@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+    <meta http-equiv="Content-Type" content="text/html" charset="utf-8" />
+    <title>常用链接</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="stylesheet" href="https://ramified.github.io/css/normalize.css" />
+    <link rel="stylesheet" href="https://ramified.github.io/css/new.css" />
+    <link rel="stylesheet" href="https://ramified.github.io/css/nav+footer.css" />
+    <link rel="stylesheet" href="https://ramified.github.io/fonts/foundation-icons/foundation-icons.css">
+    <style>
+    .um_nav-input {
+        width: 340px;
+        max-width: 95%;
+        margin: 3px;
+        height: 30px;
+    }
+
+    .um_nav-btn {
+        float: left;
+        width: 55px;
+        height: 30px;
+        border: 1px solid grey;
+        border-left: 0px;
+        text-align: center;
+        padding: 3px;
+        cursor: pointer;
+        background-color: white;
+        line-height: 30px;
+        overflow: hidden;
+    }
+
+    .acton {
+        float: left;
+        width: 40px;
+        height: 30px;
+        border: 1px solid grey;
+        text-align: center;
+        padding: 3px 0px;
+        background-color: #0084ff;
+        border-radius: 3px 0 0 3px;
+        color: white;
+        line-height: 30px;
+        overflow: hidden;
+    }
+
+    .um_nav-btn:last-of-type {
+        border-radius: 0 3px 3px 0;
+    }
+
+    .front {
+        margin: 3px 0;
+        clear: both;
+        display: block;
+        overflow: hidden;
+    }
+</style>
+</head>
+<body>
+    <nav>
+        <button class="navbar-toggle"><i class="fi-list-thumbnails size-24"></i></button>
+        <form class="search">
+            <button type="submit" onclick="search('wikipedia', 'mobile')"><i class="fi-magnifying-glass size-24"></i></button>
+            <input id="search-mobile" type="text" placeholder="搜索...">
+        </form>
+        <ul>
+            <li><a href="recommend.html">参考书</a></li>
+            <li><a href="homepages.html">他人主页</a></li>
+            <li><a class="active">常用链接</a></li>
+        </ul>
+    </nav>
+    <main>
+        <div class="um_nav-input-group">
+            <div class="clear"></div>
+            <form id="search-form-pc">
+                <input class="um_nav-input" id="search-pc">
+                <input type="submit" hidden>
+            </form>
+            <!--搜索-->
+            <div class="front">
+                <div class="acton">搜索</div>
+                <div class="um_nav-btn" onclick="search('bing', 'pc')">Bing</div>
+                <div class="um_nav-btn" onclick="search('google', 'pc')">Google</div>
+                <div class="um_nav-btn" onclick="search('baidu', 'pc')">百度</div>
+                <div class="um_nav-btn" onclick="search('info', 'pc')">info</div>
+            </div>
+            <!--翻译-->
+            <div class="front">
+                <div class="acton">翻译</div>
+                <div class="um_nav-btn" onclick="search('googletl', 'pc')">Google</div>
+                <div class="um_nav-btn" onclick="search('bingtl', 'pc')">Bing</div>
+                <div class="um_nav-btn" onclick="search('oulu', 'pc')">欧路</div>
+                <div class="um_nav-btn" onclick="search('dict', 'pc')">dict</div>
+            </div>
+            <!--查词-->
+            <div class="front">
+                <div class="acton">查词</div>
+                <div class="um_nav-btn" onclick="search('wikipedia', 'pc')">wiki</div>
+                <div class="um_nav-btn" onclick="search('herokuapp', 'pc')">pedia</div>
+                <!--<div class="um_nav-btn" onclick="search('encyclopedia', 'pc')">pe</div>-->
+                <!--<div class="um_nav-btn" onclick="search('knowpedia', 'pc')">pedia</div>-->
+
+                <div class="um_nav-btn" onclick="search('fazhu', 'pc')">法助</div>
+                <div class="um_nav-btn" onclick="search('dezhu', 'pc')">德助</div>
+            </div>
+            <!--查答案-->
+            <div class="front">
+                <div class="acton">答案</div>
+                <div class="um_nav-btn" onclick="search('stackexchange', 'pc')">stack</div>
+                <div class="um_nav-btn" onclick="search('mathoverflow', 'pc')">MO</div>
+                <div class="um_nav-btn" onclick="search('arxiv', 'pc')">arXiv</div>
+                <div class="um_nav-btn" onclick="search('wolframalpha', 'pc')">wolfram</div>
+            </div>
+            <!--其他-->
+            <div class="front">
+                <div class="acton">其他</div>
+                <div class="um_nav-btn" onclick="search('zhihu', 'pc')">知乎</div>
+                <!-- <div class="um_nav-btn" onclick="search('weixin', 'pc')">微信</div> -->
+                <div class="um_nav-btn" onclick="search('USTCwiki', 'pc')">"wiki"</div>
+                <div class="um_nav-btn" onclick="search('term', 'pc')">term</div>
+            </div>
+        </div>
+
+
+
+        <div class="rich_media_inner">
+            <ul>
+                <li><a href="http://www.fjsdfz.com/">福建师大附中</a></li>
+                <li><a onclick="openShutManager(this,'box1',false)">中国科大</a>
+                    <div id="box1" style="display: none">
+                        <ul>
+                            <li><a href="http://www.ustc.edu.cn">主页</a></li>
+                            <li>教务处
+                                <ul>
+                                    <li><a href="http://www.teach.ustc.edu.cn/">教务处主页</a>                            </li>
+                                    <li><a href="http://mis.teach.ustc.edu.cn/">综合教务系统</a></li>
+                                    <li><a href="http://jw.ustc.edu.cn">选课系统</a></li>
+                                    <li><a href="http://mis.teach.ustc.edu.cn/search_public.html">公共查询</a></li>
+                                    <li><a href="http://ta.cmet.ustc.edu.cn/indexcx.do">助教管理系统</a></li>
+                                    <li><a href="https://www.bb.ustc.edu.cn">网络教学平台</a></li>
+                                    <li><a href="http://yjs.ustc.edu.cn/course/">研究生网上选课</a></li>
+                                </ul>
+                            </li>
+                            <li><a href="https://math.ustc.edu.cn/">数学科学学院</a></li>
+                            <li><a href="http://scgy.ustc.edu.cn/">少年班学院</a></li>
+                            <li>图书馆
+                                <ul>
+                                    <li><a href="http://lib.ustc.edu.cn/">图书馆主页</a></li>
+                                    <li><a href="http://bbs.ustc.edu.cn/cgi/bbsindex">瀚海星云</a> </li>
+                                    <li><a href="https://passport.ustc.edu.cn/login?service=http://ic.lib.ustc.edu.cn/loginall.aspx">西图学习中心预约</a></li>
+                                    <li><a href="http://sp.lib.ustc.edu.cn/Login.aspx">校园打印复印 </a></li>
+                                    <li><a href="https://sls.smartstudy.com/smartstudy_ustc">智课网</a></li>
+                                </ul>
+                            </li>
+                            <li>在校常用
+                                <ul>
+                                    <li><a href="https://www.icourse.club/">评课社区</a></li>
+                                    <li><a href="http://email.ustc.edu.cn/">邮箱</a></li>
+                                    <li><a href="http://oic.ustc.edu.cn/">国际合作交流部</a></li>
+                                    <li><a href="http://jxzy.ustc.edu.cn/jxzy/login.aspx">大物实验</a></li>
+                                    <li><a href="http://ty.ustc.edu.cn/">体育课管理系统</a></li>
+                                    <li><a href="http://wlt.ustc.edu.cn/cgi-bin/ip">网络通</a></li>
+                                    <li><a href="http://ustcnet.ustc.edu.cn/service/index.php">网络用户自助服务</a></li>
+                                </ul>
+                            </li>
+                            <li>其它
+                                <ul>
+                                    <li><a href="https://www.ustc.edu.cn/2021/list.htm">公共服务</a></li>
+                                    <li><a href="http://i.ustc.edu.cn/">校园信息门户</a></li>
+                                    <li><a href="https://www.bb.ustc.edu.cn/webapps">网络教学平台</a></li>
+                                    <li><a href="http://mirrors.ustc.edu.cn/">开源软件镜像</a></li>
+                                    <li><a href="http://baike.ustc.edu.cn/">科大百科</a></li>
+                                    <li><a href="http://www.job.ustc.edu.cn/">就业信息网</a></li>
+                                    <li><a href="http://xgyth.ustc.edu.cn">学工一体化系统</a></li>
+                                    <li><a href="http://ecard.ustc.edu.cn/caslogin">一卡通</a></li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </div>
+                </li>
+
+                <li>
+                    <a onclick="openShutManager(this,'box2',false)">北京</a>
+                    <div id="box2" style="display: none">
+                        <ul>
+                            <li><a href="https://www.pku.edu.cn/">北京大学</a>
+                                <ul>
+                                    <li><a href="http://dean.pku.edu.cn/pkudean/">教务处</a></li>
+                                    <li><a href="http://dean.pku.edu.cn/pkudean/course/kcb.php?ll=1">课表查询</a></li>
+                                    <li><a href="http://www.math.pku.edu.cn/index.htm">数学科学学院</a></li>
+                                    <li><a href="https://bdkj.pku.edu.cn/">北大空间</a></li>
+                                    <li><a href="https://bbs.pku.edu.cn/v2/login.php">未名BBS</a></li>
+                                    <li><a href="http://cwsf.pku.edu.cn/slogin.html">收费平台</a></li>
+                                </ul>
+                            </li>
+                            <li><a href="http://bicmr.pku.edu.cn/">北京国际数学中心</a></li>
+                            <li>
+                                <a href="http://www.tsinghua.edu.cn/publish/thu2018/index.html">清华大学</a>
+                                <ul>
+                                    <li><a href="http://www.math.tsinghua.edu.cn/publish/math/index.html">数学科学学院</a></li>
+                                </ul>
+                            </li>
+                            <li><a href="http://www.mcm.ac.cn/">中国科学院晨兴数学中心</a></li>
+                        </ul>
+                    </div>
+
+
+                </li>
+
+                <li>
+                    <a onclick="openShutManager(this,'box3',false)">波恩大学</a>
+                    <div id="box3" style="display: none">
+                        <ul>
+                            <li><a href="https://www.mathematics.uni-bonn.de">数学系主页</a>
+                            </li>
+                            <li><a href="http://www.math.uni-bonn.de/">导航</a></li>
+                            <li><a href="https://www.mathematics.uni-bonn.de/kalender-der-mathematik">讨论班</a></li>
+                            <ul>
+                                <li><a href="https://www.mpim-bonn.mpg.de/calendar">Events at the MPIM</a></li>
+                                <li><a href="https://www.mpim-bonn.mpg.de/de/node/246">Number theory lunch seminar</a></li>
+                                <li><a href="https://www.mpim-bonn.mpg.de/de/node/10472/program">Algebra, Geometry and Physics</a></li>
+                            </ul>
+                            <li><a onclick="openShutManager(this,'box3-1',false)">21-22冬季课程</a></li>
+                            <div id="box3-1" style="display: none">
+                                <ul>
+                                    <li><a href="https://www.math.uni-bonn.de/ag/alggeom/veranstaltungen/veranstaltungen_ws2122">Arithmetical Algebraic Geometry</a></li>
+                                    <li><a href="https://www.math.uni-bonn.de/ag/topo/activities.html">Topology</a></li>
+                                    <li><a href="https://www.math.uni-bonn.de/ag/kompgeo/Lehre_WS_2122.htmpl">Complex Geometry</a></li>
+                                    <li><a href="https://www.math.uni-bonn.de/ag/azaf/">Analytic Number Theory and Automorphic Forms</a></li>
+
+                                    ---------------------------------------------------------------
+                                    <li><a href="https://www.math.uni-bonn.de/people/mihatsch/21u22%20WS/moduli/">Moduli of elliptic curves</a></li>
+                                    <li><a href="http://www.math.uni-bonn.de/people/ivanov/">Seminar on étale cohomology</a></li>
+                                    <li><a href="https://www.math.uni-bonn.de/ag/alggeom/veranstaltungen/ARGOS/ARGOS_WS2122.pdf">Arithmetic Bigness and uniform Bogomolov</a></li>
+
+                                    <li><a href="http://www.math.uni-bonn.de/people/ydutta/v5a4">Moduli of Vector Bundles</a></li>
+                                    <li><a href="http://www.math.uni-bonn.de/~georgo/DT/index.html">Donaldson-Thomas theory(S4A1)</a></li>
+                                    <li><a href="https://basis.uni-bonn.de/qisserver/rds?state=verpublish&status=init&vmfile=no&publishid=196722&moduleCall=webInfo&publishConfFile=webInfo&publishSubDir=veranstaltung">Arithmetic Geometry</a></li>
+                                    ---------------------------------------------------------------
+                                    <li><a href="https://www.iam.uni-bonn.de/users/laux/teaching">Graduate Course on Gradient Flows</a></li>
+                                    <li><a href="https://people.math.harvard.edu/~brennecke/SyllabusQM2021.pdf">Topics in Many-Body Quantum Mechanics</a></li>
+                                    <li><a href="https://www.math.uni-bonn.de/~goncalve/Boolean.html">Analysis of Boolean Functions</a></li>
+                                    ---------------------------------------------------------------
+                                    <li><a href="http://www.or.uni-bonn.de/lectures/ws21/kgm_ws21.html">Kombinatorik, Graphen, Matroide</a></li>
+                                    ---------------------------------------------------------------
+                                    <li><a href="http://www.math.uni-bonn.de/people/schwede/at1-ws2122.html/">Algebraic Topology I</a></li>
+                                <!--<li><a href="http://www.math.uni-bonn.de/people/ivanov/etale_cohomology/etale_cohomology.html">V5A2: Etale cohomology</a></li>
+                                <li><a href="https://pbelmans.ncag.info/teaching/hh-2021">V5A4: Hochschild (co)homology</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/people/gmartin/FiniteGroupSchemesSS2021.htmpl">V5A6: Finite Group Schemes</a></li>
+                                <li><a href="https://jenseberhardt.com/teaching/S21Seminar.html">S4A2:Geometric Representation Theory of Weyl Groups</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/people/gmartin/AlgebraicGeometrySS2021.htmpl">V4A2: Algebraic Geometry II</a></li>
+                                <li><a href="http://www.math.uni-bonn.de/people/schwede/topo2-ss21.html">V3D2: Topology</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/people/gjasso/teaching/sose21/v4a4/">V4A4:  Representation Theory II</a></li>
+                                <li><a href="https://www.uni-bonn.de/studying/international-students/german/sdk">German Course</a></li>-->
+                            </ul>
+                        </div>
+                        <li><a onclick="openShutManager(this,'box3-2',false)">22夏季课程</a></li>
+                        <div id="box3-2" style="display: none">
+                            <ul>
+                                <li><a href="https://ecampus.uni-bonn.de/">eCampus</a></li>
+                                <li><a href="https://basis.uni-bonn.de/qisserver/rds?state=wtree&search=1&trex=step&root120221=253978%7C253989%7C253992&P.vx=lang">Basis</a></li>
+                                <li><a href="https://www.uni-bonn.de/en/studying/international-students/learning-german/sdk">German course</a></li>
+                                ---------------------------------------------------------------
+                                <li><a href="https://www.math.uni-bonn.de/ag/alggeom/veranstaltungen/veranstaltungen_ss22">Arithmetical Algebraic Geometry</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/ag/schrstro/">Representation Theory</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/ag/topo/activities.html">Topology</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/ag/kompgeo/Lehre_SS_2022.htmpl">Complex Geometry</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/ag/azaf/">Analytic Number Theory and Automorphic Forms</a></li>
+                                ---------------------------------------------------------------
+                                <li><a href="https://www.math.uni-bonn.de/people/mihatsch/22%20SS/ai/">Arithmetic Intersections</a></li>
+                                <li><a href="https://people.mpim-bonn.mpg.de/scholze/Course%20Summer%2022.html">Condensed Mathematics and Complex Geometry</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/ag/alggeom/veranstaltungen/ARGOS/ARGOS_SS22.pdf">Finiteness of integral Hecke algebras</a></li>
+                                <li><a href="https://sites.google.com/view/kwlai/teaching/2022-summer-v5a4">Birational Geometry of Algebraic Varieties</a></li>
+                                <li><a href="http://www.math.uni-bonn.de/people/heuer/">Rigid Analytic Geometry</a></li>
+                                <!-- http://www.math.uni-bonn.de/people/heuer/lecture_notes.pdf -->
+                                ----------no official website yet
+                                <li><a href="https://basis.uni-bonn.de/qisserver/rds?state=verpublish&status=init&vmfile=no&publishid=202775&moduleCall=webInfo&publishConfFile=webInfo&publishSubDir=veranstaltung">Arithmetic Geometry</a></li>
+                                <li><a href="https://basis.uni-bonn.de/qisserver/rds?state=verpublish&status=init&vmfile=no&publishid=208597&moduleCall=webInfo&publishConfFile=webInfo&publishSubDir=veranstaltung">D-modules in characteristic p and applications</a></li>
+                                <li><a href="https://basis.uni-bonn.de/qisserver/rds?state=verpublish&status=init&vmfile=no&publishid=210841&moduleCall=webInfo&publishConfFile=webInfo&publishSubDir=veranstaltung">Class Field Theory</a></li> 
+
+                                ---------------------------------------------------------------
+                                <li><a href="https://www.dpmms.cam.ac.uk/~jf457/teaching.html">Bruhat-Tits Theory</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/people/jacobm/s22V4A3.html">Semisimple Lie algebras and their representations</a></li>
+                                <li><a href="https://w3.impa.br/~goncalves/conwayisgod.html">The Contributions of John H. Conway</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/people/gmartin/GitterKugelpackungenSS2022.htmpl">Gitter und Kugelpackungen</a></li>
+                                ---------------------------------------------------------------
+                                <li><a href="https://www.math.uni-bonn.de/people/schwede/at2-ss22.html">Algebraic Topology II</a></li>
+                                <li><a href="http://www.math.uni-bonn.de/people/cfb/teaching.html">Moduli Spaces of Riemann Surfaces</a></li>
+                            </ul>
+                        </div>
+
+                        <li><a onclick="openShutManager(this,'box3-3',false)">21-22冬季课程</a></li>
+                        <div id="box3-3" style="display: none">
+                            <ul>
+                                <li><a href="https://ecampus.uni-bonn.de/">eCampus</a></li>
+                                <li><a href="https://basis.uni-bonn.de/qisserver/rds?state=wtree&search=1&root120222=268089%7C266842%7C266863">Basis</a></li>
+                                <li><a href="https://www.uni-bonn.de/en/studying/international-students/learning-german/sdk">German course</a></li> 
+                                <li><a href="https://mail.uni-bonn.de/">Bonn email</a></li>
+                                ---------------------------------------------------------------
+                                <li><a href="https://www.math.uni-bonn.de/ag/alggeom/veranstaltungen/veranstaltungen_ws2223.htmpl">Arithmetical Algebraic Geometry</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/ag/schrstro/">Representation Theory</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/ag/topo/activities.html">Topology</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/ag/kompgeo/Lehre_WS_2223.htmpl">Complex Geometry</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/ag/azaf/">Analytic Number Theory and Automorphic Forms</a></li>
+                                ---------------------------------------------------------------
+                                <li><a href="https://www.math.uni-bonn.de/ag/alggeom/veranstaltungen/ARGOS/ARGOS_WS2223.pdf">ARGOS</a></li>
+                                <li><a href="https://www.ma.imperial.ac.uk/~acaraian/alp.pdf">The arithmetic of the Langlands program</a></li>
+                                <li><a href="https://people.mpim-bonn.mpg.de/scholze/Course%20Winter%202223.html">Six Functor Formalisms</a></li>
+                                <li><a href="https://www.dpmms.cam.ac.uk/~jf457/teaching.html">Topics in Bruhat-Tits Theory</a></li>
+                                <li><a href="https://www.ma.imperial.ac.uk/~acaraian/">The arithmetic of the Langlands program</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/people/ja/etcoh/">Étale cohomology</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/people/jacobm/w22V4A4.html">Representation Theory II</a></li>
+                                ---------------------------------------------------------------
+                                <li><a href="https://www.math.uni-bonn.de/people/schwede/V5D1-WS2223.html">Equivariant stable homotopy theory</a></li>
+                                <li><a href="https://www.math.uni-bonn.de/people/schwede/EnhancedSeminar-WS2223.pdf">Enhancements of triangulated categories</a></li>
+                                <li><a href="https://sites.google.com/view/beyrerj/">Introduction to higher Teichmueller theory</a></li>
+                                ---------------------------------------------------------------
+                                <li><a href="https://basis.uni-bonn.de/qisserver/rds?state=verpublish&status=init&vmfile=no&publishid=212534&moduleCall=webInfo&publishConfFile=webInfo&publishSubDir=veranstaltung">Functions of several complex variables</a></li>
+                                <li><a href="https://basis.uni-bonn.de/qisserver/rds?state=verpublish&status=init&vmfile=no&publishid=215222&moduleCall=webInfo&publishConfFile=webInfo&publishSubDir=veranstaltung">Geometric inequalities</a></li>
+                                <li><a href="https://www.iam.uni-bonn.de/users/laux/teaching">Variational problems in machine learning</a></li>
+                            </ul>
+                        </div>
+
+                        <li>本学期课程</li>
+                        <ul>
+                            <li><a href="https://ecampus.uni-bonn.de/goto_ecampus_cat_2897979.html">eCampus</a></li>
+                            <li><a href="https://basis.uni-bonn.de/qisserver/rds?state=wtree&search=1&trex=step&root120231=278654%7C276489%7C278475">Basis</a></li>
+                            <li><a href="https://www.studienservice.uni-bonn.de/">Student service</a></li>
+                            <li><a href="https://www.uni-bonn.de/en/studying/international-students/learning-german/sdk">German course</a></li> 
+                            <li><a href="https://mail.uni-bonn.de/">Bonn email</a></li>
+                            ---------------------------------------------------------------
+                            <li><a href="https://www.math.uni-bonn.de/ag/alggeom/veranstaltungen/veranstaltungen_ss23.htmpl">Arithmetical Algebraic Geometry</a></li>
+                            <li><a href="https://www.math.uni-bonn.de/ag/schrstro/">Representation Theory</a></li>
+                            <li><a href="https://www.math.uni-bonn.de/ag/topo/activities.html">Topology</a></li>
+                            <li><a href="https://www.math.uni-bonn.de/ag/kompgeo/Lehre_SS_2023.htmpl">Complex Geometry</a></li>
+                            <li><a href="https://www.math.uni-bonn.de/ag/azaf/">Analytic Number Theory and Automorphic Forms</a></li>
+                            ---------------------------------------------------------------
+                            <li><a href="https://basis.uni-bonn.de/qisserver/rds?state=verpublish&status=init&vmfile=no&publishid=221490&moduleCall=webInfo&publishConfFile=webInfo&publishSubDir=veranstaltung">The local Langlands conjectures for non-quasi-split groups</a></li> 
+                            <li><a href="https://www.math.uni-bonn.de/people/assing/">Modular Forms</a></li>
+                            <li><a href="http://www.math.uni-bonn.de/people/thorsten/teaching/derived-ss-23/index.htmpl">Introduction to derived categories</a></li>
+                            <li><a href="http://www.math.uni-bonn.de/~franke/">Rigid analytic geometry</a></li>
+                            <li><a href="http://www.math.uni-bonn.de/people/ja/derham/">The de Rham comparison for rigid-analytic varieties</a></li>
+                            <li><a href="https://sites.google.com/view/giacomomezzedimi/teaching">Rational points on varieties</a></li> 
+                            ---------------------------------------------------------------
+                            <li><a href="https://johannesflake.github.io/tc23/">Tensor categories in representation theory</a></li>
+                            <li><a href="https://www.math.uni-bonn.de/people/jacobm/teaching.html">The geometry of matroids, with a view towards representation theory</a></li>
+
+                            ---------------------------------------------------------------
+                            <li>(9)<a href="https://www.iam.uni-bonn.de/users/disertori/teaching/nonlinear-pde-2-ss2023">Nonlinear Partial Differential Equations II</a></li>
+                            <li>(9)<a href="https://www.iam.uni-bonn.de/aaa2/teaching/winter-term-2022-23">Functional analysis and partial differential equations</a></li>
+                            <li>(9)<a href="http://www.math.uni-bonn.de/ag/ga/teaching/">Global Analysis</a></li>
+                            <li>(7)<a href="https://www.iam.uni-bonn.de/afa/teaching">Dynamical Systems</a></li>
+                            <li>(7)<a href="https://www.iam.uni-bonn.de/users/brennecke/teaching">Mathematical Quantum Mechanics with Applications</a></li>
+                            <li>(7)<a href="https://sites.google.com/view/tommasorossi/home-page">Optimal transport, gradient flows, functional inequalities</a></li>
+                            <li>(5)<a href="https://sites.google.com/view/richardschubert/teaching">Mean-field limits in many-particle systems</a></li>
+                            <li>(5)<a href="https://www.iam.uni-bonn.de/users/stinson/teaching">Geometric Measure Theory</a></li>
+                            <li>(5)<a href="https://www.hcm.uni-bonn.de/people/faculty/profile/christoph-thiele/">Topics in Euclidean Harmonic Analysis</a></li>
+                            <li>(5)<a href="http://www.math.uni-bonn.de/people/kdungen/">Noncommutative Spaces</a></li>
+                            
+                            
+                            ---------------------------------------------------------------
+                            <li>(9)<a href="http://people.mpim-bonn.mpg.de/blohmann/teaching/">Lagrangian Field Theory</a></li>
+                            <li>(9)<a href="https://www.math.uni-bonn.de/people/ursula/courses.html">Advanced Geometry II</a></li>
+                            <li>(9)<a href="https://sites.google.com/view/jackmdavies/teaching">Topology 2</a></li>
+                            <li>(5)<a href="https://imsundberg.github.io/concordance/">Concordance and Sliceness</a></li>
+                            ---------------------------------------------------------------
+                            <li><a href="https://choum.net/~chris/page_perso/teaching.html">Neostability and independence relations</a></li>
+                            <li><a href="https://www.math.uni-bonn.de/people/phierony/s4a6-SoSe23.pdf">Applications of Tame Geometry</a></li>
+                            ---------------------------------------------------------------
+
+                        </ul>
+                        <li><a href="https://uni-bonn.zoom.us/">zoom</a></li>
+                        <li><a href="https://www.mathematics.uni-bonn.de/study/master-mathematics/calendar">Upcoming dates</a></li>
+                        <li><a href="http://aleph.mpg.de/F?func=file&file_name=find-b&local_base=MAT01&CON_LNG=eng">图书馆</a></li>
+                        <li><a href="https://www.asta-bonn.de/Services">AStA服务</a></li>
+                    </ul>
+                </div>
+
+
+            </li>
+            <li>
+                <a onclick="openShutManager(this,'box4',false)">其他学校or讨论班</a>
+                <div id="box4" style="display: none">
+                    <ul>
+                        <li><a href="https://sites.google.com/site/seminairemathjeunesparis/home">Le Séminaire Mathjeunes</a>: 法国讨论班，数论与几何</li>
+                        <li><a href="https://math.mit.edu/nt/index_stage">STAGE</a>: MIT算术几何讨论班</li>
+                        <li><a href="http://math.bu.edu/people/jsweinst/rampage/">RAMpAGe</a>: p-进几何讨论班</li>
+                        <li><a href="https://sites.google.com/view/bath-21-dirac-induction/home">K-Theory & Representation Theory</a>: 今年7月19-23日</li>
+                        <li><a href="https://www.erc-hyperk.org/seminars">
+                        ERC</a>: 欧洲研究委员会资助的讨论班</li>
+                    </ul>
+                </div>
+
+
+            </li>
+
+        </ul>
+
+
+        <ol>
+            <li><a href="../English/toynotes-Eng.html">个人的数学材料</a>、<a href="../outofmath/subject2.html">其他的学科内容</a>（主要是物理、英语、网页制作）和<a href="../outofmath/subject.html">latex</a></li>
+            <li><a href="https://ramified.github.io/">返回主页</a></li>
+            <li><a href="https://kfd.me/">中文维基镜像</a></li>
+        </ol>
+        <p>科大的链接集锦已有许多，其中<a href="http://ustc.life/">USTC导航</a>相当全面，页面简洁；<a href="https://sqrt-1.me/?p=282">网页资源一览</a>对科大的所有资源已做了详细介绍，故不撰述。以下仅供个人书签使用。另外有一些补充的信息：<a href="http://mp.weixin.qq.com/s/BOEN_WTOIWuEaV6PVIKnxA">USTC实用电话簿</a>、<a href="http://mp.weixin.qq.com/s/jfXJTbXcMRhKp_DoqZ8wpw">蜗壳周边医院小汇总</a>、<a href="https://tieba.baidu.com/p/4103009987">校园常用链接一览</a>，平时无用，但偶尔亦有其作用。</p>
+    </div>
+</main>
+<footer>
+    <p>&copy;Xiaoxiang Zhou. All Rights Reserved.|<a href="mailto:xx352229@mail.ustc.edu.cn">Email Me</a></p>
+</footer>
+<script src="https://ramified.github.io/js/openit.js"></script>
+<script src="https://ramified.github.io/js/searchbyid.js"></script>
+
+</body>
+</html>
