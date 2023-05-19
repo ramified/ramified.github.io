@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+    <meta http-equiv="Content-Type" content="text/html" charset="utf-8" />
+    <title>My homepage</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="stylesheet" href="http://home.ustc.edu.cn/~xx352229/css/normalize.css" />
+    <link rel="stylesheet" href="http://home.ustc.edu.cn/~xx352229/css/new.css" />
+    <link rel="stylesheet" href="http://home.ustc.edu.cn/~xx352229/css/nav+footer.css" />
+    <link rel="stylesheet" href="http://home.ustc.edu.cn/~xx352229/fonts/foundation-icons/foundation-icons.css">
+    <style>
+    dl {
+        margin: 0;
+    }
+
+    h5 {
+        width: 100%;
+    }
+
+    hr {
+        border-top: 1px solid black;
+    }
+
+    #count {
+        margin: 0;
+    }
+</style>
+</head>
+<body>
+    <nav>
+        <button class="navbar-toggle"><i class="fi-list-thumbnails size-24"></i></button>
+        <form class="search">
+            <button type="submit" onclick="search('wikipedia', 'mobile')"><i class="fi-magnifying-glass size-24"></i></button>
+            <input id="search-mobile" type="text" placeholder="wiki...">
+        </form>
+        <ul>
+            <li><a href="web/English/toynotes-Eng.html">Notes</a></li>
+            <li><a class="active">homepage</a></li>
+            <li><a href="index-Chi.html">中文</a></li>
+        </ul>
+    </nav>
+    <main>
+        <h1>Xiaoxiang Zhou</h1>
+        <h4>School of Mathematical Sciences, USTC</h4>
+        <hr />
+        <div class="rich_media_inner"> 
+
+            <p>Welcome to my homepage! </p>
+
+            <h5>Research project, Thesis and Preprint</h5>
+            <p>Preprint: <a href="https://arxiv.org/abs/2206.00444">Affine Pavings of Quiver Flag Varieties</a>. See the <a href="https://github.com/ramified/master_thesis/raw/main/talk_40min/talk_zxx_affine_pavings.pdf">slide</a> and the <a href="http://home.ustc.edu.cn/~xx352229/webversion/webcard.html">card game</a>.</p>
+            <p>Master thesis: <a href="https://github.com/ramified/master_thesis/raw/main/master_thesis_Xiaoxiang_Zhou.pdf">Geometry of Quiver Flag Varieties</a></p>
+            <p>Bachelor Thesis: <a href="https://github.com/ramified/personal_tex_collection/raw/main/bachelor_thesis/thesis/main.pdf">Modular form and Equations of degree 5</a></p>
+            <p>Undergraduate Research Program: <a href="https://github.com/ramified/personal_tex_collection/raw/main/Mordell_theorem/MordellThm/MordellTheorem.pdf">The theory of the Elliptic Curve</a> </p>
+
+            <h5>Notes</h5>
+            <p>In this homepage, you're welcomed to see my notes in <a href="https://github.com/ramified">GitHub</a> or <a href="web/English/toynotes-Eng.html">here(bachelor works)</a>.</p>
+            <p>Some informations about the "<a href="web/main/newprogram.html">eine Woche, ein Beispiel</a>". </p>
+            <h5>Personal information</h5>
+            <p>See My <a href="http://home.ustc.edu.cn/~xx352229/Download/pdf/CV-web.pdf">CV</a>, <a href="http://home.ustc.edu.cn/~xx352229/Download/pdf/Transcript_of_Records.pdf">transcript of records</a> and <a href="https://github.com/ramified/personal_tex_collection/raw/main/research_statement/research_statement.pdf">research statement</a> (last updated: Mar 25th, 2023)</p>
+        </div>
+        <div class="center"><canvas id="c"></canvas></div>
+    </main>
+    <footer>
+        <p>&copy;Xiaoxiang Zhou. All Rights Reserved.|<a href="mailto:xx352229@mail.ustc.edu.cn">Email Me</a></p>
+    </footer>
+</body>
+<style>
+/*https://stackoverflow.com/questions/5445491/height-equal-to-dynamic-width-css-fluid-layout*/
+@media (max-width: 650px) {
+    canvas {
+        width: 85%;
+        aspect-ratio: 1 / 1;
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        flex-direction: column;
+        align-items: center;
+    }
+}
+@media (min-width: 650px) {
+    canvas{
+        width: 400px;
+        height: 400px;
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        flex-direction: column;
+        align-items: center;
+
+    }
+}
+
+</style>
+<script src="http://home.ustc.edu.cn/~xx352229/js/searchbyid.js"></script>
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.148.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.147.0/examples/jsm/"
+        }
+    }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+    import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+    // import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls';
+    import {GUI} from 'three/addons/libs/lil-gui.module.min.js';
+    // import { MeshLine, MeshLineMaterial, MeshLineRaycast } from 'threemeshline';
+
+    function main() {
+        const canvas = document.querySelector('#c');
+        const renderer = new THREE.WebGLRenderer({
+            canvas,
+            alpha: false,
+            antialias: true,
+        });
+        renderer.setClearColor(0x000000, 0);
+        renderer.setPixelRatio(window.devicePixelRatio);
+
+
+        const fov = 45;
+        const aspect = 1;  // the canvas default
+        const near = 0.3;
+        const far = 10;
+        const camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
+        camera.position.set(0.2, 1, 3);
+
+        const scene = new THREE.Scene();
+        // scene.background = new THREE.Color('blue');
+        const controls = new OrbitControls(camera, canvas);
+        controls.target.set(0, 0, 0);
+        controls.enableDamping = true;
+        controls.update();
+
+        const material = new THREE.MeshPhongMaterial({
+            color: 'yellow',  
+            shininess: 90,
+            opacity: 0.5,
+            transparent: true,
+            flatShading: true,
+            side: THREE.DoubleSide,
+        });
+// material.wireframe = true;
+
+// Cube
+const boxWidth = 1;
+const boxHeight = 1;
+const boxDepth = 1;
+const radius = 0.5;
+
+
+const geometry = new THREE.BoxGeometry(boxWidth, boxHeight, boxDepth);
+const geometry2 = new THREE.DodecahedronGeometry(radius);
+const geometry3 = new THREE.OctahedronGeometry(radius);
+const position = geometry2.getAttribute('position');
+
+// Addstrangepoints
+// const ptmaterial = new THREE.PointsMaterial({
+//     color: 'red',
+//     size: 30,     // in world units
+//     sizeAttenuation: false,
+// });
+// const points = new THREE.Points(geometry2, ptmaterial);
+// scene.add(points);
+
+
+//     console.log( position.count ); // 24
+//     console.log( position.array.length ); // 72
+//     console.log( position.count * 3 === position.array.length); // true
+// alert(" odd " +  typeof position + position.array[0] + " " + position.array[1] + " "+position.array[2] );
+// Recall the vertices
+const t = ( 1 + Math.sqrt( 5 ) ) / 2;
+const r = 1 / t;
+const vertices = [
+
+            // (±1, ±1, ±1)
+            - 1, - 1, - 1,  - 1, - 1, 1,
+            - 1, 1, - 1, - 1, 1, 1,
+            1, - 1, - 1, 1, - 1, 1,
+            1, 1, - 1, 1, 1, 1,
+
+            // (0, ±1/φ, ±φ)
+            0, - r, - t, 0, - r, t,
+            0, r, - t, 0, r, t,
+
+            // (±1/φ, ±φ, 0)
+            - r, - t, 0, - r, t, 0,
+            r, - t, 0, r, t, 0,
+
+            // (±φ, 0, ±1/φ)
+            - t, 0, - r, t, 0, - r,
+            - t, 0, r, t, 0, r
+            ];
+
+            var sceneObjects = [];
+            sceneObjects.clear = function () {
+                var a;
+                while (a = sceneObjects.pop()) {
+                    scene.remove(a);
+                    a.geometry.dispose();
+                }
+            }
+            sceneObjects.clear();
+            
+
+            for (var i = 0; i < 20; i++) {
+                const geometry = new THREE.SphereGeometry(0.034, 32, 32);
+                const material = new THREE.MeshStandardMaterial({ color: 'white' });
+                const sphere = new THREE.Mesh(geometry, material);
+                const a = new THREE.Vector3( vertices[3*i], vertices[3*i+1], vertices[3*i+2]);
+
+                sphere.position.copy(a.multiplyScalar(radius/Math.sqrt( 3 )));
+                scene.add(sphere);
+                sceneObjects.push(sphere);
+            }
+
+            let edgeList = [
+            [0,16],[1,18],[2,16],[3,18],[16,18],
+            [4,17],[5,19],[6,17],[7,19],[17,19],
+            [2,13],[6,15],[3,13],[7,15],[13,15],
+            [0,12],[4,14],[1,12],[5,14],[12,14],
+            [1,9],[3,11],[5,9],[7,11],[9,11],
+            [0,8],[2,10],[4,8],[6,10],[8,10],
+            ];
+
+            for (var i = 0; i < edgeList.length; i++) {
+                var v1 = edgeList[i][0];
+                var v2 = edgeList[i][1];
+                var s = createLine(sceneObjects[v1].position, sceneObjects[v2].position, 0.01, 'white');
+                if (s != undefined) {
+                    scene.add(s);
+                    sceneObjects.push(s);
+                }
+            }
+
+  // const cube = new THREE.Mesh(geometry, material);
+  // scene.add(cube);
+
+
+// Light
+function addLight(...pos) {
+    const color = 0xFFFFFF;
+    const intensity = 2;
+    const light = new THREE.DirectionalLight(color, intensity);
+    light.position.set(...pos);
+    scene.add(light);
+}
+addLight(2,2,2);
+
+
+// const skyColor = 0xB1E1FF;  // light blue
+// const groundColor = 0xB97A20;  // brownish orange
+// const intensity = 1;
+// const light = new THREE.HemisphereLight(skyColor, groundColor, intensity);
+// scene.add(light);
+
+
+// group
+function makeInstance(geometry, material, x) {
+
+    const cube = new THREE.Mesh(geometry, material);
+    scene.add(cube);
+
+    cube.position.x = x;
+
+    return cube;
+}
+
+const cubes = [
+makeInstance(geometry2, material,  0),
+// makeInstance(geometry2, material, -2),
+// makeInstance(geometry3, material,  2),
+];
+
+
+// class ColorGUIHelper {
+//  constructor(object, prop) {
+//      this.object = object;
+//      this.prop = prop;
+//  }
+//  get value() {
+//      return `#${this.object[this.prop].getHexString()}`;
+//  }
+//  set value(hexString) {
+//      this.object[this.prop].set(hexString);
+//  }
+// }
+
+
+
+// const gui = new GUI();
+// gui.addColor(new ColorGUIHelper(light, 'color'), 'value').name('skyColor');
+// gui.addColor(new ColorGUIHelper(light, 'groundColor'), 'value').name('groundColor');
+// gui.add(light, 'intensity', 0, 2, 0.01);
+
+function resizeRendererToDisplaySize(renderer) {
+    const canvas = renderer.domElement;
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const needResize = canvas.width !== width || canvas.height !== height;
+    if (needResize) {
+        renderer.setSize(width, height, false);
+    }
+    return needResize;
+}
+
+
+// Real axesHelper
+// const axesHelper = new THREE.AxesHelper( 2 );
+// scene.add( axesHelper );
+
+
+function createLine(from, to, width, color, arrowWidth, arrowLength) {
+    const m = new THREE.MeshStandardMaterial({
+        color: color,
+    });
+    const dist = from.distanceTo(to);
+    if (dist < 0.0001) return;
+
+    let geometry = new THREE.CylinderGeometry(width, width, dist, 10, 1);
+    let mesh = new THREE.Mesh(geometry, m);
+    const axis = new THREE.Vector3(0, 1, 0);
+    geometry.dispose();
+    const vector = (new THREE.Vector3()).subVectors(to, from);
+    if (arrowWidth != undefined) {
+        const geometry2 = new THREE.CylinderGeometry(0, arrowWidth, arrowLength, 10, 1);
+        // geometry2.translate(0, (dist - arrowLength) / 2, 0);
+        geometry2.translate(0, (dist + arrowLength) / 2, 0);
+        geometry.merge(geometry2);      //How to merge??
+        // alert("Hello! Here it is actually wrong!!");
+        let mesh2 = new THREE.Mesh(geometry2, m);
+        mesh2.quaternion.setFromUnitVectors(axis, vector.clone().normalize());
+        mesh2.position.copy(from.clone().addScaledVector(vector, 0.5));
+        sceneAdd(scene, mesh2, "vertices");
+    }
+
+    
+
+
+    mesh.quaternion.setFromUnitVectors(axis, vector.clone().normalize());
+    mesh.position.copy(from.clone().addScaledVector(vector, 0.5));
+
+    return mesh;
+}
+
+function getVertices() {
+    const v = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, -1, 0),
+    new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1)];
+    return v;
+};
+const v = getVertices();
+const w = 0.02;
+const arrowWidth = 0.05;
+const arrowLength = 0.1;
+const c = 0x0000ff;
+
+function sceneAdd(scene, object, group) {
+    if (scene.groupings == undefined) {
+        scene.groupings = new Map();
+    }
+    if (scene.groupings.get(group) == undefined) {
+        scene.groupings.set(group, []);
+    }
+    scene.groupings.get(group).push(object);
+    scene.add(object);
+}
+
+sceneAdd(scene, createLine(v[0], v[1], w, 0xff0000, arrowWidth, arrowLength), "vertices");
+sceneAdd(scene, createLine(v[0], v[3], w, 0x00ff00, arrowWidth, arrowLength), "vertices");
+sceneAdd(scene, createLine(v[0], v[5], w, 0x0000ff, arrowWidth, arrowLength), "vertices");
+
+function render(time) {
+    time *= 0.001;  // convert time to seconds
+
+    if (resizeRendererToDisplaySize(renderer)) {
+        const canvas = renderer.domElement;
+        camera.aspect = canvas.clientWidth / canvas.clientHeight;
+        camera.updateProjectionMatrix();
+    }
+
+    // cubes.forEach((cube, ndx) => {
+    //  const speed = 0.1 + ndx * .3;
+    //  const rot = time * speed;
+    //  cube.rotation.x = rot;
+    //  cube.rotation.y = rot;
+    // });
+
+    renderer.render(scene, camera);
+
+    requestAnimationFrame(render);
+}
+requestAnimationFrame(render);
+}
+
+main();
+
+</script>
+</html>
+

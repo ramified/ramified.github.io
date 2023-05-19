@@ -1,0 +1,16 @@
+﻿.paraleft, .paramid, .pararight {
+    text-indent: 0em;
+    color: #333333;
+}
+
+.paraleft {
+    text-align: left;
+}
+
+.paramid {
+    text-align: center;
+}
+
+.pararight {
+    text-align: right;
+}

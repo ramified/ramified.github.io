@@ -1,0 +1,370 @@
+﻿@media (max-width: 650px) {
+    body {
+        width: 100%;
+        clear: both;
+        letter-spacing: .034em;
+    }
+
+    .right {
+        float: inherit;
+    }
+
+    main {
+        padding: 20px 16px 12px;
+    }
+
+    .rich_media_inner {
+        margin-left: 16px;
+        margin-right: 16px;
+        text-align: justify;
+    }
+
+        .rich_media_inner * {
+            max-width: 100% !important;
+        }
+
+    a {
+        color: inherit;
+        text-decoration: none;
+    }
+        /* 重置链接a标签 */
+        a:link, a:visited, a:active, a:hover {
+            color: inherit;
+            text-decoration: none;
+        }
+    /* 重置链接a标签的鼠标滑动效果 */
+    h1 {
+        font-family: Tahoma, Helvetica,Verdana, Arial,"楷体",sans-serif;
+        font-size: 2em;
+        font-weight: bold;
+        color: #FF0000;
+        text-align: center;
+    }
+
+    h2 {
+        font-family: "宋体";
+        word-spacing: .3em;
+        font-size: 1.7em;
+        color: #000099;
+        text-align: center;
+    }
+
+    h3 {
+        font-family: "楷体";
+        font-size: 1.5em;
+        font-weight: bold;
+        color: #8A2BE2;
+        text-align: center;
+    }
+
+    h4 {
+        font-family: "宋体";
+        font-size: 0.8em;
+        color: #000099;
+        text-align: center;
+    }
+
+    h6 {
+        float: left;
+        width: 100%;
+    }
+
+    h2, p, li, h5, dt, dd {
+        font-family: Georgia,"Times New Roman", times, "Microsoft YaHei",微软雅黑,"MicrosoftJhengHei",华文细黑,STHeiti,MingLiu,"宋体",serif;
+    }
+
+    h6, p, dt, dd {
+        margin: 0;
+        font-size: 0.88em;
+        color: #333333;
+        line-height: 2.1em;
+    }
+
+    dd {
+        margin-left: 1.5em;
+    }
+
+    h5 {
+        margin: 0;
+        font-size: 12px;
+        color: rgb(136, 136, 136);
+        line-height: 2.1em;
+        font-weight: normal;
+        text-align: center;
+    }
+
+    p[class="nonind"] {
+        text-indent: 0em;
+    }
+
+    p + p {
+        margin-top: 1em;
+    }
+
+    main li {
+        line-height: 2.1em;
+    }
+
+        main li a:link {
+            color: darkred;
+        }
+        /* 未访问的链接 */
+        main li a:visited {
+            color: firebrick;
+        }
+        /* 已访问的链接 */
+        main li a:hover {
+            color: darkred;
+        }
+        /* 当有鼠标悬停在链接上 */
+        main li a:active {
+            color: darkred;
+            cursor: pointer;
+        }
+
+    main dd a:link, main dd a:visited, main dd a:hover, main dd a:active {
+        color: brown;
+    }
+
+    p a:link {
+        color: blue
+    }
+    /* 未访问的链接 */
+    p a:visited {
+        color: purple
+    }
+    /* 已访问的链接 */
+    p a:hover {
+        text-decoration: underline;
+    }
+    /* 当有鼠标悬停在链接上 */
+    p a:active {
+        color: red;
+        cursor: pointer;
+    }
+    /* 活动链接 */
+    em {
+        font-weight: 500;
+        font-style: normal;
+        color: red;
+    }
+
+    ul {
+        list-style-type: disc;
+        padding-left: 1em;
+    }
+
+    ol {
+        padding-left: 1em;
+    }
+
+    dt:before {
+        content: ' ※ ';
+    }
+
+    ul li {
+        font-weight: lighter;
+    }
+
+    ol li {
+        font-weight: lighter;
+    }
+
+    hr {
+        border-top: 1px solid #333333;
+        clear: left;
+    }
+
+    .del {
+        text-decoration: line-through;
+    }
+
+    .right {
+        float: right;
+    }
+
+    .img {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    img {
+        clear: both;
+        margin: 0 auto;
+    }
+}
+
+@media (min-width: 650px) {
+    body {
+        background-color: #E6EFFC;
+        margin: auto;
+        padding-top: 3em;
+    }
+
+    a {
+        color: inherit;
+        text-decoration: none;
+    }
+        /* 重置链接a标签 */
+        a:link, a:visited, a:active, a:hover {
+            color: inherit;
+            text-decoration: none;
+        }
+    /* 重置链接a标签的鼠标滑动效果 */
+    h1 {
+        font-family: Tahoma, Helvetica,Verdana, Arial,"楷体",sans-serif;
+        font-size: 2.4em;
+        font-weight: bold;
+        color: #FF0000;
+        text-align: center;
+    }
+
+    h2 {
+        font-family: "宋体";
+        word-spacing: .3em;
+        font-size: 2em;
+        color: #000099;
+        text-align: center;
+    }
+
+    h3 {
+        font-family: "楷体";
+        font-size: 2em;
+        font-weight: bold;
+        color: #8A2BE2;
+        text-align: center;
+    }
+
+    h4 {
+        font-family: "宋体";
+        font-size: 1.1em;
+        color: #000099;
+        text-align: center;
+    }
+
+    h2, p, li {
+        font-family: Georgia,"Times New Roman", times, "Microsoft YaHei",微软雅黑,"MicrosoftJhengHei",华文细黑,STHeiti,MingLiu,"宋体",serif;
+        margin-right: 2%;
+        margin-left: 2%;
+    }
+
+    h5 {
+        margin: 0;
+        text-align: center;
+    }
+
+    h6 {
+        font-size: 1.2em;
+        color: #333333;
+        line-height: 1.5;
+        margin: 0;
+    }
+
+    p {
+        font-size: 1em;
+        color: #333333;
+        text-indent: 2em;
+        line-height: 1.5;
+    }
+
+        p[class="nonind"] {
+            text-indent: 0em;
+        }
+
+    main li a:link {
+        color: blue
+    }
+    /* 未访问的链接 */
+    main li a:visited {
+        color: purple
+    }
+    /* 已访问的链接 */
+    main li a:hover {
+        text-decoration: underline;
+    }
+    /* 当有鼠标悬停在链接上 */
+    main li a:active {
+        color: red;
+        cursor: pointer;
+    }
+
+    p a:link {
+        color: blue
+    }
+    /* 未访问的链接 */
+    p a:visited {
+        color: purple
+    }
+    /* 已访问的链接 */
+    p a:hover {
+        text-decoration: underline;
+    }
+    /* 当有鼠标悬停在链接上 */
+    p a:active {
+        color: red;
+        cursor: pointer;
+    }
+    /* 活动链接 */
+    em {
+        font-weight: 500;
+        font-style: normal;
+        color: red;
+    }
+
+
+    main dd a:link, main dd a:visited, main dd a:hover, main dd a:active {
+        color: brown;
+    }
+
+    dl {
+        margin: 1em;
+    }
+
+    ul li {
+        font-size: 1.04rem;
+        font-weight: lighter;
+    }
+
+    ol li {
+        font-size: 1.04rem;
+        font-weight: lighter;
+    }
+
+    hr {
+        border-top: 1px solid #FF0000;
+        clear: left;
+    }
+
+    .del {
+        text-decoration: line-through;
+    }
+
+    .right {
+        float: right;
+    }
+
+    img {
+        clear: both;
+        max-width: 80%;
+        margin: 1em;
+    }
+
+    .img {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+}
+
+@media (min-width: 650px) and (max-width: 960px) {
+    body {
+        width: 650px;
+    }
+}
+
+@media only screen and (min-width: 960px) {
+    body {
+        width: 67.7%;
+    }
+}
