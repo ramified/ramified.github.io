@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Draggable Image</title>
+  <style>
+    #container {
+      position: relative;
+      width: 400px;
+      height: 400px;
+      border: 1px solid black;
+    }
+
+    #image {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100px;
+      height: 100px;
+    }
+  </style>
+  <script>
+    window.onload = function() {
+      var container = document.getElementById("container");
+      var image = document.getElementById("image");
+
+      image.addEventListener("dragstart", function(event) {
+        event.dataTransfer.setData("text/plain", event.target.id);
+      });
+
+      container.addEventListener("dragover", function(event) {
+        event.preventDefault();
+      });
+
+      container.addEventListener("drop", function(event) {
+        event.preventDefault();
+        var data = event.dataTransfer.getData("text/plain");
+        var draggedElement = document.getElementById(data);
+        var x = event.clientX - container.offsetLeft - (draggedElement.offsetWidth / 2);
+        var y = event.clientY - container.offsetTop - (draggedElement.offsetHeight / 2);
+        draggedElement.style.left = x + "px";
+        draggedElement.style.top = y + "px";
+      });
+    };
+  </script>
+</head>
+<body>
+  <div id="container">
+    <img id="image" src="card_ext_png1.png" draggable="true">
+  </div>
+</body>
+</html>

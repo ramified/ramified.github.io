@@ -1,0 +1,459 @@
+
+\documentclass{amsart}
+%Typical documenttypes: article/book
+%some examples:
+%\documentclass[reqno,11pt]{book}   %%%for books
+%\documentclass[]{minimal}			%%%for Minimal Working Example
+
+
+%for beamers, you have to change a lot. Especially, remove the package enumitem!!!
+
+
+
+%%%%%%%%%%%%%%%%%%%% setting for fast compiling
+
+%\special{dvipdfmx:config z 0}		% no compression
+
+\includeonly{chapters/chapter9}		% In practice, use an empty document called "chapter9"	% usually for printing books
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%% here we include packages
+
+%%%basic packages for math articles
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage[shortlabels]{enumitem}	% It supersedes both enumerate and mdwlist. The package option shortlabels is included to configure the labels like in enumerate.
+
+%%%packages for special symbols
+\usepackage{pifont}					% Access to PostScript standard Symbol and Dingbats fonts
+\usepackage{wasysym}				% additional characters
+\usepackage{bm}						% bold fonts: \bm{...}
+\usepackage{extarrows}				% may be replaced by tikz-cd
+%\usepackage{unicode-math}			% unicode maths for math fonts, now I don't know how to include it
+
+%%%basic packages for fancy electronic documents
+\usepackage[colorlinks]{hyperref}
+\usepackage[table,hyperref]{xcolor} 			% before tikz-cd. 
+%\usepackage[table,hyperref,monochrome]{xcolor}	% disable colored output (black and white)
+
+%%%packages for figures and tables (general setting)
+\usepackage{float}				%Improved interface for floating objects
+\usepackage{caption,subcaption}
+\usepackage{adjustbox}			% for me it is usually used in tables 
+\usepackage{stackengine}		%baseline changes
+
+%%%packages for commutative diagrams
+\usepackage{tikz-cd}
+%\usepackage{quiver}			% see https://q.uiver.app/
+\usepackage{tikz}
+\usetikzlibrary{calc,shapes}
+
+%%%packages for pictures
+\usepackage[width=0.5,tiewidth=0.7]{strands}
+\usepackage{graphicx}			% Enhanced support for graphics
+
+%%%packages for tables and general settings
+\usepackage{array}
+\usepackage{makecell}
+\usepackage{multicol}
+\usepackage{multirow}
+\usepackage{diagbox}
+
+
+
+
+
+
+
+
+
+%https://tex.stackexchange.com/questions/58852/possible-incompatibility-with-enumitem
+
+
+
+
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%% here we include theoremstyles
+
+\numberwithin{equation}{section}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+
+\newtheorem{setting}[theorem]{Setting}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{conjecture}[theorem]{Conjecture}
+
+\newtheorem{claim}[theorem]{Claim}
+\newtheorem{eg}[theorem]{Example}
+\newtheorem{ex}[theorem]{Exercise}
+\newtheorem{fact}[theorem]{Fact}
+\newtheorem{ques}[theorem]{Question}
+\newtheorem{warning}[theorem]{Warning}
+
+
+
+\newtheorem*{bbox}{Black box}
+\newtheorem*{notation}{Conventions and Notations}
+
+
+\numberwithin{equation}{section}
+
+
+\theoremstyle{remark}
+
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem*{remarks}{Remarks}
+
+%%% for important theorems
+%\newtheoremstyle{theoremletter}{4mm}{1mm}{\itshape}{ }{\bfseries}{}{ }{}
+%\theoremstyle{theoremletter}
+%\newtheorem{theoremA}{Theorem}
+%\renewcommand{\thetheoremA}{A}
+%\newtheorem{theoremB}{Theorem}
+%\renewcommand{\thetheoremB}{B}
+
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%% here we declare some symbols
+
+%%%%%%%DeclareMathOperator
+%see here for why newcommand is better for DeclareMathOperator: https://tex.stackexchange.com/questions/67506/newcommand-vs-declaremathoperator
+
+%%%%%basic symbols. Keep them!
+
+%%%symbols for sets and maps
+\DeclareMathOperator{\pt}{\operatorname{pt}}	%points. Other possibilities are \{pt\}, ...
+\DeclareMathOperator{\Id}{\operatorname{Id}}	%identity in groups.
+\DeclareMathOperator{\Img}{\operatorname{Im}}
+
+\DeclareMathOperator{\Ob}{\operatorname{Ob}}
+\DeclareMathOperator{\Mor}{\operatorname{Mor}}	%difference of Mor and Hom: Hom is usually for abelian categories
+\DeclareMathOperator{\Hom}{\operatorname{Hom}}	\DeclareMathOperator{\End}{\operatorname{End}}
+\DeclareMathOperator{\Aut}{\operatorname{Aut}}
+
+%%%symbols for linear algebras and 
+%%linear algebras
+\DeclareMathOperator{\tr}{\operatorname{tr}}
+\DeclareMathOperator{\diag}{\operatorname{diag}}	%for diagonal matrices
+
+%%abstract algebras
+\DeclareMathOperator{\ord}{\operatorname{ord}}
+\DeclareMathOperator{\gr}{\operatorname{gr}}
+\DeclareMathOperator{\Frac}{\operatorname{Frac}}
+
+%%%symbols for basic geometries
+\DeclareMathOperator{\vol}{\operatorname{vol}}	%volume
+\DeclareMathOperator{\dist}{\operatorname{dist}}
+\DeclareMathOperator{\supp}{\operatorname{supp}}
+
+%%%symbols for category
+%%names of categories
+\DeclareMathOperator{\Mod}{\operatorname{Mod}}
+\DeclareMathOperator{\Vect}{\operatorname{Vect}}
+\DeclareMathOperator{\rep}{\operatorname{rep}} %usually rep means the category of finite dimensional representations, while Rep means the category of representations.
+\DeclareMathOperator{\Rep}{\operatorname{Rep}}
+
+
+%%%symbols for homological algebras
+\DeclareMathOperator{\Tor}{\operatorname{Tor}}
+\DeclareMathOperator{\Ext}{\operatorname{Ext}}
+\DeclareMathOperator{\gldim}{\operatorname{gl.dim}}
+\DeclareMathOperator{\projdim}{\operatorname{proj.dim}}
+\DeclareMathOperator{\injdim}{\operatorname{inj.dim}}
+\DeclareMathOperator{\rad}{\operatorname{rad}}
+
+
+%%%symbols for algebraic groups
+\DeclareMathOperator{\GL}{\operatorname{GL}}
+\DeclareMathOperator{\SL}{\operatorname{SL}}
+
+%%%symbols for typical varieties
+\DeclareMathOperator{\Gr}{\operatorname{Gr}}
+\DeclareMathOperator{\Flag}{\operatorname{Flag}}
+
+%%%symbols for basic algebraic geometry
+\DeclareMathOperator{\Spec}{\operatorname{Spec}}
+\DeclareMathOperator{\Coh}{\operatorname{Coh}}
+\newcommand{\Dcoh}{\mathcal{D}_{\operatorname{Coh}}}%%%This one shows the difference between \DeclareMathOperator and \newcommand
+\DeclareMathOperator{\Pic}{\operatorname{Pic}}
+\DeclareMathOperator{\Jac}{\operatorname{Jac}}
+
+%%%%%advanced symbols. Choose the part you need!
+
+%%%symbols for algebraic representation theory
+\DeclareMathOperator{\Irr}{\operatorname{Irr}}
+\DeclareMathOperator{\ind}{\operatorname{ind}}	%\ind(Q) means the set of  equivalence classes of finite dimensional indecomposable representations
+\DeclareMathOperator{\Res}{\operatorname{Res}}
+\DeclareMathOperator{\Ind}{\operatorname{Ind}}
+\DeclareMathOperator{\cInd}{\operatorname{c-Ind}}
+
+
+%%%symbols for algebraic topology
+\DeclareMathOperator{\EGG}{\operatorname{E}\!}
+\DeclareMathOperator{\BGG}{\operatorname{B}\!}
+
+\DeclareMathOperator{\chern}{\operatorname{ch}^{*}}
+\DeclareMathOperator{\Td}{\operatorname{Td}}
+\DeclareMathOperator{\AS}{\operatorname{AS}}	%Atiyah--Segal completion theorem 
+
+%%%symbols for Auslander--Reiten theory 
+\DeclareMathOperator{\Modup}{\overline{\operatorname{mod}}}
+\DeclareMathOperator{\Moddown}{\underline{\operatorname{mod}}}
+\DeclareMathOperator{\Homup}{\overline{\operatorname{Hom}}}
+\DeclareMathOperator{\Homdown}{\underline{\operatorname{Hom}}}
+
+
+%%%symbols for operad
+\DeclareMathOperator{\Com}{\operatorname{\mathcal{C}om}}
+\DeclareMathOperator{\Ass}{\operatorname{\mathcal{A}ss}}
+\DeclareMathOperator{\Lie}{\operatorname{\mathcal{L}ie}}
+\DeclareMathOperator{\calEnd}{\operatorname{\mathcal{E}nd}} %cal=\mathcal
+
+
+%%%%%personal symbols. Use at your own risk!
+
+%%%symbols only for master thesis
+\DeclareMathOperator{\ptt}{\operatorname{par}}	%the partition map
+\DeclareMathOperator{\str}{\operatorname{str}}	%strict case
+\DeclareMathOperator{\RRep}{\widetilde{\operatorname{Rep}}}
+\DeclareMathOperator{\Rpt}{\operatorname{R}}
+\DeclareMathOperator{\Rptc}{\operatorname{\mathcal{R}}}
+\DeclareMathOperator{\Spt}{\operatorname{S}}
+\DeclareMathOperator{\Sptc}{\operatorname{\mathcal{S}}}
+\DeclareMathOperator{\Kcurl}{\operatorname{\mathcal{K}}}
+\DeclareMathOperator{\Hcurl}{\operatorname{\mathcal{H}}}
+\DeclareMathOperator{\eu}{\operatorname{eu}}
+\DeclareMathOperator{\Eu}{\operatorname{Eu}}
+\DeclareMathOperator{\dimv}{\operatorname{\underline{\mathbf{dim}}}}
+\DeclareMathOperator{\St}{\mathcal{Z}}
+
+%%%%%symbols which haven't been classified. Add your own math operators here!
+
+
+\DeclareMathOperator{\Modr}{\operatorname{-Mod}}
+
+
+
+
+
+%%%%%%%newcommand
+
+%%%basic symbols
+\newcommand{\norm}[1]{\Vert{#1}\Vert}
+
+%%%symbols only for master thesis
+\newcommand{\dimvec}[1]{\mathbf{#1}}
+\newcommand{\abdimvec}[1]{|\dimvec{#1}|}
+\newcommand{\ftdimvec}[1]{\underline{\dimvec{#1}}}
+
+\newcommand{\absgp}[1]{\mathbb{#1}}
+\newcommand{\WWd}{\absgp{W}_{\abdimvec{d}}}
+\newcommand{\Wd}{W_{\dimvec{d}}}
+\newcommand{\MinWd}{\operatorname{Min}(\absgp{W}_{\abdimvec{d}},W_{\dimvec{d}})}
+\newcommand{\Compd}{\operatorname{Comp}_{\dimvec{d}}}
+\newcommand{\Shuffled}{\operatorname{Shuffle}_{\dimvec{d}}}
+
+\newcommand{\Omcell}{\Omega}
+\newcommand{\OOmcell}{\boldsymbol{\Omega}}
+\newcommand{\Vcell}{\mathcal{V}}
+\newcommand{\VVcell}{\boldsymbol{\mathcal{V}}}
+\newcommand{\Ocell}{\mathcal{O}}
+\newcommand{\OOcell}{\boldsymbol{\mathcal{O}}}
+\newcommand{\preimage}[1]{\widetilde{#1}}
+\newcommand{\orde}{\operatorname{ord}_e}
+\newcommand{\fakestar}{*}
+
+%as the subscription of Hom
+\newcommand{\Alggp}{\text{-Alg gp}}
+
+%%%%%symbols which haven't been classified. Add your own math operators here!
+
+\newcommand{\blockzero}[1]{\scalebox{1.3}{$\substack{\phantom{0}\\\phantom{0}#1\phantom{0}}$}}
+\newcommand{\blockone}[1]{\scalebox{1.3}{${\substack{\phantom{0}\\#1\phantom{00}}}$}}
+\newcommand{\blocktwo}[1]{\scalebox{1.3}{${\substack{\phantom{0}\\\phantom{00}#1}}$}}
+\newcommand{\blockthree}[1]{\scalebox{1.3}{${\substack{#1\\\phantom{000}}}$}}
+%%%%%%%%%%%%%%%%%%%% here we make some blocks for special features. 
+
+
+
+%%%% todo notes %%%%
+\usepackage[colorinlistoftodos,textsize=footnotesize]{todonotes}
+\setlength{\marginparwidth}{2.5cm}
+\newcommand{\leftnote}[1]{\reversemarginpar\marginnote{\footnotesize #1}}
+\newcommand{\rightnote}[1]{\normalmarginpar\marginnote{\footnotesize #1}\reversemarginpar}
+
+
+
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%% here we make some global settings. Understand everything here before you make a document!
+
+\usepackage[a4paper,top=2cm, bottom=2cm, outer=0cm, inner=0cm]{geometry}
+\usepackage{indentfirst}	% Indent first paragraph after section header
+
+\setcounter{tocdepth}{2}
+
+
+%https://latexref.xyz/_005cparindent-_0026-_005cparskip.html
+\setlength{\parindent}{15pt}	
+\setlength{\parskip}{0pt plus1pt}
+
+%\setlength\intextsep{0cm}
+%\setlength\textfloatsep{0cm}
+\def\arraystretch{1}
+%\setcounter{secnumdepth}{3}
+
+\allowdisplaybreaks
+\thispagestyle{empty}
+
+\begin{document}
+
+% The beginning depends on the documentclass. Rewrite this part if you use different documentclass!
+
+
+
+%\tikz[remember picture,overlay] \node[opacity=0.5,inner sep=0pt] at (current page.center){\includegraphics[width=\paperwidth,height=\paperheight]{figures/background.png}};
+\tikzset{
+% Defines a custom style which generates BOTH, .pdf and .png export
+% but prefers the .png on inclusion.
+%%This style is not pre-defined, you may need to copy-paste and
+% adjust it.
+png export/.style={
+external/system call/.add=
+{}
+{& magick.exe -density 300 -transparent white "\image.pdf" "\image.png"},
+%
+/pgf/images/external info,
+/pgf/images/include external/.code={%
+\includegraphics
+[width=\pgfexternalwidth,height=\pgfexternalheight]
+{##1.png}%
+},
+}
+}
+%\tikzset{
+%png export/.style={
+%    % First we call ImageMagick; change settings to requirements
+%    external/system call/.add={}{& magick.exe -density 300 "\image.pdf" "\image.png"},
+%    % Now we force the PNG figure to be used instead of the PDF
+%    /pgf/images/external info,
+%    /pgf/images/include external/.code={
+%        \includegraphics[width=\pgfexternalwidth,height=\pgfexternalheight]{##1.png}
+%    },
+%}
+%}
+{
+% Here we specify the figure will be converted and inserted as PNG
+\tikzset{png export}
+\begin{tikzpicture} [remember picture, overlay]
+\def\border{1.5cm}
+\def\upborder{0.7cm}
+\def\height{4.5cm}
+\def\betweenpieces{13mm}
+\def\extraheight{15mm}
+\def\cornerradius{2mm}
+\def\distance{0}
+\def\borderlinewidth{0.3mm}
+\def\borderlinewhitewidth{0.8mm}
+\def\borderlinewholewidth{\borderlinewidth *2 + \borderlinewhitewidth}
+\foreach \x/\xcolor in {2/yellow}
+{
+\node (PosA\x) at ([xshift=\border,yshift=-(\upborder+\x * \distance)]current page.north west){};
+\node (PosC\x) at ([xshift=\border,yshift=-(\upborder+\height+\x *\distance)]current page.north west){};
+\node (PosD\x) at ([xshift=-\border,yshift=-(\upborder+\height+\x *\distance)]current page.north east){};
+\draw (PosA\x) [line width=\borderlinewholewidth,black,rounded corners=\cornerradius]rectangle (PosD\x) node(recCen\x)[midway] {};
+
+\draw[line width=\borderlinewholewidth,rounded corners=\cornerradius]
+(PosC\x) ++(36mm+ 2 * \x * \betweenpieces ,0) --++(\cornerradius,0)-- ++(0,-\extraheight) --++(2 * \betweenpieces,0) -- ++(0,\extraheight) --++(\cornerradius,0);
+
+\draw (PosA\x) [line width=\borderlinewhitewidth,\xcolor,rounded corners=\cornerradius]rectangle (PosD\x);
+\draw[line width=\borderlinewhitewidth,\xcolor,rounded corners=\cornerradius]
+    (PosC\x) ++(36mm+ 2 * \x * \betweenpieces ,0) --++(\cornerradius,0)-- ++(0,-\extraheight) --++(\betweenpieces,0)node(PosE\x)[yshift=\extraheight/2,black] {}--++(\betweenpieces,0) -- ++(0,\extraheight) --++(\cornerradius,0);
+
+\draw (PosE\x) [yshift=-3mm,fill=black]circle (0.6mm)node(PosF0\x){};
+\draw (PosF0\x) [xshift=-7mm,fill=black]circle (0.6mm)node(PosF1\x){};
+\draw (PosF0\x) [xshift=7mm,fill=black]circle (0.6mm)node(PosF2\x){};
+\draw (PosF0\x) [yshift=7mm,fill=black]circle (0.6mm)node(PosF3\x){};
+\draw (PosF\x\x)[thick] circle (1.2mm);
+\draw (PosF0\x) -- (PosF1\x);
+\draw (PosF0\x) -- (PosF2\x);
+\draw (PosF0\x) -- (PosF3\x);
+}
+%\coordinate [label=left:$C$] (PosC0) at ([yshift=-\height]PosA0);
+% https://q.uiver.app/?q=WzAsMjcsWzIsMSwiXFxzdWJzdGFja3swXFxcXDAwMH0iXSxbMywxLCJcXHN1YnN0YWNrezBcXFxcMDAwfSJdLFsyLDAsIlxcc3Vic3RhY2t7MFxcXFwwMDB9Il0sWzIsMiwiXFxzdWJzdGFja3swXFxcXDAwMH0iXSxbMSwxLCJcXHN1YnN0YWNrezBcXFxcMDAwfSJdLFswLDAsIlxcc3Vic3RhY2t7MFxcXFwwMDB9Il0sWzAsMSwiXFxzdWJzdGFja3swXFxcXDAwMH0iXSxbMCwyLCJcXHN1YnN0YWNrezBcXFxcMDAwfSJdLFs0LDIsIlxcc3Vic3RhY2t7MFxcXFwwMDB9Il0sWzQsMSwiXFxzdWJzdGFja3swXFxcXDAwMH0iXSxbNCwwLCJcXHN1YnN0YWNrezBcXFxcMDAwfSJdLFs1LDEsIlxcc3Vic3RhY2t7MFxcXFwwMDB9Il0sWzYsMiwiXFxzdWJzdGFja3swXFxcXDAwMH0iXSxbNiwxLCJcXHN1YnN0YWNrezBcXFxcMDAwfSJdLFs2LDAsIlxcc3Vic3RhY2t7MFxcXFwwMDB9Il0sWzcsMSwiXFxzdWJzdGFja3swXFxcXDAwMH0iXSxbOCwwLCJcXHN1YnN0YWNrezBcXFxcMDAwfSJdLFs4LDEsIlxcc3Vic3RhY2t7MFxcXFwwMDB9Il0sWzgsMiwiXFxzdWJzdGFja3swXFxcXDAwMH0iXSxbOSwxLCJcXHN1YnN0YWNrezBcXFxcMDAwfSJdLFsxMCwwLCJcXHN1YnN0YWNrezBcXFxcMDAwfSJdLFsxMCwxLCJcXHN1YnN0YWNrezBcXFxcMDAwfSJdLFsxMCwyLCJcXHN1YnN0YWNrezBcXFxcMDAwfSJdLFsxMSwxLCJcXHN1YnN0YWNrezBcXFxcMDAwfSJdLFsxMiwwLCJcXHN1YnN0YWNrezBcXFxcMDAwfSJdLFsxMiwxLCJcXHN1YnN0YWNrezBcXFxcMDAwfSJdLFsxMiwyLCJcXHN1YnN0YWNrezBcXFxcMDAwfSJdLFswLDFdLFs1LDRdLFs2LDRdLFs3LDRdLFs0LDJdLFs0LDBdLFs0LDNdLFsyLDFdLFsxLDEwXSxbMSw5XSxbMywxXSxbMSw4XSxbMTAsMTFdLFs5LDExXSxbOCwxMV0sWzExLDE0XSxbMTEsMTNdLFsxMSwxMl0sWzE0LDE1XSxbMTMsMTVdLFsxMiwxNV0sWzE1LDE2XSxbMTUsMTddLFsxNSwxOF0sWzE2LDE5XSxbMTcsMTldLFsxOCwxOV0sWzE5LDIwXSxbMTksMjFdLFsxOSwyMl0sWzIyLDIzXSxbMjEsMjNdLFsyMCwyM10sWzIzLDI0XSxbMjMsMjVdLFsyMywyNl1d
+
+
+\node [black] at (recCen2) {
+$\begin{tikzcd}[sep={between origins, \betweenpieces}]
+  	\blocktwo{0} && \blocktwo{0} && \blocktwo{0} && \blocktwo{1} && \blocktwo{0} && \blocktwo{0} && \blocktwo{0} \\
+  	\blocktwo{0} & \blocktwo{0} & \blocktwo{0} & \blocktwo{0} & \blocktwo{0} & \blocktwo{1} & \blocktwo{1} & \blocktwo{1} & \blocktwo{0} & \blocktwo{0} & \blocktwo{0} & \blocktwo{0} & \blocktwo{0} \\
+  	\blocktwo{0} && \blocktwo{0} && \blocktwo{1} && \blocktwo{0} && \blocktwo{1} && \blocktwo{0} && \blocktwo{0}
+  	\arrow[from=2-3, to=2-4]
+  	\arrow[from=1-1, to=2-2]
+  	\arrow[from=2-1, to=2-2]
+  	\arrow[from=3-1, to=2-2]
+  	\arrow[from=2-2, to=1-3]
+  	\arrow[from=2-2, to=2-3]
+  	\arrow[from=2-2, to=3-3]
+  	\arrow[from=1-3, to=2-4]
+  	\arrow[from=2-4, to=1-5]
+  	\arrow[from=2-4, to=2-5]
+  	\arrow[from=3-3, to=2-4]
+  	\arrow[from=2-4, to=3-5]
+  	\arrow[from=1-5, to=2-6]
+  	\arrow[from=2-5, to=2-6]
+  	\arrow[from=3-5, to=2-6]
+  	\arrow[from=2-6, to=1-7]
+  	\arrow[from=2-6, to=2-7]
+  	\arrow[from=2-6, to=3-7]
+  	\arrow[from=1-7, to=2-8]
+  	\arrow[from=2-7, to=2-8]
+  	\arrow[from=3-7, to=2-8]
+  	\arrow[from=2-8, to=1-9]
+  	\arrow[from=2-8, to=2-9]
+  	\arrow[from=2-8, to=3-9]
+  	\arrow[from=1-9, to=2-10]
+  	\arrow[from=2-9, to=2-10]
+  	\arrow[from=3-9, to=2-10]
+  	\arrow[from=2-10, to=1-11]
+  	\arrow[from=2-10, to=2-11]
+  	\arrow[from=2-10, to=3-11]
+  	\arrow[from=3-11, to=2-12]
+  	\arrow[from=2-11, to=2-12]
+  	\arrow[from=1-11, to=2-12]
+  	\arrow[from=2-12, to=1-13]
+  	\arrow[from=2-12, to=2-13]
+  	\arrow[from=2-12, to=3-13]
+\end{tikzcd}$
+};
+
+
+\end{tikzpicture}
+}
+\include{chapters/chapter9}
+
+
+\end{document}

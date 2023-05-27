@@ -1,0 +1,19 @@
+﻿
+successful try:
+pushd "G:\我的大学材料\文件\个人练习\文件类\github\master_thesis\card\webversion"
+magick.exe -density 300 "card_ext_png1.pdf" "card_ext_png1.png"
+magick.exe "card_ext_png1.png" -crop 2480x900+0+0 "card_ext_png2_cropped.png"
+magick.exe -density 300 "card_ext_png2.pdf" "card_ext_png2.png"
+magick.exe "card_ext_png2.png" -crop 2480x900+0+0 "card_ext_png2_cropped.png"
+magick.exe -density 300 "card_ext_png3.pdf" "card_ext_png3.png"
+magick.exe "card_ext_png3.png" -crop 2480x900+0+0 "card_ext_png3_cropped.png"
+magick.exe -density 300 "card_ext_png4.pdf" "card_ext_png4.png"
+magick.exe "card_ext_png4.png" -crop 2480x900+0+0 "card_ext_png4_cropped.png"
+
+failed try:
+pushd "G:\我的大学材料\文件\个人练习\文件类\github\master_thesis\card\webversion"
+for %%i in (C:\path\to\pdf\files\card_ext_png*.tex) do (
+magick.exe -density 300 "%%i" "%%~ni.png"
+magick.exe "%%~ni.png" -crop 2480x900+0+0 "%%~ni_cropped.png"
+)
+pushd "G:\我的大学材料\文件\个人练习\文件类\github\webpage\webversion"

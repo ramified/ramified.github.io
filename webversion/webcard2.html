@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Webcard</title>
+</head>
+<body>
+  <p>This is my card game. It is still bad-behaved. See the <a href="test3.html">ideal states</a>.</p>
+  <p>This card game can generate different Auslander-Reiten quivers. Drag blue bottons to see the effect.</p>
+  <p id="myParagraph">This produces a AR-quiver. The original quiver is here: </p>
+  <canvas id="myCanvas2" width="250" height="75"></canvas>
+  <canvas id="myCanvas" width="1300" height="700"></canvas>
+
+  <script>
+
+    const canvas = document.getElementById('myCanvas');
+    const ctx = canvas.getContext('2d');
+    const canvas2 = document.getElementById('myCanvas2');
+    const ctx2 = canvas2.getContext('2d');
+  const paragraph = document.getElementById("myParagraph");
+  
+    let offsetX = 0;
+    let offsetY = 0;
+
+// Here we draw the grid 
+      // Draw the grid once
+      // Define the grid parameters
+      const gridSize = {
+        x: 111.3, // width of each grid card
+        y: 330, // height of each grid card
+      };
+      const gridOffset = {
+        x: 60, 
+        y: 70, 
+      };
+      const gridStep = {
+        x: gridSize.x + gridOffset.x,
+        y: gridSize.y + gridOffset.y,
+      };
+
+      // Draw the grid lines
+      function drawGrid() {
+        ctx.beginPath();
+        for (let x = gridOffset.x; x < canvas.width; x += gridSize.x) {
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, canvas.height);
+        }
+        for (let y = gridOffset.y; y < canvas.height; y += gridSize.y) {
+          ctx.moveTo(0, y);
+          ctx.lineTo(canvas.width, y);
+        }
+        ctx.strokeStyle = "#ddd"; // set the color of the grid lines
+        ctx.lineWidth = 0.1; // set the thickness of the grid lines
+        ctx.stroke(); // draw the grid lines
+      }
+
+// Here we define the cards(whose coordinates are indicated by x, y) with rectangles(whose coordinates are indicated by xsq, ysq)
+
+const edgeLength = 30;
+let cards = [
+{source: "card_ext_png1.png", x: 60, y: 70, idx: 0, idy: 0, width: 10, height: 10, xsq:278, ysq:263, color:'red'},
+{source: "card_ext_png2.png", x: 60, y: 70, idx: 0, idy: 0, width: 10, height: 10, xsq:278+111.3-edgeLength, ysq:263, color:'orange'},
+{source: "card_ext_png3.png", x: 60, y: 70, idx: 0, idy: 0, width: 10, height: 10, xsq:278+111.3*2+edgeLength, ysq:263, color:'yellow'},
+{source: "card_ext_png4.png", x: 60, y: 70, idx: 0, idy: 0, width: 10, height: 10, xsq:278+111.3*3, ysq:263-edgeLength, color:'green'},
+];
+
+      // Initial drawing
+      drawGrid();
+      cards.forEach(card => {
+        drawCard(card); // draw the card
+      });
+      drawDynkinD4(ctx2, 100, 60, 1, 10, 50);
+
+// Draw an image on the canvas
+function drawImageWithAspectRatio(ctx, img, x, y, width) {
+  const aspectRatio = img.height / img.width;
+  ctx.drawImage(img, x, y, width, aspectRatio * width);
+}
+
+// Draw a card and a square with color on the canvas
+function drawCard(card) {
+        ctx.fillStyle = card.color; // set the fill color to blue
+        ctx.fillRect(card.x+card.xsq, card.y+card.ysq, card.width, card.height);
+        // Create a new image object
+        const img = new Image();
+
+        // Set the image source to a PNG file
+        img.src = card.source;
+
+        // When the image is loaded, draw it onto the canvas
+        img.onload = function() {
+          drawImageWithAspectRatio(ctx, img, card.x, card.y, 900);
+        };
+      }
+
+// Check if a point is inside a square
+function isInsideSquare(x, y, card) {
+  return x >= card.x+card.xsq && x <= card.x+card.xsq + card.width && y >= card.y+card.ysq && y <= card.y+card.ysq + card.height;
+}
+
+// Add event listeners for mouse down events on the canvas
+
+canvas.addEventListener('mousedown', function(event) {
+  const rect = canvas.getBoundingClientRect();
+  const offsetX = event.clientX - rect.left;
+  const offsetY = event.clientY - rect.top;
+
+  for (let i = 0; i < cards.length; i++) {
+    const card = cards[i];
+    if (isInsideSquare(offsetX, offsetY, card)) {
+      let startX = card.x - event.clientX;
+      let startY = card.y - event.clientY;
+
+      function onMousemove(event) {
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        card.x = x + startX + rect.left;
+        card.y = y + startY + rect.top;
+              // redrawCanvas();
+//Here is the problem.I redrawCanvas for so much time, and the problem emerges;
+}
+
+function onMouseup() {
+  card.idx = Math.round((card.x - gridOffset.x) / gridSize.x);
+  card.idy = Math.round((card.y - gridOffset.y) / gridSize.y);
+  const gridCoordinate = {
+    x: card.idx * gridSize.x + gridOffset.x,
+    y: card.idy * gridSize.y + gridOffset.y,
+  };
+  card.x = gridCoordinate.x;
+  card.y = gridCoordinate.y;
+  redrawCanvas();
+              // alert("Why is that alert before the redraw?");
+              checkCondition();
+              document.removeEventListener('mousemove', onMousemove);
+              document.removeEventListener('mouseup', onMouseup);
+            }
+
+            document.addEventListener('mousemove', onMousemove);
+            document.addEventListener('mouseup', onMouseup);
+            break;
+          }
+        }
+      });
+
+
+
+      // Redraw the entire canvas with the updated cards
+      function redrawCanvas() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawGrid(); // Move this here to redraw the grid every time
+        cards.forEach(card => drawCard(card));
+        // drawImageWithAspectRatio(ctx, img, 0, 0, 900);
+      }
+
+
+
+//New function: get relative place and give an original-quiver.
+
+function checkCondition() {
+  const v1 = cards[0].idx;
+  const v2 = cards[1].idx;
+  const v3 = cards[2].idx;
+  const v4 = cards[3].idx; 
+  const a = v1-v2;
+  const b = v1-v3;
+  const c = v1-v4;
+  const allIdsSame = cards.every((card, index, arr) => card.idy === arr[0].idy);
+
+  if ((2*a-1)**2 + (2*b-1)**2 + (2*c-1)**2 === 3 && allIdsSame) {
+    paragraph.textContent = "This is an AR-quiver. The original quiver is here:";
+    drawArrow(ctx2, 100, 60, 1, 10, 50, a, b, c);
+    // alert("success!");
+  } else {
+    // Replace the text of the paragraph
+    paragraph.textContent = "This is not an AR-quiver.";
+  }
+}
+
+
+function drawArrowhead(ctx, fromX, fromY, toX, toY) {
+  // set arrow properties
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 2;
+  ctx.fillStyle = "black";
+
+  // draw line from start to end point
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.lineTo(toX, toY);
+  ctx.stroke();
+
+  // calculate angle of arrow
+  var angle = Math.atan2(toY - fromY, toX - fromX);
+  const headlength = 10;
+  // draw arrowhead
+  ctx.beginPath();
+  ctx.moveTo(toX, toY);
+  ctx.lineTo(toX - headlength * Math.cos(angle - Math.PI / 6), toY - headlength * Math.sin(angle - Math.PI / 6));
+  ctx.lineTo(toX - headlength * Math.cos(angle + Math.PI / 6), toY - headlength * Math.sin(angle + Math.PI / 6));
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawDynkinD4(ctx, x, y, scale, disc, length) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // set properties
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 2;
+  
+  const disc2=length-disc;
+  // draw edges
+  ctx.beginPath();
+  ctx.moveTo(x - disc * scale, y);
+  ctx.lineTo(x - disc2 * scale, y);
+  ctx.moveTo(x + disc * scale, y);
+  ctx.lineTo(x + disc2 * scale, y);
+  ctx.moveTo(x , y - disc * scale);
+  ctx.lineTo(x , y - disc2 * scale);
+  ctx.stroke();
+ //  if (a) {
+ //    drawArrowhead(ctx2, x - disc * scale, y, x - disc2 * scale, y);
+ //  } else {
+ //   drawArrowhead(ctx2, x - disc2 * scale, y, x - disc * scale, y);  
+ // }
+ //  if (b) {
+ //    drawArrowhead(ctx2, x + disc * scale, y, x + disc2 * scale, y);
+ //  } else {
+ //   drawArrowhead(ctx2, x + disc2 * scale, y, x + disc * scale, y);  
+ // }
+ //  if (c) {
+ //    drawArrowhead(ctx2, x, y - disc * scale, x, y - disc2 * scale);
+ //  } else {
+ //   drawArrowhead(ctx2, x, y - disc2 * scale, x, y - disc * scale);  
+ // }
+
+ // draw circles
+ ctx.beginPath();
+ ctx.arc(x, y, 3 * scale, 0, 2 * Math.PI);
+ ctx.moveTo(x + length * scale, y);
+ ctx.arc(x + length * scale, y, 3 * scale, 0, 2 * Math.PI);
+ ctx.moveTo(x - length * scale, y);
+ ctx.arc(x - length * scale, y, 3 * scale, 0, 2 * Math.PI);
+ ctx.moveTo(x, y - length * scale);
+ ctx.arc(x, y - length * scale, 3 * scale, 0, 2 * Math.PI);
+ ctx.fill();
+  // ctx.fill();
+}
+
+function drawArrow(ctx, x, y, scale, disc, length,a,b,c) {
+  alert("Both conditions are true!" + a);
+  if (a) {
+    drawArrowhead(ctx, x - disc * scale, y, x - disc2 * scale, y);
+  } else {
+   drawArrowhead(ctx, x - disc2 * scale, y, x - disc * scale, y);  
+ }
+ if (b) {
+  drawArrowhead(ctx, x + disc * scale, y, x + disc2 * scale, y);
+} else {
+ drawArrowhead(ctx, x + disc2 * scale, y, x + disc * scale, y);  
+}
+if (c) {
+  drawArrowhead(ctx, x, y - disc * scale, x, y - disc2 * scale);
+} else {
+ drawArrowhead(ctx, x, y - disc2 * scale, x, y - disc * scale);  
+}
+}
+
+</script>
+</body>
+</html>
