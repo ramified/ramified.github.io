@@ -23,6 +23,8 @@
                 conju: 'https://leconjugueur.lefigaro.fr/conjugaison/verbe/',
                 fazhu: 'https://www.frdic.com/dicts/fr/',
                 dezhu: 'http://www.godic.net/dicts/de/',
+                FrEn: 'https://en.pons.com/translate/french-english/',
+                DeEn: 'https://en.pons.com/translate/german-english/',
                 herokuapp: 'http://en-wiki.herokuapp.com/wiki/',
                 dujiang: 'http://dict.hjenglish.com/fr/',
                 USTCwiki: 'http://202.38.70.7:23334/wikipedia_en_mathematics_maxi_2019-08/A/',
