@@ -53,6 +53,8 @@
                 conju: '',
                 fazhu: '',
                 dezhu: '',
+                FrEn: '',
+                DeEn: '',
                 herokuapp: '',
                 dujiang: '',
                 USTCwiki: '',
