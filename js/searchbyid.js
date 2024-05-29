@@ -29,6 +29,7 @@
                 dujiang: 'http://dict.hjenglish.com/fr/',
                 USTCwiki: 'http://202.38.70.7:23334/wikipedia_en_mathematics_maxi_2019-08/A/',
                 dict: 'https://www.dict.cc/?s=',
+                Itverb: 'https://conjugator.reverso.net/conjugation-italian-verb-',
             };
             var base2URL = {
                 google: '',
@@ -59,6 +60,7 @@
                 dujiang: '',
                 USTCwiki: '',
                 dict: '',
+                Itverb: '.html',
             };
             openwin(baseURL[site] + encodeURIComponent(document.getElementById(searchId).value) + base2URL[site]);
         };
