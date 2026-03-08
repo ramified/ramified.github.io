@@ -17,3 +17,15 @@ if(targetObj.style.display!="none"){
    }
 }
 }
+
+function expandAll() {
+  document.querySelectorAll('[id^="box"]').forEach(function(el) {
+    el.style.display = "block";
+  });
+}
+
+function collapseAll() {
+  document.querySelectorAll('[id^="box"]').forEach(function(el) {
+    el.style.display = "none";
+  });
+}
