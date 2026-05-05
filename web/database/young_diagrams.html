@@ -4,310 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Young Diagram Calculator</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
-
-  :root {
-    --bg:       #f7f4ef;
-    --surface:  #ffffff;
-    --border:   #d8d0c4;
-    --text:     #1a1612;
-    --muted:    #7a6f65;
-    --accent:   #3d6b4f;
-    --accent2:  #8b3a2a;
-    --shadow:   0 2px 12px rgba(0,0,0,0.08);
-  }
-
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'EB Garamond', Georgia, serif;
-    font-size: 17px;
-    line-height: 1.6;
-    min-height: 100vh;
-  }
-
-  header {
-    background: var(--text);
-    color: var(--bg);
-    padding: 22px 36px;
-    display: flex;
-    align-items: baseline;
-    gap: 18px;
-    border-bottom: 3px solid var(--accent);
-  }
-  header h1 {
-    font-size: 1.7rem;
-    font-weight: 500;
-    letter-spacing: 0.01em;
-  }
-  header span {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    color: #9a9080;
-    letter-spacing: 0.05em;
-  }
-
-  .layout {
-    display: grid;
-    grid-template-columns: 1fr 320px;
-    gap: 28px;
-    max-width: 1100px;
-    margin: 32px auto;
-    padding: 0 28px;
-  }
-
-  @media (max-width: 780px) {
-    .layout { grid-template-columns: 1fr; }
-  }
-
-  /* ── canvas panel ── */
-  .canvas-panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    box-shadow: var(--shadow);
-    overflow: hidden;
-  }
-  .canvas-panel header.panel-title {
-    background: transparent;
-    border-bottom: 1px solid var(--border);
-    border-top: none;
-    padding: 10px 16px;
-    font-size: 0.78rem;
-    font-family: 'JetBrains Mono', monospace;
-    letter-spacing: 0.08em;
-    color: var(--muted);
-    text-transform: uppercase;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .canvas-panel header.panel-title span { color: var(--text); }
-
-  #canvas-wrap {
-    padding: 16px;
-    aspect-ratio: 1;
-  }
-  canvas {
-    display: block;
-    width: 100% !important;
-    height: auto !important;
-    cursor: crosshair;
-    border-radius: 2px;
-  }
-
-  /* ── right column ── */
-  .side { display: flex; flex-direction: column; gap: 18px; }
-
-  /* drag-and-drop */
-  .card {
-    transition: box-shadow 0.15s, opacity 0.15s, transform 0.15s;
-  }
-  .card.dragging {
-    opacity: 0.35;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
-  }
-  .card.drag-over {
-    box-shadow: 0 0 0 2px var(--accent), var(--shadow);
-  }
-  .drag-handle {
-    cursor: grab;
-    padding: 0 6px 0 0;
-    color: var(--border);
-    font-size: 0.9rem;
-    letter-spacing: -1px;
-    line-height: 1;
-    flex-shrink: 0;
-    transition: color 0.15s;
-  }
-  .drag-handle:hover { color: var(--muted); }
-  .card-head-label { flex: 1; }
- 
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    box-shadow: var(--shadow);
-  }
-  .card-head {
-    padding: 9px 16px;
-    border-bottom: 1px solid var(--border);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--muted);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
-    user-select: none;
-    transition: background 0.15s;
-  }
-  .card-head:hover { background: rgba(0,0,0,0.025); }
-  .card-head .toggle-icon {
-    font-style: normal;
-    font-size: 0.9rem;
-    color: var(--muted);
-    transition: transform 0.22s ease;
-    display: inline-block;
-    line-height: 1;
-  }
-  .card.collapsed .card-head .toggle-icon { transform: rotate(-90deg); }
-  .card.collapsed .card-head { border-bottom-color: transparent; }
-  .card-body {
-    padding: 14px 16px;
-    overflow: hidden;
-    transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.2s ease;
-    max-height: 600px;
-    opacity: 1;
-  }
-  .card.collapsed .card-body {
-    max-height: 0;
-    opacity: 0;
-    padding-top: 0;
-    padding-bottom: 0;
-  }
-
-  .stat-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    padding: 5px 0;
-    border-bottom: 1px dotted var(--border);
-    gap: 8px;
-  }
-  .stat-row:last-child { border-bottom: none; }
-  .stat-label {
-    font-size: 0.88rem;
-    color: var(--muted);
-    flex-shrink: 0;
-  }
-  .stat-value {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.82rem;
-    color: var(--text);
-    text-align: right;
-    word-break: break-all;
-  }
-
-  /* semistandard input row */
-  .ssrow {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 0 2px;
-    border-bottom: 1px dotted var(--border);
-  }
-  .ssrow label { font-size: 0.88rem; color: var(--muted); flex: 1; }
-  .ssrow input[type=number] {
-    width: 56px;
-    padding: 3px 6px;
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.82rem;
-    background: var(--bg);
-    color: var(--text);
-    text-align: center;
-  }
-  .ssrow input[type=number]:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
-
-  /* options */
-  .opt-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 5px 0;
-    font-size: 0.9rem;
-    cursor: pointer;
-    user-select: none;
-  }
-  .opt-row input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
-
-  /* extra: partition input */
-  .input-row {
-    display: flex;
-    gap: 8px;
-    margin-top: 4px;
-  }
-  .input-row input[type=text] {
-    flex: 1;
-    padding: 5px 10px;
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.82rem;
-    background: var(--bg);
-    color: var(--text);
-  }
-  .input-row input[type=text]:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
-  .btn {
-    padding: 5px 14px;
-    border: 1px solid var(--accent);
-    border-radius: 3px;
-    background: var(--accent);
-    color: #fff;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.78rem;
-    cursor: pointer;
-    letter-spacing: 0.04em;
-    transition: background 0.15s, transform 0.1s;
-  }
-  .btn:hover { background: #2e5239; }
-  .btn:active { transform: scale(0.97); }
-  .btn-ghost {
-    background: transparent;
-    color: var(--accent2);
-    border-color: var(--accent2);
-  }
-  .btn-ghost:hover { background: var(--accent2); color: #fff; }
-
-  .hint {
-    font-size: 0.78rem;
-    color: var(--muted);
-    margin-top: 5px;
-    font-style: italic;
-  }
-
-  /* conjugate / clear row */
-  .action-row {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  /* export textarea */
-  #export-out {
-    width: 100%;
-    height: 60px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    background: var(--bg);
-    padding: 6px 8px;
-    resize: vertical;
-    color: var(--text);
-    margin-top: 6px;
-  }
-
-  footer {
-    text-align: center;
-    padding: 28px;
-    font-size: 0.8rem;
-    color: var(--muted);
-    border-top: 1px solid var(--border);
-    margin-top: 20px;
-  }
-  footer a { color: var(--accent); text-decoration: none; }
-
-  /* error flash */
-  .err { color: var(--accent2); font-size: 0.8rem; margin-top: 4px; font-style: italic; }
-</style>
+<link rel="stylesheet" href="young_diagrams.css">
 </head>
 <body>
 
@@ -321,8 +18,21 @@
   <!-- LEFT: canvas -->
   <div class="canvas-panel">
     <header class="panel-title">
-      Young Diagram
-      <span id="shape-badge">( )</span>
+      <span class="panel-title-text">Young Diagram</span>
+      <div class="canvas-toolbar" aria-label="Canvas diagram controls">
+        <span class="shape-indicator" title="Shape λ"><!--Shape λ=-->  <span id="shape-badge">( )</span></span>
+        <span class="canvas-size-inline" aria-label="Canvas size, rows by columns">
+          <label title="Canvas rows">
+            <span>rows</span>
+            <input type="number" id="grid-rows" min="1" max="15" onchange="applyGridSizeFromInputs()">
+          </label>
+          <span class="dimension-times">×</span>
+          <label title="Canvas columns">
+            <span>cols</span>
+            <input type="number" id="grid-cols" min="1" max="25" onchange="applyGridSizeFromInputs()">
+          </label>
+        </span>
+      </div>
     </header>
     <div id="canvas-wrap">
       <canvas id="yd-canvas"></canvas>
@@ -333,7 +43,7 @@
   <div class="side">
 
     <!-- Statistics -->
-    <div class="card">
+    <div class="card collapsed">
       <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Statistics</span><em class="toggle-icon">▾</em></div>
       <div class="card-body">
         <div class="stat-row">
@@ -362,7 +72,7 @@
         </div>
         <div class="ssrow">
           <label>Max entry <em>m</em> for SSYT</label>
-          <input type="number" id="maxentry" value="5" min="1" max="99" onchange="calc()">
+          <input type="number" id="maxentry" value="5" min="1" max="99" onchange="refreshStats()">
         </div>
         <div class="stat-row">
           <span class="stat-label"># semistandard SSYT</span>
@@ -371,57 +81,58 @@
       </div>
     </div>
 
-    <!-- Options -->
-    <div class="card">
-      <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Display Options</span><em class="toggle-icon">▾</em></div>
+    <!-- Lie Algebra Weight -->
+    <div class="card collapsed">
+      <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Lie Algebra Weight</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
-        <label class="opt-row"><input type="checkbox" id="showhooks" checked onchange="redraw()"> Show hook lengths</label>
-        <label class="opt-row"><input type="checkbox" id="shadehooks" checked onchange="redraw()"> Shade by hook length</label>
-        <label class="opt-row"><input type="checkbox" id="showcoords" onchange="redraw()"> Show cell coordinates (r,c)</label>
-      </div>
-    </div>
-
-    <!-- Set partition -->
-    <div class="card">
-      <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Set Partition</span><em class="toggle-icon">▾</em></div>
-      <div class="card-body">
-        <div class="input-row">
-          <input type="text" id="partition-input" placeholder="e.g. 4,3,1" oninput="clearErr()">
-          <button class="btn" onclick="setPartition()">Draw</button>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
+          <label class="stat-label" style="white-space:nowrap;flex-shrink:0;">Type:</label>
+          <select id="lie-type" onchange="onTypeChange()" style="padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'EB Garamond',serif;font-size:0.9rem;color:var(--text);">
+            <optgroup label="Classical">
+              <option value="A">A&#8345; &nbsp;&#x1D4C8;&#x1D4C1;(n+1) / &#x1D4C8;&#x1D4CA;(n+1)</option>
+              <option value="B">B&#8345; &nbsp;&#x1D4C8;&#x1D4C0;(2n+1)</option>
+              <option value="C">C&#8345; &nbsp;&#x1D4C8;&#x1D4C5;(2n)</option>
+              <option value="D" selected>D&#8345; &nbsp;&#x1D4C8;&#x1D4C0;(2n)</option>
+            </optgroup>
+            <optgroup label="Exceptional">
+              <option value="E6">E&#8326;</option>
+              <option value="E7">E&#8327;</option>
+              <option value="E8">E&#8328;</option>
+              <option value="F4">F&#8324;</option>
+              <option value="G2">G&#8322;</option>
+            </optgroup>
+          </select>
+          <span id="lie-rank-wrap" style="display:flex;align-items:center;gap:6px;">
+            <label class="stat-label" style="white-space:nowrap;">rank&nbsp;<em>n</em>:</label>
+            <input type="number" id="lie-rank" value="3" min="1" max="12"
+              onchange="onAlgebraChange()"
+              style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;
+                     font-family:'JetBrains Mono',monospace;font-size:0.82rem;
+                     background:var(--bg);color:var(--text);text-align:center;">
+          </span>
+          <span id="lie-algebra-desc" style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:var(--muted);"></span>
         </div>
-        <div class="hint">Enter row lengths separated by commas, non-increasing.</div>
-        <div class="err" id="part-err"></div>
-      </div>
-    </div>
-
-    <!-- Actions -->
-    <div class="card">
-      <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Actions</span><em class="toggle-icon">▾</em></div>
-      <div class="card-body">
-        <div class="action-row">
-          <button class="btn" onclick="conjugate()">Conjugate λ′</button>
-          <button class="btn" onclick="complement()">Complement (in box)</button>
-          <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+        <div class="hint" style="margin-bottom:8px;" id="lie-hint">
+          Identifies the Young diagram row lengths as Dynkin labels of the highest weight &#955;.
+          Row lengths are padded/truncated to the algebra rank.
         </div>
-        <div class="hint" style="margin-top:8px;" id="box-hint">Complement uses a bounding box. Draw diagram first.</div>
-      </div>
-    </div>
-
-    <!-- Export -->
-    <div class="card">
-      <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">▾</em></div>
-      <div class="card-body">
-        <div class="action-row">
-          <button class="btn" onclick="exportLaTeX()">LaTeX</button>
-          <button class="btn" onclick="exportSVG()">SVG</button>
-          <button class="btn" onclick="copyShape()">Copy shape</button>
+        <div id="lie-warning" class="err" style="margin-bottom:4px;"></div>
+        <!-- Stats -->
+        <div class="stat-row"><span class="stat-label">Weight &#955;</span><span class="stat-value" id="lie-weight">—</span></div>
+        <div class="stat-row"><span class="stat-label">Dynkin labels</span><span class="stat-value" id="lie-dynkin">—</span></div>
+        <div class="stat-row"><span class="stat-label">dim V<sup>&#955;</sup></span><span class="stat-value" id="lie-dim">—</span></div>
+        <div class="stat-row"><span class="stat-label">|Weyl orbit|</span><span class="stat-value" id="lie-orbit-size">—</span></div>
+        <!-- Orbit table toggle -->
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn" onclick="toggleOrbitTable()" id="lie-orbit-btn">Show Weyl orbit</button>
+          <button class="btn" onclick="exportOrbit()" style="background:transparent;color:var(--accent);border-color:var(--accent);">Export orbit</button>
         </div>
-        <textarea id="export-out" readonly placeholder="Output appears here…"></textarea>
+        <div id="lie-orbit-table" style="display:none;margin-top:10px;overflow-x:auto;"></div>
       </div>
     </div>
 
     <!-- Branching Rules -->
-    <div class="card">
+    <div class="card collapsed">
       <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Branching Rules</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
@@ -439,830 +150,64 @@
       </div>
     </div>
 
+    <!-- Options -->
+    <div class="card collapsed">
+      <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Display Options</span><em class="toggle-icon">▾</em></div>
+      <div class="card-body">
+        <label class="opt-row"><input type="checkbox" id="showhooks" checked onchange="redraw()"> Show hook lengths</label>
+        <label class="opt-row"><input type="checkbox" id="shadehooks" checked onchange="redraw()"> Shade by hook length</label>
+        <label class="opt-row"><input type="checkbox" id="showcoords" onchange="redraw()"> Show cell coordinates (r,c)</label>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="card collapsed">
+      <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Actions</span><em class="toggle-icon">▾</em></div>
+      <div class="card-body">
+        <div class="action-row">
+          <button class="btn" onclick="conjugate()">Conjugate λ′</button>
+          <button class="btn" onclick="complement()">Complement (in box)</button>
+          <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+        </div>
+        <div class="hint" style="margin-top:8px;" id="box-hint">Complement uses a bounding box. Draw diagram first.</div>
+      </div>
+    </div>
+
+    <!-- Set partition -->
+    <div class="card collapsed">
+      <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Set Partition</span><em class="toggle-icon">▾</em></div>
+      <div class="card-body">
+        <div class="input-row">
+          <input type="text" id="partition-input" placeholder="e.g. 4,3,1" oninput="clearErr()">
+          <button class="btn" onclick="setPartition()">Draw</button>
+        </div>
+        <div class="hint">Enter row lengths separated by commas, non-increasing.</div>
+        <div class="err" id="part-err"></div>
+      </div>
+    </div>
+
+    <!-- Export -->
+    <div class="card collapsed">
+      <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">▾</em></div>
+      <div class="card-body">
+        <div class="action-row">
+          <button class="btn" onclick="exportLaTeX()">LaTeX</button>
+          <button class="btn" onclick="exportSVG()">SVG</button>
+          <button class="btn" onclick="copyShape()">Copy shape</button>
+        </div>
+        <textarea id="export-out" readonly placeholder="Output appears here…"></textarea>
+      </div>
+    </div>
+
   </div><!-- /side -->
 </div>
 
 <footer>
   Original applet by <a href="https://web.archive.org/web/20250513072803/https://www.integral-domain.org/lwilliams/Applets/combinatorics/youngdiagrams.php" target="_blank">Dr. Lauren K. Williams</a> (Mercyhurst University), built with p5.js.
-  By using Claude, this archive adds some additional functions. I really appreciate how they can produce such an amazing webpage. 
+  By using <a href="https://claude.ai/share/98270095-0477-4096-8018-b1f670224a79">Claude</a> and <a href="https://chatgpt.com/share/69fa2f46-4b6c-838f-8394-009912e2682f">chatGPT</a>, this archive adds some additional functions. I really appreciate how they can produce such an amazing webpage. The Lie algebra representation part has still some problems, but I hope to fix it when I got enough new tokens.
 </footer>
 
 <!-- p5.js and BigInteger inline-free: we implement bigint ourselves -->
-<script>
-// ─────────────────────────────────────────────
-//  BigInt shim (uses native BigInt if available)
-// ─────────────────────────────────────────────
-const BI = (typeof BigInt !== 'undefined')
-  ? { from: n => BigInt(n), mul: (a,b) => a*b, div: (a,b) => a/b, str: n => n.toString() }
-  : null; // fallback: use Number (lossy for large n, acceptable)
-
-function bigMul(a, b) { return BI ? BI.mul(a, b) : a * b; }
-function bigDiv(a, b) { return BI ? BI.div(a, b) : a / b; }
-function bigFrom(n)   { return BI ? BI.from(n)   : n; }
-function bigStr(n)    { return BI ? BI.str(n)     : n.toString(); }
-
-// ─────────────────────────────────────────────
-//  Factorial (returns BigInt or string for big n)
-// ─────────────────────────────────────────────
-function factorial(n) {
-  if (n <= 0) return bigFrom(1);
-  let r = bigFrom(1);
-  for (let i = 2; i <= n; i++) r = bigMul(r, bigFrom(i));
-  return r;
-}
-
-// ─────────────────────────────────────────────
-//  State
-// ─────────────────────────────────────────────
-const MAXN = 13;
-let blocks = [];   // blocks[r][c] ∈ {0,1}
-let hooks  = [];
-let n = 0;
-
-for (let r = 0; r < MAXN; r++) {
-  blocks.push([]);
-  for (let c = 0; c < MAXN; c++) blocks[r][c] = 0;
-}
-
-// ─────────────────────────────────────────────
-//  Canvas setup
-// ─────────────────────────────────────────────
-const canvasEl = document.getElementById('yd-canvas');
-const ctx = canvasEl.getContext('2d');
-let W, bsize;
-
-function resize() {
-  const wrap = document.getElementById('canvas-wrap');
-  W = wrap.clientWidth - 32;
-  canvasEl.width  = W;
-  canvasEl.height = W;
-  bsize = W / MAXN;
-  redraw();
-}
-
-window.addEventListener('resize', resize);
-
-// ─────────────────────────────────────────────
-//  Hook length at (r,c)
-// ─────────────────────────────────────────────
-function hookLen(r, c) {
-  let h = 1;
-  for (let i = r+1; i < MAXN; i++) h += blocks[i][c];
-  for (let j = c+1; j < MAXN; j++) h += blocks[r][j];
-  return h;
-}
-
-// ─────────────────────────────────────────────
-//  Compute hooks array + n
-// ─────────────────────────────────────────────
-function computeHooks() {
-  hooks = [];
-  n = 0;
-  for (let r = 0; r < MAXN; r++) {
-    hooks.push([]);
-    for (let c = 0; c < MAXN; c++) {
-      if (blocks[r][c]) {
-        n++;
-        hooks[r].push(hookLen(r, c));
-      }
-    }
-  }
-}
-
-// ─────────────────────────────────────────────
-//  Row lengths (partition)
-// ─────────────────────────────────────────────
-function rowLengths() {
-  const rows = [];
-  for (let r = 0; r < MAXN; r++) {
-    let len = 0;
-    for (let c = 0; c < MAXN; c++) if (blocks[r][c]) len++;
-    if (len > 0) rows.push(len);
-  }
-  return rows;
-}
-
-// Column lengths (conjugate partition)
-function colLengths() {
-  const cols = [];
-  for (let c = 0; c < MAXN; c++) {
-    let len = 0;
-    for (let r = 0; r < MAXN; r++) if (blocks[r][c]) len++;
-    if (len > 0) cols.push(len);
-  }
-  return cols;
-}
-
-// ─────────────────────────────────────────────
-//  Draw
-// ─────────────────────────────────────────────
-const PALETTE = [
-  null,
-  '#7fb3d3','#76c893','#a8d8a8','#f6d860','#f4a261',
-  '#e76f51','#c77dff','#e63946','#4cc9f0','#06d6a0',
-  '#ffd166','#ef476f','#118ab2'
-];
-
-function hslHook(hk) {
-  // map hook → hue similar to original (HSB 160+hk*6, s=50, b=80)
-  const hue = (160 + hk * 6) % 360;
-  return `hsla(${hue},45%,62%,0.72)`;
-}
-
-const showHooks   = () => document.getElementById('showhooks').checked;
-const shadeHooks  = () => document.getElementById('shadehooks').checked;
-const showCoords  = () => document.getElementById('showcoords').checked;
-
-function redraw() {
-  computeHooks();
-  ctx.clearRect(0, 0, W, W);
-
-  // grid
-  ctx.strokeStyle = 'rgba(180,170,158,0.45)';
-  ctx.lineWidth = 0.8;
-  for (let i = 0; i <= MAXN; i++) {
-    ctx.beginPath(); ctx.moveTo(i*bsize, 0); ctx.lineTo(i*bsize, W); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, i*bsize); ctx.lineTo(W, i*bsize); ctx.stroke();
-  }
-
-  // cells
-  for (let r = 0; r < MAXN; r++) {
-    for (let c = 0; c < MAXN; c++) {
-      if (!blocks[r][c]) continue;
-      const hk = hooks[r][c - (hooks[r].length - rowLengths()[r] || 0)];
-      // simpler: re-read from hookLen
-      const h = hookLen(r, c);
-
-      // fill
-      ctx.fillStyle = shadeHooks() ? hslHook(h) : 'hsla(210,40%,68%,0.62)';
-      ctx.strokeStyle = 'rgba(30,24,18,0.85)';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.rect(c*bsize+0.6, r*bsize+0.6, bsize-1.2, bsize-1.2);
-      ctx.fill();
-      ctx.stroke();
-
-      // hook number
-      if (showHooks()) {
-        ctx.fillStyle = 'rgba(20,16,10,0.9)';
-        ctx.font = `${Math.round(bsize*0.38)}px "JetBrains Mono", monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(h, c*bsize + bsize/2, r*bsize + bsize/2);
-      }
-
-      // coords
-      if (showCoords()) {
-        ctx.fillStyle = 'rgba(80,60,40,0.6)';
-        ctx.font = `${Math.round(bsize*0.21)}px "JetBrains Mono", monospace`;
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText(`${r},${c}`, c*bsize + bsize - 2, r*bsize + bsize - 1);
-      }
-    }
-  }
-
-  // outer border
-  ctx.strokeStyle = 'rgba(30,24,18,0.7)';
-  ctx.lineWidth = 1.8;
-  ctx.strokeRect(0.9, 0.9, W-1.8, W-1.8);
-
-  calc();
-  computeBranching();
-}
-
-// ─────────────────────────────────────────────
-//  Calc stats
-// ─────────────────────────────────────────────
-function calc() {
-  const rows = rowLengths();
-  const cols = colLengths();
-
-  let hp = bigFrom(1);
-  for (let r = 0; r < MAXN; r++)
-    for (let c = 0; c < MAXN; c++)
-      if (blocks[r][c]) hp = bigMul(hp, bigFrom(hookLen(r, c)));
-
-  const facN = factorial(n);
-
-  // semistandard: ∏_{(r,c)∈λ} (m + c - r) / ∏ hook lengths
-  const mr = parseInt(document.getElementById('maxentry').value) || 5;
-  let ssnum = bigFrom(1);
-  for (let r = 0; r < MAXN; r++)
-    for (let c = 0; c < MAXN; c++)
-      if (blocks[r][c]) ssnum = bigMul(ssnum, bigFrom(mr + c - r));
-
-  const shapeStr = rows.length ? '(' + rows.join(', ') + ')' : '( )';
-  const conjStr  = cols.length ? '(' + cols.join(', ') + ')' : '( )';
-
-  document.getElementById('out-size').textContent  = n;
-  document.getElementById('out-shape').textContent = shapeStr;
-  document.getElementById('out-conj').textContent  = conjStr;
-  document.getElementById('out-fac').textContent   = n <= 20 ? bigStr(facN) : bigStr(facN).slice(0,30)+'…';
-  document.getElementById('out-hprod').textContent = bigStr(hp);
-  document.getElementById('out-nstand').textContent = n===0 ? '1' : bigStr(bigDiv(facN, hp));
-  document.getElementById('out-sstand').textContent = n===0 ? '1' : bigStr(bigDiv(ssnum, hp));
-
-  document.getElementById('shape-badge').textContent = shapeStr;
-}
-
-// ─────────────────────────────────────────────
-//  Mouse interaction
-// ─────────────────────────────────────────────
-canvasEl.addEventListener('click', function(e) {
-  const rect = canvasEl.getBoundingClientRect();
-  const scaleX = W / rect.width;
-  const mx = (e.clientX - rect.left) * scaleX;
-  const my = (e.clientY - rect.top)  * scaleX;
-
-  if (mx < 0 || mx > W || my < 0 || my > W) return;
-
-  const r = Math.floor(my / bsize);
-  const c = Math.floor(mx / bsize);
-
-  if (blocks[r][c]) {
-    // remove bottom-right rectangle from (r,c)
-    for (let i = r; i < MAXN; i++)
-      for (let j = c; j < MAXN; j++)
-        blocks[i][j] = 0;
-  } else {
-    // fill top-left rectangle up to (r,c)
-    for (let i = 0; i <= r; i++)
-      for (let j = 0; j <= c; j++)
-        blocks[i][j] = 1;
-  }
-  redraw();
-});
-
-// ─────────────────────────────────────────────
-//  Extra actions
-// ─────────────────────────────────────────────
-
-function clearAll() {
-  for (let r = 0; r < MAXN; r++)
-    for (let c = 0; c < MAXN; c++)
-      blocks[r][c] = 0;
-  redraw();
-}
-
-function setPartition() {
-  const raw = document.getElementById('partition-input').value.trim();
-  const parts = raw.split(/[\s,]+/).map(Number).filter(x => !isNaN(x) && x > 0);
-  if (!parts.length) { showErr('Enter at least one positive integer.'); return; }
-
-  // validate: non-increasing
-  for (let i = 1; i < parts.length; i++) {
-    if (parts[i] > parts[i-1]) { showErr('Rows must be non-increasing.'); return; }
-  }
-  if (Math.max(...parts) > MAXN || parts.length > MAXN) {
-    showErr(`Max ${MAXN} rows and ${MAXN} columns.`); return;
-  }
-
-  clearAllSilent();
-  for (let r = 0; r < parts.length; r++)
-    for (let c = 0; c < parts[r]; c++)
-      blocks[r][c] = 1;
-  redraw();
-}
-
-function clearAllSilent() {
-  for (let r = 0; r < MAXN; r++)
-    for (let c = 0; c < MAXN; c++)
-      blocks[r][c] = 0;
-}
-
-function conjugate() {
-  const rows = rowLengths();
-  if (!rows.length) return;
-  const cols = colLengths();
-  clearAllSilent();
-  for (let r = 0; r < cols.length; r++)
-    for (let c = 0; c < cols[r]; c++)
-      blocks[r][c] = 1;
-  redraw();
-}
-
-function complement() {
-  const rows = rowLengths();
-  if (!rows.length) return;
-  const R = rows.length;
-  const C = rows[0];
- 
-  // Step 1: collect cells in the R×C box that are NOT in λ
-  const missing = [];
-  for (let r = 0; r < R; r++)
-    for (let c = rows[r]; c < C; c++)
-      missing.push([r, c]);
- 
-  // Step 2: rotate each missing cell 180° within the box → (R-1-r, C-1-c)
-  // These rotated cells form a valid Young diagram when sorted.
-  // Build the new block grid from them.
-  const newBlocks = [];
-  for (let r = 0; r < MAXN; r++) {
-    newBlocks.push([]);
-    for (let c = 0; c < MAXN; c++) newBlocks[r][c] = 0;
-  }
-  for (const [r, c] of missing) {
-    newBlocks[R - 1 - r][C - 1 - c] = 1;
-  }
- 
-  for (let r = 0; r < MAXN; r++)
-    for (let c = 0; c < MAXN; c++)
-      blocks[r][c] = newBlocks[r][c];
-  redraw();
-}
- 
-
-// ─────────────────────────────────────────────
-//  Export
-// ─────────────────────────────────────────────
-function exportLaTeX() {
-  const rows = rowLengths();
-  if (!rows.length) { document.getElementById('export-out').value = '% empty diagram'; return; }
-
-  let s = '\\begin{ytableau}\n';
-  for (let r = 0; r < rows.length; r++) {
-    const cells = [];
-    for (let c = 0; c < rows[r]; c++) {
-      const h = hookLen(r, c);
-      cells.push(showHooks() ? h : '\\none');
-    }
-    s += '  ' + cells.join(' & ') + (r < rows.length-1 ? ' \\\\' : '') + '\n';
-  }
-  s += '\\end{ytableau}\n% Requires \\usepackage{ytableau}';
-  document.getElementById('export-out').value = s;
-}
-
-function exportSVG() {
-  const rows = rowLengths();
-  const bs = 36;
-  const cols = rows.length ? rows[0] : 0;
-  const W_svg = cols * bs;
-  const H_svg = rows.length * bs;
-
-  if (!rows.length) { document.getElementById('export-out').value = '<!-- empty -->'; return; }
-
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W_svg}" height="${H_svg}">\n`;
-  for (let r = 0; r < rows.length; r++) {
-    for (let c = 0; c < rows[r]; c++) {
-      const h = hookLen(r, c);
-      const hue = (160 + h * 6) % 360;
-      const fill = shadeHooks() ? `hsl(${hue},45%,62%)` : `hsl(210,40%,68%)`;
-      svg += `  <rect x="${c*bs}" y="${r*bs}" width="${bs}" height="${bs}" fill="${fill}" stroke="#2a1e12" stroke-width="0.8"/>\n`;
-      if (showHooks()) {
-        svg += `  <text x="${c*bs+bs/2}" y="${r*bs+bs/2+5}" text-anchor="middle" font-family="monospace" font-size="13" fill="#1a1612">${h}</text>\n`;
-      }
-    }
-  }
-  svg += `</svg>`;
-  document.getElementById('export-out').value = svg;
-}
-
-function copyShape() {
-  const rows = rowLengths();
-  const s = rows.length ? '(' + rows.join(', ') + ')' : '( )';
-  document.getElementById('export-out').value = s;
-  navigator.clipboard?.writeText(s);
-}
-
-// ─────────────────────────────────────────────
-//  Error helpers
-// ─────────────────────────────────────────────
-function showErr(msg) { document.getElementById('part-err').textContent = msg; }
-function clearErr()   { document.getElementById('part-err').textContent = ''; }
-
-
-// ─────────────────────────────────────────────
-//  BRANCHING RULES  (Littlewood restriction)
-//
-//  GL(2n) → Sp(2n):
-//    [V^λ_GL : V^μ_Sp] = Σ_{δ even-row} c^λ_{δ' μ}
-//    where δ' is the conjugate of δ (= δ has even parts ⟺ δ' has even columns)
-//
-//  GL(n) → O(n):
-//    [V^λ_GL : V^μ_O]  = Σ_{δ even-row} c^λ_{δ μ}
-//
-//  We enumerate all δ with even parts and |δ| + |μ| = |λ|,
-//  then sum the LR coefficients c^λ_{ν μ} where ν = δ' (Sp) or ν = δ (O).
-// ─────────────────────────────────────────────
-// --- LR coefficient c^lam_{mu nu} via the standard algorithm ---
-// Count LR tableaux of skew shape lam/mu filled with content nu.
-// lam, mu, nu are arrays of row-lengths (non-increasing, trailing zeros omitted).
-function lrCoeff(lam, mu, nu) {
-  // Basic size check
-  const szLam = lam.reduce((a,b)=>a+b,0);
-  const szMu  = mu.reduce((a,b)=>a+b,0);
-  const szNu  = nu.reduce((a,b)=>a+b,0);
-  if (szLam !== szMu + szNu) return 0;
-  // lam must contain mu
-  for (let i = 0; i < Math.max(lam.length, mu.length); i++) {
-    if ((lam[i]||0) < (mu[i]||0)) return 0;
-  }
-  // Build the skew shape lam/mu as a list of cells (r,c)
-  // and fill them with a Yamanouchi word of content nu using backtracking.
-  // We count fillings where:
-  //   1. rows are weakly increasing
-  //   2. columns are strictly increasing
-  //   3. the reverse reading word is a lattice permutation of content nu
-  const numRows = lam.length;
-  // Precompute row ranges
-  const rowStart = [];
-  const rowEnd   = [];
-  for (let r = 0; r < numRows; r++) {
-    rowStart[r] = mu[r] || 0;
-    rowEnd[r]   = lam[r] || 0;
-  }
-  // Total cells
-  const cells = [];
-  for (let r = 0; r < numRows; r++)
-    for (let c = rowStart[r]; c < rowEnd[r]; c++)
-      cells.push([r, c]);
-  if (cells.length === 0) return (szNu === 0) ? 1 : 0;
-  const numLetters = nu.length;
-  if (numLetters === 0) return 0;
-  // filling[i] = letter (1-indexed) assigned to cells[i]
-  const filling = new Array(cells.length).fill(0);
-  // For lattice permutation check: count of each letter seen so far
-  // reading cells in REVERSE order (reverse reading word)
-  // We build the filling left-to-right, top-to-bottom (standard cell order).
-  // The reverse reading word reads bottom-to-top, right-to-left.
-  // Lattice condition on reverse reading word: for each prefix of the reverse word,
-  //   count(k) >= count(k+1) for all k.
-  // Equivalently, as we place cells in forward order, after placing each cell,
-  //   in the SUFFIX from that cell to the end of the reverse word, we need
-  //   count of k+1 <= count of k for all k.
-  // It is easier to track counts as we go in reverse.
-  // We use a standard recursive approach placing cells in order.
-  // Let's use the classic approach:
-  // Place cells in reading order (left→right, top→bottom).
-  // After all cells placed, check that the reverse reading word is a ballot sequence.
-  // But for efficiency, prune early using partial ballot check on the partial reverse word.
-  // The reverse reading word reads: last cell first.
-  // As we place cells[0..k], the reverse word for those k+1 cells
-  // is filling[k], filling[k-1], ..., filling[0].
-  // Lattice: every prefix of this must have count(i) >= count(i+1) for all i.
-  // So after placing filling[0..k], the "current prefix of reverse word" of length k+1
-  // is filling[k], ..., filling[0].
-  // We need: for every j in [0..k], the sub-sequence filling[j],filling[j-1],...,filling[0]
-  // satisfies count(i)>=count(i+1).
-  // This is equivalent to: the suffix filling[0..j] has, for each letter pair (i,i+1),
-  //   count(i) >= count(i+1).  (Standard ballot condition on the forward word read backwards.)
-  // Track suffix counts: suffCount[letter] = how many times letter appears in filling[0..current]
-  const suffCount = new Array(numLetters + 1).fill(0);
-  // remaining supply of each letter
-  const supply = nu.slice();
-  // We also need row/column constraints.
-  // For row weak increase: filling[i] >= filling[prev cell in same row]
-  // For col strict increase: filling[i] > filling[prev cell in same column]
-  // Build prev-in-row and prev-in-col indices for each cell
-  const prevInRow = new Array(cells.length).fill(-1);
-  const prevInCol = new Array(cells.length).fill(-1);
-  const lastInRow = {}; // row -> last cell index
-  const lastInCol = {}; // col -> last cell index
-  for (let i = 0; i < cells.length; i++) {
-    const [r, c] = cells[i];
-    if (lastInRow[r] !== undefined) prevInRow[i] = lastInRow[r];
-    if (lastInCol[c] !== undefined) prevInCol[i] = lastInCol[c];
-    lastInRow[r] = i;
-    lastInCol[c] = i;
-  }
-  let count = 0;
-  function bt(i) {
-    if (i === cells.length) { count++; return; }
-    // Determine valid range for filling[i]
-    let lo = 1;
-    let hi = numLetters;
-    if (prevInRow[i] >= 0) lo = Math.max(lo, filling[prevInRow[i]]);       // weak row increase
-    if (prevInCol[i] >= 0) lo = Math.max(lo, filling[prevInCol[i]] + 1);   // strict col increase
-    for (let v = lo; v <= hi; v++) {
-      if (supply[v-1] === 0) continue;
-      // Ballot check: after adding v at position i,
-      // the new prefix of the reverse word (of length i+1) is v, filling[i-1], ..., filling[0].
-      // The new prefix adds v at the FRONT. This only affects the count of v.
-      // We need: count(v) after adding <= count(v-1) after adding  (if v > 1)
-      // i.e. suffCount[v] + 1 <= suffCount[v-1]  (for v > 1)
-      if (v > 1 && suffCount[v] + 1 > suffCount[v-1]) continue;
-      filling[i] = v;
-      supply[v-1]--;
-      suffCount[v]++;
-      bt(i + 1);
-      supply[v-1]++;
-      suffCount[v]--;
-      filling[i] = 0;
-    }
-  }
-  bt(0);
-  return count;
-}
-// --- Generate all partitions with even parts and given size ---
-function partitionsEvenParts(size, maxPart) {
-  // partitions of `size` into even parts, each part <= maxPart (even)
-  const result = [];
-  function gen(rem, max, current) {
-    if (rem === 0) { result.push(current.slice()); return; }
-    for (let p = Math.min(max, rem); p >= 2; p -= 2) {
-      if (p > rem) continue;
-      current.push(p);
-      gen(rem - p, p, current);
-      current.pop();
-    }
-  }
-  gen(size, maxPart % 2 === 0 ? maxPart : maxPart - 1, []);
-  return result;
-}
-// Conjugate a partition
-function conjugatePart(mu) {
-  if (!mu.length) return [];
-  const maxLen = mu[0];
-  const result = [];
-  for (let c = 0; c < maxLen; c++) {
-    let len = 0;
-    for (let r = 0; r < mu.length; r++) {
-      if (mu[r] > c) len++; else break;
-    }
-    result.push(len);
-  }
-  return result;
-}
-// Trim trailing zeros
-function trimPart(p) {
-  const r = p.slice();
-  while (r.length && r[r.length-1] === 0) r.pop();
-  return r;
-}
-// --- Generate all partitions of a given size with at most maxRows rows ---
-function partitionsOfSize(size, maxRows, maxPart) {
-  const result = [];
-  function gen(rem, max, current) {
-    if (current.length > maxRows) return;
-    if (rem === 0) { result.push(current.slice()); return; }
-    for (let p = Math.min(max, rem); p >= 1; p--) {
-      current.push(p);
-      gen(rem - p, p, current);
-      current.pop();
-    }
-  }
-  gen(size, maxPart || size, []);
-  return result;
-}
-// --- Draw a small Young diagram as inline SVG ---
-function miniDiagram(mu, hue) {
-  if (!mu.length) {
-    return '<span style="font-family:\'JetBrains Mono\',monospace;font-size:0.78rem;color:var(--muted);">∅ (trivial)</span>';
-  }
-  const bs = 14;
-  const W = mu[0] * bs;
-  const H = mu.length * bs;
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="display:inline-block;vertical-align:middle;">`;
-  for (let r = 0; r < mu.length; r++) {
-    for (let c = 0; c < mu[r]; c++) {
-      svg += `<rect x="${c*bs}" y="${r*bs}" width="${bs}" height="${bs}" fill="hsl(${hue},40%,70%)" stroke="hsl(${hue},30%,35%)" stroke-width="0.7"/>`;
-    }
-  }
-  svg += '</svg>';
-  return svg;
-}
-// --- Main branching computation ---
-function computeBranching() {
-  const lam = rowLengths();
-  const rule = document.getElementById('br-rule').value;
-  const out  = document.getElementById('br-output');
-  const warn = document.getElementById('br-warning');
-  out.innerHTML = '';
-  warn.textContent = '';
-  if (!lam.length) {
-    out.innerHTML = '<span class="hint">Draw a Young diagram first.</span>';
-    return;
-  }
-  const szLam = lam.reduce((a,b)=>a+b,0);
-  // For GL(2n)→Sp(2n): sum over δ with even parts, use ν = δ' (conjugate of δ)
-  // For GL(n)→O(n):   sum over δ with even parts, use ν = δ directly
-  // multiplicity of μ = Σ_δ c^λ_{ν μ}  where ν as above, |ν|+|μ|=|λ|
-  // We'll accumulate multiplicities indexed by μ
-  const multMap = new Map(); // key = JSON.stringify(mu), value = {mu, mult}
-  // The max size of δ is |λ|, max single part is |λ|
-  for (let szDelta = 0; szDelta <= szLam; szDelta += 2) {
-    // All even-part partitions of szDelta
-    const deltas = partitionsEvenParts(szDelta, szLam);
-    const szMu = szLam - szDelta;
-    for (const delta of deltas) {
-      // nu = δ' for Sp rule, nu = δ for O rule
-      const nu = (rule === 'gl-sp') ? conjugatePart(delta) : delta;
-      // All partitions μ of szMu (any number of rows, parts ≤ λ[0])
-      const mus = partitionsOfSize(szMu, lam.length + delta.length + 2, lam[0] + (delta[0]||0));
-      for (const mu of mus) {
-        const c = lrCoeff(lam, mu, nu);
-        if (c === 0) continue;
-        const key = JSON.stringify(mu);
-        if (!multMap.has(key)) multMap.set(key, {mu: mu.slice(), mult: 0});
-        multMap.get(key).mult += c;
-      }
-    }
-  }
-  if (multMap.size === 0) {
-    out.innerHTML = '<span class="hint">No constituents found (empty decomposition).</span>';
-    return;
-  }
-  // Sort by partition (lex on row lengths descending)
-  const entries = [...multMap.values()].sort((a, b) => {
-    for (let i = 0; i < Math.max(a.mu.length, b.mu.length); i++) {
-      const d = (b.mu[i]||0) - (a.mu[i]||0);
-      if (d !== 0) return d;
-    }
-    return 0;
-  });
-  // Warn if outside stable range
-  const n = (rule === 'gl-sp') ? Math.floor(lam.length) : lam.length;
-  const glRank = (rule === 'gl-sp') ? lam.length * 2 : lam.length;
-  if (lam.length > Math.floor(glRank / 2)) {
-    warn.textContent = '⚠ Outside stable range — result may be incomplete (modification rules needed).';
-  }
-  // Render formula line + small diagrams
-  const subLabel = rule === 'gl-sp' ? 'Sp' : 'O';
-  const hue = rule === 'gl-sp' ? 200 : 30;
-  // Formula string
-  let formula = 'V<sup>λ</sup><sub>GL</sub> = ';
-  formula += entries.map(({mu, mult}) => {
-    const muStr = mu.length ? '(' + mu.join(',') + ')' : '∅';
-    return `${mult > 1 ? mult+'·' : ''}V<sup>${muStr}</sup><sub>${subLabel}</sub>`;
-  }).join(' ⊕ ');
-  const formulaDiv = document.createElement('div');
-  formulaDiv.style.cssText = 'font-size:0.82rem;line-height:1.7;word-break:break-word;padding:6px 0 4px;border-bottom:1px dotted var(--border);';
-  formulaDiv.innerHTML = formula;
-  out.appendChild(formulaDiv);
-  // Individual rows with mini diagram
-  for (const {mu, mult} of entries) {
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:3px 0;border-bottom:1px dotted var(--border);';
-    const multSpan = document.createElement('span');
-    multSpan.style.cssText = 'font-family:"JetBrains Mono",monospace;font-size:0.78rem;color:var(--accent);min-width:24px;text-align:right;flex-shrink:0;';
-    multSpan.textContent = mult > 1 ? `×${mult}` : '×1';
-    const diag = document.createElement('span');
-    diag.innerHTML = miniDiagram(mu, hue);
-    const label = document.createElement('span');
-    label.style.cssText = 'font-family:"JetBrains Mono",monospace;font-size:0.72rem;color:var(--muted);';
-    label.textContent = mu.length ? '(' + mu.join(', ') + ')' : '( )';
-    row.appendChild(multSpan);
-    row.appendChild(diag);
-    row.appendChild(label);
-    out.appendChild(row);
-  }
-}
-
-// ─────────────────────────────────────────────
-//  Drag-and-drop card reordering
-// ─────────────────────────────────────────────
-(function () {
-  let dragSrc = null;
-  let placeholder = null;
-  function getSide() { return document.querySelector('.side'); }
-  function createPlaceholder(height) {
-    const el = document.createElement('div');
-    el.id = 'dnd-placeholder';
-    el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;transition:height 0.15s;`;
-    return el;
-  }
-  function removePlaceholder() {
-    const old = document.getElementById('dnd-placeholder');
-    if (old) old.remove();
-  }
-  function cardFromHandle(el) {
-    // walk up from the handle/head to the .card
-    let node = el;
-    while (node && !node.classList.contains('card')) node = node.parentElement;
-    return node;
-  }
-  function initDnd() {
-    const side = getSide();
-    if (!side) return;
-    // We use pointer events for smooth cross-device behaviour
-    side.addEventListener('pointerdown', onPointerDown);
-  }
-  let pointerId = null;
-  let dragging  = false;
-  let startY    = 0;
-  let cardH     = 0;
-  let cardTop   = 0;
-  let cardLeft  = 0;
-  let cardWidth = 0;
-  let ghost     = null;
-  let ghostOffY = 0;
-  function onPointerDown(e) {
-    // Only trigger when clicking on the drag-handle
-    if (!e.target.closest('.drag-handle')) return;
-    e.preventDefault();
-    const card = cardFromHandle(e.target);
-    if (!card) return;
-    dragSrc  = card;
-    pointerId = e.pointerId;
-    startY   = e.clientY;
-    const _r  = card.getBoundingClientRect();
-    cardH    = _r.height;
-    cardTop  = _r.top;
-    cardLeft = _r.left;
-    cardWidth= _r.width;
-    dragging = false;
-    document.addEventListener('pointermove', onPointerMove);
-    document.addEventListener('pointerup',   onPointerUp);
-    document.addEventListener('pointercancel', onPointerUp);
-  }
-  function onPointerMove(e) {
-    if (!dragSrc) return;
-    const dy = Math.abs(e.clientY - startY);
-    if (!dragging && dy < 6) return; // dead zone
-    if (!dragging) {
-      // Start drag
-      dragging = true;
-      dragSrc.classList.add('dragging');
-      // Insert placeholder where the card was
-      placeholder = createPlaceholder(cardH);
-      dragSrc.parentElement.insertBefore(placeholder, dragSrc);
-      // Build ghost (visual clone following the pointer)
-      ghost = dragSrc.cloneNode(true);
-      ghost.id = 'dnd-ghost';
-      // Use rect captured at pointerdown — before placeholder is inserted and shifts the DOM
-      ghostOffY = startY - cardTop;
-      Object.assign(ghost.style, {
-        position: 'fixed',
-        left: cardLeft + 'px',
-        width: cardWidth + 'px',
-        top: (e.clientY - ghostOffY) + 'px',
-        zIndex: 9999,
-        pointerEvents: 'none',
-        opacity: '0.88',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.22)',
-        borderRadius: '4px',
-        transition: 'none',
-      });
-      document.body.appendChild(ghost);
-      // Remove card from flow (keep placeholder)
-      dragSrc.style.display = 'none';
-    }
-    // Move ghost
-    ghost.style.top = (e.clientY - ghostOffY) + 'px';
-    // Find insertion point
-    const side  = getSide();
-    const cards = [...side.children].filter(c => c !== placeholder && c !== dragSrc && c.id !== 'dnd-ghost');
-    let insertBefore = null;
-    for (const card of cards) {
-      const rect = card.getBoundingClientRect();
-      if (e.clientY < rect.top + rect.height / 2) {
-        insertBefore = card;
-        break;
-      }
-    }
-    if (insertBefore) {
-      side.insertBefore(placeholder, insertBefore);
-    } else {
-      side.appendChild(placeholder);
-    }
-  }
-  function onPointerUp(e) {
-    document.removeEventListener('pointermove', onPointerMove);
-    document.removeEventListener('pointerup',   onPointerUp);
-    document.removeEventListener('pointercancel', onPointerUp);
-    if (!dragSrc) return;
-    if (dragging) {
-      // Drop: put card where placeholder is
-      dragSrc.style.display = '';
-      dragSrc.classList.remove('dragging');
-      placeholder.parentElement.insertBefore(dragSrc, placeholder);
-      removePlaceholder();
-      if (ghost) { ghost.remove(); ghost = null; }
-    }
-    dragSrc  = null;
-    dragging = false;
-    placeholder = null;
-    pointerId   = null;
-  }
-  // Toggle card — but NOT when dragging or clicking handle
-  // Patch toggleCard to ignore if the click came from drag-handle
-  const _origToggle = window.toggleCard;
-  window.toggleCard = function(headEl) {
-    // If we just finished a drag, suppress the click
-    if (dragging) return;
-    _origToggle(headEl);
-  };
-  document.addEventListener('DOMContentLoaded', initDnd);
-  // Also init immediately if DOM is ready
-  if (document.readyState !== 'loading') initDnd();
-})();
-
-// ─────────────────────────────────────────────
-//  Card collapse toggle
-// ─────────────────────────────────────────────
-function toggleCard(headEl) {
-  headEl.closest('.card').classList.toggle('collapsed');
-}
-
-
-// ─────────────────────────────────────────────
-//  Init
-// ─────────────────────────────────────────────
-window.addEventListener('load', () => {
-  resize();
-  redraw();
-});
-</script>
+<script src="young_diagrams.js"></script>
 </body>
 </html>
