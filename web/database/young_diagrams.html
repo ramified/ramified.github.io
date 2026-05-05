@@ -20,7 +20,7 @@
     <header class="panel-title">
       <span class="panel-title-text">Young Diagram</span>
       <div class="canvas-toolbar" aria-label="Canvas diagram controls">
-        <span class="shape-indicator" title="Shape λ"><!--Shape λ=-->  <span id="shape-badge">( )</span></span>
+        <span class="shape-indicator" title="Shape λ"><span id="shape-badge">( )</span></span>
         <span class="canvas-size-inline" aria-label="Canvas size, rows by columns">
           <label title="Canvas rows">
             <span>rows</span>
@@ -42,169 +42,170 @@
   <!-- RIGHT: controls -->
   <div class="side">
 
-    <!-- Statistics -->
-    <div class="card collapsed">
-      <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Statistics</span><em class="toggle-icon">▾</em></div>
-      <div class="card-body">
-        <div class="stat-row">
-          <span class="stat-label">Size |λ|</span>
-          <span class="stat-value" id="out-size">0</span>
+        <!-- Statistics -->
+        <div class="card collapsed">
+          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Statistics</span><em class="toggle-icon">▾</em></div>
+          <div class="card-body">
+            <div class="stat-row">
+              <span class="stat-label">Size |λ|</span>
+              <span class="stat-value" id="out-size">0</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Shape λ</span>
+              <span class="stat-value" id="out-shape">( )</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Conjugate λ′</span>
+              <span class="stat-value" id="out-conj">( )</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">|λ|!</span>
+              <span class="stat-value" id="out-fac">1</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">∏ hook lengths</span>
+              <span class="stat-value" id="out-hprod">1</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label"># standard SYT</span>
+              <span class="stat-value" id="out-nstand">1</span>
+            </div>
+            <div class="ssrow">
+              <label>Max entry <em>m</em> for SSYT</label>
+              <input type="number" id="maxentry" value="5" min="1" max="99" onchange="refreshStats()">
+            </div>
+            <div class="stat-row">
+              <span class="stat-label"># semistandard SSYT</span>
+              <span class="stat-value" id="out-sstand">1</span>
+            </div>
+          </div>
         </div>
-        <div class="stat-row">
-          <span class="stat-label">Shape λ</span>
-          <span class="stat-value" id="out-shape">( )</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Conjugate λ′</span>
-          <span class="stat-value" id="out-conj">( )</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">|λ|!</span>
-          <span class="stat-value" id="out-fac">1</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">∏ hook lengths</span>
-          <span class="stat-value" id="out-hprod">1</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label"># standard SYT</span>
-          <span class="stat-value" id="out-nstand">1</span>
-        </div>
-        <div class="ssrow">
-          <label>Max entry <em>m</em> for SSYT</label>
-          <input type="number" id="maxentry" value="5" min="1" max="99" onchange="refreshStats()">
-        </div>
-        <div class="stat-row">
-          <span class="stat-label"># semistandard SSYT</span>
-          <span class="stat-value" id="out-sstand">1</span>
-        </div>
-      </div>
-    </div>
 
-    <!-- Lie Algebra Weight -->
-    <div class="card collapsed">
-      <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Lie Algebra Weight</span><em class="toggle-icon">&#9662;</em></div>
-      <div class="card-body">
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
-          <label class="stat-label" style="white-space:nowrap;flex-shrink:0;">Type:</label>
-          <select id="lie-type" onchange="onTypeChange()" style="padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'EB Garamond',serif;font-size:0.9rem;color:var(--text);">
-            <optgroup label="Classical">
-              <option value="A">A&#8345; &nbsp;&#x1D4C8;&#x1D4C1;(n+1) / &#x1D4C8;&#x1D4CA;(n+1)</option>
-              <option value="B">B&#8345; &nbsp;&#x1D4C8;&#x1D4C0;(2n+1)</option>
-              <option value="C">C&#8345; &nbsp;&#x1D4C8;&#x1D4C5;(2n)</option>
-              <option value="D" selected>D&#8345; &nbsp;&#x1D4C8;&#x1D4C0;(2n)</option>
-            </optgroup>
-            <optgroup label="Exceptional">
-              <option value="E6">E&#8326;</option>
-              <option value="E7">E&#8327;</option>
-              <option value="E8">E&#8328;</option>
-              <option value="F4">F&#8324;</option>
-              <option value="G2">G&#8322;</option>
-            </optgroup>
-          </select>
-          <span id="lie-rank-wrap" style="display:flex;align-items:center;gap:6px;">
-            <label class="stat-label" style="white-space:nowrap;">rank&nbsp;<em>n</em>:</label>
-            <input type="number" id="lie-rank" value="3" min="1" max="12"
-              onchange="onAlgebraChange()"
-              style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;
-                     font-family:'JetBrains Mono',monospace;font-size:0.82rem;
-                     background:var(--bg);color:var(--text);text-align:center;">
-          </span>
-          <span id="lie-algebra-desc" style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:var(--muted);"></span>
+        <!-- Lie Algebra Weight -->
+        <div class="card collapsed">
+          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Lie Algebra Weight</span><em class="toggle-icon">&#9662;</em></div>
+          <div class="card-body">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
+              <label class="stat-label" style="white-space:nowrap;flex-shrink:0;">Type:</label>
+              <select id="lie-type" onchange="onTypeChange()" style="padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'EB Garamond',serif;font-size:0.9rem;color:var(--text);">
+                <optgroup label="Classical">
+                  <option value="A">A&#8345; &nbsp;&#x1D4C8;&#x1D4C1;(n+1) / &#x1D4C8;&#x1D4CA;(n+1)</option>
+                  <option value="B">B&#8345; &nbsp;&#x1D4C8;&#x1D4C0;(2n+1)</option>
+                  <option value="C">C&#8345; &nbsp;&#x1D4C8;&#x1D4C5;(2n)</option>
+                  <option value="D" selected>D&#8345; &nbsp;&#x1D4C8;&#x1D4C0;(2n)</option>
+                </optgroup>
+                <optgroup label="Exceptional">
+                  <option value="E6">E&#8326;</option>
+                  <option value="E7">E&#8327;</option>
+                  <option value="E8">E&#8328;</option>
+                  <option value="F4">F&#8324;</option>
+                  <option value="G2">G&#8322;</option>
+                </optgroup>
+              </select>
+              <span id="lie-rank-wrap" style="display:flex;align-items:center;gap:6px;">
+                <label class="stat-label" style="white-space:nowrap;">rank&nbsp;<em>n</em>:</label>
+                <input type="number" id="lie-rank" value="3" min="1" max="12"
+                  onchange="onAlgebraChange()"
+                  style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;
+                         font-family:'JetBrains Mono',monospace;font-size:0.82rem;
+                         background:var(--bg);color:var(--text);text-align:center;">
+              </span>
+              <span id="lie-algebra-desc" style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:var(--muted);"></span>
+            </div>
+            <div class="hint" style="margin-bottom:8px;" id="lie-hint">
+              Uses row vector &#955; = (a<sub>1</sub>,...,a<sub>n</sub>) and Dynkin labels
+              [a<sub>1</sub>&minus;a<sub>2</sub>, ..., a<sub>n-1</sub>&minus;a<sub>n</sub>, a<sub>n</sub>].
+              Orbit size is computed by the stabilizer formula, not by enumerating the whole orbit.
+            </div>
+            <div id="lie-warning" class="err" style="margin-bottom:4px;"></div>
+            <!-- Stats -->
+            <div class="stat-row"><span class="stat-label">Weight &#955;</span><span class="stat-value" id="lie-weight">—</span></div>
+            <div class="stat-row"><span class="stat-label">Dynkin labels</span><span class="stat-value" id="lie-dynkin">—</span></div>
+            <div class="stat-row"><span class="stat-label">dim V<sup>&#955;</sup></span><span class="stat-value" id="lie-dim">—</span></div>
+            <div class="stat-row"><span class="stat-label">|Weyl orbit|</span><span class="stat-value" id="lie-orbit-size">—</span></div>
+            <!-- Orbit table toggle -->
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn" onclick="toggleOrbitTable()" id="lie-orbit-btn">Show Weyl orbit</button>
+              <button class="btn" onclick="exportOrbit()" style="background:transparent;color:var(--accent);border-color:var(--accent);">Export orbit</button>
+            </div>
+            <div id="lie-orbit-table" style="display:none;margin-top:10px;overflow-x:auto;"></div>
+          </div>
         </div>
-        <div class="hint" style="margin-bottom:8px;" id="lie-hint">
-          Identifies the Young diagram row lengths as Dynkin labels of the highest weight &#955;.
-          Row lengths are padded/truncated to the algebra rank.
-        </div>
-        <div id="lie-warning" class="err" style="margin-bottom:4px;"></div>
-        <!-- Stats -->
-        <div class="stat-row"><span class="stat-label">Weight &#955;</span><span class="stat-value" id="lie-weight">—</span></div>
-        <div class="stat-row"><span class="stat-label">Dynkin labels</span><span class="stat-value" id="lie-dynkin">—</span></div>
-        <div class="stat-row"><span class="stat-label">dim V<sup>&#955;</sup></span><span class="stat-value" id="lie-dim">—</span></div>
-        <div class="stat-row"><span class="stat-label">|Weyl orbit|</span><span class="stat-value" id="lie-orbit-size">—</span></div>
-        <!-- Orbit table toggle -->
-        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn" onclick="toggleOrbitTable()" id="lie-orbit-btn">Show Weyl orbit</button>
-          <button class="btn" onclick="exportOrbit()" style="background:transparent;color:var(--accent);border-color:var(--accent);">Export orbit</button>
-        </div>
-        <div id="lie-orbit-table" style="display:none;margin-top:10px;overflow-x:auto;"></div>
-      </div>
-    </div>
 
-    <!-- Branching Rules -->
-    <div class="card collapsed">
-      <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Branching Rules</span><em class="toggle-icon">&#9662;</em></div>
-      <div class="card-body">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-          <label class="stat-label" style="white-space:nowrap;flex-shrink:0;">Rule:</label>
-          <select id="br-rule" onchange="computeBranching()" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'EB Garamond',serif;font-size:0.9rem;color:var(--text);">
-            <option value="gl-sp">GL(2n) &#8594; Sp(2n)  (Littlewood)</option>
-            <option value="gl-o">GL(n) &#8594; O(n)  (Littlewood)</option>
-          </select>
+        <!-- Branching Rules -->
+        <div class="card collapsed">
+          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Branching Rules</span><em class="toggle-icon">&#9662;</em></div>
+          <div class="card-body">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <label class="stat-label" style="white-space:nowrap;flex-shrink:0;">Rule:</label>
+              <select id="br-rule" onchange="computeBranching()" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'EB Garamond',serif;font-size:0.9rem;color:var(--text);">
+                <option value="gl-sp">GL(2n) &#8594; Sp(2n)  (Littlewood)</option>
+                <option value="gl-o">GL(n) &#8594; O(n)  (Littlewood)</option>
+              </select>
+            </div>
+            <div class="hint" style="margin:4px 0 8px;">
+              Decomposes V<sup>&#955;</sup><sub>GL</sub> restricted to the subgroup. Stable when &#8467;(&#955;) &#8804; n.
+            </div>
+            <div id="br-warning" class="err" style="margin-bottom:6px;"></div>
+            <div id="br-output" style="display:flex;flex-direction:column;gap:10px;"></div>
+          </div>
         </div>
-        <div class="hint" style="margin:4px 0 8px;">
-          Decomposes V<sup>&#955;</sup><sub>GL</sub> restricted to the subgroup. Stable when &#8467;(&#955;) &#8804; n.
-        </div>
-        <div id="br-warning" class="err" style="margin-bottom:6px;"></div>
-        <div id="br-output" style="display:flex;flex-direction:column;gap:10px;"></div>
-      </div>
-    </div>
 
-    <!-- Options -->
-    <div class="card collapsed">
-      <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Display Options</span><em class="toggle-icon">▾</em></div>
-      <div class="card-body">
-        <label class="opt-row"><input type="checkbox" id="showhooks" checked onchange="redraw()"> Show hook lengths</label>
-        <label class="opt-row"><input type="checkbox" id="shadehooks" checked onchange="redraw()"> Shade by hook length</label>
-        <label class="opt-row"><input type="checkbox" id="showcoords" onchange="redraw()"> Show cell coordinates (r,c)</label>
-      </div>
-    </div>
-
-    <!-- Actions -->
-    <div class="card collapsed">
-      <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Actions</span><em class="toggle-icon">▾</em></div>
-      <div class="card-body">
-        <div class="action-row">
-          <button class="btn" onclick="conjugate()">Conjugate λ′</button>
-          <button class="btn" onclick="complement()">Complement (in box)</button>
-          <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+        <!-- Display Options -->
+        <div class="card collapsed">
+          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Display Options</span><em class="toggle-icon">▾</em></div>
+          <div class="card-body">
+            <label class="opt-row"><input type="checkbox" id="showhooks" checked onchange="redraw()"> Show hook lengths</label>
+            <label class="opt-row"><input type="checkbox" id="shadehooks" checked onchange="redraw()"> Shade by hook length</label>
+            <label class="opt-row"><input type="checkbox" id="showcoords" onchange="redraw()"> Show cell coordinates (r,c)</label>
+          </div>
         </div>
-        <div class="hint" style="margin-top:8px;" id="box-hint">Complement uses a bounding box. Draw diagram first.</div>
-      </div>
-    </div>
 
-    <!-- Set partition -->
-    <div class="card collapsed">
-      <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Set Partition</span><em class="toggle-icon">▾</em></div>
-      <div class="card-body">
-        <div class="input-row">
-          <input type="text" id="partition-input" placeholder="e.g. 4,3,1" oninput="clearErr()">
-          <button class="btn" onclick="setPartition()">Draw</button>
+        <!-- Actions -->
+        <div class="card collapsed">
+          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Actions</span><em class="toggle-icon">▾</em></div>
+          <div class="card-body">
+            <div class="action-row">
+              <button class="btn" onclick="conjugate()">Conjugate λ′</button>
+              <button class="btn" onclick="complement()">Complement (in box)</button>
+              <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+            </div>
+            <div class="hint" style="margin-top:8px;" id="box-hint">Complement uses a bounding box. Draw diagram first.</div>
+          </div>
         </div>
-        <div class="hint">Enter row lengths separated by commas, non-increasing.</div>
-        <div class="err" id="part-err"></div>
-      </div>
-    </div>
 
-    <!-- Export -->
-    <div class="card collapsed">
-      <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">▾</em></div>
-      <div class="card-body">
-        <div class="action-row">
-          <button class="btn" onclick="exportLaTeX()">LaTeX</button>
-          <button class="btn" onclick="exportSVG()">SVG</button>
-          <button class="btn" onclick="copyShape()">Copy shape</button>
+        <!-- Set Partition -->
+        <div class="card collapsed">
+          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Set Partition</span><em class="toggle-icon">▾</em></div>
+          <div class="card-body">
+            <div class="input-row">
+              <input type="text" id="partition-input" placeholder="e.g. 4,3,1" oninput="clearErr()">
+              <button class="btn" onclick="setPartition()">Draw</button>
+            </div>
+            <div class="hint">Enter row lengths separated by commas, non-increasing.</div>
+            <div class="err" id="part-err"></div>
+          </div>
         </div>
-        <textarea id="export-out" readonly placeholder="Output appears here…"></textarea>
-      </div>
-    </div>
+
+        <!-- Export -->
+        <div class="card collapsed">
+          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">▾</em></div>
+          <div class="card-body">
+            <div class="action-row">
+              <button class="btn" onclick="exportLaTeX()">LaTeX</button>
+              <button class="btn" onclick="exportSVG()">SVG</button>
+              <button class="btn" onclick="copyShape()">Copy shape</button>
+            </div>
+            <textarea id="export-out" readonly placeholder="Output appears here…"></textarea>
+          </div>
+        </div>
 
   </div><!-- /side -->
 </div>
 
 <footer>
   Original applet by <a href="https://web.archive.org/web/20250513072803/https://www.integral-domain.org/lwilliams/Applets/combinatorics/youngdiagrams.php" target="_blank">Dr. Lauren K. Williams</a> (Mercyhurst University), built with p5.js.
-  By using <a href="https://claude.ai/share/98270095-0477-4096-8018-b1f670224a79">Claude</a> and <a href="https://chatgpt.com/share/69fa2f46-4b6c-838f-8394-009912e2682f">chatGPT</a>, this archive adds some additional functions. I really appreciate how they can produce such an amazing webpage. The Lie algebra representation part has still some problems, but I hope to fix it when I got enough new tokens.
+  With help from <a href="https://claude.ai/share/98270095-0477-4096-8018-b1f670224a79" target="_blank">Claude</a> and <a href="https://chatgpt.com/share/69fa2f46-4b6c-838f-8394-009912e2682f" target="_blank">ChatGPT</a>, this archive adds additional functions. I’m grateful for how these tools helped produce such a polished webpage, and I may add more functions as needed.
 </footer>
 
 <!-- p5.js and BigInteger inline-free: we implement bigint ourselves -->

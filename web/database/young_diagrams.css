@@ -73,7 +73,6 @@
     font-family: 'JetBrains Mono', monospace;
     letter-spacing: 0.08em;
     color: var(--muted);
-    text-transform: uppercase;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -83,6 +82,7 @@
   .panel-title-text {
     color: var(--muted);
     flex-shrink: 0;
+    text-transform: uppercase;
   }
   .canvas-toolbar {
     display: flex;

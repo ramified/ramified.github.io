@@ -1035,7 +1035,10 @@ function makeBn(n) {
     else if(Math.abs(i-j)===1) C[i][j]=-1;
     else C[i][j]=0;
   }}
-  C[n-2][n-1]=-1; C[n-1][n-2]=-2; // B_n: last node short; overwrite
+  // Convention used by positiveRoots(): C[i][j] = <α_i, α_j∨>.
+  // B_n has α_n short, so <α_{n-1},α_n∨> = -2 and <α_n,α_{n-1}∨> = -1.
+  C[n-2][n-1] = -2;
+  C[n-1][n-2] = -1;
   return C;
 }
 function makeCn(n) {
@@ -1045,7 +1048,9 @@ function makeCn(n) {
     else if(Math.abs(i-j)===1) C[i][j]=-1;
     else C[i][j]=0;
   }}
-  C[n-2][n-1]=-2; C[n-1][n-2]=-1; // C_n: last node long; <α_{n-1},α_n∨>=-2
+  // C_n has α_n long, so <α_{n-1},α_n∨> = -1 and <α_n,α_{n-1}∨> = -2.
+  C[n-2][n-1] = -1;
+  C[n-1][n-2] = -2;
   return C;
 }
 function makeDn(n) {
@@ -1099,31 +1104,14 @@ function weylDimGeneral(coroots, dynkinLabels) {
 }
 // ── Dynkin labels from row lengths ──
 function toDynkinLabels(typeStr, rows) {
-  const [type, nStr] = typeStr.includes(':') ? typeStr.split(':') : [typeStr, ''];
-  const n = nStr ? parseInt(nStr) : {G2:2,F4:4,E6:6,E7:7,E8:8}[typeStr];
-  // Pad rows to length n
-  const lam = Array.from({length:n}, (_,i) => rows[i]||0);
-  // For classical types, Dynkin labels = differences (with special last element)
-  // For exceptional, the "rows" are directly interpreted as Dynkin labels a_1,...,a_n
-  // (since there's no natural "row-length-to-weight" map for exceptional types)
-  if (type === 'A') {
-    // A_n = sl(n+1), rank n, lam has length n; Dynkin labels a_i = λ_i - λ_{i+1}
-    return Array.from({length:n}, (_,i) => lam[i] - (lam[i+1]||0));
-  }
-  if (type === 'B' || type === 'C') {
-    const labels = Array.from({length:n-1}, (_,i) => lam[i]-lam[i+1]);
-    if (type === 'B') labels.push(2*lam[n-1]);   // a_n = 2λ_n for B_n
-    else              labels.push(lam[n-1]);       // a_n = λ_n for C_n
-    return labels;
-  }
-  if (type === 'D') {
-    const labels = Array.from({length:n-2}, (_,i) => lam[i]-lam[i+1]);
-    labels.push(lam[n-2]-lam[n-1]); // a_{n-1}
-    labels.push(lam[n-2]+lam[n-1]); // a_n
-    return labels;
-  }
-  // Exceptional: row lengths ARE the Dynkin labels directly
-  return lam.slice(0, n);
+  const n = rankOf(typeStr);
+  // Convention: the Young diagram rows give λ = (a_1,...,a_n), padded to the rank.
+  // The Dynkin/fundamental-weight coordinates are
+  //   [a_1-a_2, a_2-a_3, ..., a_{n-1}-a_n, a_n].
+  // Thus a single column of height i gives [0,...,0,1,0,...,0],
+  // corresponding to the i-th fundamental weight.
+  const lam = Array.from({length:n}, (_,i) => rows[i] || 0);
+  return Array.from({length:n}, (_,i) => lam[i] - (lam[i + 1] || 0));
 }
 function rankOf(typeStr) {
   if (typeStr.includes(':')) return parseInt(typeStr.split(':')[1]);
@@ -1149,9 +1137,170 @@ function weylOrbitDynkin(C, dynkinLabels) {
     for(let i=0;i<a.length;i++){if(a[i]!==b[i])return b[i]-a[i];} return 0;
   });
 }
+function factorialBI(n) {
+  let r = 1n;
+  for (let i = 2; i <= n; i++) r *= BigInt(i);
+  return r;
+}
+function powBI(base, exp) {
+  let r = 1n;
+  const b = BigInt(base);
+  for (let i = 0; i < exp; i++) r *= b;
+  return r;
+}
+function cartanEdgeWeight(C, i, j) {
+  return Math.abs((C[i][j] || 0) * (C[j][i] || 0));
+}
+function dynkinComponents(C, nodes) {
+  const nodeSet = new Set(nodes);
+  const seen = new Set();
+  const comps = [];
+  for (const start of nodes) {
+    if (seen.has(start)) continue;
+    const comp = [];
+    const stack = [start];
+    seen.add(start);
+    while (stack.length) {
+      const i = stack.pop();
+      comp.push(i);
+      for (const j of nodeSet) {
+        if (seen.has(j)) continue;
+        if (cartanEdgeWeight(C, i, j) > 0) {
+          seen.add(j);
+          stack.push(j);
+        }
+      }
+    }
+    comps.push(comp.sort((a,b)=>a-b));
+  }
+  return comps;
+}
+function componentAdjacency(C, nodes) {
+  const adj = new Map(nodes.map(i => [i, []]));
+  for (let a = 0; a < nodes.length; a++) {
+    for (let b = a + 1; b < nodes.length; b++) {
+      const i = nodes[a], j = nodes[b];
+      const w = cartanEdgeWeight(C, i, j);
+      if (w > 0) {
+        adj.get(i).push({node:j, weight:w});
+        adj.get(j).push({node:i, weight:w});
+      }
+    }
+  }
+  return adj;
+}
+function isPathAdjacency(adj, nodes) {
+  if (nodes.length === 1) return true;
+  const degs = nodes.map(i => adj.get(i).length).sort((a,b)=>a-b);
+  return degs[0] === 1 && degs[1] === 1 && degs.slice(2).every(d => d === 2);
+}
+function doubleEdgeTouchesPathEnd(adj, nodes) {
+  for (const i of nodes) {
+    for (const e of adj.get(i)) {
+      if (i < e.node && e.weight === 2) {
+        return adj.get(i).length === 1 || adj.get(e.node).length === 1;
+      }
+    }
+  }
+  return false;
+}
+function armLengthsFromBranch(adj, branch) {
+  const arms = [];
+  for (const first of adj.get(branch).map(e => e.node)) {
+    let len = 1;
+    let prev = branch;
+    let cur = first;
+    while (adj.get(cur).length > 1) {
+      const next = adj.get(cur).map(e => e.node).find(v => v !== prev);
+      if (next === undefined) break;
+      prev = cur;
+      cur = next;
+      len++;
+    }
+    arms.push(len);
+  }
+  return arms.sort((a,b)=>a-b);
+}
+function irreducibleWeylOrderFromCartan(C, nodes) {
+  const n = nodes.length;
+  if (n === 0) return 1n;
+  if (n === 1) return 2n; // A1
+
+  const adj = componentAdjacency(C, nodes);
+  const edgeWeights = [];
+  for (let a = 0; a < nodes.length; a++) {
+    for (let b = a + 1; b < nodes.length; b++) {
+      const w = cartanEdgeWeight(C, nodes[a], nodes[b]);
+      if (w > 0) edgeWeights.push(w);
+    }
+  }
+  const maxEdge = Math.max(...edgeWeights);
+
+  // Rank-two non-simply-laced types.
+  if (n === 2) {
+    if (maxEdge === 1) return 6n;   // A2
+    if (maxEdge === 2) return 8n;   // B2/C2
+    if (maxEdge === 3) return 12n;  // G2
+  }
+
+  if (maxEdge > 1) {
+    // F4 is the path of length 4 with its double edge in the middle.
+    if (n === 4 && isPathAdjacency(adj, nodes) && maxEdge === 2 && !doubleEdgeTouchesPathEnd(adj, nodes)) {
+      return 1152n;
+    }
+    // B_n/C_n: a path with one double edge at an end; |W| = 2^n n!.
+    if (isPathAdjacency(adj, nodes) && maxEdge === 2) {
+      return powBI(2, n) * factorialBI(n);
+    }
+  }
+
+  // Simply-laced connected types: A, D, E.
+  if (maxEdge === 1) {
+    if (isPathAdjacency(adj, nodes)) {
+      return factorialBI(n + 1); // A_n
+    }
+    const branchNodes = nodes.filter(i => adj.get(i).length === 3);
+    if (branchNodes.length === 1) {
+      const arms = armLengthsFromBranch(adj, branchNodes[0]);
+      const key = arms.join(',');
+      if (arms[0] === 1 && arms[1] === 1) {
+        return powBI(2, n - 1) * factorialBI(n); // D_n
+      }
+      if (key === '1,2,2') return 51840n;    // E6
+      if (key === '1,2,3') return 2903040n;  // E7
+      if (key === '1,2,4') return 696729600n;// E8
+    }
+  }
+
+  throw new Error('Unsupported Dynkin subdiagram for orbit-size shortcut.');
+}
+function weylGroupOrderFromCartan(C, nodes = null) {
+  const useNodes = nodes || Array.from({length:C.length}, (_,i)=>i);
+  if (!useNodes.length) return 1n;
+  return dynkinComponents(C, useNodes).reduce(
+    (prod, comp) => prod * irreducibleWeylOrderFromCartan(C, comp),
+    1n
+  );
+}
+function weylOrbitSizeFast(C, dynkinLabels) {
+  // For a dominant weight λ, the stabilizer is generated by the simple reflections
+  // s_i with Dynkin label <λ, α_i∨> = 0. Thus |W·λ| = |W| / |W_λ|.
+  const fullOrder = weylGroupOrderFromCartan(C);
+  const zeroNodes = dynkinLabels
+    .map((a, i) => a === 0 ? i : -1)
+    .filter(i => i >= 0);
+  const stabilizerOrder = weylGroupOrderFromCartan(C, zeroNodes);
+  return fullOrder / stabilizerOrder;
+}
 // ── State ──
+const ORBIT_LIST_LIMIT = 5000n;
 let _lieOrbit = [];
+let _lieOrbitSize = 0n;
 let _orbitVisible = false;
+let _lastOrbitKey = '';
+let _lastOrbitLabels = [];
+let _lastOrbitTypeStr = '';
+let _lastOrbitRank = 0;
 let _cachedCartan = null;
 let _cachedCoroots = null;
 let _cachedTypeStr = '';
@@ -1195,18 +1344,45 @@ function currentTypeStr() {
   const n = parseInt(document.getElementById('lie-rank').value);
   return type + ':' + n;
 }
+function orbitListLimitText() { return ORBIT_LIST_LIMIT.toString(); }
+function renderOrbitTableOrMessage() {
+  const container = document.getElementById('lie-orbit-table');
+  if (!_lastOrbitLabels.length) {
+    container.innerHTML = '<span class="hint">Draw a Young diagram first.</span>';
+    return false;
+  }
+  if (_lieOrbitSize > ORBIT_LIST_LIMIT) {
+    container.innerHTML = `<span class="hint">Orbit has ${_lieOrbitSize.toString()} weights. Full listing is disabled above ${orbitListLimitText()} weights to keep the page responsive; the size above is computed exactly by the stabilizer formula.</span>`;
+    _lieOrbit = [];
+    return false;
+  }
+  if (_lastOrbitKey && (!_lieOrbit.length || _lieOrbit._key !== _lastOrbitKey)) {
+    _lieOrbit = weylOrbitDynkin(_cachedCartan, _lastOrbitLabels);
+    _lieOrbit._key = _lastOrbitKey;
+  }
+  buildOrbitTable(_lastOrbitRank);
+  return true;
+}
 function toggleOrbitTable() {
   _orbitVisible = !_orbitVisible;
-  document.getElementById('lie-orbit-table').style.display = _orbitVisible ? 'block' : 'none';
+  const table = document.getElementById('lie-orbit-table');
+  if (_orbitVisible) {
+    renderOrbitTableOrMessage();
+  }
+  table.style.display = _orbitVisible ? 'block' : 'none';
   document.getElementById('lie-orbit-btn').textContent = _orbitVisible ? 'Hide Weyl orbit' : 'Show Weyl orbit';
 }
 function exportOrbit() {
-  if (!_lieOrbit.length) return;
-  const typeStr = currentTypeStr();
-  const n = rankOf(typeStr);
-  let out = `# Weyl orbit  type=${typeStr}  rank=${n}\n`;
-  out += _lieOrbit.map(w => '(' + w.join(', ') + ')').join('\n');
-  document.getElementById('export-out').value = out;
+  if (!_lastOrbitLabels.length) return;
+  const exportOut = document.getElementById('export-out');
+  if (_lieOrbitSize > ORBIT_LIST_LIMIT) {
+    exportOut.value = `# Weyl orbit  type=${_lastOrbitTypeStr}  rank=${_lastOrbitRank}\n# Orbit size: ${_lieOrbitSize.toString()}\n# Full export disabled above ${orbitListLimitText()} weights to keep the page responsive.`;
+  } else {
+    renderOrbitTableOrMessage();
+    let out = `# Weyl orbit  type=${_lastOrbitTypeStr}  rank=${_lastOrbitRank}\n`;
+    out += _lieOrbit.map(w => '(' + w.join(', ') + ')').join('\n');
+    exportOut.value = out;
+  }
   document.querySelectorAll('.card').forEach(c => {
     if (c.querySelector('#export-out') && c.classList.contains('collapsed'))
       c.classList.remove('collapsed');
@@ -1218,7 +1394,6 @@ function computeWeyl() {
   const typeStr = currentTypeStr();
   const warn    = document.getElementById('lie-warning');
   warn.textContent = '';
-  const [typeBase] = typeStr.includes(':') ? typeStr.split(':') : [typeStr];
   const n = rankOf(typeStr);
   // Invalidate cache if type changed
   if (_cachedTypeStr !== typeStr) {
@@ -1231,33 +1406,51 @@ function computeWeyl() {
       document.getElementById(id).textContent = '—');
     document.getElementById('lie-orbit-table').innerHTML = '';
     _lieOrbit = [];
+    _lieOrbitSize = 0n;
+    _lastOrbitKey = '';
+    _lastOrbitLabels = [];
+    _lastOrbitTypeStr = '';
+    _lastOrbitRank = 0;
     return;
   }
-  // Compute Dynkin labels
+  // Compute Dynkin labels in the row-difference convention.
   let labels;
   try { labels = toDynkinLabels(typeStr, rows); }
   catch(e) { warn.textContent = '⚠ ' + e.message; return; }
-  // Warn if any label negative (non-dominant)
-  if (labels.some(a => a < 0)) {
-    warn.textContent = '⚠ Weight is not dominant — diagram has too many rows for this rank.';
+  if (rows.length > n) {
+    warn.textContent = `⚠ Only the first ${n} row${n === 1 ? '' : 's'} are used for this rank.`;
   }
-  // Clamp negatives to 0 for display purposes but still show the labels
+  // Warn if any label negative (non-dominant). This should not happen for a valid Young diagram
+  // in the row-difference convention, but the guard keeps the Weyl formula safe.
+  if (labels.some(a => a < 0)) {
+    warn.textContent = '⚠ Weight is not dominant — the orbit-size shortcut expects non-negative Dynkin labels.';
+  }
+  // Clamp negatives to 0 for dimension only; still display the actual labels.
   const labelsForDim = labels.map(a => Math.max(a, 0));
   // Compute dimension
   let dim;
   try { dim = weylDimGeneral(_cachedCoroots, labelsForDim); }
   catch(e) { warn.textContent = '⚠ Dim error: ' + e.message; return; }
-  // Compute orbit
-  _lieOrbit = weylOrbitDynkin(_cachedCartan, labels);
-  // Format weight display (for classical: show λ coordinates; for exceptional: show Dynkin labels)
-  const isClassical = typeStr.includes(':');
+  // Compute orbit size without enumerating the orbit.
+  try { _lieOrbitSize = weylOrbitSizeFast(_cachedCartan, labelsForDim); }
+  catch(e) { warn.textContent = '⚠ Orbit-size error: ' + e.message; return; }
+
+  _lastOrbitLabels = labels.slice();
+  _lastOrbitTypeStr = typeStr;
+  _lastOrbitRank = n;
+  _lastOrbitKey = `${typeStr}|${labels.join(',')}`;
+  if (!_lieOrbit._key || _lieOrbit._key !== _lastOrbitKey) _lieOrbit = [];
+
+  // Format weight display: λ is the padded row-length vector (a_1,...,a_n).
   const lamPad = Array.from({length:n}, (_,i) => rows[i]||0);
-  const weightStr = isClassical ? '(' + lamPad.join(', ') + ')' : '[' + labels.join(', ') + ']';
+  const weightStr = '(' + lamPad.join(', ') + ')';
   document.getElementById('lie-weight').textContent      = weightStr;
   document.getElementById('lie-dynkin').textContent      = '[' + labels.join(', ') + ']';
   document.getElementById('lie-dim').textContent         = dim.toString();
-  document.getElementById('lie-orbit-size').textContent  = _lieOrbit.length.toString();
-  buildOrbitTable(n);
+  document.getElementById('lie-orbit-size').textContent  = _lieOrbitSize.toString();
+
+  if (_orbitVisible) renderOrbitTableOrMessage();
+  else document.getElementById('lie-orbit-table').innerHTML = '';
   document.getElementById('lie-orbit-table').style.display = _orbitVisible ? 'block' : 'none';
 }
 function buildOrbitTable(n) {
