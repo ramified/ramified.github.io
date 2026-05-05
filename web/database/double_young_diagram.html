@@ -1,0 +1,1151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>double_young_diagram</title>
+  <link rel="stylesheet" href="young_diagrams.css" />
+  <style>
+    .double-layout {
+      max-width: 1280px;
+      grid-template-columns: minmax(0, 1fr) 370px;
+    }
+    .canvas-stack {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+      align-content: start;
+    }
+    .double-canvas-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      padding: 16px;
+      align-items: start;
+    }
+    @media (max-width: 980px) {
+      .double-layout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 720px) {
+      .double-canvas-grid {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 8px;
+        padding: 12px;
+      }
+      .diagram-label { font-size: 0.68rem; }
+    }
+    .diagram-wrap { padding: 0; }
+    .diagram-slot {
+      min-width: 0;
+    }
+    .diagram-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin: 0 0 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: none;
+      color: var(--muted);
+    }
+    .diagram-canvas {
+      background: #fbfaf7;
+      border: 1px solid var(--border);
+      min-height: 0;
+    }
+    .lie-inline-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      color: var(--muted);
+    }
+    .lie-inline-controls select,
+    .lie-inline-controls input[type="number"] {
+      padding: 3px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .lie-inline-controls select {
+      max-width: 245px;
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+    .lie-inline-controls input[type="number"] {
+      width: 52px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      text-align: center;
+    }
+    #lie-algebra-desc {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .badge-soft {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 7px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--text);
+      background: var(--bg);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      white-space: nowrap;
+    }
+    .control-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 6px 0 10px;
+    }
+    .field-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 0;
+      border-bottom: 1px dotted var(--border);
+    }
+    .field-row label {
+      flex: 1;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+    .field-row input[type="number"],
+    .field-row input[type="text"],
+    .field-row select,
+    .mini-input {
+      min-width: 0;
+      padding: 4px 7px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .field-row input[type="number"] { width: 66px; text-align: center; }
+    .field-row select { width: 158px; }
+    .field-row input[type="text"] { width: 140px; }
+    .mini-input { width: 100%; margin-top: 5px; }
+    .result-box {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      max-height: 210px;
+      overflow: auto;
+    }
+    .math-line {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .mini-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+    }
+    .mini-table th,
+    .mini-table td {
+      border-bottom: 1px dotted var(--border);
+      padding: 4px 2px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .mini-table th { color: var(--muted); font-weight: 500; }
+    .two-button-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    #export-out { height: 116px; }
+
+    .decomposition-output {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .decomp-formula {
+      font-size: 0.82rem;
+      line-height: 1.7;
+      word-break: break-word;
+      padding: 6px 0 4px;
+      border-bottom: 1px dotted var(--border);
+    }
+    .decomp-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 3px 0;
+      border-bottom: 1px dotted var(--border);
+    }
+    .decomp-mult {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--accent);
+      min-width: 24px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .decomp-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+    .decomp-diagram {
+      display: inline-flex;
+      min-width: 20px;
+      align-items: center;
+    }
+    .warning-text {
+      color: var(--accent2);
+      font-size: 0.78rem;
+      font-style: italic;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>double_young_diagram</h1>
+    <span>two diagrams · Littlewood–Richardson coefficients</span>
+  </header>
+
+  <main class="layout double-layout">
+    <section class="canvas-stack">
+      <section class="canvas-panel" aria-labelledby="double-title">
+        <header class="panel-title">
+          <span id="double-title" class="panel-title-text">Young diagrams</span>
+          <div class="canvas-toolbar" aria-label="Lie algebra and shared grid controls">
+            <span class="lie-inline-controls">
+              <label class="stat-label" for="lie-type" style="white-space:nowrap;flex-shrink:0;">Type:</label>
+              <select id="lie-type" onchange="onTypeChange()">
+                <optgroup label="Classical">
+                  <option value="A">A&#8345; &nbsp;&#x1D4C8;&#x1D4C1;(n+1) / &#x1D4C8;&#x1D4CA;(n+1)</option>
+                  <option value="B">B&#8345; &nbsp;&#x1D4C8;&#x1D4C0;(2n+1)</option>
+                  <option value="C">C&#8345; &nbsp;&#x1D4C8;&#x1D4C5;(2n)</option>
+                  <option value="D" selected>D&#8345; &nbsp;&#x1D4C8;&#x1D4C0;(2n)</option>
+                </optgroup>
+                <optgroup label="Exceptional">
+                  <option value="E6">E&#8326;</option>
+                  <option value="E7">E&#8327;</option>
+                  <option value="E8">E&#8328;</option>
+                  <option value="F4">F&#8324;</option>
+                  <option value="G2">G&#8322;</option>
+                </optgroup>
+              </select>
+              <span id="lie-rank-wrap" style="display:flex;align-items:center;gap:6px;">
+                <label class="stat-label" for="lie-rank" style="white-space:nowrap;">rank&nbsp;<em>n</em>:</label>
+                <input type="number" id="lie-rank" value="3" min="1" max="12" onchange="onAlgebraChange()">
+              </span>
+              <span id="lie-algebra-desc"></span>
+            </span>
+            <span class="canvas-size-inline" aria-label="Shared canvas size, rows by columns">
+              <label title="Shared rows">
+                <span>rows</span>
+                <input id="grid-rows" type="number" min="1" max="18" value="5" />
+              </label>
+              <span class="dimension-times">×</span>
+              <label title="Shared columns">
+                <span>cols</span>
+                <input id="grid-cols" type="number" min="1" max="18" value="5" />
+              </label>
+            </span>
+          </div>
+        </header>
+        <div class="double-canvas-grid">
+          <div class="diagram-slot">
+            <div class="diagram-label"><span>diagram λ</span></div>
+            <canvas id="lambda-canvas" class="diagram-canvas" width="520" height="340"></canvas>
+          </div>
+          <div class="diagram-slot">
+            <div class="diagram-label"><span>diagram μ</span></div>
+            <canvas id="mu-canvas" class="diagram-canvas" width="520" height="340"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section id="diagram-input-card" class="card" draggable="true">
+        <div class="card-head">
+          <span class="drag-handle" title="drag card">⋮⋮</span>
+          <span class="card-head-label">diagram input</span>
+          <i class="toggle-icon">▾</i>
+        </div>
+        <div class="card-body">
+          <div class="control-grid">
+            <div>
+              <div class="stat-label">Set λ by partition</div>
+              <div class="input-row"><input id="lambda-partition" type="text" placeholder="4,2,1" /><button id="set-lambda" class="btn">set</button></div>
+            </div>
+            <div>
+              <div class="stat-label">Set μ by partition</div>
+              <div class="input-row"><input id="mu-partition" type="text" placeholder="3,1" /><button id="set-mu" class="btn">set</button></div>
+            </div>
+          </div>
+          <div class="action-row">
+            <button id="swap-diagrams" class="btn btn-ghost">swap λ μ</button>
+            <button id="clear-lambda" class="btn btn-ghost">clear λ</button>
+            <button id="clear-mu" class="btn btn-ghost">clear μ</button>
+          </div>
+          <p class="hint">Click a square to set that row length. The page enforces non-increasing row lengths automatically.</p>
+        </div>
+      </section>
+    </section>
+
+    <aside id="cards" class="side">
+      <section class="card" draggable="true">
+        <div class="card-head">
+          <span class="drag-handle" title="drag card">⋮⋮</span>
+          <span class="card-head-label">basic statistics</span>
+          <i class="toggle-icon">▾</i>
+        </div>
+        <div class="card-body">
+          <div id="stats-out"></div>
+        </div>
+      </section>
+
+      <section class="card" draggable="true">
+        <div class="card-head">
+          <span class="drag-handle" title="drag card">⋮⋮</span>
+          <span class="card-head-label">littlewood–richardson decomposition</span>
+          <i class="toggle-icon">▾</i>
+        </div>
+        <div class="card-body">
+          <button id="compute-schur" class="btn">compute LR decomposition</button>
+          <div id="schur-out" class="decomposition-output"><span class="hint">Draw λ and μ, then compute the Littlewood–Richardson decomposition. Small target diagrams will be displayed in the chart below.</span></div>
+          <p class="hint">Type A uses Littlewood–Richardson coefficients c<sup>ν</sup><sub>λ,μ</sub>. For B/C/D the optional stable classical mode uses the Newell–Littlewood analogue.</p>
+        </div>
+      </section>
+
+      <section class="card" draggable="true">
+        <div class="card-head">
+          <span class="drag-handle" title="drag card">⋮⋮</span>
+          <span class="card-head-label">export</span>
+          <i class="toggle-icon">▾</i>
+        </div>
+        <div class="card-body">
+          <div class="action-row">
+            <button id="refresh-export" class="btn">refresh</button>
+            <button id="copy-export" class="btn btn-ghost">copy</button>
+            <button id="download-export" class="btn btn-ghost">download</button>
+          </div>
+          <textarea id="export-out" readonly></textarea>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <footer>
+    double_young_diagram · browser-side computations for small Young diagrams
+  </footer>
+
+  <script>
+  (() => {
+    'use strict';
+
+    const MAX_EXACT_CELLS = 22;
+    const MAX_DECOMPOSE_BOXES_TYPE_A = 14;
+    const MAX_DECOMPOSE_BOXES_CLASSICAL = 12;
+    const state = {
+      lambda: { rows: [], maxRows: 5, maxCols: 5, canvas: null, ctx: null },
+      mu: { rows: [], maxRows: 5, maxCols: 5, canvas: null, ctx: null },
+      lastLR: null,
+      lastWeight: null,
+      lastSchur: null
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    function trimPartition(p) {
+      const out = [];
+      for (const x of p) {
+        const v = Math.max(0, Math.floor(Number(x) || 0));
+        if (v > 0) out.push(v);
+      }
+      while (out.length && out[out.length - 1] === 0) out.pop();
+      return out;
+    }
+
+    function normalizePartition(p) {
+      return trimPartition(p).sort((a, b) => b - a);
+    }
+
+    function parsePartition(text) {
+      if (!String(text || '').trim()) return [];
+      const raw = String(text).split(/[\s,;]+/).filter(Boolean).map(Number);
+      if (raw.some((x) => !Number.isFinite(x) || x < 0 || Math.floor(x) !== x)) {
+        throw new Error('Use a comma-separated list of nonnegative integers, e.g. 4,2,1.');
+      }
+      return normalizePartition(raw);
+    }
+
+    function parseComposition(text) {
+      if (!String(text || '').trim()) return [];
+      const raw = String(text).split(/[\s,;]+/).filter(Boolean).map(Number);
+      if (raw.some((x) => !Number.isFinite(x) || x < 0 || Math.floor(x) !== x)) {
+        throw new Error('Use a comma-separated list of nonnegative integers.');
+      }
+      return raw.map((x) => Math.floor(x));
+    }
+
+    function partitionToString(p) {
+      const q = trimPartition(p);
+      return q.length ? '(' + q.join(',') + ')' : '∅';
+    }
+
+    function partitionKey(p) { return trimPartition(p).join(','); }
+
+    function sizeOf(p) { return trimPartition(p).reduce((a, b) => a + b, 0); }
+
+    function containsPartition(outer, inner) {
+      const n = Math.max(outer.length, inner.length);
+      for (let i = 0; i < n; i++) if ((outer[i] || 0) < (inner[i] || 0)) return false;
+      return true;
+    }
+
+    function conjugatePartition(p) {
+      p = trimPartition(p);
+      const max = p[0] || 0;
+      const out = [];
+      for (let c = 1; c <= max; c++) out.push(p.filter((r) => r >= c).length);
+      return out;
+    }
+
+    function hookLengthDimension(lambda, n) {
+      lambda = trimPartition(lambda);
+      n = Math.floor(Number(n) || 0);
+      if (n <= 0) return null;
+      if (lambda.length > n) return 0;
+      const cols = conjugatePartition(lambda);
+      let result = 1;
+      for (let i = 1; i <= lambda.length; i++) {
+        for (let j = 1; j <= lambda[i - 1]; j++) {
+          const numerator = n + j - i;
+          const hook = lambda[i - 1] - j + (cols[j - 1] || 0) - i + 1;
+          if (numerator <= 0) return 0;
+          result *= numerator / hook;
+        }
+      }
+      return Math.round(result);
+    }
+
+    function rankWarning(p, n, typeLabel) {
+      p = trimPartition(p);
+      if (p.length <= n) return 'ok';
+      return `${typeLabel}: length ${p.length} exceeds n=${n}`;
+    }
+
+    function partitionsOf(total, maxPart = total, maxLen = total) {
+      const out = [];
+      function rec(rem, top, acc) {
+        if (rem === 0) { out.push(acc.slice()); return; }
+        if (acc.length >= maxLen) return;
+        const m = Math.min(top, rem, maxPart);
+        for (let x = m; x >= 1; x--) {
+          acc.push(x);
+          rec(rem - x, x, acc);
+          acc.pop();
+        }
+      }
+      rec(total, maxPart, []);
+      return out;
+    }
+
+    function skewCells(outer, inner) {
+      const cells = [];
+      for (let r = 0; r < outer.length; r++) {
+        const start = inner[r] || 0;
+        for (let c = start; c < outer[r]; c++) cells.push([r, c]);
+      }
+      return cells;
+    }
+
+    function lrCoefficient(lambda, mu, nu) {
+      lambda = trimPartition(lambda);
+      mu = trimPartition(mu);
+      nu = trimPartition(nu);
+      if (!containsPartition(nu, lambda)) return 0;
+      if (sizeOf(nu) !== sizeOf(lambda) + sizeOf(mu)) return 0;
+      const total = sizeOf(mu);
+      if (total === 0) return partitionKey(lambda) === partitionKey(nu) ? 1 : 0;
+      if (total > MAX_EXACT_CELLS) throw new Error(`Exact LR computation capped at ${MAX_EXACT_CELLS} skew boxes.`);
+      const k = mu.length;
+      const cells = skewCells(nu, lambda).sort((a, b) => (a[0] - b[0]) || (b[1] - a[1]));
+      const grid = new Map();
+      const remaining = mu.slice();
+      const prefixCounts = Array(k).fill(0);
+      let count = 0;
+
+      function get(r, c) { return grid.get(r + ',' + c); }
+      function ballotOK() {
+        for (let i = 0; i < k - 1; i++) if (prefixCounts[i] < prefixCounts[i + 1]) return false;
+        return true;
+      }
+      function rec(index) {
+        if (index === cells.length) { count++; return; }
+        const [r, c] = cells[index];
+        const right = get(r, c + 1);
+        const above = get(r - 1, c);
+        for (let value = 1; value <= k; value++) {
+          if (remaining[value - 1] <= 0) continue;
+          if (right !== undefined && value > right) continue;
+          if (above !== undefined && value <= above) continue;
+          remaining[value - 1]--;
+          prefixCounts[value - 1]++;
+          if (ballotOK()) {
+            grid.set(r + ',' + c, value);
+            rec(index + 1);
+            grid.delete(r + ',' + c);
+          }
+          prefixCounts[value - 1]--;
+          remaining[value - 1]++;
+        }
+      }
+      rec(0);
+      return count;
+    }
+
+    function stableClassicalCoefficient(lambda, mu, nu) {
+      lambda = trimPartition(lambda);
+      mu = trimPartition(mu);
+      nu = trimPartition(nu);
+      const L = sizeOf(lambda), M = sizeOf(mu), N = sizeOf(nu);
+      const a = (L + M - N) / 2;
+      const b = (L + N - M) / 2;
+      const c = (M + N - L) / 2;
+      if (![a, b, c].every((x) => Number.isInteger(x) && x >= 0)) return 0;
+      const work = a + b + c;
+      if (work > MAX_EXACT_CELLS) throw new Error(`Classical coefficient capped at total auxiliary size ${MAX_EXACT_CELLS}.`);
+      let total = 0;
+      const As = partitionsOf(a);
+      const Bs = partitionsOf(b);
+      const Cs = partitionsOf(c);
+      for (const alpha of As) {
+        for (const beta of Bs) {
+          let first = 0;
+          try { first = lrCoefficient(alpha, beta, lambda); } catch (_) { first = 0; }
+          if (!first) continue;
+          for (const gamma of Cs) {
+            let second = 0, third = 0;
+            try { second = lrCoefficient(alpha, gamma, mu); } catch (_) { second = 0; }
+            if (!second) continue;
+            try { third = lrCoefficient(beta, gamma, nu); } catch (_) { third = 0; }
+            if (third) total += first * second * third;
+          }
+        }
+      }
+      return total;
+    }
+
+    function kostkaNumber(shape, content) {
+      shape = trimPartition(shape);
+      content = parseComposition(content.join(','));
+      const total = sizeOf(shape);
+      if (content.reduce((a, b) => a + b, 0) !== total) return 0;
+      if (total === 0) return content.reduce((a, b) => a + b, 0) === 0 ? 1 : 0;
+      if (total > MAX_EXACT_CELLS) throw new Error(`Exact weight-space computation capped at ${MAX_EXACT_CELLS} boxes.`);
+      const k = content.length;
+      const cells = [];
+      for (let r = 0; r < shape.length; r++) for (let c = 0; c < shape[r]; c++) cells.push([r, c]);
+      const grid = new Map();
+      const remaining = content.slice();
+      let count = 0;
+      function get(r, c) { return grid.get(r + ',' + c); }
+      function rec(index) {
+        if (index === cells.length) { count++; return; }
+        const [r, c] = cells[index];
+        const left = get(r, c - 1);
+        const above = get(r - 1, c);
+        for (let value = 1; value <= k; value++) {
+          if (remaining[value - 1] <= 0) continue;
+          if (left !== undefined && value < left) continue;
+          if (above !== undefined && value <= above) continue;
+          remaining[value - 1]--;
+          grid.set(r + ',' + c, value);
+          rec(index + 1);
+          grid.delete(r + ',' + c);
+          remaining[value - 1]++;
+        }
+      }
+      rec(0);
+      return count;
+    }
+
+    function drawDiagram(which) {
+      const d = state[which];
+      const canvas = d.canvas;
+      const ctx = d.ctx;
+      const width = canvas.width;
+      const height = canvas.height;
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = '#fbfaf7';
+      ctx.fillRect(0, 0, width, height);
+      const pad = 18;
+      const rows = d.maxRows;
+      const cols = d.maxCols;
+      const cell = Math.floor(Math.min((width - 2 * pad) / cols, (height - 2 * pad) / rows));
+      const x0 = Math.floor((width - cell * cols) / 2);
+      const y0 = Math.floor((height - cell * rows) / 2);
+      ctx.lineWidth = 1;
+      ctx.font = '12px JetBrains Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const x = x0 + c * cell;
+          const y = y0 + r * cell;
+          const filled = c < (d.rows[r] || 0);
+          ctx.fillStyle = filled ? (which === 'lambda' ? '#dfe9e2' : '#eadfda') : '#fffdf9';
+          ctx.strokeStyle = '#d8d0c4';
+          ctx.fillRect(x, y, cell, cell);
+          ctx.strokeRect(x + 0.5, y + 0.5, cell, cell);
+        }
+      }
+      ctx.fillStyle = '#7a6f65';
+      ctx.fillText(which === 'lambda' ? 'λ' : 'μ', x0 - 10, y0 - 8);
+      d.geometry = { x0, y0, cell, rows, cols };
+      $(which + '-partition').value = trimPartition(d.rows).join(',');
+    }
+
+    function enforcePartition(rows, maxRows, maxCols) {
+      rows = rows.slice(0, maxRows).map((x) => Math.max(0, Math.min(maxCols, Math.floor(x || 0))));
+      for (let i = 1; i < rows.length; i++) rows[i] = Math.min(rows[i], rows[i - 1]);
+      return trimPartition(rows);
+    }
+
+    function setDiagram(which, rows) {
+      const d = state[which];
+      d.rows = enforcePartition(rows, d.maxRows, d.maxCols);
+      state.lastLR = state.lastWeight = state.lastSchur = null;
+      drawAll();
+      updateStats();
+      refreshExport();
+    }
+
+    function handleCanvasClick(which, event) {
+      const d = state[which];
+      const rect = d.canvas.getBoundingClientRect();
+      const scaleX = d.canvas.width / rect.width;
+      const scaleY = d.canvas.height / rect.height;
+      const x = (event.clientX - rect.left) * scaleX;
+      const y = (event.clientY - rect.top) * scaleY;
+      const g = d.geometry;
+      const c = Math.floor((x - g.x0) / g.cell);
+      const r = Math.floor((y - g.y0) / g.cell);
+      if (r < 0 || r >= d.maxRows || c < 0 || c >= d.maxCols) return;
+      const rows = d.rows.slice();
+      const old = rows[r] || 0;
+      const target = old === c + 1 ? c : c + 1;
+      rows[r] = target;
+      for (let i = r - 1; i >= 0; i--) rows[i] = Math.max(rows[i] || 0, rows[i + 1] || 0);
+      for (let i = r + 1; i < d.maxRows; i++) rows[i] = Math.min(rows[i] || 0, rows[i - 1] || 0);
+      setDiagram(which, rows);
+    }
+
+    function drawAll() { drawDiagram('lambda'); drawDiagram('mu'); }
+
+    function isClassicalType(type) {
+      return ['A', 'B', 'C', 'D'].includes(type);
+    }
+
+    function currentRank() {
+      const type = $('lie-type').value;
+      if (isClassicalType(type)) return Math.max(1, Math.floor(Number($('lie-rank').value || 1)));
+      return { E6: 6, E7: 7, E8: 8, F4: 4, G2: 2 }[type] || 0;
+    }
+
+    function vectorDimensionForType(type, rank) {
+      if (type === 'A') return rank + 1;
+      if (type === 'B') return 2 * rank + 1;
+      if (type === 'C') return 2 * rank;
+      if (type === 'D') return 2 * rank;
+      return null;
+    }
+
+    function typeDescription(type, rank) {
+      const descMap = {
+        A: () => `sl(${rank + 1}), rank ${rank}`,
+        B: () => `so(${2 * rank + 1}), rank ${rank}`,
+        C: () => `sp(${2 * rank}), rank ${rank}`,
+        D: () => `so(${2 * rank}), rank ${rank}`,
+        E6: () => 'rank 6',
+        E7: () => 'rank 7',
+        E8: () => 'rank 8',
+        F4: () => 'rank 4',
+        G2: () => 'rank 2'
+      };
+      return descMap[type] ? descMap[type]() : '';
+    }
+
+    window.onTypeChange = function onTypeChange() {
+      const type = $('lie-type').value;
+      const rankWrap = $('lie-rank-wrap');
+      const rankInput = $('lie-rank');
+      if (isClassicalType(type)) {
+        const mins = { A: 1, B: 2, C: 2, D: 3 };
+        rankWrap.style.display = 'flex';
+        rankInput.min = String(mins[type]);
+        if (Number(rankInput.value) < mins[type]) rankInput.value = String(mins[type]);
+      } else {
+        rankWrap.style.display = 'none';
+      }
+      $('lie-algebra-desc').textContent = typeDescription(type, currentRank());
+      updateStats();
+      refreshExport();
+    };
+
+    window.onAlgebraChange = function onAlgebraChange() {
+      window.onTypeChange();
+    };
+
+    function updateStats() {
+      const lambda = trimPartition(state.lambda.rows);
+      const mu = trimPartition(state.mu.rows);
+      const type = $('lie-type').value;
+      const rank = currentRank();
+      const vectorDim = vectorDimensionForType(type, rank);
+      const dimLambda = vectorDim ? hookLengthDimension(lambda, vectorDim) : null;
+      const dimMu = vectorDim ? hookLengthDimension(mu, vectorDim) : null;
+      const warnings = [];
+      if (isClassicalType(type)) {
+        for (const [label, part] of [['λ', lambda], ['μ', mu]]) {
+          if (part.length > rank) warnings.push(`${label}: length ${part.length} exceeds rank n=${rank}`);
+        }
+      } else {
+        warnings.push('Exceptional types are recorded for export; coefficient and weight-space routines below are not implemented for them yet.');
+      }
+      const dimLabel = vectorDim ? `dim S(–)(C^${vectorDim})` : 'dim S(–)(V)';
+      const rows = [
+        ['λ', partitionToString(lambda)],
+        ['μ', partitionToString(mu)],
+        ['|λ|, |μ|', `${sizeOf(lambda)}, ${sizeOf(mu)}`],
+        [`${dimLabel}, λ`, dimLambda === null ? '—' : String(dimLambda)],
+        [`${dimLabel}, μ`, dimMu === null ? '—' : String(dimMu)]
+      ];
+      $('stats-out').innerHTML = rows.map(([a, b]) => `<div class="stat-row"><span class="stat-label">${a}</span><span class="stat-value">${b}</span></div>`).join('') +
+        (warnings.length ? `<div class="warning-text">${warnings.join('; ')}</div>` : '');
+    }
+
+    function coefficientForCurrentType(lambda, mu, nu) {
+      const type = $('lie-type').value;
+      if (type === 'A') return lrCoefficient(lambda, mu, nu);
+      if (['B', 'C', 'D'].includes(type)) return stableClassicalCoefficient(lambda, mu, nu);
+      throw new Error('This coefficient routine is implemented for type A and stable classical types B/C/D only.');
+    }
+
+    function computeLR() {
+      const lambda = trimPartition(state.lambda.rows);
+      const mu = trimPartition(state.mu.rows);
+      let nu;
+      try { nu = parsePartition($('target-nu').value); }
+      catch (err) { $('lr-out').textContent = err.message; return; }
+      try {
+        const val = coefficientForCurrentType(lambda, mu, nu);
+        const type = $('lie-type').value;
+        const label = (type === 'A') ? `c^${partitionToString(nu)}_{${partitionToString(lambda)},${partitionToString(mu)}}` : `N(${partitionToString(lambda)}, ${partitionToString(mu)}, ${partitionToString(nu)})`;
+        state.lastLR = { lambda, mu, nu, coefficient: val, type };
+        $('lr-out').textContent = `${label} = ${val}\nλ = ${partitionToString(lambda)}\nμ = ${partitionToString(mu)}\nν = ${partitionToString(nu)}`;
+      } catch (err) {
+        $('lr-out').textContent = err.message;
+      }
+      refreshExport();
+    }
+
+    function computeWeight() {
+      const lambda = trimPartition(state.lambda.rows);
+      let content;
+      try { content = parseComposition($('weight-content').value); }
+      catch (err) { $('weight-out').textContent = err.message; return; }
+      const type = $('lie-type').value;
+      if (type !== 'A') {
+        $('weight-out').textContent = 'Exact weight-space dimensions are implemented here for type A only. For types B–G one needs a full root-system multiplicity algorithm, not just a two-diagram content count.';
+        state.lastWeight = null;
+        refreshExport();
+        return;
+      }
+      try {
+        const val = kostkaNumber(lambda, content);
+        state.lastWeight = { lambda, content, dimension: val, type };
+        $('weight-out').textContent = `K_{${partitionToString(lambda)},(${content.join(',') || '0'})} = ${val}\nshape λ = ${partitionToString(lambda)}\ncontent = (${content.join(',') || '0'})`;
+      } catch (err) {
+        $('weight-out').textContent = err.message;
+      }
+      refreshExport();
+    }
+
+    function decomposeTypeA(lambda, mu, n) {
+      const total = sizeOf(lambda) + sizeOf(mu);
+      if (total > MAX_DECOMPOSE_BOXES_TYPE_A) throw new Error(`Type A decomposition capped at ${MAX_DECOMPOSE_BOXES_TYPE_A} total boxes.`);
+      const terms = [];
+      for (const nu of partitionsOf(total, total, Math.max(1, n))) {
+        if (!containsPartition(nu, lambda)) continue;
+        const c = lrCoefficient(lambda, mu, nu);
+        if (c) terms.push({ nu, coefficient: c, dimension: hookLengthDimension(nu, n) });
+      }
+      return terms;
+    }
+
+    function decomposeClassical(lambda, mu, n) {
+      const total = sizeOf(lambda) + sizeOf(mu);
+      if (total > MAX_DECOMPOSE_BOXES_CLASSICAL) throw new Error(`Classical decomposition capped at ${MAX_DECOMPOSE_BOXES_CLASSICAL} total boxes.`);
+      const terms = [];
+      for (let s = total; s >= 0; s -= 2) {
+        for (const nu of partitionsOf(s, s, Math.max(1, n))) {
+          const c = stableClassicalCoefficient(lambda, mu, nu);
+          if (c) terms.push({ nu, coefficient: c, dimension: null });
+        }
+      }
+      return terms;
+    }
+
+
+    function miniDiagram(partition, hue = 145) {
+      const p = trimPartition(partition);
+      if (!p.length) return '<span class="decomp-label">∅</span>';
+      const bs = 14;
+      const width = (p[0] || 0) * bs;
+      const height = p.length * bs;
+      let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" style="display:inline-block;vertical-align:middle;">`;
+      for (let r = 0; r < p.length; r++) {
+        for (let c = 0; c < p[r]; c++) {
+          svg += `<rect x="${c * bs}" y="${r * bs}" width="${bs}" height="${bs}" fill="hsl(${hue},40%,70%)" stroke="hsl(${hue},30%,35%)" stroke-width="0.7"/>`;
+        }
+      }
+      svg += '</svg>';
+      return svg;
+    }
+
+    function renderLRDecomposition(terms, lambda, mu, type, truncatedCount = 0) {
+      const out = $('schur-out');
+      out.innerHTML = '';
+      const subLabel = type === 'A' ? 'GL' : type;
+      const formula = document.createElement('div');
+      formula.className = 'decomp-formula';
+      const head = type === 'A'
+        ? `S<sup>${partitionToString(lambda)}</sup>(V) ⊗ S<sup>${partitionToString(mu)}</sup>(V) = `
+        : `stable ${type}-classical tensor ${partitionToString(lambda)} ⊗ ${partitionToString(mu)} = `;
+      formula.innerHTML = head + terms.map(({nu, coefficient}) => {
+        const nuStr = partitionToString(nu);
+        const coeff = coefficient > 1 ? `${coefficient}·` : '';
+        return `${coeff}V<sup>${nuStr}</sup><sub>${subLabel}</sub>`;
+      }).join(' ⊕ ');
+      out.appendChild(formula);
+      const hue = type === 'A' ? 145 : 205;
+      for (const {nu, coefficient, dimension} of terms.slice(0, 80)) {
+        const row = document.createElement('div');
+        row.className = 'decomp-row';
+        const mult = document.createElement('span');
+        mult.className = 'decomp-mult';
+        mult.textContent = coefficient > 1 ? `×${coefficient}` : '×1';
+        const diagram = document.createElement('span');
+        diagram.className = 'decomp-diagram';
+        diagram.innerHTML = miniDiagram(nu, hue);
+        const label = document.createElement('span');
+        label.className = 'decomp-label';
+        label.textContent = dimension == null ? partitionToString(nu) : `${partitionToString(nu)}   dim=${dimension}`;
+        row.appendChild(mult);
+        row.appendChild(diagram);
+        row.appendChild(label);
+        out.appendChild(row);
+      }
+      if (truncatedCount > 0) {
+        const more = document.createElement('div');
+        more.className = 'hint';
+        more.textContent = `… ${truncatedCount} more term${truncatedCount === 1 ? '' : 's'} omitted.`;
+        out.appendChild(more);
+      }
+    }
+    function computeSchur() {
+      const lambda = trimPartition(state.lambda.rows);
+      const mu = trimPartition(state.mu.rows);
+      const type = $('lie-type').value;
+      const rank = currentRank();
+      const n = vectorDimensionForType(type, rank) || rank;
+      try {
+        if (!['A', 'B', 'C', 'D'].includes(type)) throw new Error('Littlewood–Richardson decomposition is implemented for type A, with a stable classical analogue for B/C/D only.');
+        const terms = (type === 'A') ? decomposeTypeA(lambda, mu, n) : decomposeClassical(lambda, mu, rank);
+        state.lastSchur = { lambda, mu, terms, type };
+        if (!terms.length) {
+          $('schur-out').innerHTML = '<span class="hint">No nonzero terms found under the current rank and cap.</span>';
+        } else {
+          const truncatedCount = Math.max(0, terms.length - 80);
+          renderLRDecomposition(terms, lambda, mu, type, truncatedCount);
+        }
+      } catch (err) {
+        $('schur-out').innerHTML = `<span class="warning-text">${err.message}</span>`;
+      }
+      refreshExport();
+    }
+
+    function refreshExport() {
+      const payload = {
+        site: 'double_young_diagram',
+        lieAlgebra: {
+          type: $('lie-type').value,
+          label: $('lie-type').selectedOptions[0].textContent,
+          rank: currentRank(),
+          vectorDimension: vectorDimensionForType($('lie-type').value, currentRank())
+        },
+        diagrams: {
+          lambda: trimPartition(state.lambda.rows),
+          mu: trimPartition(state.mu.rows)
+        },
+        inputs: {
+          decompositionMode: ['A', 'B', 'C', 'D'].includes($('lie-type').value) ? $('lie-type').value : 'not-computed'
+        },
+        results: {
+          lrDecomposition: state.lastSchur
+        }
+      };
+      $('export-out').value = JSON.stringify(payload, null, 2);
+    }
+
+    function copyExport() {
+      $('export-out').select();
+      navigator.clipboard?.writeText($('export-out').value);
+    }
+
+    function downloadExport() {
+      refreshExport();
+      const blob = new Blob([$('export-out').value], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'double_young_diagram_export.json';
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }
+
+    const cardStackMedia = window.matchMedia('(max-width: 980px)');
+
+    function syncDiagramInputPlacement() {
+      const card = $('diagram-input-card');
+      const side = $('cards');
+      const canvasStack = document.querySelector('.canvas-stack');
+      if (!card || !side || !canvasStack) return;
+
+      if (cardStackMedia.matches) {
+        if (card.parentElement !== side) side.insertBefore(card, side.firstChild);
+        card.setAttribute('draggable', 'true');
+      } else {
+        if (card.parentElement !== canvasStack) canvasStack.appendChild(card);
+        card.setAttribute('draggable', 'false');
+      }
+    }
+
+    function setupCards() {
+      document.querySelectorAll('.card-head').forEach((head) => {
+        head.addEventListener('click', (event) => {
+          if (event.target.closest('.drag-handle')) return;
+          const card = head.closest('.card');
+          card.classList.toggle('collapsed');
+        });
+      });
+
+      const side = $('cards');
+      let source = null;
+      let handle = null;
+      let placeholder = null;
+      let ghost = null;
+      let pointerId = null;
+      let dragging = false;
+      let startY = 0;
+      let ghostOffsetY = 0;
+      const listenerOpts = { passive: false };
+
+      function makePlaceholder(height) {
+        const el = document.createElement('div');
+        el.id = 'dnd-placeholder';
+        el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;`;
+        return el;
+      }
+
+      function beginDrag(e) {
+        const rect = source.getBoundingClientRect();
+        dragging = true;
+        document.body.classList.add('card-dragging');
+        source.classList.add('dragging');
+        placeholder = makePlaceholder(rect.height);
+        source.parentElement.insertBefore(placeholder, source);
+        ghost = source.cloneNode(true);
+        ghost.id = 'dnd-ghost';
+        ghostOffsetY = e.clientY - rect.top;
+        Object.assign(ghost.style, {
+          position: 'fixed',
+          left: rect.left + 'px',
+          top: rect.top + 'px',
+          width: rect.width + 'px',
+          zIndex: 9999,
+          pointerEvents: 'none',
+          opacity: '0.88',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.22)',
+          borderRadius: '4px',
+          transition: 'none'
+        });
+        document.body.appendChild(ghost);
+        source.style.display = 'none';
+      }
+
+      function movePlaceholder(clientY) {
+        const cards = [...side.children].filter((el) => el !== source && el !== placeholder && el.id !== 'dnd-ghost');
+        let before = null;
+        for (const card of cards) {
+          const rect = card.getBoundingClientRect();
+          if (clientY < rect.top + rect.height / 2) { before = card; break; }
+        }
+        if (before) side.insertBefore(placeholder, before);
+        else side.appendChild(placeholder);
+      }
+
+      function finishDrag() {
+        document.removeEventListener('pointermove', onPointerMove, listenerOpts);
+        document.removeEventListener('pointerup', onPointerUp, listenerOpts);
+        document.removeEventListener('pointercancel', onPointerCancel, listenerOpts);
+        if (handle && handle.releasePointerCapture && pointerId !== null) {
+          try { handle.releasePointerCapture(pointerId); } catch (_) {}
+        }
+        if (source) {
+          source.style.display = '';
+          source.classList.remove('dragging');
+          if (dragging && placeholder && placeholder.parentElement) {
+            placeholder.parentElement.insertBefore(source, placeholder);
+          }
+        }
+        if (placeholder) placeholder.remove();
+        if (ghost) ghost.remove();
+        document.body.classList.remove('card-dragging');
+        source = null;
+        handle = null;
+        placeholder = null;
+        ghost = null;
+        pointerId = null;
+        dragging = false;
+      }
+
+      function onPointerMove(e) {
+        if (!source || (pointerId !== null && e.pointerId !== pointerId)) return;
+        e.preventDefault();
+        if (!dragging) {
+          if (Math.abs(e.clientY - startY) < 6) return;
+          beginDrag(e);
+        }
+        ghost.style.top = (e.clientY - ghostOffsetY) + 'px';
+        movePlaceholder(e.clientY);
+      }
+
+      function onPointerUp(e) {
+        if (pointerId !== null && e.pointerId !== pointerId) return;
+        e.preventDefault();
+        finishDrag();
+      }
+
+      function onPointerCancel(e) {
+        if (pointerId !== null && e.pointerId !== pointerId) return;
+        finishDrag();
+      }
+
+      side.addEventListener('dragstart', (e) => e.preventDefault());
+      side.addEventListener('pointerdown', (e) => {
+        const h = e.target.closest('.drag-handle');
+        if (!h || !side.contains(h)) return;
+        const card = h.closest('.card');
+        if (!card || !side.contains(card)) return;
+        e.preventDefault();
+        source = card;
+        handle = h;
+        pointerId = e.pointerId;
+        startY = e.clientY;
+        if (handle.setPointerCapture) {
+          try { handle.setPointerCapture(pointerId); } catch (_) {}
+        }
+        document.addEventListener('pointermove', onPointerMove, listenerOpts);
+        document.addEventListener('pointerup', onPointerUp, listenerOpts);
+        document.addEventListener('pointercancel', onPointerCancel, listenerOpts);
+      }, listenerOpts);
+
+      if (typeof cardStackMedia.addEventListener === 'function') {
+        cardStackMedia.addEventListener('change', syncDiagramInputPlacement);
+      } else if (typeof cardStackMedia.addListener === 'function') {
+        cardStackMedia.addListener(syncDiagramInputPlacement);
+      }
+    }
+
+    function applySharedGridSize() {
+      const rows = Math.max(1, Math.min(18, Number($('grid-rows').value || 5)));
+      const cols = Math.max(1, Math.min(18, Number($('grid-cols').value || 5)));
+      $('grid-rows').value = String(rows);
+      $('grid-cols').value = String(cols);
+      for (const which of ['lambda', 'mu']) {
+        state[which].maxRows = rows;
+        state[which].maxCols = cols;
+        state[which].rows = enforcePartition(state[which].rows, rows, cols);
+      }
+      state.lastLR = state.lastWeight = state.lastSchur = null;
+      drawAll();
+      updateStats();
+      refreshExport();
+    }
+
+    function setupEvents() {
+      for (const which of ['lambda', 'mu']) {
+        state[which].canvas = $(which + '-canvas');
+        state[which].ctx = state[which].canvas.getContext('2d');
+        $(which + '-canvas').addEventListener('click', (e) => handleCanvasClick(which, e));
+        $(which === 'lambda' ? 'set-lambda' : 'set-mu').addEventListener('click', () => {
+          try { setDiagram(which, parsePartition($(which + '-partition').value)); }
+          catch (err) { alert(err.message); }
+        });
+        $(which === 'lambda' ? 'clear-lambda' : 'clear-mu').addEventListener('click', () => setDiagram(which, []));
+      }
+      $('swap-diagrams').addEventListener('click', () => {
+        const a = state.lambda.rows.slice();
+        state.lambda.rows = state.mu.rows.slice();
+        state.mu.rows = a;
+        state.lastLR = state.lastWeight = state.lastSchur = null;
+        drawAll(); updateStats(); refreshExport();
+      });
+      $('grid-rows').addEventListener('change', applySharedGridSize);
+      $('grid-cols').addEventListener('change', applySharedGridSize);
+      $('lie-type').addEventListener('change', window.onTypeChange);
+      $('lie-rank').addEventListener('change', window.onAlgebraChange);
+      $('compute-schur').addEventListener('click', computeSchur);
+      $('refresh-export').addEventListener('click', refreshExport);
+      $('copy-export').addEventListener('click', copyExport);
+      $('download-export').addEventListener('click', downloadExport);
+      window.addEventListener('resize', drawAll);
+    }
+
+    function init() {
+      setupEvents();
+      syncDiagramInputPlacement();
+      setupCards();
+      applySharedGridSize();
+      setDiagram('lambda', [3, 2]);
+      setDiagram('mu', [2, 1]);
+      window.onTypeChange();
+      refreshExport();
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>
