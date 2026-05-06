@@ -229,6 +229,77 @@
       .lie-inline-controls { width: 100%; }
       #lie-algebra-desc { white-space: normal; }
     }
+
+    /* ── 2-D weight slice ── */
+    #slice-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    #slice-panel .panel-title {
+      background: var(--surface2, #f0ede6);
+      border-bottom: 1px solid var(--border);
+      padding: 9px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #slice-canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fbfaf7;
+      cursor: default;
+    }
+    /* info box beneath slice-related card */
+    .slice-info-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      flex-wrap: wrap;
+    }
+    .slice-info-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      min-width: 80px;
+    }
+    .slice-info-value {
+      font-family: 'EB Garamond', serif;
+      font-size: 0.88rem;
+    }
+    #open-slice-btn {
+      margin-top: 10px;
+    }
+    #open-slice-btn:disabled, #open-slice-btn[disabled] {
+      opacity: 0.38;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+    .slice-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+      font-size: 0.72rem;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--muted);
+    }
+    .slice-legend-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 3px;
+      vertical-align: middle;
+    }
   </style>
 </head>
 <body>
@@ -283,6 +354,15 @@
             <canvas id="mu-canvas" class="diagram-canvas" width="520" height="340"></canvas>
           </div>
         </div>
+      </section>
+
+      <!-- 2-D weight slice canvas (hidden until activated) -->
+      <section id="slice-panel" style="display:none;">
+        <header class="panel-title">
+          <span>2-dimensional weight slice &nbsp;·&nbsp; <span id="slice-plane-label" style="font-style:italic;"></span></span>
+        </header>
+        <canvas id="slice-canvas" width="640" height="480"></canvas>
+        <div class="slice-legend" id="slice-legend" style="padding:8px 14px 10px;"></div>
       </section>
 
       <div id="diagram-input-anchor"></div>
@@ -407,6 +487,17 @@
           </div>
           <div id="grassmannian-out" class="decomposition-output"><span class="hint">Compute σ<sub>λ</sub> ∪ σ<sub>μ</sub> in H*(Gr(r,n)), where r is the number of grid rows and n−r is the number of grid columns.</span></div>
           <p class="hint">The Young-diagram presentation uses Littlewood–Richardson coefficients inside the current r × (n−r) rectangle. The Chern presentation uses the Giambelli determinant in Chern classes c<sub>i</sub>.</p>
+        </div>
+      </section>
+
+      <section class="card collapsed" draggable="true">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">2d weight slice</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body" id="slice-card-body">
+          <div id="slice-stats-out">
+            <span class="hint">Draw λ and μ; this card shows their relative geometry as Lie algebra weights.</span>
+          </div>
+          <button id="open-slice-btn" class="btn" style="margin-top:10px;" disabled>show 2d slice canvas</button>
+          <p class="hint" id="slice-card-hint" style="margin-top:8px;">λ and μ must generate a 2-dimensional subspace of the weight lattice (i.e. they must be linearly independent) to enable the slice canvas.</p>
         </div>
       </section>
 

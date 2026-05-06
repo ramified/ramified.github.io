@@ -2376,6 +2376,7 @@
       if (!card) return;
       if (card.querySelector('#stats-out')) updateStats({ force: true });
       if (card.querySelector('#invariants-out')) updateInvariants({ force: true });
+      if (card.querySelector('#slice-stats-out')) updateSliceCard({ force: true });
       const exportOut = card.querySelector('#export-out');
       if (exportOut && (!exportOut.value.trim() || state.exportMode === 'json')) refreshExport({ force: true });
     }
@@ -2384,6 +2385,7 @@
       card.classList.toggle('collapsed', collapsed);
       const head = card.querySelector('.card-head');
       if (head) head.setAttribute('aria-expanded', String(!collapsed));
+      if (collapsed && card.querySelector('#slice-stats-out')) hideSlice();
       if (!collapsed && refreshOnOpen) runCardOpenRefresh(card);
     }
     function setupCards() {
@@ -2465,5 +2467,625 @@
       window.onTypeChange(); refreshLRModeHint(); resizeCanvases();
     }
     window.__dbg = {decomposeFixedRank, decomposeFixedRankTypeA, dominantCandidatesBelow, dominantNormBoundCandidates, irreducibleCharacterFreudenthal, decomposeByCandidatesBrauerKlimyk, weightMultiplicityByFreudenthal, weightMultiplicityByWeylCharacter, kostkaNumber, semistandardTableaux, computeKostkaTableaux, decomposeKronecker, decomposePlethysm, computeKronecker, computePlethysm, computeSchurFunctor, decomposeSchurFunctorFiniteType, computeGrassmannianCup, decomposeGrassmannianCup, grassmannianChernPolynomial, schurFunctorCharacter, decomposeCharacterByHighestWeightPeeling, decomposePlethysm, weylOrbitSizeDominant, updateInvariants};
+
+    // ══════════════════════════════════════════════════════
+    //  2-D WEIGHT SLICE
+    // ══════════════════════════════════════════════════════
+
+    // State for the slice canvas
+    const sliceState = {
+      visible: false,
+      sliceCanvas: null,
+      sliceCtx: null,
+      lastData: null   // cached slice data for resize
+    };
+
+    // ── Geometry helpers ──────────────────────────────────
+
+    // Inner product of two weight vectors given by Dynkin labels.
+    // Returns a float (up to Cartan normalisation — same scale throughout).
+    function sliceInnerProduct(aLabels, bLabels, type, rank) {
+      const C = cartanMatrix(type, rank);
+      const inner = makeDynkinInnerProduct(C);
+      return inner(aLabels, bLabels);
+    }
+
+    // ‖v‖² in the same metric
+    function sliceNormSq(labels, type, rank) {
+      return sliceInnerProduct(labels, labels, type, rank);
+    }
+
+    // Gram-Schmidt: given v1 (nonzero), compute unit e1 and component of v2
+    // perpendicular to e1.  All arithmetic done in the Dynkin-label inner product.
+    // Returns { e1coords, e2coords } in the "display plane" basis where
+    //   display-x ∝ e1,  display-y ∝ e2
+    // and every lattice vector w has canvas coords (w·e1/|e1|², w·e2/|e2|²) times scale.
+    function computePlaneProjectors(lambdaLabels, muLabels, type, rank) {
+      const C = cartanMatrix(type, rank);
+      const inner = makeDynkinInnerProduct(C);
+
+      const ll = inner(lambdaLabels, lambdaLabels);
+      const mm = inner(muLabels, muLabels);
+      const lm = inner(lambdaLabels, muLabels);
+      if (ll < 1e-14) return null;   // λ is zero weight
+
+      // e1 = λ direction
+      // mu_perp = mu - proj_lambda(mu)
+      const proj = lm / ll;                             // scalar
+      const mu_perp = muLabels.map((x, i) => x - proj * lambdaLabels[i]);   // Dynkin-label coords
+      const mu_perp_norm2 = inner(mu_perp, mu_perp);
+
+      // Check 2-d (not collinear)
+      const cos2 = (lm * lm) / (ll * mm + 1e-30);     // cos²(angle)
+      const is2D = (mm > 1e-14) && (1 - cos2 > 1e-6);
+
+      return { e1: lambdaLabels.slice(), e1norm2: ll,
+               e2: mu_perp,              e2norm2: mu_perp_norm2,
+               ll, mm, lm, cos2, is2D,
+               lambdaLabels, muLabels,
+               angle: Math.acos(Math.min(1, Math.max(-1, lm / Math.sqrt(ll * mm + 1e-30)))) };
+    }
+
+    // Project any weight (Dynkin labels) onto the 2-plane spanned by e1,e2.
+    // Returns [u, v] where u = (w·e1)/|e1|², v = (w·e2)/|e2|²
+    // (fractional lattice coordinates in the basis {e1, e2}).
+    function projectOntoPlane(wLabels, proj) {
+      const { e1, e1norm2, e2, e2norm2 } = proj;
+      const C = cartanMatrix(currentType(), currentRank());
+      const inner = makeDynkinInnerProduct(C);
+      const u = inner(wLabels, e1) / (e1norm2 || 1);
+      const v = e2norm2 > 1e-12 ? inner(wLabels, e2) / e2norm2 : 0;
+      return [u, v];
+    }
+
+    // Check whether a weight lies IN the 2-plane (its component orthogonal to
+    // the plane is negligible).
+    function weightInPlane(wLabels, proj) {
+      const C = cartanMatrix(currentType(), currentRank());
+      const inner = makeDynkinInnerProduct(C);
+      const [u, v] = projectOntoPlane(wLabels, proj);
+      // Reconstruct approximation from the two basis vectors
+      const reconst = wLabels.map((_, i) => u * proj.e1[i] + v * proj.e2[i]);
+      const err2 = inner(wLabels.map((x,i) => x - reconst[i]),
+                         wLabels.map((x,i) => x - reconst[i]));
+      return err2 < 1e-6 * (inner(wLabels, wLabels) + 1e-12);
+    }
+
+    // Find an integer lattice basis for the 2-plane:
+    // given e1 = λ (non-zero), e2 = μ_perp (could be non-lattice), find integer
+    // lattice vectors b1, b2 in the plane that generate the full integer span of
+    // the plane ∩ (root lattice + weight lattice).
+    // Strategy: among the weights we'll enumerate, pick b1 = λ itself,
+    // then b2 = shortest non-λ-parallel weight vector in the plane (after
+    // Gram-Schmidt).  We do this lazily: the caller passes candidate weights.
+    function findPlaneBasis(planeWeights2D) {
+      // planeWeights2D = array of [u,v] with (u,v) rational
+      // b1 is the direction (1,0) — i.e. λ itself (u=1, v=0)
+      // b2: find smallest |v| > ε then reduce u mod b1
+      let bestV = Infinity, bestU = 0;
+      for (const [u, v] of planeWeights2D) {
+        if (Math.abs(v) > 1e-6 && Math.abs(v) < bestV - 1e-9) {
+          bestV = Math.abs(v); bestU = u;
+        }
+      }
+      if (!isFinite(bestV)) return null;   // only 1-d
+      // Reduce u mod 1 to stay in [0,1) range (fundamental domain along e1)
+      const b2v = bestV;
+      const b2u = bestU - Math.round(bestU);   // representative
+      return { b1: [1, 0], b2: [b2u, b2v] };
+    }
+
+    // ── Card update ───────────────────────────────────────
+
+    function updateSliceCard(options = {}) {
+      const cardBody = $('slice-card-body');
+      if (!cardBody) return;
+      // only update when card is open (unless forced)
+      const card = cardBody.closest('.card');
+      if (!options.force && card && card.classList.contains('collapsed')) return;
+
+      const lambda = trimPartition(state.lambda.rows);
+      const mu = trimPartition(state.mu.rows);
+      const type = currentType(), rank = currentRank();
+      const C = cartanMatrix(type, rank);
+      const lambdaLabels = diagramToDynkinLabels(lambda, rank);
+      const muLabels = diagramToDynkinLabels(mu, rank);
+
+      const inner = makeDynkinInnerProduct(C);
+      const ll = inner(lambdaLabels, lambdaLabels);
+      const mm = inner(muLabels, muLabels);
+      const lm = inner(lambdaLabels, muLabels);
+      const lenL = Math.sqrt(Math.max(0, ll));
+      const lenM = Math.sqrt(Math.max(0, mm));
+
+      let cosAngle = null, angleDeg = null, is2D = false;
+      if (lenL > 1e-7 && lenM > 1e-7) {
+        cosAngle = Math.max(-1, Math.min(1, lm / (lenL * lenM)));
+        angleDeg = Math.acos(cosAngle) * 180 / Math.PI;
+        is2D = (1 - cosAngle * cosAngle) > 1e-6;
+      }
+
+      // Render info rows
+      const rows = [];
+      rows.push(['‖λ‖', lenL < 1e-7 ? '0 (zero weight)' : lenL.toFixed(5)]);
+      rows.push(['‖μ‖', lenM < 1e-7 ? '0 (zero weight)' : lenM.toFixed(5)]);
+      rows.push(['⟨λ, μ⟩', lm.toFixed(6)]);
+      if (cosAngle !== null) {
+        rows.push(['cos θ', cosAngle.toFixed(6)]);
+        rows.push(['angle θ', angleDeg.toFixed(3) + '°']);
+        rows.push(['span', is2D ? '2-dimensional ✓' : 'collinear (1-dimensional)']);
+      } else {
+        rows.push(['span', 'one or both weights are zero']);
+      }
+
+      $('slice-stats-out').innerHTML = rows.map(([a,b]) =>
+        `<div class="slice-info-row"><span class="slice-info-label">${a}</span><span class="slice-info-value">${b}</span></div>`
+      ).join('');
+
+      const btn = $('open-slice-btn');
+      if (is2D) {
+        btn.disabled = false;
+        updateSliceButtonLabel();
+        $('slice-card-hint').textContent = sliceState.visible
+          ? 'The 2d slice canvas is shown. Click the button again to hide it.'
+          : 'λ and μ span a 2-dimensional subspace. Click the button to draw the weight slice.';
+      } else {
+        hideSlice();
+        btn.disabled = true;
+        $('slice-card-hint').textContent = 'λ and μ must be linearly independent weights to enable the 2d slice canvas.';
+      }
+    }
+
+    // ── Slice canvas drawing ──────────────────────────────
+
+    function computeSliceData() {
+      const lambda = trimPartition(state.lambda.rows);
+      const mu = trimPartition(state.mu.rows);
+      const type = currentType(), rank = currentRank();
+      const C = cartanMatrix(type, rank);
+      const lambdaLabels = diagramToDynkinLabels(lambda, rank);
+      const muLabels = diagramToDynkinLabels(mu, rank);
+
+      const proj = computePlaneProjectors(lambdaLabels, muLabels, type, rank);
+      if (!proj || !proj.is2D) return null;
+
+      // Collect all weights in the plane from both representations
+      // We use the Freudenthal character for V^λ and V^μ (capped)
+      const MAX_CHAR = 3000;
+      let charLambda = null, charMu = null;
+      try {
+        const lNonZero = lambdaLabels.some(x => x > 0);
+        if (lNonZero) charLambda = irreducibleCharacterFreudenthal(lambdaLabels, C, MAX_CHAR);
+      } catch(e) { charLambda = null; }
+      try {
+        const mNonZero = muLabels.some(x => x > 0);
+        if (mNonZero) charMu = irreducibleCharacterFreudenthal(muLabels, C, MAX_CHAR);
+      } catch(e) { charMu = null; }
+
+      // Gather all candidate weight points (from both chars plus the two generators)
+      // For each weight, project it and check if it's in the plane
+      const allWeightsMap = new Map();  // key -> {uv, multL, multM, isGenerator}
+
+      function addWeight(wLabels, multL, multM) {
+        // Check if in plane
+        if (!weightInPlane(wLabels, proj)) return;
+        const uv = projectOntoPlane(wLabels, proj);
+        const k = uv[0].toFixed(5) + ',' + uv[1].toFixed(5);
+        const existing = allWeightsMap.get(k);
+        if (existing) {
+          if (multL) existing.multL = (existing.multL || 0) + multL;
+          if (multM) existing.multM = (existing.multM || 0) + multM;
+        } else {
+          allWeightsMap.set(k, { uv, wLabels: wLabels.slice(), multL: multL || 0, multM: multM || 0 });
+        }
+      }
+
+      // Always add the two generators
+      addWeight(lambdaLabels, 1, 0);
+      addWeight(muLabels, 0, 1);
+
+      if (charLambda) {
+        for (const [, item] of charLambda) {
+          addWeight(item.wt, item.mult, 0);
+        }
+      }
+      if (charMu) {
+        for (const [, item] of charMu) {
+          addWeight(item.wt, 0, item.mult);
+        }
+      }
+
+      const weights = Array.from(allWeightsMap.values());
+
+      // Compute 2D plane basis
+      const planeWeights2D = weights.map(w => w.uv);
+      const basis = findPlaneBasis(planeWeights2D);
+
+      // Label for plane
+      const angleDeg = (proj.angle * 180 / Math.PI).toFixed(1);
+      const lenRatio = (Math.sqrt(proj.mm) / Math.sqrt(proj.ll)).toFixed(4);
+
+      return { proj, weights, basis, angleDeg, lenRatio, lambdaLabels, muLabels, charLambda, charMu };
+    }
+
+    function drawSliceCanvas(data) {
+      if (!data) return;
+      const canvas = sliceState.sliceCanvas;
+      const ctx = sliceState.sliceCtx;
+      if (!canvas || !ctx) return;
+
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = '#fbfaf7';
+      ctx.fillRect(0, 0, W, H);
+
+      const { proj, weights, angleDeg, lenRatio } = data;
+      if (!weights.length) return;
+
+      // ── Coordinate system ──────────────────────────────────────────────────
+      //
+      // We draw in a 2D canvas plane where:
+      //   • e1 (= λ direction) points to the RIGHT  (canvas angle = 0)
+      //   • e2 (= μ direction) is at the ACTUAL angle θ = ⟨λ,μ⟩ measured
+      //     counter-clockwise from e1  (canvas y-axis points DOWN, so we negate)
+      //
+      // Every weight w has plane coordinates (u, v) where
+      //   w = u·λ + v·μ   (in the {λ,μ} basis, NOT the Gram-Schmidt basis).
+      //
+      // Canvas pixel position of (u, v):
+      //   px =  u * pxL  +  v * pxM * cos(θ)
+      //   py = -v * pxM * sin(θ)          (minus: canvas y down, math y up)
+      //
+      // where pxL = pixel length of λ, pxM = pixel length of μ.
+      //
+      // We choose pxL = W / 6 so λ is always ~1/6 of canvas width.
+      // pxM = pxL * (‖μ‖/‖λ‖) to preserve the true length ratio.
+
+      const theta = proj.angle;          // angle between λ and μ, in (0, π)
+      const cosT = Math.cos(theta);
+      const sinT = Math.sin(theta);      // always > 0 for θ ∈ (0,π)
+
+      const pxL = W / 6;                // pixel length of λ
+      const lenL = Math.sqrt(proj.ll);
+      const lenM = Math.sqrt(proj.mm);
+      const pxM = (lenL > 1e-12) ? pxL * (lenM / lenL) : pxL;
+
+      // Convert (u, v) plane coords → canvas pixel offset from origin
+      function toPixelOffset(u, v) {
+        return [
+           u * pxL + v * pxM * cosT,
+          -v * pxM * sinT             // canvas y flipped
+        ];
+      }
+
+      // Plane coordinates of λ and μ in the {λ,μ} basis
+      const lambdaUV = [1, 0];
+      const muUV     = [0, 1];
+
+      // The weights stored in data.weights have .uv = [u_e1, v_e2] in the
+      // GRAM-SCHMIDT basis {e1, e2_perp}.  We need to convert them to the
+      // {λ, μ} basis to use toPixelOffset correctly.
+      //
+      // Recall:  e1 = λ,  e2 = μ - (lm/ll)·λ
+      // So:  w = u_e1·e1 + v_e2·e2
+      //        = u_e1·λ  + v_e2·(μ - (lm/ll)·λ)
+      //        = (u_e1 - v_e2·lm/ll)·λ + v_e2·μ
+      //
+      // Hence in {λ,μ} basis:  u = u_e1 - v_e2*(lm/ll),  v = v_e2
+      const lmOverLL = proj.ll > 1e-14 ? proj.lm / proj.ll : 0;
+
+      function gsToLM(uv_gs) {
+        const [u_gs, v_gs] = uv_gs;
+        return [u_gs - v_gs * lmOverLL, v_gs];
+      }
+
+      // Canvas pixel position (with origin at canvas center)
+      const ox = W / 2, oy = H / 2;
+      function canvasXY_lm(u, v) {
+        const [dx, dy] = toPixelOffset(u, v);
+        return [ox + dx, oy + dy];
+      }
+      function canvasXY(uv_gs) {
+        const [u, v] = gsToLM(uv_gs);
+        return canvasXY_lm(u, v);
+      }
+
+      // Bounding box of all weights + origin in pixel space (to check they fit)
+      let minPX = 0, maxPX = 0, minPY = 0, maxPY = 0;
+      for (const w of weights) {
+        const [u, v] = gsToLM(w.uv);
+        const [dx, dy] = toPixelOffset(u, v);
+        minPX = Math.min(minPX, dx); maxPX = Math.max(maxPX, dx);
+        minPY = Math.min(minPY, dy); maxPY = Math.max(maxPY, dy);
+      }
+
+      // If weights overflow canvas, scale down uniformly
+      const pad = 40;
+      const scaleX = (maxPX - minPX > 1e-3) ? (W - 2*pad) / (maxPX - minPX) : 1;
+      const scaleY = (maxPY - minPY > 1e-3) ? (H - 2*pad) / (maxPY - minPY) : 1;
+      const globalScale = Math.min(1, scaleX, scaleY);
+
+      function canvasXYscaled(uv_gs) {
+        const [u, v] = gsToLM(uv_gs);
+        const [dx, dy] = toPixelOffset(u, v);
+        return [ox + dx * globalScale, oy + dy * globalScale];
+      }
+      function canvasXY_lm_scaled(u, v) {
+        const [dx, dy] = toPixelOffset(u, v);
+        return [ox + dx * globalScale, oy + dy * globalScale];
+      }
+
+      // ── Grid ──────────────────────────────────────────────────────────────
+      // Draw parallelogram grid lines in the {λ,μ} basis.
+      // We need integer range of u_lm and v_lm across all weights.
+      const uLM = weights.map(w => gsToLM(w.uv)[0]);
+      const vLM = weights.map(w => gsToLM(w.uv)[1]);
+      const uMin = Math.floor(Math.min(0, ...uLM)) - 1;
+      const uMax = Math.ceil (Math.max(0, ...uLM)) + 1;
+      const vMin = Math.floor(Math.min(0, ...vLM)) - 1;
+      const vMax = Math.ceil (Math.max(0, ...vLM)) + 1;
+
+      ctx.save();
+      ctx.strokeStyle = 'rgba(180,170,150,0.3)';
+      ctx.lineWidth = 0.8;
+      // Lines parallel to μ (constant u)
+      for (let u = uMin; u <= uMax; u++) {
+        const [x1, y1] = canvasXY_lm_scaled(u, vMin - 1);
+        const [x2, y2] = canvasXY_lm_scaled(u, vMax + 1);
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      }
+      // Lines parallel to λ (constant v)
+      for (let v = vMin; v <= vMax; v++) {
+        const [x1, y1] = canvasXY_lm_scaled(uMin - 1, v);
+        const [x2, y2] = canvasXY_lm_scaled(uMax + 1, v);
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      }
+      ctx.restore();
+
+      // ── Axes (through origin) ──────────────────────────────────────────────
+      ctx.save();
+      ctx.lineWidth = 1.2;
+      // λ axis (horizontal)
+      ctx.strokeStyle = 'rgba(61,107,79,0.5)';
+      ctx.beginPath();
+      ctx.moveTo(...canvasXY_lm_scaled(uMin - 0.5, 0));
+      ctx.lineTo(...canvasXY_lm_scaled(uMax + 0.5, 0));
+      ctx.stroke();
+      // μ axis
+      ctx.strokeStyle = 'rgba(163,64,32,0.5)';
+      ctx.beginPath();
+      ctx.moveTo(...canvasXY_lm_scaled(0, vMin - 0.5));
+      ctx.lineTo(...canvasXY_lm_scaled(0, vMax + 0.5));
+      ctx.stroke();
+      ctx.restore();
+
+      // ── Weight dots ───────────────────────────────────────────────────────
+      const muUVinLM = [0, 1];
+      for (const w of weights) {
+        const [cx, cy] = canvasXYscaled(w.uv);
+        const [u_lm, v_lm] = gsToLM(w.uv);
+        const hasL = w.multL > 0;
+        const hasM = w.multM > 0;
+        const hasBoth = hasL && hasM;
+        const isOrigin = Math.abs(u_lm) < 1e-4 && Math.abs(v_lm) < 1e-4;
+        const isLambdaPt = Math.abs(u_lm - 1) < 1e-4 && Math.abs(v_lm) < 1e-4;
+        const isMuPt = Math.abs(u_lm) < 1e-4 && Math.abs(v_lm - 1) < 1e-4;
+
+        if (hasBoth) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, 8.5, 0, 2*Math.PI);
+          ctx.strokeStyle = '#8b5e3c';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+        const r = (isOrigin || isLambdaPt || isMuPt) ? 7 : 5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, 2*Math.PI);
+        ctx.fillStyle = isOrigin ? '#222' : hasBoth ? '#8b5e3c' : hasL ? '#3d6b4f' : '#a34020';
+        ctx.fill();
+
+        // Multiplicity label
+        const multText = hasBoth
+          ? (w.multL > 1 || w.multM > 1 ? `${w.multL}|${w.multM}` : '')
+          : hasL && w.multL > 1 ? `${w.multL}`
+          : hasM && w.multM > 1 ? `${w.multM}` : '';
+        if (multText) {
+          ctx.font = '10px JetBrains Mono, monospace';
+          ctx.fillStyle = hasBoth ? '#6b3e1c' : hasL ? '#3d6b4f' : '#a34020';
+          ctx.fillText(multText, cx + 8, cy + 4);
+        }
+      }
+
+      // ── Arrows for λ and μ ─────────────────────────────────────────────────
+      function drawArrow(u_lm, v_lm, color, lbl) {
+        const [tx, ty] = canvasXY_lm_scaled(u_lm, v_lm);
+        const dx = tx - ox, dy = ty - oy;
+        const len = Math.hypot(dx, dy);
+        ctx.save();
+        ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(tx, ty); ctx.stroke();
+        if (len > 6) {
+          const ux = dx/len, uy = dy/len, as = 10;
+          ctx.beginPath();
+          ctx.moveTo(tx, ty);
+          ctx.lineTo(tx - as*(ux - 0.4*uy), ty - as*(uy + 0.4*ux));
+          ctx.lineTo(tx - as*(ux + 0.4*uy), ty - as*(uy - 0.4*ux));
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.font = 'italic 14px serif';
+        ctx.fillText(lbl, tx + 7, ty - 5);
+        ctx.restore();
+      }
+      drawArrow(1, 0, '#3d6b4f', 'λ');
+      drawArrow(0, 1, '#a34020', 'μ');
+
+      // Origin dot (on top)
+      ctx.beginPath(); ctx.arc(ox, oy, 4, 0, 2*Math.PI);
+      ctx.fillStyle = '#222'; ctx.fill();
+
+      // ── Angle arc between λ and μ arrows ──────────────────────────────────
+      {
+        const [lx, ly] = canvasXY_lm_scaled(1, 0);
+        const [mx, my] = canvasXY_lm_scaled(0, 1);
+        const angleL = Math.atan2(ly - oy, lx - ox);   // should be 0 (rightward)
+        const angleM = Math.atan2(my - oy, mx - ox);   // should be -theta (upward in canvas)
+        const arcR = Math.min(28, Math.hypot(lx - ox, ly - oy) * 0.35);
+        if (arcR > 8) {
+          // Draw arc from λ direction to μ direction (counter-clockwise in math = clockwise on canvas)
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(100,80,60,0.55)';
+          ctx.lineWidth = 1;
+          // go from angleL to angleM in the short direction
+          ctx.arc(ox, oy, arcR, angleL, angleM, sinT > 0);
+          ctx.stroke();
+          const midA = (angleL + angleM) / 2;
+          ctx.font = '11px serif';
+          ctx.fillStyle = '#888';
+          ctx.fillText(`${angleDeg}°`, ox + (arcR + 8)*Math.cos(midA), oy + (arcR + 8)*Math.sin(midA));
+        }
+      }
+
+      // ── Legend ────────────────────────────────────────────────────────────
+      const lCount = weights.filter(w => w.multL > 0).length;
+      const mCount = weights.filter(w => w.multM > 0).length;
+      const bCount = weights.filter(w => w.multL > 0 && w.multM > 0).length;
+      const algebraLabel = lieAlgebraLabel(currentType(), currentRank());
+      const legend = $('slice-legend');
+      if (legend) {
+        legend.innerHTML = [
+          `<span><span class="slice-legend-dot" style="background:#3d6b4f;"></span> weights of V<sup>λ</sup> (${lCount})</span>`,
+          `<span><span class="slice-legend-dot" style="background:#a34020;"></span> weights of V<sup>μ</sup> (${mCount})</span>`,
+          `<span><span class="slice-legend-dot" style="background:#8b5e3c;"></span> in both (${bCount})</span>`,
+          `<span style="color:var(--muted);">angle(λ,μ) = ${angleDeg}°&nbsp;&nbsp;‖μ‖/‖λ‖ = ${lenRatio}</span>`,
+          `<span style="color:var(--muted);">numbers = multiplicity in V<sup>λ</sup> | V<sup>μ</sup></span>`
+        ].join('');
+      }
+      const planeLabel = $('slice-plane-label');
+      if (planeLabel) {
+        planeLabel.textContent = `angle(λ,μ) = ${angleDeg}°  ·  ‖μ‖/‖λ‖ = ${lenRatio}  ·  ${algebraLabel}`;
+      }
+    }
+
+    function sliceCardIsExpanded() {
+      const body = $('slice-card-body');
+      const card = body ? body.closest('.card') : null;
+      return !!card && !card.classList.contains('collapsed');
+    }
+
+    function updateSliceButtonLabel() {
+      const btn = $('open-slice-btn');
+      if (btn) btn.textContent = sliceState.visible ? 'hide 2d slice canvas' : 'show 2d slice canvas';
+    }
+
+    function hideSlice() {
+      const sp = $('slice-panel');
+      if (sp) sp.style.display = 'none';
+      sliceState.visible = false;
+      sliceState.lastData = null;
+      if (sliceState.sliceCtx && sliceState.sliceCanvas) {
+        sliceState.sliceCtx.clearRect(0, 0, sliceState.sliceCanvas.width, sliceState.sliceCanvas.height);
+      }
+      const legend = $('slice-legend');
+      if (legend) legend.innerHTML = '';
+      const planeLabel = $('slice-plane-label');
+      if (planeLabel) planeLabel.textContent = '';
+      updateSliceButtonLabel();
+    }
+
+    function sizeSliceCanvasToStack() {
+      if (!sliceState.sliceCanvas) return;
+      const canvasStack = $('canvas-stack');
+      const targetW = canvasStack ? Math.max(300, canvasStack.clientWidth) : 640;
+      const targetH = Math.round(targetW * 0.72);
+      sliceState.sliceCanvas.width = targetW;
+      sliceState.sliceCanvas.height = targetH;
+    }
+
+    function openSlice() {
+      if (!sliceCardIsExpanded()) return;
+      const data = computeSliceData();
+      if (!data) {
+        hideSlice();
+        alert('λ and μ must be linearly independent weights.');
+        return;
+      }
+      sliceState.lastData = data;
+      const sp = $('slice-panel');
+      sp.style.display = '';
+      sliceState.visible = true;
+      updateSliceButtonLabel();
+
+      // Size canvas to match Young diagrams panel width
+      sizeSliceCanvasToStack();
+
+      drawSliceCanvas(data);
+      sp.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function toggleSlice() {
+      if (sliceState.visible) hideSlice();
+      else openSlice();
+      updateSliceCard();
+    }
+
+    function refreshSlice() {
+      if (!sliceState.visible) return;
+      if (!sliceCardIsExpanded()) { hideSlice(); return; }
+      const data = computeSliceData();
+      if (!data) {
+        hideSlice();
+        return;
+      }
+      sliceState.lastData = data;
+      drawSliceCanvas(data);
+    }
+
+    function setupSlice() {
+      sliceState.sliceCanvas = $('slice-canvas');
+      sliceState.sliceCtx = sliceState.sliceCanvas.getContext('2d');
+      updateSliceButtonLabel();
+
+      $('open-slice-btn').addEventListener('click', toggleSlice);
+
+      // Resize slice canvas on window resize without recomputing slice data.
+      window.addEventListener('resize', () => {
+        if (!sliceState.visible) return;
+        if (!sliceCardIsExpanded()) { hideSlice(); return; }
+        sizeSliceCanvasToStack();
+        if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
+      });
+    }
+
+    // Hook slice into existing diagram/algebra changes.
+    function setupSliceHooks() {
+      // Hook into diagram change by wrapping the canvas click handlers after init
+      // and also patching setDiagram via override on the state objects.
+      // Best approach: observe diagram changes via the existing MutationObserver trick
+      // or simply poll/refresh on input.  Here we use a simpler approach:
+      // monkey-patch the global state setter by rewriting setDiagram.
+      // Since setDiagram is called by the buttons and canvas clicks, we can hook
+      // it by intercepting after init by wrapping the exposed updateStats cascade.
+      // Actually cleanest: add extra event listeners to the canvas clicks.
+      for (const which of ['lambda', 'mu']) {
+        const canvas = $(which + '-canvas');
+        if (canvas) {
+          canvas.addEventListener('click', () => {
+            setTimeout(() => { updateSliceCard(); refreshSlice(); }, 10);
+          });
+        }
+        const setBtn = $(which === 'lambda' ? 'set-lambda' : 'set-mu');
+        if (setBtn) setBtn.addEventListener('click', () => setTimeout(() => { updateSliceCard(); refreshSlice(); }, 10));
+        const clrBtn = $(which === 'lambda' ? 'clear-lambda' : 'clear-mu');
+        if (clrBtn) clrBtn.addEventListener('click', () => setTimeout(() => { updateSliceCard(); refreshSlice(); }, 10));
+      }
+      $('swap-diagrams') && $('swap-diagrams').addEventListener('click', () => setTimeout(() => { updateSliceCard(); refreshSlice(); }, 10));
+      $('lie-type') && $('lie-type').addEventListener('change', () => setTimeout(() => { updateSliceCard(); refreshSlice(); }, 10));
+      $('lie-rank') && $('lie-rank').addEventListener('change', () => setTimeout(() => { updateSliceCard(); refreshSlice(); }, 10));
+      $('grid-rows') && $('grid-rows').addEventListener('change', () => setTimeout(() => { updateSliceCard(); refreshSlice(); }, 10));
+      $('grid-cols') && $('grid-cols').addEventListener('change', () => setTimeout(() => { updateSliceCard(); refreshSlice(); }, 10));
+    }
+
     init();
+    setupSlice();
+    setupSliceHooks();
   })();
