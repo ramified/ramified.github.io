@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Production Process · Young Diagram² Calculator</title>
+  <style>
+    :root {
+      --bg: #f7f7f4;
+      --paper: #ffffff;
+      --paper-soft: #fbfbf8;
+      --text: #202123;
+      --muted: #6b6f76;
+      --border: #deded7;
+      --border-soft: #ecece6;
+      --accent: #10a37f;
+      --accent-dark: #08795f;
+      --code-bg: #f1f1ed;
+      --shadow: 0 18px 52px rgba(0,0,0,0.08);
+      --radius: 18px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, rgba(16,163,127,0.08), transparent 32rem), var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      line-height: 1.65;
+    }
+
+    a { color: var(--accent-dark); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .shell { max-width: 1120px; margin: 0 auto; padding: 32px 18px 72px; }
+    .hero {
+      background: linear-gradient(135deg, #ffffff, #fafaf6);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: clamp(26px, 5vw, 56px);
+      box-shadow: var(--shadow);
+      margin-bottom: 22px;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--accent-dark);
+      background: rgba(16,163,127,0.08);
+      border: 1px solid rgba(16,163,127,0.20);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 0.82rem;
+      font-weight: 650;
+      letter-spacing: .01em;
+    }
+    h1 {
+      margin: 18px 0 10px;
+      font-size: clamp(2.1rem, 6vw, 4.5rem);
+      line-height: 1.03;
+      letter-spacing: -0.055em;
+      font-weight: 760;
+    }
+    .lead {
+      max-width: 820px;
+      font-size: clamp(1.05rem, 2.2vw, 1.3rem);
+      color: var(--muted);
+      margin: 0 0 22px;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 24px;
+    }
+    .meta-card {
+      background: var(--paper-soft);
+      border: 1px solid var(--border-soft);
+      border-radius: 16px;
+      padding: 14px;
+      min-width: 0;
+    }
+    .meta-label {
+      display: block;
+      color: var(--muted);
+      font-size: .76rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 4px;
+    }
+    .meta-value { font-weight: 680; word-break: break-word; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 22px;
+      align-items: start;
+    }
+    nav {
+      position: sticky;
+      top: 18px;
+      background: rgba(255,255,255,0.84);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.05);
+    }
+    nav h2 {
+      font-size: .82rem;
+      text-transform: uppercase;
+      letter-spacing: .09em;
+      color: var(--muted);
+      margin: 0 0 8px;
+    }
+    nav a {
+      display: block;
+      padding: 7px 9px;
+      border-radius: 10px;
+      color: #34363b;
+      font-size: .92rem;
+    }
+    nav a:hover { background: rgba(16,163,127,0.08); text-decoration: none; }
+
+    main { min-width: 0; }
+    section.card {
+      background: rgba(255,255,255,0.94);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 10px 36px rgba(0,0,0,0.05);
+      padding: clamp(20px, 3.2vw, 34px);
+      margin-bottom: 18px;
+    }
+    h2 {
+      margin: 0 0 14px;
+      font-size: clamp(1.35rem, 3vw, 2rem);
+      letter-spacing: -0.03em;
+      line-height: 1.18;
+    }
+    h3 {
+      margin: 24px 0 8px;
+      font-size: 1.05rem;
+      letter-spacing: -0.01em;
+    }
+    p { margin: 10px 0; }
+    ul, ol { padding-left: 1.25rem; }
+    li { margin: .35rem 0; }
+
+    .timeline {
+      display: grid;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .step {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr);
+      gap: 14px;
+      padding: 14px;
+      background: var(--paper-soft);
+      border: 1px solid var(--border-soft);
+      border-radius: 16px;
+    }
+    .num {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: #202123;
+      color: #fff;
+      display: inline-grid;
+      place-items: center;
+      font-weight: 740;
+      font-size: .9rem;
+    }
+    .step h3 { margin: 0 0 4px; }
+    .step p { margin: 0; color: #4c4f56; }
+
+    .note {
+      border-left: 4px solid var(--accent);
+      background: rgba(16,163,127,0.08);
+      padding: 12px 14px;
+      border-radius: 0 14px 14px 0;
+      margin: 16px 0;
+    }
+    .warning {
+      border-left: 4px solid #b36b00;
+      background: rgba(179,107,0,0.08);
+      padding: 12px 14px;
+      border-radius: 0 14px 14px 0;
+      margin: 16px 0;
+    }
+
+    code, pre {
+      font-family: var(--mono);
+      font-size: .9em;
+    }
+    code {
+      background: var(--code-bg);
+      border: 1px solid var(--border-soft);
+      padding: .08rem .28rem;
+      border-radius: 7px;
+    }
+    pre {
+      background: #202123;
+      color: #f7f7f4;
+      border-radius: 16px;
+      padding: 16px;
+      overflow: auto;
+      line-height: 1.5;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+    }
+    pre code { background: transparent; border: 0; color: inherit; padding: 0; }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .mini-card {
+      background: var(--paper-soft);
+      border: 1px solid var(--border-soft);
+      border-radius: 16px;
+      padding: 15px;
+    }
+    .mini-card h3 { margin-top: 0; }
+
+    .tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: #4c4f56;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: .82rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: .94rem;
+    }
+    th, td {
+      border-bottom: 1px solid var(--border-soft);
+      text-align: left;
+      padding: 10px 8px;
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-size: .82rem; text-transform: uppercase; letter-spacing: .06em; }
+
+    footer {
+      color: var(--muted);
+      text-align: center;
+      margin: 36px 0 0;
+      font-size: .92rem;
+    }
+
+    @media (max-width: 840px) {
+      .layout { grid-template-columns: 1fr; }
+      nav { position: static; }
+      .meta-grid { grid-template-columns: 1fr 1fr; }
+      .two-col { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 520px) {
+      .shell { padding: 18px 12px 48px; }
+      .meta-grid { grid-template-columns: 1fr; }
+      .step { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="hero">
+      <span class="eyebrow">Production record</span>
+      <h1>How Young Diagram² Calculator was made</h1>
+      <p class="lead">A curated record of the collaborative design, debugging, and mathematical implementation process behind the <strong>Young Diagram² Calculator</strong> website.</p>
+      <div class="meta-grid">
+        <div class="meta-card"><span class="meta-label">Website</span><span class="meta-value">Young Diagram² Calculator</span></div>
+        <div class="meta-card"><span class="meta-label">Main file</span><span class="meta-value">double_young_diagram.html</span></div>
+        <div class="meta-card"><span class="meta-label">Assistant version</span><span class="meta-value">GPT-5.5 Thinking</span></div>
+        <div class="meta-card"><span class="meta-label">Document date</span><span class="meta-value">May 6, 2026</span></div>
+      </div>
+      <div class="tag-row">
+        <span class="tag">Young diagrams</span>
+        <span class="tag">Lie theory</span>
+        <span class="tag">Schubert calculus</span>
+        <span class="tag">Browser-side math</span>
+        <span class="tag">Human–AI collaboration</span>
+      </div>
+    </header>
+
+    <div class="layout">
+      <nav aria-label="Table of contents">
+        <h2>Contents</h2>
+        <a href="#summary">Summary</a>
+        <a href="#timeline">Chronology</a>
+        <a href="#final-features">Final features</a>
+        <a href="#algorithms">Algorithms</a>
+        <a href="#design">Interface design</a>
+        <a href="#corrections">Corrections and lessons</a>
+        <a href="#replicate">How to make a similar site</a>
+        <a href="#citation">Citation and credits</a>
+      </nav>
+
+      <main>
+        <section id="summary" class="card">
+          <h2>Project summary</h2>
+          <p>The project began as a request for a second webpage, parallel to an existing single Young diagram calculator, but with two drawable Young diagrams. The goal grew into a compact research-oriented calculator for operations involving two partitions: tensor products, Littlewood–Richardson style decompositions, finite-rank Lie algebra representations, Kostka tableaux, Kronecker coefficients, plethysm, Schur functors, and Grassmannian cup products.</p>
+          <p>The development style was iterative. The user repeatedly tested the generated webpage, pointed out mathematical or interface issues, and asked for targeted changes. The assistant generated updated versions of the HTML while preserving the shared stylesheet <code>young_diagrams.css</code> whenever possible.</p>
+          <div class="note">
+            <strong>Important principle:</strong> later revisions were intentionally based on the user’s latest satisfactory HTML file, rather than rebuilding the whole document from scratch. This kept previous good features intact.
+          </div>
+        </section>
+
+        <section id="timeline" class="card">
+          <h2>Chronology of the discussion</h2>
+          <div class="timeline">
+            <article class="step"><span class="num">1</span><div><h3>Initial second-page concept</h3><p>The user asked for a new page named <code>double_young_diagram</code> with two Young diagram canvases, basic statistics, export, and additional mathematical cards. The first implementation reused <code>young_diagrams.css</code> and created a standalone two-diagram webpage.</p></div></article>
+            <article class="step"><span class="num">2</span><div><h3>Canvas layout refinement</h3><p>The two diagrams were moved into one canvas panel with two grids separated by small padding. Rows and columns were unified, defaulting to a 5×5 grid. The Lie type/rank selector was moved into the canvas heading.</p></div></article>
+            <article class="step"><span class="num">3</span><div><h3>Card simplification</h3><p>Unfinished cards such as the initial fixed-rank coefficient and weight-space cards were removed. The Schur card was renamed and restyled as a Littlewood–Richardson decomposition card in the compact output style of the existing website.</p></div></article>
+            <article class="step"><span class="num">4</span><div><h3>Responsive behavior</h3><p>The user wanted diagram λ and diagram μ to remain horizontally aligned even on small screens. The layout was changed so the two grids shrink rather than stack. The diagram input card also became draggable in the small-screen card stack.</p></div></article>
+            <article class="step"><span class="num">5</span><div><h3>Fixed-rank tensor product debate</h3><p>The fixed-rank Lie algebra tensor product went through several revisions. A naive truncation idea was rejected. The user emphasized that SageMath computes representation tensor products using actual Lie algebra representation algorithms, not Young diagram truncation.</p></div></article>
+            <article class="step"><span class="num">6</span><div><h3>From Sage scripts to browser output</h3><p>A temporary version generated SageMath code, but the user wanted the answer directly in the page. The implementation moved toward browser-side Weyl-character-style computations, then away from overly expensive Kostant partition routines.</p></div></article>
+            <article class="step"><span class="num">7</span><div><h3>Algorithmic bottlenecks found</h3><p>The user noticed timeouts even for small examples such as D₆ with λ=μ=(1). The discussion identified the problem: candidate loops and coefficient subroutines were still doing unnecessary weight support or Weyl alternation work.</p></div></article>
+            <article class="step"><span class="num">8</span><div><h3>Freudenthal and Brauer–Klimyk</h3><p>The fixed-rank tensor product engine was rebuilt around Freudenthal character generation for the smaller factor and Brauer–Klimyk / Racah–Speiser straightening. This removed the old Kostant partition recursion from the tensor product path.</p></div></article>
+            <article class="step"><span class="num">9</span><div><h3>Candidate range by invariant norm</h3><p>The user proposed enumerating dominant weights γ satisfying ‖γ‖≤‖λ‖+‖μ‖. This became the fixed-rank candidate source, with a dimension check used as a completeness guard.</p></div></article>
+            <article class="step"><span class="num">10</span><div><h3>Lazy cards and exports</h3><p>All cards were made collapsed by default, and calculations were changed so they do not run while the corresponding card is collapsed. Export buttons write results to the single Export card textarea instead of forcing a download.</p></div></article>
+            <article class="step"><span class="num">11</span><div><h3>New invariant and tableau cards</h3><p>A Lie algebra invariants card was added, then a separate Kostka tableaux card was created to list all semistandard Young tableaux of shape λ and weight μ.</p></div></article>
+            <article class="step"><span class="num">12</span><div><h3>Kronecker, plethysm, and Schur functor</h3><p>Cards for Kronecker decomposition and plethysm decomposition were added. A Schur functor card was then refined so that it respects the selected Dynkin type and decomposes the finite-type result as a sum of irreducibles V^γ.</p></div></article>
+            <article class="step"><span class="num">13</span><div><h3>Grassmannian cup product</h3><p>A Grassmannian cup product card was inserted before Export. It computes σλ∪σμ in Gr(r,n), with r equal to the grid rows and n−r equal to the grid columns. It supports Young diagram output and a Chern-class polynomial mode.</p></div></article>
+            <article class="step"><span class="num">14</span><div><h3>Visual polish</h3><p>The grids were softened: heavy black borders were removed, cells became slightly smaller, padding was reduced for large grids, and the click behavior was restored so clicking a filled square removes the southeast rectangle.</p></div></article>
+            <article class="step"><span class="num">15</span><div><h3>Final identity and citation</h3><p>The title became <em>Young Diagram² Calculator</em>, the subtitle became “double diagrams · double interactions,” the computation cap increased to 25 boxes, and the default Export text became a BibTeX template.</p></div></article>
+          </div>
+        </section>
+
+        <section id="final-features" class="card">
+          <h2>Final website features</h2>
+          <div class="two-col">
+            <div class="mini-card">
+              <h3>Drawing and layout</h3>
+              <ul>
+                <li>Two Young diagrams λ and μ in one canvas panel.</li>
+                <li>Unified grid size, default 5×5.</li>
+                <li>Both diagrams stay horizontally aligned on small screens.</li>
+                <li>Clicking empty cells fills northwest rectangles; clicking filled cells removes southeast rectangles.</li>
+                <li>Mobile-friendly draggable card stack.</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h3>Cards</h3>
+              <ul>
+                <li>Basic statistics.</li>
+                <li>Littlewood–Richardson decomposition.</li>
+                <li>Lie algebra invariants.</li>
+                <li>Kostka tableaux.</li>
+                <li>Kronecker decomposition.</li>
+                <li>Plethysm decomposition.</li>
+                <li>Schur functor.</li>
+                <li>Grassmannian cup product.</li>
+                <li>Export.</li>
+              </ul>
+            </div>
+          </div>
+          <p>Every computational card follows the same interaction pattern: the card is collapsed by default, the user opens it, presses <code>compute</code>, sees a scrollable decomposition-style output, and may press <code>export</code> to place a text version into the Export card.</p>
+        </section>
+
+        <section id="algorithms" class="card">
+          <h2>Mathematical and computational algorithms</h2>
+          <table>
+            <thead><tr><th>Feature</th><th>Algorithmic idea</th><th>Implementation note</th></tr></thead>
+            <tbody>
+              <tr><td>Stable type A LR</td><td>Littlewood–Richardson tableaux / coefficients.</td><td>Enumerate target partitions ν and compute c<sup>ν</sup><sub>λμ</sub>.</td></tr>
+              <tr><td>Stable B/C/D</td><td>Stable Newell–Littlewood-style coefficient.</td><td>Uses auxiliary partitions α,β,γ and LR coefficients.</td></tr>
+              <tr><td>Fixed-rank tensor products</td><td>Dominant norm-bound candidates plus Freudenthal characters and Brauer–Klimyk straightening.</td><td>Dimension check guards completeness.</td></tr>
+              <tr><td>Weyl dimensions</td><td>Weyl dimension formula using positive coroots.</td><td>Fractions are reduced to integers before display.</td></tr>
+              <tr><td>Kostka tableaux</td><td>Backtracking enumeration of semistandard Young tableaux.</td><td>Lists the tableaux, not only the count.</td></tr>
+              <tr><td>Kronecker coefficients</td><td>Symmetric group characters via Murnaghan–Nakayama.</td><td>Uses character inner products over conjugacy classes.</td></tr>
+              <tr><td>Plethysm</td><td>Power-sum expansion of Schur plethysm.</td><td>Browser cap prevents runaway expansions.</td></tr>
+              <tr><td>Schur functor</td><td>Finite-type character of V<sup>λ</sup>, Adams operations, then highest-weight peeling.</td><td>Output is expressed as irreducibles V<sup>γ</sup> for the selected Dynkin type.</td></tr>
+              <tr><td>Grassmannian cup product</td><td>Schubert product by LR coefficients inside an r×(n−r) rectangle.</td><td>Presentation can be Young diagrams or Chern-class polynomial via Giambelli determinants.</td></tr>
+            </tbody>
+          </table>
+
+          <h3>Core fixed-rank pattern</h3>
+          <p>The most important algorithmic improvement was to avoid repeated Weyl-group alternation and instead follow the character approach used in computer algebra systems:</p>
+          <pre><code>character = irreducibleCharacterFreudenthal(smallerFactor)
+for each weight η with multiplicity m in character:
+    γ = shiftedWeylStraighten(largerFactor + η)
+    if γ is dominant and nonsingular:
+        coefficient[γ] += sign * m</code></pre>
+          <p>This is paired with a candidate enumeration by invariant norm:</p>
+          <pre><code>enumerate dominant γ with ||γ|| ≤ ||λ|| + ||μ||
+compute coefficients
+check: Σ coefficient(γ) dim(V^γ) = dim(V^λ) dim(V^μ)</code></pre>
+        </section>
+
+        <section id="design" class="card">
+          <h2>Interface design decisions</h2>
+          <ul>
+            <li><strong>One shared stylesheet:</strong> the project reused <code>young_diagrams.css</code> to stay visually aligned with the existing site.</li>
+            <li><strong>Page-local styles:</strong> special layout rules for the two-diagram page were kept inside the HTML to avoid disturbing the original single-diagram calculator.</li>
+            <li><strong>Collapsed cards:</strong> all cards start collapsed to keep the page fast and scalable as more cards are added.</li>
+            <li><strong>Lazy computation:</strong> a card computes only when the user opens it or presses its compute button.</li>
+            <li><strong>Consistent outputs:</strong> decomposition cards use the same formula line, multiplicity column, mini diagram, partition label, and export behavior.</li>
+            <li><strong>Touch-friendly drag:</strong> pointer-based card dragging was used instead of relying only on desktop drag events.</li>
+            <li><strong>Soft grid style:</strong> black borders were replaced by lighter strokes and adaptive padding.</li>
+          </ul>
+        </section>
+
+        <section id="corrections" class="card">
+          <h2>Corrections and lessons learned</h2>
+          <div class="warning">
+            Several early versions were mathematically or computationally unsatisfactory. These corrections are a useful record for future projects.
+          </div>
+          <ol>
+            <li><strong>Do not fake fixed rank by truncation.</strong> The finite-rank Lie algebra tensor product must be computed in the representation ring.</li>
+            <li><strong>Do not enumerate full product weight supports unnecessarily.</strong> For higher rank, pairwise support sums become expensive.</li>
+            <li><strong>Do not rely on Kostant partition recursion for every tensor coefficient.</strong> The recursion can explode for exceptional types.</li>
+            <li><strong>Use Freudenthal character generation and Brauer–Klimyk straightening.</strong> This is closer to the efficient strategy used by systems such as SageMath.</li>
+            <li><strong>Use dimension checks.</strong> When candidate generation is heuristic or bounded, comparing dimensions reveals missing summands.</li>
+            <li><strong>Base edits on the latest satisfactory file.</strong> Rewriting from scratch can accidentally delete good features.</li>
+            <li><strong>Separate independent mathematics into separate cards.</strong> For example, Kostka tableaux are independent of Dynkin type and therefore belong in their own card.</li>
+          </ol>
+        </section>
+
+        <section id="replicate" class="card">
+          <h2>How to make a similar website</h2>
+          <ol>
+            <li><strong>Start with a stable visual grammar.</strong> Define the card style, canvas style, button style, and export pattern first.</li>
+            <li><strong>Represent partitions simply.</strong> Store a Young diagram as a non-increasing array of row lengths, such as <code>[3,2,1]</code>.</li>
+            <li><strong>Separate UI state from mathematical functions.</strong> Canvas drawing, card state, and computation routines should not be tangled.</li>
+            <li><strong>Add one card at a time.</strong> Give each card a title, compute button, export button, output div, and a small hint.</li>
+            <li><strong>Make calculations lazy.</strong> Do not compute while cards are collapsed.</li>
+            <li><strong>Use caps and warnings.</strong> Browser-side exact combinatorics can become large very quickly.</li>
+            <li><strong>Give mathematical outputs in a familiar visual form.</strong> Use formula lines and miniature diagrams, not raw arrays only.</li>
+            <li><strong>Export plain text.</strong> Let users copy or download results from one shared Export card.</li>
+            <li><strong>Keep a process document.</strong> Record what failed, what was corrected, and what algorithms were ultimately used.</li>
+          </ol>
+
+          <h3>Suggested card template</h3>
+          <pre><code>&lt;section class="card collapsed lr-card" draggable="true"&gt;
+  &lt;div class="card-head"&gt;
+    &lt;span class="drag-handle"&gt;⋮⋮&lt;/span&gt;
+    &lt;span class="card-head-label"&gt;new computation&lt;/span&gt;
+    &lt;i class="toggle-icon"&gt;▾&lt;/i&gt;
+  &lt;/div&gt;
+  &lt;div class="card-body"&gt;
+    &lt;div class="lr-action-row"&gt;
+      &lt;button id="compute-new" class="btn"&gt;compute&lt;/button&gt;
+      &lt;button id="export-new" class="btn btn-ghost"&gt;export&lt;/button&gt;
+    &lt;/div&gt;
+    &lt;div id="new-out" class="decomposition-output"&gt;
+      &lt;span class="hint"&gt;Open this card and compute.&lt;/span&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/section&gt;</code></pre>
+        </section>
+
+        <section id="citation" class="card">
+          <h2>Citation, credits, and version</h2>
+          <p>This website was developed through a conversation between the user and ChatGPT. The assistant version recorded for this production document is <strong>GPT-5.5 Thinking</strong>.</p>
+          <p>The final site links back to the single Young diagram calculator:</p>
+          <pre><code>&lt;footer&gt;
+  One applet built with p5.js, with help from ChatGPT.
+  The single Young diagram calculator is
+  &lt;a href="https://ramified.github.io/web/database/young_diagrams.html"&gt;here&lt;/a&gt;.
+&lt;/footer&gt;</code></pre>
+          <p>The default export textbox in the final website contains a BibTeX template so users can cite the applet. The author name, canonical URL, release date, and version number can be edited later.</p>
+        </section>
+
+        <footer>
+          Generated as a production-process note for <em>Young Diagram² Calculator</em>. Model recorded: GPT-5.5 Thinking.
+        </footer>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
