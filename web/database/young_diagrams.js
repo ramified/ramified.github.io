@@ -58,6 +58,19 @@ function resetBlocks() {
 
 resetBlocks();
 
+const DEFAULT_EXPORT_CITATION = `@misc{young_diagram_calculator,
+  title        = {Young Diagram Calculator},
+  author       = {Xiaoxiang Zhou},
+  year         = {2026},
+  url          = {https://ramified.github.io/web/database/young_diagrams.html},
+  note         = {Browser-side applet for computations with a single Young diagram.}
+}`;
+
+function resetExportToDefaultCitation() {
+  const exportOut = document.getElementById('export-out');
+  if (exportOut) exportOut.value = DEFAULT_EXPORT_CITATION;
+}
+
 // ─────────────────────────────────────────────
 //  Canvas setup
 // ─────────────────────────────────────────────
@@ -268,8 +281,7 @@ function syncGridSizeInputs() {
 
 function resetCalculatedOutputsForEmptyDiagram() {
   document.getElementById('shape-badge').textContent = '( )';
-  const exportOut = document.getElementById('export-out');
-  if (exportOut) exportOut.value = '';
+  resetExportToDefaultCitation();
 }
 
 function setGridSize(cols, rows, clearDiagram = true, markCustomized = false) {
@@ -708,6 +720,41 @@ function miniDiagram(mu, hue) {
   const W = mu[0] * bs;
   const H = mu.length * bs;
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="display:inline-block;vertical-align:middle;">`;
+  for (let r = 0; r < mu.length; r++) {
+    for (let c = 0; c < mu[r]; c++) {
+      svg += `<rect x="${c*bs}" y="${r*bs}" width="${bs}" height="${bs}" fill="hsl(${hue},40%,70%)" stroke="hsl(${hue},30%,35%)" stroke-width="0.7"/>`;
+    }
+  }
+  svg += '</svg>';
+  return svg;
+}
+
+function miniDiagramPlain(mu) {
+  if (!mu.length) {
+    return `<span style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--muted);">∅</span>`;
+  }
+  const bs = 12;
+  const W = mu[0] * bs;
+  const H = mu.length * bs;
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="display:inline-block;vertical-align:middle;">`;
+  for (let r = 0; r < mu.length; r++) {
+    for (let c = 0; c < mu[r]; c++) {
+      svg += `<rect x="${c*bs}" y="${r*bs}" width="${bs}" height="${bs}" style="fill:var(--surface);stroke:var(--text);stroke-width:0.7"/>`;
+    }
+  }
+  svg += '</svg>';
+  return svg;
+}
+
+function miniDiagramDecomp(mu, hue = 200) {
+  if (!mu.length) {
+    return `<span style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--muted);">∅</span>`;
+  }
+  const maxWidth = 112;
+  const bs = Math.max(7, Math.min(14, Math.floor(maxWidth / Math.max(mu[0], 1))));
+  const W = mu[0] * bs;
+  const H = mu.length * bs;
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:inline-block;vertical-align:middle;">`;
   for (let r = 0; r < mu.length; r++) {
     for (let c = 0; c < mu[r]; c++) {
       svg += `<rect x="${c*bs}" y="${r*bs}" width="${bs}" height="${bs}" fill="hsl(${hue},40%,70%)" stroke="hsl(${hue},30%,35%)" stroke-width="0.7"/>`;
@@ -1476,6 +1523,409 @@ function buildOrbitTable(n) {
 
 
 // ─────────────────────────────────────────────
+//  WEIGHT SPACE DECOMPOSITION
+//  Lists dominant Weyl-orbit representatives γ with ||γ|| ≤ ||λ||.
+//  Multiplicities are computed by Freudenthal's recursion and grouped by Weyl orbit.
+// ─────────────────────────────────────────────
+const WEIGHT_DECOMP_CANDIDATE_LIMIT = 12000;
+const WEIGHT_DECOMP_EPS = 1e-7;
+let _lastWeightDecomposition = null;
+
+function cloneMatrix(M) { return M.map(row => row.slice()); }
+
+function invertMatrix(M) {
+  const n = M.length;
+  const A = M.map((row, i) => {
+    const r = row.map(Number);
+    for (let j = 0; j < n; j++) r.push(i === j ? 1 : 0);
+    return r;
+  });
+  for (let col = 0; col < n; col++) {
+    let pivot = col;
+    for (let r = col + 1; r < n; r++) {
+      if (Math.abs(A[r][col]) > Math.abs(A[pivot][col])) pivot = r;
+    }
+    if (Math.abs(A[pivot][col]) < 1e-12) throw new Error('Singular Cartan matrix.');
+    if (pivot !== col) [A[pivot], A[col]] = [A[col], A[pivot]];
+    const div = A[col][col];
+    for (let j = 0; j < 2 * n; j++) A[col][j] /= div;
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const f = A[r][col];
+      if (Math.abs(f) < 1e-14) continue;
+      for (let j = 0; j < 2 * n; j++) A[r][j] -= f * A[col][j];
+    }
+  }
+  return A.map(row => row.slice(n));
+}
+
+function transposeMatrix(M) {
+  return M[0].map((_, j) => M.map(row => row[j]));
+}
+
+function matVec(M, v) {
+  return M.map(row => row.reduce((s, x, i) => s + x * v[i], 0));
+}
+
+function symmetrizerFromCartan(C) {
+  const n = C.length;
+  const d = Array(n).fill(null);
+  for (let start = 0; start < n; start++) {
+    if (d[start] !== null) continue;
+    d[start] = 1;
+    const queue = [start];
+    while (queue.length) {
+      const i = queue.shift();
+      for (let j = 0; j < n; j++) {
+        if (i === j || !C[i][j] || !C[j][i]) continue;
+        // C[i][j] d_j = C[j][i] d_i, where d_i = (α_i,α_i)/2.
+        const next = d[i] * C[j][i] / C[i][j];
+        if (d[j] === null) {
+          d[j] = next;
+          queue.push(j);
+        }
+      }
+    }
+  }
+  const minPositive = Math.min(...d.filter(x => x > 0));
+  return d.map(x => x / minPositive);
+}
+
+function fundamentalWeightGram(C, d) {
+  const invC = invertMatrix(C);
+  const G = invC.map((row, i) => row.map((x, j) => x * d[j]));
+  // Numerical symmetrization keeps tiny floating roundoff from affecting norm tests.
+  for (let i = 0; i < G.length; i++) {
+    for (let j = i + 1; j < G.length; j++) {
+      const avg = (G[i][j] + G[j][i]) / 2;
+      G[i][j] = avg;
+      G[j][i] = avg;
+    }
+  }
+  return G;
+}
+
+function dotDyn(a, b, G) {
+  let s = 0;
+  for (let i = 0; i < a.length; i++)
+    for (let j = 0; j < b.length; j++)
+      s += a[i] * G[i][j] * b[j];
+  return s;
+}
+
+function normDyn(a, G) { return dotDyn(a, a, G); }
+
+function rootDynkinFromSimple(rootSimple, C) {
+  const n = C.length;
+  return Array.from({length: n}, (_, j) =>
+    rootSimple.reduce((s, coeff, i) => s + coeff * C[i][j], 0)
+  );
+}
+
+function innerWeightRoot(weightDyn, rootSimple, d) {
+  return rootSimple.reduce((s, coeff, i) => s + coeff * d[i] * weightDyn[i], 0);
+}
+
+function addScaled(a, b, k) {
+  return a.map((x, i) => x + k * b[i]);
+}
+
+function cleanIntArray(arr) {
+  return arr.map(x => Math.abs(x) < WEIGHT_DECOMP_EPS ? 0 : Math.round(x));
+}
+
+function isDominantDyn(labels) {
+  return labels.every(x => x >= -WEIGHT_DECOMP_EPS);
+}
+
+function dominantRepresentativeDyn(C, labels) {
+  let w = cleanIntArray(labels);
+  const n = C.length;
+  const seen = new Set();
+  for (let steps = 0; steps < 400; steps++) {
+    const key = w.join(',');
+    if (seen.has(key)) return null;
+    seen.add(key);
+    let i = w.findIndex(x => x < -WEIGHT_DECOMP_EPS);
+    if (i < 0) return cleanIntArray(w);
+    const ai = w[i];
+    w = w.map((v, j) => v - ai * C[i][j]);
+    w = cleanIntArray(w);
+    if (w.length !== n) return null;
+  }
+  return null;
+}
+
+function dynkinToRows(labels) {
+  const rows = [];
+  let s = 0;
+  for (let i = labels.length - 1; i >= 0; i--) {
+    s += labels[i];
+    rows[i] = s;
+  }
+  return trimPart(rows.map(x => Math.max(0, Math.round(x))));
+}
+
+function typeDisplayHTML(typeStr) {
+  const sub = String(typeStr.includes(':') ? typeStr.split(':')[1] : typeStr.replace(/^[A-Z]/, ''))
+    .replace(/0/g, '₀').replace(/1/g, '₁').replace(/2/g, '₂').replace(/3/g, '₃').replace(/4/g, '₄')
+    .replace(/5/g, '₅').replace(/6/g, '₆').replace(/7/g, '₇').replace(/8/g, '₈').replace(/9/g, '₉');
+  const type = typeStr.includes(':') ? typeStr.split(':')[0] : typeStr[0];
+  return type + sub;
+}
+
+function vectorKey(v) { return v.join(','); }
+
+function simpleRootCoordinatesForDiff(ctx, diffDyn) {
+  // rootDyn = C^T * rootSimple, so solve C^T r = diffDyn.
+  const coords = matVec(ctx.invCartanTranspose, diffDyn);
+  const rounded = coords.map(x => Math.round(x));
+  for (let i = 0; i < coords.length; i++) {
+    if (Math.abs(coords[i] - rounded[i]) > 1e-6) return null;
+    if (rounded[i] < 0) return null;
+  }
+  return rounded;
+}
+
+function isReachableFromHighest(ctx, gammaDyn) {
+  if (!isDominantDyn(gammaDyn)) return false;
+  const diff = ctx.lambdaDyn.map((x, i) => x - gammaDyn[i]);
+  return !!simpleRootCoordinatesForDiff(ctx, diff);
+}
+
+function buildWeightDecompContext() {
+  const rows = rowLengths();
+  if (!rows.length) throw new Error('Draw a Young diagram first.');
+  const typeStr = currentTypeStr();
+  const C = cartanMatrix(typeStr);
+  const rank = rankOf(typeStr);
+  const lambdaDyn = toDynkinLabels(typeStr, rows).map(x => Math.max(0, x));
+  const d = symmetrizerFromCartan(C);
+  const G = fundamentalWeightGram(C, d);
+  const positiveRootSimple = positiveRoots(C);
+  const positiveRootData = positiveRootSimple.map(simple => ({
+    simple,
+    dyn: rootDynkinFromSimple(simple, C),
+  }));
+  const invCartanTranspose = invertMatrix(transposeMatrix(C));
+  const rho = Array(rank).fill(1);
+  const lambdaNorm = normDyn(lambdaDyn, G);
+  const lambdaRhoNorm = normDyn(lambdaDyn.map((x, i) => x + rho[i]), G);
+  return {
+    rows, typeStr, C, rank, lambdaDyn, d, G, positiveRootData,
+    invCartanTranspose, rho, lambdaNorm, lambdaRhoNorm,
+    lambdaKey: vectorKey(lambdaDyn),
+  };
+}
+
+function enumerateDominantWeightCandidates(ctx) {
+  const maxPart = Math.max(...ctx.rows, 0);
+  const current = [];
+  const candidates = [];
+  let truncated = false;
+  function rec(pos, prev) {
+    if (candidates.length >= WEIGHT_DECOMP_CANDIDATE_LIMIT) {
+      truncated = true;
+      return;
+    }
+    if (pos === ctx.rank) {
+      const rows = trimPart(current.slice());
+      const dyn = toDynkinLabels(ctx.typeStr, rows).map(x => Math.max(0, x));
+      const gammaNorm = normDyn(dyn, ctx.G);
+      if (gammaNorm <= ctx.lambdaNorm + WEIGHT_DECOMP_EPS && isReachableFromHighest(ctx, dyn)) {
+        candidates.push({ rows, dyn, norm: gammaNorm });
+      }
+      return;
+    }
+    for (let v = prev; v >= 0; v--) {
+      current[pos] = v;
+      rec(pos + 1, v);
+      if (truncated) return;
+    }
+  }
+  rec(0, maxPart);
+  candidates.sort((a, b) => {
+    const nd = b.norm - a.norm;
+    if (Math.abs(nd) > WEIGHT_DECOMP_EPS) return nd;
+    for (let i = 0; i < Math.max(a.rows.length, b.rows.length); i++) {
+      const d = (b.rows[i] || 0) - (a.rows[i] || 0);
+      if (d !== 0) return d;
+    }
+    return 0;
+  });
+  return { candidates, truncated };
+}
+
+function weightMultiplicityFreudenthal(ctx) {
+  const memo = new Map([[ctx.lambdaKey, 1]]);
+  const visiting = new Set();
+  function multiplicity(gammaDynRaw) {
+    const gammaDyn = cleanIntArray(gammaDynRaw);
+    const key = vectorKey(gammaDyn);
+    if (memo.has(key)) return memo.get(key);
+    if (visiting.has(key)) return 0;
+    if (!isReachableFromHighest(ctx, gammaDyn)) {
+      memo.set(key, 0);
+      return 0;
+    }
+    const gammaNorm = normDyn(gammaDyn, ctx.G);
+    if (gammaNorm > ctx.lambdaNorm + WEIGHT_DECOMP_EPS) {
+      memo.set(key, 0);
+      return 0;
+    }
+    const gammaRho = gammaDyn.map((x, i) => x + ctx.rho[i]);
+    const denom = ctx.lambdaRhoNorm - normDyn(gammaRho, ctx.G);
+    if (denom <= WEIGHT_DECOMP_EPS) {
+      memo.set(key, 0);
+      return 0;
+    }
+    visiting.add(key);
+    let sum = 0;
+    for (const root of ctx.positiveRootData) {
+      for (let k = 1; k < 200; k++) {
+        const betaDyn = addScaled(gammaDyn, root.dyn, k);
+        if (normDyn(betaDyn, ctx.G) > ctx.lambdaNorm + WEIGHT_DECOMP_EPS) break;
+        const dom = dominantRepresentativeDyn(ctx.C, betaDyn);
+        if (!dom) continue;
+        const m = multiplicity(dom);
+        if (m === 0) continue;
+        sum += innerWeightRoot(betaDyn, root.simple, ctx.d) * m;
+      }
+    }
+    visiting.delete(key);
+    const value = Math.max(0, Math.round((2 * sum) / denom));
+    memo.set(key, value);
+    return value;
+  }
+  return multiplicity;
+}
+
+function renderWeightSpaceDecomposition(result) {
+  const out = document.getElementById('lie-ws-output');
+  const summary = document.getElementById('lie-ws-summary');
+  const warn = document.getElementById('lie-ws-warning');
+  if (!out || !summary || !warn) return;
+  warn.textContent = result.warning || '';
+  summary.textContent = `${result.entries.length} dominant representative${result.entries.length === 1 ? '' : 's'} · dim check ${result.totalContribution}/${result.dim}`;
+  if (!result.entries.length) {
+    out.innerHTML = '<span class="hint" style="display:block;padding:8px;">No nonzero dominant weight spaces found.</span>';
+    return;
+  }
+  out.innerHTML = '';
+  for (const entry of result.entries) {
+    const row = document.createElement('div');
+    row.className = 'decomp-row';
+
+    const mult = document.createElement('span');
+    mult.className = 'decomp-mult';
+    mult.textContent = `×${entry.multiplicity}`;
+
+    const diag = document.createElement('span');
+    diag.className = 'decomp-diagram';
+    diag.innerHTML = miniDiagramDecomp(entry.rows, 200);
+
+    const label = document.createElement('span');
+    label.className = 'decomp-label';
+    const rowsText = entry.rows.length ? '(' + entry.rows.join(', ') + ')' : '( )';
+    label.innerHTML = `${rowsText}<br><span class="decomp-dyn">[${entry.dyn.join(', ')}]</span> <span class="decomp-orbit">|Wγ|=${entry.orbitSize}</span>`;
+
+    row.appendChild(mult);
+    row.appendChild(diag);
+    row.appendChild(label);
+    out.appendChild(row);
+  }
+}
+
+function computeWeightSpaceDecomposition() {
+  const warn = document.getElementById('lie-ws-warning');
+  const out = document.getElementById('lie-ws-output');
+  const summary = document.getElementById('lie-ws-summary');
+  if (warn) warn.textContent = '';
+  try {
+    const ctx = buildWeightDecompContext();
+    const dim = weylDimGeneral(positiveCoroots(ctx.C), ctx.lambdaDyn).toString();
+    const { candidates, truncated } = enumerateDominantWeightCandidates(ctx);
+    const mult = weightMultiplicityFreudenthal(ctx);
+    const seen = new Set();
+    const entries = [];
+    for (const cand of candidates) {
+      const key = vectorKey(cand.dyn);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const m = mult(cand.dyn);
+      if (!m) continue;
+      let orbitSize = 1n;
+      try { orbitSize = weylOrbitSizeFast(ctx.C, cand.dyn.map(x => Math.max(0, x))); }
+      catch (_) { orbitSize = 1n; }
+      const contribution = orbitSize * BigInt(m);
+      entries.push({
+        rows: cand.rows,
+        dyn: cand.dyn,
+        multiplicity: m,
+        orbitSize: orbitSize.toString(),
+        contribution: contribution.toString(),
+        norm: cand.norm,
+      });
+    }
+    entries.sort((a, b) => {
+      const nd = b.norm - a.norm;
+      if (Math.abs(nd) > WEIGHT_DECOMP_EPS) return nd;
+      for (let i = 0; i < Math.max(a.rows.length, b.rows.length); i++) {
+        const d = (b.rows[i] || 0) - (a.rows[i] || 0);
+        if (d !== 0) return d;
+      }
+      return 0;
+    });
+    const totalContribution = entries.reduce((s, e) => s + BigInt(e.contribution), 0n).toString();
+    const warning = truncated
+      ? `⚠ Candidate search stopped at ${WEIGHT_DECOMP_CANDIDATE_LIMIT} dominant diagrams. Increase the cap in the source for larger examples.`
+      : (totalContribution !== dim ? `⚠ Dimension check gives ${totalContribution}/${dim}; this can happen if the diagram is too large for the current cap or conventions.` : '');
+    const result = {
+      typeStr: ctx.typeStr,
+      lambdaRows: ctx.rows,
+      lambdaDyn: ctx.lambdaDyn,
+      dim,
+      totalContribution,
+      entries,
+      warning,
+    };
+    _lastWeightDecomposition = result;
+    renderWeightSpaceDecomposition(result);
+  } catch (e) {
+    _lastWeightDecomposition = null;
+    if (warn) warn.textContent = '⚠ ' + e.message;
+    if (summary) summary.textContent = 'Unable to compute decomposition.';
+    if (out) out.innerHTML = '<span class="hint" style="display:block;padding:8px;">No decomposition computed.</span>';
+  }
+}
+
+function exportWeightSpaceDecomposition() {
+  if (!_lastWeightDecomposition) computeWeightSpaceDecomposition();
+  const result = _lastWeightDecomposition;
+  if (!result) return;
+  const exportOut = document.getElementById('export-out');
+  if (!exportOut) return;
+  const lambdaRows = result.lambdaRows.length ? '(' + result.lambdaRows.join(', ') + ')' : '( )';
+  let txt = `# Weight space decomposition of V^lambda\n`;
+  txt += `# type: ${result.typeStr}\n`;
+  txt += `# lambda rows: ${lambdaRows}\n`;
+  txt += `# lambda Dynkin: [${result.lambdaDyn.join(', ')}]\n`;
+  txt += `# grouped by dominant Weyl-orbit representatives gamma\n`;
+  txt += `# dimension check: ${result.totalContribution}/${result.dim}\n`;
+  txt += `# columns: multiplicity, orbit_size, gamma_rows, gamma_dynkin\n`;
+  for (const e of result.entries) {
+    const rows = e.rows.length ? '(' + e.rows.join(', ') + ')' : '( )';
+    txt += `${e.multiplicity}\t${e.orbitSize}\t${rows}\t[${e.dyn.join(', ')}]\n`;
+  }
+  exportOut.value = txt.trimEnd();
+  document.querySelectorAll('.card').forEach(c => {
+    if (c.querySelector('#export-out') && c.classList.contains('collapsed'))
+      c.classList.remove('collapsed');
+  });
+}
+
+
+// ─────────────────────────────────────────────
 //  Card collapse toggle
 // ─────────────────────────────────────────────
 function toggleCard(headEl) {
@@ -1487,6 +1937,75 @@ function toggleCard(headEl) {
 }
 
 
+
+// ─────────────────────────────────────────────
+//  Custom tooltips (more reliable than native title tooltips inside cards)
+// ─────────────────────────────────────────────
+function initCustomTooltips() {
+  if (document.body.dataset.customTooltipsReady === '1') return;
+  document.body.dataset.customTooltipsReady = '1';
+
+  const tip = document.createElement('div');
+  tip.className = 'custom-tooltip';
+  tip.setAttribute('role', 'tooltip');
+  document.body.appendChild(tip);
+
+  let activeEl = null;
+
+  function placeTooltip(el) {
+    const rect = el.getBoundingClientRect();
+    const margin = 10;
+    const gap = 8;
+    tip.style.left = '0px';
+    tip.style.top = '0px';
+    const tipRect = tip.getBoundingClientRect();
+
+    let left = rect.left + rect.width / 2 - tipRect.width / 2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - tipRect.width - margin));
+
+    let top = rect.top - tipRect.height - gap;
+    if (top < margin) top = rect.bottom + gap;
+    top = Math.max(margin, Math.min(top, window.innerHeight - tipRect.height - margin));
+
+    tip.style.left = `${Math.round(left)}px`;
+    tip.style.top = `${Math.round(top)}px`;
+  }
+
+  function showTooltip(el) {
+    const text = el.getAttribute('data-tooltip');
+    if (!text) return;
+    activeEl = el;
+    tip.textContent = text;
+    tip.classList.add('visible');
+    placeTooltip(el);
+  }
+
+  function hideTooltip(el) {
+    if (el && activeEl && el !== activeEl) return;
+    tip.classList.remove('visible');
+    activeEl = null;
+  }
+
+  document.addEventListener('pointerenter', (e) => {
+    const el = e.target.closest?.('[data-tooltip]');
+    if (el) showTooltip(el);
+  }, true);
+  document.addEventListener('pointerleave', (e) => {
+    const el = e.target.closest?.('[data-tooltip]');
+    if (el) hideTooltip(el);
+  }, true);
+  document.addEventListener('focusin', (e) => {
+    const el = e.target.closest?.('[data-tooltip]');
+    if (el) showTooltip(el);
+  });
+  document.addEventListener('focusout', (e) => {
+    const el = e.target.closest?.('[data-tooltip]');
+    if (el) hideTooltip(el);
+  });
+  window.addEventListener('scroll', () => { if (activeEl) placeTooltip(activeEl); }, true);
+  window.addEventListener('resize', () => { if (activeEl) placeTooltip(activeEl); });
+}
+
 // ─────────────────────────────────────────────
 //  Init
 // ─────────────────────────────────────────────
@@ -1497,6 +2016,11 @@ window.addEventListener('load', () => {
     if (head) head.setAttribute('aria-expanded', 'false');
   });
   initGridSizeControls();
+  initCustomTooltips();
+  resetExportToDefaultCitation();
   resize();
   onTypeChange();   // initialise lie algebra card UI state without computing collapsed data
 });
+
+// Initialise tooltips even if this script is loaded after the load event in a cached page.
+if (document.readyState !== 'loading') initCustomTooltips();

@@ -42,6 +42,16 @@
     color: #9a9080;
     letter-spacing: 0.05em;
   }
+  header span a,
+  header span a:visited {
+    color: #f2e8d8;
+    text-decoration: none;
+  }
+  header span a:hover,
+  header span a:focus {
+    color: #fffaf0;
+    text-decoration: underline;
+  }
 
   .layout {
     display: grid;
@@ -237,7 +247,7 @@
     padding: 14px 16px;
     overflow: hidden;
     transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.2s ease;
-    max-height: 600px;
+    max-height: 1400px;
     opacity: 1;
   }
   .card.collapsed .card-body {
@@ -382,3 +392,132 @@
 
   /* error flash */
   .err { color: var(--accent2); font-size: 0.8rem; margin-top: 4px; font-style: italic; }
+
+
+  /* Lie algebra decomposition rows */
+  .lie-subsection {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dotted var(--border);
+  }
+  .lie-subsection-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 3px;
+  }
+  .decomp-scroll {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: min(320px, 48vh);
+    min-height: 116px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    margin-top: 8px;
+    background: var(--surface);
+    padding: 0 10px 12px 0;
+    box-sizing: border-box;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    min-width: 0;
+  }
+  .decomp-scroll > .hint {
+    display: block;
+    padding: 2px 0 4px;
+  }
+  .decomp-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 3px 0;
+    border-bottom: 1px dotted var(--border);
+  }
+  .decomp-row:last-child { border-bottom: none; }
+  .decomp-mult {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--accent);
+    min-width: 24px;
+    text-align: right;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .decomp-diagram {
+    display: inline-flex;
+    align-items: center;
+    min-width: 20px;
+    max-width: 112px;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .decomp-diagram svg {
+    display: block;
+    max-width: 112px;
+    height: auto;
+  }
+  .decomp-label {
+    min-width: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    line-height: 1.25;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  .decomp-label .decomp-dyn {
+    color: var(--text);
+  }
+  .decomp-label .decomp-orbit {
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  @media (max-width: 780px) {
+    .decomp-scroll {
+      padding: 0 8px 10px 0;
+    }
+    .decomp-row {
+      gap: 8px;
+      padding: 3px 0;
+    }
+    .decomp-diagram,
+    .decomp-diagram svg {
+      max-width: 96px;
+    }
+  }
+
+  .tooltip-label {
+    cursor: help;
+    text-decoration: underline dotted rgba(122,111,101,0.55);
+    text-underline-offset: 2px;
+  }
+
+  .custom-tooltip {
+    position: fixed;
+    z-index: 10000;
+    max-width: min(320px, calc(100vw - 24px));
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 6px 22px rgba(0,0,0,0.16);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    letter-spacing: 0;
+    text-transform: none;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(3px);
+    transition: opacity 0.12s ease, transform 0.12s ease;
+  }
+
+  .custom-tooltip.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }

@@ -89,10 +89,10 @@
               <label class="stat-label" style="white-space:nowrap;flex-shrink:0;">Type:</label>
               <select id="lie-type" onchange="onTypeChange()" style="padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'EB Garamond',serif;font-size:0.9rem;color:var(--text);">
                 <optgroup label="Classical">
-                  <option value="A">A&#8345; &nbsp;&#x1D4C8;&#x1D4C1;(n+1) / &#x1D4C8;&#x1D4CA;(n+1)</option>
+                  <option value="A" selected>A&#8345; &nbsp;&#x1D4C8;&#x1D4C1;(n+1) / &#x1D4C8;&#x1D4CA;(n+1)</option>
                   <option value="B">B&#8345; &nbsp;&#x1D4C8;&#x1D4C0;(2n+1)</option>
                   <option value="C">C&#8345; &nbsp;&#x1D4C8;&#x1D4C5;(2n)</option>
-                  <option value="D" selected>D&#8345; &nbsp;&#x1D4C8;&#x1D4C0;(2n)</option>
+                  <option value="D">D&#8345; &nbsp;&#x1D4C8;&#x1D4C0;(2n)</option>
                 </optgroup>
                 <optgroup label="Exceptional">
                   <option value="E6">E&#8326;</option>
@@ -104,7 +104,7 @@
               </select>
               <span id="lie-rank-wrap" style="display:flex;align-items:center;gap:6px;">
                 <label class="stat-label" style="white-space:nowrap;">rank&nbsp;<em>n</em>:</label>
-                <input type="number" id="lie-rank" value="3" min="1" max="12"
+                <input type="number" id="lie-rank" value="6" min="1" max="12"
                   onchange="onAlgebraChange()"
                   style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;
                          font-family:'JetBrains Mono',monospace;font-size:0.82rem;
@@ -112,15 +112,10 @@
               </span>
               <span id="lie-algebra-desc" style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:var(--muted);"></span>
             </div>
-            <div class="hint" style="margin-bottom:8px;" id="lie-hint">
-              Uses row vector &#955; = (a<sub>1</sub>,...,a<sub>n</sub>) and Dynkin labels
-              [a<sub>1</sub>&minus;a<sub>2</sub>, ..., a<sub>n-1</sub>&minus;a<sub>n</sub>, a<sub>n</sub>].
-              Orbit size is computed by the stabilizer formula, not by enumerating the whole orbit.
-            </div>
             <div id="lie-warning" class="err" style="margin-bottom:4px;"></div>
             <!-- Stats -->
             <div class="stat-row"><span class="stat-label">Weight &#955;</span><span class="stat-value" id="lie-weight">—</span></div>
-            <div class="stat-row"><span class="stat-label">Dynkin labels</span><span class="stat-value" id="lie-dynkin">—</span></div>
+            <div class="stat-row"><span class="stat-label tooltip-label" tabindex="0" data-tooltip="Uses row vector λ = (a₁,...,aₙ) and Dynkin labels [a₁−a₂, ..., aₙ₋₁−aₙ, aₙ].">Dynkin labels</span><span class="stat-value" id="lie-dynkin">—</span></div>
             <div class="stat-row"><span class="stat-label">dim V<sup>&#955;</sup></span><span class="stat-value" id="lie-dim">—</span></div>
             <div class="stat-row"><span class="stat-label">|Weyl orbit|</span><span class="stat-value" id="lie-orbit-size">—</span></div>
             <!-- Orbit table toggle -->
@@ -129,6 +124,17 @@
               <button class="btn" onclick="exportOrbit()" style="background:transparent;color:var(--accent);border-color:var(--accent);">Export orbit</button>
             </div>
             <div id="lie-orbit-table" style="display:none;margin-top:10px;overflow-x:auto;"></div>
+
+            <div class="lie-subsection" aria-label="Weight space decomposition controls">
+              <div class="lie-subsection-title tooltip-label" tabindex="0" data-tooltip="Computes the nonzero weight spaces of V^λ, grouped by dominant Weyl-orbit representative γ. Candidate representatives are enumerated only when dominant and satisfying ‖γ‖ ≤ ‖λ‖.">Weight space decomposition</div>
+              <div class="action-row">
+                <button class="btn" onclick="computeWeightSpaceDecomposition()">compute</button>
+                <button class="btn" onclick="exportWeightSpaceDecomposition()" style="background:transparent;color:var(--accent);border-color:var(--accent);">export</button>
+              </div>
+              <div id="lie-ws-warning" class="err" style="margin-bottom:4px;"></div>
+              <div id="lie-ws-summary" class="hint">Draw a Young diagram, then compute.</div>
+              <div id="lie-ws-output" class="decomp-scroll"><span class="hint">No decomposition computed yet.</span></div>
+            </div>
           </div>
         </div>
 
@@ -196,7 +202,12 @@
               <button class="btn" onclick="exportSVG()">SVG</button>
               <button class="btn" onclick="copyShape()">Copy shape</button>
             </div>
-            <textarea id="export-out" readonly placeholder="Output appears here…"></textarea>
+            <textarea id="export-out" readonly>@misc{zhou2026youngdiagramcalculator,
+  author = {Xiaoxiang Zhou},
+  title = {Young Diagram Calculator},
+  year = {2026},
+  note = {Interactive web application}
+}</textarea>
           </div>
         </div>
 
