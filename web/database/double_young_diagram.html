@@ -318,6 +318,27 @@
       font-size: 0.74rem;
       color: var(--muted);
     }
+    .slice-mode-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .slice-mode-btn {
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      border-radius: 3px;
+      padding: 2px 7px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      cursor: pointer;
+    }
+    .slice-mode-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(61,107,79,0.08);
+    }
     #open-slice-btn {
       margin-top: 10px;
     }
@@ -467,6 +488,24 @@
         </div>
       </section>
 
+      <section class="card collapsed" draggable="true">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">2d weight slice</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body" id="slice-card-body">
+          <div id="slice-stats-out">
+            <span class="hint">Draw λ and μ; this card shows their relative geometry as Lie algebra weights.</span>
+          </div>
+          <button id="open-slice-btn" class="btn" style="margin-top:10px;" disabled>show 2d slice canvas</button>
+          <p class="hint" id="slice-card-hint" style="margin-top:8px;">λ and μ must generate a 2-dimensional subspace of the weight lattice (i.e. they must be linearly independent) to enable the slice canvas.</p>
+        </div>
+      </section>
+
+      <section class="card collapsed" id="slice-weight-info-card" draggable="true" style="display:none;">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">weight info in 2d slice</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body">
+          <div id="slice-weight-info-out"><span class="hint">Click a lattice point in the 2d slice canvas.</span></div>
+        </div>
+      </section>
+
       <section class="card collapsed lr-card" draggable="true">
         <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">kostka tableaux</span><i class="toggle-icon">▾</i></div>
         <div class="card-body">
@@ -531,24 +570,6 @@
           </div>
           <div id="grassmannian-out" class="decomposition-output"><span class="hint">Compute σ<sub>λ</sub> ∪ σ<sub>μ</sub> in H*(Gr(r,n)), where r is the number of grid rows and n−r is the number of grid columns.</span></div>
           <p class="hint">The Young-diagram presentation uses Littlewood–Richardson coefficients inside the current r × (n−r) rectangle. The Chern presentation uses the Giambelli determinant in Chern classes c<sub>i</sub>.</p>
-        </div>
-      </section>
-
-      <section class="card collapsed" draggable="true">
-        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">2d weight slice</span><i class="toggle-icon">▾</i></div>
-        <div class="card-body" id="slice-card-body">
-          <div id="slice-stats-out">
-            <span class="hint">Draw λ and μ; this card shows their relative geometry as Lie algebra weights.</span>
-          </div>
-          <button id="open-slice-btn" class="btn" style="margin-top:10px;" disabled>show 2d slice canvas</button>
-          <p class="hint" id="slice-card-hint" style="margin-top:8px;">λ and μ must generate a 2-dimensional subspace of the weight lattice (i.e. they must be linearly independent) to enable the slice canvas.</p>
-        </div>
-      </section>
-
-      <section class="card collapsed" id="slice-weight-info-card" draggable="true" style="display:none;">
-        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">weight info in 2d slice</span><i class="toggle-icon">▾</i></div>
-        <div class="card-body">
-          <div id="slice-weight-info-out"><span class="hint">Click a lattice point in the 2d slice canvas.</span></div>
         </div>
       </section>
 

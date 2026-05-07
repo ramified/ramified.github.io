@@ -14,6 +14,8 @@
     const MAX_KOSTANT_STEPS = 220000;
     const MAX_FREUDENTHAL_WEIGHTS = 20000;
     const MAX_NORM_BOUND_CANDIDATES = 12000;
+    const MAX_SLICE_CHARACTER_CANDIDATES = 5000;
+    const SLICE_FREUDENTHAL_EPS = 1e-7;
     const MAX_KOSTKA_STEPS = 250000;
     const MAX_KOSTKA_TABLEAUX = 3000;
     const MAX_KRONECKER_BOXES = 12;
@@ -282,6 +284,7 @@
       return rounded;
     }
     function isNonnegativeIntVector(v) { return !!v && v.every(x => Number.isInteger(x) && x >= 0); }
+    function isDominantDynkin(labels) { return !!labels && labels.every(x => Number.isInteger(x) && x >= 0); }
     function positiveRoots(C) {
       const n = C.length;
       const roots = new Map();
@@ -564,6 +567,7 @@
     }
 
     function weightMultiplicityByWeylCharacter(highestLabels, weightLabels, type, rank) {
+      if (!isDominantDynkin(highestLabels)) throw new Error('Weight multiplicity requires a dominant integral highest weight.');
       const C = cartanMatrix(type, rank);
       const delta = dynkinToSimple(sub(highestLabels, weightLabels), C);
       if (!isNonnegativeIntVector(delta)) {
@@ -783,6 +787,7 @@
     }
 
     function irreducibleCharacterFreudenthal(highest, C, cap = MAX_FREUDENTHAL_WEIGHTS) {
+      if (!isDominantDynkin(highest)) throw new Error('Freudenthal character generation requires a dominant integral highest weight.');
       // Build the full weight-multiplicity dictionary of V^highest using
       // Freudenthal recursion.  This replaces the old Kostant partition
       // recursion in tensor-product calculations.
@@ -1887,18 +1892,30 @@
     }
 
     function resizeCanvases() {
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
       for (const which of ['lambda','mu']) {
         const canvas = state[which].canvas;
         const slot = canvas.closest('.diagram-slot');
         const width = Math.max(90, Math.floor(slot.clientWidth));
         const height = Math.max(90, Math.floor(width * 0.72));
-        if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+        state[which].displayWidth = width;
+        state[which].displayHeight = height;
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+        const pixelWidth = Math.max(1, Math.round(width * dpr));
+        const pixelHeight = Math.max(1, Math.round(height * dpr));
+        if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+          canvas.width = pixelWidth;
+          canvas.height = pixelHeight;
+        }
+        if (state[which].ctx) state[which].ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
       drawAll();
     }
     function drawDiagram(which) {
       const d = state[which], canvas = d.canvas, ctx = d.ctx;
-      const width = canvas.width, height = canvas.height;
+      const width = d.displayWidth || canvas.clientWidth || canvas.width;
+      const height = d.displayHeight || canvas.clientHeight || canvas.height;
       ctx.clearRect(0,0,width,height);
       ctx.fillStyle = '#fbfaf7'; ctx.fillRect(0,0,width,height);
       const gridDensity = Math.min(1, Math.max(0, (Math.max(d.maxRows, d.maxCols) - 5) / 13));
@@ -1939,8 +1956,10 @@
     function handleCanvasClick(which, event) {
       const d = state[which], rect = d.canvas.getBoundingClientRect(), g = d.geometry;
       if (!g) return;
-      const x = (event.clientX - rect.left) * d.canvas.width / rect.width;
-      const y = (event.clientY - rect.top) * d.canvas.height / rect.height;
+      const logicalW = d.displayWidth || rect.width || d.canvas.clientWidth || d.canvas.width;
+      const logicalH = d.displayHeight || rect.height || d.canvas.clientHeight || d.canvas.height;
+      const x = (event.clientX - rect.left) * logicalW / Math.max(1, rect.width);
+      const y = (event.clientY - rect.top) * logicalH / Math.max(1, rect.height);
       const c = Math.floor((x - g.x0) / g.cell), r = Math.floor((y - g.y0) / g.cell);
       if (r < 0 || r >= d.maxRows || c < 0 || c >= d.maxCols) return;
       const rows = Array.from({ length: d.maxRows }, (_, i) => d.rows[i] || 0);
@@ -2466,7 +2485,7 @@
       applyGridSize(); setDiagram('lambda', [3,2]); setDiagram('mu', [2,1]);
       window.onTypeChange(); refreshLRModeHint(); resizeCanvases();
     }
-    window.__dbg = {decomposeFixedRank, decomposeFixedRankTypeA, dominantCandidatesBelow, dominantNormBoundCandidates, irreducibleCharacterFreudenthal, decomposeByCandidatesBrauerKlimyk, weightMultiplicityByFreudenthal, weightMultiplicityByWeylCharacter, kostkaNumber, semistandardTableaux, computeKostkaTableaux, decomposeKronecker, decomposePlethysm, computeKronecker, computePlethysm, computeSchurFunctor, decomposeSchurFunctorFiniteType, computeGrassmannianCup, decomposeGrassmannianCup, grassmannianChernPolynomial, schurFunctorCharacter, decomposeCharacterByHighestWeightPeeling, decomposePlethysm, weylOrbitSizeDominant, updateInvariants};
+    window.__dbg = {decomposeFixedRank, decomposeFixedRankTypeA, dominantCandidatesBelow, dominantNormBoundCandidates, boundedSliceLatticePoints, dominantSliceRepresentative, buildSliceFreudenthalContext, sliceMultiplicityFreudenthal, irreducibleCharacterFreudenthal, decomposeByCandidatesBrauerKlimyk, weightMultiplicityByFreudenthal, weightMultiplicityByWeylCharacter, kostkaNumber, semistandardTableaux, computeKostkaTableaux, decomposeKronecker, decomposePlethysm, computeKronecker, computePlethysm, computeSchurFunctor, decomposeSchurFunctorFiniteType, computeGrassmannianCup, decomposeGrassmannianCup, grassmannianChernPolynomial, schurFunctorCharacter, decomposeCharacterByHighestWeightPeeling, decomposePlethysm, weylOrbitSizeDominant, updateInvariants};
 
     // ══════════════════════════════════════════════════════
     //  2-D WEIGHT SLICE
@@ -2480,7 +2499,9 @@
       lastData: null,  // cached slice data for resize
       hitPoints: [],
       selectedPoint: null,
-      showDiagramsInSlice: false
+      showDiagramsInSlice: false,
+      characterMode: 'none',
+      activeCharacter: null
     };
 
     // ── Geometry helpers ──────────────────────────────────
@@ -2529,31 +2550,6 @@
                angle: Math.acos(Math.min(1, Math.max(-1, lm / Math.sqrt(ll * mm + 1e-30)))) };
     }
 
-    // Project any weight (Dynkin labels) onto the 2-plane spanned by e1,e2.
-    // Returns [u, v] where u = (w·e1)/|e1|², v = (w·e2)/|e2|²
-    // (fractional lattice coordinates in the basis {e1, e2}).
-    function projectOntoPlane(wLabels, proj) {
-      const { e1, e1norm2, e2, e2norm2 } = proj;
-      const C = cartanMatrix(currentType(), currentRank());
-      const inner = makeDynkinInnerProduct(C);
-      const u = inner(wLabels, e1) / (e1norm2 || 1);
-      const v = e2norm2 > 1e-12 ? inner(wLabels, e2) / e2norm2 : 0;
-      return [u, v];
-    }
-
-    // Check whether a weight lies IN the 2-plane (its component orthogonal to
-    // the plane is negligible).
-    function weightInPlane(wLabels, proj) {
-      const C = cartanMatrix(currentType(), currentRank());
-      const inner = makeDynkinInnerProduct(C);
-      const [u, v] = projectOntoPlane(wLabels, proj);
-      // Reconstruct approximation from the two basis vectors
-      const reconst = wLabels.map((_, i) => u * proj.e1[i] + v * proj.e2[i]);
-      const err2 = inner(wLabels.map((x,i) => x - reconst[i]),
-                         wLabels.map((x,i) => x - reconst[i]));
-      return err2 < 1e-6 * (inner(wLabels, wLabels) + 1e-12);
-    }
-
     // Find an integer lattice basis for the 2-plane:
     // given e1 = λ (non-zero), e2 = μ_perp (could be non-lattice), find integer
     // lattice vectors b1, b2 in the plane that generate the full integer span of
@@ -2585,6 +2581,11 @@
     }
     function vectorGcd(v) {
       return v.reduce((g, x) => gcdInt(g, x), 0);
+    }
+    function lcmInt(a, b) {
+      a = Math.abs(Math.trunc(a)); b = Math.abs(Math.trunc(b));
+      if (!a || !b) return 0;
+      return Math.abs(a / gcdInt(a, b) * b);
     }
     function posMod(a, m) {
       return ((a % m) + m) % m;
@@ -2638,7 +2639,34 @@
         best
       ];
     }
-    function computeSliceLatticeInfo(lambdaLabels, muLabels) {
+    function reduceSecondSliceBasisVector(basis, C) {
+      if (!basis || basis.length < 2 || !C) return basis;
+      const inner = makeDynkinInnerProduct(C);
+      const v1 = basis[0], v2 = basis[1];
+      const v1norm = inner(v1.labels, v1.labels);
+      if (Math.abs(v1norm) < 1e-12) return basis;
+      const k = Math.round(inner(v1.labels, v2.labels) / v1norm);
+      if (!k) return basis;
+      const denom = lcmInt(v1.denom, v2.denom);
+      if (!denom) return basis;
+      const scale1 = denom / v1.denom;
+      const scale2 = denom / v2.denom;
+      const labels = v2.labels.map((x, i) => x - k * v1.labels[i]);
+      return [
+        v1,
+        {
+          coords: [
+            v2.coords[0] * scale2 - k * v1.coords[0] * scale1,
+            v2.coords[1] * scale2 - k * v1.coords[1] * scale1
+          ],
+          denom,
+          labels,
+          reducedFrom: v2,
+          reductionK: k
+        }
+      ];
+    }
+    function computeSliceLatticeInfo(lambdaLabels, muLabels, C = null) {
       const lambdaGcd = vectorGcd(lambdaLabels);
       const muGcd = vectorGcd(muLabels);
       let minorGcd = 0;
@@ -2648,7 +2676,8 @@
         }
       }
       const rank2 = minorGcd > 0;
-      const basis = rank2 ? findSaturatedPlaneBasis(lambdaLabels, muLabels, minorGcd, lambdaGcd) : null;
+      const displayBasis = rank2 ? findSaturatedPlaneBasis(lambdaLabels, muLabels, minorGcd, lambdaGcd) : null;
+      const basis = reduceSecondSliceBasisVector(displayBasis, C);
       return {
         lambdaGcd,
         muGcd,
@@ -2656,15 +2685,34 @@
         index: minorGcd,
         rank2,
         saturated: rank2 && minorGcd === 1,
-        basis
+        basis,
+        displayBasis
       };
     }
     function latticeBasisHTML(info) {
       if (!info.rank2) return 'not available';
-      if (!info.basis) return `index ${info.index}; basis search skipped`;
-      return info.basis.map((b, i) =>
+      const displayBasis = info.displayBasis || info.basis;
+      if (!displayBasis) return `index ${info.index}; basis search skipped`;
+      return displayBasis.map((b, i) =>
         `<div class="slice-basis-line"><span class="slice-basis-name">v<sub>${i + 1}</sub></span><code>${formatDynkinVector(b.labels)}</code></div>`
       ).join('');
+    }
+    function solveIntegralSliceBasisCoords(labels, basis) {
+      if (!basis || basis.length < 2) return null;
+      const b1 = basis[0].labels, b2 = basis[1].labels;
+      for (let r = 0; r < labels.length; r++) {
+        for (let s = r + 1; s < labels.length; s++) {
+          const det = b1[r] * b2[s] - b1[s] * b2[r];
+          if (!det) continue;
+          const anum = labels[r] * b2[s] - labels[s] * b2[r];
+          const bnum = b1[r] * labels[s] - b1[s] * labels[r];
+          if (anum % det || bnum % det) continue;
+          const a = anum / det, b = bnum / det;
+          const ok = labels.every((x, i) => x === a * b1[i] + b * b2[i]);
+          if (ok) return [a, b];
+        }
+      }
+      return null;
     }
 
     // ── Card update ───────────────────────────────────────
@@ -2682,7 +2730,7 @@
       const C = cartanMatrix(type, rank);
       const lambdaLabels = diagramToDynkinLabels(lambda, rank);
       const muLabels = diagramToDynkinLabels(mu, rank);
-      const latticeInfo = computeSliceLatticeInfo(lambdaLabels, muLabels);
+      const latticeInfo = computeSliceLatticeInfo(lambdaLabels, muLabels, C);
 
       const inner = makeDynkinInnerProduct(C);
       const ll = inner(lambdaLabels, lambdaLabels);
@@ -2745,64 +2793,23 @@
       const C = cartanMatrix(type, rank);
       const lambdaLabels = diagramToDynkinLabels(lambda, rank);
       const muLabels = diagramToDynkinLabels(mu, rank);
-      const latticeInfo = computeSliceLatticeInfo(lambdaLabels, muLabels);
+      const latticeInfo = computeSliceLatticeInfo(lambdaLabels, muLabels, C);
 
       const proj = computePlaneProjectors(lambdaLabels, muLabels, type, rank);
       if (!proj || !proj.is2D) return null;
 
-      // Collect all weights in the plane from both representations
-      // We use the Freudenthal character for V^λ and V^μ (capped)
-      const MAX_CHAR = 3000;
-      let charLambda = null, charMu = null;
-      try {
-        const lNonZero = lambdaLabels.some(x => x > 0);
-        if (lNonZero) charLambda = irreducibleCharacterFreudenthal(lambdaLabels, C, MAX_CHAR);
-      } catch(e) { charLambda = null; }
-      try {
-        const mNonZero = muLabels.some(x => x > 0);
-        if (mNonZero) charMu = irreducibleCharacterFreudenthal(muLabels, C, MAX_CHAR);
-      } catch(e) { charMu = null; }
-
-      // Gather all candidate weight points (from both chars plus the two generators)
-      // For each weight, project it and check if it's in the plane
-      const allWeightsMap = new Map();  // key -> {uv, multL, multM, isGenerator}
-
-      function addWeight(wLabels, multL, multM) {
-        // Check if in plane
-        if (!weightInPlane(wLabels, proj)) return;
-        const uv = projectOntoPlane(wLabels, proj);
-        const k = uv[0].toFixed(5) + ',' + uv[1].toFixed(5);
-        const existing = allWeightsMap.get(k);
-        if (existing) {
-          if (multL) existing.multL = (existing.multL || 0) + multL;
-          if (multM) existing.multM = (existing.multM || 0) + multM;
-        } else {
-          allWeightsMap.set(k, { uv, wLabels: wLabels.slice(), multL: multL || 0, multM: multM || 0 });
-        }
-      }
-
-      // Always add the two generators
-      addWeight(lambdaLabels, 1, 0);
-      addWeight(muLabels, 0, 1);
-
-      if (charLambda) {
-        for (const [, item] of charLambda) {
-          addWeight(item.wt, item.mult, 0);
-        }
-      }
-      if (charMu) {
-        for (const [, item] of charMu) {
-          addWeight(item.wt, 0, item.mult);
-        }
-      }
-
-      const weights = Array.from(allWeightsMap.values());
+      // Lightweight anchor points used only for canvas framing.
+      const weights = [
+        { uv: [0, 0] },
+        { uv: [1, 0] },
+        { uv: [0, 1] }
+      ];
 
       // Label for plane
       const angleDeg = (proj.angle * 180 / Math.PI).toFixed(1);
       const lenRatio = (Math.sqrt(proj.mm) / Math.sqrt(proj.ll)).toFixed(4);
 
-      return { proj, weights, latticeInfo, angleDeg, lenRatio, lambdaLabels, muLabels, charLambda, charMu };
+      return { proj, weights, latticeInfo, angleDeg, lenRatio, lambdaLabels, muLabels };
     }
 
     function drawSliceCanvas(data) {
@@ -2811,7 +2818,8 @@
       const ctx = sliceState.sliceCtx;
       if (!canvas || !ctx) return;
 
-      const W = canvas.width, H = canvas.height;
+      const W = sliceState.displayWidth || canvas.clientWidth || canvas.width;
+      const H = sliceState.displayHeight || canvas.clientHeight || canvas.height;
       ctx.clearRect(0, 0, W, H);
       ctx.fillStyle = '#fbfaf7';
       ctx.fillRect(0, 0, W, H);
@@ -2887,7 +2895,7 @@
         return canvasXY_lm(u, v);
       }
 
-      // Bounding box of all weights + origin in pixel space (to check they fit)
+      // Bounding box of the lambda/mu anchor triangle + origin.
       let minPX = 0, maxPX = 0, minPY = 0, maxPY = 0;
       for (const w of weights) {
         const [u, v] = gsToLM(w.uv);
@@ -2896,7 +2904,7 @@
         minPY = Math.min(minPY, dy); maxPY = Math.max(maxPY, dy);
       }
 
-      // If weights overflow canvas, scale down uniformly
+      // If the anchor triangle overflows canvas, scale down uniformly.
       const pad = 40;
       const scaleX = (maxPX - minPX > 1e-3) ? (W - 2*pad) / (maxPX - minPX) : 1;
       const scaleY = (maxPY - minPY > 1e-3) ? (H - 2*pad) / (maxPY - minPY) : 1;
@@ -2914,7 +2922,7 @@
 
       // ── Grid ──────────────────────────────────────────────────────────────
       // Draw parallelogram grid lines in the {λ,μ} basis.
-      // We need integer range of u_lm and v_lm across all weights.
+      // Integer range of u_lm and v_lm across the anchor triangle.
       const uLM = weights.map(w => gsToLM(w.uv)[0]);
       const vLM = weights.map(w => gsToLM(w.uv)[1]);
       const uMin = Math.floor(Math.min(0, ...uLM)) - 1;
@@ -2961,53 +2969,16 @@
       }
 
       // ── Weight dots ───────────────────────────────────────────────────────
-      if (false) {
-      const muUVinLM = [0, 1];
-      for (const w of weights) {
-        const [cx, cy] = canvasXYscaled(w.uv);
-        const [u_lm, v_lm] = gsToLM(w.uv);
-        const hasL = w.multL > 0;
-        const hasM = w.multM > 0;
-        const hasBoth = hasL && hasM;
-        const isOrigin = Math.abs(u_lm) < 1e-4 && Math.abs(v_lm) < 1e-4;
-        const isLambdaPt = Math.abs(u_lm - 1) < 1e-4 && Math.abs(v_lm) < 1e-4;
-        const isMuPt = Math.abs(u_lm) < 1e-4 && Math.abs(v_lm - 1) < 1e-4;
-
-        if (hasBoth) {
-          ctx.beginPath();
-          ctx.arc(cx, cy, 8.5, 0, 2*Math.PI);
-          ctx.strokeStyle = '#8b5e3c';
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-        }
-        const r = (isOrigin || isLambdaPt || isMuPt) ? 7 : 5;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, 2*Math.PI);
-        ctx.fillStyle = isOrigin ? '#222' : hasBoth ? '#8b5e3c' : hasL ? '#3d6b4f' : '#a34020';
-        ctx.fill();
-
-        // Multiplicity label
-        const multText = hasBoth
-          ? (w.multL > 1 || w.multM > 1 ? `${w.multL}|${w.multM}` : '')
-          : hasL && w.multL > 1 ? `${w.multL}`
-          : hasM && w.multM > 1 ? `${w.multM}` : '';
-        if (multText) {
-          ctx.font = '10px JetBrains Mono, monospace';
-          ctx.fillStyle = hasBoth ? '#6b3e1c' : hasL ? '#3d6b4f' : '#a34020';
-          ctx.fillText(multText, cx + 8, cy + 4);
-        }
-      }
-      }
-
-      const weightByLabel = new Map();
-      for (const w of weights) {
-        weightByLabel.set(w.wLabels.join(','), w);
+      const overlayEntryByKey = new Map();
+      if (sliceState.characterMode !== 'none' && sliceState.activeCharacter && Array.isArray(sliceState.activeCharacter.entries)) {
+        for (const entry of sliceState.activeCharacter.entries) overlayEntryByKey.set(entry.a + ',' + entry.b, entry);
       }
       sliceState.hitPoints = [];
+      let b1uv = null, b2uv = null;
       if (latticeInfo && latticeInfo.basis && latticeInfo.basis.length >= 2) {
         const b1 = latticeInfo.basis[0], b2 = latticeInfo.basis[1];
-        const b1uv = [b1.coords[0] / b1.denom, b1.coords[1] / b1.denom];
-        const b2uv = [b2.coords[0] / b2.denom, b2.coords[1] / b2.denom];
+        b1uv = [b1.coords[0] / b1.denom, b1.coords[1] / b1.denom];
+        b2uv = [b2.coords[0] / b2.denom, b2.coords[1] / b2.denom];
         const b1px = toPixelOffset(b1uv[0], b1uv[1]);
         const b2px = toPixelOffset(b2uv[0], b2uv[1]);
         const minStep = Math.max(6, Math.min(Math.hypot(...b1px), Math.hypot(...b2px)) * globalScale);
@@ -3024,25 +2995,73 @@
             const key = labels.join(',');
             if (seenPoints.has(key)) continue;
             seenPoints.add(key);
-            const repWeight = weightByLabel.get(key);
             sliceState.hitPoints.push({
-              i, j, u, v, x, y, labels,
-              multL: repWeight ? repWeight.multL : 0,
-              multM: repWeight ? repWeight.multM : 0
+              i, j, u, v, x, y, labels
             });
           }
         }
         for (const p of sliceState.hitPoints) {
           const selected = sliceState.selectedPoint &&
             sliceState.selectedPoint.i === p.i && sliceState.selectedPoint.j === p.j;
+          const overlayEntry = overlayEntryByKey.get(p.i + ',' + p.j);
+          if (overlayEntry) continue;
           const isOrigin = p.labels.every(x => x === 0);
           ctx.beginPath();
-          ctx.arc(p.x, p.y, selected ? 5.5 : isOrigin ? 4.5 : 3.2, 0, 2*Math.PI);
-          ctx.fillStyle = selected ? '#5f6f8f' : isOrigin ? '#222' : 'rgba(80,76,68,0.48)';
+          ctx.arc(p.x, p.y, selected ? 4.8 : isOrigin ? 3.8 : 2.1, 0, 2*Math.PI);
+          ctx.fillStyle = selected ? '#5f6f8f' : isOrigin ? '#222' : 'rgba(80,76,68,0.34)';
           ctx.fill();
           if (selected) {
             ctx.strokeStyle = '#222';
-            ctx.lineWidth = 1.1;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+        }
+      }
+      function sliceDimensionDotRadius(value) {
+        const dim = Math.abs(value);
+        if (dim <= 1) return 2.2;
+        if (dim === 2) return 3.8;
+        if (dim === 3) return 5.0;
+        if (dim === 4) return 6.0;
+        return 7.0;
+      }
+
+      function drawSliceDimensionOverlay() {
+        if (sliceState.characterMode === 'none' || !sliceState.activeCharacter || !b1uv || !b2uv) return;
+        const entries = sliceState.activeCharacter.entries || [];
+        for (const e of entries) {
+          const u = e.a * b1uv[0] + e.b * b2uv[0];
+          const v = e.a * b1uv[1] + e.b * b2uv[1];
+          const [x, y] = canvasXY_lm_scaled(u, v);
+          if (x < -12 || x > W + 12 || y < -12 || y > H + 12) continue;
+          const positive = e.value >= 0;
+          const selected = !!(sliceState.selectedPoint && sliceState.selectedPoint.i === e.a && sliceState.selectedPoint.j === e.b);
+          if (sliceState.characterMode === 'numbers') {
+            ctx.save();
+            ctx.font = '11px JetBrains Mono, monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const text = String(e.value);
+            const textWidth = ctx.measureText(text).width;
+            const r = Math.max(8.5, textWidth / 2 + 5.8);
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, 2*Math.PI);
+            ctx.fillStyle = positive ? 'rgba(223,238,249,0.94)' : 'rgba(250,229,213,0.94)';
+            ctx.fill();
+            ctx.strokeStyle = selected ? '#111' : (positive ? '#1f5f9c' : '#b45a1c');
+            ctx.lineWidth = selected ? 1.4 : 1.0;
+            ctx.stroke();
+            ctx.fillStyle = '#111';
+            ctx.fillText(text, x, y + 0.4);
+            ctx.restore();
+          } else {
+            const r = sliceDimensionDotRadius(e.value);
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, 2*Math.PI);
+            ctx.fillStyle = positive ? 'rgba(42,109,169,0.38)' : 'rgba(199,106,36,0.44)';
+            ctx.fill();
+            ctx.strokeStyle = '#111';
+            ctx.lineWidth = selected ? 1.5 : 1.0;
             ctx.stroke();
           }
         }
@@ -3096,13 +3115,15 @@
         ctx.restore();
       }
       if (latticeInfo && !latticeInfo.saturated && latticeInfo.basis) {
-        drawBasisArrow(latticeInfo.basis[0], '#5f6f8f', 'v1');
-        drawBasisArrow(latticeInfo.basis[1], '#5f6f8f', 'v2');
+        const displayBasis = latticeInfo.displayBasis || latticeInfo.basis;
+        drawBasisArrow(displayBasis[0], '#5f6f8f', 'v1');
+        drawBasisArrow(displayBasis[1], '#5f6f8f', 'v2');
       }
 
-      // Origin dot (on top)
+      // Origin dot, then dimension overlay so a nonzero origin weight remains readable.
       ctx.beginPath(); ctx.arc(ox, oy, 4, 0, 2*Math.PI);
       ctx.fillStyle = '#222'; ctx.fill();
+      drawSliceDimensionOverlay();
 
       // ── Angle arc between λ and μ arrows ──────────────────────────────────
       if (false) {
@@ -3129,10 +3150,6 @@
       }
 
       // ── Legend ────────────────────────────────────────────────────────────
-      const lCount = weights.filter(w => w.multL > 0).length;
-      const mCount = weights.filter(w => w.multM > 0).length;
-      const bCount = weights.filter(w => w.multL > 0 && w.multM > 0).length;
-      const algebraLabel = lieAlgebraLabel(currentType(), currentRank());
       const legend = $('slice-legend');
       if (legend) {
         legend.innerHTML = '';
@@ -3193,9 +3210,237 @@
       const out = $('slice-weight-info-out');
       if (out) out.innerHTML = '<span class="hint">Click a lattice point in the 2d slice canvas.</span>';
       sliceState.selectedPoint = null;
+      sliceState.activeCharacter = null;
     }
 
-    function renderSliceWeightInfo(point) {
+    function cleanSliceDynkin(labels) {
+      return labels.map(x => Math.abs(x) < SLICE_FREUDENTHAL_EPS ? 0 : Math.round(x));
+    }
+
+    function isDominantDynkinLoose(labels) {
+      return !!labels && labels.every(x => Number.isInteger(x) && x >= -SLICE_FREUDENTHAL_EPS);
+    }
+
+    function dominantSliceRepresentative(C, labels) {
+      let w = cleanSliceDynkin(labels);
+      const seen = new Set();
+      for (let steps = 0; steps < 400; steps++) {
+        const k = key(w);
+        if (seen.has(k)) return null;
+        seen.add(k);
+        const i = w.findIndex(x => x < -SLICE_FREUDENTHAL_EPS);
+        if (i < 0) return cleanSliceDynkin(w);
+        w = cleanSliceDynkin(reflectDynkin(w, i, C));
+      }
+      return null;
+    }
+
+    function buildSliceFreudenthalContext(highest, C) {
+      const inner = makeDynkinInnerProduct(C);
+      const rho = Array(C.length).fill(1);
+      const rootsDynkin = positiveRoots(C).map(root => simpleToDynkin(root, C));
+      return {
+        C,
+        highest: highest.slice(),
+        highestKey: key(highest),
+        highestNorm: inner(highest, highest),
+        highestRhoNorm: inner(add(highest, rho), add(highest, rho)),
+        rho,
+        rootsDynkin,
+        inner
+      };
+    }
+
+    function isReachableFromSliceHighest(ctx, gammaDynRaw) {
+      const gammaDyn = cleanSliceDynkin(gammaDynRaw);
+      if (!isDominantDynkinLoose(gammaDyn)) return false;
+      const diff = dynkinToSimple(sub(ctx.highest, gammaDyn), ctx.C);
+      return isNonnegativeIntVector(diff);
+    }
+
+    function sliceMultiplicityFreudenthal(ctx) {
+      const memo = new Map([[ctx.highestKey, 1]]);
+      const visiting = new Set();
+
+      function multiplicity(gammaDynRaw) {
+        const gammaDyn = cleanSliceDynkin(gammaDynRaw);
+        const k = key(gammaDyn);
+        if (memo.has(k)) return memo.get(k);
+        if (visiting.has(k)) return 0;
+        if (!isReachableFromSliceHighest(ctx, gammaDyn)) {
+          memo.set(k, 0);
+          if (memo.size > MAX_FREUDENTHAL_WEIGHTS) throw new Error(`Slice Freudenthal recursion exceeded ${MAX_FREUDENTHAL_WEIGHTS} dominant orbit representatives; choose a smaller dominant weight or a smaller slice.`);
+          return 0;
+        }
+
+        const gammaNorm = ctx.inner(gammaDyn, gammaDyn);
+        if (gammaNorm > ctx.highestNorm + SLICE_FREUDENTHAL_EPS) {
+          memo.set(k, 0);
+          if (memo.size > MAX_FREUDENTHAL_WEIGHTS) throw new Error(`Slice Freudenthal recursion exceeded ${MAX_FREUDENTHAL_WEIGHTS} dominant orbit representatives; choose a smaller dominant weight or a smaller slice.`);
+          return 0;
+        }
+
+        const gammaRho = add(gammaDyn, ctx.rho);
+        const denom = ctx.highestRhoNorm - ctx.inner(gammaRho, gammaRho);
+        if (denom <= SLICE_FREUDENTHAL_EPS) {
+          memo.set(k, 0);
+          if (memo.size > MAX_FREUDENTHAL_WEIGHTS) throw new Error(`Slice Freudenthal recursion exceeded ${MAX_FREUDENTHAL_WEIGHTS} dominant orbit representatives; choose a smaller dominant weight or a smaller slice.`);
+          return 0;
+        }
+
+        visiting.add(k);
+        let sum = 0;
+        for (const alpha of ctx.rootsDynkin) {
+          for (let step = 1; ; step++) {
+            const beta = add(gammaDyn, scale(alpha, step));
+            if (ctx.inner(beta, beta) > ctx.highestNorm + SLICE_FREUDENTHAL_EPS) break;
+            if (step > 10000) throw new Error('Slice Freudenthal recursion did not reach the norm bound; choose a smaller dominant weight or a smaller slice.');
+            const dom = dominantSliceRepresentative(ctx.C, beta);
+            if (!dom) continue;
+            const m = multiplicity(dom);
+            if (!m) continue;
+            sum += ctx.inner(beta, alpha) * m;
+          }
+        }
+        visiting.delete(k);
+
+        const raw = (2 * sum) / denom;
+        const value = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
+        memo.set(k, value);
+        if (memo.size > MAX_FREUDENTHAL_WEIGHTS) throw new Error(`Slice Freudenthal recursion exceeded ${MAX_FREUDENTHAL_WEIGHTS} dominant orbit representatives; choose a smaller dominant weight or a smaller slice.`);
+        return value;
+      }
+
+      multiplicity.memo = memo;
+      return multiplicity;
+    }
+
+    function boundedSliceLatticePoints(highestLabels, basis, C, cap = MAX_SLICE_CHARACTER_CANDIDATES) {
+      if (!basis || basis.length < 2) throw new Error('No integral 2d slice basis is available.');
+      const inner = makeDynkinInnerProduct(C);
+      const b1 = basis[0].labels;
+      const b2 = basis[1].labels;
+      const A = inner(b1, b1);
+      const B = inner(b1, b2);
+      const D = inner(b2, b2);
+      const R2 = Math.max(0, inner(highestLabels, highestLabels));
+      if (!(A > 1e-12) || !(D > 1e-12)) throw new Error('The slice basis is degenerate.');
+      const perpD = D - (B * B) / A;
+      if (!(perpD > 1e-10)) throw new Error('The slice basis vectors are numerically collinear.');
+
+      const eps = 1e-8;
+      const bMax = Math.floor(Math.sqrt((R2 + eps) / perpD));
+      const points = [];
+      const seen = new Set();
+      let rectangularBox = 0;
+      for (let b = -bMax; b <= bMax; b++) {
+        const minForB = perpD * b * b;
+        if (minForB > R2 + eps) continue;
+        const centerA = -B * b / A;
+        const aSpan = Math.sqrt(Math.max(0, (R2 - minForB + eps) / A));
+        const aMin = Math.ceil(centerA - aSpan - eps);
+        const aMax = Math.floor(centerA + aSpan + eps);
+        rectangularBox += Math.max(0, aMax - aMin + 1);
+        for (let a = aMin; a <= aMax; a++) {
+          const labels = b1.map((x, i) => a * x + b * b2[i]);
+          const q = inner(labels, labels);
+          if (q > R2 + 1e-6) continue;
+          const k = key(labels);
+          if (seen.has(k)) continue;
+          seen.add(k);
+          points.push({ a, b, labels, normSquared: q });
+          if (points.length > cap) {
+            throw new Error(`The slice norm bound contains more than ${cap} lattice weights; choose a smaller dominant weight or a smaller slice.`);
+          }
+        }
+      }
+      points.sort((p, q) => (p.b - q.b) || (p.a - q.a));
+      return { points, radius: Math.sqrt(R2), radiusSquared: R2, gram: { A, B, D }, rectangularBox };
+    }
+
+    function computeSliceCharacter(point) {
+      const data = sliceState.lastData;
+      if (!point || !data || !data.latticeInfo || !data.latticeInfo.basis) return null;
+      const type = currentType(), rank = currentRank();
+      const C = cartanMatrix(type, rank);
+      const highest = point.labels.slice();
+      if (!isDominantDynkin(highest)) {
+        return {
+          status: 'dimensions require a dominant highest weight γ (all Dynkin labels ≥ 0)',
+          entries: []
+        };
+      }
+
+      try {
+        const bounded = boundedSliceLatticePoints(highest, data.latticeInfo.basis, C);
+        const ctx = buildSliceFreudenthalContext(highest, C);
+        const multiplicity = sliceMultiplicityFreudenthal(ctx);
+        const entries = [];
+        for (const cand of bounded.points) {
+          const dom = dominantSliceRepresentative(C, cand.labels);
+          if (!dom) continue;
+          const value = multiplicity(dom);
+          if (value > 0) {
+            entries.push({
+              a: cand.a,
+              b: cand.b,
+              labels: cand.labels.slice(),
+              dominantLabels: dom.slice(),
+              value
+            });
+          }
+        }
+        entries.sort((p, q) => (p.b - q.b) || (p.a - q.a));
+        return {
+          status: 'computed',
+          entries
+        };
+      } catch (err) {
+        return {
+          status: err.message,
+          entries: []
+        };
+      }
+    }
+
+    function sliceDimensionModeButtons() {
+      const modes = [
+        ['none', 'none'],
+        ['dots', 'dots'],
+        ['numbers', 'numbers']
+      ];
+      return '<div class="slice-mode-row">' + modes.map(([mode, label]) =>
+        `<button class="slice-mode-btn ${sliceState.characterMode === mode ? 'active' : ''}" data-slice-character-mode="${mode}" type="button">${label}</button>`
+      ).join('') + '</div>';
+    }
+
+    function sliceWeightSummaryRows(point) {
+      const type = currentType(), rank = currentRank();
+      const C = cartanMatrix(type, rank);
+      const labels = point.labels.slice();
+
+      let dim = 'not dominant';
+      if (isDominantDynkin(labels)) {
+        try { dim = weylDimension(labels, C); }
+        catch (_) { dim = 'not computed'; }
+      }
+
+      let orbitSize = 'not computed';
+      try {
+        const dom = dominantSliceRepresentative(C, labels);
+        orbitSize = dom ? weylOrbitSizeDominant(dom, C) : String(weylOrbitSigned(labels, C).length);
+      } catch (_) {
+        try { orbitSize = String(weylOrbitSigned(labels, C).length); }
+        catch (_) { orbitSize = 'not computed'; }
+      }
+
+      return [
+        ['dim V<sup>γ</sup>', dim],
+        ['|W·γ|', orbitSize]
+      ];
+    }
+
+    function renderSliceWeightInfo(point, character = sliceState.activeCharacter) {
       if (!point) return;
       const card = $('slice-weight-info-card');
       const out = $('slice-weight-info-out');
@@ -3203,11 +3448,14 @@
       card.style.display = '';
       setCardCollapsed(card, false, false);
       const rows = [
-        ['v coordinates', `(${point.i}, ${point.j})`],
+        ['lattice coordinates', `(${point.i}, ${point.j})`],
         ['Dynkin labels', `<code>${formatDynkinVector(point.labels)}</code>`],
-        ['weight of V<sup>λ</sup>', point.multL ? `yes, multiplicity ${point.multL}` : 'no'],
-        ['weight of V<sup>μ</sup>', point.multM ? `yes, multiplicity ${point.multM}` : 'no']
+        ...sliceWeightSummaryRows(point),
+        ['dimensions', sliceDimensionModeButtons()]
       ];
+      if (sliceState.characterMode !== 'none' && character && character.status && character.status !== 'computed') {
+        rows.push(['status', character.status]);
+      }
       out.innerHTML = rows.map(([a, b]) =>
         `<div class="slice-info-row"><span class="slice-info-label">${a}</span><span class="slice-info-value">${b}</span></div>`
       ).join('');
@@ -3216,8 +3464,10 @@
     function sliceCanvasEventXY(event) {
       if (!sliceState.sliceCanvas) return null;
       const rect = sliceState.sliceCanvas.getBoundingClientRect();
-      const sx = sliceState.sliceCanvas.width / Math.max(1, rect.width);
-      const sy = sliceState.sliceCanvas.height / Math.max(1, rect.height);
+      const logicalW = sliceState.displayWidth || rect.width || sliceState.sliceCanvas.clientWidth || sliceState.sliceCanvas.width;
+      const logicalH = sliceState.displayHeight || rect.height || sliceState.sliceCanvas.clientHeight || sliceState.sliceCanvas.height;
+      const sx = logicalW / Math.max(1, rect.width);
+      const sy = logicalH / Math.max(1, rect.height);
       return [(event.clientX - rect.left) * sx, (event.clientY - rect.top) * sy];
     }
 
@@ -3247,7 +3497,8 @@
       const best = nearestSliceHitPoint(event);
       if (!best) return;
       sliceState.selectedPoint = { i: best.i, j: best.j };
-      renderSliceWeightInfo(best);
+      sliceState.activeCharacter = sliceState.characterMode === 'none' ? null : computeSliceCharacter(best);
+      renderSliceWeightInfo(best, sliceState.activeCharacter);
       if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
     }
 
@@ -3259,6 +3510,18 @@
       if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
     }
 
+    function handleSliceWeightInfoClick(event) {
+      const btn = event.target.closest('[data-slice-character-mode]');
+      if (!btn) return;
+      const mode = btn.dataset.sliceCharacterMode;
+      sliceState.characterMode = (mode === 'dots' || mode === 'numbers') ? mode : 'none';
+      const point = sliceState.hitPoints.find(p => sliceState.selectedPoint && p.i === sliceState.selectedPoint.i && p.j === sliceState.selectedPoint.j);
+      if (sliceState.characterMode === 'none') sliceState.activeCharacter = null;
+      else if (point) sliceState.activeCharacter = computeSliceCharacter(point);
+      if (point) renderSliceWeightInfo(point, sliceState.activeCharacter);
+      if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
+    }
+
     function hideSlice() {
       const sp = $('slice-panel');
       if (sp) sp.style.display = 'none';
@@ -3267,6 +3530,7 @@
       sliceState.visible = false;
       sliceState.lastData = null;
       sliceState.hitPoints = [];
+      sliceState.activeCharacter = null;
       if (sliceState.sliceCtx && sliceState.sliceCanvas) {
         sliceState.sliceCtx.clearRect(0, 0, sliceState.sliceCanvas.width, sliceState.sliceCanvas.height);
       }
@@ -3284,8 +3548,14 @@
       const canvasStack = $('canvas-stack');
       const targetW = canvasStack ? Math.max(300, canvasStack.clientWidth) : 640;
       const targetH = Math.round(targetW * 0.72);
-      sliceState.sliceCanvas.width = targetW;
-      sliceState.sliceCanvas.height = targetH;
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      sliceState.displayWidth = targetW;
+      sliceState.displayHeight = targetH;
+      sliceState.sliceCanvas.style.width = targetW + 'px';
+      sliceState.sliceCanvas.style.height = targetH + 'px';
+      sliceState.sliceCanvas.width = Math.max(1, Math.round(targetW * dpr));
+      sliceState.sliceCanvas.height = Math.max(1, Math.round(targetH * dpr));
+      if (sliceState.sliceCtx) sliceState.sliceCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
     function openSlice() {
@@ -3328,6 +3598,7 @@
       }
       sliceState.lastData = data;
       sliceState.selectedPoint = null;
+      sliceState.activeCharacter = null;
       showSliceWeightInfoCard(true);
       drawSliceCanvas(data);
     }
@@ -3340,6 +3611,8 @@
       $('open-slice-btn').addEventListener('click', toggleSlice);
       const diagramToggle = $('slice-diagram-toggle');
       if (diagramToggle) diagramToggle.addEventListener('click', toggleSliceDiagrams);
+      const infoOut = $('slice-weight-info-out');
+      if (infoOut) infoOut.addEventListener('click', handleSliceWeightInfoClick);
       sliceState.sliceCanvas.addEventListener('click', handleSliceCanvasClick);
       sliceState.sliceCanvas.addEventListener('pointermove', handleSliceCanvasPointerMove);
       sliceState.sliceCanvas.addEventListener('pointerleave', handleSliceCanvasPointerLeave);
