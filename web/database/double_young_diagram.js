@@ -2477,7 +2477,10 @@
       visible: false,
       sliceCanvas: null,
       sliceCtx: null,
-      lastData: null   // cached slice data for resize
+      lastData: null,  // cached slice data for resize
+      hitPoints: [],
+      selectedPoint: null,
+      showDiagramsInSlice: false
     };
 
     // ── Geometry helpers ──────────────────────────────────
@@ -2575,6 +2578,95 @@
       return { b1: [1, 0], b2: [b2u, b2v] };
     }
 
+    function gcdInt(a, b) {
+      a = Math.abs(Math.trunc(a)); b = Math.abs(Math.trunc(b));
+      while (b) [a, b] = [b, a % b];
+      return a;
+    }
+    function vectorGcd(v) {
+      return v.reduce((g, x) => gcdInt(g, x), 0);
+    }
+    function posMod(a, m) {
+      return ((a % m) + m) % m;
+    }
+    function formatDynkinVector(v) {
+      return '[' + v.join(', ') + ']';
+    }
+    function formatBasisCoords(x, y, d) {
+      const f = (n) => {
+        if (n === 0) return '0';
+        if (d === 1 || n % d === 0) return String(n / d);
+        return `${n}/${d}`;
+      };
+      return `(${f(x)}, ${f(y)})`;
+    }
+    function vectorFromLambdaMuCoords(lambdaLabels, muLabels, x, y, d) {
+      const out = [];
+      for (let i = 0; i < lambdaLabels.length; i++) {
+        const n = x * lambdaLabels[i] + y * muLabels[i];
+        if (n % d !== 0) return null;
+        out.push(n / d);
+      }
+      return out;
+    }
+    function findSaturatedPlaneBasis(lambdaLabels, muLabels, minorGcd, lambdaGcd) {
+      if (!minorGcd || !lambdaGcd) return null;
+      const d = minorGcd;
+      const g = lambdaGcd;
+      if (d % g !== 0) return null;
+      const v1 = lambdaLabels.map(x => x / g);
+      const v2Y = g;
+      let best = null;
+      for (let x = 0; x < d; x++) {
+        const labels = vectorFromLambdaMuCoords(lambdaLabels, muLabels, x, v2Y, d);
+        if (!labels) continue;
+        const norm = labels.reduce((s, a) => s + a*a, 0);
+        const centeredX = x > d / 2 ? x - d : x;
+        const candidate = {
+          coords: [centeredX, v2Y],
+          denom: d,
+          labels,
+          norm
+        };
+        if (!best || candidate.norm < best.norm || (candidate.norm === best.norm && Math.abs(centeredX) < Math.abs(best.coords[0]))) {
+          best = candidate;
+        }
+      }
+      if (!best) return null;
+      return [
+        { coords: [1, 0], denom: g, labels: v1 },
+        best
+      ];
+    }
+    function computeSliceLatticeInfo(lambdaLabels, muLabels) {
+      const lambdaGcd = vectorGcd(lambdaLabels);
+      const muGcd = vectorGcd(muLabels);
+      let minorGcd = 0;
+      for (let i = 0; i < lambdaLabels.length; i++) {
+        for (let j = i + 1; j < lambdaLabels.length; j++) {
+          minorGcd = gcdInt(minorGcd, lambdaLabels[i] * muLabels[j] - lambdaLabels[j] * muLabels[i]);
+        }
+      }
+      const rank2 = minorGcd > 0;
+      const basis = rank2 ? findSaturatedPlaneBasis(lambdaLabels, muLabels, minorGcd, lambdaGcd) : null;
+      return {
+        lambdaGcd,
+        muGcd,
+        minorGcd,
+        index: minorGcd,
+        rank2,
+        saturated: rank2 && minorGcd === 1,
+        basis
+      };
+    }
+    function latticeBasisHTML(info) {
+      if (!info.rank2) return 'not available';
+      if (!info.basis) return `index ${info.index}; basis search skipped`;
+      return info.basis.map((b, i) =>
+        `<div class="slice-basis-line"><span class="slice-basis-name">v<sub>${i + 1}</sub></span><code>${formatDynkinVector(b.labels)}</code></div>`
+      ).join('');
+    }
+
     // ── Card update ───────────────────────────────────────
 
     function updateSliceCard(options = {}) {
@@ -2590,6 +2682,7 @@
       const C = cartanMatrix(type, rank);
       const lambdaLabels = diagramToDynkinLabels(lambda, rank);
       const muLabels = diagramToDynkinLabels(mu, rank);
+      const latticeInfo = computeSliceLatticeInfo(lambdaLabels, muLabels);
 
       const inner = makeDynkinInnerProduct(C);
       const ll = inner(lambdaLabels, lambdaLabels);
@@ -2607,6 +2700,8 @@
 
       // Render info rows
       const rows = [];
+      rows.push(['λ Dynkin', `<code>${formatDynkinVector(lambdaLabels)}</code>`]);
+      rows.push(['μ Dynkin', `<code>${formatDynkinVector(muLabels)}</code>`]);
       rows.push(['‖λ‖', lenL < 1e-7 ? '0 (zero weight)' : lenL.toFixed(5)]);
       rows.push(['‖μ‖', lenM < 1e-7 ? '0 (zero weight)' : lenM.toFixed(5)]);
       rows.push(['⟨λ, μ⟩', lm.toFixed(6)]);
@@ -2616,6 +2711,11 @@
         rows.push(['span', is2D ? '2-dimensional ✓' : 'collinear (1-dimensional)']);
       } else {
         rows.push(['span', 'one or both weights are zero']);
+      }
+
+      if (is2D) {
+        rows.push(['primitive', latticeInfo.saturated ? 'yes' : 'no']);
+        rows.push(['basis', latticeBasisHTML(latticeInfo)]);
       }
 
       $('slice-stats-out').innerHTML = rows.map(([a,b]) =>
@@ -2645,6 +2745,7 @@
       const C = cartanMatrix(type, rank);
       const lambdaLabels = diagramToDynkinLabels(lambda, rank);
       const muLabels = diagramToDynkinLabels(mu, rank);
+      const latticeInfo = computeSliceLatticeInfo(lambdaLabels, muLabels);
 
       const proj = computePlaneProjectors(lambdaLabels, muLabels, type, rank);
       if (!proj || !proj.is2D) return null;
@@ -2697,15 +2798,11 @@
 
       const weights = Array.from(allWeightsMap.values());
 
-      // Compute 2D plane basis
-      const planeWeights2D = weights.map(w => w.uv);
-      const basis = findPlaneBasis(planeWeights2D);
-
       // Label for plane
       const angleDeg = (proj.angle * 180 / Math.PI).toFixed(1);
       const lenRatio = (Math.sqrt(proj.mm) / Math.sqrt(proj.ll)).toFixed(4);
 
-      return { proj, weights, basis, angleDeg, lenRatio, lambdaLabels, muLabels, charLambda, charMu };
+      return { proj, weights, latticeInfo, angleDeg, lenRatio, lambdaLabels, muLabels, charLambda, charMu };
     }
 
     function drawSliceCanvas(data) {
@@ -2719,7 +2816,7 @@
       ctx.fillStyle = '#fbfaf7';
       ctx.fillRect(0, 0, W, H);
 
-      const { proj, weights, angleDeg, lenRatio } = data;
+      const { proj, weights, latticeInfo, angleDeg, lenRatio } = data;
       if (!weights.length) return;
 
       // ── Coordinate system ──────────────────────────────────────────────────
@@ -2825,6 +2922,7 @@
       const vMin = Math.floor(Math.min(0, ...vLM)) - 1;
       const vMax = Math.ceil (Math.max(0, ...vLM)) + 1;
 
+      if (false) {
       ctx.save();
       ctx.strokeStyle = 'rgba(180,170,150,0.3)';
       ctx.lineWidth = 0.8;
@@ -2841,8 +2939,10 @@
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
       }
       ctx.restore();
+      }
 
       // ── Axes (through origin) ──────────────────────────────────────────────
+      if (false) {
       ctx.save();
       ctx.lineWidth = 1.2;
       // λ axis (horizontal)
@@ -2858,8 +2958,10 @@
       ctx.lineTo(...canvasXY_lm_scaled(0, vMax + 0.5));
       ctx.stroke();
       ctx.restore();
+      }
 
       // ── Weight dots ───────────────────────────────────────────────────────
+      if (false) {
       const muUVinLM = [0, 1];
       for (const w of weights) {
         const [cx, cy] = canvasXYscaled(w.uv);
@@ -2895,6 +2997,56 @@
           ctx.fillText(multText, cx + 8, cy + 4);
         }
       }
+      }
+
+      const weightByLabel = new Map();
+      for (const w of weights) {
+        weightByLabel.set(w.wLabels.join(','), w);
+      }
+      sliceState.hitPoints = [];
+      if (latticeInfo && latticeInfo.basis && latticeInfo.basis.length >= 2) {
+        const b1 = latticeInfo.basis[0], b2 = latticeInfo.basis[1];
+        const b1uv = [b1.coords[0] / b1.denom, b1.coords[1] / b1.denom];
+        const b2uv = [b2.coords[0] / b2.denom, b2.coords[1] / b2.denom];
+        const b1px = toPixelOffset(b1uv[0], b1uv[1]);
+        const b2px = toPixelOffset(b2uv[0], b2uv[1]);
+        const minStep = Math.max(6, Math.min(Math.hypot(...b1px), Math.hypot(...b2px)) * globalScale);
+        const radius = Math.min(48, Math.ceil(Math.max(W, H) / minStep) + 3);
+        const verticalRadius = 20;
+        const seenPoints = new Set();
+        for (let i = -radius; i <= radius; i++) {
+          for (let j = -verticalRadius; j <= verticalRadius; j++) {
+            const u = i * b1uv[0] + j * b2uv[0];
+            const v = i * b1uv[1] + j * b2uv[1];
+            const [x, y] = canvasXY_lm_scaled(u, v);
+            if (x < -10 || x > W + 10 || y < -10 || y > H + 10) continue;
+            const labels = b1.labels.map((a, k) => i * a + j * b2.labels[k]);
+            const key = labels.join(',');
+            if (seenPoints.has(key)) continue;
+            seenPoints.add(key);
+            const repWeight = weightByLabel.get(key);
+            sliceState.hitPoints.push({
+              i, j, u, v, x, y, labels,
+              multL: repWeight ? repWeight.multL : 0,
+              multM: repWeight ? repWeight.multM : 0
+            });
+          }
+        }
+        for (const p of sliceState.hitPoints) {
+          const selected = sliceState.selectedPoint &&
+            sliceState.selectedPoint.i === p.i && sliceState.selectedPoint.j === p.j;
+          const isOrigin = p.labels.every(x => x === 0);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, selected ? 5.5 : isOrigin ? 4.5 : 3.2, 0, 2*Math.PI);
+          ctx.fillStyle = selected ? '#5f6f8f' : isOrigin ? '#222' : 'rgba(80,76,68,0.48)';
+          ctx.fill();
+          if (selected) {
+            ctx.strokeStyle = '#222';
+            ctx.lineWidth = 1.1;
+            ctx.stroke();
+          }
+        }
+      }
 
       // ── Arrows for λ and μ ─────────────────────────────────────────────────
       function drawArrow(u_lm, v_lm, color, lbl) {
@@ -2919,11 +3071,41 @@
       drawArrow(1, 0, '#3d6b4f', 'λ');
       drawArrow(0, 1, '#a34020', 'μ');
 
+      function drawBasisArrow(basisVector, color, lbl) {
+        const u = basisVector.coords[0] / basisVector.denom;
+        const v = basisVector.coords[1] / basisVector.denom;
+        const [tx, ty] = canvasXY_lm_scaled(u, v);
+        const dx = tx - ox, dy = ty - oy;
+        const len = Math.hypot(dx, dy);
+        if (len < 6) return;
+        ctx.save();
+        ctx.setLineDash([5, 4]);
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(tx, ty); ctx.stroke();
+        const ux = dx/len, uy = dy/len, as = 8;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(tx - as*(ux - 0.4*uy), ty - as*(uy + 0.4*ux));
+        ctx.lineTo(tx - as*(ux + 0.4*uy), ty - as*(uy - 0.4*ux));
+        ctx.closePath(); ctx.fill();
+        ctx.font = '12px JetBrains Mono, monospace';
+        ctx.fillText(lbl, tx + 7, ty + 12);
+        ctx.restore();
+      }
+      if (latticeInfo && !latticeInfo.saturated && latticeInfo.basis) {
+        drawBasisArrow(latticeInfo.basis[0], '#5f6f8f', 'v1');
+        drawBasisArrow(latticeInfo.basis[1], '#5f6f8f', 'v2');
+      }
+
       // Origin dot (on top)
       ctx.beginPath(); ctx.arc(ox, oy, 4, 0, 2*Math.PI);
       ctx.fillStyle = '#222'; ctx.fill();
 
       // ── Angle arc between λ and μ arrows ──────────────────────────────────
+      if (false) {
       {
         const [lx, ly] = canvasXY_lm_scaled(1, 0);
         const [mx, my] = canvasXY_lm_scaled(0, 1);
@@ -2944,6 +3126,7 @@
           ctx.fillText(`${angleDeg}°`, ox + (arcR + 8)*Math.cos(midA), oy + (arcR + 8)*Math.sin(midA));
         }
       }
+      }
 
       // ── Legend ────────────────────────────────────────────────────────────
       const lCount = weights.filter(w => w.multL > 0).length;
@@ -2952,17 +3135,20 @@
       const algebraLabel = lieAlgebraLabel(currentType(), currentRank());
       const legend = $('slice-legend');
       if (legend) {
+        legend.innerHTML = '';
+        /*
         legend.innerHTML = [
           `<span><span class="slice-legend-dot" style="background:#3d6b4f;"></span> weights of V<sup>λ</sup> (${lCount})</span>`,
           `<span><span class="slice-legend-dot" style="background:#a34020;"></span> weights of V<sup>μ</sup> (${mCount})</span>`,
           `<span><span class="slice-legend-dot" style="background:#8b5e3c;"></span> in both (${bCount})</span>`,
           `<span style="color:var(--muted);">angle(λ,μ) = ${angleDeg}°&nbsp;&nbsp;‖μ‖/‖λ‖ = ${lenRatio}</span>`,
           `<span style="color:var(--muted);">numbers = multiplicity in V<sup>λ</sup> | V<sup>μ</sup></span>`
-        ].join('');
+        ].filter(Boolean).join('');
+        */
       }
       const planeLabel = $('slice-plane-label');
       if (planeLabel) {
-        planeLabel.textContent = `angle(λ,μ) = ${angleDeg}°  ·  ‖μ‖/‖λ‖ = ${lenRatio}  ·  ${algebraLabel}`;
+        planeLabel.textContent = '';
       }
     }
 
@@ -2977,11 +3163,110 @@
       if (btn) btn.textContent = sliceState.visible ? 'hide 2d slice canvas' : 'show 2d slice canvas';
     }
 
+    function setSliceFocusMode(active) {
+      const panel = document.querySelector('.canvas-panel');
+      if (panel) {
+        panel.classList.toggle('slice-focus', !!active);
+        panel.classList.toggle('show-diagrams', !!active && !!sliceState.showDiagramsInSlice);
+      }
+      const btn = $('slice-diagram-toggle');
+      if (btn) {
+        btn.textContent = sliceState.showDiagramsInSlice ? 'hide diagrams' : 'show diagrams';
+        btn.setAttribute('aria-pressed', String(!!sliceState.showDiagramsInSlice));
+      }
+    }
+
+    function showSliceWeightInfoCard(collapsed = true) {
+      const card = $('slice-weight-info-card');
+      if (!card) return;
+      card.style.display = '';
+      setCardCollapsed(card, collapsed, false);
+      const out = $('slice-weight-info-out');
+      if (out && collapsed) out.innerHTML = '<span class="hint">Click a lattice point in the 2d slice canvas.</span>';
+    }
+
+    function hideSliceWeightInfoCard() {
+      const card = $('slice-weight-info-card');
+      if (!card) return;
+      setCardCollapsed(card, true, false);
+      card.style.display = 'none';
+      const out = $('slice-weight-info-out');
+      if (out) out.innerHTML = '<span class="hint">Click a lattice point in the 2d slice canvas.</span>';
+      sliceState.selectedPoint = null;
+    }
+
+    function renderSliceWeightInfo(point) {
+      if (!point) return;
+      const card = $('slice-weight-info-card');
+      const out = $('slice-weight-info-out');
+      if (!card || !out) return;
+      card.style.display = '';
+      setCardCollapsed(card, false, false);
+      const rows = [
+        ['v coordinates', `(${point.i}, ${point.j})`],
+        ['Dynkin labels', `<code>${formatDynkinVector(point.labels)}</code>`],
+        ['weight of V<sup>λ</sup>', point.multL ? `yes, multiplicity ${point.multL}` : 'no'],
+        ['weight of V<sup>μ</sup>', point.multM ? `yes, multiplicity ${point.multM}` : 'no']
+      ];
+      out.innerHTML = rows.map(([a, b]) =>
+        `<div class="slice-info-row"><span class="slice-info-label">${a}</span><span class="slice-info-value">${b}</span></div>`
+      ).join('');
+    }
+
+    function sliceCanvasEventXY(event) {
+      if (!sliceState.sliceCanvas) return null;
+      const rect = sliceState.sliceCanvas.getBoundingClientRect();
+      const sx = sliceState.sliceCanvas.width / Math.max(1, rect.width);
+      const sy = sliceState.sliceCanvas.height / Math.max(1, rect.height);
+      return [(event.clientX - rect.left) * sx, (event.clientY - rect.top) * sy];
+    }
+
+    function nearestSliceHitPoint(event, maxDist = 9) {
+      if (!sliceState.visible || !sliceState.sliceCanvas || !sliceState.hitPoints.length) return null;
+      const xy = sliceCanvasEventXY(event);
+      if (!xy) return null;
+      const [x, y] = xy;
+      let best = null, bestD2 = Infinity;
+      for (const p of sliceState.hitPoints) {
+        const d2 = (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y);
+        if (d2 < bestD2) { best = p; bestD2 = d2; }
+      }
+      return best && bestD2 <= maxDist * maxDist ? best : null;
+    }
+
+    function handleSliceCanvasPointerMove(event) {
+      if (!sliceState.sliceCanvas) return;
+      sliceState.sliceCanvas.style.cursor = nearestSliceHitPoint(event) ? 'pointer' : 'default';
+    }
+
+    function handleSliceCanvasPointerLeave() {
+      if (sliceState.sliceCanvas) sliceState.sliceCanvas.style.cursor = 'default';
+    }
+
+    function handleSliceCanvasClick(event) {
+      const best = nearestSliceHitPoint(event);
+      if (!best) return;
+      sliceState.selectedPoint = { i: best.i, j: best.j };
+      renderSliceWeightInfo(best);
+      if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
+    }
+
+    function toggleSliceDiagrams() {
+      if (!sliceState.visible) return;
+      sliceState.showDiagramsInSlice = !sliceState.showDiagramsInSlice;
+      setSliceFocusMode(true);
+      sizeSliceCanvasToStack();
+      if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
+    }
+
     function hideSlice() {
       const sp = $('slice-panel');
       if (sp) sp.style.display = 'none';
+      sliceState.showDiagramsInSlice = false;
+      setSliceFocusMode(false);
       sliceState.visible = false;
       sliceState.lastData = null;
+      sliceState.hitPoints = [];
       if (sliceState.sliceCtx && sliceState.sliceCanvas) {
         sliceState.sliceCtx.clearRect(0, 0, sliceState.sliceCanvas.width, sliceState.sliceCanvas.height);
       }
@@ -2989,6 +3274,8 @@
       if (legend) legend.innerHTML = '';
       const planeLabel = $('slice-plane-label');
       if (planeLabel) planeLabel.textContent = '';
+      handleSliceCanvasPointerLeave();
+      hideSliceWeightInfoCard();
       updateSliceButtonLabel();
     }
 
@@ -3012,8 +3299,11 @@
       sliceState.lastData = data;
       const sp = $('slice-panel');
       sp.style.display = '';
+      sliceState.showDiagramsInSlice = false;
+      setSliceFocusMode(true);
       sliceState.visible = true;
       updateSliceButtonLabel();
+      showSliceWeightInfoCard(true);
 
       // Size canvas to match Young diagrams panel width
       sizeSliceCanvasToStack();
@@ -3037,6 +3327,8 @@
         return;
       }
       sliceState.lastData = data;
+      sliceState.selectedPoint = null;
+      showSliceWeightInfoCard(true);
       drawSliceCanvas(data);
     }
 
@@ -3046,6 +3338,11 @@
       updateSliceButtonLabel();
 
       $('open-slice-btn').addEventListener('click', toggleSlice);
+      const diagramToggle = $('slice-diagram-toggle');
+      if (diagramToggle) diagramToggle.addEventListener('click', toggleSliceDiagrams);
+      sliceState.sliceCanvas.addEventListener('click', handleSliceCanvasClick);
+      sliceState.sliceCanvas.addEventListener('pointermove', handleSliceCanvasPointerMove);
+      sliceState.sliceCanvas.addEventListener('pointerleave', handleSliceCanvasPointerLeave);
 
       // Resize slice canvas on window resize without recomputing slice data.
       window.addEventListener('resize', () => {

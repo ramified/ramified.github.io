@@ -25,6 +25,30 @@
       align-items: start;
       min-width: 0;
     }
+    .canvas-panel.slice-focus:not(.show-diagrams) .double-canvas-grid {
+      display: none;
+    }
+    .slice-diagram-toggle {
+      display: none;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      border-radius: 3px;
+      padding: 2px 7px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.2;
+      cursor: pointer;
+    }
+    .canvas-panel.slice-focus .slice-diagram-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .slice-diagram-toggle:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
     .diagram-slot { min-width: 0; }
     .diagram-label {
       font-family: 'JetBrains Mono', monospace;
@@ -258,12 +282,12 @@
     }
     /* info box beneath slice-related card */
     .slice-info-row {
-      display: flex;
-      align-items: baseline;
-      gap: 6px;
+      display: grid;
+      grid-template-columns: minmax(92px, max-content) minmax(0, 1fr);
+      align-items: start;
+      column-gap: 10px;
       font-size: 0.82rem;
       line-height: 1.6;
-      flex-wrap: wrap;
     }
     .slice-info-label {
       font-family: 'JetBrains Mono', monospace;
@@ -274,6 +298,25 @@
     .slice-info-value {
       font-family: 'EB Garamond', serif;
       font-size: 0.88rem;
+      min-width: 0;
+    }
+    .slice-info-value code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      color: var(--text);
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .slice-basis-line {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      column-gap: 6px;
+      align-items: baseline;
+    }
+    .slice-basis-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      color: var(--muted);
     }
     #open-slice-btn {
       margin-top: 10px;
@@ -313,6 +356,7 @@
       <section class="canvas-panel" aria-labelledby="double-title">
         <header class="panel-title">
           <span id="double-title" class="panel-title-text">Young diagrams</span>
+          <button id="slice-diagram-toggle" class="slice-diagram-toggle" type="button" title="show or hide diagram canvases">show diagrams</button>
           <div class="canvas-toolbar" aria-label="Lie algebra and shared grid controls">
             <span class="lie-inline-controls">
               <label class="stat-label" for="lie-type" style="white-space:nowrap;flex-shrink:0;">Type:</label>
@@ -498,6 +542,13 @@
           </div>
           <button id="open-slice-btn" class="btn" style="margin-top:10px;" disabled>show 2d slice canvas</button>
           <p class="hint" id="slice-card-hint" style="margin-top:8px;">λ and μ must generate a 2-dimensional subspace of the weight lattice (i.e. they must be linearly independent) to enable the slice canvas.</p>
+        </div>
+      </section>
+
+      <section class="card collapsed" id="slice-weight-info-card" draggable="true" style="display:none;">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">weight info in 2d slice</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body">
+          <div id="slice-weight-info-out"><span class="hint">Click a lattice point in the 2d slice canvas.</span></div>
         </div>
       </section>
 

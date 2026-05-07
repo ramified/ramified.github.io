@@ -246,9 +246,6 @@ function refreshCardCalculation(card) {
   if (card.querySelector('#out-size')) {
     calc();
   }
-  if (card.querySelector('#br-output')) {
-    computeBranching();
-  }
   if (card.querySelector('#lie-weight')) {
     onTypeChange();
   }
@@ -259,6 +256,7 @@ function refreshOpenCalculations() {
 }
 
 function diagramChanged() {
+  markBranchingStale();
   redraw();
   refreshOpenCalculations();
 }
@@ -763,6 +761,30 @@ function miniDiagramDecomp(mu, hue = 200) {
   svg += '</svg>';
   return svg;
 }
+const BRANCHING_BOX_LIMIT = 24;
+const BRANCHING_PAIR_LIMIT = 3500;
+let _lastBranching = null;
+
+function branchingRuleLabel(rule) {
+  return rule === 'gl-sp' ? 'GL(2n) -> Sp(2n)' : 'GL(n) -> O(n)';
+}
+
+function rejectBranching(message) {
+  _lastBranching = null;
+  const out = document.getElementById('br-output');
+  const warn = document.getElementById('br-warning');
+  if (warn) warn.textContent = message;
+  if (out) out.innerHTML = '<span class="hint" style="display:block;padding:8px;">No branching decomposition computed.</span>';
+}
+
+function markBranchingStale() {
+  _lastBranching = null;
+  const out = document.getElementById('br-output');
+  const warn = document.getElementById('br-warning');
+  if (warn) warn.textContent = '';
+  if (out) out.innerHTML = '<span class="hint">Click compute to update the branching decomposition.</span>';
+}
+
 // --- Main branching computation ---
 function computeBranching() {
   if (!isCardExpandedById('br-output')) return;
@@ -770,6 +792,7 @@ function computeBranching() {
   const rule = document.getElementById('br-rule').value;
   const out  = document.getElementById('br-output');
   const warn = document.getElementById('br-warning');
+  _lastBranching = null;
   out.innerHTML = '';
   warn.textContent = '';
   if (!lam.length) {
@@ -777,12 +800,17 @@ function computeBranching() {
     return;
   }
   const szLam = lam.reduce((a,b)=>a+b,0);
+  if (szLam > BRANCHING_BOX_LIMIT) {
+    rejectBranching(`Too large for browser branching computation: |lambda| = ${szLam}. Please use at most ${BRANCHING_BOX_LIMIT} boxes.`);
+    return;
+  }
   // For GL(2n)→Sp(2n): sum over δ with even parts, use ν = δ' (conjugate of δ)
   // For GL(n)→O(n):   sum over δ with even parts, use ν = δ directly
   // multiplicity of μ = Σ_δ c^λ_{ν μ}  where ν as above, |ν|+|μ|=|λ|
   // We'll accumulate multiplicities indexed by μ
   const multMap = new Map(); // key = JSON.stringify(mu), value = {mu, mult}
   // The max size of δ is |λ|, max single part is |λ|
+  let candidatePairs = 0;
   for (let szDelta = 0; szDelta <= szLam; szDelta += 2) {
     // All even-part partitions of szDelta
     const deltas = partitionsEvenParts(szDelta, szLam);
@@ -793,6 +821,11 @@ function computeBranching() {
       // All partitions μ of szMu (any number of rows, parts ≤ λ[0])
       const mus = partitionsOfSize(szMu, lam.length + delta.length + 2, lam[0] + (delta[0]||0));
       for (const mu of mus) {
+        candidatePairs++;
+        if (candidatePairs > BRANCHING_PAIR_LIMIT) {
+          rejectBranching(`Too many branching candidates (${candidatePairs}+). Try a smaller diagram; the current browser cap is ${BRANCHING_PAIR_LIMIT}.`);
+          return;
+        }
         const c = lrCoeff(lam, mu, nu);
         if (c === 0) continue;
         const key = JSON.stringify(mu);
@@ -803,6 +836,14 @@ function computeBranching() {
   }
   if (multMap.size === 0) {
     out.innerHTML = '<span class="hint">No constituents found (empty decomposition).</span>';
+    _lastBranching = {
+      rule,
+      ruleLabel: branchingRuleLabel(rule),
+      lambdaRows: lam.slice(),
+      entries: [],
+      warning: warn.textContent || '',
+      candidatePairs,
+    };
     return;
   }
   // Sort by partition (lex on row lengths descending)
@@ -819,6 +860,14 @@ function computeBranching() {
   if (lam.length > Math.floor(glRank / 2)) {
     warn.textContent = '⚠ Outside stable range — result may be incomplete (modification rules needed).';
   }
+  _lastBranching = {
+    rule,
+    ruleLabel: branchingRuleLabel(rule),
+    lambdaRows: lam.slice(),
+    entries: entries.map(e => ({mu: e.mu.slice(), mult: e.mult})),
+    warning: warn.textContent || '',
+    candidatePairs,
+  };
   // Render formula line + small diagrams
   const subLabel = rule === 'gl-sp' ? 'Sp' : 'O';
   const hue = rule === 'gl-sp' ? 200 : 30;
@@ -854,6 +903,41 @@ function computeBranching() {
 // ─────────────────────────────────────────────
 //  Drag-and-drop card reordering
 // ─────────────────────────────────────────────
+function exportBranching() {
+  const result = _lastBranching;
+  if (!result) {
+    const warn = document.getElementById('br-warning');
+    if (warn) warn.textContent = 'Click compute before exporting the branching decomposition.';
+    return;
+  }
+  const exportOut = document.getElementById('export-out');
+  if (!exportOut) return;
+  const lambdaRows = result.lambdaRows.length ? '(' + result.lambdaRows.join(', ') + ')' : '( )';
+  const subLabel = result.rule === 'gl-sp' ? 'Sp' : 'O';
+  let txt = `# Branching rule decomposition\n`;
+  txt += `# rule: ${result.ruleLabel}\n`;
+  txt += `# lambda rows: ${lambdaRows}\n`;
+  txt += `# candidates checked: ${result.candidatePairs}\n`;
+  if (result.warning) txt += `# warning: ${result.warning}\n`;
+  txt += `# formula: V^${lambdaRows}_GL = `;
+  txt += result.entries.length
+    ? result.entries.map(({mu, mult}) => {
+        const muRows = mu.length ? '(' + mu.join(', ') + ')' : '( )';
+        return `${mult > 1 ? mult + '*' : ''}V^${muRows}_${subLabel}`;
+      }).join(' + ')
+    : '0';
+  txt += `\n# columns: multiplicity, mu_rows\n`;
+  for (const e of result.entries) {
+    const rows = e.mu.length ? '(' + e.mu.join(', ') + ')' : '( )';
+    txt += `${e.mult}\t${rows}\n`;
+  }
+  exportOut.value = txt.trimEnd();
+  document.querySelectorAll('.card').forEach(c => {
+    if (c.querySelector('#export-out') && c.classList.contains('collapsed'))
+      c.classList.remove('collapsed');
+  });
+}
+
 (function () {
   let dragSrc = null;
   let dragHandle = null;

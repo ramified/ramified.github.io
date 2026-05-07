@@ -422,11 +422,39 @@
     box-sizing: border-box;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
+    scrollbar-color: color-mix(in srgb, var(--accent) 68%, var(--surface)) var(--surface);
+    scrollbar-width: thin;
     min-width: 0;
+  }
+  .decomp-scroll::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .decomp-scroll::-webkit-scrollbar-track {
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+  }
+  .decomp-scroll::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--accent) 68%, var(--surface));
+    border: 2px solid var(--surface);
+    border-radius: 999px;
+  }
+  .decomp-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--accent);
   }
   .decomp-scroll > .hint {
     display: block;
     padding: 2px 0 4px;
+  }
+  .branching-scroll {
+    overflow-x: auto;
+    padding-right: 10px;
+  }
+  .branching-rule-row {
+    margin-bottom: 12px;
+  }
+  .branching-action-row {
+    margin-bottom: 10px;
   }
   .decomp-row {
     display: flex;

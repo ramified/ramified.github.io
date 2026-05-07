@@ -142,18 +142,22 @@
         <div class="card collapsed">
           <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Branching Rules</span><em class="toggle-icon">&#9662;</em></div>
           <div class="card-body">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+            <div class="branching-rule-row" style="display:flex;align-items:center;gap:8px;">
               <label class="stat-label" style="white-space:nowrap;flex-shrink:0;">Rule:</label>
-              <select id="br-rule" onchange="computeBranching()" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'EB Garamond',serif;font-size:0.9rem;color:var(--text);">
+              <select id="br-rule" onchange="markBranchingStale()" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'EB Garamond',serif;font-size:0.9rem;color:var(--text);">
                 <option value="gl-sp">GL(2n) &#8594; Sp(2n)  (Littlewood)</option>
                 <option value="gl-o">GL(n) &#8594; O(n)  (Littlewood)</option>
               </select>
+            </div>
+            <div class="action-row branching-action-row">
+              <button class="btn" onclick="computeBranching()">compute</button>
+              <button class="btn" onclick="exportBranching()" style="background:transparent;color:var(--accent);border-color:var(--accent);">export</button>
             </div>
             <div class="hint" style="margin:4px 0 8px;">
               Decomposes V<sup>&#955;</sup><sub>GL</sub> restricted to the subgroup. Stable when &#8467;(&#955;) &#8804; n.
             </div>
             <div id="br-warning" class="err" style="margin-bottom:6px;"></div>
-            <div id="br-output" style="display:flex;flex-direction:column;gap:10px;"></div>
+            <div id="br-output" class="decomp-scroll branching-scroll"><span class="hint">Draw a Young diagram, then compute.</span></div>
           </div>
         </div>
 
