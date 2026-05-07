@@ -363,7 +363,6 @@ function calc() {
   document.getElementById('out-size').textContent  = n;
   document.getElementById('out-shape').textContent = shapeStr;
   document.getElementById('out-conj').textContent  = conjStr;
-  document.getElementById('out-fac').textContent   = n <= 20 ? bigStr(facN) : bigStr(facN).slice(0,30)+'…';
   document.getElementById('out-hprod').textContent = bigStr(hp);
   document.getElementById('out-nstand').textContent = n===0 ? '1' : bigStr(bigDiv(facN, hp));
   document.getElementById('out-sstand').textContent = n===0 ? '1' : bigStr(bigDiv(ssnum, hp));
@@ -409,17 +408,29 @@ function clearAll() {
   diagramChanged();
 }
 
-function setPartition() {
-  const raw = document.getElementById('partition-input').value.trim();
-  const parts = raw.split(/[\s,]+/).map(Number).filter(x => !isNaN(x) && x > 0);
-  if (!parts.length) { showErr('Enter at least one positive integer.'); return; }
+function parseIntegerList(raw, label, allowZero = false) {
+  const tokens = String(raw || '').split(/[\s,;]+/).filter(Boolean);
+  if (!tokens.length) throw new Error(`Enter at least one ${allowZero ? 'nonnegative' : 'positive'} integer.`);
+  const values = tokens.map(t => Number(t));
+  if (values.some(x => !Number.isInteger(x) || x < (allowZero ? 0 : 1))) {
+    throw new Error(`${label} must be ${allowZero ? 'nonnegative' : 'positive'} integers.`);
+  }
+  return values;
+}
 
-  // validate: non-increasing
+function drawPartitionRows(parts) {
+  if (!parts.length) {
+    clearErr();
+    clearAllSilent();
+    diagramChanged();
+    return;
+  }
+
   for (let i = 1; i < parts.length; i++) {
-    if (parts[i] > parts[i-1]) { showErr('Rows must be non-increasing.'); return; }
+    if (parts[i] > parts[i - 1]) throw new Error('Rows must be non-increasing.');
   }
   if (Math.max(...parts) > gridCols || parts.length > gridRows) {
-    showErr(`Max ${gridCols} columns and ${gridRows} rows for the current canvas.`); return;
+    throw new Error(`Max ${gridCols} columns and ${gridRows} rows for the current canvas.`);
   }
 
   clearErr();
@@ -428,6 +439,41 @@ function setPartition() {
     for (let c = 0; c < parts[r]; c++)
       blocks[r][c] = 1;
   diagramChanged();
+}
+
+function setPartition() {
+  try {
+    const raw = document.getElementById('partition-input').value.trim();
+    const parts = parseIntegerList(raw, 'Partition rows');
+    drawPartitionRows(parts);
+    const dynkinInput = document.getElementById('dynkin-input');
+    if (dynkinInput) dynkinInput.value = parts.map((x, i) => x - (parts[i + 1] || 0)).join(',');
+  } catch (err) {
+    showErr(err.message);
+  }
+}
+
+function rowsFromDynkinLabels(labels) {
+  const rows = Array(labels.length).fill(0);
+  let running = 0;
+  for (let i = labels.length - 1; i >= 0; i--) {
+    running += labels[i];
+    rows[i] = running;
+  }
+  return rows.filter(x => x > 0);
+}
+
+function setDynkinLabels() {
+  try {
+    const raw = document.getElementById('dynkin-input').value.trim();
+    const labels = parseIntegerList(raw, 'Dynkin labels', true);
+    const rows = rowsFromDynkinLabels(labels);
+    const partitionInput = document.getElementById('partition-input');
+    if (partitionInput) partitionInput.value = rows.join(',');
+    drawPartitionRows(rows);
+  } catch (err) {
+    showErr(err.message);
+  }
 }
 
 function clearAllSilent() {

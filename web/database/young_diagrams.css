@@ -313,7 +313,24 @@
   }
   .opt-row input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
 
-  /* extra: partition input */
+  /* extra: shape input */
+  .input-method {
+    margin-top: 8px;
+  }
+  .input-method + .input-method {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .input-label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.78rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
   .input-row {
     display: flex;
     gap: 8px;

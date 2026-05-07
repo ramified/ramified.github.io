@@ -59,10 +59,6 @@
               <span class="stat-value" id="out-conj">( )</span>
             </div>
             <div class="stat-row">
-              <span class="stat-label">|λ|!</span>
-              <span class="stat-value" id="out-fac">1</span>
-            </div>
-            <div class="stat-row">
               <span class="stat-label">∏ hook lengths</span>
               <span class="stat-value" id="out-hprod">1</span>
             </div>
@@ -184,15 +180,26 @@
           </div>
         </div>
 
-        <!-- Set Partition -->
+        <!-- Input -->
         <div class="card collapsed">
-          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Set Partition</span><em class="toggle-icon">▾</em></div>
+          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">▾</em></div>
           <div class="card-body">
-            <div class="input-row">
-              <input type="text" id="partition-input" placeholder="e.g. 4,3,1" oninput="clearErr()">
-              <button class="btn" onclick="setPartition()">Draw</button>
+            <div class="input-method">
+              <label class="input-label" for="partition-input">Partition rows</label>
+              <div class="input-row">
+                <input type="text" id="partition-input" placeholder="e.g. 4,3,1" oninput="clearErr()">
+                <button class="btn" onclick="setPartition()">Draw</button>
+              </div>
+              <div class="hint">Enter row lengths separated by commas, non-increasing.</div>
             </div>
-            <div class="hint">Enter row lengths separated by commas, non-increasing.</div>
+            <div class="input-method">
+              <label class="input-label" for="dynkin-input">Dynkin labels</label>
+              <div class="input-row">
+                <input type="text" id="dynkin-input" placeholder="e.g. 1,0,2,0" oninput="clearErr()">
+                <button class="btn" onclick="setDynkinLabels()">Draw</button>
+              </div>
+              <div class="hint">Uses [a<sub>1</sub>&minus;a<sub>2</sub>, ..., a<sub>n&minus;1</sub>&minus;a<sub>n</sub>, a<sub>n</sub>].</div>
+            </div>
             <div class="err" id="part-err"></div>
           </div>
         </div>
