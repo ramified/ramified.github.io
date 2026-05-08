@@ -2501,7 +2501,13 @@
       selectedPoint: null,
       showDiagramsInSlice: false,
       characterMode: 'none',
-      activeCharacter: null
+      activeCharacter: null,
+      layerModes: {
+        fundamental: 'none',
+        simpleRoots: 'none',
+        roots: 'none',
+        positiveRoots: 'none'
+      }
     };
 
     // ── Geometry helpers ──────────────────────────────────
@@ -2697,6 +2703,38 @@
         `<div class="slice-basis-line"><span class="slice-basis-name">v<sub>${i + 1}</sub></span><code>${formatDynkinVector(b.labels)}</code></div>`
       ).join('');
     }
+    function sliceLayerModeButtons(layer) {
+      const modes = [
+        ['none', 'off'],
+        ['normal', 'slice'],
+        ['projection', 'proj']
+      ];
+      const active = sliceState.layerModes[layer] || 'none';
+      return '<div class="slice-mode-row">' + modes.map(([mode, label]) =>
+        `<button class="slice-mode-btn ${active === mode ? 'active' : ''}" data-slice-layer="${layer}" data-slice-layer-mode="${mode}" type="button">${label}</button>`
+      ).join('') + '</div>';
+    }
+    function renderSliceLayerCard() {
+      const out = $('slice-layer-controls');
+      if (!out) return;
+      let rootCountText = 'not available';
+      try {
+        const type = currentType(), rank = currentRank();
+        const C = cartanMatrix(type, rank);
+        const positiveCount = positiveRoots(C).length;
+        rootCountText = `${2 * positiveCount} total (${positiveCount} positive)`;
+      } catch (_) {}
+      const rows = [
+        ['root count', rootCountText],
+        ['fundamental weights', sliceLayerModeButtons('fundamental')],
+        ['simple roots', sliceLayerModeButtons('simpleRoots')],
+        ['roots', sliceLayerModeButtons('roots')],
+        ['positive roots', sliceLayerModeButtons('positiveRoots')]
+      ];
+      out.innerHTML = rows.map(([a, b]) =>
+        `<div class="slice-info-row"><span class="slice-info-label">${a}</span><span class="slice-info-value">${b}</span></div>`
+      ).join('');
+    }
     function solveIntegralSliceBasisCoords(labels, basis) {
       if (!basis || basis.length < 2) return null;
       const b1 = basis[0].labels, b2 = basis[1].labels;
@@ -2774,6 +2812,7 @@
       if (is2D) {
         btn.disabled = false;
         updateSliceButtonLabel();
+        if (sliceState.visible) renderSliceLayerCard();
         $('slice-card-hint').textContent = sliceState.visible
           ? 'The 2d slice canvas is shown. Click the button again to hide it.'
           : 'λ and μ span a 2-dimensional subspace. Click the button to draw the weight slice.';
@@ -2826,6 +2865,83 @@
 
       const { proj, weights, latticeInfo, angleDeg, lenRatio } = data;
       if (!weights.length) return;
+
+      const type = currentType(), rank = currentRank();
+      const C = cartanMatrix(type, rank);
+      const inner = makeDynkinInnerProduct(C);
+
+      function vectorSliceGS(labels, requireInPlane) {
+        const u = inner(labels, proj.e1) / (proj.e1norm2 || 1);
+        const v = proj.e2norm2 > 1e-12 ? inner(labels, proj.e2) / proj.e2norm2 : 0;
+        if (requireInPlane) {
+          const residual = labels.map((x, i) => x - u * proj.e1[i] - v * proj.e2[i]);
+          const err2 = inner(residual, residual);
+          const norm2 = Math.max(1e-12, Math.abs(inner(labels, labels)));
+          if (err2 > 1e-7 * norm2) return null;
+        }
+        return [u, v];
+      }
+
+      function buildSliceLayerPoints() {
+        const points = [];
+        const byKey = new Map();
+        const snapCoord = (x) => Math.round(x * 1e5);
+        const addPoint = (kind, mode, labels, label, index = 0) => {
+          if (mode === 'none') return;
+          const uv = vectorSliceGS(labels, mode === 'normal');
+          if (!uv) return;
+          const latticeCoords = mode === 'normal' ? solveIntegralSliceBasisCoords(labels, latticeInfo.basis) : null;
+          const coordKey = latticeCoords
+            ? `lattice:${latticeCoords[0]},${latticeCoords[1]}`
+            : `proj:${snapCoord(uv[0])},${snapCoord(uv[1])}`;
+          const k = `${kind}|${mode}|${coordKey}`;
+          const existing = byKey.get(k);
+          if (existing) {
+            existing.multiplicity = (existing.multiplicity || 1) + 1;
+            if (label && existing.label && !existing.label.split(',').includes(label)) existing.label += ',' + label;
+            return;
+          }
+          const point = { kind, mode, labels, label, index, uv, multiplicity: 1 };
+          byKey.set(k, point);
+          points.push(point);
+        };
+
+        const fundamentalMode = sliceState.layerModes.fundamental || 'none';
+        if (fundamentalMode !== 'none') {
+          for (let i = 0; i < rank; i++) {
+            const labels = Array(rank).fill(0);
+            labels[i] = 1;
+            addPoint('fundamental', fundamentalMode, labels, `ω${i + 1}`, i);
+          }
+        }
+
+        const simpleMode = sliceState.layerModes.simpleRoots || 'none';
+        if (simpleMode !== 'none') {
+          for (let i = 0; i < rank; i++) {
+            const simple = Array(rank).fill(0);
+            simple[i] = 1;
+            addPoint('simpleRoots', simpleMode, simpleToDynkin(simple, C), '\u03b1' + (i + 1), i);
+          }
+        }
+
+        const positiveMode = sliceState.layerModes.positiveRoots || 'none';
+        const allRootsMode = sliceState.layerModes.roots || 'none';
+        if (positiveMode !== 'none' || allRootsMode !== 'none') {
+          const positive = positiveRoots(C).map(root => simpleToDynkin(root, C));
+          if (allRootsMode !== 'none') {
+            for (const labels of positive) {
+              addPoint('roots', allRootsMode, labels, '', 0);
+              addPoint('roots', allRootsMode, scale(labels, -1), '', 0);
+            }
+          }
+          if (positiveMode !== 'none') {
+            for (const labels of positive) addPoint('positiveRoots', positiveMode, labels, '', 0);
+          }
+        }
+        return points;
+      }
+
+      const sliceLayerPoints = buildSliceLayerPoints();
 
       // ── Coordinate system ──────────────────────────────────────────────────
       //
@@ -2899,6 +3015,12 @@
       let minPX = 0, maxPX = 0, minPY = 0, maxPY = 0;
       for (const w of weights) {
         const [u, v] = gsToLM(w.uv);
+        const [dx, dy] = toPixelOffset(u, v);
+        minPX = Math.min(minPX, dx); maxPX = Math.max(maxPX, dx);
+        minPY = Math.min(minPY, dy); maxPY = Math.max(maxPY, dy);
+      }
+      for (const p of sliceLayerPoints) {
+        const [u, v] = gsToLM(p.uv);
         const [dx, dy] = toPixelOffset(u, v);
         minPX = Math.min(minPX, dx); maxPX = Math.max(maxPX, dx);
         minPY = Math.min(minPY, dy); maxPY = Math.max(maxPY, dy);
@@ -3017,6 +3139,124 @@
           }
         }
       }
+
+      function drawSliceLayerPoints() {
+        if (!sliceLayerPoints.length) return;
+        const ordered = sliceLayerPoints.slice().sort((a, b) => {
+          const order = { roots: 0, positiveRoots: 1, simpleRoots: 2, fundamental: 3 };
+          return (order[a.kind] || 0) - (order[b.kind] || 0);
+        });
+        const styles = {
+          fundamental: { stroke: '#5a58a8', fill: 'rgba(90,88,168,0.78)' },
+          simpleRoots: { stroke: '#8a5a24', fill: 'rgba(190,128,52,0.72)' },
+          roots: { stroke: '#7d5061', fill: 'rgba(125,80,97,0.58)' },
+          positiveRoots: { stroke: '#2f7d70', fill: 'rgba(47,125,112,0.62)' }
+        };
+        const labelBoxes = [];
+        function overlapsLabelBox(box) {
+          return labelBoxes.some(other =>
+            box.x < other.x + other.w &&
+            box.x + box.w > other.x &&
+            box.y < other.y + other.h &&
+            box.y + box.h > other.y
+          );
+        }
+        function drawLayerLabel(text, x, y, color, font = '12px JetBrains Mono, monospace') {
+          if (!text) return;
+          ctx.save();
+          ctx.font = font;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'alphabetic';
+          const w = ctx.measureText(text).width;
+          const h = font.startsWith('10px') ? 12 : 14;
+          const candidates = [
+            [7, -7],
+            [7, 17],
+            [-w - 7, -7],
+            [-w - 7, 17],
+            [-w / 2, -16],
+            [-w / 2, 27],
+            [12, 4],
+            [-w - 12, 4]
+          ];
+          let chosen = candidates[0];
+          for (const cand of candidates) {
+            const box = { x: x + cand[0] - 2, y: y + cand[1] - h + 2, w: w + 4, h };
+            if (!overlapsLabelBox(box)) { chosen = cand; break; }
+          }
+          const box = { x: x + chosen[0] - 2, y: y + chosen[1] - h + 2, w: w + 4, h };
+          labelBoxes.push(box);
+          ctx.fillStyle = 'rgba(251,250,247,0.82)';
+          ctx.fillRect(box.x, box.y, box.w, box.h);
+          ctx.fillStyle = color;
+          ctx.fillText(text, x + chosen[0], y + chosen[1]);
+          ctx.restore();
+        }
+        for (const p of ordered) {
+          const [u, v] = gsToLM(p.uv);
+          const [x, y] = canvasXY_lm_scaled(u, v);
+          if (x < -16 || x > W + 16 || y < -16 || y > H + 16) continue;
+          const style = styles[p.kind] || styles.roots;
+          const projection = p.mode === 'projection';
+          ctx.save();
+          ctx.strokeStyle = style.stroke;
+          ctx.fillStyle = projection ? 'rgba(251,250,247,0.82)' : style.fill;
+          ctx.lineWidth = projection ? 1.4 : 1.1;
+          if (projection && (p.kind === 'fundamental' || p.kind === 'simpleRoots')) {
+            ctx.setLineDash([3, 4]);
+            ctx.globalAlpha = 0.55;
+            ctx.beginPath();
+            ctx.moveTo(ox, oy);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.globalAlpha = 1;
+          }
+          if (p.kind === 'fundamental') {
+            ctx.beginPath();
+            ctx.arc(x, y, 5.2, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+            ctx.font = '12px JetBrains Mono, monospace';
+            ctx.fillStyle = style.stroke;
+            drawLayerLabel('\u03c9' + (p.index + 1), x, y, style.stroke);
+          } else if (p.kind === 'simpleRoots') {
+            const r = 4.8;
+            ctx.beginPath();
+            ctx.rect(x - r, y - r, 2 * r, 2 * r);
+            ctx.fill();
+            ctx.stroke();
+            ctx.font = '12px JetBrains Mono, monospace';
+            ctx.fillStyle = style.stroke;
+            drawLayerLabel(p.label || ('\u03b1' + (p.index + 1)), x, y, style.stroke);
+          } else if (p.kind === 'positiveRoots') {
+            const r = 4.8;
+            ctx.beginPath();
+            ctx.moveTo(x, y - r);
+            ctx.lineTo(x + r * 0.9, y + r * 0.65);
+            ctx.lineTo(x - r * 0.9, y + r * 0.65);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          } else {
+            const r = 4.0;
+            ctx.beginPath();
+            ctx.moveTo(x, y - r);
+            ctx.lineTo(x + r, y);
+            ctx.lineTo(x, y + r);
+            ctx.lineTo(x - r, y);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          }
+          if (p.mode === 'projection' && (p.kind === 'roots' || p.kind === 'positiveRoots') && p.multiplicity > 1) {
+            drawLayerLabel(`×${p.multiplicity}`, x, y, style.stroke, '10px JetBrains Mono, monospace');
+          }
+          ctx.restore();
+        }
+      }
+      drawSliceLayerPoints();
+
       function sliceDimensionDotRadius(value) {
         const dim = Math.abs(value);
         if (dim <= 1) return 2.2;
@@ -3211,6 +3451,22 @@
       if (out) out.innerHTML = '<span class="hint">Click a lattice point in the 2d slice canvas.</span>';
       sliceState.selectedPoint = null;
       sliceState.activeCharacter = null;
+    }
+
+    function showSliceLayerCard(collapsed = false) {
+      const card = $('slice-layer-card');
+      if (!card) return;
+      const wasHidden = card.style.display === 'none';
+      card.style.display = '';
+      if (wasHidden) setCardCollapsed(card, collapsed, false);
+      renderSliceLayerCard();
+    }
+
+    function hideSliceLayerCard() {
+      const card = $('slice-layer-card');
+      if (!card) return;
+      setCardCollapsed(card, true, false);
+      card.style.display = 'none';
     }
 
     function cleanSliceDynkin(labels) {
@@ -3522,6 +3778,17 @@
       if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
     }
 
+    function handleSliceLayerModeClick(event) {
+      const btn = event.target.closest('[data-slice-layer]');
+      if (!btn) return;
+      const layer = btn.dataset.sliceLayer;
+      const mode = btn.dataset.sliceLayerMode;
+      if (!sliceState.layerModes || !(layer in sliceState.layerModes)) return;
+      sliceState.layerModes[layer] = (mode === 'normal' || mode === 'projection') ? mode : 'none';
+      renderSliceLayerCard();
+      if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
+    }
+
     function hideSlice() {
       const sp = $('slice-panel');
       if (sp) sp.style.display = 'none';
@@ -3540,6 +3807,7 @@
       if (planeLabel) planeLabel.textContent = '';
       handleSliceCanvasPointerLeave();
       hideSliceWeightInfoCard();
+      hideSliceLayerCard();
       updateSliceButtonLabel();
     }
 
@@ -3574,6 +3842,7 @@
       sliceState.visible = true;
       updateSliceButtonLabel();
       showSliceWeightInfoCard(true);
+      showSliceLayerCard(false);
 
       // Size canvas to match Young diagrams panel width
       sizeSliceCanvasToStack();
@@ -3600,6 +3869,7 @@
       sliceState.selectedPoint = null;
       sliceState.activeCharacter = null;
       showSliceWeightInfoCard(true);
+      showSliceLayerCard(false);
       drawSliceCanvas(data);
     }
 
@@ -3611,6 +3881,8 @@
       $('open-slice-btn').addEventListener('click', toggleSlice);
       const diagramToggle = $('slice-diagram-toggle');
       if (diagramToggle) diagramToggle.addEventListener('click', toggleSliceDiagrams);
+      const layerCardBody = $('slice-layer-card-body');
+      if (layerCardBody) layerCardBody.addEventListener('click', handleSliceLayerModeClick);
       const infoOut = $('slice-weight-info-out');
       if (infoOut) infoOut.addEventListener('click', handleSliceWeightInfoClick);
       sliceState.sliceCanvas.addEventListener('click', handleSliceCanvasClick);
