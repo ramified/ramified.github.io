@@ -2442,7 +2442,9 @@
       }, { passive:false });
       window.addEventListener('pointerup', () => {
         if (!drag) return;
+        const dropped = drag;
         drag.style.display = ''; side.insertBefore(drag, placeholder); placeholder.remove(); ghost.remove(); drag = ghost = placeholder = null;
+        if (dropped.id === 'slice-card') placeSliceCompanionCards();
       });
     }
     function setupResponsiveDiagramInput() {
@@ -3415,6 +3417,22 @@
       return !!card && !card.classList.contains('collapsed');
     }
 
+    function placeSliceCompanionCards() {
+      const main = $('slice-card') || $('slice-card-body')?.closest('.card');
+      const layer = $('slice-layer-card');
+      const info = $('slice-weight-info-card');
+      const parent = main?.parentElement;
+      if (!main || !parent) return;
+      let next = main.nextSibling;
+      if (layer && layer !== main) {
+        if (layer !== next) parent.insertBefore(layer, next);
+        next = layer.nextSibling;
+      }
+      if (info && info !== main && info !== layer) {
+        if (info !== next) parent.insertBefore(info, next);
+      }
+    }
+
     function updateSliceButtonLabel() {
       const btn = $('open-slice-btn');
       if (btn) btn.textContent = sliceState.visible ? 'hide 2d slice canvas' : 'show 2d slice canvas';
@@ -3436,6 +3454,8 @@
     function showSliceWeightInfoCard(collapsed = true) {
       const card = $('slice-weight-info-card');
       if (!card) return;
+      const wasHidden = card.style.display === 'none';
+      if (wasHidden) placeSliceCompanionCards();
       card.style.display = '';
       setCardCollapsed(card, collapsed, false);
       const out = $('slice-weight-info-out');
@@ -3457,6 +3477,7 @@
       const card = $('slice-layer-card');
       if (!card) return;
       const wasHidden = card.style.display === 'none';
+      if (wasHidden) placeSliceCompanionCards();
       card.style.display = '';
       if (wasHidden) setCardCollapsed(card, collapsed, false);
       renderSliceLayerCard();
