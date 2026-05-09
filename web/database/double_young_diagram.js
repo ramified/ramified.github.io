@@ -4986,6 +4986,10 @@
 
     function refreshSlice() {
       if (!sliceState.visible) return;
+      const infoCard = $('slice-weight-info-card');
+      const layerCard = $('slice-layer-card');
+      const keepInfoCollapsed = infoCard ? infoCard.classList.contains('collapsed') : true;
+      const keepLayerCollapsed = layerCard ? layerCard.classList.contains('collapsed') : false;
       const data = computeSliceData();
       if (!data) {
         hideSlice();
@@ -4996,8 +5000,8 @@
       sliceState.infoPoint = null;
       sliceState.activeCharacter = null;
       resetSliceView();
-      showSliceWeightInfoCard(true);
-      showSliceLayerCard(false);
+      showSliceWeightInfoCard(keepInfoCollapsed);
+      showSliceLayerCard(keepLayerCollapsed);
       drawSliceCanvas(data);
     }
 
