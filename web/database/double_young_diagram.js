@@ -2504,7 +2504,21 @@
       showDiagramsInSlice: false,
       characterMode: 'none',
       activeCharacter: null,
+      view: {
+        zoom: 1,
+        panX: 0,
+        panY: 0,
+        isPanning: false,
+        pointerId: null,
+        startX: 0,
+        startY: 0,
+        startPanX: 0,
+        startPanY: 0,
+        moved: false,
+        suppressClick: false
+      },
       layerModes: {
+        weylChambers: 'none',
         fundamental: 'none',
         simpleRoots: 'none',
         roots: 'none',
@@ -2716,18 +2730,62 @@
         `<button class="slice-mode-btn ${active === mode ? 'active' : ''}" data-slice-layer="${layer}" data-slice-layer-mode="${mode}" type="button">${label}</button>`
       ).join('') + '</div>';
     }
+    function sliceLayerToggleButtons(layer) {
+      const active = sliceState.layerModes[layer] || 'none';
+      const modes = [
+        ['none', 'off'],
+        ['normal', 'on']
+      ];
+      return '<div class="slice-mode-row">' + modes.map(([mode, label]) =>
+        `<button class="slice-mode-btn ${active === mode ? 'active' : ''}" data-slice-layer="${layer}" data-slice-layer-mode="${mode}" type="button">${label}</button>`
+      ).join('') + '</div>';
+    }
+    function computeSliceWeylWalls(data, C) {
+      if (!data || !data.lambdaLabels || !data.muLabels) return [];
+      const walls = [];
+      const byAngle = new Map();
+      const eps = 1e-9;
+      for (const coroot of positiveRoots(transpose(C))) {
+        const a = dot(coroot, data.lambdaLabels);
+        const b = dot(coroot, data.muLabels);
+        if (Math.abs(a) < eps && Math.abs(b) < eps) continue;
+        let angle = Math.atan2(-a, b);
+        while (angle < 0) angle += Math.PI;
+        while (angle >= Math.PI) angle -= Math.PI;
+        const angleKey = String(Math.round(angle * 1e6));
+        const existing = byAngle.get(angleKey);
+        if (existing) {
+          existing.multiplicity += 1;
+          continue;
+        }
+        const wall = { a, b, angle, multiplicity: 1 };
+        byAngle.set(angleKey, wall);
+        walls.push(wall);
+      }
+      walls.sort((p, q) => p.angle - q.angle);
+      return walls;
+    }
+    function sliceWeylChamberNote(C) {
+      if (!sliceState.lastData) return '';
+      const walls = computeSliceWeylWalls(sliceState.lastData, C);
+      const text = `${walls.length ? 2 * walls.length : 1} sectors in the slice`;
+      return `<span class="slice-layer-note">${text}</span>`;
+    }
     function renderSliceLayerCard() {
       const out = $('slice-layer-controls');
       if (!out) return;
       let rootCountText = 'not available';
+      let chamberNote = '';
       try {
         const type = currentType(), rank = currentRank();
         const C = cartanMatrix(type, rank);
         const positiveCount = positiveRoots(C).length;
         rootCountText = `${2 * positiveCount} total (${positiveCount} positive)`;
+        chamberNote = sliceWeylChamberNote(C);
       } catch (_) {}
       const rows = [
         ['root count', rootCountText],
+        ['Weyl chambers', sliceLayerToggleButtons('weylChambers') + chamberNote],
         ['fundamental weights', sliceLayerModeButtons('fundamental')],
         ['simple roots', sliceLayerModeButtons('simpleRoots')],
         ['roots', sliceLayerModeButtons('roots')],
@@ -2944,6 +3002,9 @@
       }
 
       const sliceLayerPoints = buildSliceLayerPoints();
+      const sliceWeylWalls = (sliceState.layerModes.weylChambers || 'none') !== 'none'
+        ? computeSliceWeylWalls(data, C)
+        : [];
 
       // ── Coordinate system ──────────────────────────────────────────────────
       //
@@ -3037,11 +3098,50 @@
       function canvasXYscaled(uv_gs) {
         const [u, v] = gsToLM(uv_gs);
         const [dx, dy] = toPixelOffset(u, v);
-        return [ox + dx * globalScale, oy + dy * globalScale];
+        return applySliceView(ox + dx * globalScale, oy + dy * globalScale);
       }
       function canvasXY_lm_scaled(u, v) {
         const [dx, dy] = toPixelOffset(u, v);
-        return [ox + dx * globalScale, oy + dy * globalScale];
+        return applySliceView(ox + dx * globalScale, oy + dy * globalScale);
+      }
+      function applySliceView(x, y) {
+        const view = sliceState.view || {};
+        const zoom = Number.isFinite(view.zoom) ? view.zoom : 1;
+        const panX = Number.isFinite(view.panX) ? view.panX : 0;
+        const panY = Number.isFinite(view.panY) ? view.panY : 0;
+        return [
+          ox + (x - ox) * zoom + panX,
+          oy + (y - oy) * zoom + panY
+        ];
+      }
+      const [viewOx, viewOy] = canvasXY_lm_scaled(0, 0);
+
+      function drawWeylChambers() {
+        if (!sliceWeylWalls.length) return;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(70,84,116,0.34)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([9, 5]);
+        for (const wall of sliceWeylWalls) {
+          const du = wall.b;
+          const dv = -wall.a;
+          const [pdx, pdy] = toPixelOffset(du, dv);
+          const pixelLen = Math.hypot(pdx * globalScale * (sliceState.view?.zoom || 1), pdy * globalScale * (sliceState.view?.zoom || 1));
+          if (pixelLen < 1e-8) continue;
+          const t = (Math.hypot(W, H) * 0.65 + 24) / pixelLen;
+          const [x1, y1] = canvasXY_lm_scaled(-t * du, -t * dv);
+          const [x2, y2] = canvasXY_lm_scaled( t * du,  t * dv);
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(viewOx, viewOy, 5.5, 0, 2 * Math.PI);
+        ctx.strokeStyle = 'rgba(70,84,116,0.45)';
+        ctx.stroke();
+        ctx.restore();
       }
 
       // ── Grid ──────────────────────────────────────────────────────────────
@@ -3092,6 +3192,8 @@
       ctx.restore();
       }
 
+      drawWeylChambers();
+
       // ── Weight dots ───────────────────────────────────────────────────────
       const overlayEntryByKey = new Map();
       if (sliceState.characterMode !== 'none' && sliceState.activeCharacter && Array.isArray(sliceState.activeCharacter.entries)) {
@@ -3105,7 +3207,8 @@
         b2uv = [b2.coords[0] / b2.denom, b2.coords[1] / b2.denom];
         const b1px = toPixelOffset(b1uv[0], b1uv[1]);
         const b2px = toPixelOffset(b2uv[0], b2uv[1]);
-        const minStep = Math.max(6, Math.min(Math.hypot(...b1px), Math.hypot(...b2px)) * globalScale);
+        const viewZoom = sliceState.view?.zoom || 1;
+        const minStep = Math.max(4, Math.min(Math.hypot(...b1px), Math.hypot(...b2px)) * globalScale * viewZoom);
         const radius = Math.min(48, Math.ceil(Math.max(W, H) / minStep) + 3);
         const verticalRadius = 20;
         const seenPoints = new Set();
@@ -3208,7 +3311,7 @@
             ctx.setLineDash([3, 4]);
             ctx.globalAlpha = 0.55;
             ctx.beginPath();
-            ctx.moveTo(ox, oy);
+            ctx.moveTo(viewOx, viewOy);
             ctx.lineTo(x, y);
             ctx.stroke();
             ctx.setLineDash([]);
@@ -3312,11 +3415,11 @@
       // ── Arrows for λ and μ ─────────────────────────────────────────────────
       function drawArrow(u_lm, v_lm, color, lbl) {
         const [tx, ty] = canvasXY_lm_scaled(u_lm, v_lm);
-        const dx = tx - ox, dy = ty - oy;
+        const dx = tx - viewOx, dy = ty - viewOy;
         const len = Math.hypot(dx, dy);
         ctx.save();
         ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(viewOx, viewOy); ctx.lineTo(tx, ty); ctx.stroke();
         if (len > 6) {
           const ux = dx/len, uy = dy/len, as = 10;
           ctx.beginPath();
@@ -3336,7 +3439,7 @@
         const u = basisVector.coords[0] / basisVector.denom;
         const v = basisVector.coords[1] / basisVector.denom;
         const [tx, ty] = canvasXY_lm_scaled(u, v);
-        const dx = tx - ox, dy = ty - oy;
+        const dx = tx - viewOx, dy = ty - viewOy;
         const len = Math.hypot(dx, dy);
         if (len < 6) return;
         ctx.save();
@@ -3344,7 +3447,7 @@
         ctx.strokeStyle = color;
         ctx.fillStyle = color;
         ctx.lineWidth = 1.4;
-        ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(viewOx, viewOy); ctx.lineTo(tx, ty); ctx.stroke();
         const ux = dx/len, uy = dy/len, as = 8;
         ctx.setLineDash([]);
         ctx.beginPath();
@@ -3363,7 +3466,7 @@
       }
 
       // Origin dot, then dimension overlay so a nonzero origin weight remains readable.
-      ctx.beginPath(); ctx.arc(ox, oy, 4, 0, 2*Math.PI);
+      ctx.beginPath(); ctx.arc(viewOx, viewOy, 4, 0, 2*Math.PI);
       ctx.fillStyle = '#222'; ctx.fill();
       drawSliceDimensionOverlay();
 
@@ -3372,21 +3475,21 @@
       {
         const [lx, ly] = canvasXY_lm_scaled(1, 0);
         const [mx, my] = canvasXY_lm_scaled(0, 1);
-        const angleL = Math.atan2(ly - oy, lx - ox);   // should be 0 (rightward)
-        const angleM = Math.atan2(my - oy, mx - ox);   // should be -theta (upward in canvas)
-        const arcR = Math.min(28, Math.hypot(lx - ox, ly - oy) * 0.35);
+        const angleL = Math.atan2(ly - viewOy, lx - viewOx);   // should be 0 (rightward)
+        const angleM = Math.atan2(my - viewOy, mx - viewOx);   // should be -theta (upward in canvas)
+        const arcR = Math.min(28, Math.hypot(lx - viewOx, ly - viewOy) * 0.35);
         if (arcR > 8) {
           // Draw arc from λ direction to μ direction (counter-clockwise in math = clockwise on canvas)
           ctx.beginPath();
           ctx.strokeStyle = 'rgba(100,80,60,0.55)';
           ctx.lineWidth = 1;
           // go from angleL to angleM in the short direction
-          ctx.arc(ox, oy, arcR, angleL, angleM, sinT > 0);
+          ctx.arc(viewOx, viewOy, arcR, angleL, angleM, sinT > 0);
           ctx.stroke();
           const midA = (angleL + angleM) / 2;
           ctx.font = '11px serif';
           ctx.fillStyle = '#888';
-          ctx.fillText(`${angleDeg}°`, ox + (arcR + 8)*Math.cos(midA), oy + (arcR + 8)*Math.sin(midA));
+          ctx.fillText(`${angleDeg}°`, viewOx + (arcR + 8)*Math.cos(midA), viewOy + (arcR + 8)*Math.sin(midA));
         }
       }
       }
@@ -3738,6 +3841,31 @@
       ).join('');
     }
 
+    function resetSliceView() {
+      const view = sliceState.view;
+      view.zoom = 1;
+      view.panX = 0;
+      view.panY = 0;
+      view.isPanning = false;
+      view.pointerId = null;
+      view.startX = 0;
+      view.startY = 0;
+      view.startPanX = 0;
+      view.startPanY = 0;
+      view.moved = false;
+      view.suppressClick = false;
+    }
+
+    function updateSliceCanvasCursor(event = null) {
+      if (!sliceState.sliceCanvas) return;
+      const view = sliceState.view;
+      if (view.isPanning && view.moved) {
+        sliceState.sliceCanvas.style.cursor = 'grabbing';
+        return;
+      }
+      sliceState.sliceCanvas.style.cursor = event && nearestSliceHitPoint(event) ? 'pointer' : 'default';
+    }
+
     function sliceCanvasEventXY(event) {
       if (!sliceState.sliceCanvas) return null;
       const rect = sliceState.sliceCanvas.getBoundingClientRect();
@@ -3763,14 +3891,88 @@
 
     function handleSliceCanvasPointerMove(event) {
       if (!sliceState.sliceCanvas) return;
-      sliceState.sliceCanvas.style.cursor = nearestSliceHitPoint(event) ? 'pointer' : 'default';
+      const view = sliceState.view;
+      if (view.isPanning && view.pointerId === event.pointerId) {
+        const xy = sliceCanvasEventXY(event);
+        if (!xy) return;
+        const dx = xy[0] - view.startX;
+        const dy = xy[1] - view.startY;
+        if (!view.moved && Math.hypot(dx, dy) > 2) view.moved = true;
+        if (view.moved) {
+          event.preventDefault();
+          view.panX = view.startPanX + dx;
+          view.panY = view.startPanY + dy;
+          updateSliceCanvasCursor(event);
+          if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
+        }
+        return;
+      }
+      updateSliceCanvasCursor(event);
+    }
+
+    function handleSliceCanvasPointerDown(event) {
+      if (!sliceState.visible || event.button !== 0) return;
+      const xy = sliceCanvasEventXY(event);
+      if (!xy) return;
+      const view = sliceState.view;
+      view.isPanning = true;
+      view.pointerId = event.pointerId;
+      view.startX = xy[0];
+      view.startY = xy[1];
+      view.startPanX = view.panX;
+      view.startPanY = view.panY;
+      view.moved = false;
+      sliceState.sliceCanvas.setPointerCapture?.(event.pointerId);
+    }
+
+    function handleSliceCanvasPointerUp(event) {
+      const view = sliceState.view;
+      if (!view.isPanning || view.pointerId !== event.pointerId) return;
+      if (view.moved) view.suppressClick = true;
+      view.isPanning = false;
+      view.pointerId = null;
+      sliceState.sliceCanvas?.releasePointerCapture?.(event.pointerId);
+      updateSliceCanvasCursor(event);
     }
 
     function handleSliceCanvasPointerLeave() {
-      if (sliceState.sliceCanvas) sliceState.sliceCanvas.style.cursor = 'default';
+      if (!sliceState.sliceCanvas || sliceState.view.isPanning) return;
+      sliceState.sliceCanvas.style.cursor = 'default';
+    }
+
+    function handleSliceCanvasWheel(event) {
+      if (!sliceState.visible) return;
+      const xy = sliceCanvasEventXY(event);
+      if (!xy) return;
+      event.preventDefault();
+      const view = sliceState.view;
+      const W = sliceState.displayWidth || sliceState.sliceCanvas.clientWidth || sliceState.sliceCanvas.width;
+      const H = sliceState.displayHeight || sliceState.sliceCanvas.clientHeight || sliceState.sliceCanvas.height;
+      const ox = W / 2, oy = H / 2;
+      const oldZoom = view.zoom || 1;
+      const factor = Math.exp(-event.deltaY * 0.001);
+      const newZoom = Math.max(0.35, Math.min(10, oldZoom * factor));
+      const relX = (xy[0] - ox - view.panX) / oldZoom;
+      const relY = (xy[1] - oy - view.panY) / oldZoom;
+      view.zoom = newZoom;
+      view.panX = xy[0] - ox - relX * newZoom;
+      view.panY = xy[1] - oy - relY * newZoom;
+      if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
+      updateSliceCanvasCursor(event);
+    }
+
+    function handleSliceCanvasDoubleClick(event) {
+      if (!sliceState.visible) return;
+      event.preventDefault();
+      resetSliceView();
+      if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
     }
 
     function handleSliceCanvasClick(event) {
+      if (sliceState.view.suppressClick) {
+        sliceState.view.suppressClick = false;
+        return;
+      }
       const best = nearestSliceHitPoint(event);
       if (!best) return;
       sliceState.selectedPoint = { i: best.i, j: best.j };
@@ -3819,6 +4021,7 @@
       sliceState.lastData = null;
       sliceState.hitPoints = [];
       sliceState.activeCharacter = null;
+      resetSliceView();
       if (sliceState.sliceCtx && sliceState.sliceCanvas) {
         sliceState.sliceCtx.clearRect(0, 0, sliceState.sliceCanvas.width, sliceState.sliceCanvas.height);
       }
@@ -3861,6 +4064,7 @@
       sliceState.showDiagramsInSlice = false;
       setSliceFocusMode(true);
       sliceState.visible = true;
+      resetSliceView();
       updateSliceButtonLabel();
       showSliceWeightInfoCard(true);
       showSliceLayerCard(false);
@@ -3889,6 +4093,7 @@
       sliceState.lastData = data;
       sliceState.selectedPoint = null;
       sliceState.activeCharacter = null;
+      resetSliceView();
       showSliceWeightInfoCard(true);
       showSliceLayerCard(false);
       drawSliceCanvas(data);
@@ -3907,7 +4112,12 @@
       const infoOut = $('slice-weight-info-out');
       if (infoOut) infoOut.addEventListener('click', handleSliceWeightInfoClick);
       sliceState.sliceCanvas.addEventListener('click', handleSliceCanvasClick);
+      sliceState.sliceCanvas.addEventListener('dblclick', handleSliceCanvasDoubleClick);
+      sliceState.sliceCanvas.addEventListener('wheel', handleSliceCanvasWheel, { passive: false });
+      sliceState.sliceCanvas.addEventListener('pointerdown', handleSliceCanvasPointerDown);
       sliceState.sliceCanvas.addEventListener('pointermove', handleSliceCanvasPointerMove);
+      sliceState.sliceCanvas.addEventListener('pointerup', handleSliceCanvasPointerUp);
+      sliceState.sliceCanvas.addEventListener('pointercancel', handleSliceCanvasPointerUp);
       sliceState.sliceCanvas.addEventListener('pointerleave', handleSliceCanvasPointerLeave);
 
       // Resize slice canvas on window resize without recomputing slice data.
