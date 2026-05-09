@@ -15,7 +15,9 @@
     const MAX_FREUDENTHAL_WEIGHTS = 20000;
     const MAX_NORM_BOUND_CANDIDATES = 12000;
     const MAX_SLICE_CHARACTER_CANDIDATES = 5000;
-    const MAX_SLICE_PROJECTION_CANDIDATES = 50000;
+    const MAX_SLICE_PROJECTION_CANDIDATES = 3000000;
+    const SLICE_PROJECTION_BOX_WARNING_CANDIDATES = 600000;
+    const MAX_SLICE_PROJECTION_BOX_CANDIDATES = 6000000;
     const SLICE_FREUDENTHAL_EPS = 1e-7;
     const MAX_KOSTKA_STEPS = 250000;
     const MAX_KOSTKA_TABLEAUX = 3000;
@@ -4052,6 +4054,7 @@
       const radiusSquared = quadraticForm(B, center) + 1e-8;
       const bounds = [];
       let boxSize = 1;
+      let statusNote = '';
       for (let i = 0; i < n; i++) {
         const unit = Array(n).fill(0);
         unit[i] = 1;
@@ -4062,9 +4065,12 @@
         const hi = Math.floor(center[i] + span + 1e-9);
         bounds.push([lo, hi]);
         boxSize *= Math.max(0, hi - lo + 1);
-        if (boxSize > cap * 20) {
+        if (boxSize > MAX_SLICE_PROJECTION_BOX_CANDIDATES) {
           throw new Error(`Projected dimension norm-bound box has ${boxSize} candidates before pruning; choose a smaller dominant weight.`);
         }
+      }
+      if (boxSize >= SLICE_PROJECTION_BOX_WARNING_CANDIDATES) {
+        statusNote = `Projected dimension norm-bound box has ${boxSize.toLocaleString()} candidates before pruning; computation may be slow.`;
       }
 
       const points = [];
@@ -4076,7 +4082,7 @@
           const labels = sub(highestLabels, simpleToDynkin(delta, C));
           points.push({ labels, delta: delta.slice(), normSquared: q });
           if (points.length > cap) {
-            throw new Error(`Projected dimension norm bound contains more than ${cap} candidate weights; choose a smaller dominant weight.`);
+            throw new Error(`Projected dimension norm ball contains more than ${cap} candidate weights after pruning; choose a smaller dominant weight.`);
           }
           return;
         }
@@ -4089,7 +4095,7 @@
       }
       rec(0, Array(n).fill(0));
       points.sort((p, q) => key(p.labels).localeCompare(key(q.labels)));
-      return { points, bounds, boxSize, radiusSquared };
+      return { points, bounds, boxSize, radiusSquared, statusNote };
     }
 
     function computeSliceCharacter(point) {
@@ -4146,7 +4152,8 @@
             status: 'computed',
             entries,
             positionMode,
-            candidateCount: bounded.points.length
+            candidateCount: bounded.points.length,
+            statusNote: bounded.statusNote || ''
           };
         }
 
@@ -4254,6 +4261,8 @@
       ];
       if (sliceState.characterMode !== 'none' && character && character.status && character.status !== 'computed') {
         rows.push(['status', character.status]);
+      } else if (sliceState.characterMode !== 'none' && character && character.statusNote) {
+        rows.push(['status', `<span class="warning-text">${character.statusNote}</span>`]);
       }
       out.innerHTML = rows.map(([a, b]) =>
         `<div class="slice-info-row"><span class="slice-info-label">${a}</span><span class="slice-info-value">${b}</span></div>`
