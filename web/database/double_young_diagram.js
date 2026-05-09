@@ -15,6 +15,7 @@
     const MAX_FREUDENTHAL_WEIGHTS = 20000;
     const MAX_NORM_BOUND_CANDIDATES = 12000;
     const MAX_SLICE_CHARACTER_CANDIDATES = 5000;
+    const MAX_SLICE_PROJECTION_CANDIDATES = 50000;
     const SLICE_FREUDENTHAL_EPS = 1e-7;
     const MAX_KOSTKA_STEPS = 250000;
     const MAX_KOSTKA_TABLEAUX = 3000;
@@ -695,6 +696,22 @@
         }
         return total;
       };
+    }
+
+    function simpleRootGram(C) {
+      const d = cartanSymmetrizer(C);
+      return C.map((row, i) => row.map((_, j) => C[i][j] * d[j]));
+    }
+
+    function quadraticForm(M, v) {
+      let total = 0;
+      for (let i = 0; i < v.length; i++) {
+        if (!v[i]) continue;
+        for (let j = 0; j < v.length; j++) {
+          if (v[j]) total += v[i] * M[i][j] * v[j];
+        }
+      }
+      return total;
     }
 
     function makeDynkinGram(C) {
@@ -2454,6 +2471,70 @@
       mq.addEventListener ? mq.addEventListener('change', apply) : mq.addListener(apply);
       apply();
     }
+    function initCustomTooltips() {
+      if (document.body.dataset.customTooltipsReady === '1') return;
+      document.body.dataset.customTooltipsReady = '1';
+
+      const tip = document.createElement('div');
+      tip.className = 'custom-tooltip';
+      tip.setAttribute('role', 'tooltip');
+      document.body.appendChild(tip);
+
+      let activeEl = null;
+
+      function placeTooltip(el) {
+        const rect = el.getBoundingClientRect();
+        const margin = 10;
+        const gap = 8;
+        tip.style.left = '0px';
+        tip.style.top = '0px';
+        const tipRect = tip.getBoundingClientRect();
+
+        let left = rect.left + rect.width / 2 - tipRect.width / 2;
+        left = Math.max(margin, Math.min(left, window.innerWidth - tipRect.width - margin));
+
+        let top = rect.top - tipRect.height - gap;
+        if (top < margin) top = rect.bottom + gap;
+        top = Math.max(margin, Math.min(top, window.innerHeight - tipRect.height - margin));
+
+        tip.style.left = `${Math.round(left)}px`;
+        tip.style.top = `${Math.round(top)}px`;
+      }
+
+      function showTooltip(el) {
+        const text = el.getAttribute('data-tooltip');
+        if (!text) return;
+        activeEl = el;
+        tip.textContent = text;
+        tip.classList.add('visible');
+        placeTooltip(el);
+      }
+
+      function hideTooltip(el) {
+        if (el && activeEl && el !== activeEl) return;
+        tip.classList.remove('visible');
+        activeEl = null;
+      }
+
+      document.addEventListener('pointerenter', (event) => {
+        const el = event.target.closest?.('[data-tooltip]');
+        if (el) showTooltip(el);
+      }, true);
+      document.addEventListener('pointerleave', (event) => {
+        const el = event.target.closest?.('[data-tooltip]');
+        if (el) hideTooltip(el);
+      }, true);
+      document.addEventListener('focusin', (event) => {
+        const el = event.target.closest?.('[data-tooltip]');
+        if (el) showTooltip(el);
+      });
+      document.addEventListener('focusout', (event) => {
+        const el = event.target.closest?.('[data-tooltip]');
+        if (el) hideTooltip(el);
+      });
+      window.addEventListener('scroll', () => { if (activeEl) placeTooltip(activeEl); }, true);
+      window.addEventListener('resize', () => { if (activeEl) placeTooltip(activeEl); });
+    }
     function setupEvents() {
       for (const which of ['lambda','mu']) {
         state[which].canvas = $(which + '-canvas'); state[which].ctx = state[which].canvas.getContext('2d');
@@ -2483,7 +2564,7 @@
       window.addEventListener('resize', resizeCanvases);
     }
     function init() {
-      setupEvents(); setupCards(); setupPointerDnd(); setupResponsiveDiagramInput();
+      setupEvents(); setupCards(); setupPointerDnd(); setupResponsiveDiagramInput(); initCustomTooltips();
       applyGridSize(); setDiagram('lambda', [3,2]); setDiagram('mu', [2,1]);
       window.onTypeChange(); refreshLRModeHint(); resizeCanvases();
     }
@@ -2503,7 +2584,10 @@
       selectedPoint: null,
       showDiagramsInSlice: false,
       characterMode: 'none',
+      characterProjectionMode: 'slice',
       activeCharacter: null,
+      latticeMode: 'weight',
+      lieInfoCollapsed: false,
       view: {
         zoom: 1,
         panX: 0,
@@ -2515,7 +2599,9 @@
         startPanX: 0,
         startPanY: 0,
         moved: false,
-        suppressClick: false
+        suppressClick: false,
+        pointers: new Map(),
+        gesture: null
       },
       layerModes: {
         weylChambers: 'none',
@@ -2615,6 +2701,31 @@
     function formatDynkinVector(v) {
       return '[' + v.join(', ') + ']';
     }
+    function determinantIntMatrix(M) {
+      const n = M.length;
+      if (!n) return 1;
+      const A = M.map(row => row.map(x => BigInt(Math.trunc(x))));
+      let sign = 1n;
+      let prev = 1n;
+      for (let k = 0; k < n - 1; k++) {
+        let pivot = k;
+        while (pivot < n && A[pivot][k] === 0n) pivot++;
+        if (pivot === n) return 0;
+        if (pivot !== k) {
+          [A[k], A[pivot]] = [A[pivot], A[k]];
+          sign = -sign;
+        }
+        const pivotValue = A[k][k];
+        for (let i = k + 1; i < n; i++) {
+          for (let j = k + 1; j < n; j++) {
+            A[i][j] = (A[i][j] * pivotValue - A[i][k] * A[k][j]) / prev;
+          }
+        }
+        prev = pivotValue;
+        for (let i = k + 1; i < n; i++) A[i][k] = 0n;
+      }
+      return Number(sign * A[n - 1][n - 1]);
+    }
     function formatBasisCoords(x, y, d) {
       const f = (n) => {
         if (n === 0) return '0';
@@ -2631,6 +2742,27 @@
         out.push(n / d);
       }
       return out;
+    }
+    function normalizeSliceBasisVector(vec) {
+      let g = gcdInt(Math.abs(vec.denom || 1), Math.abs(vec.coords?.[0] || 0));
+      g = gcdInt(g, Math.abs(vec.coords?.[1] || 0));
+      if (g <= 1) return vec;
+      return { ...vec, coords: [vec.coords[0] / g, vec.coords[1] / g], denom: vec.denom / g };
+    }
+    function combineSliceBasisVector(basis, a, b) {
+      const v1 = basis[0], v2 = basis[1];
+      const denom = lcmInt(v1.denom, v2.denom);
+      const scale1 = denom / v1.denom;
+      const scale2 = denom / v2.denom;
+      return normalizeSliceBasisVector({
+        coords: [
+          a * v1.coords[0] * scale1 + b * v2.coords[0] * scale2,
+          a * v1.coords[1] * scale1 + b * v2.coords[1] * scale2
+        ],
+        denom,
+        labels: v1.labels.map((x, i) => a * x + b * v2.labels[i]),
+        weightCoords: [a, b]
+      });
     }
     function findSaturatedPlaneBasis(lambdaLabels, muLabels, minorGcd, lambdaGcd) {
       if (!minorGcd || !lambdaGcd) return null;
@@ -2660,6 +2792,48 @@
         { coords: [1, 0], denom: g, labels: v1 },
         best
       ];
+    }
+    function computeRootSliceLatticeInfo(weightBasis, C) {
+      if (!weightBasis || weightBasis.length < 2 || !C) return { rank2: false, basis: null };
+      const cartanIndex = Math.max(1, Math.abs(determinantIntMatrix(C)) || 1);
+      const searchBounds = [Math.max(10, cartanIndex * 2 + 2), Math.max(24, cartanIndex * 4 + 4), 80];
+      let best = null;
+
+      for (const bound of searchBounds) {
+        const candidates = [];
+        for (let a = -bound; a <= bound; a++) {
+          for (let b = -bound; b <= bound; b++) {
+            if (!a && !b) continue;
+            const vec = combineSliceBasisVector(weightBasis, a, b);
+            const simpleCoords = dynkinToSimple(vec.labels, C);
+            if (!simpleCoords) continue;
+            candidates.push({ ...vec, simpleCoords });
+          }
+        }
+        for (let i = 0; i < candidates.length; i++) {
+          for (let j = i + 1; j < candidates.length; j++) {
+            const u = candidates[i], v = candidates[j];
+            const det = u.weightCoords[0] * v.weightCoords[1] - u.weightCoords[1] * v.weightCoords[0];
+            if (!det) continue;
+            const index = Math.abs(det);
+            const score = u.labels.reduce((s, x) => s + x * x, 0) + v.labels.reduce((s, x) => s + x * x, 0);
+            if (!best || index < best.index || (index === best.index && score < best.score)) {
+              best = { u, v, index, score, searchBound: bound };
+            }
+          }
+        }
+        if (best && best.index <= cartanIndex) break;
+      }
+
+      if (!best) return { rank2: false, basis: null, index: null };
+      const basis = reduceSecondSliceBasisVector([best.u, best.v], C).map(normalizeSliceBasisVector);
+      return {
+        rank2: true,
+        basis,
+        displayBasis: basis,
+        index: best.index,
+        searchBound: best.searchBound
+      };
     }
     function reduceSecondSliceBasisVector(basis, C) {
       if (!basis || basis.length < 2 || !C) return basis;
@@ -2700,6 +2874,7 @@
       const rank2 = minorGcd > 0;
       const displayBasis = rank2 ? findSaturatedPlaneBasis(lambdaLabels, muLabels, minorGcd, lambdaGcd) : null;
       const basis = reduceSecondSliceBasisVector(displayBasis, C);
+      const root = rank2 && basis && C ? computeRootSliceLatticeInfo(basis, C) : null;
       return {
         lambdaGcd,
         muGcd,
@@ -2708,7 +2883,8 @@
         rank2,
         saturated: rank2 && minorGcd === 1,
         basis,
-        displayBasis
+        displayBasis,
+        root
       };
     }
     function latticeBasisHTML(info) {
@@ -2739,6 +2915,105 @@
       return '<div class="slice-mode-row">' + modes.map(([mode, label]) =>
         `<button class="slice-mode-btn ${active === mode ? 'active' : ''}" data-slice-layer="${layer}" data-slice-layer-mode="${mode}" type="button">${label}</button>`
       ).join('') + '</div>';
+    }
+    function sliceLatticeModeButtons() {
+      const modes = [
+        ['weight', 'weight'],
+        ['root', 'root'],
+        ['none', 'hide']
+      ];
+      const active = sliceState.latticeMode || 'weight';
+      return '<div class="slice-mode-row">' + modes.map(([mode, label]) =>
+        `<button class="slice-mode-btn ${active === mode ? 'active' : ''}" data-slice-lattice-mode="${mode}" type="button">${label}</button>`
+      ).join('') + '</div>';
+    }
+    function lieRootCountFormula(type, rank) {
+      switch (type) {
+        case 'A': return rank * (rank + 1);
+        case 'B': return 2 * rank * rank;
+        case 'C': return 2 * rank * rank;
+        case 'D': return 2 * rank * (rank - 1);
+        case 'E6': return 72;
+        case 'E7': return 126;
+        case 'E8': return 240;
+        case 'F4': return 48;
+        case 'G2': return 12;
+        default: return null;
+      }
+    }
+    function lieCoxeterNumber(type, rank) {
+      switch (type) {
+        case 'A': return rank + 1;
+        case 'B': return 2 * rank;
+        case 'C': return 2 * rank;
+        case 'D': return 2 * rank - 2;
+        case 'E6': return 12;
+        case 'E7': return 18;
+        case 'E8': return 30;
+        case 'F4': return 12;
+        case 'G2': return 6;
+        default: return null;
+      }
+    }
+    function lieWeylGroupOrder(type, rank) {
+      switch (type) {
+        case 'A': return factorialBI(rank + 1).toString();
+        case 'B':
+        case 'C': return (powBI(2, rank) * factorialBI(rank)).toString();
+        case 'D': return (powBI(2, rank - 1) * factorialBI(rank)).toString();
+        case 'E6': return '51840';
+        case 'E7': return '2903040';
+        case 'E8': return '696729600';
+        case 'F4': return '1152';
+        case 'G2': return '12';
+        default: return 'not available';
+      }
+    }
+    function lieCenterQuotient(type, rank) {
+      switch (type) {
+        case 'A': return `Z/${rank + 1}Z`;
+        case 'B':
+        case 'C':
+        case 'E7': return 'Z/2Z';
+        case 'D': return rank % 2 === 0 ? 'Z/2Z × Z/2Z' : 'Z/4Z';
+        case 'E6': return 'Z/3Z';
+        case 'E8':
+        case 'F4':
+        case 'G2': return 'trivial';
+        default: return 'not available';
+      }
+    }
+    function centerCardinalityFromQuotient(quotient) {
+      const matches = String(quotient).match(/Z\/(\d+)Z/g);
+      if (!matches) return quotient === 'trivial' ? 1 : 'not available';
+      return matches.reduce((prod, part) => prod * Number(part.match(/\d+/)[0]), 1);
+    }
+    function invariantTooltipLabel(symbol, tooltip) {
+      return `<span class="tooltip-label" tabindex="0" data-tooltip="${tooltip}">${symbol}</span>`;
+    }
+    function sliceLieInvariantHTML() {
+      const type = currentType(), rank = currentRank();
+      const rootCount = lieRootCountFormula(type, rank);
+      const center = lieCenterQuotient(type, rank);
+      const rows = [
+        [invariantTooltipLabel('|S|', '|S|: the rank, equivalently the number of simple roots.'), rank],
+        [invariantTooltipLabel('|R|', '|R|: the number of roots.'), rootCount ?? 'not available'],
+        [invariantTooltipLabel('P/Q', 'P/Q: the quotient of the weight lattice P by the root lattice Q, i.e. the center of the simply connected group.'), center],
+        [invariantTooltipLabel('|P/Q|', '|P/Q|: the cardinality of the lattice quotient P/Q.'), centerCardinalityFromQuotient(center)],
+        [invariantTooltipLabel('|W|', '|W|: the order of the Weyl group.'), lieWeylGroupOrder(type, rank)],
+        [invariantTooltipLabel('h', 'h: the Coxeter number.'), lieCoxeterNumber(type, rank) ?? 'not available']
+      ];
+      const body = sliceState.lieInfoCollapsed
+        ? ''
+        : `<dl class="slice-invariant-list">${rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>`;
+      const icon = sliceState.lieInfoCollapsed ? '▸' : '▾';
+      const title = sliceState.lieInfoCollapsed ? 'show invariants' : 'hide invariants';
+      return `
+        <div class="slice-invariant-head">
+          <button class="slice-invariant-toggle" data-slice-lie-info-toggle="1" type="button" title="${title}" aria-label="${title}">${icon}</button>
+        </div>
+        ${body}
+      `;
     }
     function computeSliceWeylWalls(data, C) {
       if (!data || !data.lambdaLabels || !data.muLabels) return [];
@@ -2774,17 +3049,15 @@
     function renderSliceLayerCard() {
       const out = $('slice-layer-controls');
       if (!out) return;
-      let rootCountText = 'not available';
       let chamberNote = '';
       try {
         const type = currentType(), rank = currentRank();
         const C = cartanMatrix(type, rank);
-        const positiveCount = positiveRoots(C).length;
-        rootCountText = `${2 * positiveCount} total (${positiveCount} positive)`;
         chamberNote = sliceWeylChamberNote(C);
       } catch (_) {}
       const rows = [
-        ['root count', rootCountText],
+        ['invariants', sliceLieInvariantHTML()],
+        ['lattice', sliceLatticeModeButtons()],
         ['Weyl chambers', sliceLayerToggleButtons('weylChambers') + chamberNote],
         ['fundamental weights', sliceLayerModeButtons('fundamental')],
         ['simple roots', sliceLayerModeButtons('simpleRoots')],
@@ -3196,15 +3469,24 @@
 
       // ── Weight dots ───────────────────────────────────────────────────────
       const overlayEntryByKey = new Map();
-      if (sliceState.characterMode !== 'none' && sliceState.activeCharacter && Array.isArray(sliceState.activeCharacter.entries)) {
-        for (const entry of sliceState.activeCharacter.entries) overlayEntryByKey.set(entry.a + ',' + entry.b, entry);
+      const activeCharacterIsProjection = sliceState.activeCharacter?.positionMode === 'projection';
+      if (!activeCharacterIsProjection && sliceState.characterMode !== 'none' && sliceState.activeCharacter && Array.isArray(sliceState.activeCharacter.entries)) {
+        for (const entry of sliceState.activeCharacter.entries) overlayEntryByKey.set(key(entry.labels), entry);
       }
+      const originLabelKey = Array(rank).fill(0).join(',');
       sliceState.hitPoints = [];
-      let b1uv = null, b2uv = null;
+      let weightB1uv = null, weightB2uv = null;
       if (latticeInfo && latticeInfo.basis && latticeInfo.basis.length >= 2) {
-        const b1 = latticeInfo.basis[0], b2 = latticeInfo.basis[1];
-        b1uv = [b1.coords[0] / b1.denom, b1.coords[1] / b1.denom];
-        b2uv = [b2.coords[0] / b2.denom, b2.coords[1] / b2.denom];
+        const wb1 = latticeInfo.basis[0], wb2 = latticeInfo.basis[1];
+        weightB1uv = [wb1.coords[0] / wb1.denom, wb1.coords[1] / wb1.denom];
+        weightB2uv = [wb2.coords[0] / wb2.denom, wb2.coords[1] / wb2.denom];
+      }
+      const latticeMode = sliceState.latticeMode || 'weight';
+      const pointLatticeInfo = latticeMode === 'root' ? latticeInfo?.root : latticeMode === 'weight' ? latticeInfo : null;
+      if (pointLatticeInfo && pointLatticeInfo.basis && pointLatticeInfo.basis.length >= 2) {
+        const b1 = pointLatticeInfo.basis[0], b2 = pointLatticeInfo.basis[1];
+        const b1uv = [b1.coords[0] / b1.denom, b1.coords[1] / b1.denom];
+        const b2uv = [b2.coords[0] / b2.denom, b2.coords[1] / b2.denom];
         const b1px = toPixelOffset(b1uv[0], b1uv[1]);
         const b2px = toPixelOffset(b2uv[0], b2uv[1]);
         const viewZoom = sliceState.view?.zoom || 1;
@@ -3223,19 +3505,20 @@
             if (seenPoints.has(key)) continue;
             seenPoints.add(key);
             sliceState.hitPoints.push({
-              i, j, u, v, x, y, labels
+              i, j, u, v, x, y, labels, key, latticeMode
             });
           }
         }
         for (const p of sliceState.hitPoints) {
           const selected = sliceState.selectedPoint &&
-            sliceState.selectedPoint.i === p.i && sliceState.selectedPoint.j === p.j;
-          const overlayEntry = overlayEntryByKey.get(p.i + ',' + p.j);
+            sliceState.selectedPoint.key === p.key;
+          const overlayEntry = overlayEntryByKey.get(p.key);
           if (overlayEntry) continue;
           const isOrigin = p.labels.every(x => x === 0);
           ctx.beginPath();
           ctx.arc(p.x, p.y, selected ? 4.8 : isOrigin ? 3.8 : 2.1, 0, 2*Math.PI);
-          ctx.fillStyle = selected ? '#5f6f8f' : isOrigin ? '#222' : 'rgba(80,76,68,0.34)';
+          const latticeFill = latticeMode === 'root' ? 'rgba(47,125,112,0.38)' : 'rgba(80,76,68,0.34)';
+          ctx.fillStyle = selected ? '#5f6f8f' : isOrigin ? '#222' : latticeFill;
           ctx.fill();
           if (selected) {
             ctx.strokeStyle = '#222';
@@ -3372,15 +3655,26 @@
       }
 
       function drawSliceDimensionOverlay() {
-        if (sliceState.characterMode === 'none' || !sliceState.activeCharacter || !b1uv || !b2uv) return;
+        if (sliceState.characterMode === 'none' || !sliceState.activeCharacter) return;
         const entries = sliceState.activeCharacter.entries || [];
         for (const e of entries) {
-          const u = e.a * b1uv[0] + e.b * b2uv[0];
-          const v = e.a * b1uv[1] + e.b * b2uv[1];
+          let u, v;
+          if (e.positionMode === 'projection') {
+            u = e.u;
+            v = e.v;
+          } else {
+            if (!weightB1uv || !weightB2uv) return;
+            u = e.a * weightB1uv[0] + e.b * weightB2uv[0];
+            v = e.a * weightB1uv[1] + e.b * weightB2uv[1];
+          }
           const [x, y] = canvasXY_lm_scaled(u, v);
           if (x < -12 || x > W + 12 || y < -12 || y > H + 12) continue;
           const positive = e.value >= 0;
-          const selected = !!(sliceState.selectedPoint && sliceState.selectedPoint.i === e.a && sliceState.selectedPoint.j === e.b);
+          const selected = !!(sliceState.selectedPoint && (
+            e.positionMode === 'projection'
+              ? e.sourceKeys?.includes(sliceState.selectedPoint.key)
+              : sliceState.selectedPoint.key === key(e.labels)
+          ));
           if (sliceState.characterMode === 'numbers') {
             ctx.save();
             ctx.font = '11px JetBrains Mono, monospace';
@@ -3466,8 +3760,11 @@
       }
 
       // Origin dot, then dimension overlay so a nonzero origin weight remains readable.
-      ctx.beginPath(); ctx.arc(viewOx, viewOy, 4, 0, 2*Math.PI);
-      ctx.fillStyle = '#222'; ctx.fill();
+      const originPointVisible = sliceState.hitPoints.some(p => p.key === originLabelKey);
+      if (latticeMode !== 'none' && !originPointVisible && !overlayEntryByKey.has(originLabelKey)) {
+        ctx.beginPath(); ctx.arc(viewOx, viewOy, 4, 0, 2*Math.PI);
+        ctx.fillStyle = '#222'; ctx.fill();
+      }
       drawSliceDimensionOverlay();
 
       // ── Angle arc between λ and μ arrows ──────────────────────────────────
@@ -3738,6 +4035,63 @@
       return { points, radius: Math.sqrt(R2), radiusSquared: R2, gram: { A, B, D }, rectangularBox };
     }
 
+    function projectDynkinToSliceLM(labels, data, C) {
+      const inner = makeDynkinInnerProduct(C);
+      const proj = data.proj;
+      const uGs = inner(labels, proj.e1) / (proj.e1norm2 || 1);
+      const vGs = proj.e2norm2 > 1e-12 ? inner(labels, proj.e2) / proj.e2norm2 : 0;
+      const lmOverLL = proj.ll > 1e-14 ? proj.lm / proj.ll : 0;
+      return [uGs - vGs * lmOverLL, vGs];
+    }
+
+    function boundedProjectionWeightCandidates(highestLabels, C, cap = MAX_SLICE_PROJECTION_CANDIDATES) {
+      const n = C.length;
+      const B = simpleRootGram(C);
+      const center = solveLinear(transpose(C), highestLabels);
+      if (!center) throw new Error('Could not express the highest weight in simple-root coordinates.');
+      const radiusSquared = quadraticForm(B, center) + 1e-8;
+      const bounds = [];
+      let boxSize = 1;
+      for (let i = 0; i < n; i++) {
+        const unit = Array(n).fill(0);
+        unit[i] = 1;
+        const invCol = solveLinear(B, unit);
+        if (!invCol || !(invCol[i] > 0)) throw new Error('Could not bound the projection norm ball.');
+        const span = Math.sqrt(radiusSquared * invCol[i]) + 1e-9;
+        const lo = Math.max(0, Math.ceil(center[i] - span - 1e-9));
+        const hi = Math.floor(center[i] + span + 1e-9);
+        bounds.push([lo, hi]);
+        boxSize *= Math.max(0, hi - lo + 1);
+        if (boxSize > cap * 20) {
+          throw new Error(`Projected dimension norm-bound box has ${boxSize} candidates before pruning; choose a smaller dominant weight.`);
+        }
+      }
+
+      const points = [];
+      function rec(i, delta) {
+        if (i === n) {
+          const simpleCoords = center.map((x, k) => x - delta[k]);
+          const q = quadraticForm(B, simpleCoords);
+          if (q > radiusSquared) return;
+          const labels = sub(highestLabels, simpleToDynkin(delta, C));
+          points.push({ labels, delta: delta.slice(), normSquared: q });
+          if (points.length > cap) {
+            throw new Error(`Projected dimension norm bound contains more than ${cap} candidate weights; choose a smaller dominant weight.`);
+          }
+          return;
+        }
+        const [lo, hi] = bounds[i];
+        for (let x = lo; x <= hi; x++) {
+          delta[i] = x;
+          rec(i + 1, delta);
+        }
+        delta[i] = 0;
+      }
+      rec(0, Array(n).fill(0));
+      points.sort((p, q) => key(p.labels).localeCompare(key(q.labels)));
+      return { points, bounds, boxSize, radiusSquared };
+    }
+
     function computeSliceCharacter(point) {
       const data = sliceState.lastData;
       if (!point || !data || !data.latticeInfo || !data.latticeInfo.basis) return null;
@@ -3752,6 +4106,50 @@
       }
 
       try {
+        const positionMode = sliceState.characterProjectionMode === 'projection' ? 'projection' : 'slice';
+        if (positionMode === 'projection') {
+          const bounded = boundedProjectionWeightCandidates(highest, C);
+          const ctx = buildSliceFreudenthalContext(highest, C);
+          const multiplicity = sliceMultiplicityFreudenthal(ctx);
+          const groups = new Map();
+          const snap = (x) => Math.round(x * 1e6);
+          for (const cand of bounded.points) {
+            const dom = dominantSliceRepresentative(C, cand.labels);
+            if (!dom) continue;
+            const value = multiplicity(dom);
+            if (value <= 0) continue;
+            const [u, v] = projectDynkinToSliceLM(cand.labels, data, C);
+            const projectionKey = `${snap(u)},${snap(v)}`;
+            let group = groups.get(projectionKey);
+            if (!group) {
+              group = {
+                u,
+                v,
+                labels: cand.labels.slice(),
+                sourceKeys: [],
+                value: 0,
+                projectedCount: 0,
+                projectionKey,
+                positionMode
+              };
+              groups.set(projectionKey, group);
+            }
+            group.value += value;
+            group.projectedCount += 1;
+            group.sourceKeys.push(key(cand.labels));
+          }
+          if (groups.size > MAX_SLICE_CHARACTER_CANDIDATES) {
+            throw new Error(`Projected dimensions contain more than ${MAX_SLICE_CHARACTER_CANDIDATES} points; choose a smaller dominant weight.`);
+          }
+          const entries = Array.from(groups.values()).sort((p, q) => (p.v - q.v) || (p.u - q.u));
+          return {
+            status: 'computed',
+            entries,
+            positionMode,
+            candidateCount: bounded.points.length
+          };
+        }
+
         const bounded = boundedSliceLatticePoints(highest, data.latticeInfo.basis, C);
         const ctx = buildSliceFreudenthalContext(highest, C);
         const multiplicity = sliceMultiplicityFreudenthal(ctx);
@@ -3766,38 +4164,57 @@
               b: cand.b,
               labels: cand.labels.slice(),
               dominantLabels: dom.slice(),
-              value
+              value,
+              positionMode
             });
           }
         }
         entries.sort((p, q) => (p.b - q.b) || (p.a - q.a));
         return {
           status: 'computed',
-          entries
+          entries,
+          positionMode
         };
       } catch (err) {
         return {
           status: err.message,
-          entries: []
+          entries: [],
+          positionMode: sliceState.characterProjectionMode === 'projection' ? 'projection' : 'slice'
         };
       }
     }
 
     function sliceDimensionModeButtons() {
-      const modes = [
+      const displayModes = [
         ['none', 'none'],
         ['dots', 'dots'],
         ['numbers', 'numbers']
       ];
-      return '<div class="slice-mode-row">' + modes.map(([mode, label]) =>
+      const display = '<div class="slice-mode-row">' + displayModes.map(([mode, label]) =>
         `<button class="slice-mode-btn ${sliceState.characterMode === mode ? 'active' : ''}" data-slice-character-mode="${mode}" type="button">${label}</button>`
       ).join('') + '</div>';
+      if (sliceState.characterMode === 'none') return display;
+      const positionMode = sliceState.characterProjectionMode === 'projection' ? 'projection' : 'slice';
+      const positions = [
+        ['slice', 'slice'],
+        ['projection', 'proj']
+      ];
+      const position = '<div class="slice-mode-row slice-dimension-subrow">' + positions.map(([mode, label]) =>
+        `<button class="slice-mode-btn ${positionMode === mode ? 'active' : ''}" data-slice-character-position-mode="${mode}" type="button">${label}</button>`
+      ).join('') + '</div>';
+      return display + position;
     }
 
     function sliceWeightSummaryRows(point) {
       const type = currentType(), rank = currentRank();
       const C = cartanMatrix(type, rank);
       const labels = point.labels.slice();
+
+      let normText = 'not computed';
+      try {
+        const norm = Math.sqrt(Math.max(0, makeDynkinInnerProduct(C)(labels, labels)));
+        normText = norm < 1e-9 ? '0' : norm.toFixed(6);
+      } catch (_) {}
 
       let dim = 'not dominant';
       if (isDominantDynkin(labels)) {
@@ -3815,6 +4232,7 @@
       }
 
       return [
+        ['|γ|', normText],
         ['dim V<sup>γ</sup>', dim],
         ['|W·γ|', orbitSize]
       ];
@@ -3827,8 +4245,9 @@
       if (!card || !out) return;
       card.style.display = '';
       setCardCollapsed(card, false, false);
+      const coordName = point.latticeMode === 'root' ? 'root coordinates' : 'weight coordinates';
       const rows = [
-        ['lattice coordinates', `(${point.i}, ${point.j})`],
+        [coordName, `(${point.i}, ${point.j})`],
         ['Dynkin labels', `<code>${formatDynkinVector(point.labels)}</code>`],
         ...sliceWeightSummaryRows(point),
         ['dimensions', sliceDimensionModeButtons()]
@@ -3854,12 +4273,21 @@
       view.startPanY = 0;
       view.moved = false;
       view.suppressClick = false;
+      view.pointers?.clear?.();
+      view.gesture = null;
+    }
+
+    function clearSlicePointSelection() {
+      sliceState.selectedPoint = null;
+      sliceState.activeCharacter = null;
+      const out = $('slice-weight-info-out');
+      if (out) out.innerHTML = '<span class="hint">Click a lattice point in the 2d slice canvas.</span>';
     }
 
     function updateSliceCanvasCursor(event = null) {
       if (!sliceState.sliceCanvas) return;
       const view = sliceState.view;
-      if (view.isPanning && view.moved) {
+      if ((view.isPanning && view.moved) || (view.pointers && view.pointers.size > 1)) {
         sliceState.sliceCanvas.style.cursor = 'grabbing';
         return;
       }
@@ -3874,6 +4302,57 @@
       const sx = logicalW / Math.max(1, rect.width);
       const sy = logicalH / Math.max(1, rect.height);
       return [(event.clientX - rect.left) * sx, (event.clientY - rect.top) * sy];
+    }
+
+    function sliceViewCenter() {
+      const W = sliceState.displayWidth || sliceState.sliceCanvas.clientWidth || sliceState.sliceCanvas.width;
+      const H = sliceState.displayHeight || sliceState.sliceCanvas.clientHeight || sliceState.sliceCanvas.height;
+      return [W / 2, H / 2];
+    }
+
+    function clampSliceZoom(zoom) {
+      return Math.max(0.35, Math.min(10, zoom));
+    }
+
+    function slicePointerPair() {
+      const points = Array.from(sliceState.view.pointers.values());
+      if (points.length < 2) return null;
+      return [points[0], points[1]];
+    }
+
+    function slicePairCenter(pair) {
+      return [(pair[0].x + pair[1].x) / 2, (pair[0].y + pair[1].y) / 2];
+    }
+
+    function slicePairDistance(pair) {
+      return Math.hypot(pair[0].x - pair[1].x, pair[0].y - pair[1].y);
+    }
+
+    function startSlicePinchGesture() {
+      const pair = slicePointerPair();
+      if (!pair) return;
+      const view = sliceState.view;
+      view.gesture = {
+        startDistance: Math.max(1, slicePairDistance(pair)),
+        startCenter: slicePairCenter(pair),
+        startZoom: view.zoom || 1,
+        startPanX: view.panX || 0,
+        startPanY: view.panY || 0
+      };
+      view.isPanning = false;
+      view.pointerId = null;
+      view.moved = true;
+      view.suppressClick = true;
+    }
+
+    function applySliceZoomAt(xy, newZoom, oldZoom, startPanX = sliceState.view.panX, startPanY = sliceState.view.panY) {
+      const view = sliceState.view;
+      const [ox, oy] = sliceViewCenter();
+      const relX = (xy[0] - ox - startPanX) / oldZoom;
+      const relY = (xy[1] - oy - startPanY) / oldZoom;
+      view.zoom = newZoom;
+      view.panX = xy[0] - ox - relX * newZoom;
+      view.panY = xy[1] - oy - relY * newZoom;
     }
 
     function nearestSliceHitPoint(event, maxDist = 9) {
@@ -3892,6 +4371,34 @@
     function handleSliceCanvasPointerMove(event) {
       if (!sliceState.sliceCanvas) return;
       const view = sliceState.view;
+      if (view.pointers?.has?.(event.pointerId)) {
+        const xy = sliceCanvasEventXY(event);
+        if (!xy) return;
+        view.pointers.set(event.pointerId, { x: xy[0], y: xy[1] });
+        if (view.pointers.size >= 2) {
+          event.preventDefault();
+          if (!view.gesture) startSlicePinchGesture();
+          const pair = slicePointerPair();
+          if (!pair || !view.gesture) return;
+          const center = slicePairCenter(pair);
+          const dist = Math.max(1, slicePairDistance(pair));
+          const newZoom = clampSliceZoom(view.gesture.startZoom * dist / view.gesture.startDistance);
+          applySliceZoomAt(
+            view.gesture.startCenter,
+            newZoom,
+            view.gesture.startZoom,
+            view.gesture.startPanX,
+            view.gesture.startPanY
+          );
+          view.panX += center[0] - view.gesture.startCenter[0];
+          view.panY += center[1] - view.gesture.startCenter[1];
+          view.moved = true;
+          view.suppressClick = true;
+          updateSliceCanvasCursor(event);
+          if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
+          return;
+        }
+      }
       if (view.isPanning && view.pointerId === event.pointerId) {
         const xy = sliceCanvasEventXY(event);
         if (!xy) return;
@@ -3911,10 +4418,20 @@
     }
 
     function handleSliceCanvasPointerDown(event) {
-      if (!sliceState.visible || event.button !== 0) return;
+      if (!sliceState.visible) return;
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
       const xy = sliceCanvasEventXY(event);
       if (!xy) return;
+      if (event.pointerType !== 'mouse') event.preventDefault();
       const view = sliceState.view;
+      if (!view.pointers) view.pointers = new Map();
+      view.pointers.set(event.pointerId, { x: xy[0], y: xy[1] });
+      sliceState.sliceCanvas.setPointerCapture?.(event.pointerId);
+      if (view.pointers.size >= 2) {
+        startSlicePinchGesture();
+        updateSliceCanvasCursor(event);
+        return;
+      }
       view.isPanning = true;
       view.pointerId = event.pointerId;
       view.startX = xy[0];
@@ -3922,17 +4439,50 @@
       view.startPanX = view.panX;
       view.startPanY = view.panY;
       view.moved = false;
-      sliceState.sliceCanvas.setPointerCapture?.(event.pointerId);
     }
 
     function handleSliceCanvasPointerUp(event) {
       const view = sliceState.view;
-      if (!view.isPanning || view.pointerId !== event.pointerId) return;
+      const hadPointer = view.pointers?.has?.(event.pointerId);
+      if (hadPointer) view.pointers.delete(event.pointerId);
+      if (view.gesture) {
+        view.suppressClick = true;
+        if (view.pointers && view.pointers.size >= 2) {
+          startSlicePinchGesture();
+        } else if (view.pointers && view.pointers.size === 1) {
+          const [[id, p]] = Array.from(view.pointers.entries());
+          view.gesture = null;
+          view.isPanning = true;
+          view.pointerId = id;
+          view.startX = p.x;
+          view.startY = p.y;
+          view.startPanX = view.panX;
+          view.startPanY = view.panY;
+          view.moved = true;
+        } else {
+          view.gesture = null;
+          view.isPanning = false;
+          view.pointerId = null;
+        }
+        sliceState.sliceCanvas?.releasePointerCapture?.(event.pointerId);
+        updateSliceCanvasCursor(event);
+        return;
+      }
+      if (!view.isPanning || view.pointerId !== event.pointerId) {
+        sliceState.sliceCanvas?.releasePointerCapture?.(event.pointerId);
+        updateSliceCanvasCursor(event);
+        return;
+      }
+      const wasTouchTap = event.pointerType !== 'mouse' && !view.moved;
       if (view.moved) view.suppressClick = true;
       view.isPanning = false;
       view.pointerId = null;
       sliceState.sliceCanvas?.releasePointerCapture?.(event.pointerId);
       updateSliceCanvasCursor(event);
+      if (wasTouchTap) {
+        selectSliceHitPoint(event);
+        view.suppressClick = true;
+      }
     }
 
     function handleSliceCanvasPointerLeave() {
@@ -3946,17 +4496,10 @@
       if (!xy) return;
       event.preventDefault();
       const view = sliceState.view;
-      const W = sliceState.displayWidth || sliceState.sliceCanvas.clientWidth || sliceState.sliceCanvas.width;
-      const H = sliceState.displayHeight || sliceState.sliceCanvas.clientHeight || sliceState.sliceCanvas.height;
-      const ox = W / 2, oy = H / 2;
       const oldZoom = view.zoom || 1;
       const factor = Math.exp(-event.deltaY * 0.001);
-      const newZoom = Math.max(0.35, Math.min(10, oldZoom * factor));
-      const relX = (xy[0] - ox - view.panX) / oldZoom;
-      const relY = (xy[1] - oy - view.panY) / oldZoom;
-      view.zoom = newZoom;
-      view.panX = xy[0] - ox - relX * newZoom;
-      view.panY = xy[1] - oy - relY * newZoom;
+      const newZoom = clampSliceZoom(oldZoom * factor);
+      applySliceZoomAt(xy, newZoom, oldZoom);
       if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
       updateSliceCanvasCursor(event);
     }
@@ -3968,17 +4511,22 @@
       if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
     }
 
+    function selectSliceHitPoint(event) {
+      const best = nearestSliceHitPoint(event);
+      if (!best) return false;
+      sliceState.selectedPoint = { i: best.i, j: best.j, key: best.key, latticeMode: best.latticeMode };
+      sliceState.activeCharacter = sliceState.characterMode === 'none' ? null : computeSliceCharacter(best);
+      renderSliceWeightInfo(best, sliceState.activeCharacter);
+      if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
+      return true;
+    }
+
     function handleSliceCanvasClick(event) {
       if (sliceState.view.suppressClick) {
         sliceState.view.suppressClick = false;
         return;
       }
-      const best = nearestSliceHitPoint(event);
-      if (!best) return;
-      sliceState.selectedPoint = { i: best.i, j: best.j };
-      sliceState.activeCharacter = sliceState.characterMode === 'none' ? null : computeSliceCharacter(best);
-      renderSliceWeightInfo(best, sliceState.activeCharacter);
-      if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
+      selectSliceHitPoint(event);
     }
 
     function toggleSliceDiagrams() {
@@ -3990,11 +4538,21 @@
     }
 
     function handleSliceWeightInfoClick(event) {
+      const positionBtn = event.target.closest('[data-slice-character-position-mode]');
+      if (positionBtn) {
+        const mode = positionBtn.dataset.sliceCharacterPositionMode;
+        sliceState.characterProjectionMode = mode === 'projection' ? 'projection' : 'slice';
+        const point = sliceState.hitPoints.find(p => sliceState.selectedPoint && p.key === sliceState.selectedPoint.key);
+        if (sliceState.characterMode !== 'none' && point) sliceState.activeCharacter = computeSliceCharacter(point);
+        if (point) renderSliceWeightInfo(point, sliceState.activeCharacter);
+        if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
+        return;
+      }
       const btn = event.target.closest('[data-slice-character-mode]');
       if (!btn) return;
       const mode = btn.dataset.sliceCharacterMode;
       sliceState.characterMode = (mode === 'dots' || mode === 'numbers') ? mode : 'none';
-      const point = sliceState.hitPoints.find(p => sliceState.selectedPoint && p.i === sliceState.selectedPoint.i && p.j === sliceState.selectedPoint.j);
+      const point = sliceState.hitPoints.find(p => sliceState.selectedPoint && p.key === sliceState.selectedPoint.key);
       if (sliceState.characterMode === 'none') sliceState.activeCharacter = null;
       else if (point) sliceState.activeCharacter = computeSliceCharacter(point);
       if (point) renderSliceWeightInfo(point, sliceState.activeCharacter);
@@ -4002,6 +4560,21 @@
     }
 
     function handleSliceLayerModeClick(event) {
+      const infoToggle = event.target.closest('[data-slice-lie-info-toggle]');
+      if (infoToggle) {
+        sliceState.lieInfoCollapsed = !sliceState.lieInfoCollapsed;
+        renderSliceLayerCard();
+        return;
+      }
+      const latticeBtn = event.target.closest('[data-slice-lattice-mode]');
+      if (latticeBtn) {
+        const mode = latticeBtn.dataset.sliceLatticeMode;
+        sliceState.latticeMode = (mode === 'root' || mode === 'none') ? mode : 'weight';
+        clearSlicePointSelection();
+        renderSliceLayerCard();
+        if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
+        return;
+      }
       const btn = event.target.closest('[data-slice-layer]');
       if (!btn) return;
       const layer = btn.dataset.sliceLayer;

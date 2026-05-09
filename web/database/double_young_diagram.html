@@ -279,6 +279,10 @@
       height: auto;
       background: #fbfaf7;
       cursor: default;
+      touch-action: none;
+      overscroll-behavior: contain;
+      user-select: none;
+      -webkit-user-select: none;
     }
     /* info box beneath slice-related card */
     .slice-info-row {
@@ -324,6 +328,9 @@
       flex-wrap: wrap;
       align-items: center;
     }
+    .slice-dimension-subrow {
+      margin-top: 4px;
+    }
     .slice-mode-btn {
       border: 1px solid var(--border);
       background: transparent;
@@ -345,6 +352,43 @@
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.68rem;
       color: var(--muted);
+    }
+    .slice-invariant-head {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .slice-invariant-toggle {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      line-height: 1;
+      padding: 1px 3px;
+    }
+    .slice-invariant-toggle:hover {
+      color: var(--accent);
+    }
+    .slice-invariant-list {
+      display: grid;
+      grid-template-columns: minmax(58px, max-content) minmax(0, 1fr);
+      column-gap: 10px;
+      row-gap: 2px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      line-height: 1.45;
+    }
+    .slice-invariant-list dt {
+      color: var(--muted);
+    }
+    .slice-invariant-list dd {
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
     #open-slice-btn {
       margin-top: 10px;
