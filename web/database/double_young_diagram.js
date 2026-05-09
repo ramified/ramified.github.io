@@ -2423,7 +2423,6 @@
       card.classList.toggle('collapsed', collapsed);
       const head = card.querySelector('.card-head');
       if (head) head.setAttribute('aria-expanded', String(!collapsed));
-      if (collapsed && card.querySelector('#slice-stats-out')) hideSlice();
       if (!collapsed && refreshOnOpen) runCardOpenRefresh(card);
     }
     function setupCards() {
@@ -2588,6 +2587,10 @@
       characterMode: 'none',
       characterProjectionMode: 'slice',
       activeCharacter: null,
+      infoPoint: null,
+      gammaInputMode: 'dynkin',
+      gammaInputText: '',
+      gammaInputError: '',
       latticeMode: 'weight',
       lieInfoCollapsed: false,
       view: {
@@ -2702,6 +2705,15 @@
     }
     function formatDynkinVector(v) {
       return '[' + v.join(', ') + ']';
+    }
+    function escapeHTML(text) {
+      return String(text).replace(/[&<>"']/g, ch => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[ch]));
     }
     function determinantIntMatrix(M) {
       const n = M.length;
@@ -3761,12 +3773,45 @@
         drawBasisArrow(displayBasis[1], '#5f6f8f', 'v2');
       }
 
+      function drawManualGammaProjection() {
+        const point = sliceState.infoPoint;
+        if (!point || !point.manual || !Array.isArray(point.labels)) return;
+        const [u, v] = projectDynkinToSliceLM(point.labels, data, C);
+        const [x, y] = canvasXY_lm_scaled(u, v);
+        if (x < -18 || x > W + 18 || y < -18 || y > H + 18) return;
+        ctx.save();
+        ctx.strokeStyle = '#7b2e5d';
+        ctx.fillStyle = 'rgba(123,46,93,0.14)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(viewOx, viewOy);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(x, y, 7.5, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x - 5, y);
+        ctx.lineTo(x + 5, y);
+        ctx.moveTo(x, y - 5);
+        ctx.lineTo(x, y + 5);
+        ctx.stroke();
+        ctx.font = 'italic 14px serif';
+        ctx.fillStyle = '#7b2e5d';
+        ctx.fillText('\u03b3', x + 9, y - 7);
+        ctx.restore();
+      }
+
       // Origin dot, then dimension overlay so a nonzero origin weight remains readable.
       const originPointVisible = sliceState.hitPoints.some(p => p.key === originLabelKey);
       if (latticeMode !== 'none' && !originPointVisible && !overlayEntryByKey.has(originLabelKey)) {
         ctx.beginPath(); ctx.arc(viewOx, viewOy, 4, 0, 2*Math.PI);
         ctx.fillStyle = '#222'; ctx.fill();
       }
+      drawManualGammaProjection();
       drawSliceDimensionOverlay();
 
       // ── Angle arc between λ and μ arrows ──────────────────────────────────
@@ -3860,8 +3905,7 @@
       if (wasHidden) placeSliceCompanionCards();
       card.style.display = '';
       setCardCollapsed(card, collapsed, false);
-      const out = $('slice-weight-info-out');
-      if (out && collapsed) out.innerHTML = '<span class="hint">Click a lattice point in the 2d slice canvas.</span>';
+      renderSliceWeightInfo(sliceState.infoPoint, sliceState.activeCharacter, false);
     }
 
     function hideSliceWeightInfoCard() {
@@ -3872,6 +3916,7 @@
       const out = $('slice-weight-info-out');
       if (out) out.innerHTML = '<span class="hint">Click a lattice point in the 2d slice canvas.</span>';
       sliceState.selectedPoint = null;
+      sliceState.infoPoint = null;
       sliceState.activeCharacter = null;
     }
 
@@ -4191,6 +4236,247 @@
       }
     }
 
+    function parseIntegerVectorInput(text, rank, label) {
+      const raw = String(text || '').trim();
+      if (!raw) throw new Error(`Enter ${label}.`);
+      const cleaned = raw.replace(/[\[\](){}]/g, ' ').replace(/[;,]/g, ' ');
+      const parts = cleaned.split(/\s+/).filter(Boolean);
+      if (parts.length > rank) throw new Error(`${label} has ${parts.length} entries; rank is ${rank}.`);
+      const values = parts.map(part => {
+        if (!/^[+-]?\d+$/.test(part)) throw new Error(`${label} must use integer coefficients.`);
+        return Number(part);
+      });
+      while (values.length < rank) values.push(0);
+      return values;
+    }
+
+    function parseRationalNumber(text, label) {
+      const raw = String(text || '').trim();
+      if (/^[+-]?\d+$/.test(raw)) return Number(raw);
+      const frac = raw.match(/^([+-]?\d+)\/([+-]?\d+)$/);
+      if (frac) {
+        const num = Number(frac[1]);
+        const den = Number(frac[2]);
+        if (!den) throw new Error(`${label} has a zero denominator.`);
+        return num / den;
+      }
+      throw new Error(`${label} must use integer or rational coefficients.`);
+    }
+
+    function parseRationalVectorInput(text, rank, label) {
+      const raw = String(text || '').trim();
+      if (!raw) throw new Error(`Enter ${label}.`);
+      const cleaned = raw.replace(/[\[\](){}]/g, ' ').replace(/[;,]/g, ' ');
+      const parts = cleaned.split(/\s+/).filter(Boolean);
+      if (parts.length > rank) throw new Error(`${label} has ${parts.length} entries; rank is ${rank}.`);
+      const values = parts.map(part => parseRationalNumber(part, label));
+      while (values.length < rank) values.push(0);
+      return values;
+    }
+
+    function integralVectorOrNull(v, eps = 1e-7) {
+      const rounded = v.map(x => Math.round(x));
+      return v.every((x, i) => Math.abs(x - rounded[i]) <= eps) ? rounded : null;
+    }
+
+    function parseSimpleRootInput(text, rank) {
+      const raw = String(text || '').trim();
+      if (!raw) throw new Error('Enter simple-root coefficients.');
+      if (!/(a|alpha|α)/i.test(raw)) return parseIntegerVectorInput(raw, rank, 'simple-root coefficients');
+
+      let compact = raw
+        .replace(/[−–—]/g, '-')
+        .replace(/alpha/gi, 'a')
+        .replace(/α/g, 'a')
+        .replace(/\s+/g, '')
+        .replace(/-/g, '+-');
+      if (compact.startsWith('+-')) compact = '-' + compact.slice(2);
+      const parts = compact.split('+').filter(Boolean);
+      const values = Array(rank).fill(0);
+      for (const part of parts) {
+        const m = part.match(/^([+-]?\d*)\*?a_?(\d+)$/i);
+        if (!m) throw new Error('Use simple-root terms such as 2a1-a3, or integer coefficients.');
+        const coeffText = m[1];
+        const coeff = coeffText === '' || coeffText === '+' ? 1 : coeffText === '-' ? -1 : Number(coeffText);
+        const index = Number(m[2]);
+        if (!Number.isInteger(coeff) || index < 1 || index > rank) throw new Error(`Simple-root index must be between 1 and ${rank}.`);
+        values[index - 1] += coeff;
+      }
+      return values;
+    }
+
+    function parseSimpleRootRationalInput(text, rank) {
+      const raw = String(text || '').trim();
+      if (!raw) throw new Error('Enter simple-root coefficients.');
+      if (!/(a|alpha|\u03b1)/i.test(raw)) return parseRationalVectorInput(raw, rank, 'simple-root coefficients');
+
+      let compact = raw
+        .replace(/[\u2212\u2013\u2014]/g, '-')
+        .replace(/alpha/gi, 'a')
+        .replace(/\u03b1/g, 'a')
+        .replace(/\s+/g, '')
+        .replace(/-/g, '+-');
+      if (compact.startsWith('+-')) compact = '-' + compact.slice(2);
+      const parts = compact.split('+').filter(Boolean);
+      const values = Array(rank).fill(0);
+      for (const part of parts) {
+        const m = part.match(/^([+-]?(?:\d+(?:\/\d+)?)?)\*?a_?(\d+)$/i);
+        if (!m) throw new Error('Use simple-root terms such as 1/2a1-a3, or rational coefficients.');
+        const coeffText = m[1];
+        const coeff = coeffText === '' || coeffText === '+' ? 1 : coeffText === '-' ? -1 : parseRationalNumber(coeffText, 'simple-root coefficient');
+        const index = Number(m[2]);
+        if (index < 1 || index > rank) throw new Error(`Simple-root index must be between 1 and ${rank}.`);
+        values[index - 1] += coeff;
+      }
+      return values;
+    }
+
+    function parseSliceGammaInputText(text, mode = sliceState.gammaInputMode || 'dynkin') {
+      const type = currentType(), rank = currentRank();
+      const C = cartanMatrix(type, rank);
+      if (mode === 'partition') return diagramToDynkinLabels(parsePartition(text), rank);
+      if (mode === 'simple') {
+        const labels = simpleToDynkin(parseSimpleRootRationalInput(text, rank), C);
+        const integral = integralVectorOrNull(labels);
+        if (!integral) throw new Error('This simple-root combination is not an integral weight.');
+        return integral;
+      }
+      return parseIntegerVectorInput(text, rank, 'Dynkin labels');
+    }
+
+    function parseSliceGammaInput() {
+      return parseSliceGammaInputText(sliceState.gammaInputText || '', sliceState.gammaInputMode || 'dynkin');
+    }
+
+    function makeSliceInfoPoint(labels, source = 'manual') {
+      const clean = labels.map(x => Math.trunc(Number(x) || 0));
+      return {
+        labels: clean,
+        key: key(clean),
+        latticeMode: source,
+        manual: source === 'manual'
+      };
+    }
+
+    function rationalApprox(x, maxDen = 1000000) {
+      if (!Number.isFinite(x)) return null;
+      const sign = x < 0 ? -1 : 1;
+      x = Math.abs(x);
+      if (Math.abs(x - Math.round(x)) < 1e-10) return [sign * Math.round(x), 1];
+      let h1 = 1, h0 = 0, k1 = 0, k0 = 1;
+      let value = x;
+      for (let i = 0; i < 32; i++) {
+        const a = Math.floor(value);
+        const h = a * h1 + h0;
+        const k = a * k1 + k0;
+        if (k > maxDen) break;
+        if (Math.abs(h / k - x) < 1e-10) return [sign * h, k];
+        h0 = h1; h1 = h; k0 = k1; k1 = k;
+        const rest = value - a;
+        if (Math.abs(rest) < 1e-12) break;
+        value = 1 / rest;
+      }
+      return [sign * h1, k1 || 1];
+    }
+
+    function formatRationalNumber(x) {
+      if (Math.abs(x) < 1e-10) return '0';
+      const fr = rationalApprox(x);
+      if (!fr) return String(x);
+      const [num, den] = fr;
+      return den === 1 ? String(num) : `${num}/${den}`;
+    }
+
+    function formatInputVector(v) {
+      return '[' + v.map(formatRationalNumber).join(',') + ']';
+    }
+
+    function standardSliceGammaInput(labels, preferredMode = sliceState.gammaInputMode || 'dynkin') {
+      const clean = labels.map(x => Math.trunc(Number(x) || 0));
+      if (preferredMode === 'partition') {
+        if (isDominantDynkin(clean)) {
+          return { mode: 'partition', text: partitionToString(dynkinLabelsToDiagram(clean)), warning: '' };
+        }
+        return {
+          mode: 'dynkin',
+          text: formatInputVector(clean),
+          warning: 'This weight is not a partition/highest weight, so γ is shown in Dynkin labels.'
+        };
+      }
+      if (preferredMode === 'simple') {
+        const C = cartanMatrix(currentType(), currentRank());
+        const simple = solveLinear(transpose(C), clean);
+        if (simple) return { mode: 'simple', text: formatInputVector(simple), warning: '' };
+        return {
+          mode: 'dynkin',
+          text: formatInputVector(clean),
+          warning: 'This weight is not in the root lattice, so γ is shown in Dynkin labels.'
+        };
+      }
+      return { mode: 'dynkin', text: formatInputVector(clean), warning: '' };
+    }
+
+    function setSliceGammaTextFromLabels(labels, preferredMode = sliceState.gammaInputMode || 'dynkin') {
+      const formatted = standardSliceGammaInput(labels, preferredMode);
+      sliceState.gammaInputMode = formatted.mode;
+      sliceState.gammaInputText = formatted.text;
+      sliceState.gammaInputError = formatted.warning || '';
+    }
+
+    function sliceGammaPlaceholder() {
+      const rank = currentRank();
+      const mode = sliceState.gammaInputMode || 'dynkin';
+      if (mode === 'partition') return 'e.g. (4,2,1)';
+      if (mode === 'simple') return rank >= 3 ? 'e.g. [1/2,0,-1] or 1/2a1-a3' : 'e.g. [1/2,1]';
+      return rank >= 3 ? 'e.g. [1,0,0]' : 'e.g. [1,0]';
+    }
+
+    function sliceGammaInputControls() {
+      const mode = sliceState.gammaInputMode || 'dynkin';
+      const modes = [
+        ['dynkin', 'Dynkin'],
+        ['partition', 'partition'],
+        ['simple', 'simple roots']
+      ];
+      const buttons = modes.map(([value, label]) =>
+        `<button class="slice-mode-btn ${mode === value ? 'active' : ''}" data-slice-gamma-format="${value}" type="button">${label}</button>`
+      ).join('');
+      const error = sliceState.gammaInputError
+        ? `<div class="warning-text">${escapeHTML(sliceState.gammaInputError)}</div>`
+        : '';
+      return `
+        <div class="slice-gamma-control">
+          <div class="slice-mode-row">${buttons}</div>
+          <div class="slice-gamma-entry">
+            <input data-slice-gamma-input type="text" value="${escapeHTML(sliceState.gammaInputText || '')}" placeholder="${escapeHTML(sliceGammaPlaceholder())}">
+            <button class="slice-mode-btn" data-slice-gamma-apply type="button">set γ</button>
+          </div>
+          ${error}
+        </div>`;
+    }
+
+    function readSliceGammaInputValue() {
+      const input = document.querySelector('[data-slice-gamma-input]');
+      if (input) sliceState.gammaInputText = input.value;
+    }
+
+    function applySliceGammaInput() {
+      readSliceGammaInputValue();
+      try {
+        const labels = parseSliceGammaInput();
+        const point = makeSliceInfoPoint(labels, 'manual');
+        setSliceGammaTextFromLabels(labels, sliceState.gammaInputMode);
+        sliceState.infoPoint = point;
+        sliceState.selectedPoint = null;
+        sliceState.activeCharacter = sliceState.characterMode === 'none' ? null : computeSliceCharacter(point);
+        renderSliceWeightInfo(point, sliceState.activeCharacter);
+        if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
+      } catch (err) {
+        sliceState.gammaInputError = err.message;
+        renderSliceWeightInfo(sliceState.infoPoint, sliceState.activeCharacter, false);
+      }
+    }
+
     function sliceDimensionModeButtons() {
       const displayModes = [
         ['none', 'none'],
@@ -4245,20 +4531,24 @@
       ];
     }
 
-    function renderSliceWeightInfo(point, character = sliceState.activeCharacter) {
-      if (!point) return;
+    function renderSliceWeightInfo(point = sliceState.infoPoint, character = sliceState.activeCharacter, expand = true) {
       const card = $('slice-weight-info-card');
       const out = $('slice-weight-info-out');
       if (!card || !out) return;
       card.style.display = '';
-      setCardCollapsed(card, false, false);
-      const coordName = point.latticeMode === 'root' ? 'root coordinates' : 'weight coordinates';
+      if (expand) setCardCollapsed(card, false, false);
       const rows = [
-        [coordName, `(${point.i}, ${point.j})`],
-        ['Dynkin labels', `<code>${formatDynkinVector(point.labels)}</code>`],
-        ...sliceWeightSummaryRows(point),
-        ['dimensions', sliceDimensionModeButtons()]
+        ['γ input', sliceGammaInputControls()]
       ];
+      if (point) {
+        rows.push(
+          ['Dynkin labels', `<code>${formatDynkinVector(point.labels)}</code>`],
+          ...sliceWeightSummaryRows(point),
+          ['dimensions', sliceDimensionModeButtons()]
+        );
+      } else {
+        rows.push(['status', '<span class="hint">Click a lattice point in the 2d slice canvas, or enter γ above.</span>']);
+      }
       if (sliceState.characterMode !== 'none' && character && character.status && character.status !== 'computed') {
         rows.push(['status', character.status]);
       } else if (sliceState.characterMode !== 'none' && character && character.statusNote) {
@@ -4288,9 +4578,10 @@
 
     function clearSlicePointSelection() {
       sliceState.selectedPoint = null;
+      sliceState.infoPoint = null;
       sliceState.activeCharacter = null;
       const out = $('slice-weight-info-out');
-      if (out) out.innerHTML = '<span class="hint">Click a lattice point in the 2d slice canvas.</span>';
+      if (out) renderSliceWeightInfo(null, null, false);
     }
 
     function updateSliceCanvasCursor(event = null) {
@@ -4524,6 +4815,8 @@
       const best = nearestSliceHitPoint(event);
       if (!best) return false;
       sliceState.selectedPoint = { i: best.i, j: best.j, key: best.key, latticeMode: best.latticeMode };
+      sliceState.infoPoint = best;
+      setSliceGammaTextFromLabels(best.labels, sliceState.gammaInputMode);
       sliceState.activeCharacter = sliceState.characterMode === 'none' ? null : computeSliceCharacter(best);
       renderSliceWeightInfo(best, sliceState.activeCharacter);
       if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
@@ -4547,11 +4840,32 @@
     }
 
     function handleSliceWeightInfoClick(event) {
+      const gammaFormatBtn = event.target.closest('[data-slice-gamma-format]');
+      if (gammaFormatBtn) {
+        const oldMode = sliceState.gammaInputMode || 'dynkin';
+        readSliceGammaInputValue();
+        const newMode = gammaFormatBtn.dataset.sliceGammaFormat || 'dynkin';
+        let labels = sliceState.infoPoint?.labels || null;
+        if (!labels && String(sliceState.gammaInputText || '').trim()) {
+          try { labels = parseSliceGammaInputText(sliceState.gammaInputText, oldMode); }
+          catch (_) {}
+        }
+        sliceState.gammaInputMode = newMode;
+        if (labels) setSliceGammaTextFromLabels(labels, newMode);
+        else sliceState.gammaInputError = '';
+        renderSliceWeightInfo(sliceState.infoPoint, sliceState.activeCharacter, false);
+        return;
+      }
+      const gammaApplyBtn = event.target.closest('[data-slice-gamma-apply]');
+      if (gammaApplyBtn) {
+        applySliceGammaInput();
+        return;
+      }
       const positionBtn = event.target.closest('[data-slice-character-position-mode]');
       if (positionBtn) {
         const mode = positionBtn.dataset.sliceCharacterPositionMode;
         sliceState.characterProjectionMode = mode === 'projection' ? 'projection' : 'slice';
-        const point = sliceState.hitPoints.find(p => sliceState.selectedPoint && p.key === sliceState.selectedPoint.key);
+        const point = sliceState.infoPoint;
         if (sliceState.characterMode !== 'none' && point) sliceState.activeCharacter = computeSliceCharacter(point);
         if (point) renderSliceWeightInfo(point, sliceState.activeCharacter);
         if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
@@ -4561,11 +4875,17 @@
       if (!btn) return;
       const mode = btn.dataset.sliceCharacterMode;
       sliceState.characterMode = (mode === 'dots' || mode === 'numbers') ? mode : 'none';
-      const point = sliceState.hitPoints.find(p => sliceState.selectedPoint && p.key === sliceState.selectedPoint.key);
+      const point = sliceState.infoPoint;
       if (sliceState.characterMode === 'none') sliceState.activeCharacter = null;
       else if (point) sliceState.activeCharacter = computeSliceCharacter(point);
       if (point) renderSliceWeightInfo(point, sliceState.activeCharacter);
       if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
+    }
+
+    function handleSliceWeightInfoKeydown(event) {
+      if (event.key !== 'Enter' || !event.target.closest('[data-slice-gamma-input]')) return;
+      event.preventDefault();
+      applySliceGammaInput();
     }
 
     function handleSliceLayerModeClick(event) {
@@ -4666,7 +4986,6 @@
 
     function refreshSlice() {
       if (!sliceState.visible) return;
-      if (!sliceCardIsExpanded()) { hideSlice(); return; }
       const data = computeSliceData();
       if (!data) {
         hideSlice();
@@ -4674,6 +4993,7 @@
       }
       sliceState.lastData = data;
       sliceState.selectedPoint = null;
+      sliceState.infoPoint = null;
       sliceState.activeCharacter = null;
       resetSliceView();
       showSliceWeightInfoCard(true);
@@ -4692,7 +5012,10 @@
       const layerCardBody = $('slice-layer-card-body');
       if (layerCardBody) layerCardBody.addEventListener('click', handleSliceLayerModeClick);
       const infoOut = $('slice-weight-info-out');
-      if (infoOut) infoOut.addEventListener('click', handleSliceWeightInfoClick);
+      if (infoOut) {
+        infoOut.addEventListener('click', handleSliceWeightInfoClick);
+        infoOut.addEventListener('keydown', handleSliceWeightInfoKeydown);
+      }
       sliceState.sliceCanvas.addEventListener('click', handleSliceCanvasClick);
       sliceState.sliceCanvas.addEventListener('dblclick', handleSliceCanvasDoubleClick);
       sliceState.sliceCanvas.addEventListener('wheel', handleSliceCanvasWheel, { passive: false });
@@ -4705,7 +5028,6 @@
       // Resize slice canvas on window resize without recomputing slice data.
       window.addEventListener('resize', () => {
         if (!sliceState.visible) return;
-        if (!sliceCardIsExpanded()) { hideSlice(); return; }
         sizeSliceCanvasToStack();
         if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
       });
