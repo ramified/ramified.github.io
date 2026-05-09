@@ -39,6 +39,7 @@
       lastPlethysm: null,
       lastSchurFunctor: null,
       lastGrassmannian: null,
+      lastSymmetricPolynomial: null,
       exportFilename: 'young_diagram2_calculator.bib',
       exportMode: 'citation'
     };
@@ -1970,7 +1971,7 @@
       state.lastPlethysm = null;
       state.lastSchurFunctor = null;
       state.lastGrassmannian = null;
-      drawAll(); updateStats(); updateInvariants(); refreshExport();
+      drawAll(); updateStats(); updateInvariants(); markSymmetricPolynomialStale(); refreshExport();
     }
     function handleCanvasClick(which, event) {
       const d = state[which], rect = d.canvas.getBoundingClientRect(), g = d.geometry;
@@ -2011,7 +2012,7 @@
       state.lastPlethysm = null;
       state.lastSchurFunctor = null;
       state.lastGrassmannian = null;
-      resizeCanvases(); updateStats(); updateInvariants(); refreshExport();
+      resizeCanvases(); updateStats(); updateInvariants(); markSymmetricPolynomialStale(); refreshExport();
     }
     function updateStats(options = {}) {
       if (!options.force && !isCardExpandedById('stats-out')) return;
@@ -2346,6 +2347,1482 @@
       $('export-out').focus();
     }
 
+    const SYMPOLY_VARIABLE_MAX = 18 * 18;
+    const SYMPOLY_POLYNOMIAL_TERM_LIMIT = 1000000;
+    const SYMPOLY_EXPANSION_PARTITION_LIMIT = 500000;
+    const SYMPOLY_BASIS_CONVERSION_LIMIT = 180;
+    const SYMPOLY_LINEAR_MODE_PARTITION_LIMIT = 180;
+    const SYMPOLY_SCHUR_DETERMINANT_LIMIT = 8;
+    const SYMPOLY_PLETHYSM_BOX_LIMIT = 50;
+    const SYMPOLY_ORDER = ['m', 'p', 'e', 'h', 's'];
+    let sympolyVariableCountTouched = false;
+    let sympolySavedFiniteVariableCount = '3';
+
+    function sympolyEscapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, ch => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      }[ch]));
+    }
+
+    function sympolyPartitionLabel(part) {
+      const p = trimPartition(part);
+      return p.length ? '(' + p.join(', ') + ')' : '()';
+    }
+
+    function sympolyPartKey(part) {
+      return trimPartition(part).join(',');
+    }
+
+    function sympolyPlethysmLimitMessage(lambdaRows, muRows) {
+      const degree = sizeOf(trimPartition(lambdaRows)) * sizeOf(trimPartition(muRows));
+      return `Plethysm output degree |lambda| * |mu| is ${degree}; this browser chart is capped at ${SYMPOLY_PLETHYSM_BOX_LIMIT} output boxes. Draw smaller diagrams.`;
+    }
+
+    function sympolyOutputDegree(operation, lambdaRows, muRows) {
+      const lambdaSize = sizeOf(trimPartition(lambdaRows));
+      const muSize = sizeOf(trimPartition(muRows));
+      return operation === 'plethysm' ? lambdaSize * muSize : lambdaSize + muSize;
+    }
+
+    function sympolyLinearModeLimitMessage(operation, lambdaRows, muRows) {
+      const degree = sympolyOutputDegree(operation, lambdaRows, muRows);
+      const degreeRule = operation === 'plethysm' ? '|lambda| * |mu|' : '|lambda| + |mu|';
+      return `Linear mode in degree ${degree} (${degreeRule}) would need more than ${SYMPOLY_LINEAR_MODE_PARTITION_LIMIT} partition-indexed output terms. Use poly mode for larger diagrams.`;
+    }
+
+    function assertSympolyLinearModeWithinLimit(operation, mode, lambdaRows, muRows) {
+      if (mode !== 'linear') return;
+      const degree = sympolyOutputDegree(operation, lambdaRows, muRows);
+      const data = partitionsOfSizeLimited(degree, SYMPOLY_LINEAR_MODE_PARTITION_LIMIT);
+      if (data.truncated) throw new Error('linear-mode-too-large');
+    }
+
+    function sympolyKindDefinition(kind) {
+      if (kind === 'm') return 'Monomial symmetric function: m_lambda is the sum of all distinct monomials whose exponent multiset is lambda.';
+      if (kind === 'p') return 'Power-sum symmetric function: p_lambda = product_j p_{lambda_j}, where p_k = sum_i x_i^k.';
+      if (kind === 'e') return 'Elementary symmetric function: e_lambda = product_j e_{lambda_j}, where e_k = sum_{i_1<...<i_k} x_{i_1}...x_{i_k}.';
+      if (kind === 'h') return 'Complete homogeneous symmetric function: h_lambda = product_j h_{lambda_j}, where h_k = sum_{i_1<=...<=i_k} x_{i_1}...x_{i_k}.';
+      return 'Schur function: s_lambda is the semistandard Young tableau generating function of shape lambda; equivalently s_lambda = det(h_{lambda_i-i+j}).';
+    }
+
+    function sympolyProductLabelHTML(leftKind, rightKind, operation) {
+      const tooltip = sympolyEscapeHtml(`${sympolyKindDefinition(leftKind)} ${sympolyKindDefinition(rightKind)}`);
+      const op = operation === 'plethysm' ? '&#8728;' : '&middot;';
+      return `<span class="sympoly-product-label tooltip-label" tabindex="0" data-tooltip="${tooltip}"><span>${leftKind}<sub>&lambda;</sub></span><span>${op}</span><span>${rightKind}<sub>&mu;</sub></span></span>`;
+    }
+
+    function sympolyBasisSymbol(kind, part) {
+      const p = trimPartition(part);
+      if (!p.length) return '1';
+      return `<span class="symfun-symbol">${kind}<sub>${sympolyEscapeHtml(sympolyPartitionLabel(p))}</sub></span>`;
+    }
+
+    function selectedSympolyLeftKind() {
+      const select = $('sympoly-left-kind');
+      return SYMPOLY_ORDER.includes(select?.value) ? select.value : 'm';
+    }
+
+    function selectedSympolyRightKind() {
+      const select = $('sympoly-right-kind');
+      return SYMPOLY_ORDER.includes(select?.value) ? select.value : 'm';
+    }
+
+    function selectedSympolyOperation() {
+      const select = $('sympoly-operation');
+      return select?.value === 'plethysm' ? 'plethysm' : 'product';
+    }
+
+    function selectedSympolyBasis() {
+      const select = $('sympoly-basis');
+      return SYMPOLY_ORDER.includes(select?.value) ? select.value : 'm';
+    }
+
+    function selectedSympolyMode() {
+      const select = $('sympoly-mode');
+      return select?.value === 'polynomial' ? 'polynomial' : 'linear';
+    }
+
+    function conversionBasisForSympolyMode(targetBasis, mode) {
+      return mode === 'polynomial' && targetBasis === 'm' ? 'p' : targetBasis;
+    }
+
+    function defaultSympolyVariableCount() {
+      return 3;
+    }
+
+    function syncSympolyVariableControl(lambda = trimPartition(state.lambda.rows), mu = trimPartition(state.mu.rows)) {
+      const input = $('sympoly-variable-count');
+      const infinite = $('sympoly-infinite');
+      const basisSelect = $('sympoly-basis');
+      const modeSelect = $('sympoly-mode');
+      if (!input) return { infinite: false };
+
+      if (infinite?.checked) {
+        input.type = 'text';
+        input.readOnly = true;
+        input.value = '\u221e';
+        if (basisSelect) basisSelect.disabled = false;
+        if (modeSelect) modeSelect.disabled = false;
+        return { infinite: true };
+      }
+
+      input.type = 'number';
+      input.min = '0';
+      input.max = String(SYMPOLY_VARIABLE_MAX);
+      input.step = '1';
+      input.readOnly = false;
+      if (basisSelect) basisSelect.disabled = true;
+      if (modeSelect) modeSelect.disabled = true;
+      if (!sympolyVariableCountTouched || input.value.trim() === '\u221e') {
+        input.value = String(defaultSympolyVariableCount(lambda, mu));
+      }
+      return { infinite: false };
+    }
+
+    function readSympolyVariableCount(lambda = trimPartition(state.lambda.rows), mu = trimPartition(state.mu.rows)) {
+      const controlState = syncSympolyVariableControl(lambda, mu);
+      if (controlState.infinite) return { count: null, infinite: true, error: '' };
+
+      const input = $('sympoly-variable-count');
+      if (!input) return { count: defaultSympolyVariableCount(lambda, mu), infinite: false, error: '' };
+      const raw = String(input.value || '').trim();
+      if (!raw) return { count: null, infinite: false, pending: true, error: '' };
+      const count = Number(raw);
+      if (!Number.isInteger(count) || count < 0 || count > SYMPOLY_VARIABLE_MAX) {
+        return { count: null, infinite: false, error: `Choose 0-${SYMPOLY_VARIABLE_MAX} variables, or turn on infinite.` };
+      }
+      return { count, infinite: false, error: '' };
+    }
+
+    function handleSympolyVariableInput() {
+      const input = $('sympoly-variable-count');
+      const infinite = $('sympoly-infinite');
+      if (infinite?.checked) return;
+      const raw = String(input?.value || '').trim();
+      sympolyVariableCountTouched = true;
+      sympolySavedFiniteVariableCount = raw;
+      markSymmetricPolynomialStale();
+    }
+
+    function toggleSympolyInfinite() {
+      const input = $('sympoly-variable-count');
+      const infinite = $('sympoly-infinite');
+      if (!input || !infinite) return;
+
+      if (infinite.checked) {
+        if (input.value.trim() && input.value.trim() !== '\u221e') {
+          sympolySavedFiniteVariableCount = input.value.trim();
+        }
+        input.type = 'text';
+        input.readOnly = true;
+        input.value = '\u221e';
+      } else {
+        input.type = 'number';
+        input.min = '0';
+        input.max = String(SYMPOLY_VARIABLE_MAX);
+        input.step = '1';
+        input.readOnly = false;
+        input.value = sympolyVariableCountTouched && sympolySavedFiniteVariableCount
+          ? sympolySavedFiniteVariableCount
+          : String(defaultSympolyVariableCount());
+      }
+      markSymmetricPolynomialStale();
+    }
+
+    function partitionsOfSizeLimited(size, limit = SYMPOLY_EXPANSION_PARTITION_LIMIT) {
+      if (size === 0) return { parts: [[]], truncated: false };
+      const parts = [];
+      let truncated = false;
+      function gen(rem, maxPart, current) {
+        if (parts.length > limit) {
+          truncated = true;
+          return;
+        }
+        if (rem === 0) {
+          parts.push(current.slice());
+          if (parts.length > limit) truncated = true;
+          return;
+        }
+        for (let p = Math.min(maxPart, rem); p >= 1; p--) {
+          current.push(p);
+          gen(rem - p, p, current);
+          current.pop();
+          if (truncated) return;
+        }
+      }
+      gen(size, size, []);
+      return { parts: parts.slice(0, limit), truncated };
+    }
+
+    function comparePartitionsDesc(a, b) {
+      const A = trimPartition(a), B = trimPartition(b);
+      const s = sizeOf(B) - sizeOf(A);
+      if (s) return s;
+      for (let i = 0; i < Math.max(A.length, B.length); i++) {
+        const d = (B[i] || 0) - (A[i] || 0);
+        if (d) return d;
+      }
+      return 0;
+    }
+
+    function sympolyBigCombSmall(n, k) {
+      if (k < 0 || k > n) return 0n;
+      k = Math.min(k, n - k);
+      let result = 1n;
+      for (let i = 1; i <= k; i++) {
+        result = (result * BigInt(n - k + i)) / BigInt(i);
+      }
+      return result;
+    }
+
+    function sympolyCapacityGroups(stateCaps) {
+      const groups = [];
+      for (const cap of stateCaps) {
+        if (cap <= 0) continue;
+        const last = groups[groups.length - 1];
+        if (last && last.cap === cap) last.count++;
+        else groups.push({ cap, count: 1 });
+      }
+      return groups;
+    }
+
+    const sympolyGroupProfileCache = new Map();
+    const sympolyRowTransitionCache = new Map();
+    const sympolyPowerTransitionCache = new Map();
+
+    function sympolyGroupAllocationProfiles(cap, count, maxPerColumn) {
+      const maxAlloc = maxPerColumn == null ? cap : Math.min(cap, maxPerColumn);
+      const cacheKey = `${cap}|${count}|${maxAlloc}`;
+      const cached = sympolyGroupProfileCache.get(cacheKey);
+      if (cached) return cached;
+
+      const profiles = [];
+      const allocationCounts = [];
+
+      function rec(allocation, remainingCount, used) {
+        if (allocation > maxAlloc) {
+          if (remainingCount !== 0) return;
+          let ways = 1n;
+          let unassigned = count;
+          const caps = [];
+          for (let a = 0; a <= maxAlloc; a++) {
+            const take = allocationCounts[a] || 0;
+            ways *= sympolyBigCombSmall(unassigned, take);
+            unassigned -= take;
+            const nextCap = cap - a;
+            for (let i = 0; i < take; i++) {
+              if (nextCap > 0) caps.push(nextCap);
+            }
+          }
+          profiles.push({ used, caps, ways });
+          return;
+        }
+
+        for (let take = 0; take <= remainingCount; take++) {
+          allocationCounts[allocation] = take;
+          rec(allocation + 1, remainingCount - take, used + allocation * take);
+        }
+        allocationCounts[allocation] = 0;
+      }
+
+      rec(0, count, 0);
+      sympolyGroupProfileCache.set(cacheKey, profiles);
+      return profiles;
+    }
+
+    function sympolySortedPositiveState(caps) {
+      return caps.filter(c => c > 0).sort((a, b) => b - a);
+    }
+
+    function sympolyRowTransitionStates(stateCaps, rowSum, maxPerColumn) {
+      const cacheKey = `${stateCaps.join(',')}|${rowSum}|${maxPerColumn == null ? 'inf' : maxPerColumn}`;
+      const cached = sympolyRowTransitionCache.get(cacheKey);
+      if (cached) return cached;
+
+      const groups = sympolyCapacityGroups(stateCaps);
+      const byKey = new Map();
+
+      function rec(groupIndex, used, caps, ways) {
+        if (used > rowSum) return;
+        if (groupIndex === groups.length) {
+          if (used !== rowSum) return;
+          const nextState = sympolySortedPositiveState(caps);
+          const k = sympolyPartKey(nextState);
+          byKey.set(k, (byKey.get(k) || 0n) + ways);
+          return;
+        }
+
+        const group = groups[groupIndex];
+        for (const profile of sympolyGroupAllocationProfiles(group.cap, group.count, maxPerColumn)) {
+          if (used + profile.used > rowSum) continue;
+          rec(groupIndex + 1, used + profile.used, caps.concat(profile.caps), ways * profile.ways);
+        }
+      }
+
+      rec(0, 0, [], 1n);
+      const result = [...byKey.entries()].map(([k, ways]) => ({
+        state: k ? k.split(',').map(Number) : [],
+        ways,
+      }));
+      sympolyRowTransitionCache.set(cacheKey, result);
+      return result;
+    }
+
+    function sympolyPowerRowTransitionStates(stateCaps, rowSum) {
+      const cacheKey = `${stateCaps.join(',')}|${rowSum}`;
+      const cached = sympolyPowerTransitionCache.get(cacheKey);
+      if (cached) return cached;
+
+      const groups = sympolyCapacityGroups(stateCaps);
+      const byKey = new Map();
+
+      for (let i = 0; i < groups.length; i++) {
+        const group = groups[i];
+        if (group.cap < rowSum) continue;
+        const caps = [];
+        for (let j = 0; j < groups.length; j++) {
+          const g = groups[j];
+          const count = j === i ? g.count - 1 : g.count;
+          for (let c = 0; c < count; c++) caps.push(g.cap);
+        }
+        const reduced = group.cap - rowSum;
+        if (reduced > 0) caps.push(reduced);
+        const nextState = sympolySortedPositiveState(caps);
+        const k = sympolyPartKey(nextState);
+        byKey.set(k, (byKey.get(k) || 0n) + BigInt(group.count));
+      }
+
+      const result = [...byKey.entries()].map(([k, ways]) => ({
+        state: k ? k.split(',').map(Number) : [],
+        ways,
+      }));
+      sympolyPowerTransitionCache.set(cacheKey, result);
+      return result;
+    }
+
+    function sympolyCountRowTransitionCoefficient(lambda, mu, transitionForRow) {
+      const memo = new Map();
+
+      function rec(rowIndex, stateCaps) {
+        const cacheKey = `${rowIndex}|${stateCaps.join(',')}`;
+        if (memo.has(cacheKey)) return memo.get(cacheKey);
+        if (rowIndex === lambda.length) {
+          const value = stateCaps.length === 0 ? 1n : 0n;
+          memo.set(cacheKey, value);
+          return value;
+        }
+
+        let total = 0n;
+        for (const next of transitionForRow(stateCaps, lambda[rowIndex])) {
+          total += next.ways * rec(rowIndex + 1, next.state);
+        }
+        memo.set(cacheKey, total);
+        return total;
+      }
+
+      return rec(0, trimPartition(mu));
+    }
+
+    function sympolyCoefficientForBasis(kind, lambdaRows, muRows) {
+      const lambda = trimPartition(lambdaRows);
+      const mu = trimPartition(muRows);
+      if (!lambda.length) return !mu.length ? 1n : 0n;
+      if (kind === 'm') return sympolyPartKey(lambda) === sympolyPartKey(mu) ? 1n : 0n;
+      if (kind === 's') return BigInt(kostkaNumber(lambda, mu));
+      if (kind === 'p') return sympolyCountRowTransitionCoefficient(lambda, mu, sympolyPowerRowTransitionStates);
+      if (kind === 'e') return sympolyCountRowTransitionCoefficient(lambda, mu, (stateCaps, rowSum) => sympolyRowTransitionStates(stateCaps, rowSum, 1));
+      return sympolyCountRowTransitionCoefficient(lambda, mu, (stateCaps, rowSum) => sympolyRowTransitionStates(stateCaps, rowSum, null));
+    }
+
+    function symRatGcd(a, b) {
+      a = a < 0n ? -a : a;
+      b = b < 0n ? -b : b;
+      while (b) {
+        const t = a % b;
+        a = b;
+        b = t;
+      }
+      return a || 1n;
+    }
+
+    function symRat(n, d = 1n) {
+      n = BigInt(n);
+      d = BigInt(d);
+      if (d === 0n) throw new Error('zero denominator');
+      if (n === 0n) return { n: 0n, d: 1n };
+      if (d < 0n) {
+        n = -n;
+        d = -d;
+      }
+      const g = symRatGcd(n, d);
+      return { n: n / g, d: d / g };
+    }
+
+    function symRatIsZero(a) {
+      return a.n === 0n;
+    }
+
+    function symRatIsOneAbs(a) {
+      return (a.n === 1n || a.n === -1n) && a.d === 1n;
+    }
+
+    function symRatAdd(a, b) {
+      if (a.n === 0n) return b;
+      if (b.n === 0n) return a;
+      return symRat(a.n * b.d + b.n * a.d, a.d * b.d);
+    }
+
+    function symRatSub(a, b) {
+      if (b.n === 0n) return a;
+      return symRat(a.n * b.d - b.n * a.d, a.d * b.d);
+    }
+
+    function symRatMul(a, b) {
+      if (a.n === 0n || b.n === 0n) return symRat(0n);
+      return symRat(a.n * b.n, a.d * b.d);
+    }
+
+    function symRatDiv(a, b) {
+      if (b.n === 0n) throw new Error('division by zero');
+      return symRat(a.n * b.d, a.d * b.n);
+    }
+
+    function symRatNeg(a) {
+      return { n: -a.n, d: a.d };
+    }
+
+    function symRatAbs(a) {
+      return a.n < 0n ? symRatNeg(a) : a;
+    }
+
+    function symRatFromInteger(value) {
+      return symRat(BigInt(value), 1n);
+    }
+
+    function formatSymRatCoefficient(coeff) {
+      const abs = symRatAbs(coeff);
+      return abs.d === 1n ? abs.n.toString() : `${abs.n.toString()}/${abs.d.toString()}`;
+    }
+
+    function sympolyAddLinearTerm(map, part, coeff) {
+      if (symRatIsZero(coeff)) return;
+      const clean = trimPartition(part);
+      const k = sympolyPartKey(clean);
+      const existing = map.get(k);
+      const next = symRatAdd(existing ? existing.coeff : symRat(0n), coeff);
+      if (symRatIsZero(next)) map.delete(k);
+      else map.set(k, { part: clean, coeff: next });
+    }
+
+    function sympolyBasisLinearCombinationToMonomialVector(sourceTerms, sourceKind, parts) {
+      const result = parts.map(() => symRat(0n));
+      for (const { coeff, part } of sourceTerms) {
+        if (symRatIsZero(coeff)) continue;
+        for (let i = 0; i < parts.length; i++) {
+          const c = sympolyCoefficientForBasis(sourceKind, part, parts[i]);
+          if (c !== 0n) {
+            result[i] = symRatAdd(result[i], symRatMul(coeff, symRatFromInteger(c)));
+          }
+        }
+      }
+      return result;
+    }
+
+    function sympolyConvertBasisLinearCombination(sourceTerms, sourceKind, targetKind, parts) {
+      if (targetKind === sourceKind) {
+        const byKey = new Map();
+        for (const { part, coeff } of sourceTerms) sympolyAddLinearTerm(byKey, part, coeff);
+        return [...byKey.values()].sort((a, b) => comparePartitionsDesc(a.part, b.part));
+      }
+
+      const rhs = sympolyBasisLinearCombinationToMonomialVector(sourceTerms, sourceKind, parts);
+      if (targetKind === 'm') {
+        return parts.map((part, i) => ({ part, coeff: rhs[i] }));
+      }
+
+      if (parts.length > SYMPOLY_BASIS_CONVERSION_LIMIT) {
+        throw new Error('basis-conversion-too-large');
+      }
+
+      const size = parts.length;
+      const matrix = parts.map((mPart, row) => {
+        const values = parts.map(basisPart => symRatFromInteger(sympolyCoefficientForBasis(targetKind, basisPart, mPart)));
+        values.push(rhs[row]);
+        return values;
+      });
+
+      for (let col = 0; col < size; col++) {
+        let pivot = col;
+        while (pivot < size && symRatIsZero(matrix[pivot][col])) pivot++;
+        if (pivot === size) throw new Error('basis conversion matrix is singular');
+        if (pivot !== col) {
+          const tmp = matrix[col];
+          matrix[col] = matrix[pivot];
+          matrix[pivot] = tmp;
+        }
+
+        const pivotValue = matrix[col][col];
+        for (let j = col; j <= size; j++) matrix[col][j] = symRatDiv(matrix[col][j], pivotValue);
+
+        for (let row = 0; row < size; row++) {
+          if (row === col) continue;
+          const factor = matrix[row][col];
+          if (symRatIsZero(factor)) continue;
+          for (let j = col; j <= size; j++) {
+            matrix[row][j] = symRatSub(matrix[row][j], symRatMul(factor, matrix[col][j]));
+          }
+        }
+      }
+
+      return parts.map((part, i) => ({ part, coeff: matrix[i][size] }));
+    }
+
+    function zeroExponentVector(variableCount) {
+      return Array(variableCount).fill(0);
+    }
+
+    function polyKey(exponents) {
+      return exponents.join(',');
+    }
+
+    function exponentsFromKey(polyKeyText) {
+      return polyKeyText ? polyKeyText.split(',').map(Number) : [];
+    }
+
+    function onePolynomial(variableCount) {
+      return new Map([[polyKey(zeroExponentVector(variableCount)), 1n]]);
+    }
+
+    function addPolynomialTerm(poly, exponents, coeff = 1n) {
+      if (coeff === 0n) return;
+      const k = polyKey(exponents);
+      const next = (poly.get(k) || 0n) + coeff;
+      if (next === 0n) poly.delete(k);
+      else poly.set(k, next);
+      if (poly.size > SYMPOLY_POLYNOMIAL_TERM_LIMIT) throw new Error('polynomial-too-large');
+    }
+
+    function addScaledPolynomial(target, source, scale = 1n) {
+      if (scale === 0n) return target;
+      for (const [k, coeff] of source.entries()) {
+        addPolynomialTerm(target, exponentsFromKey(k), coeff * scale);
+      }
+      return target;
+    }
+
+    function multiplyPolynomials(left, right, variableCount) {
+      if (!left.size || !right.size) return new Map();
+      const product = new Map();
+      for (const [leftKey, leftCoeff] of left.entries()) {
+        const leftExp = exponentsFromKey(leftKey);
+        for (const [rightKey, rightCoeff] of right.entries()) {
+          const rightExp = exponentsFromKey(rightKey);
+          const exp = zeroExponentVector(variableCount);
+          for (let i = 0; i < variableCount; i++) exp[i] = leftExp[i] + rightExp[i];
+          addPolynomialTerm(product, exp, leftCoeff * rightCoeff);
+        }
+      }
+      return product;
+    }
+
+    function multiplyPolynomialList(polys, variableCount) {
+      let result = onePolynomial(variableCount);
+      for (const poly of polys) {
+        result = multiplyPolynomials(result, poly, variableCount);
+        if (!result.size) break;
+      }
+      return result;
+    }
+
+    function pSeedPolynomial(k, variableCount) {
+      const poly = new Map();
+      for (let i = 0; i < variableCount; i++) {
+        const exp = zeroExponentVector(variableCount);
+        exp[i] = k;
+        addPolynomialTerm(poly, exp);
+      }
+      return poly;
+    }
+
+    function eSeedPolynomial(k, variableCount) {
+      if (k > variableCount) return new Map();
+      const poly = new Map();
+      const exp = zeroExponentVector(variableCount);
+      function rec(start, remaining) {
+        if (remaining === 0) {
+          addPolynomialTerm(poly, exp);
+          return;
+        }
+        for (let i = start; i <= variableCount - remaining; i++) {
+          exp[i] = 1;
+          rec(i + 1, remaining - 1);
+          exp[i] = 0;
+        }
+      }
+      rec(0, k);
+      return poly;
+    }
+
+    function hSeedPolynomial(k, variableCount) {
+      if (variableCount <= 0) return k === 0 ? onePolynomial(variableCount) : new Map();
+      const poly = new Map();
+      const exp = zeroExponentVector(variableCount);
+      function rec(index, remaining) {
+        if (index === variableCount - 1) {
+          exp[index] = remaining;
+          addPolynomialTerm(poly, exp);
+          exp[index] = 0;
+          return;
+        }
+        for (let a = remaining; a >= 0; a--) {
+          exp[index] = a;
+          rec(index + 1, remaining - a);
+        }
+        exp[index] = 0;
+      }
+      rec(0, k);
+      return poly;
+    }
+
+    function mPolynomial(partition, variableCount) {
+      const lambda = trimPartition(partition);
+      if (lambda.length > variableCount) return new Map();
+      const values = lambda.concat(Array(variableCount - lambda.length).fill(0));
+      const counts = new Map();
+      for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
+      const distinctValues = [...counts.keys()].sort((a, b) => b - a);
+      const exp = zeroExponentVector(variableCount);
+      const poly = new Map();
+      function rec(index) {
+        if (index === variableCount) {
+          addPolynomialTerm(poly, exp);
+          return;
+        }
+        for (const value of distinctValues) {
+          const count = counts.get(value) || 0;
+          if (!count) continue;
+          counts.set(value, count - 1);
+          exp[index] = value;
+          rec(index + 1);
+          exp[index] = 0;
+          counts.set(value, count);
+        }
+      }
+      rec(0);
+      return poly;
+    }
+
+    function schurPolynomial(lambdaRows, variableCount) {
+      const lambda = trimPartition(lambdaRows);
+      if (!lambda.length) return onePolynomial(variableCount);
+      if (lambda.length > variableCount) return new Map();
+      const degree = sizeOf(lambda);
+      const { parts, truncated } = partitionsOfSizeLimited(degree);
+      if (truncated) throw new Error('polynomial-too-large');
+      const result = new Map();
+      for (const mu of parts) {
+        if (mu.length > variableCount) continue;
+        const coeff = BigInt(kostkaNumber(lambda, mu));
+        if (coeff === 0n) continue;
+        addScaledPolynomial(result, mPolynomial(mu, variableCount), coeff);
+      }
+      return result;
+    }
+
+    function finiteSympolyPolynomial(kind, partition, variableCount) {
+      const lambda = trimPartition(partition);
+      if (!lambda.length) return onePolynomial(variableCount);
+      if (kind === 'm') return mPolynomial(lambda, variableCount);
+      if (kind === 's') return schurPolynomial(lambda, variableCount);
+      const seeds = lambda.map(part => {
+        if (kind === 'p') return pSeedPolynomial(part, variableCount);
+        if (kind === 'e') return eSeedPolynomial(part, variableCount);
+        return hSeedPolynomial(part, variableCount);
+      });
+      return multiplyPolynomialList(seeds, variableCount);
+    }
+
+    function compareExponentKeys(aKey, bKey) {
+      const a = exponentsFromKey(aKey);
+      const b = exponentsFromKey(bKey);
+      for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        const d = (b[i] || 0) - (a[i] || 0);
+        if (d !== 0) return d;
+      }
+      return 0;
+    }
+
+    function formatVariableMonomial(exponents) {
+      const factors = [];
+      for (let i = 0; i < exponents.length; i++) {
+        const pow = exponents[i];
+        if (!pow) continue;
+        const base = `x<sub>${i + 1}</sub>`;
+        factors.push(pow === 1 ? base : `${base}<sup>${pow}</sup>`);
+      }
+      return factors.length ? factors.join('') : '1';
+    }
+
+    function formatFiniteSympolyPolynomial(poly) {
+      if (!poly.size) return '0';
+      return [...poly.entries()]
+        .sort(([aKey], [bKey]) => compareExponentKeys(aKey, bKey))
+        .map(([k, coeff], index) => {
+          const negative = coeff < 0n;
+          const absCoeff = negative ? -coeff : coeff;
+          const sign = index === 0 ? (negative ? '- ' : '') : (negative ? ' - ' : ' + ');
+          const monomial = formatVariableMonomial(exponentsFromKey(k));
+          if (monomial === '1') return `${sign}${absCoeff.toString()}`;
+          if (absCoeff === 1n) return `${sign}${monomial}`;
+          return `${sign}<span class="symfun-coeff">${absCoeff.toString()}</span>${monomial}`;
+        })
+        .join('');
+    }
+
+    function exponentPartition(exponents) {
+      return exponents.filter(x => x > 0).sort((a, b) => b - a);
+    }
+
+    function sortedUnionPartition(a, b) {
+      return trimPartition(a).concat(trimPartition(b)).sort((x, y) => y - x);
+    }
+
+    function stableMonomialProductTerms(lambdaRows, muRows) {
+      const lambda = trimPartition(lambdaRows);
+      const mu = trimPartition(muRows);
+      if (!lambda.length) return [{ part: mu, coeff: 1n }];
+      if (!mu.length) return [{ part: lambda, coeff: 1n }];
+      const variableCount = lambda.length + mu.length;
+      const product = multiplyPolynomials(mPolynomial(lambda, variableCount), mPolynomial(mu, variableCount), variableCount);
+      const byPart = new Map();
+      for (const [k, coeff] of product.entries()) {
+        const part = exponentPartition(exponentsFromKey(k));
+        const partKey = sympolyPartKey(part);
+        if (!byPart.has(partKey)) {
+          byPart.set(partKey, { part, coeff });
+        } else if (byPart.get(partKey).coeff !== coeff) {
+          throw new Error('monomial product collection failed');
+        }
+      }
+      return [...byPart.values()].sort((a, b) => comparePartitionsDesc(a.part, b.part));
+    }
+
+    function schurProductTerms(lambdaRows, muRows) {
+      const lambda = trimPartition(lambdaRows);
+      const mu = trimPartition(muRows);
+      if (!lambda.length) return [{ part: mu, coeff: 1n }];
+      if (!mu.length) return [{ part: lambda, coeff: 1n }];
+      const total = sizeOf(lambda) + sizeOf(mu);
+      const { parts, truncated } = partitionsOfSizeLimited(total);
+      if (truncated) throw new Error('expansion-too-large');
+      const terms = [];
+      for (const nu of parts) {
+        if (!containsPartition(nu, lambda)) continue;
+        const coeff = lrCoefficient(lambda, mu, nu);
+        if (coeff) terms.push({ part: nu, coeff: BigInt(coeff) });
+      }
+      return terms.sort((a, b) => comparePartitionsDesc(a.part, b.part));
+    }
+
+    function sympolyExpansionInMonomialBasis(kind, partition, parts) {
+      return parts
+        .map(part => ({ part, coeff: symRatFromInteger(sympolyCoefficientForBasis(kind, partition, part)) }))
+        .filter(term => !symRatIsZero(term.coeff));
+    }
+
+    function sympolyMultiplyMonomialLinearTerms(leftTerms, rightTerms) {
+      const byKey = new Map();
+      for (const left of leftTerms) {
+        if (symRatIsZero(left.coeff)) continue;
+        for (const right of rightTerms) {
+          if (symRatIsZero(right.coeff)) continue;
+          const scale = symRatMul(left.coeff, right.coeff);
+          for (const productTerm of stableMonomialProductTerms(left.part, right.part)) {
+            sympolyAddLinearTerm(byKey, productTerm.part, symRatMul(scale, symRatFromInteger(productTerm.coeff)));
+          }
+        }
+      }
+      return [...byKey.values()].sort((a, b) => comparePartitionsDesc(a.part, b.part));
+    }
+
+    function infiniteSympolyProductTerms(leftKind, rightKind, targetKind, mode, lambdaRows, muRows) {
+      const lambda = trimPartition(lambdaRows);
+      const mu = trimPartition(muRows);
+      const totalDegree = sizeOf(lambda) + sizeOf(mu);
+      assertSympolyLinearModeWithinLimit('product', mode, lambda, mu);
+      const leftData = partitionsOfSizeLimited(sizeOf(lambda));
+      const rightData = partitionsOfSizeLimited(sizeOf(mu));
+      const totalData = partitionsOfSizeLimited(totalDegree);
+      if (leftData.truncated || rightData.truncated || totalData.truncated) throw new Error('expansion-too-large');
+
+      const leftTerms = sympolyExpansionInMonomialBasis(leftKind, lambda, leftData.parts);
+      const rightTerms = sympolyExpansionInMonomialBasis(rightKind, mu, rightData.parts);
+      const monomialTerms = sympolyMultiplyMonomialLinearTerms(leftTerms, rightTerms);
+      const conversionBasis = conversionBasisForSympolyMode(targetKind, mode);
+      return sympolyConvertBasisLinearCombination(monomialTerms, 'm', conversionBasis, totalData.parts);
+    }
+
+    function sympolyBasisElementTerms(kind, partition, targetKind) {
+      const lambda = trimPartition(partition);
+      const data = partitionsOfSizeLimited(sizeOf(lambda));
+      if (data.truncated) throw new Error('expansion-too-large');
+      return sympolyConvertBasisLinearCombination([{ part: lambda, coeff: symRat(1n) }], kind, targetKind, data.parts);
+    }
+
+    function sympolyAddPowerTerm(map, part, coeff) {
+      if (symRatIsZero(coeff)) return;
+      const clean = trimPartition(part).sort((a, b) => b - a);
+      const k = sympolyPartKey(clean);
+      const next = symRatAdd(map.get(k) || symRat(0n), coeff);
+      if (symRatIsZero(next)) map.delete(k);
+      else map.set(k, next);
+      if (map.size > SYMPOLY_POLYNOMIAL_TERM_LIMIT) throw new Error('polynomial-too-large');
+    }
+
+    function sympolyPowerMapFromTerms(terms) {
+      const map = new Map();
+      for (const { part, coeff } of terms) sympolyAddPowerTerm(map, part, coeff);
+      return map;
+    }
+
+    function sympolyPowerTermsFromMap(map) {
+      return [...map.entries()]
+        .map(([k, coeff]) => ({ part: k ? k.split(',').map(Number) : [], coeff }))
+        .sort((a, b) => comparePartitionsDesc(a.part, b.part));
+    }
+
+    function sympolyOnePowerMap() {
+      return new Map([['', symRat(1n)]]);
+    }
+
+    function sympolyMultiplyPowerMaps(left, right) {
+      const product = new Map();
+      for (const [leftKey, leftCoeff] of left.entries()) {
+        const leftPart = leftKey ? leftKey.split(',').map(Number) : [];
+        for (const [rightKey, rightCoeff] of right.entries()) {
+          const rightPart = rightKey ? rightKey.split(',').map(Number) : [];
+          sympolyAddPowerTerm(product, leftPart.concat(rightPart), symRatMul(leftCoeff, rightCoeff));
+        }
+      }
+      return product;
+    }
+
+    function sympolyAdamsPowerMap(map, factor) {
+      const out = new Map();
+      for (const [k, coeff] of map.entries()) {
+        const part = k ? k.split(',').map(Number) : [];
+        sympolyAddPowerTerm(out, part.map(x => x * factor), coeff);
+      }
+      return out;
+    }
+
+    function sympolyPlethysmPowerTerms(leftKind, rightKind, lambdaRows, muRows) {
+      const lambda = trimPartition(lambdaRows);
+      const mu = trimPartition(muRows);
+      const totalDegree = sizeOf(lambda) * sizeOf(mu);
+      if (totalDegree > SYMPOLY_PLETHYSM_BOX_LIMIT) throw new Error('plethysm-too-large');
+
+      const outerTerms = sympolyBasisElementTerms(leftKind, lambda, 'p');
+      const innerMap = sympolyPowerMapFromTerms(sympolyBasisElementTerms(rightKind, mu, 'p'));
+      const total = new Map();
+
+      for (const outer of outerTerms) {
+        if (symRatIsZero(outer.coeff)) continue;
+        let product = sympolyOnePowerMap();
+        for (const part of outer.part) {
+          product = sympolyMultiplyPowerMaps(product, sympolyAdamsPowerMap(innerMap, part));
+        }
+        for (const [k, coeff] of product.entries()) {
+          const rho = k ? k.split(',').map(Number) : [];
+          sympolyAddPowerTerm(total, rho, symRatMul(outer.coeff, coeff));
+        }
+      }
+
+      return sympolyPowerTermsFromMap(total);
+    }
+
+    function infiniteSympolyPlethysmTerms(leftKind, rightKind, targetKind, mode, lambdaRows, muRows) {
+      const lambda = trimPartition(lambdaRows);
+      const mu = trimPartition(muRows);
+      const totalDegree = sizeOf(lambda) * sizeOf(mu);
+      assertSympolyLinearModeWithinLimit('plethysm', mode, lambda, mu);
+      const totalData = partitionsOfSizeLimited(totalDegree);
+      if (totalData.truncated) throw new Error('expansion-too-large');
+      const conversionBasis = conversionBasisForSympolyMode(targetKind, mode);
+      return sympolyConvertBasisLinearCombination(
+        sympolyPlethysmPowerTerms(leftKind, rightKind, lambda, mu),
+        'p',
+        conversionBasis,
+        totalData.parts,
+      );
+    }
+
+    function oneRationalPolynomial(variableCount) {
+      return new Map([[polyKey(zeroExponentVector(variableCount)), symRat(1n)]]);
+    }
+
+    function addRationalPolynomialTerm(poly, exponents, coeff) {
+      if (symRatIsZero(coeff)) return;
+      const k = polyKey(exponents);
+      const next = symRatAdd(poly.get(k) || symRat(0n), coeff);
+      if (symRatIsZero(next)) poly.delete(k);
+      else poly.set(k, next);
+      if (poly.size > SYMPOLY_POLYNOMIAL_TERM_LIMIT) throw new Error('polynomial-too-large');
+    }
+
+    function addScaledRationalPolynomial(target, source, scale) {
+      if (symRatIsZero(scale)) return target;
+      for (const [k, coeff] of source.entries()) {
+        addRationalPolynomialTerm(target, exponentsFromKey(k), symRatMul(coeff, scale));
+      }
+      return target;
+    }
+
+    function rationalizePolynomial(poly) {
+      const out = new Map();
+      for (const [k, coeff] of poly.entries()) out.set(k, symRatFromInteger(coeff));
+      return out;
+    }
+
+    function multiplyRationalPolynomials(left, right, variableCount) {
+      if (!left.size || !right.size) return new Map();
+      const product = new Map();
+      for (const [leftKey, leftCoeff] of left.entries()) {
+        const leftExp = exponentsFromKey(leftKey);
+        for (const [rightKey, rightCoeff] of right.entries()) {
+          const rightExp = exponentsFromKey(rightKey);
+          const exp = zeroExponentVector(variableCount);
+          for (let i = 0; i < variableCount; i++) exp[i] = leftExp[i] + rightExp[i];
+          addRationalPolynomialTerm(product, exp, symRatMul(leftCoeff, rightCoeff));
+        }
+      }
+      return product;
+    }
+
+    function adamsRationalPolynomial(poly, factor) {
+      const out = new Map();
+      for (const [k, coeff] of poly.entries()) {
+        addRationalPolynomialTerm(out, exponentsFromKey(k).map(e => e * factor), coeff);
+      }
+      return out;
+    }
+
+    function finiteSympolyPlethysmPolynomial(leftKind, rightKind, lambdaRows, muRows, variableCount) {
+      const lambda = trimPartition(lambdaRows);
+      const mu = trimPartition(muRows);
+      const totalDegree = sizeOf(lambda) * sizeOf(mu);
+      if (totalDegree > SYMPOLY_PLETHYSM_BOX_LIMIT) throw new Error('plethysm-too-large');
+
+      const outerTerms = sympolyBasisElementTerms(leftKind, lambda, 'p');
+      const innerPoly = rationalizePolynomial(finiteSympolyPolynomial(rightKind, mu, variableCount));
+      const total = new Map();
+
+      for (const outer of outerTerms) {
+        if (symRatIsZero(outer.coeff)) continue;
+        let product = oneRationalPolynomial(variableCount);
+        for (const part of outer.part) {
+          product = multiplyRationalPolynomials(product, adamsRationalPolynomial(innerPoly, part), variableCount);
+        }
+        addScaledRationalPolynomial(total, product, outer.coeff);
+      }
+
+      return total;
+    }
+
+    function formatFiniteRationalSympolyPolynomial(poly) {
+      if (!poly.size) return '0';
+      return [...poly.entries()]
+        .sort(([aKey], [bKey]) => compareExponentKeys(aKey, bKey))
+        .map(([k, coeff], index) => {
+          const negative = coeff.n < 0n;
+          const absCoeff = symRatAbs(coeff);
+          const sign = index === 0 ? (negative ? '- ' : '') : (negative ? ' - ' : ' + ');
+          const monomial = formatVariableMonomial(exponentsFromKey(k));
+          if (monomial === '1') return `${sign}${formatSymRatCoefficient(absCoeff)}`;
+          if (symRatIsOneAbs(absCoeff)) return `${sign}${monomial}`;
+          return `${sign}<span class="symfun-coeff">${formatSymRatCoefficient(absCoeff)}</span>${monomial}`;
+        })
+        .join('');
+    }
+
+    function sympolyGeneratorSymbolHTML(kind, n) {
+      return `<span class="symfun-symbol">${kind}<sub>${n}</sub></span>`;
+    }
+
+    function sympolyGeneratorMonomialHTML(part, generatorKind) {
+      const clean = part.filter(n => n > 0);
+      if (!clean.length) return '1';
+      const counts = new Map();
+      for (const n of clean) counts.set(n, (counts.get(n) || 0) + 1);
+      return [...counts.entries()]
+        .sort(([a], [b]) => b - a)
+        .map(([n, count]) => {
+          const symbol = sympolyGeneratorSymbolHTML(generatorKind, n);
+          return count === 1 ? symbol : `${symbol}<sup>${count}</sup>`;
+        })
+        .join(' ');
+    }
+
+    function sympolyNormalizedGeneratorPart(part) {
+      return part.filter(n => n > 0).sort((a, b) => b - a);
+    }
+
+    function sympolyGeneratorPartFromKey(k) {
+      return k ? k.split(',').filter(Boolean).map(Number) : [];
+    }
+
+    function sympolyAddGeneratorPolynomialTerm(poly, part, coeff) {
+      if (symRatIsZero(coeff)) return;
+      const k = sympolyPartKey(sympolyNormalizedGeneratorPart(part));
+      const next = symRatAdd(poly.get(k) || symRat(0n), coeff);
+      if (symRatIsZero(next)) poly.delete(k);
+      else poly.set(k, next);
+    }
+
+    function sympolyMultiplyGeneratorPolynomials(left, right) {
+      const product = new Map();
+      for (const [leftKey, leftCoeff] of left.entries()) {
+        const leftPart = sympolyGeneratorPartFromKey(leftKey);
+        for (const [rightKey, rightCoeff] of right.entries()) {
+          sympolyAddGeneratorPolynomialTerm(
+            product,
+            leftPart.concat(sympolyGeneratorPartFromKey(rightKey)),
+            symRatMul(leftCoeff, rightCoeff),
+          );
+          if (product.size > SYMPOLY_POLYNOMIAL_TERM_LIMIT) throw new Error('polynomial-too-large');
+        }
+      }
+      return product;
+    }
+
+    const sympolySchurGeneratorCache = new Map();
+
+    function sympolySchurGeneratorPolynomial(part) {
+      const lambda = trimPartition(part);
+      const cacheKey = lambda.join(',');
+      const cached = sympolySchurGeneratorCache.get(cacheKey);
+      if (cached) return cached;
+
+      if (!lambda.length) {
+        const one = new Map([['', symRat(1n)]]);
+        sympolySchurGeneratorCache.set(cacheKey, one);
+        return one;
+      }
+      if (lambda.length > SYMPOLY_SCHUR_DETERMINANT_LIMIT) throw new Error('schur-generator-too-large');
+
+      const size = lambda.length;
+      const used = Array(size).fill(false);
+      const perm = [];
+      let total = new Map();
+
+      function permutationSign(cols) {
+        let inv = 0;
+        for (let i = 0; i < cols.length; i++) {
+          for (let j = i + 1; j < cols.length; j++) {
+            if (cols[i] > cols[j]) inv++;
+          }
+        }
+        return inv % 2 ? -1n : 1n;
+      }
+
+      function hGeneratorPoly(k) {
+        if (k < 0) return new Map();
+        if (k === 0) return new Map([['', symRat(1n)]]);
+        return new Map([[String(k), symRat(1n)]]);
+      }
+
+      function rec(row) {
+        if (row === size) {
+          let product = new Map([['', symRat(1n)]]);
+          for (let r = 0; r < size; r++) {
+            const k = lambda[r] - (r + 1) + (perm[r] + 1);
+            product = sympolyMultiplyGeneratorPolynomials(product, hGeneratorPoly(k));
+            if (!product.size) return;
+          }
+          const sign = symRat(permutationSign(perm));
+          for (const [k, coeff] of product.entries()) {
+            sympolyAddGeneratorPolynomialTerm(total, sympolyGeneratorPartFromKey(k), symRatMul(sign, coeff));
+          }
+          return;
+        }
+
+        for (let col = 0; col < size; col++) {
+          if (used[col]) continue;
+          used[col] = true;
+          perm.push(col);
+          rec(row + 1);
+          perm.pop();
+          used[col] = false;
+        }
+      }
+
+      rec(0);
+      sympolySchurGeneratorCache.set(cacheKey, total);
+      return total;
+    }
+
+    function sympolyExpandSchurLinearTermsToGeneratorPolynomial(terms) {
+      const result = new Map();
+      for (const { coeff, part } of terms) {
+        if (symRatIsZero(coeff)) continue;
+        const poly = sympolySchurGeneratorPolynomial(part);
+        for (const [k, innerCoeff] of poly.entries()) {
+          sympolyAddGeneratorPolynomialTerm(result, sympolyGeneratorPartFromKey(k), symRatMul(coeff, innerCoeff));
+        }
+      }
+      return [...result.entries()]
+        .map(([k, coeff]) => ({ part: sympolyGeneratorPartFromKey(k), coeff }))
+        .sort((a, b) => comparePartitionsDesc(a.part, b.part));
+    }
+
+    function formatSympolyBasisLinearCombination(terms, kind) {
+      const nonzero = terms.filter(term => !symRatIsZero(term.coeff));
+      if (!nonzero.length) return '0';
+      return nonzero.map(({ coeff, part }, index) => {
+        const negative = coeff.n < 0n;
+        const sign = index === 0 ? (negative ? '- ' : '') : (negative ? ' - ' : ' + ');
+        const symbol = sympolyBasisSymbol(kind, part);
+        const absCoeff = symRatAbs(coeff);
+        if (symbol === '1') return `${sign}${formatSymRatCoefficient(absCoeff)}`;
+        const coeffText = symRatIsOneAbs(absCoeff) ? '' : `<span class="symfun-coeff">${formatSymRatCoefficient(absCoeff)}</span>`;
+        return `${sign}${coeffText}${symbol}`;
+      }).join('');
+    }
+
+    function formatSympolyBasisPolynomialCombination(terms, generatorKind) {
+      if (generatorKind === 's') {
+        terms = sympolyExpandSchurLinearTermsToGeneratorPolynomial(terms);
+      }
+      const nonzero = terms.filter(term => !symRatIsZero(term.coeff));
+      if (!nonzero.length) return '0';
+
+      return nonzero.map(({ coeff, part }, index) => {
+        const negative = coeff.n < 0n;
+        const sign = index === 0 ? (negative ? '- ' : '') : (negative ? ' - ' : ' + ');
+        const absCoeff = symRatAbs(coeff);
+        const monomial = sympolyGeneratorMonomialHTML(part, generatorKind);
+        const body = monomial === '1'
+          ? formatSymRatCoefficient(absCoeff)
+          : `${symRatIsOneAbs(absCoeff) ? '' : `<span class="symfun-coeff">${formatSymRatCoefficient(absCoeff)}</span> `}${monomial}`;
+        return `${sign}${body}`;
+      }).join('');
+    }
+
+    function currentSympolyConfig() {
+      const lambda = trimPartition(state.lambda.rows);
+      const mu = trimPartition(state.mu.rows);
+      return {
+        lambda,
+        mu,
+        leftKind: selectedSympolyLeftKind(),
+        rightKind: selectedSympolyRightKind(),
+        operation: selectedSympolyOperation(),
+        targetBasis: selectedSympolyBasis(),
+        mode: selectedSympolyMode(),
+        variableChoice: readSympolyVariableCount(lambda, mu)
+      };
+    }
+
+    function sympolyConfigSignature(config) {
+      return JSON.stringify({
+        lambda: config.lambda,
+        mu: config.mu,
+        leftKind: config.leftKind,
+        rightKind: config.rightKind,
+        operation: config.operation,
+        targetBasis: config.targetBasis,
+        mode: config.mode,
+        variables: config.variableChoice?.infinite ? 'infinite' : config.variableChoice?.count
+      });
+    }
+
+    function sympolyResultFilename(operation) {
+      return operation === 'plethysm'
+        ? 'symmetric_polynomial_plethysm.txt'
+        : 'symmetric_polynomial_product.txt';
+    }
+
+    function sympolyComputationErrorMessage(err, config) {
+      const targetBasis = config?.targetBasis || selectedSympolyBasis();
+      const mode = config?.mode || selectedSympolyMode();
+      const operation = config?.operation || selectedSympolyOperation();
+      const lambda = config?.lambda || trimPartition(state.lambda.rows);
+      const mu = config?.mu || trimPartition(state.mu.rows);
+      return err && err.message === 'polynomial-too-large'
+        ? `Complete polynomial expansion has more than ${SYMPOLY_POLYNOMIAL_TERM_LIMIT} terms. Use fewer variables, turn on infinite mode, or draw smaller diagrams.`
+        : err && err.message === 'expansion-too-large'
+          ? `Complete infinite-variable expansion has more than ${SYMPOLY_EXPANSION_PARTITION_LIMIT} Young-diagram terms. Draw smaller diagrams to expand it exactly.`
+          : err && err.message === 'basis-conversion-too-large'
+            ? `Changing to the ${targetBasis}_lambda ${mode} mode needs a large exact matrix solve. Use smaller diagrams or choose linear m_lambda.`
+            : err && err.message === 'schur-generator-too-large'
+              ? `Schur polynomial mode is capped at Jacobi-Trudi size ${SYMPOLY_SCHUR_DETERMINANT_LIMIT}. Use linear mode or smaller diagrams.`
+              : err && err.message === 'plethysm-too-large'
+                ? sympolyPlethysmLimitMessage(lambda, mu)
+                : err && err.message === 'linear-mode-too-large'
+                  ? sympolyLinearModeLimitMessage(operation, lambda, mu)
+                  : (err?.message || String(err));
+    }
+
+    function buildSymmetricPolynomialProductResult(config = currentSympolyConfig()) {
+      const { lambda, mu, leftKind, rightKind, operation, targetBasis, mode, variableChoice } = config;
+      if (variableChoice.error) return { error: variableChoice.error };
+      if (variableChoice.pending) return { pending: true };
+
+      let valueHTML;
+      let valueText;
+      const leftText = `${sympolySymbolText(leftKind, 'lambda')} ${operation === 'plethysm' ? 'o' : '*'} ${sympolySymbolText(rightKind, 'mu')}`;
+      const lines = [
+        `# Symmetric polynomial ${operation}`,
+        `# lambda = ${sympolyPartitionLabel(lambda)}`,
+        `# mu = ${sympolyPartitionLabel(mu)}`,
+        `# left type = ${leftKind}`,
+        `# right type = ${rightKind}`,
+        `# operation = ${operation}`,
+      ];
+
+      if (variableChoice.count !== null) {
+        lines.push(`# variables: x_1,...,x_${variableChoice.count}`);
+        if (operation === 'plethysm') {
+          const poly = finiteSympolyPlethysmPolynomial(leftKind, rightKind, lambda, mu, variableChoice.count);
+          valueHTML = formatFiniteRationalSympolyPolynomial(poly);
+          valueText = formatFiniteRationalSympolyPolynomialText(poly);
+        } else {
+          const leftPoly = finiteSympolyPolynomial(leftKind, lambda, variableChoice.count);
+          const rightPoly = finiteSympolyPolynomial(rightKind, mu, variableChoice.count);
+          const product = multiplyPolynomials(leftPoly, rightPoly, variableChoice.count);
+          valueHTML = formatFiniteSympolyPolynomial(product);
+          valueText = formatFiniteSympolyPolynomialText(product);
+        }
+      } else {
+        const terms = operation === 'plethysm'
+          ? infiniteSympolyPlethysmTerms(leftKind, rightKind, targetBasis, mode, lambda, mu)
+          : infiniteSympolyProductTerms(leftKind, rightKind, targetBasis, mode, lambda, mu);
+        lines.push('# variables: infinite');
+        lines.push(`# basis = ${sympolySymbolText(targetBasis, 'lambda')}`);
+        lines.push(`# mode = ${mode}`);
+        if (mode === 'polynomial') {
+          valueHTML = formatSympolyBasisPolynomialCombination(terms, targetBasis);
+          valueText = formatSympolyBasisPolynomialCombinationText(terms, targetBasis);
+        } else {
+          const conversionBasis = conversionBasisForSympolyMode(targetBasis, mode);
+          valueHTML = formatSympolyBasisLinearCombination(terms, conversionBasis);
+          valueText = formatSympolyBasisLinearCombinationText(terms, conversionBasis);
+        }
+      }
+
+      lines.push(`${leftText} = ${valueText}`);
+      return {
+        signature: sympolyConfigSignature(config),
+        html: `
+          <div class="symfun-row sympoly-product-row">
+            <span class="symfun-label">${sympolyProductLabelHTML(leftKind, rightKind, operation)}</span>
+            <span class="symfun-value">${valueHTML}</span>
+          </div>
+        `,
+        text: lines.join('\n'),
+        filename: sympolyResultFilename(operation)
+      };
+    }
+
+    function sympolyStaleHint() {
+      return 'Click compute to update the symmetric-polynomial result.';
+    }
+
+    function renderSymmetricPolynomialProduct(options = {}) {
+      const output = $('sympoly-output');
+      if (!output) return;
+      const card = output.closest('.card');
+      if (!options.force && card && card.classList.contains('collapsed')) return;
+
+      const config = currentSympolyConfig();
+      if (config.variableChoice.error) {
+        output.innerHTML = `<div class="symfun-too-large">${sympolyEscapeHtml(config.variableChoice.error)}</div>`;
+        return;
+      }
+      if (config.variableChoice.pending) {
+        output.innerHTML = '<span class="hint">Enter N or turn on infinite mode before computing.</span>';
+        return;
+      }
+
+      const cached = state.lastSymmetricPolynomial;
+      if (cached && cached.signature === sympolyConfigSignature(config)) {
+        output.innerHTML = cached.html;
+      } else {
+        output.innerHTML = `<span class="hint">${sympolyEscapeHtml(sympolyStaleHint())}</span>`;
+      }
+    }
+
+    function markSymmetricPolynomialStale() {
+      state.lastSymmetricPolynomial = null;
+      renderSymmetricPolynomialProduct({ force: true });
+      if (state.exportMode === 'symmetric-polynomials') {
+        const exportOut = $('export-out');
+        if (exportOut) exportOut.value = symmetricPolynomialProductExportText();
+        state.exportFilename = sympolyResultFilename(selectedSympolyOperation());
+      }
+    }
+
+    function computeSymmetricPolynomialProduct() {
+      const output = $('sympoly-output');
+      if (!output) return;
+      const config = currentSympolyConfig();
+      if (config.variableChoice.error) {
+        state.lastSymmetricPolynomial = null;
+        output.innerHTML = `<div class="symfun-too-large">${sympolyEscapeHtml(config.variableChoice.error)}</div>`;
+        return;
+      }
+      if (config.variableChoice.pending) {
+        state.lastSymmetricPolynomial = null;
+        output.innerHTML = '<span class="hint">Enter N or turn on infinite mode before computing.</span>';
+        return;
+      }
+      try {
+        const result = buildSymmetricPolynomialProductResult(config);
+        if (result.error) {
+          state.lastSymmetricPolynomial = null;
+          output.innerHTML = `<div class="symfun-too-large">${sympolyEscapeHtml(result.error)}</div>`;
+          return;
+        }
+        if (result.pending) {
+          state.lastSymmetricPolynomial = null;
+          output.innerHTML = '<span class="hint">Enter N or turn on infinite mode before computing.</span>';
+          return;
+        }
+        state.lastSymmetricPolynomial = result;
+        output.innerHTML = result.html;
+        if (state.exportMode === 'symmetric-polynomials') {
+          const exportOut = $('export-out');
+          if (exportOut) exportOut.value = result.text;
+          state.exportFilename = result.filename;
+        }
+      } catch (err) {
+        state.lastSymmetricPolynomial = null;
+        output.innerHTML = `<div class="symfun-too-large">${sympolyEscapeHtml(sympolyComputationErrorMessage(err, config))}</div>`;
+      }
+    }
+
+    function sympolySymbolText(kind, partText) {
+      return `${kind}_${partText}`;
+    }
+
+    function formatVariableMonomialText(exponents) {
+      const factors = [];
+      for (let i = 0; i < exponents.length; i++) {
+        const pow = exponents[i];
+        if (!pow) continue;
+        factors.push(pow === 1 ? `x_${i + 1}` : `x_${i + 1}^${pow}`);
+      }
+      return factors.length ? factors.join('*') : '1';
+    }
+
+    function formatFiniteSympolyPolynomialText(poly) {
+      if (!poly.size) return '0';
+      return [...poly.entries()]
+        .sort(([aKey], [bKey]) => compareExponentKeys(aKey, bKey))
+        .map(([k, coeff], index) => {
+          const negative = coeff < 0n;
+          const absCoeff = negative ? -coeff : coeff;
+          const sign = index === 0 ? (negative ? '- ' : '') : (negative ? ' - ' : ' + ');
+          const monomial = formatVariableMonomialText(exponentsFromKey(k));
+          if (monomial === '1') return `${sign}${absCoeff.toString()}`;
+          if (absCoeff === 1n) return `${sign}${monomial}`;
+          return `${sign}${absCoeff.toString()}*${monomial}`;
+        })
+        .join('');
+    }
+
+    function formatFiniteRationalSympolyPolynomialText(poly) {
+      if (!poly.size) return '0';
+      return [...poly.entries()]
+        .sort(([aKey], [bKey]) => compareExponentKeys(aKey, bKey))
+        .map(([k, coeff], index) => {
+          const negative = coeff.n < 0n;
+          const absCoeff = symRatAbs(coeff);
+          const sign = index === 0 ? (negative ? '- ' : '') : (negative ? ' - ' : ' + ');
+          const monomial = formatVariableMonomialText(exponentsFromKey(k));
+          if (monomial === '1') return `${sign}${formatSymRatText(absCoeff)}`;
+          if (symRatIsOneAbs(absCoeff)) return `${sign}${monomial}`;
+          return `${sign}${formatSymRatText(absCoeff)}*${monomial}`;
+        })
+        .join('');
+    }
+
+    function formatSymRatText(coeff) {
+      const abs = symRatAbs(coeff);
+      return abs.d === 1n ? abs.n.toString() : `${abs.n.toString()}/${abs.d.toString()}`;
+    }
+
+    function sympolyGeneratorMonomialText(part, generatorKind) {
+      const clean = part.filter(n => n > 0);
+      if (!clean.length) return '1';
+      const counts = new Map();
+      for (const n of clean) counts.set(n, (counts.get(n) || 0) + 1);
+      return [...counts.entries()]
+        .sort(([a], [b]) => b - a)
+        .map(([n, count]) => count === 1 ? `${generatorKind}_${n}` : `${generatorKind}_${n}^${count}`)
+        .join('*');
+    }
+
+    function formatSympolyBasisLinearCombinationText(terms, kind) {
+      const nonzero = terms.filter(term => !symRatIsZero(term.coeff));
+      if (!nonzero.length) return '0';
+      return nonzero.map(({ coeff, part }, index) => {
+        const negative = coeff.n < 0n;
+        const absCoeff = symRatAbs(coeff);
+        const sign = index === 0 ? (negative ? '- ' : '') : (negative ? ' - ' : ' + ');
+        if (!part.length) return `${sign}${formatSymRatText(absCoeff)}`;
+        const symbol = sympolySymbolText(kind, sympolyPartitionLabel(part));
+        return `${sign}${symRatIsOneAbs(absCoeff) ? '' : formatSymRatText(absCoeff) + '*'}${symbol}`;
+      }).join('');
+    }
+
+    function formatSympolyBasisPolynomialCombinationText(terms, generatorKind) {
+      if (generatorKind === 's') {
+        terms = sympolyExpandSchurLinearTermsToGeneratorPolynomial(terms);
+      }
+      const nonzero = terms.filter(term => !symRatIsZero(term.coeff));
+      if (!nonzero.length) return '0';
+      return nonzero.map(({ coeff, part }, index) => {
+        const negative = coeff.n < 0n;
+        const absCoeff = symRatAbs(coeff);
+        const sign = index === 0 ? (negative ? '- ' : '') : (negative ? ' - ' : ' + ');
+        const monomial = sympolyGeneratorMonomialText(part, generatorKind);
+        const body = monomial === '1'
+          ? formatSymRatText(absCoeff)
+          : `${symRatIsOneAbs(absCoeff) ? '' : formatSymRatText(absCoeff) + '*'}${monomial}`;
+        return `${sign}${body}`;
+      }).join('');
+    }
+
+    function cachedSymmetricPolynomialProduct() {
+      const config = currentSympolyConfig();
+      const cached = state.lastSymmetricPolynomial;
+      return cached && cached.signature === sympolyConfigSignature(config) ? cached : null;
+    }
+
+    function symmetricPolynomialProductExportText() {
+      const config = currentSympolyConfig();
+      if (config.variableChoice.error) return config.variableChoice.error;
+      if (config.variableChoice.pending) return 'Enter N or turn on infinite mode, then click compute before exporting.';
+      const cached = cachedSymmetricPolynomialProduct();
+      return cached ? cached.text : sympolyStaleHint();
+    }
+
+    function exportSymmetricPolynomialProduct() {
+      const exportOut = $('export-out');
+      if (!exportOut) return;
+      const cached = cachedSymmetricPolynomialProduct();
+      exportOut.value = symmetricPolynomialProductExportText();
+      state.exportMode = 'symmetric-polynomials';
+      state.exportFilename = cached ? cached.filename : sympolyResultFilename(selectedSympolyOperation());
+      setCardCollapsed(exportOut.closest('.card'), false, false);
+      exportOut.focus();
+    }
+
     function cardForElementId(id) {
       const el = $(id);
       return el ? el.closest('.card') : null;
@@ -2415,6 +3892,7 @@
       if (card.querySelector('#stats-out')) updateStats({ force: true });
       if (card.querySelector('#invariants-out')) updateInvariants({ force: true });
       if (card.querySelector('#slice-stats-out')) updateSliceCard({ force: true });
+      if (card.querySelector('#sympoly-output')) renderSymmetricPolynomialProduct({ force: true });
       const exportOut = card.querySelector('#export-out');
       if (exportOut && (!exportOut.value.trim() || state.exportMode === 'json')) refreshExport({ force: true });
     }
@@ -2545,7 +4023,7 @@
       }
       $('grid-rows').addEventListener('change', applyGridSize); $('grid-cols').addEventListener('change', applyGridSize);
       $('swap-diagrams').addEventListener('click', () => { const a = state.lambda.rows.slice(); state.lambda.rows = state.mu.rows.slice(); state.mu.rows = a; state.lastDecomposition = null; state.lastKostka = null; state.lastKronecker = null; state.lastPlethysm = null;
-      state.lastSchurFunctor = null; state.lastGrassmannian = null; drawAll(); updateStats(); updateInvariants(); refreshExport(); });
+      state.lastSchurFunctor = null; state.lastGrassmannian = null; drawAll(); updateStats(); updateInvariants(); markSymmetricPolynomialStale(); refreshExport(); });
       $('lie-type').addEventListener('change', window.onTypeChange); $('lie-rank').addEventListener('change', window.onAlgebraChange);
       $('fixed-rank-mode').addEventListener('change', refreshLRModeHint);
       $('compute-schur').addEventListener('click', computeSchur);
@@ -2561,6 +4039,15 @@
       $('compute-grassmannian').addEventListener('click', computeGrassmannianCup);
       $('export-grassmannian').addEventListener('click', exportGrassmannianCup);
       $('grassmannian-presentation').addEventListener('change', () => { state.lastGrassmannian = null; refreshExport(); });
+      $('sympoly-variable-count').addEventListener('input', handleSympolyVariableInput);
+      $('sympoly-infinite').addEventListener('change', toggleSympolyInfinite);
+      $('sympoly-left-kind').addEventListener('change', markSymmetricPolynomialStale);
+      $('sympoly-right-kind').addEventListener('change', markSymmetricPolynomialStale);
+      $('sympoly-operation').addEventListener('change', markSymmetricPolynomialStale);
+      $('sympoly-basis').addEventListener('change', markSymmetricPolynomialStale);
+      $('sympoly-mode').addEventListener('change', markSymmetricPolynomialStale);
+      $('compute-sympoly').addEventListener('click', computeSymmetricPolynomialProduct);
+      $('export-sympoly').addEventListener('click', exportSymmetricPolynomialProduct);
       $('refresh-export').addEventListener('click', () => refreshExport({ force: true })); $('copy-export').addEventListener('click', copyExport); $('download-export').addEventListener('click', downloadExport);
       window.addEventListener('resize', resizeCanvases);
     }

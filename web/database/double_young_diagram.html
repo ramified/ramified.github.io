@@ -235,6 +235,18 @@
       color: var(--muted);
     }
     #export-out { height: 116px; }
+    .sympoly-product-row {
+      grid-template-columns: minmax(104px, max-content) minmax(0, 1fr);
+    }
+    .sympoly-product-label {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 5px;
+      white-space: nowrap;
+    }
+    #compute-sympoly + #export-sympoly {
+      margin-left: 0;
+    }
     #diagram-input-card .drag-handle { display: none; }
     @media (max-width: 980px) {
       .double-layout { grid-template-columns: 1fr; }
@@ -652,6 +664,61 @@
           </div>
           <div id="grassmannian-out" class="decomposition-output"><span class="hint">Compute σ<sub>λ</sub> ∪ σ<sub>μ</sub> in H*(Gr(r,n)), where r is the number of grid rows and n−r is the number of grid columns.</span></div>
           <p class="hint">The Young-diagram presentation uses Littlewood–Richardson coefficients inside the current r × (n−r) rectangle. The Chern presentation uses the Giambelli determinant in Chern classes c<sub>i</sub>.</p>
+        </div>
+      </section>
+
+      <section class="card collapsed" draggable="true">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">symmetric polynomials</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body">
+          <div class="symfun-control-row symfun-n-row">
+            <label class="symfun-control-label tooltip-label" tabindex="0" data-tooltip="N is the number of variables x_1,...,x_N." for="sympoly-variable-count">N</label>
+            <span class="symfun-variable-controls">
+              <input type="number" id="sympoly-variable-count" min="0" step="1" inputmode="numeric" value="3">
+              <label class="symfun-infinite-toggle tooltip-label" tabindex="0" data-tooltip="Use infinitely many variables. The result is then collected in the selected basis and mode.">infinite <input type="checkbox" id="sympoly-infinite" checked></label>
+            </span>
+          </div>
+          <div class="symfun-control-row symfun-n-row">
+            <span class="symfun-control-label">terms</span>
+            <span class="symfun-variable-controls symfun-basis-controls">
+              <select id="sympoly-left-kind" class="symfun-basis-select" title="type of the λ factor">
+                <option value="m">m_&lambda;</option>
+                <option value="p">p_&lambda;</option>
+                <option value="e">e_&lambda;</option>
+                <option value="h">h_&lambda;</option>
+                <option value="s">s_&lambda;</option>
+              </select>
+              <select id="sympoly-operation" class="symfun-basis-select" title="operation">
+                <option value="product">&times;</option>
+                <option value="plethysm">&#8728;</option>
+              </select>
+              <select id="sympoly-right-kind" class="symfun-basis-select" title="type of the μ factor">
+                <option value="m">m_&mu;</option>
+                <option value="p">p_&mu;</option>
+                <option value="e">e_&mu;</option>
+                <option value="h">h_&mu;</option>
+                <option value="s">s_&mu;</option>
+              </select>
+            </span>
+          </div>
+          <div class="symfun-control-row symfun-basis-row">
+            <span class="symfun-control-label">basis</span>
+            <span class="symfun-variable-controls symfun-basis-controls">
+              <select id="sympoly-basis" class="symfun-basis-select" title="basis for infinite-variable result expansions" disabled>
+                <option value="m">m_&lambda;</option>
+                <option value="p">p_&lambda;</option>
+                <option value="e">e_&lambda;</option>
+                <option value="h">h_&lambda;</option>
+                <option value="s">s_&lambda;</option>
+              </select>
+              <select id="sympoly-mode" class="symfun-basis-select" title="linear or polynomial expansion" disabled>
+                <option value="linear">linear</option>
+                <option value="polynomial">poly</option>
+              </select>
+              <button id="compute-sympoly" class="symfun-export-btn" type="button">compute</button>
+              <button id="export-sympoly" class="symfun-export-btn" type="button">export</button>
+            </span>
+          </div>
+          <div id="sympoly-output" class="symfun-expansions"><span class="hint">Draw &lambda; and &mu; to combine their symmetric polynomials.</span></div>
         </div>
       </section>
 
