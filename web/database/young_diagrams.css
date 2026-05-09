@@ -625,6 +625,25 @@
     outline: 2px solid var(--accent);
     border-color: var(--accent);
   }
+  .symfun-inline-select {
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    padding: 1px 5px;
+    max-width: 74px;
+  }
+  .symfun-omega-label {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+  }
+  .symfun-omega-row {
+    grid-template-columns: minmax(108px, max-content) minmax(0, 1fr);
+    padding-top: 7px;
+  }
   .symfun-export-btn {
     border: 1px solid var(--accent);
     border-radius: 3px;

@@ -814,9 +814,12 @@ const SYMFUN_EXPANSION_PARTITION_LIMIT = 1200;
 const SYMFUN_VARIABLE_MAX = MAX_GRID_COLS * MAX_GRID_ROWS;
 const SYMFUN_POLYNOMIAL_TERM_LIMIT = 2400;
 const SYMFUN_BASIS_CONVERSION_LIMIT = 180;
-const SYMFUN_ORDER = ['m', 'p', 'e', 'h'];
+const SYMFUN_KOSTKA_STEP_LIMIT = 250000;
+const SYMFUN_SCHUR_DETERMINANT_LIMIT = 8;
+const SYMFUN_ORDER = ['m', 'p', 'e', 'h', 's'];
 let symfunVariableCountTouched = false;
 let symfunSavedFiniteVariableCount = '';
+let symfunOmegaSource = 'm';
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, ch => ({
@@ -895,6 +898,7 @@ function capacityGroups(state) {
 const _symfunGroupProfileCache = new Map();
 const _symfunRowTransitionCache = new Map();
 const _symfunPowerTransitionCache = new Map();
+const _symfunKostkaCache = new Map();
 
 function groupAllocationProfiles(cap, count, maxPerColumn) {
   const maxAlloc = maxPerColumn == null ? cap : Math.min(cap, maxPerColumn);
@@ -1009,6 +1013,57 @@ function powerRowTransitionStates(state, rowSum) {
   return result;
 }
 
+function kostkaNumber(shapeRows, contentRows) {
+  const shape = trimPart(shapeRows);
+  const content = trimPart(contentRows);
+  const total = partitionSize(shape);
+  if (total !== partitionSize(content)) return 0n;
+  if (total === 0) return 1n;
+  if (!content.length) return 0n;
+
+  const cacheKey = `${shape.join(',')}|${content.join(',')}`;
+  const cached = _symfunKostkaCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const cells = [];
+  for (let r = 0; r < shape.length; r++) {
+    for (let c = 0; c < shape[r]; c++) cells.push([r, c]);
+  }
+
+  const grid = shape.map(len => Array(len).fill(0));
+  const supply = content.slice();
+  let count = 0n;
+  let steps = 0;
+
+  function rec(i) {
+    if (++steps > SYMFUN_KOSTKA_STEP_LIMIT) {
+      throw new Error('kostka-too-large');
+    }
+    if (i === cells.length) {
+      count += 1n;
+      return;
+    }
+
+    const [r, c] = cells[i];
+    let lo = 1;
+    if (c > 0) lo = Math.max(lo, grid[r][c - 1]);
+    if (r > 0 && c < shape[r - 1]) lo = Math.max(lo, grid[r - 1][c] + 1);
+
+    for (let v = lo; v <= content.length; v++) {
+      if (supply[v - 1] <= 0) continue;
+      grid[r][c] = v;
+      supply[v - 1] -= 1;
+      rec(i + 1);
+      supply[v - 1] += 1;
+      grid[r][c] = 0;
+    }
+  }
+
+  rec(0);
+  _symfunKostkaCache.set(cacheKey, count);
+  return count;
+}
+
 function countRowTransitionCoefficient(lambda, mu, transitionForRow) {
   const memo = new Map();
 
@@ -1035,6 +1090,7 @@ function countRowTransitionCoefficient(lambda, mu, transitionForRow) {
 function coefficientForBasis(kind, lambda, mu) {
   if (lambda.length === 0) return mu.length === 0 ? 1n : 0n;
   if (kind === 'm') return symfunPartKey(lambda) === symfunPartKey(mu) ? 1n : 0n;
+  if (kind === 's') return kostkaNumber(lambda, mu);
   if (kind === 'p') return countRowTransitionCoefficient(lambda, mu, powerRowTransitionStates);
   if (kind === 'e') return countRowTransitionCoefficient(lambda, mu, (state, rowSum) => rowTransitionStates(state, rowSum, 1));
   return countRowTransitionCoefficient(lambda, mu, (state, rowSum) => rowTransitionStates(state, rowSum, null));
@@ -1114,6 +1170,7 @@ function symRatFromInteger(value) {
 
 function symfunDefinition(kind) {
   if (kind === 'm') return 'Monomial symmetric function: m_lambda is the sum of all distinct monomials whose exponent multiset is lambda.';
+  if (kind === 's') return 'Schur function: s_lambda is the semistandard Young tableau generating function of shape lambda; equivalently s_lambda = det(h_{lambda_i-i+j}).';
   if (kind === 'p') return 'Power-sum symmetric function: p_lambda = product_j p_{lambda_j}, where p_k = sum_i x_i^k.';
   if (kind === 'e') return 'Elementary symmetric function: e_lambda = product_j e_{lambda_j}, where e_k = sum_{i_1<...<i_k} x_{i_1}...x_{i_k}.';
   return 'Complete homogeneous symmetric function: h_lambda = product_j h_{lambda_j}, where h_k = sum_{i_1<=...<=i_k} x_{i_1}...x_{i_k}.';
@@ -1164,7 +1221,130 @@ function generatorMonomialHTML(part, generatorKind) {
     .join(' ');
 }
 
+function normalizedGeneratorPart(part) {
+  return part.filter(n => n > 0).sort((a, b) => b - a);
+}
+
+function generatorPartFromKey(key) {
+  return key ? key.split(',').filter(Boolean).map(Number) : [];
+}
+
+function addGeneratorPolynomialTerm(poly, part, coeff) {
+  if (symRatIsZero(coeff)) return;
+  const key = symfunPartKey(normalizedGeneratorPart(part));
+  const next = symRatAdd(poly.get(key) || symRat(0n), coeff);
+  if (symRatIsZero(next)) poly.delete(key);
+  else poly.set(key, next);
+}
+
+function multiplyGeneratorPolynomials(left, right) {
+  const product = new Map();
+  for (const [leftKey, leftCoeff] of left.entries()) {
+    const leftPart = generatorPartFromKey(leftKey);
+    for (const [rightKey, rightCoeff] of right.entries()) {
+      addGeneratorPolynomialTerm(
+        product,
+        leftPart.concat(generatorPartFromKey(rightKey)),
+        symRatMul(leftCoeff, rightCoeff),
+      );
+      if (product.size > SYMFUN_POLYNOMIAL_TERM_LIMIT) throw new Error('polynomial-too-large');
+    }
+  }
+  return product;
+}
+
+const _symfunSchurGeneratorCache = new Map();
+
+function schurGeneratorPolynomial(part) {
+  const lambda = trimPart(part);
+  const cacheKey = lambda.join(',');
+  const cached = _symfunSchurGeneratorCache.get(cacheKey);
+  if (cached) return cached;
+
+  if (!lambda.length) {
+    const one = new Map([['', symRat(1n)]]);
+    _symfunSchurGeneratorCache.set(cacheKey, one);
+    return one;
+  }
+  if (lambda.length > SYMFUN_SCHUR_DETERMINANT_LIMIT) {
+    throw new Error('schur-generator-too-large');
+  }
+
+  const size = lambda.length;
+  const used = Array(size).fill(false);
+  const perm = [];
+  let total = new Map();
+
+  function permutationSign(cols) {
+    let inv = 0;
+    for (let i = 0; i < cols.length; i++) {
+      for (let j = i + 1; j < cols.length; j++) {
+        if (cols[i] > cols[j]) inv++;
+      }
+    }
+    return inv % 2 ? -1n : 1n;
+  }
+
+  function hGeneratorPoly(k) {
+    if (k < 0) return new Map();
+    if (k === 0) return new Map([['', symRat(1n)]]);
+    return new Map([[String(k), symRat(1n)]]);
+  }
+
+  function rec(row) {
+    if (row === size) {
+      let product = new Map([['', symRat(1n)]]);
+      for (let r = 0; r < size; r++) {
+        const k = lambda[r] - (r + 1) + (perm[r] + 1);
+        product = multiplyGeneratorPolynomials(product, hGeneratorPoly(k));
+        if (!product.size) return;
+      }
+      const sign = symRat(permutationSign(perm));
+      for (const [key, coeff] of product.entries()) {
+        addGeneratorPolynomialTerm(total, generatorPartFromKey(key), symRatMul(sign, coeff));
+      }
+      return;
+    }
+
+    for (let col = 0; col < size; col++) {
+      if (used[col]) continue;
+      used[col] = true;
+      perm.push(col);
+      rec(row + 1);
+      perm.pop();
+      used[col] = false;
+    }
+  }
+
+  rec(0);
+  _symfunSchurGeneratorCache.set(cacheKey, total);
+  return total;
+}
+
+function expandSchurLinearTermsToGeneratorPolynomial(terms) {
+  const result = new Map();
+  for (const { coeff, part } of terms) {
+    if (symRatIsZero(coeff)) continue;
+    const poly = schurGeneratorPolynomial(part);
+    for (const [key, innerCoeff] of poly.entries()) {
+      addGeneratorPolynomialTerm(result, generatorPartFromKey(key), symRatMul(coeff, innerCoeff));
+    }
+  }
+  return [...result.entries()]
+    .map(([key, coeff]) => ({ part: generatorPartFromKey(key), coeff }))
+    .sort((a, b) => {
+      for (let i = 0; i < Math.max(a.part.length, b.part.length); i++) {
+        const d = (b.part[i] || 0) - (a.part[i] || 0);
+        if (d !== 0) return d;
+      }
+      return 0;
+    });
+}
+
 function formatBasisPolynomialCombination(terms, generatorKind) {
+  if (generatorKind === 's') {
+    terms = expandSchurLinearTermsToGeneratorPolynomial(terms);
+  }
   const nonzero = terms.filter(term => !symRatIsZero(term.coeff));
   if (!nonzero.length) return '0';
 
@@ -1177,6 +1357,76 @@ function formatBasisPolynomialCombination(terms, generatorKind) {
       : `${symRatIsOneAbs(coeff) ? '' : `<span class="symfun-coeff">${formatSymRatCoefficient(coeff)}</span> `}${monomial}`;
     return `${sign}${body}`;
   }).join('');
+}
+
+function basisLinearCombinationToMonomialVector(sourceTerms, sourceKind, parts) {
+  const result = parts.map(() => symRat(0n));
+  for (const { coeff, part } of sourceTerms) {
+    if (symRatIsZero(coeff)) continue;
+    for (let i = 0; i < parts.length; i++) {
+      const c = coefficientForBasis(sourceKind, part, parts[i]);
+      if (c !== 0n) {
+        result[i] = symRatAdd(result[i], symRatMul(coeff, symRatFromInteger(c)));
+      }
+    }
+  }
+  return result;
+}
+
+function convertBasisLinearCombination(sourceTerms, sourceKind, targetKind, parts) {
+  if (targetKind === sourceKind) {
+    const byKey = new Map();
+    for (const { part, coeff } of sourceTerms) {
+      addGeneratorPolynomialTerm(byKey, part, coeff);
+    }
+    return [...byKey.entries()].map(([key, coeff]) => ({
+      part: generatorPartFromKey(key),
+      coeff,
+    }));
+  }
+
+  const rhs = basisLinearCombinationToMonomialVector(sourceTerms, sourceKind, parts);
+  if (targetKind === 'm') {
+    return parts.map((part, i) => ({ part, coeff: rhs[i] }));
+  }
+
+  if (parts.length > SYMFUN_BASIS_CONVERSION_LIMIT) {
+    throw new Error('basis-conversion-too-large');
+  }
+
+  const size = parts.length;
+  const matrix = parts.map((mPart, row) => {
+    const values = parts.map(basisPart => symRatFromInteger(coefficientForBasis(targetKind, basisPart, mPart)));
+    values.push(rhs[row]);
+    return values;
+  });
+
+  for (let col = 0; col < size; col++) {
+    let pivot = col;
+    while (pivot < size && symRatIsZero(matrix[pivot][col])) pivot++;
+    if (pivot === size) throw new Error('basis conversion matrix is singular');
+    if (pivot !== col) {
+      const tmp = matrix[col];
+      matrix[col] = matrix[pivot];
+      matrix[pivot] = tmp;
+    }
+
+    const pivotValue = matrix[col][col];
+    for (let j = col; j <= size; j++) {
+      matrix[col][j] = symRatDiv(matrix[col][j], pivotValue);
+    }
+
+    for (let row = 0; row < size; row++) {
+      if (row === col) continue;
+      const factor = matrix[row][col];
+      if (symRatIsZero(factor)) continue;
+      for (let j = col; j <= size; j++) {
+        matrix[row][j] = symRatSub(matrix[row][j], symRatMul(factor, matrix[col][j]));
+      }
+    }
+  }
+
+  return parts.map((part, i) => ({ part, coeff: matrix[i][size] }));
 }
 
 function convertInfiniteBasisExpansions(lambda, targetKind, parts) {
@@ -1322,7 +1572,33 @@ function initSymfunVariableControls() {
 
 function selectedSymfunInfiniteBasis() {
   const select = document.getElementById('symfun-infinite-basis');
-  return ['m', 'p', 'e', 'h'].includes(select?.value) ? select.value : 'm';
+  return ['m', 's', 'p', 'e', 'h'].includes(select?.value) ? select.value : 'm';
+}
+
+function selectedSymfunOmegaSource() {
+  const select = document.getElementById('symfun-omega-source');
+  if (['m', 'p', 'e', 'h', 's'].includes(select?.value)) {
+    symfunOmegaSource = select.value;
+  }
+  return symfunOmegaSource;
+}
+
+function setSymfunOmegaSource() {
+  selectedSymfunOmegaSource();
+  renderSymmetricFunctionChart();
+}
+
+function symfunOmegaSourceSelectHTML() {
+  const selected = selectedSymfunOmegaSource();
+  const options = SYMFUN_ORDER.map(kind => {
+    const isSelected = kind === selected ? ' selected' : '';
+    return `<option value="${kind}"${isSelected}>${kind}_\u03bb</option>`;
+  }).join('');
+  return `<select id="symfun-omega-source" class="symfun-inline-select" onchange="setSymfunOmegaSource()">${options}</select>`;
+}
+
+function symfunOmegaLabelHTML() {
+  return `<span class="symfun-omega-label tooltip-label" tabindex="0" data-tooltip="The fundamental involution omega sends p_n to (-1)^{n-1}p_n, e_n to h_n, h_n to e_n, and s_lambda to s_{lambda'}." >&omega;(${symfunOmegaSourceSelectHTML()})</span>`;
 }
 
 function selectedSymfunInfiniteMode() {
@@ -1332,6 +1608,45 @@ function selectedSymfunInfiniteMode() {
 
 function conversionBasisForInfiniteMode(targetBasis, mode) {
   return mode === 'polynomial' && targetBasis === 'm' ? 'p' : targetBasis;
+}
+
+function omegaSignForPowerSum(part) {
+  return ((partitionSize(part) - part.length) % 2 === 0) ? 1n : -1n;
+}
+
+function omegaPowerSumTerms(lambda, sourceKind, parts) {
+  const sourceTerms = [{ part: lambda, coeff: symRat(1n) }];
+  const asPowerSums = convertBasisLinearCombination(sourceTerms, sourceKind, 'p', parts);
+  return asPowerSums.map(term => ({
+    part: term.part,
+    coeff: symRatMul(term.coeff, symRat(omegaSignForPowerSum(term.part))),
+  }));
+}
+
+function omegaTermsInBasis(lambda, sourceKind, targetKind, parts) {
+  const powerTerms = omegaPowerSumTerms(lambda, sourceKind, parts);
+  return convertBasisLinearCombination(powerTerms, 'p', targetKind, parts);
+}
+
+function omegaFinitePolynomial(lambda, sourceKind, variableCount) {
+  const degree = partitionSize(lambda);
+  const { parts, truncated } = partitionsOfSizeLimited(degree);
+  if (truncated) throw new Error('polynomial-too-large');
+
+  const powerTerms = omegaPowerSumTerms(lambda, sourceKind, parts);
+  const result = new Map();
+  for (const { part, coeff } of powerTerms) {
+    if (symRatIsZero(coeff)) continue;
+    const poly = finiteSymfunPolynomial('p', part, variableCount);
+    for (const [key, intCoeff] of poly.entries()) {
+      const next = symRatMul(coeff, symRatFromInteger(intCoeff));
+      const existing = result.get(key) || symRat(0n);
+      const sum = symRatAdd(existing, next);
+      if (symRatIsZero(sum)) result.delete(key);
+      else result.set(key, sum);
+    }
+  }
+  return result;
 }
 
 function readSymfunVariableCount(lambda = rowLengths()) {
@@ -1374,6 +1689,14 @@ function addPolynomialTerm(poly, exponents, coeff = 1n) {
   if (poly.size > SYMFUN_POLYNOMIAL_TERM_LIMIT) {
     throw new Error('polynomial-too-large');
   }
+}
+
+function addScaledPolynomial(target, source, scale = 1n) {
+  if (scale === 0n) return target;
+  for (const [key, coeff] of source.entries()) {
+    addPolynomialTerm(target, exponentsFromKey(key), coeff * scale);
+  }
+  return target;
 }
 
 function multiplyPolynomials(left, right, variableCount) {
@@ -1483,9 +1806,28 @@ function mPolynomial(lambda, variableCount) {
   return poly;
 }
 
+function schurPolynomial(lambda, variableCount) {
+  if (!lambda.length) return onePolynomial(variableCount);
+  if (lambda.length > variableCount) return new Map();
+
+  const degree = partitionSize(lambda);
+  const { parts, truncated } = partitionsOfSizeLimited(degree);
+  if (truncated) throw new Error('polynomial-too-large');
+
+  const result = new Map();
+  for (const mu of parts) {
+    if (mu.length > variableCount) continue;
+    const coeff = kostkaNumber(lambda, mu);
+    if (coeff === 0n) continue;
+    addScaledPolynomial(result, mPolynomial(mu, variableCount), coeff);
+  }
+  return result;
+}
+
 function finiteSymfunPolynomial(kind, lambda, variableCount) {
   if (!lambda.length) return onePolynomial(variableCount);
   if (kind === 'm') return mPolynomial(lambda, variableCount);
+  if (kind === 's') return schurPolynomial(lambda, variableCount);
 
   const seeds = lambda.map(part => {
     if (kind === 'p') return pSeedPolynomial(part, variableCount);
@@ -1529,8 +1871,27 @@ function formatFinitePolynomial(poly) {
     .join(' + ');
 }
 
+function formatFiniteRationalPolynomial(poly) {
+  if (!poly.size) return '0';
+  return [...poly.entries()]
+    .sort(([aKey], [bKey]) => compareExponentKeys(aKey, bKey))
+    .map(([key, coeff]) => {
+      const monomial = formatVariableMonomial(exponentsFromKey(key));
+      const negative = coeff.n < 0n;
+      const sign = negative ? '- ' : '';
+      const abs = symRatAbs(coeff);
+      if (monomial === '1') return `${sign}${formatSymRatCoefficient(abs)}`;
+      if (symRatIsOneAbs(abs)) return `${sign}${monomial}`;
+      return `${sign}<span class="symfun-coeff">${formatSymRatCoefficient(abs)}</span>${monomial}`;
+    })
+    .reduce((out, term, index) => {
+      if (index === 0) return term;
+      return term.startsWith('- ') ? `${out} - ${term.slice(2)}` : `${out} + ${term}`;
+    }, '');
+}
+
 function renderFiniteSymmetricFunctionChart(lambda, variableCount) {
-  return SYMFUN_ORDER.map(kind => {
+  let html = SYMFUN_ORDER.map(kind => {
     const poly = finiteSymfunPolynomial(kind, lambda, variableCount);
     return `
       <div class="symfun-row">
@@ -1539,6 +1900,15 @@ function renderFiniteSymmetricFunctionChart(lambda, variableCount) {
       </div>
     `;
   }).join('');
+  const sourceKind = selectedSymfunOmegaSource();
+  const omegaPoly = omegaFinitePolynomial(lambda, sourceKind, variableCount);
+  html += `
+    <div class="symfun-row symfun-omega-row">
+      <span class="symfun-label">${symfunOmegaLabelHTML()}</span>
+      <span class="symfun-value">${formatFiniteRationalPolynomial(omegaPoly)}</span>
+    </div>
+  `;
+  return html;
 }
 
 function renderSymmetricFunctionChart() {
@@ -1559,6 +1929,10 @@ function renderSymmetricFunctionChart() {
     } catch (err) {
       if (err && err.message === 'polynomial-too-large') {
         output.innerHTML = `<div class="symfun-too-large">Complete polynomial expansion has more than ${SYMFUN_POLYNOMIAL_TERM_LIMIT} terms. Use fewer variables or draw a smaller diagram.</div>`;
+        return;
+      }
+      if (err && err.message === 'kostka-too-large') {
+        output.innerHTML = `<div class="symfun-too-large">Schur/Kostka calculation is too large for exact browser-side expansion. Use a smaller diagram.</div>`;
         return;
       }
       throw err;
@@ -1585,19 +1959,46 @@ function renderSymmetricFunctionChart() {
       output.innerHTML = `<div class="symfun-too-large">Changing to the ${targetBasis}<sub>&lambda;</sub> ${infiniteMode} mode in degree ${degree} needs a ${parts.length} by ${parts.length} exact matrix solve. Use a smaller diagram or choose linear m<sub>&lambda;</sub>.</div>`;
       return;
     }
+    if (err && err.message === 'kostka-too-large') {
+      output.innerHTML = `<div class="symfun-too-large">Schur/Kostka calculation is too large for exact browser-side expansion. Use a smaller diagram.</div>`;
+      return;
+    }
     throw err;
   }
 
-  const blocks = expansions.map(({ kind, terms }) => {
-    return `
-      <div class="symfun-row">
-        <span class="symfun-label">${symfunTitle(kind)}</span>
+  let blocks = '';
+  try {
+    blocks = expansions.map(({ kind, terms }) => {
+      return `
+        <div class="symfun-row">
+          <span class="symfun-label">${symfunTitle(kind)}</span>
+          <span class="symfun-value">${infiniteMode === 'polynomial'
+            ? formatBasisPolynomialCombination(terms, targetBasis)
+            : formatBasisLinearCombination(terms, targetBasis)}</span>
+        </div>
+      `;
+    }).join('');
+    const omegaSource = selectedSymfunOmegaSource();
+    const omegaTerms = omegaTermsInBasis(lambda, omegaSource, conversionBasis, parts);
+    blocks += `
+      <div class="symfun-row symfun-omega-row">
+        <span class="symfun-label">${symfunOmegaLabelHTML()}</span>
         <span class="symfun-value">${infiniteMode === 'polynomial'
-          ? formatBasisPolynomialCombination(terms, targetBasis)
-          : formatBasisLinearCombination(terms, targetBasis)}</span>
+          ? formatBasisPolynomialCombination(omegaTerms, targetBasis)
+          : formatBasisLinearCombination(omegaTerms, targetBasis)}</span>
       </div>
     `;
-  }).join('');
+  } catch (err) {
+    if (err && err.message === 'schur-generator-too-large') {
+      output.innerHTML = `<div class="symfun-too-large">Schur polynomial mode is capped at Jacobi-Trudi size ${SYMFUN_SCHUR_DETERMINANT_LIMIT}. Use linear mode or a smaller diagram.</div>`;
+      return;
+    }
+    if (err && err.message === 'polynomial-too-large') {
+      output.innerHTML = `<div class="symfun-too-large">Complete polynomial expansion has more than ${SYMFUN_POLYNOMIAL_TERM_LIMIT} terms. Use linear mode or a smaller diagram.</div>`;
+      return;
+    }
+    throw err;
+  }
 
   output.innerHTML = blocks;
 }
@@ -1637,6 +2038,9 @@ function generatorMonomialText(part, generatorKind) {
 }
 
 function formatBasisPolynomialCombinationText(terms, generatorKind) {
+  if (generatorKind === 's') {
+    terms = expandSchurLinearTermsToGeneratorPolynomial(terms);
+  }
   const nonzero = terms.filter(term => !symRatIsZero(term.coeff));
   if (!nonzero.length) return '0';
   return nonzero.map(({ coeff, part }, index) => {
@@ -1673,6 +2077,22 @@ function formatFinitePolynomialText(poly) {
     .join(' + ');
 }
 
+function formatFiniteRationalPolynomialText(poly) {
+  if (!poly.size) return '0';
+  return [...poly.entries()]
+    .sort(([aKey], [bKey]) => compareExponentKeys(aKey, bKey))
+    .map(([key, coeff], index) => {
+      const negative = coeff.n < 0n;
+      const sign = index === 0 ? (negative ? '- ' : '') : (negative ? ' - ' : ' + ');
+      const abs = symRatAbs(coeff);
+      const monomial = formatVariableMonomialText(exponentsFromKey(key));
+      if (monomial === '1') return `${sign}${formatSymRatText(abs)}`;
+      if (symRatIsOneAbs(abs)) return `${sign}${monomial}`;
+      return `${sign}${formatSymRatText(abs)}*${monomial}`;
+    })
+    .join('');
+}
+
 function symmetricFunctionExportText() {
   const lambda = rowLengths();
   const lambdaText = partitionLabelText(lambda);
@@ -1691,6 +2111,9 @@ function symmetricFunctionExportText() {
       const poly = finiteSymfunPolynomial(kind, lambda, variableChoice.count);
       lines.push(`${symfunSymbolText(kind)} = ${formatFinitePolynomialText(poly)}`);
     }
+    const omegaSource = selectedSymfunOmegaSource();
+    const omegaPoly = omegaFinitePolynomial(lambda, omegaSource, variableChoice.count);
+    lines.push(`omega(${symfunSymbolText(omegaSource)}) = ${formatFiniteRationalPolynomialText(omegaPoly)}`);
     return lines.join('\n');
   }
 
@@ -1713,6 +2136,12 @@ function symmetricFunctionExportText() {
       : formatBasisLinearCombinationText(terms, targetBasis);
     lines.push(`${symfunSymbolText(kind)} = ${rhs}`);
   }
+  const omegaSource = selectedSymfunOmegaSource();
+  const omegaTerms = omegaTermsInBasis(lambda, omegaSource, conversionBasis, parts);
+  const omegaRhs = infiniteMode === 'polynomial'
+    ? formatBasisPolynomialCombinationText(omegaTerms, targetBasis)
+    : formatBasisLinearCombinationText(omegaTerms, targetBasis);
+  lines.push(`omega(${symfunSymbolText(omegaSource)}) = ${omegaRhs}`);
   return lines.join('\n');
 }
 
@@ -1736,6 +2165,10 @@ function exportSymmetricFunctions() {
       exportOut.value = `Complete polynomial expansion has more than ${SYMFUN_POLYNOMIAL_TERM_LIMIT} terms. Use fewer variables or draw a smaller diagram.`;
     } else if (err && err.message === 'basis-conversion-too-large') {
       exportOut.value = `The selected infinite-variable basis conversion is too large for exact browser-side export. Use a smaller diagram or choose the m_lambda basis.`;
+    } else if (err && err.message === 'schur-generator-too-large') {
+      exportOut.value = `Schur polynomial-mode export is capped at Jacobi-Trudi size ${SYMFUN_SCHUR_DETERMINANT_LIMIT}. Use linear mode or a smaller diagram.`;
+    } else if (err && err.message === 'kostka-too-large') {
+      exportOut.value = `Schur/Kostka calculation is too large for exact browser-side export. Use a smaller diagram.`;
     } else {
       exportOut.value = `Unable to export symmetric functions: ${err?.message || err}`;
     }
