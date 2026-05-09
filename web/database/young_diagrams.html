@@ -157,6 +157,37 @@
           </div>
         </div>
 
+        <!-- Symmetric Functions -->
+        <div class="card collapsed">
+          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Symmetric Functions</span><em class="toggle-icon">&#9662;</em></div>
+          <div class="card-body">
+            <div class="symfun-control-row symfun-n-row">
+              <label class="symfun-control-label tooltip-label" tabindex="0" data-tooltip="N is the number of variables x_1,...,x_N." for="symfun-variable-count">N</label>
+              <span class="symfun-variable-controls">
+                <input type="number" id="symfun-variable-count" min="0" step="1" inputmode="numeric" oninput="handleSymfunVariableInput()">
+                <label class="symfun-infinite-toggle tooltip-label" tabindex="0" data-tooltip="Use infinitely many variables. The rows are then displayed as linear combinations in the selected symmetric-function basis.">infinite <input type="checkbox" id="symfun-infinite" onchange="toggleSymfunInfinite()"></label>
+              </span>
+            </div>
+            <div class="symfun-control-row symfun-basis-row">
+              <span class="symfun-control-label">basis</span>
+              <span class="symfun-variable-controls symfun-basis-controls">
+                <select id="symfun-infinite-basis" class="symfun-basis-select" onchange="renderSymmetricFunctionChart()" title="basis for infinite-variable expansions" disabled>
+                  <option value="m">m_&#955;</option>
+                  <option value="p">p_&#955;</option>
+                  <option value="e">e_&#955;</option>
+                  <option value="h">h_&#955;</option>
+                </select>
+                <select id="symfun-infinite-mode" class="symfun-basis-select" onchange="renderSymmetricFunctionChart()" title="linear or polynomial expansion" disabled>
+                  <option value="linear">linear</option>
+                  <option value="polynomial">poly</option>
+                </select>
+                <button class="symfun-export-btn" type="button" onclick="exportSymmetricFunctions()">export</button>
+              </span>
+            </div>
+            <div id="symfun-output" class="symfun-expansions"><span class="hint">Draw a Young diagram to expand.</span></div>
+          </div>
+        </div>
+
         <!-- Display Options -->
         <div class="card collapsed">
           <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Display Options</span><em class="toggle-icon">▾</em></div>

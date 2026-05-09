@@ -249,6 +249,9 @@ function refreshCardCalculation(card) {
   if (card.querySelector('#lie-weight')) {
     onTypeChange();
   }
+  if (card.querySelector('#symfun-output')) {
+    renderSymmetricFunctionChart();
+  }
 }
 
 function refreshOpenCalculations() {
@@ -807,6 +810,939 @@ function miniDiagramDecomp(mu, hue = 200) {
   svg += '</svg>';
   return svg;
 }
+const SYMFUN_EXPANSION_PARTITION_LIMIT = 1200;
+const SYMFUN_VARIABLE_MAX = MAX_GRID_COLS * MAX_GRID_ROWS;
+const SYMFUN_POLYNOMIAL_TERM_LIMIT = 2400;
+const SYMFUN_BASIS_CONVERSION_LIMIT = 180;
+const SYMFUN_ORDER = ['m', 'p', 'e', 'h'];
+let symfunVariableCountTouched = false;
+let symfunSavedFiniteVariableCount = '';
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[ch]));
+}
+
+function partitionSize(part) {
+  return part.reduce((sum, p) => sum + p, 0);
+}
+
+function partitionLabel(part) {
+  return part.length ? '(' + part.join(', ') + ')' : '( )';
+}
+
+function symfunPartKey(part) {
+  return part.join(',');
+}
+
+function partitionsOfSizeLimited(size, limit = SYMFUN_EXPANSION_PARTITION_LIMIT) {
+  if (size === 0) return { parts: [[]], truncated: false };
+
+  const parts = [];
+  let truncated = false;
+
+  function gen(rem, maxPart, current) {
+    if (parts.length > limit) {
+      truncated = true;
+      return;
+    }
+    if (rem === 0) {
+      parts.push(current.slice());
+      if (parts.length > limit) truncated = true;
+      return;
+    }
+    for (let p = Math.min(maxPart, rem); p >= 1; p--) {
+      current.push(p);
+      gen(rem - p, p, current);
+      current.pop();
+      if (truncated) return;
+    }
+  }
+
+  gen(size, size, []);
+  return { parts: parts.slice(0, limit), truncated };
+}
+
+function bigCombSmall(n, k) {
+  if (k < 0 || k > n) return 0n;
+  k = Math.min(k, n - k);
+  let result = 1n;
+  for (let i = 1; i <= k; i++) {
+    result = (result * BigInt(n - k + i)) / BigInt(i);
+  }
+  return result;
+}
+
+function capacityGroups(state) {
+  const groups = [];
+  for (const cap of state) {
+    if (cap <= 0) continue;
+    const last = groups[groups.length - 1];
+    if (last && last.cap === cap) {
+      last.count++;
+    } else {
+      groups.push({ cap, count: 1 });
+    }
+  }
+  return groups;
+}
+
+const _symfunGroupProfileCache = new Map();
+const _symfunRowTransitionCache = new Map();
+const _symfunPowerTransitionCache = new Map();
+
+function groupAllocationProfiles(cap, count, maxPerColumn) {
+  const maxAlloc = maxPerColumn == null ? cap : Math.min(cap, maxPerColumn);
+  const cacheKey = `${cap}|${count}|${maxAlloc}`;
+  const cached = _symfunGroupProfileCache.get(cacheKey);
+  if (cached) return cached;
+
+  const profiles = [];
+  const allocationCounts = [];
+
+  function rec(allocation, remainingCount, used) {
+    if (allocation > maxAlloc) {
+      if (remainingCount !== 0) return;
+
+      let ways = 1n;
+      let unassigned = count;
+      const caps = [];
+      for (let a = 0; a <= maxAlloc; a++) {
+        const take = allocationCounts[a] || 0;
+        ways *= bigCombSmall(unassigned, take);
+        unassigned -= take;
+        const nextCap = cap - a;
+        for (let i = 0; i < take; i++) {
+          if (nextCap > 0) caps.push(nextCap);
+        }
+      }
+      profiles.push({ used, caps, ways });
+      return;
+    }
+
+    for (let take = 0; take <= remainingCount; take++) {
+      allocationCounts[allocation] = take;
+      rec(allocation + 1, remainingCount - take, used + allocation * take);
+    }
+    allocationCounts[allocation] = 0;
+  }
+
+  rec(0, count, 0);
+  _symfunGroupProfileCache.set(cacheKey, profiles);
+  return profiles;
+}
+
+function sortedPositiveState(caps) {
+  return caps.filter(c => c > 0).sort((a, b) => b - a);
+}
+
+function rowTransitionStates(state, rowSum, maxPerColumn) {
+  const cacheKey = `${state.join(',')}|${rowSum}|${maxPerColumn == null ? 'inf' : maxPerColumn}`;
+  const cached = _symfunRowTransitionCache.get(cacheKey);
+  if (cached) return cached;
+
+  const groups = capacityGroups(state);
+  const byKey = new Map();
+
+  function rec(groupIndex, used, caps, ways) {
+    if (used > rowSum) return;
+    if (groupIndex === groups.length) {
+      if (used !== rowSum) return;
+      const nextState = sortedPositiveState(caps);
+      const key = symfunPartKey(nextState);
+      byKey.set(key, (byKey.get(key) || 0n) + ways);
+      return;
+    }
+
+    const group = groups[groupIndex];
+    for (const profile of groupAllocationProfiles(group.cap, group.count, maxPerColumn)) {
+      if (used + profile.used > rowSum) continue;
+      rec(groupIndex + 1, used + profile.used, caps.concat(profile.caps), ways * profile.ways);
+    }
+  }
+
+  rec(0, 0, [], 1n);
+  const result = [...byKey.entries()].map(([key, ways]) => ({
+    state: key ? key.split(',').map(Number) : [],
+    ways,
+  }));
+  _symfunRowTransitionCache.set(cacheKey, result);
+  return result;
+}
+
+function powerRowTransitionStates(state, rowSum) {
+  const cacheKey = `${state.join(',')}|${rowSum}`;
+  const cached = _symfunPowerTransitionCache.get(cacheKey);
+  if (cached) return cached;
+
+  const groups = capacityGroups(state);
+  const byKey = new Map();
+
+  for (let i = 0; i < groups.length; i++) {
+    const group = groups[i];
+    if (group.cap < rowSum) continue;
+
+    const caps = [];
+    for (let j = 0; j < groups.length; j++) {
+      const g = groups[j];
+      const count = j === i ? g.count - 1 : g.count;
+      for (let c = 0; c < count; c++) caps.push(g.cap);
+    }
+    const reduced = group.cap - rowSum;
+    if (reduced > 0) caps.push(reduced);
+
+    const nextState = sortedPositiveState(caps);
+    const key = symfunPartKey(nextState);
+    byKey.set(key, (byKey.get(key) || 0n) + BigInt(group.count));
+  }
+
+  const result = [...byKey.entries()].map(([key, ways]) => ({
+    state: key ? key.split(',').map(Number) : [],
+    ways,
+  }));
+  _symfunPowerTransitionCache.set(cacheKey, result);
+  return result;
+}
+
+function countRowTransitionCoefficient(lambda, mu, transitionForRow) {
+  const memo = new Map();
+
+  function rec(rowIndex, state) {
+    const key = `${rowIndex}|${state.join(',')}`;
+    if (memo.has(key)) return memo.get(key);
+    if (rowIndex === lambda.length) {
+      const value = state.length === 0 ? 1n : 0n;
+      memo.set(key, value);
+      return value;
+    }
+
+    let total = 0n;
+    for (const next of transitionForRow(state, lambda[rowIndex])) {
+      total += next.ways * rec(rowIndex + 1, next.state);
+    }
+    memo.set(key, total);
+    return total;
+  }
+
+  return rec(0, mu.slice());
+}
+
+function coefficientForBasis(kind, lambda, mu) {
+  if (lambda.length === 0) return mu.length === 0 ? 1n : 0n;
+  if (kind === 'm') return symfunPartKey(lambda) === symfunPartKey(mu) ? 1n : 0n;
+  if (kind === 'p') return countRowTransitionCoefficient(lambda, mu, powerRowTransitionStates);
+  if (kind === 'e') return countRowTransitionCoefficient(lambda, mu, (state, rowSum) => rowTransitionStates(state, rowSum, 1));
+  return countRowTransitionCoefficient(lambda, mu, (state, rowSum) => rowTransitionStates(state, rowSum, null));
+}
+
+function expansionForBasis(kind, lambda, partitions) {
+  return partitions.map(mu => ({
+    part: mu,
+    coeff: coefficientForBasis(kind, lambda, mu),
+  }));
+}
+
+function symRatGcd(a, b) {
+  a = a < 0n ? -a : a;
+  b = b < 0n ? -b : b;
+  while (b) {
+    const t = a % b;
+    a = b;
+    b = t;
+  }
+  return a || 1n;
+}
+
+function symRat(n, d = 1n) {
+  n = BigInt(n);
+  d = BigInt(d);
+  if (d === 0n) throw new Error('zero denominator');
+  if (n === 0n) return { n: 0n, d: 1n };
+  if (d < 0n) {
+    n = -n;
+    d = -d;
+  }
+  const g = symRatGcd(n, d);
+  return { n: n / g, d: d / g };
+}
+
+function symRatIsZero(a) {
+  return a.n === 0n;
+}
+
+function symRatIsOneAbs(a) {
+  return (a.n === 1n || a.n === -1n) && a.d === 1n;
+}
+
+function symRatAdd(a, b) {
+  if (a.n === 0n) return b;
+  if (b.n === 0n) return a;
+  return symRat(a.n * b.d + b.n * a.d, a.d * b.d);
+}
+
+function symRatSub(a, b) {
+  if (b.n === 0n) return a;
+  return symRat(a.n * b.d - b.n * a.d, a.d * b.d);
+}
+
+function symRatMul(a, b) {
+  if (a.n === 0n || b.n === 0n) return symRat(0n);
+  return symRat(a.n * b.n, a.d * b.d);
+}
+
+function symRatDiv(a, b) {
+  if (b.n === 0n) throw new Error('division by zero');
+  return symRat(a.n * b.d, a.d * b.n);
+}
+
+function symRatNeg(a) {
+  return { n: -a.n, d: a.d };
+}
+
+function symRatAbs(a) {
+  return a.n < 0n ? symRatNeg(a) : a;
+}
+
+function symRatFromInteger(value) {
+  return symRat(BigInt(value), 1n);
+}
+
+function symfunDefinition(kind) {
+  if (kind === 'm') return 'Monomial symmetric function: m_lambda is the sum of all distinct monomials whose exponent multiset is lambda.';
+  if (kind === 'p') return 'Power-sum symmetric function: p_lambda = product_j p_{lambda_j}, where p_k = sum_i x_i^k.';
+  if (kind === 'e') return 'Elementary symmetric function: e_lambda = product_j e_{lambda_j}, where e_k = sum_{i_1<...<i_k} x_{i_1}...x_{i_k}.';
+  return 'Complete homogeneous symmetric function: h_lambda = product_j h_{lambda_j}, where h_k = sum_{i_1<=...<=i_k} x_{i_1}...x_{i_k}.';
+}
+
+function symfunSymbolHTML(kind, partLabel = '&lambda;') {
+  return `<span class="symfun-symbol tooltip-label" tabindex="0" data-tooltip="${escapeHtml(symfunDefinition(kind))}">${kind}<sub>${partLabel}</sub></span>`;
+}
+
+function symmetricBasisSymbol(kind, part) {
+  return `<span class="symfun-symbol">${kind}<sub>${escapeHtml(partitionLabel(part))}</sub></span>`;
+}
+
+function formatSymRatCoefficient(coeff) {
+  const abs = symRatAbs(coeff);
+  return abs.d === 1n ? abs.n.toString() : `${abs.n.toString()}/${abs.d.toString()}`;
+}
+
+function formatBasisLinearCombination(terms, basisKind) {
+  const nonzero = terms.filter(term => !symRatIsZero(term.coeff));
+  if (!nonzero.length) return '0';
+
+  return nonzero.map(({ coeff, part }, index) => {
+    const negative = coeff.n < 0n;
+    const sign = index === 0 ? (negative ? '- ' : '') : (negative ? ' - ' : ' + ');
+    const symbol = symmetricBasisSymbol(basisKind, part);
+    const coeffText = symRatIsOneAbs(coeff)
+      ? ''
+      : `<span class="symfun-coeff">${formatSymRatCoefficient(coeff)}</span>`;
+    return `${sign}${coeffText}${symbol}`;
+  }).join('');
+}
+
+function generatorSymbolHTML(kind, n) {
+  return `<span class="symfun-symbol">${kind}<sub>${n}</sub></span>`;
+}
+
+function generatorMonomialHTML(part, generatorKind) {
+  if (!part.length) return '1';
+  const counts = new Map();
+  for (const n of part) counts.set(n, (counts.get(n) || 0) + 1);
+  return [...counts.entries()]
+    .sort(([a], [b]) => b - a)
+    .map(([n, count]) => {
+      const symbol = generatorSymbolHTML(generatorKind, n);
+      return count === 1 ? symbol : `${symbol}<sup>${count}</sup>`;
+    })
+    .join(' ');
+}
+
+function formatBasisPolynomialCombination(terms, generatorKind) {
+  const nonzero = terms.filter(term => !symRatIsZero(term.coeff));
+  if (!nonzero.length) return '0';
+
+  return nonzero.map(({ coeff, part }, index) => {
+    const negative = coeff.n < 0n;
+    const sign = index === 0 ? (negative ? '- ' : '') : (negative ? ' - ' : ' + ');
+    const monomial = generatorMonomialHTML(part, generatorKind);
+    const body = monomial === '1'
+      ? formatSymRatCoefficient(coeff)
+      : `${symRatIsOneAbs(coeff) ? '' : `<span class="symfun-coeff">${formatSymRatCoefficient(coeff)}</span> `}${monomial}`;
+    return `${sign}${body}`;
+  }).join('');
+}
+
+function convertInfiniteBasisExpansions(lambda, targetKind, parts) {
+  if (targetKind === 'm') {
+    return SYMFUN_ORDER.map(kind => ({
+      kind,
+      terms: expansionForBasis(kind, lambda, parts).map(term => ({
+        part: term.part,
+        coeff: symRatFromInteger(term.coeff),
+      })),
+    }));
+  }
+
+  if (parts.length > SYMFUN_BASIS_CONVERSION_LIMIT) {
+    throw new Error('basis-conversion-too-large');
+  }
+
+  const size = parts.length;
+  const rhsKinds = SYMFUN_ORDER;
+  const rhsStart = size;
+  const width = size + rhsKinds.length;
+  const matrix = parts.map((mPart) => {
+    const row = [];
+    for (const basisPart of parts) {
+      row.push(symRatFromInteger(coefficientForBasis(targetKind, basisPart, mPart)));
+    }
+    for (const sourceKind of rhsKinds) {
+      row.push(symRatFromInteger(coefficientForBasis(sourceKind, lambda, mPart)));
+    }
+    return row;
+  });
+
+  for (let col = 0; col < size; col++) {
+    let pivot = col;
+    while (pivot < size && symRatIsZero(matrix[pivot][col])) pivot++;
+    if (pivot === size) throw new Error('basis conversion matrix is singular');
+    if (pivot !== col) {
+      const tmp = matrix[col];
+      matrix[col] = matrix[pivot];
+      matrix[pivot] = tmp;
+    }
+
+    const pivotValue = matrix[col][col];
+    for (let j = col; j < width; j++) {
+      matrix[col][j] = symRatDiv(matrix[col][j], pivotValue);
+    }
+
+    for (let row = 0; row < size; row++) {
+      if (row === col) continue;
+      const factor = matrix[row][col];
+      if (symRatIsZero(factor)) continue;
+      for (let j = col; j < width; j++) {
+        matrix[row][j] = symRatSub(matrix[row][j], symRatMul(factor, matrix[col][j]));
+      }
+    }
+  }
+
+  return rhsKinds.map((kind, rhsIndex) => ({
+    kind,
+    terms: parts.map((part, partIndex) => ({
+      part,
+      coeff: matrix[partIndex][rhsStart + rhsIndex],
+    })),
+  }));
+}
+
+function symfunTitle(kind) {
+  return symfunSymbolHTML(kind);
+}
+
+function defaultSymfunVariableCount(lambda = rowLengths()) {
+  return partitionSize(lambda);
+}
+
+function syncSymfunVariableControl(lambda = rowLengths()) {
+  const input = document.getElementById('symfun-variable-count');
+  const infinite = document.getElementById('symfun-infinite');
+  const basisSelect = document.getElementById('symfun-infinite-basis');
+  const modeSelect = document.getElementById('symfun-infinite-mode');
+  if (!input) return { infinite: false };
+
+  if (infinite?.checked) {
+    input.type = 'text';
+    input.readOnly = true;
+    input.value = '\u221e';
+    if (basisSelect) basisSelect.disabled = false;
+    if (modeSelect) modeSelect.disabled = false;
+    return { infinite: true };
+  }
+
+  input.type = 'number';
+  input.min = '0';
+  input.max = String(SYMFUN_VARIABLE_MAX);
+  input.step = '1';
+  input.readOnly = false;
+  if (basisSelect) basisSelect.disabled = true;
+  if (modeSelect) modeSelect.disabled = true;
+  if (!symfunVariableCountTouched || input.value.trim() === '\u221e') {
+    input.value = String(defaultSymfunVariableCount(lambda));
+  }
+  return { infinite: false };
+}
+
+function handleSymfunVariableInput() {
+  const input = document.getElementById('symfun-variable-count');
+  const infinite = document.getElementById('symfun-infinite');
+  if (infinite?.checked) return;
+  const raw = String(input?.value || '').trim();
+  symfunVariableCountTouched = true;
+  symfunSavedFiniteVariableCount = raw;
+  if (raw === '') return;
+  renderSymmetricFunctionChart();
+}
+
+function toggleSymfunInfinite() {
+  const input = document.getElementById('symfun-variable-count');
+  const infinite = document.getElementById('symfun-infinite');
+  if (!input || !infinite) return;
+
+  if (infinite.checked) {
+    if (input.value.trim() && input.value.trim() !== '\u221e') {
+      symfunSavedFiniteVariableCount = input.value.trim();
+    }
+    input.type = 'text';
+    input.readOnly = true;
+    input.value = '\u221e';
+  } else {
+    input.type = 'number';
+    input.min = '0';
+    input.max = String(SYMFUN_VARIABLE_MAX);
+    input.step = '1';
+    input.readOnly = false;
+    input.value = symfunVariableCountTouched && symfunSavedFiniteVariableCount
+      ? symfunSavedFiniteVariableCount
+      : String(defaultSymfunVariableCount());
+  }
+  renderSymmetricFunctionChart();
+}
+
+function initSymfunVariableControls() {
+  syncSymfunVariableControl();
+}
+
+function selectedSymfunInfiniteBasis() {
+  const select = document.getElementById('symfun-infinite-basis');
+  return ['m', 'p', 'e', 'h'].includes(select?.value) ? select.value : 'm';
+}
+
+function selectedSymfunInfiniteMode() {
+  const select = document.getElementById('symfun-infinite-mode');
+  return select?.value === 'polynomial' ? 'polynomial' : 'linear';
+}
+
+function conversionBasisForInfiniteMode(targetBasis, mode) {
+  return mode === 'polynomial' && targetBasis === 'm' ? 'p' : targetBasis;
+}
+
+function readSymfunVariableCount(lambda = rowLengths()) {
+  const controlState = syncSymfunVariableControl(lambda);
+  if (controlState.infinite) return { count: null, infinite: true, error: '' };
+
+  const input = document.getElementById('symfun-variable-count');
+  if (!input) return { count: defaultSymfunVariableCount(lambda), infinite: false, error: '' };
+  const raw = String(input.value || '').trim();
+  if (!raw) return { count: null, infinite: false, pending: true, error: '' };
+  const count = Number(raw);
+  if (!Number.isInteger(count) || count < 0 || count > SYMFUN_VARIABLE_MAX) {
+    return { count: null, infinite: false, error: `Choose 0-${SYMFUN_VARIABLE_MAX} variables, or turn on infinite.` };
+  }
+  return { count, infinite: false, error: '' };
+}
+
+function zeroExponentVector(variableCount) {
+  return Array(variableCount).fill(0);
+}
+
+function polyKey(exponents) {
+  return exponents.join(',');
+}
+
+function exponentsFromKey(key) {
+  return key ? key.split(',').map(Number) : [];
+}
+
+function onePolynomial(variableCount) {
+  return new Map([[polyKey(zeroExponentVector(variableCount)), 1n]]);
+}
+
+function addPolynomialTerm(poly, exponents, coeff = 1n) {
+  if (coeff === 0n) return;
+  const key = polyKey(exponents);
+  const next = (poly.get(key) || 0n) + coeff;
+  if (next === 0n) poly.delete(key);
+  else poly.set(key, next);
+  if (poly.size > SYMFUN_POLYNOMIAL_TERM_LIMIT) {
+    throw new Error('polynomial-too-large');
+  }
+}
+
+function multiplyPolynomials(left, right, variableCount) {
+  if (!left.size || !right.size) return new Map();
+  const product = new Map();
+  for (const [leftKey, leftCoeff] of left.entries()) {
+    const leftExp = exponentsFromKey(leftKey);
+    for (const [rightKey, rightCoeff] of right.entries()) {
+      const rightExp = exponentsFromKey(rightKey);
+      const exp = zeroExponentVector(variableCount);
+      for (let i = 0; i < variableCount; i++) exp[i] = leftExp[i] + rightExp[i];
+      addPolynomialTerm(product, exp, leftCoeff * rightCoeff);
+    }
+  }
+  return product;
+}
+
+function multiplyPolynomialList(polys, variableCount) {
+  let result = onePolynomial(variableCount);
+  for (const poly of polys) {
+    result = multiplyPolynomials(result, poly, variableCount);
+    if (!result.size) break;
+  }
+  return result;
+}
+
+function pSeedPolynomial(k, variableCount) {
+  const poly = new Map();
+  for (let i = 0; i < variableCount; i++) {
+    const exp = zeroExponentVector(variableCount);
+    exp[i] = k;
+    addPolynomialTerm(poly, exp);
+  }
+  return poly;
+}
+
+function eSeedPolynomial(k, variableCount) {
+  if (k > variableCount) return new Map();
+  const poly = new Map();
+  const exp = zeroExponentVector(variableCount);
+
+  function rec(start, remaining) {
+    if (remaining === 0) {
+      addPolynomialTerm(poly, exp);
+      return;
+    }
+    for (let i = start; i <= variableCount - remaining; i++) {
+      exp[i] = 1;
+      rec(i + 1, remaining - 1);
+      exp[i] = 0;
+    }
+  }
+
+  rec(0, k);
+  return poly;
+}
+
+function hSeedPolynomial(k, variableCount) {
+  if (variableCount <= 0) return k === 0 ? onePolynomial(variableCount) : new Map();
+  const poly = new Map();
+  const exp = zeroExponentVector(variableCount);
+
+  function rec(index, remaining) {
+    if (index === variableCount - 1) {
+      exp[index] = remaining;
+      addPolynomialTerm(poly, exp);
+      exp[index] = 0;
+      return;
+    }
+    for (let a = remaining; a >= 0; a--) {
+      exp[index] = a;
+      rec(index + 1, remaining - a);
+    }
+    exp[index] = 0;
+  }
+
+  rec(0, k);
+  return poly;
+}
+
+function mPolynomial(lambda, variableCount) {
+  if (lambda.length > variableCount) return new Map();
+  const values = lambda.concat(Array(variableCount - lambda.length).fill(0));
+  const counts = new Map();
+  for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
+  const distinctValues = [...counts.keys()].sort((a, b) => b - a);
+  const exp = zeroExponentVector(variableCount);
+  const poly = new Map();
+
+  function rec(index) {
+    if (index === variableCount) {
+      addPolynomialTerm(poly, exp);
+      return;
+    }
+    for (const value of distinctValues) {
+      const count = counts.get(value) || 0;
+      if (!count) continue;
+      counts.set(value, count - 1);
+      exp[index] = value;
+      rec(index + 1);
+      exp[index] = 0;
+      counts.set(value, count);
+    }
+  }
+
+  rec(0);
+  return poly;
+}
+
+function finiteSymfunPolynomial(kind, lambda, variableCount) {
+  if (!lambda.length) return onePolynomial(variableCount);
+  if (kind === 'm') return mPolynomial(lambda, variableCount);
+
+  const seeds = lambda.map(part => {
+    if (kind === 'p') return pSeedPolynomial(part, variableCount);
+    if (kind === 'e') return eSeedPolynomial(part, variableCount);
+    return hSeedPolynomial(part, variableCount);
+  });
+  return multiplyPolynomialList(seeds, variableCount);
+}
+
+function compareExponentKeys(aKey, bKey) {
+  const a = exponentsFromKey(aKey);
+  const b = exponentsFromKey(bKey);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const d = (b[i] || 0) - (a[i] || 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
+function formatVariableMonomial(exponents) {
+  const factors = [];
+  for (let i = 0; i < exponents.length; i++) {
+    const pow = exponents[i];
+    if (!pow) continue;
+    const base = `x<sub>${i + 1}</sub>`;
+    factors.push(pow === 1 ? base : `${base}<sup>${pow}</sup>`);
+  }
+  return factors.length ? factors.join('') : '1';
+}
+
+function formatFinitePolynomial(poly) {
+  if (!poly.size) return '0';
+  return [...poly.entries()]
+    .sort(([aKey], [bKey]) => compareExponentKeys(aKey, bKey))
+    .map(([key, coeff]) => {
+      const monomial = formatVariableMonomial(exponentsFromKey(key));
+      if (monomial === '1') return coeff.toString();
+      if (coeff === 1n) return monomial;
+      return `<span class="symfun-coeff">${coeff.toString()}</span>${monomial}`;
+    })
+    .join(' + ');
+}
+
+function renderFiniteSymmetricFunctionChart(lambda, variableCount) {
+  return SYMFUN_ORDER.map(kind => {
+    const poly = finiteSymfunPolynomial(kind, lambda, variableCount);
+    return `
+      <div class="symfun-row">
+        <span class="symfun-label">${symfunTitle(kind)}</span>
+        <span class="symfun-value">${formatFinitePolynomial(poly)}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderSymmetricFunctionChart() {
+  const output = document.getElementById('symfun-output');
+  if (!output) return;
+
+  const lambda = rowLengths();
+  const variableChoice = readSymfunVariableCount(lambda);
+  if (variableChoice.error) {
+    output.innerHTML = `<div class="symfun-too-large">${escapeHtml(variableChoice.error)}</div>`;
+    return;
+  }
+  if (variableChoice.pending) return;
+
+  if (variableChoice.count !== null) {
+    try {
+      output.innerHTML = renderFiniteSymmetricFunctionChart(lambda, variableChoice.count);
+    } catch (err) {
+      if (err && err.message === 'polynomial-too-large') {
+        output.innerHTML = `<div class="symfun-too-large">Complete polynomial expansion has more than ${SYMFUN_POLYNOMIAL_TERM_LIMIT} terms. Use fewer variables or draw a smaller diagram.</div>`;
+        return;
+      }
+      throw err;
+    }
+    return;
+  }
+
+  const degree = partitionSize(lambda);
+  const { parts, truncated } = partitionsOfSizeLimited(degree);
+
+  if (truncated) {
+    output.innerHTML = `<div class="symfun-too-large">Complete monomial-basis expansion in degree ${degree} has more than ${SYMFUN_EXPANSION_PARTITION_LIMIT} Young-diagram terms. Draw a smaller diagram to expand it exactly.</div>`;
+    return;
+  }
+
+  const targetBasis = selectedSymfunInfiniteBasis();
+  const infiniteMode = selectedSymfunInfiniteMode();
+  const conversionBasis = conversionBasisForInfiniteMode(targetBasis, infiniteMode);
+  let expansions;
+  try {
+    expansions = convertInfiniteBasisExpansions(lambda, conversionBasis, parts);
+  } catch (err) {
+    if (err && err.message === 'basis-conversion-too-large') {
+      output.innerHTML = `<div class="symfun-too-large">Changing to the ${targetBasis}<sub>&lambda;</sub> ${infiniteMode} mode in degree ${degree} needs a ${parts.length} by ${parts.length} exact matrix solve. Use a smaller diagram or choose linear m<sub>&lambda;</sub>.</div>`;
+      return;
+    }
+    throw err;
+  }
+
+  const blocks = expansions.map(({ kind, terms }) => {
+    return `
+      <div class="symfun-row">
+        <span class="symfun-label">${symfunTitle(kind)}</span>
+        <span class="symfun-value">${infiniteMode === 'polynomial'
+          ? formatBasisPolynomialCombination(terms, targetBasis)
+          : formatBasisLinearCombination(terms, targetBasis)}</span>
+      </div>
+    `;
+  }).join('');
+
+  output.innerHTML = blocks;
+}
+
+function symfunSymbolText(kind, partText = 'lambda') {
+  return `${kind}_${partText}`;
+}
+
+function partitionLabelText(part) {
+  return part.length ? '(' + part.join(', ') + ')' : '()';
+}
+
+function formatSymRatText(coeff) {
+  const abs = symRatAbs(coeff);
+  return abs.d === 1n ? abs.n.toString() : `${abs.n.toString()}/${abs.d.toString()}`;
+}
+
+function formatBasisLinearCombinationText(terms, basisKind) {
+  const nonzero = terms.filter(term => !symRatIsZero(term.coeff));
+  if (!nonzero.length) return '0';
+  return nonzero.map(({ coeff, part }, index) => {
+    const negative = coeff.n < 0n;
+    const sign = index === 0 ? (negative ? '- ' : '') : (negative ? ' - ' : ' + ');
+    const coeffText = symRatIsOneAbs(coeff) ? '' : `${formatSymRatText(coeff)}*`;
+    return `${sign}${coeffText}${symfunSymbolText(basisKind, partitionLabelText(part))}`;
+  }).join('');
+}
+
+function generatorMonomialText(part, generatorKind) {
+  if (!part.length) return '1';
+  const counts = new Map();
+  for (const n of part) counts.set(n, (counts.get(n) || 0) + 1);
+  return [...counts.entries()]
+    .sort(([a], [b]) => b - a)
+    .map(([n, count]) => count === 1 ? `${generatorKind}_${n}` : `${generatorKind}_${n}^${count}`)
+    .join('*');
+}
+
+function formatBasisPolynomialCombinationText(terms, generatorKind) {
+  const nonzero = terms.filter(term => !symRatIsZero(term.coeff));
+  if (!nonzero.length) return '0';
+  return nonzero.map(({ coeff, part }, index) => {
+    const negative = coeff.n < 0n;
+    const sign = index === 0 ? (negative ? '- ' : '') : (negative ? ' - ' : ' + ');
+    const monomial = generatorMonomialText(part, generatorKind);
+    const body = monomial === '1'
+      ? formatSymRatText(coeff)
+      : `${symRatIsOneAbs(coeff) ? '' : `${formatSymRatText(coeff)}*`}${monomial}`;
+    return `${sign}${body}`;
+  }).join('');
+}
+
+function formatVariableMonomialText(exponents) {
+  const factors = [];
+  for (let i = 0; i < exponents.length; i++) {
+    const pow = exponents[i];
+    if (!pow) continue;
+    factors.push(pow === 1 ? `x_${i + 1}` : `x_${i + 1}^${pow}`);
+  }
+  return factors.length ? factors.join('*') : '1';
+}
+
+function formatFinitePolynomialText(poly) {
+  if (!poly.size) return '0';
+  return [...poly.entries()]
+    .sort(([aKey], [bKey]) => compareExponentKeys(aKey, bKey))
+    .map(([key, coeff]) => {
+      const monomial = formatVariableMonomialText(exponentsFromKey(key));
+      if (monomial === '1') return coeff.toString();
+      if (coeff === 1n) return monomial;
+      return `${coeff.toString()}*${monomial}`;
+    })
+    .join(' + ');
+}
+
+function symmetricFunctionExportText() {
+  const lambda = rowLengths();
+  const lambdaText = partitionLabelText(lambda);
+  const variableChoice = readSymfunVariableCount(lambda);
+  if (variableChoice.error) return variableChoice.error;
+  if (variableChoice.pending) return 'Enter N or turn on infinite mode before exporting.';
+
+  const lines = [
+    '# Symmetric function expansions',
+    `# lambda = ${lambdaText}`,
+  ];
+
+  if (variableChoice.count !== null) {
+    lines.push(`# variables: x_1,...,x_${variableChoice.count}`);
+    for (const kind of SYMFUN_ORDER) {
+      const poly = finiteSymfunPolynomial(kind, lambda, variableChoice.count);
+      lines.push(`${symfunSymbolText(kind)} = ${formatFinitePolynomialText(poly)}`);
+    }
+    return lines.join('\n');
+  }
+
+  const degree = partitionSize(lambda);
+  const { parts, truncated } = partitionsOfSizeLimited(degree);
+  if (truncated) {
+    return `Complete infinite-variable expansion in degree ${degree} has more than ${SYMFUN_EXPANSION_PARTITION_LIMIT} Young-diagram terms.`;
+  }
+
+  const targetBasis = selectedSymfunInfiniteBasis();
+  const infiniteMode = selectedSymfunInfiniteMode();
+  const conversionBasis = conversionBasisForInfiniteMode(targetBasis, infiniteMode);
+  lines.push('# variables: infinite');
+  lines.push(`# basis: ${symfunSymbolText(targetBasis)}`);
+  lines.push(`# mode: ${infiniteMode}`);
+  const expansions = convertInfiniteBasisExpansions(lambda, conversionBasis, parts);
+  for (const { kind, terms } of expansions) {
+    const rhs = infiniteMode === 'polynomial'
+      ? formatBasisPolynomialCombinationText(terms, targetBasis)
+      : formatBasisLinearCombinationText(terms, targetBasis);
+    lines.push(`${symfunSymbolText(kind)} = ${rhs}`);
+  }
+  return lines.join('\n');
+}
+
+function revealExportCard() {
+  document.querySelectorAll('.card').forEach(c => {
+    if (c.querySelector('#export-out') && c.classList.contains('collapsed')) {
+      c.classList.remove('collapsed');
+      const head = c.querySelector('.card-head');
+      if (head) head.setAttribute('aria-expanded', 'true');
+    }
+  });
+}
+
+function exportSymmetricFunctions() {
+  const exportOut = document.getElementById('export-out');
+  if (!exportOut) return;
+  try {
+    exportOut.value = symmetricFunctionExportText();
+  } catch (err) {
+    if (err && err.message === 'polynomial-too-large') {
+      exportOut.value = `Complete polynomial expansion has more than ${SYMFUN_POLYNOMIAL_TERM_LIMIT} terms. Use fewer variables or draw a smaller diagram.`;
+    } else if (err && err.message === 'basis-conversion-too-large') {
+      exportOut.value = `The selected infinite-variable basis conversion is too large for exact browser-side export. Use a smaller diagram or choose the m_lambda basis.`;
+    } else {
+      exportOut.value = `Unable to export symmetric functions: ${err?.message || err}`;
+    }
+  }
+  revealExportCard();
+}
+
 const BRANCHING_BOX_LIMIT = 24;
 const BRANCHING_PAIR_LIMIT = 3500;
 let _lastBranching = null;
@@ -2147,6 +3083,7 @@ window.addEventListener('load', () => {
   });
   initGridSizeControls();
   initCustomTooltips();
+  initSymfunVariableControls();
   resetExportToDefaultCitation();
   resize();
   onTypeChange();   // initialise lie algebra card UI state without computing collapsed data

@@ -535,6 +535,181 @@
     }
   }
 
+  /* symmetric-function expansions */
+  .symfun-control-row {
+    display: grid;
+    grid-template-columns: minmax(46px, max-content) minmax(0, 1fr);
+    align-items: center;
+    column-gap: 10px;
+    padding: 0;
+    margin-bottom: 0;
+  }
+  .symfun-n-row {
+    padding-bottom: 5px;
+  }
+  .symfun-basis-row {
+    padding-bottom: 7px;
+    margin-bottom: 2px;
+    border-bottom: 1px dotted var(--border);
+  }
+  .symfun-control-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    min-width: 46px;
+  }
+  .symfun-variable-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  .symfun-control-row input[type=number],
+  .symfun-control-row input[type=text] {
+    width: 68px;
+    padding: 3px 6px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.74rem;
+    text-align: center;
+  }
+  .symfun-control-row input[type=text][readonly] {
+    color: var(--muted);
+    background: color-mix(in srgb, var(--bg) 72%, var(--surface));
+  }
+  .symfun-control-row input[type=number]:focus,
+  .symfun-control-row input[type=text]:focus {
+    outline: 2px solid var(--accent);
+    border-color: var(--accent);
+  }
+  .symfun-infinite-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  .symfun-infinite-toggle input[type=checkbox] {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .symfun-basis-select {
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    padding: 2px 5px;
+    min-width: 64px;
+  }
+  .symfun-basis-select:disabled {
+    opacity: 0.42;
+    cursor: not-allowed;
+  }
+  .symfun-basis-controls {
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+  }
+  .symfun-basis-select:focus {
+    outline: 2px solid var(--accent);
+    border-color: var(--accent);
+  }
+  .symfun-export-btn {
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    padding: 2px 7px;
+    cursor: pointer;
+    margin-left: auto;
+  }
+  .symfun-export-btn:hover {
+    background: rgba(61,107,79,0.08);
+  }
+  .symfun-expansions {
+    max-height: min(460px, 58vh);
+    overflow: auto;
+    padding: 0 8px 6px 0;
+    scrollbar-gutter: stable;
+    scrollbar-color: color-mix(in srgb, var(--accent) 68%, var(--surface)) var(--surface);
+    scrollbar-width: thin;
+  }
+  .symfun-expansions::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .symfun-expansions::-webkit-scrollbar-track {
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+  }
+  .symfun-expansions::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--accent) 68%, var(--surface));
+    border: 2px solid var(--surface);
+    border-radius: 999px;
+  }
+  .symfun-expansions::-webkit-scrollbar-thumb:hover {
+    background: var(--accent);
+  }
+  .symfun-row {
+    display: grid;
+    grid-template-columns: minmax(46px, max-content) minmax(0, 1fr);
+    align-items: start;
+    column-gap: 10px;
+    padding: 4px 0;
+    border-bottom: 1px dotted var(--border);
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+  .symfun-row:last-child {
+    border-bottom: none;
+  }
+  .symfun-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.74rem;
+    color: var(--muted);
+    min-width: 46px;
+    white-space: nowrap;
+  }
+  .symfun-label sub,
+  .symfun-symbol sub {
+    font-size: 0.72em;
+  }
+  .symfun-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    color: var(--text);
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+  .symfun-symbol {
+    color: var(--text);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .symfun-coeff {
+    color: var(--accent2);
+  }
+  .symfun-too-large {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.74rem;
+    color: var(--accent2);
+    line-height: 1.45;
+  }
+
   .tooltip-label {
     cursor: help;
     text-decoration: underline dotted rgba(122,111,101,0.55);
