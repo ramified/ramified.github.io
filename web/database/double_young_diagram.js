@@ -4253,6 +4253,11 @@
       }
     }
 
+    function stopCardPinEvent(event) {
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    }
+
     function initCardChrome() {
       document.querySelectorAll('.card').forEach(card => {
         const head = card.querySelector('.card-head');
@@ -4269,8 +4274,12 @@
         pin.title = 'pin card';
         pin.setAttribute('aria-label', 'pin card');
         pin.setAttribute('aria-pressed', 'false');
+        pin.addEventListener('pointerdown', stopCardPinEvent);
+        pin.addEventListener('mousedown', stopCardPinEvent);
+        pin.addEventListener('touchstart', stopCardPinEvent, { passive: true });
         pin.addEventListener('click', event => {
-          event.stopPropagation();
+          event.preventDefault();
+          stopCardPinEvent(event);
           toggleCardPinned(card);
         });
         tools.appendChild(stale);
