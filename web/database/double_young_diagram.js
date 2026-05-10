@@ -4265,7 +4265,7 @@
         const pin = document.createElement('button');
         pin.className = 'card-pin-btn';
         pin.type = 'button';
-        pin.textContent = '\u{1F588}';
+        pin.textContent = '';
         pin.title = 'pin card';
         pin.setAttribute('aria-label', 'pin card');
         pin.setAttribute('aria-pressed', 'false');
