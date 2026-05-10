@@ -29,6 +29,10 @@
     const MAX_GRASSMANNIAN_TERMS = 1200;
     const MAX_CHERN_DETERMINANT_SIZE = 7;
     const MAX_CHERN_POLY_TERMS = 4000;
+    const CARD_PIN_SMALL_SCREEN_QUERY = '(max-width: 980px)';
+    const cardPinBreakpointMedia = typeof window.matchMedia === 'function'
+      ? window.matchMedia(CARD_PIN_SMALL_SCREEN_QUERY)
+      : null;
 
     const state = {
       lambda: { rows: [], maxRows: 5, maxCols: 5, canvas: null, ctx: null, geometry: null },
@@ -1038,14 +1042,13 @@
       refreshExport({ force: true });
     }
 
-    function exportKostkaTableaux() {
+    function exportKostkaTableaux(event) {
       if (!state.lastKostka) computeKostkaTableaux();
       if (!state.lastKostka) return;
       state.exportMode = 'kostka';
       state.exportFilename = 'kostka_tableaux.txt';
       $('export-out').value = formatKostkaForExport(state.lastKostka);
-      setCardCollapsed($('export-out').closest('.card'), false, false);
-      $('export-out').focus();
+      openExportCard(event);
     }
 
 
@@ -1572,7 +1575,7 @@
       refreshExport({ force: true });
     }
 
-    function exportKronecker() {
+    function exportKronecker(event) {
       if (!state.lastKronecker) computeKronecker();
       if (!state.lastKronecker) return;
       const { lambda, mu, terms } = state.lastKronecker;
@@ -1581,8 +1584,7 @@
       $('export-out').value = formatCoefficientExport('Kronecker decomposition', `s_${partitionToString(lambda)} * s_${partitionToString(mu)}`, lambda, mu, terms, [
         'Kronecker coefficients via symmetric-group characters and the Murnaghan--Nakayama rule.'
       ]);
-      setCardCollapsed($('export-out').closest('.card'), false, false);
-      $('export-out').focus();
+      openExportCard(event);
     }
 
     function computePlethysm() {
@@ -1604,7 +1606,7 @@
       refreshExport({ force: true });
     }
 
-    function exportPlethysm() {
+    function exportPlethysm(event) {
       if (!state.lastPlethysm) computePlethysm();
       if (!state.lastPlethysm) return;
       const { lambda, mu, terms } = state.lastPlethysm;
@@ -1614,8 +1616,7 @@
         `Power-sum expansion terms: ${terms.powerTermCount || 0}.`,
         'Dimension-completeness guard can be added later.'
       ]);
-      setCardCollapsed($('export-out').closest('.card'), false, false);
-      $('export-out').focus();
+      openExportCard(event);
     }
 
     function computeSchurFunctor() {
@@ -1634,14 +1635,13 @@
       refreshExport({ force: true });
     }
 
-    function exportSchurFunctor() {
+    function exportSchurFunctor(event) {
       if (!state.lastSchurFunctor) computeSchurFunctor();
       if (!state.lastSchurFunctor) return;
       state.exportMode = 'schur-functor';
       state.exportFilename = 'schur_functor_decomposition.txt';
       $('export-out').value = formatLieSchurFunctorExport(state.lastSchurFunctor);
-      setCardCollapsed($('export-out').closest('.card'), false, false);
-      $('export-out').focus();
+      openExportCard(event);
     }
 
     function candidateListFromStableTerms(stableTerms, rank) {
@@ -1912,7 +1912,7 @@
       if (dec.terms.candidateCount != null) lines.push(`# candidates: ${dec.terms.candidateCount} (${dec.terms.candidateSource || 'candidate'})`);
       return lines.join('\n');
     }
-    function exportSchur() {
+    function exportSchur(event) {
       if (!state.lastDecomposition) computeSchur();
       if (!state.lastDecomposition) return;
       const text = formatDecompositionForExport(state.lastDecomposition);
@@ -1920,8 +1920,7 @@
       state.exportMode = 'lr';
       state.exportFilename = `lr_decomposition_${suffix}.txt`;
       $('export-out').value = text;
-      setCardCollapsed($('export-out').closest('.card'), false, false);
-      $('export-out').focus();
+      openExportCard(event);
     }
 
     function resizeCanvases() {
@@ -2406,14 +2405,13 @@
       return lines.join('\n');
     }
 
-    function exportGrassmannianCup() {
+    function exportGrassmannianCup(event) {
       if (!state.lastGrassmannian || state.lastGrassmannian.presentation !== $('grassmannian-presentation').value) computeGrassmannianCup();
       if (!state.lastGrassmannian) return;
       state.exportMode = 'grassmannian';
       state.exportFilename = 'grassmannian_cup_product.txt';
       $('export-out').value = formatGrassmannianExport(state.lastGrassmannian);
-      setCardCollapsed($('export-out').closest('.card'), false, false);
-      $('export-out').focus();
+      openExportCard(event);
     }
 
     const SYMPOLY_VARIABLE_MAX = 18 * 18;
@@ -4088,20 +4086,36 @@
       return cached ? cached.text : sympolyStaleHint();
     }
 
-    function exportSymmetricPolynomialProduct() {
+    function exportSymmetricPolynomialProduct(event) {
       const exportOut = $('export-out');
       if (!exportOut) return;
       const cached = cachedSymmetricPolynomialProduct();
       exportOut.value = symmetricPolynomialProductExportText();
       state.exportMode = 'symmetric-polynomials';
       state.exportFilename = cached ? cached.filename : sympolyResultFilename(selectedSympolyOperation());
-      setCardCollapsed(exportOut.closest('.card'), false, false);
-      exportOut.focus();
+      openExportCard(event);
     }
 
     function cardForElementId(id) {
       const el = $(id);
       return el ? el.closest('.card') : null;
+    }
+    function cardFromActionEvent(event) {
+      const target = event && event.target;
+      if (target && target.closest) return target.closest('.card');
+      const active = document.activeElement;
+      return active && active.closest ? active.closest('.card') : null;
+    }
+    function openExportCard(event) {
+      const exportOut = $('export-out');
+      if (!exportOut) return;
+      const exportCard = exportOut.closest('.card');
+      const sourceFromEvent = cardFromActionEvent(event);
+      const sourceCard = sourceFromEvent && sourceFromEvent !== exportCard
+        ? sourceFromEvent
+        : latestOpenChartCardExcluding(exportCard);
+      setCardCollapsed(exportCard, false, false, sourceCard);
+      exportOut.focus();
     }
     function isCardExpandedById(id) {
       const card = cardForElementId(id);
@@ -4216,14 +4230,52 @@
     }
     const MAX_OPEN_CHART_CARDS = 3;
     let openChartCardSequence = 0;
+    let temporaryOpenLimitProtectedCard = null;
+    let cardPinBreakpointListenerReady = false;
 
     function isOpenChartLimitCard(card) {
       if (!card || !card.classList.contains('card')) return false;
       if (card.closest('.canvas-panel')) return false;
-      if (card.querySelector('#export-out')) return false;
       if (card.id === 'diagram-input-card' && card.getAttribute('draggable') !== 'true') return false;
       if (card.style.display === 'none') return false;
       return true;
+    }
+
+    function latestOpenChartCardExcluding(excludedCard) {
+      return Array.from(document.querySelectorAll('.card:not(.collapsed)'))
+        .filter(card => card !== excludedCard && isOpenChartLimitCard(card))
+        .sort((a, b) => Number(b.dataset.openChartOrder || 0) - Number(a.dataset.openChartOrder || 0))[0] || null;
+    }
+
+    function cardPinningEnabled() {
+      return !(cardPinBreakpointMedia && cardPinBreakpointMedia.matches);
+    }
+
+    function isCardPinnedForOpenLimit(card) {
+      return cardPinningEnabled() && card && card.classList.contains('is-pinned');
+    }
+
+    function syncCardPinAvailability() {
+      const enabled = cardPinningEnabled();
+      document.querySelectorAll('.card-pin-btn').forEach(btn => {
+        btn.disabled = !enabled;
+        btn.setAttribute('aria-hidden', String(!enabled));
+      });
+    }
+
+    function initCardPinBreakpoint() {
+      if (!cardPinBreakpointMedia || cardPinBreakpointListenerReady) {
+        syncCardPinAvailability();
+        return;
+      }
+      cardPinBreakpointListenerReady = true;
+      const listener = () => syncCardPinAvailability();
+      if (typeof cardPinBreakpointMedia.addEventListener === 'function') {
+        cardPinBreakpointMedia.addEventListener('change', listener);
+      } else if (typeof cardPinBreakpointMedia.addListener === 'function') {
+        cardPinBreakpointMedia.addListener(listener);
+      }
+      syncCardPinAvailability();
     }
 
     function openChartCardGroupKey(card) {
@@ -4245,6 +4297,7 @@
 
     function toggleCardPinned(card, pinned) {
       if (!card) return;
+      if (!cardPinningEnabled()) return;
       const next = pinned == null ? !card.classList.contains('is-pinned') : !!pinned;
       card.classList.toggle('is-pinned', next);
       const btn = card.querySelector('.card-pin-btn');
@@ -4298,6 +4351,9 @@
       if (!isOpenChartLimitCard(activeCard)) return;
       activeCard.dataset.openChartOrder = String(++openChartCardSequence);
       const activeGroupKey = openChartCardGroupKey(activeCard);
+      const protectedGroupKey = temporaryOpenLimitProtectedCard && isOpenChartLimitCard(temporaryOpenLimitProtectedCard)
+        ? openChartCardGroupKey(temporaryOpenLimitProtectedCard)
+        : null;
       const groups = new Map();
       for (const card of Array.from(document.querySelectorAll('.card:not(.collapsed)')).filter(isOpenChartLimitCard)) {
         const key = openChartCardGroupKey(card);
@@ -4305,24 +4361,30 @@
         const existing = groups.get(key) || { key, cards: [], order: 0, pinned: false };
         existing.cards.push(card);
         existing.order = Math.max(existing.order, order);
-        existing.pinned = existing.pinned || card.classList.contains('is-pinned');
+        existing.pinned = existing.pinned || isCardPinnedForOpenLimit(card);
         groups.set(key, existing);
       }
       const openGroups = Array.from(groups.values()).sort((a, b) => a.order - b.order);
       while (openGroups.length > MAX_OPEN_CHART_CARDS) {
-        const victim = openGroups.find(group => group.key !== activeGroupKey && !group.pinned);
-        if (!victim) break; // Never close pinned groups just to satisfy the open-card limit.
+        const victim = openGroups.find(group => group.key !== activeGroupKey && group.key !== protectedGroupKey && !group.pinned);
+        if (!victim) break; // On wide screens, pinned groups are exempt from the open-card limit.
         victim.cards.forEach(collapseCardForOpenLimit);
         openGroups.splice(openGroups.indexOf(victim), 1);
       }
     }
 
-    function setCardCollapsed(card, collapsed, refreshOnOpen = true) {
+    function setCardCollapsed(card, collapsed, refreshOnOpen = true, protectedCard = null) {
       if (!card) return;
       card.classList.toggle('collapsed', collapsed);
       setCardAriaExpanded(card, !collapsed);
       if (!collapsed) {
-        enforceOpenChartCardLimit(card);
+        const previousProtectedCard = temporaryOpenLimitProtectedCard;
+        temporaryOpenLimitProtectedCard = protectedCard && protectedCard !== card ? protectedCard : previousProtectedCard;
+        try {
+          enforceOpenChartCardLimit(card);
+        } finally {
+          temporaryOpenLimitProtectedCard = previousProtectedCard;
+        }
         if (refreshOnOpen) runCardOpenRefresh(card);
       }
     }
@@ -4334,6 +4396,7 @@
         setCardCollapsed(card, !card.classList.contains('collapsed'));
       });
       initCardChrome();
+      initCardPinBreakpoint();
       document.querySelectorAll('.card').forEach(card => setCardCollapsed(card, true, false));
     }
     function setupPointerDnd() {
@@ -4363,7 +4426,6 @@
       window.addEventListener('pointerup', () => {
         if (!drag) return;
         drag.style.display = ''; side.insertBefore(drag, placeholder); placeholder.remove(); ghost.remove(); drag = ghost = placeholder = null;
-        placeSliceCompanionCards();
       });
     }
     function setupResponsiveDiagramInput() {
@@ -5776,20 +5838,21 @@
       return !!card && !card.classList.contains('collapsed');
     }
 
-    function placeSliceCompanionCards() {
+    function placeSliceCompanionCard(card) {
       const main = $('slice-card') || $('slice-card-body')?.closest('.card');
       const layer = $('slice-layer-card');
-      const info = $('slice-weight-info-card');
       const parent = main?.parentElement;
-      if (!main || !parent) return;
-      let next = main.nextSibling;
-      if (layer && layer !== main) {
-        if (layer !== next) parent.insertBefore(layer, next);
-        next = layer.nextSibling;
+      if (!main || !parent || !card || card === main || card.parentElement !== parent) return;
+      let anchor = main;
+      if (card.id === 'slice-weight-info-card' && layer && layer.parentElement === parent && layer.style.display !== 'none' && layer.previousElementSibling === main) {
+        anchor = layer;
       }
-      if (info && info !== main && info !== layer) {
-        if (info !== next) parent.insertBefore(info, next);
-      }
+      parent.insertBefore(card, anchor.nextSibling);
+      card.dataset.sliceInitialPlacementDone = '1';
+    }
+
+    function placeSliceCompanionCardOnFirstShow(card) {
+      if (card && card.dataset.sliceInitialPlacementDone !== '1') placeSliceCompanionCard(card);
     }
 
     function updateSliceButtonLabel() {
@@ -5814,7 +5877,7 @@
       const card = $('slice-weight-info-card');
       if (!card) return;
       const wasHidden = card.style.display === 'none';
-      if (wasHidden) placeSliceCompanionCards();
+      if (wasHidden) placeSliceCompanionCardOnFirstShow(card);
       card.style.display = '';
       setCardCollapsed(card, collapsed, false);
       renderSliceWeightInfo(sliceState.infoPoint, sliceState.activeCharacter, false);
@@ -5836,7 +5899,7 @@
       const card = $('slice-layer-card');
       if (!card) return;
       const wasHidden = card.style.display === 'none';
-      if (wasHidden) placeSliceCompanionCards();
+      if (wasHidden) placeSliceCompanionCardOnFirstShow(card);
       card.style.display = '';
       if (wasHidden) setCardCollapsed(card, collapsed, false);
       renderSliceLayerCard();

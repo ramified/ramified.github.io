@@ -30,9 +30,16 @@ const SMALL_SCREEN_QUERY = '(max-width: 780px)';
 const layoutBreakpointMedia = typeof window.matchMedia === 'function'
   ? window.matchMedia(SMALL_SCREEN_QUERY)
   : null;
+const CARD_PIN_SMALL_SCREEN_QUERY = '(max-width: 980px)';
+const cardPinBreakpointMedia = typeof window.matchMedia === 'function'
+  ? window.matchMedia(CARD_PIN_SMALL_SCREEN_QUERY)
+  : null;
 
 function defaultGridSize() {
-  return { cols: 13, rows: 13 };
+  const isSmallScreen = layoutBreakpointMedia ? layoutBreakpointMedia.matches : false;
+  return isSmallScreen
+    ? { cols: 10, rows: 6 }
+    : { cols: 13, rows: 13 };
 }
 
 const _initialGrid = defaultGridSize();
@@ -2262,13 +2269,26 @@ function symmetricFunctionExportText() {
   return lines.join('\n');
 }
 
-function revealExportCard() {
+function cardFromActionEvent(event) {
+  const target = event && event.target;
+  if (target && target.closest) return target.closest('.card');
+  const active = document.activeElement;
+  return active && active.closest ? active.closest('.card') : null;
+}
+
+function revealExportCard(event) {
   document.querySelectorAll('.card').forEach(c => {
-    if (c.querySelector('#export-out')) openCard(c, false);
+    if (c.querySelector('#export-out')) {
+      const sourceFromEvent = cardFromActionEvent(event);
+      const sourceCard = sourceFromEvent && sourceFromEvent !== c
+        ? sourceFromEvent
+        : latestOpenChartCardExcluding(c);
+      openCard(c, false, sourceCard);
+    }
   });
 }
 
-function exportSymmetricFunctions() {
+function exportSymmetricFunctions(event) {
   const exportOut = document.getElementById('export-out');
   if (!exportOut) return;
   try {
@@ -2286,7 +2306,7 @@ function exportSymmetricFunctions() {
       exportOut.value = `Unable to export symmetric functions: ${(err && err.message) || err}`;
     }
   }
-  revealExportCard();
+  revealExportCard(event);
 }
 
 const BRANCHING_BOX_LIMIT = 24;
@@ -2494,7 +2514,7 @@ function computeBranching() {
 // ─────────────────────────────────────────────
 //  Drag-and-drop card reordering
 // ─────────────────────────────────────────────
-function exportBranching() {
+function exportBranching(event) {
   const result = _lastBranching;
   if (!result) {
     const warn = document.getElementById('br-warning');
@@ -2524,7 +2544,7 @@ function exportBranching() {
     txt += `${e.mult}\t${rows}\n`;
   }
   exportOut.value = txt.trimEnd();
-  revealExportCard();
+  revealExportCard(event);
 }
 
 (function () {
@@ -3093,7 +3113,7 @@ function toggleOrbitTable() {
   table.style.display = _orbitVisible ? 'block' : 'none';
   document.getElementById('lie-orbit-btn').textContent = _orbitVisible ? 'Hide Weyl orbit' : 'Show Weyl orbit';
 }
-function exportOrbit() {
+function exportOrbit(event) {
   if (!_lastOrbitLabels.length) return;
   const exportOut = document.getElementById('export-out');
   if (_lieOrbitSize > ORBIT_LIST_LIMIT) {
@@ -3104,7 +3124,7 @@ function exportOrbit() {
     out += _lieOrbit.map(w => '(' + w.join(', ') + ')').join('\n');
     exportOut.value = out;
   }
-  revealExportCard();
+  revealExportCard(event);
 }
 function computeWeyl() {
   if (!isCardExpandedById('lie-weight')) return;
@@ -3570,7 +3590,7 @@ function computeWeightSpaceDecomposition() {
   }
 }
 
-function exportWeightSpaceDecomposition() {
+function exportWeightSpaceDecomposition(event) {
   if (!_lastWeightDecomposition) computeWeightSpaceDecomposition();
   const result = _lastWeightDecomposition;
   if (!result) return;
@@ -3589,7 +3609,7 @@ function exportWeightSpaceDecomposition() {
     txt += `${e.multiplicity}\t${e.orbitSize}\t${rows}\t[${e.dyn.join(', ')}]\n`;
   }
   exportOut.value = txt.trimEnd();
-  revealExportCard();
+  revealExportCard(event);
 }
 
 
@@ -3598,13 +3618,51 @@ function exportWeightSpaceDecomposition() {
 // ─────────────────────────────────────────────
 const MAX_OPEN_CHART_CARDS = 3;
 let openChartCardSequence = 0;
+let temporaryOpenLimitProtectedCard = null;
+let cardPinBreakpointListenerReady = false;
 
 function isOpenChartLimitCard(card) {
   if (!card || !card.classList.contains('card')) return false;
   if (card.closest('.canvas-panel')) return false;
-  if (card.querySelector('#export-out')) return false;
   if (card.id === 'diagram-input-card' && card.getAttribute('draggable') !== 'true') return false;
   return true;
+}
+
+function latestOpenChartCardExcluding(excludedCard) {
+  return Array.from(document.querySelectorAll('.card:not(.collapsed)'))
+    .filter(card => card !== excludedCard && isOpenChartLimitCard(card))
+    .sort((a, b) => Number(b.dataset.openChartOrder || 0) - Number(a.dataset.openChartOrder || 0))[0] || null;
+}
+
+function cardPinningEnabled() {
+  return !(cardPinBreakpointMedia && cardPinBreakpointMedia.matches);
+}
+
+function isCardPinnedForOpenLimit(card) {
+  return cardPinningEnabled() && card && card.classList.contains('is-pinned');
+}
+
+function syncCardPinAvailability() {
+  const enabled = cardPinningEnabled();
+  document.querySelectorAll('.card-pin-btn').forEach(btn => {
+    btn.disabled = !enabled;
+    btn.setAttribute('aria-hidden', String(!enabled));
+  });
+}
+
+function initCardPinBreakpoint() {
+  if (!cardPinBreakpointMedia || cardPinBreakpointListenerReady) {
+    syncCardPinAvailability();
+    return;
+  }
+  cardPinBreakpointListenerReady = true;
+  const listener = () => syncCardPinAvailability();
+  if (typeof cardPinBreakpointMedia.addEventListener === 'function') {
+    cardPinBreakpointMedia.addEventListener('change', listener);
+  } else if (typeof cardPinBreakpointMedia.addListener === 'function') {
+    cardPinBreakpointMedia.addListener(listener);
+  }
+  syncCardPinAvailability();
 }
 
 function setCardAriaExpanded(card, expanded) {
@@ -3620,6 +3678,7 @@ function collapseCard(card) {
 
 function toggleCardPinned(card, pinned) {
   if (!card) return;
+  if (!cardPinningEnabled()) return;
   const next = pinned == null ? !card.classList.contains('is-pinned') : !!pinned;
   card.classList.toggle('is-pinned', next);
   const btn = card.querySelector('.card-pin-btn');
@@ -3672,22 +3731,29 @@ function initCardChrome() {
 function enforceOpenChartCardLimit(activeCard) {
   if (!isOpenChartLimitCard(activeCard)) return;
   activeCard.dataset.openChartOrder = String(++openChartCardSequence);
+  const protectedCard = temporaryOpenLimitProtectedCard;
   const openCards = Array.from(document.querySelectorAll('.card:not(.collapsed)'))
     .filter(isOpenChartLimitCard)
     .sort((a, b) => Number(a.dataset.openChartOrder || 0) - Number(b.dataset.openChartOrder || 0));
   while (openCards.length > MAX_OPEN_CHART_CARDS) {
-    const victim = openCards.find(card => card !== activeCard && !card.classList.contains('is-pinned'));
-    if (!victim) break; // Never close pinned cards just to satisfy the open-card limit.
+    const victim = openCards.find(card => card !== activeCard && card !== protectedCard && !isCardPinnedForOpenLimit(card));
+    if (!victim) break; // On wide screens, pinned cards are exempt from the open-card limit.
     collapseCard(victim);
     openCards.splice(openCards.indexOf(victim), 1);
   }
 }
 
-function openCard(card, refreshOnOpen = true) {
+function openCard(card, refreshOnOpen = true, protectedCard = null) {
   if (!card) return;
   card.classList.remove('collapsed');
   setCardAriaExpanded(card, true);
-  enforceOpenChartCardLimit(card);
+  const previousProtectedCard = temporaryOpenLimitProtectedCard;
+  temporaryOpenLimitProtectedCard = protectedCard && protectedCard !== card ? protectedCard : previousProtectedCard;
+  try {
+    enforceOpenChartCardLimit(card);
+  } finally {
+    temporaryOpenLimitProtectedCard = previousProtectedCard;
+  }
   if (refreshOnOpen) refreshCardCalculation(card);
 }
 
@@ -3783,6 +3849,7 @@ function initYoungDiagramPage() {
     if (head) head.setAttribute('aria-expanded', 'false');
   });
   initCardChrome();
+  initCardPinBreakpoint();
   initGridSizeControls();
   applyYoungUrlState();
   initCustomTooltips();

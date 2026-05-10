@@ -270,6 +270,11 @@
     color: var(--accent);
     background: rgba(61,107,79,0.08);
   }
+  @media (max-width: 980px) {
+    .card-pin-btn {
+      display: none;
+    }
+  }
  
   .card {
     background: var(--surface);

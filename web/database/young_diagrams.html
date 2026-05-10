@@ -117,7 +117,7 @@
             <!-- Orbit table toggle -->
             <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn" onclick="toggleOrbitTable()" id="lie-orbit-btn">Show Weyl orbit</button>
-              <button class="btn" onclick="exportOrbit()" style="background:transparent;color:var(--accent);border-color:var(--accent);">Export orbit</button>
+              <button class="btn" onclick="exportOrbit(event)" style="background:transparent;color:var(--accent);border-color:var(--accent);">Export orbit</button>
             </div>
             <div id="lie-orbit-table" style="display:none;margin-top:10px;overflow-x:auto;"></div>
 
@@ -125,7 +125,7 @@
               <div class="lie-subsection-title tooltip-label" tabindex="0" data-tooltip="Computes the nonzero weight spaces of V^λ, grouped by dominant Weyl-orbit representative γ. Candidate representatives are enumerated only when dominant and satisfying ‖γ‖ ≤ ‖λ‖.">Weight space decomposition</div>
               <div class="action-row">
                 <button class="btn" onclick="computeWeightSpaceDecomposition()">compute</button>
-                <button class="btn" onclick="exportWeightSpaceDecomposition()" style="background:transparent;color:var(--accent);border-color:var(--accent);">export</button>
+                <button class="btn" onclick="exportWeightSpaceDecomposition(event)" style="background:transparent;color:var(--accent);border-color:var(--accent);">export</button>
               </div>
               <div id="lie-ws-warning" class="err" style="margin-bottom:4px;"></div>
               <div id="lie-ws-summary" class="hint">Draw a Young diagram, then compute.</div>
@@ -147,7 +147,7 @@
             </div>
             <div class="action-row branching-action-row">
               <button class="btn" onclick="computeBranching()">compute</button>
-              <button class="btn" onclick="exportBranching()" style="background:transparent;color:var(--accent);border-color:var(--accent);">export</button>
+              <button class="btn" onclick="exportBranching(event)" style="background:transparent;color:var(--accent);border-color:var(--accent);">export</button>
             </div>
             <div class="hint" style="margin:4px 0 8px;">
               Decomposes V<sup>&#955;</sup><sub>GL</sub> restricted to the subgroup. Stable when &#8467;(&#955;) &#8804; n.
@@ -182,7 +182,7 @@
                   <option value="linear">linear</option>
                   <option value="polynomial">poly</option>
                 </select>
-                <button class="symfun-export-btn" type="button" onclick="exportSymmetricFunctions()">export</button>
+                <button class="symfun-export-btn" type="button" onclick="exportSymmetricFunctions(event)">export</button>
               </span>
             </div>
             <div id="symfun-output" class="symfun-expansions"><span class="hint">Draw a Young diagram to expand.</span></div>
