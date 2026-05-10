@@ -82,17 +82,23 @@ const canvasEl = document.getElementById('yd-canvas');
 const ctx = canvasEl.getContext('2d');
 let W, H, bsize;
 
-function measuredCanvasWrapWidth() {
+function measuredCanvasWrapInnerWidth() {
   const wrap = document.getElementById('canvas-wrap');
   if (!wrap) return 0;
   const rectWidth = wrap.getBoundingClientRect ? wrap.getBoundingClientRect().width : 0;
-  return Math.max(wrap.clientWidth || 0, rectWidth || 0);
+  const outerWidth = Math.max(wrap.clientWidth || 0, rectWidth || 0);
+  let horizontalPadding = 0;
+  if (typeof window.getComputedStyle === 'function') {
+    const style = window.getComputedStyle(wrap);
+    horizontalPadding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+  }
+  return Math.max(0, outerWidth - horizontalPadding);
 }
 
 function resize() {
-  const measuredWidth = measuredCanvasWrapWidth();
+  const measuredWidth = measuredCanvasWrapInnerWidth();
   const fallbackWidth = Math.max(160, Math.min(window.innerWidth || 360, 640) - 56);
-  W = Math.max(1, (measuredWidth > 120 ? measuredWidth - 32 : fallbackWidth));
+  W = Math.max(1, (measuredWidth > 120 ? measuredWidth : fallbackWidth));
   bsize = W / gridCols;
   H = bsize * gridRows;
   canvasEl.width  = Math.round(W);
