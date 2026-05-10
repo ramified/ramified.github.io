@@ -4249,6 +4249,7 @@
       const btn = card.querySelector('.card-pin-btn');
       if (btn) {
         btn.setAttribute('aria-pressed', String(next));
+        btn.setAttribute('aria-label', next ? 'unpin card' : 'pin card');
         btn.title = next ? 'unpin card' : 'pin card';
       }
     }
@@ -4274,14 +4275,20 @@
         pin.title = 'pin card';
         pin.setAttribute('aria-label', 'pin card');
         pin.setAttribute('aria-pressed', 'false');
-        pin.addEventListener('pointerdown', stopCardPinEvent);
-        pin.addEventListener('mousedown', stopCardPinEvent);
-        pin.addEventListener('touchstart', stopCardPinEvent, { passive: true });
+        ['pointerdown', 'pointerup', 'mousedown'].forEach(type => {
+          pin.addEventListener(type, stopCardPinEvent);
+          tools.addEventListener(type, stopCardPinEvent);
+        });
+        ['touchstart', 'touchend'].forEach(type => {
+          pin.addEventListener(type, stopCardPinEvent, { passive: true });
+          tools.addEventListener(type, stopCardPinEvent, { passive: true });
+        });
+        tools.addEventListener('click', stopCardPinEvent);
         pin.addEventListener('click', event => {
           event.preventDefault();
           stopCardPinEvent(event);
           toggleCardPinned(card);
-        });
+        }, true);
         tools.appendChild(stale);
         tools.appendChild(pin);
         const toggle = head.querySelector('.toggle-icon');
@@ -4306,9 +4313,8 @@
       }
       const openGroups = Array.from(groups.values()).sort((a, b) => a.order - b.order);
       while (openGroups.length > MAX_OPEN_CHART_CARDS) {
-        const victim = openGroups.find(group => group.key !== activeGroupKey && !group.pinned)
-          || openGroups.find(group => group.key !== activeGroupKey)
-          || openGroups[0];
+        const victim = openGroups.find(group => group.key !== activeGroupKey && !group.pinned);
+        if (!victim) break; // Never close pinned groups just to satisfy the open-card limit.
         victim.cards.forEach(collapseCardForOpenLimit);
         openGroups.splice(openGroups.indexOf(victim), 1);
       }

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Web fonts were removed from the blocking CSS path so the canvases initialise reliably on slow/mobile networks. */
 
   :root {
     --bg:       #f7f4ef;
@@ -160,8 +160,8 @@
   }
   canvas {
     display: block;
-    width: 100% !important;
-    height: auto !important;
+    width: 100%;
+    height: auto;
     cursor: crosshair;
     border-radius: 2px;
     background: #fffdf8;
@@ -241,6 +241,8 @@
     border-radius: 3px;
     width: 18px;
     height: 18px;
+    min-width: 18px;
+    min-height: 18px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -250,6 +252,23 @@
     padding: 0;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+    position: relative;
+    z-index: 2;
+    flex: 0 0 auto;
+  }
+  .card-title-tools {
+    position: relative;
+    z-index: 2;
+  }
+  @media (pointer: coarse) {
+    .card-pin-btn::after {
+      content: "";
+      position: absolute;
+      inset: -8px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.001);
+      pointer-events: auto;
+    }
   }
   .card-pin-btn::before {
     content: "";

@@ -75,11 +75,12 @@ function resetExportToDefaultCitation() {
 //  Canvas setup
 // ─────────────────────────────────────────────
 const canvasEl = document.getElementById('yd-canvas');
-const ctx = canvasEl.getContext('2d');
+const ctx = canvasEl ? canvasEl.getContext('2d') : null;
 let W, H, bsize;
 let resizeQueued = false;
 
 function canvasWrapContentWidth(wrap) {
+  if (!wrap) return Math.max(160, Math.min(window.innerWidth || 320, 640) - 56);
   const style = window.getComputedStyle ? window.getComputedStyle(wrap) : null;
   const padLeft = style ? parseFloat(style.paddingLeft) || 0 : 16;
   const padRight = style ? parseFloat(style.paddingRight) || 0 : 16;
@@ -96,6 +97,7 @@ function canvasWrapContentWidth(wrap) {
 }
 
 function resize() {
+  if (!canvasEl || !ctx) return;
   const wrap = document.getElementById('canvas-wrap');
   W = Math.max(1, canvasWrapContentWidth(wrap));
   bsize = W / gridCols;
@@ -103,8 +105,8 @@ function resize() {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   canvasEl.width  = Math.max(1, Math.round(W * dpr));
   canvasEl.height = Math.max(1, Math.round(H * dpr));
-  canvasEl.style.width = `${W}px`;
-  canvasEl.style.height = `${H}px`;
+  canvasEl.style.setProperty('width', `${W}px`);
+  canvasEl.style.setProperty('height', `${H}px`);
   if (ctx.setTransform) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   redraw();
 }
@@ -196,11 +198,12 @@ function hslHook(hk) {
   return `hsla(${hue},45%,62%,0.72)`;
 }
 
-const showHooks   = () => document.getElementById('showhooks').checked;
-const shadeHooks  = () => document.getElementById('shadehooks').checked;
-const showCoords  = () => document.getElementById('showcoords').checked;
+const showHooks   = () => !!document.getElementById('showhooks')?.checked;
+const shadeHooks  = () => !!document.getElementById('shadehooks')?.checked;
+const showCoords  = () => !!document.getElementById('showcoords')?.checked;
 
 function redraw() {
+  if (!ctx) return;
   computeHooks();
   ctx.clearRect(0, 0, W, H);
 
@@ -3634,6 +3637,7 @@ function toggleCardPinned(card, pinned) {
   const btn = card.querySelector('.card-pin-btn');
   if (btn) {
     btn.setAttribute('aria-pressed', String(next));
+    btn.setAttribute('aria-label', next ? 'unpin card' : 'pin card');
     btn.title = next ? 'unpin card' : 'pin card';
   }
 }
@@ -3659,14 +3663,20 @@ function initCardChrome() {
     pin.title = 'pin card';
     pin.setAttribute('aria-label', 'pin card');
     pin.setAttribute('aria-pressed', 'false');
-    pin.addEventListener('pointerdown', stopCardPinEvent);
-    pin.addEventListener('mousedown', stopCardPinEvent);
-    pin.addEventListener('touchstart', stopCardPinEvent, { passive: true });
+    ['pointerdown', 'pointerup', 'mousedown'].forEach(type => {
+      pin.addEventListener(type, stopCardPinEvent);
+      tools.addEventListener(type, stopCardPinEvent);
+    });
+    ['touchstart', 'touchend'].forEach(type => {
+      pin.addEventListener(type, stopCardPinEvent, { passive: true });
+      tools.addEventListener(type, stopCardPinEvent, { passive: true });
+    });
+    tools.addEventListener('click', stopCardPinEvent);
     pin.addEventListener('click', event => {
       event.preventDefault();
       stopCardPinEvent(event);
       toggleCardPinned(card);
-    });
+    }, true);
     tools.appendChild(stale);
     tools.appendChild(pin);
     const toggle = head.querySelector('.toggle-icon');
@@ -3682,9 +3692,8 @@ function enforceOpenChartCardLimit(activeCard) {
     .filter(isOpenChartLimitCard)
     .sort((a, b) => Number(a.dataset.openChartOrder || 0) - Number(b.dataset.openChartOrder || 0));
   while (openCards.length > MAX_OPEN_CHART_CARDS) {
-    const victim = openCards.find(card => card !== activeCard && !card.classList.contains('is-pinned'))
-      || openCards.find(card => card !== activeCard)
-      || openCards[0];
+    const victim = openCards.find(card => card !== activeCard && !card.classList.contains('is-pinned'));
+    if (!victim) break; // Never close pinned cards just to satisfy the open-card limit.
     collapseCard(victim);
     openCards.splice(openCards.indexOf(victim), 1);
   }
@@ -3777,7 +3786,10 @@ function initCustomTooltips() {
 // ─────────────────────────────────────────────
 //  Init
 // ─────────────────────────────────────────────
-window.addEventListener('load', () => {
+let youngDiagramPageInitialized = false;
+function initYoungDiagramPage() {
+  if (youngDiagramPageInitialized) return;
+  youngDiagramPageInitialized = true;
   document.querySelectorAll('.card').forEach(card => {
     card.classList.add('collapsed');
     const head = card.querySelector('.card-head');
@@ -3790,8 +3802,13 @@ window.addEventListener('load', () => {
   initSymfunVariableControls();
   resetExportToDefaultCitation();
   resize();
+  requestAnimationFrame(resize);
   onTypeChange();   // initialise lie algebra card UI state without computing collapsed data
-});
+}
 
-// Initialise tooltips even if this script is loaded after the load event in a cached page.
-if (document.readyState !== 'loading') initCustomTooltips();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initYoungDiagramPage, { once: true });
+} else {
+  initYoungDiagramPage();
+}
+window.addEventListener('load', requestCanvasResize, { once: true });
