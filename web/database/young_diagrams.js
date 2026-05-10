@@ -601,7 +601,18 @@ function clearErr()   { document.getElementById('part-err').textContent = ''; }
 // --- LR coefficient c^lam_{mu nu} via the standard algorithm ---
 // Count LR tableaux of skew shape lam/mu filled with content nu.
 // lam, mu, nu are arrays of row-lengths (non-increasing, trailing zeros omitted).
-function lrCoeff(lam, mu, nu) {
+function bumpBranchingLRSearch(stats) {
+  if (!stats) return;
+  stats.steps++;
+  if (stats.steps > stats.limit) {
+    const err = new Error('branching-lr-search-too-large');
+    err.steps = stats.steps;
+    err.limit = stats.limit;
+    throw err;
+  }
+}
+
+function lrCoeff(lam, mu, nu, stats = null) {
   // Basic size check
   const szLam = lam.reduce((a,b)=>a+b,0);
   const szMu  = mu.reduce((a,b)=>a+b,0);
@@ -681,6 +692,7 @@ function lrCoeff(lam, mu, nu) {
   }
   let count = 0;
   function bt(i) {
+    bumpBranchingLRSearch(stats);
     if (i === cells.length) { count++; return; }
     // Determine valid range for filling[i]
     let lo = 1;
@@ -688,6 +700,7 @@ function lrCoeff(lam, mu, nu) {
     if (prevInRow[i] >= 0) lo = Math.max(lo, filling[prevInRow[i]]);       // weak row increase
     if (prevInCol[i] >= 0) lo = Math.max(lo, filling[prevInCol[i]] + 1);   // strict col increase
     for (let v = lo; v <= hi; v++) {
+      bumpBranchingLRSearch(stats);
       if (supply[v-1] === 0) continue;
       // Ballot check: after adding v at position i,
       // the new prefix of the reverse word (of length i+1) is v, filling[i-1], ..., filling[0].
@@ -2147,11 +2160,7 @@ function symmetricFunctionExportText() {
 
 function revealExportCard() {
   document.querySelectorAll('.card').forEach(c => {
-    if (c.querySelector('#export-out') && c.classList.contains('collapsed')) {
-      c.classList.remove('collapsed');
-      const head = c.querySelector('.card-head');
-      if (head) head.setAttribute('aria-expanded', 'true');
-    }
+    if (c.querySelector('#export-out')) openCard(c, false);
   });
 }
 
@@ -2178,10 +2187,15 @@ function exportSymmetricFunctions() {
 
 const BRANCHING_BOX_LIMIT = 24;
 const BRANCHING_PAIR_LIMIT = 3500;
+const BRANCHING_LR_SEARCH_STEP_LIMIT = 1000000;
 let _lastBranching = null;
 
 function branchingRuleLabel(rule) {
   return rule === 'gl-sp' ? 'GL(2n) -> Sp(2n)' : 'GL(n) -> O(n)';
+}
+
+function branchingLRSearchLimitMessage(candidatePairs, stats) {
+  return `Branching computation stopped after ${stats.steps.toLocaleString()} LR search steps while checking candidate pair ${candidatePairs}. The browser cap is ${stats.limit.toLocaleString()} LR search steps, chosen to keep the expected computation time under about 3 seconds.`;
 }
 
 function rejectBranching(message) {
@@ -2226,6 +2240,7 @@ function computeBranching() {
   const multMap = new Map(); // key = JSON.stringify(mu), value = {mu, mult}
   // The max size of δ is |λ|, max single part is |λ|
   let candidatePairs = 0;
+  const lrStats = { steps: 0, limit: BRANCHING_LR_SEARCH_STEP_LIMIT };
   for (let szDelta = 0; szDelta <= szLam; szDelta += 2) {
     // All even-part partitions of szDelta
     const deltas = partitionsEvenParts(szDelta, szLam);
@@ -2238,10 +2253,19 @@ function computeBranching() {
       for (const mu of mus) {
         candidatePairs++;
         if (candidatePairs > BRANCHING_PAIR_LIMIT) {
-          rejectBranching(`Too many branching candidates (${candidatePairs}+). Try a smaller diagram; the current browser cap is ${BRANCHING_PAIR_LIMIT}.`);
+          rejectBranching(`Too many branching candidates (${candidatePairs}+). The browser cap is ${BRANCHING_PAIR_LIMIT} candidate pairs; this is the number of (delta, mu) pairs tested before each LR coefficient is computed. LR search steps so far: ${lrStats.steps.toLocaleString()} / ${BRANCHING_LR_SEARCH_STEP_LIMIT.toLocaleString()}.`);
           return;
         }
-        const c = lrCoeff(lam, mu, nu);
+        let c = 0;
+        try {
+          c = lrCoeff(lam, mu, nu, lrStats);
+        } catch (err) {
+          if (err && err.message === 'branching-lr-search-too-large') {
+            rejectBranching(branchingLRSearchLimitMessage(candidatePairs, lrStats));
+            return;
+          }
+          throw err;
+        }
         if (c === 0) continue;
         const key = JSON.stringify(mu);
         if (!multMap.has(key)) multMap.set(key, {mu: mu.slice(), mult: 0});
@@ -2258,6 +2282,8 @@ function computeBranching() {
       entries: [],
       warning: warn.textContent || '',
       candidatePairs,
+      lrSearchSteps: lrStats.steps,
+      lrSearchStepLimit: lrStats.limit,
     };
     return;
   }
@@ -2282,6 +2308,8 @@ function computeBranching() {
     entries: entries.map(e => ({mu: e.mu.slice(), mult: e.mult})),
     warning: warn.textContent || '',
     candidatePairs,
+    lrSearchSteps: lrStats.steps,
+    lrSearchStepLimit: lrStats.limit,
   };
   // Render formula line + small diagrams
   const subLabel = rule === 'gl-sp' ? 'Sp' : 'O';
@@ -2296,6 +2324,11 @@ function computeBranching() {
   formulaDiv.style.cssText = 'font-size:0.82rem;line-height:1.7;word-break:break-word;padding:6px 0 4px;border-bottom:1px dotted var(--border);';
   formulaDiv.innerHTML = formula;
   out.appendChild(formulaDiv);
+  const meta = document.createElement('div');
+  meta.className = 'hint';
+  meta.style.cssText = 'padding:4px 0 6px;border-bottom:1px dotted var(--border);';
+  meta.textContent = `Checked ${candidatePairs.toLocaleString()} branching candidates; LR search steps ${lrStats.steps.toLocaleString()} / ${lrStats.limit.toLocaleString()}.`;
+  out.appendChild(meta);
   // Individual rows with mini diagram
   for (const {mu, mult} of entries) {
     const row = document.createElement('div');
@@ -2333,6 +2366,7 @@ function exportBranching() {
   txt += `# rule: ${result.ruleLabel}\n`;
   txt += `# lambda rows: ${lambdaRows}\n`;
   txt += `# candidates checked: ${result.candidatePairs}\n`;
+  if (result.lrSearchSteps != null) txt += `# LR search steps: ${result.lrSearchSteps} / ${result.lrSearchStepLimit}\n`;
   if (result.warning) txt += `# warning: ${result.warning}\n`;
   txt += `# formula: V^${lambdaRows}_GL = `;
   txt += result.entries.length
@@ -2347,10 +2381,7 @@ function exportBranching() {
     txt += `${e.mult}\t${rows}\n`;
   }
   exportOut.value = txt.trimEnd();
-  document.querySelectorAll('.card').forEach(c => {
-    if (c.querySelector('#export-out') && c.classList.contains('collapsed'))
-      c.classList.remove('collapsed');
-  });
+  revealExportCard();
 }
 
 (function () {
@@ -2929,10 +2960,7 @@ function exportOrbit() {
     out += _lieOrbit.map(w => '(' + w.join(', ') + ')').join('\n');
     exportOut.value = out;
   }
-  document.querySelectorAll('.card').forEach(c => {
-    if (c.querySelector('#export-out') && c.classList.contains('collapsed'))
-      c.classList.remove('collapsed');
-  });
+  revealExportCard();
 }
 function computeWeyl() {
   if (!isCardExpandedById('lie-weight')) return;
@@ -3417,22 +3445,59 @@ function exportWeightSpaceDecomposition() {
     txt += `${e.multiplicity}\t${e.orbitSize}\t${rows}\t[${e.dyn.join(', ')}]\n`;
   }
   exportOut.value = txt.trimEnd();
-  document.querySelectorAll('.card').forEach(c => {
-    if (c.querySelector('#export-out') && c.classList.contains('collapsed'))
-      c.classList.remove('collapsed');
-  });
+  revealExportCard();
 }
 
 
 // ─────────────────────────────────────────────
 //  Card collapse toggle
 // ─────────────────────────────────────────────
+const MAX_OPEN_CHART_CARDS = 3;
+let openChartCardSequence = 0;
+
+function isOpenChartLimitCard(card) {
+  if (!card || !card.classList.contains('card')) return false;
+  if (card.closest('.canvas-panel')) return false;
+  if (card.id === 'diagram-input-card' && card.getAttribute('draggable') !== 'true') return false;
+  return true;
+}
+
+function setCardAriaExpanded(card, expanded) {
+  const head = card?.querySelector('.card-head');
+  if (head) head.setAttribute('aria-expanded', String(!!expanded));
+}
+
+function collapseCard(card) {
+  if (!card) return;
+  card.classList.add('collapsed');
+  setCardAriaExpanded(card, false);
+}
+
+function enforceOpenChartCardLimit(activeCard) {
+  if (!isOpenChartLimitCard(activeCard)) return;
+  activeCard.dataset.openChartOrder = String(++openChartCardSequence);
+  const openCards = Array.from(document.querySelectorAll('.card:not(.collapsed)'))
+    .filter(isOpenChartLimitCard)
+    .sort((a, b) => Number(a.dataset.openChartOrder || 0) - Number(b.dataset.openChartOrder || 0));
+  while (openCards.length > MAX_OPEN_CHART_CARDS) {
+    const victim = openCards.find(card => card !== activeCard) || openCards[0];
+    collapseCard(victim);
+    openCards.splice(openCards.indexOf(victim), 1);
+  }
+}
+
+function openCard(card, refreshOnOpen = true) {
+  if (!card) return;
+  card.classList.remove('collapsed');
+  setCardAriaExpanded(card, true);
+  enforceOpenChartCardLimit(card);
+  if (refreshOnOpen) refreshCardCalculation(card);
+}
+
 function toggleCard(headEl) {
   const card = headEl.closest('.card');
-  const isCollapsed = card.classList.toggle('collapsed');
-  headEl.setAttribute('aria-expanded', String(!isCollapsed));
-
-  if (!isCollapsed) refreshCardCalculation(card);
+  if (card.classList.contains('collapsed')) openCard(card);
+  else collapseCard(card);
 }
 
 
