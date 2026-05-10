@@ -258,10 +258,22 @@ function refreshOpenCalculations() {
   document.querySelectorAll('.card:not(.collapsed)').forEach(refreshCardCalculation);
 }
 
+function cardByContainedId(id) {
+  const el = document.getElementById(id);
+  return el ? el.closest('.card') : null;
+}
+
+function setCardStaleById(id, stale = true) {
+  const card = cardByContainedId(id);
+  if (card) card.classList.toggle('is-stale', !!stale);
+}
+
 function diagramChanged() {
   markBranchingStale();
+  setCardStaleById('symfun-output', false);
   redraw();
   refreshOpenCalculations();
+  updateYoungUrlState();
 }
 
 // ─────────────────────────────────────────────
@@ -336,6 +348,52 @@ function initGridSizeControls() {
     }
   }
   syncGridSizeInputs();
+}
+
+let applyingYoungUrlState = false;
+
+function updateYoungUrlState() {
+  if (applyingYoungUrlState || !window.history || !window.URLSearchParams) return;
+  const params = new URLSearchParams(window.location.search);
+  const rows = rowLengths();
+  if (rows.length) params.set('lambda', rows.join(','));
+  else params.delete('lambda');
+  params.set('rows', String(gridRows));
+  params.set('cols', String(gridCols));
+  const type = document.getElementById('lie-type')?.value;
+  const rank = document.getElementById('lie-rank')?.value;
+  if (type) params.set('type', type);
+  if (rank) params.set('rank', rank);
+  const query = params.toString();
+  const nextUrl = `${window.location.pathname}${query ? '?' + query : ''}${window.location.hash}`;
+  window.history.replaceState(null, '', nextUrl);
+}
+
+function applyYoungUrlState() {
+  if (!window.URLSearchParams) return;
+  const params = new URLSearchParams(window.location.search);
+  const lambdaText = params.get('lambda');
+  const nextRows = params.get('rows');
+  const nextCols = params.get('cols');
+  const type = params.get('type');
+  const rank = params.get('rank');
+  applyingYoungUrlState = true;
+  try {
+    if (nextRows || nextCols) setGridSize(nextCols || gridCols, nextRows || gridRows, false, true);
+    if (type && document.getElementById('lie-type')) document.getElementById('lie-type').value = type;
+    if (rank && document.getElementById('lie-rank')) document.getElementById('lie-rank').value = rank;
+    if (lambdaText) {
+      const parts = parseIntegerList(lambdaText, 'Partition rows');
+      clearAllSilent();
+      for (let r = 0; r < parts.length && r < gridRows; r++) {
+        for (let c = 0; c < Math.min(parts[r], gridCols); c++) blocks[r][c] = 1;
+      }
+    }
+  } catch (_) {
+    clearErr();
+  } finally {
+    applyingYoungUrlState = false;
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -846,6 +904,20 @@ function escapeHtml(value) {
 
 function partitionSize(part) {
   return part.reduce((sum, p) => sum + p, 0);
+}
+
+const partitionCountCache = new Map();
+
+function partitionCount(size) {
+  const n = Math.max(0, Math.floor(Number(size) || 0));
+  if (partitionCountCache.has(n)) return partitionCountCache.get(n);
+  const dp = Array(n + 1).fill(0n);
+  dp[0] = 1n;
+  for (let part = 1; part <= n; part++) {
+    for (let total = part; total <= n; total++) dp[total] += dp[total - part];
+  }
+  partitionCountCache.set(n, dp[n]);
+  return dp[n];
 }
 
 function partitionLabel(part) {
@@ -1929,6 +2001,8 @@ function renderSymmetricFunctionChart() {
   if (!output) return;
 
   const lambda = rowLengths();
+  document.getElementById('symfun-preview')?.remove();
+  setCardStaleById('symfun-output', false);
   const variableChoice = readSymfunVariableCount(lambda);
   if (variableChoice.error) {
     output.innerHTML = `<div class="symfun-too-large">${escapeHtml(variableChoice.error)}</div>`;
@@ -1939,6 +2013,7 @@ function renderSymmetricFunctionChart() {
   if (variableChoice.count !== null) {
     try {
       output.innerHTML = renderFiniteSymmetricFunctionChart(lambda, variableChoice.count);
+      setCardStaleById('symfun-output', false);
     } catch (err) {
       if (err && err.message === 'polynomial-too-large') {
         output.innerHTML = `<div class="symfun-too-large">Complete polynomial expansion has more than ${SYMFUN_POLYNOMIAL_TERM_LIMIT} terms. Use fewer variables or draw a smaller diagram.</div>`;
@@ -2014,6 +2089,7 @@ function renderSymmetricFunctionChart() {
   }
 
   output.innerHTML = blocks;
+  setCardStaleById('symfun-output', false);
 }
 
 function symfunSymbolText(kind, partText = 'lambda') {
@@ -2198,20 +2274,55 @@ function branchingLRSearchLimitMessage(candidatePairs, stats) {
   return `Branching computation stopped after ${stats.steps.toLocaleString()} LR search steps while checking candidate pair ${candidatePairs}. The browser cap is ${stats.limit.toLocaleString()} LR search steps, chosen to keep the expected computation time under about 3 seconds.`;
 }
 
+function ensureBeforeElement(id, beforeId, className) {
+  let el = document.getElementById(id);
+  if (el) return el;
+  const before = document.getElementById(beforeId);
+  if (!before || !before.parentNode) return null;
+  el = document.createElement('div');
+  el.id = id;
+  el.className = className;
+  before.parentNode.insertBefore(el, before);
+  return el;
+}
+
+function branchingCandidatePairEstimate(lam, rule) {
+  const szLam = partitionSize(lam);
+  let count = 0;
+  for (let szDelta = 0; szDelta <= szLam; szDelta += 2) {
+    const deltas = partitionsEvenParts(szDelta, szLam);
+    const szMu = szLam - szDelta;
+    for (const delta of deltas) {
+      const mus = partitionsOfSize(szMu, lam.length + delta.length + 2, (lam[0] || 0) + (delta[0] || 0));
+      count += mus.length;
+      if (count > BRANCHING_PAIR_LIMIT) return count;
+    }
+  }
+  return count;
+}
+
+function renderBranchingPreview() {
+  document.getElementById('br-preview')?.remove();
+}
+
 function rejectBranching(message) {
   _lastBranching = null;
+  setCardStaleById('br-output', false);
   const out = document.getElementById('br-output');
   const warn = document.getElementById('br-warning');
   if (warn) warn.textContent = message;
   if (out) out.innerHTML = '<span class="hint" style="display:block;padding:8px;">No branching decomposition computed.</span>';
+  renderBranchingPreview();
 }
 
 function markBranchingStale() {
   _lastBranching = null;
+  setCardStaleById('br-output', false);
   const out = document.getElementById('br-output');
   const warn = document.getElementById('br-warning');
   if (warn) warn.textContent = '';
   if (out) out.innerHTML = '<span class="hint">Click compute to update the branching decomposition.</span>';
+  renderBranchingPreview();
 }
 
 // --- Main branching computation ---
@@ -2224,6 +2335,7 @@ function computeBranching() {
   _lastBranching = null;
   out.innerHTML = '';
   warn.textContent = '';
+  renderBranchingPreview();
   if (!lam.length) {
     out.innerHTML = '<span class="hint">Draw a Young diagram first.</span>';
     return;
@@ -2275,6 +2387,7 @@ function computeBranching() {
   }
   if (multMap.size === 0) {
     out.innerHTML = '<span class="hint">No constituents found (empty decomposition).</span>';
+    setCardStaleById('br-output', false);
     _lastBranching = {
       rule,
       ruleLabel: branchingRuleLabel(rule),
@@ -2311,6 +2424,7 @@ function computeBranching() {
     lrSearchSteps: lrStats.steps,
     lrSearchStepLimit: lrStats.limit,
   };
+  setCardStaleById('br-output', false);
   // Render formula line + small diagrams
   const subLabel = rule === 'gl-sp' ? 'Sp' : 'O';
   const hue = rule === 'gl-sp' ? 200 : 30;
@@ -2909,6 +3023,7 @@ function onTypeChange() {
   const n = parseInt(rankInput.value);
   desc.textContent = isClassical ? descMap[type](n) : (descMap[type] ? descMap[type]() : '');
   computeWeyl();
+  updateYoungUrlState();
 }
 function onAlgebraChange() {
   // Called when rank input changes — update description then recompute
@@ -3473,6 +3588,45 @@ function collapseCard(card) {
   setCardAriaExpanded(card, false);
 }
 
+function toggleCardPinned(card, pinned) {
+  if (!card) return;
+  const next = pinned == null ? !card.classList.contains('is-pinned') : !!pinned;
+  card.classList.toggle('is-pinned', next);
+  const btn = card.querySelector('.card-pin-btn');
+  if (btn) {
+    btn.setAttribute('aria-pressed', String(next));
+    btn.title = next ? 'unpin card' : 'pin card';
+  }
+}
+
+function initCardChrome() {
+  document.querySelectorAll('.card').forEach(card => {
+    const head = card.querySelector('.card-head');
+    if (!head || head.querySelector('.card-title-tools')) return;
+    const tools = document.createElement('span');
+    tools.className = 'card-title-tools';
+    const stale = document.createElement('span');
+    stale.className = 'card-stale-badge';
+    stale.textContent = 'stale';
+    const pin = document.createElement('button');
+    pin.className = 'card-pin-btn';
+    pin.type = 'button';
+    pin.textContent = '\u{1F588}';
+    pin.title = 'pin card';
+    pin.setAttribute('aria-label', 'pin card');
+    pin.setAttribute('aria-pressed', 'false');
+    pin.addEventListener('click', event => {
+      event.stopPropagation();
+      toggleCardPinned(card);
+    });
+    tools.appendChild(stale);
+    tools.appendChild(pin);
+    const toggle = head.querySelector('.toggle-icon');
+    if (toggle) head.insertBefore(tools, toggle);
+    else head.appendChild(tools);
+  });
+}
+
 function enforceOpenChartCardLimit(activeCard) {
   if (!isOpenChartLimitCard(activeCard)) return;
   activeCard.dataset.openChartOrder = String(++openChartCardSequence);
@@ -3480,7 +3634,9 @@ function enforceOpenChartCardLimit(activeCard) {
     .filter(isOpenChartLimitCard)
     .sort((a, b) => Number(a.dataset.openChartOrder || 0) - Number(b.dataset.openChartOrder || 0));
   while (openCards.length > MAX_OPEN_CHART_CARDS) {
-    const victim = openCards.find(card => card !== activeCard) || openCards[0];
+    const victim = openCards.find(card => card !== activeCard && !card.classList.contains('is-pinned'))
+      || openCards.find(card => card !== activeCard)
+      || openCards[0];
     collapseCard(victim);
     openCards.splice(openCards.indexOf(victim), 1);
   }
@@ -3579,7 +3735,9 @@ window.addEventListener('load', () => {
     const head = card.querySelector('.card-head');
     if (head) head.setAttribute('aria-expanded', 'false');
   });
+  initCardChrome();
   initGridSizeControls();
+  applyYoungUrlState();
   initCustomTooltips();
   initSymfunVariableControls();
   resetExportToDefaultCitation();

@@ -63,8 +63,11 @@
     function normalizePartition(p) { return trimPartition(p).sort((a,b) => b - a); }
     function parsePartition(text) {
       if (!String(text || '').trim()) return [];
-      const raw = String(text).split(/[\s,;]+/).filter(Boolean).map(Number);
-      if (raw.some(x => !Number.isFinite(x) || x < 0 || Math.floor(x) !== x)) throw new Error('Use nonnegative integers, e.g. 4,2,1.');
+      const cleaned = String(text).replace(/[\[\](){}]/g, ' ').replace(/[;,]/g, ' ');
+      const parts = cleaned.split(/\s+/).filter(Boolean);
+      if (!parts.length) return [];
+      const raw = parts.map(Number);
+      if (raw.some(x => !Number.isFinite(x) || x < 0 || Math.floor(x) !== x)) throw new Error('Use nonnegative integers, e.g. (4,2,1) or 4,2,1.');
       return normalizePartition(raw);
     }
     function partitionToString(p) {
@@ -1026,9 +1029,11 @@
         const result = semistandardTableaux(lambda, mu);
         state.lastKostka = { lambda, mu, result };
         renderKostkaTableaux(result, lambda, mu);
+        clearDoubleCardStale('kostka-out');
       } catch (err) {
         state.lastKostka = null;
         $('kostka-out').innerHTML = `<span class="warning-text">${err.message}</span>`;
+        clearDoubleCardStale('kostka-out');
       }
       refreshExport({ force: true });
     }
@@ -1558,9 +1563,11 @@
           hue: 280,
           note: 'Kronecker coefficients are computed from symmetric-group characters using the Murnaghan–Nakayama rule.'
         });
+        clearDoubleCardStale('kronecker-out');
       } catch (err) {
         state.lastKronecker = null;
         $('kronecker-out').innerHTML = `<span class="warning-text">${err.message}</span>`;
+        clearDoubleCardStale('kronecker-out');
       }
       refreshExport({ force: true });
     }
@@ -1587,10 +1594,12 @@
           hue: 315,
           note: `Power-sum expansion used ${terms.powerTermCount || 0} intermediate term${terms.powerTermCount === 1 ? '' : 's'}. Dimension-completeness guard can be added later.`
         });
+        clearDoubleCardStale('plethysm-out');
       } catch (err) {
         state.lastPlethysm = null;
       state.lastSchurFunctor = null;
         $('plethysm-out').innerHTML = `<span class="warning-text">${err.message}</span>`;
+        clearDoubleCardStale('plethysm-out');
       }
       refreshExport({ force: true });
     }
@@ -1616,9 +1625,11 @@
         const terms = decomposeSchurFunctorFiniteType(lambda, mu, type, rank);
         state.lastSchurFunctor = { lambda, mu, terms, type, rank, kind: 'schur-functor' };
         renderLieSchurFunctorDecomposition('schur-functor-out', lambda, mu, terms, type, rank);
+        clearDoubleCardStale('schur-functor-out');
       } catch (err) {
         state.lastSchurFunctor = null;
         $('schur-functor-out').innerHTML = `<span class="warning-text">${err.message}</span>`;
+        clearDoubleCardStale('schur-functor-out');
       }
       refreshExport({ force: true });
     }
@@ -1865,9 +1876,11 @@
         else throw new Error('Stable browser-side decomposition is implemented for A/B/C/D. Exceptional types are forced to fixed-rank mode.');
         state.lastDecomposition = { lambda, mu, terms, type, rank, fixed };
         renderDecomposition(terms, lambda, mu, type, rank, fixed);
+        clearDoubleCardStale('schur-out');
       } catch (err) {
         $('schur-out').innerHTML = `<span class="warning-text">${err.message}</span>`;
         state.lastDecomposition = null;
+        clearDoubleCardStale('schur-out');
       }
       refreshExport({ force: true });
     }
@@ -1962,16 +1975,67 @@
       for (let i=1;i<rows.length;i++) rows[i] = Math.min(rows[i], rows[i-1]);
       return trimPartition(rows);
     }
+    let applyingDoubleUrlState = false;
+
+    function updateDoubleUrlState() {
+      if (applyingDoubleUrlState || !window.history || !window.URLSearchParams) return;
+      const params = new URLSearchParams(window.location.search);
+      const lambda = trimPartition(state.lambda.rows);
+      const mu = trimPartition(state.mu.rows);
+      if (lambda.length) params.set('lambda', lambda.join(','));
+      else params.delete('lambda');
+      if (mu.length) params.set('mu', mu.join(','));
+      else params.delete('mu');
+      params.set('rows', String(state.lambda.maxRows));
+      params.set('cols', String(state.lambda.maxCols));
+      const type = $('lie-type')?.value;
+      const rank = $('lie-rank')?.value;
+      if (type) params.set('type', type);
+      if (rank) params.set('rank', rank);
+      const query = params.toString();
+      window.history.replaceState(null, '', `${window.location.pathname}${query ? '?' + query : ''}${window.location.hash}`);
+    }
+
+    function applyDoubleUrlState() {
+      if (!window.URLSearchParams) return false;
+      const params = new URLSearchParams(window.location.search);
+      const lambdaText = params.get('lambda');
+      const muText = params.get('mu');
+      const rows = Number(params.get('rows'));
+      const cols = Number(params.get('cols'));
+      const type = params.get('type');
+      const rank = params.get('rank');
+      if (!lambdaText && !muText && !rows && !cols && !type && !rank) return false;
+      applyingDoubleUrlState = true;
+      try {
+        if (Number.isInteger(rows) && rows > 0) $('grid-rows').value = String(Math.min(18, rows));
+        if (Number.isInteger(cols) && cols > 0) $('grid-cols').value = String(Math.min(18, cols));
+        if (type && $('lie-type')) $('lie-type').value = type;
+        if (rank && $('lie-rank')) $('lie-rank').value = rank;
+        applyGridSize();
+        setDiagram('lambda', lambdaText ? parsePartition(lambdaText) : [3, 2]);
+        setDiagram('mu', muText ? parsePartition(muText) : [2, 1]);
+      } catch (_) {
+        return false;
+      } finally {
+        applyingDoubleUrlState = false;
+      }
+      return true;
+    }
+
     function setDiagram(which, rows) {
       const d = state[which];
       d.rows = enforcePartition(rows, d.maxRows, d.maxCols);
+      const staleFlags = currentDoubleResultFlags();
       state.lastDecomposition = null;
       state.lastKostka = null;
       state.lastKronecker = null;
       state.lastPlethysm = null;
       state.lastSchurFunctor = null;
       state.lastGrassmannian = null;
+      markDoubleComputedCardsStale(staleFlags);
       drawAll(); updateStats(); updateInvariants(); markSymmetricPolynomialStale(); refreshExport();
+      updateDoubleUrlState();
     }
     function handleCanvasClick(which, event) {
       const d = state[which], rect = d.canvas.getBoundingClientRect(), g = d.geometry;
@@ -2006,13 +2070,16 @@
         state[which].maxRows = rows; state[which].maxCols = cols;
         state[which].rows = enforcePartition(state[which].rows, rows, cols);
       }
+      const staleFlags = currentDoubleResultFlags();
       state.lastDecomposition = null;
       state.lastKostka = null;
       state.lastKronecker = null;
       state.lastPlethysm = null;
       state.lastSchurFunctor = null;
       state.lastGrassmannian = null;
+      markDoubleComputedCardsStale(staleFlags);
       resizeCanvases(); updateStats(); updateInvariants(); markSymmetricPolynomialStale(); refreshExport();
+      updateDoubleUrlState();
     }
     function updateStats(options = {}) {
       if (!options.force && !isCardExpandedById('stats-out')) return;
@@ -2311,9 +2378,11 @@
         }
         state.lastGrassmannian = data;
         renderGrassmannianCup(data);
+        clearDoubleCardStale('grassmannian-out');
       } catch (err) {
         state.lastGrassmannian = null;
         $('grassmannian-out').innerHTML = `<span class="warning-text">${err.message}</span>`;
+        clearDoubleCardStale('grassmannian-out');
       }
       refreshExport({ force: true });
     }
@@ -2469,6 +2538,10 @@
     function appendSympolyLimitDetails(message, config) {
       const details = sympolyLimitDetails(config);
       return details ? `${message} Limits: ${details}.` : message;
+    }
+
+    function sympolyComplexityPreviewHTML(config) {
+      return '';
     }
 
     function sympolyEscapeHtml(value) {
@@ -3790,16 +3863,20 @@
       }
 
       lines.push(`${leftText} = ${valueText}`);
+      const computedAt = new Date().toLocaleTimeString();
       return {
         signature: sympolyConfigSignature(config),
         html: `
+          ${sympolyComplexityPreviewHTML(config)}
           <div class="symfun-row sympoly-product-row">
             <span class="symfun-label">${sympolyProductLabelHTML(leftKind, rightKind, operation)}</span>
             <span class="symfun-value">${valueHTML}</span>
           </div>
+          <div class="result-meta">computed ${sympolyEscapeHtml(computedAt)} for lambda=${sympolyEscapeHtml(sympolyPartitionLabel(lambda))}, mu=${sympolyEscapeHtml(sympolyPartitionLabel(mu))}</div>
         `,
         text: lines.join('\n'),
-        filename: sympolyResultFilename(operation)
+        filename: sympolyResultFilename(operation),
+        computedAt
       };
     }
 
@@ -3812,14 +3889,15 @@
       if (!output) return;
       const card = output.closest('.card');
       if (!options.force && card && card.classList.contains('collapsed')) return;
+      clearDoubleCardStale('sympoly-output');
 
       const config = currentSympolyConfig();
       if (config.variableChoice.error) {
-        output.innerHTML = `<div class="symfun-too-large">${sympolyEscapeHtml(config.variableChoice.error)}</div>`;
+        output.innerHTML = `${sympolyComplexityPreviewHTML(config)}<div class="symfun-too-large">${sympolyEscapeHtml(config.variableChoice.error)}</div>`;
         return;
       }
       if (config.variableChoice.pending) {
-        output.innerHTML = '<span class="hint">Enter N or turn on infinite mode before computing.</span>';
+        output.innerHTML = `${sympolyComplexityPreviewHTML(config)}<span class="hint">Enter N or turn on infinite mode before computing.</span>`;
         return;
       }
 
@@ -3827,12 +3905,13 @@
       if (cached && cached.signature === sympolyConfigSignature(config)) {
         output.innerHTML = cached.html;
       } else {
-        output.innerHTML = `<span class="hint">${sympolyEscapeHtml(sympolyStaleHint())}</span>`;
+        output.innerHTML = `${sympolyComplexityPreviewHTML(config)}<span class="hint">${sympolyEscapeHtml(sympolyStaleHint())}</span>`;
       }
     }
 
     function markSymmetricPolynomialStale() {
       state.lastSymmetricPolynomial = null;
+      clearDoubleCardStale('sympoly-output');
       renderSymmetricPolynomialProduct({ force: true });
       if (state.exportMode === 'symmetric-polynomials') {
         const exportOut = $('export-out');
@@ -3844,6 +3923,7 @@
     function computeSymmetricPolynomialProduct() {
       const output = $('sympoly-output');
       if (!output) return;
+      clearDoubleCardStale('sympoly-output');
       const config = currentSympolyConfig();
       if (config.variableChoice.error) {
         state.lastSymmetricPolynomial = null;
@@ -3870,6 +3950,7 @@
         }
         state.lastSymmetricPolynomial = result;
         output.innerHTML = result.html;
+        clearDoubleCardStale('sympoly-output');
         if (state.exportMode === 'symmetric-polynomials') {
           const exportOut = $('export-out');
           if (exportOut) exportOut.value = result.text;
@@ -3879,13 +3960,14 @@
         const message = sympolyComputationErrorMessage(err, config);
         const errorResult = {
           signature: sympolyConfigSignature(config),
-          html: `<div class="symfun-too-large">${sympolyEscapeHtml(message)}</div>`,
+          html: `${sympolyComplexityPreviewHTML(config)}<div class="symfun-too-large">${sympolyEscapeHtml(message)}</div>`,
           text: message,
           filename: sympolyResultFilename(config.operation),
           failed: true
         };
         state.lastSymmetricPolynomial = errorResult;
         output.innerHTML = errorResult.html;
+        clearDoubleCardStale('sympoly-output');
         if (state.exportMode === 'symmetric-polynomials') {
           const exportOut = $('export-out');
           if (exportOut) exportOut.value = errorResult.text;
@@ -4025,6 +4107,35 @@
       const card = cardForElementId(id);
       return !!card && !card.classList.contains('collapsed');
     }
+    function setCardStaleById(id, stale = true) {
+      const card = cardForElementId(id);
+      if (card) card.classList.toggle('is-stale', !!stale);
+    }
+    function currentDoubleResultFlags() {
+      return {
+        decomposition: !!state.lastDecomposition,
+        kostka: !!state.lastKostka,
+        kronecker: !!state.lastKronecker,
+        plethysm: !!state.lastPlethysm,
+        schurFunctor: !!state.lastSchurFunctor,
+        grassmannian: !!state.lastGrassmannian
+      };
+    }
+    function markDoubleComputedCardsStale(flags = currentDoubleResultFlags()) {
+      [
+        ['decomposition', 'schur-out'],
+        ['kostka', 'kostka-out'],
+        ['kronecker', 'kronecker-out'],
+        ['plethysm', 'plethysm-out'],
+        ['schurFunctor', 'schur-functor-out'],
+        ['grassmannian', 'grassmannian-out']
+      ].forEach(([key, id]) => {
+        if (flags[key]) setCardStaleById(id, true);
+      });
+    }
+    function clearDoubleCardStale(id) {
+      setCardStaleById(id, false);
+    }
     function refreshExport(options = {}) {
       const force = !!options.force;
       if (!force && !isCardExpandedById('export-out')) return;
@@ -4061,7 +4172,17 @@
         if (Number(rankInput.value) < mins[type]) rankInput.value = String(mins[type]);
       } else rankWrap.style.display = 'none';
       $('lie-algebra-desc').textContent = typeDescription(type, currentRank());
-      state.lastDecomposition = null; state.lastSchurFunctor = null; refreshLRModeHint(); updateStats(); updateInvariants(); refreshExport();
+      const hadDecomposition = !!state.lastDecomposition;
+      const hadSchurFunctor = !!state.lastSchurFunctor;
+      state.lastDecomposition = null;
+      state.lastSchurFunctor = null;
+      if (hadDecomposition) setCardStaleById('schur-out', true);
+      if (hadSchurFunctor) setCardStaleById('schur-functor-out', true);
+      refreshLRModeHint();
+      updateStats();
+      updateInvariants();
+      refreshExport();
+      updateDoubleUrlState();
     };
     window.onAlgebraChange = function onAlgebraChange() { window.onTypeChange(); };
     function refreshLRModeHint() {
@@ -4077,7 +4198,10 @@
         if (!fixed) $('lr-mode-hint').innerHTML = 'Unchecked: stable <em>n</em> ≫ 0. Type A gives ordinary LR coefficients; B/C/D gives stable Newell–Littlewood coefficients.';
         else $('lr-mode-hint').innerHTML = `Checked: fixed ${lieAlgebraLabel(type, rank)}. The page enumerates dominant weights in the invariant norm ball, builds the smaller character by Freudenthal recursion, applies Brauer–Klimyk straightening, then translates dominant labels back to diagram rows.`;
       }
-      state.lastDecomposition = null; refreshExport();
+      const hadDecomposition = !!state.lastDecomposition;
+      state.lastDecomposition = null;
+      if (hadDecomposition) setCardStaleById('schur-out', true);
+      refreshExport();
     }
     window.refreshLRModeHint = refreshLRModeHint;
 
@@ -4101,6 +4225,12 @@
       return true;
     }
 
+    function openChartCardGroupKey(card) {
+      if (card && ['slice-card', 'slice-layer-card', 'slice-weight-info-card'].includes(card.id)) return 'slice';
+      if (!card.dataset.openChartKey) card.dataset.openChartKey = `card-${++openChartCardSequence}`;
+      return card.dataset.openChartKey;
+    }
+
     function setCardAriaExpanded(card, expanded) {
       const head = card?.querySelector('.card-head');
       if (head) head.setAttribute('aria-expanded', String(!!expanded));
@@ -4112,16 +4242,66 @@
       setCardAriaExpanded(card, false);
     }
 
+    function toggleCardPinned(card, pinned) {
+      if (!card) return;
+      const next = pinned == null ? !card.classList.contains('is-pinned') : !!pinned;
+      card.classList.toggle('is-pinned', next);
+      const btn = card.querySelector('.card-pin-btn');
+      if (btn) {
+        btn.setAttribute('aria-pressed', String(next));
+        btn.title = next ? 'unpin card' : 'pin card';
+      }
+    }
+
+    function initCardChrome() {
+      document.querySelectorAll('.card').forEach(card => {
+        const head = card.querySelector('.card-head');
+        if (!head || head.querySelector('.card-title-tools')) return;
+        const tools = document.createElement('span');
+        tools.className = 'card-title-tools';
+        const stale = document.createElement('span');
+        stale.className = 'card-stale-badge';
+        stale.textContent = 'stale';
+        const pin = document.createElement('button');
+        pin.className = 'card-pin-btn';
+        pin.type = 'button';
+        pin.textContent = '\u{1F588}';
+        pin.title = 'pin card';
+        pin.setAttribute('aria-label', 'pin card');
+        pin.setAttribute('aria-pressed', 'false');
+        pin.addEventListener('click', event => {
+          event.stopPropagation();
+          toggleCardPinned(card);
+        });
+        tools.appendChild(stale);
+        tools.appendChild(pin);
+        const toggle = head.querySelector('.toggle-icon');
+        if (toggle) head.insertBefore(tools, toggle);
+        else head.appendChild(tools);
+      });
+    }
+
     function enforceOpenChartCardLimit(activeCard) {
       if (!isOpenChartLimitCard(activeCard)) return;
       activeCard.dataset.openChartOrder = String(++openChartCardSequence);
-      const openCards = Array.from(document.querySelectorAll('.card:not(.collapsed)'))
-        .filter(isOpenChartLimitCard)
-        .sort((a, b) => Number(a.dataset.openChartOrder || 0) - Number(b.dataset.openChartOrder || 0));
-      while (openCards.length > MAX_OPEN_CHART_CARDS) {
-        const victim = openCards.find(card => card !== activeCard) || openCards[0];
-        collapseCardForOpenLimit(victim);
-        openCards.splice(openCards.indexOf(victim), 1);
+      const activeGroupKey = openChartCardGroupKey(activeCard);
+      const groups = new Map();
+      for (const card of Array.from(document.querySelectorAll('.card:not(.collapsed)')).filter(isOpenChartLimitCard)) {
+        const key = openChartCardGroupKey(card);
+        const order = Number(card.dataset.openChartOrder || 0);
+        const existing = groups.get(key) || { key, cards: [], order: 0, pinned: false };
+        existing.cards.push(card);
+        existing.order = Math.max(existing.order, order);
+        existing.pinned = existing.pinned || card.classList.contains('is-pinned');
+        groups.set(key, existing);
+      }
+      const openGroups = Array.from(groups.values()).sort((a, b) => a.order - b.order);
+      while (openGroups.length > MAX_OPEN_CHART_CARDS) {
+        const victim = openGroups.find(group => group.key !== activeGroupKey && !group.pinned)
+          || openGroups.find(group => group.key !== activeGroupKey)
+          || openGroups[0];
+        victim.cards.forEach(collapseCardForOpenLimit);
+        openGroups.splice(openGroups.indexOf(victim), 1);
       }
     }
 
@@ -4137,10 +4317,11 @@
     function setupCards() {
       document.addEventListener('click', (event) => {
         const head = event.target.closest('.card-head');
-        if (!head || event.target.closest('.drag-handle')) return;
+        if (!head || event.target.closest('.drag-handle') || event.target.closest('.card-pin-btn')) return;
         const card = head.closest('.card');
         setCardCollapsed(card, !card.classList.contains('collapsed'));
       });
+      initCardChrome();
       document.querySelectorAll('.card').forEach(card => setCardCollapsed(card, true, false));
     }
     function setupPointerDnd() {
@@ -4169,9 +4350,8 @@
       }, { passive:false });
       window.addEventListener('pointerup', () => {
         if (!drag) return;
-        const dropped = drag;
         drag.style.display = ''; side.insertBefore(drag, placeholder); placeholder.remove(); ghost.remove(); drag = ghost = placeholder = null;
-        if (dropped.id === 'slice-card') placeSliceCompanionCards();
+        placeSliceCompanionCards();
       });
     }
     function setupResponsiveDiagramInput() {
@@ -4253,8 +4433,8 @@
         $(which === 'lambda' ? 'clear-lambda' : 'clear-mu').addEventListener('click', () => setDiagram(which, []));
       }
       $('grid-rows').addEventListener('change', applyGridSize); $('grid-cols').addEventListener('change', applyGridSize);
-      $('swap-diagrams').addEventListener('click', () => { const a = state.lambda.rows.slice(); state.lambda.rows = state.mu.rows.slice(); state.mu.rows = a; state.lastDecomposition = null; state.lastKostka = null; state.lastKronecker = null; state.lastPlethysm = null;
-      state.lastSchurFunctor = null; state.lastGrassmannian = null; drawAll(); updateStats(); updateInvariants(); markSymmetricPolynomialStale(); refreshExport(); });
+      $('swap-diagrams').addEventListener('click', () => { const staleFlags = currentDoubleResultFlags(); const a = state.lambda.rows.slice(); state.lambda.rows = state.mu.rows.slice(); state.mu.rows = a; state.lastDecomposition = null; state.lastKostka = null; state.lastKronecker = null; state.lastPlethysm = null;
+      state.lastSchurFunctor = null; state.lastGrassmannian = null; markDoubleComputedCardsStale(staleFlags); drawAll(); updateStats(); updateInvariants(); markSymmetricPolynomialStale(); refreshExport(); updateDoubleUrlState(); });
       $('lie-type').addEventListener('change', window.onTypeChange); $('lie-rank').addEventListener('change', window.onAlgebraChange);
       $('fixed-rank-mode').addEventListener('change', refreshLRModeHint);
       $('compute-schur').addEventListener('click', computeSchur);
@@ -4269,7 +4449,7 @@
       $('export-schur-functor').addEventListener('click', exportSchurFunctor);
       $('compute-grassmannian').addEventListener('click', computeGrassmannianCup);
       $('export-grassmannian').addEventListener('click', exportGrassmannianCup);
-      $('grassmannian-presentation').addEventListener('change', () => { state.lastGrassmannian = null; refreshExport(); });
+      $('grassmannian-presentation').addEventListener('change', () => { const hadGrassmannian = !!state.lastGrassmannian; state.lastGrassmannian = null; if (hadGrassmannian) setCardStaleById('grassmannian-out', true); refreshExport(); });
       $('sympoly-variable-count').addEventListener('input', handleSympolyVariableInput);
       $('sympoly-infinite').addEventListener('change', toggleSympolyInfinite);
       $('sympoly-left-kind').addEventListener('change', markSymmetricPolynomialStale);
@@ -4284,7 +4464,9 @@
     }
     function init() {
       setupEvents(); setupCards(); setupPointerDnd(); setupResponsiveDiagramInput(); initCustomTooltips();
-      applyGridSize(); setDiagram('lambda', [3,2]); setDiagram('mu', [2,1]);
+      if (!applyDoubleUrlState()) {
+        applyGridSize(); setDiagram('lambda', [3,2]); setDiagram('mu', [2,1]);
+      }
       window.onTypeChange(); refreshLRModeHint(); resizeCanvases();
     }
     window.__dbg = {decomposeFixedRank, decomposeFixedRankTypeA, dominantCandidatesBelow, dominantNormBoundCandidates, boundedSliceLatticePoints, dominantSliceRepresentative, buildSliceFreudenthalContext, sliceMultiplicityFreudenthal, irreducibleCharacterFreudenthal, decomposeByCandidatesBrauerKlimyk, weightMultiplicityByFreudenthal, weightMultiplicityByWeylCharacter, kostkaNumber, semistandardTableaux, computeKostkaTableaux, decomposeKronecker, decomposePlethysm, computeKronecker, computePlethysm, computeSchurFunctor, decomposeSchurFunctorFiniteType, computeGrassmannianCup, decomposeGrassmannianCup, grassmannianChernPolynomial, schurFunctorCharacter, decomposeCharacterByHighestWeightPeeling, decomposePlethysm, weylOrbitSizeDominant, updateInvariants};
