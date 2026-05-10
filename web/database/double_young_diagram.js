@@ -4254,9 +4254,10 @@
       }
     }
 
+    const CARD_PIN_ICON = '<svg class="card-pin-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5"></path><path d="M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V16h14v-.8a2 2 0 0 0-1.1-1.7l-1.8-.9A2 2 0 0 1 15 10.8V7a2 2 0 0 1 .6-1.4L17 4.2V2H7v2.2l1.4 1.4A2 2 0 0 1 9 7z"></path></svg>';
+
     function stopCardPinEvent(event) {
       event.stopPropagation();
-      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
     }
 
     function initCardChrome() {
@@ -4271,24 +4272,19 @@
         const pin = document.createElement('button');
         pin.className = 'card-pin-btn';
         pin.type = 'button';
-        pin.textContent = '';
+        pin.innerHTML = CARD_PIN_ICON;
         pin.title = 'pin card';
         pin.setAttribute('aria-label', 'pin card');
         pin.setAttribute('aria-pressed', 'false');
-        ['pointerdown', 'pointerup', 'mousedown'].forEach(type => {
+        ['pointerdown', 'mousedown'].forEach(type => {
           pin.addEventListener(type, stopCardPinEvent);
-          tools.addEventListener(type, stopCardPinEvent);
         });
-        ['touchstart', 'touchend'].forEach(type => {
-          pin.addEventListener(type, stopCardPinEvent, { passive: true });
-          tools.addEventListener(type, stopCardPinEvent, { passive: true });
-        });
-        tools.addEventListener('click', stopCardPinEvent);
+        pin.addEventListener('touchstart', stopCardPinEvent, { passive: true });
         pin.addEventListener('click', event => {
           event.preventDefault();
           stopCardPinEvent(event);
           toggleCardPinned(card);
-        }, true);
+        });
         tools.appendChild(stale);
         tools.appendChild(pin);
         const toggle = head.querySelector('.toggle-icon');

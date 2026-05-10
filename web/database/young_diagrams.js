@@ -75,61 +75,20 @@ function resetExportToDefaultCitation() {
 //  Canvas setup
 // ─────────────────────────────────────────────
 const canvasEl = document.getElementById('yd-canvas');
-const ctx = canvasEl ? canvasEl.getContext('2d') : null;
+const ctx = canvasEl.getContext('2d');
 let W, H, bsize;
-let resizeQueued = false;
-
-function canvasWrapContentWidth(wrap) {
-  if (!wrap) return Math.max(160, Math.min(window.innerWidth || 320, 640) - 56);
-  const style = window.getComputedStyle ? window.getComputedStyle(wrap) : null;
-  const padLeft = style ? parseFloat(style.paddingLeft) || 0 : 16;
-  const padRight = style ? parseFloat(style.paddingRight) || 0 : 16;
-  const padding = padLeft + padRight;
-  const rectWidth = wrap.getBoundingClientRect ? wrap.getBoundingClientRect().width : 0;
-  const measured = Math.max(rectWidth || 0, wrap.clientWidth || 0);
-  if (measured > padding + 1) return measured - padding;
-
-  const panel = wrap.closest?.('.canvas-panel');
-  const panelWidth = panel?.getBoundingClientRect ? panel.getBoundingClientRect().width : 0;
-  if (panelWidth > padding + 1) return panelWidth - padding;
-
-  return Math.max(160, Math.min(window.innerWidth || 320, 640) - 56);
-}
 
 function resize() {
-  if (!canvasEl || !ctx) return;
   const wrap = document.getElementById('canvas-wrap');
-  W = Math.max(1, canvasWrapContentWidth(wrap));
+  W = Math.max(1, wrap.clientWidth - 32);
   bsize = W / gridCols;
   H = bsize * gridRows;
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  canvasEl.width  = Math.max(1, Math.round(W * dpr));
-  canvasEl.height = Math.max(1, Math.round(H * dpr));
-  canvasEl.style.setProperty('width', `${W}px`);
-  canvasEl.style.setProperty('height', `${H}px`);
-  if (ctx.setTransform) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  canvasEl.width  = Math.round(W);
+  canvasEl.height = Math.round(H);
   redraw();
 }
 
-function requestCanvasResize() {
-  if (resizeQueued) return;
-  resizeQueued = true;
-  requestAnimationFrame(() => {
-    resizeQueued = false;
-    resize();
-  });
-}
-
-window.addEventListener('resize', requestCanvasResize);
-window.addEventListener('orientationchange', () => {
-  requestCanvasResize();
-  setTimeout(requestCanvasResize, 250);
-});
-
-if (typeof ResizeObserver !== 'undefined') {
-  const wrap = document.getElementById('canvas-wrap');
-  if (wrap) new ResizeObserver(requestCanvasResize).observe(wrap);
-}
+window.addEventListener('resize', resize);
 
 // ─────────────────────────────────────────────
 //  Hook length at (r,c)
@@ -2706,9 +2665,9 @@ function exportBranching() {
   }
   // Toggle card — but NOT when dragging or just after dragging.
   const _origToggle = window.toggleCard;
-  window.toggleCard = function(headEl) {
+  window.toggleCard = function(eventOrHead, maybeHead) {
     if (dragging || Date.now() < suppressToggleUntil) return;
-    _origToggle(headEl);
+    _origToggle(eventOrHead, maybeHead);
   };
   document.addEventListener('DOMContentLoaded', initDnd);
   // Also init immediately if DOM is ready
@@ -3642,9 +3601,10 @@ function toggleCardPinned(card, pinned) {
   }
 }
 
+const CARD_PIN_ICON = '<svg class="card-pin-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5"></path><path d="M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V16h14v-.8a2 2 0 0 0-1.1-1.7l-1.8-.9A2 2 0 0 1 15 10.8V7a2 2 0 0 1 .6-1.4L17 4.2V2H7v2.2l1.4 1.4A2 2 0 0 1 9 7z"></path></svg>';
+
 function stopCardPinEvent(event) {
   event.stopPropagation();
-  if (event.stopImmediatePropagation) event.stopImmediatePropagation();
 }
 
 function initCardChrome() {
@@ -3659,24 +3619,19 @@ function initCardChrome() {
     const pin = document.createElement('button');
     pin.className = 'card-pin-btn';
     pin.type = 'button';
-    pin.textContent = '';
+    pin.innerHTML = CARD_PIN_ICON;
     pin.title = 'pin card';
     pin.setAttribute('aria-label', 'pin card');
     pin.setAttribute('aria-pressed', 'false');
-    ['pointerdown', 'pointerup', 'mousedown'].forEach(type => {
+    ['pointerdown', 'mousedown'].forEach(type => {
       pin.addEventListener(type, stopCardPinEvent);
-      tools.addEventListener(type, stopCardPinEvent);
     });
-    ['touchstart', 'touchend'].forEach(type => {
-      pin.addEventListener(type, stopCardPinEvent, { passive: true });
-      tools.addEventListener(type, stopCardPinEvent, { passive: true });
-    });
-    tools.addEventListener('click', stopCardPinEvent);
+    pin.addEventListener('touchstart', stopCardPinEvent, { passive: true });
     pin.addEventListener('click', event => {
       event.preventDefault();
       stopCardPinEvent(event);
       toggleCardPinned(card);
-    }, true);
+    });
     tools.appendChild(stale);
     tools.appendChild(pin);
     const toggle = head.querySelector('.toggle-icon');
@@ -3707,7 +3662,10 @@ function openCard(card, refreshOnOpen = true) {
   if (refreshOnOpen) refreshCardCalculation(card);
 }
 
-function toggleCard(headEl) {
+function toggleCard(eventOrHead, maybeHead) {
+  const event = maybeHead ? eventOrHead : window.event;
+  const headEl = maybeHead || eventOrHead;
+  if (event && event.target && event.target.closest && event.target.closest('.card-pin-btn')) return;
   const card = headEl.closest('.card');
   if (card.classList.contains('collapsed')) openCard(card);
   else collapseCard(card);
@@ -3811,4 +3769,4 @@ if (document.readyState === 'loading') {
 } else {
   initYoungDiagramPage();
 }
-window.addEventListener('load', requestCanvasResize, { once: true });
+window.addEventListener('load', resize, { once: true });

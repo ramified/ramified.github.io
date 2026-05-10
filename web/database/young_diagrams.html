@@ -44,7 +44,7 @@
 
         <!-- Statistics -->
         <div class="card collapsed">
-          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Statistics</span><em class="toggle-icon">▾</em></div>
+          <div class="card-head" onclick="toggleCard(event, this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Statistics</span><em class="toggle-icon">▾</em></div>
           <div class="card-body">
             <div class="stat-row">
               <span class="stat-label">Size |λ|</span>
@@ -79,7 +79,7 @@
 
         <!-- Lie Algebra Weight -->
         <div class="card collapsed">
-          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Lie Algebra Weight</span><em class="toggle-icon">&#9662;</em></div>
+          <div class="card-head" onclick="toggleCard(event, this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Lie Algebra Weight</span><em class="toggle-icon">&#9662;</em></div>
           <div class="card-body">
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
               <label class="stat-label" style="white-space:nowrap;flex-shrink:0;">Type:</label>
@@ -136,7 +136,7 @@
 
         <!-- Branching Rules -->
         <div class="card collapsed">
-          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Branching Rules</span><em class="toggle-icon">&#9662;</em></div>
+          <div class="card-head" onclick="toggleCard(event, this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Branching Rules</span><em class="toggle-icon">&#9662;</em></div>
           <div class="card-body">
             <div class="branching-rule-row" style="display:flex;align-items:center;gap:8px;">
               <label class="stat-label" style="white-space:nowrap;flex-shrink:0;">Rule:</label>
@@ -159,7 +159,7 @@
 
         <!-- Symmetric Functions -->
         <div class="card collapsed">
-          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Symmetric Functions</span><em class="toggle-icon">&#9662;</em></div>
+          <div class="card-head" onclick="toggleCard(event, this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Symmetric Functions</span><em class="toggle-icon">&#9662;</em></div>
           <div class="card-body">
             <div class="symfun-control-row symfun-n-row">
               <label class="symfun-control-label tooltip-label" tabindex="0" data-tooltip="N is the number of variables x_1,...,x_N." for="symfun-variable-count">N</label>
@@ -191,7 +191,7 @@
 
         <!-- Display Options -->
         <div class="card collapsed">
-          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Display Options</span><em class="toggle-icon">▾</em></div>
+          <div class="card-head" onclick="toggleCard(event, this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Display Options</span><em class="toggle-icon">▾</em></div>
           <div class="card-body">
             <label class="opt-row"><input type="checkbox" id="showhooks" checked onchange="redraw()"> Show hook lengths</label>
             <label class="opt-row"><input type="checkbox" id="shadehooks" checked onchange="redraw()"> Shade by hook length</label>
@@ -201,7 +201,7 @@
 
         <!-- Actions -->
         <div class="card collapsed">
-          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Actions</span><em class="toggle-icon">▾</em></div>
+          <div class="card-head" onclick="toggleCard(event, this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Actions</span><em class="toggle-icon">▾</em></div>
           <div class="card-body">
             <div class="action-row">
               <button class="btn" onclick="conjugate()">Conjugate λ′</button>
@@ -214,7 +214,7 @@
 
         <!-- Input -->
         <div class="card collapsed">
-          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">▾</em></div>
+          <div class="card-head" onclick="toggleCard(event, this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">▾</em></div>
           <div class="card-body">
             <div class="input-method">
               <label class="input-label" for="partition-input">Partition rows</label>
@@ -238,7 +238,7 @@
 
         <!-- Export -->
         <div class="card collapsed">
-          <div class="card-head" onclick="toggleCard(this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">▾</em></div>
+          <div class="card-head" onclick="toggleCard(event, this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">▾</em></div>
           <div class="card-body">
             <div class="action-row">
               <button class="btn" onclick="exportLaTeX()">LaTeX</button>
