@@ -156,6 +156,7 @@
 
   #canvas-wrap {
     padding: 16px;
+    aspect-ratio: 1;
   }
   canvas {
     display: block;
@@ -163,6 +164,7 @@
     height: auto !important;
     cursor: crosshair;
     border-radius: 2px;
+    background: #fffdf8;
   }
 
   /* ── right column ── */

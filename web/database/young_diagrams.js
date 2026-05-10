@@ -32,10 +32,7 @@ const layoutBreakpointMedia = typeof window.matchMedia === 'function'
   : null;
 
 function defaultGridSize() {
-  const isSmallScreen = layoutBreakpointMedia ? layoutBreakpointMedia.matches : false;
-  return isSmallScreen
-    ? { cols: 10, rows: 6 }
-    : { cols: 13, rows: 13 };
+  return { cols: 13, rows: 13 };
 }
 
 const _initialGrid = defaultGridSize();
@@ -78,9 +75,17 @@ const canvasEl = document.getElementById('yd-canvas');
 const ctx = canvasEl.getContext('2d');
 let W, H, bsize;
 
-function resize() {
+function measuredCanvasWrapWidth() {
   const wrap = document.getElementById('canvas-wrap');
-  W = Math.max(1, wrap.clientWidth - 32);
+  if (!wrap) return 0;
+  const rectWidth = wrap.getBoundingClientRect ? wrap.getBoundingClientRect().width : 0;
+  return Math.max(wrap.clientWidth || 0, rectWidth || 0);
+}
+
+function resize() {
+  const measuredWidth = measuredCanvasWrapWidth();
+  const fallbackWidth = Math.max(160, Math.min(window.innerWidth || 360, 640) - 56);
+  W = Math.max(1, (measuredWidth > 120 ? measuredWidth - 32 : fallbackWidth));
   bsize = W / gridCols;
   H = bsize * gridRows;
   canvasEl.width  = Math.round(W);
@@ -89,6 +94,15 @@ function resize() {
 }
 
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', scheduleCanvasResizePasses);
+
+function scheduleCanvasResizePasses() {
+  resize();
+  requestAnimationFrame(resize);
+  setTimeout(resize, 80);
+  setTimeout(resize, 240);
+  setTimeout(resize, 600);
+}
 
 // ─────────────────────────────────────────────
 //  Hook length at (r,c)
@@ -157,18 +171,28 @@ function hslHook(hk) {
   return `hsla(${hue},45%,62%,0.72)`;
 }
 
-const showHooks   = () => !!document.getElementById('showhooks')?.checked;
-const shadeHooks  = () => !!document.getElementById('shadehooks')?.checked;
-const showCoords  = () => !!document.getElementById('showcoords')?.checked;
+const showHooks   = () => {
+  const el = document.getElementById('showhooks');
+  return !!(el && el.checked);
+};
+const shadeHooks  = () => {
+  const el = document.getElementById('shadehooks');
+  return !!(el && el.checked);
+};
+const showCoords  = () => {
+  const el = document.getElementById('showcoords');
+  return !!(el && el.checked);
+};
 
 function redraw() {
   if (!ctx) return;
   computeHooks();
   ctx.clearRect(0, 0, W, H);
+  const mobileCanvas = typeof window.matchMedia === 'function' && window.matchMedia(SMALL_SCREEN_QUERY).matches;
 
   // grid
-  ctx.strokeStyle = 'rgba(180,170,158,0.45)';
-  ctx.lineWidth = 0.8;
+  ctx.strokeStyle = mobileCanvas ? 'rgba(125,112,100,0.68)' : 'rgba(180,170,158,0.45)';
+  ctx.lineWidth = mobileCanvas ? 1 : 0.8;
   for (let i = 0; i <= gridCols; i++) {
     ctx.beginPath(); ctx.moveTo(i*bsize, 0); ctx.lineTo(i*bsize, H); ctx.stroke();
   }
@@ -212,8 +236,8 @@ function redraw() {
   }
 
   // outer border
-  ctx.strokeStyle = 'rgba(30,24,18,0.7)';
-  ctx.lineWidth = 1.8;
+  ctx.strokeStyle = mobileCanvas ? 'rgba(30,24,18,0.82)' : 'rgba(30,24,18,0.7)';
+  ctx.lineWidth = mobileCanvas ? 2 : 1.8;
   ctx.strokeRect(0.9, 0.9, W-1.8, H-1.8);
 
   updateShapeBadge();
@@ -321,7 +345,7 @@ function setGridSize(cols, rows, clearDiagram = true, markCustomized = false) {
 function applyGridSizeFromInputs() {
   const colsInput = document.getElementById('grid-cols');
   const rowsInput = document.getElementById('grid-rows');
-  setGridSize(colsInput?.value, rowsInput?.value, true, true);
+  setGridSize(colsInput ? colsInput.value : undefined, rowsInput ? rowsInput.value : undefined, true, true);
 }
 
 function handleLayoutBreakpointChange() {
@@ -361,8 +385,10 @@ function updateYoungUrlState() {
   else params.delete('lambda');
   params.set('rows', String(gridRows));
   params.set('cols', String(gridCols));
-  const type = document.getElementById('lie-type')?.value;
-  const rank = document.getElementById('lie-rank')?.value;
+  const typeEl = document.getElementById('lie-type');
+  const rankEl = document.getElementById('lie-rank');
+  const type = typeEl ? typeEl.value : undefined;
+  const rank = rankEl ? rankEl.value : undefined;
   if (type) params.set('type', type);
   if (rank) params.set('rank', rank);
   const query = params.toString();
@@ -634,7 +660,7 @@ function copyShape() {
   const rows = rowLengths();
   const s = rows.length ? '(' + rows.join(', ') + ')' : '( )';
   document.getElementById('export-out').value = s;
-  navigator.clipboard?.writeText(s);
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(s);
 }
 
 // ─────────────────────────────────────────────
@@ -1594,7 +1620,7 @@ function syncSymfunVariableControl(lambda = rowLengths()) {
   const modeSelect = document.getElementById('symfun-infinite-mode');
   if (!input) return { infinite: false };
 
-  if (infinite?.checked) {
+  if (infinite && infinite.checked) {
     input.type = 'text';
     input.readOnly = true;
     input.value = '\u221e';
@@ -1619,8 +1645,8 @@ function syncSymfunVariableControl(lambda = rowLengths()) {
 function handleSymfunVariableInput() {
   const input = document.getElementById('symfun-variable-count');
   const infinite = document.getElementById('symfun-infinite');
-  if (infinite?.checked) return;
-  const raw = String(input?.value || '').trim();
+  if (infinite && infinite.checked) return;
+  const raw = String((input && input.value) || '').trim();
   symfunVariableCountTouched = true;
   symfunSavedFiniteVariableCount = raw;
   if (raw === '') return;
@@ -1658,12 +1684,12 @@ function initSymfunVariableControls() {
 
 function selectedSymfunInfiniteBasis() {
   const select = document.getElementById('symfun-infinite-basis');
-  return ['m', 's', 'p', 'e', 'h'].includes(select?.value) ? select.value : 'm';
+  return select && ['m', 's', 'p', 'e', 'h'].includes(select.value) ? select.value : 'm';
 }
 
 function selectedSymfunOmegaSource() {
   const select = document.getElementById('symfun-omega-source');
-  if (['m', 'p', 'e', 'h', 's'].includes(select?.value)) {
+  if (select && ['m', 'p', 'e', 'h', 's'].includes(select.value)) {
     symfunOmegaSource = select.value;
   }
   return symfunOmegaSource;
@@ -1689,7 +1715,7 @@ function symfunOmegaLabelHTML() {
 
 function selectedSymfunInfiniteMode() {
   const select = document.getElementById('symfun-infinite-mode');
-  return select?.value === 'polynomial' ? 'polynomial' : 'linear';
+  return select && select.value === 'polynomial' ? 'polynomial' : 'linear';
 }
 
 function conversionBasisForInfiniteMode(targetBasis, mode) {
@@ -2002,7 +2028,8 @@ function renderSymmetricFunctionChart() {
   if (!output) return;
 
   const lambda = rowLengths();
-  document.getElementById('symfun-preview')?.remove();
+  const oldSymfunPreview = document.getElementById('symfun-preview');
+  if (oldSymfunPreview) oldSymfunPreview.remove();
   setCardStaleById('symfun-output', false);
   const variableChoice = readSymfunVariableCount(lambda);
   if (variableChoice.error) {
@@ -2256,7 +2283,7 @@ function exportSymmetricFunctions() {
     } else if (err && err.message === 'kostka-too-large') {
       exportOut.value = `Schur/Kostka calculation is too large for exact browser-side export. Use a smaller diagram.`;
     } else {
-      exportOut.value = `Unable to export symmetric functions: ${err?.message || err}`;
+      exportOut.value = `Unable to export symmetric functions: ${(err && err.message) || err}`;
     }
   }
   revealExportCard();
@@ -2303,7 +2330,8 @@ function branchingCandidatePairEstimate(lam, rule) {
 }
 
 function renderBranchingPreview() {
-  document.getElementById('br-preview')?.remove();
+  const oldBranchingPreview = document.getElementById('br-preview');
+  if (oldBranchingPreview) oldBranchingPreview.remove();
 }
 
 function rejectBranching(message) {
@@ -3574,12 +3602,13 @@ let openChartCardSequence = 0;
 function isOpenChartLimitCard(card) {
   if (!card || !card.classList.contains('card')) return false;
   if (card.closest('.canvas-panel')) return false;
+  if (card.querySelector('#export-out')) return false;
   if (card.id === 'diagram-input-card' && card.getAttribute('draggable') !== 'true') return false;
   return true;
 }
 
 function setCardAriaExpanded(card, expanded) {
-  const head = card?.querySelector('.card-head');
+  const head = card ? card.querySelector('.card-head') : null;
   if (head) head.setAttribute('aria-expanded', String(!!expanded));
 }
 
@@ -3722,19 +3751,19 @@ function initCustomTooltips() {
   }
 
   document.addEventListener('pointerenter', (e) => {
-    const el = e.target.closest?.('[data-tooltip]');
+    const el = e.target && e.target.closest ? e.target.closest('[data-tooltip]') : null;
     if (el) showTooltip(el);
   }, true);
   document.addEventListener('pointerleave', (e) => {
-    const el = e.target.closest?.('[data-tooltip]');
+    const el = e.target && e.target.closest ? e.target.closest('[data-tooltip]') : null;
     if (el) hideTooltip(el);
   }, true);
   document.addEventListener('focusin', (e) => {
-    const el = e.target.closest?.('[data-tooltip]');
+    const el = e.target && e.target.closest ? e.target.closest('[data-tooltip]') : null;
     if (el) showTooltip(el);
   });
   document.addEventListener('focusout', (e) => {
-    const el = e.target.closest?.('[data-tooltip]');
+    const el = e.target && e.target.closest ? e.target.closest('[data-tooltip]') : null;
     if (el) hideTooltip(el);
   });
   window.addEventListener('scroll', () => { if (activeEl) placeTooltip(activeEl); }, true);
@@ -3759,8 +3788,7 @@ function initYoungDiagramPage() {
   initCustomTooltips();
   initSymfunVariableControls();
   resetExportToDefaultCitation();
-  resize();
-  requestAnimationFrame(resize);
+  scheduleCanvasResizePasses();
   onTypeChange();   // initialise lie algebra card UI state without computing collapsed data
 }
 
@@ -3769,4 +3797,4 @@ if (document.readyState === 'loading') {
 } else {
   initYoungDiagramPage();
 }
-window.addEventListener('load', resize, { once: true });
+window.addEventListener('load', scheduleCanvasResizePasses, { once: true });

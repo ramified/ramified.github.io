@@ -4220,6 +4220,7 @@
     function isOpenChartLimitCard(card) {
       if (!card || !card.classList.contains('card')) return false;
       if (card.closest('.canvas-panel')) return false;
+      if (card.querySelector('#export-out')) return false;
       if (card.id === 'diagram-input-card' && card.getAttribute('draggable') !== 'true') return false;
       if (card.style.display === 'none') return false;
       return true;
