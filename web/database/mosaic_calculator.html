@@ -70,6 +70,17 @@
       margin-top: 4px;
     }
 
+    .mosaic-import-input {
+      min-height: 78px;
+      line-height: 1.35;
+      resize: vertical;
+    }
+
+    .mosaic-import-button {
+      width: 100%;
+      margin-top: 8px;
+    }
+
     .mosaic-mode-row {
       display: grid;
       grid-template-columns: minmax(0, 1fr) max-content;
@@ -119,6 +130,10 @@
       gap: 8px;
       align-items: center;
       margin-top: 8px;
+    }
+
+    .mosaic-two-select-row {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .mosaic-view-row select {
@@ -189,6 +204,11 @@
       box-shadow: inset 0 0 0 1px var(--accent);
     }
 
+    .tile-swatch.dragging {
+      opacity: 0.42;
+      box-shadow: inset 0 0 0 1px var(--accent);
+    }
+
     .tile-swatch:active {
       cursor: grabbing;
       transform: scale(0.98);
@@ -201,26 +221,30 @@
       cursor: inherit;
     }
 
-    .trash-bin {
-      margin-top: 10px;
-      min-height: 48px;
-      border: 1px dashed var(--accent2);
+    .tile-drag-ghost {
+      position: fixed;
+      width: 58px;
+      height: 58px;
+      border: 1px solid var(--accent);
       border-radius: 3px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--accent2);
-      background: rgba(139,58,42,0.05);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.74rem;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      transition: background 0.15s, box-shadow 0.15s;
+      background: #fffdf8;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+      opacity: 0.86;
+      padding: 4px;
+      pointer-events: none;
+      z-index: 9999;
+      box-sizing: border-box;
+      transform: translate(-50%, -50%);
     }
 
-    .trash-bin.drag-over {
-      background: rgba(139,58,42,0.12);
-      box-shadow: inset 0 0 0 1px var(--accent2);
+    .tile-drag-ghost canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    body.tile-dragging * {
+      cursor: grabbing !important;
     }
 
     @media (max-width: 980px) {
@@ -318,10 +342,30 @@
           <label>rows <input type="number" id="input-rows" min="2" max="12" value="5"></label>
           <label>cols <input type="number" id="input-cols" min="2" max="12" value="5"></label>
         </div>
+        <div class="mosaic-view-row mosaic-two-select-row">
+          <label>
+            <span class="input-label" style="margin-bottom:4px;">Arc arrows</span>
+            <select id="arrow-mode">
+              <option value="none">Hidden</option>
+              <option value="show">Show pair direction</option>
+            </select>
+          </label>
+          <label>
+            <span class="input-label" style="margin-bottom:4px;">Canvas clicks</span>
+            <select id="edit-mode">
+              <option value="rotate">Rotate</option>
+              <option value="reorder">Reorder pairs</option>
+            </select>
+          </label>
+        </div>
+        <div class="input-method">
+          <span class="input-label">Mosaic Data</span>
+          <textarea id="import-input" class="mosaic-editor-input mosaic-import-input" spellcheck="false" autocomplete="off" placeholder="{ ... }"></textarea>
+          <button class="btn mosaic-import-button" id="generate-import">generate</button>
+        </div>
         <div class="input-method">
           <span class="input-label">Tile Preferences</span>
           <div id="tile-palette" class="tile-palette-grid" aria-label="Tile preferences"></div>
-          <div id="trash-bin" class="trash-bin" aria-label="Trash bin">trash</div>
         </div>
       </div>
     </section>
