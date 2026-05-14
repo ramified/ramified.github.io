@@ -18,15 +18,70 @@
       -webkit-user-select: none;
     }
 
+    .mosaic-toolbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding-left: 12px;
+      border-left: 1px solid var(--border);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .mosaic-toolbar-group label,
+    .mosaic-toolbar-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .mosaic-toolbar-select {
+      min-width: 92px;
+      padding: 2px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.82rem;
+    }
+
+    .mosaic-toolbar-select:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .mosaic-toolbar-toggle {
+      padding-left: 12px;
+      border-left: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .mosaic-toolbar-toggle input {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
     .mosaic-underbar {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       gap: 12px;
       padding: 0 16px 14px;
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.72rem;
       color: var(--muted);
       flex-wrap: wrap;
+    }
+
+    .mosaic-underbar-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
     }
 
     .mosaic-status-good { color: var(--accent); }
@@ -132,8 +187,21 @@
       margin-top: 8px;
     }
 
-    .mosaic-two-select-row {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+    .mosaic-inline-row {
+      display: grid;
+      grid-template-columns: 116px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .mosaic-inline-row .input-label {
+      margin-bottom: 0 !important;
+      white-space: nowrap;
+    }
+
+    .input-mode-panel[hidden] {
+      display: none !important;
     }
 
     .mosaic-view-row select {
@@ -153,6 +221,23 @@
       border-color: var(--accent);
     }
 
+    .mosaic-inline-row select {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+
+    .mosaic-inline-row select:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
     .mosaic-chip {
       display: inline-flex;
       align-items: center;
@@ -165,19 +250,6 @@
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.7rem;
       white-space: nowrap;
-    }
-
-    .mosaic-action-row {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-    }
-
-    .mosaic-action-row .btn {
-      width: 100%;
-      min-width: 0;
-      padding-left: 8px;
-      padding-right: 8px;
     }
 
     .tile-palette-grid {
@@ -243,6 +315,11 @@
       height: 100% !important;
     }
 
+    .mosaic-underbar-clear {
+      padding: 4px 12px;
+      font-size: 0.72rem;
+    }
+
     body.tile-dragging * {
       cursor: grabbing !important;
     }
@@ -252,11 +329,17 @@
     }
 
     @media (max-width: 520px) {
-      .mosaic-action-row,
       .mosaic-number-row,
       .mosaic-mode-row,
-      .mosaic-view-row {
+      .mosaic-view-row,
+      .mosaic-inline-row {
         grid-template-columns: 1fr;
+      }
+
+      .mosaic-toolbar-group,
+      .mosaic-toolbar-toggle {
+        padding-left: 0;
+        border-left: none;
       }
     }
   </style>
@@ -274,6 +357,19 @@
       <span class="panel-title-text">Mosaic Canvas</span>
       <div class="canvas-toolbar" aria-label="Mosaic canvas controls">
         <span class="shape-indicator" title="Editor status"><span id="status-badge" class="mosaic-chip">empty</span></span>
+        <span class="mosaic-toolbar-group" aria-label="Mosaic lattice">
+          <label title="Mosaic lattice">
+            <span>lattice</span>
+            <select id="lattice-select" class="mosaic-toolbar-select">
+              <option value="hexagonal">Hexagonal</option>
+              <option value="square">Square</option>
+            </select>
+          </label>
+        </span>
+        <label class="mosaic-toolbar-toggle" title="Connect opposite edges">
+          <input type="checkbox" id="wrap-board">
+          wrapped
+        </label>
         <span class="canvas-size-inline" aria-label="Board size">
           <label title="Mosaic rows">
             <span>rows</span>
@@ -291,82 +387,63 @@
       <canvas id="mosaic-canvas" tabindex="0" aria-label="Pipe mosaic"></canvas>
     </div>
     <div class="mosaic-underbar">
-      <span id="status-line">ready</span>
+      <span class="mosaic-underbar-left">
+        <button class="btn btn-ghost mosaic-underbar-clear" id="clear-board" type="button">clear</button>
+        <span id="status-line">ready</span>
+      </span>
       <span id="info-line">hexagonal, open</span>
     </div>
   </section>
 
   <aside class="side">
     <section class="card">
-      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Statistics</span><em class="toggle-icon">&#9662;</em></div>
-      <div class="card-body">
-        <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value" id="out-status">empty</span></div>
-        <div class="stat-row"><span class="stat-label">Lattice</span><span class="stat-value" id="out-lattice">hexagonal</span></div>
-        <div class="stat-row"><span class="stat-label">Boundary</span><span class="stat-value" id="out-boundary">open</span></div>
-        <div class="stat-row"><span class="stat-label">Filled tiles</span><span class="stat-value" id="out-tiles">0</span></div>
-        <div class="stat-row"><span class="stat-label">Connections</span><span class="stat-value" id="out-connections">0</span></div>
-        <div class="stat-row"><span class="stat-label">Open ends</span><span class="stat-value" id="out-open-ends">0</span></div>
-        <div class="stat-row"><span class="stat-label">Components</span><span class="stat-value" id="out-components">0</span></div>
-        <div class="stat-row"><span class="stat-label">Cycles</span><span class="stat-value" id="out-cycles">0</span></div>
-        <div class="stat-row"><span class="stat-label">Edits</span><span class="stat-value" id="out-moves">0</span></div>
-      </div>
-    </section>
-
-    <section class="card">
-      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Actions</span><em class="toggle-icon">&#9662;</em></div>
-      <div class="card-body">
-        <div class="mosaic-action-row">
-          <button class="btn" id="apply-input">apply</button>
-          <button class="btn btn-ghost" id="clear-board">clear canvas</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="card collapsed">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
-        <div class="mosaic-mode-row" aria-label="Mosaic mode">
-          <label>
-            <span class="input-label" style="margin-bottom:4px;">Lattice</span>
-            <select id="lattice-select">
-              <option value="hexagonal">Hexagonal</option>
-              <option value="square">Square</option>
-            </select>
-          </label>
-          <label class="mosaic-wrap-toggle" title="Connect opposite edges">
-            <input type="checkbox" id="wrap-board">
-            wrapped
-          </label>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Mode</span>
+          <select id="input-mode">
+            <option value="draw">Draw</option>
+            <option value="drag">Drag</option>
+            <option value="import">Import</option>
+          </select>
         </div>
-        <div class="mosaic-number-row" aria-label="Board dimensions">
-          <label>rows <input type="number" id="input-rows" min="2" max="12" value="5"></label>
-          <label>cols <input type="number" id="input-cols" min="2" max="12" value="5"></label>
-        </div>
-        <div class="mosaic-view-row mosaic-two-select-row">
-          <label>
-            <span class="input-label" style="margin-bottom:4px;">Arc arrows</span>
-            <select id="arrow-mode">
-              <option value="none">Hidden</option>
-              <option value="show">Show pair direction</option>
+        <div class="input-mode-panel" data-input-panel="draw">
+          <div class="mosaic-inline-row">
+            <span class="input-label">New pair layer</span>
+            <select id="draw-layer">
+              <option value="above">Above</option>
+              <option value="below">Below</option>
             </select>
-          </label>
-          <label>
-            <span class="input-label" style="margin-bottom:4px;">Canvas clicks</span>
+          </div>
+          <label class="opt-row"><input type="checkbox" id="draw-debug"> Draw debug overlay</label>
+        </div>
+        <div class="input-mode-panel" data-input-panel="drag">
+          <div class="mosaic-inline-row">
+            <span class="input-label">Canvas clicks</span>
             <select id="edit-mode">
               <option value="rotate">Rotate</option>
               <option value="reorder">Reorder pairs</option>
             </select>
-          </label>
+          </div>
+          <div class="input-method">
+            <span class="input-label">Tile Preferences</span>
+            <div id="tile-palette" class="tile-palette-grid" aria-label="Tile preferences"></div>
+          </div>
         </div>
-        <div class="input-method">
+        <div class="input-method input-mode-panel" data-input-panel="import">
           <span class="input-label">Mosaic Data</span>
           <textarea id="import-input" class="mosaic-editor-input mosaic-import-input" spellcheck="false" autocomplete="off" placeholder="{ ... }"></textarea>
           <button class="btn mosaic-import-button" id="generate-import">generate</button>
         </div>
-        <div class="input-method">
-          <span class="input-label">Tile Preferences</span>
-          <div id="tile-palette" class="tile-palette-grid" aria-label="Tile preferences"></div>
-        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Statistics</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="stat-row"><span class="stat-label">Filled tiles</span><span class="stat-value" id="out-tiles">0</span></div>
+        <div class="stat-row"><span class="stat-label">Open ends</span><span class="stat-value" id="out-open-ends">0</span></div>
+        <div class="stat-row"><span class="stat-label">Components</span><span class="stat-value" id="out-components">0</span></div>
       </div>
     </section>
 
@@ -375,15 +452,13 @@
       <div class="card-body">
         <label class="opt-row"><input type="checkbox" id="show-errors" checked> Show open ends</label>
         <label class="opt-row"><input type="checkbox" id="show-coords"> Show coordinates</label>
-        <div class="mosaic-view-row">
-          <label>
-            <span class="input-label" style="margin-bottom:4px;">Wrapped view</span>
-            <select id="wrapped-view-mode">
-              <option value="periodic">Periodic copies</option>
-              <option value="single">Single board</option>
-            </select>
-          </label>
-          <button class="btn btn-ghost" id="reset-view">reset view</button>
+        <label class="opt-row"><input type="checkbox" id="color-components" checked> Color components</label>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Wrapped view</span>
+          <select id="wrapped-view-mode">
+            <option value="periodic">Periodic copies</option>
+            <option value="single">Single board</option>
+          </select>
         </div>
       </div>
     </section>
