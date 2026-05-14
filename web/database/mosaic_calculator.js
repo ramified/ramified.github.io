@@ -26,6 +26,9 @@
   const MIN_BOARD = 2;
   const MIN_VIEW_SCALE = 0.45;
   const MAX_VIEW_SCALE = 2.8;
+  const MOSAIC_THEME = {
+    pipe: '#2f3437'
+  };
 
   const state = {
     rows: 5,
@@ -836,12 +839,13 @@
   function drawPipe(ctx, cell, mask, locked, palette) {
     const radius = geometry.radius;
     const dirs = maskToDirs(mask);
-    const pipeColor = locked ? palette.text : palette.accent;
+    const theme = getMosaicTheme(palette);
+    const pipeColor = locked ? theme.lockedPipe : theme.pipe;
 
     ctx.save();
     ctx.strokeStyle = pipeColor;
     ctx.lineWidth = Math.max(5, radius * 0.17);
-    ctx.lineCap = 'round';
+    ctx.lineCap = 'butt';
     ctx.lineJoin = 'round';
 
     dirs.forEach((dir) => {
@@ -854,11 +858,6 @@
 
     ctx.fillStyle = pipeColor;
     circle(ctx, cell.x, cell.y, Math.max(4, radius * 0.14));
-
-    if (dirs.length === 1) {
-      const bulb = edgePoint(cell.x, cell.y, dirs[0], radius * 0.6);
-      circle(ctx, bulb.x, bulb.y, Math.max(5, radius * 0.19));
-    }
     ctx.restore();
   }
 
@@ -1175,6 +1174,13 @@
       muted: styles.getPropertyValue('--muted').trim() || '#7a6f65',
       accent: styles.getPropertyValue('--accent').trim() || '#3d6b4f',
       accent2: styles.getPropertyValue('--accent2').trim() || '#8b3a2a'
+    };
+  }
+
+  function getMosaicTheme(palette) {
+    return {
+      pipe: MOSAIC_THEME.pipe,
+      lockedPipe: palette.text
     };
   }
 
