@@ -35,19 +35,19 @@
     cols: 5,
     lattice: 'hexagonal',
     wrapped: false,
-    seed: '',
-    solutionMasks: [],
     masks: [],
-    initialMasks: [],
-    locked: [],
-    moves: 0,
+    edits: 0,
     showErrors: true,
     showCoords: false,
-    lockMode: false,
     wrappedViewMode: 'periodic',
     viewScale: 1,
     viewX: 0,
     viewY: 0,
+    selectedMask: null,
+    selectedPaletteId: '',
+    drag: null,
+    dragPoint: null,
+    dragPreviewIndex: -1,
     hoverIndex: -1
   };
 
@@ -68,9 +68,7 @@
     bindCards();
     bindCanvas();
 
-    const seed = randomSeed();
-    refs.seedInput.value = seed;
-    createPuzzle(5, 5, seed, state.lattice, state.wrapped);
+    createBoard(5, 5, state.lattice, state.wrapped);
   }
 
   function collectRefs() {
@@ -78,19 +76,19 @@
     refs.canvasWrap = document.getElementById('canvas-wrap');
     refs.statusBadge = document.getElementById('status-badge');
     refs.statusLine = document.getElementById('status-line');
-    refs.seedLine = document.getElementById('seed-line');
+    refs.infoLine = document.getElementById('info-line');
     refs.gridRows = document.getElementById('grid-rows');
     refs.gridCols = document.getElementById('grid-cols');
     refs.inputRows = document.getElementById('input-rows');
     refs.inputCols = document.getElementById('input-cols');
-    refs.seedInput = document.getElementById('seed-input');
     refs.latticeSelect = document.getElementById('lattice-select');
     refs.wrapBoard = document.getElementById('wrap-board');
-    refs.lockMode = document.getElementById('lock-mode');
     refs.showErrors = document.getElementById('show-errors');
     refs.showCoords = document.getElementById('show-coords');
     refs.wrappedViewMode = document.getElementById('wrapped-view-mode');
     refs.resetView = document.getElementById('reset-view');
+    refs.tilePalette = document.getElementById('tile-palette');
+    refs.trashBin = document.getElementById('trash-bin');
     refs.exportOut = document.getElementById('export-out');
 
     refs.out = {
@@ -111,27 +109,14 @@
     refs.gridCols.addEventListener('change', () => generateFromControls('toolbar'));
     refs.inputRows.addEventListener('change', () => syncInputDimensions());
     refs.inputCols.addEventListener('change', () => syncInputDimensions());
-    refs.seedInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') generateFromControls('input');
-    });
     refs.latticeSelect.addEventListener('change', () => generateFromControls('input'));
     refs.wrapBoard.addEventListener('change', () => generateFromControls('input'));
 
-    document.getElementById('new-puzzle').addEventListener('click', () => generateFromControls('toolbar', true));
-    document.getElementById('shuffle-puzzle').addEventListener('click', shuffleCurrentPuzzle);
-    document.getElementById('reset-puzzle').addEventListener('click', resetPuzzle);
-    document.getElementById('check-puzzle').addEventListener('click', () => updateReport(true));
-    document.getElementById('solve-puzzle').addEventListener('click', solvePuzzle);
-    document.getElementById('clear-locks').addEventListener('click', clearLocks);
     document.getElementById('apply-input').addEventListener('click', () => generateFromControls('input'));
-    document.getElementById('random-seed').addEventListener('click', () => generateFromControls('input', true));
+    document.getElementById('clear-board').addEventListener('click', clearBoard);
     document.getElementById('refresh-export').addEventListener('click', refreshExport);
     document.getElementById('copy-export').addEventListener('click', copyExport);
 
-    refs.lockMode.addEventListener('change', () => {
-      state.lockMode = refs.lockMode.checked;
-      updateReport(false);
-    });
     refs.showErrors.addEventListener('change', () => {
       state.showErrors = refs.showErrors.checked;
       updateReport(false);
@@ -155,6 +140,102 @@
       normalizeViewOffset();
       draw(analyze());
     }, 80));
+
+    bindPalette();
+  }
+
+  function bindPalette() {
+    renderTilePalette();
+  }
+
+  function renderTilePalette() {
+    if (!refs.tilePalette) return;
+    refs.tilePalette.textContent = '';
+    const entries = getTilePreferences();
+    if (!entries.some((entry) => entry.id === state.selectedPaletteId)) {
+      state.selectedMask = null;
+      state.selectedPaletteId = '';
+    }
+
+    entries.forEach((entry) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'tile-swatch';
+      button.title = entry.label;
+      button.setAttribute('aria-label', entry.label);
+      button.dataset.mask = String(entry.mask);
+      button.dataset.paletteId = entry.id;
+      if (entry.id === state.selectedPaletteId) button.classList.add('active');
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      button.appendChild(canvas);
+      refs.tilePalette.appendChild(button);
+      drawTilePreview(canvas, entry.mask);
+
+      button.addEventListener('click', () => selectPaletteTile(entry));
+      button.addEventListener('pointerdown', (event) => beginPaletteDrag(event, entry));
+    });
+  }
+
+  function getTilePreferences() {
+    const lattice = getLattice();
+    if (lattice.shape === 'square') {
+      return [
+        { id: 'single', label: 'single', mask: maskFromDirs([0]) },
+        { id: 'straight', label: 'straight', mask: maskFromDirs([0, 2]) },
+        { id: 'corner', label: 'corner', mask: maskFromDirs([0, 1]) },
+        { id: 'tee', label: 'tee', mask: maskFromDirs([0, 1, 2]) },
+        { id: 'cross', label: 'cross', mask: maskFromDirs([0, 1, 2, 3]) }
+      ];
+    }
+    return [
+      { id: 'single', label: 'single', mask: maskFromDirs([0]) },
+      { id: 'straight', label: 'straight', mask: maskFromDirs([0, 3]) },
+      { id: 'bend', label: 'bend', mask: maskFromDirs([0, 1]) },
+      { id: 'wide-bend', label: 'wide bend', mask: maskFromDirs([0, 2]) },
+      { id: 'tee', label: 'tee', mask: maskFromDirs([0, 1, 2]) },
+      { id: 'branch', label: 'branch', mask: maskFromDirs([0, 1, 3]) },
+      { id: 'hub', label: 'hub', mask: maskFromDirs([0, 1, 2, 3, 4, 5]) }
+    ];
+  }
+
+  function selectPaletteTile(entry) {
+    state.selectedMask = entry.mask;
+    state.selectedPaletteId = entry.id;
+    refs.tilePalette.querySelectorAll('.tile-swatch').forEach((button) => {
+      button.classList.toggle('active', button.dataset.paletteId === entry.id);
+    });
+  }
+
+  function beginPaletteDrag(event, entry) {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    selectPaletteTile(entry);
+    state.drag = {
+      type: 'palette',
+      mask: entry.mask,
+      active: true
+    };
+
+    const onMove = (moveEvent) => {
+      updateDragPreview(moveEvent.clientX, moveEvent.clientY);
+    };
+    const onUp = (upEvent) => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      if (isOverCanvas(upEvent.clientX, upEvent.clientY)) {
+        const hit = hitTest(upEvent.clientX, upEvent.clientY);
+        if (hit >= 0) placeTile(hit, entry.mask);
+      }
+      clearEditorDrag();
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    event.preventDefault();
   }
 
   function bindCards() {
@@ -172,51 +253,95 @@
     let placeholder = null;
     let pointerId = null;
     let startY = 0;
+    let cardTop = 0;
+    let cardLeft = 0;
+    let cardWidth = 0;
+    let cardHeight = 0;
+    let ghost = null;
+    let ghostOffsetY = 0;
     let dragging = false;
+    const pointerOptions = { passive: false };
 
     side.addEventListener('pointerdown', (event) => {
       const handle = event.target.closest('.drag-handle');
       if (!handle) return;
+      event.preventDefault();
+      event.stopPropagation();
       const card = handle.closest('.card');
       if (!card) return;
       dragCard = card;
       pointerId = event.pointerId;
       startY = event.clientY;
+      const rect = card.getBoundingClientRect();
+      cardTop = rect.top;
+      cardLeft = rect.left;
+      cardWidth = rect.width;
+      cardHeight = rect.height;
+      ghostOffsetY = startY - cardTop;
       dragging = false;
-      handle.setPointerCapture(pointerId);
-      event.preventDefault();
-    });
+      if (handle.setPointerCapture) {
+        try { handle.setPointerCapture(pointerId); } catch (_) {}
+      }
+      document.addEventListener('pointermove', handleCardDragMove, pointerOptions);
+      document.addEventListener('pointerup', finishCardDrag, pointerOptions);
+      document.addEventListener('pointercancel', finishCardDrag, pointerOptions);
+    }, pointerOptions);
 
-    side.addEventListener('pointermove', (event) => {
+    function handleCardDragMove(event) {
       if (!dragCard || event.pointerId !== pointerId) return;
+      event.preventDefault();
       if (!dragging && Math.abs(event.clientY - startY) < 6) return;
       if (!dragging) {
         dragging = true;
+        suppressCardToggleUntil = Date.now() + 500;
+        document.body.classList.add('card-dragging');
         dragCard.classList.add('dragging');
         placeholder = document.createElement('div');
-        placeholder.className = 'card';
-        placeholder.style.height = `${dragCard.offsetHeight}px`;
-        placeholder.style.opacity = '0.18';
-        dragCard.parentElement.insertBefore(placeholder, dragCard.nextSibling);
+        placeholder.id = 'dnd-placeholder';
+        placeholder.style.cssText = `height:${cardHeight}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;transition:height 0.15s;`;
+        dragCard.parentElement.insertBefore(placeholder, dragCard);
+        ghost = dragCard.cloneNode(true);
+        ghost.id = 'dnd-ghost';
+        Object.assign(ghost.style, {
+          position: 'fixed',
+          left: `${cardLeft}px`,
+          width: `${cardWidth}px`,
+          top: `${event.clientY - ghostOffsetY}px`,
+          zIndex: 9999,
+          pointerEvents: 'none',
+          opacity: '0.88',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.22)',
+          borderRadius: '4px',
+          transition: 'none',
+          touchAction: 'none'
+        });
+        document.body.appendChild(ghost);
+        dragCard.style.display = 'none';
       }
+      if (ghost) ghost.style.top = `${event.clientY - ghostOffsetY}px`;
       const after = getCardAfterPointer(side, event.clientY, dragCard, placeholder);
       if (after) side.insertBefore(placeholder, after);
       else side.appendChild(placeholder);
-    });
-
-    side.addEventListener('pointerup', finishCardDrag);
-    side.addEventListener('pointercancel', finishCardDrag);
+    }
 
     function finishCardDrag(event) {
       if (!dragCard || (event && event.pointerId !== pointerId)) return;
+      if (event) event.preventDefault();
+      document.removeEventListener('pointermove', handleCardDragMove, pointerOptions);
+      document.removeEventListener('pointerup', finishCardDrag, pointerOptions);
+      document.removeEventListener('pointercancel', finishCardDrag, pointerOptions);
+      document.body.classList.remove('card-dragging');
       if (dragging && placeholder) {
+        dragCard.style.display = '';
         side.insertBefore(dragCard, placeholder);
         placeholder.remove();
-        suppressCardToggleUntil = Date.now() + 220;
+        if (ghost) ghost.remove();
+        suppressCardToggleUntil = Date.now() + 500;
       }
       dragCard.classList.remove('dragging');
       dragCard = null;
       placeholder = null;
+      ghost = null;
       pointerId = null;
       dragging = false;
     }
@@ -242,7 +367,7 @@
     refs.canvas.addEventListener('contextmenu', (event) => {
       event.preventDefault();
       const hit = hitTest(event.clientX, event.clientY);
-      if (hit >= 0) toggleLock(hit);
+      if (hit >= 0) deleteTile(hit);
     });
     refs.canvas.addEventListener('mouseleave', () => {
       state.hoverIndex = -1;
@@ -258,16 +383,14 @@
     });
   }
 
-  function generateFromControls(source, randomizeSeed = false) {
+  function generateFromControls(source) {
     const rowRef = source === 'toolbar' ? refs.gridRows : refs.inputRows;
     const colRef = source === 'toolbar' ? refs.gridCols : refs.inputCols;
     const rows = clampInt(rowRef.value, MIN_BOARD, MAX_BOARD, state.rows);
     const cols = clampInt(colRef.value, MIN_BOARD, MAX_BOARD, state.cols);
     const latticeName = LATTICES[refs.latticeSelect.value] ? refs.latticeSelect.value : state.lattice;
     const wrapped = refs.wrapBoard.checked;
-    const seed = randomizeSeed ? randomSeed() : (refs.seedInput.value.trim() || randomSeed());
-    refs.seedInput.value = seed;
-    createPuzzle(rows, cols, seed, latticeName, wrapped);
+    createBoard(rows, cols, latticeName, wrapped);
   }
 
   function syncInputDimensions() {
@@ -277,105 +400,55 @@
     refs.inputCols.value = cols;
   }
 
-  function createPuzzle(rows, cols, seed, latticeName, wrapped) {
+  function createBoard(rows, cols, latticeName, wrapped) {
     state.rows = rows;
     state.cols = cols;
     state.lattice = LATTICES[latticeName] ? latticeName : 'hexagonal';
     state.wrapped = !!wrapped;
-    state.seed = seed;
-    state.moves = 0;
+    state.edits = 0;
     state.hoverIndex = -1;
-    state.locked = Array(rows * cols).fill(false);
-
-    const lattice = getLattice();
-    const rng = mulberry32(hashString(`${seed}:${state.lattice}:${state.wrapped ? 'wrapped' : 'open'}:${rows}x${cols}`));
-    state.solutionMasks = buildSolutionTree(rows, cols, rng, lattice, state.wrapped);
-    state.masks = state.solutionMasks.map((mask) => rotateMask(mask, Math.floor(rng() * lattice.sides)));
-
-    if (state.masks.every((mask, index) => mask === state.solutionMasks[index])) {
-      const first = state.masks.findIndex((mask) => mask !== 0);
-      if (first >= 0) state.masks[first] = rotateMask(state.masks[first], 1);
-    }
-
-    state.initialMasks = state.masks.slice();
+    state.masks = Array(rows * cols).fill(0);
     syncAllInputs(rows, cols, state.lattice, state.wrapped);
+    renderTilePalette();
     resetView(false);
     resizeCanvas();
     updateReport(false);
   }
 
-  function buildSolutionTree(rows, cols, rng, lattice, wrapped) {
-    const total = rows * cols;
-    const masks = Array(total).fill(0);
-    const parent = Array.from({ length: total }, (_, index) => index);
-    const rank = Array(total).fill(0);
-    const edges = [];
-
-    for (let row = 0; row < rows; row += 1) {
-      for (let col = 0; col < cols; col += 1) {
-        const from = indexOf(row, col, cols);
-        for (const dir of lattice.forwardDirs) {
-          const next = neighbor(row, col, dir, rows, cols, lattice, wrapped);
-          if (!next) continue;
-          edges.push({ from, to: indexOf(next.row, next.col, cols), dir });
-        }
-      }
-    }
-
-    shuffle(edges, rng);
-    let chosen = 0;
-    for (const edge of edges) {
-      if (union(parent, rank, edge.from, edge.to)) {
-        masks[edge.from] |= (1 << edge.dir);
-        masks[edge.to] |= (1 << lattice.opposite[edge.dir]);
-        chosen += 1;
-        if (chosen === total - 1) break;
-      }
-    }
-    return masks;
-  }
-
-  function shuffleCurrentPuzzle() {
-    const rng = mulberry32(hashString(`${state.seed}:shuffle:${Date.now()}`));
-    const lattice = getLattice();
-    state.masks = state.solutionMasks.map((mask) => rotateMask(mask, Math.floor(rng() * lattice.sides)));
-    if (state.masks.every((mask, index) => mask === state.solutionMasks[index])) {
-      const first = state.masks.findIndex((mask) => mask !== 0);
-      if (first >= 0) state.masks[first] = rotateMask(state.masks[first], 1);
-    }
-    state.initialMasks = state.masks.slice();
-    state.locked = Array(state.rows * state.cols).fill(false);
-    state.moves = 0;
-    updateReport(false);
-  }
-
-  function resetPuzzle() {
-    state.masks = state.initialMasks.slice();
-    state.locked = Array(state.rows * state.cols).fill(false);
-    state.moves = 0;
-    updateReport(false);
-  }
-
-  function solvePuzzle() {
-    state.masks = state.solutionMasks.slice();
-    state.locked = Array(state.rows * state.cols).fill(false);
-    updateReport(false);
-  }
-
-  function clearLocks() {
-    state.locked = Array(state.rows * state.cols).fill(false);
+  function clearBoard() {
+    state.masks = Array(state.rows * state.cols).fill(0);
+    state.edits += 1;
     updateReport(false);
   }
 
   function rotateTile(index, steps) {
-    if (state.locked[index]) return;
     state.masks[index] = rotateMask(state.masks[index], steps);
-    state.moves += 1;
+    state.edits += 1;
     updateReport(false);
   }
 
-  function toggleLock(index) {
-    state.locked[index] = !state.locked[index];
+  function placeTile(index, mask) {
+    if (index < 0 || mask == null) return;
+    if (state.masks[index] === mask) return;
+    state.masks[index] = mask;
+    state.edits += 1;
+    updateReport(false);
+  }
+
+  function deleteTile(index) {
+    if (index < 0 || !state.masks[index]) return;
+    state.masks[index] = 0;
+    state.edits += 1;
+    updateReport(false);
+  }
+
+  function moveTile(fromIndex, toIndex) {
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+    const mask = state.masks[fromIndex];
+    if (!mask) return;
+    state.masks[toIndex] = mask;
+    state.masks[fromIndex] = 0;
+    state.edits += 1;
     updateReport(false);
   }
 
@@ -392,6 +465,7 @@
     }
 
     const hit = hitTest(event.clientX, event.clientY);
+    const existingMask = hit >= 0 ? state.masks[hit] : 0;
     pointerState = {
       id: event.pointerId,
       index: hit,
@@ -401,13 +475,13 @@
       lastY: event.clientY,
       moved: false
     };
+    state.drag = existingMask ? {
+      type: 'canvas',
+      sourceIndex: hit,
+      mask: existingMask,
+      active: false
+    } : null;
     longPressFired = false;
-    if (hit >= 0 && event.pointerType !== 'mouse') {
-      longPressTimer = window.setTimeout(() => {
-        longPressFired = true;
-        toggleLock(hit);
-      }, 520);
-    }
     refs.canvas.setPointerCapture(event.pointerId);
     event.preventDefault();
   }
@@ -429,6 +503,12 @@
       pointerState.moved = true;
       clearLongPressTimer();
     }
+    if (state.drag && state.drag.type === 'canvas' && pointerState.moved) {
+      state.drag.active = true;
+      updateDragPreview(event.clientX, event.clientY);
+      event.preventDefault();
+      return;
+    }
     if (state.wrapped && pointerState.moved) {
       panViewByClientDelta(event.clientX - pointerState.lastX, event.clientY - pointerState.lastY);
       pointerState.lastX = event.clientX;
@@ -444,10 +524,21 @@
     }
     clearLongPressTimer();
     const hit = hitTest(event.clientX, event.clientY);
-    if (!pointerState.moved && hit === pointerState.index && hit >= 0 && !longPressFired) {
-      if (state.lockMode) toggleLock(hit);
-      else rotateTile(hit, event.shiftKey ? -1 : 1);
+    if (state.drag && state.drag.type === 'canvas' && state.drag.active) {
+      if (isOverTrash(event.clientX, event.clientY)) {
+        deleteTile(state.drag.sourceIndex);
+      } else if (hit >= 0) {
+        moveTile(state.drag.sourceIndex, hit);
+      }
+      clearEditorDrag();
+      clearPointerState(event);
+      return;
     }
+    if (!pointerState.moved && hit === pointerState.index && hit >= 0 && !longPressFired) {
+      if (state.selectedMask != null) placeTile(hit, state.selectedMask);
+      else if (state.masks[hit]) rotateTile(hit, event.shiftKey ? -1 : 1);
+    }
+    clearEditorDrag();
     clearPointerState(event);
   }
 
@@ -459,6 +550,7 @@
       try { refs.canvas.releasePointerCapture(event.pointerId); } catch (_) {}
     }
     pointerState = null;
+    if (!state.drag || state.drag.type === 'canvas') clearEditorDrag();
     longPressFired = false;
   }
 
@@ -590,6 +682,7 @@
   function analyze() {
     const total = state.rows * state.cols;
     const lattice = getLattice();
+    const active = state.masks.reduce((count, mask) => count + (mask ? 1 : 0), 0);
     const parent = Array.from({ length: total }, (_, index) => index);
     const rank = Array(total).fill(0);
     let openEnds = 0;
@@ -599,6 +692,7 @@
       const row = Math.floor(index / state.cols);
       const col = index % state.cols;
       const mask = state.masks[index] || 0;
+      if (!mask) continue;
       for (let dir = 0; dir < lattice.sides; dir += 1) {
         if (!(mask & (1 << dir))) continue;
         const next = neighbor(row, col, dir, state.rows, state.cols, lattice, state.wrapped);
@@ -619,15 +713,19 @@
       }
     }
 
-    const components = new Set(parent.map((_, index) => find(parent, index))).size;
-    const cycles = Math.max(0, alignedEdges - total + components);
-    const solved = openEnds === 0 && components === 1 && cycles === 0;
-    let label = 'working';
-    let message = `${openEnds} open end${openEnds === 1 ? '' : 's'}`;
+    const activeIndices = state.masks
+      .map((mask, index) => (mask ? index : -1))
+      .filter((index) => index >= 0);
+    const components = activeIndices.length
+      ? new Set(activeIndices.map((index) => find(parent, index))).size
+      : 0;
+    const cycles = Math.max(0, alignedEdges - active + components);
+    let label = active === 0 ? 'empty' : 'editing';
+    let message = active === 0 ? 'empty canvas' : `${openEnds} open end${openEnds === 1 ? '' : 's'}`;
 
-    if (solved) {
-      label = 'solved';
-      message = 'solved';
+    if (active > 0 && openEnds === 0) {
+      label = 'closed';
+      message = components > 1 ? `${components} closed components` : 'closed network';
     } else if (components > 1 && openEnds === 0) {
       label = 'disconnected';
       message = `${components} components`;
@@ -638,12 +736,11 @@
 
     return {
       total,
-      targetEdges: Math.max(0, total - 1),
+      active,
       alignedEdges,
       openEnds,
       components,
       cycles,
-      solved,
       label,
       message
     };
@@ -654,20 +751,20 @@
     refs.out.status.textContent = report.label;
     refs.out.lattice.textContent = getLattice().label;
     refs.out.boundary.textContent = state.wrapped ? 'wrapped' : 'open';
-    refs.out.tiles.textContent = String(report.total);
-    refs.out.connections.textContent = `${report.alignedEdges}/${report.targetEdges}`;
+    refs.out.tiles.textContent = `${report.active}/${report.total}`;
+    refs.out.connections.textContent = String(report.alignedEdges);
     refs.out.openEnds.textContent = String(report.openEnds);
     refs.out.components.textContent = String(report.components);
     refs.out.cycles.textContent = String(report.cycles);
-    refs.out.moves.textContent = String(state.moves);
+    refs.out.moves.textContent = String(state.edits);
 
     refs.statusBadge.textContent = report.label;
-    refs.statusBadge.classList.toggle('mosaic-status-good', report.solved);
-    refs.statusBadge.classList.toggle('mosaic-status-bad', !report.solved && (report.openEnds > 0 || report.cycles > 0));
+    refs.statusBadge.classList.toggle('mosaic-status-good', report.label === 'closed');
+    refs.statusBadge.classList.toggle('mosaic-status-bad', report.openEnds > 0 || report.cycles > 0);
     refs.statusLine.textContent = manualCheck ? `checked: ${report.message}` : report.message;
-    refs.statusLine.classList.toggle('mosaic-status-good', report.solved);
-    refs.statusLine.classList.toggle('mosaic-status-bad', !report.solved && report.openEnds > 0);
-    refs.seedLine.textContent = `${getLattice().label}, ${state.wrapped ? 'wrapped' : 'open'} · seed ${state.seed}`;
+    refs.statusLine.classList.toggle('mosaic-status-good', report.label === 'closed');
+    refs.statusLine.classList.toggle('mosaic-status-bad', report.openEnds > 0);
+    refs.infoLine.textContent = `${getLattice().label}, ${state.wrapped ? 'wrapped' : 'open'} · ${report.active} filled`;
 
     refreshExport();
     draw(report);
@@ -756,10 +853,12 @@
         drawBoardCopy(ctx, report, palette, offset);
       });
       ctx.restore();
+      drawDragGhost(ctx, palette);
       return;
     }
 
     drawBoardCopy(ctx, report, palette, { x: 0, y: 0 });
+    drawDragGhost(ctx, palette);
   }
 
   function drawBoardCopy(ctx, report, palette, offset) {
@@ -768,6 +867,28 @@
     for (let index = 0; index < state.masks.length; index += 1) {
       drawTile(ctx, index, report, palette);
     }
+    ctx.restore();
+  }
+
+  function drawDragGhost(ctx, palette) {
+    if (!state.drag || !state.drag.active || !state.dragPoint || !state.drag.mask) return;
+    const radius = geometry.radius * 0.88;
+    const points = tilePoints(state.dragPoint.x, state.dragPoint.y, radius);
+
+    ctx.save();
+    ctx.globalAlpha = 0.78;
+    ctx.beginPath();
+    points.forEach((point, pointIndex) => {
+      if (pointIndex === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(61,107,79,0.16)';
+    ctx.strokeStyle = palette.accent;
+    ctx.lineWidth = 2;
+    ctx.fill();
+    ctx.stroke();
+    drawPipe(ctx, state.dragPoint, state.drag.mask, palette);
     ctx.restore();
   }
 
@@ -814,7 +935,9 @@
     const radius = geometry.radius;
     const mask = state.masks[index] || 0;
     const points = tilePoints(cell.x, cell.y, radius * 0.96);
-    const locked = state.locked[index];
+    const isDragTarget = !!state.drag && index === state.dragPreviewIndex;
+    const isDragSource = !!state.drag && state.drag.active && state.drag.type === 'canvas' && state.drag.sourceIndex === index;
+    const displayMask = isDragTarget && state.drag.mask ? state.drag.mask : mask;
     const isHover = index === state.hoverIndex;
 
     ctx.beginPath();
@@ -823,24 +946,24 @@
       else ctx.lineTo(point.x, point.y);
     });
     ctx.closePath();
-    ctx.fillStyle = report.solved ? 'rgba(61,107,79,0.08)' : (locked ? '#f1ede5' : '#fffdf8');
-    ctx.strokeStyle = isHover ? palette.accent : palette.border;
-    ctx.lineWidth = isHover ? 2 : 1;
+    ctx.fillStyle = isDragTarget ? 'rgba(61,107,79,0.12)' : (isDragSource ? '#eee7dd' : (mask ? '#fffdf8' : '#f8f5ee'));
+    ctx.strokeStyle = (isHover || isDragTarget) ? palette.accent : palette.border;
+    ctx.lineWidth = (isHover || isDragTarget) ? 2 : 1;
     ctx.fill();
     ctx.stroke();
 
-    drawPipe(ctx, cell, mask, locked, palette);
+    drawPipe(ctx, cell, displayMask, palette);
 
-    if (state.showErrors) drawOpenEndMarks(ctx, index, cell, mask, palette);
+    if (state.showErrors && !isDragTarget) drawOpenEndMarks(ctx, index, cell, mask, palette);
     if (state.showCoords) drawCellLabel(ctx, cell, palette);
-    if (locked) drawLock(ctx, cell, palette);
   }
 
-  function drawPipe(ctx, cell, mask, locked, palette) {
+  function drawPipe(ctx, cell, mask, palette) {
     const radius = geometry.radius;
     const dirs = maskToDirs(mask);
+    if (!dirs.length) return;
     const theme = getMosaicTheme(palette);
-    const pipeColor = locked ? theme.lockedPipe : theme.pipe;
+    const pipeColor = theme.pipe;
 
     ctx.save();
     ctx.strokeStyle = pipeColor;
@@ -900,6 +1023,86 @@
     ctx.restore();
   }
 
+  function drawTilePreview(canvas, mask) {
+    const ctx = canvas.getContext('2d');
+    const palette = getPalette();
+    const theme = getMosaicTheme(palette);
+    const lattice = getLattice();
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const radius = 24;
+    const points = lattice.shape === 'square'
+      ? squarePoints(cx, cy, radius * 0.86)
+      : hexPoints(cx, cy, radius * 0.88, lattice);
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = '#fffdf8';
+    ctx.strokeStyle = palette.border;
+    ctx.lineWidth = 1;
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = theme.pipe;
+    ctx.fillStyle = theme.pipe;
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'round';
+    for (let dir = 0; dir < lattice.sides; dir += 1) {
+      if (!(mask & (1 << dir))) continue;
+      const angle = lattice.angles[dir];
+      const endX = cx + Math.cos(angle) * radius * 0.67;
+      const endY = cy + Math.sin(angle) * radius * 0.67;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(endX, endY);
+      ctx.stroke();
+    }
+    circle(ctx, cx, cy, 4);
+  }
+
+  function isOverCanvas(clientX, clientY) {
+    const rect = refs.canvas.getBoundingClientRect();
+    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+  }
+
+  function isOverTrash(clientX, clientY) {
+    if (!refs.trashBin) return false;
+    const rect = refs.trashBin.getBoundingClientRect();
+    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+  }
+
+  function updateTrashHover(clientX, clientY) {
+    if (!refs.trashBin) return;
+    refs.trashBin.classList.toggle('drag-over', isOverTrash(clientX, clientY));
+  }
+
+  function updateDragPreview(clientX, clientY) {
+    updateTrashHover(clientX, clientY);
+    const overCanvas = isOverCanvas(clientX, clientY);
+    const nextIndex = overCanvas ? hitTest(clientX, clientY) : -1;
+    const hadPoint = !!state.dragPoint;
+    state.dragPoint = overCanvas ? clientPointToLogical(clientX, clientY) : null;
+    if (nextIndex !== state.dragPreviewIndex || state.dragPoint || hadPoint) {
+      state.dragPreviewIndex = nextIndex;
+      draw(analyze());
+    }
+  }
+
+  function clearEditorDrag() {
+    const hadPreview = state.dragPreviewIndex >= 0 || !!state.dragPoint;
+    state.drag = null;
+    state.dragPoint = null;
+    state.dragPreviewIndex = -1;
+    if (refs.trashBin) refs.trashBin.classList.remove('drag-over');
+    if (hadPreview) draw(analyze());
+  }
+
   function hitTest(clientX, clientY) {
     if (!geometry) return -1;
     const point = state.wrapped
@@ -953,18 +1156,12 @@
       },
       rows: state.rows,
       cols: state.cols,
-      seed: state.seed,
-      moves: state.moves,
-      solved: report.solved,
+      edits: state.edits,
+      filledTiles: report.active,
       tiles: state.masks.map((mask, index) => ({
         row: Math.floor(index / state.cols) + 1,
         col: (index % state.cols) + 1,
-        edges: maskToDirs(mask).map((dir) => lattice.dirNames[dir]),
-        locked: state.locked[index]
-      })),
-      solution: state.solutionMasks.map((mask, index) => ({
-        row: Math.floor(index / state.cols) + 1,
-        col: (index % state.cols) + 1,
+        mask,
         edges: maskToDirs(mask).map((dir) => lattice.dirNames[dir])
       }))
     };
@@ -1011,6 +1208,10 @@
       if (mask & (1 << dir)) dirs.push(dir);
     }
     return dirs;
+  }
+
+  function maskFromDirs(dirs) {
+    return dirs.reduce((mask, dir) => mask | (1 << dir), 0);
   }
 
   function rotateMask(mask, steps) {
@@ -1107,15 +1308,6 @@
     return true;
   }
 
-  function shuffle(array, rng) {
-    for (let index = array.length - 1; index > 0; index -= 1) {
-      const swapIndex = Math.floor(rng() * (index + 1));
-      const temp = array[index];
-      array[index] = array[swapIndex];
-      array[swapIndex] = temp;
-    }
-  }
-
   function tilePoints(x, y, radius) {
     const lattice = getLattice();
     if (lattice.shape === 'square') return squarePoints(x, y, radius);
@@ -1179,8 +1371,7 @@
 
   function getMosaicTheme(palette) {
     return {
-      pipe: MOSAIC_THEME.pipe,
-      lockedPipe: palette.text
+      pipe: MOSAIC_THEME.pipe
     };
   }
 
@@ -1198,30 +1389,6 @@
 
   function modulo(value, size) {
     return ((value % size) + size) % size;
-  }
-
-  function hashString(text) {
-    let hash = 2166136261;
-    for (let index = 0; index < text.length; index += 1) {
-      hash ^= text.charCodeAt(index);
-      hash = Math.imul(hash, 16777619);
-    }
-    return hash >>> 0;
-  }
-
-  function mulberry32(seed) {
-    let value = seed >>> 0;
-    return function random() {
-      value += 0x6D2B79F5;
-      let mixed = value;
-      mixed = Math.imul(mixed ^ (mixed >>> 15), mixed | 1);
-      mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
-      return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-
-  function randomSeed() {
-    return `mosaic-${Math.floor(Math.random() * 0xFFFFFF).toString(36).padStart(5, '0')}`;
   }
 
   function clamp(value, min, max) {
