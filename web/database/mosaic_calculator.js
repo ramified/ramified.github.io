@@ -53,7 +53,7 @@
     showCoords: false,
     colorComponents: true,
     componentColors: [],
-    drawDebug: false,
+    drawStyle: 'shade',
     wrappedViewMode: 'periodic',
     viewScale: 1,
     viewX: 0,
@@ -66,6 +66,8 @@
     drag: null,
     dragPoint: null,
     dragPreviewIndex: -1,
+    pickedComponent: null,
+    pickHoverHit: null,
     drawDebugHit: null,
     hoverIndex: -1
   };
@@ -106,10 +108,12 @@
     refs.wrapBoard = document.getElementById('wrap-board');
     refs.editMode = document.getElementById('edit-mode');
     refs.drawLayer = document.getElementById('draw-layer');
-    refs.drawDebug = document.getElementById('draw-debug');
+    refs.drawStyle = document.getElementById('draw-style');
+    refs.applyPick = document.getElementById('apply-pick');
     refs.showErrors = document.getElementById('show-errors');
     refs.showCoords = document.getElementById('show-coords');
     refs.colorComponents = document.getElementById('color-components');
+    refs.wrappedViewRow = document.getElementById('wrapped-view-row');
     refs.wrappedViewMode = document.getElementById('wrapped-view-mode');
     refs.tilePalette = document.getElementById('tile-palette');
     refs.importInput = document.getElementById('import-input');
@@ -133,12 +137,13 @@
       state.inputMode = normalizeInputMode(refs.inputMode.value);
       state.hoverIndex = -1;
       state.drawDebugHit = null;
+      state.pickHoverHit = null;
+      if (state.inputMode !== 'pick') state.pickedComponent = null;
       clearEditorDrag();
       cancelDrawGesture();
       if (state.inputMode === 'drag') renderTilePalette();
       updateInputModePanels();
-      draw(analyze());
-      refreshExport();
+      updateReport(false);
     });
     refs.latticeSelect.addEventListener('change', () => generateFromControls());
     refs.wrapBoard.addEventListener('change', () => generateFromControls());
@@ -150,14 +155,15 @@
       state.drawLayer = normalizeDrawLayer(refs.drawLayer.value);
       refreshExport();
     });
-    refs.drawDebug.addEventListener('change', () => {
-      state.drawDebug = refs.drawDebug.checked;
+    refs.drawStyle.addEventListener('change', () => {
+      state.drawStyle = normalizeDrawStyle(refs.drawStyle.value);
       state.drawDebugHit = null;
       updateReport(false);
     });
 
     document.getElementById('clear-board').addEventListener('click', clearBoard);
     document.getElementById('generate-import').addEventListener('click', generateFromImport);
+    refs.applyPick.addEventListener('click', applyPickedComponent);
     document.getElementById('refresh-export').addEventListener('click', refreshExport);
     document.getElementById('copy-export').addEventListener('click', copyExport);
 
@@ -433,6 +439,7 @@
     });
     refs.canvas.addEventListener('mouseleave', () => {
       clearDrawDebugHit(false);
+      clearPickHoverHit(false);
       state.hoverIndex = -1;
       draw(analyze());
     });
@@ -440,6 +447,14 @@
       if (pointerState) return;
       if (state.inputMode === 'import') {
         if (state.hoverIndex !== -1) {
+          state.hoverIndex = -1;
+          draw(analyze());
+        }
+        return;
+      }
+      if (state.inputMode === 'pick') {
+        const pickChanged = updatePickHoverFromPoint(event.clientX, event.clientY, false);
+        if (state.hoverIndex !== -1 || pickChanged) {
           state.hoverIndex = -1;
           draw(analyze());
         }
@@ -470,6 +485,8 @@
     state.edits = 0;
     state.hoverIndex = -1;
     state.drawDebugHit = null;
+    state.pickHoverHit = null;
+    state.pickedComponent = null;
     state.tiles = Array(rows * cols).fill(null);
     syncAllInputs(rows, cols, state.lattice, state.wrapped);
     renderTilePalette();
@@ -503,6 +520,8 @@
     state.wrapped = nextWrapped;
     state.hoverIndex = -1;
     state.drawDebugHit = null;
+    state.pickHoverHit = null;
+    state.pickedComponent = null;
     if (oldLattice !== nextLattice) {
       state.selectedTile = null;
       state.selectedPaletteId = '';
@@ -590,10 +609,16 @@
     state.showCoords = !!(payload.display && payload.display.showCoords);
     state.colorComponents = !(payload.display && payload.display.colorComponents === false);
     state.componentColors = [];
-    state.drawDebug = !!(payload.display && payload.display.drawDebug);
+    state.drawStyle = normalizeDrawStyle(
+      payload.drawStyle
+      || (payload.display && payload.display.drawStyle)
+      || (payload.display && payload.display.drawDebug ? 'debug' : 'shade')
+    );
     state.edits = Number.isFinite(Number(payload.edits)) ? Math.max(0, Math.trunc(Number(payload.edits))) : 0;
     state.hoverIndex = -1;
     state.drawDebugHit = null;
+    state.pickHoverHit = null;
+    state.pickedComponent = null;
     state.selectedTile = null;
     state.selectedPaletteId = '';
     state.tiles = importTiles(payload.tiles, rows, cols);
@@ -602,7 +627,7 @@
     refs.showErrors.checked = state.showErrors;
     refs.showCoords.checked = state.showCoords;
     refs.colorComponents.checked = state.colorComponents;
-    refs.drawDebug.checked = state.drawDebug;
+    refs.drawStyle.value = state.drawStyle;
     renderTilePalette();
     resizeCanvas();
     applyImportedView(payload.view);
@@ -661,6 +686,8 @@
 
   function clearBoard() {
     state.tiles = Array(state.rows * state.cols).fill(null);
+    state.pickedComponent = null;
+    state.pickHoverHit = null;
     state.edits += 1;
     updateReport(false);
   }
@@ -730,7 +757,7 @@
 
   function beginDrawGesture(event) {
     const origin = drawOriginFromPoint(event.clientX, event.clientY);
-    setDrawDebugHit(edgeHitTest(event.clientX, event.clientY, 0), false);
+    updateDrawDebugFromPoint(event.clientX, event.clientY, false);
     pointerState = {
       id: event.pointerId,
       index: origin ? origin.index : -1,
@@ -753,10 +780,17 @@
 
   function updateDrawGesture(event) {
     if (!drawState) return;
-    updateDrawDebugFromPoint(event.clientX, event.clientY);
+    if (state.drawStyle === 'shade' && drawState.current) {
+      updateDrawShadeFromCurrent(event.clientX, event.clientY);
+    } else {
+      updateDrawDebugFromPoint(event.clientX, event.clientY);
+    }
     if (!drawState.current) {
       const firstEntry = firstDrawEntry(event.clientX, event.clientY);
-      if (firstEntry) startDrawTile(firstEntry);
+      if (firstEntry) {
+        startDrawTile(firstEntry);
+        if (state.drawStyle === 'shade') updateDrawShadeFromCurrent(event.clientX, event.clientY);
+      }
       return;
     }
 
@@ -764,6 +798,10 @@
     if (backtrackDir === drawState.current.entryDir) {
       if (drawState.history.length) undoLastDrawSegment();
       else restorePendingDrawTile();
+      if (state.drawStyle === 'shade') {
+        if (drawState.current) updateDrawShadeFromCurrent(event.clientX, event.clientY);
+        else clearDrawDebugHit();
+      }
       return;
     }
 
@@ -777,7 +815,10 @@
     updateReport(false);
 
     const next = nextDrawEntry(finished, exitDir);
-    if (next) startDrawTile(next);
+    if (next) {
+      startDrawTile(next);
+      if (state.drawStyle === 'shade') updateDrawShadeFromCurrent(event.clientX, event.clientY);
+    }
   }
 
   function drawOriginFromPoint(clientX, clientY) {
@@ -870,6 +911,7 @@
     restoreDrawTile(drawState.current);
     drawState.current = null;
     drawState.completed = drawState.history.length > 0;
+    if (state.drawStyle === 'shade') clearDrawDebugHit(false);
     updateReport(false);
     return true;
   }
@@ -898,15 +940,17 @@
     if (!drawState) return;
     if (drawState.current) {
       restoreDrawTile(drawState.current);
-      updateReport(false);
     }
     drawState = null;
+    if (state.drawStyle === 'shade') clearDrawDebugHit(false);
+    updateReport(false);
   }
 
   function cancelDrawGesture(redraw = true) {
     if (!drawState) return;
     if (drawState.current) restoreDrawTile(drawState.current);
     drawState = null;
+    if (state.drawStyle === 'shade') clearDrawDebugHit(false);
     if (redraw) updateReport(false);
   }
 
@@ -927,6 +971,126 @@
       && ((pair[0] === first && pair[1] === second) || (pair[0] === second && pair[1] === first));
   }
 
+  function beginPickGesture(event) {
+    pointerState = {
+      id: event.pointerId,
+      index: -1,
+      x: event.clientX,
+      y: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      moved: false
+    };
+    refs.canvas.setPointerCapture(event.pointerId);
+  }
+
+  function updatePickGesture(event) {
+    if (!pointerState || event.pointerId !== pointerState.id) return;
+    const dx = event.clientX - pointerState.x;
+    const dy = event.clientY - pointerState.y;
+    if (Math.hypot(dx, dy) > 8) pointerState.moved = true;
+  }
+
+  function finishPickGesture(event) {
+    if (!pointerState || event.pointerId !== pointerState.id) return;
+    if (!pointerState.moved && isOverCanvas(event.clientX, event.clientY)) {
+      pickComponentAtPoint(event.clientX, event.clientY);
+    }
+  }
+
+  function pickComponentAtPoint(clientX, clientY) {
+    const hit = edgeHitTest(clientX, clientY, DRAW_START_EDGE_RATIO);
+    const report = analyze();
+    const component = hit ? componentAtEdgeHit(hit, report) : null;
+    state.pickedComponent = component;
+    state.pickHoverHit = component == null ? null : pickHoverHitFromEdgeHit(hit, component);
+    updateReport(false);
+  }
+
+  function componentAtEdgeHit(hit, report) {
+    if (!hit || !report || !report.arcComponents) return null;
+    const tile = normalizeTile(state.tiles[hit.index]);
+    const pairIndex = tile.findIndex((pair) => pair[0] === hit.dir || pair[1] === hit.dir);
+    if (pairIndex < 0) return null;
+    const component = report.arcComponents[hit.index]
+      ? report.arcComponents[hit.index][pairIndex]
+      : null;
+    return Number.isInteger(component) && component >= 0 ? component : null;
+  }
+
+  function applyPickedComponent() {
+    if (state.pickedComponent == null) return;
+    const report = analyze();
+    const keepComponent = state.pickedComponent;
+    let changed = false;
+
+    state.tiles = state.tiles.map((tile, tileIndex) => {
+      const arcs = normalizeTile(tile);
+      if (!arcs.length) {
+        if (tile != null) changed = true;
+        return null;
+      }
+      const components = report.arcComponents[tileIndex] || [];
+      const kept = arcs.filter((_, arcIndex) => components[arcIndex] === keepComponent);
+      if (kept.length === arcs.length) return cloneTile(tile);
+      changed = true;
+      return kept.length ? kept.map((pair) => pair.slice(0, 2)) : null;
+    });
+
+    state.pickedComponent = null;
+    state.pickHoverHit = null;
+    if (changed) state.edits += 1;
+    updateReport(false);
+  }
+
+  function updatePickHoverFromPoint(clientX, clientY, redraw = true) {
+    if (state.inputMode !== 'pick') return false;
+    const hit = edgeHitTest(clientX, clientY, DRAW_START_EDGE_RATIO);
+    const report = analyze();
+    const component = hit ? componentAtEdgeHit(hit, report) : null;
+    return setPickHoverHit(component == null ? null : pickHoverHitFromEdgeHit(hit, component), redraw);
+  }
+
+  function pickHoverHitFromEdgeHit(hit, component) {
+    return {
+      index: hit.index,
+      dir: hit.dir,
+      component,
+      offset: { x: hit.offset.x, y: hit.offset.y }
+    };
+  }
+
+  function setPickHoverHit(hit, redraw = true) {
+    const next = hit
+      ? {
+        index: hit.index,
+        dir: hit.dir,
+        component: hit.component,
+        offset: { x: hit.offset.x, y: hit.offset.y }
+      }
+      : null;
+    if (samePickHoverHit(state.pickHoverHit, next)) return false;
+    state.pickHoverHit = next;
+    if (redraw) draw(analyze());
+    return true;
+  }
+
+  function clearPickHoverHit(redraw = true) {
+    if (!state.pickHoverHit) return false;
+    state.pickHoverHit = null;
+    if (redraw) draw(analyze());
+    return true;
+  }
+
+  function samePickHoverHit(left, right) {
+    if (!left || !right) return left === right;
+    return left.index === right.index
+      && left.dir === right.dir
+      && left.component === right.component
+      && Math.abs(left.offset.x - right.offset.x) < 0.001
+      && Math.abs(left.offset.y - right.offset.y) < 0.001;
+  }
+
   function handlePointerDown(event) {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -941,6 +1105,11 @@
 
     if (state.inputMode === 'draw') {
       beginDrawGesture(event);
+      event.preventDefault();
+      return;
+    }
+    if (state.inputMode === 'pick') {
+      beginPickGesture(event);
       event.preventDefault();
       return;
     }
@@ -992,6 +1161,11 @@
       event.preventDefault();
       return;
     }
+    if (state.inputMode === 'pick') {
+      updatePickGesture(event);
+      event.preventDefault();
+      return;
+    }
     if (state.inputMode !== 'drag') return;
 
     if (!pointerState || event.pointerId !== pointerState.id) return;
@@ -1024,6 +1198,11 @@
       finishDrawGesture(event);
       clearPointerState(event);
       if (handledClick) return;
+      return;
+    }
+    if (state.inputMode === 'pick') {
+      finishPickGesture(event);
+      clearPointerState(event);
       return;
     }
     if (state.inputMode !== 'drag') {
@@ -1287,6 +1466,7 @@
 
   function updateReport(manualCheck) {
     const report = analyze();
+    normalizePickedComponent(report);
     refs.out.tiles.textContent = `${report.active}/${report.total}`;
     refs.out.openEnds.textContent = String(report.openEnds);
     refs.out.components.textContent = String(report.components);
@@ -1299,8 +1479,22 @@
     refs.statusLine.classList.toggle('mosaic-status-bad', report.openEnds > 0);
     refs.infoLine.textContent = `${getLattice().label}, ${state.wrapped ? 'wrapped' : 'open'} · ${report.active} filled`;
 
+    updatePickControls();
     refreshExport();
     draw(report);
+  }
+
+  function normalizePickedComponent(report) {
+    if (state.pickedComponent == null) return;
+    const hasComponent = report.arcComponents.some((components) => (
+      components.some((component) => component === state.pickedComponent)
+    ));
+    if (!hasComponent) state.pickedComponent = null;
+  }
+
+  function updatePickControls() {
+    if (!refs.applyPick) return;
+    refs.applyPick.disabled = state.inputMode !== 'pick' || state.pickedComponent == null;
   }
 
   function resizeCanvas() {
@@ -1388,14 +1582,16 @@
       getBoardCopyOffsets().forEach((offset) => {
         drawBoardCopy(ctx, report, palette, offset);
       });
-      drawDrawDebugOverlay(ctx, palette);
+      drawDrawDebugOverlay(ctx, palette, report);
+      drawPickHoverOverlay(ctx, palette, report);
       ctx.restore();
       drawDragGhost(ctx, palette);
       return;
     }
 
     drawBoardCopy(ctx, report, palette, { x: 0, y: 0 });
-    drawDrawDebugOverlay(ctx, palette);
+    drawDrawDebugOverlay(ctx, palette, report);
+    drawPickHoverOverlay(ctx, palette, report);
     drawDragGhost(ctx, palette);
   }
 
@@ -1430,9 +1626,74 @@
     ctx.restore();
   }
 
-  function drawDrawDebugOverlay(ctx, palette) {
-    if (state.inputMode !== 'draw' || !state.drawDebug || !state.drawDebugHit) return;
-    const hit = state.drawDebugHit;
+  function drawPickHoverOverlay(ctx, palette, report) {
+    if (state.inputMode !== 'pick' || !state.pickHoverHit) return;
+    const hit = state.pickHoverHit;
+    const cell = geometry.cells[hit.index];
+    if (!cell) return;
+
+    const radius = geometry.radius;
+    const tile = {
+      x: cell.x + hit.offset.x,
+      y: cell.y + hit.offset.y
+    };
+    const markers = [{ x: tile.x, y: tile.y, dir: hit.dir }];
+    const neighborMarker = matchingNeighborEdgeMarker(hit);
+    if (neighborMarker) markers.push(neighborMarker);
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    markers.forEach((marker) => {
+      drawPickEdgeMarker(ctx, marker.x, marker.y, marker.dir, radius, palette.accent, 2);
+    });
+    ctx.restore();
+  }
+
+  function matchingNeighborEdgeMarker(hit) {
+    const lattice = getLattice();
+    const cell = geometry.cells[hit.index];
+    if (!cell) return null;
+    const next = neighbor(cell.row, cell.col, hit.dir, state.rows, state.cols, lattice, state.wrapped);
+    if (!next) return null;
+    const nextIndex = indexOf(next.row, next.col, state.cols);
+    const opposite = lattice.opposite[hit.dir];
+    if (!normalizeTile(state.tiles[nextIndex]).some((pair) => pair[0] === opposite || pair[1] === opposite)) {
+      return null;
+    }
+    const nextOffset = drawContinuationOffset({
+      index: hit.index,
+      offset: hit.offset
+    }, hit.dir, nextIndex);
+    const nextCell = geometry.cells[nextIndex];
+    if (!nextCell) return null;
+    return {
+      x: nextCell.x + nextOffset.x,
+      y: nextCell.y + nextOffset.y,
+      dir: opposite
+    };
+  }
+
+  function drawPickEdgeMarker(ctx, x, y, dir, radius, color, width) {
+    const segment = edgeSegmentPoints(x, y, dir, radius * 0.96);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(segment.start.x, segment.start.y);
+    ctx.lineTo(segment.end.x, segment.end.y);
+    ctx.stroke();
+  }
+
+  function drawDrawDebugOverlay(ctx, palette, report) {
+    if (state.inputMode !== 'draw' || state.drawStyle === 'none' || !state.drawDebugHit) return;
+    if (state.drawStyle === 'shade') {
+      drawDrawShadeOverlay(ctx, palette, report, state.drawDebugHit);
+      return;
+    }
+    drawDrawDebugEdgeOverlay(ctx, palette, state.drawDebugHit);
+  }
+
+  function drawDrawDebugEdgeOverlay(ctx, palette, hit) {
     const cell = geometry.cells[hit.index];
     if (!cell) return;
 
@@ -1498,6 +1759,102 @@
     ctx.restore();
   }
 
+  function drawDrawShadeOverlay(ctx, palette, report, hit) {
+    const cell = geometry.cells[hit.index];
+    if (!cell || !hit.point) return;
+
+    const radius = geometry.radius;
+    const tile = {
+      x: cell.x + hit.offset.x,
+      y: cell.y + hit.offset.y
+    };
+    const edge = edgePoint(tile.x, tile.y, hit.dir, edgeConnectionDistance(radius));
+    const pointer = hit.point;
+    const distance = Math.hypot(pointer.x - edge.x, pointer.y - edge.y);
+    if (!Number.isFinite(distance) || distance < 1.5) return;
+
+    const color = drawShadeColor(hit, report, palette);
+    const pipeWidth = Math.max(5, radius * 0.17);
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.12;
+    ctx.lineWidth = pipeWidth * 2.4;
+    drawPerpendicularShadePath(ctx, edge, pointer, hit.dir, radius);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.34;
+    ctx.lineWidth = pipeWidth * 0.82;
+    drawPerpendicularShadePath(ctx, edge, pointer, hit.dir, radius);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawShadeColor(hit, report, palette) {
+    const tile = normalizeTile(state.tiles[hit.index]);
+    const pairIndex = tile.findIndex((pair) => pair[0] === hit.dir || pair[1] === hit.dir);
+    if (pairIndex < 0) return palette.accent;
+
+    const theme = getMosaicTheme(palette);
+    if (state.colorComponents && report && report.arcComponents && report.arcComponents[hit.index]) {
+      return componentPipeColor(report.arcComponents[hit.index][pairIndex], theme);
+    }
+    return theme.pipe;
+  }
+
+  function drawPerpendicularShadePath(ctx, start, end, dir, radius) {
+    const angle = getLattice().angles[dir];
+    const baseTangent = { x: Math.cos(angle), y: Math.sin(angle) };
+    const normal = { x: -baseTangent.y, y: baseTangent.x };
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const distanceSq = (dx * dx) + (dy * dy);
+    const normalProjection = (dx * normal.x) + (dy * normal.y);
+
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+
+    if (distanceSq < 0.001 || Math.abs(normalProjection) < 0.001) {
+      const distance = Math.sqrt(distanceSq);
+      const controlDistance = Math.max(radius * 0.28, distance * 0.45);
+      const tangentSign = ((dx * baseTangent.x) + (dy * baseTangent.y)) < 0 ? -1 : 1;
+      ctx.quadraticCurveTo(
+        start.x + (baseTangent.x * tangentSign * controlDistance),
+        start.y + (baseTangent.y * tangentSign * controlDistance),
+        end.x,
+        end.y
+      );
+      return;
+    }
+
+    const signedRadius = distanceSq / (2 * normalProjection);
+    const center = {
+      x: start.x + (normal.x * signedRadius),
+      y: start.y + (normal.y * signedRadius)
+    };
+    const arcRadius = Math.abs(signedRadius);
+    if (!Number.isFinite(arcRadius) || arcRadius < 0.001 || arcRadius > radius * 12) {
+      const distance = Math.sqrt(distanceSq);
+      const controlDistance = Math.max(radius * 0.28, distance * 0.45);
+      const tangentSign = ((dx * baseTangent.x) + (dy * baseTangent.y)) < 0 ? -1 : 1;
+      ctx.quadraticCurveTo(
+        start.x + (baseTangent.x * tangentSign * controlDistance),
+        start.y + (baseTangent.y * tangentSign * controlDistance),
+        end.x,
+        end.y
+      );
+      return;
+    }
+
+    const startAngle = Math.atan2(start.y - center.y, start.x - center.x);
+    const endAngle = Math.atan2(end.y - center.y, end.x - center.x);
+    const clockwise = moduloAngle(endAngle - startAngle);
+    const anticlockwise = moduloAngle(startAngle - endAngle);
+    ctx.arc(center.x, center.y, arcRadius, startAngle, endAngle, anticlockwise < clockwise);
+  }
+
   function applyViewTransform(ctx) {
     const cx = geometry.width / 2;
     const cy = geometry.height / 2;
@@ -1546,10 +1903,10 @@
     const isDragTarget = !!state.drag && index === state.dragPreviewIndex;
     const isDragSource = !!state.drag && state.drag.active && state.drag.type === 'canvas' && state.drag.sourceIndex === index;
     const displayTile = isDragTarget && !isTileEmpty(state.drag.tile) ? state.drag.tile : tile;
-    const arcComponents = !isDragTarget && state.colorComponents && report.arcComponents
+    const arcComponents = !isDragTarget && report.arcComponents
       ? report.arcComponents[index]
       : null;
-    const isHover = index === state.hoverIndex;
+    const isHover = state.inputMode !== 'pick' && index === state.hoverIndex;
 
     ctx.beginPath();
     points.forEach((point, pointIndex) => {
@@ -1575,25 +1932,35 @@
     if (!arcs.length) return;
     const theme = getMosaicTheme(palette);
     const pipeWidth = Math.max(5, radius * 0.17);
-    const gapWidth = pipeWidth + Math.max(4, radius * 0.09);
 
     ctx.save();
     ctx.lineCap = 'butt';
     ctx.lineJoin = 'round';
 
     arcs.forEach((pair, index) => {
+      const componentIndex = arcComponents ? arcComponents[index] : null;
+      const strokeScale = componentStrokeScale(componentIndex);
+      const currentPipeWidth = pipeWidth * strokeScale;
+      const currentGapWidth = currentPipeWidth + Math.max(4, radius * 0.09);
       if (index > 0) {
         ctx.strokeStyle = '#fffdf8';
-        ctx.lineWidth = gapWidth;
+        ctx.lineWidth = currentGapWidth;
         drawArcPath(ctx, cell, pair, radius);
       }
-      const pipeColor = componentPipeColor(arcComponents ? arcComponents[index] : null, theme);
+      const pipeColor = componentPipeColor(componentIndex, theme);
       ctx.strokeStyle = pipeColor;
       ctx.fillStyle = pipeColor;
-      ctx.lineWidth = pipeWidth;
+      ctx.lineWidth = currentPipeWidth;
       drawArcPath(ctx, cell, pair, radius);
     });
     ctx.restore();
+  }
+
+  function componentStrokeScale(componentIndex) {
+    if (state.inputMode !== 'pick' || state.pickedComponent == null || componentIndex == null || componentIndex < 0) {
+      return 1;
+    }
+    return componentIndex === state.pickedComponent ? 1.22 : 0.34;
   }
 
   function drawOpenEndMarks(ctx, index, cell, mask, palette) {
@@ -1768,17 +2135,31 @@
   }
 
   function updateDrawDebugFromPoint(clientX, clientY, redraw = true) {
-    if (state.inputMode !== 'draw' || !state.drawDebug) return false;
-    return setDrawDebugHit(edgeHitTest(clientX, clientY, 0), redraw);
+    if (state.inputMode !== 'draw' || state.drawStyle === 'none') return false;
+    if (state.drawStyle === 'shade') return clearDrawDebugHit(redraw);
+    const hit = edgeHitTest(clientX, clientY, 0);
+    if (hit) hit.point = clientPointToBoardPoint(clientX, clientY);
+    return setDrawDebugHit(hit, redraw);
+  }
+
+  function updateDrawShadeFromCurrent(clientX, clientY, redraw = true) {
+    if (!drawState || !drawState.current) return false;
+    return setDrawDebugHit({
+      index: drawState.current.index,
+      dir: drawState.current.entryDir,
+      offset: { x: drawState.current.offset.x, y: drawState.current.offset.y },
+      point: clientPointToBoardPoint(clientX, clientY)
+    }, redraw);
   }
 
   function setDrawDebugHit(hit, redraw = true) {
-    if (state.inputMode !== 'draw' || !state.drawDebug) return false;
+    if (state.inputMode !== 'draw' || state.drawStyle === 'none') return false;
     const next = hit
       ? {
         index: hit.index,
         dir: hit.dir,
-        offset: { x: hit.offset.x, y: hit.offset.y }
+        offset: { x: hit.offset.x, y: hit.offset.y },
+        point: hit.point ? { x: hit.point.x, y: hit.point.y } : null
       }
       : null;
     if (sameDrawDebugHit(state.drawDebugHit, next)) return false;
@@ -1799,7 +2180,14 @@
     return left.index === right.index
       && left.dir === right.dir
       && Math.abs(left.offset.x - right.offset.x) < 0.001
-      && Math.abs(left.offset.y - right.offset.y) < 0.001;
+      && Math.abs(left.offset.y - right.offset.y) < 0.001
+      && sameOptionalPoint(left.point, right.point);
+  }
+
+  function sameOptionalPoint(left, right) {
+    if (!left || !right) return left === right;
+    return Math.abs(left.x - right.x) < 0.001
+      && Math.abs(left.y - right.y) < 0.001;
   }
 
   function edgeHitAtBoardPoint(point, minDistanceRatio = 0.42) {
@@ -1959,11 +2347,13 @@
       inputMode: state.inputMode,
       clickMode: state.editMode,
       drawLayer: state.drawLayer,
+      drawStyle: state.drawStyle,
       display: {
         showOpenEnds: state.showErrors,
         showCoords: state.showCoords,
         colorComponents: state.colorComponents,
-        drawDebug: state.drawDebug
+        drawStyle: state.drawStyle,
+        drawDebug: state.drawStyle === 'debug'
       },
       view: {
         scale: Number(state.viewScale.toFixed(4)),
@@ -2020,10 +2410,12 @@
     refs.wrapBoard.checked = wrapped;
     refs.editMode.value = state.editMode;
     refs.drawLayer.value = state.drawLayer;
-    refs.drawDebug.checked = state.drawDebug;
+    refs.drawStyle.value = state.drawStyle;
     refs.colorComponents.checked = state.colorComponents;
     refs.wrappedViewMode.value = state.wrappedViewMode;
     updateInputModePanels();
+    updateDisplayControls();
+    updatePickControls();
   }
 
   function updateInputModePanels() {
@@ -2031,6 +2423,12 @@
       const modes = (panel.dataset.inputPanel || '').split(/\s+/);
       panel.hidden = !modes.includes(state.inputMode);
     });
+  }
+
+  function updateDisplayControls() {
+    if (!refs.wrappedViewRow) return;
+    refs.wrappedViewRow.hidden = !state.wrapped;
+    refs.wrappedViewMode.disabled = !state.wrapped;
   }
 
   function generateTilePreferences(lattice) {
@@ -2169,11 +2567,15 @@
   }
 
   function normalizeInputMode(mode) {
-    return ['draw', 'drag', 'import'].includes(mode) ? mode : 'draw';
+    return ['draw', 'drag', 'pick', 'import'].includes(mode) ? mode : 'draw';
   }
 
   function normalizeDrawLayer(layer) {
     return layer === 'below' ? 'below' : 'above';
+  }
+
+  function normalizeDrawStyle(style) {
+    return ['none', 'debug', 'shade'].includes(style) ? style : 'none';
   }
 
   function normalizeDir(dir, sides) {
@@ -2317,6 +2719,20 @@
     const lattice = getLattice();
     if (lattice.shape === 'square') return squarePoints(x, y, radius);
     return hexPoints(x, y, radius, lattice);
+  }
+
+  function edgeSegmentPoints(x, y, dir, radius) {
+    const lattice = getLattice();
+    const points = tilePoints(x, y, radius);
+    if (lattice.shape === 'square') {
+      const start = points[(dir + 1) % lattice.sides];
+      const end = points[(dir + 2) % lattice.sides];
+      return { start, end };
+    }
+    return {
+      start: points[modulo(dir - 1, lattice.sides)],
+      end: points[dir]
+    };
   }
 
   function squarePoints(x, y, radius) {

@@ -200,7 +200,9 @@
       white-space: nowrap;
     }
 
-    .input-mode-panel[hidden] {
+    .input-mode-panel[hidden],
+    .mosaic-inline-row[hidden],
+    .mosaic-view-row[hidden] {
       display: none !important;
     }
 
@@ -404,6 +406,7 @@
           <select id="input-mode">
             <option value="draw">Draw</option>
             <option value="drag">Drag</option>
+            <option value="pick">Pick</option>
             <option value="import">Import</option>
           </select>
         </div>
@@ -415,7 +418,14 @@
               <option value="below">Below</option>
             </select>
           </div>
-          <label class="opt-row"><input type="checkbox" id="draw-debug"> Draw debug overlay</label>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Draw preview</span>
+            <select id="draw-style">
+              <option value="none">None</option>
+              <option value="debug">Debug</option>
+              <option value="shade" selected>Shade</option>
+            </select>
+          </div>
         </div>
         <div class="input-mode-panel" data-input-panel="drag">
           <div class="mosaic-inline-row">
@@ -429,6 +439,9 @@
             <span class="input-label">Tile Preferences</span>
             <div id="tile-palette" class="tile-palette-grid" aria-label="Tile preferences"></div>
           </div>
+        </div>
+        <div class="input-mode-panel" data-input-panel="pick">
+          <button class="btn mosaic-import-button" id="apply-pick" type="button" disabled>pick</button>
         </div>
         <div class="input-method input-mode-panel" data-input-panel="import">
           <span class="input-label">Mosaic Data</span>
@@ -453,7 +466,7 @@
         <label class="opt-row"><input type="checkbox" id="show-errors" checked> Show open ends</label>
         <label class="opt-row"><input type="checkbox" id="show-coords"> Show coordinates</label>
         <label class="opt-row"><input type="checkbox" id="color-components" checked> Color components</label>
-        <div class="mosaic-inline-row">
+        <div class="mosaic-inline-row" id="wrapped-view-row" hidden>
           <span class="input-label">Wrapped view</span>
           <select id="wrapped-view-mode">
             <option value="periodic">Periodic copies</option>
