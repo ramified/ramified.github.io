@@ -29,6 +29,7 @@
   const DRAW_START_EDGE_RATIO = 0.42;
   const DRAW_EXIT_EDGE_RATIO = 0.94;
   const DRAW_BACKTRACK_EDGE_RATIO = 1.03;
+  const PICK_UNCONNECTED_LIFT_ALPHA = 0.32;
   const HEX_AXIAL_DELTAS = [
     [1, 0],
     [0, 1],
@@ -69,6 +70,7 @@
     dragPoint: null,
     dragPreviewIndex: -1,
     pickedComponent: null,
+    pickedAnchor: null,
     pickHoverHit: null,
     drawDebugHit: null,
     hoverIndex: -1
@@ -147,7 +149,10 @@
       state.hoverIndex = -1;
       state.drawDebugHit = null;
       state.pickHoverHit = null;
-      if (state.inputMode !== 'pick') state.pickedComponent = null;
+      if (state.inputMode !== 'pick') {
+        state.pickedComponent = null;
+        state.pickedAnchor = null;
+      }
       clearEditorDrag();
       cancelDrawGesture();
       if (state.inputMode === 'drag') renderTilePalette();
@@ -530,6 +535,7 @@
     state.drawDebugHit = null;
     state.pickHoverHit = null;
     state.pickedComponent = null;
+    state.pickedAnchor = null;
     state.tiles = Array(rows * cols).fill(null);
     syncAllInputs(rows, cols, state.lattice, state.wrapped);
     renderTilePalette();
@@ -565,6 +571,7 @@
     state.drawDebugHit = null;
     state.pickHoverHit = null;
     state.pickedComponent = null;
+    state.pickedAnchor = null;
     if (oldLattice !== nextLattice) {
       state.selectedTile = null;
       state.selectedPaletteId = '';
@@ -666,6 +673,7 @@
     state.drawDebugHit = null;
     state.pickHoverHit = null;
     state.pickedComponent = null;
+    state.pickedAnchor = null;
     state.selectedTile = null;
     state.selectedPaletteId = '';
     state.tiles = importTiles(payload.tiles, rows, cols);
@@ -736,6 +744,7 @@
   function clearBoard() {
     state.tiles = Array(state.rows * state.cols).fill(null);
     state.pickedComponent = null;
+    state.pickedAnchor = null;
     state.pickHoverHit = null;
     state.edits += 1;
     updateReport(false);
@@ -1129,6 +1138,7 @@
     const report = analyze();
     const component = hit ? componentAtEdgeHit(hit, report) : null;
     state.pickedComponent = component;
+    state.pickedAnchor = hit && component != null ? pickHoverHitFromEdgeHit(hit, component) : null;
     state.pickHoverHit = hit ? pickHoverHitFromEdgeHit(hit, component) : null;
     updateReport(false);
   }
@@ -1164,6 +1174,7 @@
     });
 
     state.pickedComponent = null;
+    state.pickedAnchor = null;
     state.pickHoverHit = null;
     if (changed) state.edits += 1;
     updateReport(false);
@@ -1182,7 +1193,7 @@
       index: hit.index,
       dir: hit.dir,
       component,
-      offset: { x: hit.offset.x, y: hit.offset.y }
+      offset: copyOffsetRecord(hit.offset)
     };
   }
 
@@ -1192,7 +1203,7 @@
         index: hit.index,
         dir: hit.dir,
         component: hit.component,
-        offset: { x: hit.offset.x, y: hit.offset.y }
+        offset: copyOffsetRecord(hit.offset)
       }
       : null;
     if (samePickHoverHit(state.pickHoverHit, next)) return false;
@@ -1627,7 +1638,10 @@
     const hasComponent = report.arcComponents.some((components) => (
       components.some((component) => component === state.pickedComponent)
     ));
-    if (!hasComponent) state.pickedComponent = null;
+    if (!hasComponent) {
+      state.pickedComponent = null;
+      state.pickedAnchor = null;
+    }
   }
 
   function updatePickControls() {
@@ -1940,10 +1954,12 @@
     ctx.fillRect(0, 0, geometry.width, geometry.height);
 
     if (state.wrapped) {
+      const offsets = getBoardCopyOffsets();
+      const pickedLift = buildPickedLiftContext(report, offsets);
       ctx.save();
       applyViewTransform(ctx);
-      getBoardCopyOffsets().forEach((offset) => {
-        drawBoardCopy(ctx, report, palette, offset);
+      offsets.forEach((offset) => {
+        drawBoardCopy(ctx, report, palette, offset, pickedLift);
       });
       drawDrawDebugOverlay(ctx, palette, report);
       drawPickHoverOverlay(ctx, palette, report);
@@ -1952,17 +1968,17 @@
       return;
     }
 
-    drawBoardCopy(ctx, report, palette, { x: 0, y: 0 });
+    drawBoardCopy(ctx, report, palette, { x: 0, y: 0, copyCol: 0, copyRow: 0 }, null);
     drawDrawDebugOverlay(ctx, palette, report);
     drawPickHoverOverlay(ctx, palette, report);
     drawDragGhost(ctx, palette);
   }
 
-  function drawBoardCopy(ctx, report, palette, offset) {
+  function drawBoardCopy(ctx, report, palette, offset, pickedLift) {
     ctx.save();
     ctx.translate(offset.x, offset.y);
     for (let index = 0; index < state.tiles.length; index += 1) {
-      drawTile(ctx, index, report, palette);
+      drawTile(ctx, index, report, palette, offset, pickedLift);
     }
     ctx.restore();
   }
@@ -2223,7 +2239,7 @@
   }
 
   function getBoardCopyOffsets() {
-    if (!isPeriodicWrappedView()) return [{ x: 0, y: 0 }];
+    if (!isPeriodicWrappedView()) return [{ x: 0, y: 0, copyCol: 0, copyRow: 0 }];
     const range = getPeriodicRange();
     const offsets = [];
     for (let row = -range; row <= range; row += 1) {
@@ -2232,7 +2248,7 @@
         offsets.push(copyOffset(col, row));
       }
     }
-    offsets.push({ x: 0, y: 0 });
+    offsets.push(copyOffset(0, 0));
     return offsets;
   }
 
@@ -2247,11 +2263,41 @@
   function copyOffset(col, row) {
     return {
       x: (col * geometry.periodA.x) + (row * geometry.periodB.x),
-      y: (col * geometry.periodA.y) + (row * geometry.periodB.y)
+      y: (col * geometry.periodA.y) + (row * geometry.periodB.y),
+      copyCol: col,
+      copyRow: row
     };
   }
 
-  function drawTile(ctx, index, report, palette) {
+  function copyOffsetRecord(offset) {
+    const copy = copyCoordsFromOffset(offset);
+    return {
+      x: offset && Number.isFinite(offset.x) ? offset.x : 0,
+      y: offset && Number.isFinite(offset.y) ? offset.y : 0,
+      copyCol: copy.copyCol,
+      copyRow: copy.copyRow
+    };
+  }
+
+  function copyCoordsFromOffset(offset) {
+    if (!offset) return { copyCol: 0, copyRow: 0 };
+    if (Number.isInteger(offset.copyCol) && Number.isInteger(offset.copyRow)) {
+      return { copyCol: offset.copyCol, copyRow: offset.copyRow };
+    }
+    if (!geometry) return { copyCol: 0, copyRow: 0 };
+    const a = geometry.periodA;
+    const b = geometry.periodB;
+    const det = (a.x * b.y) - (a.y * b.x);
+    if (Math.abs(det) < 0.0001) return { copyCol: 0, copyRow: 0 };
+    const x = Number.isFinite(offset.x) ? offset.x : 0;
+    const y = Number.isFinite(offset.y) ? offset.y : 0;
+    return {
+      copyCol: Math.round(((x * b.y) - (y * b.x)) / det),
+      copyRow: Math.round(((a.x * y) - (a.y * x)) / det)
+    };
+  }
+
+  function drawTile(ctx, index, report, palette, offset = null, pickedLift = null) {
     const cell = geometry.cells[index];
     if (!cell) return;
     const radius = geometry.radius;
@@ -2280,13 +2326,17 @@
     ctx.fill();
     ctx.stroke();
 
-    drawPipe(ctx, cell, displayTile, palette, null, arcComponents);
+    drawPipe(ctx, cell, displayTile, palette, null, arcComponents, {
+      tileIndex: index,
+      copy: offset,
+      pickedLift
+    });
 
     if (state.showErrors && !isDragTarget) drawOpenEndMarks(ctx, index, cell, mask, palette);
     if (state.showCoords) drawCellLabel(ctx, cell, palette);
   }
 
-  function drawPipe(ctx, cell, tile, palette, radiusOverride = null, arcComponents = null) {
+  function drawPipe(ctx, cell, tile, palette, radiusOverride = null, arcComponents = null, drawMeta = null) {
     const radius = radiusOverride || geometry.radius;
     const arcs = normalizeTile(tile);
     if (!arcs.length) return;
@@ -2300,8 +2350,11 @@
     arcs.forEach((pair, index) => {
       const componentIndex = arcComponents ? arcComponents[index] : null;
       const strokeScale = componentStrokeScale(componentIndex);
+      const pipeAlpha = componentPipeAlpha(componentIndex, drawMeta, index);
       const currentPipeWidth = pipeWidth * strokeScale;
       const currentGapWidth = currentPipeWidth + Math.max(4, radius * 0.09);
+      ctx.save();
+      ctx.globalAlpha *= pipeAlpha;
       if (index > 0) {
         ctx.strokeStyle = '#fffdf8';
         ctx.lineWidth = currentGapWidth;
@@ -2312,6 +2365,7 @@
       ctx.fillStyle = pipeColor;
       ctx.lineWidth = currentPipeWidth;
       drawArcPath(ctx, cell, pair, radius);
+      ctx.restore();
     });
     ctx.restore();
   }
@@ -2321,6 +2375,137 @@
       return 1;
     }
     return componentIndex === state.pickedComponent ? 1.22 : 0.34;
+  }
+
+  function componentPipeAlpha(componentIndex, drawMeta, pairIndex) {
+    if (
+      state.inputMode !== 'pick'
+      || !state.wrapped
+      || state.pickedComponent == null
+      || componentIndex !== state.pickedComponent
+      || !drawMeta
+      || !drawMeta.pickedLift
+    ) {
+      return 1;
+    }
+    const copy = copyCoordsFromOffset(drawMeta.copy);
+    const key = liftedArcKey(copy.copyCol, copy.copyRow, drawMeta.tileIndex, pairIndex);
+    return drawMeta.pickedLift.has(key) ? 1 : PICK_UNCONNECTED_LIFT_ALPHA;
+  }
+
+  function buildPickedLiftContext(report, offsets) {
+    if (
+      state.inputMode !== 'pick'
+      || !state.wrapped
+      || !isPeriodicWrappedView()
+      || state.pickedComponent == null
+      || !state.pickedAnchor
+      || !report.arcComponents
+    ) {
+      return null;
+    }
+
+    const anchor = state.pickedAnchor;
+    const anchorTile = normalizeTile(state.tiles[anchor.index]);
+    const anchorPairIndex = anchorTile.findIndex((pair) => pair[0] === anchor.dir || pair[1] === anchor.dir);
+    if (anchorPairIndex < 0) return null;
+
+    const anchorCopy = copyCoordsFromOffset(anchor.offset);
+    const bounds = liftedCopyBounds(offsets, anchorCopy);
+    return traceLiftedComponent(anchor.index, anchorPairIndex, anchorCopy, bounds);
+  }
+
+  function traceLiftedComponent(anchorIndex, anchorPairIndex, anchorCopy, bounds) {
+    const selected = new Set();
+    const queued = new Set();
+    const queue = [{
+      index: anchorIndex,
+      pairIndex: anchorPairIndex,
+      copyCol: anchorCopy.copyCol,
+      copyRow: anchorCopy.copyRow
+    }];
+
+    while (queue.length) {
+      const current = queue.shift();
+      if (!copyWithinBounds(current, bounds)) continue;
+
+      const key = liftedArcKey(current.copyCol, current.copyRow, current.index, current.pairIndex);
+      if (queued.has(key)) continue;
+      queued.add(key);
+      selected.add(key);
+
+      const tile = normalizeTile(state.tiles[current.index]);
+      const pair = tile[current.pairIndex];
+      if (!pair) continue;
+
+      pair.forEach((dir) => {
+        const next = liftedNeighbor(current.index, dir, current.copyCol, current.copyRow);
+        if (!next || !copyWithinBounds(next, bounds)) return;
+        const nextTile = normalizeTile(state.tiles[next.index]);
+        const nextPairIndex = nextTile.findIndex((candidate) => candidate[0] === next.dir || candidate[1] === next.dir);
+        if (nextPairIndex < 0) return;
+        queue.push({
+          index: next.index,
+          pairIndex: nextPairIndex,
+          copyCol: next.copyCol,
+          copyRow: next.copyRow
+        });
+      });
+    }
+
+    return selected;
+  }
+
+  function liftedNeighbor(index, dir, copyCol, copyRow) {
+    const lattice = getLattice();
+    const row = Math.floor(index / state.cols);
+    const col = index % state.cols;
+    const next = neighbor(row, col, dir, state.rows, state.cols, lattice, true);
+    if (!next) return null;
+    const nextIndex = indexOf(next.row, next.col, state.cols);
+    const nextOffset = drawContinuationOffset({
+      index,
+      offset: copyOffset(copyCol, copyRow)
+    }, dir, nextIndex);
+    const nextCopy = copyCoordsFromOffset(nextOffset);
+    return {
+      index: nextIndex,
+      dir: lattice.opposite[dir],
+      copyCol: nextCopy.copyCol,
+      copyRow: nextCopy.copyRow
+    };
+  }
+
+  function liftedCopyBounds(offsets, anchorCopy) {
+    const bounds = offsets.reduce((acc, offset) => {
+      const copy = copyCoordsFromOffset(offset);
+      acc.minCol = Math.min(acc.minCol, copy.copyCol);
+      acc.maxCol = Math.max(acc.maxCol, copy.copyCol);
+      acc.minRow = Math.min(acc.minRow, copy.copyRow);
+      acc.maxRow = Math.max(acc.maxRow, copy.copyRow);
+      return acc;
+    }, {
+      minCol: anchorCopy.copyCol,
+      maxCol: anchorCopy.copyCol,
+      minRow: anchorCopy.copyRow,
+      maxRow: anchorCopy.copyRow
+    });
+    bounds.minCol -= 1;
+    bounds.maxCol += 1;
+    bounds.minRow -= 1;
+    bounds.maxRow += 1;
+    return bounds;
+  }
+
+  function copyWithinBounds(copy, bounds) {
+    return copy.copyCol >= bounds.minCol
+      && copy.copyCol <= bounds.maxCol
+      && copy.copyRow >= bounds.minRow
+      && copy.copyRow <= bounds.maxRow;
+  }
+
+  function liftedArcKey(copyCol, copyRow, index, pairIndex) {
+    return `${copyCol}:${copyRow}:${index}:${pairIndex}`;
   }
 
   function drawOpenEndMarks(ctx, index, cell, mask, palette) {
