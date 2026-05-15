@@ -136,6 +136,16 @@
       margin-top: 8px;
     }
 
+    .mosaic-knot-code {
+      min-height: 46px;
+      line-height: 1.35;
+      resize: vertical;
+    }
+
+    #knot-link[hidden] {
+      display: none !important;
+    }
+
     .mosaic-mode-row {
       display: grid;
       grid-template-columns: minmax(0, 1fr) max-content;
@@ -477,6 +487,34 @@
     </section>
 
     <section class="card collapsed">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Knot</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="mosaic-inline-row">
+          <span class="input-label">Method</span>
+          <select id="knot-method">
+            <option value="hybrid" selected>Hybrid</option>
+            <option value="invariants">Invariants</option>
+            <option value="dt">DT lookup</option>
+          </select>
+        </div>
+        <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value" id="knot-status">not checked</span></div>
+        <div class="stat-row"><span class="stat-label">Method result</span><span class="stat-value" id="knot-method-result">not run</span></div>
+        <div class="stat-row"><span class="stat-label">Name</span><span class="stat-value" id="knot-name">-</span></div>
+        <div class="input-method">
+          <span class="input-label">PD</span>
+          <textarea id="knot-pd" class="mosaic-editor-input mosaic-knot-code" readonly spellcheck="false">-</textarea>
+        </div>
+        <div class="input-method">
+          <span class="input-label">DT</span>
+          <textarea id="knot-dt" class="mosaic-editor-input mosaic-knot-code" readonly spellcheck="false">-</textarea>
+        </div>
+        <div class="action-row">
+          <a class="btn btn-ghost" id="knot-link" href="https://knotinfo.org/" target="_blank" rel="noopener">more data</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="card collapsed">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="action-row">
@@ -493,6 +531,8 @@
   Browser-side mosaic editor styled with the shared Young diagram UI.
 </footer>
 
+<script src="mosaic_knot_data.js"></script>
+<script src="mosaic_knot_engine.js"></script>
 <script src="mosaic_calculator.js"></script>
 </body>
 </html>

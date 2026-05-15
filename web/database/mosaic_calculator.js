@@ -54,6 +54,7 @@
     colorComponents: true,
     componentColors: [],
     drawStyle: 'shade',
+    knotMethod: 'hybrid',
     wrappedViewMode: 'periodic',
     viewScale: 1,
     viewX: 0,
@@ -115,6 +116,13 @@
     refs.colorComponents = document.getElementById('color-components');
     refs.wrappedViewRow = document.getElementById('wrapped-view-row');
     refs.wrappedViewMode = document.getElementById('wrapped-view-mode');
+    refs.knotMethod = document.getElementById('knot-method');
+    refs.knotStatus = document.getElementById('knot-status');
+    refs.knotMethodResult = document.getElementById('knot-method-result');
+    refs.knotName = document.getElementById('knot-name');
+    refs.knotPd = document.getElementById('knot-pd');
+    refs.knotDt = document.getElementById('knot-dt');
+    refs.knotLink = document.getElementById('knot-link');
     refs.tilePalette = document.getElementById('tile-palette');
     refs.importInput = document.getElementById('import-input');
     refs.exportOut = document.getElementById('export-out');
@@ -185,6 +193,11 @@
       state.wrappedViewMode = refs.wrappedViewMode.value === 'single' ? 'single' : 'periodic';
       normalizeViewOffset();
       updateReport(false);
+    });
+    refs.knotMethod.addEventListener('change', () => {
+      state.knotMethod = normalizeKnotMethod(refs.knotMethod.value);
+      updateReport(false);
+      refreshExport();
     });
 
     window.addEventListener('resize', debounce(() => {
@@ -614,6 +627,7 @@
       || (payload.display && payload.display.drawStyle)
       || (payload.display && payload.display.drawDebug ? 'debug' : 'shade')
     );
+    state.knotMethod = normalizeKnotMethod(payload.knotMethod || (payload.display && payload.display.knotMethod));
     state.edits = Number.isFinite(Number(payload.edits)) ? Math.max(0, Math.trunc(Number(payload.edits))) : 0;
     state.hoverIndex = -1;
     state.drawDebugHit = null;
@@ -628,6 +642,7 @@
     refs.showCoords.checked = state.showCoords;
     refs.colorComponents.checked = state.colorComponents;
     refs.drawStyle.value = state.drawStyle;
+    refs.knotMethod.value = state.knotMethod;
     renderTilePalette();
     resizeCanvas();
     applyImportedView(payload.view);
@@ -1003,7 +1018,7 @@
     const report = analyze();
     const component = hit ? componentAtEdgeHit(hit, report) : null;
     state.pickedComponent = component;
-    state.pickHoverHit = component == null ? null : pickHoverHitFromEdgeHit(hit, component);
+    state.pickHoverHit = hit ? pickHoverHitFromEdgeHit(hit, component) : null;
     updateReport(false);
   }
 
@@ -1048,7 +1063,7 @@
     const hit = edgeHitTest(clientX, clientY, DRAW_START_EDGE_RATIO);
     const report = analyze();
     const component = hit ? componentAtEdgeHit(hit, report) : null;
-    return setPickHoverHit(component == null ? null : pickHoverHitFromEdgeHit(hit, component), redraw);
+    return setPickHoverHit(hit ? pickHoverHitFromEdgeHit(hit, component) : null, redraw);
   }
 
   function pickHoverHitFromEdgeHit(hit, component) {
@@ -1480,6 +1495,7 @@
     refs.infoLine.textContent = `${getLattice().label}, ${state.wrapped ? 'wrapped' : 'open'} · ${report.active} filled`;
 
     updatePickControls();
+    updateKnotCard(report);
     refreshExport();
     draw(report);
   }
@@ -1495,6 +1511,133 @@
   function updatePickControls() {
     if (!refs.applyPick) return;
     refs.applyPick.disabled = state.inputMode !== 'pick' || state.pickedComponent == null;
+  }
+
+  function updateKnotCard(report) {
+    if (!refs.knotStatus || !refs.knotName || !refs.knotLink) return;
+    const summary = identifyKnot(report);
+    refs.knotStatus.textContent = summary.status;
+    if (refs.knotMethodResult) refs.knotMethodResult.textContent = summary.methodResult || 'not run';
+    refs.knotName.textContent = summary.name || '-';
+    if (refs.knotPd) refs.knotPd.value = summary.pd || '-';
+    if (refs.knotDt) refs.knotDt.value = summary.dt || '-';
+    refs.knotStatus.classList.toggle('mosaic-status-good', summary.tone === 'good');
+    refs.knotStatus.classList.toggle('mosaic-status-bad', summary.tone === 'bad');
+    if (refs.knotMethodResult) {
+      refs.knotMethodResult.classList.toggle('mosaic-status-good', summary.tone === 'good');
+      refs.knotMethodResult.classList.toggle('mosaic-status-bad', summary.tone === 'bad');
+    }
+    refs.knotName.classList.toggle('mosaic-status-good', summary.tone === 'good');
+    refs.knotName.classList.toggle('mosaic-status-bad', summary.tone === 'bad');
+    refs.knotLink.hidden = !summary.href;
+    if (summary.href) {
+      refs.knotLink.href = summary.href;
+      refs.knotLink.textContent = summary.linkText;
+    }
+  }
+
+  function identifyKnot(report) {
+    if (!report || report.active === 0) {
+      return {
+        status: 'empty canvas',
+        methodResult: 'not run',
+        name: '',
+        pd: '',
+        dt: '',
+        href: '',
+        linkText: '',
+        tone: 'bad'
+      };
+    }
+    if (report.openEnds > 0 || report.components !== 1) {
+      return {
+        status: 'not a knot',
+        methodResult: 'not run',
+        name: `${report.components} components, ${report.openEnds} open ends`,
+        pd: '',
+        dt: '',
+        href: '',
+        linkText: '',
+        tone: 'bad'
+      };
+    }
+    if (state.wrapped) {
+      return {
+        status: 'wrapped knot candidate',
+        methodResult: 'not run',
+        name: 'further exploration remains experimental',
+        pd: '',
+        dt: '',
+        href: '',
+        linkText: '',
+        tone: 'bad'
+      };
+    }
+
+    const engine = window.MosaicKnotEngine;
+    if (!engine || typeof engine.identify !== 'function') {
+      return {
+        status: 'engine unavailable',
+        methodResult: 'not run',
+        name: 'mosaic_knot_engine.js did not load',
+        pd: '',
+        dt: '',
+        href: '',
+        linkText: '',
+        tone: 'bad'
+      };
+    }
+
+    const result = engine.identify({
+      rows: state.rows,
+      cols: state.cols,
+      lattice: state.lattice,
+      wrapped: state.wrapped,
+      method: state.knotMethod,
+      tiles: state.tiles.map((tile) => normalizeTile(tile).map((pair) => pair.slice(0, 2)))
+    });
+
+    return {
+      status: result.status || 'PD/DT generated',
+      methodResult: result.methodResult || 'no match',
+      name: result.name || '',
+      pd: result.pd || '',
+      dt: result.dt || '',
+      href: result.href || '',
+      linkText: result.linkText || 'more data',
+      tone: result.tone || (result.name ? 'good' : 'bad')
+    };
+  }
+
+  function countMosaicCrossings() {
+    return state.tiles.reduce((total, tile) => total + countTileCrossings(tile), 0);
+  }
+
+  function countTileCrossings(tile) {
+    const arcs = normalizeTile(tile);
+    const sides = getLattice().sides;
+    let count = 0;
+    for (let left = 0; left < arcs.length; left += 1) {
+      for (let right = left + 1; right < arcs.length; right += 1) {
+        if (pairsCrossInTile(arcs[left], arcs[right], sides)) count += 1;
+      }
+    }
+    return count;
+  }
+
+  function pairsCrossInTile(left, right, sides) {
+    if (left[0] === right[0] || left[0] === right[1] || left[1] === right[0] || left[1] === right[1]) {
+      return false;
+    }
+    const rightStartInside = dirBetweenCyclic(right[0], left[0], left[1], sides);
+    const rightEndInside = dirBetweenCyclic(right[1], left[0], left[1], sides);
+    return rightStartInside !== rightEndInside;
+  }
+
+  function dirBetweenCyclic(dir, start, end, sides) {
+    const span = modulo(end - start, sides);
+    const offset = modulo(dir - start, sides);
+    return offset > 0 && offset < span;
   }
 
   function resizeCanvas() {
@@ -1658,9 +1801,6 @@
     if (!next) return null;
     const nextIndex = indexOf(next.row, next.col, state.cols);
     const opposite = lattice.opposite[hit.dir];
-    if (!normalizeTile(state.tiles[nextIndex]).some((pair) => pair[0] === opposite || pair[1] === opposite)) {
-      return null;
-    }
     const nextOffset = drawContinuationOffset({
       index: hit.index,
       offset: hit.offset
@@ -2348,12 +2488,14 @@
       clickMode: state.editMode,
       drawLayer: state.drawLayer,
       drawStyle: state.drawStyle,
+      knotMethod: state.knotMethod,
       display: {
         showOpenEnds: state.showErrors,
         showCoords: state.showCoords,
         colorComponents: state.colorComponents,
         drawStyle: state.drawStyle,
-        drawDebug: state.drawStyle === 'debug'
+        drawDebug: state.drawStyle === 'debug',
+        knotMethod: state.knotMethod
       },
       view: {
         scale: Number(state.viewScale.toFixed(4)),
@@ -2411,6 +2553,7 @@
     refs.editMode.value = state.editMode;
     refs.drawLayer.value = state.drawLayer;
     refs.drawStyle.value = state.drawStyle;
+    refs.knotMethod.value = state.knotMethod;
     refs.colorComponents.checked = state.colorComponents;
     refs.wrappedViewMode.value = state.wrappedViewMode;
     updateInputModePanels();
@@ -2575,7 +2718,11 @@
   }
 
   function normalizeDrawStyle(style) {
-    return ['none', 'debug', 'shade'].includes(style) ? style : 'none';
+    return ['none', 'debug', 'shade'].includes(style) ? style : 'shade';
+  }
+
+  function normalizeKnotMethod(method) {
+    return ['hybrid', 'invariants', 'dt'].includes(method) ? method : 'hybrid';
   }
 
   function normalizeDir(dir, sides) {
