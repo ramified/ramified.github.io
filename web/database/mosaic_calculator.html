@@ -142,8 +142,11 @@
       resize: vertical;
     }
 
-    #knot-link[hidden] {
-      display: none !important;
+    .mosaic-knot-links {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      align-items: flex-end;
     }
 
     .mosaic-mode-row {
@@ -422,6 +425,15 @@
         </div>
         <div class="input-mode-panel" data-input-panel="draw">
           <div class="mosaic-inline-row">
+            <span class="input-label">Draw click</span>
+            <select id="draw-action">
+              <option value="edge">Edge</option>
+              <option value="rotate">Rotate</option>
+              <option value="reorder">Reorder pairs</option>
+              <option value="randomize">Randomize</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row">
             <span class="input-label">New pair layer</span>
             <select id="draw-layer">
               <option value="above">Above</option>
@@ -443,6 +455,7 @@
             <select id="edit-mode">
               <option value="rotate">Rotate</option>
               <option value="reorder">Reorder pairs</option>
+              <option value="randomize">Randomize</option>
             </select>
           </div>
           <div class="input-method">
@@ -489,27 +502,18 @@
     <section class="card collapsed">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Knot</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
-        <div class="mosaic-inline-row">
-          <span class="input-label">Method</span>
-          <select id="knot-method">
-            <option value="hybrid" selected>Hybrid</option>
-            <option value="invariants">Invariants</option>
-            <option value="dt">DT lookup</option>
-          </select>
-        </div>
         <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value" id="knot-status">not checked</span></div>
-        <div class="stat-row"><span class="stat-label">Method result</span><span class="stat-value" id="knot-method-result">not run</span></div>
-        <div class="stat-row"><span class="stat-label">Name</span><span class="stat-value" id="knot-name">-</span></div>
-        <div class="input-method">
-          <span class="input-label">PD</span>
-          <textarea id="knot-pd" class="mosaic-editor-input mosaic-knot-code" readonly spellcheck="false">-</textarea>
-        </div>
-        <div class="input-method">
-          <span class="input-label">DT</span>
-          <textarea id="knot-dt" class="mosaic-editor-input mosaic-knot-code" readonly spellcheck="false">-</textarea>
-        </div>
-        <div class="action-row">
-          <a class="btn btn-ghost" id="knot-link" href="https://knotinfo.org/" target="_blank" rel="noopener">more data</a>
+        <div class="stat-row" id="knot-name-row"><span class="stat-label">Name</span><span class="stat-value" id="knot-name">-</span></div>
+        <div class="input-method" id="knot-code-row">
+          <div class="mosaic-inline-row">
+            <span class="input-label">Code</span>
+            <select id="knot-code-kind">
+              <option value="pd">PD</option>
+              <option value="dt">DT</option>
+              <option value="braid">Braid</option>
+            </select>
+          </div>
+          <textarea id="knot-code" class="mosaic-editor-input mosaic-knot-code" readonly spellcheck="false">-</textarea>
         </div>
       </div>
     </section>

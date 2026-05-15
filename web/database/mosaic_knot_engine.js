@@ -10,6 +10,8 @@
   const METHODS = ['hybrid', 'invariants', 'dt'];
   const EMPTY_PD = 'PD[P[1,1]]';
   const EMPTY_DT = 'DT[]';
+  const ARC_DEFORMATION_SAMPLES = 24;
+  const HEX_DIAMETER_NUDGE = 0.055;
 
   const LATTICES = {
     hexagonal: {
@@ -118,6 +120,7 @@
       dtKey: keyOf(dtCode),
       mirrorDtKey: mirrorDtCode ? keyOf(mirrorDtCode) : '',
       crossingCount: graph.crossings.length,
+      hasMultiCrossingTile: !!graph.hasMultiCrossingTile,
       pdEntries: pdEntries.entries,
       occurrences: trace.occurrences,
       graph
@@ -130,8 +133,9 @@
     const edges = [];
     const adj = [];
     const boundaryNodes = new Map();
-    const crossingByArc = new Map();
+    const crossingRefsByArc = new Map();
     const crossings = [];
+    let hasMultiCrossingTile = false;
 
     const addNode = (meta) => {
       const id = nodes.length;
@@ -167,11 +171,9 @@
           }
         }
       }
-      if (tileCrossings.length > 1) {
-        return failedDiagram('ambiguous tile with multiple crossings');
-      }
-      if (tileCrossings.length === 1) {
-        const [leftArcIndex, rightArcIndex] = tileCrossings[0];
+      const useThreeDiameterDeformation = isHexThreeDiameterTile(arcs, lattice);
+      if (tileCrossings.length > 1) hasMultiCrossingTile = true;
+      for (const [leftArcIndex, rightArcIndex] of tileCrossings) {
         const underArcIndex = Math.min(leftArcIndex, rightArcIndex);
         const overArcIndex = Math.max(leftArcIndex, rightArcIndex);
         const crossing = {
@@ -193,24 +195,53 @@
         }
 
         crossings.push(crossing);
-        crossingByArc.set(arcKey(tileIndex, underArcIndex), crossing);
-        crossingByArc.set(arcKey(tileIndex, overArcIndex), crossing);
+        addArcCrossingRef(
+          crossingRefsByArc,
+          arcKey(tileIndex, leftArcIndex),
+          crossing,
+          arcs[leftArcIndex],
+          arcs[rightArcIndex],
+          lattice,
+          useThreeDiameterDeformation,
+          leftArcIndex
+        );
+        addArcCrossingRef(
+          crossingRefsByArc,
+          arcKey(tileIndex, rightArcIndex),
+          crossing,
+          arcs[rightArcIndex],
+          arcs[leftArcIndex],
+          lattice,
+          useThreeDiameterDeformation,
+          rightArcIndex
+        );
       }
     }
 
     for (let tileIndex = 0; tileIndex < tiles.length; tileIndex += 1) {
-      tiles[tileIndex].forEach((pair, arcIndex) => {
-        const crossing = crossingByArc.get(arcKey(tileIndex, arcIndex));
-        if (!crossing) {
+      const arcs = tiles[tileIndex];
+      for (let arcIndex = 0; arcIndex < arcs.length; arcIndex += 1) {
+        const pair = arcs[arcIndex];
+        const crossingRefs = (crossingRefsByArc.get(arcKey(tileIndex, arcIndex)) || [])
+          .slice()
+          .sort(compareArcCrossingRefs);
+        if (!crossingRefs.length) {
           addEdge(getBoundaryNode(tileIndex, pair[0]), getBoundaryNode(tileIndex, pair[1]));
-          return;
+          continue;
         }
-        pair.forEach((dir) => {
-          const node = crossing.nodesByDir.get(dir);
-          if (node == null) return;
-          addEdge(getBoundaryNode(tileIndex, dir), node);
-        });
-      });
+
+        let previousNode = getBoundaryNode(tileIndex, pair[0]);
+        for (const ref of crossingRefs) {
+          const entryNode = ref.crossing.nodesByDir.get(pair[0]);
+          const exitNode = ref.crossing.nodesByDir.get(pair[1]);
+          if (entryNode == null || exitNode == null) {
+            return failedDiagram('crossing segment data is incomplete');
+          }
+          addEdge(previousNode, entryNode);
+          previousNode = exitNode;
+        }
+        addEdge(previousNode, getBoundaryNode(tileIndex, pair[1]));
+      }
     }
 
     crossings.forEach((crossing) => {
@@ -250,6 +281,7 @@
       edges,
       adj,
       crossings,
+      hasMultiCrossingTile,
       rows,
       cols,
       lattice
@@ -265,6 +297,16 @@
       node,
       angle: normalizeAngle(lattice.angles[dir])
     });
+  }
+
+  function addArcCrossingRef(refsByArc, key, crossing, arc, otherArc, lattice, useThreeDiameterDeformation, arcIndex) {
+    const refs = refsByArc.get(key) || [];
+    refs.push({
+      crossing,
+      arcIndex,
+      position: crossingPositionAlongArc(arc, otherArc, lattice, useThreeDiameterDeformation)
+    });
+    refsByArc.set(key, refs);
   }
 
   function traceGraph(graph) {
@@ -407,6 +449,16 @@
   }
 
   function identifyDiagram(diagram, method) {
+    if (diagram.hasMultiCrossingTile) {
+      const invariantResult = identifyByInvariants(diagram);
+      if (invariantResult && invariantResult.name) return invariantResult;
+      if (method === 'invariants') return invariantResult;
+
+      const dtResult = identifyByDt(diagram, method === 'dt' ? 'DT match' : 'DT fallback');
+      if (dtResult && dtResult.name) return dtResult;
+      return null;
+    }
+
     if (method === 'dt') return identifyByDt(diagram, 'DT match');
     if (method === 'invariants') return identifyByInvariants(diagram);
 
@@ -473,6 +525,7 @@
       href: knotInfoHref(first),
       linkText: 'more data',
       methodResult: 'invariant candidates',
+      candidates: candidates.map(candidateFromName),
       tone: 'good'
     };
   }
@@ -503,23 +556,44 @@
   function resultFromName(name, methodResult, status) {
     const data = getData();
     const entry = (data.entries && data.entries[name]) || null;
+    const href = entry && entry.href ? entry.href : knotInfoHref(name);
+    const braid = braidWordForName(name);
     return {
       status,
       name: displayName(name),
-      href: entry && entry.href ? entry.href : knotInfoHref(name),
+      href,
       linkText: 'more data',
       methodResult,
+      braid,
+      candidates: [{
+        name,
+        label: displayName(name),
+        href,
+        braid
+      }],
       tone: 'good'
+    };
+  }
+
+  function candidateFromName(name) {
+    const data = getData();
+    const entry = (data.entries && data.entries[name]) || null;
+    return {
+      name,
+      label: displayName(name),
+      href: entry && entry.href ? entry.href : knotInfoHref(name),
+      braid: braidWordForName(name)
     };
   }
 
   function noMatchResult(diagram) {
     return {
-      status: diagram.crossingCount ? 'PD/DT generated' : 'unknot diagram',
+      status: diagram.crossingCount ? 'code generated' : 'unknot diagram',
       name: diagram.crossingCount ? 'no local match' : displayName('0_1'),
       href: diagram.crossingCount ? 'https://find-a-knot.onrender.com/' : knotInfoHref('0_1'),
       linkText: diagram.crossingCount ? 'Find-A-Knot' : 'more data',
       methodResult: diagram.crossingCount ? 'no match' : 'invariant match',
+      braid: diagram.crossingCount ? null : braidWordForName('0_1'),
       tone: diagram.crossingCount ? 'bad' : 'good'
     };
   }
@@ -767,6 +841,169 @@
     return rightStartInside !== rightEndInside;
   }
 
+  function isHexThreeDiameterTile(arcs, lattice) {
+    if (lattice.shape !== 'hex' || arcs.length !== 3) return false;
+    const keys = new Set(arcs.map(diameterKey).filter(Boolean));
+    return keys.size === 3 && keys.has('0:3') && keys.has('1:4') && keys.has('2:5');
+  }
+
+  function diameterKey(arc) {
+    if (!arc || arc.length < 2) return '';
+    const first = Math.min(arc[0], arc[1]);
+    const second = Math.max(arc[0], arc[1]);
+    if ((first === 0 && second === 3) || (first === 1 && second === 4) || (first === 2 && second === 5)) {
+      return `${first}:${second}`;
+    }
+    return '';
+  }
+
+  function crossingPositionAlongArc(arc, otherArc, lattice, useThreeDiameterDeformation) {
+    const intersection = arcPathIntersection(arc, otherArc, lattice, useThreeDiameterDeformation);
+    if (intersection && Number.isFinite(intersection.first)) {
+      return clamp(intersection.first, 0, 1);
+    }
+
+    const span = modulo(arc[1] - arc[0], lattice.sides);
+    if (span <= 0) return 0.5;
+    for (const dir of otherArc) {
+      const offset = modulo(dir - arc[0], lattice.sides);
+      if (offset > 0 && offset < span) return offset / span;
+    }
+    return 0.5;
+  }
+
+  function arcPathIntersection(firstArc, secondArc, lattice, useThreeDiameterDeformation) {
+    const firstPath = sampleArcPath(firstArc, lattice, useThreeDiameterDeformation);
+    const secondPath = sampleArcPath(secondArc, lattice, useThreeDiameterDeformation);
+    const hits = [];
+
+    for (let firstIndex = 0; firstIndex + 1 < firstPath.length; firstIndex += 1) {
+      const firstStart = firstPath[firstIndex];
+      const firstEnd = firstPath[firstIndex + 1];
+      for (let secondIndex = 0; secondIndex + 1 < secondPath.length; secondIndex += 1) {
+        const secondStart = secondPath[secondIndex];
+        const secondEnd = secondPath[secondIndex + 1];
+        const hit = segmentIntersectionParameters(
+          firstStart.point,
+          firstEnd.point,
+          secondStart.point,
+          secondEnd.point
+        );
+        if (!hit || !isSegmentParameter(hit.first) || !isSegmentParameter(hit.second)) continue;
+
+        hits.push({
+          first: lerp(firstStart.t, firstEnd.t, hit.first),
+          second: lerp(secondStart.t, secondEnd.t, hit.second)
+        });
+      }
+    }
+
+    if (!hits.length) return null;
+    hits.sort((left, right) => Math.abs(left.first - 0.5) - Math.abs(right.first - 0.5));
+    return hits[0];
+  }
+
+  function sampleArcPath(arc, lattice, useThreeDiameterDeformation) {
+    const start = directionPoint(arc[0], lattice);
+    const end = directionPoint(arc[1], lattice);
+    const control = deformedArcControlPoint(arc, lattice, useThreeDiameterDeformation);
+    if (!control) {
+      return [
+        { point: start, t: 0 },
+        { point: end, t: 1 }
+      ];
+    }
+
+    const samples = [];
+    for (let index = 0; index <= ARC_DEFORMATION_SAMPLES; index += 1) {
+      const t = index / ARC_DEFORMATION_SAMPLES;
+      samples.push({
+        point: quadraticPoint(start, control, end, t),
+        t
+      });
+    }
+    return samples;
+  }
+
+  function deformedArcControlPoint(arc, lattice, useThreeDiameterDeformation) {
+    if (!useThreeDiameterDeformation || lattice.shape !== 'hex' || !isZeroThreeDiameter(arc)) return null;
+
+    const start = directionPoint(0, lattice);
+    const end = directionPoint(3, lattice);
+    const vector = {
+      x: end.x - start.x,
+      y: end.y - start.y
+    };
+    const right = screenRightNormal(vector);
+    return {
+      x: (start.x + end.x) / 2 + (right.x * HEX_DIAMETER_NUDGE),
+      y: (start.y + end.y) / 2 + (right.y * HEX_DIAMETER_NUDGE)
+    };
+  }
+
+  function isZeroThreeDiameter(arc) {
+    return (arc[0] === 0 && arc[1] === 3) || (arc[0] === 3 && arc[1] === 0);
+  }
+
+  function quadraticPoint(start, control, end, t) {
+    const inverse = 1 - t;
+    return {
+      x: (inverse * inverse * start.x) + (2 * inverse * t * control.x) + (t * t * end.x),
+      y: (inverse * inverse * start.y) + (2 * inverse * t * control.y) + (t * t * end.y)
+    };
+  }
+
+  function segmentIntersectionParameters(firstStart, firstEnd, secondStart, secondEnd) {
+    const first = {
+      x: firstEnd.x - firstStart.x,
+      y: firstEnd.y - firstStart.y
+    };
+    const second = {
+      x: secondEnd.x - secondStart.x,
+      y: secondEnd.y - secondStart.y
+    };
+    const denominator = cross2d(first, second);
+    if (Math.abs(denominator) < 1e-9) return NaN;
+
+    const delta = {
+      x: secondStart.x - firstStart.x,
+      y: secondStart.y - firstStart.y
+    };
+    return {
+      first: cross2d(delta, second) / denominator,
+      second: cross2d(delta, first) / denominator
+    };
+  }
+
+  function directionPoint(dir, lattice) {
+    const angle = lattice.angles[dir];
+    return {
+      x: Math.cos(angle),
+      y: Math.sin(angle)
+    };
+  }
+
+  function screenRightNormal(vector) {
+    const length = Math.hypot(vector.x, vector.y);
+    if (!Number.isFinite(length) || length < 1e-9) return { x: 0, y: 0 };
+    return {
+      x: -vector.y / length,
+      y: vector.x / length
+    };
+  }
+
+  function isSegmentParameter(value) {
+    return Number.isFinite(value) && value >= -1e-8 && value <= 1 + 1e-8;
+  }
+
+  function lerp(start, end, t) {
+    return start + ((end - start) * t);
+  }
+
+  function cross2d(left, right) {
+    return (left.x * right.y) - (left.y * right.x);
+  }
+
   function dirBetweenCyclic(dir, start, end, sides) {
     const span = modulo(end - start, sides);
     const offset = modulo(dir - start, sides);
@@ -818,6 +1055,13 @@
     return left.angle - right.angle;
   }
 
+  function compareArcCrossingRefs(left, right) {
+    const delta = left.position - right.position;
+    if (Math.abs(delta) > 1e-9) return delta;
+    if (left.arcIndex !== right.arcIndex) return left.arcIndex - right.arcIndex;
+    return left.crossing.id - right.crossing.id;
+  }
+
   function compareDtCodes(left, right) {
     if (left.length !== right.length) return left.length - right.length;
     for (let index = 0; index < left.length; index += 1) {
@@ -862,6 +1106,12 @@
     return `https://knotinfo.org/diagram_display.php?${encodeURIComponent(name)}`;
   }
 
+  function braidWordForName(name) {
+    const data = getData();
+    const word = data.braid && data.braid[name];
+    return Array.isArray(word) ? word.slice() : null;
+  }
+
   function invariantKey(conway, jones) {
     return `${JSON.stringify(conway || null)}|${JSON.stringify(jones || null)}`;
   }
@@ -894,6 +1144,10 @@
 
   function moduloFloat(value, size) {
     return ((value % size) + size) % size;
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
   }
 
   function toPositiveInt(value) {
