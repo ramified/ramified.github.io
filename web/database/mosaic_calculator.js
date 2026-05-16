@@ -77,7 +77,11 @@
     pickedAnchor: null,
     pickHoverHit: null,
     drawDebugHit: null,
-    hoverIndex: -1
+    hoverIndex: -1,
+    dualGraphLayout: null,
+    dualGraphSimulation: null,
+    dualGraphDragging: null,
+    dualGraphAnimating: false
   };
 
   const refs = {};
@@ -136,6 +140,13 @@
     refs.knotCodeRow = document.getElementById('knot-code-row');
     refs.knotCodeKind = document.getElementById('knot-code-kind');
     refs.knotCode = document.getElementById('knot-code');
+    refs.dualGraphCard = document.getElementById('dual-graph-card');
+    refs.dualGraphStatus = document.getElementById('dual-graph-status');
+    refs.dualGraphCanvas = document.getElementById('dual-graph-canvas');
+    refs.dualGraphCanvasWrap = document.getElementById('dual-graph-canvas-wrap');
+    refs.dualGraphPlaceholder = document.getElementById('dual-graph-placeholder');
+    refs.computeLayout = document.getElementById('compute-layout');
+    refs.resetLayout = document.getElementById('reset-layout');
     refs.tilePalette = document.getElementById('tile-palette');
     refs.importInput = document.getElementById('import-input');
     refs.exportOut = document.getElementById('export-out');
@@ -225,6 +236,33 @@
       updateKnotCard(analyze());
       refreshExport();
     });
+    if (refs.computeLayout) {
+      refs.computeLayout.addEventListener('click', () => {
+        if (!state.dualGraphLayout || !state.dualGraphData) return;
+        if (state.dualGraphAnimating) {
+          state.dualGraphAnimating = false;
+          refs.computeLayout.textContent = 'Compute layout';
+        } else {
+          state.dualGraphAnimating = true;
+          refs.computeLayout.textContent = 'Stop';
+          animateDualGraphLayout();
+        }
+      });
+    }
+    if (refs.resetLayout) {
+      refs.resetLayout.addEventListener('click', () => {
+        state.dualGraphAnimating = false;
+        state.dualGraphLayout = null;
+        if (refs.computeLayout) refs.computeLayout.textContent = 'Compute layout';
+        updateReport(false);
+      });
+    }
+    if (refs.dualGraphCanvas) {
+      refs.dualGraphCanvas.addEventListener('mousedown', handleDualGraphMouseDown);
+      refs.dualGraphCanvas.addEventListener('mousemove', handleDualGraphMouseMove);
+      refs.dualGraphCanvas.addEventListener('mouseup', handleDualGraphMouseUp);
+      refs.dualGraphCanvas.addEventListener('mouseleave', handleDualGraphMouseUp);
+    }
     window.addEventListener('resize', debounce(() => {
       resizeCanvas();
       normalizeViewOffset();
@@ -2385,6 +2423,7 @@
     updatePickControls();
     updateDisplayControls();
     if (!isDualGraph()) updateKnotCard(report);
+    else updateDualGraphCard(report);
     refreshExport();
     draw(report);
   }
@@ -2502,6 +2541,612 @@
       state.knotCodeKind = 'pd';
     }
     refs.knotCodeKind.value = state.knotCodeKind;
+  }
+
+  function updateDualGraphCard(report) {
+    if (!refs.dualGraphStatus || !refs.dualGraphCanvas) return;
+
+    const graphData = collectDualGraphData(report);
+
+    if (!graphData.isValid) {
+      refs.dualGraphStatus.textContent = graphData.reason || 'Not available';
+      refs.dualGraphCanvasWrap.style.display = 'none';
+      refs.dualGraphPlaceholder.style.display = 'block';
+      state.dualGraphLayout = null;
+      state.dualGraphData = null;
+      state.dualGraphAnimating = false;
+      return;
+    }
+
+    refs.dualGraphStatus.textContent = `${graphData.vertices.length} vertices, ${graphData.edges.length} edges, ${graphData.legs.length} legs`;
+    refs.dualGraphCanvasWrap.style.display = 'block';
+    refs.dualGraphPlaceholder.style.display = 'none';
+
+    // Check if graph structure changed
+    const structureKey = JSON.stringify({
+      v: graphData.vertices.map(v => v.index),
+      e: graphData.edges.map(e => [e.from, e.to]),
+      l: graphData.legs.map(l => l.vertex)
+    });
+    const oldKey = state.dualGraphStructureKey || '';
+
+    if (structureKey !== oldKey) {
+      state.dualGraphAnimating = false;
+      state.dualGraphLayout = null;
+      state.dualGraphStructureKey = structureKey;
+      if (refs.computeLayout) refs.computeLayout.textContent = 'Compute layout';
+    }
+
+    state.dualGraphData = graphData;
+    renderDualGraphVisualization(graphData);
+  }
+
+  function collectDualGraphData(report) {
+    // Check prerequisites: exactly one component and at least one vertex
+    if (report.components !== 1) {
+      return { isValid: false, reason: 'Requires exactly one component' };
+    }
+
+    const lattice = getLattice();
+    const vertices = [];
+    const edges = [];
+    const legs = [];
+
+    // Collect vertices
+    for (let index = 0; index < state.tiles.length; index += 1) {
+      if (isVertexTileValue(state.tiles[index])) {
+        const row = Math.floor(index / state.cols);
+        const col = index % state.cols;
+        vertices.push({ index, row, col });
+      }
+    }
+
+    if (vertices.length === 0) {
+      return { isValid: false, reason: 'Requires at least one vertex' };
+    }
+
+    // Track which vertex spokes have been processed
+    const markedSpokes = new Set();
+
+    // Process each vertex and its spokes
+    for (let vi = 0; vi < vertices.length; vi += 1) {
+      const vertex = vertices[vi];
+      const vertexTile = normalizeVertexTile(state.tiles[vertex.index]);
+
+      vertexTile.forEach((startDir) => {
+        const spokeKey = `${vertex.index}:${startDir}`;
+        if (markedSpokes.has(spokeKey)) return; // Already processed
+
+        // Mark this spoke as processed
+        markedSpokes.add(spokeKey);
+
+        // Trace the arc from this vertex spoke
+        const path = [{ index: vertex.index, dir: startDir }];
+        let current = { index: vertex.index, dir: startDir };
+
+        while (true) {
+          const row = Math.floor(current.index / state.cols);
+          const col = current.index % state.cols;
+          const next = neighbor(row, col, current.dir, state.rows, state.cols, lattice, state.wrapped);
+
+          if (!next) {
+            // Open end - this is a leg
+            legs.push({
+              vertex: vertex.index,
+              spoke: startDir,
+              path: path.slice()
+            });
+            break;
+          }
+
+          const nextIndex = indexOf(next.row, next.col, state.cols);
+          const opposite = lattice.opposite[current.dir];
+
+          if (isVertexTileValue(state.tiles[nextIndex])) {
+            // Found another vertex - this is an edge
+            const endSpokeKey = `${nextIndex}:${opposite}`;
+            markedSpokes.add(endSpokeKey); // Mark the other end too
+
+            edges.push({
+              from: vertex.index,
+              to: nextIndex,
+              fromSpoke: startDir,
+              toSpoke: opposite,
+              path: path.slice()
+            });
+            break;
+          }
+
+          // Continue tracing through the tile
+          const tile = normalizeTile(state.tiles[nextIndex]);
+          let nextDir = null;
+          for (const pair of tile) {
+            if (pair[0] === opposite) {
+              nextDir = pair[1];
+              break;
+            }
+            if (pair[1] === opposite) {
+              nextDir = pair[0];
+              break;
+            }
+          }
+
+          if (nextDir == null) {
+            // Dead end - this is a leg
+            legs.push({
+              vertex: vertex.index,
+              spoke: startDir,
+              path: path.slice()
+            });
+            break;
+          }
+
+          current = { index: nextIndex, dir: nextDir };
+          path.push(current);
+        }
+      });
+    }
+
+    return { isValid: true, vertices, edges, legs };
+  }
+
+  function renderDualGraphVisualization(graphData) {
+    const canvas = refs.dualGraphCanvas;
+    if (!canvas) return;
+
+    // Ensure canvas matches display size
+    const rect = canvas.getBoundingClientRect();
+    const displayWidth = Math.round(rect.width);
+    const displayHeight = Math.round(rect.height);
+    if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+      canvas.width = displayWidth;
+      canvas.height = displayHeight;
+      // If layout exists but was for a different size, scale it
+      if (state.dualGraphLayout) {
+        const sx = displayWidth / state.dualGraphLayout.width;
+        const sy = displayHeight / state.dualGraphLayout.height;
+        state.dualGraphLayout.nodes.forEach((node) => {
+          node.x *= sx;
+          node.y *= sy;
+        });
+        state.dualGraphLayout.width = displayWidth;
+        state.dualGraphLayout.height = displayHeight;
+      }
+    }
+
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    // Get or create layout
+    if (!state.dualGraphLayout) {
+      state.dualGraphLayout = calculateGraphLayout(graphData, width, height);
+    }
+
+    const layout = state.dualGraphLayout;
+
+    // Draw edges using virtual nodes
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 2;
+
+    graphData.edges.forEach((edge, i) => {
+      const fromNode = layout.nodeMap.get(`v${edge.from}`);
+      const toNode = layout.nodeMap.get(`v${edge.to}`);
+
+      if (!fromNode || !toNode) return;
+
+      if (edge.from === edge.to) {
+        // Loop: draw through 3 virtual nodes
+        const node0 = layout.nodeMap.get(`e${i}_0`);
+        const node1 = layout.nodeMap.get(`e${i}_1`);
+        const node2 = layout.nodeMap.get(`e${i}_2`);
+
+        if (node0 && node1 && node2) {
+          // Draw smooth curve through all 3 virtual nodes
+          ctx.beginPath();
+          ctx.moveTo(fromNode.x, fromNode.y);
+          ctx.quadraticCurveTo(node0.x, node0.y, (node0.x + node1.x) / 2, (node0.y + node1.y) / 2);
+          ctx.quadraticCurveTo(node1.x, node1.y, (node1.x + node2.x) / 2, (node1.y + node2.y) / 2);
+          ctx.quadraticCurveTo(node2.x, node2.y, fromNode.x, fromNode.y);
+          ctx.stroke();
+
+          // Draw virtual nodes
+          ctx.fillStyle = '#93c5fd';
+          ctx.strokeStyle = '#2563eb';
+          ctx.lineWidth = 1;
+          [node0, node1, node2].forEach((node) => {
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, 5, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+          });
+          ctx.lineWidth = 2;
+        }
+      } else {
+        // Regular edge: single virtual node
+        const edgeNode = layout.nodeMap.get(`e${i}`);
+        if (edgeNode) {
+          // Draw as quadratic curve through virtual node
+          ctx.beginPath();
+          ctx.moveTo(fromNode.x, fromNode.y);
+          ctx.quadraticCurveTo(edgeNode.x, edgeNode.y, toNode.x, toNode.y);
+          ctx.stroke();
+
+          // Draw virtual node (small circle)
+          ctx.fillStyle = '#93c5fd';
+          ctx.beginPath();
+          ctx.arc(edgeNode.x, edgeNode.y, 5, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = '#2563eb';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.lineWidth = 2;
+        }
+      }
+    });
+
+    // Draw legs using virtual nodes
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 2;
+
+    graphData.legs.forEach((leg, i) => {
+      const legNode = layout.nodeMap.get(`l${i}`);
+      const vertexNode = layout.nodeMap.get(`v${leg.vertex}`);
+
+      if (!legNode || !vertexNode) return;
+
+      ctx.beginPath();
+      ctx.moveTo(vertexNode.x, vertexNode.y);
+      ctx.lineTo(legNode.x, legNode.y);
+      ctx.stroke();
+
+      // Draw virtual node
+      ctx.fillStyle = '#fca5a5';
+      ctx.beginPath();
+      ctx.arc(legNode.x, legNode.y, 5, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+
+    // Draw vertices on top
+    ctx.fillStyle = '#1e40af';
+    ctx.strokeStyle = '#1e3a8a';
+    ctx.lineWidth = 2;
+    graphData.vertices.forEach((vertex) => {
+      const node = layout.nodeMap.get(`v${vertex.index}`);
+      if (node) {
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 8, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+      }
+    });
+  }
+
+  function calculateGraphLayout(graphData, width, height) {
+    // Initialize layout with virtual nodes for edges and loops
+    const padding = 40;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const radius = Math.min(width, height) / 2 - padding;
+
+    const nodes = [];
+    const nodeMap = new Map();
+
+    // Add vertex nodes
+    graphData.vertices.forEach((vertex, i) => {
+      const angle = (2 * Math.PI * i) / graphData.vertices.length - Math.PI / 2;
+      const node = {
+        id: `v${vertex.index}`,
+        type: 'vertex',
+        vertexIndex: vertex.index,
+        x: centerX + radius * Math.cos(angle),
+        y: centerY + radius * Math.sin(angle),
+        vx: 0,
+        vy: 0,
+        fixed: false
+      };
+      nodes.push(node);
+      nodeMap.set(node.id, node);
+    });
+
+    // Add virtual nodes for edges with offset for multiple edges
+    const edgeCountMap = new Map();
+    graphData.edges.forEach((edge, i) => {
+      const fromNode = nodeMap.get(`v${edge.from}`);
+      const toNode = nodeMap.get(`v${edge.to}`);
+      if (!fromNode || !toNode) return;
+
+      // Track multiple edges between same vertices
+      const key = edge.from === edge.to
+        ? `loop:${edge.from}`
+        : (edge.from < edge.to ? `${edge.from}-${edge.to}` : `${edge.to}-${edge.from}`);
+      const count = edgeCountMap.get(key) || 0;
+      edgeCountMap.set(key, count + 1);
+
+      if (edge.from === edge.to) {
+        // Loop: create 3 virtual nodes to form a circular path
+        const baseAngle = (count * Math.PI * 2 / 3) + Math.PI / 4;
+        const loopRadius = 50;
+
+        for (let j = 0; j < 3; j += 1) {
+          const angle = baseAngle + (j * Math.PI * 2 / 3);
+          const node = {
+            id: `e${i}_${j}`,
+            type: 'edge',
+            edgeIndex: i,
+            loopPart: j,
+            from: edge.from,
+            to: edge.to,
+            x: fromNode.x + Math.cos(angle) * loopRadius,
+            y: fromNode.y + Math.sin(angle) * loopRadius,
+            vx: 0,
+            vy: 0,
+            fixed: false
+          };
+          nodes.push(node);
+          nodeMap.set(node.id, node);
+        }
+      } else {
+        // Regular edge: single virtual node with offset for multiples
+        const midX = (fromNode.x + toNode.x) / 2;
+        const midY = (fromNode.y + toNode.y) / 2;
+
+        const dx = toNode.x - fromNode.x;
+        const dy = toNode.y - fromNode.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const perpX = -dy / dist;
+        const perpY = dx / dist;
+        const offset = (count - 0.5) * 25;
+
+        const node = {
+          id: `e${i}`,
+          type: 'edge',
+          edgeIndex: i,
+          from: edge.from,
+          to: edge.to,
+          x: midX + perpX * offset,
+          y: midY + perpY * offset,
+          vx: 0,
+          vy: 0,
+          fixed: false
+        };
+        nodes.push(node);
+        nodeMap.set(node.id, node);
+      }
+    });
+
+    // Add virtual nodes for legs with even distribution
+    const legCountMap = new Map();
+    graphData.legs.forEach((leg, i) => {
+      const fromNode = nodeMap.get(`v${leg.vertex}`);
+      if (!fromNode) return;
+
+      const count = legCountMap.get(leg.vertex) || 0;
+      legCountMap.set(leg.vertex, count + 1);
+
+      const angle = (count * Math.PI * 2 / Math.max(graphData.legs.filter(l => l.vertex === leg.vertex).length, 1));
+      const dist = 50;
+      const node = {
+        id: `l${i}`,
+        type: 'leg',
+        legIndex: i,
+        vertex: leg.vertex,
+        x: fromNode.x + Math.cos(angle) * dist,
+        y: fromNode.y + Math.sin(angle) * dist,
+        vx: 0,
+        vy: 0,
+        fixed: false
+      };
+      nodes.push(node);
+      nodeMap.set(node.id, node);
+    });
+
+    return { nodes, nodeMap, width, height };
+  }
+
+  function runForceSimulation(layout, graphData, iterations = 100) {
+    // Deprecated - use animateDualGraphLayout instead
+  }
+
+  function animateDualGraphLayout() {
+    if (!state.dualGraphAnimating || !state.dualGraphLayout || !state.dualGraphData) return;
+
+    const layout = state.dualGraphLayout;
+    const graphData = state.dualGraphData;
+
+    applyForces(layout, graphData, 1.0);
+
+    layout.nodes.forEach((node) => {
+      if (node.fixed) return;
+      node.x += node.vx;
+      node.y += node.vy;
+      node.vx *= 0.85;
+      node.vy *= 0.85;
+
+      const margin = 20;
+      if (node.x < margin) { node.x = margin; node.vx = 0; }
+      if (node.x > layout.width - margin) { node.x = layout.width - margin; node.vx = 0; }
+      if (node.y < margin) { node.y = margin; node.vy = 0; }
+      if (node.y > layout.height - margin) { node.y = layout.height - margin; node.vy = 0; }
+    });
+
+    renderDualGraphVisualization(graphData);
+
+    if (state.dualGraphAnimating) {
+      requestAnimationFrame(animateDualGraphLayout);
+    }
+  }
+
+  function applyForces(layout, graphData, alpha) {
+    const nodes = layout.nodes;
+
+    // Strong repulsion between all nodes
+    const repulsionStrength = 2000;
+    for (let i = 0; i < nodes.length; i += 1) {
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        const dx = nodes[j].x - nodes[i].x;
+        const dy = nodes[j].y - nodes[i].y;
+        const distSq = dx * dx + dy * dy + 1;
+        const dist = Math.sqrt(distSq);
+        const force = repulsionStrength / distSq;
+        const fx = (dx / dist) * force;
+        const fy = (dy / dist) * force;
+
+        if (!nodes[i].fixed) {
+          nodes[i].vx -= fx;
+          nodes[i].vy -= fy;
+        }
+        if (!nodes[j].fixed) {
+          nodes[j].vx += fx;
+          nodes[j].vy += fy;
+        }
+      }
+    }
+
+    // Attraction along edges - stronger springs
+    const edgeStrength = 0.1;
+    const edgeLength = 80;
+    graphData.edges.forEach((edge, i) => {
+      const fromNode = layout.nodeMap.get(`v${edge.from}`);
+      const toNode = layout.nodeMap.get(`v${edge.to}`);
+
+      if (!fromNode || !toNode) return;
+
+      if (edge.from === edge.to) {
+        // Loop: connect vertex → node0 → node1 → node2 → vertex
+        const node0 = layout.nodeMap.get(`e${i}_0`);
+        const node1 = layout.nodeMap.get(`e${i}_1`);
+        const node2 = layout.nodeMap.get(`e${i}_2`);
+
+        if (node0 && node1 && node2) {
+          const loopSegmentLength = edgeLength / 2;
+          applySpringForce(fromNode, node0, edgeStrength, loopSegmentLength);
+          applySpringForce(node0, node1, edgeStrength, loopSegmentLength);
+          applySpringForce(node1, node2, edgeStrength, loopSegmentLength);
+          applySpringForce(node2, fromNode, edgeStrength, loopSegmentLength);
+        }
+      } else {
+        // Regular edge: single virtual node
+        const edgeNode = layout.nodeMap.get(`e${i}`);
+        if (edgeNode) {
+          applySpringForce(fromNode, edgeNode, edgeStrength, edgeLength / 2);
+          applySpringForce(toNode, edgeNode, edgeStrength, edgeLength / 2);
+        }
+      }
+    });
+
+    // Attraction for legs
+    const legStrength = 0.08;
+    const legLength = 60;
+    graphData.legs.forEach((leg, i) => {
+      const legNode = layout.nodeMap.get(`l${i}`);
+      const vertexNode = layout.nodeMap.get(`v${leg.vertex}`);
+
+      if (!legNode || !vertexNode) return;
+      applySpringForce(vertexNode, legNode, legStrength, legLength);
+    });
+
+    // Weak center force
+    const centerStrength = 0.005;
+    const centerX = layout.width / 2;
+    const centerY = layout.height / 2;
+    nodes.forEach((node) => {
+      if (node.fixed) return;
+      node.vx += (centerX - node.x) * centerStrength;
+      node.vy += (centerY - node.y) * centerStrength;
+    });
+  }
+
+  function applySpringForce(node1, node2, strength, targetDist) {
+    const dx = node2.x - node1.x;
+    const dy = node2.y - node1.y;
+    const dist = Math.sqrt(dx * dx + dy * dy + 0.01);
+    const force = (dist - targetDist) * strength;
+    const fx = (dx / dist) * force;
+    const fy = (dy / dist) * force;
+
+    if (!node1.fixed) {
+      node1.vx += fx;
+      node1.vy += fy;
+    }
+    if (!node2.fixed) {
+      node2.vx -= fx;
+      node2.vy -= fy;
+    }
+  }
+
+  function handleDualGraphMouseDown(event) {
+    if (!state.dualGraphLayout) return;
+
+    const canvas = refs.dualGraphCanvas;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (event.clientX - rect.left) * scaleX;
+    const y = (event.clientY - rect.top) * scaleY;
+
+    // Find node under cursor
+    const hitRadius = 15;
+    for (const node of state.dualGraphLayout.nodes) {
+      const dx = node.x - x;
+      const dy = node.y - y;
+      if (dx * dx + dy * dy < hitRadius * hitRadius) {
+        state.dualGraphDragging = node;
+        node.fixed = true;
+        canvas.style.cursor = 'grabbing';
+        break;
+      }
+    }
+  }
+
+  function handleDualGraphMouseMove(event) {
+    if (!state.dualGraphLayout) return;
+
+    const canvas = refs.dualGraphCanvas;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (event.clientX - rect.left) * scaleX;
+    const y = (event.clientY - rect.top) * scaleY;
+
+    if (state.dualGraphDragging) {
+      state.dualGraphDragging.x = x;
+      state.dualGraphDragging.y = y;
+      state.dualGraphDragging.vx = 0;
+      state.dualGraphDragging.vy = 0;
+
+      // Re-render if not animating (animation loop handles it otherwise)
+      if (!state.dualGraphAnimating && state.dualGraphData) {
+        renderDualGraphVisualization(state.dualGraphData);
+      }
+    } else {
+      const hitRadius = 15;
+      let hovering = false;
+      for (const node of state.dualGraphLayout.nodes) {
+        const dx = node.x - x;
+        const dy = node.y - y;
+        if (dx * dx + dy * dy < hitRadius * hitRadius) {
+          hovering = true;
+          break;
+        }
+      }
+      canvas.style.cursor = hovering ? 'grab' : 'default';
+    }
+  }
+
+  function handleDualGraphMouseUp() {
+    if (state.dualGraphDragging) {
+      state.dualGraphDragging.fixed = false;
+      state.dualGraphDragging = null;
+      if (refs.dualGraphCanvas) {
+        refs.dualGraphCanvas.style.cursor = 'default';
+      }
+    }
   }
 
   function normalizeKnotCandidates(result) {
@@ -4025,6 +4670,7 @@
       refs.wrappedViewMode.disabled = !state.wrapped;
     }
     if (refs.knotCard) refs.knotCard.hidden = isDualGraph();
+    if (refs.dualGraphCard) refs.dualGraphCard.hidden = !isDualGraph();
   }
 
   function generateTilePreferences(lattice) {

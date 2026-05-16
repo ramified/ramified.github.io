@@ -498,6 +498,23 @@
       </div>
     </section>
 
+    <section class="card collapsed" id="dual-graph-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Dual Graph Visualization</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value" id="dual-graph-status">-</span></div>
+        <div id="dual-graph-canvas-wrap" style="margin-top: 12px; display: none;">
+          <canvas id="dual-graph-canvas" width="300" height="300" style="width: 100%; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: default;"></canvas>
+          <div style="margin-top: 8px;">
+            <button class="btn" id="compute-layout" type="button">Compute layout</button>
+            <button class="btn btn-ghost" id="reset-layout" type="button">Reset</button>
+          </div>
+        </div>
+        <div id="dual-graph-placeholder" style="margin-top: 8px; color: var(--muted); font-size: 0.86rem;">
+          Requires exactly one component with at least one vertex
+        </div>
+      </div>
+    </section>
+
     <section class="card collapsed">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Display Options</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
