@@ -960,11 +960,41 @@
   }
 
   function beginDrawGesture(event) {
-    const entry = edgeHitTest(event.clientX, event.clientY, 0);
-    updateDrawDebugFromPoint(event.clientX, event.clientY, false);
+    const point = clientPointToBoardPoint(event.clientX, event.clientY);
+    const tileHit = tileHitTest(event.clientX, event.clientY, 1.02);
+
+    if (!tileHit) {
+      updateDrawDebugFromPoint(event.clientX, event.clientY, false);
+      return;
+    }
+
+    const tile = state.tiles[tileHit.index];
+    const isVertex = isVertexTileValue(tile);
+
+    // Determine entry point
+    let entryDir = null;
+    let vertexTouched = false;
+
+    if (isVertex) {
+      const anchor = dualGraphAnchorFromPoint(point, tileHit);
+      if (anchor && anchor.type === 'edge') {
+        entryDir = anchor.dir;
+      } else {
+        vertexTouched = true;
+      }
+    } else {
+      const edgeHit = edgeHitTest(event.clientX, event.clientY, 0);
+      if (edgeHit && edgeHit.index === tileHit.index) {
+        entryDir = edgeHit.dir;
+      } else {
+        updateDrawDebugFromPoint(event.clientX, event.clientY, false);
+        return;
+      }
+    }
+
     pointerState = {
       id: event.pointerId,
-      index: entry ? entry.index : -1,
+      index: tileHit.index,
       x: event.clientX,
       y: event.clientY,
       lastX: event.clientX,
@@ -972,65 +1002,135 @@
       moved: false
     };
     refs.canvas.setPointerCapture(event.pointerId);
+
     drawState = {
       pointerId: event.pointerId,
       origin: null,
-      current: null,
+      current: {
+        index: tileHit.index,
+        offset: copyOffsetRecord(tileHit.offset),
+        entryDir: entryDir,
+        isVertexTile: isVertex,
+        vertexTouched: vertexTouched,
+        originalTile: cloneTile(tile),
+        removedEntryPair: null,
+        removedEntryIndex: -1
+      },
       history: [],
       eraseMode: 'detecting',
       completed: false
     };
-    state.hoverIndex = -1;
-    if (entry) {
-      startDrawTile(entry, false);
-      if (state.drawStyle === 'shade') updateDrawShadeFromCurrent(event.clientX, event.clientY, false);
-      else updateDrawDebugFromPoint(event.clientX, event.clientY, false);
-      draw(analyze());
+
+    if (!isVertex && entryDir != null) {
+      const removed = removePairAtEdge(tile || [], entryDir);
+      state.tiles[tileHit.index] = removed.tile;
+      drawState.current.removedEntryPair = removed.pair;
+      drawState.current.removedEntryIndex = removed.pairIndex;
     }
+
+    state.hoverIndex = tileHit.index;
+    updateUnifiedDrawPreview(event.clientX, event.clientY, false);
+    draw(analyze());
   }
 
   function updateDrawGesture(event) {
     if (!drawState) return;
-    if (state.drawStyle === 'shade' && drawState.current) {
-      updateDrawShadeFromCurrent(event.clientX, event.clientY);
-    } else {
-      updateDrawDebugFromPoint(event.clientX, event.clientY);
-    }
+
+    updateUnifiedDrawPreview(event.clientX, event.clientY);
+
     if (!drawState.current) {
-      const firstEntry = firstDrawEntry(event.clientX, event.clientY);
-      if (firstEntry) {
-        startDrawTile(firstEntry);
-        if (state.drawStyle === 'shade') updateDrawShadeFromCurrent(event.clientX, event.clientY);
+      const tileHit = tileHitTest(event.clientX, event.clientY, 1.02);
+      if (!tileHit) return;
+
+      const tile = state.tiles[tileHit.index];
+      const isVertex = isVertexTileValue(tile);
+      const point = clientPointToBoardPoint(event.clientX, event.clientY);
+
+      let entryDir = null;
+      let vertexTouched = false;
+
+      if (isVertex) {
+        const anchor = dualGraphAnchorFromPoint(point, tileHit);
+        if (anchor && anchor.type === 'edge') {
+          entryDir = anchor.dir;
+        } else {
+          vertexTouched = true;
+        }
+      } else {
+        const edgeHit = edgeHitTest(event.clientX, event.clientY, 0);
+        if (edgeHit && edgeHit.index === tileHit.index) {
+          entryDir = edgeHit.dir;
+        } else {
+          return;
+        }
+      }
+
+      drawState.current = {
+        index: tileHit.index,
+        offset: copyOffsetRecord(tileHit.offset),
+        entryDir: entryDir,
+        isVertexTile: isVertex,
+        vertexTouched: vertexTouched,
+        originalTile: cloneTile(tile),
+        removedEntryPair: null,
+        removedEntryIndex: -1
+      };
+
+      if (!isVertex && entryDir != null) {
+        const removed = removePairAtEdge(tile || [], entryDir);
+        state.tiles[tileHit.index] = removed.tile;
+        drawState.current.removedEntryPair = removed.pair;
+        drawState.current.removedEntryIndex = removed.pairIndex;
+      }
+
+      state.hoverIndex = tileHit.index;
+      updateUnifiedDrawPreview(event.clientX, event.clientY);
+      draw(analyze());
+      return;
+    }
+
+    const point = clientPointToBoardPoint(event.clientX, event.clientY);
+    const currentHit = tileHitTest(event.clientX, event.clientY, 1.02);
+
+    if (currentHit && currentHit.index === drawState.current.index) {
+      if (drawState.current.isVertexTile) {
+        const centerDist = dualGraphCenterDistanceFromPoint(point, drawState.current);
+        if (centerDist != null && centerDist <= geometry.radius * 0.32) {
+          if (!drawState.current.vertexTouched) {
+            // First time touching the vertex - commit the entry spoke
+            drawState.current.vertexTouched = true;
+            if (drawState.current.entryDir != null) {
+              commitDualGraphSpoke(drawState.current.index, drawState.current.entryDir);
+              drawState.completed = true;
+              updateReport(false);
+            }
+            // Now we're drawing from the center
+            drawState.current.entryDir = null;
+          }
+        }
       }
       return;
     }
 
-    const backtrackDir = drawBacktrackDirection(event.clientX, event.clientY, drawState.current);
-    if (backtrackDir === drawState.current.entryDir) {
+    const exitDir = detectExitDirection(event.clientX, event.clientY, drawState.current);
+    if (exitDir == null) return;
+
+    if (exitDir === drawState.current.entryDir && !drawState.current.vertexTouched) {
       if (drawState.history.length) undoLastDrawSegment();
       else restorePendingDrawTile();
-      if (state.drawStyle === 'shade') {
-        if (drawState.current) updateDrawShadeFromCurrent(event.clientX, event.clientY);
-        else updateDrawDebugFromPoint(event.clientX, event.clientY);
-      } else {
-        updateDrawDebugFromPoint(event.clientX, event.clientY);
-      }
+      updateUnifiedDrawPreview(event.clientX, event.clientY);
       return;
     }
 
-    const exitDir = drawExitDirection(event.clientX, event.clientY, drawState.current);
-    if (exitDir == null || exitDir === drawState.current.entryDir) return;
-
     const finished = drawState.current;
-    commitDrawTile(finished, exitDir);
+    commitCurrentTile(exitDir);
     drawState.current = null;
     drawState.completed = true;
     updateReport(false);
 
     const next = nextDrawEntry(finished, exitDir);
     if (next) {
-      startDrawTile(next);
-      if (state.drawStyle === 'shade') updateDrawShadeFromCurrent(event.clientX, event.clientY);
+      startDrawingAtTile(next, event.clientX, event.clientY);
     }
   }
 
@@ -1038,105 +1138,172 @@
     return edgeHitTest(clientX, clientY, 0);
   }
 
-  function beginDualGraphDrawGesture(event) {
-    const hit = tileHitTest(event.clientX, event.clientY, 1.02);
-    const anchor = hit ? dualGraphAnchorFromPoint(clientPointToBoardPoint(event.clientX, event.clientY), {
-      index: hit.index,
-      offset: copyOffsetRecord(hit.offset)
-    }) : null;
-    pointerState = {
-      id: event.pointerId,
-      index: hit ? hit.index : -1,
-      x: event.clientX,
-      y: event.clientY,
-      lastX: event.clientX,
-      lastY: event.clientY,
-      moved: false
-    };
-    refs.canvas.setPointerCapture(event.pointerId);
-    drawState = {
-      kind: 'dual',
-      pointerId: event.pointerId,
-      origin: null,
-      history: [],
-      eraseMode: 'drawing',
-      current: hit
-        ? {
-          index: hit.index,
-          offset: copyOffsetRecord(hit.offset),
-          anchor: anchor && anchor.type === 'edge' ? 'edge' : 'center',
-          entryDir: anchor && anchor.type === 'edge' ? anchor.dir : null
+  function detectExitDirection(clientX, clientY, tileState) {
+    if (tileState.isVertexTile) {
+      const point = clientPointToBoardPoint(clientX, clientY);
+      const endpoint = dualGraphEndpointFromPoint(point, {
+        index: tileState.index,
+        offset: tileState.offset,
+        anchor: tileState.entryDir != null ? 'edge' : 'center',
+        entryDir: tileState.entryDir
+      });
+      return endpoint && endpoint.type === 'edge' ? endpoint.dir : null;
+    } else {
+      return drawExitDirection(clientX, clientY, tileState);
+    }
+  }
+
+  function commitCurrentTile(exitDir) {
+    if (!drawState || !drawState.current) return;
+
+    const current = drawState.current;
+
+    if (current.isVertexTile) {
+      // If vertex was touched, entry spoke was already toggled when touching vertex
+      // So we only need to toggle the exit spoke
+      if (current.vertexTouched) {
+        if (exitDir != null) {
+          commitDualGraphSpoke(current.index, exitDir);
         }
-        : null,
-      completed: false
+      } else {
+        // Vertex not touched - toggle both entry and exit spokes
+        if (current.entryDir != null) {
+          commitDualGraphSpoke(current.index, current.entryDir);
+        }
+        if (exitDir != null && exitDir !== current.entryDir) {
+          commitDualGraphSpoke(current.index, exitDir);
+        }
+      }
+    } else {
+      if (current.entryDir != null && exitDir != null) {
+        const eraseModeBefore = drawState.eraseMode;
+        const erasesExisting = eraseModeBefore === 'detecting'
+          && pairHasEndpoints(current.removedEntryPair, current.entryDir, exitDir);
+
+        if (erasesExisting) {
+          state.tiles[current.index] = cloneTile(state.tiles[current.index] || []);
+        } else {
+          drawState.eraseMode = 'drawing';
+          const removed = removePairAtEdge(state.tiles[current.index] || [], exitDir);
+          const next = removed.tile;
+          const newPair = [current.entryDir, exitDir];
+          if (state.drawLayer === 'below') next.unshift(newPair);
+          else next.push(newPair);
+          state.tiles[current.index] = cloneTile(next);
+        }
+
+        state.edits += 1;
+
+        drawState.history.push({
+          tileState: cloneDrawTileState(current),
+          exitDir,
+          eraseModeBefore,
+          eraseModeAfter: drawState.eraseMode
+        });
+      }
+    }
+
+    drawState.completed = true;
+  }
+
+  function startDrawingAtTile(entry, clientX, clientY) {
+    const tile = state.tiles[entry.index];
+    const isVertex = isVertexTileValue(tile);
+
+    drawState.current = {
+      index: entry.index,
+      offset: copyOffsetRecord(entry.offset),
+      entryDir: entry.dir,
+      isVertexTile: isVertex,
+      vertexTouched: false,
+      originalTile: cloneTile(tile),
+      removedEntryPair: null,
+      removedEntryIndex: -1
     };
-    state.hoverIndex = hit ? hit.index : -1;
-    updateDualGraphDrawPreview(event.clientX, event.clientY, false);
+
+    if (!isVertex && entry.dir != null) {
+      const removed = removePairAtEdge(tile || [], entry.dir);
+      state.tiles[entry.index] = removed.tile;
+      drawState.current.removedEntryPair = removed.pair;
+      drawState.current.removedEntryIndex = removed.pairIndex;
+    }
+
+    state.hoverIndex = entry.index;
+    updateUnifiedDrawPreview(clientX, clientY);
     draw(analyze());
   }
 
-  function updateDualGraphDrawGesture(event) {
-    if (!drawState || drawState.kind !== 'dual') return;
-    if (!drawState.current) {
-      const hit = tileHitTest(event.clientX, event.clientY, 1.02);
-      if (!hit || !isVertexTileValue(state.tiles[hit.index])) return;
-      const anchor = dualGraphAnchorFromPoint(clientPointToBoardPoint(event.clientX, event.clientY), {
-        index: hit.index,
-        offset: copyOffsetRecord(hit.offset)
+  function updateUnifiedDrawPreview(clientX, clientY, redraw = true) {
+    if (!drawState || !drawState.current) {
+      updateDrawDebugFromPoint(clientX, clientY, redraw);
+      return;
+    }
+
+    const current = drawState.current;
+    const point = clientPointToBoardPoint(clientX, clientY);
+
+    if (current.isVertexTile) {
+      const endpoint = dualGraphEndpointFromPoint(point, {
+        index: current.index,
+        offset: current.offset,
+        anchor: current.entryDir != null ? 'edge' : 'center',
+        entryDir: current.entryDir
       });
-      drawState.current = {
-        index: hit.index,
-        offset: copyOffsetRecord(hit.offset),
-        anchor: anchor && anchor.type === 'edge' ? 'edge' : 'center',
-        entryDir: anchor && anchor.type === 'edge' ? anchor.dir : null
-      };
-      state.hoverIndex = hit.index;
-      updateDualGraphDrawPreview(event.clientX, event.clientY);
-      return;
-    }
 
-    updateDualGraphDrawPreview(event.clientX, event.clientY);
-    const endpoint = dualGraphEndpointFromPoint(clientPointToBoardPoint(event.clientX, event.clientY), drawState.current);
-    if (!endpoint) return;
+      const dir = current.entryDir != null
+        ? current.entryDir
+        : (endpoint && endpoint.type === 'edge'
+          ? endpoint.dir
+          : nearestDirectionForTilePoint(point, current));
 
-    if (drawState.current.anchor === 'center' && endpoint.type === 'edge') {
-      commitDualGraphSpoke(drawState.current.index, endpoint.dir);
-      drawState.completed = true;
-      continueFromVertexEdge(drawState.current, endpoint.dir);
-      updateReport(false);
-      return;
-    }
-
-    if (drawState.current.anchor === 'edge' && endpoint.type === 'center') {
-      commitDualGraphSpoke(drawState.current.index, drawState.current.entryDir);
-      drawState.current = {
-        index: drawState.current.index,
-        offset: copyOffsetRecord(drawState.current.offset),
-        anchor: 'center',
-        entryDir: null
-      };
-      drawState.completed = true;
-      updateReport(false);
+      setDrawDebugHit({
+        index: current.index,
+        dir: dir == null || dir < 0 ? 0 : dir,
+        offset: copyOffsetRecord(current.offset),
+        point,
+        graphAnchor: current.entryDir != null ? 'edge' : 'center',
+        graphVertex: !!endpoint && endpoint.type === 'center'
+      }, redraw);
+    } else {
+      if (state.drawStyle === 'shade') {
+        setDrawDebugHit({
+          index: current.index,
+          dir: current.entryDir,
+          offset: copyOffsetRecord(current.offset),
+          point
+        }, redraw);
+      } else {
+        updateDrawDebugFromPoint(clientX, clientY, redraw);
+      }
     }
   }
 
+  function cloneDrawTileState(tileState) {
+    return {
+      index: tileState.index,
+      offset: copyOffsetRecord(tileState.offset),
+      entryDir: tileState.entryDir,
+      isVertexTile: tileState.isVertexTile,
+      vertexTouched: tileState.vertexTouched,
+      originalTile: cloneTile(tileState.originalTile),
+      removedEntryPair: tileState.removedEntryPair ? tileState.removedEntryPair.slice() : null,
+      removedEntryIndex: tileState.removedEntryIndex
+    };
+  }
+
+  function beginDualGraphDrawGesture(event) {
+    // Unified system: just call beginDrawGesture
+    beginDrawGesture(event);
+  }
+
+  function updateDualGraphDrawGesture(event) {
+    // Unified system: just call updateDrawGesture
+    updateDrawGesture(event);
+  }
+
   function updateDualGraphDrawPreview(clientX, clientY, redraw = true) {
-    if (!drawState || drawState.kind !== 'dual' || !drawState.current) return false;
-    const point = clientPointToBoardPoint(clientX, clientY);
-    const endpoint = dualGraphEndpointFromPoint(point, drawState.current);
-    const dir = drawState.current.anchor === 'edge'
-      ? drawState.current.entryDir
-      : (endpoint && endpoint.type === 'edge'
-        ? endpoint.dir
-        : nearestDirectionForTilePoint(point, drawState.current));
-    return setDrawDebugHit({
-      index: drawState.current.index,
-      dir: dir == null || dir < 0 ? 0 : dir,
-      offset: copyOffsetRecord(drawState.current.offset),
-      point,
-      graphAnchor: drawState.current.anchor,
-      graphVertex: !!endpoint && endpoint.type === 'center'
-    }, redraw);
+    // Unified system: just call updateUnifiedDrawPreview
+    updateUnifiedDrawPreview(clientX, clientY, redraw);
   }
 
   function nearestDirectionForTilePoint(point, tileState) {
@@ -1224,33 +1391,9 @@
     };
   }
 
-  function continueFromVertexEdge(tileState, dir) {
-    if (!drawState) return false;
-    const next = nextDrawEntry(tileState, dir);
-    if (!next) {
-      drawState.current = null;
-      return false;
-    }
-
-    if (isVertexTileValue(state.tiles[next.index])) {
-      drawState.current = {
-        index: next.index,
-        offset: copyOffsetRecord(next.offset),
-        anchor: 'edge',
-        entryDir: next.dir
-      };
-      state.hoverIndex = next.index;
-      return true;
-    }
-
-    drawState.kind = null;
-    drawState.origin = null;
-    drawState.current = null;
-    drawState.eraseMode = 'drawing';
-    if (!Array.isArray(drawState.history)) drawState.history = [];
-    state.hoverIndex = -1;
-    startDrawTile(next);
-    return true;
+  function continueFromVertexEdge(tileState, dir, clientX, clientY) {
+    // Obsolete: unified system handles transitions automatically
+    return false;
   }
 
   function shouldDrawDualGraphVertex(clientX, clientY) {
@@ -1266,7 +1409,9 @@
     if (isVertexTileValue(tile)) {
       state.tiles[index] = null;
     } else if (isTileEmpty(tile)) {
-      state.tiles[index] = vertexTileFromDirs([]);
+      // Creating a vertex on an empty tile - auto-connect to open ends
+      const openEnds = findOpenEndsPointingToTile(index);
+      state.tiles[index] = vertexTileFromDirs(openEnds);
     } else {
       state.tiles[index] = vertexTileFromDirs(maskToDirs(tileToMask(tile)));
     }
@@ -1275,50 +1420,51 @@
     return true;
   }
 
+  function findOpenEndsPointingToTile(targetIndex) {
+    const lattice = getLattice();
+    const cell = geometry.cells[targetIndex];
+    if (!cell) return [];
+
+    const openDirs = [];
+
+    // Check each direction from the target tile
+    for (let dir = 0; dir < lattice.sides; dir++) {
+      // Find the neighbor in this direction
+      const neighborInfo = neighbor(cell.row, cell.col, dir, state.rows, state.cols, lattice, state.wrapped);
+      if (!neighborInfo) continue;
+
+      const neighborIndex = indexOf(neighborInfo.row, neighborInfo.col, state.cols);
+      const neighborTile = state.tiles[neighborIndex];
+
+      // Check if neighbor has an open end pointing back to us
+      const oppositeDir = lattice.opposite[dir];
+
+      if (isVertexTileValue(neighborTile)) {
+        // Neighbor is a vertex tile - check if it has a spoke pointing to us
+        if (vertexTileHasSpoke(neighborIndex, oppositeDir)) {
+          openDirs.push(dir);
+        }
+      } else if (!isTileEmpty(neighborTile)) {
+        // Neighbor is an arc tile - check if it has an open end pointing to us
+        const arcs = normalizeTile(neighborTile);
+        const hasOpenEnd = arcs.some(pair => pair[0] === oppositeDir || pair[1] === oppositeDir);
+        if (hasOpenEnd) {
+          openDirs.push(dir);
+        }
+      }
+    }
+
+    return openDirs;
+  }
+
   function startDrawTile(edge, redraw = true) {
-    if (!drawState) return;
-    const existingTile = state.tiles[edge.index];
-    if (isDualGraph() && isVertexTileValue(existingTile)) return;
-    const originalTile = isTileEmpty(existingTile) ? null : cloneTile(existingTile);
-    const removed = removePairAtEdge(originalTile || [], edge.dir);
-    state.tiles[edge.index] = removed.tile;
-    drawState.current = {
-      index: edge.index,
-      offset: { x: edge.offset.x, y: edge.offset.y },
-      entryDir: edge.dir,
-      originalTile,
-      removedEntryPair: removed.pair,
-      removedEntryIndex: removed.pairIndex
-    };
-    if (redraw) draw(analyze());
+    // Obsolete: replaced by startDrawingAtTile in unified system
+    return;
   }
 
   function commitDrawTile(tileState, exitDir) {
-    const eraseModeBefore = drawState ? drawState.eraseMode : 'drawing';
-    const erasesExisting = eraseModeBefore === 'detecting'
-      && pairHasEndpoints(tileState.removedEntryPair, tileState.entryDir, exitDir);
-
-    if (erasesExisting) {
-      state.tiles[tileState.index] = cloneTile(state.tiles[tileState.index] || []);
-    } else {
-      if (drawState) drawState.eraseMode = 'drawing';
-      const removed = removePairAtEdge(state.tiles[tileState.index] || [], exitDir);
-      const next = removed.tile;
-      const newPair = [tileState.entryDir, exitDir];
-      if (state.drawLayer === 'below') next.unshift(newPair);
-      else next.push(newPair);
-      state.tiles[tileState.index] = cloneTile(next);
-    }
-    state.edits += 1;
-    if (drawState) {
-      drawState.origin = null;
-      drawState.history.push({
-        tileState: cloneDrawTileState(tileState),
-        exitDir,
-        eraseModeBefore,
-        eraseModeAfter: drawState.eraseMode
-      });
-    }
+    // Obsolete: replaced by commitCurrentTile in unified system
+    return;
   }
 
   function undoLastDrawSegment() {
@@ -1328,16 +1474,14 @@
     const segment = drawState.history.pop();
     restoreDrawTile(segment.tileState);
     state.edits = Math.max(0, state.edits - 1);
-    drawState.current = null;
     drawState.eraseMode = segment.eraseModeBefore || 'drawing';
     drawState.completed = drawState.history.length > 0;
     updateReport(false);
 
-    startDrawTile({
-      index: segment.tileState.index,
-      dir: segment.tileState.entryDir,
-      offset: segment.tileState.offset
-    });
+    // Restore the previous tile state
+    drawState.current = cloneDrawTileState(segment.tileState);
+    state.hoverIndex = segment.tileState.index;
+
     return true;
   }
 
@@ -1352,22 +1496,26 @@
   }
 
   function handleDrawClick(event) {
-    if (drawState && drawState.kind === 'dual' && drawState.current && pointerState && !pointerState.moved) {
-      const endpoint = dualGraphEndpointFromPoint(
-        clientPointToBoardPoint(event.clientX, event.clientY),
-        drawState.current
-      );
+    if (drawState && drawState.current && drawState.current.isVertexTile && pointerState && !pointerState.moved) {
+      const point = clientPointToBoardPoint(event.clientX, event.clientY);
+      const endpoint = dualGraphEndpointFromPoint(point, {
+        index: drawState.current.index,
+        offset: drawState.current.offset,
+        anchor: drawState.current.entryDir != null ? 'edge' : 'center',
+        entryDir: drawState.current.entryDir
+      });
       if (!endpoint) return false;
 
-      if (drawState.current.anchor === 'center' && endpoint.type === 'edge') {
+      const anchor = drawState.current.entryDir != null ? 'edge' : 'center';
+
+      if (anchor === 'center' && endpoint.type === 'edge') {
         commitDualGraphSpoke(drawState.current.index, endpoint.dir);
         drawState.completed = true;
-        continueFromVertexEdge(drawState.current, endpoint.dir);
         updateReport(false);
         return true;
       }
 
-      if (drawState.current.anchor === 'edge' && endpoint.type === 'center') {
+      if (anchor === 'edge' && endpoint.type === 'center') {
         commitDualGraphSpoke(drawState.current.index, drawState.current.entryDir);
         drawState.completed = true;
         updateReport(false);
@@ -1418,31 +1566,14 @@
     return applyDrawTileAction(hit, 1);
   }
 
-  function cloneDrawTileState(tileState) {
-    return {
-      index: tileState.index,
-      offset: { x: tileState.offset.x, y: tileState.offset.y },
-      entryDir: tileState.entryDir,
-      originalTile: tileState.originalTile == null ? null : cloneTile(tileState.originalTile),
-      removedEntryPair: tileState.removedEntryPair ? tileState.removedEntryPair.slice() : null,
-      removedEntryIndex: tileState.removedEntryIndex
-    };
-  }
-
   function finishDrawGesture(event = null) {
     if (!drawState) return;
-    if (drawState.kind === 'dual') {
-      drawState = null;
-      if (event && isOverCanvas(event.clientX, event.clientY)) {
-        updateDrawDebugFromPoint(event.clientX, event.clientY, false);
-      } else {
-        clearDrawDebugHit(false);
-      }
-      updateReport(false);
-      return;
-    }
     if (drawState.current) {
-      restoreDrawTile(drawState.current);
+      // If vertex was touched, the spoke was already committed, so don't restore
+      // For arc tiles or vertex tiles where vertex wasn't touched, restore the original
+      if (!drawState.current.isVertexTile || !drawState.current.vertexTouched) {
+        restoreDrawTile(drawState.current);
+      }
     }
     drawState = null;
     if (event && isOverCanvas(event.clientX, event.clientY)) {
@@ -1455,12 +1586,6 @@
 
   function cancelDrawGesture(redraw = true) {
     if (!drawState) return;
-    if (drawState.kind === 'dual') {
-      drawState = null;
-      clearDrawDebugHit(false);
-      if (redraw) updateReport(false);
-      return;
-    }
     if (drawState.current) restoreDrawTile(drawState.current);
     drawState = null;
     clearDrawDebugHit(false);
@@ -1639,10 +1764,17 @@
         const spokes = normalizeVertexTile(tile);
         const components = report.spokeComponents[tileIndex] || [];
         const kept = spokes.filter((_, spokeIndex) => components[spokeIndex] === keepComponent);
+
+        // If no spokes are kept, remove the vertex entirely (including isolated vertices)
+        if (kept.length === 0) {
+          if (spokes.length > 0) changed = true;
+          return null;
+        }
+
         const nextTile = vertexTileFromDirs(kept);
         if (tilesEqual(tile, nextTile)) return cloneTile(tile);
         changed = true;
-        return kept.length ? nextTile : null;
+        return nextTile;
       }
 
       const arcs = normalizeTile(tile);
@@ -1779,8 +1911,7 @@
         const dy = event.clientY - pointerState.y;
         if (Math.hypot(dx, dy) > 10) pointerState.moved = true;
       }
-      if (drawState.kind === 'dual') updateDualGraphDrawGesture(event);
-      else updateDrawGesture(event);
+      updateDrawGesture(event);
       event.preventDefault();
       return;
     }
@@ -3915,11 +4046,10 @@
 
   function generateDualGraphTilePreferences(lattice) {
     const arcEntries = generateArcTilePreferences(lattice)
-      .filter((entry) => entry.tile.length)
       .map((entry) => ({
         ...entry,
-        id: `arc-${entry.id}`,
-        label: `arc ${entry.label}`
+        id: entry.tile.length ? `arc-${entry.id}` : 'tile-blank',
+        label: entry.tile.length ? `arc ${entry.label}` : entry.label
       }));
     const vertexEntries = generateVertexTilePreferences(lattice);
     return arcEntries.concat(vertexEntries);
