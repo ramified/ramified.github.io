@@ -47,7 +47,6 @@
     rows: 5,
     cols: 5,
     lattice: 'hexagonal',
-    diagramType: 'link',
     wrapped: false,
     tiles: [],
     edits: 0,
@@ -111,15 +110,11 @@
     refs.infoLine = document.getElementById('info-line');
     refs.gridRows = document.getElementById('grid-rows');
     refs.gridCols = document.getElementById('grid-cols');
-    refs.diagramType = document.getElementById('diagram-type');
     refs.inputMode = document.getElementById('input-mode');
     refs.latticeSelect = document.getElementById('lattice-select');
     refs.wrapBoard = document.getElementById('wrap-board');
     refs.editMode = document.getElementById('edit-mode');
     refs.drawAction = document.getElementById('draw-action');
-    refs.drawVertexOption = refs.drawAction
-      ? refs.drawAction.querySelector('option[value="vertex"]')
-      : null;
     refs.drawLayer = document.getElementById('draw-layer');
     refs.drawStyle = document.getElementById('draw-style');
     refs.applyPick = document.getElementById('apply-pick');
@@ -130,7 +125,6 @@
     refs.wrappedViewRow = document.getElementById('wrapped-view-row');
     refs.wrappedViewMode = document.getElementById('wrapped-view-mode');
     refs.knotStatus = document.getElementById('knot-status');
-    refs.knotCard = document.getElementById('knot-card');
     refs.knotNameRow = document.getElementById('knot-name-row');
     refs.knotName = document.getElementById('knot-name');
     refs.knotCodeRow = document.getElementById('knot-code-row');
@@ -154,9 +148,6 @@
     refs.gridCols.addEventListener('input', updateBoardFromControls);
     refs.gridRows.addEventListener('change', () => generateFromControls());
     refs.gridCols.addEventListener('change', () => generateFromControls());
-    refs.diagramType.addEventListener('change', () => {
-      setDiagramType(refs.diagramType.value);
-    });
     refs.inputMode.addEventListener('change', () => {
       setInputMode(refs.inputMode.value);
     });
@@ -246,35 +237,10 @@
     }
     clearEditorDrag();
     cancelDrawGesture();
-    if (isTilingMode()) renderTilePalette();
+    if (state.inputMode === 'drag') renderTilePalette();
     updateInputModePanels();
     updateDrawModeControls();
     updateInputModeLock();
-    updateReport(false);
-  }
-
-  function setDiagramType(type) {
-    const nextType = normalizeDiagramType(type);
-    if (nextType === state.diagramType) {
-      syncAllInputs(state.rows, state.cols, state.lattice, state.wrapped);
-      renderTilePalette();
-      updateReport(false);
-      return;
-    }
-
-    clearEditorDrag();
-    cancelDrawGesture(false);
-    state.diagramType = nextType;
-    state.tiles = Array(state.rows * state.cols).fill(null);
-    state.pickedComponent = null;
-    state.pickedAnchor = null;
-    state.pickHoverHit = null;
-    state.selectedTile = null;
-    state.selectedPaletteId = '';
-    state.componentColors = [];
-    state.edits += 1;
-    syncAllInputs(state.rows, state.cols, state.lattice, state.wrapped);
-    renderTilePalette();
     updateReport(false);
   }
 
@@ -284,7 +250,7 @@
 
   function renderTilePalette() {
     if (!refs.tilePalette) return;
-    if (!isTilingMode()) return;
+    if (state.inputMode !== 'drag') return;
     refs.tilePalette.textContent = '';
     const entries = getTilePreferences();
     const selectedEntry = entries.find((entry) => entry.id === state.selectedPaletteId);
@@ -323,7 +289,7 @@
   }
 
   function selectPaletteTile(entry) {
-    if (!isTilingMode()) return;
+    if (state.inputMode !== 'drag') return;
     state.selectedTile = cloneTile(entry.tile);
     state.selectedPaletteId = entry.id;
     refs.tilePalette.querySelectorAll('.tile-swatch').forEach((button) => {
@@ -338,7 +304,7 @@
   }
 
   function beginPaletteDrag(event, entry) {
-    if (!isTilingMode()) return;
+    if (state.inputMode !== 'drag') return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     selectPaletteTile(entry);
     state.drag = {
@@ -518,7 +484,7 @@
         }
         return;
       }
-      if (!isTilingMode()) return;
+      if (state.inputMode !== 'drag') return;
       const hit = hitTest(event.clientX, event.clientY);
       if (hit >= 0 && !isTileEmpty(state.tiles[hit])) editExistingTile(hit, -1);
     });
@@ -660,9 +626,6 @@
 
   function adaptTileToSides(tile, sides) {
     if (tile == null) return null;
-    if (isVertexTileValue(tile)) {
-      return vertexTileFromDirs(normalizeVertexTile(tile).filter((dir) => dir >= 0 && dir < sides));
-    }
     if (!Array.isArray(tile)) return null;
     return tile
       .map((pair) => {
@@ -708,21 +671,16 @@
     const rows = clampInt(payload.rows, MIN_BOARD, MAX_BOARD, state.rows);
     const cols = clampInt(payload.cols, MIN_BOARD, MAX_BOARD, state.cols);
     const latticeName = LATTICES[payload.lattice] ? payload.lattice : state.lattice;
-    const diagramType = normalizeDiagramType(payload.diagramType || payload.type);
     const wrapped = payload.boundary === 'wrapped' || payload.wrapped === true;
 
     state.rows = rows;
     state.cols = cols;
     state.lattice = latticeName;
-    state.diagramType = diagramType;
     state.wrapped = wrapped;
     state.wrappedViewMode = payload.wrappedViewMode === 'single' ? 'single' : 'periodic';
     state.inputMode = normalizeInputMode(payload.inputMode);
     state.editMode = normalizeEditMode(payload.clickMode || payload.editMode);
     state.drawAction = normalizeDrawAction(payload.drawAction || (payload.display && payload.display.drawAction));
-    if (state.diagramType === 'dual' && (payload.drawAddVertices || (payload.display && payload.display.drawAddVertices))) {
-      state.drawAction = 'vertex';
-    }
     state.knotCodeKind = normalizeKnotCodeKind(payload.knotCodeKind || (payload.display && payload.display.knotCodeKind));
     state.drawLayer = normalizeDrawLayer(payload.drawLayer);
     state.showErrors = !(payload.display && payload.display.showOpenEnds === false);
@@ -788,19 +746,11 @@
     let value = entry;
     if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
       if (Object.prototype.hasOwnProperty.call(entry, 'tile')) value = entry.tile;
-      else if (isDualGraph() && (Array.isArray(entry.vertexEdges) || Array.isArray(entry.spokes))) {
-        value = vertexTileFromDirs(entry.vertexEdges || entry.spokes);
-      } else if (Number.isFinite(Number(entry.mask))) {
-        value = isDualGraph() ? vertexTileFromDirs(maskToDirs(Number(entry.mask))) : tileFromMask(Number(entry.mask));
-      }
+      else if (Number.isFinite(Number(entry.mask))) value = tileFromMask(Number(entry.mask));
       else value = null;
     }
     if (value == null) return null;
-    if (isDualGraph() && !isVertexTileValue(value)) {
-      if (Array.isArray(value) && !value.some((entry) => Array.isArray(entry))) return vertexTileFromDirs(value);
-      return null;
-    }
-    if (!isDualGraph() && !Array.isArray(value)) return null;
+    if (!Array.isArray(value)) return null;
     return cloneTile(value);
   }
 
@@ -884,11 +834,7 @@
   }
 
   function applyDrawTileAction(index, direction) {
-    if (index < 0) return false;
-    if (state.drawAction === 'vertex') {
-      return direction > 0 && toggleVertexTileAtIndex(index);
-    }
-    if (isTileEmpty(state.tiles[index])) return false;
+    if (index < 0 || isTileEmpty(state.tiles[index])) return false;
     if (state.drawAction === 'rotate') {
       rotateTile(index, direction);
       return true;
@@ -906,10 +852,6 @@
   }
 
   function randomizeTile(index) {
-    if (isDualGraph() && isVertexTileValue(state.tiles[index])) {
-      return;
-    }
-
     const dirs = maskToDirs(tileToMask(state.tiles[index]));
     if (dirs.length < 2 || dirs.length % 2 !== 0) return;
     let next = randomMatching(dirs);
@@ -1038,248 +980,9 @@
     return edgeHitTest(clientX, clientY, 0);
   }
 
-  function beginDualGraphDrawGesture(event) {
-    const hit = tileHitTest(event.clientX, event.clientY, 1.02);
-    const anchor = hit ? dualGraphAnchorFromPoint(clientPointToBoardPoint(event.clientX, event.clientY), {
-      index: hit.index,
-      offset: copyOffsetRecord(hit.offset)
-    }) : null;
-    pointerState = {
-      id: event.pointerId,
-      index: hit ? hit.index : -1,
-      x: event.clientX,
-      y: event.clientY,
-      lastX: event.clientX,
-      lastY: event.clientY,
-      moved: false
-    };
-    refs.canvas.setPointerCapture(event.pointerId);
-    drawState = {
-      kind: 'dual',
-      pointerId: event.pointerId,
-      origin: null,
-      history: [],
-      eraseMode: 'drawing',
-      current: hit
-        ? {
-          index: hit.index,
-          offset: copyOffsetRecord(hit.offset),
-          anchor: anchor && anchor.type === 'edge' ? 'edge' : 'center',
-          entryDir: anchor && anchor.type === 'edge' ? anchor.dir : null
-        }
-        : null,
-      completed: false
-    };
-    state.hoverIndex = hit ? hit.index : -1;
-    updateDualGraphDrawPreview(event.clientX, event.clientY, false);
-    draw(analyze());
-  }
-
-  function updateDualGraphDrawGesture(event) {
-    if (!drawState || drawState.kind !== 'dual') return;
-    if (!drawState.current) {
-      const hit = tileHitTest(event.clientX, event.clientY, 1.02);
-      if (!hit || !isVertexTileValue(state.tiles[hit.index])) return;
-      const anchor = dualGraphAnchorFromPoint(clientPointToBoardPoint(event.clientX, event.clientY), {
-        index: hit.index,
-        offset: copyOffsetRecord(hit.offset)
-      });
-      drawState.current = {
-        index: hit.index,
-        offset: copyOffsetRecord(hit.offset),
-        anchor: anchor && anchor.type === 'edge' ? 'edge' : 'center',
-        entryDir: anchor && anchor.type === 'edge' ? anchor.dir : null
-      };
-      state.hoverIndex = hit.index;
-      updateDualGraphDrawPreview(event.clientX, event.clientY);
-      return;
-    }
-
-    updateDualGraphDrawPreview(event.clientX, event.clientY);
-    const endpoint = dualGraphEndpointFromPoint(clientPointToBoardPoint(event.clientX, event.clientY), drawState.current);
-    if (!endpoint) return;
-
-    if (drawState.current.anchor === 'center' && endpoint.type === 'edge') {
-      commitDualGraphSpoke(drawState.current.index, endpoint.dir);
-      drawState.completed = true;
-      continueFromVertexEdge(drawState.current, endpoint.dir);
-      updateReport(false);
-      return;
-    }
-
-    if (drawState.current.anchor === 'edge' && endpoint.type === 'center') {
-      commitDualGraphSpoke(drawState.current.index, drawState.current.entryDir);
-      drawState.current = {
-        index: drawState.current.index,
-        offset: copyOffsetRecord(drawState.current.offset),
-        anchor: 'center',
-        entryDir: null
-      };
-      drawState.completed = true;
-      updateReport(false);
-    }
-  }
-
-  function updateDualGraphDrawPreview(clientX, clientY, redraw = true) {
-    if (!drawState || drawState.kind !== 'dual' || !drawState.current) return false;
-    const point = clientPointToBoardPoint(clientX, clientY);
-    const endpoint = dualGraphEndpointFromPoint(point, drawState.current);
-    const dir = drawState.current.anchor === 'edge'
-      ? drawState.current.entryDir
-      : (endpoint && endpoint.type === 'edge'
-        ? endpoint.dir
-        : nearestDirectionForTilePoint(point, drawState.current));
-    return setDrawDebugHit({
-      index: drawState.current.index,
-      dir: dir == null || dir < 0 ? 0 : dir,
-      offset: copyOffsetRecord(drawState.current.offset),
-      point,
-      graphAnchor: drawState.current.anchor,
-      graphVertex: !!endpoint && endpoint.type === 'center'
-    }, redraw);
-  }
-
-  function nearestDirectionForTilePoint(point, tileState) {
-    const cell = geometry.cells[tileState.index];
-    if (!cell) return null;
-    const local = {
-      x: point.x - tileState.offset.x,
-      y: point.y - tileState.offset.y
-    };
-    return nearestDirectionFromVector(local.x - cell.x, local.y - cell.y);
-  }
-
-  function dualGraphAnchorFromPoint(point, tileState) {
-    const centerDistance = dualGraphCenterDistanceFromPoint(point, tileState);
-    if (centerDistance == null) return null;
-    if (centerDistance <= geometry.radius * 0.34) return { type: 'center' };
-
-    const dir = nearestDirectionForTilePoint(point, tileState);
-    if (dir == null || dir < 0) return { type: 'center' };
-    return { type: 'edge', dir };
-  }
-
-  function dualGraphEndpointFromPoint(point, tileState) {
-    const gestureDir = tileState.entryDir ?? nearestDirectionForTilePoint(point, tileState);
-    const projection = gestureDir == null || gestureDir < 0
-      ? null
-      : dualGraphSpokeProjectionFromPoint(point, tileState, gestureDir);
-    if (projection && projection.distance <= geometry.radius * 0.34) {
-      if (tileState.anchor === 'edge' && projection.t >= 0.78) {
-        return { type: 'center', dir: gestureDir };
-      }
-      if (tileState.anchor === 'center' && projection.t <= 0.22) {
-        return { type: 'edge', dir: gestureDir };
-      }
-    }
-
-    const centerDistance = dualGraphCenterDistanceFromPoint(point, tileState);
-    if (centerDistance == null) return null;
-    if (centerDistance <= geometry.radius * 0.32) return { type: 'center' };
-
-    const dir = drawExitDirectionFromPoint(point, tileState);
-    if (dir == null) return null;
-    return { type: 'edge', dir };
-  }
-
-  function dualGraphCenterDistanceFromPoint(point, tileState) {
-    const cell = geometry.cells[tileState.index];
-    if (!cell) return null;
-    return Math.hypot(
-      point.x - tileState.offset.x - cell.x,
-      point.y - tileState.offset.y - cell.y
-    );
-  }
-
-  function commitDualGraphSpoke(index, dir) {
-    const changed = setVertexTileSpoke(index, dir, !vertexTileHasSpoke(index, dir));
-    if (changed) state.edits += 1;
-  }
-
-  function dualGraphSpokeProjectionFromPoint(point, tileState, dir) {
-    const cell = geometry.cells[tileState.index];
-    if (!cell) return null;
-    const center = {
-      x: cell.x + tileState.offset.x,
-      y: cell.y + tileState.offset.y
-    };
-    const edge = edgePoint(center.x, center.y, dir, edgeConnectionDistance(geometry.radius));
-    const vx = center.x - edge.x;
-    const vy = center.y - edge.y;
-    const lengthSq = (vx * vx) + (vy * vy);
-    if (lengthSq < 0.001) return null;
-    const rawT = (((point.x - edge.x) * vx) + ((point.y - edge.y) * vy)) / lengthSq;
-    const t = Math.max(0, Math.min(1, rawT));
-    const projected = {
-      x: edge.x + (vx * t),
-      y: edge.y + (vy * t)
-    };
-    return {
-      center,
-      edge,
-      point: projected,
-      rawT,
-      t,
-      distance: Math.hypot(point.x - projected.x, point.y - projected.y)
-    };
-  }
-
-  function continueFromVertexEdge(tileState, dir) {
-    if (!drawState) return false;
-    const next = nextDrawEntry(tileState, dir);
-    if (!next) {
-      drawState.current = null;
-      return false;
-    }
-
-    if (isVertexTileValue(state.tiles[next.index])) {
-      drawState.current = {
-        index: next.index,
-        offset: copyOffsetRecord(next.offset),
-        anchor: 'edge',
-        entryDir: next.dir
-      };
-      state.hoverIndex = next.index;
-      return true;
-    }
-
-    drawState.kind = null;
-    drawState.origin = null;
-    drawState.current = null;
-    drawState.eraseMode = 'drawing';
-    if (!Array.isArray(drawState.history)) drawState.history = [];
-    state.hoverIndex = -1;
-    startDrawTile(next);
-    return true;
-  }
-
-  function shouldDrawDualGraphVertex(clientX, clientY) {
-    if (!isDualGraph()) return false;
-    const hit = tileHitTest(clientX, clientY, 1.02);
-    if (!hit) return false;
-    return state.drawAction === 'edge' && isVertexTileValue(state.tiles[hit.index]);
-  }
-
-  function toggleVertexTileAtIndex(index) {
-    if (!isDualGraph() || index < 0 || index >= state.tiles.length) return false;
-    const tile = state.tiles[index];
-    if (isVertexTileValue(tile)) {
-      state.tiles[index] = null;
-    } else if (isTileEmpty(tile)) {
-      state.tiles[index] = vertexTileFromDirs([]);
-    } else {
-      state.tiles[index] = vertexTileFromDirs(maskToDirs(tileToMask(tile)));
-    }
-    state.edits += 1;
-    updateReport(false);
-    return true;
-  }
-
   function startDrawTile(edge, redraw = true) {
     if (!drawState) return;
-    const existingTile = state.tiles[edge.index];
-    if (isDualGraph() && isVertexTileValue(existingTile)) return;
-    const originalTile = isTileEmpty(existingTile) ? null : cloneTile(existingTile);
+    const originalTile = isTileEmpty(state.tiles[edge.index]) ? null : cloneTile(state.tiles[edge.index]);
     const removed = removePairAtEdge(originalTile || [], edge.dir);
     state.tiles[edge.index] = removed.tile;
     drawState.current = {
@@ -1352,30 +1055,6 @@
   }
 
   function handleDrawClick(event) {
-    if (drawState && drawState.kind === 'dual' && drawState.current && pointerState && !pointerState.moved) {
-      const endpoint = dualGraphEndpointFromPoint(
-        clientPointToBoardPoint(event.clientX, event.clientY),
-        drawState.current
-      );
-      if (!endpoint) return false;
-
-      if (drawState.current.anchor === 'center' && endpoint.type === 'edge') {
-        commitDualGraphSpoke(drawState.current.index, endpoint.dir);
-        drawState.completed = true;
-        continueFromVertexEdge(drawState.current, endpoint.dir);
-        updateReport(false);
-        return true;
-      }
-
-      if (drawState.current.anchor === 'edge' && endpoint.type === 'center') {
-        commitDualGraphSpoke(drawState.current.index, drawState.current.entryDir);
-        drawState.completed = true;
-        updateReport(false);
-        return true;
-      }
-
-      return false;
-    }
     return false;
   }
 
@@ -1414,7 +1093,7 @@
   function handleDrawTileActionClick(event) {
     if (!pointerState || pointerState.moved || longPressFired) return false;
     const hit = hitTest(event.clientX, event.clientY);
-    if (hit < 0 || hit !== pointerState.index) return false;
+    if (hit < 0 || hit !== pointerState.index || isTileEmpty(state.tiles[hit])) return false;
     return applyDrawTileAction(hit, 1);
   }
 
@@ -1431,16 +1110,6 @@
 
   function finishDrawGesture(event = null) {
     if (!drawState) return;
-    if (drawState.kind === 'dual') {
-      drawState = null;
-      if (event && isOverCanvas(event.clientX, event.clientY)) {
-        updateDrawDebugFromPoint(event.clientX, event.clientY, false);
-      } else {
-        clearDrawDebugHit(false);
-      }
-      updateReport(false);
-      return;
-    }
     if (drawState.current) {
       restoreDrawTile(drawState.current);
     }
@@ -1455,12 +1124,6 @@
 
   function cancelDrawGesture(redraw = true) {
     if (!drawState) return;
-    if (drawState.kind === 'dual') {
-      drawState = null;
-      clearDrawDebugHit(false);
-      if (redraw) updateReport(false);
-      return;
-    }
     if (drawState.current) restoreDrawTile(drawState.current);
     drawState = null;
     clearDrawDebugHit(false);
@@ -1531,7 +1194,6 @@
   }
 
   function connectedArcAtEdgeHit(hit, report) {
-    if (isDualGraph()) return connectedDualGraphAtEdgeHit(hit, report);
     if (!hit || !report || !report.arcComponents) return null;
     const direct = connectedArcAtTileEdge(hit.index, hit.dir, hit.offset, report);
     if (direct) return direct;
@@ -1558,52 +1220,8 @@
     };
   }
 
-  function connectedDualGraphAtEdgeHit(hit, report) {
-    if (!hit || !report) return null;
-    const directArc = connectedArcAtTileEdge(hit.index, hit.dir, hit.offset, report);
-    if (directArc) return directArc;
-    const directSpoke = connectedGraphSpokeAtTileEdge(hit.index, hit.dir, hit.offset, report);
-    if (directSpoke) return directSpoke;
-
-    const neighborHit = matchingNeighborEdgeHit(hit);
-    if (!neighborHit) return null;
-    return connectedArcAtTileEdge(neighborHit.index, neighborHit.dir, neighborHit.offset, report)
-      || connectedGraphSpokeAtTileEdge(neighborHit.index, neighborHit.dir, neighborHit.offset, report);
-  }
-
-  function connectedGraphSpokeAtEdgeHit(hit, report) {
-    if (!hit || !report || !report.spokeComponents) return null;
-    const direct = connectedGraphSpokeAtTileEdge(hit.index, hit.dir, hit.offset, report);
-    if (direct) return direct;
-
-    const neighborHit = matchingNeighborEdgeHit(hit);
-    if (!neighborHit) return null;
-    return connectedGraphSpokeAtTileEdge(neighborHit.index, neighborHit.dir, neighborHit.offset, report);
-  }
-
-  function connectedGraphSpokeAtTileEdge(index, dir, offset, report) {
-    const spokes = normalizeVertexTile(state.tiles[index]);
-    const spokeIndex = spokes.findIndex((candidate) => candidate === dir);
-    if (spokeIndex < 0) return null;
-    const component = report.spokeComponents[index]
-      ? report.spokeComponents[index][spokeIndex]
-      : null;
-    if (!Number.isInteger(component) || component < 0) return null;
-    return {
-      index,
-      dir,
-      pairIndex: spokeIndex,
-      component,
-      offset: copyOffsetRecord(offset)
-    };
-  }
-
   function applyPickedComponent() {
     if (state.pickedComponent == null) return;
-    if (isDualGraph()) {
-      applyPickedDualComponent();
-      return;
-    }
     const report = analyze();
     const keepComponent = state.pickedComponent;
     let changed = false;
@@ -1619,39 +1237,6 @@
       if (kept.length === arcs.length) return cloneTile(tile);
       changed = true;
       return kept.length ? kept.map((pair) => pair.slice(0, 2)) : null;
-    });
-
-    state.pickedComponent = null;
-    state.pickedAnchor = null;
-    state.pickHoverHit = null;
-    if (changed) state.edits += 1;
-    updateReport(false);
-  }
-
-  function applyPickedDualComponent() {
-    const report = analyze();
-    const keepComponent = state.pickedComponent;
-    let changed = false;
-
-    state.tiles = state.tiles.map((tile, tileIndex) => {
-      if (isTileEmpty(tile)) return null;
-      if (isVertexTileValue(tile)) {
-        const spokes = normalizeVertexTile(tile);
-        const components = report.spokeComponents[tileIndex] || [];
-        const kept = spokes.filter((_, spokeIndex) => components[spokeIndex] === keepComponent);
-        const nextTile = vertexTileFromDirs(kept);
-        if (tilesEqual(tile, nextTile)) return cloneTile(tile);
-        changed = true;
-        return kept.length ? nextTile : null;
-      }
-
-      const arcs = normalizeTile(tile);
-      const components = report.arcComponents[tileIndex] || [];
-      const kept = arcs.filter((_, arcIndex) => components[arcIndex] === keepComponent);
-      const nextTile = kept.map((pair) => pair.slice(0, 2));
-      if (tilesEqual(tile, nextTile)) return cloneTile(tile);
-      changed = true;
-      return nextTile.length ? nextTile : null;
     });
 
     state.pickedComponent = null;
@@ -1722,10 +1307,7 @@
     }
 
     if (state.inputMode === 'draw') {
-      if (isDrawGestureAction()) {
-        if (shouldDrawDualGraphVertex(event.clientX, event.clientY)) beginDualGraphDrawGesture(event);
-        else beginDrawGesture(event);
-      }
+      if (state.drawAction === 'edge') beginDrawGesture(event);
       else beginDrawTileActionGesture(event);
       event.preventDefault();
       return;
@@ -1735,7 +1317,7 @@
       event.preventDefault();
       return;
     }
-    if (!isTilingMode()) {
+    if (state.inputMode !== 'drag') {
       refs.canvas.setPointerCapture(event.pointerId);
       event.preventDefault();
       return;
@@ -1779,12 +1361,11 @@
         const dy = event.clientY - pointerState.y;
         if (Math.hypot(dx, dy) > 10) pointerState.moved = true;
       }
-      if (drawState.kind === 'dual') updateDualGraphDrawGesture(event);
-      else updateDrawGesture(event);
+      updateDrawGesture(event);
       event.preventDefault();
       return;
     }
-    if (state.inputMode === 'draw' && !isDrawGestureAction()) {
+    if (state.inputMode === 'draw' && state.drawAction !== 'edge') {
       updateDrawTileActionGesture(event);
       event.preventDefault();
       return;
@@ -1794,7 +1375,7 @@
       event.preventDefault();
       return;
     }
-    if (!isTilingMode()) return;
+    if (state.inputMode !== 'drag') return;
 
     if (!pointerState || event.pointerId !== pointerState.id) return;
     const dx = event.clientX - pointerState.x;
@@ -1828,7 +1409,7 @@
       if (handledClick) return;
       return;
     }
-    if (state.inputMode === 'draw' && !isDrawGestureAction()) {
+    if (state.inputMode === 'draw' && state.drawAction !== 'edge') {
       handleDrawTileActionClick(event);
       clearPointerState(event);
       return;
@@ -1838,7 +1419,7 @@
       clearPointerState(event);
       return;
     }
-    if (!isTilingMode()) {
+    if (state.inputMode !== 'drag') {
       clearPointerState(event);
       return;
     }
@@ -2005,10 +1586,6 @@
   }
 
   function analyze() {
-    return isDualGraph() ? analyzeDualGraph() : analyzeLinkMosaic();
-  }
-
-  function analyzeLinkMosaic() {
     const total = state.rows * state.cols;
     const lattice = getLattice();
     const active = state.tiles.reduce((count, tile) => count + (isTileEmpty(tile) ? 0 : 1), 0);
@@ -2101,121 +1678,6 @@
     };
   }
 
-  function analyzeDualGraph() {
-    const total = state.rows * state.cols;
-    const lattice = getLattice();
-    const active = state.tiles.reduce((count, tile) => count + (isTileEmpty(tile) ? 0 : 1), 0);
-    const parent = [];
-    const rank = [];
-    const nodeIds = new Map();
-    const portIds = new Map();
-    const portMeta = [];
-    const arcPortIds = Array.from({ length: total }, () => []);
-    const spokePortIds = Array.from({ length: total }, () => []);
-    let openEnds = 0;
-    let alignedEdges = 0;
-    let edgeCount = 0;
-
-    const ensureNode = (key) => {
-      if (nodeIds.has(key)) return nodeIds.get(key);
-      const id = parent.length;
-      nodeIds.set(key, id);
-      parent[id] = id;
-      rank[id] = 0;
-      return id;
-    };
-    const ensureVertex = (index) => ensureNode(`v:${index}`);
-    const ensurePort = (index, dir) => {
-      const key = `p:${index}:${dir}`;
-      if (portIds.has(key)) return portIds.get(key);
-      const id = ensureNode(key);
-      portIds.set(key, id);
-      portMeta.push({ index, dir, id });
-      return id;
-    };
-    const connectNodes = (left, right) => {
-      edgeCount += 1;
-      union(parent, rank, left, right);
-    };
-
-    for (let index = 0; index < total; index += 1) {
-      if (isTileEmpty(state.tiles[index])) continue;
-      const arcs = normalizeTile(state.tiles[index]);
-      arcs.forEach((pair, pairIndex) => {
-        const left = ensurePort(index, pair[0]);
-        const right = ensurePort(index, pair[1]);
-        arcPortIds[index][pairIndex] = left;
-        connectNodes(left, right);
-      });
-
-      if (isVertexTileValue(state.tiles[index])) {
-        const vertex = ensureVertex(index);
-        normalizeVertexTile(state.tiles[index]).forEach((dir, spokeIndex) => {
-          const port = ensurePort(index, dir);
-          spokePortIds[index][spokeIndex] = port;
-          connectNodes(vertex, port);
-        });
-      }
-    }
-
-    portMeta.forEach((port) => {
-      const row = Math.floor(port.index / state.cols);
-      const col = port.index % state.cols;
-      const next = neighbor(row, col, port.dir, state.rows, state.cols, lattice, state.wrapped);
-      if (!next) {
-        openEnds += 1;
-        return;
-      }
-      const nextIndex = indexOf(next.row, next.col, state.cols);
-      const opposite = lattice.opposite[port.dir];
-      const nextId = portIds.get(`p:${nextIndex}:${opposite}`);
-      if (nextId == null) {
-        openEnds += 1;
-        return;
-      }
-      if (port.id < nextId) {
-        alignedEdges += 1;
-        connectNodes(port.id, nextId);
-      }
-    });
-
-    const roots = parent.map((_, index) => find(parent, index));
-    const rootToComponent = new Map();
-    roots.forEach((root) => {
-      if (!rootToComponent.has(root)) rootToComponent.set(root, rootToComponent.size);
-    });
-    const components = rootToComponent.size;
-    const cycles = Math.max(0, edgeCount - parent.length + components);
-    const arcComponents = arcPortIds.map((tilePorts) => (
-      tilePorts.map((portId) => rootToComponent.get(find(parent, portId)) ?? -1)
-    ));
-    const spokeComponents = spokePortIds.map((tilePorts) => (
-      tilePorts.map((portId) => rootToComponent.get(find(parent, portId)) ?? -1)
-    ));
-
-    let label = active === 0 ? 'empty' : 'editing';
-    let message = active === 0 ? 'empty canvas' : `${components} component${components === 1 ? '' : 's'}, ${openEnds} open end${openEnds === 1 ? '' : 's'}`;
-    if (active > 0 && openEnds === 0) {
-      label = 'closed';
-      message = cycles > 0
-        ? `${components} component${components === 1 ? '' : 's'}, ${cycles} cycle${cycles === 1 ? '' : 's'}`
-        : `${components} component${components === 1 ? '' : 's'}`;
-    }
-
-    return {
-      total,
-      active,
-      alignedEdges,
-      openEnds,
-      components,
-      cycles,
-      label,
-      message,
-      arcComponents,
-      spokeComponents
-    };
-  }
-
   function updateReport(manualCheck) {
     const report = analyze();
     normalizePickedComponent(report);
@@ -2229,11 +1691,10 @@
     refs.statusLine.textContent = manualCheck ? `checked: ${report.message}` : report.message;
     refs.statusLine.classList.toggle('mosaic-status-good', report.label === 'closed');
     refs.statusLine.classList.toggle('mosaic-status-bad', report.openEnds > 0);
-    refs.infoLine.textContent = `${getLattice().label}, ${isDualGraph() ? 'dual graph' : 'knot/link'}, ${state.wrapped ? 'wrapped' : 'open'} · ${report.active} filled`;
+    refs.infoLine.textContent = `${getLattice().label}, ${state.wrapped ? 'wrapped' : 'open'} · ${report.active} filled`;
 
     updatePickControls();
-    updateDisplayControls();
-    if (!isDualGraph()) updateKnotCard(report);
+    updateKnotCard(report);
     refreshExport();
     draw(report);
   }
@@ -2241,20 +1702,12 @@
   function normalizePickedComponent(report) {
     if (state.pickedAnchor) {
       const component = componentAtEdgeHit(state.pickedAnchor, report);
-      if (component == null) {
-        state.pickedComponent = null;
-        state.pickedAnchor = null;
-        return;
-      }
       state.pickedAnchor.component = component;
       state.pickedComponent = component;
       return;
     }
     if (state.pickedComponent == null) return;
-    const componentGroups = isDualGraph()
-      ? (report.arcComponents || []).concat(report.spokeComponents || [])
-      : report.arcComponents;
-    const hasComponent = (componentGroups || []).some((components) => (
+    const hasComponent = report.arcComponents.some((components) => (
       components.some((component) => component === state.pickedComponent)
     ));
     if (!hasComponent) {
@@ -2651,8 +2104,7 @@
     ctx.lineWidth = 2;
     ctx.fill();
     ctx.stroke();
-    if (isDualGraph() && isVertexTileValue(state.drag.tile)) drawGraphTile(ctx, state.dragPoint, state.drag.tile, palette);
-    else drawPipe(ctx, state.dragPoint, state.drag.tile, palette);
+    drawPipe(ctx, state.dragPoint, state.drag.tile, palette);
     ctx.restore();
   }
 
@@ -2767,7 +2219,7 @@
   }
 
   function drawDrawDebugOverlay(ctx, palette, report) {
-    if (state.inputMode !== 'draw' || !isDrawGestureAction() || state.drawStyle === 'none' || !state.drawDebugHit) return;
+    if (state.inputMode !== 'draw' || state.drawAction !== 'edge' || state.drawStyle === 'none' || !state.drawDebugHit) return;
     if (state.drawStyle === 'shade' && drawState && drawState.current) {
       drawDrawShadeOverlay(ctx, palette, report, state.drawDebugHit);
     }
@@ -2784,36 +2236,6 @@
       x: cell.x + hit.offset.x,
       y: cell.y + hit.offset.y
     };
-
-    if (hit.graphVertex) {
-      ctx.save();
-      ctx.fillStyle = 'rgba(255,253,248,0.96)';
-      circle(ctx, tile.x, tile.y, Math.max(5.2, radius * 0.13));
-      ctx.fillStyle = palette.accent;
-      circle(ctx, tile.x, tile.y, Math.max(2.8, radius * 0.07));
-
-      if (state.drawStyle === 'debug') {
-        const label = `T${hit.index + 1} (${cell.row + 1},${cell.col + 1})  V`;
-        ctx.font = `${Math.max(10, radius * 0.24)}px "JetBrains Mono", monospace`;
-        ctx.textBaseline = 'middle';
-        ctx.textAlign = 'left';
-        const metrics = ctx.measureText ? ctx.measureText(label) : null;
-        const labelWidth = metrics && Number.isFinite(metrics.width) ? metrics.width : label.length * 7;
-        const boxX = tile.x - labelWidth / 2 - 5;
-        const boxY = tile.y - radius * 0.23 - 10;
-        const boxHeight = Math.max(18, radius * 0.32);
-        ctx.fillStyle = 'rgba(255,253,248,0.92)';
-        ctx.strokeStyle = palette.accent2;
-        ctx.lineWidth = 1;
-        ctx.fillRect(boxX, boxY, labelWidth + 10, boxHeight);
-        ctx.strokeRect(boxX, boxY, labelWidth + 10, boxHeight);
-        ctx.fillStyle = palette.text;
-        ctx.fillText(label, boxX + 5, boxY + boxHeight / 2);
-      }
-      ctx.restore();
-      return;
-    }
-
     const edge = edgePoint(tile.x, tile.y, hit.dir, edgeConnectionDistance(radius));
     const label = `T${hit.index + 1} (${cell.row + 1},${cell.col + 1})  E ${lattice.dirNames[hit.dir]}`;
     const markers = [{ x: tile.x, y: tile.y, dir: hit.dir }];
@@ -2874,11 +2296,6 @@
     const cell = geometry.cells[hit.index];
     if (!cell || !hit.point) return;
 
-    if (hit.graphAnchor || hit.graphVertex) {
-      drawDualGraphShadeOverlay(ctx, palette, report, hit);
-      return;
-    }
-
     const radius = geometry.radius;
     const tile = {
       x: cell.x + hit.offset.x,
@@ -2908,53 +2325,7 @@
     ctx.restore();
   }
 
-  function drawDualGraphShadeOverlay(ctx, palette, report, hit) {
-    const cell = geometry.cells[hit.index];
-    if (!cell || !hit.point) return;
-    const radius = geometry.radius;
-    const tile = {
-      x: cell.x + hit.offset.x,
-      y: cell.y + hit.offset.y
-    };
-    const projection = hit.graphAnchor
-      ? dualGraphSpokeProjectionFromPoint(hit.point, hit, hit.dir)
-      : null;
-    const start = projection
-      ? (hit.graphAnchor === 'edge' ? projection.edge : projection.center)
-      : tile;
-    const end = projection ? projection.point : hit.point;
-    const distance = Math.hypot(end.x - start.x, end.y - start.y);
-    if (!Number.isFinite(distance) || distance < 1.5) return;
-
-    const pipeWidth = Math.max(5, radius * 0.17);
-    const color = drawShadeColor(hit, report, palette);
-    ctx.save();
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = color;
-    ctx.globalAlpha = 0.12;
-    ctx.lineWidth = pipeWidth * 2.4;
-    ctx.beginPath();
-    ctx.moveTo(start.x, start.y);
-    ctx.lineTo(end.x, end.y);
-    ctx.stroke();
-
-    ctx.globalAlpha = 0.34;
-    ctx.lineWidth = pipeWidth * 0.82;
-    ctx.beginPath();
-    ctx.moveTo(start.x, start.y);
-    ctx.lineTo(end.x, end.y);
-    ctx.stroke();
-    ctx.restore();
-  }
-
   function drawShadeColor(hit, report, palette) {
-    if (isDualGraph()) {
-      const connection = connectedArcAtEdgeHit(hit, report);
-      if (!connection) return palette.accent;
-      const theme = getMosaicTheme(palette);
-      return componentPipeColor(connection.component, theme);
-    }
     const tile = normalizeTile(state.tiles[hit.index]);
     const pairIndex = tile.findIndex((pair) => pair[0] === hit.dir || pair[1] === hit.dir);
     if (pairIndex < 0) return palette.accent;
@@ -3098,10 +2469,7 @@
     const arcComponents = !isDragTarget && report.arcComponents
       ? report.arcComponents[index]
       : null;
-    const spokeComponents = !isDragTarget && report.spokeComponents
-      ? report.spokeComponents[index]
-      : null;
-    const isHover = (isTilingMode() || (state.inputMode === 'draw' && !isDrawGestureAction()))
+    const isHover = (state.inputMode === 'drag' || (state.inputMode === 'draw' && state.drawAction !== 'edge'))
       && index === state.hoverIndex;
 
     ctx.beginPath();
@@ -3116,19 +2484,11 @@
     ctx.fill();
     ctx.stroke();
 
-    if (isDualGraph() && isVertexTileValue(displayTile)) {
-      drawGraphTile(ctx, cell, displayTile, palette, null, spokeComponents, {
-        tileIndex: index,
-        copy: offset,
-        pickedLift
-      });
-    } else {
-      drawPipe(ctx, cell, displayTile, palette, null, arcComponents, {
-        tileIndex: index,
-        copy: offset,
-        pickedLift
-      });
-    }
+    drawPipe(ctx, cell, displayTile, palette, null, arcComponents, {
+      tileIndex: index,
+      copy: offset,
+      pickedLift
+    });
 
     if (state.showErrors && !isDragTarget) drawOpenEndMarks(ctx, index, cell, mask, palette);
     if (state.showCoords) drawCellLabel(ctx, cell, palette);
@@ -3168,41 +2528,6 @@
     ctx.restore();
   }
 
-  function drawGraphTile(ctx, cell, tile, palette, radiusOverride = null, spokeComponents = null, drawMeta = null) {
-    if (isTileEmpty(tile)) return;
-    const radius = radiusOverride || geometry.radius;
-    const spokes = normalizeVertexTile(tile);
-    const theme = getMosaicTheme(palette);
-    const pipeWidth = Math.max(5, radius * 0.17);
-
-    ctx.save();
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    spokes.forEach((dir, index) => {
-      const componentIndex = spokeComponents ? spokeComponents[index] : null;
-      const strokeScale = componentStrokeScale(componentIndex);
-      const pipeAlpha = componentPipeAlpha(componentIndex, drawMeta, index);
-      const pipeColor = componentPipeColor(componentIndex, theme);
-      const end = edgePoint(cell.x, cell.y, dir, edgeConnectionDistance(radius));
-      ctx.save();
-      ctx.globalAlpha *= pipeAlpha;
-      ctx.strokeStyle = pipeColor;
-      ctx.lineWidth = pipeWidth * strokeScale;
-      ctx.beginPath();
-      ctx.moveTo(cell.x, cell.y);
-      ctx.lineTo(end.x, end.y);
-      ctx.stroke();
-      ctx.restore();
-    });
-
-    ctx.fillStyle = theme.pipe;
-    ctx.strokeStyle = '#fffdf8';
-    ctx.lineWidth = Math.max(2, radius * 0.055);
-    circle(ctx, cell.x, cell.y, Math.max(4.4, radius * 0.11));
-    ctx.stroke();
-    ctx.restore();
-  }
-
   function componentStrokeScale(componentIndex) {
     if (!isPickDisplayActive() || state.pickedComponent == null || componentIndex == null || componentIndex < 0) {
       return 1;
@@ -3228,8 +2553,6 @@
 
   function buildPickedLiftContext(report, offsets) {
     if (
-      isDualGraph()
-      ||
       !isPickDisplayActive()
       || !state.wrapped
       || !isPeriodicWrappedView()
@@ -3421,8 +2744,7 @@
     ctx.fill();
     ctx.stroke();
 
-    if (isDualGraph() && isVertexTileValue(tile)) drawGraphTile(ctx, { x: cx, y: cy }, tile, palette, radius);
-    else drawPipe(ctx, { x: cx, y: cy }, tile, palette, radius);
+    drawPipe(ctx, { x: cx, y: cy }, tile, palette, radius);
   }
 
   function isOverCanvas(clientX, clientY) {
@@ -3508,54 +2830,20 @@
     return -1;
   }
 
-  function tileHitTest(clientX, clientY, radiusScale = 0.96) {
-    if (!geometry) return null;
-    return tileHitAtBoardPoint(clientPointToBoardPoint(clientX, clientY), radiusScale);
-  }
-
   function edgeHitTest(clientX, clientY, minDistanceRatio = 0.42) {
     if (!geometry) return null;
     return edgeHitAtBoardPoint(clientPointToBoardPoint(clientX, clientY), minDistanceRatio);
   }
 
   function updateDrawDebugFromPoint(clientX, clientY, redraw = true) {
-    if (state.inputMode !== 'draw' || !isDrawGestureAction() || state.drawStyle === 'none') return false;
-    const hit = dualGraphDrawDebugHit(clientX, clientY) || edgeHitTest(clientX, clientY, 0);
+    if (state.inputMode !== 'draw' || state.drawAction !== 'edge' || state.drawStyle === 'none') return false;
+    const hit = edgeHitTest(clientX, clientY, 0);
     if (hit) hit.point = clientPointToBoardPoint(clientX, clientY);
     return setDrawDebugHit(hit, redraw);
   }
 
-  function dualGraphDrawDebugHit(clientX, clientY) {
-    if (!isDualGraph() || state.drawAction !== 'edge') return null;
-    const hit = tileHitTest(clientX, clientY, 1.02);
-    if (!hit || !isVertexTileValue(state.tiles[hit.index])) return null;
-
-    const point = clientPointToBoardPoint(clientX, clientY);
-    const cell = geometry.cells[hit.index];
-    if (!cell) return null;
-    const tile = {
-      x: cell.x + hit.offset.x,
-      y: cell.y + hit.offset.y
-    };
-    const dx = point.x - tile.x;
-    const dy = point.y - tile.y;
-    const dir = nearestDirectionFromVector(dx, dy);
-    const normalizedDir = dir < 0 ? 0 : dir;
-    const edge = edgePoint(tile.x, tile.y, normalizedDir, edgeConnectionDistance(geometry.radius));
-    const centerDistance = Math.hypot(dx, dy);
-    const edgeDistance = Math.hypot(point.x - edge.x, point.y - edge.y);
-    const graphVertex = centerDistance <= edgeDistance || centerDistance < geometry.radius * 0.32;
-    return {
-      index: hit.index,
-      dir: normalizedDir,
-      offset: copyOffsetRecord(hit.offset),
-      point,
-      graphVertex
-    };
-  }
-
   function updateDrawShadeFromCurrent(clientX, clientY, redraw = true) {
-    if (!isDrawGestureAction() || !drawState || !drawState.current) return false;
+    if (state.drawAction !== 'edge' || !drawState || !drawState.current) return false;
     return setDrawDebugHit({
       index: drawState.current.index,
       dir: drawState.current.entryDir,
@@ -3565,15 +2853,13 @@
   }
 
   function setDrawDebugHit(hit, redraw = true) {
-    if (state.inputMode !== 'draw' || !isDrawGestureAction() || state.drawStyle === 'none') return false;
+    if (state.inputMode !== 'draw' || state.drawAction !== 'edge' || state.drawStyle === 'none') return false;
     const next = hit
       ? {
         index: hit.index,
         dir: hit.dir,
         offset: { x: hit.offset.x, y: hit.offset.y },
-        point: hit.point ? { x: hit.point.x, y: hit.point.y } : null,
-        graphAnchor: hit.graphAnchor || null,
-        graphVertex: !!hit.graphVertex
+        point: hit.point ? { x: hit.point.x, y: hit.point.y } : null
       }
       : null;
     if (sameDrawDebugHit(state.drawDebugHit, next)) return false;
@@ -3593,8 +2879,6 @@
     if (!left || !right) return left === right;
     return left.index === right.index
       && left.dir === right.dir
-      && left.graphAnchor === right.graphAnchor
-      && left.graphVertex === right.graphVertex
       && Math.abs(left.offset.x - right.offset.x) < 0.001
       && Math.abs(left.offset.y - right.offset.y) < 0.001
       && sameOptionalPoint(left.point, right.point);
@@ -3758,7 +3042,6 @@
     const payload = {
       name: 'Mosaic Calculator',
       lattice: state.lattice,
-      diagramType: state.diagramType,
       boundary: state.wrapped ? 'wrapped' : 'open',
       wrappedViewMode: state.wrappedViewMode,
       inputMode: state.inputMode,
@@ -3794,8 +3077,7 @@
           tile: cloneTile(tile),
           mask,
           edges: maskToDirs(mask).map((dir) => lattice.dirNames[dir]),
-          arcs: normalizeTile(tile).map((pair) => pair.slice(0, 2).map((dir) => lattice.dirNames[dir])),
-          vertexEdges: normalizeVertexTile(tile).map((dir) => lattice.dirNames[dir])
+          arcs: normalizeTile(tile).map((pair) => pair.slice(0, 2).map((dir) => lattice.dirNames[dir]))
         };
       })
     };
@@ -3828,7 +3110,6 @@
   function syncAllInputs(rows, cols, latticeName, wrapped) {
     refs.gridRows.value = rows;
     refs.gridCols.value = cols;
-    refs.diagramType.value = state.diagramType;
     refs.inputMode.value = state.inputMode;
     refs.latticeSelect.value = latticeName;
     refs.wrapBoard.checked = wrapped;
@@ -3856,33 +3137,18 @@
 
   function updateDrawModeControls() {
     if (!refs.drawLayer || !refs.drawStyle) return;
-    if (!isDualGraph() && state.drawAction === 'vertex') {
-      state.drawAction = 'edge';
-      refs.drawAction.value = state.drawAction;
-    }
-    if (refs.drawVertexOption) {
-      refs.drawVertexOption.hidden = !isDualGraph();
-      refs.drawVertexOption.disabled = !isDualGraph();
-    }
-    refs.drawLayer.disabled = state.drawAction !== 'edge';
-    refs.drawStyle.disabled = !isDrawGestureAction();
+    const usesEdgeDrawing = state.drawAction === 'edge';
+    refs.drawLayer.disabled = !usesEdgeDrawing;
+    refs.drawStyle.disabled = !usesEdgeDrawing;
   }
 
   function updateDisplayControls() {
-    if (refs.wrappedViewRow) {
-      refs.wrappedViewRow.hidden = !state.wrapped;
-      refs.wrappedViewMode.disabled = !state.wrapped;
-    }
-    if (refs.knotCard) refs.knotCard.hidden = isDualGraph();
+    if (!refs.wrappedViewRow) return;
+    refs.wrappedViewRow.hidden = !state.wrapped;
+    refs.wrappedViewMode.disabled = !state.wrapped;
   }
 
   function generateTilePreferences(lattice) {
-    return isDualGraph()
-      ? generateDualGraphTilePreferences(lattice)
-      : generateArcTilePreferences(lattice);
-  }
-
-  function generateArcTilePreferences(lattice) {
     const tilesByKey = new Map();
     const blankTile = [];
 
@@ -3913,41 +3179,6 @@
       }));
   }
 
-  function generateDualGraphTilePreferences(lattice) {
-    const arcEntries = generateArcTilePreferences(lattice)
-      .filter((entry) => entry.tile.length)
-      .map((entry) => ({
-        ...entry,
-        id: `arc-${entry.id}`,
-        label: `arc ${entry.label}`
-      }));
-    const vertexEntries = generateVertexTilePreferences(lattice);
-    return arcEntries.concat(vertexEntries);
-  }
-
-  function generateVertexTilePreferences(lattice) {
-    const maxMask = 1 << lattice.sides;
-    const tilesByKey = new Map();
-    Array.from({ length: maxMask }, (_, mask) => mask).forEach((mask) => {
-      const dirs = maskToDirs(mask);
-      const canonical = canonicalDirs(dirs, lattice.sides);
-      const key = dirsKey(canonical);
-      if (!tilesByKey.has(key)) tilesByKey.set(key, canonical);
-    });
-    return Array.from(tilesByKey.values()).map((dirs) => {
-      return {
-        id: dirs.length ? `vertex-${dirsKey(dirs).replaceAll(',', '-')}` : 'vertex-free',
-        label: vertexTileLabel(dirs, lattice),
-        tile: vertexTileFromDirs(dirs)
-      };
-    }).sort((left, right) => {
-      const leftCount = normalizeVertexTile(left.tile).length;
-      const rightCount = normalizeVertexTile(right.tile).length;
-      if (leftCount !== rightCount) return leftCount - rightCount;
-      return left.id.localeCompare(right.id);
-    });
-  }
-
   function preferredTileRepresentatives(lattice) {
     if (lattice.shape !== 'hex') return [];
     return [
@@ -3972,36 +3203,13 @@
     return best;
   }
 
-  function canonicalDirs(dirs, sides) {
-    let best = null;
-    let bestKey = '';
-    for (let shift = 0; shift < sides; shift += 1) {
-      const candidate = normalizeDirs(dirs.map((dir) => modulo(dir + shift, sides)));
-      const key = dirsKey(candidate);
-      if (!best || key < bestKey) {
-        best = candidate;
-        bestKey = key;
-      }
-    }
-    return best || [];
-  }
-
   function tileKey(tile) {
     return tile.map((pair) => `${pair[0]},${pair[1]}`).join(';');
-  }
-
-  function dirsKey(dirs) {
-    return dirs.join(',');
   }
 
   function tileLabel(tile, lattice) {
     if (!tile.length) return 'blank';
     return tile.map((pair) => `${lattice.dirNames[pair[0]]}-${lattice.dirNames[pair[1]]}`).join(' / ');
-  }
-
-  function vertexTileLabel(dirs, lattice) {
-    if (!dirs.length) return 'isolated vertex';
-    return `vertex ${dirs.map((dir) => lattice.dirNames[dir]).join(' / ')}`;
   }
 
   function normalizePair(pair) {
@@ -4056,21 +3264,13 @@
     return dirs;
   }
 
-  // Link tiles are ordered edge pairs; dual graph tiles keep center-to-edge spokes.
+  // A tile is an ordered list of edge pairs; later arcs are drawn above earlier arcs.
   function tileFromPairs(pairs) {
     return pairs.map((pair) => [pair[0], pair[1]]);
   }
 
-  function vertexTileFromDirs(dirs) {
-    return {
-      type: 'vertex',
-      edges: normalizeDirs(dirs)
-    };
-  }
-
   function cloneTile(tile) {
     if (tile == null) return null;
-    if (isVertexTileValue(tile)) return vertexTileFromDirs(normalizeVertexTile(tile));
     const arcs = normalizeTile(tile);
     return arcs.map((pair) => [pair[0], pair[1]]);
   }
@@ -4090,89 +3290,13 @@
       .filter(Boolean);
   }
 
-  function isVertexTileValue(tile) {
-    return !!tile
-      && typeof tile === 'object'
-      && !Array.isArray(tile)
-      && (
-        tile.type === 'vertex'
-        || Array.isArray(tile.edges)
-        || Array.isArray(tile.spokes)
-        || Array.isArray(tile.vertex)
-      );
-  }
-
-  function normalizeVertexTile(tile) {
-    if (typeof tile === 'number') return maskToDirs(tile);
-    if (Array.isArray(tile)) {
-      if (tile.some((entry) => Array.isArray(entry))) return [];
-      return normalizeDirs(tile);
-    }
-    if (!tile || typeof tile !== 'object') return [];
-    const dirs = Array.isArray(tile.edges)
-      ? tile.edges
-      : (Array.isArray(tile.spokes) ? tile.spokes : tile.vertex);
-    return normalizeDirs(Array.isArray(dirs) ? dirs : []);
-  }
-
-  function normalizeDirs(dirs) {
-    const sides = getLattice().sides;
-    return Array.from(new Set((dirs || [])
-      .map((dir) => normalizeDir(dir, sides))
-      .filter((dir) => Number.isInteger(dir))))
-      .sort((left, right) => left - right);
-  }
-
-  function vertexTileHasSpoke(index, dir) {
-    return normalizeVertexTile(state.tiles[index]).includes(normalizeDir(dir, getLattice().sides));
-  }
-
-  function tileHasEdgeAt(index, dir) {
-    if (index < 0 || index >= state.tiles.length) return false;
-    return !!(tileToMask(state.tiles[index]) & (1 << normalizeDir(dir, getLattice().sides)));
-  }
-
-  function setVertexTileSpoke(index, dir, present, allowCreate = false) {
-    if (index < 0 || index >= state.tiles.length) return false;
-    const tile = state.tiles[index];
-    if (!isVertexTileValue(tile) && !(allowCreate && isTileEmpty(tile))) return false;
-    const dirs = normalizeVertexTile(state.tiles[index]);
-    const normalized = normalizeDir(dir, getLattice().sides);
-    const hasDir = dirs.includes(normalized);
-    if (present === hasDir && isVertexTileValue(state.tiles[index])) return false;
-    const next = present
-      ? normalizeDirs(dirs.concat([normalized]))
-      : dirs.filter((item) => item !== normalized);
-    const nextTile = vertexTileFromDirs(next);
-    if (tilesEqual(state.tiles[index], nextTile)) return false;
-    state.tiles[index] = nextTile;
-    return true;
-  }
-
   function normalizeEditMode(mode) {
     if (mode === 'randonize') return 'randomize';
     return ['rotate', 'reorder', 'randomize'].includes(mode) ? mode : 'rotate';
   }
 
-  function normalizeDiagramType(type) {
-    return type === 'dual' || type === 'dualGraph' || type === 'dual-graph' ? 'dual' : 'link';
-  }
-
-  function isDualGraph() {
-    return state.diagramType === 'dual';
-  }
-
-  function isTilingMode() {
-    return state.inputMode === 'tiling';
-  }
-
-  function isDrawGestureAction() {
-    return state.drawAction === 'edge';
-  }
-
   function normalizeInputMode(mode) {
-    if (mode === 'drag') return 'tiling';
-    return ['draw', 'tiling', 'pick', 'import'].includes(mode) ? mode : 'draw';
+    return ['draw', 'drag', 'pick', 'import'].includes(mode) ? mode : 'draw';
   }
 
   function normalizeDrawLayer(layer) {
@@ -4185,7 +3309,7 @@
 
   function normalizeDrawAction(action) {
     if (action === 'randonize') return 'randomize';
-    return ['edge', 'vertex', 'rotate', 'reorder', 'randomize'].includes(action) ? action : 'edge';
+    return ['edge', 'rotate', 'reorder', 'randomize'].includes(action) ? action : 'edge';
   }
 
   function normalizeKnotCodeKind(kind) {
@@ -4194,11 +3318,6 @@
   }
 
   function normalizeDir(dir, sides) {
-    if (typeof dir === 'string') {
-      const normalized = dir.trim().toUpperCase();
-      const named = getLattice().dirNames.findIndex((name) => name.toUpperCase() === normalized);
-      if (named >= 0) return named;
-    }
     const parsed = Number(dir);
     if (!Number.isFinite(parsed)) return 0;
     return modulo(Math.trunc(parsed), sides);
@@ -4215,13 +3334,9 @@
 
   function tileToMask(tile) {
     if (typeof tile === 'number') return tile || 0;
-    const arcMask = normalizeTile(tile).reduce((mask, pair) => (
+    return normalizeTile(tile).reduce((mask, pair) => (
       mask | (1 << pair[0]) | (1 << pair[1])
     ), 0);
-    const spokeMask = normalizeVertexTile(tile).reduce((mask, dir) => (
-      mask | (1 << dir)
-    ), 0);
-    return arcMask | spokeMask;
   }
 
   function isTileEmpty(tile) {
@@ -4230,12 +3345,6 @@
 
   function tilesEqual(left, right) {
     if (left == null || right == null) return left == null && right == null;
-    if (isVertexTileValue(left) || isVertexTileValue(right)) {
-      const leftDirs = normalizeVertexTile(left);
-      const rightDirs = normalizeVertexTile(right);
-      return leftDirs.length === rightDirs.length
-        && leftDirs.every((dir, index) => dir === rightDirs[index]);
-    }
     const leftTile = normalizeTile(left);
     const rightTile = normalizeTile(right);
     if (leftTile.length !== rightTile.length) return false;
@@ -4247,11 +3356,6 @@
 
   function rotateTileValue(tile, steps) {
     if (tile == null) return null;
-    if (isVertexTileValue(tile)) {
-      const lattice = getLattice();
-      const normalized = ((steps % lattice.sides) + lattice.sides) % lattice.sides;
-      return vertexTileFromDirs(normalizeVertexTile(tile).map((dir) => (dir + normalized) % lattice.sides));
-    }
     const arcs = normalizeTile(tile);
     if (!arcs.length) return [];
     const lattice = getLattice();

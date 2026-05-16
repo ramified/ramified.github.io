@@ -422,17 +422,10 @@
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="mosaic-inline-row">
-          <span class="input-label">Diagram</span>
-          <select id="diagram-type">
-            <option value="link">Knot / link</option>
-            <option value="dual">Dual graph</option>
-          </select>
-        </div>
-        <div class="mosaic-inline-row">
           <span class="input-label">Mode</span>
           <select id="input-mode">
             <option value="draw">Draw</option>
-            <option value="tiling">Tiling</option>
+            <option value="drag">Drag</option>
             <option value="pick">Pick</option>
             <option value="import">Import</option>
           </select>
@@ -442,7 +435,6 @@
             <span class="input-label">Draw click</span>
             <select id="draw-action">
               <option value="edge">Edge</option>
-              <option value="vertex" hidden disabled>Add vertexes</option>
               <option value="rotate">Rotate</option>
               <option value="reorder">Reorder pairs</option>
               <option value="randomize">Randomize</option>
@@ -464,7 +456,7 @@
             </select>
           </div>
         </div>
-        <div class="input-mode-panel" data-input-panel="tiling">
+        <div class="input-mode-panel" data-input-panel="drag">
           <div class="mosaic-inline-row">
             <span class="input-label">Canvas clicks</span>
             <select id="edit-mode">
@@ -474,8 +466,8 @@
             </select>
           </div>
           <div class="input-method">
-            <span class="input-label">Tiling preferences</span>
-            <div id="tile-palette" class="tile-palette-grid" aria-label="Tiling preferences"></div>
+            <span class="input-label">Tile Preferences</span>
+            <div id="tile-palette" class="tile-palette-grid" aria-label="Tile preferences"></div>
           </div>
         </div>
         <div class="input-mode-panel" data-input-panel="pick">
@@ -517,7 +509,7 @@
       </div>
     </section>
 
-    <section class="card collapsed" id="knot-card">
+    <section class="card collapsed">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Knot</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value" id="knot-status">not checked</span></div>
