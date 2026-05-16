@@ -149,6 +149,13 @@
       align-items: flex-end;
     }
 
+    .mosaic-opt-pair {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      column-gap: 12px;
+      align-items: center;
+    }
+
     .mosaic-mode-row {
       display: grid;
       grid-template-columns: minmax(0, 1fr) max-content;
@@ -488,7 +495,10 @@
       <div class="card-body">
         <label class="opt-row"><input type="checkbox" id="show-errors" checked> Show open ends</label>
         <label class="opt-row"><input type="checkbox" id="show-coords"> Show coordinates</label>
-        <label class="opt-row"><input type="checkbox" id="color-components" checked> Color components</label>
+        <div class="mosaic-opt-pair">
+          <label class="opt-row"><input type="checkbox" id="color-components" checked> Color components</label>
+          <label class="opt-row"><input type="checkbox" id="display-pick"> Pick</label>
+        </div>
         <div class="mosaic-inline-row" id="wrapped-view-row" hidden>
           <span class="input-label">Wrapped view</span>
           <select id="wrapped-view-mode">

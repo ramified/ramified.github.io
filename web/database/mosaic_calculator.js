@@ -53,6 +53,7 @@
     showErrors: true,
     showCoords: false,
     colorComponents: true,
+    displayPick: false,
     componentColors: [],
     drawStyle: 'shade',
     drawAction: 'edge',
@@ -62,6 +63,8 @@
     viewX: 0,
     viewY: 0,
     inputMode: 'draw',
+    displayPickInputLocked: false,
+    displayPickReturnMode: 'draw',
     editMode: 'rotate',
     drawLayer: 'above',
     selectedTile: null,
@@ -118,6 +121,7 @@
     refs.showErrors = document.getElementById('show-errors');
     refs.showCoords = document.getElementById('show-coords');
     refs.colorComponents = document.getElementById('color-components');
+    refs.displayPick = document.getElementById('display-pick');
     refs.wrappedViewRow = document.getElementById('wrapped-view-row');
     refs.wrappedViewMode = document.getElementById('wrapped-view-mode');
     refs.knotStatus = document.getElementById('knot-status');
@@ -145,20 +149,7 @@
     refs.gridRows.addEventListener('change', () => generateFromControls());
     refs.gridCols.addEventListener('change', () => generateFromControls());
     refs.inputMode.addEventListener('change', () => {
-      state.inputMode = normalizeInputMode(refs.inputMode.value);
-      state.hoverIndex = -1;
-      state.drawDebugHit = null;
-      state.pickHoverHit = null;
-      if (state.inputMode !== 'pick') {
-        state.pickedComponent = null;
-        state.pickedAnchor = null;
-      }
-      clearEditorDrag();
-      cancelDrawGesture();
-      if (state.inputMode === 'drag') renderTilePalette();
-      updateInputModePanels();
-      updateDrawModeControls();
-      updateReport(false);
+      setInputMode(refs.inputMode.value);
     });
     refs.latticeSelect.addEventListener('change', () => generateFromControls());
     refs.wrapBoard.addEventListener('change', () => generateFromControls());
@@ -205,6 +196,16 @@
       updateReport(false);
       refreshExport();
     });
+    refs.displayPick.addEventListener('change', () => {
+      state.displayPick = refs.displayPick.checked;
+      if (!isPickDisplayActive()) state.pickHoverHit = null;
+      if (state.displayPick) {
+        beginDisplayPickCapture();
+      } else {
+        finishDisplayPickCapture(true);
+      }
+      refreshExport();
+    });
     refs.wrappedViewMode.addEventListener('change', () => {
       state.wrappedViewMode = refs.wrappedViewMode.value === 'single' ? 'single' : 'periodic';
       normalizeViewOffset();
@@ -222,6 +223,25 @@
     }, 80));
 
     bindPalette();
+  }
+
+  function setInputMode(mode, options = {}) {
+    state.inputMode = normalizeInputMode(mode);
+    refs.inputMode.value = state.inputMode;
+    state.hoverIndex = -1;
+    state.drawDebugHit = null;
+    state.pickHoverHit = null;
+    if (state.inputMode !== 'pick' && !state.displayPick && options.clearPick !== false) {
+      state.pickedComponent = null;
+      state.pickedAnchor = null;
+    }
+    clearEditorDrag();
+    cancelDrawGesture();
+    if (state.inputMode === 'drag') renderTilePalette();
+    updateInputModePanels();
+    updateDrawModeControls();
+    updateInputModeLock();
+    updateReport(false);
   }
 
   function bindPalette() {
@@ -536,6 +556,8 @@
     state.pickHoverHit = null;
     state.pickedComponent = null;
     state.pickedAnchor = null;
+    state.displayPickInputLocked = false;
+    state.displayPickReturnMode = 'draw';
     state.tiles = Array(rows * cols).fill(null);
     syncAllInputs(rows, cols, state.lattice, state.wrapped);
     renderTilePalette();
@@ -572,6 +594,8 @@
     state.pickHoverHit = null;
     state.pickedComponent = null;
     state.pickedAnchor = null;
+    state.displayPickInputLocked = false;
+    state.displayPickReturnMode = 'draw';
     if (oldLattice !== nextLattice) {
       state.selectedTile = null;
       state.selectedPaletteId = '';
@@ -662,6 +686,9 @@
     state.showErrors = !(payload.display && payload.display.showOpenEnds === false);
     state.showCoords = !!(payload.display && payload.display.showCoords);
     state.colorComponents = !(payload.display && payload.display.colorComponents === false);
+    state.displayPick = !!(payload.display && payload.display.pick);
+    state.displayPickInputLocked = false;
+    state.displayPickReturnMode = 'draw';
     state.componentColors = [];
     state.drawStyle = normalizeDrawStyle(
       payload.drawStyle
@@ -682,6 +709,7 @@
     refs.showErrors.checked = state.showErrors;
     refs.showCoords.checked = state.showCoords;
     refs.colorComponents.checked = state.colorComponents;
+    refs.displayPick.checked = state.displayPick;
     refs.drawAction.value = state.drawAction;
     refs.knotCodeKind.value = state.knotCodeKind;
     refs.drawStyle.value = state.drawStyle;
@@ -742,10 +770,23 @@
   }
 
   function clearBoard() {
+    const shouldRestoreInputMode = state.displayPickInputLocked && state.inputMode === 'pick';
+    const returnMode = state.displayPickReturnMode || 'draw';
     state.tiles = Array(state.rows * state.cols).fill(null);
     state.pickedComponent = null;
     state.pickedAnchor = null;
     state.pickHoverHit = null;
+    state.displayPick = false;
+    state.displayPickInputLocked = false;
+    state.displayPickReturnMode = 'draw';
+    if (refs.displayPick) refs.displayPick.checked = false;
+    if (shouldRestoreInputMode) {
+      state.inputMode = normalizeInputMode(returnMode);
+      refs.inputMode.value = state.inputMode;
+      updateInputModePanels();
+      updateDrawModeControls();
+    }
+    updateInputModeLock();
     state.edits += 1;
     updateReport(false);
   }
@@ -1138,20 +1179,45 @@
     const report = analyze();
     const component = hit ? componentAtEdgeHit(hit, report) : null;
     state.pickedComponent = component;
-    state.pickedAnchor = hit && component != null ? pickHoverHitFromEdgeHit(hit, component) : null;
+    state.pickedAnchor = hit ? pickHoverHitFromEdgeHit(hit, component) : null;
     state.pickHoverHit = hit ? pickHoverHitFromEdgeHit(hit, component) : null;
+    if (hit && state.displayPickInputLocked) {
+      finishDisplayPickCapture(true);
+      return;
+    }
     updateReport(false);
   }
 
   function componentAtEdgeHit(hit, report) {
+    const connection = connectedArcAtEdgeHit(hit, report);
+    return connection ? connection.component : null;
+  }
+
+  function connectedArcAtEdgeHit(hit, report) {
     if (!hit || !report || !report.arcComponents) return null;
-    const tile = normalizeTile(state.tiles[hit.index]);
-    const pairIndex = tile.findIndex((pair) => pair[0] === hit.dir || pair[1] === hit.dir);
+    const direct = connectedArcAtTileEdge(hit.index, hit.dir, hit.offset, report);
+    if (direct) return direct;
+
+    const neighborHit = matchingNeighborEdgeHit(hit);
+    if (!neighborHit) return null;
+    return connectedArcAtTileEdge(neighborHit.index, neighborHit.dir, neighborHit.offset, report);
+  }
+
+  function connectedArcAtTileEdge(index, dir, offset, report) {
+    const tile = normalizeTile(state.tiles[index]);
+    const pairIndex = tile.findIndex((pair) => pair[0] === dir || pair[1] === dir);
     if (pairIndex < 0) return null;
-    const component = report.arcComponents[hit.index]
-      ? report.arcComponents[hit.index][pairIndex]
+    const component = report.arcComponents[index]
+      ? report.arcComponents[index][pairIndex]
       : null;
-    return Number.isInteger(component) && component >= 0 ? component : null;
+    if (!Number.isInteger(component) || component < 0) return null;
+    return {
+      index,
+      dir,
+      pairIndex,
+      component,
+      offset: copyOffsetRecord(offset)
+    };
   }
 
   function applyPickedComponent() {
@@ -1634,6 +1700,12 @@
   }
 
   function normalizePickedComponent(report) {
+    if (state.pickedAnchor) {
+      const component = componentAtEdgeHit(state.pickedAnchor, report);
+      state.pickedAnchor.component = component;
+      state.pickedComponent = component;
+      return;
+    }
     if (state.pickedComponent == null) return;
     const hasComponent = report.arcComponents.some((components) => (
       components.some((component) => component === state.pickedComponent)
@@ -1647,6 +1719,37 @@
   function updatePickControls() {
     if (!refs.applyPick) return;
     refs.applyPick.disabled = state.inputMode !== 'pick' || state.pickedComponent == null;
+  }
+
+  function isPickDisplayActive() {
+    return state.inputMode === 'pick' || state.displayPick;
+  }
+
+  function beginDisplayPickCapture() {
+    state.displayPickInputLocked = true;
+    state.displayPickReturnMode = state.inputMode;
+    setInputMode('pick', { clearPick: false });
+    updateInputModeLock();
+  }
+
+  function finishDisplayPickCapture(restoreMode) {
+    const wasLocked = state.displayPickInputLocked;
+    const returnMode = state.displayPickReturnMode || 'draw';
+    state.displayPickInputLocked = false;
+    state.displayPickReturnMode = 'draw';
+    updateInputModeLock();
+    if (wasLocked && restoreMode) {
+      setInputMode(returnMode, { clearPick: false });
+      return;
+    }
+    updateInputModePanels();
+    updateDrawModeControls();
+    updateReport(false);
+  }
+
+  function updateInputModeLock() {
+    if (!refs.inputMode) return;
+    refs.inputMode.disabled = !!state.displayPickInputLocked;
   }
 
   function updateKnotCard(report) {
@@ -2006,30 +2109,38 @@
   }
 
   function drawPickHoverOverlay(ctx, palette, report) {
-    if (state.inputMode !== 'pick' || !state.pickHoverHit) return;
-    const hit = state.pickHoverHit;
-    const cell = geometry.cells[hit.index];
-    if (!cell) return;
+    if (!isPickDisplayActive()) return;
+    if (state.pickedAnchor) {
+      drawPickHitMarkers(ctx, state.pickedAnchor, palette.accent2, 2.4);
+    }
+    if (state.inputMode === 'pick' && state.pickHoverHit) {
+      drawPickHitMarkers(ctx, state.pickHoverHit, palette.accent, 2);
+    }
+  }
 
+  function drawPickHitMarkers(ctx, hit, color, width) {
+    const midpoint = sharedEdgeMidpoint(hit);
+    if (!midpoint) return;
     const radius = geometry.radius;
-    const tile = {
-      x: cell.x + hit.offset.x,
-      y: cell.y + hit.offset.y
-    };
-    const markers = [{ x: tile.x, y: tile.y, dir: hit.dir }];
-    const neighborMarker = matchingNeighborEdgeMarker(hit);
-    if (neighborMarker) markers.push(neighborMarker);
 
     ctx.save();
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    markers.forEach((marker) => {
-      drawPickEdgeMarker(ctx, marker.x, marker.y, marker.dir, radius, palette.accent, 2);
-    });
+    drawPickEdgeMidpoint(ctx, midpoint.x, midpoint.y, radius, color, width);
     ctx.restore();
   }
 
   function matchingNeighborEdgeMarker(hit) {
+    const neighborHit = matchingNeighborEdgeHit(hit);
+    if (!neighborHit) return null;
+    const nextCell = geometry.cells[neighborHit.index];
+    if (!nextCell) return null;
+    return {
+      x: nextCell.x + neighborHit.offset.x,
+      y: nextCell.y + neighborHit.offset.y,
+      dir: neighborHit.dir
+    };
+  }
+
+  function matchingNeighborEdgeHit(hit) {
     const lattice = getLattice();
     const cell = geometry.cells[hit.index];
     if (!cell) return null;
@@ -2044,9 +2155,9 @@
     const nextCell = geometry.cells[nextIndex];
     if (!nextCell) return null;
     return {
-      x: nextCell.x + nextOffset.x,
-      y: nextCell.y + nextOffset.y,
-      dir: opposite
+      index: nextIndex,
+      dir: opposite,
+      offset: nextOffset
     };
   }
 
@@ -2058,6 +2169,53 @@
     ctx.moveTo(segment.start.x, segment.start.y);
     ctx.lineTo(segment.end.x, segment.end.y);
     ctx.stroke();
+  }
+
+  function edgeMarkerMidpoint(x, y, dir, radius) {
+    const segment = edgeSegmentPoints(x, y, dir, radius * 0.96);
+    return {
+      x: (segment.start.x + segment.end.x) / 2,
+      y: (segment.start.y + segment.end.y) / 2
+    };
+  }
+
+  function sharedEdgeMidpoint(hit) {
+    const cell = geometry.cells[hit.index];
+    if (!cell) return null;
+
+    const radius = geometry.radius;
+    const tile = {
+      x: cell.x + hit.offset.x,
+      y: cell.y + hit.offset.y
+    };
+    const points = [edgeMarkerMidpoint(tile.x, tile.y, hit.dir, radius)];
+    const neighborMarker = matchingNeighborEdgeMarker(hit);
+    if (neighborMarker) {
+      points.push(edgeMarkerMidpoint(neighborMarker.x, neighborMarker.y, neighborMarker.dir, radius));
+    }
+    return averagePoints(points);
+  }
+
+  function averagePoints(points) {
+    if (!points.length) return null;
+    const total = points.reduce((acc, point) => ({
+      x: acc.x + point.x,
+      y: acc.y + point.y
+    }), { x: 0, y: 0 });
+    return {
+      x: total.x / points.length,
+      y: total.y / points.length
+    };
+  }
+
+  function drawPickEdgeMidpoint(ctx, x, y, radius, color, width = 2) {
+    const markerRadius = Math.max(4.2, radius * 0.105) * Math.max(0.85, width / 2);
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,253,248,0.96)';
+    circle(ctx, x, y, markerRadius);
+    ctx.fillStyle = color;
+    circle(ctx, x, y, Math.max(2.2, markerRadius * 0.55));
+    ctx.restore();
   }
 
   function drawDrawDebugOverlay(ctx, palette, report) {
@@ -2371,7 +2529,7 @@
   }
 
   function componentStrokeScale(componentIndex) {
-    if (state.inputMode !== 'pick' || state.pickedComponent == null || componentIndex == null || componentIndex < 0) {
+    if (!isPickDisplayActive() || state.pickedComponent == null || componentIndex == null || componentIndex < 0) {
       return 1;
     }
     return componentIndex === state.pickedComponent ? 1.22 : 0.34;
@@ -2379,7 +2537,7 @@
 
   function componentPipeAlpha(componentIndex, drawMeta, pairIndex) {
     if (
-      state.inputMode !== 'pick'
+      !isPickDisplayActive()
       || !state.wrapped
       || state.pickedComponent == null
       || componentIndex !== state.pickedComponent
@@ -2395,7 +2553,7 @@
 
   function buildPickedLiftContext(report, offsets) {
     if (
-      state.inputMode !== 'pick'
+      !isPickDisplayActive()
       || !state.wrapped
       || !isPeriodicWrappedView()
       || state.pickedComponent == null
@@ -2405,14 +2563,12 @@
       return null;
     }
 
-    const anchor = state.pickedAnchor;
-    const anchorTile = normalizeTile(state.tiles[anchor.index]);
-    const anchorPairIndex = anchorTile.findIndex((pair) => pair[0] === anchor.dir || pair[1] === anchor.dir);
-    if (anchorPairIndex < 0) return null;
+    const anchorArc = connectedArcAtEdgeHit(state.pickedAnchor, report);
+    if (!anchorArc) return null;
 
-    const anchorCopy = copyCoordsFromOffset(anchor.offset);
+    const anchorCopy = copyCoordsFromOffset(anchorArc.offset);
     const bounds = liftedCopyBounds(offsets, anchorCopy);
-    return traceLiftedComponent(anchor.index, anchorPairIndex, anchorCopy, bounds);
+    return traceLiftedComponent(anchorArc.index, anchorArc.pairIndex, anchorCopy, bounds);
   }
 
   function traceLiftedComponent(anchorIndex, anchorPairIndex, anchorCopy, bounds) {
@@ -2898,6 +3054,7 @@
         showOpenEnds: state.showErrors,
         showCoords: state.showCoords,
         colorComponents: state.colorComponents,
+        pick: state.displayPick,
         drawAction: state.drawAction,
         knotCodeKind: state.knotCodeKind,
         drawStyle: state.drawStyle,
@@ -2962,9 +3119,11 @@
     refs.drawLayer.value = state.drawLayer;
     refs.drawStyle.value = state.drawStyle;
     refs.colorComponents.checked = state.colorComponents;
+    refs.displayPick.checked = state.displayPick;
     refs.wrappedViewMode.value = state.wrappedViewMode;
     updateInputModePanels();
     updateDrawModeControls();
+    updateInputModeLock();
     updateDisplayControls();
     updatePickControls();
   }
