@@ -264,8 +264,23 @@
 
     clearEditorDrag();
     cancelDrawGesture(false);
+
+    // Check if switching from dual to link and there are vertex tiles
+    if (state.diagramType === 'dual' && nextType === 'link') {
+      const hasVertices = state.tiles.some(tile => isVertexTileValue(tile));
+      if (hasVertices) {
+        const confirmed = confirm('All the vertex tiles will be removed. Continue?');
+        if (!confirmed) {
+          // User cancelled, restore the select value
+          refs.diagramType.value = state.diagramType;
+          return;
+        }
+        // Remove only vertex tiles, preserve others
+        state.tiles = state.tiles.map(tile => isVertexTileValue(tile) ? null : tile);
+      }
+    }
+
     state.diagramType = nextType;
-    state.tiles = Array(state.rows * state.cols).fill(null);
     state.pickedComponent = null;
     state.pickedAnchor = null;
     state.pickHoverHit = null;
@@ -512,9 +527,14 @@
       event.preventDefault();
       if (state.inputMode === 'draw') {
         const hit = hitTest(event.clientX, event.clientY);
-        if (hit >= 0 && !isTileEmpty(state.tiles[hit])) {
-          if (state.drawAction === 'edge') cycleTilePairs(hit);
-          else applyDrawTileAction(hit, -1);
+        if (hit >= 0) {
+          if (state.drawAction === 'edge' && isDualGraph()) {
+            toggleVertexTileAtIndex(hit);
+            updateReport(false);
+          } else if (!isTileEmpty(state.tiles[hit])) {
+            if (state.drawAction === 'edge') cycleTilePairs(hit);
+            else applyDrawTileAction(hit, -1);
+          }
         }
         return;
       }
