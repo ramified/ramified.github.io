@@ -281,8 +281,6 @@
       column-gap: 10px;
       font-size: 0.82rem;
       line-height: 1.6;
-      padding: 6px 0;
-      border-bottom: 1px solid var(--border);
     }
 
     .slice-info-label {
@@ -298,6 +296,38 @@
       min-width: 0;
     }
 
+    .slice-invariant-head {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .slice-invariant-toggle {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      line-height: 1;
+      padding: 1px 3px;
+    }
+
+    .slice-invariant-toggle:hover {
+      color: var(--accent);
+    }
+
+    #dual-graph-invariant-panel {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    #dual-graph-invariant-panel[hidden] {
+      display: none;
+    }
+
     .slice-invariant-list {
       display: grid;
       grid-template-columns: minmax(58px, max-content) minmax(0, 1fr);
@@ -306,6 +336,17 @@
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.7rem;
       line-height: 1.45;
+      margin: 0;
+    }
+
+    .dual-graph-control-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 12px;
+      margin-top: 8px;
+    }
+
+    .dual-graph-control-row .opt-row {
       margin: 0;
     }
 
@@ -582,22 +623,34 @@
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Dual Graph Visualization</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value" id="dual-graph-status">-</span></div>
-        <div class="slice-info-row"><span class="slice-info-label">invariants</span><span class="slice-info-value" id="dual-graph-invariants"><span class="hint">-</span></span></div>
+        <div class="slice-info-row">
+          <span class="slice-info-label">invariants</span>
+          <span class="slice-info-value">
+            <div class="slice-invariant-head"><button class="slice-invariant-toggle" id="dual-graph-invariant-toggle" type="button" title="hide invariants" aria-label="hide invariants" aria-expanded="true">&#9662;</button></div>
+            <div id="dual-graph-invariant-panel"><span id="dual-graph-invariants"><span class="hint">-</span></span></div>
+          </span>
+        </div>
         <div id="dual-graph-canvas-wrap" style="margin-top: 12px; display: none;">
-          <label class="opt-row"><input type="checkbox" id="show-dual-graph-canvas" checked> Show dual graph canvas</label>
-          <label class="opt-row"><input type="checkbox" id="show-riemann-surface-canvas" checked> Show RS canvas</label>
+          <div style="margin-top: 8px;">
+            <button class="btn btn-ghost" id="export-dual-graph" type="button">Export graph</button>
+          </div>
+          <div class="dual-graph-control-row">
+            <label class="opt-row"><input type="checkbox" id="show-dual-graph-canvas"> Dual graph</label>
+            <label class="opt-row"><input type="checkbox" id="show-riemann-surface-canvas"> RS</label>
+          </div>
+          <div id="dual-graph-layout-controls" style="margin-top: 8px;">
+            <button class="btn" id="compute-layout" type="button">Compute layout</button>
+            <button class="btn btn-ghost" id="reset-layout" type="button">Reset</button>
+          </div>
           <div id="dual-graph-view-wrap">
             <canvas id="dual-graph-canvas" width="300" height="300" style="width: 100%; margin-top: 8px; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: default;"></canvas>
           </div>
-          <div style="margin-top: 8px;">
-            <button class="btn" id="compute-layout" type="button">Compute layout</button>
-            <button class="btn btn-ghost" id="reset-layout" type="button">Reset</button>
-            <button class="btn btn-ghost" id="export-dual-graph" type="button">Export graph</button>
-          </div>
           <div id="riemann-surface-view-wrap">
-            <label class="opt-row" style="margin-top: 8px;"><input type="checkbox" id="show-riemann-debug-circles"> Show RS blue circles</label>
-            <label class="opt-row"><input type="checkbox" id="show-riemann-bezier-curve"> Show RS Bezier curve</label>
             <canvas id="riemann-surface-canvas" width="300" height="280" aria-label="Corresponding Riemann surface" style="width: 100%; margin-top: 12px; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: pointer;"></canvas>
+            <div class="dual-graph-control-row">
+              <label class="opt-row"><input type="checkbox" id="show-riemann-debug-circles"> Blue circles</label>
+              <label class="opt-row"><input type="checkbox" id="show-riemann-bezier-curve"> Bézier curve</label>
+            </div>
           </div>
         </div>
         <div id="dual-graph-placeholder" style="margin-top: 8px; color: var(--muted); font-size: 0.86rem;">

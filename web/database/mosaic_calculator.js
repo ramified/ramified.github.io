@@ -94,13 +94,14 @@
     dualGraphAnimating: false,
     riemannSurfaceModel: null,
     selectedRiemannVertex: null,
+    dualGraphInvariantsExpanded: true,
     riemannNodeRadii: DEFAULT_RIEMANN_NODE_RADII.slice(),
     riemannLoopNodePositions: DEFAULT_RIEMANN_LOOP_NODE_POSITIONS.slice(),
     riemannLoopTangentScale: DEFAULT_RIEMANN_LOOP_TANGENT_SCALE,
     showRiemannDebugCircles: false,
     showRiemannBezierCurve: false,
-    showDualGraphCanvas: true,
-    showRiemannSurfaceCanvas: true
+    showDualGraphCanvas: false,
+    showRiemannSurfaceCanvas: false
   };
 
   const refs = {};
@@ -166,12 +167,15 @@
     refs.dualGraphCard = document.getElementById('dual-graph-card');
     refs.dualGraphStatus = document.getElementById('dual-graph-status');
     refs.dualGraphInvariants = document.getElementById('dual-graph-invariants');
+    refs.dualGraphInvariantToggle = document.getElementById('dual-graph-invariant-toggle');
+    refs.dualGraphInvariantPanel = document.getElementById('dual-graph-invariant-panel');
     refs.dualGraphCanvas = document.getElementById('dual-graph-canvas');
     refs.dualGraphCanvasWrap = document.getElementById('dual-graph-canvas-wrap');
     refs.dualGraphViewWrap = document.getElementById('dual-graph-view-wrap');
     refs.dualGraphPlaceholder = document.getElementById('dual-graph-placeholder');
     refs.riemannSurfaceCanvas = document.getElementById('riemann-surface-canvas');
     refs.riemannSurfaceViewWrap = document.getElementById('riemann-surface-view-wrap');
+    refs.dualGraphLayoutControls = document.getElementById('dual-graph-layout-controls');
     refs.computeLayout = document.getElementById('compute-layout');
     refs.resetLayout = document.getElementById('reset-layout');
     refs.exportDualGraph = document.getElementById('export-dual-graph');
@@ -300,6 +304,12 @@
     }
     if (refs.exportDualGraph) {
       refs.exportDualGraph.addEventListener('click', exportDualGraphFromVisualization);
+    }
+    if (refs.dualGraphInvariantToggle) {
+      refs.dualGraphInvariantToggle.addEventListener('click', () => {
+        state.dualGraphInvariantsExpanded = !state.dualGraphInvariantsExpanded;
+        syncDualGraphInvariantVisibility();
+      });
     }
     if (refs.showDualGraphCanvas) {
       refs.showDualGraphCanvas.addEventListener('change', () => {
@@ -2849,6 +2859,7 @@
 
     refs.dualGraphStatus.textContent = `${graphData.vertices.length} vertices, ${graphData.edges.length} edges, ${graphData.legs.length} legs`;
     if (refs.dualGraphInvariants) refs.dualGraphInvariants.innerHTML = formatDualGraphInvariants(graphData);
+    syncDualGraphInvariantVisibility();
     refs.dualGraphCanvasWrap.style.display = 'block';
     refs.dualGraphPlaceholder.style.display = 'none';
 
@@ -2877,6 +2888,7 @@
     if (refs.showRiemannSurfaceCanvas) refs.showRiemannSurfaceCanvas.checked = state.showRiemannSurfaceCanvas;
     if (refs.dualGraphViewWrap) refs.dualGraphViewWrap.hidden = !state.showDualGraphCanvas;
     if (refs.riemannSurfaceViewWrap) refs.riemannSurfaceViewWrap.hidden = !state.showRiemannSurfaceCanvas;
+    if (refs.dualGraphLayoutControls) refs.dualGraphLayoutControls.hidden = !isDualGraphVisualizationVisible();
 
     if (!isDualGraphVisualizationVisible()) {
       state.dualGraphAnimating = false;
@@ -3066,6 +3078,17 @@
       <dt>n</dt><dd>${inv.halfEdges}</dd>
       <dt>b<sub>1</sub></dt><dd>${inv.cycleRank}</dd>
     </dl>`;
+  }
+
+  function syncDualGraphInvariantVisibility() {
+    const expanded = state.dualGraphInvariantsExpanded;
+    if (refs.dualGraphInvariantPanel) refs.dualGraphInvariantPanel.hidden = !expanded;
+    if (refs.dualGraphInvariantToggle) {
+      refs.dualGraphInvariantToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      refs.dualGraphInvariantToggle.setAttribute('title', expanded ? 'hide invariants' : 'show invariants');
+      refs.dualGraphInvariantToggle.setAttribute('aria-label', expanded ? 'hide invariants' : 'show invariants');
+      refs.dualGraphInvariantToggle.innerHTML = expanded ? '&#9662;' : '&#9656;';
+    }
   }
 
   function countDualGraphComponents(graphData) {
@@ -6258,6 +6281,7 @@
     refs.drawStyle.value = state.drawStyle;
     refs.colorComponents.checked = state.colorComponents;
     refs.displayPick.checked = state.displayPick;
+    syncDualGraphInvariantVisibility();
     if (refs.showDualGraphCanvas) refs.showDualGraphCanvas.checked = state.showDualGraphCanvas;
     if (refs.showRiemannSurfaceCanvas) refs.showRiemannSurfaceCanvas.checked = state.showRiemannSurfaceCanvas;
     if (refs.showRiemannDebugCircles) refs.showRiemannDebugCircles.checked = state.showRiemannDebugCircles;
