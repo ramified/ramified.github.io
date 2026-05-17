@@ -274,6 +274,85 @@
       white-space: nowrap;
     }
 
+    .slice-info-row {
+      display: grid;
+      grid-template-columns: minmax(92px, max-content) minmax(0, 1fr);
+      align-items: start;
+      column-gap: 10px;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .slice-info-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      min-width: 80px;
+    }
+
+    .slice-info-value {
+      font-family: 'EB Garamond', serif;
+      font-size: 0.88rem;
+      min-width: 0;
+    }
+
+    .slice-invariant-list {
+      display: grid;
+      grid-template-columns: minmax(58px, max-content) minmax(0, 1fr);
+      column-gap: 10px;
+      row-gap: 2px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      line-height: 1.45;
+      margin: 0;
+    }
+
+    .slice-invariant-list dt {
+      color: var(--muted);
+    }
+
+    .slice-invariant-list dd {
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .rs-node-radius-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
+      gap: 6px 8px;
+      margin-top: 8px;
+    }
+
+    .rs-node-radius-control {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr) 32px;
+      align-items: center;
+      column-gap: 5px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      color: var(--muted);
+    }
+
+    .rs-node-radius-control input {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .rs-node-radius-control output {
+      text-align: right;
+      color: var(--text);
+    }
+
+    .rs-node-auto {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      align-self: center;
+    }
+
     .tile-palette-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(46px, 1fr));
@@ -433,6 +512,7 @@
           <select id="input-mode">
             <option value="draw">Draw</option>
             <option value="tiling">Tiling</option>
+            <option value="decoration" hidden disabled>Decoration</option>
             <option value="pick">Pick</option>
             <option value="import">Import</option>
           </select>
@@ -502,12 +582,22 @@
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Dual Graph Visualization</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value" id="dual-graph-status">-</span></div>
+        <div class="slice-info-row"><span class="slice-info-label">invariants</span><span class="slice-info-value" id="dual-graph-invariants"><span class="hint">-</span></span></div>
         <div id="dual-graph-canvas-wrap" style="margin-top: 12px; display: none;">
-          <canvas id="dual-graph-canvas" width="300" height="300" style="width: 100%; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: default;"></canvas>
+          <label class="opt-row"><input type="checkbox" id="show-dual-graph-canvas" checked> Show dual graph canvas</label>
+          <label class="opt-row"><input type="checkbox" id="show-riemann-surface-canvas" checked> Show RS canvas</label>
+          <div id="dual-graph-view-wrap">
+            <canvas id="dual-graph-canvas" width="300" height="300" style="width: 100%; margin-top: 8px; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: default;"></canvas>
+          </div>
           <div style="margin-top: 8px;">
             <button class="btn" id="compute-layout" type="button">Compute layout</button>
             <button class="btn btn-ghost" id="reset-layout" type="button">Reset</button>
             <button class="btn btn-ghost" id="export-dual-graph" type="button">Export graph</button>
+          </div>
+          <div id="riemann-surface-view-wrap">
+            <label class="opt-row" style="margin-top: 8px;"><input type="checkbox" id="show-riemann-debug-circles"> Show RS blue circles</label>
+            <label class="opt-row"><input type="checkbox" id="show-riemann-bezier-curve"> Show RS Bezier curve</label>
+            <canvas id="riemann-surface-canvas" width="300" height="280" aria-label="Corresponding Riemann surface" style="width: 100%; margin-top: 12px; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: pointer;"></canvas>
           </div>
         </div>
         <div id="dual-graph-placeholder" style="margin-top: 8px; color: var(--muted); font-size: 0.86rem;">
@@ -516,7 +606,7 @@
       </div>
     </section>
 
-    <section class="card collapsed" id="export-card">
+    <section class="card collapsed">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Display Options</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <label class="opt-row"><input type="checkbox" id="show-errors" checked> Show open ends</label>
@@ -554,7 +644,7 @@
       </div>
     </section>
 
-    <section class="card collapsed">
+    <section class="card collapsed" id="export-card">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="action-row">

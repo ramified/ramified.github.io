@@ -26,6 +26,15 @@
   const MIN_BOARD = 2;
   const MIN_VIEW_SCALE = 0.45;
   const MAX_VIEW_SCALE = 2.8;
+  const DEFAULT_RIEMANN_NODE_RADII = [1.1, 0.5, 0.47, 0.43, 0.39, 0.35, 0.35];
+  const DEFAULT_RIEMANN_NODE_POSITIONS = [0, 0.12, 0.24, 0.36, 0.48, 0.84, 1];
+  const RIEMANN_LOOP_FINAL_INDEX = 22;
+  const RIEMANN_LOOP_PASS_INDEX = RIEMANN_LOOP_FINAL_INDEX - 1;
+  const DEFAULT_RIEMANN_LOOP_NODE_POSITIONS = Array.from({ length: RIEMANN_LOOP_FINAL_INDEX + 1 }, (_, index) => (
+    index >= RIEMANN_LOOP_PASS_INDEX ? 1 : Math.max(index * 0.02, 1 - ((RIEMANN_LOOP_PASS_INDEX - index) * 0.1))
+  ));
+  const DEFAULT_RIEMANN_LOOP_TANGENT_SCALE = 0.4;
+  const RIEMANN_LOOP_NODE_POSITION_GAP = 0.01;
   const DRAW_START_EDGE_RATIO = 0.42;
   const DRAW_EXIT_EDGE_RATIO = 0.94;
   const DRAW_BACKTRACK_EDGE_RATIO = 1.03;
@@ -67,6 +76,7 @@
     displayPickInputLocked: false,
     displayPickReturnMode: 'draw',
     editMode: 'rotate',
+    vertexDecorations: {},
     drawLayer: 'above',
     selectedTile: null,
     selectedPaletteId: '',
@@ -81,7 +91,16 @@
     dualGraphLayout: null,
     dualGraphSimulation: null,
     dualGraphDragging: null,
-    dualGraphAnimating: false
+    dualGraphAnimating: false,
+    riemannSurfaceModel: null,
+    selectedRiemannVertex: null,
+    riemannNodeRadii: DEFAULT_RIEMANN_NODE_RADII.slice(),
+    riemannLoopNodePositions: DEFAULT_RIEMANN_LOOP_NODE_POSITIONS.slice(),
+    riemannLoopTangentScale: DEFAULT_RIEMANN_LOOP_TANGENT_SCALE,
+    showRiemannDebugCircles: false,
+    showRiemannBezierCurve: false,
+    showDualGraphCanvas: true,
+    showRiemannSurfaceCanvas: true
   };
 
   const refs = {};
@@ -95,6 +114,7 @@
   let tileDragGhost = null;
   let tileDragSource = null;
   let drawState = null;
+  let decorationClickTimer = null;
 
   document.addEventListener('DOMContentLoaded', init);
 
@@ -117,6 +137,9 @@
     refs.gridCols = document.getElementById('grid-cols');
     refs.diagramType = document.getElementById('diagram-type');
     refs.inputMode = document.getElementById('input-mode');
+    refs.inputDecorationOption = refs.inputMode
+      ? refs.inputMode.querySelector('option[value="decoration"]')
+      : null;
     refs.latticeSelect = document.getElementById('lattice-select');
     refs.wrapBoard = document.getElementById('wrap-board');
     refs.editMode = document.getElementById('edit-mode');
@@ -142,12 +165,26 @@
     refs.knotCode = document.getElementById('knot-code');
     refs.dualGraphCard = document.getElementById('dual-graph-card');
     refs.dualGraphStatus = document.getElementById('dual-graph-status');
+    refs.dualGraphInvariants = document.getElementById('dual-graph-invariants');
     refs.dualGraphCanvas = document.getElementById('dual-graph-canvas');
     refs.dualGraphCanvasWrap = document.getElementById('dual-graph-canvas-wrap');
+    refs.dualGraphViewWrap = document.getElementById('dual-graph-view-wrap');
     refs.dualGraphPlaceholder = document.getElementById('dual-graph-placeholder');
+    refs.riemannSurfaceCanvas = document.getElementById('riemann-surface-canvas');
+    refs.riemannSurfaceViewWrap = document.getElementById('riemann-surface-view-wrap');
     refs.computeLayout = document.getElementById('compute-layout');
     refs.resetLayout = document.getElementById('reset-layout');
     refs.exportDualGraph = document.getElementById('export-dual-graph');
+    refs.showDualGraphCanvas = document.getElementById('show-dual-graph-canvas');
+    refs.showRiemannSurfaceCanvas = document.getElementById('show-riemann-surface-canvas');
+    refs.showRiemannDebugCircles = document.getElementById('show-riemann-debug-circles');
+    refs.showRiemannBezierCurve = document.getElementById('show-riemann-bezier-curve');
+    refs.riemannNodeRadiusInputs = Array.from(document.querySelectorAll('[data-riemann-node-radius]'));
+    refs.riemannNodeRadiusOutputs = Array.from(document.querySelectorAll('[data-riemann-node-radius-value]'));
+    refs.riemannNodePositionInputs = Array.from(document.querySelectorAll('[data-riemann-node-position]'));
+    refs.riemannNodePositionOutputs = Array.from(document.querySelectorAll('[data-riemann-node-position-value]'));
+    refs.riemannLoopTangentScaleInputs = Array.from(document.querySelectorAll('[data-riemann-loop-tangent-scale]'));
+    refs.riemannLoopTangentScaleOutputs = Array.from(document.querySelectorAll('[data-riemann-loop-tangent-scale-value]'));
     refs.tilePalette = document.getElementById('tile-palette');
     refs.importInput = document.getElementById('import-input');
     refs.exportCard = document.getElementById('export-card');
@@ -240,7 +277,8 @@
     });
     if (refs.computeLayout) {
       refs.computeLayout.addEventListener('click', () => {
-        if (!state.dualGraphLayout || !state.dualGraphData) return;
+        if (!state.dualGraphData || !isDualGraphVisualizationVisible()) return;
+        ensureDualGraphLayout(state.dualGraphData);
         if (state.dualGraphAnimating) {
           state.dualGraphAnimating = false;
           refs.computeLayout.textContent = 'Compute layout';
@@ -254,6 +292,7 @@
     if (refs.resetLayout) {
       refs.resetLayout.addEventListener('click', () => {
         state.dualGraphAnimating = false;
+        state.dualGraphDragging = null;
         state.dualGraphLayout = null;
         if (refs.computeLayout) refs.computeLayout.textContent = 'Compute layout';
         updateReport(false);
@@ -261,6 +300,67 @@
     }
     if (refs.exportDualGraph) {
       refs.exportDualGraph.addEventListener('click', exportDualGraphFromVisualization);
+    }
+    if (refs.showDualGraphCanvas) {
+      refs.showDualGraphCanvas.addEventListener('change', () => {
+        state.showDualGraphCanvas = refs.showDualGraphCanvas.checked;
+        syncDualGraphCanvasVisibility();
+        if (state.dualGraphData) renderVisibleDualGraphVisualizations(state.dualGraphData);
+      });
+    }
+    if (refs.showRiemannSurfaceCanvas) {
+      refs.showRiemannSurfaceCanvas.addEventListener('change', () => {
+        state.showRiemannSurfaceCanvas = refs.showRiemannSurfaceCanvas.checked;
+        syncDualGraphCanvasVisibility();
+        if (state.dualGraphData) renderVisibleDualGraphVisualizations(state.dualGraphData);
+      });
+    }
+    if (refs.riemannNodeRadiusInputs) {
+      refs.riemannNodeRadiusInputs.forEach((input) => {
+        input.addEventListener('input', () => {
+          const index = Number(input.dataset.riemannNodeRadius);
+          if (!Number.isInteger(index) || index < 0 || index >= DEFAULT_RIEMANN_NODE_RADII.length) return;
+          state.riemannNodeRadii[index] = normalizeRiemannNodeRadiusInput(input.value, DEFAULT_RIEMANN_NODE_RADII[index]);
+          syncRiemannNodeControls();
+          if (state.dualGraphData && state.showRiemannSurfaceCanvas) renderRiemannSurfaceVisualization(state.dualGraphData);
+        });
+      });
+    }
+    if (refs.riemannNodePositionInputs) {
+      refs.riemannNodePositionInputs.forEach((input) => {
+        input.addEventListener('input', () => {
+          const index = Number(input.dataset.riemannNodePosition);
+          if (!Number.isInteger(index) || index <= 0 || index >= RIEMANN_LOOP_PASS_INDEX) return;
+          state.riemannLoopNodePositions[index] = normalizeRiemannLoopNodePositionInput(input.value, DEFAULT_RIEMANN_LOOP_NODE_POSITIONS[index]);
+          normalizeRiemannLoopNodePositions();
+          syncRiemannNodeControls();
+          if (state.dualGraphData && state.showRiemannSurfaceCanvas) renderRiemannSurfaceVisualization(state.dualGraphData);
+        });
+      });
+    }
+    if (refs.riemannLoopTangentScaleInputs) {
+      refs.riemannLoopTangentScaleInputs.forEach((input) => {
+        input.addEventListener('input', () => {
+          state.riemannLoopTangentScale = normalizeRiemannLoopTangentScaleInput(Number(input.value) / 100);
+          syncRiemannNodeControls();
+          if (state.dualGraphData && state.showRiemannSurfaceCanvas) renderRiemannSurfaceVisualization(state.dualGraphData);
+        });
+      });
+    }
+    if (refs.showRiemannDebugCircles) {
+      refs.showRiemannDebugCircles.addEventListener('change', () => {
+        state.showRiemannDebugCircles = refs.showRiemannDebugCircles.checked;
+        if (state.dualGraphData && state.showRiemannSurfaceCanvas) renderRiemannSurfaceVisualization(state.dualGraphData);
+      });
+    }
+    if (refs.showRiemannBezierCurve) {
+      refs.showRiemannBezierCurve.addEventListener('change', () => {
+        state.showRiemannBezierCurve = refs.showRiemannBezierCurve.checked;
+        if (state.dualGraphData && state.showRiemannSurfaceCanvas) renderRiemannSurfaceVisualization(state.dualGraphData);
+      });
+    }
+    if (refs.riemannSurfaceCanvas) {
+      refs.riemannSurfaceCanvas.addEventListener('click', handleRiemannSurfaceClick);
     }
     if (refs.dualGraphCanvas) {
       refs.dualGraphCanvas.addEventListener('mousedown', handleDualGraphMouseDown);
@@ -280,6 +380,7 @@
   function setInputMode(mode, options = {}) {
     state.inputMode = normalizeInputMode(mode);
     refs.inputMode.value = state.inputMode;
+    clearDecorationClickTimer();
     state.hoverIndex = -1;
     state.drawDebugHit = null;
     state.pickHoverHit = null;
@@ -292,6 +393,7 @@
     if (isTilingMode()) renderTilePalette();
     updateInputModePanels();
     updateDrawModeControls();
+    updateInputModePanels();
     updateInputModeLock();
     updateReport(false);
   }
@@ -307,6 +409,7 @@
 
     clearEditorDrag();
     cancelDrawGesture(false);
+    clearDecorationClickTimer();
 
     // Check if switching from dual to link and there are vertex tiles
     if (state.diagramType === 'dual' && nextType === 'link') {
@@ -324,6 +427,10 @@
     }
 
     state.diagramType = nextType;
+    if (!isDualGraph()) {
+      state.vertexDecorations = {};
+      if (state.inputMode === 'decoration') state.inputMode = 'draw';
+    }
     state.pickedComponent = null;
     state.pickedAnchor = null;
     state.pickHoverHit = null;
@@ -559,15 +666,14 @@
     refs.canvas.addEventListener('pointerup', handlePointerUp);
     refs.canvas.addEventListener('pointercancel', clearPointerState);
     refs.canvas.addEventListener('wheel', handleWheel, { passive: false });
-    refs.canvas.addEventListener('dblclick', () => {
-      if (!state.colorComponents) return;
-      state.colorComponents = false;
-      state.componentColors = [];
-      refs.colorComponents.checked = false;
-      updateReport(false);
-    });
+    refs.canvas.addEventListener('dblclick', handleVertexDecorationDoubleClick);
     refs.canvas.addEventListener('contextmenu', (event) => {
       event.preventDefault();
+      if (isDecorationMode()) {
+        const hit = vertexDecorationHitTest(event.clientX, event.clientY);
+        if (hit >= 0) changeVertexDecoration(hit, -1);
+        return;
+      }
       if (state.inputMode === 'draw') {
         const hit = hitTest(event.clientX, event.clientY);
         if (hit >= 0) {
@@ -604,6 +710,15 @@
         const pickChanged = updatePickHoverFromPoint(event.clientX, event.clientY, false);
         if (state.hoverIndex !== -1 || pickChanged) {
           state.hoverIndex = -1;
+          draw(analyze());
+        }
+        return;
+      }
+      if (isDecorationMode()) {
+        const debugChanged = clearDrawDebugHit(false);
+        const hit = vertexDecorationHitTest(event.clientX, event.clientY);
+        if (hit !== state.hoverIndex || debugChanged) {
+          state.hoverIndex = hit;
           draw(analyze());
         }
         return;
@@ -655,6 +770,8 @@
     state.pickedAnchor = null;
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
+    clearDecorationClickTimer();
+    state.vertexDecorations = {};
     state.tiles = Array(rows * cols).fill(null);
     syncAllInputs(rows, cols, state.lattice, state.wrapped);
     renderTilePalette();
@@ -677,10 +794,12 @@
 
     clearEditorDrag();
     cancelDrawGesture(false);
+    clearDecorationClickTimer();
     const oldRows = state.rows;
     const oldCols = state.cols;
     const oldLattice = state.lattice;
     const oldTiles = state.tiles.slice();
+    const oldDecorations = { ...state.vertexDecorations };
 
     state.rows = rows;
     state.cols = cols;
@@ -700,6 +819,9 @@
     state.tiles = oldLattice !== nextLattice
       ? Array(rows * cols).fill(null)
       : reshapeTiles(oldTiles, oldRows, oldCols, rows, cols, getLattice().sides);
+    state.vertexDecorations = oldLattice !== nextLattice
+      ? {}
+      : reshapeVertexDecorations(oldDecorations, oldRows, oldCols, rows, cols);
     syncAllInputs(rows, cols, state.lattice, state.wrapped);
     renderTilePalette();
     resetView(false);
@@ -716,6 +838,20 @@
         const oldIndex = indexOf(row, col, oldCols);
         const nextIndex = indexOf(row, col, cols);
         next[nextIndex] = adaptTileToSides(oldTiles[oldIndex], sides);
+      }
+    }
+    return next;
+  }
+
+  function reshapeVertexDecorations(oldDecorations, oldRows, oldCols, rows, cols) {
+    const next = {};
+    const rowLimit = Math.min(oldRows, rows);
+    const colLimit = Math.min(oldCols, cols);
+    for (let row = 0; row < rowLimit; row += 1) {
+      for (let col = 0; col < colLimit; col += 1) {
+        const oldIndex = indexOf(row, col, oldCols);
+        const value = normalizeVertexDecoration(oldDecorations[oldIndex]);
+        if (value > 0) next[indexOf(row, col, cols)] = value;
       }
     }
     return next;
@@ -809,6 +945,7 @@
     state.selectedTile = null;
     state.selectedPaletteId = '';
     state.tiles = importTiles(payload.tiles, rows, cols);
+    state.vertexDecorations = importVertexDecorations(payload, rows, cols);
 
     syncAllInputs(rows, cols, state.lattice, state.wrapped);
     refs.showErrors.checked = state.showErrors;
@@ -867,6 +1004,30 @@
     return cloneTile(value);
   }
 
+  function importVertexDecorations(payload, rows, cols) {
+    const decorations = {};
+    const entries = Array.isArray(payload.tiles) ? payload.tiles : [];
+    entries.forEach((entry, entryIndex) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
+      const index = importedTileIndex(entry, entryIndex, rows, cols);
+      if (index < 0 || index >= rows * cols || !isVertexTileValue(state.tiles[index])) return;
+      const value = normalizeVertexDecoration(entry.decoration ?? entry.vertexDecoration);
+      if (value > 0) decorations[index] = value;
+    });
+
+    if (payload.vertexDecorations && typeof payload.vertexDecorations === 'object') {
+      Object.entries(payload.vertexDecorations).forEach(([key, value]) => {
+        const index = Number(key);
+        const decoration = normalizeVertexDecoration(value);
+        if (Number.isInteger(index) && index >= 0 && index < rows * cols && decoration > 0 && isVertexTileValue(state.tiles[index])) {
+          decorations[index] = decoration;
+        }
+      });
+    }
+
+    return decorations;
+  }
+
   function applyImportedView(view) {
     state.viewScale = 1;
     state.viewX = 0;
@@ -885,7 +1046,9 @@
   function clearBoard() {
     const shouldRestoreInputMode = state.displayPickInputLocked && state.inputMode === 'pick';
     const returnMode = state.displayPickReturnMode || 'draw';
+    clearDecorationClickTimer();
     state.tiles = Array(state.rows * state.cols).fill(null);
+    state.vertexDecorations = {};
     state.pickedComponent = null;
     state.pickedAnchor = null;
     state.pickHoverHit = null;
@@ -902,6 +1065,81 @@
     updateInputModeLock();
     state.edits += 1;
     updateReport(false);
+  }
+
+  function vertexDecorationHitTest(clientX, clientY) {
+    if (!isDecorationMode()) return -1;
+    const hit = hitTest(clientX, clientY);
+    return hit >= 0 && isVertexTileValue(state.tiles[hit]) ? hit : -1;
+  }
+
+  function vertexDecorationValue(index) {
+    const value = Number(state.vertexDecorations[index]);
+    return Number.isInteger(value) && value > 0 ? value : 0;
+  }
+
+  function normalizeVertexDecoration(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return 0;
+    return Math.max(0, Math.trunc(number));
+  }
+
+  function setVertexDecoration(index, value) {
+    if (index < 0 || index >= state.tiles.length || !isVertexTileValue(state.tiles[index])) return false;
+    const next = normalizeVertexDecoration(value);
+    const current = vertexDecorationValue(index);
+    if (next === current) return false;
+    if (next > 0) state.vertexDecorations[index] = next;
+    else delete state.vertexDecorations[index];
+    state.edits += 1;
+    updateReport(false);
+    return true;
+  }
+
+  function changeVertexDecoration(index, delta) {
+    return setVertexDecoration(index, Math.max(0, vertexDecorationValue(index) + delta));
+  }
+
+  function scheduleVertexDecorationIncrement(index) {
+    clearDecorationClickTimer();
+    decorationClickTimer = window.setTimeout(() => {
+      decorationClickTimer = null;
+      changeVertexDecoration(index, 1);
+    }, 300);
+  }
+
+  function clearDecorationClickTimer() {
+    if (decorationClickTimer !== null) window.clearTimeout(decorationClickTimer);
+    decorationClickTimer = null;
+  }
+
+  function handleVertexDecorationDoubleClick(event) {
+    if (!isDecorationMode()) return false;
+    event.preventDefault();
+    clearDecorationClickTimer();
+    const hit = vertexDecorationHitTest(event.clientX, event.clientY);
+    if (hit < 0) return true;
+    const current = vertexDecorationValue(hit);
+    const input = window.prompt('Vertex decoration', String(current));
+    if (input == null) return true;
+    const trimmed = input.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      refs.statusLine.textContent = 'decoration must be a non-negative integer';
+      refs.statusLine.classList.add('mosaic-status-bad');
+      return true;
+    }
+    refs.statusLine.classList.remove('mosaic-status-bad');
+    setVertexDecoration(hit, Number(trimmed));
+    return true;
+  }
+
+  function pruneVertexDecorations() {
+    Object.keys(state.vertexDecorations).forEach((key) => {
+      const index = Number(key);
+      if (!Number.isInteger(index) || !isVertexTileValue(state.tiles[index]) || vertexDecorationValue(index) === 0) {
+        delete state.vertexDecorations[key];
+      }
+    });
   }
 
   function rotateTile(index, steps) {
@@ -1001,6 +1239,7 @@
     if (index < 0 || isTileEmpty(tile)) return;
     if (tilesEqual(state.tiles[index], tile)) return;
     state.tiles[index] = cloneTile(tile);
+    delete state.vertexDecorations[index];
     state.edits += 1;
     updateReport(false);
   }
@@ -1008,6 +1247,7 @@
   function deleteTile(index) {
     if (index < 0 || isTileEmpty(state.tiles[index])) return;
     state.tiles[index] = null;
+    delete state.vertexDecorations[index];
     state.edits += 1;
     updateReport(false);
   }
@@ -1016,8 +1256,12 @@
     if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
     const tile = state.tiles[fromIndex];
     if (isTileEmpty(tile)) return;
+    const decoration = vertexDecorationValue(fromIndex);
     state.tiles[toIndex] = cloneTile(tile);
     state.tiles[fromIndex] = null;
+    delete state.vertexDecorations[fromIndex];
+    delete state.vertexDecorations[toIndex];
+    if (decoration > 0 && isVertexTileValue(state.tiles[toIndex])) state.vertexDecorations[toIndex] = decoration;
     state.edits += 1;
     updateReport(false);
   }
@@ -1471,12 +1715,15 @@
     const tile = state.tiles[index];
     if (isVertexTileValue(tile)) {
       state.tiles[index] = null;
+      delete state.vertexDecorations[index];
     } else if (isTileEmpty(tile)) {
       // Creating a vertex on an empty tile - auto-connect to open ends
       const openEnds = findOpenEndsPointingToTile(index);
       state.tiles[index] = vertexTileFromDirs(openEnds);
+      delete state.vertexDecorations[index];
     } else {
       state.tiles[index] = vertexTileFromDirs(maskToDirs(tileToMask(tile)));
+      delete state.vertexDecorations[index];
     }
     state.edits += 1;
     updateReport(false);
@@ -1930,6 +2177,21 @@
       event.preventDefault();
       return;
     }
+    if (isDecorationMode()) {
+      const hit = vertexDecorationHitTest(event.clientX, event.clientY);
+      pointerState = {
+        id: event.pointerId,
+        index: hit,
+        x: event.clientX,
+        y: event.clientY,
+        lastX: event.clientX,
+        lastY: event.clientY,
+        moved: false
+      };
+      refs.canvas.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      return;
+    }
     if (!isTilingMode()) {
       refs.canvas.setPointerCapture(event.pointerId);
       event.preventDefault();
@@ -1988,6 +2250,14 @@
       event.preventDefault();
       return;
     }
+    if (isDecorationMode()) {
+      if (!pointerState || event.pointerId !== pointerState.id) return;
+      const dx = event.clientX - pointerState.x;
+      const dy = event.clientY - pointerState.y;
+      if (Math.hypot(dx, dy) > 10) pointerState.moved = true;
+      event.preventDefault();
+      return;
+    }
     if (!isTilingMode()) return;
 
     if (!pointerState || event.pointerId !== pointerState.id) return;
@@ -2029,6 +2299,14 @@
     }
     if (state.inputMode === 'pick') {
       finishPickGesture(event);
+      clearPointerState(event);
+      return;
+    }
+    if (isDecorationMode()) {
+      if (pointerState && event.pointerId === pointerState.id && !pointerState.moved) {
+        const hit = vertexDecorationHitTest(event.clientX, event.clientY);
+        if (hit >= 0 && hit === pointerState.index) scheduleVertexDecorationIncrement(hit);
+      }
       clearPointerState(event);
       return;
     }
@@ -2411,6 +2689,7 @@
   }
 
   function updateReport(manualCheck) {
+    pruneVertexDecorations();
     const report = analyze();
     normalizePickedComponent(report);
     refs.out.tiles.textContent = `${report.active}/${report.total}`;
@@ -2555,15 +2834,21 @@
 
     if (!graphData.isValid) {
       refs.dualGraphStatus.textContent = graphData.reason || 'Not available';
+      if (refs.dualGraphInvariants) refs.dualGraphInvariants.innerHTML = '<span class="hint">-</span>';
       refs.dualGraphCanvasWrap.style.display = 'none';
       refs.dualGraphPlaceholder.style.display = 'block';
       state.dualGraphLayout = null;
       state.dualGraphData = null;
       state.dualGraphAnimating = false;
+      state.dualGraphDragging = null;
+      state.riemannSurfaceModel = null;
+      state.selectedRiemannVertex = null;
+      syncDualGraphCanvasVisibility();
       return;
     }
 
     refs.dualGraphStatus.textContent = `${graphData.vertices.length} vertices, ${graphData.edges.length} edges, ${graphData.legs.length} legs`;
+    if (refs.dualGraphInvariants) refs.dualGraphInvariants.innerHTML = formatDualGraphInvariants(graphData);
     refs.dualGraphCanvasWrap.style.display = 'block';
     refs.dualGraphPlaceholder.style.display = 'none';
 
@@ -2583,7 +2868,54 @@
     }
 
     state.dualGraphData = graphData;
-    renderDualGraphVisualization(graphData);
+    syncDualGraphCanvasVisibility();
+    renderVisibleDualGraphVisualizations(graphData);
+  }
+
+  function syncDualGraphCanvasVisibility() {
+    if (refs.showDualGraphCanvas) refs.showDualGraphCanvas.checked = state.showDualGraphCanvas;
+    if (refs.showRiemannSurfaceCanvas) refs.showRiemannSurfaceCanvas.checked = state.showRiemannSurfaceCanvas;
+    if (refs.dualGraphViewWrap) refs.dualGraphViewWrap.hidden = !state.showDualGraphCanvas;
+    if (refs.riemannSurfaceViewWrap) refs.riemannSurfaceViewWrap.hidden = !state.showRiemannSurfaceCanvas;
+
+    if (!isDualGraphVisualizationVisible()) {
+      state.dualGraphAnimating = false;
+      state.dualGraphDragging = null;
+      if (refs.computeLayout) refs.computeLayout.textContent = 'Compute layout';
+    }
+    if (!state.showDualGraphCanvas && refs.dualGraphCanvas) refs.dualGraphCanvas.style.cursor = 'default';
+    if (!state.showRiemannSurfaceCanvas) {
+      state.riemannSurfaceModel = null;
+      state.selectedRiemannVertex = null;
+    }
+
+    if (refs.computeLayout) refs.computeLayout.disabled = !isDualGraphVisualizationVisible() || !state.dualGraphData;
+    if (refs.resetLayout) refs.resetLayout.disabled = !isDualGraphVisualizationVisible() || !state.dualGraphData;
+  }
+
+  function renderVisibleDualGraphVisualizations(graphData) {
+    if (state.showDualGraphCanvas) renderDualGraphVisualization(graphData);
+    if (state.showRiemannSurfaceCanvas) renderRiemannSurfaceVisualization(graphData);
+  }
+
+  function isDualGraphVisualizationVisible() {
+    return state.showDualGraphCanvas || state.showRiemannSurfaceCanvas;
+  }
+
+  function ensureDualGraphLayout(graphData) {
+    if (state.dualGraphLayout) return state.dualGraphLayout;
+    const size = dualGraphLayoutSize();
+    state.dualGraphLayout = calculateGraphLayout(graphData, size.width, size.height);
+    return state.dualGraphLayout;
+  }
+
+  function dualGraphLayoutSize() {
+    const canvas = refs.dualGraphCanvas;
+    if (!canvas) return { width: 300, height: 300 };
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.round(rect.width) || canvas.width || 300;
+    const height = Math.round(rect.height) || canvas.height || 300;
+    return { width, height };
   }
 
   function collectDualGraphData(report) {
@@ -2703,6 +3035,64 @@
     return { isValid: true, vertices, edges, legs };
   }
 
+  function dualGraphInvariants(graphData) {
+    const vertices = graphData.vertices.length;
+    const edges = graphData.edges.length;
+    const halfEdges = graphData.legs.length;
+    const components = countDualGraphComponents(graphData);
+    const cycleRank = Math.max(0, edges - vertices + components);
+    const vertexGenus = graphData.vertices.reduce((total, vertex) => (
+      total + vertexDecorationValue(vertex.index)
+    ), 0);
+    const genus = vertexGenus + cycleRank;
+    const eulerCharacteristic = (2 * components) - (2 * genus) - halfEdges;
+
+    return {
+      vertices,
+      edges,
+      halfEdges,
+      components,
+      cycleRank,
+      vertexGenus,
+      genus,
+      eulerCharacteristic
+    };
+  }
+
+  function formatDualGraphInvariants(graphData) {
+    const inv = dualGraphInvariants(graphData);
+    return `<dl class="slice-invariant-list">
+      <dt>g</dt><dd>${inv.genus}</dd>
+      <dt>n</dt><dd>${inv.halfEdges}</dd>
+      <dt>b<sub>1</sub></dt><dd>${inv.cycleRank}</dd>
+    </dl>`;
+  }
+
+  function countDualGraphComponents(graphData) {
+    const vertices = graphData.vertices.map((vertex) => vertex.index);
+    if (!vertices.length) return 0;
+
+    const parent = new Map(vertices.map((index) => [index, index]));
+    const findRoot = (index) => {
+      const current = parent.get(index);
+      if (current === index) return index;
+      const root = findRoot(current);
+      parent.set(index, root);
+      return root;
+    };
+    const unite = (left, right) => {
+      const leftRoot = findRoot(left);
+      const rightRoot = findRoot(right);
+      if (leftRoot !== rightRoot) parent.set(rightRoot, leftRoot);
+    };
+
+    graphData.edges.forEach((edge) => {
+      if (parent.has(edge.from) && parent.has(edge.to)) unite(edge.from, edge.to);
+    });
+
+    return new Set(vertices.map(findRoot)).size;
+  }
+
   function buildDualGraphExport(report, lattice) {
     const graphData = collectDualGraphData(report);
     if (!graphData.isValid) {
@@ -2722,6 +3112,7 @@
         index: vertex.index,
         row: vertex.row + 1,
         col: vertex.col + 1,
+        decoration: vertexDecorationValue(vertex.index),
         spokes: normalizeVertexTile(state.tiles[vertex.index]).map((dir) => ({
           dir,
           name: lattice.dirNames[dir]
@@ -2774,7 +3165,10 @@
     });
 
     return {
-      vertices: graphData.vertices.map((_, vertexIndex) => vertexIndex + 1),
+      vertices: graphData.vertices.map((vertex, vertexIndex) => ({
+        id: vertexIndex + 1,
+        decoration: vertexDecorationValue(vertex.index)
+      })),
       edges: graphData.edges.map((edge) => ({
         from: vertexIds.get(edge.from),
         to: vertexIds.get(edge.to)
@@ -2806,6 +3200,7 @@
   }
 
   function renderDualGraphVisualization(graphData) {
+    if (!state.showDualGraphCanvas) return;
     const canvas = refs.dualGraphCanvas;
     if (!canvas) return;
 
@@ -2836,9 +3231,7 @@
     ctx.clearRect(0, 0, width, height);
 
     // Get or create layout
-    if (!state.dualGraphLayout) {
-      state.dualGraphLayout = calculateGraphLayout(graphData, width, height);
-    }
+    ensureDualGraphLayout(graphData);
 
     const layout = state.dualGraphLayout;
 
@@ -2906,18 +3299,1036 @@
     });
 
     // Draw vertices on top
-    ctx.fillStyle = '#1e40af';
-    ctx.strokeStyle = '#1e3a8a';
-    ctx.lineWidth = 2;
     graphData.vertices.forEach((vertex) => {
       const node = layout.nodeMap.get(`v${vertex.index}`);
       if (node) {
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, 8, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.stroke();
+        drawDualGraphVertex(ctx, node.x, node.y, vertexDecorationValue(vertex.index));
       }
     });
+  }
+
+  function drawDualGraphVertex(ctx, x, y, decoration) {
+    const text = decoration ? String(decoration) : '';
+    const fontSize = 11;
+    let radius = 8;
+    if (text) {
+      ctx.save();
+      ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
+      const metrics = ctx.measureText(text);
+      radius = Math.max(radius, metrics.width / 2 + 4, fontSize * 0.68);
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.fillStyle = '#1e40af';
+    ctx.strokeStyle = '#1e3a8a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
+
+    if (text) {
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
+      ctx.fillText(text, x, y + fontSize * 0.03);
+    }
+    ctx.restore();
+  }
+
+  function renderRiemannSurfaceVisualization(graphData) {
+    if (!state.showRiemannSurfaceCanvas) return;
+    const canvas = refs.riemannSurfaceCanvas;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const displayWidth = Math.round(rect.width) || canvas.width || 300;
+    const displayHeight = Math.round(rect.height) || canvas.height || 170;
+    if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+      canvas.width = displayWidth;
+      canvas.height = displayHeight;
+    }
+
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#fffdf8';
+    ctx.fillRect(0, 0, width, height);
+
+    if (state.selectedRiemannVertex != null && !graphData.vertices.some((vertex) => vertex.index === state.selectedRiemannVertex)) {
+      state.selectedRiemannVertex = null;
+    }
+
+    const model = calculateRiemannSurfaceModel(graphData, width, height);
+    state.riemannSurfaceModel = model;
+    if (!model.surfaces.size) return;
+
+    drawRiemannSurfaceDomains(ctx, model);
+    if (state.showRiemannBezierCurve) drawRiemannSurfaceDebugBezierCurves(ctx, model);
+    if (state.showRiemannDebugCircles) drawRiemannSurfaceDebugCircles(ctx, model);
+    drawRiemannSurfaceNodes(ctx, model);
+  }
+
+  function calculateRiemannSurfaceModel(graphData, width, height) {
+    const layoutMap = state.dualGraphLayout && state.dualGraphLayout.nodeMap
+      ? state.dualGraphLayout.nodeMap
+      : null;
+    const sources = graphData.vertices.map((vertex) => {
+      const node = layoutMap ? layoutMap.get(`v${vertex.index}`) : null;
+      return {
+        index: vertex.index,
+        x: node ? node.x : vertex.col,
+        y: node ? node.y : vertex.row
+      };
+    });
+    const padding = 38;
+    const boundsSources = sources.slice();
+    if (layoutMap) {
+      graphData.edges.forEach((edge, edgeIndex) => {
+        const node = edge.from === edge.to
+          ? layoutMap.get(`e${edgeIndex}_1`)
+          : layoutMap.get(`e${edgeIndex}`);
+        if (node) boundsSources.push({ x: node.x, y: node.y });
+      });
+    }
+    const bounds = pointBounds(boundsSources);
+    const sourceWidth = Math.max(bounds.maxX - bounds.minX, 1);
+    const sourceHeight = Math.max(bounds.maxY - bounds.minY, 1);
+    const scale = sources.length <= 1
+      ? 1
+      : Math.min((width - padding * 2) / sourceWidth, (height - padding * 2) / sourceHeight);
+    const sourceCenter = {
+      x: (bounds.minX + bounds.maxX) / 2,
+      y: (bounds.minY + bounds.maxY) / 2
+    };
+    const targetCenter = { x: width / 2, y: height / 2 };
+    const mapPoint = (point) => ({
+      x: targetCenter.x + ((point.x - sourceCenter.x) * scale),
+      y: targetCenter.y + ((point.y - sourceCenter.y) * scale)
+    });
+
+    const surfaces = new Map();
+    sources.forEach((source) => {
+      const point = mapPoint(source);
+      surfaces.set(source.index, {
+        vertexIndex: source.index,
+        x: point.x,
+        y: point.y,
+        color: riemannSurfaceColor(surfaces.size),
+        genus: vertexDecorationValue(source.index),
+        arms: [],
+        marks: []
+      });
+    });
+
+    const centers = Array.from(surfaces.values());
+    const minDistance = nearestSurfaceDistance(centers);
+    const defaultRadius = Math.min(36, Math.min(width, height) * 0.16);
+    const radius = clamp(minDistance ? Math.min(defaultRadius, minDistance * 0.3) : defaultRadius, 16, 42);
+    const tubeWidth = clamp(radius * 0.72, 13, 24);
+    centers.forEach((surface) => {
+      surface.radius = radius;
+      surface.tubeWidth = tubeWidth;
+      const radii = riemannNodeRadiiForSurface(surface);
+      surface.coreNode = {
+        x: surface.x,
+        y: surface.y,
+        radius: radii[0]
+      };
+    });
+
+    const nodeMarks = [];
+    const debugNodes = [];
+    centers.forEach((surface) => addRiemannDebugNodes(debugNodes, [surface.coreNode]));
+    const pairTotals = new Map();
+    graphData.edges.forEach((edge) => {
+      const key = edgePairKey(edge);
+      pairTotals.set(key, (pairTotals.get(key) || 0) + 1);
+    });
+    const pairSeen = new Map();
+
+    graphData.edges.forEach((edge, edgeIndex) => {
+      const from = surfaces.get(edge.from);
+      const to = surfaces.get(edge.to);
+      if (!from || !to) return;
+
+      if (edge.from === edge.to) {
+        const loopNode = layoutMap ? layoutMap.get(`e${edgeIndex}_1`) : null;
+        const node = loopNode
+          ? mapPoint(loopNode)
+          : {
+            x: from.x + Math.cos(edgeIndex * Math.PI * 0.7) * radius * 2.6,
+            y: from.y - radius * 2.2
+          };
+        const vector = normalizeVector(node.x - from.x, node.y - from.y, 0, -1);
+        const normal = { x: -vector.y, y: vector.x };
+        const leftArm = createSurfaceLoopArm(from, node, vector, normal, 1, edgeIndex);
+        const rightArm = createSurfaceLoopArm(from, node, vector, normal, -1, edgeIndex);
+        from.arms.push(leftArm, rightArm);
+        addRiemannDebugNodes(debugNodes, leftArm.controlNodes.slice(1));
+        addRiemannDebugNodes(debugNodes, rightArm.controlNodes.slice(1));
+        nodeMarks.push({ type: 'regular', x: node.x, y: node.y });
+        return;
+      }
+
+      const key = edgePairKey(edge);
+      const seen = pairSeen.get(key) || 0;
+      pairSeen.set(key, seen + 1);
+      const total = pairTotals.get(key) || 1;
+      const edgeNode = layoutMap ? layoutMap.get(`e${edgeIndex}`) : null;
+      let node = edgeNode ? mapPoint(edgeNode) : {
+        x: (from.x + to.x) / 2,
+        y: (from.y + to.y) / 2
+      };
+      if (!edgeNode && total > 1) {
+        const vector = normalizeVector(to.x - from.x, to.y - from.y, 1, 0);
+        const normal = { x: -vector.y, y: vector.x };
+        const offset = (seen - (total - 1) / 2) * Math.min(18, radius * 0.9);
+        node = {
+          x: node.x + normal.x * offset,
+          y: node.y + normal.y * offset
+        };
+      }
+      const edgeVector = normalizeVector(to.x - from.x, to.y - from.y, 1, 0);
+      const edgeArms = createSurfaceEdgeArms(from, to, node, edgeVector, edgeIndex);
+      from.arms.push(edgeArms.from);
+      to.arms.push(edgeArms.to);
+      addRiemannDebugNodes(debugNodes, edgeArms.controlNodes);
+      nodeMarks.push({ type: 'regular', x: node.x, y: node.y });
+    });
+
+    const legsByVertex = new Map();
+    graphData.legs.forEach((leg, index) => {
+      if (!legsByVertex.has(leg.vertex)) legsByVertex.set(leg.vertex, []);
+      legsByVertex.get(leg.vertex).push(index + 1);
+    });
+    legsByVertex.forEach((labels, vertexIndex) => {
+      const surface = surfaces.get(vertexIndex);
+      if (!surface) return;
+      const samples = sampleRiemannSurfaceInterior(surface, labels.length + surface.genus + 5);
+      labels.forEach((label, index) => {
+        const point = samples.marked[index] || sampleRiemannSurfacePoint(surface, index + 17, 0.46);
+        surface.marks.push({
+          label,
+          x: point.x,
+          y: point.y
+        });
+      });
+      surface.handlePoints = samples.handles.slice(0, Math.max(surface.genus, 0));
+    });
+    centers.forEach((surface) => {
+      if (surface.handlePoints) return;
+      surface.handlePoints = sampleRiemannSurfaceInterior(surface, surface.genus + 3).handles.slice(0, Math.max(surface.genus, 0));
+    });
+
+    return { surfaces, nodeMarks, debugNodes, radius, tubeWidth };
+  }
+
+  function drawRiemannSurfaceDomains(ctx, model) {
+    const boundaryWidth = 2.4;
+    orderedRiemannSurfaces(model).forEach((surface) => {
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.fillStyle = '#111111';
+      surface.arms.forEach((arm) => drawSurfaceArm(ctx, arm, 0));
+      drawSurfaceBody(ctx, surface, surfaceCoreRadius(surface));
+      ctx.fillStyle = surface.color;
+      surface.arms.forEach((arm) => drawSurfaceArm(ctx, arm, -boundaryWidth));
+      drawSurfaceBody(ctx, surface, Math.max(0.1, surfaceCoreRadius(surface) - boundaryWidth));
+      ctx.restore();
+      drawRiemannSurfaceGenusForSurface(ctx, surface);
+      drawRiemannSurfaceMarkedPointsForSurface(ctx, surface);
+    });
+  }
+
+  function drawRiemannSurfaceGenus(ctx, model) {
+    orderedRiemannSurfaces(model).forEach((surface) => {
+      drawRiemannSurfaceGenusForSurface(ctx, surface);
+    });
+  }
+
+  function drawRiemannSurfaceGenusForSurface(ctx, surface) {
+    ctx.save();
+    ctx.strokeStyle = '#111111';
+    ctx.lineWidth = 2;
+    const coreRadius = surfaceCoreRadius(surface);
+    const handles = Math.min(surface.genus, 3);
+    for (let index = 0; index < handles; index += 1) {
+      const point = surface.handlePoints && surface.handlePoints[index]
+        ? surface.handlePoints[index]
+        : sampleRiemannSurfacePoint(surface, 101 + index, 0.38);
+      drawRiemannSurfaceHole(ctx, point.x, point.y, coreRadius);
+    }
+    if (surface.genus > 3) {
+      ctx.font = '700 11px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#111111';
+      ctx.fillText(`g=${surface.genus}`, surface.x, surface.y + coreRadius * 0.58);
+    }
+    ctx.restore();
+  }
+
+  function drawRiemannSurfaceHole(ctx, x, y, coreRadius) {
+    const halfWidth = clamp(coreRadius * 0.22, 6, 11);
+    const extension = clamp(coreRadius * 0.08, 2.5, 4.5);
+    const upperDepth = clamp(coreRadius * 0.1, 3.2, 5.5);
+    const lowerDepth = clamp(coreRadius * 0.2, 5, 10);
+    const upperLeft = { x: x - halfWidth, y };
+    const upperRight = { x: x + halfWidth, y };
+    const lowerLeft = { x: x - halfWidth - extension, y: y + upperDepth * 0.12 };
+    const lowerRight = { x: x + halfWidth + extension, y: y + upperDepth * 0.12 };
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(upperLeft.x, upperLeft.y);
+    ctx.quadraticCurveTo(x, y - upperDepth, upperRight.x, upperRight.y);
+    ctx.quadraticCurveTo(x + halfWidth + extension * 0.55, y + upperDepth * 0.12, lowerRight.x, lowerRight.y);
+    ctx.quadraticCurveTo(x, y + lowerDepth, lowerLeft.x, lowerLeft.y);
+    ctx.quadraticCurveTo(x - halfWidth - extension * 0.55, y + upperDepth * 0.12, upperLeft.x, upperLeft.y);
+    ctx.closePath();
+    ctx.fillStyle = '#fffdf8';
+    ctx.fill();
+    ctx.strokeStyle = '#111111';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawRiemannSurfaceDebugCircles(ctx, model) {
+    if (!model.debugNodes || !model.debugNodes.length) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(37, 99, 235, 0.74)';
+    ctx.fillStyle = 'rgba(37, 99, 235, 0.07)';
+    ctx.lineWidth = 1.1;
+    model.debugNodes.forEach((node) => {
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, 1.7, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+
+  function drawRiemannSurfaceDebugBezierCurves(ctx, model) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(30, 64, 175, 0.88)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 4]);
+    const edgeGroups = new Map();
+    const loopGroups = new Map();
+
+    orderedRiemannSurfaces(model).forEach((surface) => {
+      surface.arms.forEach((arm) => {
+        if (!arm.bezier) return;
+        if (arm.kind === 'loop') {
+          const key = arm.loopId == null ? `${arm.bezier.end.x},${arm.bezier.end.y}` : arm.loopId;
+          if (!loopGroups.has(key)) loopGroups.set(key, []);
+          loopGroups.get(key).push(arm);
+        } else if (arm.kind === 'edge') {
+          const key = arm.edgeId == null ? `${arm.bezier.end.x},${arm.bezier.end.y}` : arm.edgeId;
+          if (!edgeGroups.has(key)) edgeGroups.set(key, []);
+          edgeGroups.get(key).push(arm);
+        } else {
+          drawRiemannDebugBezierArm(ctx, arm);
+        }
+      });
+    });
+
+    loopGroups.forEach((arms) => {
+      const first = arms.find((arm) => arm.side > 0) || arms[0];
+      const second = arms.find((arm) => arm !== first);
+      if (second) drawRiemannDebugBezierPair(ctx, first, second);
+      else drawRiemannDebugBezierArm(ctx, first);
+    });
+
+    edgeGroups.forEach((arms) => {
+      const first = arms.find((arm) => arm.edgeSide === 'from') || arms[0];
+      const second = arms.find((arm) => arm !== first);
+      if (second) drawRiemannDebugBezierPair(ctx, first, second);
+      else drawRiemannDebugBezierArm(ctx, first);
+    });
+    ctx.restore();
+  }
+
+  function drawRiemannDebugBezierPair(ctx, first, second) {
+    ctx.beginPath();
+    ctx.moveTo(first.bezier.start.x, first.bezier.start.y);
+    ctx.bezierCurveTo(
+      first.bezier.controlA.x,
+      first.bezier.controlA.y,
+      first.bezier.controlB.x,
+      first.bezier.controlB.y,
+      first.bezier.end.x,
+      first.bezier.end.y
+    );
+    ctx.bezierCurveTo(
+      second.bezier.controlB.x,
+      second.bezier.controlB.y,
+      second.bezier.controlA.x,
+      second.bezier.controlA.y,
+      second.bezier.start.x,
+      second.bezier.start.y
+    );
+    ctx.stroke();
+  }
+
+  function drawRiemannDebugBezierArm(ctx, arm) {
+    ctx.beginPath();
+    ctx.moveTo(arm.bezier.start.x, arm.bezier.start.y);
+    ctx.bezierCurveTo(
+      arm.bezier.controlA.x,
+      arm.bezier.controlA.y,
+      arm.bezier.controlB.x,
+      arm.bezier.controlB.y,
+      arm.bezier.end.x,
+      arm.bezier.end.y
+    );
+    ctx.stroke();
+  }
+
+  function drawRiemannSurfaceNodes(ctx, model) {
+    ctx.save();
+    ctx.strokeStyle = '#2563eb';
+    ctx.fillStyle = '#2563eb';
+    ctx.lineWidth = 2;
+    model.nodeMarks.forEach((mark) => {
+      if (mark.type === 'self') {
+        const left = mark.points[0];
+        const right = mark.points[1];
+        ctx.beginPath();
+        ctx.moveTo(left.x, left.y);
+        ctx.quadraticCurveTo((left.x + right.x) / 2, Math.min(left.y, right.y) - model.radius * 0.7, right.x, right.y);
+        ctx.stroke();
+        drawSurfacePoint(ctx, left.x, left.y, 3.8);
+        drawSurfacePoint(ctx, right.x, right.y, 3.8);
+      } else {
+        drawSurfacePoint(ctx, mark.x, mark.y, 4.2);
+      }
+    });
+    ctx.restore();
+  }
+
+  function drawRiemannSurfaceMarkedPoints(ctx, model) {
+    ctx.save();
+    ctx.fillStyle = '#dc2626';
+    orderedRiemannSurfaces(model).forEach((surface) => {
+      drawRiemannSurfaceMarkedPointsForSurface(ctx, surface);
+    });
+    ctx.restore();
+  }
+
+  function drawRiemannSurfaceMarkedPointsForSurface(ctx, surface) {
+    ctx.save();
+    ctx.fillStyle = '#dc2626';
+    surface.marks.forEach((mark) => {
+      drawSurfacePoint(ctx, mark.x, mark.y, 4.2);
+    });
+    ctx.restore();
+  }
+
+  function orderedRiemannSurfaces(model) {
+    const surfaces = Array.from(model.surfaces.values());
+    if (state.selectedRiemannVertex == null) return surfaces;
+    return surfaces.sort((left, right) => {
+      if (left.vertexIndex === state.selectedRiemannVertex) return -1;
+      if (right.vertexIndex === state.selectedRiemannVertex) return 1;
+      return 0;
+    });
+  }
+
+  function handleRiemannSurfaceClick(event) {
+    if (!state.showRiemannSurfaceCanvas || !state.riemannSurfaceModel || !state.dualGraphData || !refs.riemannSurfaceCanvas) return;
+    const canvas = refs.riemannSurfaceCanvas;
+    const rect = canvas.getBoundingClientRect();
+    const x = (event.clientX - rect.left) * canvas.width / rect.width;
+    const y = (event.clientY - rect.top) * canvas.height / rect.height;
+    const hit = hitRiemannSurfaceComponent(state.riemannSurfaceModel, x, y);
+    state.selectedRiemannVertex = hit;
+    if (state.showRiemannSurfaceCanvas) renderRiemannSurfaceVisualization(state.dualGraphData);
+  }
+
+  function hitRiemannSurfaceComponent(model, x, y) {
+    const surfaces = orderedRiemannSurfaces(model).slice().reverse();
+    for (const surface of surfaces) {
+      const bodyHit = Math.hypot(x - surface.x, y - surface.y) <= surfaceCoreRadius(surface);
+      if (bodyHit) return surface.vertexIndex;
+      for (const arm of surface.arms) {
+        if ((arm.nodes || []).some((node) => Math.hypot(x - node.x, y - node.y) <= node.radius + 4)) {
+          return surface.vertexIndex;
+        }
+      }
+    }
+    return null;
+  }
+
+  function createSurfaceArm(surface, target, tangentVector = null) {
+    const vector = normalizeVector(target.x - surface.x, target.y - surface.y, 1, 0);
+    const tangent = tangentVector
+      ? normalizeVector(tangentVector.x, tangentVector.y, vector.x, vector.y)
+      : vector;
+    const distance = Math.hypot(target.x - surface.x, target.y - surface.y);
+    const radii = riemannNodeRadiiForSurface(surface);
+    const start = {
+      x: surface.x,
+      y: surface.y
+    };
+    const end = {
+      x: target.x,
+      y: target.y
+    };
+    const startControlDistance = Math.max(surface.radius * 0.65, distance * 0.3);
+    const endControlDistance = Math.max(surface.tubeWidth * 1.15, distance * 0.24);
+    const startControl = {
+      x: start.x + vector.x * startControlDistance,
+      y: start.y + vector.y * startControlDistance
+    };
+    const endControl = {
+      x: end.x - tangent.x * endControlDistance,
+      y: end.y - tangent.y * endControlDistance
+    };
+    const controlNodes = sampleSurfaceArmNodes(start, startControl, endControl, end, radii);
+    shapeIntermediateNodeRadii(controlNodes);
+    return {
+      x: target.x,
+      y: target.y,
+      tangent,
+      controlNodes,
+      nodes: controlNodes.slice(0, -1)
+    };
+  }
+
+  function createSurfaceLoopArm(surface, node, direction, normal, side, loopId = null) {
+    const distance = Math.hypot(node.x - surface.x, node.y - surface.y);
+    const bow = Math.max(surface.radius * 0.82, distance * 0.24);
+    const radii = riemannNodeRadiiForSurface(surface);
+    const start = {
+      x: surface.x,
+      y: surface.y
+    };
+    const startControl = {
+      x: surface.x + direction.x * Math.max(surface.radius * 0.8, distance * 0.28) + normal.x * side * bow,
+      y: surface.y + direction.y * Math.max(surface.radius * 0.8, distance * 0.28) + normal.y * side * bow
+    };
+    const nodeTangentDistance = Math.max(surface.tubeWidth * 1.25, distance * 0.22);
+    const endControl = {
+      x: node.x + normal.x * side * nodeTangentDistance,
+      y: node.y + normal.y * side * nodeTangentDistance
+    };
+    const controlNodes = sampleSurfaceArmNodes(start, startControl, endControl, node, radii, riemannNodeParameters(22));
+    shapeIntermediateNodeRadii(controlNodes);
+    shapeLoopTangentNode(controlNodes, start, startControl, endControl, node);
+    return {
+      kind: 'loop',
+      loopId,
+      side,
+      x: node.x,
+      y: node.y,
+      tangent: direction,
+      bezier: {
+        start,
+        controlA: startControl,
+        controlB: endControl,
+        end: node
+      },
+      controlNodes,
+      nodes: controlNodes.slice(0, -1)
+    };
+  }
+
+  function createSurfaceEdgeArms(from, to, node, edgeVector, edgeId = null) {
+    const edgeDir = normalizeVector(edgeVector.x, edgeVector.y, to.x - from.x, to.y - from.y);
+    const fromDir = normalizeVector(node.x - from.x, node.y - from.y, edgeDir.x, edgeDir.y);
+    const toDir = normalizeVector(node.x - to.x, node.y - to.y, -edgeDir.x, -edgeDir.y);
+    const fromRadii = riemannNodeRadiiForSurface(from);
+    const toRadii = riemannNodeRadiiForSurface(to);
+    const middleRadius = Math.min(fromRadii[6], toRadii[6]);
+    const fromArmRadii = [fromRadii[0], fromRadii[1], fromRadii[2], fromRadii[3], fromRadii[4], 1, middleRadius];
+    const toArmRadii = [toRadii[0], toRadii[1], toRadii[2], toRadii[3], toRadii[4], 1, middleRadius];
+    const fromStart = {
+      x: from.x,
+      y: from.y
+    };
+    const toStart = {
+      x: to.x,
+      y: to.y
+    };
+    const fromDistance = Math.max(Math.hypot(node.x - fromStart.x, node.y - fromStart.y), 1);
+    const toDistance = Math.max(Math.hypot(node.x - toStart.x, node.y - toStart.y), 1);
+    const fromNodeHandle = Math.max(from.radius * 0.7, fromDistance * 0.26);
+    const toNodeHandle = Math.max(to.radius * 0.7, toDistance * 0.26);
+    const fromControls = {
+      a: {
+        x: fromStart.x + fromDir.x * Math.max(from.radius * 0.72, fromDistance * 0.34),
+        y: fromStart.y + fromDir.y * Math.max(from.radius * 0.72, fromDistance * 0.34)
+      },
+      b: {
+        x: node.x - edgeDir.x * fromNodeHandle,
+        y: node.y - edgeDir.y * fromNodeHandle
+      }
+    };
+    const toControls = {
+      a: {
+        x: toStart.x + toDir.x * Math.max(to.radius * 0.72, toDistance * 0.34),
+        y: toStart.y + toDir.y * Math.max(to.radius * 0.72, toDistance * 0.34)
+      },
+      b: {
+        x: node.x + edgeDir.x * toNodeHandle,
+        y: node.y + edgeDir.y * toNodeHandle
+      }
+    };
+
+    const fromNodes = sampleSurfaceArmNodes(fromStart, fromControls.a, fromControls.b, node, fromArmRadii, riemannNodeParameters(6));
+    const toNodes = sampleSurfaceArmNodes(toStart, toControls.a, toControls.b, node, toArmRadii, riemannNodeParameters(6));
+    shapeIntermediateNodeRadii(fromNodes);
+    shapeIntermediateNodeRadii(toNodes);
+    const controlNodes = [
+      ...fromNodes.slice(1),
+      ...toNodes.slice(1, -1).reverse()
+    ];
+
+    return {
+      controlNodes,
+      from: {
+        kind: 'edge',
+        edgeId,
+        edgeSide: 'from',
+        x: node.x,
+        y: node.y,
+        tangent: edgeDir,
+        controlNodeCount: 6,
+        bezier: {
+          start: fromStart,
+          controlA: fromControls.a,
+          controlB: fromControls.b,
+          end: node
+        },
+        controlNodes,
+        nodes: fromNodes.slice(0, -1)
+      },
+      to: {
+        kind: 'edge',
+        edgeId,
+        edgeSide: 'to',
+        x: node.x,
+        y: node.y,
+        tangent: { x: -edgeDir.x, y: -edgeDir.y },
+        controlNodeCount: 6,
+        bezier: {
+          start: toStart,
+          controlA: toControls.a,
+          controlB: toControls.b,
+          end: node
+        },
+        controlNodes,
+        nodes: toNodes.slice(0, -1)
+      }
+    };
+  }
+
+  function shapeIntermediateNodeRadii(nodes) {
+    if (nodes.length < 2) return;
+    const node = nodes[nodes.length - 1];
+    let passIndex = nodes.length - 2;
+    for (let index = nodes.length - 2; index > 0; index -= 1) {
+      if ((nodes[index].t || 0) < 1 - 0.0001) {
+        passIndex = index;
+        break;
+      }
+    }
+    const passNode = nodes[passIndex];
+    passNode.radius = Math.max(0.1, Math.hypot(node.x - passNode.x, node.y - passNode.y));
+    for (let index = 1; index < passIndex; index += 1) {
+      nodes[index].radius = (((passIndex - index) * nodes[0].radius) + (index * passNode.radius)) / passIndex;
+    }
+    for (let index = passIndex + 1; index < nodes.length - 1; index += 1) {
+      nodes[index].radius = passNode.radius;
+    }
+  }
+
+  function shapeLoopTangentNode(nodes, start, controlA, controlB, end) {
+    if (nodes.length <= RIEMANN_LOOP_FINAL_INDEX || !nodes[RIEMANN_LOOP_PASS_INDEX]) return;
+    const passNode = nodes[RIEMANN_LOOP_PASS_INDEX];
+    const finalNode = nodes[RIEMANN_LOOP_FINAL_INDEX];
+    const currentDx = passNode.x - finalNode.x;
+    const currentDy = passNode.y - finalNode.y;
+    const currentDistance = Math.hypot(currentDx, currentDy);
+    const currentRadius = passNode.radius;
+    const derivative = cubicDerivative(start, controlA, controlB, end, 1);
+    const fallbackTangent = normalizeVector(finalNode.x - passNode.x, finalNode.y - passNode.y, 1, 0);
+    const tangent = normalizeVector(derivative.x, derivative.y, fallbackTangent.x, fallbackTangent.y);
+    const side = (currentDx * tangent.x) + (currentDy * tangent.y) < 0 ? -1 : 1;
+    const scale = normalizeRiemannLoopTangentScaleInput(state.riemannLoopTangentScale);
+    passNode.x = finalNode.x + (tangent.x * side * currentDistance * scale);
+    passNode.y = finalNode.y + (tangent.y * side * currentDistance * scale);
+    passNode.radius = Math.max(0.1, currentRadius * scale);
+    for (let index = 1; index < RIEMANN_LOOP_PASS_INDEX; index += 1) {
+      nodes[index].radius = (((RIEMANN_LOOP_PASS_INDEX - index) * nodes[0].radius) + (index * passNode.radius)) / RIEMANN_LOOP_PASS_INDEX;
+    }
+  }
+
+  function sampleSurfaceArmNodes(start, controlA, controlB, end, radii, parameters = riemannNodeParameters(6)) {
+    return parameters.map((t, step) => {
+      const point = cubicPoint(start, controlA, controlB, end, t);
+      const radiusIndex = Math.min(Math.round(t * (radii.length - 1)), radii.length - 1);
+      return {
+        x: point.x,
+        y: point.y,
+        radius: radii[radiusIndex],
+        t
+      };
+    });
+  }
+
+  function addRiemannDebugNodes(target, nodes) {
+    (nodes || []).forEach((node, index) => {
+      target.push({
+        x: node.x,
+        y: node.y,
+        radius: node.radius,
+        index
+      });
+    });
+  }
+
+  function riemannNodeRadiiForSurface(surface) {
+    return DEFAULT_RIEMANN_NODE_RADII.map((fallback, index) => {
+      const scale = normalizeRiemannNodeRadiusInput(state.riemannNodeRadii[index], fallback);
+      return clamp(surface.radius * scale, 2.6, surface.radius * 1.18);
+    });
+  }
+
+  function riemannNodeParameters(finalIndex = 6) {
+    if (finalIndex === RIEMANN_LOOP_FINAL_INDEX) {
+      normalizeRiemannLoopNodePositions();
+      const passT = DEFAULT_RIEMANN_NODE_POSITIONS[5];
+      return state.riemannLoopNodePositions.map((position, index) => {
+        if (index === 0) return 0;
+        if (index >= RIEMANN_LOOP_PASS_INDEX) return index === RIEMANN_LOOP_PASS_INDEX ? passT : 1;
+        return passT * normalizeRiemannLoopNodePositionInput(position, DEFAULT_RIEMANN_LOOP_NODE_POSITIONS[index]);
+      });
+    }
+    return DEFAULT_RIEMANN_NODE_POSITIONS.slice();
+  }
+
+  function surfaceCoreRadius(surface) {
+    return surface.coreNode ? surface.coreNode.radius : surface.radius;
+  }
+
+  function normalizeRiemannNodeRadiusInput(value, fallback) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return clamp(number, 0.08, 1.1);
+  }
+
+  function normalizeRiemannLoopNodePositionInput(value, fallback) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return clamp(number, RIEMANN_LOOP_NODE_POSITION_GAP, 1 - RIEMANN_LOOP_NODE_POSITION_GAP);
+  }
+
+  function normalizeRiemannLoopTangentScaleInput(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return DEFAULT_RIEMANN_LOOP_TANGENT_SCALE;
+    return clamp(number, 0, 1);
+  }
+
+  function normalizeRiemannLoopNodePositions() {
+    for (let index = 1; index < RIEMANN_LOOP_PASS_INDEX; index += 1) {
+      const min = index === 1 ? RIEMANN_LOOP_NODE_POSITION_GAP : state.riemannLoopNodePositions[index - 1] + RIEMANN_LOOP_NODE_POSITION_GAP;
+      const max = 1 - ((RIEMANN_LOOP_PASS_INDEX - index) * RIEMANN_LOOP_NODE_POSITION_GAP);
+      state.riemannLoopNodePositions[index] = clamp(
+        normalizeRiemannLoopNodePositionInput(state.riemannLoopNodePositions[index], DEFAULT_RIEMANN_LOOP_NODE_POSITIONS[index]),
+        min,
+        max
+      );
+    }
+    state.riemannLoopNodePositions[0] = 0;
+    state.riemannLoopNodePositions[RIEMANN_LOOP_PASS_INDEX] = 1;
+    state.riemannLoopNodePositions[RIEMANN_LOOP_FINAL_INDEX] = 1;
+  }
+
+  function drawSurfaceArm(ctx, arm, outline) {
+    const nodes = (arm.nodes || []).map((node) => ({
+      x: node.x,
+      y: node.y,
+      radius: Math.max(0.1, node.radius + outline)
+    }));
+    if (!nodes.length) return;
+
+    for (let index = 0; index + 1 < nodes.length; index += 1) {
+      drawCircleConvexHull(ctx, nodes[index], nodes[index + 1]);
+    }
+    nodes.forEach((node) => {
+      drawSurfacePoint(ctx, node.x, node.y, node.radius);
+    });
+  }
+
+  function drawCircleConvexHull(ctx, left, right) {
+    const tangents = externalCircleTangents(left, right);
+    if (!tangents) return;
+    ctx.beginPath();
+    ctx.moveTo(tangents[0].left.x, tangents[0].left.y);
+    ctx.lineTo(tangents[0].right.x, tangents[0].right.y);
+    ctx.lineTo(tangents[1].right.x, tangents[1].right.y);
+    ctx.lineTo(tangents[1].left.x, tangents[1].left.y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function externalCircleTangents(left, right) {
+    const dx = right.x - left.x;
+    const dy = right.y - left.y;
+    const distanceSquared = (dx * dx) + (dy * dy);
+    if (distanceSquared < 0.001) return null;
+    const radiusDelta = left.radius - right.radius;
+    const tangentSquared = distanceSquared - (radiusDelta * radiusDelta);
+    if (tangentSquared <= 0.001) return null;
+    const tangentDistance = Math.sqrt(tangentSquared);
+    return [1, -1].map((side) => {
+      const normalX = ((dx * radiusDelta) - (side * dy * tangentDistance)) / distanceSquared;
+      const normalY = ((dy * radiusDelta) + (side * dx * tangentDistance)) / distanceSquared;
+      return {
+        left: {
+          x: left.x + (normalX * left.radius),
+          y: left.y + (normalY * left.radius)
+        },
+        right: {
+          x: right.x + (normalX * right.radius),
+          y: right.y + (normalY * right.radius)
+        }
+      };
+    });
+  }
+
+  function drawSurfaceBody(ctx, surface, radius) {
+    ctx.beginPath();
+    ctx.arc(surface.x, surface.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function sampleRiemannSurfaceInterior(surface, count) {
+    const marked = [];
+    const handles = [];
+    const used = [];
+    const target = Math.max(count, 1);
+    const gap = clamp(surfaceCoreRadius(surface) * 0.26, 7, 13);
+    const attempts = Math.max(target * 18, 36);
+
+    for (let index = 0; index < attempts && (handles.length < target || marked.length < target); index += 1) {
+      if (handles.length < target) {
+        const point = sampleRiemannSurfacePoint(surface, 2000 + index, 0.82, { shrink: 0.42 });
+        if (hasSampleClearance(point, used, gap)) {
+          handles.push(point);
+          used.push(point);
+        }
+      }
+      if (marked.length < target) {
+        const point = sampleRiemannSurfacePoint(surface, 5000 + index, 0.58, { shrink: 0.48 });
+        if (hasSampleClearance(point, used, gap * 0.72)) {
+          marked.push(point);
+          used.push(point);
+        }
+      }
+    }
+
+    while (handles.length < target) {
+      handles.push(sampleRiemannSurfacePoint(surface, 8000 + handles.length, 0.9, { shrink: 0.36 }));
+    }
+    while (marked.length < target) {
+      marked.push(sampleRiemannSurfacePoint(surface, 9000 + marked.length, 0.7, { shrink: 0.44 }));
+    }
+    return { marked, handles };
+  }
+
+  function hasSampleClearance(point, used, gap) {
+    return used.every((other) => Math.hypot(point.x - other.x, point.y - other.y) >= gap);
+  }
+
+  function sampleRiemannSurfacePoint(surface, seed, middleBias, options = {}) {
+    const pieces = riemannSurfaceSamplePieces(surface);
+    if (!pieces.length) return { x: surface.x, y: surface.y };
+    const random = seededRandom((surface.vertexIndex + 1) * 4099 + seed * 9173);
+    const circleShrink = Number.isFinite(options.shrink) ? options.shrink : 0.72;
+    const hullShrink = Number.isFinite(options.shrink) ? options.shrink : 0.56;
+    const middleRoll = random();
+    if (middleRoll < middleBias) {
+      return sampleInCircle({
+        x: surface.x,
+        y: surface.y,
+        radius: surfaceCoreRadius(surface) * 0.62
+      }, random, circleShrink);
+    }
+    const piece = weightedChoice(pieces, random);
+    if (piece.type === 'circle') return sampleInCircle(piece, random, circleShrink);
+    return sampleInHull(piece.left, piece.right, random, hullShrink);
+  }
+
+  function riemannSurfaceSamplePieces(surface) {
+    const pieces = [{
+      type: 'circle',
+      x: surface.x,
+      y: surface.y,
+      radius: surfaceCoreRadius(surface)
+    }];
+    surface.arms.forEach((arm) => {
+      const nodes = arm.nodes || [];
+      nodes.forEach((node) => {
+        pieces.push({
+          type: 'circle',
+          x: node.x,
+          y: node.y,
+          radius: node.radius
+        });
+      });
+      for (let index = 0; index + 1 < nodes.length; index += 1) {
+        pieces.push({
+          type: 'hull',
+          left: nodes[index],
+          right: nodes[index + 1],
+          area: circleHullAreaEstimate(nodes[index], nodes[index + 1])
+        });
+      }
+    });
+    pieces.forEach((piece) => {
+      if (piece.area == null) piece.area = Math.PI * piece.radius * piece.radius;
+    });
+    return pieces;
+  }
+
+  function weightedChoice(items, random) {
+    const total = items.reduce((sum, item) => sum + Math.max(item.area || 0, 0.001), 0);
+    let target = random() * total;
+    for (const item of items) {
+      target -= Math.max(item.area || 0, 0.001);
+      if (target <= 0) return item;
+    }
+    return items[items.length - 1];
+  }
+
+  function sampleInCircle(circle, random, shrink = 0.72) {
+    const angle = random() * Math.PI * 2;
+    const radius = Math.sqrt(random()) * circle.radius * shrink;
+    return {
+      x: circle.x + Math.cos(angle) * radius,
+      y: circle.y + Math.sin(angle) * radius
+    };
+  }
+
+  function sampleInHull(left, right, random, shrink = 0.56) {
+    const t = random();
+    const base = {
+      x: left.x + ((right.x - left.x) * t),
+      y: left.y + ((right.y - left.y) * t)
+    };
+    const radius = (left.radius + ((right.radius - left.radius) * t)) * shrink;
+    const direction = normalizeVector(right.x - left.x, right.y - left.y, 1, 0);
+    const normal = { x: -direction.y, y: direction.x };
+    const offset = (random() - 0.5) * 2 * radius;
+    return {
+      x: base.x + normal.x * offset,
+      y: base.y + normal.y * offset
+    };
+  }
+
+  function circleHullAreaEstimate(left, right) {
+    const distance = Math.hypot(right.x - left.x, right.y - left.y);
+    return Math.max(0.001, distance * (left.radius + right.radius));
+  }
+
+  function seededRandom(seed) {
+    let value = seed >>> 0;
+    return () => {
+      value = (value * 1664525 + 1013904223) >>> 0;
+      return value / 4294967296;
+    };
+  }
+
+  function cubicPoint(start, controlA, controlB, end, t) {
+    const inv = 1 - t;
+    const aa = inv * inv * inv;
+    const ab = 3 * inv * inv * t;
+    const bb = 3 * inv * t * t;
+    const cc = t * t * t;
+    return {
+      x: start.x * aa + controlA.x * ab + controlB.x * bb + end.x * cc,
+      y: start.y * aa + controlA.y * ab + controlB.y * bb + end.y * cc
+    };
+  }
+
+  function cubicDerivative(start, controlA, controlB, end, t) {
+    const inv = 1 - t;
+    return {
+      x: (3 * inv * inv * (controlA.x - start.x)) + (6 * inv * t * (controlB.x - controlA.x)) + (3 * t * t * (end.x - controlB.x)),
+      y: (3 * inv * inv * (controlA.y - start.y)) + (6 * inv * t * (controlB.y - controlA.y)) + (3 * t * t * (end.y - controlB.y))
+    };
+  }
+
+  function pointBounds(points) {
+    if (!points.length) return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+    return points.reduce((bounds, point) => ({
+      minX: Math.min(bounds.minX, point.x),
+      maxX: Math.max(bounds.maxX, point.x),
+      minY: Math.min(bounds.minY, point.y),
+      maxY: Math.max(bounds.maxY, point.y)
+    }), {
+      minX: points[0].x,
+      maxX: points[0].x,
+      minY: points[0].y,
+      maxY: points[0].y
+    });
+  }
+
+  function nearestSurfaceDistance(surfaces) {
+    if (surfaces.length < 2) return 0;
+    let best = Infinity;
+    for (let left = 0; left < surfaces.length; left += 1) {
+      for (let right = left + 1; right < surfaces.length; right += 1) {
+        best = Math.min(best, Math.hypot(surfaces[left].x - surfaces[right].x, surfaces[left].y - surfaces[right].y));
+      }
+    }
+    return Number.isFinite(best) ? best : 0;
+  }
+
+  function riemannSurfaceColor(index) {
+    const colors = [
+      '#cfe8ff',
+      '#ffd7d7',
+      '#dff3d6',
+      '#eadcff',
+      '#ffe6bd',
+      '#d9f0ef',
+      '#f5d4eb',
+      '#e8e1c8'
+    ];
+    return colors[index % colors.length];
+  }
+
+  function edgePairKey(edge) {
+    return edge.from === edge.to
+      ? `loop:${edge.from}`
+      : (edge.from < edge.to ? `${edge.from}:${edge.to}` : `${edge.to}:${edge.from}`);
+  }
+
+  function normalizeVector(dx, dy, fallbackX, fallbackY) {
+    const length = Math.hypot(dx, dy);
+    if (length < 0.001) return { x: fallbackX, y: fallbackY };
+    return { x: dx / length, y: dy / length };
+  }
+
+  function drawSurfacePoint(ctx, x, y, radius) {
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   function calculateGraphLayout(graphData, width, height) {
@@ -3111,6 +4522,11 @@
 
   function animateDualGraphLayout() {
     if (!state.dualGraphAnimating || !state.dualGraphLayout || !state.dualGraphData) return;
+    if (!isDualGraphVisualizationVisible()) {
+      state.dualGraphAnimating = false;
+      if (refs.computeLayout) refs.computeLayout.textContent = 'Compute layout';
+      return;
+    }
 
     const layout = state.dualGraphLayout;
     const graphData = state.dualGraphData;
@@ -3131,7 +4547,7 @@
       if (node.y > layout.height - margin) { node.y = layout.height - margin; node.vy = 0; }
     });
 
-    renderDualGraphVisualization(graphData);
+    renderVisibleDualGraphVisualizations(graphData);
 
     if (state.dualGraphAnimating) {
       requestAnimationFrame(animateDualGraphLayout);
@@ -3237,7 +4653,7 @@
   }
 
   function handleDualGraphMouseDown(event) {
-    if (!state.dualGraphLayout) return;
+    if (!state.showDualGraphCanvas || !state.dualGraphLayout) return;
 
     const canvas = refs.dualGraphCanvas;
     const rect = canvas.getBoundingClientRect();
@@ -3262,7 +4678,7 @@
   }
 
   function handleDualGraphMouseMove(event) {
-    if (!state.dualGraphLayout) return;
+    if (!state.showDualGraphCanvas || !state.dualGraphLayout) return;
 
     const canvas = refs.dualGraphCanvas;
     const rect = canvas.getBoundingClientRect();
@@ -3279,7 +4695,7 @@
 
       // Re-render if not animating (animation loop handles it otherwise)
       if (!state.dualGraphAnimating && state.dualGraphData) {
-        renderDualGraphVisualization(state.dualGraphData);
+        renderVisibleDualGraphVisualizations(state.dualGraphData);
       }
     } else {
       const hitRadius = 15;
@@ -4061,6 +5477,7 @@
       : null;
     const isHover = (isTilingMode() || (state.inputMode === 'draw' && !isDrawGestureAction()))
       && index === state.hoverIndex;
+    const isDecorationHover = isDecorationMode() && index === state.hoverIndex;
 
     ctx.beginPath();
     points.forEach((point, pointIndex) => {
@@ -4069,8 +5486,8 @@
     });
     ctx.closePath();
     ctx.fillStyle = isDragTarget ? 'rgba(61,107,79,0.12)' : (isDragSource ? '#eee7dd' : (hasTile ? '#fffdf8' : '#f8f5ee'));
-    ctx.strokeStyle = (isHover || isDragTarget) ? palette.accent : palette.border;
-    ctx.lineWidth = (isHover || isDragTarget) ? 2 : 1;
+    ctx.strokeStyle = (isHover || isDecorationHover || isDragTarget) ? palette.accent : palette.border;
+    ctx.lineWidth = (isHover || isDecorationHover || isDragTarget) ? 2 : 1;
     ctx.fill();
     ctx.stroke();
 
@@ -4080,6 +5497,9 @@
         copy: offset,
         pickedLift
       });
+      if (!isDragTarget && !isDragSource) {
+        drawVertexDecoration(ctx, cell, vertexDecorationValue(index), palette, radius);
+      }
     } else {
       drawPipe(ctx, cell, displayTile, palette, null, arcComponents, {
         tileIndex: index,
@@ -4090,6 +5510,29 @@
 
     if (state.showErrors && !isDragTarget) drawOpenEndMarks(ctx, index, cell, mask, palette);
     if (state.showCoords) drawCellLabel(ctx, cell, palette);
+  }
+
+  function drawVertexDecoration(ctx, cell, value, palette, radius) {
+    if (!value) return;
+    drawNumberBadge(ctx, cell.x, cell.y, value, clamp(radius * 0.42, 9, 17), Math.max(7, radius * 0.18));
+  }
+
+  function drawNumberBadge(ctx, x, y, value, fontSize, minRadius) {
+    if (!value) return;
+    const text = String(value);
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
+    const metrics = ctx.measureText(text);
+    const badgeRadius = Math.max(minRadius, metrics.width / 2 + Math.max(3, fontSize * 0.26), fontSize * 0.68);
+    ctx.beginPath();
+    ctx.arc(x, y, badgeRadius, 0, Math.PI * 2);
+    ctx.fillStyle = '#111111';
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, x, y + fontSize * 0.03);
+    ctx.restore();
   }
 
   function drawPipe(ctx, cell, tile, palette, radiusOverride = null, arcComponents = null, drawMeta = null) {
@@ -4753,7 +6196,8 @@
           mask,
           edges: maskToDirs(mask).map((dir) => lattice.dirNames[dir]),
           arcs: normalizeTile(tile).map((pair) => pair.slice(0, 2).map((dir) => lattice.dirNames[dir])),
-          vertexEdges: normalizeVertexTile(tile).map((dir) => lattice.dirNames[dir])
+          vertexEdges: normalizeVertexTile(tile).map((dir) => lattice.dirNames[dir]),
+          decoration: isDualGraph() && isVertexTileValue(tile) ? vertexDecorationValue(index) : 0
         };
       }),
       dualGraph: isDualGraph() ? buildDualGraphExport(report, lattice) : null
@@ -4814,6 +6258,12 @@
     refs.drawStyle.value = state.drawStyle;
     refs.colorComponents.checked = state.colorComponents;
     refs.displayPick.checked = state.displayPick;
+    if (refs.showDualGraphCanvas) refs.showDualGraphCanvas.checked = state.showDualGraphCanvas;
+    if (refs.showRiemannSurfaceCanvas) refs.showRiemannSurfaceCanvas.checked = state.showRiemannSurfaceCanvas;
+    if (refs.showRiemannDebugCircles) refs.showRiemannDebugCircles.checked = state.showRiemannDebugCircles;
+    if (refs.showRiemannBezierCurve) refs.showRiemannBezierCurve.checked = state.showRiemannBezierCurve;
+    syncDualGraphCanvasVisibility();
+    syncRiemannNodeControls();
     refs.wrappedViewMode.value = state.wrappedViewMode;
     updateInputModePanels();
     updateDrawModeControls();
@@ -4829,8 +6279,61 @@
     });
   }
 
+  function syncRiemannNodeControls() {
+    if (refs.riemannNodeRadiusInputs) {
+      refs.riemannNodeRadiusInputs.forEach((input) => {
+        const index = Number(input.dataset.riemannNodeRadius);
+        if (Number.isInteger(index) && index >= 0 && index < DEFAULT_RIEMANN_NODE_RADII.length) {
+          input.value = normalizeRiemannNodeRadiusInput(state.riemannNodeRadii[index], DEFAULT_RIEMANN_NODE_RADII[index]).toFixed(2);
+        }
+      });
+    }
+    if (refs.riemannNodeRadiusOutputs) {
+      refs.riemannNodeRadiusOutputs.forEach((output) => {
+        const index = Number(output.dataset.riemannNodeRadiusValue);
+        if (Number.isInteger(index) && index >= 0 && index < DEFAULT_RIEMANN_NODE_RADII.length) {
+          output.textContent = normalizeRiemannNodeRadiusInput(state.riemannNodeRadii[index], DEFAULT_RIEMANN_NODE_RADII[index]).toFixed(2);
+        }
+      });
+    }
+    if (refs.riemannNodePositionInputs) {
+      refs.riemannNodePositionInputs.forEach((input) => {
+        const index = Number(input.dataset.riemannNodePosition);
+        if (Number.isInteger(index) && index > 0 && index < RIEMANN_LOOP_PASS_INDEX) {
+          input.value = normalizeRiemannLoopNodePositionInput(state.riemannLoopNodePositions[index], DEFAULT_RIEMANN_LOOP_NODE_POSITIONS[index]).toFixed(2);
+        }
+      });
+    }
+    if (refs.riemannNodePositionOutputs) {
+      refs.riemannNodePositionOutputs.forEach((output) => {
+        const index = Number(output.dataset.riemannNodePositionValue);
+        if (Number.isInteger(index) && index > 0 && index < RIEMANN_LOOP_PASS_INDEX) {
+          output.textContent = normalizeRiemannLoopNodePositionInput(state.riemannLoopNodePositions[index], DEFAULT_RIEMANN_LOOP_NODE_POSITIONS[index]).toFixed(2);
+        }
+      });
+    }
+    if (refs.riemannLoopTangentScaleInputs) {
+      refs.riemannLoopTangentScaleInputs.forEach((input) => {
+        input.value = String(Math.round(normalizeRiemannLoopTangentScaleInput(state.riemannLoopTangentScale) * 100));
+      });
+    }
+    if (refs.riemannLoopTangentScaleOutputs) {
+      refs.riemannLoopTangentScaleOutputs.forEach((output) => {
+        output.textContent = `${Math.round(normalizeRiemannLoopTangentScaleInput(state.riemannLoopTangentScale) * 100)}%`;
+      });
+    }
+  }
+
   function updateDrawModeControls() {
     if (!refs.drawLayer || !refs.drawStyle) return;
+    if (!isDualGraph() && state.inputMode === 'decoration') {
+      state.inputMode = 'draw';
+      refs.inputMode.value = state.inputMode;
+    }
+    if (refs.inputDecorationOption) {
+      refs.inputDecorationOption.hidden = !isDualGraph();
+      refs.inputDecorationOption.disabled = !isDualGraph();
+    }
     if (!isDualGraph() && state.drawAction === 'vertex') {
       state.drawAction = 'edge';
       refs.drawAction.value = state.drawAction;
@@ -5141,12 +6644,17 @@
     return state.inputMode === 'tiling';
   }
 
+  function isDecorationMode() {
+    return state.inputMode === 'decoration' && isDualGraph();
+  }
+
   function isDrawGestureAction() {
     return state.drawAction === 'edge';
   }
 
   function normalizeInputMode(mode) {
     if (mode === 'drag') return 'tiling';
+    if (mode === 'decoration') return isDualGraph() ? 'decoration' : 'draw';
     return ['draw', 'tiling', 'pick', 'import'].includes(mode) ? mode : 'draw';
   }
 
