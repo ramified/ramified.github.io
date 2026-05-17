@@ -92,6 +92,15 @@
     dualGraphSimulation: null,
     dualGraphDragging: null,
     dualGraphAnimating: false,
+    algebraicCurveModel: null,
+    algebraicCurveDragging: null,
+    algebraicPointOverrides: {},
+    algebraicUserPointLocks: {},
+    algebraicTangentOverrides: {},
+    algebraicOptimizationRunning: false,
+    algebraicOptimizationFrame: null,
+    algebraicOptimization: null,
+    showAlgebraicTangentHandles: false,
     riemannSurfaceModel: null,
     selectedRiemannVertex: null,
     dualGraphInvariantsExpanded: true,
@@ -101,7 +110,8 @@
     showRiemannDebugCircles: false,
     showRiemannBezierCurve: false,
     showDualGraphCanvas: false,
-    showRiemannSurfaceCanvas: false
+    showRiemannSurfaceCanvas: false,
+    showAlgebraicCurveCanvas: false
   };
 
   const refs = {};
@@ -166,6 +176,8 @@
     refs.knotCode = document.getElementById('knot-code');
     refs.dualGraphCard = document.getElementById('dual-graph-card');
     refs.dualGraphStatus = document.getElementById('dual-graph-status');
+    refs.dualGraphStatusText = document.getElementById('dual-graph-status-text');
+    refs.dualGraphInvariantsRow = document.getElementById('dual-graph-invariants-row');
     refs.dualGraphInvariants = document.getElementById('dual-graph-invariants');
     refs.dualGraphInvariantToggle = document.getElementById('dual-graph-invariant-toggle');
     refs.dualGraphInvariantPanel = document.getElementById('dual-graph-invariant-panel');
@@ -175,12 +187,19 @@
     refs.dualGraphPlaceholder = document.getElementById('dual-graph-placeholder');
     refs.riemannSurfaceCanvas = document.getElementById('riemann-surface-canvas');
     refs.riemannSurfaceViewWrap = document.getElementById('riemann-surface-view-wrap');
+    refs.algebraicCurveCanvas = document.getElementById('algebraic-curve-canvas');
+    refs.algebraicCurveViewWrap = document.getElementById('algebraic-curve-view-wrap');
+    refs.optimizeAlgebraicCurve = document.getElementById('optimize-algebraic-curve');
+    refs.algebraicEnergyStatus = document.getElementById('algebraic-energy-status');
+    refs.showAlgebraicTangentHandles = document.getElementById('show-algebraic-tangent-handles');
     refs.dualGraphLayoutControls = document.getElementById('dual-graph-layout-controls');
     refs.computeLayout = document.getElementById('compute-layout');
     refs.resetLayout = document.getElementById('reset-layout');
     refs.exportDualGraph = document.getElementById('export-dual-graph');
     refs.showDualGraphCanvas = document.getElementById('show-dual-graph-canvas');
     refs.showRiemannSurfaceCanvas = document.getElementById('show-riemann-surface-canvas');
+    refs.showAlgebraicCurveCanvas = document.getElementById('show-algebraic-curve-canvas');
+    refs.dualGraphViewButtons = Array.from(document.querySelectorAll('[data-dual-graph-view]'));
     refs.showRiemannDebugCircles = document.getElementById('show-riemann-debug-circles');
     refs.showRiemannBezierCurve = document.getElementById('show-riemann-bezier-curve');
     refs.riemannNodeRadiusInputs = Array.from(document.querySelectorAll('[data-riemann-node-radius]'));
@@ -281,7 +300,7 @@
     });
     if (refs.computeLayout) {
       refs.computeLayout.addEventListener('click', () => {
-        if (!state.dualGraphData || !isDualGraphVisualizationVisible()) return;
+        if (!state.dualGraphData || !(state.showDualGraphCanvas || state.showRiemannSurfaceCanvas)) return;
         ensureDualGraphLayout(state.dualGraphData);
         if (state.dualGraphAnimating) {
           state.dualGraphAnimating = false;
@@ -293,11 +312,26 @@
         }
       });
     }
+    if (refs.optimizeAlgebraicCurve) {
+      refs.optimizeAlgebraicCurve.addEventListener('click', () => {
+        if (!state.dualGraphData || !state.showAlgebraicCurveCanvas) return;
+        if (state.algebraicOptimizationRunning) {
+          stopAlgebraicCurveOptimization();
+        } else {
+          startAlgebraicCurveOptimization(state.dualGraphData);
+        }
+      });
+    }
     if (refs.resetLayout) {
       refs.resetLayout.addEventListener('click', () => {
+        stopAlgebraicCurveOptimization();
         state.dualGraphAnimating = false;
         state.dualGraphDragging = null;
         state.dualGraphLayout = null;
+        state.algebraicCurveDragging = null;
+        state.algebraicPointOverrides = {};
+        state.algebraicUserPointLocks = {};
+        state.algebraicTangentOverrides = {};
         if (refs.computeLayout) refs.computeLayout.textContent = 'Compute layout';
         updateReport(false);
       });
@@ -323,6 +357,27 @@
         state.showRiemannSurfaceCanvas = refs.showRiemannSurfaceCanvas.checked;
         syncDualGraphCanvasVisibility();
         if (state.dualGraphData) renderVisibleDualGraphVisualizations(state.dualGraphData);
+      });
+    }
+    if (refs.showAlgebraicCurveCanvas) {
+      refs.showAlgebraicCurveCanvas.addEventListener('change', () => {
+        state.showAlgebraicCurveCanvas = refs.showAlgebraicCurveCanvas.checked;
+        syncDualGraphCanvasVisibility();
+        if (state.dualGraphData) renderVisibleDualGraphVisualizations(state.dualGraphData);
+      });
+    }
+    if (refs.dualGraphViewButtons) {
+      refs.dualGraphViewButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          toggleDualGraphVisualizationView(button.dataset.dualGraphView);
+        });
+      });
+    }
+    if (refs.showAlgebraicTangentHandles) {
+      refs.showAlgebraicTangentHandles.addEventListener('change', () => {
+        state.showAlgebraicTangentHandles = refs.showAlgebraicTangentHandles.checked;
+        if (!state.showAlgebraicTangentHandles) state.algebraicCurveDragging = null;
+        if (state.dualGraphData && state.showAlgebraicCurveCanvas) renderAlgebraicCurveVisualization(state.dualGraphData);
       });
     }
     if (refs.riemannNodeRadiusInputs) {
@@ -371,6 +426,13 @@
     }
     if (refs.riemannSurfaceCanvas) {
       refs.riemannSurfaceCanvas.addEventListener('click', handleRiemannSurfaceClick);
+    }
+    if (refs.algebraicCurveCanvas) {
+      refs.algebraicCurveCanvas.addEventListener('mousedown', handleAlgebraicCurveMouseDown);
+      refs.algebraicCurveCanvas.addEventListener('mousemove', handleAlgebraicCurveMouseMove);
+      refs.algebraicCurveCanvas.addEventListener('mouseup', handleAlgebraicCurveMouseUp);
+      refs.algebraicCurveCanvas.addEventListener('mouseleave', handleAlgebraicCurveMouseUp);
+      refs.algebraicCurveCanvas.addEventListener('contextmenu', handleAlgebraicCurveContextMenu);
     }
     if (refs.dualGraphCanvas) {
       refs.dualGraphCanvas.addEventListener('mousedown', handleDualGraphMouseDown);
@@ -2843,7 +2905,8 @@
     const graphData = collectDualGraphData(report);
 
     if (!graphData.isValid) {
-      refs.dualGraphStatus.textContent = graphData.reason || 'Not available';
+      setDualGraphStatusContent(graphData.reason || 'Not available', false);
+      if (refs.dualGraphInvariantsRow) refs.dualGraphInvariantsRow.hidden = true;
       if (refs.dualGraphInvariants) refs.dualGraphInvariants.innerHTML = '<span class="hint">-</span>';
       refs.dualGraphCanvasWrap.style.display = 'none';
       refs.dualGraphPlaceholder.style.display = 'block';
@@ -2857,7 +2920,8 @@
       return;
     }
 
-    refs.dualGraphStatus.textContent = `${graphData.vertices.length} vertices, ${graphData.edges.length} edges, ${graphData.legs.length} legs`;
+    setDualGraphStatusContent('', true);
+    if (refs.dualGraphInvariantsRow) refs.dualGraphInvariantsRow.hidden = false;
     if (refs.dualGraphInvariants) refs.dualGraphInvariants.innerHTML = formatDualGraphInvariants(graphData);
     syncDualGraphInvariantVisibility();
     refs.dualGraphCanvasWrap.style.display = 'block';
@@ -2883,12 +2947,27 @@
     renderVisibleDualGraphVisualizations(graphData);
   }
 
+  function setDualGraphStatusContent(text, showExport) {
+    if (refs.dualGraphStatusText) {
+      refs.dualGraphStatusText.textContent = showExport ? '' : (text || '-');
+      refs.dualGraphStatusText.hidden = !!showExport;
+    } else if (refs.dualGraphStatus) {
+      refs.dualGraphStatus.textContent = showExport ? '' : (text || '-');
+    }
+    if (refs.exportDualGraph) refs.exportDualGraph.hidden = !showExport;
+  }
+
   function syncDualGraphCanvasVisibility() {
     if (refs.showDualGraphCanvas) refs.showDualGraphCanvas.checked = state.showDualGraphCanvas;
     if (refs.showRiemannSurfaceCanvas) refs.showRiemannSurfaceCanvas.checked = state.showRiemannSurfaceCanvas;
+    if (refs.showAlgebraicCurveCanvas) refs.showAlgebraicCurveCanvas.checked = state.showAlgebraicCurveCanvas;
+    if (refs.showAlgebraicTangentHandles) refs.showAlgebraicTangentHandles.checked = state.showAlgebraicTangentHandles;
+    syncDualGraphVisualizationButtons();
     if (refs.dualGraphViewWrap) refs.dualGraphViewWrap.hidden = !state.showDualGraphCanvas;
     if (refs.riemannSurfaceViewWrap) refs.riemannSurfaceViewWrap.hidden = !state.showRiemannSurfaceCanvas;
-    if (refs.dualGraphLayoutControls) refs.dualGraphLayoutControls.hidden = !isDualGraphVisualizationVisible();
+    if (refs.algebraicCurveViewWrap) refs.algebraicCurveViewWrap.hidden = !state.showAlgebraicCurveCanvas;
+    if (refs.dualGraphLayoutControls) refs.dualGraphLayoutControls.hidden = !(state.showDualGraphCanvas || state.showRiemannSurfaceCanvas);
+    if (refs.optimizeAlgebraicCurve) refs.optimizeAlgebraicCurve.disabled = !state.showAlgebraicCurveCanvas || !state.dualGraphData;
 
     if (!isDualGraphVisualizationVisible()) {
       state.dualGraphAnimating = false;
@@ -2896,22 +2975,51 @@
       if (refs.computeLayout) refs.computeLayout.textContent = 'Compute layout';
     }
     if (!state.showDualGraphCanvas && refs.dualGraphCanvas) refs.dualGraphCanvas.style.cursor = 'default';
+    if (!state.showAlgebraicCurveCanvas && refs.algebraicCurveCanvas) refs.algebraicCurveCanvas.style.cursor = 'default';
     if (!state.showRiemannSurfaceCanvas) {
       state.riemannSurfaceModel = null;
       state.selectedRiemannVertex = null;
     }
+    if (!state.showAlgebraicCurveCanvas) {
+      stopAlgebraicCurveOptimization();
+      state.algebraicCurveModel = null;
+      state.algebraicCurveDragging = null;
+      if (refs.algebraicCurveCanvas) refs.algebraicCurveCanvas.style.cursor = 'default';
+    }
 
-    if (refs.computeLayout) refs.computeLayout.disabled = !isDualGraphVisualizationVisible() || !state.dualGraphData;
+    if (refs.computeLayout) refs.computeLayout.disabled = !(state.showDualGraphCanvas || state.showRiemannSurfaceCanvas) || !state.dualGraphData;
     if (refs.resetLayout) refs.resetLayout.disabled = !isDualGraphVisualizationVisible() || !state.dualGraphData;
+    syncAlgebraicOptimizationControls();
+  }
+
+  function toggleDualGraphVisualizationView(view) {
+    if (view === 'dual') state.showDualGraphCanvas = !state.showDualGraphCanvas;
+    if (view === 'rs') state.showRiemannSurfaceCanvas = !state.showRiemannSurfaceCanvas;
+    if (view === 'algebraic') state.showAlgebraicCurveCanvas = !state.showAlgebraicCurveCanvas;
+    syncDualGraphCanvasVisibility();
+    if (state.dualGraphData) renderVisibleDualGraphVisualizations(state.dualGraphData);
+  }
+
+  function syncDualGraphVisualizationButtons() {
+    if (!refs.dualGraphViewButtons) return;
+    refs.dualGraphViewButtons.forEach((button) => {
+      const view = button.dataset.dualGraphView;
+      const active = (view === 'dual' && state.showDualGraphCanvas)
+        || (view === 'rs' && state.showRiemannSurfaceCanvas)
+        || (view === 'algebraic' && state.showAlgebraicCurveCanvas);
+      button.classList.toggle('active', !!active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
   }
 
   function renderVisibleDualGraphVisualizations(graphData) {
     if (state.showDualGraphCanvas) renderDualGraphVisualization(graphData);
     if (state.showRiemannSurfaceCanvas) renderRiemannSurfaceVisualization(graphData);
+    if (state.showAlgebraicCurveCanvas) renderAlgebraicCurveVisualization(graphData);
   }
 
   function isDualGraphVisualizationVisible() {
-    return state.showDualGraphCanvas || state.showRiemannSurfaceCanvas;
+    return state.showDualGraphCanvas || state.showRiemannSurfaceCanvas || state.showAlgebraicCurveCanvas;
   }
 
   function ensureDualGraphLayout(graphData) {
@@ -3361,6 +3469,1101 @@
     ctx.restore();
   }
 
+  function renderAlgebraicCurveVisualization(graphData, updateEnergyStatus = true) {
+    if (!state.showAlgebraicCurveCanvas) return;
+    const canvas = refs.algebraicCurveCanvas;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const displayWidth = Math.round(rect.width) || canvas.width || 300;
+    const displayHeight = Math.round(rect.height) || canvas.height || 280;
+    if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+      canvas.width = displayWidth;
+      canvas.height = displayHeight;
+    }
+
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#fffdf8';
+    ctx.fillRect(0, 0, width, height);
+
+    ensureDualGraphLayout(graphData);
+    const model = calculateAlgebraicCurveModel(graphData, width, height);
+    state.algebraicCurveModel = model;
+    if (!model.curves.length) return;
+
+    model.curves.forEach((curve) => drawAlgebraicCurve(ctx, curve, true));
+    model.curves.forEach((curve) => drawAlgebraicCurve(ctx, curve, false));
+    drawAlgebraicUnexpectedCrossings(ctx, model);
+    drawAlgebraicCurveLabels(ctx, model);
+    drawAlgebraicIntersections(ctx, model);
+    if (state.showAlgebraicTangentHandles) drawAlgebraicTangentHandles(ctx, model);
+    drawAlgebraicMarkedPoints(ctx, model, width, height);
+    if (updateEnergyStatus && !state.algebraicOptimizationRunning) {
+      syncAlgebraicEnergyStatus(algebraicCurveEnergy(model, width, height), null, false);
+    }
+  }
+
+  function calculateAlgebraicCurveModel(graphData, width, height) {
+    const layout = state.dualGraphLayout || ensureDualGraphLayout(graphData);
+    const layoutMap = layout && layout.nodeMap ? layout.nodeMap : new Map();
+    const sourcePoints = [];
+    const vertexSources = new Map();
+
+    graphData.vertices.forEach((vertex) => {
+      const node = layoutMap.get(`v${vertex.index}`);
+      const point = node
+        ? { x: node.x, y: node.y }
+        : { x: vertex.col, y: vertex.row };
+      vertexSources.set(vertex.index, point);
+      sourcePoints.push(point);
+    });
+
+    const edgeSources = graphData.edges.map((edge, edgeIndex) => {
+      const source = algebraicEdgeSource(edge, edgeIndex, layoutMap, vertexSources);
+      sourcePoints.push(source);
+      return source;
+    });
+    const legSources = graphData.legs.map((leg, legIndex) => {
+      const source = algebraicLegSource(leg, legIndex, layoutMap, vertexSources);
+      sourcePoints.push(source);
+      return source;
+    });
+
+    const mapPoint = algebraicCanvasMapper(sourcePoints, width, height);
+    const radius = clamp(Math.min(width, height) * 0.16, 28, 52);
+    const curves = graphData.vertices.map((vertex, index) => {
+      const center = mapPoint(vertexSources.get(vertex.index) || { x: vertex.col, y: vertex.row });
+      return {
+        vertexIndex: vertex.index,
+        label: `C${index + 1}`,
+        center,
+        radius,
+        color: algebraicCurveColor(index),
+        decoration: vertexDecorationValue(vertex.index),
+        incidences: [],
+        pathPoints: []
+      };
+    });
+    const curveMap = new Map(curves.map((curve) => [curve.vertexIndex, curve]));
+    const intersections = [];
+    const markedPoints = [];
+
+    const addIncidence = (vertexIndex, incidence) => {
+      const curve = curveMap.get(vertexIndex);
+      if (curve) curve.incidences.push(incidence);
+    };
+
+    graphData.edges.forEach((edge, edgeIndex) => {
+      const pointId = `edge:${edgeIndex}`;
+      const point = algebraicPointWithOverride(pointId, mapPoint(edgeSources[edgeIndex]), width, height);
+      const intersection = {
+        id: pointId,
+        x: point.x,
+        y: point.y,
+        edgeIndex,
+        kind: edge.from === edge.to ? 'self' : 'node',
+        vertexIndex: edge.from
+      };
+      intersections.push(intersection);
+
+      if (edge.from === edge.to) {
+        const curve = curveMap.get(edge.from);
+        const center = curve ? curve.center : intersection;
+        const tangentKey = algebraicTangentKey(pointId);
+        const primaryTangent = algebraicTangentWithOverride(tangentKey, normalizeVector(intersection.x - center.x, intersection.y - center.y, 1, 0));
+        const secondaryTangent = algebraicOrientedPerpendicular(primaryTangent, {
+          x: Math.cos(algebraicSpokeAngle(edge.toSpoke, 0)),
+          y: Math.sin(algebraicSpokeAngle(edge.toSpoke, Math.PI / 2))
+        });
+        intersection.tangentKey = tangentKey;
+        intersection.tangent = primaryTangent;
+        addIncidence(edge.from, {
+          kind: 'loop',
+          edgeIndex,
+          branch: 0,
+          tangentKey,
+          spoke: edge.fromSpoke,
+          point: intersection,
+          tangent: primaryTangent
+        });
+        addIncidence(edge.to, {
+          kind: 'loop',
+          edgeIndex,
+          branch: 1,
+          tangentKey,
+          spoke: edge.toSpoke,
+          point: intersection,
+          tangent: secondaryTangent
+        });
+        return;
+      }
+
+      const fromCurve = curveMap.get(edge.from);
+      const toCurve = curveMap.get(edge.to);
+      const tangentKey = algebraicTangentKey(pointId);
+      const edgeTangent = algebraicTangentWithOverride(tangentKey, normalizeVector(
+        (toCurve ? toCurve.center.x : intersection.x + 1) - (fromCurve ? fromCurve.center.x : intersection.x),
+        (toCurve ? toCurve.center.y : intersection.y) - (fromCurve ? fromCurve.center.y : intersection.y),
+        1,
+        0
+      ));
+      const toFallback = toCurve
+        ? normalizeVector(intersection.x - toCurve.center.x, intersection.y - toCurve.center.y, -edgeTangent.y, edgeTangent.x)
+        : { x: -edgeTangent.y, y: edgeTangent.x };
+      const normalTangent = algebraicOrientedPerpendicular(edgeTangent, toFallback);
+      intersection.tangentKey = tangentKey;
+      intersection.tangent = edgeTangent;
+      addIncidence(edge.from, {
+        kind: 'edge',
+        edgeIndex,
+        tangentKey,
+        spoke: edge.fromSpoke,
+        point: intersection,
+        tangent: edgeTangent
+      });
+      addIncidence(edge.to, {
+        kind: 'edge',
+        edgeIndex,
+        tangentKey,
+        spoke: edge.toSpoke,
+        point: intersection,
+        tangent: normalTangent
+      });
+    });
+
+    graphData.legs.forEach((leg, legIndex) => {
+      const pointId = `leg:${legIndex}`;
+      const point = algebraicPointWithOverride(pointId, mapPoint(legSources[legIndex]), width, height);
+      const mark = {
+        id: pointId,
+        x: point.x,
+        y: point.y,
+        legIndex,
+        label: `p${legIndex + 1}`,
+        vertexIndex: leg.vertex
+      };
+      markedPoints.push(mark);
+      const tangentKey = algebraicTangentKey(pointId);
+      const curve = curveMap.get(leg.vertex);
+      const fallbackTangent = curve
+        ? normalizeVector(mark.x - curve.center.x, mark.y - curve.center.y, Math.cos(algebraicSpokeAngle(leg.spoke, 0)), Math.sin(algebraicSpokeAngle(leg.spoke, 0)))
+        : normalizeVector(Math.cos(algebraicSpokeAngle(leg.spoke, 0)), Math.sin(algebraicSpokeAngle(leg.spoke, 0)), 1, 0);
+      mark.tangentKey = tangentKey;
+      mark.tangent = algebraicTangentWithOverride(tangentKey, fallbackTangent);
+      const tangentOverride = algebraicOptionalTangentOverride(tangentKey);
+      addIncidence(leg.vertex, {
+        kind: 'leg',
+        legIndex,
+        tangentKey,
+        spoke: leg.spoke,
+        point: mark,
+        tangent: tangentOverride,
+        label: mark.label
+      });
+    });
+
+    relaxAlgebraicPoints(curves, intersections, markedPoints, width, height);
+    curves.forEach((curve) => {
+      curve.pathPoints = algebraicCurvePathPoints(curve, width, height);
+    });
+
+    const model = { curves, intersections, markedPoints, unexpectedCrossings: [] };
+    model.unexpectedCrossings = algebraicUnexpectedCrossings(model, width, height);
+    return model;
+  }
+
+  function algebraicEdgeSource(edge, edgeIndex, layoutMap, vertexSources) {
+    if (edge.from === edge.to) {
+      const loopNode = layoutMap.get(`e${edgeIndex}_1`)
+        || layoutMap.get(`e${edgeIndex}_0`)
+        || layoutMap.get(`e${edgeIndex}_2`);
+      if (loopNode) return { x: loopNode.x, y: loopNode.y };
+      const center = vertexSources.get(edge.from) || { x: 0, y: 0 };
+      const angle = (edgeIndex * Math.PI * 0.72) - Math.PI / 2;
+      return {
+        x: center.x + Math.cos(angle) * 44,
+        y: center.y + Math.sin(angle) * 44
+      };
+    }
+
+    const edgeNode = layoutMap.get(`e${edgeIndex}`);
+    if (edgeNode) return { x: edgeNode.x, y: edgeNode.y };
+    const from = vertexSources.get(edge.from) || { x: 0, y: 0 };
+    const to = vertexSources.get(edge.to) || from;
+    return {
+      x: (from.x + to.x) / 2,
+      y: (from.y + to.y) / 2
+    };
+  }
+
+  function algebraicLegSource(leg, legIndex, layoutMap, vertexSources) {
+    const legNode = layoutMap.get(`l${legIndex}`);
+    if (legNode) return { x: legNode.x, y: legNode.y };
+    const center = vertexSources.get(leg.vertex) || { x: 0, y: 0 };
+    const angle = algebraicSpokeAngle(leg.spoke, legIndex * Math.PI * 0.5);
+    return {
+      x: center.x + Math.cos(angle) * 54,
+      y: center.y + Math.sin(angle) * 54
+    };
+  }
+
+  function algebraicCanvasMapper(points, width, height) {
+    const padding = clamp(Math.min(width, height) * 0.16, 34, 56);
+    const bounds = pointBounds(points);
+    const sourceWidth = Math.max(bounds.maxX - bounds.minX, 1);
+    const sourceHeight = Math.max(bounds.maxY - bounds.minY, 1);
+    const targetWidth = Math.max(width - (padding * 2), 1);
+    const targetHeight = Math.max(height - (padding * 2), 1);
+    const scale = points.length <= 1 ? 1 : Math.min(targetWidth / sourceWidth, targetHeight / sourceHeight);
+    const sourceCenter = {
+      x: (bounds.minX + bounds.maxX) / 2,
+      y: (bounds.minY + bounds.maxY) / 2
+    };
+    const targetCenter = { x: width / 2, y: height / 2 };
+    return (point) => ({
+      x: targetCenter.x + ((point.x - sourceCenter.x) * scale),
+      y: targetCenter.y + ((point.y - sourceCenter.y) * scale)
+    });
+  }
+
+  function startAlgebraicCurveOptimization(graphData) {
+    const canvas = refs.algebraicCurveCanvas;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.round(rect.width) || canvas.width || 300;
+    const height = Math.round(rect.height) || canvas.height || 280;
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+
+    const baseModel = calculateAlgebraicCurveModel(graphData, width, height);
+    const points = algebraicOptimizablePoints(baseModel);
+    if (!points.length) {
+      syncAlgebraicEnergyStatus(algebraicCurveEnergy(baseModel, width, height), null, false, 'no movable points');
+      return;
+    }
+
+    stopAlgebraicCurveOptimization();
+    const bestEnergy = algebraicCurveEnergy(baseModel, width, height);
+    state.algebraicOptimizationRunning = true;
+    state.algebraicOptimization = {
+      graphData,
+      width,
+      height,
+      points,
+      bestOverrides: { ...state.algebraicPointOverrides },
+      bestTangentOverrides: { ...state.algebraicTangentOverrides },
+      bestEnergy,
+      currentEnergy: bestEnergy,
+      step: Math.max(8, Math.min(width, height) * 0.1),
+      angleStep: Math.PI / 9,
+      iteration: 0,
+      staleIterations: 0,
+      random: seededRandom(Math.round(bestEnergy * 1000) + points.length * 7919)
+    };
+    syncAlgebraicOptimizationControls();
+    animateAlgebraicCurveOptimization();
+  }
+
+  function stopAlgebraicCurveOptimization() {
+    if (state.algebraicOptimizationFrame != null) {
+      cancelAnimationFrame(state.algebraicOptimizationFrame);
+    }
+    state.algebraicOptimizationFrame = null;
+    state.algebraicOptimizationRunning = false;
+    state.algebraicOptimization = null;
+    syncAlgebraicOptimizationControls();
+  }
+
+  function animateAlgebraicCurveOptimization() {
+    const opt = state.algebraicOptimization;
+    if (!state.algebraicOptimizationRunning || !opt || !state.dualGraphData || !state.showAlgebraicCurveCanvas) {
+      stopAlgebraicCurveOptimization();
+      return;
+    }
+
+    const attemptsPerFrame = 5;
+    let accepted = false;
+    for (let attempt = 0; attempt < attemptsPerFrame; attempt += 1) {
+      const result = algebraicOptimizationStep(opt);
+      accepted = accepted || result.accepted;
+      if (result.done) {
+        state.algebraicPointOverrides = opt.bestOverrides;
+        state.algebraicTangentOverrides = opt.bestTangentOverrides;
+        renderAlgebraicCurveVisualization(opt.graphData, false);
+        syncAlgebraicEnergyStatus(opt.bestEnergy, null, false);
+        stopAlgebraicCurveOptimization();
+        return;
+      }
+    }
+
+    state.algebraicPointOverrides = opt.bestOverrides;
+    state.algebraicTangentOverrides = opt.bestTangentOverrides;
+    renderAlgebraicCurveVisualization(opt.graphData, false);
+    syncAlgebraicEnergyStatus(opt.currentEnergy, opt.bestEnergy, accepted);
+    state.algebraicOptimizationFrame = requestAnimationFrame(animateAlgebraicCurveOptimization);
+  }
+
+  function algebraicOptimizationStep(opt) {
+    opt.iteration += 1;
+    const candidateOverrides = { ...opt.bestOverrides };
+    const candidateTangentOverrides = { ...opt.bestTangentOverrides };
+    const count = opt.iteration < 120 ? Math.min(opt.points.length, 2) : 1;
+    for (let move = 0; move < count; move += 1) {
+      const point = opt.points[Math.floor(opt.random() * opt.points.length)];
+      const current = candidateOverrides[point.id] || { x: point.x, y: point.y };
+      const angle = opt.random() * Math.PI * 2;
+      const distance = opt.step * (0.2 + opt.random() * 0.85);
+      candidateOverrides[point.id] = {
+        x: clamp(current.x + Math.cos(angle) * distance, 10, opt.width - 10),
+        y: clamp(current.y + Math.sin(angle) * distance, 10, opt.height - 10)
+      };
+    }
+    const tangentMoveCount = Math.max(1, Math.min(3, Math.ceil(opt.points.length / 3)));
+    for (let move = 0; move < tangentMoveCount; move += 1) {
+      const point = opt.points[Math.floor(opt.random() * opt.points.length)];
+      const key = algebraicTangentKey(point.id);
+      const current = candidateTangentOverrides[key] || point.tangent || { x: 1, y: 0 };
+      const delta = (opt.random() - 0.5) * 2 * opt.angleStep;
+      candidateTangentOverrides[key] = rotateVector(current, delta);
+    }
+
+    const previousOverrides = state.algebraicPointOverrides;
+    const previousTangentOverrides = state.algebraicTangentOverrides;
+    state.algebraicPointOverrides = candidateOverrides;
+    state.algebraicTangentOverrides = candidateTangentOverrides;
+    const candidate = calculateAlgebraicCurveModel(opt.graphData, opt.width, opt.height);
+    const energy = algebraicCurveEnergy(candidate, opt.width, opt.height);
+    state.algebraicPointOverrides = previousOverrides;
+    state.algebraicTangentOverrides = previousTangentOverrides;
+    opt.currentEnergy = energy;
+
+    if (energy < opt.bestEnergy) {
+      opt.bestEnergy = energy;
+      opt.bestOverrides = candidateOverrides;
+      opt.bestTangentOverrides = candidateTangentOverrides;
+      opt.staleIterations = 0;
+      opt.step = Math.min(opt.step * 1.012, Math.min(opt.width, opt.height) * 0.13);
+      opt.angleStep = Math.min(opt.angleStep * 1.01, Math.PI / 5);
+      return { accepted: true, done: false };
+    }
+
+    opt.staleIterations += 1;
+    opt.step *= 0.985;
+    opt.angleStep *= 0.987;
+    const done = opt.iteration >= 420 || opt.step < 0.8 || opt.staleIterations > 160;
+    return { accepted: false, done };
+  }
+
+  function syncAlgebraicOptimizationControls() {
+    if (refs.optimizeAlgebraicCurve) {
+      refs.optimizeAlgebraicCurve.textContent = state.algebraicOptimizationRunning ? 'Stop optimization' : 'Timed optimization';
+      refs.optimizeAlgebraicCurve.disabled = !state.showAlgebraicCurveCanvas || !state.dualGraphData;
+    }
+    if (!state.algebraicOptimizationRunning && refs.algebraicEnergyStatus) {
+      const model = state.algebraicCurveModel;
+      if (!model || !refs.algebraicCurveCanvas) {
+        refs.algebraicEnergyStatus.textContent = '';
+      }
+    }
+  }
+
+  function syncAlgebraicEnergyStatus(currentEnergy, bestEnergy, accepted, suffix = '') {
+    if (!refs.algebraicEnergyStatus) return;
+    const displayEnergy = Number.isFinite(bestEnergy) ? bestEnergy : currentEnergy;
+    const energyText = Number.isFinite(displayEnergy) ? displayEnergy.toFixed(1) : '-';
+    const hasTrial = Number.isFinite(bestEnergy) && Number.isFinite(currentEnergy) && Math.abs(currentEnergy - bestEnergy) > 0.05;
+    const trialText = Number.isFinite(currentEnergy) ? currentEnergy.toFixed(1) : '-';
+    const text = hasTrial && !accepted
+      ? `energy ${energyText} / trial ${trialText}`
+      : `energy ${energyText}`;
+    refs.algebraicEnergyStatus.textContent = suffix ? `${text} - ${suffix}` : text;
+  }
+
+  function algebraicOptimizablePoints(model) {
+    return (model.intersections || []).concat(model.markedPoints || [])
+      .filter((point) => point && point.id && !state.algebraicUserPointLocks[point.id]);
+  }
+
+  function algebraicCurveEnergy(model, width, height) {
+    let energy = 0;
+    model.curves.forEach((curve) => {
+      const samples = algebraicCurveSamples(curve.pathPoints, 10);
+      for (let index = 1; index + 1 < samples.length; index += 1) {
+        const left = normalizeVector(samples[index].x - samples[index - 1].x, samples[index].y - samples[index - 1].y, 1, 0);
+        const right = normalizeVector(samples[index + 1].x - samples[index].x, samples[index + 1].y - samples[index].y, left.x, left.y);
+        const angle = Math.acos(clamp((left.x * right.x) + (left.y * right.y), -1, 1));
+        energy += angle * angle * 120;
+      }
+      for (let index = 0; index + 1 < samples.length; index += 1) {
+        energy += Math.hypot(samples[index + 1].x - samples[index].x, samples[index + 1].y - samples[index].y) * 0.03;
+      }
+    });
+
+    (model.unexpectedCrossings || []).forEach(() => {
+      energy += 160;
+    });
+    const points = (model.intersections || []).concat(model.markedPoints || []);
+    for (let left = 0; left < points.length; left += 1) {
+      for (let right = left + 1; right < points.length; right += 1) {
+        const distance = Math.hypot(points[left].x - points[right].x, points[left].y - points[right].y);
+        if (distance < 24) energy += (24 - distance) * 8;
+      }
+    }
+    points.forEach((point) => {
+      const edgeDistance = Math.min(point.x, width - point.x, point.y, height - point.y);
+      if (edgeDistance < 16) energy += (16 - edgeDistance) * 10;
+    });
+    return energy;
+  }
+
+  function algebraicPointWithOverride(id, point, width, height) {
+    const override = state.algebraicPointOverrides ? state.algebraicPointOverrides[id] : null;
+    if (!override) return point;
+    return {
+      x: clamp(Number(override.x), 8, width - 8),
+      y: clamp(Number(override.y), 8, height - 8)
+    };
+  }
+
+  function algebraicTangentWithOverride(id, fallback) {
+    const override = state.algebraicTangentOverrides ? state.algebraicTangentOverrides[id] : null;
+    if (!override) return fallback;
+    return normalizeVector(Number(override.x), Number(override.y), fallback.x, fallback.y);
+  }
+
+  function algebraicOptionalTangentOverride(id) {
+    const override = state.algebraicTangentOverrides ? state.algebraicTangentOverrides[id] : null;
+    if (!override) return null;
+    return normalizeVector(Number(override.x), Number(override.y), 1, 0);
+  }
+
+  function rotateVector(vector, angle) {
+    const source = normalizeVector(Number(vector.x), Number(vector.y), 1, 0);
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    return normalizeVector(
+      source.x * cos - source.y * sin,
+      source.x * sin + source.y * cos,
+      source.x,
+      source.y
+    );
+  }
+
+  function algebraicOrientedPerpendicular(tangent, preferred) {
+    const normal = normalizeVector(-tangent.y, tangent.x, 0, 1);
+    const preferredDirection = preferred
+      ? normalizeVector(preferred.x, preferred.y, normal.x, normal.y)
+      : normal;
+    return ((normal.x * preferredDirection.x) + (normal.y * preferredDirection.y)) < 0
+      ? { x: -normal.x, y: -normal.y }
+      : normal;
+  }
+
+  function algebraicTangentKey(pointId) {
+    return `${pointId}:tangent`;
+  }
+
+  function relaxAlgebraicPoints(curves, intersections, markedPoints, width, height) {
+    const nodes = intersections.concat(markedPoints);
+    const movable = nodes.filter((node) => !state.algebraicPointOverrides[node.id]);
+    if (!movable.length) return;
+
+    for (let pass = 0; pass < 12; pass += 1) {
+      const deltas = new Map(movable.map((node) => [node.id, { x: 0, y: 0, count: 0 }]));
+      curves.forEach((curve) => {
+        const ordered = algebraicSimpleIncidenceOrder(curve.incidences, curve.center);
+        for (let index = 1; index + 1 < ordered.length; index += 1) {
+          const current = ordered[index];
+          if (!deltas.has(current.point.id)) continue;
+          const previous = ordered[index - 1].point;
+          const next = ordered[index + 1].point;
+          const target = {
+            x: (previous.x + next.x) / 2,
+            y: (previous.y + next.y) / 2
+          };
+          const delta = deltas.get(current.point.id);
+          delta.x += (target.x - current.point.x) * 0.14;
+          delta.y += (target.y - current.point.y) * 0.14;
+          delta.count += 1;
+        }
+      });
+
+      movable.forEach((node) => {
+        const delta = deltas.get(node.id);
+        if (!delta || !delta.count) return;
+        node.x = clamp(node.x + delta.x / delta.count, 10, width - 10);
+        node.y = clamp(node.y + delta.y / delta.count, 10, height - 10);
+      });
+    }
+  }
+
+  function algebraicIncidenceAngle(incidence, center) {
+    if (Number.isInteger(incidence.spoke)) {
+      return normalizeAngle(algebraicSpokeAngle(incidence.spoke, 0));
+    }
+    return normalizeAngle(Math.atan2(incidence.point.y - center.y, incidence.point.x - center.x));
+  }
+
+  function algebraicSpokeAngle(spoke, fallback) {
+    const lattice = getLattice();
+    const normalized = normalizeDir(spoke, lattice.sides);
+    return Number.isInteger(normalized) && Number.isFinite(lattice.angles[normalized])
+      ? lattice.angles[normalized]
+      : fallback;
+  }
+
+  function algebraicIncidenceTieBreak(incidence) {
+    if (incidence.kind === 'loop') return 10000 + (incidence.edgeIndex * 2) + (incidence.branch || 0);
+    if (incidence.kind === 'edge') return 20000 + incidence.edgeIndex;
+    if (incidence.kind === 'leg') return 30000 + incidence.legIndex;
+    return 40000;
+  }
+
+  function algebraicCurvePathPoints(curve, width, height) {
+    const ordered = algebraicSimpleIncidenceOrder(curve.incidences, curve.center);
+    const anchors = ordered.map((incidence, index) => {
+      const tangent = algebraicRouteTangent(ordered, index, curve.center);
+      incidence.renderTangent = tangent;
+      return {
+        x: incidence.point.x,
+        y: incidence.point.y,
+        tangent,
+        incidence
+      };
+    });
+    if (!anchors.length) {
+      const tangent = algebraicEscapeDirection(curve.center, null, width, height, -1);
+      const start = algebraicCanvasExitPoint(curve.center, { x: -tangent.x, y: -tangent.y }, width, height);
+      const end = algebraicCanvasExitPoint(curve.center, tangent, width, height);
+      return [
+        { ...start, tangent },
+        { x: curve.center.x, y: curve.center.y, tangent },
+        { ...end, tangent }
+      ];
+    }
+
+    const startDirection = algebraicEscapeDirection(anchors[0], anchors[1] || curve.center, width, height, -1);
+    const endDirection = algebraicEscapeDirection(anchors[anchors.length - 1], anchors[anchors.length - 2] || curve.center, width, height, 1);
+    const start = algebraicCanvasExitPoint(anchors[0], startDirection, width, height);
+    const end = algebraicCanvasExitPoint(anchors[anchors.length - 1], endDirection, width, height);
+    return [
+      { ...start, tangent: startDirection },
+      ...anchors,
+      { ...end, tangent: endDirection }
+    ];
+  }
+
+  function algebraicEscapeDirection(anchor, neighbor, width, height, side) {
+    const away = neighbor
+      ? normalizeVector(anchor.x - neighbor.x, anchor.y - neighbor.y, side, 0)
+      : normalizeVector(anchor.x - width / 2, anchor.y - height / 2, side, 0);
+    const boundary = normalizeVector(anchor.x - width / 2, anchor.y - height / 2, away.x, away.y);
+    const candidates = [];
+    for (let index = 0; index < 16; index += 1) {
+      const angle = (Math.PI * 2 * index) / 16;
+      candidates.push({ x: Math.cos(angle), y: Math.sin(angle) });
+    }
+    candidates.push(away, boundary);
+    let best = away;
+    let bestScore = Infinity;
+    candidates.forEach((candidate) => {
+      const direction = normalizeVector(candidate.x, candidate.y, away.x, away.y);
+      const exit = algebraicCanvasExitPoint(anchor, direction, width, height);
+      const exitDistance = Math.hypot(exit.x - anchor.x, exit.y - anchor.y);
+      const awayScore = 1 - ((direction.x * away.x) + (direction.y * away.y));
+      const boundaryScore = 1 - ((direction.x * boundary.x) + (direction.y * boundary.y));
+      const score = exitDistance * 0.018 + awayScore * 18 + boundaryScore * 7;
+      if (score < bestScore) {
+        bestScore = score;
+        best = direction;
+      }
+    });
+    return best;
+  }
+
+  function algebraicSimpleIncidenceOrder(incidences, center) {
+    if (incidences.length <= 2) return incidences.slice();
+    const ordered = incidences.slice().sort((left, right) => (
+      algebraicIncidenceAngle(left, center) - algebraicIncidenceAngle(right, center)
+      || algebraicIncidenceTieBreak(left) - algebraicIncidenceTieBreak(right)
+    ));
+    if (ordered.length > 6) return algebraicNearestRoute(ordered);
+
+    const candidates = algebraicPermutations(ordered);
+    let best = ordered;
+    let bestScore = Infinity;
+    candidates.forEach((candidate) => {
+      const score = algebraicRouteScore(candidate);
+      if (score < bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    });
+    return best;
+  }
+
+  function algebraicNearestRoute(items) {
+    const remaining = items.slice();
+    const route = [remaining.shift()];
+    while (remaining.length) {
+      const last = route[route.length - 1];
+      let bestIndex = 0;
+      let bestDistance = Infinity;
+      remaining.forEach((candidate, index) => {
+        const distance = Math.hypot(candidate.point.x - last.point.x, candidate.point.y - last.point.y);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestIndex = index;
+        }
+      });
+      route.push(remaining.splice(bestIndex, 1)[0]);
+    }
+    return route;
+  }
+
+  function algebraicPermutations(items) {
+    const result = [];
+    const used = new Array(items.length).fill(false);
+    const current = [];
+    const build = () => {
+      if (current.length === items.length) {
+        result.push(current.slice());
+        return;
+      }
+      for (let index = 0; index < items.length; index += 1) {
+        if (used[index]) continue;
+        used[index] = true;
+        current.push(items[index]);
+        build();
+        current.pop();
+        used[index] = false;
+      }
+    };
+    build();
+    return result;
+  }
+
+  function algebraicRouteScore(route) {
+    let length = 0;
+    let turn = 0;
+    let duplicatePenalty = 0;
+    for (let index = 0; index + 1 < route.length; index += 1) {
+      const current = route[index].point;
+      const next = route[index + 1].point;
+      const distance = Math.hypot(next.x - current.x, next.y - current.y);
+      length += distance;
+      if (distance < 1.2) duplicatePenalty += 2000;
+    }
+    for (let index = 1; index + 1 < route.length; index += 1) {
+      const previous = route[index - 1].point;
+      const current = route[index].point;
+      const next = route[index + 1].point;
+      const left = normalizeVector(current.x - previous.x, current.y - previous.y, 1, 0);
+      const right = normalizeVector(next.x - current.x, next.y - current.y, left.x, left.y);
+      turn += Math.acos(clamp((left.x * right.x) + (left.y * right.y), -1, 1));
+    }
+    return length + (turn * 30) + duplicatePenalty;
+  }
+
+  function algebraicRouteTangent(route, index, center) {
+    const current = route[index];
+    if (current.tangent) {
+      return normalizeVector(current.tangent.x, current.tangent.y, 1, 0);
+    }
+    const previous = route[index - 1];
+    const next = route[index + 1];
+    let tangent = null;
+
+    if (previous && next) {
+      tangent = normalizeVector(
+        next.point.x - previous.point.x,
+        next.point.y - previous.point.y,
+        current.point.x - center.x,
+        current.point.y - center.y
+      );
+    } else if (next) {
+      tangent = normalizeVector(
+        next.point.x - current.point.x,
+        next.point.y - current.point.y,
+        current.point.x - center.x,
+        current.point.y - center.y
+      );
+    } else if (previous) {
+      tangent = normalizeVector(
+        current.point.x - previous.point.x,
+        current.point.y - previous.point.y,
+        current.point.x - center.x,
+        current.point.y - center.y
+      );
+    }
+
+    const intended = algebraicIncidenceTangent(current, center, index);
+    if (!tangent || Math.hypot(tangent.x, tangent.y) < 0.001) return intended;
+    if (((tangent.x * intended.x) + (tangent.y * intended.y)) < 0) {
+      tangent = { x: -tangent.x, y: -tangent.y };
+    }
+    return normalizeVector(
+      tangent.x + intended.x * 0.22,
+      tangent.y + intended.y * 0.22,
+      intended.x,
+      intended.y
+    );
+  }
+
+  function algebraicIncidenceTangent(incidence, center, fallbackIndex) {
+    if (incidence.tangent) return normalizeVector(incidence.tangent.x, incidence.tangent.y, 1, 0);
+    const angle = algebraicSpokeAngle(incidence.spoke, Math.atan2(incidence.point.y - center.y, incidence.point.x - center.x) + fallbackIndex * 0.47);
+    return normalizeVector(Math.cos(angle), Math.sin(angle), 1, 0);
+  }
+
+  function algebraicCanvasExitPoint(point, direction, width, height) {
+    const margin = Math.max(width, height) * 0.24;
+    const dx = Math.abs(direction.x) < 0.001 ? 0.001 * Math.sign(direction.x || 1) : direction.x;
+    const dy = Math.abs(direction.y) < 0.001 ? 0.001 * Math.sign(direction.y || 1) : direction.y;
+    const candidates = [
+      ((-margin) - point.x) / dx,
+      ((width + margin) - point.x) / dx,
+      ((-margin) - point.y) / dy,
+      ((height + margin) - point.y) / dy
+    ].filter((value) => value > 0);
+    const distance = candidates.length ? Math.min(...candidates) : Math.max(width, height);
+    return {
+      x: point.x + direction.x * distance,
+      y: point.y + direction.y * distance
+    };
+  }
+
+  function drawAlgebraicCurve(ctx, curve, outline) {
+    if (!curve.pathPoints || curve.pathPoints.length < 2) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = outline ? 'rgba(255, 253, 248, 0.94)' : curve.color;
+    ctx.lineWidth = outline ? 7 : 3;
+    if (!outline) ctx.globalAlpha = 0.92;
+    drawAlgebraicClosedSpline(ctx, curve.pathPoints);
+    ctx.restore();
+  }
+
+  function drawAlgebraicClosedSpline(ctx, points) {
+    const count = points.length;
+    if (count < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let index = 0; index + 1 < count; index += 1) {
+      const current = points[index];
+      const next = points[index + 1];
+      const distance = Math.hypot(next.x - current.x, next.y - current.y);
+      const handle = clamp(distance * 0.34, 18, 92);
+      const currentTangent = current.tangent || normalizeVector(next.x - current.x, next.y - current.y, 1, 0);
+      const nextTangent = next.tangent || currentTangent;
+      ctx.bezierCurveTo(
+        current.x + currentTangent.x * handle,
+        current.y + currentTangent.y * handle,
+        next.x - nextTangent.x * handle,
+        next.y - nextTangent.y * handle,
+        next.x,
+        next.y
+      );
+    }
+    ctx.stroke();
+  }
+
+  function algebraicUnexpectedCrossings(model, width, height) {
+    const segments = [];
+    model.curves.forEach((curve, curveIndex) => {
+      const samples = algebraicCurveSamples(curve.pathPoints, 16);
+      for (let index = 0; index + 1 < samples.length; index += 1) {
+        const start = samples[index];
+        const end = samples[index + 1];
+        if (Math.hypot(end.x - start.x, end.y - start.y) < 0.1) continue;
+        segments.push({
+          curveIndex,
+          segmentIndex: index,
+          start,
+          end
+        });
+      }
+    });
+
+    const expected = (model.intersections || []).concat(model.markedPoints || []);
+    const crossings = [];
+    for (let left = 0; left < segments.length; left += 1) {
+      for (let right = left + 1; right < segments.length; right += 1) {
+        const a = segments[left];
+        const b = segments[right];
+        if (a.curveIndex === b.curveIndex && Math.abs(a.segmentIndex - b.segmentIndex) <= 1) continue;
+        const hit = segmentIntersection(a.start, a.end, b.start, b.end);
+        if (!hit) continue;
+        if (hit.x < 0 || hit.x > width || hit.y < 0 || hit.y > height) continue;
+        if (expected.some((point) => Math.hypot(point.x - hit.x, point.y - hit.y) < 8)) continue;
+        if (crossings.some((point) => Math.hypot(point.x - hit.x, point.y - hit.y) < 9)) continue;
+        const over = algebraicCrossingOverSegment(model, a, b);
+        crossings.push({
+          x: hit.x,
+          y: hit.y,
+          underTangent: normalizeVector((over === a ? b : a).end.x - (over === a ? b : a).start.x, (over === a ? b : a).end.y - (over === a ? b : a).start.y, 1, 0),
+          overTangent: normalizeVector(over.end.x - over.start.x, over.end.y - over.start.y, 1, 0),
+          overColor: model.curves[over.curveIndex] ? model.curves[over.curveIndex].color : '#2563eb'
+        });
+      }
+    }
+    return crossings;
+  }
+
+  function algebraicCrossingOverSegment(model, a, b) {
+    const leftCurve = model.curves[a.curveIndex];
+    const rightCurve = model.curves[b.curveIndex];
+    const leftWeight = (leftCurve ? leftCurve.vertexIndex : 0) + a.segmentIndex;
+    const rightWeight = (rightCurve ? rightCurve.vertexIndex : 0) + b.segmentIndex;
+    return leftWeight % 2 <= rightWeight % 2 ? a : b;
+  }
+
+  function algebraicCurveSamples(points, stepsPerSegment) {
+    const samples = [];
+    for (let index = 0; index + 1 < points.length; index += 1) {
+      const current = points[index];
+      const next = points[index + 1];
+      const distance = Math.hypot(next.x - current.x, next.y - current.y);
+      const handle = clamp(distance * 0.34, 18, 92);
+      const currentTangent = current.tangent || normalizeVector(next.x - current.x, next.y - current.y, 1, 0);
+      const nextTangent = next.tangent || currentTangent;
+      const controlA = {
+        x: current.x + currentTangent.x * handle,
+        y: current.y + currentTangent.y * handle
+      };
+      const controlB = {
+        x: next.x - nextTangent.x * handle,
+        y: next.y - nextTangent.y * handle
+      };
+      for (let step = 0; step <= stepsPerSegment; step += 1) {
+        if (index > 0 && step === 0) continue;
+        samples.push(cubicPoint(current, controlA, controlB, next, step / stepsPerSegment));
+      }
+    }
+    return samples;
+  }
+
+  function segmentIntersection(a, b, c, d) {
+    const r = { x: b.x - a.x, y: b.y - a.y };
+    const s = { x: d.x - c.x, y: d.y - c.y };
+    const denominator = (r.x * s.y) - (r.y * s.x);
+    if (Math.abs(denominator) < 0.0001) return null;
+    const dx = c.x - a.x;
+    const dy = c.y - a.y;
+    const t = ((dx * s.y) - (dy * s.x)) / denominator;
+    const u = ((dx * r.y) - (dy * r.x)) / denominator;
+    if (t <= 0.02 || t >= 0.98 || u <= 0.02 || u >= 0.98) return null;
+    return {
+      x: a.x + r.x * t,
+      y: a.y + r.y * t
+    };
+  }
+
+  function drawAlgebraicUnexpectedCrossings(ctx, model) {
+    if (!model.unexpectedCrossings || !model.unexpectedCrossings.length) return;
+    ctx.save();
+    ctx.strokeStyle = '#fffdf8';
+    ctx.lineWidth = 9;
+    ctx.lineCap = 'round';
+    model.unexpectedCrossings.forEach((crossing) => {
+      const tangent = crossing.underTangent || { x: 1, y: 0 };
+      const gap = 8;
+      ctx.beginPath();
+      ctx.moveTo(crossing.x - tangent.x * gap, crossing.y - tangent.y * gap);
+      ctx.lineTo(crossing.x + tangent.x * gap, crossing.y + tangent.y * gap);
+      ctx.stroke();
+    });
+    ctx.restore();
+
+    ctx.save();
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    model.unexpectedCrossings.forEach((crossing) => {
+      const tangent = crossing.overTangent || { x: 1, y: 0 };
+      const length = 10;
+      ctx.strokeStyle = crossing.overColor || '#2563eb';
+      ctx.beginPath();
+      ctx.moveTo(crossing.x - tangent.x * length, crossing.y - tangent.y * length);
+      ctx.lineTo(crossing.x + tangent.x * length, crossing.y + tangent.y * length);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  function drawAlgebraicCurveLabels(ctx, model) {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '700 11px "JetBrains Mono", monospace';
+    model.curves.forEach((curve) => {
+      const text = String(Math.max(0, curve.decoration || 0));
+      const position = algebraicCurveLabelPosition(curve);
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#fffdf8';
+      ctx.strokeText(text, position.x, position.y);
+      ctx.fillStyle = curve.color;
+      ctx.fillText(text, position.x, position.y);
+    });
+    ctx.restore();
+  }
+
+  function algebraicCurveLabelPosition(curve) {
+    const points = (curve.pathPoints || []).filter((point) => point && point.incidence);
+    if (!points.length) return curve.center;
+    let best = points[0];
+    let bestDistance = -Infinity;
+    points.forEach((point) => {
+      const distance = Math.hypot(point.x - curve.center.x, point.y - curve.center.y);
+      if (distance > bestDistance) {
+        bestDistance = distance;
+        best = point;
+      }
+    });
+    const tangent = best.tangent || { x: 1, y: 0 };
+    const normal = normalizeVector(-tangent.y, tangent.x, 0, 1);
+    const away = normalizeVector(best.x - curve.center.x, best.y - curve.center.y, normal.x, normal.y);
+    const side = ((normal.x * away.x) + (normal.y * away.y)) < 0 ? -1 : 1;
+    return {
+      x: best.x + normal.x * side * 11,
+      y: best.y + normal.y * side * 11
+    };
+  }
+
+  function drawAlgebraicTangentHandles(ctx, model) {
+    const handles = algebraicTangentHandles(model);
+    if (!handles.length) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(17, 17, 17, 0.62)';
+    ctx.fillStyle = '#111111';
+    ctx.lineWidth = 1.4;
+    handles.forEach((handleInfo) => {
+      const mark = handleInfo.mark;
+      const tangent = handleInfo.tangent;
+      const handle = {
+        x: mark.x + tangent.x * 22,
+        y: mark.y + tangent.y * 22
+      };
+      handleInfo.handle = handle;
+      ctx.beginPath();
+      ctx.moveTo(mark.x, mark.y);
+      ctx.lineTo(handle.x, handle.y);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(handle.x, handle.y, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+
+  function algebraicTangentHandles(model) {
+    const handlesByKey = new Map();
+    (model.intersections || []).concat(model.markedPoints || []).forEach((point) => {
+      if (!point.tangentKey || !point.tangent) return;
+      if (!point.kind) return;
+      handlesByKey.set(point.tangentKey, {
+        mark: point,
+        tangentKey: point.tangentKey,
+        tangent: point.tangent,
+        curveIndex: point.vertexIndex
+      });
+    });
+    (model.curves || []).forEach((curve) => {
+      (curve.incidences || []).forEach((incidence) => {
+        if (!incidence.tangentKey || !incidence.point) return;
+        if (handlesByKey.has(incidence.tangentKey)) return;
+        handlesByKey.set(incidence.tangentKey, {
+          mark: incidence.point,
+          tangentKey: incidence.tangentKey,
+          tangent: incidence.tangent || incidence.renderTangent || algebraicIntersectionFallbackTangent(curve, incidence.point),
+          curveIndex: curve.vertexIndex
+        });
+      });
+    });
+    return Array.from(handlesByKey.values());
+  }
+
+  function algebraicIntersectionFallbackTangent(curve, mark) {
+    if (!curve) return { x: 1, y: 0 };
+    return normalizeVector(mark.x - curve.center.x, mark.y - curve.center.y, 1, 0);
+  }
+
+  function drawAlgebraicIntersections(ctx, model) {
+    ctx.save();
+    ctx.lineWidth = 1.5;
+    model.intersections.forEach((mark) => {
+      const radius = mark.kind === 'self' ? 5.4 : 4.6;
+      ctx.fillStyle = '#fffdf8';
+      ctx.strokeStyle = '#2563eb';
+      ctx.beginPath();
+      ctx.arc(mark.x, mark.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      if (mark.kind === 'self') {
+        ctx.beginPath();
+        ctx.moveTo(mark.x - radius * 0.58, mark.y - radius * 0.58);
+        ctx.lineTo(mark.x + radius * 0.58, mark.y + radius * 0.58);
+        ctx.moveTo(mark.x - radius * 0.58, mark.y + radius * 0.58);
+        ctx.lineTo(mark.x + radius * 0.58, mark.y - radius * 0.58);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = '#2563eb';
+        ctx.beginPath();
+        ctx.arc(mark.x, mark.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+    ctx.restore();
+  }
+
+  function drawAlgebraicMarkedPoints(ctx, model, width, height) {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '700 11px "JetBrains Mono", monospace';
+    model.markedPoints.forEach((mark) => {
+      const curve = model.curves.find((item) => item.vertexIndex === mark.vertexIndex);
+      const center = curve ? curve.center : { x: width / 2, y: height / 2 };
+      const direction = normalizeVector(mark.x - center.x, mark.y - center.y, 1, 0);
+      const labelX = clamp(mark.x + direction.x * 14, 12, width - 12);
+      const labelY = clamp(mark.y + direction.y * 14, 12, height - 12);
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.arc(mark.x, mark.y, 4.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#fffdf8';
+      ctx.strokeText(mark.label, labelX, labelY);
+      ctx.fillStyle = '#991b1b';
+      ctx.fillText(mark.label, labelX, labelY);
+    });
+    ctx.restore();
+  }
+
+  function algebraicCurveColor(index) {
+    const colors = [
+      '#2563eb',
+      '#b23a48',
+      '#1f7a8c',
+      '#6a4c93',
+      '#c47f17',
+      '#047857',
+      '#be185d',
+      '#4b5563'
+    ];
+    return colors[index % colors.length];
+  }
+
+  function normalizeAngle(angle) {
+    const full = Math.PI * 2;
+    return ((angle % full) + full) % full;
+  }
+
   function renderRiemannSurfaceVisualization(graphData) {
     if (!state.showRiemannSurfaceCanvas) return;
     const canvas = refs.riemannSurfaceCanvas;
@@ -3792,6 +4995,105 @@
       }
     }
     return null;
+  }
+
+  function handleAlgebraicCurveMouseDown(event) {
+    if (!state.showAlgebraicCurveCanvas || !state.algebraicCurveModel || !refs.algebraicCurveCanvas) return;
+    const hit = algebraicCurvePointerHit(event);
+    if (!hit) return;
+    stopAlgebraicCurveOptimization();
+    state.algebraicCurveDragging = hit;
+    refs.algebraicCurveCanvas.style.cursor = hit.kind === 'tangent' ? 'crosshair' : 'grabbing';
+    event.preventDefault();
+  }
+
+  function handleAlgebraicCurveMouseMove(event) {
+    if (!state.showAlgebraicCurveCanvas || !refs.algebraicCurveCanvas) return;
+    const point = algebraicCanvasPointFromEvent(event);
+    if (!point) return;
+
+    if (state.algebraicCurveDragging) {
+      const drag = state.algebraicCurveDragging;
+      if (drag.kind === 'point') {
+        state.algebraicPointOverrides[drag.id] = {
+          x: point.x,
+          y: point.y
+        };
+      } else if (drag.kind === 'tangent') {
+        const anchor = drag.anchor;
+        state.algebraicTangentOverrides[drag.id] = normalizeVector(point.x - anchor.x, point.y - anchor.y, drag.tangent.x, drag.tangent.y);
+      }
+      if (state.dualGraphData) renderAlgebraicCurveVisualization(state.dualGraphData);
+      return;
+    }
+
+    const hit = algebraicCurvePointerHit(event);
+    refs.algebraicCurveCanvas.style.cursor = hit
+      ? (hit.kind === 'tangent' ? 'crosshair' : 'grab')
+      : 'default';
+  }
+
+  function handleAlgebraicCurveMouseUp() {
+    if (state.algebraicCurveDragging) {
+      state.algebraicCurveDragging = null;
+      if (refs.algebraicCurveCanvas) refs.algebraicCurveCanvas.style.cursor = 'default';
+    }
+  }
+
+  function handleAlgebraicCurveContextMenu(event) {
+    if (!state.showAlgebraicCurveCanvas || !state.showAlgebraicTangentHandles || !state.algebraicCurveModel) return;
+    const hit = algebraicCurvePointerHit(event);
+    if (!hit || hit.kind !== 'tangent') return;
+    event.preventDefault();
+    const current = algebraicTangentWithOverride(hit.id, hit.tangent || { x: 1, y: 0 });
+    state.algebraicTangentOverrides[hit.id] = {
+      x: -current.x,
+      y: -current.y
+    };
+    if (state.dualGraphData) renderAlgebraicCurveVisualization(state.dualGraphData);
+  }
+
+  function algebraicCurvePointerHit(event) {
+    const point = algebraicCanvasPointFromEvent(event);
+    const model = state.algebraicCurveModel;
+    if (!point || !model) return null;
+    if (state.showAlgebraicTangentHandles) {
+      for (const handleInfo of algebraicTangentHandles(model)) {
+        const mark = handleInfo.mark;
+        const handle = {
+          x: mark.x + handleInfo.tangent.x * 22,
+          y: mark.y + handleInfo.tangent.y * 22
+        };
+        if (Math.hypot(point.x - handle.x, point.y - handle.y) <= 8) {
+          return {
+            kind: 'tangent',
+            id: handleInfo.tangentKey,
+            anchor: { x: mark.x, y: mark.y },
+            tangent: handleInfo.tangent
+          };
+        }
+      }
+    }
+    const points = (model.intersections || []).concat(model.markedPoints || []);
+    for (const mark of points) {
+      if (Math.hypot(point.x - mark.x, point.y - mark.y) <= 8) {
+        return {
+          kind: 'point',
+          id: mark.id
+        };
+      }
+    }
+    return null;
+  }
+
+  function algebraicCanvasPointFromEvent(event) {
+    const canvas = refs.algebraicCurveCanvas;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (event.clientX - rect.left) * canvas.width / rect.width,
+      y: (event.clientY - rect.top) * canvas.height / rect.height
+    };
   }
 
   function createSurfaceArm(surface, target, tangentVector = null) {
@@ -6284,6 +7586,7 @@
     syncDualGraphInvariantVisibility();
     if (refs.showDualGraphCanvas) refs.showDualGraphCanvas.checked = state.showDualGraphCanvas;
     if (refs.showRiemannSurfaceCanvas) refs.showRiemannSurfaceCanvas.checked = state.showRiemannSurfaceCanvas;
+    if (refs.showAlgebraicCurveCanvas) refs.showAlgebraicCurveCanvas.checked = state.showAlgebraicCurveCanvas;
     if (refs.showRiemannDebugCircles) refs.showRiemannDebugCircles.checked = state.showRiemannDebugCircles;
     if (refs.showRiemannBezierCurve) refs.showRiemannBezierCurve.checked = state.showRiemannBezierCurve;
     syncDualGraphCanvasVisibility();

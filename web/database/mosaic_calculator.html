@@ -341,12 +341,52 @@
 
     .dual-graph-control-row {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
       gap: 8px 12px;
       margin-top: 8px;
     }
 
     .dual-graph-control-row .opt-row {
+      margin: 0;
+    }
+
+    .slice-mode-row {
+      display: inline-flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .slice-mode-btn {
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--muted);
+      padding: 2px 7px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      cursor: pointer;
+    }
+
+    .slice-mode-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(61,107,79,0.08);
+    }
+
+    .dual-graph-view-inputs {
+      display: none;
+    }
+
+    .algebraic-energy-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+
+    .algebraic-energy-row .opt-row {
       margin: 0;
     }
 
@@ -622,8 +662,14 @@
     <section class="card collapsed" id="dual-graph-card">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Dual Graph Visualization</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
-        <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value" id="dual-graph-status">-</span></div>
-        <div class="slice-info-row">
+        <div class="stat-row">
+          <span class="stat-label">Status</span>
+          <span class="stat-value" id="dual-graph-status">
+            <span id="dual-graph-status-text">-</span>
+            <button class="btn btn-ghost" id="export-dual-graph" type="button" hidden>Export graph</button>
+          </span>
+        </div>
+        <div class="slice-info-row" id="dual-graph-invariants-row" hidden>
           <span class="slice-info-label">invariants</span>
           <span class="slice-info-value">
             <div class="slice-invariant-head"><button class="slice-invariant-toggle" id="dual-graph-invariant-toggle" type="button" title="hide invariants" aria-label="hide invariants" aria-expanded="true">&#9662;</button></div>
@@ -631,12 +677,20 @@
           </span>
         </div>
         <div id="dual-graph-canvas-wrap" style="margin-top: 12px; display: none;">
-          <div style="margin-top: 8px;">
-            <button class="btn btn-ghost" id="export-dual-graph" type="button">Export graph</button>
+          <div class="slice-info-row">
+            <span class="slice-info-label">view</span>
+            <span class="slice-info-value">
+              <span class="slice-mode-row" aria-label="Dual graph visualization views">
+                <button class="slice-mode-btn" data-dual-graph-view="dual" type="button">dual graph</button>
+                <button class="slice-mode-btn" data-dual-graph-view="rs" type="button">RS</button>
+                <button class="slice-mode-btn" data-dual-graph-view="algebraic" type="button">alg curve</button>
+              </span>
+            </span>
           </div>
-          <div class="dual-graph-control-row">
-            <label class="opt-row"><input type="checkbox" id="show-dual-graph-canvas"> Dual graph</label>
-            <label class="opt-row"><input type="checkbox" id="show-riemann-surface-canvas"> RS</label>
+          <div class="dual-graph-view-inputs">
+            <input type="checkbox" id="show-dual-graph-canvas" aria-label="Dual graph">
+            <input type="checkbox" id="show-riemann-surface-canvas" aria-label="RS">
+            <input type="checkbox" id="show-algebraic-curve-canvas" aria-label="Algebraic curve">
           </div>
           <div id="dual-graph-layout-controls" style="margin-top: 8px;">
             <button class="btn" id="compute-layout" type="button">Compute layout</button>
@@ -650,6 +704,16 @@
             <div class="dual-graph-control-row">
               <label class="opt-row"><input type="checkbox" id="show-riemann-debug-circles"> Blue circles</label>
               <label class="opt-row"><input type="checkbox" id="show-riemann-bezier-curve"> Bézier curve</label>
+            </div>
+          </div>
+          <div id="algebraic-curve-view-wrap">
+            <div style="margin-top: 8px;">
+              <button class="btn btn-ghost" id="optimize-algebraic-curve" type="button">Timed optimization</button>
+            </div>
+            <canvas id="algebraic-curve-canvas" width="300" height="280" aria-label="Algebraic curve visualization" style="width: 100%; margin-top: 12px; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: default;"></canvas>
+            <div class="algebraic-energy-row">
+              <label class="opt-row"><input type="checkbox" id="show-algebraic-tangent-handles"> toggles</label>
+              <span class="hint" id="algebraic-energy-status"></span>
             </div>
           </div>
         </div>
