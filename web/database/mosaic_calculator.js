@@ -425,20 +425,20 @@
       });
     }
     if (refs.riemannSurfaceCanvas) {
-      refs.riemannSurfaceCanvas.addEventListener('click', handleRiemannSurfaceClick);
+      refs.riemannSurfaceCanvas.addEventListener('pointerdown', handleRiemannSurfacePointerDown);
     }
     if (refs.algebraicCurveCanvas) {
-      refs.algebraicCurveCanvas.addEventListener('mousedown', handleAlgebraicCurveMouseDown);
-      refs.algebraicCurveCanvas.addEventListener('mousemove', handleAlgebraicCurveMouseMove);
-      refs.algebraicCurveCanvas.addEventListener('mouseup', handleAlgebraicCurveMouseUp);
-      refs.algebraicCurveCanvas.addEventListener('mouseleave', handleAlgebraicCurveMouseUp);
+      refs.algebraicCurveCanvas.addEventListener('pointerdown', handleAlgebraicCurvePointerDown);
+      refs.algebraicCurveCanvas.addEventListener('pointermove', handleAlgebraicCurvePointerMove);
+      refs.algebraicCurveCanvas.addEventListener('pointerup', handleAlgebraicCurvePointerUp);
+      refs.algebraicCurveCanvas.addEventListener('pointercancel', handleAlgebraicCurvePointerUp);
       refs.algebraicCurveCanvas.addEventListener('contextmenu', handleAlgebraicCurveContextMenu);
     }
     if (refs.dualGraphCanvas) {
-      refs.dualGraphCanvas.addEventListener('mousedown', handleDualGraphMouseDown);
-      refs.dualGraphCanvas.addEventListener('mousemove', handleDualGraphMouseMove);
-      refs.dualGraphCanvas.addEventListener('mouseup', handleDualGraphMouseUp);
-      refs.dualGraphCanvas.addEventListener('mouseleave', handleDualGraphMouseUp);
+      refs.dualGraphCanvas.addEventListener('pointerdown', handleDualGraphPointerDown);
+      refs.dualGraphCanvas.addEventListener('pointermove', handleDualGraphPointerMove);
+      refs.dualGraphCanvas.addEventListener('pointerup', handleDualGraphPointerUp);
+      refs.dualGraphCanvas.addEventListener('pointercancel', handleDualGraphPointerUp);
     }
     window.addEventListener('resize', debounce(() => {
       resizeCanvas();
@@ -577,6 +577,7 @@
   function beginPaletteDrag(event, entry) {
     if (!isTilingMode()) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch (_) {}
     selectPaletteTile(entry);
     state.drag = {
       type: 'palette',
@@ -596,6 +597,7 @@
       updateDragPreview(moveEvent.clientX, moveEvent.clientY);
     };
     const onUp = (upEvent) => {
+      try { event.currentTarget.releasePointerCapture(event.pointerId); } catch (_) {}
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
@@ -4972,8 +4974,9 @@
     });
   }
 
-  function handleRiemannSurfaceClick(event) {
+  function handleRiemannSurfacePointerDown(event) {
     if (!state.showRiemannSurfaceCanvas || !state.riemannSurfaceModel || !state.dualGraphData || !refs.riemannSurfaceCanvas) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
     const canvas = refs.riemannSurfaceCanvas;
     const rect = canvas.getBoundingClientRect();
     const x = (event.clientX - rect.left) * canvas.width / rect.width;
@@ -4981,6 +4984,7 @@
     const hit = hitRiemannSurfaceComponent(state.riemannSurfaceModel, x, y);
     state.selectedRiemannVertex = hit;
     if (state.showRiemannSurfaceCanvas) renderRiemannSurfaceVisualization(state.dualGraphData);
+    event.preventDefault();
   }
 
   function hitRiemannSurfaceComponent(model, x, y) {
@@ -4997,17 +5001,19 @@
     return null;
   }
 
-  function handleAlgebraicCurveMouseDown(event) {
+  function handleAlgebraicCurvePointerDown(event) {
     if (!state.showAlgebraicCurveCanvas || !state.algebraicCurveModel || !refs.algebraicCurveCanvas) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
     const hit = algebraicCurvePointerHit(event);
     if (!hit) return;
     stopAlgebraicCurveOptimization();
     state.algebraicCurveDragging = hit;
+    try { refs.algebraicCurveCanvas.setPointerCapture(event.pointerId); } catch (_) {}
     refs.algebraicCurveCanvas.style.cursor = hit.kind === 'tangent' ? 'crosshair' : 'grabbing';
     event.preventDefault();
   }
 
-  function handleAlgebraicCurveMouseMove(event) {
+  function handleAlgebraicCurvePointerMove(event) {
     if (!state.showAlgebraicCurveCanvas || !refs.algebraicCurveCanvas) return;
     const point = algebraicCanvasPointFromEvent(event);
     if (!point) return;
@@ -5024,6 +5030,7 @@
         state.algebraicTangentOverrides[drag.id] = normalizeVector(point.x - anchor.x, point.y - anchor.y, drag.tangent.x, drag.tangent.y);
       }
       if (state.dualGraphData) renderAlgebraicCurveVisualization(state.dualGraphData);
+      event.preventDefault();
       return;
     }
 
@@ -5033,9 +5040,12 @@
       : 'default';
   }
 
-  function handleAlgebraicCurveMouseUp() {
+  function handleAlgebraicCurvePointerUp(event) {
     if (state.algebraicCurveDragging) {
       state.algebraicCurveDragging = null;
+      if (event && event.pointerId != null && refs.algebraicCurveCanvas) {
+        try { refs.algebraicCurveCanvas.releasePointerCapture(event.pointerId); } catch (_) {}
+      }
       if (refs.algebraicCurveCanvas) refs.algebraicCurveCanvas.style.cursor = 'default';
     }
   }
@@ -5977,8 +5987,9 @@
     }
   }
 
-  function handleDualGraphMouseDown(event) {
+  function handleDualGraphPointerDown(event) {
     if (!state.showDualGraphCanvas || !state.dualGraphLayout) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
 
     const canvas = refs.dualGraphCanvas;
     const rect = canvas.getBoundingClientRect();
@@ -5996,13 +6007,15 @@
       if (dx * dx + dy * dy < hitRadius * hitRadius) {
         state.dualGraphDragging = node;
         node.fixed = true;
+        try { canvas.setPointerCapture(event.pointerId); } catch (_) {}
         canvas.style.cursor = 'grabbing';
+        event.preventDefault();
         break;
       }
     }
   }
 
-  function handleDualGraphMouseMove(event) {
+  function handleDualGraphPointerMove(event) {
     if (!state.showDualGraphCanvas || !state.dualGraphLayout) return;
 
     const canvas = refs.dualGraphCanvas;
@@ -6022,6 +6035,7 @@
       if (!state.dualGraphAnimating && state.dualGraphData) {
         renderVisibleDualGraphVisualizations(state.dualGraphData);
       }
+      event.preventDefault();
     } else {
       const hitRadius = 15;
       let hovering = false;
@@ -6038,10 +6052,13 @@
     }
   }
 
-  function handleDualGraphMouseUp() {
+  function handleDualGraphPointerUp(event) {
     if (state.dualGraphDragging) {
       state.dualGraphDragging.fixed = false;
       state.dualGraphDragging = null;
+      if (event && event.pointerId != null && refs.dualGraphCanvas) {
+        try { refs.dualGraphCanvas.releasePointerCapture(event.pointerId); } catch (_) {}
+      }
       if (refs.dualGraphCanvas) {
         refs.dualGraphCanvas.style.cursor = 'default';
       }

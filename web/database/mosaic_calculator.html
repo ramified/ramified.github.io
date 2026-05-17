@@ -448,6 +448,9 @@
       border-radius: 3px;
       background: #fffdf8;
       cursor: grab;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
       padding: 3px;
       transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
     }
@@ -681,7 +684,7 @@
             <span class="slice-info-label">view</span>
             <span class="slice-info-value">
               <span class="slice-mode-row" aria-label="Dual graph visualization views">
-                <button class="slice-mode-btn" data-dual-graph-view="dual" type="button">dual graph</button>
+                <button class="slice-mode-btn" data-dual-graph-view="dual" type="button">graph</button>
                 <button class="slice-mode-btn" data-dual-graph-view="rs" type="button">RS</button>
                 <button class="slice-mode-btn" data-dual-graph-view="algebraic" type="button">alg curve</button>
               </span>
@@ -697,10 +700,10 @@
             <button class="btn btn-ghost" id="reset-layout" type="button">Reset</button>
           </div>
           <div id="dual-graph-view-wrap">
-            <canvas id="dual-graph-canvas" width="300" height="300" style="width: 100%; margin-top: 8px; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: default;"></canvas>
+            <canvas id="dual-graph-canvas" width="300" height="300" style="width: 100%; margin-top: 8px; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: default; touch-action: none;"></canvas>
           </div>
           <div id="riemann-surface-view-wrap">
-            <canvas id="riemann-surface-canvas" width="300" height="280" aria-label="Corresponding Riemann surface" style="width: 100%; margin-top: 12px; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: pointer;"></canvas>
+            <canvas id="riemann-surface-canvas" width="300" height="280" aria-label="Corresponding Riemann surface" style="width: 100%; margin-top: 12px; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: pointer; touch-action: none;"></canvas>
             <div class="dual-graph-control-row">
               <label class="opt-row"><input type="checkbox" id="show-riemann-debug-circles"> Blue circles</label>
               <label class="opt-row"><input type="checkbox" id="show-riemann-bezier-curve"> Bézier curve</label>
@@ -710,7 +713,7 @@
             <div style="margin-top: 8px;">
               <button class="btn btn-ghost" id="optimize-algebraic-curve" type="button">Timed optimization</button>
             </div>
-            <canvas id="algebraic-curve-canvas" width="300" height="280" aria-label="Algebraic curve visualization" style="width: 100%; margin-top: 12px; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: default;"></canvas>
+            <canvas id="algebraic-curve-canvas" width="300" height="280" aria-label="Algebraic curve visualization" style="width: 100%; margin-top: 12px; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: default; touch-action: none;"></canvas>
             <div class="algebraic-energy-row">
               <label class="opt-row"><input type="checkbox" id="show-algebraic-tangent-handles"> toggles</label>
               <span class="hint" id="algebraic-energy-status"></span>
