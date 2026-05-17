@@ -2690,6 +2690,81 @@
     return { isValid: true, vertices, edges, legs };
   }
 
+  function buildDualGraphExport(report, lattice) {
+    const graphData = collectDualGraphData(report);
+    if (!graphData.isValid) {
+      return {
+        isValid: false,
+        status: graphData.reason || 'Not available',
+        vertices: [],
+        edges: [],
+        legs: []
+      };
+    }
+
+    return {
+      isValid: true,
+      status: `${graphData.vertices.length} vertices, ${graphData.edges.length} edges, ${graphData.legs.length} legs`,
+      vertices: graphData.vertices.map((vertex) => ({
+        index: vertex.index,
+        row: vertex.row + 1,
+        col: vertex.col + 1,
+        spokes: normalizeVertexTile(state.tiles[vertex.index]).map((dir) => ({
+          dir,
+          name: lattice.dirNames[dir]
+        })),
+        layout: dualGraphNodeExport(`v${vertex.index}`)
+      })),
+      edges: graphData.edges.map((edge, edgeIndex) => ({
+        index: edgeIndex,
+        from: edge.from,
+        to: edge.to,
+        fromSpoke: {
+          dir: edge.fromSpoke,
+          name: lattice.dirNames[edge.fromSpoke]
+        },
+        toSpoke: {
+          dir: edge.toSpoke,
+          name: lattice.dirNames[edge.toSpoke]
+        },
+        path: exportDualGraphPath(edge.path, lattice),
+        layoutControls: edge.from === edge.to
+          ? [`e${edgeIndex}_0`, `e${edgeIndex}_1`, `e${edgeIndex}_2`].map(dualGraphNodeExport).filter(Boolean)
+          : [dualGraphNodeExport(`e${edgeIndex}`)].filter(Boolean)
+      })),
+      legs: graphData.legs.map((leg, legIndex) => ({
+        index: legIndex,
+        vertex: leg.vertex,
+        spoke: {
+          dir: leg.spoke,
+          name: lattice.dirNames[leg.spoke]
+        },
+        path: exportDualGraphPath(leg.path, lattice),
+        layout: dualGraphNodeExport(`l${legIndex}`)
+      }))
+    };
+  }
+
+  function exportDualGraphPath(path, lattice) {
+    return path.map((step) => ({
+      index: step.index,
+      row: Math.floor(step.index / state.cols) + 1,
+      col: (step.index % state.cols) + 1,
+      dir: step.dir,
+      name: lattice.dirNames[step.dir]
+    }));
+  }
+
+  function dualGraphNodeExport(id) {
+    if (!state.dualGraphLayout || !state.dualGraphLayout.nodeMap) return null;
+    const node = state.dualGraphLayout.nodeMap.get(id);
+    if (!node) return null;
+    return {
+      x: Number(node.x.toFixed(2)),
+      y: Number(node.y.toFixed(2))
+    };
+  }
+
   function renderDualGraphVisualization(graphData) {
     const canvas = refs.dualGraphCanvas;
     if (!canvas) return;
@@ -2751,18 +2826,6 @@
           ctx.quadraticCurveTo(node1.x, node1.y, (node1.x + node2.x) / 2, (node1.y + node2.y) / 2);
           ctx.quadraticCurveTo(node2.x, node2.y, fromNode.x, fromNode.y);
           ctx.stroke();
-
-          // Draw virtual nodes
-          ctx.fillStyle = '#93c5fd';
-          ctx.strokeStyle = '#2563eb';
-          ctx.lineWidth = 1;
-          [node0, node1, node2].forEach((node) => {
-            ctx.beginPath();
-            ctx.arc(node.x, node.y, 5, 0, 2 * Math.PI);
-            ctx.fill();
-            ctx.stroke();
-          });
-          ctx.lineWidth = 2;
         }
       } else {
         // Regular edge: single virtual node
@@ -2773,16 +2836,6 @@
           ctx.moveTo(fromNode.x, fromNode.y);
           ctx.quadraticCurveTo(edgeNode.x, edgeNode.y, toNode.x, toNode.y);
           ctx.stroke();
-
-          // Draw virtual node (small circle)
-          ctx.fillStyle = '#93c5fd';
-          ctx.beginPath();
-          ctx.arc(edgeNode.x, edgeNode.y, 5, 0, 2 * Math.PI);
-          ctx.fill();
-          ctx.strokeStyle = '#2563eb';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          ctx.lineWidth = 2;
         }
       }
     });
@@ -2836,16 +2889,21 @@
 
     const nodes = [];
     const nodeMap = new Map();
+    const vertexPositions = initialDualGraphVertexPositions(graphData, width, height, padding);
 
     // Add vertex nodes
     graphData.vertices.forEach((vertex, i) => {
       const angle = (2 * Math.PI * i) / graphData.vertices.length - Math.PI / 2;
+      const initial = vertexPositions.get(vertex.index) || {
+        x: centerX + radius * Math.cos(angle),
+        y: centerY + radius * Math.sin(angle)
+      };
       const node = {
         id: `v${vertex.index}`,
         type: 'vertex',
         vertexIndex: vertex.index,
-        x: centerX + radius * Math.cos(angle),
-        y: centerY + radius * Math.sin(angle),
+        x: initial.x,
+        y: initial.y,
         vx: 0,
         vy: 0,
         fixed: false
@@ -2869,12 +2927,9 @@
       edgeCountMap.set(key, count + 1);
 
       if (edge.from === edge.to) {
-        // Loop: create 3 virtual nodes to form a circular path
-        const baseAngle = (count * Math.PI * 2 / 3) + Math.PI / 4;
-        const loopRadius = 50;
-
-        for (let j = 0; j < 3; j += 1) {
-          const angle = baseAngle + (j * Math.PI * 2 / 3);
+        // Loop: vertex + 3 handles start as a 60-degree parallelogram.
+        const loopHandles = initialLoopHandlePositions(fromNode, count);
+        loopHandles.forEach((position, j) => {
           const node = {
             id: `e${i}_${j}`,
             type: 'edge',
@@ -2882,15 +2937,15 @@
             loopPart: j,
             from: edge.from,
             to: edge.to,
-            x: fromNode.x + Math.cos(angle) * loopRadius,
-            y: fromNode.y + Math.sin(angle) * loopRadius,
+            x: position.x,
+            y: position.y,
             vx: 0,
             vy: 0,
             fixed: false
           };
           nodes.push(node);
           nodeMap.set(node.id, node);
-        }
+        });
       } else {
         // Regular edge: single virtual node with offset for multiples
         const midX = (fromNode.x + toNode.x) / 2;
@@ -2947,6 +3002,67 @@
     });
 
     return { nodes, nodeMap, width, height };
+  }
+
+  function initialLoopHandlePositions(vertexNode, loopIndex) {
+    const sideLength = 46;
+    const baseAngle = (loopIndex * Math.PI * 2 / 3) + Math.PI / 6;
+    const nextAngle = baseAngle + (Math.PI / 3);
+    const a = {
+      x: Math.cos(baseAngle) * sideLength,
+      y: Math.sin(baseAngle) * sideLength
+    };
+    const b = {
+      x: Math.cos(nextAngle) * sideLength,
+      y: Math.sin(nextAngle) * sideLength
+    };
+
+    return [
+      { x: vertexNode.x + a.x, y: vertexNode.y + a.y },
+      { x: vertexNode.x + a.x + b.x, y: vertexNode.y + a.y + b.y },
+      { x: vertexNode.x + b.x, y: vertexNode.y + b.y }
+    ];
+  }
+
+  function initialDualGraphVertexPositions(graphData, width, height, padding) {
+    const positions = new Map();
+    if (!geometry || !Array.isArray(geometry.cells) || !graphData.vertices.length) return positions;
+
+    const samples = graphData.vertices
+      .map((vertex) => {
+        const cell = geometry.cells[vertex.index];
+        return cell ? { index: vertex.index, x: cell.x, y: cell.y } : null;
+      })
+      .filter(Boolean);
+    if (!samples.length) return positions;
+
+    if (samples.length === 1) {
+      positions.set(samples[0].index, { x: width / 2, y: height / 2 });
+      return positions;
+    }
+
+    const minX = Math.min(...samples.map((sample) => sample.x));
+    const maxX = Math.max(...samples.map((sample) => sample.x));
+    const minY = Math.min(...samples.map((sample) => sample.y));
+    const maxY = Math.max(...samples.map((sample) => sample.y));
+    const sourceWidth = Math.max(maxX - minX, 1);
+    const sourceHeight = Math.max(maxY - minY, 1);
+    const targetWidth = Math.max(width - (padding * 2), 1);
+    const targetHeight = Math.max(height - (padding * 2), 1);
+    const scale = Math.min(targetWidth / sourceWidth, targetHeight / sourceHeight);
+    const sourceCenterX = (minX + maxX) / 2;
+    const sourceCenterY = (minY + maxY) / 2;
+    const targetCenterX = width / 2;
+    const targetCenterY = height / 2;
+
+    samples.forEach((sample) => {
+      positions.set(sample.index, {
+        x: clamp(targetCenterX + ((sample.x - sourceCenterX) * scale), padding, width - padding),
+        y: clamp(targetCenterY + ((sample.y - sourceCenterY) * scale), padding, height - padding)
+      });
+    });
+
+    return positions;
   }
 
   function runForceSimulation(layout, graphData, iterations = 100) {
@@ -3093,6 +3209,7 @@
     // Find node under cursor
     const hitRadius = 15;
     for (const node of state.dualGraphLayout.nodes) {
+      if (!isVisibleDualGraphNode(node)) continue;
       const dx = node.x - x;
       const dy = node.y - y;
       if (dx * dx + dy * dy < hitRadius * hitRadius) {
@@ -3128,6 +3245,7 @@
       const hitRadius = 15;
       let hovering = false;
       for (const node of state.dualGraphLayout.nodes) {
+        if (!isVisibleDualGraphNode(node)) continue;
         const dx = node.x - x;
         const dy = node.y - y;
         if (dx * dx + dy * dy < hitRadius * hitRadius) {
@@ -3147,6 +3265,10 @@
         refs.dualGraphCanvas.style.cursor = 'default';
       }
     }
+  }
+
+  function isVisibleDualGraphNode(node) {
+    return !!node && node.type !== 'edge';
   }
 
   function normalizeKnotCandidates(result) {
@@ -4593,7 +4715,8 @@
           arcs: normalizeTile(tile).map((pair) => pair.slice(0, 2).map((dir) => lattice.dirNames[dir])),
           vertexEdges: normalizeVertexTile(tile).map((dir) => lattice.dirNames[dir])
         };
-      })
+      }),
+      dualGraph: isDualGraph() ? buildDualGraphExport(report, lattice) : null
     };
     refs.exportOut.value = JSON.stringify(payload, null, 2);
   }
