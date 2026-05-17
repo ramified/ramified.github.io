@@ -507,6 +507,7 @@
           <div style="margin-top: 8px;">
             <button class="btn" id="compute-layout" type="button">Compute layout</button>
             <button class="btn btn-ghost" id="reset-layout" type="button">Reset</button>
+            <button class="btn btn-ghost" id="export-dual-graph" type="button">Export graph</button>
           </div>
         </div>
         <div id="dual-graph-placeholder" style="margin-top: 8px; color: var(--muted); font-size: 0.86rem;">
@@ -515,7 +516,7 @@
       </div>
     </section>
 
-    <section class="card collapsed">
+    <section class="card collapsed" id="export-card">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Display Options</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <label class="opt-row"><input type="checkbox" id="show-errors" checked> Show open ends</label>

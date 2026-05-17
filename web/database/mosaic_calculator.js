@@ -147,8 +147,10 @@
     refs.dualGraphPlaceholder = document.getElementById('dual-graph-placeholder');
     refs.computeLayout = document.getElementById('compute-layout');
     refs.resetLayout = document.getElementById('reset-layout');
+    refs.exportDualGraph = document.getElementById('export-dual-graph');
     refs.tilePalette = document.getElementById('tile-palette');
     refs.importInput = document.getElementById('import-input');
+    refs.exportCard = document.getElementById('export-card');
     refs.exportOut = document.getElementById('export-out');
     refs.inputPanels = Array.from(document.querySelectorAll('[data-input-panel]'));
 
@@ -256,6 +258,9 @@
         if (refs.computeLayout) refs.computeLayout.textContent = 'Compute layout';
         updateReport(false);
       });
+    }
+    if (refs.exportDualGraph) {
+      refs.exportDualGraph.addEventListener('click', exportDualGraphFromVisualization);
     }
     if (refs.dualGraphCanvas) {
       refs.dualGraphCanvas.addEventListener('mousedown', handleDualGraphMouseDown);
@@ -2643,17 +2648,25 @@
           const opposite = lattice.opposite[current.dir];
 
           if (isVertexTileValue(state.tiles[nextIndex])) {
-            // Found another vertex - this is an edge
-            const endSpokeKey = `${nextIndex}:${opposite}`;
-            markedSpokes.add(endSpokeKey); // Mark the other end too
+            // Only a matching spoke on the target vertex closes a dual graph edge.
+            if (vertexTileHasSpoke(nextIndex, opposite)) {
+              const endSpokeKey = `${nextIndex}:${opposite}`;
+              markedSpokes.add(endSpokeKey); // Mark the other end too
 
-            edges.push({
-              from: vertex.index,
-              to: nextIndex,
-              fromSpoke: startDir,
-              toSpoke: opposite,
-              path: path.slice()
-            });
+              edges.push({
+                from: vertex.index,
+                to: nextIndex,
+                fromSpoke: startDir,
+                toSpoke: opposite,
+                path: path.slice()
+              });
+            } else {
+              legs.push({
+                vertex: vertex.index,
+                spoke: startDir,
+                path: path.concat({ index: nextIndex, dir: opposite })
+              });
+            }
             break;
           }
 
@@ -2741,6 +2754,33 @@
         },
         path: exportDualGraphPath(leg.path, lattice),
         layout: dualGraphNodeExport(`l${legIndex}`)
+      }))
+    };
+  }
+
+  function buildDualGraphOnlyExport(report) {
+    const graphData = collectDualGraphData(report);
+    if (!graphData.isValid) {
+      return {
+        vertices: [],
+        edges: [],
+        halfEdges: []
+      };
+    }
+
+    const vertexIds = new Map();
+    graphData.vertices.forEach((vertex, vertexIndex) => {
+      vertexIds.set(vertex.index, vertexIndex + 1);
+    });
+
+    return {
+      vertices: graphData.vertices.map((_, vertexIndex) => vertexIndex + 1),
+      edges: graphData.edges.map((edge) => ({
+        from: vertexIds.get(edge.from),
+        to: vertexIds.get(edge.to)
+      })),
+      halfEdges: graphData.legs.map((leg) => ({
+        vertex: vertexIds.get(leg.vertex)
       }))
     };
   }
@@ -4722,7 +4762,7 @@
   }
 
   function copyExport() {
-    refreshExport();
+    if (!refs.exportOut.value) refreshExport();
     const text = refs.exportOut.value;
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(text)
@@ -4730,6 +4770,22 @@
         .catch(fallbackCopyExport);
     } else {
       fallbackCopyExport();
+    }
+  }
+
+  function exportDualGraphFromVisualization() {
+    const report = analyze();
+    const graphData = collectDualGraphData(report);
+    refs.exportOut.value = JSON.stringify(buildDualGraphOnlyExport(report), null, 2);
+    if (refs.exportCard) refs.exportCard.classList.remove('collapsed');
+    if (refs.exportOut) {
+      refs.exportOut.focus();
+      refs.exportOut.select();
+    }
+    if (refs.statusLine) {
+      refs.statusLine.textContent = graphData.isValid
+        ? 'dual graph export ready'
+        : (graphData.reason || 'dual graph export unavailable');
     }
   }
 
