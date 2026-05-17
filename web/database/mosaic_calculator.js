@@ -426,12 +426,21 @@
     }
     if (refs.riemannSurfaceCanvas) {
       refs.riemannSurfaceCanvas.addEventListener('pointerdown', handleRiemannSurfacePointerDown);
+      bindTouchFallback(refs.riemannSurfaceCanvas, {
+        touchstart: handleRiemannSurfacePointerDown
+      });
     }
     if (refs.algebraicCurveCanvas) {
       refs.algebraicCurveCanvas.addEventListener('pointerdown', handleAlgebraicCurvePointerDown);
       refs.algebraicCurveCanvas.addEventListener('pointermove', handleAlgebraicCurvePointerMove);
       refs.algebraicCurveCanvas.addEventListener('pointerup', handleAlgebraicCurvePointerUp);
       refs.algebraicCurveCanvas.addEventListener('pointercancel', handleAlgebraicCurvePointerUp);
+      bindTouchFallback(refs.algebraicCurveCanvas, {
+        touchstart: handleAlgebraicCurvePointerDown,
+        touchmove: handleAlgebraicCurvePointerMove,
+        touchend: handleAlgebraicCurvePointerUp,
+        touchcancel: handleAlgebraicCurvePointerUp
+      });
       refs.algebraicCurveCanvas.addEventListener('contextmenu', handleAlgebraicCurveContextMenu);
     }
     if (refs.dualGraphCanvas) {
@@ -439,6 +448,12 @@
       refs.dualGraphCanvas.addEventListener('pointermove', handleDualGraphPointerMove);
       refs.dualGraphCanvas.addEventListener('pointerup', handleDualGraphPointerUp);
       refs.dualGraphCanvas.addEventListener('pointercancel', handleDualGraphPointerUp);
+      bindTouchFallback(refs.dualGraphCanvas, {
+        touchstart: handleDualGraphPointerDown,
+        touchmove: handleDualGraphPointerMove,
+        touchend: handleDualGraphPointerUp,
+        touchcancel: handleDualGraphPointerUp
+      });
     }
     window.addEventListener('resize', debounce(() => {
       resizeCanvas();
@@ -821,6 +836,68 @@
         draw(analyze());
       }
     });
+  }
+
+  function bindTouchFallback(element, handlers) {
+    if (!element || !handlers) return;
+    const useFallback = !window.PointerEvent || isCoarsePrimaryPointer();
+    if (!useFallback) return;
+    const activeTouches = new Map();
+
+    const eventOptions = { passive: false };
+    Object.keys(handlers).forEach((type) => {
+      const handler = handlers[type];
+      if (typeof handler !== 'function') return;
+      element.addEventListener(type, (event) => {
+        const touches = touchesForFallbackEvent(event, activeTouches);
+        if (!touches.length) return;
+        event.preventDefault();
+        touches.forEach((touch) => {
+          if (type === 'touchstart') activeTouches.set(touch.identifier, true);
+          const pointerEvent = pointerEventFromTouch(event, touch, type, element);
+          handler(pointerEvent);
+          if (type === 'touchend' || type === 'touchcancel') activeTouches.delete(touch.identifier);
+        });
+      }, eventOptions);
+    });
+  }
+
+  function touchesForFallbackEvent(event, activeTouches) {
+    const changed = Array.from(event.changedTouches || []);
+    if (event.type === 'touchstart') return changed.slice(0, 1);
+    const active = changed.filter((touch) => activeTouches.has(touch.identifier));
+    if (active.length) return active.slice(0, 1);
+    return changed.slice(0, 1);
+  }
+
+  function pointerEventFromTouch(sourceEvent, touch, type, element) {
+    return {
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      pageX: touch.pageX,
+      pageY: touch.pageY,
+      screenX: touch.screenX,
+      screenY: touch.screenY,
+      button: 0,
+      buttons: type === 'touchend' || type === 'touchcancel' ? 0 : 1,
+      pointerId: touch.identifier,
+      pointerType: 'touch',
+      currentTarget: element,
+      target: sourceEvent.target,
+      preventDefault: () => sourceEvent.preventDefault(),
+      stopPropagation: () => sourceEvent.stopPropagation()
+    };
+  }
+
+  function isCoarsePrimaryPointer() {
+    return typeof window.matchMedia === 'function'
+      && window.matchMedia('(pointer: coarse)').matches;
+  }
+
+  function pointerHitRadius(event, mouseRadius, touchRadius) {
+    return event && event.pointerType && event.pointerType !== 'mouse'
+      ? touchRadius
+      : mouseRadius;
   }
 
   function generateFromControls() {
@@ -4981,19 +5058,19 @@
     const rect = canvas.getBoundingClientRect();
     const x = (event.clientX - rect.left) * canvas.width / rect.width;
     const y = (event.clientY - rect.top) * canvas.height / rect.height;
-    const hit = hitRiemannSurfaceComponent(state.riemannSurfaceModel, x, y);
+    const hit = hitRiemannSurfaceComponent(state.riemannSurfaceModel, x, y, pointerHitRadius(event, 4, 18));
     state.selectedRiemannVertex = hit;
     if (state.showRiemannSurfaceCanvas) renderRiemannSurfaceVisualization(state.dualGraphData);
     event.preventDefault();
   }
 
-  function hitRiemannSurfaceComponent(model, x, y) {
+  function hitRiemannSurfaceComponent(model, x, y, hitPadding = 4) {
     const surfaces = orderedRiemannSurfaces(model).slice().reverse();
     for (const surface of surfaces) {
-      const bodyHit = Math.hypot(x - surface.x, y - surface.y) <= surfaceCoreRadius(surface);
+      const bodyHit = Math.hypot(x - surface.x, y - surface.y) <= surfaceCoreRadius(surface) + Math.max(0, hitPadding - 4);
       if (bodyHit) return surface.vertexIndex;
       for (const arm of surface.arms) {
-        if ((arm.nodes || []).some((node) => Math.hypot(x - node.x, y - node.y) <= node.radius + 4)) {
+        if ((arm.nodes || []).some((node) => Math.hypot(x - node.x, y - node.y) <= node.radius + hitPadding)) {
           return surface.vertexIndex;
         }
       }
@@ -5074,7 +5151,7 @@
           x: mark.x + handleInfo.tangent.x * 22,
           y: mark.y + handleInfo.tangent.y * 22
         };
-        if (Math.hypot(point.x - handle.x, point.y - handle.y) <= 8) {
+        if (Math.hypot(point.x - handle.x, point.y - handle.y) <= pointerHitRadius(event, 8, 24)) {
           return {
             kind: 'tangent',
             id: handleInfo.tangentKey,
@@ -5086,7 +5163,7 @@
     }
     const points = (model.intersections || []).concat(model.markedPoints || []);
     for (const mark of points) {
-      if (Math.hypot(point.x - mark.x, point.y - mark.y) <= 8) {
+      if (Math.hypot(point.x - mark.x, point.y - mark.y) <= pointerHitRadius(event, 8, 22)) {
         return {
           kind: 'point',
           id: mark.id
@@ -5999,7 +6076,7 @@
     const y = (event.clientY - rect.top) * scaleY;
 
     // Find node under cursor
-    const hitRadius = 15;
+    const hitRadius = pointerHitRadius(event, 15, 30);
     for (const node of state.dualGraphLayout.nodes) {
       if (!isVisibleDualGraphNode(node)) continue;
       const dx = node.x - x;
@@ -6037,7 +6114,7 @@
       }
       event.preventDefault();
     } else {
-      const hitRadius = 15;
+      const hitRadius = pointerHitRadius(event, 15, 30);
       let hovering = false;
       for (const node of state.dualGraphLayout.nodes) {
         if (!isVisibleDualGraphNode(node)) continue;
