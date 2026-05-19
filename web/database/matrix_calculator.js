@@ -846,6 +846,16 @@
     return out;
   }
 
+  function adjoint(A) {
+    const rows = A.length;
+    const cols = A[0]?.length || 0;
+    const out = zeros(cols, rows);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) out[c][r] = A[r][c].conj();
+    }
+    return out;
+  }
+
   function trace(A) {
     let sum = new Complex(0, 0);
     for (let i = 0; i < A.length; i++) sum = sum.add(A[i][i]);
@@ -1290,6 +1300,200 @@
       for (let r = 0; r < m; r++) Q[r][c] = Qcols[c][r].clone();
     }
     return { Q, R, dependent };
+  }
+
+  function svdDecomposition(A) {
+    const m = A.length;
+    const n = A[0]?.length || 0;
+    const gram = matrixMultiply(adjoint(A), A);
+    const eig = hermitianEigenDecomposition(gram);
+    const singularValues = eig.map((item) => Math.sqrt(Math.max(0, item.value)));
+    const Vcols = eig.map((item) => item.vector);
+    const Ucols = [];
+    const rankTol = svdTolerance(singularValues);
+
+    for (let i = 0; i < singularValues.length; i++) {
+      if (singularValues[i] > rankTol) {
+        Ucols.push(matrixVectorMultiply(A, Vcols[i]).map((z) => z.scale(1 / singularValues[i])));
+      }
+    }
+    completeOrthonormalBasis(Ucols, m);
+
+    const U = matrixFromColumns(Ucols.slice(0, m));
+    const Sigma = zeros(m, n);
+    for (let i = 0; i < Math.min(m, n); i++) Sigma[i][i] = new Complex(singularValues[i] || 0, 0);
+    const V = matrixFromColumns(Vcols);
+    return { U, Sigma, V, singularValues, rank: singularValues.filter((s) => s > rankTol).length };
+  }
+
+  function polarDecomposition(A) {
+    const svd = svdDecomposition(A);
+    const Vstar = adjoint(svd.V);
+    const U = matrixMultiply(svd.U, matrixMultiply(rectangularPolarFactor(svd.singularValues, svd.U[0]?.length || 0, svd.V[0]?.length || 0), Vstar));
+    const P = matrixMultiply(svd.V, matrixMultiply(squareDiagonal(svd.singularValues), Vstar));
+    return { U, P, singularValues: svd.singularValues, rank: svd.rank };
+  }
+
+  function hermitianEigenDecomposition(H) {
+    const n = H.length;
+    const embedded = hermitianToRealSymmetric(H);
+    const raw = jacobiSymmetric(embedded).sort((a, b) => b.value - a.value);
+    const eigenpairs = [];
+    const rankTol = 1e-7;
+    for (const item of raw) {
+      let candidate = complexFromRealPairVector(item.vector, n);
+      candidate = orthogonalizeAgainst(candidate, eigenpairs.map((pair) => pair.vector));
+      const norm = vectorNorm(candidate);
+      if (norm <= rankTol) continue;
+      candidate = candidate.map((z) => z.scale(1 / norm));
+      const before = rankOfColumns(eigenpairs.map((pair) => pair.vector), rankTol);
+      const after = rankOfColumns(eigenpairs.map((pair) => pair.vector).concat([candidate]), rankTol);
+      if (after > before) eigenpairs.push({ value: item.value, vector: candidate });
+      if (eigenpairs.length === n) break;
+    }
+    if (eigenpairs.length < n) completeHermitianEigenbasis(H, eigenpairs);
+    return eigenpairs.slice(0, n).sort((a, b) => b.value - a.value);
+  }
+
+  function completeHermitianEigenbasis(H, eigenpairs) {
+    const n = H.length;
+    const existing = eigenpairs.map((pair) => pair.vector);
+    completeOrthonormalBasis(existing, n);
+    while (eigenpairs.length < n) {
+      const vector = existing[eigenpairs.length];
+      const Hv = matrixVectorMultiply(H, vector);
+      const value = dotConj(vector, Hv).re;
+      eigenpairs.push({ value, vector });
+    }
+  }
+
+  function hermitianToRealSymmetric(H) {
+    const n = H.length;
+    const out = Array.from({ length: 2 * n }, () => Array.from({ length: 2 * n }, () => 0));
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        const z = H[r][c];
+        out[r][c] = z.re;
+        out[r][c + n] = -z.im;
+        out[r + n][c] = z.im;
+        out[r + n][c + n] = z.re;
+      }
+    }
+    return out;
+  }
+
+  function jacobiSymmetric(A) {
+    const n = A.length;
+    const M = A.map((row) => row.slice());
+    const V = Array.from({ length: n }, (_, r) => Array.from({ length: n }, (_, c) => r === c ? 1 : 0));
+    const maxIter = Math.max(80, n * n * 40);
+    for (let iter = 0; iter < maxIter; iter++) {
+      let p = 0;
+      let q = 1;
+      let max = 0;
+      for (let r = 0; r < n; r++) {
+        for (let c = r + 1; c < n; c++) {
+          const value = Math.abs(M[r][c]);
+          if (value > max) {
+            max = value;
+            p = r;
+            q = c;
+          }
+        }
+      }
+      if (max <= 1e-12) break;
+      const tau = (M[q][q] - M[p][p]) / (2 * M[p][q]);
+      const t = Math.sign(tau || 1) / (Math.abs(tau) + Math.sqrt(1 + tau * tau));
+      const cs = 1 / Math.sqrt(1 + t * t);
+      const sn = t * cs;
+      rotateJacobi(M, V, p, q, cs, sn);
+    }
+    return Array.from({ length: n }, (_, i) => ({
+      value: M[i][i],
+      vector: V.map((row) => row[i])
+    }));
+  }
+
+  function rotateJacobi(M, V, p, q, cs, sn) {
+    const n = M.length;
+    const app = M[p][p];
+    const aqq = M[q][q];
+    const apq = M[p][q];
+    M[p][p] = cs * cs * app - 2 * cs * sn * apq + sn * sn * aqq;
+    M[q][q] = sn * sn * app + 2 * cs * sn * apq + cs * cs * aqq;
+    M[p][q] = 0;
+    M[q][p] = 0;
+    for (let k = 0; k < n; k++) {
+      if (k === p || k === q) continue;
+      const mkp = M[k][p];
+      const mkq = M[k][q];
+      M[k][p] = cs * mkp - sn * mkq;
+      M[p][k] = M[k][p];
+      M[k][q] = sn * mkp + cs * mkq;
+      M[q][k] = M[k][q];
+    }
+    for (let k = 0; k < n; k++) {
+      const vkp = V[k][p];
+      const vkq = V[k][q];
+      V[k][p] = cs * vkp - sn * vkq;
+      V[k][q] = sn * vkp + cs * vkq;
+    }
+  }
+
+  function complexFromRealPairVector(v, n) {
+    return normalizeVector(Array.from({ length: n }, (_, i) => new Complex(v[i], v[i + n])));
+  }
+
+  function svdTolerance(singularValues) {
+    const scale = singularValues[0] || 1;
+    return Math.max(1e-10, scale * 1e-9);
+  }
+
+  function completeOrthonormalBasis(cols, size) {
+    const candidates = [];
+    for (let i = 0; i < size; i++) {
+      const e = Array.from({ length: size }, (_, r) => new Complex(r === i ? 1 : 0, 0));
+      candidates.push(e);
+    }
+    for (let i = 0; i < size; i++) {
+      const e = Array.from({ length: size }, (_, r) => new Complex(0, r === i ? 1 : 0));
+      candidates.push(e);
+    }
+    for (const candidate of candidates) {
+      if (cols.length >= size) break;
+      const v = orthogonalizeAgainst(candidate, cols);
+      const norm = vectorNorm(v);
+      if (norm > 1e-9) cols.push(v.map((z) => z.scale(1 / norm)));
+    }
+    while (cols.length < size) {
+      const e = Array.from({ length: size }, (_, r) => new Complex(r === cols.length ? 1 : 0, 0));
+      cols.push(e);
+    }
+    return cols;
+  }
+
+  function orthogonalizeAgainst(vector, basis) {
+    let v = vector.map((z) => z.clone());
+    for (const q of basis) {
+      const coeff = dotConj(q, v);
+      v = v.map((z, i) => z.sub(q[i].mul(coeff)));
+    }
+    return v;
+  }
+
+  function rectangularPolarFactor(values, rows, cols) {
+    const out = zeros(rows, cols);
+    const tol = svdTolerance(values);
+    for (let i = 0; i < Math.min(rows, cols, values.length); i++) {
+      out[i][i] = new Complex(values[i] > tol ? 1 : 0, 0);
+    }
+    return out;
+  }
+
+  function squareDiagonal(values) {
+    const out = zeros(values.length, values.length);
+    for (let i = 0; i < values.length; i++) out[i][i] = new Complex(values[i] || 0, 0);
+    return out;
   }
 
   function column(A, c) {
@@ -2288,6 +2492,29 @@
           formula: 'A = Q R',
           blocks: [{ title: 'Q', matrix: result.Q }, { title: 'R', matrix: result.R }],
           note
+        };
+      } else if (op === 'svd') {
+        const result = svdDecomposition(A);
+        payload = {
+          title: 'SVD Decomposition',
+          formula: 'A = U\\Sigma V^*',
+          blocks: [
+            { title: 'U', matrix: result.U },
+            { title: '\\Sigma', matrix: result.Sigma },
+            { title: 'V', matrix: result.V }
+          ],
+          note: `Numerical singular value decomposition with rank ${result.rank}.`
+        };
+      } else if (op === 'polar') {
+        const result = polarDecomposition(A);
+        payload = {
+          title: 'Polar Decomposition',
+          formula: 'A = U P',
+          blocks: [
+            { title: 'U', matrix: result.U },
+            { title: 'P', matrix: result.P }
+          ],
+          note: `Numerical right polar decomposition; P is positive semidefinite and rank is ${result.rank}.`
         };
       }
       if (payload && symbolic && !canComputeSymbolically(op)) {
