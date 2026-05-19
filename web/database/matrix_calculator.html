@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Matrix Calculator</title>
+  <link rel="stylesheet" href="young_diagrams.css">
+  <style>
+    .matrix-layout {
+      max-width: 1240px;
+      grid-template-columns: minmax(0, 1fr) 360px;
+    }
+
+    .matrix-editor {
+      padding: 18px;
+      overflow: auto;
+      scrollbar-gutter: stable;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 420px;
+    }
+
+    .matrix-grid {
+      display: grid;
+      gap: 7px;
+      min-width: max-content;
+      align-items: stretch;
+      justify-content: center;
+    }
+
+    .matrix-cell {
+      width: 88px;
+      min-width: 76px;
+      height: 40px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: #fffdf8;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      text-align: center;
+      padding: 6px 7px;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    }
+
+    .matrix-cell:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+      background: #ffffff;
+    }
+
+    .matrix-cell.invalid {
+      border-color: var(--accent2);
+      box-shadow: inset 0 0 0 1px rgba(139,58,42,0.2);
+      background: #fff7f3;
+    }
+
+    .matrix-underbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+
+    .matrix-underbar-left,
+    .matrix-underbar-right {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .matrix-toolbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding-left: 12px;
+      border-left: 1px solid var(--border);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .matrix-toolbar-group select,
+    .matrix-select,
+    .matrix-number-input,
+    .matrix-textarea {
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+    }
+
+    .matrix-toolbar-group select,
+    .matrix-select {
+      padding: 4px 7px;
+      min-width: 118px;
+    }
+
+    .matrix-number-input {
+      width: 64px;
+      padding: 4px 7px;
+      text-align: center;
+    }
+
+    .matrix-textarea {
+      width: 100%;
+      min-height: 100px;
+      line-height: 1.35;
+      padding: 7px 8px;
+      resize: vertical;
+    }
+
+    .matrix-toolbar-group select:focus,
+    .matrix-select:focus,
+    .matrix-number-input:focus,
+    .matrix-textarea:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .matrix-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 21px;
+      padding: 1px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text);
+      background: rgba(255,255,255,0.55);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      white-space: nowrap;
+    }
+
+    .matrix-inline-row {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .matrix-inline-row[hidden] {
+      display: none !important;
+    }
+
+    .matrix-inline-row .input-label {
+      margin-bottom: 0;
+      white-space: nowrap;
+    }
+
+    .matrix-preset-buttons {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .matrix-preset-buttons .btn {
+      min-width: 42px;
+      padding: 4px 9px;
+    }
+
+    .matrix-action-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .matrix-result-scroll {
+      max-height: min(440px, 56vh);
+      min-height: 120px;
+      overflow: auto;
+      padding: 2px 8px 8px 0;
+      scrollbar-gutter: stable;
+      scrollbar-color: color-mix(in srgb, var(--accent) 68%, var(--surface)) var(--surface);
+      scrollbar-width: thin;
+    }
+
+    .matrix-result-block {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .matrix-result-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .matrix-table {
+      border-collapse: collapse;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      line-height: 1.25;
+      background: #fffdf8;
+    }
+
+    .matrix-table td {
+      min-width: 58px;
+      max-width: 150px;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      text-align: right;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .matrix-output-note {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      line-height: 1.45;
+      color: var(--muted);
+      margin-top: 7px;
+      overflow-wrap: anywhere;
+    }
+
+    #export-out {
+      min-height: 138px;
+    }
+
+    .matrix-dialog-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 9000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(26,22,18,0.34);
+    }
+
+    .matrix-dialog-backdrop[hidden] {
+      display: none !important;
+    }
+
+    .matrix-dialog {
+      width: min(620px, calc(100vw - 36px));
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.24);
+      padding: 14px 16px 16px;
+    }
+
+    .matrix-dialog-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .matrix-dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    @media (max-width: 980px) {
+      .matrix-layout { grid-template-columns: 1fr; }
+      .matrix-cell { width: 82px; }
+    }
+
+    @media (max-width: 560px) {
+      .matrix-inline-row {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+      .matrix-toolbar-group,
+      .canvas-size-inline {
+        padding-left: 0;
+        border-left: none;
+      }
+      .matrix-underbar {
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Matrix Calculator</h1>
+  <span><a href="young_diagrams.html">Young Diagram Calculator</a> &middot; <a href="double_young_diagram.html">Young Diagram<sup>2</sup> Calculator</a> &middot; <a href="mosaic_calculator.html">Mosaic Calculator</a> &middot; linear algebra workspace</span>
+</header>
+
+<main class="layout matrix-layout">
+  <section class="canvas-panel" aria-label="Matrix canvas panel">
+    <header class="panel-title">
+      <span class="panel-title-text">Matrix Canvas</span>
+      <div class="canvas-toolbar" aria-label="Matrix controls">
+        <span class="shape-indicator" title="Matrix status"><span id="status-badge" class="matrix-badge">5 x 5</span></span>
+        <span class="matrix-toolbar-group" aria-label="Matrix data type">
+          <label title="Allowed data type">
+            <span>type</span>
+            <select id="data-type-select">
+              <option value="complex">Complex</option>
+              <option value="real">Real</option>
+              <option value="rational">Rational</option>
+              <option value="integer">Integer</option>
+            </select>
+          </label>
+        </span>
+        <span class="canvas-size-inline" aria-label="Matrix size">
+          <label title="Matrix rows">
+            <span>rows</span>
+            <input type="number" id="matrix-rows" min="1" max="8" value="5">
+          </label>
+          <span class="dimension-times">&times;</span>
+          <label title="Matrix columns">
+            <span>cols</span>
+            <input type="number" id="matrix-cols" min="1" max="8" value="5">
+          </label>
+        </span>
+      </div>
+    </header>
+    <div class="matrix-editor">
+      <div id="matrix-grid" class="matrix-grid" aria-label="Matrix entries"></div>
+    </div>
+    <div class="matrix-underbar">
+      <span class="matrix-underbar-left">
+        <button class="btn btn-ghost" id="clear-matrix" type="button">clear</button>
+        <span id="matrix-status">ready</span>
+      </span>
+      <span class="matrix-underbar-right" id="matrix-summary">rank pending</span>
+    </div>
+  </section>
+
+  <aside class="side" id="cards">
+    <section class="card" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="matrix-inline-row">
+          <span class="input-label">Preset</span>
+          <div class="matrix-preset-buttons" aria-label="Preset matrix buttons">
+            <button class="btn btn-ghost" type="button" data-preset="zero">0</button>
+            <button class="btn btn-ghost" type="button" data-preset="identity">Id</button>
+            <button class="btn btn-ghost" type="button" data-preset="diagonal">Diag</button>
+            <button class="btn btn-ghost" type="button" data-preset="random">Rand</button>
+            <button class="btn btn-ghost" type="button" data-preset="cyclic">Cyc</button>
+          </div>
+        </div>
+        <div class="matrix-action-row">
+          <span class="input-label">Import</span>
+          <button class="btn" id="apply-bulk" type="button">input</button>
+        </div>
+        <div id="bulk-message" class="err"></div>
+      </div>
+    </section>
+
+    <section class="card" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Basic Invariants</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="stat-row"><span class="stat-label">Size</span><span class="stat-value" id="out-size">5 x 5</span></div>
+        <div class="stat-row"><span class="stat-label">Rank</span><span class="stat-value" id="out-rank">-</span></div>
+        <div class="stat-row"><span class="stat-label">Trace</span><span class="stat-value" id="out-trace">-</span></div>
+        <div class="stat-row"><span class="stat-label">Determinant</span><span class="stat-value" id="out-det">-</span></div>
+      </div>
+    </section>
+
+    <section class="card" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Computation</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="matrix-inline-row">
+          <span class="input-label">Operation</span>
+          <select id="operation-select" class="matrix-select">
+            <option value="transpose">A^T</option>
+            <option value="inverse">A^{-1}</option>
+            <option value="power">A^n</option>
+            <option value="exp">exp(A)</option>
+            <option value="jordan">Jordan decomposition</option>
+            <option value="bruhat">Bruhat decomposition</option>
+            <option value="qr">QR decomposition</option>
+          </select>
+        </div>
+        <div class="matrix-inline-row" id="power-row">
+          <span class="input-label">n</span>
+          <input type="number" id="power-exponent" class="matrix-number-input" value="2" step="1" min="-12" max="12">
+        </div>
+        <div class="matrix-action-row">
+          <button class="btn" id="compute-operation" type="button">compute</button>
+          <button class="btn btn-ghost" id="export-operation" type="button">export</button>
+          <button class="btn btn-ghost" id="clear-output" type="button">clear output</button>
+        </div>
+        <div id="operation-message" class="err"></div>
+        <div id="operation-output" class="matrix-result-scroll"><span class="hint">No computation yet.</span></div>
+      </div>
+    </section>
+
+    <section class="card" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="matrix-inline-row">
+          <span class="input-label">Format</span>
+          <select id="export-format" class="matrix-select">
+            <option value="latex">LaTeX</option>
+            <option value="python">Python</option>
+            <option value="sage">SageMath</option>
+            <option value="macaulay2">Macaulay2</option>
+            <option value="mathematica">Mathematica</option>
+            <option value="matlab">MATLAB</option>
+            <option value="rows">Rows</option>
+          </select>
+        </div>
+        <div class="matrix-action-row">
+          <button class="btn" id="refresh-export" type="button">refresh</button>
+          <button class="btn btn-ghost" id="copy-export" type="button">copy</button>
+        </div>
+        <textarea id="export-out" readonly></textarea>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<div id="import-dialog" class="matrix-dialog-backdrop" hidden>
+  <div class="matrix-dialog" role="dialog" aria-modal="true" aria-labelledby="import-dialog-title">
+    <div id="import-dialog-title" class="matrix-dialog-title">Input Matrix</div>
+    <textarea id="import-text" class="matrix-textarea" spellcheck="false" autocomplete="off"></textarea>
+    <div class="matrix-output-note">Accepts bulk rows such as 1, 2; 3, 4, or LaTeX matrices such as \begin{pmatrix}1 & 2 \\ 3 & 4\end{pmatrix}.</div>
+    <div id="import-dialog-message" class="err"></div>
+    <div class="matrix-dialog-actions">
+      <button class="btn btn-ghost" id="cancel-import" type="button">cancel</button>
+      <button class="btn" id="confirm-import" type="button">import</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Browser-side matrix calculator styled with the shared Young diagram UI.
+</footer>
+
+<script src="matrix_calculator.js"></script>
+</body>
+</html>
