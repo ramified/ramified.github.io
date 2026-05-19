@@ -89,6 +89,8 @@
     drawDebugHit: null,
     hoverIndex: -1,
     dualGraphLayout: null,
+    dualGraphLayoutMethod: 'force',
+    dualGraphLayoutTimings: {},
     dualGraphSimulation: null,
     dualGraphDragging: null,
     dualGraphAnimating: false,
@@ -101,6 +103,13 @@
     algebraicOptimizationFrame: null,
     algebraicOptimization: null,
     showAlgebraicTangentHandles: false,
+    algebraicEnergyTerms: {
+      bend: true,
+      length: true,
+      crossing: true,
+      spacing: true,
+      boundary: true
+    },
     riemannSurfaceModel: null,
     selectedRiemannVertex: null,
     dualGraphInvariantsExpanded: true,
@@ -192,6 +201,9 @@
     refs.optimizeAlgebraicCurve = document.getElementById('optimize-algebraic-curve');
     refs.algebraicEnergyStatus = document.getElementById('algebraic-energy-status');
     refs.showAlgebraicTangentHandles = document.getElementById('show-algebraic-tangent-handles');
+    refs.algebraicEnergyTermInputs = Array.from(document.querySelectorAll('[data-algebraic-energy-term]'));
+    refs.dualGraphLayoutMethod = document.getElementById('dual-graph-layout-method');
+    refs.dualGraphLayoutTime = document.getElementById('dual-graph-layout-time');
     refs.dualGraphLayoutControls = document.getElementById('dual-graph-layout-controls');
     refs.computeLayout = document.getElementById('compute-layout');
     refs.resetLayout = document.getElementById('reset-layout');
@@ -222,9 +234,6 @@
   }
 
   function bindControls() {
-    const updateBoardFromControls = debounce(() => generateFromControls(), 80);
-    refs.gridRows.addEventListener('input', updateBoardFromControls);
-    refs.gridCols.addEventListener('input', updateBoardFromControls);
     refs.gridRows.addEventListener('change', () => generateFromControls());
     refs.gridCols.addEventListener('change', () => generateFromControls());
     refs.diagramType.addEventListener('change', () => {
@@ -298,18 +307,15 @@
       updateKnotCard(analyze());
       refreshExport();
     });
+    if (refs.dualGraphLayoutMethod) {
+      refs.dualGraphLayoutMethod.addEventListener('change', () => {
+        setDualGraphLayoutMethod(refs.dualGraphLayoutMethod.value);
+      });
+    }
     if (refs.computeLayout) {
       refs.computeLayout.addEventListener('click', () => {
         if (!state.dualGraphData || !(state.showDualGraphCanvas || state.showRiemannSurfaceCanvas)) return;
-        ensureDualGraphLayout(state.dualGraphData);
-        if (state.dualGraphAnimating) {
-          state.dualGraphAnimating = false;
-          refs.computeLayout.textContent = 'Compute layout';
-        } else {
-          state.dualGraphAnimating = true;
-          refs.computeLayout.textContent = 'Stop';
-          animateDualGraphLayout();
-        }
+        runSelectedDualGraphLayout();
       });
     }
     if (refs.optimizeAlgebraicCurve) {
@@ -333,6 +339,7 @@
         state.algebraicUserPointLocks = {};
         state.algebraicTangentOverrides = {};
         if (refs.computeLayout) refs.computeLayout.textContent = 'Compute layout';
+        syncDualGraphLayoutControls();
         updateReport(false);
       });
     }
@@ -378,6 +385,17 @@
         state.showAlgebraicTangentHandles = refs.showAlgebraicTangentHandles.checked;
         if (!state.showAlgebraicTangentHandles) state.algebraicCurveDragging = null;
         if (state.dualGraphData && state.showAlgebraicCurveCanvas) renderAlgebraicCurveVisualization(state.dualGraphData);
+      });
+    }
+    if (refs.algebraicEnergyTermInputs) {
+      refs.algebraicEnergyTermInputs.forEach((input) => {
+        input.addEventListener('change', () => {
+          const term = input.dataset.algebraicEnergyTerm;
+          if (!Object.prototype.hasOwnProperty.call(state.algebraicEnergyTerms, term)) return;
+          state.algebraicEnergyTerms[term] = input.checked;
+          stopAlgebraicCurveOptimization();
+          if (state.dualGraphData && state.showAlgebraicCurveCanvas) renderAlgebraicCurveVisualization(state.dualGraphData);
+        });
       });
     }
     if (refs.riemannNodeRadiusInputs) {
@@ -2993,6 +3011,7 @@
       state.dualGraphData = null;
       state.dualGraphAnimating = false;
       state.dualGraphDragging = null;
+      state.dualGraphLayoutTimings = {};
       state.riemannSurfaceModel = null;
       state.selectedRiemannVertex = null;
       syncDualGraphCanvasVisibility();
@@ -3018,7 +3037,9 @@
       state.dualGraphAnimating = false;
       state.dualGraphLayout = null;
       state.dualGraphStructureKey = structureKey;
+      state.dualGraphLayoutTimings = {};
       if (refs.computeLayout) refs.computeLayout.textContent = 'Compute layout';
+      syncDualGraphLayoutControls();
     }
 
     state.dualGraphData = graphData;
@@ -3041,17 +3062,20 @@
     if (refs.showRiemannSurfaceCanvas) refs.showRiemannSurfaceCanvas.checked = state.showRiemannSurfaceCanvas;
     if (refs.showAlgebraicCurveCanvas) refs.showAlgebraicCurveCanvas.checked = state.showAlgebraicCurveCanvas;
     if (refs.showAlgebraicTangentHandles) refs.showAlgebraicTangentHandles.checked = state.showAlgebraicTangentHandles;
+    syncAlgebraicEnergyTermControls();
     syncDualGraphVisualizationButtons();
     if (refs.dualGraphViewWrap) refs.dualGraphViewWrap.hidden = !state.showDualGraphCanvas;
     if (refs.riemannSurfaceViewWrap) refs.riemannSurfaceViewWrap.hidden = !state.showRiemannSurfaceCanvas;
     if (refs.algebraicCurveViewWrap) refs.algebraicCurveViewWrap.hidden = !state.showAlgebraicCurveCanvas;
     if (refs.dualGraphLayoutControls) refs.dualGraphLayoutControls.hidden = !(state.showDualGraphCanvas || state.showRiemannSurfaceCanvas);
+    syncDualGraphLayoutControls();
     if (refs.optimizeAlgebraicCurve) refs.optimizeAlgebraicCurve.disabled = !state.showAlgebraicCurveCanvas || !state.dualGraphData;
 
     if (!isDualGraphVisualizationVisible()) {
       state.dualGraphAnimating = false;
       state.dualGraphDragging = null;
       if (refs.computeLayout) refs.computeLayout.textContent = 'Compute layout';
+      syncDualGraphLayoutControls();
     }
     if (!state.showDualGraphCanvas && refs.dualGraphCanvas) refs.dualGraphCanvas.style.cursor = 'default';
     if (!state.showAlgebraicCurveCanvas && refs.algebraicCurveCanvas) refs.algebraicCurveCanvas.style.cursor = 'default';
@@ -3097,6 +3121,91 @@
     if (state.showAlgebraicCurveCanvas) renderAlgebraicCurveVisualization(graphData);
   }
 
+  function setDualGraphLayoutMethod(method) {
+    const nextMethod = normalizeDualGraphLayoutMethod(method);
+    if (nextMethod === state.dualGraphLayoutMethod) {
+      syncDualGraphLayoutControls();
+      return;
+    }
+
+    state.dualGraphLayoutMethod = nextMethod;
+    state.dualGraphAnimating = false;
+    state.dualGraphDragging = null;
+    state.dualGraphLayout = null;
+    syncDualGraphLayoutControls();
+    if (state.dualGraphData && isDualGraphVisualizationVisible()) {
+      runSelectedDualGraphLayout();
+    }
+  }
+
+  function runSelectedDualGraphLayout() {
+    if (!state.dualGraphData) return;
+
+    if (state.dualGraphLayoutMethod === 'force') {
+      ensureDualGraphLayout(state.dualGraphData);
+      if (state.dualGraphAnimating) {
+        state.dualGraphAnimating = false;
+        if (state.dualGraphLayout && Number.isFinite(state.dualGraphLayout.startedAt)) {
+          state.dualGraphLayoutTimings.force = layoutNow() - state.dualGraphLayout.startedAt;
+          state.dualGraphLayout.startedAt = null;
+        }
+        syncDualGraphLayoutControls();
+      } else {
+        state.dualGraphAnimating = true;
+        if (state.dualGraphLayout) state.dualGraphLayout.startedAt = layoutNow();
+        syncDualGraphLayoutControls();
+        animateDualGraphLayout();
+      }
+      return;
+    }
+
+    state.dualGraphAnimating = false;
+    const size = dualGraphLayoutSize();
+    const startedAt = layoutNow();
+    state.dualGraphLayout = calculateGraphLayout(state.dualGraphData, size.width, size.height, state.dualGraphLayoutMethod);
+    state.dualGraphLayoutTimings[state.dualGraphLayoutMethod] = layoutNow() - startedAt;
+    syncDualGraphLayoutControls();
+    renderVisibleDualGraphVisualizations(state.dualGraphData);
+  }
+
+  function syncDualGraphLayoutControls() {
+    if (refs.dualGraphLayoutMethod) refs.dualGraphLayoutMethod.value = state.dualGraphLayoutMethod;
+    if (refs.computeLayout) {
+      refs.computeLayout.textContent = state.dualGraphLayoutMethod === 'force' && state.dualGraphAnimating
+        ? 'Stop'
+        : 'Compute layout';
+    }
+    syncDualGraphLayoutTime();
+  }
+
+  function syncDualGraphLayoutTime() {
+    if (!refs.dualGraphLayoutTime) return;
+    const timings = state.dualGraphLayoutTimings || {};
+    const labels = [
+      ['force', 'Force'],
+      ['shell', 'Shell'],
+      ['spectral', 'Spectral'],
+      ['kamada-kawai', 'Kamada-Kawai']
+    ];
+    const measured = labels
+      .filter(([key]) => Number.isFinite(timings[key]))
+      .map(([key, label]) => `${label} ${formatLayoutDuration(timings[key])}`);
+    refs.dualGraphLayoutTime.textContent = measured.length ? measured.join(' | ') : '-';
+  }
+
+  function formatLayoutDuration(ms) {
+    if (!Number.isFinite(ms)) return '-';
+    if (ms < 10) return `${ms.toFixed(2)}ms`;
+    if (ms < 100) return `${ms.toFixed(1)}ms`;
+    return `${Math.round(ms)}ms`;
+  }
+
+  function layoutNow() {
+    return (typeof performance !== 'undefined' && typeof performance.now === 'function')
+      ? performance.now()
+      : Date.now();
+  }
+
   function isDualGraphVisualizationVisible() {
     return state.showDualGraphCanvas || state.showRiemannSurfaceCanvas || state.showAlgebraicCurveCanvas;
   }
@@ -3104,7 +3213,10 @@
   function ensureDualGraphLayout(graphData) {
     if (state.dualGraphLayout) return state.dualGraphLayout;
     const size = dualGraphLayoutSize();
-    state.dualGraphLayout = calculateGraphLayout(graphData, size.width, size.height);
+    const startedAt = layoutNow();
+    state.dualGraphLayout = calculateGraphLayout(graphData, size.width, size.height, state.dualGraphLayoutMethod);
+    state.dualGraphLayoutTimings[state.dualGraphLayoutMethod] = layoutNow() - startedAt;
+    syncDualGraphLayoutControls();
     return state.dualGraphLayout;
   }
 
@@ -3243,6 +3355,7 @@
     const vertexGenus = graphData.vertices.reduce((total, vertex) => (
       total + vertexDecorationValue(vertex.index)
     ), 0);
+    const firstBetti = cycleRank + vertexGenus;
     const genus = vertexGenus + cycleRank;
     const eulerCharacteristic = (2 * components) - (2 * genus) - halfEdges;
 
@@ -3253,6 +3366,7 @@
       components,
       cycleRank,
       vertexGenus,
+      firstBetti,
       genus,
       eulerCharacteristic
     };
@@ -3263,7 +3377,7 @@
     return `<dl class="slice-invariant-list">
       <dt>g</dt><dd>${inv.genus}</dd>
       <dt>n</dt><dd>${inv.halfEdges}</dd>
-      <dt>b<sub>1</sub></dt><dd>${inv.cycleRank}</dd>
+      <dt>b<sub>1</sub></dt><dd>${inv.firstBetti}</dd>
     </dl>`;
   }
 
@@ -3605,12 +3719,6 @@
       sourcePoints.push(source);
       return source;
     });
-    const legSources = graphData.legs.map((leg, legIndex) => {
-      const source = algebraicLegSource(leg, legIndex, layoutMap, vertexSources);
-      sourcePoints.push(source);
-      return source;
-    });
-
     const mapPoint = algebraicCanvasMapper(sourcePoints, width, height);
     const radius = clamp(Math.min(width, height) * 0.16, 28, 52);
     const curves = graphData.vertices.map((vertex, index) => {
@@ -3713,45 +3821,104 @@
       });
     });
 
-    graphData.legs.forEach((leg, legIndex) => {
-      const pointId = `leg:${legIndex}`;
-      const point = algebraicPointWithOverride(pointId, mapPoint(legSources[legIndex]), width, height);
-      const mark = {
-        id: pointId,
-        x: point.x,
-        y: point.y,
-        legIndex,
-        label: `p${legIndex + 1}`,
-        vertexIndex: leg.vertex
-      };
-      markedPoints.push(mark);
-      const tangentKey = algebraicTangentKey(pointId);
-      const curve = curveMap.get(leg.vertex);
-      const fallbackTangent = curve
-        ? normalizeVector(mark.x - curve.center.x, mark.y - curve.center.y, Math.cos(algebraicSpokeAngle(leg.spoke, 0)), Math.sin(algebraicSpokeAngle(leg.spoke, 0)))
-        : normalizeVector(Math.cos(algebraicSpokeAngle(leg.spoke, 0)), Math.sin(algebraicSpokeAngle(leg.spoke, 0)), 1, 0);
-      mark.tangentKey = tangentKey;
-      mark.tangent = algebraicTangentWithOverride(tangentKey, fallbackTangent);
-      const tangentOverride = algebraicOptionalTangentOverride(tangentKey);
-      addIncidence(leg.vertex, {
-        kind: 'leg',
-        legIndex,
-        tangentKey,
-        spoke: leg.spoke,
-        point: mark,
-        tangent: tangentOverride,
-        label: mark.label
-      });
-    });
-
-    relaxAlgebraicPoints(curves, intersections, markedPoints, width, height);
+    relaxAlgebraicPoints(curves, intersections, [], width, height);
     curves.forEach((curve) => {
       curve.pathPoints = algebraicCurvePathPoints(curve, width, height);
     });
+    placeAlgebraicMarksOnCurves(graphData, curves, markedPoints, width, height);
 
     const model = { curves, intersections, markedPoints, unexpectedCrossings: [] };
     model.unexpectedCrossings = algebraicUnexpectedCrossings(model, width, height);
     return model;
+  }
+
+  function placeAlgebraicMarksOnCurves(graphData, curves, markedPoints, width, height) {
+    const curveMap = new Map(curves.map((curve) => [curve.vertexIndex, curve]));
+    const legsByVertex = new Map();
+    graphData.legs.forEach((leg, legIndex) => {
+      if (!legsByVertex.has(leg.vertex)) legsByVertex.set(leg.vertex, []);
+      legsByVertex.get(leg.vertex).push({ leg, legIndex });
+    });
+
+    legsByVertex.forEach((entries, vertexIndex) => {
+      const curve = curveMap.get(vertexIndex);
+      const samples = curve ? algebraicCurveSamples(curve.pathPoints, 18) : [];
+      entries.forEach(({ leg, legIndex }, entryIndex) => {
+        const sampled = sampleAlgebraicMarkOnCurve(samples, vertexIndex, legIndex, entryIndex, entries.length)
+          || { x: curve ? curve.center.x : 0, y: curve ? curve.center.y : 0, tangent: { x: 1, y: 0 } };
+        const pointId = `leg:${legIndex}`;
+        const target = algebraicPointWithOverride(pointId, sampled, width, height);
+        const point = projectPointToSamples(target, samples) || sampled;
+        const tangentKey = algebraicTangentKey(pointId);
+        const overrideTangent = algebraicOptionalTangentOverride(tangentKey);
+        const tangent = overrideTangent || point.tangent || sampled.tangent || normalizeVector(
+          Math.cos(algebraicSpokeAngle(leg.spoke, 0)),
+          Math.sin(algebraicSpokeAngle(leg.spoke, 0)),
+          1,
+          0
+        );
+        markedPoints.push({
+          id: pointId,
+          x: point.x,
+          y: point.y,
+          legIndex,
+          label: `p${legIndex + 1}`,
+          vertexIndex,
+          tangentKey,
+          tangent
+        });
+      });
+    });
+  }
+
+  function sampleAlgebraicMarkOnCurve(samples, vertexIndex, legIndex, entryIndex, entryCount) {
+    if (!samples.length) return null;
+    if (samples.length === 1) {
+      return { x: samples[0].x, y: samples[0].y, tangent: { x: 1, y: 0 } };
+    }
+
+    const random = seededRandom((vertexIndex + 1) * 1009 + (legIndex + 1) * 9173);
+    const low = 0.14;
+    const high = 0.86;
+    const base = entryCount > 1 ? (entryIndex + 0.5) / entryCount : random();
+    const jitter = (random() - 0.5) * Math.min(0.22, 0.48 / Math.max(entryCount, 1));
+    const t = clamp(low + (high - low) * clamp(base + jitter, 0, 1), low, high);
+    const position = t * (samples.length - 1);
+    const index = clamp(Math.round(position), 0, samples.length - 1);
+    const previous = samples[Math.max(0, index - 1)];
+    const current = samples[index];
+    const next = samples[Math.min(samples.length - 1, index + 1)];
+    return {
+      x: current.x,
+      y: current.y,
+      tangent: normalizeVector(next.x - previous.x, next.y - previous.y, 1, 0)
+    };
+  }
+
+  function projectPointToSamples(point, samples) {
+    if (!point || !samples || !samples.length) return null;
+    if (samples.length === 1) {
+      return { x: samples[0].x, y: samples[0].y, tangent: { x: 1, y: 0 } };
+    }
+
+    let bestIndex = 0;
+    let bestDistance = Infinity;
+    samples.forEach((sample, index) => {
+      const distance = Math.hypot(point.x - sample.x, point.y - sample.y);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = index;
+      }
+    });
+
+    const previous = samples[Math.max(0, bestIndex - 1)];
+    const current = samples[bestIndex];
+    const next = samples[Math.min(samples.length - 1, bestIndex + 1)];
+    return {
+      x: current.x,
+      y: current.y,
+      tangent: normalizeVector(next.x - previous.x, next.y - previous.y, 1, 0)
+    };
   }
 
   function algebraicEdgeSource(edge, edgeIndex, layoutMap, vertexSources) {
@@ -3822,7 +3989,7 @@
     const baseModel = calculateAlgebraicCurveModel(graphData, width, height);
     const points = algebraicOptimizablePoints(baseModel);
     if (!points.length) {
-      syncAlgebraicEnergyStatus(algebraicCurveEnergy(baseModel, width, height), null, false, 'no movable points');
+      syncAlgebraicEnergyStatus(algebraicCurveEnergy(baseModel, width, height), null, false, 'no movable points', baseModel, width, height);
       return;
     }
 
@@ -3874,7 +4041,7 @@
         state.algebraicPointOverrides = opt.bestOverrides;
         state.algebraicTangentOverrides = opt.bestTangentOverrides;
         renderAlgebraicCurveVisualization(opt.graphData, false);
-        syncAlgebraicEnergyStatus(opt.bestEnergy, null, false);
+        syncAlgebraicEnergyStatus(opt.bestEnergy, null, false, '', state.algebraicCurveModel, opt.width, opt.height);
         stopAlgebraicCurveOptimization();
         return;
       }
@@ -3883,7 +4050,7 @@
     state.algebraicPointOverrides = opt.bestOverrides;
     state.algebraicTangentOverrides = opt.bestTangentOverrides;
     renderAlgebraicCurveVisualization(opt.graphData, false);
-    syncAlgebraicEnergyStatus(opt.currentEnergy, opt.bestEnergy, accepted);
+    syncAlgebraicEnergyStatus(opt.currentEnergy, opt.bestEnergy, accepted, '', state.algebraicCurveModel, opt.width, opt.height);
     state.algebraicOptimizationFrame = requestAnimationFrame(animateAlgebraicCurveOptimization);
   }
 
@@ -3951,51 +4118,94 @@
     }
   }
 
-  function syncAlgebraicEnergyStatus(currentEnergy, bestEnergy, accepted, suffix = '') {
+  function syncAlgebraicEnergyStatus(currentEnergy, bestEnergy, accepted, suffix = '', modelForBreakdown = null, width = null, height = null) {
     if (!refs.algebraicEnergyStatus) return;
     const displayEnergy = Number.isFinite(bestEnergy) ? bestEnergy : currentEnergy;
     const energyText = Number.isFinite(displayEnergy) ? displayEnergy.toFixed(1) : '-';
     const hasTrial = Number.isFinite(bestEnergy) && Number.isFinite(currentEnergy) && Math.abs(currentEnergy - bestEnergy) > 0.05;
     const trialText = Number.isFinite(currentEnergy) ? currentEnergy.toFixed(1) : '-';
+    const breakdownModel = modelForBreakdown || state.algebraicCurveModel;
+    const breakdownWidth = Number.isFinite(width) ? width : (refs.algebraicCurveCanvas ? refs.algebraicCurveCanvas.width : null);
+    const breakdownHeight = Number.isFinite(height) ? height : (refs.algebraicCurveCanvas ? refs.algebraicCurveCanvas.height : null);
+    const breakdown = breakdownModel && Number.isFinite(breakdownWidth) && Number.isFinite(breakdownHeight)
+      ? algebraicEnergyBreakdownText(breakdownModel, breakdownWidth, breakdownHeight)
+      : '';
     const text = hasTrial && !accepted
       ? `energy ${energyText} / trial ${trialText}`
       : `energy ${energyText}`;
-    refs.algebraicEnergyStatus.textContent = suffix ? `${text} - ${suffix}` : text;
+    const parts = [text];
+    if (breakdown) parts.push(breakdown);
+    if (suffix) parts.push(suffix);
+    refs.algebraicEnergyStatus.textContent = parts.join(' - ');
+  }
+
+  function syncAlgebraicEnergyTermControls() {
+    if (!refs.algebraicEnergyTermInputs) return;
+    refs.algebraicEnergyTermInputs.forEach((input) => {
+      const term = input.dataset.algebraicEnergyTerm;
+      if (Object.prototype.hasOwnProperty.call(state.algebraicEnergyTerms, term)) {
+        input.checked = !!state.algebraicEnergyTerms[term];
+      }
+    });
   }
 
   function algebraicOptimizablePoints(model) {
-    return (model.intersections || []).concat(model.markedPoints || [])
+    const points = (model.intersections || []).concat(model.markedPoints || []);
+    return points
       .filter((point) => point && point.id && !state.algebraicUserPointLocks[point.id]);
   }
 
   function algebraicCurveEnergy(model, width, height) {
-    let energy = 0;
+    const totals = algebraicCurveEnergyParts(model, width, height);
+    const terms = state.algebraicEnergyTerms || {};
+    return Object.entries(totals).reduce((sum, [term, value]) => (
+      terms[term] === false ? sum : sum + value
+    ), 0);
+  }
+
+  function algebraicEnergyBreakdownText(model, width, height) {
+    const totals = algebraicCurveEnergyParts(model, width, height);
+    const terms = state.algebraicEnergyTerms || {};
+    return ['bend', 'length', 'crossing', 'spacing', 'boundary']
+      .filter((term) => terms[term] !== false)
+      .map((term) => `${term} ${totals[term].toFixed(1)}`)
+      .join(', ');
+  }
+
+  function algebraicCurveEnergyParts(model, width, height) {
+    const energy = {
+      bend: 0,
+      length: 0,
+      crossing: 0,
+      spacing: 0,
+      boundary: 0
+    };
     model.curves.forEach((curve) => {
       const samples = algebraicCurveSamples(curve.pathPoints, 10);
       for (let index = 1; index + 1 < samples.length; index += 1) {
         const left = normalizeVector(samples[index].x - samples[index - 1].x, samples[index].y - samples[index - 1].y, 1, 0);
         const right = normalizeVector(samples[index + 1].x - samples[index].x, samples[index + 1].y - samples[index].y, left.x, left.y);
         const angle = Math.acos(clamp((left.x * right.x) + (left.y * right.y), -1, 1));
-        energy += angle * angle * 120;
+        energy.bend += angle * angle * 120;
       }
       for (let index = 0; index + 1 < samples.length; index += 1) {
-        energy += Math.hypot(samples[index + 1].x - samples[index].x, samples[index + 1].y - samples[index].y) * 0.03;
+        energy.length += Math.hypot(samples[index + 1].x - samples[index].x, samples[index + 1].y - samples[index].y) * 0.006;
       }
     });
 
     (model.unexpectedCrossings || []).forEach(() => {
-      energy += 160;
+      energy.crossing += 160;
     });
     const points = (model.intersections || []).concat(model.markedPoints || []);
     for (let left = 0; left < points.length; left += 1) {
       for (let right = left + 1; right < points.length; right += 1) {
         const distance = Math.hypot(points[left].x - points[right].x, points[left].y - points[right].y);
-        if (distance < 24) energy += (24 - distance) * 8;
+        if (distance < 24) energy.spacing += (24 - distance) * 8;
       }
     }
     points.forEach((point) => {
       const edgeDistance = Math.min(point.x, width - point.x, point.y, height - point.y);
-      if (edgeDistance < 16) energy += (16 - edgeDistance) * 10;
+      if (edgeDistance < 16) energy.boundary += (16 - edgeDistance) * 10;
     });
     return energy;
   }
@@ -5102,6 +5312,14 @@
           x: point.x,
           y: point.y
         };
+      } else if (drag.kind === 'mark') {
+        const projected = projectPointToAlgebraicCurve(point, drag.vertexIndex);
+        if (projected) {
+          state.algebraicPointOverrides[drag.id] = {
+            x: projected.x,
+            y: projected.y
+          };
+        }
       } else if (drag.kind === 'tangent') {
         const anchor = drag.anchor;
         state.algebraicTangentOverrides[drag.id] = normalizeVector(point.x - anchor.x, point.y - anchor.y, drag.tangent.x, drag.tangent.y);
@@ -5161,8 +5379,17 @@
         }
       }
     }
-    const points = (model.intersections || []).concat(model.markedPoints || []);
-    for (const mark of points) {
+    for (const mark of model.markedPoints || []) {
+      if (Math.hypot(point.x - mark.x, point.y - mark.y) <= pointerHitRadius(event, 8, 22)) {
+        return {
+          kind: 'mark',
+          id: mark.id,
+          tangentKey: mark.tangentKey,
+          vertexIndex: mark.vertexIndex
+        };
+      }
+    }
+    for (const mark of model.intersections || []) {
       if (Math.hypot(point.x - mark.x, point.y - mark.y) <= pointerHitRadius(event, 8, 22)) {
         return {
           kind: 'point',
@@ -5171,6 +5398,15 @@
       }
     }
     return null;
+  }
+
+  function projectPointToAlgebraicCurve(point, vertexIndex) {
+    const model = state.algebraicCurveModel;
+    if (!model || !point) return null;
+    const curve = (model.curves || []).find((item) => item.vertexIndex === vertexIndex);
+    if (!curve || !curve.pathPoints || curve.pathPoints.length < 2) return null;
+    const samples = algebraicCurveSamples(curve.pathPoints, 22);
+    return projectPointToSamples(point, samples);
   }
 
   function algebraicCanvasPointFromEvent(event) {
@@ -5743,7 +5979,7 @@
     ctx.fill();
   }
 
-  function calculateGraphLayout(graphData, width, height) {
+  function calculateGraphLayout(graphData, width, height, method = 'force') {
     // Initialize layout with virtual nodes for edges and loops
     const padding = 40;
     const centerX = width / 2;
@@ -5752,7 +5988,8 @@
 
     const nodes = [];
     const nodeMap = new Map();
-    const vertexPositions = initialDualGraphVertexPositions(graphData, width, height, padding);
+    const layoutMethod = normalizeDualGraphLayoutMethod(method);
+    const vertexPositions = initialDualGraphVertexPositions(graphData, width, height, padding, layoutMethod);
 
     // Add vertex nodes
     graphData.vertices.forEach((vertex, i) => {
@@ -5864,7 +6101,7 @@
       nodeMap.set(node.id, node);
     });
 
-    return { nodes, nodeMap, width, height };
+    return { nodes, nodeMap, width, height, method: layoutMethod };
   }
 
   function initialLoopHandlePositions(vertexNode, loopIndex) {
@@ -5887,7 +6124,12 @@
     ];
   }
 
-  function initialDualGraphVertexPositions(graphData, width, height, padding) {
+  function initialDualGraphVertexPositions(graphData, width, height, padding, method = 'force') {
+    const layoutMethod = normalizeDualGraphLayoutMethod(method);
+    if (layoutMethod === 'shell') return shellDualGraphVertexPositions(graphData, width, height, padding);
+    if (layoutMethod === 'spectral') return spectralDualGraphVertexPositions(graphData, width, height, padding);
+    if (layoutMethod === 'kamada-kawai') return kamadaKawaiDualGraphVertexPositions(graphData, width, height, padding);
+
     const positions = new Map();
     if (!geometry || !Array.isArray(geometry.cells) || !graphData.vertices.length) return positions;
 
@@ -5928,6 +6170,300 @@
     return positions;
   }
 
+  function shellDualGraphVertexPositions(graphData, width, height, padding) {
+    const positions = new Map();
+    const vertices = graphData.vertices.map((vertex) => vertex.index);
+    if (!vertices.length) return positions;
+
+    const centerX = width / 2;
+    const centerY = height / 2;
+    if (vertices.length === 1) {
+      positions.set(vertices[0], { x: centerX, y: centerY });
+      return positions;
+    }
+
+    const adjacency = dualGraphVertexAdjacency(graphData);
+    const root = vertices
+      .map((index) => ({ index, degree: (adjacency.get(index) || new Set()).size }))
+      .sort((left, right) => right.degree - left.degree || left.index - right.index)[0].index;
+    const distances = dualGraphShortestDistancesFrom(root, vertices, adjacency);
+    const shells = new Map();
+    vertices.forEach((index) => {
+      const distance = Number.isFinite(distances.get(index)) ? distances.get(index) : 0;
+      if (!shells.has(distance)) shells.set(distance, []);
+      shells.get(distance).push(index);
+    });
+
+    const orderedShells = Array.from(shells.entries()).sort((left, right) => left[0] - right[0]);
+    const usableRadius = Math.max(Math.min(width, height) / 2 - padding, 1);
+    const shellGap = usableRadius / Math.max(orderedShells.length, 1);
+    orderedShells.forEach(([distance, members], shellIndex) => {
+      members.sort((left, right) => left - right);
+      if (distance === 0 && members.length === 1) {
+        positions.set(members[0], { x: centerX, y: centerY });
+        return;
+      }
+      const shellRadius = clamp(shellGap * Math.max(shellIndex, 1), 18, usableRadius);
+      members.forEach((index, memberIndex) => {
+        const angle = (Math.PI * -0.5) + (Math.PI * 2 * memberIndex / members.length);
+        positions.set(index, {
+          x: centerX + Math.cos(angle) * shellRadius,
+          y: centerY + Math.sin(angle) * shellRadius
+        });
+      });
+    });
+    return positions;
+  }
+
+  function spectralDualGraphVertexPositions(graphData, width, height, padding) {
+    const positions = new Map();
+    const vertices = graphData.vertices.map((vertex) => vertex.index);
+    if (!vertices.length) return positions;
+    if (vertices.length === 1) {
+      positions.set(vertices[0], { x: width / 2, y: height / 2 });
+      return positions;
+    }
+
+    const matrix = dualGraphLaplacianMatrix(graphData, vertices);
+    const eig = jacobiSymmetricEigen(matrix);
+    const order = eig.values
+      .map((value, index) => ({ value, index }))
+      .sort((left, right) => left.value - right.value);
+    const xVector = eig.vectors.map((row) => row[order[Math.min(1, order.length - 1)].index]);
+    const yVector = eig.vectors.map((row) => row[order[Math.min(2, order.length - 1)].index]);
+    const mapped = mapNormalizedCoordinates(vertices, xVector, yVector, width, height, padding);
+    mapped.forEach((position, index) => positions.set(index, position));
+    return positions;
+  }
+
+  function kamadaKawaiDualGraphVertexPositions(graphData, width, height, padding) {
+    const vertices = graphData.vertices.map((vertex) => vertex.index);
+    const positions = spectralDualGraphVertexPositions(graphData, width, height, padding);
+    if (vertices.length <= 2) return positions;
+
+    const adjacency = dualGraphVertexAdjacency(graphData);
+    const distances = dualGraphAllPairsDistances(vertices, adjacency);
+    const usable = Math.max(Math.min(width, height) - (padding * 2), 1);
+    const idealScale = usable / Math.max(1, graphDiameter(distances));
+    const entries = vertices.map((index) => ({
+      index,
+      x: (positions.get(index) || { x: width / 2 }).x,
+      y: (positions.get(index) || { y: height / 2 }).y
+    }));
+    const n = entries.length;
+    const maxIterations = Math.min(500, Math.max(120, n * n * 10));
+    const step = 0.09;
+
+    for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+      const forces = Array.from({ length: n }, () => ({ x: 0, y: 0 }));
+      let maxForce = 0;
+      for (let i = 0; i < n; i += 1) {
+        for (let j = i + 1; j < n; j += 1) {
+          const distance = distances[i][j];
+          if (!Number.isFinite(distance) || distance <= 0) continue;
+          const dx = entries[j].x - entries[i].x;
+          const dy = entries[j].y - entries[i].y;
+          const length = Math.hypot(dx, dy) || 0.0001;
+          const ideal = idealScale * distance;
+          const spring = 1 / (distance * distance);
+          const force = spring * (length - ideal);
+          const fx = (dx / length) * force;
+          const fy = (dy / length) * force;
+          forces[i].x += fx;
+          forces[i].y += fy;
+          forces[j].x -= fx;
+          forces[j].y -= fy;
+        }
+      }
+
+      for (let i = 0; i < n; i += 1) {
+        const magnitude = Math.hypot(forces[i].x, forces[i].y);
+        maxForce = Math.max(maxForce, magnitude);
+        entries[i].x = clamp(entries[i].x + forces[i].x * step, padding, width - padding);
+        entries[i].y = clamp(entries[i].y + forces[i].y * step, padding, height - padding);
+      }
+      if (maxForce < 0.01) break;
+    }
+
+    const fitted = fitPositionsToCanvas(entries, width, height, padding);
+    fitted.forEach((position, index) => positions.set(index, position));
+    return positions;
+  }
+
+  function dualGraphVertexAdjacency(graphData) {
+    const adjacency = new Map();
+    graphData.vertices.forEach((vertex) => adjacency.set(vertex.index, new Set()));
+    graphData.edges.forEach((edge) => {
+      if (!adjacency.has(edge.from) || !adjacency.has(edge.to) || edge.from === edge.to) return;
+      adjacency.get(edge.from).add(edge.to);
+      adjacency.get(edge.to).add(edge.from);
+    });
+    return adjacency;
+  }
+
+  function dualGraphShortestDistancesFrom(root, vertices, adjacency) {
+    const distances = new Map(vertices.map((index) => [index, Infinity]));
+    if (!distances.has(root)) return distances;
+    distances.set(root, 0);
+    const queue = [root];
+    for (let head = 0; head < queue.length; head += 1) {
+      const current = queue[head];
+      const nextDistance = distances.get(current) + 1;
+      (adjacency.get(current) || new Set()).forEach((next) => {
+        if (nextDistance >= distances.get(next)) return;
+        distances.set(next, nextDistance);
+        queue.push(next);
+      });
+    }
+    return distances;
+  }
+
+  function dualGraphAllPairsDistances(vertices, adjacency) {
+    const raw = vertices.map((index) => dualGraphShortestDistancesFrom(index, vertices, adjacency));
+    return raw.map((row) => vertices.map((index) => row.get(index)));
+  }
+
+  function graphDiameter(distances) {
+    let diameter = 1;
+    distances.forEach((row) => {
+      row.forEach((distance) => {
+        if (Number.isFinite(distance)) diameter = Math.max(diameter, distance);
+      });
+    });
+    return diameter;
+  }
+
+  function dualGraphLaplacianMatrix(graphData, vertices) {
+    const n = vertices.length;
+    const indexMap = new Map(vertices.map((index, position) => [index, position]));
+    const matrix = Array.from({ length: n }, () => Array(n).fill(0));
+    graphData.edges.forEach((edge) => {
+      if (edge.from === edge.to) return;
+      const from = indexMap.get(edge.from);
+      const to = indexMap.get(edge.to);
+      if (from == null || to == null) return;
+      matrix[from][from] += 1;
+      matrix[to][to] += 1;
+      matrix[from][to] -= 1;
+      matrix[to][from] -= 1;
+    });
+    return matrix;
+  }
+
+  function jacobiSymmetricEigen(matrix) {
+    const n = matrix.length;
+    const a = matrix.map((row) => row.slice());
+    const vectors = Array.from({ length: n }, (_, row) => (
+      Array.from({ length: n }, (_, col) => row === col ? 1 : 0)
+    ));
+    if (n <= 1) return { values: a.map((row, index) => row[index] || 0), vectors };
+
+    const maxIterations = Math.min(1200, Math.max(40, n * n * 2));
+    for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+      let p = 0;
+      let q = 1;
+      let max = Math.abs(a[p][q]);
+      for (let row = 0; row < n; row += 1) {
+        for (let col = row + 1; col < n; col += 1) {
+          const value = Math.abs(a[row][col]);
+          if (value > max) {
+            max = value;
+            p = row;
+            q = col;
+          }
+        }
+      }
+      if (max < 1e-9) break;
+
+      const app = a[p][p];
+      const aqq = a[q][q];
+      const apq = a[p][q];
+      const angle = 0.5 * Math.atan2(2 * apq, aqq - app);
+      const c = Math.cos(angle);
+      const s = Math.sin(angle);
+
+      for (let row = 0; row < n; row += 1) {
+        if (row === p || row === q) continue;
+        const arp = a[row][p];
+        const arq = a[row][q];
+        a[row][p] = (c * arp) - (s * arq);
+        a[p][row] = a[row][p];
+        a[row][q] = (s * arp) + (c * arq);
+        a[q][row] = a[row][q];
+      }
+
+      a[p][p] = (c * c * app) - (2 * s * c * apq) + (s * s * aqq);
+      a[q][q] = (s * s * app) + (2 * s * c * apq) + (c * c * aqq);
+      a[p][q] = 0;
+      a[q][p] = 0;
+
+      for (let row = 0; row < n; row += 1) {
+        const vrp = vectors[row][p];
+        const vrq = vectors[row][q];
+        vectors[row][p] = (c * vrp) - (s * vrq);
+        vectors[row][q] = (s * vrp) + (c * vrq);
+      }
+    }
+
+    return {
+      values: a.map((row, index) => row[index]),
+      vectors
+    };
+  }
+
+  function mapNormalizedCoordinates(vertices, xs, ys, width, height, padding) {
+    const fallbackRadius = Math.max(Math.min(width, height) / 2 - padding, 1);
+    if (!hasCoordinateSpread(xs) || !hasCoordinateSpread(ys)) {
+      return new Map(vertices.map((index, i) => {
+        const angle = (Math.PI * -0.5) + (Math.PI * 2 * i / vertices.length);
+        return [index, {
+          x: width / 2 + Math.cos(angle) * fallbackRadius,
+          y: height / 2 + Math.sin(angle) * fallbackRadius
+        }];
+      }));
+    }
+
+    const entries = vertices.map((index, i) => ({ index, x: xs[i], y: ys[i] }));
+    return fitPositionsToCanvas(entries, width, height, padding);
+  }
+
+  function hasCoordinateSpread(values) {
+    if (!values.length) return false;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    return Number.isFinite(min) && Number.isFinite(max) && Math.abs(max - min) > 1e-8;
+  }
+
+  function fitPositionsToCanvas(entries, width, height, padding) {
+    const positions = new Map();
+    if (!entries.length) return positions;
+    if (entries.length === 1) {
+      positions.set(entries[0].index, { x: width / 2, y: height / 2 });
+      return positions;
+    }
+
+    const minX = Math.min(...entries.map((entry) => entry.x));
+    const maxX = Math.max(...entries.map((entry) => entry.x));
+    const minY = Math.min(...entries.map((entry) => entry.y));
+    const maxY = Math.max(...entries.map((entry) => entry.y));
+    const sourceWidth = Math.max(maxX - minX, 1e-6);
+    const sourceHeight = Math.max(maxY - minY, 1e-6);
+    const targetWidth = Math.max(width - (padding * 2), 1);
+    const targetHeight = Math.max(height - (padding * 2), 1);
+    const scale = Math.min(targetWidth / sourceWidth, targetHeight / sourceHeight);
+    const sourceCenterX = (minX + maxX) / 2;
+    const sourceCenterY = (minY + maxY) / 2;
+    const targetCenterX = width / 2;
+    const targetCenterY = height / 2;
+    entries.forEach((entry) => {
+      positions.set(entry.index, {
+        x: clamp(targetCenterX + ((entry.x - sourceCenterX) * scale), padding, width - padding),
+        y: clamp(targetCenterY + ((entry.y - sourceCenterY) * scale), padding, height - padding)
+      });
+    });
+    return positions;
+  }
+
   function runForceSimulation(layout, graphData, iterations = 100) {
     // Deprecated - use animateDualGraphLayout instead
   }
@@ -5936,7 +6472,12 @@
     if (!state.dualGraphAnimating || !state.dualGraphLayout || !state.dualGraphData) return;
     if (!isDualGraphVisualizationVisible()) {
       state.dualGraphAnimating = false;
+      if (Number.isFinite(state.dualGraphLayout.startedAt)) {
+        state.dualGraphLayoutTimings.force = layoutNow() - state.dualGraphLayout.startedAt;
+        state.dualGraphLayout.startedAt = null;
+      }
       if (refs.computeLayout) refs.computeLayout.textContent = 'Compute layout';
+      syncDualGraphLayoutControls();
       return;
     }
 
@@ -5963,6 +6504,10 @@
 
     if (state.dualGraphAnimating) {
       requestAnimationFrame(animateDualGraphLayout);
+    } else if (Number.isFinite(layout.startedAt)) {
+      state.dualGraphLayoutTimings.force = layoutNow() - layout.startedAt;
+      layout.startedAt = null;
+      syncDualGraphLayoutControls();
     }
   }
 
@@ -7683,6 +8228,7 @@
     if (refs.showAlgebraicCurveCanvas) refs.showAlgebraicCurveCanvas.checked = state.showAlgebraicCurveCanvas;
     if (refs.showRiemannDebugCircles) refs.showRiemannDebugCircles.checked = state.showRiemannDebugCircles;
     if (refs.showRiemannBezierCurve) refs.showRiemannBezierCurve.checked = state.showRiemannBezierCurve;
+    syncAlgebraicEnergyTermControls();
     syncDualGraphCanvasVisibility();
     syncRiemannNodeControls();
     refs.wrappedViewMode.value = state.wrappedViewMode;
@@ -8077,6 +8623,14 @@
     if (mode === 'drag') return 'tiling';
     if (mode === 'decoration') return isDualGraph() ? 'decoration' : 'draw';
     return ['draw', 'tiling', 'pick', 'import'].includes(mode) ? mode : 'draw';
+  }
+
+  function normalizeDualGraphLayoutMethod(method) {
+    const value = String(method || '').toLowerCase();
+    if (value === 'shell') return 'shell';
+    if (value === 'spectral') return 'spectral';
+    if (value === 'kamada' || value === 'kamada-kawai' || value === 'kamada_kawai' || value === 'kk') return 'kamada-kawai';
+    return 'force';
   }
 
   function normalizeDrawLayer(layer) {

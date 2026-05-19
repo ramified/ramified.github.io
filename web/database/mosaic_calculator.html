@@ -350,6 +350,43 @@
       margin: 0;
     }
 
+    #dual-graph-layout-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .dual-graph-layout-picker {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .dual-graph-layout-picker select {
+      min-width: 128px;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+
+    .dual-graph-layout-picker select:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .dual-graph-layout-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      overflow-wrap: anywhere;
+    }
+
     .slice-mode-row {
       display: inline-flex;
       gap: 4px;
@@ -696,8 +733,18 @@
             <input type="checkbox" id="show-algebraic-curve-canvas" aria-label="Algebraic curve">
           </div>
           <div id="dual-graph-layout-controls" style="margin-top: 8px;">
+            <label class="dual-graph-layout-picker" for="dual-graph-layout-method">
+              <span>layout</span>
+              <select id="dual-graph-layout-method">
+                <option value="force">Force</option>
+                <option value="shell">Shell</option>
+                <option value="spectral">Spectral</option>
+                <option value="kamada-kawai">Kamada-Kawai</option>
+              </select>
+            </label>
             <button class="btn" id="compute-layout" type="button">Compute layout</button>
             <button class="btn btn-ghost" id="reset-layout" type="button">Reset</button>
+            <span class="hint dual-graph-layout-time" id="dual-graph-layout-time">-</span>
           </div>
           <div id="dual-graph-view-wrap">
             <canvas id="dual-graph-canvas" width="300" height="300" style="width: 100%; margin-top: 8px; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: default; touch-action: none;"></canvas>
@@ -717,6 +764,13 @@
             <div class="algebraic-energy-row">
               <label class="opt-row"><input type="checkbox" id="show-algebraic-tangent-handles"> toggles</label>
               <span class="hint" id="algebraic-energy-status"></span>
+            </div>
+            <div class="algebraic-energy-row" aria-label="Algebraic curve energy terms">
+              <label class="opt-row"><input type="checkbox" data-algebraic-energy-term="bend" checked> bend</label>
+              <label class="opt-row"><input type="checkbox" data-algebraic-energy-term="length" checked> length</label>
+              <label class="opt-row"><input type="checkbox" data-algebraic-energy-term="crossing" checked> crossings</label>
+              <label class="opt-row"><input type="checkbox" data-algebraic-energy-term="spacing" checked> spacing</label>
+              <label class="opt-row"><input type="checkbox" data-algebraic-energy-term="boundary" checked> boundary</label>
             </div>
           </div>
         </div>
