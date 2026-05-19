@@ -203,6 +203,53 @@
       letter-spacing: 0.04em;
     }
 
+    .matrix-formula-line {
+      color: var(--muted);
+      font-size: 0.86rem;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }
+
+    .matrix-latex-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      color: var(--text);
+    }
+
+    .matrix-result-name {
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: var(--accent2);
+      font-family: inherit;
+      font-size: inherit;
+      cursor: pointer;
+      text-decoration: underline;
+      text-decoration-style: dotted;
+      text-underline-offset: 3px;
+    }
+
+    .matrix-result-name:hover,
+    .matrix-result-name:focus-visible {
+      color: var(--accent);
+    }
+
+    .matrix-equals {
+      color: var(--muted);
+    }
+
+    .matrix-latex-code {
+      display: inline-block;
+      flex: 1 1 auto;
+      min-width: min(240px, 100%);
+      max-width: 100%;
+      overflow-x: auto;
+      vertical-align: middle;
+      scrollbar-width: thin;
+    }
+
     .matrix-table {
       border-collapse: collapse;
       font-family: 'JetBrains Mono', monospace;
@@ -220,6 +267,32 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    .matrix-click-label {
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: var(--accent2);
+      font-family: inherit;
+      cursor: pointer;
+      text-align: left;
+      text-decoration: underline;
+      text-decoration-style: dotted;
+      text-underline-offset: 3px;
+    }
+
+    .matrix-click-label:hover,
+    .matrix-click-label:focus-visible {
+      color: var(--accent);
+    }
+
+    .matrix-polynomial {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      line-height: 1.55;
+      color: var(--text);
+      overflow-wrap: anywhere;
     }
 
     .matrix-output-note {
@@ -356,8 +429,11 @@
             <button class="btn btn-ghost" type="button" data-preset="zero">0</button>
             <button class="btn btn-ghost" type="button" data-preset="identity">Id</button>
             <button class="btn btn-ghost" type="button" data-preset="diagonal">Diag</button>
-            <button class="btn btn-ghost" type="button" data-preset="random">Rand</button>
+            <button class="btn btn-ghost" type="button" data-preset="random" title="Random" aria-label="Random">&#9858;</button>
             <button class="btn btn-ghost" type="button" data-preset="cyclic">Cyc</button>
+            <button class="btn btn-ghost" type="button" data-preset="upper" title="Make upper triangular">Up</button>
+            <button class="btn btn-ghost" type="button" data-preset="symmetric" title="Make symmetric">Sym</button>
+            <button class="btn btn-ghost" type="button" data-preset="antisymmetric" title="Make anti-symmetric">Asym</button>
           </div>
         </div>
         <div class="matrix-action-row">
@@ -375,6 +451,7 @@
         <div class="stat-row"><span class="stat-label">Rank</span><span class="stat-value" id="out-rank">-</span></div>
         <div class="stat-row"><span class="stat-label">Trace</span><span class="stat-value" id="out-trace">-</span></div>
         <div class="stat-row"><span class="stat-label">Determinant</span><span class="stat-value" id="out-det">-</span></div>
+        <div class="stat-row"><button class="stat-label matrix-click-label" id="charpoly-factor" type="button" title="factor over the selected field">χ_A(T)</button><span class="stat-value" id="out-charpoly">-</span></div>
       </div>
     </section>
 
@@ -391,6 +468,13 @@
             <option value="jordan">Jordan decomposition</option>
             <option value="bruhat">Bruhat decomposition</option>
             <option value="qr">QR decomposition</option>
+          </select>
+        </div>
+        <div class="matrix-inline-row">
+          <span class="input-label">Result</span>
+          <select id="result-mode-select" class="matrix-select">
+            <option value="numeric">Numerical</option>
+            <option value="symbolic">Symbolic</option>
           </select>
         </div>
         <div class="matrix-inline-row" id="power-row">
@@ -449,6 +533,19 @@
   Browser-side matrix calculator styled with the shared Young diagram UI.
 </footer>
 
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]']],
+      processEscapes: true
+    },
+    options: {
+      skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+    }
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="matrix_calculator.js"></script>
 </body>
 </html>
