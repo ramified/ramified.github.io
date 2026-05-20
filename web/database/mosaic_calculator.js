@@ -77,6 +77,10 @@
     displayPickReturnMode: 'draw',
     editMode: 'rotate',
     vertexDecorations: {},
+    halfEdgeDecorations: {},
+    halfEdgeLabelStyle: 'number',
+    clearVertexDecorations: true,
+    clearHalfEdgeDecorations: true,
     drawLayer: 'above',
     selectedTile: null,
     selectedPaletteId: '',
@@ -169,6 +173,11 @@
       : null;
     refs.drawLayer = document.getElementById('draw-layer');
     refs.drawStyle = document.getElementById('draw-style');
+    refs.halfEdgeLabelStyle = document.getElementById('half-edge-label-style');
+    refs.randomHalfEdgeLabels = document.getElementById('random-half-edge-labels');
+    refs.clearDecorations = document.getElementById('clear-decorations');
+    refs.clearVertexDecorations = document.getElementById('clear-vertex-decorations');
+    refs.clearHalfEdgeDecorations = document.getElementById('clear-half-edge-decorations');
     refs.applyPick = document.getElementById('apply-pick');
     refs.showErrors = document.getElementById('show-errors');
     refs.showCoords = document.getElementById('show-coords');
@@ -266,6 +275,31 @@
       state.drawDebugHit = null;
       updateReport(false);
     });
+    if (refs.halfEdgeLabelStyle) {
+      refs.halfEdgeLabelStyle.addEventListener('change', () => {
+        state.halfEdgeLabelStyle = normalizeHalfEdgeLabelStyle(refs.halfEdgeLabelStyle.value);
+        refs.halfEdgeLabelStyle.value = state.halfEdgeLabelStyle;
+        refreshExport();
+      });
+    }
+    if (refs.randomHalfEdgeLabels) {
+      refs.randomHalfEdgeLabels.addEventListener('click', randomizeHalfEdgeDecorations);
+    }
+    if (refs.clearDecorations) {
+      refs.clearDecorations.addEventListener('click', clearSelectedDecorations);
+    }
+    if (refs.clearVertexDecorations) {
+      refs.clearVertexDecorations.addEventListener('change', () => {
+        state.clearVertexDecorations = refs.clearVertexDecorations.checked;
+        refreshExport();
+      });
+    }
+    if (refs.clearHalfEdgeDecorations) {
+      refs.clearHalfEdgeDecorations.addEventListener('change', () => {
+        state.clearHalfEdgeDecorations = refs.clearHalfEdgeDecorations.checked;
+        refreshExport();
+      });
+    }
 
     document.getElementById('clear-board').addEventListener('click', clearBoard);
     document.getElementById('generate-import').addEventListener('click', generateFromImport);
@@ -534,6 +568,7 @@
     state.diagramType = nextType;
     if (!isDualGraph()) {
       state.vertexDecorations = {};
+      state.halfEdgeDecorations = {};
       if (state.inputMode === 'decoration') state.inputMode = 'draw';
     }
     state.pickedComponent = null;
@@ -777,6 +812,11 @@
     refs.canvas.addEventListener('contextmenu', (event) => {
       event.preventDefault();
       if (isDecorationMode()) {
+        const halfEdgeHit = halfEdgeDecorationHitTest(event.clientX, event.clientY);
+        if (halfEdgeHit) {
+          setHalfEdgeDecoration(halfEdgeHit.key, '');
+          return;
+        }
         const hit = vertexDecorationHitTest(event.clientX, event.clientY);
         if (hit >= 0) changeVertexDecoration(hit, -1);
         return;
@@ -823,9 +863,10 @@
       }
       if (isDecorationMode()) {
         const debugChanged = clearDrawDebugHit(false);
-        const hit = vertexDecorationHitTest(event.clientX, event.clientY);
-        if (hit !== state.hoverIndex || debugChanged) {
-          state.hoverIndex = hit;
+        const hit = decorationHitFromPoint(event.clientX, event.clientY);
+        const hoverIndex = hit && hit.type === 'vertex' ? hit.index : -1;
+        if (hoverIndex !== state.hoverIndex || debugChanged) {
+          state.hoverIndex = hoverIndex;
           draw(analyze());
         }
         return;
@@ -941,6 +982,7 @@
     state.displayPickReturnMode = 'draw';
     clearDecorationClickTimer();
     state.vertexDecorations = {};
+    state.halfEdgeDecorations = {};
     state.tiles = Array(rows * cols).fill(null);
     syncAllInputs(rows, cols, state.lattice, state.wrapped);
     renderTilePalette();
@@ -969,6 +1011,7 @@
     const oldLattice = state.lattice;
     const oldTiles = state.tiles.slice();
     const oldDecorations = { ...state.vertexDecorations };
+    const oldHalfEdgeDecorations = { ...state.halfEdgeDecorations };
 
     state.rows = rows;
     state.cols = cols;
@@ -991,6 +1034,7 @@
     state.vertexDecorations = oldLattice !== nextLattice
       ? {}
       : reshapeVertexDecorations(oldDecorations, oldRows, oldCols, rows, cols);
+    state.halfEdgeDecorations = oldLattice !== nextLattice ? {} : oldHalfEdgeDecorations;
     syncAllInputs(rows, cols, state.lattice, state.wrapped);
     renderTilePalette();
     resetView(false);
@@ -1106,6 +1150,9 @@
       || (payload.display && payload.display.drawDebug ? 'debug' : 'shade')
     );
     state.edits = Number.isFinite(Number(payload.edits)) ? Math.max(0, Math.trunc(Number(payload.edits))) : 0;
+    state.halfEdgeLabelStyle = normalizeHalfEdgeLabelStyle(payload.halfEdgeLabelStyle || (payload.display && payload.display.halfEdgeLabelStyle));
+    state.clearVertexDecorations = payload.clearVertexDecorations !== false;
+    state.clearHalfEdgeDecorations = payload.clearHalfEdgeDecorations !== false;
     state.hoverIndex = -1;
     state.drawDebugHit = null;
     state.pickHoverHit = null;
@@ -1115,6 +1162,7 @@
     state.selectedPaletteId = '';
     state.tiles = importTiles(payload.tiles, rows, cols);
     state.vertexDecorations = importVertexDecorations(payload, rows, cols);
+    state.halfEdgeDecorations = importHalfEdgeDecorations(payload);
 
     syncAllInputs(rows, cols, state.lattice, state.wrapped);
     refs.showErrors.checked = state.showErrors;
@@ -1124,6 +1172,9 @@
     refs.drawAction.value = state.drawAction;
     refs.knotCodeKind.value = state.knotCodeKind;
     refs.drawStyle.value = state.drawStyle;
+    if (refs.halfEdgeLabelStyle) refs.halfEdgeLabelStyle.value = state.halfEdgeLabelStyle;
+    if (refs.clearVertexDecorations) refs.clearVertexDecorations.checked = !!state.clearVertexDecorations;
+    if (refs.clearHalfEdgeDecorations) refs.clearHalfEdgeDecorations.checked = !!state.clearHalfEdgeDecorations;
     renderTilePalette();
     resizeCanvas();
     applyImportedView(payload.view);
@@ -1197,6 +1248,43 @@
     return decorations;
   }
 
+  function importHalfEdgeDecorations(payload) {
+    const decorations = {};
+    const addDecoration = (key, value) => {
+      const normalizedKey = String(key || '').trim();
+      const normalizedValue = normalizeHalfEdgeDecoration(value);
+      if (normalizedKey && normalizedValue) decorations[normalizedKey] = normalizedValue;
+    };
+
+    if (payload.halfEdgeDecorations && typeof payload.halfEdgeDecorations === 'object') {
+      Object.entries(payload.halfEdgeDecorations).forEach(([key, value]) => addDecoration(key, value));
+    }
+
+    const graph = payload.dualGraph;
+    if (graph && Array.isArray(graph.legs)) {
+      graph.legs.forEach((leg) => {
+        if (!leg || leg.label == null) return;
+        const vertex = Number(leg.vertex);
+        const spoke = leg.spoke && typeof leg.spoke === 'object' ? Number(leg.spoke.dir) : Number(leg.spoke);
+        if (Number.isInteger(vertex) && Number.isInteger(spoke)) addDecoration(`${vertex}:${spoke}`, leg.label);
+      });
+    }
+
+    if (graph && Array.isArray(graph.halfEdges)) {
+      graph.halfEdges.forEach((halfEdge) => {
+        if (!halfEdge || halfEdge.label == null) return;
+        const key = halfEdge.key || (
+          Number.isInteger(Number(halfEdge.vertex)) && Number.isInteger(Number(halfEdge.spoke))
+            ? `${Number(halfEdge.vertex)}:${Number(halfEdge.spoke)}`
+            : ''
+        );
+        addDecoration(key, halfEdge.label);
+      });
+    }
+
+    return decorations;
+  }
+
   function applyImportedView(view) {
     state.viewScale = 1;
     state.viewX = 0;
@@ -1218,6 +1306,7 @@
     clearDecorationClickTimer();
     state.tiles = Array(state.rows * state.cols).fill(null);
     state.vertexDecorations = {};
+    state.halfEdgeDecorations = {};
     state.pickedComponent = null;
     state.pickedAnchor = null;
     state.pickHoverHit = null;
@@ -1240,6 +1329,52 @@
     if (!isDecorationMode()) return -1;
     const hit = hitTest(clientX, clientY);
     return hit >= 0 && isVertexTileValue(state.tiles[hit]) ? hit : -1;
+  }
+
+  function halfEdgeDecorationHitTest(clientX, clientY) {
+    if (!isDecorationMode()) return null;
+    const graphData = collectDualGraphData(analyze(), { requireSingleComponent: false });
+    if (!graphData.isValid) return null;
+    const point = clientPointToBoardPoint(clientX, clientY);
+    const hitPadding = Math.max(7, geometry.radius * 0.16);
+    let best = null;
+
+    graphData.legs.forEach((leg, legIndex) => {
+      const mark = halfEdgeDecorationMarkPoint(leg);
+      if (!mark) return;
+      const distance = Math.hypot(point.x - mark.x, point.y - mark.y);
+      if (distance > hitPadding) return;
+      if (!best || distance < best.distance) {
+        best = {
+          leg,
+          legIndex,
+          key: halfEdgeDecorationKey(leg),
+          distance
+        };
+      }
+    });
+
+    return best;
+  }
+
+  function decorationHitFromPoint(clientX, clientY) {
+    const halfEdgeHit = halfEdgeDecorationHitTest(clientX, clientY);
+    if (halfEdgeHit) {
+      return {
+        type: 'half-edge',
+        key: halfEdgeHit.key,
+        legIndex: halfEdgeHit.legIndex
+      };
+    }
+    const vertexIndex = vertexDecorationHitTest(clientX, clientY);
+    return vertexIndex >= 0 ? { type: 'vertex', index: vertexIndex } : null;
+  }
+
+  function sameDecorationHit(left, right) {
+    if (!left || !right) return left === right;
+    if (left.type !== right.type) return false;
+    if (left.type === 'half-edge') return left.key === right.key;
+    return left.index === right.index;
   }
 
   function vertexDecorationValue(index) {
@@ -1269,11 +1404,43 @@
     return setVertexDecoration(index, Math.max(0, vertexDecorationValue(index) + delta));
   }
 
-  function scheduleVertexDecorationIncrement(index) {
+  function halfEdgeDecorationValue(key) {
+    const value = state.halfEdgeDecorations[key];
+    return value == null ? '' : String(value);
+  }
+
+  function setHalfEdgeDecoration(key, label) {
+    if (!key) return false;
+    const next = normalizeHalfEdgeDecoration(label);
+    const current = halfEdgeDecorationValue(key);
+    if (next === current) return false;
+    if (next) state.halfEdgeDecorations[key] = next;
+    else delete state.halfEdgeDecorations[key];
+    pruneHalfEdgeDecorations();
+    state.edits += 1;
+    updateReport(false);
+    return true;
+  }
+
+  function assignNextHalfEdgeDecoration(key) {
+    const graphData = collectDualGraphData(analyze(), { requireSingleComponent: false });
+    if (!graphData.isValid) return false;
+    const labels = orderedHalfEdgeLabels(graphData.legs.length, state.halfEdgeLabelStyle);
+    const used = new Set(Object.values(state.halfEdgeDecorations).map((label) => String(label)));
+    const next = labels.find((label) => !used.has(label)) || labels[0] || '1';
+    return setHalfEdgeDecoration(key, next);
+  }
+
+  function scheduleDecorationClick(hit) {
     clearDecorationClickTimer();
     decorationClickTimer = window.setTimeout(() => {
       decorationClickTimer = null;
-      changeVertexDecoration(index, 1);
+      if (!hit) return;
+      if (hit.type === 'half-edge') {
+        assignNextHalfEdgeDecoration(hit.key);
+      } else if (hit.type === 'vertex') {
+        changeVertexDecoration(hit.index, 1);
+      }
     }, 300);
   }
 
@@ -1286,6 +1453,16 @@
     if (!isDecorationMode()) return false;
     event.preventDefault();
     clearDecorationClickTimer();
+    const halfEdgeHit = halfEdgeDecorationHitTest(event.clientX, event.clientY);
+    if (halfEdgeHit) {
+      const current = halfEdgeDecorationValue(halfEdgeHit.key);
+      const input = window.prompt('Half-edge label', current);
+      if (input == null) return true;
+      setHalfEdgeDecoration(halfEdgeHit.key, input);
+      refs.statusLine.classList.remove('mosaic-status-bad');
+      return true;
+    }
+
     const hit = vertexDecorationHitTest(event.clientX, event.clientY);
     if (hit < 0) return true;
     const current = vertexDecorationValue(hit);
@@ -1309,6 +1486,139 @@
         delete state.vertexDecorations[key];
       }
     });
+  }
+
+  function pruneHalfEdgeDecorations(graphData = null) {
+    const data = graphData || collectDualGraphData(analyze(), { requireSingleComponent: false });
+    if (!data.isValid) {
+      state.halfEdgeDecorations = {};
+      return;
+    }
+    const validKeys = new Set(data.legs.map(halfEdgeDecorationKey));
+    Object.keys(state.halfEdgeDecorations).forEach((key) => {
+      const value = normalizeHalfEdgeDecoration(state.halfEdgeDecorations[key]);
+      if (!validKeys.has(key) || !value) delete state.halfEdgeDecorations[key];
+      else state.halfEdgeDecorations[key] = value;
+    });
+  }
+
+  function randomizeHalfEdgeDecorations() {
+    const graphData = collectDualGraphData(analyze(), { requireSingleComponent: false });
+    if (!graphData.isValid || !graphData.legs.length) return;
+    pruneHalfEdgeDecorations(graphData);
+    const legs = graphData.legs.slice();
+    const remaining = legs.filter((leg) => !halfEdgeDecorationValue(halfEdgeDecorationKey(leg)));
+    const targets = remaining.length ? remaining : legs;
+    const labels = orderedHalfEdgeLabels(graphData.legs.length, state.halfEdgeLabelStyle);
+    const used = remaining.length
+      ? new Set(Object.values(state.halfEdgeDecorations).map((label) => String(label)))
+      : new Set();
+    const available = labels.filter((label) => !used.has(label));
+    const shuffled = shuffleArray(available);
+    targets.forEach((leg, index) => {
+      const label = shuffled[index] || labels[index] || String(index + 1);
+      state.halfEdgeDecorations[halfEdgeDecorationKey(leg)] = label;
+    });
+    state.edits += 1;
+    updateReport(false);
+  }
+
+  function clearSelectedDecorations() {
+    const clearVertex = !!(refs.clearVertexDecorations && refs.clearVertexDecorations.checked);
+    const clearHalfEdge = !!(refs.clearHalfEdgeDecorations && refs.clearHalfEdgeDecorations.checked);
+    if (!clearVertex && !clearHalfEdge) return;
+    let changed = false;
+    if (clearVertex && Object.keys(state.vertexDecorations).length) {
+      state.vertexDecorations = {};
+      changed = true;
+    }
+    if (clearHalfEdge && Object.keys(state.halfEdgeDecorations).length) {
+      state.halfEdgeDecorations = {};
+      changed = true;
+    }
+    if (!changed) return;
+    state.edits += 1;
+    updateReport(false);
+  }
+
+  function halfEdgeDecorationKey(leg) {
+    return `${leg.vertex}:${leg.spoke}`;
+  }
+
+  function normalizeHalfEdgeDecoration(value) {
+    return String(value == null ? '' : value).trim();
+  }
+
+  function orderedHalfEdgeLabels(count, style) {
+    const labelStyle = normalizeHalfEdgeLabelStyle(style);
+    return Array.from({ length: Math.max(0, count) }, (_, index) => halfEdgeLabelForIndex(index, labelStyle));
+  }
+
+  function halfEdgeLabelForIndex(index, style) {
+    if (style === 'letter') return alphabeticLabel(index);
+    if (style === 'point') return `p${index + 1}`;
+    if (style === 'roman') return romanLabel(index + 1);
+    return String(index + 1);
+  }
+
+  function alphabeticLabel(index) {
+    let value = Math.max(0, Math.trunc(index));
+    let label = '';
+    do {
+      label = String.fromCharCode(97 + (value % 26)) + label;
+      value = Math.floor(value / 26) - 1;
+    } while (value >= 0);
+    return label;
+  }
+
+  function romanLabel(value) {
+    let remaining = Math.max(1, Math.trunc(value));
+    const parts = [
+      [1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'],
+      [100, 'c'], [90, 'xc'], [50, 'l'], [40, 'xl'],
+      [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i']
+    ];
+    let label = '';
+    parts.forEach(([amount, text]) => {
+      while (remaining >= amount) {
+        label += text;
+        remaining -= amount;
+      }
+    });
+    return label;
+  }
+
+  function halfEdgeDecorationMarkPoint(leg) {
+    const end = halfEdgeDecorationEnd(leg);
+    const cell = end && geometry && geometry.cells[end.index];
+    if (!cell) return null;
+    return edgePoint(cell.x, cell.y, end.dir, edgeConnectionDistance(geometry.radius));
+  }
+
+  function halfEdgeDecorationLabelPoint(leg) {
+    const mark = halfEdgeDecorationMarkPoint(leg);
+    if (!mark) return null;
+    const end = halfEdgeDecorationEnd(leg);
+    const angle = getLattice().angles[end.dir];
+    const distance = Math.max(12, geometry.radius * 0.24);
+    return {
+      x: mark.x + Math.cos(angle) * distance,
+      y: mark.y + Math.sin(angle) * distance
+    };
+  }
+
+  function halfEdgeDecorationEnd(leg) {
+    if (!leg || !leg.path || !leg.path.length) return null;
+    const last = leg.path[leg.path.length - 1];
+    if (
+      last
+      && isVertexTileValue(state.tiles[last.index])
+      && !vertexTileHasSpoke(last.index, last.dir)
+      && leg.path.length > 1
+    ) {
+      return leg.path[leg.path.length - 2];
+    }
+    return last;
   }
 
   function rotateTile(index, steps) {
@@ -1409,6 +1719,7 @@
     if (tilesEqual(state.tiles[index], tile)) return;
     state.tiles[index] = cloneTile(tile);
     delete state.vertexDecorations[index];
+    pruneHalfEdgeDecorations();
     state.edits += 1;
     updateReport(false);
   }
@@ -1417,6 +1728,7 @@
     if (index < 0 || isTileEmpty(state.tiles[index])) return;
     state.tiles[index] = null;
     delete state.vertexDecorations[index];
+    pruneHalfEdgeDecorations();
     state.edits += 1;
     updateReport(false);
   }
@@ -1431,6 +1743,7 @@
     delete state.vertexDecorations[fromIndex];
     delete state.vertexDecorations[toIndex];
     if (decoration > 0 && isVertexTileValue(state.tiles[toIndex])) state.vertexDecorations[toIndex] = decoration;
+    pruneHalfEdgeDecorations();
     state.edits += 1;
     updateReport(false);
   }
@@ -1882,18 +2195,21 @@
   function toggleVertexTileAtIndex(index) {
     if (!isDualGraph() || index < 0 || index >= state.tiles.length) return false;
     const tile = state.tiles[index];
-    if (isVertexTileValue(tile)) {
-      state.tiles[index] = null;
-      delete state.vertexDecorations[index];
-    } else if (isTileEmpty(tile)) {
-      // Creating a vertex on an empty tile - auto-connect to open ends
-      const openEnds = findOpenEndsPointingToTile(index);
-      state.tiles[index] = vertexTileFromDirs(openEnds);
-      delete state.vertexDecorations[index];
-    } else {
-      state.tiles[index] = vertexTileFromDirs(maskToDirs(tileToMask(tile)));
-      delete state.vertexDecorations[index];
-    }
+      if (isVertexTileValue(tile)) {
+        state.tiles[index] = null;
+        delete state.vertexDecorations[index];
+        pruneHalfEdgeDecorations();
+      } else if (isTileEmpty(tile)) {
+        // Creating a vertex on an empty tile - auto-connect to open ends
+        const openEnds = findOpenEndsPointingToTile(index);
+        state.tiles[index] = vertexTileFromDirs(openEnds);
+        delete state.vertexDecorations[index];
+        pruneHalfEdgeDecorations();
+      } else {
+        state.tiles[index] = vertexTileFromDirs(maskToDirs(tileToMask(tile)));
+        delete state.vertexDecorations[index];
+        pruneHalfEdgeDecorations();
+      }
     state.edits += 1;
     updateReport(false);
     return true;
@@ -2347,10 +2663,11 @@
       return;
     }
     if (isDecorationMode()) {
-      const hit = vertexDecorationHitTest(event.clientX, event.clientY);
+      const hit = decorationHitFromPoint(event.clientX, event.clientY);
       pointerState = {
         id: event.pointerId,
-        index: hit,
+        index: hit && hit.type === 'vertex' ? hit.index : -1,
+        decorationHit: hit,
         x: event.clientX,
         y: event.clientY,
         lastX: event.clientX,
@@ -2473,8 +2790,8 @@
     }
     if (isDecorationMode()) {
       if (pointerState && event.pointerId === pointerState.id && !pointerState.moved) {
-        const hit = vertexDecorationHitTest(event.clientX, event.clientY);
-        if (hit >= 0 && hit === pointerState.index) scheduleVertexDecorationIncrement(hit);
+        const hit = decorationHitFromPoint(event.clientX, event.clientY);
+        if (sameDecorationHit(hit, pointerState.decorationHit)) scheduleDecorationClick(hit);
       }
       clearPointerState(event);
       return;
@@ -2860,6 +3177,7 @@
   function updateReport(manualCheck) {
     pruneVertexDecorations();
     const report = analyze();
+    if (isDualGraph()) pruneHalfEdgeDecorations();
     normalizePickedComponent(report);
     refs.out.tiles.textContent = `${report.active}/${report.total}`;
     refs.out.openEnds.textContent = String(report.openEnds);
@@ -2909,6 +3227,11 @@
   function updatePickControls() {
     if (!refs.applyPick) return;
     refs.applyPick.disabled = state.inputMode !== 'pick' || state.pickedComponent == null;
+    if (refs.randomHalfEdgeLabels) refs.randomHalfEdgeLabels.disabled = !isDecorationMode();
+    if (refs.clearDecorations) refs.clearDecorations.disabled = !isDecorationMode();
+    if (refs.halfEdgeLabelStyle) refs.halfEdgeLabelStyle.disabled = !isDecorationMode();
+    if (refs.clearVertexDecorations) refs.clearVertexDecorations.disabled = !isDecorationMode();
+    if (refs.clearHalfEdgeDecorations) refs.clearHalfEdgeDecorations.disabled = !isDecorationMode();
   }
 
   function isPickDisplayActive() {
@@ -3229,9 +3552,10 @@
     return { width, height };
   }
 
-  function collectDualGraphData(report) {
+  function collectDualGraphData(report, options = {}) {
+    const requireSingleComponent = options.requireSingleComponent !== false;
     // Check prerequisites: exactly one component and at least one vertex
-    if (report.components !== 1) {
+    if (requireSingleComponent && report.components !== 1) {
       return { isValid: false, reason: 'Requires exactly one component' };
     }
 
@@ -3282,6 +3606,7 @@
             legs.push({
               vertex: vertex.index,
               spoke: startDir,
+              label: halfEdgeDecorationValue(`${vertex.index}:${startDir}`),
               path: path.slice()
             });
             break;
@@ -3307,6 +3632,7 @@
               legs.push({
                 vertex: vertex.index,
                 spoke: startDir,
+                label: halfEdgeDecorationValue(`${vertex.index}:${startDir}`),
                 path: path.concat({ index: nextIndex, dir: opposite })
               });
             }
@@ -3332,6 +3658,7 @@
             legs.push({
               vertex: vertex.index,
               spoke: startDir,
+              label: halfEdgeDecorationValue(`${vertex.index}:${startDir}`),
               path: path.slice()
             });
             break;
@@ -3351,13 +3678,29 @@
     const edges = graphData.edges.length;
     const halfEdges = graphData.legs.length;
     const components = countDualGraphComponents(graphData);
+    const valences = dualGraphVertexValences(graphData);
     const cycleRank = Math.max(0, edges - vertices + components);
-    const vertexGenus = graphData.vertices.reduce((total, vertex) => (
-      total + vertexDecorationValue(vertex.index)
-    ), 0);
+    const vertexDetails = graphData.vertices.map((vertex) => {
+      const genus = vertexDecorationValue(vertex.index);
+      const valence = valences.get(vertex.index) || 0;
+      return {
+        index: vertex.index,
+        row: vertex.row,
+        col: vertex.col,
+        genus,
+        valence,
+        stability: (2 * genus) - 2 + valence,
+        stackDimension: (3 * genus) - 3 + valence
+      };
+    });
+    const vertexGenus = vertexDetails.reduce((total, vertex) => total + vertex.genus, 0);
     const firstBetti = cycleRank + vertexGenus;
     const genus = vertexGenus + cycleRank;
     const eulerCharacteristic = (2 * components) - (2 * genus) - halfEdges;
+    const unstableVertices = vertexDetails.filter((vertex) => vertex.stability <= 0);
+    const stackStratumDimension = vertexDetails.reduce((total, vertex) => (
+      total + vertex.stackDimension
+    ), 0);
 
     return {
       vertices,
@@ -3366,19 +3709,33 @@
       components,
       cycleRank,
       vertexGenus,
+      vertexDetails,
       firstBetti,
       genus,
-      eulerCharacteristic
+      eulerCharacteristic,
+      isStable: unstableVertices.length === 0,
+      unstableVertices,
+      stackStratumDimension
     };
   }
 
   function formatDualGraphInvariants(graphData) {
     const inv = dualGraphInvariants(graphData);
+    const stableLabel = inv.isStable ? 'yes' : 'no';
+    const stableTitle = inv.isStable
+      ? 'Every vertex satisfies 2g(v) - 2 + n(v) > 0'
+      : `Unstable vertices: ${inv.unstableVertices.map(formatDualGraphVertexLabel).join(', ')}`;
     return `<dl class="slice-invariant-list">
       <dt>g</dt><dd>${inv.genus}</dd>
       <dt>n</dt><dd>${inv.halfEdges}</dd>
       <dt>b<sub>1</sub></dt><dd>${inv.firstBetti}</dd>
+      <dt title="Every vertex satisfies 2g(v) - 2 + n(v) > 0">stable</dt><dd title="${stableTitle}">${stableLabel}</dd>
+      <dt title="Stack stratum dimension: sum_v (3g(v) - 3 + n(v))">dim</dt><dd>${inv.stackStratumDimension}</dd>
     </dl>`;
+  }
+
+  function formatDualGraphVertexLabel(vertex) {
+    return `r${vertex.row + 1}c${vertex.col + 1}`;
   }
 
   function syncDualGraphInvariantVisibility() {
@@ -3415,6 +3772,20 @@
     });
 
     return new Set(vertices.map(findRoot)).size;
+  }
+
+  function dualGraphVertexValences(graphData) {
+    const valences = new Map(graphData.vertices.map((vertex) => [vertex.index, 0]));
+
+    graphData.edges.forEach((edge) => {
+      if (valences.has(edge.from)) valences.set(edge.from, valences.get(edge.from) + 1);
+      if (valences.has(edge.to)) valences.set(edge.to, valences.get(edge.to) + 1);
+    });
+    graphData.legs.forEach((leg) => {
+      if (valences.has(leg.vertex)) valences.set(leg.vertex, valences.get(leg.vertex) + 1);
+    });
+
+    return valences;
   }
 
   function buildDualGraphExport(report, lattice) {
@@ -3467,6 +3838,8 @@
           dir: leg.spoke,
           name: lattice.dirNames[leg.spoke]
         },
+        key: halfEdgeDecorationKey(leg),
+        label: leg.label || halfEdgeDecorationValue(halfEdgeDecorationKey(leg)),
         path: exportDualGraphPath(leg.path, lattice),
         layout: dualGraphNodeExport(`l${legIndex}`)
       }))
@@ -3498,7 +3871,9 @@
         to: vertexIds.get(edge.to)
       })),
       halfEdges: graphData.legs.map((leg) => ({
-        vertex: vertexIds.get(leg.vertex)
+        vertex: vertexIds.get(leg.vertex),
+        key: halfEdgeDecorationKey(leg),
+        label: leg.label || halfEdgeDecorationValue(halfEdgeDecorationKey(leg))
       }))
     };
   }
@@ -3620,6 +3995,9 @@
       ctx.strokeStyle = '#dc2626';
       ctx.lineWidth = 1;
       ctx.stroke();
+
+      const label = leg.label || halfEdgeDecorationValue(halfEdgeDecorationKey(leg));
+      if (label) drawPlainTextLabel(ctx, legNode.x, legNode.y - 14, label, '#991b1b', 10);
     });
 
     // Draw vertices on top
@@ -3862,7 +4240,7 @@
           x: point.x,
           y: point.y,
           legIndex,
-          label: `p${legIndex + 1}`,
+          label: leg.label || halfEdgeDecorationValue(halfEdgeDecorationKey(leg)) || `p${legIndex + 1}`,
           vertexIndex,
           tangentKey,
           tangent
@@ -5018,16 +5396,19 @@
     const legsByVertex = new Map();
     graphData.legs.forEach((leg, index) => {
       if (!legsByVertex.has(leg.vertex)) legsByVertex.set(leg.vertex, []);
-      legsByVertex.get(leg.vertex).push(index + 1);
+      legsByVertex.get(leg.vertex).push({
+        leg,
+        label: leg.label || halfEdgeDecorationValue(halfEdgeDecorationKey(leg)) || String(index + 1)
+      });
     });
-    legsByVertex.forEach((labels, vertexIndex) => {
+    legsByVertex.forEach((entries, vertexIndex) => {
       const surface = surfaces.get(vertexIndex);
       if (!surface) return;
-      const samples = sampleRiemannSurfaceInterior(surface, labels.length + surface.genus + 5);
-      labels.forEach((label, index) => {
+      const samples = sampleRiemannSurfaceInterior(surface, entries.length + surface.genus + 5);
+      entries.forEach((entry, index) => {
         const point = samples.marked[index] || sampleRiemannSurfacePoint(surface, index + 17, 0.46);
         surface.marks.push({
-          label,
+          label: entry.label,
           x: point.x,
           y: point.y
         });
@@ -5247,6 +5628,7 @@
     ctx.fillStyle = '#dc2626';
     surface.marks.forEach((mark) => {
       drawSurfacePoint(ctx, mark.x, mark.y, 4.2);
+      if (mark.label) drawPlainTextLabel(ctx, mark.x + 8, mark.y - 8, mark.label, '#991b1b', 10, 'left');
     });
     ctx.restore();
   }
@@ -6935,6 +7317,7 @@
     const canvas = refs.canvas;
     const ctx = canvas.getContext('2d');
     const palette = getPalette();
+    const graphData = isDualGraph() ? collectDualGraphData(report, { requireSingleComponent: false }) : null;
 
     ctx.setTransform(geometry.dpr, 0, 0, geometry.dpr, 0, 0);
     ctx.clearRect(0, 0, geometry.width, geometry.height);
@@ -6949,6 +7332,7 @@
       offsets.forEach((offset) => {
         drawBoardCopy(ctx, report, palette, offset, pickedLift);
       });
+      if (graphData && graphData.isValid) drawHalfEdgeDecorationLabels(ctx, graphData, palette);
       drawDrawDebugOverlay(ctx, palette, report);
       drawPickHoverOverlay(ctx, palette, report);
       ctx.restore();
@@ -6957,6 +7341,7 @@
     }
 
     drawBoardCopy(ctx, report, palette, { x: 0, y: 0, copyCol: 0, copyRow: 0 }, null);
+    if (graphData && graphData.isValid) drawHalfEdgeDecorationLabels(ctx, graphData, palette);
     drawDrawDebugOverlay(ctx, palette, report);
     drawPickHoverOverlay(ctx, palette, report);
     drawDragGhost(ctx, palette);
@@ -6992,6 +7377,73 @@
     if (isDualGraph() && isVertexTileValue(state.drag.tile)) drawGraphTile(ctx, state.dragPoint, state.drag.tile, palette);
     else drawPipe(ctx, state.dragPoint, state.drag.tile, palette);
     ctx.restore();
+  }
+
+  function drawHalfEdgeDecorationLabels(ctx, graphData, palette) {
+    if (!graphData || !graphData.legs || !graphData.legs.length) return;
+    graphData.legs.forEach((leg) => {
+      const label = leg.label || halfEdgeDecorationValue(halfEdgeDecorationKey(leg));
+      if (!label) return;
+      const point = halfEdgeDecorationLabelPoint(leg);
+      if (!point) return;
+      drawTextBadge(ctx, point.x, point.y, label, palette, Math.max(8, geometry.radius * 0.2));
+    });
+  }
+
+  function drawTextBadge(ctx, x, y, value, palette, fontSize) {
+    const text = String(value || '');
+    if (!text) return;
+    ctx.save();
+    ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const metrics = ctx.measureText(text);
+    const paddingX = Math.max(4, fontSize * 0.36);
+    const paddingY = Math.max(2.5, fontSize * 0.24);
+    const width = Math.max(fontSize + 5, metrics.width + paddingX * 2);
+    const height = Math.max(fontSize + 4, fontSize + paddingY * 2);
+    const radius = Math.min(4, height * 0.28);
+    const left = x - width / 2;
+    const top = y - height / 2;
+    roundedRectPath(ctx, left, top, width, height, radius);
+    ctx.fillStyle = 'rgba(255,253,248,0.96)';
+    ctx.fill();
+    ctx.strokeStyle = palette.accent2;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = palette.text;
+    ctx.fillText(text, x, y + fontSize * 0.03);
+    ctx.restore();
+  }
+
+  function drawPlainTextLabel(ctx, x, y, value, color, fontSize, align = 'center') {
+    const text = String(value || '');
+    if (!text) return;
+    ctx.save();
+    ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
+    ctx.textAlign = align;
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = Math.max(2.5, fontSize * 0.32);
+    ctx.strokeStyle = 'rgba(255,253,248,0.92)';
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+    ctx.restore();
+  }
+
+  function roundedRectPath(ctx, x, y, width, height, radius) {
+    const r = Math.max(0, Math.min(radius, width / 2, height / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
   }
 
   function drawPickHoverOverlay(ctx, palette, report) {
@@ -8132,6 +8584,10 @@
       knotCodeKind: state.knotCodeKind,
       drawLayer: state.drawLayer,
       drawStyle: state.drawStyle,
+      halfEdgeLabelStyle: state.halfEdgeLabelStyle,
+      halfEdgeDecorations: { ...state.halfEdgeDecorations },
+      clearVertexDecorations: !!state.clearVertexDecorations,
+      clearHalfEdgeDecorations: !!state.clearHalfEdgeDecorations,
       display: {
         showOpenEnds: state.showErrors,
         showCoords: state.showCoords,
@@ -8140,6 +8596,7 @@
         drawAction: state.drawAction,
         knotCodeKind: state.knotCodeKind,
         drawStyle: state.drawStyle,
+        halfEdgeLabelStyle: state.halfEdgeLabelStyle,
         drawDebug: state.drawStyle === 'debug'
       },
       view: {
@@ -8220,6 +8677,9 @@
     refs.knotCodeKind.value = state.knotCodeKind;
     refs.drawLayer.value = state.drawLayer;
     refs.drawStyle.value = state.drawStyle;
+    if (refs.halfEdgeLabelStyle) refs.halfEdgeLabelStyle.value = normalizeHalfEdgeLabelStyle(state.halfEdgeLabelStyle);
+    if (refs.clearVertexDecorations) refs.clearVertexDecorations.checked = !!state.clearVertexDecorations;
+    if (refs.clearHalfEdgeDecorations) refs.clearHalfEdgeDecorations.checked = !!state.clearHalfEdgeDecorations;
     refs.colorComponents.checked = state.colorComponents;
     refs.displayPick.checked = state.displayPick;
     syncDualGraphInvariantVisibility();
@@ -8301,6 +8761,7 @@
       refs.inputDecorationOption.hidden = !isDualGraph();
       refs.inputDecorationOption.disabled = !isDualGraph();
     }
+    updatePickControls();
     if (!isDualGraph() && state.drawAction === 'vertex') {
       state.drawAction = 'edge';
       refs.drawAction.value = state.drawAction;
@@ -8639,6 +9100,10 @@
 
   function normalizeDrawStyle(style) {
     return ['none', 'debug', 'shade'].includes(style) ? style : 'shade';
+  }
+
+  function normalizeHalfEdgeLabelStyle(style) {
+    return ['number', 'letter', 'point', 'roman'].includes(style) ? style : 'number';
   }
 
   function normalizeDrawAction(action) {

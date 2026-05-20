@@ -5,6 +5,16 @@
   const TOL = 1e-10;
   const DISPLAY_TOL = 1e-12;
   const CHARPOLY_TIMEOUT_MS = 1500;
+  const DEFAULT_FINITE_FIELD_PRIME = 7;
+  const SMALL_PRIMES = [
+    2, 3, 5, 7, 11, 13, 17, 19, 23, 29,
+    31, 37, 41, 43, 47, 53, 59, 61, 67, 71,
+    73, 79, 83, 89, 97, 101, 103, 107, 109, 113,
+    127, 131, 137, 139, 149, 151, 157, 163, 167, 173,
+    179, 181, 191, 193, 197, 199, 211, 223, 227, 229,
+    233, 239, 241, 251, 257, 263, 269, 271, 277, 281,
+    283, 293
+  ];
 
   class Complex {
     constructor(re = 0, im = 0) {
@@ -191,9 +201,113 @@
     }
   }
 
+  class RationalFunctionScalar {
+    constructor(num = [Fraction.zero()], den = [Fraction.one()], variable = 't') {
+      this.variable = normalizeSymbolName(variable, 't');
+      const normalized = rationalFunctionNormalize(num, den);
+      this.num = normalized.num;
+      this.den = normalized.den;
+    }
+
+    static zero(variable = 't') { return new RationalFunctionScalar([Fraction.zero()], [Fraction.one()], variable); }
+    static one(variable = 't') { return new RationalFunctionScalar([Fraction.one()], [Fraction.one()], variable); }
+    static variable(variable = 't') { return new RationalFunctionScalar([Fraction.zero(), Fraction.one()], [Fraction.one()], variable); }
+    static fromFraction(value, variable = 't') { return new RationalFunctionScalar([Fraction.from(value)], [Fraction.one()], variable); }
+
+    clone() { return new RationalFunctionScalar(this.num, this.den, this.variable); }
+    add(other) {
+      other = this.coerce(other);
+      return new RationalFunctionScalar(
+        polyQAdd(polyQMul(this.num, other.den), polyQMul(other.num, this.den)),
+        polyQMul(this.den, other.den),
+        this.variable
+      );
+    }
+    sub(other) { other = this.coerce(other); return this.add(other.neg()); }
+    neg() { return new RationalFunctionScalar(polyQNeg(this.num), this.den, this.variable); }
+    mul(other) {
+      other = this.coerce(other);
+      return new RationalFunctionScalar(polyQMul(this.num, other.num), polyQMul(this.den, other.den), this.variable);
+    }
+    div(other) {
+      other = this.coerce(other);
+      if (other.isZero()) throw new Error('Division by zero.');
+      return new RationalFunctionScalar(polyQMul(this.num, other.den), polyQMul(this.den, other.num), this.variable);
+    }
+    isZero() { return polyQIsZero(this.num); }
+    isOne() { return polyQEqual(this.num, this.den); }
+    isReal() { return this.isConstant(); }
+    isConstant() { return polyQDegree(this.num) <= 0 && polyQDegree(this.den) <= 0; }
+    constantFraction() { return this.isConstant() ? this.num[0].div(this.den[0]) : null; }
+    toComplex() {
+      const value = this.constantFraction();
+      return new Complex(value ? value.toNumber() : 0, 0);
+    }
+
+    coerce(other) {
+      if (other instanceof RationalFunctionScalar) {
+        if (other.variable !== this.variable) throw new Error('Cannot mix rational function variables.');
+        return other;
+      }
+      if (other instanceof Fraction) return RationalFunctionScalar.fromFraction(other, this.variable);
+      return RationalFunctionScalar.fromFraction(new Fraction(other, 1n), this.variable);
+    }
+  }
+
+  class NumberFieldScalar {
+    constructor(coeffs = [Fraction.zero()], field) {
+      if (!field || field.kind !== 'number-field') throw new Error('Missing number field.');
+      this.field = field;
+      this.coeffs = numberFieldReduce(coeffs, field);
+    }
+
+    static zero(field) { return new NumberFieldScalar([Fraction.zero()], field); }
+    static one(field) { return new NumberFieldScalar([Fraction.one()], field); }
+    static generator(field) { return new NumberFieldScalar([Fraction.zero(), Fraction.one()], field); }
+    static fromFraction(value, field) { return new NumberFieldScalar([Fraction.from(value)], field); }
+
+    clone() { return new NumberFieldScalar(this.coeffs, this.field); }
+    add(other) { other = this.coerce(other); return new NumberFieldScalar(polyQAdd(this.coeffs, other.coeffs), this.field); }
+    sub(other) { other = this.coerce(other); return new NumberFieldScalar(polyQSub(this.coeffs, other.coeffs), this.field); }
+    neg() { return new NumberFieldScalar(polyQNeg(this.coeffs), this.field); }
+    mul(other) { other = this.coerce(other); return new NumberFieldScalar(polyQMul(this.coeffs, other.coeffs), this.field); }
+    div(other) {
+      other = this.coerce(other);
+      if (other.isZero()) throw new Error('Division by zero.');
+      return this.mul(other.inverse());
+    }
+    inverse() {
+      const inv = polyQInverseMod(this.coeffs, this.field.modulus);
+      return new NumberFieldScalar(inv, this.field);
+    }
+    isZero() { return polyQIsZero(this.coeffs); }
+    isOne() { return polyQEqual(this.coeffs, [Fraction.one()]); }
+    isReal() { return this.isRational(); }
+    isRational() { return polyQDegree(this.coeffs) <= 0; }
+    constantFraction() { return this.isRational() ? this.coeffs[0] : null; }
+    toComplex() {
+      const value = this.constantFraction();
+      return new Complex(value ? value.toNumber() : 0, 0);
+    }
+
+    coerce(other) {
+      if (other instanceof NumberFieldScalar) {
+        if (other.field.key !== this.field.key) throw new Error('Cannot mix different number fields.');
+        return other;
+      }
+      if (other instanceof Fraction) return NumberFieldScalar.fromFraction(other, this.field);
+      return NumberFieldScalar.fromFraction(new Fraction(other, 1n), this.field);
+    }
+  }
+
   const state = {
     rows: 5,
     cols: 5,
+    finiteFieldPrime: DEFAULT_FINITE_FIELD_PRIME,
+    finiteFieldPrimeTextEditing: false,
+    rationalFunctionVariable: 't',
+    numberFieldSymbol: 'a',
+    numberFieldPolynomial: 'a^2 - 2',
     lastOperationResult: null,
     entries: [
       ['1', '0', '0', '0', '0'],
@@ -224,8 +338,17 @@
     refs.cols = $('matrix-cols');
     refs.presetButtons = Array.from(document.querySelectorAll('[data-preset]'));
     refs.dataType = $('data-type-select');
+    refs.finiteFieldSymbol = $('finite-field-symbol');
     refs.finiteFieldPrimeLabel = $('finite-field-prime-label');
     refs.finiteFieldPrime = $('finite-field-prime');
+    refs.rationalFunctionSymbol = $('rational-function-symbol');
+    refs.rationalFunctionVariableLabel = $('rational-function-variable-label');
+    refs.rationalFunctionVariable = $('rational-function-variable');
+    refs.numberFieldSymbol = $('number-field-symbol');
+    refs.numberFieldSymbolLabel = $('number-field-symbol-label');
+    refs.numberFieldGenerator = $('number-field-generator');
+    refs.numberFieldPolynomialLabel = $('number-field-polynomial-label');
+    refs.numberFieldPolynomial = $('number-field-polynomial');
     refs.statusBadge = $('status-badge');
     refs.matrixStatus = $('matrix-status');
     refs.matrixSummary = $('matrix-summary');
@@ -274,10 +397,44 @@
       refreshAll();
     });
     if (refs.finiteFieldPrime) {
+      refs.finiteFieldPrime.addEventListener('keydown', handleFiniteFieldPrimeKeydown);
+      refs.finiteFieldPrime.addEventListener('input', handleFiniteFieldPrimeInput);
+      refs.finiteFieldPrime.addEventListener('paste', () => { state.finiteFieldPrimeTextEditing = true; });
       refs.finiteFieldPrime.addEventListener('change', () => {
         try {
-          refs.finiteFieldPrime.value = String(currentFiniteFieldPrime());
+          setFiniteFieldPrime(currentFiniteFieldPrime());
         } catch (_) {}
+        state.finiteFieldPrimeTextEditing = false;
+        clearOperationResult();
+        refreshAll();
+      });
+    }
+    if (refs.rationalFunctionVariable) {
+      refs.rationalFunctionVariable.addEventListener('change', () => {
+        refs.rationalFunctionVariable.value = normalizeSymbolName(refs.rationalFunctionVariable.value, 't');
+        state.rationalFunctionVariable = refs.rationalFunctionVariable.value;
+        updateFieldControls();
+        clearOperationResult();
+        refreshAll();
+      });
+    }
+    if (refs.numberFieldGenerator) {
+      refs.numberFieldGenerator.addEventListener('change', () => {
+        refs.numberFieldGenerator.value = normalizeSymbolName(refs.numberFieldGenerator.value, 'a');
+        state.numberFieldSymbol = refs.numberFieldGenerator.value;
+        if (refs.numberFieldPolynomial && !refs.numberFieldPolynomial.value.trim()) {
+          refs.numberFieldPolynomial.value = `${state.numberFieldSymbol}^2 - 2`;
+        }
+        updateFieldControls();
+        clearOperationResult();
+        refreshAll();
+      });
+    }
+    if (refs.numberFieldPolynomial) {
+      refs.numberFieldPolynomial.addEventListener('change', () => {
+        state.numberFieldPolynomial = refs.numberFieldPolynomial.value.trim() || `${state.numberFieldSymbol}^2 - 2`;
+        refs.numberFieldPolynomial.value = state.numberFieldPolynomial;
+        updateFieldControls();
         clearOperationResult();
         refreshAll();
       });
@@ -321,17 +478,178 @@
   }
 
   function currentFiniteFieldPrime() {
-    return normalizePrime(refs.finiteFieldPrime ? refs.finiteFieldPrime.value : 5);
+    return normalizePrime(refs.finiteFieldPrime ? refs.finiteFieldPrime.value : state.finiteFieldPrime);
   }
 
   function currentFieldInfo() {
-    return isFiniteFieldMode()
-      ? { kind: 'finite-field', p: currentFiniteFieldPrime() }
-      : { kind: currentDataType() };
+    const type = currentDataType();
+    if (type === 'finite-field') return { kind: 'finite-field', p: currentFiniteFieldPrime() };
+    if (type === 'rational-function') {
+      const variable = normalizeSymbolName(refs.rationalFunctionVariable ? refs.rationalFunctionVariable.value : state.rationalFunctionVariable, 't');
+      return { kind: 'rational-function', variable };
+    }
+    if (type === 'number-field') return currentNumberFieldInfo();
+    return { kind: type };
   }
 
   function updateFieldControls() {
-    if (refs.finiteFieldPrimeLabel) refs.finiteFieldPrimeLabel.hidden = !isFiniteFieldMode();
+    const finiteField = isFiniteFieldMode();
+    const rationalFunction = currentDataType() === 'rational-function';
+    const numberField = currentDataType() === 'number-field';
+    if (refs.finiteFieldPrimeLabel) refs.finiteFieldPrimeLabel.hidden = !finiteField;
+    if (refs.finiteFieldSymbol) refs.finiteFieldSymbol.hidden = !finiteField;
+    if (refs.rationalFunctionVariableLabel) refs.rationalFunctionVariableLabel.hidden = !rationalFunction;
+    if (refs.rationalFunctionSymbol) refs.rationalFunctionSymbol.hidden = !rationalFunction;
+    if (refs.numberFieldSymbolLabel) refs.numberFieldSymbolLabel.hidden = !numberField;
+    if (refs.numberFieldPolynomialLabel) refs.numberFieldPolynomialLabel.hidden = !numberField;
+    if (refs.numberFieldSymbol) refs.numberFieldSymbol.hidden = !numberField;
+    if (refs.finiteFieldPrime && finiteField && !refs.finiteFieldPrime.value) {
+      refs.finiteFieldPrime.value = String(state.finiteFieldPrime);
+    }
+    if (refs.rationalFunctionVariable && rationalFunction && !refs.rationalFunctionVariable.value) {
+      refs.rationalFunctionVariable.value = state.rationalFunctionVariable;
+    }
+    if (refs.numberFieldGenerator && numberField && !refs.numberFieldGenerator.value) {
+      refs.numberFieldGenerator.value = state.numberFieldSymbol;
+    }
+    if (refs.numberFieldPolynomial && numberField && !refs.numberFieldPolynomial.value) {
+      refs.numberFieldPolynomial.value = state.numberFieldPolynomial;
+    }
+    renderFiniteFieldSymbol();
+    renderRationalFunctionSymbol();
+    renderNumberFieldSymbol();
+  }
+
+  function handleFiniteFieldPrimeKeydown(event) {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') {
+      if (event.key.length === 1 || event.key === 'Backspace' || event.key === 'Delete') {
+        state.finiteFieldPrimeTextEditing = true;
+      }
+      return;
+    }
+    event.preventDefault();
+    state.finiteFieldPrimeTextEditing = false;
+    const current = currentFiniteFieldPrime();
+    setFiniteFieldPrime(event.key === 'ArrowUp' ? nextPrimeAfter(current) : previousPrimeBefore(current));
+    clearOperationResult();
+    refreshAll();
+  }
+
+  function handleFiniteFieldPrimeInput() {
+    if (state.finiteFieldPrimeTextEditing) return;
+    const raw = Math.floor(Number(refs.finiteFieldPrime.value));
+    if (!Number.isFinite(raw)) return;
+    const current = state.finiteFieldPrime;
+    if (raw === current + 1) {
+      setFiniteFieldPrime(nextPrimeAfter(current));
+      clearOperationResult();
+      refreshAll();
+    } else if (raw === current - 1) {
+      setFiniteFieldPrime(previousPrimeBefore(current));
+      clearOperationResult();
+      refreshAll();
+    }
+  }
+
+  function setFiniteFieldPrime(value) {
+    const p = normalizePrime(value);
+    state.finiteFieldPrime = p;
+    if (refs.finiteFieldPrime) refs.finiteFieldPrime.value = String(p);
+    renderFiniteFieldSymbol();
+  }
+
+  function finiteFieldLatex(p = currentFiniteFieldPrime()) {
+    return `\\mathbb{F}_{${p}}`;
+  }
+
+  function finiteFieldInlineMath(p = currentFiniteFieldPrime()) {
+    return `\\(${finiteFieldLatex(p)}\\)`;
+  }
+
+  function finiteFieldPlain(p = currentFiniteFieldPrime()) {
+    return `F_${p}`;
+  }
+
+  function rationalFunctionLatex(variable = currentFieldInfo().variable || 't') {
+    return `\\mathbb{Q}(${escapeLatexIdentifier(variable)})`;
+  }
+
+  function rationalFunctionPlain(variable = currentFieldInfo().variable || 't') {
+    return `Q(${variable})`;
+  }
+
+  function numberFieldLatex(field = currentNumberFieldInfo()) {
+    return `\\mathbb{Q}(${escapeLatexIdentifier(field.symbol)})`;
+  }
+
+  function numberFieldPlain(field = currentNumberFieldInfo()) {
+    return `Q(${field.symbol})`;
+  }
+
+  function normalizeSymbolName(value, fallback) {
+    const raw = String(value || '').trim();
+    if (/^[A-Za-z][A-Za-z0-9_]*$/.test(raw)) return raw;
+    return fallback;
+  }
+
+  function currentNumberFieldInfo() {
+    const symbol = normalizeSymbolName(refs.numberFieldGenerator ? refs.numberFieldGenerator.value : state.numberFieldSymbol, 'a');
+    const polynomialText = (refs.numberFieldPolynomial ? refs.numberFieldPolynomial.value : state.numberFieldPolynomial).trim() || `${symbol}^2 - 2`;
+    let modulus;
+    try {
+      modulus = parsePolynomialQExpression(polynomialText, symbol);
+    } catch (error) {
+      if (symbol !== 'x') modulus = parsePolynomialQExpression(polynomialText, 'x');
+      else throw error;
+    }
+    const monic = polyQMonic(modulus);
+    if (polyQDegree(monic) < 1) throw new Error('Number field polynomial must have positive degree.');
+    const key = `${symbol}:${polyQKey(monic)}`;
+    return { kind: 'number-field', symbol, modulus: monic, modulusText: polynomialText, key };
+  }
+
+  function escapeLatexIdentifier(value) {
+    return String(value).replace(/_/g, '\\_');
+  }
+
+  function renderFiniteFieldSymbol() {
+    if (!refs.finiteFieldSymbol || !isFiniteFieldMode()) return;
+    let p = state.finiteFieldPrime;
+    try { p = currentFiniteFieldPrime(); } catch (_) {}
+    if (window.MathJax?.typesetClear) window.MathJax.typesetClear([refs.finiteFieldSymbol]);
+    refs.finiteFieldSymbol.innerHTML = finiteFieldInlineMath(p);
+    typesetFiniteFieldSymbol();
+  }
+
+  function typesetFiniteFieldSymbol() {
+    if (!refs.finiteFieldSymbol || !window.MathJax?.typesetPromise) return;
+    mathJaxTypesetQueue = mathJaxTypesetQueue
+      .then(() => window.MathJax.typesetPromise([refs.finiteFieldSymbol]))
+      .catch(() => {});
+  }
+
+  function renderRationalFunctionSymbol() {
+    if (!refs.rationalFunctionSymbol || currentDataType() !== 'rational-function') return;
+    const variable = normalizeSymbolName(refs.rationalFunctionVariable ? refs.rationalFunctionVariable.value : state.rationalFunctionVariable, 't');
+    if (window.MathJax?.typesetClear) window.MathJax.typesetClear([refs.rationalFunctionSymbol]);
+    refs.rationalFunctionSymbol.innerHTML = `\\(${rationalFunctionLatex(variable)}\\)`;
+    typesetFieldSymbol(refs.rationalFunctionSymbol);
+  }
+
+  function renderNumberFieldSymbol() {
+    if (!refs.numberFieldSymbol || currentDataType() !== 'number-field') return;
+    let symbol = state.numberFieldSymbol;
+    try { symbol = currentNumberFieldInfo().symbol; } catch (_) {}
+    if (window.MathJax?.typesetClear) window.MathJax.typesetClear([refs.numberFieldSymbol]);
+    refs.numberFieldSymbol.innerHTML = `\\(\\mathbb{Q}(${escapeLatexIdentifier(symbol)})\\)`;
+    typesetFieldSymbol(refs.numberFieldSymbol);
+  }
+
+  function typesetFieldSymbol(element) {
+    if (!element || !window.MathJax?.typesetPromise) return;
+    mathJaxTypesetQueue = mathJaxTypesetQueue
+      .then(() => window.MathJax.typesetPromise([element]))
+      .catch(() => {});
   }
 
   function bindCards() {
@@ -529,6 +847,14 @@
         return '0';
       }
     }
+    if (type === 'rational-function') {
+      const variable = normalizeSymbolName(refs.rationalFunctionVariable ? refs.rationalFunctionVariable.value : state.rationalFunctionVariable, 't');
+      return randomInt(-2, 2) === 0 ? variable : `${randomInt(-3, 3)}+${randomInt(1, 3)}*${variable}`;
+    }
+    if (type === 'number-field') {
+      const symbol = normalizeSymbolName(refs.numberFieldGenerator ? refs.numberFieldGenerator.value : state.numberFieldSymbol, 'a');
+      return randomInt(-2, 2) === 0 ? symbol : `${randomInt(-3, 3)}+${randomInt(1, 3)}*${symbol}`;
+    }
     if (type === 'integer') return String(randomInt(-5, 5));
     if (type === 'rational') {
       const den = randomInt(1, 7);
@@ -612,7 +938,7 @@
 
   function normalizePrime(value) {
     const p = normalizeModulus(value);
-    if (!Number.isFinite(p) || p < 2) throw new Error('Choose a prime p >= 2 for GF(p).');
+    if (!Number.isFinite(p) || p < 2) throw new Error('Choose a prime p >= 2 for the finite field.');
     if (p > 999983) throw new Error('Use a prime p at most 999983.');
     if (!isPrimeInt(p)) throw new Error('The modulus p must be prime.');
     return p;
@@ -633,6 +959,29 @@
       if (value % d === 0) return false;
     }
     return true;
+  }
+
+  function nextPrimeAfter(value) {
+    const n = normalizeModulus(value);
+    const listed = SMALL_PRIMES.find((prime) => prime > n);
+    if (listed) return listed;
+    for (let candidate = n + 1; candidate <= 999983; candidate++) {
+      if (isPrimeInt(candidate)) return candidate;
+    }
+    return n;
+  }
+
+  function previousPrimeBefore(value) {
+    const n = normalizeModulus(value);
+    if (n <= SMALL_PRIMES[SMALL_PRIMES.length - 1] + 1) {
+      for (let i = SMALL_PRIMES.length - 1; i >= 0; i--) {
+        if (SMALL_PRIMES[i] < n) return SMALL_PRIMES[i];
+      }
+    }
+    for (let candidate = n - 1; candidate >= 2; candidate--) {
+      if (isPrimeInt(candidate)) return candidate;
+    }
+    return 2;
   }
 
   function modNormalize(value, p) {
@@ -664,6 +1013,314 @@
     }
     if (a !== 1) throw new Error('Element is not invertible.');
     return modNormalize(x0, p);
+  }
+
+  function polyQTrim(poly) {
+    const out = (poly && poly.length ? poly : [Fraction.zero()]).map(Fraction.from);
+    let end = out.length - 1;
+    while (end > 0 && out[end].isZero()) end--;
+    return out.slice(0, end + 1);
+  }
+
+  function polyQZero() { return [Fraction.zero()]; }
+  function polyQOne() { return [Fraction.one()]; }
+  function polyQVariable() { return [Fraction.zero(), Fraction.one()]; }
+  function polyQDegree(poly) { return polyQTrim(poly).length - 1; }
+  function polyQIsZero(poly) { return polyQTrim(poly).length === 1 && polyQTrim(poly)[0].isZero(); }
+  function polyQIsOne(poly) { return polyQEqual(poly, polyQOne()); }
+  function polyQEqual(a, b) {
+    a = polyQTrim(a);
+    b = polyQTrim(b);
+    return a.length === b.length && a.every((coeff, i) => coeff.num === b[i].num && coeff.den === b[i].den);
+  }
+
+  function polyQAdd(a, b) {
+    a = polyQTrim(a);
+    b = polyQTrim(b);
+    const len = Math.max(a.length, b.length);
+    const out = [];
+    for (let i = 0; i < len; i++) {
+      const x = i < a.length ? a[i] : Fraction.zero();
+      const y = i < b.length ? b[i] : Fraction.zero();
+      out.push(x.add(y));
+    }
+    return polyQTrim(out);
+  }
+
+  function polyQSub(a, b) { return polyQAdd(a, polyQNeg(b)); }
+  function polyQNeg(poly) { return polyQTrim(poly).map((coeff) => coeff.neg()); }
+  function polyQScale(poly, scalar) {
+    scalar = Fraction.from(scalar);
+    return polyQTrim(poly).map((coeff) => coeff.mul(scalar));
+  }
+
+  function polyQMul(a, b) {
+    a = polyQTrim(a);
+    b = polyQTrim(b);
+    const out = Array.from({ length: a.length + b.length - 1 }, () => Fraction.zero());
+    for (let i = 0; i < a.length; i++) {
+      for (let j = 0; j < b.length; j++) out[i + j] = out[i + j].add(a[i].mul(b[j]));
+    }
+    return polyQTrim(out);
+  }
+
+  function polyQDivmod(dividend, divisor) {
+    dividend = polyQTrim(dividend);
+    divisor = polyQTrim(divisor);
+    if (polyQIsZero(divisor)) throw new Error('Division by zero polynomial.');
+    let rem = dividend.map((coeff) => Fraction.from(coeff));
+    const degreeDiff = polyQDegree(rem) - polyQDegree(divisor);
+    if (degreeDiff < 0) return { quotient: polyQZero(), remainder: rem };
+    const quotient = Array.from({ length: degreeDiff + 1 }, () => Fraction.zero());
+    const divisorLead = divisor[divisor.length - 1];
+    while (!polyQIsZero(rem) && polyQDegree(rem) >= polyQDegree(divisor)) {
+      const shift = polyQDegree(rem) - polyQDegree(divisor);
+      const factor = rem[rem.length - 1].div(divisorLead);
+      quotient[shift] = quotient[shift].add(factor);
+      for (let i = 0; i < divisor.length; i++) rem[i + shift] = rem[i + shift].sub(factor.mul(divisor[i]));
+      rem = polyQTrim(rem);
+    }
+    return { quotient: polyQTrim(quotient), remainder: polyQTrim(rem) };
+  }
+
+  function polyQDivExact(dividend, divisor) {
+    const result = polyQDivmod(dividend, divisor);
+    if (!polyQIsZero(result.remainder)) throw new Error('Polynomial division left a remainder.');
+    return result.quotient;
+  }
+
+  function polyQGcd(a, b) {
+    a = polyQTrim(a);
+    b = polyQTrim(b);
+    while (!polyQIsZero(b)) {
+      const r = polyQDivmod(a, b).remainder;
+      a = b;
+      b = r;
+    }
+    return polyQMonic(a);
+  }
+
+  function polyQMonic(poly) {
+    poly = polyQTrim(poly);
+    if (polyQIsZero(poly)) return poly;
+    const lead = poly[poly.length - 1];
+    return polyQScale(poly, Fraction.one().div(lead));
+  }
+
+  function polyQExtendedGcd(a, b) {
+    let oldR = polyQTrim(a);
+    let r = polyQTrim(b);
+    let oldS = polyQOne();
+    let s = polyQZero();
+    let oldT = polyQZero();
+    let t = polyQOne();
+    while (!polyQIsZero(r)) {
+      const div = polyQDivmod(oldR, r);
+      [oldR, r] = [r, div.remainder];
+      [oldS, s] = [s, polyQSub(oldS, polyQMul(div.quotient, s))];
+      [oldT, t] = [t, polyQSub(oldT, polyQMul(div.quotient, t))];
+    }
+    const lead = oldR[oldR.length - 1];
+    return {
+      gcd: polyQScale(oldR, Fraction.one().div(lead)),
+      s: polyQScale(oldS, Fraction.one().div(lead)),
+      t: polyQScale(oldT, Fraction.one().div(lead))
+    };
+  }
+
+  function polyQInverseMod(poly, modulus) {
+    const result = polyQExtendedGcd(poly, modulus);
+    if (!polyQIsOne(result.gcd)) throw new Error('Element is not invertible in the number field.');
+    return polyQDivmod(result.s, modulus).remainder;
+  }
+
+  function polyQPow(poly, exponent) {
+    if (!Number.isInteger(exponent) || exponent < 0) throw new Error('Use a nonnegative integer exponent.');
+    let n = exponent;
+    let result = polyQOne();
+    let base = polyQTrim(poly);
+    while (n > 0) {
+      if (n % 2 === 1) result = polyQMul(result, base);
+      base = polyQMul(base, base);
+      n = Math.floor(n / 2);
+    }
+    return result;
+  }
+
+  function polyQKey(poly) {
+    return polyQTrim(poly).map((coeff) => `${coeff.num}/${coeff.den}`).join(',');
+  }
+
+  function rationalFunctionNormalize(num, den) {
+    num = polyQTrim(num);
+    den = polyQTrim(den);
+    if (polyQIsZero(den)) throw new Error('Division by zero.');
+    if (polyQIsZero(num)) return { num: polyQZero(), den: polyQOne() };
+    const gcd = polyQGcd(num, den);
+    num = polyQDivExact(num, gcd);
+    den = polyQDivExact(den, gcd);
+    const lead = den[den.length - 1];
+    num = polyQScale(num, Fraction.one().div(lead));
+    den = polyQScale(den, Fraction.one().div(lead));
+    return { num, den };
+  }
+
+  function numberFieldReduce(coeffs, field) {
+    return polyQDivmod(coeffs, field.modulus).remainder;
+  }
+
+  function parsePolynomialQExpression(text, variable) {
+    return parseFieldExpression(text, {
+      symbol: normalizeSymbolName(variable, 'a'),
+      zero: polyQZero,
+      one: polyQOne,
+      constant: (frac) => [Fraction.from(frac)],
+      variable: polyQVariable,
+      add: polyQAdd,
+      sub: polyQSub,
+      neg: polyQNeg,
+      mul: polyQMul,
+      div: (a, b) => {
+        b = polyQTrim(b);
+        if (polyQDegree(b) > 0) throw new Error('Polynomial coefficients may only divide by constants.');
+        return polyQScale(a, Fraction.one().div(b[0]));
+      },
+      pow: polyQPow
+    });
+  }
+
+  function parseFieldExpression(text, builder) {
+    const parser = new ExpressionParser(tokenizeFieldExpression(text), builder);
+    return parser.parse();
+  }
+
+  function tokenizeFieldExpression(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return [];
+    const tokens = [];
+    let i = 0;
+    while (i < raw.length) {
+      const ch = raw[i];
+      if (/\s/.test(ch)) {
+        i++;
+        continue;
+      }
+      if ('+-*/^()'.includes(ch)) {
+        tokens.push({ type: ch, value: ch });
+        i++;
+        continue;
+      }
+      if (/\d|\./.test(ch)) {
+        const start = i;
+        i++;
+        while (i < raw.length && /[\d.]/.test(raw[i])) i++;
+        if (i < raw.length && /[eE]/.test(raw[i])) {
+          i++;
+          if (/[+-]/.test(raw[i])) i++;
+          while (i < raw.length && /\d/.test(raw[i])) i++;
+        }
+        tokens.push({ type: 'number', value: raw.slice(start, i) });
+        continue;
+      }
+      if (/[A-Za-z_]/.test(ch)) {
+        const start = i;
+        i++;
+        while (i < raw.length && /[A-Za-z0-9_]/.test(raw[i])) i++;
+        tokens.push({ type: 'identifier', value: raw.slice(start, i) });
+        continue;
+      }
+      throw new Error(`Unexpected character "${ch}".`);
+    }
+    return tokens;
+  }
+
+  class ExpressionParser {
+    constructor(tokens, builder) {
+      this.tokens = tokens;
+      this.builder = builder;
+      this.index = 0;
+    }
+
+    parse() {
+      const value = this.parseExpression();
+      if (this.peek()) throw new Error(`Unexpected token "${this.peek().value}".`);
+      return value;
+    }
+
+    parseExpression() {
+      let value = this.parseTerm();
+      while (this.match('+') || this.match('-')) {
+        const op = this.previous().type;
+        const rhs = this.parseTerm();
+        value = op === '+' ? this.builder.add(value, rhs) : this.builder.sub(value, rhs);
+      }
+      return value;
+    }
+
+    parseTerm() {
+      let value = this.parsePower();
+      while (true) {
+        if (this.match('*')) {
+          value = this.builder.mul(value, this.parsePower());
+        } else if (this.match('/')) {
+          value = this.builder.div(value, this.parsePower());
+        } else if (this.canStartFactor(this.peek())) {
+          value = this.builder.mul(value, this.parsePower());
+        } else {
+          break;
+        }
+      }
+      return value;
+    }
+
+    parsePower() {
+      let value = this.parseUnary();
+      while (this.match('^')) {
+        const token = this.consume('number', 'Use a nonnegative integer exponent.');
+        if (!/^\d+$/.test(token.value)) throw new Error('Use a nonnegative integer exponent.');
+        value = this.builder.pow(value, Number(token.value));
+      }
+      return value;
+    }
+
+    parseUnary() {
+      if (this.match('+')) return this.parseUnary();
+      if (this.match('-')) return this.builder.neg(this.parseUnary());
+      return this.parsePrimary();
+    }
+
+    parsePrimary() {
+      if (this.match('number')) return this.builder.constant(exactFractionFromDecimalText(this.previous().value));
+      if (this.match('identifier')) {
+        const name = this.previous().value;
+        if (name === this.builder.symbol) return this.builder.variable();
+        throw new Error(`Unknown symbol "${name}".`);
+      }
+      if (this.match('(')) {
+        const value = this.parseExpression();
+        this.consume(')', 'Missing closing parenthesis.');
+        return value;
+      }
+      throw new Error('Expected a number, variable, or parenthesized expression.');
+    }
+
+    canStartFactor(token) {
+      return token && (token.type === 'number' || token.type === 'identifier' || token.type === '(');
+    }
+
+    match(type) {
+      if (this.peek()?.type !== type) return false;
+      this.index++;
+      return true;
+    }
+
+    consume(type, message) {
+      if (this.peek()?.type === type) return this.tokens[this.index++];
+      throw new Error(message);
+    }
+
+    previous() { return this.tokens[this.index - 1]; }
+    peek() { return this.tokens[this.index] || null; }
   }
 
   function cyclicEntry(r, c) {
@@ -714,7 +1371,7 @@
         const text = state.entries[r]?.[c] ?? '';
         const input = refs.grid.querySelector(`[data-row="${r}"][data-col="${c}"]`);
         try {
-          const parsed = parseEntry(text);
+          const parsed = parseEntryForField(text, fieldInfo);
           validateEntryType(parsed, fieldInfo);
           row.push(parsed.value);
           detailRow.push(parsed);
@@ -732,14 +1389,85 @@
     return { matrix, details, errors, rows: state.rows, cols: state.cols, fieldInfo };
   }
 
+  function parseEntryForField(text, fieldInfo) {
+    if (fieldInfo.kind === 'rational-function') return parseRationalFunctionEntry(text, fieldInfo);
+    if (fieldInfo.kind === 'number-field') return parseNumberFieldEntry(text, fieldInfo);
+    return parseEntry(text);
+  }
+
+  function parseRationalFunctionEntry(text, fieldInfo) {
+    const raw = String(text ?? '').trim();
+    const variable = fieldInfo.variable;
+    const scalar = raw
+      ? parseFieldExpression(raw, rationalFunctionBuilder(variable))
+      : RationalFunctionScalar.zero(variable);
+    return { raw, value: scalar.toComplex(), scalar };
+  }
+
+  function parseNumberFieldEntry(text, fieldInfo) {
+    const raw = String(text ?? '').trim();
+    const scalar = raw
+      ? parseFieldExpression(raw, numberFieldBuilder(fieldInfo))
+      : NumberFieldScalar.zero(fieldInfo);
+    return { raw, value: scalar.toComplex(), scalar };
+  }
+
+  function rationalFunctionBuilder(variable) {
+    return {
+      symbol: variable,
+      zero: () => RationalFunctionScalar.zero(variable),
+      one: () => RationalFunctionScalar.one(variable),
+      constant: (frac) => RationalFunctionScalar.fromFraction(frac, variable),
+      variable: () => RationalFunctionScalar.variable(variable),
+      add: (a, b) => a.add(b),
+      sub: (a, b) => a.sub(b),
+      neg: (a) => a.neg(),
+      mul: (a, b) => a.mul(b),
+      div: (a, b) => a.div(b),
+      pow: scalarPower
+    };
+  }
+
+  function numberFieldBuilder(fieldInfo) {
+    return {
+      symbol: fieldInfo.symbol,
+      zero: () => NumberFieldScalar.zero(fieldInfo),
+      one: () => NumberFieldScalar.one(fieldInfo),
+      constant: (frac) => NumberFieldScalar.fromFraction(frac, fieldInfo),
+      variable: () => NumberFieldScalar.generator(fieldInfo),
+      add: (a, b) => a.add(b),
+      sub: (a, b) => a.sub(b),
+      neg: (a) => a.neg(),
+      mul: (a, b) => a.mul(b),
+      div: (a, b) => a.div(b),
+      pow: scalarPower
+    };
+  }
+
+  function scalarPower(value, exponent) {
+    if (!Number.isInteger(exponent) || exponent < 0) throw new Error('Use a nonnegative integer exponent.');
+    let n = exponent;
+    let result = value instanceof RationalFunctionScalar
+      ? RationalFunctionScalar.one(value.variable)
+      : NumberFieldScalar.one(value.field);
+    let base = value.clone();
+    while (n > 0) {
+      if (n % 2 === 1) result = result.mul(base);
+      base = base.mul(base);
+      n = Math.floor(n / 2);
+    }
+    return result;
+  }
+
   function validateEntryType(entry, fieldInfo = currentFieldInfo()) {
     const type = fieldInfo.kind;
+    if (type === 'rational-function' || type === 'number-field') return;
     if (type === 'complex') return;
     if (Math.abs(entry.value.im) > DISPLAY_TOL) {
       throw new Error(`Expected a ${type} entry.`);
     }
     if (type === 'finite-field') {
-      if (!isExactIntegerPart(entry.real)) throw new Error('Expected an integer entry for GF(p).');
+      if (!isExactIntegerPart(entry.real)) throw new Error('Expected an integer entry for the finite field.');
       return;
     }
     if (type === 'real') return;
@@ -775,15 +1503,15 @@
       return;
     }
 
-    const finiteField = data.fieldInfo?.kind === 'finite-field';
-    const exactMatrix = finiteField ? finiteFieldMatrixFromDetails(data.details, data.fieldInfo.p) : null;
-    const rankValue = finiteField ? exactMatrixRank(exactMatrix) : matrixRank(data.matrix);
+    const exactField = isExactMatrixField(data.fieldInfo);
+    const exactMatrix = exactField ? exactMatrixFromData(data) : null;
+    const rankValue = exactField ? exactMatrixRank(exactMatrix) : matrixRank(data.matrix);
     refs.outRank.textContent = String(rankValue);
     refs.outTrace.textContent = data.rows === data.cols
-      ? (finiteField ? formatScalar(exactTrace(exactMatrix)) : formatComplex(trace(data.matrix)))
+      ? (exactField ? formatScalar(exactTrace(exactMatrix)) : formatComplex(trace(data.matrix)))
       : 'not square';
     refs.outDet.textContent = data.rows === data.cols
-      ? (finiteField ? formatScalar(exactDeterminant(exactMatrix)) : formatComplex(determinant(data.matrix)))
+      ? (exactField ? formatScalar(exactDeterminant(exactMatrix)) : formatComplex(determinant(data.matrix)))
       : 'not square';
     if (data.rows === data.cols) {
       const result = charPolyForDisplay(data);
@@ -929,6 +1657,20 @@
     return details.map((row) => row.map((entry) => new ModScalar(entry.real.raw, p)));
   }
 
+  function algebraicMatrixFromDetails(details) {
+    return details.map((row) => row.map((entry) => entry.scalar.clone()));
+  }
+
+  function exactMatrixFromData(data) {
+    if (data.fieldInfo?.kind === 'finite-field') return finiteFieldMatrixFromDetails(data.details, data.fieldInfo.p);
+    if (data.fieldInfo?.kind === 'rational-function' || data.fieldInfo?.kind === 'number-field') return algebraicMatrixFromDetails(data.details);
+    return exactMatrixFromDetails(data.details);
+  }
+
+  function isExactMatrixField(fieldInfo) {
+    return fieldInfo?.kind === 'finite-field' || fieldInfo?.kind === 'rational-function' || fieldInfo?.kind === 'number-field';
+  }
+
   function scalarSampleFromMatrix(A) {
     for (const row of A || []) {
       for (const value of row || []) if (value) return value;
@@ -937,14 +1679,20 @@
   }
 
   function scalarZeroLike(sample) {
+    if (sample instanceof RationalFunctionScalar) return RationalFunctionScalar.zero(sample.variable);
+    if (sample instanceof NumberFieldScalar) return NumberFieldScalar.zero(sample.field);
     return sample instanceof ModScalar ? ModScalar.zero(sample.p) : ExactScalar.zero();
   }
 
   function scalarOneLike(sample) {
+    if (sample instanceof RationalFunctionScalar) return RationalFunctionScalar.one(sample.variable);
+    if (sample instanceof NumberFieldScalar) return NumberFieldScalar.one(sample.field);
     return sample instanceof ModScalar ? ModScalar.one(sample.p) : ExactScalar.one();
   }
 
   function scalarFromIntLike(value, sample) {
+    if (sample instanceof RationalFunctionScalar) return RationalFunctionScalar.fromFraction(Fraction.fromInt(value), sample.variable);
+    if (sample instanceof NumberFieldScalar) return NumberFieldScalar.fromFraction(Fraction.fromInt(value), sample.field);
     return sample instanceof ModScalar
       ? ModScalar.fromInt(value, sample.p)
       : ExactScalar.fromFraction(Fraction.fromInt(value));
@@ -1357,24 +2105,22 @@
   }
 
   function bruhatDecomposition(A) {
-    if (A.length !== (A[0]?.length || 0)) throw new Error('Bruhat decomposition requires a square matrix.');
-    const n = A.length;
-    if (matrixRank(A) < n) throw new Error('This Bruhat decomposition routine expects an invertible matrix in GL(n).');
-
+    const rows = A.length;
+    const cols = A[0]?.length || 0;
+    if (!rows || !cols) throw new Error('Bruhat decomposition requires a nonempty matrix.');
     const M = copyMatrix(A);
-    const leftTransform = identity(n);
-    const rightTransform = identity(n);
+    const leftTransform = identity(rows);
+    const rightTransform = identity(cols);
     const pivots = [];
-    let maxRow = n - 1;
-    let minCol = 0;
+    let maxRow = rows - 1;
 
-    while (maxRow >= 0 && minCol < n) {
+    while (maxRow >= 0) {
       let pivotRow = -1;
       let pivotCol = -1;
       let pivotAbs = 0;
 
       for (let r = maxRow; r >= 0; r--) {
-        for (let c = minCol; c < n; c++) {
+        for (let c = 0; c < cols; c++) {
           const value = M[r][c].abs();
           if (value > TOL) {
             pivotRow = r;
@@ -1391,28 +2137,23 @@
       for (let r = 0; r < pivotRow; r++) {
         if (M[r][pivotCol].isZero()) continue;
         const factor = M[r][pivotCol].div(pivot);
-        for (let c = 0; c < n; c++) M[r][c] = M[r][c].sub(factor.mul(M[pivotRow][c]));
-        for (let c = 0; c < n; c++) leftTransform[r][c] = leftTransform[r][c].sub(factor.mul(leftTransform[pivotRow][c]));
+        for (let c = 0; c < cols; c++) M[r][c] = M[r][c].sub(factor.mul(M[pivotRow][c]));
+        for (let c = 0; c < rows; c++) leftTransform[r][c] = leftTransform[r][c].sub(factor.mul(leftTransform[pivotRow][c]));
       }
 
-      for (let c = pivotCol + 1; c < n; c++) {
+      for (let c = pivotCol + 1; c < cols; c++) {
         if (M[pivotRow][c].isZero()) continue;
         const factor = M[pivotRow][c].div(pivot);
-        for (let r = 0; r < n; r++) M[r][c] = M[r][c].sub(M[r][pivotCol].mul(factor));
-        for (let r = 0; r < n; r++) rightTransform[r][c] = rightTransform[r][c].sub(rightTransform[r][pivotCol].mul(factor));
+        for (let r = 0; r < rows; r++) M[r][c] = M[r][c].sub(M[r][pivotCol].mul(factor));
+        for (let r = 0; r < cols; r++) rightTransform[r][c] = rightTransform[r][c].sub(rightTransform[r][pivotCol].mul(factor));
       }
 
       pivots.push({ row: pivotRow, col: pivotCol });
       maxRow = pivotRow - 1;
-      minCol = pivotCol + 1;
     }
 
-    if (pivots.length !== n) {
-      throw new Error('Could not find a full Bruhat pivot pattern for this matrix.');
-    }
-
-    const W = zeros(n, n);
-    const D = zeros(n, n);
+    const W = zeros(rows, cols);
+    const D = identity(cols);
     for (const { row, col } of pivots) {
       W[row][col] = new Complex(1, 0);
       D[col][col] = M[row][col].clone();
@@ -1420,26 +2161,26 @@
 
     const B1 = inverseUpperTriangular(leftTransform);
     const B2 = matrixMultiply(D, inverseUpperTriangular(rightTransform));
-    return { B1, W, B2, pivots };
+    return { B1, W, B2, pivots, rank: pivots.length };
   }
 
   function exactBruhatDecomposition(A) {
-    if (A.length !== (A[0]?.length || 0)) throw new Error('Bruhat decomposition requires a square matrix.');
-    const n = A.length;
+    const rows = A.length;
+    const cols = A[0]?.length || 0;
+    if (!rows || !cols) throw new Error('Bruhat decomposition requires a nonempty matrix.');
     const sample = scalarSampleFromMatrix(A);
     const M = exactMatrixCopy(A);
-    const leftTransform = exactIdentity(n, sample);
-    const rightTransform = exactIdentity(n, sample);
+    const leftTransform = exactIdentity(rows, sample);
+    const rightTransform = exactIdentity(cols, sample);
     const pivots = [];
-    let maxRow = n - 1;
-    let minCol = 0;
+    let maxRow = rows - 1;
 
-    while (maxRow >= 0 && minCol < n) {
+    while (maxRow >= 0) {
       let pivotRow = -1;
       let pivotCol = -1;
 
       for (let r = maxRow; r >= 0; r--) {
-        for (let c = minCol; c < n; c++) {
+        for (let c = 0; c < cols; c++) {
           if (!M[r][c].isZero()) {
             pivotRow = r;
             pivotCol = c;
@@ -1454,28 +2195,23 @@
       for (let r = 0; r < pivotRow; r++) {
         if (M[r][pivotCol].isZero()) continue;
         const factor = M[r][pivotCol].div(pivot);
-        for (let c = 0; c < n; c++) M[r][c] = M[r][c].sub(factor.mul(M[pivotRow][c]));
-        for (let c = 0; c < n; c++) leftTransform[r][c] = leftTransform[r][c].sub(factor.mul(leftTransform[pivotRow][c]));
+        for (let c = 0; c < cols; c++) M[r][c] = M[r][c].sub(factor.mul(M[pivotRow][c]));
+        for (let c = 0; c < rows; c++) leftTransform[r][c] = leftTransform[r][c].sub(factor.mul(leftTransform[pivotRow][c]));
       }
 
-      for (let c = pivotCol + 1; c < n; c++) {
+      for (let c = pivotCol + 1; c < cols; c++) {
         if (M[pivotRow][c].isZero()) continue;
         const factor = M[pivotRow][c].div(pivot);
-        for (let r = 0; r < n; r++) M[r][c] = M[r][c].sub(M[r][pivotCol].mul(factor));
-        for (let r = 0; r < n; r++) rightTransform[r][c] = rightTransform[r][c].sub(rightTransform[r][pivotCol].mul(factor));
+        for (let r = 0; r < rows; r++) M[r][c] = M[r][c].sub(M[r][pivotCol].mul(factor));
+        for (let r = 0; r < cols; r++) rightTransform[r][c] = rightTransform[r][c].sub(rightTransform[r][pivotCol].mul(factor));
       }
 
       pivots.push({ row: pivotRow, col: pivotCol });
       maxRow = pivotRow - 1;
-      minCol = pivotCol + 1;
     }
 
-    if (pivots.length !== n) {
-      throw new Error('Could not find a full Bruhat pivot pattern for this matrix.');
-    }
-
-    const W = exactZeros(n, n, sample);
-    const D = exactZeros(n, n, sample);
+    const W = exactZeros(rows, cols, sample);
+    const D = exactIdentity(cols, sample);
     for (const { row, col } of pivots) {
       W[row][col] = scalarOneLike(sample);
       D[col][col] = M[row][col].clone();
@@ -1483,7 +2219,7 @@
 
     const B1 = exactInverseUpperTriangular(leftTransform);
     const B2 = exactMatrixMultiply(D, exactInverseUpperTriangular(rightTransform));
-    return { B1, W, B2, pivots };
+    return { B1, W, B2, pivots, rank: pivots.length };
   }
 
   function inverseUpperTriangular(T) {
@@ -1936,12 +2672,12 @@
 
   function charPolyForDisplay(data) {
     const guard = makeDeadline(CHARPOLY_TIMEOUT_MS);
-    if (data.fieldInfo?.kind === 'finite-field') {
+    if (isExactMatrixField(data.fieldInfo)) {
       try {
         return {
-          coeffs: exactCharacteristicPolynomial(finiteFieldMatrixFromDetails(data.details, data.fieldInfo.p), guard),
-          mode: 'finite-field',
-          note: `Exact characteristic polynomial over GF(${data.fieldInfo.p}).`
+          coeffs: exactCharacteristicPolynomial(exactMatrixFromData(data), guard),
+          mode: data.fieldInfo.kind,
+          note: `Exact characteristic polynomial over ${fieldNameForInfo(data.fieldInfo)}.`
         };
       } catch (error) {
         return {
@@ -2040,8 +2776,9 @@
       return;
     }
 
+    let result = null;
     try {
-      const result = charPolyForDisplay(data);
+      result = charPolyForDisplay(data);
       if (result.error) {
         refs.outCharpoly.textContent = result.error;
         refs.outCharpoly.title = result.error;
@@ -2051,8 +2788,8 @@
       const coeffs = result.coeffs;
       const field = currentDataType();
       const factorGuard = makeDeadline(CHARPOLY_TIMEOUT_MS);
-      const factorization = factorPolynomialForField(coeffs, field, 'T', factorGuard);
-      checkDeadline(factorGuard);
+      const factorization = factorPolynomialForField(coeffs, field, 'T', factorGuard, data);
+      if (!factorization.timedOut) checkDeadline(factorGuard);
       refs.outCharpoly.textContent = factorization.text;
       refs.outCharpoly.title = [result.note, factorization.note].filter(Boolean).join(' ');
       refs.matrixStatus.textContent = factorization.factored === false
@@ -2062,34 +2799,563 @@
     } catch (error) {
       if (isTimeoutError(error)) {
         const field = currentDataType();
-        const fallback = timeoutFactorizationFallback(data, field, 'T');
+        const fallback = timeoutFactorizationFallback(data, field, 'T', result?.coeffs || null);
         refs.outCharpoly.textContent = fallback.error || `warning: factorization took more than 1.5 seconds; ${fallback.text}`;
         refs.outCharpoly.title = fallback.error || fallback.note;
-        refs.matrixStatus.textContent = fallback.error ? 'characteristic polynomial timed out' : 'numeric factorization shown';
+        refs.matrixStatus.textContent = fallback.error
+          ? 'characteristic polynomial timed out'
+          : fallback.mode === 'exact-partial'
+            ? `characteristic polynomial shown over ${fieldName(field)}`
+            : 'numeric factorization shown';
       } else {
         refs.operationMessage.textContent = error.message;
       }
     }
   }
 
-  function factorPolynomialForField(coeffs, field, variable, guard = null) {
+  function factorPolynomialForField(coeffs, field, variable, guard = null, data = null) {
     checkDeadline(guard);
     if (field === 'finite-field') {
-      return {
-        text: formatPolynomial(coeffs, variable),
-        note: 'Finite-field factorization is not implemented yet; the exact characteristic polynomial is shown.',
-        factored: false
-      };
+      return factorPolynomialOverFiniteField(coeffs, variable, guard);
+    }
+    if (field === 'rational-function' || field === 'number-field') {
+      return factorPolynomialOverGenericExactField(coeffs, variable, field, guard, genericFactorizationCandidatesFromData(data));
     }
     if (field === 'complex') return factorPolynomialOverComplex(coeffs, variable, guard);
     if (field === 'real') return factorPolynomialOverReal(coeffs, variable, guard);
     return factorPolynomialOverRationals(coeffs, variable, field, guard);
   }
 
-  function timeoutFactorizationFallback(data, field, variable) {
+  function factorPolynomialOverFiniteField(coeffs, variable, guard = null) {
+    checkDeadline(guard);
+    const sample = coeffs.find((coeff) => coeff instanceof ModScalar);
+    if (!sample) {
+      return {
+        text: formatPolynomial(coeffs, variable),
+        note: 'Finite-field coefficients were not available.',
+        factored: false
+      };
+    }
+    const p = sample.p;
+    const poly = ffPolyFromDescending(coeffs, p);
+    if (ffPolyDegree(poly) < 1) {
+      return {
+        text: formatPolynomial(coeffs, variable),
+        note: `Constant polynomial over ${finiteFieldPlain(p)}.`
+      };
+    }
+    const leading = poly[poly.length - 1].clone();
+    const monicFactors = ffFactorMonic(ffPolyMonic(poly), guard);
+    const grouped = [];
+    for (const factor of monicFactors) {
+      const key = ffPolyKey(factor.poly);
+      const existing = grouped.find((item) => item.key === key);
+      if (existing) existing.multiplicity += factor.multiplicity;
+      else grouped.push({ key, poly: factor.poly, multiplicity: factor.multiplicity });
+    }
+    grouped.sort((a, b) => {
+      const degreeDiff = ffPolyDegree(a.poly) - ffPolyDegree(b.poly);
+      return degreeDiff || a.key.localeCompare(b.key);
+    });
+    const parts = [];
+    if (!leading.isOne()) parts.push(formatScalar(leading));
+    for (const factor of grouped) {
+      const text = formatPolynomial(factor.poly.slice().reverse(), variable);
+      parts.push(powerText(`(${text})`, factor.multiplicity));
+    }
+    return {
+      text: parts.length ? parts.join(' ') : formatPolynomial(coeffs, variable),
+      note: `Exact finite-field factorization over ${finiteFieldPlain(p)}.`
+    };
+  }
+
+  function ffFactorMonic(poly, guard = null) {
+    const squareFree = ffSquareFreeFactors(ffPolyMonic(poly), guard);
+    const factors = [];
+    for (const item of squareFree) {
+      checkDeadline(guard);
+      for (const factor of ffBerlekampFactor(item.poly, guard)) {
+        factors.push({ poly: ffPolyMonic(factor), multiplicity: item.multiplicity });
+      }
+    }
+    return factors;
+  }
+
+  function ffSquareFreeFactors(poly, guard = null) {
+    poly = ffPolyMonic(poly);
+    if (ffPolyDegree(poly) < 1) return [];
+    const derivative = ffPolyDerivative(poly);
+    if (ffPolyIsZero(derivative)) {
+      return ffSquareFreeFactors(ffPolyPthRoot(poly), guard)
+        .map((factor) => ({ poly: factor.poly, multiplicity: factor.multiplicity * poly[0].p }));
+    }
+    let c = ffPolyGcd(poly, derivative, guard);
+    let w = ffPolyDivExact(poly, c, guard);
+    let multiplicity = 1;
+    const factors = [];
+    while (!ffPolyIsOne(w)) {
+      checkDeadline(guard);
+      const y = ffPolyGcd(w, c, guard);
+      const z = ffPolyDivExact(w, y, guard);
+      if (!ffPolyIsOne(z)) factors.push({ poly: ffPolyMonic(z), multiplicity });
+      w = y;
+      c = ffPolyDivExact(c, y, guard);
+      multiplicity++;
+    }
+    if (!ffPolyIsOne(c)) {
+      for (const factor of ffSquareFreeFactors(ffPolyPthRoot(c), guard)) {
+        factors.push({ poly: factor.poly, multiplicity: factor.multiplicity * c[0].p });
+      }
+    }
+    return factors;
+  }
+
+  function ffBerlekampFactor(poly, guard = null) {
+    poly = ffPolyMonic(poly);
+    if (ffPolyDegree(poly) <= 1) return [poly];
+    const basis = ffBerlekampKernel(poly, guard);
+    if (basis.length <= 1) return [poly];
+    let factors = [poly];
+    let splitHappened = false;
+    for (const vector of basis) {
+      checkDeadline(guard);
+      if (ffPolyDegree(vector) <= 0) continue;
+      const next = [];
+      for (const factor of factors) {
+        if (ffPolyDegree(factor) <= 1) {
+          next.push(factor);
+          continue;
+        }
+        const pieces = ffSplitByBerlekampVector(factor, vector, guard);
+        if (pieces.length > 1) splitHappened = true;
+        next.push(...pieces);
+      }
+      factors = next.map(ffPolyMonic);
+      if (factors.length >= basis.length) break;
+    }
+    if (!splitHappened) return [poly];
+    const out = [];
+    for (const factor of factors) {
+      checkDeadline(guard);
+      if (ffPolyDegree(factor) <= 1 || ffBerlekampKernel(factor, guard).length <= 1) out.push(factor);
+      else out.push(...ffBerlekampFactor(factor, guard));
+    }
+    return out;
+  }
+
+  function ffSplitByBerlekampVector(factor, vector, guard = null) {
+    let remaining = ffPolyMonic(factor);
+    const p = remaining[0].p;
+    const pieces = [];
+    for (let value = 0; value < p && !ffPolyIsOne(remaining); value++) {
+      checkDeadline(guard);
+      const shifted = ffPolySub(ffPolyMod(vector, remaining, guard), [new ModScalar(value, p)]);
+      const gcd = ffPolyGcd(remaining, shifted, guard);
+      const gcdDegree = ffPolyDegree(gcd);
+      const remainingDegree = ffPolyDegree(remaining);
+      if (gcdDegree <= 0) continue;
+      if (gcdDegree < remainingDegree) {
+        pieces.push(ffPolyMonic(gcd));
+        remaining = ffPolyDivExact(remaining, gcd, guard);
+      } else {
+        pieces.push(remaining);
+        remaining = [ModScalar.one(p)];
+      }
+    }
+    if (!ffPolyIsOne(remaining)) pieces.push(remaining);
+    return pieces;
+  }
+
+  function ffBerlekampKernel(poly, guard = null) {
+    poly = ffPolyMonic(poly);
+    const n = ffPolyDegree(poly);
+    const p = poly[0].p;
+    const zero = () => ModScalar.zero(p);
+    const one = () => ModScalar.one(p);
+    const x = [zero(), one()];
+    const matrix = Array.from({ length: n }, () => Array.from({ length: n }, zero));
+    for (let col = 0; col < n; col++) {
+      checkDeadline(guard);
+      const power = ffPolyPowMod(x, BigInt(p) * BigInt(col), poly, guard);
+      for (let row = 0; row < n; row++) {
+        const identity = row === col ? one() : zero();
+        matrix[row][col] = ffPolyCoeff(power, row, p).sub(identity);
+      }
+    }
+    return ffNullspace(matrix).map((basis) => ffPolyTrim(basis, p));
+  }
+
+  function ffNullspace(matrix) {
+    const cols = matrix[0]?.length || 0;
+    const sample = scalarSampleFromMatrix(matrix);
+    const { matrix: R, pivots } = exactRref(matrix);
+    const pivotSet = new Set(pivots);
+    const freeCols = [];
+    for (let c = 0; c < cols; c++) if (!pivotSet.has(c)) freeCols.push(c);
+    return freeCols.map((freeCol) => {
+      const v = Array.from({ length: cols }, () => scalarZeroLike(sample));
+      v[freeCol] = scalarOneLike(sample);
+      for (let i = pivots.length - 1; i >= 0; i--) {
+        const pivotCol = pivots[i];
+        let sum = scalarZeroLike(sample);
+        for (const c of freeCols) sum = sum.add(R[i][c].mul(v[c]));
+        v[pivotCol] = sum.neg();
+      }
+      return v;
+    });
+  }
+
+  function ffPolyFromDescending(coeffs, p) {
+    return ffPolyTrim(coeffs.slice().reverse().map((coeff) => coeff instanceof ModScalar ? coeff.clone() : new ModScalar(coeff, p)), p);
+  }
+
+  function ffPolyTrim(coeffs, p = null) {
+    const sample = coeffs.find((coeff) => coeff instanceof ModScalar);
+    const modulus = p || sample?.p || DEFAULT_FINITE_FIELD_PRIME;
+    const out = coeffs.length
+      ? coeffs.map((coeff) => coeff == null ? ModScalar.zero(modulus) : coeff instanceof ModScalar ? coeff.clone() : new ModScalar(coeff, modulus))
+      : [ModScalar.zero(modulus)];
+    let end = out.length - 1;
+    while (end > 0 && out[end].isZero()) end--;
+    return out.slice(0, end + 1);
+  }
+
+  function ffPolyDegree(poly) {
+    return ffPolyTrim(poly).length - 1;
+  }
+
+  function ffPolyCoeff(poly, index, p) {
+    return index < poly.length ? poly[index].clone() : ModScalar.zero(p);
+  }
+
+  function ffPolyKey(poly) {
+    const trimmed = ffPolyTrim(poly);
+    return `${trimmed[0].p}:${trimmed.map((coeff) => coeff.value).join(',')}`;
+  }
+
+  function ffPolyIsZero(poly) {
+    const trimmed = ffPolyTrim(poly);
+    return trimmed.length === 1 && trimmed[0].isZero();
+  }
+
+  function ffPolyIsOne(poly) {
+    const trimmed = ffPolyTrim(poly);
+    return trimmed.length === 1 && trimmed[0].isOne();
+  }
+
+  function ffPolyMonic(poly) {
+    poly = ffPolyTrim(poly);
+    if (ffPolyIsZero(poly)) return poly;
+    const lead = poly[poly.length - 1];
+    return poly.map((coeff) => coeff.div(lead));
+  }
+
+  function ffPolySub(a, b) {
+    const sample = (a.find((coeff) => coeff instanceof ModScalar) || b.find((coeff) => coeff instanceof ModScalar));
+    const len = Math.max(a.length, b.length);
+    const out = [];
+    for (let i = 0; i < len; i++) {
+      const x = i < a.length ? a[i] : scalarZeroLike(sample);
+      const y = i < b.length ? b[i] : scalarZeroLike(sample);
+      out.push(x.sub(y));
+    }
+    return ffPolyTrim(out, sample.p);
+  }
+
+  function ffPolyMul(a, b) {
+    const sample = (a.find((coeff) => coeff instanceof ModScalar) || b.find((coeff) => coeff instanceof ModScalar));
+    const out = Array.from({ length: a.length + b.length - 1 }, () => scalarZeroLike(sample));
+    for (let i = 0; i < a.length; i++) {
+      for (let j = 0; j < b.length; j++) out[i + j] = out[i + j].add(a[i].mul(b[j]));
+    }
+    return ffPolyTrim(out, sample.p);
+  }
+
+  function ffPolyDivmod(dividend, divisor, guard = null) {
+    dividend = ffPolyTrim(dividend);
+    divisor = ffPolyTrim(divisor);
+    if (ffPolyIsZero(divisor)) throw new Error('Division by zero polynomial.');
+    const p = divisor[0].p;
+    let rem = dividend.map((coeff) => coeff.clone());
+    const degreeDiff = ffPolyDegree(rem) - ffPolyDegree(divisor);
+    if (degreeDiff < 0) return { quotient: [ModScalar.zero(p)], remainder: rem };
+    const quotient = Array.from({ length: degreeDiff + 1 }, () => ModScalar.zero(p));
+    while (!ffPolyIsZero(rem) && ffPolyDegree(rem) >= ffPolyDegree(divisor)) {
+      checkDeadline(guard);
+      const shift = ffPolyDegree(rem) - ffPolyDegree(divisor);
+      const factor = rem[rem.length - 1].div(divisor[divisor.length - 1]);
+      quotient[shift] = quotient[shift].add(factor);
+      for (let i = 0; i < divisor.length; i++) rem[i + shift] = rem[i + shift].sub(factor.mul(divisor[i]));
+      rem = ffPolyTrim(rem, p);
+    }
+    return {
+      quotient: ffPolyTrim(quotient, p),
+      remainder: ffPolyTrim(rem, p)
+    };
+  }
+
+  function ffPolyDivExact(dividend, divisor, guard = null) {
+    const result = ffPolyDivmod(dividend, divisor, guard);
+    if (!ffPolyIsZero(result.remainder)) throw new Error('Polynomial division left a remainder.');
+    return result.quotient;
+  }
+
+  function ffPolyMod(dividend, modulus, guard = null) {
+    return ffPolyDivmod(dividend, modulus, guard).remainder;
+  }
+
+  function ffPolyGcd(a, b, guard = null) {
+    a = ffPolyTrim(a);
+    b = ffPolyTrim(b);
+    while (!ffPolyIsZero(b)) {
+      checkDeadline(guard);
+      const r = ffPolyMod(a, b, guard);
+      a = b;
+      b = r;
+    }
+    return ffPolyMonic(a);
+  }
+
+  function ffPolyPowMod(base, exponent, modulus, guard = null) {
+    let e = typeof exponent === 'bigint' ? exponent : BigInt(exponent);
+    const p = modulus[0].p;
+    let result = [ModScalar.one(p)];
+    let power = ffPolyMod(base, modulus, guard);
+    while (e > 0n) {
+      checkDeadline(guard);
+      if (e & 1n) result = ffPolyMod(ffPolyMul(result, power), modulus, guard);
+      e >>= 1n;
+      if (e > 0n) power = ffPolyMod(ffPolyMul(power, power), modulus, guard);
+    }
+    return result;
+  }
+
+  function ffPolyDerivative(poly) {
+    poly = ffPolyTrim(poly);
+    const p = poly[0].p;
+    if (poly.length <= 1) return [ModScalar.zero(p)];
+    const out = [];
+    for (let i = 1; i < poly.length; i++) out[i - 1] = poly[i].mul(new ModScalar(i, p));
+    return ffPolyTrim(out, p);
+  }
+
+  function ffPolyPthRoot(poly) {
+    poly = ffPolyTrim(poly);
+    const p = poly[0].p;
+    const out = [];
+    for (let i = 0; i < poly.length; i++) {
+      if (i % p === 0) out[i / p] = poly[i].clone();
+      else if (!poly[i].isZero()) throw new Error('Expected a p-th power polynomial.');
+    }
+    return ffPolyTrim(out, p);
+  }
+
+  function factorPolynomialOverGenericExactField(coeffs, variable, field, guard = null, extraCandidates = []) {
+    checkDeadline(guard);
+    const sample = genericFieldSampleFromPolynomial(coeffs);
+    if (!sample) {
+      return {
+        text: formatPolynomial(coeffs, variable),
+        note: `Exact coefficients over ${fieldName(field)} were not available.`,
+        factored: false
+      };
+    }
+
+    const state = {
+      parts: [],
+      remaining: trimPolynomial(coeffs.map((coeff) => coeff.clone())),
+      timedOut: false
+    };
+
+    try {
+      extractGenericLinearFactors(state, variable, sample, guard, extraCandidates);
+    } catch (error) {
+      if (!isTimeoutError(error)) throw error;
+      state.timedOut = true;
+    }
+
+    const parts = state.parts.slice();
+    if (state.remaining.length > 1) parts.push(`(${formatPolynomial(state.remaining, variable)})`);
+    const body = parts.length ? parts.join(' ') : formatPolynomial(coeffs, variable);
+    const complete = state.remaining.length <= 1;
+    const fieldText = fieldName(field);
+    if (state.timedOut) {
+      return {
+        text: `warning: exact factorization took more than 1.5 seconds; ${body}`,
+        note: `Exact factor search over ${fieldText} reached the 1.5 second limit; partial factors are shown and the remaining factor is unchanged.`,
+        factored: false,
+        timedOut: true
+      };
+    }
+    if (complete) {
+      return {
+        text: body,
+        note: `Exact linear factorization over ${fieldText}.`,
+        factored: true
+      };
+    }
+    return {
+      text: body,
+      note: `Exact linear factors over ${fieldText} are shown; the remaining factor is shown unchanged after the 1.5 second bounded search.`,
+      factored: false
+    };
+  }
+
+  function extractGenericLinearFactors(state, variable, sample, guard = null, extraCandidates = []) {
+    state.remaining = trimPolynomial(state.remaining);
+    if (state.remaining.length <= 1) return;
+
+    const leading = state.remaining[0];
+    if (!leading.isOne()) {
+      state.parts.push(`(${formatScalar(leading)})`);
+      state.remaining = trimPolynomial(state.remaining.map((coeff) => coeff.div(leading)));
+    }
+
+    while (state.remaining.length > 1) {
+      checkDeadline(guard);
+      const root = state.remaining.length === 2
+        ? genericLinearRoot(state.remaining)
+        : findGenericFieldRoot(state.remaining, sample, guard, extraCandidates);
+      if (!root) break;
+
+      let multiplicity = 0;
+      const factor = [scalarOneLike(sample), root.neg()];
+      while (state.remaining.length > 1 && exactPolynomialEval(state.remaining, root).isZero()) {
+        checkDeadline(guard);
+        const division = exactPolynomialDivmod(state.remaining, factor, guard);
+        if (!polynomialIsZero(division.remainder)) break;
+        state.remaining = trimPolynomial(division.quotient);
+        multiplicity++;
+      }
+      if (!multiplicity) break;
+      state.parts.push(powerText(linearFactorText(root, variable, true), multiplicity));
+    }
+  }
+
+  function genericLinearRoot(coeffs) {
+    coeffs = trimPolynomial(coeffs);
+    if (coeffs.length !== 2) return null;
+    return coeffs[1].neg().div(coeffs[0]);
+  }
+
+  function findGenericFieldRoot(coeffs, sample, guard = null, extraCandidates = []) {
+    for (const candidate of genericFieldRootCandidates(coeffs, sample, extraCandidates)) {
+      checkDeadline(guard);
+      if (exactPolynomialEval(coeffs, candidate).isZero()) return candidate;
+    }
+    return null;
+  }
+
+  function genericFieldRootCandidates(coeffs, sample, extraCandidates = []) {
+    const candidates = [];
+    const seen = new Set();
+    const add = (value) => pushGenericFieldCandidate(candidates, seen, value, sample);
+    const addFamily = (value) => pushGenericFieldCandidateFamily(candidates, seen, value, sample);
+
+    add(scalarZeroLike(sample));
+    for (const value of extraCandidates) addFamily(value);
+
+    const generator = genericFieldGenerator(sample);
+    if (generator) {
+      for (let multiplier = -3; multiplier <= 3; multiplier++) {
+        if (multiplier === 0) continue;
+        for (let offset = -3; offset <= 3; offset++) {
+          add(generator.mul(scalarFromIntLike(multiplier, sample)).add(scalarFromIntLike(offset, sample)));
+        }
+      }
+      if (sample instanceof RationalFunctionScalar) {
+        const one = scalarOneLike(sample);
+        for (let offset = -3; offset <= 3; offset++) {
+          const shifted = generator.add(scalarFromIntLike(offset, sample));
+          if (!shifted.isZero()) {
+            add(one.div(shifted));
+            add(generator.div(shifted));
+          }
+        }
+      }
+    }
+
+    for (let value = -6; value <= 6; value++) add(scalarFromIntLike(value, sample));
+    for (const coeff of coeffs) addFamily(coeff);
+    return candidates;
+  }
+
+  function pushGenericFieldCandidateFamily(candidates, seen, value, sample) {
+    if (!genericFieldCompatible(value, sample)) return;
+    const base = value.clone();
+    pushGenericFieldCandidate(candidates, seen, base, sample);
+    pushGenericFieldCandidate(candidates, seen, base.neg(), sample);
+    for (let offset = -3; offset <= 3; offset++) {
+      if (offset === 0) continue;
+      pushGenericFieldCandidate(candidates, seen, base.add(scalarFromIntLike(offset, sample)), sample);
+    }
+    if (!base.isZero()) {
+      const inverse = scalarOneLike(sample).div(base);
+      pushGenericFieldCandidate(candidates, seen, inverse, sample);
+      pushGenericFieldCandidate(candidates, seen, inverse.neg(), sample);
+    }
+  }
+
+  function pushGenericFieldCandidate(candidates, seen, value, sample) {
+    if (!genericFieldCompatible(value, sample)) return;
+    const key = genericFieldScalarKey(value);
+    if (seen.has(key)) return;
+    seen.add(key);
+    candidates.push(value.clone());
+  }
+
+  function genericFieldCompatible(value, sample) {
+    if (sample instanceof RationalFunctionScalar) return value instanceof RationalFunctionScalar && value.variable === sample.variable;
+    if (sample instanceof NumberFieldScalar) return value instanceof NumberFieldScalar && value.field.key === sample.field.key;
+    return false;
+  }
+
+  function genericFieldScalarKey(value) {
+    if (value instanceof RationalFunctionScalar) return `rf:${value.variable}:${polyQKey(value.num)}/${polyQKey(value.den)}`;
+    if (value instanceof NumberFieldScalar) return `nf:${value.field.key}:${polyQKey(value.coeffs)}`;
+    return formatScalar(value);
+  }
+
+  function genericFieldGenerator(sample) {
+    if (sample instanceof RationalFunctionScalar) return RationalFunctionScalar.variable(sample.variable);
+    if (sample instanceof NumberFieldScalar) return NumberFieldScalar.generator(sample.field);
+    return null;
+  }
+
+  function genericFieldSampleFromPolynomial(coeffs) {
+    return (coeffs || []).find((coeff) => coeff instanceof RationalFunctionScalar || coeff instanceof NumberFieldScalar) || null;
+  }
+
+  function genericFactorizationCandidatesFromData(data) {
+    const out = [];
+    if (!data?.details) return out;
+    for (const row of data.details) {
+      for (const entry of row) {
+        if (entry?.scalar instanceof RationalFunctionScalar || entry?.scalar instanceof NumberFieldScalar) {
+          out.push(entry.scalar.clone());
+        }
+      }
+    }
+    return out;
+  }
+
+  function timeoutFactorizationFallback(data, field, variable, coeffs = null) {
     if (field === 'finite-field') {
       return {
-        error: 'Finite-field factorization timed out.',
+        error: 'Finite-field factorization timed out after 1.5 seconds.',
+        mode: 'error'
+      };
+    }
+    if (field === 'rational-function' || field === 'number-field') {
+      if (coeffs) {
+        return {
+          text: `exact factorization was not completed; ${formatPolynomial(coeffs, variable)}`,
+          note: 'Exact factorization timed out after 1.5 seconds; the characteristic polynomial is shown unchanged.',
+          mode: 'exact-partial'
+        };
+      }
+      return {
+        error: 'Exact factorization timed out after 1.5 seconds.',
         mode: 'error'
       };
     }
@@ -2348,15 +3614,17 @@
     else factors.push({ key, poly, multiplicity: 1 });
   }
 
-  function exactPolynomialDivmod(dividend, divisor) {
+  function exactPolynomialDivmod(dividend, divisor, guard = null) {
     dividend = trimPolynomial(dividend);
     divisor = trimPolynomial(divisor);
     if (!divisor.length || scalarIsZero(divisor[0])) throw new Error('Division by zero polynomial.');
+    const sample = dividend.find(Boolean) || divisor.find(Boolean) || ExactScalar.zero();
     const degreeDiff = dividend.length - divisor.length;
-    if (degreeDiff < 0) return { quotient: [ExactScalar.zero()], remainder: dividend };
+    if (degreeDiff < 0) return { quotient: [scalarZeroLike(sample)], remainder: dividend };
     const rem = dividend.map((z) => z.clone());
-    const quotient = Array.from({ length: degreeDiff + 1 }, () => ExactScalar.zero());
+    const quotient = Array.from({ length: degreeDiff + 1 }, () => scalarZeroLike(sample));
     for (let i = 0; i <= degreeDiff; i++) {
+      checkDeadline(guard);
       const factor = rem[i].div(divisor[0]);
       quotient[i] = factor;
       if (factor.isZero()) continue;
@@ -2425,6 +3693,8 @@
   }
 
   function formatScalar(value) {
+    if (value instanceof RationalFunctionScalar) return formatRationalFunction(value, 'text');
+    if (value instanceof NumberFieldScalar) return formatNumberFieldScalar(value, 'text');
     if (value instanceof ModScalar) return value.value.toString();
     if (value instanceof ExactScalar) {
       if (value.im.isZero()) return formatExactFraction(value.re);
@@ -2448,12 +3718,14 @@
   }
 
   function scalarIsZero(value) {
+    if (value instanceof RationalFunctionScalar || value instanceof NumberFieldScalar) return value.isZero();
     if (value instanceof ModScalar) return value.isZero();
     if (value instanceof ExactScalar) return value.isZero();
     return Complex.from(value).isZero(DISPLAY_TOL);
   }
 
   function scalarIsOne(value) {
+    if (value instanceof RationalFunctionScalar || value instanceof NumberFieldScalar) return value.isOne();
     if (value instanceof ModScalar) return value.isOne();
     if (value instanceof ExactScalar) return value.im.isZero() && value.re.isOne();
     const z = Complex.from(value);
@@ -2461,12 +3733,17 @@
   }
 
   function scalarIsReal(value) {
+    if (value instanceof RationalFunctionScalar || value instanceof NumberFieldScalar) return value.isReal();
     if (value instanceof ModScalar) return true;
     if (value instanceof ExactScalar) return value.isReal();
     return Math.abs(Complex.from(value).im) <= DISPLAY_TOL;
   }
 
   function scalarRealSign(value) {
+    if (value instanceof RationalFunctionScalar || value instanceof NumberFieldScalar) {
+      const constant = value.constantFraction();
+      return constant ? constant.sign() : 1;
+    }
     if (value instanceof ModScalar) return 1;
     if (value instanceof ExactScalar) return value.im.isZero() ? value.re.sign() : 1;
     const z = Complex.from(value);
@@ -2474,6 +3751,7 @@
   }
 
   function scalarNeg(value) {
+    if (value instanceof RationalFunctionScalar || value instanceof NumberFieldScalar) return value.neg();
     if (value instanceof ModScalar) return value.neg();
     if (value instanceof ExactScalar) return value.neg();
     return Complex.from(value).neg();
@@ -2481,6 +3759,10 @@
 
   function linearFactorText(root, variable, exact) {
     const z = exact ? root : cleanComplex(root, 1e-8);
+    if (z instanceof RationalFunctionScalar || z instanceof NumberFieldScalar) {
+      if (z.isZero()) return `(${variable})`;
+      return `(${variable} - (${formatScalar(z)}))`;
+    }
     if (z instanceof ExactScalar && z.im.isZero()) {
       if (z.re.isZero()) return `(${variable})`;
       return z.re.sign() < 0
@@ -2505,8 +3787,66 @@
     if (field === 'real') return 'R';
     if (field === 'rational') return 'Q';
     if (field === 'integer') return 'Q';
-    if (field === 'finite-field') return `GF(${currentFiniteFieldPrime()})`;
+    if (field === 'finite-field') return finiteFieldPlain();
+    if (field === 'rational-function') return rationalFunctionPlain();
+    if (field === 'number-field') return numberFieldPlain();
     return field;
+  }
+
+  function fieldNameForInfo(fieldInfo) {
+    if (fieldInfo?.kind === 'finite-field') return finiteFieldPlain(fieldInfo.p);
+    if (fieldInfo?.kind === 'rational-function') return rationalFunctionPlain(fieldInfo.variable);
+    if (fieldInfo?.kind === 'number-field') return numberFieldPlain(fieldInfo);
+    return fieldName(fieldInfo?.kind || currentDataType());
+  }
+
+  function formatRationalFunction(value, mode = 'text') {
+    const numerator = formatPolyQ(value.num, value.variable, mode);
+    if (polyQEqual(value.den, polyQOne())) return numerator;
+    const denominator = formatPolyQ(value.den, value.variable, mode);
+    if (mode === 'latex') return `\\frac{${numerator}}{${denominator}}`;
+    return `(${numerator})/(${denominator})`;
+  }
+
+  function formatNumberFieldScalar(value, mode = 'text') {
+    return formatPolyQ(value.coeffs, value.field.symbol, mode);
+  }
+
+  function formatPolyQ(poly, variable = 't', mode = 'text') {
+    poly = polyQTrim(poly);
+    const terms = [];
+    for (let power = poly.length - 1; power >= 0; power--) {
+      const coeff = poly[power];
+      if (coeff.isZero()) continue;
+      const sign = coeff.sign();
+      const abs = coeff.abs();
+      const variablePart = formatPowerVariable(variable, power, mode);
+      const coeffText = power > 0 && abs.isOne() ? '' : formatFractionForMode(abs, mode);
+      const body = variablePart
+        ? coeffText ? `${coeffText}${mode === 'latex' ? '' : '*'}${variablePart}` : variablePart
+        : coeffText;
+      terms.push({ sign, body });
+    }
+    if (!terms.length) return '0';
+    return terms.map((term, index) => {
+      if (index === 0) return term.sign < 0 ? `-${term.body}` : term.body;
+      return `${term.sign < 0 ? ' - ' : ' + '}${term.body}`;
+    }).join('');
+  }
+
+  function formatPowerVariable(variable, power, mode = 'text') {
+    if (power === 0) return '';
+    const name = mode === 'latex' ? escapeLatexIdentifier(variable) : variable;
+    if (power === 1) return name;
+    return mode === 'python' ? `${name}**${power}` : `${name}^${power}`;
+  }
+
+  function formatFractionForMode(value, mode = 'text') {
+    value = Fraction.from(value);
+    if (value.den === 1n) return value.num.toString();
+    if (mode === 'latex') return `\\frac{${value.num.toString()}}{${value.den.toString()}}`;
+    if (mode === 'python') return `Fraction(${value.num.toString()}, ${value.den.toString()})`;
+    return `${value.num.toString()}/${value.den.toString()}`;
   }
 
   function polynomialRoots(coeffs, guard = null) {
@@ -2782,8 +4122,8 @@
       const op = refs.operation.value;
       const symbolic = refs.resultMode.value === 'symbolic';
       let payload = null;
-      if (data.fieldInfo?.kind === 'finite-field') {
-        payload = computeFiniteFieldOperation(data, op);
+      if (isExactMatrixField(data.fieldInfo)) {
+        payload = computeExactFieldOperation(data, op);
       } else if (symbolic && canComputeSymbolically(op)) {
         payload = computeSymbolicOperation(data, op);
       } else if (op === 'transpose') {
@@ -2832,7 +4172,7 @@
             { title: '\\omega', matrix: result.W },
             { title: 'B_2', matrix: result.B2 }
           ],
-          note: 'Numerical Bruhat form in GL(n): A = B_1 omega B_2, with B_1 and B_2 upper triangular and omega a permutation matrix.'
+          note: `Numerical Bruhat form for rank ${result.rank}: B_1 and B_2 are invertible upper triangular matrices, and omega is a partial permutation matrix.`
         };
       } else if (op === 'qr') {
         const result = qrDecomposition(A);
@@ -2884,16 +4224,16 @@
     return op === 'transpose' || op === 'inverse' || op === 'power' || op === 'bruhat';
   }
 
-  function computeFiniteFieldOperation(data, op) {
+  function computeExactFieldOperation(data, op) {
     if (!canComputeSymbolically(op)) {
-      throw new Error('This operation is numerical/analytic and is not available over GF(p). Try transpose, inverse, powers, or Bruhat decomposition.');
+      throw new Error(`This operation is numerical/analytic and is not available over ${fieldNameForInfo(data.fieldInfo)}. Try transpose, inverse, powers, or Bruhat decomposition.`);
     }
-    const p = data.fieldInfo.p;
-    const A = finiteFieldMatrixFromDetails(data.details, p);
-    const field = { kind: 'finite-field', p };
+    const A = exactMatrixFromData(data);
+    const field = data.fieldInfo;
+    const fieldText = fieldNameForInfo(field);
     if (op === 'transpose') {
       return {
-        title: `Transpose over GF(${p})`,
+        title: `Transpose over ${fieldText}`,
         formula: 'A^T',
         field,
         blocks: [{ title: 'A^T', matrix: exactTranspose(A), exact: true, field }]
@@ -2901,7 +4241,7 @@
     }
     if (op === 'inverse') {
       return {
-        title: `Inverse over GF(${p})`,
+        title: `Inverse over ${fieldText}`,
         formula: 'A^{-1}',
         field,
         blocks: [{ title: 'A^{-1}', matrix: exactInverse(A), exact: true, field }]
@@ -2912,7 +4252,7 @@
       refs.powerExponent.value = String(n);
       const powerLabel = `A^{${n}}`;
       return {
-        title: `Power ${n} over GF(${p})`,
+        title: `Power ${n} over ${fieldText}`,
         formula: powerLabel,
         field,
         blocks: [{ title: powerLabel, matrix: exactMatrixPower(A, n), exact: true, field }]
@@ -2921,7 +4261,7 @@
     if (op === 'bruhat') {
       const result = exactBruhatDecomposition(A);
       return {
-        title: `Bruhat Decomposition over GF(${p})`,
+        title: `Bruhat Decomposition over ${fieldText}`,
         formula: 'A = B_1\\omega B_2',
         field,
         blocks: [
@@ -2929,10 +4269,10 @@
           { title: '\\omega', matrix: result.W, exact: true, field },
           { title: 'B_2', matrix: result.B2, exact: true, field }
         ],
-        note: `Exact Bruhat form in GL(n, ${p}).`
+        note: `Exact Bruhat form over ${fieldText} with rank ${result.rank}; B_1 and B_2 are invertible upper triangular matrices, and omega is a partial permutation matrix.`
       };
     }
-    throw new Error('This operation is not available over GF(p).');
+    throw new Error(`This operation is not available over ${fieldText}.`);
   }
 
   function computeSymbolicOperation(data, op) {
@@ -2971,7 +4311,7 @@
           { title: '\\omega', matrix: result.W, exact: true },
           { title: 'B_2', matrix: result.B2, exact: true }
         ],
-        note: 'Exact Bruhat form in GL(n): A = B_1 omega B_2, with B_1 and B_2 upper triangular and omega a permutation matrix.'
+        note: `Exact Bruhat form with rank ${result.rank}: B_1 and B_2 are invertible upper triangular matrices, and omega is a partial permutation matrix.`
       };
     }
     throw new Error('Symbolic mode is not available for this operation.');
@@ -3119,14 +4459,32 @@
   }
 
   function operationFieldPrelude(field, format) {
-    if (field?.kind !== 'finite-field') return '';
-    if (format === 'sage') return `F = GF(${field.p})`;
-    if (format === 'macaulay2') return `kk = ZZ/${field.p}`;
-    if (format === 'mathematica' || format === 'matlab' || format === 'python') return `p = ${field.p}`;
+    if (!field) return '';
+    if (field.kind === 'finite-field') {
+      if (format === 'sage') return `F = GF(${field.p})`;
+      if (format === 'macaulay2') return `kk = ZZ/${field.p}`;
+      if (format === 'mathematica' || format === 'matlab' || format === 'python') return `p = ${field.p}`;
+      return '';
+    }
+    if (field.kind === 'rational-function') {
+      if (format === 'sage') return `R.<${field.variable}> = PolynomialRing(QQ)\nK = FractionField(R)`;
+      if (format === 'macaulay2') return `kk = frac(QQ[${field.variable}])`;
+      if (format === 'python') return `from fractions import Fraction\nfrom sympy import Matrix, symbols\n${field.variable} = symbols('${field.variable}')`;
+      return '';
+    }
+    if (field.kind === 'number-field') {
+      const poly = formatPolyQ(field.modulus, field.symbol, 'text');
+      const sagePoly = formatPolyQ(field.modulus, 'x', 'text');
+      if (format === 'sage') return `x = polygen(QQ, 'x')\nK.<${field.symbol}> = NumberField(${sagePoly})`;
+      if (format === 'macaulay2') return `kk = QQ[${field.symbol}]/(${poly})`;
+      if (format === 'python') return `from fractions import Fraction\nfrom sympy import Matrix, symbols\n${field.symbol} = symbols('${field.symbol}')\n# relation: ${poly} = 0`;
+      return '';
+    }
     return '';
   }
 
   function operationNeedsPythonFraction(result) {
+    if (result.field?.kind === 'rational-function' || result.field?.kind === 'number-field') return false;
     return (result.blocks || []).some((block) => block.exact && !isFiniteFieldMatrix(block.matrix) && exactMatrixNeedsFraction(block.matrix));
   }
 
@@ -3145,14 +4503,13 @@
   function operationAssignment(name, matrix, format, exact = false, field = null) {
     if (format === 'python') return `${name} = ${matrixCodeValue(matrix, format, exact)}`;
     if (format === 'sage') {
-      return field?.kind === 'finite-field'
-        ? `${name} = Matrix(F, ${matrixCodeValue(matrix, format, exact)})`
-        : `${name} = Matrix(${matrixCodeValue(matrix, format, exact)})`;
+      if (field?.kind === 'finite-field') return `${name} = Matrix(F, ${matrixCodeValue(matrix, format, exact)})`;
+      if (field?.kind === 'rational-function' || field?.kind === 'number-field') return `${name} = Matrix(K, ${matrixCodeValue(matrix, format, exact)})`;
+      return `${name} = Matrix(${matrixCodeValue(matrix, format, exact)})`;
     }
     if (format === 'macaulay2') {
-      return field?.kind === 'finite-field'
-        ? `${name} = matrix kk ${matrixCodeValue(matrix, format, exact)}`
-        : `${name} = matrix ${matrixCodeValue(matrix, format, exact)}`;
+      if (field?.kind === 'finite-field' || field?.kind === 'rational-function' || field?.kind === 'number-field') return `${name} = matrix kk ${matrixCodeValue(matrix, format, exact)}`;
+      return `${name} = matrix ${matrixCodeValue(matrix, format, exact)}`;
     }
     if (format === 'mathematica') return `${name} = ${matrixCodeValue(matrix, format, exact)};`;
     if (format === 'matlab') return `${name} = ${matrixCodeValue(matrix, format, exact)};`;
@@ -3199,6 +4556,8 @@
   }
 
   function exactScalarSource(value, format) {
+    if (value instanceof RationalFunctionScalar) return formatRationalFunction(value, sourceModeForFormat(format));
+    if (value instanceof NumberFieldScalar) return formatNumberFieldScalar(value, sourceModeForFormat(format));
     if (value instanceof ModScalar) return value.value.toString();
     value = ExactScalar.from(value);
     if (value.im.isZero()) return exactFractionSource(value.re, format);
@@ -3256,6 +4615,10 @@
   function matrixLatexBlock(block, index) {
     const latex = matrixToLatexValue(block.matrix, block.exact);
     return `<div class="matrix-result-block matrix-latex-row"><button class="matrix-result-name" type="button" data-block-index="${index}" title="load ${escapeHtml(block.title)} into canvas">${inlineMathHtml(block.title)}</button><span class="matrix-equals">=</span><span class="matrix-latex-code">${inlineMathHtml(latex)}</span></div>`;
+  }
+
+  function sourceModeForFormat(format) {
+    return format === 'latex' ? 'latex' : format === 'python' ? 'python' : 'text';
   }
 
   function matrixBlock(title, matrix, note = '', exact = false) {
@@ -3399,6 +4762,7 @@
   }
 
   function parseBulkMatrix(text) {
+    const fieldInfo = currentFieldInfo();
     const lines = String(text || '')
       .split(/\n|;/)
       .map((line) => line.trim())
@@ -3409,7 +4773,7 @@
         ? line.split(',').map((x) => x.trim()).filter((x) => x !== '')
         : line.split(/\s+/).filter(Boolean);
       if (!parts.length) throw new Error('Empty row in bulk input.');
-      for (const part of parts) validateEntryType(parseEntry(part));
+      for (const part of parts) validateEntryType(parseEntryForField(part, fieldInfo), fieldInfo);
       return parts;
     });
     const width = rows[0].length;
@@ -3418,11 +4782,12 @@
   }
 
   function validateImportedRows(rows) {
+    const fieldInfo = currentFieldInfo();
     if (!rows.length || !rows[0]?.length) throw new Error('Enter at least one row and one column.');
     const width = rows[0].length;
     for (const row of rows) {
       if (row.length !== width) throw new Error('Every row must have the same number of entries.');
-      for (const part of row) validateEntryType(parseEntry(part));
+      for (const part of row) validateEntryType(parseEntryForField(part, fieldInfo), fieldInfo);
     }
   }
 
@@ -3444,6 +4809,7 @@
 
   function exportMatrix(details, format, fieldInfo = null) {
     if (fieldInfo?.kind === 'finite-field') return exportFiniteFieldMatrix(details, format, fieldInfo.p);
+    if (fieldInfo?.kind === 'rational-function' || fieldInfo?.kind === 'number-field') return exportAlgebraicMatrix(details, format, fieldInfo);
     if (format === 'latex') return exportLatex(details);
     if (format === 'python') return exportPython(details);
     if (format === 'sage') return exportSage(details);
@@ -3452,6 +4818,19 @@
     if (format === 'matlab') return exportMatlab(details);
     if (format === 'rows' || format === 'bulk') return exportRows(details);
     return '';
+  }
+
+  function exportAlgebraicMatrix(details, format, fieldInfo) {
+    const matrix = algebraicMatrixFromDetails(details);
+    const rows = matrixCodeValue(matrix, format, true);
+    const prelude = operationFieldPrelude(fieldInfo, format);
+    if (format === 'latex') return matrixToLatexValue(matrix, true);
+    if (format === 'sage') return `${prelude}\nA = Matrix(K, ${rows})`;
+    if (format === 'macaulay2') return `${prelude}\nA = matrix kk ${rows}`;
+    if (format === 'python') return `${prelude}\nA = Matrix(${rows})`;
+    if (format === 'mathematica') return `A = ${rows};`;
+    if (format === 'matlab') return `A = ${rows};`;
+    return matrixRowsValue(matrix, true);
   }
 
   function exportFiniteFieldMatrix(details, format, p) {

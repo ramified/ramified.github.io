@@ -112,6 +112,28 @@
       text-align: center;
     }
 
+    .matrix-toolbar-group .matrix-symbol-input {
+      width: 48px;
+    }
+
+    .matrix-toolbar-group .matrix-polynomial-input {
+      width: 132px;
+      text-align: left;
+    }
+
+    .matrix-field-symbol {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 1px 4px;
+      color: var(--text);
+      font-size: 0.78rem;
+    }
+
+    .matrix-field-symbol[hidden] {
+      display: none !important;
+    }
+
     .matrix-number-input {
       width: 64px;
       padding: 4px 7px;
@@ -399,12 +421,29 @@
               <option value="real">Real</option>
               <option value="rational">Rational</option>
               <option value="integer">Integer</option>
-              <option value="finite-field">GF(p)</option>
+              <option value="finite-field">Finite field</option>
+              <option value="rational-function">Rational function</option>
+              <option value="number-field">Number field</option>
             </select>
           </label>
-          <label id="finite-field-prime-label" title="Prime modulus for GF(p)" hidden>
+          <span id="finite-field-symbol" class="matrix-field-symbol" hidden>\(\mathbb{F}_{7}\)</span>
+          <label id="finite-field-prime-label" title="Prime modulus for finite field" hidden>
             <span>p</span>
-            <input type="number" id="finite-field-prime" min="2" max="999983" step="1" value="5">
+            <input type="number" id="finite-field-prime" min="2" max="999983" step="1" value="7">
+          </label>
+          <span id="rational-function-symbol" class="matrix-field-symbol" hidden>\(\mathbb{Q}(t)\)</span>
+          <label id="rational-function-variable-label" title="Rational function variable" hidden>
+            <span>var</span>
+            <input class="matrix-symbol-input" type="text" id="rational-function-variable" value="t" maxlength="8" spellcheck="false" autocomplete="off">
+          </label>
+          <span id="number-field-symbol" class="matrix-field-symbol" hidden>\(\mathbb{Q}(a)\)</span>
+          <label id="number-field-symbol-label" title="Number field generator" hidden>
+            <span>gen</span>
+            <input class="matrix-symbol-input" type="text" id="number-field-generator" value="a" maxlength="8" spellcheck="false" autocomplete="off">
+          </label>
+          <label id="number-field-polynomial-label" title="Minimal polynomial" hidden>
+            <span>min</span>
+            <input class="matrix-polynomial-input" type="text" id="number-field-polynomial" value="a^2 - 2" spellcheck="false" autocomplete="off">
           </label>
         </span>
         <span class="canvas-size-inline" aria-label="Matrix size">

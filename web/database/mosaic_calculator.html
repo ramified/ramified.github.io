@@ -415,6 +415,24 @@
       display: none;
     }
 
+    .mosaic-decoration-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .mosaic-decoration-actions .btn {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+    }
+
+    .mosaic-decoration-actions .opt-row {
+      margin: 0;
+      white-space: nowrap;
+    }
+
     .algebraic-energy-row {
       display: flex;
       align-items: center;
@@ -677,6 +695,23 @@
           <div class="input-method">
             <span class="input-label">Tiling preferences</span>
             <div id="tile-palette" class="tile-palette-grid" aria-label="Tiling preferences"></div>
+          </div>
+        </div>
+        <div class="input-mode-panel" data-input-panel="decoration">
+          <div class="mosaic-inline-row">
+            <span class="input-label">Half-edge labels</span>
+            <select id="half-edge-label-style">
+              <option value="number">Number</option>
+              <option value="letter">Letter</option>
+              <option value="point">Point</option>
+              <option value="roman">Roman</option>
+            </select>
+          </div>
+          <div class="mosaic-decoration-actions">
+            <button class="btn btn-ghost" id="random-half-edge-labels" type="button">random</button>
+            <button class="btn btn-ghost" id="clear-decorations" type="button">clear</button>
+            <label class="opt-row"><input type="checkbox" id="clear-vertex-decorations" checked> vertex</label>
+            <label class="opt-row"><input type="checkbox" id="clear-half-edge-decorations" checked> half-edge</label>
           </div>
         </div>
         <div class="input-mode-panel" data-input-panel="pick">
