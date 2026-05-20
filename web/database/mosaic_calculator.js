@@ -98,6 +98,14 @@
     dualGraphSimulation: null,
     dualGraphDragging: null,
     dualGraphAnimating: false,
+    dualGraphDegenerations: [],
+    dualGraphDegenerationLayouts: new Map(),
+    dualGraphDegenerationSourceKey: '',
+    dualGraphDegenerationHoverTimer: null,
+    dualGraphDegenerationAnimations: new Map(),
+    dualGraphDegenerationsWide: false,
+    emphasizeDegenerations: false,
+    decorationHoverHit: null,
     algebraicCurveModel: null,
     algebraicCurveDragging: null,
     algebraicPointOverrides: {},
@@ -193,6 +201,9 @@
     refs.knotCodeKind = document.getElementById('knot-code-kind');
     refs.knotCode = document.getElementById('knot-code');
     refs.dualGraphCard = document.getElementById('dual-graph-card');
+    refs.dualGraphDegenerationsCard = document.getElementById('dual-graph-degenerations-card');
+    refs.dualGraphDegenerationsSideHost = document.getElementById('dual-graph-degenerations-side-host');
+    refs.dualGraphDegenerationsWideHost = document.getElementById('dual-graph-degenerations-wide-host');
     refs.dualGraphStatus = document.getElementById('dual-graph-status');
     refs.dualGraphStatusText = document.getElementById('dual-graph-status-text');
     refs.dualGraphInvariantsRow = document.getElementById('dual-graph-invariants-row');
@@ -216,6 +227,12 @@
     refs.dualGraphLayoutControls = document.getElementById('dual-graph-layout-controls');
     refs.computeLayout = document.getElementById('compute-layout');
     refs.resetLayout = document.getElementById('reset-layout');
+    refs.computeDegenerations = document.getElementById('compute-degenerations');
+    refs.exportDegenerations = document.getElementById('export-degenerations');
+    refs.toggleDegenerationsWide = document.getElementById('toggle-degenerations-wide');
+    refs.emphasizeDegenerations = document.getElementById('emphasize-degenerations');
+    refs.dualGraphDegenerationsStatus = document.getElementById('dual-graph-degenerations-status');
+    refs.dualGraphDegenerationsGrid = document.getElementById('dual-graph-degenerations-grid');
     refs.exportDualGraph = document.getElementById('export-dual-graph');
     refs.showDualGraphCanvas = document.getElementById('show-dual-graph-canvas');
     refs.showRiemannSurfaceCanvas = document.getElementById('show-riemann-surface-canvas');
@@ -350,6 +367,24 @@
       refs.computeLayout.addEventListener('click', () => {
         if (!state.dualGraphData || !(state.showDualGraphCanvas || state.showRiemannSurfaceCanvas)) return;
         runSelectedDualGraphLayout();
+      });
+    }
+    if (refs.computeDegenerations) {
+      refs.computeDegenerations.addEventListener('click', computeAndRenderDualGraphDegenerations);
+    }
+    if (refs.exportDegenerations) {
+      refs.exportDegenerations.addEventListener('click', exportDualGraphDegenerations);
+    }
+    if (refs.toggleDegenerationsWide) {
+      refs.toggleDegenerationsWide.addEventListener('click', () => {
+        setDualGraphDegenerationsWide(!state.dualGraphDegenerationsWide);
+      });
+    }
+    if (refs.emphasizeDegenerations) {
+      refs.emphasizeDegenerations.addEventListener('change', () => {
+        state.emphasizeDegenerations = refs.emphasizeDegenerations.checked;
+        renderDualGraphDegenerationChart();
+        refreshExport();
       });
     }
     if (refs.optimizeAlgebraicCurve) {
@@ -510,6 +545,7 @@
     window.addEventListener('resize', debounce(() => {
       resizeCanvas();
       normalizeViewOffset();
+      syncDualGraphDegenerationWidePlacement();
       draw(analyze());
     }, 80));
 
@@ -523,6 +559,8 @@
     state.hoverIndex = -1;
     state.drawDebugHit = null;
     state.pickHoverHit = null;
+    state.decorationHoverHit = null;
+    syncMainCanvasCursor();
     if (state.inputMode !== 'pick' && !state.displayPick && options.clearPick !== false) {
       state.pickedComponent = null;
       state.pickedAnchor = null;
@@ -842,6 +880,8 @@
       clearDrawDebugHit(false);
       clearPickHoverHit(false);
       state.hoverIndex = -1;
+      state.decorationHoverHit = null;
+      syncMainCanvasCursor();
       draw(analyze());
     });
     refs.canvas.addEventListener('mousemove', (event) => {
@@ -849,14 +889,18 @@
       if (state.inputMode === 'import') {
         if (state.hoverIndex !== -1) {
           state.hoverIndex = -1;
+          state.decorationHoverHit = null;
+          syncMainCanvasCursor();
           draw(analyze());
         }
         return;
       }
       if (state.inputMode === 'pick') {
         const pickChanged = updatePickHoverFromPoint(event.clientX, event.clientY, false);
-        if (state.hoverIndex !== -1 || pickChanged) {
+        if (state.hoverIndex !== -1 || state.decorationHoverHit || pickChanged) {
           state.hoverIndex = -1;
+          state.decorationHoverHit = null;
+          syncMainCanvasCursor();
           draw(analyze());
         }
         return;
@@ -865,8 +909,11 @@
         const debugChanged = clearDrawDebugHit(false);
         const hit = decorationHitFromPoint(event.clientX, event.clientY);
         const hoverIndex = hit && hit.type === 'vertex' ? hit.index : -1;
-        if (hoverIndex !== state.hoverIndex || debugChanged) {
+        const hoverChanged = !sameDecorationHit(hit, state.decorationHoverHit);
+        if (hoverIndex !== state.hoverIndex || hoverChanged || debugChanged) {
           state.hoverIndex = hoverIndex;
+          state.decorationHoverHit = hit;
+          syncMainCanvasCursor();
           draw(analyze());
         }
         return;
@@ -874,15 +921,19 @@
       if (state.inputMode === 'draw') {
         if (state.drawAction === 'edge') {
           const debugChanged = updateDrawDebugFromPoint(event.clientX, event.clientY, false);
-          if (state.hoverIndex !== -1 || debugChanged) {
+          if (state.hoverIndex !== -1 || state.decorationHoverHit || debugChanged) {
             state.hoverIndex = -1;
+            state.decorationHoverHit = null;
+            syncMainCanvasCursor();
             draw(analyze());
           }
         } else {
           const debugChanged = clearDrawDebugHit(false);
           const hit = hitTest(event.clientX, event.clientY);
-          if (hit !== state.hoverIndex || debugChanged) {
+          if (hit !== state.hoverIndex || state.decorationHoverHit || debugChanged) {
             state.hoverIndex = hit;
+            state.decorationHoverHit = null;
+            syncMainCanvasCursor();
             draw(analyze());
           }
         }
@@ -890,8 +941,10 @@
       }
       const debugChanged = updateDrawDebugFromPoint(event.clientX, event.clientY, false);
       const hit = hitTest(event.clientX, event.clientY);
-      if (hit !== state.hoverIndex || debugChanged) {
+      if (hit !== state.hoverIndex || state.decorationHoverHit || debugChanged) {
         state.hoverIndex = hit;
+        state.decorationHoverHit = null;
+        syncMainCanvasCursor();
         draw(analyze());
       }
     });
@@ -978,6 +1031,8 @@
     state.pickHoverHit = null;
     state.pickedComponent = null;
     state.pickedAnchor = null;
+    state.decorationHoverHit = null;
+    syncMainCanvasCursor();
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
     clearDecorationClickTimer();
@@ -1022,6 +1077,8 @@
     state.pickHoverHit = null;
     state.pickedComponent = null;
     state.pickedAnchor = null;
+    state.decorationHoverHit = null;
+    syncMainCanvasCursor();
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
     if (oldLattice !== nextLattice) {
@@ -1156,6 +1213,8 @@
     state.hoverIndex = -1;
     state.drawDebugHit = null;
     state.pickHoverHit = null;
+    state.decorationHoverHit = null;
+    syncMainCanvasCursor();
     state.pickedComponent = null;
     state.pickedAnchor = null;
     state.selectedTile = null;
@@ -1336,20 +1395,21 @@
     const graphData = collectDualGraphData(analyze(), { requireSingleComponent: false });
     if (!graphData.isValid) return null;
     const point = clientPointToBoardPoint(clientX, clientY);
-    const hitPadding = Math.max(7, geometry.radius * 0.16);
+    const hitPadding = Math.max(7, geometry.radius * 0.18);
     let best = null;
 
     graphData.legs.forEach((leg, legIndex) => {
-      const mark = halfEdgeDecorationMarkPoint(leg);
-      if (!mark) return;
-      const distance = Math.hypot(point.x - mark.x, point.y - mark.y);
+      const hit = halfEdgeDecorationHitGeometry(leg, point);
+      if (!hit) return;
+      const distance = hit.distance;
       if (distance > hitPadding) return;
       if (!best || distance < best.distance) {
         best = {
           leg,
           legIndex,
           key: halfEdgeDecorationKey(leg),
-          distance
+          distance,
+          nearest: hit.nearest
         };
       }
     });
@@ -1375,6 +1435,15 @@
     if (left.type !== right.type) return false;
     if (left.type === 'half-edge') return left.key === right.key;
     return left.index === right.index;
+  }
+
+  function syncMainCanvasCursor() {
+    if (!refs.canvas) return;
+    if (isDecorationMode()) {
+      refs.canvas.style.cursor = state.decorationHoverHit ? 'pointer' : 'default';
+      return;
+    }
+    refs.canvas.style.cursor = '';
   }
 
   function vertexDecorationValue(index) {
@@ -1619,6 +1688,25 @@
       return leg.path[leg.path.length - 2];
     }
     return last;
+  }
+
+  function halfEdgeDecorationHitGeometry(leg, point) {
+    const end = halfEdgeDecorationEnd(leg);
+    const mark = halfEdgeDecorationMarkPoint(leg);
+    const cell = end && geometry && geometry.cells[end.index];
+    if (!point || !mark || !cell) return null;
+    const segmentStart = {
+      x: cell.x + ((mark.x - cell.x) * 0.58),
+      y: cell.y + ((mark.y - cell.y) * 0.58)
+    };
+    const projection = projectPointToSegment(point, segmentStart, mark);
+    return {
+      nearest: projection.point,
+      distance: Math.min(
+        Math.hypot(point.x - mark.x, point.y - mark.y),
+        projection.distance
+      )
+    };
   }
 
   function rotateTile(index, steps) {
@@ -2833,6 +2921,7 @@
       try { refs.canvas.releasePointerCapture(event.pointerId); } catch (_) {}
     }
     pointerState = null;
+    syncMainCanvasCursor();
     if (!state.drag || state.drag.type === 'canvas') clearEditorDrag();
     longPressFired = false;
   }
@@ -3335,6 +3424,7 @@
       state.dualGraphAnimating = false;
       state.dualGraphDragging = null;
       state.dualGraphLayoutTimings = {};
+      clearDualGraphDegenerationChart();
       state.riemannSurfaceModel = null;
       state.selectedRiemannVertex = null;
       syncDualGraphCanvasVisibility();
@@ -3361,11 +3451,17 @@
       state.dualGraphLayout = null;
       state.dualGraphStructureKey = structureKey;
       state.dualGraphLayoutTimings = {};
+      clearDualGraphDegenerationChart();
       if (refs.computeLayout) refs.computeLayout.textContent = 'Compute layout';
       syncDualGraphLayoutControls();
     }
 
     state.dualGraphData = graphData;
+    const degenerationSourceKey = dualGraphDegenerationSourceKey(graphData);
+    if (state.dualGraphDegenerationSourceKey && state.dualGraphDegenerationSourceKey !== degenerationSourceKey) {
+      clearDualGraphDegenerationChart();
+    }
+    syncDualGraphDegenerationControls(graphData);
     syncDualGraphCanvasVisibility();
     renderVisibleDualGraphVisualizations(graphData);
   }
@@ -3747,6 +3843,849 @@
       refs.dualGraphInvariantToggle.setAttribute('aria-label', expanded ? 'hide invariants' : 'show invariants');
       refs.dualGraphInvariantToggle.innerHTML = expanded ? '&#9662;' : '&#9656;';
     }
+  }
+
+  function syncDualGraphDegenerationControls(graphData) {
+    if (!refs.computeDegenerations || !refs.dualGraphDegenerationsStatus) return;
+    const inv = graphData && graphData.isValid ? dualGraphInvariants(graphData) : null;
+    refs.computeDegenerations.disabled = !(inv && inv.isStable);
+    if (refs.exportDegenerations) refs.exportDegenerations.disabled = !state.dualGraphDegenerations.length;
+    if (refs.emphasizeDegenerations) refs.emphasizeDegenerations.disabled = !state.dualGraphDegenerations.length;
+    syncDualGraphDegenerationWidePlacement();
+    if (!inv) {
+      refs.dualGraphDegenerationsStatus.textContent = 'stable graph required';
+      return;
+    }
+    if (!inv.isStable) {
+      refs.dualGraphDegenerationsStatus.textContent = 'not stable';
+      return;
+    }
+    if (state.dualGraphDegenerations.length || state.dualGraphDegenerationSourceKey === dualGraphDegenerationSourceKey(graphData)) {
+      refs.dualGraphDegenerationsStatus.textContent = `${state.dualGraphDegenerations.length} divisor graph${state.dualGraphDegenerations.length === 1 ? '' : 's'}`;
+    } else {
+      refs.dualGraphDegenerationsStatus.textContent = 'ready';
+    }
+  }
+
+  function clearDualGraphDegenerationChart() {
+    clearDualGraphDegenerationHoverTimer();
+    clearDualGraphDegenerationAnimations();
+    state.dualGraphDegenerations = [];
+    state.dualGraphDegenerationLayouts = new Map();
+    state.dualGraphDegenerationSourceKey = '';
+    if (refs.dualGraphDegenerationsGrid) refs.dualGraphDegenerationsGrid.textContent = '';
+    if (refs.dualGraphDegenerationsStatus) refs.dualGraphDegenerationsStatus.textContent = 'stable graph required';
+    if (refs.exportDegenerations) refs.exportDegenerations.disabled = true;
+    if (refs.emphasizeDegenerations) refs.emphasizeDegenerations.disabled = true;
+  }
+
+  function computeAndRenderDualGraphDegenerations() {
+    if (!state.dualGraphData || !state.dualGraphData.isValid) return;
+    const inv = dualGraphInvariants(state.dualGraphData);
+    if (!inv.isStable) {
+      clearDualGraphDegenerationChart();
+      syncDualGraphDegenerationControls(state.dualGraphData);
+      return;
+    }
+    const sourceKey = dualGraphDegenerationSourceKey(state.dualGraphData);
+    state.dualGraphDegenerationSourceKey = sourceKey;
+    state.dualGraphDegenerations = enumerateDualGraphDivisorDegenerations(state.dualGraphData);
+    state.dualGraphDegenerationLayouts = new Map();
+    renderDualGraphDegenerationChart();
+    syncDualGraphDegenerationControls(state.dualGraphData);
+  }
+
+  function exportDualGraphDegenerations() {
+    const report = analyze();
+    const payload = buildDualGraphDegenerationsExport(report);
+    refs.exportOut.value = JSON.stringify(payload, null, 2);
+    if (refs.exportCard) refs.exportCard.classList.remove('collapsed');
+    if (refs.exportOut) {
+      refs.exportOut.focus();
+      refs.exportOut.select();
+    }
+    if (refs.statusLine) {
+      refs.statusLine.textContent = payload.isValid
+        ? 'boundary divisor export ready'
+        : (payload.reason || 'boundary divisor export unavailable');
+    }
+  }
+
+  function buildDualGraphDegenerationsExport(report) {
+    const graphData = state.dualGraphData && state.dualGraphData.isValid
+      ? state.dualGraphData
+      : collectDualGraphData(report);
+    if (!graphData.isValid) {
+      return {
+        isValid: false,
+        reason: graphData.reason || 'dual graph unavailable',
+        source: null,
+        divisors: []
+      };
+    }
+    const inv = dualGraphInvariants(graphData);
+    if (!inv.isStable) {
+      return {
+        isValid: false,
+        reason: 'source dual graph is not stable',
+        source: normalizedStableGraphFromDualGraph(graphData),
+        invariants: inv,
+        divisors: []
+      };
+    }
+    const sourceKey = dualGraphDegenerationSourceKey(graphData);
+    const divisors = state.dualGraphDegenerationSourceKey === sourceKey && state.dualGraphDegenerations.length
+      ? state.dualGraphDegenerations
+      : enumerateDualGraphDivisorDegenerations(graphData);
+    return {
+      isValid: true,
+      source: normalizedStableGraphFromDualGraph(graphData),
+      sourceKey,
+      invariants: inv,
+      count: divisors.length,
+      divisors: divisors.map((degeneration, index) => exportDualGraphDegenerationRecord(degeneration, index))
+    };
+  }
+
+  function exportDualGraphDegenerationRecord(degeneration, index) {
+    const graphData = degeneration.graphData;
+    return {
+      id: degeneration.id || `deg${index}`,
+      index,
+      kind: degeneration.kind,
+      label: degeneration.label,
+      emphasis: degeneration.emphasis || null,
+      invariants: dualGraphInvariants(graphData),
+      vertices: graphData.vertices.map((vertex) => ({
+        index: vertex.index,
+        genus: Number(vertex.genus) || 0
+      })),
+      edges: graphData.edges.map((edge, edgeIndex) => ({
+        index: edgeIndex,
+        from: edge.from,
+        to: edge.to
+      })),
+      halfEdges: graphData.legs.map((leg, legIndex) => ({
+        index: legIndex,
+        vertex: leg.vertex,
+        key: leg.key || '',
+        label: leg.label || ''
+      }))
+    };
+  }
+
+  function setDualGraphDegenerationsWide(enabled) {
+    const canUseWide = isDualGraph() && window.matchMedia('(min-width: 960px)').matches;
+    state.dualGraphDegenerationsWide = !!enabled && canUseWide;
+    syncDualGraphDegenerationWidePlacement();
+  }
+
+  function syncDualGraphDegenerationWidePlacement() {
+    const card = refs.dualGraphDegenerationsCard;
+    const sideHost = refs.dualGraphDegenerationsSideHost;
+    const wideHost = refs.dualGraphDegenerationsWideHost;
+    if (!card || !sideHost || !wideHost) return;
+    const canUseWide = isDualGraph() && window.matchMedia('(min-width: 960px)').matches;
+    if (!canUseWide) state.dualGraphDegenerationsWide = false;
+    const target = state.dualGraphDegenerationsWide ? wideHost : sideHost;
+    if (card.parentElement !== target) target.appendChild(card);
+    card.classList.toggle('wide', state.dualGraphDegenerationsWide);
+    wideHost.hidden = !state.dualGraphDegenerationsWide;
+    if (refs.toggleDegenerationsWide) {
+      refs.toggleDegenerationsWide.textContent = state.dualGraphDegenerationsWide ? 'side' : 'wide';
+      refs.toggleDegenerationsWide.setAttribute('aria-pressed', state.dualGraphDegenerationsWide ? 'true' : 'false');
+      refs.toggleDegenerationsWide.disabled = !canUseWide;
+    }
+  }
+
+  function renderDualGraphDegenerationChart() {
+    if (!refs.dualGraphDegenerationsGrid) return;
+    clearDualGraphDegenerationHoverTimer();
+    refs.dualGraphDegenerationsGrid.textContent = '';
+    state.dualGraphDegenerations.forEach((degeneration, index) => {
+      const tile = document.createElement('button');
+      tile.type = 'button';
+      tile.className = 'dual-graph-degeneration-tile';
+      tile.dataset.degenerationIndex = String(index);
+      const canvas = document.createElement('canvas');
+      canvas.width = 150;
+      canvas.height = 150;
+      const caption = document.createElement('span');
+      caption.className = 'dual-graph-degeneration-caption';
+      caption.textContent = formatDualGraphDegenerationMultiplicity(degeneration);
+      caption.title = degeneration.label;
+      tile.append(canvas, caption);
+      tile.addEventListener('mouseenter', () => scheduleDualGraphDegenerationForce(index, true));
+      tile.addEventListener('mouseleave', () => stopDualGraphDegenerationForce(index));
+      tile.addEventListener('click', () => promoteDualGraphDegenerationLayout(index));
+      refs.dualGraphDegenerationsGrid.appendChild(tile);
+      renderDualGraphDegenerationCanvas(canvas, degeneration, 'shell');
+    });
+  }
+
+  function formatDualGraphDegenerationMultiplicity(degeneration) {
+    if (!degeneration || !degeneration.graphData) return '';
+    const edgeCounts = miniDualGraphMultiplicities(degeneration.graphData);
+    const repeated = Array.from(edgeCounts.values()).filter((count) => count > 1).sort((left, right) => right - left);
+    return repeated.length ? `mult ${repeated.join(',')}` : 'mult 1';
+  }
+
+  function scheduleDualGraphDegenerationForce(index, hover = false) {
+    clearDualGraphDegenerationHoverTimer();
+    state.dualGraphDegenerationHoverTimer = window.setTimeout(() => {
+      state.dualGraphDegenerationHoverTimer = null;
+      promoteDualGraphDegenerationLayout(index, hover);
+    }, 1000);
+  }
+
+  function clearDualGraphDegenerationHoverTimer() {
+    if (state.dualGraphDegenerationHoverTimer !== null) {
+      window.clearTimeout(state.dualGraphDegenerationHoverTimer);
+      state.dualGraphDegenerationHoverTimer = null;
+    }
+  }
+
+  function promoteDualGraphDegenerationLayout(index, hover = false) {
+    const degeneration = state.dualGraphDegenerations[index];
+    if (!degeneration || !refs.dualGraphDegenerationsGrid) return;
+    const tile = refs.dualGraphDegenerationsGrid.querySelector(`[data-degeneration-index="${index}"]`);
+    const canvas = tile ? tile.querySelector('canvas') : null;
+    if (!canvas) return;
+    animateDualGraphDegenerationForce(canvas, degeneration, { hover });
+  }
+
+  function renderDualGraphDegenerationCanvas(canvas, degeneration, method) {
+    const graphData = degeneration.graphData;
+    const layoutKey = `${degeneration.id}:${method}`;
+    let layout = state.dualGraphDegenerationLayouts.get(layoutKey);
+    if (!layout) {
+      layout = method === 'force'
+        ? calculateMiniForceDegenerationLayout(graphData, canvas, degeneration)
+        : calculateGraphLayout(graphData, canvas.width, canvas.height, method);
+      state.dualGraphDegenerationLayouts.set(layoutKey, layout);
+      if (method === 'shell') stretchMiniDegenerationShellLayout(layout, graphData);
+    }
+    drawMiniDualGraph(canvas, graphData, layout, degeneration);
+  }
+
+  function animateDualGraphDegenerationForce(canvas, degeneration, options = {}) {
+    const graphData = degeneration.graphData;
+    const animationKey = degeneration.id;
+    const existing = state.dualGraphDegenerationAnimations.get(animationKey);
+    if (existing) {
+      existing.hover = existing.hover || !!options.hover;
+      return;
+    }
+    const shellLayout = state.dualGraphDegenerationLayouts.get(`${degeneration.id}:shell`)
+      || calculateGraphLayout(graphData, canvas.width, canvas.height, 'shell');
+    state.dualGraphDegenerationLayouts.set(`${degeneration.id}:shell`, shellLayout);
+    const startLayout = cloneGraphLayout(shellLayout);
+    let targetLayout = state.dualGraphDegenerationLayouts.get(`${degeneration.id}:force`);
+    if (!targetLayout) {
+      targetLayout = calculateMiniForceDegenerationLayout(graphData, canvas, degeneration, shellLayout);
+      state.dualGraphDegenerationLayouts.set(`${degeneration.id}:force`, targetLayout);
+    }
+
+    let frame = 0;
+    const maxFrames = 64;
+    const animation = {
+      frameId: 0,
+      hover: !!options.hover,
+      stopped: false
+    };
+    const tick = () => {
+      if (!state.dualGraphDegenerationAnimations.has(animationKey) || animation.stopped) return;
+      if (frame < maxFrames) {
+        const t = easeInOutCubic(Math.min(1, frame / maxFrames));
+        const layout = interpolateGraphLayout(startLayout, targetLayout, t);
+        drawMiniDualGraph(canvas, graphData, layout, degeneration);
+      } else {
+        applyMiniDegenerationForces(targetLayout, graphData, 0.12);
+        shrinkMiniDegenerationLegs(targetLayout, graphData, 0.1);
+        stepGraphLayout(targetLayout, 0.72, 20);
+        drawMiniDualGraph(canvas, graphData, targetLayout, degeneration);
+        state.dualGraphDegenerationLayouts.set(`${degeneration.id}:force`, targetLayout);
+      }
+      frame += 1;
+      if (!animation.hover && frame >= maxFrames) {
+        drawMiniDualGraph(canvas, graphData, targetLayout, degeneration);
+        state.dualGraphDegenerationAnimations.delete(animationKey);
+        return;
+      }
+      animation.frameId = window.requestAnimationFrame(tick);
+    };
+    state.dualGraphDegenerationAnimations.set(animationKey, animation);
+    animation.frameId = window.requestAnimationFrame(tick);
+  }
+
+  function stopDualGraphDegenerationForce(index) {
+    clearDualGraphDegenerationHoverTimer();
+    const degeneration = state.dualGraphDegenerations[index];
+    if (!degeneration) return;
+    const animation = state.dualGraphDegenerationAnimations.get(degeneration.id);
+    if (!animation) return;
+    animation.stopped = true;
+    window.cancelAnimationFrame(animation.frameId);
+    state.dualGraphDegenerationAnimations.delete(degeneration.id);
+  }
+
+  function clearDualGraphDegenerationAnimations() {
+    state.dualGraphDegenerationAnimations.forEach((animation) => {
+      if (animation) {
+        animation.stopped = true;
+        window.cancelAnimationFrame(animation.frameId);
+      }
+    });
+    state.dualGraphDegenerationAnimations.clear();
+  }
+
+  function calculateMiniForceDegenerationLayout(graphData, canvas, degeneration, sourceLayout = null) {
+    const layout = cloneGraphLayout(
+      sourceLayout || state.dualGraphDegenerationLayouts.get(`${degeneration.id}:shell`)
+      || calculateGraphLayout(graphData, canvas.width, canvas.height, 'shell')
+    );
+    shrinkMiniDegenerationLegs(layout, graphData, 0.58);
+    for (let iteration = 0; iteration < 110; iteration += 1) {
+      const alpha = 0.16 * (1 - (iteration / 140));
+      applyMiniDegenerationForces(layout, graphData, alpha);
+      shrinkMiniDegenerationLegs(layout, graphData, 0.18);
+      stepGraphLayout(layout, 0.68, 26);
+    }
+    shrinkMiniDegenerationLegs(layout, graphData, 0.42);
+    return layout;
+  }
+
+  function stretchMiniDegenerationShellLayout(layout, graphData) {
+    if (!layout || !graphData) return;
+    const cx = layout.width / 2;
+    const cy = layout.height / 2;
+    layout.nodes.forEach((node) => {
+      if (node.type === 'vertex') {
+        node.x = cx + ((node.x - cx) * 2.15);
+        node.y = cy + ((node.y - cy) * 2.15);
+      }
+    });
+    graphData.legs.forEach((leg, legIndex) => {
+      const legNode = layout.nodeMap.get(`l${legIndex}`);
+      const vertexNode = layout.nodeMap.get(`v${leg.vertex}`);
+      if (!legNode || !vertexNode) return;
+      const vector = normalizeVector(legNode.x - vertexNode.x, legNode.y - vertexNode.y, 1, 0);
+      const length = 38;
+      legNode.x = vertexNode.x + (vector.x * length);
+      legNode.y = vertexNode.y + (vector.y * length);
+    });
+    layout.nodes.forEach((node) => {
+      node.x = clamp(node.x, 10, layout.width - 10);
+      node.y = clamp(node.y, 10, layout.height - 10);
+      node.vx = 0;
+      node.vy = 0;
+    });
+  }
+
+  function shrinkMiniDegenerationLegs(layout, graphData, amount) {
+    graphData.legs.forEach((leg, legIndex) => {
+      const legNode = layout.nodeMap.get(`l${legIndex}`);
+      const vertexNode = layout.nodeMap.get(`v${leg.vertex}`);
+      if (!legNode || !vertexNode) return;
+      const target = 34;
+      const dx = legNode.x - vertexNode.x;
+      const dy = legNode.y - vertexNode.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const nextX = vertexNode.x + (dx / dist) * target;
+      const nextY = vertexNode.y + (dy / dist) * target;
+      legNode.x += (nextX - legNode.x) * amount;
+      legNode.y += (nextY - legNode.y) * amount;
+      legNode.vx *= 0.5;
+      legNode.vy *= 0.5;
+    });
+  }
+
+  function applyMiniDegenerationForces(layout, graphData, alpha) {
+    const nodes = layout.nodes;
+    const forceAlpha = Number.isFinite(alpha) ? Math.max(0, alpha) : 1;
+    const repulsionStrength = 620 * forceAlpha;
+    for (let i = 0; i < nodes.length; i += 1) {
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        const dx = nodes[j].x - nodes[i].x;
+        const dy = nodes[j].y - nodes[i].y;
+        const distSq = dx * dx + dy * dy + 1;
+        const dist = Math.sqrt(distSq);
+        const force = repulsionStrength / distSq;
+        const fx = (dx / dist) * force;
+        const fy = (dy / dist) * force;
+        nodes[i].vx -= fx;
+        nodes[i].vy -= fy;
+        nodes[j].vx += fx;
+        nodes[j].vy += fy;
+      }
+    }
+
+    graphData.edges.forEach((edge, edgeIndex) => {
+      const fromNode = layout.nodeMap.get(`v${edge.from}`);
+      const toNode = layout.nodeMap.get(`v${edge.to}`);
+      if (!fromNode || !toNode) return;
+      if (edge.from === edge.to) {
+        const node0 = layout.nodeMap.get(`e${edgeIndex}_0`);
+        const node1 = layout.nodeMap.get(`e${edgeIndex}_1`);
+        const node2 = layout.nodeMap.get(`e${edgeIndex}_2`);
+        if (node0 && node1 && node2) {
+          applySpringForce(fromNode, node0, 0.026 * forceAlpha, 24);
+          applySpringForce(node0, node1, 0.026 * forceAlpha, 24);
+          applySpringForce(node1, node2, 0.026 * forceAlpha, 24);
+          applySpringForce(node2, fromNode, 0.026 * forceAlpha, 24);
+        }
+        return;
+      }
+      const edgeNode = layout.nodeMap.get(`e${edgeIndex}`);
+      if (edgeNode) {
+        applySpringForce(fromNode, edgeNode, 0.036 * forceAlpha, 24);
+        applySpringForce(toNode, edgeNode, 0.036 * forceAlpha, 24);
+      }
+    });
+
+    graphData.legs.forEach((leg, legIndex) => {
+      const legNode = layout.nodeMap.get(`l${legIndex}`);
+      const vertexNode = layout.nodeMap.get(`v${leg.vertex}`);
+      if (!legNode || !vertexNode) return;
+      applySpringForce(vertexNode, legNode, 0.03 * forceAlpha, 34);
+    });
+
+    const centerX = layout.width / 2;
+    const centerY = layout.height / 2;
+    nodes.forEach((node) => {
+      node.vx += (centerX - node.x) * 0.002 * forceAlpha;
+      node.vy += (centerY - node.y) * 0.002 * forceAlpha;
+    });
+  }
+
+  function cloneGraphLayout(layout) {
+    const nodes = layout.nodes.map((node) => ({ ...node, vx: 0, vy: 0, fixed: false }));
+    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+    return {
+      nodes,
+      nodeMap,
+      width: layout.width,
+      height: layout.height,
+      method: layout.method
+    };
+  }
+
+  function interpolateGraphLayout(fromLayout, toLayout, amount) {
+    const t = clamp(amount, 0, 1);
+    const nodes = fromLayout.nodes.map((fromNode) => {
+      const toNode = toLayout.nodeMap.get(fromNode.id) || fromNode;
+      return {
+        ...fromNode,
+        x: fromNode.x + ((toNode.x - fromNode.x) * t),
+        y: fromNode.y + ((toNode.y - fromNode.y) * t),
+        vx: 0,
+        vy: 0,
+        fixed: false
+      };
+    });
+    return {
+      nodes,
+      nodeMap: new Map(nodes.map((node) => [node.id, node])),
+      width: fromLayout.width,
+      height: fromLayout.height,
+      method: toLayout.method
+    };
+  }
+
+  function easeInOutCubic(t) {
+    const value = clamp(t, 0, 1);
+    return value < 0.5
+      ? 4 * value * value * value
+      : 1 - Math.pow(-2 * value + 2, 3) / 2;
+  }
+
+  function stepGraphLayout(layout, damping = 0.85, margin = 16) {
+    layout.nodes.forEach((node) => {
+      if (node.fixed) return;
+      node.x += node.vx;
+      node.y += node.vy;
+      node.vx *= damping;
+      node.vy *= damping;
+      node.x = clamp(node.x, margin, layout.width - margin);
+      node.y = clamp(node.y, margin, layout.height - margin);
+    });
+  }
+
+  function drawMiniDualGraph(canvas, graphData, layout, degeneration = null) {
+    const ctx = canvas.getContext('2d');
+    const emphasis = miniDegenerationEmphasis(degeneration);
+    const multiplicities = miniDualGraphMultiplicities(graphData);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#fffdf8';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    graphData.edges.forEach((edge, edgeIndex) => {
+      const highlighted = emphasis.edges.has(edgeIndex);
+      ctx.strokeStyle = highlighted ? '#b45309' : '#2563eb';
+      ctx.lineWidth = highlighted ? 3.4 : 2.1;
+      drawLayoutEdgePath(ctx, layout, edge, edgeIndex);
+    });
+    drawMiniDualGraphMultiplicityBadges(ctx, graphData, layout, multiplicities, emphasis);
+    graphData.legs.forEach((leg, legIndex) => {
+      const legNode = layout.nodeMap.get(`l${legIndex}`);
+      const vertexNode = layout.nodeMap.get(`v${leg.vertex}`);
+      if (!legNode || !vertexNode) return;
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = 1.9;
+      ctx.beginPath();
+      ctx.moveTo(vertexNode.x, vertexNode.y);
+      ctx.lineTo(legNode.x, legNode.y);
+      ctx.stroke();
+      ctx.fillStyle = '#fca5a5';
+      circle(ctx, legNode.x, legNode.y, 4.4);
+      const label = leg.label || '';
+      if (label) drawPlainTextLabel(ctx, legNode.x + 7, legNode.y - 7, label, '#991b1b', 11, 'left');
+      ctx.fillStyle = '#fca5a5';
+    });
+    graphData.vertices.forEach((vertex) => {
+      const node = layout.nodeMap.get(`v${vertex.index}`);
+      if (!node) return;
+      drawMiniDualGraphVertex(ctx, node.x, node.y, vertex.genus || 0, emphasis.vertices.has(vertex.index));
+    });
+    ctx.restore();
+  }
+
+  function miniDualGraphMultiplicities(graphData) {
+    const counts = new Map();
+    graphData.edges.forEach((edge) => {
+      const key = stableEdgeMultiplicityKey(edge);
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return counts;
+  }
+
+  function stableEdgeMultiplicityKey(edge) {
+    return edge.from === edge.to
+      ? `loop:${edge.from}`
+      : (edge.from < edge.to ? `${edge.from}:${edge.to}` : `${edge.to}:${edge.from}`);
+  }
+
+  function drawMiniDualGraphMultiplicityBadges(ctx, graphData, layout, multiplicities, emphasis) {
+    const drawn = new Set();
+    graphData.edges.forEach((edge, edgeIndex) => {
+      const key = stableEdgeMultiplicityKey(edge);
+      const count = multiplicities.get(key) || 0;
+      if (count <= 1 || drawn.has(key)) return;
+      drawn.add(key);
+      const point = miniEdgeMultiplicityPoint(layout, edge, edgeIndex);
+      if (!point) return;
+      const highlighted = emphasis.edges.has(edgeIndex);
+      drawMiniMultiplicityBadge(ctx, point.x, point.y, count, highlighted);
+    });
+  }
+
+  function miniEdgeMultiplicityPoint(layout, edge, edgeIndex) {
+    const fromNode = layout.nodeMap.get(`v${edge.from}`);
+    const toNode = layout.nodeMap.get(`v${edge.to}`);
+    if (!fromNode || !toNode) return null;
+    if (edge.from === edge.to) {
+      const node1 = layout.nodeMap.get(`e${edgeIndex}_1`);
+      return node1 ? { x: node1.x, y: node1.y } : { x: fromNode.x + 12, y: fromNode.y - 12 };
+    }
+    const edgeNode = layout.nodeMap.get(`e${edgeIndex}`);
+    if (edgeNode) return { x: edgeNode.x, y: edgeNode.y };
+    return {
+      x: (fromNode.x + toNode.x) / 2,
+      y: (fromNode.y + toNode.y) / 2
+    };
+  }
+
+  function drawMiniMultiplicityBadge(ctx, x, y, value, highlighted) {
+    const text = String(value);
+    ctx.save();
+    ctx.font = '700 10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const metrics = ctx.measureText(text);
+    const width = Math.max(15, metrics.width + 8);
+    const height = 14;
+    roundedRectPath(ctx, x - width / 2, y - height / 2, width, height, 4);
+    ctx.fillStyle = highlighted ? '#ffedd5' : '#eff6ff';
+    ctx.fill();
+    ctx.strokeStyle = highlighted ? '#b45309' : '#2563eb';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = highlighted ? '#7c2d12' : '#1e3a8a';
+    ctx.fillText(text, x, y + 0.2);
+    ctx.restore();
+  }
+
+  function miniDegenerationEmphasis(degeneration) {
+    const active = !!(state.emphasizeDegenerations && degeneration && degeneration.emphasis);
+    return {
+      vertices: new Set(active ? degeneration.emphasis.vertices || [] : []),
+      edges: new Set(active ? degeneration.emphasis.edges || [] : []),
+      legs: new Set()
+    };
+  }
+
+  function drawLayoutEdgePath(ctx, layout, edge, edgeIndex) {
+    const fromNode = layout.nodeMap.get(`v${edge.from}`);
+    const toNode = layout.nodeMap.get(`v${edge.to}`);
+    if (!fromNode || !toNode) return;
+    ctx.beginPath();
+    ctx.moveTo(fromNode.x, fromNode.y);
+    if (edge.from === edge.to) {
+      const node0 = layout.nodeMap.get(`e${edgeIndex}_0`);
+      const node1 = layout.nodeMap.get(`e${edgeIndex}_1`);
+      const node2 = layout.nodeMap.get(`e${edgeIndex}_2`);
+      if (!node0 || !node1 || !node2) return;
+      ctx.quadraticCurveTo(node0.x, node0.y, (node0.x + node1.x) / 2, (node0.y + node1.y) / 2);
+      ctx.quadraticCurveTo(node1.x, node1.y, (node1.x + node2.x) / 2, (node1.y + node2.y) / 2);
+      ctx.quadraticCurveTo(node2.x, node2.y, fromNode.x, fromNode.y);
+    } else {
+      const edgeNode = layout.nodeMap.get(`e${edgeIndex}`);
+      if (edgeNode) ctx.quadraticCurveTo(edgeNode.x, edgeNode.y, toNode.x, toNode.y);
+      else ctx.lineTo(toNode.x, toNode.y);
+    }
+    ctx.stroke();
+  }
+
+  function drawMiniDualGraphVertex(ctx, x, y, genus, highlighted = false) {
+    ctx.save();
+    ctx.fillStyle = highlighted ? '#f59e0b' : '#1e40af';
+    ctx.strokeStyle = highlighted ? '#92400e' : '#1e3a8a';
+    ctx.lineWidth = highlighted ? 2.5 : 1.8;
+    circle(ctx, x, y, highlighted ? 10 : 8);
+    ctx.stroke();
+    if (genus > 0) {
+      ctx.fillStyle = highlighted ? '#3b2503' : '#ffffff';
+      ctx.font = '700 12px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(genus), x, y + 0.2);
+    }
+    ctx.restore();
+  }
+
+  function enumerateDualGraphDivisorDegenerations(graphData) {
+    const base = normalizedStableGraphFromDualGraph(graphData);
+    const degenerations = [];
+    const seen = new Set();
+
+    base.vertices.forEach((vertex) => {
+      if (vertex.genus > 0) {
+        addDualGraphDegeneration(degenerations, seen, createNonseparatingDegeneration(base, vertex));
+      }
+      separatingVertexDegenerations(base, vertex).forEach((degeneration) => {
+        addDualGraphDegeneration(degenerations, seen, degeneration);
+      });
+    });
+
+    return degenerations;
+  }
+
+  function dualGraphDegenerationSourceKey(graphData) {
+    return stableGraphCanonicalKey(normalizedStableGraphFromDualGraph(graphData));
+  }
+
+  function addDualGraphDegeneration(target, seen, degeneration) {
+    if (!degeneration) return;
+    const key = stableGraphCanonicalKey(degeneration.graphData);
+    if (seen.has(key)) return;
+    seen.add(key);
+    degeneration.id = `deg${target.length}`;
+    target.push(degeneration);
+  }
+
+  function normalizedStableGraphFromDualGraph(graphData) {
+    return {
+      vertices: graphData.vertices.map((vertex) => ({
+        index: vertex.index,
+        genus: vertexDecorationValue(vertex.index)
+      })),
+      edges: graphData.edges.map((edge) => ({
+        from: edge.from,
+        to: edge.to
+      })),
+      legs: graphData.legs.map((leg) => ({
+        vertex: leg.vertex,
+        label: leg.label || halfEdgeDecorationValue(halfEdgeDecorationKey(leg)),
+        key: halfEdgeDecorationKey(leg)
+      }))
+    };
+  }
+
+  function createNonseparatingDegeneration(base, vertex) {
+    const graphData = cloneStableGraph(base);
+    const target = graphData.vertices.find((item) => item.index === vertex.index);
+    if (!target || target.genus <= 0) return null;
+    target.genus -= 1;
+    const edgeIndex = graphData.edges.length;
+    graphData.edges.push({ from: target.index, to: target.index });
+    return {
+      kind: 'nonseparating',
+      label: `v${vertex.index + 1}: g ${vertex.genus}->${target.genus} + loop`,
+      emphasis: {
+        vertices: [target.index],
+        edges: [edgeIndex],
+        legs: []
+      },
+      graphData
+    };
+  }
+
+  function separatingVertexDegenerations(base, vertex) {
+    const flags = stableGraphFlagsAtVertex(base, vertex.index);
+    if (!flags.length && vertex.genus === 0) return [];
+    const results = [];
+    const subsets = flagSubsets(flags.length);
+
+    for (let leftGenus = 0; leftGenus <= vertex.genus; leftGenus += 1) {
+      const rightGenus = vertex.genus - leftGenus;
+      for (const subset of subsets) {
+        if (!isCanonicalStableSplitSubset(subset, flags.length, leftGenus, rightGenus)) continue;
+        if (!stableVertexCondition(leftGenus, subset.size + 1)) continue;
+        if (!stableVertexCondition(rightGenus, flags.length - subset.size + 1)) continue;
+        results.push(createSeparatingDegeneration(base, vertex, leftGenus, rightGenus, flags, subset));
+      }
+    }
+
+    return results.filter(Boolean);
+  }
+
+  function createSeparatingDegeneration(base, vertex, leftGenus, rightGenus, flags, subset) {
+    const leftIndex = nextSyntheticVertexIndex(base);
+    const rightIndex = leftIndex + 1;
+    const graphData = {
+      vertices: base.vertices
+        .filter((item) => item.index !== vertex.index)
+        .map((item) => ({ ...item }))
+        .concat([
+          { index: leftIndex, genus: leftGenus },
+          { index: rightIndex, genus: rightGenus }
+        ]),
+      edges: [],
+      legs: []
+    };
+
+    base.edges.forEach((edge, edgeIndex) => {
+      if (edge.from !== vertex.index && edge.to !== vertex.index) {
+        graphData.edges.push({ ...edge });
+        return;
+      }
+      const from = edge.from === vertex.index
+        ? splitTargetForFlag(flags, subset, `e:${edgeIndex}:from`, leftIndex, rightIndex)
+        : edge.from;
+      const to = edge.to === vertex.index
+        ? splitTargetForFlag(flags, subset, `e:${edgeIndex}:to`, leftIndex, rightIndex)
+        : edge.to;
+      graphData.edges.push({ from, to });
+    });
+
+    base.legs.forEach((leg, legIndex) => {
+      if (leg.vertex !== vertex.index) {
+        graphData.legs.push({ ...leg });
+        return;
+      }
+      graphData.legs.push({
+        ...leg,
+        vertex: splitTargetForFlag(flags, subset, `l:${legIndex}`, leftIndex, rightIndex)
+      });
+    });
+    const bridgeIndex = graphData.edges.length;
+    graphData.edges.push({ from: leftIndex, to: rightIndex });
+    return {
+      kind: 'separating',
+      label: `v${vertex.index + 1}: sep g ${leftGenus}+${rightGenus}, ${subset.size}|${flags.length - subset.size} flags`,
+      emphasis: {
+        vertices: [leftIndex, rightIndex],
+        edges: [bridgeIndex],
+        legs: []
+      },
+      graphData
+    };
+  }
+
+  function cloneStableGraph(graphData) {
+    return {
+      vertices: graphData.vertices.map((vertex) => ({ ...vertex })),
+      edges: graphData.edges.map((edge) => ({ ...edge })),
+      legs: graphData.legs.map((leg) => ({ ...leg }))
+    };
+  }
+
+  function stableGraphFlagsAtVertex(graphData, vertexIndex) {
+    const flags = [];
+    graphData.edges.forEach((edge, edgeIndex) => {
+      if (edge.from === vertexIndex) flags.push({ key: `e:${edgeIndex}:from` });
+      if (edge.to === vertexIndex) flags.push({ key: `e:${edgeIndex}:to` });
+    });
+    graphData.legs.forEach((leg, legIndex) => {
+      if (leg.vertex === vertexIndex) flags.push({ key: `l:${legIndex}` });
+    });
+    return flags;
+  }
+
+  function splitTargetForFlag(flags, subset, key, leftIndex, rightIndex) {
+    const index = flags.findIndex((flag) => flag.key === key);
+    if (index < 0) return rightIndex;
+    return subset.has(index) ? leftIndex : rightIndex;
+  }
+
+  function isCanonicalStableSplitSubset(subset, flagCount, leftGenus, rightGenus) {
+    if (flagCount === 0) return leftGenus <= rightGenus;
+    if (leftGenus !== rightGenus) return leftGenus < rightGenus;
+    return subsetSignature(subset, flagCount) <= subsetSignature(complementSubset(subset, flagCount), flagCount);
+  }
+
+  function nextSyntheticVertexIndex(graphData) {
+    return graphData.vertices.reduce((max, vertex) => Math.max(max, vertex.index), -1) + 1;
+  }
+
+  function stableVertexCondition(genus, valence) {
+    return (2 * genus) - 2 + valence > 0;
+  }
+
+  function flagSubsets(count) {
+    const subsets = [new Set()];
+    for (let index = 0; index < count; index += 1) {
+      const currentLength = subsets.length;
+      for (let entry = 0; entry < currentLength; entry += 1) {
+        const next = new Set(subsets[entry]);
+        next.add(index);
+        subsets.push(next);
+      }
+    }
+    return subsets;
+  }
+
+  function complementSubset(subset, count) {
+    const complement = new Set();
+    for (let index = 0; index < count; index += 1) {
+      if (!subset.has(index)) complement.add(index);
+    }
+    return complement;
+  }
+
+  function subsetSignature(subset, count) {
+    let text = '';
+    for (let index = 0; index < count; index += 1) {
+      text += subset.has(index) ? '1' : '0';
+    }
+    return text;
+  }
+
+  function stableGraphCanonicalKey(graphData) {
+    const vertices = graphData.vertices
+      .map((vertex) => `${vertex.index}:${vertex.genus}`)
+      .sort()
+      .join('|');
+    const edges = graphData.edges
+      .map((edge) => edge.from <= edge.to ? `${edge.from}-${edge.to}` : `${edge.to}-${edge.from}`)
+      .sort()
+      .join('|');
+    const legs = graphData.legs
+      .map((leg) => `${leg.vertex}:${leg.label || leg.key || ''}`)
+      .sort()
+      .join('|');
+    return `${vertices}::${edges}::${legs}`;
   }
 
   function countDualGraphComponents(graphData) {
@@ -5029,6 +5968,30 @@
     return {
       x: a.x + r.x * t,
       y: a.y + r.y * t
+    };
+  }
+
+  function projectPointToSegment(point, start, end) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const lengthSq = (dx * dx) + (dy * dy);
+    if (lengthSq < 0.0001) {
+      return {
+        point: { x: start.x, y: start.y },
+        t: 0,
+        distance: Math.hypot(point.x - start.x, point.y - start.y)
+      };
+    }
+    const rawT = (((point.x - start.x) * dx) + ((point.y - start.y) * dy)) / lengthSq;
+    const t = clamp(rawT, 0, 1);
+    const projected = {
+      x: start.x + (dx * t),
+      y: start.y + (dy * t)
+    };
+    return {
+      point: projected,
+      t,
+      distance: Math.hypot(point.x - projected.x, point.y - projected.y)
     };
   }
 
@@ -6895,9 +7858,10 @@
 
   function applyForces(layout, graphData, alpha) {
     const nodes = layout.nodes;
+    const forceAlpha = Number.isFinite(alpha) ? Math.max(0, alpha) : 1;
 
     // Strong repulsion between all nodes
-    const repulsionStrength = 2000;
+    const repulsionStrength = 2000 * forceAlpha;
     for (let i = 0; i < nodes.length; i += 1) {
       for (let j = i + 1; j < nodes.length; j += 1) {
         const dx = nodes[j].x - nodes[i].x;
@@ -6920,7 +7884,7 @@
     }
 
     // Attraction along edges - stronger springs
-    const edgeStrength = 0.1;
+    const edgeStrength = 0.1 * forceAlpha;
     const edgeLength = 80;
     graphData.edges.forEach((edge, i) => {
       const fromNode = layout.nodeMap.get(`v${edge.from}`);
@@ -6952,7 +7916,7 @@
     });
 
     // Attraction for legs
-    const legStrength = 0.08;
+    const legStrength = 0.08 * forceAlpha;
     const legLength = 60;
     graphData.legs.forEach((leg, i) => {
       const legNode = layout.nodeMap.get(`l${i}`);
@@ -6963,7 +7927,7 @@
     });
 
     // Weak center force
-    const centerStrength = 0.005;
+    const centerStrength = 0.005 * forceAlpha;
     const centerX = layout.width / 2;
     const centerY = layout.height / 2;
     nodes.forEach((node) => {
@@ -7382,12 +8346,35 @@
   function drawHalfEdgeDecorationLabels(ctx, graphData, palette) {
     if (!graphData || !graphData.legs || !graphData.legs.length) return;
     graphData.legs.forEach((leg) => {
+      if (state.decorationHoverHit && state.decorationHoverHit.type === 'half-edge' && state.decorationHoverHit.key === halfEdgeDecorationKey(leg)) {
+        drawHalfEdgeDecorationHover(ctx, leg, palette);
+      }
       const label = leg.label || halfEdgeDecorationValue(halfEdgeDecorationKey(leg));
       if (!label) return;
       const point = halfEdgeDecorationLabelPoint(leg);
       if (!point) return;
       drawTextBadge(ctx, point.x, point.y, label, palette, Math.max(8, geometry.radius * 0.2));
     });
+  }
+
+  function drawHalfEdgeDecorationHover(ctx, leg, palette) {
+    const end = halfEdgeDecorationEnd(leg);
+    const point = halfEdgeDecorationMarkPoint(leg);
+    const cell = end && geometry.cells[end.index];
+    if (!point || !cell) return;
+    const radius = geometry.radius;
+    ctx.save();
+    ctx.fillStyle = 'rgba(217,119,6,0.18)';
+    circle(ctx, point.x, point.y, Math.max(7, radius * 0.18));
+    ctx.strokeStyle = '#b45309';
+    ctx.lineWidth = Math.max(1.5, radius * 0.04);
+    ctx.stroke();
+    ctx.fillStyle = '#f59e0b';
+    circle(ctx, point.x, point.y, Math.max(3.5, radius * 0.075));
+    ctx.strokeStyle = 'rgba(255,253,248,0.95)';
+    ctx.lineWidth = Math.max(1, radius * 0.025);
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawTextBadge(ctx, x, y, value, palette, fontSize) {
@@ -8686,6 +9673,10 @@
     if (refs.showDualGraphCanvas) refs.showDualGraphCanvas.checked = state.showDualGraphCanvas;
     if (refs.showRiemannSurfaceCanvas) refs.showRiemannSurfaceCanvas.checked = state.showRiemannSurfaceCanvas;
     if (refs.showAlgebraicCurveCanvas) refs.showAlgebraicCurveCanvas.checked = state.showAlgebraicCurveCanvas;
+    if (refs.emphasizeDegenerations) {
+      refs.emphasizeDegenerations.checked = !!state.emphasizeDegenerations;
+      refs.emphasizeDegenerations.disabled = !state.dualGraphDegenerations.length;
+    }
     if (refs.showRiemannDebugCircles) refs.showRiemannDebugCircles.checked = state.showRiemannDebugCircles;
     if (refs.showRiemannBezierCurve) refs.showRiemannBezierCurve.checked = state.showRiemannBezierCurve;
     syncAlgebraicEnergyTermControls();
@@ -8697,6 +9688,7 @@
     updateInputModeLock();
     updateDisplayControls();
     updatePickControls();
+    syncMainCanvasCursor();
   }
 
   function updateInputModePanels() {
@@ -8761,6 +9753,10 @@
       refs.inputDecorationOption.hidden = !isDualGraph();
       refs.inputDecorationOption.disabled = !isDualGraph();
     }
+    if (!isDecorationMode() && state.decorationHoverHit) {
+      state.decorationHoverHit = null;
+      syncMainCanvasCursor();
+    }
     updatePickControls();
     if (!isDualGraph() && state.drawAction === 'vertex') {
       state.drawAction = 'edge';
@@ -8781,6 +9777,8 @@
     }
     if (refs.knotCard) refs.knotCard.hidden = isDualGraph();
     if (refs.dualGraphCard) refs.dualGraphCard.hidden = !isDualGraph();
+    if (refs.dualGraphDegenerationsCard) refs.dualGraphDegenerationsCard.hidden = !isDualGraph();
+    syncDualGraphDegenerationWidePlacement();
   }
 
   function generateTilePreferences(lattice) {
