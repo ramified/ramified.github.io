@@ -88,6 +88,7 @@
     }
 
     .matrix-toolbar-group select,
+    .matrix-toolbar-group input,
     .matrix-select,
     .matrix-number-input,
     .matrix-textarea {
@@ -105,6 +106,12 @@
       min-width: 118px;
     }
 
+    .matrix-toolbar-group input {
+      width: 76px;
+      padding: 4px 7px;
+      text-align: center;
+    }
+
     .matrix-number-input {
       width: 64px;
       padding: 4px 7px;
@@ -120,6 +127,7 @@
     }
 
     .matrix-toolbar-group select:focus,
+    .matrix-toolbar-group input:focus,
     .matrix-select:focus,
     .matrix-number-input:focus,
     .matrix-textarea:focus {
@@ -391,7 +399,12 @@
               <option value="real">Real</option>
               <option value="rational">Rational</option>
               <option value="integer">Integer</option>
+              <option value="finite-field">GF(p)</option>
             </select>
+          </label>
+          <label id="finite-field-prime-label" title="Prime modulus for GF(p)" hidden>
+            <span>p</span>
+            <input type="number" id="finite-field-prime" min="2" max="999983" step="1" value="5">
           </label>
         </span>
         <span class="canvas-size-inline" aria-label="Matrix size">

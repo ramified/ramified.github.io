@@ -156,6 +156,41 @@
     }
   }
 
+  class ModScalar {
+    constructor(value = 0, p = 5) {
+      this.p = normalizeModulus(p);
+      this.value = modNormalize(value, this.p);
+    }
+
+    static zero(p) { return new ModScalar(0, p); }
+    static one(p) { return new ModScalar(1, p); }
+    static fromInt(value, p) { return new ModScalar(value, p); }
+
+    clone() { return new ModScalar(this.value, this.p); }
+    add(other) { other = this.coerce(other); return new ModScalar(this.value + other.value, this.p); }
+    sub(other) { other = this.coerce(other); return new ModScalar(this.value - other.value, this.p); }
+    neg() { return new ModScalar(-this.value, this.p); }
+    mul(other) { other = this.coerce(other); return new ModScalar(this.value * other.value, this.p); }
+    div(other) {
+      other = this.coerce(other);
+      if (other.isZero()) throw new Error('Division by zero.');
+      return new ModScalar(this.value * modInverse(other.value, this.p), this.p);
+    }
+    isZero() { return this.value === 0; }
+    isOne() { return this.value === 1; }
+    isReal() { return true; }
+    sign() { return this.value === 0 ? 0 : 1; }
+    toComplex() { return new Complex(this.value, 0); }
+
+    coerce(other) {
+      if (other instanceof ModScalar) {
+        if (other.p !== this.p) throw new Error('Cannot mix different finite fields.');
+        return other;
+      }
+      return new ModScalar(other, this.p);
+    }
+  }
+
   const state = {
     rows: 5,
     cols: 5,
@@ -189,6 +224,8 @@
     refs.cols = $('matrix-cols');
     refs.presetButtons = Array.from(document.querySelectorAll('[data-preset]'));
     refs.dataType = $('data-type-select');
+    refs.finiteFieldPrimeLabel = $('finite-field-prime-label');
+    refs.finiteFieldPrime = $('finite-field-prime');
     refs.statusBadge = $('status-badge');
     refs.matrixStatus = $('matrix-status');
     refs.matrixSummary = $('matrix-summary');
@@ -232,9 +269,19 @@
       button.addEventListener('click', () => setPresetEntries(button.dataset.preset));
     });
     refs.dataType.addEventListener('change', () => {
+      updateFieldControls();
       clearOperationResult();
       refreshAll();
     });
+    if (refs.finiteFieldPrime) {
+      refs.finiteFieldPrime.addEventListener('change', () => {
+        try {
+          refs.finiteFieldPrime.value = String(currentFiniteFieldPrime());
+        } catch (_) {}
+        clearOperationResult();
+        refreshAll();
+      });
+    }
     refs.clearMatrix.addEventListener('click', () => setAllEntries(''));
     refs.operation.addEventListener('change', updateOperationControls);
     refs.resultMode.addEventListener('change', clearOperationResult);
@@ -261,7 +308,30 @@
     refs.exportFormat.addEventListener('change', refreshExport);
     refs.refreshExport.addEventListener('click', refreshExport);
     refs.copyExport.addEventListener('click', copyExport);
+    updateFieldControls();
     updateOperationControls();
+  }
+
+  function currentDataType() {
+    return refs.dataType ? refs.dataType.value : 'complex';
+  }
+
+  function isFiniteFieldMode() {
+    return currentDataType() === 'finite-field';
+  }
+
+  function currentFiniteFieldPrime() {
+    return normalizePrime(refs.finiteFieldPrime ? refs.finiteFieldPrime.value : 5);
+  }
+
+  function currentFieldInfo() {
+    return isFiniteFieldMode()
+      ? { kind: 'finite-field', p: currentFiniteFieldPrime() }
+      : { kind: currentDataType() };
+  }
+
+  function updateFieldControls() {
+    if (refs.finiteFieldPrimeLabel) refs.finiteFieldPrimeLabel.hidden = !isFiniteFieldMode();
   }
 
   function bindCards() {
@@ -451,7 +521,14 @@
   }
 
   function randomEntryForType() {
-    const type = refs.dataType ? refs.dataType.value : 'complex';
+    const type = currentDataType();
+    if (type === 'finite-field') {
+      try {
+        return String(randomInt(0, currentFiniteFieldPrime() - 1));
+      } catch (_) {
+        return '0';
+      }
+    }
     if (type === 'integer') return String(randomInt(-5, 5));
     if (type === 'rational') {
       const den = randomInt(1, 7);
@@ -533,6 +610,62 @@
     return out;
   }
 
+  function normalizePrime(value) {
+    const p = normalizeModulus(value);
+    if (!Number.isFinite(p) || p < 2) throw new Error('Choose a prime p >= 2 for GF(p).');
+    if (p > 999983) throw new Error('Use a prime p at most 999983.');
+    if (!isPrimeInt(p)) throw new Error('The modulus p must be prime.');
+    return p;
+  }
+
+  function normalizeModulus(value) {
+    const p = Math.floor(Number(value));
+    if (!Number.isFinite(p) || p < 2) throw new Error('Choose a modulus p >= 2.');
+    if (p > 999983) throw new Error('Use a modulus at most 999983.');
+    return p;
+  }
+
+  function isPrimeInt(value) {
+    if (value < 2 || value % 1 !== 0) return false;
+    if (value === 2) return true;
+    if (value % 2 === 0) return false;
+    for (let d = 3; d * d <= value; d += 2) {
+      if (value % d === 0) return false;
+    }
+    return true;
+  }
+
+  function modNormalize(value, p) {
+    const P = BigInt(p);
+    let n;
+    if (typeof value === 'bigint') n = value;
+    else if (typeof value === 'number') {
+      if (!Number.isInteger(value)) throw new Error('Expected an integer.');
+      n = BigInt(value);
+    } else {
+      const raw = String(value).trim();
+      if (!/^[+-]?\d+$/.test(raw)) throw new Error('Expected an integer.');
+      n = BigInt(raw);
+    }
+    const reduced = ((n % P) + P) % P;
+    return Number(reduced);
+  }
+
+  function modInverse(value, p) {
+    let a = modNormalize(value, p);
+    if (a === 0) throw new Error('Division by zero.');
+    let b = p;
+    let x0 = 1;
+    let x1 = 0;
+    while (b !== 0) {
+      const q = Math.floor(a / b);
+      [a, b] = [b, a - q * b];
+      [x0, x1] = [x1, x0 - q * x1];
+    }
+    if (a !== 1) throw new Error('Element is not invertible.');
+    return modNormalize(x0, p);
+  }
+
   function cyclicEntry(r, c) {
     if (r === 0 || c === 0) return state.entries[r]?.[c] ?? '0';
     return state.entries[r - 1]?.[c - 1] ?? '0';
@@ -558,6 +691,19 @@
   }
 
   function readMatrix(markCells) {
+    let fieldInfo;
+    try {
+      fieldInfo = currentFieldInfo();
+    } catch (error) {
+      return {
+        matrix: zeros(state.rows, state.cols),
+        details: [],
+        errors: [{ field: true, message: error.message }],
+        rows: state.rows,
+        cols: state.cols,
+        fieldInfo: null
+      };
+    }
     const matrix = [];
     const details = [];
     const errors = [];
@@ -569,7 +715,7 @@
         const input = refs.grid.querySelector(`[data-row="${r}"][data-col="${c}"]`);
         try {
           const parsed = parseEntry(text);
-          validateEntryType(parsed);
+          validateEntryType(parsed, fieldInfo);
           row.push(parsed.value);
           detailRow.push(parsed);
           if (markCells && input) input.classList.remove('invalid');
@@ -583,14 +729,18 @@
       matrix.push(row);
       details.push(detailRow);
     }
-    return { matrix, details, errors, rows: state.rows, cols: state.cols };
+    return { matrix, details, errors, rows: state.rows, cols: state.cols, fieldInfo };
   }
 
-  function validateEntryType(entry) {
-    const type = refs.dataType ? refs.dataType.value : 'complex';
+  function validateEntryType(entry, fieldInfo = currentFieldInfo()) {
+    const type = fieldInfo.kind;
     if (type === 'complex') return;
     if (Math.abs(entry.value.im) > DISPLAY_TOL) {
       throw new Error(`Expected a ${type} entry.`);
+    }
+    if (type === 'finite-field') {
+      if (!isExactIntegerPart(entry.real)) throw new Error('Expected an integer entry for GF(p).');
+      return;
     }
     if (type === 'real') return;
     if (type === 'rational' && !isExactRationalPart(entry.real)) {
@@ -619,16 +769,22 @@
 
     if (data.errors.length) {
       const first = data.errors[0];
-      refs.matrixStatus.textContent = `invalid entry at (${first.row}, ${first.col})`;
-      refs.matrixSummary.textContent = first.message;
+      refs.matrixStatus.textContent = first.field ? 'invalid field' : `invalid entry at (${first.row}, ${first.col})`;
+      refs.matrixSummary.textContent = matrixDataErrorMessage(first);
       for (const ref of [refs.outRank, refs.outTrace, refs.outDet, refs.outCharpoly]) ref.textContent = '-';
       return;
     }
 
-    const rankValue = matrixRank(data.matrix);
+    const finiteField = data.fieldInfo?.kind === 'finite-field';
+    const exactMatrix = finiteField ? finiteFieldMatrixFromDetails(data.details, data.fieldInfo.p) : null;
+    const rankValue = finiteField ? exactMatrixRank(exactMatrix) : matrixRank(data.matrix);
     refs.outRank.textContent = String(rankValue);
-    refs.outTrace.textContent = data.rows === data.cols ? formatComplex(trace(data.matrix)) : 'not square';
-    refs.outDet.textContent = data.rows === data.cols ? formatComplex(determinant(data.matrix)) : 'not square';
+    refs.outTrace.textContent = data.rows === data.cols
+      ? (finiteField ? formatScalar(exactTrace(exactMatrix)) : formatComplex(trace(data.matrix)))
+      : 'not square';
+    refs.outDet.textContent = data.rows === data.cols
+      ? (finiteField ? formatScalar(exactDeterminant(exactMatrix)) : formatComplex(determinant(data.matrix)))
+      : 'not square';
     if (data.rows === data.cols) {
       const result = charPolyForDisplay(data);
       refs.outCharpoly.textContent = charPolyDisplayText(result);
@@ -639,6 +795,10 @@
     }
     refs.matrixStatus.textContent = 'ready';
     refs.matrixSummary.textContent = `rank ${rankValue}`;
+  }
+
+  function matrixDataErrorMessage(error) {
+    return error.field ? `Invalid field: ${error.message}` : `Invalid entry at (${error.row}, ${error.col}): ${error.message}`;
   }
 
   function parseEntry(text) {
@@ -763,6 +923,31 @@
 
   function exactMatrixFromDetails(details) {
     return details.map((row) => row.map(exactScalarFromDetail));
+  }
+
+  function finiteFieldMatrixFromDetails(details, p) {
+    return details.map((row) => row.map((entry) => new ModScalar(entry.real.raw, p)));
+  }
+
+  function scalarSampleFromMatrix(A) {
+    for (const row of A || []) {
+      for (const value of row || []) if (value) return value;
+    }
+    return ExactScalar.zero();
+  }
+
+  function scalarZeroLike(sample) {
+    return sample instanceof ModScalar ? ModScalar.zero(sample.p) : ExactScalar.zero();
+  }
+
+  function scalarOneLike(sample) {
+    return sample instanceof ModScalar ? ModScalar.one(sample.p) : ExactScalar.one();
+  }
+
+  function scalarFromIntLike(value, sample) {
+    return sample instanceof ModScalar
+      ? ModScalar.fromInt(value, sample.p)
+      : ExactScalar.fromFraction(Fraction.fromInt(value));
   }
 
   function stripOuterParens(text) {
@@ -1013,24 +1198,25 @@
     return result;
   }
 
-  function exactZeros(rows, cols) {
-    return Array.from({ length: rows }, () => Array.from({ length: cols }, () => ExactScalar.zero()));
+  function exactZeros(rows, cols, sample = ExactScalar.zero()) {
+    return Array.from({ length: rows }, () => Array.from({ length: cols }, () => scalarZeroLike(sample)));
   }
 
-  function exactIdentity(n) {
-    const out = exactZeros(n, n);
-    for (let i = 0; i < n; i++) out[i][i] = ExactScalar.one();
+  function exactIdentity(n, sample = ExactScalar.zero()) {
+    const out = exactZeros(n, n, sample);
+    for (let i = 0; i < n; i++) out[i][i] = scalarOneLike(sample);
     return out;
   }
 
   function exactMatrixMultiply(A, B) {
+    const sample = scalarSampleFromMatrix(A) || scalarSampleFromMatrix(B);
     const rows = A.length;
     const inner = A[0]?.length || 0;
     const cols = B[0]?.length || 0;
-    const out = exactZeros(rows, cols);
+    const out = exactZeros(rows, cols, sample);
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        let sum = ExactScalar.zero();
+        let sum = scalarZeroLike(sample);
         for (let k = 0; k < inner; k++) sum = sum.add(A[r][k].mul(B[k][c]));
         out[r][c] = sum;
       }
@@ -1039,9 +1225,10 @@
   }
 
   function exactTranspose(A) {
+    const sample = scalarSampleFromMatrix(A);
     const rows = A.length;
     const cols = A[0]?.length || 0;
-    const out = exactZeros(cols, rows);
+    const out = exactZeros(cols, rows, sample);
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) out[c][r] = A[r][c].clone();
     }
@@ -1049,15 +1236,70 @@
   }
 
   function exactTrace(A) {
-    let sum = ExactScalar.zero();
+    const sample = scalarSampleFromMatrix(A);
+    let sum = scalarZeroLike(sample);
     for (let i = 0; i < A.length; i++) sum = sum.add(A[i][i]);
     return sum;
+  }
+
+  function exactMatrixRank(A) {
+    return exactRref(A).rank;
+  }
+
+  function exactRref(A) {
+    const M = exactMatrixCopy(A);
+    const rows = M.length;
+    const cols = M[0]?.length || 0;
+    let pivotRow = 0;
+    const pivots = [];
+    for (let col = 0; col < cols && pivotRow < rows; col++) {
+      let best = pivotRow;
+      while (best < rows && M[best][col].isZero()) best++;
+      if (best === rows) continue;
+      if (best !== pivotRow) [M[pivotRow], M[best]] = [M[best], M[pivotRow]];
+      const pivot = M[pivotRow][col];
+      for (let c = col; c < cols; c++) M[pivotRow][c] = M[pivotRow][c].div(pivot);
+      for (let r = 0; r < rows; r++) {
+        if (r === pivotRow || M[r][col].isZero()) continue;
+        const factor = M[r][col];
+        for (let c = col; c < cols; c++) M[r][c] = M[r][c].sub(factor.mul(M[pivotRow][c]));
+      }
+      pivots.push(col);
+      pivotRow++;
+    }
+    return { matrix: M, pivots, rank: pivotRow };
+  }
+
+  function exactDeterminant(A) {
+    if (A.length !== (A[0]?.length || 0)) throw new Error('Determinant requires a square matrix.');
+    const n = A.length;
+    const sample = scalarSampleFromMatrix(A);
+    const M = exactMatrixCopy(A);
+    let det = scalarOneLike(sample);
+    let sign = 1;
+    for (let col = 0; col < n; col++) {
+      let pivotRow = col;
+      while (pivotRow < n && M[pivotRow][col].isZero()) pivotRow++;
+      if (pivotRow === n) return scalarZeroLike(sample);
+      if (pivotRow !== col) {
+        [M[col], M[pivotRow]] = [M[pivotRow], M[col]];
+        sign *= -1;
+      }
+      const pivot = M[col][col];
+      det = det.mul(pivot);
+      for (let r = col + 1; r < n; r++) {
+        if (M[r][col].isZero()) continue;
+        const factor = M[r][col].div(pivot);
+        for (let c = col; c < n; c++) M[r][c] = M[r][c].sub(factor.mul(M[col][c]));
+      }
+    }
+    return sign < 0 ? det.neg() : det;
   }
 
   function exactInverse(A) {
     if (A.length !== (A[0]?.length || 0)) throw new Error('Inverse requires a square matrix.');
     const n = A.length;
-    const I = exactIdentity(n);
+    const I = exactIdentity(n, scalarSampleFromMatrix(A));
     const M = A.map((row, r) => [...row.map((z) => z.clone()), ...I[r].map((z) => z.clone())]);
     for (let col = 0; col < n; col++) {
       let pivotRow = col;
@@ -1084,7 +1326,7 @@
       base = exactInverse(base);
       n = -n;
     }
-    let result = exactIdentity(A.length);
+    let result = exactIdentity(A.length, scalarSampleFromMatrix(A));
     while (n > 0) {
       if (n % 2 === 1) result = exactMatrixMultiply(result, base);
       base = exactMatrixMultiply(base, base);
@@ -1184,9 +1426,10 @@
   function exactBruhatDecomposition(A) {
     if (A.length !== (A[0]?.length || 0)) throw new Error('Bruhat decomposition requires a square matrix.');
     const n = A.length;
+    const sample = scalarSampleFromMatrix(A);
     const M = exactMatrixCopy(A);
-    const leftTransform = exactIdentity(n);
-    const rightTransform = exactIdentity(n);
+    const leftTransform = exactIdentity(n, sample);
+    const rightTransform = exactIdentity(n, sample);
     const pivots = [];
     let maxRow = n - 1;
     let minCol = 0;
@@ -1231,10 +1474,10 @@
       throw new Error('Could not find a full Bruhat pivot pattern for this matrix.');
     }
 
-    const W = exactZeros(n, n);
-    const D = exactZeros(n, n);
+    const W = exactZeros(n, n, sample);
+    const D = exactZeros(n, n, sample);
     for (const { row, col } of pivots) {
-      W[row][col] = ExactScalar.one();
+      W[row][col] = scalarOneLike(sample);
       D[col][col] = M[row][col].clone();
     }
 
@@ -1259,10 +1502,11 @@
 
   function exactInverseUpperTriangular(T) {
     const n = T.length;
-    const X = exactZeros(n, n);
+    const sample = scalarSampleFromMatrix(T);
+    const X = exactZeros(n, n, sample);
     for (let col = 0; col < n; col++) {
       for (let row = n - 1; row >= 0; row--) {
-        let sum = row === col ? ExactScalar.one() : ExactScalar.zero();
+        let sum = row === col ? scalarOneLike(sample) : scalarZeroLike(sample);
         for (let k = row + 1; k < n; k++) sum = sum.sub(T[row][k].mul(X[k][col]));
         if (T[row][row].isZero()) throw new Error('Upper triangular factor is singular.');
         X[row][col] = sum.div(T[row][row]);
@@ -1607,13 +1851,15 @@
   }
 
   function exactCharacteristicPolynomial(A, guard = null) {
+    const sample = scalarSampleFromMatrix(A);
+    if (sample instanceof ModScalar) return finiteFieldCharacteristicPolynomial(A, guard);
     const n = A.length;
-    const coeffs = [ExactScalar.one()];
-    let B = exactIdentity(n);
+    const coeffs = [scalarOneLike(sample)];
+    let B = exactIdentity(n, sample);
     for (let k = 1; k <= n; k++) {
       checkDeadline(guard);
       const AB = exactMatrixMultiply(A, B);
-      const coeff = exactTrace(AB).div(ExactScalar.fromFraction(Fraction.fromInt(k))).neg();
+      const coeff = exactTrace(AB).div(scalarFromIntLike(k, sample)).neg();
       coeffs.push(coeff);
       B = exactMatrixCopy(AB);
       for (let i = 0; i < n; i++) B[i][i] = B[i][i].add(coeff);
@@ -1621,8 +1867,90 @@
     return coeffs;
   }
 
+  function finiteFieldCharacteristicPolynomial(A, guard = null) {
+    const n = A.length;
+    const sample = scalarSampleFromMatrix(A);
+    const zero = () => scalarZeroLike(sample);
+    const one = () => scalarOneLike(sample);
+    const polyZero = [zero()];
+    const polyOne = [one()];
+    let result = polyZero;
+    const used = Array.from({ length: n }, () => false);
+
+    function visit(row, sign, acc) {
+      checkDeadline(guard);
+      if (row === n) {
+        result = polyAdd(result, sign < 0 ? polyNeg(acc) : acc);
+        return;
+      }
+      for (let col = 0; col < n; col++) {
+        if (used[col]) continue;
+        used[col] = true;
+        const entry = row === col
+          ? [A[row][col].neg(), one()]
+          : [A[row][col].neg()];
+        const inversions = used.slice(col + 1).filter(Boolean).length;
+        visit(row + 1, inversions % 2 ? -sign : sign, polyMul(acc, entry));
+        used[col] = false;
+      }
+    }
+
+    visit(0, 1, polyOne);
+    const ascending = trimPolynomialAscending(result);
+    return ascending.slice().reverse();
+  }
+
+  function polyAdd(a, b) {
+    const sample = scalarSampleFromPoly(a) || scalarSampleFromPoly(b);
+    const len = Math.max(a.length, b.length);
+    const out = Array.from({ length: len }, (_, i) => {
+      const x = i < a.length ? a[i] : scalarZeroLike(sample);
+      const y = i < b.length ? b[i] : scalarZeroLike(sample);
+      return x.add(y);
+    });
+    return trimPolynomialAscending(out);
+  }
+
+  function polyNeg(poly) {
+    return trimPolynomialAscending(poly.map((coeff) => coeff.neg()));
+  }
+
+  function polyMul(a, b) {
+    const sample = scalarSampleFromPoly(a) || scalarSampleFromPoly(b);
+    const out = Array.from({ length: a.length + b.length - 1 }, () => scalarZeroLike(sample));
+    for (let i = 0; i < a.length; i++) {
+      for (let j = 0; j < b.length; j++) out[i + j] = out[i + j].add(a[i].mul(b[j]));
+    }
+    return trimPolynomialAscending(out);
+  }
+
+  function scalarSampleFromPoly(poly) {
+    return (poly || []).find(Boolean) || null;
+  }
+
+  function trimPolynomialAscending(coeffs) {
+    let end = coeffs.length - 1;
+    while (end > 0 && scalarIsZero(coeffs[end])) end--;
+    return coeffs.slice(0, end + 1);
+  }
+
   function charPolyForDisplay(data) {
     const guard = makeDeadline(CHARPOLY_TIMEOUT_MS);
+    if (data.fieldInfo?.kind === 'finite-field') {
+      try {
+        return {
+          coeffs: exactCharacteristicPolynomial(finiteFieldMatrixFromDetails(data.details, data.fieldInfo.p), guard),
+          mode: 'finite-field',
+          note: `Exact characteristic polynomial over GF(${data.fieldInfo.p}).`
+        };
+      } catch (error) {
+        return {
+          coeffs: null,
+          mode: 'error',
+          error: isTimeoutError(error) ? 'chi_A(T) timed out after 1.5 seconds.' : error.message
+        };
+      }
+    }
     try {
       return {
         coeffs: exactCharacteristicPolynomial(exactMatrixFromDetails(data.details), guard),
@@ -1704,7 +2032,7 @@
     const data = readMatrix(true);
     if (data.errors.length) {
       const first = data.errors[0];
-      refs.operationMessage.textContent = `Invalid entry at (${first.row}, ${first.col}): ${first.message}`;
+      refs.operationMessage.textContent = matrixDataErrorMessage(first);
       return;
     }
     if (data.rows !== data.cols) {
@@ -1721,17 +2049,19 @@
         return;
       }
       const coeffs = result.coeffs;
-      const field = refs.dataType ? refs.dataType.value : 'complex';
+      const field = currentDataType();
       const factorGuard = makeDeadline(CHARPOLY_TIMEOUT_MS);
       const factorization = factorPolynomialForField(coeffs, field, 'T', factorGuard);
       checkDeadline(factorGuard);
       refs.outCharpoly.textContent = factorization.text;
       refs.outCharpoly.title = [result.note, factorization.note].filter(Boolean).join(' ');
-      refs.matrixStatus.textContent = `characteristic polynomial factored over ${fieldName(field)}`;
+      refs.matrixStatus.textContent = factorization.factored === false
+        ? `characteristic polynomial shown over ${fieldName(field)}`
+        : `characteristic polynomial factored over ${fieldName(field)}`;
       return;
     } catch (error) {
       if (isTimeoutError(error)) {
-        const field = refs.dataType ? refs.dataType.value : 'complex';
+        const field = currentDataType();
         const fallback = timeoutFactorizationFallback(data, field, 'T');
         refs.outCharpoly.textContent = fallback.error || `warning: factorization took more than 1.5 seconds; ${fallback.text}`;
         refs.outCharpoly.title = fallback.error || fallback.note;
@@ -1744,12 +2074,25 @@
 
   function factorPolynomialForField(coeffs, field, variable, guard = null) {
     checkDeadline(guard);
+    if (field === 'finite-field') {
+      return {
+        text: formatPolynomial(coeffs, variable),
+        note: 'Finite-field factorization is not implemented yet; the exact characteristic polynomial is shown.',
+        factored: false
+      };
+    }
     if (field === 'complex') return factorPolynomialOverComplex(coeffs, variable, guard);
     if (field === 'real') return factorPolynomialOverReal(coeffs, variable, guard);
     return factorPolynomialOverRationals(coeffs, variable, field, guard);
   }
 
   function timeoutFactorizationFallback(data, field, variable) {
+    if (field === 'finite-field') {
+      return {
+        error: 'Finite-field factorization timed out.',
+        mode: 'error'
+      };
+    }
     const numeric = timedNumericCharPoly(data);
     if (numeric.error) return numeric;
     try {
@@ -2082,6 +2425,7 @@
   }
 
   function formatScalar(value) {
+    if (value instanceof ModScalar) return value.value.toString();
     if (value instanceof ExactScalar) {
       if (value.im.isZero()) return formatExactFraction(value.re);
       if (value.re.isZero()) return formatExactImag(value.im);
@@ -2104,28 +2448,33 @@
   }
 
   function scalarIsZero(value) {
+    if (value instanceof ModScalar) return value.isZero();
     if (value instanceof ExactScalar) return value.isZero();
     return Complex.from(value).isZero(DISPLAY_TOL);
   }
 
   function scalarIsOne(value) {
+    if (value instanceof ModScalar) return value.isOne();
     if (value instanceof ExactScalar) return value.im.isZero() && value.re.isOne();
     const z = Complex.from(value);
     return Math.abs(z.re - 1) <= DISPLAY_TOL && Math.abs(z.im) <= DISPLAY_TOL;
   }
 
   function scalarIsReal(value) {
+    if (value instanceof ModScalar) return true;
     if (value instanceof ExactScalar) return value.isReal();
     return Math.abs(Complex.from(value).im) <= DISPLAY_TOL;
   }
 
   function scalarRealSign(value) {
+    if (value instanceof ModScalar) return 1;
     if (value instanceof ExactScalar) return value.im.isZero() ? value.re.sign() : 1;
     const z = Complex.from(value);
     return Math.abs(z.im) <= DISPLAY_TOL && z.re < 0 ? -1 : 1;
   }
 
   function scalarNeg(value) {
+    if (value instanceof ModScalar) return value.neg();
     if (value instanceof ExactScalar) return value.neg();
     return Complex.from(value).neg();
   }
@@ -2156,6 +2505,7 @@
     if (field === 'real') return 'R';
     if (field === 'rational') return 'Q';
     if (field === 'integer') return 'Q';
+    if (field === 'finite-field') return `GF(${currentFiniteFieldPrime()})`;
     return field;
   }
 
@@ -2423,7 +2773,7 @@
     const data = readMatrix(true);
     if (data.errors.length) {
       const first = data.errors[0];
-      refs.operationMessage.textContent = `Invalid entry at (${first.row}, ${first.col}): ${first.message}`;
+      refs.operationMessage.textContent = matrixDataErrorMessage(first);
       return;
     }
 
@@ -2432,7 +2782,9 @@
       const op = refs.operation.value;
       const symbolic = refs.resultMode.value === 'symbolic';
       let payload = null;
-      if (symbolic && canComputeSymbolically(op)) {
+      if (data.fieldInfo?.kind === 'finite-field') {
+        payload = computeFiniteFieldOperation(data, op);
+      } else if (symbolic && canComputeSymbolically(op)) {
         payload = computeSymbolicOperation(data, op);
       } else if (op === 'transpose') {
         payload = {
@@ -2530,6 +2882,57 @@
 
   function canComputeSymbolically(op) {
     return op === 'transpose' || op === 'inverse' || op === 'power' || op === 'bruhat';
+  }
+
+  function computeFiniteFieldOperation(data, op) {
+    if (!canComputeSymbolically(op)) {
+      throw new Error('This operation is numerical/analytic and is not available over GF(p). Try transpose, inverse, powers, or Bruhat decomposition.');
+    }
+    const p = data.fieldInfo.p;
+    const A = finiteFieldMatrixFromDetails(data.details, p);
+    const field = { kind: 'finite-field', p };
+    if (op === 'transpose') {
+      return {
+        title: `Transpose over GF(${p})`,
+        formula: 'A^T',
+        field,
+        blocks: [{ title: 'A^T', matrix: exactTranspose(A), exact: true, field }]
+      };
+    }
+    if (op === 'inverse') {
+      return {
+        title: `Inverse over GF(${p})`,
+        formula: 'A^{-1}',
+        field,
+        blocks: [{ title: 'A^{-1}', matrix: exactInverse(A), exact: true, field }]
+      };
+    }
+    if (op === 'power') {
+      const n = clampInt(refs.powerExponent.value, -12, 12, 2);
+      refs.powerExponent.value = String(n);
+      const powerLabel = `A^{${n}}`;
+      return {
+        title: `Power ${n} over GF(${p})`,
+        formula: powerLabel,
+        field,
+        blocks: [{ title: powerLabel, matrix: exactMatrixPower(A, n), exact: true, field }]
+      };
+    }
+    if (op === 'bruhat') {
+      const result = exactBruhatDecomposition(A);
+      return {
+        title: `Bruhat Decomposition over GF(${p})`,
+        formula: 'A = B_1\\omega B_2',
+        field,
+        blocks: [
+          { title: 'B_1', matrix: result.B1, exact: true, field },
+          { title: '\\omega', matrix: result.W, exact: true, field },
+          { title: 'B_2', matrix: result.B2, exact: true, field }
+        ],
+        note: `Exact Bruhat form in GL(n, ${p}).`
+      };
+    }
+    throw new Error('This operation is not available over GF(p).');
   }
 
   function computeSymbolicOperation(data, op) {
@@ -2699,11 +3102,13 @@
     if (format === 'python' && operationNeedsPythonFraction(result)) {
       lines.push('from fractions import Fraction', '');
     }
+    const prelude = operationFieldPrelude(result.field, format);
+    if (prelude) lines.push(prelude, '');
     lines.push(`${comment} ${result.title}${commentEnd}`);
     if (result.formula) lines.push(`${comment} ${result.formula}${commentEnd}`);
     for (const block of result.blocks || []) {
       const name = operationVariableName(block.title, format);
-      lines.push(operationAssignment(name, block.matrix, format, block.exact));
+      lines.push(operationAssignment(name, block.matrix, format, block.exact, block.field || result.field));
     }
     for (const block of result.expressions || []) {
       const name = operationVariableName(block.title, format);
@@ -2713,21 +3118,42 @@
     return lines.join('\n');
   }
 
+  function operationFieldPrelude(field, format) {
+    if (field?.kind !== 'finite-field') return '';
+    if (format === 'sage') return `F = GF(${field.p})`;
+    if (format === 'macaulay2') return `kk = ZZ/${field.p}`;
+    if (format === 'mathematica' || format === 'matlab' || format === 'python') return `p = ${field.p}`;
+    return '';
+  }
+
   function operationNeedsPythonFraction(result) {
-    return (result.blocks || []).some((block) => block.exact && exactMatrixNeedsFraction(block.matrix));
+    return (result.blocks || []).some((block) => block.exact && !isFiniteFieldMatrix(block.matrix) && exactMatrixNeedsFraction(block.matrix));
   }
 
   function exactMatrixNeedsFraction(matrix) {
     return matrix.some((row) => row.some((value) => {
+      if (value instanceof ModScalar) return false;
       value = ExactScalar.from(value);
       return value.re.den !== 1n || value.im.den !== 1n;
     }));
   }
 
-  function operationAssignment(name, matrix, format, exact = false) {
+  function isFiniteFieldMatrix(matrix) {
+    return (matrix || []).some((row) => (row || []).some((value) => value instanceof ModScalar));
+  }
+
+  function operationAssignment(name, matrix, format, exact = false, field = null) {
     if (format === 'python') return `${name} = ${matrixCodeValue(matrix, format, exact)}`;
-    if (format === 'sage') return `${name} = Matrix(${matrixCodeValue(matrix, format, exact)})`;
-    if (format === 'macaulay2') return `${name} = matrix ${matrixCodeValue(matrix, format, exact)}`;
+    if (format === 'sage') {
+      return field?.kind === 'finite-field'
+        ? `${name} = Matrix(F, ${matrixCodeValue(matrix, format, exact)})`
+        : `${name} = Matrix(${matrixCodeValue(matrix, format, exact)})`;
+    }
+    if (format === 'macaulay2') {
+      return field?.kind === 'finite-field'
+        ? `${name} = matrix kk ${matrixCodeValue(matrix, format, exact)}`
+        : `${name} = matrix ${matrixCodeValue(matrix, format, exact)}`;
+    }
     if (format === 'mathematica') return `${name} = ${matrixCodeValue(matrix, format, exact)};`;
     if (format === 'matlab') return `${name} = ${matrixCodeValue(matrix, format, exact)};`;
     return `${name} = ${formatMatrixPlain(matrix, exact)}`;
@@ -2773,6 +3199,7 @@
   }
 
   function exactScalarSource(value, format) {
+    if (value instanceof ModScalar) return value.value.toString();
     value = ExactScalar.from(value);
     if (value.im.isZero()) return exactFractionSource(value.re, format);
     if (format === 'python') {
@@ -3008,14 +3435,15 @@
     const data = readMatrix(false);
     if (data.errors.length) {
       const first = data.errors[0];
-      refs.exportOut.value = `Invalid entry at (${first.row}, ${first.col}): ${first.message}`;
+      refs.exportOut.value = matrixDataErrorMessage(first);
       return;
     }
     const format = refs.exportFormat.value;
-    refs.exportOut.value = exportMatrix(data.details, format);
+    refs.exportOut.value = exportMatrix(data.details, format, data.fieldInfo);
   }
 
-  function exportMatrix(details, format) {
+  function exportMatrix(details, format, fieldInfo = null) {
+    if (fieldInfo?.kind === 'finite-field') return exportFiniteFieldMatrix(details, format, fieldInfo.p);
     if (format === 'latex') return exportLatex(details);
     if (format === 'python') return exportPython(details);
     if (format === 'sage') return exportSage(details);
@@ -3024,6 +3452,33 @@
     if (format === 'matlab') return exportMatlab(details);
     if (format === 'rows' || format === 'bulk') return exportRows(details);
     return '';
+  }
+
+  function exportFiniteFieldMatrix(details, format, p) {
+    const rows = finiteFieldResidueRows(details, p);
+    if (format === 'latex') {
+      return `\\begin{pmatrix}\n${rows.map((row) => row.join(' & ')).join(' \\\\\n')}\n\\end{pmatrix}`;
+    }
+    if (format === 'python') {
+      return `p = ${p}\nA = [\n    ${rows.map((row) => '[' + row.join(', ') + ']').join(',\n    ')}\n]`;
+    }
+    if (format === 'sage') {
+      return `F = GF(${p})\nA = Matrix(F, [\n    ${rows.map((row) => '[' + row.join(', ') + ']').join(',\n    ')}\n])`;
+    }
+    if (format === 'macaulay2') {
+      return `kk = ZZ/${p}\nA = matrix kk {\n    ${rows.map((row) => '{' + row.join(', ') + '}').join(',\n    ')}\n}`;
+    }
+    if (format === 'mathematica') {
+      return `p = ${p};\nA = Mod[{\n     ${rows.map((row) => '{' + row.join(', ') + '}').join(',\n     ')}\n}, p];`;
+    }
+    if (format === 'matlab') {
+      return `p = ${p};\nA = mod([${rows.map((row) => row.join(', ')).join(';\n     ')}], p);`;
+    }
+    return rows.map((row) => row.join(', ')).join('\n');
+  }
+
+  function finiteFieldResidueRows(details, p) {
+    return details.map((row) => row.map((entry) => new ModScalar(entry.real.raw, p).value.toString()));
   }
 
   function exportLatex(details) {
