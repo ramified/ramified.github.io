@@ -147,6 +147,26 @@
       margin-top: 8px;
     }
 
+    .mosaic-preset-field {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .mosaic-preset-field .input-label {
+      display: inline;
+      flex: 0 0 auto;
+      margin: 0;
+      text-transform: none;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .mosaic-preset-field .mosaic-editor-input {
+      margin-top: 0;
+    }
+
     .mosaic-import-preset-controls[hidden] {
       display: none !important;
     }
@@ -372,6 +392,10 @@
       flex-wrap: wrap;
     }
 
+    #dual-graph-layout-controls[hidden] {
+      display: none !important;
+    }
+
     .dual-graph-layout-picker {
       display: inline-flex;
       align-items: center;
@@ -436,6 +460,59 @@
       gap: 8px;
       flex-wrap: wrap;
       margin-top: 8px;
+    }
+
+    .dual-graph-degeneration-options-row,
+    .dual-graph-degeneration-emphasis-row {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .dual-graph-degeneration-options-row {
+      grid-template-columns: minmax(0, 1fr) max-content;
+    }
+
+    .dual-graph-degeneration-option-toggle,
+    .dual-graph-degeneration-emphasis-toggle {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .dual-graph-degeneration-select-field,
+    .dual-graph-degeneration-style-field {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .dual-graph-degeneration-options-row .input-label,
+    .dual-graph-degeneration-emphasis-row .input-label {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .dual-graph-degeneration-options-row select,
+    .dual-graph-degeneration-emphasis-row select {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+
+    .dual-graph-degeneration-options-row select:focus,
+    .dual-graph-degeneration-emphasis-row select:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
     }
 
     .dual-graph-degeneration-scroll {
@@ -817,12 +894,12 @@
               <select id="import-preset-select"></select>
             </div>
             <div class="mosaic-import-preset-controls" id="dual-graph-preset-controls" hidden>
-              <label>
-                <span class="input-label">g</span>
+              <label class="mosaic-preset-field">
+                <span class="input-label">g:</span>
                 <input type="number" id="dual-graph-preset-genus" class="mosaic-editor-input" min="0" max="12" value="2">
               </label>
-              <label>
-                <span class="input-label">n</span>
+              <label class="mosaic-preset-field">
+                <span class="input-label">n:</span>
                 <input type="number" id="dual-graph-preset-markings" class="mosaic-editor-input" min="0" max="6" value="5">
               </label>
             </div>
@@ -932,8 +1009,29 @@
             <button class="btn btn-ghost" id="compute-degenerations" type="button">Compute divisors</button>
             <button class="btn btn-ghost" id="export-degenerations" type="button">Export</button>
             <button class="btn btn-ghost dual-graph-degeneration-wide-toggle" id="toggle-degenerations-wide" type="button">wide</button>
-            <label class="opt-row"><input type="checkbox" id="emphasize-degenerations"> emphasize</label>
             <span class="hint" id="dual-graph-degenerations-status">stable graph required</span>
+          </div>
+          <div class="dual-graph-degeneration-options-row">
+            <label class="dual-graph-degeneration-select-field" for="dual-graph-degeneration-initial-layout">
+              <span class="input-label">init</span>
+              <select id="dual-graph-degeneration-initial-layout">
+                <option value="shell">shell</option>
+                <option value="spectral">spectral</option>
+                <option value="kamada-kawai">Kamada-Kawai</option>
+              </select>
+            </label>
+            <label class="opt-row dual-graph-degeneration-option-toggle"><input type="checkbox" id="dual-graph-degeneration-force" checked> force</label>
+          </div>
+          <div class="dual-graph-degeneration-emphasis-row">
+            <label class="opt-row dual-graph-degeneration-emphasis-toggle"><input type="checkbox" id="emphasize-degenerations"> emph</label>
+            <label class="dual-graph-degeneration-style-field" for="dual-graph-degeneration-emphasis-style">
+              <span class="input-label">style</span>
+              <select id="dual-graph-degeneration-emphasis-style">
+                <option value="none" disabled>none</option>
+                <option value="orange">orange</option>
+                <option value="black">black</option>
+              </select>
+            </label>
           </div>
           <div class="dual-graph-degeneration-scroll">
             <div class="dual-graph-degeneration-grid" id="dual-graph-degenerations-grid"></div>

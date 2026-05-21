@@ -70,6 +70,22 @@
           null, [[4, 0]], [[4, 0], [3, 5]], [[3, 5]], null,
           null, null, null, null, null
         ]
+      },
+      squarePayload: {
+        name: 'Hopf link preset',
+        diagramType: 'link',
+        lattice: 'square',
+        inputMode: 'draw',
+        rows: 5,
+        cols: 5,
+        boundary: 'open',
+        tiles: [
+          [[1, 0]], [[2, 0]], [[2, 1]], null, null,
+          [[1, 3]], [[0, 1]], [[3, 1], [0, 2]], [[1, 2]], null,
+          [[0, 3]], [[3, 1], [0, 2]], [[3, 2]], [[1, 3]], null,
+          null, [[3, 0]], [[2, 0]], [[2, 3]], null,
+          null, null, null, null, null
+        ]
       }
     },
     {
@@ -88,6 +104,22 @@
           null, [[1, 0]], [[2, 0], [3, 1]], [[3, 2]], null,
           null, null, [[0, 4], [1, 5]], [[4, 2], [5, 3]], null,
           null, null, [[5, 4]], null, null,
+          null, null, null, null, null
+        ]
+      },
+      squarePayload: {
+        name: 'Trefoil knot preset',
+        diagramType: 'link',
+        lattice: 'square',
+        inputMode: 'draw',
+        rows: 5,
+        cols: 5,
+        boundary: 'open',
+        tiles: [
+          null, [[0, 1]], [[1, 2]], null, null,
+          [[0, 1]], [[0, 2], [3, 1]], [[1, 3], [0, 2]], [[1, 2]], null,
+          [[3, 0]], [[3, 1], [2, 0]], [[1, 0], [2, 3]], [[2, 3]], null,
+          null, [[3, 0]], [[2, 3]], null, null,
           null, null, null, null, null
         ]
       }
@@ -110,13 +142,33 @@
           null, [[5, 0], [4, 1]], [[5, 2], [3, 0]], [[3, 4]], null,
           null, null, [[4, 5]], null, null
         ]
+      },
+      squarePayload: {
+        name: 'Figure-eight knot preset',
+        diagramType: 'link',
+        lattice: 'square',
+        inputMode: 'draw',
+        rows: 5,
+        cols: 5,
+        boundary: 'open',
+        tiles: [
+          null, [[0, 1]], [[1, 2]], null, null,
+          [[0, 1]], [[3, 2], [1, 0]], [[2, 0], [1, 3]], [[2, 1]], null,
+          [[3, 0]], [[2, 0], [1, 3]], [[1, 3], [2, 0]], [[2, 1], [3, 0]], [[2, 1]],
+          null, [[0, 3]], [[1, 2], [0, 3]], [[3, 1], [0, 2]], [[3, 2]],
+          null, null, [[0, 3]], [[3, 2]], null
+        ]
       }
     }
   ];
   const DUAL_GRAPH_PRESETS = [
-    { id: 'moduli', label: 'M_g,n stable graph' },
-    { id: 'random-stable-curve', label: 'Random stable curve' }
+    { id: 'random-stable-curve', label: 'Random stable curve' },
+    { id: 'moduli', label: 'M_g,n stable graph' }
   ];
+  const COMPACT_DUAL_GRAPH_LAYOUT_SCALE = 0.5;
+  const MINI_SPECTRAL_LAYOUT_SCALE = 2;
+  const DEGENERATION_FORCE_LIMIT = 20;
+  const DEGENERATION_FORCE_DURATION_MS = 5000;
 
   const state = {
     rows: 5,
@@ -167,11 +219,15 @@
     dualGraphAnimating: false,
     dualGraphDegenerations: [],
     dualGraphDegenerationLayouts: new Map(),
+    dualGraphDegenerationCurrentLayouts: new Map(),
     dualGraphDegenerationSourceKey: '',
     dualGraphDegenerationHoverTimer: null,
     dualGraphDegenerationAnimations: new Map(),
     dualGraphDegenerationsWide: false,
+    dualGraphDegenerationInitialLayout: 'shell',
+    dualGraphDegenerationForceEnabled: true,
     emphasizeDegenerations: false,
+    dualGraphDegenerationEmphasisStyle: 'orange',
     decorationHoverHit: null,
     algebraicCurveModel: null,
     algebraicCurveDragging: null,
@@ -297,7 +353,10 @@
     refs.computeDegenerations = document.getElementById('compute-degenerations');
     refs.exportDegenerations = document.getElementById('export-degenerations');
     refs.toggleDegenerationsWide = document.getElementById('toggle-degenerations-wide');
+    refs.dualGraphDegenerationInitialLayout = document.getElementById('dual-graph-degeneration-initial-layout');
+    refs.dualGraphDegenerationForce = document.getElementById('dual-graph-degeneration-force');
     refs.emphasizeDegenerations = document.getElementById('emphasize-degenerations');
+    refs.dualGraphDegenerationEmphasisStyle = document.getElementById('dual-graph-degeneration-emphasis-style');
     refs.dualGraphDegenerationsStatus = document.getElementById('dual-graph-degenerations-status');
     refs.dualGraphDegenerationsGrid = document.getElementById('dual-graph-degenerations-grid');
     refs.exportDualGraph = document.getElementById('export-dual-graph');
@@ -456,10 +515,44 @@
         setDualGraphDegenerationsWide(!state.dualGraphDegenerationsWide);
       });
     }
+    if (refs.dualGraphDegenerationInitialLayout) {
+      refs.dualGraphDegenerationInitialLayout.addEventListener('change', () => {
+        state.dualGraphDegenerationInitialLayout = normalizeDualGraphDegenerationInitialLayout(refs.dualGraphDegenerationInitialLayout.value);
+        refs.dualGraphDegenerationInitialLayout.value = state.dualGraphDegenerationInitialLayout;
+        state.dualGraphDegenerationLayouts = new Map();
+        renderDualGraphDegenerationChart();
+        refreshExport();
+      });
+    }
+    if (refs.dualGraphDegenerationForce) {
+      refs.dualGraphDegenerationForce.addEventListener('change', () => {
+        state.dualGraphDegenerationForceEnabled = refs.dualGraphDegenerationForce.checked;
+        if (state.dualGraphDegenerationForceEnabled) {
+          runInitialDualGraphDegenerationForce();
+        } else {
+          clearDualGraphDegenerationAnimations();
+          renderDualGraphDegenerationChart({ skipInitialForce: true });
+        }
+        refreshExport();
+      });
+    }
     if (refs.emphasizeDegenerations) {
       refs.emphasizeDegenerations.addEventListener('change', () => {
         state.emphasizeDegenerations = refs.emphasizeDegenerations.checked;
-        renderDualGraphDegenerationChart();
+        syncDualGraphDegenerationEmphasisControls();
+        repaintDualGraphDegenerationCanvases();
+        refreshExport();
+      });
+    }
+    if (refs.dualGraphDegenerationEmphasisStyle) {
+      refs.dualGraphDegenerationEmphasisStyle.addEventListener('change', () => {
+        if (!state.emphasizeDegenerations) {
+          syncDualGraphDegenerationEmphasisControls();
+          return;
+        }
+        state.dualGraphDegenerationEmphasisStyle = normalizeDualGraphDegenerationEmphasisStyle(refs.dualGraphDegenerationEmphasisStyle.value);
+        refs.dualGraphDegenerationEmphasisStyle.value = state.dualGraphDegenerationEmphasisStyle;
+        repaintDualGraphDegenerationCanvases();
         refreshExport();
       });
     }
@@ -1297,16 +1390,22 @@
 
     const preset = KNOT_PRESETS.find((entry) => entry.id === id) || KNOT_PRESETS[0];
     if (!preset) return;
-    const payload = { ...preset.payload, inputMode: 'import' };
+    const payload = { ...knotPresetPayloadForCurrentLattice(preset), inputMode: 'import' };
     refs.importInput.value = JSON.stringify(payload, null, 2);
     try {
       applyImportedMosaic(payload);
-      refs.statusLine.textContent = `${preset.label} preset loaded`;
+      refs.statusLine.textContent = `${preset.label} preset loaded (${payload.lattice})`;
       refs.statusLine.classList.remove('mosaic-status-bad');
     } catch (error) {
       refs.statusLine.textContent = error.message || 'could not load preset';
       refs.statusLine.classList.add('mosaic-status-bad');
     }
+  }
+
+  function knotPresetPayloadForCurrentLattice(preset) {
+    if (!preset) return {};
+    if (state.lattice === 'square' && preset.squarePayload) return preset.squarePayload;
+    return preset.payload || preset.squarePayload || {};
   }
 
   function syncImportPresetControls() {
@@ -1322,7 +1421,7 @@
       });
       refs.importPresetSelect.value = DUAL_GRAPH_PRESETS.some((preset) => preset.id === previous)
         ? previous
-        : 'moduli';
+        : 'random-stable-curve';
     } else {
       KNOT_PRESETS.forEach((preset) => {
         const option = document.createElement('option');
@@ -4259,6 +4358,7 @@
   }
 
   function syncDualGraphCanvasVisibility() {
+    const hasLayoutView = state.showDualGraphCanvas || state.showRiemannSurfaceCanvas;
     if (refs.showDualGraphCanvas) refs.showDualGraphCanvas.checked = state.showDualGraphCanvas;
     if (refs.showRiemannSurfaceCanvas) refs.showRiemannSurfaceCanvas.checked = state.showRiemannSurfaceCanvas;
     if (refs.showAlgebraicCurveCanvas) refs.showAlgebraicCurveCanvas.checked = state.showAlgebraicCurveCanvas;
@@ -4268,11 +4368,11 @@
     if (refs.dualGraphViewWrap) refs.dualGraphViewWrap.hidden = !state.showDualGraphCanvas;
     if (refs.riemannSurfaceViewWrap) refs.riemannSurfaceViewWrap.hidden = !state.showRiemannSurfaceCanvas;
     if (refs.algebraicCurveViewWrap) refs.algebraicCurveViewWrap.hidden = !state.showAlgebraicCurveCanvas;
-    if (refs.dualGraphLayoutControls) refs.dualGraphLayoutControls.hidden = !(state.showDualGraphCanvas || state.showRiemannSurfaceCanvas);
+    if (refs.dualGraphLayoutControls) refs.dualGraphLayoutControls.hidden = !hasLayoutView;
     syncDualGraphLayoutControls();
     if (refs.optimizeAlgebraicCurve) refs.optimizeAlgebraicCurve.disabled = !state.showAlgebraicCurveCanvas || !state.dualGraphData;
 
-    if (!isDualGraphVisualizationVisible()) {
+    if (!hasLayoutView) {
       state.dualGraphAnimating = false;
       state.dualGraphDragging = null;
       if (refs.computeLayout) refs.computeLayout.textContent = 'Compute layout';
@@ -4291,8 +4391,8 @@
       if (refs.algebraicCurveCanvas) refs.algebraicCurveCanvas.style.cursor = 'default';
     }
 
-    if (refs.computeLayout) refs.computeLayout.disabled = !(state.showDualGraphCanvas || state.showRiemannSurfaceCanvas) || !state.dualGraphData;
-    if (refs.resetLayout) refs.resetLayout.disabled = !isDualGraphVisualizationVisible() || !state.dualGraphData;
+    if (refs.computeLayout) refs.computeLayout.disabled = !hasLayoutView || !state.dualGraphData;
+    if (refs.resetLayout) refs.resetLayout.disabled = !hasLayoutView || !state.dualGraphData;
     syncAlgebraicOptimizationControls();
   }
 
@@ -4930,6 +5030,9 @@
     refs.computeDegenerations.disabled = !(inv && inv.isStable);
     if (refs.exportDegenerations) refs.exportDegenerations.disabled = !state.dualGraphDegenerations.length;
     if (refs.emphasizeDegenerations) refs.emphasizeDegenerations.disabled = !state.dualGraphDegenerations.length;
+    if (refs.dualGraphDegenerationInitialLayout) refs.dualGraphDegenerationInitialLayout.disabled = !(inv && inv.isStable);
+    if (refs.dualGraphDegenerationForce) refs.dualGraphDegenerationForce.disabled = !(inv && inv.isStable);
+    syncDualGraphDegenerationEmphasisControls();
     syncDualGraphDegenerationWidePlacement();
     if (!inv) {
       refs.dualGraphDegenerationsStatus.textContent = 'stable graph required';
@@ -4951,11 +5054,15 @@
     clearDualGraphDegenerationAnimations();
     state.dualGraphDegenerations = [];
     state.dualGraphDegenerationLayouts = new Map();
+    state.dualGraphDegenerationCurrentLayouts = new Map();
     state.dualGraphDegenerationSourceKey = '';
     if (refs.dualGraphDegenerationsGrid) refs.dualGraphDegenerationsGrid.textContent = '';
     if (refs.dualGraphDegenerationsStatus) refs.dualGraphDegenerationsStatus.textContent = 'stable graph required';
     if (refs.exportDegenerations) refs.exportDegenerations.disabled = true;
     if (refs.emphasizeDegenerations) refs.emphasizeDegenerations.disabled = true;
+    if (refs.dualGraphDegenerationInitialLayout) refs.dualGraphDegenerationInitialLayout.disabled = true;
+    if (refs.dualGraphDegenerationForce) refs.dualGraphDegenerationForce.disabled = true;
+    syncDualGraphDegenerationEmphasisControls();
   }
 
   function computeAndRenderDualGraphDegenerations() {
@@ -4970,8 +5077,24 @@
     state.dualGraphDegenerationSourceKey = sourceKey;
     state.dualGraphDegenerations = enumerateDualGraphDivisorDegenerations(state.dualGraphData);
     state.dualGraphDegenerationLayouts = new Map();
-    renderDualGraphDegenerationChart();
+    state.dualGraphDegenerationCurrentLayouts = new Map();
+    renderDualGraphDegenerationChart({ runInitialForce: true });
     syncDualGraphDegenerationControls(state.dualGraphData);
+  }
+
+  function syncDualGraphDegenerationEmphasisControls() {
+    if (refs.emphasizeDegenerations) {
+      refs.emphasizeDegenerations.checked = !!state.emphasizeDegenerations;
+      refs.emphasizeDegenerations.disabled = !state.dualGraphDegenerations.length;
+    }
+    if (!refs.dualGraphDegenerationEmphasisStyle) return;
+    refs.dualGraphDegenerationEmphasisStyle.disabled = !state.dualGraphDegenerations.length || !state.emphasizeDegenerations;
+    refs.dualGraphDegenerationEmphasisStyle.value = state.emphasizeDegenerations
+      ? normalizeDualGraphDegenerationEmphasisStyle(state.dualGraphDegenerationEmphasisStyle)
+      : 'none';
+    if (refs.dualGraphDegenerationEmphasisStyle.options && refs.dualGraphDegenerationEmphasisStyle.options.none) {
+      refs.dualGraphDegenerationEmphasisStyle.options.none.disabled = state.emphasizeDegenerations;
+    }
   }
 
   function exportDualGraphDegenerations() {
@@ -5062,10 +5185,13 @@
     }
   }
 
-  function renderDualGraphDegenerationChart() {
+  function renderDualGraphDegenerationChart(options = {}) {
     if (!refs.dualGraphDegenerationsGrid) return;
     clearDualGraphDegenerationHoverTimer();
+    clearDualGraphDegenerationAnimations();
+    state.dualGraphDegenerationCurrentLayouts = new Map();
     refs.dualGraphDegenerationsGrid.textContent = '';
+    const initialLayout = normalizeDualGraphDegenerationInitialLayout(state.dualGraphDegenerationInitialLayout);
     state.dualGraphDegenerations.forEach((degeneration, index) => {
       const tile = document.createElement('button');
       tile.type = 'button';
@@ -5083,8 +5209,11 @@
       tile.addEventListener('mouseleave', () => stopDualGraphDegenerationForce(index));
       tile.addEventListener('click', () => promoteDualGraphDegenerationLayout(index));
       refs.dualGraphDegenerationsGrid.appendChild(tile);
-      renderDualGraphDegenerationCanvas(canvas, degeneration, 'shell');
+      renderDualGraphDegenerationCanvas(canvas, degeneration, initialLayout);
     });
+    if (state.dualGraphDegenerationForceEnabled && options.runInitialForce) {
+      window.setTimeout(runInitialDualGraphDegenerationForce, 0);
+    }
   }
 
   function formatDualGraphDegenerationMultiplicity(degeneration) {
@@ -5098,8 +5227,20 @@
     clearDualGraphDegenerationHoverTimer();
     state.dualGraphDegenerationHoverTimer = window.setTimeout(() => {
       state.dualGraphDegenerationHoverTimer = null;
-      promoteDualGraphDegenerationLayout(index, hover);
+      promoteDualGraphDegenerationLayout(index, { hover });
     }, 1000);
+  }
+
+  function runInitialDualGraphDegenerationForce() {
+    if (!state.dualGraphDegenerationForceEnabled || !refs.dualGraphDegenerationsGrid) return;
+    const count = Math.min(DEGENERATION_FORCE_LIMIT, state.dualGraphDegenerations.length);
+    for (let index = 0; index < count; index += 1) {
+      promoteDualGraphDegenerationLayout(index, {
+        timed: true,
+        duration: DEGENERATION_FORCE_DURATION_MS,
+        fromInitial: true
+      });
+    }
   }
 
   function clearDualGraphDegenerationHoverTimer() {
@@ -5109,27 +5250,48 @@
     }
   }
 
-  function promoteDualGraphDegenerationLayout(index, hover = false) {
+  function promoteDualGraphDegenerationLayout(index, options = {}) {
     const degeneration = state.dualGraphDegenerations[index];
     if (!degeneration || !refs.dualGraphDegenerationsGrid) return;
     const tile = refs.dualGraphDegenerationsGrid.querySelector(`[data-degeneration-index="${index}"]`);
     const canvas = tile ? tile.querySelector('canvas') : null;
     if (!canvas) return;
-    animateDualGraphDegenerationForce(canvas, degeneration, { hover });
+    const animationOptions = typeof options === 'boolean' ? { hover: options } : options;
+    animateDualGraphDegenerationForce(canvas, degeneration, animationOptions);
   }
 
   function renderDualGraphDegenerationCanvas(canvas, degeneration, method) {
     const graphData = degeneration.graphData;
-    const layoutKey = `${degeneration.id}:${method}`;
+    const layoutMethod = normalizeDualGraphDegenerationInitialLayout(method);
+    const layoutKey = `${degeneration.id}:${layoutMethod}`;
     let layout = state.dualGraphDegenerationLayouts.get(layoutKey);
     if (!layout) {
-      layout = method === 'force'
-        ? calculateMiniForceDegenerationLayout(graphData, canvas, degeneration)
-        : calculateGraphLayout(graphData, canvas.width, canvas.height, method);
+      layout = calculateMiniInitialDegenerationLayout(graphData, canvas, degeneration, layoutMethod);
       state.dualGraphDegenerationLayouts.set(layoutKey, layout);
-      if (method === 'shell') stretchMiniDegenerationShellLayout(layout, graphData);
     }
     drawMiniDualGraph(canvas, graphData, layout, degeneration);
+    state.dualGraphDegenerationCurrentLayouts.set(degeneration.id, cloneGraphLayout(layout));
+  }
+
+  function repaintDualGraphDegenerationCanvases() {
+    if (!refs.dualGraphDegenerationsGrid) return;
+    state.dualGraphDegenerations.forEach((degeneration, index) => {
+      const tile = refs.dualGraphDegenerationsGrid.querySelector(`[data-degeneration-index="${index}"]`);
+      const canvas = tile ? tile.querySelector('canvas') : null;
+      const layout = state.dualGraphDegenerationCurrentLayouts.get(degeneration.id);
+      if (!canvas || !layout) return;
+      drawMiniDualGraph(canvas, degeneration.graphData, layout, degeneration);
+    });
+  }
+
+  function calculateMiniInitialDegenerationLayout(graphData, canvas, degeneration, method) {
+    const layoutMethod = normalizeDualGraphDegenerationInitialLayout(method);
+    const layout = calculateGraphLayout(graphData, canvas.width, canvas.height, layoutMethod);
+    if (layoutMethod === 'shell') stretchMiniDegenerationShellLayout(layout, graphData);
+    if (layoutMethod === 'spectral' || layoutMethod === 'kamada-kawai') {
+      compactGraphLayout(layout, MINI_SPECTRAL_LAYOUT_SCALE);
+    }
+    return layout;
   }
 
   function animateDualGraphDegenerationForce(canvas, degeneration, options = {}) {
@@ -5137,24 +5299,35 @@
     const animationKey = degeneration.id;
     const existing = state.dualGraphDegenerationAnimations.get(animationKey);
     if (existing) {
-      existing.hover = existing.hover || !!options.hover;
-      return;
+      if (options.timed) {
+        existing.stopped = true;
+        window.cancelAnimationFrame(existing.frameId);
+        state.dualGraphDegenerationAnimations.delete(animationKey);
+      } else {
+        existing.hover = existing.hover || !!options.hover;
+        return;
+      }
     }
-    const shellLayout = state.dualGraphDegenerationLayouts.get(`${degeneration.id}:shell`)
-      || calculateGraphLayout(graphData, canvas.width, canvas.height, 'shell');
-    state.dualGraphDegenerationLayouts.set(`${degeneration.id}:shell`, shellLayout);
-    const startLayout = cloneGraphLayout(shellLayout);
+    const initialMethod = normalizeDualGraphDegenerationInitialLayout(state.dualGraphDegenerationInitialLayout);
+    const initialLayout = state.dualGraphDegenerationLayouts.get(`${degeneration.id}:${initialMethod}`)
+      || calculateMiniInitialDegenerationLayout(graphData, canvas, degeneration, initialMethod);
+    state.dualGraphDegenerationLayouts.set(`${degeneration.id}:${initialMethod}`, initialLayout);
+    const startLayout = cloneGraphLayout(initialLayout);
     let targetLayout = state.dualGraphDegenerationLayouts.get(`${degeneration.id}:force`);
     if (!targetLayout) {
-      targetLayout = calculateMiniForceDegenerationLayout(graphData, canvas, degeneration, shellLayout);
+      targetLayout = calculateMiniForceDegenerationLayout(graphData, canvas, degeneration, initialLayout);
       state.dualGraphDegenerationLayouts.set(`${degeneration.id}:force`, targetLayout);
     }
 
     let frame = 0;
     const maxFrames = 64;
+    const endAt = options.timed && Number.isFinite(options.duration)
+      ? layoutNow() + Math.max(0, options.duration)
+      : null;
     const animation = {
       frameId: 0,
       hover: !!options.hover,
+      timed: !!options.timed,
       stopped: false
     };
     const tick = () => {
@@ -5163,16 +5336,25 @@
         const t = easeInOutCubic(Math.min(1, frame / maxFrames));
         const layout = interpolateGraphLayout(startLayout, targetLayout, t);
         drawMiniDualGraph(canvas, graphData, layout, degeneration);
+        state.dualGraphDegenerationCurrentLayouts.set(degeneration.id, cloneGraphLayout(layout));
       } else {
         applyMiniDegenerationForces(targetLayout, graphData, 0.12);
         shrinkMiniDegenerationLegs(targetLayout, graphData, 0.1);
         stepGraphLayout(targetLayout, 0.72, 20);
         drawMiniDualGraph(canvas, graphData, targetLayout, degeneration);
+        state.dualGraphDegenerationCurrentLayouts.set(degeneration.id, cloneGraphLayout(targetLayout));
         state.dualGraphDegenerationLayouts.set(`${degeneration.id}:force`, targetLayout);
       }
       frame += 1;
-      if (!animation.hover && frame >= maxFrames) {
+      if (animation.timed && endAt !== null && layoutNow() >= endAt) {
         drawMiniDualGraph(canvas, graphData, targetLayout, degeneration);
+        state.dualGraphDegenerationCurrentLayouts.set(degeneration.id, cloneGraphLayout(targetLayout));
+        state.dualGraphDegenerationAnimations.delete(animationKey);
+        return;
+      }
+      if (!animation.hover && !animation.timed && frame >= maxFrames) {
+        drawMiniDualGraph(canvas, graphData, targetLayout, degeneration);
+        state.dualGraphDegenerationCurrentLayouts.set(degeneration.id, cloneGraphLayout(targetLayout));
         state.dualGraphDegenerationAnimations.delete(animationKey);
         return;
       }
@@ -5188,6 +5370,10 @@
     if (!degeneration) return;
     const animation = state.dualGraphDegenerationAnimations.get(degeneration.id);
     if (!animation) return;
+    if (animation.timed) {
+      animation.hover = false;
+      return;
+    }
     animation.stopped = true;
     window.cancelAnimationFrame(animation.frameId);
     state.dualGraphDegenerationAnimations.delete(degeneration.id);
@@ -5204,9 +5390,10 @@
   }
 
   function calculateMiniForceDegenerationLayout(graphData, canvas, degeneration, sourceLayout = null) {
+    const initialMethod = normalizeDualGraphDegenerationInitialLayout(state.dualGraphDegenerationInitialLayout);
     const layout = cloneGraphLayout(
-      sourceLayout || state.dualGraphDegenerationLayouts.get(`${degeneration.id}:shell`)
-      || calculateGraphLayout(graphData, canvas.width, canvas.height, 'shell')
+      sourceLayout || state.dualGraphDegenerationLayouts.get(`${degeneration.id}:${initialMethod}`)
+      || calculateMiniInitialDegenerationLayout(graphData, canvas, degeneration, initialMethod)
     );
     shrinkMiniDegenerationLegs(layout, graphData, 0.58);
     for (let iteration = 0; iteration < 110; iteration += 1) {
@@ -5378,6 +5565,7 @@
   function drawMiniDualGraph(canvas, graphData, layout, degeneration = null) {
     const ctx = canvas.getContext('2d');
     const emphasis = miniDegenerationEmphasis(degeneration);
+    const emphasisStyle = emphasis.style;
     const multiplicities = miniDualGraphMultiplicities(graphData);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#fffdf8';
@@ -5386,8 +5574,10 @@
     ctx.save();
     graphData.edges.forEach((edge, edgeIndex) => {
       const highlighted = emphasis.edges.has(edgeIndex);
-      ctx.strokeStyle = highlighted ? '#b45309' : '#2563eb';
-      ctx.lineWidth = highlighted ? 3.4 : 2.1;
+      ctx.strokeStyle = highlighted
+        ? dualGraphEmphasisStrokeColor(emphasisStyle)
+        : '#2563eb';
+      ctx.lineWidth = 2.1;
       drawLayoutEdgePath(ctx, layout, edge, edgeIndex);
     });
     drawMiniDualGraphMultiplicityBadges(ctx, graphData, layout, multiplicities, emphasis);
@@ -5410,7 +5600,7 @@
     graphData.vertices.forEach((vertex) => {
       const node = layout.nodeMap.get(`v${vertex.index}`);
       if (!node) return;
-      drawMiniDualGraphVertex(ctx, node.x, node.y, vertex.genus || 0, emphasis.vertices.has(vertex.index));
+      drawMiniDualGraphVertex(ctx, node.x, node.y, vertex.genus || 0, emphasis.vertices.has(vertex.index), emphasisStyle);
     });
     ctx.restore();
   }
@@ -5440,7 +5630,7 @@
       const point = miniEdgeMultiplicityPoint(layout, edge, edgeIndex);
       if (!point) return;
       const highlighted = emphasis.edges.has(edgeIndex);
-      drawMiniMultiplicityBadge(ctx, point.x, point.y, count, highlighted);
+      drawMiniMultiplicityBadge(ctx, point.x, point.y, count, highlighted, emphasis.style);
     });
   }
 
@@ -5460,8 +5650,9 @@
     };
   }
 
-  function drawMiniMultiplicityBadge(ctx, x, y, value, highlighted) {
+  function drawMiniMultiplicityBadge(ctx, x, y, value, highlighted, emphasisStyle = 'orange') {
     const text = String(value);
+    const emphasisColors = highlighted ? dualGraphEmphasisBadgeColors(emphasisStyle) : null;
     ctx.save();
     ctx.font = '700 10px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
@@ -5470,12 +5661,12 @@
     const width = Math.max(15, metrics.width + 8);
     const height = 14;
     roundedRectPath(ctx, x - width / 2, y - height / 2, width, height, 4);
-    ctx.fillStyle = highlighted ? '#ffedd5' : '#eff6ff';
+    ctx.fillStyle = emphasisColors ? emphasisColors.fill : '#eff6ff';
     ctx.fill();
-    ctx.strokeStyle = highlighted ? '#b45309' : '#2563eb';
+    ctx.strokeStyle = emphasisColors ? emphasisColors.stroke : '#2563eb';
     ctx.lineWidth = 1;
     ctx.stroke();
-    ctx.fillStyle = highlighted ? '#7c2d12' : '#1e3a8a';
+    ctx.fillStyle = emphasisColors ? emphasisColors.text : '#1e3a8a';
     ctx.fillText(text, x, y + 0.2);
     ctx.restore();
   }
@@ -5485,7 +5676,8 @@
     return {
       vertices: new Set(active ? degeneration.emphasis.vertices || [] : []),
       edges: new Set(active ? degeneration.emphasis.edges || [] : []),
-      legs: new Set()
+      legs: new Set(),
+      style: active ? normalizeDualGraphDegenerationEmphasisStyle(state.dualGraphDegenerationEmphasisStyle) : 'none'
     };
   }
 
@@ -5511,21 +5703,40 @@
     ctx.stroke();
   }
 
-  function drawMiniDualGraphVertex(ctx, x, y, genus, highlighted = false) {
+  function drawMiniDualGraphVertex(ctx, x, y, genus, highlighted = false, emphasisStyle = 'orange') {
+    const colors = highlighted
+      ? dualGraphEmphasisVertexColors(emphasisStyle)
+      : { fill: '#1e40af', stroke: '#1e3a8a', text: '#ffffff' };
     ctx.save();
-    ctx.fillStyle = highlighted ? '#f59e0b' : '#1e40af';
-    ctx.strokeStyle = highlighted ? '#92400e' : '#1e3a8a';
-    ctx.lineWidth = highlighted ? 2.5 : 1.8;
-    circle(ctx, x, y, highlighted ? 10 : 8);
+    ctx.fillStyle = colors.fill;
+    ctx.strokeStyle = colors.stroke;
+    ctx.lineWidth = 1.8;
+    circle(ctx, x, y, 8);
     ctx.stroke();
     if (genus > 0) {
-      ctx.fillStyle = highlighted ? '#3b2503' : '#ffffff';
+      ctx.fillStyle = colors.text;
       ctx.font = '700 12px "JetBrains Mono", monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(String(genus), x, y + 0.2);
     }
     ctx.restore();
+  }
+
+  function dualGraphEmphasisStrokeColor(style) {
+    return normalizeDualGraphDegenerationEmphasisStyle(style) === 'black' ? '#111827' : '#b45309';
+  }
+
+  function dualGraphEmphasisVertexColors(style) {
+    return normalizeDualGraphDegenerationEmphasisStyle(style) === 'black'
+      ? { fill: '#111827', stroke: '#030712', text: '#ffffff' }
+      : { fill: '#f59e0b', stroke: '#92400e', text: '#3b2503' };
+  }
+
+  function dualGraphEmphasisBadgeColors(style) {
+    return normalizeDualGraphDegenerationEmphasisStyle(style) === 'black'
+      ? { fill: '#f3f4f6', stroke: '#111827', text: '#111827' }
+      : { fill: '#ffedd5', stroke: '#b45309', text: '#7c2d12' };
   }
 
   function enumerateDualGraphDivisorDegenerations(graphData) {
@@ -8621,7 +8832,11 @@
       nodeMap.set(node.id, node);
     });
 
-    return { nodes, nodeMap, width, height, method: layoutMethod };
+    const layout = { nodes, nodeMap, width, height, method: layoutMethod };
+    if (layoutMethod === 'spectral' || layoutMethod === 'kamada-kawai') {
+      compactGraphLayout(layout, COMPACT_DUAL_GRAPH_LAYOUT_SCALE);
+    }
+    return layout;
   }
 
   function initialLoopHandlePositions(vertexNode, loopIndex) {
@@ -8983,6 +9198,20 @@
       });
     });
     return positions;
+  }
+
+  function compactGraphLayout(layout, scale) {
+    const amount = Number.isFinite(scale) ? clamp(scale, 0.05, 4) : 1;
+    if (amount === 1 || !layout || !Array.isArray(layout.nodes)) return layout;
+    const centerX = layout.width / 2;
+    const centerY = layout.height / 2;
+    layout.nodes.forEach((node) => {
+      node.x = centerX + ((node.x - centerX) * amount);
+      node.y = centerY + ((node.y - centerY) * amount);
+      node.vx = 0;
+      node.vy = 0;
+    });
+    return layout;
   }
 
   function runForceSimulation(layout, graphData, iterations = 100) {
@@ -10849,10 +11078,9 @@
     if (refs.showDualGraphCanvas) refs.showDualGraphCanvas.checked = state.showDualGraphCanvas;
     if (refs.showRiemannSurfaceCanvas) refs.showRiemannSurfaceCanvas.checked = state.showRiemannSurfaceCanvas;
     if (refs.showAlgebraicCurveCanvas) refs.showAlgebraicCurveCanvas.checked = state.showAlgebraicCurveCanvas;
-    if (refs.emphasizeDegenerations) {
-      refs.emphasizeDegenerations.checked = !!state.emphasizeDegenerations;
-      refs.emphasizeDegenerations.disabled = !state.dualGraphDegenerations.length;
-    }
+    if (refs.dualGraphDegenerationInitialLayout) refs.dualGraphDegenerationInitialLayout.value = normalizeDualGraphDegenerationInitialLayout(state.dualGraphDegenerationInitialLayout);
+    if (refs.dualGraphDegenerationForce) refs.dualGraphDegenerationForce.checked = !!state.dualGraphDegenerationForceEnabled;
+    syncDualGraphDegenerationEmphasisControls();
     if (refs.showRiemannDebugCircles) refs.showRiemannDebugCircles.checked = state.showRiemannDebugCircles;
     if (refs.showRiemannBezierCurve) refs.showRiemannBezierCurve.checked = state.showRiemannBezierCurve;
     syncAlgebraicEnergyTermControls();
@@ -11267,6 +11495,15 @@
     if (value === 'spectral') return 'spectral';
     if (value === 'kamada' || value === 'kamada-kawai' || value === 'kamada_kawai' || value === 'kk') return 'kamada-kawai';
     return 'force';
+  }
+
+  function normalizeDualGraphDegenerationInitialLayout(method) {
+    const value = normalizeDualGraphLayoutMethod(method);
+    return value === 'force' ? 'shell' : value;
+  }
+
+  function normalizeDualGraphDegenerationEmphasisStyle(style) {
+    return String(style || '').toLowerCase() === 'black' ? 'black' : 'orange';
   }
 
   function normalizeDrawLayer(layer) {
