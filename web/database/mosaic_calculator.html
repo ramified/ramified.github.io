@@ -136,6 +136,21 @@
       margin-top: 8px;
     }
 
+    .mosaic-import-presets {
+      margin-top: 4px;
+    }
+
+    .mosaic-import-preset-controls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .mosaic-import-preset-controls[hidden] {
+      display: none !important;
+    }
+
     .mosaic-knot-code {
       min-height: 46px;
       line-height: 1.35;
@@ -796,6 +811,23 @@
         </div>
         <div class="input-method input-mode-panel" data-input-panel="import">
           <span class="input-label">Mosaic Data</span>
+          <div class="mosaic-import-presets">
+            <div class="mosaic-inline-row">
+              <span class="input-label">Preset</span>
+              <select id="import-preset-select"></select>
+            </div>
+            <div class="mosaic-import-preset-controls" id="dual-graph-preset-controls" hidden>
+              <label>
+                <span class="input-label">g</span>
+                <input type="number" id="dual-graph-preset-genus" class="mosaic-editor-input" min="0" max="12" value="2">
+              </label>
+              <label>
+                <span class="input-label">n</span>
+                <input type="number" id="dual-graph-preset-markings" class="mosaic-editor-input" min="0" max="6" value="5">
+              </label>
+            </div>
+            <button class="btn btn-ghost mosaic-import-button" id="load-import-preset" type="button">load preset</button>
+          </div>
           <textarea id="import-input" class="mosaic-editor-input mosaic-import-input" spellcheck="false" autocomplete="off" placeholder="{ ... }"></textarea>
           <button class="btn mosaic-import-button" id="generate-import">generate</button>
         </div>

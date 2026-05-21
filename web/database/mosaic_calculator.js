@@ -51,6 +51,72 @@
     pipe: '#2f3437'
   };
   const COMPONENT_COLOR_PALETTE = ['#b23a48', '#1f7a8c', '#6a4c93', '#c47f17'];
+  const KNOT_PRESETS = [
+    {
+      id: 'hopf-link',
+      label: 'Hopf link',
+      payload: {
+        name: 'Hopf link preset',
+        diagramType: 'link',
+        lattice: 'hexagonal',
+        inputMode: 'tiling',
+        rows: 5,
+        cols: 5,
+        boundary: 'open',
+        tiles: [
+          null, null, null, null, null,
+          null, [[0, 2]], [[3, 1], [0, 2]], [[1, 3]], null,
+          null, [[5, 1]], [[5, 1]], [[2, 4]], [[2, 4]],
+          null, [[4, 0]], [[4, 0], [3, 5]], [[3, 5]], null,
+          null, null, null, null, null
+        ]
+      }
+    },
+    {
+      id: 'trefoil',
+      label: 'Trefoil knot (3_1)',
+      payload: {
+        name: 'Trefoil knot preset',
+        diagramType: 'link',
+        lattice: 'hexagonal',
+        inputMode: 'draw',
+        rows: 5,
+        cols: 5,
+        boundary: 'open',
+        tiles: [
+          null, null, null, null, null,
+          null, [[1, 0]], [[2, 0], [3, 1]], [[3, 2]], null,
+          null, null, [[0, 4], [1, 5]], [[4, 2], [5, 3]], null,
+          null, null, [[5, 4]], null, null,
+          null, null, null, null, null
+        ]
+      }
+    },
+    {
+      id: 'figure-eight',
+      label: 'Figure-eight knot (4_1)',
+      payload: {
+        name: 'Figure-eight knot preset',
+        diagramType: 'link',
+        lattice: 'hexagonal',
+        inputMode: 'tiling',
+        rows: 5,
+        cols: 5,
+        boundary: 'open',
+        tiles: [
+          null, null, [[1, 2]], null, null,
+          [[0, 1]], [[2, 0], [5, 3]], [[3, 1], [4, 2]], null, null,
+          null, [[4, 0], [5, 1]], [[5, 2], [3, 0]], [[3, 2], [1, 4]], null,
+          null, [[5, 0], [4, 1]], [[5, 2], [3, 0]], [[3, 4]], null,
+          null, null, [[4, 5]], null, null
+        ]
+      }
+    }
+  ];
+  const DUAL_GRAPH_PRESETS = [
+    { id: 'moduli', label: 'M_g,n stable graph' },
+    { id: 'random-stable-curve', label: 'Random stable curve' }
+  ];
 
   const state = {
     rows: 5,
@@ -78,6 +144,7 @@
     editMode: 'rotate',
     vertexDecorations: {},
     halfEdgeDecorations: {},
+    standardDualGraphInput: null,
     halfEdgeLabelStyle: 'number',
     clearVertexDecorations: true,
     clearHalfEdgeDecorations: true,
@@ -248,6 +315,11 @@
     refs.riemannLoopTangentScaleOutputs = Array.from(document.querySelectorAll('[data-riemann-loop-tangent-scale-value]'));
     refs.tilePalette = document.getElementById('tile-palette');
     refs.importInput = document.getElementById('import-input');
+    refs.importPresetSelect = document.getElementById('import-preset-select');
+    refs.loadImportPreset = document.getElementById('load-import-preset');
+    refs.dualGraphPresetControls = document.getElementById('dual-graph-preset-controls');
+    refs.dualGraphPresetGenus = document.getElementById('dual-graph-preset-genus');
+    refs.dualGraphPresetMarkings = document.getElementById('dual-graph-preset-markings');
     refs.exportCard = document.getElementById('export-card');
     refs.exportOut = document.getElementById('export-out');
     refs.inputPanels = Array.from(document.querySelectorAll('[data-input-panel]'));
@@ -320,6 +392,10 @@
 
     document.getElementById('clear-board').addEventListener('click', clearBoard);
     document.getElementById('generate-import').addEventListener('click', generateFromImport);
+    if (refs.loadImportPreset) refs.loadImportPreset.addEventListener('click', loadSelectedImportPreset);
+    if (refs.importPresetSelect) {
+      refs.importPresetSelect.addEventListener('change', syncImportPresetControls);
+    }
     refs.applyPick.addEventListener('click', applyPickedComponent);
     document.getElementById('refresh-export').addEventListener('click', refreshExport);
     document.getElementById('copy-export').addEventListener('click', copyExport);
@@ -569,6 +645,7 @@
     cancelDrawGesture();
     if (isTilingMode()) renderTilePalette();
     updateInputModePanels();
+    syncImportPresetControls();
     updateDrawModeControls();
     updateInputModePanels();
     updateInputModeLock();
@@ -607,6 +684,7 @@
     if (!isDualGraph()) {
       state.vertexDecorations = {};
       state.halfEdgeDecorations = {};
+      state.standardDualGraphInput = null;
       if (state.inputMode === 'decoration') state.inputMode = 'draw';
     }
     state.pickedComponent = null;
@@ -1038,6 +1116,7 @@
     clearDecorationClickTimer();
     state.vertexDecorations = {};
     state.halfEdgeDecorations = {};
+    state.standardDualGraphInput = null;
     state.tiles = Array(rows * cols).fill(null);
     syncAllInputs(rows, cols, state.lattice, state.wrapped);
     renderTilePalette();
@@ -1092,6 +1171,7 @@
       ? {}
       : reshapeVertexDecorations(oldDecorations, oldRows, oldCols, rows, cols);
     state.halfEdgeDecorations = oldLattice !== nextLattice ? {} : oldHalfEdgeDecorations;
+    state.standardDualGraphInput = null;
     syncAllInputs(rows, cols, state.lattice, state.wrapped);
     renderTilePalette();
     resetView(false);
@@ -1153,6 +1233,14 @@
       return;
     }
 
+    const standardGraph = standardDualGraphInputFromText(text);
+    if (standardGraph.isValid) {
+      applyImportedStandardDualGraph(standardGraph.graph);
+      refs.statusLine.textContent = 'dual graph generated';
+      refs.statusLine.classList.remove('mosaic-status-bad');
+      return;
+    }
+
     let payload;
     try {
       payload = JSON.parse(text);
@@ -1163,6 +1251,13 @@
     }
 
     try {
+      const graphPayload = standardDualGraphInputFromPayload(payload);
+      if (graphPayload.isValid) {
+        applyImportedStandardDualGraph(graphPayload.graph);
+        refs.statusLine.textContent = 'dual graph generated';
+        refs.statusLine.classList.remove('mosaic-status-bad');
+        return;
+      }
       applyImportedMosaic(payload);
       refs.statusLine.textContent = 'mosaic generated';
       refs.statusLine.classList.remove('mosaic-status-bad');
@@ -1172,8 +1267,673 @@
     }
   }
 
+  function loadSelectedImportPreset() {
+    if (!refs.importInput || !refs.importPresetSelect) return;
+    const id = refs.importPresetSelect.value;
+    if (isDualGraph()) {
+      if (id === 'random-stable-curve') {
+        try {
+          const preset = applyRandomStableCurvePreset();
+          refs.statusLine.textContent = `random stable curve loaded (g=${preset.genus}, n=${preset.markings})`;
+          refs.statusLine.classList.remove('mosaic-status-bad');
+        } catch (error) {
+          refs.statusLine.textContent = error.message || 'could not load preset';
+          refs.statusLine.classList.add('mosaic-status-bad');
+        }
+        return;
+      }
+      const genus = clampInt(refs.dualGraphPresetGenus ? refs.dualGraphPresetGenus.value : 2, 0, 12, 2);
+      const markings = clampInt(refs.dualGraphPresetMarkings ? refs.dualGraphPresetMarkings.value : 5, 0, 6, 5);
+      try {
+        applyModuliSpaceDualGraphPreset(genus, markings);
+        refs.statusLine.textContent = `M_${genus},${markings} preset loaded`;
+        refs.statusLine.classList.remove('mosaic-status-bad');
+      } catch (error) {
+        refs.statusLine.textContent = error.message || 'could not load preset';
+        refs.statusLine.classList.add('mosaic-status-bad');
+      }
+      return;
+    }
+
+    const preset = KNOT_PRESETS.find((entry) => entry.id === id) || KNOT_PRESETS[0];
+    if (!preset) return;
+    const payload = { ...preset.payload, inputMode: 'import' };
+    refs.importInput.value = JSON.stringify(payload, null, 2);
+    try {
+      applyImportedMosaic(payload);
+      refs.statusLine.textContent = `${preset.label} preset loaded`;
+      refs.statusLine.classList.remove('mosaic-status-bad');
+    } catch (error) {
+      refs.statusLine.textContent = error.message || 'could not load preset';
+      refs.statusLine.classList.add('mosaic-status-bad');
+    }
+  }
+
+  function syncImportPresetControls() {
+    if (!refs.importPresetSelect) return;
+    const previous = refs.importPresetSelect.value;
+    refs.importPresetSelect.textContent = '';
+    if (isDualGraph()) {
+      DUAL_GRAPH_PRESETS.forEach((preset) => {
+        const option = document.createElement('option');
+        option.value = preset.id;
+        option.textContent = preset.label;
+        refs.importPresetSelect.appendChild(option);
+      });
+      refs.importPresetSelect.value = DUAL_GRAPH_PRESETS.some((preset) => preset.id === previous)
+        ? previous
+        : 'moduli';
+    } else {
+      KNOT_PRESETS.forEach((preset) => {
+        const option = document.createElement('option');
+        option.value = preset.id;
+        option.textContent = preset.label;
+        refs.importPresetSelect.appendChild(option);
+      });
+      if (KNOT_PRESETS.some((preset) => preset.id === previous)) refs.importPresetSelect.value = previous;
+    }
+    if (refs.dualGraphPresetControls) {
+      refs.dualGraphPresetControls.hidden = !isDualGraph() || refs.importPresetSelect.value !== 'moduli';
+    }
+  }
+
+  function formatModuliSpaceDualGraphPreset(genus, markings) {
+    const n = clampInt(markings, 0, 6, 5);
+    const legs = Array.from({ length: n }, (_, index) => index + 1);
+    return `Graph : [${clampInt(genus, 0, 12, 2)}] [[${legs.join(', ')}]] []`;
+  }
+
+  function applyModuliSpaceDualGraphPreset(genus, markings) {
+    const g = clampInt(genus, 0, 12, 2);
+    const n = clampInt(markings, 0, 6, 5);
+    const rows = 5;
+    const cols = 5;
+    const latticeName = n > 4 ? 'hexagonal' : (LATTICES[state.lattice] ? state.lattice : 'hexagonal');
+    const centerIndex = indexOf(2, 2, cols);
+    const tiles = Array(rows * cols).fill(null);
+    tiles[centerIndex] = plainVertexTileFromDirs(moduliSpaceLegDirs(n, latticeName));
+    applyDualGraphTilesPreset({
+      rows,
+      cols,
+      latticeName,
+      tiles,
+      vertexDecorations: g > 0 ? { [centerIndex]: g } : {},
+      importText: formatModuliSpaceDualGraphPreset(g, n)
+    });
+  }
+
+  function applyRandomStableCurvePreset() {
+    const latticeName = LATTICES[state.lattice] ? state.lattice : 'hexagonal';
+    const rendered = randomStableCurvePresetData(latticeName);
+    applyDualGraphTilesPreset({
+      rows: 5,
+      cols: 5,
+      latticeName,
+      tiles: rendered.tiles,
+      vertexDecorations: rendered.vertexDecorations
+    });
+    const graphData = state.dualGraphData && state.dualGraphData.isValid ? state.dualGraphData : null;
+    if (graphData && refs.importInput) refs.importInput.value = graphData.standardText;
+    const inv = graphData ? dualGraphInvariants(graphData) : null;
+    return {
+      genus: inv ? inv.genus : rendered.genus,
+      markings: inv ? inv.halfEdges : rendered.markings
+    };
+  }
+
+  function applyDualGraphTilesPreset(options) {
+    const rows = clampInt(options && options.rows, MIN_BOARD, MAX_BOARD, 5);
+    const cols = clampInt(options && options.cols, MIN_BOARD, MAX_BOARD, 5);
+    const latticeName = options && LATTICES[options.latticeName] ? options.latticeName : 'hexagonal';
+    clearEditorDrag();
+    cancelDrawGesture(false);
+    clearDecorationClickTimer();
+    state.rows = rows;
+    state.cols = cols;
+    state.lattice = latticeName;
+    state.diagramType = 'dual';
+    state.wrapped = false;
+    state.wrappedViewMode = 'periodic';
+    state.inputMode = 'import';
+    state.editMode = 'rotate';
+    state.drawAction = 'edge';
+    state.drawLayer = 'above';
+    state.drawStyle = 'shade';
+    state.knotCodeKind = 'pd';
+    state.showErrors = true;
+    state.showCoords = false;
+    state.colorComponents = true;
+    state.displayPick = false;
+    state.displayPickInputLocked = false;
+    state.displayPickReturnMode = 'draw';
+    state.componentColors = [];
+    state.edits = 0;
+    state.hoverIndex = -1;
+    state.drawDebugHit = null;
+    state.pickHoverHit = null;
+    state.decorationHoverHit = null;
+    syncMainCanvasCursor();
+    state.pickedComponent = null;
+    state.pickedAnchor = null;
+    state.selectedTile = null;
+    state.selectedPaletteId = '';
+    state.standardDualGraphInput = null;
+    state.tiles = Array(rows * cols).fill(null);
+    (Array.isArray(options && options.tiles) ? options.tiles : []).forEach((tile, index) => {
+      if (index >= 0 && index < state.tiles.length) state.tiles[index] = tile == null ? null : cloneTile(tile);
+    });
+    state.vertexDecorations = { ...(options && options.vertexDecorations ? options.vertexDecorations : {}) };
+    state.halfEdgeDecorations = {};
+    state.dualGraphLayout = null;
+    state.dualGraphStructureKey = '';
+    state.dualGraphLayoutTimings = {};
+    clearDualGraphDegenerationChart();
+
+    syncAllInputs(rows, cols, state.lattice, state.wrapped);
+    syncImportPresetControls();
+    if (refs.showErrors) refs.showErrors.checked = state.showErrors;
+    if (refs.showCoords) refs.showCoords.checked = state.showCoords;
+    if (refs.colorComponents) refs.colorComponents.checked = state.colorComponents;
+    if (refs.displayPick) refs.displayPick.checked = state.displayPick;
+    if (refs.importInput && typeof (options && options.importText) === 'string') refs.importInput.value = options.importText;
+    renderTilePalette();
+    resetView(false);
+    resizeCanvas();
+    updateReport(false);
+  }
+
+  function moduliSpaceLegDirs(markings, latticeName) {
+    const n = clampInt(markings, 0, latticeName === 'hexagonal' ? 6 : 4, 0);
+    if (latticeName === 'hexagonal') return [0, 1, 2, 3, 4, 5].slice(0, n);
+    const squareDirs = [
+      [],
+      [0],
+      [0, 2],
+      [0, 1, 3],
+      [0, 1, 2, 3]
+    ];
+    return squareDirs[n].slice();
+  }
+
+  function randomStableCurvePresetData(latticeName) {
+    for (let attempt = 0; attempt < 160; attempt += 1) {
+      const builder = makeRandomStableCurveBuilder(latticeName);
+      if (!builder) continue;
+      if (!connectRandomStableCurveVertices(builder)) continue;
+      addRandomStableCurveLoops(builder);
+      addRandomStableCurveExtraEdges(builder);
+      const completed = completeRandomStableCurveBuilder(builder);
+      if (completed) return completed;
+    }
+    return fallbackRandomStableCurvePreset(latticeName);
+  }
+
+  function makeRandomStableCurveBuilder(latticeName) {
+    const rows = 5;
+    const cols = 5;
+    const lattice = LATTICES[latticeName] || LATTICES.hexagonal;
+    const tiles = Array(rows * cols).fill(null);
+    const vertexCount = randomInteger(1, 4);
+    const positions = randomStableCurvePositions(vertexCount, rows, cols);
+    if (positions.length !== vertexCount) return null;
+    return {
+      rows,
+      cols,
+      latticeName,
+      lattice,
+      tiles,
+      vertexPositions: positions,
+      vertexByIndex: new Map(positions.map((position, index) => [position, index])),
+      spokes: Array.from({ length: vertexCount }, () => new Set()),
+      edgeCount: 0
+    };
+  }
+
+  function connectRandomStableCurveVertices(builder) {
+    const order = shuffleArray(Array.from({ length: builder.vertexPositions.length }, (_, index) => index));
+    for (let index = 1; index < order.length; index += 1) {
+      const from = order[index];
+      const to = order[randomInteger(0, index - 1)];
+      if (!tryAddRandomStableCurveEdge(builder, from, to)) return false;
+    }
+    return true;
+  }
+
+  function addRandomStableCurveExtraEdges(builder) {
+    const vertexCount = builder.vertexPositions.length;
+    if (vertexCount < 2) return;
+    const extraEdges = weightedRandomChoice([
+      [0, 0.48],
+      [1, 0.32],
+      [2, 0.16],
+      [3, 0.04]
+    ]);
+    for (let count = 0; count < extraEdges; count += 1) {
+      if (randomStableCurveCycleRank(builder) >= 4) return;
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        const from = randomInteger(0, vertexCount - 1);
+        let to = randomInteger(0, vertexCount - 2);
+        if (to >= from) to += 1;
+        if (tryAddRandomStableCurveEdge(builder, from, to)) break;
+      }
+    }
+  }
+
+  function addRandomStableCurveLoops(builder) {
+    const loops = weightedRandomChoice([
+      [0, 0.38],
+      [1, 0.44],
+      [2, 0.18]
+    ]);
+    for (let count = 0; count < loops; count += 1) {
+      if (randomStableCurveCycleRank(builder) >= 4) return;
+      const vertices = shuffleArray(Array.from({ length: builder.vertexPositions.length }, (_, index) => index));
+      for (const vertex of vertices) {
+        if (tryAddRandomStableCurveLoop(builder, vertex)) break;
+      }
+    }
+  }
+
+  function completeRandomStableCurveBuilder(builder) {
+    const cycleRank = randomStableCurveCycleRank(builder);
+    if (cycleRank > 4) return null;
+    for (let genusAttempt = 0; genusAttempt < 40; genusAttempt += 1) {
+      const targetGenus = randomInteger(cycleRank, 4);
+      const genera = randomWeakComposition(targetGenus - cycleRank, builder.vertexPositions.length);
+      const mandatoryLegs = genera.map((genus, vertex) => (
+        Math.max(0, minimumStableValence(genus) - builder.spokes[vertex].size)
+      ));
+      const capacities = builder.spokes.map((spokes, vertex) => (
+        safeRandomStableCurveLegDirs(builder, vertex, spokes).length
+      ));
+      if (mandatoryLegs.some((count, index) => count > capacities[index])) continue;
+
+      const nextSpokes = builder.spokes.map((spokes) => new Set(spokes));
+      mandatoryLegs.forEach((count, vertex) => {
+        addRandomStableCurveLegs(builder, nextSpokes[vertex], vertex, count);
+      });
+      let extraLegs = randomInteger(0, 2);
+      if (Math.random() < 0.2) extraLegs += randomInteger(1, 3);
+      distributeRandomLegs(extraLegs, nextSpokes.map((spokes, vertex) => (
+        safeRandomStableCurveLegDirs(builder, vertex, spokes).length
+      ))).forEach((count, vertex) => {
+        addRandomStableCurveLegs(builder, nextSpokes[vertex], vertex, count);
+      });
+
+      const tiles = builder.tiles.map((tile) => clonePlainTile(tile));
+      const vertexDecorations = {};
+      builder.vertexPositions.forEach((position, vertex) => {
+        tiles[position] = plainVertexTileFromDirs(Array.from(nextSpokes[vertex]));
+        if (genera[vertex] > 0) vertexDecorations[position] = genera[vertex];
+      });
+      const markings = nextSpokes.reduce((total, spokes) => total + spokes.size, 0) - (2 * builder.edgeCount);
+      return {
+        tiles,
+        vertexDecorations,
+        genus: targetGenus,
+        markings
+      };
+    }
+    return null;
+  }
+
+  function fallbackRandomStableCurvePreset(latticeName) {
+    const tiles = Array(25).fill(null);
+    const centerIndex = indexOf(2, 2, 5);
+    tiles[centerIndex] = plainVertexTileFromDirs(moduliSpaceLegDirs(3, latticeName));
+    return {
+      tiles,
+      vertexDecorations: {},
+      genus: 0,
+      markings: 3
+    };
+  }
+
+  function randomStableCurvePositions(count, rows, cols) {
+    const positions = [];
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        positions.push(indexOf(row, col, cols));
+      }
+    }
+    return shuffleArray(positions).slice(0, count);
+  }
+
+  function distributeRandomLegs(total, capacities) {
+    const counts = capacities.map(() => 0);
+    for (let leg = 0; leg < total; leg += 1) {
+      const candidates = capacities
+        .map((capacity, index) => ({ capacity, index }))
+        .filter((entry) => counts[entry.index] < entry.capacity);
+      if (!candidates.length) break;
+      counts[candidates[randomInteger(0, candidates.length - 1)].index] += 1;
+    }
+    return counts;
+  }
+
+  function safeRandomStableCurveLegDirs(builder, vertex, usedDirs) {
+    const preference = builder.latticeName === 'hexagonal'
+      ? [5, 1, 4, 2, 0, 3]
+      : [3, 1, 0, 2];
+    return shuffleArray(preference.filter((dir) => (
+      !usedDirs.has(dir) && randomStableCurveLegDirIsSafe(builder, vertex, dir)
+    )));
+  }
+
+  function randomStableCurveLegDirIsSafe(builder, vertex, dir) {
+    const vertexIndex = builder.vertexPositions[vertex];
+    const next = randomStableCurveNeighborIndex(builder, vertexIndex, dir);
+    if (next == null) return true;
+    if (builder.vertexByIndex.has(next)) return false;
+    return !randomStableCurveTilePortUsed(builder.tiles[next], builder.lattice.opposite[dir]);
+  }
+
+  function addRandomStableCurveLegs(builder, usedDirs, vertex, count) {
+    safeRandomStableCurveLegDirs(builder, vertex, usedDirs).slice(0, count).forEach((dir) => usedDirs.add(dir));
+  }
+
+  function minimumStableValence(genus) {
+    if (genus <= 0) return 3;
+    if (genus === 1) return 1;
+    return 0;
+  }
+
+  function randomWeakComposition(total, count) {
+    const parts = Array(count).fill(0);
+    for (let remaining = total; remaining > 0; remaining -= 1) {
+      parts[randomInteger(0, count - 1)] += 1;
+    }
+    return parts;
+  }
+
+  function tryAddRandomStableCurveEdge(builder, from, to) {
+    const path = findRandomStableCurvePath(builder, from, to);
+    if (!path) return false;
+    placeRandomStableCurvePath(builder, path);
+    return true;
+  }
+
+  function tryAddRandomStableCurveLoop(builder, vertex) {
+    const path = findRandomStableCurveLoop(builder, vertex);
+    if (!path) return false;
+    placeRandomStableCurvePath(builder, path);
+    return true;
+  }
+
+  function findRandomStableCurvePath(builder, from, to) {
+    const sourceIndex = builder.vertexPositions[from];
+    const targetIndex = builder.vertexPositions[to];
+    const queue = [{ index: sourceIndex, entryDir: null, cells: [sourceIndex], dirs: [] }];
+    const visited = new Set([`${sourceIndex}:start`]);
+    while (queue.length) {
+      const current = queue.shift();
+      for (const dir of shuffleArray(Array.from({ length: builder.lattice.sides }, (_, index) => index))) {
+        if (!canLeaveRandomStableCurveCell(builder, current, dir, from)) continue;
+        const next = randomStableCurveNeighborIndex(builder, current.index, dir);
+        if (next == null) continue;
+        const nextEntry = builder.lattice.opposite[dir];
+        const nextVertex = builder.vertexByIndex.get(next);
+        if (nextVertex != null) {
+          if (nextVertex !== to || builder.spokes[to].has(nextEntry)) continue;
+          return {
+            from,
+            to,
+            cells: current.cells.concat(next),
+            dirs: current.dirs.concat(dir)
+          };
+        }
+        if (!canEnterRandomStableCurveCell(builder, next, nextEntry)) continue;
+        const key = `${next}:${nextEntry}`;
+        if (visited.has(key)) continue;
+        visited.add(key);
+        queue.push({
+          index: next,
+          entryDir: nextEntry,
+          cells: current.cells.concat(next),
+          dirs: current.dirs.concat(dir)
+        });
+      }
+    }
+    return null;
+  }
+
+  function findRandomStableCurveLoop(builder, vertex) {
+    const sourceIndex = builder.vertexPositions[vertex];
+    const startDirs = shuffleArray(Array.from({ length: builder.lattice.sides }, (_, index) => index))
+      .filter((dir) => !builder.spokes[vertex].has(dir));
+    for (const startDir of startDirs) {
+      const startIndex = randomStableCurveNeighborIndex(builder, sourceIndex, startDir);
+      if (startIndex == null || builder.vertexByIndex.has(startIndex)) continue;
+      const entryDir = builder.lattice.opposite[startDir];
+      if (!canEnterRandomStableCurveCell(builder, startIndex, entryDir)) continue;
+      const queue = [{
+        index: startIndex,
+        entryDir,
+        cells: [sourceIndex, startIndex],
+        dirs: [startDir]
+      }];
+      const visited = new Set([`${startIndex}:${entryDir}`]);
+      while (queue.length) {
+        const current = queue.shift();
+        for (const dir of shuffleArray(Array.from({ length: builder.lattice.sides }, (_, index) => index))) {
+          if (!canLeaveRandomStableCurveCell(builder, current, dir, vertex)) continue;
+          const next = randomStableCurveNeighborIndex(builder, current.index, dir);
+          if (next == null) continue;
+          const nextEntry = builder.lattice.opposite[dir];
+          const nextVertex = builder.vertexByIndex.get(next);
+          if (nextVertex != null) {
+            if (nextVertex !== vertex) continue;
+            if (nextEntry === startDir || builder.spokes[vertex].has(nextEntry)) continue;
+            return {
+              from: vertex,
+              to: vertex,
+              cells: current.cells.concat(next),
+              dirs: current.dirs.concat(dir)
+            };
+          }
+          if (!canEnterRandomStableCurveCell(builder, next, nextEntry)) continue;
+          const key = `${next}:${nextEntry}`;
+          if (visited.has(key)) continue;
+          visited.add(key);
+          queue.push({
+            index: next,
+            entryDir: nextEntry,
+            cells: current.cells.concat(next),
+            dirs: current.dirs.concat(dir)
+          });
+        }
+      }
+    }
+    return null;
+  }
+
+  function canLeaveRandomStableCurveCell(builder, current, dir, sourceVertex) {
+    const vertex = builder.vertexByIndex.get(current.index);
+    if (vertex != null) return vertex === sourceVertex && !builder.spokes[vertex].has(dir);
+    return current.entryDir !== dir && canAddRandomStableCurveArc(builder.tiles[current.index], current.entryDir, dir);
+  }
+
+  function canEnterRandomStableCurveCell(builder, index, entryDir) {
+    return !randomStableCurveTilePortUsed(builder.tiles[index], entryDir);
+  }
+
+  function canAddRandomStableCurveArc(tile, first, second) {
+    return Number.isInteger(first)
+      && Number.isInteger(second)
+      && first !== second
+      && !randomStableCurveTilePortUsed(tile, first)
+      && !randomStableCurveTilePortUsed(tile, second);
+  }
+
+  function randomStableCurveTilePortUsed(tile, dir) {
+    return Array.isArray(tile) && tile.some((pair) => pair[0] === dir || pair[1] === dir);
+  }
+
+  function randomStableCurveNeighborIndex(builder, index, dir) {
+    const row = Math.floor(index / builder.cols);
+    const col = index % builder.cols;
+    const next = neighbor(row, col, dir, builder.rows, builder.cols, builder.lattice, false);
+    return next ? indexOf(next.row, next.col, builder.cols) : null;
+  }
+
+  function placeRandomStableCurvePath(builder, path) {
+    builder.spokes[path.from].add(path.dirs[0]);
+    builder.spokes[path.to].add(builder.lattice.opposite[path.dirs[path.dirs.length - 1]]);
+    for (let index = 1; index < path.cells.length - 1; index += 1) {
+      addRandomStableCurveArc(
+        builder.tiles,
+        path.cells[index],
+        builder.lattice.opposite[path.dirs[index - 1]],
+        path.dirs[index]
+      );
+    }
+    builder.edgeCount += 1;
+  }
+
+  function addRandomStableCurveArc(tiles, index, first, second) {
+    if (!Array.isArray(tiles[index])) tiles[index] = [];
+    tiles[index].push([first, second]);
+  }
+
+  function randomStableCurveCycleRank(builder) {
+    return Math.max(0, builder.edgeCount - builder.vertexPositions.length + 1);
+  }
+
+  function clonePlainTile(tile) {
+    return Array.isArray(tile) ? tile.map((pair) => pair.slice(0, 2)) : null;
+  }
+
+  function weightedRandomChoice(entries) {
+    const total = entries.reduce((sum, entry) => sum + entry[1], 0);
+    let target = Math.random() * total;
+    for (const [value, weight] of entries) {
+      target -= weight;
+      if (target <= 0) return value;
+    }
+    return entries[entries.length - 1][0];
+  }
+
+  function randomInteger(min, max) {
+    const low = Math.ceil(min);
+    const high = Math.floor(max);
+    if (high <= low) return low;
+    return low + Math.floor(Math.random() * ((high - low) + 1));
+  }
+
+  function plainVertexTileFromDirs(dirs) {
+    return {
+      type: 'vertex',
+      edges: Array.isArray(dirs) ? dirs.slice() : []
+    };
+  }
+
+  function applyImportedStandardDualGraph(graph) {
+    const normalized = normalizeStandardDualGraphInput(graph);
+    if (!normalized.isValid) throw new Error(normalized.reason || 'dual graph import failed');
+    state.diagramType = 'dual';
+    state.inputMode = 'import';
+    state.standardDualGraphInput = {
+      genera: normalized.genera.slice(),
+      legs: normalized.legs.map((entries) => entries.slice()),
+      edges: normalized.edges.map((pair) => pair.slice(0, 2)),
+      decorations: { ...normalized.decorations }
+    };
+    state.tiles = Array(state.rows * state.cols).fill(null);
+    state.vertexDecorations = {};
+    state.halfEdgeDecorations = {};
+    state.pickedComponent = null;
+    state.pickedAnchor = null;
+    state.pickHoverHit = null;
+    state.decorationHoverHit = null;
+    state.dualGraphLayout = null;
+    state.dualGraphStructureKey = '';
+    state.dualGraphLayoutTimings = {};
+    clearDualGraphDegenerationChart();
+    syncAllInputs(state.rows, state.cols, state.lattice, state.wrapped);
+    renderTilePalette();
+    updateReport(false);
+  }
+
+  function standardDualGraphInputFromPayload(payload) {
+    if (typeof payload === 'string') return standardDualGraphInputFromText(payload);
+    if (!payload || typeof payload !== 'object') return { isValid: false };
+    if (typeof payload.graph === 'string') {
+      const parsed = standardDualGraphInputFromText(payload.graph);
+      if (!parsed.isValid) return parsed;
+      return {
+        isValid: true,
+        graph: {
+          ...parsed.graph,
+          decorations: payload.decorations || payload.labels || {}
+        }
+      };
+    }
+    const normalized = normalizeStandardDualGraphInput(payload.graph ? payload : { graph: payload });
+    return normalized.isValid
+      ? { isValid: true, graph: payload.graph ? payload : { graph: payload } }
+      : { isValid: false, reason: normalized.reason };
+  }
+
+  function standardDualGraphInputFromText(text) {
+    const source = String(text || '').trim();
+    if (!/^Graph\s*:/i.test(source)) return { isValid: false };
+    const body = source.replace(/^Graph\s*:\s*/i, '');
+    const first = readBracketGroup(body, 0);
+    if (!first) return { isValid: false, reason: 'could not read genus list' };
+    const second = readBracketGroup(body, first.end);
+    if (!second) return { isValid: false, reason: 'could not read leg list' };
+    const third = readBracketGroup(body, second.end);
+    if (!third) return { isValid: false, reason: 'could not read edge list' };
+    try {
+      return {
+        isValid: true,
+        graph: {
+          genera: JSON.parse(first.text),
+          legs: JSON.parse(second.text),
+          edges: parseStandardDualGraphEdgePairs(third.text)
+        }
+      };
+    } catch (error) {
+      return { isValid: false, reason: error.message || 'could not parse dual graph' };
+    }
+  }
+
+  function readBracketGroup(text, startIndex) {
+    const start = String(text).indexOf('[', startIndex);
+    if (start < 0) return null;
+    let depth = 0;
+    for (let index = start; index < text.length; index += 1) {
+      const char = text[index];
+      if (char === '[') depth += 1;
+      if (char === ']') {
+        depth -= 1;
+        if (depth === 0) {
+          return {
+            text: text.slice(start, index + 1),
+            end: index + 1
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  function parseStandardDualGraphEdgePairs(text) {
+    const trimmed = String(text || '').trim();
+    if (trimmed === '[]') return [];
+    const pairs = [];
+    const pattern = /\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/g;
+    let match;
+    while ((match = pattern.exec(trimmed))) {
+      pairs.push([Number(match[1]), Number(match[2])]);
+    }
+    if (!pairs.length) return JSON.parse(trimmed);
+    return pairs;
+  }
+
   function applyImportedMosaic(payload) {
     if (!payload || typeof payload !== 'object') throw new Error('mosaic data must be an object');
+    state.standardDualGraphInput = null;
     const rows = clampInt(payload.rows, MIN_BOARD, MAX_BOARD, state.rows);
     const cols = clampInt(payload.cols, MIN_BOARD, MAX_BOARD, state.cols);
     const latticeName = LATTICES[payload.lattice] ? payload.lattice : state.lattice;
@@ -1366,6 +2126,7 @@
     state.tiles = Array(state.rows * state.cols).fill(null);
     state.vertexDecorations = {};
     state.halfEdgeDecorations = {};
+    state.standardDualGraphInput = null;
     state.pickedComponent = null;
     state.pickedAnchor = null;
     state.pickHoverHit = null;
@@ -1611,6 +2372,7 @@
   }
 
   function halfEdgeDecorationKey(leg) {
+    if (leg && leg.key) return String(leg.key);
     return `${leg.vertex}:${leg.spoke}`;
   }
 
@@ -1709,10 +2471,15 @@
     };
   }
 
+  function clearStandardDualGraphInput() {
+    if (state.standardDualGraphInput) state.standardDualGraphInput = null;
+  }
+
   function rotateTile(index, steps) {
     if (isTileEmpty(state.tiles[index])) return;
     const next = rotateTileValue(state.tiles[index], steps);
     if (tilesEqual(state.tiles[index], next)) return;
+    clearStandardDualGraphInput();
     state.tiles[index] = next;
     state.edits += 1;
     updateReport(false);
@@ -1736,6 +2503,7 @@
     if (tile.length < 2) return;
     const next = tile.slice(1).concat([tile[0]]);
     if (tilesEqual(tile, next)) return;
+    clearStandardDualGraphInput();
     state.tiles[index] = cloneTile(next);
     state.edits += 1;
     updateReport(false);
@@ -1746,6 +2514,7 @@
     if (tile.length < 2) return;
     const next = tile.slice().reverse();
     if (tilesEqual(tile, next)) return;
+    clearStandardDualGraphInput();
     state.tiles[index] = cloneTile(next);
     state.edits += 1;
     updateReport(false);
@@ -1785,6 +2554,7 @@
       next = randomMatching(dirs);
     }
     if (tilesEqual(state.tiles[index], next)) return;
+    clearStandardDualGraphInput();
     state.tiles[index] = next;
     state.edits += 1;
     updateReport(false);
@@ -1805,6 +2575,7 @@
   function placeTile(index, tile) {
     if (index < 0 || isTileEmpty(tile)) return;
     if (tilesEqual(state.tiles[index], tile)) return;
+    clearStandardDualGraphInput();
     state.tiles[index] = cloneTile(tile);
     delete state.vertexDecorations[index];
     pruneHalfEdgeDecorations();
@@ -1814,6 +2585,7 @@
 
   function deleteTile(index) {
     if (index < 0 || isTileEmpty(state.tiles[index])) return;
+    clearStandardDualGraphInput();
     state.tiles[index] = null;
     delete state.vertexDecorations[index];
     pruneHalfEdgeDecorations();
@@ -1825,6 +2597,7 @@
     if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
     const tile = state.tiles[fromIndex];
     if (isTileEmpty(tile)) return;
+    clearStandardDualGraphInput();
     const decoration = vertexDecorationValue(fromIndex);
     state.tiles[toIndex] = cloneTile(tile);
     state.tiles[fromIndex] = null;
@@ -1955,6 +2728,7 @@
 
       if (!isVertex && entryDir != null) {
         const removed = removePairAtEdge(tile || [], entryDir);
+        clearStandardDualGraphInput();
         state.tiles[tileHit.index] = removed.tile;
         drawState.current.removedEntryPair = removed.pair;
         drawState.current.removedEntryIndex = removed.pairIndex;
@@ -2058,8 +2832,10 @@
           && pairHasEndpoints(current.removedEntryPair, current.entryDir, exitDir);
 
         if (erasesExisting) {
+          clearStandardDualGraphInput();
           state.tiles[current.index] = cloneTile(state.tiles[current.index] || []);
         } else {
+          clearStandardDualGraphInput();
           drawState.eraseMode = 'drawing';
           const removed = removePairAtEdge(state.tiles[current.index] || [], exitDir);
           const next = removed.tile;
@@ -2237,7 +3013,10 @@
 
   function commitDualGraphSpoke(index, dir) {
     const changed = setVertexTileSpoke(index, dir, !vertexTileHasSpoke(index, dir));
-    if (changed) state.edits += 1;
+    if (changed) {
+      clearStandardDualGraphInput();
+      state.edits += 1;
+    }
   }
 
   function dualGraphSpokeProjectionFromPoint(point, tileState, dir) {
@@ -2284,16 +3063,19 @@
     if (!isDualGraph() || index < 0 || index >= state.tiles.length) return false;
     const tile = state.tiles[index];
       if (isVertexTileValue(tile)) {
+        clearStandardDualGraphInput();
         state.tiles[index] = null;
         delete state.vertexDecorations[index];
         pruneHalfEdgeDecorations();
       } else if (isTileEmpty(tile)) {
         // Creating a vertex on an empty tile - auto-connect to open ends
+        clearStandardDualGraphInput();
         const openEnds = findOpenEndsPointingToTile(index);
         state.tiles[index] = vertexTileFromDirs(openEnds);
         delete state.vertexDecorations[index];
         pruneHalfEdgeDecorations();
       } else {
+        clearStandardDualGraphInput();
         state.tiles[index] = vertexTileFromDirs(maskToDirs(tileToMask(tile)));
         delete state.vertexDecorations[index];
         pruneHalfEdgeDecorations();
@@ -3649,6 +4431,17 @@
   }
 
   function collectDualGraphData(report, options = {}) {
+    if (options.standardGraph) return dualGraphDataFromStandardGraph(options.standardGraph, options);
+    if (isDualGraph() && state.standardDualGraphInput && (!report || report.active === 0)) {
+      return dualGraphDataFromStandardGraph(state.standardDualGraphInput, options);
+    }
+    const topology = collectDualGraphTopologyFromCanvas(report, options);
+    if (!topology.isValid) return topology;
+    const standardGraph = standardDualGraphFromCanvasTopology(topology);
+    return dualGraphDataFromStandardGraph(standardGraph, { source: topology });
+  }
+
+  function collectDualGraphTopologyFromCanvas(report, options = {}) {
     const requireSingleComponent = options.requireSingleComponent !== false;
     // Check prerequisites: exactly one component and at least one vertex
     if (requireSingleComponent && report.components !== 1) {
@@ -3769,6 +4562,289 @@
     return { isValid: true, vertices, edges, legs };
   }
 
+  function standardDualGraphFromCanvasTopology(topology) {
+    const vertexIdBySource = new Map();
+    const sourceByVertexId = new Map();
+    const genera = topology.vertices.map((vertex, vertexIndex) => {
+      vertexIdBySource.set(vertex.index, vertexIndex);
+      sourceByVertexId.set(vertexIndex, vertex);
+      return vertexDecorationValue(vertex.index);
+    });
+    const legs = genera.map(() => []);
+    const edges = [];
+    const decorations = {};
+    const halfEdgeMeta = {};
+    let nextHalfEdge = 1;
+
+    const addHalfEdge = (vertexIndex, meta, decoration = '') => {
+      const halfEdge = nextHalfEdge;
+      nextHalfEdge += 1;
+      legs[vertexIndex].push(halfEdge);
+      halfEdgeMeta[halfEdge] = { ...meta, vertex: vertexIndex, halfEdge };
+      const label = normalizeHalfEdgeDecoration(decoration);
+      if (label) decorations[halfEdge] = label;
+      return halfEdge;
+    };
+
+    topology.edges.forEach((edge, edgeIndex) => {
+      const from = vertexIdBySource.get(edge.from);
+      const to = vertexIdBySource.get(edge.to);
+      if (from == null || to == null) return;
+      const fromHalfEdge = addHalfEdge(from, {
+        kind: 'edge',
+        edgeIndex,
+        branch: 'from',
+        sourceVertex: edge.from,
+        spoke: edge.fromSpoke,
+        key: `${edge.from}:${edge.fromSpoke}`,
+        path: cloneDualGraphPath(edge.path)
+      });
+      const toHalfEdge = addHalfEdge(to, {
+        kind: 'edge',
+        edgeIndex,
+        branch: 'to',
+        sourceVertex: edge.to,
+        spoke: edge.toSpoke,
+        key: `${edge.to}:${edge.toSpoke}`,
+        path: cloneDualGraphPath(edge.path)
+      });
+      edges.push([fromHalfEdge, toHalfEdge]);
+    });
+
+    topology.legs.forEach((leg, legIndex) => {
+      const vertex = vertexIdBySource.get(leg.vertex);
+      if (vertex == null) return;
+      addHalfEdge(vertex, {
+        kind: 'leg',
+        legIndex,
+        sourceVertex: leg.vertex,
+        spoke: leg.spoke,
+        key: halfEdgeDecorationKey(leg),
+        path: cloneDualGraphPath(leg.path)
+      }, leg.label);
+    });
+
+    return {
+      genera,
+      legs,
+      edges,
+      decorations,
+      meta: {
+        source: 'mosaic-canvas',
+        vertices: Array.from(sourceByVertexId.entries()).map(([index, vertex]) => ({
+          index,
+          sourceIndex: vertex.index,
+          row: vertex.row,
+          col: vertex.col,
+          spokes: normalizeVertexTile(state.tiles[vertex.index])
+        })),
+        halfEdges: halfEdgeMeta
+      }
+    };
+  }
+
+  function dualGraphDataFromStandardGraph(input, options = {}) {
+    const normalized = normalizeStandardDualGraphInput(input);
+    if (!normalized.isValid) return normalized;
+
+    const meta = normalized.meta || {};
+    const vertexMeta = new Map();
+    if (Array.isArray(meta.vertices)) {
+      meta.vertices.forEach((vertex) => {
+        if (!vertex || !Number.isInteger(Number(vertex.index))) return;
+        vertexMeta.set(Number(vertex.index), vertex);
+      });
+    }
+    const halfEdgeMeta = meta.halfEdges && typeof meta.halfEdges === 'object' ? meta.halfEdges : {};
+    const source = options.source && options.source.isValid ? options.source : null;
+    const sourceVertices = source
+      ? new Map(source.vertices.map((vertex, vertexIndex) => [vertexIndex, vertex]))
+      : new Map();
+
+    const vertices = normalized.genera.map((genus, index) => {
+      const fromMeta = vertexMeta.get(index) || {};
+      const fromSource = sourceVertices.get(index) || {};
+      return {
+        index,
+        genus,
+        row: Number.isInteger(Number(fromMeta.row)) ? Number(fromMeta.row) : fromSource.row,
+        col: Number.isInteger(Number(fromMeta.col)) ? Number(fromMeta.col) : fromSource.col,
+        sourceIndex: Number.isInteger(Number(fromMeta.sourceIndex)) ? Number(fromMeta.sourceIndex) : fromSource.index,
+        spokes: Array.isArray(fromMeta.spokes) ? fromMeta.spokes.slice() : []
+      };
+    });
+
+    const halfEdgeVertex = new Map();
+    normalized.legs.forEach((halfEdges, vertex) => {
+      halfEdges.forEach((halfEdge) => {
+        halfEdgeVertex.set(halfEdge, vertex);
+      });
+    });
+
+    const pairedHalfEdges = new Set();
+    const edges = normalized.edges.map((pair, edgeIndex) => {
+      const fromHalfEdge = pair[0];
+      const toHalfEdge = pair[1];
+      pairedHalfEdges.add(fromHalfEdge);
+      pairedHalfEdges.add(toHalfEdge);
+      const fromMeta = halfEdgeMeta[fromHalfEdge] || {};
+      const toMeta = halfEdgeMeta[toHalfEdge] || {};
+      return {
+        from: halfEdgeVertex.get(fromHalfEdge),
+        to: halfEdgeVertex.get(toHalfEdge),
+        fromHalfEdge,
+        toHalfEdge,
+        fromSpoke: Number.isInteger(Number(fromMeta.spoke)) ? Number(fromMeta.spoke) : null,
+        toSpoke: Number.isInteger(Number(toMeta.spoke)) ? Number(toMeta.spoke) : null,
+        path: cloneDualGraphPath(fromMeta.path || toMeta.path || []),
+        halfEdges: [fromHalfEdge, toHalfEdge]
+      };
+    });
+
+    const decorationLabels = normalized.decorations || {};
+    const externalLegs = [];
+    normalized.legs.forEach((halfEdges, vertex) => {
+      halfEdges.forEach((halfEdge) => {
+        if (pairedHalfEdges.has(halfEdge)) return;
+        const metaEntry = halfEdgeMeta[halfEdge] || {};
+        const key = metaEntry.key || `${vertex}:${halfEdge}`;
+        externalLegs.push({
+          vertex,
+          halfEdge,
+          key,
+          spoke: Number.isInteger(Number(metaEntry.spoke)) ? Number(metaEntry.spoke) : null,
+          label: normalizeHalfEdgeDecoration(decorationLabels[halfEdge]),
+          path: cloneDualGraphPath(metaEntry.path || [])
+        });
+      });
+    });
+
+    return {
+      isValid: true,
+      vertices,
+      edges,
+      legs: externalLegs,
+      standardGraph: standardDualGraphPlain(normalized),
+      standardDecorations: { ...normalized.decorations },
+      standardText: formatStandardDualGraphText(normalized)
+    };
+  }
+
+  function normalizeStandardDualGraphInput(input) {
+    if (Array.isArray(input)) {
+      input = {
+        genera: input[0],
+        legs: input[1],
+        edges: input[2],
+        decorations: input[3] || {}
+      };
+    }
+    const graph = input && input.graph && typeof input.graph === 'object' && !Array.isArray(input.graph)
+      ? input.graph
+      : input;
+    if (!graph || typeof graph !== 'object') {
+      return { isValid: false, reason: 'dual graph standard input required' };
+    }
+
+    const generaInput = Array.isArray(graph.genera) ? graph.genera : graph.vertices;
+    const legsInput = Array.isArray(graph.legs) ? graph.legs : graph.halfEdges;
+    const edgesInput = Array.isArray(graph.edges) ? graph.edges : [];
+    if (!Array.isArray(generaInput) || !Array.isArray(legsInput)) {
+      return { isValid: false, reason: 'dual graph requires genera and legs lists' };
+    }
+    if (generaInput.length !== legsInput.length) {
+      return { isValid: false, reason: 'genera and legs lists must have the same length' };
+    }
+
+    const genera = generaInput.map((value) => normalizeVertexDecoration(value));
+    const seenHalfEdges = new Set();
+    const legs = legsInput.map((entries) => {
+      const list = Array.isArray(entries) ? entries : [];
+      return list.map((value) => {
+        const halfEdge = Number(value);
+        if (!Number.isInteger(halfEdge)) return null;
+        if (seenHalfEdges.has(halfEdge)) return null;
+        seenHalfEdges.add(halfEdge);
+        return halfEdge;
+      }).filter((value) => value != null);
+    });
+    const lostHalfEdges = legsInput.some((entries, index) => (
+      Array.isArray(entries) && entries.length !== legs[index].length
+    ));
+    if (lostHalfEdges) return { isValid: false, reason: 'half-edge labels must be unique integers' };
+
+    const edges = [];
+    const pairedHalfEdges = new Set();
+    for (const entry of edgesInput) {
+      const pair = Array.isArray(entry) ? entry : [];
+      if (pair.length !== 2) return { isValid: false, reason: 'each edge must pair exactly two half-edges' };
+      const left = Number(pair[0]);
+      const right = Number(pair[1]);
+      if (!Number.isInteger(left) || !Number.isInteger(right)) {
+        return { isValid: false, reason: 'edge half-edge labels must be integers' };
+      }
+      if (!seenHalfEdges.has(left) || !seenHalfEdges.has(right)) {
+        return { isValid: false, reason: 'edges must use half-edges from the legs lists' };
+      }
+      if (pairedHalfEdges.has(left) || pairedHalfEdges.has(right)) {
+        return { isValid: false, reason: 'a half-edge can appear in at most one edge pair' };
+      }
+      pairedHalfEdges.add(left);
+      pairedHalfEdges.add(right);
+      edges.push([left, right]);
+    }
+
+    const decorationsInput = input.decorations || graph.decorations || input.labels || graph.labels || {};
+    const decorations = {};
+    if (decorationsInput && typeof decorationsInput === 'object') {
+      Object.entries(decorationsInput).forEach(([key, value]) => {
+        const halfEdge = Number(key);
+        const label = normalizeHalfEdgeDecoration(value);
+        if (Number.isInteger(halfEdge) && seenHalfEdges.has(halfEdge) && label) decorations[halfEdge] = label;
+      });
+    }
+
+    return {
+      isValid: true,
+      genera,
+      legs,
+      edges,
+      decorations,
+      meta: input.meta || graph.meta || null
+    };
+  }
+
+  function standardDualGraphPlain(graph) {
+    return {
+      genera: graph.genera.map((value) => Number(value) || 0),
+      legs: graph.legs.map((entries) => entries.slice()),
+      edges: graph.edges.map((pair) => pair.slice(0, 2))
+    };
+  }
+
+  function cloneDualGraphPath(path) {
+    return Array.isArray(path)
+      ? path.map((step) => ({ ...step }))
+      : [];
+  }
+
+  function formatStandardDualGraphText(graph) {
+    const plain = standardDualGraphPlain(graph);
+    return `Graph : ${formatNumberList(plain.genera)} ${formatNestedNumberList(plain.legs)} ${formatEdgePairList(plain.edges)}`;
+  }
+
+  function formatNumberList(values) {
+    return `[${values.join(', ')}]`;
+  }
+
+  function formatNestedNumberList(lists) {
+    return `[${lists.map(formatNumberList).join(', ')}]`;
+  }
+
+  function formatEdgePairList(edges) {
+    return `[${edges.map((edge) => `(${edge[0]}, ${edge[1]})`).join(', ')}]`;
+  }
+
   function dualGraphInvariants(graphData) {
     const vertices = graphData.vertices.length;
     const edges = graphData.edges.length;
@@ -3777,7 +4853,7 @@
     const valences = dualGraphVertexValences(graphData);
     const cycleRank = Math.max(0, edges - vertices + components);
     const vertexDetails = graphData.vertices.map((vertex) => {
-      const genus = vertexDecorationValue(vertex.index);
+      const genus = Number.isInteger(Number(vertex.genus)) ? Number(vertex.genus) : 0;
       const valence = valences.get(vertex.index) || 0;
       return {
         index: vertex.index,
@@ -3831,7 +4907,10 @@
   }
 
   function formatDualGraphVertexLabel(vertex) {
-    return `r${vertex.row + 1}c${vertex.col + 1}`;
+    if (Number.isInteger(Number(vertex.row)) && Number.isInteger(Number(vertex.col))) {
+      return `r${Number(vertex.row) + 1}c${Number(vertex.col) + 1}`;
+    }
+    return `v${vertex.index}`;
   }
 
   function syncDualGraphInvariantVisibility() {
@@ -3898,17 +4977,23 @@
   function exportDualGraphDegenerations() {
     const report = analyze();
     const payload = buildDualGraphDegenerationsExport(report);
-    refs.exportOut.value = JSON.stringify(payload, null, 2);
+    refs.exportOut.value = formatConciseDualGraphPayload(payload);
     if (refs.exportCard) refs.exportCard.classList.remove('collapsed');
     if (refs.exportOut) {
       refs.exportOut.focus();
       refs.exportOut.select();
     }
     if (refs.statusLine) {
-      refs.statusLine.textContent = payload.isValid
+      refs.statusLine.textContent = isSuccessfulConciseDualGraphExport(payload)
         ? 'boundary divisor export ready'
         : (payload.reason || 'boundary divisor export unavailable');
     }
+  }
+
+  function isSuccessfulConciseDualGraphExport(payload) {
+    return typeof payload === 'string'
+      || Array.isArray(payload)
+      || !!(payload && Array.isArray(payload.divisors) && !payload.reason);
   }
 
   function buildDualGraphDegenerationsExport(report) {
@@ -3917,61 +5002,40 @@
       : collectDualGraphData(report);
     if (!graphData.isValid) {
       return {
-        isValid: false,
         reason: graphData.reason || 'dual graph unavailable',
-        source: null,
         divisors: []
       };
     }
     const inv = dualGraphInvariants(graphData);
     if (!inv.isStable) {
       return {
-        isValid: false,
         reason: 'source dual graph is not stable',
-        source: normalizedStableGraphFromDualGraph(graphData),
-        invariants: inv,
+        source: conciseStandardDualGraphExport(graphData),
         divisors: []
       };
     }
-    const sourceKey = dualGraphDegenerationSourceKey(graphData);
-    const divisors = state.dualGraphDegenerationSourceKey === sourceKey && state.dualGraphDegenerations.length
+    const currentSourceKey = dualGraphDegenerationSourceKey(graphData);
+    const divisors = state.dualGraphDegenerationSourceKey === currentSourceKey && state.dualGraphDegenerations.length
       ? state.dualGraphDegenerations
       : enumerateDualGraphDivisorDegenerations(graphData);
-    return {
-      isValid: true,
-      source: normalizedStableGraphFromDualGraph(graphData),
-      sourceKey,
-      invariants: inv,
-      count: divisors.length,
-      divisors: divisors.map((degeneration, index) => exportDualGraphDegenerationRecord(degeneration, index))
-    };
+    return conciseDualGraphDivisorExport(divisors);
   }
 
-  function exportDualGraphDegenerationRecord(degeneration, index) {
-    const graphData = degeneration.graphData;
-    return {
-      id: degeneration.id || `deg${index}`,
-      index,
-      kind: degeneration.kind,
-      label: degeneration.label,
-      emphasis: degeneration.emphasis || null,
-      invariants: dualGraphInvariants(graphData),
-      vertices: graphData.vertices.map((vertex) => ({
-        index: vertex.index,
-        genus: Number(vertex.genus) || 0
-      })),
-      edges: graphData.edges.map((edge, edgeIndex) => ({
-        index: edgeIndex,
-        from: edge.from,
-        to: edge.to
-      })),
-      halfEdges: graphData.legs.map((leg, legIndex) => ({
-        index: legIndex,
-        vertex: leg.vertex,
-        key: leg.key || '',
-        label: leg.label || ''
-      }))
-    };
+  function conciseDualGraphDivisorExport(divisors) {
+    const records = divisors.map((degeneration) => exportStandardDualGraphRecord(degeneration.graphData));
+    const graphs = records.map((record) => record.text);
+    const decorationKeys = records.map((record) => stableDecorationKey(record.decorations));
+    const firstDecorationKey = decorationKeys[0] || '{}';
+    const hasDecorations = firstDecorationKey !== '{}';
+    const sharedDecorations = decorationKeys.every((key) => key === firstDecorationKey);
+    if (!hasDecorations) return graphs;
+    if (sharedDecorations) {
+      return {
+        decorations: { ...records[0].decorations },
+        divisors: graphs
+      };
+    }
+    return records.map((record) => conciseStandardDualGraphRecordExport(record));
   }
 
   function setDualGraphDegenerationsWide(enabled) {
@@ -4498,15 +5562,17 @@
     return {
       vertices: graphData.vertices.map((vertex) => ({
         index: vertex.index,
-        genus: vertexDecorationValue(vertex.index)
+        genus: Number.isInteger(Number(vertex.genus)) ? Number(vertex.genus) : 0
       })),
       edges: graphData.edges.map((edge) => ({
         from: edge.from,
-        to: edge.to
+        to: edge.to,
+        halfEdges: Array.isArray(edge.halfEdges) ? edge.halfEdges.slice(0, 2) : undefined
       })),
       legs: graphData.legs.map((leg) => ({
         vertex: leg.vertex,
-        label: leg.label || halfEdgeDecorationValue(halfEdgeDecorationKey(leg)),
+        halfEdge: Number.isInteger(Number(leg.halfEdge)) ? Number(leg.halfEdge) : null,
+        label: leg.label || '',
         key: halfEdgeDecorationKey(leg)
       }))
     };
@@ -4674,7 +5740,7 @@
 
   function stableGraphCanonicalKey(graphData) {
     const vertices = graphData.vertices
-      .map((vertex) => `${vertex.index}:${vertex.genus}`)
+      .map((vertex) => `${vertex.index}:${Number.isInteger(Number(vertex.genus)) ? Number(vertex.genus) : 0}`)
       .sort()
       .join('|');
     const edges = graphData.edges
@@ -4682,7 +5748,7 @@
       .sort()
       .join('|');
     const legs = graphData.legs
-      .map((leg) => `${leg.vertex}:${leg.label || leg.key || ''}`)
+      .map((leg) => `${leg.vertex}:${Number.isInteger(Number(leg.halfEdge)) ? Number(leg.halfEdge) : (leg.key || '')}`)
       .sort()
       .join('|');
     return `${vertices}::${edges}::${legs}`;
@@ -4733,21 +5799,31 @@
       return {
         isValid: false,
         status: graphData.reason || 'Not available',
+        format: 'Graph : [genera] [half-edges at vertices] [(edge half-edge pairs)]',
+        graph: null,
+        text: '',
+        decorations: {},
         vertices: [],
         edges: [],
         legs: []
       };
     }
+    const standard = exportStandardDualGraphRecord(graphData);
 
     return {
       isValid: true,
       status: `${graphData.vertices.length} vertices, ${graphData.edges.length} edges, ${graphData.legs.length} legs`,
+      format: standard.format,
+      graph: standard.graph,
+      text: standard.text,
+      decorations: standard.decorations,
       vertices: graphData.vertices.map((vertex) => ({
         index: vertex.index,
-        row: vertex.row + 1,
-        col: vertex.col + 1,
-        decoration: vertexDecorationValue(vertex.index),
-        spokes: normalizeVertexTile(state.tiles[vertex.index]).map((dir) => ({
+        row: Number.isInteger(Number(vertex.row)) ? Number(vertex.row) + 1 : null,
+        col: Number.isInteger(Number(vertex.col)) ? Number(vertex.col) + 1 : null,
+        sourceIndex: Number.isInteger(Number(vertex.sourceIndex)) ? Number(vertex.sourceIndex) : null,
+        genus: Number.isInteger(Number(vertex.genus)) ? Number(vertex.genus) : 0,
+        spokes: dualGraphVertexSpokes(vertex).map((dir) => ({
           dir,
           name: lattice.dirNames[dir]
         })),
@@ -4757,14 +5833,9 @@
         index: edgeIndex,
         from: edge.from,
         to: edge.to,
-        fromSpoke: {
-          dir: edge.fromSpoke,
-          name: lattice.dirNames[edge.fromSpoke]
-        },
-        toSpoke: {
-          dir: edge.toSpoke,
-          name: lattice.dirNames[edge.toSpoke]
-        },
+        halfEdges: Array.isArray(edge.halfEdges) ? edge.halfEdges.slice(0, 2) : [edge.fromHalfEdge, edge.toHalfEdge].filter((value) => Number.isInteger(Number(value))),
+        fromSpoke: dualGraphSpokeExport(edge.fromSpoke, lattice),
+        toSpoke: dualGraphSpokeExport(edge.toSpoke, lattice),
         path: exportDualGraphPath(edge.path, lattice),
         layoutControls: edge.from === edge.to
           ? [`e${edgeIndex}_0`, `e${edgeIndex}_1`, `e${edgeIndex}_2`].map(dualGraphNodeExport).filter(Boolean)
@@ -4773,12 +5844,10 @@
       legs: graphData.legs.map((leg, legIndex) => ({
         index: legIndex,
         vertex: leg.vertex,
-        spoke: {
-          dir: leg.spoke,
-          name: lattice.dirNames[leg.spoke]
-        },
+        halfEdge: leg.halfEdge,
+        spoke: dualGraphSpokeExport(leg.spoke, lattice),
         key: halfEdgeDecorationKey(leg),
-        label: leg.label || halfEdgeDecorationValue(halfEdgeDecorationKey(leg)),
+        label: leg.label || '',
         path: exportDualGraphPath(leg.path, lattice),
         layout: dualGraphNodeExport(`l${legIndex}`)
       }))
@@ -4789,32 +5858,137 @@
     const graphData = collectDualGraphData(report);
     if (!graphData.isValid) {
       return {
-        vertices: [],
-        edges: [],
-        halfEdges: []
+        reason: graphData.reason || 'dual graph unavailable',
+        graph: '',
+        decorations: {}
       };
     }
 
-    const vertexIds = new Map();
-    graphData.vertices.forEach((vertex, vertexIndex) => {
-      vertexIds.set(vertex.index, vertexIndex + 1);
+    return conciseStandardDualGraphExport(graphData);
+  }
+
+  function dualGraphVertexSpokes(vertex) {
+    if (Array.isArray(vertex.spokes) && vertex.spokes.length) return vertex.spokes.slice();
+    const sourceIndex = Number(vertex.sourceIndex);
+    if (Number.isInteger(sourceIndex) && sourceIndex >= 0 && sourceIndex < state.tiles.length) {
+      return normalizeVertexTile(state.tiles[sourceIndex]);
+    }
+    return [];
+  }
+
+  function dualGraphSpokeExport(dir, lattice) {
+    const value = Number(dir);
+    if (!Number.isInteger(value)) return { dir: null, name: '' };
+    return {
+      dir: value,
+      name: lattice.dirNames[value] || ''
+    };
+  }
+
+  function exportStandardDualGraphRecord(graphData) {
+    const graph = standardDualGraphFromGraphData(graphData);
+    const normalized = normalizeStandardDualGraphInput(graph);
+    if (!normalized.isValid) {
+      return {
+        format: 'Graph : [genera] [half-edges at vertices] [(edge half-edge pairs)]',
+        graph: null,
+        text: '',
+        decorations: {}
+      };
+    }
+    return {
+      format: 'Graph : [genera] [half-edges at vertices] [(edge half-edge pairs)]',
+      graph: standardDualGraphPlain(normalized),
+      text: formatStandardDualGraphText(normalized),
+      decorations: { ...normalized.decorations }
+    };
+  }
+
+  function conciseStandardDualGraphExport(graphData) {
+    return conciseStandardDualGraphRecordExport(exportStandardDualGraphRecord(graphData));
+  }
+
+  function conciseStandardDualGraphRecordExport(standard) {
+    const decorations = standard.decorations || {};
+    return Object.keys(decorations).length
+      ? { graph: standard.text, decorations }
+      : standard.text;
+  }
+
+  function formatConciseDualGraphPayload(payload) {
+    if (typeof payload === 'string') return payload;
+    if (Array.isArray(payload) && payload.every((entry) => typeof entry === 'string')) {
+      return payload.join('\n');
+    }
+    return JSON.stringify(payload, null, 2);
+  }
+
+  function stableDecorationKey(decorations) {
+    const entries = Object.entries(decorations || {})
+      .sort(([left], [right]) => Number(left) - Number(right));
+    return JSON.stringify(Object.fromEntries(entries));
+  }
+
+  function standardDualGraphFromGraphData(graphData) {
+    const vertexOrder = graphData.vertices.map((vertex) => vertex.index);
+    const vertexPosition = new Map(vertexOrder.map((index, position) => [index, position]));
+    const genera = graphData.vertices.map((vertex) => (
+      Number.isInteger(Number(vertex.genus)) ? Number(vertex.genus) : 0
+    ));
+    const legs = genera.map(() => []);
+    const edges = [];
+    const decorations = {};
+    let nextHalfEdge = 1;
+    const usedHalfEdges = new Set();
+    const reservedHalfEdges = new Set();
+    graphData.edges.forEach((edge) => {
+      const edgeHalfEdges = Array.isArray(edge.halfEdges) ? edge.halfEdges : [edge.fromHalfEdge, edge.toHalfEdge];
+      edgeHalfEdges.forEach((halfEdge) => {
+        const value = Number(halfEdge);
+        if (Number.isInteger(value)) reservedHalfEdges.add(value);
+      });
+    });
+    graphData.legs.forEach((leg) => {
+      const value = Number(leg.halfEdge);
+      if (Number.isInteger(value)) reservedHalfEdges.add(value);
     });
 
-    return {
-      vertices: graphData.vertices.map((vertex, vertexIndex) => ({
-        id: vertexIndex + 1,
-        decoration: vertexDecorationValue(vertex.index)
-      })),
-      edges: graphData.edges.map((edge) => ({
-        from: vertexIds.get(edge.from),
-        to: vertexIds.get(edge.to)
-      })),
-      halfEdges: graphData.legs.map((leg) => ({
-        vertex: vertexIds.get(leg.vertex),
-        key: halfEdgeDecorationKey(leg),
-        label: leg.label || halfEdgeDecorationValue(halfEdgeDecorationKey(leg))
-      }))
+    const allocateHalfEdge = (preferred) => {
+      const candidate = Number(preferred);
+      if (Number.isInteger(candidate) && !usedHalfEdges.has(candidate)) {
+        usedHalfEdges.add(candidate);
+        nextHalfEdge = Math.max(nextHalfEdge, candidate + 1);
+        return candidate;
+      }
+      while (usedHalfEdges.has(nextHalfEdge) || reservedHalfEdges.has(nextHalfEdge)) nextHalfEdge += 1;
+      const halfEdge = nextHalfEdge;
+      usedHalfEdges.add(halfEdge);
+      nextHalfEdge += 1;
+      return halfEdge;
     };
+
+    graphData.edges.forEach((edge) => {
+      const from = vertexPosition.get(edge.from);
+      const to = vertexPosition.get(edge.to);
+      if (from == null || to == null) return;
+      const edgeHalfEdges = Array.isArray(edge.halfEdges) ? edge.halfEdges : [edge.fromHalfEdge, edge.toHalfEdge];
+      const fromHalfEdge = allocateHalfEdge(edgeHalfEdges[0]);
+      const toHalfEdge = allocateHalfEdge(edgeHalfEdges[1]);
+      legs[from].push(fromHalfEdge);
+      legs[to].push(toHalfEdge);
+      edges.push([fromHalfEdge, toHalfEdge]);
+    });
+
+    graphData.legs.forEach((leg) => {
+      const vertex = vertexPosition.get(leg.vertex);
+      if (vertex == null) return;
+      const halfEdge = allocateHalfEdge(leg.halfEdge);
+      legs[vertex].push(halfEdge);
+      const label = normalizeHalfEdgeDecoration(leg.label);
+      if (label) decorations[halfEdge] = label;
+    });
+
+    return { genera, legs, edges, decorations };
   }
 
   function exportDualGraphPath(path, lattice) {
@@ -4943,7 +6117,7 @@
     graphData.vertices.forEach((vertex) => {
       const node = layout.nodeMap.get(`v${vertex.index}`);
       if (node) {
-        drawDualGraphVertex(ctx, node.x, node.y, vertexDecorationValue(vertex.index));
+        drawDualGraphVertex(ctx, node.x, node.y, Number.isInteger(Number(vertex.genus)) ? Number(vertex.genus) : 0);
       }
     });
   }
@@ -5046,7 +6220,7 @@
         center,
         radius,
         color: algebraicCurveColor(index),
-        decoration: vertexDecorationValue(vertex.index),
+        decoration: Number.isInteger(Number(vertex.genus)) ? Number(vertex.genus) : 0,
         incidences: [],
         pathPoints: []
       };
@@ -6236,6 +7410,7 @@
       const node = layoutMap ? layoutMap.get(`v${vertex.index}`) : null;
       return {
         index: vertex.index,
+        genus: Number.isInteger(Number(vertex.genus)) ? Number(vertex.genus) : 0,
         x: node ? node.x : vertex.col,
         y: node ? node.y : vertex.row
       };
@@ -6274,7 +7449,7 @@
         x: point.x,
         y: point.y,
         color: riemannSurfaceColor(surfaces.size),
-        genus: vertexDecorationValue(source.index),
+        genus: Number.isInteger(Number(source.genus)) ? Number(source.genus) : 0,
         arms: [],
         marks: []
       });
@@ -7480,7 +8655,8 @@
 
     const samples = graphData.vertices
       .map((vertex) => {
-        const cell = geometry.cells[vertex.index];
+        const sourceIndex = Number.isInteger(Number(vertex.sourceIndex)) ? Number(vertex.sourceIndex) : vertex.index;
+        const cell = geometry.cells[sourceIndex];
         return cell ? { index: vertex.index, x: cell.x, y: cell.y } : null;
       })
       .filter(Boolean);
@@ -9628,7 +10804,7 @@
   function exportDualGraphFromVisualization() {
     const report = analyze();
     const graphData = collectDualGraphData(report);
-    refs.exportOut.value = JSON.stringify(buildDualGraphOnlyExport(report), null, 2);
+    refs.exportOut.value = formatConciseDualGraphPayload(buildDualGraphOnlyExport(report));
     if (refs.exportCard) refs.exportCard.classList.remove('collapsed');
     if (refs.exportOut) {
       refs.exportOut.focus();
@@ -9683,6 +10859,7 @@
     syncDualGraphCanvasVisibility();
     syncRiemannNodeControls();
     refs.wrappedViewMode.value = state.wrappedViewMode;
+    syncImportPresetControls();
     updateInputModePanels();
     updateDrawModeControls();
     updateInputModeLock();
