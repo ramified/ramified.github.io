@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sheaf Calculator</title>
+  <link rel="stylesheet" href="young_diagrams.css">
+  <style>
+    .sheaf-layout {
+      max-width: 1240px;
+      grid-template-columns: minmax(0, 1fr) 380px;
+    }
+
+    .sheaf-workspace {
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .sheaf-control-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .sheaf-control-panel {
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #fffdf8;
+      padding: 12px;
+      min-width: 0;
+    }
+
+    .sheaf-control-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .sheaf-field-row {
+      display: grid;
+      grid-template-columns: 118px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+      min-width: 0;
+    }
+
+    .sheaf-field-row[hidden],
+    .sheaf-note[hidden] {
+      display: none !important;
+    }
+
+    .sheaf-field-row .input-label {
+      margin: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sheaf-select,
+    .sheaf-input {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+    }
+
+    .sheaf-select {
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+
+    .sheaf-input[type=number] {
+      text-align: center;
+    }
+
+    .sheaf-select:focus,
+    .sheaf-input:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .sheaf-note {
+      margin-top: 8px;
+      padding-top: 7px;
+      border-top: 1px dotted var(--border);
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+
+    .sheaf-stage {
+      position: relative;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #fffdf8;
+      min-height: 248px;
+      overflow: hidden;
+    }
+
+    #sheaf-canvas {
+      width: 100% !important;
+      height: auto !important;
+      min-height: 248px;
+      display: block;
+      cursor: default;
+    }
+
+    .sheaf-canvas-labels {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      color: var(--text);
+    }
+
+    .sheaf-canvas-label {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      max-width: 230px;
+      text-align: center;
+      line-height: 1.28;
+      color: var(--text);
+      font-size: 1rem;
+      overflow-wrap: anywhere;
+    }
+
+    .sheaf-canvas-label small {
+      display: block;
+      margin-bottom: 3px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.66rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .sheaf-canvas-label .subline {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+    }
+
+    .sheaf-canvas-label mjx-container {
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    .sheaf-underbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+
+    .sheaf-underbar span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .sheaf-class-scroll {
+      max-height: min(620px, 72vh);
+      overflow: auto;
+      padding: 0 10px 8px 0;
+      scrollbar-gutter: stable;
+      scrollbar-color: color-mix(in srgb, var(--accent) 68%, var(--surface)) var(--surface);
+      scrollbar-width: thin;
+    }
+
+    .sheaf-class-scroll::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+
+    .sheaf-class-scroll::-webkit-scrollbar-track {
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+    }
+
+    .sheaf-class-scroll::-webkit-scrollbar-thumb {
+      background: color-mix(in srgb, var(--accent) 68%, var(--surface));
+      border: 2px solid var(--surface);
+      border-radius: 999px;
+    }
+
+    .sheaf-formula-row {
+      display: grid;
+      grid-template-columns: 74px minmax(0, 1fr);
+      column-gap: 10px;
+      padding: 7px 0;
+      border-bottom: 1px dotted var(--border);
+      align-items: start;
+    }
+
+    .sheaf-formula-row:last-child {
+      border-bottom: none;
+    }
+
+    .sheaf-formula-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      white-space: nowrap;
+      padding-top: 2px;
+    }
+
+    .sheaf-formula-value {
+      min-width: 0;
+      color: var(--text);
+      font-size: 0.88rem;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }
+
+    .sheaf-formula-value mjx-container {
+      overflow-x: auto;
+      overflow-y: hidden;
+      max-width: 100%;
+      padding-bottom: 2px;
+    }
+
+    .sheaf-inline-row {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .sheaf-inline-row .input-label {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .sheaf-lower-label {
+      text-transform: none !important;
+      letter-spacing: 0;
+    }
+
+    .sheaf-export-actions {
+      margin-top: 8px;
+    }
+
+    .hodge-grid {
+      display: block;
+      max-height: min(520px, 62vh);
+      overflow: auto;
+      padding: 4px 8px 10px;
+      cursor: pointer;
+      scrollbar-gutter: stable;
+      scrollbar-color: color-mix(in srgb, var(--accent) 68%, var(--surface)) var(--surface);
+      scrollbar-width: thin;
+    }
+
+    .hodge-expanded-toggle {
+      margin: 0;
+      padding: 0;
+    }
+
+    .hodge-grid:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+
+    .hodge-frame {
+      width: max-content;
+      margin-inline: auto;
+    }
+
+    .hodge-board {
+      --hodge-cell: 20px;
+      --hodge-row: var(--hodge-cell);
+      --hodge-total-cols: var(--hodge-cols);
+      display: grid;
+      grid-template-columns: repeat(var(--hodge-cols), var(--hodge-cell));
+      grid-template-rows: repeat(var(--hodge-rows), var(--hodge-row));
+      align-items: center;
+      justify-items: center;
+      min-width: max-content;
+    }
+
+    .hodge-board.is-expanded {
+      grid-template-columns: repeat(var(--hodge-total-cols), var(--hodge-cell)) 18px max-content;
+    }
+
+    #hodge-wide-host {
+      padding: 0 16px 16px;
+    }
+
+    #hodge-wide-host[hidden] {
+      display: none !important;
+    }
+
+    #hodge-card.wide {
+      margin-top: 16px;
+    }
+
+    #hodge-card.wide .hodge-grid {
+      max-height: min(70vh, 720px);
+      padding-right: 8px;
+    }
+
+    .hodge-card-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+      padding-bottom: 7px;
+      border-bottom: 1px dotted var(--border);
+    }
+
+    .hodge-cell-size-control,
+    .hodge-offset-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      white-space: nowrap;
+    }
+
+    .hodge-cell-size-control input[type=range],
+    .hodge-offset-control input[type=range] {
+      width: 84px;
+      accent-color: var(--accent);
+    }
+
+    .hodge-cell-size-control output,
+    .hodge-offset-control output {
+      min-width: 42px;
+      color: var(--text);
+      text-align: right;
+    }
+
+    .hodge-wide-toggle {
+      display: none;
+      padding: 4px 10px;
+      font-size: 0.76rem;
+    }
+
+    @media (min-width: 960px) {
+      .hodge-wide-toggle {
+        display: inline-flex;
+      }
+    }
+
+    .hodge-cell {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      min-height: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text);
+      font-size: 0.9rem;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .hodge-cell mjx-container {
+      max-width: none;
+      overflow: visible;
+    }
+
+    .hodge-betti {
+      position: relative;
+      z-index: 1;
+      justify-self: start;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    .hodge-euler {
+      position: relative;
+      z-index: 1;
+      justify-self: start;
+      color: var(--accent2);
+      font-size: 0.9rem;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    .hodge-chi {
+      position: relative;
+      z-index: 1;
+      justify-self: center;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    .hodge-betti-line {
+      align-self: center;
+      justify-self: stretch;
+      border-top: 1px dotted color-mix(in srgb, var(--muted) 72%, transparent);
+      height: 0;
+      min-width: 0;
+      margin-inline: calc(var(--hodge-cell) * 0.24);
+      pointer-events: none;
+      position: relative;
+      z-index: 0;
+    }
+
+    .hodge-diagonal-guides {
+      align-self: stretch;
+      justify-self: stretch;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      position: relative;
+      z-index: 0;
+      overflow: visible;
+    }
+
+    .hodge-diagonal-guides line {
+      stroke: color-mix(in srgb, var(--muted) 72%, transparent);
+      stroke-width: 0.055;
+      stroke-linecap: round;
+      stroke-dasharray: 0.08 0.18;
+    }
+
+    .sheaf-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 21px;
+      padding: 1px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text);
+      background: rgba(255,255,255,0.55);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 860px) {
+      .sheaf-layout,
+      .sheaf-control-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .sheaf-field-row,
+      .sheaf-inline-row {
+        grid-template-columns: 96px minmax(0, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Sheaf Calculator</h1>
+  <span><a href="young_diagrams.html">Young Diagram Calculator</a> &middot; <a href="double_young_diagram.html">Young Diagram^2 Calculator</a> &middot; <a href="mosaic_calculator.html">Mosaic Calculator</a> &middot; <a href="matrix_calculator.html">Matrix Calculator</a></span>
+</header>
+
+<main class="layout sheaf-layout">
+  <section class="canvas-panel">
+    <header class="panel-title">
+      <span class="panel-title-text">Variety and Sheaf</span>
+      <div class="canvas-toolbar" aria-label="Sheaf calculator controls">
+        <span class="sheaf-badge" id="object-badge">\(X,\mathcal{F}\)</span>
+        <span class="canvas-size-inline" aria-label="Dimension of X">
+          <label title="Dimension of X">
+            <span>\(\dim X\)</span>
+            <input type="number" id="variety-dim" min="0" max="8" value="3">
+          </label>
+        </span>
+      </div>
+    </header>
+
+    <div class="sheaf-workspace">
+      <div class="sheaf-control-grid">
+        <section class="sheaf-control-panel" aria-label="Variety controls">
+          <div class="sheaf-control-title">Variety</div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="variety-type">Type</label>
+            <select id="variety-type" class="sheaf-select">
+              <option value="abstract" selected>Abstract variety</option>
+              <option value="projective">Projective space ℙⁿ</option>
+              <option value="complete-intersection">Complete intersection in ℙⁿ</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row" id="projective-n-row" hidden>
+            <label class="input-label" for="projective-n">\(n\)</label>
+            <input id="projective-n" class="sheaf-input" type="number" min="0" max="8" value="3">
+          </div>
+          <div class="sheaf-field-row" id="ci-ambient-row" hidden>
+            <label class="input-label" for="ci-ambient">ambient \(N\)</label>
+            <input id="ci-ambient" class="sheaf-input" type="number" min="0" max="12" value="3">
+          </div>
+          <div class="sheaf-field-row" id="ci-degrees-row" hidden>
+            <label class="input-label" for="ci-degrees">degrees</label>
+            <input id="ci-degrees" class="sheaf-input" type="text" value="" spellcheck="false" autocomplete="off" placeholder="2, 3">
+          </div>
+          <div class="sheaf-note" id="ci-note" hidden>\(\mathbb{P}^N\) is represented by the complete intersection with no equations.</div>
+        </section>
+
+        <section class="sheaf-control-panel" aria-label="Sheaf controls">
+          <div class="sheaf-control-title">Sheaf</div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="sheaf-type">Type</label>
+            <select id="sheaf-type" class="sheaf-select">
+              <option value="abstract" selected>Abstract sheaf</option>
+              <option value="tangent">Tangent sheaf Tₓ</option>
+              <option value="cotangent">Cotangent sheaf Ω¹ₓ</option>
+              <option value="canonical">Canonical sheaf Kₓ</option>
+              <option value="twist" id="sheaf-twist-option">Oₓ(r)</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row" id="twist-row" hidden>
+            <label class="input-label sheaf-lower-label" for="twist-r">r</label>
+            <input id="twist-r" class="sheaf-input" type="number" min="-24" max="24" value="1">
+          </div>
+          <div class="sheaf-field-row" id="rank-row">
+            <label class="input-label" for="rank-symbol">rank</label>
+            <input id="rank-symbol" class="sheaf-input" type="text" value="rho" maxlength="16" spellcheck="false" autocomplete="off">
+          </div>
+        </section>
+      </div>
+
+      <div class="sheaf-stage">
+        <canvas id="sheaf-canvas" width="880" height="280" aria-label="Sheaf calculator overview"></canvas>
+        <div id="sheaf-canvas-labels" class="sheaf-canvas-labels" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <div class="sheaf-underbar">
+      <span id="sheaf-status">ready</span>
+        <span id="ring-summary">\(A^*(X)_{\le 3}\)</span>
+    </div>
+    <section id="hodge-wide-host" hidden></section>
+  </section>
+
+  <aside class="side" id="cards">
+    <section class="card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Characteristic Classes</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="sheaf-inline-row" id="basis-row">
+          <span class="input-label">basis</span>
+          <select id="abstract-basis" class="sheaf-select">
+            <option value="chern" selected>Chern classes</option>
+            <option value="character">Chern character</option>
+          </select>
+        </div>
+        <div id="class-chart" class="sheaf-class-scroll"></div>
+        <div id="class-message" class="err"></div>
+      </div>
+    </section>
+
+    <span id="hodge-side-anchor" hidden></span>
+    <section class="card" id="hodge-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Hodge Numbers</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="hodge-card-actions">
+          <label class="opt-row hodge-expanded-toggle">
+            <input type="checkbox" id="hodge-expanded">
+            Expanded view
+          </label>
+          <label class="hodge-cell-size-control" for="hodge-cell-size">
+            <span>cell</span>
+            <input type="range" id="hodge-cell-size" min="15" max="30" step="1" value="20">
+            <output id="hodge-cell-size-value" for="hodge-cell-size">20px</output>
+          </label>
+          <label class="hodge-offset-control" for="hodge-chi-offset-a">
+            <span>\(\chi\) shift</span>
+            <input type="range" id="hodge-chi-offset-a" min="-8" max="8" step="1" value="-1">
+            <output id="hodge-chi-offset-a-value" for="hodge-chi-offset-a">-n-1</output>
+          </label>
+          <button class="btn btn-ghost hodge-wide-toggle" id="toggle-hodge-wide" type="button" aria-pressed="false">wide</button>
+        </div>
+        <div id="hodge-chart" class="hodge-grid" role="button" tabindex="0" aria-expanded="false"></div>
+        <div id="hodge-message" class="hint"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Geometry</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="stat-row"><span class="stat-label">\(X\)</span><span class="stat-value" id="out-variety">\(X\)</span></div>
+        <div class="stat-row"><span class="stat-label">\(\dim X\)</span><span class="stat-value" id="out-dim">\(3\)</span></div>
+        <div class="stat-row"><span class="stat-label">\(\mathbb{P}^N\)</span><span class="stat-value" id="out-ambient">\(\text{abstract}\)</span></div>
+        <div class="stat-row"><span class="stat-label">\(\operatorname{codim}X\)</span><span class="stat-value" id="out-codim">\(-\)</span></div>
+        <div class="stat-row"><span class="stat-label">\(E\)</span><span class="stat-value" id="out-sheaf">\(\mathcal{F}\)</span></div>
+        <div class="stat-row"><span class="stat-label">\(\operatorname{rk}E\)</span><span class="stat-value" id="out-rank">\(\rho\)</span></div>
+      </div>
+    </section>
+
+    <section class="card collapsed">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Formula Notes</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="stat-row"><span class="stat-label">\(\mathbb{P}^n\)</span><span class="stat-value">\(\operatorname{ch}(T)=(n+1)e^H-1\)</span></div>
+        <div class="stat-row"><span class="stat-label">CI</span><span class="stat-value">\(\operatorname{ch}(T_X)=(N+1)e^H-1-\sum_i e^{d_iH}\)</span></div>
+        <div class="stat-row"><span class="stat-label">\(K_X\)</span><span class="stat-value">\(\mathcal{O}_X(\sum_i d_i-N-1)\)</span></div>
+        <div class="hint">All series are truncated above \(\dim X\).</div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="export-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="sheaf-inline-row">
+          <span class="input-label">Format</span>
+          <select id="export-format" class="sheaf-select">
+            <option value="latex" selected>LaTeX</option>
+            <option value="plain">Plain text</option>
+            <option value="sage">SageMath note</option>
+          </select>
+        </div>
+        <div class="action-row sheaf-export-actions">
+          <button class="btn" id="refresh-export" type="button">refresh</button>
+          <button class="btn btn-ghost" id="copy-export" type="button">copy</button>
+        </div>
+        <textarea id="export-out" readonly></textarea>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<footer>
+  Browser-side sheaf calculator styled with the shared Young diagram UI.
+</footer>
+
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]']],
+      processEscapes: true
+    },
+    options: {
+      skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+    }
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+<script src="sheaf_calculator.js"></script>
+</body>
+</html>
