@@ -18,28 +18,80 @@
       min-width: 0;
     }
 
-    .sheaf-control-grid {
+    .sheaf-object-button {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+    }
+
+    .sheaf-input-toolbar {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: 12px;
-      align-items: start;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding-bottom: 9px;
+      border-bottom: 1px dotted var(--border);
     }
 
-    .sheaf-control-panel {
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      background: #fffdf8;
-      padding: 12px;
+    .sheaf-input-editor[hidden] {
+      display: none !important;
+    }
+
+    .sheaf-input-add {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .sheaf-input-add .sheaf-select {
+      flex: 1 1 150px;
+    }
+
+    .sheaf-input-add .sheaf-select[hidden] {
+      display: none !important;
+    }
+
+    .sheaf-input-add .sheaf-mode-select {
+      flex: 0 0 112px;
+    }
+
+    .sheaf-modify-warning {
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-style: italic;
+    }
+
+    .sheaf-modify-warning[hidden] {
+      display: none !important;
+    }
+
+    .sheaf-input-options {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(150px, 1.25fr);
+      gap: 8px;
+      align-items: center;
+    }
+
+    .sheaf-input-options[hidden] {
+      display: none !important;
+    }
+
+    .sheaf-input-options .opt-row {
+      margin: 0;
       min-width: 0;
+      white-space: nowrap;
     }
 
-    .sheaf-control-title {
+    .sheaf-editor-title {
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.72rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+      letter-spacing: 0;
+      text-transform: none;
       color: var(--muted);
       margin-bottom: 8px;
+    }
+
+    .sheaf-editor-title mjx-container {
+      font-size: 1em !important;
     }
 
     .sheaf-field-row {
@@ -52,6 +104,12 @@
     }
 
     .sheaf-field-row[hidden],
+    .sheaf-inline-row[hidden],
+    .sheaf-chart-actions[hidden],
+    .hodge-card-actions[hidden],
+    .sheaf-class-scroll[hidden],
+    .hodge-grid[hidden],
+    .ci-degree-sliders[hidden],
     .sheaf-note[hidden] {
       display: none !important;
     }
@@ -91,6 +149,11 @@
       border-color: var(--accent);
     }
 
+    .sheaf-object-button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
     .sheaf-note {
       margin-top: 8px;
       padding-top: 7px;
@@ -107,6 +170,16 @@
       background: #fffdf8;
       min-height: 248px;
       overflow: hidden;
+    }
+
+    .canvas-clear-button {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      z-index: 2;
+      padding: 4px 10px;
+      font-size: 0.74rem;
+      background: rgba(255,253,248,0.88);
     }
 
     #sheaf-canvas {
@@ -128,35 +201,46 @@
     .sheaf-canvas-label {
       position: absolute;
       transform: translate(-50%, -50%);
-      max-width: 230px;
+      max-width: 260px;
       text-align: center;
       line-height: 1.28;
       color: var(--text);
       font-size: 1rem;
       overflow-wrap: anywhere;
+      pointer-events: auto;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+      padding: 2px 8px;
+      border: 1px solid transparent;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.68);
+      will-change: left, top;
     }
 
-    .sheaf-canvas-label small {
-      display: block;
-      margin-bottom: 3px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.66rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--muted);
+    .sheaf-canvas-label.is-active {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+      background: rgba(255,255,255,0.86);
     }
 
-    .sheaf-canvas-label .subline {
-      display: block;
-      margin-top: 3px;
-      color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
+    .sheaf-canvas-label.is-sheaf {
+      color: var(--accent2);
+    }
+
+    .sheaf-canvas-label.is-variety {
+      color: var(--accent);
     }
 
     .sheaf-canvas-label mjx-container {
       max-width: 100%;
       overflow: hidden;
+    }
+
+    .sheaf-canvas-label.is-dragging {
+      cursor: grabbing;
+      z-index: 3;
+      box-shadow: 0 4px 12px rgba(40, 34, 20, 0.14);
     }
 
     .sheaf-underbar {
@@ -255,8 +339,72 @@
       letter-spacing: 0;
     }
 
+    .ci-equation-count-control {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 44px;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .ci-equation-count-control input[type=range],
+    .ci-degree-slider-row input[type=range] {
+      width: 100%;
+      min-width: 0;
+      accent-color: var(--accent);
+    }
+
+    .ci-equation-count-control output,
+    .ci-degree-slider-row output {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      color: var(--text);
+      text-align: right;
+    }
+
+    .ci-degree-sliders {
+      display: grid;
+      gap: 7px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .ci-degree-slider-row {
+      display: grid;
+      grid-template-columns: 64px minmax(0, 1fr) 44px;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .ci-degree-slider-row span {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      white-space: nowrap;
+    }
+
+    .curve-genus-input {
+      text-align: center;
+    }
+
     .sheaf-export-actions {
       margin-top: 8px;
+    }
+
+    .sheaf-chart-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-bottom: 8px;
+      padding-bottom: 7px;
+      border-bottom: 1px dotted var(--border);
+    }
+
+    .sheaf-chart-export {
+      padding: 4px 10px;
+      font-size: 0.76rem;
     }
 
     .hodge-grid {
@@ -328,8 +476,7 @@
       border-bottom: 1px dotted var(--border);
     }
 
-    .hodge-cell-size-control,
-    .hodge-offset-control {
+    .hodge-cell-size-control {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -339,14 +486,12 @@
       white-space: nowrap;
     }
 
-    .hodge-cell-size-control input[type=range],
-    .hodge-offset-control input[type=range] {
+    .hodge-cell-size-control input[type=range] {
       width: 84px;
       accent-color: var(--accent);
     }
 
-    .hodge-cell-size-control output,
-    .hodge-offset-control output {
+    .hodge-cell-size-control output {
       min-width: 42px;
       color: var(--text);
       text-align: right;
@@ -356,6 +501,10 @@
       display: none;
       padding: 4px 10px;
       font-size: 0.76rem;
+    }
+
+    .hodge-export-button {
+      margin-left: auto;
     }
 
     @media (min-width: 960px) {
@@ -393,6 +542,12 @@
       font-size: 0.9rem;
       line-height: 1.25;
       white-space: nowrap;
+    }
+
+    .hodge-betti.is-number,
+    .hodge-euler.is-number {
+      justify-self: stretch;
+      text-align: right;
     }
 
     .hodge-euler {
@@ -460,8 +615,7 @@
     }
 
     @media (max-width: 860px) {
-      .sheaf-layout,
-      .sheaf-control-grid {
+      .sheaf-layout {
         grid-template-columns: 1fr;
       }
 
@@ -484,69 +638,15 @@
     <header class="panel-title">
       <span class="panel-title-text">Variety and Sheaf</span>
       <div class="canvas-toolbar" aria-label="Sheaf calculator controls">
-        <span class="sheaf-badge" id="object-badge">\(X,\mathcal{F}\)</span>
-        <span class="canvas-size-inline" aria-label="Dimension of X">
-          <label title="Dimension of X">
-            <span>\(\dim X\)</span>
-            <input type="number" id="variety-dim" min="0" max="8" value="3">
-          </label>
-        </span>
+        <span class="sheaf-badge" id="object-badge">\(X,\mathcal{E}\)</span>
       </div>
     </header>
 
     <div class="sheaf-workspace">
-      <div class="sheaf-control-grid">
-        <section class="sheaf-control-panel" aria-label="Variety controls">
-          <div class="sheaf-control-title">Variety</div>
-          <div class="sheaf-field-row">
-            <label class="input-label" for="variety-type">Type</label>
-            <select id="variety-type" class="sheaf-select">
-              <option value="abstract" selected>Abstract variety</option>
-              <option value="projective">Projective space ℙⁿ</option>
-              <option value="complete-intersection">Complete intersection in ℙⁿ</option>
-            </select>
-          </div>
-          <div class="sheaf-field-row" id="projective-n-row" hidden>
-            <label class="input-label" for="projective-n">\(n\)</label>
-            <input id="projective-n" class="sheaf-input" type="number" min="0" max="8" value="3">
-          </div>
-          <div class="sheaf-field-row" id="ci-ambient-row" hidden>
-            <label class="input-label" for="ci-ambient">ambient \(N\)</label>
-            <input id="ci-ambient" class="sheaf-input" type="number" min="0" max="12" value="3">
-          </div>
-          <div class="sheaf-field-row" id="ci-degrees-row" hidden>
-            <label class="input-label" for="ci-degrees">degrees</label>
-            <input id="ci-degrees" class="sheaf-input" type="text" value="" spellcheck="false" autocomplete="off" placeholder="2, 3">
-          </div>
-          <div class="sheaf-note" id="ci-note" hidden>\(\mathbb{P}^N\) is represented by the complete intersection with no equations.</div>
-        </section>
-
-        <section class="sheaf-control-panel" aria-label="Sheaf controls">
-          <div class="sheaf-control-title">Sheaf</div>
-          <div class="sheaf-field-row">
-            <label class="input-label" for="sheaf-type">Type</label>
-            <select id="sheaf-type" class="sheaf-select">
-              <option value="abstract" selected>Abstract sheaf</option>
-              <option value="tangent">Tangent sheaf Tₓ</option>
-              <option value="cotangent">Cotangent sheaf Ω¹ₓ</option>
-              <option value="canonical">Canonical sheaf Kₓ</option>
-              <option value="twist" id="sheaf-twist-option">Oₓ(r)</option>
-            </select>
-          </div>
-          <div class="sheaf-field-row" id="twist-row" hidden>
-            <label class="input-label sheaf-lower-label" for="twist-r">r</label>
-            <input id="twist-r" class="sheaf-input" type="number" min="-24" max="24" value="1">
-          </div>
-          <div class="sheaf-field-row" id="rank-row">
-            <label class="input-label" for="rank-symbol">rank</label>
-            <input id="rank-symbol" class="sheaf-input" type="text" value="rho" maxlength="16" spellcheck="false" autocomplete="off">
-          </div>
-        </section>
-      </div>
-
       <div class="sheaf-stage">
         <canvas id="sheaf-canvas" width="880" height="280" aria-label="Sheaf calculator overview"></canvas>
-        <div id="sheaf-canvas-labels" class="sheaf-canvas-labels" aria-hidden="true"></div>
+        <div id="sheaf-canvas-labels" class="sheaf-canvas-labels" aria-label="Added varieties and sheaves"></div>
+        <button class="btn btn-ghost canvas-clear-button" id="clear-canvas" type="button">clear</button>
       </div>
     </div>
 
@@ -558,9 +658,115 @@
   </section>
 
   <aside class="side" id="cards">
-    <section class="card">
+    <section class="card" id="input-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="sheaf-input-toolbar">
+          <div class="sheaf-input-add">
+            <select id="input-mode" class="sheaf-select sheaf-mode-select" aria-label="Input mode">
+              <option value="create" selected>Create</option>
+              <option value="modify">Modify</option>
+            </select>
+            <select id="add-object-kind" class="sheaf-select" aria-label="Object type to add">
+              <option value="variety">Variety</option>
+              <option value="sheaf">Sheaf</option>
+            </select>
+            <button class="btn btn-ghost sheaf-object-button" id="add-object" type="button">add</button>
+            <button class="btn btn-ghost sheaf-object-button" id="delete-object" type="button">delete</button>
+          </div>
+          <div class="sheaf-input-options" id="input-options">
+            <label class="opt-row" for="repeat-names">
+              <input type="checkbox" id="repeat-names" checked>
+              repetition
+            </label>
+            <select id="repeat-style" class="sheaf-select" aria-label="Repetition style">
+              <option value="letters" selected>X,Y,Z,W...</option>
+              <option value="prime">X,X',X''...</option>
+              <option value="paren">X,X^{(1)},X^{(2)}...</option>
+              <option value="subscript">X,X_{1},X_{2}...</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sheaf-modify-warning" id="modify-warning" hidden>select a label to modify</div>
+
+        <div id="variety-editor" class="sheaf-input-editor">
+          <div class="sheaf-editor-title" id="variety-editor-title">New variety</div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="variety-dim">dimension</label>
+            <input type="number" id="variety-dim" class="sheaf-input" min="0" max="8" value="3">
+          </div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="variety-type">Type</label>
+            <select id="variety-type" class="sheaf-select">
+              <option value="abstract" selected>Abstract variety</option>
+              <option value="curve">Curve</option>
+              <option value="projective">Projective space ℙⁿ</option>
+              <option value="complete-intersection">Complete intersection in ℙⁿ</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="variety-name">name</label>
+            <input id="variety-name" class="sheaf-input" type="text" value="X" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row" id="curve-genus-row" hidden>
+            <label class="input-label" for="curve-genus">genus</label>
+            <input id="curve-genus" class="sheaf-input curve-genus-input" type="text" value="g" maxlength="12" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row" id="ci-degrees-row" hidden>
+            <label class="input-label" for="ci-degrees">degrees</label>
+            <input id="ci-degrees" class="sheaf-input" type="text" value="" spellcheck="false" autocomplete="off" placeholder="2, 3">
+          </div>
+          <div class="sheaf-field-row" id="ci-equation-count-row" hidden>
+            <label class="input-label" for="ci-equation-count">equations</label>
+            <div class="ci-equation-count-control">
+              <input id="ci-equation-count" type="range" min="0" max="8" step="1" value="0">
+              <output id="ci-equation-count-value" for="ci-equation-count">0</output>
+            </div>
+          </div>
+          <div class="ci-degree-sliders" id="ci-degree-sliders" hidden></div>
+          <div class="sheaf-note" id="ci-note" hidden>\(\mathbb{P}^n\) is represented by the complete intersection with no equations.</div>
+        </div>
+
+        <div id="sheaf-editor" class="sheaf-input-editor" hidden>
+          <div class="sheaf-editor-title" id="sheaf-editor-title">New sheaf</div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="sheaf-type">Type</label>
+            <select id="sheaf-type" class="sheaf-select">
+              <option value="abstract" selected>Abstract sheaf</option>
+              <option value="locally-free">Locally free sheaf</option>
+              <option value="tangent">Tangent sheaf Tₓ</option>
+              <option value="cotangent">Cotangent sheaf Ω¹ₓ</option>
+              <option value="canonical">Canonical sheaf Kₓ</option>
+              <option value="twist" id="sheaf-twist-option">Oₓ(r)</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="sheaf-name">name</label>
+            <input id="sheaf-name" class="sheaf-input" type="text" value="\mathcal{E}" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row" id="sheaf-base-row" hidden>
+            <label class="input-label" for="sheaf-base-variety">base</label>
+            <select id="sheaf-base-variety" class="sheaf-select"></select>
+          </div>
+          <div class="sheaf-field-row" id="twist-row" hidden>
+            <label class="input-label sheaf-lower-label" for="twist-r">r</label>
+            <input id="twist-r" class="sheaf-input" type="number" min="-24" max="24" value="1">
+          </div>
+          <div class="sheaf-field-row" id="rank-row">
+            <label class="input-label" for="rank-symbol">rank</label>
+            <input id="rank-symbol" class="sheaf-input" type="text" value="r" maxlength="16" spellcheck="false" autocomplete="off">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card collapsed">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Characteristic Classes</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
+        <div class="sheaf-chart-actions" id="class-actions">
+          <button class="btn btn-ghost sheaf-chart-export" id="export-classes" type="button">export</button>
+        </div>
         <div class="sheaf-inline-row" id="basis-row">
           <span class="input-label">basis</span>
           <select id="abstract-basis" class="sheaf-select">
@@ -574,10 +780,10 @@
     </section>
 
     <span id="hodge-side-anchor" hidden></span>
-    <section class="card" id="hodge-card">
+    <section class="card collapsed" id="hodge-card">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Hodge Numbers</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
-        <div class="hodge-card-actions">
+        <div class="hodge-card-actions" id="hodge-actions">
           <label class="opt-row hodge-expanded-toggle">
             <input type="checkbox" id="hodge-expanded">
             Expanded view
@@ -587,37 +793,11 @@
             <input type="range" id="hodge-cell-size" min="15" max="30" step="1" value="20">
             <output id="hodge-cell-size-value" for="hodge-cell-size">20px</output>
           </label>
-          <label class="hodge-offset-control" for="hodge-chi-offset-a">
-            <span>\(\chi\) shift</span>
-            <input type="range" id="hodge-chi-offset-a" min="-8" max="8" step="1" value="-1">
-            <output id="hodge-chi-offset-a-value" for="hodge-chi-offset-a">-n-1</output>
-          </label>
           <button class="btn btn-ghost hodge-wide-toggle" id="toggle-hodge-wide" type="button" aria-pressed="false">wide</button>
+          <button class="btn btn-ghost sheaf-chart-export hodge-export-button" id="export-hodge" type="button">export</button>
         </div>
         <div id="hodge-chart" class="hodge-grid" role="button" tabindex="0" aria-expanded="false"></div>
         <div id="hodge-message" class="hint"></div>
-      </div>
-    </section>
-
-    <section class="card">
-      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Geometry</span><em class="toggle-icon">&#9662;</em></div>
-      <div class="card-body">
-        <div class="stat-row"><span class="stat-label">\(X\)</span><span class="stat-value" id="out-variety">\(X\)</span></div>
-        <div class="stat-row"><span class="stat-label">\(\dim X\)</span><span class="stat-value" id="out-dim">\(3\)</span></div>
-        <div class="stat-row"><span class="stat-label">\(\mathbb{P}^N\)</span><span class="stat-value" id="out-ambient">\(\text{abstract}\)</span></div>
-        <div class="stat-row"><span class="stat-label">\(\operatorname{codim}X\)</span><span class="stat-value" id="out-codim">\(-\)</span></div>
-        <div class="stat-row"><span class="stat-label">\(E\)</span><span class="stat-value" id="out-sheaf">\(\mathcal{F}\)</span></div>
-        <div class="stat-row"><span class="stat-label">\(\operatorname{rk}E\)</span><span class="stat-value" id="out-rank">\(\rho\)</span></div>
-      </div>
-    </section>
-
-    <section class="card collapsed">
-      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Formula Notes</span><em class="toggle-icon">&#9662;</em></div>
-      <div class="card-body">
-        <div class="stat-row"><span class="stat-label">\(\mathbb{P}^n\)</span><span class="stat-value">\(\operatorname{ch}(T)=(n+1)e^H-1\)</span></div>
-        <div class="stat-row"><span class="stat-label">CI</span><span class="stat-value">\(\operatorname{ch}(T_X)=(N+1)e^H-1-\sum_i e^{d_iH}\)</span></div>
-        <div class="stat-row"><span class="stat-label">\(K_X\)</span><span class="stat-value">\(\mathcal{O}_X(\sum_i d_i-N-1)\)</span></div>
-        <div class="hint">All series are truncated above \(\dim X\).</div>
       </div>
     </section>
 

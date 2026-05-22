@@ -4,15 +4,31 @@
   const MAX_DIMENSION = 8;
   const MAX_CI_EQUATIONS = 8;
   const MAX_AMBIENT = 16;
+  const MAX_CI_DEGREE = 99;
+  const MAX_CI_SLIDER_DEGREE = 12;
+  const VARIETY_LETTER_NAMES = ['X', 'Y', 'Z', 'W', 'V', 'U', 'T', 'S', 'R', 'Q'];
+  const SHEAF_LETTER_NAMES = ['\\mathcal{E}', '\\mathcal{F}', '\\mathcal{G}', '\\mathcal{H}', '\\mathcal{I}', '\\mathcal{J}', '\\mathcal{K}', '\\mathcal{L}', '\\mathcal{M}', '\\mathcal{N}'];
   const VARS = new Map();
   const refs = {};
   const hodgeACoeffCache = new Map();
   const state = {
     lastResult: null,
+    varieties: [],
+    sheaves: [],
+    activeVarietyId: null,
+    activeSheafId: null,
+    inputMode: 'create',
+    labelDrag: null,
+    canvasWidth: 0,
+    canvasHeight: 0,
+    draftVarietyNameDirty: false,
+    draftSheafNameDirty: false,
+    nextObjectId: 1,
     hodgeExpanded: false,
     hodgeWide: false,
     hodgeCellSize: 20,
-    hodgeChiOffsetA: -1,
+    exportScope: 'main',
+    suppressLabelClickUntil: 0,
     suppressCardToggleUntil: 0,
     mathJaxQueue: Promise.resolve()
   };
@@ -21,6 +37,10 @@
 
   function init() {
     collectRefs();
+    initializeInputObjects();
+    syncInputEditorVisibility();
+    normalizeControlVisibility();
+    syncCompleteIntersectionControls();
     bindControls();
     bindCards();
     syncHodgeWidePlacement();
@@ -34,14 +54,32 @@
   function collectRefs() {
     refs.dim = $('variety-dim');
     refs.varietyType = $('variety-type');
-    refs.projectiveNRow = $('projective-n-row');
-    refs.projectiveN = $('projective-n');
-    refs.ciAmbientRow = $('ci-ambient-row');
-    refs.ciAmbient = $('ci-ambient');
+    refs.curveGenusRow = $('curve-genus-row');
+    refs.curveGenus = $('curve-genus');
     refs.ciDegreesRow = $('ci-degrees-row');
     refs.ciDegrees = $('ci-degrees');
+    refs.ciEquationCountRow = $('ci-equation-count-row');
+    refs.ciEquationCount = $('ci-equation-count');
+    refs.ciEquationCountValue = $('ci-equation-count-value');
+    refs.ciDegreeSliders = $('ci-degree-sliders');
     refs.ciNote = $('ci-note');
+    refs.varietyName = $('variety-name');
+    refs.varietyEditorTitle = $('variety-editor-title');
+    refs.varietyEditor = $('variety-editor');
     refs.sheafType = $('sheaf-type');
+    refs.sheafName = $('sheaf-name');
+    refs.sheafEditorTitle = $('sheaf-editor-title');
+    refs.sheafEditor = $('sheaf-editor');
+    refs.sheafBaseRow = $('sheaf-base-row');
+    refs.sheafBaseVariety = $('sheaf-base-variety');
+    refs.inputMode = $('input-mode');
+    refs.addObjectKind = $('add-object-kind');
+    refs.inputOptions = $('input-options');
+    refs.modifyWarning = $('modify-warning');
+    refs.repeatNames = $('repeat-names');
+    refs.repeatStyle = $('repeat-style');
+    refs.addObject = $('add-object');
+    refs.deleteObject = $('delete-object');
     refs.twistOption = $('sheaf-twist-option');
     refs.twistRow = $('twist-row');
     refs.twist = $('twist-r');
@@ -51,11 +89,14 @@
     refs.rank = $('rank-symbol');
     refs.canvas = $('sheaf-canvas');
     refs.canvasLabels = $('sheaf-canvas-labels');
+    refs.clearCanvas = $('clear-canvas');
     refs.objectBadge = $('object-badge');
     refs.status = $('sheaf-status');
     refs.ringSummary = $('ring-summary');
+    refs.classActions = $('class-actions');
     refs.classChart = $('class-chart');
     refs.classMessage = $('class-message');
+    refs.exportClasses = $('export-classes');
     refs.hodgeCard = $('hodge-card');
     refs.hodgeSideAnchor = $('hodge-side-anchor');
     refs.hodgeWideHost = $('hodge-wide-host');
@@ -63,16 +104,10 @@
     refs.hodgeExpanded = $('hodge-expanded');
     refs.hodgeCellSize = $('hodge-cell-size');
     refs.hodgeCellSizeValue = $('hodge-cell-size-value');
-    refs.hodgeChiOffsetA = $('hodge-chi-offset-a');
-    refs.hodgeChiOffsetAValue = $('hodge-chi-offset-a-value');
+    refs.hodgeActions = $('hodge-actions');
     refs.hodgeChart = $('hodge-chart');
     refs.hodgeMessage = $('hodge-message');
-    refs.outVariety = $('out-variety');
-    refs.outDim = $('out-dim');
-    refs.outAmbient = $('out-ambient');
-    refs.outCodim = $('out-codim');
-    refs.outSheaf = $('out-sheaf');
-    refs.outRank = $('out-rank');
+    refs.exportHodge = $('export-hodge');
     refs.exportCard = $('export-card');
     refs.exportFormat = $('export-format');
     refs.refreshExport = $('refresh-export');
@@ -84,55 +119,724 @@
     return document.getElementById(id);
   }
 
+  function initializeInputObjects() {
+    state.varieties = [];
+    state.sheaves = [];
+    state.activeVarietyId = null;
+    state.activeSheafId = null;
+  }
+
+  function createDefaultVariety() {
+    return {
+      id: nextInputId('X'),
+      type: 'abstract',
+      dim: '3',
+      name: 'X',
+      genus: 'g',
+      ciDegrees: '',
+      nameDirty: false
+    };
+  }
+
+  function createDefaultSheaf() {
+    return {
+      id: nextInputId('E'),
+      type: 'abstract',
+      name: '\\mathcal{E}',
+      twist: '1',
+      rank: 'r',
+      baseVarietyId: null,
+      basis: 'chern',
+      nameDirty: false
+    };
+  }
+
+  function createVarietyFromDraft() {
+    const variety = {
+      id: nextInputId('X'),
+      ...readVarietyDraft()
+    };
+    variety.name = uniqueObjectName('variety', variety.name);
+    refs.varietyName.value = variety.name;
+    variety.nameDirty = variety.nameDirty || variety.name !== defaultVarietyNameLatex();
+    geometryFromVariety(variety);
+    positionVarietyOnCanvas(variety);
+    avoidCanvasLabelOverlap(variety);
+    return variety;
+  }
+
+  function createSheafFromDraft() {
+    const baseVariety = draftBaseVariety();
+    if (!baseVariety) return null;
+    const sheaf = {
+      id: nextInputId('E'),
+      ...readSheafDraft(baseVariety)
+    };
+    sheaf.name = uniqueObjectName('sheaf', sheaf.name);
+    refs.sheafName.value = sheaf.name;
+    sheaf.nameDirty = sheaf.nameDirty || sheaf.name !== defaultSheafNameLatex();
+    positionSheafNearBase(sheaf, baseVariety);
+    avoidCanvasLabelOverlap(sheaf);
+    sheafFromObject(sheaf, baseVariety ? geometryFromVariety(baseVariety) : null);
+    return sheaf;
+  }
+
+  function readVarietyDraft() {
+    const defaultName = defaultVarietyNameLatex();
+    const name = sanitizeMathLabel(refs.varietyName.value, defaultName);
+    return {
+      type: refs.varietyType.value,
+      dim: normalizedDraftDimension(),
+      name,
+      genus: sanitizeGenusInput(refs.curveGenus.value),
+      ciAmbient: derivedCompleteIntersectionAmbient(),
+      ciDegrees: normalizedCompleteIntersectionDegreesText(),
+      nameDirty: state.draftVarietyNameDirty || name !== defaultName
+    };
+  }
+
+  function readSheafDraft(baseVariety = draftBaseVariety()) {
+    const defaultName = defaultSheafNameLatex();
+    const name = sanitizeMathLabel(refs.sheafName.value, defaultName);
+    return {
+      type: refs.sheafType.value,
+      name,
+      twist: refs.twist.value,
+      rank: refs.rank.value,
+      baseVarietyId: baseVariety?.id || null,
+      basis: refs.basis.value,
+      nameDirty: state.draftSheafNameDirty || name !== defaultName
+    };
+  }
+
+  function uniqueObjectName(kind, proposedName, excludeId = null) {
+    if (!refs.repeatNames?.checked) return proposedName;
+    const items = kind === 'sheaf' ? state.sheaves : state.varieties;
+    const used = new Set(items
+      .filter((item) => item.id !== excludeId)
+      .map((item) => canonicalMathLabel(item.name)));
+    const sequence = repetitionNameSequence(kind, proposedName);
+    const sequenceKeys = new Set(sequence.map(canonicalMathLabel));
+    const proposedKey = canonicalMathLabel(proposedName);
+    if (!sequenceKeys.has(proposedKey)) return proposedName;
+    if (!used.has(proposedKey)) return proposedName;
+    for (const candidate of sequence) {
+      if (!used.has(canonicalMathLabel(candidate))) return candidate;
+    }
+    return proposedName;
+  }
+
+  function nameBelongsToRepetitionModel(kind, name) {
+    const sequence = repetitionNameSequence(kind, name);
+    const key = canonicalMathLabel(name);
+    return sequence.some((candidate) => canonicalMathLabel(candidate) === key);
+  }
+
+  function repetitionNameSequence(kind, proposedName) {
+    const style = refs.repeatStyle?.value || 'letters';
+    if (style === 'letters') {
+      return kind === 'sheaf' ? SHEAF_LETTER_NAMES : VARIETY_LETTER_NAMES;
+    }
+    const base = repetitionBaseName(kind, proposedName);
+    if (style === 'prime') {
+      return Array.from({ length: 24 }, (_, index) => `${base}${"'".repeat(index)}`);
+    }
+    if (style === 'paren') {
+      return Array.from({ length: 25 }, (_, index) => (index === 0 ? base : `${base}^{(${index})}`));
+    }
+    if (style === 'subscript') {
+      return Array.from({ length: 25 }, (_, index) => (index === 0 ? base : `${base}_{${index}}`));
+    }
+    return [base];
+  }
+
+  function repetitionBaseName(kind, proposedName) {
+    const fallback = kind === 'sheaf' ? '\\mathcal{E}' : (refs.varietyType?.value === 'curve' ? curveDefaultName(refs.curveGenus?.value) : 'X');
+    const name = sanitizeMathLabel(proposedName, fallback);
+    if (refs.repeatStyle?.value === 'letters') return name;
+    if (kind === 'sheaf') {
+      const match = name.match(/^\\mathcal\{([A-Z])\}(?:'*)?(?:\^\{\(\d+\)\}|_\{\d+\})?$/);
+      return match ? `\\mathcal{${match[1]}}` : name;
+    }
+    const match = name.match(/^([A-Za-z])(?:'*)?(?:\^\{\(\d+\)\}|_\{\d+\})?$/);
+    return match ? match[1] : name;
+  }
+
+  function canonicalMathLabel(value) {
+    return String(value || '').replace(/\s+/g, '');
+  }
+
+  function curveDefaultName(genusValue) {
+    return sanitizeGenusInput(genusValue) === '1' ? 'E' : 'C';
+  }
+
+  function sanitizeGenusInput(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return 'g';
+    if (raw === 'g') return 'g';
+    if (/^\d+$/.test(raw)) return raw;
+    return 'g';
+  }
+
+  function varietyHasHyperplaneClass(type) {
+    return type === 'projective' || type === 'complete-intersection';
+  }
+
+  function genusLatex(value) {
+    return sanitizeGenusInput(value);
+  }
+
+  function genusPlain(value) {
+    return sanitizeGenusInput(value);
+  }
+
+  function nextInputId(prefix) {
+    const id = `${prefix}${state.nextObjectId}`;
+    state.nextObjectId += 1;
+    return id;
+  }
+
+  function activeVariety() {
+    return state.varieties.find((item) => item.id === state.activeVarietyId) || state.varieties[0] || null;
+  }
+
+  function activeSheaf() {
+    return state.sheaves.find((item) => item.id === state.activeSheafId) || null;
+  }
+
+  function selectedVariety() {
+    return state.varieties.find((item) => item.id === state.activeVarietyId) || null;
+  }
+
+  function selectedSheaf() {
+    return state.sheaves.find((item) => item.id === state.activeSheafId) || null;
+  }
+
+  function activeObjectForModifyMode() {
+    if (state.activeSheafId) return selectedSheaf();
+    if (state.activeVarietyId) return selectedVariety();
+    return null;
+  }
+
+  function modifyKind() {
+    return state.activeSheafId ? 'sheaf' : 'variety';
+  }
+
+  function defaultBaseVarietyId() {
+    return state.varieties.find((item) => item.id === state.activeVarietyId)?.id
+      || state.varieties[0]?.id
+      || null;
+  }
+
+  function draftBaseVariety() {
+    const selectedId = refs.sheafBaseVariety?.value || defaultBaseVarietyId();
+    return state.varieties.find((item) => item.id === selectedId) || null;
+  }
+
+  function baseVarietyForSheaf(sheaf) {
+    if (!sheaf) return null;
+    return state.varieties.find((item) => item.id === sheaf.baseVarietyId) || activeVariety() || state.varieties[0] || null;
+  }
+
+  function syncSheafBaseOptions(force = false) {
+    if (!refs.sheafBaseVariety) return;
+    const hasMultipleVarieties = state.varieties.length > 1;
+    refs.sheafBaseRow.hidden = !refs.addObjectKind || refs.addObjectKind.value !== 'sheaf' || !hasMultipleVarieties;
+    if (!hasMultipleVarieties) {
+      refs.sheafBaseVariety.innerHTML = '';
+      if (state.varieties.length === 1) refs.sheafBaseVariety.value = state.varieties[0].id;
+      return;
+    }
+    const editingSheaf = inputIsModifyMode() && refs.addObjectKind?.value === 'sheaf' ? activeSheaf() : null;
+    const fallback = editingSheaf?.baseVarietyId || defaultBaseVarietyId();
+    const current = force ? fallback : (refs.sheafBaseVariety.value || fallback);
+    refs.sheafBaseVariety.innerHTML = state.varieties.map((variety) => {
+      const label = sanitizeMathLabel(variety.name, 'X');
+      return `<option value="${escapeHtml(variety.id)}">${escapeHtml(latexToPlain(label))}</option>`;
+    }).join('');
+    const next = state.varieties.some((item) => item.id === current) ? current : fallback;
+    if (next) refs.sheafBaseVariety.value = next;
+    if (force && !refs.sheafBaseVariety.value) refs.sheafBaseVariety.value = next || '';
+  }
+
+  function positionSheafNearBase(sheaf, baseVariety) {
+    if (!sheaf || !baseVariety) return;
+    const baseX = Number.isFinite(baseVariety.labelX) ? baseVariety.labelX : 0.28;
+    const baseY = Number.isFinite(baseVariety.labelY) ? baseVariety.labelY : 0.36;
+    sheaf.labelX = clamp(baseX + 0.1, 0.08, 0.94);
+    sheaf.labelY = clamp(baseY - 0.16, 0.08, 0.92);
+  }
+
+  function positionVarietyOnCanvas(variety) {
+    if (!variety) return;
+    variety.labelX = 0.28;
+    variety.labelY = 0.36;
+  }
+
+  function avoidCanvasLabelOverlap(object) {
+    if (!object) return;
+    const step = 0.075;
+    const rowStep = 0.045;
+    const thresholdX = 0.055;
+    const thresholdY = 0.055;
+    const startX = Number.isFinite(object.labelX) ? object.labelX : 0.5;
+    const startY = Number.isFinite(object.labelY) ? object.labelY : 0.5;
+    const existing = [...state.varieties, ...state.sheaves];
+    for (let row = 0; row < 6; row += 1) {
+      const candidateY = clamp(startY + row * rowStep, 0.08, 0.92);
+      for (let col = 0; col < 10; col += 1) {
+        const candidateX = clamp(startX + col * step, 0.08, 0.94);
+        const overlaps = existing.some((item) => (
+          item.id !== object.id
+          && Number.isFinite(item.labelX)
+          && Number.isFinite(item.labelY)
+          && Math.abs(item.labelX - candidateX) < thresholdX
+          && Math.abs(item.labelY - candidateY) < thresholdY
+        ));
+        if (!overlaps) {
+          object.labelX = candidateX;
+          object.labelY = candidateY;
+          return;
+        }
+      }
+    }
+  }
+
+  function syncInputEditorVisibility() {
+    const modifying = inputIsModifyMode();
+    const hasModifyTarget = !!activeObjectForModifyMode();
+    const showingSheaf = modifying ? !!state.activeSheafId : refs.addObjectKind?.value === 'sheaf';
+    if (refs.addObjectKind) refs.addObjectKind.hidden = modifying;
+    if (refs.inputOptions) refs.inputOptions.hidden = modifying;
+    if (refs.modifyWarning) refs.modifyWarning.hidden = !modifying || hasModifyTarget;
+    refs.varietyEditor.hidden = modifying ? (showingSheaf || !hasModifyTarget) : showingSheaf;
+    refs.sheafEditor.hidden = modifying ? (!showingSheaf || !hasModifyTarget) : !showingSheaf;
+    syncInputModeControls();
+    updateInputEditorTitles();
+    updateDeleteObjectButton();
+  }
+
+  function resetDraftForKind(kind = currentInputKind()) {
+    if (kind === 'sheaf') {
+      refs.sheafType.value = 'abstract';
+      refs.twist.value = '1';
+      refs.rank.value = 'r';
+      refs.basis.value = 'chern';
+      state.draftSheafNameDirty = false;
+      syncSheafBaseOptions(true);
+      refs.sheafName.value = defaultCreateSheafNameLatex();
+    } else {
+      refs.varietyType.value = 'abstract';
+      refs.dim.value = '3';
+      refs.curveGenus.value = 'g';
+      refs.ciDegrees.value = '';
+      syncCompleteIntersectionControls();
+      state.draftVarietyNameDirty = false;
+      refs.varietyName.value = defaultCreateVarietyNameLatex();
+    }
+    normalizeControlVisibility();
+  }
+
+  function selectObject(kind, id) {
+    activateObject(kind, id, { mode: 'modify', loadDraft: true });
+    recompute();
+  }
+
+  function activateObject(kind, id, options = {}) {
+    if (kind === 'variety') {
+      state.activeVarietyId = id;
+      state.activeSheafId = null;
+    } else if (kind === 'sheaf') {
+      state.activeSheafId = id;
+      const sheaf = activeSheaf();
+      const baseVariety = baseVarietyForSheaf(sheaf);
+      if (baseVariety) state.activeVarietyId = baseVariety.id;
+      if (sheaf) refs.basis.value = sheaf.basis || 'chern';
+    }
+    if (refs.addObjectKind && inputIsCreateMode() && (kind === 'variety' || kind === 'sheaf')) {
+      refs.addObjectKind.value = kind;
+    }
+    if (options.mode) setInputMode(options.mode, { loadDraft: false });
+    if (options.loadDraft) loadActiveObjectIntoDraft(kind);
+    syncInputEditorVisibility();
+  }
+
+  function inputIsModifyMode() {
+    return state.inputMode === 'modify';
+  }
+
+  function inputIsCreateMode() {
+    return state.inputMode !== 'modify';
+  }
+
+  function setInputMode(mode, options = {}) {
+    state.inputMode = mode === 'modify' ? 'modify' : 'create';
+    if (refs.inputMode) refs.inputMode.value = state.inputMode;
+    if (state.inputMode === 'modify' && options.clearSelection) {
+      state.activeVarietyId = null;
+      state.activeSheafId = null;
+    }
+    if (state.inputMode === 'create' && options.resetDraft) {
+      resetDraftForKind(currentInputKind());
+    }
+    if (options.loadDraft && state.inputMode === 'modify' && activeObjectForModifyMode()) {
+      loadActiveObjectIntoDraft(modifyKind());
+    }
+    syncInputEditorVisibility();
+  }
+
+  function syncInputModeControls() {
+    if (refs.inputMode) refs.inputMode.value = state.inputMode;
+    if (refs.addObject) {
+      refs.addObject.textContent = inputIsModifyMode() ? 'update' : 'add';
+      refs.addObject.hidden = inputIsModifyMode() && !activeObjectForModifyMode();
+    }
+    updateInputEditorTitles();
+  }
+
+  function updateInputEditorTitles() {
+    const kind = inputIsModifyMode() ? modifyKind() : currentInputKind();
+    if (refs.varietyEditorTitle) {
+      if (inputIsModifyMode() && kind === 'variety') {
+        setInlineMath(refs.varietyEditorTitle, `\\text{the variety } ${sanitizeMathLabel(refs.varietyName?.value || activeVariety()?.name, 'X')}`);
+      } else {
+        refs.varietyEditorTitle.textContent = 'new variety';
+      }
+    }
+    if (refs.sheafEditorTitle) {
+      if (inputIsModifyMode() && kind === 'sheaf') {
+        setInlineMath(refs.sheafEditorTitle, `\\text{the sheaf } ${sanitizeMathLabel(refs.sheafName?.value || activeSheaf()?.name, '\\mathcal{E}')}`);
+      } else {
+        refs.sheafEditorTitle.textContent = 'new sheaf';
+      }
+    }
+  }
+
+  function loadActiveObjectIntoDraft(kind = currentInputKind()) {
+    const item = activeObjectForKind(kind);
+    if (!item) return;
+    if (kind === 'sheaf') loadSheafIntoDraft(item);
+    else loadVarietyIntoDraft(item);
+    normalizeControlVisibility();
+  }
+
+  function loadVarietyIntoDraft(variety) {
+    refs.varietyType.value = variety.type || 'abstract';
+    refs.dim.value = variety.dim ?? '3';
+    refs.varietyName.value = variety.name || defaultVarietyNameLatex();
+    refs.curveGenus.value = variety.genus || 'g';
+    refs.ciDegrees.value = variety.ciDegrees || '';
+    syncCompleteIntersectionControls();
+    state.draftVarietyNameDirty = !!variety.nameDirty;
+    updateInputEditorTitles();
+  }
+
+  function loadSheafIntoDraft(sheaf) {
+    refs.sheafType.value = sheaf.type || 'abstract';
+    refs.sheafName.value = sheaf.name || defaultSheafNameLatex();
+    refs.twist.value = sheaf.twist ?? '1';
+    refs.rank.value = sheaf.rank || 'r';
+    refs.basis.value = sheaf.basis || 'chern';
+    state.draftSheafNameDirty = !!sheaf.nameDirty;
+    syncSheafBaseOptions();
+    if (refs.sheafBaseVariety && sheaf.baseVarietyId && state.varieties.some((item) => item.id === sheaf.baseVarietyId)) {
+      refs.sheafBaseVariety.value = sheaf.baseVarietyId;
+    }
+    updateInputEditorTitles();
+  }
+
+  function activeObjectForKind(kind) {
+    if (inputIsModifyMode()) return kind === 'sheaf' ? selectedSheaf() : (state.activeSheafId ? null : selectedVariety());
+    return kind === 'sheaf' ? activeSheaf() : activeVariety();
+  }
+
+  function currentInputKind() {
+    if (inputIsModifyMode()) return modifyKind();
+    return refs.addObjectKind?.value === 'sheaf' ? 'sheaf' : 'variety';
+  }
+
+  function deleteActiveObject(kind = currentInputKind()) {
+    const deletingSheaf = kind === 'sheaf';
+    const items = deletingSheaf ? state.sheaves : state.varieties;
+    const active = activeObjectForKind(kind);
+    if (!active) return;
+    const index = items.findIndex((item) => item.id === active.id);
+    if (index < 0) return;
+    const removed = items.splice(index, 1)[0] || null;
+    const next = items[Math.min(index, items.length - 1)] || null;
+    if (deletingSheaf) {
+      state.activeSheafId = next?.id || null;
+      if (next) {
+        state.activeVarietyId = next.baseVarietyId || defaultBaseVarietyId();
+        refs.basis.value = next.basis || 'chern';
+      }
+    } else {
+      state.activeVarietyId = next?.id || null;
+      state.activeSheafId = null;
+      state.sheaves = state.sheaves.filter((sheaf) => sheaf.baseVarietyId !== removed?.id);
+      if (!state.varieties.some((variety) => variety.id === state.activeVarietyId)) {
+        state.activeVarietyId = state.varieties[0]?.id || null;
+      }
+      syncDefaultSheafName();
+    }
+    syncSheafBaseOptions(true);
+    if (inputIsModifyMode()) {
+      const nextActive = activeObjectForKind(kind);
+      if (nextActive) loadActiveObjectIntoDraft(kind);
+      else setInputMode('create', { resetDraft: true });
+    }
+    recompute();
+  }
+
+  function clearCanvasObjects() {
+    state.varieties = [];
+    state.sheaves = [];
+    state.activeVarietyId = null;
+    state.activeSheafId = null;
+    state.labelDrag = null;
+    if (refs.addObjectKind) refs.addObjectKind.value = 'variety';
+    setInputMode('create', { resetDraft: true });
+    syncSheafBaseOptions(true);
+    syncInputEditorVisibility();
+    recompute();
+  }
+
+  function updateDeleteObjectButton() {
+    if (!refs.deleteObject) return;
+    const kind = currentInputKind();
+    const active = activeObjectForKind(kind);
+    refs.deleteObject.hidden = inputIsModifyMode() && !activeObjectForModifyMode();
+    refs.deleteObject.disabled = !active;
+    refs.deleteObject.textContent = 'delete';
+    refs.deleteObject.title = active ? `Delete selected ${kind}` : `No ${kind} to delete`;
+  }
+
+  function createObjectFromDraft(kind = currentInputKind()) {
+    if (kind === 'sheaf') {
+      const sheaf = createSheafFromDraft();
+      if (!sheaf) return null;
+      state.sheaves.push(sheaf);
+      state.activeSheafId = sheaf.id;
+      state.activeVarietyId = sheaf.baseVarietyId || defaultBaseVarietyId();
+      prepareNextDraftName('sheaf', sheaf.name);
+      return sheaf;
+    }
+    const variety = createVarietyFromDraft();
+    state.varieties.push(variety);
+    state.activeVarietyId = variety.id;
+    state.activeSheafId = null;
+    prepareNextDraftName('variety', variety.name);
+    return variety;
+  }
+
+  function prepareNextDraftName(kind, createdName) {
+    if (!refs.repeatNames?.checked || !nameBelongsToRepetitionModel(kind, createdName)) return;
+    if (kind === 'sheaf') {
+      state.draftSheafNameDirty = false;
+      refs.sheafName.value = uniqueObjectName('sheaf', createdName);
+    } else {
+      state.draftVarietyNameDirty = false;
+      refs.varietyName.value = uniqueObjectName('variety', createdName);
+    }
+  }
+
+  function updateObjectFromDraft(kind = currentInputKind()) {
+    const active = activeObjectForKind(kind);
+    if (!active) return null;
+    if (kind === 'sheaf') {
+      const oldBaseId = active.baseVarietyId;
+      const baseVariety = draftBaseVariety();
+      if (!baseVariety) return null;
+      Object.assign(active, readSheafDraft(baseVariety));
+      if (oldBaseId !== active.baseVarietyId) {
+        positionSheafNearBase(active, baseVariety);
+        avoidCanvasLabelOverlap(active);
+      }
+      sheafFromObject(active, geometryFromVariety(baseVariety));
+      state.activeSheafId = active.id;
+      state.activeVarietyId = active.baseVarietyId || defaultBaseVarietyId();
+      refs.basis.value = active.basis || 'chern';
+      return active;
+    }
+    Object.assign(active, readVarietyDraft());
+    geometryFromVariety(active);
+    if (active.type === 'curve') refs.dim.value = '1';
+    state.activeVarietyId = active.id;
+    state.activeSheafId = null;
+    state.sheaves.forEach((sheaf) => {
+      if (sheaf.baseVarietyId === active.id && !sheaf.nameDirty) {
+        const rank = sanitizeRankInput(sheaf.rank);
+        const twist = normalizedInt(sheaf.twist, -24, 24, 1);
+        sheaf.name = defaultSheafNameFor(sheaf.type, rank, twist, active.name);
+      }
+    });
+    syncDefaultSheafName();
+    return active;
+  }
+
   function bindControls() {
+    if (refs.inputMode) {
+      refs.inputMode.addEventListener('change', () => {
+        setInputMode(refs.inputMode.value, {
+          loadDraft: true,
+          resetDraft: true,
+          clearSelection: refs.inputMode.value === 'modify'
+        });
+        recompute();
+      });
+    }
+    if (refs.repeatNames) {
+      refs.repeatNames.addEventListener('change', () => {
+        syncDefaultVarietyName();
+        syncDefaultSheafName();
+      });
+    }
+    if (refs.repeatStyle) {
+      refs.repeatStyle.addEventListener('change', () => {
+        syncDefaultVarietyName();
+        syncDefaultSheafName();
+      });
+    }
+    refs.addObjectKind.addEventListener('change', () => {
+      if (refs.addObjectKind.value === 'variety') state.activeSheafId = null;
+      if (inputIsModifyMode()) {
+        if (!activeObjectForKind(currentInputKind())) setInputMode('create', { resetDraft: true });
+        else loadActiveObjectIntoDraft(currentInputKind());
+      } else {
+        resetDraftForKind(currentInputKind());
+      }
+      syncInputEditorVisibility();
+      if (inputIsModifyMode()) syncSheafBaseOptions();
+      normalizeControlVisibility();
+      typeset(refs.varietyEditor);
+      typeset(refs.sheafEditor);
+    });
+    refs.addObject.addEventListener('click', () => {
+      const changed = inputIsModifyMode()
+        ? updateObjectFromDraft()
+        : createObjectFromDraft();
+      if (!changed) return;
+      syncSheafBaseOptions(true);
+      recompute();
+    });
+    if (refs.deleteObject) {
+      refs.deleteObject.addEventListener('click', () => {
+        deleteActiveObject();
+      });
+    }
     refs.varietyType.addEventListener('change', () => {
       const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
-      if (refs.varietyType.value === 'projective') refs.projectiveN.value = String(dim);
-      if (refs.varietyType.value === 'complete-intersection') {
-        const degrees = safeParseDegrees();
-        refs.ciAmbient.value = String(Math.min(MAX_AMBIENT, dim + degrees.length));
-      }
-      recompute();
+      if (refs.varietyType.value === 'curve') refs.dim.value = '1';
+      if (refs.varietyType.value === 'complete-intersection') syncCompleteIntersectionControls();
+      normalizeControlVisibility();
+      syncDefaultVarietyName();
+      syncDefaultSheafName();
     });
     refs.dim.addEventListener('change', () => {
       const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
-      refs.dim.value = String(dim);
-      if (refs.varietyType.value === 'projective') refs.projectiveN.value = String(dim);
-      if (refs.varietyType.value === 'complete-intersection') {
-        const degrees = safeParseDegrees();
-        refs.ciAmbient.value = String(Math.min(MAX_AMBIENT, dim + degrees.length));
-      }
-      recompute();
+      refs.dim.value = refs.varietyType.value === 'curve' ? '1' : String(dim);
+      if (refs.varietyType.value === 'complete-intersection') syncCompleteIntersectionControls();
+      syncDefaultVarietyName();
+      syncDefaultSheafName();
     });
-    refs.projectiveN.addEventListener('change', () => {
-      refs.projectiveN.value = String(normalizedInt(refs.projectiveN.value, 0, MAX_DIMENSION, 3));
-      refs.dim.value = refs.projectiveN.value;
-      recompute();
+    refs.curveGenus.addEventListener('input', () => {
+      syncDefaultVarietyName();
+      syncDefaultSheafName();
     });
-    refs.ciAmbient.addEventListener('change', () => {
-      syncDimensionFromCompleteIntersection();
-      recompute();
+    refs.curveGenus.addEventListener('change', () => {
+      refs.curveGenus.value = sanitizeGenusInput(refs.curveGenus.value);
+      syncDefaultVarietyName();
+      syncDefaultSheafName();
     });
     refs.ciDegrees.addEventListener('change', () => {
-      syncDimensionFromCompleteIntersection();
-      recompute();
+      syncCompleteIntersectionControls();
+      syncDefaultVarietyName();
+      syncDefaultSheafName();
     });
-    refs.sheafType.addEventListener('change', recompute);
+    if (refs.ciEquationCount) {
+      refs.ciEquationCount.addEventListener('input', () => {
+        syncCompleteIntersectionControls({ source: 'count' });
+        syncDefaultVarietyName();
+        syncDefaultSheafName();
+      });
+      refs.ciEquationCount.addEventListener('change', () => {
+        syncCompleteIntersectionControls({ source: 'count' });
+        syncDefaultVarietyName();
+        syncDefaultSheafName();
+      });
+    }
+    if (refs.ciDegreeSliders) {
+      refs.ciDegreeSliders.addEventListener('input', (event) => {
+        const slider = event.target.closest('.ci-degree-slider');
+        if (!slider) return;
+        updateDegreeFromSlider(slider);
+      });
+      refs.ciDegreeSliders.addEventListener('change', (event) => {
+        const slider = event.target.closest('.ci-degree-slider');
+        if (!slider) return;
+        updateDegreeFromSlider(slider);
+      });
+    }
+    refs.varietyName.addEventListener('input', () => {
+      state.draftVarietyNameDirty = true;
+      updateInputEditorTitles();
+      syncDefaultSheafName();
+    });
+    refs.varietyName.addEventListener('change', () => {
+      refs.varietyName.value = normalizeDraftNameForKind('variety', refs.varietyName.value);
+      updateInputEditorTitles();
+      syncDefaultSheafName();
+    });
+    refs.sheafType.addEventListener('change', () => {
+      syncDefaultRank(true);
+      syncDefaultSheafName();
+    });
+    refs.sheafName.addEventListener('input', () => {
+      state.draftSheafNameDirty = true;
+      updateInputEditorTitles();
+    });
+    refs.sheafName.addEventListener('change', () => {
+      refs.sheafName.value = normalizeDraftNameForKind('sheaf', refs.sheafName.value);
+      updateInputEditorTitles();
+    });
+    if (refs.sheafBaseVariety) {
+      refs.sheafBaseVariety.addEventListener('change', () => {
+        if (refs.sheafBaseVariety.value) {
+          state.activeVarietyId = refs.sheafBaseVariety.value;
+        }
+        syncDefaultSheafName();
+        normalizeControlVisibility();
+        recompute();
+      });
+    }
     refs.twist.addEventListener('change', () => {
       refs.twist.value = String(normalizedInt(refs.twist.value, -24, 24, 1));
+      syncDefaultSheafName();
+    });
+    refs.basis.addEventListener('change', () => {
+      const sheaf = activeSheaf();
+      if (sheaf) sheaf.basis = refs.basis.value;
       recompute();
     });
-    refs.basis.addEventListener('change', recompute);
     refs.rank.addEventListener('change', () => {
       refs.rank.value = sanitizeRankInput(refs.rank.value);
-      recompute();
+      syncDefaultSheafName();
     });
-    refs.refreshExport.addEventListener('click', refreshExport);
+    if (refs.exportClasses) {
+      refs.exportClasses.addEventListener('click', () => openChartExport('classes'));
+    }
+    if (refs.exportHodge) {
+      refs.exportHodge.addEventListener('click', () => openChartExport('hodge'));
+    }
+    if (refs.clearCanvas) {
+      refs.clearCanvas.addEventListener('click', clearCanvasObjects);
+    }
+    refs.refreshExport.addEventListener('click', () => refreshExport('main'));
     refs.copyExport.addEventListener('click', copyExport);
-    refs.exportFormat.addEventListener('change', refreshExport);
+    refs.exportFormat.addEventListener('change', () => refreshExport());
     refs.hodgeExpanded.addEventListener('change', () => {
       state.hodgeExpanded = refs.hodgeExpanded.checked;
-      if (state.lastResult) {
+      if (state.lastResult?.hodge) {
         renderHodgeChart(state.lastResult);
         typeset(refs.hodgeChart);
       }
@@ -150,14 +854,33 @@
         setHodgeCellSize(refs.hodgeCellSize.value);
       });
     }
-    if (refs.hodgeChiOffsetA) {
-      refs.hodgeChiOffsetA.addEventListener('input', () => {
-        setHodgeChiOffsetA(refs.hodgeChiOffsetA.value);
-      });
-      refs.hodgeChiOffsetA.addEventListener('change', () => {
-        setHodgeChiOffsetA(refs.hodgeChiOffsetA.value);
-      });
-    }
+    refs.canvasLabels.addEventListener('click', (event) => {
+      if (Date.now() < state.suppressLabelClickUntil) return;
+      const target = event.target.closest('[data-object-kind]');
+      if (!target) return;
+      selectObject(target.dataset.objectKind, target.dataset.objectId);
+    });
+    refs.canvasLabels.addEventListener('keydown', (event) => {
+      const target = event.target.closest('[data-object-kind]');
+      if (!target) return;
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        selectObject(target.dataset.objectKind, target.dataset.objectId);
+        return;
+      }
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        const kind = target.dataset.objectKind;
+        activateObject(kind, target.dataset.objectId);
+        deleteActiveObject(kind);
+      }
+    });
+    refs.canvasLabels.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      const target = event.target.closest('[data-object-kind]');
+      if (!target) return;
+      startCanvasLabelDrag(target, event);
+    });
     refs.hodgeChart.addEventListener('click', toggleHodgeExpanded);
     refs.hodgeChart.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -174,25 +897,133 @@
     }
   }
 
-  function syncDimensionFromCompleteIntersection() {
-    let degrees = [];
-    try {
-      degrees = parseDegrees(refs.ciDegrees.value);
-    } catch (_) {}
-    let ambient = normalizedInt(refs.ciAmbient.value, 0, MAX_AMBIENT, 3);
-    ambient = Math.max(ambient, degrees.length);
-    if (ambient - degrees.length > MAX_DIMENSION) ambient = degrees.length + MAX_DIMENSION;
-    refs.ciAmbient.value = String(ambient);
-    refs.dim.value = String(Math.max(0, ambient - degrees.length));
+  function normalizedDraftDimension() {
+    return String(normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3));
+  }
+
+  function completeIntersectionDegrees() {
+    return safeParseDegrees().map((degree) => normalizedInt(degree, 1, MAX_CI_DEGREE, 2));
+  }
+
+  function normalizedCompleteIntersectionDegreesText() {
+    return completeIntersectionDegrees().join(', ');
+  }
+
+  function derivedCompleteIntersectionAmbient() {
+    const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
+    const degrees = completeIntersectionDegrees();
+    return String(Math.min(MAX_AMBIENT, dim + degrees.length));
+  }
+
+  function derivedCompleteIntersectionAmbientFor(variety, degrees) {
+    const dim = normalizedInt(variety?.dim, 0, MAX_DIMENSION, 3);
+    return Math.min(MAX_AMBIENT, dim + degrees.length);
+  }
+
+  function syncCompleteIntersectionControls({ source = 'text' } = {}) {
+    if (!refs.ciDegrees || !refs.ciEquationCount || !refs.ciDegreeSliders) return;
+    let degrees = completeIntersectionDegrees();
+    if (source === 'count') {
+      const count = normalizedInt(refs.ciEquationCount.value, 0, MAX_CI_EQUATIONS, degrees.length);
+      if (degrees.length < count) degrees = degrees.concat(Array.from({ length: count - degrees.length }, () => 2));
+      else degrees = degrees.slice(0, count);
+    }
+    refs.ciDegrees.value = degrees.join(', ');
+    refs.ciEquationCount.value = String(degrees.length);
+    refs.ciEquationCountValue.textContent = String(degrees.length);
+    refs.ciDegreeSliders.hidden = degrees.length === 0 || refs.varietyType.value !== 'complete-intersection';
+    refs.ciDegreeSliders.innerHTML = degrees.map((degree, index) => `
+      <label class="ci-degree-slider-row" for="ci-degree-${index}">
+        <span>degree ${index + 1}</span>
+        <input id="ci-degree-${index}" class="ci-degree-slider" type="range" min="1" max="${Math.max(MAX_CI_SLIDER_DEGREE, degree)}" step="1" value="${degree}" data-degree-index="${index}">
+        <output for="ci-degree-${index}">${degree}</output>
+      </label>
+    `).join('');
+  }
+
+  function updateDegreeFromSlider(slider) {
+    const index = Number(slider.dataset.degreeIndex);
+    if (!Number.isInteger(index)) return;
+    const degrees = completeIntersectionDegrees();
+    degrees[index] = normalizedInt(slider.value, 1, MAX_CI_DEGREE, 2);
+    refs.ciDegrees.value = degrees.join(', ');
+    const output = slider.parentElement?.querySelector('output');
+    if (output) output.textContent = String(degrees[index]);
+    syncDefaultVarietyName();
+    syncDefaultSheafName();
+  }
+
+  function defaultVarietyNameLatex() {
+    const type = refs.varietyType.value;
+    if (type === 'projective') {
+      const n = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
+      return `\\mathbb{P}^{${n}}`;
+    }
+    if (type === 'curve') return curveDefaultName(refs.curveGenus.value);
+    if (type === 'complete-intersection') {
+      const degrees = safeParseDegrees();
+      const ambient = derivedCompleteIntersectionAmbient();
+      return degrees.length ? `X_{${degrees.join(',')}}` : `\\mathbb{P}^{${ambient}}`;
+    }
+    return 'X';
+  }
+
+  function defaultCreateVarietyNameLatex() {
+    return inputIsModifyMode() ? defaultVarietyNameLatex() : uniqueObjectName('variety', defaultVarietyNameLatex());
+  }
+
+  function defaultSheafNameLatex() {
+    const baseVariety = draftBaseVariety() || activeVariety();
+    const variety = baseVariety ? geometryFromVariety(baseVariety).labelLatex : 'X';
+    const type = refs.sheafType.value;
+    return defaultSheafNameFor(type, sanitizeRankInput(refs.rank.value), normalizedInt(refs.twist.value, -24, 24, 1), variety);
+  }
+
+  function defaultCreateSheafNameLatex() {
+    return inputIsModifyMode() ? defaultSheafNameLatex() : uniqueObjectName('sheaf', defaultSheafNameLatex());
+  }
+
+  function normalizeDraftNameForKind(kind, value) {
+    const defaultName = kind === 'sheaf' ? defaultSheafNameLatex() : defaultVarietyNameLatex();
+    const sanitized = sanitizeMathLabel(value, defaultName);
+    return inputIsModifyMode() ? sanitized : uniqueObjectName(kind, sanitized);
+  }
+
+  function defaultSheafNameFor(type, rankPlain, twist, variety) {
+    if (type === 'locally-free') return rankPlain === '1' ? '\\mathcal{L}' : '\\mathcal{E}';
+    if (type === 'tangent') return `\\mathcal{T}_{${variety}}`;
+    if (type === 'cotangent') return `\\Omega^1_{${variety}}`;
+    if (type === 'canonical') return `K_{${variety}}`;
+    if (type === 'twist') return `\\mathcal{O}_{${variety}}(${twist})`;
+    return '\\mathcal{E}';
+  }
+
+  function syncDefaultVarietyName(force = false) {
+    if (!refs.varietyName) return;
+    if (force || !state.draftVarietyNameDirty) refs.varietyName.value = defaultCreateVarietyNameLatex();
+  }
+
+  function syncDefaultSheafName(force = false) {
+    if (!refs.sheafName) return;
+    if (force || !state.draftSheafNameDirty) refs.sheafName.value = defaultCreateSheafNameLatex();
+  }
+
+  function syncDefaultRank(force = false) {
+    if (!refs.rank || !force) return;
+    if (refs.sheafType.value === 'locally-free') refs.rank.value = '1';
+    else if (refs.sheafType.value === 'abstract') refs.rank.value = 'r';
   }
 
   function recompute() {
     try {
       normalizeControlVisibility();
       VARS.clear();
-      const geometry = readGeometry();
-      const sheaf = readSheaf();
-      const result = buildCharacteristicClasses(geometry, sheaf);
+      const chosenSheaf = inputIsModifyMode() ? selectedSheaf() : null;
+      const chosenVariety = inputIsModifyMode() ? selectedVariety() : null;
+      const baseVariety = chosenSheaf ? baseVarietyForSheaf(chosenSheaf) : chosenVariety;
+      const geometry = baseVariety ? geometryFromVariety(baseVariety) : null;
+      const sheaf = chosenSheaf && geometry ? sheafFromObject(chosenSheaf, geometry) : null;
+      const result = buildResult(geometry, sheaf);
       state.lastResult = result;
       refs.classMessage.textContent = '';
       renderResult(result);
@@ -200,88 +1031,248 @@
     } catch (error) {
       state.lastResult = null;
       refs.status.textContent = error.message || 'unable to compute';
+      if (refs.classActions) refs.classActions.hidden = true;
+      if (refs.basisRow) refs.basisRow.hidden = true;
+      if (refs.classChart) refs.classChart.hidden = true;
+      refs.classMessage.className = 'err';
       refs.classMessage.textContent = error.message || 'Unable to compute.';
-      refs.classChart.innerHTML = '<span class="hint">No chart available for the current input.</span>';
+      refs.classMessage.hidden = false;
+      if (refs.hodgeActions) refs.hodgeActions.hidden = true;
+      if (refs.hodgeChart) {
+        refs.hodgeChart.hidden = true;
+        refs.hodgeChart.innerHTML = '';
+      }
+      refs.hodgeMessage.textContent = 'No Hodge numbers available for the current input.';
+      refs.hodgeMessage.hidden = false;
       renderCanvas(null);
     }
   }
 
+  function buildResult(geometry, sheaf) {
+    if (geometry && sheaf) return buildCharacteristicClasses(geometry, sheaf);
+    if (geometry) {
+      return {
+        geometry,
+        sheaf: null,
+        bundle: null,
+        hodge: buildHodgeNumbers(geometry),
+        classRows: []
+      };
+    }
+    return {
+      geometry: null,
+      sheaf,
+      bundle: null,
+      hodge: null,
+      classRows: []
+    };
+  }
+
   function normalizeControlVisibility() {
-    const variety = refs.varietyType.value;
-    let sheaf = refs.sheafType.value;
-    const canTwist = variety !== 'abstract';
+    syncSheafBaseOptions();
+    const hasVariety = state.varieties.length > 0;
+    const hasSheaf = !!activeSheaf();
+    const editingSheaf = inputIsModifyMode() && !!state.activeSheafId;
+    const draftingSheaf = inputIsModifyMode() ? editingSheaf : refs.addObjectKind?.value === 'sheaf';
+    const draftVariety = refs.varietyType.value;
+    const activeVarietyType = activeVariety()?.type || 'abstract';
+    const activeSheafType = activeSheaf()?.type || 'abstract';
+    const draftBase = draftBaseVariety();
+    const draftBaseType = draftBase?.type || 'abstract';
+    let draftSheaf = refs.sheafType.value;
+    const canTwist = draftingSheaf ? !!draftBase && varietyHasHyperplaneClass(draftBaseType) : hasVariety && varietyHasHyperplaneClass(activeVarietyType);
     if (refs.twistOption) {
       refs.twistOption.hidden = !canTwist;
       refs.twistOption.disabled = !canTwist;
     }
-    if (!canTwist && sheaf === 'twist') {
+    if (!canTwist && draftSheaf === 'twist') {
       refs.sheafType.value = 'abstract';
-      sheaf = 'abstract';
+      draftSheaf = 'abstract';
+      syncDefaultRank(true);
+      syncDefaultSheafName();
     }
-    const showProjective = variety === 'projective';
-    const showCi = variety === 'complete-intersection';
-    refs.projectiveNRow.hidden = !showProjective;
-    refs.ciAmbientRow.hidden = !showCi;
+    const showCurve = draftVariety === 'curve';
+    const showCi = draftVariety === 'complete-intersection';
+    if (refs.curveGenusRow) refs.curveGenusRow.hidden = !showCurve;
     refs.ciDegreesRow.hidden = !showCi;
+    if (refs.ciEquationCountRow) refs.ciEquationCountRow.hidden = !showCi;
+    if (refs.ciDegreeSliders) refs.ciDegreeSliders.hidden = !showCi || completeIntersectionDegrees().length === 0;
     refs.ciNote.hidden = !showCi;
-    refs.twistRow.hidden = sheaf !== 'twist';
-    const needsBasisInput = sheaf === 'abstract'
-      || (variety === 'abstract' && (sheaf === 'tangent' || sheaf === 'cotangent' || sheaf === 'canonical'));
+    refs.twistRow.hidden = !draftingSheaf || draftSheaf !== 'twist';
+    const needsBasisInput = hasVariety && hasSheaf && activeVarietyType === 'abstract'
+      && (activeSheafType === 'abstract' || activeSheafType === 'locally-free' || activeSheafType === 'tangent' || activeSheafType === 'cotangent' || activeSheafType === 'canonical');
+    if (!needsBasisInput) refs.basis.value = 'chern';
     refs.basisRow.hidden = !needsBasisInput;
-    refs.rankRow.hidden = sheaf !== 'abstract';
+    refs.rankRow.hidden = !draftingSheaf || (draftSheaf !== 'abstract' && draftSheaf !== 'locally-free');
+    refs.sheafBaseRow.hidden = inputIsModifyMode() || !draftingSheaf || state.varieties.length <= 1;
+    if (refs.addObject) {
+      const canAddSheaf = !draftingSheaf || !!draftBase;
+      const hasEditableObject = !inputIsModifyMode() || !!activeObjectForKind(currentInputKind());
+      refs.addObject.disabled = (!canAddSheaf && draftingSheaf) || !hasEditableObject;
+      refs.addObject.title = draftingSheaf && !draftBase ? 'Add a base variety first' : '';
+    }
+    syncInputEditorVisibility();
   }
 
-  function readGeometry() {
-    const type = refs.varietyType.value;
+  function geometryFromVariety(variety) {
+    const type = variety?.type || 'abstract';
     if (type === 'projective') {
-      const n = normalizedInt(refs.projectiveN.value, 0, MAX_DIMENSION, 3);
-      refs.projectiveN.value = String(n);
-      refs.dim.value = String(n);
+      const n = normalizedInt(variety.dim, 0, MAX_DIMENSION, 3);
+      const labelLatex = sanitizeMathLabel(variety.name, `\\mathbb{P}^{${n}}`);
+      Object.assign(variety, { dim: String(n), name: labelLatex });
       return {
         type,
         dim: n,
         ambient: n,
         degrees: [],
         codim: 0,
-        labelLatex: `\\mathbb{P}^{${n}}`,
-        labelPlain: `P^${n}`,
+        labelLatex,
+        labelPlain: latexToPlain(labelLatex),
         ambientLatex: `\\mathbb{P}^{${n}}`,
         ambientPlain: `P^${n}`
       };
     }
+    if (type === 'curve') {
+      const genus = sanitizeGenusInput(variety.genus);
+      const labelLatex = sanitizeMathLabel(variety.name, curveDefaultName(genus));
+      Object.assign(variety, { dim: '1', genus, name: labelLatex });
+      return {
+        type,
+        dim: 1,
+        genus,
+        ambient: null,
+        degrees: [],
+        codim: null,
+        labelLatex,
+        labelPlain: latexToPlain(labelLatex),
+        ambientLatex: 'curve',
+        ambientPlain: 'curve'
+      };
+    }
     if (type === 'complete-intersection') {
-      const degrees = parseDegrees(refs.ciDegrees.value);
-      let ambient = normalizedInt(refs.ciAmbient.value, 0, MAX_AMBIENT, 3);
-      ambient = Math.max(ambient, degrees.length);
-      if (ambient - degrees.length > MAX_DIMENSION) ambient = degrees.length + MAX_DIMENSION;
-      refs.ciAmbient.value = String(ambient);
-      refs.dim.value = String(ambient - degrees.length);
-      const dim = ambient - degrees.length;
-      const degreeLabel = degrees.length ? degrees.join(',') : '';
+      const degrees = parseDegrees(variety.ciDegrees || '');
+      const dim = normalizedInt(variety.dim, 0, MAX_DIMENSION, 3);
+      const ambient = derivedCompleteIntersectionAmbientFor(variety, degrees);
+      const defaultLabel = degrees.length ? `X_{${degrees.join(',')}}` : `\\mathbb{P}^{${ambient}}`;
+      const labelLatex = sanitizeMathLabel(variety.name, defaultLabel);
+      Object.assign(variety, { dim: String(dim), ciAmbient: String(ambient), name: labelLatex });
       return {
         type,
         dim,
         ambient,
         degrees,
         codim: degrees.length,
-        labelLatex: degrees.length
-          ? `X_{${degrees.join(',')}}\\subset\\mathbb{P}^{${ambient}}`
-          : `\\mathbb{P}^{${ambient}}`,
-        labelPlain: degrees.length ? `X_(${degreeLabel}) in P^${ambient}` : `P^${ambient}`,
+        labelLatex,
+        labelPlain: degrees.length ? `${latexToPlain(labelLatex)} in P^${ambient}` : latexToPlain(labelLatex),
         ambientLatex: `\\mathbb{P}^{${ambient}}`,
         ambientPlain: `P^${ambient}`
       };
     }
-    const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
-    refs.dim.value = String(dim);
+    const dim = normalizedInt(variety.dim, 0, MAX_DIMENSION, 3);
+    const labelLatex = sanitizeMathLabel(variety.name, 'X');
+    Object.assign(variety, { dim: String(dim), name: labelLatex });
     return {
       type: 'abstract',
       dim,
       ambient: null,
       degrees: [],
       codim: null,
-      labelLatex: 'X',
-      labelPlain: 'abstract X',
+      labelLatex,
+      labelPlain: latexToPlain(labelLatex),
+      ambientLatex: 'abstract',
+      ambientPlain: 'abstract'
+    };
+  }
+
+  function sheafFromObject(sheaf, geometry) {
+    const type = sheaf?.type || 'abstract';
+    const twist = normalizedInt(sheaf.twist, -24, 24, 1);
+    const basis = sheaf.basis === 'character' ? 'character' : 'chern';
+    const rankPlain = sanitizeRankInput(sheaf.rank);
+    const baseVariety = baseVarietyForSheaf(sheaf);
+    const labelLatex = sanitizeMathLabel(sheaf.name, defaultSheafNameFor(type, rankPlain, twist, geometry?.labelLatex || 'X'));
+    Object.assign(sheaf, { twist: String(twist), basis, rank: rankPlain, name: labelLatex, baseVarietyId: baseVariety?.id || sheaf.baseVarietyId || null });
+    return {
+      type,
+      twist,
+      baseVarietyId: sheaf.baseVarietyId,
+      basis,
+      rankPlain,
+      rankLatex: symbolToLatex(rankPlain),
+      labelLatex,
+      labelPlain: latexToPlain(labelLatex)
+    };
+  }
+
+  function readGeometry() {
+    const type = refs.varietyType.value;
+    if (type === 'projective') {
+      const n = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
+      refs.dim.value = String(n);
+      const labelLatex = sanitizeMathLabel(refs.varietyName.value, `\\mathbb{P}^{${n}}`);
+      refs.varietyName.value = labelLatex;
+      return {
+        type,
+        dim: n,
+        ambient: n,
+        degrees: [],
+        codim: 0,
+        labelLatex,
+        labelPlain: latexToPlain(labelLatex),
+        ambientLatex: `\\mathbb{P}^{${n}}`,
+        ambientPlain: `P^${n}`
+      };
+    }
+    if (type === 'curve') {
+      refs.dim.value = '1';
+      refs.curveGenus.value = sanitizeGenusInput(refs.curveGenus.value);
+      const labelLatex = sanitizeMathLabel(refs.varietyName.value, curveDefaultName(refs.curveGenus.value));
+      refs.varietyName.value = labelLatex;
+      return {
+        type,
+        dim: 1,
+        genus: refs.curveGenus.value,
+        ambient: null,
+        degrees: [],
+        codim: null,
+        labelLatex,
+        labelPlain: latexToPlain(labelLatex),
+        ambientLatex: 'curve',
+        ambientPlain: 'curve'
+      };
+    }
+    if (type === 'complete-intersection') {
+      const degrees = parseDegrees(refs.ciDegrees.value);
+      const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
+      refs.dim.value = String(dim);
+      const ambient = Math.min(MAX_AMBIENT, dim + degrees.length);
+      const defaultLabel = degrees.length ? `X_{${degrees.join(',')}}` : `\\mathbb{P}^{${ambient}}`;
+      const labelLatex = sanitizeMathLabel(refs.varietyName.value, defaultLabel);
+      refs.varietyName.value = labelLatex;
+      return {
+        type,
+        dim,
+        ambient,
+        degrees,
+        codim: degrees.length,
+        labelLatex,
+        labelPlain: degrees.length ? `${latexToPlain(labelLatex)} in P^${ambient}` : latexToPlain(labelLatex),
+        ambientLatex: `\\mathbb{P}^{${ambient}}`,
+        ambientPlain: `P^${ambient}`
+      };
+    }
+    const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
+    refs.dim.value = String(dim);
+    const labelLatex = sanitizeMathLabel(refs.varietyName.value, 'X');
+    refs.varietyName.value = labelLatex;
+    return {
+      type: 'abstract',
+      dim,
+      ambient: null,
+      degrees: [],
+      codim: null,
+      labelLatex,
+      labelPlain: latexToPlain(labelLatex),
       ambientLatex: 'abstract',
       ambientPlain: 'abstract'
     };
@@ -293,16 +1284,28 @@
     const basis = refs.basis.value === 'character' ? 'character' : 'chern';
     const rankPlain = sanitizeRankInput(refs.rank.value);
     refs.rank.value = rankPlain;
-    return { type, twist, basis, rankPlain, rankLatex: symbolToLatex(rankPlain) };
+    const labelLatex = sanitizeMathLabel(refs.sheafName.value, defaultSheafNameLatex());
+    refs.sheafName.value = labelLatex;
+    return {
+      type,
+      twist,
+      basis,
+      rankPlain,
+      rankLatex: symbolToLatex(rankPlain),
+      labelLatex,
+      labelPlain: latexToPlain(labelLatex)
+    };
   }
 
   function buildCharacteristicClasses(geometry, sheaf) {
     defineVariable('H', 1, 'H');
     const d = geometry.dim;
     let bundle;
-    if (sheaf.type === 'abstract') {
-      bundle = buildAbstractBundle(d, sheaf, '\\mathcal{F}', 'F', sheaf.rankLatex, sheaf.rankPlain);
-    } else if (geometry.type === 'abstract') {
+    if (sheaf.type === 'locally-free') {
+      bundle = buildLocallyFreeBundle(d, sheaf);
+    } else if (sheaf.type === 'abstract') {
+      bundle = buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain);
+    } else if (geometry.type === 'abstract' || geometry.type === 'curve') {
       bundle = buildAbstractGeometrySheaf(geometry, sheaf);
     } else {
       bundle = buildEmbeddedGeometrySheaf(geometry, sheaf);
@@ -315,11 +1318,11 @@
       bundle,
       hodge,
       classRows: [
-        { label: 'c(E)', labelLatex: 'c(E)', key: 'chern', latex: formatPolyLatex(bundle.cTotal), plain: formatPolyPlain(bundle.cTotal) },
-        { label: 'ch(E)', labelLatex: '\\operatorname{ch}(E)', key: 'character', latex: formatRankPlusPolyLatex(bundle.rankLatex, positiveTotal(bundle.chComps, d)), plain: formatRankPlusPolyPlain(bundle.rankPlain, positiveTotal(bundle.chComps, d)) },
-        { label: 'td(E)', labelLatex: '\\operatorname{td}(E)', key: 'todd', latex: formatPolyLatex(bundle.todd), plain: formatPolyPlain(bundle.todd) },
-        { label: 's(E)', labelLatex: 's(E)', key: 'segre', latex: formatPolyLatex(bundle.segre), plain: formatPolyPlain(bundle.segre) },
-        { label: 'sqrt td(E)', labelLatex: '\\sqrt{\\operatorname{td}(E)}', key: 'sqrtTodd', latex: formatPolyLatex(bundle.sqrtTodd), plain: formatPolyPlain(bundle.sqrtTodd) }
+        { label: `c(${bundle.labelPlain})`, labelLatex: `c(${bundle.labelLatex})`, key: 'chern', latex: formatPolyLatex(bundle.cTotal), plain: formatPolyPlain(bundle.cTotal) },
+        { label: `ch(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}(${bundle.labelLatex})`, key: 'character', latex: formatRankPlusPolyLatex(bundle.rankLatex, positiveTotal(bundle.chComps, d)), plain: formatRankPlusPolyPlain(bundle.rankPlain, positiveTotal(bundle.chComps, d)) },
+        { label: `td(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}(${bundle.labelLatex})`, key: 'todd', latex: formatPolyLatex(bundle.todd), plain: formatPolyPlain(bundle.todd) },
+        { label: `s(${bundle.labelPlain})`, labelLatex: `s(${bundle.labelLatex})`, key: 'segre', latex: formatPolyLatex(bundle.segre), plain: formatPolyPlain(bundle.segre) },
+        { label: `sqrt td(${bundle.labelPlain})`, labelLatex: `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, key: 'sqrtTodd', latex: formatPolyLatex(bundle.sqrtTodd), plain: formatPolyPlain(bundle.sqrtTodd) }
       ]
     };
     return result;
@@ -327,62 +1330,99 @@
 
   function buildAbstractGeometrySheaf(geometry, sheaf) {
     if (sheaf.type === 'tangent') {
-      return buildAbstractTangentBundle(geometry.dim, sheaf);
+      return buildAbstractTangentBundle(geometry, sheaf);
     }
     if (sheaf.type === 'cotangent') {
-      return buildAbstractCotangentBundle(geometry.dim, sheaf);
+      return buildAbstractCotangentBundle(geometry, sheaf);
     }
     if (sheaf.type === 'canonical') {
-      return buildAbstractCanonicalBundle(geometry.dim, sheaf);
+      return buildAbstractCanonicalBundle(geometry, sheaf);
     }
     if (sheaf.type === 'twist') {
       throw new Error('O_X(r) requires a map to projective space.');
     }
-    return buildAbstractBundle(geometry.dim, sheaf, '\\mathcal{F}', 'F', sheaf.rankLatex, sheaf.rankPlain);
+    return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain);
   }
 
-  function buildAbstractTangentBundle(d, sheaf) {
-    if (sheaf.basis === 'character') {
-      return buildBundleFromCh(abstractTangentChComponents(d), String(d), String(d), 'T_X', 'T_X');
+  function buildAbstractTangentBundle(geometry, sheaf) {
+    if (geometry.type === 'curve') {
+      return buildCurveLineBundle(geometry, sheaf, 'tangent');
     }
-    return buildBundleFromChern(abstractTangentChernComponents(d), String(d), String(d), 'T_X', 'T_X');
+    const d = geometry.dim;
+    if (sheaf.basis === 'character') {
+      return buildBundleFromCh(abstractTangentChComponents(geometry), String(d), String(d), sheaf.labelLatex, sheaf.labelPlain);
+    }
+    return buildBundleFromChern(abstractTangentChernComponents(geometry), String(d), String(d), sheaf.labelLatex, sheaf.labelPlain);
   }
 
-  function buildAbstractCotangentBundle(d, sheaf) {
+  function buildAbstractCotangentBundle(geometry, sheaf) {
+    if (geometry.type === 'curve') {
+      return buildCurveLineBundle(geometry, sheaf, 'cotangent');
+    }
+    const d = geometry.dim;
     if (sheaf.basis === 'character') {
-      const chComps = abstractTangentChComponents(d).map((comp, i) => (
+      const chComps = abstractTangentChComponents(geometry).map((comp, i) => (
         i === 0 ? comp : comp.scale(fraction(i % 2 === 0 ? 1 : -1))
       ));
-      return buildBundleFromCh(chComps, String(d), String(d), '\\Omega_X^1', 'Omega_X^1');
+      return buildBundleFromCh(chComps, String(d), String(d), sheaf.labelLatex, sheaf.labelPlain);
     }
-    const cComps = abstractTangentChernComponents(d).map((comp, i) => (
+    const cComps = abstractTangentChernComponents(geometry).map((comp, i) => (
       i === 0 ? comp : comp.scale(fraction(i % 2 === 0 ? 1 : -1))
     ));
-    return buildBundleFromChern(cComps, String(d), String(d), '\\Omega_X^1', 'Omega_X^1');
+    return buildBundleFromChern(cComps, String(d), String(d), sheaf.labelLatex, sheaf.labelPlain);
   }
 
-  function buildAbstractCanonicalBundle(d, sheaf) {
+  function buildAbstractCanonicalBundle(geometry, sheaf) {
+    if (geometry.type === 'curve') {
+      return buildCurveLineBundle(geometry, sheaf, 'canonical');
+    }
+    const d = geometry.dim;
     const firstChern = sheaf.basis === 'character'
-      ? (abstractTangentChComponents(d)[1] || Poly.zero()).scale(fraction(-1))
-      : (abstractTangentChernComponents(d)[1] || Poly.zero()).scale(fraction(-1));
-    return buildLineFromFirstChern(firstChern, d, 'K_X', 'K_X');
+      ? (abstractTangentChComponents(geometry)[1] || Poly.zero()).scale(fraction(-1))
+      : (abstractTangentChernComponents(geometry)[1] || Poly.zero()).scale(fraction(-1));
+    return buildLineFromFirstChern(firstChern, d, sheaf.labelLatex, sheaf.labelPlain);
   }
 
-  function abstractTangentChernComponents(d) {
+  function buildCurveLineBundle(geometry, sheaf, kind) {
+    const point = curvePointClass(geometry);
+    const firstChern = kind === 'tangent' ? curveTangentFirstChern(geometry, point) : curveCanonicalFirstChern(geometry, point);
+    return buildLineFromFirstChern(firstChern, 1, sheaf.labelLatex, sheaf.labelPlain);
+  }
+
+  function curvePointClass(geometry) {
+    const id = `pt_${geometry.labelPlain.replace(/[^A-Za-z0-9]+/g, '_') || 'C'}`;
+    defineVariable(id, 1, `[p]_{${geometry.labelLatex}}`);
+    return Poly.variable(id);
+  }
+
+  function curveTangentFirstChern(geometry, point) {
+    const genus = sanitizeGenusInput(geometry.genus);
+    if (/^\d+$/.test(genus)) return point.scale(fraction(2 - 2 * Number(genus)));
+    defineVariable('curveGenus', 0, 'g');
+    return point.scale(fraction(2)).sub(Poly.variable('curveGenus').mul(point, 1).scale(fraction(2)));
+  }
+
+  function curveCanonicalFirstChern(geometry, point) {
+    return curveTangentFirstChern(geometry, point).neg();
+  }
+
+  function abstractTangentChernComponents(geometry) {
+    const d = geometry.dim;
     const cComps = zeroComponentArray(d);
     for (let i = 1; i <= d; i++) {
       const id = `cX${i}`;
-      defineVariable(id, i, `c_{${i}}(X)`);
+      defineVariable(id, i, `c_{${i}}(${geometry.labelLatex})`);
       cComps[i] = Poly.variable(id);
     }
     return cComps;
   }
 
-  function abstractTangentChComponents(d) {
+  function abstractTangentChComponents(geometry) {
+    const d = geometry.dim;
     const chComps = zeroComponentArray(d);
     for (let i = 1; i <= d; i++) {
       const id = `chX${i}`;
-      defineVariable(id, i, `\\operatorname{ch}_{${i}}(X)`);
+      defineVariable(id, i, `\\operatorname{ch}_{${i}}(${geometry.labelLatex})`);
       chComps[i] = Poly.variable(id);
     }
     return chComps;
@@ -404,12 +1444,44 @@
     }
     if (sheaf.type === 'canonical') {
       const q = geometry.degrees.reduce((sum, degree) => sum + degree, 0) - geometry.ambient - 1;
-      return buildLineFromHyperplane(q, d, `K_X=\\mathcal{O}_X(${q})`, `K_X=O_X(${q})`);
+      return buildLineFromHyperplane(q, d, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
     }
     if (sheaf.type === 'twist') {
-      return buildLineFromHyperplane(sheaf.twist, d, `\\mathcal{O}_X(${sheaf.twist})`, `O_X(${sheaf.twist})`);
+      return buildLineFromHyperplane(sheaf.twist, d, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
     }
-    return buildAbstractBundle(d, sheaf, '\\mathcal{F}', 'F', sheaf.rankLatex, sheaf.rankPlain);
+    return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain);
+  }
+
+  function buildLocallyFreeBundle(d, sheaf) {
+    const numericRank = numericRankFromPlain(sheaf.rankPlain);
+    if (sheaf.basis === 'character') {
+      if (numericRank == null) {
+        return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain);
+      }
+      const maxCharacterIndex = Math.min(d, numericRank);
+      const freeChComps = zeroComponentArray(maxCharacterIndex);
+      for (let i = 1; i <= maxCharacterIndex; i++) {
+        const id = `ch${i}`;
+        defineVariable(id, i, `\\operatorname{ch}_{${i}}(${sheaf.labelLatex})`);
+        freeChComps[i] = Poly.variable(id);
+      }
+      const freePComps = zeroComponentArray(maxCharacterIndex);
+      for (let i = 1; i <= maxCharacterIndex; i++) {
+        freePComps[i] = freeChComps[i].scale(fraction(factorialBigInt(i)));
+      }
+      const freeCComps = chernFromPowerSums(freePComps, maxCharacterIndex);
+      const cComps = zeroComponentArray(d);
+      for (let i = 1; i <= maxCharacterIndex; i++) cComps[i] = freeCComps[i];
+      return buildBundleFromChern(cComps, sheaf.rankLatex, sheaf.rankPlain, sheaf.labelLatex, sheaf.labelPlain);
+    }
+    const cComps = zeroComponentArray(d);
+    const maxChernIndex = numericRank == null ? d : Math.min(d, numericRank);
+    for (let i = 1; i <= maxChernIndex; i++) {
+      const id = `c${i}`;
+      defineVariable(id, i, `c_{${i}}(${sheaf.labelLatex})`);
+      cComps[i] = Poly.variable(id);
+    }
+    return buildBundleFromChern(cComps, sheaf.rankLatex, sheaf.rankPlain, sheaf.labelLatex, sheaf.labelPlain);
   }
 
   function buildAbstractBundle(d, sheaf, subjectLatex, subjectPlain, rankLatex, rankPlain, options = {}) {
@@ -580,6 +1652,22 @@
 
   function buildHodgeNumbers(geometry) {
     const d = geometry.dim;
+    if (geometry.type === 'curve') {
+      const genus = genusLatex(geometry.genus);
+      return {
+        entries: [
+          [
+            { latex: '1', plain: '1' },
+            { latex: genus, plain: genusPlain(geometry.genus) }
+          ],
+          [
+            { latex: genus, plain: genusPlain(geometry.genus) },
+            { latex: '1', plain: '1' }
+          ]
+        ],
+        message: `Curve Hodge numbers with genus ${genusPlain(geometry.genus)}.`
+      };
+    }
     if (geometry.type === 'abstract') {
       if (d === 2) {
         return {
@@ -1038,23 +2126,45 @@
 
   function renderResult(result) {
     const { geometry, bundle } = result;
-    setInlineMath(refs.objectBadge, `${geometry.labelLatex},\\ ${bundle.labelLatex}`);
-    refs.status.textContent = `${result.sheaf.basis === 'character' ? 'chern character' : 'chern class'} basis`;
-    setInlineMath(refs.ringSummary, `A^*(X)_{\\le ${geometry.dim}}`);
-    setInlineMath(refs.outVariety, geometry.labelLatex);
-    setInlineMath(refs.outDim, String(geometry.dim));
-    if (geometry.ambient == null) setInlineMath(refs.outAmbient, '\\text{abstract}');
-    else setInlineMath(refs.outAmbient, geometry.ambientLatex);
-    setInlineMath(refs.outCodim, geometry.codim == null ? '-' : String(geometry.codim));
-    setInlineMath(refs.outSheaf, bundle.labelLatex);
-    setInlineMath(refs.outRank, bundle.rankLatex);
-    refs.classChart.innerHTML = result.classRows.map((row) => `
-      <div class="sheaf-formula-row">
-        <span class="sheaf-formula-label">\\(${row.labelLatex}\\)</span>
-        <span class="sheaf-formula-value">\\(${row.latex}\\)</span>
-      </div>
-    `).join('');
-    renderHodgeChart(result);
+    const badgeParts = [];
+    if (geometry) badgeParts.push(geometry.labelLatex);
+    if (bundle) badgeParts.push(bundle.labelLatex);
+    setInlineMath(refs.objectBadge, badgeParts.length ? badgeParts.join(',\\ ') : '\\text{empty}');
+    const basis = result.sheaf?.basis === 'character' ? 'chern character' : 'chern class';
+    refs.status.textContent = `${state.varieties.length} variet${state.varieties.length === 1 ? 'y' : 'ies'} · ${state.sheaves.length} ${state.sheaves.length === 1 ? 'sheaf' : 'sheaves'}${bundle ? ` · ${basis} basis` : ''}`;
+    setInlineMath(refs.ringSummary, geometry ? `A^*(${geometry.labelLatex})_{\\le ${geometry.dim}}` : '\\text{add a variety}');
+    if (result.classRows.length) {
+      if (refs.classActions) refs.classActions.hidden = false;
+      refs.classChart.hidden = false;
+      refs.classMessage.hidden = true;
+      refs.classChart.innerHTML = result.classRows.map((row) => `
+        <div class="sheaf-formula-row">
+          <span class="sheaf-formula-label">\\(${row.labelLatex}\\)</span>
+          <span class="sheaf-formula-value">\\(${row.latex}\\)</span>
+        </div>
+      `).join('');
+      refs.classMessage.textContent = '';
+    } else {
+      if (refs.classActions) refs.classActions.hidden = true;
+      refs.basisRow.hidden = true;
+      refs.classChart.hidden = true;
+      refs.classChart.innerHTML = '';
+      refs.classMessage.className = 'hint';
+      refs.classMessage.hidden = false;
+      refs.classMessage.textContent = 'Select a sheaf for characteristic classes.';
+    }
+    if (result.hodge) {
+      if (refs.hodgeActions) refs.hodgeActions.hidden = false;
+      refs.hodgeChart.hidden = false;
+      refs.hodgeMessage.hidden = false;
+      renderHodgeChart(result);
+    } else {
+      if (refs.hodgeActions) refs.hodgeActions.hidden = true;
+      refs.hodgeChart.hidden = true;
+      refs.hodgeChart.innerHTML = '';
+      refs.hodgeMessage.hidden = false;
+      refs.hodgeMessage.textContent = 'Add and select a variety for Hodge numbers.';
+    }
     typeset(refs.classChart);
     typeset(refs.hodgeChart);
     renderCanvas(result);
@@ -1069,7 +2179,7 @@
     const d = result.geometry.dim;
     const entries = result.hodge.entries;
     const expanded = state.hodgeExpanded;
-    const chiOffset = expanded && d > 0 ? -d + state.hodgeChiOffsetA : 0;
+    const chiOffset = expanded && d > 0 ? -d - 1 : 0;
     const leftPaddingCols = expanded && d > 0 ? Math.max(2 * d, -chiOffset) : 0;
     const hodgeOffset = expanded ? leftPaddingCols : 0;
     const hodgeEndCol = hodgeOffset + 2 * d + 1;
@@ -1131,16 +2241,18 @@
         const col = chiGridColumn(p);
         boardCells.push(`<span class="hodge-chi" style="grid-row:1;grid-column:${col};">\\(${chi}\\)</span>`);
       });
-      boardCells.push(`<span class="hodge-euler" style="grid-row:1;grid-column:${bettiCol};">\\(${hodgeEulerDisplay(result)}\\)</span>`);
+      const eulerDisplay = hodgeEulerDisplay(result);
+      const eulerClass = parseSimpleLatexNumber(eulerDisplay) == null ? '' : ' is-number';
+      boardCells.push(`<span class="hodge-euler${eulerClass}" style="grid-row:1;grid-column:${bettiCol};">\\(${eulerDisplay}\\)</span>`);
       hodgeBettiDisplays(result).forEach((betti, k) => {
         const row = 2 * d - k + 1 + rowOffset;
-        boardCells.push(`<span class="hodge-betti" style="grid-row:${row};grid-column:${bettiCol};">\\(${betti}\\)</span>`);
+        const bettiClass = parseSimpleLatexNumber(betti) == null ? '' : ' is-number';
+        boardCells.push(`<span class="hodge-betti${bettiClass}" style="grid-row:${row};grid-column:${bettiCol};">\\(${betti}\\)</span>`);
       });
     }
     const expandedClass = expanded ? ' is-expanded' : '';
     if (refs.hodgeExpanded) refs.hodgeExpanded.checked = expanded;
     syncHodgeCellSizeControl();
-    syncHodgeChiOffsetControl();
     refs.hodgeChart.setAttribute('aria-expanded', String(expanded));
     refs.hodgeChart.innerHTML = `
       <div class="hodge-frame${expandedClass}">
@@ -1154,7 +2266,7 @@
 
   function toggleHodgeExpanded() {
     state.hodgeExpanded = !state.hodgeExpanded;
-    if (state.lastResult) {
+    if (state.lastResult?.hodge) {
       renderHodgeChart(state.lastResult);
       typeset(refs.hodgeChart);
     }
@@ -1181,25 +2293,6 @@
     if (refs.hodgeCellSizeValue) refs.hodgeCellSizeValue.textContent = `${state.hodgeCellSize}px`;
   }
 
-  function setHodgeChiOffsetA(value) {
-    state.hodgeChiOffsetA = normalizedInt(value, -MAX_DIMENSION, MAX_DIMENSION, -1);
-    syncHodgeChiOffsetControl();
-    if (state.lastResult) {
-      renderHodgeChart(state.lastResult);
-      typeset(refs.hodgeChart);
-    }
-  }
-
-  function syncHodgeChiOffsetControl() {
-    if (refs.hodgeChiOffsetA) refs.hodgeChiOffsetA.value = String(state.hodgeChiOffsetA);
-    if (refs.hodgeChiOffsetAValue) refs.hodgeChiOffsetAValue.textContent = hodgeChiOffsetLabel(state.hodgeChiOffsetA);
-  }
-
-  function hodgeChiOffsetLabel(a) {
-    if (a === 0) return '-n';
-    return a > 0 ? `-n+${a}` : `-n${a}`;
-  }
-
   function syncHodgeWidePlacement() {
     const card = refs.hodgeCard;
     const sideAnchor = refs.hodgeSideAnchor;
@@ -1224,11 +2317,12 @@
   function hodgeChiDisplays(result) {
     const d = result.geometry.dim;
     if (result.geometry.type === 'abstract') {
+      const variety = result.geometry.labelLatex;
       return Array.from({ length: d + 1 }, (_, p) => {
-        if (p === 0) return '\\chi(\\mathcal{O}_X)';
-        if (p === d) return '\\chi(\\omega_X)';
-        if (p === 1) return '\\chi(\\Omega_X)';
-        return `\\chi(\\Omega_X^{${p}})`;
+        if (p === 0) return `\\chi(\\mathcal{O}_{${variety}})`;
+        if (p === d) return `\\chi(\\omega_{${variety}})`;
+        if (p === 1) return `\\chi(\\Omega_{${variety}})`;
+        return `\\chi(\\Omega_{${variety}}^{${p}})`;
       });
     }
     return hodgeChiExpressions(result.hodge.entries, d);
@@ -1342,18 +2436,32 @@
     canvas.style.height = `${cssHeight}px`;
     canvas.width = Math.floor(cssWidth * ratio);
     canvas.height = Math.floor(cssHeight * ratio);
+    state.canvasWidth = cssWidth;
+    state.canvasHeight = cssHeight;
     const ctx = canvas.getContext('2d');
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, cssWidth, cssHeight);
     drawCanvasBackground(ctx, cssWidth, cssHeight);
-    if (!result) {
-      renderCanvasMessage(cssWidth, cssHeight, '\\text{No valid sheaf data}');
+    if (!state.varieties.length && !state.sheaves.length) {
+      renderCanvasMessage(cssWidth, cssHeight, '\\text{Add a variety or sheaf}');
       return;
     }
-    const compact = cssWidth < 620;
-    if (compact) drawCompactOverview(ctx, cssWidth, cssHeight, result);
-    else drawWideOverview(ctx, cssWidth, cssHeight, result);
-    renderCanvasLabels(result, cssWidth, cssHeight, compact);
+    ensureCanvasLabelPositions(cssWidth, cssHeight);
+    drawSheafBaseLines(ctx, cssWidth, cssHeight);
+    renderCanvasLabels(cssWidth, cssHeight);
+  }
+
+  function redrawCanvasSurface() {
+    const canvas = refs.canvas;
+    if (!canvas || !state.canvasWidth || !state.canvasHeight) return;
+    const ratio = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.clearRect(0, 0, state.canvasWidth, state.canvasHeight);
+    drawCanvasBackground(ctx, state.canvasWidth, state.canvasHeight);
+    if (!state.varieties.length && !state.sheaves.length) return;
+    ensureCanvasLabelPositions(state.canvasWidth, state.canvasHeight);
+    drawSheafBaseLines(ctx, state.canvasWidth, state.canvasHeight);
   }
 
   function renderCanvasMessage(width, height, latex) {
@@ -1362,114 +2470,154 @@
     typeset(refs.canvasLabels);
   }
 
-  function renderCanvasLabels(result, width, height, compact) {
+  function renderCanvasLabels(width, height) {
     if (!refs.canvasLabels) return;
-    const labels = compact
-      ? compactCanvasLabels(result, width, height)
-      : wideCanvasLabels(result, width, height);
+    const labels = canvasOverviewLabels(width, height);
     refs.canvasLabels.innerHTML = labels.map((label) => `
-      <div class="sheaf-canvas-label" style="left:${label.x}px;top:${label.y}px;max-width:${label.maxWidth}px;">
-        <small>\\(${label.kicker}\\)</small>
+      <div class="${label.className || 'sheaf-canvas-label'}" style="left:${label.x}px;top:${label.y}px;max-width:${label.maxWidth}px;" ${label.objectKind ? `data-object-kind="${label.objectKind}" data-object-id="${escapeHtml(label.objectId)}" role="button" tabindex="0" aria-label="${escapeHtml(label.ariaLabel || label.main)}"` : ''}>
         <span>\\(${label.main}\\)</span>
-        ${label.sub ? `<span class="subline">\\(${label.sub}\\)</span>` : ''}
       </div>
     `).join('');
     typeset(refs.canvasLabels);
   }
 
-  function wideCanvasLabels(result, width, height) {
-    const y = height / 2;
-    return [
-      {
-        x: 36 + 125,
-        y: y - 8,
-        maxWidth: 220,
-        kicker: 'X',
-        main: result.geometry.labelLatex,
-        sub: `\\dim X=${result.geometry.dim}`
-      },
-      {
-        x: width / 2,
-        y,
-        maxWidth: 170,
-        kicker: 'E',
-        main: result.bundle.labelLatex,
-        sub: `\\operatorname{rk}E=${result.bundle.rankLatex}`
-      },
-      {
-        x: width - 161,
-        y,
-        maxWidth: 220,
-        kicker: 'A^*(X)',
-        main: 'c(E),\\ \\operatorname{ch}(E),\\ \\operatorname{td}(E),\\ s(E)',
-        sub: `\\deg\\le ${result.geometry.dim}`
-      }
-    ];
-  }
-
-  function compactCanvasLabels(result, width) {
-    return [
-      {
-        x: width / 2,
-        y: 75,
-        maxWidth: width - 86,
-        kicker: 'X',
-        main: result.geometry.labelLatex,
-        sub: `\\dim X=${result.geometry.dim}`
-      },
-      {
-        x: width / 2,
-        y: 181,
-        maxWidth: width - 140,
-        kicker: 'E',
-        main: result.bundle.labelLatex,
-        sub: `\\operatorname{rk}E=${result.bundle.rankLatex}`
-      },
-      {
-        x: width / 2,
-        y: 274,
-        maxWidth: width - 140,
-        kicker: 'A^*(X)',
-        main: 'c(E),\\ \\operatorname{ch}(E),\\ \\operatorname{td}(E),\\ s(E)',
-        sub: `\\deg\\le ${result.geometry.dim}`
-      }
-    ];
+  function canvasOverviewLabels(width, height) {
+    const compact = width < 620;
+    const layout = canvasOverviewLayout(width, height, compact);
+    const labels = [];
+    const showSelection = inputIsModifyMode();
+    state.varieties.forEach((variety, index) => {
+      const rect = layout.varietyNodes[index] || layout.varietyPanel;
+      const pos = canvasLabelPosition(variety, 'variety', rect, width, height, index, state.varieties.length);
+      const name = sanitizeMathLabel(variety.name, 'X');
+      labels.push({
+        x: pos.x,
+        y: pos.y,
+        maxWidth: Math.max(120, Math.min(260, width - 24)),
+        main: name,
+        ariaLabel: `variety ${latexToPlain(name)}`,
+        className: showSelection && !state.activeSheafId && variety.id === state.activeVarietyId ? 'sheaf-canvas-label is-active is-variety' : 'sheaf-canvas-label is-variety',
+        objectKind: 'variety',
+        objectId: variety.id
+      });
+    });
+    state.sheaves.forEach((sheaf, index) => {
+      const rect = layout.sheafNodes[index] || layout.sheafPanel;
+      const pos = canvasLabelPosition(sheaf, 'sheaf', rect, width, height, index, state.sheaves.length);
+      const name = sanitizeMathLabel(sheaf.name, '\\mathcal{E}');
+      labels.push({
+        x: pos.x,
+        y: pos.y,
+        maxWidth: Math.max(120, Math.min(260, width - 24)),
+        main: name,
+        ariaLabel: `sheaf ${latexToPlain(name)}`,
+        className: showSelection && sheaf.id === state.activeSheafId ? 'sheaf-canvas-label is-active is-sheaf' : 'sheaf-canvas-label is-sheaf',
+        objectKind: 'sheaf',
+        objectId: sheaf.id
+      });
+    });
+    return labels;
   }
 
   function drawCanvasBackground(ctx, width, height) {
     ctx.fillStyle = '#fffdf8';
     ctx.fillRect(0, 0, width, height);
-    ctx.strokeStyle = 'rgba(216,208,196,0.55)';
-    ctx.lineWidth = 1;
-    for (let x = 24; x < width; x += 24) {
+  }
+
+  function drawSheafBaseLines(ctx, width, height) {
+    const labels = canvasOverviewLabels(width, height);
+    const labelMap = new Map();
+    labels.forEach((label) => {
+      if (!label.objectKind || !label.objectId) return;
+      labelMap.set(`${label.objectKind}:${label.objectId}`, label);
+    });
+    ctx.save();
+    ctx.strokeStyle = 'rgba(139, 58, 42, 0.65)';
+    ctx.lineWidth = 1.6;
+    labels.forEach((label) => {
+      if (label.objectKind !== 'sheaf') return;
+      const sheaf = state.sheaves.find((item) => item.id === label.objectId);
+      if (!sheaf?.baseVarietyId) return;
+      const base = labelMap.get(`variety:${sheaf.baseVarietyId}`);
+      if (!base) return;
       ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
+      ctx.moveTo(label.x, label.y);
+      ctx.lineTo(base.x, base.y);
       ctx.stroke();
-    }
-    for (let y = 24; y < height; y += 24) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
-    }
+    });
+    ctx.restore();
   }
 
   function drawWideOverview(ctx, width, height, result) {
-    const y = height / 2;
-    drawAmbient(ctx, 36, 42, 250, height - 84, result.geometry);
-    drawSheafNode(ctx, width / 2 - 95, y - 62, 190, 124, result.bundle);
-    drawClassNode(ctx, width - 286, 62, 250, height - 124, result.geometry.dim);
-    drawArrow(ctx, 286, y, width / 2 - 95, y, '#3d6b4f');
-    drawArrow(ctx, width / 2 + 95, y, width - 286, y, '#8b3a2a');
+    drawInputOverview(ctx, canvasOverviewLayout(width, height, false), result);
   }
 
   function drawCompactOverview(ctx, width, height, result) {
-    drawAmbient(ctx, 28, 28, width - 56, 94, result.geometry);
-    drawSheafNode(ctx, 58, 144, width - 116, 74, result.bundle);
-    drawClassNode(ctx, 58, 242, width - 116, 64, result.geometry.dim);
-    drawArrow(ctx, width / 2, 122, width / 2, 144, '#3d6b4f');
-    drawArrow(ctx, width / 2, 218, width / 2, 242, '#8b3a2a');
+    drawInputOverview(ctx, canvasOverviewLayout(width, height, true), result);
+  }
+
+  function canvasOverviewLayout(width, height, compact) {
+    if (compact) {
+      const margin = 28;
+      const panelW = Math.max(120, width - margin * 2);
+      const varietyPanel = { x: margin, y: 28, w: panelW, h: 120 };
+      const sheafPanel = { x: margin, y: 176, w: panelW, h: 120 };
+      return {
+        varietyPanel,
+        sheafPanel,
+        varietyNodes: objectNodeRects(state.varieties.length, varietyPanel),
+        sheafNodes: objectNodeRects(state.sheaves.length, sheafPanel),
+        hodge: { x: margin, y: 232, w: (panelW - 12) / 2, h: 70 },
+        classes: { x: margin + (panelW + 12) / 2, y: 232, w: (panelW - 12) / 2, h: 70 }
+      };
+    }
+    const margin = 36;
+    const colW = Math.max(120, (width - margin * 2) / 2);
+    const varietyPanel = { x: margin, y: 36, w: colW, h: height - 72 };
+    const sheafPanel = { x: width - margin - colW, y: 36, w: colW, h: height - 72 };
+    return {
+      varietyPanel,
+      sheafPanel,
+      varietyNodes: objectNodeRects(state.varieties.length, varietyPanel),
+      sheafNodes: objectNodeRects(state.sheaves.length, sheafPanel),
+      hodge: { x: 0, y: 0, w: 0, h: 0 },
+      classes: { x: 0, y: 0, w: 0, h: 0 }
+    };
+  }
+
+  function objectNodeRects(count, panel) {
+    const safeCount = Math.max(1, count);
+    const gap = Math.max(18, Math.min(34, panel.h / (safeCount + 2)));
+    const nodeH = Math.max(26, Math.min(40, (panel.h - gap * (safeCount + 1)) / safeCount));
+    return Array.from({ length: count }, (_, index) => ({
+      x: panel.x,
+      y: panel.y + gap + index * (nodeH + gap),
+      w: panel.w,
+      h: nodeH
+    }));
+  }
+
+  function drawInputOverview(ctx, layout) {
+    drawObjectPanel(ctx, layout.varietyPanel, layout.varietyNodes, state.varieties, state.activeVarietyId, '#3d6b4f', '#f7f4ef');
+    drawObjectPanel(ctx, layout.sheafPanel, layout.sheafNodes, state.sheaves, state.activeSheafId, '#3d6b4f', '#ffffff');
+    drawClassNode(ctx, layout.hodge.x, layout.hodge.y, layout.hodge.w, layout.hodge.h, 0);
+    drawClassNode(ctx, layout.classes.x, layout.classes.y, layout.classes.w, layout.classes.h, 0);
+    const activeVarietyRect = layout.varietyNodes[state.varieties.findIndex((item) => item.id === state.activeVarietyId)];
+    const activeSheafRect = layout.sheafNodes[state.sheaves.findIndex((item) => item.id === state.activeSheafId)];
+    if (activeVarietyRect) drawArrow(ctx, activeVarietyRect.x + activeVarietyRect.w, activeVarietyRect.y + activeVarietyRect.h / 2, layout.hodge.x, layout.hodge.y + layout.hodge.h / 2, '#3d6b4f');
+    if (activeSheafRect) drawArrow(ctx, activeSheafRect.x + activeSheafRect.w, activeSheafRect.y + activeSheafRect.h / 2, layout.classes.x, layout.classes.y + layout.classes.h / 2, '#8b3a2a');
+  }
+
+  function drawObjectPanel(ctx, panel, nodes, items, activeId, color, fill) {
+    roundedRect(ctx, panel.x, panel.y, panel.w, panel.h, 8, '#fffdf8', '#d8d0c4');
+    nodes.forEach((node, index) => {
+      const active = items[index]?.id === activeId;
+      roundedRect(ctx, node.x, node.y, node.w, node.h, 6, active ? fill : 'rgba(255,255,255,0.58)', active ? color : '#d8d0c4');
+    });
+  }
+
+  function sanitizeDimensionText(value) {
+    return String(normalizedInt(value, 0, MAX_DIMENSION, 3));
   }
 
   function drawAmbient(ctx, x, y, w, h, geometry) {
@@ -1489,6 +2637,106 @@
 
   function drawClassNode(ctx, x, y, w, h, dim) {
     roundedRect(ctx, x, y, w, h, 8, '#fff7f3', '#8b3a2a');
+  }
+
+  function canvasLabelPosition(object, kind, fallbackRect, width, height) {
+    if (Number.isFinite(object.labelX) && Number.isFinite(object.labelY)) {
+      return {
+        x: clamp(object.labelX * width, 24, width - 24),
+        y: clamp(object.labelY * height, 24, height - 24)
+      };
+    }
+    return {
+      x: clamp(fallbackRect.x + fallbackRect.w / 2, 24, width - 24),
+      y: clamp(fallbackRect.y + fallbackRect.h / 2, 24, height - 24)
+    };
+  }
+
+  function ensureCanvasLabelPositions(width, height) {
+    const compact = width < 620;
+    const layout = canvasOverviewLayout(width, height, compact);
+    state.varieties.forEach((variety, index) => {
+      if (Number.isFinite(variety.labelX) && Number.isFinite(variety.labelY)) return;
+      const rect = layout.varietyNodes[index] || layout.varietyPanel;
+      setCanvasLabelPosition(variety, rect.x + rect.w / 2, rect.y + rect.h / 2, width, height);
+    });
+    state.sheaves.forEach((sheaf, index) => {
+      if (Number.isFinite(sheaf.labelX) && Number.isFinite(sheaf.labelY)) return;
+      const rect = layout.sheafNodes[index] || layout.sheafPanel;
+      setCanvasLabelPosition(sheaf, rect.x + rect.w / 2, rect.y + rect.h / 2, width, height);
+    });
+  }
+
+  function setCanvasLabelPosition(object, x, y, width, height) {
+    object.labelX = clamp(width ? x / width : 0.5, 0.04, 0.96);
+    object.labelY = clamp(height ? y / height : 0.5, 0.07, 0.93);
+  }
+
+  function startCanvasLabelDrag(target, event) {
+    const kind = target.dataset.objectKind;
+    const id = target.dataset.objectId;
+    const item = kind === 'sheaf'
+      ? state.sheaves.find((entry) => entry.id === id)
+      : state.varieties.find((entry) => entry.id === id);
+    if (!item || !refs.canvas) return;
+    event.preventDefault();
+    target.classList.add('is-dragging');
+    const canvasRect = refs.canvas.getBoundingClientRect();
+    const labelRect = target.getBoundingClientRect();
+    state.labelDrag = {
+      item,
+      target,
+      canvasRect,
+      offsetX: event.clientX - labelRect.left,
+      offsetY: event.clientY - labelRect.top,
+      startX: event.clientX,
+      startY: event.clientY,
+      pointerId: event.pointerId,
+      moved: false
+    };
+    try { target.setPointerCapture?.(event.pointerId); } catch (_) {}
+    document.addEventListener('pointermove', updateCanvasLabelDrag);
+    document.addEventListener('pointerup', finishCanvasLabelDrag);
+    document.addEventListener('pointercancel', finishCanvasLabelDrag);
+  }
+
+  function updateCanvasLabelDrag(event) {
+    const drag = state.labelDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const width = drag.canvasRect.width || 1;
+    const height = drag.canvasRect.height || 1;
+    const x = event.clientX - drag.canvasRect.left - drag.offsetX + drag.target.offsetWidth / 2;
+    const y = event.clientY - drag.canvasRect.top - drag.offsetY + drag.target.offsetHeight / 2;
+    const clampedX = clamp(x, 24, width - 24);
+    const clampedY = clamp(y, 24, height - 24);
+    setCanvasLabelPosition(drag.item, clampedX, clampedY, width, height);
+    drag.target.style.left = `${clampedX}px`;
+    drag.target.style.top = `${clampedY}px`;
+    if (Math.abs(event.clientX - drag.startX) > 2 || Math.abs(event.clientY - drag.startY) > 2) {
+      drag.moved = true;
+      redrawCanvasSurface();
+    }
+  }
+
+  function finishCanvasLabelDrag(event) {
+    const drag = state.labelDrag;
+    document.removeEventListener('pointermove', updateCanvasLabelDrag);
+    document.removeEventListener('pointerup', finishCanvasLabelDrag);
+    document.removeEventListener('pointercancel', finishCanvasLabelDrag);
+    if (!drag) return;
+    drag.target.classList.remove('is-dragging');
+    try { drag.target.releasePointerCapture?.(drag.pointerId); } catch (_) {}
+    const moved = drag.moved;
+    state.labelDrag = null;
+    if (moved) {
+      state.suppressLabelClickUntil = Date.now() + 180;
+      recompute();
+    }
+  }
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
   }
 
   function roundedRect(ctx, x, y, w, h, r, fill, stroke) {
@@ -1527,53 +2775,296 @@
     ctx.fill();
   }
 
-  function refreshExport() {
+  function refreshExport(scope = state.exportScope || 'main') {
     if (!refs.exportOut) return;
+    state.exportScope = scope || 'main';
     if (!state.lastResult) {
       refs.exportOut.value = '';
       return;
     }
     const format = refs.exportFormat.value;
-    refs.exportOut.value = exportResult(state.lastResult, format);
+    refs.exportOut.value = exportResult(state.lastResult, format, state.exportScope);
   }
 
-  function exportResult(result, format) {
+  function openChartExport(scope) {
+    refreshExport(scope);
+    if (refs.exportCard) refs.exportCard.classList.remove('collapsed');
+    refs.status.textContent = scope === 'hodge' ? 'hodge numbers export ready' : 'characteristic classes export ready';
+  }
+
+  function exportResult(result, format, scope = 'main') {
+    if (scope === 'classes') {
+      if (!result.classRows.length) return 'No characteristic classes available. Select a sheaf.';
+      return exportClassChart(result, format);
+    }
+    if (scope === 'hodge') {
+      if (!result.hodge || !result.geometry) return 'No Hodge numbers available. Add and select a variety.';
+      return exportHodgeChart(result, format);
+    }
+    return exportMainCanvas(result, format);
+  }
+
+  function exportMainCanvas(result, format) {
     const lines = [];
+    const basisPlain = result.sheaf?.basis === 'character' ? 'Chern character' : 'Chern classes';
     if (format === 'latex') {
-      lines.push(`% Sheaf Calculator`);
-      lines.push(`% X: ${result.geometry.labelPlain}`);
-      lines.push(`% E: ${result.bundle.labelPlain}`);
-      lines.push(`% truncated above degree ${result.geometry.dim}`);
-      result.classRows.forEach((row) => lines.push(`\\[${row.label} = ${row.latex}\\]`));
-      lines.push(...exportHodgeLines(result, 'latex'));
+      lines.push('% Sheaf Calculator: main canvas');
+      state.varieties.forEach((variety, index) => {
+        const marker = variety.id === state.activeVarietyId ? '\\quad\\text{active for }h^{p,q}' : '';
+        lines.push(`\\[X_{${index + 1}}:\\ ${exportVarietyLatex(variety)}${marker}\\]`);
+      });
+      state.sheaves.forEach((sheaf, index) => {
+        const marker = sheaf.id === state.activeSheafId ? '\\quad\\text{active for }A^*' : '';
+        lines.push(`\\[E_{${index + 1}}:\\ ${exportSheafLatex(sheaf)}${marker}\\]`);
+      });
+      if (result.sheaf) lines.push(`% basis: ${basisPlain}`);
       return lines.join('\n');
     }
     if (format === 'sage') {
-      lines.push(`# Sheaf Calculator`);
-      lines.push(`# X: ${result.geometry.labelPlain}`);
-      lines.push(`# E: ${result.bundle.labelPlain}`);
-      lines.push(`# Work modulo terms of degree > ${result.geometry.dim}.`);
-      result.classRows.forEach((row) => lines.push(`${row.key} = ${row.plain}`));
-      lines.push(...exportHodgeLines(result, 'plain'));
+      lines.push('# Sheaf Calculator: main canvas');
+      state.varieties.forEach((variety, index) => {
+        const marker = variety.id === state.activeVarietyId ? ' active for hodge numbers' : '';
+        lines.push(`# X_${index + 1}: ${exportVarietyPlain(variety)}${marker}`);
+      });
+      state.sheaves.forEach((sheaf, index) => {
+        const marker = sheaf.id === state.activeSheafId ? ' active for characteristic classes' : '';
+        lines.push(`# E_${index + 1}: ${exportSheafPlain(sheaf)}${marker}`);
+      });
+      if (result.sheaf) lines.push(`# basis: ${basisPlain}`);
       return lines.join('\n');
     }
-    lines.push(`Sheaf Calculator`);
+    lines.push('Sheaf Calculator: main canvas');
+    state.varieties.forEach((variety, index) => {
+      const marker = variety.id === state.activeVarietyId ? ' active for Hodge numbers' : '';
+      lines.push(`X_${index + 1}: ${exportVarietyPlain(variety)}${marker}`);
+    });
+    state.sheaves.forEach((sheaf, index) => {
+      const marker = sheaf.id === state.activeSheafId ? ' active for characteristic classes' : '';
+      lines.push(`E_${index + 1}: ${exportSheafPlain(sheaf)}${marker}`);
+    });
+    if (result.sheaf) lines.push(`basis: ${basisPlain}`);
+    return lines.join('\n');
+  }
+
+  function exportVarietyLatex(variety) {
+    const geometry = geometryFromVariety(variety);
+    const parts = [
+      `${sanitizeMathLabel(variety.name, 'X')}`,
+      `\\operatorname{type}=\\text{${varietyTypeLabel(variety.type)}}`,
+      `\\dim=${geometry.dim}`
+    ];
+    if (geometry.type === 'curve') parts.push(`g=${genusLatex(geometry.genus)}`);
+    if (geometry.type === 'projective') parts.push(`\\text{ambient}=\\mathbb{P}^{${geometry.ambient}}`);
+    if (geometry.type === 'complete-intersection') {
+      parts.push(`\\text{ambient}=\\mathbb{P}^{${geometry.ambient}}`);
+      parts.push(`\\text{degrees}=(${geometry.degrees.join(',') || '0'})`);
+    }
+    return parts.join(',\\ ');
+  }
+
+  function exportSheafLatex(sheaf) {
+    const base = baseVarietyForSheaf(sheaf);
+    const parts = [
+      `${sanitizeMathLabel(sheaf.name, '\\mathcal{E}')}`,
+      `\\operatorname{type}=\\text{${sheafTypeLabel(sheaf.type)}}`,
+      `\\operatorname{rk}=${symbolToLatex(sanitizeRankInput(sheaf.rank))}`
+    ];
+    if (base) parts.push(`\\text{base}=${sanitizeMathLabel(base.name, 'X')}`);
+    if (sheaf.type === 'twist') parts.push(`r=${normalizedInt(sheaf.twist, -24, 24, 1)}`);
+    parts.push(`\\text{basis}=\\text{${sheaf.basis === 'character' ? 'Chern character' : 'Chern classes'}}`);
+    return parts.join(',\\ ');
+  }
+
+  function exportVarietyPlain(variety) {
+    const geometry = geometryFromVariety(variety);
+    const parts = [
+      `name ${latexToPlain(variety.name)}`,
+      `type ${varietyTypeLabel(variety.type)}`,
+      `dim ${geometry.dim}`
+    ];
+    if (geometry.type === 'curve') parts.push(`genus ${genusPlain(geometry.genus)}`);
+    if (geometry.type === 'projective') parts.push(`ambient P^${geometry.ambient}`);
+    if (geometry.type === 'complete-intersection') {
+      parts.push(`ambient P^${geometry.ambient}`);
+      parts.push(`degrees ${geometry.degrees.join(',') || 'none'}`);
+    }
+    return parts.join('; ');
+  }
+
+  function exportSheafPlain(sheaf) {
+    const base = baseVarietyForSheaf(sheaf);
+    const parts = [
+      `name ${latexToPlain(sheaf.name)}`,
+      `type ${sheafTypeLabel(sheaf.type)}`,
+      `rank ${sanitizeRankInput(sheaf.rank)}`
+    ];
+    if (base) parts.push(`base ${latexToPlain(base.name)}`);
+    if (sheaf.type === 'twist') parts.push(`twist ${normalizedInt(sheaf.twist, -24, 24, 1)}`);
+    parts.push(`basis ${sheaf.basis === 'character' ? 'Chern character' : 'Chern classes'}`);
+    return parts.join('; ');
+  }
+
+  function varietyTypeLabel(type) {
+    if (type === 'projective') return 'projective space';
+    if (type === 'complete-intersection') return 'complete intersection';
+    if (type === 'curve') return 'curve';
+    return 'abstract variety';
+  }
+
+  function sheafTypeLabel(type) {
+    if (type === 'locally-free') return 'locally free';
+    if (type === 'tangent') return 'tangent sheaf';
+    if (type === 'cotangent') return 'cotangent sheaf';
+    if (type === 'canonical') return 'canonical sheaf';
+    if (type === 'twist') return 'twist';
+    return 'abstract sheaf';
+  }
+
+  function exportClassChart(result, format) {
+    const lines = [];
+    if (format === 'latex') {
+      lines.push('% Sheaf Calculator: characteristic classes');
+      lines.push(`% X: ${result.geometry.labelPlain}`);
+      lines.push(`% E: ${result.bundle.labelPlain}`);
+      result.classRows.forEach((row) => lines.push(`\\[${row.labelLatex} = ${row.latex}\\]`));
+      return lines.join('\n');
+    }
+    if (format === 'sage') {
+      lines.push('# Sheaf Calculator: characteristic classes');
+      lines.push(`# X: ${result.geometry.labelPlain}`);
+      lines.push(`# E: ${result.bundle.labelPlain}`);
+      result.classRows.forEach((row) => lines.push(`${row.key} = ${row.plain}`));
+      return lines.join('\n');
+    }
+    lines.push('Sheaf Calculator: characteristic classes');
     lines.push(`X: ${result.geometry.labelPlain}`);
     lines.push(`E: ${result.bundle.labelPlain}`);
-    lines.push(`truncated above degree ${result.geometry.dim}`);
     result.classRows.forEach((row) => lines.push(`${row.label} = ${row.plain}`));
-    lines.push(...exportHodgeLines(result, 'plain'));
     return lines.join('\n');
+  }
+
+  function exportHodgeChart(result, format) {
+    const lines = [];
+    if (format === 'latex') {
+      lines.push('% Sheaf Calculator: Hodge numbers');
+      lines.push('% requires \\usepackage{tikz-cd}');
+      lines.push(`% X: ${result.geometry.labelPlain}`);
+      lines.push(exportHodgeTikzcd(result, state.hodgeExpanded));
+      return lines.join('\n');
+    }
+    if (format === 'sage') {
+      lines.push('# Sheaf Calculator: Hodge numbers');
+      lines.push(`# X: ${result.geometry.labelPlain}`);
+      lines.push(...exportHodgeLines(result, 'plain'));
+      if (state.hodgeExpanded) lines.push(...exportExpandedHodgeLines(result, 'plain'));
+      return lines.join('\n');
+    }
+    lines.push('Sheaf Calculator: Hodge numbers');
+    lines.push(`X: ${result.geometry.labelPlain}`);
+    lines.push(...exportHodgeLines(result, 'plain'));
+    if (state.hodgeExpanded) lines.push(...exportExpandedHodgeLines(result, 'plain'));
+    return lines.join('\n');
+  }
+
+  function exportHodgeTikzcd(result, expanded) {
+    const d = result.geometry.dim;
+    const entries = result.hodge.entries;
+    const layout = hodgeExportLayout(d, expanded);
+    const rows = Array.from({ length: layout.totalRows }, () => (
+      Array.from({ length: layout.totalCols }, () => '')
+    ));
+    const arrows = [];
+    const arrowKeys = new Set();
+    const setCell = (row, col, value) => {
+      rows[row - 1][col - 1] = value;
+    };
+    const addArrow = (from, to) => {
+      const key = `${from.row}-${from.col}:${to.row}-${to.col}`;
+      if (arrowKeys.has(key)) return;
+      arrowKeys.add(key);
+      arrows.push(`  \\arrow[dotted, no head, shorten <=3pt, shorten >=3pt, from=${from.row}-${from.col}, to=${to.row}-${to.col}]`);
+    };
+
+    for (let p = 0; p <= d; p++) {
+      for (let q = 0; q <= d; q++) {
+        const pos = layout.hodgeGridPosition(p, q);
+        setCell(pos.row, pos.col, entries[p][q].latex);
+      }
+    }
+
+    if (expanded) {
+      hodgeChiDisplays(result).forEach((chi, p) => {
+        setCell(1, layout.chiGridColumn(p), chi);
+        addArrow(layout.hodgeGridPosition(p, d), { row: 1, col: layout.chiGridColumn(p) });
+      });
+      const euler = hodgeEulerDisplay(result);
+      setCell(1, layout.bettiCol, euler);
+      hodgeBettiDisplays(result).forEach((betti, k) => {
+        const row = 2 * d - k + 1 + layout.rowOffset;
+        setCell(row, layout.bettiCol, betti);
+      });
+      for (let p = 0; p <= d; p++) addArrow(layout.hodgeGridPosition(p, 0), { row: 2 * d - p + 1 + layout.rowOffset, col: layout.bettiCol });
+      for (let q = 0; q <= d; q++) addArrow(layout.hodgeGridPosition(d, q), { row: d - q + 1 + layout.rowOffset, col: layout.bettiCol });
+    }
+
+    const matrix = rows.map((row, index) => {
+      const terminator = index === rows.length - 1 ? '' : ' \\\\';
+      return `  ${row.map((cell) => (cell ? `{${cell}}` : '{}')).join(' & ')}${terminator}`;
+    }).join('\n');
+    const arrowBlock = arrows.length ? `\n${arrows.join('\n')}` : '';
+    return [
+      '\\[',
+      '\\begin{tikzcd}[row sep=1.15em, column sep=1.15em, cells={nodes={inner sep=1pt}}]',
+      matrix,
+      arrowBlock,
+      '\\end{tikzcd}',
+      '\\]'
+    ].filter(Boolean).join('\n');
+  }
+
+  function hodgeExportLayout(d, expanded) {
+    const chiOffset = expanded && d > 0 ? -d - 1 : 0;
+    const leftPaddingCols = expanded && d > 0 ? Math.max(2 * d, -chiOffset) : 0;
+    const hodgeOffset = expanded ? leftPaddingCols : 0;
+    const hodgeEndCol = hodgeOffset + 2 * d + 1;
+    const chiEndCol = expanded ? hodgeOffset + chiOffset + 2 * d + 1 : hodgeEndCol;
+    const coreCols = Math.max(hodgeEndCol, chiEndCol);
+    const rowOffset = expanded ? 1 : 0;
+    const bettiCol = coreCols + 2;
+    return {
+      rowOffset,
+      bettiCol,
+      totalCols: expanded ? bettiCol : coreCols,
+      totalRows: 2 * d + 1 + rowOffset,
+      hodgeGridPosition: (p, q) => ({
+        row: 2 * d - (p + q) + 1 + rowOffset,
+        col: hodgeOffset + d + p - q + 1
+      }),
+      chiGridColumn: (p) => hodgeOffset + chiOffset + 2 * p + 1
+    };
   }
 
   function exportHodgeLines(result, format) {
     const d = result.geometry.dim;
-    const lines = ['', format === 'latex' ? '% Hodge numbers h^{p,q}' : 'Hodge numbers h^p,q'];
+    const lines = [format === 'latex' ? '% h^{p,q}, rows indexed by p' : 'h^p,q, rows indexed by p'];
     for (let p = 0; p <= d; p++) {
       const row = [];
       for (let q = 0; q <= d; q++) row.push(result.hodge.entries[p][q][format === 'latex' ? 'latex' : 'plain']);
       lines.push(format === 'latex' ? `% p=${p}: ${row.join(', ')}` : `p=${p}: ${row.join(', ')}`);
     }
+    return lines;
+  }
+
+  function exportExpandedHodgeLines(result, format) {
+    const lines = ['', format === 'latex' ? '% expanded invariants' : 'expanded invariants'];
+    hodgeChiDisplays(result).forEach((chi, p) => {
+      lines.push(format === 'latex' ? `% chi_${p}: ${chi}` : `chi_${p}: ${latexToPlain(chi)}`);
+    });
+    const euler = hodgeEulerDisplay(result);
+    lines.push(format === 'latex' ? `% e: ${euler}` : `e: ${latexToPlain(euler)}`);
+    hodgeBettiDisplays(result).forEach((betti, k) => {
+      lines.push(format === 'latex' ? `% b_{${k}}: ${betti}` : `b_${k}: ${latexToPlain(betti)}`);
+    });
     return lines;
   }
 
@@ -1740,23 +3231,30 @@
     const raw = String(value || '').trim();
     if (/^-?\d+$/.test(raw)) return raw;
     if (/^[A-Za-z][A-Za-z0-9_]{0,15}$/.test(raw)) return raw;
-    return 'rho';
+    return 'r';
+  }
+
+  function numericRankFromPlain(value) {
+    const raw = String(value || '').trim();
+    if (!/^\d+$/.test(raw)) return null;
+    return Math.min(MAX_DIMENSION, Number(raw));
+  }
+
+  function sanitizeMathLabel(value, fallback) {
+    const raw = String(value || '').trim().replace(/\s+/g, ' ');
+    const safeFallback = String(fallback || 'X').trim() || 'X';
+    if (!raw) return safeFallback;
+    if (raw.length > 48) return safeFallback;
+    if (!/^[A-Za-z0-9_{}\\^()+,\-'\s]+$/.test(raw)) return safeFallback;
+    return raw;
   }
 
   function sheafLabelLatex(sheaf) {
-    if (sheaf.type === 'tangent') return 'T_X';
-    if (sheaf.type === 'cotangent') return '\\Omega_X^1';
-    if (sheaf.type === 'canonical') return 'K_X';
-    if (sheaf.type === 'twist') return `\\mathcal{O}_X(${sheaf.twist})`;
-    return '\\mathcal{F}';
+    return sheaf.labelLatex || '\\mathcal{E}';
   }
 
   function sheafLabelPlain(sheaf) {
-    if (sheaf.type === 'tangent') return 'T_X';
-    if (sheaf.type === 'cotangent') return 'Omega_X^1';
-    if (sheaf.type === 'canonical') return 'K_X';
-    if (sheaf.type === 'twist') return `O_X(${sheaf.twist})`;
-    return 'F';
+    return sheaf.labelPlain || latexToPlain(sheafLabelLatex(sheaf));
   }
 
   function symbolToLatex(value) {
@@ -1772,10 +3270,10 @@
   function latexToPlain(latex) {
     return String(latex)
       .replace(/\\operatorname\{ch\}_\{(\d+)\}\(([^)]+)\)/g, 'ch_$1($2)')
-      .replace(/\\mathcal\{F\}/g, 'F')
+      .replace(/\\mathcal\{([^}]+)\}/g, '$1')
+      .replace(/\\mathbb\{([^}]+)\}/g, '$1')
       .replace(/\\Omega/g, 'Omega')
       .replace(/\\omega/g, 'omega')
-      .replace(/\\mathbb\{P\}/g, 'P')
       .replace(/[{}\\]/g, '');
   }
 
