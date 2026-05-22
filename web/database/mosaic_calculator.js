@@ -89,6 +89,78 @@
       }
     },
     {
+      id: 'solomon-link',
+      label: 'Solomon link (L4a1)',
+      payload: {
+        name: 'Solomon link preset',
+        diagramType: 'link',
+        lattice: 'hexagonal',
+        inputMode: 'draw',
+        rows: 5,
+        cols: 5,
+        boundary: 'open',
+        tiles: [
+          null, null, [[1, 2]], null, null,
+          [[0, 1]], [[5, 2], [0, 3]], [[1, 3], [2, 4]], null, null,
+          null, [[4, 0], [5, 1]], [[2, 5], [3, 0]], [[3, 4]], null,
+          null, [[4, 5]], null, null, null,
+          null, null, null, null, null
+        ]
+      },
+      squarePayload: {
+        name: 'Solomon link preset',
+        diagramType: 'link',
+        lattice: 'square',
+        inputMode: 'draw',
+        rows: 5,
+        cols: 5,
+        boundary: 'open',
+        tiles: [
+          null, [[0, 1]], [[1, 2]], null, null,
+          [[0, 1]], [[3, 1], [0, 2]], [[0, 2], [1, 3]], [[1, 2]], null,
+          [[3, 0]], [[2, 0], [3, 1]], [[1, 3], [2, 0]], [[2, 3]], null,
+          null, [[3, 0]], [[2, 3]], null, null,
+          null, null, null, null, null
+        ]
+      }
+    },
+    {
+      id: 'whitehead-link',
+      label: 'Whitehead link (L5a1)',
+      payload: {
+        name: 'Whitehead link preset',
+        diagramType: 'link',
+        lattice: 'hexagonal',
+        inputMode: 'draw',
+        rows: 5,
+        cols: 5,
+        boundary: 'open',
+        tiles: [
+          null, null, [[2, 1]], null, null,
+          null, [[0, 2], [1, 5]], [[4, 2], [1, 3]], null, null,
+          null, [[5, 1]], [[1, 4], [5, 2]], [[2, 4]], null,
+          null, [[5, 1], [4, 0]], [[3, 5], [2, 4]], null, null,
+          null, null, [[4, 5]], null, null
+        ]
+      },
+      squarePayload: {
+        name: 'Whitehead link preset',
+        diagramType: 'link',
+        lattice: 'square',
+        inputMode: 'draw',
+        rows: 5,
+        cols: 5,
+        boundary: 'open',
+        tiles: [
+          null, null, [[1, 0]], [[2, 1]], null,
+          [[0, 1]], [[0, 2]], [[0, 2], [1, 3]], [[3, 1], [0, 2]], [[1, 2]],
+          [[3, 1]], [[0, 1]], [[1, 3], [0, 2]], [[3, 2]], [[1, 3]],
+          [[3, 0]], [[3, 1], [2, 0]], [[2, 0], [1, 3]], [[2, 0]], [[2, 3]],
+          null, [[3, 0]], [[2, 3]], null, null
+        ]
+      }
+    },
+    {
       id: 'trefoil',
       label: 'Trefoil knot (3_1)',
       payload: {
@@ -167,6 +239,7 @@
   ];
   const COMPACT_DUAL_GRAPH_LAYOUT_SCALE = 0.5;
   const MINI_SPECTRAL_LAYOUT_SCALE = 2;
+  const MINI_FORCE_EDGE_LENGTH = 12;
   const DEGENERATION_FORCE_LIMIT = 20;
   const DEGENERATION_FORCE_DURATION_MS = 5000;
 
@@ -520,7 +593,7 @@
         state.dualGraphDegenerationInitialLayout = normalizeDualGraphDegenerationInitialLayout(refs.dualGraphDegenerationInitialLayout.value);
         refs.dualGraphDegenerationInitialLayout.value = state.dualGraphDegenerationInitialLayout;
         state.dualGraphDegenerationLayouts = new Map();
-        renderDualGraphDegenerationChart();
+        renderDualGraphDegenerationChart({ runInitialForce: true });
         refreshExport();
       });
     }
@@ -4261,7 +4334,7 @@
     refs.knotName.classList.add('mosaic-knot-links');
     candidates.forEach((candidate) => {
       const link = document.createElement('a');
-      link.href = candidate.href || knotInfoHrefFromName(candidate.name);
+      link.href = candidate.href || diagramInfoHrefFromName(candidate.name, candidate.kind || summary.kind);
       link.target = '_blank';
       link.rel = 'noopener';
       link.textContent = candidate.label || candidate.name;
@@ -4280,9 +4353,15 @@
 
   function syncKnotCodeSelector(summary) {
     if (!refs.knotCodeKind) return;
+    const dtOption = refs.knotCodeKind.querySelector('option[value="dt"]');
     const braidOption = refs.knotCodeKind.querySelector('option[value="braid"]');
+    const hasDt = !!(summary && typeof summary.dt === 'string' && summary.dt.trim());
     const hasBraid = !!(summary && Array.isArray(summary.braid));
+    if (dtOption) dtOption.disabled = !hasDt;
     if (braidOption) braidOption.disabled = !hasBraid;
+    if (!hasDt && state.knotCodeKind === 'dt') {
+      state.knotCodeKind = 'pd';
+    }
     if (!hasBraid && state.knotCodeKind === 'braid') {
       state.knotCodeKind = 'pd';
     }
@@ -5480,17 +5559,17 @@
         const node1 = layout.nodeMap.get(`e${edgeIndex}_1`);
         const node2 = layout.nodeMap.get(`e${edgeIndex}_2`);
         if (node0 && node1 && node2) {
-          applySpringForce(fromNode, node0, 0.026 * forceAlpha, 24);
-          applySpringForce(node0, node1, 0.026 * forceAlpha, 24);
-          applySpringForce(node1, node2, 0.026 * forceAlpha, 24);
-          applySpringForce(node2, fromNode, 0.026 * forceAlpha, 24);
+          applySpringForce(fromNode, node0, 0.026 * forceAlpha, MINI_FORCE_EDGE_LENGTH);
+          applySpringForce(node0, node1, 0.026 * forceAlpha, MINI_FORCE_EDGE_LENGTH);
+          applySpringForce(node1, node2, 0.026 * forceAlpha, MINI_FORCE_EDGE_LENGTH);
+          applySpringForce(node2, fromNode, 0.026 * forceAlpha, MINI_FORCE_EDGE_LENGTH);
         }
         return;
       }
       const edgeNode = layout.nodeMap.get(`e${edgeIndex}`);
       if (edgeNode) {
-        applySpringForce(fromNode, edgeNode, 0.036 * forceAlpha, 24);
-        applySpringForce(toNode, edgeNode, 0.036 * forceAlpha, 24);
+        applySpringForce(fromNode, edgeNode, 0.036 * forceAlpha, MINI_FORCE_EDGE_LENGTH);
+        applySpringForce(toNode, edgeNode, 0.036 * forceAlpha, MINI_FORCE_EDGE_LENGTH);
       }
     });
 
@@ -9442,7 +9521,7 @@
     return !!node && node.type !== 'edge';
   }
 
-  function normalizeKnotCandidates(result) {
+  function normalizeKnotCandidates(result, kind = '') {
     if (Array.isArray(result.candidates) && result.candidates.length) {
       return result.candidates
         .map((candidate) => {
@@ -9450,10 +9529,12 @@
           const name = String(candidate.name || '').trim();
           const label = String(candidate.label || candidate.displayName || name).trim();
           if (!name && !label) return null;
+          const candidateKind = candidate.kind || kind || inferDiagramInfoKind(name);
           return {
             name,
             label: label || name,
-            href: candidate.href || (name ? knotInfoHrefFromName(name) : '')
+            href: candidate.href || (name ? diagramInfoHrefFromName(name, candidateKind) : ''),
+            kind: candidateKind
           };
         })
         .filter(Boolean);
@@ -9462,7 +9543,8 @@
     return [{
       name: result.name,
       label: result.name,
-      href: result.href
+      href: result.href,
+      kind: kind || inferDiagramInfoKind(result.name)
     }];
   }
 
@@ -9497,9 +9579,29 @@
     return Array.isArray(summary.braid) ? JSON.stringify(summary.braid) : 'braid unavailable';
   }
 
+  function diagramInfoHrefFromName(name, kind = '') {
+    const plainName = String(name || '').replace(/^knot\s+/, '').replace(/^.*\(([^)]+)\).*$/, '$1');
+    if ((kind || inferDiagramInfoKind(plainName)) === 'link') return linkInfoHrefFromName(plainName);
+    return knotInfoHrefFromName(plainName);
+  }
+
   function knotInfoHrefFromName(name) {
     const plainName = String(name || '').replace(/^knot\s+/, '').replace(/^.*\(([^)]+)\).*$/, '$1');
     return `https://knotinfo.org/diagram_display.php?${encodeURIComponent(plainName)}`;
+  }
+
+  function linkInfoHrefFromName(name) {
+    const plainName = String(name || '').replace(/^link\s+/, '').replace(/^.*\(([^)]+)\).*$/, '$1');
+    if (!plainName || /search/i.test(plainName)) return linkInfoSearchHref();
+    return `https://knotinfo.org/linkinfo/diagram_display.php?${encodeURIComponent(plainName)}`;
+  }
+
+  function linkInfoSearchHref() {
+    return 'https://knotinfo.org/linkinfo/search-general.php';
+  }
+
+  function inferDiagramInfoKind(name) {
+    return /^L\d/i.test(String(name || '').trim()) ? 'link' : 'knot';
   }
 
   function identifyKnot(report) {
@@ -9516,9 +9618,9 @@
         tone: 'bad'
       };
     }
-    if (report.openEnds > 0 || report.components !== 1) {
+    if (report.openEnds > 0) {
       return {
-        status: 'not a knot',
+        status: 'not a knot/link',
         name: `${report.components} components, ${report.openEnds} open ends`,
         candidates: [],
         pd: '',
@@ -9526,12 +9628,13 @@
         braid: null,
         href: '',
         linkText: '',
-        tone: 'bad'
+        tone: 'bad',
+        kind: report.components > 1 ? 'link' : 'knot'
       };
     }
     if (state.wrapped) {
       return {
-        status: 'wrapped knot candidate',
+        status: `wrapped ${report.components > 1 ? 'link' : 'knot'} candidate`,
         name: 'further exploration remains experimental',
         candidates: [],
         pd: '',
@@ -9539,7 +9642,8 @@
         braid: null,
         href: '',
         linkText: '',
-        tone: 'bad'
+        tone: 'bad',
+        kind: report.components > 1 ? 'link' : 'knot'
       };
     }
 
@@ -9555,10 +9659,12 @@
         href: '',
         linkText: '',
         tone: 'bad',
+        kind: report.components > 1 ? 'link' : 'knot',
         showDetails: true
       };
     }
 
+    const isLink = report.components > 1;
     const result = engine.identify({
       rows: state.rows,
       cols: state.cols,
@@ -9567,17 +9673,20 @@
       method: 'invariants',
       tiles: state.tiles.map((tile) => normalizeTile(tile).map((pair) => pair.slice(0, 2)))
     });
+    const kind = result.kind || (isLink ? 'link' : 'knot');
+    const linkFallback = isLink && result.ok && !result.name;
 
     return {
-      status: result.status || 'code generated',
-      name: result.name || '',
-      candidates: normalizeKnotCandidates(result),
+      status: result.status || (isLink ? 'link code generated' : 'code generated'),
+      name: result.name || (linkFallback ? `${report.components} component link` : ''),
+      candidates: normalizeKnotCandidates(result, kind),
       pd: result.pd || '',
       dt: result.dt || '',
       braid: Array.isArray(result.braid) ? result.braid.slice() : null,
-      href: result.href || '',
-      linkText: result.linkText || 'more data',
+      href: result.href || (isLink ? linkInfoSearchHref() : ''),
+      linkText: result.linkText || (isLink ? 'LinkInfo search' : 'more data'),
       tone: result.tone || (result.name ? 'good' : 'bad'),
+      kind,
       showDetails: true
     };
   }

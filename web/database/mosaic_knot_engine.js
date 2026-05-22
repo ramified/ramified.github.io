@@ -85,6 +85,12 @@
     const graph = buildGraph({ rows, cols, lattice, tiles });
     if (!graph.ok) return graph;
 
+    const trace = traceGraph(graph);
+    if (!trace.ok) {
+      return failedDiagram(trace.error || 'diagram trace failed');
+    }
+    const componentCount = trace.componentCount || 0;
+
     if (graph.crossings.length === 0) {
       return {
         ok: true,
@@ -93,36 +99,37 @@
         dtKey: '',
         mirrorDtKey: '',
         crossingCount: 0,
+        componentCount,
+        crossingComponents: [],
         pdEntries: [],
         occurrences: [],
+        components: trace.components || [],
         graph
       };
     }
 
-    const trace = traceGraph(graph);
-    if (!trace.ok) {
-      return failedDiagram(trace.error || 'diagram trace failed');
-    }
-
-    const pdEntries = buildPdEntries(graph, trace.occurrences);
+    const pdEntries = buildPdEntries(graph, trace);
     if (!pdEntries.ok) return failedDiagram(pdEntries.error || 'PD code failed');
 
-    const dtCode = canonicalDtFromOccurrences(trace.occurrences, false);
-    const mirrorDtCode = canonicalDtFromOccurrences(trace.occurrences, true);
-    if (!dtCode) {
+    const dtCode = componentCount === 1 ? canonicalDtFromOccurrences(trace.occurrences, false) : null;
+    const mirrorDtCode = componentCount === 1 ? canonicalDtFromOccurrences(trace.occurrences, true) : null;
+    if (componentCount === 1 && !dtCode) {
       return failedDiagram('DT code failed', formatPd(pdEntries.entries), '');
     }
 
     return {
       ok: true,
       pd: formatPd(pdEntries.entries),
-      dt: formatDt(dtCode),
-      dtKey: keyOf(dtCode),
-      mirrorDtKey: mirrorDtCode ? keyOf(mirrorDtCode) : '',
+      dt: componentCount === 1 ? formatDt(dtCode) : '',
+      dtKey: componentCount === 1 ? keyOf(dtCode) : '',
+      mirrorDtKey: componentCount === 1 && mirrorDtCode ? keyOf(mirrorDtCode) : '',
       crossingCount: graph.crossings.length,
+      componentCount,
+      crossingComponents: crossingComponentsFromTrace(trace, graph.crossings.length),
       hasMultiCrossingTile: !!graph.hasMultiCrossingTile,
       pdEntries: pdEntries.entries,
       occurrences: trace.occurrences,
+      components: trace.components || [],
       graph
     };
   }
@@ -310,44 +317,54 @@
   }
 
   function traceGraph(graph) {
-    const startEdge = graph.edges.findIndex((edge) => edge.event);
-    if (startEdge < 0) {
-      return {
-        ok: true,
-        occurrences: [],
-        usedEdges: new Set()
-      };
-    }
-
-    const startNode = graph.edges[startEdge].from;
-    let currentNode = startNode;
-    let edgeIndex = startEdge;
     const usedEdges = new Set();
+    const components = [];
     const occurrences = [];
 
-    for (let guard = 0; guard <= graph.edges.length + 1; guard += 1) {
-      if (usedEdges.has(edgeIndex)) {
-        return { ok: false, error: 'diagram trace repeated an edge early' };
+    while (usedEdges.size < graph.edges.length) {
+      const startEdge = graph.edges.findIndex((_, edgeIndex) => !usedEdges.has(edgeIndex));
+      if (startEdge < 0) break;
+      const componentOccurrences = [];
+      const componentIndex = components.length;
+      const startNode = graph.edges[startEdge].from;
+      let currentNode = startNode;
+      let edgeIndex = startEdge;
+
+      for (let guard = 0; guard <= graph.edges.length + 1; guard += 1) {
+        if (usedEdges.has(edgeIndex)) {
+          return { ok: false, error: 'diagram trace repeated an edge early' };
+        }
+        usedEdges.add(edgeIndex);
+        const edge = graph.edges[edgeIndex];
+        const nextNode = edge.from === currentNode ? edge.to : edge.from;
+        if (edge.event) {
+          const occurrence = {
+            crossing: edge.event.crossing,
+            over: edge.event.over,
+            from: currentNode,
+            to: nextNode,
+            component: componentIndex,
+            componentIndex: componentOccurrences.length
+          };
+          componentOccurrences.push(occurrence);
+          occurrences.push(occurrence);
+        }
+        const nextEdges = graph.adj[nextNode].filter((candidate) => candidate !== edgeIndex);
+        if (nextEdges.length !== 1) return { ok: false, error: 'diagram trace is not a circuit' };
+        currentNode = nextNode;
+        edgeIndex = nextEdges[0];
+        if (edgeIndex === startEdge && currentNode === startNode) break;
       }
-      usedEdges.add(edgeIndex);
-      const edge = graph.edges[edgeIndex];
-      const nextNode = edge.from === currentNode ? edge.to : edge.from;
-      if (edge.event) {
-        occurrences.push({
-          crossing: edge.event.crossing,
-          over: edge.event.over,
-          from: currentNode,
-          to: nextNode
-        });
+
+      if (edgeIndex !== startEdge || currentNode !== startNode) {
+        return { ok: false, error: 'diagram trace is not a circuit' };
       }
-      const nextEdges = graph.adj[nextNode].filter((candidate) => candidate !== edgeIndex);
-      if (nextEdges.length !== 1) return { ok: false, error: 'diagram trace is not a circuit' };
-      currentNode = nextNode;
-      edgeIndex = nextEdges[0];
-      if (edgeIndex === startEdge && currentNode === startNode) break;
+      components.push({
+        index: componentIndex,
+        occurrences: componentOccurrences
+      });
     }
 
-    if (usedEdges.size !== graph.edges.length) return { ok: false, error: 'diagram has more than one circuit' };
     if (occurrences.length !== graph.crossings.length * 2) return { ok: false, error: 'crossing trace is incomplete' };
 
     const seen = new Map();
@@ -362,17 +379,30 @@
       }
     }
 
-    return { ok: true, occurrences, usedEdges };
+    return {
+      ok: true,
+      occurrences,
+      components,
+      componentCount: components.length,
+      usedEdges
+    };
   }
 
-  function buildPdEntries(graph, occurrences) {
+  function buildPdEntries(graph, trace) {
+    const occurrences = trace && Array.isArray(trace.occurrences) ? trace.occurrences : [];
     if (!occurrences.length) return { ok: true, entries: [] };
     const labelByNode = new Map();
-    occurrences.forEach((occurrence, index) => {
-      const label = index + 1;
-      const next = occurrences[(index + 1) % occurrences.length];
-      labelByNode.set(occurrence.to, label);
-      labelByNode.set(next.from, label);
+    let nextLabel = 1;
+    const components = trace && Array.isArray(trace.components) ? trace.components : [{ occurrences }];
+    components.forEach((component) => {
+      const componentOccurrences = component && Array.isArray(component.occurrences) ? component.occurrences : [];
+      componentOccurrences.forEach((occurrence, index) => {
+        const label = nextLabel;
+        const next = componentOccurrences[(index + 1) % componentOccurrences.length];
+        labelByNode.set(occurrence.to, label);
+        labelByNode.set(next.from, label);
+        nextLabel += 1;
+      });
     });
 
     const entries = [];
@@ -449,6 +479,8 @@
   }
 
   function identifyDiagram(diagram, method) {
+    if (diagram.componentCount > 1) return identifyLinkDiagram(diagram);
+
     if (diagram.hasMultiCrossingTile) {
       const invariantResult = identifyByInvariants(diagram);
       if (invariantResult && invariantResult.name) return invariantResult;
@@ -467,6 +499,30 @@
     const dtResult = identifyByDt(diagram, 'DT fallback');
     if (dtResult && dtResult.name) return dtResult;
     return null;
+  }
+
+  function identifyLinkDiagram(diagram) {
+    const jonesVectors = computeJonesVectors(diagram.pdEntries);
+    const candidates = linkCandidatesByJones(jonesVectors, diagram.crossingCount, diagram.componentCount);
+    const result = linkResultFromCandidates(candidates);
+    if (result) return result;
+
+    return {
+      status: 'link code generated',
+      name: `${diagram.componentCount} component link`,
+      href: linkInfoSearchHref(),
+      linkText: 'LinkInfo search',
+      methodResult: 'link code',
+      braid: null,
+      candidates: [{
+        name: 'LinkInfo search',
+        label: 'LinkInfo search',
+        href: linkInfoSearchHref(),
+        kind: 'link'
+      }],
+      tone: diagram.crossingCount ? 'bad' : 'good',
+      kind: 'link'
+    };
   }
 
   function identifyByInvariants(diagram) {
@@ -530,8 +586,80 @@
     };
   }
 
+  function linkCandidatesByJones(jonesVectors, crossingCount, componentCount) {
+    if (!jonesVectors || !jonesVectors.length) return [];
+    const data = getLinkData();
+    const index = getLinkJonesIndex();
+    const candidates = new Map();
+    jonesVectors.forEach((vector) => {
+      [
+        vector,
+        reverseJonesVector(vector)
+      ].forEach((candidateVector) => {
+        const names = index[JSON.stringify(candidateVector)] || [];
+        names.forEach((name) => {
+          const entry = data.entries && data.entries[name];
+          if (!entry || entry.crossingNumber > crossingCount || entry.components !== componentCount) return;
+          candidates.set(name, entry);
+        });
+      });
+    });
+    return Array.from(candidates.keys()).sort(compareLinkNames);
+  }
+
+  function linkResultFromCandidates(candidates) {
+    if (!candidates.length) return null;
+    const linkCandidates = uniqueLinkCandidates(candidates);
+    if (linkCandidates.length === 1) {
+      return resultFromLinkName(candidates[0], 'link invariant match', 'link table match');
+    }
+    const shortList = linkCandidates.slice(0, 5).map((candidate) => candidate.name).join(', ');
+    const first = candidates[0];
+    return {
+      status: 'link table match',
+      name: linkCandidates.length > 5 ? `candidate links: ${shortList}, ...` : `candidate links: ${shortList}`,
+      href: linkInfoHref(first),
+      linkText: 'more data',
+      methodResult: 'link invariant candidates',
+      braid: null,
+      candidates: linkCandidates,
+      tone: 'good',
+      kind: 'link'
+    };
+  }
+
+  function uniqueLinkCandidates(names) {
+    const out = [];
+    const seen = new Set();
+    names.forEach((name) => {
+      const candidate = candidateFromLinkName(name);
+      const key = candidate.name || name;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(candidate);
+    });
+    return out;
+  }
+
   function getJonesIndex() {
     const data = getData();
+    if (data._jonesIndex) return data._jonesIndex;
+    const index = {};
+    if (data.entries) {
+      Object.keys(data.entries).forEach((name) => {
+        const entry = data.entries[name];
+        if (!entry || !entry.jones) return;
+        const key = JSON.stringify(entry.jones);
+        if (!index[key]) index[key] = [];
+        index[key].push(name);
+      });
+    }
+    data._jonesIndex = index;
+    return index;
+  }
+
+  function getLinkJonesIndex() {
+    const data = getLinkData();
     if (data._jonesIndex) return data._jonesIndex;
     const index = {};
     if (data.entries) {
@@ -575,6 +703,28 @@
     };
   }
 
+  function resultFromLinkName(name, methodResult, status) {
+    const data = getLinkData();
+    const entry = (data.entries && data.entries[name]) || null;
+    const href = entry && entry.href ? entry.href : linkInfoHref(name);
+    return {
+      status,
+      name: displayLinkName(name),
+      href,
+      linkText: 'more data',
+      methodResult,
+      braid: null,
+      candidates: [{
+        name,
+        label: displayLinkName(name),
+        href,
+        kind: 'link'
+      }],
+      tone: 'good',
+      kind: 'link'
+    };
+  }
+
   function candidateFromName(name) {
     const data = getData();
     const entry = (data.entries && data.entries[name]) || null;
@@ -583,6 +733,18 @@
       label: displayName(name),
       href: entry && entry.href ? entry.href : knotInfoHref(name),
       braid: braidWordForName(name)
+    };
+  }
+
+  function candidateFromLinkName(name) {
+    const data = getLinkData();
+    const entry = (data.entries && data.entries[name]) || null;
+    const displayName = entry && entry.unorientedName ? entry.unorientedName : stripLinkOrientation(name);
+    return {
+      name: displayName,
+      label: displayLinkName(displayName),
+      href: entry && entry.href ? entry.href : linkInfoHref(name),
+      kind: 'link'
     };
   }
 
@@ -596,6 +758,18 @@
       braid: diagram.crossingCount ? null : braidWordForName('0_1'),
       tone: diagram.crossingCount ? 'bad' : 'good'
     };
+  }
+
+  function crossingComponentsFromTrace(trace, crossingCount) {
+    const out = Array.from({ length: crossingCount }, () => []);
+    if (!trace || !Array.isArray(trace.occurrences)) return out;
+    trace.occurrences.forEach((occurrence) => {
+      if (!occurrence || occurrence.crossing == null || occurrence.component == null) return;
+      const list = out[occurrence.crossing];
+      if (!list || list.includes(occurrence.component)) return;
+      list.push(occurrence.component);
+    });
+    return out.map((components) => components.sort((left, right) => left - right));
   }
 
   function computeJonesVectors(pdEntries) {
@@ -1078,11 +1252,29 @@
     return left.localeCompare(right);
   }
 
+  function compareLinkNames(left, right) {
+    const leftParts = linkNameParts(left);
+    const rightParts = linkNameParts(right);
+    if (leftParts.crossing !== rightParts.crossing) return leftParts.crossing - rightParts.crossing;
+    if (leftParts.kind !== rightParts.kind) return leftParts.kind.localeCompare(rightParts.kind);
+    if (leftParts.rank !== rightParts.rank) return leftParts.rank - rightParts.rank;
+    return left.localeCompare(right);
+  }
+
   function knotNameParts(name) {
     const match = /^(\d+)_([0-9]+)$/.exec(name);
     return {
       crossing: match ? Number(match[1]) : Number.MAX_SAFE_INTEGER,
       rank: match ? Number(match[2]) : Number.MAX_SAFE_INTEGER
+    };
+  }
+
+  function linkNameParts(name) {
+    const match = /^L(\d+)([an])(\d+)/.exec(name);
+    return {
+      crossing: match ? Number(match[1]) : Number.MAX_SAFE_INTEGER,
+      kind: match ? match[2] : 'z',
+      rank: match ? Number(match[3]) : Number.MAX_SAFE_INTEGER
     };
   }
 
@@ -1106,6 +1298,26 @@
     return `https://knotinfo.org/diagram_display.php?${encodeURIComponent(name)}`;
   }
 
+  function displayLinkName(name) {
+    const unorientedName = stripLinkOrientation(name);
+    if (unorientedName === 'L2a1') return 'Hopf link (L2a1)';
+    if (unorientedName === 'L4a1') return "Solomon's knot (L4a1)";
+    if (unorientedName === 'L5a1') return 'Whitehead link (L5a1)';
+    return `link ${unorientedName}`;
+  }
+
+  function stripLinkOrientation(name) {
+    return String(name || '').replace(/\{[^}]*\}$/, '');
+  }
+
+  function linkInfoHref(name) {
+    return `https://knotinfo.org/linkinfo/diagram_display.php?${encodeURIComponent(name)}`;
+  }
+
+  function linkInfoSearchHref() {
+    return 'https://knotinfo.org/linkinfo/search-general.php';
+  }
+
   function braidWordForName(name) {
     const data = getData();
     const word = data.braid && data.braid[name];
@@ -1118,6 +1330,10 @@
 
   function getData() {
     return global.MosaicKnotData || {};
+  }
+
+  function getLinkData() {
+    return global.MosaicLinkData || {};
   }
 
   function keyOf(code) {
