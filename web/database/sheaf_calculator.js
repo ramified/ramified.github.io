@@ -8,8 +8,7 @@
   const MAX_CI_SLIDER_DEGREE = 12;
   const MAX_ROOT_EXPANSION_MONOMIALS = 1500;
   const MAX_EXPLICIT_ROOT_FACTORS = 64;
-  const MAX_HOMOLOGY_RULE_PASSES = 10;
-  const MAX_HOMOLOGY_RULE_MS = 300;
+  const DEFAULT_HOMOLOGY_RULE_PASSES = 1;
   const DEFAULT_VARIETY_SPACING_PX = 110;
   const DEFAULT_MAP_LABEL_OFFSET = -18;
   const MIN_MAP_LABEL_OFFSET = -25;
@@ -22,6 +21,27 @@
   const VARIETY_LETTER_NAMES = ['X', 'Y', 'Z', 'W', 'V', 'U', 'T', 'S', 'R', 'Q'];
   const SHEAF_LETTER_NAMES = ['\\mathcal{E}', '\\mathcal{F}', '\\mathcal{G}', '\\mathcal{H}', '\\mathcal{I}', '\\mathcal{J}', '\\mathcal{K}', '\\mathcal{L}', '\\mathcal{M}', '\\mathcal{N}'];
   const MAP_LETTER_NAMES = ['f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w'];
+  const REPETITION_STYLE_LABELS = {
+    variety: {
+      letters: 'X,Y,Z,W...',
+      prime: "X,X',X''...",
+      paren: 'X,X^{(1)},X^{(2)}...',
+      subscript: 'X,X_{1},X_{2}...'
+    },
+    sheaf: {
+      letters: '\\mathcal{E},\\mathcal{F},\\mathcal{G}...',
+      prime: "\\mathcal{E},\\mathcal{E}',\\mathcal{E}''...",
+      paren: '\\mathcal{E},\\mathcal{E}^{(1)},\\mathcal{E}^{(2)}...',
+      subscript: '\\mathcal{E},\\mathcal{E}_{1},\\mathcal{E}_{2}...'
+    },
+    map: {
+      letters: 'f,g,h,i...',
+      prime: "f,f',f''...",
+      paren: 'f,f^{(1)},f^{(2)}...',
+      subscript: 'f,f_1,f_2...'
+    }
+  };
+  const HOMOLOGY_UNIT_CLASS = 'unit';
   const HOMOLOGY_HYPERPLANE_CLASS = 'hyperplane';
   const HOMOLOGY_POINT_CLASS = 'point';
   const HOMOLOGY_TOP_RULE_ID = 'top-hyperplane-point';
@@ -42,6 +62,7 @@
     mapDrag: null,
     mapControlDrag: null,
     basePickActive: false,
+    draftSheafBaseVarietyId: null,
     canvasWidth: 0,
     canvasHeight: 0,
     draftVarietyNameDirty: false,
@@ -51,6 +72,7 @@
     hodgeExpanded: false,
     hodgeWide: false,
     hodgeCellSize: 20,
+    homologyRulePasses: DEFAULT_HOMOLOGY_RULE_PASSES,
     exportScope: 'main',
     constructionMessage: '',
     suppressLabelClickUntil: 0,
@@ -145,7 +167,12 @@
     refs.classActions = $('class-actions');
     refs.classChart = $('class-chart');
     refs.classMessage = $('class-message');
+    refs.furtherSimplify = $('further-simplify');
     refs.exportClasses = $('export-classes');
+    refs.cohomologyActions = $('cohomology-actions');
+    refs.cohomologyDimOnly = $('cohomology-dim-only');
+    refs.cohomologyChart = $('cohomology-chart');
+    refs.cohomologyMessage = $('cohomology-message');
     refs.homologyCard = $('homology-card');
     refs.homologyActive = $('homology-active');
     refs.homologyHyperplaneRow = $('homology-hyperplane-row');
@@ -154,6 +181,10 @@
     refs.homologyPointSymbol = $('homology-point-symbol');
     refs.homologySymbols = $('homology-symbols');
     refs.homologyRules = $('homology-rules');
+    refs.homologyAddClass = $('homology-add-class');
+    refs.homologyClassSymbol = $('homology-class-symbol');
+    refs.homologyClassDegree = $('homology-class-degree');
+    refs.homologyAddClassButton = $('homology-add-class-button');
     refs.homologyAddRule = $('homology-add-rule');
     refs.homologyRuleEquation = $('homology-rule-equation');
     refs.homologyAddRuleButton = $('homology-add-rule-button');
@@ -250,19 +281,29 @@
     return variety;
   }
 
-  function createSheafFromDraft() {
-    const baseVariety = draftBaseVariety();
+  function createSheafFromDraft(baseVariety = draftBaseVariety()) {
     if (!baseVariety) return null;
+    if (!state.draftSheafNameDirty) refs.sheafName.value = defaultSheafNameLatex(baseVariety);
     const sheaf = {
       id: nextInputId('E'),
       ...readSheafDraft(baseVariety)
     };
     sheaf.name = uniqueObjectName('sheaf', sheaf.name);
     refs.sheafName.value = sheaf.name;
-    sheaf.nameDirty = sheaf.nameDirty || sheaf.name !== defaultSheafNameLatex();
+    sheaf.nameDirty = sheaf.nameDirty || sheaf.name !== defaultSheafNameLatex(baseVariety);
     positionSheafNearBase(sheaf, baseVariety);
     avoidCanvasLabelOverlap(sheaf);
     sheafFromObject(sheaf, baseVariety ? geometryFromVariety(baseVariety) : null);
+    return sheaf;
+  }
+
+  function addSheafFromDraft(baseVariety = draftBaseVariety()) {
+    const sheaf = createSheafFromDraft(baseVariety);
+    if (!sheaf) return null;
+    state.sheaves.push(sheaf);
+    state.activeSheafId = sheaf.id;
+    state.activeVarietyId = sheaf.baseVarietyId || defaultBaseVarietyId();
+    prepareNextDraftName('sheaf', sheaf.name);
     return sheaf;
   }
 
@@ -281,7 +322,7 @@
   }
 
   function readSheafDraft(baseVariety = draftBaseVariety()) {
-    const defaultName = defaultSheafNameLatex();
+    const defaultName = defaultSheafNameLatex(baseVariety);
     const name = sanitizeMathLabel(refs.sheafName.value, defaultName);
     return {
       type: refs.sheafType.value,
@@ -495,8 +536,16 @@
   }
 
   function draftBaseVariety() {
-    const selectedId = refs.sheafBaseVariety?.value || defaultBaseVarietyId();
+    const selectedId = state.draftSheafBaseVarietyId || refs.sheafBaseVariety?.value || defaultBaseVarietyId();
     return state.varieties.find((item) => item.id === selectedId) || null;
+  }
+
+  function setDraftBaseVariety(varietyId) {
+    if (!refs.sheafBaseVariety || !state.varieties.some((variety) => variety.id === varietyId)) return false;
+    if (!Array.from(refs.sheafBaseVariety.options || []).some((option) => option.value === varietyId)) syncSheafBaseOptions(true);
+    refs.sheafBaseVariety.value = varietyId;
+    state.draftSheafBaseVarietyId = refs.sheafBaseVariety.value === varietyId ? varietyId : null;
+    return refs.sheafBaseVariety.value === varietyId;
   }
 
   function baseVarietyForSheaf(sheaf) {
@@ -507,7 +556,7 @@
   function syncSheafBaseOptions(force = false) {
     if (!refs.sheafBaseVariety) return;
     const hasMultipleVarieties = state.varieties.length > 1;
-    refs.sheafBaseRow.hidden = !refs.addObjectKind || refs.addObjectKind.value !== 'sheaf' || !hasMultipleVarieties;
+    refs.sheafBaseRow.hidden = !refs.addObjectKind || refs.addObjectKind.value !== 'sheaf' || !hasMultipleVarieties || inputIsCreateMode();
     if (!hasMultipleVarieties) {
       refs.sheafBaseVariety.innerHTML = '';
       if (state.varieties.length === 1) refs.sheafBaseVariety.value = state.varieties[0].id;
@@ -583,16 +632,26 @@
     const hasModifyTarget = !!activeObjectForModifyMode();
     const showingMap = modifying ? !!state.activeMapId : refs.addObjectKind?.value === 'map';
     const showingSheaf = !showingMap && (modifying ? !!state.activeSheafId : refs.addObjectKind?.value === 'sheaf');
+    const waitingForSheafBase = inputIsCreateMode() && showingSheaf && !state.draftSheafBaseVarietyId;
     if (refs.addObjectKind) refs.addObjectKind.hidden = modifying;
     if (refs.inputOptions) refs.inputOptions.hidden = modifying;
     if (refs.modifyWarning) refs.modifyWarning.hidden = !modifying || hasModifyTarget;
     refs.varietyEditor.hidden = modifying ? (showingSheaf || showingMap || !hasModifyTarget) : (showingSheaf || showingMap);
-    refs.sheafEditor.hidden = modifying ? (!showingSheaf || !hasModifyTarget) : !showingSheaf;
+    refs.sheafEditor.hidden = modifying ? (!showingSheaf || !hasModifyTarget) : (!showingSheaf || waitingForSheafBase);
     if (refs.mapEditor) refs.mapEditor.hidden = modifying ? (!showingMap || !hasModifyTarget) : !showingMap;
     syncMapCurveControls(showingMap && modifying ? selectedMap() : null);
+    syncRepetitionStyleLabels();
     syncInputModeControls();
     updateInputEditorTitles();
     updateDeleteObjectButton();
+  }
+
+  function syncRepetitionStyleLabels() {
+    if (!refs.repeatStyle) return;
+    const labels = REPETITION_STYLE_LABELS[currentInputKind()] || REPETITION_STYLE_LABELS.variety;
+    Array.from(refs.repeatStyle.options).forEach((option) => {
+      if (labels[option.value]) option.textContent = labels[option.value];
+    });
   }
 
   function resetDraftForKind(kind = currentInputKind()) {
@@ -601,6 +660,7 @@
       refs.twist.value = '1';
       refs.rank.value = 'r';
       refs.basis.value = 'chern';
+      state.draftSheafBaseVarietyId = null;
       state.draftSheafNameDirty = false;
       syncSheafBaseOptions(true);
       refs.sheafName.value = defaultCreateSheafNameLatex();
@@ -671,6 +731,7 @@
     if (state.inputMode === 'modify') {
       clearMapDraft();
       setBasePickActive(false);
+      state.draftSheafBaseVarietyId = null;
     }
     if (state.inputMode === 'create' && options.resetDraft) {
       resetDraftForKind(currentInputKind());
@@ -684,7 +745,8 @@
   function syncInputModeControls() {
     if (refs.inputMode) refs.inputMode.value = state.inputMode;
     if (refs.addObject) {
-      refs.addObject.textContent = currentInputKind() === 'map' && inputIsCreateMode() ? 'pick' : (inputIsModifyMode() ? 'update' : 'add');
+      const pickingFromCanvas = inputIsCreateMode() && currentInputKind() === 'map';
+      refs.addObject.textContent = pickingFromCanvas ? 'pick' : (inputIsModifyMode() ? 'update' : 'add');
       refs.addObject.hidden = inputIsModifyMode() && !activeObjectForModifyMode();
     }
     updateInputEditorTitles();
@@ -937,7 +999,7 @@
     if (!refs.deleteObject) return;
     const kind = currentInputKind();
     const active = activeObjectForKind(kind);
-    refs.deleteObject.hidden = inputIsModifyMode() && !activeObjectForModifyMode();
+    refs.deleteObject.hidden = inputIsCreateMode() || (inputIsModifyMode() && !activeObjectForModifyMode());
     refs.deleteObject.disabled = !active;
     refs.deleteObject.textContent = 'delete';
     refs.deleteObject.title = active ? `Delete selected ${kind}` : `No ${kind} to delete`;
@@ -946,13 +1008,7 @@
   function createObjectFromDraft(kind = currentInputKind()) {
     if (kind === 'map') return null;
     if (kind === 'sheaf') {
-      const sheaf = createSheafFromDraft();
-      if (!sheaf) return null;
-      state.sheaves.push(sheaf);
-      state.activeSheafId = sheaf.id;
-      state.activeVarietyId = sheaf.baseVarietyId || defaultBaseVarietyId();
-      prepareNextDraftName('sheaf', sheaf.name);
-      return sheaf;
+      return addSheafFromDraft();
     }
     const variety = createVarietyFromDraft();
     state.varieties.push(variety);
@@ -1068,6 +1124,7 @@
         : createObjectFromDraft();
       if (!changed) return;
       syncSheafBaseOptions(true);
+      if (inputIsCreateMode() && currentInputKind() === 'sheaf') state.draftSheafBaseVarietyId = null;
       recompute();
     });
     if (refs.deleteObject) {
@@ -1141,6 +1198,7 @@
     refs.sheafType.addEventListener('change', () => {
       syncDefaultRank(true);
       syncDefaultSheafName();
+      normalizeControlVisibility();
     });
     refs.sheafName.addEventListener('input', () => {
       state.draftSheafNameDirty = true;
@@ -1201,6 +1259,7 @@
       refs.sheafBaseVariety.addEventListener('change', () => {
         if (refs.sheafBaseVariety.value) {
           state.activeVarietyId = refs.sheafBaseVariety.value;
+          state.draftSheafBaseVarietyId = refs.sheafBaseVariety.value;
         }
         syncDefaultSheafName();
         normalizeControlVisibility();
@@ -1257,14 +1316,49 @@
     if (refs.homologyRules) {
       refs.homologyRules.addEventListener('change', (event) => {
         const toggle = event.target.closest('[data-homology-rule-toggle]');
-        if (!toggle) return;
-        setHomologyRuleEnabled(toggle.dataset.homologyRuleToggle, toggle.checked);
+        if (toggle) {
+          setHomologyRuleEnabled(toggle.dataset.homologyRuleToggle, toggle.checked);
+          return;
+        }
+        const input = event.target.closest('[data-map-homology-rule]');
+        if (input) setMapHomologyRuleFromInput(input);
+      });
+      refs.homologyRules.addEventListener('keydown', (event) => {
+        const input = event.target.closest('[data-map-homology-rule]');
+        if (!input || event.key !== 'Enter') return;
+        event.preventDefault();
+        setMapHomologyRuleFromInput(input);
       });
       refs.homologyRules.addEventListener('click', (event) => {
         const button = event.target.closest('[data-homology-rule-delete]');
         if (!button) return;
         deleteHomologyRule(button.dataset.homologyRuleDelete);
       });
+    }
+    if (refs.homologySymbols) {
+      refs.homologySymbols.addEventListener('change', (event) => {
+        const symbolInput = event.target.closest('[data-homology-class-symbol]');
+        if (symbolInput) {
+          updateHomologySymbol(symbolInput.dataset.homologyClassSymbol, symbolInput.value);
+          return;
+        }
+        const degreeInput = event.target.closest('[data-homology-class-degree]');
+        if (degreeInput) updateHomologyClassDegree(degreeInput.dataset.homologyClassDegree, degreeInput.value);
+      });
+      refs.homologySymbols.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-homology-class-delete]');
+        if (!button) return;
+        deleteHomologyClass(button.dataset.homologyClassDelete);
+      });
+    }
+    if (refs.homologyClassDegree) {
+      refs.homologyClassDegree.addEventListener('change', () => {
+        const geometry = activeHomologyGeometry();
+        refs.homologyClassDegree.value = String(normalizedInt(refs.homologyClassDegree.value, 0, geometry?.dim ?? MAX_DIMENSION, 1));
+      });
+    }
+    if (refs.homologyAddClassButton) {
+      refs.homologyAddClassButton.addEventListener('click', addHomologyClassFromControls);
     }
     if (refs.homologyAddRuleButton) {
       refs.homologyAddRuleButton.addEventListener('click', addHomologyRuleFromControls);
@@ -1303,8 +1397,22 @@
     if (refs.exportClasses) {
       refs.exportClasses.addEventListener('click', () => openChartExport('classes'));
     }
+    if (refs.furtherSimplify) {
+      refs.furtherSimplify.addEventListener('click', () => {
+        state.homologyRulePasses += 1;
+        recompute();
+      });
+    }
     if (refs.exportHodge) {
       refs.exportHodge.addEventListener('click', () => openChartExport('hodge'));
+    }
+    if (refs.cohomologyDimOnly) {
+      refs.cohomologyDimOnly.addEventListener('change', () => {
+        if (state.lastResult) {
+          renderSheafCohomologyChart(state.lastResult);
+          typeset(refs.cohomologyChart);
+        }
+      });
     }
     if (refs.clearCanvas) {
       refs.clearCanvas.addEventListener('click', clearCanvasObjects);
@@ -1370,6 +1478,7 @@
       }
       const target = event.target.closest('[data-object-kind]');
       if (!target) return;
+      if (currentInputKind() === 'sheaf' && inputIsCreateMode()) return;
       if (currentInputKind() === 'map' && inputIsCreateMode()) {
         if (shouldUseMapCanvasDrag(target)) startMapCanvasDrag(target, event);
         return;
@@ -1391,8 +1500,28 @@
     return variety ? geometryFromVariety(variety) : null;
   }
 
+  function activeHomologyMapContext() {
+    const map = activeMap();
+    if (!map || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return null;
+    const domain = state.varieties.find((item) => item.id === map.domainId);
+    const codomain = state.varieties.find((item) => item.id === map.codomainId);
+    if (!domain || !codomain) return null;
+    const domainGeometry = geometryFromVariety(domain);
+    const codomainGeometry = geometryFromVariety(codomain);
+    return {
+      map,
+      domain: { variety: domain, geometry: domainGeometry },
+      codomain: { variety: codomain, geometry: codomainGeometry }
+    };
+  }
+
+  function activeHomologyVariety() {
+    return activeVariety();
+  }
+
   function updateHomologySymbol(classId, value) {
-    const variety = activeVariety();
+    resetHomologyRulePasses();
+    const variety = activeHomologyVariety();
     if (!variety) return;
     const geometry = geometryFromVariety(variety);
     const def = homologyClassDefById(geometry, classId);
@@ -1400,11 +1529,28 @@
     const homology = ensureHomologySystem(variety, geometry);
     homology.classes[classId] = homology.classes[classId] || {};
     homology.classes[classId].symbol = sanitizeHomologySymbol(value, def.defaultSymbol);
+    const custom = homology.customClasses?.find((item) => item.id === classId);
+    if (custom) custom.symbol = homology.classes[classId].symbol;
+    recompute();
+  }
+
+  function updateHomologyClassDegree(classId, value) {
+    resetHomologyRulePasses();
+    const variety = activeHomologyVariety();
+    if (!variety) return;
+    const geometry = geometryFromVariety(variety);
+    const homology = ensureHomologySystem(variety, geometry);
+    const custom = homology.customClasses.find((item) => item.id === classId);
+    if (!custom) return;
+    const variableId = homologyVariableId(classId);
+    custom.degree = normalizedInt(value, 0, geometry.dim, custom.degree);
+    homology.rules = homology.rules.filter((rule) => rule.builtin || !homologyRuleContainsVariable(rule, variableId));
     recompute();
   }
 
   function setHomologyRuleEnabled(ruleId, enabled) {
-    const variety = activeVariety();
+    resetHomologyRulePasses();
+    const variety = activeHomologyVariety();
     if (!variety) return;
     const geometry = geometryFromVariety(variety);
     const homology = ensureHomologySystem(variety, geometry);
@@ -1415,7 +1561,8 @@
   }
 
   function deleteHomologyRule(ruleId) {
-    const variety = activeVariety();
+    resetHomologyRulePasses();
+    const variety = activeHomologyVariety();
     if (!variety) return;
     const geometry = geometryFromVariety(variety);
     const homology = ensureHomologySystem(variety, geometry);
@@ -1423,8 +1570,39 @@
     recompute();
   }
 
+  function addHomologyClassFromControls() {
+    resetHomologyRulePasses();
+    const variety = activeHomologyVariety();
+    if (!variety) return;
+    const geometry = activeHomologyGeometry();
+    if (!geometry) return;
+    const homology = ensureHomologySystem(variety, geometry);
+    const symbol = sanitizeHomologySymbol(refs.homologyClassSymbol?.value || '', nextHomologyClassSymbol(homology, geometry));
+    const degree = normalizedInt(refs.homologyClassDegree?.value, 0, geometry.dim, Math.min(1, geometry.dim));
+    const id = nextInputId('C');
+    homology.customClasses.push({ id, symbol, degree });
+    homology.classes[id] = { symbol };
+    if (refs.homologyClassSymbol) refs.homologyClassSymbol.value = '';
+    if (refs.homologyClassDegree) refs.homologyClassDegree.value = String(Math.min(1, geometry.dim));
+    recompute();
+  }
+
+  function deleteHomologyClass(classId) {
+    resetHomologyRulePasses();
+    const variety = activeHomologyVariety();
+    if (!variety) return;
+    const geometry = geometryFromVariety(variety);
+    const homology = ensureHomologySystem(variety, geometry);
+    const variableId = homologyVariableId(classId);
+    homology.customClasses = homology.customClasses.filter((item) => item.id !== classId);
+    delete homology.classes[classId];
+    homology.rules = homology.rules.filter((rule) => rule.builtin || !homologyRuleContainsVariable(rule, variableId));
+    recompute();
+  }
+
   function addHomologyRuleFromControls() {
-    const variety = activeVariety();
+    resetHomologyRulePasses();
+    const variety = activeHomologyVariety();
     if (!variety) return;
     const geometry = activeHomologyGeometry();
     if (!geometry) return;
@@ -1448,7 +1626,7 @@
     const values = constructionControlValues();
     const stateForFields = constructionFieldState(operation, values);
     refs.constructionFields.innerHTML = [
-      ...stateForFields.fields.map((field) => constructionSelectRow(field)),
+      ...stateForFields.fields.map((field) => constructionFieldRow(field)),
       constructionNameRow(stateForFields.defaultName, values.name || '')
     ].join('');
     updateConstructionPreview();
@@ -1457,7 +1635,7 @@
   function constructionControlValues() {
     const values = {};
     refs.constructionFields?.querySelectorAll?.('[data-construction-field]').forEach((control) => {
-      values[control.dataset.constructionField] = control.value;
+      values[control.dataset.constructionField] = control.type === 'checkbox' ? control.checked : control.value;
     });
     return values;
   }
@@ -1470,7 +1648,12 @@
     const fields = [];
     const select = (name, label, options) => {
       const value = constructionSelectedValue(options, values[name]);
-      fields.push({ name, label, options, value });
+      fields.push({ type: 'select', name, label, options, value });
+      return value;
+    };
+    const option = (name, label, checked = false) => {
+      const value = values[name] === undefined ? checked : !!values[name];
+      fields.push({ type: 'checkbox', name, label, value });
       return value;
     };
 
@@ -1482,11 +1665,12 @@
     if (operation === 'direct-sum-sheaf' || operation === 'tensor-sheaf') {
       const left = select('sheafA', 'left', sheaves);
       const right = select('sheafB', 'right', sheaves);
+      const exact = operation === 'tensor-sheaf' ? option('exact', 'exact') : false;
       return {
         fields,
         defaultName: operation === 'direct-sum-sheaf'
           ? defaultBinarySheafName(left, right, '\\oplus')
-          : defaultBinarySheafName(left, right, '\\otimes')
+          : defaultBinarySheafName(left, right, tensorOperationLatex(!exact))
       };
     }
     if (operation === 'compose-map') {
@@ -1497,14 +1681,21 @@
     if (operation === 'pullback-sheaf' || operation === 'pushforward-sheaf') {
       const mapId = select('map', 'map', varietyMaps);
       const sheafId = select('sheaf', 'sheaf', sheaves);
+      const exact = option('exact', 'exact');
+      const proper = operation === 'pushforward-sheaf' ? option('proper', 'proper') : false;
       return {
         fields,
         defaultName: operation === 'pullback-sheaf'
-          ? defaultPullbackSheafName(mapId, sheafId)
-          : defaultPushforwardSheafName(mapId, sheafId)
+          ? defaultPullbackSheafName(mapId, sheafId, { derived: !exact })
+          : defaultPushforwardSheafName(mapId, sheafId, { derived: !exact, proper })
       };
     }
     return { fields, defaultName: 'X' };
+  }
+
+  function constructionFieldRow(field) {
+    if (field.type === 'checkbox') return constructionCheckboxRow(field);
+    return constructionSelectRow(field);
   }
 
   function constructionSelectRow(field) {
@@ -1514,6 +1705,18 @@
         <select id="construction-${field.name}" class="sheaf-select" data-construction-field="${escapeHtml(field.name)}">
           ${field.options.length ? field.options.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === field.value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('') : '<option value="">none</option>'}
         </select>
+      </div>
+    `;
+  }
+
+  function constructionCheckboxRow(field) {
+    return `
+      <div class="sheaf-field-row">
+        <span class="input-label">${escapeHtml(field.label)}</span>
+        <label class="opt-row">
+          <input id="construction-${field.name}" type="checkbox" data-construction-field="${escapeHtml(field.name)}" ${field.value ? 'checked' : ''}>
+          <span>${field.name === 'proper' ? 'use f_*' : 'ordinary functor'}</span>
+        </label>
       </div>
     `;
   }
@@ -1568,15 +1771,15 @@
       return `${name}=${sanitizeMathLabel(data.left.name, '\\mathcal{E}')}\\oplus ${sanitizeMathLabel(data.right.name, '\\mathcal{F}')}`;
     }
     if (data.operation === 'tensor-sheaf') {
-      return `${name}=${sanitizeMathLabel(data.left.name, '\\mathcal{E}')}\\otimes ${sanitizeMathLabel(data.right.name, '\\mathcal{F}')}`;
+      return `${name}=${sanitizeMathLabel(data.left.name, '\\mathcal{E}')}${tensorOperationLatex(!data.exact)} ${sanitizeMathLabel(data.right.name, '\\mathcal{F}')}`;
     }
     if (data.operation === 'compose-map') {
       return `${name}=${sanitizeMathLabel(data.second.name, 'g')}\\circ ${sanitizeMathLabel(data.first.name, 'f')}`;
     }
     if (data.operation === 'pullback-sheaf') {
-      return `${name}=${sanitizeMathLabel(data.map.name, 'f')}^{*}${sanitizeMathLabel(data.sheaf.name, '\\mathcal{E}')}`;
+      return `${name}=${pullbackFunctorLatex(data.map, { derived: !data.exact })}${sanitizeMathLabel(data.sheaf.name, '\\mathcal{E}')}`;
     }
-    return `${name}=${sanitizeMathLabel(data.map.name, 'f')}_{*}${sanitizeMathLabel(data.sheaf.name, '\\mathcal{E}')}`;
+    return `${name}=${pushforwardFunctorLatex(data.map, { derived: !data.exact, proper: data.proper })}${sanitizeMathLabel(data.sheaf.name, '\\mathcal{E}')}`;
   }
 
   function applyConstruction() {
@@ -1608,11 +1811,12 @@
       const left = requireSheaf(values.sheafA);
       const right = requireSheaf(values.sheafB);
       if (!left.baseVarietyId || left.baseVarietyId !== right.baseVarietyId) throw new Error('The sheaves must have the same base variety.');
+      const exact = !!values.exact;
       const defaultName = operation === 'direct-sum-sheaf'
         ? defaultBinarySheafName(left.id, right.id, '\\oplus')
-        : defaultBinarySheafName(left.id, right.id, '\\otimes');
+        : defaultBinarySheafName(left.id, right.id, tensorOperationLatex(!exact));
       const name = constructionAutoName(values.name, defaultName);
-      return { operation, left, right, baseVarietyId: left.baseVarietyId, defaultName, name: name.name, nameDirty: name.dirty };
+      return { operation, left, right, exact, derived: operation === 'tensor-sheaf' && !exact, baseVarietyId: left.baseVarietyId, defaultName, name: name.name, nameDirty: name.dirty };
     }
     if (operation === 'compose-map') {
       const first = requireMap(values.mapA);
@@ -1630,9 +1834,13 @@
       const sheaf = requireSheaf(values.sheaf);
       if (operation === 'pullback-sheaf' && sheaf.baseVarietyId !== map.codomainId) throw new Error('For pullback, the sheaf must live on the codomain.');
       if (operation === 'pushforward-sheaf' && sheaf.baseVarietyId !== map.domainId) throw new Error('For pushforward, the sheaf must live on the domain.');
-      const defaultName = operation === 'pullback-sheaf' ? defaultPullbackSheafName(map.id, sheaf.id) : defaultPushforwardSheafName(map.id, sheaf.id);
+      const exact = !!values.exact;
+      const proper = operation === 'pushforward-sheaf' && !!values.proper;
+      const defaultName = operation === 'pullback-sheaf'
+        ? defaultPullbackSheafName(map.id, sheaf.id, { derived: !exact })
+        : defaultPushforwardSheafName(map.id, sheaf.id, { derived: !exact, proper });
       const name = constructionAutoName(values.name, defaultName);
-      return { operation, map, sheaf, defaultName, name: name.name, nameDirty: name.dirty };
+      return { operation, map, sheaf, exact, derived: !exact, proper, defaultName, name: name.name, nameDirty: name.dirty };
     }
     throw new Error('Unknown construction.');
   }
@@ -1681,6 +1889,8 @@
       construction: {
         type: data.operation === 'direct-sum-sheaf' ? 'direct-sum' : 'tensor',
         sheafIds: [data.left.id, data.right.id],
+        derived: data.operation === 'tensor-sheaf' ? !!data.derived : false,
+        exact: data.operation === 'tensor-sheaf' ? !!data.exact : true,
         defaultName: data.defaultName
       }
     };
@@ -1729,6 +1939,9 @@
         type: isPullback ? 'pullback' : 'pushforward',
         mapId: data.map.id,
         sheafId: data.sheaf.id,
+        derived: !!data.derived,
+        exact: !!data.exact,
+        proper: isPullback ? false : !!data.proper,
         defaultName: data.defaultName
       }
     };
@@ -1821,6 +2034,10 @@
     return `${sanitizeMathLabel(left?.name, '\\mathcal{E}')}${operationLatex}${sanitizeMathLabel(right?.name, '\\mathcal{F}')}`;
   }
 
+  function tensorOperationLatex(derived) {
+    return derived ? '\\otimes^{\\mathbf{L}}' : '\\otimes';
+  }
+
   function defaultComposedMapName(firstId, secondId) {
     const first = state.maps.find((item) => item.id === firstId);
     const second = state.maps.find((item) => item.id === secondId);
@@ -1831,24 +2048,35 @@
     return `${sanitizeMathLabel(second?.name, 'g')}\\circ ${sanitizeMathLabel(first?.name, 'f')}`;
   }
 
-  function defaultPullbackSheafName(mapId, sheafId) {
+  function defaultPullbackSheafName(mapId, sheafId, options = {}) {
     const map = state.maps.find((item) => item.id === mapId);
     const sheaf = state.sheaves.find((item) => item.id === sheafId);
-    return defaultPullbackSheafNameFromObjects(map, sheaf);
+    return defaultPullbackSheafNameFromObjects(map, sheaf, options);
   }
 
-  function defaultPullbackSheafNameFromObjects(map, sheaf) {
-    return `${sanitizeMathLabel(map?.name, 'f')}^{*}${sanitizeMathLabel(sheaf?.name, '\\mathcal{E}')}`;
+  function defaultPullbackSheafNameFromObjects(map, sheaf, options = {}) {
+    return `${pullbackFunctorLatex(map, options)}${sanitizeMathLabel(sheaf?.name, '\\mathcal{E}')}`;
   }
 
-  function defaultPushforwardSheafName(mapId, sheafId) {
+  function defaultPushforwardSheafName(mapId, sheafId, options = {}) {
     const map = state.maps.find((item) => item.id === mapId);
     const sheaf = state.sheaves.find((item) => item.id === sheafId);
-    return defaultPushforwardSheafNameFromObjects(map, sheaf);
+    return defaultPushforwardSheafNameFromObjects(map, sheaf, options);
   }
 
-  function defaultPushforwardSheafNameFromObjects(map, sheaf) {
-    return `${sanitizeMathLabel(map?.name, 'f')}_{*}${sanitizeMathLabel(sheaf?.name, '\\mathcal{E}')}`;
+  function defaultPushforwardSheafNameFromObjects(map, sheaf, options = {}) {
+    return `${pushforwardFunctorLatex(map, options)}${sanitizeMathLabel(sheaf?.name, '\\mathcal{E}')}`;
+  }
+
+  function pullbackFunctorLatex(map, options = {}) {
+    const mapName = sanitizeMathLabel(map?.name, 'f');
+    return options.derived === false ? `${mapName}^{*}` : `\\mathbf{L}${mapName}^{*}`;
+  }
+
+  function pushforwardFunctorLatex(map, options = {}) {
+    const mapName = sanitizeMathLabel(map?.name, 'f');
+    const lower = options.proper ? '*' : '!';
+    return options.derived === false ? `${mapName}_{${lower}}` : `\\mathbf{R}${mapName}_{${lower}}`;
   }
 
   function constructionRankPlaceholder(operation, left, right) {
@@ -1924,6 +2152,11 @@
       chooseSheafBaseFromCanvas(id);
       return true;
     }
+    if (kind === 'variety' && currentInputKind() === 'sheaf' && inputIsCreateMode()) {
+      if (allowableSheafBase(id)) chooseSheafBaseFromCanvas(id);
+      return true;
+    }
+    if (currentInputKind() === 'sheaf' && inputIsCreateMode()) return true;
     if (kind === 'map' && currentInputKind() === 'map' && inputIsCreateMode()) {
       clearMapDraft();
       activateObject('map', id, { mode: 'modify', loadDraft: true });
@@ -1939,12 +2172,19 @@
 
   function chooseSheafBaseFromCanvas(varietyId) {
     if (!state.varieties.some((variety) => variety.id === varietyId)) return;
-    if (refs.sheafBaseVariety) refs.sheafBaseVariety.value = varietyId;
+    setDraftBaseVariety(varietyId);
     state.activeVarietyId = varietyId;
     setBasePickActive(false);
     syncDefaultSheafName();
     normalizeControlVisibility();
     recompute();
+  }
+
+  function allowableSheafBase(varietyId) {
+    const variety = state.varieties.find((item) => item.id === varietyId);
+    if (!variety) return false;
+    if (refs.sheafType?.value !== 'twist') return true;
+    return varietyHasHyperplaneClass(variety.type || 'abstract');
   }
 
   function handleMapPick(kind, id) {
@@ -2187,8 +2427,8 @@
     return inputIsModifyMode() ? defaultVarietyNameLatex() : uniqueObjectName('variety', defaultVarietyNameLatex());
   }
 
-  function defaultSheafNameLatex() {
-    const baseVariety = draftBaseVariety() || activeVariety();
+  function defaultSheafNameLatex(baseVarietyOverride = null) {
+    const baseVariety = baseVarietyOverride || draftBaseVariety() || activeVariety();
     const variety = baseVariety ? geometryFromVariety(baseVariety).labelLatex : 'X';
     const type = refs.sheafType.value;
     return defaultSheafNameFor(type, sanitizeRankInput(refs.rank.value), normalizedInt(refs.twist.value, -24, 24, 1), variety);
@@ -2300,7 +2540,7 @@
   function refreshBinaryConstructedSheaf(sheaf, construction) {
     const [left, right] = (construction.sheafIds || []).map((id) => state.sheaves.find((item) => item.id === id));
     if (!left || !right) return false;
-    const opLatex = construction.type === 'direct-sum' ? '\\oplus' : '\\otimes';
+    const opLatex = construction.type === 'direct-sum' ? '\\oplus' : tensorOperationLatex(construction.derived !== false);
     const oldDefault = construction.defaultName || defaultBinarySheafNameFromObjects(left, right, opLatex);
     const nextDefault = defaultBinarySheafNameFromObjects(left, right, opLatex);
     let changed = false;
@@ -2329,8 +2569,9 @@
     const sourceSheaf = state.sheaves.find((item) => item.id === construction.sheafId);
     if (!map || !sourceSheaf) return false;
     const isPullback = construction.type === 'pullback';
-    const oldDefault = construction.defaultName || (isPullback ? defaultPullbackSheafNameFromObjects(map, sourceSheaf) : defaultPushforwardSheafNameFromObjects(map, sourceSheaf));
-    const nextDefault = isPullback ? defaultPullbackSheafNameFromObjects(map, sourceSheaf) : defaultPushforwardSheafNameFromObjects(map, sourceSheaf);
+    const functorOptions = { derived: construction.derived !== false, proper: !!construction.proper };
+    const oldDefault = construction.defaultName || (isPullback ? defaultPullbackSheafNameFromObjects(map, sourceSheaf, functorOptions) : defaultPushforwardSheafNameFromObjects(map, sourceSheaf, functorOptions));
+    const nextDefault = isPullback ? defaultPullbackSheafNameFromObjects(map, sourceSheaf, functorOptions) : defaultPushforwardSheafNameFromObjects(map, sourceSheaf, functorOptions);
     let changed = false;
     const nextBase = isPullback ? map.domainId : map.codomainId;
     if (map.domainKind === 'variety' && map.codomainKind === 'variety' && sheaf.baseVarietyId !== nextBase) {
@@ -2422,20 +2663,35 @@
       }
       refs.hodgeMessage.textContent = 'No Hodge numbers available for the current input.';
       refs.hodgeMessage.hidden = false;
+      if (refs.cohomologyActions) refs.cohomologyActions.hidden = true;
+      if (refs.cohomologyChart) {
+        refs.cohomologyChart.hidden = true;
+        refs.cohomologyChart.innerHTML = '';
+      }
+      if (refs.cohomologyMessage) {
+        refs.cohomologyMessage.textContent = 'No sheaf cohomology available for the current input.';
+        refs.cohomologyMessage.hidden = false;
+      }
       renderConstructionPanel();
       renderHomologyPanel(null);
       renderCanvas(null);
     }
   }
 
+  function resetHomologyRulePasses() {
+    state.homologyRulePasses = DEFAULT_HOMOLOGY_RULE_PASSES;
+  }
+
   function buildResult(geometry, sheaf) {
     if (geometry && sheaf) return buildCharacteristicClasses(geometry, sheaf);
     if (geometry) {
+      const hodge = buildHodgeNumbers(geometry);
       return {
         geometry,
         sheaf: null,
         bundle: null,
-        hodge: buildHodgeNumbers(geometry),
+        hodge,
+        cohomology: buildSheafCohomology(geometry, null, hodge),
         classRows: []
       };
     }
@@ -2444,6 +2700,7 @@
       sheaf,
       bundle: null,
       hodge: null,
+      cohomology: null,
       classRows: []
     };
   }
@@ -2462,7 +2719,11 @@
     const draftBase = draftBaseVariety();
     const draftBaseType = draftBase?.type || 'abstract';
     let draftSheaf = refs.sheafType.value;
-    const canTwist = draftingSheaf ? !!draftBase && varietyHasHyperplaneClass(draftBaseType) : hasVariety && varietyHasHyperplaneClass(activeVarietyType);
+    const hasTwistBase = state.varieties.some((variety) => varietyHasHyperplaneClass(variety.type || 'abstract'));
+    const waitingForSheafBase = inputIsCreateMode() && draftingSheaf && !state.draftSheafBaseVarietyId;
+    const canTwist = draftingSheaf
+      ? (waitingForSheafBase ? hasTwistBase : !!draftBase && varietyHasHyperplaneClass(draftBaseType))
+      : hasVariety && varietyHasHyperplaneClass(activeVarietyType);
     if (refs.twistOption) {
       refs.twistOption.hidden = !canTwist;
       refs.twistOption.disabled = !canTwist;
@@ -2491,20 +2752,23 @@
     refs.basisRow.hidden = !needsBasisInput;
     syncClassDisplayControls();
     refs.rankRow.hidden = !draftingSheaf || (draftSheaf !== 'abstract' && draftSheaf !== 'locally-free');
-    refs.sheafBaseRow.hidden = inputIsModifyMode() || !draftingSheaf || state.varieties.length <= 1;
+    refs.sheafBaseRow.hidden = inputIsCreateMode() || inputIsModifyMode() || !draftingSheaf || state.varieties.length <= 1;
     if (refs.pickSheafBase) {
       refs.pickSheafBase.disabled = refs.sheafBaseRow.hidden;
       refs.pickSheafBase.setAttribute('aria-pressed', state.basePickActive ? 'true' : 'false');
       refs.pickSheafBase.textContent = state.basePickActive ? 'picking' : 'pick';
     }
-    if (state.basePickActive && (refs.sheafBaseRow.hidden || !draftingSheaf)) setBasePickActive(false);
+    if (state.basePickActive && !draftingSheaf) setBasePickActive(false);
     if (refs.addObject) {
       const canAddSheaf = !draftingSheaf || !!draftBase;
       const hasEditableObject = !inputIsModifyMode() || !!activeObjectForKind(currentInputKind());
       const creatingMap = draftingMap && inputIsCreateMode();
-      refs.addObject.disabled = creatingMap || (!canAddSheaf && draftingSheaf) || !hasEditableObject;
+      const creatingSheaf = draftingSheaf && inputIsCreateMode();
+      refs.addObject.disabled = creatingMap || (creatingSheaf && waitingForSheafBase) || (creatingSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
       refs.addObject.textContent = creatingMap ? 'pick' : (inputIsModifyMode() ? 'update' : 'add');
-      refs.addObject.title = creatingMap ? 'Pick domain and codomain on the canvas' : (draftingSheaf && !draftBase ? 'Add a base variety first' : '');
+      refs.addObject.title = creatingMap
+        ? 'Pick domain and codomain on the canvas'
+        : (creatingSheaf && waitingForSheafBase ? (hasVariety ? 'Pick a base variety on the canvas first' : 'Add a variety first') : (draftingSheaf && !draftBase ? 'Add a base variety first' : ''));
     }
     updateMapPickStatus();
     syncInputEditorVisibility();
@@ -2615,9 +2879,11 @@
   function ensureHomologySystem(variety, geometry) {
     const homology = variety.homology && typeof variety.homology === 'object' ? variety.homology : {};
     homology.classes = homology.classes && typeof homology.classes === 'object' ? homology.classes : {};
+    homology.customClasses = Array.isArray(homology.customClasses) ? homology.customClasses : [];
+    homology.customClasses = homology.customClasses.map((item) => normalizeCustomHomologyClass(item, geometry)).filter(Boolean);
     homology.rules = Array.isArray(homology.rules) ? homology.rules : [];
 
-    const classDefs = homologyClassDefinitions({ ...geometry, homology });
+    const classDefs = baseHomologyClassDefinitions({ ...geometry, homology });
     classDefs.forEach((def) => {
       const existing = homology.classes[def.id] && typeof homology.classes[def.id] === 'object'
         ? homology.classes[def.id]
@@ -2629,18 +2895,36 @@
     const existingTopRule = homology.rules.find((rule) => rule.id === HOMOLOGY_TOP_RULE_ID);
     const customRules = homology.rules.filter((rule) => rule.id !== HOMOLOGY_TOP_RULE_ID);
     const standardRule = standardHomologyTopRule(geometry, existingTopRule);
+    const normalizationGeometry = { ...geometry, homology };
     homology.rules = [
       ...(standardRule ? [standardRule] : []),
-      ...customRules.map((rule) => normalizeHomologyRule(rule, geometry)).filter(Boolean)
+      ...customRules.map((rule) => normalizeHomologyRule(rule, normalizationGeometry, {
+        includeMapClasses: false,
+        preserveUnknownVariables: true
+      })).filter(Boolean)
     ];
     variety.homology = homology;
     return homology;
   }
 
-  function homologyClassDefinitions(geometry) {
+  function homologyClassDefinitions(geometry, options = {}) {
+    const defs = baseHomologyClassDefinitions(geometry);
+    if (options.includeMapClasses === false) return defs;
+    return [...defs, ...mapHomologyClassDefinitions(geometry, defs)];
+  }
+
+  function baseHomologyClassDefinitions(geometry) {
     if (!geometry) return [];
     const homology = geometry.homology || {};
-    const defs = [];
+    const defs = [
+      homologyClassDefinition(
+        HOMOLOGY_UNIT_CLASS,
+        0,
+        '1',
+        'unit',
+        homology
+      )
+    ];
     if (varietyHasHyperplaneClass(geometry.type)) {
       defs.push(homologyClassDefinition(
         HOMOLOGY_HYPERPLANE_CLASS,
@@ -2659,11 +2943,42 @@
         homology
       ));
     }
+    for (const custom of homology.customClasses || []) {
+      const normalized = normalizeCustomHomologyClass(custom, geometry);
+      if (!normalized) continue;
+      defs.push(homologyClassDefinition(
+        normalized.id,
+        normalized.degree,
+        normalized.symbol,
+        'custom',
+        homology,
+        normalized.symbol
+      ));
+    }
     return defs;
   }
 
-  function homologyClassDefinition(id, degree, defaultSymbol, kind, homology) {
-    const symbol = sanitizeHomologySymbol(homology?.classes?.[id]?.symbol, defaultSymbol);
+  function normalizeCustomHomologyClass(item, geometry) {
+    if (!item || typeof item !== 'object') return null;
+    const id = String(item.id || '').trim() || nextInputId('C');
+    if ([HOMOLOGY_UNIT_CLASS, HOMOLOGY_HYPERPLANE_CLASS, HOMOLOGY_POINT_CLASS].includes(id)) return null;
+    const dim = Number.isInteger(geometry?.dim) ? geometry.dim : MAX_DIMENSION;
+    const degree = normalizedInt(item.degree, 0, dim, Math.min(1, dim));
+    const fallback = nextHomologyClassSymbol({ customClasses: [] }, geometry);
+    const symbol = sanitizeHomologySymbol(item.symbol, fallback);
+    return { id, symbol, degree };
+  }
+
+  function nextHomologyClassSymbol(homology, geometry) {
+    const used = new Set(baseHomologyClassDefinitions({ ...geometry, homology: { ...homology, customClasses: [] } })
+      .map((def) => canonicalMathLabel(def.symbolLatex)));
+    (homology?.customClasses || []).forEach((item) => used.add(canonicalMathLabel(item.symbol)));
+    const candidates = ['A', 'B', 'C', 'D', 'L', 'M', 'N', 'Z'];
+    return candidates.find((symbol) => !used.has(canonicalMathLabel(symbol))) || `A_{${(homology?.customClasses || []).length + 1}}`;
+  }
+
+  function homologyClassDefinition(id, degree, defaultSymbol, kind, homology, fallbackSymbol = defaultSymbol) {
+    const symbol = sanitizeHomologySymbol(homology?.classes?.[id]?.symbol, fallbackSymbol || defaultSymbol);
     return {
       id,
       degree,
@@ -2679,15 +2994,212 @@
   }
 
   function homologyVariableId(classId) {
+    if (String(classId || '').startsWith('map_')) return String(classId);
+    if (classId === HOMOLOGY_UNIT_CLASS) return 'unit';
     if (classId === HOMOLOGY_HYPERPLANE_CLASS) return 'H';
     if (classId === HOMOLOGY_POINT_CLASS) return 'point';
+    const mapClass = parseMapHomologyClassId(classId);
+    if (mapClass) return mapHomologyVariableId({ id: mapClass.mapId }, mapClass.operation, homologyVariableId(mapClass.sourceClassId));
     return `homology_${String(classId || '').replace(/[^A-Za-z0-9_]+/g, '_')}`;
+  }
+
+  function parseMapHomologyClassId(classId) {
+    const text = String(classId || '');
+    const match = text.match(/^(pullback|pushforward)_([^_]+)_(.+)$/);
+    if (!match) return null;
+    return {
+      operation: match[1],
+      mapId: match[2],
+      sourceClassId: match[3]
+    };
+  }
+
+  function mapHomologyClassDefinitions(geometry, baseDefs = null) {
+    const context = activeHomologyMapContext();
+    if (!context || !geometry?.varietyId) return [];
+    const map = context.map;
+    if (geometry.varietyId === context.domain.variety.id) {
+      const sourceDefs = baseHomologyClassDefinitions(context.codomain.geometry);
+      return sourceDefs.map((def) => mapOperationHomologyClassDefinition(map, 'pullback', def, geometry)).filter(Boolean);
+    }
+    if (geometry.varietyId === context.codomain.variety.id) {
+      return mapPushforwardClassDefinitions(map, context.domain.geometry, geometry);
+    }
+    return [];
+  }
+
+  function mapPushforwardClassDefinitions(map, domainGeometry, codomainGeometry) {
+    return homologyMonomialDefinitions(domainGeometry)
+      .map((mono) => mapPushforwardMonomialClassDefinition(map, mono, domainGeometry, codomainGeometry))
+      .filter(Boolean);
+  }
+
+  function mapOperationHomologyClassDefinition(map, operation, sourceDef, targetGeometry) {
+    if (!sourceDef || !Number.isInteger(sourceDef.degree) || !Number.isInteger(targetGeometry.dim)) return null;
+    const sourceDim = operation === 'pullback'
+      ? geometryByVarietyId(map.codomainId)?.dim
+      : geometryByVarietyId(map.domainId)?.dim;
+    if (!Number.isInteger(sourceDim)) return null;
+    const degreeShift = operation === 'pullback' ? 0 : targetGeometry.dim - sourceDim;
+    const degree = sourceDef.degree + degreeShift;
+    if (degree < 0 || degree > targetGeometry.dim) return null;
+    const mapName = sanitizeMathLabel(map.name, 'f');
+    const id = mapHomologyClassId(map, operation, sourceDef.id);
+    const symbol = mapHomologySymbolLatex(map, operation, sourceDef.symbolLatex);
+    const sourceVariableId = homologyVariableId(sourceDef.id);
+    defineMapHomologyVariable(map, operation, sourceVariableId, degree, sourceDef.symbolLatex, {
+      sourceKey: monoKey({ [sourceVariableId]: 1 })
+    });
+    const defaultSymbol = operation === 'pullback'
+      ? `${mapName}^{*}${sourceDef.defaultSymbol}`
+      : `${mapName}_{*}${sourceDef.defaultSymbol}`;
+    return homologyClassDefinition(
+      id,
+      degree,
+      defaultSymbol,
+      operation === 'pullback' ? `pullback of ${sourceDef.kind}` : `pushforward of ${sourceDef.kind}`,
+      targetGeometry.homology,
+      symbol
+    );
+  }
+
+  function mapPushforwardMonomialClassDefinition(map, mono, domainGeometry, codomainGeometry) {
+    if (!mono || !Number.isInteger(mono.degree) || !Number.isInteger(domainGeometry?.dim) || !Number.isInteger(codomainGeometry?.dim)) return null;
+    const targetDegree = mono.degree + codomainGeometry.dim - domainGeometry.dim;
+    if (targetDegree < 0 || targetDegree > codomainGeometry.dim) return null;
+    const sourcePowers = parseMonoKey(mono.key);
+    if (Object.keys(sourcePowers).length === 1) {
+      const [sourceId, exponent] = Object.entries(sourcePowers)[0];
+      if (exponent === 1) {
+        const sourceDef = baseHomologyClassDefinitions(domainGeometry).find((def) => homologyVariableId(def.id) === sourceId);
+        if (sourceDef) return mapOperationHomologyClassDefinition(map, 'pushforward', sourceDef, codomainGeometry);
+      }
+    }
+    const variableId = pushforwardTermVariableId(map, mono.key, targetDegree, { proper: false });
+    const data = VARS.get(variableId) || {};
+    return {
+      id: variableId,
+      degree: targetDegree,
+      defaultSymbol: data.latex || mapHomologySymbolLatex(map, 'pushforward', mono.latex || '1'),
+      kind: mono.key ? 'pushforward of product' : 'pushforward of unit',
+      symbolLatex: data.latex || mapHomologySymbolLatex(map, 'pushforward', mono.latex || '1'),
+      symbolPlain: data.plain || latexToPlain(data.latex || '')
+    };
+  }
+
+  function homologyMonomialDefinitions(geometry, options = {}) {
+    const maxDegree = Number.isInteger(options.maxDegree) ? options.maxDegree : (geometry?.dim ?? MAX_DIMENSION);
+    const positiveDefs = baseHomologyClassDefinitions(geometry)
+      .filter((def) => def.degree > 0 && def.degree <= maxDegree)
+      .map((def) => ({
+        id: homologyVariableId(def.id),
+        degree: def.degree
+      }));
+    const out = [{ key: '', degree: 0, latex: '1', plain: '1' }];
+    const seen = new Set(['']);
+    const visit = (startIndex, powers, degree) => {
+      if (out.length > 160) return;
+      for (let index = startIndex; index < positiveDefs.length; index += 1) {
+        const def = positiveDefs[index];
+        const nextDegree = degree + def.degree;
+        if (nextDegree > maxDegree) continue;
+        const nextPowers = { ...powers, [def.id]: (powers[def.id] || 0) + 1 };
+        const key = monoKey(nextPowers);
+        if (!seen.has(key)) {
+          seen.add(key);
+          out.push({
+            key,
+            degree: nextDegree,
+            latex: monomialLatex(key),
+            plain: monomialPlain(key)
+          });
+        }
+        visit(index, nextPowers, nextDegree);
+      }
+    };
+    defineBaseHomologyVariables(geometry);
+    visit(0, {}, 0);
+    return out.sort((a, b) => a.degree - b.degree || a.key.localeCompare(b.key));
+  }
+
+  function mapHomologySymbolLatex(map, operation, sourceLatex) {
+    const mapName = sanitizeMathLabel(map.name, 'f');
+    return operation === 'pullback'
+      ? `${mapName}^{*}\\left(${sourceLatex}\\right)`
+      : `${mapName}_{*}\\left(${sourceLatex}\\right)`;
+  }
+
+  function mapHomologyClassId(map, operation, sourceClassId) {
+    return `${operation}_${map.id}_${sourceClassId}`;
+  }
+
+  function geometryByVarietyId(varietyId) {
+    const variety = state.varieties.find((item) => item.id === varietyId);
+    return variety ? geometryFromVariety(variety) : null;
   }
 
   function defineHomologyVariables(geometry) {
     homologyClassDefinitions(geometry).forEach((def) => {
       defineVariable(homologyVariableId(def.id), def.degree, def.symbolLatex);
     });
+  }
+
+  function defineBaseHomologyVariables(geometry) {
+    baseHomologyClassDefinitions(geometry).forEach((def) => {
+      defineVariable(homologyVariableId(def.id), def.degree, def.symbolLatex);
+    });
+  }
+
+  function defineMapHomologyVariable(map, operation, sourceId, degree, sourceLatex, meta = {}) {
+    const id = mapHomologyVariableId(map, operation, sourceId);
+    const sourceKey = Object.prototype.hasOwnProperty.call(meta, 'sourceKey')
+      ? meta.sourceKey
+      : monoKey({ [sourceId]: 1 });
+    defineVariable(id, degree, mapHomologySymbolLatex(map, operation, sourceLatex), {
+      kind: 'mapHomology',
+      mapId: map?.id || null,
+      operation,
+      sourceId,
+      sourceKey,
+      ...meta
+    });
+    return id;
+  }
+
+  function ensureMapHomologyVariableFromId(id) {
+    if (!String(id || '').startsWith('map_') || VARS.has(id)) return VARS.get(id) || null;
+    const parsed = parseMapHomologyVariableId(id);
+    if (!parsed) return null;
+    const map = state.maps.find((item) => variableIdSafe(item.id) === parsed.mapKey || item.id === parsed.mapKey);
+    if (!map || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return null;
+    const sourceGeometry = parsed.operation === 'pullback'
+      ? geometryByVarietyId(map.codomainId)
+      : geometryByVarietyId(map.domainId);
+    const targetGeometry = parsed.operation === 'pullback'
+      ? geometryByVarietyId(map.domainId)
+      : geometryByVarietyId(map.codomainId);
+    const sourceData = sourceGeometry ? homologyVariableDataById(sourceGeometry, parsed.sourceId) : null;
+    if (!sourceData || !targetGeometry) return null;
+    defineMapHomologyVariable(map, parsed.operation, parsed.sourceId, parsed.operation === 'pullback'
+      ? sourceData.degree
+      : sourceData.degree + targetGeometry.dim - sourceGeometry.dim, sourceData.latex, {
+        sourceKey: monoKey({ [parsed.sourceId]: 1 })
+      });
+    return VARS.get(id) || null;
+  }
+
+  function parseMapHomologyVariableId(id) {
+    const match = String(id || '').match(/^map_(pullback|pushforward)_([^_]+)_(.+)$/);
+    if (!match) return null;
+    return { operation: match[1], mapKey: match[2], sourceId: match[3] };
+  }
+
+  function homologyVariableDataById(geometry, variableId) {
+    defineHomologyVariables(geometry);
+    if (VARS.has(variableId)) return VARS.get(variableId);
+    const def = homologyClassDefinitions(geometry).find((item) => homologyVariableId(item.id) === variableId);
+    if (!def) return null;
+    return { degree: def.degree, latex: def.symbolLatex, plain: def.symbolPlain };
   }
 
   function standardHomologyTopRule(geometry, existingRule = null) {
@@ -2707,12 +3219,13 @@
     };
   }
 
-  function normalizeHomologyRule(rule, geometry) {
+  function normalizeHomologyRule(rule, geometry, options = {}) {
     if (!rule || typeof rule !== 'object') return null;
-    const defs = homologyClassDefinitions(geometry);
+    const defs = homologyClassDefinitions(geometry, { includeMapClasses: options.includeMapClasses !== false });
     const variableIds = new Set(defs.map((def) => homologyVariableId(def.id)));
-    let lhsPowers = normalizeHomologyPowers(rule.lhs?.powers || rule.lhsPowers, variableIds);
-    let rhsTerms = normalizeHomologyRuleTerms(rule.rhs || rule.rhsTerms, variableIds);
+    const normalizeOptions = { preserveUnknownVariables: !!options.preserveUnknownVariables };
+    let lhsPowers = normalizeHomologyPowers(rule.lhs?.powers || rule.lhsPowers, variableIds, normalizeOptions);
+    let rhsTerms = normalizeHomologyRuleTerms(rule.rhs || rule.rhsTerms, variableIds, normalizeOptions);
     if ((!lhsPowers || !rhsTerms) && rule.source && rule.target) {
       const sourceDef = defs.find((def) => def.id === rule.source);
       const targetDef = defs.find((def) => def.id === rule.target);
@@ -2738,26 +3251,27 @@
       lhs: { powers: lhsPowers },
       rhs: rhsTerms
     };
-    return homologyRulePreservesDegree(normalized, defs) ? normalized : null;
+    if (options.preserveUnknownVariables && !homologyRuleUsesAvailableVariables(normalized, variableIds, { resolveMapVariables: false })) return normalized;
+    return homologyRulePreservesDegree(normalized, defs, { resolveMapVariables: options.preserveUnknownVariables !== true }) ? normalized : null;
   }
 
-  function normalizeHomologyPowers(powers, variableIds) {
+  function normalizeHomologyPowers(powers, variableIds, options = {}) {
     if (!powers || typeof powers !== 'object') return null;
     const out = {};
     for (const [id, exp] of Object.entries(powers)) {
-      if (!variableIds.has(id)) return null;
+      if (!variableIds.has(id) && !options.preserveUnknownVariables) return null;
       const exponent = normalizedInt(exp, 0, MAX_DIMENSION, 0);
       if (exponent > 0) out[id] = exponent;
     }
     return Object.keys(out).length ? out : null;
   }
 
-  function normalizeHomologyRuleTerms(terms, variableIds) {
+  function normalizeHomologyRuleTerms(terms, variableIds, options = {}) {
     if (!Array.isArray(terms)) return null;
     const out = [];
     for (const term of terms) {
       if (!term || typeof term !== 'object') return null;
-      const powers = normalizeHomologyPowers(term.powers || {}, variableIds) || {};
+      const powers = normalizeHomologyPowers(term.powers || {}, variableIds, options) || {};
       let coefficient;
       try {
         coefficient = formatFractionPlain(parseRuleCoefficient(term.coefficient || '1'));
@@ -2892,6 +3406,8 @@
     const compact = source
       .replace(/\\cdot/g, '*')
       .replace(/\\,/g, '')
+      .replace(/\^\{\\ast\}/g, '^*')
+      .replace(/\^\{([^{}]+)\}/g, '^$1')
       .replace(/\s+/g, '');
     if (compact === '0') return Poly.zero();
     const aliases = homologyParseAliases(geometry);
@@ -2908,12 +3424,33 @@
     return homologyClassDefinitions(geometry)
       .flatMap((def) => {
         const id = homologyVariableId(def.id);
-        return [def.symbolLatex, def.symbolPlain, def.defaultSymbol]
+        return homologyAliasCandidates(def)
           .filter(Boolean)
           .map((alias) => ({ alias: String(alias).replace(/\s+/g, ''), id }));
       })
       .filter((entry, index, all) => entry.alias && all.findIndex((item) => item.alias === entry.alias && item.id === entry.id) === index)
       .sort((a, b) => b.alias.length - a.alias.length);
+  }
+
+  function homologyAliasCandidates(def) {
+    const aliases = [def.symbolLatex, def.symbolPlain, def.defaultSymbol];
+    [def.symbolLatex, def.defaultSymbol].forEach((alias) => {
+      const text = String(alias || '');
+      if (!text) return;
+      const compact = normalizeHomologyAliasText(text);
+      aliases.push(compact);
+      aliases.push(compact.replace(/\\left\(/g, '(').replace(/\\right\)/g, ')'));
+      aliases.push(compact.replace(/\\left\(([^()]*)\\right\)/g, '$1'));
+    });
+    return aliases;
+  }
+
+  function normalizeHomologyAliasText(text) {
+    return String(text || '')
+      .replace(/\^\{\\ast\}/g, '^*')
+      .replace(/\^\{([^{}]+)\}/g, '^$1')
+      .replace(/_\{([^{}]+)\}/g, '_$1')
+      .replace(/\s+/g, '');
   }
 
   function splitSignedHomologyTerms(text) {
@@ -2936,7 +3473,7 @@
   }
 
   function parseHomologyTerm(text, aliases) {
-    let rest = text.replace(/\*/g, '');
+    let rest = text.replace(/(^|[^^])\*/g, '$1');
     if (!rest) throw new Error('Rule contains an empty term.');
     let coeff = Fraction.one();
     const coeffMatch = rest.match(/^(\d+(?:\/\d+)?)/);
@@ -3094,6 +3631,7 @@
       sheaf,
       bundle,
       hodge,
+      cohomology: buildSheafCohomology(geometry, sheaf, hodge),
       classRows: [],
       classDisplay: classDisplayOptions(geometry, sheaf)
     };
@@ -3125,7 +3663,8 @@
       termMode,
       termIndex,
       geometry,
-      homology: geometry.homology || null
+      homology: geometry.homology || null,
+      homologyRulePasses: Math.max(1, normalizedInt(state.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES))
     };
   }
 
@@ -3443,32 +3982,33 @@
     poly = Poly.from(poly);
     const geometry = options.geometry || null;
     const homology = options.homology || geometry?.homology || null;
-    if (!homology?.rules?.length) return poly;
+    const startPoly = maybeExpandMapHomologyVariables(poly, options);
     const defs = homologyClassDefinitions(geometry);
     const available = new Set(defs.map((def) => homologyVariableId(def.id)));
-    const rules = homology.rules.filter((rule) => (
+    const storedRules = homology?.rules || [];
+    const defaultRules = defaultMapHomologyRulesForGeometry(geometry)
+      .filter((rule) => !storedRules.some((stored) => homologyRuleHasSameLhs(stored, rule)));
+    const rules = [...storedRules, ...defaultRules].filter((rule) => (
       rule.enabled !== false
       && homologyRulePreservesDegree(rule, defs)
       && homologyRuleUsesAvailableVariables(rule, available)
     ));
-    if (!rules.length) return poly;
-    let out = poly;
-    const start = currentTimeMs();
-    for (let pass = 1; pass <= MAX_HOMOLOGY_RULE_PASSES; pass += 1) {
+    if (!rules.length) return startPoly.truncate(geometry?.dim ?? MAX_DIMENSION);
+    let out = startPoly;
+    const passes = Math.max(1, normalizedInt(options.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES));
+    for (let pass = 1; pass <= passes; pass += 1) {
       const before = out;
+      out = maybeExpandMapHomologyVariables(out, options);
       for (const rule of rules) out = applyOneHomologyRule(out, rule, geometry?.dim ?? MAX_DIMENSION);
+      out = maybeExpandMapHomologyVariables(out, options);
       if (polyEquals(before, out)) return out.truncate(geometry?.dim ?? MAX_DIMENSION);
-      if (currentTimeMs() - start > MAX_HOMOLOGY_RULE_MS) {
-        recordHomologyRuleWarning(options, `Homology rules did not settle within ${MAX_HOMOLOGY_RULE_MS / 1000}s.`);
-        return out.truncate(geometry?.dim ?? MAX_DIMENSION);
-      }
     }
-    recordHomologyRuleWarning(options, `Homology rules did not settle after ${MAX_HOMOLOGY_RULE_PASSES} passes.`);
     return out.truncate(geometry?.dim ?? MAX_DIMENSION);
   }
 
-  function recordHomologyRuleWarning(options, message) {
-    if (!options.homologyRuleWarning) options.homologyRuleWarning = message;
+  function maybeExpandMapHomologyVariables(poly, options = {}) {
+    if (options.expandNestedMaps === false) return Poly.from(poly);
+    return expandNestedMapHomologyVariables(poly, options);
   }
 
   function polyEquals(a, b) {
@@ -3482,10 +4022,64 @@
     return true;
   }
 
-  function currentTimeMs() {
-    return typeof performance !== 'undefined' && typeof performance.now === 'function'
-      ? performance.now()
-      : Date.now();
+  function expandNestedMapHomologyVariables(poly, options = {}) {
+    poly = Poly.from(poly);
+    const geometry = options.geometry || null;
+    const maxDegree = geometry?.dim ?? MAX_DIMENSION;
+    let out = poly;
+    for (let pass = 0; pass < 4; pass += 1) {
+      const next = expandNestedMapHomologyVariablesOnce(out, options, maxDegree);
+      if (polyEquals(next, out)) return out.truncate(maxDegree);
+      out = next;
+    }
+    return out.truncate(maxDegree);
+  }
+
+  function expandNestedMapHomologyVariablesOnce(poly, options, maxDegree) {
+    const terms = new Map();
+    for (const [key, coeff] of Poly.from(poly).terms) {
+      let replacement = Poly.one();
+      for (const [id, exp] of Object.entries(parseMonoKey(key))) {
+        const factor = expandOneMapHomologyVariable(id, options);
+        replacement = replacement.mul(polyPower(factor, exp, maxDegree), maxDegree);
+      }
+      replacement = replacement.scale(coeff);
+      for (const [nextKey, nextCoeff] of replacement.terms) {
+        const next = (terms.get(nextKey) || Fraction.zero()).add(nextCoeff);
+        if (next.isZero()) terms.delete(nextKey);
+        else terms.set(nextKey, next);
+      }
+    }
+    return new Poly(terms).truncate(maxDegree);
+  }
+
+  function expandOneMapHomologyVariable(id, options = {}) {
+    const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+    if (data?.kind !== 'mapHomology') return Poly.variable(id);
+    if (!data.sourceKey && data.sourceKey !== '') return Poly.variable(id);
+    const seen = options.mapExpansionStack || new Set();
+    if (seen.has(id)) return Poly.variable(id);
+    const map = state.maps.find((item) => item.id === data.mapId);
+    if (!map || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return Poly.variable(id);
+    const sourceGeometry = data.operation === 'pullback'
+      ? geometryByVarietyId(map.codomainId)
+      : geometryByVarietyId(map.domainId);
+    const targetGeometry = data.operation === 'pullback'
+      ? geometryByVarietyId(map.domainId)
+      : (options.geometry || geometryByVarietyId(map.codomainId));
+    if (!sourceGeometry || !targetGeometry) return Poly.variable(id);
+    const sourcePoly = polyFromPowers(parseMonoKey(data.sourceKey));
+    const simplifiedSource = applyHomologyRules(sourcePoly, {
+      geometry: sourceGeometry,
+      homology: sourceGeometry.homology,
+      homologyRulePasses: options.homologyRulePasses,
+      expandNestedMaps: true,
+      mapExpansionStack: new Set([...seen, id])
+    });
+    if (polyEquals(sourcePoly, simplifiedSource)) return Poly.variable(id);
+    if (data.operation === 'pullback') return pullbackPolynomial(simplifiedSource, map).truncate(targetGeometry.dim);
+    if (data.operation === 'pushforward') return pushforwardPolynomialByDegree(map, simplifiedSource, sourceGeometry.dim, targetGeometry.dim, { proper: false });
+    return Poly.variable(id);
   }
 
   function applyOneHomologyRule(poly, rule, maxDegree) {
@@ -3507,27 +4101,66 @@
     return new Poly(terms).truncate(maxDegree);
   }
 
-  function homologyRulePreservesDegree(rule, defs) {
-    const lhsDegree = homologyPowersDegree(rule.lhs?.powers || {}, defs);
-    if (lhsDegree == null || lhsDegree <= 0) return false;
+  function defaultMapHomologyRulesForGeometry(geometry) {
+    if (!geometry?.varietyId) return [];
+    return state.maps
+      .filter((map) => map.domainKind === 'variety' && map.codomainKind === 'variety' && map.domainId === geometry.varietyId)
+      .map((map) => defaultPullbackUnitRule(map));
+  }
+
+  function defaultPullbackUnitRule(map) {
+    const variableId = defineMapHomologyVariable(map, 'pullback', homologyVariableId(HOMOLOGY_UNIT_CLASS), 0, '1');
+    return {
+      id: `default-pullback-unit-${map.id}`,
+      builtin: true,
+      enabled: true,
+      lhs: { powers: { [variableId]: 1 } },
+      rhs: [{ coefficient: '1', powers: {} }]
+    };
+  }
+
+  function homologyRuleHasSameLhs(left, right) {
+    return monoKey(left?.lhs?.powers || {}) === monoKey(right?.lhs?.powers || {});
+  }
+
+  function homologyRulePreservesDegree(rule, defs, options = {}) {
+    const lhsDegree = homologyPowersDegree(rule.lhs?.powers || {}, defs, options);
+    if (lhsDegree == null || lhsDegree < 0 || !Object.keys(rule.lhs?.powers || {}).length) return false;
     const rhs = homologyRuleRhsPoly(rule);
     if (rhs.isZero()) return true;
-    return sortedTerms(rhs).every(([key]) => homologyPowersDegree(parseMonoKey(key), defs) === lhsDegree);
+    return sortedTerms(rhs).every(([key]) => homologyPowersDegree(parseMonoKey(key), defs, options) === lhsDegree);
   }
 
-  function homologyRuleUsesAvailableVariables(rule, availableIds) {
+  function homologyRuleUsesAvailableVariables(rule, availableIds, options = {}) {
+    const resolveMapVariables = options.resolveMapVariables !== false;
     const allTerms = [rule.lhs || {}, ...(rule.rhs || [])];
-    return allTerms.every((term) => Object.keys(term.powers || {}).every((id) => availableIds.has(id)));
+    return allTerms.every((term) => Object.keys(term.powers || {}).every((id) => (
+      availableIds.has(id)
+      || (resolveMapVariables && (mapHomologyVariableIsDefined(id) || !!ensureMapHomologyVariableFromId(id)))
+    )));
   }
 
-  function homologyPowersDegree(powers, defs) {
+  function homologyRuleContainsVariable(rule, variableId) {
+    const allTerms = [rule?.lhs || {}, ...(rule?.rhs || [])];
+    return allTerms.some((term) => Object.prototype.hasOwnProperty.call(term.powers || {}, variableId));
+  }
+
+  function homologyPowersDegree(powers, defs, options = {}) {
+    const resolveMapVariables = options.resolveMapVariables !== false;
     let degree = 0;
     for (const [id, exp] of Object.entries(powers || {})) {
       const def = defs.find((entry) => homologyVariableId(entry.id) === id);
-      if (!def) return null;
-      degree += def.degree * (Number(exp) || 0);
+      const fallback = !def && resolveMapVariables
+        ? (mapHomologyVariableIsDefined(id) ? VARS.get(id) : ensureMapHomologyVariableFromId(id))
+        : null;
+      if (!def && !fallback) return null;
+      degree += (def ? def.degree : fallback.degree) * (Number(exp) || 0);
     }
     return degree;
+  }
+
+  function mapHomologyVariableIsDefined(id) {
+    return String(id || '').startsWith('map_') && (VARS.has(id) || !!ensureMapHomologyVariableFromId(id));
   }
 
   function monomialFactorCount(powers, factorPowers) {
@@ -3599,6 +4232,13 @@
         : buildTensorBundle(geometry.dim, sheaf, left, right);
     }
     if (construction.type === 'pullback' || construction.type === 'pushforward') {
+      if (construction.type === 'pullback') {
+        const pulled = buildPullbackSheafBundle(geometry, sheaf, construction, options);
+        if (pulled) return pulled;
+      } else {
+        const pushed = buildPushforwardSheafBundle(geometry, sheaf, construction, options);
+        if (pushed) return pushed;
+      }
       return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, {
         ...options,
         variablePrefix: constructionVariablePrefix(sheaf.sourceObject || sheaf, construction.type),
@@ -3614,6 +4254,147 @@
     return buildBundleForSheaf(geometry, source, {
       variablePrefix: constructionVariablePrefix(sheafObject, 'source')
     });
+  }
+
+  function buildPullbackSheafBundle(geometry, sheaf, construction) {
+    const map = state.maps.find((item) => item.id === construction.mapId);
+    const sourceSheaf = state.sheaves.find((item) => item.id === construction.sheafId);
+    const codomain = state.varieties.find((item) => item.id === map?.codomainId);
+    if (!map || !sourceSheaf || !codomain) return null;
+    const codomainGeometry = geometryFromVariety(codomain);
+    defineBaseHomologyVariables(codomainGeometry);
+    const source = sheafFromObject(sourceSheaf, codomainGeometry);
+    const sourceBundle = buildBundleForSheaf(codomainGeometry, source, {
+      variablePrefix: constructionVariablePrefix(sourceSheaf, 'pullbackSource')
+    });
+    const chComps = pullbackComponentArray(sourceBundle.chComps, geometry.dim, map);
+    defineHomologyVariables(geometry);
+    return buildBundleFromCh(chComps, sourceBundle.rankLatex, sourceBundle.rankPlain, sheaf.labelLatex, sheaf.labelPlain);
+  }
+
+  function buildPushforwardSheafBundle(geometry, sheaf, construction) {
+    const map = state.maps.find((item) => item.id === construction.mapId);
+    const sourceSheaf = state.sheaves.find((item) => item.id === construction.sheafId);
+    const domain = state.varieties.find((item) => item.id === map?.domainId);
+    if (!map || !sourceSheaf || !domain) return null;
+    const domainGeometry = geometryFromVariety(domain);
+    defineBaseHomologyVariables(domainGeometry);
+    const source = sheafFromObject(sourceSheaf, domainGeometry);
+    const sourceBundle = buildBundleForSheaf(domainGeometry, source, {
+      variablePrefix: constructionVariablePrefix(sourceSheaf, 'pushforwardSource')
+    });
+    const sourceTangent = buildTangentClassBundle(domainGeometry);
+    const sourceChTotal = bundleChernCharacterTotal(sourceBundle, domainGeometry.dim, 'pushSourceRank');
+    const grrSource = sourceChTotal.mul(sourceTangent.todd, domainGeometry.dim);
+    const pushedTotal = pushforwardPolynomialByDegree(map, grrSource, domainGeometry.dim, geometry.dim, construction);
+    defineHomologyVariables(geometry);
+    const targetTangent = buildTangentClassBundle(geometry);
+    const targetChTotal = pushedTotal.mul(inverseUnit(targetTangent.todd, geometry.dim), geometry.dim);
+    const chComps = zeroComponentArray(geometry.dim);
+    for (let i = 1; i <= geometry.dim; i += 1) chComps[i] = homogeneousPart(targetChTotal, i);
+    const rankPoly = homogeneousPart(targetChTotal, 0);
+    const rankDisplayOptions = {
+      geometry,
+      homology: geometry.homology || null,
+      homologyRulePasses: Math.max(1, normalizedInt(state.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES))
+    };
+    const reducedRankPoly = applyHomologyRules(rankPoly, rankDisplayOptions);
+    const rankLatex = reducedRankPoly.isZero() ? '0' : formatPolyLatex(reducedRankPoly);
+    const rankPlain = reducedRankPoly.isZero() ? '0' : formatPolyPlain(reducedRankPoly);
+    return buildBundleFromCh(chComps, rankLatex, rankPlain, sheaf.labelLatex, sheaf.labelPlain);
+  }
+
+  function buildTangentClassBundle(geometry) {
+    const labelLatex = `\\mathcal{T}_{${geometry.labelLatex}}`;
+    return buildBundleForSheaf(geometry, {
+      type: 'tangent',
+      basis: 'character',
+      labelLatex,
+      labelPlain: latexToPlain(labelLatex),
+      rankLatex: String(geometry.dim),
+      rankPlain: String(geometry.dim)
+    });
+  }
+
+  function bundleChernCharacterTotal(bundle, d, idSeed) {
+    return rankAsDegreeZeroPoly(bundle, idSeed).add(positiveTotal(bundle.chComps, d));
+  }
+
+  function pullbackComponentArray(comps, d, map) {
+    const out = zeroComponentArray(d);
+    const limit = Math.min(d, (comps?.length || 1) - 1);
+    for (let i = 1; i <= limit; i += 1) out[i] = pullbackPolynomial(comps[i], map).truncate(d);
+    return out;
+  }
+
+  function pullbackPolynomial(poly, map) {
+    return remapPolynomialVariables(poly, (id) => pullbackVariableId(map, id));
+  }
+
+  function pullbackVariableId(map, id) {
+    const data = VARS.get(id) || ensureMapHomologyVariableFromId(id) || { degree: 1, latex: id };
+    return defineMapHomologyVariable(map, 'pullback', id, data.degree, data.latex || id);
+  }
+
+  function pushforwardPolynomialByDegree(map, poly, sourceDim, targetDim, construction) {
+    let out = Poly.zero();
+    const degreeShift = targetDim - sourceDim;
+    for (const [key, coeff] of Poly.from(poly).terms) {
+      const sourceDegree = monoDegree(key);
+      if (sourceDegree < 0 || sourceDegree > sourceDim) continue;
+      const targetDegree = sourceDegree + degreeShift;
+      if (targetDegree < 0 || targetDegree > targetDim) continue;
+      const id = pushforwardTermVariableId(map, key, targetDegree, construction);
+      out = out.add(Poly.variable(id).scale(coeff));
+    }
+    return out.truncate(targetDim);
+  }
+
+  function pushforwardTermVariableId(map, sourceKey, targetDegree, construction) {
+    if (!sourceKey) {
+      return defineMapHomologyVariable(map, 'pushforward', 'unit', targetDegree, '1', { sourceKey: '' });
+    }
+    const powers = parseMonoKey(sourceKey);
+    const ids = Object.keys(powers);
+    if (ids.length === 1 && powers[ids[0]] === 1) {
+      const data = VARS.get(ids[0]) || ensureMapHomologyVariableFromId(ids[0]) || { latex: ids[0] };
+      return defineMapHomologyVariable(map, 'pushforward', ids[0], targetDegree, data.latex || ids[0], { sourceKey });
+    }
+    const id = `${mapHomologyVariableId(map, 'pushforward', 'term')}_${hashString(sourceKey)}`;
+    const operator = pushforwardClassOperatorLatex(map, construction);
+    defineVariable(id, targetDegree, `${operator}\\left(${monomialLatex(sourceKey) || '1'}\\right)`, {
+      kind: 'mapHomology',
+      mapId: map?.id || null,
+      operation: 'pushforward',
+      sourceId: 'term',
+      sourceKey
+    });
+    return id;
+  }
+
+  function pushforwardClassOperatorLatex(map, construction = {}) {
+    return `${sanitizeMathLabel(map?.name, 'f')}_{*}`;
+  }
+
+  function mapHomologyVariableId(map, operation, sourceId) {
+    return `map_${operation}_${variableIdSafe(map?.id || 'f')}_${variableIdSafe(sourceId)}`;
+  }
+
+  function remapPolynomialVariables(poly, mapId) {
+    poly = Poly.from(poly);
+    const terms = new Map();
+    for (const [key, coeff] of poly.terms) {
+      const powers = {};
+      for (const [id, exp] of Object.entries(parseMonoKey(key))) {
+        const nextId = mapId(id);
+        powers[nextId] = (powers[nextId] || 0) + exp;
+      }
+      const nextKey = monoKey(powers);
+      const next = (terms.get(nextKey) || Fraction.zero()).add(coeff);
+      if (next.isZero()) terms.delete(nextKey);
+      else terms.set(nextKey, next);
+    }
+    return new Poly(terms);
   }
 
   function buildDirectSumBundle(d, sheaf, left, right) {
@@ -3686,6 +4467,20 @@
 
   function constructionSafeId(value) {
     return String(value || 'x').replace(/[^A-Za-z0-9]/g, '') || 'x';
+  }
+
+  function variableIdSafe(value) {
+    return String(value || 'x').replace(/[^A-Za-z0-9_]/g, '_') || 'x';
+  }
+
+  function hashString(value) {
+    let hash = 2166136261;
+    const text = String(value || '');
+    for (let i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
   }
 
   function buildAbstractGeometrySheaf(geometry, sheaf, options = {}) {
@@ -4168,6 +4963,189 @@
     return /^[A-Za-z0-9_^,]+$/.test(text) ? text : `(${text})`;
   }
 
+  function buildSheafCohomology(geometry, sheaf, hodge = null) {
+    if (!geometry) return null;
+    const target = cohomologyTargetForSheaf(geometry, sheaf);
+    if (target.kind === 'line') {
+      const dimensions = lineBundleCohomologyDimensions(geometry, target.twist);
+      if (dimensions) {
+        return {
+          subjectLatex: target.subjectLatex,
+          subjectPlain: target.subjectPlain,
+          dimensions,
+          message: target.message || lineBundleCohomologyMessage(geometry, target.twist)
+        };
+      }
+    }
+    if (target.kind === 'structure') {
+      const dimensions = structureSheafCohomologyDimensions(geometry, hodge || buildHodgeNumbers(geometry));
+      if (dimensions) {
+        return {
+          subjectLatex: target.subjectLatex,
+          subjectPlain: target.subjectPlain,
+          dimensions,
+          message: target.message || 'Structure-sheaf cohomology read from the Hodge row h^{0,i}.'
+        };
+      }
+    }
+    if (target.kind === 'hodge-row') {
+      const dimensions = hodgeRowSheafCohomologyDimensions(geometry, hodge || buildHodgeNumbers(geometry), target.hodgeP);
+      if (dimensions) {
+        return {
+          subjectLatex: target.subjectLatex,
+          subjectPlain: target.subjectPlain,
+          dimensions,
+          message: target.message || `Cohomology dimensions read from the Hodge row h^${target.hodgeP},i.`
+        };
+      }
+    }
+    return {
+      subjectLatex: target.subjectLatex || sheafLabelLatex(sheaf || {}),
+      subjectPlain: target.subjectPlain || sheafLabelPlain(sheaf || {}),
+      dimensions: null,
+      message: target.message || 'Cohomology is available for O_X(r) on projective spaces and smooth complete intersections.'
+    };
+  }
+
+  function cohomologyTargetForSheaf(geometry, sheaf) {
+    if (!sheaf) {
+      return {
+        kind: embeddedGeometrySupportsLineCohomology(geometry) ? 'line' : 'structure',
+        twist: 0,
+        subjectLatex: `\\mathcal{O}_{${geometry.labelLatex}}`,
+        subjectPlain: `O_${geometry.labelPlain}`,
+        message: embeddedGeometrySupportsLineCohomology(geometry) ? '' : 'Structure-sheaf cohomology read from the Hodge row h^{0,i}.'
+      };
+    }
+    if (sheaf.type === 'twist') {
+      return {
+        kind: embeddedGeometrySupportsLineCohomology(geometry) ? 'line' : 'unsupported',
+        twist: normalizedInt(sheaf.twist, -24, 24, 0),
+        subjectLatex: sheafLabelLatex(sheaf),
+        subjectPlain: sheafLabelPlain(sheaf),
+        message: embeddedGeometrySupportsLineCohomology(geometry)
+          ? ''
+          : 'Twist sheaf cohomology needs a projective-space or complete-intersection embedding.'
+      };
+    }
+    if (sheaf.type === 'canonical' && embeddedGeometrySupportsLineCohomology(geometry)) {
+      const twist = completeIntersectionCanonicalTwist(geometry);
+      return {
+        kind: 'line',
+        twist,
+        subjectLatex: sheafLabelLatex(sheaf),
+        subjectPlain: sheafLabelPlain(sheaf),
+        message: `Canonical sheaf identified with O_X(${twist}) by adjunction.`
+      };
+    }
+    if (sheaf.type === 'cotangent') {
+      return {
+        kind: 'hodge-row',
+        hodgeP: 1,
+        subjectLatex: sheafLabelLatex(sheaf),
+        subjectPlain: sheafLabelPlain(sheaf),
+        message: 'Cotangent-sheaf cohomology uses dim H^i(X, Omega_X^1)=h^{1,i}.'
+      };
+    }
+    if (sheaf.type === 'abstract' && (canonicalMathLabel(sheaf.labelLatex) === canonicalMathLabel(`\\mathcal{O}_{${geometry.labelLatex}}`) || canonicalMathLabel(sheaf.labelLatex) === canonicalMathLabel('\\mathcal{O}_X'))) {
+      return {
+        kind: embeddedGeometrySupportsLineCohomology(geometry) ? 'line' : 'structure',
+        twist: 0,
+        subjectLatex: sheafLabelLatex(sheaf),
+        subjectPlain: sheafLabelPlain(sheaf)
+      };
+    }
+    return {
+      kind: 'unsupported',
+      subjectLatex: sheafLabelLatex(sheaf),
+      subjectPlain: sheafLabelPlain(sheaf),
+      message: `Cohomology of ${sheafTypeLabel(sheaf.type)} is not determined by the current input.`
+    };
+  }
+
+  function embeddedGeometrySupportsLineCohomology(geometry) {
+    return geometry?.type === 'projective' || geometry?.type === 'complete-intersection';
+  }
+
+  function lineBundleCohomologyMessage(geometry, twist) {
+    if (geometry.type === 'projective') return `Line-bundle cohomology on ${geometry.ambientPlain}, for twist ${twist}.`;
+    return `Assuming a smooth complete intersection in ${geometry.ambientPlain}; computed from the Hilbert series and Serre duality.`;
+  }
+
+  function lineBundleCohomologyDimensions(geometry, twist) {
+    if (!embeddedGeometrySupportsLineCohomology(geometry)) return null;
+    const ambient = Number.isInteger(geometry.ambient) ? geometry.ambient : geometry.dim;
+    const degrees = Array.isArray(geometry.degrees) ? geometry.degrees : [];
+    const dim = Math.max(0, ambient - degrees.length);
+    return Array.from({ length: dim + 1 }, (_, q) => cohomologyDimensionEntry(completeIntersectionLineCohomologyAt(ambient, degrees, q, twist)));
+  }
+
+  function completeIntersectionLineCohomologyAt(ambient, degrees, q, twist) {
+    const dim = ambient - degrees.length;
+    if (q === 0) {
+      if (ambient === degrees.length) return completeIntersectionDegreeProduct(degrees);
+      return twist >= 0 ? completeIntersectionHilbertCoefficient(ambient, degrees, twist) : 0n;
+    }
+    if (q === dim) {
+      return completeIntersectionLineCohomologyAt(ambient, degrees, 0, completeIntersectionCanonicalTwist({ ambient, degrees }) - twist);
+    }
+    return 0n;
+  }
+
+  function completeIntersectionCanonicalTwist(geometry) {
+    const ambient = Number.isInteger(geometry.ambient) ? geometry.ambient : geometry.dim;
+    const degrees = Array.isArray(geometry.degrees) ? geometry.degrees : [];
+    return degrees.reduce((sum, degree) => sum + degree, 0) - ambient - 1;
+  }
+
+  function completeIntersectionDegreeProduct(degrees) {
+    return (degrees || []).reduce((product, degree) => product * BigInt(degree), 1n);
+  }
+
+  function completeIntersectionHilbertCoefficient(ambient, degrees, degree) {
+    if (!Number.isInteger(degree) || degree < 0) return 0n;
+    let total = 0n;
+    const count = degrees.length;
+    const subsets = 1 << count;
+    for (let mask = 0; mask < subsets; mask += 1) {
+      let degreeSum = 0;
+      let parity = 0;
+      for (let i = 0; i < count; i += 1) {
+        if (!(mask & (1 << i))) continue;
+        degreeSum += degrees[i];
+        parity += 1;
+      }
+      const shifted = degree - degreeSum;
+      if (shifted < 0) continue;
+      const contribution = binomialBigInt(ambient + shifted, ambient);
+      total += parity % 2 === 0 ? contribution : -contribution;
+    }
+    return total < 0n ? 0n : total;
+  }
+
+  function structureSheafCohomologyDimensions(geometry, hodge) {
+    return hodgeRowSheafCohomologyDimensions(geometry, hodge, 0);
+  }
+
+  function hodgeRowSheafCohomologyDimensions(geometry, hodge, p) {
+    if (!hodge?.entries?.[0]) return null;
+    if (!Number.isInteger(p) || p < 0 || p > geometry.dim || !hodge.entries[p]) return null;
+    return Array.from({ length: geometry.dim + 1 }, (_, i) => {
+      const entry = hodge.entries[p][i] || { latex: '0', plain: '0' };
+      return {
+        latex: entry.latex || '0',
+        plain: entry.plain || latexToPlain(entry.latex || '0')
+      };
+    });
+  }
+
+  function cohomologyDimensionEntry(value) {
+    return {
+      latex: value.toString(),
+      plain: value.toString()
+    };
+  }
+
   function chiYCoefficientsForCompleteIntersection(geometry) {
     const d = geometry.dim;
     const values = [];
@@ -4461,8 +5439,8 @@
     }
   }
 
-  function defineVariable(id, degree, latex) {
-    VARS.set(id, { degree, latex, plain: latexToPlain(latex) });
+  function defineVariable(id, degree, latex, meta = {}) {
+    VARS.set(id, { degree, latex, plain: latexToPlain(latex), ...meta });
   }
 
   function monoKey(powers) {
@@ -4576,7 +5554,12 @@
 
   function renderHomologyPanel(result = state.lastResult) {
     if (!refs.homologyCard) return;
-    const variety = activeVariety();
+    const mapContext = activeHomologyMapContext();
+    if (mapContext) {
+      renderMapHomologyPanel(mapContext);
+      return;
+    }
+    const variety = activeHomologyVariety();
     if (!variety) {
       if (refs.homologyActive) refs.homologyActive.textContent = 'Add a variety.';
       if (refs.homologyHyperplaneRow) refs.homologyHyperplaneRow.hidden = true;
@@ -4589,6 +5572,7 @@
         refs.homologyRules.hidden = true;
         refs.homologyRules.innerHTML = '';
       }
+      if (refs.homologyAddClass) refs.homologyAddClass.hidden = true;
       if (refs.homologyAddRule) refs.homologyAddRule.hidden = true;
       if (refs.homologyMessage) refs.homologyMessage.textContent = '';
       return;
@@ -4598,36 +5582,79 @@
       ? result.geometry
       : geometryFromVariety(variety);
     const defs = homologyClassDefinitions(geometry);
-    const hyperplane = defs.find((def) => def.id === HOMOLOGY_HYPERPLANE_CLASS);
-    const point = defs.find((def) => def.id === HOMOLOGY_POINT_CLASS);
+    const mapMode = false;
+    const shownDefs = mapMode ? defs.filter((def) => parseMapHomologyClassId(def.id)) : defs;
+    const baseDefs = baseHomologyClassDefinitions(geometry);
+    const hyperplane = mapMode ? null : baseDefs.find((def) => def.id === HOMOLOGY_HYPERPLANE_CLASS);
+    const point = mapMode ? null : baseDefs.find((def) => def.id === HOMOLOGY_POINT_CLASS);
 
-    if (refs.homologyActive) setInlineMath(refs.homologyActive, `\\text{classes on } ${geometry.labelLatex}`);
+    if (refs.homologyActive) setInlineMath(refs.homologyActive, homologyActiveLatex(geometry));
     if (refs.homologyHyperplaneRow) refs.homologyHyperplaneRow.hidden = !hyperplane;
     if (refs.homologyHyperplaneSymbol && hyperplane) refs.homologyHyperplaneSymbol.value = hyperplane.symbolLatex;
     if (refs.homologyPointRow) refs.homologyPointRow.hidden = !point;
     if (refs.homologyPointSymbol && point) refs.homologyPointSymbol.value = point.symbolLatex;
 
-    const ruleWarning = result?.classDisplay?.homologyRuleWarning || '';
-    renderHomologySymbols(geometry, defs);
-    renderHomologyRules(geometry, defs);
-    renderHomologyRuleCreator(geometry, defs);
-    if (refs.homologyMessage) refs.homologyMessage.textContent = ruleWarning;
+    renderHomologySymbols(geometry, shownDefs, { mapMode });
+    renderHomologyRules(geometry, mapMode ? shownDefs : defs, { mapMode });
+    renderHomologyClassCreator(geometry, { mapMode });
+    renderHomologyRuleCreator(geometry, mapMode ? shownDefs : defs, { mapMode });
+    if (refs.homologyMessage) refs.homologyMessage.textContent = '';
     typeset(refs.homologyCard);
   }
 
-  function renderHomologySymbols(geometry, defs) {
+  function renderMapHomologyPanel(context) {
+    const map = context.map;
+    const domainGeometry = context.domain.geometry;
+    const codomainGeometry = context.codomain.geometry;
+    const pullbackDefs = baseHomologyClassDefinitions(codomainGeometry)
+      .map((def) => mapOperationHomologyClassDefinition(map, 'pullback', def, domainGeometry))
+      .filter(Boolean);
+    const pushforwardDefs = mapPushforwardClassDefinitions(map, domainGeometry, codomainGeometry);
+    const relationDefs = [
+      ...pullbackDefs.map((def) => ({ def, geometry: domainGeometry, variety: context.domain.variety })),
+      ...pushforwardDefs.map((def) => ({ def, geometry: codomainGeometry, variety: context.codomain.variety }))
+    ];
+    if (refs.homologyActive) setInlineMath(refs.homologyActive, homologyMapActiveLatex(context));
+    if (refs.homologyHyperplaneRow) refs.homologyHyperplaneRow.hidden = true;
+    if (refs.homologyPointRow) refs.homologyPointRow.hidden = true;
+    if (refs.homologySymbols) {
+      refs.homologySymbols.hidden = true;
+      refs.homologySymbols.innerHTML = '';
+    }
+    if (refs.homologyAddClass) refs.homologyAddClass.hidden = true;
+    if (refs.homologyAddRule) refs.homologyAddRule.hidden = true;
+    renderMapHomologyRuleInputs(relationDefs);
+    if (refs.homologyMessage) refs.homologyMessage.textContent = '';
+    typeset(refs.homologyCard);
+  }
+
+  function renderHomologySymbols(geometry, defs, options = {}) {
     if (!refs.homologySymbols) return;
-    refs.homologySymbols.hidden = defs.length === 0;
+    refs.homologySymbols.hidden = options.mapMode || defs.length === 0;
+    if (options.mapMode) {
+      refs.homologySymbols.innerHTML = '';
+      return;
+    }
     refs.homologySymbols.innerHTML = defs.map((def) => `
-      <div class="homology-symbol-row">
-        <span>\\(${def.symbolLatex}\\in H^{${2 * def.degree}}(${geometry.labelLatex})\\)</span>
-        <span class="homology-symbol-kind">${escapeHtml(def.kind)}</span>
+      <div class="homology-symbol-row ${def.kind === 'custom' ? 'homology-custom-class-row' : ''}">
+        ${def.kind === 'custom' ? `
+          <input class="sheaf-input homology-map-rule-input" type="text" value="${escapeHtml(def.symbolLatex)}" maxlength="48" spellcheck="false" autocomplete="off" aria-label="Custom homology class symbol" data-homology-class-symbol="${escapeHtml(def.id)}">
+          <input class="sheaf-input homology-map-rule-input" type="number" min="0" max="${geometry.dim}" step="1" value="${escapeHtml(def.degree)}" aria-label="Custom homology class degree" data-homology-class-degree="${escapeHtml(def.id)}">
+          <button class="btn btn-ghost homology-rule-delete" type="button" data-homology-class-delete="${escapeHtml(def.id)}">delete</button>
+        ` : `
+          <span>\\(${def.symbolLatex}\\in H^{${2 * def.degree}}(${geometry.labelLatex})\\)</span>
+          <span class="homology-symbol-kind">${escapeHtml(def.kind)}</span>
+        `}
       </div>
     `).join('');
   }
 
-  function renderHomologyRules(geometry, defs) {
+  function renderHomologyRules(geometry, defs, options = {}) {
     if (!refs.homologyRules) return;
+    if (options.mapMode) {
+      renderMapHomologyRuleInputs(geometry, defs);
+      return;
+    }
     const available = new Set(defs.map((def) => homologyVariableId(def.id)));
     const rules = (geometry.homology?.rules || []).filter((rule) => (
       homologyRulePreservesDegree(rule, defs)
@@ -4646,13 +5673,129 @@
     `).join('');
   }
 
-  function renderHomologyRuleCreator(geometry, defs) {
+  function renderMapHomologyRuleInputs(geometryOrRelations, defs = null) {
+    const relations = Array.isArray(defs)
+      ? defs.map((def) => ({ def, geometry: geometryOrRelations, variety: activeHomologyVariety() }))
+      : geometryOrRelations;
+    refs.homologyRules.hidden = !relations?.length;
+    refs.homologyRules.innerHTML = (relations || []).map(({ def, geometry }) => {
+      defineHomologyVariables(geometry);
+      const rule = mapHomologyRuleForDef(geometry, def);
+      const value = rule ? formatHomologyInputPoly(homologyRuleRhsPoly(rule)) : '';
+      return `
+        <div class="homology-rule-row is-map-relation">
+          <span>\\(${def.symbolLatex}=\\)</span>
+          <input class="sheaf-input homology-map-rule-input" type="text" value="${escapeHtml(value)}" placeholder="0" spellcheck="false" autocomplete="off" data-map-homology-rule="${escapeHtml(def.id)}" data-map-homology-variety="${escapeHtml(geometry.varietyId || '')}">
+        </div>
+      `;
+    }).join('');
+  }
+
+  function mapHomologyRuleForDef(geometry, def) {
+    const variableId = homologyVariableId(def.id);
+    const stored = (geometry.homology?.rules || []).find((rule) => (
+      !rule.builtin
+      && rule.lhs?.powers
+      && Object.keys(rule.lhs.powers).length === 1
+      && rule.lhs.powers[variableId] === 1
+    ));
+    if (stored) return stored;
+    const mapClass = parseMapHomologyClassId(def.id);
+    const map = mapClass?.operation === 'pullback' && mapClass.sourceClassId === HOMOLOGY_UNIT_CLASS
+      ? state.maps.find((item) => item.id === mapClass.mapId)
+      : null;
+    return map ? defaultPullbackUnitRule(map) : null;
+  }
+
+  function setMapHomologyRuleFromInput(input) {
+    resetHomologyRulePasses();
+    const varietyId = input.dataset.mapHomologyVariety || activeHomologyVariety()?.id;
+    const variety = state.varieties.find((item) => item.id === varietyId) || activeHomologyVariety();
+    if (!variety) return;
+    const geometry = geometryFromVariety(variety);
+    if (!geometry) return;
+    const def = homologyClassDefinitions(geometry).find((item) => item.id === input.dataset.mapHomologyRule);
+    if (!def) return;
+    const homology = ensureHomologySystem(variety, geometry);
+    const variableId = homologyVariableId(def.id);
+    const value = String(input.value || '').trim();
+    homology.rules = homology.rules.filter((rule) => !(
+      !rule.builtin
+      && rule.lhs?.powers
+      && Object.keys(rule.lhs.powers).length === 1
+      && rule.lhs.powers[variableId] === 1
+    ));
+    if (!value) {
+      recompute();
+      return;
+    }
+    let rhs;
+    try {
+      rhs = parseHomologyExpression(value, geometry, { side: 'right' });
+    } catch (error) {
+      if (refs.homologyMessage) refs.homologyMessage.textContent = error.message || 'Invalid right side.';
+      return;
+    }
+    const rule = {
+      id: `map-rule-${def.id}`,
+      builtin: false,
+      enabled: true,
+      lhs: { powers: { [variableId]: 1 } },
+      rhs: serializeHomologyPoly(rhs)
+    };
+    const defs = homologyClassDefinitions(geometry);
+    if (!homologyRulePreservesDegree(rule, defs)) {
+      if (refs.homologyMessage) refs.homologyMessage.textContent = 'Rule degrees must match.';
+      return;
+    }
+    homology.rules.push(rule);
+    if (refs.homologyMessage) refs.homologyMessage.textContent = '';
+    recompute();
+  }
+
+  function renderHomologyRuleCreator(geometry, defs, options = {}) {
     if (!refs.homologyAddRule) return;
+    if (options.mapMode) {
+      refs.homologyAddRule.hidden = true;
+      return;
+    }
     refs.homologyAddRule.hidden = defs.length === 0;
     if (defs.length === 0) return;
     if (refs.homologyRuleEquation) {
       refs.homologyRuleEquation.placeholder = defaultHomologyRulePlaceholder(geometry);
     }
+  }
+
+  function renderHomologyClassCreator(geometry, options = {}) {
+    if (!refs.homologyAddClass) return;
+    refs.homologyAddClass.hidden = !!options.mapMode || !geometry;
+    if (refs.homologyClassDegree && geometry) {
+      refs.homologyClassDegree.max = String(geometry.dim);
+      refs.homologyClassDegree.value = String(normalizedInt(refs.homologyClassDegree.value, 0, geometry.dim, Math.min(1, geometry.dim)));
+    }
+    if (refs.homologyClassSymbol && geometry && !refs.homologyClassSymbol.value) {
+      refs.homologyClassSymbol.placeholder = nextHomologyClassSymbol(geometry.homology, geometry);
+    }
+  }
+
+  function homologyActiveLatex(geometry) {
+    const context = activeHomologyMapContext();
+    if (!context) return `\\text{classes on } ${geometry.labelLatex}`;
+    if (geometry.varietyId === context.domain.variety.id) {
+      const mapName = sanitizeMathLabel(context.map.name, 'f');
+      return `${mapName}^{*}\\text{ relations for codomain classes}\\quad(${mapName}:${context.domain.geometry.labelLatex}\\to ${context.codomain.geometry.labelLatex})`;
+    }
+    if (geometry.varietyId === context.codomain.variety.id) {
+      const mapName = sanitizeMathLabel(context.map.name, 'f');
+      return `${mapName}_{*}\\text{ relations for domain classes}\\quad(${mapName}:${context.domain.geometry.labelLatex}\\to ${context.codomain.geometry.labelLatex})`;
+    }
+    return `\\text{classes on } ${geometry.labelLatex}`;
+  }
+
+  function homologyMapActiveLatex(context) {
+    const mapName = sanitizeMathLabel(context.map.name, 'f');
+    const arrow = `${mapName}:${context.domain.geometry.labelLatex}\\to ${context.codomain.geometry.labelLatex}`;
+    return `${mapName}^{*}\\text{ and }${mapName}_{*}\\text{ relations}\\quad(${arrow})`;
   }
 
   function homologyRuleLatex(rule, geometry) {
@@ -4677,6 +5820,7 @@
     renderHomologyPanel(result);
     if (result.classRows.length) {
       if (refs.classActions) refs.classActions.hidden = false;
+      if (refs.furtherSimplify) refs.furtherSimplify.textContent = `further simplify (${result.classDisplay?.homologyRulePasses || DEFAULT_HOMOLOGY_RULE_PASSES})`;
       syncClassDisplayControls(result);
       refs.classChart.hidden = false;
       refs.classMessage.hidden = true;
@@ -4696,7 +5840,7 @@
       refs.classChart.innerHTML = '';
       refs.classMessage.className = 'hint';
       refs.classMessage.hidden = false;
-      refs.classMessage.textContent = 'Select a sheaf for characteristic classes.';
+      refs.classMessage.textContent = classChartEmptyMessage();
     }
     if (result.hodge) {
       if (refs.hodgeActions) refs.hodgeActions.hidden = false;
@@ -4708,11 +5852,83 @@
       refs.hodgeChart.hidden = true;
       refs.hodgeChart.innerHTML = '';
       refs.hodgeMessage.hidden = false;
-      refs.hodgeMessage.textContent = 'Add and select a variety for Hodge numbers.';
+      refs.hodgeMessage.textContent = hodgeChartEmptyMessage();
     }
+    renderSheafCohomologyChart(result);
     typeset(refs.classChart);
+    typeset(refs.cohomologyChart);
     typeset(refs.hodgeChart);
     renderCanvas(result);
+  }
+
+  function classChartEmptyMessage() {
+    if (inputIsCreateMode()) {
+      if (currentInputKind() === 'sheaf') return state.draftSheafBaseVarietyId
+        ? 'Set the sheaf data, then click add to create it.'
+        : 'Pick a base variety on the canvas to start the sheaf.';
+      if (currentInputKind() === 'map') return 'Finish creating the map; characteristic classes use a modified sheaf.';
+      return 'Switch to Modify and choose a sheaf for characteristic classes.';
+    }
+    return 'Select a sheaf for characteristic classes.';
+  }
+
+  function hodgeChartEmptyMessage() {
+    if (inputIsCreateMode()) return 'Add a variety, then switch to Modify to inspect its Hodge numbers.';
+    return 'Select a variety for Hodge numbers.';
+  }
+
+  function cohomologyChartEmptyMessage() {
+    if (inputIsCreateMode()) {
+      if (currentInputKind() === 'sheaf') return state.draftSheafBaseVarietyId
+        ? 'Set the sheaf data, then click add to create it.'
+        : 'Pick a base variety on the canvas to start the sheaf.';
+      return 'Switch to Modify and choose a sheaf or variety for sheaf cohomology.';
+    }
+    return 'Select a sheaf or variety for sheaf cohomology.';
+  }
+
+  function renderSheafCohomologyChart(result) {
+    if (!refs.cohomologyChart || !refs.cohomologyMessage) return;
+    const cohomology = result?.cohomology;
+    const dimensions = cohomology?.dimensions;
+    if (!dimensions?.length) {
+      if (refs.cohomologyActions) refs.cohomologyActions.hidden = true;
+      refs.cohomologyChart.hidden = true;
+      refs.cohomologyChart.innerHTML = '';
+      refs.cohomologyMessage.hidden = false;
+      refs.cohomologyMessage.textContent = cohomology?.message || cohomologyChartEmptyMessage();
+      return;
+    }
+    const dimOnly = !!refs.cohomologyDimOnly?.checked;
+    if (refs.cohomologyActions) refs.cohomologyActions.hidden = false;
+    refs.cohomologyChart.hidden = false;
+    refs.cohomologyMessage.hidden = false;
+    const subject = cohomology.subjectLatex || '\\mathcal{F}';
+    const valueLabel = dimOnly ? `\\dim H^i(${result.geometry.labelLatex},${subject})` : `H^i(${result.geometry.labelLatex},${subject})`;
+    const indexCells = dimensions.map((_, i) => `<td>\\(${i}\\)</td>`).join('');
+    const valueCells = dimensions.map((entry) => `<td>\\(${dimOnly ? entry.latex : cohomologyGroupLatex(entry.latex)}\\)</td>`).join('');
+    refs.cohomologyChart.innerHTML = `
+      <table class="cohomology-table">
+        <tbody>
+          <tr><th>\\(i\\)</th>${indexCells}</tr>
+          <tr><th>\\(${valueLabel}\\)</th>${valueCells}</tr>
+        </tbody>
+      </table>`;
+    refs.cohomologyMessage.textContent = cohomology.message || '';
+  }
+
+  function cohomologyGroupLatex(dimensionLatex) {
+    const numeric = parseSimpleLatexNumber(dimensionLatex);
+    if (numeric?.isZero()) return '0';
+    if (numeric?.isOne()) return '\\mathbb{C}';
+    const body = cohomologyExponentLatex(dimensionLatex);
+    return `\\mathbb{C}^{${body}}`;
+  }
+
+  function cohomologyExponentLatex(value) {
+    const text = String(value || '0').trim();
+    if (/^[A-Za-z0-9_{}\\^,]+$/.test(text) || parseSimpleLatexNumber(text)) return text;
+    return `\\left(${text}\\right)`;
   }
 
   function setInlineMath(element, latex) {
@@ -5067,7 +6283,8 @@
       const activeEndpointRole = activeMapEndpointRole('variety', variety.id);
       if (activeEndpointRole === 'domain') classes.push('is-map-domain');
       else if (activeEndpointRole === 'codomain') classes.push('is-map-codomain');
-      if (state.basePickActive) classes.push('is-pick-candidate');
+      if ((state.basePickActive || (currentInputKind() === 'sheaf' && inputIsCreateMode() && !state.draftSheafBaseVarietyId)) && allowableSheafBase(variety.id)) classes.push('is-pick-candidate');
+      if (currentInputKind() === 'sheaf' && inputIsCreateMode() && state.draftSheafBaseVarietyId === variety.id) classes.push('is-active');
       if (currentInputKind() === 'map' && inputIsCreateMode() && !state.mapDraft) classes.push('is-pick-candidate');
       else if (state.mapDraft?.domainKind === 'variety' && state.mapDraft.domainId === variety.id) classes.push('is-map-domain');
       else if (allowableMapCodomain('variety', variety.id)) classes.push('is-map-codomain-candidate');
@@ -6217,11 +7434,11 @@
 
   function exportResult(result, format, scope = 'main') {
     if (scope === 'classes') {
-      if (!result.classRows.length) return 'No characteristic classes available. Select a sheaf.';
+      if (!result.classRows.length) return `No characteristic classes available. ${classChartEmptyMessage()}`;
       return exportClassChart(result, format);
     }
     if (scope === 'hodge') {
-      if (!result.hodge || !result.geometry) return 'No Hodge numbers available. Add and select a variety.';
+      if (!result.hodge || !result.geometry) return `No Hodge numbers available. ${hodgeChartEmptyMessage()}`;
       return exportHodgeChart(result, format);
     }
     return exportMainCanvas(result, format);
@@ -6422,7 +7639,8 @@
     const expression = result.classRows.some((row) => row.key.startsWith('root_')) ? 'Chern roots' : 'class variables';
     const term = result.classDisplay?.termMode === 'term' ? `i=${result.classDisplay.termIndex}` : 'total';
     const form = expression === 'Chern roots' ? `, ${result.classDisplay?.rootForm === 'expanded' ? 'expanded polynomial' : 'product'}` : '';
-    return `${expression}${form}, ${term}`;
+    const passes = result.classDisplay?.homologyRulePasses || DEFAULT_HOMOLOGY_RULE_PASSES;
+    return `${expression}${form}, ${term}, ${passes} homology rule pass${passes === 1 ? '' : 'es'}`;
   }
 
   function exportHodgeChart(result, format) {
@@ -6751,12 +7969,22 @@
     return out;
   }
 
+  function binomialBigInt(n, k) {
+    if (!Number.isInteger(n) || !Number.isInteger(k) || k < 0 || k > n) return 0n;
+    k = Math.min(k, n - k);
+    let out = 1n;
+    for (let i = 1; i <= k; i += 1) {
+      out = (out * BigInt(n - k + i)) / BigInt(i);
+    }
+    return out;
+  }
+
   function sanitizeMathLabel(value, fallback) {
     const raw = String(value || '').trim().replace(/\s+/g, ' ');
     const safeFallback = String(fallback || 'X').trim() || 'X';
     if (!raw) return safeFallback;
     if (raw.length > 120) return safeFallback;
-    if (!/^[A-Za-z0-9_{}\\^()\[\]+,\-'\s*]+$/.test(raw)) return safeFallback;
+    if (!/^[A-Za-z0-9_{}\\^()\[\]+,\-'\s*!]+$/.test(raw)) return safeFallback;
     return raw;
   }
 
