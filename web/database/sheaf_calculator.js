@@ -6,6 +6,8 @@
   const MAX_AMBIENT = 16;
   const MAX_CI_DEGREE = 99;
   const MAX_CI_SLIDER_DEGREE = 12;
+  const MAX_ROOT_EXPANSION_MONOMIALS = 1500;
+  const MAX_EXPLICIT_ROOT_FACTORS = 64;
   const VARIETY_LETTER_NAMES = ['X', 'Y', 'Z', 'W', 'V', 'U', 'T', 'S', 'R', 'Q'];
   const SHEAF_LETTER_NAMES = ['\\mathcal{E}', '\\mathcal{F}', '\\mathcal{G}', '\\mathcal{H}', '\\mathcal{I}', '\\mathcal{J}', '\\mathcal{K}', '\\mathcal{L}', '\\mathcal{M}', '\\mathcal{N}'];
   const VARS = new Map();
@@ -85,6 +87,11 @@
     refs.twist = $('twist-r');
     refs.basisRow = $('basis-row');
     refs.basis = $('abstract-basis');
+    refs.rootFormRow = $('root-form-row');
+    refs.rootForm = $('root-form');
+    refs.classTermRow = $('class-term-row');
+    refs.classTermOnly = $('class-term-only');
+    refs.classTermIndex = $('class-term-index');
     refs.rankRow = $('rank-row');
     refs.rank = $('rank-symbol');
     refs.canvas = $('sheaf-canvas');
@@ -204,7 +211,7 @@
       twist: refs.twist.value,
       rank: refs.rank.value,
       baseVarietyId: baseVariety?.id || null,
-      basis: refs.basis.value,
+      basis: normalizeBasisValue(refs.basis.value),
       nameDirty: state.draftSheafNameDirty || name !== defaultName
     };
   }
@@ -280,6 +287,58 @@
 
   function varietyHasHyperplaneClass(type) {
     return type === 'projective' || type === 'complete-intersection';
+  }
+
+  function sheafSupportsChernRoots(sheaf = activeSheaf()) {
+    return !!sheaf && (sheaf.type === 'abstract' || sheaf.type === 'locally-free');
+  }
+
+  function normalizeBasisValue(value) {
+    if (value === 'character') return 'character';
+    if (value === 'roots') return 'roots';
+    return 'chern';
+  }
+
+  function basisLabel(value) {
+    const basis = normalizeBasisValue(value);
+    if (basis === 'character') return 'Chern character';
+    if (basis === 'roots') return 'Chern roots';
+    return 'Chern classes';
+  }
+
+  function basisStatusLabel(value) {
+    return basisLabel(value).toLowerCase();
+  }
+
+  function syncClassDisplayControls(result = state.lastResult) {
+    const hasClasses = !!result?.classRows?.length || (!!activeSheaf() && !!activeVariety());
+    const supportsRoots = sheafSupportsChernRoots(result?.sheaf || activeSheaf());
+    syncBasisOptions(supportsRoots);
+    const usingRoots = supportsRoots && refs.basis?.value === 'roots';
+    if (refs.rootFormRow) refs.rootFormRow.hidden = !hasClasses || !usingRoots;
+    const rankPlain = result?.bundle?.rankPlain || result?.sheaf?.rankPlain || activeSheaf()?.rank;
+    const activeDim = Number.isInteger(result?.geometry?.dim) ? result.geometry.dim : null;
+    const fallbackVariety = activeVariety();
+    const classDim = activeDim == null
+      ? (fallbackVariety ? normalizedInt(fallbackVariety.dim, 0, MAX_DIMENSION, MAX_DIMENSION) : MAX_DIMENSION)
+      : activeDim;
+    const expandedOption = refs.rootForm?.querySelector('option[value="expanded"]');
+    const canExpandRoots = usingRoots && rootExpansionRankFromPlain(rankPlain, classDim) != null;
+    if (expandedOption) expandedOption.disabled = !canExpandRoots;
+    if (!canExpandRoots && refs.rootForm?.value === 'expanded') refs.rootForm.value = 'product';
+    if (refs.classTermRow) refs.classTermRow.hidden = !hasClasses;
+    const termOnly = !!refs.classTermOnly?.checked;
+    if (refs.classTermIndex) refs.classTermIndex.disabled = !hasClasses || !termOnly;
+    if (refs.classTermIndex) {
+      refs.classTermIndex.max = String(Math.max(0, classDim));
+    }
+  }
+
+  function syncBasisOptions(supportsRoots = sheafSupportsChernRoots()) {
+    if (!refs.basis) return;
+    const rootOption = refs.basis.querySelector('option[value="roots"]');
+    if (rootOption) rootOption.hidden = !supportsRoots;
+    if (!supportsRoots && refs.basis.value === 'roots') refs.basis.value = 'chern';
   }
 
   function genusLatex(value) {
@@ -451,7 +510,7 @@
       const sheaf = activeSheaf();
       const baseVariety = baseVarietyForSheaf(sheaf);
       if (baseVariety) state.activeVarietyId = baseVariety.id;
-      if (sheaf) refs.basis.value = sheaf.basis || 'chern';
+      if (sheaf) refs.basis.value = normalizeBasisValue(sheaf.basis);
     }
     if (refs.addObjectKind && inputIsCreateMode() && (kind === 'variety' || kind === 'sheaf')) {
       refs.addObjectKind.value = kind;
@@ -536,7 +595,7 @@
     refs.sheafName.value = sheaf.name || defaultSheafNameLatex();
     refs.twist.value = sheaf.twist ?? '1';
     refs.rank.value = sheaf.rank || 'r';
-    refs.basis.value = sheaf.basis || 'chern';
+    refs.basis.value = normalizeBasisValue(sheaf.basis);
     state.draftSheafNameDirty = !!sheaf.nameDirty;
     syncSheafBaseOptions();
     if (refs.sheafBaseVariety && sheaf.baseVarietyId && state.varieties.some((item) => item.id === sheaf.baseVarietyId)) {
@@ -568,7 +627,7 @@
       state.activeSheafId = next?.id || null;
       if (next) {
         state.activeVarietyId = next.baseVarietyId || defaultBaseVarietyId();
-        refs.basis.value = next.basis || 'chern';
+        refs.basis.value = normalizeBasisValue(next.basis);
       }
     } else {
       state.activeVarietyId = next?.id || null;
@@ -655,7 +714,7 @@
       sheafFromObject(active, geometryFromVariety(baseVariety));
       state.activeSheafId = active.id;
       state.activeVarietyId = active.baseVarietyId || defaultBaseVarietyId();
-      refs.basis.value = active.basis || 'chern';
+      refs.basis.value = normalizeBasisValue(active.basis);
       return active;
     }
     Object.assign(active, readVarietyDraft());
@@ -815,9 +874,30 @@
     });
     refs.basis.addEventListener('change', () => {
       const sheaf = activeSheaf();
-      if (sheaf) sheaf.basis = refs.basis.value;
+      if (sheaf) sheaf.basis = normalizeBasisValue(refs.basis.value);
+      syncClassDisplayControls();
       recompute();
     });
+    if (refs.rootForm) {
+      refs.rootForm.addEventListener('change', () => {
+        syncClassDisplayControls();
+        recompute();
+      });
+    }
+    if (refs.classTermOnly) {
+      refs.classTermOnly.addEventListener('change', () => {
+        syncClassDisplayControls();
+        recompute();
+      });
+    }
+    if (refs.classTermIndex) {
+      refs.classTermIndex.addEventListener('change', () => {
+        const max = normalizedInt(refs.classTermIndex.max, 0, MAX_DIMENSION, MAX_DIMENSION);
+        refs.classTermIndex.value = String(normalizedInt(refs.classTermIndex.value, 0, max, 1));
+        syncClassDisplayControls();
+        recompute();
+      });
+    }
     refs.rank.addEventListener('change', () => {
       refs.rank.value = sanitizeRankInput(refs.rank.value);
       syncDefaultSheafName();
@@ -1033,6 +1113,8 @@
       refs.status.textContent = error.message || 'unable to compute';
       if (refs.classActions) refs.classActions.hidden = true;
       if (refs.basisRow) refs.basisRow.hidden = true;
+      if (refs.rootFormRow) refs.rootFormRow.hidden = true;
+      if (refs.classTermRow) refs.classTermRow.hidden = true;
       if (refs.classChart) refs.classChart.hidden = true;
       refs.classMessage.className = 'err';
       refs.classMessage.textContent = error.message || 'Unable to compute.';
@@ -1099,10 +1181,15 @@
     if (refs.ciDegreeSliders) refs.ciDegreeSliders.hidden = !showCi || completeIntersectionDegrees().length === 0;
     refs.ciNote.hidden = !showCi;
     refs.twistRow.hidden = !draftingSheaf || draftSheaf !== 'twist';
-    const needsBasisInput = hasVariety && hasSheaf && activeVarietyType === 'abstract'
-      && (activeSheafType === 'abstract' || activeSheafType === 'locally-free' || activeSheafType === 'tangent' || activeSheafType === 'cotangent' || activeSheafType === 'canonical');
+    const activeSupportsRoots = sheafSupportsChernRoots(activeSheaf());
+    const needsBasisInput = hasVariety && hasSheaf && (
+      activeSupportsRoots
+      || (activeVarietyType === 'abstract' && (activeSheafType === 'tangent' || activeSheafType === 'cotangent' || activeSheafType === 'canonical'))
+    );
+    syncBasisOptions(activeSupportsRoots);
     if (!needsBasisInput) refs.basis.value = 'chern';
     refs.basisRow.hidden = !needsBasisInput;
+    syncClassDisplayControls();
     refs.rankRow.hidden = !draftingSheaf || (draftSheaf !== 'abstract' && draftSheaf !== 'locally-free');
     refs.sheafBaseRow.hidden = inputIsModifyMode() || !draftingSheaf || state.varieties.length <= 1;
     if (refs.addObject) {
@@ -1187,7 +1274,8 @@
   function sheafFromObject(sheaf, geometry) {
     const type = sheaf?.type || 'abstract';
     const twist = normalizedInt(sheaf.twist, -24, 24, 1);
-    const basis = sheaf.basis === 'character' ? 'character' : 'chern';
+    let basis = normalizeBasisValue(sheaf.basis);
+    if (basis === 'roots' && !sheafSupportsChernRoots(sheaf)) basis = 'chern';
     const rankPlain = sanitizeRankInput(sheaf.rank);
     const baseVariety = baseVarietyForSheaf(sheaf);
     const labelLatex = sanitizeMathLabel(sheaf.name, defaultSheafNameFor(type, rankPlain, twist, geometry?.labelLatex || 'X'));
@@ -1281,7 +1369,8 @@
   function readSheaf() {
     const type = refs.sheafType.value;
     const twist = normalizedInt(refs.twist.value, -24, 24, 1);
-    const basis = refs.basis.value === 'character' ? 'character' : 'chern';
+    let basis = normalizeBasisValue(refs.basis.value);
+    if (basis === 'roots' && type !== 'abstract' && type !== 'locally-free') basis = 'chern';
     const rankPlain = sanitizeRankInput(refs.rank.value);
     refs.rank.value = rankPlain;
     const labelLatex = sanitizeMathLabel(refs.sheafName.value, defaultSheafNameLatex());
@@ -1317,15 +1406,352 @@
       sheaf,
       bundle,
       hodge,
-      classRows: [
-        { label: `c(${bundle.labelPlain})`, labelLatex: `c(${bundle.labelLatex})`, key: 'chern', latex: formatPolyLatex(bundle.cTotal), plain: formatPolyPlain(bundle.cTotal) },
-        { label: `ch(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}(${bundle.labelLatex})`, key: 'character', latex: formatRankPlusPolyLatex(bundle.rankLatex, positiveTotal(bundle.chComps, d)), plain: formatRankPlusPolyPlain(bundle.rankPlain, positiveTotal(bundle.chComps, d)) },
-        { label: `td(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}(${bundle.labelLatex})`, key: 'todd', latex: formatPolyLatex(bundle.todd), plain: formatPolyPlain(bundle.todd) },
-        { label: `s(${bundle.labelPlain})`, labelLatex: `s(${bundle.labelLatex})`, key: 'segre', latex: formatPolyLatex(bundle.segre), plain: formatPolyPlain(bundle.segre) },
-        { label: `sqrt td(${bundle.labelPlain})`, labelLatex: `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, key: 'sqrtTodd', latex: formatPolyLatex(bundle.sqrtTodd), plain: formatPolyPlain(bundle.sqrtTodd) }
-      ]
+      classRows: [],
+      classDisplay: classDisplayOptions(geometry, sheaf)
     };
+    result.classRows = buildClassRows(bundle, d, result.classDisplay);
     return result;
+  }
+
+  function classDisplayOptions(geometry, sheaf) {
+    const supportsRoots = sheafSupportsChernRoots(sheaf);
+    const expression = supportsRoots && sheaf.basis === 'roots' ? 'roots' : 'standard';
+    const rootForm = refs.rootForm?.value === 'expanded' ? 'expanded' : 'product';
+    const termMode = refs.classTermOnly?.checked ? 'term' : 'total';
+    const termIndex = termMode === 'term'
+      ? normalizedInt(refs.classTermIndex?.value, 0, geometry.dim, 1)
+      : null;
+    if (termMode === 'term' && refs.classTermIndex) refs.classTermIndex.value = String(termIndex);
+    return {
+      expression,
+      rootForm,
+      termMode,
+      termIndex
+    };
+  }
+
+  function buildClassRows(bundle, d, options) {
+    if (options.expression === 'roots') {
+      if (options.rootForm === 'expanded' && rootExpansionRankFromPlain(bundle.rankPlain, d) != null) {
+        return buildExpandedRootClassRows(bundle, d, options);
+      }
+      return buildProductRootClassRows(bundle, options);
+    }
+    return buildStandardClassRows(bundle, d, options);
+  }
+
+  function buildStandardClassRows(bundle, d, options) {
+    if (options.termMode === 'term') {
+      const i = options.termIndex;
+      const suffix = `_{${i}}`;
+      return [
+        { label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `chern_${i}`, latex: formatPolyLatex(i === 0 ? Poly.one() : componentOrZero(bundle.cComps, i)), plain: formatPolyPlain(i === 0 ? Poly.one() : componentOrZero(bundle.cComps, i)) },
+        { label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `character_${i}`, latex: i === 0 ? (bundle.rankLatex || '0') : formatPolyLatex(componentOrZero(bundle.chComps, i)), plain: i === 0 ? (bundle.rankPlain || '0') : formatPolyPlain(componentOrZero(bundle.chComps, i)) },
+        { label: `td_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}${suffix}(${bundle.labelLatex})`, key: `todd_${i}`, latex: formatPolyLatex(homogeneousPart(bundle.todd, i)), plain: formatPolyPlain(homogeneousPart(bundle.todd, i)) },
+        { label: `s_${i}(${bundle.labelPlain})`, labelLatex: `s${suffix}(${bundle.labelLatex})`, key: `segre_${i}`, latex: formatPolyLatex(homogeneousPart(bundle.segre, i)), plain: formatPolyPlain(homogeneousPart(bundle.segre, i)) },
+        { label: `sqrt td_${i}(${bundle.labelPlain})`, labelLatex: `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, key: `sqrtTodd_${i}`, latex: formatPolyLatex(homogeneousPart(bundle.sqrtTodd, i)), plain: formatPolyPlain(homogeneousPart(bundle.sqrtTodd, i)) }
+      ];
+    }
+    return [
+      { label: `c(${bundle.labelPlain})`, labelLatex: `c(${bundle.labelLatex})`, key: 'chern', latex: formatPolyLatex(bundle.cTotal), plain: formatPolyPlain(bundle.cTotal) },
+      { label: `ch(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}(${bundle.labelLatex})`, key: 'character', latex: formatRankPlusPolyLatex(bundle.rankLatex, positiveTotal(bundle.chComps, d)), plain: formatRankPlusPolyPlain(bundle.rankPlain, positiveTotal(bundle.chComps, d)) },
+      { label: `td(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}(${bundle.labelLatex})`, key: 'todd', latex: formatPolyLatex(bundle.todd), plain: formatPolyPlain(bundle.todd) },
+      { label: `s(${bundle.labelPlain})`, labelLatex: `s(${bundle.labelLatex})`, key: 'segre', latex: formatPolyLatex(bundle.segre), plain: formatPolyPlain(bundle.segre) },
+      { label: `sqrt td(${bundle.labelPlain})`, labelLatex: `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, key: 'sqrtTodd', latex: formatPolyLatex(bundle.sqrtTodd), plain: formatPolyPlain(bundle.sqrtTodd) }
+    ];
+  }
+
+  function buildProductRootClassRows(bundle, options) {
+    const rankLatex = bundle.rankLatex || 'r';
+    const rankPlain = bundle.rankPlain || 'r';
+    const explicitRank = explicitRootRankFromPlain(rankPlain);
+    const total = explicitRank == null
+      ? indexedRootTotals(rankLatex, rankPlain)
+      : explicitRootTotals(explicitRank);
+    if (options.termMode === 'term') {
+      const i = options.termIndex;
+      const suffix = `_{${i}}`;
+      const term = i === 0 ? rootDegreeZeroTerms(rankLatex, rankPlain) : {
+        chern: coefficientLatexPlain(total.chern, i),
+        character: explicitRank == null ? rootCharacterTerm(i, rankLatex, rankPlain) : explicitRootCharacterTerm(i, explicitRank),
+        todd: coefficientLatexPlain(total.todd, i),
+        segre: coefficientLatexPlain(total.segre, i),
+        sqrtTodd: coefficientLatexPlain(total.sqrtTodd, i)
+      };
+      return [
+        { label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `root_chern_${i}`, latex: term.chern.latex, plain: term.chern.plain },
+        { label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `root_character_${i}`, latex: term.character.latex, plain: term.character.plain },
+        { label: `td_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}${suffix}(${bundle.labelLatex})`, key: `root_todd_${i}`, latex: term.todd.latex, plain: term.todd.plain },
+        { label: `s_${i}(${bundle.labelPlain})`, labelLatex: `s${suffix}(${bundle.labelLatex})`, key: `root_segre_${i}`, latex: term.segre.latex, plain: term.segre.plain },
+        { label: `sqrt td_${i}(${bundle.labelPlain})`, labelLatex: `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, key: `root_sqrtTodd_${i}`, latex: term.sqrtTodd.latex, plain: term.sqrtTodd.plain }
+      ];
+    }
+    return [
+      { label: `c(${bundle.labelPlain})`, labelLatex: `c(${bundle.labelLatex})`, key: 'root_chern', latex: total.chern.latex, plain: total.chern.plain },
+      { label: `ch(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}(${bundle.labelLatex})`, key: 'root_character', latex: total.character.latex, plain: total.character.plain },
+      { label: `td(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}(${bundle.labelLatex})`, key: 'root_todd', latex: total.todd.latex, plain: total.todd.plain },
+      { label: `s(${bundle.labelPlain})`, labelLatex: `s(${bundle.labelLatex})`, key: 'root_segre', latex: total.segre.latex, plain: total.segre.plain },
+      { label: `sqrt td(${bundle.labelPlain})`, labelLatex: `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, key: 'root_sqrtTodd', latex: total.sqrtTodd.latex, plain: total.sqrtTodd.plain }
+    ];
+  }
+
+  function indexedRootTotals(rankLatex, rankPlain) {
+    const alpha = '\\alpha_j';
+    const rangeLatex = `_{j=1}^{${rankLatex}}`;
+    const rangePlain = `_{j=1}^${rankPlain}`;
+    return {
+      chern: {
+        latex: `\\prod${rangeLatex}(1+${alpha})`,
+        plain: `prod${rangePlain}(1 + alpha_j)`
+      },
+      character: {
+        latex: `\\sum${rangeLatex} e^{${alpha}}`,
+        plain: `sum${rangePlain} exp(alpha_j)`
+      },
+      todd: {
+        latex: `\\prod${rangeLatex}\\frac{${alpha}}{1-e^{-${alpha}}}`,
+        plain: `prod${rangePlain} alpha_j/(1 - exp(-alpha_j))`
+      },
+      segre: {
+        latex: `\\prod${rangeLatex}(1+${alpha})^{-1}`,
+        plain: `prod${rangePlain}(1 + alpha_j)^-1`
+      },
+      sqrtTodd: {
+        latex: `\\prod${rangeLatex}\\sqrt{\\frac{${alpha}}{1-e^{-${alpha}}}}`,
+        plain: `prod${rangePlain} sqrt(alpha_j/(1 - exp(-alpha_j)))`
+      }
+    };
+  }
+
+  function explicitRootTotals(rank) {
+    const roots = Array.from({ length: rank }, (_, index) => index + 1);
+    return {
+      chern: explicitProductDisplay(roots.map((i) => ({
+        latex: `(1+${rootLatex(i)})`,
+        plain: `(1 + ${rootPlain(i)})`
+      })), '1'),
+      character: explicitSumDisplay(roots.map((i) => ({
+        latex: `e^{${rootLatex(i)}}`,
+        plain: `exp(${rootPlain(i)})`
+      })), '0'),
+      todd: explicitProductDisplay(roots.map((i) => ({
+        latex: `\\left(\\frac{${rootLatex(i)}}{1-e^{-${rootLatex(i)}}}\\right)`,
+        plain: `(${rootPlain(i)}/(1 - exp(-${rootPlain(i)})))`
+      })), '1'),
+      segre: explicitProductDisplay(roots.map((i) => ({
+        latex: `(1+${rootLatex(i)})^{-1}`,
+        plain: `(1 + ${rootPlain(i)})^-1`
+      })), '1'),
+      sqrtTodd: explicitProductDisplay(roots.map((i) => ({
+        latex: `\\sqrt{\\frac{${rootLatex(i)}}{1-e^{-${rootLatex(i)}}}}`,
+        plain: `sqrt(${rootPlain(i)}/(1 - exp(-${rootPlain(i)})))`
+      })), '1')
+    };
+  }
+
+  function explicitProductDisplay(factors, emptyValue) {
+    if (!factors.length) return { latex: emptyValue, plain: emptyValue };
+    return {
+      latex: factors.map((factor) => factor.latex).join(''),
+      plain: factors.map((factor) => factor.plain).join('*')
+    };
+  }
+
+  function explicitSumDisplay(terms, emptyValue) {
+    if (!terms.length) return { latex: emptyValue, plain: emptyValue };
+    return {
+      latex: terms.map((term) => term.latex).join(' + '),
+      plain: terms.map((term) => term.plain).join(' + ')
+    };
+  }
+
+  function explicitRootCharacterTerm(degree, rank) {
+    const denom = factorialBigInt(degree).toString();
+    const terms = Array.from({ length: rank }, (_, index) => {
+      const i = index + 1;
+      const latexRoot = rootLatex(i);
+      const plainRoot = rootPlain(i);
+      return {
+        latex: degree === 1 ? latexRoot : `${latexRoot}^{${degree}}`,
+        plain: degree === 1 ? plainRoot : `${plainRoot}^${degree}`
+      };
+    });
+    const sum = explicitSumDisplay(terms, '0');
+    if (denom === '1' || sum.latex === '0') return sum;
+    return {
+      latex: `\\frac{1}{${denom}}\\left(${sum.latex}\\right)`,
+      plain: `1/${denom}*(${sum.plain})`
+    };
+  }
+
+  function rootLatex(index) {
+    return `\\alpha_{${index}}`;
+  }
+
+  function rootPlain(index) {
+    return `alpha_${index}`;
+  }
+
+  function buildExpandedRootClassRows(bundle, d, options) {
+    const rank = rootExpansionRankFromPlain(bundle.rankPlain, d);
+    if (rank == null) return buildProductRootClassRows(bundle, { ...options, rootForm: 'product' });
+    const rootDisplay = buildExpandedRootPolynomials(rank, d);
+    if (rootDisplayHasLargeExpansion(rootDisplay, options)) {
+      options.rootForm = 'product';
+      return buildProductRootClassRows(bundle, { ...options, rootForm: 'product' });
+    }
+    if (options.termMode === 'term') {
+      const i = options.termIndex;
+      const suffix = `_{${i}}`;
+      return [
+        { label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `root_chern_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.chern, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.chern, i)) },
+        { label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `root_character_${i}`, latex: i === 0 ? String(rank) : formatPolyLatex(homogeneousPart(rootDisplay.character, i)), plain: i === 0 ? String(rank) : formatPolyPlain(homogeneousPart(rootDisplay.character, i)) },
+        { label: `td_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}${suffix}(${bundle.labelLatex})`, key: `root_todd_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.todd, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.todd, i)) },
+        { label: `s_${i}(${bundle.labelPlain})`, labelLatex: `s${suffix}(${bundle.labelLatex})`, key: `root_segre_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.segre, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.segre, i)) },
+        { label: `sqrt td_${i}(${bundle.labelPlain})`, labelLatex: `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, key: `root_sqrtTodd_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.sqrtTodd, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.sqrtTodd, i)) }
+      ];
+    }
+    return [
+      { label: `c(${bundle.labelPlain})`, labelLatex: `c(${bundle.labelLatex})`, key: 'root_chern', latex: formatPolyLatex(rootDisplay.chern), plain: formatPolyPlain(rootDisplay.chern) },
+      { label: `ch(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}(${bundle.labelLatex})`, key: 'root_character', latex: formatRankPlusPolyLatex(String(rank), rootDisplay.character), plain: formatRankPlusPolyPlain(String(rank), rootDisplay.character) },
+      { label: `td(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}(${bundle.labelLatex})`, key: 'root_todd', latex: formatPolyLatex(rootDisplay.todd), plain: formatPolyPlain(rootDisplay.todd) },
+      { label: `s(${bundle.labelPlain})`, labelLatex: `s(${bundle.labelLatex})`, key: 'root_segre', latex: formatPolyLatex(rootDisplay.segre), plain: formatPolyPlain(rootDisplay.segre) },
+      { label: `sqrt td(${bundle.labelPlain})`, labelLatex: `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, key: 'root_sqrtTodd', latex: formatPolyLatex(rootDisplay.sqrtTodd), plain: formatPolyPlain(rootDisplay.sqrtTodd) }
+    ];
+  }
+
+  function buildExpandedRootPolynomials(rank, d) {
+    const roots = chernRootVariables(rank);
+    const pComps = powerSumsFromRoots(roots, d);
+    return {
+      chern: multiplyRootFactors(roots.map((root) => Poly.one().add(root)), d),
+      character: positiveTotal(chComponentsFromPowerSums(pComps, d), d),
+      todd: multiplyRootSeries(roots, toddFactorCoefficients(d), d),
+      segre: multiplyRootSeries(roots, segreFactorCoefficients(d), d),
+      sqrtTodd: multiplyRootSeries(roots, sqrtToddFactorCoefficients(d), d)
+    };
+  }
+
+  function chernComponentsFromRoots(rank, d) {
+    const total = chernRootVariables(rank)
+      .reduce((product, root) => product.mul(Poly.one().add(root), d), Poly.one());
+    const cComps = zeroComponentArray(d);
+    cComps[0] = Poly.one();
+    for (let i = 1; i <= d; i++) cComps[i] = homogeneousPart(total, i);
+    return cComps;
+  }
+
+  function chernRootVariables(rank) {
+    return Array.from({ length: rank }, (_, index) => chernRootVariable(index + 1));
+  }
+
+  function chernRootVariable(index) {
+    const id = `chernRoot${index}`;
+    defineVariable(id, 1, `\\alpha_{${index}}`);
+    return Poly.variable(id);
+  }
+
+  function componentOrZero(comps, index) {
+    return comps && comps[index] ? comps[index] : Poly.zero();
+  }
+
+  function powerSumsFromRoots(roots, d) {
+    const sums = zeroComponentArray(d);
+    for (const root of roots) {
+      let power = Poly.one();
+      for (let i = 1; i <= d; i++) {
+        power = power.mul(root, d);
+        sums[i] = sums[i].add(power);
+      }
+    }
+    return sums;
+  }
+
+  function multiplyRootFactors(factors, d) {
+    return factors.reduce((product, factor) => product.mul(factor, d), Poly.one()).truncate(d);
+  }
+
+  function multiplyRootSeries(roots, coeffs, d) {
+    return multiplyRootFactors(roots.map((root) => polyFromRootSeries(root, coeffs, d)), d);
+  }
+
+  function polyFromRootSeries(root, coeffs, d) {
+    let total = Poly.zero();
+    let power = Poly.one();
+    for (let i = 0; i <= d; i++) {
+      const coeff = Fraction.from(coeffs[i] || Fraction.zero());
+      if (!coeff.isZero()) total = total.add(power.scale(coeff));
+      if (i < d) power = power.mul(root, d);
+    }
+    return total.truncate(d);
+  }
+
+  function segreFactorCoefficients(d) {
+    return Array.from({ length: d + 1 }, (_, i) => fraction(i % 2 === 0 ? 1 : -1));
+  }
+
+  function toddFactorCoefficients(d) {
+    const denominator = Array.from({ length: d + 1 }, (_, i) => fraction(i % 2 === 0 ? 1 : -1, factorialBigInt(i + 1)));
+    return seriesInverse(denominator, d);
+  }
+
+  function sqrtToddFactorCoefficients(d) {
+    return seriesExp(seriesScale(toddLogCoefficients(d), fraction(1, 2), d), d);
+  }
+
+  function rootDisplayHasLargeExpansion(display, options) {
+    if (options.termMode === 'term') {
+      const i = options.termIndex;
+      const polys = [
+        homogeneousPart(display.chern, i),
+        i === 0 ? Poly.one() : homogeneousPart(display.character, i),
+        homogeneousPart(display.todd, i),
+        homogeneousPart(display.segre, i),
+        homogeneousPart(display.sqrtTodd, i)
+      ];
+      return polys.some((poly) => poly.terms.size > MAX_ROOT_EXPANSION_MONOMIALS);
+    }
+    return [display.chern, display.character, display.todd, display.segre, display.sqrtTodd]
+      .some((poly) => poly.terms.size > MAX_ROOT_EXPANSION_MONOMIALS);
+  }
+
+  function homogeneousPart(poly, degree) {
+    poly = Poly.from(poly);
+    const terms = new Map();
+    for (const [key, coeff] of poly.terms) {
+      if (monoDegree(key) === degree) terms.set(key, coeff);
+    }
+    return new Poly(terms);
+  }
+
+  function coefficientLatexPlain(total, degree) {
+    return {
+      latex: `\\left[${total.latex}\\right]_{${degree}}`,
+      plain: `degree_${degree}(${total.plain})`
+    };
+  }
+
+  function rootDegreeZeroTerms(rankLatex, rankPlain) {
+    return {
+      chern: { latex: '1', plain: '1' },
+      character: { latex: rankLatex, plain: rankPlain },
+      todd: { latex: '1', plain: '1' },
+      segre: { latex: '1', plain: '1' },
+      sqrtTodd: { latex: '1', plain: '1' }
+    };
+  }
+
+  function rootCharacterTerm(degree, rankLatex, rankPlain) {
+    const denom = factorialBigInt(degree).toString();
+    const powerLatex = degree === 1 ? '\\alpha_j' : `\\alpha_j^{${degree}}`;
+    const powerPlain = degree === 1 ? 'alpha_j' : `alpha_j^${degree}`;
+    const sumLatex = `\\sum_{j=1}^{${rankLatex}} ${powerLatex}`;
+    const sumPlain = `sum_{j=1}^${rankPlain} ${powerPlain}`;
+    if (denom === '1') return { latex: sumLatex, plain: sumPlain };
+    return {
+      latex: `\\frac{1}{${denom}}${sumLatex}`,
+      plain: `1/${denom}*${sumPlain}`
+    };
   }
 
   function buildAbstractGeometrySheaf(geometry, sheaf) {
@@ -1848,6 +2274,16 @@
     return total;
   }
 
+  function seriesExp(series, d) {
+    let total = [Fraction.one(), ...Array.from({ length: d }, () => Fraction.zero())];
+    let power = [Fraction.one(), ...Array.from({ length: d }, () => Fraction.zero())];
+    for (let k = 1; k <= d; k++) {
+      power = seriesMultiply(power, series, d);
+      total = seriesAdd(total, seriesScale(power, fraction(1, factorialBigInt(k)), d), d);
+    }
+    return total;
+  }
+
   function seriesMultiply(a, b, d) {
     const out = Array.from({ length: d + 1 }, () => Fraction.zero());
     for (let i = 0; i <= d; i++) {
@@ -2130,11 +2566,12 @@
     if (geometry) badgeParts.push(geometry.labelLatex);
     if (bundle) badgeParts.push(bundle.labelLatex);
     setInlineMath(refs.objectBadge, badgeParts.length ? badgeParts.join(',\\ ') : '\\text{empty}');
-    const basis = result.sheaf?.basis === 'character' ? 'chern character' : 'chern class';
+    const basis = basisStatusLabel(result.sheaf?.basis);
     refs.status.textContent = `${state.varieties.length} variet${state.varieties.length === 1 ? 'y' : 'ies'} · ${state.sheaves.length} ${state.sheaves.length === 1 ? 'sheaf' : 'sheaves'}${bundle ? ` · ${basis} basis` : ''}`;
     setInlineMath(refs.ringSummary, geometry ? `A^*(${geometry.labelLatex})_{\\le ${geometry.dim}}` : '\\text{add a variety}');
     if (result.classRows.length) {
       if (refs.classActions) refs.classActions.hidden = false;
+      syncClassDisplayControls(result);
       refs.classChart.hidden = false;
       refs.classMessage.hidden = true;
       refs.classChart.innerHTML = result.classRows.map((row) => `
@@ -2147,6 +2584,8 @@
     } else {
       if (refs.classActions) refs.classActions.hidden = true;
       refs.basisRow.hidden = true;
+      if (refs.rootFormRow) refs.rootFormRow.hidden = true;
+      if (refs.classTermRow) refs.classTermRow.hidden = true;
       refs.classChart.hidden = true;
       refs.classChart.innerHTML = '';
       refs.classMessage.className = 'hint';
@@ -2806,7 +3245,7 @@
 
   function exportMainCanvas(result, format) {
     const lines = [];
-    const basisPlain = result.sheaf?.basis === 'character' ? 'Chern character' : 'Chern classes';
+    const basisPlain = basisLabel(result.sheaf?.basis);
     if (format === 'latex') {
       lines.push('% Sheaf Calculator: main canvas');
       state.varieties.forEach((variety, index) => {
@@ -2871,7 +3310,7 @@
     ];
     if (base) parts.push(`\\text{base}=${sanitizeMathLabel(base.name, 'X')}`);
     if (sheaf.type === 'twist') parts.push(`r=${normalizedInt(sheaf.twist, -24, 24, 1)}`);
-    parts.push(`\\text{basis}=\\text{${sheaf.basis === 'character' ? 'Chern character' : 'Chern classes'}}`);
+    parts.push(`\\text{basis}=\\text{${basisLabel(sheaf.basis)}}`);
     return parts.join(',\\ ');
   }
 
@@ -2900,7 +3339,7 @@
     ];
     if (base) parts.push(`base ${latexToPlain(base.name)}`);
     if (sheaf.type === 'twist') parts.push(`twist ${normalizedInt(sheaf.twist, -24, 24, 1)}`);
-    parts.push(`basis ${sheaf.basis === 'character' ? 'Chern character' : 'Chern classes'}`);
+    parts.push(`basis ${basisLabel(sheaf.basis)}`);
     return parts.join('; ');
   }
 
@@ -2926,6 +3365,7 @@
       lines.push('% Sheaf Calculator: characteristic classes');
       lines.push(`% X: ${result.geometry.labelPlain}`);
       lines.push(`% E: ${result.bundle.labelPlain}`);
+      lines.push(`% display: ${classDisplayDescription(result)}`);
       result.classRows.forEach((row) => lines.push(`\\[${row.labelLatex} = ${row.latex}\\]`));
       return lines.join('\n');
     }
@@ -2933,14 +3373,23 @@
       lines.push('# Sheaf Calculator: characteristic classes');
       lines.push(`# X: ${result.geometry.labelPlain}`);
       lines.push(`# E: ${result.bundle.labelPlain}`);
+      lines.push(`# display: ${classDisplayDescription(result)}`);
       result.classRows.forEach((row) => lines.push(`${row.key} = ${row.plain}`));
       return lines.join('\n');
     }
     lines.push('Sheaf Calculator: characteristic classes');
     lines.push(`X: ${result.geometry.labelPlain}`);
     lines.push(`E: ${result.bundle.labelPlain}`);
+    lines.push(`display: ${classDisplayDescription(result)}`);
     result.classRows.forEach((row) => lines.push(`${row.label} = ${row.plain}`));
     return lines.join('\n');
+  }
+
+  function classDisplayDescription(result) {
+    const expression = result.classRows.some((row) => row.key.startsWith('root_')) ? 'Chern roots' : 'class variables';
+    const term = result.classDisplay?.termMode === 'term' ? `i=${result.classDisplay.termIndex}` : 'total';
+    const form = expression === 'Chern roots' ? `, ${result.classDisplay?.rootForm === 'expanded' ? 'expanded polynomial' : 'product'}` : '';
+    return `${expression}${form}, ${term}`;
   }
 
   function exportHodgeChart(result, format) {
@@ -3238,6 +3687,35 @@
     const raw = String(value || '').trim();
     if (!/^\d+$/.test(raw)) return null;
     return Math.min(MAX_DIMENSION, Number(raw));
+  }
+
+  function explicitRootRankFromPlain(value) {
+    const raw = String(value || '').trim();
+    if (!/^\d+$/.test(raw)) return null;
+    const rank = Number(raw);
+    if (!Number.isInteger(rank) || rank < 0 || rank > MAX_EXPLICIT_ROOT_FACTORS) return null;
+    return rank;
+  }
+
+  function rootExpansionRankFromPlain(value, d = MAX_DIMENSION) {
+    const raw = String(value || '').trim();
+    if (!/^\d+$/.test(raw)) return null;
+    const rank = Number(raw);
+    if (!Number.isInteger(rank) || rank < 0) return null;
+    const monomialBound = binomial(rank + d, d);
+    if (!Number.isFinite(monomialBound) || monomialBound > MAX_ROOT_EXPANSION_MONOMIALS) return null;
+    return rank;
+  }
+
+  function binomial(n, k) {
+    if (!Number.isInteger(n) || !Number.isInteger(k) || k < 0 || k > n) return 0;
+    k = Math.min(k, n - k);
+    let out = 1;
+    for (let i = 1; i <= k; i++) {
+      out *= (n - k + i) / i;
+      if (out > MAX_ROOT_EXPANSION_MONOMIALS) return out;
+    }
+    return out;
   }
 
   function sanitizeMathLabel(value, fallback) {

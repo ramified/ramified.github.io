@@ -334,6 +334,30 @@
       white-space: nowrap;
     }
 
+    .sheaf-term-only-control {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      color: var(--text);
+      font-size: 0.88rem;
+    }
+
+    .sheaf-term-only-control .sheaf-input {
+      width: 58px;
+      flex: 0 0 58px;
+      text-align: center;
+    }
+
+    .sheaf-term-only-control .sheaf-input:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .sheaf-term-only-control span {
+      white-space: nowrap;
+    }
+
     .sheaf-lower-label {
       text-transform: none !important;
       letter-spacing: 0;
@@ -772,7 +796,23 @@
           <select id="abstract-basis" class="sheaf-select">
             <option value="chern" selected>Chern classes</option>
             <option value="character">Chern character</option>
+            <option value="roots">Chern roots</option>
           </select>
+        </div>
+        <div class="sheaf-inline-row" id="root-form-row" hidden>
+          <span class="input-label">root form</span>
+          <select id="root-form" class="sheaf-select">
+            <option value="product" selected>Product</option>
+            <option value="expanded">Expanded polynomial</option>
+          </select>
+        </div>
+        <div class="sheaf-inline-row" id="class-term-row">
+          <span class="input-label">terms</span>
+          <div class="sheaf-term-only-control">
+            <input id="class-term-index" class="sheaf-input" type="number" min="0" max="8" value="1" aria-label="term index" disabled>
+            <span>th term only</span>
+            <input type="checkbox" id="class-term-only" aria-label="only compute selected term">
+          </div>
         </div>
         <div id="class-chart" class="sheaf-class-scroll"></div>
         <div id="class-message" class="err"></div>
