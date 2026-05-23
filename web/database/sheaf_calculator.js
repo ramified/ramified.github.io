@@ -10,8 +10,18 @@
   const MAX_EXPLICIT_ROOT_FACTORS = 64;
   const MAX_HOMOLOGY_RULE_PASSES = 10;
   const MAX_HOMOLOGY_RULE_MS = 300;
+  const DEFAULT_VARIETY_SPACING_PX = 110;
+  const DEFAULT_MAP_LABEL_OFFSET = -18;
+  const MIN_MAP_LABEL_OFFSET = -25;
+  const MAX_MAP_LABEL_OFFSET = 25;
+  const DEFAULT_MAP_LABEL_T = 0.5;
+  const MAP_BEND_SLOTS = [0, -60, 60, -120, 120];
+  const DEFAULT_MAP_POINT_COUNT = 2;
+  const MAX_MAP_POINT_COUNT = 5;
+  const MAP_CURVE_SAMPLE_COUNT = 48;
   const VARIETY_LETTER_NAMES = ['X', 'Y', 'Z', 'W', 'V', 'U', 'T', 'S', 'R', 'Q'];
   const SHEAF_LETTER_NAMES = ['\\mathcal{E}', '\\mathcal{F}', '\\mathcal{G}', '\\mathcal{H}', '\\mathcal{I}', '\\mathcal{J}', '\\mathcal{K}', '\\mathcal{L}', '\\mathcal{M}', '\\mathcal{N}'];
+  const MAP_LETTER_NAMES = ['f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w'];
   const HOMOLOGY_HYPERPLANE_CLASS = 'hyperplane';
   const HOMOLOGY_POINT_CLASS = 'point';
   const HOMOLOGY_TOP_RULE_ID = 'top-hyperplane-point';
@@ -30,6 +40,7 @@
     labelDrag: null,
     mapDraft: null,
     mapDrag: null,
+    mapControlDrag: null,
     basePickActive: false,
     canvasWidth: 0,
     canvasHeight: 0,
@@ -91,6 +102,13 @@
     refs.mapEditor = $('map-editor');
     refs.mapEditorTitle = $('map-editor-title');
     refs.mapName = $('map-name');
+    refs.mapCurveRow = $('map-curve-row');
+    refs.mapPointCount = $('map-point-count');
+    refs.mapPointCountValue = $('map-point-count-value');
+    refs.standardMapCurve = $('standard-map-curve');
+    refs.mapLabelOffsetRow = $('map-label-offset-row');
+    refs.mapLabelOffset = $('map-label-offset');
+    refs.mapLabelOffsetValue = $('map-label-offset-value');
     refs.mapPickStatus = $('map-pick-status');
     refs.resetMapPick = $('reset-map-pick');
     refs.constructionOperation = $('construction-operation');
@@ -206,7 +224,8 @@
       domainId: from.id,
       codomainKind: to.kind,
       codomainId: to.id,
-      construction: options.construction || null
+      construction: options.construction || null,
+      curve: options.curve ? normalizeMapCurve(options.curve) : null
     };
   }
 
@@ -276,13 +295,13 @@
   }
 
   function readMapDraftName() {
-    const fallback = inputIsModifyMode() ? (activeMap()?.name || defaultMapNameLatex()) : defaultMapNameLatex();
+    const fallback = inputIsModifyMode() ? (activeMap()?.name || defaultMapNameLatex()) : defaultCreateMapNameLatex();
     return sanitizeMathLabel(refs.mapName?.value, fallback);
   }
 
   function uniqueObjectName(kind, proposedName, excludeId = null) {
     if (!refs.repeatNames?.checked) return proposedName;
-    const items = kind === 'sheaf' ? state.sheaves : state.varieties;
+    const items = objectCollectionForNameKind(kind);
     const used = new Set(items
       .filter((item) => item.id !== excludeId)
       .map((item) => canonicalMathLabel(item.name)));
@@ -297,6 +316,11 @@
     return proposedName;
   }
 
+  function objectCollectionForNameKind(kind) {
+    if (kind === 'map') return state.maps;
+    return kind === 'sheaf' ? state.sheaves : state.varieties;
+  }
+
   function nameBelongsToRepetitionModel(kind, name) {
     const sequence = repetitionNameSequence(kind, name);
     const key = canonicalMathLabel(name);
@@ -306,6 +330,7 @@
   function repetitionNameSequence(kind, proposedName) {
     const style = refs.repeatStyle?.value || 'letters';
     if (style === 'letters') {
+      if (kind === 'map') return MAP_LETTER_NAMES;
       return kind === 'sheaf' ? SHEAF_LETTER_NAMES : VARIETY_LETTER_NAMES;
     }
     const base = repetitionBaseName(kind, proposedName);
@@ -316,25 +341,33 @@
       return Array.from({ length: 25 }, (_, index) => (index === 0 ? base : `${base}^{(${index})}`));
     }
     if (style === 'subscript') {
-      return Array.from({ length: 25 }, (_, index) => (index === 0 ? base : `${base}_{${index}}`));
+      return Array.from({ length: 25 }, (_, index) => {
+        if (index === 0) return base;
+        if (kind === 'map' && index < 10) return `${base}_${index}`;
+        return `${base}_{${index}}`;
+      });
     }
     return [base];
   }
 
   function repetitionBaseName(kind, proposedName) {
-    const fallback = kind === 'sheaf' ? '\\mathcal{E}' : (refs.varietyType?.value === 'curve' ? curveDefaultName(refs.curveGenus?.value) : 'X');
+    const fallback = kind === 'map'
+      ? 'f'
+      : (kind === 'sheaf' ? '\\mathcal{E}' : (refs.varietyType?.value === 'curve' ? curveDefaultName(refs.curveGenus?.value) : 'X'));
     const name = sanitizeMathLabel(proposedName, fallback);
     if (refs.repeatStyle?.value === 'letters') return name;
     if (kind === 'sheaf') {
-      const match = name.match(/^\\mathcal\{([A-Z])\}(?:'*)?(?:\^\{\(\d+\)\}|_\{\d+\})?$/);
+      const match = name.match(/^\\mathcal\{([A-Z])\}(?:'*)?(?:\^\{\(\d+\)\}|_\{?\d+\}?)?$/);
       return match ? `\\mathcal{${match[1]}}` : name;
     }
-    const match = name.match(/^([A-Za-z])(?:'*)?(?:\^\{\(\d+\)\}|_\{\d+\})?$/);
+    const match = name.match(/^([A-Za-z])(?:'*)?(?:\^\{\(\d+\)\}|_\{?\d+\}?)?$/);
     return match ? match[1] : name;
   }
 
   function canonicalMathLabel(value) {
-    return String(value || '').replace(/\s+/g, '');
+    return String(value || '')
+      .replace(/\s+/g, '')
+      .replace(/_\{(\d+)\}/g, '_$1');
   }
 
   function curveDefaultName(genusValue) {
@@ -496,19 +529,22 @@
     if (!sheaf || !baseVariety) return;
     const baseX = Number.isFinite(baseVariety.labelX) ? baseVariety.labelX : 0.28;
     const baseY = Number.isFinite(baseVariety.labelY) ? baseVariety.labelY : 0.36;
-    sheaf.labelX = clamp(baseX + 0.1, 0.08, 0.94);
+    const spacing = canvasSpacingRatio('x');
+    sheaf.labelX = clamp(baseX + Math.min(0.18, spacing * 0.72), 0.08, 0.94);
     sheaf.labelY = clamp(baseY - 0.16, 0.08, 0.92);
   }
 
   function positionVarietyOnCanvas(variety) {
     if (!variety) return;
-    variety.labelX = 0.28;
+    const spacing = canvasSpacingRatio('x');
+    const index = state.varieties.length;
+    variety.labelX = clamp(0.22 + index * spacing, 0.08, 0.92);
     variety.labelY = 0.36;
   }
 
   function avoidCanvasLabelOverlap(object) {
     if (!object) return;
-    const step = 0.075;
+    const step = Math.max(0.075, canvasSpacingRatio('x') * 0.72);
     const rowStep = 0.045;
     const thresholdX = 0.055;
     const thresholdY = 0.055;
@@ -535,6 +571,13 @@
     }
   }
 
+  function canvasSpacingRatio(axis = 'x') {
+    const size = axis === 'y'
+      ? (state.canvasHeight || refs.canvas?.clientHeight || 280)
+      : (state.canvasWidth || refs.canvas?.clientWidth || 760);
+    return clamp(DEFAULT_VARIETY_SPACING_PX / Math.max(1, size), axis === 'y' ? 0.05 : 0.07, axis === 'y' ? 0.3 : 0.32);
+  }
+
   function syncInputEditorVisibility() {
     const modifying = inputIsModifyMode();
     const hasModifyTarget = !!activeObjectForModifyMode();
@@ -546,6 +589,7 @@
     refs.varietyEditor.hidden = modifying ? (showingSheaf || showingMap || !hasModifyTarget) : (showingSheaf || showingMap);
     refs.sheafEditor.hidden = modifying ? (!showingSheaf || !hasModifyTarget) : !showingSheaf;
     if (refs.mapEditor) refs.mapEditor.hidden = modifying ? (!showingMap || !hasModifyTarget) : !showingMap;
+    syncMapCurveControls(showingMap && modifying ? selectedMap() : null);
     syncInputModeControls();
     updateInputEditorTitles();
     updateDeleteObjectButton();
@@ -586,9 +630,11 @@
       state.activeVarietyId = id;
       state.activeSheafId = null;
       state.activeMapId = null;
+      syncMapCurveControls(null);
     } else if (kind === 'sheaf') {
       state.activeSheafId = id;
       state.activeMapId = null;
+      syncMapCurveControls(null);
       const sheaf = activeSheaf();
       const baseVariety = baseVarietyForSheaf(sheaf);
       if (baseVariety) state.activeVarietyId = baseVariety.id;
@@ -596,6 +642,7 @@
     } else if (kind === 'map') {
       state.activeMapId = id;
       state.activeSheafId = null;
+      syncMapCurveControls(selectedMap());
     }
     if (refs.addObjectKind && inputIsCreateMode() && (kind === 'variety' || kind === 'sheaf')) {
       refs.addObjectKind.value = kind;
@@ -668,6 +715,61 @@
     }
   }
 
+  function syncMapCurveControls(map = inputIsModifyMode() ? selectedMap() : null) {
+    const showCurveControls = inputIsModifyMode() && !!map;
+    if (refs.mapCurveRow) refs.mapCurveRow.hidden = !showCurveControls;
+    if (refs.mapLabelOffsetRow) refs.mapLabelOffsetRow.hidden = !showCurveControls;
+    const count = mapCurveAnchorCount(map);
+    if (refs.mapPointCount) {
+      refs.mapPointCount.value = String(count);
+      refs.mapPointCount.disabled = !showCurveControls;
+    }
+    if (refs.mapPointCountValue) refs.mapPointCountValue.textContent = String(count);
+    if (refs.standardMapCurve) refs.standardMapCurve.disabled = !showCurveControls;
+    const offset = normalizedMapLabelOffset(map?.labelOffset);
+    if (refs.mapLabelOffset) {
+      refs.mapLabelOffset.min = String(MIN_MAP_LABEL_OFFSET);
+      refs.mapLabelOffset.max = String(MAX_MAP_LABEL_OFFSET);
+      refs.mapLabelOffset.value = String(offset);
+      refs.mapLabelOffset.disabled = !showCurveControls;
+    }
+    if (refs.mapLabelOffsetValue) refs.mapLabelOffsetValue.textContent = `${offset}px`;
+  }
+
+  function repositionCanvasObjectsForSpacing() {
+    state.varieties.forEach((variety, index) => {
+      variety.labelX = clamp(0.22 + index * canvasSpacingRatio('x'), 0.08, 0.92);
+    });
+    state.sheaves.forEach((sheaf) => {
+      const base = baseVarietyForSheaf(sheaf);
+      positionSheafNearBase(sheaf, base);
+      avoidCanvasLabelOverlap(sheaf);
+    });
+    state.maps.forEach((map) => {
+      map.curve = null;
+      positionMapLabel(map);
+    });
+  }
+
+  function applyStandardMapCurve(map, pointCount = mapCurveAnchorCount(map), bendPx = map?.defaultBendPx) {
+    if (!map) return;
+    const width = state.canvasWidth || refs.canvas?.clientWidth || 760;
+    const height = state.canvasHeight || refs.canvas?.clientHeight || 280;
+    const labels = canvasObjectLabels(width, height);
+    const endpoints = mapEndpointLabels(map, labels);
+    if (!endpoints) {
+      map.curve = null;
+      return;
+    }
+    const bend = Number.isFinite(bendPx) ? bendPx : 0;
+    map.curve = standardMapCurve(endpoints.from, endpoints.to, width, height, normalizedMapPointCount(pointCount), bend);
+    map.defaultBendPx = bend;
+    map.modified = false;
+    map.labelOffset = DEFAULT_MAP_LABEL_OFFSET;
+    map.labelT = DEFAULT_MAP_LABEL_T;
+    syncMapCurveControls(map);
+  }
+
   function loadActiveObjectIntoDraft(kind = currentInputKind()) {
     const item = activeObjectForKind(kind);
     if (!item) return;
@@ -705,6 +807,7 @@
   function loadMapIntoDraft(map) {
     state.mapDraft = map ? { domainKind: map.domainKind, domainId: map.domainId } : null;
     if (refs.mapName) refs.mapName.value = map?.name || defaultMapNameLatex();
+    syncMapCurveControls(map);
     state.draftMapNameDirty = false;
     updateMapPickStatus();
     updateInputEditorTitles();
@@ -820,6 +923,7 @@
     state.activeSheafId = null;
     state.activeMapId = null;
     state.labelDrag = null;
+    state.mapControlDrag = null;
     clearMapDraft();
     setBasePickActive(false);
     if (refs.addObjectKind) refs.addObjectKind.value = 'variety';
@@ -859,14 +963,18 @@
   }
 
   function prepareNextDraftName(kind, createdName) {
-    if (!refs.repeatNames?.checked || !nameBelongsToRepetitionModel(kind, createdName)) return;
-    if (kind === 'sheaf') {
+    if (!refs.repeatNames?.checked || !nameBelongsToRepetitionModel(kind, createdName)) return false;
+    if (kind === 'map') {
+      state.draftMapNameDirty = false;
+      refs.mapName.value = uniqueObjectName('map', createdName);
+    } else if (kind === 'sheaf') {
       state.draftSheafNameDirty = false;
       refs.sheafName.value = uniqueObjectName('sheaf', createdName);
     } else {
       state.draftVarietyNameDirty = false;
       refs.varietyName.value = uniqueObjectName('variety', createdName);
     }
+    return true;
   }
 
   function updateObjectFromDraft(kind = currentInputKind()) {
@@ -874,6 +982,8 @@
     if (!active) return null;
     if (kind === 'map') {
       active.name = readMapDraftName();
+      active.nameDirty = true;
+      if (active.construction) active.construction.nameDirty = true;
       updateInputEditorTitles();
       return active;
     }
@@ -923,12 +1033,14 @@
       refs.repeatNames.addEventListener('change', () => {
         syncDefaultVarietyName();
         syncDefaultSheafName();
+        syncDefaultMapName();
       });
     }
     if (refs.repeatStyle) {
       refs.repeatStyle.addEventListener('change', () => {
         syncDefaultVarietyName();
         syncDefaultSheafName();
+        syncDefaultMapName();
       });
     }
     refs.addObjectKind.addEventListener('change', () => {
@@ -1044,8 +1156,45 @@
         updateInputEditorTitles();
       });
       refs.mapName.addEventListener('change', () => {
-        refs.mapName.value = readMapDraftName();
+        refs.mapName.value = normalizeDraftNameForKind('map', refs.mapName.value);
         updateInputEditorTitles();
+      });
+    }
+    if (refs.mapPointCount) {
+      refs.mapPointCount.addEventListener('input', () => {
+        const map = selectedMap();
+        if (!map) return;
+        setMapPointCount(map, refs.mapPointCount.value);
+        recompute();
+      });
+      refs.mapPointCount.addEventListener('change', () => {
+        const map = selectedMap();
+        if (!map) return;
+        setMapPointCount(map, refs.mapPointCount.value);
+        recompute();
+      });
+      syncMapCurveControls();
+    }
+    if (refs.mapLabelOffset) {
+      refs.mapLabelOffset.addEventListener('input', () => {
+        const map = selectedMap();
+        if (!map) return;
+        setMapLabelOffset(map, refs.mapLabelOffset.value);
+        recompute();
+      });
+      refs.mapLabelOffset.addEventListener('change', () => {
+        const map = selectedMap();
+        if (!map) return;
+        setMapLabelOffset(map, refs.mapLabelOffset.value);
+        recompute();
+      });
+    }
+    if (refs.standardMapCurve) {
+      refs.standardMapCurve.addEventListener('click', () => {
+        const map = selectedMap();
+        if (!map) return;
+        applyStandardMapCurve(map);
+        recompute();
       });
     }
     if (refs.sheafBaseVariety) {
@@ -1185,12 +1334,18 @@
     }
     refs.canvasLabels.addEventListener('click', (event) => {
       if (Date.now() < state.suppressLabelClickUntil) return;
+      if (event.target.closest('[data-map-control]')) return;
       const target = event.target.closest('[data-object-kind]');
       if (!target) return;
       if (handleCanvasPickClick(target)) return;
       selectObject(target.dataset.objectKind, target.dataset.objectId);
     });
     refs.canvasLabels.addEventListener('keydown', (event) => {
+      const control = event.target.closest('[data-map-control]');
+      if (control) {
+        handleMapControlKey(event, control);
+        return;
+      }
       const target = event.target.closest('[data-object-kind]');
       if (!target) return;
       if (event.key === 'Enter' || event.key === ' ') {
@@ -1208,19 +1363,21 @@
     });
     refs.canvasLabels.addEventListener('pointerdown', (event) => {
       if (event.button !== 0) return;
+      const control = event.target.closest('[data-map-control]');
+      if (control) {
+        startMapControlDrag(control, event);
+        return;
+      }
       const target = event.target.closest('[data-object-kind]');
       if (!target) return;
       if (currentInputKind() === 'map' && inputIsCreateMode()) {
-        if (target.dataset.objectKind === 'map') {
-          startCanvasLabelDrag(target, event);
-          return;
-        }
         if (shouldUseMapCanvasDrag(target)) startMapCanvasDrag(target, event);
         return;
       }
       if (state.basePickActive) return;
       startCanvasLabelDrag(target, event);
     });
+    syncMapCurveControls();
     refs.hodgeChart.addEventListener('click', toggleHodgeExpanded);
     refs.hodgeChart.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -1444,7 +1601,8 @@
       const dim = normalizedInt(left.dim, 0, MAX_DIMENSION, 0) + normalizedInt(right.dim, 0, MAX_DIMENSION, 0);
       if (dim > MAX_DIMENSION) throw new Error(`Product dimension ${dim} exceeds the calculator limit ${MAX_DIMENSION}.`);
       const defaultName = defaultProductVarietyName(left.id, right.id);
-      return { operation, left, right, dim, defaultName, name: constructionName(values.name, defaultName) };
+      const name = constructionAutoName(values.name, defaultName);
+      return { operation, left, right, dim, defaultName, name: name.name, nameDirty: name.dirty };
     }
     if (operation === 'direct-sum-sheaf' || operation === 'tensor-sheaf') {
       const left = requireSheaf(values.sheafA);
@@ -1453,7 +1611,8 @@
       const defaultName = operation === 'direct-sum-sheaf'
         ? defaultBinarySheafName(left.id, right.id, '\\oplus')
         : defaultBinarySheafName(left.id, right.id, '\\otimes');
-      return { operation, left, right, baseVarietyId: left.baseVarietyId, defaultName, name: constructionName(values.name, defaultName) };
+      const name = constructionAutoName(values.name, defaultName);
+      return { operation, left, right, baseVarietyId: left.baseVarietyId, defaultName, name: name.name, nameDirty: name.dirty };
     }
     if (operation === 'compose-map') {
       const first = requireMap(values.mapA);
@@ -1462,7 +1621,8 @@
         throw new Error('Maps must compose as second after first.');
       }
       const defaultName = defaultComposedMapName(first.id, second.id);
-      return { operation, first, second, defaultName, name: constructionName(values.name, defaultName) };
+      const name = constructionAutoName(values.name, defaultName);
+      return { operation, first, second, defaultName, name: name.name, nameDirty: name.dirty };
     }
     if (operation === 'pullback-sheaf' || operation === 'pushforward-sheaf') {
       const map = requireMap(values.map);
@@ -1471,7 +1631,8 @@
       if (operation === 'pullback-sheaf' && sheaf.baseVarietyId !== map.codomainId) throw new Error('For pullback, the sheaf must live on the codomain.');
       if (operation === 'pushforward-sheaf' && sheaf.baseVarietyId !== map.domainId) throw new Error('For pushforward, the sheaf must live on the domain.');
       const defaultName = operation === 'pullback-sheaf' ? defaultPullbackSheafName(map.id, sheaf.id) : defaultPushforwardSheafName(map.id, sheaf.id);
-      return { operation, map, sheaf, defaultName, name: constructionName(values.name, defaultName) };
+      const name = constructionAutoName(values.name, defaultName);
+      return { operation, map, sheaf, defaultName, name: name.name, nameDirty: name.dirty };
     }
     throw new Error('Unknown construction.');
   }
@@ -1492,10 +1653,11 @@
       name: uniqueConstructedObjectName('variety', data.name),
       genus: 'g',
       ciDegrees: '',
-      nameDirty: true,
+      nameDirty: data.nameDirty,
       construction: {
         type: 'product',
-        varietyIds: [data.left.id, data.right.id]
+        varietyIds: [data.left.id, data.right.id],
+        defaultName: data.defaultName
       }
     };
     positionConstructedObjectNear(variety, [data.left, data.right]);
@@ -1515,10 +1677,11 @@
       rank: constructionRankPlaceholder(data.operation, data.left, data.right),
       baseVarietyId: data.baseVarietyId,
       basis: 'chern',
-      nameDirty: true,
+      nameDirty: data.nameDirty,
       construction: {
         type: data.operation === 'direct-sum-sheaf' ? 'direct-sum' : 'tensor',
-        sheafIds: [data.left.id, data.right.id]
+        sheafIds: [data.left.id, data.right.id],
+        defaultName: data.defaultName
       }
     };
     positionSheafNearBase(sheaf, baseVarietyForSheaf(sheaf));
@@ -1531,17 +1694,24 @@
   }
 
   function createComposedMap(data) {
-    return createMapObject(
+    const map = createMapObject(
       { kind: data.first.domainKind, id: data.first.domainId },
       { kind: data.second.codomainKind, id: data.second.codomainId },
       {
         name: uniqueConstructedObjectName('map', data.name),
         construction: {
           type: 'composition',
-          mapIds: [data.first.id, data.second.id]
+          mapIds: [data.first.id, data.second.id],
+          defaultName: data.defaultName,
+          nameDirty: data.nameDirty
         }
       }
     );
+    if (map) {
+      map.nameDirty = data.nameDirty;
+      map.construction.nameDirty = data.nameDirty;
+    }
+    return map;
   }
 
   function createMapSheafConstruction(data) {
@@ -1554,11 +1724,12 @@
       rank: isPullback ? data.sheaf.rank : 'r',
       baseVarietyId: isPullback ? data.map.domainId : data.map.codomainId,
       basis: normalizeBasisValue(data.sheaf.basis),
-      nameDirty: true,
+      nameDirty: data.nameDirty,
       construction: {
         type: isPullback ? 'pullback' : 'pushforward',
         mapId: data.map.id,
-        sheafId: data.sheaf.id
+        sheafId: data.sheaf.id,
+        defaultName: data.defaultName
       }
     };
     positionSheafNearBase(sheaf, baseVarietyForSheaf(sheaf));
@@ -1622,33 +1793,61 @@
     return sanitizeMathLabel(value, fallback);
   }
 
+  function constructionAutoName(value, fallback) {
+    const name = sanitizeMathLabel(value, fallback);
+    return {
+      name,
+      dirty: canonicalMathLabel(name) !== canonicalMathLabel(fallback)
+    };
+  }
+
   function defaultProductVarietyName(leftId, rightId) {
     const left = state.varieties.find((item) => item.id === leftId);
     const right = state.varieties.find((item) => item.id === rightId);
+    return defaultProductVarietyNameFromObjects(left, right);
+  }
+
+  function defaultProductVarietyNameFromObjects(left, right) {
     return `${sanitizeMathLabel(left?.name, 'X')}\\times ${sanitizeMathLabel(right?.name, 'Y')}`;
   }
 
   function defaultBinarySheafName(leftId, rightId, operationLatex) {
     const left = state.sheaves.find((item) => item.id === leftId);
     const right = state.sheaves.find((item) => item.id === rightId);
+    return defaultBinarySheafNameFromObjects(left, right, operationLatex);
+  }
+
+  function defaultBinarySheafNameFromObjects(left, right, operationLatex) {
     return `${sanitizeMathLabel(left?.name, '\\mathcal{E}')}${operationLatex}${sanitizeMathLabel(right?.name, '\\mathcal{F}')}`;
   }
 
   function defaultComposedMapName(firstId, secondId) {
     const first = state.maps.find((item) => item.id === firstId);
     const second = state.maps.find((item) => item.id === secondId);
+    return defaultComposedMapNameFromObjects(first, second);
+  }
+
+  function defaultComposedMapNameFromObjects(first, second) {
     return `${sanitizeMathLabel(second?.name, 'g')}\\circ ${sanitizeMathLabel(first?.name, 'f')}`;
   }
 
   function defaultPullbackSheafName(mapId, sheafId) {
     const map = state.maps.find((item) => item.id === mapId);
     const sheaf = state.sheaves.find((item) => item.id === sheafId);
+    return defaultPullbackSheafNameFromObjects(map, sheaf);
+  }
+
+  function defaultPullbackSheafNameFromObjects(map, sheaf) {
     return `${sanitizeMathLabel(map?.name, 'f')}^{*}${sanitizeMathLabel(sheaf?.name, '\\mathcal{E}')}`;
   }
 
   function defaultPushforwardSheafName(mapId, sheafId) {
     const map = state.maps.find((item) => item.id === mapId);
     const sheaf = state.sheaves.find((item) => item.id === sheafId);
+    return defaultPushforwardSheafNameFromObjects(map, sheaf);
+  }
+
+  function defaultPushforwardSheafNameFromObjects(map, sheaf) {
     return `${sanitizeMathLabel(map?.name, 'f')}_{*}${sanitizeMathLabel(sheaf?.name, '\\mathcal{E}')}`;
   }
 
@@ -1725,6 +1924,12 @@
       chooseSheafBaseFromCanvas(id);
       return true;
     }
+    if (kind === 'map' && currentInputKind() === 'map' && inputIsCreateMode()) {
+      clearMapDraft();
+      activateObject('map', id, { mode: 'modify', loadDraft: true });
+      recompute();
+      return true;
+    }
     if (currentInputKind() === 'map' && inputIsCreateMode()) {
       handleMapPick(kind, id);
       return true;
@@ -1764,12 +1969,19 @@
   function createMapObject(domain, codomain, options = {}) {
     const map = createDefaultMap(domain, codomain, options);
     if (!isValidMapCodomain(map.domainKind, map.domainId, map.codomainKind, map.codomainId)) return null;
+    if (!options.name) {
+      map.name = uniqueObjectName('map', map.name);
+    }
+    if (!map.curve && !options.construction) {
+      map.defaultBendPx = nextDefaultMapBend(map);
+    }
     positionMapLabel(map);
     state.maps.push(map);
     state.activeMapId = map.id;
     state.activeSheafId = null;
     state.draftMapNameDirty = false;
-    syncDefaultMapName(true);
+    if (!prepareNextDraftName('map', map.name)) syncDefaultMapName(true);
+    syncMapCurveControls(map);
     return map;
   }
 
@@ -1790,6 +2002,20 @@
 
   function allowableMapCodomain(kind, id) {
     return !!state.mapDraft && isValidMapCodomain(state.mapDraft.domainKind, state.mapDraft.domainId, kind, id);
+  }
+
+  function nextDefaultMapBend(map) {
+    const occupied = new Set(state.maps
+      .filter((item) => (
+        !item.modified
+        && item.domainKind === map.domainKind
+        && item.domainId === map.domainId
+        && item.codomainKind === map.codomainKind
+        && item.codomainId === map.codomainId
+        && Number.isFinite(item.defaultBendPx)
+      ))
+      .map((item) => item.defaultBendPx));
+    return MAP_BEND_SLOTS.find((bend) => !occupied.has(bend)) ?? 0;
   }
 
   function shouldUseMapCanvasDrag(target) {
@@ -1973,7 +2199,7 @@
   }
 
   function normalizeDraftNameForKind(kind, value) {
-    const defaultName = kind === 'sheaf' ? defaultSheafNameLatex() : defaultVarietyNameLatex();
+    const defaultName = kind === 'map' ? defaultMapNameLatex() : (kind === 'sheaf' ? defaultSheafNameLatex() : defaultVarietyNameLatex());
     const sanitized = sanitizeMathLabel(value, defaultName);
     return inputIsModifyMode() ? sanitized : uniqueObjectName(kind, sanitized);
   }
@@ -1988,13 +2214,20 @@
   }
 
   function defaultMapNameLatex() {
-    const index = state.maps.length + 1;
-    return index === 1 ? 'f' : `f_{${index}}`;
+    return 'f';
+  }
+
+  function defaultCreateMapNameLatex() {
+    if (inputIsModifyMode()) return defaultMapNameLatex();
+    if (!refs.repeatNames?.checked) return defaultMapNameLatex();
+    const sequence = repetitionNameSequence('map', defaultMapNameLatex());
+    const used = new Set(state.maps.map((item) => canonicalMathLabel(item.name)));
+    return sequence.find((candidate) => !used.has(canonicalMathLabel(candidate))) || defaultMapNameLatex();
   }
 
   function syncDefaultMapName(force = false) {
     if (!refs.mapName) return;
-    if (force || !state.draftMapNameDirty) refs.mapName.value = defaultMapNameLatex();
+    if (force || !state.draftMapNameDirty) refs.mapName.value = defaultCreateMapNameLatex();
   }
 
   function syncDefaultVarietyName(force = false) {
@@ -2013,8 +2246,152 @@
     else if (refs.sheafType.value === 'abstract') refs.rank.value = 'r';
   }
 
+  function refreshConstructedObjects() {
+    let changed = false;
+    state.varieties.forEach((variety) => {
+      if (refreshConstructedVariety(variety)) changed = true;
+    });
+    state.sheaves.forEach((sheaf) => {
+      if (refreshConstructedSheaf(sheaf)) changed = true;
+    });
+    state.maps.forEach((map) => {
+      if (refreshConstructedMap(map)) changed = true;
+    });
+    if (changed) {
+      syncSheafBaseOptions(true);
+      syncDefaultSheafName();
+    }
+  }
+
+  function refreshConstructedVariety(variety) {
+    const construction = variety?.construction;
+    if (construction?.type !== 'product') return false;
+    const [left, right] = (construction.varietyIds || []).map((id) => state.varieties.find((item) => item.id === id));
+    if (!left || !right) return false;
+    const leftGeometry = geometryFromVariety(left);
+    const rightGeometry = geometryFromVariety(right);
+    const oldDefault = construction.defaultName || defaultProductVarietyNameFromObjects(left, right);
+    const nextDefault = defaultProductVarietyNameFromObjects(left, right);
+    const dim = leftGeometry.dim + rightGeometry.dim;
+    let changed = false;
+    if (String(variety.dim) !== String(dim)) {
+      variety.dim = String(Math.min(dim, MAX_DIMENSION));
+      changed = true;
+    }
+    if (!variety.nameDirty && canonicalMathLabel(variety.name) === canonicalMathLabel(oldDefault) && canonicalMathLabel(variety.name) !== canonicalMathLabel(nextDefault)) {
+      variety.name = nextDefault;
+      changed = true;
+    }
+    if (construction.defaultName !== nextDefault) {
+      construction.defaultName = nextDefault;
+      changed = true;
+    }
+    return changed;
+  }
+
+  function refreshConstructedSheaf(sheaf) {
+    const construction = sheaf?.construction;
+    if (!construction) return false;
+    if (construction.type === 'direct-sum' || construction.type === 'tensor') return refreshBinaryConstructedSheaf(sheaf, construction);
+    if (construction.type === 'pullback' || construction.type === 'pushforward') return refreshMapConstructedSheaf(sheaf, construction);
+    return false;
+  }
+
+  function refreshBinaryConstructedSheaf(sheaf, construction) {
+    const [left, right] = (construction.sheafIds || []).map((id) => state.sheaves.find((item) => item.id === id));
+    if (!left || !right) return false;
+    const opLatex = construction.type === 'direct-sum' ? '\\oplus' : '\\otimes';
+    const oldDefault = construction.defaultName || defaultBinarySheafNameFromObjects(left, right, opLatex);
+    const nextDefault = defaultBinarySheafNameFromObjects(left, right, opLatex);
+    let changed = false;
+    if (sheaf.baseVarietyId !== left.baseVarietyId) {
+      sheaf.baseVarietyId = left.baseVarietyId;
+      changed = true;
+    }
+    const nextRank = constructionRankPlaceholder(construction.type === 'direct-sum' ? 'direct-sum-sheaf' : 'tensor-sheaf', left, right);
+    if (sheaf.rank !== nextRank) {
+      sheaf.rank = nextRank;
+      changed = true;
+    }
+    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) === canonicalMathLabel(oldDefault) && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(nextDefault)) {
+      sheaf.name = nextDefault;
+      changed = true;
+    }
+    if (construction.defaultName !== nextDefault) {
+      construction.defaultName = nextDefault;
+      changed = true;
+    }
+    return changed;
+  }
+
+  function refreshMapConstructedSheaf(sheaf, construction) {
+    const map = state.maps.find((item) => item.id === construction.mapId);
+    const sourceSheaf = state.sheaves.find((item) => item.id === construction.sheafId);
+    if (!map || !sourceSheaf) return false;
+    const isPullback = construction.type === 'pullback';
+    const oldDefault = construction.defaultName || (isPullback ? defaultPullbackSheafNameFromObjects(map, sourceSheaf) : defaultPushforwardSheafNameFromObjects(map, sourceSheaf));
+    const nextDefault = isPullback ? defaultPullbackSheafNameFromObjects(map, sourceSheaf) : defaultPushforwardSheafNameFromObjects(map, sourceSheaf);
+    let changed = false;
+    const nextBase = isPullback ? map.domainId : map.codomainId;
+    if (map.domainKind === 'variety' && map.codomainKind === 'variety' && sheaf.baseVarietyId !== nextBase) {
+      sheaf.baseVarietyId = nextBase;
+      changed = true;
+    }
+    const nextRank = isPullback ? sanitizeRankInput(sourceSheaf.rank) : 'r';
+    if (sheaf.rank !== nextRank) {
+      sheaf.rank = nextRank;
+      changed = true;
+    }
+    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) === canonicalMathLabel(oldDefault) && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(nextDefault)) {
+      sheaf.name = nextDefault;
+      changed = true;
+    }
+    if (construction.defaultName !== nextDefault) {
+      construction.defaultName = nextDefault;
+      changed = true;
+    }
+    return changed;
+  }
+
+  function refreshConstructedMap(map) {
+    const construction = map?.construction;
+    if (construction?.type !== 'composition') return false;
+    const [first, second] = (construction.mapIds || []).map((id) => state.maps.find((item) => item.id === id));
+    if (!first || !second) return false;
+    const oldDefault = construction.defaultName || defaultComposedMapNameFromObjects(first, second);
+    const nextDefault = defaultComposedMapNameFromObjects(first, second);
+    let changed = false;
+    if (map.domainKind !== first.domainKind || map.domainId !== first.domainId || map.codomainKind !== second.codomainKind || map.codomainId !== second.codomainId) {
+      map.domainKind = first.domainKind;
+      map.domainId = first.domainId;
+      map.codomainKind = second.codomainKind;
+      map.codomainId = second.codomainId;
+      map.curve = null;
+      changed = true;
+    }
+    const nameDirty = map.nameDirty || construction.nameDirty;
+    if (!nameDirty && canonicalMathLabel(map.name) === canonicalMathLabel(oldDefault) && canonicalMathLabel(map.name) !== canonicalMathLabel(nextDefault)) {
+      map.name = nextDefault;
+      changed = true;
+    }
+    if (map.nameDirty !== !!nameDirty) {
+      map.nameDirty = !!nameDirty;
+      changed = true;
+    }
+    if (construction.nameDirty !== !!nameDirty) {
+      construction.nameDirty = !!nameDirty;
+      changed = true;
+    }
+    if (construction.defaultName !== nextDefault) {
+      construction.defaultName = nextDefault;
+      changed = true;
+    }
+    return changed;
+  }
+
   function recompute() {
     try {
+      refreshConstructedObjects();
       normalizeControlVisibility();
       VARS.clear();
       const chosenSheaf = inputIsModifyMode() ? selectedSheaf() : null;
@@ -2135,6 +2512,29 @@
 
   function geometryFromVariety(variety) {
     const type = variety?.type || 'abstract';
+    if (variety?.construction?.type === 'product') {
+      const [left, right] = (variety.construction.varietyIds || []).map((id) => state.varieties.find((item) => item.id === id));
+      if (left && right) {
+        const leftGeometry = geometryFromVariety(left);
+        const rightGeometry = geometryFromVariety(right);
+        const dim = Math.min(MAX_DIMENSION, leftGeometry.dim + rightGeometry.dim);
+        const labelLatex = sanitizeMathLabel(variety.name, defaultProductVarietyNameFromObjects(left, right));
+        Object.assign(variety, { type: 'abstract', dim: String(dim), name: labelLatex });
+        const geometry = {
+          type: 'product',
+          dim,
+          ambient: null,
+          degrees: [],
+          codim: null,
+          labelLatex,
+          labelPlain: latexToPlain(labelLatex),
+          ambientLatex: 'product',
+          ambientPlain: 'product',
+          productFactors: [leftGeometry, rightGeometry]
+        };
+        return attachHomologyToGeometry(variety, geometry);
+      }
+    }
     if (type === 'projective') {
       const n = normalizedInt(variety.dim, 0, MAX_DIMENSION, 3);
       const labelLatex = sanitizeMathLabel(variety.name, `\\mathbb{P}^{${n}}`);
@@ -3615,6 +4015,11 @@
 
   function buildHodgeNumbers(geometry) {
     const d = geometry.dim;
+    if (geometry.type === 'product' && Array.isArray(geometry.productFactors) && geometry.productFactors.length === 2) {
+      const left = buildHodgeNumbers(geometry.productFactors[0]);
+      const right = buildHodgeNumbers(geometry.productFactors[1]);
+      return productHodgeNumbers(left, right, geometry);
+    }
     if (geometry.type === 'curve') {
       const genus = genusLatex(geometry.genus);
       return {
@@ -3689,6 +4094,78 @@
         ? 'Projective-space Hodge numbers.'
         : 'Smooth complete-intersection Hodge numbers, computed from the Hirzebruch chi_y genus.'
     };
+  }
+
+  function productHodgeNumbers(left, right, geometry) {
+    const leftDim = geometry.productFactors[0].dim;
+    const rightDim = geometry.productFactors[1].dim;
+    const entries = Array.from({ length: geometry.dim + 1 }, (_, p) => (
+      Array.from({ length: geometry.dim + 1 }, (_, q) => {
+        const terms = [];
+        for (let a = 0; a <= leftDim; a += 1) {
+          const b = p - a;
+          if (b < 0 || b > rightDim) continue;
+          for (let c = 0; c <= leftDim; c += 1) {
+            const e = q - c;
+            if (e < 0 || e > rightDim) continue;
+            terms.push(multiplyHodgeEntries(left.entries[a][c], right.entries[b][e]));
+          }
+        }
+        return sumHodgeEntries(terms);
+      })
+    ));
+    return {
+      entries,
+      message: `Product Hodge numbers from ${geometry.productFactors[0].labelPlain} and ${geometry.productFactors[1].labelPlain}.`
+    };
+  }
+
+  function multiplyHodgeEntries(left, right) {
+    const leftNumber = parseSimpleLatexNumber(left?.latex);
+    const rightNumber = parseSimpleLatexNumber(right?.latex);
+    if (leftNumber && rightNumber) {
+      const value = leftNumber.mul(rightNumber);
+      return {
+        latex: formatFractionLatex(value),
+        plain: formatFractionPlain(value)
+      };
+    }
+    if (leftNumber?.isZero() || rightNumber?.isZero()) return { latex: '0', plain: '0' };
+    if (leftNumber?.isOne()) return { latex: right.latex, plain: right.plain };
+    if (rightNumber?.isOne()) return { latex: left.latex, plain: left.plain };
+    const leftLatex = leftNumber ? formatFractionLatex(leftNumber) : left.latex;
+    const rightLatex = rightNumber ? formatFractionLatex(rightNumber) : right.latex;
+    const leftPlain = leftNumber ? formatFractionPlain(leftNumber) : left.plain;
+    const rightPlain = rightNumber ? formatFractionPlain(rightNumber) : right.plain;
+    return {
+      latex: `${hodgeFactorLatex(leftLatex)}${hodgeFactorLatex(rightLatex)}`,
+      plain: `${hodgeFactorPlain(leftPlain)}*${hodgeFactorPlain(rightPlain)}`
+    };
+  }
+
+  function sumHodgeEntries(entries) {
+    const numeric = entries.map((entry) => parseSimpleLatexNumber(entry.latex));
+    if (numeric.every((value) => value != null)) {
+      const total = numeric.reduce((sum, value) => sum.add(value), Fraction.zero());
+      return {
+        latex: formatFractionLatex(total),
+        plain: formatFractionPlain(total)
+      };
+    }
+    return {
+      latex: formatHodgeExpressionLatex(entries.map((entry) => ({ ...entry, sign: 1 }))),
+      plain: entries.map((entry) => entry.plain).filter((plain) => plain && plain !== '0').join(' + ') || '0'
+    };
+  }
+
+  function hodgeFactorLatex(value) {
+    const text = String(value || '0');
+    return /^[A-Za-z0-9_{}\\^]+$/.test(text) || parseSimpleLatexNumber(text) ? text : `\\left(${text}\\right)`;
+  }
+
+  function hodgeFactorPlain(value) {
+    const text = String(value || '0');
+    return /^[A-Za-z0-9_^,]+$/.test(text) ? text : `(${text})`;
   }
 
   function chiYCoefficientsForCompleteIntersection(geometry) {
@@ -4543,15 +5020,40 @@
   function renderCanvasLabels(width, height) {
     if (!refs.canvasLabels) return;
     const labels = canvasOverviewLabels(width, height);
+    const controls = mapCurveControlLabels(labels, width, height);
     refs.canvasLabels.innerHTML = labels.map((label) => `
       <div class="${label.className || 'sheaf-canvas-label'}" style="left:${label.x}px;top:${label.y}px;max-width:${label.maxWidth}px;" ${label.objectKind ? `data-object-kind="${label.objectKind}" data-object-id="${escapeHtml(label.objectId)}" role="button" tabindex="0" aria-label="${escapeHtml(label.ariaLabel || label.main)}"` : ''}>
         <span>\\(${label.main}\\)</span>
       </div>
+    `).join('') + controls.map((control) => `
+      <button class="${control.className || 'sheaf-map-control'}" type="button" style="left:${control.x}px;top:${control.y}px;" data-map-id="${escapeHtml(control.mapId)}" data-map-control="${escapeHtml(control.control)}" aria-label="${escapeHtml(control.ariaLabel)}" title="${escapeHtml(control.title)}" ${control.disabled ? 'disabled' : ''}></button>
     `).join('');
     typeset(refs.canvasLabels);
   }
 
   function canvasOverviewLabels(width, height) {
+    const labels = canvasObjectLabels(width, height);
+    const showSelection = inputIsModifyMode();
+    state.maps.forEach((map) => {
+      const endpoints = mapEndpointLabels(map, labels);
+      if (!endpoints) return;
+      const pos = mapLabelPosition(map, endpoints, width, height);
+      const name = sanitizeMathLabel(map.name, 'f');
+      labels.push({
+        x: pos.x,
+        y: pos.y,
+        maxWidth: 96,
+        main: name,
+        ariaLabel: `map ${latexToPlain(name)}`,
+        className: `${showSelection && map.id === state.activeMapId ? 'sheaf-canvas-label is-active is-map' : 'sheaf-canvas-label is-map'}`,
+        objectKind: 'map',
+        objectId: map.id
+      });
+    });
+    return labels;
+  }
+
+  function canvasObjectLabels(width, height) {
     const compact = width < 620;
     const layout = canvasOverviewLayout(width, height, compact);
     const labels = [];
@@ -4603,22 +5105,6 @@
         objectId: sheaf.id
       });
     });
-    state.maps.forEach((map) => {
-      const endpoints = mapEndpointLabels(map, labels);
-      if (!endpoints) return;
-      const pos = mapLabelPosition(map, endpoints, width, height);
-      const name = sanitizeMathLabel(map.name, 'f');
-      labels.push({
-        x: pos.x,
-        y: pos.y,
-        maxWidth: 96,
-        main: name,
-        ariaLabel: `map ${latexToPlain(name)}`,
-        className: `${showSelection && map.id === state.activeMapId ? 'sheaf-canvas-label is-active is-map' : 'sheaf-canvas-label is-map'}`,
-        objectKind: 'map',
-        objectId: map.id
-      });
-    });
     return labels;
   }
 
@@ -4637,7 +5123,7 @@
   }
 
   function drawSheafBaseLines(ctx, width, height) {
-    const labels = canvasOverviewLabels(width, height);
+    const labels = canvasObjectLabels(width, height);
     const labelMap = new Map();
     labels.forEach((label) => {
       if (!label.objectKind || !label.objectId) return;
@@ -4661,14 +5147,14 @@
   }
 
   function drawMapArrows(ctx, width, height) {
-    const labels = canvasOverviewLabels(width, height).filter((label) => label.objectKind !== 'map');
+    const labels = canvasObjectLabels(width, height);
     const labelMap = canvasLabelMap(labels);
     ctx.save();
     state.maps.forEach((map) => {
       const from = labelMap.get(`${map.domainKind}:${map.domainId}`);
       const to = labelMap.get(`${map.codomainKind}:${map.codomainId}`);
       if (!from || !to) return;
-      drawArrowBetweenLabels(ctx, from, to, map.id === state.activeMapId ? '#8b3a2a' : 'rgba(139,58,42,0.72)');
+      drawMapArrow(ctx, map, from, to, map.id === state.activeMapId ? '#8b3a2a' : 'rgba(139,58,42,0.72)', width, height);
     });
     if (state.mapDrag) {
       const from = labelMap.get(`${state.mapDrag.domainKind}:${state.mapDrag.domainId}`);
@@ -4681,6 +5167,18 @@
     const endpoints = clippedArrowEndpoints(from, to);
     if (!endpoints) return;
     drawArrow(ctx, endpoints.x1, endpoints.y1, endpoints.x2, endpoints.y2, color);
+  }
+
+  function drawMapArrow(ctx, map, from, to, color, width, height) {
+    const path = mapCurveGeometry(map, from, to, width, height);
+    if (!path) {
+      drawArrowBetweenLabels(ctx, from, to, color);
+      return;
+    }
+    drawBezierPathArrow(ctx, path, color);
+    if (inputIsModifyMode() && map.id === state.activeMapId) {
+      drawMapPenGuides(ctx, map, from, to, width, height);
+    }
   }
 
   function drawArrowFromLabel(ctx, from, x2, y2, color) {
@@ -4733,6 +5231,380 @@
     return Math.min(xOffset, yOffset);
   }
 
+  function mapCurveControlLabels(labels, width, height) {
+    if (!inputIsModifyMode() || !state.activeMapId) return [];
+    const map = selectedMap();
+    if (!map) return [];
+    const endpoints = mapEndpointLabels(map, labels.filter((label) => label.objectKind !== 'map'));
+    if (!endpoints) return [];
+    const path = mapRawCurveGeometry(map, endpoints.from, endpoints.to, width, height);
+    if (!path) return [];
+    const plainName = latexToPlain(map.name || 'f');
+    const controls = [];
+    mapVisibleHandleControls(path, map.id, plainName).forEach((control) => controls.push(control));
+    path.anchors.forEach((anchor, index) => {
+      const endpoint = index === 0 || index === path.anchors.length - 1;
+      controls.push({
+        mapId: map.id,
+        control: `anchor:${index}`,
+        className: `sheaf-map-control is-anchor${endpoint ? ' is-endpoint' : ''}`,
+        disabled: endpoint,
+        x: anchor.x,
+        y: anchor.y,
+        title: endpoint ? 'endpoint follows the object label' : 'drag anchor point',
+        ariaLabel: `${endpoint ? 'endpoint' : 'anchor point'} for ${plainName}`
+      });
+    });
+    return controls;
+  }
+
+  function mapVisibleHandleControls(path, mapId, plainName = 'map') {
+    const lastIndex = path.anchors.length - 1;
+    const controls = [];
+    path.anchors.forEach((anchor, index) => {
+      if (index === 0) {
+        addMapHandleControl(controls, path.outHandles[index], mapId, `handle:${index}:out`, plainName, 'outgoing');
+        return;
+      }
+      if (index === lastIndex) {
+        addMapHandleControl(controls, path.inHandles[index], mapId, `handle:${index}:in`, plainName, 'incoming');
+        return;
+      }
+      addMapHandleControl(controls, path.inHandles[index], mapId, `handle:${index}:in`, plainName, 'incoming');
+      addMapHandleControl(controls, path.outHandles[index], mapId, `handle:${index}:out`, plainName, 'outgoing');
+    });
+    return controls;
+  }
+
+  function addMapHandleControl(controls, point, mapId, control, plainName, directionLabel) {
+    if (!point) return;
+    controls.push({
+      mapId,
+      control,
+      className: 'sheaf-map-control is-handle',
+      x: point.x,
+      y: point.y,
+      title: `drag ${directionLabel} control handle`,
+      ariaLabel: `${directionLabel} control handle for ${plainName}`
+    });
+  }
+
+  function normalizeMapCurve(curve) {
+    if (!curve) return null;
+    let anchors;
+    if (Array.isArray(curve.anchors)) {
+      anchors = curve.anchors
+        .map((point, index) => normalizedCurvePoint(point, index === 0 ? 0.28 : 0.72, 0.44))
+        .slice(0, MAX_MAP_POINT_COUNT);
+      if (anchors.length < 2) anchors = [normalizedCurvePoint(null, 0.28, 0.44), normalizedCurvePoint(null, 0.72, 0.44)];
+      const handles = anchors.map((anchor, index) => {
+        const legacy = curve.handles?.[index];
+        const point = curve.anchorHandles?.[index] || curve.handles?.[index]?.point || legacy?.c1 || legacy?.c2 || legacy;
+        return normalizedCurvePoint(point, fallbackHandleX(anchors, index), fallbackHandleY(anchors, index));
+      });
+      return { anchors, handles };
+    }
+    anchors = [normalizedCurvePoint(null, 0.28, 0.44), normalizedCurvePoint(null, 0.72, 0.44)];
+    const handles = [
+      normalizedCurvePoint(curve?.c1, 0.36, 0.44),
+      normalizedCurvePoint(curve?.c2, 0.64, 0.44)
+    ];
+    return { anchors, handles };
+  }
+
+  function ensureMapCurve(map, from, to, width, height) {
+    if (!map || !from || !to) return null;
+    if (!map.curve) {
+      const bend = Number.isFinite(map.defaultBendPx) ? map.defaultBendPx : 0;
+      map.curve = standardMapCurve(from, to, width, height, DEFAULT_MAP_POINT_COUNT, bend);
+      map.defaultBendPx = bend;
+      map.labelOffset = normalizedMapLabelOffset(map.labelOffset);
+      map.labelT = Number.isFinite(map.labelT) ? clamp(map.labelT, 0.06, 0.94) : DEFAULT_MAP_LABEL_T;
+    } else {
+      map.curve = normalizeMapCurve(map.curve);
+    }
+    return map.curve;
+  }
+
+  function standardMapCurve(from, to, width, height, pointCount = DEFAULT_MAP_POINT_COUNT, bendPx = null) {
+    const count = normalizedMapPointCount(pointCount);
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const nx = -dy / length;
+    const ny = dx / length;
+    const bend = Number.isFinite(bendPx) ? bendPx : 0;
+    const anchors = Array.from({ length: count }, (_, index) => {
+      const t = index / (count - 1);
+      const arch = Math.sin(Math.PI * t);
+      return normalizedCurvePoint({
+        x: (from.x + dx * t + nx * bend * arch) / Math.max(1, width),
+        y: (from.y + dy * t + ny * bend * arch) / Math.max(1, height)
+      }, 0.5, 0.5);
+    });
+    return {
+      anchors,
+      handles: standardMapHandles(anchors, width, height, bend)
+    };
+  }
+
+  function standardMapHandles(anchors, width, height, bendPx = 0) {
+    const bend = Number.isFinite(bendPx) ? bendPx : 0;
+    if (anchors.length === 2 && Math.abs(bend) > 0.001) {
+      const start = anchorToPoint(anchors[0], width, height);
+      const end = anchorToPoint(anchors[1], width, height);
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const length = Math.hypot(dx, dy) || 1;
+      const nx = -dy / length;
+      const ny = dx / length;
+      const c1 = {
+        x: start.x + dx / 3 + nx * bend,
+        y: start.y + dy / 3 + ny * bend
+      };
+      const c2 = {
+        x: start.x + dx * 2 / 3 + nx * bend,
+        y: start.y + dy * 2 / 3 + ny * bend
+      };
+      return [
+        normalizedCurvePoint({ x: c1.x / Math.max(1, width), y: c1.y / Math.max(1, height) }, anchors[0].x, anchors[0].y),
+        normalizedCurvePoint({ x: (end.x * 2 - c2.x) / Math.max(1, width), y: (end.y * 2 - c2.y) / Math.max(1, height) }, anchors[1].x, anchors[1].y)
+      ];
+    }
+    return anchors.map((anchor, index) => {
+      const previous = anchors[Math.max(0, index - 1)];
+      const next = anchors[Math.min(anchors.length - 1, index + 1)];
+      const base = anchorToPoint(anchor, width, height);
+      const before = anchorToPoint(previous, width, height);
+      const after = anchorToPoint(next, width, height);
+      const vx = after.x - before.x;
+      const vy = after.y - before.y;
+      const scale = index === 0 || index === anchors.length - 1 ? 1 / 3 : 1 / 6;
+      return normalizedCurvePoint({
+        x: (base.x + vx * scale) / Math.max(1, width),
+        y: (base.y + vy * scale) / Math.max(1, height)
+      }, anchor.x, anchor.y);
+    });
+  }
+
+  function fallbackHandleX(anchors, index) {
+    const before = anchors[Math.max(0, index - 1)];
+    const after = anchors[Math.min(anchors.length - 1, index + 1)];
+    const scale = index === 0 || index === anchors.length - 1 ? 1 / 3 : 1 / 6;
+    return anchors[index].x + (after.x - before.x) * scale;
+  }
+
+  function fallbackHandleY(anchors, index) {
+    const before = anchors[Math.max(0, index - 1)];
+    const after = anchors[Math.min(anchors.length - 1, index + 1)];
+    const scale = index === 0 || index === anchors.length - 1 ? 1 / 3 : 1 / 6;
+    return anchors[index].y + (after.y - before.y) * scale;
+  }
+
+  function mapCurveGeometry(map, from, to, width, height) {
+    const raw = mapRawCurveGeometry(map, from, to, width, height);
+    if (!raw) return null;
+    return clipBezierPathByLabels(raw, from, to);
+  }
+
+  function mapRawCurveGeometry(map, from, to, width, height) {
+    const curve = ensureMapCurve(map, from, to, width, height);
+    if (!curve) return null;
+    const anchors = curve.anchors.map((anchor, index) => {
+      if (index === 0) return { x: from.x, y: from.y };
+      if (index === curve.anchors.length - 1) return { x: to.x, y: to.y };
+      return anchorToPoint(anchor, width, height);
+    });
+    const handles = curve.handles.map((handle) => anchorToPoint(handle, width, height));
+    const outHandles = anchors.map((anchor, index) => handles[index] || fallbackRawHandle(anchors, index, true));
+    const inHandles = anchors.map((anchor, index) => reflectedHandlePoint(anchor, outHandles[index]) || fallbackRawHandle(anchors, index, false));
+    const segments = Array.from({ length: Math.max(0, anchors.length - 1) }, (_, index) => {
+      const start = anchors[index];
+      const end = anchors[index + 1];
+      return {
+        index,
+        start,
+        c1: outHandles[index] || lerpPoint(start, end, 1 / 3),
+        c2: inHandles[index + 1] || lerpPoint(start, end, 2 / 3),
+        end
+      };
+    }).filter((segment) => segment.start && segment.end);
+    return { anchors, handles, outHandles, inHandles, segments };
+  }
+
+  function fallbackRawHandle(anchors, index, forward = true) {
+    const anchor = anchors[index];
+    if (!anchor) return null;
+    const neighbor = forward ? anchors[Math.min(anchors.length - 1, index + 1)] : anchors[Math.max(0, index - 1)];
+    if (!neighbor || neighbor === anchor) return anchor;
+    return lerpPoint(anchor, neighbor, 1 / 3);
+  }
+
+  function reflectedHandlePoint(anchor, handle) {
+    if (!anchor || !handle) return null;
+    return {
+      x: anchor.x * 2 - handle.x,
+      y: anchor.y * 2 - handle.y
+    };
+  }
+
+  function clipBezierPathByLabels(path, from, to) {
+    if (!path?.segments?.length) return null;
+    const segments = path.segments.map((segment) => ({ ...segment }));
+    const first = segments[0];
+    const startT = firstOutsideBezierT(first, from, 7, true);
+    if (segments.length === 1) {
+      const endT = firstOutsideBezierT(first, to, 9, false);
+      if (startT == null || endT == null || endT - startT < 0.06) return clippedStraightPathFallback(from, to);
+      segments[0] = splitCubicSegment(first.start, first.c1, first.c2, first.end, startT, endT);
+    } else {
+      if (startT == null) return clippedStraightPathFallback(from, to);
+      segments[0] = splitCubicSegment(first.start, first.c1, first.c2, first.end, startT, 1);
+      const lastIndex = segments.length - 1;
+      const last = segments[lastIndex];
+      const endT = firstOutsideBezierT(last, to, 9, false);
+      if (endT == null) return clippedStraightPathFallback(from, to);
+      segments[lastIndex] = splitCubicSegment(last.start, last.c1, last.c2, last.end, 0, endT);
+    }
+    return { anchors: path.anchors, segments };
+  }
+
+  function firstOutsideBezierT(segment, label, extra, forward) {
+    if (forward) {
+      for (let i = 0; i <= MAP_CURVE_SAMPLE_COUNT; i += 1) {
+        const t = i / MAP_CURVE_SAMPLE_COUNT;
+        const point = cubicBezierPoint(segment.start, segment.c1, segment.c2, segment.end, t);
+        if (!pointInsideEstimatedLabel(point, label, extra)) return t;
+      }
+      return null;
+    }
+    for (let i = MAP_CURVE_SAMPLE_COUNT; i >= 0; i -= 1) {
+      const t = i / MAP_CURVE_SAMPLE_COUNT;
+      const point = cubicBezierPoint(segment.start, segment.c1, segment.c2, segment.end, t);
+      if (!pointInsideEstimatedLabel(point, label, extra)) return t;
+    }
+    return null;
+  }
+
+  function clippedStraightPathFallback(from, to) {
+    const endpoints = clippedArrowEndpoints(from, to);
+    if (!endpoints) return null;
+    const start = { x: endpoints.x1, y: endpoints.y1 };
+    const end = { x: endpoints.x2, y: endpoints.y2 };
+    const startHandle = lerpPoint(start, end, 1 / 3);
+    const endHandle = lerpPoint(end, start, 1 / 3);
+    return {
+      anchors: [start, end],
+      outHandles: [startHandle, null],
+      inHandles: [null, endHandle],
+      segments: [{
+        start,
+        c1: startHandle,
+        c2: endHandle,
+        end
+      }]
+    };
+  }
+
+  function pointInsideEstimatedLabel(point, label, extra = 0) {
+    const bounds = estimatedLabelBounds(label);
+    return Math.abs(point.x - label.x) <= bounds.halfWidth + extra
+      && Math.abs(point.y - label.y) <= bounds.halfHeight + extra;
+  }
+
+  function anchorToPoint(anchor, width, height) {
+    return {
+      x: clamp(anchor.x * width, 16, width - 16),
+      y: clamp(anchor.y * height, 16, height - 16)
+    };
+  }
+
+  function normalizedCurvePoint(point, fallbackX, fallbackY) {
+    return {
+      x: clamp(Number.isFinite(point?.x) ? point.x : fallbackX, 0.04, 0.96),
+      y: clamp(Number.isFinite(point?.y) ? point.y : fallbackY, 0.07, 0.93)
+    };
+  }
+
+  function mapCurveAnchorCount(map) {
+    return normalizedMapPointCount(map?.curve?.anchors?.length || DEFAULT_MAP_POINT_COUNT);
+  }
+
+  function normalizedMapPointCount(value) {
+    return normalizedInt(value, 2, MAX_MAP_POINT_COUNT, DEFAULT_MAP_POINT_COUNT);
+  }
+
+  function normalizedMapLabelOffset(value) {
+    return normalizedInt(value, MIN_MAP_LABEL_OFFSET, MAX_MAP_LABEL_OFFSET, DEFAULT_MAP_LABEL_OFFSET);
+  }
+
+  function setMapPointCount(map, value) {
+    if (!map) return;
+    applyStandardMapCurve(map, normalizedMapPointCount(value));
+  }
+
+  function setMapLabelOffset(map, value) {
+    if (!map) return;
+    map.labelOffset = normalizedMapLabelOffset(value);
+    map.modified = true;
+    syncMapCurveControls(map);
+  }
+
+  function lerpNumber(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function splitCubicSegment(p0, p1, p2, p3, t0, t1) {
+    const firstSplit = splitCubic(p0, p1, p2, p3, clamp(t0, 0, 1));
+    const right = firstSplit.right;
+    const span = 1 - t0;
+    const localT = span <= 0 ? 1 : clamp((t1 - t0) / span, 0, 1);
+    const secondSplit = splitCubic(right[0], right[1], right[2], right[3], localT);
+    const segment = secondSplit.left;
+    return {
+      start: segment[0],
+      c1: segment[1],
+      c2: segment[2],
+      end: segment[3]
+    };
+  }
+
+  function splitCubic(p0, p1, p2, p3, t) {
+    const p01 = lerpPoint(p0, p1, t);
+    const p12 = lerpPoint(p1, p2, t);
+    const p23 = lerpPoint(p2, p3, t);
+    const p012 = lerpPoint(p01, p12, t);
+    const p123 = lerpPoint(p12, p23, t);
+    const p0123 = lerpPoint(p012, p123, t);
+    return {
+      left: [p0, p01, p012, p0123],
+      right: [p0123, p123, p23, p3]
+    };
+  }
+
+  function lerpPoint(a, b, t) {
+    return {
+      x: a.x + (b.x - a.x) * t,
+      y: a.y + (b.y - a.y) * t
+    };
+  }
+
+  function cubicBezierPoint(p0, p1, p2, p3, t) {
+    const mt = 1 - t;
+    return {
+      x: mt ** 3 * p0.x + 3 * mt ** 2 * t * p1.x + 3 * mt * t ** 2 * p2.x + t ** 3 * p3.x,
+      y: mt ** 3 * p0.y + 3 * mt ** 2 * t * p1.y + 3 * mt * t ** 2 * p2.y + t ** 3 * p3.y
+    };
+  }
+
+  function cubicBezierTangent(p0, p1, p2, p3, t) {
+    const mt = 1 - t;
+    return {
+      x: 3 * mt ** 2 * (p1.x - p0.x) + 6 * mt * t * (p2.x - p1.x) + 3 * t ** 2 * (p3.x - p2.x),
+      y: 3 * mt ** 2 * (p1.y - p0.y) + 6 * mt * t * (p2.y - p1.y) + 3 * t ** 2 * (p3.y - p2.y)
+    };
+  }
+
   function estimatedLabelBounds(label) {
     const plain = latexToPlain(label.main || '');
     const lines = Math.max(1, Math.ceil(plain.length / 22));
@@ -4748,7 +5620,7 @@
   function canvasLabelMap(labels = canvasOverviewLabels(state.canvasWidth || 760, state.canvasHeight || 280)) {
     const labelMap = new Map();
     labels.forEach((label) => {
-      if (!label.objectKind || !label.objectId) return;
+      if (!label.objectKind || !label.objectId || label.objectKind === 'map') return;
       labelMap.set(`${label.objectKind}:${label.objectId}`, label);
     });
     return labelMap;
@@ -4762,16 +5634,64 @@
   }
 
   function mapLabelPosition(map, endpoints, width, height) {
-    if (Number.isFinite(map.labelX) && Number.isFinite(map.labelY)) {
+    const path = mapCurveGeometry(map, endpoints.from, endpoints.to, width, height);
+    if (!path) {
       return {
-        x: clamp(map.labelX * width, 24, width - 24),
-        y: clamp(map.labelY * height, 24, height - 24)
+        x: (endpoints.from.x + endpoints.to.x) / 2,
+        y: (endpoints.from.y + endpoints.to.y) / 2
       };
     }
+    const labelPoint = pointOnBezierPathByArcRatio(path, Number.isFinite(map.labelT) ? map.labelT : DEFAULT_MAP_LABEL_T);
+    const point = labelPoint.point;
+    const tangent = labelPoint.tangent;
+    const length = Math.hypot(tangent.x, tangent.y) || 1;
+    const nx = -tangent.y / length;
+    const ny = tangent.x / length;
+    const offset = normalizedMapLabelOffset(map.labelOffset);
     return {
-      x: (endpoints.from.x + endpoints.to.x) / 2,
-      y: (endpoints.from.y + endpoints.to.y) / 2
+      x: clamp(point.x + nx * offset, 24, width - 24),
+      y: clamp(point.y + ny * offset, 24, height - 24)
     };
+  }
+
+  function pointOnBezierPathByArcRatio(path, ratio = 0.5) {
+    const samples = [];
+    let total = 0;
+    path.segments.forEach((segment) => {
+      for (let i = samples.length ? 1 : 0; i <= MAP_CURVE_SAMPLE_COUNT; i += 1) {
+        const t = i / MAP_CURVE_SAMPLE_COUNT;
+        const point = cubicBezierPoint(segment.start, segment.c1, segment.c2, segment.end, t);
+        const previous = samples[samples.length - 1]?.point;
+        if (previous) total += Math.hypot(point.x - previous.x, point.y - previous.y);
+        samples.push({ segment, t, point, length: total });
+      }
+    });
+    if (!samples.length) return { point: { x: 0, y: 0 }, tangent: { x: 1, y: 0 } };
+    const target = total * clamp(ratio, 0, 1);
+    const sample = samples.find((entry) => entry.length >= target) || samples[Math.floor(samples.length / 2)];
+    return {
+      point: sample.point,
+      tangent: cubicBezierTangent(sample.segment.start, sample.segment.c1, sample.segment.c2, sample.segment.end, sample.t)
+    };
+  }
+
+  function closestBezierPathRatio(path, x, y) {
+    const samples = [];
+    let total = 0;
+    let best = null;
+    path.segments.forEach((segment) => {
+      for (let i = samples.length ? 1 : 0; i <= MAP_CURVE_SAMPLE_COUNT; i += 1) {
+        const t = i / MAP_CURVE_SAMPLE_COUNT;
+        const point = cubicBezierPoint(segment.start, segment.c1, segment.c2, segment.end, t);
+        const previous = samples[samples.length - 1]?.point;
+        if (previous) total += Math.hypot(point.x - previous.x, point.y - previous.y);
+        const entry = { point, length: total };
+        samples.push(entry);
+        const distance = Math.hypot(point.x - x, point.y - y);
+        if (!best || distance < best.distance) best = { distance, length: total };
+      }
+    });
+    return total ? clamp((best?.length || 0) / total, 0.04, 0.96) : DEFAULT_MAP_LABEL_T;
   }
 
   function drawWideOverview(ctx, width, height, result) {
@@ -4892,7 +5812,7 @@
       setCanvasLabelPosition(sheaf, rect.x + rect.w / 2, rect.y + rect.h / 2, width, height);
     });
     state.maps.forEach((map) => {
-      if (Number.isFinite(map.labelX) && Number.isFinite(map.labelY)) return;
+      if (map.curve) return;
       positionMapLabel(map, width, height);
     });
   }
@@ -4903,14 +5823,12 @@
   }
 
   function positionMapLabel(map, width = state.canvasWidth || 760, height = state.canvasHeight || 280) {
-    const labels = canvasOverviewLabels(width, height).filter((label) => label.objectKind !== 'map');
+    const labels = canvasObjectLabels(width, height);
     const endpoints = mapEndpointLabels(map, labels);
     if (!endpoints) {
-      map.labelX = 0.5;
-      map.labelY = 0.5;
       return;
     }
-    setCanvasLabelPosition(map, (endpoints.from.x + endpoints.to.x) / 2, (endpoints.from.y + endpoints.to.y) / 2, width, height);
+    ensureMapCurve(map, endpoints.from, endpoints.to, width, height);
   }
 
   function startCanvasLabelDrag(target, event) {
@@ -4951,13 +5869,35 @@
     const y = event.clientY - drag.canvasRect.top - drag.offsetY + drag.target.offsetHeight / 2;
     const clampedX = clamp(x, 24, width - 24);
     const clampedY = clamp(y, 24, height - 24);
-    setCanvasLabelPosition(drag.item, clampedX, clampedY, width, height);
+    if (drag.kind === 'map') {
+      updateMapLabelDragPosition(drag.item, clampedX, clampedY, width, height);
+    } else {
+      setCanvasLabelPosition(drag.item, clampedX, clampedY, width, height);
+    }
     drag.target.style.left = `${clampedX}px`;
     drag.target.style.top = `${clampedY}px`;
     if (Math.abs(event.clientX - drag.startX) > 2 || Math.abs(event.clientY - drag.startY) > 2) {
       drag.moved = true;
       redrawCanvasSurface();
     }
+  }
+
+  function updateMapLabelDragPosition(map, x, y, width, height) {
+    const labels = canvasObjectLabels(width, height);
+    const endpoints = mapEndpointLabels(map, labels);
+    if (!endpoints) return;
+    const path = mapCurveGeometry(map, endpoints.from, endpoints.to, width, height);
+    if (!path) return;
+    const ratio = closestBezierPathRatio(path, x, y);
+    const point = pointOnBezierPathByArcRatio(path, ratio);
+    const tangentLength = Math.hypot(point.tangent.x, point.tangent.y) || 1;
+    const nx = -point.tangent.y / tangentLength;
+    const ny = point.tangent.x / tangentLength;
+    const offset = (x - point.point.x) * nx + (y - point.point.y) * ny;
+    map.labelT = ratio;
+    map.labelOffset = clamp(offset, MIN_MAP_LABEL_OFFSET, MAX_MAP_LABEL_OFFSET);
+    map.modified = true;
+    syncMapCurveControls(map);
   }
 
   function finishCanvasLabelDrag(event) {
@@ -4980,6 +5920,181 @@
       state.suppressLabelClickUntil = Date.now() + 180;
       recompute();
     }
+  }
+
+  function startMapControlDrag(target, event) {
+    const map = state.maps.find((item) => item.id === target.dataset.mapId);
+    const control = parseMapControlRef(target.dataset.mapControl);
+    if (!map || !control || !refs.canvas) return;
+    event.preventDefault();
+    activateObject('map', map.id, { mode: 'modify', loadDraft: true });
+    const canvasRect = refs.canvas.getBoundingClientRect();
+    state.mapControlDrag = {
+      map,
+      control,
+      target,
+      canvasRect,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false
+    };
+    target.classList.add('is-dragging');
+    try { target.setPointerCapture?.(event.pointerId); } catch (_) {}
+    document.addEventListener('pointermove', updateMapControlDrag);
+    document.addEventListener('pointerup', finishMapControlDrag);
+    document.addEventListener('pointercancel', finishMapControlDrag);
+  }
+
+  function parseMapControlRef(value) {
+    const parts = String(value || '').split(':');
+    if (parts[0] === 'anchor' && parts.length === 2) {
+      const index = Number(parts[1]);
+      return Number.isInteger(index) ? { type: 'anchor', index } : null;
+    }
+    if (parts[0] === 'handle' && (parts.length === 2 || parts.length === 3)) {
+      const index = Number(parts[1]);
+      const direction = parts[2] === 'in' ? 'in' : 'out';
+      return Number.isInteger(index) ? { type: 'handle', index, direction } : null;
+    }
+    return null;
+  }
+
+  function handleMapControlKey(event, target) {
+    const map = state.maps.find((item) => item.id === target.dataset.mapId);
+    const control = parseMapControlRef(target.dataset.mapControl);
+    if (!map || !control) return;
+    const step = event.shiftKey ? 18 : 6;
+    let dx = 0;
+    let dy = 0;
+    if (event.key === 'ArrowLeft') dx = -step;
+    else if (event.key === 'ArrowRight') dx = step;
+    else if (event.key === 'ArrowUp') dy = -step;
+    else if (event.key === 'ArrowDown') dy = step;
+    else return;
+    event.preventDefault();
+    activateObject('map', map.id, { mode: 'modify', loadDraft: true });
+    const width = state.canvasWidth || refs.canvas?.clientWidth || 760;
+    const height = state.canvasHeight || refs.canvas?.clientHeight || 280;
+    const endpoints = mapEndpointLabels(map, canvasObjectLabels(width, height));
+    if (!endpoints) return;
+    moveMapControl(map, control, dx, dy, width, height);
+    recompute();
+  }
+
+  function updateMapControlDrag(event) {
+    const drag = state.mapControlDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const width = drag.canvasRect.width || 1;
+    const height = drag.canvasRect.height || 1;
+    const x = clamp(event.clientX - drag.canvasRect.left, 16, width - 16);
+    const y = clamp(event.clientY - drag.canvasRect.top, 16, height - 16);
+    setMapControlPoint(drag.map, drag.control, x, y, width, height);
+    if (Math.abs(event.clientX - drag.startX) > 2 || Math.abs(event.clientY - drag.startY) > 2) drag.moved = true;
+    redrawCanvasSurface();
+    updateMapOverlayPositions(drag.map);
+  }
+
+  function setMapControlPoint(map, control, x, y, width, height) {
+    map.curve = normalizeMapCurve(map.curve) || standardMapCurve({ x: width * 0.28, y: height * 0.44 }, { x: width * 0.72, y: height * 0.44 }, width, height);
+    const point = normalizedCurvePoint({ x: x / width, y: y / height }, 0.5, 0.5);
+    if (control.type === 'anchor') {
+      if (control.index <= 0 || control.index >= map.curve.anchors.length - 1) return;
+      const oldAnchor = map.curve.anchors[control.index];
+      const dx = point.x - oldAnchor.x;
+      const dy = point.y - oldAnchor.y;
+      map.curve.anchors[control.index] = point;
+      if (map.curve.handles?.[control.index]) {
+        const handle = map.curve.handles[control.index];
+        map.curve.handles[control.index] = normalizedCurvePoint({ x: handle.x + dx, y: handle.y + dy }, point.x, point.y);
+      }
+      map.modified = true;
+      return;
+    }
+    if (!map.curve.handles?.[control.index]) return;
+    if (control.direction === 'in') {
+      const anchor = currentCurveAnchorPoint(map, control.index, width, height);
+      if (!anchor) return;
+      map.curve.handles[control.index] = normalizedCurvePoint({
+        x: (anchor.x * 2 - x) / width,
+        y: (anchor.y * 2 - y) / height
+      }, (anchor.x * 2 - x) / width, (anchor.y * 2 - y) / height);
+    } else {
+      map.curve.handles[control.index] = point;
+    }
+    map.modified = true;
+  }
+
+  function currentCurveAnchorPoint(map, index, width, height) {
+    const endpoints = mapEndpointLabels(map, canvasObjectLabels(width, height));
+    if (!endpoints) return null;
+    if (index === 0) return { x: endpoints.from.x, y: endpoints.from.y };
+    if (index === map.curve.anchors.length - 1) return { x: endpoints.to.x, y: endpoints.to.y };
+    return anchorToPoint(map.curve.anchors[index], width, height);
+  }
+
+  function moveMapControl(map, control, dx, dy, width, height) {
+    const endpoints = mapEndpointLabels(map, canvasObjectLabels(width, height));
+    if (!endpoints) return;
+    const path = mapRawCurveGeometry(map, endpoints.from, endpoints.to, width, height);
+    if (!path) return;
+    let point = null;
+    if (control.type === 'anchor') point = path.anchors[control.index];
+    else point = mapControlVisiblePoint(path, control);
+    if (!point) return;
+    setMapControlPoint(map, control, point.x + dx, point.y + dy, width, height);
+  }
+
+  function mapControlVisiblePoint(path, control) {
+    if (!path || control.type !== 'handle') return null;
+    return control.direction === 'in' ? path.inHandles[control.index] : path.outHandles[control.index];
+  }
+
+  function finishMapControlDrag(event) {
+    const drag = state.mapControlDrag;
+    document.removeEventListener('pointermove', updateMapControlDrag);
+    document.removeEventListener('pointerup', finishMapControlDrag);
+    document.removeEventListener('pointercancel', finishMapControlDrag);
+    if (!drag) return;
+    drag.target.classList.remove('is-dragging');
+    try { drag.target.releasePointerCapture?.(drag.pointerId); } catch (_) {}
+    const moved = drag.moved;
+    state.mapControlDrag = null;
+    if (moved) {
+      state.suppressLabelClickUntil = Date.now() + 180;
+      recompute();
+    }
+  }
+
+  function updateMapOverlayPositions(map) {
+    if (!map || !refs.canvasLabels || !state.canvasWidth || !state.canvasHeight) return;
+    const labels = canvasObjectLabels(state.canvasWidth, state.canvasHeight);
+    const endpoints = mapEndpointLabels(map, labels);
+    if (!endpoints) return;
+    const pos = mapLabelPosition(map, endpoints, state.canvasWidth, state.canvasHeight);
+    const mapLabel = refs.canvasLabels.querySelector(`[data-object-kind="map"][data-object-id="${cssEscape(map.id)}"]`);
+    if (mapLabel) {
+      mapLabel.style.left = `${pos.x}px`;
+      mapLabel.style.top = `${pos.y}px`;
+    }
+    const curve = mapRawCurveGeometry(map, endpoints.from, endpoints.to, state.canvasWidth, state.canvasHeight);
+    if (!curve) return;
+    curve.anchors.forEach((_, index) => {
+      updateMapControlElement(map.id, `handle:${index}:in`, curve.inHandles[index]);
+      updateMapControlElement(map.id, `handle:${index}:out`, curve.outHandles[index]);
+    });
+    curve.anchors.forEach((anchor, index) => {
+      updateMapControlElement(map.id, `anchor:${index}`, anchor);
+    });
+    redrawCanvasSurface();
+  }
+
+  function updateMapControlElement(mapId, control, point) {
+    const element = refs.canvasLabels.querySelector(`[data-map-id="${cssEscape(mapId)}"][data-map-control="${cssEscape(control)}"]`);
+    if (!element || !point) return;
+    element.style.left = `${point.x}px`;
+    element.style.top = `${point.y}px`;
   }
 
   function objectByKind(kind, id) {
@@ -5030,6 +6145,57 @@
     ctx.lineTo(x2 - 10 * Math.cos(angle + 0.45), y2 - 10 * Math.sin(angle + 0.45));
     ctx.closePath();
     ctx.fill();
+  }
+
+  function drawBezierPathArrow(ctx, path, color) {
+    const segments = path?.segments || [];
+    if (!segments.length) return;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(segments[0].start.x, segments[0].start.y);
+    segments.forEach((segment) => {
+      ctx.bezierCurveTo(segment.c1.x, segment.c1.y, segment.c2.x, segment.c2.y, segment.end.x, segment.end.y);
+    });
+    ctx.stroke();
+    const last = segments[segments.length - 1];
+    const tangent = cubicBezierTangent(last.start, last.c1, last.c2, last.end, 1);
+    const fallback = { x: last.end.x - last.c2.x, y: last.end.y - last.c2.y };
+    const angle = Math.atan2(
+      Math.abs(tangent.y) > 0.001 || Math.abs(tangent.x) > 0.001 ? tangent.y : fallback.y,
+      Math.abs(tangent.y) > 0.001 || Math.abs(tangent.x) > 0.001 ? tangent.x : fallback.x
+    );
+    ctx.beginPath();
+    ctx.moveTo(last.end.x, last.end.y);
+    ctx.lineTo(last.end.x - 10 * Math.cos(angle - 0.45), last.end.y - 10 * Math.sin(angle - 0.45));
+    ctx.lineTo(last.end.x - 10 * Math.cos(angle + 0.45), last.end.y - 10 * Math.sin(angle + 0.45));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawMapPenGuides(ctx, map, from, to, width, height) {
+    const path = mapRawCurveGeometry(map, from, to, width, height);
+    if (!path) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(139,58,42,0.34)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    path.anchors.forEach((anchor, index) => {
+      const lastIndex = path.anchors.length - 1;
+      const handles = [];
+      if (index === 0) handles.push(path.outHandles[index]);
+      else if (index === lastIndex) handles.push(path.inHandles[index]);
+      else handles.push(path.inHandles[index], path.outHandles[index]);
+      handles.forEach((handle) => {
+        if (!handle) return;
+        ctx.beginPath();
+        ctx.moveTo(anchor.x, anchor.y);
+        ctx.lineTo(handle.x, handle.y);
+        ctx.stroke();
+      });
+    });
+    ctx.restore();
   }
 
   function refreshExport(scope = state.exportScope || 'main') {
@@ -5589,7 +6755,7 @@
     const raw = String(value || '').trim().replace(/\s+/g, ' ');
     const safeFallback = String(fallback || 'X').trim() || 'X';
     if (!raw) return safeFallback;
-    if (raw.length > 48) return safeFallback;
+    if (raw.length > 120) return safeFallback;
     if (!/^[A-Za-z0-9_{}\\^()\[\]+,\-'\s*]+$/.test(raw)) return safeFallback;
     return raw;
   }
@@ -5648,6 +6814,11 @@
       '"': '&quot;',
       "'": '&#39;'
     })[char]);
+  }
+
+  function cssEscape(value) {
+    if (window.CSS?.escape) return window.CSS.escape(String(value ?? ''));
+    return String(value ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[^a-zA-Z0-9_-]/g, '\\$&');
   }
 
   function formatFractionLatex(value) {

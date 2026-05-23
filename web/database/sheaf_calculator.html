@@ -109,6 +109,7 @@
 
     .sheaf-field-row[hidden],
     .sheaf-inline-row[hidden],
+    .map-curve-row[hidden],
     .sheaf-chart-actions[hidden],
     .hodge-card-actions[hidden],
     .sheaf-class-scroll[hidden],
@@ -176,17 +177,103 @@
       overflow: hidden;
     }
 
-    .canvas-clear-button {
+  .canvas-clear-button {
       position: absolute;
       left: 10px;
       bottom: 10px;
       z-index: 2;
       padding: 4px 10px;
       font-size: 0.74rem;
-      background: rgba(255,253,248,0.88);
-    }
+    background: rgba(255,253,248,0.88);
+  }
 
-    #sheaf-canvas {
+  .map-curve-control {
+    display: inline-grid;
+    grid-template-columns: auto minmax(64px, 1fr) 48px;
+    gap: 7px;
+    align-items: center;
+    color: var(--muted);
+  }
+
+  .map-curve-control {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .map-curve-control input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+
+  .map-curve-control output {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    text-align: right;
+  }
+
+  .map-curve-row {
+    align-items: center;
+  }
+
+  .map-curve-tools {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .map-curve-reset {
+    padding: 4px 9px;
+    font-size: 0.72rem;
+  }
+
+  .sheaf-map-control {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    transform: translate(-50%, -50%);
+    border: 2px solid #8b3a2a;
+    border-radius: 50%;
+    background: #fffdf8;
+    box-shadow: 0 1px 5px rgba(40, 34, 20, 0.18);
+    pointer-events: auto;
+    cursor: grab;
+    touch-action: none;
+    z-index: 2;
+  }
+
+  .sheaf-map-control::before {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
+
+  .sheaf-map-control.is-anchor {
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    background: #fff7f3;
+  }
+
+  .sheaf-map-control.is-endpoint {
+    opacity: 0.72;
+    cursor: default;
+  }
+
+  .sheaf-map-control:disabled {
+    pointer-events: none;
+  }
+
+  .sheaf-map-control:hover,
+  .sheaf-map-control:focus-visible,
+  .sheaf-map-control.is-dragging {
+    outline: none;
+    background: #fff7f3;
+    box-shadow: 0 0 0 3px rgba(139,58,42,0.18);
+  }
+
+  #sheaf-canvas {
       width: 100% !important;
       height: auto !important;
       min-height: 248px;
@@ -236,11 +323,12 @@
       color: var(--accent);
     }
 
-    .sheaf-canvas-label.is-map {
-      color: #8b3a2a;
-      font-size: 0.84rem;
-      background: rgba(255,247,243,0.9);
-    }
+  .sheaf-canvas-label.is-map {
+    color: #8b3a2a;
+    font-size: 0.84rem;
+    background: rgba(255,247,243,0.9);
+    cursor: pointer;
+  }
 
     .sheaf-canvas-label.is-pick-candidate,
     .sheaf-canvas-label.is-map-codomain-candidate {
@@ -974,6 +1062,25 @@
           <div class="sheaf-field-row">
             <label class="input-label" for="map-name">name</label>
             <input id="map-name" class="sheaf-input" type="text" value="f" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row map-curve-row" id="map-curve-row" hidden>
+            <label class="input-label" for="map-point-count">curve</label>
+            <div class="map-curve-tools">
+              <label class="map-curve-control" for="map-point-count">
+                <span>points</span>
+                <input id="map-point-count" type="range" min="2" max="5" step="1" value="2">
+                <output id="map-point-count-value" for="map-point-count">2</output>
+              </label>
+              <button class="btn btn-ghost map-curve-reset" id="standard-map-curve" type="button">standard</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row map-curve-row" id="map-label-offset-row" hidden>
+            <label class="input-label" for="map-label-offset">label</label>
+            <label class="map-curve-control" for="map-label-offset">
+              <span>offset</span>
+              <input id="map-label-offset" type="range" min="-25" max="25" step="1" value="-18">
+              <output id="map-label-offset-value" for="map-label-offset">-18px</output>
+            </label>
           </div>
           <div class="map-pick-status" id="map-pick-status">pick a domain</div>
           <div class="map-pick-actions">
