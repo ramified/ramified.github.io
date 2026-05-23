@@ -8,8 +8,13 @@
   const MAX_CI_SLIDER_DEGREE = 12;
   const MAX_ROOT_EXPANSION_MONOMIALS = 1500;
   const MAX_EXPLICIT_ROOT_FACTORS = 64;
+  const MAX_HOMOLOGY_RULE_PASSES = 10;
+  const MAX_HOMOLOGY_RULE_MS = 300;
   const VARIETY_LETTER_NAMES = ['X', 'Y', 'Z', 'W', 'V', 'U', 'T', 'S', 'R', 'Q'];
   const SHEAF_LETTER_NAMES = ['\\mathcal{E}', '\\mathcal{F}', '\\mathcal{G}', '\\mathcal{H}', '\\mathcal{I}', '\\mathcal{J}', '\\mathcal{K}', '\\mathcal{L}', '\\mathcal{M}', '\\mathcal{N}'];
+  const HOMOLOGY_HYPERPLANE_CLASS = 'hyperplane';
+  const HOMOLOGY_POINT_CLASS = 'point';
+  const HOMOLOGY_TOP_RULE_ID = 'top-hyperplane-point';
   const VARS = new Map();
   const refs = {};
   const hodgeACoeffCache = new Map();
@@ -17,19 +22,26 @@
     lastResult: null,
     varieties: [],
     sheaves: [],
+    maps: [],
     activeVarietyId: null,
     activeSheafId: null,
+    activeMapId: null,
     inputMode: 'create',
     labelDrag: null,
+    mapDraft: null,
+    mapDrag: null,
+    basePickActive: false,
     canvasWidth: 0,
     canvasHeight: 0,
     draftVarietyNameDirty: false,
     draftSheafNameDirty: false,
+    draftMapNameDirty: false,
     nextObjectId: 1,
     hodgeExpanded: false,
     hodgeWide: false,
     hodgeCellSize: 20,
     exportScope: 'main',
+    constructionMessage: '',
     suppressLabelClickUntil: 0,
     suppressCardToggleUntil: 0,
     mathJaxQueue: Promise.resolve()
@@ -45,6 +57,7 @@
     syncCompleteIntersectionControls();
     bindControls();
     bindCards();
+    renderConstructionPanel();
     syncHodgeWidePlacement();
     recompute();
     window.addEventListener('resize', debounce(() => {
@@ -74,6 +87,17 @@
     refs.sheafEditor = $('sheaf-editor');
     refs.sheafBaseRow = $('sheaf-base-row');
     refs.sheafBaseVariety = $('sheaf-base-variety');
+    refs.pickSheafBase = $('pick-sheaf-base');
+    refs.mapEditor = $('map-editor');
+    refs.mapEditorTitle = $('map-editor-title');
+    refs.mapName = $('map-name');
+    refs.mapPickStatus = $('map-pick-status');
+    refs.resetMapPick = $('reset-map-pick');
+    refs.constructionOperation = $('construction-operation');
+    refs.constructionFields = $('construction-fields');
+    refs.constructionPreview = $('construction-preview');
+    refs.applyConstruction = $('apply-construction');
+    refs.constructionMessage = $('construction-message');
     refs.inputMode = $('input-mode');
     refs.addObjectKind = $('add-object-kind');
     refs.inputOptions = $('input-options');
@@ -104,6 +128,18 @@
     refs.classChart = $('class-chart');
     refs.classMessage = $('class-message');
     refs.exportClasses = $('export-classes');
+    refs.homologyCard = $('homology-card');
+    refs.homologyActive = $('homology-active');
+    refs.homologyHyperplaneRow = $('homology-hyperplane-row');
+    refs.homologyHyperplaneSymbol = $('homology-hyperplane-symbol');
+    refs.homologyPointRow = $('homology-point-row');
+    refs.homologyPointSymbol = $('homology-point-symbol');
+    refs.homologySymbols = $('homology-symbols');
+    refs.homologyRules = $('homology-rules');
+    refs.homologyAddRule = $('homology-add-rule');
+    refs.homologyRuleEquation = $('homology-rule-equation');
+    refs.homologyAddRuleButton = $('homology-add-rule-button');
+    refs.homologyMessage = $('homology-message');
     refs.hodgeCard = $('hodge-card');
     refs.hodgeSideAnchor = $('hodge-side-anchor');
     refs.hodgeWideHost = $('hodge-wide-host');
@@ -129,8 +165,10 @@
   function initializeInputObjects() {
     state.varieties = [];
     state.sheaves = [];
+    state.maps = [];
     state.activeVarietyId = null;
     state.activeSheafId = null;
+    state.activeMapId = null;
   }
 
   function createDefaultVariety() {
@@ -155,6 +193,27 @@
       baseVarietyId: null,
       basis: 'chern',
       nameDirty: false
+    };
+  }
+
+  function createDefaultMap(domain, codomain, options = {}) {
+    const from = normalizeMapEndpoint(domain, 'domain');
+    const to = normalizeMapEndpoint(codomain, 'codomain');
+    return {
+      id: nextInputId('M'),
+      name: sanitizeMathLabel(options.name, readMapDraftName()),
+      domainKind: from.kind,
+      domainId: from.id,
+      codomainKind: to.kind,
+      codomainId: to.id,
+      construction: options.construction || null
+    };
+  }
+
+  function normalizeMapEndpoint(endpoint, role) {
+    return {
+      kind: endpoint?.kind || endpoint?.[`${role}Kind`] || null,
+      id: endpoint?.id || endpoint?.[`${role}Id`] || null
     };
   }
 
@@ -214,6 +273,11 @@
       basis: normalizeBasisValue(refs.basis.value),
       nameDirty: state.draftSheafNameDirty || name !== defaultName
     };
+  }
+
+  function readMapDraftName() {
+    const fallback = inputIsModifyMode() ? (activeMap()?.name || defaultMapNameLatex()) : defaultMapNameLatex();
+    return sanitizeMathLabel(refs.mapName?.value, fallback);
   }
 
   function uniqueObjectName(kind, proposedName, excludeId = null) {
@@ -363,6 +427,10 @@
     return state.sheaves.find((item) => item.id === state.activeSheafId) || null;
   }
 
+  function activeMap() {
+    return state.maps.find((item) => item.id === state.activeMapId) || null;
+  }
+
   function selectedVariety() {
     return state.varieties.find((item) => item.id === state.activeVarietyId) || null;
   }
@@ -371,13 +439,19 @@
     return state.sheaves.find((item) => item.id === state.activeSheafId) || null;
   }
 
+  function selectedMap() {
+    return state.maps.find((item) => item.id === state.activeMapId) || null;
+  }
+
   function activeObjectForModifyMode() {
+    if (state.activeMapId) return selectedMap();
     if (state.activeSheafId) return selectedSheaf();
     if (state.activeVarietyId) return selectedVariety();
     return null;
   }
 
   function modifyKind() {
+    if (state.activeMapId) return 'map';
     return state.activeSheafId ? 'sheaf' : 'variety';
   }
 
@@ -464,12 +538,14 @@
   function syncInputEditorVisibility() {
     const modifying = inputIsModifyMode();
     const hasModifyTarget = !!activeObjectForModifyMode();
-    const showingSheaf = modifying ? !!state.activeSheafId : refs.addObjectKind?.value === 'sheaf';
+    const showingMap = modifying ? !!state.activeMapId : refs.addObjectKind?.value === 'map';
+    const showingSheaf = !showingMap && (modifying ? !!state.activeSheafId : refs.addObjectKind?.value === 'sheaf');
     if (refs.addObjectKind) refs.addObjectKind.hidden = modifying;
     if (refs.inputOptions) refs.inputOptions.hidden = modifying;
     if (refs.modifyWarning) refs.modifyWarning.hidden = !modifying || hasModifyTarget;
-    refs.varietyEditor.hidden = modifying ? (showingSheaf || !hasModifyTarget) : showingSheaf;
+    refs.varietyEditor.hidden = modifying ? (showingSheaf || showingMap || !hasModifyTarget) : (showingSheaf || showingMap);
     refs.sheafEditor.hidden = modifying ? (!showingSheaf || !hasModifyTarget) : !showingSheaf;
+    if (refs.mapEditor) refs.mapEditor.hidden = modifying ? (!showingMap || !hasModifyTarget) : !showingMap;
     syncInputModeControls();
     updateInputEditorTitles();
     updateDeleteObjectButton();
@@ -484,6 +560,10 @@
       state.draftSheafNameDirty = false;
       syncSheafBaseOptions(true);
       refs.sheafName.value = defaultCreateSheafNameLatex();
+    } else if (kind === 'map') {
+      clearMapDraft();
+      state.draftMapNameDirty = false;
+      syncDefaultMapName(true);
     } else {
       refs.varietyType.value = 'abstract';
       refs.dim.value = '3';
@@ -505,12 +585,17 @@
     if (kind === 'variety') {
       state.activeVarietyId = id;
       state.activeSheafId = null;
+      state.activeMapId = null;
     } else if (kind === 'sheaf') {
       state.activeSheafId = id;
+      state.activeMapId = null;
       const sheaf = activeSheaf();
       const baseVariety = baseVarietyForSheaf(sheaf);
       if (baseVariety) state.activeVarietyId = baseVariety.id;
       if (sheaf) refs.basis.value = normalizeBasisValue(sheaf.basis);
+    } else if (kind === 'map') {
+      state.activeMapId = id;
+      state.activeSheafId = null;
     }
     if (refs.addObjectKind && inputIsCreateMode() && (kind === 'variety' || kind === 'sheaf')) {
       refs.addObjectKind.value = kind;
@@ -534,6 +619,11 @@
     if (state.inputMode === 'modify' && options.clearSelection) {
       state.activeVarietyId = null;
       state.activeSheafId = null;
+      state.activeMapId = null;
+    }
+    if (state.inputMode === 'modify') {
+      clearMapDraft();
+      setBasePickActive(false);
     }
     if (state.inputMode === 'create' && options.resetDraft) {
       resetDraftForKind(currentInputKind());
@@ -547,7 +637,7 @@
   function syncInputModeControls() {
     if (refs.inputMode) refs.inputMode.value = state.inputMode;
     if (refs.addObject) {
-      refs.addObject.textContent = inputIsModifyMode() ? 'update' : 'add';
+      refs.addObject.textContent = currentInputKind() === 'map' && inputIsCreateMode() ? 'pick' : (inputIsModifyMode() ? 'update' : 'add');
       refs.addObject.hidden = inputIsModifyMode() && !activeObjectForModifyMode();
     }
     updateInputEditorTitles();
@@ -569,12 +659,20 @@
         refs.sheafEditorTitle.textContent = 'new sheaf';
       }
     }
+    if (refs.mapEditorTitle) {
+      if (inputIsModifyMode() && kind === 'map') {
+        setInlineMath(refs.mapEditorTitle, `\\text{the map } ${readMapDraftName()}`);
+      } else {
+        refs.mapEditorTitle.textContent = 'new map';
+      }
+    }
   }
 
   function loadActiveObjectIntoDraft(kind = currentInputKind()) {
     const item = activeObjectForKind(kind);
     if (!item) return;
-    if (kind === 'sheaf') loadSheafIntoDraft(item);
+    if (kind === 'map') loadMapIntoDraft(item);
+    else if (kind === 'sheaf') loadSheafIntoDraft(item);
     else loadVarietyIntoDraft(item);
     normalizeControlVisibility();
   }
@@ -604,17 +702,36 @@
     updateInputEditorTitles();
   }
 
+  function loadMapIntoDraft(map) {
+    state.mapDraft = map ? { domainKind: map.domainKind, domainId: map.domainId } : null;
+    if (refs.mapName) refs.mapName.value = map?.name || defaultMapNameLatex();
+    state.draftMapNameDirty = false;
+    updateMapPickStatus();
+    updateInputEditorTitles();
+  }
+
   function activeObjectForKind(kind) {
-    if (inputIsModifyMode()) return kind === 'sheaf' ? selectedSheaf() : (state.activeSheafId ? null : selectedVariety());
+    if (inputIsModifyMode()) {
+      if (kind === 'map') return selectedMap();
+      if (kind === 'sheaf') return selectedSheaf();
+      return state.activeSheafId || state.activeMapId ? null : selectedVariety();
+    }
+    if (kind === 'map') return activeMap();
     return kind === 'sheaf' ? activeSheaf() : activeVariety();
   }
 
   function currentInputKind() {
     if (inputIsModifyMode()) return modifyKind();
+    if (refs.addObjectKind?.value === 'map') return 'map';
     return refs.addObjectKind?.value === 'sheaf' ? 'sheaf' : 'variety';
   }
 
   function deleteActiveObject(kind = currentInputKind()) {
+    if (kind === 'map') {
+      const active = activeObjectForKind(kind);
+      if (active) removeCanvasObject('map', active.id);
+      return;
+    }
     const deletingSheaf = kind === 'sheaf';
     const items = deletingSheaf ? state.sheaves : state.varieties;
     const active = activeObjectForKind(kind);
@@ -625,19 +742,29 @@
     const next = items[Math.min(index, items.length - 1)] || null;
     if (deletingSheaf) {
       state.activeSheafId = next?.id || null;
+      state.maps = state.maps.filter((map) => !(map.domainKind === 'sheaf' && map.domainId === removed?.id) && !(map.codomainKind === 'sheaf' && map.codomainId === removed?.id));
       if (next) {
         state.activeVarietyId = next.baseVarietyId || defaultBaseVarietyId();
         refs.basis.value = normalizeBasisValue(next.basis);
       }
     } else {
+      const removedSheafIds = new Set(state.sheaves.filter((sheaf) => sheaf.baseVarietyId === removed?.id).map((sheaf) => sheaf.id));
       state.activeVarietyId = next?.id || null;
       state.activeSheafId = null;
       state.sheaves = state.sheaves.filter((sheaf) => sheaf.baseVarietyId !== removed?.id);
+      state.maps = state.maps.filter((map) => (
+        !(map.domainKind === 'variety' && map.domainId === removed?.id)
+        && !(map.codomainKind === 'variety' && map.codomainId === removed?.id)
+        && !(map.domainKind === 'sheaf' && removedSheafIds.has(map.domainId))
+        && !(map.codomainKind === 'sheaf' && removedSheafIds.has(map.codomainId))
+      ));
       if (!state.varieties.some((variety) => variety.id === state.activeVarietyId)) {
         state.activeVarietyId = state.varieties[0]?.id || null;
       }
       syncDefaultSheafName();
     }
+    if (state.activeMapId && !state.maps.some((map) => map.id === state.activeMapId)) state.activeMapId = null;
+    clearMapDraft();
     syncSheafBaseOptions(true);
     if (inputIsModifyMode()) {
       const nextActive = activeObjectForKind(kind);
@@ -647,12 +774,54 @@
     recompute();
   }
 
+  function removeCanvasObject(kind, id) {
+    if (kind === 'map') {
+      state.maps = state.maps.filter((map) => map.id !== id);
+      if (state.activeMapId === id) state.activeMapId = null;
+      if (state.mapDraft?.domainKind === 'map' && state.mapDraft.domainId === id) clearMapDraft();
+      recompute();
+      return;
+    }
+    if (kind === 'sheaf') {
+      state.sheaves = state.sheaves.filter((sheaf) => sheaf.id !== id);
+      state.maps = state.maps.filter((map) => !(map.domainKind === 'sheaf' && map.domainId === id) && !(map.codomainKind === 'sheaf' && map.codomainId === id));
+      if (state.activeSheafId === id) state.activeSheafId = null;
+      if (state.activeMapId && !state.maps.some((map) => map.id === state.activeMapId)) state.activeMapId = null;
+      clearMapDraft();
+      syncSheafBaseOptions(true);
+      recompute();
+      return;
+    }
+    if (kind === 'variety') {
+      const removedSheafIds = new Set(state.sheaves.filter((sheaf) => sheaf.baseVarietyId === id).map((sheaf) => sheaf.id));
+      state.varieties = state.varieties.filter((variety) => variety.id !== id);
+      state.sheaves = state.sheaves.filter((sheaf) => sheaf.baseVarietyId !== id);
+      state.maps = state.maps.filter((map) => (
+        !(map.domainKind === 'variety' && map.domainId === id)
+        && !(map.codomainKind === 'variety' && map.codomainId === id)
+        && !(map.domainKind === 'sheaf' && removedSheafIds.has(map.domainId))
+        && !(map.codomainKind === 'sheaf' && removedSheafIds.has(map.codomainId))
+      ));
+      if (state.activeVarietyId === id) state.activeVarietyId = state.varieties[0]?.id || null;
+      if (state.activeSheafId && !state.sheaves.some((sheaf) => sheaf.id === state.activeSheafId)) state.activeSheafId = null;
+      if (state.activeMapId && !state.maps.some((map) => map.id === state.activeMapId)) state.activeMapId = null;
+      clearMapDraft();
+      syncSheafBaseOptions(true);
+      syncDefaultSheafName();
+      recompute();
+    }
+  }
+
   function clearCanvasObjects() {
     state.varieties = [];
     state.sheaves = [];
+    state.maps = [];
     state.activeVarietyId = null;
     state.activeSheafId = null;
+    state.activeMapId = null;
     state.labelDrag = null;
+    clearMapDraft();
+    setBasePickActive(false);
     if (refs.addObjectKind) refs.addObjectKind.value = 'variety';
     setInputMode('create', { resetDraft: true });
     syncSheafBaseOptions(true);
@@ -671,6 +840,7 @@
   }
 
   function createObjectFromDraft(kind = currentInputKind()) {
+    if (kind === 'map') return null;
     if (kind === 'sheaf') {
       const sheaf = createSheafFromDraft();
       if (!sheaf) return null;
@@ -702,6 +872,11 @@
   function updateObjectFromDraft(kind = currentInputKind()) {
     const active = activeObjectForKind(kind);
     if (!active) return null;
+    if (kind === 'map') {
+      active.name = readMapDraftName();
+      updateInputEditorTitles();
+      return active;
+    }
     if (kind === 'sheaf') {
       const oldBaseId = active.baseVarietyId;
       const baseVariety = draftBaseVariety();
@@ -757,6 +932,9 @@
       });
     }
     refs.addObjectKind.addEventListener('change', () => {
+      state.activeMapId = null;
+      clearMapDraft();
+      setBasePickActive(false);
       if (refs.addObjectKind.value === 'variety') state.activeSheafId = null;
       if (inputIsModifyMode()) {
         if (!activeObjectForKind(currentInputKind())) setInputMode('create', { resetDraft: true });
@@ -769,6 +947,8 @@
       normalizeControlVisibility();
       typeset(refs.varietyEditor);
       typeset(refs.sheafEditor);
+      typeset(refs.mapEditor);
+      recompute();
     });
     refs.addObject.addEventListener('click', () => {
       const changed = inputIsModifyMode()
@@ -858,6 +1038,16 @@
       refs.sheafName.value = normalizeDraftNameForKind('sheaf', refs.sheafName.value);
       updateInputEditorTitles();
     });
+    if (refs.mapName) {
+      refs.mapName.addEventListener('input', () => {
+        state.draftMapNameDirty = true;
+        updateInputEditorTitles();
+      });
+      refs.mapName.addEventListener('change', () => {
+        refs.mapName.value = readMapDraftName();
+        updateInputEditorTitles();
+      });
+    }
     if (refs.sheafBaseVariety) {
       refs.sheafBaseVariety.addEventListener('change', () => {
         if (refs.sheafBaseVariety.value) {
@@ -865,6 +1055,13 @@
         }
         syncDefaultSheafName();
         normalizeControlVisibility();
+        recompute();
+      });
+    }
+    if (refs.pickSheafBase) {
+      refs.pickSheafBase.addEventListener('click', () => {
+        setBasePickActive(!state.basePickActive);
+        clearMapDraft();
         recompute();
       });
     }
@@ -897,6 +1094,58 @@
         syncClassDisplayControls();
         recompute();
       });
+    }
+    if (refs.homologyHyperplaneSymbol) {
+      refs.homologyHyperplaneSymbol.addEventListener('change', () => {
+        updateHomologySymbol(HOMOLOGY_HYPERPLANE_CLASS, refs.homologyHyperplaneSymbol.value);
+      });
+    }
+    if (refs.homologyPointSymbol) {
+      refs.homologyPointSymbol.addEventListener('change', () => {
+        updateHomologySymbol(HOMOLOGY_POINT_CLASS, refs.homologyPointSymbol.value);
+      });
+    }
+    if (refs.homologyRules) {
+      refs.homologyRules.addEventListener('change', (event) => {
+        const toggle = event.target.closest('[data-homology-rule-toggle]');
+        if (!toggle) return;
+        setHomologyRuleEnabled(toggle.dataset.homologyRuleToggle, toggle.checked);
+      });
+      refs.homologyRules.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-homology-rule-delete]');
+        if (!button) return;
+        deleteHomologyRule(button.dataset.homologyRuleDelete);
+      });
+    }
+    if (refs.homologyAddRuleButton) {
+      refs.homologyAddRuleButton.addEventListener('click', addHomologyRuleFromControls);
+    }
+    if (refs.resetMapPick) {
+      refs.resetMapPick.addEventListener('click', () => {
+        clearMapDraft();
+        recompute();
+      });
+    }
+    if (refs.constructionOperation) {
+      refs.constructionOperation.addEventListener('change', () => {
+        state.constructionMessage = '';
+        renderConstructionPanel();
+      });
+    }
+    if (refs.constructionFields) {
+      refs.constructionFields.addEventListener('change', () => {
+        state.constructionMessage = '';
+        renderConstructionPanel();
+      });
+      refs.constructionFields.addEventListener('input', (event) => {
+        if (event.target?.matches?.('[data-construction-field="name"]')) {
+          state.constructionMessage = '';
+          updateConstructionPreview();
+        }
+      });
+    }
+    if (refs.applyConstruction) {
+      refs.applyConstruction.addEventListener('click', applyConstruction);
     }
     refs.rank.addEventListener('change', () => {
       refs.rank.value = sanitizeRankInput(refs.rank.value);
@@ -938,6 +1187,7 @@
       if (Date.now() < state.suppressLabelClickUntil) return;
       const target = event.target.closest('[data-object-kind]');
       if (!target) return;
+      if (handleCanvasPickClick(target)) return;
       selectObject(target.dataset.objectKind, target.dataset.objectId);
     });
     refs.canvasLabels.addEventListener('keydown', (event) => {
@@ -945,6 +1195,7 @@
       if (!target) return;
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
+        if (handleCanvasPickClick(target)) return;
         selectObject(target.dataset.objectKind, target.dataset.objectId);
         return;
       }
@@ -959,6 +1210,15 @@
       if (event.button !== 0) return;
       const target = event.target.closest('[data-object-kind]');
       if (!target) return;
+      if (currentInputKind() === 'map' && inputIsCreateMode()) {
+        if (target.dataset.objectKind === 'map') {
+          startCanvasLabelDrag(target, event);
+          return;
+        }
+        if (shouldUseMapCanvasDrag(target)) startMapCanvasDrag(target, event);
+        return;
+      }
+      if (state.basePickActive) return;
       startCanvasLabelDrag(target, event);
     });
     refs.hodgeChart.addEventListener('click', toggleHodgeExpanded);
@@ -967,6 +1227,655 @@
       event.preventDefault();
       toggleHodgeExpanded();
     });
+  }
+
+  function activeHomologyGeometry() {
+    const variety = activeVariety();
+    return variety ? geometryFromVariety(variety) : null;
+  }
+
+  function updateHomologySymbol(classId, value) {
+    const variety = activeVariety();
+    if (!variety) return;
+    const geometry = geometryFromVariety(variety);
+    const def = homologyClassDefById(geometry, classId);
+    if (!def) return;
+    const homology = ensureHomologySystem(variety, geometry);
+    homology.classes[classId] = homology.classes[classId] || {};
+    homology.classes[classId].symbol = sanitizeHomologySymbol(value, def.defaultSymbol);
+    recompute();
+  }
+
+  function setHomologyRuleEnabled(ruleId, enabled) {
+    const variety = activeVariety();
+    if (!variety) return;
+    const geometry = geometryFromVariety(variety);
+    const homology = ensureHomologySystem(variety, geometry);
+    const rule = homology.rules.find((item) => item.id === ruleId);
+    if (!rule) return;
+    rule.enabled = !!enabled;
+    recompute();
+  }
+
+  function deleteHomologyRule(ruleId) {
+    const variety = activeVariety();
+    if (!variety) return;
+    const geometry = geometryFromVariety(variety);
+    const homology = ensureHomologySystem(variety, geometry);
+    homology.rules = homology.rules.filter((rule) => rule.builtin || rule.id !== ruleId);
+    recompute();
+  }
+
+  function addHomologyRuleFromControls() {
+    const variety = activeVariety();
+    if (!variety) return;
+    const geometry = activeHomologyGeometry();
+    if (!geometry) return;
+    const homology = ensureHomologySystem(variety, geometry);
+    let rule;
+    try {
+      rule = parseHomologyRuleEquation(refs.homologyRuleEquation?.value || '', geometry);
+    } catch (error) {
+      if (refs.homologyMessage) refs.homologyMessage.textContent = error.message || 'Invalid rule.';
+      return;
+    }
+    homology.rules.push(rule);
+    if (refs.homologyRuleEquation) refs.homologyRuleEquation.value = '';
+    if (refs.homologyMessage) refs.homologyMessage.textContent = '';
+    recompute();
+  }
+
+  function renderConstructionPanel() {
+    if (!refs.constructionOperation || !refs.constructionFields) return;
+    const operation = refs.constructionOperation.value || 'product-variety';
+    const values = constructionControlValues();
+    const stateForFields = constructionFieldState(operation, values);
+    refs.constructionFields.innerHTML = [
+      ...stateForFields.fields.map((field) => constructionSelectRow(field)),
+      constructionNameRow(stateForFields.defaultName, values.name || '')
+    ].join('');
+    updateConstructionPreview();
+  }
+
+  function constructionControlValues() {
+    const values = {};
+    refs.constructionFields?.querySelectorAll?.('[data-construction-field]').forEach((control) => {
+      values[control.dataset.constructionField] = control.value;
+    });
+    return values;
+  }
+
+  function constructionFieldState(operation, values = {}) {
+    const varieties = constructionVarietyOptions();
+    const sheaves = constructionSheafOptions();
+    const maps = constructionMapOptions();
+    const varietyMaps = constructionMapOptions((map) => map.domainKind === 'variety' && map.codomainKind === 'variety');
+    const fields = [];
+    const select = (name, label, options) => {
+      const value = constructionSelectedValue(options, values[name]);
+      fields.push({ name, label, options, value });
+      return value;
+    };
+
+    if (operation === 'product-variety') {
+      const left = select('varietyA', 'left', varieties);
+      const right = select('varietyB', 'right', varieties);
+      return { fields, defaultName: defaultProductVarietyName(left, right) };
+    }
+    if (operation === 'direct-sum-sheaf' || operation === 'tensor-sheaf') {
+      const left = select('sheafA', 'left', sheaves);
+      const right = select('sheafB', 'right', sheaves);
+      return {
+        fields,
+        defaultName: operation === 'direct-sum-sheaf'
+          ? defaultBinarySheafName(left, right, '\\oplus')
+          : defaultBinarySheafName(left, right, '\\otimes')
+      };
+    }
+    if (operation === 'compose-map') {
+      const first = select('mapA', 'first', maps);
+      const second = select('mapB', 'second', maps);
+      return { fields, defaultName: defaultComposedMapName(first, second) };
+    }
+    if (operation === 'pullback-sheaf' || operation === 'pushforward-sheaf') {
+      const mapId = select('map', 'map', varietyMaps);
+      const sheafId = select('sheaf', 'sheaf', sheaves);
+      return {
+        fields,
+        defaultName: operation === 'pullback-sheaf'
+          ? defaultPullbackSheafName(mapId, sheafId)
+          : defaultPushforwardSheafName(mapId, sheafId)
+      };
+    }
+    return { fields, defaultName: 'X' };
+  }
+
+  function constructionSelectRow(field) {
+    return `
+      <div class="sheaf-field-row">
+        <label class="input-label" for="construction-${field.name}">${escapeHtml(field.label)}</label>
+        <select id="construction-${field.name}" class="sheaf-select" data-construction-field="${escapeHtml(field.name)}">
+          ${field.options.length ? field.options.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === field.value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('') : '<option value="">none</option>'}
+        </select>
+      </div>
+    `;
+  }
+
+  function constructionNameRow(defaultName, value) {
+    return `
+      <div class="sheaf-field-row">
+        <label class="input-label" for="construction-name">name</label>
+        <input id="construction-name" class="sheaf-input" type="text" value="${escapeHtml(value)}" placeholder="${escapeHtml(defaultName)}" maxlength="48" spellcheck="false" autocomplete="off" data-construction-field="name">
+      </div>
+    `;
+  }
+
+  function updateConstructionPreview() {
+    if (!refs.constructionPreview) return;
+    const preview = constructionPreviewData(refs.constructionOperation?.value || 'product-variety', constructionControlValues());
+    if (refs.applyConstruction) refs.applyConstruction.disabled = !!preview.error;
+    if (preview.error) {
+      refs.constructionPreview.textContent = preview.error;
+    } else {
+      setInlineMath(refs.constructionPreview, preview.latex);
+    }
+    if (refs.constructionMessage) {
+      refs.constructionMessage.textContent = state.constructionMessage || '';
+      refs.constructionMessage.className = state.constructionMessage?.startsWith('Error:') ? 'construction-message err' : 'construction-message';
+    }
+  }
+
+  function constructionPreviewData(operation, values = {}) {
+    try {
+      const data = validateConstruction(operation, values);
+      return {
+        error: '',
+        defaultName: data.defaultName,
+        latex: constructionPreviewLatex(data)
+      };
+    } catch (error) {
+      return {
+        error: error.message || 'Construction is not available.',
+        defaultName: '',
+        latex: ''
+      };
+    }
+  }
+
+  function constructionPreviewLatex(data) {
+    const name = sanitizeMathLabel(data.name, data.defaultName);
+    if (data.operation === 'product-variety') {
+      return `${name}=${sanitizeMathLabel(data.left.name, 'X')}\\times ${sanitizeMathLabel(data.right.name, 'Y')}`;
+    }
+    if (data.operation === 'direct-sum-sheaf') {
+      return `${name}=${sanitizeMathLabel(data.left.name, '\\mathcal{E}')}\\oplus ${sanitizeMathLabel(data.right.name, '\\mathcal{F}')}`;
+    }
+    if (data.operation === 'tensor-sheaf') {
+      return `${name}=${sanitizeMathLabel(data.left.name, '\\mathcal{E}')}\\otimes ${sanitizeMathLabel(data.right.name, '\\mathcal{F}')}`;
+    }
+    if (data.operation === 'compose-map') {
+      return `${name}=${sanitizeMathLabel(data.second.name, 'g')}\\circ ${sanitizeMathLabel(data.first.name, 'f')}`;
+    }
+    if (data.operation === 'pullback-sheaf') {
+      return `${name}=${sanitizeMathLabel(data.map.name, 'f')}^{*}${sanitizeMathLabel(data.sheaf.name, '\\mathcal{E}')}`;
+    }
+    return `${name}=${sanitizeMathLabel(data.map.name, 'f')}_{*}${sanitizeMathLabel(data.sheaf.name, '\\mathcal{E}')}`;
+  }
+
+  function applyConstruction() {
+    const operation = refs.constructionOperation?.value || 'product-variety';
+    let data;
+    try {
+      data = validateConstruction(operation, constructionControlValues());
+      const created = createConstructedObject(data);
+      if (!created) throw new Error('Could not create the requested object.');
+      state.constructionMessage = `Created ${latexToPlain(created.name || data.name)}.`;
+      recompute();
+    } catch (error) {
+      state.constructionMessage = `Error: ${error.message || 'Construction failed.'}`;
+      updateConstructionPreview();
+    }
+  }
+
+  function validateConstruction(operation, values = {}) {
+    if (operation === 'product-variety') {
+      const left = requireVariety(values.varietyA);
+      const right = requireVariety(values.varietyB);
+      const dim = normalizedInt(left.dim, 0, MAX_DIMENSION, 0) + normalizedInt(right.dim, 0, MAX_DIMENSION, 0);
+      if (dim > MAX_DIMENSION) throw new Error(`Product dimension ${dim} exceeds the calculator limit ${MAX_DIMENSION}.`);
+      const defaultName = defaultProductVarietyName(left.id, right.id);
+      return { operation, left, right, dim, defaultName, name: constructionName(values.name, defaultName) };
+    }
+    if (operation === 'direct-sum-sheaf' || operation === 'tensor-sheaf') {
+      const left = requireSheaf(values.sheafA);
+      const right = requireSheaf(values.sheafB);
+      if (!left.baseVarietyId || left.baseVarietyId !== right.baseVarietyId) throw new Error('The sheaves must have the same base variety.');
+      const defaultName = operation === 'direct-sum-sheaf'
+        ? defaultBinarySheafName(left.id, right.id, '\\oplus')
+        : defaultBinarySheafName(left.id, right.id, '\\otimes');
+      return { operation, left, right, baseVarietyId: left.baseVarietyId, defaultName, name: constructionName(values.name, defaultName) };
+    }
+    if (operation === 'compose-map') {
+      const first = requireMap(values.mapA);
+      const second = requireMap(values.mapB);
+      if (first.codomainKind !== second.domainKind || first.codomainId !== second.domainId) {
+        throw new Error('Maps must compose as second after first.');
+      }
+      const defaultName = defaultComposedMapName(first.id, second.id);
+      return { operation, first, second, defaultName, name: constructionName(values.name, defaultName) };
+    }
+    if (operation === 'pullback-sheaf' || operation === 'pushforward-sheaf') {
+      const map = requireMap(values.map);
+      if (map.domainKind !== 'variety' || map.codomainKind !== 'variety') throw new Error('Use a map between varieties.');
+      const sheaf = requireSheaf(values.sheaf);
+      if (operation === 'pullback-sheaf' && sheaf.baseVarietyId !== map.codomainId) throw new Error('For pullback, the sheaf must live on the codomain.');
+      if (operation === 'pushforward-sheaf' && sheaf.baseVarietyId !== map.domainId) throw new Error('For pushforward, the sheaf must live on the domain.');
+      const defaultName = operation === 'pullback-sheaf' ? defaultPullbackSheafName(map.id, sheaf.id) : defaultPushforwardSheafName(map.id, sheaf.id);
+      return { operation, map, sheaf, defaultName, name: constructionName(values.name, defaultName) };
+    }
+    throw new Error('Unknown construction.');
+  }
+
+  function createConstructedObject(data) {
+    if (data.operation === 'product-variety') return createProductVariety(data);
+    if (data.operation === 'direct-sum-sheaf' || data.operation === 'tensor-sheaf') return createBinarySheafConstruction(data);
+    if (data.operation === 'compose-map') return createComposedMap(data);
+    if (data.operation === 'pullback-sheaf' || data.operation === 'pushforward-sheaf') return createMapSheafConstruction(data);
+    return null;
+  }
+
+  function createProductVariety(data) {
+    const variety = {
+      id: nextInputId('X'),
+      type: 'abstract',
+      dim: String(data.dim),
+      name: uniqueConstructedObjectName('variety', data.name),
+      genus: 'g',
+      ciDegrees: '',
+      nameDirty: true,
+      construction: {
+        type: 'product',
+        varietyIds: [data.left.id, data.right.id]
+      }
+    };
+    positionConstructedObjectNear(variety, [data.left, data.right]);
+    state.varieties.push(variety);
+    state.activeVarietyId = variety.id;
+    state.activeSheafId = null;
+    state.activeMapId = null;
+    return variety;
+  }
+
+  function createBinarySheafConstruction(data) {
+    const sheaf = {
+      id: nextInputId('E'),
+      type: 'abstract',
+      name: uniqueConstructedObjectName('sheaf', data.name),
+      twist: '1',
+      rank: constructionRankPlaceholder(data.operation, data.left, data.right),
+      baseVarietyId: data.baseVarietyId,
+      basis: 'chern',
+      nameDirty: true,
+      construction: {
+        type: data.operation === 'direct-sum-sheaf' ? 'direct-sum' : 'tensor',
+        sheafIds: [data.left.id, data.right.id]
+      }
+    };
+    positionSheafNearBase(sheaf, baseVarietyForSheaf(sheaf));
+    avoidCanvasLabelOverlap(sheaf);
+    state.sheaves.push(sheaf);
+    state.activeSheafId = sheaf.id;
+    state.activeVarietyId = sheaf.baseVarietyId;
+    state.activeMapId = null;
+    return sheaf;
+  }
+
+  function createComposedMap(data) {
+    return createMapObject(
+      { kind: data.first.domainKind, id: data.first.domainId },
+      { kind: data.second.codomainKind, id: data.second.codomainId },
+      {
+        name: uniqueConstructedObjectName('map', data.name),
+        construction: {
+          type: 'composition',
+          mapIds: [data.first.id, data.second.id]
+        }
+      }
+    );
+  }
+
+  function createMapSheafConstruction(data) {
+    const isPullback = data.operation === 'pullback-sheaf';
+    const sheaf = {
+      id: nextInputId('E'),
+      type: 'abstract',
+      name: uniqueConstructedObjectName('sheaf', data.name),
+      twist: '1',
+      rank: isPullback ? data.sheaf.rank : 'r',
+      baseVarietyId: isPullback ? data.map.domainId : data.map.codomainId,
+      basis: normalizeBasisValue(data.sheaf.basis),
+      nameDirty: true,
+      construction: {
+        type: isPullback ? 'pullback' : 'pushforward',
+        mapId: data.map.id,
+        sheafId: data.sheaf.id
+      }
+    };
+    positionSheafNearBase(sheaf, baseVarietyForSheaf(sheaf));
+    avoidCanvasLabelOverlap(sheaf);
+    state.sheaves.push(sheaf);
+    state.activeSheafId = sheaf.id;
+    state.activeVarietyId = sheaf.baseVarietyId;
+    state.activeMapId = null;
+    return sheaf;
+  }
+
+  function constructionVarietyOptions() {
+    return state.varieties.map((variety) => ({
+      value: variety.id,
+      label: latexToPlain(sanitizeMathLabel(variety.name, 'X'))
+    }));
+  }
+
+  function constructionSheafOptions(filter = null) {
+    return state.sheaves
+      .filter((sheaf) => !filter || filter(sheaf))
+      .map((sheaf) => ({
+        value: sheaf.id,
+        label: latexToPlain(sanitizeMathLabel(sheaf.name, '\\mathcal{E}'))
+      }));
+  }
+
+  function constructionMapOptions(filter = null) {
+    return state.maps
+      .filter((map) => !filter || filter(map))
+      .map((map) => ({
+        value: map.id,
+        label: exportMapPlain(map)
+      }));
+  }
+
+  function constructionSelectedValue(options, current) {
+    if (current && options.some((option) => option.value === current)) return current;
+    return options[0]?.value || '';
+  }
+
+  function requireVariety(id) {
+    const variety = state.varieties.find((item) => item.id === id);
+    if (!variety) throw new Error('Choose a variety.');
+    return variety;
+  }
+
+  function requireSheaf(id) {
+    const sheaf = state.sheaves.find((item) => item.id === id);
+    if (!sheaf) throw new Error('Choose a sheaf.');
+    return sheaf;
+  }
+
+  function requireMap(id) {
+    const map = state.maps.find((item) => item.id === id);
+    if (!map) throw new Error('Choose a map.');
+    return map;
+  }
+
+  function constructionName(value, fallback) {
+    return sanitizeMathLabel(value, fallback);
+  }
+
+  function defaultProductVarietyName(leftId, rightId) {
+    const left = state.varieties.find((item) => item.id === leftId);
+    const right = state.varieties.find((item) => item.id === rightId);
+    return `${sanitizeMathLabel(left?.name, 'X')}\\times ${sanitizeMathLabel(right?.name, 'Y')}`;
+  }
+
+  function defaultBinarySheafName(leftId, rightId, operationLatex) {
+    const left = state.sheaves.find((item) => item.id === leftId);
+    const right = state.sheaves.find((item) => item.id === rightId);
+    return `${sanitizeMathLabel(left?.name, '\\mathcal{E}')}${operationLatex}${sanitizeMathLabel(right?.name, '\\mathcal{F}')}`;
+  }
+
+  function defaultComposedMapName(firstId, secondId) {
+    const first = state.maps.find((item) => item.id === firstId);
+    const second = state.maps.find((item) => item.id === secondId);
+    return `${sanitizeMathLabel(second?.name, 'g')}\\circ ${sanitizeMathLabel(first?.name, 'f')}`;
+  }
+
+  function defaultPullbackSheafName(mapId, sheafId) {
+    const map = state.maps.find((item) => item.id === mapId);
+    const sheaf = state.sheaves.find((item) => item.id === sheafId);
+    return `${sanitizeMathLabel(map?.name, 'f')}^{*}${sanitizeMathLabel(sheaf?.name, '\\mathcal{E}')}`;
+  }
+
+  function defaultPushforwardSheafName(mapId, sheafId) {
+    const map = state.maps.find((item) => item.id === mapId);
+    const sheaf = state.sheaves.find((item) => item.id === sheafId);
+    return `${sanitizeMathLabel(map?.name, 'f')}_{*}${sanitizeMathLabel(sheaf?.name, '\\mathcal{E}')}`;
+  }
+
+  function constructionRankPlaceholder(operation, left, right) {
+    const leftRank = sanitizeRankInput(left.rank);
+    const rightRank = sanitizeRankInput(right.rank);
+    if (/^\d+$/.test(leftRank) && /^\d+$/.test(rightRank)) {
+      return operation === 'direct-sum-sheaf'
+        ? String(Number(leftRank) + Number(rightRank))
+        : String(Number(leftRank) * Number(rightRank));
+    }
+    return 'r';
+  }
+
+  function uniqueConstructedObjectName(kind, proposedName) {
+    const fallback = kind === 'map' ? defaultMapNameLatex() : (kind === 'sheaf' ? '\\mathcal{E}' : 'X');
+    const sanitized = sanitizeMathLabel(proposedName, fallback);
+    const items = kind === 'map' ? state.maps : (kind === 'sheaf' ? state.sheaves : state.varieties);
+    const used = new Set(items.map((item) => canonicalMathLabel(item.name)));
+    if (!used.has(canonicalMathLabel(sanitized))) return sanitized;
+    for (let index = 2; index <= 50; index += 1) {
+      const candidate = sanitizeMathLabel(`${sanitized}^{(${index})}`, sanitized);
+      if (!used.has(canonicalMathLabel(candidate))) return candidate;
+    }
+    return sanitized;
+  }
+
+  function positionConstructedObjectNear(object, sources) {
+    const positioned = sources.filter((source) => Number.isFinite(source?.labelX) && Number.isFinite(source?.labelY));
+    if (!positioned.length) {
+      positionVarietyOnCanvas(object);
+      return;
+    }
+    const x = positioned.reduce((sum, source) => sum + source.labelX, 0) / positioned.length;
+    const y = positioned.reduce((sum, source) => sum + source.labelY, 0) / positioned.length;
+    object.labelX = clamp(x + 0.08, 0.08, 0.94);
+    object.labelY = clamp(y + 0.1, 0.08, 0.92);
+    avoidCanvasLabelOverlap(object);
+  }
+
+  function setBasePickActive(enabled) {
+    state.basePickActive = !!enabled && currentInputKind() === 'sheaf' && !inputIsModifyMode();
+    if (refs.pickSheafBase) {
+      refs.pickSheafBase.setAttribute('aria-pressed', state.basePickActive ? 'true' : 'false');
+      refs.pickSheafBase.textContent = state.basePickActive ? 'picking' : 'pick';
+    }
+  }
+
+  function clearMapDraft() {
+    state.mapDraft = null;
+    state.mapDrag = null;
+    updateMapPickStatus();
+  }
+
+  function updateMapPickStatus() {
+    if (!refs.mapPickStatus) return;
+    if (inputIsModifyMode() && state.activeMapId) {
+      const map = selectedMap();
+      refs.mapPickStatus.textContent = map ? `${objectPlainLabel(map.domainKind, map.domainId)} -> ${objectPlainLabel(map.codomainKind, map.codomainId)}` : 'map';
+      return;
+    }
+    if (state.mapDraft) {
+      refs.mapPickStatus.textContent = `${objectPlainLabel(state.mapDraft.domainKind, state.mapDraft.domainId)} ->`;
+      return;
+    }
+    refs.mapPickStatus.textContent = 'pick a domain';
+  }
+
+  function handleCanvasPickClick(target) {
+    const kind = target.dataset.objectKind;
+    const id = target.dataset.objectId;
+    if (state.basePickActive) {
+      if (kind !== 'variety') return true;
+      chooseSheafBaseFromCanvas(id);
+      return true;
+    }
+    if (currentInputKind() === 'map' && inputIsCreateMode()) {
+      handleMapPick(kind, id);
+      return true;
+    }
+    return false;
+  }
+
+  function chooseSheafBaseFromCanvas(varietyId) {
+    if (!state.varieties.some((variety) => variety.id === varietyId)) return;
+    if (refs.sheafBaseVariety) refs.sheafBaseVariety.value = varietyId;
+    state.activeVarietyId = varietyId;
+    setBasePickActive(false);
+    syncDefaultSheafName();
+    normalizeControlVisibility();
+    recompute();
+  }
+
+  function handleMapPick(kind, id) {
+    if (kind !== 'variety' && kind !== 'sheaf') return;
+    if (!state.mapDraft) {
+      state.mapDraft = { domainKind: kind, domainId: id };
+      updateMapPickStatus();
+      recompute();
+      return;
+    }
+    if (isValidMapCodomain(state.mapDraft.domainKind, state.mapDraft.domainId, kind, id)) {
+      createMapObject({ kind: state.mapDraft.domainKind, id: state.mapDraft.domainId }, { kind, id });
+      clearMapDraft();
+      recompute();
+      return;
+    }
+    state.mapDraft = { domainKind: kind, domainId: id };
+    updateMapPickStatus();
+    recompute();
+  }
+
+  function createMapObject(domain, codomain, options = {}) {
+    const map = createDefaultMap(domain, codomain, options);
+    if (!isValidMapCodomain(map.domainKind, map.domainId, map.codomainKind, map.codomainId)) return null;
+    positionMapLabel(map);
+    state.maps.push(map);
+    state.activeMapId = map.id;
+    state.activeSheafId = null;
+    state.draftMapNameDirty = false;
+    syncDefaultMapName(true);
+    return map;
+  }
+
+  function isValidMapCodomain(domainKind, domainId, codomainKind, codomainId) {
+    if (!domainKind || !domainId || !codomainKind || !codomainId) return false;
+    if (domainKind !== codomainKind || domainId === codomainId) return false;
+    if (domainKind === 'variety') {
+      return state.varieties.some((item) => item.id === domainId)
+        && state.varieties.some((item) => item.id === codomainId);
+    }
+    if (domainKind === 'sheaf') {
+      const domain = state.sheaves.find((item) => item.id === domainId);
+      const codomain = state.sheaves.find((item) => item.id === codomainId);
+      return !!domain && !!codomain && domain.baseVarietyId === codomain.baseVarietyId;
+    }
+    return false;
+  }
+
+  function allowableMapCodomain(kind, id) {
+    return !!state.mapDraft && isValidMapCodomain(state.mapDraft.domainKind, state.mapDraft.domainId, kind, id);
+  }
+
+  function shouldUseMapCanvasDrag(target) {
+    const kind = target.dataset.objectKind;
+    if (currentInputKind() !== 'map' || !inputIsCreateMode()) return false;
+    if (kind !== 'variety' && kind !== 'sheaf') return false;
+    return !allowableMapCodomain(kind, target.dataset.objectId);
+  }
+
+  function startMapCanvasDrag(target, event) {
+    const kind = target.dataset.objectKind;
+    const id = target.dataset.objectId;
+    if (kind !== 'variety' && kind !== 'sheaf') return;
+    const canvasRect = refs.canvas.getBoundingClientRect();
+    state.mapDrag = {
+      domainKind: kind,
+      domainId: id,
+      target,
+      pointerId: event.pointerId,
+      canvasRect,
+      x: event.clientX - canvasRect.left,
+      y: event.clientY - canvasRect.top,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false
+    };
+    document.addEventListener('pointermove', updateMapCanvasDrag);
+    document.addEventListener('pointerup', finishMapCanvasDrag);
+    document.addEventListener('pointercancel', finishMapCanvasDrag);
+  }
+
+  function updateMapCanvasDrag(event) {
+    const drag = state.mapDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    drag.x = event.clientX - drag.canvasRect.left;
+    drag.y = event.clientY - drag.canvasRect.top;
+    if (!drag.moved && (Math.abs(event.clientX - drag.startX) > 5 || Math.abs(event.clientY - drag.startY) > 5)) {
+      event.preventDefault();
+      drag.moved = true;
+      try { drag.target?.setPointerCapture?.(drag.pointerId); } catch (_) {}
+      state.mapDraft = { domainKind: drag.domainKind, domainId: drag.domainId };
+      updateMapPickStatus();
+      renderCanvas(state.lastResult);
+      return;
+    }
+    if (!drag.moved) return;
+    event.preventDefault();
+    redrawCanvasSurface();
+  }
+
+  function finishMapCanvasDrag(event) {
+    const drag = state.mapDrag;
+    document.removeEventListener('pointermove', updateMapCanvasDrag);
+    document.removeEventListener('pointerup', finishMapCanvasDrag);
+    document.removeEventListener('pointercancel', finishMapCanvasDrag);
+    if (!drag) return;
+    const target = event.type === 'pointercancel'
+      ? null
+      : document.elementFromPoint(event.clientX, event.clientY)?.closest?.('[data-object-kind]');
+    const targetKind = target?.dataset.objectKind;
+    const targetId = target?.dataset.objectId;
+    try { drag.target?.releasePointerCapture?.(drag.pointerId); } catch (_) {}
+    state.mapDrag = null;
+    const clickedSameLabel = !drag.moved
+      && event.type !== 'pointercancel'
+      && targetKind === drag.domainKind
+      && targetId === drag.domainId;
+    if (clickedSameLabel) {
+      state.suppressLabelClickUntil = Date.now() + 180;
+      handleMapPick(targetKind, targetId);
+      return;
+    }
+    if (!drag.moved) return;
+    state.suppressLabelClickUntil = Date.now() + 180;
+    if (isValidMapCodomain(drag.domainKind, drag.domainId, targetKind, targetId)) {
+      createMapObject({ kind: drag.domainKind, id: drag.domainId }, { kind: targetKind, id: targetId });
+      clearMapDraft();
+    }
+    recompute();
+  }
+
+  function objectPlainLabel(kind, id) {
+    if (kind === 'variety') return latexToPlain(state.varieties.find((item) => item.id === id)?.name || 'X');
+    if (kind === 'sheaf') return latexToPlain(state.sheaves.find((item) => item.id === id)?.name || 'E');
+    if (kind === 'map') return latexToPlain(state.maps.find((item) => item.id === id)?.name || 'f');
+    return '';
   }
 
   function safeParseDegrees() {
@@ -1078,6 +1987,16 @@
     return '\\mathcal{E}';
   }
 
+  function defaultMapNameLatex() {
+    const index = state.maps.length + 1;
+    return index === 1 ? 'f' : `f_{${index}}`;
+  }
+
+  function syncDefaultMapName(force = false) {
+    if (!refs.mapName) return;
+    if (force || !state.draftMapNameDirty) refs.mapName.value = defaultMapNameLatex();
+  }
+
   function syncDefaultVarietyName(force = false) {
     if (!refs.varietyName) return;
     if (force || !state.draftVarietyNameDirty) refs.varietyName.value = defaultCreateVarietyNameLatex();
@@ -1126,6 +2045,8 @@
       }
       refs.hodgeMessage.textContent = 'No Hodge numbers available for the current input.';
       refs.hodgeMessage.hidden = false;
+      renderConstructionPanel();
+      renderHomologyPanel(null);
       renderCanvas(null);
     }
   }
@@ -1155,7 +2076,9 @@
     const hasVariety = state.varieties.length > 0;
     const hasSheaf = !!activeSheaf();
     const editingSheaf = inputIsModifyMode() && !!state.activeSheafId;
-    const draftingSheaf = inputIsModifyMode() ? editingSheaf : refs.addObjectKind?.value === 'sheaf';
+    const editingMap = inputIsModifyMode() && !!state.activeMapId;
+    const draftingMap = inputIsModifyMode() ? editingMap : refs.addObjectKind?.value === 'map';
+    const draftingSheaf = !draftingMap && (inputIsModifyMode() ? editingSheaf : refs.addObjectKind?.value === 'sheaf');
     const draftVariety = refs.varietyType.value;
     const activeVarietyType = activeVariety()?.type || 'abstract';
     const activeSheafType = activeSheaf()?.type || 'abstract';
@@ -1192,12 +2115,21 @@
     syncClassDisplayControls();
     refs.rankRow.hidden = !draftingSheaf || (draftSheaf !== 'abstract' && draftSheaf !== 'locally-free');
     refs.sheafBaseRow.hidden = inputIsModifyMode() || !draftingSheaf || state.varieties.length <= 1;
+    if (refs.pickSheafBase) {
+      refs.pickSheafBase.disabled = refs.sheafBaseRow.hidden;
+      refs.pickSheafBase.setAttribute('aria-pressed', state.basePickActive ? 'true' : 'false');
+      refs.pickSheafBase.textContent = state.basePickActive ? 'picking' : 'pick';
+    }
+    if (state.basePickActive && (refs.sheafBaseRow.hidden || !draftingSheaf)) setBasePickActive(false);
     if (refs.addObject) {
       const canAddSheaf = !draftingSheaf || !!draftBase;
       const hasEditableObject = !inputIsModifyMode() || !!activeObjectForKind(currentInputKind());
-      refs.addObject.disabled = (!canAddSheaf && draftingSheaf) || !hasEditableObject;
-      refs.addObject.title = draftingSheaf && !draftBase ? 'Add a base variety first' : '';
+      const creatingMap = draftingMap && inputIsCreateMode();
+      refs.addObject.disabled = creatingMap || (!canAddSheaf && draftingSheaf) || !hasEditableObject;
+      refs.addObject.textContent = creatingMap ? 'pick' : (inputIsModifyMode() ? 'update' : 'add');
+      refs.addObject.title = creatingMap ? 'Pick domain and codomain on the canvas' : (draftingSheaf && !draftBase ? 'Add a base variety first' : '');
     }
+    updateMapPickStatus();
     syncInputEditorVisibility();
   }
 
@@ -1207,7 +2139,7 @@
       const n = normalizedInt(variety.dim, 0, MAX_DIMENSION, 3);
       const labelLatex = sanitizeMathLabel(variety.name, `\\mathbb{P}^{${n}}`);
       Object.assign(variety, { dim: String(n), name: labelLatex });
-      return {
+      const geometry = {
         type,
         dim: n,
         ambient: n,
@@ -1218,12 +2150,13 @@
         ambientLatex: `\\mathbb{P}^{${n}}`,
         ambientPlain: `P^${n}`
       };
+      return attachHomologyToGeometry(variety, geometry);
     }
     if (type === 'curve') {
       const genus = sanitizeGenusInput(variety.genus);
       const labelLatex = sanitizeMathLabel(variety.name, curveDefaultName(genus));
       Object.assign(variety, { dim: '1', genus, name: labelLatex });
-      return {
+      const geometry = {
         type,
         dim: 1,
         genus,
@@ -1235,6 +2168,7 @@
         ambientLatex: 'curve',
         ambientPlain: 'curve'
       };
+      return attachHomologyToGeometry(variety, geometry);
     }
     if (type === 'complete-intersection') {
       const degrees = parseDegrees(variety.ciDegrees || '');
@@ -1243,7 +2177,7 @@
       const defaultLabel = degrees.length ? `X_{${degrees.join(',')}}` : `\\mathbb{P}^{${ambient}}`;
       const labelLatex = sanitizeMathLabel(variety.name, defaultLabel);
       Object.assign(variety, { dim: String(dim), ciAmbient: String(ambient), name: labelLatex });
-      return {
+      const geometry = {
         type,
         dim,
         ambient,
@@ -1254,11 +2188,12 @@
         ambientLatex: `\\mathbb{P}^{${ambient}}`,
         ambientPlain: `P^${ambient}`
       };
+      return attachHomologyToGeometry(variety, geometry);
     }
     const dim = normalizedInt(variety.dim, 0, MAX_DIMENSION, 3);
     const labelLatex = sanitizeMathLabel(variety.name, 'X');
     Object.assign(variety, { dim: String(dim), name: labelLatex });
-    return {
+    const geometry = {
       type: 'abstract',
       dim,
       ambient: null,
@@ -1269,6 +2204,366 @@
       ambientLatex: 'abstract',
       ambientPlain: 'abstract'
     };
+    return attachHomologyToGeometry(variety, geometry);
+  }
+
+  function attachHomologyToGeometry(variety, geometry) {
+    const homology = ensureHomologySystem(variety, geometry);
+    return { ...geometry, varietyId: variety?.id || null, homology };
+  }
+
+  function ensureHomologySystem(variety, geometry) {
+    const homology = variety.homology && typeof variety.homology === 'object' ? variety.homology : {};
+    homology.classes = homology.classes && typeof homology.classes === 'object' ? homology.classes : {};
+    homology.rules = Array.isArray(homology.rules) ? homology.rules : [];
+
+    const classDefs = homologyClassDefinitions({ ...geometry, homology });
+    classDefs.forEach((def) => {
+      const existing = homology.classes[def.id] && typeof homology.classes[def.id] === 'object'
+        ? homology.classes[def.id]
+        : {};
+      existing.symbol = sanitizeHomologySymbol(existing.symbol, def.defaultSymbol);
+      homology.classes[def.id] = existing;
+    });
+
+    const existingTopRule = homology.rules.find((rule) => rule.id === HOMOLOGY_TOP_RULE_ID);
+    const customRules = homology.rules.filter((rule) => rule.id !== HOMOLOGY_TOP_RULE_ID);
+    const standardRule = standardHomologyTopRule(geometry, existingTopRule);
+    homology.rules = [
+      ...(standardRule ? [standardRule] : []),
+      ...customRules.map((rule) => normalizeHomologyRule(rule, geometry)).filter(Boolean)
+    ];
+    variety.homology = homology;
+    return homology;
+  }
+
+  function homologyClassDefinitions(geometry) {
+    if (!geometry) return [];
+    const homology = geometry.homology || {};
+    const defs = [];
+    if (varietyHasHyperplaneClass(geometry.type)) {
+      defs.push(homologyClassDefinition(
+        HOMOLOGY_HYPERPLANE_CLASS,
+        1,
+        'H',
+        'hyperplane',
+        homology
+      ));
+    }
+    if (Number.isInteger(geometry.dim) && geometry.dim >= 0) {
+      defs.push(homologyClassDefinition(
+        HOMOLOGY_POINT_CLASS,
+        geometry.dim,
+        '[p]',
+        'point',
+        homology
+      ));
+    }
+    return defs;
+  }
+
+  function homologyClassDefinition(id, degree, defaultSymbol, kind, homology) {
+    const symbol = sanitizeHomologySymbol(homology?.classes?.[id]?.symbol, defaultSymbol);
+    return {
+      id,
+      degree,
+      defaultSymbol,
+      kind,
+      symbolLatex: symbol,
+      symbolPlain: latexToPlain(symbol)
+    };
+  }
+
+  function homologyClassDefById(geometry, classId) {
+    return homologyClassDefinitions(geometry).find((def) => def.id === classId) || null;
+  }
+
+  function homologyVariableId(classId) {
+    if (classId === HOMOLOGY_HYPERPLANE_CLASS) return 'H';
+    if (classId === HOMOLOGY_POINT_CLASS) return 'point';
+    return `homology_${String(classId || '').replace(/[^A-Za-z0-9_]+/g, '_')}`;
+  }
+
+  function defineHomologyVariables(geometry) {
+    homologyClassDefinitions(geometry).forEach((def) => {
+      defineVariable(homologyVariableId(def.id), def.degree, def.symbolLatex);
+    });
+  }
+
+  function standardHomologyTopRule(geometry, existingRule = null) {
+    if (!varietyHasHyperplaneClass(geometry?.type) || !Number.isInteger(geometry.dim) || geometry.dim <= 0) return null;
+    const degreeProduct = (geometry.degrees || []).reduce((product, degree) => product * BigInt(degree), 1n);
+    return {
+      id: HOMOLOGY_TOP_RULE_ID,
+      builtin: true,
+      enabled: existingRule ? existingRule.enabled !== false : true,
+      lhs: { powers: { [homologyVariableId(HOMOLOGY_HYPERPLANE_CLASS)]: geometry.dim } },
+      rhs: [
+        {
+          coefficient: degreeProduct.toString(),
+          powers: { [homologyVariableId(HOMOLOGY_POINT_CLASS)]: 1 }
+        }
+      ]
+    };
+  }
+
+  function normalizeHomologyRule(rule, geometry) {
+    if (!rule || typeof rule !== 'object') return null;
+    const defs = homologyClassDefinitions(geometry);
+    const variableIds = new Set(defs.map((def) => homologyVariableId(def.id)));
+    let lhsPowers = normalizeHomologyPowers(rule.lhs?.powers || rule.lhsPowers, variableIds);
+    let rhsTerms = normalizeHomologyRuleTerms(rule.rhs || rule.rhsTerms, variableIds);
+    if ((!lhsPowers || !rhsTerms) && rule.source && rule.target) {
+      const sourceDef = defs.find((def) => def.id === rule.source);
+      const targetDef = defs.find((def) => def.id === rule.target);
+      if (!sourceDef || !targetDef) return null;
+      const power = normalizedInt(rule.power, 1, Math.max(1, geometry?.dim || MAX_DIMENSION), 1);
+      lhsPowers = { [homologyVariableId(rule.source)]: power };
+      try {
+        rhsTerms = [
+          {
+            coefficient: formatFractionPlain(parseRuleCoefficient(rule.coefficient || '1')),
+            powers: { [homologyVariableId(rule.target)]: 1 }
+          }
+        ];
+      } catch (_) {
+        return null;
+      }
+    }
+    if (!lhsPowers || !rhsTerms) return null;
+    const normalized = {
+      id: rule.id || nextInputId('R'),
+      builtin: false,
+      enabled: rule.enabled !== false,
+      lhs: { powers: lhsPowers },
+      rhs: rhsTerms
+    };
+    return homologyRulePreservesDegree(normalized, defs) ? normalized : null;
+  }
+
+  function normalizeHomologyPowers(powers, variableIds) {
+    if (!powers || typeof powers !== 'object') return null;
+    const out = {};
+    for (const [id, exp] of Object.entries(powers)) {
+      if (!variableIds.has(id)) return null;
+      const exponent = normalizedInt(exp, 0, MAX_DIMENSION, 0);
+      if (exponent > 0) out[id] = exponent;
+    }
+    return Object.keys(out).length ? out : null;
+  }
+
+  function normalizeHomologyRuleTerms(terms, variableIds) {
+    if (!Array.isArray(terms)) return null;
+    const out = [];
+    for (const term of terms) {
+      if (!term || typeof term !== 'object') return null;
+      const powers = normalizeHomologyPowers(term.powers || {}, variableIds) || {};
+      let coefficient;
+      try {
+        coefficient = formatFractionPlain(parseRuleCoefficient(term.coefficient || '1'));
+      } catch (_) {
+        return null;
+      }
+      if (parseRuleCoefficient(coefficient).isZero()) continue;
+      out.push({ coefficient, powers });
+    }
+    return out;
+  }
+
+  function serializeHomologyPoly(poly) {
+    return sortedTerms(poly).map(([key, coeff]) => ({
+      coefficient: formatFractionPlain(coeff),
+      powers: parseMonoKey(key)
+    }));
+  }
+
+  function homologyRuleRhsPoly(rule) {
+    if (!Array.isArray(rule?.rhs)) return Poly.zero();
+    let out = Poly.zero();
+    for (const term of rule.rhs) {
+      let coeff;
+      try {
+        coeff = parseRuleCoefficient(term.coefficient || '1');
+      } catch (_) {
+        continue;
+      }
+      if (coeff.isZero()) continue;
+      out = out.add(polyFromPowers(term.powers || {}).scale(coeff));
+    }
+    return out;
+  }
+
+  function homologyRuleInputText(rule, geometry) {
+    defineHomologyVariables(geometry);
+    return `${homologyRuleInputMonomial(rule.lhs?.powers || {})}=${formatHomologyInputPoly(homologyRuleRhsPoly(rule))}`;
+  }
+
+  function formatHomologyInputPoly(poly) {
+    poly = Poly.from(poly);
+    if (poly.isZero()) return '0';
+    let out = '';
+    sortedTerms(poly).forEach(([key, coeff], index) => {
+      const sign = coeff.sign();
+      const body = formatHomologyInputTerm(key, coeff.abs());
+      if (index === 0) out += sign < 0 ? `-${body}` : body;
+      else out += sign < 0 ? `-${body}` : `+${body}`;
+    });
+    return out;
+  }
+
+  function formatHomologyInputTerm(key, absCoeff) {
+    const mono = homologyRuleInputMonomial(parseMonoKey(key));
+    if (!mono) return absCoeff.toPlainAbs();
+    if (absCoeff.isOne()) return mono;
+    return `${absCoeff.toPlainAbs()}${mono}`;
+  }
+
+  function homologyRuleInputMonomial(powers) {
+    return Object.entries(powers || {}).map(([id, exp]) => {
+      const data = VARS.get(id);
+      const base = data ? data.plain : id;
+      return exp === 1 ? base : `${base}^${exp}`;
+    }).join('');
+  }
+
+  function polyFromPowers(powers) {
+    const clean = {};
+    for (const [id, exp] of Object.entries(powers || {})) {
+      const exponent = Number(exp) || 0;
+      if (exponent > 0) clean[id] = exponent;
+    }
+    return Object.keys(clean).length ? new Poly(new Map([[monoKey(clean), Fraction.one()]])) : Poly.one();
+  }
+
+  function homologyRuleLhsLatex(rule, geometry) {
+    defineHomologyVariables(geometry);
+    return monomialLatex(monoKey(rule.lhs?.powers || {})) || '1';
+  }
+
+  function homologyRuleLhsPlain(rule, geometry) {
+    defineHomologyVariables(geometry);
+    return monomialPlain(monoKey(rule.lhs?.powers || {})) || '1';
+  }
+
+  function homologyRulePlainEquation(rule, geometry) {
+    defineHomologyVariables(geometry);
+    return `${homologyRuleInputMonomial(rule.lhs?.powers || {})} = ${formatHomologyInputPoly(homologyRuleRhsPoly(rule))}`;
+  }
+
+  function defaultHomologyRulePlaceholder(geometry) {
+    const topRule = standardHomologyTopRule(geometry);
+    if (topRule) return homologyRuleInputText(topRule, geometry);
+    const defs = homologyClassDefinitions(geometry);
+    return defs.length ? `${defs[0].symbolPlain}=0` : '';
+  }
+
+  function parseHomologyRuleEquation(text, geometry) {
+    const raw = String(text || '').trim();
+    if (!raw) throw new Error('Enter a rule as left=right.');
+    const parts = raw.split('=');
+    if (parts.length !== 2) throw new Error('Use exactly one equals sign.');
+    defineHomologyVariables(geometry);
+    const lhs = parseHomologyExpression(parts[0], geometry, { side: 'left' });
+    const rhs = parseHomologyExpression(parts[1], geometry, { side: 'right' });
+    if (lhs.isZero()) throw new Error('Left side cannot be zero.');
+    const lhsTerms = sortedTerms(lhs);
+    if (lhsTerms.length !== 1 || !lhsTerms[0][1].isOne()) {
+      throw new Error('Left side must be one monomial with coefficient 1.');
+    }
+    const lhsPowers = parseMonoKey(lhsTerms[0][0]);
+    const rule = {
+      id: nextInputId('R'),
+      builtin: false,
+      enabled: true,
+      lhs: { powers: lhsPowers },
+      rhs: serializeHomologyPoly(rhs)
+    };
+    const defs = homologyClassDefinitions(geometry);
+    if (!homologyRulePreservesDegree(rule, defs)) throw new Error('Rule degrees must match.');
+    return {
+      ...rule,
+      input: raw
+    };
+  }
+
+  function parseHomologyExpression(text, geometry, { side = 'right' } = {}) {
+    const source = String(text || '').trim();
+    if (!source) throw new Error(`${side === 'left' ? 'Left' : 'Right'} side is empty.`);
+    const compact = source
+      .replace(/\\cdot/g, '*')
+      .replace(/\\,/g, '')
+      .replace(/\s+/g, '');
+    if (compact === '0') return Poly.zero();
+    const aliases = homologyParseAliases(geometry);
+    const pieces = splitSignedHomologyTerms(compact);
+    let out = Poly.zero();
+    for (const piece of pieces) {
+      const term = parseHomologyTerm(piece.body, aliases);
+      out = out.add(term.scale(fraction(piece.sign)));
+    }
+    return out;
+  }
+
+  function homologyParseAliases(geometry) {
+    return homologyClassDefinitions(geometry)
+      .flatMap((def) => {
+        const id = homologyVariableId(def.id);
+        return [def.symbolLatex, def.symbolPlain, def.defaultSymbol]
+          .filter(Boolean)
+          .map((alias) => ({ alias: String(alias).replace(/\s+/g, ''), id }));
+      })
+      .filter((entry, index, all) => entry.alias && all.findIndex((item) => item.alias === entry.alias && item.id === entry.id) === index)
+      .sort((a, b) => b.alias.length - a.alias.length);
+  }
+
+  function splitSignedHomologyTerms(text) {
+    const terms = [];
+    let start = 0;
+    let sign = 1;
+    let depth = 0;
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (char === '{' || char === '[' || char === '(') depth += 1;
+      else if (char === '}' || char === ']' || char === ')') depth = Math.max(0, depth - 1);
+      else if ((char === '+' || char === '-') && depth === 0) {
+        if (i > start) terms.push({ sign, body: text.slice(start, i) });
+        sign = char === '-' ? -1 : 1;
+        start = i + 1;
+      }
+    }
+    if (start < text.length) terms.push({ sign, body: text.slice(start) });
+    return terms.filter((term) => term.body);
+  }
+
+  function parseHomologyTerm(text, aliases) {
+    let rest = text.replace(/\*/g, '');
+    if (!rest) throw new Error('Rule contains an empty term.');
+    let coeff = Fraction.one();
+    const coeffMatch = rest.match(/^(\d+(?:\/\d+)?)/);
+    if (coeffMatch) {
+      coeff = parseRuleCoefficient(coeffMatch[1]);
+      rest = rest.slice(coeffMatch[1].length);
+    }
+    const powers = {};
+    while (rest) {
+      const match = aliases.find((entry) => rest.startsWith(entry.alias));
+      if (!match) throw new Error(`Unknown class in rule near "${rest}".`);
+      rest = rest.slice(match.alias.length);
+      const parsedPower = parseHomologyExponent(rest);
+      rest = parsedPower.rest;
+      powers[match.id] = (powers[match.id] || 0) + parsedPower.exponent;
+    }
+    return polyFromPowers(powers).scale(coeff);
+  }
+
+  function parseHomologyExponent(text) {
+    if (!text.startsWith('^')) return { exponent: 1, rest: text };
+    const body = text.slice(1);
+    const braced = body.match(/^\{(\d+)\}/);
+    if (braced) return { exponent: normalizedInt(braced[1], 0, MAX_DIMENSION, 1), rest: body.slice(braced[0].length) };
+    const plain = body.match(/^(\d+)/);
+    if (plain) return { exponent: normalizedInt(plain[1], 0, MAX_DIMENSION, 1), rest: body.slice(plain[1].length) };
+    throw new Error('Rule exponent must be a nonnegative integer.');
   }
 
   function sheafFromObject(sheaf, geometry) {
@@ -1288,7 +2583,9 @@
       rankPlain,
       rankLatex: symbolToLatex(rankPlain),
       labelLatex,
-      labelPlain: latexToPlain(labelLatex)
+      labelPlain: latexToPlain(labelLatex),
+      construction: sheaf.construction || null,
+      sourceObject: sheaf
     };
   }
 
@@ -1387,18 +2684,9 @@
   }
 
   function buildCharacteristicClasses(geometry, sheaf) {
-    defineVariable('H', 1, 'H');
+    defineHomologyVariables(geometry);
     const d = geometry.dim;
-    let bundle;
-    if (sheaf.type === 'locally-free') {
-      bundle = buildLocallyFreeBundle(d, sheaf);
-    } else if (sheaf.type === 'abstract') {
-      bundle = buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain);
-    } else if (geometry.type === 'abstract' || geometry.type === 'curve') {
-      bundle = buildAbstractGeometrySheaf(geometry, sheaf);
-    } else {
-      bundle = buildEmbeddedGeometrySheaf(geometry, sheaf);
-    }
+    const bundle = buildBundleForSheaf(geometry, sheaf);
     const hodge = buildHodgeNumbers(geometry);
 
     const result = {
@@ -1411,6 +2699,15 @@
     };
     result.classRows = buildClassRows(bundle, d, result.classDisplay);
     return result;
+  }
+
+  function buildBundleForSheaf(geometry, sheaf, options = {}) {
+    const d = geometry.dim;
+    if (sheaf.construction) return buildConstructedSheafBundle(geometry, sheaf, options);
+    if (sheaf.type === 'locally-free') return buildLocallyFreeBundle(d, sheaf, options);
+    if (sheaf.type === 'abstract') return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
+    if (geometry.type === 'abstract' || geometry.type === 'curve') return buildAbstractGeometrySheaf(geometry, sheaf, options);
+    return buildEmbeddedGeometrySheaf(geometry, sheaf, options);
   }
 
   function classDisplayOptions(geometry, sheaf) {
@@ -1426,7 +2723,9 @@
       expression,
       rootForm,
       termMode,
-      termIndex
+      termIndex,
+      geometry,
+      homology: geometry.homology || null
     };
   }
 
@@ -1440,24 +2739,40 @@
     return buildStandardClassRows(bundle, d, options);
   }
 
+  function formatClassPolyLatex(poly, options) {
+    return formatPolyLatex(applyHomologyRules(poly, options));
+  }
+
+  function formatClassPolyPlain(poly, options) {
+    return formatPolyPlain(applyHomologyRules(poly, options));
+  }
+
+  function formatRankPlusClassPolyLatex(rank, poly, options) {
+    return formatRankPlusPolyLatex(rank, applyHomologyRules(poly, options));
+  }
+
+  function formatRankPlusClassPolyPlain(rank, poly, options) {
+    return formatRankPlusPolyPlain(rank, applyHomologyRules(poly, options));
+  }
+
   function buildStandardClassRows(bundle, d, options) {
     if (options.termMode === 'term') {
       const i = options.termIndex;
       const suffix = `_{${i}}`;
       return [
-        { label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `chern_${i}`, latex: formatPolyLatex(i === 0 ? Poly.one() : componentOrZero(bundle.cComps, i)), plain: formatPolyPlain(i === 0 ? Poly.one() : componentOrZero(bundle.cComps, i)) },
-        { label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `character_${i}`, latex: i === 0 ? (bundle.rankLatex || '0') : formatPolyLatex(componentOrZero(bundle.chComps, i)), plain: i === 0 ? (bundle.rankPlain || '0') : formatPolyPlain(componentOrZero(bundle.chComps, i)) },
-        { label: `td_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}${suffix}(${bundle.labelLatex})`, key: `todd_${i}`, latex: formatPolyLatex(homogeneousPart(bundle.todd, i)), plain: formatPolyPlain(homogeneousPart(bundle.todd, i)) },
-        { label: `s_${i}(${bundle.labelPlain})`, labelLatex: `s${suffix}(${bundle.labelLatex})`, key: `segre_${i}`, latex: formatPolyLatex(homogeneousPart(bundle.segre, i)), plain: formatPolyPlain(homogeneousPart(bundle.segre, i)) },
-        { label: `sqrt td_${i}(${bundle.labelPlain})`, labelLatex: `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, key: `sqrtTodd_${i}`, latex: formatPolyLatex(homogeneousPart(bundle.sqrtTodd, i)), plain: formatPolyPlain(homogeneousPart(bundle.sqrtTodd, i)) }
+        { label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `chern_${i}`, latex: formatClassPolyLatex(i === 0 ? Poly.one() : componentOrZero(bundle.cComps, i), options), plain: formatClassPolyPlain(i === 0 ? Poly.one() : componentOrZero(bundle.cComps, i), options) },
+        { label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `character_${i}`, latex: i === 0 ? (bundle.rankLatex || '0') : formatClassPolyLatex(componentOrZero(bundle.chComps, i), options), plain: i === 0 ? (bundle.rankPlain || '0') : formatClassPolyPlain(componentOrZero(bundle.chComps, i), options) },
+        { label: `td_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}${suffix}(${bundle.labelLatex})`, key: `todd_${i}`, latex: formatClassPolyLatex(homogeneousPart(bundle.todd, i), options), plain: formatClassPolyPlain(homogeneousPart(bundle.todd, i), options) },
+        { label: `s_${i}(${bundle.labelPlain})`, labelLatex: `s${suffix}(${bundle.labelLatex})`, key: `segre_${i}`, latex: formatClassPolyLatex(homogeneousPart(bundle.segre, i), options), plain: formatClassPolyPlain(homogeneousPart(bundle.segre, i), options) },
+        { label: `sqrt td_${i}(${bundle.labelPlain})`, labelLatex: `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, key: `sqrtTodd_${i}`, latex: formatClassPolyLatex(homogeneousPart(bundle.sqrtTodd, i), options), plain: formatClassPolyPlain(homogeneousPart(bundle.sqrtTodd, i), options) }
       ];
     }
     return [
-      { label: `c(${bundle.labelPlain})`, labelLatex: `c(${bundle.labelLatex})`, key: 'chern', latex: formatPolyLatex(bundle.cTotal), plain: formatPolyPlain(bundle.cTotal) },
-      { label: `ch(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}(${bundle.labelLatex})`, key: 'character', latex: formatRankPlusPolyLatex(bundle.rankLatex, positiveTotal(bundle.chComps, d)), plain: formatRankPlusPolyPlain(bundle.rankPlain, positiveTotal(bundle.chComps, d)) },
-      { label: `td(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}(${bundle.labelLatex})`, key: 'todd', latex: formatPolyLatex(bundle.todd), plain: formatPolyPlain(bundle.todd) },
-      { label: `s(${bundle.labelPlain})`, labelLatex: `s(${bundle.labelLatex})`, key: 'segre', latex: formatPolyLatex(bundle.segre), plain: formatPolyPlain(bundle.segre) },
-      { label: `sqrt td(${bundle.labelPlain})`, labelLatex: `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, key: 'sqrtTodd', latex: formatPolyLatex(bundle.sqrtTodd), plain: formatPolyPlain(bundle.sqrtTodd) }
+      { label: `c(${bundle.labelPlain})`, labelLatex: `c(${bundle.labelLatex})`, key: 'chern', latex: formatClassPolyLatex(bundle.cTotal, options), plain: formatClassPolyPlain(bundle.cTotal, options) },
+      { label: `ch(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}(${bundle.labelLatex})`, key: 'character', latex: formatRankPlusClassPolyLatex(bundle.rankLatex, positiveTotal(bundle.chComps, d), options), plain: formatRankPlusClassPolyPlain(bundle.rankPlain, positiveTotal(bundle.chComps, d), options) },
+      { label: `td(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}(${bundle.labelLatex})`, key: 'todd', latex: formatClassPolyLatex(bundle.todd, options), plain: formatClassPolyPlain(bundle.todd, options) },
+      { label: `s(${bundle.labelPlain})`, labelLatex: `s(${bundle.labelLatex})`, key: 'segre', latex: formatClassPolyLatex(bundle.segre, options), plain: formatClassPolyPlain(bundle.segre, options) },
+      { label: `sqrt td(${bundle.labelPlain})`, labelLatex: `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, key: 'sqrtTodd', latex: formatClassPolyLatex(bundle.sqrtTodd, options), plain: formatClassPolyPlain(bundle.sqrtTodd, options) }
     ];
   }
 
@@ -1724,6 +3039,124 @@
     return new Poly(terms);
   }
 
+  function applyHomologyRules(poly, options = {}) {
+    poly = Poly.from(poly);
+    const geometry = options.geometry || null;
+    const homology = options.homology || geometry?.homology || null;
+    if (!homology?.rules?.length) return poly;
+    const defs = homologyClassDefinitions(geometry);
+    const available = new Set(defs.map((def) => homologyVariableId(def.id)));
+    const rules = homology.rules.filter((rule) => (
+      rule.enabled !== false
+      && homologyRulePreservesDegree(rule, defs)
+      && homologyRuleUsesAvailableVariables(rule, available)
+    ));
+    if (!rules.length) return poly;
+    let out = poly;
+    const start = currentTimeMs();
+    for (let pass = 1; pass <= MAX_HOMOLOGY_RULE_PASSES; pass += 1) {
+      const before = out;
+      for (const rule of rules) out = applyOneHomologyRule(out, rule, geometry?.dim ?? MAX_DIMENSION);
+      if (polyEquals(before, out)) return out.truncate(geometry?.dim ?? MAX_DIMENSION);
+      if (currentTimeMs() - start > MAX_HOMOLOGY_RULE_MS) {
+        recordHomologyRuleWarning(options, `Homology rules did not settle within ${MAX_HOMOLOGY_RULE_MS / 1000}s.`);
+        return out.truncate(geometry?.dim ?? MAX_DIMENSION);
+      }
+    }
+    recordHomologyRuleWarning(options, `Homology rules did not settle after ${MAX_HOMOLOGY_RULE_PASSES} passes.`);
+    return out.truncate(geometry?.dim ?? MAX_DIMENSION);
+  }
+
+  function recordHomologyRuleWarning(options, message) {
+    if (!options.homologyRuleWarning) options.homologyRuleWarning = message;
+  }
+
+  function polyEquals(a, b) {
+    a = Poly.from(a);
+    b = Poly.from(b);
+    if (a.terms.size !== b.terms.size) return false;
+    for (const [key, coeff] of a.terms) {
+      const other = b.terms.get(key);
+      if (!other || coeff.num !== other.num || coeff.den !== other.den) return false;
+    }
+    return true;
+  }
+
+  function currentTimeMs() {
+    return typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now()
+      : Date.now();
+  }
+
+  function applyOneHomologyRule(poly, rule, maxDegree) {
+    const lhsPowers = rule.lhs?.powers || {};
+    const rhs = homologyRuleRhsPoly(rule);
+    const terms = new Map();
+    for (const [key, coeff] of poly.terms) {
+      const powers = parseMonoKey(key);
+      const count = monomialFactorCount(powers, lhsPowers);
+      const replacement = count > 0
+        ? polyFromPowers(removeMonomialFactor(powers, lhsPowers, count)).mul(polyPower(rhs, count, maxDegree), maxDegree).scale(coeff)
+        : polyFromPowers(powers).scale(coeff);
+      for (const [nextKey, nextCoeff] of replacement.terms) {
+        const next = (terms.get(nextKey) || Fraction.zero()).add(nextCoeff);
+        if (next.isZero()) terms.delete(nextKey);
+        else terms.set(nextKey, next);
+      }
+    }
+    return new Poly(terms).truncate(maxDegree);
+  }
+
+  function homologyRulePreservesDegree(rule, defs) {
+    const lhsDegree = homologyPowersDegree(rule.lhs?.powers || {}, defs);
+    if (lhsDegree == null || lhsDegree <= 0) return false;
+    const rhs = homologyRuleRhsPoly(rule);
+    if (rhs.isZero()) return true;
+    return sortedTerms(rhs).every(([key]) => homologyPowersDegree(parseMonoKey(key), defs) === lhsDegree);
+  }
+
+  function homologyRuleUsesAvailableVariables(rule, availableIds) {
+    const allTerms = [rule.lhs || {}, ...(rule.rhs || [])];
+    return allTerms.every((term) => Object.keys(term.powers || {}).every((id) => availableIds.has(id)));
+  }
+
+  function homologyPowersDegree(powers, defs) {
+    let degree = 0;
+    for (const [id, exp] of Object.entries(powers || {})) {
+      const def = defs.find((entry) => homologyVariableId(entry.id) === id);
+      if (!def) return null;
+      degree += def.degree * (Number(exp) || 0);
+    }
+    return degree;
+  }
+
+  function monomialFactorCount(powers, factorPowers) {
+    const entries = Object.entries(factorPowers || {});
+    if (!entries.length) return 0;
+    let count = Infinity;
+    for (const [id, exp] of entries) {
+      const exponent = Number(exp) || 0;
+      if (exponent <= 0) return 0;
+      count = Math.min(count, Math.floor((powers[id] || 0) / exponent));
+    }
+    return Number.isFinite(count) ? count : 0;
+  }
+
+  function removeMonomialFactor(powers, factorPowers, count) {
+    const out = { ...powers };
+    for (const [id, exp] of Object.entries(factorPowers || {})) {
+      out[id] = (out[id] || 0) - (Number(exp) || 0) * count;
+      if (out[id] <= 0) delete out[id];
+    }
+    return out;
+  }
+
+  function polyPower(poly, exponent, maxDegree) {
+    let out = Poly.one();
+    for (let i = 0; i < exponent; i++) out = out.mul(poly, maxDegree);
+    return out;
+  }
+
   function coefficientLatexPlain(total, degree) {
     return {
       latex: `\\left[${total.latex}\\right]_{${degree}}`,
@@ -1754,7 +3187,108 @@
     };
   }
 
-  function buildAbstractGeometrySheaf(geometry, sheaf) {
+  function buildConstructedSheafBundle(geometry, sheaf, options = {}) {
+    const construction = sheaf.construction || {};
+    if (construction.type === 'direct-sum' || construction.type === 'tensor') {
+      const [leftObject, rightObject] = (construction.sheafIds || []).map((id) => state.sheaves.find((item) => item.id === id));
+      if (!leftObject || !rightObject) return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
+      const left = buildSourceSheafBundle(geometry, leftObject);
+      const right = buildSourceSheafBundle(geometry, rightObject);
+      return construction.type === 'direct-sum'
+        ? buildDirectSumBundle(geometry.dim, sheaf, left, right)
+        : buildTensorBundle(geometry.dim, sheaf, left, right);
+    }
+    if (construction.type === 'pullback' || construction.type === 'pushforward') {
+      return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, {
+        ...options,
+        variablePrefix: constructionVariablePrefix(sheaf.sourceObject || sheaf, construction.type),
+        chernSubjectLatex: sheaf.labelLatex,
+        characterSubjectLatex: sheaf.labelLatex
+      });
+    }
+    return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
+  }
+
+  function buildSourceSheafBundle(geometry, sheafObject) {
+    const source = sheafFromObject(sheafObject, geometry);
+    return buildBundleForSheaf(geometry, source, {
+      variablePrefix: constructionVariablePrefix(sheafObject, 'source')
+    });
+  }
+
+  function buildDirectSumBundle(d, sheaf, left, right) {
+    const chComps = zeroComponentArray(d);
+    for (let i = 1; i <= d; i++) {
+      chComps[i] = componentOrZero(left.chComps, i).add(componentOrZero(right.chComps, i));
+    }
+    return buildBundleFromCh(chComps, rankSumLatex(left, right), rankSumPlain(left, right), sheaf.labelLatex, sheaf.labelPlain);
+  }
+
+  function buildTensorBundle(d, sheaf, left, right) {
+    const chComps = zeroComponentArray(d);
+    const leftRank = rankAsDegreeZeroPoly(left, `${constructionSafeId(sheaf.labelPlain)}Left`);
+    const rightRank = rankAsDegreeZeroPoly(right, `${constructionSafeId(sheaf.labelPlain)}Right`);
+    for (let i = 1; i <= d; i++) {
+      let term = componentOrZero(left.chComps, i).mul(rightRank, d)
+        .add(componentOrZero(right.chComps, i).mul(leftRank, d));
+      for (let j = 1; j < i; j += 1) {
+        term = term.add(componentOrZero(left.chComps, j).mul(componentOrZero(right.chComps, i - j), d));
+      }
+      chComps[i] = term;
+    }
+    return buildBundleFromCh(chComps, rankProductLatex(left, right), rankProductPlain(left, right), sheaf.labelLatex, sheaf.labelPlain);
+  }
+
+  function rankAsDegreeZeroPoly(bundle, idSeed) {
+    const plain = String(bundle.rankPlain || '').trim();
+    if (/^-?\d+$/.test(plain)) return Poly.constant(BigInt(plain));
+    const id = `rank${constructionSafeId(bundle.rankLatex || bundle.rankPlain || idSeed)}`;
+    defineVariable(id, 0, bundle.rankLatex || plain || 'r');
+    return Poly.variable(id);
+  }
+
+  function rankSumLatex(left, right) {
+    if (/^-?\d+$/.test(left.rankPlain || '') && /^-?\d+$/.test(right.rankPlain || '')) {
+      return String(Number(left.rankPlain) + Number(right.rankPlain));
+    }
+    return `${rankLatexTerm(left)}+${rankLatexTerm(right)}`;
+  }
+
+  function rankSumPlain(left, right) {
+    if (/^-?\d+$/.test(left.rankPlain || '') && /^-?\d+$/.test(right.rankPlain || '')) {
+      return String(Number(left.rankPlain) + Number(right.rankPlain));
+    }
+    return `${left.rankPlain || 'r'}+${right.rankPlain || 's'}`;
+  }
+
+  function rankProductLatex(left, right) {
+    if (/^-?\d+$/.test(left.rankPlain || '') && /^-?\d+$/.test(right.rankPlain || '')) {
+      return String(Number(left.rankPlain) * Number(right.rankPlain));
+    }
+    return `${rankLatexTerm(left)}${rankLatexTerm(right)}`;
+  }
+
+  function rankProductPlain(left, right) {
+    if (/^-?\d+$/.test(left.rankPlain || '') && /^-?\d+$/.test(right.rankPlain || '')) {
+      return String(Number(left.rankPlain) * Number(right.rankPlain));
+    }
+    return `(${left.rankPlain || 'r'})*(${right.rankPlain || 's'})`;
+  }
+
+  function rankLatexTerm(bundle) {
+    const rank = bundle.rankLatex || bundle.rankPlain || 'r';
+    return /^[A-Za-z0-9_{}\\^]+$/.test(rank) ? rank : `\\left(${rank}\\right)`;
+  }
+
+  function constructionVariablePrefix(object, role) {
+    return `${role}${constructionSafeId(object?.id || object?.name || 'object')}_`;
+  }
+
+  function constructionSafeId(value) {
+    return String(value || 'x').replace(/[^A-Za-z0-9]/g, '') || 'x';
+  }
+
+  function buildAbstractGeometrySheaf(geometry, sheaf, options = {}) {
     if (sheaf.type === 'tangent') {
       return buildAbstractTangentBundle(geometry, sheaf);
     }
@@ -1767,7 +3301,7 @@
     if (sheaf.type === 'twist') {
       throw new Error('O_X(r) requires a map to projective space.');
     }
-    return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain);
+    return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
   }
 
   function buildAbstractTangentBundle(geometry, sheaf) {
@@ -1816,8 +3350,9 @@
   }
 
   function curvePointClass(geometry) {
-    const id = `pt_${geometry.labelPlain.replace(/[^A-Za-z0-9]+/g, '_') || 'C'}`;
-    defineVariable(id, 1, `[p]_{${geometry.labelLatex}}`);
+    const id = homologyVariableId(HOMOLOGY_POINT_CLASS);
+    const pointClass = homologyClassDefById(geometry, HOMOLOGY_POINT_CLASS);
+    defineVariable(id, 1, pointClass?.symbolLatex || '[p]');
     return Poly.variable(id);
   }
 
@@ -1854,7 +3389,7 @@
     return chComps;
   }
 
-  function buildEmbeddedGeometrySheaf(geometry, sheaf) {
+  function buildEmbeddedGeometrySheaf(geometry, sheaf, options = {}) {
     const d = geometry.dim;
     if (sheaf.type === 'tangent') {
       const terms = [{ multiplicity: geometry.ambient + 1, twist: 1 }, { multiplicity: -1, twist: 0 }];
@@ -1875,19 +3410,20 @@
     if (sheaf.type === 'twist') {
       return buildLineFromHyperplane(sheaf.twist, d, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
     }
-    return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain);
+    return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
   }
 
-  function buildLocallyFreeBundle(d, sheaf) {
+  function buildLocallyFreeBundle(d, sheaf, options = {}) {
+    const prefix = options.variablePrefix || '';
     const numericRank = numericRankFromPlain(sheaf.rankPlain);
     if (sheaf.basis === 'character') {
       if (numericRank == null) {
-        return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain);
+        return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
       }
       const maxCharacterIndex = Math.min(d, numericRank);
       const freeChComps = zeroComponentArray(maxCharacterIndex);
       for (let i = 1; i <= maxCharacterIndex; i++) {
-        const id = `ch${i}`;
+        const id = `${prefix}ch${i}`;
         defineVariable(id, i, `\\operatorname{ch}_{${i}}(${sheaf.labelLatex})`);
         freeChComps[i] = Poly.variable(id);
       }
@@ -1903,7 +3439,7 @@
     const cComps = zeroComponentArray(d);
     const maxChernIndex = numericRank == null ? d : Math.min(d, numericRank);
     for (let i = 1; i <= maxChernIndex; i++) {
-      const id = `c${i}`;
+      const id = `${prefix}c${i}`;
       defineVariable(id, i, `c_{${i}}(${sheaf.labelLatex})`);
       cComps[i] = Poly.variable(id);
     }
@@ -1913,10 +3449,11 @@
   function buildAbstractBundle(d, sheaf, subjectLatex, subjectPlain, rankLatex, rankPlain, options = {}) {
     const chernSubjectLatex = options.chernSubjectLatex || subjectLatex;
     const characterSubjectLatex = options.characterSubjectLatex || subjectLatex;
+    const prefix = options.variablePrefix || '';
     if (sheaf.basis === 'character') {
       const chComps = zeroComponentArray(d);
       for (let i = 1; i <= d; i++) {
-        const id = `ch${i}`;
+        const id = `${prefix}ch${i}`;
         defineVariable(id, i, `\\operatorname{ch}_{${i}}(${characterSubjectLatex})`);
         chComps[i] = Poly.variable(id);
       }
@@ -1924,7 +3461,7 @@
     }
     const cComps = zeroComponentArray(d);
     for (let i = 1; i <= d; i++) {
-      const id = `c${i}`;
+      const id = `${prefix}c${i}`;
       defineVariable(id, i, `c_{${i}}(${chernSubjectLatex})`);
       cComps[i] = Poly.variable(id);
     }
@@ -2560,6 +4097,96 @@
     return body.startsWith('-') ? `${rank} - ${body.slice(1)}` : `${rank} + ${body}`;
   }
 
+  function renderHomologyPanel(result = state.lastResult) {
+    if (!refs.homologyCard) return;
+    const variety = activeVariety();
+    if (!variety) {
+      if (refs.homologyActive) refs.homologyActive.textContent = 'Add a variety.';
+      if (refs.homologyHyperplaneRow) refs.homologyHyperplaneRow.hidden = true;
+      if (refs.homologyPointRow) refs.homologyPointRow.hidden = true;
+      if (refs.homologySymbols) {
+        refs.homologySymbols.hidden = true;
+        refs.homologySymbols.innerHTML = '';
+      }
+      if (refs.homologyRules) {
+        refs.homologyRules.hidden = true;
+        refs.homologyRules.innerHTML = '';
+      }
+      if (refs.homologyAddRule) refs.homologyAddRule.hidden = true;
+      if (refs.homologyMessage) refs.homologyMessage.textContent = '';
+      return;
+    }
+
+    const geometry = result?.geometry?.homology && result.geometry.varietyId === variety.id
+      ? result.geometry
+      : geometryFromVariety(variety);
+    const defs = homologyClassDefinitions(geometry);
+    const hyperplane = defs.find((def) => def.id === HOMOLOGY_HYPERPLANE_CLASS);
+    const point = defs.find((def) => def.id === HOMOLOGY_POINT_CLASS);
+
+    if (refs.homologyActive) setInlineMath(refs.homologyActive, `\\text{classes on } ${geometry.labelLatex}`);
+    if (refs.homologyHyperplaneRow) refs.homologyHyperplaneRow.hidden = !hyperplane;
+    if (refs.homologyHyperplaneSymbol && hyperplane) refs.homologyHyperplaneSymbol.value = hyperplane.symbolLatex;
+    if (refs.homologyPointRow) refs.homologyPointRow.hidden = !point;
+    if (refs.homologyPointSymbol && point) refs.homologyPointSymbol.value = point.symbolLatex;
+
+    const ruleWarning = result?.classDisplay?.homologyRuleWarning || '';
+    renderHomologySymbols(geometry, defs);
+    renderHomologyRules(geometry, defs);
+    renderHomologyRuleCreator(geometry, defs);
+    if (refs.homologyMessage) refs.homologyMessage.textContent = ruleWarning;
+    typeset(refs.homologyCard);
+  }
+
+  function renderHomologySymbols(geometry, defs) {
+    if (!refs.homologySymbols) return;
+    refs.homologySymbols.hidden = defs.length === 0;
+    refs.homologySymbols.innerHTML = defs.map((def) => `
+      <div class="homology-symbol-row">
+        <span>\\(${def.symbolLatex}\\in H^{${2 * def.degree}}(${geometry.labelLatex})\\)</span>
+        <span class="homology-symbol-kind">${escapeHtml(def.kind)}</span>
+      </div>
+    `).join('');
+  }
+
+  function renderHomologyRules(geometry, defs) {
+    if (!refs.homologyRules) return;
+    const available = new Set(defs.map((def) => homologyVariableId(def.id)));
+    const rules = (geometry.homology?.rules || []).filter((rule) => (
+      homologyRulePreservesDegree(rule, defs)
+      && homologyRuleUsesAvailableVariables(rule, available)
+    ));
+    defineHomologyVariables(geometry);
+    refs.homologyRules.hidden = rules.length === 0;
+    refs.homologyRules.innerHTML = rules.map((rule) => `
+      <div class="homology-rule-row" data-rule-id="${escapeHtml(rule.id)}">
+        <label class="homology-rule-toggle">
+          <input type="checkbox" data-homology-rule-toggle="${escapeHtml(rule.id)}" ${rule.enabled !== false ? 'checked' : ''}>
+          <span>\\(${homologyRuleLatex(rule, geometry)}\\)</span>
+        </label>
+        ${rule.builtin ? '<span class="homology-symbol-kind">standard</span>' : `<button class="btn btn-ghost homology-rule-delete" type="button" data-homology-rule-delete="${escapeHtml(rule.id)}">delete</button>`}
+      </div>
+    `).join('');
+  }
+
+  function renderHomologyRuleCreator(geometry, defs) {
+    if (!refs.homologyAddRule) return;
+    refs.homologyAddRule.hidden = defs.length === 0;
+    if (defs.length === 0) return;
+    if (refs.homologyRuleEquation) {
+      refs.homologyRuleEquation.placeholder = defaultHomologyRulePlaceholder(geometry);
+    }
+  }
+
+  function homologyRuleLatex(rule, geometry) {
+    defineHomologyVariables(geometry);
+    return `${homologyRuleLhsLatex(rule, geometry)}=${formatPolyLatex(homologyRuleRhsPoly(rule))}`;
+  }
+
+  function homologyRulePlain(rule, geometry) {
+    return homologyRulePlainEquation(rule, geometry);
+  }
+
   function renderResult(result) {
     const { geometry, bundle } = result;
     const badgeParts = [];
@@ -2567,8 +4194,10 @@
     if (bundle) badgeParts.push(bundle.labelLatex);
     setInlineMath(refs.objectBadge, badgeParts.length ? badgeParts.join(',\\ ') : '\\text{empty}');
     const basis = basisStatusLabel(result.sheaf?.basis);
-    refs.status.textContent = `${state.varieties.length} variet${state.varieties.length === 1 ? 'y' : 'ies'} · ${state.sheaves.length} ${state.sheaves.length === 1 ? 'sheaf' : 'sheaves'}${bundle ? ` · ${basis} basis` : ''}`;
+    refs.status.textContent = `${state.varieties.length} variet${state.varieties.length === 1 ? 'y' : 'ies'} · ${state.sheaves.length} ${state.sheaves.length === 1 ? 'sheaf' : 'sheaves'} · ${state.maps.length} map${state.maps.length === 1 ? '' : 's'}${bundle ? ` · ${basis} basis` : ''}`;
     setInlineMath(refs.ringSummary, geometry ? `A^*(${geometry.labelLatex})_{\\le ${geometry.dim}}` : '\\text{add a variety}');
+    renderConstructionPanel();
+    renderHomologyPanel(result);
     if (result.classRows.length) {
       if (refs.classActions) refs.classActions.hidden = false;
       syncClassDisplayControls(result);
@@ -2887,6 +4516,7 @@
     }
     ensureCanvasLabelPositions(cssWidth, cssHeight);
     drawSheafBaseLines(ctx, cssWidth, cssHeight);
+    drawMapArrows(ctx, cssWidth, cssHeight);
     renderCanvasLabels(cssWidth, cssHeight);
   }
 
@@ -2901,6 +4531,7 @@
     if (!state.varieties.length && !state.sheaves.length) return;
     ensureCanvasLabelPositions(state.canvasWidth, state.canvasHeight);
     drawSheafBaseLines(ctx, state.canvasWidth, state.canvasHeight);
+    drawMapArrows(ctx, state.canvasWidth, state.canvasHeight);
   }
 
   function renderCanvasMessage(width, height, latex) {
@@ -2929,13 +4560,22 @@
       const rect = layout.varietyNodes[index] || layout.varietyPanel;
       const pos = canvasLabelPosition(variety, 'variety', rect, width, height, index, state.varieties.length);
       const name = sanitizeMathLabel(variety.name, 'X');
+      const classes = ['sheaf-canvas-label', 'is-variety'];
+      if (showSelection && !state.activeSheafId && !state.activeMapId && variety.id === state.activeVarietyId) classes.push('is-active');
+      const activeEndpointRole = activeMapEndpointRole('variety', variety.id);
+      if (activeEndpointRole === 'domain') classes.push('is-map-domain');
+      else if (activeEndpointRole === 'codomain') classes.push('is-map-codomain');
+      if (state.basePickActive) classes.push('is-pick-candidate');
+      if (currentInputKind() === 'map' && inputIsCreateMode() && !state.mapDraft) classes.push('is-pick-candidate');
+      else if (state.mapDraft?.domainKind === 'variety' && state.mapDraft.domainId === variety.id) classes.push('is-map-domain');
+      else if (allowableMapCodomain('variety', variety.id)) classes.push('is-map-codomain-candidate');
       labels.push({
         x: pos.x,
         y: pos.y,
         maxWidth: Math.max(120, Math.min(260, width - 24)),
         main: name,
         ariaLabel: `variety ${latexToPlain(name)}`,
-        className: showSelection && !state.activeSheafId && variety.id === state.activeVarietyId ? 'sheaf-canvas-label is-active is-variety' : 'sheaf-canvas-label is-variety',
+        className: classes.join(' '),
         objectKind: 'variety',
         objectId: variety.id
       });
@@ -2944,18 +4584,51 @@
       const rect = layout.sheafNodes[index] || layout.sheafPanel;
       const pos = canvasLabelPosition(sheaf, 'sheaf', rect, width, height, index, state.sheaves.length);
       const name = sanitizeMathLabel(sheaf.name, '\\mathcal{E}');
+      const classes = ['sheaf-canvas-label', 'is-sheaf'];
+      if (showSelection && sheaf.id === state.activeSheafId) classes.push('is-active');
+      const activeEndpointRole = activeMapEndpointRole('sheaf', sheaf.id);
+      if (activeEndpointRole === 'domain') classes.push('is-map-domain');
+      else if (activeEndpointRole === 'codomain') classes.push('is-map-codomain');
+      if (currentInputKind() === 'map' && inputIsCreateMode() && !state.mapDraft) classes.push('is-pick-candidate');
+      else if (state.mapDraft?.domainKind === 'sheaf' && state.mapDraft.domainId === sheaf.id) classes.push('is-map-domain');
+      else if (allowableMapCodomain('sheaf', sheaf.id)) classes.push('is-map-codomain-candidate');
       labels.push({
         x: pos.x,
         y: pos.y,
         maxWidth: Math.max(120, Math.min(260, width - 24)),
         main: name,
         ariaLabel: `sheaf ${latexToPlain(name)}`,
-        className: showSelection && sheaf.id === state.activeSheafId ? 'sheaf-canvas-label is-active is-sheaf' : 'sheaf-canvas-label is-sheaf',
+        className: classes.join(' '),
         objectKind: 'sheaf',
         objectId: sheaf.id
       });
     });
+    state.maps.forEach((map) => {
+      const endpoints = mapEndpointLabels(map, labels);
+      if (!endpoints) return;
+      const pos = mapLabelPosition(map, endpoints, width, height);
+      const name = sanitizeMathLabel(map.name, 'f');
+      labels.push({
+        x: pos.x,
+        y: pos.y,
+        maxWidth: 96,
+        main: name,
+        ariaLabel: `map ${latexToPlain(name)}`,
+        className: `${showSelection && map.id === state.activeMapId ? 'sheaf-canvas-label is-active is-map' : 'sheaf-canvas-label is-map'}`,
+        objectKind: 'map',
+        objectId: map.id
+      });
+    });
     return labels;
+  }
+
+  function activeMapEndpointRole(kind, id) {
+    if (!inputIsModifyMode() || !state.activeMapId) return null;
+    const map = selectedMap();
+    if (!map) return null;
+    if (map.domainKind === kind && map.domainId === id) return 'domain';
+    if (map.codomainKind === kind && map.codomainId === id) return 'codomain';
+    return null;
   }
 
   function drawCanvasBackground(ctx, width, height) {
@@ -2985,6 +4658,120 @@
       ctx.stroke();
     });
     ctx.restore();
+  }
+
+  function drawMapArrows(ctx, width, height) {
+    const labels = canvasOverviewLabels(width, height).filter((label) => label.objectKind !== 'map');
+    const labelMap = canvasLabelMap(labels);
+    ctx.save();
+    state.maps.forEach((map) => {
+      const from = labelMap.get(`${map.domainKind}:${map.domainId}`);
+      const to = labelMap.get(`${map.codomainKind}:${map.codomainId}`);
+      if (!from || !to) return;
+      drawArrowBetweenLabels(ctx, from, to, map.id === state.activeMapId ? '#8b3a2a' : 'rgba(139,58,42,0.72)');
+    });
+    if (state.mapDrag) {
+      const from = labelMap.get(`${state.mapDrag.domainKind}:${state.mapDrag.domainId}`);
+      if (from) drawArrowFromLabel(ctx, from, state.mapDrag.x, state.mapDrag.y, 'rgba(139,58,42,0.42)');
+    }
+    ctx.restore();
+  }
+
+  function drawArrowBetweenLabels(ctx, from, to, color) {
+    const endpoints = clippedArrowEndpoints(from, to);
+    if (!endpoints) return;
+    drawArrow(ctx, endpoints.x1, endpoints.y1, endpoints.x2, endpoints.y2, color);
+  }
+
+  function drawArrowFromLabel(ctx, from, x2, y2, color) {
+    const start = labelEdgePoint(from, x2, y2, 6);
+    if (!start || Math.hypot(x2 - start.x, y2 - start.y) < 12) return;
+    drawArrow(ctx, start.x, start.y, x2, y2, color);
+  }
+
+  function clippedArrowEndpoints(from, to) {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 18) return null;
+    const ux = dx / length;
+    const uy = dy / length;
+    let startOffset = labelExitOffset(from, ux, uy) + 6;
+    let endOffset = labelExitOffset(to, -ux, -uy) + 9;
+    const maxOffset = length - 12;
+    if (startOffset + endOffset > maxOffset) {
+      const scale = maxOffset / (startOffset + endOffset);
+      startOffset *= scale;
+      endOffset *= scale;
+    }
+    return {
+      x1: from.x + ux * startOffset,
+      y1: from.y + uy * startOffset,
+      x2: to.x - ux * endOffset,
+      y2: to.y - uy * endOffset
+    };
+  }
+
+  function labelEdgePoint(label, x, y, extra = 6) {
+    const dx = x - label.x;
+    const dy = y - label.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 1) return null;
+    const ux = dx / length;
+    const uy = dy / length;
+    const offset = Math.min(length - 1, labelExitOffset(label, ux, uy) + extra);
+    return {
+      x: label.x + ux * offset,
+      y: label.y + uy * offset
+    };
+  }
+
+  function labelExitOffset(label, ux, uy) {
+    const bounds = estimatedLabelBounds(label);
+    const xOffset = Math.abs(ux) < 0.001 ? Infinity : bounds.halfWidth / Math.abs(ux);
+    const yOffset = Math.abs(uy) < 0.001 ? Infinity : bounds.halfHeight / Math.abs(uy);
+    return Math.min(xOffset, yOffset);
+  }
+
+  function estimatedLabelBounds(label) {
+    const plain = latexToPlain(label.main || '');
+    const lines = Math.max(1, Math.ceil(plain.length / 22));
+    const maxWidth = label.maxWidth || 260;
+    const width = Math.min(maxWidth, Math.max(label.objectKind === 'map' ? 30 : 42, plain.length * 8 + 24));
+    const height = label.objectKind === 'map' ? 24 : Math.max(26, lines * 22 + 6);
+    return {
+      halfWidth: width / 2,
+      halfHeight: height / 2
+    };
+  }
+
+  function canvasLabelMap(labels = canvasOverviewLabels(state.canvasWidth || 760, state.canvasHeight || 280)) {
+    const labelMap = new Map();
+    labels.forEach((label) => {
+      if (!label.objectKind || !label.objectId) return;
+      labelMap.set(`${label.objectKind}:${label.objectId}`, label);
+    });
+    return labelMap;
+  }
+
+  function mapEndpointLabels(map, labels) {
+    const labelMap = canvasLabelMap(labels);
+    const from = labelMap.get(`${map.domainKind}:${map.domainId}`);
+    const to = labelMap.get(`${map.codomainKind}:${map.codomainId}`);
+    return from && to ? { from, to } : null;
+  }
+
+  function mapLabelPosition(map, endpoints, width, height) {
+    if (Number.isFinite(map.labelX) && Number.isFinite(map.labelY)) {
+      return {
+        x: clamp(map.labelX * width, 24, width - 24),
+        y: clamp(map.labelY * height, 24, height - 24)
+      };
+    }
+    return {
+      x: (endpoints.from.x + endpoints.to.x) / 2,
+      y: (endpoints.from.y + endpoints.to.y) / 2
+    };
   }
 
   function drawWideOverview(ctx, width, height, result) {
@@ -3104,6 +4891,10 @@
       const rect = layout.sheafNodes[index] || layout.sheafPanel;
       setCanvasLabelPosition(sheaf, rect.x + rect.w / 2, rect.y + rect.h / 2, width, height);
     });
+    state.maps.forEach((map) => {
+      if (Number.isFinite(map.labelX) && Number.isFinite(map.labelY)) return;
+      positionMapLabel(map, width, height);
+    });
   }
 
   function setCanvasLabelPosition(object, x, y, width, height) {
@@ -3111,12 +4902,21 @@
     object.labelY = clamp(height ? y / height : 0.5, 0.07, 0.93);
   }
 
+  function positionMapLabel(map, width = state.canvasWidth || 760, height = state.canvasHeight || 280) {
+    const labels = canvasOverviewLabels(width, height).filter((label) => label.objectKind !== 'map');
+    const endpoints = mapEndpointLabels(map, labels);
+    if (!endpoints) {
+      map.labelX = 0.5;
+      map.labelY = 0.5;
+      return;
+    }
+    setCanvasLabelPosition(map, (endpoints.from.x + endpoints.to.x) / 2, (endpoints.from.y + endpoints.to.y) / 2, width, height);
+  }
+
   function startCanvasLabelDrag(target, event) {
     const kind = target.dataset.objectKind;
     const id = target.dataset.objectId;
-    const item = kind === 'sheaf'
-      ? state.sheaves.find((entry) => entry.id === id)
-      : state.varieties.find((entry) => entry.id === id);
+    const item = objectByKind(kind, id);
     if (!item || !refs.canvas) return;
     event.preventDefault();
     target.classList.add('is-dragging');
@@ -3124,6 +4924,8 @@
     const labelRect = target.getBoundingClientRect();
     state.labelDrag = {
       item,
+      kind,
+      id,
       target,
       canvasRect,
       offsetX: event.clientX - labelRect.left,
@@ -3167,11 +4969,27 @@
     drag.target.classList.remove('is-dragging');
     try { drag.target.releasePointerCapture?.(drag.pointerId); } catch (_) {}
     const moved = drag.moved;
+    const outside = event && pointOutsideRect(event.clientX, event.clientY, drag.canvasRect);
     state.labelDrag = null;
+    if (moved && outside) {
+      state.suppressLabelClickUntil = Date.now() + 180;
+      removeCanvasObject(drag.kind, drag.id);
+      return;
+    }
     if (moved) {
       state.suppressLabelClickUntil = Date.now() + 180;
       recompute();
     }
+  }
+
+  function objectByKind(kind, id) {
+    if (kind === 'sheaf') return state.sheaves.find((entry) => entry.id === id);
+    if (kind === 'map') return state.maps.find((entry) => entry.id === id);
+    return state.varieties.find((entry) => entry.id === id);
+  }
+
+  function pointOutsideRect(x, y, rect) {
+    return x < rect.left || x > rect.right || y < rect.top || y > rect.bottom;
   }
 
   function clamp(value, min, max) {
@@ -3256,6 +5074,10 @@
         const marker = sheaf.id === state.activeSheafId ? '\\quad\\text{active for }A^*' : '';
         lines.push(`\\[E_{${index + 1}}:\\ ${exportSheafLatex(sheaf)}${marker}\\]`);
       });
+      state.maps.forEach((map, index) => {
+        const marker = map.id === state.activeMapId ? '\\quad\\text{active map}' : '';
+        lines.push(`\\[f_{${index + 1}}:\\ ${exportMapLatex(map)}${marker}\\]`);
+      });
       if (result.sheaf) lines.push(`% basis: ${basisPlain}`);
       return lines.join('\n');
     }
@@ -3269,6 +5091,10 @@
         const marker = sheaf.id === state.activeSheafId ? ' active for characteristic classes' : '';
         lines.push(`# E_${index + 1}: ${exportSheafPlain(sheaf)}${marker}`);
       });
+      state.maps.forEach((map, index) => {
+        const marker = map.id === state.activeMapId ? ' active map' : '';
+        lines.push(`# f_${index + 1}: ${exportMapPlain(map)}${marker}`);
+      });
       if (result.sheaf) lines.push(`# basis: ${basisPlain}`);
       return lines.join('\n');
     }
@@ -3280,6 +5106,10 @@
     state.sheaves.forEach((sheaf, index) => {
       const marker = sheaf.id === state.activeSheafId ? ' active for characteristic classes' : '';
       lines.push(`E_${index + 1}: ${exportSheafPlain(sheaf)}${marker}`);
+    });
+    state.maps.forEach((map, index) => {
+      const marker = map.id === state.activeMapId ? ' active map' : '';
+      lines.push(`f_${index + 1}: ${exportMapPlain(map)}${marker}`);
     });
     if (result.sheaf) lines.push(`basis: ${basisPlain}`);
     return lines.join('\n');
@@ -3314,6 +5144,10 @@
     return parts.join(',\\ ');
   }
 
+  function exportMapLatex(map) {
+    return `${sanitizeMathLabel(map.name, 'f')}: ${objectLatexLabel(map.domainKind, map.domainId)}\\to ${objectLatexLabel(map.codomainKind, map.codomainId)}`;
+  }
+
   function exportVarietyPlain(variety) {
     const geometry = geometryFromVariety(variety);
     const parts = [
@@ -3343,6 +5177,16 @@
     return parts.join('; ');
   }
 
+  function exportMapPlain(map) {
+    return `${latexToPlain(map.name)}: ${objectPlainLabel(map.domainKind, map.domainId)} -> ${objectPlainLabel(map.codomainKind, map.codomainId)}`;
+  }
+
+  function objectLatexLabel(kind, id) {
+    if (kind === 'variety') return sanitizeMathLabel(state.varieties.find((item) => item.id === id)?.name, 'X');
+    if (kind === 'sheaf') return sanitizeMathLabel(state.sheaves.find((item) => item.id === id)?.name, '\\mathcal{E}');
+    return sanitizeMathLabel(state.maps.find((item) => item.id === id)?.name, 'f');
+  }
+
   function varietyTypeLabel(type) {
     if (type === 'projective') return 'projective space';
     if (type === 'complete-intersection') return 'complete intersection';
@@ -3366,6 +5210,7 @@
       lines.push(`% X: ${result.geometry.labelPlain}`);
       lines.push(`% E: ${result.bundle.labelPlain}`);
       lines.push(`% display: ${classDisplayDescription(result)}`);
+      lines.push(...exportHomologyNotes(result.geometry, format));
       result.classRows.forEach((row) => lines.push(`\\[${row.labelLatex} = ${row.latex}\\]`));
       return lines.join('\n');
     }
@@ -3374,6 +5219,7 @@
       lines.push(`# X: ${result.geometry.labelPlain}`);
       lines.push(`# E: ${result.bundle.labelPlain}`);
       lines.push(`# display: ${classDisplayDescription(result)}`);
+      lines.push(...exportHomologyNotes(result.geometry, format));
       result.classRows.forEach((row) => lines.push(`${row.key} = ${row.plain}`));
       return lines.join('\n');
     }
@@ -3381,8 +5227,29 @@
     lines.push(`X: ${result.geometry.labelPlain}`);
     lines.push(`E: ${result.bundle.labelPlain}`);
     lines.push(`display: ${classDisplayDescription(result)}`);
+    lines.push(...exportHomologyNotes(result.geometry, format));
     result.classRows.forEach((row) => lines.push(`${row.label} = ${row.plain}`));
     return lines.join('\n');
+  }
+
+  function exportHomologyNotes(geometry, format) {
+    const defs = homologyClassDefinitions(geometry);
+    if (!defs.length) return [];
+    const rules = (geometry.homology?.rules || []).filter((rule) => (
+      rule.enabled !== false
+      && homologyRulePreservesDegree(rule, defs)
+    ));
+    if (format === 'latex') {
+      return [
+        ...defs.map((def) => `% ${def.symbolLatex} in H^{${2 * def.degree}}(${geometry.labelPlain}): ${def.kind}`),
+        ...rules.map((rule) => `% rule: ${homologyRulePlain(rule, geometry)}`)
+      ];
+    }
+    const prefix = format === 'sage' ? '# ' : '';
+    return [
+      ...defs.map((def) => `${prefix}${def.symbolPlain} in H^${2 * def.degree}(${geometry.labelPlain}): ${def.kind}`),
+      ...rules.map((rule) => `${prefix}rule: ${homologyRulePlain(rule, geometry)}`)
+    ];
   }
 
   function classDisplayDescription(result) {
@@ -3723,8 +5590,22 @@
     const safeFallback = String(fallback || 'X').trim() || 'X';
     if (!raw) return safeFallback;
     if (raw.length > 48) return safeFallback;
-    if (!/^[A-Za-z0-9_{}\\^()+,\-'\s]+$/.test(raw)) return safeFallback;
+    if (!/^[A-Za-z0-9_{}\\^()\[\]+,\-'\s*]+$/.test(raw)) return safeFallback;
     return raw;
+  }
+
+  function sanitizeHomologySymbol(value, fallback) {
+    return sanitizeMathLabel(value, fallback);
+  }
+
+  function parseRuleCoefficient(value) {
+    const raw = String(value || '1').trim().replace(/\s+/g, '');
+    if (!raw) return Fraction.one();
+    const match = raw.match(/^([+-]?\d+)(?:\/(\d+))?$/);
+    if (!match) throw new Error('Rule coefficient must be an integer or fraction.');
+    const den = BigInt(match[2] || '1');
+    if (den === 0n) throw new Error('Rule coefficient has zero denominator.');
+    return new Fraction(BigInt(match[1]), den);
   }
 
   function sheafLabelLatex(sheaf) {
@@ -3750,6 +5631,10 @@
       .replace(/\\operatorname\{ch\}_\{(\d+)\}\(([^)]+)\)/g, 'ch_$1($2)')
       .replace(/\\mathcal\{([^}]+)\}/g, '$1')
       .replace(/\\mathbb\{([^}]+)\}/g, '$1')
+      .replace(/\\times/g, ' x ')
+      .replace(/\\oplus/g, ' + ')
+      .replace(/\\otimes/g, ' tensor ')
+      .replace(/\\circ/g, ' o ')
       .replace(/\\Omega/g, 'Omega')
       .replace(/\\omega/g, 'omega')
       .replace(/[{}\\]/g, '');
