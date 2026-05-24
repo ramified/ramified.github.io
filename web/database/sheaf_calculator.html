@@ -79,6 +79,11 @@
       display: none !important;
     }
 
+    .card[hidden],
+    .sheaf-input-reveal-actions[hidden] {
+      display: none !important;
+    }
+
     .sheaf-input-options .opt-row {
       margin: 0;
       min-width: 0;
@@ -158,6 +163,12 @@
     .sheaf-object-button:disabled {
       opacity: 0.45;
       cursor: not-allowed;
+    }
+
+    .sheaf-object-button[aria-pressed="true"] {
+      color: var(--bg);
+      border-color: var(--accent);
+      background: var(--accent);
     }
 
     .sheaf-note {
@@ -503,7 +514,96 @@
       font-size: 0.74rem;
     }
 
+    .product-factor-picker {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: 6px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .product-factor-button {
+      padding: 4px 8px;
+      font-size: 0.72rem;
+      letter-spacing: 0;
+      text-transform: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .product-factor-button[aria-pressed="true"] {
+      color: var(--bg);
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .product-factor-times {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+    }
+
+    .sheaf-map-formula-picker {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+
+    .sheaf-map-slot-button {
+      padding: 4px 8px;
+      font-size: 0.72rem;
+      letter-spacing: 0;
+      text-transform: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 112px;
+    }
+
+    .sheaf-map-slot-button[aria-pressed="true"] {
+      color: var(--bg);
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .sheaf-map-formula-mark {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      line-height: 1;
+    }
+
     .sheaf-base-pick-button[aria-pressed="true"] {
+      color: var(--bg);
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .sheaf-input-reveal-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .sheaf-input-reveal-button {
+      padding: 4px 10px;
+      font-size: 0.72rem;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+
+    .sheaf-input-reveal-button[hidden] {
+      display: none !important;
+    }
+
+    .sheaf-input-reveal-button[aria-pressed="true"] {
       color: var(--bg);
       border-color: var(--accent);
       background: var(--accent);
@@ -521,31 +621,6 @@
       display: flex;
       justify-content: flex-end;
       margin-top: 8px;
-    }
-
-    .construction-fields {
-      display: grid;
-      gap: 8px;
-      margin-top: 8px;
-    }
-
-    .construction-preview,
-    .construction-message {
-      margin-top: 9px;
-      color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
-      line-height: 1.45;
-      overflow-wrap: anywhere;
-    }
-
-    .construction-preview mjx-container {
-      font-size: 1em !important;
-    }
-
-    .construction-actions {
-      justify-content: flex-end;
-      margin-top: 10px;
     }
 
     .ci-equation-count-control input[type=range],
@@ -1044,6 +1119,7 @@
             </select>
             <button class="btn btn-ghost sheaf-object-button" id="add-object" type="button">add</button>
             <button class="btn btn-ghost sheaf-object-button" id="delete-object" type="button">delete</button>
+            <button class="btn btn-ghost sheaf-object-button" id="input-pick-mode" type="button" aria-pressed="false" hidden>pick</button>
           </div>
           <div class="sheaf-input-options" id="input-options">
             <label class="opt-row" for="repeat-names">
@@ -1064,17 +1140,27 @@
         <div id="variety-editor" class="sheaf-input-editor">
           <div class="sheaf-editor-title" id="variety-editor-title">New variety</div>
           <div class="sheaf-field-row">
-            <label class="input-label" for="variety-dim">dimension</label>
-            <input type="number" id="variety-dim" class="sheaf-input" min="0" max="8" value="3">
-          </div>
-          <div class="sheaf-field-row">
             <label class="input-label" for="variety-type">Type</label>
             <select id="variety-type" class="sheaf-select">
               <option value="abstract" selected>Abstract variety</option>
               <option value="curve">Curve</option>
               <option value="projective">Projective space ℙⁿ</option>
               <option value="complete-intersection">Complete intersection in ℙⁿ</option>
+              <option value="product">Product of varieties</option>
             </select>
+          </div>
+          <div class="sheaf-field-row" id="product-factors-row" hidden>
+            <span class="input-label">factors</span>
+            <div class="product-factor-picker">
+              <button class="btn btn-ghost product-factor-button" id="product-factor-a" type="button" data-product-factor-index="0">varietyA</button>
+              <span class="product-factor-times">×</span>
+              <button class="btn btn-ghost product-factor-button" id="product-factor-b" type="button" data-product-factor-index="1">varietyB</button>
+            </div>
+          </div>
+          <div class="sheaf-note" id="product-pick-note" hidden>click two varieties on the canvas</div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="variety-dim">dimension</label>
+            <input type="number" id="variety-dim" class="sheaf-input" min="0" max="8" value="3">
           </div>
           <div class="sheaf-field-row">
             <label class="input-label" for="variety-name">name</label>
@@ -1110,6 +1196,9 @@
               <option value="cotangent">Cotangent sheaf Ω¹ₓ</option>
               <option value="canonical">Canonical sheaf Kₓ</option>
               <option value="twist" id="sheaf-twist-option">Oₓ(r)</option>
+              <option value="direct-sum">Direct sum</option>
+              <option value="tensor">Tensor product</option>
+              <option value="map-operation">Pullback / pushforward</option>
             </select>
           </div>
           <div class="sheaf-field-row">
@@ -1117,12 +1206,60 @@
             <input id="sheaf-name" class="sheaf-input" type="text" value="\mathcal{E}" maxlength="48" spellcheck="false" autocomplete="off">
           </div>
           <div class="sheaf-field-row" id="sheaf-base-row" hidden>
-            <label class="input-label" for="sheaf-base-variety">base</label>
+            <label class="input-label" for="sheaf-base-button">base variety</label>
             <div class="sheaf-base-picker">
-              <select id="sheaf-base-variety" class="sheaf-select"></select>
-              <button class="btn btn-ghost sheaf-base-pick-button" id="pick-sheaf-base" type="button" aria-pressed="false">pick</button>
+              <select id="sheaf-base-variety" class="sheaf-select" hidden></select>
+              <button class="btn btn-ghost sheaf-map-slot-button sheaf-base-pick-button" id="sheaf-base-button" type="button">variety</button>
             </div>
           </div>
+          <div class="sheaf-field-row" id="sheaf-binary-formula-row" hidden>
+            <span class="input-label">parents</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-binary-left-button" type="button" data-sheaf-binary-pick="left">sheaf</button>
+              <span class="sheaf-map-formula-mark" id="sheaf-binary-symbol">&oplus;</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-binary-right-button" type="button" data-sheaf-binary-pick="right">sheaf</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-binary-exact-row" hidden>
+            <span class="input-label">exact</span>
+            <label class="opt-row">
+              <input id="sheaf-binary-exact" type="checkbox">
+              <span>ordinary tensor</span>
+            </label>
+          </div>
+          <div class="sheaf-note" id="sheaf-binary-pick-note" hidden>pick two sheaves on the same base</div>
+          <div class="sheaf-field-row" id="sheaf-map-operation-row" hidden>
+            <label class="input-label" for="sheaf-map-operation">operation</label>
+            <select id="sheaf-map-operation" class="sheaf-select">
+              <option value="auto" selected>auto</option>
+              <option value="pullback">pullback</option>
+              <option value="pushforward">pushforward</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-map-formula-row" hidden>
+            <span class="input-label">parents</span>
+            <div class="sheaf-map-formula-picker">
+              <span class="sheaf-map-formula-mark" id="sheaf-map-prefix">R</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-map-map-button" type="button" data-sheaf-map-pick="map">map</button>
+              <span class="sheaf-map-formula-mark" id="sheaf-map-script">_!</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-map-sheaf-button" type="button" data-sheaf-map-pick="sheaf">sheaf</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-map-exact-row" hidden>
+            <span class="input-label">exact</span>
+            <label class="opt-row">
+              <input id="sheaf-map-exact" type="checkbox">
+              <span>ordinary functor</span>
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-map-proper-row" hidden>
+            <span class="input-label">proper</span>
+            <label class="opt-row">
+              <input id="sheaf-map-proper" type="checkbox">
+              <span>use f_*</span>
+            </label>
+          </div>
+          <div class="sheaf-note" id="sheaf-map-pick-note" hidden>pick a map and a sheaf on the canvas</div>
           <div class="sheaf-field-row" id="twist-row" hidden>
             <label class="input-label sheaf-lower-label" for="twist-r">r</label>
             <input id="twist-r" class="sheaf-input" type="number" min="-24" max="24" value="1">
@@ -1136,8 +1273,31 @@
         <div id="map-editor" class="sheaf-input-editor map-input-editor" hidden>
           <div class="sheaf-editor-title" id="map-editor-title">New map</div>
           <div class="sheaf-field-row">
+            <label class="input-label" for="map-type">Type</label>
+            <select id="map-type" class="sheaf-select">
+              <option value="ordinary" selected>Map of varieties</option>
+              <option value="composition">Composition of maps</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row">
             <label class="input-label" for="map-name">name</label>
             <input id="map-name" class="sheaf-input" type="text" value="f" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row" id="map-endpoints-row">
+            <span class="input-label">parents</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="map-domain-button" type="button" data-map-pick="domain">variety</button>
+              <span class="sheaf-map-formula-mark">&rArr;</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="map-codomain-button" type="button" data-map-pick="codomain">variety</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="map-composition-row" hidden>
+            <span class="input-label">parents</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="map-second-button" type="button" data-map-pick="second">map</button>
+              <span class="sheaf-map-formula-mark">&compfn;</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="map-first-button" type="button" data-map-pick="first">map</button>
+            </div>
           </div>
           <div class="sheaf-field-row map-curve-row" id="map-curve-row" hidden>
             <label class="input-label" for="map-point-count">curve</label>
@@ -1163,33 +1323,16 @@
             <button class="btn btn-ghost map-pick-reset" id="reset-map-pick" type="button">reset</button>
           </div>
         </div>
+
+        <div class="sheaf-input-reveal-actions" id="input-reveal-actions" hidden>
+          <button class="btn btn-ghost sheaf-input-reveal-button" id="toggle-hodge-card" type="button" aria-pressed="false" hidden>show Hodge numbers</button>
+          <button class="btn btn-ghost sheaf-input-reveal-button" id="toggle-class-card" type="button" aria-pressed="false" hidden>show characteristic classes</button>
+          <button class="btn btn-ghost sheaf-input-reveal-button" id="toggle-cohomology-card" type="button" aria-pressed="false" hidden>show sheaf cohomology</button>
+        </div>
       </div>
     </section>
 
-    <section class="card collapsed" id="construction-card">
-      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Constructions</span><em class="toggle-icon">&#9662;</em></div>
-      <div class="card-body">
-        <div class="sheaf-inline-row">
-          <span class="input-label">operation</span>
-          <select id="construction-operation" class="sheaf-select">
-            <option value="product-variety" selected>Product of varieties</option>
-            <option value="direct-sum-sheaf">Direct sum of sheaves</option>
-            <option value="tensor-sheaf">Tensor product of sheaves</option>
-            <option value="compose-map">Composition of maps</option>
-            <option value="pullback-sheaf">Pullback of a sheaf</option>
-            <option value="pushforward-sheaf">Pushforward of a sheaf</option>
-          </select>
-        </div>
-        <div class="construction-fields" id="construction-fields"></div>
-        <div class="construction-preview" id="construction-preview"></div>
-        <div class="action-row construction-actions">
-          <button class="btn btn-ghost sheaf-object-button" id="apply-construction" type="button">create</button>
-        </div>
-        <div id="construction-message" class="construction-message"></div>
-      </div>
-    </section>
-
-    <section class="card collapsed">
+    <section class="card collapsed" id="class-card" hidden>
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Characteristic Classes</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="sheaf-chart-actions" id="class-actions">
@@ -1224,7 +1367,7 @@
       </div>
     </section>
 
-    <section class="card collapsed" id="cohomology-card">
+    <section class="card collapsed" id="cohomology-card" hidden>
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Sheaf Cohomology</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="sheaf-chart-actions" id="cohomology-actions">
@@ -1266,7 +1409,7 @@
     </section>
 
     <span id="hodge-side-anchor" hidden></span>
-    <section class="card collapsed" id="hodge-card">
+    <section class="card collapsed" id="hodge-card" hidden>
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Hodge Numbers</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="hodge-card-actions" id="hodge-actions">

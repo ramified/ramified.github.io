@@ -58,11 +58,18 @@
     activeMapId: null,
     inputMode: 'create',
     labelDrag: null,
+    productDraft: null,
     mapDraft: null,
+    mapPickTarget: 'domain',
     mapDrag: null,
     mapControlDrag: null,
-    basePickActive: false,
+    sheafBinaryDraft: null,
+    sheafBinaryPickTarget: 'left',
+    sheafMapDraft: null,
+    sheafMapPickTarget: 'map',
+    canvasPickEnabled: false,
     draftSheafBaseVarietyId: null,
+    productPickIndex: 0,
     canvasWidth: 0,
     canvasHeight: 0,
     draftVarietyNameDirty: false,
@@ -72,9 +79,13 @@
     hodgeExpanded: false,
     hodgeWide: false,
     hodgeCellSize: 20,
+    revealedCharts: {
+      hodge: false,
+      classes: false,
+      cohomology: false
+    },
     homologyRulePasses: DEFAULT_HOMOLOGY_RULE_PASSES,
     exportScope: 'main',
-    constructionMessage: '',
     suppressLabelClickUntil: 0,
     suppressCardToggleUntil: 0,
     mathJaxQueue: Promise.resolve()
@@ -90,7 +101,6 @@
     syncCompleteIntersectionControls();
     bindControls();
     bindCards();
-    renderConstructionPanel();
     syncHodgeWidePlacement();
     recompute();
     window.addEventListener('resize', debounce(() => {
@@ -111,6 +121,10 @@
     refs.ciEquationCountValue = $('ci-equation-count-value');
     refs.ciDegreeSliders = $('ci-degree-sliders');
     refs.ciNote = $('ci-note');
+    refs.productFactorsRow = $('product-factors-row');
+    refs.productFactorA = $('product-factor-a');
+    refs.productFactorB = $('product-factor-b');
+    refs.productPickNote = $('product-pick-note');
     refs.varietyName = $('variety-name');
     refs.varietyEditorTitle = $('variety-editor-title');
     refs.varietyEditor = $('variety-editor');
@@ -120,10 +134,36 @@
     refs.sheafEditor = $('sheaf-editor');
     refs.sheafBaseRow = $('sheaf-base-row');
     refs.sheafBaseVariety = $('sheaf-base-variety');
-    refs.pickSheafBase = $('pick-sheaf-base');
+    refs.sheafBaseButton = $('sheaf-base-button');
+    refs.sheafBinaryFormulaRow = $('sheaf-binary-formula-row');
+    refs.sheafBinaryLeftButton = $('sheaf-binary-left-button');
+    refs.sheafBinarySymbol = $('sheaf-binary-symbol');
+    refs.sheafBinaryRightButton = $('sheaf-binary-right-button');
+    refs.sheafBinaryExactRow = $('sheaf-binary-exact-row');
+    refs.sheafBinaryExact = $('sheaf-binary-exact');
+    refs.sheafBinaryPickNote = $('sheaf-binary-pick-note');
+    refs.sheafMapOperationRow = $('sheaf-map-operation-row');
+    refs.sheafMapOperation = $('sheaf-map-operation');
+    refs.sheafMapFormulaRow = $('sheaf-map-formula-row');
+    refs.sheafMapPrefix = $('sheaf-map-prefix');
+    refs.sheafMapMapButton = $('sheaf-map-map-button');
+    refs.sheafMapScript = $('sheaf-map-script');
+    refs.sheafMapSheafButton = $('sheaf-map-sheaf-button');
+    refs.sheafMapExactRow = $('sheaf-map-exact-row');
+    refs.sheafMapExact = $('sheaf-map-exact');
+    refs.sheafMapProperRow = $('sheaf-map-proper-row');
+    refs.sheafMapProper = $('sheaf-map-proper');
+    refs.sheafMapPickNote = $('sheaf-map-pick-note');
     refs.mapEditor = $('map-editor');
     refs.mapEditorTitle = $('map-editor-title');
+    refs.mapType = $('map-type');
     refs.mapName = $('map-name');
+    refs.mapEndpointsRow = $('map-endpoints-row');
+    refs.mapCompositionRow = $('map-composition-row');
+    refs.mapDomainButton = $('map-domain-button');
+    refs.mapCodomainButton = $('map-codomain-button');
+    refs.mapFirstButton = $('map-first-button');
+    refs.mapSecondButton = $('map-second-button');
     refs.mapCurveRow = $('map-curve-row');
     refs.mapPointCount = $('map-point-count');
     refs.mapPointCountValue = $('map-point-count-value');
@@ -133,15 +173,15 @@
     refs.mapLabelOffsetValue = $('map-label-offset-value');
     refs.mapPickStatus = $('map-pick-status');
     refs.resetMapPick = $('reset-map-pick');
-    refs.constructionOperation = $('construction-operation');
-    refs.constructionFields = $('construction-fields');
-    refs.constructionPreview = $('construction-preview');
-    refs.applyConstruction = $('apply-construction');
-    refs.constructionMessage = $('construction-message');
     refs.inputMode = $('input-mode');
+    refs.inputPickMode = $('input-pick-mode');
     refs.addObjectKind = $('add-object-kind');
     refs.inputOptions = $('input-options');
     refs.modifyWarning = $('modify-warning');
+    refs.inputRevealActions = $('input-reveal-actions');
+    refs.toggleHodgeCard = $('toggle-hodge-card');
+    refs.toggleClassCard = $('toggle-class-card');
+    refs.toggleCohomologyCard = $('toggle-cohomology-card');
     refs.repeatNames = $('repeat-names');
     refs.repeatStyle = $('repeat-style');
     refs.addObject = $('add-object');
@@ -164,11 +204,13 @@
     refs.objectBadge = $('object-badge');
     refs.status = $('sheaf-status');
     refs.ringSummary = $('ring-summary');
+    refs.classCard = $('class-card');
     refs.classActions = $('class-actions');
     refs.classChart = $('class-chart');
     refs.classMessage = $('class-message');
     refs.furtherSimplify = $('further-simplify');
     refs.exportClasses = $('export-classes');
+    refs.cohomologyCard = $('cohomology-card');
     refs.cohomologyActions = $('cohomology-actions');
     refs.cohomologyDimOnly = $('cohomology-dim-only');
     refs.cohomologyChart = $('cohomology-chart');
@@ -298,6 +340,12 @@
   }
 
   function addSheafFromDraft(baseVariety = draftBaseVariety()) {
+    if (sheafBinaryInputMode() && inputIsCreateMode()) {
+      return addBinarySheafFromDraft();
+    }
+    if (refs.sheafType?.value === 'map-operation' && inputIsCreateMode()) {
+      return addMapOperationSheafFromDraft();
+    }
     const sheaf = createSheafFromDraft(baseVariety);
     if (!sheaf) return null;
     state.sheaves.push(sheaf);
@@ -307,7 +355,164 @@
     return sheaf;
   }
 
+  function addBinarySheafFromDraft() {
+    const data = binarySheafConstructionData();
+    if (!data) return null;
+    const sheaf = createBinarySheafConstruction(data);
+    if (!sheaf) return null;
+    clearSheafBinaryDraft();
+    state.draftSheafNameDirty = false;
+    refs.sheafName.value = defaultCreateSheafNameLatex();
+    return sheaf;
+  }
+
+  function updateBinarySheafFromDraft(sheaf) {
+    const data = binarySheafConstructionData();
+    if (!sheaf || !data) return null;
+    const oldBaseId = sheaf.baseVarietyId;
+    const isTensor = data.operation === 'tensor-sheaf';
+    sheaf.type = 'abstract';
+    sheaf.name = data.name;
+    sheaf.twist = '1';
+    sheaf.rank = constructionRankPlaceholder(data.operation, data.left, data.right);
+    sheaf.baseVarietyId = data.baseVarietyId;
+    sheaf.basis = 'chern';
+    sheaf.nameDirty = data.nameDirty;
+    sheaf.construction = {
+      type: isTensor ? 'tensor' : 'direct-sum',
+      sheafIds: [data.left.id, data.right.id],
+      derived: isTensor ? !!data.derived : false,
+      exact: isTensor ? !!data.exact : true,
+      defaultName: data.defaultName
+    };
+    const baseVariety = baseVarietyForSheaf(sheaf);
+    if (oldBaseId !== sheaf.baseVarietyId) {
+      positionSheafNearBase(sheaf, baseVariety);
+      avoidCanvasLabelOverlap(sheaf);
+    }
+    if (baseVariety) sheafFromObject(sheaf, geometryFromVariety(baseVariety));
+    state.activeSheafId = sheaf.id;
+    state.activeVarietyId = sheaf.baseVarietyId || defaultBaseVarietyId();
+    state.activeMapId = null;
+    refs.basis.value = normalizeBasisValue(sheaf.basis);
+    syncObjectLineage(sheaf, 'sheaf');
+    refreshConstructedObjects();
+    return sheaf;
+  }
+
+  function addMapOperationSheafFromDraft() {
+    const data = mapOperationSheafConstructionData();
+    if (!data) return null;
+    const sheaf = createMapSheafConstruction(data);
+    if (!sheaf) return null;
+    clearSheafMapDraft();
+    state.draftSheafNameDirty = false;
+    refs.sheafName.value = defaultCreateSheafNameLatex();
+    return sheaf;
+  }
+
+  function updateMapOperationSheafFromDraft(sheaf) {
+    const data = mapOperationSheafConstructionData();
+    if (!sheaf || !data) return null;
+    const isPullback = data.operation === 'pullback-sheaf';
+    const oldBaseId = sheaf.baseVarietyId;
+    sheaf.type = 'abstract';
+    sheaf.name = data.name;
+    sheaf.twist = '1';
+    sheaf.rank = isPullback ? sanitizeRankInput(data.sheaf.rank) : 'r';
+    sheaf.baseVarietyId = isPullback ? data.map.domainId : data.map.codomainId;
+    sheaf.basis = normalizeBasisValue(data.sheaf.basis);
+    sheaf.nameDirty = data.nameDirty;
+    sheaf.construction = {
+      type: isPullback ? 'pullback' : 'pushforward',
+      mapId: data.map.id,
+      sheafId: data.sheaf.id,
+      derived: !!data.derived,
+      exact: !!data.exact,
+      proper: isPullback ? false : !!data.proper,
+      defaultName: data.defaultName
+    };
+    const baseVariety = baseVarietyForSheaf(sheaf);
+    if (oldBaseId !== sheaf.baseVarietyId) {
+      positionSheafNearBase(sheaf, baseVariety);
+      avoidCanvasLabelOverlap(sheaf);
+    }
+    if (baseVariety) sheafFromObject(sheaf, geometryFromVariety(baseVariety));
+    state.activeSheafId = sheaf.id;
+    state.activeVarietyId = sheaf.baseVarietyId || defaultBaseVarietyId();
+    state.activeMapId = null;
+    refs.basis.value = normalizeBasisValue(sheaf.basis);
+    syncObjectLineage(sheaf, 'sheaf');
+    refreshConstructedObjects();
+    return sheaf;
+  }
+
+  function mapOperationSheafConstructionData() {
+    const map = sheafMapDraftMap();
+    const sourceSheaf = sheafMapDraftSheaf();
+    const operationKind = sheafMapOperationFor(map);
+    if (!map || !sourceSheaf || !operationKind) return null;
+    if (!allowableSheafMapOperationSheaf(sourceSheaf.id)) return null;
+    const operation = operationKind === 'pushforward' ? 'pushforward-sheaf' : 'pullback-sheaf';
+    const exact = !!refs.sheafMapExact?.checked;
+    const proper = operationKind === 'pushforward' && !!refs.sheafMapProper?.checked;
+    const defaultName = operationKind === 'pullback'
+      ? defaultPullbackSheafNameFromObjects(map, sourceSheaf, { derived: !exact })
+      : defaultPushforwardSheafNameFromObjects(map, sourceSheaf, { derived: !exact, proper });
+    const name = state.draftSheafNameDirty
+      ? sanitizeMathLabel(refs.sheafName.value, defaultName)
+      : defaultName;
+    return {
+      operation,
+      map,
+      sheaf: sourceSheaf,
+      exact,
+      derived: !exact,
+      proper,
+      defaultName,
+      name,
+      nameDirty: state.draftSheafNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName)
+    };
+  }
+
+  function binarySheafConstructionData() {
+    const operation = refs.sheafType?.value === 'tensor' ? 'tensor-sheaf' : refs.sheafType?.value === 'direct-sum' ? 'direct-sum-sheaf' : null;
+    if (!operation) return null;
+    const left = sheafBinaryDraftSheaf('left');
+    const right = sheafBinaryDraftSheaf('right');
+    if (!left || !right || !left.baseVarietyId || left.baseVarietyId !== right.baseVarietyId) return null;
+    const exact = operation === 'tensor-sheaf' && !!refs.sheafBinaryExact?.checked;
+    const operationLatex = operation === 'direct-sum-sheaf' ? '\\oplus' : tensorOperationLatex(!exact);
+    const defaultName = defaultBinarySheafNameFromObjects(left, right, operationLatex);
+    const name = state.draftSheafNameDirty
+      ? sanitizeMathLabel(refs.sheafName.value, defaultName)
+      : defaultName;
+    return {
+      operation,
+      left,
+      right,
+      exact,
+      derived: operation === 'tensor-sheaf' && !exact,
+      baseVarietyId: left.baseVarietyId,
+      defaultName,
+      name,
+      nameDirty: state.draftSheafNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName)
+    };
+  }
+
   function readVarietyDraft() {
+    if (refs.varietyType.value === 'product' && inputIsModifyMode()) {
+      const active = activeVariety();
+      if (active?.construction?.type === 'product') return {
+        type: 'abstract',
+        dim: String(Math.min(productDimensionFromSlots(), MAX_DIMENSION) || active.dim || refs.dim.value),
+        name: sanitizeMathLabel(refs.varietyName.value, active.name || 'X'),
+        genus: active.genus || 'g',
+        ciDegrees: active.ciDegrees || '',
+        nameDirty: state.draftVarietyNameDirty || active.nameDirty
+      };
+      refs.varietyType.value = 'abstract';
+    }
     const defaultName = defaultVarietyNameLatex();
     const name = sanitizeMathLabel(refs.varietyName.value, defaultName);
     return {
@@ -536,15 +741,26 @@
   }
 
   function draftBaseVariety() {
-    const selectedId = state.draftSheafBaseVarietyId || refs.sheafBaseVariety?.value || defaultBaseVarietyId();
+    const selectedId = [
+      state.draftSheafBaseVarietyId,
+      refs.sheafBaseVariety?.value,
+      defaultBaseVarietyId()
+    ].find((id) => state.varieties.some((item) => item.id === id));
     return state.varieties.find((item) => item.id === selectedId) || null;
   }
 
   function setDraftBaseVariety(varietyId) {
     if (!refs.sheafBaseVariety || !state.varieties.some((variety) => variety.id === varietyId)) return false;
     if (!Array.from(refs.sheafBaseVariety.options || []).some((option) => option.value === varietyId)) syncSheafBaseOptions(true);
+    const pickTarget = state.sheafMapPickTarget;
     refs.sheafBaseVariety.value = varietyId;
     state.draftSheafBaseVarietyId = refs.sheafBaseVariety.value === varietyId ? varietyId : null;
+    updateSheafBaseButton();
+    clearSheafMapDraft();
+    if (refs.sheafType?.value === 'map-operation' && inputIsCreateMode()) {
+      state.sheafMapPickTarget = pickTarget === 'map' || pickTarget === 'sheaf' ? pickTarget : 'map';
+      updateSheafMapDraftControls();
+    }
     return refs.sheafBaseVariety.value === varietyId;
   }
 
@@ -555,16 +771,18 @@
 
   function syncSheafBaseOptions(force = false) {
     if (!refs.sheafBaseVariety) return;
-    const hasMultipleVarieties = state.varieties.length > 1;
-    refs.sheafBaseRow.hidden = !refs.addObjectKind || refs.addObjectKind.value !== 'sheaf' || !hasMultipleVarieties || inputIsCreateMode();
-    if (!hasMultipleVarieties) {
+    if (!state.varieties.length) {
       refs.sheafBaseVariety.innerHTML = '';
-      if (state.varieties.length === 1) refs.sheafBaseVariety.value = state.varieties[0].id;
+      state.draftSheafBaseVarietyId = null;
+      updateSheafBaseButton(null);
       return;
     }
-    const editingSheaf = inputIsModifyMode() && refs.addObjectKind?.value === 'sheaf' ? activeSheaf() : null;
+    if (state.draftSheafBaseVarietyId && !state.varieties.some((item) => item.id === state.draftSheafBaseVarietyId)) {
+      state.draftSheafBaseVarietyId = null;
+    }
+    const editingSheaf = inputIsModifyMode() && modifyKind() === 'sheaf' ? activeSheaf() : null;
     const fallback = editingSheaf?.baseVarietyId || defaultBaseVarietyId();
-    const current = force ? fallback : (refs.sheafBaseVariety.value || fallback);
+    const current = force ? fallback : (state.draftSheafBaseVarietyId || refs.sheafBaseVariety.value || fallback);
     refs.sheafBaseVariety.innerHTML = state.varieties.map((variety) => {
       const label = sanitizeMathLabel(variety.name, 'X');
       return `<option value="${escapeHtml(variety.id)}">${escapeHtml(latexToPlain(label))}</option>`;
@@ -572,6 +790,22 @@
     const next = state.varieties.some((item) => item.id === current) ? current : fallback;
     if (next) refs.sheafBaseVariety.value = next;
     if (force && !refs.sheafBaseVariety.value) refs.sheafBaseVariety.value = next || '';
+    updateSheafBaseButton(selectedSheafBaseForButton());
+  }
+
+  function selectedSheafBaseForButton() {
+    const selectedId = state.draftSheafBaseVarietyId
+      || (inputIsModifyMode() && modifyKind() === 'sheaf' ? activeSheaf()?.baseVarietyId : null);
+    return state.varieties.find((item) => item.id === selectedId) || null;
+  }
+
+  function updateSheafBaseButton(variety = selectedSheafBaseForButton()) {
+    if (!refs.sheafBaseButton) return;
+    const label = variety ? latexToPlain(sanitizeMathLabel(variety.name, 'X')) : 'variety';
+    refs.sheafBaseButton.textContent = label;
+    refs.sheafBaseButton.title = variety ? `Replace ${label}` : 'Pick a base variety on the canvas';
+    refs.sheafBaseButton.disabled = !state.varieties.length;
+    refs.sheafBaseButton.setAttribute('aria-pressed', state.canvasPickEnabled && sheafBasePickInputMode() ? 'true' : 'false');
   }
 
   function positionSheafNearBase(sheaf, baseVariety) {
@@ -637,13 +871,73 @@
     if (refs.inputOptions) refs.inputOptions.hidden = modifying;
     if (refs.modifyWarning) refs.modifyWarning.hidden = !modifying || hasModifyTarget;
     refs.varietyEditor.hidden = modifying ? (showingSheaf || showingMap || !hasModifyTarget) : (showingSheaf || showingMap);
-    refs.sheafEditor.hidden = modifying ? (!showingSheaf || !hasModifyTarget) : (!showingSheaf || waitingForSheafBase);
+    refs.sheafEditor.hidden = modifying ? (!showingSheaf || !hasModifyTarget) : !showingSheaf;
     if (refs.mapEditor) refs.mapEditor.hidden = modifying ? (!showingMap || !hasModifyTarget) : !showingMap;
     syncMapCurveControls(showingMap && modifying ? selectedMap() : null);
     syncRepetitionStyleLabels();
     syncInputModeControls();
     updateInputEditorTitles();
     updateDeleteObjectButton();
+    syncChartRevealControls(state.lastResult);
+  }
+
+  function chartRevealAvailability(result = state.lastResult) {
+    const modifying = inputIsModifyMode();
+    const kind = modifying ? modifyKind() : null;
+    return {
+      hodge: modifying && kind === 'variety' && !!result?.hodge,
+      classes: modifying && kind === 'sheaf' && !!result && !!selectedSheaf(),
+      cohomology: modifying && kind === 'sheaf' && !!result?.cohomology?.dimensions?.length
+    };
+  }
+
+  function setChartCardVisible(scope, visible) {
+    const card = scope === 'hodge'
+      ? refs.hodgeCard
+      : scope === 'classes'
+        ? refs.classCard
+        : refs.cohomologyCard;
+    if (!card) return;
+    if (scope === 'hodge' && !visible && state.hodgeWide) setHodgeWide(false);
+    card.hidden = !visible;
+    if (visible) card.classList.remove('collapsed');
+  }
+
+  function syncRevealButton(button, scope, available) {
+    if (!button) return;
+    button.hidden = !available;
+    const revealed = !!state.revealedCharts[scope] && available;
+    button.setAttribute('aria-pressed', revealed ? 'true' : 'false');
+    const label = scope === 'hodge'
+      ? 'Hodge numbers'
+      : scope === 'classes'
+        ? 'characteristic classes'
+        : 'sheaf cohomology';
+    button.textContent = `${revealed ? 'hide' : 'show'} ${label}`;
+  }
+
+  function syncChartRevealControls(result = state.lastResult) {
+    const available = chartRevealAvailability(result);
+    Object.keys(available).forEach((scope) => {
+      if (!available[scope]) state.revealedCharts[scope] = false;
+    });
+    setChartCardVisible('hodge', available.hodge && state.revealedCharts.hodge);
+    setChartCardVisible('classes', available.classes && state.revealedCharts.classes);
+    setChartCardVisible('cohomology', available.cohomology && state.revealedCharts.cohomology);
+    syncRevealButton(refs.toggleHodgeCard, 'hodge', available.hodge);
+    syncRevealButton(refs.toggleClassCard, 'classes', available.classes);
+    syncRevealButton(refs.toggleCohomologyCard, 'cohomology', available.cohomology);
+    if (refs.inputRevealActions) {
+      refs.inputRevealActions.hidden = !available.hodge && !available.classes && !available.cohomology;
+    }
+  }
+
+  function toggleChartReveal(scope) {
+    if (!state.revealedCharts || !(scope in state.revealedCharts)) return;
+    const available = chartRevealAvailability();
+    if (!available[scope]) return;
+    state.revealedCharts[scope] = !state.revealedCharts[scope];
+    syncChartRevealControls();
   }
 
   function syncRepetitionStyleLabels() {
@@ -661,14 +955,18 @@
       refs.rank.value = 'r';
       refs.basis.value = 'chern';
       state.draftSheafBaseVarietyId = null;
+      clearSheafBinaryDraft();
+      clearSheafMapDraft();
       state.draftSheafNameDirty = false;
       syncSheafBaseOptions(true);
       refs.sheafName.value = defaultCreateSheafNameLatex();
     } else if (kind === 'map') {
+      if (refs.mapType) refs.mapType.value = 'ordinary';
       clearMapDraft();
       state.draftMapNameDirty = false;
       syncDefaultMapName(true);
     } else {
+      clearProductDraft();
       refs.varietyType.value = 'abstract';
       refs.dim.value = '3';
       refs.curveGenus.value = 'g';
@@ -728,9 +1026,8 @@
       state.activeSheafId = null;
       state.activeMapId = null;
     }
+    setCanvasPickEnabled(false, { render: false });
     if (state.inputMode === 'modify') {
-      clearMapDraft();
-      setBasePickActive(false);
       state.draftSheafBaseVarietyId = null;
     }
     if (state.inputMode === 'create' && options.resetDraft) {
@@ -745,8 +1042,6 @@
   function syncInputModeControls() {
     if (refs.inputMode) refs.inputMode.value = state.inputMode;
     if (refs.addObject) {
-      const pickingFromCanvas = inputIsCreateMode() && currentInputKind() === 'map';
-      refs.addObject.textContent = pickingFromCanvas ? 'pick' : (inputIsModifyMode() ? 'update' : 'add');
       refs.addObject.hidden = inputIsModifyMode() && !activeObjectForModifyMode();
     }
     updateInputEditorTitles();
@@ -843,35 +1138,97 @@
 
   function loadVarietyIntoDraft(variety) {
     refs.varietyType.value = variety.type || 'abstract';
+    if (variety.construction?.type === 'product') refs.varietyType.value = 'product';
     refs.dim.value = variety.dim ?? '3';
     refs.varietyName.value = variety.name || defaultVarietyNameLatex();
     refs.curveGenus.value = variety.genus || 'g';
     refs.ciDegrees.value = variety.ciDegrees || '';
+    state.productDraft = variety.construction?.type === 'product'
+      ? { varietyIds: [...(variety.construction.varietyIds || []).slice(0, 2)] }
+      : null;
+    state.productPickIndex = 0;
+    updateProductDraftControls();
     syncCompleteIntersectionControls();
     state.draftVarietyNameDirty = !!variety.nameDirty;
     updateInputEditorTitles();
   }
 
   function loadSheafIntoDraft(sheaf) {
-    refs.sheafType.value = sheaf.type || 'abstract';
+    const mapConstruction = sheafMapConstructionType(sheaf);
+    const binaryConstruction = sheafBinaryConstructionType(sheaf);
+    refs.sheafType.value = mapConstruction ? 'map-operation' : (binaryConstruction || sheaf.type || 'abstract');
     refs.sheafName.value = sheaf.name || defaultSheafNameLatex();
     refs.twist.value = sheaf.twist ?? '1';
     refs.rank.value = sheaf.rank || 'r';
     refs.basis.value = normalizeBasisValue(sheaf.basis);
     state.draftSheafNameDirty = !!sheaf.nameDirty;
     syncSheafBaseOptions();
+    state.draftSheafBaseVarietyId = sheaf.baseVarietyId || null;
     if (refs.sheafBaseVariety && sheaf.baseVarietyId && state.varieties.some((item) => item.id === sheaf.baseVarietyId)) {
       refs.sheafBaseVariety.value = sheaf.baseVarietyId;
+    }
+    updateSheafBaseButton();
+    if (mapConstruction) {
+      clearSheafBinaryDraft();
+      loadMapOperationSheafIntoDraft(sheaf);
+    } else if (binaryConstruction) {
+      clearSheafMapDraft();
+      loadBinarySheafIntoDraft(sheaf);
+    } else {
+      clearSheafMapDraft();
+      clearSheafBinaryDraft();
     }
     updateInputEditorTitles();
   }
 
+  function sheafBinaryConstructionType(sheaf) {
+    const type = sheaf?.construction?.type;
+    return type === 'direct-sum' || type === 'tensor' ? type : null;
+  }
+
+  function sheafMapConstructionType(sheaf) {
+    const type = sheaf?.construction?.type;
+    return type === 'pullback' || type === 'pushforward' ? type : null;
+  }
+
+  function loadBinarySheafIntoDraft(sheaf) {
+    const construction = sheaf?.construction || {};
+    state.sheafBinaryDraft = {
+      sheafIds: [...(construction.sheafIds || []).slice(0, 2)]
+    };
+    state.sheafBinaryPickTarget = 'left';
+    if (refs.sheafBinaryExact) refs.sheafBinaryExact.checked = !!construction.exact;
+    updateSheafBinaryDraftControls();
+  }
+
+  function loadMapOperationSheafIntoDraft(sheaf) {
+    const construction = sheaf?.construction || {};
+    state.sheafMapDraft = {
+      mapId: construction.mapId || null,
+      sheafId: construction.sheafId || null
+    };
+    state.sheafMapPickTarget = 'map';
+    if (refs.sheafMapOperation) {
+      refs.sheafMapOperation.value = construction.type === 'pushforward' ? 'pushforward' : 'pullback';
+    }
+    if (refs.sheafMapExact) refs.sheafMapExact.checked = !!construction.exact;
+    if (refs.sheafMapProper) refs.sheafMapProper.checked = !!construction.proper;
+    updateSheafMapDraftControls();
+  }
+
   function loadMapIntoDraft(map) {
-    state.mapDraft = map ? { domainKind: map.domainKind, domainId: map.domainId } : null;
+    if (refs.mapType) refs.mapType.value = map?.construction?.type === 'composition' ? 'composition' : 'ordinary';
+    state.mapDraft = map
+      ? (map.construction?.type === 'composition'
+        ? { type: 'composition', mapIds: [...(map.construction.mapIds || []).slice(0, 2)] }
+        : { type: 'ordinary', domainKind: map.domainKind, domainId: map.domainId, codomainKind: map.codomainKind, codomainId: map.codomainId })
+      : null;
+    state.mapPickTarget = refs.mapType?.value === 'composition' ? 'first' : 'domain';
     if (refs.mapName) refs.mapName.value = map?.name || defaultMapNameLatex();
     syncMapCurveControls(map);
     state.draftMapNameDirty = false;
     updateMapPickStatus();
+    updateMapDraftControls();
     updateInputEditorTitles();
   }
 
@@ -883,6 +1240,10 @@
     }
     if (kind === 'map') return activeMap();
     return kind === 'sheaf' ? activeSheaf() : activeVariety();
+  }
+
+  function activeEditingSheaf() {
+    return inputIsModifyMode() && modifyKind() === 'sheaf' ? selectedSheaf() : null;
   }
 
   function currentInputKind() {
@@ -943,7 +1304,7 @@
     if (kind === 'map') {
       state.maps = state.maps.filter((map) => map.id !== id);
       if (state.activeMapId === id) state.activeMapId = null;
-      if (state.mapDraft?.domainKind === 'map' && state.mapDraft.domainId === id) clearMapDraft();
+      if (state.mapDraft?.type === 'composition' && (state.mapDraft.mapIds || []).includes(id)) clearMapDraft();
       recompute();
       return;
     }
@@ -987,7 +1348,6 @@
     state.labelDrag = null;
     state.mapControlDrag = null;
     clearMapDraft();
-    setBasePickActive(false);
     if (refs.addObjectKind) refs.addObjectKind.value = 'variety';
     setInputMode('create', { resetDraft: true });
     syncSheafBaseOptions(true);
@@ -1006,16 +1366,146 @@
   }
 
   function createObjectFromDraft(kind = currentInputKind()) {
-    if (kind === 'map') return null;
+    if (kind === 'map') return createMapFromDraft();
     if (kind === 'sheaf') {
       return addSheafFromDraft();
     }
+    if (creatingProductVariety()) return createProductVarietyFromDraft();
     const variety = createVarietyFromDraft();
     state.varieties.push(variety);
     state.activeVarietyId = variety.id;
     state.activeSheafId = null;
     prepareNextDraftName('variety', variety.name);
     return variety;
+  }
+
+  function createProductVarietyFromDraft() {
+    const factors = productDraftFactors();
+    if (factors.length !== 2) return null;
+    const dim = productDimensionFromFactors(factors[0], factors[1]);
+    if (dim > MAX_DIMENSION) return null;
+    const defaultName = defaultProductVarietyNameFromObjects(factors[0], factors[1]);
+    const name = state.draftVarietyNameDirty
+      ? sanitizeMathLabel(refs.varietyName.value, defaultName)
+      : defaultName;
+    const created = createProductVariety({
+      left: factors[0],
+      right: factors[1],
+      dim,
+      defaultName,
+      name,
+      nameDirty: state.draftVarietyNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName)
+    });
+    clearProductDraft();
+    state.draftVarietyNameDirty = false;
+    refs.varietyName.value = defaultCreateVarietyNameLatex();
+    return created;
+  }
+
+  function createMapFromDraft() {
+    if (mapCompositionInputMode()) {
+      const data = mapCompositionConstructionData();
+      if (!data) return null;
+      const map = createComposedMap(data);
+      if (!map) return null;
+      clearMapDraft();
+      state.draftMapNameDirty = false;
+      refs.mapName.value = defaultCreateMapNameLatex();
+      return map;
+    }
+    const data = ordinaryMapDraftData();
+    if (!data) return null;
+    const map = createMapObject(
+      { kind: 'variety', id: data.domain.id },
+      { kind: 'variety', id: data.codomain.id },
+      { name: uniqueObjectName('map', data.name) }
+    );
+    if (!map) return null;
+    map.nameDirty = data.nameDirty;
+    clearMapDraft();
+    return map;
+  }
+
+  function updateMapFromDraft(map) {
+    if (!map) return null;
+    if (mapCompositionInputMode()) {
+      const data = mapCompositionConstructionData();
+      if (!data) return null;
+      map.name = data.name;
+      map.domainKind = data.first.domainKind;
+      map.domainId = data.first.domainId;
+      map.codomainKind = data.second.codomainKind;
+      map.codomainId = data.second.codomainId;
+      map.nameDirty = data.nameDirty;
+      map.construction = {
+        type: 'composition',
+        mapIds: [data.first.id, data.second.id],
+        defaultName: data.defaultName,
+        nameDirty: data.nameDirty
+      };
+      map.curve = null;
+      positionMapLabel(map);
+      syncObjectLineage(map, 'map');
+      refreshConstructedObjects();
+      updateInputEditorTitles();
+      return map;
+    }
+    const data = ordinaryMapDraftData();
+    if (!data) return null;
+    map.name = data.name;
+    map.domainKind = 'variety';
+    map.domainId = data.domain.id;
+    map.codomainKind = 'variety';
+    map.codomainId = data.codomain.id;
+    map.nameDirty = data.nameDirty;
+    map.construction = null;
+    map.curve = null;
+    map.defaultBendPx = isSelfMap(map) ? nextDefaultSelfMapAngle(map) : nextDefaultMapBend(map);
+    positionMapLabel(map);
+    syncObjectLineage(map, 'map');
+    refreshConstructedObjects();
+    updateInputEditorTitles();
+    return map;
+  }
+
+  function ordinaryMapDraftData() {
+    const draft = state.mapDraft || {};
+    const domainId = draft.domainId;
+    const codomainId = draft.codomainId;
+    const domain = state.varieties.find((item) => item.id === domainId);
+    const codomain = state.varieties.find((item) => item.id === codomainId);
+    if (!domain || !codomain) return null;
+    const defaultName = defaultMapNameLatex();
+    const name = state.draftMapNameDirty
+      ? sanitizeMathLabel(refs.mapName?.value, defaultName)
+      : (inputIsCreateMode() ? defaultCreateMapNameLatex() : readMapDraftName());
+    return {
+      domain,
+      codomain,
+      name,
+      nameDirty: state.draftMapNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName)
+    };
+  }
+
+  function mapCompositionConstructionData() {
+    const [firstId, secondId] = mapDraftMapIds();
+    const first = state.maps.find((item) => item.id === firstId);
+    const second = state.maps.find((item) => item.id === secondId);
+    if (!first || !second) return null;
+    if (first.codomainKind !== second.domainKind || first.codomainId !== second.domainId) return null;
+    if (inputIsModifyMode() && (first.id === state.activeMapId || second.id === state.activeMapId)) return null;
+    const defaultName = defaultComposedMapNameFromObjects(first, second);
+    const name = state.draftMapNameDirty
+      ? sanitizeMathLabel(refs.mapName?.value, defaultName)
+      : (inputIsCreateMode() ? uniqueObjectName('map', defaultName) : defaultName);
+    return {
+      operation: 'compose-map',
+      first,
+      second,
+      defaultName,
+      name,
+      nameDirty: state.draftMapNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName)
+    };
   }
 
   function prepareNextDraftName(kind, createdName) {
@@ -1037,13 +1527,11 @@
     const active = activeObjectForKind(kind);
     if (!active) return null;
     if (kind === 'map') {
-      active.name = readMapDraftName();
-      active.nameDirty = true;
-      if (active.construction) active.construction.nameDirty = true;
-      updateInputEditorTitles();
-      return active;
+      return updateMapFromDraft(active);
     }
     if (kind === 'sheaf') {
+      if (sheafBinaryInputMode()) return updateBinarySheafFromDraft(active);
+      if (refs.sheafType?.value === 'map-operation') return updateMapOperationSheafFromDraft(active);
       const oldBaseId = active.baseVarietyId;
       const baseVariety = draftBaseVariety();
       if (!baseVariety) return null;
@@ -1056,22 +1544,49 @@
       state.activeSheafId = active.id;
       state.activeVarietyId = active.baseVarietyId || defaultBaseVarietyId();
       refs.basis.value = normalizeBasisValue(active.basis);
+      syncObjectLineage(active, 'sheaf');
+      refreshConstructedObjects();
       return active;
     }
     Object.assign(active, readVarietyDraft());
+    if (active.construction?.type === 'product' && refs.varietyType.value === 'product') {
+      updateProductVarietyConstructionFromDraft(active);
+    } else if (refs.varietyType.value !== 'product') {
+      active.construction = null;
+      syncObjectLineage(active, 'variety');
+    }
     geometryFromVariety(active);
     if (active.type === 'curve') refs.dim.value = '1';
     state.activeVarietyId = active.id;
     state.activeSheafId = null;
     state.sheaves.forEach((sheaf) => {
-      if (sheaf.baseVarietyId === active.id && !sheaf.nameDirty) {
+      if (sheaf.baseVarietyId === active.id && !sheaf.construction && !sheaf.nameDirty) {
         const rank = sanitizeRankInput(sheaf.rank);
         const twist = normalizedInt(sheaf.twist, -24, 24, 1);
         sheaf.name = defaultSheafNameFor(sheaf.type, rank, twist, active.name);
       }
     });
     syncDefaultSheafName();
+    syncObjectLineage(active, 'variety');
+    refreshConstructedObjects();
     return active;
+  }
+
+  function updateProductVarietyConstructionFromDraft(variety) {
+    const factors = productDraftFactors();
+    if (!variety || factors.length !== 2) return false;
+    const defaultName = defaultProductVarietyNameFromObjects(factors[0], factors[1]);
+    variety.construction = {
+      ...(variety.construction || {}),
+      type: 'product',
+      varietyIds: [factors[0].id, factors[1].id],
+      defaultName
+    };
+    if (!state.draftVarietyNameDirty) variety.name = defaultName;
+    variety.dim = String(Math.min(productDimensionFromFactors(factors[0], factors[1]), MAX_DIMENSION));
+    if (!variety.labelPositionDirty) positionProductVarietyLabel(variety, factors[0], factors[1]);
+    syncObjectLineage(variety, 'variety');
+    return true;
   }
 
   function bindControls() {
@@ -1101,8 +1616,11 @@
     }
     refs.addObjectKind.addEventListener('change', () => {
       state.activeMapId = null;
+      if (refs.addObjectKind.value !== 'variety') clearProductDraft();
       clearMapDraft();
-      setBasePickActive(false);
+      clearSheafBinaryDraft();
+      clearSheafMapDraft();
+      setCanvasPickEnabled(false, { render: false });
       if (refs.addObjectKind.value === 'variety') state.activeSheafId = null;
       if (inputIsModifyMode()) {
         if (!activeObjectForKind(currentInputKind())) setInputMode('create', { resetDraft: true });
@@ -1118,6 +1636,22 @@
       typeset(refs.mapEditor);
       recompute();
     });
+    [refs.productFactorA, refs.productFactorB].forEach((button) => {
+      if (!button) return;
+      button.addEventListener('click', () => {
+        state.productPickIndex = normalizedInt(button.dataset.productFactorIndex, 0, 1, 0);
+        setCanvasPickEnabled(true, { render: false });
+        updateProductDraftControls();
+        syncGlobalPickButton();
+        renderCanvas(state.lastResult);
+      });
+    });
+    if (refs.inputPickMode) {
+      refs.inputPickMode.addEventListener('click', () => {
+        setCanvasPickEnabled(false);
+        normalizeControlVisibility();
+      });
+    }
     refs.addObject.addEventListener('click', () => {
       const changed = inputIsModifyMode()
         ? updateObjectFromDraft()
@@ -1135,7 +1669,9 @@
     refs.varietyType.addEventListener('change', () => {
       const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
       if (refs.varietyType.value === 'curve') refs.dim.value = '1';
+      if (refs.varietyType.value !== 'product') clearProductDraft();
       if (refs.varietyType.value === 'complete-intersection') syncCompleteIntersectionControls();
+      updateProductDraftControls();
       normalizeControlVisibility();
       syncDefaultVarietyName();
       syncDefaultSheafName();
@@ -1196,9 +1732,24 @@
       syncDefaultSheafName();
     });
     refs.sheafType.addEventListener('change', () => {
+      const type = refs.sheafType.value;
+      if (type !== 'map-operation') clearSheafMapDraft();
+      if (type !== 'direct-sum' && type !== 'tensor') clearSheafBinaryDraft();
+      if (type === 'map-operation' && inputIsModifyMode()) {
+        const sheaf = activeSheaf();
+        if (sheafMapConstructionType(sheaf)) loadMapOperationSheafIntoDraft(sheaf);
+      } else if (type === 'map-operation') {
+        state.sheafMapPickTarget = 'map';
+      } else if ((type === 'direct-sum' || type === 'tensor') && inputIsModifyMode()) {
+        const sheaf = activeSheaf();
+        if (sheafBinaryConstructionType(sheaf)) loadBinarySheafIntoDraft(sheaf);
+      } else if (type === 'direct-sum' || type === 'tensor') {
+        state.sheafBinaryPickTarget = 'left';
+      }
       syncDefaultRank(true);
       syncDefaultSheafName();
       normalizeControlVisibility();
+      renderCanvas(state.lastResult);
     });
     refs.sheafName.addEventListener('input', () => {
       state.draftSheafNameDirty = true;
@@ -1216,6 +1767,16 @@
       refs.mapName.addEventListener('change', () => {
         refs.mapName.value = normalizeDraftNameForKind('map', refs.mapName.value);
         updateInputEditorTitles();
+      });
+    }
+    if (refs.mapType) {
+      refs.mapType.addEventListener('change', () => {
+        clearMapDraft();
+        state.mapPickTarget = refs.mapType.value === 'composition' ? 'first' : 'domain';
+        syncDefaultMapName(true);
+        normalizeControlVisibility();
+        updateMapDraftControls();
+        renderCanvas(state.lastResult);
       });
     }
     if (refs.mapPointCount) {
@@ -1260,19 +1821,68 @@
         if (refs.sheafBaseVariety.value) {
           state.activeVarietyId = refs.sheafBaseVariety.value;
           state.draftSheafBaseVarietyId = refs.sheafBaseVariety.value;
+          clearSheafMapDraft();
+          clearSheafBinaryDraft();
+          updateSheafBaseButton();
         }
         syncDefaultSheafName();
         normalizeControlVisibility();
         recompute();
       });
     }
-    if (refs.pickSheafBase) {
-      refs.pickSheafBase.addEventListener('click', () => {
-        setBasePickActive(!state.basePickActive);
-        clearMapDraft();
+    if (refs.sheafBaseButton) {
+      refs.sheafBaseButton.addEventListener('click', () => {
+        if (!sheafBasePickInputMode()) return;
+        setCanvasPickEnabled(true);
+        normalizeControlVisibility();
+      });
+    }
+    if (refs.sheafMapOperation) {
+      refs.sheafMapOperation.addEventListener('change', () => {
+        if (state.sheafMapDraft?.sheafId && !allowableSheafMapOperationSheaf(state.sheafMapDraft.sheafId)) {
+          state.sheafMapDraft = { ...(state.sheafMapDraft || {}), sheafId: null };
+          if (state.sheafMapPickTarget !== 'map') state.sheafMapPickTarget = 'sheaf';
+        }
+        updateSheafMapDraftControls();
+        syncDefaultRank(true);
+        syncDefaultSheafName();
+        normalizeControlVisibility();
         recompute();
       });
     }
+    [refs.sheafMapExact, refs.sheafMapProper].forEach((control) => {
+      if (!control) return;
+      control.addEventListener('change', () => {
+        syncDefaultSheafName();
+        updateSheafMapDraftControls();
+        recompute();
+      });
+    });
+    [refs.sheafMapMapButton, refs.sheafMapSheafButton].forEach((button) => {
+      if (!button) return;
+      button.addEventListener('click', () => {
+        setSheafMapPickTarget(button.dataset.sheafMapPick || 'map');
+      });
+    });
+    [refs.sheafBinaryLeftButton, refs.sheafBinaryRightButton].forEach((button) => {
+      if (!button) return;
+      button.addEventListener('click', () => {
+        setSheafBinaryPickTarget(button.dataset.sheafBinaryPick || 'left');
+      });
+    });
+    if (refs.sheafBinaryExact) {
+      refs.sheafBinaryExact.addEventListener('change', () => {
+        syncDefaultSheafName();
+        updateSheafBinaryDraftControls();
+        recompute();
+      });
+    }
+    [refs.mapDomainButton, refs.mapCodomainButton, refs.mapFirstButton, refs.mapSecondButton].forEach((button) => {
+      if (!button) return;
+      button.addEventListener('click', () => {
+        setMapPickTarget(button.dataset.mapPick || 'domain');
+      });
+    });
     refs.twist.addEventListener('change', () => {
       refs.twist.value = String(normalizedInt(refs.twist.value, -24, 24, 1));
       syncDefaultSheafName();
@@ -1369,27 +1979,6 @@
         recompute();
       });
     }
-    if (refs.constructionOperation) {
-      refs.constructionOperation.addEventListener('change', () => {
-        state.constructionMessage = '';
-        renderConstructionPanel();
-      });
-    }
-    if (refs.constructionFields) {
-      refs.constructionFields.addEventListener('change', () => {
-        state.constructionMessage = '';
-        renderConstructionPanel();
-      });
-      refs.constructionFields.addEventListener('input', (event) => {
-        if (event.target?.matches?.('[data-construction-field="name"]')) {
-          state.constructionMessage = '';
-          updateConstructionPreview();
-        }
-      });
-    }
-    if (refs.applyConstruction) {
-      refs.applyConstruction.addEventListener('click', applyConstruction);
-    }
     refs.rank.addEventListener('change', () => {
       refs.rank.value = sanitizeRankInput(refs.rank.value);
       syncDefaultSheafName();
@@ -1402,6 +1991,15 @@
         state.homologyRulePasses += 1;
         recompute();
       });
+    }
+    if (refs.toggleHodgeCard) {
+      refs.toggleHodgeCard.addEventListener('click', () => toggleChartReveal('hodge'));
+    }
+    if (refs.toggleClassCard) {
+      refs.toggleClassCard.addEventListener('click', () => toggleChartReveal('classes'));
+    }
+    if (refs.toggleCohomologyCard) {
+      refs.toggleCohomologyCard.addEventListener('click', () => toggleChartReveal('cohomology'));
     }
     if (refs.exportHodge) {
       refs.exportHodge.addEventListener('click', () => openChartExport('hodge'));
@@ -1478,12 +2076,11 @@
       }
       const target = event.target.closest('[data-object-kind]');
       if (!target) return;
-      if (currentInputKind() === 'sheaf' && inputIsCreateMode()) return;
-      if (currentInputKind() === 'map' && inputIsCreateMode()) {
+      if (state.canvasPickEnabled) return;
+      if (currentInputKind() === 'map' && inputIsCreateMode() && ordinaryMapInputMode()) {
         if (shouldUseMapCanvasDrag(target)) startMapCanvasDrag(target, event);
         return;
       }
-      if (state.basePickActive) return;
       startCanvasLabelDrag(target, event);
     });
     syncMapCurveControls();
@@ -1620,239 +2217,6 @@
     recompute();
   }
 
-  function renderConstructionPanel() {
-    if (!refs.constructionOperation || !refs.constructionFields) return;
-    const operation = refs.constructionOperation.value || 'product-variety';
-    const values = constructionControlValues();
-    const stateForFields = constructionFieldState(operation, values);
-    refs.constructionFields.innerHTML = [
-      ...stateForFields.fields.map((field) => constructionFieldRow(field)),
-      constructionNameRow(stateForFields.defaultName, values.name || '')
-    ].join('');
-    updateConstructionPreview();
-  }
-
-  function constructionControlValues() {
-    const values = {};
-    refs.constructionFields?.querySelectorAll?.('[data-construction-field]').forEach((control) => {
-      values[control.dataset.constructionField] = control.type === 'checkbox' ? control.checked : control.value;
-    });
-    return values;
-  }
-
-  function constructionFieldState(operation, values = {}) {
-    const varieties = constructionVarietyOptions();
-    const sheaves = constructionSheafOptions();
-    const maps = constructionMapOptions();
-    const varietyMaps = constructionMapOptions((map) => map.domainKind === 'variety' && map.codomainKind === 'variety');
-    const fields = [];
-    const select = (name, label, options) => {
-      const value = constructionSelectedValue(options, values[name]);
-      fields.push({ type: 'select', name, label, options, value });
-      return value;
-    };
-    const option = (name, label, checked = false) => {
-      const value = values[name] === undefined ? checked : !!values[name];
-      fields.push({ type: 'checkbox', name, label, value });
-      return value;
-    };
-
-    if (operation === 'product-variety') {
-      const left = select('varietyA', 'left', varieties);
-      const right = select('varietyB', 'right', varieties);
-      return { fields, defaultName: defaultProductVarietyName(left, right) };
-    }
-    if (operation === 'direct-sum-sheaf' || operation === 'tensor-sheaf') {
-      const left = select('sheafA', 'left', sheaves);
-      const right = select('sheafB', 'right', sheaves);
-      const exact = operation === 'tensor-sheaf' ? option('exact', 'exact') : false;
-      return {
-        fields,
-        defaultName: operation === 'direct-sum-sheaf'
-          ? defaultBinarySheafName(left, right, '\\oplus')
-          : defaultBinarySheafName(left, right, tensorOperationLatex(!exact))
-      };
-    }
-    if (operation === 'compose-map') {
-      const first = select('mapA', 'first', maps);
-      const second = select('mapB', 'second', maps);
-      return { fields, defaultName: defaultComposedMapName(first, second) };
-    }
-    if (operation === 'pullback-sheaf' || operation === 'pushforward-sheaf') {
-      const mapId = select('map', 'map', varietyMaps);
-      const sheafId = select('sheaf', 'sheaf', sheaves);
-      const exact = option('exact', 'exact');
-      const proper = operation === 'pushforward-sheaf' ? option('proper', 'proper') : false;
-      return {
-        fields,
-        defaultName: operation === 'pullback-sheaf'
-          ? defaultPullbackSheafName(mapId, sheafId, { derived: !exact })
-          : defaultPushforwardSheafName(mapId, sheafId, { derived: !exact, proper })
-      };
-    }
-    return { fields, defaultName: 'X' };
-  }
-
-  function constructionFieldRow(field) {
-    if (field.type === 'checkbox') return constructionCheckboxRow(field);
-    return constructionSelectRow(field);
-  }
-
-  function constructionSelectRow(field) {
-    return `
-      <div class="sheaf-field-row">
-        <label class="input-label" for="construction-${field.name}">${escapeHtml(field.label)}</label>
-        <select id="construction-${field.name}" class="sheaf-select" data-construction-field="${escapeHtml(field.name)}">
-          ${field.options.length ? field.options.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === field.value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('') : '<option value="">none</option>'}
-        </select>
-      </div>
-    `;
-  }
-
-  function constructionCheckboxRow(field) {
-    return `
-      <div class="sheaf-field-row">
-        <span class="input-label">${escapeHtml(field.label)}</span>
-        <label class="opt-row">
-          <input id="construction-${field.name}" type="checkbox" data-construction-field="${escapeHtml(field.name)}" ${field.value ? 'checked' : ''}>
-          <span>${field.name === 'proper' ? 'use f_*' : 'ordinary functor'}</span>
-        </label>
-      </div>
-    `;
-  }
-
-  function constructionNameRow(defaultName, value) {
-    return `
-      <div class="sheaf-field-row">
-        <label class="input-label" for="construction-name">name</label>
-        <input id="construction-name" class="sheaf-input" type="text" value="${escapeHtml(value)}" placeholder="${escapeHtml(defaultName)}" maxlength="48" spellcheck="false" autocomplete="off" data-construction-field="name">
-      </div>
-    `;
-  }
-
-  function updateConstructionPreview() {
-    if (!refs.constructionPreview) return;
-    const preview = constructionPreviewData(refs.constructionOperation?.value || 'product-variety', constructionControlValues());
-    if (refs.applyConstruction) refs.applyConstruction.disabled = !!preview.error;
-    if (preview.error) {
-      refs.constructionPreview.textContent = preview.error;
-    } else {
-      setInlineMath(refs.constructionPreview, preview.latex);
-    }
-    if (refs.constructionMessage) {
-      refs.constructionMessage.textContent = state.constructionMessage || '';
-      refs.constructionMessage.className = state.constructionMessage?.startsWith('Error:') ? 'construction-message err' : 'construction-message';
-    }
-  }
-
-  function constructionPreviewData(operation, values = {}) {
-    try {
-      const data = validateConstruction(operation, values);
-      return {
-        error: '',
-        defaultName: data.defaultName,
-        latex: constructionPreviewLatex(data)
-      };
-    } catch (error) {
-      return {
-        error: error.message || 'Construction is not available.',
-        defaultName: '',
-        latex: ''
-      };
-    }
-  }
-
-  function constructionPreviewLatex(data) {
-    const name = sanitizeMathLabel(data.name, data.defaultName);
-    if (data.operation === 'product-variety') {
-      return `${name}=${sanitizeMathLabel(data.left.name, 'X')}\\times ${sanitizeMathLabel(data.right.name, 'Y')}`;
-    }
-    if (data.operation === 'direct-sum-sheaf') {
-      return `${name}=${sanitizeMathLabel(data.left.name, '\\mathcal{E}')}\\oplus ${sanitizeMathLabel(data.right.name, '\\mathcal{F}')}`;
-    }
-    if (data.operation === 'tensor-sheaf') {
-      return `${name}=${sanitizeMathLabel(data.left.name, '\\mathcal{E}')}${tensorOperationLatex(!data.exact)} ${sanitizeMathLabel(data.right.name, '\\mathcal{F}')}`;
-    }
-    if (data.operation === 'compose-map') {
-      return `${name}=${sanitizeMathLabel(data.second.name, 'g')}\\circ ${sanitizeMathLabel(data.first.name, 'f')}`;
-    }
-    if (data.operation === 'pullback-sheaf') {
-      return `${name}=${pullbackFunctorLatex(data.map, { derived: !data.exact })}${sanitizeMathLabel(data.sheaf.name, '\\mathcal{E}')}`;
-    }
-    return `${name}=${pushforwardFunctorLatex(data.map, { derived: !data.exact, proper: data.proper })}${sanitizeMathLabel(data.sheaf.name, '\\mathcal{E}')}`;
-  }
-
-  function applyConstruction() {
-    const operation = refs.constructionOperation?.value || 'product-variety';
-    let data;
-    try {
-      data = validateConstruction(operation, constructionControlValues());
-      const created = createConstructedObject(data);
-      if (!created) throw new Error('Could not create the requested object.');
-      state.constructionMessage = `Created ${latexToPlain(created.name || data.name)}.`;
-      recompute();
-    } catch (error) {
-      state.constructionMessage = `Error: ${error.message || 'Construction failed.'}`;
-      updateConstructionPreview();
-    }
-  }
-
-  function validateConstruction(operation, values = {}) {
-    if (operation === 'product-variety') {
-      const left = requireVariety(values.varietyA);
-      const right = requireVariety(values.varietyB);
-      const dim = normalizedInt(left.dim, 0, MAX_DIMENSION, 0) + normalizedInt(right.dim, 0, MAX_DIMENSION, 0);
-      if (dim > MAX_DIMENSION) throw new Error(`Product dimension ${dim} exceeds the calculator limit ${MAX_DIMENSION}.`);
-      const defaultName = defaultProductVarietyName(left.id, right.id);
-      const name = constructionAutoName(values.name, defaultName);
-      return { operation, left, right, dim, defaultName, name: name.name, nameDirty: name.dirty };
-    }
-    if (operation === 'direct-sum-sheaf' || operation === 'tensor-sheaf') {
-      const left = requireSheaf(values.sheafA);
-      const right = requireSheaf(values.sheafB);
-      if (!left.baseVarietyId || left.baseVarietyId !== right.baseVarietyId) throw new Error('The sheaves must have the same base variety.');
-      const exact = !!values.exact;
-      const defaultName = operation === 'direct-sum-sheaf'
-        ? defaultBinarySheafName(left.id, right.id, '\\oplus')
-        : defaultBinarySheafName(left.id, right.id, tensorOperationLatex(!exact));
-      const name = constructionAutoName(values.name, defaultName);
-      return { operation, left, right, exact, derived: operation === 'tensor-sheaf' && !exact, baseVarietyId: left.baseVarietyId, defaultName, name: name.name, nameDirty: name.dirty };
-    }
-    if (operation === 'compose-map') {
-      const first = requireMap(values.mapA);
-      const second = requireMap(values.mapB);
-      if (first.codomainKind !== second.domainKind || first.codomainId !== second.domainId) {
-        throw new Error('Maps must compose as second after first.');
-      }
-      const defaultName = defaultComposedMapName(first.id, second.id);
-      const name = constructionAutoName(values.name, defaultName);
-      return { operation, first, second, defaultName, name: name.name, nameDirty: name.dirty };
-    }
-    if (operation === 'pullback-sheaf' || operation === 'pushforward-sheaf') {
-      const map = requireMap(values.map);
-      if (map.domainKind !== 'variety' || map.codomainKind !== 'variety') throw new Error('Use a map between varieties.');
-      const sheaf = requireSheaf(values.sheaf);
-      if (operation === 'pullback-sheaf' && sheaf.baseVarietyId !== map.codomainId) throw new Error('For pullback, the sheaf must live on the codomain.');
-      if (operation === 'pushforward-sheaf' && sheaf.baseVarietyId !== map.domainId) throw new Error('For pushforward, the sheaf must live on the domain.');
-      const exact = !!values.exact;
-      const proper = operation === 'pushforward-sheaf' && !!values.proper;
-      const defaultName = operation === 'pullback-sheaf'
-        ? defaultPullbackSheafName(map.id, sheaf.id, { derived: !exact })
-        : defaultPushforwardSheafName(map.id, sheaf.id, { derived: !exact, proper });
-      const name = constructionAutoName(values.name, defaultName);
-      return { operation, map, sheaf, exact, derived: !exact, proper, defaultName, name: name.name, nameDirty: name.dirty };
-    }
-    throw new Error('Unknown construction.');
-  }
-
-  function createConstructedObject(data) {
-    if (data.operation === 'product-variety') return createProductVariety(data);
-    if (data.operation === 'direct-sum-sheaf' || data.operation === 'tensor-sheaf') return createBinarySheafConstruction(data);
-    if (data.operation === 'compose-map') return createComposedMap(data);
-    if (data.operation === 'pullback-sheaf' || data.operation === 'pushforward-sheaf') return createMapSheafConstruction(data);
-    return null;
-  }
-
   function createProductVariety(data) {
     const variety = {
       id: nextInputId('X'),
@@ -1868,12 +2232,76 @@
         defaultName: data.defaultName
       }
     };
-    positionConstructedObjectNear(variety, [data.left, data.right]);
+    syncObjectLineage(variety, 'variety');
+    positionProductVarietyLabel(variety, data.left, data.right);
     state.varieties.push(variety);
     state.activeVarietyId = variety.id;
     state.activeSheafId = null;
     state.activeMapId = null;
+    createProjectionMapForProduct(variety, data.left, 0);
+    createProjectionMapForProduct(variety, data.right, 1);
     return variety;
+  }
+
+  function createProjectionMapForProduct(product, factor, factorIndex) {
+    if (!product || !factor) return null;
+    const defaultName = defaultProjectionMapNameFromObjects(product, factor, factorIndex);
+    const map = createMapObject(
+      { kind: 'variety', id: product.id },
+      { kind: 'variety', id: factor.id },
+      {
+        name: uniqueConstructedObjectName('map', defaultName),
+        activate: false,
+        autoBend: true,
+        syncDraft: false,
+        construction: {
+          type: 'projection',
+          productId: product.id,
+          factorIndex,
+          defaultName,
+          nameDirty: false
+        }
+      }
+    );
+    if (map) map.nameDirty = false;
+    return map;
+  }
+
+  function positionProductVarietyLabel(product, left, right) {
+    if (!product || !left || !right) {
+      positionVarietyOnCanvas(product);
+      return;
+    }
+    const leftX = Number.isFinite(left.labelX) ? left.labelX : 0.35;
+    const rightX = Number.isFinite(right.labelX) ? right.labelX : 0.65;
+    const leftY = Number.isFinite(left.labelY) ? left.labelY : 0.42;
+    const rightY = Number.isFinite(right.labelY) ? right.labelY : leftY;
+    const averageY = (leftY + rightY) / 2;
+    product.labelX = clamp((leftX + rightX) / 2, 0.08, 0.94);
+    product.labelY = clamp(averageY - Math.max(0.11, canvasSpacingRatio('y') * 0.72), 0.08, 0.92);
+    avoidCanvasLabelVerticalOverlap(product);
+  }
+
+  function avoidCanvasLabelVerticalOverlap(object) {
+    if (!object) return;
+    const thresholdX = 0.055;
+    const thresholdY = 0.055;
+    const startY = Number.isFinite(object.labelY) ? object.labelY : 0.5;
+    const existing = [...state.varieties, ...state.sheaves];
+    for (let step = 0; step < 8; step += 1) {
+      const candidateY = clamp(startY - step * 0.045, 0.08, 0.92);
+      const overlaps = existing.some((item) => (
+        item.id !== object.id
+        && Number.isFinite(item.labelX)
+        && Number.isFinite(item.labelY)
+        && Math.abs(item.labelX - object.labelX) < thresholdX
+        && Math.abs(item.labelY - candidateY) < thresholdY
+      ));
+      if (!overlaps) {
+        object.labelY = candidateY;
+        return;
+      }
+    }
   }
 
   function createBinarySheafConstruction(data) {
@@ -1894,6 +2322,7 @@
         defaultName: data.defaultName
       }
     };
+    syncObjectLineage(sheaf, 'sheaf');
     positionSheafNearBase(sheaf, baseVarietyForSheaf(sheaf));
     avoidCanvasLabelOverlap(sheaf);
     state.sheaves.push(sheaf);
@@ -1920,6 +2349,7 @@
     if (map) {
       map.nameDirty = data.nameDirty;
       map.construction.nameDirty = data.nameDirty;
+      syncObjectLineage(map, 'map');
     }
     return map;
   }
@@ -1945,6 +2375,7 @@
         defaultName: data.defaultName
       }
     };
+    syncObjectLineage(sheaf, 'sheaf');
     positionSheafNearBase(sheaf, baseVarietyForSheaf(sheaf));
     avoidCanvasLabelOverlap(sheaf);
     state.sheaves.push(sheaf);
@@ -1952,66 +2383,6 @@
     state.activeVarietyId = sheaf.baseVarietyId;
     state.activeMapId = null;
     return sheaf;
-  }
-
-  function constructionVarietyOptions() {
-    return state.varieties.map((variety) => ({
-      value: variety.id,
-      label: latexToPlain(sanitizeMathLabel(variety.name, 'X'))
-    }));
-  }
-
-  function constructionSheafOptions(filter = null) {
-    return state.sheaves
-      .filter((sheaf) => !filter || filter(sheaf))
-      .map((sheaf) => ({
-        value: sheaf.id,
-        label: latexToPlain(sanitizeMathLabel(sheaf.name, '\\mathcal{E}'))
-      }));
-  }
-
-  function constructionMapOptions(filter = null) {
-    return state.maps
-      .filter((map) => !filter || filter(map))
-      .map((map) => ({
-        value: map.id,
-        label: exportMapPlain(map)
-      }));
-  }
-
-  function constructionSelectedValue(options, current) {
-    if (current && options.some((option) => option.value === current)) return current;
-    return options[0]?.value || '';
-  }
-
-  function requireVariety(id) {
-    const variety = state.varieties.find((item) => item.id === id);
-    if (!variety) throw new Error('Choose a variety.');
-    return variety;
-  }
-
-  function requireSheaf(id) {
-    const sheaf = state.sheaves.find((item) => item.id === id);
-    if (!sheaf) throw new Error('Choose a sheaf.');
-    return sheaf;
-  }
-
-  function requireMap(id) {
-    const map = state.maps.find((item) => item.id === id);
-    if (!map) throw new Error('Choose a map.');
-    return map;
-  }
-
-  function constructionName(value, fallback) {
-    return sanitizeMathLabel(value, fallback);
-  }
-
-  function constructionAutoName(value, fallback) {
-    const name = sanitizeMathLabel(value, fallback);
-    return {
-      name,
-      dirty: canonicalMathLabel(name) !== canonicalMathLabel(fallback)
-    };
   }
 
   function defaultProductVarietyName(leftId, rightId) {
@@ -2068,15 +2439,32 @@
     return `${pushforwardFunctorLatex(map, options)}${sanitizeMathLabel(sheaf?.name, '\\mathcal{E}')}`;
   }
 
-  function pullbackFunctorLatex(map, options = {}) {
+  function defaultProjectionMapNameFromObjects(product, factor, factorIndex = 0) {
+    const factorName = sanitizeMathLabel(factor?.name, factorIndex === 0 ? 'X' : 'Y');
+    const productFactors = product?.construction?.type === 'product' ? (product.construction.varietyIds || []) : [];
+    const repeatedFactor = productFactors[0] && productFactors[0] === productFactors[1];
+    return repeatedFactor ? `\\pi_{${factorName},${factorIndex + 1}}` : `\\pi_{${factorName}}`;
+  }
+
+  function mapPullbackOperatorLatex(map) {
     const mapName = sanitizeMathLabel(map?.name, 'f');
-    return options.derived === false ? `${mapName}^{*}` : `\\mathbf{L}${mapName}^{*}`;
+    return `${mapName}^{*}`;
+  }
+
+  function mapPushforwardOperatorLatex(map, lower = '*') {
+    const mapName = sanitizeMathLabel(map?.name, 'f');
+    return `${mapName}_{${lower}}`;
+  }
+
+  function pullbackFunctorLatex(map, options = {}) {
+    const operator = mapPullbackOperatorLatex(map);
+    return options.derived === false ? operator : `\\mathbf{L}${operator}`;
   }
 
   function pushforwardFunctorLatex(map, options = {}) {
-    const mapName = sanitizeMathLabel(map?.name, 'f');
     const lower = options.proper ? '*' : '!';
-    return options.derived === false ? `${mapName}_{${lower}}` : `\\mathbf{R}${mapName}_{${lower}}`;
+    const operator = mapPushforwardOperatorLatex(map, lower);
+    return options.derived === false ? operator : `\\mathbf{R}${operator}`;
   }
 
   function constructionRankPlaceholder(operation, left, right) {
@@ -2116,65 +2504,554 @@
     avoidCanvasLabelOverlap(object);
   }
 
-  function setBasePickActive(enabled) {
-    state.basePickActive = !!enabled && currentInputKind() === 'sheaf' && !inputIsModifyMode();
-    if (refs.pickSheafBase) {
-      refs.pickSheafBase.setAttribute('aria-pressed', state.basePickActive ? 'true' : 'false');
-      refs.pickSheafBase.textContent = state.basePickActive ? 'picking' : 'pick';
+  function setCanvasPickEnabled(enabled, options = {}) {
+    state.canvasPickEnabled = !!enabled && canvasPickAvailable();
+    if (!state.canvasPickEnabled) {
+      state.mapDrag = null;
     }
+    syncGlobalPickButton();
+    if (options.render !== false) renderCanvas(state.lastResult);
+  }
+
+  function canvasPickAvailable() {
+    if (productVarietyInputMode()) return productPickableVarieties().length > 0;
+    if (mapInputMode()) return mapPickAvailable();
+    if (sheafBinaryInputMode()) return sheafBinaryPickableSheaves().length > 0;
+    if (sheafMapOperationInputMode()) {
+      return state.maps.some((map) => allowableSheafMapOperationMap(map.id))
+        || state.sheaves.some((sheaf) => allowableSheafMapOperationSheaf(sheaf.id));
+    }
+    if (sheafBasePickInputMode()) return state.varieties.some((variety) => allowableSheafBase(variety.id));
+    return false;
+  }
+
+  function syncGlobalPickButton() {
+    if (!refs.inputPickMode) return;
+    const available = canvasPickAvailable();
+    if (!available) state.canvasPickEnabled = false;
+    refs.inputPickMode.hidden = !available;
+    refs.inputPickMode.disabled = !available;
+    refs.inputPickMode.setAttribute('aria-pressed', available && !state.canvasPickEnabled ? 'true' : 'false');
+    refs.inputPickMode.textContent = 'pick';
+    refs.inputPickMode.title = state.canvasPickEnabled
+      ? 'Switch canvas clicks back to choosing labels to modify'
+      : 'Canvas clicks choose labels to modify';
   }
 
   function clearMapDraft() {
     state.mapDraft = null;
+    state.mapPickTarget = 'domain';
     state.mapDrag = null;
     updateMapPickStatus();
+    updateMapDraftControls();
+  }
+
+  function clearSheafMapDraft() {
+    state.sheafMapDraft = null;
+    state.sheafMapPickTarget = 'map';
+    if (refs.sheafMapOperation) refs.sheafMapOperation.value = 'auto';
+    if (refs.sheafMapExact) refs.sheafMapExact.checked = false;
+    if (refs.sheafMapProper) refs.sheafMapProper.checked = false;
+    updateSheafMapDraftControls();
+  }
+
+  function clearSheafBinaryDraft() {
+    state.sheafBinaryDraft = null;
+    state.sheafBinaryPickTarget = 'left';
+    if (refs.sheafBinaryExact) refs.sheafBinaryExact.checked = false;
+    updateSheafBinaryDraftControls();
+  }
+
+  function clearProductDraft() {
+    state.productDraft = null;
+    state.productPickIndex = 0;
+    updateProductDraftControls();
+  }
+
+  function updateProductDraftControls() {
+    if (refs.varietyType?.value !== 'product') {
+      if (refs.productFactorsRow) refs.productFactorsRow.hidden = true;
+      if (refs.productPickNote) refs.productPickNote.hidden = true;
+      return;
+    }
+    const slots = productDraftFactorSlots();
+    const factors = productDraftFactors();
+    if (refs.productFactorsRow) refs.productFactorsRow.hidden = false;
+    updateProductFactorButton(refs.productFactorA, slots[0], 0);
+    updateProductFactorButton(refs.productFactorB, slots[1], 1);
+    if (refs.productPickNote) {
+      refs.productPickNote.hidden = false;
+      refs.productPickNote.textContent = productPickHint(slots);
+    }
+    if (refs.dim) {
+      const dim = productDimensionFromSlots(slots);
+      refs.dim.value = String(Math.min(dim, MAX_DIMENSION));
+    }
+    if (refs.varietyName && !state.draftVarietyNameDirty && factors.length === 2) {
+      refs.varietyName.value = defaultProductVarietyNameFromObjects(factors[0], factors[1]);
+    }
+    syncGlobalPickButton();
+  }
+
+  function updateProductFactorButton(button, variety, index) {
+    if (!button) return;
+    button.textContent = variety ? latexToPlain(sanitizeMathLabel(variety.name, index === 0 ? 'X' : 'Y')) : (index === 0 ? 'varietyA' : 'varietyB');
+    button.title = variety ? `Replace ${button.textContent}` : `Pick ${index === 0 ? 'the first' : 'the second'} variety`;
+    button.setAttribute('aria-pressed', state.canvasPickEnabled && productVarietyInputMode() && state.productPickIndex === index ? 'true' : 'false');
+  }
+
+  function productPickHint(factors = productDraftFactorSlots()) {
+    if (!productPickableVarieties().length) {
+      return inputIsModifyMode()
+        ? 'add another variety before replacing a factor'
+        : 'add a variety before creating a product';
+    }
+    if (inputIsModifyMode()) return `click a variety to replace ${state.productPickIndex === 0 ? 'varietyA' : 'varietyB'}`;
+    if (!factors[0]) return 'click the first variety on the canvas';
+    if (!factors[1]) return 'click the second variety on the canvas';
+    const dim = productDimensionFromFactors(factors[0], factors[1]);
+    if (dim > MAX_DIMENSION) return `product dimension ${dim} exceeds the calculator limit ${MAX_DIMENSION}`;
+    return 'click add to create the product';
+  }
+
+  function productDraftFactors() {
+    const ids = productDraftFactorIds();
+    return ids.map((id) => state.varieties.find((item) => item.id === id)).filter(Boolean);
+  }
+
+  function productDraftFactorSlots() {
+    return productDraftFactorIds().map((id) => state.varieties.find((item) => item.id === id) || null);
+  }
+
+  function productDraftFactorIds() {
+    const ids = state.productDraft?.varietyIds || [];
+    return [ids[0] || null, ids[1] || null];
+  }
+
+  function productDimensionFromSlots(slots = productDraftFactorSlots()) {
+    if (!slots[0] || !slots[1]) return 0;
+    return productDimensionFromFactors(slots[0], slots[1]);
+  }
+
+  function productDimensionFromFactors(left, right) {
+    if (!left || !right) return 0;
+    return geometryFromVariety(left).dim + geometryFromVariety(right).dim;
+  }
+
+  function productPickableVarieties() {
+    const activeProduct = inputIsModifyMode() ? selectedVariety() : null;
+    const activeProductId = activeProduct?.construction?.type === 'product'
+      ? activeProduct.id
+      : null;
+    return state.varieties.filter((variety) => (
+      !activeProductId
+      || (variety.id !== activeProductId && !productVarietyHasAncestor(variety.id, activeProductId))
+    ));
+  }
+
+  function productCanPickVariety(varietyId) {
+    return productPickableVarieties().some((variety) => variety.id === varietyId);
+  }
+
+  function productVarietyHasAncestor(varietyId, ancestorId, seen = new Set()) {
+    if (!varietyId || !ancestorId || seen.has(varietyId)) return false;
+    seen.add(varietyId);
+    const variety = state.varieties.find((item) => item.id === varietyId);
+    const parentIds = variety?.construction?.type === 'product' ? (variety.construction.varietyIds || []) : [];
+    return parentIds.some((parentId) => parentId === ancestorId || productVarietyHasAncestor(parentId, ancestorId, seen));
   }
 
   function updateMapPickStatus() {
     if (!refs.mapPickStatus) return;
-    if (inputIsModifyMode() && state.activeMapId) {
-      const map = selectedMap();
-      refs.mapPickStatus.textContent = map ? `${objectPlainLabel(map.domainKind, map.domainId)} -> ${objectPlainLabel(map.codomainKind, map.codomainId)}` : 'map';
+    if (!mapInputMode()) {
+      refs.mapPickStatus.hidden = true;
       return;
     }
-    if (state.mapDraft) {
-      refs.mapPickStatus.textContent = `${objectPlainLabel(state.mapDraft.domainKind, state.mapDraft.domainId)} ->`;
+    refs.mapPickStatus.hidden = false;
+    if (mapCompositionInputMode()) {
+      refs.mapPickStatus.textContent = mapCompositionPickHint();
       return;
     }
-    refs.mapPickStatus.textContent = 'pick a domain';
+    refs.mapPickStatus.textContent = ordinaryMapPickHint();
   }
 
   function handleCanvasPickClick(target) {
     const kind = target.dataset.objectKind;
     const id = target.dataset.objectId;
-    if (state.basePickActive) {
+    if (!state.canvasPickEnabled) return false;
+    if (productVarietyInputMode()) {
+      if (kind === 'variety') handleProductPick(id);
+      return true;
+    }
+    if (mapInputMode()) {
+      handleMapPick(kind, id);
+      return true;
+    }
+    if (sheafBinaryInputMode()) {
+      handleSheafBinaryPick(kind, id);
+      return true;
+    }
+    if (sheafMapOperationInputMode()) {
+      handleSheafMapOperationPick(kind, id);
+      return true;
+    }
+    if (sheafBasePickInputMode()) {
       if (kind !== 'variety') return true;
       chooseSheafBaseFromCanvas(id);
-      return true;
-    }
-    if (kind === 'variety' && currentInputKind() === 'sheaf' && inputIsCreateMode()) {
-      if (allowableSheafBase(id)) chooseSheafBaseFromCanvas(id);
-      return true;
-    }
-    if (currentInputKind() === 'sheaf' && inputIsCreateMode()) return true;
-    if (kind === 'map' && currentInputKind() === 'map' && inputIsCreateMode()) {
-      clearMapDraft();
-      activateObject('map', id, { mode: 'modify', loadDraft: true });
-      recompute();
-      return true;
-    }
-    if (currentInputKind() === 'map' && inputIsCreateMode()) {
-      handleMapPick(kind, id);
       return true;
     }
     return false;
   }
 
+  function creatingProductVariety() {
+    return inputIsCreateMode() && currentInputKind() === 'variety' && refs.varietyType?.value === 'product';
+  }
+
+  function productVarietyInputMode() {
+    return refs.varietyType?.value === 'product' && (
+      creatingProductVariety()
+      || (inputIsModifyMode() && currentInputKind() === 'variety' && selectedVariety()?.construction?.type === 'product')
+    );
+  }
+
+  function sheafMapOperationInputMode() {
+    const kind = inputIsModifyMode() ? modifyKind() : currentInputKind();
+    return kind === 'sheaf' && refs.sheafType?.value === 'map-operation';
+  }
+
+  function sheafBinaryInputMode() {
+    const kind = inputIsModifyMode() ? modifyKind() : currentInputKind();
+    return kind === 'sheaf' && (refs.sheafType?.value === 'direct-sum' || refs.sheafType?.value === 'tensor');
+  }
+
+  function sheafBasePickInputMode() {
+    return currentInputKind() === 'sheaf'
+      && !sheafMapOperationInputMode()
+      && !sheafBinaryInputMode()
+      && state.varieties.length > 0;
+  }
+
+  function mapInputMode() {
+    const kind = inputIsModifyMode() ? modifyKind() : currentInputKind();
+    return kind === 'map';
+  }
+
+  function mapCompositionInputMode() {
+    return mapInputMode() && refs.mapType?.value === 'composition';
+  }
+
+  function ordinaryMapInputMode() {
+    return mapInputMode() && !mapCompositionInputMode();
+  }
+
+  function mapPickAvailable() {
+    if (!mapInputMode()) return false;
+    if (mapCompositionInputMode()) return state.maps.some((map) => allowableMapCompositionPick(map.id));
+    return state.varieties.length > 0;
+  }
+
+  function sheafMapDraftBase() {
+    if (!sheafMapOperationInputMode()) return null;
+    const map = sheafMapDraftMap();
+    const operation = sheafMapOperationForMapAndBase(map, state.draftSheafBaseVarietyId || activeEditingSheaf()?.baseVarietyId || null);
+    if (map && operation) {
+      const baseId = operation === 'pullback' ? map.domainId : map.codomainId;
+      const base = state.varieties.find((item) => item.id === baseId) || null;
+      if (base) return base;
+    }
+    const selectedId = state.draftSheafBaseVarietyId || activeEditingSheaf()?.baseVarietyId || null;
+    return state.varieties.find((item) => item.id === selectedId) || null;
+  }
+
+  function sheafMapOperationFor(map = sheafMapDraftMap()) {
+    if (!map || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return null;
+    const sourceSheaf = sheafMapDraftSheaf();
+    if (sourceSheaf) {
+      const canPullback = sourceSheaf.baseVarietyId === map.codomainId;
+      const canPushforward = sourceSheaf.baseVarietyId === map.domainId;
+      if (canPullback && canPushforward) {
+        return refs.sheafMapOperation?.value === 'pushforward' ? 'pushforward' : 'pullback';
+      }
+      if (canPullback) return 'pullback';
+      if (canPushforward) return 'pushforward';
+    }
+    const baseId = state.draftSheafBaseVarietyId || activeEditingSheaf()?.baseVarietyId || null;
+    if (map && activeEditingSheaf()?.construction?.type === 'pullback' && map.domainKind === 'variety') {
+      return sheafMapOperationForMapAndBase(map, map.domainId);
+    }
+    if (map && activeEditingSheaf()?.construction?.type === 'pushforward' && map.codomainKind === 'variety') {
+      return sheafMapOperationForMapAndBase(map, map.codomainId);
+    }
+    return sheafMapOperationForMapAndBase(map, baseId);
+  }
+
+  function sheafMapOperationForMapAndBase(map, baseId) {
+    if (!baseId || !map) return null;
+    if (map.domainKind !== 'variety' || map.codomainKind !== 'variety') return null;
+    const canPullback = map.domainId === baseId;
+    const canPushforward = map.codomainId === baseId;
+    if (canPullback && canPushforward) {
+      return refs.sheafMapOperation?.value === 'pushforward' ? 'pushforward' : 'pullback';
+    }
+    if (canPullback) return 'pullback';
+    if (canPushforward) return 'pushforward';
+    return null;
+  }
+
+  function sheafMapDraftMap() {
+    const id = state.sheafMapDraft?.mapId;
+    return state.maps.find((map) => map.id === id) || null;
+  }
+
+  function sheafMapDraftSheaf() {
+    const id = state.sheafMapDraft?.sheafId;
+    return state.sheaves.find((sheaf) => sheaf.id === id) || null;
+  }
+
+  function setSheafMapPickTarget(target = 'map') {
+    const normalized = target === 'sheaf' ? 'sheaf' : 'map';
+    state.sheafMapPickTarget = normalized;
+    setCanvasPickEnabled(true, { render: false });
+    updateSheafMapDraftControls();
+    syncGlobalPickButton();
+    renderCanvas(state.lastResult);
+  }
+
+  function sheafBinaryDraftSheaf(slot) {
+    const ids = sheafBinaryDraftIds();
+    const id = slot === 'right' ? ids[1] : ids[0];
+    return state.sheaves.find((sheaf) => sheaf.id === id) || null;
+  }
+
+  function sheafBinaryDraftIds() {
+    const ids = state.sheafBinaryDraft?.sheafIds || [];
+    return [ids[0] || null, ids[1] || null];
+  }
+
+  function setSheafBinaryPickTarget(target = 'left') {
+    state.sheafBinaryPickTarget = target === 'right' ? 'right' : 'left';
+    setCanvasPickEnabled(true, { render: false });
+    updateSheafBinaryDraftControls();
+    syncGlobalPickButton();
+    renderCanvas(state.lastResult);
+  }
+
+  function sheafBinaryPickableSheaves() {
+    return state.sheaves.filter((sheaf) => (
+      !inputIsModifyMode() || sheaf.id !== state.activeSheafId
+    ));
+  }
+
+  function allowableSheafBinaryPick(sheafId, target = state.sheafBinaryPickTarget) {
+    const sheaf = state.sheaves.find((item) => item.id === sheafId);
+    if (!sheaf || (inputIsModifyMode() && sheaf.id === state.activeSheafId)) return false;
+    const other = sheafBinaryDraftSheaf(target === 'right' ? 'left' : 'right');
+    return !other || sheaf.baseVarietyId === other.baseVarietyId;
+  }
+
+  function handleSheafBinaryPick(kind, id) {
+    if (kind !== 'sheaf' || !allowableSheafBinaryPick(id)) return;
+    const ids = sheafBinaryDraftIds();
+    const index = state.sheafBinaryPickTarget === 'right' ? 1 : 0;
+    ids[index] = id;
+    if (ids[0] && ids[1] && !allowableSheafBinaryPick(ids[1], 'right')) ids[1] = null;
+    state.sheafBinaryDraft = { sheafIds: ids };
+    if (state.sheafBinaryPickTarget === 'left' && !ids[1]) state.sheafBinaryPickTarget = 'right';
+    updateSheafBinaryDraftControls();
+    syncDefaultRank(true);
+    syncDefaultSheafName();
+    recompute();
+  }
+
+  function updateSheafBinaryDraftControls() {
+    const show = sheafBinaryInputMode();
+    if (refs.sheafBinaryFormulaRow) refs.sheafBinaryFormulaRow.hidden = !show;
+    if (refs.sheafBinaryExactRow) refs.sheafBinaryExactRow.hidden = !show || refs.sheafType?.value !== 'tensor';
+    if (refs.sheafBinaryExact && refs.sheafType?.value !== 'tensor') refs.sheafBinaryExact.checked = false;
+    if (refs.sheafBinarySymbol) refs.sheafBinarySymbol.textContent = refs.sheafType?.value === 'tensor' ? String.fromCharCode(0x2297) : String.fromCharCode(0x2295);
+    updateSheafBinarySlotButton(refs.sheafBinaryLeftButton, sheafBinaryDraftSheaf('left'), 'left');
+    updateSheafBinarySlotButton(refs.sheafBinaryRightButton, sheafBinaryDraftSheaf('right'), 'right');
+    if (refs.sheafBinaryPickNote) {
+      refs.sheafBinaryPickNote.hidden = !show;
+      refs.sheafBinaryPickNote.textContent = sheafBinaryPickHint();
+    }
+    syncGlobalPickButton();
+    if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
+  }
+
+  function updateSheafBinarySlotButton(button, sheaf, target) {
+    if (!button) return;
+    button.setAttribute('aria-pressed', state.canvasPickEnabled && sheafBinaryInputMode() && state.sheafBinaryPickTarget === target ? 'true' : 'false');
+    const fallback = target === 'left' ? 'sheafA' : 'sheafB';
+    const label = sheaf ? latexToPlain(sanitizeMathLabel(sheaf.name, '\\mathcal{E}')) : fallback;
+    button.textContent = label;
+    button.title = sheaf ? `Replace ${label}` : `Pick ${fallback} on the canvas`;
+  }
+
+  function sheafBinaryPickHint() {
+    if (!sheafBinaryPickableSheaves().length) return 'add compatible sheaves on the same base';
+    const left = sheafBinaryDraftSheaf('left');
+    const right = sheafBinaryDraftSheaf('right');
+    if (!left) return 'click the first sheaf on the canvas';
+    if (!state.sheaves.some((sheaf) => allowableSheafBinaryPick(sheaf.id, 'right'))) return 'add a sheaf on the same base';
+    if (!right) return 'click the second sheaf on the same base';
+    return inputIsModifyMode() ? 'click update to rebuild the sheaf' : 'click add to create the sheaf';
+  }
+
+  function sheafMapOperationSourceBaseId(map = sheafMapDraftMap(), operation = sheafMapOperationFor(map)) {
+    if (!map || !operation) return null;
+    return operation === 'pullback' ? map.codomainId : map.domainId;
+  }
+
+  function allowableSheafMapOperationMap(mapId) {
+    const map = state.maps.find((item) => item.id === mapId);
+    if (!map || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return false;
+    if (inputIsModifyMode() || !sheafMapDraftBase()) {
+      return state.sheaves.some((sheaf) => (
+        sheaf.id !== state.activeSheafId
+        && (
+          (sheaf.baseVarietyId === map.codomainId && sheafMapOperationForMapAndBase(map, map.domainId) === 'pullback')
+          || (sheaf.baseVarietyId === map.domainId && sheafMapOperationForMapAndBase(map, map.codomainId) === 'pushforward')
+        )
+      ));
+    }
+    const base = sheafMapDraftBase();
+    if (!base) return false;
+    return map.domainId === base.id || map.codomainId === base.id;
+  }
+
+  function allowableSheafMapOperationSheaf(sheafId) {
+    const map = sheafMapDraftMap();
+    const operation = sheafMapOperationFor(map);
+    const sourceBaseId = sheafMapOperationSourceBaseId(map, operation);
+    return state.sheaves.some((sheaf) => (
+      sheaf.id === sheafId
+      && !(inputIsModifyMode() && sheaf.id === state.activeSheafId)
+      && (
+        sourceBaseId
+          ? sheaf.baseVarietyId === sourceBaseId
+          : !!map && (sheaf.baseVarietyId === map.domainId || sheaf.baseVarietyId === map.codomainId)
+      )
+    ));
+  }
+
+  function syncSheafMapDraftBaseFromOperation() {
+    const map = sheafMapDraftMap();
+    const operation = sheafMapOperationFor(map);
+    if (!map || !operation) return null;
+    const baseId = operation === 'pullback' ? map.domainId : map.codomainId;
+    if (!state.varieties.some((item) => item.id === baseId)) return null;
+    state.draftSheafBaseVarietyId = baseId;
+    if (refs.sheafBaseVariety) {
+      if (!Array.from(refs.sheafBaseVariety.options || []).some((option) => option.value === baseId)) syncSheafBaseOptions(true);
+      refs.sheafBaseVariety.value = baseId;
+    }
+    return baseId;
+  }
+
+  function handleSheafMapOperationPick(kind, id) {
+    if (state.sheafMapPickTarget === 'map' && kind === 'map' && allowableSheafMapOperationMap(id)) {
+      const changingMap = state.sheafMapDraft?.mapId !== id;
+      if (changingMap && refs.sheafMapOperation) refs.sheafMapOperation.value = 'auto';
+      state.sheafMapDraft = { mapId: id, sheafId: null };
+      syncSheafMapDraftBaseFromOperation();
+      state.sheafMapPickTarget = 'sheaf';
+      updateSheafMapDraftControls();
+      syncDefaultRank(true);
+      syncDefaultSheafName();
+      recompute();
+      return;
+    }
+    if (state.sheafMapPickTarget === 'sheaf' && kind === 'sheaf' && allowableSheafMapOperationSheaf(id)) {
+      state.sheafMapDraft = { ...(state.sheafMapDraft || {}), sheafId: id };
+      syncSheafMapDraftBaseFromOperation();
+      updateSheafMapDraftControls();
+      syncDefaultRank(true);
+      syncDefaultSheafName();
+      recompute();
+    }
+  }
+
+  function updateSheafMapDraftControls() {
+    if (!refs.sheafMapOperationRow && !refs.sheafMapPickNote && !refs.sheafMapFormulaRow) return;
+    const show = sheafMapOperationInputMode();
+    const map = show ? sheafMapDraftMap() : null;
+    const base = show ? sheafMapDraftBase() : null;
+    const loopMap = !!map && map.domainKind === 'variety' && map.domainId === map.codomainId;
+    const operation = show ? sheafMapOperationFor(map) : null;
+    if (refs.sheafMapOperationRow) refs.sheafMapOperationRow.hidden = !show || !loopMap;
+    if (refs.sheafMapFormulaRow) refs.sheafMapFormulaRow.hidden = !show;
+    if (refs.sheafMapExactRow) refs.sheafMapExactRow.hidden = !show;
+    if (refs.sheafMapProperRow) refs.sheafMapProperRow.hidden = !show || operation !== 'pushforward';
+    if (refs.sheafMapProper && operation === 'pullback') refs.sheafMapProper.checked = false;
+    updateSheafMapFormulaControls(show, operation);
+    if (refs.sheafMapPickNote) {
+      refs.sheafMapPickNote.hidden = !show;
+      refs.sheafMapPickNote.textContent = sheafMapPickHint(base, map);
+    }
+    syncGlobalPickButton();
+    if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
+  }
+
+  function updateSheafMapFormulaControls(show, operation = sheafMapOperationFor()) {
+    const map = show ? sheafMapDraftMap() : null;
+    const sheaf = show ? sheafMapDraftSheaf() : null;
+    const decoration = sheafMapFormulaDecoration(operation);
+    if (refs.sheafMapPrefix) {
+      refs.sheafMapPrefix.textContent = decoration.prefix || '';
+      refs.sheafMapPrefix.hidden = !show || !decoration.prefix;
+    }
+    if (refs.sheafMapScript) {
+      refs.sheafMapScript.textContent = decoration.script;
+      refs.sheafMapScript.hidden = !show;
+    }
+    updateSheafMapSlotButton(refs.sheafMapMapButton, map, 'map');
+    updateSheafMapSlotButton(refs.sheafMapSheafButton, sheaf, 'sheaf');
+  }
+
+  function updateSheafMapSlotButton(button, object, target) {
+    if (!button) return;
+    const picking = state.canvasPickEnabled && sheafMapOperationInputMode() && state.sheafMapPickTarget === target;
+    button.setAttribute('aria-pressed', picking ? 'true' : 'false');
+    const fallback = target === 'map' ? 'map' : 'sheaf';
+    const label = object ? latexToPlain(sanitizeMathLabel(object.name, target === 'map' ? 'f' : '\\mathcal{E}')) : fallback;
+    button.textContent = label;
+    button.title = object ? `Replace ${label}` : `Pick a ${fallback} on the canvas`;
+  }
+
+  function sheafMapPickHint(base = sheafMapDraftBase(), map = sheafMapDraftMap()) {
+    if (!base) return 'pick a base variety first';
+    if (!state.maps.some((item) => allowableSheafMapOperationMap(item.id))) return inputIsModifyMode() ? 'add a compatible map and source sheaf' : 'add a map touching the base variety';
+    if (state.sheafMapPickTarget === 'map') return map ? 'click a map to replace the parent map' : 'click a map whose domain or codomain is the base variety';
+    if (!map) return 'click the map button first';
+    const sourceBaseId = sheafMapOperationSourceBaseId(map);
+    if (!state.sheaves.some((sheaf) => sheaf.baseVarietyId === sourceBaseId && !(inputIsModifyMode() && sheaf.id === state.activeSheafId))) return 'add a sheaf on the source side of the operation';
+    if (state.sheafMapPickTarget === 'sheaf') return 'click a sheaf on the source side of the operation';
+    if (!sheafMapDraftSheaf()) return 'click the sheaf button first';
+    return inputIsModifyMode() ? 'click update to rebuild the sheaf' : 'click add to create the sheaf';
+  }
+
+  function handleProductPick(varietyId) {
+    if (!productCanPickVariety(varietyId)) return;
+    const ids = productDraftFactorIds();
+    let nextIds = [...ids];
+    if (inputIsModifyMode()) {
+      nextIds[state.productPickIndex] = varietyId;
+    } else {
+      nextIds[state.productPickIndex] = varietyId;
+      if (state.productPickIndex === 0) state.productPickIndex = nextIds[1] ? 0 : 1;
+      else state.productPickIndex = nextIds[0] ? 1 : 0;
+    }
+    state.productDraft = nextIds.some(Boolean) ? { varietyIds: nextIds.slice(0, 2) } : null;
+    updateProductDraftControls();
+    recompute();
+  }
+
   function chooseSheafBaseFromCanvas(varietyId) {
     if (!state.varieties.some((variety) => variety.id === varietyId)) return;
     setDraftBaseVariety(varietyId);
-    state.activeVarietyId = varietyId;
-    setBasePickActive(false);
+    if (!inputIsModifyMode()) state.activeVarietyId = varietyId;
+    setCanvasPickEnabled(false, { render: false });
     syncDefaultSheafName();
     normalizeControlVisibility();
     recompute();
@@ -2188,22 +3065,126 @@
   }
 
   function handleMapPick(kind, id) {
-    if (kind !== 'variety' && kind !== 'sheaf') return;
-    if (!state.mapDraft) {
-      state.mapDraft = { domainKind: kind, domainId: id };
-      updateMapPickStatus();
-      recompute();
+    if (mapCompositionInputMode()) {
+      handleMapCompositionPick(kind, id);
       return;
     }
-    if (isValidMapCodomain(state.mapDraft.domainKind, state.mapDraft.domainId, kind, id)) {
-      createMapObject({ kind: state.mapDraft.domainKind, id: state.mapDraft.domainId }, { kind, id });
-      clearMapDraft();
-      recompute();
-      return;
+    if (kind !== 'variety' || !state.varieties.some((item) => item.id === id)) return;
+    const draft = state.mapDraft?.type === 'ordinary' ? { ...state.mapDraft } : { type: 'ordinary' };
+    if (state.mapPickTarget === 'codomain') {
+      draft.codomainKind = 'variety';
+      draft.codomainId = id;
+    } else {
+      draft.domainKind = 'variety';
+      draft.domainId = id;
+      if (!draft.codomainId && inputIsModifyMode()) {
+        const active = selectedMap();
+        if (active?.codomainKind === 'variety') {
+          draft.codomainKind = 'variety';
+          draft.codomainId = active.codomainId;
+        }
+      }
+      if (!draft.codomainId) state.mapPickTarget = 'codomain';
     }
-    state.mapDraft = { domainKind: kind, domainId: id };
-    updateMapPickStatus();
+    state.mapDraft = draft;
+    updateMapDraftControls();
+    syncDefaultMapName();
     recompute();
+  }
+
+  function handleMapCompositionPick(kind, id) {
+    if (kind !== 'map' || !allowableMapCompositionPick(id)) return;
+    const ids = mapDraftMapIds();
+    const index = state.mapPickTarget === 'second' ? 1 : 0;
+    ids[index] = id;
+    state.mapDraft = { type: 'composition', mapIds: ids };
+    if (state.mapPickTarget === 'first' && !ids[1]) state.mapPickTarget = 'second';
+    updateMapDraftControls();
+    syncDefaultMapName();
+    recompute();
+  }
+
+  function mapDraftMapIds() {
+    const ids = state.mapDraft?.type === 'composition' ? (state.mapDraft.mapIds || []) : [];
+    return [ids[0] || null, ids[1] || null];
+  }
+
+  function mapDraftMap(slot) {
+    const ids = mapDraftMapIds();
+    const id = slot === 'second' ? ids[1] : ids[0];
+    return state.maps.find((map) => map.id === id) || null;
+  }
+
+  function setMapPickTarget(target = 'domain') {
+    const composition = mapCompositionInputMode();
+    if (composition) {
+      state.mapPickTarget = target === 'second' ? 'second' : 'first';
+    } else {
+      state.mapPickTarget = target === 'codomain' ? 'codomain' : 'domain';
+    }
+    setCanvasPickEnabled(true, { render: false });
+    updateMapDraftControls();
+    syncGlobalPickButton();
+    renderCanvas(state.lastResult);
+  }
+
+  function updateMapDraftControls() {
+    const show = mapInputMode();
+    const composition = mapCompositionInputMode();
+    if (refs.mapEndpointsRow) refs.mapEndpointsRow.hidden = !show || composition;
+    if (refs.mapCompositionRow) refs.mapCompositionRow.hidden = !show || !composition;
+    if (refs.resetMapPick) refs.resetMapPick.hidden = !show;
+    updateMapSlotButton(refs.mapDomainButton, mapDraftEndpointObject('domain'), 'domain');
+    updateMapSlotButton(refs.mapCodomainButton, mapDraftEndpointObject('codomain'), 'codomain');
+    updateMapSlotButton(refs.mapFirstButton, mapDraftMap('first'), 'first');
+    updateMapSlotButton(refs.mapSecondButton, mapDraftMap('second'), 'second');
+    updateMapPickStatus();
+    syncGlobalPickButton();
+  }
+
+  function updateMapSlotButton(button, object, target) {
+    if (!button) return;
+    button.setAttribute('aria-pressed', state.canvasPickEnabled && mapInputMode() && state.mapPickTarget === target ? 'true' : 'false');
+    const isMapSlot = target === 'first' || target === 'second';
+    const fallback = isMapSlot ? 'map' : 'variety';
+    const label = object ? objectPlainLabel(isMapSlot ? 'map' : 'variety', object.id) : fallback;
+    button.textContent = label;
+    button.title = object ? `Replace ${label}` : `Pick a ${fallback} on the canvas`;
+  }
+
+  function mapDraftEndpointObject(role) {
+    const draft = state.mapDraft || {};
+    const id = role === 'codomain' ? draft.codomainId : draft.domainId;
+    return state.varieties.find((variety) => variety.id === id) || null;
+  }
+
+  function ordinaryMapPickHint() {
+    const domain = mapDraftEndpointObject('domain');
+    const codomain = mapDraftEndpointObject('codomain');
+    if (!state.varieties.length) return 'add a variety first';
+    if (!domain) return 'click the domain variety';
+    if (!codomain) return 'click the codomain variety';
+    return inputIsModifyMode() ? 'click update to rebuild the map' : 'click add to create the map';
+  }
+
+  function mapCompositionPickHint() {
+    const first = mapDraftMap('first');
+    const second = mapDraftMap('second');
+    if (!state.maps.some((map) => allowableMapCompositionPick(map.id))) return 'add composable maps first';
+    if (!first) return 'click the first map';
+    if (!second) return 'click the second map after the first';
+    if (first.codomainKind !== second.domainKind || first.codomainId !== second.domainId) return 'the maps must compose as second after first';
+    return inputIsModifyMode() ? 'click update to rebuild the map' : 'click add to create the map';
+  }
+
+  function allowableMapCompositionPick(mapId, target = state.mapPickTarget) {
+    const map = state.maps.find((item) => item.id === mapId);
+    if (!map || (inputIsModifyMode() && map.id === state.activeMapId)) return false;
+    const other = mapDraftMap(target === 'second' ? 'first' : 'second');
+    if (!other) return true;
+    return target === 'second'
+      ? other.codomainKind === map.domainKind && other.codomainId === map.domainId
+      : map.codomainKind === other.domainKind && map.codomainId === other.domainId;
   }
 
   function createMapObject(domain, codomain, options = {}) {
@@ -2212,22 +3193,26 @@
     if (!options.name) {
       map.name = uniqueObjectName('map', map.name);
     }
-    if (!map.curve && !options.construction) {
-      map.defaultBendPx = nextDefaultMapBend(map);
+    state.maps.push(map);
+    if (!map.curve && (!options.construction || options.autoBend)) {
+      map.defaultBendPx = isSelfMap(map) ? nextDefaultSelfMapAngle(map) : nextDefaultMapBend(map);
     }
     positionMapLabel(map);
-    state.maps.push(map);
-    state.activeMapId = map.id;
-    state.activeSheafId = null;
+    if (options.activate !== false) {
+      state.activeMapId = map.id;
+      state.activeSheafId = null;
+    }
     state.draftMapNameDirty = false;
-    if (!prepareNextDraftName('map', map.name)) syncDefaultMapName(true);
-    syncMapCurveControls(map);
+    if (options.syncDraft !== false) {
+      if (!prepareNextDraftName('map', map.name)) syncDefaultMapName(true);
+      syncMapCurveControls(map);
+    }
     return map;
   }
 
   function isValidMapCodomain(domainKind, domainId, codomainKind, codomainId) {
     if (!domainKind || !domainId || !codomainKind || !codomainId) return false;
-    if (domainKind !== codomainKind || domainId === codomainId) return false;
+    if (domainKind !== codomainKind) return false;
     if (domainKind === 'variety') {
       return state.varieties.some((item) => item.id === domainId)
         && state.varieties.some((item) => item.id === codomainId);
@@ -2240,13 +3225,11 @@
     return false;
   }
 
-  function allowableMapCodomain(kind, id) {
-    return !!state.mapDraft && isValidMapCodomain(state.mapDraft.domainKind, state.mapDraft.domainId, kind, id);
-  }
-
   function nextDefaultMapBend(map) {
     const occupied = new Set(state.maps
       .filter((item) => (
+        item !== map
+        &&
         !item.modified
         && item.domainKind === map.domainKind
         && item.domainId === map.domainId
@@ -2258,11 +3241,33 @@
     return MAP_BEND_SLOTS.find((bend) => !occupied.has(bend)) ?? 0;
   }
 
+  function isSelfMap(map) {
+    return !!map && map.domainKind === map.codomainKind && map.domainId === map.codomainId;
+  }
+
+  function nextDefaultSelfMapAngle(map) {
+    const used = new Set(state.maps
+      .filter((item) => (
+        item !== map
+        && !item.modified
+        && isSelfMap(item)
+        && item.domainKind === map.domainKind
+        && item.domainId === map.domainId
+        && Number.isFinite(item.defaultBendPx)
+      ))
+      .map((item) => item.defaultBendPx));
+    for (let index = 0; index < 12; index += 1) {
+      const angle = index * 120;
+      if (!used.has(angle)) return angle;
+    }
+    return 0;
+  }
+
   function shouldUseMapCanvasDrag(target) {
     const kind = target.dataset.objectKind;
-    if (currentInputKind() !== 'map' || !inputIsCreateMode()) return false;
-    if (kind !== 'variety' && kind !== 'sheaf') return false;
-    return !allowableMapCodomain(kind, target.dataset.objectId);
+    if (!state.canvasPickEnabled || !ordinaryMapInputMode() || !inputIsCreateMode()) return false;
+    if (kind !== 'variety') return false;
+    return state.mapPickTarget === 'domain';
   }
 
   function startMapCanvasDrag(target, event) {
@@ -2296,8 +3301,10 @@
       event.preventDefault();
       drag.moved = true;
       try { drag.target?.setPointerCapture?.(drag.pointerId); } catch (_) {}
-      state.mapDraft = { domainKind: drag.domainKind, domainId: drag.domainId };
+      state.mapDraft = { type: 'ordinary', domainKind: drag.domainKind, domainId: drag.domainId };
+      state.mapPickTarget = 'codomain';
       updateMapPickStatus();
+      updateMapDraftControls();
       renderCanvas(state.lastResult);
       return;
     }
@@ -2330,9 +3337,10 @@
     }
     if (!drag.moved) return;
     state.suppressLabelClickUntil = Date.now() + 180;
-    if (isValidMapCodomain(drag.domainKind, drag.domainId, targetKind, targetId)) {
-      createMapObject({ kind: drag.domainKind, id: drag.domainId }, { kind: targetKind, id: targetId });
-      clearMapDraft();
+    if (targetKind === 'variety' && state.varieties.some((item) => item.id === targetId)) {
+      state.mapDraft = { type: 'ordinary', domainKind: 'variety', domainId: drag.domainId, codomainKind: 'variety', codomainId: targetId };
+      state.mapPickTarget = 'codomain';
+      updateMapDraftControls();
     }
     recompute();
   }
@@ -2410,6 +3418,10 @@
 
   function defaultVarietyNameLatex() {
     const type = refs.varietyType.value;
+    if (type === 'product') {
+      const factors = productDraftFactors();
+      if (factors.length === 2) return defaultProductVarietyNameFromObjects(factors[0], factors[1]);
+    }
     if (type === 'projective') {
       const n = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
       return `\\mathbb{P}^{${n}}`;
@@ -2428,6 +3440,14 @@
   }
 
   function defaultSheafNameLatex(baseVarietyOverride = null) {
+    if (refs.sheafType?.value === 'direct-sum' || refs.sheafType?.value === 'tensor') {
+      const data = binarySheafConstructionData();
+      if (data?.defaultName) return data.defaultName;
+    }
+    if (refs.sheafType?.value === 'map-operation') {
+      const data = mapOperationSheafConstructionData();
+      if (data?.defaultName) return data.defaultName;
+    }
     const baseVariety = baseVarietyOverride || draftBaseVariety() || activeVariety();
     const variety = baseVariety ? geometryFromVariety(baseVariety).labelLatex : 'X';
     const type = refs.sheafType.value;
@@ -2436,6 +3456,14 @@
 
   function defaultCreateSheafNameLatex() {
     return inputIsModifyMode() ? defaultSheafNameLatex() : uniqueObjectName('sheaf', defaultSheafNameLatex());
+  }
+
+  function sheafMapFormulaDecoration(operation = sheafMapOperationFor()) {
+    const exact = !!refs.sheafMapExact?.checked;
+    const proper = !!refs.sheafMapProper?.checked;
+    if (operation === 'pullback') return { prefix: exact ? '' : 'L', script: '^*' };
+    if (operation === 'pushforward') return { prefix: exact ? '' : 'R', script: proper ? '_*' : '_!' };
+    return { prefix: exact ? '' : 'R', script: '_!' };
   }
 
   function normalizeDraftNameForKind(kind, value) {
@@ -2454,10 +3482,18 @@
   }
 
   function defaultMapNameLatex() {
+    if (refs.mapType?.value === 'composition') {
+      const data = mapCompositionConstructionData();
+      if (data?.defaultName) return data.defaultName;
+    }
     return 'f';
   }
 
   function defaultCreateMapNameLatex() {
+    if (refs.mapType?.value === 'composition') {
+      const defaultName = defaultMapNameLatex();
+      return inputIsModifyMode() ? defaultName : uniqueObjectName('map', defaultName);
+    }
     if (inputIsModifyMode()) return defaultMapNameLatex();
     if (!refs.repeatNames?.checked) return defaultMapNameLatex();
     const sequence = repetitionNameSequence('map', defaultMapNameLatex());
@@ -2484,10 +3520,27 @@
     if (!refs.rank || !force) return;
     if (refs.sheafType.value === 'locally-free') refs.rank.value = '1';
     else if (refs.sheafType.value === 'abstract') refs.rank.value = 'r';
+    else if (refs.sheafType.value === 'direct-sum' || refs.sheafType.value === 'tensor') {
+      const data = binarySheafConstructionData();
+      refs.rank.value = data ? constructionRankPlaceholder(data.operation, data.left, data.right) : 'r';
+    }
+    else if (refs.sheafType.value === 'map-operation') {
+      const data = mapOperationSheafConstructionData();
+      refs.rank.value = data?.operation === 'pullback-sheaf' ? sanitizeRankInput(data.sheaf.rank) : 'r';
+    }
   }
 
   function refreshConstructedObjects() {
     let changed = false;
+    state.varieties.forEach((variety) => {
+      if (syncObjectLineage(variety, 'variety')) changed = true;
+    });
+    state.sheaves.forEach((sheaf) => {
+      if (syncObjectLineage(sheaf, 'sheaf')) changed = true;
+    });
+    state.maps.forEach((map) => {
+      if (syncObjectLineage(map, 'map')) changed = true;
+    });
     state.varieties.forEach((variety) => {
       if (refreshConstructedVariety(variety)) changed = true;
     });
@@ -2501,6 +3554,87 @@
       syncSheafBaseOptions(true);
       syncDefaultSheafName();
     }
+  }
+
+  function syncObjectLineage(object, kind = objectKindForItem(object)) {
+    if (!object) return false;
+    const lineage = objectLineage(object, kind);
+    let changed = false;
+    if (JSON.stringify(object.parents || []) !== JSON.stringify(lineage.parents)) {
+      object.parents = lineage.parents;
+      changed = true;
+    }
+    if (JSON.stringify(object.subobjects || []) !== JSON.stringify(lineage.subobjects)) {
+      object.subobjects = lineage.subobjects;
+      changed = true;
+    }
+    const parentIds = lineage.parents.map((parent) => parent.id).filter(Boolean);
+    if (JSON.stringify(object.parentIds || []) !== JSON.stringify(parentIds)) {
+      object.parentIds = parentIds;
+      changed = true;
+    }
+    return changed;
+  }
+
+  function objectLineage(object, kind) {
+    const construction = object?.construction || null;
+    if (!construction) return { parents: [], subobjects: [] };
+    const parent = (parentKind, id, role) => ({ kind: parentKind, id, role });
+    if (kind === 'variety' && construction.type === 'product') {
+      return {
+        parents: (construction.varietyIds || []).map((id, index) => parent('variety', id, index === 0 ? 'left-factor' : 'right-factor')),
+        subobjects: []
+      };
+    }
+    if (kind === 'sheaf' && (construction.type === 'direct-sum' || construction.type === 'tensor')) {
+      return {
+        parents: (construction.sheafIds || []).map((id, index) => parent('sheaf', id, index === 0 ? 'left-summand' : 'right-summand')),
+        subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'base')] : []
+      };
+    }
+    if (kind === 'sheaf' && (construction.type === 'pullback' || construction.type === 'pushforward')) {
+      return {
+        parents: [
+          parent('map', construction.mapId, 'map'),
+          parent('sheaf', construction.sheafId, 'source-sheaf')
+        ].filter((item) => item.id),
+        subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'base')] : []
+      };
+    }
+    if (kind === 'map' && construction.type === 'composition') {
+      return {
+        parents: (construction.mapIds || []).map((id, index) => parent('map', id, index === 0 ? 'first-map' : 'second-map')),
+        subobjects: [
+          object.domainId ? parent(object.domainKind, object.domainId, 'domain') : null,
+          object.codomainId ? parent(object.codomainKind, object.codomainId, 'codomain') : null
+        ].filter(Boolean)
+      };
+    }
+    if (kind === 'map' && construction.type === 'projection') {
+      const product = state.varieties.find((item) => item.id === construction.productId);
+      const factorId = product?.construction?.type === 'product'
+        ? product.construction.varietyIds?.[normalizedInt(construction.factorIndex, 0, 1, 0)]
+        : null;
+      return {
+        parents: [
+          parent('variety', construction.productId, 'product'),
+          factorId ? parent('variety', factorId, 'factor') : null
+        ].filter((item) => item?.id),
+        subobjects: [
+          object.domainId ? parent(object.domainKind, object.domainId, 'domain') : null,
+          object.codomainId ? parent(object.codomainKind, object.codomainId, 'codomain') : null
+        ].filter(Boolean)
+      };
+    }
+    return { parents: [], subobjects: [] };
+  }
+
+  function objectKindForItem(object) {
+    if (!object) return 'object';
+    if (state.varieties.includes(object)) return 'variety';
+    if (state.sheaves.includes(object)) return 'sheaf';
+    if (state.maps.includes(object)) return 'map';
+    return 'object';
   }
 
   function refreshConstructedVariety(variety) {
@@ -2526,6 +3660,13 @@
       construction.defaultName = nextDefault;
       changed = true;
     }
+    if (!variety.labelPositionDirty) {
+      const oldX = variety.labelX;
+      const oldY = variety.labelY;
+      positionProductVarietyLabel(variety, left, right);
+      if (variety.labelX !== oldX || variety.labelY !== oldY) changed = true;
+    }
+    if (syncObjectLineage(variety, 'variety')) changed = true;
     return changed;
   }
 
@@ -2553,7 +3694,7 @@
       sheaf.rank = nextRank;
       changed = true;
     }
-    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) === canonicalMathLabel(oldDefault) && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(nextDefault)) {
+    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(nextDefault)) {
       sheaf.name = nextDefault;
       changed = true;
     }
@@ -2561,6 +3702,7 @@
       construction.defaultName = nextDefault;
       changed = true;
     }
+    if (syncObjectLineage(sheaf, 'sheaf')) changed = true;
     return changed;
   }
 
@@ -2583,7 +3725,7 @@
       sheaf.rank = nextRank;
       changed = true;
     }
-    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) === canonicalMathLabel(oldDefault) && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(nextDefault)) {
+    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(nextDefault)) {
       sheaf.name = nextDefault;
       changed = true;
     }
@@ -2591,11 +3733,13 @@
       construction.defaultName = nextDefault;
       changed = true;
     }
+    if (syncObjectLineage(sheaf, 'sheaf')) changed = true;
     return changed;
   }
 
   function refreshConstructedMap(map) {
     const construction = map?.construction;
+    if (construction?.type === 'projection') return refreshProjectionMap(map, construction);
     if (construction?.type !== 'composition') return false;
     const [first, second] = (construction.mapIds || []).map((id) => state.maps.find((item) => item.id === id));
     if (!first || !second) return false;
@@ -2627,6 +3771,45 @@
       construction.defaultName = nextDefault;
       changed = true;
     }
+    if (syncObjectLineage(map, 'map')) changed = true;
+    return changed;
+  }
+
+  function refreshProjectionMap(map, construction) {
+    const product = state.varieties.find((item) => item.id === construction.productId);
+    if (!product?.construction || product.construction.type !== 'product') return false;
+    const factorIndex = normalizedInt(construction.factorIndex, 0, 1, 0);
+    const factor = state.varieties.find((item) => item.id === product.construction.varietyIds?.[factorIndex]);
+    if (!factor) return false;
+    const oldDefault = construction.defaultName || defaultProjectionMapNameFromObjects(product, factor, factorIndex);
+    const nextDefault = defaultProjectionMapNameFromObjects(product, factor, factorIndex);
+    let changed = false;
+    if (map.domainKind !== 'variety' || map.domainId !== product.id || map.codomainKind !== 'variety' || map.codomainId !== factor.id) {
+      map.domainKind = 'variety';
+      map.domainId = product.id;
+      map.codomainKind = 'variety';
+      map.codomainId = factor.id;
+      map.curve = null;
+      changed = true;
+    }
+    const nameDirty = map.nameDirty || construction.nameDirty;
+    if (!nameDirty && canonicalMathLabel(map.name) === canonicalMathLabel(oldDefault) && canonicalMathLabel(map.name) !== canonicalMathLabel(nextDefault)) {
+      map.name = nextDefault;
+      changed = true;
+    }
+    if (map.nameDirty !== !!nameDirty) {
+      map.nameDirty = !!nameDirty;
+      changed = true;
+    }
+    if (construction.nameDirty !== !!nameDirty) {
+      construction.nameDirty = !!nameDirty;
+      changed = true;
+    }
+    if (construction.defaultName !== nextDefault) {
+      construction.defaultName = nextDefault;
+      changed = true;
+    }
+    if (syncObjectLineage(map, 'map')) changed = true;
     return changed;
   }
 
@@ -2649,6 +3832,7 @@
       state.lastResult = null;
       refs.status.textContent = error.message || 'unable to compute';
       if (refs.classActions) refs.classActions.hidden = true;
+      if (refs.classCard) refs.classCard.hidden = true;
       if (refs.basisRow) refs.basisRow.hidden = true;
       if (refs.rootFormRow) refs.rootFormRow.hidden = true;
       if (refs.classTermRow) refs.classTermRow.hidden = true;
@@ -2657,6 +3841,7 @@
       refs.classMessage.textContent = error.message || 'Unable to compute.';
       refs.classMessage.hidden = false;
       if (refs.hodgeActions) refs.hodgeActions.hidden = true;
+      if (refs.hodgeCard) refs.hodgeCard.hidden = true;
       if (refs.hodgeChart) {
         refs.hodgeChart.hidden = true;
         refs.hodgeChart.innerHTML = '';
@@ -2664,6 +3849,7 @@
       refs.hodgeMessage.textContent = 'No Hodge numbers available for the current input.';
       refs.hodgeMessage.hidden = false;
       if (refs.cohomologyActions) refs.cohomologyActions.hidden = true;
+      if (refs.cohomologyCard) refs.cohomologyCard.hidden = true;
       if (refs.cohomologyChart) {
         refs.cohomologyChart.hidden = true;
         refs.cohomologyChart.innerHTML = '';
@@ -2672,9 +3858,9 @@
         refs.cohomologyMessage.textContent = 'No sheaf cohomology available for the current input.';
         refs.cohomologyMessage.hidden = false;
       }
-      renderConstructionPanel();
       renderHomologyPanel(null);
       renderCanvas(null);
+      syncChartRevealControls(null);
     }
   }
 
@@ -2713,6 +3899,7 @@
     const editingMap = inputIsModifyMode() && !!state.activeMapId;
     const draftingMap = inputIsModifyMode() ? editingMap : refs.addObjectKind?.value === 'map';
     const draftingSheaf = !draftingMap && (inputIsModifyMode() ? editingSheaf : refs.addObjectKind?.value === 'sheaf');
+    syncProductVarietyOption();
     const draftVariety = refs.varietyType.value;
     const activeVarietyType = activeVariety()?.type || 'abstract';
     const activeSheafType = activeSheaf()?.type || 'abstract';
@@ -2720,13 +3907,55 @@
     const draftBaseType = draftBase?.type || 'abstract';
     let draftSheaf = refs.sheafType.value;
     const hasTwistBase = state.varieties.some((variety) => varietyHasHyperplaneClass(variety.type || 'abstract'));
-    const waitingForSheafBase = inputIsCreateMode() && draftingSheaf && !state.draftSheafBaseVarietyId;
+    const sheafTypeHasParentRow = (type) => type === 'map-operation' || type === 'direct-sum' || type === 'tensor';
+    let sheafHasParentRow = false;
+    let waitingForSheafBase = false;
+    let editingSheafMapOperation = false;
+    let creatingSheafMapOperation = false;
+    let editingSheafBinary = false;
+    let creatingSheafBinary = false;
+    const refreshSheafTypeFlags = () => {
+      sheafHasParentRow = sheafTypeHasParentRow(draftSheaf);
+      waitingForSheafBase = inputIsCreateMode() && draftingSheaf && !sheafHasParentRow && !state.draftSheafBaseVarietyId;
+      editingSheafMapOperation = inputIsModifyMode() && draftingSheaf && draftSheaf === 'map-operation';
+      creatingSheafMapOperation = inputIsCreateMode() && draftingSheaf && draftSheaf === 'map-operation';
+      editingSheafBinary = inputIsModifyMode() && draftingSheaf && (draftSheaf === 'direct-sum' || draftSheaf === 'tensor');
+      creatingSheafBinary = inputIsCreateMode() && draftingSheaf && (draftSheaf === 'direct-sum' || draftSheaf === 'tensor');
+    };
+    refreshSheafTypeFlags();
     const canTwist = draftingSheaf
       ? (waitingForSheafBase ? hasTwistBase : !!draftBase && varietyHasHyperplaneClass(draftBaseType))
       : hasVariety && varietyHasHyperplaneClass(activeVarietyType);
+    const canMapOperationSheaf = hasVariety
+      && state.maps.some((map) => map.domainKind === 'variety' && map.codomainKind === 'variety')
+      && state.sheaves.some((sheaf) => !editingSheafMapOperation || sheaf.id !== state.activeSheafId);
+    const canBinarySheaf = state.sheaves.filter((sheaf) => !editingSheafBinary || sheaf.id !== state.activeSheafId).length > 0;
     if (refs.twistOption) {
       refs.twistOption.hidden = !canTwist;
       refs.twistOption.disabled = !canTwist;
+    }
+    const mapOperationOption = refs.sheafType?.querySelector?.('option[value="map-operation"]');
+    if (mapOperationOption) {
+      mapOperationOption.disabled = !canMapOperationSheaf;
+      if (!canMapOperationSheaf && draftSheaf === 'map-operation' && !editingSheafMapOperation) {
+        refs.sheafType.value = 'abstract';
+        draftSheaf = 'abstract';
+        clearSheafMapDraft();
+        syncDefaultRank(true);
+        syncDefaultSheafName();
+      }
+    }
+    ['direct-sum', 'tensor'].forEach((type) => {
+      const option = refs.sheafType?.querySelector?.(`option[value="${type}"]`);
+      if (!option) return;
+      option.disabled = !canBinarySheaf;
+    });
+    if (!canBinarySheaf && (draftSheaf === 'direct-sum' || draftSheaf === 'tensor') && !editingSheafBinary) {
+      refs.sheafType.value = 'abstract';
+      draftSheaf = 'abstract';
+      clearSheafBinaryDraft();
+      syncDefaultRank(true);
+      syncDefaultSheafName();
     }
     if (!canTwist && draftSheaf === 'twist') {
       refs.sheafType.value = 'abstract';
@@ -2734,14 +3963,25 @@
       syncDefaultRank(true);
       syncDefaultSheafName();
     }
+    refreshSheafTypeFlags();
     const showCurve = draftVariety === 'curve';
     const showCi = draftVariety === 'complete-intersection';
+    const showProduct = draftVariety === 'product' && !inputIsModifyMode() && currentInputKind() === 'variety';
+    const editingProduct = draftVariety === 'product' && inputIsModifyMode() && currentInputKind() === 'variety';
+    const productMode = showProduct || editingProduct;
+    if (productMode) updateProductDraftControls();
+    else if (refs.productFactorsRow || refs.productPickNote) updateProductDraftControls();
+    if (refs.dim) refs.dim.closest('.sheaf-field-row').hidden = productMode;
+    if (refs.varietyName) refs.varietyName.closest('.sheaf-field-row').hidden = showProduct && productDraftFactors().length < 2;
     if (refs.curveGenusRow) refs.curveGenusRow.hidden = !showCurve;
     refs.ciDegreesRow.hidden = !showCi;
     if (refs.ciEquationCountRow) refs.ciEquationCountRow.hidden = !showCi;
     if (refs.ciDegreeSliders) refs.ciDegreeSliders.hidden = !showCi || completeIntersectionDegrees().length === 0;
     refs.ciNote.hidden = !showCi;
     refs.twistRow.hidden = !draftingSheaf || draftSheaf !== 'twist';
+    updateSheafBinaryDraftControls();
+    updateSheafMapDraftControls();
+    updateMapDraftControls();
     const activeSupportsRoots = sheafSupportsChernRoots(activeSheaf());
     const needsBasisInput = hasVariety && hasSheaf && (
       activeSupportsRoots
@@ -2752,26 +3992,40 @@
     refs.basisRow.hidden = !needsBasisInput;
     syncClassDisplayControls();
     refs.rankRow.hidden = !draftingSheaf || (draftSheaf !== 'abstract' && draftSheaf !== 'locally-free');
-    refs.sheafBaseRow.hidden = inputIsCreateMode() || inputIsModifyMode() || !draftingSheaf || state.varieties.length <= 1;
-    if (refs.pickSheafBase) {
-      refs.pickSheafBase.disabled = refs.sheafBaseRow.hidden;
-      refs.pickSheafBase.setAttribute('aria-pressed', state.basePickActive ? 'true' : 'false');
-      refs.pickSheafBase.textContent = state.basePickActive ? 'picking' : 'pick';
-    }
-    if (state.basePickActive && !draftingSheaf) setBasePickActive(false);
+    refs.sheafBaseRow.hidden = !draftingSheaf || sheafHasParentRow || !hasVariety;
+    updateSheafBaseButton();
     if (refs.addObject) {
-      const canAddSheaf = !draftingSheaf || !!draftBase;
+      const canAddSheaf = !draftingSheaf || creatingSheafMapOperation || creatingSheafBinary || !!draftBase;
       const hasEditableObject = !inputIsModifyMode() || !!activeObjectForKind(currentInputKind());
       const creatingMap = draftingMap && inputIsCreateMode();
+      const mapReady = !draftingMap || !!(mapCompositionInputMode() ? mapCompositionConstructionData() : ordinaryMapDraftData());
+      const creatingProduct = showProduct;
+      const updatingProduct = editingProduct && selectedVariety()?.construction?.type === 'product';
       const creatingSheaf = draftingSheaf && inputIsCreateMode();
-      refs.addObject.disabled = creatingMap || (creatingSheaf && waitingForSheafBase) || (creatingSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
-      refs.addObject.textContent = creatingMap ? 'pick' : (inputIsModifyMode() ? 'update' : 'add');
+      const sheafMapReady = !(creatingSheafMapOperation || editingSheafMapOperation) || !!mapOperationSheafConstructionData();
+      const sheafBinaryReady = !(creatingSheafBinary || editingSheafBinary) || !!binarySheafConstructionData();
+      const productFactors = productDraftFactors();
+      const productDim = productFactors.length === 2 ? productDimensionFromFactors(productFactors[0], productFactors[1]) : 0;
+      const productNeedsFactors = creatingProduct || updatingProduct;
+      const productReady = !productNeedsFactors || (productFactors.length === 2 && productDim <= MAX_DIMENSION);
+      refs.addObject.disabled = (draftingMap && !mapReady) || (productNeedsFactors && !productReady) || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || (creatingSheaf && !(creatingSheafMapOperation || creatingSheafBinary) && waitingForSheafBase) || (creatingSheaf && !(creatingSheafBinary || creatingSheafMapOperation) && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
+      refs.addObject.textContent = inputIsModifyMode() ? 'update' : 'add';
       refs.addObject.title = creatingMap
-        ? 'Pick domain and codomain on the canvas'
-        : (creatingSheaf && waitingForSheafBase ? (hasVariety ? 'Pick a base variety on the canvas first' : 'Add a variety first') : (draftingSheaf && !draftBase ? 'Add a base variety first' : ''));
+        ? (mapCompositionInputMode() ? mapCompositionPickHint() : ordinaryMapPickHint())
+        : (productNeedsFactors ? (productFactors.length === 2 && productDim > MAX_DIMENSION ? `Product dimension ${productDim} exceeds the calculator limit ${MAX_DIMENSION}` : 'Pick two varieties on the canvas') : ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady ? sheafMapPickHint() : ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady ? sheafBinaryPickHint() : (creatingSheaf && !(creatingSheafMapOperation || creatingSheafBinary) && waitingForSheafBase ? (hasVariety ? 'Pick a base variety on the canvas first' : 'Add a variety first') : (draftingSheaf && !(creatingSheafMapOperation || creatingSheafBinary) && !draftBase ? 'Add a base variety first' : '')))));
     }
     updateMapPickStatus();
+    syncGlobalPickButton();
     syncInputEditorVisibility();
+  }
+
+  function syncProductVarietyOption() {
+    const option = refs.varietyType?.querySelector?.('option[value="product"]');
+    if (!option) return;
+    const activeProduct = inputIsModifyMode() && selectedVariety()?.construction?.type === 'product';
+    const canPickProduct = inputIsModifyMode() ? activeProduct : state.varieties.length > 0;
+    option.disabled = !canPickProduct;
+    if (!canPickProduct && refs.varietyType.value === 'product') refs.varietyType.value = 'abstract';
   }
 
   function geometryFromVariety(variety) {
@@ -3043,16 +4297,16 @@
     const degreeShift = operation === 'pullback' ? 0 : targetGeometry.dim - sourceDim;
     const degree = sourceDef.degree + degreeShift;
     if (degree < 0 || degree > targetGeometry.dim) return null;
-    const mapName = sanitizeMathLabel(map.name, 'f');
     const id = mapHomologyClassId(map, operation, sourceDef.id);
     const symbol = mapHomologySymbolLatex(map, operation, sourceDef.symbolLatex);
     const sourceVariableId = homologyVariableId(sourceDef.id);
     defineMapHomologyVariable(map, operation, sourceVariableId, degree, sourceDef.symbolLatex, {
       sourceKey: monoKey({ [sourceVariableId]: 1 })
     });
-    const defaultSymbol = operation === 'pullback'
-      ? `${mapName}^{*}${sourceDef.defaultSymbol}`
-      : `${mapName}_{*}${sourceDef.defaultSymbol}`;
+    const operator = operation === 'pullback'
+      ? mapPullbackOperatorLatex(map)
+      : mapPushforwardOperatorLatex(map);
+    const defaultSymbol = `${operator}${sourceDef.defaultSymbol}`;
     return homologyClassDefinition(
       id,
       degree,
@@ -3123,10 +4377,10 @@
   }
 
   function mapHomologySymbolLatex(map, operation, sourceLatex) {
-    const mapName = sanitizeMathLabel(map.name, 'f');
-    return operation === 'pullback'
-      ? `${mapName}^{*}\\left(${sourceLatex}\\right)`
-      : `${mapName}_{*}\\left(${sourceLatex}\\right)`;
+    const operator = operation === 'pullback'
+      ? mapPullbackOperatorLatex(map)
+      : mapPushforwardOperatorLatex(map);
+    return `${operator}\\left(${sourceLatex}\\right)`;
   }
 
   function mapHomologyClassId(map, operation, sourceClassId) {
@@ -4068,6 +5322,12 @@
       ? geometryByVarietyId(map.domainId)
       : (options.geometry || geometryByVarietyId(map.codomainId));
     if (!sourceGeometry || !targetGeometry) return Poly.variable(id);
+    defineHomologyVariables(sourceGeometry);
+    if (data.operation === 'pushforward') {
+      defineHomologyVariables(targetGeometry);
+      const projected = projectionFormulaPushforwardSourceKey(map, data.sourceKey, sourceGeometry.dim, targetGeometry.dim, { proper: false });
+      if (projected) return projected.truncate(targetGeometry.dim);
+    }
     const sourcePoly = polyFromPowers(parseMonoKey(data.sourceKey));
     const simplifiedSource = applyHomologyRules(sourcePoly, {
       geometry: sourceGeometry,
@@ -4339,15 +5599,104 @@
   function pushforwardPolynomialByDegree(map, poly, sourceDim, targetDim, construction) {
     let out = Poly.zero();
     const degreeShift = targetDim - sourceDim;
+    const sourceGeometry = geometryByVarietyId(map?.domainId);
+    const targetGeometry = geometryByVarietyId(map?.codomainId);
+    if (sourceGeometry) defineHomologyVariables(sourceGeometry);
+    if (targetGeometry) defineHomologyVariables(targetGeometry);
     for (const [key, coeff] of Poly.from(poly).terms) {
       const sourceDegree = monoDegree(key);
       if (sourceDegree < 0 || sourceDegree > sourceDim) continue;
       const targetDegree = sourceDegree + degreeShift;
       if (targetDegree < 0 || targetDegree > targetDim) continue;
+      const projected = projectionFormulaPushforwardSourceKey(map, key, sourceDim, targetDim, construction);
+      if (projected) {
+        out = out.add(projected.scale(coeff));
+        continue;
+      }
       const id = pushforwardTermVariableId(map, key, targetDegree, construction);
       out = out.add(Poly.variable(id).scale(coeff));
     }
     return out.truncate(targetDim);
+  }
+
+  function projectionFormulaPushforwardSourceKey(map, sourceKey, sourceDim, targetDim, construction = {}) {
+    const split = splitProjectionFormulaPullbacks(map, sourceKey);
+    if (!split) return null;
+    const degreeShift = targetDim - sourceDim;
+    const remainingDegree = monoDegree(split.remainingKey);
+    const remainingTargetDegree = remainingDegree + degreeShift;
+    if (remainingTargetDegree < 0 || remainingTargetDegree > targetDim) return null;
+    const pushedId = pushforwardTermVariableId(map, split.remainingKey, remainingTargetDegree, construction);
+    return split.codomainFactor.mul(Poly.variable(pushedId), targetDim).truncate(targetDim);
+  }
+
+  function splitProjectionFormulaPullbacks(map, sourceKey) {
+    const powers = flattenProjectionSourcePowers(parseMonoKey(sourceKey), { preservePullbacksForMap: map });
+    const remaining = {};
+    const codomainPowers = {};
+    let moved = false;
+    for (const [id, exp] of Object.entries(powers)) {
+      const sourcePowers = sameMapPullbackSourcePowers(map, id);
+      if (!sourcePowers) {
+        remaining[id] = (remaining[id] || 0) + exp;
+        continue;
+      }
+      moved = true;
+      for (const [sourceId, sourceExp] of Object.entries(sourcePowers)) {
+        if (sourceId === homologyVariableId(HOMOLOGY_UNIT_CLASS)) continue;
+        codomainPowers[sourceId] = (codomainPowers[sourceId] || 0) + sourceExp * exp;
+      }
+    }
+    if (!moved) return null;
+    return {
+      remainingKey: monoKey(remaining),
+      codomainFactor: polyFromPowers(codomainPowers)
+    };
+  }
+
+  function sameMapPullbackSourcePowers(map, id) {
+    const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+    if (data?.kind !== 'mapHomology' || data.operation !== 'pullback') return null;
+    if (!sameMapId(data.mapId, map?.id)) return null;
+    if (data.sourceKey || data.sourceKey === '') return flattenProjectionSourcePowers(parseMonoKey(data.sourceKey));
+    return parseMonoKey(monoKey({ [data.sourceId]: 1 }));
+  }
+
+  function flattenProjectionSourcePowers(powers, options = {}, seen = new Set()) {
+    const out = {};
+    for (const [id, exp] of Object.entries(powers || {})) {
+      const exponent = Number(exp) || 0;
+      if (exponent <= 0) continue;
+      const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+      const preserveSameMapPullback = data?.kind === 'mapHomology'
+        && data.operation === 'pullback'
+        && options.preservePullbacksForMap
+        && sameMapId(data.mapId, options.preservePullbacksForMap.id);
+      const canFlatten = data?.kind === 'mapHomology'
+        && (data.sourceKey || data.sourceKey === '')
+        && !preserveSameMapPullback
+        && !seen.has(id)
+        && sourceKeyDegreeMatchesVariable(data, id);
+      if (!canFlatten) {
+        out[id] = (out[id] || 0) + exponent;
+        continue;
+      }
+      const nested = flattenProjectionSourcePowers(parseMonoKey(data.sourceKey), options, new Set([...seen, id]));
+      for (const [nestedId, nestedExp] of Object.entries(nested)) {
+        out[nestedId] = (out[nestedId] || 0) + nestedExp * exponent;
+      }
+    }
+    return out;
+  }
+
+  function sourceKeyDegreeMatchesVariable(data, id) {
+    if (!data || !Number.isInteger(data.degree)) return false;
+    return monoDegree(data.sourceKey) === data.degree;
+  }
+
+  function sameMapId(left, right) {
+    return String(left || '') === String(right || '')
+      || variableIdSafe(left || '') === variableIdSafe(right || '');
   }
 
   function pushforwardTermVariableId(map, sourceKey, targetDegree, construction) {
@@ -4373,7 +5722,7 @@
   }
 
   function pushforwardClassOperatorLatex(map, construction = {}) {
-    return `${sanitizeMathLabel(map?.name, 'f')}_{*}`;
+    return mapPushforwardOperatorLatex(map);
   }
 
   function mapHomologyVariableId(map, operation, sourceId) {
@@ -5783,11 +7132,11 @@
     if (!context) return `\\text{classes on } ${geometry.labelLatex}`;
     if (geometry.varietyId === context.domain.variety.id) {
       const mapName = sanitizeMathLabel(context.map.name, 'f');
-      return `${mapName}^{*}\\text{ relations for codomain classes}\\quad(${mapName}:${context.domain.geometry.labelLatex}\\to ${context.codomain.geometry.labelLatex})`;
+      return `${mapPullbackOperatorLatex(context.map)}\\text{ relations for codomain classes}\\quad(${mapName}:${context.domain.geometry.labelLatex}\\to ${context.codomain.geometry.labelLatex})`;
     }
     if (geometry.varietyId === context.codomain.variety.id) {
       const mapName = sanitizeMathLabel(context.map.name, 'f');
-      return `${mapName}_{*}\\text{ relations for domain classes}\\quad(${mapName}:${context.domain.geometry.labelLatex}\\to ${context.codomain.geometry.labelLatex})`;
+      return `${mapPushforwardOperatorLatex(context.map)}\\text{ relations for domain classes}\\quad(${mapName}:${context.domain.geometry.labelLatex}\\to ${context.codomain.geometry.labelLatex})`;
     }
     return `\\text{classes on } ${geometry.labelLatex}`;
   }
@@ -5795,7 +7144,7 @@
   function homologyMapActiveLatex(context) {
     const mapName = sanitizeMathLabel(context.map.name, 'f');
     const arrow = `${mapName}:${context.domain.geometry.labelLatex}\\to ${context.codomain.geometry.labelLatex}`;
-    return `${mapName}^{*}\\text{ and }${mapName}_{*}\\text{ relations}\\quad(${arrow})`;
+    return `${mapPullbackOperatorLatex(context.map)}\\text{ and }${mapPushforwardOperatorLatex(context.map)}\\text{ relations}\\quad(${arrow})`;
   }
 
   function homologyRuleLatex(rule, geometry) {
@@ -5816,7 +7165,6 @@
     const basis = basisStatusLabel(result.sheaf?.basis);
     refs.status.textContent = `${state.varieties.length} variet${state.varieties.length === 1 ? 'y' : 'ies'} · ${state.sheaves.length} ${state.sheaves.length === 1 ? 'sheaf' : 'sheaves'} · ${state.maps.length} map${state.maps.length === 1 ? '' : 's'}${bundle ? ` · ${basis} basis` : ''}`;
     setInlineMath(refs.ringSummary, geometry ? `A^*(${geometry.labelLatex})_{\\le ${geometry.dim}}` : '\\text{add a variety}');
-    renderConstructionPanel();
     renderHomologyPanel(result);
     if (result.classRows.length) {
       if (refs.classActions) refs.classActions.hidden = false;
@@ -5855,6 +7203,7 @@
       refs.hodgeMessage.textContent = hodgeChartEmptyMessage();
     }
     renderSheafCohomologyChart(result);
+    syncChartRevealControls(result);
     typeset(refs.classChart);
     typeset(refs.cohomologyChart);
     typeset(refs.hodgeChart);
@@ -6255,13 +7604,25 @@
       if (!endpoints) return;
       const pos = mapLabelPosition(map, endpoints, width, height);
       const name = sanitizeMathLabel(map.name, 'f');
+      const classes = ['sheaf-canvas-label', 'is-map'];
+      if (showSelection && map.id === state.activeMapId) classes.push('is-active');
+      if (sheafMapOperationInputMode()) {
+        if (state.sheafMapDraft?.mapId === map.id) classes.push('is-active');
+        else if (state.canvasPickEnabled && state.sheafMapPickTarget === 'map' && allowableSheafMapOperationMap(map.id)) classes.push('is-pick-candidate');
+      }
+      if (mapCompositionInputMode()) {
+        const ids = mapDraftMapIds();
+        if (ids[0] === map.id) classes.push('is-map-domain');
+        if (ids[1] === map.id) classes.push('is-map-codomain');
+        if (state.canvasPickEnabled && ids[0] !== map.id && ids[1] !== map.id && allowableMapCompositionPick(map.id)) classes.push('is-pick-candidate');
+      }
       labels.push({
         x: pos.x,
         y: pos.y,
         maxWidth: 96,
         main: name,
         ariaLabel: `map ${latexToPlain(name)}`,
-        className: `${showSelection && map.id === state.activeMapId ? 'sheaf-canvas-label is-active is-map' : 'sheaf-canvas-label is-map'}`,
+        className: classes.join(' '),
         objectKind: 'map',
         objectId: map.id
       });
@@ -6283,11 +7644,25 @@
       const activeEndpointRole = activeMapEndpointRole('variety', variety.id);
       if (activeEndpointRole === 'domain') classes.push('is-map-domain');
       else if (activeEndpointRole === 'codomain') classes.push('is-map-codomain');
-      if ((state.basePickActive || (currentInputKind() === 'sheaf' && inputIsCreateMode() && !state.draftSheafBaseVarietyId)) && allowableSheafBase(variety.id)) classes.push('is-pick-candidate');
-      if (currentInputKind() === 'sheaf' && inputIsCreateMode() && state.draftSheafBaseVarietyId === variety.id) classes.push('is-active');
-      if (currentInputKind() === 'map' && inputIsCreateMode() && !state.mapDraft) classes.push('is-pick-candidate');
-      else if (state.mapDraft?.domainKind === 'variety' && state.mapDraft.domainId === variety.id) classes.push('is-map-domain');
-      else if (allowableMapCodomain('variety', variety.id)) classes.push('is-map-codomain-candidate');
+      if (productVarietyInputMode()) {
+        const productIds = productDraftFactorIds();
+        if (productIds[0] === variety.id) classes.push('is-map-domain');
+        if (productIds[1] === variety.id) classes.push('is-map-codomain');
+        if (state.canvasPickEnabled && productIds[0] !== variety.id && productIds[1] !== variety.id && productCanPickVariety(variety.id)) {
+          classes.push('is-pick-candidate');
+        }
+      }
+      const creatingMapOperationSheaf = sheafMapOperationInputMode() && inputIsCreateMode();
+      if (state.canvasPickEnabled && sheafBasePickInputMode() && allowableSheafBase(variety.id)) classes.push('is-pick-candidate');
+      if (currentInputKind() === 'sheaf' && inputIsCreateMode() && !creatingMapOperationSheaf && state.draftSheafBaseVarietyId === variety.id) classes.push('is-active');
+      if (ordinaryMapInputMode()) {
+        const domain = mapDraftEndpointObject('domain');
+        const codomain = mapDraftEndpointObject('codomain');
+        if (domain?.id === variety.id) classes.push('is-map-domain');
+        else if (codomain?.id === variety.id) classes.push('is-map-codomain');
+        else if (state.canvasPickEnabled) classes.push(state.mapPickTarget === 'codomain' ? 'is-map-codomain-candidate' : 'is-pick-candidate');
+      }
+      if (sheafMapOperationInputMode() && sheafMapDraftBase()?.id === variety.id) classes.push('is-active');
       labels.push({
         x: pos.x,
         y: pos.y,
@@ -6308,9 +7683,16 @@
       const activeEndpointRole = activeMapEndpointRole('sheaf', sheaf.id);
       if (activeEndpointRole === 'domain') classes.push('is-map-domain');
       else if (activeEndpointRole === 'codomain') classes.push('is-map-codomain');
-      if (currentInputKind() === 'map' && inputIsCreateMode() && !state.mapDraft) classes.push('is-pick-candidate');
-      else if (state.mapDraft?.domainKind === 'sheaf' && state.mapDraft.domainId === sheaf.id) classes.push('is-map-domain');
-      else if (allowableMapCodomain('sheaf', sheaf.id)) classes.push('is-map-codomain-candidate');
+      if (sheafBinaryInputMode()) {
+        const ids = sheafBinaryDraftIds();
+        if (ids[0] === sheaf.id) classes.push('is-map-domain');
+        if (ids[1] === sheaf.id) classes.push('is-map-codomain');
+        if (state.canvasPickEnabled && ids[0] !== sheaf.id && ids[1] !== sheaf.id && allowableSheafBinaryPick(sheaf.id)) classes.push('is-pick-candidate');
+      }
+      if (sheafMapOperationInputMode()) {
+        if (state.sheafMapDraft?.sheafId === sheaf.id) classes.push('is-active');
+        else if (state.canvasPickEnabled && state.sheafMapPickTarget === 'sheaf' && allowableSheafMapOperationSheaf(sheaf.id)) classes.push('is-pick-candidate');
+      }
       labels.push({
         x: pos.x,
         y: pos.y,
@@ -6547,6 +7929,9 @@
     const count = normalizedMapPointCount(pointCount);
     const dx = to.x - from.x;
     const dy = to.y - from.y;
+    if (Math.hypot(dx, dy) < 1) {
+      return standardSelfMapCurve(from, width, height, count, bendPx);
+    }
     const length = Math.hypot(dx, dy) || 1;
     const nx = -dy / length;
     const ny = dx / length;
@@ -6563,6 +7948,41 @@
       anchors,
       handles: standardMapHandles(anchors, width, height, bend)
     };
+  }
+
+  function standardSelfMapCurve(label, width, height, pointCount = DEFAULT_MAP_POINT_COUNT, bendPx = null) {
+    const count = Math.max(3, normalizedMapPointCount(pointCount));
+    const loopIndex = selfMapLoopIndex(label?.objectKind, label?.objectId);
+    const baseAngle = ((Number.isFinite(bendPx) ? bendPx : loopIndex * 120) + 30) * Math.PI / 180;
+    const bounds = estimatedLabelBounds(label);
+    const rx = Math.max(42, bounds.halfWidth + 24);
+    const ry = Math.max(32, bounds.halfHeight + 20);
+    const cx = label.x + Math.cos(baseAngle) * (bounds.halfWidth + rx * 0.38);
+    const cy = label.y + Math.sin(baseAngle) * (bounds.halfHeight + ry * 0.38);
+    const startAngle = baseAngle + Math.PI + 0.5;
+    const endAngle = baseAngle + Math.PI - 0.5;
+    const anchors = Array.from({ length: count }, (_, index) => {
+      const t = index / (count - 1);
+      const theta = startAngle + (endAngle + Math.PI * 2 - startAngle) * t;
+      return normalizedCurvePoint({
+        x: (cx + rx * Math.cos(theta)) / Math.max(1, width),
+        y: (cy + ry * Math.sin(theta)) / Math.max(1, height)
+      }, 0.5, 0.5);
+    });
+    return {
+      anchors,
+      handles: standardMapHandles(anchors, width, height, 0)
+    };
+  }
+
+  function selfMapLoopIndex(kind, id) {
+    if (!kind || !id) return 0;
+    return state.maps.filter((item) => (
+      item.domainKind === kind
+      && item.domainId === id
+      && item.codomainKind === kind
+      && item.codomainId === id
+    )).length;
   }
 
   function standardMapHandles(anchors, width, height, bendPx = 0) {
@@ -6621,15 +8041,17 @@
   function mapCurveGeometry(map, from, to, width, height) {
     const raw = mapRawCurveGeometry(map, from, to, width, height);
     if (!raw) return null;
+    if (isSelfMap(map)) return raw;
     return clipBezierPathByLabels(raw, from, to);
   }
 
   function mapRawCurveGeometry(map, from, to, width, height) {
     const curve = ensureMapCurve(map, from, to, width, height);
     if (!curve) return null;
+    const selfMap = map.domainKind === map.codomainKind && map.domainId === map.codomainId;
     const anchors = curve.anchors.map((anchor, index) => {
-      if (index === 0) return { x: from.x, y: from.y };
-      if (index === curve.anchors.length - 1) return { x: to.x, y: to.y };
+      if (index === 0) return selfMap ? selfMapEndpoint(anchor, from, width, height) : { x: from.x, y: from.y };
+      if (index === curve.anchors.length - 1) return selfMap ? selfMapEndpoint(anchor, to, width, height) : { x: to.x, y: to.y };
       return anchorToPoint(anchor, width, height);
     });
     const handles = curve.handles.map((handle) => anchorToPoint(handle, width, height));
@@ -6647,6 +8069,11 @@
       };
     }).filter((segment) => segment.start && segment.end);
     return { anchors, handles, outHandles, inHandles, segments };
+  }
+
+  function selfMapEndpoint(anchor, label, width, height) {
+    const target = anchorToPoint(anchor, width, height);
+    return labelEdgePoint(label, target.x, target.y, 0) || { x: label.x, y: label.y };
   }
 
   function fallbackRawHandle(anchors, index, forward = true) {
@@ -6669,9 +8096,9 @@
     if (!path?.segments?.length) return null;
     const segments = path.segments.map((segment) => ({ ...segment }));
     const first = segments[0];
-    const startT = firstOutsideBezierT(first, from, 7, true);
+    const startT = firstOutsideBezierT(first, from, 7, true, true);
     if (segments.length === 1) {
-      const endT = firstOutsideBezierT(first, to, 9, false);
+      const endT = firstOutsideBezierT(first, to, 9, false, true);
       if (startT == null || endT == null || endT - startT < 0.06) return clippedStraightPathFallback(from, to);
       segments[0] = splitCubicSegment(first.start, first.c1, first.c2, first.end, startT, endT);
     } else {
@@ -6679,14 +8106,16 @@
       segments[0] = splitCubicSegment(first.start, first.c1, first.c2, first.end, startT, 1);
       const lastIndex = segments.length - 1;
       const last = segments[lastIndex];
-      const endT = firstOutsideBezierT(last, to, 9, false);
+      const endT = firstOutsideBezierT(last, to, 9, false, true);
       if (endT == null) return clippedStraightPathFallback(from, to);
       segments[lastIndex] = splitCubicSegment(last.start, last.c1, last.c2, last.end, 0, endT);
     }
     return { anchors: path.anchors, segments };
   }
 
-  function firstOutsideBezierT(segment, label, extra, forward) {
+  function firstOutsideBezierT(segment, label, extra, forward, requireBoundaryInside = false) {
+    const boundary = forward ? segment.start : segment.end;
+    if (requireBoundaryInside && !pointInsideEstimatedLabel(boundary, label, extra)) return forward ? 0 : 1;
     if (forward) {
       for (let i = 0; i <= MAP_CURVE_SAMPLE_COUNT; i += 1) {
         const t = i / MAP_CURVE_SAMPLE_COUNT;
@@ -7086,10 +8515,11 @@
     const y = event.clientY - drag.canvasRect.top - drag.offsetY + drag.target.offsetHeight / 2;
     const clampedX = clamp(x, 24, width - 24);
     const clampedY = clamp(y, 24, height - 24);
-    if (drag.kind === 'map') {
+      if (drag.kind === 'map') {
       updateMapLabelDragPosition(drag.item, clampedX, clampedY, width, height);
     } else {
       setCanvasLabelPosition(drag.item, clampedX, clampedY, width, height);
+      drag.item.labelPositionDirty = true;
     }
     drag.target.style.left = `${clampedX}px`;
     drag.target.style.top = `${clampedY}px`;
@@ -7903,9 +9333,73 @@
   function typeset(element) {
     if (!window.MathJax?.typesetPromise) return;
     if (window.MathJax.typesetClear) window.MathJax.typesetClear([element]);
+    polishDisplayLatexScripts(element);
     state.mathJaxQueue = state.mathJaxQueue
       .then(() => window.MathJax.typesetPromise([element]))
       .catch(() => {});
+  }
+
+  function polishDisplayLatexScripts(root) {
+    if (!root) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        if (!String(node.nodeValue || '').includes('}_{')) return NodeFilter.FILTER_REJECT;
+        const parent = node.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        if (parent.closest('mjx-container, script, style, textarea, input, select, option')) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    const textNodes = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode);
+    textNodes.forEach((node) => {
+      const polished = polishLatexScriptsForDisplay(node.nodeValue);
+      if (polished !== node.nodeValue) node.nodeValue = polished;
+    });
+  }
+
+  function polishLatexScriptsForDisplay(text) {
+    const source = String(text || '');
+    let out = '';
+    for (let index = 0; index < source.length; index += 1) {
+      if (source[index] !== '_' || source[index + 1] !== '{') {
+        out += source[index];
+        continue;
+      }
+      const subscript = readLatexBraceGroup(source, index + 1);
+      if (!subscript || source[subscript.end + 1] !== '_' || source[subscript.end + 2] !== '{') {
+        out += source[index];
+        continue;
+      }
+      const decoration = readLatexBraceGroup(source, subscript.end + 2);
+      if (!decoration || !/^[!*]$/.test(decoration.content)) {
+        out += source[index];
+        continue;
+      }
+      out += `_{${subscript.content},${decoration.content}}`;
+      index = decoration.end;
+    }
+    return out;
+  }
+
+  function readLatexBraceGroup(source, openIndex) {
+    if (source[openIndex] !== '{') return null;
+    let depth = 0;
+    for (let index = openIndex; index < source.length; index += 1) {
+      const ch = source[index];
+      if (ch === '{') depth += 1;
+      else if (ch === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          return {
+            content: source.slice(openIndex + 1, index),
+            end: index
+          };
+        }
+      }
+      if (depth < 0) return null;
+    }
+    return null;
   }
 
   function parseDegrees(text) {
