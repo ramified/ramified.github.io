@@ -204,7 +204,8 @@
     grid-template-columns: auto minmax(64px, 1fr) 48px;
     gap: 7px;
     align-items: center;
-    color: var(--muted);
+    color: inherit;
+    font-size: 0.76rem;
   }
 
   .map-curve-control {
@@ -218,8 +219,8 @@
   }
 
   .map-curve-control output {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.68rem;
+    font-family: inherit;
+    font-size: 0.76rem;
     text-align: right;
   }
 
@@ -1119,7 +1120,7 @@
             </select>
             <button class="btn btn-ghost sheaf-object-button" id="add-object" type="button">add</button>
             <button class="btn btn-ghost sheaf-object-button" id="delete-object" type="button">delete</button>
-            <button class="btn btn-ghost sheaf-object-button" id="input-pick-mode" type="button" aria-pressed="false" hidden>pick</button>
+            <button class="btn btn-ghost sheaf-object-button" id="input-pick-mode" type="button" aria-pressed="false" hidden>cancel</button>
           </div>
           <div class="sheaf-input-options" id="input-options">
             <label class="opt-row" for="repeat-names">
@@ -1304,10 +1305,10 @@
             <div class="map-curve-tools">
               <label class="map-curve-control" for="map-point-count">
                 <span>points</span>
-                <input id="map-point-count" type="range" min="2" max="5" step="1" value="2">
-                <output id="map-point-count-value" for="map-point-count">2</output>
+                <input id="map-point-count" type="range" min="0" max="4" step="1" value="0">
+                <output id="map-point-count-value" for="map-point-count">0</output>
               </label>
-              <button class="btn btn-ghost map-curve-reset" id="standard-map-curve" type="button">standard</button>
+              <button class="btn btn-ghost map-curve-reset" id="standard-map-curve" type="button" title="Reset the arrow shape for the current point count">reset</button>
             </div>
           </div>
           <div class="sheaf-field-row map-curve-row" id="map-label-offset-row" hidden>

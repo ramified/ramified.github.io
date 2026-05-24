@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dynkin Diagram Calculator</title>
+  <link rel="stylesheet" href="young_diagrams.css">
+  <style>
+    .dynkin-layout {
+      max-width: 1240px;
+      grid-template-columns: minmax(0, 1fr) 370px;
+    }
+
+    .dynkin-stage {
+      padding: 16px;
+      min-width: 0;
+    }
+
+    .dynkin-canvas {
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--border);
+      background: #fffdf8;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7);
+    }
+
+    .dynkin-toolbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .dynkin-toolbar-group select,
+    .dynkin-toolbar-group input,
+    .dynkin-select,
+    .dynkin-number-input {
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+    }
+
+    .dynkin-toolbar-group select,
+    .dynkin-select {
+      padding: 4px 7px;
+      min-width: 154px;
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.94rem;
+    }
+
+    .dynkin-toolbar-group input,
+    .dynkin-number-input {
+      width: 58px;
+      padding: 4px 7px;
+      text-align: center;
+    }
+
+    .dynkin-toolbar-group select:focus,
+    .dynkin-toolbar-group input:focus,
+    .dynkin-select:focus,
+    .dynkin-number-input:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .dynkin-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 21px;
+      padding: 1px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text);
+      background: rgba(255,255,255,0.55);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      white-space: nowrap;
+    }
+
+    .dynkin-underbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+
+    .dynkin-inline-row {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .dynkin-inline-row .input-label {
+      margin-bottom: 0;
+      white-space: nowrap;
+    }
+
+    .dynkin-action-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .dynkin-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.35;
+    }
+
+    .dynkin-table th,
+    .dynkin-table td {
+      border-bottom: 1px dotted var(--border);
+      padding: 5px 4px;
+      text-align: right;
+      vertical-align: top;
+    }
+
+    .dynkin-table th:first-child,
+    .dynkin-table td:first-child {
+      text-align: left;
+      color: var(--muted);
+    }
+
+    .dynkin-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .dynkin-scroll {
+      max-height: min(340px, 48vh);
+      overflow: auto;
+      padding-right: 6px;
+      scrollbar-gutter: stable;
+    }
+
+    .start-chart {
+      width: 100% !important;
+      height: auto !important;
+      margin-top: 8px;
+      border: 1px solid var(--border);
+      background: #fffdf8;
+      cursor: default;
+    }
+
+    #dynkin-export-out {
+      width: 100%;
+      min-height: 76px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      padding: 7px 8px;
+      resize: vertical;
+      margin-top: 8px;
+    }
+
+    @media (max-width: 780px) {
+      .dynkin-layout {
+        grid-template-columns: 1fr;
+      }
+      .dynkin-toolbar-group {
+        width: 100%;
+      }
+      .dynkin-toolbar-group select {
+        flex: 1 1 180px;
+      }
+      .dynkin-underbar {
+        padding: 0 12px 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Dynkin Diagram Calculator</h1>
+  <span><a href="young_diagrams.html">Young Diagram Calculator</a> &middot; <a href="double_young_diagram.html">Young Diagram<sup>2</sup> Calculator</a> &middot; <a href="mosaic_calculator.html">Mosaic Calculator</a> &middot; <a href="matrix_calculator.html">Matrix Calculator</a> &middot; <a href="sheaf_calculator.html">Sheaf Calculator</a> &middot; <a href="place_ramification_calculator.html">Place Ramification Calculator</a></span>
+</header>
+
+<main class="layout dynkin-layout">
+  <section class="canvas-panel" aria-label="Dynkin diagram canvas panel">
+    <header class="panel-title">
+      <span class="panel-title-text">Dynkin Diagram</span>
+      <div class="canvas-toolbar" aria-label="Dynkin diagram controls">
+        <span class="shape-indicator"><span id="dynkin-status" class="dynkin-badge">A_6</span></span>
+        <span class="dynkin-toolbar-group">
+          <label class="stat-label" for="dynkin-type">Type</label>
+          <select id="dynkin-type">
+            <optgroup label="Classical">
+              <option value="A" selected>A_n sl(n+1)</option>
+              <option value="B">B_n so(2n+1)</option>
+              <option value="C">C_n sp(2n)</option>
+              <option value="D">D_n so(2n)</option>
+            </optgroup>
+            <optgroup label="Exceptional">
+              <option value="E6">E_6</option>
+              <option value="E7">E_7</option>
+              <option value="E8">E_8</option>
+              <option value="F4">F_4</option>
+              <option value="G2">G_2</option>
+            </optgroup>
+          </select>
+          <span id="dynkin-rank-wrap" class="dynkin-toolbar-group">
+            <label class="stat-label" for="dynkin-rank">rank</label>
+            <input id="dynkin-rank" type="number" min="1" max="12" value="6">
+          </span>
+        </span>
+      </div>
+    </header>
+    <div class="dynkin-stage">
+      <canvas id="dynkin-canvas" class="dynkin-canvas" width="900" height="420"></canvas>
+    </div>
+    <div class="dynkin-underbar">
+      <span id="dynkin-selected-label">selected vertex: 1</span>
+      <span id="dynkin-root-count-label">positive roots: 21</span>
+    </div>
+  </section>
+
+  <aside class="side" id="cards">
+    <section class="card" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="dynkin-inline-row">
+          <span class="input-label">Type</span>
+          <select id="dynkin-type-side" class="dynkin-select">
+            <optgroup label="Classical">
+              <option value="A" selected>A_n</option>
+              <option value="B">B_n</option>
+              <option value="C">C_n</option>
+              <option value="D">D_n</option>
+            </optgroup>
+            <optgroup label="Exceptional">
+              <option value="E6">E_6</option>
+              <option value="E7">E_7</option>
+              <option value="E8">E_8</option>
+              <option value="F4">F_4</option>
+              <option value="G2">G_2</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="dynkin-inline-row" id="dynkin-rank-side-row">
+          <span class="input-label">Rank</span>
+          <input id="dynkin-rank-side" class="dynkin-number-input" type="number" min="1" max="12" value="6">
+        </div>
+        <div class="dynkin-inline-row">
+          <span class="input-label">Vertex</span>
+          <input id="dynkin-vertex" class="dynkin-number-input" type="number" min="1" max="6" value="1">
+        </div>
+        <div class="result-meta" id="dynkin-input-note">finite root system</div>
+      </div>
+    </section>
+
+    <section class="card" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Basic Invariants</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body" id="dynkin-invariants"></div>
+    </section>
+
+    <section class="card" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Starting Function</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div id="dynkin-start-summary"></div>
+        <canvas id="dynkin-start-canvas" class="start-chart" width="620" height="230"></canvas>
+        <div class="dynkin-scroll" id="dynkin-start-table"></div>
+      </div>
+    </section>
+
+    <section class="card collapsed" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Vertex Data</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body" id="dynkin-vertex-data"></div>
+    </section>
+
+    <section class="card collapsed" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Cartan Matrix</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="dynkin-scroll" id="dynkin-cartan"></div>
+      </div>
+    </section>
+
+    <section class="card collapsed" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="dynkin-action-row">
+          <button id="dynkin-refresh-export" class="btn" type="button">refresh</button>
+          <button id="dynkin-select-export" class="btn btn-ghost" type="button">select</button>
+        </div>
+        <textarea id="dynkin-export-out" spellcheck="false"></textarea>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<script src="dynkin_diagram_calculator.js"></script>
+</body>
+</html>

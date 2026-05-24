@@ -15,8 +15,11 @@
   const MAX_MAP_LABEL_OFFSET = 25;
   const DEFAULT_MAP_LABEL_T = 0.5;
   const MAP_BEND_SLOTS = [0, -60, 60, -120, 120];
-  const DEFAULT_MAP_POINT_COUNT = 2;
+  const LEGACY_STRAIGHT_MAP_POINT_COUNT = -1;
+  const STRAIGHT_MAP_POINT_COUNT = 0;
+  const DEFAULT_MAP_POINT_COUNT = STRAIGHT_MAP_POINT_COUNT;
   const MAX_MAP_POINT_COUNT = 5;
+  const MAP_POINT_COUNT_OPTIONS = [STRAIGHT_MAP_POINT_COUNT, 2, 3, 4, 5];
   const MAP_CURVE_SAMPLE_COUNT = 48;
   const VARIETY_LETTER_NAMES = ['X', 'Y', 'Z', 'W', 'V', 'U', 'T', 'S', 'R', 'Q'];
   const SHEAF_LETTER_NAMES = ['\\mathcal{E}', '\\mathcal{F}', '\\mathcal{G}', '\\mathcal{H}', '\\mathcal{I}', '\\mathcal{J}', '\\mathcal{K}', '\\mathcal{L}', '\\mathcal{M}', '\\mathcal{N}'];
@@ -1078,10 +1081,13 @@
     if (refs.mapLabelOffsetRow) refs.mapLabelOffsetRow.hidden = !showCurveControls;
     const count = mapCurveAnchorCount(map);
     if (refs.mapPointCount) {
-      refs.mapPointCount.value = String(count);
+      refs.mapPointCount.min = '0';
+      refs.mapPointCount.max = String(MAP_POINT_COUNT_OPTIONS.length - 1);
+      refs.mapPointCount.step = '1';
+      refs.mapPointCount.value = String(mapPointCountSliderValue(count));
       refs.mapPointCount.disabled = !showCurveControls;
     }
-    if (refs.mapPointCountValue) refs.mapPointCountValue.textContent = String(count);
+    if (refs.mapPointCountValue) refs.mapPointCountValue.textContent = formatMapPointCount(count);
     if (refs.standardMapCurve) refs.standardMapCurve.disabled = !showCurveControls;
     const offset = normalizedMapLabelOffset(map?.labelOffset);
     if (refs.mapLabelOffset) {
@@ -2139,7 +2145,7 @@
     const homology = ensureHomologySystem(variety, geometry);
     const custom = homology.customClasses.find((item) => item.id === classId);
     if (!custom) return;
-    const variableId = homologyVariableId(classId);
+    const variableId = homologyVariableId(classId, geometry);
     custom.degree = normalizedInt(value, 0, geometry.dim, custom.degree);
     homology.rules = homology.rules.filter((rule) => rule.builtin || !homologyRuleContainsVariable(rule, variableId));
     recompute();
@@ -2190,7 +2196,7 @@
     if (!variety) return;
     const geometry = geometryFromVariety(variety);
     const homology = ensureHomologySystem(variety, geometry);
-    const variableId = homologyVariableId(classId);
+    const variableId = homologyVariableId(classId, geometry);
     homology.customClasses = homology.customClasses.filter((item) => item.id !== classId);
     delete homology.classes[classId];
     homology.rules = homology.rules.filter((rule) => rule.builtin || !homologyRuleContainsVariable(rule, variableId));
@@ -2529,13 +2535,11 @@
     if (!refs.inputPickMode) return;
     const available = canvasPickAvailable();
     if (!available) state.canvasPickEnabled = false;
-    refs.inputPickMode.hidden = !available;
-    refs.inputPickMode.disabled = !available;
-    refs.inputPickMode.setAttribute('aria-pressed', available && !state.canvasPickEnabled ? 'true' : 'false');
-    refs.inputPickMode.textContent = 'pick';
-    refs.inputPickMode.title = state.canvasPickEnabled
-      ? 'Switch canvas clicks back to choosing labels to modify'
-      : 'Canvas clicks choose labels to modify';
+    refs.inputPickMode.hidden = !state.canvasPickEnabled;
+    refs.inputPickMode.disabled = !state.canvasPickEnabled;
+    refs.inputPickMode.setAttribute('aria-pressed', state.canvasPickEnabled ? 'true' : 'false');
+    refs.inputPickMode.textContent = 'cancel';
+    refs.inputPickMode.title = 'Cancel canvas selection';
   }
 
   function clearMapDraft() {
@@ -3015,8 +3019,8 @@
     button.setAttribute('aria-pressed', picking ? 'true' : 'false');
     const fallback = target === 'map' ? 'map' : 'sheaf';
     const label = object ? latexToPlain(sanitizeMathLabel(object.name, target === 'map' ? 'f' : '\\mathcal{E}')) : fallback;
-    button.textContent = label;
-    button.title = object ? `Replace ${label}` : `Pick a ${fallback} on the canvas`;
+    button.textContent = object && inputIsModifyMode() ? `replace ${label}` : (object ? label : `pick ${fallback}`);
+    button.title = object ? `Pick a replacement for ${label}` : `Pick a ${fallback} on the canvas`;
   }
 
   function sheafMapPickHint(base = sheafMapDraftBase(), map = sheafMapDraftMap()) {
@@ -4126,8 +4130,9 @@
   }
 
   function attachHomologyToGeometry(variety, geometry) {
-    const homology = ensureHomologySystem(variety, geometry);
-    return { ...geometry, varietyId: variety?.id || null, homology };
+    const scopedGeometry = { ...geometry, varietyId: variety?.id || null };
+    const homology = ensureHomologySystem(variety, scopedGeometry);
+    return { ...scopedGeometry, homology };
   }
 
   function ensureHomologySystem(variety, geometry) {
@@ -4176,7 +4181,9 @@
         0,
         '1',
         'unit',
-        homology
+        homology,
+        '1',
+        geometry
       )
     ];
     if (varietyHasHyperplaneClass(geometry.type)) {
@@ -4185,7 +4192,9 @@
         1,
         'H',
         'hyperplane',
-        homology
+        homology,
+        'H',
+        geometry
       ));
     }
     if (Number.isInteger(geometry.dim) && geometry.dim >= 0) {
@@ -4194,7 +4203,9 @@
         geometry.dim,
         '[p]',
         'point',
-        homology
+        homology,
+        '[p]',
+        geometry
       ));
     }
     for (const custom of homology.customClasses || []) {
@@ -4206,7 +4217,8 @@
         normalized.symbol,
         'custom',
         homology,
-        normalized.symbol
+        normalized.symbol,
+        geometry
       ));
     }
     return defs;
@@ -4231,10 +4243,11 @@
     return candidates.find((symbol) => !used.has(canonicalMathLabel(symbol))) || `A_{${(homology?.customClasses || []).length + 1}}`;
   }
 
-  function homologyClassDefinition(id, degree, defaultSymbol, kind, homology, fallbackSymbol = defaultSymbol) {
+  function homologyClassDefinition(id, degree, defaultSymbol, kind, homology, fallbackSymbol = defaultSymbol, geometry = null) {
     const symbol = sanitizeHomologySymbol(homology?.classes?.[id]?.symbol, fallbackSymbol || defaultSymbol);
     return {
       id,
+      variableId: homologyVariableId(id, geometry),
       degree,
       defaultSymbol,
       kind,
@@ -4247,14 +4260,68 @@
     return homologyClassDefinitions(geometry).find((def) => def.id === classId) || null;
   }
 
-  function homologyVariableId(classId) {
-    if (String(classId || '').startsWith('map_')) return String(classId);
-    if (classId === HOMOLOGY_UNIT_CLASS) return 'unit';
-    if (classId === HOMOLOGY_HYPERPLANE_CLASS) return 'H';
-    if (classId === HOMOLOGY_POINT_CLASS) return 'point';
-    const mapClass = parseMapHomologyClassId(classId);
-    if (mapClass) return mapHomologyVariableId({ id: mapClass.mapId }, mapClass.operation, homologyVariableId(mapClass.sourceClassId));
-    return `homology_${String(classId || '').replace(/[^A-Za-z0-9_]+/g, '_')}`;
+  function homologyVariableId(classId, geometry = null) {
+    const text = String(classId || '');
+    if (text.startsWith('map_')) return text;
+    const mapClass = parseMapHomologyClassId(text);
+    if (mapClass) {
+      const map = state.maps.find((item) => item.id === mapClass.mapId || variableIdSafe(item.id) === mapClass.mapId) || { id: mapClass.mapId };
+      const sourceGeometry = map.domainKind === 'variety' && map.codomainKind === 'variety'
+        ? (mapClass.operation === 'pullback' ? geometryByVarietyId(map.codomainId) : geometryByVarietyId(map.domainId))
+        : null;
+      return mapHomologyVariableId(map, mapClass.operation, homologyVariableId(mapClass.sourceClassId, sourceGeometry));
+    }
+    return scopedHomologyVariableId(text, geometry);
+  }
+
+  function homologyDefVariableId(def, geometry = null) {
+    return def?.variableId || homologyVariableId(def?.id, geometry);
+  }
+
+  function scopedHomologyVariableId(classId, geometry = null) {
+    const scope = homologyScopeId(geometry);
+    if (classId === HOMOLOGY_UNIT_CLASS) return `homology_${scope}_unit`;
+    if (classId === HOMOLOGY_HYPERPLANE_CLASS) return `homology_${scope}_H`;
+    if (classId === HOMOLOGY_POINT_CLASS) return `homology_${scope}_point`;
+    return `homology_${scope}_${variableIdSafe(classId || 'class')}`;
+  }
+
+  function homologyScopeId(geometry = null) {
+    if (geometry?.varietyId) return `v_${variableIdSafe(geometry.varietyId)}`;
+    const label = geometry?.labelPlain || geometry?.labelLatex || geometry?.type || 'draft';
+    return `draft_${hashString(label)}`;
+  }
+
+  function canonicalHomologyVariableId(id, geometry = null) {
+    const text = String(id || '');
+    if (!text) return text;
+    if (text.startsWith('map_')) return canonicalMapHomologyVariableId(text);
+    const legacyBase = legacyBaseHomologyClassId(text);
+    if (legacyBase) return homologyVariableId(legacyBase, geometry);
+    const legacyCustom = text.match(/^homology_(.+)$/);
+    if (legacyCustom && !legacyCustom[1].startsWith('v_') && !legacyCustom[1].startsWith('draft_')) {
+      return homologyVariableId(legacyCustom[1], geometry);
+    }
+    return text;
+  }
+
+  function legacyBaseHomologyClassId(id) {
+    if (id === 'unit') return HOMOLOGY_UNIT_CLASS;
+    if (id === 'H') return HOMOLOGY_HYPERPLANE_CLASS;
+    if (id === 'point') return HOMOLOGY_POINT_CLASS;
+    return null;
+  }
+
+  function canonicalMapHomologyVariableId(id) {
+    const parsed = parseMapHomologyVariableId(id);
+    if (!parsed) return id;
+    const map = state.maps.find((item) => variableIdSafe(item.id) === parsed.mapKey || item.id === parsed.mapKey);
+    if (!map || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return id;
+    const sourceGeometry = parsed.operation === 'pullback'
+      ? geometryByVarietyId(map.codomainId)
+      : geometryByVarietyId(map.domainId);
+    const sourceId = canonicalHomologyVariableId(parsed.sourceId, sourceGeometry);
+    return mapHomologyVariableId(map, parsed.operation, sourceId);
   }
 
   function parseMapHomologyClassId(classId) {
@@ -4290,16 +4357,18 @@
 
   function mapOperationHomologyClassDefinition(map, operation, sourceDef, targetGeometry) {
     if (!sourceDef || !Number.isInteger(sourceDef.degree) || !Number.isInteger(targetGeometry.dim)) return null;
-    const sourceDim = operation === 'pullback'
-      ? geometryByVarietyId(map.codomainId)?.dim
-      : geometryByVarietyId(map.domainId)?.dim;
+    const sourceGeometry = operation === 'pullback'
+      ? geometryByVarietyId(map.codomainId)
+      : geometryByVarietyId(map.domainId);
+    const sourceDim = sourceGeometry?.dim;
     if (!Number.isInteger(sourceDim)) return null;
     const degreeShift = operation === 'pullback' ? 0 : targetGeometry.dim - sourceDim;
     const degree = sourceDef.degree + degreeShift;
     if (degree < 0 || degree > targetGeometry.dim) return null;
     const id = mapHomologyClassId(map, operation, sourceDef.id);
     const symbol = mapHomologySymbolLatex(map, operation, sourceDef.symbolLatex);
-    const sourceVariableId = homologyVariableId(sourceDef.id);
+    const sourceVariableId = homologyDefVariableId(sourceDef, sourceGeometry);
+    defineVariable(sourceVariableId, sourceDef.degree, sourceDef.symbolLatex);
     defineMapHomologyVariable(map, operation, sourceVariableId, degree, sourceDef.symbolLatex, {
       sourceKey: monoKey({ [sourceVariableId]: 1 })
     });
@@ -4313,7 +4382,8 @@
       defaultSymbol,
       operation === 'pullback' ? `pullback of ${sourceDef.kind}` : `pushforward of ${sourceDef.kind}`,
       targetGeometry.homology,
-      symbol
+      symbol,
+      targetGeometry
     );
   }
 
@@ -4325,7 +4395,7 @@
     if (Object.keys(sourcePowers).length === 1) {
       const [sourceId, exponent] = Object.entries(sourcePowers)[0];
       if (exponent === 1) {
-        const sourceDef = baseHomologyClassDefinitions(domainGeometry).find((def) => homologyVariableId(def.id) === sourceId);
+        const sourceDef = baseHomologyClassDefinitions(domainGeometry).find((def) => homologyDefVariableId(def, domainGeometry) === sourceId);
         if (sourceDef) return mapOperationHomologyClassDefinition(map, 'pushforward', sourceDef, codomainGeometry);
       }
     }
@@ -4337,7 +4407,8 @@
       defaultSymbol: data.latex || mapHomologySymbolLatex(map, 'pushforward', mono.latex || '1'),
       kind: mono.key ? 'pushforward of product' : 'pushforward of unit',
       symbolLatex: data.latex || mapHomologySymbolLatex(map, 'pushforward', mono.latex || '1'),
-      symbolPlain: data.plain || latexToPlain(data.latex || '')
+      symbolPlain: data.plain || latexToPlain(data.latex || ''),
+      variableId
     };
   }
 
@@ -4346,7 +4417,7 @@
     const positiveDefs = baseHomologyClassDefinitions(geometry)
       .filter((def) => def.degree > 0 && def.degree <= maxDegree)
       .map((def) => ({
-        id: homologyVariableId(def.id),
+        id: homologyDefVariableId(def, geometry),
         degree: def.degree
       }));
     const out = [{ key: '', degree: 0, latex: '1', plain: '1' }];
@@ -4394,13 +4465,13 @@
 
   function defineHomologyVariables(geometry) {
     homologyClassDefinitions(geometry).forEach((def) => {
-      defineVariable(homologyVariableId(def.id), def.degree, def.symbolLatex);
+      defineVariable(homologyDefVariableId(def, geometry), def.degree, def.symbolLatex);
     });
   }
 
   function defineBaseHomologyVariables(geometry) {
     baseHomologyClassDefinitions(geometry).forEach((def) => {
-      defineVariable(homologyVariableId(def.id), def.degree, def.symbolLatex);
+      defineVariable(homologyDefVariableId(def, geometry), def.degree, def.symbolLatex);
     });
   }
 
@@ -4432,14 +4503,15 @@
     const targetGeometry = parsed.operation === 'pullback'
       ? geometryByVarietyId(map.domainId)
       : geometryByVarietyId(map.codomainId);
-    const sourceData = sourceGeometry ? homologyVariableDataById(sourceGeometry, parsed.sourceId) : null;
+    const sourceId = sourceGeometry ? canonicalHomologyVariableId(parsed.sourceId, sourceGeometry) : parsed.sourceId;
+    const sourceData = sourceGeometry ? homologyVariableDataById(sourceGeometry, sourceId) : null;
     if (!sourceData || !targetGeometry) return null;
-    defineMapHomologyVariable(map, parsed.operation, parsed.sourceId, parsed.operation === 'pullback'
+    const variableId = defineMapHomologyVariable(map, parsed.operation, sourceId, parsed.operation === 'pullback'
       ? sourceData.degree
       : sourceData.degree + targetGeometry.dim - sourceGeometry.dim, sourceData.latex, {
-        sourceKey: monoKey({ [parsed.sourceId]: 1 })
+        sourceKey: monoKey({ [sourceId]: 1 })
       });
-    return VARS.get(id) || null;
+    return VARS.get(variableId) || VARS.get(id) || null;
   }
 
   function parseMapHomologyVariableId(id) {
@@ -4450,8 +4522,9 @@
 
   function homologyVariableDataById(geometry, variableId) {
     defineHomologyVariables(geometry);
-    if (VARS.has(variableId)) return VARS.get(variableId);
-    const def = homologyClassDefinitions(geometry).find((item) => homologyVariableId(item.id) === variableId);
+    const normalizedId = canonicalHomologyVariableId(variableId, geometry);
+    if (VARS.has(normalizedId)) return VARS.get(normalizedId);
+    const def = homologyClassDefinitions(geometry).find((item) => homologyDefVariableId(item, geometry) === normalizedId);
     if (!def) return null;
     return { degree: def.degree, latex: def.symbolLatex, plain: def.symbolPlain };
   }
@@ -4463,11 +4536,11 @@
       id: HOMOLOGY_TOP_RULE_ID,
       builtin: true,
       enabled: existingRule ? existingRule.enabled !== false : true,
-      lhs: { powers: { [homologyVariableId(HOMOLOGY_HYPERPLANE_CLASS)]: geometry.dim } },
+      lhs: { powers: { [homologyVariableId(HOMOLOGY_HYPERPLANE_CLASS, geometry)]: geometry.dim } },
       rhs: [
         {
           coefficient: degreeProduct.toString(),
-          powers: { [homologyVariableId(HOMOLOGY_POINT_CLASS)]: 1 }
+          powers: { [homologyVariableId(HOMOLOGY_POINT_CLASS, geometry)]: 1 }
         }
       ]
     };
@@ -4476,8 +4549,8 @@
   function normalizeHomologyRule(rule, geometry, options = {}) {
     if (!rule || typeof rule !== 'object') return null;
     const defs = homologyClassDefinitions(geometry, { includeMapClasses: options.includeMapClasses !== false });
-    const variableIds = new Set(defs.map((def) => homologyVariableId(def.id)));
-    const normalizeOptions = { preserveUnknownVariables: !!options.preserveUnknownVariables };
+    const variableIds = new Set(defs.map((def) => homologyDefVariableId(def, geometry)));
+    const normalizeOptions = { preserveUnknownVariables: !!options.preserveUnknownVariables, geometry };
     let lhsPowers = normalizeHomologyPowers(rule.lhs?.powers || rule.lhsPowers, variableIds, normalizeOptions);
     let rhsTerms = normalizeHomologyRuleTerms(rule.rhs || rule.rhsTerms, variableIds, normalizeOptions);
     if ((!lhsPowers || !rhsTerms) && rule.source && rule.target) {
@@ -4485,12 +4558,12 @@
       const targetDef = defs.find((def) => def.id === rule.target);
       if (!sourceDef || !targetDef) return null;
       const power = normalizedInt(rule.power, 1, Math.max(1, geometry?.dim || MAX_DIMENSION), 1);
-      lhsPowers = { [homologyVariableId(rule.source)]: power };
+      lhsPowers = { [homologyDefVariableId(sourceDef, geometry)]: power };
       try {
         rhsTerms = [
           {
             coefficient: formatFractionPlain(parseRuleCoefficient(rule.coefficient || '1')),
-            powers: { [homologyVariableId(rule.target)]: 1 }
+            powers: { [homologyDefVariableId(targetDef, geometry)]: 1 }
           }
         ];
       } catch (_) {
@@ -4513,9 +4586,10 @@
     if (!powers || typeof powers !== 'object') return null;
     const out = {};
     for (const [id, exp] of Object.entries(powers)) {
-      if (!variableIds.has(id) && !options.preserveUnknownVariables) return null;
+      const normalizedId = canonicalHomologyVariableId(id, options.geometry);
+      if (!variableIds.has(normalizedId) && !options.preserveUnknownVariables) return null;
       const exponent = normalizedInt(exp, 0, MAX_DIMENSION, 0);
-      if (exponent > 0) out[id] = exponent;
+      if (exponent > 0) out[normalizedId] = (out[normalizedId] || 0) + exponent;
     }
     return Object.keys(out).length ? out : null;
   }
@@ -4677,7 +4751,7 @@
   function homologyParseAliases(geometry) {
     return homologyClassDefinitions(geometry)
       .flatMap((def) => {
-        const id = homologyVariableId(def.id);
+        const id = homologyDefVariableId(def, geometry);
         return homologyAliasCandidates(def)
           .filter(Boolean)
           .map((alias) => ({ alias: String(alias).replace(/\s+/g, ''), id }));
@@ -5237,8 +5311,11 @@
     const geometry = options.geometry || null;
     const homology = options.homology || geometry?.homology || null;
     const startPoly = maybeExpandMapHomologyVariables(poly, options);
+    // Map expansion inspects source varieties and can rebind shared symbols such as [p].
+    // Rebind the target geometry before checking or applying target-side rules.
+    defineHomologyVariables(geometry);
     const defs = homologyClassDefinitions(geometry);
-    const available = new Set(defs.map((def) => homologyVariableId(def.id)));
+    const available = new Set(defs.map((def) => homologyDefVariableId(def, geometry)));
     const storedRules = homology?.rules || [];
     const defaultRules = defaultMapHomologyRulesForGeometry(geometry)
       .filter((rule) => !storedRules.some((stored) => homologyRuleHasSameLhs(stored, rule)));
@@ -5247,16 +5324,20 @@
       && homologyRulePreservesDegree(rule, defs)
       && homologyRuleUsesAvailableVariables(rule, available)
     ));
+    defineHomologyVariables(geometry);
     if (!rules.length) return startPoly.truncate(geometry?.dim ?? MAX_DIMENSION);
     let out = startPoly;
     const passes = Math.max(1, normalizedInt(options.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES));
     for (let pass = 1; pass <= passes; pass += 1) {
       const before = out;
       out = maybeExpandMapHomologyVariables(out, options);
+      defineHomologyVariables(geometry);
       for (const rule of rules) out = applyOneHomologyRule(out, rule, geometry?.dim ?? MAX_DIMENSION);
       out = maybeExpandMapHomologyVariables(out, options);
+      defineHomologyVariables(geometry);
       if (polyEquals(before, out)) return out.truncate(geometry?.dim ?? MAX_DIMENSION);
     }
+    defineHomologyVariables(geometry);
     return out.truncate(geometry?.dim ?? MAX_DIMENSION);
   }
 
@@ -5369,7 +5450,10 @@
   }
 
   function defaultPullbackUnitRule(map) {
-    const variableId = defineMapHomologyVariable(map, 'pullback', homologyVariableId(HOMOLOGY_UNIT_CLASS), 0, '1');
+    const sourceGeometry = geometryByVarietyId(map?.codomainId);
+    const sourceUnitId = homologyVariableId(HOMOLOGY_UNIT_CLASS, sourceGeometry);
+    defineVariable(sourceUnitId, 0, '1');
+    const variableId = defineMapHomologyVariable(map, 'pullback', sourceUnitId, 0, '1');
     return {
       id: `default-pullback-unit-${map.id}`,
       builtin: true,
@@ -5409,9 +5493,9 @@
     const resolveMapVariables = options.resolveMapVariables !== false;
     let degree = 0;
     for (const [id, exp] of Object.entries(powers || {})) {
-      const def = defs.find((entry) => homologyVariableId(entry.id) === id);
+      const def = defs.find((entry) => homologyDefVariableId(entry) === id);
       const fallback = !def && resolveMapVariables
-        ? (mapHomologyVariableIsDefined(id) ? VARS.get(id) : ensureMapHomologyVariableFromId(id))
+        ? (VARS.get(id) || ensureMapHomologyVariableFromId(id))
         : null;
       if (!def && !fallback) return null;
       degree += (def ? def.degree : fallback.degree) * (Number(exp) || 0);
@@ -5642,8 +5726,10 @@
         continue;
       }
       moved = true;
+      const sourceGeometry = geometryByVarietyId(map?.codomainId);
+      const sourceUnitId = homologyVariableId(HOMOLOGY_UNIT_CLASS, sourceGeometry);
       for (const [sourceId, sourceExp] of Object.entries(sourcePowers)) {
-        if (sourceId === homologyVariableId(HOMOLOGY_UNIT_CLASS)) continue;
+        if (sourceId === sourceUnitId || legacyBaseHomologyClassId(sourceId) === HOMOLOGY_UNIT_CLASS) continue;
         codomainPowers[sourceId] = (codomainPowers[sourceId] || 0) + sourceExp * exp;
       }
     }
@@ -5818,6 +5904,13 @@
     return String(value || 'x').replace(/[^A-Za-z0-9]/g, '') || 'x';
   }
 
+  function defaultSheafVariablePrefix(sheaf) {
+    const source = sheaf?.sourceObject || sheaf;
+    if (source?.id) return `sheaf_${variableIdSafe(source.id)}_`;
+    const label = sheaf?.labelLatex || sheaf?.labelPlain || source?.name || 'draft';
+    return `sheaf_draft_${hashString(label)}_`;
+  }
+
   function variableIdSafe(value) {
     return String(value || 'x').replace(/[^A-Za-z0-9_]/g, '_') || 'x';
   }
@@ -5894,7 +5987,7 @@
   }
 
   function curvePointClass(geometry) {
-    const id = homologyVariableId(HOMOLOGY_POINT_CLASS);
+    const id = homologyVariableId(HOMOLOGY_POINT_CLASS, geometry);
     const pointClass = homologyClassDefById(geometry, HOMOLOGY_POINT_CLASS);
     defineVariable(id, 1, pointClass?.symbolLatex || '[p]');
     return Poly.variable(id);
@@ -5914,8 +6007,9 @@
   function abstractTangentChernComponents(geometry) {
     const d = geometry.dim;
     const cComps = zeroComponentArray(d);
+    const scope = homologyScopeId(geometry);
     for (let i = 1; i <= d; i++) {
-      const id = `cX${i}`;
+      const id = `chern_${scope}_tangent_${i}`;
       defineVariable(id, i, `c_{${i}}(${geometry.labelLatex})`);
       cComps[i] = Poly.variable(id);
     }
@@ -5925,8 +6019,9 @@
   function abstractTangentChComponents(geometry) {
     const d = geometry.dim;
     const chComps = zeroComponentArray(d);
+    const scope = homologyScopeId(geometry);
     for (let i = 1; i <= d; i++) {
-      const id = `chX${i}`;
+      const id = `character_${scope}_tangent_${i}`;
       defineVariable(id, i, `\\operatorname{ch}_{${i}}(${geometry.labelLatex})`);
       chComps[i] = Poly.variable(id);
     }
@@ -5938,27 +6033,27 @@
     if (sheaf.type === 'tangent') {
       const terms = [{ multiplicity: geometry.ambient + 1, twist: 1 }, { multiplicity: -1, twist: 0 }];
       geometry.degrees.forEach((degree) => terms.push({ multiplicity: -1, twist: degree }));
-      const chComps = chComponentsFromLineTerms(terms, d);
+      const chComps = chComponentsFromLineTerms(geometry, terms, d);
       return buildBundleFromCh(chComps, String(d), String(d), sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
     }
     if (sheaf.type === 'cotangent') {
       const terms = [{ multiplicity: geometry.ambient + 1, twist: -1 }, { multiplicity: -1, twist: 0 }];
       geometry.degrees.forEach((degree) => terms.push({ multiplicity: -1, twist: -degree }));
-      const chComps = chComponentsFromLineTerms(terms, d);
+      const chComps = chComponentsFromLineTerms(geometry, terms, d);
       return buildBundleFromCh(chComps, String(d), String(d), sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
     }
     if (sheaf.type === 'canonical') {
       const q = geometry.degrees.reduce((sum, degree) => sum + degree, 0) - geometry.ambient - 1;
-      return buildLineFromHyperplane(q, d, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
+      return buildLineFromHyperplane(geometry, q, d, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
     }
     if (sheaf.type === 'twist') {
-      return buildLineFromHyperplane(sheaf.twist, d, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
+      return buildLineFromHyperplane(geometry, sheaf.twist, d, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
     }
     return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
   }
 
   function buildLocallyFreeBundle(d, sheaf, options = {}) {
-    const prefix = options.variablePrefix || '';
+    const prefix = options.variablePrefix ?? defaultSheafVariablePrefix(sheaf);
     const numericRank = numericRankFromPlain(sheaf.rankPlain);
     if (sheaf.basis === 'character') {
       if (numericRank == null) {
@@ -5993,7 +6088,7 @@
   function buildAbstractBundle(d, sheaf, subjectLatex, subjectPlain, rankLatex, rankPlain, options = {}) {
     const chernSubjectLatex = options.chernSubjectLatex || subjectLatex;
     const characterSubjectLatex = options.characterSubjectLatex || subjectLatex;
-    const prefix = options.variablePrefix || '';
+    const prefix = options.variablePrefix ?? defaultSheafVariablePrefix(sheaf);
     if (sheaf.basis === 'character') {
       const chComps = zeroComponentArray(d);
       for (let i = 1; i <= d; i++) {
@@ -6012,8 +6107,11 @@
     return buildBundleFromChern(cComps, rankLatex, rankPlain, subjectLatex, subjectPlain);
   }
 
-  function buildLineFromHyperplane(twist, d, labelLatex, labelPlain) {
-    return buildLineFromFirstChern(Poly.variable('H').scale(fraction(twist)), d, labelLatex, labelPlain);
+  function buildLineFromHyperplane(geometry, twist, d, labelLatex, labelPlain) {
+    const hyperplaneId = homologyVariableId(HOMOLOGY_HYPERPLANE_CLASS, geometry);
+    const hyperplane = homologyClassDefById(geometry, HOMOLOGY_HYPERPLANE_CLASS);
+    defineVariable(hyperplaneId, 1, hyperplane?.symbolLatex || 'H');
+    return buildLineFromFirstChern(Poly.variable(hyperplaneId).scale(fraction(twist)), d, labelLatex, labelPlain);
   }
 
   function buildLineFromFirstChern(firstChern, d, labelLatex, labelPlain) {
@@ -6059,9 +6157,12 @@
     };
   }
 
-  function chComponentsFromLineTerms(terms, d) {
+  function chComponentsFromLineTerms(geometry, terms, d) {
     const chComps = zeroComponentArray(d);
-    const H = Poly.variable('H');
+    const hyperplaneId = homologyVariableId(HOMOLOGY_HYPERPLANE_CLASS, geometry);
+    const hyperplane = homologyClassDefById(geometry, HOMOLOGY_HYPERPLANE_CLASS);
+    defineVariable(hyperplaneId, 1, hyperplane?.symbolLatex || 'H');
+    const H = Poly.variable(hyperplaneId);
     const powers = [Poly.one()];
     for (let i = 1; i <= d; i++) powers[i] = powers[i - 1].mul(H, d);
     for (let i = 1; i <= d; i++) {
@@ -7004,7 +7105,7 @@
       renderMapHomologyRuleInputs(geometry, defs);
       return;
     }
-    const available = new Set(defs.map((def) => homologyVariableId(def.id)));
+    const available = new Set(defs.map((def) => homologyDefVariableId(def, geometry)));
     const rules = (geometry.homology?.rules || []).filter((rule) => (
       homologyRulePreservesDegree(rule, defs)
       && homologyRuleUsesAvailableVariables(rule, available)
@@ -7041,7 +7142,7 @@
   }
 
   function mapHomologyRuleForDef(geometry, def) {
-    const variableId = homologyVariableId(def.id);
+    const variableId = homologyDefVariableId(def, geometry);
     const stored = (geometry.homology?.rules || []).find((rule) => (
       !rule.builtin
       && rule.lhs?.powers
@@ -7066,7 +7167,7 @@
     const def = homologyClassDefinitions(geometry).find((item) => item.id === input.dataset.mapHomologyRule);
     if (!def) return;
     const homology = ensureHomologySystem(variety, geometry);
-    const variableId = homologyVariableId(def.id);
+    const variableId = homologyDefVariableId(def, geometry);
     const value = String(input.value || '').trim();
     homology.rules = homology.rules.filter((rule) => !(
       !rule.builtin
@@ -7834,6 +7935,7 @@
     if (!inputIsModifyMode() || !state.activeMapId) return [];
     const map = selectedMap();
     if (!map) return [];
+    if (isStraightMapCurve(map.curve)) return [];
     const endpoints = mapEndpointLabels(map, labels.filter((label) => label.objectKind !== 'map'));
     if (!endpoints) return [];
     const path = mapRawCurveGeometry(map, endpoints.from, endpoints.to, width, height);
@@ -7890,6 +7992,7 @@
 
   function normalizeMapCurve(curve) {
     if (!curve) return null;
+    if (isStraightMapCurve(curve)) return straightMapCurve();
     let anchors;
     if (Array.isArray(curve.anchors)) {
       anchors = curve.anchors
@@ -7909,6 +8012,14 @@
       normalizedCurvePoint(curve?.c2, 0.64, 0.44)
     ];
     return { anchors, handles };
+  }
+
+  function straightMapCurve() {
+    return { type: 'straight', anchors: [], handles: [] };
+  }
+
+  function isStraightMapCurve(curve) {
+    return curve?.type === 'straight' || curve?.mode === 'straight' || curve?.straight === true;
   }
 
   function ensureMapCurve(map, from, to, width, height) {
@@ -7932,6 +8043,7 @@
     if (Math.hypot(dx, dy) < 1) {
       return standardSelfMapCurve(from, width, height, count, bendPx);
     }
+    if (count === STRAIGHT_MAP_POINT_COUNT) return straightMapCurve();
     const length = Math.hypot(dx, dy) || 1;
     const nx = -dy / length;
     const ny = dx / length;
@@ -7951,7 +8063,7 @@
   }
 
   function standardSelfMapCurve(label, width, height, pointCount = DEFAULT_MAP_POINT_COUNT, bendPx = null) {
-    const count = Math.max(3, normalizedMapPointCount(pointCount));
+    const count = Math.max(3, normalizedMapPointCount(pointCount) === STRAIGHT_MAP_POINT_COUNT ? 3 : normalizedMapPointCount(pointCount));
     const loopIndex = selfMapLoopIndex(label?.objectKind, label?.objectId);
     const baseAngle = ((Number.isFinite(bendPx) ? bendPx : loopIndex * 120) + 30) * Math.PI / 180;
     const bounds = estimatedLabelBounds(label);
@@ -8048,6 +8160,7 @@
   function mapRawCurveGeometry(map, from, to, width, height) {
     const curve = ensureMapCurve(map, from, to, width, height);
     if (!curve) return null;
+    if (isStraightMapCurve(curve)) return straightMapRawGeometry(from, to);
     const selfMap = map.domainKind === map.codomainKind && map.domainId === map.codomainId;
     const anchors = curve.anchors.map((anchor, index) => {
       if (index === 0) return selfMap ? selfMapEndpoint(anchor, from, width, height) : { x: from.x, y: from.y };
@@ -8069,6 +8182,20 @@
       };
     }).filter((segment) => segment.start && segment.end);
     return { anchors, handles, outHandles, inHandles, segments };
+  }
+
+  function straightMapRawGeometry(from, to) {
+    const start = { x: from.x, y: from.y };
+    const end = { x: to.x, y: to.y };
+    const c1 = lerpPoint(start, end, 1 / 3);
+    const c2 = lerpPoint(start, end, 2 / 3);
+    return {
+      anchors: [start, end],
+      handles: [],
+      outHandles: [],
+      inHandles: [],
+      segments: [{ start, c1, c2, end }]
+    };
   }
 
   function selfMapEndpoint(anchor, label, width, height) {
@@ -8160,24 +8287,42 @@
 
   function anchorToPoint(anchor, width, height) {
     return {
-      x: clamp(anchor.x * width, 16, width - 16),
-      y: clamp(anchor.y * height, 16, height - 16)
+      x: anchor.x * width,
+      y: anchor.y * height
     };
   }
 
   function normalizedCurvePoint(point, fallbackX, fallbackY) {
     return {
-      x: clamp(Number.isFinite(point?.x) ? point.x : fallbackX, 0.04, 0.96),
-      y: clamp(Number.isFinite(point?.y) ? point.y : fallbackY, 0.07, 0.93)
+      x: Number.isFinite(point?.x) ? point.x : fallbackX,
+      y: Number.isFinite(point?.y) ? point.y : fallbackY
     };
   }
 
   function mapCurveAnchorCount(map) {
+    if (isStraightMapCurve(map?.curve)) return STRAIGHT_MAP_POINT_COUNT;
     return normalizedMapPointCount(map?.curve?.anchors?.length || DEFAULT_MAP_POINT_COUNT);
   }
 
   function normalizedMapPointCount(value) {
-    return normalizedInt(value, 2, MAX_MAP_POINT_COUNT, DEFAULT_MAP_POINT_COUNT);
+    const numeric = Number(value);
+    if (numeric === STRAIGHT_MAP_POINT_COUNT || numeric === LEGACY_STRAIGHT_MAP_POINT_COUNT) return STRAIGHT_MAP_POINT_COUNT;
+    return normalizedInt(value, 2, MAX_MAP_POINT_COUNT, 2);
+  }
+
+  function mapPointCountFromSliderValue(value) {
+    const index = normalizedInt(value, 0, MAP_POINT_COUNT_OPTIONS.length - 1, 0);
+    return MAP_POINT_COUNT_OPTIONS[index] ?? DEFAULT_MAP_POINT_COUNT;
+  }
+
+  function mapPointCountSliderValue(count) {
+    const normalized = normalizedMapPointCount(count);
+    const index = MAP_POINT_COUNT_OPTIONS.indexOf(normalized);
+    return index >= 0 ? index : MAP_POINT_COUNT_OPTIONS.indexOf(DEFAULT_MAP_POINT_COUNT);
+  }
+
+  function formatMapPointCount(count) {
+    return String(normalizedMapPointCount(count));
   }
 
   function normalizedMapLabelOffset(value) {
@@ -8186,7 +8331,7 @@
 
   function setMapPointCount(map, value) {
     if (!map) return;
-    applyStandardMapCurve(map, normalizedMapPointCount(value));
+    applyStandardMapCurve(map, mapPointCountFromSliderValue(value));
   }
 
   function setMapLabelOffset(map, value) {
@@ -8496,6 +8641,8 @@
       offsetY: event.clientY - labelRect.top,
       startX: event.clientX,
       startY: event.clientY,
+      lastLabelX: labelRect.left - canvasRect.left + labelRect.width / 2,
+      lastLabelY: labelRect.top - canvasRect.top + labelRect.height / 2,
       pointerId: event.pointerId,
       moved: false
     };
@@ -8515,11 +8662,14 @@
     const y = event.clientY - drag.canvasRect.top - drag.offsetY + drag.target.offsetHeight / 2;
     const clampedX = clamp(x, 24, width - 24);
     const clampedY = clamp(y, 24, height - 24);
-      if (drag.kind === 'map') {
+    if (drag.kind === 'map') {
       updateMapLabelDragPosition(drag.item, clampedX, clampedY, width, height);
     } else {
+      preserveEndpointHandlesForMovedObject(drag.kind, drag.id, clampedX - drag.lastLabelX, clampedY - drag.lastLabelY, width, height);
       setCanvasLabelPosition(drag.item, clampedX, clampedY, width, height);
       drag.item.labelPositionDirty = true;
+      drag.lastLabelX = clampedX;
+      drag.lastLabelY = clampedY;
     }
     drag.target.style.left = `${clampedX}px`;
     drag.target.style.top = `${clampedY}px`;
@@ -8545,6 +8695,28 @@
     map.labelOffset = clamp(offset, MIN_MAP_LABEL_OFFSET, MAX_MAP_LABEL_OFFSET);
     map.modified = true;
     syncMapCurveControls(map);
+  }
+
+  function preserveEndpointHandlesForMovedObject(kind, id, dx, dy, width, height) {
+    if (!kind || !id || (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001)) return;
+    state.maps.forEach((map) => {
+      if (!map.curve || isStraightMapCurve(map.curve)) return;
+      map.curve = normalizeMapCurve(map.curve);
+      if (!map.curve?.handles?.length) return;
+      const lastIndex = map.curve.anchors.length - 1;
+      const endpointIndexes = [];
+      if (map.domainKind === kind && map.domainId === id) endpointIndexes.push(0);
+      if (map.codomainKind === kind && map.codomainId === id) endpointIndexes.push(lastIndex);
+      [...new Set(endpointIndexes)].forEach((index) => {
+        const handle = map.curve.handles[index];
+        if (!handle) return;
+        map.curve.handles[index] = normalizedCurvePoint({
+          x: handle.x + dx / Math.max(1, width),
+          y: handle.y + dy / Math.max(1, height)
+        }, handle.x, handle.y);
+        map.modified = true;
+      });
+    });
   }
 
   function finishCanvasLabelDrag(event) {
@@ -8635,8 +8807,8 @@
     event.preventDefault();
     const width = drag.canvasRect.width || 1;
     const height = drag.canvasRect.height || 1;
-    const x = clamp(event.clientX - drag.canvasRect.left, 16, width - 16);
-    const y = clamp(event.clientY - drag.canvasRect.top, 16, height - 16);
+    const x = event.clientX - drag.canvasRect.left;
+    const y = event.clientY - drag.canvasRect.top;
     setMapControlPoint(drag.map, drag.control, x, y, width, height);
     if (Math.abs(event.clientX - drag.startX) > 2 || Math.abs(event.clientY - drag.startY) > 2) drag.moved = true;
     redrawCanvasSurface();

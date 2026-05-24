@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Place Ramification Calculator</title>
+  <link rel="stylesheet" href="young_diagrams.css">
+  <style>
+    .ramification-layout {
+      max-width: 1240px;
+      grid-template-columns: minmax(0, 1fr) 380px;
+    }
+
+    .ramification-stage {
+      padding: 16px;
+      min-width: 0;
+    }
+
+    .ramification-canvas {
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--border);
+      background: #fffdf8;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7);
+    }
+
+    .ramification-toolbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .ramification-toolbar-group input[type=range] {
+      width: 150px;
+      accent-color: var(--accent);
+    }
+
+    .ramification-select,
+    .ramification-input,
+    .ramification-toolbar-group select,
+    .ramification-toolbar-group input[type=number] {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+    }
+
+    .ramification-select {
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.94rem;
+    }
+
+    .ramification-input[type=number] {
+      text-align: center;
+    }
+
+    .ramification-select:focus,
+    .ramification-input:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .ramification-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 21px;
+      padding: 1px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text);
+      background: rgba(255,255,255,0.55);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      white-space: nowrap;
+    }
+
+    .ramification-underbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+
+    .ramification-inline-row {
+      display: grid;
+      grid-template-columns: 104px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+      min-width: 0;
+    }
+
+    .ramification-inline-row .input-label {
+      margin-bottom: 0;
+      white-space: nowrap;
+    }
+
+    .ramification-preset-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .ramification-preset-row .btn {
+      min-width: 54px;
+      padding: 4px 9px;
+    }
+
+    .ramification-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.35;
+    }
+
+    .ramification-table th,
+    .ramification-table td {
+      border-bottom: 1px dotted var(--border);
+      padding: 5px 4px;
+      text-align: right;
+      vertical-align: top;
+    }
+
+    .ramification-table th:first-child,
+    .ramification-table td:first-child {
+      text-align: left;
+      color: var(--muted);
+    }
+
+    .ramification-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .ramification-scroll {
+      max-height: min(410px, 54vh);
+      overflow: auto;
+      padding-right: 6px;
+      scrollbar-gutter: stable;
+    }
+
+    #ramification-export-out {
+      width: 100%;
+      min-height: 76px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      padding: 7px 8px;
+      resize: vertical;
+      margin-top: 8px;
+    }
+
+    @media (max-width: 780px) {
+      .ramification-layout {
+        grid-template-columns: 1fr;
+      }
+      .ramification-toolbar-group {
+        width: 100%;
+      }
+      .ramification-toolbar-group input[type=range] {
+        flex: 1 1 160px;
+      }
+      .ramification-underbar {
+        padding: 0 12px 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Place Ramification Calculator</h1>
+  <span><a href="young_diagrams.html">Young Diagram Calculator</a> &middot; <a href="double_young_diagram.html">Young Diagram<sup>2</sup> Calculator</a> &middot; <a href="mosaic_calculator.html">Mosaic Calculator</a> &middot; <a href="matrix_calculator.html">Matrix Calculator</a> &middot; <a href="sheaf_calculator.html">Sheaf Calculator</a> &middot; <a href="dynkin_diagram_calculator.html">Dynkin Diagram Calculator</a></span>
+</header>
+
+<main class="layout ramification-layout">
+  <section class="canvas-panel" aria-label="Place ramification canvas panel">
+    <header class="panel-title">
+      <span class="panel-title-text">Places Over Q</span>
+      <div class="canvas-toolbar" aria-label="Ramification controls">
+        <span class="shape-indicator"><span id="ramification-status" class="ramification-badge">Q(sqrt(2))</span></span>
+        <span class="ramification-toolbar-group">
+          <label class="stat-label" for="prime-bound">p &le; n</label>
+          <input id="prime-bound" type="range" min="2" max="199" value="47">
+          <output id="prime-bound-output" class="ramification-badge">47</output>
+        </span>
+      </div>
+    </header>
+    <div class="ramification-stage">
+      <canvas id="ramification-canvas" class="ramification-canvas" width="920" height="560"></canvas>
+    </div>
+    <div class="ramification-underbar">
+      <span id="ramification-selected-label">selected place: 2</span>
+      <span id="ramification-count-label">finite primes shown: 15</span>
+    </div>
+  </section>
+
+  <aside class="side" id="cards">
+    <section class="card" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="ramification-inline-row">
+          <span class="input-label">Extension</span>
+          <select id="extension-type" class="ramification-select">
+            <option value="quadratic" selected>K = Q(sqrt(d))</option>
+          </select>
+        </div>
+        <div class="ramification-inline-row">
+          <span class="input-label">d</span>
+          <input id="quadratic-d" class="ramification-input" type="number" step="1" value="2">
+        </div>
+        <label class="opt-row">
+          <input id="show-infinite" type="checkbox" checked>
+          <span>show infinite place</span>
+        </label>
+        <div class="ramification-preset-row">
+          <button class="btn btn-ghost" type="button" data-d="2">sqrt 2</button>
+          <button class="btn btn-ghost" type="button" data-d="5">sqrt 5</button>
+          <button class="btn btn-ghost" type="button" data-d="-1">sqrt -1</button>
+          <button class="btn btn-ghost" type="button" data-d="-3">sqrt -3</button>
+        </div>
+        <div class="result-meta" id="ramification-input-note">quadratic field over Q</div>
+      </div>
+    </section>
+
+    <section class="card" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Field Invariants</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body" id="field-invariants"></div>
+    </section>
+
+    <section class="card" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Places</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="ramification-scroll" id="places-table"></div>
+      </div>
+    </section>
+
+    <section class="card collapsed" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Selected Place</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body" id="selected-place-data"></div>
+    </section>
+
+    <section class="card collapsed" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="ramification-preset-row">
+          <button id="ramification-refresh-export" class="btn" type="button">refresh</button>
+          <button id="ramification-select-export" class="btn btn-ghost" type="button">select</button>
+        </div>
+        <textarea id="ramification-export-out" spellcheck="false"></textarea>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<script src="place_ramification_calculator.js"></script>
+</body>
+</html>
