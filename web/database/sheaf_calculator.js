@@ -48,6 +48,8 @@
   const HOMOLOGY_HYPERPLANE_CLASS = 'hyperplane';
   const HOMOLOGY_POINT_CLASS = 'point';
   const HOMOLOGY_TOP_RULE_ID = 'top-hyperplane-point';
+  const HOMOLOGY_POINT_UNIT_RULE_ID = 'point-class-unit';
+  const POINT_VARIETY_NAMES = ['\\{*\\}', 'pt', 'p', '\\{p\\}'];
   const VARS = new Map();
   const refs = {};
   const hodgeACoeffCache = new Map();
@@ -128,6 +130,8 @@
     refs.productFactorA = $('product-factor-a');
     refs.productFactorB = $('product-factor-b');
     refs.productPickNote = $('product-pick-note');
+    refs.pointNamePresetRow = $('point-name-preset-row');
+    refs.pointNamePresets = Array.from(document.querySelectorAll('[data-point-variety-name]'));
     refs.varietyName = $('variety-name');
     refs.varietyEditorTitle = $('variety-editor-title');
     refs.varietyEditor = $('variety-editor');
@@ -577,6 +581,8 @@
   }
 
   function repetitionNameSequence(kind, proposedName) {
+    const pointNames = pointVarietyNameSequence(kind, proposedName);
+    if (pointNames) return pointNames;
     const style = refs.repeatStyle?.value || 'letters';
     if (style === 'letters') {
       if (kind === 'map') return MAP_LETTER_NAMES;
@@ -599,10 +605,19 @@
     return [base];
   }
 
+  function pointVarietyNameSequence(kind, proposedName) {
+    if (kind !== 'variety') return null;
+    const keys = new Set(POINT_VARIETY_NAMES.map(canonicalMathLabel));
+    if (refs.varietyType?.value === 'point' || keys.has(canonicalMathLabel(proposedName))) {
+      return POINT_VARIETY_NAMES;
+    }
+    return null;
+  }
+
   function repetitionBaseName(kind, proposedName) {
     const fallback = kind === 'map'
       ? 'f'
-      : (kind === 'sheaf' ? '\\mathcal{E}' : (refs.varietyType?.value === 'curve' ? curveDefaultName(refs.curveGenus?.value) : 'X'));
+      : (kind === 'sheaf' ? '\\mathcal{E}' : defaultVarietyFallbackName());
     const name = sanitizeMathLabel(proposedName, fallback);
     if (refs.repeatStyle?.value === 'letters') return name;
     if (kind === 'sheaf') {
@@ -611,6 +626,13 @@
     }
     const match = name.match(/^([A-Za-z])(?:'*)?(?:\^\{\(\d+\)\}|_\{?\d+\}?)?$/);
     return match ? match[1] : name;
+  }
+
+  function defaultVarietyFallbackName() {
+    if (refs.varietyType?.value === 'curve') return curveDefaultName(refs.curveGenus?.value);
+    if (refs.varietyType?.value === 'point') return POINT_VARIETY_NAMES[0];
+    if (refs.varietyType?.value === 'abelian') return 'A';
+    return 'X';
   }
 
   function canonicalMathLabel(value) {
@@ -1040,6 +1062,7 @@
       loadActiveObjectIntoDraft(modifyKind());
     }
     syncInputEditorVisibility();
+    if (state.inputMode === 'create') activateFirstCreateBlankPick({ render: false });
   }
 
   function syncInputModeControls() {
@@ -1640,6 +1663,7 @@
       typeset(refs.varietyEditor);
       typeset(refs.sheafEditor);
       typeset(refs.mapEditor);
+      activateFirstCreateBlankPick({ render: false });
       recompute();
     });
     [refs.productFactorA, refs.productFactorB].forEach((button) => {
@@ -1652,6 +1676,15 @@
         renderCanvas(state.lastResult);
       });
     });
+    (refs.pointNamePresets || []).forEach((button) => {
+      button.addEventListener('click', () => {
+        if (refs.varietyType?.value !== 'point') return;
+        refs.varietyName.value = sanitizeMathLabel(button.dataset.pointVarietyName, POINT_VARIETY_NAMES[0]);
+        state.draftVarietyNameDirty = true;
+        updateInputEditorTitles();
+        syncDefaultSheafName();
+      });
+    });
     if (refs.inputPickMode) {
       refs.inputPickMode.addEventListener('click', () => {
         setCanvasPickEnabled(false);
@@ -1659,12 +1692,14 @@
       });
     }
     refs.addObject.addEventListener('click', () => {
+      const kind = currentInputKind();
       const changed = inputIsModifyMode()
         ? updateObjectFromDraft()
         : createObjectFromDraft();
       if (!changed) return;
       syncSheafBaseOptions(true);
-      if (inputIsCreateMode() && currentInputKind() === 'sheaf') state.draftSheafBaseVarietyId = null;
+      if (inputIsCreateMode() && kind === 'sheaf') state.draftSheafBaseVarietyId = null;
+      activateFirstCreateBlankPick({ kind, render: false });
       recompute();
     });
     if (refs.deleteObject) {
@@ -1675,6 +1710,8 @@
     refs.varietyType.addEventListener('change', () => {
       const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
       if (refs.varietyType.value === 'curve') refs.dim.value = '1';
+      else if (refs.varietyType.value === 'point') refs.dim.value = '0';
+      else refs.dim.value = String(dim);
       if (refs.varietyType.value !== 'product') clearProductDraft();
       if (refs.varietyType.value === 'complete-intersection') syncCompleteIntersectionControls();
       updateProductDraftControls();
@@ -1684,7 +1721,7 @@
     });
     refs.dim.addEventListener('change', () => {
       const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
-      refs.dim.value = refs.varietyType.value === 'curve' ? '1' : String(dim);
+      refs.dim.value = refs.varietyType.value === 'curve' ? '1' : (refs.varietyType.value === 'point' ? '0' : String(dim));
       if (refs.varietyType.value === 'complete-intersection') syncCompleteIntersectionControls();
       syncDefaultVarietyName();
       syncDefaultSheafName();
@@ -1755,6 +1792,7 @@
       syncDefaultRank(true);
       syncDefaultSheafName();
       normalizeControlVisibility();
+      activateFirstCreateBlankPick({ kind: 'sheaf', render: false });
       renderCanvas(state.lastResult);
     });
     refs.sheafName.addEventListener('input', () => {
@@ -1781,6 +1819,7 @@
         state.mapPickTarget = refs.mapType.value === 'composition' ? 'first' : 'domain';
         syncDefaultMapName(true);
         normalizeControlVisibility();
+        activateFirstCreateBlankPick({ kind: 'map', render: false });
         updateMapDraftControls();
         renderCanvas(state.lastResult);
       });
@@ -2519,6 +2558,28 @@
     if (options.render !== false) renderCanvas(state.lastResult);
   }
 
+  function activateFirstCreateBlankPick(options = {}) {
+    if (!inputIsCreateMode()) return false;
+    const kind = options.kind || currentInputKind();
+    if (kind === 'sheaf') {
+      if (sheafBinaryInputMode()) {
+        state.sheafBinaryPickTarget = sheafBinaryDraftSheaf('left') ? 'right' : 'left';
+      } else if (sheafMapOperationInputMode()) {
+        state.sheafMapPickTarget = sheafMapDraftMap() ? 'sheaf' : 'map';
+      }
+    } else if (kind === 'map') {
+      state.mapPickTarget = mapCompositionInputMode()
+        ? (mapDraftMap('first') ? 'second' : 'first')
+        : (mapDraftEndpointObject('domain') ? 'codomain' : 'domain');
+    } else {
+      return false;
+    }
+    setCanvasPickEnabled(true, { render: false });
+    normalizeControlVisibility();
+    if (options.render !== false) renderCanvas(state.lastResult);
+    return state.canvasPickEnabled;
+  }
+
   function canvasPickAvailable() {
     if (productVarietyInputMode()) return productPickableVarieties().length > 0;
     if (mapInputMode()) return mapPickAvailable();
@@ -2537,7 +2598,7 @@
     if (!available) state.canvasPickEnabled = false;
     refs.inputPickMode.hidden = !state.canvasPickEnabled;
     refs.inputPickMode.disabled = !state.canvasPickEnabled;
-    refs.inputPickMode.setAttribute('aria-pressed', state.canvasPickEnabled ? 'true' : 'false');
+    refs.inputPickMode.setAttribute('aria-pressed', 'false');
     refs.inputPickMode.textContent = 'cancel';
     refs.inputPickMode.title = 'Cancel canvas selection';
   }
@@ -2861,6 +2922,7 @@
     if (ids[0] && ids[1] && !allowableSheafBinaryPick(ids[1], 'right')) ids[1] = null;
     state.sheafBinaryDraft = { sheafIds: ids };
     if (state.sheafBinaryPickTarget === 'left' && !ids[1]) state.sheafBinaryPickTarget = 'right';
+    if (ids[0] && ids[1]) setCanvasPickEnabled(false, { render: false });
     updateSheafBinaryDraftControls();
     syncDefaultRank(true);
     syncDefaultSheafName();
@@ -2969,6 +3031,7 @@
     if (state.sheafMapPickTarget === 'sheaf' && kind === 'sheaf' && allowableSheafMapOperationSheaf(id)) {
       state.sheafMapDraft = { ...(state.sheafMapDraft || {}), sheafId: id };
       syncSheafMapDraftBaseFromOperation();
+      setCanvasPickEnabled(false, { render: false });
       updateSheafMapDraftControls();
       syncDefaultRank(true);
       syncDefaultSheafName();
@@ -3091,6 +3154,7 @@
       if (!draft.codomainId) state.mapPickTarget = 'codomain';
     }
     state.mapDraft = draft;
+    if (draft.domainId && draft.codomainId) setCanvasPickEnabled(false, { render: false });
     updateMapDraftControls();
     syncDefaultMapName();
     recompute();
@@ -3103,6 +3167,7 @@
     ids[index] = id;
     state.mapDraft = { type: 'composition', mapIds: ids };
     if (state.mapPickTarget === 'first' && !ids[1]) state.mapPickTarget = 'second';
+    if (ids[0] && ids[1]) setCanvasPickEnabled(false, { render: false });
     updateMapDraftControls();
     syncDefaultMapName();
     recompute();
@@ -3365,6 +3430,7 @@
   }
 
   function normalizedDraftDimension() {
+    if (refs.varietyType?.value === 'point') return '0';
     return String(normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3));
   }
 
@@ -3431,6 +3497,8 @@
       return `\\mathbb{P}^{${n}}`;
     }
     if (type === 'curve') return curveDefaultName(refs.curveGenus.value);
+    if (type === 'abelian') return 'A';
+    if (type === 'point') return POINT_VARIETY_NAMES[0];
     if (type === 'complete-intersection') {
       const degrees = safeParseDegrees();
       const ambient = derivedCompleteIntersectionAmbient();
@@ -3969,6 +4037,7 @@
     }
     refreshSheafTypeFlags();
     const showCurve = draftVariety === 'curve';
+    const showPoint = draftVariety === 'point';
     const showCi = draftVariety === 'complete-intersection';
     const showProduct = draftVariety === 'product' && !inputIsModifyMode() && currentInputKind() === 'variety';
     const editingProduct = draftVariety === 'product' && inputIsModifyMode() && currentInputKind() === 'variety';
@@ -3977,6 +4046,7 @@
     else if (refs.productFactorsRow || refs.productPickNote) updateProductDraftControls();
     if (refs.dim) refs.dim.closest('.sheaf-field-row').hidden = productMode;
     if (refs.varietyName) refs.varietyName.closest('.sheaf-field-row').hidden = showProduct && productDraftFactors().length < 2;
+    if (refs.pointNamePresetRow) refs.pointNamePresetRow.hidden = !showPoint;
     if (refs.curveGenusRow) refs.curveGenusRow.hidden = !showCurve;
     refs.ciDegreesRow.hidden = !showCi;
     if (refs.ciEquationCountRow) refs.ciEquationCountRow.hidden = !showCi;
@@ -4092,6 +4162,39 @@
       };
       return attachHomologyToGeometry(variety, geometry);
     }
+    if (type === 'abelian') {
+      const dim = normalizedInt(variety.dim, 0, MAX_DIMENSION, 2);
+      const labelLatex = sanitizeMathLabel(variety.name, 'A');
+      Object.assign(variety, { dim: String(dim), name: labelLatex });
+      const geometry = {
+        type,
+        dim,
+        ambient: null,
+        degrees: [],
+        codim: null,
+        labelLatex,
+        labelPlain: latexToPlain(labelLatex),
+        ambientLatex: 'abelian',
+        ambientPlain: 'abelian'
+      };
+      return attachHomologyToGeometry(variety, geometry);
+    }
+    if (type === 'point') {
+      const labelLatex = sanitizeMathLabel(variety.name, POINT_VARIETY_NAMES[0]);
+      Object.assign(variety, { dim: '0', name: labelLatex });
+      const geometry = {
+        type,
+        dim: 0,
+        ambient: null,
+        degrees: [],
+        codim: null,
+        labelLatex,
+        labelPlain: latexToPlain(labelLatex),
+        ambientLatex: 'point',
+        ambientPlain: 'point'
+      };
+      return attachHomologyToGeometry(variety, geometry);
+    }
     if (type === 'complete-intersection') {
       const degrees = parseDegrees(variety.ciDegrees || '');
       const dim = normalizedInt(variety.dim, 0, MAX_DIMENSION, 3);
@@ -4151,12 +4254,15 @@
       homology.classes[def.id] = existing;
     });
 
-    const existingTopRule = homology.rules.find((rule) => rule.id === HOMOLOGY_TOP_RULE_ID);
-    const customRules = homology.rules.filter((rule) => rule.id !== HOMOLOGY_TOP_RULE_ID);
-    const standardRule = standardHomologyTopRule(geometry, existingTopRule);
+    const standardRuleIds = new Set([HOMOLOGY_TOP_RULE_ID, HOMOLOGY_POINT_UNIT_RULE_ID]);
+    const existingStandardRules = new Map(homology.rules
+      .filter((rule) => standardRuleIds.has(rule.id))
+      .map((rule) => [rule.id, rule]));
+    const customRules = homology.rules.filter((rule) => !standardRuleIds.has(rule.id));
+    const standardRules = standardHomologyRules(geometry, existingStandardRules);
     const normalizationGeometry = { ...geometry, homology };
     homology.rules = [
-      ...(standardRule ? [standardRule] : []),
+      ...standardRules,
       ...customRules.map((rule) => normalizeHomologyRule(rule, normalizationGeometry, {
         includeMapClasses: false,
         preserveUnknownVariables: true
@@ -4360,11 +4466,8 @@
     const sourceGeometry = operation === 'pullback'
       ? geometryByVarietyId(map.codomainId)
       : geometryByVarietyId(map.domainId);
-    const sourceDim = sourceGeometry?.dim;
-    if (!Number.isInteger(sourceDim)) return null;
-    const degreeShift = operation === 'pullback' ? 0 : targetGeometry.dim - sourceDim;
-    const degree = sourceDef.degree + degreeShift;
-    if (degree < 0 || degree > targetGeometry.dim) return null;
+    const degree = mapOperationTargetDegree(operation, sourceDef.degree, sourceGeometry, targetGeometry);
+    if (degree == null) return null;
     const id = mapHomologyClassId(map, operation, sourceDef.id);
     const symbol = mapHomologySymbolLatex(map, operation, sourceDef.symbolLatex);
     const sourceVariableId = homologyDefVariableId(sourceDef, sourceGeometry);
@@ -4389,8 +4492,8 @@
 
   function mapPushforwardMonomialClassDefinition(map, mono, domainGeometry, codomainGeometry) {
     if (!mono || !Number.isInteger(mono.degree) || !Number.isInteger(domainGeometry?.dim) || !Number.isInteger(codomainGeometry?.dim)) return null;
-    const targetDegree = mono.degree + codomainGeometry.dim - domainGeometry.dim;
-    if (targetDegree < 0 || targetDegree > codomainGeometry.dim) return null;
+    const targetDegree = mapOperationTargetDegree('pushforward', mono.degree, domainGeometry, codomainGeometry);
+    if (targetDegree == null) return null;
     const sourcePowers = parseMonoKey(mono.key);
     if (Object.keys(sourcePowers).length === 1) {
       const [sourceId, exponent] = Object.entries(sourcePowers)[0];
@@ -4410,6 +4513,13 @@
       symbolPlain: data.plain || latexToPlain(data.latex || ''),
       variableId
     };
+  }
+
+  function mapOperationTargetDegree(operation, sourceDegree, sourceGeometry, targetGeometry) {
+    if (!Number.isInteger(sourceDegree) || !Number.isInteger(sourceGeometry?.dim) || !Number.isInteger(targetGeometry?.dim)) return null;
+    const degreeShift = operation === 'pushforward' ? targetGeometry.dim - sourceGeometry.dim : 0;
+    const degree = sourceDegree + degreeShift;
+    return degree >= 0 && degree <= targetGeometry.dim ? degree : null;
   }
 
   function homologyMonomialDefinitions(geometry, options = {}) {
@@ -4529,6 +4639,13 @@
     return { degree: def.degree, latex: def.symbolLatex, plain: def.symbolPlain };
   }
 
+  function standardHomologyRules(geometry, existingRules = new Map()) {
+    return [
+      standardHomologyTopRule(geometry, existingRules.get(HOMOLOGY_TOP_RULE_ID)),
+      standardPointHomologyUnitRule(geometry, existingRules.get(HOMOLOGY_POINT_UNIT_RULE_ID))
+    ].filter(Boolean);
+  }
+
   function standardHomologyTopRule(geometry, existingRule = null) {
     if (!varietyHasHyperplaneClass(geometry?.type) || !Number.isInteger(geometry.dim) || geometry.dim <= 0) return null;
     const degreeProduct = (geometry.degrees || []).reduce((product, degree) => product * BigInt(degree), 1n);
@@ -4543,6 +4660,17 @@
           powers: { [homologyVariableId(HOMOLOGY_POINT_CLASS, geometry)]: 1 }
         }
       ]
+    };
+  }
+
+  function standardPointHomologyUnitRule(geometry, existingRule = null) {
+    if (geometry?.type !== 'point') return null;
+    return {
+      id: HOMOLOGY_POINT_UNIT_RULE_ID,
+      builtin: true,
+      enabled: existingRule ? existingRule.enabled !== false : true,
+      lhs: { powers: { [homologyVariableId(HOMOLOGY_POINT_CLASS, geometry)]: 1 } },
+      rhs: [{ coefficient: '1', powers: {} }]
     };
   }
 
@@ -4693,8 +4821,8 @@
   }
 
   function defaultHomologyRulePlaceholder(geometry) {
-    const topRule = standardHomologyTopRule(geometry);
-    if (topRule) return homologyRuleInputText(topRule, geometry);
+    const standardRule = standardHomologyRules(geometry)[0];
+    if (standardRule) return homologyRuleInputText(standardRule, geometry);
     const defs = homologyClassDefinitions(geometry);
     return defs.length ? `${defs[0].symbolPlain}=0` : '';
   }
@@ -4891,6 +5019,39 @@
         ambientPlain: 'curve'
       };
     }
+    if (type === 'abelian') {
+      const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 2);
+      refs.dim.value = String(dim);
+      const labelLatex = sanitizeMathLabel(refs.varietyName.value, 'A');
+      refs.varietyName.value = labelLatex;
+      return {
+        type,
+        dim,
+        ambient: null,
+        degrees: [],
+        codim: null,
+        labelLatex,
+        labelPlain: latexToPlain(labelLatex),
+        ambientLatex: 'abelian',
+        ambientPlain: 'abelian'
+      };
+    }
+    if (type === 'point') {
+      refs.dim.value = '0';
+      const labelLatex = sanitizeMathLabel(refs.varietyName.value, POINT_VARIETY_NAMES[0]);
+      refs.varietyName.value = labelLatex;
+      return {
+        type,
+        dim: 0,
+        ambient: null,
+        degrees: [],
+        codim: null,
+        labelLatex,
+        labelPlain: latexToPlain(labelLatex),
+        ambientLatex: 'point',
+        ambientPlain: 'point'
+      };
+    }
     if (type === 'complete-intersection') {
       const degrees = parseDegrees(refs.ciDegrees.value);
       const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
@@ -4972,7 +5133,7 @@
     if (sheaf.construction) return buildConstructedSheafBundle(geometry, sheaf, options);
     if (sheaf.type === 'locally-free') return buildLocallyFreeBundle(d, sheaf, options);
     if (sheaf.type === 'abstract') return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
-    if (geometry.type === 'abstract' || geometry.type === 'curve') return buildAbstractGeometrySheaf(geometry, sheaf, options);
+    if (geometry.type === 'abstract' || geometry.type === 'curve' || geometry.type === 'abelian' || geometry.type === 'point') return buildAbstractGeometrySheaf(geometry, sheaf, options);
     return buildEmbeddedGeometrySheaf(geometry, sheaf, options);
   }
 
@@ -5310,6 +5471,7 @@
     poly = Poly.from(poly);
     const geometry = options.geometry || null;
     const homology = options.homology || geometry?.homology || null;
+    defineHomologyVariables(geometry);
     const startPoly = maybeExpandMapHomologyVariables(poly, options);
     // Map expansion inspects source varieties and can rebind shared symbols such as [p].
     // Rebind the target geometry before checking or applying target-side rules.
@@ -5444,9 +5606,13 @@
 
   function defaultMapHomologyRulesForGeometry(geometry) {
     if (!geometry?.varietyId) return [];
-    return state.maps
+    const pullbackRules = state.maps
       .filter((map) => map.domainKind === 'variety' && map.codomainKind === 'variety' && map.domainId === geometry.varietyId)
       .map((map) => defaultPullbackUnitRule(map));
+    const pointPushforwardRules = state.maps
+      .filter((map) => map.domainKind === 'variety' && map.codomainKind === 'variety' && map.codomainId === geometry.varietyId)
+      .flatMap((map) => defaultPointPushforwardRules(map, geometry));
+    return [...pullbackRules, ...pointPushforwardRules].filter(Boolean);
   }
 
   function defaultPullbackUnitRule(map) {
@@ -5461,6 +5627,40 @@
       lhs: { powers: { [variableId]: 1 } },
       rhs: [{ coefficient: '1', powers: {} }]
     };
+  }
+
+  function defaultPointPushforwardRules(map, targetGeometry = geometryByVarietyId(map?.codomainId)) {
+    const sourceGeometry = geometryByVarietyId(map?.domainId);
+    if (!map || !sourceGeometry || !targetGeometry) return [];
+    const rules = [];
+    if (sourceGeometry.type === 'point') {
+      const variableId = defineMapHomologyVariable(map, 'pushforward', 'unit', targetGeometry.dim, '1', {
+        sourceKey: ''
+      });
+      rules.push({
+        id: `default-point-source-pushforward-${map.id}`,
+        builtin: true,
+        enabled: true,
+        lhs: { powers: { [variableId]: 1 } },
+        rhs: [{ coefficient: '1', powers: { [homologyVariableId(HOMOLOGY_POINT_CLASS, targetGeometry)]: 1 } }]
+      });
+    }
+    if (targetGeometry.type === 'point') {
+      const sourcePointId = homologyVariableId(HOMOLOGY_POINT_CLASS, sourceGeometry);
+      const sourcePoint = homologyClassDefById(sourceGeometry, HOMOLOGY_POINT_CLASS);
+      defineVariable(sourcePointId, sourceGeometry.dim, sourcePoint?.symbolLatex || '[p]');
+      const variableId = defineMapHomologyVariable(map, 'pushforward', sourcePointId, 0, sourcePoint?.symbolLatex || '[p]', {
+        sourceKey: monoKey({ [sourcePointId]: 1 })
+      });
+      rules.push({
+        id: `default-point-target-pushforward-${map.id}`,
+        builtin: true,
+        enabled: true,
+        lhs: { powers: { [variableId]: 1 } },
+        rhs: [{ coefficient: '1', powers: {} }]
+      });
+    }
+    return rules;
   }
 
   function homologyRuleHasSameLhs(left, right) {
@@ -5942,6 +6142,9 @@
   }
 
   function buildAbstractTangentBundle(geometry, sheaf) {
+    if (geometry.type === 'abelian' || geometry.type === 'point') {
+      return buildTrivialBundle(geometry.dim, geometry.dim, sheaf.labelLatex, sheaf.labelPlain);
+    }
     if (geometry.type === 'curve') {
       return buildCurveLineBundle(geometry, sheaf, 'tangent');
     }
@@ -5953,6 +6156,9 @@
   }
 
   function buildAbstractCotangentBundle(geometry, sheaf) {
+    if (geometry.type === 'abelian' || geometry.type === 'point') {
+      return buildTrivialBundle(geometry.dim, geometry.dim, sheaf.labelLatex, sheaf.labelPlain);
+    }
     if (geometry.type === 'curve') {
       return buildCurveLineBundle(geometry, sheaf, 'cotangent');
     }
@@ -5970,6 +6176,9 @@
   }
 
   function buildAbstractCanonicalBundle(geometry, sheaf) {
+    if (geometry.type === 'abelian' || geometry.type === 'point') {
+      return buildTrivialBundle(geometry.dim, 1, sheaf.labelLatex, sheaf.labelPlain);
+    }
     if (geometry.type === 'curve') {
       return buildCurveLineBundle(geometry, sheaf, 'canonical');
     }
@@ -5978,6 +6187,10 @@
       ? (abstractTangentChComponents(geometry)[1] || Poly.zero()).scale(fraction(-1))
       : (abstractTangentChernComponents(geometry)[1] || Poly.zero()).scale(fraction(-1));
     return buildLineFromFirstChern(firstChern, d, sheaf.labelLatex, sheaf.labelPlain);
+  }
+
+  function buildTrivialBundle(d, rank, labelLatex, labelPlain) {
+    return buildBundleFromChern(zeroComponentArray(d), String(rank), String(rank), labelLatex, labelPlain);
   }
 
   function buildCurveLineBundle(geometry, sheaf, kind) {
@@ -6260,6 +6473,15 @@
 
   function buildHodgeNumbers(geometry) {
     const d = geometry.dim;
+    if (geometry.type === 'point') {
+      return {
+        entries: [[{ latex: '1', plain: '1' }]],
+        message: 'Point Hodge numbers.'
+      };
+    }
+    if (geometry.type === 'abelian') {
+      return buildAbelianHodgeNumbers(geometry);
+    }
     if (geometry.type === 'product' && Array.isArray(geometry.productFactors) && geometry.productFactors.length === 2) {
       const left = buildHodgeNumbers(geometry.productFactors[0]);
       const right = buildHodgeNumbers(geometry.productFactors[1]);
@@ -6338,6 +6560,22 @@
       message: geometry.type === 'projective'
         ? 'Projective-space Hodge numbers.'
         : 'Smooth complete-intersection Hodge numbers, computed from the Hirzebruch chi_y genus.'
+    };
+  }
+
+  function buildAbelianHodgeNumbers(geometry) {
+    const d = geometry.dim;
+    return {
+      entries: Array.from({ length: d + 1 }, (_, p) => (
+        Array.from({ length: d + 1 }, (_, q) => {
+          const value = binomialBigInt(d, p) * binomialBigInt(d, q);
+          return {
+            latex: value.toString(),
+            plain: value.toString()
+          };
+        })
+      )),
+      message: 'Abelian-variety Hodge numbers.'
     };
   }
 
@@ -7150,6 +7388,13 @@
       && rule.lhs.powers[variableId] === 1
     ));
     if (stored) return stored;
+    const mapVariable = VARS.get(variableId) || ensureMapHomologyVariableFromId(variableId);
+    if (mapVariable?.kind === 'mapHomology' && mapVariable.operation === 'pushforward') {
+      const map = state.maps.find((item) => sameMapId(item.id, mapVariable.mapId));
+      const rule = map ? defaultPointPushforwardRules(map, geometry)
+        .find((item) => item.lhs?.powers?.[variableId] === 1) : null;
+      if (rule) return rule;
+    }
     const mapClass = parseMapHomologyClassId(def.id);
     const map = mapClass?.operation === 'pullback' && mapClass.sourceClassId === HOMOLOGY_UNIT_CLASS
       ? state.maps.find((item) => item.id === mapClass.mapId)
@@ -9176,6 +9421,8 @@
     if (type === 'projective') return 'projective space';
     if (type === 'complete-intersection') return 'complete intersection';
     if (type === 'curve') return 'curve';
+    if (type === 'abelian') return 'abelian variety';
+    if (type === 'point') return 'point';
     return 'abstract variety';
   }
 
@@ -9650,7 +9897,7 @@
     const safeFallback = String(fallback || 'X').trim() || 'X';
     if (!raw) return safeFallback;
     if (raw.length > 120) return safeFallback;
-    if (!/^[A-Za-z0-9_{}\\^()\[\]+,\-'\s*!]+$/.test(raw)) return safeFallback;
+    if (!/^[A-Za-z0-9_{}\\^()\[\]+,\-'\s*!*]+$/.test(raw)) return safeFallback;
     return raw;
   }
 

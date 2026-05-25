@@ -11,6 +11,11 @@ function loadCalculator() {
     sheafFromObject,
     buildBundleForSheaf,
     buildCharacteristicClasses,
+    applyHomologyRules,
+    polyFromPowers,
+    pushforwardPolynomialByDegree,
+    formatPolyPlain,
+    mapHomologyClassDefinitions,
     homologyVariableId,
     HOMOLOGY_HYPERPLANE_CLASS,
     HOMOLOGY_POINT_CLASS,
@@ -46,6 +51,105 @@ function characteristicRows(api, targetSheaf) {
 
 function chernPlain(rows) {
   return rows.find((row) => row.key === 'chern')?.plain || '';
+}
+
+function characterPlain(rows) {
+  return rows.find((row) => row.key === 'character')?.plain || '';
+}
+
+function testAbelianSpecialSheavesAreTrivial() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'A', type: 'abelian', dim: '2', name: 'A' }];
+
+  const tangentRows = characteristicRows(api, {
+    id: 'TA',
+    type: 'tangent',
+    basis: 'chern',
+    rank: '2',
+    name: 'TA',
+    baseVarietyId: 'A'
+  });
+  assert.strictEqual(chernPlain(tangentRows), '1');
+  assert.strictEqual(characterPlain(tangentRows), '2');
+
+  const canonicalRows = characteristicRows(api, {
+    id: 'KA',
+    type: 'canonical',
+    basis: 'chern',
+    rank: '1',
+    name: 'KA',
+    baseVarietyId: 'A'
+  });
+  assert.strictEqual(chernPlain(canonicalRows), '1');
+  assert.strictEqual(characterPlain(canonicalRows), '1');
+}
+
+function testPointClassDefaultsToUnit() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'pt', type: 'point', dim: '0', name: '\\{*\\}' }];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const pointId = api.homologyVariableId(api.HOMOLOGY_POINT_CLASS, geometry);
+  const point = api.polyFromPowers({ [pointId]: 1 });
+  const reduced = api.applyHomologyRules(point, { geometry, homology: geometry.homology });
+  assert.strictEqual(api.formatPolyPlain(reduced), '1');
+}
+
+function testPointSourcePushforwardDefaultsToTargetPoint() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'pt', type: 'point', dim: '0', name: '\\{*\\}' },
+    { id: 'X', type: 'abstract', dim: '2', name: 'X' }
+  ];
+  api.state.maps = [
+    { id: 'f', name: 'f', domainKind: 'variety', domainId: 'pt', codomainKind: 'variety', codomainId: 'X' }
+  ];
+  const targetGeometry = api.geometryFromVariety(api.state.varieties[1]);
+  const pushed = api.pushforwardPolynomialByDegree(api.state.maps[0], api.polyFromPowers({}), 0, 2, {});
+  const reduced = api.applyHomologyRules(pushed, { geometry: targetGeometry, homology: targetGeometry.homology });
+  assert.strictEqual(api.formatPolyPlain(reduced), '[p]');
+}
+
+function testMapToPointPushforwardOfPointDefaultsToOne() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'X', type: 'abstract', dim: '2', name: 'X' },
+    { id: 'pt', type: 'point', dim: '0', name: '\\{*\\}' }
+  ];
+  api.state.maps = [
+    { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'pt' }
+  ];
+  const sourceGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const targetGeometry = api.geometryFromVariety(api.state.varieties[1]);
+  const sourcePointId = api.homologyVariableId(api.HOMOLOGY_POINT_CLASS, sourceGeometry);
+  const sourcePoint = api.polyFromPowers({ [sourcePointId]: 1 });
+  const pushed = api.pushforwardPolynomialByDegree(api.state.maps[0], sourcePoint, 2, 0, {});
+  const reduced = api.applyHomologyRules(pushed, { geometry: targetGeometry, homology: targetGeometry.homology });
+  assert.strictEqual(api.formatPolyPlain(reduced), '1');
+}
+
+function testOutOfRangeMapHomologyRelationsAreOmitted() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'pt', type: 'point', dim: '0', name: '\\{*\\}' },
+    { id: 'X', type: 'abstract', dim: '2', name: 'X' }
+  ];
+  api.state.maps = [
+    { id: 'i', name: 'i', domainKind: 'variety', domainId: 'pt', codomainKind: 'variety', codomainId: 'X' },
+    { id: 'q', name: 'q', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'pt' }
+  ];
+
+  api.state.activeMapId = 'i';
+  const pointGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const pullbackDefs = api.mapHomologyClassDefinitions(pointGeometry);
+  assert.strictEqual(pullbackDefs.length, 1);
+  assert.strictEqual(pullbackDefs[0].degree, 0);
+
+  api.state.activeMapId = 'q';
+  const targetPointGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const pushforwardDefs = api.mapHomologyClassDefinitions(targetPointGeometry);
+  assert.strictEqual(pushforwardDefs.length, 1);
+  assert.strictEqual(pushforwardDefs[0].degree, 0);
+  assert.match(pushforwardDefs[0].kind, /point/);
 }
 
 function testCurveToProjectivePullbackUsesCurvePoint() {
@@ -202,6 +306,11 @@ testCurveToProjectivePullbackUsesCurvePoint();
 testProjectivePullbackStillUsesTargetHyperplane();
 testDuplicateDisplayNamesHaveDistinctInternalClasses();
 testDuplicateSheafNamesHaveDistinctInternalClasses();
+testAbelianSpecialSheavesAreTrivial();
+testPointClassDefaultsToUnit();
+testPointSourcePushforwardDefaultsToTargetPoint();
+testMapToPointPushforwardOfPointDefaultsToOne();
+testOutOfRangeMapHomologyRelationsAreOmitted();
 testStraightMapIsDefaultNoControlCase();
 testEndpointMovePreservesAttachedHandleVector();
 testMapControlCanMoveOutsideCanvas();
