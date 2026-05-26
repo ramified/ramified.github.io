@@ -1,0 +1,283 @@
+.index-page {
+  background: var(--bg);
+}
+
+.index-header {
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.index-shell {
+  width: min(1180px, calc(100% - 48px));
+  margin: 34px auto 42px;
+}
+
+.index-intro,
+.index-section {
+  margin-bottom: 28px;
+}
+
+.index-intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 28px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 18px;
+}
+
+.index-intro h2,
+.section-heading h2 {
+  font-size: 1.52rem;
+  font-weight: 500;
+  line-height: 1.18;
+}
+
+.index-intro p:last-child {
+  max-width: 560px;
+  color: var(--muted);
+  font-size: 0.98rem;
+}
+
+.index-kicker,
+.applet-kind {
+  font-family: "JetBrains Mono", Consolas, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.index-kicker {
+  color: var(--accent);
+  font-size: 0.72rem;
+  margin-bottom: 5px;
+}
+
+.applet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 22px;
+}
+
+@media (min-width: 1120px) {
+  .applet-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.applet-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.demo-strip {
+  background: #fffdf8;
+  border-bottom: 1px solid var(--border);
+  padding: 12px;
+}
+
+.demo-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background:
+    linear-gradient(0deg, rgba(216, 208, 196, 0.22), rgba(216, 208, 196, 0.22)),
+    #fffdf8;
+  overflow: hidden;
+}
+
+.demo-frame object {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.demo-frame span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  color: var(--muted);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  text-align: center;
+  word-break: break-word;
+}
+
+.applet-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  padding: 17px 18px 18px;
+}
+
+.applet-kind {
+  color: var(--accent);
+  font-size: 0.68rem;
+}
+
+.applet-body h3 {
+  font-size: 1.2rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.applet-body p:not(.applet-kind) {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.applet-link {
+  align-self: flex-start;
+  margin-top: auto;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 6px 12px;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+}
+
+.applet-link:hover,
+.applet-link:focus {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.section-heading {
+  margin: 36px 0 18px;
+}
+
+.split-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 28px;
+}
+
+.split-heading > p {
+  max-width: 620px;
+  color: var(--muted);
+  font-size: 0.96rem;
+}
+
+.reference-section {
+  margin-top: 36px;
+}
+
+.reference-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+}
+
+@media (min-width: 1060px) {
+  .wide-reference {
+    grid-column: span 2;
+  }
+}
+
+.reference-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 17px 18px 18px;
+}
+
+.reference-card h3 {
+  font-size: 1.08rem;
+  font-weight: 500;
+  line-height: 1.22;
+}
+
+.reference-card p:not(.applet-kind) {
+  color: var(--muted);
+  font-size: 0.93rem;
+}
+
+.reference-card a {
+  color: var(--accent);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  margin-top: auto;
+  text-decoration: none;
+}
+
+.reference-card a:hover,
+.reference-card a:focus {
+  text-decoration: underline;
+}
+
+.reference-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-top: auto;
+}
+
+.reference-links a {
+  margin-top: 0;
+}
+
+.atlas-card {
+  background: #fbf8f2;
+}
+
+.compact-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+}
+
+.compact-card .applet-body {
+  padding-bottom: 17px;
+}
+
+.index-footer {
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.9rem;
+  margin: 24px 0 38px;
+}
+
+@media (max-width: 720px) {
+  .index-shell {
+    width: min(100% - 28px, 1180px);
+    margin-top: 24px;
+  }
+
+  .index-intro {
+    align-items: start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .split-heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .index-header {
+    padding: 19px 22px;
+  }
+}

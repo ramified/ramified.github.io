@@ -311,7 +311,7 @@
         <section id="summary" class="card">
           <h2>Project summary</h2>
           <p>The project began as a request for a second webpage, parallel to an existing single Young diagram calculator, but with two drawable Young diagrams. The goal grew into a compact research-oriented calculator for operations involving two partitions: tensor products, Littlewood–Richardson style decompositions, finite-rank Lie algebra representations, Kostka tableaux, Kronecker coefficients, plethysm, Schur functors, and Grassmannian cup products.</p>
-          <p>The development style was iterative. The user repeatedly tested the generated webpage, pointed out mathematical or interface issues, and asked for targeted changes. The assistant generated updated versions of the HTML while preserving the shared stylesheet <code>young_diagrams.css</code> whenever possible.</p>
+          <p>The development style was iterative. The user repeatedly tested the generated webpage, pointed out mathematical or interface issues, and asked for targeted changes. The assistant generated updated versions of the HTML while preserving the shared stylesheet <code>css/site.css</code> whenever possible.</p>
           <div class="note">
             <strong>Important principle:</strong> later revisions were intentionally based on the user’s latest satisfactory HTML file, rather than rebuilding the whole document from scratch. This kept previous good features intact.
           </div>
@@ -320,7 +320,7 @@
         <section id="timeline" class="card">
           <h2>Chronology of the discussion</h2>
           <div class="timeline">
-            <article class="step"><span class="num">1</span><div><h3>Initial second-page concept</h3><p>The user asked for a new page named <code>double_young_diagram</code> with two Young diagram canvases, basic statistics, export, and additional mathematical cards. The first implementation reused <code>young_diagrams.css</code> and created a standalone two-diagram webpage.</p></div></article>
+            <article class="step"><span class="num">1</span><div><h3>Initial second-page concept</h3><p>The user asked for a new page named <code>double_young_diagram</code> with two Young diagram canvases, basic statistics, export, and additional mathematical cards. The first implementation reused <code>css/site.css</code> and created a standalone two-diagram webpage.</p></div></article>
             <article class="step"><span class="num">2</span><div><h3>Canvas layout refinement</h3><p>The two diagrams were moved into one canvas panel with two grids separated by small padding. Rows and columns were unified, defaulting to a 5×5 grid. The Lie type/rank selector was moved into the canvas heading.</p></div></article>
             <article class="step"><span class="num">3</span><div><h3>Card simplification</h3><p>Unfinished cards such as the initial fixed-rank coefficient and weight-space cards were removed. The Schur card was renamed and restyled as a Littlewood–Richardson decomposition card in the compact output style of the existing website.</p></div></article>
             <article class="step"><span class="num">4</span><div><h3>Responsive behavior</h3><p>The user wanted diagram λ and diagram μ to remain horizontally aligned even on small screens. The layout was changed so the two grids shrink rather than stack. The diagram input card also became draggable in the small-screen card stack.</p></div></article>
@@ -402,7 +402,7 @@ check: Σ coefficient(γ) dim(V^γ) = dim(V^λ) dim(V^μ)</code></pre>
         <section id="design" class="card">
           <h2>Interface design decisions</h2>
           <ul>
-            <li><strong>One shared stylesheet:</strong> the project reused <code>young_diagrams.css</code> to stay visually aligned with the existing site.</li>
+            <li><strong>One shared stylesheet:</strong> the project reused <code>css/site.css</code> to stay visually aligned with the existing site.</li>
             <li><strong>Page-local styles:</strong> special layout rules for the two-diagram page were kept inside the HTML to avoid disturbing the original single-diagram calculator.</li>
             <li><strong>Collapsed cards:</strong> all cards start collapsed to keep the page fast and scalable as more cards are added.</li>
             <li><strong>Lazy computation:</strong> a card computes only when the user opens it or presses its compute button.</li>
