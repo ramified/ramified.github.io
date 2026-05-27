@@ -812,6 +812,23 @@
       border-top: 1px dotted var(--border);
     }
 
+    .homology-tool-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .homology-tool-actions {
+      display: inline-flex;
+      justify-content: flex-end;
+      gap: 6px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
     .homology-map-mode-row {
       justify-content: space-between;
       margin: 0;
@@ -844,6 +861,12 @@
       scrollbar-gutter: stable;
       scrollbar-color: color-mix(in srgb, var(--accent) 68%, var(--surface)) var(--surface);
       scrollbar-width: thin;
+    }
+
+    .homology-expression-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 7px;
     }
 
     .homology-expression-table {
@@ -884,10 +907,12 @@
       white-space: nowrap;
     }
 
-    .homology-map-update {
+    .homology-update-button,
+    .homology-transpose-button {
       padding: 4px 9px;
       font-size: 0.7rem;
       align-self: start;
+      white-space: normal;
     }
 
     .homology-coefficient-editor {
@@ -1209,7 +1234,16 @@
         grid-column: 1 / -1;
       }
 
-      .homology-map-update {
+      .homology-tool-row {
+        align-items: stretch;
+      }
+
+      .homology-tool-actions {
+        width: 100%;
+      }
+
+      .homology-update-button,
+      .homology-transpose-button {
         justify-self: end;
       }
     }
@@ -1541,16 +1575,24 @@
       <div class="card-body">
         <div class="homology-active" id="homology-active"></div>
         <div class="homology-map-tools" id="homology-map-tools" hidden>
-          <label class="opt-row homology-map-mode-row" for="homology-map-input-mode">
-            <span>input</span>
-            <select id="homology-map-input-mode" class="sheaf-select homology-map-mode-select">
-              <option value="formula" selected>formulas</option>
-              <option value="coefficients">only provide coefficients</option>
-            </select>
-          </label>
+          <div class="homology-tool-row">
+            <label class="opt-row homology-map-mode-row" for="homology-map-input-mode">
+              <span>input</span>
+              <select id="homology-map-input-mode" class="sheaf-select homology-map-mode-select">
+                <option value="formula">formulas</option>
+                <option value="coefficients" selected>only provide coefficients</option>
+              </select>
+            </label>
+            <div class="homology-tool-actions">
+              <button class="btn btn-ghost homology-update-button" id="homology-update-all" type="button">update</button>
+            </div>
+          </div>
           <details class="homology-expression-panel" id="homology-expression-panel">
             <summary>available class expressions</summary>
             <div class="homology-expression-chart" id="homology-expression-chart"></div>
+            <div class="homology-expression-actions">
+              <button class="btn btn-ghost homology-transpose-button" id="homology-transpose-expressions" type="button" aria-pressed="true">vertical</button>
+            </div>
           </details>
         </div>
         <div class="sheaf-field-row" id="homology-hyperplane-row" hidden>
