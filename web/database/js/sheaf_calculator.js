@@ -90,6 +90,8 @@
       cohomology: false
     },
     homologyRulePasses: DEFAULT_HOMOLOGY_RULE_PASSES,
+    homologyMapInputMode: 'formula',
+    homologyMapClassTableOpen: false,
     exportScope: 'main',
     suppressLabelClickUntil: 0,
     suppressCardToggleUntil: 0,
@@ -224,6 +226,10 @@
     refs.cohomologyMessage = $('cohomology-message');
     refs.homologyCard = $('homology-card');
     refs.homologyActive = $('homology-active');
+    refs.homologyMapTools = $('homology-map-tools');
+    refs.homologyMapInputMode = $('homology-map-input-mode');
+    refs.homologyExpressionPanel = $('homology-expression-panel');
+    refs.homologyExpressionChart = $('homology-expression-chart');
     refs.homologyHyperplaneRow = $('homology-hyperplane-row');
     refs.homologyHyperplaneSymbol = $('homology-hyperplane-symbol');
     refs.homologyPointRow = $('homology-point-row');
@@ -1968,6 +1974,17 @@
         updateHomologySymbol(HOMOLOGY_POINT_CLASS, refs.homologyPointSymbol.value);
       });
     }
+    if (refs.homologyMapInputMode) {
+      refs.homologyMapInputMode.addEventListener('change', () => {
+        state.homologyMapInputMode = refs.homologyMapInputMode.value === 'coefficients' ? 'coefficients' : 'formula';
+        renderHomologyPanel(state.lastResult);
+      });
+    }
+    if (refs.homologyExpressionPanel) {
+      refs.homologyExpressionPanel.addEventListener('toggle', () => {
+        state.homologyMapClassTableOpen = refs.homologyExpressionPanel.open;
+      });
+    }
     if (refs.homologyRules) {
       refs.homologyRules.addEventListener('change', (event) => {
         const toggle = event.target.closest('[data-homology-rule-toggle]');
@@ -1975,16 +1992,31 @@
           setHomologyRuleEnabled(toggle.dataset.homologyRuleToggle, toggle.checked);
           return;
         }
-        const input = event.target.closest('[data-map-homology-rule]');
+        const input = event.target.closest('input[data-map-homology-rule]');
         if (input) setMapHomologyRuleFromInput(input);
       });
       refs.homologyRules.addEventListener('keydown', (event) => {
-        const input = event.target.closest('[data-map-homology-rule]');
-        if (!input || event.key !== 'Enter') return;
+        const input = event.target.closest('input[data-map-homology-rule]');
+        const coefficientInput = event.target.closest('[data-map-homology-coeff]');
+        if ((!input && !coefficientInput) || event.key !== 'Enter') return;
         event.preventDefault();
-        setMapHomologyRuleFromInput(input);
+        if (input) {
+          setMapHomologyRuleFromInput(input);
+          return;
+        }
+        const editor = coefficientInput.closest('[data-map-homology-coeff-editor]');
+        if (editor) setMapHomologyRuleFromCoefficientEditor(editor);
       });
       refs.homologyRules.addEventListener('click', (event) => {
+        const update = event.target.closest('[data-map-homology-update]');
+        if (update) {
+          const row = update.closest('.homology-rule-row');
+          const input = row?.querySelector('input[data-map-homology-rule]');
+          const editor = row?.querySelector('[data-map-homology-coeff-editor]');
+          if (input) setMapHomologyRuleFromInput(input);
+          else if (editor) setMapHomologyRuleFromCoefficientEditor(editor);
+          return;
+        }
         const button = event.target.closest('[data-homology-rule-delete]');
         if (!button) return;
         deleteHomologyRule(button.dataset.homologyRuleDelete);
@@ -7250,6 +7282,7 @@
     const variety = activeHomologyVariety();
     if (!variety) {
       if (refs.homologyActive) refs.homologyActive.textContent = 'Add a variety.';
+      hideMapHomologyTools();
       if (refs.homologyHyperplaneRow) refs.homologyHyperplaneRow.hidden = true;
       if (refs.homologyPointRow) refs.homologyPointRow.hidden = true;
       if (refs.homologySymbols) {
@@ -7277,6 +7310,7 @@
     const point = mapMode ? null : baseDefs.find((def) => def.id === HOMOLOGY_POINT_CLASS);
 
     if (refs.homologyActive) setInlineMath(refs.homologyActive, homologyActiveLatex(geometry));
+    hideMapHomologyTools();
     if (refs.homologyHyperplaneRow) refs.homologyHyperplaneRow.hidden = !hyperplane;
     if (refs.homologyHyperplaneSymbol && hyperplane) refs.homologyHyperplaneSymbol.value = hyperplane.symbolLatex;
     if (refs.homologyPointRow) refs.homologyPointRow.hidden = !point;
@@ -7303,6 +7337,7 @@
       ...pushforwardDefs.map((def) => ({ def, geometry: codomainGeometry, variety: context.codomain.variety }))
     ];
     if (refs.homologyActive) setInlineMath(refs.homologyActive, homologyMapActiveLatex(context));
+    renderMapHomologyTools(context);
     if (refs.homologyHyperplaneRow) refs.homologyHyperplaneRow.hidden = true;
     if (refs.homologyPointRow) refs.homologyPointRow.hidden = true;
     if (refs.homologySymbols) {
@@ -7314,6 +7349,71 @@
     renderMapHomologyRuleInputs(relationDefs);
     if (refs.homologyMessage) refs.homologyMessage.textContent = '';
     typeset(refs.homologyCard);
+  }
+
+  function hideMapHomologyTools() {
+    if (refs.homologyMapTools) refs.homologyMapTools.hidden = true;
+    if (refs.homologyExpressionChart) refs.homologyExpressionChart.innerHTML = '';
+  }
+
+  function renderMapHomologyTools(context) {
+    if (!refs.homologyMapTools) return;
+    refs.homologyMapTools.hidden = false;
+    if (refs.homologyMapInputMode) {
+      refs.homologyMapInputMode.value = state.homologyMapInputMode === 'coefficients' ? 'coefficients' : 'formula';
+    }
+    if (refs.homologyExpressionPanel) {
+      refs.homologyExpressionPanel.open = !!state.homologyMapClassTableOpen;
+    }
+    renderMapHomologyExpressionTable(context);
+  }
+
+  function renderMapHomologyExpressionTable(context) {
+    if (!refs.homologyExpressionChart) return;
+    const domainGeometry = context.domain.geometry;
+    const codomainGeometry = context.codomain.geometry;
+    const maxDegree = Math.max(domainGeometry.dim || 0, codomainGeometry.dim || 0);
+    const rows = Array.from({ length: maxDegree + 1 }, (_, degree) => `
+      <tr>
+        <th scope="row">${degree}</th>
+        <td>${homologyExpressionListHtml(domainGeometry, degree)}</td>
+        <td>${homologyExpressionListHtml(codomainGeometry, degree)}</td>
+      </tr>
+    `).join('');
+    refs.homologyExpressionChart.innerHTML = `
+      <table class="homology-expression-table">
+        <thead>
+          <tr>
+            <th scope="col">i</th>
+            <th scope="col">\\(H^{2i}(${domainGeometry.labelLatex})\\)</th>
+            <th scope="col">\\(H^{2i}(${codomainGeometry.labelLatex})\\)</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  function homologyExpressionListHtml(geometry, degree) {
+    const expressions = homologyDisplayMonomialsOfDegree(geometry, degree);
+    if (!expressions.length) return '<span class="homology-coefficient-empty">0</span>';
+    return `<div class="homology-expression-list">${expressions.map((mono) => `
+      <span>\\(${mono.latex || '1'}\\)</span>
+    `).join('')}</div>`;
+  }
+
+  function homologyDisplayMonomialsOfDegree(geometry, degree) {
+    return homologyMonomialDefinitions(geometry, { maxDegree: degree })
+      .filter((mono) => mono.degree === degree)
+      .sort((left, right) => {
+        const byFactors = homologyMonomialFactorCount(right) - homologyMonomialFactorCount(left);
+        if (byFactors) return byFactors;
+        return left.key.localeCompare(right.key);
+      });
+  }
+
+  function homologyMonomialFactorCount(mono) {
+    return Object.values(parseMonoKey(mono?.key || '')).reduce((sum, exp) => sum + exp, 0);
   }
 
   function renderHomologySymbols(geometry, defs, options = {}) {
@@ -7366,17 +7466,58 @@
       ? defs.map((def) => ({ def, geometry: geometryOrRelations, variety: activeHomologyVariety() }))
       : geometryOrRelations;
     refs.homologyRules.hidden = !relations?.length;
-    refs.homologyRules.innerHTML = (relations || []).map(({ def, geometry }) => {
-      defineHomologyVariables(geometry);
-      const rule = mapHomologyRuleForDef(geometry, def);
-      const value = rule ? formatHomologyInputPoly(homologyRuleRhsPoly(rule)) : '';
-      return `
-        <div class="homology-rule-row is-map-relation">
-          <span>\\(${def.symbolLatex}=\\)</span>
-          <input class="sheaf-input homology-map-rule-input" type="text" value="${escapeHtml(value)}" placeholder="0" spellcheck="false" autocomplete="off" data-map-homology-rule="${escapeHtml(def.id)}" data-map-homology-variety="${escapeHtml(geometry.varietyId || '')}">
+    const coefficientMode = state.homologyMapInputMode === 'coefficients';
+    refs.homologyRules.innerHTML = (relations || []).map(({ def, geometry }) => (
+      coefficientMode
+        ? renderMapHomologyCoefficientRow(def, geometry)
+        : renderMapHomologyFormulaRow(def, geometry)
+    )).join('');
+  }
+
+  function renderMapHomologyFormulaRow(def, geometry) {
+    defineHomologyVariables(geometry);
+    const rule = mapHomologyRuleForDef(geometry, def);
+    const value = rule ? formatHomologyInputPoly(homologyRuleRhsPoly(rule)) : '';
+    return `
+      <div class="homology-rule-row is-map-relation">
+        <span>\\(${def.symbolLatex}=\\)</span>
+        <input class="sheaf-input homology-map-rule-input" type="text" value="${escapeHtml(value)}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Right side for ${escapeHtml(latexToPlain(def.symbolLatex))}" data-map-homology-rule="${escapeHtml(def.id)}" data-map-homology-variety="${escapeHtml(geometry.varietyId || '')}">
+        <button class="btn btn-ghost homology-map-update" type="button" data-map-homology-update>update</button>
+      </div>
+    `;
+  }
+
+  function renderMapHomologyCoefficientRow(def, geometry) {
+    defineHomologyVariables(geometry);
+    const rule = mapHomologyRuleForDef(geometry, def);
+    const coefficients = rule ? homologyRuleCoefficientMap(rule) : new Map();
+    const terms = homologyDisplayMonomialsOfDegree(geometry, def.degree);
+    const editor = terms.length
+      ? terms.map((mono, index) => `
+          ${index ? '<span class="homology-coefficient-plus">+</span>' : ''}
+          <label class="homology-coefficient-term">
+            <input class="sheaf-input homology-coefficient-input" type="text" value="${escapeHtml(coefficients.get(mono.key) || '')}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Coefficient of ${escapeHtml(mono.plain || '1')} in ${escapeHtml(latexToPlain(def.symbolLatex))}" data-map-homology-coeff data-monomial-key="${escapeHtml(mono.key)}">
+            <span>\\(${mono.latex || '1'}\\)</span>
+          </label>
+        `).join('')
+      : '<span class="homology-coefficient-empty">0</span>';
+    return `
+      <div class="homology-rule-row is-map-relation">
+        <span>\\(${def.symbolLatex}=\\)</span>
+        <div class="homology-coefficient-editor" data-map-homology-coeff-editor data-map-homology-rule="${escapeHtml(def.id)}" data-map-homology-variety="${escapeHtml(geometry.varietyId || '')}">
+          ${editor}
         </div>
-      `;
-    }).join('');
+        <button class="btn btn-ghost homology-map-update" type="button" data-map-homology-update>update</button>
+      </div>
+    `;
+  }
+
+  function homologyRuleCoefficientMap(rule) {
+    const out = new Map();
+    sortedTerms(homologyRuleRhsPoly(rule)).forEach(([key, coeff]) => {
+      out.set(key, formatFractionPlain(coeff));
+    });
+    return out;
   }
 
   function mapHomologyRuleForDef(geometry, def) {
@@ -7404,48 +7545,98 @@
 
   function setMapHomologyRuleFromInput(input) {
     resetHomologyRulePasses();
-    const varietyId = input.dataset.mapHomologyVariety || activeHomologyVariety()?.id;
-    const variety = state.varieties.find((item) => item.id === varietyId) || activeHomologyVariety();
-    if (!variety) return;
-    const geometry = geometryFromVariety(variety);
-    if (!geometry) return;
-    const def = homologyClassDefinitions(geometry).find((item) => item.id === input.dataset.mapHomologyRule);
-    if (!def) return;
-    const homology = ensureHomologySystem(variety, geometry);
-    const variableId = homologyDefVariableId(def, geometry);
+    const context = mapHomologyRelationContext(input);
+    if (!context) return;
     const value = String(input.value || '').trim();
-    homology.rules = homology.rules.filter((rule) => !(
-      !rule.builtin
-      && rule.lhs?.powers
-      && Object.keys(rule.lhs.powers).length === 1
-      && rule.lhs.powers[variableId] === 1
-    ));
     if (!value) {
-      recompute();
+      clearMapHomologyRule(context);
       return;
     }
     let rhs;
     try {
-      rhs = parseHomologyExpression(value, geometry, { side: 'right' });
+      rhs = parseHomologyExpression(value, context.geometry, { side: 'right' });
     } catch (error) {
       if (refs.homologyMessage) refs.homologyMessage.textContent = error.message || 'Invalid right side.';
       return;
     }
+    saveMapHomologyRuleTerms(context, serializeHomologyPoly(rhs));
+  }
+
+  function setMapHomologyRuleFromCoefficientEditor(editor) {
+    resetHomologyRulePasses();
+    const context = mapHomologyRelationContext(editor);
+    if (!context) return;
+    const terms = [];
+    for (const input of editor.querySelectorAll('[data-map-homology-coeff]')) {
+      const raw = String(input.value || '').trim();
+      if (!raw) continue;
+      let coefficient;
+      try {
+        coefficient = parseRuleCoefficient(raw);
+      } catch (error) {
+        if (refs.homologyMessage) refs.homologyMessage.textContent = error.message || 'Invalid coefficient.';
+        return;
+      }
+      if (coefficient.isZero()) continue;
+      terms.push({
+        coefficient: formatFractionPlain(coefficient),
+        powers: parseMonoKey(input.dataset.monomialKey || '')
+      });
+    }
+    saveMapHomologyRuleTerms(context, terms);
+  }
+
+  function mapHomologyRelationContext(control) {
+    const varietyId = control.dataset.mapHomologyVariety || activeHomologyVariety()?.id;
+    const variety = state.varieties.find((item) => item.id === varietyId) || activeHomologyVariety();
+    if (!variety) return null;
+    const geometry = geometryFromVariety(variety);
+    if (!geometry) return null;
+    const def = homologyClassDefinitions(geometry).find((item) => item.id === control.dataset.mapHomologyRule);
+    return def ? { variety, geometry, def } : null;
+  }
+
+  function clearMapHomologyRule(context) {
+    const { variety, geometry, def } = context;
+    const homology = ensureHomologySystem(variety, geometry);
+    const variableId = homologyDefVariableId(def, geometry);
+    homology.rules = withoutMapHomologyRuleForVariable(homology.rules, variableId);
+    finishMapHomologyRuleUpdate();
+  }
+
+  function saveMapHomologyRuleTerms(context, rhsTerms) {
+    const { variety, geometry, def } = context;
+    const variableId = homologyDefVariableId(def, geometry);
     const rule = {
       id: `map-rule-${def.id}`,
       builtin: false,
       enabled: true,
       lhs: { powers: { [variableId]: 1 } },
-      rhs: serializeHomologyPoly(rhs)
+      rhs: rhsTerms
     };
     const defs = homologyClassDefinitions(geometry);
     if (!homologyRulePreservesDegree(rule, defs)) {
       if (refs.homologyMessage) refs.homologyMessage.textContent = 'Rule degrees must match.';
       return;
     }
+    const homology = ensureHomologySystem(variety, geometry);
+    homology.rules = withoutMapHomologyRuleForVariable(homology.rules, variableId);
     homology.rules.push(rule);
-    if (refs.homologyMessage) refs.homologyMessage.textContent = '';
+    finishMapHomologyRuleUpdate();
+  }
+
+  function withoutMapHomologyRuleForVariable(rules, variableId) {
+    return (rules || []).filter((rule) => !(
+      !rule.builtin
+      && rule.lhs?.powers
+      && Object.keys(rule.lhs.powers).length === 1
+      && rule.lhs.powers[variableId] === 1
+    ));
+  }
+
+  function finishMapHomologyRuleUpdate() {
     recompute();
+    if (refs.homologyMessage) refs.homologyMessage.textContent = 'Updated relation.';
   }
 
   function renderHomologyRuleCreator(geometry, defs, options = {}) {

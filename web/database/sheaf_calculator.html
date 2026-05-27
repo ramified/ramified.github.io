@@ -761,6 +761,7 @@
     }
 
     .homology-active[hidden],
+    .homology-map-tools[hidden],
     .homology-symbol-list[hidden],
     .homology-rule-list[hidden],
     .homology-add-class[hidden],
@@ -790,7 +791,7 @@
     }
 
     .homology-rule-row.is-map-relation {
-      grid-template-columns: minmax(96px, max-content) minmax(0, 1fr);
+      grid-template-columns: minmax(96px, max-content) minmax(0, 1fr) auto;
     }
 
     .homology-symbol-row span,
@@ -801,6 +802,123 @@
 
     .homology-map-rule-input {
       font-size: 0.74rem;
+    }
+
+    .homology-map-tools {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+      padding-top: 9px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .homology-map-mode-row {
+      justify-content: space-between;
+      margin: 0;
+      padding: 0;
+    }
+
+    .homology-map-mode-select {
+      max-width: 190px;
+      font-size: 0.74rem;
+    }
+
+    .homology-expression-panel {
+      min-width: 0;
+      color: var(--text);
+      font-size: 0.78rem;
+    }
+
+    .homology-expression-panel summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      list-style-position: outside;
+      padding: 2px 0;
+    }
+
+    .homology-expression-chart {
+      max-height: 240px;
+      overflow: auto;
+      margin-top: 8px;
+      scrollbar-gutter: stable;
+      scrollbar-color: color-mix(in srgb, var(--accent) 68%, var(--surface)) var(--surface);
+      scrollbar-width: thin;
+    }
+
+    .homology-expression-table {
+      width: max-content;
+      min-width: 100%;
+      border-collapse: collapse;
+      font-size: 0.76rem;
+      line-height: 1.45;
+    }
+
+    .homology-expression-table th,
+    .homology-expression-table td {
+      border-bottom: 1px dotted var(--border);
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+      white-space: nowrap;
+    }
+
+    .homology-expression-table th:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      color: var(--muted);
+      background: var(--surface);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .homology-expression-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 8px;
+      min-width: 0;
+      white-space: normal;
+    }
+
+    .homology-expression-list span {
+      white-space: nowrap;
+    }
+
+    .homology-map-update {
+      padding: 4px 9px;
+      font-size: 0.7rem;
+      align-self: start;
+    }
+
+    .homology-coefficient-editor {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 5px 6px;
+      min-width: 0;
+    }
+
+    .homology-coefficient-term {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+      white-space: nowrap;
+    }
+
+    .homology-coefficient-input {
+      width: 58px;
+      min-width: 48px;
+      padding: 4px 6px;
+      text-align: center;
+      font-size: 0.74rem;
+    }
+
+    .homology-coefficient-plus,
+    .homology-coefficient-empty {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
     }
 
     .homology-custom-class-row {
@@ -1083,8 +1201,16 @@
         grid-template-columns: minmax(0, 1fr);
       }
 
+      .homology-rule-row.is-map-relation {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
       .homology-add-rule .homology-add-button {
         grid-column: 1 / -1;
+      }
+
+      .homology-map-update {
+        justify-self: end;
       }
     }
   </style>
@@ -1414,6 +1540,19 @@
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Homology Classes</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="homology-active" id="homology-active"></div>
+        <div class="homology-map-tools" id="homology-map-tools" hidden>
+          <label class="opt-row homology-map-mode-row" for="homology-map-input-mode">
+            <span>input</span>
+            <select id="homology-map-input-mode" class="sheaf-select homology-map-mode-select">
+              <option value="formula" selected>formulas</option>
+              <option value="coefficients">only provide coefficients</option>
+            </select>
+          </label>
+          <details class="homology-expression-panel" id="homology-expression-panel">
+            <summary>available class expressions</summary>
+            <div class="homology-expression-chart" id="homology-expression-chart"></div>
+          </details>
+        </div>
         <div class="sheaf-field-row" id="homology-hyperplane-row" hidden>
           <label class="input-label" for="homology-hyperplane-symbol">hyperplane</label>
           <input id="homology-hyperplane-symbol" class="sheaf-input" type="text" value="H" maxlength="48" spellcheck="false" autocomplete="off">
