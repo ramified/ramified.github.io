@@ -1703,13 +1703,18 @@
     }
     refs.addObject.addEventListener('click', () => {
       const kind = currentInputKind();
+      const modifying = inputIsModifyMode();
       const changed = inputIsModifyMode()
         ? updateObjectFromDraft()
         : createObjectFromDraft();
       if (!changed) return;
       syncSheafBaseOptions(true);
-      if (inputIsCreateMode() && kind === 'sheaf') state.draftSheafBaseVarietyId = null;
-      activateFirstCreateBlankPick({ kind, render: false });
+      if (modifying) {
+        setCanvasPickEnabled(false, { render: false });
+      } else {
+        if (kind === 'sheaf') state.draftSheafBaseVarietyId = null;
+        activateFirstCreateBlankPick({ kind, render: false });
+      }
       recompute();
     });
     if (refs.deleteObject) {
@@ -8675,10 +8680,11 @@
     const canvas = refs.canvas;
     if (!canvas) return;
     const wrap = canvas.parentElement;
-    const cssWidth = Math.max(320, Math.floor(wrap.clientWidth || 760));
+    const measuredWidth = wrap.clientWidth || canvas.getBoundingClientRect?.().width || 760;
+    const cssWidth = Math.max(1, Math.floor(measuredWidth));
     const cssHeight = cssWidth < 620 ? 330 : 280;
     const ratio = window.devicePixelRatio || 1;
-    canvas.style.height = `${cssHeight}px`;
+    canvas.style.setProperty('height', `${cssHeight}px`, 'important');
     canvas.width = Math.floor(cssWidth * ratio);
     canvas.height = Math.floor(cssHeight * ratio);
     state.canvasWidth = cssWidth;
@@ -8688,7 +8694,7 @@
     ctx.clearRect(0, 0, cssWidth, cssHeight);
     drawCanvasBackground(ctx, cssWidth, cssHeight);
     if (!state.varieties.length && !state.sheaves.length) {
-      renderCanvasMessage(cssWidth, cssHeight, '\\text{Add a variety or sheaf}');
+      renderCanvasMessage(cssWidth, cssHeight, '\\text{Add a variety}');
       return;
     }
     ensureCanvasLabelPositions(cssWidth, cssHeight);
@@ -9767,6 +9773,11 @@
     if (moved && outside) {
       state.suppressLabelClickUntil = Date.now() + 180;
       removeCanvasObject(drag.kind, drag.id);
+      return;
+    }
+    if (!moved && event?.type !== 'pointercancel' && !outside) {
+      state.suppressLabelClickUntil = Date.now() + 180;
+      selectObject(drag.kind, drag.id);
       return;
     }
     if (moved) {
