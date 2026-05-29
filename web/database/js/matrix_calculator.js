@@ -300,6 +300,91 @@
     }
   }
 
+  class SymbolicExpScalar {
+    constructor(terms = []) {
+      this.terms = [];
+      for (const term of terms) {
+        const coeff = cloneExactLikeScalar(term.coeff);
+        const exponent = cloneExactLikeScalar(term.exponent);
+        if (!coeff.isZero()) this.terms.push({ coeff, exponent });
+      }
+      this.normalize();
+    }
+
+    static zero() { return new SymbolicExpScalar(); }
+    static fromExact(value) {
+      value = cloneExactLikeScalar(value);
+      return value.isZero()
+        ? SymbolicExpScalar.zero()
+        : new SymbolicExpScalar([{ coeff: value, exponent: scalarZeroLike(value) }]);
+    }
+    static exp(exponent, coeff = ExactScalar.one()) {
+      return new SymbolicExpScalar([{ coeff: cloneExactLikeScalar(coeff), exponent: cloneExactLikeScalar(exponent) }]);
+    }
+
+    clone() {
+      return new SymbolicExpScalar(this.terms.map((term) => ({
+        coeff: term.coeff.clone(),
+        exponent: term.exponent.clone()
+      })));
+    }
+
+    normalize() {
+      const grouped = new Map();
+      for (const term of this.terms) {
+        const key = symbolicExpKey(term.exponent);
+        const existing = grouped.get(key);
+        grouped.set(key, {
+          exponent: existing ? existing.exponent : term.exponent.clone(),
+          coeff: existing ? existing.coeff.add(term.coeff) : term.coeff.clone()
+        });
+      }
+      this.terms = Array.from(grouped.values())
+        .filter((term) => !term.coeff.isZero())
+        .sort((a, b) => symbolicExpKey(a.exponent).localeCompare(symbolicExpKey(b.exponent)));
+    }
+
+    add(other) {
+      other = symbolicExpScalarFrom(other);
+      return new SymbolicExpScalar(this.terms.concat(other.terms));
+    }
+    neg() {
+      return new SymbolicExpScalar(this.terms.map((term) => ({
+        coeff: term.coeff.neg(),
+        exponent: term.exponent
+      })));
+    }
+    sub(other) { return this.add(symbolicExpScalarFrom(other).neg()); }
+    mulExact(value) {
+      value = ExactScalar.from(value);
+      return new SymbolicExpScalar(this.terms.map((term) => ({
+        coeff: term.coeff.mul(value),
+        exponent: term.exponent
+      })));
+    }
+    divExact(value) {
+      value = cloneExactLikeScalar(value);
+      return new SymbolicExpScalar(this.terms.map((term) => ({
+        coeff: term.coeff.div(value),
+        exponent: term.exponent
+      })));
+    }
+    mul(other) {
+      other = symbolicExpScalarFrom(other);
+      const terms = [];
+      for (const a of this.terms) {
+        for (const b of other.terms) {
+          terms.push({
+            coeff: a.coeff.mul(b.coeff),
+            exponent: a.exponent.add(b.exponent)
+          });
+        }
+      }
+      return new SymbolicExpScalar(terms);
+    }
+    isZero() { return this.terms.length === 0; }
+  }
+
   const state = {
     rows: 5,
     cols: 5,
@@ -1720,6 +1805,24 @@
       : ExactScalar.fromFraction(Fraction.fromInt(value));
   }
 
+  function symbolicExpScalarFrom(value) {
+    if (value instanceof SymbolicExpScalar) return value;
+    if (value instanceof ModScalar) {
+      throw new Error('Symbolic exponential entries require characteristic zero exact scalars.');
+    }
+    return SymbolicExpScalar.fromExact(value);
+  }
+
+  function symbolicExpKey(exponent) {
+    return formatScalar(exponent);
+  }
+
+  function cloneExactLikeScalar(value) {
+    if (value instanceof RationalFunctionScalar || value instanceof NumberFieldScalar || value instanceof ExactScalar) return value.clone();
+    if (value instanceof ModScalar) throw new Error('Symbolic exponential entries require characteristic zero exact scalars.');
+    return ExactScalar.from(value);
+  }
+
   function stripOuterParens(text) {
     let s = String(text || '');
     while (s.length >= 2 && s[0] === '(' && s[s.length - 1] === ')' && hasBalancedOuterParens(s)) {
@@ -2107,6 +2210,690 @@
 
   function exactMatrixCopy(A) {
     return A.map((row) => row.map((z) => z.clone()));
+  }
+
+  function symbolicExpMatrix(A) {
+    if (A.length !== (A[0]?.length || 0)) throw new Error('Matrix exponential requires a square matrix.');
+    const decomp = exactJordanDecompositionForLinearEigenvalues(A);
+    const expJ = symbolicExpJordanMatrix(decomp.J, decomp.blocks, scalarSampleFromMatrix(A));
+    const exactPart = symbolicMatrixMultiply(symbolicMatrixMultiply(decomp.P, expJ), exactInverse(decomp.P));
+    return {
+      matrix: exactPart,
+      P: decomp.P,
+      J: decomp.J,
+      summary: decomp.summary
+    };
+  }
+
+  function exactJordanDecompositionForLinearEigenvalues(A) {
+    const n = A.length;
+    const sample = scalarSampleFromMatrix(A);
+    const roots = exactLinearEigenvalueMultiset(A);
+    if (roots.length !== n) {
+      throw new Error('Symbolic exp(A) via Jordan form needs chi_A(T) to split into exact linear factors over the selected field.');
+    }
+    const groups = groupExactRoots(roots);
+    const J = exactZeros(n, n, sample);
+    const pColumns = [];
+    const blocks = [];
+    const summaries = [];
+    let offset = 0;
+
+    for (const group of groups) {
+      const N = exactSubtractScalarIdentity(A, group.lambda);
+      const structure = exactJordanStructureForEigenvalue(N, group.multiplicity);
+      summaries.push(`${formatScalar(group.lambda)}: alg ${group.multiplicity}, eig ${structure.nullities[1] || 0}, blocks ${structure.blockSizes.join('+')}`);
+      const basesByPower = exactNullspaceBasesByPower(N, Math.max(...structure.blockSizes));
+      for (const size of structure.blockSizes) {
+        for (let i = 0; i < size; i++) {
+          J[offset + i][offset + i] = group.lambda.clone();
+          if (i < size - 1) J[offset + i][offset + i + 1] = scalarOneLike(sample);
+        }
+        const chain = chooseExactJordanChain(N, size, pColumns, basesByPower);
+        if (!chain) throw new Error('Could not construct a symbolic generalized eigenvector basis.');
+        pColumns.push(...chain);
+        blocks.push({ start: offset, size, lambda: group.lambda.clone() });
+        offset += size;
+      }
+    }
+    if (pColumns.length !== n) throw new Error('Could not construct a full symbolic Jordan basis.');
+    const P = exactMatrixFromColumns(pColumns, sample);
+    return { P, J, blocks, summary: summaries.join('; ') };
+  }
+
+  function exactLinearEigenvalueMultiset(A) {
+    const sample = scalarSampleFromMatrix(A);
+    const triangular = exactTriangularEigenvalues(A);
+    if (triangular) return triangular;
+    let remaining = exactCharacteristicPolynomial(A);
+    remaining = trimPolynomial(remaining.map((coeff) => coeff.clone()));
+    const roots = [];
+    while (remaining.length > 1) {
+      const root = remaining.length === 2
+        ? genericLinearRoot(remaining)
+        : findExactLinearRootForField(remaining, sample);
+      if (!root) break;
+      const factor = [scalarOneLike(sample), root.neg()];
+      let divided = false;
+      while (remaining.length > 1 && exactPolynomialEval(remaining, root).isZero()) {
+        const division = exactPolynomialDivmod(remaining, factor);
+        if (!polynomialIsZero(division.remainder)) break;
+        roots.push(root.clone());
+        remaining = trimPolynomial(division.quotient);
+        divided = true;
+      }
+      if (!divided) break;
+    }
+    return roots;
+  }
+
+  function exactTriangularEigenvalues(A) {
+    const n = A.length;
+    let upper = true;
+    let lower = true;
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        if (r > c && !A[r][c].isZero()) upper = false;
+        if (r < c && !A[r][c].isZero()) lower = false;
+      }
+    }
+    if (!upper && !lower) return null;
+    return A.map((row, i) => row[i].clone());
+  }
+
+  function findExactLinearRootForField(coeffs, sample) {
+    if (sample instanceof ModScalar) return findFiniteFieldRoot(coeffs, sample.p);
+    if (sample instanceof ExactScalar) {
+      const root = findRationalRoot(coeffs);
+      return root ? ExactScalar.fromFraction(root) : null;
+    }
+    return findGenericFieldRoot(coeffs, sample, null, coeffs);
+  }
+
+  function findFiniteFieldRoot(coeffs, p) {
+    for (let value = 0; value < p; value++) {
+      const candidate = new ModScalar(value, p);
+      if (exactPolynomialEval(coeffs, candidate).isZero()) return candidate;
+    }
+    return null;
+  }
+
+  function groupExactRoots(roots) {
+    const groups = [];
+    for (const root of roots) {
+      const key = exactRootKey(root);
+      const group = groups.find((item) => item.key === key);
+      if (group) group.multiplicity++;
+      else groups.push({ key, lambda: root.clone(), multiplicity: 1 });
+    }
+    return groups.sort((a, b) => a.key.localeCompare(b.key));
+  }
+
+  function exactRootKey(root) {
+    if (root instanceof ModScalar) return `mod:${root.p}:${root.value}`;
+    if (root instanceof RationalFunctionScalar || root instanceof NumberFieldScalar) return genericFieldScalarKey(root);
+    return formatScalar(root);
+  }
+
+  function exactSubtractScalarIdentity(A, lambda) {
+    const sample = scalarSampleFromMatrix(A);
+    return A.map((row, r) => row.map((value, c) => (r === c ? value.sub(lambda) : value.clone())));
+  }
+
+  function exactJordanStructureForEigenvalue(N, multiplicity) {
+    const nullities = [0];
+    let power = exactIdentity(N.length, scalarSampleFromMatrix(N));
+    for (let k = 1; k <= multiplicity; k++) {
+      power = exactMatrixMultiply(power, N);
+      nullities.push(N.length - exactRref(power).rank);
+    }
+    return {
+      nullities,
+      blockSizes: blockSizesFromNullities(nullities, multiplicity)
+    };
+  }
+
+  function exactNullspaceBasesByPower(N, maxPower) {
+    const bases = [[]];
+    let power = exactIdentity(N.length, scalarSampleFromMatrix(N));
+    for (let k = 1; k <= maxPower; k++) {
+      power = exactMatrixMultiply(power, N);
+      bases[k] = exactNullspace(power);
+    }
+    return bases;
+  }
+
+  function exactNullspace(A) {
+    const cols = A[0]?.length || 0;
+    const sample = scalarSampleFromMatrix(A);
+    const { matrix: R, pivots } = exactRref(A);
+    const pivotSet = new Set(pivots);
+    const freeCols = [];
+    for (let c = 0; c < cols; c++) if (!pivotSet.has(c)) freeCols.push(c);
+    return freeCols.map((freeCol) => {
+      const v = Array.from({ length: cols }, () => scalarZeroLike(sample));
+      v[freeCol] = scalarOneLike(sample);
+      for (let i = pivots.length - 1; i >= 0; i--) {
+        const pivotCol = pivots[i];
+        let sum = scalarZeroLike(sample);
+        for (const c of freeCols) sum = sum.add(R[i][c].mul(v[c]));
+        v[pivotCol] = sum.neg();
+      }
+      return v;
+    });
+  }
+
+  function chooseExactJordanChain(N, size, existingColumns, basesByPower) {
+    const basis = basesByPower[size] || [];
+    const before = exactRankOfColumns(existingColumns);
+    for (const candidate of exactJordanChainCandidates(basis)) {
+      const chain = exactJordanChainFromTop(N, candidate, size);
+      if (chain.some((v) => v.every((entry) => entry.isZero()))) continue;
+      if (exactRankOfColumns(existingColumns.concat(chain)) >= before + size) return chain;
+    }
+    return null;
+  }
+
+  function exactJordanChainCandidates(basis) {
+    const candidates = basis.map((v) => v.map((z) => z.clone()));
+    for (let i = 0; i < basis.length; i++) {
+      for (let j = i + 1; j < basis.length; j++) {
+        candidates.push(exactAddVectors(basis[i], basis[j]));
+        candidates.push(exactSubVectors(basis[i], basis[j]));
+      }
+    }
+    return candidates;
+  }
+
+  function exactJordanChainFromTop(N, top, size) {
+    const chain = [top.map((z) => z.clone())];
+    let current = top.map((z) => z.clone());
+    for (let k = 1; k < size; k++) {
+      current = exactMatrixVectorMultiply(N, current);
+      chain.unshift(current);
+    }
+    return chain;
+  }
+
+  function exactRankOfColumns(cols) {
+    if (!cols.length) return 0;
+    return exactRref(exactMatrixFromColumns(cols)).rank;
+  }
+
+  function exactMatrixFromColumns(cols, sample = null) {
+    const rows = cols[0]?.length || 0;
+    const fallback = sample || (cols[0] || []).find(Boolean) || ExactScalar.zero();
+    const out = exactZeros(rows, cols.length, fallback);
+    for (let c = 0; c < cols.length; c++) {
+      for (let r = 0; r < rows; r++) out[r][c] = cols[c][r].clone();
+    }
+    return out;
+  }
+
+  function exactMatrixVectorMultiply(A, v) {
+    const sample = scalarSampleFromMatrix(A) || v.find(Boolean) || ExactScalar.zero();
+    return A.map((row) => {
+      let sum = scalarZeroLike(sample);
+      for (let i = 0; i < row.length; i++) sum = sum.add(row[i].mul(v[i]));
+      return sum;
+    });
+  }
+
+  function exactAddVectors(a, b) {
+    return a.map((value, i) => value.add(b[i]));
+  }
+
+  function exactSubVectors(a, b) {
+    return a.map((value, i) => value.sub(b[i]));
+  }
+
+  function symbolicExpJordanMatrix(J, blocks, sample) {
+    const n = J.length;
+    const out = Array.from({ length: n }, () => Array.from({ length: n }, () => SymbolicExpScalar.zero()));
+    for (const block of blocks) {
+      for (let r = 0; r < block.size; r++) {
+        for (let c = r; c < block.size; c++) {
+          const distance = c - r;
+          const denom = scalarFromIntLike(factorialInt(distance), sample);
+          out[block.start + r][block.start + c] = SymbolicExpScalar.exp(block.lambda, scalarOneLike(sample).div(denom));
+        }
+      }
+    }
+    return out;
+  }
+
+  function symbolicMatrixMultiply(A, B) {
+    const rows = A.length;
+    const inner = A[0]?.length || 0;
+    const cols = B[0]?.length || 0;
+    const out = Array.from({ length: rows }, () => Array.from({ length: cols }, () => SymbolicExpScalar.zero()));
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        let sum = SymbolicExpScalar.zero();
+        for (let k = 0; k < inner; k++) sum = sum.add(symbolicExpProduct(A[r][k], B[k][c]));
+        out[r][c] = sum;
+      }
+    }
+    return out;
+  }
+
+  function symbolicExpProduct(a, b) {
+    a = symbolicExpScalarFrom(a);
+    b = symbolicExpScalarFrom(b);
+    return a.mul(b);
+  }
+
+  function factorialInt(n) {
+    let out = 1n;
+    for (let i = 2n; i <= BigInt(n); i++) out *= i;
+    return out;
+  }
+
+  function rationalCanonicalForm(A) {
+    if (A.length !== (A[0]?.length || 0)) throw new Error('Rational canonical form requires a square matrix.');
+    const n = A.length;
+    if (!n) throw new Error('Rational canonical form requires a nonempty matrix.');
+    const sample = scalarSampleFromMatrix(A);
+    const invariantFactors = invariantFactorsFromSmith(exactPolynomialMatrixTMinusA(A));
+    const nontrivialFactors = invariantFactors.filter((poly) => exactPolyDegreeAscending(poly, sample) > 0);
+    const R = exactZeros(n, n, sample);
+    let offset = 0;
+    for (const factor of nontrivialFactors) {
+      const block = companionMatrixFromMonicAscending(factor, sample);
+      for (let r = 0; r < block.length; r++) {
+        for (let c = 0; c < block.length; c++) R[offset + r][offset + c] = block[r][c];
+      }
+      offset += block.length;
+    }
+    if (offset !== n) throw new Error('Invariant factors did not match the matrix size.');
+    const P = exactSimilarityTransition(A, R);
+    const divisibility = nontrivialFactors.length
+      ? nontrivialFactors.map((poly) => formatPolynomial(poly.slice().reverse(), 'T')).join(' | ')
+      : '1';
+    return { P, R, invariantFactors: nontrivialFactors, divisibility };
+  }
+
+  function exactSimilarityTransition(A, R) {
+    const n = A.length;
+    const sample = scalarSampleFromMatrix(A);
+    const basis = exactIntertwinerBasis(A, R);
+    if (!basis.length) throw new Error('Could not solve A P = P R for the rational canonical transition matrix.');
+    const basisMatrices = basis.map((vector) => exactVectorToMatrix(vector, n, sample));
+    const candidates = exactTransitionCandidates(basisMatrices, sample);
+    for (const candidate of candidates) {
+      if (!candidate || exactDeterminant(candidate).isZero()) continue;
+      if (exactMatrixEqual(exactMatrixMultiply(A, candidate), exactMatrixMultiply(candidate, R))) return candidate;
+    }
+    throw new Error('Could not find an invertible transition matrix P for A = P R P^{-1}.');
+  }
+
+  function exactIntertwinerBasis(A, R) {
+    const n = A.length;
+    const sample = scalarSampleFromMatrix(A);
+    const rows = [];
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        const equation = Array.from({ length: n * n }, () => scalarZeroLike(sample));
+        for (let row = 0; row < n; row++) {
+          for (let col = 0; col < n; col++) {
+            let coeff = scalarZeroLike(sample);
+            if (col === j) coeff = coeff.add(A[i][row]);
+            if (row === i) coeff = coeff.sub(R[col][j]);
+            equation[row * n + col] = coeff;
+          }
+        }
+        rows.push(equation);
+      }
+    }
+    return exactNullspace(rows);
+  }
+
+  function exactTransitionCandidates(basisMatrices, sample) {
+    const candidates = [];
+    const seen = new Set();
+    const add = (matrix) => {
+      const key = exactMatrixKey(matrix);
+      if (seen.has(key)) return;
+      seen.add(key);
+      candidates.push(matrix);
+    };
+
+    for (const matrix of basisMatrices) add(matrix);
+
+    let prefix = exactZeros(basisMatrices[0].length, basisMatrices[0].length, sample);
+    for (const matrix of basisMatrices) {
+      prefix = exactMatrixAdd(prefix, matrix);
+      add(prefix);
+    }
+
+    const patterns = [
+      (i) => 1,
+      (i) => i + 1,
+      (i) => (i % 2 ? -1 : 1),
+      (i) => (i % 3) - 1,
+      (i) => ((i * i + 1) % 5) - 2
+    ];
+    for (const pattern of patterns) {
+      add(exactMatrixCombination(basisMatrices, basisMatrices.map((_, i) => scalarFromIntLike(pattern(i), sample)), sample));
+    }
+
+    const greedy = greedyTransitionCandidate(basisMatrices, sample);
+    if (greedy) add(greedy);
+
+    for (let seed = 1; seed <= 240; seed++) {
+      const coeffs = deterministicTransitionCoefficients(basisMatrices.length, sample, seed);
+      add(exactMatrixCombination(basisMatrices, coeffs, sample));
+    }
+    return candidates;
+  }
+
+  function greedyTransitionCandidate(basisMatrices, sample) {
+    const n = basisMatrices[0].length;
+    let current = exactZeros(n, n, sample);
+    let rank = 0;
+    const used = new Set();
+    const coeffs = transitionCoefficientSamples(sample, n);
+    while (rank < n && used.size < basisMatrices.length) {
+      let best = null;
+      for (let i = 0; i < basisMatrices.length; i++) {
+        if (used.has(i)) continue;
+        for (const coeff of coeffs) {
+          if (coeff.isZero()) continue;
+          const candidate = exactMatrixAdd(current, exactMatrixScaleExact(basisMatrices[i], coeff));
+          const candidateRank = exactMatrixRank(candidate);
+          if (!best || candidateRank > best.rank) best = { index: i, matrix: candidate, rank: candidateRank };
+          if (candidateRank === n) return candidate;
+        }
+      }
+      if (!best || best.rank <= rank) break;
+      used.add(best.index);
+      current = best.matrix;
+      rank = best.rank;
+    }
+    return rank === n ? current : null;
+  }
+
+  function transitionCoefficientSamples(sample, n) {
+    if (sample instanceof ModScalar) {
+      const limit = Math.min(sample.p, Math.max(2, n + 2));
+      return Array.from({ length: limit }, (_, value) => scalarFromIntLike(value, sample));
+    }
+    const values = [1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 0];
+    return values.map((value) => scalarFromIntLike(value, sample));
+  }
+
+  function deterministicTransitionCoefficients(count, sample, seed) {
+    let x = (seed * 1103515245 + 12345) >>> 0;
+    const coeffs = [];
+    for (let i = 0; i < count; i++) {
+      x = (x * 1103515245 + 12345) >>> 0;
+      const value = sample instanceof ModScalar
+        ? x % sample.p
+        : (x % 11) - 5;
+      coeffs.push(scalarFromIntLike(value, sample));
+    }
+    return coeffs;
+  }
+
+  function exactVectorToMatrix(vector, n, sample) {
+    const matrix = exactZeros(n, n, sample);
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) matrix[r][c] = vector[r * n + c].clone();
+    }
+    return matrix;
+  }
+
+  function exactMatrixCombination(matrices, coeffs, sample) {
+    const n = matrices[0].length;
+    let out = exactZeros(n, n, sample);
+    for (let i = 0; i < matrices.length; i++) {
+      if (coeffs[i].isZero()) continue;
+      out = exactMatrixAdd(out, exactMatrixScaleExact(matrices[i], coeffs[i]));
+    }
+    return out;
+  }
+
+  function exactMatrixAdd(A, B) {
+    return A.map((row, r) => row.map((value, c) => value.add(B[r][c])));
+  }
+
+  function exactMatrixScaleExact(A, coeff) {
+    return A.map((row) => row.map((value) => value.mul(coeff)));
+  }
+
+  function exactMatrixEqual(A, B) {
+    return A.every((row, r) => row.every((value, c) => value.sub(B[r][c]).isZero()));
+  }
+
+  function exactMatrixKey(matrix) {
+    return matrix.map((row) => row.map(formatScalar).join(',')).join(';');
+  }
+
+  function exactPolynomialMatrixTMinusA(A) {
+    const n = A.length;
+    const sample = scalarSampleFromMatrix(A);
+    const one = () => scalarOneLike(sample);
+    return Array.from({ length: n }, (_, r) => Array.from({ length: n }, (_, c) => {
+      const constant = A[r][c].neg();
+      return r === c ? exactPolyTrimAscending([constant, one()], sample) : exactPolyTrimAscending([constant], sample);
+    }));
+  }
+
+  function invariantFactorsFromSmith(M) {
+    const { diagonal, sample } = polynomialMatrixSmithDiagonal(M);
+    const nonzero = diagonal
+      .map((poly) => exactPolyMonicAscending(poly, sample))
+      .filter((poly) => !exactPolyIsZeroAscending(poly, sample));
+    const units = nonzero.filter((poly) => exactPolyDegreeAscending(poly, sample) === 0);
+    const factors = nonzero.filter((poly) => exactPolyDegreeAscending(poly, sample) > 0);
+    return units.concat(factors);
+  }
+
+  function polynomialMatrixSmithDiagonal(input) {
+    const rows = input.length;
+    const cols = input[0]?.length || 0;
+    const sample = polynomialMatrixSample(input);
+    const M = input.map((row) => row.map((poly) => exactPolyTrimAscending(poly, sample)));
+    let k = 0;
+    let guard = 0;
+
+    while (k < rows && k < cols) {
+      if (++guard > 1000) throw new Error('Rational canonical form did not converge.');
+      const pos = smallestNonzeroPolyPosition(M, k, sample);
+      if (!pos) break;
+      swapRows(M, k, pos.row);
+      swapCols(M, k, pos.col);
+      clearSmithPivotRowAndColumn(M, k, sample);
+      const bad = findEntryNotDivisibleByPivot(M, k, sample);
+      if (bad) {
+        addPolyRowMultiple(M, k, bad.row, [scalarOneLike(sample)], sample);
+        continue;
+      }
+      M[k][k] = exactPolyMonicAscending(M[k][k], sample);
+      k++;
+    }
+
+    const diagonal = [];
+    for (let i = 0; i < Math.min(rows, cols); i++) diagonal.push(M[i][i] || [scalarZeroLike(sample)]);
+    return { diagonal, sample };
+  }
+
+  function clearSmithPivotRowAndColumn(M, k, sample) {
+    const rows = M.length;
+    const cols = M[0]?.length || 0;
+    let changed = true;
+    let guard = 0;
+    while (changed) {
+      if (++guard > 1000) throw new Error('Rational canonical row reduction did not converge.');
+      changed = false;
+      for (let r = 0; r < rows; r++) {
+        if (r === k || exactPolyIsZeroAscending(M[r][k], sample)) continue;
+        const div = exactPolyDivmodAscending(M[r][k], M[k][k], sample);
+        addPolyRowMultiple(M, r, k, exactPolyNegAscending(div.quotient, sample), sample);
+        if (!exactPolyIsZeroAscending(M[r][k], sample)) {
+          swapRows(M, k, r);
+          changed = true;
+          break;
+        }
+      }
+      if (changed) continue;
+      for (let c = 0; c < cols; c++) {
+        if (c === k || exactPolyIsZeroAscending(M[k][c], sample)) continue;
+        const div = exactPolyDivmodAscending(M[k][c], M[k][k], sample);
+        addPolyColMultiple(M, c, k, exactPolyNegAscending(div.quotient, sample), sample);
+        if (!exactPolyIsZeroAscending(M[k][c], sample)) {
+          swapCols(M, k, c);
+          changed = true;
+          break;
+        }
+      }
+    }
+  }
+
+  function smallestNonzeroPolyPosition(M, start, sample) {
+    let best = null;
+    for (let r = start; r < M.length; r++) {
+      for (let c = start; c < (M[0]?.length || 0); c++) {
+        if (exactPolyIsZeroAscending(M[r][c], sample)) continue;
+        const degree = exactPolyDegreeAscending(M[r][c], sample);
+        if (!best || degree < best.degree) best = { row: r, col: c, degree };
+      }
+    }
+    return best;
+  }
+
+  function findEntryNotDivisibleByPivot(M, k, sample) {
+    const pivot = M[k][k];
+    for (let r = k + 1; r < M.length; r++) {
+      for (let c = k + 1; c < (M[0]?.length || 0); c++) {
+        if (exactPolyIsZeroAscending(M[r][c], sample)) continue;
+        const div = exactPolyDivmodAscending(M[r][c], pivot, sample);
+        if (!exactPolyIsZeroAscending(div.remainder, sample)) return { row: r, col: c };
+      }
+    }
+    return null;
+  }
+
+  function addPolyRowMultiple(M, target, source, multiple, sample) {
+    for (let c = 0; c < (M[0]?.length || 0); c++) {
+      M[target][c] = exactPolyAddAscending(
+        M[target][c],
+        exactPolyMulAscending(multiple, M[source][c], sample),
+        sample
+      );
+    }
+  }
+
+  function addPolyColMultiple(M, target, source, multiple, sample) {
+    for (let r = 0; r < M.length; r++) {
+      M[r][target] = exactPolyAddAscending(
+        M[r][target],
+        exactPolyMulAscending(multiple, M[r][source], sample),
+        sample
+      );
+    }
+  }
+
+  function swapRows(M, a, b) {
+    if (a !== b) [M[a], M[b]] = [M[b], M[a]];
+  }
+
+  function swapCols(M, a, b) {
+    if (a === b) return;
+    for (const row of M) [row[a], row[b]] = [row[b], row[a]];
+  }
+
+  function companionMatrixFromMonicAscending(poly, sample) {
+    poly = exactPolyMonicAscending(poly, sample);
+    const degree = exactPolyDegreeAscending(poly, sample);
+    if (degree < 1) return [];
+    const block = exactZeros(degree, degree, sample);
+    for (let i = 1; i < degree; i++) block[i][i - 1] = scalarOneLike(sample);
+    for (let r = 0; r < degree; r++) block[r][degree - 1] = poly[r].neg();
+    return block;
+  }
+
+  function polynomialMatrixSample(M) {
+    for (const row of M || []) {
+      for (const poly of row || []) {
+        for (const coeff of poly || []) if (coeff) return coeff;
+      }
+    }
+    return ExactScalar.zero();
+  }
+
+  function exactPolyTrimAscending(poly, sample = null) {
+    const fallback = sample || (poly || []).find(Boolean) || ExactScalar.zero();
+    const out = (poly && poly.length ? poly : [scalarZeroLike(fallback)]).map((coeff) => coeff.clone());
+    let end = out.length - 1;
+    while (end > 0 && out[end].isZero()) end--;
+    return out.slice(0, end + 1);
+  }
+
+  function exactPolyDegreeAscending(poly, sample = null) {
+    return exactPolyTrimAscending(poly, sample).length - 1;
+  }
+
+  function exactPolyIsZeroAscending(poly, sample = null) {
+    const trimmed = exactPolyTrimAscending(poly, sample);
+    return trimmed.length === 1 && trimmed[0].isZero();
+  }
+
+  function exactPolyAddAscending(a, b, sample = null) {
+    const fallback = sample || (a || []).find(Boolean) || (b || []).find(Boolean) || ExactScalar.zero();
+    a = exactPolyTrimAscending(a, fallback);
+    b = exactPolyTrimAscending(b, fallback);
+    const len = Math.max(a.length, b.length);
+    const out = Array.from({ length: len }, (_, i) => {
+      const x = i < a.length ? a[i] : scalarZeroLike(fallback);
+      const y = i < b.length ? b[i] : scalarZeroLike(fallback);
+      return x.add(y);
+    });
+    return exactPolyTrimAscending(out, fallback);
+  }
+
+  function exactPolyNegAscending(poly, sample = null) {
+    return exactPolyTrimAscending(poly, sample).map((coeff) => coeff.neg());
+  }
+
+  function exactPolyMulAscending(a, b, sample = null) {
+    const fallback = sample || (a || []).find(Boolean) || (b || []).find(Boolean) || ExactScalar.zero();
+    a = exactPolyTrimAscending(a, fallback);
+    b = exactPolyTrimAscending(b, fallback);
+    const out = Array.from({ length: a.length + b.length - 1 }, () => scalarZeroLike(fallback));
+    for (let i = 0; i < a.length; i++) {
+      for (let j = 0; j < b.length; j++) out[i + j] = out[i + j].add(a[i].mul(b[j]));
+    }
+    return exactPolyTrimAscending(out, fallback);
+  }
+
+  function exactPolyDivmodAscending(dividend, divisor, sample = null) {
+    const fallback = sample || (dividend || []).find(Boolean) || (divisor || []).find(Boolean) || ExactScalar.zero();
+    let rem = exactPolyTrimAscending(dividend, fallback);
+    divisor = exactPolyTrimAscending(divisor, fallback);
+    if (exactPolyIsZeroAscending(divisor, fallback)) throw new Error('Division by zero polynomial.');
+    const degreeDiff = exactPolyDegreeAscending(rem, fallback) - exactPolyDegreeAscending(divisor, fallback);
+    if (degreeDiff < 0) return { quotient: [scalarZeroLike(fallback)], remainder: rem };
+    const quotient = Array.from({ length: degreeDiff + 1 }, () => scalarZeroLike(fallback));
+    const divisorLead = divisor[divisor.length - 1];
+    while (!exactPolyIsZeroAscending(rem, fallback) && exactPolyDegreeAscending(rem, fallback) >= exactPolyDegreeAscending(divisor, fallback)) {
+      const shift = exactPolyDegreeAscending(rem, fallback) - exactPolyDegreeAscending(divisor, fallback);
+      const factor = rem[rem.length - 1].div(divisorLead);
+      quotient[shift] = quotient[shift].add(factor);
+      for (let i = 0; i < divisor.length; i++) rem[i + shift] = rem[i + shift].sub(factor.mul(divisor[i]));
+      rem = exactPolyTrimAscending(rem, fallback);
+    }
+    return {
+      quotient: exactPolyTrimAscending(quotient, fallback),
+      remainder: exactPolyTrimAscending(rem, fallback)
+    };
+  }
+
+  function exactPolyMonicAscending(poly, sample = null) {
+    poly = exactPolyTrimAscending(poly, sample);
+    if (exactPolyIsZeroAscending(poly, sample)) return poly;
+    const lead = poly[poly.length - 1];
+    return poly.map((coeff) => coeff.div(lead));
   }
 
   function matrixExp(A) {
@@ -3715,6 +4502,7 @@
   }
 
   function formatScalar(value) {
+    if (value instanceof SymbolicExpScalar) return formatSymbolicExpScalar(value, 'text');
     if (value instanceof RationalFunctionScalar) return formatRationalFunction(value, 'text');
     if (value instanceof NumberFieldScalar) return formatNumberFieldScalar(value, 'text');
     if (value instanceof ModScalar) return value.value.toString();
@@ -3725,6 +4513,41 @@
       return `${formatExactFraction(value.re)}${sign}${formatExactImag(value.im.abs())}`;
     }
     return formatComplex(value, 10);
+  }
+
+  function formatSymbolicExpScalar(value, mode = 'text') {
+    value = symbolicExpScalarFrom(value);
+    if (value.isZero()) return '0';
+    return value.terms.map((term, index) => {
+      const sign = symbolicExpTermNegative(term);
+      const coeff = sign ? term.coeff.neg() : term.coeff;
+      const body = symbolicExpTermBody(coeff, term.exponent, mode);
+      if (index === 0) return sign ? `-${body}` : body;
+      return `${sign ? ' - ' : ' + '}${body}`;
+    }).join('');
+  }
+
+  function symbolicExpTermNegative(term) {
+    return scalarIsReal(term.coeff) && scalarRealSign(term.coeff) < 0;
+  }
+
+  function symbolicExpTermBody(coeff, exponent, mode) {
+    const expText = symbolicExpFactorText(exponent, mode);
+    if (symbolicExponentIsZero(exponent)) return exactScalarSource(coeff, mode === 'latex' ? 'latex' : 'text');
+    if (scalarIsOne(coeff)) return expText;
+    const coeffText = exactScalarSource(coeff, mode === 'latex' ? 'latex' : 'text');
+    if (mode === 'latex') return `${coeffText}${expText}`;
+    return `${coeffText}*${expText}`;
+  }
+
+  function symbolicExponentIsZero(value) {
+    return cloneExactLikeScalar(value).isZero();
+  }
+
+  function symbolicExpFactorText(exponent, mode) {
+    const text = exactScalarSource(exponent, mode === 'latex' ? 'latex' : 'text');
+    if (mode === 'latex') return `e^{${text}}`;
+    return `exp(${text})`;
   }
 
   function formatExactFraction(value) {
@@ -4144,23 +4967,33 @@
       const op = refs.operation.value;
       const symbolic = refs.resultMode.value === 'symbolic';
       let payload = null;
-      if (isExactMatrixField(data.fieldInfo)) {
-        payload = computeExactFieldOperation(data, op);
-      } else if (symbolic && canComputeSymbolically(op)) {
+      if (op === 'exp' && symbolic) {
+        try {
+          payload = computeSymbolicExpOperation(data);
+        } catch (error) {
+          if (isExactMatrixField(data.fieldInfo)) throw error;
+          payload = null;
+        }
+      }
+    if (!payload && isExactMatrixField(data.fieldInfo)) {
+      payload = computeExactFieldOperation(data, op);
+      } else if (!payload && symbolic && canComputeSymbolically(op)) {
         payload = computeSymbolicOperation(data, op);
-      } else if (op === 'transpose') {
+      } else if (!payload && op === 'rcf') {
+        payload = computeSymbolicOperation(data, op);
+      } else if (!payload && op === 'transpose') {
         payload = {
           title: 'Transpose',
           formula: 'A^T',
           blocks: [{ title: 'A^T', matrix: transpose(A) }]
         };
-      } else if (op === 'inverse') {
+      } else if (!payload && op === 'inverse') {
         payload = {
           title: 'Inverse',
           formula: 'A^{-1}',
           blocks: [{ title: 'A^{-1}', matrix: inverse(A) }]
         };
-      } else if (op === 'power') {
+      } else if (!payload && op === 'power') {
         const n = clampInt(refs.powerExponent.value, -12, 12, 2);
         refs.powerExponent.value = String(n);
         const powerLabel = `A^{${n}}`;
@@ -4169,14 +5002,14 @@
           formula: powerLabel,
           blocks: [{ title: powerLabel, matrix: matrixPower(A, n) }]
         };
-      } else if (op === 'exp') {
+      } else if (!payload && op === 'exp') {
         payload = {
           title: 'Matrix Exponential',
           formula: 'exp(A)',
           blocks: [{ title: 'exp(A)', matrix: matrixExp(A) }],
           note: 'Computed numerically by scaling, Taylor summation, and squaring.'
         };
-      } else if (op === 'jordan') {
+      } else if (!payload && op === 'jordan') {
         const result = jordanDecomposition(A);
         payload = {
           title: 'Jordan Decomposition',
@@ -4184,7 +5017,7 @@
           blocks: result.blocks,
           note: result.note
         };
-      } else if (op === 'bruhat') {
+      } else if (!payload && op === 'bruhat') {
         const result = bruhatDecomposition(A);
         payload = {
           title: 'Bruhat Decomposition',
@@ -4196,7 +5029,7 @@
           ],
           note: `Numerical Bruhat form for rank ${result.rank}: B_1 and B_2 are invertible upper triangular matrices, and omega is a partial permutation matrix.`
         };
-      } else if (op === 'qr') {
+      } else if (!payload && op === 'qr') {
         const result = qrDecomposition(A);
         const note = result.dependent.length
           ? `Thin QR computed numerically; dependent columns: ${result.dependent.join(', ')}.`
@@ -4207,7 +5040,7 @@
           blocks: [{ title: 'Q', matrix: result.Q }, { title: 'R', matrix: result.R }],
           note
         };
-      } else if (op === 'svd') {
+      } else if (!payload && op === 'svd') {
         const result = svdDecomposition(A);
         payload = {
           title: 'SVD Decomposition',
@@ -4219,7 +5052,7 @@
           ],
           note: `Numerical singular value decomposition with rank ${result.rank}.`
         };
-      } else if (op === 'polar') {
+      } else if (!payload && op === 'polar') {
         const result = polarDecomposition(A);
         payload = {
           title: 'Polar Decomposition',
@@ -4231,7 +5064,7 @@
           note: `Numerical right polar decomposition; P is positive semidefinite and rank is ${result.rank}.`
         };
       }
-      if (payload && symbolic && !canComputeSymbolically(op)) {
+      if (payload && symbolic && !canComputeSymbolically(op) && !(op === 'exp' && payload.blocks?.some((block) => block.symbolicExp))) {
         payload.note = [payload.note, 'Symbolic mode is not available for this operation here, so the displayed result is numerical.']
           .filter(Boolean)
           .join(' ');
@@ -4243,12 +5076,12 @@
   }
 
   function canComputeSymbolically(op) {
-    return op === 'transpose' || op === 'inverse' || op === 'power' || op === 'bruhat';
+    return op === 'transpose' || op === 'inverse' || op === 'power' || op === 'rcf' || op === 'bruhat';
   }
 
   function computeExactFieldOperation(data, op) {
     if (!canComputeSymbolically(op)) {
-      throw new Error(`This operation is numerical/analytic and is not available over ${fieldNameForInfo(data.fieldInfo)}. Try transpose, inverse, powers, or Bruhat decomposition.`);
+      throw new Error(`This operation is numerical/analytic and is not available over ${fieldNameForInfo(data.fieldInfo)}. Try transpose, inverse, powers, rational canonical form, or Bruhat decomposition.`);
     }
     const A = exactMatrixFromData(data);
     const field = data.fieldInfo;
@@ -4294,6 +5127,20 @@
         note: `Exact Bruhat form over ${fieldText} with rank ${result.rank}; B_1 and B_2 are invertible upper triangular matrices, and omega is a partial permutation matrix.`
       };
     }
+    if (op === 'rcf') {
+      const result = rationalCanonicalForm(A);
+      return {
+        title: `Rational Canonical Form over ${fieldText}`,
+        formula: 'A = P R P^{-1}',
+        field,
+        blocks: [
+          { title: 'P', matrix: result.P, exact: true, field },
+          { title: 'R', matrix: result.R, exact: true, field }
+        ],
+        expressions: [{ title: 'Invariant factors', value: result.divisibility }],
+        note: `Exact Frobenius rational canonical form over ${fieldText}. The displayed P satisfies A = P R P^{-1}; invariant factors divide successively.`
+      };
+    }
     throw new Error(`This operation is not available over ${fieldText}.`);
   }
 
@@ -4336,7 +5183,43 @@
         note: `Exact Bruhat form with rank ${result.rank}: B_1 and B_2 are invertible upper triangular matrices, and omega is a partial permutation matrix.`
       };
     }
+    if (op === 'rcf') {
+      const result = rationalCanonicalForm(A);
+      return {
+        title: 'Rational Canonical Form',
+        formula: 'A = P R P^{-1}',
+        blocks: [
+          { title: 'P', matrix: result.P, exact: true },
+          { title: 'R', matrix: result.R, exact: true }
+        ],
+        expressions: [{ title: 'Invariant factors', value: result.divisibility }],
+        note: 'Exact Frobenius rational canonical form. The displayed P satisfies A = P R P^{-1}; invariant factors divide successively.'
+      };
+    }
     throw new Error('Symbolic mode is not available for this operation.');
+  }
+
+  function computeSymbolicExpOperation(data) {
+    if (data.fieldInfo?.kind === 'finite-field') {
+      throw new Error('Symbolic exp(A) is only available in characteristic zero fields.');
+    }
+    const A = isExactMatrixField(data.fieldInfo)
+      ? exactMatrixFromData(data)
+      : exactMatrixFromDetails(data.details);
+    const result = symbolicExpMatrix(A);
+    const field = data.fieldInfo;
+    const fieldText = fieldNameForInfo(field);
+    return {
+      title: `Symbolic Matrix Exponential over ${fieldText}`,
+      formula: 'e^A = P e^J P^{-1}',
+      field,
+      blocks: [
+        { title: 'P', matrix: result.P, exact: true, field },
+        { title: 'J', matrix: result.J, exact: true, field },
+        { title: 'e^A', matrix: result.matrix, exact: true, symbolicExp: true, field }
+      ],
+      note: `Symbolic exponential computed from the exact Jordan form because chi_A(T) splits into linear factors. Eigenvalues: ${result.summary}.`
+    };
   }
 
   function renderOperationResult(payload) {
@@ -4507,15 +5390,26 @@
 
   function operationNeedsPythonFraction(result) {
     if (result.field?.kind === 'rational-function' || result.field?.kind === 'number-field') return false;
+    if ((result.blocks || []).some((block) => matrixHasSymbolicExp(block.matrix))) return true;
     return (result.blocks || []).some((block) => block.exact && !isFiniteFieldMatrix(block.matrix) && exactMatrixNeedsFraction(block.matrix));
   }
 
   function exactMatrixNeedsFraction(matrix) {
     return matrix.some((row) => row.some((value) => {
-      if (value instanceof ModScalar) return false;
-      value = ExactScalar.from(value);
-      return value.re.den !== 1n || value.im.den !== 1n;
+      if (value instanceof SymbolicExpScalar) return value.terms.some((term) => exactScalarNeedsFraction(term.coeff) || exactScalarNeedsFraction(term.exponent));
+      return exactScalarNeedsFraction(value);
     }));
+  }
+
+  function exactScalarNeedsFraction(value) {
+    if (value instanceof RationalFunctionScalar || value instanceof NumberFieldScalar) return false;
+    if (value instanceof ModScalar) return false;
+    value = ExactScalar.from(value);
+    return value.re.den !== 1n || value.im.den !== 1n;
+  }
+
+  function matrixHasSymbolicExp(matrix) {
+    return (matrix || []).some((row) => (row || []).some((value) => value instanceof SymbolicExpScalar));
   }
 
   function isFiniteFieldMatrix(matrix) {
@@ -4561,6 +5455,7 @@
   }
 
   function matrixEntryText(value, exact = false) {
+    if (value instanceof SymbolicExpScalar) return formatSymbolicExpScalar(value, 'text').replace(/\s+/g, '');
     return exact ? formatScalar(value).replace(/\s+/g, '') : formatComplex(value, 14).replace(/\s+/g, '');
   }
 
@@ -4578,6 +5473,7 @@
   }
 
   function exactScalarSource(value, format) {
+    if (value instanceof SymbolicExpScalar) return formatSymbolicExpScalar(value, sourceModeForFormat(format));
     if (value instanceof RationalFunctionScalar) return formatRationalFunction(value, sourceModeForFormat(format));
     if (value instanceof NumberFieldScalar) return formatNumberFieldScalar(value, sourceModeForFormat(format));
     if (value instanceof ModScalar) return value.value.toString();
