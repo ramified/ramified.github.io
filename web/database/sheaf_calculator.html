@@ -794,6 +794,24 @@
       grid-template-columns: minmax(96px, max-content) minmax(0, 1fr) auto;
     }
 
+    .homology-rule-separator {
+      height: 0;
+      border-top: 1px solid var(--border);
+      margin: 3px 0;
+    }
+
+    .homology-map-assign-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      width: 18px;
+    }
+
+    .homology-map-assign-toggle input {
+      flex: 0 0 auto;
+      margin: 0;
+    }
+
     .homology-symbol-row span,
     .homology-rule-row span {
       min-width: 0;
@@ -905,6 +923,65 @@
 
     .homology-expression-list span {
       white-space: nowrap;
+    }
+
+    .homology-expression-token {
+      border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+      color: var(--text);
+      padding: 2px 6px;
+      font: inherit;
+      line-height: 1.35;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .homology-expression-token:hover,
+    .homology-expression-token:focus-visible {
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+      outline: none;
+    }
+
+    .homology-assignment-form {
+      display: flex;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .homology-assignment-form[hidden] {
+      display: none !important;
+    }
+
+    .homology-assignment-lhs {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      overflow-wrap: anywhere;
+    }
+
+    .homology-assignment-form > .homology-map-rule-input,
+    .homology-assignment-coefficients {
+      flex: 1 1 260px;
+      min-width: 0;
+    }
+
+    .homology-assignment-coefficients[hidden] {
+      display: none !important;
+    }
+
+    .homology-assignment-actions {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      justify-content: flex-end;
+      flex: 0 0 auto;
+      margin-left: auto;
     }
 
     .homology-update-button,
@@ -1224,6 +1301,16 @@
 
       .homology-add-rule {
         grid-template-columns: minmax(0, 1fr);
+      }
+
+      .homology-assignment-form > .homology-map-rule-input,
+      .homology-assignment-coefficients,
+      .homology-assignment-actions {
+        flex-basis: 100%;
+      }
+
+      .homology-assignment-actions {
+        justify-content: flex-end;
       }
 
       .homology-rule-row.is-map-relation {
@@ -1594,6 +1681,15 @@
           <details class="homology-expression-panel" id="homology-expression-panel">
             <summary>available class expressions</summary>
             <div class="homology-expression-chart" id="homology-expression-chart"></div>
+            <div class="homology-assignment-form" id="homology-assignment-form" hidden>
+              <span class="homology-assignment-lhs" id="homology-assignment-lhs"></span>
+              <input id="homology-assignment-rhs" class="sheaf-input homology-map-rule-input" type="text" value="" maxlength="120" spellcheck="false" autocomplete="off" aria-label="Assigned linear combination" placeholder="0">
+              <div class="homology-coefficient-editor homology-assignment-coefficients" id="homology-assignment-coefficients" hidden></div>
+              <div class="homology-assignment-actions">
+                <button class="btn btn-ghost homology-rule-delete" id="homology-assignment-save" type="button">assign</button>
+                <button class="btn btn-ghost homology-rule-delete" id="homology-assignment-cancel" type="button">cancel</button>
+              </div>
+            </div>
             <div class="homology-expression-actions">
               <button class="btn btn-ghost homology-transpose-button" id="homology-transpose-expressions" type="button" aria-pressed="true">vertical</button>
             </div>
@@ -1611,7 +1707,7 @@
         <div class="homology-rule-list" id="homology-rules"></div>
         <div class="homology-add-class" id="homology-add-class">
           <input id="homology-class-symbol" class="sheaf-input" type="text" value="" maxlength="48" spellcheck="false" autocomplete="off" aria-label="Homology class symbol" placeholder="A">
-          <input id="homology-class-degree" class="sheaf-input" type="number" value="1" min="0" max="8" step="1" aria-label="Homology class degree">
+          <input id="homology-class-degree" class="sheaf-input" type="number" value="2" min="0" max="16" step="1" aria-label="Homology class degree">
           <button class="btn btn-ghost sheaf-object-button homology-add-button" id="homology-add-class-button" type="button">add class</button>
         </div>
         <div class="homology-add-rule" id="homology-add-rule">

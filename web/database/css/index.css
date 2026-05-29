@@ -58,6 +58,23 @@
   gap: 22px;
 }
 
+.applet-grid.masonry-grid {
+  align-items: flex-start;
+  display: flex;
+}
+
+.masonry-column {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+
+.masonry-column > .applet-card {
+  width: 100%;
+}
+
 @media (min-width: 1120px) {
   .applet-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));

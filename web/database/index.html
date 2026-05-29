@@ -279,5 +279,136 @@
   Browser-side mathematical applets collected in one directory.
 </footer>
 
+<script>
+(() => {
+  const gifPattern = /^(.*_gif_)\d+(\.gif)$/i;
+  const masonryState = new WeakMap();
+
+  const probeGif = (src) => new Promise((resolve) => {
+    const image = new Image();
+
+    image.onload = () => resolve({
+      src,
+      ratio: image.naturalWidth && image.naturalHeight
+        ? `${image.naturalWidth} / ${image.naturalHeight}`
+        : null
+    });
+    image.onerror = () => resolve(null);
+    image.src = src;
+  });
+
+  const collectSequentialGifs = async (firstSrc) => {
+    const match = firstSrc.match(gifPattern);
+
+    if (!match) {
+      const loaded = await probeGif(firstSrc);
+      return loaded ? [loaded] : [];
+    }
+
+    const gifs = [];
+
+    for (let index = 1; ; index += 1) {
+      const loaded = await probeGif(`${match[1]}${index}${match[2]}`);
+
+      if (!loaded) {
+        break;
+      }
+
+      gifs.push(loaded);
+    }
+
+    return gifs;
+  };
+
+  const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
+
+  const getGridGap = (grid) => {
+    const style = window.getComputedStyle(grid);
+    return parseFloat(style.columnGap || style.gap) || 0;
+  };
+
+  const getColumnCount = (grid) => {
+    const width = grid.clientWidth;
+
+    if (width >= 1120 && !grid.classList.contains('compact-grid')) {
+      return 3;
+    }
+
+    const minimumColumnWidth = grid.classList.contains('compact-grid') ? 300 : 320;
+    const gap = getGridGap(grid);
+
+    return Math.max(1, Math.floor((width + gap) / (minimumColumnWidth + gap)));
+  };
+
+  const resetMasonryGrid = (grid) => {
+    const state = masonryState.get(grid);
+
+    if (!state) {
+      return Array.from(grid.children);
+    }
+
+    state.items.forEach((item) => grid.appendChild(item));
+    state.columns.forEach((column) => column.remove());
+    masonryState.delete(grid);
+
+    return state.items;
+  };
+
+  const arrangeMasonryGrid = (grid) => {
+    const items = resetMasonryGrid(grid);
+    const columnCount = getColumnCount(grid);
+    const gap = getGridGap(grid);
+    const columns = Array.from({ length: columnCount }, () => {
+      const column = document.createElement('div');
+
+      column.className = 'masonry-column';
+      grid.appendChild(column);
+
+      return column;
+    });
+
+    grid.classList.add('masonry-grid');
+    grid.style.gap = `${gap}px`;
+
+    const heights = columns.map(() => 0);
+
+    items.forEach((item) => {
+      const columnIndex = heights.indexOf(Math.min(...heights));
+      const column = columns[columnIndex];
+
+      column.appendChild(item);
+      heights[columnIndex] += item.getBoundingClientRect().height + gap;
+    });
+
+    masonryState.set(grid, { columns, items });
+  };
+
+  const arrangeAllMasonryGrids = () => {
+    document.querySelectorAll('.applet-grid').forEach(arrangeMasonryGrid);
+  };
+
+  const gifTasks = Array.from(document.querySelectorAll('.demo-frame object[data]')).map(async (object) => {
+    const frame = object.closest('.demo-frame');
+    const gifs = await collectSequentialGifs(object.getAttribute('data'));
+
+    if (!gifs.length) {
+      return;
+    }
+
+    const selected = randomItem(gifs);
+
+    if (selected.ratio && frame) {
+      frame.style.aspectRatio = selected.ratio;
+    }
+
+    object.setAttribute('data', selected.src);
+  });
+
+  Promise.all(gifTasks).then(() => {
+    arrangeAllMasonryGrids();
+    window.addEventListener('resize', arrangeAllMasonryGrids);
+  });
+})();
+</script>
 </body>
 </html>
