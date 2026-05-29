@@ -1691,11 +1691,7 @@
     [refs.productFactorA, refs.productFactorB].forEach((button) => {
       if (!button) return;
       button.addEventListener('click', () => {
-        state.productPickIndex = normalizedInt(button.dataset.productFactorIndex, 0, 1, 0);
-        setCanvasPickEnabled(true, { render: false });
-        updateProductDraftControls();
-        syncGlobalPickButton();
-        renderCanvas(state.lastResult);
+        activateProductFactorPick(button.dataset.productFactorIndex);
       });
     });
     (refs.pointNamePresets || []).forEach((button) => {
@@ -1740,11 +1736,13 @@
       else if (refs.varietyType.value === 'point') refs.dim.value = '0';
       else refs.dim.value = String(dim);
       if (refs.varietyType.value !== 'product') clearProductDraft();
+      else if (inputIsCreateMode() && currentInputKind() === 'variety') activateProductFactorPick(0, { render: false });
       if (refs.varietyType.value === 'complete-intersection') syncCompleteIntersectionControls();
       updateProductDraftControls();
       normalizeControlVisibility();
       syncDefaultVarietyName();
       syncDefaultSheafName();
+      if (refs.varietyType.value === 'product') renderCanvas(state.lastResult);
     });
     refs.dim.addEventListener('change', () => {
       const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
@@ -2915,6 +2913,15 @@
     state.productDraft = null;
     state.productPickIndex = 0;
     updateProductDraftControls();
+  }
+
+  function activateProductFactorPick(index = 0, options = {}) {
+    if (!productVarietyInputMode()) return false;
+    state.productPickIndex = normalizedInt(index, 0, 1, 0);
+    setCanvasPickEnabled(true, { render: false });
+    updateProductDraftControls();
+    if (options.render !== false) renderCanvas(state.lastResult);
+    return state.canvasPickEnabled;
   }
 
   function updateProductDraftControls() {
