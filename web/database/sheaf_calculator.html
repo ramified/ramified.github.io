@@ -1379,12 +1379,12 @@
           <div class="sheaf-input-add">
             <select id="input-mode" class="sheaf-select sheaf-mode-select" aria-label="Input mode">
               <option value="create" selected>Create</option>
-              <option value="modify">Modify</option>
+              <option value="modify" disabled>Modify</option>
             </select>
             <select id="add-object-kind" class="sheaf-select" aria-label="Object type to add">
               <option value="variety">Variety</option>
-              <option value="sheaf">Sheaf</option>
-              <option value="map">Map</option>
+              <option value="sheaf" disabled>Sheaf</option>
+              <option value="map" disabled>Map</option>
             </select>
             <button class="btn btn-ghost sheaf-object-button" id="add-object" type="button">add</button>
             <button class="btn btn-ghost sheaf-object-button" id="delete-object" type="button">delete</button>
@@ -1556,6 +1556,7 @@
             <label class="input-label" for="map-type">Type</label>
             <select id="map-type" class="sheaf-select">
               <option value="ordinary" selected>Map of varieties</option>
+              <option value="abel-jacobi" id="map-abel-jacobi-option">Abel-Jacobi map</option>
               <option value="composition">Composition of maps</option>
             </select>
           </div>
@@ -1569,6 +1570,14 @@
               <button class="btn btn-ghost sheaf-map-slot-button" id="map-domain-button" type="button" data-map-pick="domain">variety</button>
               <span class="sheaf-map-formula-mark">&rArr;</span>
               <button class="btn btn-ghost sheaf-map-slot-button" id="map-codomain-button" type="button" data-map-pick="codomain">variety</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="map-abel-jacobi-row" hidden>
+            <span class="input-label">source</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="map-abel-jacobi-curve-button" type="button" data-map-pick="curve">curve</button>
+              <span class="sheaf-map-formula-mark">&rArr;</span>
+              <span class="sheaf-map-formula-mark">Jac</span>
             </div>
           </div>
           <div class="sheaf-field-row" id="map-composition-row" hidden>

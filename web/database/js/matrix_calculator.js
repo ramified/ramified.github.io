@@ -765,7 +765,7 @@
   }
 
   function renderMatrixGrid() {
-    refs.grid.style.gridTemplateColumns = `repeat(${state.cols}, minmax(76px, 88px))`;
+    refs.grid.style.gridTemplateColumns = `repeat(${state.cols}, minmax(0, var(--matrix-cell-size)))`;
     refs.grid.innerHTML = '';
     for (let r = 0; r < state.rows; r++) {
       for (let c = 0; c < state.cols; c++) {
@@ -873,12 +873,34 @@
     const raw = String(text ?? '').trim();
     if (!raw || raw === '0') return '0';
     try {
-      const parsed = parseEntry(raw);
-      const neg = parsed.value.neg();
-      return formatComplex(neg, 14).replace(/\s+/g, '');
+      return negateParsedEntryText(raw);
     } catch (_) {
       return raw.startsWith('-') ? raw.slice(1) : `-(${raw})`;
     }
+  }
+
+  function negateParsedEntryText(raw) {
+    const fieldInfo = currentFieldInfo();
+    if (isExactMatrixField(fieldInfo)) return formatScalar(exactScalarFromText(raw, fieldInfo));
+    const parsed = parseEntry(raw);
+    validateEntryType(parsed, fieldInfo);
+    if (currentDataType() === 'rational') {
+      return formatScalar(exactScalarFromDetail(parsed).neg());
+    }
+    return formatComplex(parsed.value.neg(), 14).replace(/\s+/g, '');
+  }
+
+  function exactScalarFromText(raw, fieldInfo = currentFieldInfo()) {
+    if (fieldInfo?.kind === 'finite-field') {
+      return new ModScalar(raw, fieldInfo.p).neg();
+    }
+    if (fieldInfo?.kind === 'rational-function') {
+      return parseRationalFunctionEntry(raw, fieldInfo).scalar.neg();
+    }
+    if (fieldInfo?.kind === 'number-field') {
+      return parseNumberFieldEntry(raw, fieldInfo).scalar.neg();
+    }
+    return exactScalarFromDetail(parseEntry(raw)).neg();
   }
 
   function randomInt(min, max) {

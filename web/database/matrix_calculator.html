@@ -12,6 +12,8 @@
     }
 
     .matrix-editor {
+      --matrix-gap: 7px;
+      --matrix-cell-size: 88px;
       padding: 18px;
       overflow: auto;
       scrollbar-gutter: stable;
@@ -23,15 +25,16 @@
 
     .matrix-grid {
       display: grid;
-      gap: 7px;
-      min-width: max-content;
+      gap: var(--matrix-gap);
+      max-width: 100%;
+      min-width: 0;
       align-items: stretch;
       justify-content: center;
     }
 
     .matrix-cell {
-      width: 88px;
-      min-width: 76px;
+      width: var(--matrix-cell-size);
+      min-width: 0;
       height: 40px;
       border: 1px solid var(--border);
       border-radius: 3px;
@@ -381,10 +384,27 @@
 
     @media (max-width: 980px) {
       .matrix-layout { grid-template-columns: 1fr; }
-      .matrix-cell { width: 82px; }
+      .matrix-editor { --matrix-cell-size: 82px; }
     }
 
     @media (max-width: 560px) {
+      .matrix-editor {
+        --matrix-gap: 5px;
+        --matrix-cell-size: 1fr;
+        min-height: 0;
+        padding: 8px;
+        align-items: flex-start;
+      }
+      .matrix-grid {
+        width: 100%;
+        justify-content: stretch;
+      }
+      .matrix-cell {
+        width: 100%;
+        height: 36px;
+        padding: 5px 4px;
+        font-size: 0.68rem;
+      }
       .matrix-inline-row {
         grid-template-columns: 1fr;
         gap: 4px;

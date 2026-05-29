@@ -10,6 +10,10 @@
   const MAX_EXPLICIT_ROOT_FACTORS = 64;
   const DEFAULT_HOMOLOGY_RULE_PASSES = 1;
   const DEFAULT_VARIETY_SPACING_PX = 110;
+  const DEFAULT_FIRST_VARIETY_X = 0.22;
+  const DEFAULT_FIRST_VARIETY_Y = 0.6;
+  const DEFAULT_FIRST_SHEAF_DX = 0.03;
+  const DEFAULT_FIRST_SHEAF_DY = -0.2;
   const DEFAULT_MAP_LABEL_OFFSET = -18;
   const MIN_MAP_LABEL_OFFSET = -25;
   const MAX_MAP_LABEL_OFFSET = 25;
@@ -46,6 +50,7 @@
   };
   const HOMOLOGY_UNIT_CLASS = 'unit';
   const HOMOLOGY_HYPERPLANE_CLASS = 'hyperplane';
+  const HOMOLOGY_THETA_CLASS = 'theta';
   const HOMOLOGY_POINT_CLASS = 'point';
   const HOMOLOGY_CURVE_A_CLASS_PREFIX = 'curve_a_';
   const HOMOLOGY_CURVE_B_CLASS_PREFIX = 'curve_b_';
@@ -54,6 +59,7 @@
   const HOMOLOGY_PRODUCT_BOX_RULE_PREFIX = 'product-box-';
   const HOMOLOGY_TANGENT_CHERN_CLASS_PREFIX = 'tangent_chern_';
   const HOMOLOGY_TOP_RULE_ID = 'top-hyperplane-point';
+  const HOMOLOGY_THETA_TOP_RULE_ID = 'top-theta-point';
   const HOMOLOGY_POINT_UNIT_RULE_ID = 'point-class-unit';
   const MAX_PRODUCT_BOX_CLASSES = 600;
   const POINT_VARIETY_NAMES = ['\\{*\\}', 'pt', 'p', '\\{p\\}'];
@@ -174,8 +180,11 @@
     refs.mapEditor = $('map-editor');
     refs.mapEditorTitle = $('map-editor-title');
     refs.mapType = $('map-type');
+    refs.mapAbelJacobiOption = $('map-abel-jacobi-option');
     refs.mapName = $('map-name');
     refs.mapEndpointsRow = $('map-endpoints-row');
+    refs.mapAbelJacobiRow = $('map-abel-jacobi-row');
+    refs.mapAbelJacobiCurveButton = $('map-abel-jacobi-curve-button');
     refs.mapCompositionRow = $('map-composition-row');
     refs.mapDomainButton = $('map-domain-button');
     refs.mapCodomainButton = $('map-codomain-button');
@@ -675,6 +684,45 @@
     return 'g';
   }
 
+  function completeIntersectionCurveGenus(geometry) {
+    if (geometry?.type !== 'complete-intersection' || geometry.dim !== 1) return null;
+    const ambient = Number(geometry.ambient);
+    const degrees = Array.isArray(geometry.degrees) ? geometry.degrees : [];
+    if (!Number.isInteger(ambient) || ambient < 1 || degrees.some((degree) => !Number.isInteger(degree) || degree <= 0)) return null;
+    const degreeProduct = degrees.reduce((product, degree) => product * degree, 1);
+    const canonicalDegree = (degrees.reduce((sum, degree) => sum + degree, 0) - ambient - 1) * degreeProduct;
+    const numerator = canonicalDegree + 2;
+    return numerator % 2 === 0 && numerator >= 0 ? numerator / 2 : null;
+  }
+
+  function numericalCurveGenus(geometry) {
+    if (!geometry || geometry.dim !== 1) return null;
+    if (geometry.type === 'curve') {
+      const genus = sanitizeGenusInput(geometry.genus);
+      return /^\d+$/.test(genus) ? Number(genus) : null;
+    }
+    if (geometry.type === 'projective' && geometry.ambient === 1) return 0;
+    if (geometry.type === 'complete-intersection') return completeIntersectionCurveGenus(geometry);
+    return null;
+  }
+
+  function geometryHasNumericalCurveLabel(geometry) {
+    return numericalCurveGenus(geometry) != null;
+  }
+
+  function sheafHasLocallyFreeLabel(sheaf) {
+    if (!sheaf) return false;
+    if (['locally-free', 'tangent', 'cotangent', 'canonical', 'twist'].includes(sheaf.type)) return true;
+    if (!sheaf.construction) return false;
+    if (sheaf.construction.type === 'direct-sum' || sheaf.construction.type === 'tensor') {
+      return (sheaf.construction.sheafIds || [])
+        .map((id) => state.sheaves.find((item) => item.id === id))
+        .every((item) => sheafHasLocallyFreeLabel(item));
+    }
+    return sheaf.construction.type === 'pullback'
+      && sheafHasLocallyFreeLabel(state.sheaves.find((item) => item.id === sheaf.construction.sheafId));
+  }
+
   function varietyHasHyperplaneClass(type) {
     return type === 'projective' || type === 'complete-intersection';
   }
@@ -776,6 +824,48 @@
     return null;
   }
 
+  function canvasHasObjects() {
+    return state.varieties.length > 0 || state.sheaves.length > 0 || state.maps.length > 0;
+  }
+
+  function syncInputAvailabilityControls() {
+    const hasBaseVariety = state.varieties.length > 0;
+    const hasCanvasObjects = canvasHasObjects();
+    ['sheaf', 'map'].forEach((kind) => {
+      const option = refs.addObjectKind?.querySelector?.(`option[value="${kind}"]`);
+      if (option) option.disabled = !hasBaseVariety;
+    });
+    if (refs.addObjectKind && !hasBaseVariety && (refs.addObjectKind.value === 'sheaf' || refs.addObjectKind.value === 'map')) {
+      refs.addObjectKind.value = 'variety';
+    }
+    const modifyOption = refs.inputMode?.querySelector?.('option[value="modify"]');
+    if (modifyOption) modifyOption.disabled = !hasCanvasObjects;
+    if (!hasCanvasObjects && state.inputMode === 'modify') {
+      state.inputMode = 'create';
+    }
+    if (refs.inputMode) refs.inputMode.value = state.inputMode;
+  }
+
+  function numericalCurveVarieties() {
+    return state.varieties.filter((variety) => geometryHasNumericalCurveLabel(geometryFromVariety(variety)));
+  }
+
+  function abelJacobiCurveGenus(geometry) {
+    const genus = numericalCurveGenus(geometry);
+    return Number.isInteger(genus) && genus > 0 && genus < 10 ? genus : null;
+  }
+
+  function abelJacobiCurveVarieties() {
+    return state.varieties.filter((variety) => abelJacobiCurveGenus(geometryFromVariety(variety)) != null);
+  }
+
+  function syncMapTypeOptions() {
+    if (!refs.mapType) return;
+    const canAbelJacobi = abelJacobiCurveVarieties().length > 0;
+    if (refs.mapAbelJacobiOption) refs.mapAbelJacobiOption.disabled = !canAbelJacobi;
+    if (!canAbelJacobi && refs.mapType.value === 'abel-jacobi') refs.mapType.value = 'ordinary';
+  }
+
   function modifyKind() {
     if (state.activeMapId) return 'map';
     return state.activeSheafId ? 'sheaf' : 'variety';
@@ -857,19 +947,18 @@
 
   function positionSheafNearBase(sheaf, baseVariety) {
     if (!sheaf || !baseVariety) return;
-    const baseX = Number.isFinite(baseVariety.labelX) ? baseVariety.labelX : 0.28;
-    const baseY = Number.isFinite(baseVariety.labelY) ? baseVariety.labelY : 0.36;
-    const spacing = canvasSpacingRatio('x');
-    sheaf.labelX = clamp(baseX + Math.min(0.18, spacing * 0.72), 0.08, 0.94);
-    sheaf.labelY = clamp(baseY - 0.16, 0.08, 0.92);
+    const baseX = Number.isFinite(baseVariety.labelX) ? baseVariety.labelX : DEFAULT_FIRST_VARIETY_X;
+    const baseY = Number.isFinite(baseVariety.labelY) ? baseVariety.labelY : DEFAULT_FIRST_VARIETY_Y;
+    sheaf.labelX = clamp(baseX + DEFAULT_FIRST_SHEAF_DX, 0.08, 0.94);
+    sheaf.labelY = clamp(baseY + DEFAULT_FIRST_SHEAF_DY, 0.08, 0.92);
   }
 
   function positionVarietyOnCanvas(variety) {
     if (!variety) return;
     const spacing = canvasSpacingRatio('x');
     const index = state.varieties.length;
-    variety.labelX = clamp(0.22 + index * spacing, 0.08, 0.92);
-    variety.labelY = 0.36;
+    variety.labelX = clamp(DEFAULT_FIRST_VARIETY_X + index * spacing, 0.08, 0.92);
+    variety.labelY = DEFAULT_FIRST_VARIETY_Y;
   }
 
   function avoidCanvasLabelOverlap(object) {
@@ -909,6 +998,7 @@
   }
 
   function syncInputEditorVisibility() {
+    syncInputAvailabilityControls();
     const modifying = inputIsModifyMode();
     const hasModifyTarget = !!activeObjectForModifyMode();
     const showingMap = modifying ? !!state.activeMapId : refs.addObjectKind?.value === 'map';
@@ -1066,12 +1156,17 @@
   }
 
   function setInputMode(mode, options = {}) {
-    state.inputMode = mode === 'modify' ? 'modify' : 'create';
+    state.inputMode = mode === 'modify' && canvasHasObjects() ? 'modify' : 'create';
     if (refs.inputMode) refs.inputMode.value = state.inputMode;
     if (state.inputMode === 'modify' && options.clearSelection) {
       state.activeVarietyId = null;
       state.activeSheafId = null;
       state.activeMapId = null;
+    }
+    if (state.inputMode === 'create') {
+      state.activeSheafId = null;
+      state.activeMapId = null;
+      if (refs.modifyWarning) refs.modifyWarning.hidden = true;
     }
     setCanvasPickEnabled(false, { render: false });
     if (state.inputMode === 'modify') {
@@ -1146,9 +1241,15 @@
 
   function repositionCanvasObjectsForSpacing() {
     state.varieties.forEach((variety, index) => {
-      variety.labelX = clamp(0.22 + index * canvasSpacingRatio('x'), 0.08, 0.92);
+      variety.labelX = clamp(DEFAULT_FIRST_VARIETY_X + index * canvasSpacingRatio('x'), 0.08, 0.92);
+      variety.labelY = DEFAULT_FIRST_VARIETY_Y;
     });
+    repositionDependentCanvasObjects();
+  }
+
+  function repositionDependentCanvasObjects() {
     state.sheaves.forEach((sheaf) => {
+      if (sheaf.labelPositionDirty) return;
       const base = baseVarietyForSheaf(sheaf);
       positionSheafNearBase(sheaf, base);
       avoidCanvasLabelOverlap(sheaf);
@@ -1268,13 +1369,17 @@
   }
 
   function loadMapIntoDraft(map) {
-    if (refs.mapType) refs.mapType.value = map?.construction?.type === 'composition' ? 'composition' : 'ordinary';
+    if (refs.mapType) refs.mapType.value = map?.construction?.type === 'composition'
+      ? 'composition'
+      : (map?.construction?.type === 'abel-jacobi' ? 'abel-jacobi' : 'ordinary');
     state.mapDraft = map
       ? (map.construction?.type === 'composition'
         ? { type: 'composition', mapIds: [...(map.construction.mapIds || []).slice(0, 2)] }
+        : map.construction?.type === 'abel-jacobi'
+          ? { type: 'abel-jacobi', curveId: map.construction.curveId || map.domainId, jacobianId: map.codomainId }
         : { type: 'ordinary', domainKind: map.domainKind, domainId: map.domainId, codomainKind: map.codomainKind, codomainId: map.codomainId })
       : null;
-    state.mapPickTarget = refs.mapType?.value === 'composition' ? 'first' : 'domain';
+    state.mapPickTarget = refs.mapType?.value === 'composition' ? 'first' : (refs.mapType?.value === 'abel-jacobi' ? 'curve' : 'domain');
     if (refs.mapName) refs.mapName.value = map?.name || defaultMapNameLatex();
     syncMapCurveControls(map);
     state.draftMapNameDirty = false;
@@ -1299,6 +1404,7 @@
 
   function currentInputKind() {
     if (inputIsModifyMode()) return modifyKind();
+    if (!state.varieties.length && (refs.addObjectKind?.value === 'sheaf' || refs.addObjectKind?.value === 'map')) return 'variety';
     if (refs.addObjectKind?.value === 'map') return 'map';
     return refs.addObjectKind?.value === 'sheaf' ? 'sheaf' : 'variety';
   }
@@ -1464,6 +1570,7 @@
       refs.mapName.value = defaultCreateMapNameLatex();
       return map;
     }
+    if (abelJacobiMapInputMode()) return createAbelJacobiMapFromDraft();
     const data = ordinaryMapDraftData();
     if (!data) return null;
     const map = createMapObject(
@@ -1578,6 +1685,7 @@
     const active = activeObjectForKind(kind);
     if (!active) return null;
     if (kind === 'map') {
+      if (abelJacobiMapInputMode()) return null;
       return updateMapFromDraft(active);
     }
     if (kind === 'sheaf') {
@@ -1666,6 +1774,7 @@
       });
     }
     refs.addObjectKind.addEventListener('change', () => {
+      syncInputAvailabilityControls();
       state.activeMapId = null;
       if (refs.addObjectKind.value !== 'variety') clearProductDraft();
       clearMapDraft();
@@ -1840,8 +1949,9 @@
     }
     if (refs.mapType) {
       refs.mapType.addEventListener('change', () => {
+        syncMapTypeOptions();
         clearMapDraft();
-        state.mapPickTarget = refs.mapType.value === 'composition' ? 'first' : 'domain';
+        state.mapPickTarget = refs.mapType.value === 'composition' ? 'first' : (refs.mapType.value === 'abel-jacobi' ? 'curve' : 'domain');
         syncDefaultMapName(true);
         normalizeControlVisibility();
         activateFirstCreateBlankPick({ kind: 'map', render: false });
@@ -1947,7 +2057,7 @@
         recompute();
       });
     }
-    [refs.mapDomainButton, refs.mapCodomainButton, refs.mapFirstButton, refs.mapSecondButton].forEach((button) => {
+    [refs.mapDomainButton, refs.mapCodomainButton, refs.mapFirstButton, refs.mapSecondButton, refs.mapAbelJacobiCurveButton].forEach((button) => {
       if (!button) return;
       button.addEventListener('click', () => {
         setMapPickTarget(button.dataset.mapPick || 'domain');
@@ -2231,7 +2341,7 @@
   }
 
   function activeHomologyGeometry() {
-    const variety = activeVariety();
+    const variety = activeHomologyVariety();
     return variety ? geometryFromVariety(variety) : null;
   }
 
@@ -2252,6 +2362,7 @@
   }
 
   function activeHomologyVariety() {
+    if (inputIsModifyMode()) return modifyKind() === 'variety' ? selectedVariety() : null;
     return activeVariety();
   }
 
@@ -2268,6 +2379,19 @@
       ? result.sheaf
       : sheafFromObject(sheafObject, geometry);
     return { sheafObject, sheaf, variety, geometry, result };
+  }
+
+  function activeHomologyContext(result = state.lastResult) {
+    const map = activeHomologyMapContext();
+    if (map) return { kind: 'map', ...map };
+    const sheaf = activeHomologySheafContext(result);
+    if (sheaf) return { kind: 'sheaf', ...sheaf };
+    const variety = activeHomologyVariety();
+    if (!variety) return { kind: 'empty' };
+    const geometry = result?.geometry?.homology && result.geometry.varietyId === variety.id
+      ? result.geometry
+      : geometryFromVariety(variety);
+    return geometry ? { kind: 'variety', variety, geometry, result } : { kind: 'empty' };
   }
 
   function updateHomologySymbol(classId, value) {
@@ -2336,12 +2460,30 @@
 
   function deleteHomologyRule(ruleId) {
     resetHomologyRulePasses();
-    const variety = activeHomologyVariety();
+    const context = activeHomologyContext();
+    if (context.kind === 'map') {
+      if (deleteMapHomologyRuleById(ruleId)) recompute();
+      return;
+    }
+    const variety = context.kind === 'variety' ? context.variety : null;
     if (!variety) return;
     const geometry = geometryFromVariety(variety);
     const homology = ensureHomologySystem(variety, geometry);
     homology.rules = homology.rules.filter((rule) => rule.builtin || rule.id !== ruleId);
     recompute();
+  }
+
+  function deleteMapHomologyRuleById(ruleId) {
+    const context = activeHomologyMapContext();
+    if (!context) return false;
+    let changed = false;
+    [context.domain, context.codomain].forEach((entry) => {
+      const homology = ensureHomologySystem(entry.variety, entry.geometry);
+      const before = homology.rules.length;
+      homology.rules = homology.rules.filter((rule) => rule.builtin || rule.id !== ruleId);
+      if (homology.rules.length !== before) changed = true;
+    });
+    return changed;
   }
 
   function addHomologyClassFromControls() {
@@ -2570,6 +2712,61 @@
     return variety;
   }
 
+  function createJacobianVariety(curve) {
+    const curveGeometry = geometryFromVariety(curve);
+    const genus = abelJacobiCurveGenus(curveGeometry);
+    if (genus == null) return null;
+    const defaultName = defaultJacobianNameFromCurve(curve);
+    const variety = {
+      id: nextInputId('X'),
+      type: 'abelian',
+      dim: String(genus),
+      name: uniqueConstructedObjectName('variety', defaultName),
+      genus: 'g',
+      ciDegrees: '',
+      nameDirty: false,
+      specialLabels: ['jacobian'],
+      construction: {
+        type: 'jacobian',
+        curveId: curve.id,
+        defaultName,
+        nameDirty: false
+      }
+    };
+    ensureThetaClass(variety);
+    syncObjectLineage(variety, 'variety');
+    positionConstructedObjectNear(variety, [curve]);
+    state.varieties.push(variety);
+    return variety;
+  }
+
+  function ensureThetaClass(variety) {
+    if (!variety) return;
+    const homology = variety.homology && typeof variety.homology === 'object' ? variety.homology : {};
+    homology.classes = homology.classes && typeof homology.classes === 'object' ? homology.classes : {};
+    homology.classes[HOMOLOGY_THETA_CLASS] = {
+      ...(homology.classes[HOMOLOGY_THETA_CLASS] || {}),
+      symbol: sanitizeHomologySymbol(homology.classes[HOMOLOGY_THETA_CLASS]?.symbol, '\\Theta')
+    };
+    variety.homology = homology;
+  }
+
+  function confirmCurveSymplecticBasis(curve) {
+    const geometry = geometryFromVariety(curve);
+    const genus = abelJacobiCurveGenus(geometry);
+    if (genus == null || genus === 0) return true;
+    const homology = curve.homology && typeof curve.homology === 'object' ? curve.homology : {};
+    if (homology.symplecticBasisConfirmed) return true;
+    const accepted = typeof window === 'undefined' || typeof window.confirm !== 'function'
+      ? true
+      : window.confirm(`The Abel-Jacobi map needs a symplectic basis a_i,b_i for ${latexToPlain(curve.name)}. Add the ${2 * genus} standard basis classes?`);
+    if (!accepted) return false;
+    homology.symplecticBasisConfirmed = true;
+    curve.homology = homology;
+    geometryFromVariety(curve);
+    return true;
+  }
+
   function createProjectionMapForProduct(product, factor, factorIndex) {
     if (!product || !factor) return null;
     const defaultName = defaultProjectionMapNameFromObjects(product, factor, factorIndex);
@@ -2681,6 +2878,40 @@
     return map;
   }
 
+  function createAbelJacobiMapFromDraft() {
+    const curve = mapDraftAbelJacobiCurve();
+    if (!curve) return null;
+    if (!confirmCurveSymplecticBasis(curve)) return null;
+    const jacobian = createJacobianVariety(curve);
+    if (!jacobian) return null;
+    const defaultName = defaultAbelJacobiMapNameFromCurve(curve);
+    const name = state.draftMapNameDirty
+      ? sanitizeMathLabel(refs.mapName?.value, defaultName)
+      : defaultName;
+    const map = createMapObject(
+      { kind: 'variety', id: curve.id },
+      { kind: 'variety', id: jacobian.id },
+      {
+        name: uniqueConstructedObjectName('map', name),
+        construction: {
+          type: 'abel-jacobi',
+          curveId: curve.id,
+          jacobianId: jacobian.id,
+          defaultName,
+          nameDirty: state.draftMapNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName)
+        }
+      }
+    );
+    if (!map) return null;
+    map.nameDirty = state.draftMapNameDirty || canonicalMathLabel(map.name) !== canonicalMathLabel(defaultName);
+    map.construction.nameDirty = map.nameDirty;
+    syncObjectLineage(map, 'map');
+    ensureAbelJacobiKnownHomologyRules(map);
+    state.draftMapNameDirty = false;
+    refs.mapName.value = defaultCreateMapNameLatex();
+    return map;
+  }
+
   function createMapSheafConstruction(data) {
     const isPullback = data.operation === 'pullback-sheaf';
     const sheaf = {
@@ -2773,6 +3004,14 @@
     return repeatedFactor ? `\\pi_{${factorName},${factorIndex + 1}}` : `\\pi_{${factorName}}`;
   }
 
+  function defaultJacobianNameFromCurve(curve) {
+    return `\\operatorname{Jac}(${sanitizeMathLabel(curve?.name, 'C')})`;
+  }
+
+  function defaultAbelJacobiMapNameFromCurve(curve) {
+    return `\\operatorname{AJ}_{${sanitizeMathLabel(curve?.name, 'C')}}`;
+  }
+
   function mapPullbackOperatorLatex(map) {
     const mapName = sanitizeMathLabel(map?.name, 'f');
     return `${mapName}^{*}`;
@@ -2852,7 +3091,7 @@
     } else if (kind === 'map') {
       state.mapPickTarget = mapCompositionInputMode()
         ? (mapDraftMap('first') ? 'second' : 'first')
-        : (mapDraftEndpointObject('domain') ? 'codomain' : 'domain');
+        : (abelJacobiMapInputMode() ? 'curve' : (mapDraftEndpointObject('domain') ? 'codomain' : 'domain'));
     } else {
       return false;
     }
@@ -3028,6 +3267,10 @@
       refs.mapPickStatus.textContent = mapCompositionPickHint();
       return;
     }
+    if (abelJacobiMapInputMode()) {
+      refs.mapPickStatus.textContent = abelJacobiMapPickHint();
+      return;
+    }
     refs.mapPickStatus.textContent = ordinaryMapPickHint();
   }
 
@@ -3096,13 +3339,18 @@
     return mapInputMode() && refs.mapType?.value === 'composition';
   }
 
+  function abelJacobiMapInputMode() {
+    return mapInputMode() && refs.mapType?.value === 'abel-jacobi';
+  }
+
   function ordinaryMapInputMode() {
-    return mapInputMode() && !mapCompositionInputMode();
+    return mapInputMode() && !mapCompositionInputMode() && !abelJacobiMapInputMode();
   }
 
   function mapPickAvailable() {
     if (!mapInputMode()) return false;
     if (mapCompositionInputMode()) return state.maps.some((map) => allowableMapCompositionPick(map.id));
+    if (abelJacobiMapInputMode()) return numericalCurveVarieties().length > 0;
     return state.varieties.length > 0;
   }
 
@@ -3427,6 +3675,10 @@
       handleMapCompositionPick(kind, id);
       return;
     }
+    if (abelJacobiMapInputMode()) {
+      handleAbelJacobiMapPick(kind, id);
+      return;
+    }
     if (kind !== 'variety' || !state.varieties.some((item) => item.id === id)) return;
     const draft = state.mapDraft?.type === 'ordinary' ? { ...state.mapDraft } : { type: 'ordinary' };
     if (state.mapPickTarget === 'codomain') {
@@ -3464,9 +3716,24 @@
     recompute();
   }
 
+  function handleAbelJacobiMapPick(kind, id) {
+    if (kind !== 'variety' || !allowableAbelJacobiCurvePick(id)) return;
+    state.mapDraft = { type: 'abel-jacobi', curveId: id };
+    setCanvasPickEnabled(false, { render: false });
+    updateMapDraftControls();
+    syncDefaultMapName();
+    recompute();
+  }
+
   function mapDraftMapIds() {
     const ids = state.mapDraft?.type === 'composition' ? (state.mapDraft.mapIds || []) : [];
     return [ids[0] || null, ids[1] || null];
+  }
+
+  function mapDraftAbelJacobiCurve() {
+    const id = state.mapDraft?.type === 'abel-jacobi' ? state.mapDraft.curveId : null;
+    const variety = state.varieties.find((item) => item.id === id);
+    return variety && abelJacobiCurveGenus(geometryFromVariety(variety)) != null ? variety : null;
   }
 
   function mapDraftMap(slot) {
@@ -3479,6 +3746,8 @@
     const composition = mapCompositionInputMode();
     if (composition) {
       state.mapPickTarget = target === 'second' ? 'second' : 'first';
+    } else if (abelJacobiMapInputMode()) {
+      state.mapPickTarget = 'curve';
     } else {
       state.mapPickTarget = target === 'codomain' ? 'codomain' : 'domain';
     }
@@ -3491,13 +3760,16 @@
   function updateMapDraftControls() {
     const show = mapInputMode();
     const composition = mapCompositionInputMode();
-    if (refs.mapEndpointsRow) refs.mapEndpointsRow.hidden = !show || composition;
+    const abelJacobi = abelJacobiMapInputMode();
+    if (refs.mapEndpointsRow) refs.mapEndpointsRow.hidden = !show || composition || abelJacobi;
+    if (refs.mapAbelJacobiRow) refs.mapAbelJacobiRow.hidden = !show || !abelJacobi;
     if (refs.mapCompositionRow) refs.mapCompositionRow.hidden = !show || !composition;
     if (refs.resetMapPick) refs.resetMapPick.hidden = !show;
     updateMapSlotButton(refs.mapDomainButton, mapDraftEndpointObject('domain'), 'domain');
     updateMapSlotButton(refs.mapCodomainButton, mapDraftEndpointObject('codomain'), 'codomain');
     updateMapSlotButton(refs.mapFirstButton, mapDraftMap('first'), 'first');
     updateMapSlotButton(refs.mapSecondButton, mapDraftMap('second'), 'second');
+    updateMapSlotButton(refs.mapAbelJacobiCurveButton, mapDraftAbelJacobiCurve(), 'curve');
     updateMapPickStatus();
     syncGlobalPickButton();
   }
@@ -3506,7 +3778,8 @@
     if (!button) return;
     button.setAttribute('aria-pressed', state.canvasPickEnabled && mapInputMode() && state.mapPickTarget === target ? 'true' : 'false');
     const isMapSlot = target === 'first' || target === 'second';
-    const fallback = isMapSlot ? 'map' : 'variety';
+    const isCurveSlot = target === 'curve';
+    const fallback = isMapSlot ? 'map' : (isCurveSlot ? 'curve' : 'variety');
     const label = object ? objectPlainLabel(isMapSlot ? 'map' : 'variety', object.id) : fallback;
     button.textContent = label;
     button.title = object ? `Replace ${label}` : `Pick a ${fallback} on the canvas`;
@@ -3537,6 +3810,12 @@
     return inputIsModifyMode() ? 'click update to rebuild the map' : 'click add to create the map';
   }
 
+  function abelJacobiMapPickHint() {
+    if (!abelJacobiCurveVarieties().length) return 'add a curve with positive numerical genus below 10 first';
+    if (!mapDraftAbelJacobiCurve()) return 'click the source curve';
+    return inputIsModifyMode() ? 'Abel-Jacobi maps are rebuilt from the source curve' : 'click add to create the Abel-Jacobi map';
+  }
+
   function allowableMapCompositionPick(mapId, target = state.mapPickTarget) {
     const map = state.maps.find((item) => item.id === mapId);
     if (!map || (inputIsModifyMode() && map.id === state.activeMapId)) return false;
@@ -3545,6 +3824,11 @@
     return target === 'second'
       ? other.codomainKind === map.domainKind && other.codomainId === map.domainId
       : map.codomainKind === other.domainKind && map.codomainId === other.domainId;
+  }
+
+  function allowableAbelJacobiCurvePick(varietyId) {
+    const variety = state.varieties.find((item) => item.id === varietyId);
+    return !!variety && abelJacobiCurveGenus(geometryFromVariety(variety)) != null;
   }
 
   function createMapObject(domain, codomain, options = {}) {
@@ -3849,6 +4133,10 @@
       const data = mapCompositionConstructionData();
       if (data?.defaultName) return data.defaultName;
     }
+    if (refs.mapType?.value === 'abel-jacobi') {
+      const curve = mapDraftAbelJacobiCurve() || abelJacobiCurveVarieties()[0];
+      return defaultAbelJacobiMapNameFromCurve(curve);
+    }
     return 'f';
   }
 
@@ -3949,6 +4237,12 @@
         subobjects: []
       };
     }
+    if (kind === 'variety' && construction.type === 'jacobian') {
+      return {
+        parents: [parent('variety', construction.curveId, 'curve')].filter((item) => item.id),
+        subobjects: []
+      };
+    }
     if (kind === 'sheaf' && (construction.type === 'direct-sum' || construction.type === 'tensor')) {
       return {
         parents: (construction.sheafIds || []).map((id, index) => parent('sheaf', id, index === 0 ? 'left-summand' : 'right-summand')),
@@ -3989,6 +4283,18 @@
         ].filter(Boolean)
       };
     }
+    if (kind === 'map' && construction.type === 'abel-jacobi') {
+      return {
+        parents: [
+          parent('variety', construction.curveId, 'curve'),
+          parent('variety', construction.jacobianId, 'jacobian')
+        ].filter((item) => item.id),
+        subobjects: [
+          object.domainId ? parent(object.domainKind, object.domainId, 'domain') : null,
+          object.codomainId ? parent(object.codomainKind, object.codomainId, 'codomain') : null
+        ].filter(Boolean)
+      };
+    }
     return { parents: [], subobjects: [] };
   }
 
@@ -4002,6 +4308,7 @@
 
   function refreshConstructedVariety(variety) {
     const construction = variety?.construction;
+    if (construction?.type === 'jacobian') return refreshJacobianVariety(variety, construction);
     if (construction?.type !== 'product') return false;
     const [left, right] = (construction.varietyIds || []).map((id) => state.varieties.find((item) => item.id === id));
     if (!left || !right) return false;
@@ -4029,6 +4336,49 @@
       positionProductVarietyLabel(variety, left, right);
       if (variety.labelX !== oldX || variety.labelY !== oldY) changed = true;
     }
+    if (syncObjectLineage(variety, 'variety')) changed = true;
+    return changed;
+  }
+
+  function refreshJacobianVariety(variety, construction) {
+    const curve = state.varieties.find((item) => item.id === construction.curveId);
+    if (!curve) return false;
+    const curveGeometry = geometryFromVariety(curve);
+    const genus = numericalCurveGenus(curveGeometry);
+    if (genus == null) return false;
+    const oldDefault = construction.defaultName || defaultJacobianNameFromCurve(curve);
+    const nextDefault = defaultJacobianNameFromCurve(curve);
+    let changed = false;
+    if (variety.type !== 'abelian') {
+      variety.type = 'abelian';
+      changed = true;
+    }
+    if (String(variety.dim) !== String(genus)) {
+      variety.dim = String(genus);
+      changed = true;
+    }
+    const nameDirty = variety.nameDirty || construction.nameDirty;
+    if (!nameDirty && canonicalMathLabel(variety.name) === canonicalMathLabel(oldDefault) && canonicalMathLabel(variety.name) !== canonicalMathLabel(nextDefault)) {
+      variety.name = nextDefault;
+      changed = true;
+    }
+    if (variety.nameDirty !== !!nameDirty) {
+      variety.nameDirty = !!nameDirty;
+      changed = true;
+    }
+    if (construction.nameDirty !== !!nameDirty) {
+      construction.nameDirty = !!nameDirty;
+      changed = true;
+    }
+    if (construction.defaultName !== nextDefault) {
+      construction.defaultName = nextDefault;
+      changed = true;
+    }
+    if (!variety.specialLabels?.includes('jacobian')) {
+      variety.specialLabels = [...(variety.specialLabels || []), 'jacobian'];
+      changed = true;
+    }
+    ensureThetaClass(variety);
     if (syncObjectLineage(variety, 'variety')) changed = true;
     return changed;
   }
@@ -4103,6 +4453,7 @@
   function refreshConstructedMap(map) {
     const construction = map?.construction;
     if (construction?.type === 'projection') return refreshProjectionMap(map, construction);
+    if (construction?.type === 'abel-jacobi') return refreshAbelJacobiMap(map, construction);
     if (construction?.type !== 'composition') return false;
     const [first, second] = (construction.mapIds || []).map((id) => state.maps.find((item) => item.id === id));
     if (!first || !second) return false;
@@ -4114,6 +4465,45 @@
       map.domainId = first.domainId;
       map.codomainKind = second.codomainKind;
       map.codomainId = second.codomainId;
+      map.curve = null;
+      changed = true;
+    }
+    const nameDirty = map.nameDirty || construction.nameDirty;
+    if (!nameDirty && canonicalMathLabel(map.name) === canonicalMathLabel(oldDefault) && canonicalMathLabel(map.name) !== canonicalMathLabel(nextDefault)) {
+      map.name = nextDefault;
+      changed = true;
+    }
+    if (map.nameDirty !== !!nameDirty) {
+      map.nameDirty = !!nameDirty;
+      changed = true;
+    }
+    if (construction.nameDirty !== !!nameDirty) {
+      construction.nameDirty = !!nameDirty;
+      changed = true;
+    }
+    if (construction.defaultName !== nextDefault) {
+      construction.defaultName = nextDefault;
+      changed = true;
+    }
+    if (ensureAbelJacobiKnownHomologyRules(map)) changed = true;
+    if (syncObjectLineage(map, 'map')) changed = true;
+    return changed;
+  }
+
+  function refreshAbelJacobiMap(map, construction) {
+    const curve = state.varieties.find((item) => item.id === construction.curveId);
+    const jacobian = state.varieties.find((item) => item.id === construction.jacobianId);
+    if (!curve || !jacobian) return false;
+    const genus = abelJacobiCurveGenus(geometryFromVariety(curve));
+    if (genus == null) return false;
+    const oldDefault = construction.defaultName || defaultAbelJacobiMapNameFromCurve(curve);
+    const nextDefault = defaultAbelJacobiMapNameFromCurve(curve);
+    let changed = false;
+    if (map.domainKind !== 'variety' || map.domainId !== curve.id || map.codomainKind !== 'variety' || map.codomainId !== jacobian.id) {
+      map.domainKind = 'variety';
+      map.domainId = curve.id;
+      map.codomainKind = 'variety';
+      map.codomainId = jacobian.id;
       map.curve = null;
       changed = true;
     }
@@ -4182,7 +4572,7 @@
       normalizeControlVisibility();
       VARS.clear();
       const chosenSheaf = inputIsModifyMode() ? selectedSheaf() : null;
-      const chosenVariety = inputIsModifyMode() ? selectedVariety() : null;
+      const chosenVariety = inputIsModifyMode() && modifyKind() === 'variety' ? selectedVariety() : null;
       const baseVariety = chosenSheaf ? baseVarietyForSheaf(chosenSheaf) : chosenVariety;
       const geometry = baseVariety ? geometryFromVariety(baseVariety) : null;
       const sheaf = chosenSheaf && geometry ? sheafFromObject(chosenSheaf, geometry) : null;
@@ -4255,6 +4645,8 @@
   }
 
   function normalizeControlVisibility() {
+    syncInputAvailabilityControls();
+    syncMapTypeOptions();
     syncSheafBaseOptions();
     const hasVariety = state.varieties.length > 0;
     const hasSheaf = !!activeSheaf();
@@ -4361,9 +4753,11 @@
     updateSheafBaseButton();
     if (refs.addObject) {
       const canAddSheaf = !draftingSheaf || creatingSheafMapOperation || creatingSheafBinary || !!draftBase;
-      const hasEditableObject = !inputIsModifyMode() || !!activeObjectForKind(currentInputKind());
+    const hasEditableObject = !inputIsModifyMode() || !!activeObjectForKind(currentInputKind());
       const creatingMap = draftingMap && inputIsCreateMode();
-      const mapReady = !draftingMap || !!(mapCompositionInputMode() ? mapCompositionConstructionData() : ordinaryMapDraftData());
+      const mapReady = !draftingMap || !!(mapCompositionInputMode()
+        ? mapCompositionConstructionData()
+        : (abelJacobiMapInputMode() ? mapDraftAbelJacobiCurve() : ordinaryMapDraftData()));
       const creatingProduct = showProduct;
       const updatingProduct = editingProduct && selectedVariety()?.construction?.type === 'product';
       const creatingSheaf = draftingSheaf && inputIsCreateMode();
@@ -4376,7 +4770,7 @@
       refs.addObject.disabled = (draftingMap && !mapReady) || (productNeedsFactors && !productReady) || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || (creatingSheaf && !(creatingSheafMapOperation || creatingSheafBinary) && waitingForSheafBase) || (creatingSheaf && !(creatingSheafBinary || creatingSheafMapOperation) && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
       refs.addObject.textContent = inputIsModifyMode() ? 'update' : 'add';
       refs.addObject.title = creatingMap
-        ? (mapCompositionInputMode() ? mapCompositionPickHint() : ordinaryMapPickHint())
+        ? (mapCompositionInputMode() ? mapCompositionPickHint() : (abelJacobiMapInputMode() ? abelJacobiMapPickHint() : ordinaryMapPickHint()))
         : (productNeedsFactors ? (productFactors.length === 2 && productDim > MAX_DIMENSION ? `Product dimension ${productDim} exceeds the calculator limit ${MAX_DIMENSION}` : 'Pick two varieties on the canvas') : ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady ? sheafMapPickHint() : ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady ? sheafBinaryPickHint() : (creatingSheaf && !(creatingSheafMapOperation || creatingSheafBinary) && waitingForSheafBase ? (hasVariety ? 'Pick a base variety on the canvas first' : 'Add a variety first') : (draftingSheaf && !(creatingSheafMapOperation || creatingSheafBinary) && !draftBase ? 'Add a base variety first' : '')))));
     }
     updateMapPickStatus();
@@ -4458,6 +4852,7 @@
       const dim = normalizedInt(variety.dim, 0, MAX_DIMENSION, 2);
       const labelLatex = sanitizeMathLabel(variety.name, 'A');
       Object.assign(variety, { dim: String(dim), name: labelLatex });
+      const isJacobian = variety.construction?.type === 'jacobian' || variety.specialLabels?.includes('jacobian');
       const geometry = {
         type,
         dim,
@@ -4467,7 +4862,8 @@
         labelLatex,
         labelPlain: latexToPlain(labelLatex),
         ambientLatex: 'abelian',
-        ambientPlain: 'abelian'
+        ambientPlain: 'abelian',
+        ...(isJacobian ? { specialLabels: ['jacobian'] } : {})
       };
       return attachHomologyToGeometry(variety, geometry);
     }
@@ -4525,7 +4921,18 @@
   }
 
   function attachHomologyToGeometry(variety, geometry) {
-    const scopedGeometry = { ...geometry, varietyId: variety?.id || null };
+    const genus = numericalCurveGenus(geometry);
+    const specialLabels = [
+      ...(Array.isArray(geometry.specialLabels) ? geometry.specialLabels : []),
+      ...(genus != null ? ['curve', 'numerical-curve'] : [])
+    ].filter((label, index, all) => label && all.indexOf(label) === index);
+    const scopedGeometry = {
+      ...geometry,
+      ...(genus != null ? { curveGenus: genus } : {}),
+      specialLabels,
+      varietyId: variety?.id || null
+    };
+    if (variety) variety.specialLabels = specialLabels;
     const homology = ensureHomologySystem(variety, scopedGeometry);
     return { ...scopedGeometry, homology };
   }
@@ -4659,6 +5066,17 @@
         geometry
       )
     ];
+    if (geometryHasThetaClass(geometry)) {
+      defs.push(homologyClassDefinition(
+        HOMOLOGY_THETA_CLASS,
+        1,
+        '\\Theta',
+        'theta divisor',
+        homology,
+        '\\Theta',
+        geometry
+      ));
+    }
     if (varietyHasHyperplaneClass(geometry.type)) {
       defs.push(homologyClassDefinition(
         HOMOLOGY_HYPERPLANE_CLASS,
@@ -4910,16 +5328,13 @@
   }
 
   function isReservedHomologyClassId(id) {
-    return [HOMOLOGY_UNIT_CLASS, HOMOLOGY_HYPERPLANE_CLASS, HOMOLOGY_POINT_CLASS].includes(id)
+    return [HOMOLOGY_UNIT_CLASS, HOMOLOGY_HYPERPLANE_CLASS, HOMOLOGY_THETA_CLASS, HOMOLOGY_POINT_CLASS].includes(id)
       || isCurveSymplecticClassId(id)
       || String(id || '').startsWith(HOMOLOGY_PRODUCT_BOX_CLASS_PREFIX);
   }
 
   function curveSmallNumericGenus(geometry) {
-    if (geometry?.type !== 'curve') return null;
-    const genus = sanitizeGenusInput(geometry.genus);
-    if (!/^\d+$/.test(genus)) return null;
-    const value = Number(genus);
+    const value = numericalCurveGenus(geometry);
     return Number.isInteger(value) && value > 0 && value < 10 ? value : null;
   }
 
@@ -4943,6 +5358,10 @@
   function curveSymplecticClassId(kind, index) {
     const prefix = kind === 'b' ? HOMOLOGY_CURVE_B_CLASS_PREFIX : HOMOLOGY_CURVE_A_CLASS_PREFIX;
     return `${prefix}${index}`;
+  }
+
+  function geometryHasThetaClass(geometry) {
+    return geometry?.specialLabels?.includes('jacobian') || geometry?.specialLabels?.includes('theta-divisor');
   }
 
   function isCurveSymplecticClassId(id) {
@@ -5416,6 +5835,7 @@
   function standardHomologyRules(geometry, existingRules = new Map()) {
     return [
       standardHomologyTopRule(geometry, existingRules.get(HOMOLOGY_TOP_RULE_ID)),
+      standardThetaTopRule(geometry, existingRules.get(HOMOLOGY_THETA_TOP_RULE_ID)),
       standardPointHomologyUnitRule(geometry, existingRules.get(HOMOLOGY_POINT_UNIT_RULE_ID)),
       ...standardCurveSymplecticRules(geometry, existingRules),
       ...standardProductBoxRules(geometry, existingRules)
@@ -5425,6 +5845,7 @@
   function isStandardHomologyRuleId(id) {
     const text = String(id || '');
     return text === HOMOLOGY_TOP_RULE_ID
+      || text === HOMOLOGY_THETA_TOP_RULE_ID
       || text === HOMOLOGY_POINT_UNIT_RULE_ID
       || text.startsWith(HOMOLOGY_CURVE_SYMPLECTIC_RULE_PREFIX)
       || text.startsWith(HOMOLOGY_PRODUCT_BOX_RULE_PREFIX);
@@ -5441,6 +5862,22 @@
       rhs: [
         {
           coefficient: degreeProduct.toString(),
+          powers: { [homologyVariableId(HOMOLOGY_POINT_CLASS, geometry)]: 1 }
+        }
+      ]
+    };
+  }
+
+  function standardThetaTopRule(geometry, existingRule = null) {
+    if (!geometryHasThetaClass(geometry) || !Number.isInteger(geometry.dim) || geometry.dim <= 0) return null;
+    return {
+      id: HOMOLOGY_THETA_TOP_RULE_ID,
+      builtin: true,
+      enabled: existingRule ? existingRule.enabled !== false : true,
+      lhs: { powers: { [homologyVariableId(HOMOLOGY_THETA_CLASS, geometry)]: geometry.dim } },
+      rhs: [
+        {
+          coefficient: factorialBigInt(geometry.dim).toString(),
           powers: { [homologyVariableId(HOMOLOGY_POINT_CLASS, geometry)]: 1 }
         }
       ]
@@ -5557,7 +5994,8 @@
     if (!lhsPowers || !rhsTerms) return null;
     const normalized = {
       id: rule.id || nextInputId('R'),
-      builtin: false,
+      builtin: !!rule.builtin,
+      ...(rule.automatic ? { automatic: rule.automatic } : {}),
       enabled: rule.enabled !== false,
       lhs: { powers: lhsPowers },
       rhs: rhsTerms
@@ -5833,7 +6271,8 @@
     const rankPlain = sanitizeRankInput(sheaf.rank);
     const baseVariety = baseVarietyForSheaf(sheaf);
     const labelLatex = sanitizeMathLabel(sheaf.name, defaultSheafNameFor(type, rankPlain, twist, geometry?.labelLatex || 'X'));
-    Object.assign(sheaf, { twist: String(twist), basis, rank: rankPlain, name: labelLatex, baseVarietyId: baseVariety?.id || sheaf.baseVarietyId || null });
+    const specialLabels = sheafHasLocallyFreeLabel(sheaf) ? ['locally-free'] : [];
+    Object.assign(sheaf, { twist: String(twist), basis, rank: rankPlain, name: labelLatex, baseVarietyId: baseVariety?.id || sheaf.baseVarietyId || null, specialLabels });
     return {
       type,
       twist,
@@ -5843,6 +6282,7 @@
       rankLatex: symbolToLatex(rankPlain),
       labelLatex,
       labelPlain: latexToPlain(labelLatex),
+      specialLabels,
       construction: sheaf.construction || null,
       sourceObject: sheaf
     };
@@ -5959,7 +6399,7 @@
     const type = refs.sheafType.value;
     const twist = normalizedInt(refs.twist.value, -24, 24, 1);
     let basis = normalizeBasisValue(refs.basis.value);
-    if (basis === 'roots' && type !== 'abstract' && type !== 'locally-free') basis = 'chern';
+    if (basis === 'roots' && type !== 'abstract' && !sheafHasLocallyFreeLabel({ type })) basis = 'chern';
     const rankPlain = sanitizeRankInput(refs.rank.value);
     refs.rank.value = rankPlain;
     const labelLatex = sanitizeMathLabel(refs.sheafName.value, defaultSheafNameLatex());
@@ -6067,6 +6507,9 @@
     if (sheaf.construction) return buildConstructedSheafBundle(geometry, sheaf, options);
     if (sheaf.type === 'locally-free') return buildLocallyFreeBundle(d, sheaf, options);
     if (sheaf.type === 'abstract') return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
+    if (geometryHasNumericalCurveLabel(geometry) && (sheaf.type === 'tangent' || sheaf.type === 'cotangent' || sheaf.type === 'canonical')) {
+      return buildCurveLineBundle(geometry, sheaf, sheaf.type);
+    }
     if (geometry.type === 'abstract' || geometry.type === 'curve' || geometry.type === 'abelian' || geometry.type === 'point') return buildAbstractGeometrySheaf(geometry, sheaf, options);
     return buildEmbeddedGeometrySheaf(geometry, sheaf, options);
   }
@@ -6640,11 +7083,15 @@
     const projectionPushforwardRules = state.maps
       .filter((map) => map.domainKind === 'variety' && map.codomainKind === 'variety' && map.codomainId === geometry.varietyId)
       .flatMap((map) => defaultProjectionPushforwardRules(map, geometry));
+    const abelJacobiPullbackRules = state.maps
+      .filter((map) => map.domainKind === 'variety' && map.codomainKind === 'variety' && map.domainId === geometry.varietyId)
+      .flatMap((map) => defaultAbelJacobiPullbackRules(map, geometry));
     return uniqueHomologyRulesByLhs([
       ...pullbackRules,
       ...projectionPullbackRules,
       ...pointPushforwardRules,
-      ...projectionPushforwardRules
+      ...projectionPushforwardRules,
+      ...abelJacobiPullbackRules
     ].filter(Boolean));
   }
 
@@ -6766,6 +7213,46 @@
     };
   }
 
+  function defaultAbelJacobiPullbackRules(map, curveGeometry = geometryByVarietyId(map?.domainId)) {
+    const context = abelJacobiMapContext(map);
+    if (!context || context.curveGeometry.varietyId !== curveGeometry?.varietyId) return [];
+    const thetaDef = homologyClassDefById(context.jacobianGeometry, HOMOLOGY_THETA_CLASS);
+    const pointDef = homologyClassDefById(context.curveGeometry, HOMOLOGY_POINT_CLASS);
+    const genus = numericalCurveGenus(context.curveGeometry);
+    if (!thetaDef || !pointDef || genus == null) return [];
+    const targetDef = mapOperationHomologyClassDefinition(map, 'pullback', thetaDef, context.curveGeometry);
+    if (!targetDef) return [];
+    return [{
+      id: `default-abel-jacobi-theta-pullback-${map.id}`,
+      builtin: true,
+      enabled: true,
+      lhs: { powers: { [homologyDefVariableId(targetDef, context.curveGeometry)]: 1 } },
+      rhs: [{ coefficient: String(genus), powers: { [homologyDefVariableId(pointDef, context.curveGeometry)]: 1 } }]
+    }];
+  }
+
+  function ensureAbelJacobiKnownHomologyRules(map) {
+    const context = abelJacobiMapContext(map);
+    if (!context) return false;
+    const rules = defaultAbelJacobiPullbackRules(map, context.curveGeometry);
+    if (!rules.length) return false;
+    const homology = ensureHomologySystem(context.curve, context.curveGeometry);
+    let changed = false;
+    rules.forEach((rule) => {
+      const variableId = Object.keys(rule.lhs?.powers || {})[0];
+      if (!variableId) return;
+      const existing = mapHomologyRuleForVariable(homology.rules, variableId, { includeBuiltin: true });
+      if (existing && !existing.builtin && existing.automatic !== 'abel-jacobi') return;
+      const stored = { ...rule, builtin: true, automatic: 'abel-jacobi' };
+      if (!existing || serializeHomologyRuleTerms(existing.rhs || []) !== serializeHomologyRuleTerms(stored.rhs || []) || existing.enabled === false) {
+        homology.rules = withoutHomologyRuleForVariable(homology.rules, variableId, { includeBuiltin: true });
+        homology.rules.push(stored);
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
   function projectionPushforwardProductBoxRhs(context, productBox) {
     const keptKey = context.factorIndex === 0 ? productBox.leftKey : productBox.rightKey;
     const fiberKey = context.factorIndex === 0 ? productBox.rightKey : productBox.leftKey;
@@ -6834,6 +7321,17 @@
       factorIndex,
       productContext
     };
+  }
+
+  function abelJacobiMapContext(map) {
+    if (!map || map.construction?.type !== 'abel-jacobi' || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return null;
+    const curve = state.varieties.find((item) => item.id === (map.construction.curveId || map.domainId));
+    const jacobian = state.varieties.find((item) => item.id === (map.construction.jacobianId || map.codomainId));
+    if (!curve || !jacobian) return null;
+    const curveGeometry = geometryFromVariety(curve);
+    const jacobianGeometry = geometryFromVariety(jacobian);
+    if (!geometryHasNumericalCurveLabel(curveGeometry) || !geometryHasThetaClass(jacobianGeometry)) return null;
+    return { map, curve, jacobian, curveGeometry, jacobianGeometry };
   }
 
   function uniqueHomologyRulesByLhs(rules) {
@@ -7456,6 +7954,8 @@
   }
 
   function curveTangentFirstChern(geometry, point) {
+    const numericalGenus = numericalCurveGenus(geometry);
+    if (numericalGenus != null) return point.scale(fraction(2 - 2 * numericalGenus));
     const genus = sanitizeGenusInput(geometry.genus);
     if (/^\d+$/.test(genus)) return point.scale(fraction(2 - 2 * Number(genus)));
     defineVariable('curveGenus', 0, 'g');
@@ -7732,6 +8232,22 @@
     }
     if (geometry.type === 'abelian') {
       return buildAbelianHodgeNumbers(geometry);
+    }
+    if (geometryHasNumericalCurveLabel(geometry)) {
+      const genus = String(numericalCurveGenus(geometry));
+      return {
+        entries: [
+          [
+            { latex: '1', plain: '1' },
+            { latex: genus, plain: genus }
+          ],
+          [
+            { latex: genus, plain: genus },
+            { latex: '1', plain: '1' }
+          ]
+        ],
+        message: `Curve Hodge numbers with genus ${genus}.`
+      };
     }
     if (geometry.type === 'product' && Array.isArray(geometry.productFactors) && geometry.productFactors.length === 2) {
       const left = buildHodgeNumbers(geometry.productFactors[0]);
@@ -8524,45 +9040,37 @@
 
   function renderHomologyPanel(result = state.lastResult) {
     if (!refs.homologyCard) return;
-    const mapContext = activeHomologyMapContext();
-    if (mapContext) {
-      renderMapHomologyPanel(mapContext);
-      return;
-    }
-    const sheafContext = activeHomologySheafContext(result);
-    if (sheafContext) {
-      renderSheafHomologyPanel(sheafContext);
-      return;
-    }
-    const variety = activeHomologyVariety();
-    if (!variety) {
-      if (refs.homologyActive) refs.homologyActive.textContent = 'Add a variety.';
-      hideMapHomologyTools();
-      if (refs.homologyHyperplaneRow) refs.homologyHyperplaneRow.hidden = true;
-      if (refs.homologyPointRow) refs.homologyPointRow.hidden = true;
-      if (refs.homologySymbols) {
-        refs.homologySymbols.hidden = true;
-        refs.homologySymbols.innerHTML = '';
-      }
-      if (refs.homologyRules) {
-        refs.homologyRules.hidden = true;
-        refs.homologyRules.innerHTML = '';
-      }
-      if (refs.homologyAddClass) refs.homologyAddClass.hidden = true;
-      if (refs.homologyAddRule) refs.homologyAddRule.hidden = true;
-      if (refs.homologyMessage) refs.homologyMessage.textContent = '';
-      return;
-    }
+    const context = activeHomologyContext(result);
+    if (context.kind === 'map') return renderMapHomologyPanel(context);
+    if (context.kind === 'sheaf') return renderSheafHomologyPanel(context);
+    if (context.kind === 'empty') return renderEmptyHomologyPanel();
+    return renderVarietyHomologyPanel(context);
+  }
 
-    const geometry = result?.geometry?.homology && result.geometry.varietyId === variety.id
-      ? result.geometry
-      : geometryFromVariety(variety);
+  function renderEmptyHomologyPanel() {
+    if (refs.homologyActive) refs.homologyActive.textContent = 'Add a variety.';
+    hideMapHomologyTools();
+    if (refs.homologyHyperplaneRow) refs.homologyHyperplaneRow.hidden = true;
+    if (refs.homologyPointRow) refs.homologyPointRow.hidden = true;
+    if (refs.homologySymbols) {
+      refs.homologySymbols.hidden = true;
+      refs.homologySymbols.innerHTML = '';
+    }
+    if (refs.homologyRules) {
+      refs.homologyRules.hidden = true;
+      refs.homologyRules.innerHTML = '';
+    }
+    if (refs.homologyAddClass) refs.homologyAddClass.hidden = true;
+    if (refs.homologyAddRule) refs.homologyAddRule.hidden = true;
+    if (refs.homologyMessage) refs.homologyMessage.textContent = '';
+  }
+
+  function renderVarietyHomologyPanel(context) {
+    const { geometry } = context;
     const defs = homologyClassDefinitions(geometry);
-    const mapMode = false;
-    const shownDefs = mapMode ? defs.filter((def) => parseMapHomologyClassId(def.id)) : defs;
     const baseDefs = baseHomologyClassDefinitions(geometry);
-    const hyperplane = mapMode ? null : baseDefs.find((def) => def.id === HOMOLOGY_HYPERPLANE_CLASS);
-    const point = mapMode ? null : baseDefs.find((def) => def.id === HOMOLOGY_POINT_CLASS);
+    const hyperplane = baseDefs.find((def) => def.id === HOMOLOGY_HYPERPLANE_CLASS);
+    const point = baseDefs.find((def) => def.id === HOMOLOGY_POINT_CLASS);
 
     if (refs.homologyActive) setInlineMath(refs.homologyActive, homologyActiveLatex(geometry));
     hideMapHomologyTools();
@@ -8572,10 +9080,10 @@
     if (refs.homologyPointRow) refs.homologyPointRow.hidden = !point;
     if (refs.homologyPointSymbol && point) refs.homologyPointSymbol.value = point.symbolLatex;
 
-    renderHomologySymbols(geometry, shownDefs, { mapMode });
-    renderHomologyRules(geometry, mapMode ? shownDefs : defs, { mapMode });
-    renderHomologyClassCreator(geometry, { mapMode });
-    renderHomologyRuleCreator(geometry, mapMode ? shownDefs : defs, { mapMode });
+    renderHomologySymbols(geometry, defs);
+    renderHomologyRules(geometry, defs);
+    renderHomologyClassCreator(geometry);
+    renderHomologyRuleCreator(geometry, defs);
     if (refs.homologyMessage) refs.homologyMessage.textContent = '';
     typeset(refs.homologyCard);
   }
@@ -8603,8 +9111,18 @@
     if (refs.homologyAddClass) refs.homologyAddClass.hidden = true;
     if (refs.homologyAddRule) refs.homologyAddRule.hidden = true;
     renderMapHomologyRuleInputs(relationDefs);
-    if (refs.homologyMessage) refs.homologyMessage.textContent = '';
+    if (refs.homologyMessage) refs.homologyMessage.textContent = abelJacobiHomologyMessage(context);
     typeset(refs.homologyCard);
+  }
+
+  function abelJacobiHomologyMessage(context) {
+    const aj = abelJacobiMapContext(context?.map);
+    if (!aj) return '';
+    const genus = numericalCurveGenus(aj.curveGeometry);
+    const hasSymplecticBasis = genus === 0 || !!aj.curve.homology?.symplecticBasisConfirmed;
+    return hasSymplecticBasis
+      ? 'Abel-Jacobi defaults include theta on the Jacobian and the symplectic basis on the curve.'
+      : 'Add a numerical genus to the curve so the symplectic basis can be added.';
   }
 
   function renderSheafHomologyPanel(context) {
@@ -8793,13 +9311,9 @@
     return Object.values(parseMonoKey(mono?.key || '')).reduce((sum, exp) => sum + exp, 0);
   }
 
-  function renderHomologySymbols(geometry, defs, options = {}) {
+  function renderHomologySymbols(geometry, defs) {
     if (!refs.homologySymbols) return;
-    refs.homologySymbols.hidden = options.mapMode || defs.length === 0;
-    if (options.mapMode) {
-      refs.homologySymbols.innerHTML = '';
-      return;
-    }
+    refs.homologySymbols.hidden = defs.length === 0;
     refs.homologySymbols.innerHTML = defs.map((def) => `
       <div class="homology-symbol-row ${def.kind === 'custom' ? 'homology-custom-class-row' : ''}">
         ${def.kind === 'custom' ? `
@@ -8814,12 +9328,8 @@
     `).join('');
   }
 
-  function renderHomologyRules(geometry, defs, options = {}) {
+  function renderHomologyRules(geometry, defs) {
     if (!refs.homologyRules) return;
-    if (options.mapMode) {
-      renderMapHomologyRuleInputs(geometry, defs);
-      return;
-    }
     const available = new Set(defs.flatMap((def) => [...homologyDefVariableIds(def, geometry)]));
     const rules = (geometry.homology?.rules || []).filter((rule) => (
       homologyRulePreservesDegree(rule, defs, { geometry })
@@ -8840,7 +9350,7 @@
 
   function renderMapHomologyRuleInputs(geometryOrRelations, defs = null) {
     const relations = Array.isArray(defs)
-      ? defs.map((def) => ({ def, geometry: geometryOrRelations, variety: activeHomologyVariety() }))
+      ? defs.map((def) => ({ def, geometry: geometryOrRelations }))
       : (geometryOrRelations || []);
     refs.homologyRules.hidden = !relations.length;
     if (!relations.length) {
@@ -8850,11 +9360,12 @@
     const coefficientMode = state.homologyMapInputMode === 'coefficients';
     const rows = relations.map(({ def, geometry }) => {
       const storedRule = storedMapHomologyRuleForDef(geometry, def);
+      const automaticRule = storedRule || automaticMapHomologyRuleForDef(geometry, def);
       return {
-        stored: !!storedRule,
+        stored: !!automaticRule,
         html: coefficientMode
-          ? renderMapHomologyCoefficientRow(def, geometry, storedRule)
-          : renderMapHomologyFormulaRow(def, geometry, storedRule)
+          ? renderMapHomologyCoefficientRow(def, geometry, automaticRule)
+          : renderMapHomologyFormulaRow(def, geometry, automaticRule)
       };
     });
     const savedRows = rows.filter((row) => row.stored).map((row) => row.html);
@@ -8919,7 +9430,9 @@
       <div class="homology-rule-row is-map-relation is-saved">
         <span>\\(${def.symbolLatex}=\\)</span>
         <span>\\(${formatPolyLatex(homologyRuleRhsPoly(rule))}\\)</span>
-        <button class="btn btn-ghost homology-rule-delete" type="button" data-homology-rule-delete="${escapeHtml(rule.id)}">delete</button>
+        ${rule.builtin
+          ? '<span class="homology-symbol-kind">known</span>'
+          : `<button class="btn btn-ghost homology-rule-delete" type="button" data-homology-rule-delete="${escapeHtml(rule.id)}">delete</button>`}
       </div>
     `;
   }
@@ -9093,6 +9606,11 @@
     return map ? defaultPullbackUnitRule(map) : null;
   }
 
+  function automaticMapHomologyRuleForDef(geometry, def) {
+    const rule = mapHomologyRuleForDef(geometry, def);
+    return rule?.builtin && String(rule.id || '').startsWith('default-abel-jacobi-') ? rule : null;
+  }
+
   function storedMapHomologyRuleForDef(geometry, def) {
     const variableId = homologyDefVariableId(def, geometry);
     return (geometry.homology?.rules || []).find((rule) => (
@@ -9146,20 +9664,18 @@
   }
 
   function updateAllHomologyAssignments() {
-    const mapContext = activeHomologyMapContext();
-    const sheafContext = activeHomologySheafContext();
-    if (mapContext) {
+    const context = activeHomologyContext();
+    if (context.kind === 'map') {
       updateAllMapHomologyAssignments();
       return;
     }
-    if (sheafContext) {
-      updateAllSheafHomologyAssignments(sheafContext);
+    if (context.kind === 'sheaf') {
+      updateAllSheafHomologyAssignments(context);
     }
   }
 
   function updateAllMapHomologyAssignments() {
     if (!refs.homologyRules) return;
-    setCanvasPickEnabled(false, { render: false });
     const controls = state.homologyMapInputMode === 'coefficients'
       ? Array.from(refs.homologyRules.querySelectorAll('[data-map-homology-coeff-editor]'))
       : Array.from(refs.homologyRules.querySelectorAll('input[data-map-homology-rule]'));
@@ -9224,7 +9740,7 @@
 
   function mapHomologyRelationContext(control) {
     const varietyId = control.dataset.mapHomologyVariety || activeHomologyVariety()?.id;
-    const variety = state.varieties.find((item) => item.id === varietyId) || activeHomologyVariety();
+    const variety = state.varieties.find((item) => item.id === varietyId) || null;
     if (!variety) return null;
     const geometry = geometryFromVariety(variety);
     if (!geometry) return null;
@@ -9355,8 +9871,12 @@
   }
 
   function withoutMapHomologyRuleForVariable(rules, variableId) {
+    return withoutHomologyRuleForVariable(rules, variableId);
+  }
+
+  function withoutHomologyRuleForVariable(rules, variableId, options = {}) {
     return (rules || []).filter((rule) => !(
-      !rule.builtin
+      (options.includeBuiltin || !rule.builtin)
       && rule.lhs?.powers
       && Object.keys(rule.lhs.powers).length === 1
       && rule.lhs.powers[variableId] === 1
@@ -9373,7 +9893,6 @@
   }
 
   function finishMapHomologyRuleUpdate(options = {}) {
-    setCanvasPickEnabled(false, { render: false });
     if (!options.deferRecompute) recompute();
     if (refs.homologyMessage) refs.homologyMessage.textContent = 'Updated relation.';
   }
@@ -9383,12 +9902,8 @@
     if (refs.homologyMessage) refs.homologyMessage.textContent = 'Updated relation.';
   }
 
-  function renderHomologyRuleCreator(geometry, defs, options = {}) {
+  function renderHomologyRuleCreator(geometry, defs) {
     if (!refs.homologyAddRule) return;
-    if (options.mapMode) {
-      refs.homologyAddRule.hidden = true;
-      return;
-    }
     refs.homologyAddRule.hidden = defs.length === 0;
     if (defs.length === 0) return;
     if (refs.homologyRuleEquation) {
@@ -9396,9 +9911,9 @@
     }
   }
 
-  function renderHomologyClassCreator(geometry, options = {}) {
+  function renderHomologyClassCreator(geometry) {
     if (!refs.homologyAddClass) return;
-    refs.homologyAddClass.hidden = !!options.mapMode || !geometry;
+    refs.homologyAddClass.hidden = !geometry;
     if (refs.homologyClassDegree && geometry) {
       refs.homologyClassDegree.max = String(2 * geometry.dim);
       refs.homologyClassDegree.value = String(normalizedInt(refs.homologyClassDegree.value, 0, 2 * geometry.dim, Math.min(2, 2 * geometry.dim)));
@@ -9947,6 +10462,11 @@
         if (domain?.id === variety.id) classes.push('is-map-domain');
         else if (codomain?.id === variety.id) classes.push('is-map-codomain');
         else if (state.canvasPickEnabled) classes.push(state.mapPickTarget === 'codomain' ? 'is-map-codomain-candidate' : 'is-pick-candidate');
+      }
+      if (abelJacobiMapInputMode()) {
+        const sourceCurve = mapDraftAbelJacobiCurve();
+        if (sourceCurve?.id === variety.id) classes.push('is-map-domain');
+        else if (state.canvasPickEnabled && allowableAbelJacobiCurvePick(variety.id)) classes.push('is-pick-candidate');
       }
       if (sheafMapOperationInputMode() && sheafMapDraftBase()?.id === variety.id) classes.push('is-active');
       labels.push({
@@ -11297,7 +11817,7 @@
       `\\operatorname{type}=\\text{${varietyTypeLabel(variety.type)}}`,
       `\\dim=${geometry.dim}`
     ];
-    if (geometry.type === 'curve') parts.push(`g=${genusLatex(geometry.genus)}`);
+    if (geometryHasNumericalCurveLabel(geometry)) parts.push(`g=${genusLatex(numericalCurveGenus(geometry))}`);
     if (geometry.type === 'projective') parts.push(`\\text{ambient}=\\mathbb{P}^{${geometry.ambient}}`);
     if (geometry.type === 'complete-intersection') {
       parts.push(`\\text{ambient}=\\mathbb{P}^{${geometry.ambient}}`);
@@ -11330,7 +11850,7 @@
       `type ${varietyTypeLabel(variety.type)}`,
       `dim ${geometry.dim}`
     ];
-    if (geometry.type === 'curve') parts.push(`genus ${genusPlain(geometry.genus)}`);
+    if (geometryHasNumericalCurveLabel(geometry)) parts.push(`genus ${genusPlain(numericalCurveGenus(geometry))}`);
     if (geometry.type === 'projective') parts.push(`ambient P^${geometry.ambient}`);
     if (geometry.type === 'complete-intersection') {
       parts.push(`ambient P^${geometry.ambient}`);
