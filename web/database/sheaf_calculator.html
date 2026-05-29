@@ -1385,6 +1385,7 @@
               <option value="variety">Variety</option>
               <option value="sheaf" disabled>Sheaf</option>
               <option value="map" disabled>Map</option>
+              <option value="combined" disabled>Combined</option>
             </select>
             <button class="btn btn-ghost sheaf-object-button" id="add-object" type="button">add</button>
             <button class="btn btn-ghost sheaf-object-button" id="delete-object" type="button">delete</button>
@@ -1405,6 +1406,16 @@
         </div>
 
         <div class="sheaf-modify-warning" id="modify-warning" hidden>select a label to modify</div>
+
+        <div class="sheaf-input-editor" id="combined-editor" hidden>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="combined-type">Type</label>
+            <select id="combined-type" class="sheaf-select">
+              <option value="product" selected>Product + projections</option>
+              <option value="abel-jacobi">Abel-Jacobi + Jacobian</option>
+            </select>
+          </div>
+        </div>
 
         <div id="variety-editor" class="sheaf-input-editor">
           <div class="sheaf-editor-title" id="variety-editor-title">New variety</div>
