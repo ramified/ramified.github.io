@@ -284,18 +284,106 @@
   const gifPattern = /^(.*_gif_)\d+(\.gif)$/i;
   const masonryState = new WeakMap();
 
-  const probeGif = (src) => new Promise((resolve) => {
+  const formatRatio = ({ width, height }) => (
+    width && height ? `${width} / ${height}` : null
+  );
+
+  const readFirstBytes = async (response, byteCount) => {
+    if (!response.body) {
+      return new Uint8Array(await response.arrayBuffer()).slice(0, byteCount);
+    }
+
+    const reader = response.body.getReader();
+    const chunks = [];
+    let received = 0;
+
+    while (received < byteCount) {
+      const { done, value } = await reader.read();
+
+      if (done) {
+        break;
+      }
+
+      chunks.push(value);
+      received += value.byteLength;
+    }
+
+    await reader.cancel();
+
+    if (received < byteCount) {
+      return null;
+    }
+
+    const bytes = new Uint8Array(byteCount);
+    let offset = 0;
+
+    chunks.forEach((chunk) => {
+      const remaining = byteCount - offset;
+
+      if (remaining > 0) {
+        bytes.set(chunk.slice(0, remaining), offset);
+        offset += Math.min(chunk.byteLength, remaining);
+      }
+    });
+
+    return bytes;
+  };
+
+  const readGifHeaderSize = async (src) => {
+    try {
+      const response = await fetch(src, { headers: { Range: 'bytes=0-9' } });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const bytes = await readFirstBytes(response, 10);
+
+      if (!bytes) {
+        return null;
+      }
+
+      const signature = String.fromCharCode(...bytes.slice(0, 6));
+
+      if (signature !== 'GIF87a' && signature !== 'GIF89a') {
+        return null;
+      }
+
+      const view = new DataView(bytes.buffer);
+
+      return {
+        width: view.getUint16(6, true),
+        height: view.getUint16(8, true)
+      };
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const loadGifSize = (src) => new Promise((resolve) => {
     const image = new Image();
 
     image.onload = () => resolve({
-      src,
-      ratio: image.naturalWidth && image.naturalHeight
-        ? `${image.naturalWidth} / ${image.naturalHeight}`
-        : null
+      width: image.naturalWidth,
+      height: image.naturalHeight
     });
     image.onerror = () => resolve(null);
     image.src = src;
   });
+
+  const probeGif = async (src) => {
+    const size = await readGifHeaderSize(src) || await loadGifSize(src);
+
+    if (!size) {
+      return null;
+    }
+
+    return {
+      src,
+      ...size,
+      ratio: formatRatio(size)
+    };
+  };
 
   const collectSequentialGifs = async (firstSrc) => {
     const match = firstSrc.match(gifPattern);
@@ -349,6 +437,8 @@
 
     state.items.forEach((item) => grid.appendChild(item));
     state.columns.forEach((column) => column.remove());
+    grid.classList.remove('masonry-grid');
+    grid.style.removeProperty('gap');
     masonryState.delete(grid);
 
     return state.items;
@@ -358,6 +448,13 @@
     const items = resetMasonryGrid(grid);
     const columnCount = getColumnCount(grid);
     const gap = getGridGap(grid);
+    const detachedItems = document.createDocumentFragment();
+
+    items.forEach((item) => detachedItems.appendChild(item));
+
+    grid.classList.add('masonry-grid');
+    grid.style.gap = `${gap}px`;
+
     const columns = Array.from({ length: columnCount }, () => {
       const column = document.createElement('div');
 
@@ -366,9 +463,6 @@
 
       return column;
     });
-
-    grid.classList.add('masonry-grid');
-    grid.style.gap = `${gap}px`;
 
     const heights = columns.map(() => 0);
 
@@ -401,6 +495,8 @@
       frame.style.aspectRatio = selected.ratio;
     }
 
+    object.setAttribute('width', selected.width);
+    object.setAttribute('height', selected.height);
     object.setAttribute('data', selected.src);
   });
 

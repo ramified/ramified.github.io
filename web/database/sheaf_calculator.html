@@ -1489,6 +1489,7 @@
               <option value="twist" id="sheaf-twist-option">Oₓ(r)</option>
               <option value="direct-sum">Direct sum</option>
               <option value="tensor">Tensor product</option>
+              <option value="schur">Schur functor</option>
               <option value="map-operation">Pullback / pushforward</option>
             </select>
           </div>
@@ -1519,6 +1520,19 @@
             </label>
           </div>
           <div class="sheaf-note" id="sheaf-binary-pick-note" hidden>pick two sheaves on the same base</div>
+          <div class="sheaf-field-row" id="sheaf-schur-formula-row" hidden>
+            <span class="input-label">parent</span>
+            <div class="sheaf-map-formula-picker">
+              <span class="sheaf-map-formula-mark">\(S\)</span>
+              <span class="sheaf-map-formula-mark" id="sheaf-schur-diagram-preview">\(_{(2,1)}\)</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-schur-parent-button" type="button" data-sheaf-schur-pick="parent">bundle</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-schur-partition-row" hidden>
+            <label class="input-label" for="sheaf-schur-partition">diagram</label>
+            <input id="sheaf-schur-partition" class="sheaf-input" type="text" value="2,1" maxlength="48" spellcheck="false" autocomplete="off" placeholder="2, 1">
+          </div>
+          <div class="sheaf-note" id="sheaf-schur-pick-note" hidden>pick a locally free sheaf on the canvas</div>
           <div class="sheaf-field-row" id="sheaf-map-operation-row" hidden>
             <label class="input-label" for="sheaf-map-operation">operation</label>
             <select id="sheaf-map-operation" class="sheaf-select">

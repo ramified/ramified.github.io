@@ -8,6 +8,7 @@
   const MAX_CI_SLIDER_DEGREE = 12;
   const MAX_ROOT_EXPANSION_MONOMIALS = 1500;
   const MAX_EXPLICIT_ROOT_FACTORS = 64;
+  const MAX_SCHUR_PARTITION_SIZE = 12;
   const DEFAULT_HOMOLOGY_RULE_PASSES = 1;
   const DEFAULT_VARIETY_SPACING_PX = 110;
   const DEFAULT_FIRST_VARIETY_X = 0.22;
@@ -68,6 +69,9 @@
   const VARS = new Map();
   const refs = {};
   const hodgeACoeffCache = new Map();
+  const completeSymmetricCache = new Map();
+  const schurPowerPolynomialCache = new Map();
+  const integerPartitionCountCache = new Map();
   const state = {
     lastResult: null,
     varieties: [],
@@ -85,6 +89,7 @@
     mapControlDrag: null,
     sheafBinaryDraft: null,
     sheafBinaryPickTarget: 'left',
+    sheafSchurDraft: null,
     sheafMapDraft: null,
     sheafMapPickTarget: 'map',
     canvasPickEnabled: false,
@@ -179,6 +184,12 @@
     refs.sheafBinaryExactRow = $('sheaf-binary-exact-row');
     refs.sheafBinaryExact = $('sheaf-binary-exact');
     refs.sheafBinaryPickNote = $('sheaf-binary-pick-note');
+    refs.sheafSchurFormulaRow = $('sheaf-schur-formula-row');
+    refs.sheafSchurParentButton = $('sheaf-schur-parent-button');
+    refs.sheafSchurDiagramPreview = $('sheaf-schur-diagram-preview');
+    refs.sheafSchurPartitionRow = $('sheaf-schur-partition-row');
+    refs.sheafSchurPartition = $('sheaf-schur-partition');
+    refs.sheafSchurPickNote = $('sheaf-schur-pick-note');
     refs.sheafMapOperationRow = $('sheaf-map-operation-row');
     refs.sheafMapOperation = $('sheaf-map-operation');
     refs.sheafMapFormulaRow = $('sheaf-map-formula-row');
@@ -397,6 +408,9 @@
     if (sheafBinaryInputMode() && inputIsCreateMode()) {
       return addBinarySheafFromDraft();
     }
+    if (sheafSchurInputMode() && inputIsCreateMode()) {
+      return addSchurSheafFromDraft();
+    }
     if (refs.sheafType?.value === 'map-operation' && inputIsCreateMode()) {
       return addMapOperationSheafFromDraft();
     }
@@ -420,6 +434,17 @@
     return sheaf;
   }
 
+  function addSchurSheafFromDraft() {
+    const data = schurSheafConstructionData();
+    if (!data) return null;
+    const sheaf = createSchurSheafConstruction(data);
+    if (!sheaf) return null;
+    clearSheafSchurDraft();
+    state.draftSheafNameDirty = false;
+    refs.sheafName.value = defaultCreateSheafNameLatex();
+    return sheaf;
+  }
+
   function updateBinarySheafFromDraft(sheaf) {
     const data = binarySheafConstructionData();
     if (!sheaf || !data) return null;
@@ -437,6 +462,38 @@
       sheafIds: [data.left.id, data.right.id],
       derived: isTensor ? !!data.derived : false,
       exact: isTensor ? !!data.exact : true,
+      defaultName: data.defaultName
+    };
+    const baseVariety = baseVarietyForSheaf(sheaf);
+    if (oldBaseId !== sheaf.baseVarietyId) {
+      positionSheafNearBase(sheaf, baseVariety);
+      avoidCanvasLabelOverlap(sheaf);
+    }
+    if (baseVariety) sheafFromObject(sheaf, geometryFromVariety(baseVariety));
+    state.activeSheafId = sheaf.id;
+    state.activeVarietyId = sheaf.baseVarietyId || defaultBaseVarietyId();
+    state.activeMapId = null;
+    refs.basis.value = normalizeBasisValue(sheaf.basis);
+    syncObjectLineage(sheaf, 'sheaf');
+    refreshConstructedObjects();
+    return sheaf;
+  }
+
+  function updateSchurSheafFromDraft(sheaf) {
+    const data = schurSheafConstructionData();
+    if (!sheaf || !data) return null;
+    const oldBaseId = sheaf.baseVarietyId;
+    sheaf.type = 'abstract';
+    sheaf.name = data.name;
+    sheaf.twist = '1';
+    sheaf.rank = schurRankPlaceholder(data.parent, data.partition);
+    sheaf.baseVarietyId = data.parent.baseVarietyId;
+    sheaf.basis = 'chern';
+    sheaf.nameDirty = data.nameDirty;
+    sheaf.construction = {
+      type: 'schur',
+      sheafId: data.parent.id,
+      partition: data.partition,
       defaultName: data.defaultName
     };
     const baseVariety = baseVarietyForSheaf(sheaf);
@@ -523,6 +580,25 @@
       exact,
       derived: !exact,
       proper,
+      defaultName,
+      name,
+      nameDirty: state.draftSheafNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName)
+    };
+  }
+
+  function schurSheafConstructionData() {
+    if (refs.sheafType?.value !== 'schur') return null;
+    const parent = sheafSchurDraftSheaf();
+    const partition = currentSchurPartition();
+    if (!parent || !partition || !allowableSheafSchurPick(parent.id)) return null;
+    const defaultName = defaultSchurSheafNameFromObjects(parent, partition);
+    const name = state.draftSheafNameDirty
+      ? sanitizeMathLabel(refs.sheafName.value, defaultName)
+      : defaultName;
+    return {
+      parent,
+      partition,
+      baseVarietyId: parent.baseVarietyId,
       defaultName,
       name,
       nameDirty: state.draftSheafNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName)
@@ -734,6 +810,9 @@
       return (sheaf.construction.sheafIds || [])
         .map((id) => state.sheaves.find((item) => item.id === id))
         .every((item) => sheafHasLocallyFreeLabel(item));
+    }
+    if (sheaf.construction.type === 'schur') {
+      return sheafHasLocallyFreeLabel(state.sheaves.find((item) => item.id === sheaf.construction.sheafId));
     }
     return sheaf.construction.type === 'pullback'
       && sheafHasLocallyFreeLabel(state.sheaves.find((item) => item.id === sheaf.construction.sheafId));
@@ -1157,6 +1236,7 @@
       refs.basis.value = 'chern';
       state.draftSheafBaseVarietyId = null;
       clearSheafBinaryDraft();
+      clearSheafSchurDraft();
       clearSheafMapDraft();
       state.draftSheafNameDirty = false;
       syncSheafBaseOptions(true);
@@ -1376,7 +1456,8 @@
   function loadSheafIntoDraft(sheaf) {
     const mapConstruction = sheafMapConstructionType(sheaf);
     const binaryConstruction = sheafBinaryConstructionType(sheaf);
-    refs.sheafType.value = mapConstruction ? 'map-operation' : (binaryConstruction || sheaf.type || 'abstract');
+    const schurConstruction = sheafSchurConstructionType(sheaf);
+    refs.sheafType.value = mapConstruction ? 'map-operation' : (schurConstruction || binaryConstruction || sheaf.type || 'abstract');
     refs.sheafName.value = sheaf.name || defaultSheafNameLatex();
     refs.twist.value = sheaf.twist ?? '1';
     refs.rank.value = sheaf.rank || 'r';
@@ -1390,13 +1471,20 @@
     updateSheafBaseButton();
     if (mapConstruction) {
       clearSheafBinaryDraft();
+      clearSheafSchurDraft();
       loadMapOperationSheafIntoDraft(sheaf);
+    } else if (schurConstruction) {
+      clearSheafMapDraft();
+      clearSheafBinaryDraft();
+      loadSchurSheafIntoDraft(sheaf);
     } else if (binaryConstruction) {
       clearSheafMapDraft();
+      clearSheafSchurDraft();
       loadBinarySheafIntoDraft(sheaf);
     } else {
       clearSheafMapDraft();
       clearSheafBinaryDraft();
+      clearSheafSchurDraft();
     }
     updateInputEditorTitles();
   }
@@ -1404,6 +1492,10 @@
   function sheafBinaryConstructionType(sheaf) {
     const type = sheaf?.construction?.type;
     return type === 'direct-sum' || type === 'tensor' ? type : null;
+  }
+
+  function sheafSchurConstructionType(sheaf) {
+    return sheaf?.construction?.type === 'schur' ? 'schur' : null;
   }
 
   function sheafMapConstructionType(sheaf) {
@@ -1419,6 +1511,15 @@
     state.sheafBinaryPickTarget = 'left';
     if (refs.sheafBinaryExact) refs.sheafBinaryExact.checked = !!construction.exact;
     updateSheafBinaryDraftControls();
+  }
+
+  function loadSchurSheafIntoDraft(sheaf) {
+    const construction = sheaf?.construction || {};
+    state.sheafSchurDraft = {
+      sheafId: construction.sheafId || null
+    };
+    if (refs.sheafSchurPartition) refs.sheafSchurPartition.value = formatSchurPartitionInput(construction.partition);
+    updateSheafSchurDraftControls();
   }
 
   function loadMapOperationSheafIntoDraft(sheaf) {
@@ -1773,6 +1874,7 @@
     }
     if (kind === 'sheaf') {
       if (sheafBinaryInputMode()) return updateBinarySheafFromDraft(active);
+      if (sheafSchurInputMode()) return updateSchurSheafFromDraft(active);
       if (refs.sheafType?.value === 'map-operation') return updateMapOperationSheafFromDraft(active);
       const oldBaseId = active.baseVarietyId;
       const baseVariety = draftBaseVariety();
@@ -1862,6 +1964,7 @@
       if (!combinedProductCreateMode() && refs.addObjectKind.value !== 'variety') clearProductDraft();
       clearMapDraft();
       clearSheafBinaryDraft();
+      clearSheafSchurDraft();
       clearSheafMapDraft();
       setCanvasPickEnabled(false, { render: false });
       if (combinedProductCreateMode()) refs.varietyType.value = 'product';
@@ -2028,11 +2131,17 @@
       const type = refs.sheafType.value;
       if (type !== 'map-operation') clearSheafMapDraft();
       if (type !== 'direct-sum' && type !== 'tensor') clearSheafBinaryDraft();
+      if (type !== 'schur') clearSheafSchurDraft();
       if (type === 'map-operation' && inputIsModifyMode()) {
         const sheaf = activeSheaf();
         if (sheafMapConstructionType(sheaf)) loadMapOperationSheafIntoDraft(sheaf);
       } else if (type === 'map-operation') {
         state.sheafMapPickTarget = 'map';
+      } else if (type === 'schur' && inputIsModifyMode()) {
+        const sheaf = activeSheaf();
+        if (sheafSchurConstructionType(sheaf)) loadSchurSheafIntoDraft(sheaf);
+      } else if (type === 'schur') {
+        state.sheafSchurDraft = state.sheafSchurDraft || {};
       } else if ((type === 'direct-sum' || type === 'tensor') && inputIsModifyMode()) {
         const sheaf = activeSheaf();
         if (sheafBinaryConstructionType(sheaf)) loadBinarySheafIntoDraft(sheaf);
@@ -2119,6 +2228,7 @@
           state.draftSheafBaseVarietyId = refs.sheafBaseVariety.value;
           clearSheafMapDraft();
           clearSheafBinaryDraft();
+          clearSheafSchurDraft();
           updateSheafBaseButton();
         }
         syncDefaultSheafName();
@@ -2170,6 +2280,28 @@
       refs.sheafBinaryExact.addEventListener('change', () => {
         syncDefaultSheafName();
         updateSheafBinaryDraftControls();
+        recompute();
+      });
+    }
+    if (refs.sheafSchurParentButton) {
+      refs.sheafSchurParentButton.addEventListener('click', () => {
+        setSheafSchurPickTarget();
+      });
+    }
+    if (refs.sheafSchurPartition) {
+      refs.sheafSchurPartition.addEventListener('input', () => {
+        updateSheafSchurDraftControls();
+        syncDefaultRank(true);
+        syncDefaultSheafName();
+        normalizeControlVisibility();
+      });
+      refs.sheafSchurPartition.addEventListener('change', () => {
+        const partition = currentSchurPartition() || [2, 1];
+        refs.sheafSchurPartition.value = formatSchurPartitionInput(partition);
+        updateSheafSchurDraftControls();
+        syncDefaultRank(true);
+        syncDefaultSheafName();
+        normalizeControlVisibility();
         recompute();
       });
     }
@@ -2969,6 +3101,33 @@
     return sheaf;
   }
 
+  function createSchurSheafConstruction(data) {
+    const sheaf = {
+      id: nextInputId('E'),
+      type: 'abstract',
+      name: uniqueConstructedObjectName('sheaf', data.name),
+      twist: '1',
+      rank: schurRankPlaceholder(data.parent, data.partition),
+      baseVarietyId: data.parent.baseVarietyId,
+      basis: 'chern',
+      nameDirty: data.nameDirty,
+      construction: {
+        type: 'schur',
+        sheafId: data.parent.id,
+        partition: data.partition,
+        defaultName: data.defaultName
+      }
+    };
+    syncObjectLineage(sheaf, 'sheaf');
+    positionSheafNearBase(sheaf, baseVarietyForSheaf(sheaf));
+    avoidCanvasLabelOverlap(sheaf);
+    state.sheaves.push(sheaf);
+    state.activeSheafId = sheaf.id;
+    state.activeVarietyId = sheaf.baseVarietyId;
+    state.activeMapId = null;
+    return sheaf;
+  }
+
   function createComposedMap(data) {
     const map = createMapObject(
       { kind: data.first.domainKind, id: data.first.domainId },
@@ -3077,6 +3236,10 @@
     return `${sanitizeMathLabel(left?.name, '\\mathcal{E}')}${operationLatex}${sanitizeMathLabel(right?.name, '\\mathcal{F}')}`;
   }
 
+  function defaultSchurSheafNameFromObjects(parent, partition) {
+    return `\\mathbb{S}_{${schurPartitionLatex(partition)}}${sanitizeMathLabel(parent?.name, '\\mathcal{E}')}`;
+  }
+
   function tensorOperationLatex(derived) {
     return derived ? '\\otimes^{\\mathbf{L}}' : '\\otimes';
   }
@@ -3158,6 +3321,14 @@
     return 'r';
   }
 
+  function schurRankPlaceholder(parent, partition) {
+    const rank = sanitizeRankInput(parent?.rank);
+    const numericRank = numericRankFromPlain(rank);
+    const normalizedPartition = normalizeSchurPartition(partition);
+    if (numericRank != null && normalizedPartition && normalizedPartition.length <= numericRank) return String(schurRepresentationRank(normalizedPartition, numericRank));
+    return rank || 'r';
+  }
+
   function uniqueConstructedObjectName(kind, proposedName) {
     const fallback = kind === 'map' ? defaultMapNameLatex() : (kind === 'sheaf' ? '\\mathcal{E}' : 'X');
     const sanitized = sanitizeMathLabel(proposedName, fallback);
@@ -3199,8 +3370,14 @@
     if (kind === 'sheaf') {
       if (sheafBinaryInputMode()) {
         state.sheafBinaryPickTarget = sheafBinaryDraftSheaf('left') ? 'right' : 'left';
+      } else if (sheafSchurInputMode()) {
+        state.sheafSchurDraft = state.sheafSchurDraft || {};
       } else if (sheafMapOperationInputMode()) {
         state.sheafMapPickTarget = sheafMapDraftMap() ? 'sheaf' : 'map';
+      } else if (sheafBasePickInputMode()) {
+        // Ordinary sheaf creation starts by choosing its base variety.
+      } else {
+        return false;
       }
     } else if (kind === 'map') {
       state.mapPickTarget = mapCompositionInputMode()
@@ -3219,6 +3396,7 @@
     if (productVarietyInputMode()) return productPickableVarieties().length > 0;
     if (mapInputMode()) return mapPickAvailable();
     if (sheafBinaryInputMode()) return sheafBinaryPickableSheaves().length > 0;
+    if (sheafSchurInputMode()) return sheafSchurPickableSheaves().length > 0;
     if (sheafMapOperationInputMode()) {
       return state.maps.some((map) => allowableSheafMapOperationMap(map.id))
         || state.sheaves.some((sheaf) => allowableSheafMapOperationSheaf(sheaf.id));
@@ -3260,6 +3438,11 @@
     state.sheafBinaryPickTarget = 'left';
     if (refs.sheafBinaryExact) refs.sheafBinaryExact.checked = false;
     updateSheafBinaryDraftControls();
+  }
+
+  function clearSheafSchurDraft() {
+    state.sheafSchurDraft = null;
+    updateSheafSchurDraftControls();
   }
 
   function clearProductDraft() {
@@ -3404,6 +3587,10 @@
       handleSheafBinaryPick(kind, id);
       return true;
     }
+    if (sheafSchurInputMode()) {
+      handleSheafSchurPick(kind, id);
+      return true;
+    }
     if (sheafMapOperationInputMode()) {
       handleSheafMapOperationPick(kind, id);
       return true;
@@ -3437,10 +3624,16 @@
     return kind === 'sheaf' && (refs.sheafType?.value === 'direct-sum' || refs.sheafType?.value === 'tensor');
   }
 
+  function sheafSchurInputMode() {
+    const kind = inputIsModifyMode() ? modifyKind() : currentInputKind();
+    return kind === 'sheaf' && refs.sheafType?.value === 'schur';
+  }
+
   function sheafBasePickInputMode() {
     return currentInputKind() === 'sheaf'
       && !sheafMapOperationInputMode()
       && !sheafBinaryInputMode()
+      && !sheafSchurInputMode()
       && state.varieties.length > 0;
   }
 
@@ -3554,6 +3747,14 @@
     renderCanvas(state.lastResult);
   }
 
+  function setSheafSchurPickTarget() {
+    state.sheafSchurDraft = state.sheafSchurDraft || {};
+    setCanvasPickEnabled(true, { render: false });
+    updateSheafSchurDraftControls();
+    syncGlobalPickButton();
+    renderCanvas(state.lastResult);
+  }
+
   function sheafBinaryPickableSheaves() {
     return state.sheaves.filter((sheaf) => (
       !inputIsModifyMode() || sheaf.id !== state.activeSheafId
@@ -3565,6 +3766,32 @@
     if (!sheaf || (inputIsModifyMode() && sheaf.id === state.activeSheafId)) return false;
     const other = sheafBinaryDraftSheaf(target === 'right' ? 'left' : 'right');
     return !other || sheaf.baseVarietyId === other.baseVarietyId;
+  }
+
+  function sheafSchurDraftSheaf() {
+    const id = state.sheafSchurDraft?.sheafId;
+    return state.sheaves.find((sheaf) => sheaf.id === id) || null;
+  }
+
+  function sheafSchurPickableSheaves() {
+    return state.sheaves.filter((sheaf) => allowableSheafSchurPick(sheaf.id));
+  }
+
+  function allowableSheafSchurPick(sheafId) {
+    const sheaf = state.sheaves.find((item) => item.id === sheafId);
+    return !!sheaf
+      && !(inputIsModifyMode() && sheaf.id === state.activeSheafId)
+      && sheafHasLocallyFreeLabel(sheaf);
+  }
+
+  function handleSheafSchurPick(kind, id) {
+    if (kind !== 'sheaf' || !allowableSheafSchurPick(id)) return;
+    state.sheafSchurDraft = { sheafId: id };
+    setCanvasPickEnabled(false, { render: false });
+    updateSheafSchurDraftControls();
+    syncDefaultRank(true);
+    syncDefaultSheafName();
+    recompute();
   }
 
   function handleSheafBinaryPick(kind, id) {
@@ -3615,6 +3842,38 @@
     if (!state.sheaves.some((sheaf) => allowableSheafBinaryPick(sheaf.id, 'right'))) return 'add a sheaf on the same base';
     if (!right) return 'click the second sheaf on the same base';
     return inputIsModifyMode() ? 'click update to rebuild the sheaf' : 'click add to create the sheaf';
+  }
+
+  function updateSheafSchurDraftControls() {
+    const show = sheafSchurInputMode();
+    if (refs.sheafSchurFormulaRow) refs.sheafSchurFormulaRow.hidden = !show;
+    if (refs.sheafSchurPartitionRow) refs.sheafSchurPartitionRow.hidden = !show;
+    const partition = currentSchurPartition();
+    if (refs.sheafSchurDiagramPreview) {
+      setInlineMath(refs.sheafSchurDiagramPreview, `_{${schurPartitionLatex(partition || [2, 1])}}`);
+    }
+    updateSheafSchurSlotButton(refs.sheafSchurParentButton, sheafSchurDraftSheaf());
+    if (refs.sheafSchurPickNote) {
+      refs.sheafSchurPickNote.hidden = !show;
+      refs.sheafSchurPickNote.textContent = sheafSchurPickHint(partition);
+    }
+    syncGlobalPickButton();
+    if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
+  }
+
+  function updateSheafSchurSlotButton(button, sheaf) {
+    if (!button) return;
+    button.setAttribute('aria-pressed', state.canvasPickEnabled && sheafSchurInputMode() ? 'true' : 'false');
+    const label = sheaf ? latexToPlain(sanitizeMathLabel(sheaf.name, '\\mathcal{E}')) : 'bundle';
+    button.textContent = label;
+    button.title = sheaf ? `Replace ${label}` : 'Pick a locally free sheaf on the canvas';
+  }
+
+  function sheafSchurPickHint(partition = currentSchurPartition()) {
+    if (!partition) return 'enter a Young diagram such as 2,1';
+    if (!sheafSchurPickableSheaves().length) return 'add a locally free sheaf first';
+    if (!sheafSchurDraftSheaf()) return 'click a locally free sheaf on the canvas';
+    return inputIsModifyMode() ? 'click update to rebuild the Schur functor' : 'click add to create the Schur functor';
   }
 
   function sheafMapOperationSourceBaseId(map = sheafMapDraftMap(), operation = sheafMapOperationFor(map)) {
@@ -4205,6 +4464,10 @@
       const data = binarySheafConstructionData();
       if (data?.defaultName) return data.defaultName;
     }
+    if (refs.sheafType?.value === 'schur') {
+      const data = schurSheafConstructionData();
+      if (data?.defaultName) return data.defaultName;
+    }
     if (refs.sheafType?.value === 'map-operation') {
       const data = mapOperationSheafConstructionData();
       if (data?.defaultName) return data.defaultName;
@@ -4289,6 +4552,10 @@
       const data = binarySheafConstructionData();
       refs.rank.value = data ? constructionRankPlaceholder(data.operation, data.left, data.right) : 'r';
     }
+    else if (refs.sheafType.value === 'schur') {
+      const data = schurSheafConstructionData();
+      refs.rank.value = data ? schurRankPlaceholder(data.parent, data.partition) : 'r';
+    }
     else if (refs.sheafType.value === 'map-operation') {
       const data = mapOperationSheafConstructionData();
       refs.rank.value = data?.operation === 'pullback-sheaf' ? sanitizeRankInput(data.sheaf.rank) : 'r';
@@ -4360,6 +4627,12 @@
     if (kind === 'sheaf' && (construction.type === 'direct-sum' || construction.type === 'tensor')) {
       return {
         parents: (construction.sheafIds || []).map((id, index) => parent('sheaf', id, index === 0 ? 'left-summand' : 'right-summand')),
+        subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'base')] : []
+      };
+    }
+    if (kind === 'sheaf' && construction.type === 'schur') {
+      return {
+        parents: [parent('sheaf', construction.sheafId, 'parent-bundle')].filter((item) => item.id),
         subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'base')] : []
       };
     }
@@ -4501,6 +4774,7 @@
     const construction = sheaf?.construction;
     if (!construction) return false;
     if (construction.type === 'direct-sum' || construction.type === 'tensor') return refreshBinaryConstructedSheaf(sheaf, construction);
+    if (construction.type === 'schur') return refreshSchurConstructedSheaf(sheaf, construction);
     if (construction.type === 'pullback' || construction.type === 'pushforward') return refreshMapConstructedSheaf(sheaf, construction);
     return false;
   }
@@ -4522,6 +4796,43 @@
       changed = true;
     }
     if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(nextDefault)) {
+      sheaf.name = nextDefault;
+      changed = true;
+    }
+    if (construction.defaultName !== nextDefault) {
+      construction.defaultName = nextDefault;
+      changed = true;
+    }
+    if (syncObjectLineage(sheaf, 'sheaf')) changed = true;
+    return changed;
+  }
+
+  function refreshSchurConstructedSheaf(sheaf, construction) {
+    const parent = state.sheaves.find((item) => item.id === construction.sheafId);
+    if (!parent) return false;
+    const partition = normalizeSchurPartition(construction.partition) || [1];
+    const oldDefault = construction.defaultName || defaultSchurSheafNameFromObjects(parent, partition);
+    const nextDefault = defaultSchurSheafNameFromObjects(parent, partition);
+    let changed = false;
+    if (sheaf.baseVarietyId !== parent.baseVarietyId) {
+      sheaf.baseVarietyId = parent.baseVarietyId;
+      changed = true;
+    }
+    const nextRank = schurRankPlaceholder(parent, partition);
+    if (sheaf.rank !== nextRank) {
+      sheaf.rank = nextRank;
+      changed = true;
+    }
+    const nextBasis = 'chern';
+    if (sheaf.basis !== nextBasis) {
+      sheaf.basis = nextBasis;
+      changed = true;
+    }
+    if (JSON.stringify(construction.partition || []) !== JSON.stringify(partition)) {
+      construction.partition = partition;
+      changed = true;
+    }
+    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) === canonicalMathLabel(oldDefault) && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(nextDefault)) {
       sheaf.name = nextDefault;
       changed = true;
     }
@@ -4799,13 +5110,15 @@
     const draftBaseType = draftBase?.type || 'abstract';
     let draftSheaf = refs.sheafType.value;
     const hasTwistBase = state.varieties.some((variety) => varietyHasHyperplaneClass(variety.type || 'abstract'));
-    const sheafTypeHasParentRow = (type) => type === 'map-operation' || type === 'direct-sum' || type === 'tensor';
+    const sheafTypeHasParentRow = (type) => type === 'map-operation' || type === 'direct-sum' || type === 'tensor' || type === 'schur';
     let sheafHasParentRow = false;
     let waitingForSheafBase = false;
     let editingSheafMapOperation = false;
     let creatingSheafMapOperation = false;
     let editingSheafBinary = false;
     let creatingSheafBinary = false;
+    let editingSheafSchur = false;
+    let creatingSheafSchur = false;
     const refreshSheafTypeFlags = () => {
       sheafHasParentRow = sheafTypeHasParentRow(draftSheaf);
       waitingForSheafBase = inputIsCreateMode() && draftingSheaf && !sheafHasParentRow && !state.draftSheafBaseVarietyId;
@@ -4813,6 +5126,8 @@
       creatingSheafMapOperation = inputIsCreateMode() && draftingSheaf && draftSheaf === 'map-operation';
       editingSheafBinary = inputIsModifyMode() && draftingSheaf && (draftSheaf === 'direct-sum' || draftSheaf === 'tensor');
       creatingSheafBinary = inputIsCreateMode() && draftingSheaf && (draftSheaf === 'direct-sum' || draftSheaf === 'tensor');
+      editingSheafSchur = inputIsModifyMode() && draftingSheaf && draftSheaf === 'schur';
+      creatingSheafSchur = inputIsCreateMode() && draftingSheaf && draftSheaf === 'schur';
     };
     refreshSheafTypeFlags();
     const canTwist = draftingSheaf
@@ -4822,6 +5137,9 @@
       && state.maps.some((map) => map.domainKind === 'variety' && map.codomainKind === 'variety')
       && state.sheaves.some((sheaf) => !editingSheafMapOperation || sheaf.id !== state.activeSheafId);
     const canBinarySheaf = state.sheaves.filter((sheaf) => !editingSheafBinary || sheaf.id !== state.activeSheafId).length > 0;
+    const canSchurSheaf = state.sheaves.some((sheaf) => (
+      (!editingSheafSchur || sheaf.id !== state.activeSheafId) && sheafHasLocallyFreeLabel(sheaf)
+    ));
     if (refs.twistOption) {
       refs.twistOption.hidden = !canTwist;
       refs.twistOption.disabled = !canTwist;
@@ -4846,6 +5164,15 @@
       refs.sheafType.value = 'abstract';
       draftSheaf = 'abstract';
       clearSheafBinaryDraft();
+      syncDefaultRank(true);
+      syncDefaultSheafName();
+    }
+    const schurOption = refs.sheafType?.querySelector?.('option[value="schur"]');
+    if (schurOption) schurOption.disabled = !canSchurSheaf;
+    if (!canSchurSheaf && draftSheaf === 'schur' && !editingSheafSchur) {
+      refs.sheafType.value = 'abstract';
+      draftSheaf = 'abstract';
+      clearSheafSchurDraft();
       syncDefaultRank(true);
       syncDefaultSheafName();
     }
@@ -4878,6 +5205,7 @@
     refs.ciNote.hidden = !showCi;
     refs.twistRow.hidden = !draftingSheaf || draftSheaf !== 'twist';
     updateSheafBinaryDraftControls();
+    updateSheafSchurDraftControls();
     updateSheafMapDraftControls();
     updateMapDraftControls();
     const activeSupportsRoots = sheafSupportsChernRoots(activeSheaf());
@@ -4893,8 +5221,8 @@
     refs.sheafBaseRow.hidden = !draftingSheaf || sheafHasParentRow || !hasVariety;
     updateSheafBaseButton();
     if (refs.addObject) {
-      const canAddSheaf = !draftingSheaf || creatingSheafMapOperation || creatingSheafBinary || !!draftBase;
-    const hasEditableObject = !inputIsModifyMode() || !!activeObjectForKind(currentInputKind());
+      const canAddSheaf = !draftingSheaf || creatingSheafMapOperation || creatingSheafBinary || creatingSheafSchur || !!draftBase;
+      const hasEditableObject = !inputIsModifyMode() || !!activeObjectForKind(currentInputKind());
       const creatingMap = draftingMap && inputIsCreateMode();
       const mapReady = !draftingMap || !!(mapCompositionInputMode()
         ? mapCompositionConstructionData()
@@ -4904,15 +5232,17 @@
       const creatingSheaf = draftingSheaf && inputIsCreateMode();
       const sheafMapReady = !(creatingSheafMapOperation || editingSheafMapOperation) || !!mapOperationSheafConstructionData();
       const sheafBinaryReady = !(creatingSheafBinary || editingSheafBinary) || !!binarySheafConstructionData();
+      const sheafSchurReady = !(creatingSheafSchur || editingSheafSchur) || !!schurSheafConstructionData();
+      const creatingParentSheaf = creatingSheafMapOperation || creatingSheafBinary || creatingSheafSchur;
       const productFactors = productDraftFactors();
       const productDim = productFactors.length === 2 ? productDimensionFromFactors(productFactors[0], productFactors[1]) : 0;
       const productNeedsFactors = creatingProduct || updatingProduct;
       const productReady = !productNeedsFactors || (productFactors.length === 2 && productDim <= MAX_DIMENSION);
-      refs.addObject.disabled = (draftingMap && !mapReady) || (productNeedsFactors && !productReady) || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || (creatingSheaf && !(creatingSheafMapOperation || creatingSheafBinary) && waitingForSheafBase) || (creatingSheaf && !(creatingSheafBinary || creatingSheafMapOperation) && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
+      refs.addObject.disabled = (draftingMap && !mapReady) || (productNeedsFactors && !productReady) || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
       refs.addObject.textContent = inputIsModifyMode() ? 'update' : (combinedProductCreateMode() || combinedAbelJacobiCreateMode() ? 'build' : 'add');
       refs.addObject.title = creatingMap
         ? (mapCompositionInputMode() ? mapCompositionPickHint() : (abelJacobiMapInputMode() ? abelJacobiMapPickHint() : ordinaryMapPickHint()))
-        : (productNeedsFactors ? (productFactors.length === 2 && productDim > MAX_DIMENSION ? `Product dimension ${productDim} exceeds the calculator limit ${MAX_DIMENSION}` : 'Pick two varieties on the canvas') : ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady ? sheafMapPickHint() : ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady ? sheafBinaryPickHint() : (creatingSheaf && !(creatingSheafMapOperation || creatingSheafBinary) && waitingForSheafBase ? (hasVariety ? 'Pick a base variety on the canvas first' : 'Add a variety first') : (draftingSheaf && !(creatingSheafMapOperation || creatingSheafBinary) && !draftBase ? 'Add a base variety first' : '')))));
+        : (productNeedsFactors ? (productFactors.length === 2 && productDim > MAX_DIMENSION ? `Product dimension ${productDim} exceeds the calculator limit ${MAX_DIMENSION}` : 'Pick two varieties on the canvas') : ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady ? sheafMapPickHint() : ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady ? sheafBinaryPickHint() : ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady ? sheafSchurPickHint() : (creatingSheaf && !creatingParentSheaf && waitingForSheafBase ? (hasVariety ? 'Pick a base variety on the canvas first' : 'Add a variety first') : (draftingSheaf && !creatingParentSheaf && !draftBase ? 'Add a base variety first' : ''))))));
     }
     updateMapPickStatus();
     syncGlobalPickButton();
@@ -7808,6 +8138,13 @@
         ? buildDirectSumBundle(geometry.dim, sheaf, left, right)
         : buildTensorBundle(geometry.dim, sheaf, left, right);
     }
+    if (construction.type === 'schur') {
+      const parentObject = state.sheaves.find((item) => item.id === construction.sheafId);
+      const partition = normalizeSchurPartition(construction.partition);
+      if (!parentObject || !partition) return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
+      const parent = buildSourceSheafBundle(geometry, parentObject);
+      return buildSchurBundle(geometry.dim, sheaf, parent, partition);
+    }
     if (construction.type === 'pullback' || construction.type === 'pushforward') {
       if (construction.type === 'pullback') {
         const pulled = buildPullbackSheafBundle(geometry, sheaf, construction, options);
@@ -8150,6 +8487,44 @@
       chComps[i] = term;
     }
     return buildBundleFromCh(chComps, rankProductLatex(left, right), rankProductPlain(left, right), sheaf.labelLatex, sheaf.labelPlain);
+  }
+
+  function buildSchurBundle(d, sheaf, parent, partition) {
+    const rank = explicitRootRankFromPlain(parent.rankPlain);
+    const parentName = parent.labelPlain || parent.labelLatex || 'E';
+    if (rank != null && partition.length > rank) {
+      throw new Error(`The Young diagram ${formatSchurPartitionInput(partition)} has more rows than rank ${rank}.`);
+    }
+    const rankContext = schurRankContext(partition, parent.rankLatex, parent.rankPlain, parentName);
+    const chComps = schurChComponentsFromParentCharacter(partition, rankContext, parent.chComps, d);
+    const rankValue = evaluateSymmetricPowerPolynomialAtRank(schurPowerSumPolynomial(partition), rankContext, d);
+    const rankLatex = rankValue instanceof Fraction ? formatFractionLatex(rankValue) : formatPolyLatex(rankValue);
+    const rankPlain = rankValue instanceof Fraction ? formatFractionPlain(rankValue) : formatPolyPlain(rankValue);
+    return buildBundleFromCh(chComps, rankLatex, rankPlain, sheaf.labelLatex, sheaf.labelPlain);
+  }
+
+  function schurChComponentsFromParentCharacter(partition, rankContext, parentChComps, d) {
+    const chComps = zeroComponentArray(d);
+    const schur = schurPowerSumPolynomial(partition);
+    for (let n = 1; n <= d; n += 1) {
+      let total = Poly.zero();
+      for (const nu of integerPartitionCounts(n)) {
+        const coeff = evaluateSymmetricPowerPolynomialAtRank(applyPowerSumDerivationPartition(schur, nu), rankContext, d);
+        if (coefficientIsZero(coeff)) continue;
+        let term = Poly.one();
+        for (const [degreeText, count] of Object.entries(nu)) {
+          const degree = Number(degreeText);
+          if (!Number.isInteger(degree) || degree <= 0 || count <= 0) continue;
+          const dividedPower = polyPower(componentOrZero(parentChComps, degree), count, d)
+            .scale(fraction(1, factorialBigInt(count)));
+          term = term.mul(dividedPower, d);
+          if (term.isZero()) break;
+        }
+        total = total.add(multiplyByCoefficient(term, coeff, d));
+      }
+      chComps[n] = total.truncate(d);
+    }
+    return chComps;
   }
 
   function rankAsDegreeZeroPoly(bundle, idSeed) {
@@ -10845,6 +11220,11 @@
         if (ids[1] === sheaf.id) classes.push('is-map-codomain');
         if (state.canvasPickEnabled && ids[0] !== sheaf.id && ids[1] !== sheaf.id && allowableSheafBinaryPick(sheaf.id)) classes.push('is-pick-candidate');
       }
+      if (sheafSchurInputMode()) {
+        const parent = sheafSchurDraftSheaf();
+        if (parent?.id === sheaf.id) classes.push('is-active');
+        else if (state.canvasPickEnabled && allowableSheafSchurPick(sheaf.id)) classes.push('is-pick-candidate');
+      }
       if (sheafMapOperationInputMode()) {
         if (state.sheafMapDraft?.sheafId === sheaf.id) classes.push('is-active');
         else if (state.canvasPickEnabled && state.sheafMapPickTarget === 'sheaf' && allowableSheafMapOperationSheaf(sheaf.id)) classes.push('is-pick-candidate');
@@ -12185,6 +12565,7 @@
     ];
     if (base) parts.push(`\\text{base}=${sanitizeMathLabel(base.name, 'X')}`);
     if (sheaf.type === 'twist') parts.push(`r=${normalizedInt(sheaf.twist, -24, 24, 1)}`);
+    if (sheaf.construction?.type === 'schur') parts.push(`\\lambda=${schurPartitionLatex(sheaf.construction.partition)}`);
     parts.push(`\\text{basis}=\\text{${basisLabel(sheaf.basis)}}`);
     return parts.join(',\\ ');
   }
@@ -12218,6 +12599,7 @@
     ];
     if (base) parts.push(`base ${latexToPlain(base.name)}`);
     if (sheaf.type === 'twist') parts.push(`twist ${normalizedInt(sheaf.twist, -24, 24, 1)}`);
+    if (sheaf.construction?.type === 'schur') parts.push(`diagram ${formatSchurPartitionInput(sheaf.construction.partition)}`);
     parts.push(`basis ${basisLabel(sheaf.basis)}`);
     return parts.join('; ');
   }
@@ -12247,6 +12629,7 @@
     if (type === 'cotangent') return 'cotangent sheaf';
     if (type === 'canonical') return 'canonical sheaf';
     if (type === 'twist') return 'twist';
+    if (type === 'schur') return 'Schur functor';
     return 'abstract sheaf';
   }
 
@@ -12705,6 +13088,300 @@
       out = (out * BigInt(n - k + i)) / BigInt(i);
     }
     return out;
+  }
+
+  function bitCount(value) {
+    if (typeof value === 'bigint') {
+      let count = 0;
+      while (value) {
+        value &= value - 1n;
+        count += 1;
+      }
+      return count;
+    }
+    let count = 0;
+    while (value) {
+      value &= value - 1;
+      count += 1;
+    }
+    return count;
+  }
+
+  function currentSchurPartition() {
+    return parseSchurPartition(refs.sheafSchurPartition?.value);
+  }
+
+  function parseSchurPartition(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return null;
+    const parts = raw.replace(/[;|(){}\[\]]/g, ',').split(/[,\s]+/).map((part) => part.trim()).filter(Boolean);
+    if (!parts.length) return null;
+    const values = parts.map((part) => Number(part));
+    return normalizeSchurPartition(values);
+  }
+
+  function normalizeSchurPartition(value) {
+    if (!Array.isArray(value)) {
+      const raw = String(value || '').trim();
+      if (!raw) return null;
+      value = raw.replace(/[;|(){}\[\]]/g, ',').split(/[,\s]+/).map((part) => part.trim()).filter(Boolean);
+    }
+    const values = value.map((part) => Number(part));
+    if (!values?.length) return null;
+    if (values.some((part) => !Number.isInteger(part) || part <= 0)) return null;
+    const partition = values.filter((part) => part > 0);
+    for (let i = 1; i < partition.length; i += 1) {
+      if (partition[i] > partition[i - 1]) return null;
+    }
+    const size = partition.reduce((sum, part) => sum + part, 0);
+    if (size <= 0 || size > MAX_SCHUR_PARTITION_SIZE) return null;
+    return partition;
+  }
+
+  function formatSchurPartitionInput(partition) {
+    const normalized = normalizeSchurPartition(partition) || [2, 1];
+    return normalized.join(', ');
+  }
+
+  function schurPartitionLatex(partition) {
+    const normalized = normalizeSchurPartition(partition) || [2, 1];
+    return `(${normalized.join(',')})`;
+  }
+
+  function schurRepresentationRank(partition, rank) {
+    const normalized = normalizeSchurPartition(partition);
+    if (!normalized || !Number.isInteger(rank) || rank < normalized.length) return 0n;
+    let value = Fraction.one();
+    for (let row = 0; row < normalized.length; row += 1) {
+      for (let col = 1; col <= normalized[row]; col += 1) {
+        value = value.mul(fraction(BigInt(rank + col - row - 1), BigInt(schurHookLength(normalized, row, col))));
+      }
+    }
+    return value.den === 1n ? value.num : 0n;
+  }
+
+  function schurPowerSumPolynomial(partition) {
+    const normalized = normalizeSchurPartition(partition);
+    if (!normalized) return symmetricPowerZero();
+    const key = normalized.join(',');
+    if (schurPowerPolynomialCache.has(key)) return schurPowerPolynomialCache.get(key);
+    const length = normalized.length;
+    const matrix = [];
+    for (let i = 0; i < length; i += 1) {
+      const row = [];
+      for (let j = 0; j < length; j += 1) {
+        row.push(completeSymmetricPowerPolynomial(normalized[i] - i + j));
+      }
+      matrix.push(row);
+    }
+    const out = determinantSymmetricPowerPolynomial(matrix);
+    schurPowerPolynomialCache.set(key, out);
+    return out;
+  }
+
+  function completeSymmetricPowerPolynomial(n) {
+    if (n < 0) return symmetricPowerZero();
+    if (n === 0) return symmetricPowerOne();
+    if (completeSymmetricCache.has(n)) return completeSymmetricCache.get(n);
+    let out = symmetricPowerZero();
+    for (const counts of integerPartitionCounts(n)) {
+      let denom = 1n;
+      const powers = {};
+      Object.entries(counts).forEach(([degreeText, count]) => {
+        const degree = Number(degreeText);
+        powers[degree] = count;
+        denom *= bigintPow(BigInt(degree), count) * factorialBigInt(count);
+      });
+      out = addSymmetricPowerPolynomials(out, new Map([[powerSumKey(powers), fraction(1, denom)]]));
+    }
+    completeSymmetricCache.set(n, out);
+    return out;
+  }
+
+  function determinantSymmetricPowerPolynomial(matrix) {
+    const n = matrix.length;
+    if (!n) return symmetricPowerOne();
+    const dp = new Map([[0n, symmetricPowerOne()]]);
+    const fullMask = (1n << BigInt(n)) - 1n;
+    for (let mask = 0n; mask <= fullMask; mask += 1n) {
+      const current = dp.get(mask);
+      if (!current) continue;
+      const row = bitCount(mask);
+      if (row >= n) continue;
+      for (let col = 0; col < n; col += 1) {
+        const bit = 1n << BigInt(col);
+        if (mask & bit) continue;
+        const greaterUsed = bitCount(mask & ~((1n << BigInt(col + 1)) - 1n));
+        const signedEntry = greaterUsed % 2 === 0
+          ? matrix[row][col]
+          : scaleSymmetricPowerPolynomial(matrix[row][col], fraction(-1));
+        const nextMask = mask | bit;
+        const next = multiplySymmetricPowerPolynomials(current, signedEntry);
+        dp.set(nextMask, addSymmetricPowerPolynomials(dp.get(nextMask) || symmetricPowerZero(), next));
+      }
+    }
+    return dp.get(fullMask) || symmetricPowerZero();
+  }
+
+  function applyPowerSumDerivationPartition(poly, counts) {
+    let out = poly;
+    Object.entries(counts).forEach(([degreeText, count]) => {
+      const degree = Number(degreeText);
+      for (let i = 0; i < count; i += 1) out = applyPowerSumDerivation(out, degree);
+    });
+    return out;
+  }
+
+  function applyPowerSumDerivation(poly, degree) {
+    const out = symmetricPowerZero();
+    for (const [key, coeff] of poly) {
+      const powers = parsePowerSumKey(key);
+      Object.entries(powers).forEach(([partText, exponent]) => {
+        const part = Number(partText);
+        if (!exponent) return;
+        const nextPowers = { ...powers };
+        if (exponent === 1) delete nextPowers[partText];
+        else nextPowers[partText] = exponent - 1;
+        const nextKey = powerSumKey(nextPowers);
+        const delta = coeff.mul(fraction(exponent)).mul(fraction(bigintPow(BigInt(part), degree)));
+        out.set(nextKey, (out.get(nextKey) || Fraction.zero()).add(delta));
+      });
+    }
+    return cleanSymmetricPowerPolynomial(out);
+  }
+
+  function evaluateSymmetricPowerPolynomial(poly, rank) {
+    let total = Fraction.zero();
+    for (const [key, coeff] of poly) {
+      const powers = parsePowerSumKey(key);
+      const factor = Object.values(powers).reduce((sum, exponent) => sum + exponent, 0);
+      total = total.add(coeff.mul(fraction(bigintPow(BigInt(rank), factor))));
+    }
+    return total;
+  }
+
+  function evaluateSymmetricPowerPolynomialAtRank(poly, rankContext, d = MAX_DIMENSION) {
+    if (rankContext.numeric != null) return evaluateSymmetricPowerPolynomial(poly, rankContext.numeric);
+    let total = Poly.zero();
+    for (const [key, coeff] of poly) {
+      const powers = parsePowerSumKey(key);
+      const factor = Object.values(powers).reduce((sum, exponent) => sum + exponent, 0);
+      const term = factor ? polyPower(rankContext.poly, factor, d).scale(coeff) : Poly.constant(coeff);
+      total = total.add(term);
+    }
+    return total.truncate(d);
+  }
+
+  function schurRankContext(partition, rankLatex, rankPlain, parentName) {
+    const numeric = explicitRootRankFromPlain(rankPlain);
+    if (numeric != null) return { numeric, poly: Poly.constant(BigInt(numeric)) };
+    const id = `rankSchurParent${hashString(`${parentName}:${formatSchurPartitionInput(partition)}:${rankPlain || rankLatex || 'r'}`)}`;
+    defineVariable(id, 0, rankLatex || symbolToLatex(rankPlain || 'r'));
+    return { numeric: null, poly: Poly.variable(id) };
+  }
+
+  function coefficientIsZero(value) {
+    return value instanceof Fraction ? value.isZero() : Poly.from(value).isZero();
+  }
+
+  function multiplyByCoefficient(poly, coeff, d) {
+    return coeff instanceof Fraction ? poly.scale(coeff) : poly.mul(coeff, d);
+  }
+
+  function symmetricPowerZero() {
+    return new Map();
+  }
+
+  function symmetricPowerOne() {
+    return new Map([['', Fraction.one()]]);
+  }
+
+  function addSymmetricPowerPolynomials(left, right) {
+    const out = new Map(left);
+    for (const [key, coeff] of right) {
+      out.set(key, (out.get(key) || Fraction.zero()).add(coeff));
+    }
+    return cleanSymmetricPowerPolynomial(out);
+  }
+
+  function scaleSymmetricPowerPolynomial(poly, scalar) {
+    scalar = Fraction.from(scalar);
+    if (scalar.isZero()) return symmetricPowerZero();
+    const out = new Map();
+    for (const [key, coeff] of poly) out.set(key, coeff.mul(scalar));
+    return cleanSymmetricPowerPolynomial(out);
+  }
+
+  function multiplySymmetricPowerPolynomials(left, right) {
+    if (!left.size || !right.size) return symmetricPowerZero();
+    const out = new Map();
+    for (const [leftKey, leftCoeff] of left) {
+      const leftPowers = parsePowerSumKey(leftKey);
+      for (const [rightKey, rightCoeff] of right) {
+        const powers = { ...leftPowers };
+        Object.entries(parsePowerSumKey(rightKey)).forEach(([degree, exponent]) => {
+          powers[degree] = (powers[degree] || 0) + exponent;
+        });
+        const key = powerSumKey(powers);
+        out.set(key, (out.get(key) || Fraction.zero()).add(leftCoeff.mul(rightCoeff)));
+      }
+    }
+    return cleanSymmetricPowerPolynomial(out);
+  }
+
+  function cleanSymmetricPowerPolynomial(poly) {
+    for (const [key, coeff] of Array.from(poly.entries())) {
+      if (coeff.isZero()) poly.delete(key);
+    }
+    return poly;
+  }
+
+  function powerSumKey(powers) {
+    return Object.entries(powers || {})
+      .map(([degree, exponent]) => [Number(degree), Number(exponent)])
+      .filter(([degree, exponent]) => Number.isInteger(degree) && degree > 0 && exponent > 0)
+      .sort((a, b) => a[0] - b[0])
+      .map(([degree, exponent]) => `${degree}:${exponent}`)
+      .join('|');
+  }
+
+  function parsePowerSumKey(key) {
+    if (!key) return {};
+    const out = {};
+    key.split('|').forEach((part) => {
+      const [degree, exponent] = part.split(':');
+      out[degree] = Number(exponent);
+    });
+    return out;
+  }
+
+  function integerPartitionCounts(n) {
+    if (integerPartitionCountCache.has(n)) return integerPartitionCountCache.get(n);
+    const out = [];
+    const counts = {};
+    const visit = (remaining, maxPart) => {
+      if (remaining === 0) {
+        out.push({ ...counts });
+        return;
+      }
+      for (let part = Math.min(maxPart, remaining); part >= 1; part -= 1) {
+        counts[part] = (counts[part] || 0) + 1;
+        visit(remaining - part, part);
+        counts[part] -= 1;
+        if (!counts[part]) delete counts[part];
+      }
+    };
+    visit(n, n);
+    integerPartitionCountCache.set(n, out);
+    return out;
+  }
+
+  function schurHookLength(partition, row, col) {
+    let below = 0;
+    for (let i = row + 1; i < partition.length; i += 1) {
+      if (partition[i] >= col) below += 1;
+    }
+    return partition[row] - col + below + 1;
   }
 
   function sanitizeMathLabel(value, fallback) {
