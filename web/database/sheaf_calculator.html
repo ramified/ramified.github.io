@@ -189,14 +189,26 @@
       overflow: hidden;
     }
 
-  .canvas-clear-button {
+  .canvas-corner-actions {
       position: absolute;
       left: 10px;
       bottom: 10px;
       z-index: 2;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+  }
+
+  .canvas-clear-button,
+  .canvas-show-button {
       padding: 4px 10px;
       font-size: 0.74rem;
     background: rgba(255,253,248,0.88);
+  }
+
+  .canvas-show-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   .map-curve-control {
@@ -554,6 +566,30 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .grassmannian-param-picker {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .grassmannian-param {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 5px;
+      align-items: center;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+    }
+
+    .grassmannian-param .sheaf-input {
+      width: 100%;
+      min-width: 0;
+      padding: 4px 6px;
+      text-align: center;
     }
 
     .product-factor-times {
@@ -1360,7 +1396,10 @@
       <div class="sheaf-stage">
         <canvas id="sheaf-canvas" width="880" height="280" aria-label="Sheaf calculator overview"></canvas>
         <div id="sheaf-canvas-labels" class="sheaf-canvas-labels" aria-label="Added varieties and sheaves"></div>
-        <button class="btn btn-ghost canvas-clear-button" id="clear-canvas" type="button">clear</button>
+        <div class="canvas-corner-actions">
+          <button class="btn btn-ghost canvas-clear-button" id="clear-canvas" type="button">clear</button>
+          <button class="btn btn-ghost canvas-show-button" id="show-canvas" type="button">show</button>
+        </div>
       </div>
     </div>
 
@@ -1427,6 +1466,7 @@
               <option value="abelian">Abelian variety</option>
               <option value="point">Point</option>
               <option value="projective">Projective space ℙⁿ</option>
+              <option value="grassmannian">Grassmannian Gr(r,n)</option>
               <option value="complete-intersection">Complete intersection in ℙⁿ</option>
               <option value="product">Product of varieties</option>
             </select>
@@ -1440,6 +1480,19 @@
             </div>
           </div>
           <div class="sheaf-note" id="product-pick-note" hidden>click two varieties on the canvas</div>
+          <div class="sheaf-field-row" id="grassmannian-params-row" hidden>
+            <span class="input-label">parameters</span>
+            <div class="grassmannian-param-picker">
+              <label class="grassmannian-param" for="grassmannian-r">
+                <span>r</span>
+                <input type="number" id="grassmannian-r" class="sheaf-input" min="1" max="8" value="2">
+              </label>
+              <label class="grassmannian-param" for="grassmannian-n">
+                <span>n</span>
+                <input type="number" id="grassmannian-n" class="sheaf-input" min="2" max="9" value="4">
+              </label>
+            </div>
+          </div>
           <div class="sheaf-field-row">
             <label class="input-label" for="variety-dim">dimension</label>
             <input type="number" id="variety-dim" class="sheaf-input" min="0" max="8" value="3">
@@ -1697,8 +1750,15 @@
 
     <section class="card collapsed" id="homology-card">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Homology Classes</span><em class="toggle-icon">&#9662;</em></div>
-      <div class="card-body">
+        <div class="card-body">
         <div class="homology-active" id="homology-active"></div>
+        <div class="sheaf-field-row" id="homology-grassmannian-basis-row" hidden>
+          <span class="input-label">basis</span>
+          <label class="opt-row">
+            <input type="checkbox" id="homology-grassmannian-young-basis">
+            Young diagrams
+          </label>
+        </div>
         <div class="homology-map-tools" id="homology-map-tools" hidden>
           <div class="homology-tool-row">
             <label class="opt-row homology-map-mode-row" for="homology-map-input-mode">

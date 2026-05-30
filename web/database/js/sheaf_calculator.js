@@ -9,6 +9,7 @@
   const MAX_ROOT_EXPANSION_MONOMIALS = 1500;
   const MAX_EXPLICIT_ROOT_FACTORS = 64;
   const MAX_SCHUR_PARTITION_SIZE = 12;
+  const MAX_GRASSMANNIAN_N = MAX_DIMENSION + 1;
   const DEFAULT_HOMOLOGY_RULE_PASSES = 1;
   const DEFAULT_VARIETY_SPACING_PX = 110;
   const DEFAULT_FIRST_VARIETY_X = 0.22;
@@ -60,6 +61,9 @@
   const HOMOLOGY_JACOBIAN_TOP_RULE_ID = 'jacobian-symplectic-point';
   const HOMOLOGY_PRODUCT_BOX_CLASS_PREFIX = 'product_box_';
   const HOMOLOGY_PRODUCT_BOX_RULE_PREFIX = 'product-box-';
+  const HOMOLOGY_GRASSMANNIAN_TAUTOLOGICAL_CLASS_PREFIX = 'grassmannian_s_';
+  const HOMOLOGY_GRASSMANNIAN_YOUNG_CLASS_PREFIX = 'grassmannian_young_';
+  const HOMOLOGY_GRASSMANNIAN_RULE_PREFIX = 'grassmannian-';
   const HOMOLOGY_TANGENT_CHERN_CLASS_PREFIX = 'tangent_chern_';
   const HOMOLOGY_TOP_RULE_ID = 'top-hyperplane-point';
   const HOMOLOGY_THETA_TOP_RULE_ID = 'top-theta-point';
@@ -113,6 +117,7 @@
     homologyMapInputMode: 'coefficients',
     homologyMapClassTableOpen: false,
     homologyExpressionTransposed: true,
+    hiddenObjects: [],
     exportScope: 'main',
     suppressLabelClickUntil: 0,
     suppressCardToggleUntil: 0,
@@ -165,6 +170,9 @@
     refs.productFactorA = $('product-factor-a');
     refs.productFactorB = $('product-factor-b');
     refs.productPickNote = $('product-pick-note');
+    refs.grassmannianParamsRow = $('grassmannian-params-row');
+    refs.grassmannianR = $('grassmannian-r');
+    refs.grassmannianN = $('grassmannian-n');
     refs.pointNamePresetRow = $('point-name-preset-row');
     refs.pointNamePresets = Array.from(document.querySelectorAll('[data-point-variety-name]'));
     refs.varietyName = $('variety-name');
@@ -254,6 +262,7 @@
     refs.canvas = $('sheaf-canvas');
     refs.canvasLabels = $('sheaf-canvas-labels');
     refs.clearCanvas = $('clear-canvas');
+    refs.showCanvas = $('show-canvas');
     refs.objectBadge = $('object-badge');
     refs.status = $('sheaf-status');
     refs.ringSummary = $('ring-summary');
@@ -282,6 +291,8 @@
     refs.homologyAssignmentCancel = $('homology-assignment-cancel');
     refs.homologyExpressionPanel = $('homology-expression-panel');
     refs.homologyExpressionChart = $('homology-expression-chart');
+    refs.homologyGrassmannianBasisRow = $('homology-grassmannian-basis-row');
+    refs.homologyGrassmannianYoungBasis = $('homology-grassmannian-young-basis');
     refs.homologyHyperplaneRow = $('homology-hyperplane-row');
     refs.homologyHyperplaneSymbol = $('homology-hyperplane-symbol');
     refs.homologyPointRow = $('homology-point-row');
@@ -334,6 +345,9 @@
       dim: '3',
       name: 'X',
       genus: 'g',
+      grassmannianR: '2',
+      grassmannianN: '4',
+      grassmannianYoungBasis: false,
       ciDegrees: '',
       nameDirty: false
     };
@@ -379,6 +393,7 @@
       id: nextInputId('X'),
       ...readVarietyDraft()
     };
+    if (variety.type === 'grassmannian') variety.grassmannianYoungBasis = false;
     variety.name = uniqueObjectName('variety', variety.name);
     refs.varietyName.value = variety.name;
     variety.nameDirty = variety.nameDirty || variety.name !== defaultVarietyNameLatex();
@@ -643,13 +658,21 @@
       };
       refs.varietyType.value = 'abstract';
     }
+    const active = inputIsModifyMode() ? activeVariety() : null;
     const defaultName = defaultVarietyNameLatex();
     const name = sanitizeMathLabel(refs.varietyName.value, defaultName);
+    const grassmannian = syncGrassmannianControls();
+    if (refs.varietyType.value === 'grassmannian' && grassmannian.dim > MAX_DIMENSION) {
+      throw new Error(`Grassmannian dimension ${grassmannian.dim} exceeds the calculator limit ${MAX_DIMENSION}.`);
+    }
     return {
       type: refs.varietyType.value,
       dim: normalizedDraftDimension(),
       name,
       genus: sanitizeGenusInput(refs.curveGenus.value),
+      grassmannianR: String(grassmannian.r),
+      grassmannianN: String(grassmannian.n),
+      grassmannianYoungBasis: refs.varietyType.value === 'grassmannian' && active?.grassmannianYoungBasis === true,
       ciAmbient: derivedCompleteIntersectionAmbient(),
       ciDegrees: normalizedCompleteIntersectionDegreesText(),
       nameDirty: state.draftVarietyNameDirty || name !== defaultName
@@ -820,6 +843,10 @@
 
   function varietyHasHyperplaneClass(type) {
     return type === 'projective' || type === 'complete-intersection';
+  }
+
+  function varietySupportsTwist(type) {
+    return varietyHasHyperplaneClass(type) || type === 'grassmannian';
   }
 
   function sheafSupportsChernRoots(sheaf = activeSheaf()) {
@@ -1218,6 +1245,8 @@
       refs.varietyType.value = 'product';
       refs.dim.value = '3';
       refs.curveGenus.value = 'g';
+      refs.grassmannianR.value = '2';
+      refs.grassmannianN.value = '4';
       refs.ciDegrees.value = '';
       syncCompleteIntersectionControls();
       clearProductDraft();
@@ -1251,6 +1280,8 @@
       refs.varietyType.value = 'abstract';
       refs.dim.value = '3';
       refs.curveGenus.value = 'g';
+      refs.grassmannianR.value = '2';
+      refs.grassmannianN.value = '4';
       refs.ciDegrees.value = '';
       syncCompleteIntersectionControls();
       state.draftVarietyNameDirty = false;
@@ -1265,6 +1296,11 @@
   }
 
   function activateObject(kind, id, options = {}) {
+    const object = objectByKind(kind, id);
+    if (object?.hiddenOnCanvas) {
+      object.hiddenOnCanvas = false;
+      state.hiddenObjects = hiddenObjectRefs();
+    }
     if (kind === 'variety') {
       state.activeVarietyId = id;
       state.activeSheafId = null;
@@ -1442,6 +1478,8 @@
     refs.dim.value = variety.dim ?? '3';
     refs.varietyName.value = variety.name || defaultVarietyNameLatex();
     refs.curveGenus.value = variety.genus || 'g';
+    refs.grassmannianR.value = variety.grassmannianR || '2';
+    refs.grassmannianN.value = variety.grassmannianN || '4';
     refs.ciDegrees.value = variety.ciDegrees || '';
     state.productDraft = variety.construction?.type === 'product'
       ? { varietyIds: [...(variety.construction.varietyIds || []).slice(0, 2)] }
@@ -1686,12 +1724,94 @@
     state.activeMapId = null;
     state.labelDrag = null;
     state.mapControlDrag = null;
+    state.hiddenObjects = [];
     clearMapDraft();
     if (refs.addObjectKind) refs.addObjectKind.value = 'variety';
     setInputMode('create', { resetDraft: true });
     syncSheafBaseOptions(true);
     syncInputEditorVisibility();
     recompute();
+  }
+
+  function hideCanvasObject(kind, id) {
+    const object = objectByKind(kind, id);
+    if (!object) return;
+    object.hiddenOnCanvas = true;
+    if (kind !== 'map') {
+      state.maps.forEach((map) => {
+        if (map.domainKind === kind && map.domainId === id) map.hiddenOnCanvas = true;
+        if (map.codomainKind === kind && map.codomainId === id) map.hiddenOnCanvas = true;
+      });
+    }
+    state.hiddenObjects = hiddenObjectRefs();
+    recompute();
+  }
+
+  function showHiddenCanvasObjects() {
+    let changed = false;
+    allCanvasObjects().forEach((object) => {
+      if (object.hiddenOnCanvas) {
+        object.hiddenOnCanvas = false;
+        changed = true;
+      }
+    });
+    state.hiddenObjects = [];
+    if (changed) recompute();
+    else syncShowCanvasButton();
+  }
+
+  function allCanvasObjects() {
+    return [...state.varieties, ...state.sheaves, ...state.maps];
+  }
+
+  function hiddenObjectRefs() {
+    return [
+      ...state.varieties.filter((item) => item.hiddenOnCanvas).map((item) => ({ kind: 'variety', id: item.id })),
+      ...state.sheaves.filter((item) => item.hiddenOnCanvas).map((item) => ({ kind: 'sheaf', id: item.id })),
+      ...state.maps.filter((item) => item.hiddenOnCanvas).map((item) => ({ kind: 'map', id: item.id }))
+    ];
+  }
+
+  function hasHiddenCanvasObjects() {
+    return allCanvasObjects().some((object) => object.hiddenOnCanvas);
+  }
+
+  function syncShowCanvasButton() {
+    if (!refs.showCanvas) return;
+    const hiddenRefs = hiddenObjectRefs();
+    const count = hiddenRefs.length;
+    state.hiddenObjects = hiddenRefs;
+    refs.showCanvas.disabled = count === 0;
+    refs.showCanvas.title = count ? `Show ${count} hidden label${count === 1 ? '' : 's'}` : 'No hidden labels';
+  }
+
+  function canvasObjectLabelFromEvent(event) {
+    const direct = event?.target?.closest?.('[data-object-kind][data-object-id]');
+    if (direct && refs.canvasLabels?.contains(direct)) return direct;
+    const path = typeof event?.composedPath === 'function' ? event.composedPath() : [];
+    for (const node of path) {
+      if (!node?.closest) continue;
+      const label = node.closest('[data-object-kind][data-object-id]');
+      if (label && refs.canvasLabels?.contains(label)) return label;
+    }
+    const x = Number(event?.clientX);
+    const y = Number(event?.clientY);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    let node = document.elementFromPoint(x, y);
+    while (node && node !== refs.canvasLabels) {
+      if (node?.matches?.('[data-object-kind][data-object-id]')) return node;
+      node = node.parentElement || node.getRootNode?.()?.host || null;
+    }
+    return null;
+  }
+
+  function handleCanvasLabelContextMenu(event) {
+    const target = canvasObjectLabelFromEvent(event);
+    if (!target) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+    hideCanvasObject(target.dataset.objectKind, target.dataset.objectId);
   }
 
   function updateDeleteObjectButton() {
@@ -2062,6 +2182,7 @@
       const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
       if (refs.varietyType.value === 'curve') refs.dim.value = '1';
       else if (refs.varietyType.value === 'point') refs.dim.value = '0';
+      else if (refs.varietyType.value === 'grassmannian') syncGrassmannianControls();
       else refs.dim.value = String(dim);
       if (refs.varietyType.value !== 'product') clearProductDraft();
       else if (inputIsCreateMode() && currentInputKind() === 'variety') activateProductFactorPick(0, { render: false });
@@ -2074,10 +2195,25 @@
     });
     refs.dim.addEventListener('change', () => {
       const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
-      refs.dim.value = refs.varietyType.value === 'curve' ? '1' : (refs.varietyType.value === 'point' ? '0' : String(dim));
+      refs.dim.value = refs.varietyType.value === 'curve' ? '1' : (refs.varietyType.value === 'point' ? '0' : (refs.varietyType.value === 'grassmannian' ? String(syncGrassmannianControls().dim) : String(dim)));
       if (refs.varietyType.value === 'complete-intersection') syncCompleteIntersectionControls();
       syncDefaultVarietyName();
       syncDefaultSheafName();
+    });
+    [refs.grassmannianR, refs.grassmannianN].forEach((input) => {
+      if (!input) return;
+      input.addEventListener('input', () => {
+        if (refs.varietyType?.value !== 'grassmannian') return;
+        syncGrassmannianControls();
+        syncDefaultVarietyName();
+        syncDefaultSheafName();
+      });
+      input.addEventListener('change', () => {
+        if (refs.varietyType?.value !== 'grassmannian') return;
+        syncGrassmannianControls();
+        syncDefaultVarietyName();
+        syncDefaultSheafName();
+      });
     });
     refs.curveGenus.addEventListener('input', () => {
       syncDefaultVarietyName();
@@ -2511,6 +2647,18 @@
     if (refs.clearCanvas) {
       refs.clearCanvas.addEventListener('click', clearCanvasObjects);
     }
+    if (refs.showCanvas) {
+      refs.showCanvas.addEventListener('click', showHiddenCanvasObjects);
+    }
+    if (refs.homologyGrassmannianYoungBasis) {
+      refs.homologyGrassmannianYoungBasis.addEventListener('change', () => {
+        const variety = activeHomologyVariety();
+        if (!variety || variety.type !== 'grassmannian') return;
+        resetHomologyRulePasses();
+        variety.grassmannianYoungBasis = refs.homologyGrassmannianYoungBasis.checked;
+        recompute();
+      });
+    }
     refs.refreshExport.addEventListener('click', () => refreshExport('main'));
     refs.copyExport.addEventListener('click', copyExport);
     refs.exportFormat.addEventListener('change', () => refreshExport());
@@ -2537,7 +2685,7 @@
     refs.canvasLabels.addEventListener('click', (event) => {
       if (Date.now() < state.suppressLabelClickUntil) return;
       if (event.target.closest('[data-map-control]')) return;
-      const target = event.target.closest('[data-object-kind]');
+      const target = canvasObjectLabelFromEvent(event);
       if (!target) return;
       if (handleCanvasPickClick(target)) return;
       selectObject(target.dataset.objectKind, target.dataset.objectId);
@@ -2548,7 +2696,7 @@
         handleMapControlKey(event, control);
         return;
       }
-      const target = event.target.closest('[data-object-kind]');
+      const target = canvasObjectLabelFromEvent(event);
       if (!target) return;
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
@@ -2563,6 +2711,7 @@
         deleteActiveObject(kind);
       }
     });
+    refs.canvasLabels.addEventListener('contextmenu', handleCanvasLabelContextMenu, true);
     refs.canvasLabels.addEventListener('pointerdown', (event) => {
       if (event.button !== 0) return;
       const control = event.target.closest('[data-map-control]');
@@ -2570,7 +2719,7 @@
         startMapControlDrag(control, event);
         return;
       }
-      const target = event.target.closest('[data-object-kind]');
+      const target = canvasObjectLabelFromEvent(event);
       if (!target) return;
       if (state.canvasPickEnabled) return;
       if (currentInputKind() === 'map' && inputIsCreateMode() && ordinaryMapInputMode()) {
@@ -2594,8 +2743,8 @@
   }
 
   function activeHomologyMapContext() {
-    if (!inputIsModifyMode() || modifyKind() !== 'map') return null;
     const map = activeMap();
+    if (!map || (inputIsModifyMode() && modifyKind() !== 'map')) return null;
     if (!map || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return null;
     const domain = state.varieties.find((item) => item.id === map.domainId);
     const codomain = state.varieties.find((item) => item.id === map.codomainId);
@@ -2611,7 +2760,7 @@
 
   function activeHomologyVariety() {
     if (inputIsModifyMode()) return modifyKind() === 'variety' ? selectedVariety() : null;
-    return activeVariety();
+    return activeVariety() || selectedVariety();
   }
 
   function activeHomologySheafContext(result = state.lastResult) {
@@ -3658,7 +3807,7 @@
     if (!mapInputMode()) return false;
     if (mapCompositionInputMode()) return state.maps.some((map) => allowableMapCompositionPick(map.id));
     if (abelJacobiMapInputMode()) return abelJacobiCurveVarieties().length > 0;
-    return state.varieties.length > 0;
+    return visibleCanvasVarieties().length > 0;
   }
 
   function sheafMapDraftBase() {
@@ -4040,7 +4189,7 @@
     const variety = state.varieties.find((item) => item.id === varietyId);
     if (!variety) return false;
     if (refs.sheafType?.value !== 'twist') return true;
-    return varietyHasHyperplaneClass(variety.type || 'abstract');
+    return varietySupportsTwist(variety.type || 'abstract');
   }
 
   function handleMapPick(kind, id) {
@@ -4053,6 +4202,7 @@
       return;
     }
     if (kind !== 'variety' || !state.varieties.some((item) => item.id === id)) return;
+    if (state.varieties.some((item) => item.id === id && item.hiddenOnCanvas)) return;
     const draft = state.mapDraft?.type === 'ordinary' ? { ...state.mapDraft } : { type: 'ordinary' };
     if (state.mapPickTarget === 'codomain') {
       draft.codomainKind = 'variety';
@@ -4379,7 +4529,38 @@
 
   function normalizedDraftDimension() {
     if (refs.varietyType?.value === 'point') return '0';
+    if (refs.varietyType?.value === 'grassmannian') return String(syncGrassmannianControls().dim);
     return String(normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3));
+  }
+
+  function normalizedGrassmannianParams(source = {}) {
+    const n = normalizedInt(source.n ?? source.grassmannianN ?? refs.grassmannianN?.value, 2, MAX_GRASSMANNIAN_N, 4);
+    const r = normalizedInt(source.r ?? source.grassmannianR ?? refs.grassmannianR?.value, 1, Math.max(1, n - 1), Math.min(2, n - 1));
+    return {
+      r,
+      n,
+      dim: grassmannianDimension(r, n)
+    };
+  }
+
+  function syncGrassmannianControls() {
+    const params = normalizedGrassmannianParams();
+    if (refs.grassmannianR) {
+      refs.grassmannianR.max = String(Math.max(1, params.n - 1));
+      refs.grassmannianR.value = String(params.r);
+    }
+    if (refs.grassmannianN) {
+      refs.grassmannianN.max = String(MAX_GRASSMANNIAN_N);
+      refs.grassmannianN.value = String(params.n);
+    }
+    if (refs.dim && refs.varietyType?.value === 'grassmannian') {
+      refs.dim.value = String(params.dim);
+    }
+    return params;
+  }
+
+  function grassmannianDimension(r, n) {
+    return r * Math.max(0, n - r);
   }
 
   function completeIntersectionDegrees() {
@@ -4443,6 +4624,10 @@
     if (type === 'projective') {
       const n = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
       return `\\mathbb{P}^{${n}}`;
+    }
+    if (type === 'grassmannian') {
+      const { r, n } = syncGrassmannianControls();
+      return `\\operatorname{Gr}(${r},${n})`;
     }
     if (type === 'curve') return curveDefaultName(refs.curveGenus.value);
     if (type === 'abelian') return 'A';
@@ -5102,6 +5287,7 @@
     const editingMap = inputIsModifyMode() && !!state.activeMapId;
     const draftingMap = inputIsModifyMode() ? editingMap : (refs.addObjectKind?.value === 'map' || combinedAbelJacobiCreateMode());
     const draftingSheaf = !draftingMap && (inputIsModifyMode() ? editingSheaf : refs.addObjectKind?.value === 'sheaf');
+    const draftingVariety = !draftingMap && !draftingSheaf;
     syncProductVarietyOption();
     const draftVariety = refs.varietyType.value;
     const activeVarietyType = activeVariety()?.type || 'abstract';
@@ -5109,7 +5295,7 @@
     const draftBase = draftBaseVariety();
     const draftBaseType = draftBase?.type || 'abstract';
     let draftSheaf = refs.sheafType.value;
-    const hasTwistBase = state.varieties.some((variety) => varietyHasHyperplaneClass(variety.type || 'abstract'));
+    const hasTwistBase = state.varieties.some((variety) => varietySupportsTwist(variety.type || 'abstract'));
     const sheafTypeHasParentRow = (type) => type === 'map-operation' || type === 'direct-sum' || type === 'tensor' || type === 'schur';
     let sheafHasParentRow = false;
     let waitingForSheafBase = false;
@@ -5131,8 +5317,8 @@
     };
     refreshSheafTypeFlags();
     const canTwist = draftingSheaf
-      ? (waitingForSheafBase ? hasTwistBase : !!draftBase && varietyHasHyperplaneClass(draftBaseType))
-      : hasVariety && varietyHasHyperplaneClass(activeVarietyType);
+      ? (waitingForSheafBase ? hasTwistBase : !!draftBase && varietySupportsTwist(draftBaseType))
+      : hasVariety && varietySupportsTwist(activeVarietyType);
     const canMapOperationSheaf = hasVariety
       && state.maps.some((map) => map.domainKind === 'variety' && map.codomainKind === 'variety')
       && state.sheaves.some((sheaf) => !editingSheafMapOperation || sheaf.id !== state.activeSheafId);
@@ -5185,6 +5371,7 @@
     refreshSheafTypeFlags();
     const showCurve = draftVariety === 'curve';
     const showPoint = draftVariety === 'point';
+    const showGrassmannian = draftVariety === 'grassmannian';
     const showCi = draftVariety === 'complete-intersection';
     const showProduct = (draftVariety === 'product' && !inputIsModifyMode() && currentInputKind() === 'variety') || combinedProductCreateMode();
     const editingProduct = draftVariety === 'product' && inputIsModifyMode() && currentInputKind() === 'variety';
@@ -5197,12 +5384,16 @@
     else if (refs.productFactorsRow || refs.productPickNote) updateProductDraftControls();
     if (refs.dim) refs.dim.closest('.sheaf-field-row').hidden = productMode;
     if (refs.varietyName) refs.varietyName.closest('.sheaf-field-row').hidden = showProduct && productDraftFactors().length < 2;
+    if (refs.grassmannianParamsRow) refs.grassmannianParamsRow.hidden = !showGrassmannian;
+    if (showGrassmannian) syncGrassmannianControls();
     if (refs.pointNamePresetRow) refs.pointNamePresetRow.hidden = !showPoint;
     if (refs.curveGenusRow) refs.curveGenusRow.hidden = !showCurve;
     refs.ciDegreesRow.hidden = !showCi;
     if (refs.ciEquationCountRow) refs.ciEquationCountRow.hidden = !showCi;
     if (refs.ciDegreeSliders) refs.ciDegreeSliders.hidden = !showCi || completeIntersectionDegrees().length === 0;
     refs.ciNote.hidden = !showCi;
+    if (refs.dim && showGrassmannian) refs.dim.readOnly = true;
+    else if (refs.dim) refs.dim.readOnly = false;
     refs.twistRow.hidden = !draftingSheaf || draftSheaf !== 'twist';
     updateSheafBinaryDraftControls();
     updateSheafSchurDraftControls();
@@ -5238,11 +5429,13 @@
       const productDim = productFactors.length === 2 ? productDimensionFromFactors(productFactors[0], productFactors[1]) : 0;
       const productNeedsFactors = creatingProduct || updatingProduct;
       const productReady = !productNeedsFactors || (productFactors.length === 2 && productDim <= MAX_DIMENSION);
-      refs.addObject.disabled = (draftingMap && !mapReady) || (productNeedsFactors && !productReady) || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
+      const grassmannianParams = draftingVariety && draftVariety === 'grassmannian' ? syncGrassmannianControls() : null;
+      const grassmannianReady = !grassmannianParams || grassmannianParams.dim <= MAX_DIMENSION;
+      refs.addObject.disabled = (draftingMap && !mapReady) || (productNeedsFactors && !productReady) || !grassmannianReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
       refs.addObject.textContent = inputIsModifyMode() ? 'update' : (combinedProductCreateMode() || combinedAbelJacobiCreateMode() ? 'build' : 'add');
       refs.addObject.title = creatingMap
         ? (mapCompositionInputMode() ? mapCompositionPickHint() : (abelJacobiMapInputMode() ? abelJacobiMapPickHint() : ordinaryMapPickHint()))
-        : (productNeedsFactors ? (productFactors.length === 2 && productDim > MAX_DIMENSION ? `Product dimension ${productDim} exceeds the calculator limit ${MAX_DIMENSION}` : 'Pick two varieties on the canvas') : ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady ? sheafMapPickHint() : ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady ? sheafBinaryPickHint() : ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady ? sheafSchurPickHint() : (creatingSheaf && !creatingParentSheaf && waitingForSheafBase ? (hasVariety ? 'Pick a base variety on the canvas first' : 'Add a variety first') : (draftingSheaf && !creatingParentSheaf && !draftBase ? 'Add a base variety first' : ''))))));
+        : (!grassmannianReady ? `Grassmannian dimension ${grassmannianParams.dim} exceeds the calculator limit ${MAX_DIMENSION}` : (productNeedsFactors ? (productFactors.length === 2 && productDim > MAX_DIMENSION ? `Product dimension ${productDim} exceeds the calculator limit ${MAX_DIMENSION}` : 'Pick two varieties on the canvas') : ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady ? sheafMapPickHint() : ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady ? sheafBinaryPickHint() : ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady ? sheafSchurPickHint() : (creatingSheaf && !creatingParentSheaf && waitingForSheafBase ? (hasVariety ? 'Pick a base variety on the canvas first' : 'Add a variety first') : (draftingSheaf && !creatingParentSheaf && !draftBase ? 'Add a base variety first' : '')))))));
     }
     updateMapPickStatus();
     syncGlobalPickButton();
@@ -5299,6 +5492,32 @@
         labelPlain: latexToPlain(labelLatex),
         ambientLatex: `\\mathbb{P}^{${n}}`,
         ambientPlain: `P^${n}`
+      };
+      return attachHomologyToGeometry(variety, geometry);
+    }
+    if (type === 'grassmannian') {
+      const { r, n, dim } = normalizedGrassmannianParams(variety);
+      const labelLatex = sanitizeMathLabel(variety.name, `\\operatorname{Gr}(${r},${n})`);
+      Object.assign(variety, {
+        dim: String(dim),
+        grassmannianR: String(r),
+        grassmannianN: String(n),
+        name: labelLatex
+      });
+      const geometry = {
+        type,
+        dim,
+        ambient: null,
+        degrees: [],
+        codim: null,
+        labelLatex,
+        labelPlain: latexToPlain(labelLatex),
+        ambientLatex: `\\mathbb{C}^{${n}}`,
+        ambientPlain: `C^${n}`,
+        grassmannianR: r,
+        grassmannianN: n,
+        grassmannianQRank: n - r,
+        grassmannianYoungBasis: variety.grassmannianYoungBasis === true
       };
       return attachHomologyToGeometry(variety, geometry);
     }
@@ -5557,6 +5776,7 @@
         geometry
       ));
     }
+    defs.push(...grassmannianHomologyClassDefinitions(geometry, homology));
     if (varietyHasHyperplaneClass(geometry.type)) {
       defs.push(homologyClassDefinition(
         HOMOLOGY_HYPERPLANE_CLASS,
@@ -5642,6 +5862,127 @@
       }
     }
     return defs;
+  }
+
+  function grassmannianHomologyClassDefinitions(geometry, homology) {
+    const params = grassmannianParamsFromGeometry(geometry);
+    if (!params) return [];
+    const defs = [];
+    for (let index = 1; index <= Math.min(params.r, params.dim); index += 1) {
+      const symbol = grassmannianTautologicalClassSymbol(index);
+      defs.push(homologyClassDefinition(
+        grassmannianTautologicalClassId(index),
+        index,
+        symbol,
+        'tautological',
+        homology,
+        symbol,
+        geometry
+      ));
+    }
+    if (grassmannianYoungBasisEnabled(geometry)) {
+      grassmannianPartitions(params.r, params.q).forEach((partition) => {
+        if (!partition.length) return;
+        const id = grassmannianYoungClassId(partition);
+        const symbol = grassmannianYoungClassSymbol(partition);
+        const def = homologyClassDefinition(
+          id,
+          partition.reduce((sum, part) => sum + part, 0),
+          symbol,
+          'Schubert class',
+          homology,
+          symbol,
+          geometry
+        );
+        def.grassmannianYoungPartition = partition;
+        defs.push(def);
+      });
+    }
+    return defs;
+  }
+
+  function grassmannianTautologicalClassId(index) {
+    return `${HOMOLOGY_GRASSMANNIAN_TAUTOLOGICAL_CLASS_PREFIX}${index}`;
+  }
+
+  function grassmannianTautologicalClassSymbol(index) {
+    return `c_{${index}}(S)`;
+  }
+
+  function grassmannianTautologicalChernClassPoly(geometry, index) {
+    const classId = grassmannianTautologicalClassId(index);
+    const id = homologyVariableId(classId, geometry);
+    const def = homologyClassDefById(geometry, classId);
+    defineVariable(id, index, def?.symbolLatex || grassmannianTautologicalClassSymbol(index));
+    return Poly.variable(id);
+  }
+
+  function grassmannianTautologicalChernComponents(geometry) {
+    const params = grassmannianParamsFromGeometry(geometry);
+    const d = geometry.dim;
+    const comps = zeroComponentArray(d);
+    if (!params) return comps;
+    for (let index = 1; index <= Math.min(params.r, d); index += 1) {
+      comps[index] = grassmannianTautologicalChernClassPoly(geometry, index);
+    }
+    return comps;
+  }
+
+  function grassmannianPluckerFirstChernPoly(geometry) {
+    return grassmannianTautologicalChernClassPoly(geometry, 1).neg();
+  }
+
+  function grassmannianYoungBasisEnabled(geometry) {
+    if (geometry?.type !== 'grassmannian') return false;
+    if (geometry.grassmannianYoungBasis === true) return true;
+    const variety = geometry.varietyId ? state.varieties.find((item) => item.id === geometry.varietyId) : null;
+    return variety?.grassmannianYoungBasis === true;
+  }
+
+  function grassmannianYoungClassId(partition) {
+    const normalized = normalizeGrassmannianPartition(partition);
+    return `${HOMOLOGY_GRASSMANNIAN_YOUNG_CLASS_PREFIX}${normalized.length ? normalized.join('_') : 'empty'}`;
+  }
+
+  function grassmannianYoungClassSymbol(partition) {
+    const normalized = normalizeGrassmannianPartition(partition);
+    return `\\sigma_{${normalized.length ? normalized.join(',') : '0'}}`;
+  }
+
+  function grassmannianColumnPartition(length) {
+    return Array.from({ length }, () => 1);
+  }
+
+  function normalizeGrassmannianPartition(partition) {
+    if (!Array.isArray(partition)) return [];
+    return partition.map((part) => Number(part)).filter((part) => Number.isInteger(part) && part > 0);
+  }
+
+  function grassmannianPartitions(r, q) {
+    const rows = Math.max(0, r);
+    const width = Math.max(0, q);
+    const out = [];
+    const visit = (row, maxPart, parts) => {
+      if (row === rows) {
+        out.push(normalizeGrassmannianPartition(parts));
+        return;
+      }
+      for (let part = maxPart; part >= 0; part -= 1) {
+        visit(row + 1, part, part > 0 ? [...parts, part] : parts);
+      }
+    };
+    visit(0, width, []);
+    return out;
+  }
+
+  function grassmannianParamsFromGeometry(geometry) {
+    if (geometry?.type !== 'grassmannian') return null;
+    const n = normalizedInt(geometry.grassmannianN, 2, MAX_GRASSMANNIAN_N, 4);
+    const r = normalizedInt(geometry.grassmannianR, 1, Math.max(1, n - 1), Math.min(2, n - 1));
+    const q = n - r;
+    const dim = grassmannianDimension(r, n);
+    if (dim > MAX_DIMENSION) return null;
+    return { r, n, q, dim };
   }
 
   function productGeometryContext(geometry) {
@@ -5810,6 +6151,8 @@
   function isReservedHomologyClassId(id) {
     return [HOMOLOGY_UNIT_CLASS, HOMOLOGY_HYPERPLANE_CLASS, HOMOLOGY_THETA_CLASS, HOMOLOGY_POINT_CLASS].includes(id)
       || isCurveSymplecticClassId(id)
+      || String(id || '').startsWith(HOMOLOGY_GRASSMANNIAN_TAUTOLOGICAL_CLASS_PREFIX)
+      || String(id || '').startsWith(HOMOLOGY_GRASSMANNIAN_YOUNG_CLASS_PREFIX)
       || String(id || '').startsWith(HOMOLOGY_PRODUCT_BOX_CLASS_PREFIX);
   }
 
@@ -5939,6 +6282,9 @@
     const scope = homologyScopeId(geometry);
     if (classId === HOMOLOGY_UNIT_CLASS) return `homology_${scope}_unit`;
     if (classId === HOMOLOGY_HYPERPLANE_CLASS) return `homology_${scope}_H`;
+    if (String(classId || '').startsWith(HOMOLOGY_GRASSMANNIAN_TAUTOLOGICAL_CLASS_PREFIX)) {
+      return `homology_${scope}_${variableIdSafe(classId)}`;
+    }
     if (classId === HOMOLOGY_POINT_CLASS) return `homology_${scope}_point`;
     return `homology_${scope}_${variableIdSafe(classId || 'class')}`;
   }
@@ -6003,7 +6349,11 @@
     const map = context.map;
     if (geometry.varietyId === context.domain.variety.id) {
       const sourceDefs = homologyPullbackClassDefinitionsForMap(context.codomain.geometry);
-      return sourceDefs.map((def) => mapOperationHomologyClassDefinition(map, 'pullback', def, geometry)).filter(Boolean);
+      const defs = sourceDefs.map((def) => mapOperationHomologyClassDefinition(map, 'pullback', def, geometry)).filter(Boolean);
+      if (defs.length || geometry.dim !== 0) return defs;
+      const unit = baseHomologyClassDefinitions(context.codomain.geometry).find((def) => def.id === HOMOLOGY_UNIT_CLASS);
+      const unitDef = unit ? mapOperationHomologyClassDefinition(map, 'pullback', unit, geometry) : null;
+      return unitDef ? [unitDef] : [];
     }
     if (geometry.varietyId === context.codomain.variety.id) {
       return mapPushforwardClassDefinitions(map, context.domain.geometry, geometry);
@@ -6332,8 +6682,9 @@
 
   function standardHomologyRules(geometry, existingRules = new Map()) {
     return [
-      standardHomologyTopRule(geometry, existingRules.get(HOMOLOGY_TOP_RULE_ID)),
       standardPointHomologyUnitRule(geometry, existingRules.get(HOMOLOGY_POINT_UNIT_RULE_ID)),
+      ...standardGrassmannianRules(geometry, existingRules),
+      standardHomologyTopRule(geometry, existingRules.get(HOMOLOGY_TOP_RULE_ID)),
       ...standardCurveSymplecticRules(geometry, existingRules),
       ...standardJacobianSymplecticRules(geometry, existingRules),
       standardThetaTopRule(geometry, existingRules.get(HOMOLOGY_THETA_TOP_RULE_ID)),
@@ -6349,6 +6700,7 @@
       || text === HOMOLOGY_JACOBIAN_THETA_RULE_ID
       || text === HOMOLOGY_JACOBIAN_TOP_RULE_ID
       || text.startsWith(HOMOLOGY_CURVE_SYMPLECTIC_RULE_PREFIX)
+      || text.startsWith(HOMOLOGY_GRASSMANNIAN_RULE_PREFIX)
       || text.startsWith(HOMOLOGY_PRODUCT_BOX_RULE_PREFIX);
   }
 
@@ -6394,6 +6746,61 @@
       lhs: { powers: { [homologyVariableId(HOMOLOGY_POINT_CLASS, geometry)]: 1 } },
       rhs: [{ coefficient: '1', powers: {} }]
     };
+  }
+
+  function standardGrassmannianRules(geometry, existingRules = new Map()) {
+    const params = grassmannianParamsFromGeometry(geometry);
+    if (!params || !grassmannianYoungBasisEnabled(geometry)) return [];
+    const rules = [];
+    grassmannianPartitions(params.r, params.q).forEach((partition) => {
+      if (!partition.length) return;
+      const id = homologyVariableId(grassmannianYoungClassId(partition), geometry);
+      const def = homologyClassDefById(geometry, grassmannianYoungClassId(partition));
+      defineVariable(id, partition.reduce((sum, part) => sum + part, 0), def?.symbolLatex || grassmannianYoungClassSymbol(partition));
+    });
+    for (let index = 1; index <= Math.min(params.r, params.dim); index += 1) {
+      const lhsId = homologyVariableId(grassmannianTautologicalClassId(index), geometry);
+      const partition = grassmannianColumnPartition(index);
+      const rhsId = homologyVariableId(grassmannianYoungClassId(partition), geometry);
+      const ruleId = `${HOMOLOGY_GRASSMANNIAN_RULE_PREFIX}tautological-${index}`;
+      rules.push({
+        id: ruleId,
+        builtin: true,
+        enabled: existingRules.get(ruleId)?.enabled !== false,
+        lhs: { powers: { [lhsId]: 1 } },
+        rhs: [{
+          coefficient: index % 2 === 0 ? '1' : '-1',
+          powers: { [rhsId]: 1 }
+        }]
+      });
+    }
+    const topPartition = Array.from({ length: params.r }, () => params.q);
+    const topId = homologyVariableId(grassmannianYoungClassId(topPartition), geometry);
+    const pointId = homologyVariableId(HOMOLOGY_POINT_CLASS, geometry);
+    const topRuleId = `${HOMOLOGY_GRASSMANNIAN_RULE_PREFIX}young-top-point`;
+    if (topId && topId !== pointId) {
+      rules.push({
+        id: topRuleId,
+        builtin: true,
+        enabled: existingRules.get(topRuleId)?.enabled !== false,
+        lhs: { powers: { [topId]: 1 } },
+        rhs: [{ coefficient: '1', powers: { [pointId]: 1 } }]
+      });
+    }
+    return rules;
+  }
+
+  function grassmannianQuotientChernComponents(geometry) {
+    const params = grassmannianParamsFromGeometry(geometry);
+    const d = geometry.dim;
+    const comps = zeroComponentArray(d);
+    if (!params) return comps;
+    const tautological = grassmannianTautologicalChernComponents(geometry);
+    const quotientTotal = inverseUnit(totalFromComponents(tautological, d, Poly.one()), d);
+    for (let index = 1; index <= Math.min(params.q, d); index += 1) {
+      comps[index] = homogeneousPart(quotientTotal, index);
+    }
+    return comps;
   }
 
   function standardCurveSymplecticRules(geometry, existingRules = new Map()) {
@@ -6555,9 +6962,10 @@
     if (!powers || typeof powers !== 'object') return null;
     const out = {};
     for (const [id, exp] of Object.entries(powers)) {
-      const normalizedId = variableIds.has(id) || options.preserveUnknownVariables
-        ? id
-        : canonicalHomologyVariableId(id, options.geometry);
+      const canonicalId = variableIds.has(id) ? id : canonicalHomologyVariableId(id, options.geometry);
+      const normalizedId = variableIds.has(canonicalId) || options.preserveUnknownVariables
+        ? canonicalId
+        : id;
       if (!variableIds.has(normalizedId) && !options.preserveUnknownVariables) return null;
       const exponent = normalizedInt(exp, 0, MAX_DIMENSION, 0);
       if (exponent > 0) out[normalizedId] = (out[normalizedId] || 0) + exponent;
@@ -6856,6 +7264,26 @@
         ambientPlain: `P^${n}`
       };
     }
+    if (type === 'grassmannian') {
+      const { r, n, dim } = syncGrassmannianControls();
+      const labelLatex = sanitizeMathLabel(refs.varietyName.value, `\\operatorname{Gr}(${r},${n})`);
+      refs.varietyName.value = labelLatex;
+      return {
+        type,
+        dim,
+        ambient: null,
+        degrees: [],
+        codim: null,
+        labelLatex,
+        labelPlain: latexToPlain(labelLatex),
+        ambientLatex: `\\mathbb{C}^{${n}}`,
+        ambientPlain: `C^${n}`,
+        grassmannianR: r,
+        grassmannianN: n,
+        grassmannianQRank: n - r,
+        grassmannianYoungBasis: activeVariety()?.grassmannianYoungBasis === true
+      };
+    }
     if (type === 'curve') {
       refs.dim.value = '1';
       refs.curveGenus.value = sanitizeGenusInput(refs.curveGenus.value);
@@ -7059,6 +7487,7 @@
     if (geometryHasNumericalCurveLabel(geometry) && (sheaf.type === 'tangent' || sheaf.type === 'cotangent' || sheaf.type === 'canonical')) {
       return buildCurveLineBundle(geometry, sheaf, sheaf.type);
     }
+    if (geometry.type === 'grassmannian') return buildGrassmannianSheafBundle(geometry, sheaf, options);
     if (geometry.type === 'abstract' || geometry.type === 'curve' || geometry.type === 'abelian' || geometry.type === 'point') return buildAbstractGeometrySheaf(geometry, sheaf, options);
     return buildEmbeddedGeometrySheaf(geometry, sheaf, options);
   }
@@ -8651,6 +9080,9 @@
     if (geometry.type === 'abelian' || geometry.type === 'point') {
       return buildTrivialBundle(geometry.dim, 1, sheaf.labelLatex, sheaf.labelPlain);
     }
+    if (geometry.type === 'grassmannian') {
+      return buildGrassmannianPluckerLineBundle(geometry, -geometry.grassmannianN, geometry.dim, sheaf.labelLatex, sheaf.labelPlain);
+    }
     if (geometry.type === 'curve') {
       return buildCurveLineBundle(geometry, sheaf, 'canonical');
     }
@@ -8659,6 +9091,73 @@
       ? (abstractTangentChComponents(geometry)[1] || Poly.zero()).scale(fraction(-1))
       : (abstractTangentChernComponents(geometry)[1] || Poly.zero()).scale(fraction(-1));
     return buildLineFromFirstChern(firstChern, d, sheaf.labelLatex, sheaf.labelPlain);
+  }
+
+  function buildGrassmannianSheafBundle(geometry, sheaf, options = {}) {
+    const d = geometry.dim;
+    if (sheaf.type === 'tangent') {
+      const tangent = buildGrassmannianTangentBundle(geometry, sheaf);
+      return relabelBundle(tangent, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
+    }
+    if (sheaf.type === 'cotangent') {
+      const tangent = buildGrassmannianTangentBundle(geometry, sheaf);
+      const chComps = tangent.chComps.map((comp, i) => (
+        i === 0 ? comp : comp.scale(fraction(i % 2 === 0 ? 1 : -1))
+      ));
+      return buildBundleFromCh(chComps, tangent.rankLatex, tangent.rankPlain, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
+    }
+    if (sheaf.type === 'canonical') {
+      return buildGrassmannianPluckerLineBundle(geometry, -geometry.grassmannianN, d, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
+    }
+    if (sheaf.type === 'twist') {
+      return buildGrassmannianPluckerLineBundle(geometry, sheaf.twist, d, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
+    }
+    return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
+  }
+
+  function buildGrassmannianTangentBundle(geometry, sheaf = null) {
+    const params = grassmannianParamsFromGeometry(geometry);
+    if (!params) return buildTrivialBundle(geometry.dim, geometry.dim, `\\mathcal{T}_{${geometry.labelLatex}}`, `T_${geometry.labelPlain}`);
+    const d = geometry.dim;
+    const subjectLatex = sheaf ? sheafLabelLatex(sheaf) : `\\mathcal{T}_{${geometry.labelLatex}}`;
+    const subjectPlain = sheaf ? sheafLabelPlain(sheaf) : `T_${geometry.labelPlain}`;
+    return buildTensorBundle(d, { labelLatex: subjectLatex, labelPlain: subjectPlain }, buildGrassmannianDualSubBundle(geometry), buildGrassmannianQuotientBundle(geometry));
+  }
+
+  function buildGrassmannianSubBundle(geometry) {
+    const params = grassmannianParamsFromGeometry(geometry);
+    const cComps = params ? grassmannianTautologicalChernComponents(geometry) : zeroComponentArray(geometry.dim);
+    return buildBundleFromChern(cComps, String(params?.r ?? 0), String(params?.r ?? 0), 'S', 'S');
+  }
+
+  function buildGrassmannianQuotientBundle(geometry) {
+    const params = grassmannianParamsFromGeometry(geometry);
+    const d = geometry.dim;
+    const cComps = params ? grassmannianQuotientChernComponents(geometry) : zeroComponentArray(d);
+    return buildBundleFromChern(cComps, String(params?.q ?? 0), String(params?.q ?? 0), 'Q', 'Q');
+  }
+
+  function buildGrassmannianDualSubBundle(geometry) {
+    const params = grassmannianParamsFromGeometry(geometry);
+    const d = geometry.dim;
+    const sub = buildGrassmannianSubBundle(geometry);
+    const chComps = zeroComponentArray(d);
+    for (let i = 1; i <= d; i += 1) {
+      chComps[i] = componentOrZero(sub.chComps, i).scale(fraction(i % 2 === 0 ? 1 : -1));
+    }
+    return buildBundleFromCh(chComps, String(params?.r ?? 0), String(params?.r ?? 0), 'S^*', 'S^*');
+  }
+
+  function buildGrassmannianPluckerLineBundle(geometry, twist, d, labelLatex, labelPlain) {
+    return buildLineFromFirstChern(grassmannianPluckerFirstChernPoly(geometry).scale(fraction(twist)), d, labelLatex, labelPlain);
+  }
+
+  function relabelBundle(bundle, labelLatex, labelPlain) {
+    return {
+      ...bundle,
+      labelLatex,
+      labelPlain
+    };
   }
 
   function buildTrivialBundle(d, rank, labelLatex, labelPlain) {
@@ -8958,6 +9457,9 @@
     if (geometry.type === 'abelian') {
       return buildAbelianHodgeNumbers(geometry);
     }
+    if (geometry.type === 'grassmannian') {
+      return buildGrassmannianHodgeNumbers(geometry);
+    }
     if (geometryHasNumericalCurveLabel(geometry)) {
       const genus = String(numericalCurveGenus(geometry));
       return {
@@ -9069,6 +9571,41 @@
       )),
       message: 'Abelian-variety Hodge numbers.'
     };
+  }
+
+  function buildGrassmannianHodgeNumbers(geometry) {
+    const params = grassmannianParamsFromGeometry(geometry);
+    const d = geometry.dim;
+    const diagonal = params ? grassmannianBettiNumbers(params.r, params.n) : [];
+    return {
+      entries: Array.from({ length: d + 1 }, (_, p) => (
+        Array.from({ length: d + 1 }, (_, q) => {
+          const value = p === q ? BigInt(diagonal[p] || 0) : 0n;
+          return {
+            latex: value.toString(),
+            plain: value.toString()
+          };
+        })
+      )),
+      message: 'Grassmannian Hodge numbers: Schubert classes are pure of type (p,p).'
+    };
+  }
+
+  function grassmannianBettiNumbers(r, n) {
+    const q = n - r;
+    const dim = grassmannianDimension(r, n);
+    const counts = Array.from({ length: dim + 1 }, () => 0n);
+    const visit = (row, maxPart, total) => {
+      if (row === r) {
+        counts[total] += 1n;
+        return;
+      }
+      for (let part = maxPart; part >= 0; part -= 1) {
+        visit(row + 1, part, total + part);
+      }
+    };
+    visit(0, q, 0);
+    return counts;
   }
 
   function productHodgeNumbers(left, right, geometry) {
@@ -9775,6 +10312,7 @@
   function renderEmptyHomologyPanel() {
     if (refs.homologyActive) refs.homologyActive.textContent = 'Add a variety.';
     hideMapHomologyTools();
+    if (refs.homologyGrassmannianBasisRow) refs.homologyGrassmannianBasisRow.hidden = true;
     if (refs.homologyHyperplaneRow) refs.homologyHyperplaneRow.hidden = true;
     if (refs.homologyPointRow) refs.homologyPointRow.hidden = true;
     if (refs.homologySymbols) {
@@ -9800,6 +10338,7 @@
     if (refs.homologyActive) setInlineMath(refs.homologyActive, homologyActiveLatex(geometry));
     hideMapHomologyTools();
     renderVarietyHomologyExpressionTools(geometry);
+    renderGrassmannianBasisToggle(context.variety, geometry);
     if (refs.homologyHyperplaneRow) refs.homologyHyperplaneRow.hidden = !hyperplane;
     if (refs.homologyHyperplaneSymbol && hyperplane) refs.homologyHyperplaneSymbol.value = hyperplane.symbolLatex;
     if (refs.homologyPointRow) refs.homologyPointRow.hidden = !point;
@@ -9811,6 +10350,15 @@
     renderHomologyRuleCreator(geometry, defs);
     if (refs.homologyMessage) refs.homologyMessage.textContent = '';
     typeset(refs.homologyCard);
+  }
+
+  function renderGrassmannianBasisToggle(variety, geometry) {
+    if (!refs.homologyGrassmannianBasisRow) return;
+    const show = geometry?.type === 'grassmannian' && !!variety;
+    refs.homologyGrassmannianBasisRow.hidden = !show;
+    if (show && refs.homologyGrassmannianYoungBasis) {
+      refs.homologyGrassmannianYoungBasis.checked = variety.grassmannianYoungBasis === true;
+    }
   }
 
   function renderMapHomologyPanel(context) {
@@ -9827,6 +10375,7 @@
     ];
     if (refs.homologyActive) setInlineMath(refs.homologyActive, homologyMapActiveLatex(context));
     renderMapHomologyTools(context);
+    if (refs.homologyGrassmannianBasisRow) refs.homologyGrassmannianBasisRow.hidden = true;
     if (refs.homologyHyperplaneRow) refs.homologyHyperplaneRow.hidden = true;
     if (refs.homologyPointRow) refs.homologyPointRow.hidden = true;
     if (refs.homologySymbols) {
@@ -9854,6 +10403,7 @@
     const { sheafObject, sheaf, geometry, result } = context;
     if (refs.homologyActive) setInlineMath(refs.homologyActive, homologySheafActiveLatex(context));
     renderSheafHomologyTools(context);
+    if (refs.homologyGrassmannianBasisRow) refs.homologyGrassmannianBasisRow.hidden = true;
     if (refs.homologyHyperplaneRow) refs.homologyHyperplaneRow.hidden = true;
     if (refs.homologyPointRow) refs.homologyPointRow.hidden = true;
     if (refs.homologySymbols) {
@@ -11064,6 +11614,7 @@
   function renderCanvas(result) {
     const canvas = refs.canvas;
     if (!canvas) return;
+    syncShowCanvasButton();
     const wrap = canvas.parentElement;
     const measuredWidth = wrap.clientWidth || canvas.getBoundingClientRect?.().width || 760;
     const cssWidth = Math.max(1, Math.floor(measuredWidth));
@@ -11078,8 +11629,8 @@
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, cssWidth, cssHeight);
     drawCanvasBackground(ctx, cssWidth, cssHeight);
-    if (!state.varieties.length && !state.sheaves.length) {
-      renderCanvasMessage(cssWidth, cssHeight, '\\text{Add a variety}');
+    if (!visibleCanvasVarieties().length && !visibleCanvasSheaves().length) {
+      renderCanvasMessage(cssWidth, cssHeight, hasHiddenCanvasObjects() ? '\\text{Labels hidden}' : '\\text{Add a variety}');
       return;
     }
     ensureCanvasLabelPositions(cssWidth, cssHeight);
@@ -11096,7 +11647,10 @@
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, state.canvasWidth, state.canvasHeight);
     drawCanvasBackground(ctx, state.canvasWidth, state.canvasHeight);
-    if (!state.varieties.length && !state.sheaves.length) return;
+    if (!visibleCanvasVarieties().length && !visibleCanvasSheaves().length) {
+      if (hasHiddenCanvasObjects()) renderCanvasMessage(state.canvasWidth, state.canvasHeight, '\\text{Labels hidden}');
+      return;
+    }
     ensureCanvasLabelPositions(state.canvasWidth, state.canvasHeight);
     drawSheafBaseLines(ctx, state.canvasWidth, state.canvasHeight);
     drawMapArrows(ctx, state.canvasWidth, state.canvasHeight);
@@ -11104,12 +11658,26 @@
 
   function renderCanvasMessage(width, height, latex) {
     if (!refs.canvasLabels) return;
+    syncShowCanvasButton();
     refs.canvasLabels.innerHTML = `<div class="sheaf-canvas-label" style="left:${width / 2}px;top:${height / 2}px;color:var(--accent2);">\\(${latex}\\)</div>`;
     typeset(refs.canvasLabels);
   }
 
+  function visibleCanvasVarieties() {
+    return state.varieties.filter((variety) => !variety.hiddenOnCanvas);
+  }
+
+  function visibleCanvasSheaves() {
+    return state.sheaves.filter((sheaf) => !sheaf.hiddenOnCanvas);
+  }
+
+  function visibleCanvasMaps() {
+    return state.maps.filter((map) => !map.hiddenOnCanvas);
+  }
+
   function renderCanvasLabels(width, height) {
     if (!refs.canvasLabels) return;
+    syncShowCanvasButton();
     const labels = canvasOverviewLabels(width, height);
     const controls = mapCurveControlLabels(labels, width, height);
     refs.canvasLabels.innerHTML = labels.map((label) => `
@@ -11125,7 +11693,7 @@
   function canvasOverviewLabels(width, height) {
     const labels = canvasObjectLabels(width, height);
     const showSelection = inputIsModifyMode();
-    state.maps.forEach((map) => {
+    visibleCanvasMaps().forEach((map) => {
       const endpoints = mapEndpointLabels(map, labels);
       if (!endpoints) return;
       const pos = mapLabelPosition(map, endpoints, width, height);
@@ -11161,9 +11729,11 @@
     const layout = canvasOverviewLayout(width, height, compact);
     const labels = [];
     const showSelection = inputIsModifyMode();
-    state.varieties.forEach((variety, index) => {
+    const varieties = visibleCanvasVarieties();
+    const sheaves = visibleCanvasSheaves();
+    varieties.forEach((variety, index) => {
       const rect = layout.varietyNodes[index] || layout.varietyPanel;
-      const pos = canvasLabelPosition(variety, 'variety', rect, width, height, index, state.varieties.length);
+      const pos = canvasLabelPosition(variety, 'variety', rect, width, height, index, varieties.length);
       const name = sanitizeMathLabel(variety.name, 'X');
       const classes = ['sheaf-canvas-label', 'is-variety'];
       if (showSelection && !state.activeSheafId && !state.activeMapId && variety.id === state.activeVarietyId) classes.push('is-active');
@@ -11205,9 +11775,9 @@
         objectId: variety.id
       });
     });
-    state.sheaves.forEach((sheaf, index) => {
+    sheaves.forEach((sheaf, index) => {
       const rect = layout.sheafNodes[index] || layout.sheafPanel;
-      const pos = canvasLabelPosition(sheaf, 'sheaf', rect, width, height, index, state.sheaves.length);
+      const pos = canvasLabelPosition(sheaf, 'sheaf', rect, width, height, index, sheaves.length);
       const name = sanitizeMathLabel(sheaf.name, '\\mathcal{E}');
       const classes = ['sheaf-canvas-label', 'is-sheaf'];
       if (showSelection && sheaf.id === state.activeSheafId) classes.push('is-active');
@@ -11285,7 +11855,7 @@
     const labels = canvasObjectLabels(width, height);
     const labelMap = canvasLabelMap(labels);
     ctx.save();
-    state.maps.forEach((map) => {
+    visibleCanvasMaps().forEach((map) => {
       const from = labelMap.get(`${map.domainKind}:${map.domainId}`);
       const to = labelMap.get(`${map.codomainKind}:${map.codomainId}`);
       if (!from || !to) return;
@@ -11369,7 +11939,7 @@
   function mapCurveControlLabels(labels, width, height) {
     if (!inputIsModifyMode() || !state.activeMapId) return [];
     const map = selectedMap();
-    if (!map) return [];
+    if (!map || map.hiddenOnCanvas) return [];
     if (isStraightMapCurve(map.curve)) return [];
     const endpoints = mapEndpointLabels(map, labels.filter((label) => label.objectKind !== 'map'));
     if (!endpoints) return [];
@@ -11853,6 +12423,7 @@
   }
 
   function mapEndpointLabels(map, labels) {
+    if (map.hiddenOnCanvas) return null;
     const labelMap = canvasLabelMap(labels);
     const from = labelMap.get(`${map.domainKind}:${map.domainId}`);
     const to = labelMap.get(`${map.codomainKind}:${map.codomainId}`);
@@ -11937,8 +12508,8 @@
       return {
         varietyPanel,
         sheafPanel,
-        varietyNodes: objectNodeRects(state.varieties.length, varietyPanel),
-        sheafNodes: objectNodeRects(state.sheaves.length, sheafPanel),
+        varietyNodes: objectNodeRects(visibleCanvasVarieties().length, varietyPanel),
+        sheafNodes: objectNodeRects(visibleCanvasSheaves().length, sheafPanel),
         hodge: { x: margin, y: 232, w: (panelW - 12) / 2, h: 70 },
         classes: { x: margin + (panelW + 12) / 2, y: 232, w: (panelW - 12) / 2, h: 70 }
       };
@@ -11950,8 +12521,8 @@
     return {
       varietyPanel,
       sheafPanel,
-      varietyNodes: objectNodeRects(state.varieties.length, varietyPanel),
-      sheafNodes: objectNodeRects(state.sheaves.length, sheafPanel),
+      varietyNodes: objectNodeRects(visibleCanvasVarieties().length, varietyPanel),
+      sheafNodes: objectNodeRects(visibleCanvasSheaves().length, sheafPanel),
       hodge: { x: 0, y: 0, w: 0, h: 0 },
       classes: { x: 0, y: 0, w: 0, h: 0 }
     };
@@ -11970,12 +12541,14 @@
   }
 
   function drawInputOverview(ctx, layout) {
-    drawObjectPanel(ctx, layout.varietyPanel, layout.varietyNodes, state.varieties, state.activeVarietyId, '#3d6b4f', '#f7f4ef');
-    drawObjectPanel(ctx, layout.sheafPanel, layout.sheafNodes, state.sheaves, state.activeSheafId, '#3d6b4f', '#ffffff');
+    const varieties = visibleCanvasVarieties();
+    const sheaves = visibleCanvasSheaves();
+    drawObjectPanel(ctx, layout.varietyPanel, layout.varietyNodes, varieties, state.activeVarietyId, '#3d6b4f', '#f7f4ef');
+    drawObjectPanel(ctx, layout.sheafPanel, layout.sheafNodes, sheaves, state.activeSheafId, '#3d6b4f', '#ffffff');
     drawClassNode(ctx, layout.hodge.x, layout.hodge.y, layout.hodge.w, layout.hodge.h, 0);
     drawClassNode(ctx, layout.classes.x, layout.classes.y, layout.classes.w, layout.classes.h, 0);
-    const activeVarietyRect = layout.varietyNodes[state.varieties.findIndex((item) => item.id === state.activeVarietyId)];
-    const activeSheafRect = layout.sheafNodes[state.sheaves.findIndex((item) => item.id === state.activeSheafId)];
+    const activeVarietyRect = layout.varietyNodes[varieties.findIndex((item) => item.id === state.activeVarietyId)];
+    const activeSheafRect = layout.sheafNodes[sheaves.findIndex((item) => item.id === state.activeSheafId)];
     if (activeVarietyRect) drawArrow(ctx, activeVarietyRect.x + activeVarietyRect.w, activeVarietyRect.y + activeVarietyRect.h / 2, layout.hodge.x, layout.hodge.y + layout.hodge.h / 2, '#3d6b4f');
     if (activeSheafRect) drawArrow(ctx, activeSheafRect.x + activeSheafRect.w, activeSheafRect.y + activeSheafRect.h / 2, layout.classes.x, layout.classes.y + layout.classes.h / 2, '#8b3a2a');
   }
@@ -12027,17 +12600,17 @@
   function ensureCanvasLabelPositions(width, height) {
     const compact = width < 620;
     const layout = canvasOverviewLayout(width, height, compact);
-    state.varieties.forEach((variety, index) => {
+    visibleCanvasVarieties().forEach((variety, index) => {
       if (Number.isFinite(variety.labelX) && Number.isFinite(variety.labelY)) return;
       const rect = layout.varietyNodes[index] || layout.varietyPanel;
       setCanvasLabelPosition(variety, rect.x + rect.w / 2, rect.y + rect.h / 2, width, height);
     });
-    state.sheaves.forEach((sheaf, index) => {
+    visibleCanvasSheaves().forEach((sheaf, index) => {
       if (Number.isFinite(sheaf.labelX) && Number.isFinite(sheaf.labelY)) return;
       const rect = layout.sheafNodes[index] || layout.sheafPanel;
       setCanvasLabelPosition(sheaf, rect.x + rect.w / 2, rect.y + rect.h / 2, width, height);
     });
-    state.maps.forEach((map) => {
+    visibleCanvasMaps().forEach((map) => {
       if (map.curve) return;
       positionMapLabel(map, width, height);
     });
@@ -12549,6 +13122,7 @@
     ];
     if (geometryHasNumericalCurveLabel(geometry)) parts.push(`g=${genusLatex(numericalCurveGenus(geometry))}`);
     if (geometry.type === 'projective') parts.push(`\\text{ambient}=\\mathbb{P}^{${geometry.ambient}}`);
+    if (geometry.type === 'grassmannian') parts.push(`(r,n)=(${geometry.grassmannianR},${geometry.grassmannianN})`);
     if (geometry.type === 'complete-intersection') {
       parts.push(`\\text{ambient}=\\mathbb{P}^{${geometry.ambient}}`);
       parts.push(`\\text{degrees}=(${geometry.degrees.join(',') || '0'})`);
@@ -12583,6 +13157,7 @@
     ];
     if (geometryHasNumericalCurveLabel(geometry)) parts.push(`genus ${genusPlain(numericalCurveGenus(geometry))}`);
     if (geometry.type === 'projective') parts.push(`ambient P^${geometry.ambient}`);
+    if (geometry.type === 'grassmannian') parts.push(`r ${geometry.grassmannianR}`, `n ${geometry.grassmannianN}`);
     if (geometry.type === 'complete-intersection') {
       parts.push(`ambient P^${geometry.ambient}`);
       parts.push(`degrees ${geometry.degrees.join(',') || 'none'}`);
@@ -12617,6 +13192,7 @@
   function varietyTypeLabel(type) {
     if (type === 'projective') return 'projective space';
     if (type === 'complete-intersection') return 'complete intersection';
+    if (type === 'grassmannian') return 'Grassmannian';
     if (type === 'curve') return 'curve';
     if (type === 'abelian') return 'abelian variety';
     if (type === 'point') return 'point';
@@ -13427,6 +14003,7 @@
 
   function latexToPlain(latex) {
     return String(latex)
+      .replace(/\\operatorname\{Gr\}/g, 'Gr')
       .replace(/\\operatorname\{ch\}_\{(\d+)\}\(([^)]+)\)/g, 'ch_$1($2)')
       .replace(/\\mathcal\{([^}]+)\}/g, '$1')
       .replace(/\\mathbb\{([^}]+)\}/g, '$1')

@@ -17,7 +17,9 @@ function loadCalculator() {
     pushforwardPolynomialByDegree,
     formatPolyPlain,
     mapHomologyClassDefinitions,
+    homologyClassDefinitions,
     homologyVariableId,
+    standardHomologyRules,
     HOMOLOGY_HYPERPLANE_CLASS,
     HOMOLOGY_POINT_CLASS,
     standardMapCurve,
@@ -268,6 +270,71 @@ function testDuplicateSheafNamesHaveDistinctInternalClasses() {
   );
 }
 
+function testGrassmannianUsesTautologicalBundleClasses() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'G', type: 'grassmannian', grassmannianR: '2', grassmannianN: '4', name: 'G' }];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const defs = api.homologyClassDefinitions(geometry);
+  const tautological = defs.filter((def) => def.kind === 'tautological');
+  assert.deepStrictEqual(Array.from(tautological, (def) => def.id), ['grassmannian_s_1', 'grassmannian_s_2']);
+  assert.deepStrictEqual(Array.from(tautological, (def) => def.symbolLatex), ['c_{1}(S)', 'c_{2}(S)']);
+  assert.strictEqual(defs.some((def) => def.id === 'grassmannian_o1'), false);
+  assert.strictEqual(defs.some((def) => String(def.id).startsWith('grassmannian_young_')), false);
+
+  const twistRows = characteristicRows(api, {
+    id: 'O1',
+    type: 'twist',
+    twist: '1',
+    basis: 'chern',
+    rank: '1',
+    name: 'O1',
+    baseVarietyId: 'G'
+  });
+  assert.strictEqual(chernPlain(twistRows), '1 - c_1(S)');
+
+  const tangentRows = characteristicRows(api, {
+    id: 'TG',
+    type: 'tangent',
+    basis: 'chern',
+    rank: '4',
+    name: 'TG',
+    baseVarietyId: 'G'
+  });
+  assert.match(chernPlain(tangentRows), /^1 - 4\*c_1\(S\)/);
+}
+
+function testGrassmannianYoungBasisRulesExpressTautologicalClasses() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'G', type: 'grassmannian', grassmannianR: '2', grassmannianN: '4', grassmannianYoungBasis: true, name: 'G' }];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const rules = api.standardHomologyRules(geometry);
+  const c1Rule = rules.find((rule) => rule.id === 'grassmannian-tautological-1');
+  const c2Rule = rules.find((rule) => rule.id === 'grassmannian-tautological-2');
+  assert(c1Rule);
+  assert(c2Rule);
+  assert.strictEqual(c1Rule.rhs[0].coefficient, '-1');
+  assert.strictEqual(c2Rule.rhs[0].coefficient, '1');
+
+  const c1Id = api.homologyVariableId('grassmannian_s_1', geometry);
+  const c2Id = api.homologyVariableId('grassmannian_s_2', geometry);
+  const sigma1Id = api.homologyVariableId('grassmannian_young_1', geometry);
+  const sigma11Id = api.homologyVariableId('grassmannian_young_1_1', geometry);
+  assert.strictEqual(api.formatPolyPlain(api.applyHomologyRules(api.polyFromPowers({ [c1Id]: 1 }), { geometry, homology: geometry.homology })), '-sigma_1');
+  assert.strictEqual(api.formatPolyPlain(api.applyHomologyRules(api.polyFromPowers({ [c2Id]: 1 }), { geometry, homology: geometry.homology })), 'sigma_1,1');
+
+  const twistRows = characteristicRows(api, {
+    id: 'O1',
+    type: 'twist',
+    twist: '1',
+    basis: 'chern',
+    rank: '1',
+    name: 'O1',
+    baseVarietyId: 'G'
+  });
+  assert.strictEqual(chernPlain(twistRows), `1 + sigma_1`);
+  assert.notStrictEqual(sigma1Id, sigma11Id);
+}
+
 function testStraightMapIsDefaultNoControlCase() {
   const api = loadCalculator();
   const curve = api.standardMapCurve({ x: 100, y: 100 }, { x: 300, y: 100 }, 500, 300, 0, 0);
@@ -307,6 +374,8 @@ testCurveToProjectivePullbackUsesCurvePoint();
 testProjectivePullbackStillUsesTargetHyperplane();
 testDuplicateDisplayNamesHaveDistinctInternalClasses();
 testDuplicateSheafNamesHaveDistinctInternalClasses();
+testGrassmannianUsesTautologicalBundleClasses();
+testGrassmannianYoungBasisRulesExpressTautologicalClasses();
 testAbelianSpecialSheavesAreTrivial();
 testPointClassDefaultsToUnit();
 testPointSourcePushforwardDefaultsToTargetPoint();
