@@ -14,14 +14,59 @@
     .ramification-stage {
       padding: 16px;
       min-width: 0;
+      overflow-x: auto;
+    }
+
+    .ramification-diagram-wrap {
+      position: relative;
+      min-width: 760px;
+      height: 340px;
     }
 
     .ramification-canvas {
+      display: block;
       width: 100%;
-      height: auto;
+      height: 100%;
       border: 1px solid var(--border);
       background: #fffdf8;
       box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7);
+    }
+
+    .ramification-labels {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      color: var(--text);
+    }
+
+    .ramification-label {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      white-space: nowrap;
+      color: #3b342d;
+      font-size: 0.98rem;
+      line-height: 1;
+      padding: 2px 5px;
+      border-radius: 3px;
+      background: rgba(255,253,248,0.84);
+    }
+
+    .ramification-label.is-top {
+      font-size: 0.92rem;
+    }
+
+    .ramification-label.is-bottom {
+      font-size: 1rem;
+    }
+
+    .ramification-label.is-selected {
+      color: var(--accent);
+    }
+
+    .ramification-label mjx-container {
+      margin: 0 !important;
+      overflow: visible;
     }
 
     .ramification-toolbar-group {
@@ -119,6 +164,54 @@
       padding: 4px 9px;
     }
 
+    .ramification-place-editor {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .ramification-place-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 6px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .ramification-chip-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .ramification-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: rgba(255,255,255,0.55);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--text);
+    }
+
+    .ramification-chip button {
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 0 1px;
+      font: inherit;
+      line-height: 1;
+    }
+
+    .ramification-chip button:hover {
+      color: var(--accent2);
+    }
+
     .ramification-table {
       width: 100%;
       border-collapse: collapse;
@@ -193,22 +286,25 @@
 <main class="layout ramification-layout">
   <section class="canvas-panel" aria-label="Place ramification canvas panel">
     <header class="panel-title">
-      <span class="panel-title-text">Places Over Q</span>
+      <span class="panel-title-text">Places Over \(\mathbb{Q}\)</span>
       <div class="canvas-toolbar" aria-label="Ramification controls">
-        <span class="shape-indicator"><span id="ramification-status" class="ramification-badge">Q(sqrt(2))</span></span>
+        <span class="shape-indicator"><span id="ramification-status" class="ramification-badge">\(\mathbb{Q}(\sqrt{2})\)</span></span>
         <span class="ramification-toolbar-group">
-          <label class="stat-label" for="prime-bound">p &le; n</label>
-          <input id="prime-bound" type="range" min="2" max="199" value="47">
-          <output id="prime-bound-output" class="ramification-badge">47</output>
+          <label class="stat-label" for="prime-bound">\(p \le n\)</label>
+          <input id="prime-bound" type="range" min="2" max="31" value="11">
+          <output id="prime-bound-output" class="ramification-badge">11</output>
         </span>
       </div>
     </header>
     <div class="ramification-stage">
-      <canvas id="ramification-canvas" class="ramification-canvas" width="920" height="560"></canvas>
+      <div id="ramification-diagram-wrap" class="ramification-diagram-wrap">
+        <canvas id="ramification-canvas" class="ramification-canvas" width="920" height="340"></canvas>
+        <div id="ramification-labels" class="ramification-labels" aria-hidden="true"></div>
+      </div>
     </div>
     <div class="ramification-underbar">
-      <span id="ramification-selected-label">selected place: 2</span>
-      <span id="ramification-count-label">finite primes shown: 15</span>
+      <span id="ramification-selected-label">selected place: \(2\)</span>
+      <span id="ramification-count-label">finite primes shown: 5</span>
     </div>
   </section>
 
@@ -219,22 +315,30 @@
         <div class="ramification-inline-row">
           <span class="input-label">Extension</span>
           <select id="extension-type" class="ramification-select">
-            <option value="quadratic" selected>K = Q(sqrt(d))</option>
+            <option value="quadratic" selected>Quadratic extension</option>
           </select>
         </div>
         <div class="ramification-inline-row">
-          <span class="input-label">d</span>
+          <span class="input-label">\(d\)</span>
           <input id="quadratic-d" class="ramification-input" type="number" step="1" value="2">
         </div>
         <label class="opt-row">
           <input id="show-infinite" type="checkbox" checked>
-          <span>show infinite place</span>
+          <span>show \(\infty\)</span>
         </label>
         <div class="ramification-preset-row">
-          <button class="btn btn-ghost" type="button" data-d="2">sqrt 2</button>
-          <button class="btn btn-ghost" type="button" data-d="5">sqrt 5</button>
-          <button class="btn btn-ghost" type="button" data-d="-1">sqrt -1</button>
-          <button class="btn btn-ghost" type="button" data-d="-3">sqrt -3</button>
+          <button class="btn btn-ghost" type="button" data-d="2">\(\sqrt{2}\)</button>
+          <button class="btn btn-ghost" type="button" data-d="5">\(\sqrt{5}\)</button>
+          <button class="btn btn-ghost" type="button" data-d="-1">\(\sqrt{-1}\)</button>
+          <button class="btn btn-ghost" type="button" data-d="-3">\(\sqrt{-3}\)</button>
+        </div>
+        <div class="ramification-place-editor">
+          <div class="input-label">Finite places</div>
+          <div class="ramification-place-row">
+            <input id="extra-prime-input" class="ramification-input" type="number" min="2" step="1" placeholder="prime p">
+            <button id="add-extra-prime" class="btn btn-ghost" type="button">add</button>
+          </div>
+          <div id="place-chip-list" class="ramification-chip-list"></div>
         </div>
         <div class="result-meta" id="ramification-input-note">quadratic field over Q</div>
       </div>
@@ -243,13 +347,6 @@
     <section class="card" draggable="true">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Field Invariants</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body" id="field-invariants"></div>
-    </section>
-
-    <section class="card" draggable="true">
-      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Places</span><em class="toggle-icon">&#9662;</em></div>
-      <div class="card-body">
-        <div class="ramification-scroll" id="places-table"></div>
-      </div>
     </section>
 
     <section class="card collapsed" draggable="true">
@@ -270,6 +367,19 @@
   </aside>
 </main>
 
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]']],
+      processEscapes: true
+    },
+    options: {
+      skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+    }
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="js/place_ramification_calculator.js"></script>
 </body>
 </html>

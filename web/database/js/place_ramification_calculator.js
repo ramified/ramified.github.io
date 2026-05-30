@@ -4,11 +4,15 @@
   const $ = (id) => document.getElementById(id);
   const state = {
     rawD: 2,
-    primeBound: 47,
+    primeBound: 11,
     showInfinite: true,
     selectedKey: 'p:2',
     hitboxes: [],
-    places: []
+    places: [],
+    extraPrimes: [],
+    hiddenPrimes: [],
+    canvasWidth: 920,
+    canvasHeight: 340
   };
 
   const PLACE_STYLE = {
@@ -75,6 +79,17 @@
     return out;
   }
 
+  function isPrime(n) {
+    const value = Math.floor(Number(n));
+    if (value < 2) return false;
+    if (value === 2) return true;
+    if (value % 2 === 0) return false;
+    for (let p = 3; p * p <= value; p += 2) {
+      if (value % p === 0) return false;
+    }
+    return true;
+  }
+
   function factorInteger(value) {
     let n = Math.abs(Math.trunc(value));
     if (n <= 1) return [];
@@ -119,19 +134,75 @@
     return value === 1 ? 1 : -1;
   }
 
+  function sqrtLabel(field) {
+    return `\\sqrt{${field.d}}`;
+  }
+
+  function sqrtTerm(field, root, sign) {
+    const radical = sqrtLabel(field);
+    if (!root) return radical;
+    return sign === 'plus' ? `${radical}+${root}` : `${radical}-${root}`;
+  }
+
+  function squareRootModPrime(value, p) {
+    const target = positiveMod(value, p);
+    if (p === 2) return target;
+    for (let r = 0; r <= Math.floor(p / 2); r++) {
+      if ((r * r) % p === target) return r;
+    }
+    return null;
+  }
+
+  function primeIdealLabels(field, p, kind) {
+    if (kind === 'inert') return [baseIdealLatex(p)];
+
+    if (kind === 'ramified') {
+      const simplified = simplifiedRamifiedIdeal(field, p);
+      if (simplified) return [simplified];
+    }
+
+    if (p === 2 && positiveMod(field.d, 4) === 1 && kind === 'split') {
+      const radical = sqrtLabel(field);
+      return [
+        `\\left(2,\\frac{1+${radical}}{2}\\right)`,
+        `\\left(2,\\frac{${radical}-1}{2}\\right)`
+      ];
+    }
+
+    const root = squareRootModPrime(field.d, p);
+    const r = root == null ? (p === 2 ? positiveMod(field.d, 2) : 0) : root;
+    if (kind === 'split') {
+      return [
+        `(${p},${sqrtTerm(field, r, 'minus')})`,
+        `(${p},${sqrtTerm(field, r, 'plus')})`
+      ];
+    }
+    return [`(${p},${sqrtTerm(field, r, 'minus')})`];
+  }
+
+  function simplifiedRamifiedIdeal(field, p) {
+    if (p === 2 && field.d === -1) return `(1+${sqrtLabel(field)})`;
+    if (Math.abs(field.d) === p) return `(${sqrtLabel(field)})`;
+    return null;
+  }
+
+  function baseIdealLatex(p) {
+    return `(${p})`;
+  }
+
   function finitePlace(field, p) {
     const D = field.discriminant;
     if (D % p === 0) {
       return {
         key: `p:${p}`,
-        label: String(p),
-        base: `p=${p}`,
+        label: baseIdealLatex(p),
+        base: `\\(${baseIdealLatex(p)}\\)`,
         kind: 'ramified',
         e: 2,
         f: 1,
         g: 1,
-        ideals: [`P^2 over ${p}`],
-        detail: `${p} divides the field discriminant ${D}.`
+        ideals: primeIdealLabels(field, p, 'ramified'),
+        detail: `\\(${p}\\) divides \\(\\operatorname{Disc}(K)=${D}\\).`
       };
     }
     if (p === 2) {
@@ -139,52 +210,52 @@
       if (mod8 === 1) {
         return {
           key: 'p:2',
-          label: '2',
-          base: 'p=2',
+          label: baseIdealLatex(2),
+          base: `\\(${baseIdealLatex(2)}\\)`,
           kind: 'split',
           e: 1,
           f: 1,
           g: 2,
-          ideals: ['P_1', 'P_2'],
-          detail: 'D is congruent to 1 modulo 8.'
+          ideals: primeIdealLabels(field, 2, 'split'),
+          detail: '\\(\\operatorname{Disc}(K) \\equiv 1 \\pmod 8\\).'
         };
       }
       return {
         key: 'p:2',
-        label: '2',
-        base: 'p=2',
+        label: baseIdealLatex(2),
+        base: `\\(${baseIdealLatex(2)}\\)`,
         kind: 'inert',
         e: 1,
         f: 2,
         g: 1,
-        ideals: ['P'],
-        detail: 'D is congruent to 5 modulo 8.'
+        ideals: primeIdealLabels(field, 2, 'inert'),
+        detail: '\\(\\operatorname{Disc}(K) \\equiv 5 \\pmod 8\\).'
       };
     }
     const chi = legendreSymbol(D, p);
     if (chi === 1) {
       return {
         key: `p:${p}`,
-        label: String(p),
-        base: `p=${p}`,
+        label: baseIdealLatex(p),
+        base: `\\(${baseIdealLatex(p)}\\)`,
         kind: 'split',
         e: 1,
         f: 1,
         g: 2,
-        ideals: ['P_1', 'P_2'],
-        detail: `The Kronecker symbol (D/${p}) is 1.`
+        ideals: primeIdealLabels(field, p, 'split'),
+        detail: `The Kronecker symbol \\(\\left(\\frac{D}{${p}}\\right)=1\\).`
       };
     }
     return {
       key: `p:${p}`,
-      label: String(p),
-      base: `p=${p}`,
+      label: baseIdealLatex(p),
+      base: `\\(${baseIdealLatex(p)}\\)`,
       kind: 'inert',
       e: 1,
       f: 2,
       g: 1,
-      ideals: ['P'],
-      detail: `The Kronecker symbol (D/${p}) is -1.`
+      ideals: primeIdealLabels(field, p, 'inert'),
+      detail: `The Kronecker symbol \\(\\left(\\frac{D}{${p}}\\right)=-1\\).`
     };
   }
 
@@ -192,33 +263,35 @@
     if (field.d > 0) {
       return {
         key: 'inf',
-        label: 'inf',
-        base: 'real infinity',
+        label: '\\infty',
+        base: '\\(\\infty\\)',
         kind: 'split',
         e: 1,
         f: 1,
         g: 2,
-        ideals: ['real place 1', 'real place 2'],
+        ideals: ['v_1', 'v_2'],
         detail: 'The field has two real embeddings.'
       };
     }
     return {
       key: 'inf',
-      label: 'inf',
-      base: 'real infinity',
+      label: '\\infty',
+      base: '\\(\\infty\\)',
       kind: 'complex',
       e: 2,
       f: 1,
       g: 1,
-      ideals: ['complex place'],
+      ideals: ['w'],
       detail: 'The real place becomes complex.'
     };
   }
 
   function buildPlaces(field) {
-    const places = [];
+    const hiddenSet = new Set(state.hiddenPrimes);
+    const primeSet = new Set(primesUpTo(state.primeBound).filter((p) => !hiddenSet.has(p)));
+    state.extraPrimes.forEach((p) => primeSet.add(p));
+    const places = [...primeSet].sort((a, b) => a - b).map((p) => finitePlace(field, p));
     if (state.showInfinite) places.push(infinitePlace(field));
-    primesUpTo(state.primeBound).forEach((p) => places.push(finitePlace(field, p)));
     return places;
   }
 
@@ -236,6 +309,20 @@
     return `Q(sqrt(${field.d}))`;
   }
 
+  function fieldLatex(field) {
+    return `\\mathbb{Q}(\\sqrt{${field.d}})`;
+  }
+
+  function ringLatex(field) {
+    return positiveMod(field.d, 4) === 1
+      ? `\\mathbb{Z}\\left[\\frac{1+\\sqrt{${field.d}}}{2}\\right]`
+      : `\\mathbb{Z}[\\sqrt{${field.d}}]`;
+  }
+
+  function polynomialLatex(field) {
+    return field.d < 0 ? `x^2+${Math.abs(field.d)}` : `x^2-${field.d}`;
+  }
+
   function render() {
     const field = normalizedField();
     if (field.error) {
@@ -248,7 +335,7 @@
     }
     syncControls(field);
     renderInvariants(field);
-    renderPlacesTable();
+    renderPlaceChips();
     renderSelectedPlace();
     drawCanvas(field);
     renderExport(field);
@@ -258,49 +345,59 @@
     $('ramification-status').textContent = 'invalid field';
     $('ramification-input-note').textContent = message;
     $('field-invariants').innerHTML = `<p class="err">${escapeHtml(message)}</p>`;
-    $('places-table').innerHTML = '';
+    const chipList = $('place-chip-list');
+    if (chipList) chipList.innerHTML = '';
     $('selected-place-data').innerHTML = '';
     const canvas = $('ramification-canvas');
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const labelLayer = $('ramification-labels');
+    if (labelLayer) labelLayer.innerHTML = '';
   }
 
   function syncControls(field) {
     $('quadratic-d').value = String(state.rawD);
+    state.primeBound = Math.min(31, Math.max(2, Math.floor(Number(state.primeBound) || 11)));
     $('prime-bound').value = String(state.primeBound);
     $('prime-bound-output').textContent = String(state.primeBound);
     $('show-infinite').checked = state.showInfinite;
-    $('ramification-status').textContent = fieldLabel(field);
-    $('ramification-input-note').textContent = field.raw === field.d
-      ? 'quadratic field over Q'
-      : `same field as d=${field.d}`;
+    $('ramification-status').innerHTML = `\\(${fieldLatex(field)}\\)`;
+    typeset($('ramification-status'));
+    $('ramification-input-note').innerHTML = field.raw === field.d
+      ? 'quadratic field over \\(\\mathbb{Q}\\)'
+      : `same field as \\(d=${field.d}\\)`;
+    typeset($('ramification-input-note'));
     const finiteCount = state.places.filter((place) => place.key.startsWith('p:')).length;
     $('ramification-count-label').textContent = `finite primes shown: ${finiteCount}`;
   }
 
   function renderInvariants(field) {
     $('field-invariants').innerHTML = htmlRows([
-      ['Field', fieldLabel(field)],
-      ['Polynomial', field.polynomial],
-      ['Disc(K)', `${field.discriminant} = ${factorText(field.discriminant)}`],
-      ['Signature', field.signature],
-      ['O_K', field.ring],
-      ['Ramified finite primes', factorInteger(field.discriminant).map(([p]) => p).join(', ') || 'none'],
-      ['Degree', '2']
+      ['Field', `\\(${fieldLatex(field)}\\)`],
+      ['Polynomial', `\\(${polynomialLatex(field)}\\)`],
+      ['\\(\\operatorname{Disc}(K)\\)', `\\(${field.discriminant}=${factorText(field.discriminant)}\\)`],
+      ['Signature', `\\(${field.signature}\\)`],
+      ['\\(\\mathcal{O}_K\\)', `\\(${ringLatex(field)}\\)`],
+      ['Ramified finite primes', factorInteger(field.discriminant).map(([p]) => `\\(${p}\\)`).join(', ') || 'none'],
+      ['Degree', '\\(2\\)']
     ]);
+    typeset($('field-invariants'));
   }
 
-  function renderPlacesTable() {
-    const rows = state.places.map((place) => {
-      const selected = place.key === state.selectedKey ? ' style="font-weight:700;color:var(--text);"' : '';
-      return `<tr${selected}><td>${escapeHtml(place.label)}</td><td>${PLACE_STYLE[place.kind].label}</td><td>${place.e}</td><td>${place.f}</td><td>${place.g}</td></tr>`;
+  function renderPlaceChips() {
+    const chipList = $('place-chip-list');
+    if (!chipList) return;
+    const finitePlaces = state.places.filter((place) => place.key.startsWith('p:'));
+    chipList.innerHTML = finitePlaces.map((place) => {
+      const p = Number(place.key.slice(2));
+      return `
+        <span class="ramification-chip" data-place-key="${escapeHtml(place.key)}">
+          <span>\\(${escapeHtml(place.label)}\\)</span>
+          <button type="button" data-remove-prime="${p}" aria-label="remove prime ${p}">&times;</button>
+        </span>
+      `;
     }).join('');
-    $('places-table').innerHTML = `
-      <table class="ramification-table">
-        <thead><tr><th>place</th><th>type</th><th>e</th><th>f</th><th>g</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    `;
+    typeset(chipList);
   }
 
   function renderSelectedPlace() {
@@ -309,133 +406,174 @@
       $('selected-place-data').innerHTML = '<p class="hint">No place selected.</p>';
       return;
     }
-    $('ramification-selected-label').textContent = `selected place: ${place.label}`;
+    $('ramification-selected-label').innerHTML = `selected place: \\(${escapeHtml(place.label)}\\)`;
     $('selected-place-data').innerHTML = htmlRows([
       ['base place', place.base],
       ['behavior', PLACE_STYLE[place.kind].label],
-      ['e', place.e],
-      ['f', place.f],
-      ['g', place.g],
-      ['places above', place.ideals.join(', ')],
+      ['\\((e,f,g)\\)', `\\((${place.e},${place.f},${place.g})\\)`],
+      ['places above', `\\(${place.ideals.join(', ')}\\)`],
       ['criterion', place.detail]
     ]);
+    typeset($('selected-place-data'));
+    typeset($('ramification-selected-label'));
   }
 
   function drawCanvas(field) {
+    void field;
     const canvas = $('ramification-canvas');
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
-    const W = 920;
-    const columns = 5;
-    const cellW = W / columns;
-    const cellH = 124;
-    const rows = Math.max(1, Math.ceil(state.places.length / columns));
-    const H = 38 + rows * cellH + 24;
+    const wrap = $('ramification-diagram-wrap');
+    const stage = wrap?.parentElement;
+    const stageWidth = Math.max(760, Math.floor(stage?.clientWidth || 760) - 34);
+    const placeCount = Math.max(1, state.places.length);
+    const availableSpan = Math.max(360, stageWidth - 112);
+    const gaps = weightedGaps(state.places, availableSpan);
+    const span = gaps.reduce((total, gap) => total + gap, 0);
+    const W = stageWidth;
+    const H = 340;
+    const topY = 122;
+    const bottomY = 254;
+    const topLabelY = 56;
+    const startX = (W - span) / 2;
+
+    state.canvasWidth = W;
+    state.canvasHeight = H;
     canvas.width = W * dpr;
     canvas.height = H * dpr;
+    if (wrap) {
+      wrap.style.width = `${W}px`;
+      wrap.style.height = `${H}px`;
+    }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#fffdf8';
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = '#7a6f65';
-    ctx.font = '13px JetBrains Mono, monospace';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText(`${fieldLabel(field)} over Q, primes p <= ${state.primeBound}`, 22, 18);
+
     state.hitboxes = [];
+    const labels = [];
+    let cursorX = placeCount === 1 ? W / 2 : startX;
     state.places.forEach((place, index) => {
-      const col = index % columns;
-      const row = Math.floor(index / columns);
-      const x = col * cellW + cellW / 2;
-      const y = 58 + row * cellH;
-      drawPlaceGlyph(ctx, place, x, y, cellW - 22, cellH - 14, place.key === state.selectedKey);
-      state.hitboxes.push({ key: place.key, x: x - cellW / 2 + 8, y: y - 8, w: cellW - 16, h: cellH - 18 });
+      const x = cursorX;
+      const glyphW = needsSplitLabelRoom(place) ? 122 : 78;
+      const placeLabels = drawPlaceGlyph(ctx, place, x, topY, bottomY, glyphW, topLabelY, place.key === state.selectedKey);
+      labels.push(...placeLabels);
+      state.hitboxes.push({ key: place.key, x: x - glyphW / 2, y: topLabelY - 28, w: glyphW, h: bottomY - topLabelY + 78 });
+      cursorX += gaps[index] || 0;
     });
+    renderCanvasLabels(labels);
   }
 
-  function drawPlaceGlyph(ctx, place, cx, top, width, height, selected) {
+  function needsSplitLabelRoom(place) {
+    return !!place && place.key !== 'inf' && place.g === 2;
+  }
+
+  function weightedGaps(places, availableSpan) {
+    if (places.length <= 1) return [];
+    const weights = places.slice(0, -1).map((place, index) => {
+      const next = places[index + 1];
+      return 1 + (needsSplitLabelRoom(place) || needsSplitLabelRoom(next) ? 0.42 : 0);
+    });
+    const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
+    const rawGaps = weights.map((weight) => availableSpan * weight / totalWeight);
+    return rawGaps.map((gap) => Math.max(42, gap));
+  }
+
+  function drawPlaceGlyph(ctx, place, cx, topY, bottomY, glyphW, topLabelY, selected) {
     const style = PLACE_STYLE[place.kind];
-    const left = cx - width / 2;
-    const right = cx + width / 2;
-    const bottomY = top + height - 24;
-    const topY = top + 34;
+    const splitOffset = needsSplitLabelRoom(place) ? 48 : 24;
+    const tops = place.g === 2
+      ? [{ x: cx - splitOffset, y: topY, latex: place.ideals[0] }, { x: cx + splitOffset, y: topY, latex: place.ideals[1] }]
+      : [{ x: cx, y: topY, latex: place.ideals[0] }];
+    const branchLineWidth = place.kind === 'ramified' || place.kind === 'complex' ? 2.1 : 2;
+    const labels = [];
 
     ctx.save();
-    ctx.fillStyle = selected ? 'rgba(61,107,79,0.08)' : 'rgba(255,255,255,0.48)';
-    ctx.strokeStyle = selected ? '#3d6b4f' : '#d8d0c4';
-    ctx.lineWidth = selected ? 2 : 1;
-    roundRect(ctx, left, top, width, height, 4);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.strokeStyle = style.stroke;
-    ctx.lineWidth = place.kind === 'ramified' || place.kind === 'complex' ? 3 : 1.6;
-    ctx.lineCap = 'round';
-
-    const base = { x: cx, y: bottomY };
-    const tops = place.g === 2
-      ? [{ x: cx - width * 0.2, y: topY }, { x: cx + width * 0.2, y: topY }]
-      : [{ x: cx, y: topY }];
-    tops.forEach((point) => {
-      ctx.beginPath();
-      ctx.moveTo(base.x, base.y - 9);
-      ctx.lineTo(point.x, point.y + 9);
-      ctx.stroke();
-    });
-
-    ctx.fillStyle = '#fffdf8';
-    ctx.strokeStyle = '#1a1612';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.arc(base.x, base.y, 10, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    tops.forEach((point) => {
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, 10, 0, Math.PI * 2);
-      ctx.fillStyle = style.fill;
-      ctx.fill();
-      ctx.strokeStyle = style.stroke;
-      ctx.lineWidth = 1.4;
-      ctx.stroke();
-    });
-
-    if (place.kind === 'ramified' || place.kind === 'complex') {
-      ctx.beginPath();
-      ctx.arc(tops[0].x, tops[0].y, 15, 0, Math.PI * 2);
-      ctx.strokeStyle = style.stroke;
-      ctx.lineWidth = 1.4;
-      ctx.stroke();
+    if (selected) {
+      ctx.fillStyle = 'rgba(61,107,79,0.06)';
+      ctx.fillRect(cx - glyphW * 0.56, topLabelY - 26, glyphW * 1.12, bottomY - topLabelY + 80);
     }
 
-    ctx.fillStyle = '#1a1612';
-    ctx.font = '700 13px JetBrains Mono, monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(place.label, base.x, base.y + 0.5);
+    ctx.strokeStyle = style.stroke;
+    ctx.lineWidth = selected ? branchLineWidth + 0.8 : branchLineWidth;
+    ctx.lineCap = 'round';
+    ctx.setLineDash(place.kind === 'inert' ? [7, 6] : []);
 
-    ctx.fillStyle = style.stroke;
-    ctx.font = '12px JetBrains Mono, monospace';
-    ctx.textBaseline = 'top';
-    ctx.fillText(PLACE_STYLE[place.kind].label, cx, top + height - 16);
-    ctx.fillStyle = '#7a6f65';
-    ctx.font = '11px JetBrains Mono, monospace';
-    ctx.fillText(`e=${place.e}, f=${place.f}, g=${place.g}`, cx, top + 8);
+    tops.forEach((point) => {
+      if (place.kind === 'ramified' || place.kind === 'complex') {
+        drawBranch(ctx, cx, bottomY, point.x, point.y, -3.2);
+        drawBranch(ctx, cx, bottomY, point.x, point.y, 3.2);
+      } else {
+        drawBranch(ctx, cx, bottomY, point.x, point.y, 0);
+      }
+    });
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = selected ? '#1a1612' : '#7a6f65';
+    ctx.lineWidth = selected ? 2 : 1.4;
+    ctx.beginPath();
+    ctx.moveTo(cx, bottomY - 7);
+    ctx.lineTo(cx, bottomY + 7);
+    ctx.stroke();
+
+    tops.forEach((point) => {
+      ctx.beginPath();
+      ctx.moveTo(point.x, point.y - 7);
+      ctx.lineTo(point.x, point.y + 7);
+      ctx.stroke();
+    });
+
+    tops.forEach((point) => {
+      labels.push({
+        x: point.x,
+        y: topLabelY,
+        latex: point.latex,
+        className: selected ? 'ramification-label is-top is-selected' : 'ramification-label is-top'
+      });
+    });
+    labels.push({
+      x: cx,
+      y: bottomY + 34,
+      latex: place.label,
+      className: selected ? 'ramification-label is-bottom is-selected' : 'ramification-label is-bottom'
+    });
     ctx.restore();
+    return labels;
   }
 
-  function roundRect(ctx, x, y, w, h, r) {
+  function drawBranch(ctx, x1, y1, x2, y2, offset) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const length = Math.hypot(dx, dy) || 1;
+    const nx = -dy / length * offset;
+    const ny = dx / length * offset;
     ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.moveTo(x1 + nx, y1 + ny);
+    ctx.lineTo(x2 + nx, y2 + ny);
+    ctx.stroke();
+  }
+
+  function renderCanvasLabels(labels) {
+    const layer = $('ramification-labels');
+    if (!layer) return;
+    if (window.MathJax?.typesetClear) window.MathJax.typesetClear([layer]);
+    layer.innerHTML = labels.map((label) => (
+      `<span class="${label.className}" style="left:${label.x}px;top:${label.y}px;">\\(${escapeHtml(label.latex)}\\)</span>`
+    )).join('');
+    typeset(layer);
+  }
+
+  function typeset(element) {
+    if (!element || !window.MathJax) return;
+    const run = () => {
+      if (!window.MathJax?.typesetPromise) return;
+      window.MathJax.typesetPromise([element]).catch(() => {});
+    };
+    if (window.MathJax.startup?.promise) {
+      window.MathJax.startup.promise.then(run).catch(() => {});
+      return;
+    }
+    run();
   }
 
   function renderExport(field) {
@@ -465,7 +603,29 @@
       render();
     });
     $('prime-bound').addEventListener('input', (event) => {
-      state.primeBound = Math.floor(Number(event.target.value) || 2);
+      state.primeBound = Math.min(31, Math.max(2, Math.floor(Number(event.target.value) || 11)));
+      state.hiddenPrimes = state.hiddenPrimes.filter((p) => p <= state.primeBound);
+      render();
+    });
+    $('add-extra-prime').addEventListener('click', addExtraPrimeFromInput);
+    $('extra-prime-input').addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      addExtraPrimeFromInput();
+    });
+    $('place-chip-list').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-remove-prime]');
+      if (!button) return;
+      const p = Number(button.dataset.removePrime);
+      state.extraPrimes = state.extraPrimes.filter((value) => value !== p);
+      if (p <= state.primeBound && !state.hiddenPrimes.includes(p)) {
+        state.hiddenPrimes.push(p);
+        state.hiddenPrimes.sort((a, b) => a - b);
+      }
+      if (state.selectedKey === `p:${p}`) {
+        const fallback = state.places.find((place) => place.key !== `p:${p}` && place.key.startsWith('p:')) || state.places.find((place) => place.key !== `p:${p}`);
+        state.selectedKey = fallback?.key || 'p:2';
+      }
       render();
     });
     $('show-infinite').addEventListener('change', (event) => {
@@ -495,10 +655,30 @@
     });
   }
 
+  function addExtraPrimeFromInput() {
+    const input = $('extra-prime-input');
+    const value = Math.floor(Number(input.value));
+    if (!isPrime(value)) {
+      input.setCustomValidity('Enter a prime number.');
+      input.reportValidity();
+      return;
+    }
+    input.setCustomValidity('');
+    if (!state.extraPrimes.includes(value)) {
+      state.extraPrimes.push(value);
+      state.extraPrimes.sort((a, b) => a - b);
+    }
+    state.hiddenPrimes = state.hiddenPrimes.filter((p) => p !== value);
+    state.selectedKey = `p:${value}`;
+    input.value = '';
+    render();
+  }
+
   function handleCanvasClick(event) {
     const canvas = $('ramification-canvas');
     const rect = canvas.getBoundingClientRect();
-    const logicalW = 920;
+    const dpr = window.devicePixelRatio || 1;
+    const logicalW = canvas.width / dpr;
     const logicalH = canvas.height / (window.devicePixelRatio || 1);
     const x = (event.clientX - rect.left) * logicalW / rect.width;
     const y = (event.clientY - rect.top) * logicalH / rect.height;

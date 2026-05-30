@@ -33,9 +33,7 @@
     }
 
     .dynkin-toolbar-group select,
-    .dynkin-toolbar-group input,
-    .dynkin-select,
-    .dynkin-number-input {
+    .dynkin-toolbar-group input {
       border: 1px solid var(--border);
       border-radius: 3px;
       background: var(--bg);
@@ -44,25 +42,21 @@
       font-size: 0.74rem;
     }
 
-    .dynkin-toolbar-group select,
-    .dynkin-select {
+    .dynkin-toolbar-group select {
       padding: 4px 7px;
       min-width: 154px;
       font-family: 'EB Garamond', Georgia, serif;
       font-size: 0.94rem;
     }
 
-    .dynkin-toolbar-group input,
-    .dynkin-number-input {
+    .dynkin-toolbar-group input {
       width: 58px;
       padding: 4px 7px;
       text-align: center;
     }
 
     .dynkin-toolbar-group select:focus,
-    .dynkin-toolbar-group input:focus,
-    .dynkin-select:focus,
-    .dynkin-number-input:focus {
+    .dynkin-toolbar-group input:focus {
       outline: 2px solid var(--accent);
       border-color: var(--accent);
     }
@@ -91,19 +85,6 @@
       font-size: 0.72rem;
       color: var(--muted);
       flex-wrap: wrap;
-    }
-
-    .dynkin-inline-row {
-      display: grid;
-      grid-template-columns: 92px minmax(0, 1fr);
-      gap: 10px;
-      align-items: center;
-      margin-top: 8px;
-    }
-
-    .dynkin-inline-row .input-label {
-      margin-bottom: 0;
-      white-space: nowrap;
     }
 
     .dynkin-action-row {
@@ -148,15 +129,6 @@
       scrollbar-gutter: stable;
     }
 
-    .start-chart {
-      width: 100% !important;
-      height: auto !important;
-      margin-top: 8px;
-      border: 1px solid var(--border);
-      background: #fffdf8;
-      cursor: default;
-    }
-
     #dynkin-export-out {
       width: 100%;
       min-height: 76px;
@@ -199,18 +171,18 @@
     <header class="panel-title">
       <span class="panel-title-text">Dynkin Diagram</span>
       <div class="canvas-toolbar" aria-label="Dynkin diagram controls">
-        <span class="shape-indicator"><span id="dynkin-status" class="dynkin-badge">A_6</span></span>
+        <span class="shape-indicator"><span id="dynkin-status" class="dynkin-badge">E_6</span></span>
         <span class="dynkin-toolbar-group">
           <label class="stat-label" for="dynkin-type">Type</label>
           <select id="dynkin-type">
             <optgroup label="Classical">
-              <option value="A" selected>A_n sl(n+1)</option>
+              <option value="A">A_n sl(n+1)</option>
               <option value="B">B_n so(2n+1)</option>
               <option value="C">C_n sp(2n)</option>
               <option value="D">D_n so(2n)</option>
             </optgroup>
             <optgroup label="Exceptional">
-              <option value="E6">E_6</option>
+              <option value="E6" selected>E_6</option>
               <option value="E7">E_7</option>
               <option value="E8">E_8</option>
               <option value="F4">F_4</option>
@@ -235,50 +207,8 @@
 
   <aside class="side" id="cards">
     <section class="card" draggable="true">
-      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
-      <div class="card-body">
-        <div class="dynkin-inline-row">
-          <span class="input-label">Type</span>
-          <select id="dynkin-type-side" class="dynkin-select">
-            <optgroup label="Classical">
-              <option value="A" selected>A_n</option>
-              <option value="B">B_n</option>
-              <option value="C">C_n</option>
-              <option value="D">D_n</option>
-            </optgroup>
-            <optgroup label="Exceptional">
-              <option value="E6">E_6</option>
-              <option value="E7">E_7</option>
-              <option value="E8">E_8</option>
-              <option value="F4">F_4</option>
-              <option value="G2">G_2</option>
-            </optgroup>
-          </select>
-        </div>
-        <div class="dynkin-inline-row" id="dynkin-rank-side-row">
-          <span class="input-label">Rank</span>
-          <input id="dynkin-rank-side" class="dynkin-number-input" type="number" min="1" max="12" value="6">
-        </div>
-        <div class="dynkin-inline-row">
-          <span class="input-label">Vertex</span>
-          <input id="dynkin-vertex" class="dynkin-number-input" type="number" min="1" max="6" value="1">
-        </div>
-        <div class="result-meta" id="dynkin-input-note">finite root system</div>
-      </div>
-    </section>
-
-    <section class="card" draggable="true">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Basic Invariants</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body" id="dynkin-invariants"></div>
-    </section>
-
-    <section class="card" draggable="true">
-      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Starting Function</span><em class="toggle-icon">&#9662;</em></div>
-      <div class="card-body">
-        <div id="dynkin-start-summary"></div>
-        <canvas id="dynkin-start-canvas" class="start-chart" width="620" height="230"></canvas>
-        <div class="dynkin-scroll" id="dynkin-start-table"></div>
-      </div>
     </section>
 
     <section class="card collapsed" draggable="true">

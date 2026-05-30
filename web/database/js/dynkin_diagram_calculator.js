@@ -4,7 +4,7 @@
   const $ = (id) => document.getElementById(id);
   const key = (v) => v.join(',');
   const state = {
-    type: 'A',
+    type: 'E6',
     rank: 6,
     selected: 0,
     hitboxes: [],
@@ -317,31 +317,28 @@
 
   function layoutNodes(type, rank, width, height) {
     const midY = height * 0.52;
-    const gapY = Math.min(96, height * 0.24);
-    const left = 86;
-    const right = width - 86;
+    const edge = Math.min(118, Math.max(70, Math.min((width - 172) / Math.max(1, rank - 1), height * 0.22)));
     const nodes = [];
-    function line(count, y = midY) {
-      const span = Math.max(1, count - 1);
-      for (let i = 0; i < count; i++) nodes[i] = { x: left + (right - left) * (i / span), y };
+    function line(count, y = midY, centerX = width / 2) {
+      const startX = centerX - edge * (count - 1) / 2;
+      for (let i = 0; i < count; i++) nodes[i] = { x: startX + edge * i, y };
     }
     if (type === 'A' || type === 'B' || type === 'C' || type === 'F4' || type === 'G2') {
       line(rank);
     } else if (type === 'D') {
       const chainCount = rank - 2;
-      const branchRight = right;
-      const chainRight = right - Math.min(120, (right - left) / Math.max(2, rank - 2));
+      const centerX = width / 2 - edge / 2;
+      const startX = centerX - edge * (chainCount - 1) / 2;
       for (let i = 0; i < chainCount; i++) {
-        nodes[i] = { x: left + (chainRight - left) * (i / Math.max(1, chainCount - 1)), y: midY };
+        nodes[i] = { x: startX + edge * i, y: midY };
       }
-      nodes[rank - 2] = { x: branchRight, y: midY - gapY * 0.58 };
-      nodes[rank - 1] = { x: branchRight, y: midY + gapY * 0.58 };
+      const fork = nodes[rank - 3];
+      nodes[rank - 2] = { x: fork.x + edge * Math.cos(Math.PI / 6), y: midY - edge * Math.sin(Math.PI / 6) };
+      nodes[rank - 1] = { x: fork.x + edge * Math.cos(Math.PI / 6), y: midY + edge * Math.sin(Math.PI / 6) };
     } else if (type === 'E6' || type === 'E7' || type === 'E8') {
       const chain = rank - 1;
-      for (let i = 0; i < chain; i++) {
-        nodes[i] = { x: left + (right - left) * (i / Math.max(1, chain - 1)), y: midY };
-      }
-      nodes[rank - 1] = { x: nodes[2].x, y: midY - gapY };
+      line(chain);
+      nodes[rank - 1] = { x: nodes[2].x, y: midY - edge };
     }
     return nodes;
   }
@@ -450,87 +447,6 @@
     ctx.stroke();
   }
 
-  function startingData(vertex) {
-    const values = state.roots.map((root, index) => ({
-      index: index + 1,
-      root,
-      height: rootHeight(root),
-      value: root[vertex] || 0,
-      order: Math.max(...root)
-    }));
-    const distribution = new Map();
-    values.forEach((item) => {
-      distribution.set(item.value, (distribution.get(item.value) || 0) + 1);
-    });
-    return {
-      values,
-      nonzero: values.filter((item) => item.value > 0),
-      maxValue: Math.max(0, ...values.map((item) => item.value)),
-      distribution: Array.from(distribution.entries()).sort((a, b) => a[0] - b[0])
-    };
-  }
-
-  function drawStartChart(values) {
-    const canvas = $('dynkin-start-canvas');
-    const ctx = canvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
-    const W = 620;
-    const H = 230;
-    canvas.width = W * dpr;
-    canvas.height = H * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#fffdf8';
-    ctx.fillRect(0, 0, W, H);
-    const left = 42;
-    const right = W - 18;
-    const top = 22;
-    const bottom = H - 34;
-    const maxValue = Math.max(1, ...values.map((item) => item.value));
-    const barW = values.length ? Math.max(2, Math.min(16, (right - left) / values.length - 2)) : 8;
-
-    ctx.strokeStyle = '#d8d0c4';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(left, top);
-    ctx.lineTo(left, bottom);
-    ctx.lineTo(right, bottom);
-    ctx.stroke();
-
-    values.forEach((item, index) => {
-      const slot = (right - left) / Math.max(1, values.length);
-      const x = left + slot * index + (slot - barW) / 2;
-      const h = (bottom - top - 12) * item.value / maxValue;
-      ctx.fillStyle = item.value ? '#3d6b4f' : 'rgba(122,111,101,0.22)';
-      ctx.fillRect(x, bottom - h, barW, h);
-      if (values.length <= 36 && (index % 2 === 0 || values.length <= 18)) {
-        ctx.fillStyle = '#7a6f65';
-        ctx.font = '10px JetBrains Mono, monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        ctx.fillText(String(item.index), x + barW / 2, bottom + 7);
-      }
-      if (item.value === maxValue && item.value > 0) {
-        ctx.fillStyle = '#7a6f65';
-        ctx.font = '10px JetBrains Mono, monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText(String(item.value), x + barW / 2, bottom - h - 4);
-      }
-    });
-
-    ctx.fillStyle = '#7a6f65';
-    ctx.font = '11px JetBrains Mono, monospace';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText('positive roots by height', right - 142, bottom + 7);
-    ctx.save();
-    ctx.translate(12, top + 66);
-    ctx.rotate(-Math.PI / 2);
-    ctx.fillText('s_P(i)(M_beta)', 0, 0);
-    ctx.restore();
-  }
-
   function render() {
     state.cartan = cartanMatrix(state.type, state.rank);
     state.roots = positiveRoots(state.cartan);
@@ -539,7 +455,6 @@
     drawDynkin();
     renderInvariants();
     renderVertexData();
-    renderStartingFunction();
     renderCartan();
     renderExport();
   }
@@ -548,7 +463,6 @@
     const info = invariants(state.type, state.rank, state.cartan, state.roots);
     $('dynkin-status').textContent = info.label;
     $('dynkin-root-count-label').textContent = `positive roots: ${info.positiveRoots}`;
-    $('dynkin-input-note').textContent = `${info.label}, ${info.desc}`;
     $('dynkin-invariants').innerHTML = htmlRows([
       ['Lie algebra', `${info.label} ${escapeHtml(info.desc)}`],
       ['rank', info.rank],
@@ -587,33 +501,6 @@
     ]);
   }
 
-  function renderStartingFunction() {
-    const data = startingData(state.selected);
-    const distributionText = data.distribution.map(([value, count]) => `s=${value}: ${count}`).join(', ');
-    const scopeText = ['A', 'D', 'E6', 'E7', 'E8'].includes(state.type)
-      ? 'Dynkin-quiver dimension vectors'
-      : 'root-coefficient analogue';
-    $('dynkin-start-summary').innerHTML = htmlRows([
-      ['vertex', state.selected + 1],
-      ['definition', `s_P(${state.selected + 1})(M) = dim M_${state.selected + 1}`],
-      ['scope', scopeText],
-      ['nonzero roots', `${data.nonzero.length} of ${data.values.length}`],
-      ['maximum value', data.maxValue],
-      ['distribution', distributionText]
-    ]);
-    drawStartChart(data.values);
-    const rows = data.values.map((item) =>
-      `<tr><td>${item.index}</td><td>${formatVector(item.root)}</td><td>${item.height}</td><td>${item.value}</td><td>${item.order}</td></tr>`
-    ).join('');
-    $('dynkin-start-table').innerHTML = `
-      <table class="dynkin-table">
-        <thead><tr><th>#</th><th>dim M_beta</th><th>ht</th><th>s</th><th>ord</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div class="result-meta">For beta=sum d_j alpha_j, this card computes s_P(i)(M_beta)=d_i and ord(M_beta)=max_j d_j. In the paper's quiver setting, this is literally the Dynkin-quiver dimension vector for simply-laced types.</div>
-    `;
-  }
-
   function renderCartan() {
     const header = Array.from({ length: state.rank }, (_, i) => `<th>${i + 1}</th>`).join('');
     const body = state.cartan.map((row, i) =>
@@ -624,7 +511,6 @@
 
   function renderExport() {
     const info = invariants(state.type, state.rank, state.cartan, state.roots);
-    const data = startingData(state.selected);
     const payload = {
       calculator: 'Dynkin diagram calculator',
       type: info.label,
@@ -634,13 +520,6 @@
       positiveRoots: info.positiveRoots,
       coxeterNumber: info.coxeter,
       dualCoxeterNumber: info.dualCoxeter,
-      startingFunctionDefinition: `s_P(${state.selected + 1})(M)=dim M_${state.selected + 1}`,
-      startingFunctionValues: data.values.map((item) => ({
-        root: item.root,
-        height: item.height,
-        value: item.value,
-        order: item.order
-      })),
       cartanMatrix: state.cartan
     };
     $('dynkin-export-out').value = JSON.stringify(payload, null, 2);
@@ -648,20 +527,13 @@
 
   function syncControls() {
     const rankWrap = $('dynkin-rank-wrap');
-    const rankSideRow = $('dynkin-rank-side-row');
     rankWrap.style.display = isClassical(state.type) ? 'inline-flex' : 'none';
-    rankSideRow.hidden = !isClassical(state.type);
-    for (const id of ['dynkin-type', 'dynkin-type-side']) $(id).value = state.type;
-    for (const id of ['dynkin-rank', 'dynkin-rank-side']) {
-      const input = $(id);
-      const bounds = rankBounds(state.type);
-      input.min = String(bounds.min);
-      input.max = String(bounds.max);
-      input.value = String(state.rank);
-    }
-    const vertex = $('dynkin-vertex');
-    vertex.max = String(state.rank);
-    vertex.value = String(state.selected + 1);
+    $('dynkin-type').value = state.type;
+    const input = $('dynkin-rank');
+    const bounds = rankBounds(state.type);
+    input.min = String(bounds.min);
+    input.max = String(bounds.max);
+    input.value = String(state.rank);
   }
 
   function setType(type) {
@@ -677,17 +549,9 @@
     render();
   }
 
-  function setVertex(value) {
-    state.selected = Math.max(0, Math.min(state.rank - 1, Math.floor(Number(value) || 1) - 1));
-    render();
-  }
-
   function bindInputs() {
     $('dynkin-type').addEventListener('change', (event) => setType(event.target.value));
-    $('dynkin-type-side').addEventListener('change', (event) => setType(event.target.value));
     $('dynkin-rank').addEventListener('change', (event) => setRank(event.target.value));
-    $('dynkin-rank-side').addEventListener('change', (event) => setRank(event.target.value));
-    $('dynkin-vertex').addEventListener('change', (event) => setVertex(event.target.value));
     $('dynkin-refresh-export').addEventListener('click', renderExport);
     $('dynkin-select-export').addEventListener('click', () => {
       const out = $('dynkin-export-out');
