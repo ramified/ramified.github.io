@@ -253,6 +253,14 @@
     font-size: 0.72rem;
   }
 
+  .sequence-tail-tools {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    align-items: center;
+    min-width: 0;
+  }
+
   .sheaf-map-control {
     position: absolute;
     width: 12px;
@@ -606,6 +614,47 @@
       flex-wrap: wrap;
     }
 
+    .combined-sequence-picker {
+      display: grid;
+      grid-template-columns: minmax(54px, max-content) minmax(84px, 96px) minmax(54px, max-content);
+      column-gap: 6px;
+      row-gap: 6px;
+      align-items: end;
+      justify-content: start;
+      width: 100%;
+    }
+
+    .combined-sequence-arrow {
+      display: grid;
+      grid-template-rows: 15px 17px;
+      justify-items: center;
+      align-items: end;
+      min-width: 84px;
+      width: 100%;
+    }
+
+    .combined-sequence-arrow-line {
+      display: block;
+      width: 100%;
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1;
+      text-align: center;
+      white-space: nowrap;
+      transform: translateY(1px);
+    }
+
+    .combined-sequence-spacer {
+      min-height: 1px;
+    }
+
+    .combined-sequence-map-button {
+      max-width: 58px;
+      padding: 2px 5px;
+      font-size: 0.64rem;
+      line-height: 1.05;
+    }
+
     .sheaf-map-slot-button {
       padding: 4px 8px;
       font-size: 0.72rem;
@@ -615,6 +664,14 @@
       text-overflow: ellipsis;
       white-space: nowrap;
       max-width: 112px;
+    }
+
+    .sheaf-map-slot-button.combined-sequence-map-button {
+      max-width: 44px;
+      min-height: 17px;
+      padding: 1px 4px;
+      font-size: 0.56rem;
+      line-height: 1;
     }
 
     .sheaf-map-slot-button[aria-pressed="true"] {
@@ -1452,8 +1509,70 @@
             <select id="combined-type" class="sheaf-select">
               <option value="product" selected>Product + projections</option>
               <option value="abel-jacobi">Abel-Jacobi + Jacobian</option>
+              <option value="short-exact-sequence">Short exact sequence / triangle</option>
+              <option value="blow-up-point">Blow-up of a point</option>
+              <option value="grassmannian-map">Map to Grassmannian</option>
             </select>
           </div>
+          <div class="sheaf-field-row" id="ses-parents-row" hidden>
+            <span class="input-label">parents</span>
+            <div class="sheaf-map-formula-picker combined-sequence-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="ses-left-button" type="button" data-ses-pick="sheaf-a">sheaf</button>
+              <span class="combined-sequence-arrow">
+                <button class="btn btn-ghost sheaf-map-slot-button combined-sequence-map-button" id="ses-first-map-button" type="button" data-ses-pick="map-ab">map</button>
+                <span class="combined-sequence-arrow-line" aria-hidden="true">\( \rightarrow \)</span>
+              </span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="ses-middle-button" type="button" data-ses-pick="sheaf-b">sheaf</button>
+              <span class="combined-sequence-spacer" aria-hidden="true"></span>
+              <span class="combined-sequence-arrow">
+                <button class="btn btn-ghost sheaf-map-slot-button combined-sequence-map-button" id="ses-second-map-button" type="button" data-ses-pick="map-bc">map</button>
+                <span class="combined-sequence-arrow-line" aria-hidden="true">\( \rightarrow \)</span>
+              </span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="ses-right-button" type="button" data-ses-pick="sheaf-c">sheaf</button>
+            </div>
+          </div>
+          <div class="sheaf-note" id="ses-pick-note" hidden>pick two sheaves on the same base</div>
+          <div class="sheaf-field-row map-curve-row" id="ses-tail-row" hidden>
+            <label class="input-label" for="ses-tail-point-count">+1 tail</label>
+            <div class="sequence-tail-tools">
+              <label class="map-curve-control" for="ses-tail-point-count">
+                <span>points</span>
+                <input id="ses-tail-point-count" type="range" min="0" max="4" step="1" value="0">
+                <output id="ses-tail-point-count-value" for="ses-tail-point-count">0</output>
+              </label>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="blowup-parents-row" hidden>
+            <span class="input-label">parents</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="blowup-base-button" type="button" data-blowup-pick="base">variety</button>
+              <span class="sheaf-map-formula-mark">&larr;</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="blowup-point-button" type="button" data-blowup-pick="point">point</button>
+            </div>
+          </div>
+          <div class="sheaf-note" id="blowup-pick-note" hidden>pick a variety and a point</div>
+          <div class="sheaf-field-row" id="grassmannian-map-parent-row" hidden>
+            <span class="input-label">parent</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="grassmannian-map-bundle-button" type="button" data-grassmannian-map-pick="bundle">bundle</button>
+              <span class="sheaf-map-formula-mark">&rArr;</span>
+              <span class="sheaf-map-formula-mark" id="grassmannian-map-target-preview">Gr(2,4)</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="grassmannian-map-params-row" hidden>
+            <span class="input-label">target</span>
+            <div class="grassmannian-param-picker">
+              <label class="grassmannian-param" for="grassmannian-map-r">
+                <span>r</span>
+                <input type="number" id="grassmannian-map-r" class="sheaf-input" min="1" max="8" value="2">
+              </label>
+              <label class="grassmannian-param" for="grassmannian-map-n">
+                <span>n</span>
+                <input type="number" id="grassmannian-map-n" class="sheaf-input" min="2" max="9" value="4">
+              </label>
+            </div>
+          </div>
+          <div class="sheaf-note" id="grassmannian-map-pick-note" hidden>pick a locally free sheaf</div>
         </div>
 
         <div id="variety-editor" class="sheaf-input-editor">
@@ -1634,6 +1753,7 @@
             <label class="input-label" for="map-type">Type</label>
             <select id="map-type" class="sheaf-select">
               <option value="ordinary" selected>Map of varieties</option>
+              <option value="sheaf">Map of sheaves</option>
               <option value="abel-jacobi" id="map-abel-jacobi-option">Abel-Jacobi map</option>
               <option value="composition">Composition of maps</option>
             </select>

@@ -29,7 +29,16 @@ function loadCalculator() {
     mapPointCountFromSliderValue,
     mapPointCountSliderValue,
     setMapControlPoint,
-    preserveEndpointHandlesForMovedObject
+    preserveEndpointHandlesForMovedObject,
+    buildShortExactSequence,
+    defaultShortExactSequenceLabel,
+    shortExactSequenceTailGeometry,
+    hideShortExactSequenceTail,
+    showHiddenCanvasObjects,
+    setSequenceTailPoint,
+    sequenceTailPointCount,
+    createBlowupPointConstruction,
+    createGrassmannianMapConstruction
   };
 })();`);
   return vm.runInNewContext(source, {
@@ -370,6 +379,217 @@ function testMapControlCanMoveOutsideCanvas() {
   assert.strictEqual(map.curve.handles[0].y, 420 / 300);
 }
 
+function testShortExactSequenceCreatesMissingTermAndSheafMaps() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.5, labelY: 0.7 }];
+  const left = { id: 'A', type: 'abstract', basis: 'chern', rank: '2', name: '\\mathcal{A}', baseVarietyId: 'X' };
+  const middle = { id: 'B', type: 'abstract', basis: 'chern', rank: '5', name: '\\mathcal{B}', baseVarietyId: 'X' };
+  api.state.sheaves = [left, middle];
+
+  const sequence = api.buildShortExactSequence({
+    sheafA: left,
+    sheafB: middle,
+    sheafC: null,
+    mapAB: null,
+    mapBC: null,
+    baseVarietyId: 'X'
+  });
+
+  assert(sequence);
+  assert.strictEqual(api.state.sequences.length, 1);
+  assert.strictEqual(api.state.sheaves.length, 3);
+  assert.strictEqual(api.state.maps.length, 2);
+  const right = api.state.sheaves.find((sheaf) => sheaf.id !== 'A' && sheaf.id !== 'B');
+  assert.strictEqual(right.baseVarietyId, 'X');
+  assert.strictEqual(right.rank, '3');
+  assert.strictEqual(right.name, '\\operatorname{coker}(\\iota)');
+  assert.deepStrictEqual(Array.from(sequence.sheafIds), ['A', 'B', right.id]);
+  assert(api.state.maps.every((map) => map.domainKind === 'sheaf' && map.codomainKind === 'sheaf'));
+  assert.strictEqual(api.state.maps[0].domainId, 'A');
+  assert.strictEqual(api.state.maps[0].codomainId, 'B');
+  assert.strictEqual(api.state.maps[1].domainId, 'B');
+  assert.strictEqual(api.state.maps[1].codomainId, right.id);
+  assert.match(api.defaultShortExactSequenceLabel(sequence), /\\to \\mathcal\{A\}\\to \\mathcal\{B\}\\to/);
+  assert(left.labelX < middle.labelX);
+  assert(middle.labelX < right.labelX);
+}
+
+function testShortExactSequenceMissingTermNamesUseMapLabels() {
+  let api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.5, labelY: 0.7 }];
+  const source = { id: 'E', type: 'abstract', basis: 'chern', rank: '2', name: '\\mathcal{E}', baseVarietyId: 'X' };
+  const target = { id: 'F', type: 'abstract', basis: 'chern', rank: '5', name: '\\mathcal{F}', baseVarietyId: 'X' };
+  const f = { id: 'f', name: 'f', domainKind: 'sheaf', domainId: 'E', codomainKind: 'sheaf', codomainId: 'F' };
+  api.state.sheaves = [source, target];
+  api.state.maps = [f];
+  api.buildShortExactSequence({
+    sheafA: source,
+    sheafB: target,
+    sheafC: null,
+    mapAB: f,
+    mapBC: null,
+    baseVarietyId: 'X'
+  });
+  const quotient = api.state.sheaves.find((sheaf) => sheaf.id !== 'E' && sheaf.id !== 'F');
+  assert.strictEqual(quotient.name, '\\operatorname{coker}(f)');
+
+  api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.5, labelY: 0.7 }];
+  const middle = { id: 'F', type: 'abstract', basis: 'chern', rank: '5', name: '\\mathcal{F}', baseVarietyId: 'X' };
+  const right = { id: 'G', type: 'abstract', basis: 'chern', rank: '3', name: '\\mathcal{G}', baseVarietyId: 'X' };
+  const g = { id: 'g', name: 'g', domainKind: 'sheaf', domainId: 'F', codomainKind: 'sheaf', codomainId: 'G' };
+  api.state.sheaves = [middle, right];
+  api.state.maps = [g];
+  api.buildShortExactSequence({
+    sheafA: null,
+    sheafB: middle,
+    sheafC: right,
+    mapAB: null,
+    mapBC: g,
+    baseVarietyId: 'X'
+  });
+  const kernel = api.state.sheaves.find((sheaf) => sheaf.id !== 'F' && sheaf.id !== 'G');
+  assert.strictEqual(kernel.name, '\\ker(g)');
+}
+
+function testShortExactSequenceTailCanMoveEndpointAndHandles() {
+  const api = loadCalculator();
+  const sequence = { id: 'S', type: 'short-exact-sequence', sheafIds: ['A', 'B', 'C'], mapIds: [] };
+  api.state.sheaves = [
+    { id: 'A', type: 'abstract', basis: 'chern', rank: '1', name: '\\mathcal{A}', baseVarietyId: 'X', labelX: 0.2, labelY: 0.4 },
+    { id: 'B', type: 'abstract', basis: 'chern', rank: '1', name: '\\mathcal{B}', baseVarietyId: 'X', labelX: 0.4, labelY: 0.4 },
+    { id: 'C', type: 'abstract', basis: 'chern', rank: '1', name: '\\mathcal{C}', baseVarietyId: 'X', labelX: 0.6, labelY: 0.4 }
+  ];
+  const rightLabel = { x: 300, y: 120, maxWidth: 120, main: '\\mathcal{C}', objectKind: 'sheaf', objectId: 'C' };
+  let geometry = api.shortExactSequenceTailGeometry(sequence, rightLabel, 500, 300);
+  assert(geometry);
+  api.setSequenceTailPoint(sequence, 'end', 430, 170, 500, 300);
+  assert.strictEqual(sequence.tail.end.x, 430 / 500);
+  assert.strictEqual(sequence.tail.end.y, 170 / 300);
+  geometry = api.shortExactSequenceTailGeometry(sequence, rightLabel, 500, 300);
+  assert(Math.abs(geometry.end.x - 430) < 0.001);
+  sequence.tail.pointCount = 2;
+  api.setSequenceTailPoint(sequence, 'handle:0:out', 365, 80, 500, 300);
+  geometry = api.shortExactSequenceTailGeometry(sequence, rightLabel, 500, 300);
+  assert(geometry.path);
+  assert(Math.abs(geometry.path.outHandles[0].x - 365) < 0.001);
+  assert(Math.abs(geometry.path.outHandles[0].y - 80) < 0.001);
+}
+
+function testShortExactSequenceTailPointCountKeepsFreeEndpoint() {
+  const api = loadCalculator();
+  const sequence = { id: 'S', type: 'short-exact-sequence', sheafIds: ['A', 'B', 'C'], mapIds: [], tail: { pointCount: 2 } };
+  const rightLabel = { x: 300, y: 120, maxWidth: 120, main: '\\mathcal{C}', objectKind: 'sheaf', objectId: 'C' };
+  const geometry = api.shortExactSequenceTailGeometry(sequence, rightLabel, 500, 300);
+  assert(geometry.path);
+  assert.strictEqual(api.sequenceTailPointCount(sequence.tail), 2);
+  assert.strictEqual(geometry.path.anchors.length, 2);
+  assert(geometry.end.x > rightLabel.x);
+}
+
+function testShortExactSequenceStraightTailUsesZeroPoints() {
+  const api = loadCalculator();
+  const sequence = { id: 'S', type: 'short-exact-sequence', sheafIds: ['A', 'B', 'C'], mapIds: [], tail: { pointCount: 0 } };
+  const rightLabel = { x: 300, y: 120, maxWidth: 120, main: '\\mathcal{C}', objectKind: 'sheaf', objectId: 'C' };
+  const geometry = api.shortExactSequenceTailGeometry(sequence, rightLabel, 500, 300);
+  assert(geometry.path);
+  assert.strictEqual(api.sequenceTailPointCount(sequence.tail), 0);
+  assert.strictEqual(geometry.path.anchors.length, 2);
+  assert.strictEqual(geometry.path.handles.length, 0);
+  assert(geometry.label.y < geometry.end.y);
+  assert(Math.abs(geometry.label.x - (geometry.start.x + geometry.end.x) / 2) < 0.001);
+  const segment = geometry.path.segments[0];
+  const tangent = {
+    x: 3 * (segment.end.x - segment.c2.x),
+    y: 3 * (segment.end.y - segment.c2.y)
+  };
+  assert(tangent.x > 0);
+  assert(Math.abs(tangent.y) < 0.001);
+}
+
+function testShortExactSequenceTailHideAndShowRestoresGeometry() {
+  const api = loadCalculator();
+  const sequence = {
+    id: 'S',
+    type: 'short-exact-sequence',
+    sheafIds: ['A', 'B', 'C'],
+    mapIds: [],
+    tail: {
+      pointCount: 1,
+      end: { x: 0.86, y: 0.5 },
+      handle: { x: 0.8, y: 0.5 }
+    }
+  };
+  const rightLabel = { x: 300, y: 120, maxWidth: 120, main: '\\mathcal{C}', objectKind: 'sheaf', objectId: 'C' };
+  api.state.sheaves = [
+    { id: 'A', type: 'abstract', basis: 'chern', rank: '1', name: '\\mathcal{A}', baseVarietyId: 'X' },
+    { id: 'B', type: 'abstract', basis: 'chern', rank: '1', name: '\\mathcal{B}', baseVarietyId: 'X' },
+    { id: 'C', type: 'abstract', basis: 'chern', rank: '1', name: '\\mathcal{C}', baseVarietyId: 'X' }
+  ];
+  api.state.sequences = [sequence];
+
+  const visible = api.shortExactSequenceTailGeometry(sequence, rightLabel, 500, 300);
+  assert(visible);
+
+  api.hideShortExactSequenceTail('S');
+  assert.strictEqual(sequence.tail.hiddenOnCanvas, true);
+  assert.strictEqual(api.shortExactSequenceTailGeometry(sequence, rightLabel, 500, 300), null);
+
+  api.showHiddenCanvasObjects();
+  assert.strictEqual(sequence.tail.hiddenOnCanvas, false);
+  const restored = api.shortExactSequenceTailGeometry(sequence, rightLabel, 500, 300);
+  assert(restored);
+  assert(restored.path);
+}
+
+function testBlowupPointConstructionCreatesVarietyAndMap() {
+  const api = loadCalculator();
+  const base = { id: 'X', type: 'abstract', dim: '3', name: 'X', labelX: 0.4, labelY: 0.7 };
+  const point = { id: 'p', type: 'point', dim: '0', name: 'p', labelX: 0.6, labelY: 0.7 };
+  api.state.varieties = [base, point];
+
+  const blowup = api.createBlowupPointConstruction({
+    base,
+    point,
+    defaultName: '\\operatorname{Bl}_{p}X',
+    name: '\\operatorname{Bl}_{p}X'
+  });
+
+  assert(blowup);
+  assert.strictEqual(api.state.varieties.length, 3);
+  assert.strictEqual(api.state.maps.length, 1);
+  assert.strictEqual(blowup.construction.type, 'blow-up-point');
+  assert.strictEqual(api.state.maps[0].domainId, blowup.id);
+  assert.strictEqual(api.state.maps[0].codomainId, 'X');
+}
+
+function testGrassmannianMapConstructionCreatesTargetAndMap() {
+  const api = loadCalculator();
+  const base = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.4, labelY: 0.7 };
+  const bundle = { id: 'E', type: 'locally-free', basis: 'chern', rank: '2', name: '\\mathcal{E}', baseVarietyId: 'X', labelX: 0.45, labelY: 0.4 };
+  api.state.varieties = [base];
+  api.state.sheaves = [bundle];
+
+  const map = api.createGrassmannianMapConstruction({
+    bundle,
+    base,
+    params: { r: 2, n: 4, dim: 4 },
+    defaultTargetName: '\\operatorname{Gr}(2,4)',
+    targetName: '\\operatorname{Gr}(2,4)',
+    mapName: '\\varphi_{\\mathcal{E}}'
+  });
+
+  assert(map);
+  assert.strictEqual(api.state.varieties.length, 2);
+  assert.strictEqual(api.state.maps.length, 1);
+  const target = api.state.varieties[1];
+  assert.strictEqual(target.type, 'grassmannian');
+  assert.strictEqual(target.construction.type, 'grassmannian-target');
+  assert.strictEqual(map.domainId, 'X');
+  assert.strictEqual(map.codomainId, target.id);
+  assert.strictEqual(map.construction.type, 'grassmannian-map');
+}
+
 testCurveToProjectivePullbackUsesCurvePoint();
 testProjectivePullbackStillUsesTargetHyperplane();
 testDuplicateDisplayNamesHaveDistinctInternalClasses();
@@ -384,5 +604,13 @@ testOutOfRangeMapHomologyRelationsAreOmitted();
 testStraightMapIsDefaultNoControlCase();
 testEndpointMovePreservesAttachedHandleVector();
 testMapControlCanMoveOutsideCanvas();
+testShortExactSequenceCreatesMissingTermAndSheafMaps();
+testShortExactSequenceMissingTermNamesUseMapLabels();
+testShortExactSequenceTailCanMoveEndpointAndHandles();
+testShortExactSequenceTailPointCountKeepsFreeEndpoint();
+testShortExactSequenceStraightTailUsesZeroPoints();
+testShortExactSequenceTailHideAndShowRestoresGeometry();
+testBlowupPointConstructionCreatesVarietyAndMap();
+testGrassmannianMapConstructionCreatesTargetAndMap();
 
 console.log('sheaf calculator regression tests passed');

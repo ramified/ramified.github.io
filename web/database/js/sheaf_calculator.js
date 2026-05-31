@@ -26,6 +26,9 @@
   const DEFAULT_MAP_POINT_COUNT = STRAIGHT_MAP_POINT_COUNT;
   const MAX_MAP_POINT_COUNT = 5;
   const MAP_POINT_COUNT_OPTIONS = [STRAIGHT_MAP_POINT_COUNT, 2, 3, 4, 5];
+  const DEFAULT_SEQUENCE_TAIL_POINT_COUNT = STRAIGHT_MAP_POINT_COUNT;
+  const MAX_SEQUENCE_TAIL_POINT_COUNT = MAX_MAP_POINT_COUNT;
+  const SEQUENCE_TAIL_POINT_COUNT_OPTIONS = MAP_POINT_COUNT_OPTIONS;
   const MAP_CURVE_SAMPLE_COUNT = 48;
   const VARIETY_LETTER_NAMES = ['X', 'Y', 'Z', 'W', 'V', 'U', 'T', 'S', 'R', 'Q'];
   const SHEAF_LETTER_NAMES = ['\\mathcal{E}', '\\mathcal{F}', '\\mathcal{G}', '\\mathcal{H}', '\\mathcal{I}', '\\mathcal{J}', '\\mathcal{K}', '\\mathcal{L}', '\\mathcal{M}', '\\mathcal{N}'];
@@ -81,16 +84,25 @@
     varieties: [],
     sheaves: [],
     maps: [],
+    sequences: [],
     activeVarietyId: null,
     activeSheafId: null,
     activeMapId: null,
+    activeSequenceId: null,
     inputMode: 'create',
     labelDrag: null,
     productDraft: null,
+    sesDraft: null,
+    sesPickTarget: 'sheaf-a',
+    blowupDraft: null,
+    blowupPickTarget: 'base',
+    grassmannianMapDraft: null,
+    grassmannianMapPickTarget: 'bundle',
     mapDraft: null,
     mapPickTarget: 'domain',
     mapDrag: null,
     mapControlDrag: null,
+    sequenceTailDrag: null,
     sheafBinaryDraft: null,
     sheafBinaryPickTarget: 'left',
     sheafSchurDraft: null,
@@ -237,6 +249,27 @@
     refs.addObjectKind = $('add-object-kind');
     refs.combinedEditor = $('combined-editor');
     refs.combinedType = $('combined-type');
+    refs.sesParentsRow = $('ses-parents-row');
+    refs.sesLeftButton = $('ses-left-button');
+    refs.sesFirstMapButton = $('ses-first-map-button');
+    refs.sesMiddleButton = $('ses-middle-button');
+    refs.sesSecondMapButton = $('ses-second-map-button');
+    refs.sesRightButton = $('ses-right-button');
+    refs.sesPickNote = $('ses-pick-note');
+    refs.sesTailRow = $('ses-tail-row');
+    refs.sesTailPointCount = $('ses-tail-point-count');
+    refs.sesTailPointCountValue = $('ses-tail-point-count-value');
+    refs.blowupParentsRow = $('blowup-parents-row');
+    refs.blowupBaseButton = $('blowup-base-button');
+    refs.blowupPointButton = $('blowup-point-button');
+    refs.blowupPickNote = $('blowup-pick-note');
+    refs.grassmannianMapParentRow = $('grassmannian-map-parent-row');
+    refs.grassmannianMapBundleButton = $('grassmannian-map-bundle-button');
+    refs.grassmannianMapTargetPreview = $('grassmannian-map-target-preview');
+    refs.grassmannianMapParamsRow = $('grassmannian-map-params-row');
+    refs.grassmannianMapR = $('grassmannian-map-r');
+    refs.grassmannianMapN = $('grassmannian-map-n');
+    refs.grassmannianMapPickNote = $('grassmannian-map-pick-note');
     refs.inputOptions = $('input-options');
     refs.modifyWarning = $('modify-warning');
     refs.inputRevealActions = $('input-reveal-actions');
@@ -333,9 +366,11 @@
     state.varieties = [];
     state.sheaves = [];
     state.maps = [];
+    state.sequences = [];
     state.activeVarietyId = null;
     state.activeSheafId = null;
     state.activeMapId = null;
+    state.activeSequenceId = null;
   }
 
   function createDefaultVariety() {
@@ -378,6 +413,17 @@
       codomainId: to.id,
       construction: options.construction || null,
       curve: options.curve ? normalizeMapCurve(options.curve) : null
+    };
+  }
+
+  function createDefaultSequence(options = {}) {
+    return {
+      id: options.id || nextInputId('S'),
+      type: options.type || 'short-exact-sequence',
+      sheafIds: Array.isArray(options.sheafIds) ? options.sheafIds.slice(0, 3) : [],
+      mapIds: Array.isArray(options.mapIds) ? options.mapIds.slice(0, 2) : [],
+      baseVarietyId: options.baseVarietyId || null,
+      tail: normalizeSequenceTailCurve(options.tail)
     };
   }
 
@@ -431,9 +477,7 @@
     }
     const sheaf = createSheafFromDraft(baseVariety);
     if (!sheaf) return null;
-    state.sheaves.push(sheaf);
-    state.activeSheafId = sheaf.id;
-    state.activeVarietyId = sheaf.baseVarietyId || defaultBaseVarietyId();
+    addSheafObject(sheaf);
     prepareNextDraftName('sheaf', sheaf.name);
     return sheaf;
   }
@@ -446,6 +490,19 @@
     clearSheafBinaryDraft();
     state.draftSheafNameDirty = false;
     refs.sheafName.value = defaultCreateSheafNameLatex();
+    return sheaf;
+  }
+
+  function addSheafObject(sheaf, options = {}) {
+    if (!sheaf) return null;
+    if (state.sheaves.some((item) => item.id === sheaf.id)) return sheaf;
+    state.sheaves.push(sheaf);
+    if (options.activate !== false) {
+      state.activeSequenceId = null;
+      state.activeSheafId = sheaf.id;
+      state.activeVarietyId = sheaf.baseVarietyId || defaultBaseVarietyId();
+      state.activeMapId = null;
+    }
     return sheaf;
   }
 
@@ -485,6 +542,7 @@
       avoidCanvasLabelOverlap(sheaf);
     }
     if (baseVariety) sheafFromObject(sheaf, geometryFromVariety(baseVariety));
+    state.activeSequenceId = null;
     state.activeSheafId = sheaf.id;
     state.activeVarietyId = sheaf.baseVarietyId || defaultBaseVarietyId();
     state.activeMapId = null;
@@ -517,6 +575,7 @@
       avoidCanvasLabelOverlap(sheaf);
     }
     if (baseVariety) sheafFromObject(sheaf, geometryFromVariety(baseVariety));
+    state.activeSequenceId = null;
     state.activeSheafId = sheaf.id;
     state.activeVarietyId = sheaf.baseVarietyId || defaultBaseVarietyId();
     state.activeMapId = null;
@@ -564,6 +623,7 @@
       avoidCanvasLabelOverlap(sheaf);
     }
     if (baseVariety) sheafFromObject(sheaf, geometryFromVariety(baseVariety));
+    state.activeSequenceId = null;
     state.activeSheafId = sheaf.id;
     state.activeVarietyId = sheaf.baseVarietyId || defaultBaseVarietyId();
     state.activeMapId = null;
@@ -927,6 +987,10 @@
     return state.maps.find((item) => item.id === state.activeMapId) || null;
   }
 
+  function activeSequence() {
+    return (state.sequences || []).find((item) => item.id === state.activeSequenceId) || null;
+  }
+
   function selectedVariety() {
     return state.varieties.find((item) => item.id === state.activeVarietyId) || null;
   }
@@ -939,7 +1003,12 @@
     return state.maps.find((item) => item.id === state.activeMapId) || null;
   }
 
+  function selectedSequence() {
+    return activeSequence();
+  }
+
   function activeObjectForModifyMode() {
+    if (state.activeSequenceId) return selectedSequence();
     if (state.activeMapId) return selectedMap();
     if (state.activeSheafId) return selectedSheaf();
     if (state.activeVarietyId) return selectedVariety();
@@ -947,26 +1016,34 @@
   }
 
   function canvasHasObjects() {
-    return state.varieties.length > 0 || state.sheaves.length > 0 || state.maps.length > 0;
+    return state.varieties.length > 0 || state.sheaves.length > 0 || state.maps.length > 0 || (state.sequences || []).length > 0;
   }
 
   function syncInputAvailabilityControls() {
     const hasBaseVariety = state.varieties.length > 0;
     const hasCanvasObjects = canvasHasObjects();
     const hasAbelJacobiCurve = abelJacobiCurveVarieties().length > 0;
+    const hasSheaf = state.sheaves.length > 0;
     ['sheaf', 'map', 'combined'].forEach((kind) => {
       const option = refs.addObjectKind?.querySelector?.(`option[value="${kind}"]`);
       if (option) option.disabled = !hasBaseVariety;
     });
     const abelJacobiTypeOption = refs.combinedType?.querySelector?.('option[value="abel-jacobi"]');
     if (abelJacobiTypeOption) abelJacobiTypeOption.disabled = !hasAbelJacobiCurve;
+    const sesTypeOption = refs.combinedType?.querySelector?.('option[value="short-exact-sequence"]');
+    if (sesTypeOption) sesTypeOption.disabled = !hasSheaf && !activeSesEditMode();
     if (combinedCreateMode() && refs.combinedType?.value === 'abel-jacobi' && !hasAbelJacobiCurve) {
       refs.combinedType.value = 'product';
+    }
+    if (combinedCreateMode() && refs.combinedType?.value === 'short-exact-sequence' && !hasSheaf) {
+      refs.combinedType.value = 'product';
+      clearSesDraft();
     }
     if (refs.addObjectKind && !createKindIsAvailable(refs.addObjectKind.value)) {
       refs.addObjectKind.value = 'variety';
     }
     if (refs.combinedEditor) refs.combinedEditor.hidden = inputIsModifyMode() || !combinedCreateMode();
+    updateCombinedDraftControls();
     const modifyOption = refs.inputMode?.querySelector?.('option[value="modify"]');
     if (modifyOption) modifyOption.disabled = !hasCanvasObjects;
     if (!hasCanvasObjects && state.inputMode === 'modify') {
@@ -998,6 +1075,9 @@
     const canAbelJacobi = abelJacobiCurveVarieties().length > 0;
     const editingAbelJacobi = inputIsModifyMode() && selectedMap()?.construction?.type === 'abel-jacobi';
     const allowAbelJacobiOption = combinedAbelJacobiCreateMode() || editingAbelJacobi;
+    const sheafMapOption = refs.mapType.querySelector?.('option[value="sheaf"]');
+    if (sheafMapOption) sheafMapOption.disabled = !state.sheaves.length;
+    if (!state.sheaves.length && refs.mapType.value === 'sheaf') refs.mapType.value = 'ordinary';
     if (refs.mapAbelJacobiOption) {
       refs.mapAbelJacobiOption.hidden = !allowAbelJacobiOption;
       refs.mapAbelJacobiOption.disabled = !allowAbelJacobiOption || !canAbelJacobi;
@@ -1006,6 +1086,7 @@
   }
 
   function modifyKind() {
+    if (state.activeSequenceId) return 'sequence';
     if (state.activeMapId) return 'map';
     return state.activeSheafId ? 'sheaf' : 'variety';
   }
@@ -1153,18 +1234,20 @@
     syncInputAvailabilityControls();
     const modifying = inputIsModifyMode();
     const hasModifyTarget = !!activeObjectForModifyMode();
+    const showingSequence = modifying && !!state.activeSequenceId;
     const showingMap = modifying ? !!state.activeMapId : refs.addObjectKind?.value === 'map';
     const showingCombinedAbelJacobi = !modifying && combinedAbelJacobiCreateMode();
     const showingMapEditor = showingMap || showingCombinedAbelJacobi;
-    const showingSheaf = !showingMapEditor && (modifying ? !!state.activeSheafId : refs.addObjectKind?.value === 'sheaf');
+    const showingCombinedStructure = showingSequence || (!modifying && (combinedSesCreateMode() || combinedBlowupCreateMode() || combinedGrassmannianMapCreateMode()));
+    const showingSheaf = !showingMapEditor && !showingCombinedStructure && (modifying ? !!state.activeSheafId : refs.addObjectKind?.value === 'sheaf');
     const waitingForSheafBase = inputIsCreateMode() && showingSheaf && !state.draftSheafBaseVarietyId;
     if (refs.addObjectKind) refs.addObjectKind.hidden = modifying;
-    if (refs.combinedEditor) refs.combinedEditor.hidden = modifying || !combinedCreateMode();
+    if (refs.combinedEditor) refs.combinedEditor.hidden = !showingSequence && (modifying || !combinedCreateMode());
     if (refs.inputOptions) refs.inputOptions.hidden = modifying;
     if (refs.modifyWarning) refs.modifyWarning.hidden = !modifying || hasModifyTarget;
-    refs.varietyEditor.hidden = modifying ? (showingSheaf || showingMapEditor || !hasModifyTarget) : (showingSheaf || showingMapEditor);
-    refs.sheafEditor.hidden = modifying ? (!showingSheaf || !hasModifyTarget) : !showingSheaf;
-    if (refs.mapEditor) refs.mapEditor.hidden = modifying ? (!showingMap || !hasModifyTarget) : !showingMapEditor;
+    refs.varietyEditor.hidden = modifying ? (showingSequence || showingSheaf || showingMapEditor || !hasModifyTarget) : (showingSheaf || showingMapEditor || showingCombinedStructure);
+    refs.sheafEditor.hidden = modifying ? (showingSequence || !showingSheaf || !hasModifyTarget) : !showingSheaf;
+    if (refs.mapEditor) refs.mapEditor.hidden = modifying ? (showingSequence || !showingMap || !hasModifyTarget) : !showingMapEditor;
     syncMapCurveControls(showingMapEditor && modifying ? selectedMap() : null);
     syncRepetitionStyleLabels();
     syncInputModeControls();
@@ -1258,6 +1341,20 @@
       clearMapDraft();
       state.draftMapNameDirty = false;
       syncDefaultMapName(true);
+    } else if (combinedSesCreateMode()) {
+      clearSesDraft();
+      state.sesPickTarget = 'sheaf-a';
+      activateSesPick('sheaf-a', { render: false });
+    } else if (combinedBlowupCreateMode()) {
+      clearBlowupDraft();
+      state.blowupPickTarget = 'base';
+      activateBlowupPick('base', { render: false });
+    } else if (combinedGrassmannianMapCreateMode()) {
+      clearGrassmannianMapDraft();
+      state.grassmannianMapPickTarget = 'bundle';
+      if (refs.grassmannianMapR) refs.grassmannianMapR.value = '2';
+      if (refs.grassmannianMapN) refs.grassmannianMapN.value = '4';
+      activateGrassmannianMapPick({ render: false });
     } else if (kind === 'sheaf') {
       refs.sheafType.value = 'abstract';
       refs.twist.value = '1';
@@ -1302,11 +1399,13 @@
       state.hiddenObjects = hiddenObjectRefs();
     }
     if (kind === 'variety') {
+      state.activeSequenceId = null;
       state.activeVarietyId = id;
       state.activeSheafId = null;
       state.activeMapId = null;
       syncMapCurveControls(null);
     } else if (kind === 'sheaf') {
+      state.activeSequenceId = null;
       state.activeSheafId = id;
       state.activeMapId = null;
       syncMapCurveControls(null);
@@ -1315,9 +1414,20 @@
       if (baseVariety) state.activeVarietyId = baseVariety.id;
       if (sheaf) refs.basis.value = normalizeBasisValue(sheaf.basis);
     } else if (kind === 'map') {
+      state.activeSequenceId = null;
       state.activeMapId = id;
       state.activeSheafId = null;
       syncMapCurveControls(selectedMap());
+    } else if (kind === 'sequence') {
+      const sequence = state.sequences.find((item) => item.id === id) || null;
+      if (!sequence) return;
+      state.activeSequenceId = id;
+      state.activeMapId = null;
+      state.activeSheafId = null;
+      state.activeVarietyId = sequence.baseVarietyId || defaultBaseVarietyId();
+      syncMapCurveControls(null);
+      if (refs.addObjectKind) refs.addObjectKind.value = 'combined';
+      if (refs.combinedType) refs.combinedType.value = 'short-exact-sequence';
     }
     if (refs.addObjectKind && inputIsCreateMode() && (kind === 'variety' || kind === 'sheaf' || kind === 'map')) {
       refs.addObjectKind.value = kind;
@@ -1342,10 +1452,14 @@
       state.activeVarietyId = null;
       state.activeSheafId = null;
       state.activeMapId = null;
+      state.activeSequenceId = null;
+      if (refs.combinedType) refs.combinedType.disabled = false;
     }
     if (state.inputMode === 'create') {
       state.activeSheafId = null;
       state.activeMapId = null;
+      state.activeSequenceId = null;
+      if (refs.combinedType) refs.combinedType.disabled = false;
       if (refs.modifyWarning) refs.modifyWarning.hidden = true;
     }
     setCanvasPickEnabled(false, { render: false });
@@ -1372,6 +1486,7 @@
 
   function updateInputEditorTitles() {
     const kind = inputIsModifyMode() ? modifyKind() : currentInputKind();
+    if (refs.combinedType) refs.combinedType.disabled = activeSesEditMode();
     if (refs.varietyEditorTitle) {
       if (combinedProductCreateMode()) {
         refs.varietyEditorTitle.textContent = 'new product construction';
@@ -1382,7 +1497,11 @@
       }
     }
     if (refs.sheafEditorTitle) {
-      if (inputIsModifyMode() && kind === 'sheaf') {
+      if (combinedSesCreateMode()) {
+        refs.sheafEditorTitle.textContent = activeSesEditMode() ? 'short exact sequence' : 'new short exact sequence';
+      } else if (combinedGrassmannianMapCreateMode()) {
+        refs.sheafEditorTitle.textContent = 'new Grassmannian map';
+      } else if (inputIsModifyMode() && kind === 'sheaf') {
         setInlineMath(refs.sheafEditorTitle, `\\text{the sheaf } ${sanitizeMathLabel(refs.sheafName?.value || activeSheaf()?.name, '\\mathcal{E}')}`);
       } else {
         refs.sheafEditorTitle.textContent = 'new sheaf';
@@ -1421,6 +1540,44 @@
       refs.mapLabelOffset.disabled = !showCurveControls;
     }
     if (refs.mapLabelOffsetValue) refs.mapLabelOffsetValue.textContent = `${offset}px`;
+  }
+
+  function syncSequenceTailControls(sequence = activeSesDraftSequence()) {
+    const show = combinedSesCreateMode();
+    if (refs.sesTailRow) refs.sesTailRow.hidden = !show;
+    const count = sequence ? sequenceTailPointCount(sequence.tail) : sequenceTailPointCount(state.sesDraft);
+    if (refs.sesTailPointCount) {
+      refs.sesTailPointCount.min = '0';
+      refs.sesTailPointCount.max = String(SEQUENCE_TAIL_POINT_COUNT_OPTIONS.length - 1);
+      refs.sesTailPointCount.step = '1';
+      refs.sesTailPointCount.value = String(sequenceTailPointCountSliderValue(count));
+      refs.sesTailPointCount.disabled = !show;
+    }
+    if (refs.sesTailPointCountValue) refs.sesTailPointCountValue.textContent = formatSequenceTailPointCount(count);
+  }
+
+  function setActiveSequenceTailPointCount(value) {
+    const sequence = activeSesDraftSequence();
+    const count = sequenceTailPointCountFromSliderValue(value);
+    if (refs.sesTailPointCount) refs.sesTailPointCount.value = String(sequenceTailPointCountSliderValue(count));
+    if (refs.sesTailPointCountValue) refs.sesTailPointCountValue.textContent = formatSequenceTailPointCount(count);
+    if (!sequence) {
+      setSesDraft({ ...sesDraftIds(), tailPointCount: count });
+      return;
+    }
+    const width = state.canvasWidth || refs.canvas?.clientWidth || 760;
+    const height = state.canvasHeight || refs.canvas?.clientHeight || 280;
+    const current = sequenceTailGeometryFromCanvas(sequence, width, height);
+    if (!current?.path) {
+      sequence.tail = { ...normalizeSequenceTailCurve(sequence.tail), pointCount: count };
+      sequence.modified = true;
+      recompute();
+      return;
+    }
+    const previous = sequenceTailStateFromPath(sequence.tail, current.path, width, height);
+    sequence.tail = sequenceTailWithPointCount(previous, current.start, current.end, count, width, height);
+    sequence.modified = true;
+    recompute();
   }
 
   function repositionCanvasObjectsForSpacing() {
@@ -1468,6 +1625,7 @@
     if (!item) return;
     if (kind === 'map') loadMapIntoDraft(item);
     else if (kind === 'sheaf') loadSheafIntoDraft(item);
+    else if (kind === 'sequence') loadShortExactSequenceIntoDraft(item);
     else loadVarietyIntoDraft(item);
     normalizeControlVisibility();
   }
@@ -1579,6 +1737,7 @@
     if (refs.mapType) refs.mapType.value = map?.construction?.type === 'composition'
       ? 'composition'
       : (map?.construction?.type === 'abel-jacobi' ? 'abel-jacobi' : 'ordinary');
+    if (refs.mapType && map && !map.construction && map.domainKind === 'sheaf' && map.codomainKind === 'sheaf') refs.mapType.value = 'sheaf';
     state.mapDraft = map
       ? (map.construction?.type === 'composition'
         ? { type: 'composition', mapIds: [...(map.construction.mapIds || []).slice(0, 2)] }
@@ -1595,10 +1754,34 @@
     updateInputEditorTitles();
   }
 
+  function loadShortExactSequenceIntoDraft(sequence) {
+    if (!sequence || sequence.type !== 'short-exact-sequence') return;
+    if (refs.addObjectKind) refs.addObjectKind.value = 'combined';
+    if (refs.combinedType) refs.combinedType.value = 'short-exact-sequence';
+    sequence.tail = normalizeSequenceTailCurve(sequence.tail);
+    const sheafIds = sequence.sheafIds || [];
+    const mapIds = sequence.mapIds || [];
+    setSesDraft({
+      sequenceId: sequence.id,
+      sheafAId: sheafIds[0] || null,
+      sheafBId: sheafIds[1] || null,
+      sheafCId: sheafIds[2] || null,
+      mapABId: mapIds[0] || null,
+      mapBCId: mapIds[1] || null,
+      tailPointCount: sequenceTailPointCount(sequence.tail)
+    });
+    state.sesPickTarget = 'sheaf-a';
+    updateSesDraftControls();
+    syncSequenceTailControls(sequence);
+    updateInputEditorTitles();
+  }
+
   function activeObjectForKind(kind) {
     if (inputIsModifyMode()) {
+      if (kind === 'sequence') return selectedSequence();
       if (kind === 'map') return selectedMap();
       if (kind === 'sheaf') return selectedSheaf();
+      if (state.activeSequenceId) return null;
       return state.activeSheafId || state.activeMapId ? null : selectedVariety();
     }
     if (kind === 'map') return activeMap();
@@ -1614,6 +1797,7 @@
     const value = refs.addObjectKind?.value;
     if (!state.varieties.length && (value === 'sheaf' || value === 'map' || value === 'combined')) return 'variety';
     if (value === 'map' || combinedAbelJacobiCreateMode()) return 'map';
+    if (combinedSesCreateMode() || combinedGrassmannianMapCreateMode()) return 'sheaf';
     return value === 'sheaf' ? 'sheaf' : 'variety';
   }
 
@@ -1622,14 +1806,36 @@
   }
 
   function combinedProductCreateMode() {
-    return combinedCreateMode() && refs.combinedType?.value !== 'abel-jacobi';
+    return combinedCreateMode() && refs.combinedType?.value === 'product';
   }
 
   function combinedAbelJacobiCreateMode() {
     return combinedCreateMode() && refs.combinedType?.value === 'abel-jacobi';
   }
 
+  function combinedSesCreateMode() {
+    return (combinedCreateMode() && refs.combinedType?.value === 'short-exact-sequence') || activeSesEditMode();
+  }
+
+  function combinedBlowupCreateMode() {
+    return combinedCreateMode() && refs.combinedType?.value === 'blow-up-point';
+  }
+
+  function combinedGrassmannianMapCreateMode() {
+    return combinedCreateMode() && refs.combinedType?.value === 'grassmannian-map';
+  }
+
+  function activeSesEditMode() {
+    return inputIsModifyMode() && !!state.activeSequenceId && selectedSequence()?.type === 'short-exact-sequence';
+  }
+
   function deleteActiveObject(kind = currentInputKind()) {
+    if (kind === 'sequence') {
+      const active = selectedSequence();
+      if (!active) return;
+      deleteShortExactSequence(active.id);
+      return;
+    }
     if (kind === 'map') {
       const active = activeObjectForKind(kind);
       if (active) removeCanvasObject('map', active.id);
@@ -1646,6 +1852,7 @@
     if (deletingSheaf) {
       state.activeSheafId = next?.id || null;
       state.maps = state.maps.filter((map) => !(map.domainKind === 'sheaf' && map.domainId === removed?.id) && !(map.codomainKind === 'sheaf' && map.codomainId === removed?.id));
+      removeSequencesTouchingSheaves(new Set([removed?.id].filter(Boolean)));
       if (next) {
         state.activeVarietyId = next.baseVarietyId || defaultBaseVarietyId();
         refs.basis.value = normalizeBasisValue(next.basis);
@@ -1661,6 +1868,7 @@
         && !(map.domainKind === 'sheaf' && removedSheafIds.has(map.domainId))
         && !(map.codomainKind === 'sheaf' && removedSheafIds.has(map.codomainId))
       ));
+      removeSequencesTouchingSheaves(removedSheafIds);
       if (!state.varieties.some((variety) => variety.id === state.activeVarietyId)) {
         state.activeVarietyId = state.varieties[0]?.id || null;
       }
@@ -1678,8 +1886,13 @@
   }
 
   function removeCanvasObject(kind, id) {
+    if (kind === 'sequence') {
+      deleteShortExactSequence(id);
+      return;
+    }
     if (kind === 'map') {
       state.maps = state.maps.filter((map) => map.id !== id);
+      removeSequencesTouchingMaps(new Set([id]));
       if (state.activeMapId === id) state.activeMapId = null;
       if (state.mapDraft?.type === 'composition' && (state.mapDraft.mapIds || []).includes(id)) clearMapDraft();
       recompute();
@@ -1688,6 +1901,7 @@
     if (kind === 'sheaf') {
       state.sheaves = state.sheaves.filter((sheaf) => sheaf.id !== id);
       state.maps = state.maps.filter((map) => !(map.domainKind === 'sheaf' && map.domainId === id) && !(map.codomainKind === 'sheaf' && map.codomainId === id));
+      removeSequencesTouchingSheaves(new Set([id]));
       if (state.activeSheafId === id) state.activeSheafId = null;
       if (state.activeMapId && !state.maps.some((map) => map.id === state.activeMapId)) state.activeMapId = null;
       clearMapDraft();
@@ -1705,6 +1919,7 @@
         && !(map.domainKind === 'sheaf' && removedSheafIds.has(map.domainId))
         && !(map.codomainKind === 'sheaf' && removedSheafIds.has(map.codomainId))
       ));
+      removeSequencesTouchingSheaves(removedSheafIds);
       if (state.activeVarietyId === id) state.activeVarietyId = state.varieties[0]?.id || null;
       if (state.activeSheafId && !state.sheaves.some((sheaf) => sheaf.id === state.activeSheafId)) state.activeSheafId = null;
       if (state.activeMapId && !state.maps.some((map) => map.id === state.activeMapId)) state.activeMapId = null;
@@ -1715,15 +1930,55 @@
     }
   }
 
+  function deleteShortExactSequence(sequenceId) {
+    const sequence = (state.sequences || []).find((item) => item.id === sequenceId);
+    if (!sequence) return;
+    detachShortExactSequenceMemberships(sequenceId);
+    (sequence.mapIds || []).forEach((mapId) => detachShortExactSequenceMap(mapId, sequenceId));
+    state.sequences = state.sequences.filter((item) => item.id !== sequenceId);
+    if (state.activeSequenceId === sequenceId) state.activeSequenceId = null;
+    if (refs.combinedType) refs.combinedType.disabled = false;
+    clearSesDraft();
+    recompute();
+  }
+
+  function removeSequencesTouchingSheaves(sheafIds) {
+    if (!sheafIds?.size || !Array.isArray(state.sequences)) return;
+    const removedSequenceIds = new Set();
+    state.sequences = state.sequences.filter((sequence) => {
+      const touches = (sequence.sheafIds || []).some((id) => sheafIds.has(id));
+      if (touches) removedSequenceIds.add(sequence.id);
+      return !touches;
+    });
+    if (removedSequenceIds.size) {
+      state.maps = state.maps.filter((map) => !removedSequenceIds.has(map.construction?.sequenceId));
+      if (removedSequenceIds.has(state.activeSequenceId)) state.activeSequenceId = null;
+    }
+  }
+
+  function removeSequencesTouchingMaps(mapIds) {
+    if (!mapIds?.size || !Array.isArray(state.sequences)) return;
+    const removedSequenceIds = new Set();
+    state.sequences = state.sequences.filter((sequence) => {
+      const touches = (sequence.mapIds || []).some((id) => mapIds.has(id));
+      if (touches) removedSequenceIds.add(sequence.id);
+      return !touches;
+    });
+    if (removedSequenceIds.has(state.activeSequenceId)) state.activeSequenceId = null;
+  }
+
   function clearCanvasObjects() {
     state.varieties = [];
     state.sheaves = [];
     state.maps = [];
+    state.sequences = [];
     state.activeVarietyId = null;
     state.activeSheafId = null;
     state.activeMapId = null;
+    state.activeSequenceId = null;
     state.labelDrag = null;
     state.mapControlDrag = null;
+    state.sequenceTailDrag = null;
     state.hiddenObjects = [];
     clearMapDraft();
     if (refs.addObjectKind) refs.addObjectKind.value = 'variety';
@@ -1747,6 +2002,15 @@
     recompute();
   }
 
+  function hideShortExactSequenceTail(sequenceId) {
+    const sequence = (state.sequences || []).find((item) => item.id === sequenceId);
+    if (!sequence) return;
+    const tail = normalizeSequenceTailCurve(sequence.tail) || {};
+    sequence.tail = { ...tail, hiddenOnCanvas: true };
+    state.hiddenObjects = hiddenObjectRefs();
+    recompute();
+  }
+
   function showHiddenCanvasObjects() {
     let changed = false;
     allCanvasObjects().forEach((object) => {
@@ -1754,6 +2018,11 @@
         object.hiddenOnCanvas = false;
         changed = true;
       }
+    });
+    (state.sequences || []).forEach((sequence) => {
+      if (!sequence.tail?.hiddenOnCanvas) return;
+      sequence.tail = { ...normalizeSequenceTailCurve(sequence.tail), hiddenOnCanvas: false };
+      changed = true;
     });
     state.hiddenObjects = [];
     if (changed) recompute();
@@ -1768,12 +2037,13 @@
     return [
       ...state.varieties.filter((item) => item.hiddenOnCanvas).map((item) => ({ kind: 'variety', id: item.id })),
       ...state.sheaves.filter((item) => item.hiddenOnCanvas).map((item) => ({ kind: 'sheaf', id: item.id })),
-      ...state.maps.filter((item) => item.hiddenOnCanvas).map((item) => ({ kind: 'map', id: item.id }))
+      ...state.maps.filter((item) => item.hiddenOnCanvas).map((item) => ({ kind: 'map', id: item.id })),
+      ...state.sequences.filter((item) => item.tail?.hiddenOnCanvas).map((item) => ({ kind: 'sequence-tail', id: item.id }))
     ];
   }
 
   function hasHiddenCanvasObjects() {
-    return allCanvasObjects().some((object) => object.hiddenOnCanvas);
+    return allCanvasObjects().some((object) => object.hiddenOnCanvas) || (state.sequences || []).some((sequence) => sequence.tail?.hiddenOnCanvas);
   }
 
   function syncShowCanvasButton() {
@@ -1805,9 +2075,34 @@
     return null;
   }
 
+  function isCanvasSequenceControl(target) {
+    return target?.closest?.('[data-object-kind="sequence"][data-object-id]');
+  }
+
   function handleCanvasLabelContextMenu(event) {
+    const sequenceTailControl = event.target.closest('[data-sequence-tail-control]');
+    if (sequenceTailControl) {
+      const sequence = sequenceFromTailControl(sequenceTailControl);
+      if (sequence?.type === 'short-exact-sequence') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+        hideShortExactSequenceTail(sequence.id);
+      }
+      return;
+    }
     const target = canvasObjectLabelFromEvent(event);
     if (!target) return;
+    if (target.dataset.objectKind === 'sequence') {
+      const control = target.dataset.sequenceTailControl;
+      if (control === 'end') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+        hideShortExactSequenceTail(target.dataset.objectId);
+      }
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
@@ -1827,6 +2122,9 @@
   function createObjectFromDraft(kind = currentInputKind()) {
     if (combinedProductCreateMode()) return createProductVarietyFromDraft();
     if (combinedAbelJacobiCreateMode()) return createAbelJacobiMapFromDraft();
+    if (combinedSesCreateMode()) return createSesFromDraft();
+    if (combinedBlowupCreateMode()) return createBlowupPointFromDraft();
+    if (combinedGrassmannianMapCreateMode()) return createGrassmannianMapFromDraft();
     if (kind === 'map') return createMapFromDraft();
     if (kind === 'sheaf') {
       return addSheafFromDraft();
@@ -1834,8 +2132,10 @@
     if (creatingProductVariety()) return createProductVarietyFromDraft();
     const variety = createVarietyFromDraft();
     state.varieties.push(variety);
+    state.activeSequenceId = null;
     state.activeVarietyId = variety.id;
     state.activeSheafId = null;
+    state.activeMapId = null;
     prepareNextDraftName('variety', variety.name);
     return variety;
   }
@@ -1878,8 +2178,8 @@
     const data = ordinaryMapDraftData();
     if (!data) return null;
     const map = createMapObject(
-      { kind: 'variety', id: data.domain.id },
-      { kind: 'variety', id: data.codomain.id },
+      { kind: data.kind, id: data.domain.id },
+      { kind: data.kind, id: data.codomain.id },
       { name: uniqueObjectName('map', data.name) }
     );
     if (!map) return null;
@@ -1915,9 +2215,9 @@
     const data = ordinaryMapDraftData();
     if (!data) return null;
     map.name = data.name;
-    map.domainKind = 'variety';
+    map.domainKind = data.kind;
     map.domainId = data.domain.id;
-    map.codomainKind = 'variety';
+    map.codomainKind = data.kind;
     map.codomainId = data.codomain.id;
     map.nameDirty = data.nameDirty;
     map.construction = null;
@@ -1934,14 +2234,19 @@
     const draft = state.mapDraft || {};
     const domainId = draft.domainId;
     const codomainId = draft.codomainId;
-    const domain = state.varieties.find((item) => item.id === domainId);
-    const codomain = state.varieties.find((item) => item.id === codomainId);
+    const kind = sheafMapInputMode() ? 'sheaf' : 'variety';
+    if ((draft.domainKind && draft.domainKind !== kind) || (draft.codomainKind && draft.codomainKind !== kind)) return null;
+    const collection = kind === 'sheaf' ? state.sheaves : state.varieties;
+    const domain = collection.find((item) => item.id === domainId);
+    const codomain = collection.find((item) => item.id === codomainId);
     if (!domain || !codomain) return null;
+    if (kind === 'sheaf' && domain.baseVarietyId !== codomain.baseVarietyId) return null;
     const defaultName = defaultMapNameLatex();
     const name = state.draftMapNameDirty
       ? sanitizeMathLabel(refs.mapName?.value, defaultName)
       : (inputIsCreateMode() ? defaultCreateMapNameLatex() : readMapDraftName());
     return {
+      kind,
       domain,
       codomain,
       name,
@@ -1988,6 +2293,7 @@
   function updateObjectFromDraft(kind = currentInputKind()) {
     const active = activeObjectForKind(kind);
     if (!active) return null;
+    if (kind === 'sequence') return updateShortExactSequenceFromDraft();
     if (kind === 'map') {
       if (abelJacobiMapInputMode()) return null;
       return updateMapFromDraft(active);
@@ -2005,6 +2311,7 @@
         avoidCanvasLabelOverlap(active);
       }
       sheafFromObject(active, geometryFromVariety(baseVariety));
+      state.activeSequenceId = null;
       state.activeSheafId = active.id;
       state.activeVarietyId = active.baseVarietyId || defaultBaseVarietyId();
       refs.basis.value = normalizeBasisValue(active.basis);
@@ -2021,6 +2328,7 @@
     }
     geometryFromVariety(active);
     if (active.type === 'curve') refs.dim.value = '1';
+    state.activeSequenceId = null;
     state.activeVarietyId = active.id;
     state.activeSheafId = null;
     state.sheaves.forEach((sheaf) => {
@@ -2080,8 +2388,12 @@
     }
     refs.addObjectKind.addEventListener('change', () => {
       syncInputAvailabilityControls();
+      state.activeSequenceId = null;
       state.activeMapId = null;
       if (!combinedProductCreateMode() && refs.addObjectKind.value !== 'variety') clearProductDraft();
+      clearSesDraft();
+      clearBlowupDraft();
+      clearGrassmannianMapDraft();
       clearMapDraft();
       clearSheafBinaryDraft();
       clearSheafSchurDraft();
@@ -2102,14 +2414,22 @@
       typeset(refs.varietyEditor);
       typeset(refs.sheafEditor);
       typeset(refs.mapEditor);
+      typeset(refs.combinedEditor);
       if (combinedProductCreateMode()) activateProductFactorPick(0, { render: false });
+      else if (combinedSesCreateMode()) activateSesPick(state.sesPickTarget || 'sheaf-a', { render: false });
+      else if (combinedBlowupCreateMode()) activateBlowupPick(state.blowupPickTarget || 'base', { render: false });
+      else if (combinedGrassmannianMapCreateMode()) activateGrassmannianMapPick({ render: false });
       else activateFirstCreateBlankPick({ render: false });
       recompute();
     });
     if (refs.combinedType) {
       refs.combinedType.addEventListener('change', () => {
+        if (activeSesEditMode()) return;
         syncInputAvailabilityControls();
         clearProductDraft();
+        clearSesDraft();
+        clearBlowupDraft();
+        clearGrassmannianMapDraft();
         clearMapDraft();
         setCanvasPickEnabled(false, { render: false });
         if (combinedProductCreateMode()) refs.varietyType.value = 'product';
@@ -2119,7 +2439,11 @@
         normalizeControlVisibility();
         typeset(refs.varietyEditor);
         typeset(refs.mapEditor);
+        typeset(refs.combinedEditor);
         if (combinedProductCreateMode()) activateProductFactorPick(0, { render: false });
+        else if (combinedSesCreateMode()) activateSesPick(state.sesPickTarget || 'sheaf-a', { render: false });
+        else if (combinedBlowupCreateMode()) activateBlowupPick(state.blowupPickTarget || 'base', { render: false });
+        else if (combinedGrassmannianMapCreateMode()) activateGrassmannianMapPick({ render: false });
         else activateFirstCreateBlankPick({ render: false });
         recompute();
       });
@@ -2128,6 +2452,35 @@
       if (!button) return;
       button.addEventListener('click', () => {
         activateProductFactorPick(button.dataset.productFactorIndex);
+      });
+    });
+    [refs.sesLeftButton, refs.sesFirstMapButton, refs.sesMiddleButton, refs.sesSecondMapButton, refs.sesRightButton].forEach((button) => {
+      if (!button) return;
+      button.addEventListener('click', () => {
+        activateSesPick(button.dataset.sesPick || 'sheaf-a');
+      });
+    });
+    [refs.blowupBaseButton, refs.blowupPointButton].forEach((button) => {
+      if (!button) return;
+      button.addEventListener('click', () => {
+        activateBlowupPick(button.dataset.blowupPick || 'base');
+      });
+    });
+    if (refs.grassmannianMapBundleButton) {
+      refs.grassmannianMapBundleButton.addEventListener('click', () => {
+        activateGrassmannianMapPick();
+      });
+    }
+    [refs.grassmannianMapR, refs.grassmannianMapN].forEach((input) => {
+      if (!input) return;
+      input.addEventListener('input', () => {
+        syncGrassmannianMapControls();
+        normalizeControlVisibility();
+      });
+      input.addEventListener('change', () => {
+        syncGrassmannianMapControls();
+        normalizeControlVisibility();
+        recompute();
       });
     });
     (refs.pointNamePresets || []).forEach((button) => {
@@ -2319,6 +2672,15 @@
         updateMapDraftControls();
         renderCanvas(state.lastResult);
       });
+    }
+    if (refs.sesTailPointCount) {
+      refs.sesTailPointCount.addEventListener('input', () => {
+        setActiveSequenceTailPointCount(refs.sesTailPointCount.value);
+      });
+      refs.sesTailPointCount.addEventListener('change', () => {
+        setActiveSequenceTailPointCount(refs.sesTailPointCount.value);
+      });
+      syncSequenceTailControls();
     }
     if (refs.mapPointCount) {
       refs.mapPointCount.addEventListener('input', () => {
@@ -2684,6 +3046,14 @@
     }
     refs.canvasLabels.addEventListener('click', (event) => {
       if (Date.now() < state.suppressLabelClickUntil) return;
+      const sequenceControl = event.target.closest('[data-object-kind="sequence"][data-object-id]');
+      if (sequenceControl) {
+        event.preventDefault();
+        event.stopPropagation();
+        activateObject('sequence', sequenceControl.dataset.objectId, { mode: 'modify', loadDraft: true });
+        recompute();
+        return;
+      }
       if (event.target.closest('[data-map-control]')) return;
       const target = canvasObjectLabelFromEvent(event);
       if (!target) return;
@@ -2691,6 +3061,17 @@
       selectObject(target.dataset.objectKind, target.dataset.objectId);
     });
     refs.canvasLabels.addEventListener('keydown', (event) => {
+      const sequenceTailControl = event.target.closest('[data-sequence-tail-control]');
+      if (sequenceTailControl && handleSequenceTailControlKey(event, sequenceTailControl)) {
+        return;
+      }
+      const sequenceControl = event.target.closest('[data-object-kind="sequence"][data-object-id]');
+      if (sequenceControl && (event.key === 'Enter' || event.key === ' ')) {
+        event.preventDefault();
+        activateObject('sequence', sequenceControl.dataset.objectId, { mode: 'modify', loadDraft: true });
+        recompute();
+        return;
+      }
       const control = event.target.closest('[data-map-control]');
       if (control) {
         handleMapControlKey(event, control);
@@ -2714,6 +3095,11 @@
     refs.canvasLabels.addEventListener('contextmenu', handleCanvasLabelContextMenu, true);
     refs.canvasLabels.addEventListener('pointerdown', (event) => {
       if (event.button !== 0) return;
+      const sequenceTailControl = event.target.closest('[data-sequence-tail-control]');
+      if (sequenceTailControl) {
+        startSequenceTailDrag(sequenceTailControl, event);
+        return;
+      }
       const control = event.target.closest('[data-map-control]');
       if (control) {
         startMapControlDrag(control, event);
@@ -3101,6 +3487,7 @@
     syncObjectLineage(variety, 'variety');
     positionProductVarietyLabel(variety, data.left, data.right);
     state.varieties.push(variety);
+    state.activeSequenceId = null;
     state.activeVarietyId = variety.id;
     state.activeSheafId = null;
     state.activeMapId = null;
@@ -3243,11 +3630,7 @@
     syncObjectLineage(sheaf, 'sheaf');
     positionSheafNearBase(sheaf, baseVarietyForSheaf(sheaf));
     avoidCanvasLabelOverlap(sheaf);
-    state.sheaves.push(sheaf);
-    state.activeSheafId = sheaf.id;
-    state.activeVarietyId = sheaf.baseVarietyId;
-    state.activeMapId = null;
-    return sheaf;
+    return addSheafObject(sheaf);
   }
 
   function createSchurSheafConstruction(data) {
@@ -3270,11 +3653,7 @@
     syncObjectLineage(sheaf, 'sheaf');
     positionSheafNearBase(sheaf, baseVarietyForSheaf(sheaf));
     avoidCanvasLabelOverlap(sheaf);
-    state.sheaves.push(sheaf);
-    state.activeSheafId = sheaf.id;
-    state.activeVarietyId = sheaf.baseVarietyId;
-    state.activeMapId = null;
-    return sheaf;
+    return addSheafObject(sheaf);
   }
 
   function createComposedMap(data) {
@@ -3334,6 +3713,389 @@
     return map;
   }
 
+  function createSesFromDraft() {
+    if (activeSesDraftSequence()) return updateShortExactSequenceFromDraft();
+    const data = shortExactSequenceData();
+    if (!data) return null;
+    const sequence = buildShortExactSequence(data);
+    if (!sequence) return null;
+    clearSesDraft();
+    return sequence;
+  }
+
+  function updateShortExactSequenceFromDraft() {
+    const sequence = activeSesDraftSequence();
+    const data = shortExactSequenceData({ requireComplete: true, requireMaps: true });
+    if (!sequence || !data?.sheafA || !data.sheafB || !data.sheafC || !data.mapAB || !data.mapBC) return null;
+    const sheafIds = [data.sheafA.id, data.sheafB.id, data.sheafC.id];
+    const mapIds = [data.mapAB.id, data.mapBC.id];
+    detachShortExactSequenceMemberships(sequence.id);
+    (sequence.mapIds || []).forEach((mapId) => {
+      if (!mapIds.includes(mapId)) detachShortExactSequenceMap(mapId, sequence.id);
+    });
+    sequence.sheafIds = sheafIds;
+    sequence.mapIds = mapIds;
+    sequence.baseVarietyId = data.baseVarietyId;
+    attachShortExactSequenceMap(data.mapAB, sequence, 0);
+    attachShortExactSequenceMap(data.mapBC, sequence, 1);
+    attachShortExactSequenceMemberships(sequence);
+    state.activeSheafId = data.sheafB.id;
+    state.activeVarietyId = data.baseVarietyId;
+    state.activeMapId = null;
+    setCanvasPickEnabled(false, { render: false });
+    loadShortExactSequenceIntoDraft(sequence);
+    refreshConstructedObjects();
+    return sequence;
+  }
+
+  function createBlowupPointFromDraft() {
+    const data = blowupConstructionData();
+    if (!data) return null;
+    const created = createBlowupPointConstruction(data);
+    if (!created) return null;
+    clearBlowupDraft();
+    return created;
+  }
+
+  function createGrassmannianMapFromDraft() {
+    const data = grassmannianMapConstructionData();
+    if (!data) return null;
+    const created = createGrassmannianMapConstruction(data);
+    if (!created) return null;
+    clearGrassmannianMapDraft();
+    return created;
+  }
+
+  function buildShortExactSequence(data) {
+    const sheaves = [data.sheafA, data.sheafB, data.sheafC];
+    const missingIndex = sheaves.findIndex((sheaf) => !sheaf);
+    if (missingIndex < 0) return createShortExactSequenceFromObjects(data);
+    const sourceSheaves = sheaves.filter(Boolean);
+    if (sourceSheaves.length !== 2 || !data.baseVarietyId) return null;
+    const autoMapABName = data.mapAB ? null : uniqueConstructedObjectName('map', '\\iota');
+    const autoMapBCName = data.mapBC ? null : uniqueConstructedObjectName('map', '\\pi');
+    const missing = createMissingSesSheaf({ ...data, autoMapABName, autoMapBCName }, missingIndex);
+    if (!missing) return null;
+    sheaves[missingIndex] = missing;
+    addSheafObject(missing, { activate: false });
+    return createShortExactSequenceFromObjects({
+      ...data,
+      autoMapABName,
+      autoMapBCName,
+      sheafA: sheaves[0],
+      sheafB: sheaves[1],
+      sheafC: sheaves[2]
+    });
+  }
+
+  function createMissingSesSheaf(data, missingIndex) {
+    const mapAB = data.mapAB || (data.autoMapABName ? { name: data.autoMapABName } : null);
+    const mapBC = data.mapBC || (data.autoMapBCName ? { name: data.autoMapBCName } : null);
+    const names = [
+      defaultSesLeftSheafName(data.sheafB, data.sheafC, mapBC),
+      defaultSesMiddleSheafName(data.sheafA, data.sheafC),
+      defaultSesRightSheafName(data.sheafA, data.sheafB, mapAB)
+    ];
+    const sheaf = {
+      id: nextInputId('E'),
+      type: 'abstract',
+      name: uniqueConstructedObjectName('sheaf', names[missingIndex]),
+      twist: '1',
+      rank: sesMissingRankPlaceholder(data, missingIndex),
+      baseVarietyId: data.baseVarietyId,
+      basis: 'chern',
+      nameDirty: false,
+      construction: {
+        type: 'ses-term',
+        role: ['subobject', 'extension', 'quotient'][missingIndex],
+        sourceSheafIds: [data.sheafA, data.sheafB, data.sheafC].filter(Boolean).map((sheaf) => sheaf.id),
+        defaultName: names[missingIndex]
+      }
+    };
+    syncObjectLineage(sheaf, 'sheaf');
+    return sheaf;
+  }
+
+  function createShortExactSequenceFromObjects(data) {
+    const sheafA = data.sheafA;
+    const sheafB = data.sheafB;
+    const sheafC = data.sheafC;
+    if (!sheafA || !sheafB || !sheafC || sheafA.baseVarietyId !== sheafB.baseVarietyId || sheafB.baseVarietyId !== sheafC.baseVarietyId) return null;
+    arrangeShortExactSequenceLabels(sheafA, sheafB, sheafC);
+    const sequenceId = nextInputId('S');
+    const mapAB = data.mapAB || createSesMapObject(sheafA, sheafB, data.autoMapABName || '\\iota', sequenceId, 0);
+    const mapBC = data.mapBC || createSesMapObject(sheafB, sheafC, data.autoMapBCName || '\\pi', sequenceId, 1);
+    if (!mapAB || !mapBC) return null;
+    const sequence = createDefaultSequence({
+      id: sequenceId,
+      type: 'short-exact-sequence',
+      sheafIds: [sheafA.id, sheafB.id, sheafC.id],
+      mapIds: [mapAB.id, mapBC.id],
+      baseVarietyId: sheafA.baseVarietyId,
+      tail: { pointCount: sequenceTailPointCount(state.sesDraft) }
+    });
+    attachShortExactSequenceMap(mapAB, sequence, 0);
+    attachShortExactSequenceMap(mapBC, sequence, 1);
+    state.sequences.push(sequence);
+    attachShortExactSequenceMemberships(sequence);
+    state.activeSheafId = sheafB.id;
+    state.activeVarietyId = sheafB.baseVarietyId;
+    state.activeMapId = null;
+    return sequence;
+  }
+
+  function attachShortExactSequenceMap(map, sequence, position) {
+    if (!map || !sequence) return;
+    map.construction = {
+      ...(map.construction || {}),
+      type: 'short-exact-sequence-map',
+      sequenceId: sequence.id,
+      position,
+      sheafIds: [...(sequence.sheafIds || [])],
+      defaultName: map.construction?.defaultName || map.name
+    };
+    syncObjectLineage(map, 'map');
+  }
+
+  function detachShortExactSequenceMap(mapId, sequenceId) {
+    const map = state.maps.find((item) => item.id === mapId);
+    if (!map || map.construction?.type !== 'short-exact-sequence-map' || map.construction.sequenceId !== sequenceId) return;
+    map.construction = null;
+    syncObjectLineage(map, 'map');
+  }
+
+  function attachShortExactSequenceMemberships(sequence) {
+    if (!sequence) return;
+    (sequence.sheafIds || []).forEach((sheafId, index) => {
+      const sheaf = state.sheaves.find((item) => item.id === sheafId);
+      if (!sheaf) return;
+      sheaf.sequenceMemberships = [
+        ...(sheaf.sequenceMemberships || []).filter((item) => item.sequenceId !== sequence.id),
+        { sequenceId: sequence.id, role: ['A', 'B', 'C'][index] }
+      ];
+      syncObjectLineage(sheaf, 'sheaf');
+    });
+  }
+
+  function detachShortExactSequenceMemberships(sequenceId) {
+    state.sheaves.forEach((sheaf) => {
+      const memberships = sheaf.sequenceMemberships || [];
+      if (!memberships.some((item) => item.sequenceId === sequenceId)) return;
+      sheaf.sequenceMemberships = memberships.filter((item) => item.sequenceId !== sequenceId);
+      syncObjectLineage(sheaf, 'sheaf');
+    });
+  }
+
+  function createSesMapObject(domainSheaf, codomainSheaf, fallbackName, sequenceId, position) {
+    const map = createMapObject(
+      { kind: 'sheaf', id: domainSheaf.id },
+      { kind: 'sheaf', id: codomainSheaf.id },
+      {
+        name: uniqueConstructedObjectName('map', fallbackName),
+        activate: false,
+        syncDraft: false,
+        construction: {
+          type: 'short-exact-sequence-map',
+          sequenceId,
+          position,
+          defaultName: fallbackName,
+          nameDirty: false
+        }
+      }
+    );
+    if (map) {
+      map.nameDirty = false;
+      map.labelOffset = -16;
+      map.labelT = 0.5;
+    }
+    return map;
+  }
+
+  function arrangeShortExactSequenceLabels(sheafA, sheafB, sheafC) {
+    const base = state.varieties.find((variety) => variety.id === sheafA.baseVarietyId) || baseVarietyForSheaf(sheafA);
+    const baseX = Number.isFinite(base?.labelX) ? base.labelX : DEFAULT_FIRST_VARIETY_X;
+    const baseY = Number.isFinite(base?.labelY) ? base.labelY : DEFAULT_FIRST_VARIETY_Y;
+    const spacing = Math.max(0.14, canvasSpacingRatio('x') * 1.15);
+    const y = clamp(baseY - Math.max(0.18, canvasSpacingRatio('y') * 1.35), 0.1, 0.9);
+    [sheafA, sheafB, sheafC].forEach((sheaf, index) => {
+      if (sheaf.labelPositionDirty) return;
+      sheaf.labelX = clamp(baseX + (index - 1) * spacing, 0.08, 0.94);
+      sheaf.labelY = y;
+    });
+  }
+
+  function sesMissingRankPlaceholder(data, missingIndex) {
+    const ranks = [data.sheafA, data.sheafB, data.sheafC].map((sheaf) => sheaf ? sanitizeRankInput(sheaf.rank) : null);
+    const numeric = ranks.map((rank) => (/^\d+$/.test(rank || '') ? Number(rank) : null));
+    if (missingIndex === 0 && numeric[1] != null && numeric[2] != null) return String(Math.max(0, numeric[1] - numeric[2]));
+    if (missingIndex === 1 && numeric[0] != null && numeric[2] != null) return String(numeric[0] + numeric[2]);
+    if (missingIndex === 2 && numeric[1] != null && numeric[0] != null) return String(Math.max(0, numeric[1] - numeric[0]));
+    return 'r';
+  }
+
+  function blowupConstructionData() {
+    const base = blowupDraftVariety('base');
+    const point = blowupDraftVariety('point');
+    if (!base || !point || point.type !== 'point') return null;
+    const defaultName = defaultBlowupVarietyNameFromObjects(base, point);
+    return {
+      base,
+      point,
+      defaultName,
+      name: uniqueConstructedObjectName('variety', defaultName)
+    };
+  }
+
+  function createBlowupPointConstruction(data) {
+    const variety = {
+      id: nextInputId('X'),
+      type: 'abstract',
+      dim: String(normalizedInt(data.base.dim, 0, MAX_DIMENSION, 3)),
+      name: data.name,
+      genus: data.base.genus || 'g',
+      ciDegrees: '',
+      nameDirty: false,
+      construction: {
+        type: 'blow-up-point',
+        baseId: data.base.id,
+        pointId: data.point.id,
+        defaultName: data.defaultName
+      }
+    };
+    syncObjectLineage(variety, 'variety');
+    positionConstructedObjectNear(variety, [data.base, data.point]);
+    state.varieties.push(variety);
+    state.activeSequenceId = null;
+    state.activeVarietyId = variety.id;
+    state.activeSheafId = null;
+    state.activeMapId = null;
+    const map = createMapObject(
+      { kind: 'variety', id: variety.id },
+      { kind: 'variety', id: data.base.id },
+      {
+        name: uniqueConstructedObjectName('map', defaultBlowdownMapNameFromObjects(variety)),
+        activate: false,
+        syncDraft: false,
+        construction: {
+          type: 'blow-down',
+          blowupId: variety.id,
+          baseId: data.base.id,
+          pointId: data.point.id,
+          defaultName: defaultBlowdownMapNameFromObjects(variety),
+          nameDirty: false
+        }
+      }
+    );
+    if (map) map.nameDirty = false;
+    return variety;
+  }
+
+  function grassmannianMapConstructionData() {
+    const bundle = grassmannianMapDraftSheaf();
+    const params = syncGrassmannianMapControls();
+    if (!bundle || params.dim > MAX_DIMENSION) return null;
+    const base = state.varieties.find((variety) => variety.id === bundle.baseVarietyId);
+    if (!base) return null;
+    const defaultTargetName = defaultGrassmannianTargetName(params);
+    return {
+      bundle,
+      base,
+      params,
+      defaultTargetName,
+      targetName: uniqueConstructedObjectName('variety', defaultTargetName),
+      mapName: uniqueConstructedObjectName('map', defaultGrassmannianMapNameFromObjects(bundle))
+    };
+  }
+
+  function createGrassmannianMapConstruction(data) {
+    const target = {
+      id: nextInputId('X'),
+      type: 'grassmannian',
+      dim: String(data.params.dim),
+      name: data.targetName,
+      genus: 'g',
+      grassmannianR: String(data.params.r),
+      grassmannianN: String(data.params.n),
+      grassmannianYoungBasis: false,
+      ciDegrees: '',
+      nameDirty: false,
+      construction: {
+        type: 'grassmannian-target',
+        sheafId: data.bundle.id,
+        baseId: data.base.id,
+        defaultName: data.defaultTargetName
+      }
+    };
+    syncObjectLineage(target, 'variety');
+    positionConstructedObjectNear(target, [data.base, data.bundle]);
+    state.varieties.push(target);
+    const map = createMapObject(
+      { kind: 'variety', id: data.base.id },
+      { kind: 'variety', id: target.id },
+      {
+        name: data.mapName,
+        activate: false,
+        syncDraft: false,
+        construction: {
+          type: 'grassmannian-map',
+          sheafId: data.bundle.id,
+          baseId: data.base.id,
+          targetId: target.id,
+          defaultName: defaultGrassmannianMapNameFromObjects(data.bundle),
+          nameDirty: false
+        }
+      }
+    );
+    if (map) map.nameDirty = false;
+    state.activeSequenceId = null;
+    state.activeVarietyId = target.id;
+    state.activeSheafId = null;
+    state.activeMapId = map?.id || null;
+    return map || target;
+  }
+
+  function defaultSesMapName(map, fallback) {
+    if (!map) return null;
+    return sanitizeMathLabel(map.name || map.construction?.defaultName, fallback);
+  }
+
+  function defaultSesLeftSheafName(middle, right, map = null) {
+    const mapName = defaultSesMapName(map, '\\pi');
+    if (mapName) return `\\ker(${mapName})`;
+    return `\\ker(${sanitizeMathLabel(middle?.name, '\\mathcal{F}')}\\to ${sanitizeMathLabel(right?.name, '\\mathcal{G}')})`;
+  }
+
+  function defaultSesMiddleSheafName(left, right) {
+    return `${sanitizeMathLabel(left?.name, '\\mathcal{E}')}\\oplus ${sanitizeMathLabel(right?.name, '\\mathcal{G}')}`;
+  }
+
+  function defaultSesRightSheafName(left, middle, map = null) {
+    const mapName = defaultSesMapName(map, '\\iota');
+    if (mapName) return `\\operatorname{coker}(${mapName})`;
+    return `\\operatorname{coker}(${sanitizeMathLabel(left?.name, '\\mathcal{E}')}\\to ${sanitizeMathLabel(middle?.name, '\\mathcal{F}')})`;
+  }
+
+  function defaultShortExactSequenceLabel(sequence) {
+    const [left, middle, right] = (sequence?.sheafIds || []).map((id) => state.sheaves.find((sheaf) => sheaf.id === id));
+    return `0\\to ${sanitizeMathLabel(left?.name, '\\mathcal{E}')}\\to ${sanitizeMathLabel(middle?.name, '\\mathcal{F}')}\\to ${sanitizeMathLabel(right?.name, '\\mathcal{G}')}\\to 0`;
+  }
+
+  function defaultBlowupVarietyNameFromObjects(base, point) {
+    return `\\operatorname{Bl}_{${sanitizeMathLabel(point?.name, 'p')}}${sanitizeMathLabel(base?.name, 'X')}`;
+  }
+
+  function defaultBlowdownMapNameFromObjects() {
+    return '\\beta';
+  }
+
+  function defaultGrassmannianTargetName(params) {
+    return `\\operatorname{Gr}(${params.r},${params.n})`;
+  }
+
+  function defaultGrassmannianMapNameFromObjects(bundle) {
+    return `\\varphi_{${sanitizeMathLabel(bundle?.name, '\\mathcal{E}')}}`;
+  }
+
   function createMapSheafConstruction(data) {
     const isPullback = data.operation === 'pullback-sheaf';
     const sheaf = {
@@ -3358,11 +4120,7 @@
     syncObjectLineage(sheaf, 'sheaf');
     positionSheafNearBase(sheaf, baseVarietyForSheaf(sheaf));
     avoidCanvasLabelOverlap(sheaf);
-    state.sheaves.push(sheaf);
-    state.activeSheafId = sheaf.id;
-    state.activeVarietyId = sheaf.baseVarietyId;
-    state.activeMapId = null;
-    return sheaf;
+    return addSheafObject(sheaf);
   }
 
   function defaultProductVarietyName(leftId, rightId) {
@@ -3516,6 +4274,9 @@
   function activateFirstCreateBlankPick(options = {}) {
     if (!inputIsCreateMode()) return false;
     const kind = options.kind || currentInputKind();
+    if (combinedSesCreateMode()) return activateSesPick(state.sesPickTarget || 'sheaf-a', options);
+    if (combinedBlowupCreateMode()) return activateBlowupPick(state.blowupPickTarget || 'base', options);
+    if (combinedGrassmannianMapCreateMode()) return activateGrassmannianMapPick(options);
     if (kind === 'sheaf') {
       if (sheafBinaryInputMode()) {
         state.sheafBinaryPickTarget = sheafBinaryDraftSheaf('left') ? 'right' : 'left';
@@ -3542,6 +4303,9 @@
   }
 
   function canvasPickAvailable() {
+    if (combinedSesCreateMode()) return sesPickAvailable();
+    if (combinedBlowupCreateMode()) return blowupPickAvailable();
+    if (combinedGrassmannianMapCreateMode()) return grassmannianMapPickAvailable();
     if (productVarietyInputMode()) return productPickableVarieties().length > 0;
     if (mapInputMode()) return mapPickAvailable();
     if (sheafBinaryInputMode()) return sheafBinaryPickableSheaves().length > 0;
@@ -3573,6 +4337,24 @@
     updateMapDraftControls();
   }
 
+  function clearSesDraft() {
+    state.sesDraft = null;
+    state.sesPickTarget = 'sheaf-a';
+    updateSesDraftControls();
+  }
+
+  function clearBlowupDraft() {
+    state.blowupDraft = null;
+    state.blowupPickTarget = 'base';
+    updateBlowupDraftControls();
+  }
+
+  function clearGrassmannianMapDraft() {
+    state.grassmannianMapDraft = null;
+    state.grassmannianMapPickTarget = 'bundle';
+    updateGrassmannianMapDraftControls();
+  }
+
   function clearSheafMapDraft() {
     state.sheafMapDraft = null;
     state.sheafMapPickTarget = 'map';
@@ -3598,6 +4380,12 @@
     state.productDraft = null;
     state.productPickIndex = 0;
     updateProductDraftControls();
+  }
+
+  function updateCombinedDraftControls() {
+    updateSesDraftControls();
+    updateBlowupDraftControls();
+    updateGrassmannianMapDraftControls();
   }
 
   function activateProductFactorPick(index = 0, options = {}) {
@@ -3694,6 +4482,427 @@
     return productPickableVarieties().some((variety) => variety.id === varietyId);
   }
 
+  function sesDraftIds() {
+    const draft = state.sesDraft || {};
+    return {
+      sequenceId: draft.sequenceId || null,
+      sheafAId: draft.sheafAId || null,
+      sheafBId: draft.sheafBId || null,
+      sheafCId: draft.sheafCId || null,
+      mapABId: draft.mapABId || null,
+      mapBCId: draft.mapBCId || null,
+      tailPointCount: sequenceTailPointCount(draft)
+    };
+  }
+
+  function sesDraftSheaf(slot) {
+    const ids = sesDraftIds();
+    const id = slot === 'sheaf-c' ? ids.sheafCId : (slot === 'sheaf-b' ? ids.sheafBId : ids.sheafAId);
+    return state.sheaves.find((sheaf) => sheaf.id === id) || null;
+  }
+
+  function sesDraftMap(slot) {
+    const ids = sesDraftIds();
+    const id = slot === 'map-bc' ? ids.mapBCId : ids.mapABId;
+    return state.maps.find((map) => map.id === id) || null;
+  }
+
+  function activeSesDraftSequence() {
+    const id = state.sesDraft?.sequenceId || state.activeSequenceId;
+    const sequence = (state.sequences || []).find((item) => item.id === id);
+    return sequence?.type === 'short-exact-sequence' ? sequence : null;
+  }
+
+  function setSesDraft(nextDraft) {
+    const draft = { ...(nextDraft || {}) };
+    if (activeSesEditMode()) draft.sequenceId = draft.sequenceId || state.activeSequenceId;
+    const mapAB = state.maps.find((map) => map.id === draft.mapABId) || null;
+    if (mapAB?.domainKind === 'sheaf') draft.sheafAId = mapAB.domainId;
+    if (mapAB?.codomainKind === 'sheaf') draft.sheafBId = mapAB.codomainId;
+    const mapBC = state.maps.find((map) => map.id === draft.mapBCId) || null;
+    if (mapBC?.domainKind === 'sheaf') draft.sheafBId = mapBC.domainId;
+    if (mapBC?.codomainKind === 'sheaf') draft.sheafCId = mapBC.codomainId;
+    if (draft.sheafAId && draft.sheafBId) {
+      const map = findSheafMapBetween(draft.sheafAId, draft.sheafBId);
+      if (map) draft.mapABId = map.id;
+    }
+    if (draft.sheafBId && draft.sheafCId) {
+      const map = findSheafMapBetween(draft.sheafBId, draft.sheafCId);
+      if (map) draft.mapBCId = map.id;
+    }
+    state.sesDraft = Object.values(draft).some(Boolean) ? draft : null;
+  }
+
+  function sesSelectedSheaves() {
+    return ['sheaf-a', 'sheaf-b', 'sheaf-c'].map((slot) => sesDraftSheaf(slot)).filter(Boolean);
+  }
+
+  function sesBaseVarietyId() {
+    return sesSelectedSheaves().find((sheaf) => sheaf.baseVarietyId)?.baseVarietyId || null;
+  }
+
+  function sesSheafMatchesBase(sheaf) {
+    const baseId = sesBaseVarietyId();
+    return !!sheaf && (!baseId || sheaf.baseVarietyId === baseId);
+  }
+
+  function sesPickAvailable() {
+    if (!combinedSesCreateMode()) return false;
+    const target = state.sesPickTarget || 'sheaf-a';
+    if (activeSesEditMode()) {
+      if (target === 'map-ab' || target === 'map-bc') return state.maps.some((map) => allowableSesFixedMapPick(map.id, target));
+      return state.sheaves.some((sheaf) => allowableSesSheafPick(sheaf.id, target));
+    }
+    if (target === 'map-ab' || target === 'map-bc') return state.maps.some((map) => allowableSesMapPick(map.id, target));
+    return state.sheaves.some((sheaf) => allowableSesSheafPick(sheaf.id, target));
+  }
+
+  function allowableSesSheafPick(sheafId, target = state.sesPickTarget) {
+    const sheaf = state.sheaves.find((item) => item.id === sheafId);
+    if (!sheaf || sheaf.hiddenOnCanvas || !sesSheafMatchesBase(sheaf)) return false;
+    const draft = sesDraftIds();
+    if (target === 'sheaf-a' && draft.sheafAId === sheafId) return false;
+    if (target === 'sheaf-b' && draft.sheafBId === sheafId) return false;
+    if (target === 'sheaf-c' && draft.sheafCId === sheafId) return false;
+    if (target === 'sheaf-a' && draft.mapABId) {
+      const map = state.maps.find((item) => item.id === draft.mapABId);
+      return !!map && map.domainKind === 'sheaf' && map.domainId === sheafId;
+    }
+    if (target === 'sheaf-b') {
+      const mapAB = state.maps.find((item) => item.id === draft.mapABId);
+      const mapBC = state.maps.find((item) => item.id === draft.mapBCId);
+      if (mapAB && (mapAB.codomainKind !== 'sheaf' || mapAB.codomainId !== sheafId)) return false;
+      if (mapBC && (mapBC.domainKind !== 'sheaf' || mapBC.domainId !== sheafId)) return false;
+    }
+    if (target === 'sheaf-c' && draft.mapBCId) {
+      const map = state.maps.find((item) => item.id === draft.mapBCId);
+      return !!map && map.codomainKind === 'sheaf' && map.codomainId === sheafId;
+    }
+    return true;
+  }
+
+  function allowableSesMapPick(mapId, target = state.sesPickTarget) {
+    const map = state.maps.find((item) => item.id === mapId);
+    if (!map || map.hiddenOnCanvas || map.domainKind !== 'sheaf' || map.codomainKind !== 'sheaf') return false;
+    const domain = state.sheaves.find((sheaf) => sheaf.id === map.domainId);
+    const codomain = state.sheaves.find((sheaf) => sheaf.id === map.codomainId);
+    if (!domain || !codomain || domain.baseVarietyId !== codomain.baseVarietyId) return false;
+    const baseId = sesBaseVarietyId();
+    if (baseId && domain.baseVarietyId !== baseId) return false;
+    const draft = sesDraftIds();
+    if (target === 'map-ab') {
+      if (draft.sheafAId && map.domainId !== draft.sheafAId) return false;
+      if (draft.sheafBId && map.codomainId !== draft.sheafBId) return false;
+      return true;
+    }
+    if (target === 'map-bc') {
+      if (draft.sheafBId && map.domainId !== draft.sheafBId) return false;
+      if (draft.sheafCId && map.codomainId !== draft.sheafCId) return false;
+      return true;
+    }
+    return false;
+  }
+
+  function allowableSesFixedMapPick(mapId, target = state.sesPickTarget) {
+    const sequence = activeSesDraftSequence();
+    const draft = sesDraftIds();
+    if (!sequence || !sequence.mapIds?.includes(mapId)) return false;
+    const map = state.maps.find((item) => item.id === mapId);
+    if (!map || map.hiddenOnCanvas || map.domainKind !== 'sheaf' || map.codomainKind !== 'sheaf') return false;
+    if (target === 'map-ab') {
+      if (draft.sheafAId && map.domainId !== draft.sheafAId) return false;
+      if (draft.sheafBId && map.codomainId !== draft.sheafBId) return false;
+      return true;
+    }
+    if (target === 'map-bc') {
+      if (draft.sheafBId && map.domainId !== draft.sheafBId) return false;
+      if (draft.sheafCId && map.codomainId !== draft.sheafCId) return false;
+      return true;
+    }
+    return false;
+  }
+
+  function activateSesPick(target = 'sheaf-a', options = {}) {
+    if (!combinedSesCreateMode()) return false;
+    const normalized = ['sheaf-a', 'map-ab', 'sheaf-b', 'map-bc', 'sheaf-c'].includes(target) ? target : 'sheaf-a';
+    state.sesPickTarget = normalized;
+    setCanvasPickEnabled(true, { render: false });
+    updateSesDraftControls();
+    syncGlobalPickButton();
+    if (options.render !== false) renderCanvas(state.lastResult);
+    return state.canvasPickEnabled;
+  }
+
+  function handleSesPick(kind, id) {
+    const target = state.sesPickTarget || 'sheaf-a';
+    const draft = sesDraftIds();
+    let changed = false;
+    const canPickMap = activeSesEditMode() ? allowableSesFixedMapPick(id, target) : allowableSesMapPick(id, target);
+    if ((target === 'map-ab' || target === 'map-bc') && kind === 'map' && canPickMap) {
+      if (target === 'map-ab') draft.mapABId = id;
+      else draft.mapBCId = id;
+      setSesDraft(draft);
+      changed = true;
+    } else if (kind === 'sheaf' && allowableSesSheafPick(id, target)) {
+      if (target === 'sheaf-a') draft.sheafAId = id;
+      else if (target === 'sheaf-b') draft.sheafBId = id;
+      else if (target === 'sheaf-c') draft.sheafCId = id;
+      setSesDraft(draft);
+      changed = true;
+    } else {
+      return;
+    }
+    let normalizedDraft = sesDraftIds();
+    if (changed && target === 'sheaf-a' && normalizedDraft.sheafBId && !normalizedDraft.mapABId) {
+      const map = findSheafMapBetween(normalizedDraft.sheafAId, normalizedDraft.sheafBId);
+      if (map) setSesDraft({ ...normalizedDraft, mapABId: map.id });
+    }
+    normalizedDraft = sesDraftIds();
+    if (changed && target === 'sheaf-b') {
+      const mapAB = normalizedDraft.sheafAId && !normalizedDraft.mapABId ? findSheafMapBetween(normalizedDraft.sheafAId, normalizedDraft.sheafBId) : null;
+      const mapBC = normalizedDraft.sheafCId && !normalizedDraft.mapBCId ? findSheafMapBetween(normalizedDraft.sheafBId, normalizedDraft.sheafCId) : null;
+      if (mapAB || mapBC) setSesDraft({ ...normalizedDraft, mapABId: mapAB?.id || normalizedDraft.mapABId, mapBCId: mapBC?.id || normalizedDraft.mapBCId });
+    }
+    normalizedDraft = sesDraftIds();
+    if (changed && target === 'sheaf-c' && normalizedDraft.sheafBId && !normalizedDraft.mapBCId) {
+      const map = findSheafMapBetween(normalizedDraft.sheafBId, normalizedDraft.sheafCId);
+      if (map) setSesDraft({ ...normalizedDraft, mapBCId: map.id });
+    }
+    const ready = !!shortExactSequenceData();
+    if (ready) setCanvasPickEnabled(false, { render: false });
+    else state.sesPickTarget = nextSesPickTarget();
+    updateSesDraftControls();
+    recompute();
+  }
+
+  function findSheafMapBetween(domainId, codomainId) {
+    return state.maps.find((map) => (
+      map.domainKind === 'sheaf'
+      && map.domainId === domainId
+      && map.codomainKind === 'sheaf'
+      && map.codomainId === codomainId
+    )) || null;
+  }
+
+  function nextSesPickTarget() {
+    const draft = sesDraftIds();
+    if (!draft.sheafAId && !draft.mapABId) return 'sheaf-a';
+    if (!draft.sheafBId && !draft.mapABId && !draft.mapBCId) return 'sheaf-b';
+    if (!draft.sheafCId && !draft.mapBCId) return 'sheaf-c';
+    return 'sheaf-a';
+  }
+
+  function updateSesDraftControls() {
+    const show = combinedSesCreateMode();
+    if (refs.sesParentsRow) refs.sesParentsRow.hidden = !show;
+    syncSequenceTailControls(activeSesDraftSequence());
+    if (refs.sesPickNote) {
+      refs.sesPickNote.hidden = !show;
+      refs.sesPickNote.textContent = sesPickHint();
+    }
+    updateSesSlotButton(refs.sesLeftButton, sesDraftSheaf('sheaf-a'), 'sheaf-a');
+    updateSesSlotButton(refs.sesFirstMapButton, sesDraftMap('map-ab'), 'map-ab');
+    updateSesSlotButton(refs.sesMiddleButton, sesDraftSheaf('sheaf-b'), 'sheaf-b');
+    updateSesSlotButton(refs.sesSecondMapButton, sesDraftMap('map-bc'), 'map-bc');
+    updateSesSlotButton(refs.sesRightButton, sesDraftSheaf('sheaf-c'), 'sheaf-c');
+    syncGlobalPickButton();
+  }
+
+  function updateSesSlotButton(button, object, target) {
+    if (!button) return;
+    button.disabled = false;
+    const picking = state.canvasPickEnabled && combinedSesCreateMode() && state.sesPickTarget === target;
+    button.setAttribute('aria-pressed', picking ? 'true' : 'false');
+    const isMap = target === 'map-ab' || target === 'map-bc';
+    const fallback = isMap ? 'map' : 'sheaf';
+    const label = object ? latexToPlain(sanitizeMathLabel(object.name, isMap ? 'f' : '\\mathcal{E}')) : fallback;
+    button.textContent = label;
+    button.title = object ? `Replace ${label}` : `Pick a ${fallback} on the canvas`;
+    button.disabled = activeSesEditMode() && isMap && !!object && !state.maps.some((map) => allowableSesFixedMapPick(map.id, target));
+  }
+
+  function sesPickHint() {
+    const data = shortExactSequenceData();
+    if (activeSesEditMode()) {
+      if (data) return 'click update to modify this short exact sequence with the existing sheaves/maps';
+      return 'choose compatible existing sheaves and sequence maps';
+    }
+    if (data) return 'click build to add the missing sheaf/maps and arrange 0 -> A -> B -> C -> 0';
+    if (!state.sheaves.length) return 'add two sheaves on the same base first';
+    const target = state.sesPickTarget || nextSesPickTarget();
+    if (target === 'map-ab' || target === 'map-bc') {
+      if (!state.maps.some((map) => allowableSesMapPick(map.id, target))) return 'no compatible sheaf map is on the canvas yet';
+      return target === 'map-ab' ? 'click the map A -> B' : 'click the map B -> C';
+    }
+    if (!state.sheaves.some((sheaf) => allowableSesSheafPick(sheaf.id, target))) return 'add a compatible sheaf on the same base';
+    if (target === 'sheaf-a') return 'click A, the left sheaf';
+    if (target === 'sheaf-b') return 'click B, the middle sheaf';
+    return 'click C, the right sheaf';
+  }
+
+  function shortExactSequenceData(options = {}) {
+    const draft = sesDraftIds();
+    const sheaves = ['sheafAId', 'sheafBId', 'sheafCId'].map((key) => state.sheaves.find((sheaf) => sheaf.id === draft[key]) || null);
+    const selectedSheaves = sheaves.filter(Boolean);
+    const baseId = selectedSheaves[0]?.baseVarietyId || null;
+    if (selectedSheaves.some((sheaf) => sheaf.baseVarietyId !== baseId)) return null;
+    const count = selectedSheaves.length;
+    if (options.requireComplete ? count !== 3 : (count !== 2 && count !== 3)) return null;
+    const mapAllowed = (mapId, target) => activeSesEditMode()
+      ? allowableSesFixedMapPick(mapId, target)
+      : allowableSesMapPick(mapId, target);
+    if (draft.mapABId && !mapAllowed(draft.mapABId, 'map-ab')) return null;
+    if (draft.mapBCId && !mapAllowed(draft.mapBCId, 'map-bc')) return null;
+    if (options.requireMaps && (!draft.mapABId || !draft.mapBCId)) return null;
+    return {
+      sheafA: sheaves[0],
+      sheafB: sheaves[1],
+      sheafC: sheaves[2],
+      mapAB: state.maps.find((map) => map.id === draft.mapABId) || null,
+      mapBC: state.maps.find((map) => map.id === draft.mapBCId) || null,
+      baseVarietyId: baseId
+    };
+  }
+
+  function blowupDraftVariety(role) {
+    const id = role === 'point' ? state.blowupDraft?.pointId : state.blowupDraft?.baseId;
+    return state.varieties.find((variety) => variety.id === id) || null;
+  }
+
+  function blowupPickAvailable() {
+    if (!combinedBlowupCreateMode()) return false;
+    return state.varieties.some((variety) => allowableBlowupPick(variety.id, state.blowupPickTarget));
+  }
+
+  function allowableBlowupPick(varietyId, target = state.blowupPickTarget) {
+    const variety = state.varieties.find((item) => item.id === varietyId);
+    if (!variety || variety.hiddenOnCanvas) return false;
+    return target === 'point' ? variety.type === 'point' : variety.type !== 'point';
+  }
+
+  function activateBlowupPick(target = 'base', options = {}) {
+    if (!combinedBlowupCreateMode()) return false;
+    state.blowupPickTarget = target === 'point' ? 'point' : 'base';
+    setCanvasPickEnabled(true, { render: false });
+    updateBlowupDraftControls();
+    syncGlobalPickButton();
+    if (options.render !== false) renderCanvas(state.lastResult);
+    return state.canvasPickEnabled;
+  }
+
+  function handleBlowupPick(kind, id) {
+    if (kind !== 'variety' || !allowableBlowupPick(id, state.blowupPickTarget)) return;
+    const draft = { ...(state.blowupDraft || {}) };
+    if (state.blowupPickTarget === 'point') draft.pointId = id;
+    else draft.baseId = id;
+    state.blowupDraft = draft;
+    state.blowupPickTarget = draft.baseId && !draft.pointId ? 'point' : 'base';
+    updateBlowupDraftControls();
+    recompute();
+  }
+
+  function updateBlowupDraftControls() {
+    const show = combinedBlowupCreateMode();
+    if (refs.blowupParentsRow) refs.blowupParentsRow.hidden = !show;
+    if (refs.blowupPickNote) {
+      refs.blowupPickNote.hidden = !show;
+      refs.blowupPickNote.textContent = blowupPickHint();
+    }
+    updateCombinedVarietySlotButton(refs.blowupBaseButton, blowupDraftVariety('base'), 'base', combinedBlowupCreateMode() && state.blowupPickTarget === 'base');
+    updateCombinedVarietySlotButton(refs.blowupPointButton, blowupDraftVariety('point'), 'point', combinedBlowupCreateMode() && state.blowupPickTarget === 'point');
+    syncGlobalPickButton();
+  }
+
+  function blowupPickHint() {
+    if (!state.varieties.length) return 'add a variety first';
+    if (!blowupDraftVariety('base')) return 'click the variety to blow up';
+    if (!blowupDraftVariety('point')) return 'click a point';
+    return 'blow-up construction is ready for the later geometry rules';
+  }
+
+  function grassmannianMapDraftSheaf() {
+    const id = state.grassmannianMapDraft?.sheafId;
+    return state.sheaves.find((sheaf) => sheaf.id === id) || null;
+  }
+
+  function grassmannianMapPickAvailable() {
+    return combinedGrassmannianMapCreateMode() && state.sheaves.some((sheaf) => allowableGrassmannianMapSheafPick(sheaf.id));
+  }
+
+  function allowableGrassmannianMapSheafPick(sheafId) {
+    const sheaf = state.sheaves.find((item) => item.id === sheafId);
+    return !!sheaf && !sheaf.hiddenOnCanvas && sheafHasLocallyFreeLabel(sheaf);
+  }
+
+  function activateGrassmannianMapPick(options = {}) {
+    if (!combinedGrassmannianMapCreateMode()) return false;
+    state.grassmannianMapPickTarget = 'bundle';
+    setCanvasPickEnabled(true, { render: false });
+    updateGrassmannianMapDraftControls();
+    syncGlobalPickButton();
+    if (options.render !== false) renderCanvas(state.lastResult);
+    return state.canvasPickEnabled;
+  }
+
+  function handleGrassmannianMapPick(kind, id) {
+    if (kind !== 'sheaf' || !allowableGrassmannianMapSheafPick(id)) return;
+    state.grassmannianMapDraft = { sheafId: id };
+    setCanvasPickEnabled(false, { render: false });
+    updateGrassmannianMapDraftControls();
+    recompute();
+  }
+
+  function updateGrassmannianMapDraftControls() {
+    const show = combinedGrassmannianMapCreateMode();
+    if (refs.grassmannianMapParentRow) refs.grassmannianMapParentRow.hidden = !show;
+    if (refs.grassmannianMapParamsRow) refs.grassmannianMapParamsRow.hidden = !show;
+    const params = syncGrassmannianMapControls();
+    if (refs.grassmannianMapPickNote) {
+      refs.grassmannianMapPickNote.hidden = !show;
+      refs.grassmannianMapPickNote.textContent = grassmannianMapPickHint(params);
+    }
+    const sheaf = grassmannianMapDraftSheaf();
+    if (refs.grassmannianMapBundleButton) {
+      const label = sheaf ? latexToPlain(sanitizeMathLabel(sheaf.name, '\\mathcal{E}')) : 'bundle';
+      refs.grassmannianMapBundleButton.textContent = label;
+      refs.grassmannianMapBundleButton.title = sheaf ? `Replace ${label}` : 'Pick a locally free sheaf on the canvas';
+      refs.grassmannianMapBundleButton.setAttribute('aria-pressed', state.canvasPickEnabled && show ? 'true' : 'false');
+    }
+    syncGlobalPickButton();
+  }
+
+  function syncGrassmannianMapControls() {
+    const params = normalizedGrassmannianParams({
+      grassmannianR: refs.grassmannianMapR?.value,
+      grassmannianN: refs.grassmannianMapN?.value
+    });
+    if (refs.grassmannianMapR) {
+      refs.grassmannianMapR.max = String(Math.max(1, params.n - 1));
+      refs.grassmannianMapR.value = String(params.r);
+    }
+    if (refs.grassmannianMapN) {
+      refs.grassmannianMapN.max = String(MAX_GRASSMANNIAN_N);
+      refs.grassmannianMapN.value = String(params.n);
+    }
+    if (refs.grassmannianMapTargetPreview) refs.grassmannianMapTargetPreview.textContent = `Gr(${params.r},${params.n})`;
+    return params;
+  }
+
+  function grassmannianMapPickHint(params = syncGrassmannianMapControls()) {
+    if (params.dim > MAX_DIMENSION) return `Grassmannian dimension ${params.dim} exceeds the calculator limit ${MAX_DIMENSION}`;
+    if (!state.sheaves.some((sheaf) => allowableGrassmannianMapSheafPick(sheaf.id))) return 'add a locally free sheaf first';
+    if (!grassmannianMapDraftSheaf()) return 'click the vector bundle on the canvas';
+    return 'Grassmannian-map construction is ready for the later geometry rules';
+  }
+
+  function updateCombinedVarietySlotButton(button, variety, fallback, picking) {
+    if (!button) return;
+    const label = variety ? latexToPlain(sanitizeMathLabel(variety.name, fallback === 'point' ? 'p' : 'X')) : fallback;
+    button.textContent = label;
+    button.title = variety ? `Replace ${label}` : `Pick a ${fallback} on the canvas`;
+    button.setAttribute('aria-pressed', picking && state.canvasPickEnabled ? 'true' : 'false');
+  }
+
   function productVarietyHasAncestor(varietyId, ancestorId, seen = new Set()) {
     if (!varietyId || !ancestorId || seen.has(varietyId)) return false;
     seen.add(varietyId);
@@ -3724,6 +4933,18 @@
     const kind = target.dataset.objectKind;
     const id = target.dataset.objectId;
     if (!state.canvasPickEnabled) return false;
+    if (combinedSesCreateMode()) {
+      handleSesPick(kind, id);
+      return true;
+    }
+    if (combinedBlowupCreateMode()) {
+      handleBlowupPick(kind, id);
+      return true;
+    }
+    if (combinedGrassmannianMapCreateMode()) {
+      handleGrassmannianMapPick(kind, id);
+      return true;
+    }
     if (productVarietyInputMode()) {
       if (kind === 'variety') handleProductPick(id);
       return true;
@@ -3780,6 +5001,9 @@
 
   function sheafBasePickInputMode() {
     return currentInputKind() === 'sheaf'
+      && !activeSesEditMode()
+      && !combinedSesCreateMode()
+      && !combinedGrassmannianMapCreateMode()
       && !sheafMapOperationInputMode()
       && !sheafBinaryInputMode()
       && !sheafSchurInputMode()
@@ -3799,6 +5023,10 @@
     return combinedAbelJacobiCreateMode() || (mapInputMode() && refs.mapType?.value === 'abel-jacobi');
   }
 
+  function sheafMapInputMode() {
+    return !combinedAbelJacobiCreateMode() && mapInputMode() && refs.mapType?.value === 'sheaf';
+  }
+
   function ordinaryMapInputMode() {
     return mapInputMode() && !mapCompositionInputMode() && !abelJacobiMapInputMode();
   }
@@ -3807,6 +5035,7 @@
     if (!mapInputMode()) return false;
     if (mapCompositionInputMode()) return state.maps.some((map) => allowableMapCompositionPick(map.id));
     if (abelJacobiMapInputMode()) return abelJacobiCurveVarieties().length > 0;
+    if (sheafMapInputMode()) return visibleCanvasSheaves().length > 0;
     return visibleCanvasVarieties().length > 0;
   }
 
@@ -4178,7 +5407,10 @@
   function chooseSheafBaseFromCanvas(varietyId) {
     if (!state.varieties.some((variety) => variety.id === varietyId)) return;
     setDraftBaseVariety(varietyId);
-    if (!inputIsModifyMode()) state.activeVarietyId = varietyId;
+    if (!inputIsModifyMode()) {
+      state.activeSequenceId = null;
+      state.activeVarietyId = varietyId;
+    }
     setCanvasPickEnabled(false, { render: false });
     syncDefaultSheafName();
     normalizeControlVisibility();
@@ -4201,19 +5433,21 @@
       handleAbelJacobiMapPick(kind, id);
       return;
     }
-    if (kind !== 'variety' || !state.varieties.some((item) => item.id === id)) return;
-    if (state.varieties.some((item) => item.id === id && item.hiddenOnCanvas)) return;
+    const endpointKind = sheafMapInputMode() ? 'sheaf' : 'variety';
+    const endpointCollection = endpointKind === 'sheaf' ? state.sheaves : state.varieties;
+    if (kind !== endpointKind || !endpointCollection.some((item) => item.id === id)) return;
+    if (endpointCollection.some((item) => item.id === id && item.hiddenOnCanvas)) return;
     const draft = state.mapDraft?.type === 'ordinary' ? { ...state.mapDraft } : { type: 'ordinary' };
     if (state.mapPickTarget === 'codomain') {
-      draft.codomainKind = 'variety';
+      draft.codomainKind = endpointKind;
       draft.codomainId = id;
     } else {
-      draft.domainKind = 'variety';
+      draft.domainKind = endpointKind;
       draft.domainId = id;
       if (!draft.codomainId && inputIsModifyMode()) {
         const active = selectedMap();
-        if (active?.codomainKind === 'variety') {
-          draft.codomainKind = 'variety';
+        if (active?.codomainKind === endpointKind) {
+          draft.codomainKind = endpointKind;
           draft.codomainId = active.codomainId;
         }
       }
@@ -4302,8 +5536,9 @@
     button.setAttribute('aria-pressed', state.canvasPickEnabled && (mapInputMode() || combinedAbelJacobiCreateMode()) && state.mapPickTarget === target ? 'true' : 'false');
     const isMapSlot = target === 'first' || target === 'second';
     const isCurveSlot = target === 'curve';
-    const fallback = isMapSlot ? 'map' : (isCurveSlot ? 'curve' : 'variety');
-    const label = object ? objectPlainLabel(isMapSlot ? 'map' : 'variety', object.id) : fallback;
+    const endpointKind = sheafMapInputMode() ? 'sheaf' : 'variety';
+    const fallback = isMapSlot ? 'map' : (isCurveSlot ? 'curve' : endpointKind);
+    const label = object ? objectPlainLabel(isMapSlot ? 'map' : endpointKind, object.id) : fallback;
     button.textContent = label;
     button.title = object ? `Replace ${label}` : `Pick a ${fallback} on the canvas`;
   }
@@ -4311,15 +5546,20 @@
   function mapDraftEndpointObject(role) {
     const draft = state.mapDraft || {};
     const id = role === 'codomain' ? draft.codomainId : draft.domainId;
+    const kind = draft[role === 'codomain' ? 'codomainKind' : 'domainKind'] || (sheafMapInputMode() ? 'sheaf' : 'variety');
+    if (kind === 'sheaf') return state.sheaves.find((sheaf) => sheaf.id === id) || null;
     return state.varieties.find((variety) => variety.id === id) || null;
   }
 
   function ordinaryMapPickHint() {
+    const endpointKind = sheafMapInputMode() ? 'sheaf' : 'variety';
     const domain = mapDraftEndpointObject('domain');
     const codomain = mapDraftEndpointObject('codomain');
-    if (!state.varieties.length) return 'add a variety first';
-    if (!domain) return 'click the domain variety';
-    if (!codomain) return 'click the codomain variety';
+    if (endpointKind === 'sheaf' && !state.sheaves.length) return 'add a sheaf first';
+    if (endpointKind === 'variety' && !state.varieties.length) return 'add a variety first';
+    if (!domain) return `click the domain ${endpointKind}`;
+    if (!codomain) return `click the codomain ${endpointKind}`;
+    if (endpointKind === 'sheaf' && domain.baseVarietyId !== codomain.baseVarietyId) return 'the sheaves must have the same base variety';
     return inputIsModifyMode() ? 'click update to rebuild the map' : 'click add to create the map';
   }
 
@@ -4366,6 +5606,7 @@
     }
     positionMapLabel(map);
     if (options.activate !== false) {
+      state.activeSequenceId = null;
       state.activeMapId = map.id;
       state.activeSheafId = null;
     }
@@ -4433,7 +5674,7 @@
   function shouldUseMapCanvasDrag(target) {
     const kind = target.dataset.objectKind;
     if (!state.canvasPickEnabled || !ordinaryMapInputMode() || !inputIsCreateMode()) return false;
-    if (kind !== 'variety') return false;
+    if (kind !== (sheafMapInputMode() ? 'sheaf' : 'variety')) return false;
     return state.mapPickTarget === 'domain';
   }
 
@@ -4504,8 +5745,8 @@
     }
     if (!drag.moved) return;
     state.suppressLabelClickUntil = Date.now() + 180;
-    if (targetKind === 'variety' && state.varieties.some((item) => item.id === targetId)) {
-      state.mapDraft = { type: 'ordinary', domainKind: 'variety', domainId: drag.domainId, codomainKind: 'variety', codomainId: targetId };
+    if (targetKind === drag.domainKind && (targetKind === 'sheaf' ? state.sheaves : state.varieties).some((item) => item.id === targetId)) {
+      state.mapDraft = { type: 'ordinary', domainKind: drag.domainKind, domainId: drag.domainId, codomainKind: targetKind, codomainId: targetId };
       state.mapPickTarget = 'codomain';
       updateMapDraftControls();
     }
@@ -4767,9 +6008,21 @@
     state.maps.forEach((map) => {
       if (refreshConstructedMap(map)) changed = true;
     });
+    if (Array.isArray(state.sequences)) {
+      const before = state.sequences.length;
+      state.sequences = state.sequences.filter((sequence) => {
+        const sheavesPresent = (sequence.sheafIds || []).every((id) => state.sheaves.some((sheaf) => sheaf.id === id));
+        const mapsPresent = (sequence.mapIds || []).every((id) => state.maps.some((map) => map.id === id));
+        return sheavesPresent && mapsPresent;
+      });
+      if (state.sequences.length !== before) changed = true;
+    }
     if (changed) {
       syncSheafBaseOptions(true);
       syncDefaultSheafName();
+    }
+    if (state.activeSequenceId && !state.sequences.some((sequence) => sequence.id === state.activeSequenceId)) {
+      state.activeSequenceId = null;
     }
   }
 
@@ -4809,6 +6062,24 @@
         subobjects: []
       };
     }
+    if (kind === 'variety' && construction.type === 'blow-up-point') {
+      return {
+        parents: [
+          parent('variety', construction.baseId, 'base'),
+          parent('variety', construction.pointId, 'center')
+        ].filter((item) => item.id),
+        subobjects: []
+      };
+    }
+    if (kind === 'variety' && construction.type === 'grassmannian-target') {
+      return {
+        parents: [
+          parent('sheaf', construction.sheafId, 'bundle'),
+          parent('variety', construction.baseId, 'base')
+        ].filter((item) => item.id),
+        subobjects: []
+      };
+    }
     if (kind === 'sheaf' && (construction.type === 'direct-sum' || construction.type === 'tensor')) {
       return {
         parents: (construction.sheafIds || []).map((id, index) => parent('sheaf', id, index === 0 ? 'left-summand' : 'right-summand')),
@@ -4827,6 +6098,12 @@
           parent('map', construction.mapId, 'map'),
           parent('sheaf', construction.sheafId, 'source-sheaf')
         ].filter((item) => item.id),
+        subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'base')] : []
+      };
+    }
+    if (kind === 'sheaf' && construction.type === 'ses-term') {
+      return {
+        parents: (construction.sourceSheafIds || []).map((id) => parent('sheaf', id, 'known-term')),
         subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'base')] : []
       };
     }
@@ -4867,6 +6144,41 @@
         ].filter(Boolean)
       };
     }
+    if (kind === 'map' && construction.type === 'short-exact-sequence-map') {
+      return {
+        parents: (construction.sheafIds || []).map((id, index) => parent('sheaf', id, ['left-term', 'middle-term', 'right-term'][index] || 'term')),
+        subobjects: [
+          object.domainId ? parent(object.domainKind, object.domainId, 'domain') : null,
+          object.codomainId ? parent(object.codomainKind, object.codomainId, 'codomain') : null
+        ].filter(Boolean)
+      };
+    }
+    if (kind === 'map' && construction.type === 'blow-down') {
+      return {
+        parents: [
+          parent('variety', construction.blowupId, 'blow-up'),
+          parent('variety', construction.baseId, 'base'),
+          parent('variety', construction.pointId, 'center')
+        ].filter((item) => item.id),
+        subobjects: [
+          object.domainId ? parent(object.domainKind, object.domainId, 'domain') : null,
+          object.codomainId ? parent(object.codomainKind, object.codomainId, 'codomain') : null
+        ].filter(Boolean)
+      };
+    }
+    if (kind === 'map' && construction.type === 'grassmannian-map') {
+      return {
+        parents: [
+          parent('sheaf', construction.sheafId, 'bundle'),
+          parent('variety', construction.baseId, 'base'),
+          parent('variety', construction.targetId, 'target')
+        ].filter((item) => item.id),
+        subobjects: [
+          object.domainId ? parent(object.domainKind, object.domainId, 'domain') : null,
+          object.codomainId ? parent(object.codomainKind, object.codomainId, 'codomain') : null
+        ].filter(Boolean)
+      };
+    }
     return { parents: [], subobjects: [] };
   }
 
@@ -4881,6 +6193,8 @@
   function refreshConstructedVariety(variety) {
     const construction = variety?.construction;
     if (construction?.type === 'jacobian') return refreshJacobianVariety(variety, construction);
+    if (construction?.type === 'blow-up-point') return refreshBlowupVariety(variety, construction);
+    if (construction?.type === 'grassmannian-target') return refreshGrassmannianTargetVariety(variety, construction);
     if (construction?.type !== 'product') return false;
     const [left, right] = (construction.varietyIds || []).map((id) => state.varieties.find((item) => item.id === id));
     if (!left || !right) return false;
@@ -4955,12 +6269,75 @@
     return changed;
   }
 
+  function refreshBlowupVariety(variety, construction) {
+    const base = state.varieties.find((item) => item.id === construction.baseId);
+    const point = state.varieties.find((item) => item.id === construction.pointId);
+    if (!base || !point) return false;
+    const nextDefault = defaultBlowupVarietyNameFromObjects(base, point);
+    let changed = false;
+    const nextDim = String(normalizedInt(base.dim, 0, MAX_DIMENSION, 3));
+    if (variety.type !== 'abstract') {
+      variety.type = 'abstract';
+      changed = true;
+    }
+    if (variety.dim !== nextDim) {
+      variety.dim = nextDim;
+      changed = true;
+    }
+    if (!variety.nameDirty && canonicalMathLabel(variety.name) !== canonicalMathLabel(nextDefault)) {
+      variety.name = nextDefault;
+      changed = true;
+    }
+    if (construction.defaultName !== nextDefault) {
+      construction.defaultName = nextDefault;
+      changed = true;
+    }
+    if (syncObjectLineage(variety, 'variety')) changed = true;
+    return changed;
+  }
+
+  function refreshGrassmannianTargetVariety(variety, construction) {
+    const bundle = state.sheaves.find((item) => item.id === construction.sheafId);
+    if (!bundle) return false;
+    const params = normalizedGrassmannianParams(variety);
+    const nextDefault = defaultGrassmannianTargetName(params);
+    let changed = false;
+    if (variety.type !== 'grassmannian') {
+      variety.type = 'grassmannian';
+      changed = true;
+    }
+    if (variety.dim !== String(params.dim)) {
+      variety.dim = String(params.dim);
+      changed = true;
+    }
+    if (variety.grassmannianR !== String(params.r) || variety.grassmannianN !== String(params.n)) {
+      variety.grassmannianR = String(params.r);
+      variety.grassmannianN = String(params.n);
+      changed = true;
+    }
+    if (!variety.nameDirty && canonicalMathLabel(variety.name) !== canonicalMathLabel(nextDefault)) {
+      variety.name = nextDefault;
+      changed = true;
+    }
+    if (construction.defaultName !== nextDefault) {
+      construction.defaultName = nextDefault;
+      changed = true;
+    }
+    if (construction.baseId !== bundle.baseVarietyId) {
+      construction.baseId = bundle.baseVarietyId;
+      changed = true;
+    }
+    if (syncObjectLineage(variety, 'variety')) changed = true;
+    return changed;
+  }
+
   function refreshConstructedSheaf(sheaf) {
     const construction = sheaf?.construction;
     if (!construction) return false;
     if (construction.type === 'direct-sum' || construction.type === 'tensor') return refreshBinaryConstructedSheaf(sheaf, construction);
     if (construction.type === 'schur') return refreshSchurConstructedSheaf(sheaf, construction);
     if (construction.type === 'pullback' || construction.type === 'pushforward') return refreshMapConstructedSheaf(sheaf, construction);
+    if (construction.type === 'ses-term') return refreshSesTermSheaf(sheaf, construction);
     return false;
   }
 
@@ -5060,10 +6437,30 @@
     return changed;
   }
 
+  function refreshSesTermSheaf(sheaf, construction) {
+    const sources = (construction.sourceSheafIds || []).map((id) => state.sheaves.find((item) => item.id === id)).filter(Boolean);
+    if (!sources.length) return false;
+    let changed = false;
+    const baseId = sources[0]?.baseVarietyId || sheaf.baseVarietyId;
+    if (baseId && sheaf.baseVarietyId !== baseId) {
+      sheaf.baseVarietyId = baseId;
+      changed = true;
+    }
+    if (!sheaf.nameDirty && construction.defaultName && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(construction.defaultName)) {
+      sheaf.name = construction.defaultName;
+      changed = true;
+    }
+    if (syncObjectLineage(sheaf, 'sheaf')) changed = true;
+    return changed;
+  }
+
   function refreshConstructedMap(map) {
     const construction = map?.construction;
     if (construction?.type === 'projection') return refreshProjectionMap(map, construction);
     if (construction?.type === 'abel-jacobi') return refreshAbelJacobiMap(map, construction);
+    if (construction?.type === 'short-exact-sequence-map') return refreshSesMap(map, construction);
+    if (construction?.type === 'blow-down') return refreshBlowdownMap(map, construction);
+    if (construction?.type === 'grassmannian-map') return refreshGrassmannianMap(map, construction);
     if (construction?.type !== 'composition') return false;
     const [first, second] = (construction.mapIds || []).map((id) => state.maps.find((item) => item.id === id));
     if (!first || !second) return false;
@@ -5096,6 +6493,72 @@
       changed = true;
     }
     if (ensureAbelJacobiKnownHomologyRules(map)) changed = true;
+    if (syncObjectLineage(map, 'map')) changed = true;
+    return changed;
+  }
+
+  function refreshSesMap(map, construction) {
+    const sheaves = (construction.sheafIds || []).map((id) => state.sheaves.find((item) => item.id === id));
+    if (!sheaves[0] || !sheaves[1] || !sheaves[2]) return false;
+    const domain = construction.position === 1 ? sheaves[1] : sheaves[0];
+    const codomain = construction.position === 1 ? sheaves[2] : sheaves[1];
+    let changed = false;
+    if (map.domainKind !== 'sheaf' || map.domainId !== domain.id || map.codomainKind !== 'sheaf' || map.codomainId !== codomain.id) {
+      map.domainKind = 'sheaf';
+      map.domainId = domain.id;
+      map.codomainKind = 'sheaf';
+      map.codomainId = codomain.id;
+      map.curve = null;
+      changed = true;
+    }
+    if (syncObjectLineage(map, 'map')) changed = true;
+    return changed;
+  }
+
+  function refreshBlowdownMap(map, construction) {
+    const blowup = state.varieties.find((item) => item.id === construction.blowupId);
+    const base = state.varieties.find((item) => item.id === construction.baseId);
+    if (!blowup || !base) return false;
+    let changed = false;
+    if (map.domainKind !== 'variety' || map.domainId !== blowup.id || map.codomainKind !== 'variety' || map.codomainId !== base.id) {
+      map.domainKind = 'variety';
+      map.domainId = blowup.id;
+      map.codomainKind = 'variety';
+      map.codomainId = base.id;
+      map.curve = null;
+      changed = true;
+    }
+    if (syncObjectLineage(map, 'map')) changed = true;
+    return changed;
+  }
+
+  function refreshGrassmannianMap(map, construction) {
+    const bundle = state.sheaves.find((item) => item.id === construction.sheafId);
+    const base = state.varieties.find((item) => item.id === bundle?.baseVarietyId);
+    const target = state.varieties.find((item) => item.id === construction.targetId);
+    if (!bundle || !base || !target) return false;
+    let changed = false;
+    if (map.domainKind !== 'variety' || map.domainId !== base.id || map.codomainKind !== 'variety' || map.codomainId !== target.id) {
+      map.domainKind = 'variety';
+      map.domainId = base.id;
+      map.codomainKind = 'variety';
+      map.codomainId = target.id;
+      map.curve = null;
+      changed = true;
+    }
+    if (construction.baseId !== base.id) {
+      construction.baseId = base.id;
+      changed = true;
+    }
+    const nextDefault = defaultGrassmannianMapNameFromObjects(bundle);
+    if (!map.nameDirty && canonicalMathLabel(map.name) !== canonicalMathLabel(nextDefault)) {
+      map.name = nextDefault;
+      changed = true;
+    }
+    if (construction.defaultName !== nextDefault) {
+      construction.defaultName = nextDefault;
+      changed = true;
+    }
     if (syncObjectLineage(map, 'map')) changed = true;
     return changed;
   }
@@ -5188,29 +6651,33 @@
       const sheaf = chosenSheaf && geometry ? sheafFromObject(chosenSheaf, geometry) : null;
       const result = buildResult(geometry, sheaf);
       state.lastResult = result;
-      refs.classMessage.textContent = '';
+      if (refs.classMessage) refs.classMessage.textContent = '';
       renderResult(result);
       refreshExport();
     } catch (error) {
       state.lastResult = null;
-      refs.status.textContent = error.message || 'unable to compute';
+      if (refs.status) refs.status.textContent = error.message || 'unable to compute';
       if (refs.classActions) refs.classActions.hidden = true;
       if (refs.classCard) refs.classCard.hidden = true;
       if (refs.basisRow) refs.basisRow.hidden = true;
       if (refs.rootFormRow) refs.rootFormRow.hidden = true;
       if (refs.classTermRow) refs.classTermRow.hidden = true;
       if (refs.classChart) refs.classChart.hidden = true;
-      refs.classMessage.className = 'err';
-      refs.classMessage.textContent = error.message || 'Unable to compute.';
-      refs.classMessage.hidden = false;
+      if (refs.classMessage) {
+        refs.classMessage.className = 'err';
+        refs.classMessage.textContent = error.message || 'Unable to compute.';
+        refs.classMessage.hidden = false;
+      }
       if (refs.hodgeActions) refs.hodgeActions.hidden = true;
       if (refs.hodgeCard) refs.hodgeCard.hidden = true;
       if (refs.hodgeChart) {
         refs.hodgeChart.hidden = true;
         refs.hodgeChart.innerHTML = '';
       }
-      refs.hodgeMessage.textContent = 'No Hodge numbers available for the current input.';
-      refs.hodgeMessage.hidden = false;
+      if (refs.hodgeMessage) {
+        refs.hodgeMessage.textContent = 'No Hodge numbers available for the current input.';
+        refs.hodgeMessage.hidden = false;
+      }
       if (refs.cohomologyActions) refs.cohomologyActions.hidden = true;
       if (refs.cohomologyCard) refs.cohomologyCard.hidden = true;
       if (refs.cohomologyChart) {
@@ -5286,7 +6753,11 @@
     const editingSheaf = inputIsModifyMode() && !!state.activeSheafId;
     const editingMap = inputIsModifyMode() && !!state.activeMapId;
     const draftingMap = inputIsModifyMode() ? editingMap : (refs.addObjectKind?.value === 'map' || combinedAbelJacobiCreateMode());
-    const draftingSheaf = !draftingMap && (inputIsModifyMode() ? editingSheaf : refs.addObjectKind?.value === 'sheaf');
+    const draftingCombinedSes = combinedSesCreateMode();
+    const draftingCombinedBlowup = combinedBlowupCreateMode();
+    const draftingCombinedGrassmannianMap = combinedGrassmannianMapCreateMode();
+    const draftingCombinedStructure = draftingCombinedSes || draftingCombinedBlowup || draftingCombinedGrassmannianMap;
+    const draftingSheaf = !draftingMap && !draftingCombinedStructure && (inputIsModifyMode() ? editingSheaf : refs.addObjectKind?.value === 'sheaf');
     const draftingVariety = !draftingMap && !draftingSheaf;
     syncProductVarietyOption();
     const draftVariety = refs.varietyType.value;
@@ -5382,6 +6853,7 @@
     if (mapTypeRow) mapTypeRow.hidden = combinedAbelJacobiCreateMode();
     if (productMode) updateProductDraftControls();
     else if (refs.productFactorsRow || refs.productPickNote) updateProductDraftControls();
+    updateCombinedDraftControls();
     if (refs.dim) refs.dim.closest('.sheaf-field-row').hidden = productMode;
     if (refs.varietyName) refs.varietyName.closest('.sheaf-field-row').hidden = showProduct && productDraftFactors().length < 2;
     if (refs.grassmannianParamsRow) refs.grassmannianParamsRow.hidden = !showGrassmannian;
@@ -5412,8 +6884,9 @@
     refs.sheafBaseRow.hidden = !draftingSheaf || sheafHasParentRow || !hasVariety;
     updateSheafBaseButton();
     if (refs.addObject) {
+      const editingSequence = activeSesEditMode();
       const canAddSheaf = !draftingSheaf || creatingSheafMapOperation || creatingSheafBinary || creatingSheafSchur || !!draftBase;
-      const hasEditableObject = !inputIsModifyMode() || !!activeObjectForKind(currentInputKind());
+      const hasEditableObject = !inputIsModifyMode() || editingSequence || !!activeObjectForKind(currentInputKind());
       const creatingMap = draftingMap && inputIsCreateMode();
       const mapReady = !draftingMap || !!(mapCompositionInputMode()
         ? mapCompositionConstructionData()
@@ -5431,11 +6904,42 @@
       const productReady = !productNeedsFactors || (productFactors.length === 2 && productDim <= MAX_DIMENSION);
       const grassmannianParams = draftingVariety && draftVariety === 'grassmannian' ? syncGrassmannianControls() : null;
       const grassmannianReady = !grassmannianParams || grassmannianParams.dim <= MAX_DIMENSION;
-      refs.addObject.disabled = (draftingMap && !mapReady) || (productNeedsFactors && !productReady) || !grassmannianReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
-      refs.addObject.textContent = inputIsModifyMode() ? 'update' : (combinedProductCreateMode() || combinedAbelJacobiCreateMode() ? 'build' : 'add');
-      refs.addObject.title = creatingMap
-        ? (mapCompositionInputMode() ? mapCompositionPickHint() : (abelJacobiMapInputMode() ? abelJacobiMapPickHint() : ordinaryMapPickHint()))
-        : (!grassmannianReady ? `Grassmannian dimension ${grassmannianParams.dim} exceeds the calculator limit ${MAX_DIMENSION}` : (productNeedsFactors ? (productFactors.length === 2 && productDim > MAX_DIMENSION ? `Product dimension ${productDim} exceeds the calculator limit ${MAX_DIMENSION}` : 'Pick two varieties on the canvas') : ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady ? sheafMapPickHint() : ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady ? sheafBinaryPickHint() : ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady ? sheafSchurPickHint() : (creatingSheaf && !creatingParentSheaf && waitingForSheafBase ? (hasVariety ? 'Pick a base variety on the canvas first' : 'Add a variety first') : (draftingSheaf && !creatingParentSheaf && !draftBase ? 'Add a base variety first' : '')))))));
+      const sesReady = !draftingCombinedSes || !!shortExactSequenceData();
+      const sesEditReady = !activeSesEditMode() || !!shortExactSequenceData({ requireComplete: true, requireMaps: true });
+      const blowupReady = !draftingCombinedBlowup || !!blowupConstructionData();
+      const grassmannianMapParams = draftingCombinedGrassmannianMap ? syncGrassmannianMapControls() : null;
+      const grassmannianMapReady = !draftingCombinedGrassmannianMap || !!grassmannianMapConstructionData();
+      refs.addObject.disabled = (draftingMap && !mapReady) || (productNeedsFactors && !productReady) || !grassmannianReady || !sesReady || !sesEditReady || !blowupReady || !grassmannianMapReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
+      refs.addObject.textContent = inputIsModifyMode() ? 'update' : (combinedCreateMode() ? 'build' : 'add');
+      let addTitle = '';
+      if (creatingMap) {
+        addTitle = mapCompositionInputMode()
+          ? mapCompositionPickHint()
+          : (abelJacobiMapInputMode() ? abelJacobiMapPickHint() : ordinaryMapPickHint());
+      } else if (draftingCombinedSes) {
+        addTitle = activeSesEditMode() && !sesEditReady ? 'Use existing sheaves and maps for all five SES slots' : sesPickHint();
+      } else if (draftingCombinedBlowup) {
+        addTitle = blowupPickHint();
+      } else if (draftingCombinedGrassmannianMap) {
+        addTitle = grassmannianMapPickHint(grassmannianMapParams);
+      } else if (!grassmannianReady) {
+        addTitle = `Grassmannian dimension ${grassmannianParams.dim} exceeds the calculator limit ${MAX_DIMENSION}`;
+      } else if (productNeedsFactors) {
+        addTitle = productFactors.length === 2 && productDim > MAX_DIMENSION
+          ? `Product dimension ${productDim} exceeds the calculator limit ${MAX_DIMENSION}`
+          : 'Pick two varieties on the canvas';
+      } else if ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) {
+        addTitle = sheafMapPickHint();
+      } else if ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) {
+        addTitle = sheafBinaryPickHint();
+      } else if ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) {
+        addTitle = sheafSchurPickHint();
+      } else if (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) {
+        addTitle = hasVariety ? 'Pick a base variety on the canvas first' : 'Add a variety first';
+      } else if (draftingSheaf && !creatingParentSheaf && !draftBase) {
+        addTitle = 'Add a base variety first';
+      }
+      refs.addObject.title = addTitle;
     }
     updateMapPickStatus();
     syncGlobalPickButton();
@@ -11238,7 +12742,7 @@
     if (bundle) badgeParts.push(bundle.labelLatex);
     setInlineMath(refs.objectBadge, badgeParts.length ? badgeParts.join(',\\ ') : '\\text{empty}');
     const basis = basisStatusLabel(result.sheaf?.basis);
-    refs.status.textContent = `${state.varieties.length} variet${state.varieties.length === 1 ? 'y' : 'ies'} · ${state.sheaves.length} ${state.sheaves.length === 1 ? 'sheaf' : 'sheaves'} · ${state.maps.length} map${state.maps.length === 1 ? '' : 's'}${bundle ? ` · ${basis} basis` : ''}`;
+    refs.status.textContent = `${state.varieties.length} variet${state.varieties.length === 1 ? 'y' : 'ies'} · ${state.sheaves.length} ${state.sheaves.length === 1 ? 'sheaf' : 'sheaves'} · ${state.maps.length} map${state.maps.length === 1 ? '' : 's'} · ${(state.sequences || []).length} SES${bundle ? ` · ${basis} basis` : ''}`;
     setInlineMath(refs.ringSummary, geometry ? `A^*(${geometry.labelLatex})_{\\le ${geometry.dim}}` : '\\text{add a variety}');
     renderHomologyPanel(result);
     if (result.classRows.length) {
@@ -11636,6 +13140,7 @@
     ensureCanvasLabelPositions(cssWidth, cssHeight);
     drawSheafBaseLines(ctx, cssWidth, cssHeight);
     drawMapArrows(ctx, cssWidth, cssHeight);
+    drawShortExactSequenceTailArrows(ctx, cssWidth, cssHeight);
     renderCanvasLabels(cssWidth, cssHeight);
   }
 
@@ -11654,6 +13159,7 @@
     ensureCanvasLabelPositions(state.canvasWidth, state.canvasHeight);
     drawSheafBaseLines(ctx, state.canvasWidth, state.canvasHeight);
     drawMapArrows(ctx, state.canvasWidth, state.canvasHeight);
+    drawShortExactSequenceTailArrows(ctx, state.canvasWidth, state.canvasHeight);
   }
 
   function renderCanvasMessage(width, height, latex) {
@@ -11680,10 +13186,15 @@
     syncShowCanvasButton();
     const labels = canvasOverviewLabels(width, height);
     const controls = mapCurveControlLabels(labels, width, height);
+    const sequenceControls = shortExactSequenceTailControls(labels, width, height);
     refs.canvasLabels.innerHTML = labels.map((label) => `
       <div class="${label.className || 'sheaf-canvas-label'}" style="left:${label.x}px;top:${label.y}px;max-width:${label.maxWidth}px;" ${label.objectKind ? `data-object-kind="${label.objectKind}" data-object-id="${escapeHtml(label.objectId)}" role="button" tabindex="0" aria-label="${escapeHtml(label.ariaLabel || label.main)}"` : ''}>
         <span>\\(${label.main}\\)</span>
       </div>
+    `).join('') + sequenceControls.map((control) => control.type === 'label' ? `
+      <button class="${control.className}" type="button" style="left:${control.x}px;top:${control.y}px;max-width:${control.maxWidth || 80}px;" data-object-kind="sequence" data-object-id="${escapeHtml(control.sequenceId)}" data-sequence-tail-control="${escapeHtml(control.control)}" aria-label="${escapeHtml(control.ariaLabel)}" title="${escapeHtml(control.title)}"><span>\\(${control.main}\\)</span></button>
+    ` : `
+      <button class="${control.className}" type="button" style="left:${control.x}px;top:${control.y}px;" data-sequence-id="${escapeHtml(control.sequenceId)}" data-sequence-tail-control="${escapeHtml(control.control)}" aria-label="${escapeHtml(control.ariaLabel)}" title="${escapeHtml(control.title)}" ${control.disabled ? 'disabled' : ''}></button>
     `).join('') + controls.map((control) => `
       <button class="${control.className || 'sheaf-map-control'}" type="button" style="left:${control.x}px;top:${control.y}px;" data-map-id="${escapeHtml(control.mapId)}" data-map-control="${escapeHtml(control.control)}" aria-label="${escapeHtml(control.ariaLabel)}" title="${escapeHtml(control.title)}" ${control.disabled ? 'disabled' : ''}></button>
     `).join('');
@@ -11710,6 +13221,12 @@
         if (ids[1] === map.id) classes.push('is-map-codomain');
         if (state.canvasPickEnabled && ids[0] !== map.id && ids[1] !== map.id && allowableMapCompositionPick(map.id)) classes.push('is-pick-candidate');
       }
+      if (combinedSesCreateMode()) {
+        const draft = sesDraftIds();
+        if (draft.mapABId === map.id) classes.push('is-map-domain');
+        if (draft.mapBCId === map.id) classes.push('is-map-codomain');
+        if (state.canvasPickEnabled && allowableSesMapPick(map.id, state.sesPickTarget)) classes.push('is-pick-candidate');
+      }
       labels.push({
         x: pos.x,
         y: pos.y,
@@ -11722,6 +13239,82 @@
       });
     });
     return labels;
+  }
+
+  function shortExactSequenceTailControls(labels, width, height) {
+    const labelMap = canvasLabelMap(labels);
+    return (state.sequences || []).flatMap((sequence) => {
+      if (sequence.type !== 'short-exact-sequence') return [];
+      if (sequence.tail?.hiddenOnCanvas) return [];
+      const rightId = sequence.sheafIds?.[2];
+      const right = rightId ? labelMap.get(`sheaf:${rightId}`) : null;
+      const geometry = right ? shortExactSequenceTailGeometry(sequence, right, width, height) : null;
+      if (!geometry) return [];
+      const path = geometry.path;
+      const lastIndex = path?.anchors?.length ? path.anchors.length - 1 : sequenceTailEndAnchorIndex(sequence);
+      const active = inputIsModifyMode() && sequence.id === state.activeSequenceId;
+      const controls = [{
+        sequenceId: sequence.id,
+        control: 'label',
+        type: 'label',
+        main: '+1',
+        x: geometry.label.x,
+        y: geometry.label.y,
+        maxWidth: 54,
+        className: `sheaf-canvas-label is-map is-sequence-tail-label${sequence.id === state.activeSequenceId ? ' is-active' : ''}`,
+        title: 'Modify this short exact sequence. Right-click to hide the +1 tail.',
+        ariaLabel: 'modify short exact sequence plus one tail'
+      }];
+      if (active && path) {
+        if (sequenceTailPointCount(sequence.tail) !== STRAIGHT_MAP_POINT_COUNT) {
+          sequenceTailHandleControls(path, sequence.id).forEach((control) => controls.push(control));
+        }
+        path.anchors.forEach((anchor, index) => {
+          controls.push({
+            sequenceId: sequence.id,
+            control: `anchor:${index}`,
+            x: anchor.x,
+            y: anchor.y,
+            className: `sheaf-map-control is-anchor${index === 0 ? ' is-endpoint' : ''}${index === lastIndex ? ' is-sequence-tail-end' : ''}`,
+            disabled: index === 0,
+            title: index === 0 ? 'endpoint follows the final sheaf' : (index === lastIndex ? 'drag empty target of the +1 tail' : 'drag tail point'),
+            ariaLabel: index === 0 ? 'source endpoint for short exact sequence plus one tail' : (index === lastIndex ? 'empty target for short exact sequence plus one tail' : 'anchor point for short exact sequence tail')
+          });
+        });
+      }
+      return controls;
+    });
+  }
+
+  function sequenceTailHandleControls(path, sequenceId) {
+    const lastIndex = path.anchors.length - 1;
+    const controls = [];
+    path.anchors.forEach((anchor, index) => {
+      if (index === 0) {
+        addSequenceTailHandleControl(controls, path.outHandles[index], sequenceId, `handle:${index}:out`, 'outgoing');
+        return;
+      }
+      if (index === lastIndex) {
+        addSequenceTailHandleControl(controls, path.inHandles[index], sequenceId, `handle:${index}:in`, 'incoming');
+        return;
+      }
+      addSequenceTailHandleControl(controls, path.inHandles[index], sequenceId, `handle:${index}:in`, 'incoming');
+      addSequenceTailHandleControl(controls, path.outHandles[index], sequenceId, `handle:${index}:out`, 'outgoing');
+    });
+    return controls;
+  }
+
+  function addSequenceTailHandleControl(controls, point, sequenceId, control, directionLabel) {
+    if (!point) return;
+    controls.push({
+      sequenceId,
+      control,
+      className: 'sheaf-map-control is-handle',
+      x: point.x,
+      y: point.y,
+      title: `drag ${directionLabel} +1 tail handle`,
+      ariaLabel: `${directionLabel} control handle for short exact sequence plus one tail`
+    });
   }
 
   function canvasObjectLabels(width, height) {
@@ -11748,10 +13341,17 @@
           classes.push('is-pick-candidate');
         }
       }
+      if (combinedBlowupCreateMode()) {
+        const base = blowupDraftVariety('base');
+        const point = blowupDraftVariety('point');
+        if (base?.id === variety.id) classes.push('is-map-domain');
+        if (point?.id === variety.id) classes.push('is-map-codomain');
+        if (state.canvasPickEnabled && allowableBlowupPick(variety.id, state.blowupPickTarget)) classes.push('is-pick-candidate');
+      }
       const creatingMapOperationSheaf = sheafMapOperationInputMode() && inputIsCreateMode();
       if (state.canvasPickEnabled && sheafBasePickInputMode() && allowableSheafBase(variety.id)) classes.push('is-pick-candidate');
       if (currentInputKind() === 'sheaf' && inputIsCreateMode() && !creatingMapOperationSheaf && state.draftSheafBaseVarietyId === variety.id) classes.push('is-active');
-      if (ordinaryMapInputMode()) {
+      if (ordinaryMapInputMode() && !sheafMapInputMode()) {
         const domain = mapDraftEndpointObject('domain');
         const codomain = mapDraftEndpointObject('codomain');
         if (domain?.id === variety.id) classes.push('is-map-domain');
@@ -11790,6 +13390,18 @@
         if (ids[1] === sheaf.id) classes.push('is-map-codomain');
         if (state.canvasPickEnabled && ids[0] !== sheaf.id && ids[1] !== sheaf.id && allowableSheafBinaryPick(sheaf.id)) classes.push('is-pick-candidate');
       }
+      if (combinedSesCreateMode()) {
+        const draft = sesDraftIds();
+        if (draft.sheafAId === sheaf.id) classes.push('is-map-domain');
+        if (draft.sheafBId === sheaf.id) classes.push('is-active');
+        if (draft.sheafCId === sheaf.id) classes.push('is-map-codomain');
+        if (state.canvasPickEnabled && allowableSesSheafPick(sheaf.id, state.sesPickTarget)) classes.push('is-pick-candidate');
+      }
+      if (combinedGrassmannianMapCreateMode()) {
+        const parent = grassmannianMapDraftSheaf();
+        if (parent?.id === sheaf.id) classes.push('is-active');
+        else if (state.canvasPickEnabled && allowableGrassmannianMapSheafPick(sheaf.id)) classes.push('is-pick-candidate');
+      }
       if (sheafSchurInputMode()) {
         const parent = sheafSchurDraftSheaf();
         if (parent?.id === sheaf.id) classes.push('is-active');
@@ -11798,6 +13410,13 @@
       if (sheafMapOperationInputMode()) {
         if (state.sheafMapDraft?.sheafId === sheaf.id) classes.push('is-active');
         else if (state.canvasPickEnabled && state.sheafMapPickTarget === 'sheaf' && allowableSheafMapOperationSheaf(sheaf.id)) classes.push('is-pick-candidate');
+      }
+      if (ordinaryMapInputMode() && sheafMapInputMode()) {
+        const domain = mapDraftEndpointObject('domain');
+        const codomain = mapDraftEndpointObject('codomain');
+        if (domain?.id === sheaf.id) classes.push('is-map-domain');
+        else if (codomain?.id === sheaf.id) classes.push('is-map-codomain');
+        else if (state.canvasPickEnabled) classes.push(state.mapPickTarget === 'codomain' ? 'is-map-codomain-candidate' : 'is-pick-candidate');
       }
       labels.push({
         x: pos.x,
@@ -11868,6 +13487,27 @@
     ctx.restore();
   }
 
+  function drawShortExactSequenceTailArrows(ctx, width, height) {
+    const labels = canvasObjectLabels(width, height);
+    const labelMap = canvasLabelMap(labels);
+    ctx.save();
+    (state.sequences || []).forEach((sequence) => {
+      if (sequence.type !== 'short-exact-sequence') return;
+      if (sequence.tail?.hiddenOnCanvas) return;
+      const rightId = sequence.sheafIds?.[2];
+      const right = rightId ? labelMap.get(`sheaf:${rightId}`) : null;
+      if (!right) return;
+      const geometry = shortExactSequenceTailGeometry(sequence, right, width, height);
+      if (!geometry) return;
+      const active = sequence.id === state.activeSequenceId;
+      const color = active ? '#8b3a2a' : 'rgba(139,58,42,0.7)';
+      if (geometry.path) drawBezierPathArrow(ctx, geometry.path, color);
+      else drawArrow(ctx, geometry.start.x, geometry.start.y, geometry.end.x, geometry.end.y, color);
+      if (active && inputIsModifyMode()) drawSequenceTailGuides(ctx, geometry);
+    });
+    ctx.restore();
+  }
+
   function drawArrowBetweenLabels(ctx, from, to, color) {
     const endpoints = clippedArrowEndpoints(from, to);
     if (!endpoints) return;
@@ -11890,6 +13530,314 @@
     const start = labelEdgePoint(from, x2, y2, 6);
     if (!start || Math.hypot(x2 - start.x, y2 - start.y) < 12) return;
     drawArrow(ctx, start.x, start.y, x2, y2, color);
+  }
+
+  function shortExactSequenceTailGeometry(sequence, rightLabel, width, height) {
+    if (!sequence || !rightLabel || sequence.tail?.hiddenOnCanvas) return null;
+    const tail = normalizeSequenceTailCurve(sequence.tail);
+    const bounds = estimatedLabelBounds(rightLabel);
+    const defaultStart = {
+      x: clamp(rightLabel.x + bounds.halfWidth + 12, 18, width - 18),
+      y: clamp(rightLabel.y, 20, height - 20)
+    };
+    const defaultLength = clamp(width * 0.07, 38, 64);
+    const defaultEnd = {
+      x: Math.min(width - 18, defaultStart.x + defaultLength),
+      y: defaultStart.y
+    };
+    const end = tail?.end
+      ? {
+        x: clamp(tail.end.x * width, 14, width - 14),
+        y: clamp(tail.end.y * height, 14, height - 14)
+      }
+      : defaultEnd;
+    const start = tail?.end
+      ? labelEdgePoint(rightLabel, end.x, end.y, 6) || defaultStart
+      : defaultStart;
+    if (Math.hypot(end.x - start.x, end.y - start.y) < 16) return null;
+    const pointCount = sequenceTailPointCount(tail || sequence.tail);
+    const path = sequenceTailPathGeometry(start, end, tail, pointCount, width, height);
+    const finalSegment = path?.segments?.[path.segments.length - 1];
+    const straightTail = pointCount === STRAIGHT_MAP_POINT_COUNT;
+    const midpoint = straightTail
+      ? { point: lerpPoint(start, end, 0.5), tangent: { x: end.x - start.x, y: end.y - start.y } }
+      : pointOnBezierPathByArcRatio(path, 0.5);
+    const labelTangent = midpoint?.tangent || (finalSegment
+      ? cubicBezierTangent(finalSegment.start, finalSegment.c1, finalSegment.c2, finalSegment.end, 0.5)
+      : { x: end.x - start.x, y: end.y - start.y });
+    return {
+      start,
+      end,
+      label: sequenceTailLabelPoint(midpoint.point, labelTangent, width, height),
+      labelNormal: sequenceTailLabelNormal(labelTangent),
+      path
+    };
+  }
+
+  function normalizeSequenceTailCurve(tail) {
+    if (!tail) return null;
+    const pointCount = sequenceTailPointCount(tail);
+    const storedAnchors = Array.isArray(tail.anchors)
+      ? tail.anchors.map((anchor) => anchor ? normalizedCurvePoint(anchor, 0.5, 0.5) : null)
+      : [];
+    const storedHandles = Array.isArray(tail.handles)
+      ? tail.handles.map((handle) => handle ? normalizedCurvePoint(handle, 0.5, 0.5) : null)
+      : [];
+    const endIndex = sequenceTailInteriorPointCount(pointCount) + 1;
+    const endSource = tail.end || tail.anchor || storedAnchors[endIndex] || (Number.isFinite(tail.x) || Number.isFinite(tail.y) ? tail : null);
+    const end = endSource ? normalizedCurvePoint(endSource, 0.86, 0.5) : null;
+    const hasLegacyHandle = !!(tail.handle || tail.control);
+    const handle = hasLegacyHandle ? normalizedCurvePoint(tail.handle || tail.control, end ? end.x - 0.04 : 0.82, end ? end.y : 0.5) : null;
+    const normalized = {
+      end,
+      anchors: storedAnchors,
+      handles: storedHandles,
+      bent: !!tail.bent || hasLegacyHandle,
+      pointCount
+    };
+    if (handle) normalized.handle = handle;
+    if (tail.hiddenOnCanvas) normalized.hiddenOnCanvas = true;
+    return normalized;
+  }
+
+  function sequenceTailPointCount(tail) {
+    const raw = tail?.pointCount ?? tail?.tailPointCount ?? tail?.points ?? DEFAULT_SEQUENCE_TAIL_POINT_COUNT;
+    const numeric = Number(raw);
+    if (numeric === STRAIGHT_MAP_POINT_COUNT || numeric === LEGACY_STRAIGHT_MAP_POINT_COUNT) return STRAIGHT_MAP_POINT_COUNT;
+    return normalizedInt(raw, 2, MAX_SEQUENCE_TAIL_POINT_COUNT, 2);
+  }
+
+  function sequenceTailPointCountFromSliderValue(value) {
+    const index = normalizedInt(value, 0, SEQUENCE_TAIL_POINT_COUNT_OPTIONS.length - 1, 0);
+    return SEQUENCE_TAIL_POINT_COUNT_OPTIONS[index] ?? DEFAULT_SEQUENCE_TAIL_POINT_COUNT;
+  }
+
+  function sequenceTailPointCountSliderValue(count) {
+    const normalized = sequenceTailPointCount({ pointCount: count });
+    const index = SEQUENCE_TAIL_POINT_COUNT_OPTIONS.indexOf(normalized);
+    return index >= 0 ? index : SEQUENCE_TAIL_POINT_COUNT_OPTIONS.indexOf(DEFAULT_SEQUENCE_TAIL_POINT_COUNT);
+  }
+
+  function formatSequenceTailPointCount(count) {
+    return String(sequenceTailPointCount({ pointCount: count }));
+  }
+
+  function sequenceTailInteriorPointCount(tailOrCount) {
+    const count = typeof tailOrCount === 'number' ? sequenceTailPointCount({ pointCount: tailOrCount }) : sequenceTailPointCount(tailOrCount);
+    return count === STRAIGHT_MAP_POINT_COUNT ? 0 : Math.max(0, count - 2);
+  }
+
+  function sequenceTailEndAnchorIndex(sequenceOrTail) {
+    const tail = sequenceOrTail?.tail || sequenceOrTail;
+    return sequenceTailInteriorPointCount(tail) + 1;
+  }
+
+  function sequenceTailPathGeometry(start, end, tail, pointCount, width, height) {
+    const count = sequenceTailInteriorPointCount(pointCount);
+    const anchors = [start];
+    const storedAnchors = Array.isArray(tail?.anchors) ? tail.anchors : [];
+    const legacyHandle = tail?.handle
+      ? {
+        x: tail.handle.x * width,
+        y: tail.handle.y * height
+      }
+      : null;
+    for (let index = 1; index <= count; index += 1) {
+      if (storedAnchors[index]) {
+        anchors.push({
+          x: clamp(storedAnchors[index].x * width, 14, width - 14),
+          y: clamp(storedAnchors[index].y * height, 14, height - 14)
+        });
+        continue;
+      }
+      const t = index / (count + 1);
+      const base = lerpPoint(start, end, t);
+      if (tail?.bent && legacyHandle) {
+        const influence = Math.sin(Math.PI * t);
+        anchors.push({
+          x: clamp(base.x + (legacyHandle.x - base.x) * influence, 14, width - 14),
+          y: clamp(base.y + (legacyHandle.y - base.y) * influence, 14, height - 14)
+        });
+      } else {
+        anchors.push(base);
+      }
+    }
+    anchors.push(end);
+    const normalizedAnchors = anchors.map((anchor) => normalizedCurvePoint({ x: anchor.x / Math.max(1, width), y: anchor.y / Math.max(1, height) }, 0.5, 0.5));
+    const standardHandles = standardMapHandles(normalizedAnchors, width, height, 0);
+    const straight = sequenceTailPointCount({ pointCount }) === STRAIGHT_MAP_POINT_COUNT;
+    if (straight) {
+      return {
+        anchors,
+        handles: [],
+        outHandles: [],
+        inHandles: [],
+        segments: Array.from({ length: Math.max(0, anchors.length - 1) }, (_, index) => {
+          const segmentStart = anchors[index];
+          const segmentEnd = anchors[index + 1];
+          return {
+            index,
+            start: segmentStart,
+            c1: lerpPoint(segmentStart, segmentEnd, 1 / 3),
+            c2: lerpPoint(segmentStart, segmentEnd, 2 / 3),
+            end: segmentEnd
+          };
+        })
+      };
+    }
+    const normalizedHandles = sequenceTailNormalizedHandles(tail, anchors, legacyHandle, standardHandles, width, height);
+    const handles = normalizedHandles.map((point) => point ? anchorToPoint(point, width, height) : null);
+    const outHandles = anchors.map((anchor, index) => handles[index] || fallbackRawHandle(anchors, index, true));
+    const inHandles = anchors.map((anchor, index) => reflectedHandlePoint(anchor, outHandles[index]) || fallbackRawHandle(anchors, index, false));
+    const segments = Array.from({ length: Math.max(0, anchors.length - 1) }, (_, index) => {
+      const segmentStart = anchors[index];
+      const segmentEnd = anchors[index + 1];
+      return {
+        index,
+        start: segmentStart,
+        c1: outHandles[index] || lerpPoint(segmentStart, segmentEnd, 1 / 3),
+        c2: inHandles[index + 1] || lerpPoint(segmentStart, segmentEnd, 2 / 3),
+        end: segmentEnd
+      };
+    });
+    return { anchors, handles, outHandles, inHandles, segments };
+  }
+
+  function sequenceTailNormalizedHandles(tail, anchors, legacyHandle, standardHandles, width, height) {
+    const storedHandles = Array.isArray(tail?.handles) ? tail.handles : [];
+    if (storedHandles.some(Boolean)) {
+      return anchors.map((anchor, index) => storedHandles[index]
+        ? normalizedCurvePoint(storedHandles[index], standardHandles[index]?.x ?? anchor.x / Math.max(1, width), standardHandles[index]?.y ?? anchor.y / Math.max(1, height))
+        : (standardHandles[index] || normalizedCurvePoint({ x: anchor.x / Math.max(1, width), y: anchor.y / Math.max(1, height) }, 0.5, 0.5)));
+    }
+    if (tail?.bent && legacyHandle && anchors.length === 2) {
+      const start = anchors[0];
+      const end = anchors[1];
+      const c1 = {
+        x: start.x + (legacyHandle.x - start.x) * 2 / 3,
+        y: start.y + (legacyHandle.y - start.y) * 2 / 3
+      };
+      const c2 = {
+        x: end.x + (legacyHandle.x - end.x) * 2 / 3,
+        y: end.y + (legacyHandle.y - end.y) * 2 / 3
+      };
+      return [
+        normalizedCurvePoint({ x: c1.x / Math.max(1, width), y: c1.y / Math.max(1, height) }, 0.5, 0.5),
+        normalizedCurvePoint({ x: (end.x * 2 - c2.x) / Math.max(1, width), y: (end.y * 2 - c2.y) / Math.max(1, height) }, 0.5, 0.5)
+      ];
+    }
+    return standardHandles;
+  }
+
+  function parseSequenceTailControlRef(value, sequence) {
+    if (value === 'label') return { type: 'label' };
+    if (value === 'end') return { type: 'anchor', index: sequenceTailEndAnchorIndex(sequence) };
+    return parseMapControlRef(value);
+  }
+
+  function sequenceTailAnchorIndex(control, sequence = null) {
+    const parsed = parseSequenceTailControlRef(control, sequence);
+    return parsed?.type === 'anchor' ? parsed.index : null;
+  }
+
+  function ensureSequenceTailCurveState(sequence, width = state.canvasWidth || refs.canvas?.clientWidth || 760, height = state.canvasHeight || refs.canvas?.clientHeight || 280) {
+    if (!sequence) return null;
+    const geometry = sequenceTailGeometryFromCanvas(sequence, width, height);
+    if (!geometry?.path) return null;
+    sequence.tail = sequenceTailStateFromPath(sequence.tail, geometry.path, width, height);
+    return sequence.tail;
+  }
+
+  function sequenceTailStateFromPath(currentTail, path, width, height) {
+    const normalized = normalizeSequenceTailCurve(currentTail) || {};
+    const anchors = path.anchors.map((anchor) => normalizedCurvePoint({ x: anchor.x / Math.max(1, width), y: anchor.y / Math.max(1, height) }, 0.5, 0.5));
+    const handles = path.handles.map((handle, index) => {
+      if (handle) return normalizedCurvePoint({ x: handle.x / Math.max(1, width), y: handle.y / Math.max(1, height) }, anchors[index]?.x ?? 0.5, anchors[index]?.y ?? 0.5);
+      return null;
+    });
+    const tail = {
+      end: anchors[anchors.length - 1],
+      anchors,
+      handles,
+      pointCount: normalized.pointCount
+    };
+    if (normalized.hiddenOnCanvas) tail.hiddenOnCanvas = true;
+    return tail;
+  }
+
+  function sequenceTailWithPointCount(tail, start, end, count, width, height) {
+    const normalized = normalizeSequenceTailCurve(tail) || {};
+    const safeWidth = Math.max(1, width);
+    const safeHeight = Math.max(1, height);
+    const oldCount = sequenceTailInteriorPointCount(normalized);
+    const newInteriorCount = sequenceTailInteriorPointCount(count);
+    const oldEndIndex = oldCount + 1;
+    const newEndIndex = newInteriorCount + 1;
+    const oldAnchors = Array.isArray(normalized.anchors) ? normalized.anchors : [];
+    const oldHandles = Array.isArray(normalized.handles) ? normalized.handles : [];
+    const endAnchor = oldAnchors[oldEndIndex] || normalized.end || normalizedCurvePoint({ x: end.x / safeWidth, y: end.y / safeHeight }, 0.86, 0.5);
+    const endHandle = oldHandles[oldEndIndex] || null;
+    const anchors = [normalizedCurvePoint({ x: start.x / safeWidth, y: start.y / safeHeight }, 0.5, 0.5)];
+    const handles = [oldHandles[0] || null];
+    const preservedInteriorCount = Math.min(oldCount, newInteriorCount);
+    for (let index = 1; index <= newInteriorCount; index += 1) {
+      const t = index / (newInteriorCount + 1);
+      anchors[index] = (index <= preservedInteriorCount && oldAnchors[index]) || normalizedCurvePoint({
+        x: (start.x + (end.x - start.x) * t) / safeWidth,
+        y: (start.y + (end.y - start.y) * t) / safeHeight
+      }, 0.5, 0.5);
+      handles[index] = index <= preservedInteriorCount ? (oldHandles[index] || null) : null;
+    }
+    anchors[newEndIndex] = endAnchor;
+    handles[newEndIndex] = endHandle;
+    return {
+      end: endAnchor,
+      anchors,
+      handles,
+      pointCount: sequenceTailPointCount({ pointCount: count }),
+      ...(normalized.hiddenOnCanvas ? { hiddenOnCanvas: true } : {})
+    };
+  }
+
+  function sequenceTailLabelNormal(tangent) {
+    const length = Math.hypot(tangent?.x || 0, tangent?.y || 0) || 1;
+    return {
+      x: (tangent?.y || 0) / length,
+      y: -(tangent?.x || 0) / length
+    };
+  }
+
+  function sequenceTailLabelPoint(point, tangent, width, height) {
+    const normal = sequenceTailLabelNormal(tangent);
+    const offset = 14;
+    return {
+      x: clamp(point.x + normal.x * offset, 14, width - 14),
+      y: clamp(point.y + normal.y * offset, 14, height - 14)
+    };
+  }
+
+  function drawSequenceTailGuides(ctx, geometry) {
+    const path = geometry?.path;
+    if (!path) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(139,58,42,0.32)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    path.anchors.forEach((anchor, index) => {
+      const lastIndex = path.anchors.length - 1;
+      const handles = [];
+      if (index === 0) handles.push(path.outHandles[index]);
+      else if (index === lastIndex) handles.push(path.inHandles[index]);
+      else handles.push(path.inHandles[index], path.outHandles[index]);
+      handles.forEach((handle) => {
+        if (!handle) return;
+        ctx.beginPath();
+        ctx.moveTo(anchor.x, anchor.y);
+        ctx.lineTo(handle.x, handle.y);
+        ctx.stroke();
+      });
+    });
+    ctx.restore();
   }
 
   function clippedArrowEndpoints(from, to) {
@@ -12899,6 +14847,245 @@
     }
   }
 
+  function sequenceFromTailControl(target) {
+    const sequenceId = target?.dataset?.objectId || target?.dataset?.sequenceId;
+    return (state.sequences || []).find((item) => item.id === sequenceId) || null;
+  }
+
+  function startSequenceTailDrag(target, event) {
+    const sequence = sequenceFromTailControl(target);
+    const control = target?.dataset?.sequenceTailControl || 'end';
+    if (!sequence || !refs.canvas || control === 'label') return;
+    event.preventDefault();
+    activateObject('sequence', sequence.id, { mode: 'modify', loadDraft: true });
+    const canvasRect = refs.canvas.getBoundingClientRect();
+    ensureSequenceTailCurveState(sequence, canvasRect.width || 1, canvasRect.height || 1);
+    state.sequenceTailDrag = {
+      sequence,
+      control,
+      target,
+      canvasRect,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false
+    };
+    target.classList.add('is-dragging');
+    try { target.setPointerCapture?.(event.pointerId); } catch (_) {}
+    document.addEventListener('pointermove', updateSequenceTailDrag);
+    document.addEventListener('pointerup', finishSequenceTailDrag);
+    document.addEventListener('pointercancel', finishSequenceTailDrag);
+  }
+
+  function updateSequenceTailDrag(event) {
+    const drag = state.sequenceTailDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const width = drag.canvasRect.width || 1;
+    const height = drag.canvasRect.height || 1;
+    const x = event.clientX - drag.canvasRect.left;
+    const y = event.clientY - drag.canvasRect.top;
+    setSequenceTailPoint(drag.sequence, drag.control, x, y, width, height, { labelPosition: drag.control === 'label' });
+    if (Math.abs(event.clientX - drag.startX) > 2 || Math.abs(event.clientY - drag.startY) > 2) drag.moved = true;
+    redrawCanvasSurface();
+    updateSequenceTailOverlayPositions(drag.sequence);
+  }
+
+  function finishSequenceTailDrag(event) {
+    const drag = state.sequenceTailDrag;
+    document.removeEventListener('pointermove', updateSequenceTailDrag);
+    document.removeEventListener('pointerup', finishSequenceTailDrag);
+    document.removeEventListener('pointercancel', finishSequenceTailDrag);
+    if (!drag) return;
+    drag.target.classList.remove('is-dragging');
+    try { drag.target.releasePointerCapture?.(drag.pointerId); } catch (_) {}
+    const moved = drag.moved;
+    const sequence = drag.sequence;
+    state.sequenceTailDrag = null;
+    if (moved) {
+      state.suppressLabelClickUntil = Date.now() + 180;
+      recompute();
+      return;
+    }
+    const parsed = parseSequenceTailControlRef(drag.control, sequence);
+    const endIndex = sequenceTailEndAnchorIndex(sequence);
+    if (event?.type !== 'pointercancel' && (drag.control === 'label' || (parsed?.type === 'anchor' && parsed.index === endIndex))) {
+      state.suppressLabelClickUntil = Date.now() + 180;
+      activateObject('sequence', sequence.id, { mode: 'modify', loadDraft: true });
+      recompute();
+    }
+  }
+
+  function handleSequenceTailControlKey(event, target) {
+    const sequence = sequenceFromTailControl(target);
+    const control = target?.dataset?.sequenceTailControl || 'end';
+    if (!sequence) return false;
+    const parsed = parseSequenceTailControlRef(control, sequence);
+    const endIndex = sequenceTailEndAnchorIndex(sequence);
+    if ((control === 'label' || (parsed?.type === 'anchor' && parsed.index === endIndex)) && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      activateObject('sequence', sequence.id, { mode: 'modify', loadDraft: true });
+      recompute();
+      return true;
+    }
+    if (control === 'label') return false;
+    const step = event.shiftKey ? 18 : 6;
+    let dx = 0;
+    let dy = 0;
+    if (event.key === 'ArrowLeft') dx = -step;
+    else if (event.key === 'ArrowRight') dx = step;
+    else if (event.key === 'ArrowUp') dy = -step;
+    else if (event.key === 'ArrowDown') dy = step;
+    else return false;
+    event.preventDefault();
+    activateObject('sequence', sequence.id, { mode: 'modify', loadDraft: true });
+    moveSequenceTailControl(sequence, control, dx, dy);
+    recompute();
+    return true;
+  }
+
+  function moveSequenceTailControl(sequence, control, dx, dy, width = state.canvasWidth || refs.canvas?.clientWidth || 760, height = state.canvasHeight || refs.canvas?.clientHeight || 280) {
+    const geometry = sequenceTailGeometryFromCanvas(sequence, width, height);
+    if (!geometry?.path) return;
+    const parsed = parseSequenceTailControlRef(control, sequence);
+    let point = null;
+    if (parsed?.type === 'anchor') point = geometry.path.anchors?.[parsed.index];
+    else if (parsed?.type === 'handle') point = mapControlVisiblePoint(geometry.path, parsed);
+    if (!point) return;
+    setSequenceTailPoint(sequence, control, point.x + dx, point.y + dy, width, height);
+  }
+
+  function setSequenceTailPoint(sequence, control, x, y, width, height, options = {}) {
+    if (!sequence) return;
+    const safeWidth = Math.max(1, width || 1);
+    const safeHeight = Math.max(1, height || 1);
+    const current = sequenceTailGeometryFromCanvas(sequence, safeWidth, safeHeight);
+    if (!current?.path) return;
+    sequence.tail = sequenceTailStateFromPath(sequence.tail, current.path, safeWidth, safeHeight);
+    const parsed = parseSequenceTailControlRef(control, sequence);
+    const pointCount = sequenceTailPointCount(sequence.tail);
+    const endIndex = sequenceTailEndAnchorIndex(sequence.tail);
+    const anchors = Array.isArray(sequence.tail.anchors) ? sequence.tail.anchors.slice() : [];
+    const handles = Array.isArray(sequence.tail.handles) ? sequence.tail.handles.slice() : [];
+    if (parsed?.type === 'anchor') {
+      if (parsed.index <= 0 || parsed.index > endIndex) return;
+      const oldAnchor = anchors[parsed.index];
+      const point = normalizedCurvePoint({
+        x: clamp(x, 14, safeWidth - 14) / safeWidth,
+        y: clamp(y, 14, safeHeight - 14) / safeHeight
+      }, 0.5, 0.5);
+      const dx = oldAnchor ? point.x - oldAnchor.x : 0;
+      const dy = oldAnchor ? point.y - oldAnchor.y : 0;
+      anchors[parsed.index] = point;
+      if (handles[parsed.index]) {
+        handles[parsed.index] = normalizedCurvePoint({
+          x: handles[parsed.index].x + dx,
+          y: handles[parsed.index].y + dy
+        }, point.x, point.y);
+      }
+      sequence.tail = {
+        ...sequence.tail,
+        anchors,
+        handles,
+        end: anchors[endIndex],
+        pointCount
+      };
+      sequence.modified = true;
+      return;
+    }
+    if (parsed?.type === 'handle') {
+      const anchor = current.path.anchors?.[parsed.index];
+      if (!anchor || parsed.index < 0 || parsed.index >= anchors.length) return;
+      if (parsed.direction === 'in') {
+        handles[parsed.index] = normalizedCurvePoint({
+          x: (anchor.x * 2 - x) / safeWidth,
+          y: (anchor.y * 2 - y) / safeHeight
+        }, (anchor.x * 2 - x) / safeWidth, (anchor.y * 2 - y) / safeHeight);
+      } else {
+        handles[parsed.index] = normalizedCurvePoint({
+          x: x / safeWidth,
+          y: y / safeHeight
+        }, anchors[parsed.index]?.x ?? 0.5, anchors[parsed.index]?.y ?? 0.5);
+      }
+      sequence.tail = {
+        ...sequence.tail,
+        anchors,
+        handles,
+        end: anchors[endIndex],
+        pointCount
+      };
+      sequence.modified = true;
+      return;
+    }
+    if (control !== 'label') return;
+    const normal = current?.labelNormal || { x: 0, y: -1 };
+    const end = options.labelPosition
+      ? {
+        x: clamp(x - normal.x * 14, 14, safeWidth - 14),
+        y: clamp(y - normal.y * 14, 14, safeHeight - 14)
+      }
+      : {
+        x: clamp(x, 14, safeWidth - 14),
+        y: clamp(y, 14, safeHeight - 14)
+      };
+    const oldAnchor = anchors[endIndex];
+    const point = normalizedCurvePoint({ x: end.x / safeWidth, y: end.y / safeHeight }, 0.86, 0.5);
+    const dx = oldAnchor ? point.x - oldAnchor.x : 0;
+    const dy = oldAnchor ? point.y - oldAnchor.y : 0;
+    anchors[endIndex] = point;
+    if (handles[endIndex]) {
+      handles[endIndex] = normalizedCurvePoint({
+        x: handles[endIndex].x + dx,
+        y: handles[endIndex].y + dy
+      }, point.x, point.y);
+    }
+    sequence.tail = {
+      ...sequence.tail,
+      anchors,
+      handles,
+      end: point,
+      pointCount
+    };
+    sequence.modified = true;
+  }
+
+  function sequenceTailGeometryFromCanvas(sequence, width, height) {
+    if (sequence?.tail?.hiddenOnCanvas) return null;
+    const labels = canvasObjectLabels(width, height);
+    const labelMap = canvasLabelMap(labels);
+    const rightId = sequence?.sheafIds?.[2];
+    const right = rightId ? labelMap.get(`sheaf:${rightId}`) : null;
+    return right ? shortExactSequenceTailGeometry(sequence, right, width, height) : null;
+  }
+
+  function updateSequenceTailOverlayPositions(sequence) {
+    if (!sequence || sequence.tail?.hiddenOnCanvas || !refs.canvasLabels || !state.canvasWidth || !state.canvasHeight) return;
+    const geometry = sequenceTailGeometryFromCanvas(sequence, state.canvasWidth, state.canvasHeight);
+    if (!geometry) return;
+    const labelControl = refs.canvasLabels.querySelector(`[data-object-kind="sequence"][data-object-id="${cssEscape(sequence.id)}"][data-sequence-tail-control="label"]`);
+    if (labelControl) {
+      labelControl.style.left = `${geometry.label.x}px`;
+      labelControl.style.top = `${geometry.label.y}px`;
+    }
+    const path = geometry.path;
+    if (!path) return;
+    path.anchors.forEach((_, index) => {
+      updateSequenceTailControlElement(sequence.id, `handle:${index}:in`, path.inHandles[index]);
+      updateSequenceTailControlElement(sequence.id, `handle:${index}:out`, path.outHandles[index]);
+    });
+    path.anchors.forEach((anchor, index) => {
+      updateSequenceTailControlElement(sequence.id, `anchor:${index}`, anchor);
+    });
+    redrawCanvasSurface();
+  }
+
+  function updateSequenceTailControlElement(sequenceId, control, point) {
+    const element = refs.canvasLabels.querySelector(`[data-sequence-id="${cssEscape(sequenceId)}"][data-sequence-tail-control="${cssEscape(control)}"]`);
+    if (!element || !point) return;
+    element.style.left = `${point.x}px`;
+    element.style.top = `${point.y}px`;
+  }
+
   function updateMapOverlayPositions(map) {
     if (!map || !refs.canvasLabels || !state.canvasWidth || !state.canvasHeight) return;
     const labels = canvasObjectLabels(state.canvasWidth, state.canvasHeight);
@@ -12932,6 +15119,7 @@
   function objectByKind(kind, id) {
     if (kind === 'sheaf') return state.sheaves.find((entry) => entry.id === id);
     if (kind === 'map') return state.maps.find((entry) => entry.id === id);
+    if (kind === 'sequence') return (state.sequences || []).find((entry) => entry.id === id);
     return state.varieties.find((entry) => entry.id === id);
   }
 
@@ -13076,6 +15264,9 @@
         const marker = map.id === state.activeMapId ? '\\quad\\text{active map}' : '';
         lines.push(`\\[f_{${index + 1}}:\\ ${exportMapLatex(map)}${marker}\\]`);
       });
+      (state.sequences || []).forEach((sequence, index) => {
+        lines.push(`\\[S_{${index + 1}}:\\ ${defaultShortExactSequenceLabel(sequence)}\\]`);
+      });
       if (result.sheaf) lines.push(`% basis: ${basisPlain}`);
       return lines.join('\n');
     }
@@ -13093,6 +15284,9 @@
         const marker = map.id === state.activeMapId ? ' active map' : '';
         lines.push(`# f_${index + 1}: ${exportMapPlain(map)}${marker}`);
       });
+      (state.sequences || []).forEach((sequence, index) => {
+        lines.push(`# S_${index + 1}: ${latexToPlain(defaultShortExactSequenceLabel(sequence))}`);
+      });
       if (result.sheaf) lines.push(`# basis: ${basisPlain}`);
       return lines.join('\n');
     }
@@ -13108,6 +15302,9 @@
     state.maps.forEach((map, index) => {
       const marker = map.id === state.activeMapId ? ' active map' : '';
       lines.push(`f_${index + 1}: ${exportMapPlain(map)}${marker}`);
+    });
+    (state.sequences || []).forEach((sequence, index) => {
+      lines.push(`S_${index + 1}: ${latexToPlain(defaultShortExactSequenceLabel(sequence))}`);
     });
     if (result.sheaf) lines.push(`basis: ${basisPlain}`);
     return lines.join('\n');
@@ -13965,7 +16162,7 @@
     const safeFallback = String(fallback || 'X').trim() || 'X';
     if (!raw) return safeFallback;
     if (raw.length > 120) return safeFallback;
-    if (!/^[A-Za-z0-9_{}\\^()\[\]+,\-'\s*!*]+$/.test(raw)) return safeFallback;
+    if (!/^[A-Za-z0-9_{}\\^()\[\]+,\-'\s*!*\/]+$/.test(raw)) return safeFallback;
     return raw;
   }
 
