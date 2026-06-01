@@ -1510,6 +1510,7 @@
               <option value="product" selected>Product + projections</option>
               <option value="abel-jacobi">Abel-Jacobi + Jacobian</option>
               <option value="short-exact-sequence">Short exact sequence / triangle</option>
+              <option value="grassmannian-tautological-ses">Tautological SES</option>
               <option value="blow-up-point">Blow-up of a point</option>
               <option value="grassmannian-map">Map to Grassmannian</option>
             </select>
@@ -1551,6 +1552,14 @@
             </div>
           </div>
           <div class="sheaf-note" id="blowup-pick-note" hidden>pick a variety and a point</div>
+          <div class="sheaf-field-row" id="tautological-ses-base-row" hidden>
+            <span class="input-label">base</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="tautological-ses-base-button" type="button">variety</button>
+              <span class="sheaf-map-formula-mark">0→S→Oᴺ→Q→0</span>
+            </div>
+          </div>
+          <div class="sheaf-note" id="tautological-ses-pick-note" hidden>pick a projective space or Grassmannian</div>
           <div class="sheaf-field-row" id="grassmannian-map-parent-row" hidden>
             <span class="input-label">parent</span>
             <div class="sheaf-map-formula-picker">
@@ -1659,6 +1668,7 @@
               <option value="cotangent">Cotangent sheaf Ω¹ₓ</option>
               <option value="canonical">Canonical sheaf Kₓ</option>
               <option value="twist" id="sheaf-twist-option">Oₓ(r)</option>
+              <option value="universal-bundle" id="sheaf-universal-bundle-option">Universal bundle</option>
               <option value="direct-sum">Direct sum</option>
               <option value="tensor">Tensor product</option>
               <option value="schur">Schur functor</option>

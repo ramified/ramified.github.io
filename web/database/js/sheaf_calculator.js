@@ -96,6 +96,7 @@
     sesPickTarget: 'sheaf-a',
     blowupDraft: null,
     blowupPickTarget: 'base',
+    tautologicalSesDraft: null,
     grassmannianMapDraft: null,
     grassmannianMapPickTarget: 'bundle',
     mapDraft: null,
@@ -263,6 +264,9 @@
     refs.blowupBaseButton = $('blowup-base-button');
     refs.blowupPointButton = $('blowup-point-button');
     refs.blowupPickNote = $('blowup-pick-note');
+    refs.tautologicalSesBaseRow = $('tautological-ses-base-row');
+    refs.tautologicalSesBaseButton = $('tautological-ses-base-button');
+    refs.tautologicalSesPickNote = $('tautological-ses-pick-note');
     refs.grassmannianMapParentRow = $('grassmannian-map-parent-row');
     refs.grassmannianMapBundleButton = $('grassmannian-map-bundle-button');
     refs.grassmannianMapTargetPreview = $('grassmannian-map-target-preview');
@@ -281,6 +285,7 @@
     refs.addObject = $('add-object');
     refs.deleteObject = $('delete-object');
     refs.twistOption = $('sheaf-twist-option');
+    refs.universalBundleOption = $('sheaf-universal-bundle-option');
     refs.twistRow = $('twist-row');
     refs.twist = $('twist-r');
     refs.basisRow = $('basis-row');
@@ -363,14 +368,19 @@
   }
 
   function initializeInputObjects() {
-    state.varieties = [];
-    state.sheaves = [];
+    const defaultVariety = createDefaultVariety();
+    positionVarietyOnCanvas(defaultVariety);
+    const defaultSheaf = createDefaultSheaf(defaultVariety);
+    positionSheafNearBase(defaultSheaf, defaultVariety);
+    state.varieties = [defaultVariety];
+    state.sheaves = [defaultSheaf];
     state.maps = [];
     state.sequences = [];
-    state.activeVarietyId = null;
-    state.activeSheafId = null;
+    state.activeVarietyId = defaultVariety.id;
+    state.activeSheafId = defaultSheaf.id;
     state.activeMapId = null;
     state.activeSequenceId = null;
+    state.inputMode = 'modify';
   }
 
   function createDefaultVariety() {
@@ -388,14 +398,14 @@
     };
   }
 
-  function createDefaultSheaf() {
+  function createDefaultSheaf(baseVariety = null) {
     return {
       id: nextInputId('E'),
       type: 'abstract',
       name: '\\mathcal{E}',
       twist: '1',
       rank: 'r',
-      baseVarietyId: null,
+      baseVarietyId: baseVariety?.id || null,
       basis: 'chern',
       nameDirty: false
     };
@@ -743,7 +753,7 @@
     const defaultName = defaultSheafNameLatex(baseVariety);
     const name = sanitizeMathLabel(refs.sheafName.value, defaultName);
     return {
-      type: refs.sheafType.value,
+      type: canonicalSheafType(refs.sheafType.value),
       name,
       twist: refs.twist.value,
       rank: refs.rank.value,
@@ -887,7 +897,7 @@
 
   function sheafHasLocallyFreeLabel(sheaf) {
     if (!sheaf) return false;
-    if (['locally-free', 'tangent', 'cotangent', 'canonical', 'twist'].includes(sheaf.type)) return true;
+    if (['locally-free', 'tangent', 'cotangent', 'canonical', 'twist', 'universal-bundle', 'universal-line'].includes(sheaf.type)) return true;
     if (!sheaf.construction) return false;
     if (sheaf.construction.type === 'direct-sum' || sheaf.construction.type === 'tensor') {
       return (sheaf.construction.sheafIds || [])
@@ -907,6 +917,27 @@
 
   function varietySupportsTwist(type) {
     return varietyHasHyperplaneClass(type) || type === 'grassmannian';
+  }
+
+  function varietySupportsUniversalBundle(type) {
+    return varietyHasHyperplaneClass(type) || type === 'grassmannian';
+  }
+
+  function varietySupportsTautologicalSequence(type) {
+    return varietyHasHyperplaneClass(type) || type === 'grassmannian';
+  }
+
+  function universalBundleRankPlain(geometry = null) {
+    return geometry?.type === 'grassmannian' ? String(geometry.grassmannianR) : '1';
+  }
+
+  function isUniversalBundleSheafType(type) {
+    return type === 'universal-bundle' || type === 'universal-line';
+  }
+
+  function canonicalSheafType(type) {
+    if (type === 'universal-line') return 'universal-bundle';
+    return type || 'abstract';
   }
 
   function sheafSupportsChernRoots(sheaf = activeSheaf()) {
@@ -1032,12 +1063,19 @@
     if (abelJacobiTypeOption) abelJacobiTypeOption.disabled = !hasAbelJacobiCurve;
     const sesTypeOption = refs.combinedType?.querySelector?.('option[value="short-exact-sequence"]');
     if (sesTypeOption) sesTypeOption.disabled = !hasSheaf && !activeSesEditMode();
+    const tautologicalSesTypeOption = refs.combinedType?.querySelector?.('option[value="grassmannian-tautological-ses"]');
+    const hasTautologicalSesBase = state.varieties.some((variety) => varietySupportsTautologicalSequence(variety.type || 'abstract'));
+    if (tautologicalSesTypeOption) tautologicalSesTypeOption.disabled = !hasTautologicalSesBase;
     if (combinedCreateMode() && refs.combinedType?.value === 'abel-jacobi' && !hasAbelJacobiCurve) {
       refs.combinedType.value = 'product';
     }
     if (combinedCreateMode() && refs.combinedType?.value === 'short-exact-sequence' && !hasSheaf) {
       refs.combinedType.value = 'product';
       clearSesDraft();
+    }
+    if (combinedCreateMode() && refs.combinedType?.value === 'grassmannian-tautological-ses' && !hasTautologicalSesBase) {
+      refs.combinedType.value = 'product';
+      clearTautologicalSesDraft();
     }
     if (refs.addObjectKind && !createKindIsAvailable(refs.addObjectKind.value)) {
       refs.addObjectKind.value = 'variety';
@@ -1238,7 +1276,7 @@
     const showingMap = modifying ? !!state.activeMapId : refs.addObjectKind?.value === 'map';
     const showingCombinedAbelJacobi = !modifying && combinedAbelJacobiCreateMode();
     const showingMapEditor = showingMap || showingCombinedAbelJacobi;
-    const showingCombinedStructure = showingSequence || (!modifying && (combinedSesCreateMode() || combinedBlowupCreateMode() || combinedGrassmannianMapCreateMode()));
+    const showingCombinedStructure = showingSequence || (!modifying && (combinedSesCreateMode() || combinedBlowupCreateMode() || combinedGrassmannianTautologicalSesCreateMode() || combinedGrassmannianMapCreateMode()));
     const showingSheaf = !showingMapEditor && !showingCombinedStructure && (modifying ? !!state.activeSheafId : refs.addObjectKind?.value === 'sheaf');
     const waitingForSheafBase = inputIsCreateMode() && showingSheaf && !state.draftSheafBaseVarietyId;
     if (refs.addObjectKind) refs.addObjectKind.hidden = modifying;
@@ -1349,6 +1387,9 @@
       clearBlowupDraft();
       state.blowupPickTarget = 'base';
       activateBlowupPick('base', { render: false });
+    } else if (combinedGrassmannianTautologicalSesCreateMode()) {
+      clearTautologicalSesDraft();
+      activateTautologicalSesPick({ render: false });
     } else if (combinedGrassmannianMapCreateMode()) {
       clearGrassmannianMapDraft();
       state.grassmannianMapPickTarget = 'bundle';
@@ -1499,6 +1540,8 @@
     if (refs.sheafEditorTitle) {
       if (combinedSesCreateMode()) {
         refs.sheafEditorTitle.textContent = activeSesEditMode() ? 'short exact sequence' : 'new short exact sequence';
+      } else if (combinedGrassmannianTautologicalSesCreateMode()) {
+        refs.sheafEditorTitle.textContent = 'new canonical SES';
       } else if (combinedGrassmannianMapCreateMode()) {
         refs.sheafEditorTitle.textContent = 'new Grassmannian map';
       } else if (inputIsModifyMode() && kind === 'sheaf') {
@@ -1653,7 +1696,9 @@
     const mapConstruction = sheafMapConstructionType(sheaf);
     const binaryConstruction = sheafBinaryConstructionType(sheaf);
     const schurConstruction = sheafSchurConstructionType(sheaf);
-    refs.sheafType.value = mapConstruction ? 'map-operation' : (schurConstruction || binaryConstruction || sheaf.type || 'abstract');
+    const canonicalType = canonicalSheafType(sheaf.type);
+    sheaf.type = canonicalType;
+    refs.sheafType.value = mapConstruction ? 'map-operation' : (schurConstruction || binaryConstruction || canonicalType);
     refs.sheafName.value = sheaf.name || defaultSheafNameLatex();
     refs.twist.value = sheaf.twist ?? '1';
     refs.rank.value = sheaf.rank || 'r';
@@ -1797,7 +1842,7 @@
     const value = refs.addObjectKind?.value;
     if (!state.varieties.length && (value === 'sheaf' || value === 'map' || value === 'combined')) return 'variety';
     if (value === 'map' || combinedAbelJacobiCreateMode()) return 'map';
-    if (combinedSesCreateMode() || combinedGrassmannianMapCreateMode()) return 'sheaf';
+    if (combinedSesCreateMode() || combinedGrassmannianTautologicalSesCreateMode() || combinedGrassmannianMapCreateMode()) return 'sheaf';
     return value === 'sheaf' ? 'sheaf' : 'variety';
   }
 
@@ -1819,6 +1864,10 @@
 
   function combinedBlowupCreateMode() {
     return combinedCreateMode() && refs.combinedType?.value === 'blow-up-point';
+  }
+
+  function combinedGrassmannianTautologicalSesCreateMode() {
+    return combinedCreateMode() && refs.combinedType?.value === 'grassmannian-tautological-ses';
   }
 
   function combinedGrassmannianMapCreateMode() {
@@ -2123,6 +2172,7 @@
     if (combinedProductCreateMode()) return createProductVarietyFromDraft();
     if (combinedAbelJacobiCreateMode()) return createAbelJacobiMapFromDraft();
     if (combinedSesCreateMode()) return createSesFromDraft();
+    if (combinedGrassmannianTautologicalSesCreateMode()) return createTautologicalSesFromDraft();
     if (combinedBlowupCreateMode()) return createBlowupPointFromDraft();
     if (combinedGrassmannianMapCreateMode()) return createGrassmannianMapFromDraft();
     if (kind === 'map') return createMapFromDraft();
@@ -2335,7 +2385,7 @@
       if (sheaf.baseVarietyId === active.id && !sheaf.construction && !sheaf.nameDirty) {
         const rank = sanitizeRankInput(sheaf.rank);
         const twist = normalizedInt(sheaf.twist, -24, 24, 1);
-        sheaf.name = defaultSheafNameFor(sheaf.type, rank, twist, active.name);
+        sheaf.name = defaultSheafNameFor(sheaf.type, rank, twist, active.name, geometryFromVariety(active));
       }
     });
     syncDefaultSheafName();
@@ -2393,6 +2443,7 @@
       if (!combinedProductCreateMode() && refs.addObjectKind.value !== 'variety') clearProductDraft();
       clearSesDraft();
       clearBlowupDraft();
+      clearTautologicalSesDraft();
       clearGrassmannianMapDraft();
       clearMapDraft();
       clearSheafBinaryDraft();
@@ -2418,6 +2469,7 @@
       if (combinedProductCreateMode()) activateProductFactorPick(0, { render: false });
       else if (combinedSesCreateMode()) activateSesPick(state.sesPickTarget || 'sheaf-a', { render: false });
       else if (combinedBlowupCreateMode()) activateBlowupPick(state.blowupPickTarget || 'base', { render: false });
+      else if (combinedGrassmannianTautologicalSesCreateMode()) activateTautologicalSesPick({ render: false });
       else if (combinedGrassmannianMapCreateMode()) activateGrassmannianMapPick({ render: false });
       else activateFirstCreateBlankPick({ render: false });
       recompute();
@@ -2429,6 +2481,7 @@
         clearProductDraft();
         clearSesDraft();
         clearBlowupDraft();
+        clearTautologicalSesDraft();
         clearGrassmannianMapDraft();
         clearMapDraft();
         setCanvasPickEnabled(false, { render: false });
@@ -2443,6 +2496,7 @@
         if (combinedProductCreateMode()) activateProductFactorPick(0, { render: false });
         else if (combinedSesCreateMode()) activateSesPick(state.sesPickTarget || 'sheaf-a', { render: false });
         else if (combinedBlowupCreateMode()) activateBlowupPick(state.blowupPickTarget || 'base', { render: false });
+        else if (combinedGrassmannianTautologicalSesCreateMode()) activateTautologicalSesPick({ render: false });
         else if (combinedGrassmannianMapCreateMode()) activateGrassmannianMapPick({ render: false });
         else activateFirstCreateBlankPick({ render: false });
         recompute();
@@ -2466,6 +2520,11 @@
         activateBlowupPick(button.dataset.blowupPick || 'base');
       });
     });
+    if (refs.tautologicalSesBaseButton) {
+      refs.tautologicalSesBaseButton.addEventListener('click', () => {
+        activateTautologicalSesPick();
+      });
+    }
     if (refs.grassmannianMapBundleButton) {
       refs.grassmannianMapBundleButton.addEventListener('click', () => {
         activateGrassmannianMapPick();
@@ -2729,6 +2788,7 @@
           clearSheafSchurDraft();
           updateSheafBaseButton();
         }
+        syncDefaultRank(true);
         syncDefaultSheafName();
         normalizeControlVisibility();
         recompute();
@@ -3757,6 +3817,15 @@
     return created;
   }
 
+  function createTautologicalSesFromDraft() {
+    const data = tautologicalSesConstructionData();
+    if (!data) return null;
+    const sequence = createTautologicalSesConstruction(data);
+    if (!sequence) return null;
+    clearTautologicalSesDraft();
+    return sequence;
+  }
+
   function createGrassmannianMapFromDraft() {
     const data = grassmannianMapConstructionData();
     if (!data) return null;
@@ -3931,6 +4000,183 @@
     if (missingIndex === 1 && numeric[0] != null && numeric[2] != null) return String(numeric[0] + numeric[2]);
     if (missingIndex === 2 && numeric[1] != null && numeric[0] != null) return String(Math.max(0, numeric[1] - numeric[0]));
     return 'r';
+  }
+
+  function sesRankPlaceholderFromTerms(terms, missingIndex) {
+    const ranks = (terms || []).map((sheaf) => sheaf ? sanitizeRankInput(sheaf.rank) : null);
+    const numeric = ranks.map((rank) => (/^-?\d+$/.test(rank || '') ? Number(rank) : null));
+    if (missingIndex === 0 && numeric[1] != null && numeric[2] != null) return String(numeric[1] - numeric[2]);
+    if (missingIndex === 1 && numeric[0] != null && numeric[2] != null) return String(numeric[0] + numeric[2]);
+    if (missingIndex === 2 && numeric[1] != null && numeric[0] != null) return String(numeric[1] - numeric[0]);
+    return 'r';
+  }
+
+  function tautologicalSesDraftBase() {
+    const id = state.tautologicalSesDraft?.baseId;
+    return state.varieties.find((variety) => variety.id === id) || null;
+  }
+
+  function tautologicalSesPickAvailable() {
+    return combinedGrassmannianTautologicalSesCreateMode()
+      && state.varieties.some((variety) => allowableTautologicalSesBasePick(variety.id));
+  }
+
+  function allowableTautologicalSesBasePick(varietyId) {
+    const variety = state.varieties.find((item) => item.id === varietyId);
+    return !!variety && !variety.hiddenOnCanvas && varietySupportsTautologicalSequence(variety.type || 'abstract');
+  }
+
+  function activateTautologicalSesPick(options = {}) {
+    if (!combinedGrassmannianTautologicalSesCreateMode()) return false;
+    setCanvasPickEnabled(true, { render: false });
+    updateTautologicalSesDraftControls();
+    syncGlobalPickButton();
+    if (options.render !== false) renderCanvas(state.lastResult);
+    return state.canvasPickEnabled;
+  }
+
+  function handleTautologicalSesPick(kind, id) {
+    if (kind !== 'variety' || !allowableTautologicalSesBasePick(id)) return;
+    state.tautologicalSesDraft = { baseId: id };
+    state.activeVarietyId = id;
+    setCanvasPickEnabled(false, { render: false });
+    updateTautologicalSesDraftControls();
+    recompute();
+  }
+
+  function updateTautologicalSesDraftControls() {
+    const show = combinedGrassmannianTautologicalSesCreateMode();
+    if (refs.tautologicalSesBaseRow) refs.tautologicalSesBaseRow.hidden = !show;
+    if (refs.tautologicalSesPickNote) {
+      refs.tautologicalSesPickNote.hidden = !show;
+      refs.tautologicalSesPickNote.textContent = tautologicalSesPickHint();
+    }
+    updateCombinedVarietySlotButton(
+      refs.tautologicalSesBaseButton,
+      tautologicalSesDraftBase(),
+      'base',
+      combinedGrassmannianTautologicalSesCreateMode() && state.canvasPickEnabled
+    );
+  }
+
+  function tautologicalSesPickHint() {
+    if (!state.varieties.some((variety) => varietySupportsTautologicalSequence(variety.type || 'abstract'))) return 'add a projective space or Grassmannian first';
+    if (!tautologicalSesDraftBase()) return 'click the projective space or Grassmannian';
+    return 'click build to create 0 -> S -> O^N -> Q -> 0';
+  }
+
+  function tautologicalSesConstructionData() {
+    const base = tautologicalSesDraftBase();
+    if (!base || !varietySupportsTautologicalSequence(base.type || 'abstract')) return null;
+    const geometry = geometryFromVariety(base);
+    const ambientRank = tautologicalAmbientRank(geometry);
+    const subRank = universalBundleRankPlain(geometry);
+    if (!Number.isInteger(ambientRank) || ambientRank < 1) return null;
+    return { base, geometry, ambientRank, subRank };
+  }
+
+  function tautologicalAmbientRank(geometry) {
+    if (geometry?.type === 'grassmannian') return geometry.grassmannianN;
+    if (varietyHasHyperplaneClass(geometry?.type || 'abstract')) return (geometry.ambient ?? geometry.dim) + 1;
+    return null;
+  }
+
+  function createTautologicalSesConstruction(data) {
+    const universal = ensureTautologicalUniversalBundle(data);
+    const middle = createTautologicalTrivialBundle(data, universal);
+    if (!universal || !middle) return null;
+    const quotient = createTautologicalQuotientBundle(data, universal, middle);
+    if (!quotient) return null;
+    addSheafObject(middle, { activate: false });
+    addSheafObject(quotient, { activate: false });
+    return createShortExactSequenceFromObjects({
+      sheafA: universal,
+      sheafB: middle,
+      sheafC: quotient,
+      baseVarietyId: data.base.id,
+      autoMapABName: '\\iota',
+      autoMapBCName: '\\pi'
+    });
+  }
+
+  function findUniversalBundleOnBase(baseId) {
+    return state.sheaves.find((sheaf) => (
+      sheaf.baseVarietyId === baseId
+      && isUniversalBundleSheafType(sheaf.type)
+      && !sheaf.construction
+    )) || null;
+  }
+
+  function ensureTautologicalUniversalBundle(data) {
+    const existing = findUniversalBundleOnBase(data.base.id);
+    if (existing) {
+      sheafFromObject(existing, data.geometry);
+      return existing;
+    }
+    const sheaf = {
+      id: nextInputId('E'),
+      type: 'universal-bundle',
+      name: uniqueConstructedObjectName('sheaf', defaultSheafNameFor('universal-bundle', data.subRank, 1, data.geometry.labelLatex, data.geometry)),
+      twist: '1',
+      rank: data.subRank,
+      baseVarietyId: data.base.id,
+      basis: 'chern',
+      nameDirty: false
+    };
+    positionSheafNearBase(sheaf, data.base);
+    avoidCanvasLabelOverlap(sheaf);
+    sheafFromObject(sheaf, data.geometry);
+    return addSheafObject(sheaf, { activate: false });
+  }
+
+  function createTautologicalTrivialBundle(data, universal) {
+    const sheaf = {
+      id: nextInputId('E'),
+      type: 'abstract',
+      name: uniqueConstructedObjectName('sheaf', `\\mathcal{O}^{\\oplus ${data.ambientRank}}`),
+      twist: '1',
+      rank: String(data.ambientRank),
+      baseVarietyId: data.base.id,
+      basis: 'chern',
+      nameDirty: false,
+      construction: {
+        type: 'trivial-bundle',
+        rank: String(data.ambientRank),
+        defaultName: `\\mathcal{O}^{\\oplus ${data.ambientRank}}`
+      }
+    };
+    positionSheafNearBase(sheaf, data.base);
+    if (Number.isFinite(universal?.labelX)) sheaf.labelX = clamp(universal.labelX + Math.max(0.14, canvasSpacingRatio('x') * 1.15), 0.08, 0.94);
+    if (Number.isFinite(universal?.labelY)) sheaf.labelY = universal.labelY;
+    avoidCanvasLabelOverlap(sheaf);
+    syncObjectLineage(sheaf, 'sheaf');
+    return sheaf;
+  }
+
+  function createTautologicalQuotientBundle(data, universal, middle) {
+    const quotientRank = Math.max(0, data.ambientRank - Number(data.subRank || 0));
+    const sheaf = {
+      id: nextInputId('E'),
+      type: 'abstract',
+      name: uniqueConstructedObjectName('sheaf', 'Q'),
+      twist: '1',
+      rank: String(quotientRank),
+      baseVarietyId: data.base.id,
+      basis: 'chern',
+      nameDirty: false,
+      construction: {
+        type: 'ses-term',
+        role: 'quotient',
+        sourceSheafIds: [universal.id, middle.id],
+        defaultName: 'Q'
+      }
+    };
+    positionSheafNearBase(sheaf, data.base);
+    if (Number.isFinite(middle?.labelX)) sheaf.labelX = clamp(middle.labelX + Math.max(0.14, canvasSpacingRatio('x') * 1.15), 0.08, 0.94);
+    if (Number.isFinite(middle?.labelY)) sheaf.labelY = middle.labelY;
+    avoidCanvasLabelOverlap(sheaf);
+    syncObjectLineage(sheaf, 'sheaf');
+    return sheaf;
   }
 
   function blowupConstructionData() {
@@ -4276,6 +4522,7 @@
     const kind = options.kind || currentInputKind();
     if (combinedSesCreateMode()) return activateSesPick(state.sesPickTarget || 'sheaf-a', options);
     if (combinedBlowupCreateMode()) return activateBlowupPick(state.blowupPickTarget || 'base', options);
+    if (combinedGrassmannianTautologicalSesCreateMode()) return activateTautologicalSesPick(options);
     if (combinedGrassmannianMapCreateMode()) return activateGrassmannianMapPick(options);
     if (kind === 'sheaf') {
       if (sheafBinaryInputMode()) {
@@ -4305,6 +4552,7 @@
   function canvasPickAvailable() {
     if (combinedSesCreateMode()) return sesPickAvailable();
     if (combinedBlowupCreateMode()) return blowupPickAvailable();
+    if (combinedGrassmannianTautologicalSesCreateMode()) return tautologicalSesPickAvailable();
     if (combinedGrassmannianMapCreateMode()) return grassmannianMapPickAvailable();
     if (productVarietyInputMode()) return productPickableVarieties().length > 0;
     if (mapInputMode()) return mapPickAvailable();
@@ -4349,6 +4597,11 @@
     updateBlowupDraftControls();
   }
 
+  function clearTautologicalSesDraft() {
+    state.tautologicalSesDraft = null;
+    updateTautologicalSesDraftControls();
+  }
+
   function clearGrassmannianMapDraft() {
     state.grassmannianMapDraft = null;
     state.grassmannianMapPickTarget = 'bundle';
@@ -4385,6 +4638,7 @@
   function updateCombinedDraftControls() {
     updateSesDraftControls();
     updateBlowupDraftControls();
+    updateTautologicalSesDraftControls();
     updateGrassmannianMapDraftControls();
   }
 
@@ -4941,6 +5195,10 @@
       handleBlowupPick(kind, id);
       return true;
     }
+    if (combinedGrassmannianTautologicalSesCreateMode()) {
+      handleTautologicalSesPick(kind, id);
+      return true;
+    }
     if (combinedGrassmannianMapCreateMode()) {
       handleGrassmannianMapPick(kind, id);
       return true;
@@ -5412,6 +5670,7 @@
       state.activeVarietyId = varietyId;
     }
     setCanvasPickEnabled(false, { render: false });
+    syncDefaultRank(true);
     syncDefaultSheafName();
     normalizeControlVisibility();
     recompute();
@@ -5420,8 +5679,9 @@
   function allowableSheafBase(varietyId) {
     const variety = state.varieties.find((item) => item.id === varietyId);
     if (!variety) return false;
-    if (refs.sheafType?.value !== 'twist') return true;
-    return varietySupportsTwist(variety.type || 'abstract');
+    if (refs.sheafType?.value === 'twist') return varietySupportsTwist(variety.type || 'abstract');
+    if (isUniversalBundleSheafType(refs.sheafType?.value)) return varietySupportsUniversalBundle(variety.type || 'abstract');
+    return true;
   }
 
   function handleMapPick(kind, id) {
@@ -5899,9 +6159,10 @@
       if (data?.defaultName) return data.defaultName;
     }
     const baseVariety = baseVarietyOverride || draftBaseVariety() || activeVariety();
-    const variety = baseVariety ? geometryFromVariety(baseVariety).labelLatex : 'X';
+    const geometry = baseVariety ? geometryFromVariety(baseVariety) : null;
+    const variety = geometry ? geometry.labelLatex : 'X';
     const type = refs.sheafType.value;
-    return defaultSheafNameFor(type, sanitizeRankInput(refs.rank.value), normalizedInt(refs.twist.value, -24, 24, 1), variety);
+    return defaultSheafNameFor(type, sanitizeRankInput(refs.rank.value), normalizedInt(refs.twist.value, -24, 24, 1), variety, geometry);
   }
 
   function defaultCreateSheafNameLatex() {
@@ -5922,12 +6183,13 @@
     return inputIsModifyMode() ? sanitized : uniqueObjectName(kind, sanitized);
   }
 
-  function defaultSheafNameFor(type, rankPlain, twist, variety) {
+  function defaultSheafNameFor(type, rankPlain, twist, variety, geometry = null) {
     if (type === 'locally-free') return rankPlain === '1' ? '\\mathcal{L}' : '\\mathcal{E}';
     if (type === 'tangent') return `\\mathcal{T}_{${variety}}`;
     if (type === 'cotangent') return `\\Omega^1_{${variety}}`;
     if (type === 'canonical') return `K_{${variety}}`;
     if (type === 'twist') return `\\mathcal{O}_{${variety}}(${twist})`;
+    if (isUniversalBundleSheafType(type)) return geometry?.type === 'grassmannian' ? 'S' : `\\mathcal{O}_{${variety}}(-1)`;
     return '\\mathcal{E}';
   }
 
@@ -5974,6 +6236,10 @@
     if (!refs.rank || !force) return;
     if (refs.sheafType.value === 'locally-free') refs.rank.value = '1';
     else if (refs.sheafType.value === 'abstract') refs.rank.value = 'r';
+    else if (isUniversalBundleSheafType(refs.sheafType.value)) {
+      const geometry = draftBaseVariety() ? geometryFromVariety(draftBaseVariety()) : null;
+      refs.rank.value = universalBundleRankPlain(geometry);
+    }
     else if (refs.sheafType.value === 'direct-sum' || refs.sheafType.value === 'tensor') {
       const data = binarySheafConstructionData();
       refs.rank.value = data ? constructionRankPlaceholder(data.operation, data.left, data.right) : 'r';
@@ -6440,10 +6706,18 @@
   function refreshSesTermSheaf(sheaf, construction) {
     const sources = (construction.sourceSheafIds || []).map((id) => state.sheaves.find((item) => item.id === id)).filter(Boolean);
     if (!sources.length) return false;
+    const sequence = sesSequenceForTermSheaf(sheaf);
+    const terms = sesTermSheaves(sequence);
+    const termIndex = terms.findIndex((term) => term?.id === sheaf.id);
     let changed = false;
     const baseId = sources[0]?.baseVarietyId || sheaf.baseVarietyId;
     if (baseId && sheaf.baseVarietyId !== baseId) {
       sheaf.baseVarietyId = baseId;
+      changed = true;
+    }
+    const nextRank = termIndex >= 0 ? sesRankPlaceholderFromTerms(terms, termIndex) : null;
+    if (nextRank && sheaf.rank !== nextRank) {
+      sheaf.rank = nextRank;
       changed = true;
     }
     if (!sheaf.nameDirty && construction.defaultName && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(construction.defaultName)) {
@@ -6755,8 +7029,9 @@
     const draftingMap = inputIsModifyMode() ? editingMap : (refs.addObjectKind?.value === 'map' || combinedAbelJacobiCreateMode());
     const draftingCombinedSes = combinedSesCreateMode();
     const draftingCombinedBlowup = combinedBlowupCreateMode();
+    const draftingCombinedTautologicalSes = combinedGrassmannianTautologicalSesCreateMode();
     const draftingCombinedGrassmannianMap = combinedGrassmannianMapCreateMode();
-    const draftingCombinedStructure = draftingCombinedSes || draftingCombinedBlowup || draftingCombinedGrassmannianMap;
+    const draftingCombinedStructure = draftingCombinedSes || draftingCombinedBlowup || draftingCombinedTautologicalSes || draftingCombinedGrassmannianMap;
     const draftingSheaf = !draftingMap && !draftingCombinedStructure && (inputIsModifyMode() ? editingSheaf : refs.addObjectKind?.value === 'sheaf');
     const draftingVariety = !draftingMap && !draftingSheaf;
     syncProductVarietyOption();
@@ -6767,6 +7042,7 @@
     const draftBaseType = draftBase?.type || 'abstract';
     let draftSheaf = refs.sheafType.value;
     const hasTwistBase = state.varieties.some((variety) => varietySupportsTwist(variety.type || 'abstract'));
+    const hasUniversalBundleBase = state.varieties.some((variety) => varietySupportsUniversalBundle(variety.type || 'abstract'));
     const sheafTypeHasParentRow = (type) => type === 'map-operation' || type === 'direct-sum' || type === 'tensor' || type === 'schur';
     let sheafHasParentRow = false;
     let waitingForSheafBase = false;
@@ -6790,6 +7066,9 @@
     const canTwist = draftingSheaf
       ? (waitingForSheafBase ? hasTwistBase : !!draftBase && varietySupportsTwist(draftBaseType))
       : hasVariety && varietySupportsTwist(activeVarietyType);
+    const canUniversalBundle = draftingSheaf
+      ? (waitingForSheafBase ? hasUniversalBundleBase : !!draftBase && varietySupportsUniversalBundle(draftBaseType))
+      : hasVariety && varietySupportsUniversalBundle(activeVarietyType);
     const canMapOperationSheaf = hasVariety
       && state.maps.some((map) => map.domainKind === 'variety' && map.codomainKind === 'variety')
       && state.sheaves.some((sheaf) => !editingSheafMapOperation || sheaf.id !== state.activeSheafId);
@@ -6800,6 +7079,10 @@
     if (refs.twistOption) {
       refs.twistOption.hidden = !canTwist;
       refs.twistOption.disabled = !canTwist;
+    }
+    if (refs.universalBundleOption) {
+      refs.universalBundleOption.hidden = !canUniversalBundle;
+      refs.universalBundleOption.disabled = !canUniversalBundle;
     }
     const mapOperationOption = refs.sheafType?.querySelector?.('option[value="map-operation"]');
     if (mapOperationOption) {
@@ -6834,6 +7117,12 @@
       syncDefaultSheafName();
     }
     if (!canTwist && draftSheaf === 'twist') {
+      refs.sheafType.value = 'abstract';
+      draftSheaf = 'abstract';
+      syncDefaultRank(true);
+      syncDefaultSheafName();
+    }
+    if (!canUniversalBundle && isUniversalBundleSheafType(draftSheaf)) {
       refs.sheafType.value = 'abstract';
       draftSheaf = 'abstract';
       syncDefaultRank(true);
@@ -6907,9 +7196,10 @@
       const sesReady = !draftingCombinedSes || !!shortExactSequenceData();
       const sesEditReady = !activeSesEditMode() || !!shortExactSequenceData({ requireComplete: true, requireMaps: true });
       const blowupReady = !draftingCombinedBlowup || !!blowupConstructionData();
+      const tautologicalSesReady = !draftingCombinedTautologicalSes || !!tautologicalSesConstructionData();
       const grassmannianMapParams = draftingCombinedGrassmannianMap ? syncGrassmannianMapControls() : null;
       const grassmannianMapReady = !draftingCombinedGrassmannianMap || !!grassmannianMapConstructionData();
-      refs.addObject.disabled = (draftingMap && !mapReady) || (productNeedsFactors && !productReady) || !grassmannianReady || !sesReady || !sesEditReady || !blowupReady || !grassmannianMapReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
+      refs.addObject.disabled = (draftingMap && !mapReady) || (productNeedsFactors && !productReady) || !grassmannianReady || !sesReady || !sesEditReady || !blowupReady || !tautologicalSesReady || !grassmannianMapReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
       refs.addObject.textContent = inputIsModifyMode() ? 'update' : (combinedCreateMode() ? 'build' : 'add');
       let addTitle = '';
       if (creatingMap) {
@@ -6920,6 +7210,8 @@
         addTitle = activeSesEditMode() && !sesEditReady ? 'Use existing sheaves and maps for all five SES slots' : sesPickHint();
       } else if (draftingCombinedBlowup) {
         addTitle = blowupPickHint();
+      } else if (draftingCombinedTautologicalSes) {
+        addTitle = tautologicalSesPickHint();
       } else if (draftingCombinedGrassmannianMap) {
         addTitle = grassmannianMapPickHint(grassmannianMapParams);
       } else if (!grassmannianReady) {
@@ -8725,15 +9017,15 @@
   }
 
   function sheafFromObject(sheaf, geometry) {
-    const type = sheaf?.type || 'abstract';
+    const type = canonicalSheafType(sheaf?.type);
     const twist = normalizedInt(sheaf.twist, -24, 24, 1);
     let basis = normalizeBasisValue(sheaf.basis);
     if (basis === 'roots' && !sheafSupportsChernRoots(sheaf)) basis = 'chern';
-    const rankPlain = sanitizeRankInput(sheaf.rank);
     const baseVariety = baseVarietyForSheaf(sheaf);
-    const labelLatex = sanitizeMathLabel(sheaf.name, defaultSheafNameFor(type, rankPlain, twist, geometry?.labelLatex || 'X'));
+    const rankPlain = isUniversalBundleSheafType(type) ? universalBundleRankPlain(geometry) : sanitizeRankInput(sheaf.rank);
+    const labelLatex = sanitizeMathLabel(sheaf.name, defaultSheafNameFor(type, rankPlain, twist, geometry?.labelLatex || 'X', geometry));
     const specialLabels = sheafHasLocallyFreeLabel(sheaf) ? ['locally-free'] : [];
-    Object.assign(sheaf, { twist: String(twist), basis, rank: rankPlain, name: labelLatex, baseVarietyId: baseVariety?.id || sheaf.baseVarietyId || null, specialLabels });
+    Object.assign(sheaf, { type, twist: String(twist), basis, rank: rankPlain, name: labelLatex, baseVarietyId: baseVariety?.id || sheaf.baseVarietyId || null, specialLabels });
     return {
       type,
       twist,
@@ -10062,6 +10354,15 @@
 
   function buildConstructedSheafBundle(geometry, sheaf, options = {}) {
     const construction = sheaf.construction || {};
+    if (construction.type === 'trivial-bundle') {
+      const rank = sanitizeRankInput(construction.rank || sheaf.rankPlain || sheaf.rank);
+      return buildTrivialBundle(geometry.dim, rank, sheaf.labelLatex, sheaf.labelPlain);
+    }
+    if (construction.type === 'ses-term') {
+      const inferred = buildSesTermBundle(geometry, sheaf, construction);
+      if (inferred) return inferred;
+      return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
+    }
     if (construction.type === 'direct-sum' || construction.type === 'tensor') {
       const [leftObject, rightObject] = (construction.sheafIds || []).map((id) => state.sheaves.find((item) => item.id === id));
       if (!leftObject || !rightObject) return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
@@ -10098,9 +10399,95 @@
 
   function buildSourceSheafBundle(geometry, sheafObject) {
     const source = sheafFromObject(sheafObject, geometry);
-    return buildBundleForSheaf(geometry, source, {
-      variablePrefix: constructionVariablePrefix(sheafObject, 'source')
+    const bundle = buildBundleForSheaf(geometry, source);
+    return applyStoredSheafHomologyRulesToSourceBundle(bundle, geometry, source);
+  }
+
+  function applyStoredSheafHomologyRulesToSourceBundle(bundle, geometry, sheaf) {
+    if (!sheafUsesFreeClassVariables(sheaf) || !sheaf?.sourceObject) return bundle;
+    const homology = ensureSheafHomologySystem(sheaf.sourceObject, geometry);
+    if (!homology.rules?.length) return bundle;
+    const ruleGeometry = sheafHomologyGeometry(sheaf, geometry);
+    return applySheafHomologyRulesToBundle(bundle, geometry.dim, {
+      geometry: ruleGeometry,
+      homology: ruleGeometry.homology,
+      sheaf,
+      baseGeometry: geometry,
+      homologyRulePasses: Math.max(1, normalizedInt(state.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES))
     });
+  }
+
+  function buildSesTermBundle(geometry, sheaf, construction) {
+    const sequence = sesSequenceForTermSheaf(sheaf);
+    const terms = sesTermSheaves(sequence);
+    const missingIndex = terms.findIndex((term) => term?.id === sheaf.sourceObject?.id);
+    if (missingIndex < 0) return null;
+    const bundles = terms.map((term, index) => (
+      index === missingIndex || !term ? null : buildSourceSheafBundle(geometry, term)
+    ));
+    const known = bundles.filter(Boolean);
+    if (known.length !== 2) return null;
+    const d = geometry.dim;
+    const chComps = zeroComponentArray(d);
+    for (let i = 1; i <= d; i += 1) {
+      if (missingIndex === 0) {
+        chComps[i] = componentOrZero(bundles[1].chComps, i).sub(componentOrZero(bundles[2].chComps, i));
+      } else if (missingIndex === 1) {
+        chComps[i] = componentOrZero(bundles[0].chComps, i).add(componentOrZero(bundles[2].chComps, i));
+      } else {
+        chComps[i] = componentOrZero(bundles[1].chComps, i).sub(componentOrZero(bundles[0].chComps, i));
+      }
+    }
+    const rankLatex = sesRankLatexFromBundles(bundles, missingIndex, sheaf.rankLatex);
+    const rankPlain = sesRankPlainFromBundles(bundles, missingIndex, sheaf.rankPlain);
+    return buildBundleFromCh(chComps, rankLatex, rankPlain, sheaf.labelLatex, sheaf.labelPlain);
+  }
+
+  function sesSequenceForTermSheaf(sheaf) {
+    const source = sheaf?.sourceObject || sheaf;
+    return (state.sequences || []).find((sequence) => (
+      sequence.type === 'short-exact-sequence'
+      && (sequence.sheafIds || []).includes(source?.id)
+    )) || null;
+  }
+
+  function sesTermSheaves(sequence) {
+    return (sequence?.sheafIds || []).slice(0, 3).map((id) => state.sheaves.find((item) => item.id === id) || null);
+  }
+
+  function sesRankLatexFromBundles(bundles, missingIndex, fallback) {
+    return sesRankDisplayFromBundles(bundles, missingIndex, 'rankLatex', fallback || 'r');
+  }
+
+  function sesRankPlainFromBundles(bundles, missingIndex, fallback) {
+    return sesRankDisplayFromBundles(bundles, missingIndex, 'rankPlain', fallback || 'r');
+  }
+
+  function sesRankDisplayFromBundles(bundles, missingIndex, key, fallback) {
+    const left = bundles[0]?.[key] || null;
+    const middle = bundles[1]?.[key] || null;
+    const right = bundles[2]?.[key] || null;
+    if (missingIndex === 0 && middle && right) return rankDifferenceDisplay(middle, right, key === 'rankLatex', fallback);
+    if (missingIndex === 1 && left && right) return rankSumDisplay(left, right, key === 'rankLatex');
+    if (missingIndex === 2 && middle && left) return rankDifferenceDisplay(middle, left, key === 'rankLatex', fallback);
+    return fallback;
+  }
+
+  function rankSumDisplay(left, right, latex = true) {
+    if (/^-?\d+$/.test(left || '') && /^-?\d+$/.test(right || '')) return String(Number(left) + Number(right));
+    return latex ? `${rankDisplayTerm(left, true)}+${rankDisplayTerm(right, true)}` : `(${left})+(${right})`;
+  }
+
+  function rankDifferenceDisplay(left, right, latex = true, fallback = 'r') {
+    if (/^-?\d+$/.test(left || '') && /^-?\d+$/.test(right || '')) return String(Number(left) - Number(right));
+    if (!left || !right) return fallback;
+    return latex ? `${rankDisplayTerm(left, true)}-${rankDisplayTerm(right, true)}` : `(${left})-(${right})`;
+  }
+
+  function rankDisplayTerm(value, latex = true) {
+    const rank = String(value || 'r');
+    if (!latex) return `(${rank})`;
+    return /^[A-Za-z0-9_{}\\^]+$/.test(rank) ? rank : `\\left(${rank}\\right)`;
   }
 
   function buildPullbackSheafBundle(geometry, sheaf, construction) {
@@ -10543,6 +10930,9 @@
     if (sheaf.type === 'twist') {
       throw new Error('O_X(r) requires a map to projective space.');
     }
+    if (isUniversalBundleSheafType(sheaf.type)) {
+      throw new Error('Universal bundle requires projective space or a Grassmannian.');
+    }
     return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
   }
 
@@ -10615,6 +11005,9 @@
     }
     if (sheaf.type === 'twist') {
       return buildGrassmannianPluckerLineBundle(geometry, sheaf.twist, d, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
+    }
+    if (isUniversalBundleSheafType(sheaf.type)) {
+      return relabelBundle(buildGrassmannianSubBundle(geometry), sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
     }
     return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
   }
@@ -10740,6 +11133,9 @@
     }
     if (sheaf.type === 'twist') {
       return buildLineFromHyperplane(geometry, sheaf.twist, d, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
+    }
+    if (isUniversalBundleSheafType(sheaf.type)) {
+      return buildLineFromHyperplane(geometry, -1, d, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
     }
     return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
   }
@@ -11220,6 +11616,14 @@
         };
       }
     }
+    if (target.kind === 'acyclic') {
+      return {
+        subjectLatex: target.subjectLatex,
+        subjectPlain: target.subjectPlain,
+        dimensions: zeroSheafCohomologyDimensions(geometry),
+        message: target.message || 'All sheaf cohomology groups vanish.'
+      };
+    }
     return {
       subjectLatex: target.subjectLatex || sheafLabelLatex(sheaf || {}),
       subjectPlain: target.subjectPlain || sheafLabelPlain(sheaf || {}),
@@ -11247,6 +11651,25 @@
         message: embeddedGeometrySupportsLineCohomology(geometry)
           ? ''
           : 'Twist sheaf cohomology needs a projective-space or complete-intersection embedding.'
+      };
+    }
+    if (isUniversalBundleSheafType(sheaf.type) && varietyHasHyperplaneClass(geometry?.type || 'abstract')) {
+      return {
+        kind: embeddedGeometrySupportsLineCohomology(geometry) ? 'line' : 'unsupported',
+        twist: -1,
+        subjectLatex: sheafLabelLatex(sheaf),
+        subjectPlain: sheafLabelPlain(sheaf),
+        message: embeddedGeometrySupportsLineCohomology(geometry)
+          ? 'Universal bundle identified with O_X(-1).'
+          : 'Universal bundle cohomology needs a projective-space or complete-intersection embedding.'
+      };
+    }
+    if (isUniversalBundleSheafType(sheaf.type) && geometry?.type === 'grassmannian') {
+      return {
+        kind: 'acyclic',
+        subjectLatex: sheafLabelLatex(sheaf),
+        subjectPlain: sheafLabelPlain(sheaf),
+        message: 'Universal subbundle cohomology on the Grassmannian: all H^i vanish.'
       };
     }
     if (sheaf.type === 'canonical' && embeddedGeometrySupportsLineCohomology(geometry)) {
@@ -11358,6 +11781,11 @@
         plain: entry.plain || latexToPlain(entry.latex || '0')
       };
     });
+  }
+
+  function zeroSheafCohomologyDimensions(geometry) {
+    const dim = Math.max(0, geometry?.dim || 0);
+    return Array.from({ length: dim + 1 }, () => cohomologyDimensionEntry(0n));
   }
 
   function cohomologyDimensionEntry(value) {
@@ -13347,6 +13775,11 @@
         if (base?.id === variety.id) classes.push('is-map-domain');
         if (point?.id === variety.id) classes.push('is-map-codomain');
         if (state.canvasPickEnabled && allowableBlowupPick(variety.id, state.blowupPickTarget)) classes.push('is-pick-candidate');
+      }
+      if (combinedGrassmannianTautologicalSesCreateMode()) {
+        const base = tautologicalSesDraftBase();
+        if (base?.id === variety.id) classes.push('is-active');
+        else if (state.canvasPickEnabled && allowableTautologicalSesBasePick(variety.id)) classes.push('is-pick-candidate');
       }
       const creatingMapOperationSheaf = sheafMapOperationInputMode() && inputIsCreateMode();
       if (state.canvasPickEnabled && sheafBasePickInputMode() && allowableSheafBase(variety.id)) classes.push('is-pick-candidate');
@@ -15402,6 +15835,7 @@
     if (type === 'cotangent') return 'cotangent sheaf';
     if (type === 'canonical') return 'canonical sheaf';
     if (type === 'twist') return 'twist';
+    if (isUniversalBundleSheafType(type)) return 'universal bundle';
     if (type === 'schur') return 'Schur functor';
     return 'abstract sheaf';
   }
