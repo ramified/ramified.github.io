@@ -728,6 +728,65 @@
       overflow-wrap: anywhere;
     }
 
+    .global-invariant-editor .sheaf-field-row {
+      grid-template-columns: 80px minmax(0, 1fr);
+    }
+
+    .global-invariant-mode {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .global-invariant-usage {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .global-invariant-usage.is-warning {
+      color: var(--accent2);
+    }
+
+    .global-invariant-list {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    .global-invariant-chip {
+      display: inline-flex;
+      align-items: center;
+      max-width: 190px;
+      min-height: 22px;
+      padding: 2px 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--surface) 72%, transparent);
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .global-invariant-chip.is-active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .global-invariant-chip.is-replaced {
+      color: var(--muted);
+      text-decoration: line-through;
+    }
+
     .map-pick-actions {
       display: flex;
       justify-content: flex-end;
@@ -1482,6 +1541,7 @@
               <option value="sheaf" disabled>Sheaf</option>
               <option value="map" disabled>Map</option>
               <option value="combined" disabled>Combined</option>
+              <option value="number">Rational number</option>
             </select>
             <button class="btn btn-ghost sheaf-object-button" id="add-object" type="button">add</button>
             <button class="btn btn-ghost sheaf-object-button" id="delete-object" type="button">delete</button>
@@ -1502,6 +1562,39 @@
         </div>
 
         <div class="sheaf-modify-warning" id="modify-warning" hidden>select a label to modify</div>
+
+        <div class="sheaf-input-editor global-invariant-editor" id="global-invariant-editor" hidden>
+          <div class="sheaf-editor-title" id="global-invariant-editor-title">New rational number</div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="global-invariant-name">name</label>
+            <input id="global-invariant-name" class="sheaf-input" type="text" value="a" maxlength="24" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row">
+            <span class="input-label">value</span>
+            <div class="global-invariant-mode">
+              <label class="opt-row">
+                <input type="radio" name="global-invariant-mode" id="global-invariant-mode-symbolic" value="symbolic" checked>
+                symbolic
+              </label>
+              <label class="opt-row">
+                <input type="radio" name="global-invariant-mode" id="global-invariant-mode-integer" value="integer">
+                integer
+              </label>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="global-invariant-value-row" hidden>
+            <label class="input-label" for="global-invariant-value">integer</label>
+            <input id="global-invariant-value" class="sheaf-input" type="number" step="1" value="0">
+          </div>
+          <div class="sheaf-field-row">
+            <span class="input-label">replace</span>
+            <label class="opt-row">
+              <input type="checkbox" id="global-invariant-replace">
+              use integer in formulas
+            </label>
+          </div>
+          <div class="global-invariant-usage" id="global-invariant-usage"></div>
+        </div>
 
         <div class="sheaf-input-editor" id="combined-editor" hidden>
           <div class="sheaf-field-row">
@@ -1664,6 +1757,7 @@
             <select id="sheaf-type" class="sheaf-select">
               <option value="abstract" selected>Abstract sheaf</option>
               <option value="locally-free">Locally free sheaf</option>
+              <option value="structure">Structure sheaf</option>
               <option value="tangent">Tangent sheaf Tₓ</option>
               <option value="cotangent">Cotangent sheaf Ω¹ₓ</option>
               <option value="canonical">Canonical sheaf Kₓ</option>

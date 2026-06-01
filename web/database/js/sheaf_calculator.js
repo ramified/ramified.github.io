@@ -85,6 +85,8 @@
     sheaves: [],
     maps: [],
     sequences: [],
+    globalInvariants: [],
+    activeGlobalInvariantId: null,
     activeVarietyId: null,
     activeSheafId: null,
     activeMapId: null,
@@ -248,6 +250,15 @@
     refs.inputMode = $('input-mode');
     refs.inputPickMode = $('input-pick-mode');
     refs.addObjectKind = $('add-object-kind');
+    refs.globalInvariantEditor = $('global-invariant-editor');
+    refs.globalInvariantEditorTitle = $('global-invariant-editor-title');
+    refs.globalInvariantName = $('global-invariant-name');
+    refs.globalInvariantModeSymbolic = $('global-invariant-mode-symbolic');
+    refs.globalInvariantModeInteger = $('global-invariant-mode-integer');
+    refs.globalInvariantValueRow = $('global-invariant-value-row');
+    refs.globalInvariantValue = $('global-invariant-value');
+    refs.globalInvariantReplace = $('global-invariant-replace');
+    refs.globalInvariantUsage = $('global-invariant-usage');
     refs.combinedEditor = $('combined-editor');
     refs.combinedType = $('combined-type');
     refs.sesParentsRow = $('ses-parents-row');
@@ -376,6 +387,8 @@
     state.sheaves = [defaultSheaf];
     state.maps = [];
     state.sequences = [];
+    state.globalInvariants = [];
+    state.activeGlobalInvariantId = null;
     state.activeVarietyId = defaultVariety.id;
     state.activeSheafId = defaultSheaf.id;
     state.activeMapId = null;
@@ -434,6 +447,19 @@
       mapIds: Array.isArray(options.mapIds) ? options.mapIds.slice(0, 2) : [],
       baseVarietyId: options.baseVarietyId || null,
       tail: normalizeSequenceTailCurve(options.tail)
+    };
+  }
+
+  function createDefaultGlobalInvariant(options = {}) {
+    const name = sanitizeGlobalInvariantName(options.name, nextGlobalInvariantName());
+    const value = sanitizeIntegerString(options.value, '0');
+    return {
+      id: options.id || nextInputId('N'),
+      type: 'rational-number',
+      name,
+      value,
+      hasValue: !!options.hasValue,
+      replaceWithValue: !!options.replaceWithValue
     };
   }
 
@@ -752,11 +778,12 @@
   function readSheafDraft(baseVariety = draftBaseVariety()) {
     const defaultName = defaultSheafNameLatex(baseVariety);
     const name = sanitizeMathLabel(refs.sheafName.value, defaultName);
+    const type = canonicalSheafType(refs.sheafType.value);
     return {
-      type: canonicalSheafType(refs.sheafType.value),
+      type,
       name,
       twist: refs.twist.value,
-      rank: refs.rank.value,
+      rank: type === 'structure' ? '1' : refs.rank.value,
       baseVarietyId: baseVariety?.id || null,
       basis: normalizeBasisValue(refs.basis.value),
       nameDirty: state.draftSheafNameDirty || name !== defaultName
@@ -786,6 +813,7 @@
   }
 
   function objectCollectionForNameKind(kind) {
+    if (kind === 'number') return state.globalInvariants || [];
     if (kind === 'map') return state.maps;
     return kind === 'sheaf' ? state.sheaves : state.varieties;
   }
@@ -799,6 +827,7 @@
   function repetitionNameSequence(kind, proposedName) {
     const pointNames = pointVarietyNameSequence(kind, proposedName);
     if (pointNames) return pointNames;
+    if (kind === 'number') return ['a', 'b', 'c', 'd', 'e', 'm', 'n', 'r', 's', 't'];
     const style = refs.repeatStyle?.value || 'letters';
     if (style === 'letters') {
       if (kind === 'map') return MAP_LETTER_NAMES;
@@ -857,6 +886,253 @@
       .replace(/_\{(\d+)\}/g, '_$1');
   }
 
+  function normalizeGlobalInvariantNameInput(value) {
+    return String(value || '').trim().replace(/\s+/g, '');
+  }
+
+  function globalInvariantNameIsValid(value) {
+    return /^[A-Za-z][A-Za-z0-9_]{0,15}$/.test(normalizeGlobalInvariantNameInput(value));
+  }
+
+  function globalInvariantNameWarning() {
+    return 'Name must start with a letter, be at most 16 characters, and contain only letters, digits, or _. Examples: r, g, f_1.';
+  }
+
+  function sanitizeGlobalInvariantName(value, fallback = 'a') {
+    const raw = normalizeGlobalInvariantNameInput(value);
+    const fallbackText = String(fallback ?? 'a').trim();
+    if (!raw && fallbackText === '') return '';
+    const safeFallback = fallbackText || 'a';
+    if (globalInvariantNameIsValid(raw)) return raw;
+    if (fallbackText === '') return '';
+    const normalizedFallback = normalizeGlobalInvariantNameInput(safeFallback);
+    return globalInvariantNameIsValid(normalizedFallback) ? normalizedFallback : 'a';
+  }
+
+  function sanitizeIntegerString(value, fallback = '0') {
+    const raw = String(value ?? '').trim();
+    return /^-?\d+$/.test(raw) ? raw : fallback;
+  }
+
+  function globalInvariantKey(name) {
+    return sanitizeGlobalInvariantName(name).toLowerCase();
+  }
+
+  function nextGlobalInvariantName() {
+    const used = new Set((state.globalInvariants || []).map((item) => globalInvariantKey(item.name)));
+    return ['a', 'b', 'c', 'd', 'e', 'm', 'n', 'r', 's', 't'].find((name) => !used.has(globalInvariantKey(name))) || `a_${(state.globalInvariants || []).length + 1}`;
+  }
+
+  function uniqueGlobalInvariantName(name, excludeId = null) {
+    const base = sanitizeGlobalInvariantName(name, nextGlobalInvariantName());
+    const used = new Set((state.globalInvariants || [])
+      .filter((item) => item.id !== excludeId)
+      .map((item) => globalInvariantKey(item.name)));
+    if (!used.has(globalInvariantKey(base))) return base;
+    for (let index = 1; index < 999; index += 1) {
+      const suffix = `_${index}`;
+      const candidate = `${base.slice(0, Math.max(1, 16 - suffix.length))}${suffix}`;
+      if (!used.has(globalInvariantKey(candidate))) return candidate;
+    }
+    return base;
+  }
+
+  function ensureGlobalInvariantForSymbol(name, source = {}) {
+    const symbol = sanitizeGlobalInvariantName(name, '');
+    if (!symbol || /^-?\d+$/.test(symbol)) return null;
+    const key = globalInvariantKey(symbol);
+    let invariant = (state.globalInvariants || []).find((item) => globalInvariantKey(item.name) === key);
+    if (!invariant) {
+      invariant = createDefaultGlobalInvariant({
+        id: `auto-${key}`,
+        name: symbol,
+        hasValue: false,
+        value: '0',
+        replaceWithValue: false
+      });
+      invariant.auto = true;
+      state.globalInvariants.push(invariant);
+    }
+    if (source.kind && source.id && source.field) {
+      invariant.sources = mergeGlobalInvariantSources(invariant.sources, [source]);
+    }
+    return invariant;
+  }
+
+  function mergeGlobalInvariantSources(existing = [], additions = []) {
+    const byKey = new Map();
+    [...(existing || []), ...(additions || [])].forEach((source) => {
+      if (!source?.kind || !source.id || !source.field) return;
+      byKey.set(`${source.kind}:${source.id}:${source.field}`, {
+        kind: source.kind,
+        id: source.id,
+        field: source.field
+      });
+    });
+    return Array.from(byKey.values());
+  }
+
+  function registerGlobalInvariantVariable(name, source = null) {
+    const invariant = ensureGlobalInvariantForSymbol(name, source || {});
+    if (!invariant) return null;
+    const id = globalInvariantVariableId(invariant);
+    const latex = symbolToLatex(invariant.name);
+    defineVariable(id, 0, latex, { kind: 'globalInvariant', globalInvariantId: invariant.id });
+    return { invariant, id };
+  }
+
+  function globalInvariantVariableId(invariantOrName) {
+    const name = typeof invariantOrName === 'string' ? invariantOrName : invariantOrName?.name;
+    return `global_${variableIdSafe(globalInvariantKey(name || 'a'))}`;
+  }
+
+  function globalInvariantValue(invariant) {
+    if (!invariant?.hasValue || !invariant.replaceWithValue) return null;
+    return sanitizeIntegerString(invariant.value, '0');
+  }
+
+  function globalInvariantLatex(invariant) {
+    if (!invariant) return 'a';
+    const value = globalInvariantValue(invariant);
+    if (value != null) return value;
+    return symbolToLatex(invariant.name);
+  }
+
+  function globalInvariantPlain(invariant) {
+    if (!invariant) return 'a';
+    const value = globalInvariantValue(invariant);
+    if (value != null) return value;
+    return invariant.hasValue ? sanitizeIntegerString(invariant.value, '0') : invariant.name;
+  }
+
+  function globalInvariantChipValue(invariant) {
+    return invariant?.hasValue ? sanitizeIntegerString(invariant.value, '0') : '';
+  }
+
+  function scalarExpressionPoly(text, source = null) {
+    const raw = String(text || '').replace(/\s+/g, '');
+    if (!raw) return Poly.zero();
+    if (!/^[A-Za-z0-9_+\-]+$/.test(raw)) return null;
+    let normalized = raw.replace(/-/g, '+-');
+    if (normalized.startsWith('+')) normalized = normalized.slice(1);
+    const parts = normalized.split('+').filter((part) => part !== '');
+    let out = Poly.zero();
+    for (const part of parts) {
+      const integer = part.match(/^-?\d+$/);
+      if (integer) {
+        out = out.add(Poly.constant(BigInt(integer[0])));
+        continue;
+      }
+      const sign = part.startsWith('-') ? -1 : 1;
+      const symbol = sign < 0 ? part.slice(1) : part;
+      if (!/^[A-Za-z][A-Za-z0-9_]{0,15}$/.test(symbol)) return null;
+      const registered = registerGlobalInvariantVariable(symbol, source);
+      if (!registered) return null;
+      const value = globalInvariantValue(registered.invariant);
+      const term = value == null ? Poly.variable(registered.id) : Poly.constant(BigInt(value));
+      out = out.add(sign < 0 ? term.neg() : term);
+    }
+    return out;
+  }
+
+  function simplifyScalarExpressionPlain(text, source = null) {
+    const poly = scalarExpressionPoly(text, source);
+    return poly ? formatPolyPlain(poly) : sanitizeGlobalInvariantName(text, 'r');
+  }
+
+  function simplifyScalarExpressionLatex(text, source = null) {
+    const poly = scalarExpressionPoly(text, source);
+    return poly ? formatPolyLatex(poly) : symbolToLatex(sanitizeGlobalInvariantName(text, 'r'));
+  }
+
+  function scalarExpressionIntegerValue(text, source = null) {
+    const poly = scalarExpressionPoly(text, source);
+    if (!poly || poly.terms.size !== 1) return null;
+    const coeff = poly.terms.get('');
+    if (!coeff || coeff.den !== 1n) return null;
+    const value = Number(coeff.num);
+    return Number.isSafeInteger(value) ? value : null;
+  }
+
+  function globalInvariantReferences(invariant) {
+    if (!invariant) return [];
+    const key = globalInvariantKey(invariant.name);
+    return scalarReferenceRecords().filter((record) => (
+      record.symbols.some((symbol) => globalInvariantKey(symbol) === key)
+    ));
+  }
+
+  function scalarReferenceRecords() {
+    const records = [];
+    state.varieties.forEach((variety) => {
+      if ((variety.type || 'abstract') !== 'curve') return;
+      addScalarReferenceRecord(records, variety, 'variety', 'genus', variety.genus);
+    });
+    state.sheaves.forEach((sheaf) => {
+      addScalarReferenceRecord(records, sheaf, 'sheaf', 'rank', sheaf.rank);
+    });
+    return records;
+  }
+
+  function addScalarReferenceRecord(records, object, kind, field, value) {
+    const symbols = scalarSymbolsInText(value);
+    if (!symbols.length) return;
+    records.push({ kind, id: object.id, field, object, symbols });
+  }
+
+  function scalarSymbolsInText(value) {
+    const text = String(value || '');
+    const matches = text.match(/[A-Za-z][A-Za-z0-9_]{0,15}/g) || [];
+    return [...new Set(matches.filter((symbol) => !['mathcal', 'mathbb', 'operatorname', 'text'].includes(symbol)))];
+  }
+
+  function refreshGlobalInvariantReferences() {
+    const records = scalarReferenceRecords();
+    const used = new Set();
+    records.forEach((record) => {
+      record.symbols.forEach((symbol) => {
+        const invariant = ensureGlobalInvariantForSymbol(symbol);
+        if (!invariant) return;
+        invariant.sources = mergeGlobalInvariantSources(invariant.sources, [record]);
+        used.add(invariant.id);
+      });
+    });
+    (state.globalInvariants || []).forEach((invariant) => {
+      invariant.sources = globalInvariantReferences(invariant).map((record) => ({
+        kind: record.kind,
+        id: record.id,
+        field: record.field
+      }));
+      if (invariant.auto && !used.has(invariant.id) && !invariant.hasValue) invariant.unused = true;
+      else invariant.unused = false;
+    });
+    state.globalInvariants = (state.globalInvariants || []).filter((item) => !item.auto || !item.unused || item.id === state.activeGlobalInvariantId);
+  }
+
+  function formatGlobalInvariantReferences(invariant) {
+    const refsForInvariant = globalInvariantReferences(invariant);
+    if (!refsForInvariant.length) return 'No current object uses this symbol.';
+    return `Used by ${refsForInvariant.map((record) => `${objectPlainLabel(record.kind, record.id)} ${record.field}`).join(', ')}.`;
+  }
+
+  function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function renameGlobalInvariantReferences(beforeName, nextName) {
+    const before = sanitizeGlobalInvariantName(beforeName, '');
+    const next = sanitizeGlobalInvariantName(nextName, before);
+    if (!before || before === next) return;
+    const replace = (value) => String(value || '').replace(new RegExp(`\\b${escapeRegExp(before)}\\b`, 'g'), next);
+    state.varieties.forEach((variety) => {
+      if ((variety.type || 'abstract') !== 'curve') return;
+      if (scalarSymbolsInText(variety.genus).includes(before)) variety.genus = replace(variety.genus);
+    });
+    state.sheaves.forEach((sheaf) => {
+      if (scalarSymbolsInText(sheaf.rank).includes(before)) sheaf.rank = replace(sheaf.rank);
+    });
+  }
+
   function curveDefaultName(genusValue) {
     return sanitizeGenusInput(genusValue) === '1' ? 'E' : 'C';
   }
@@ -864,9 +1140,8 @@
   function sanitizeGenusInput(value) {
     const raw = String(value || '').trim();
     if (!raw) return 'g';
-    if (raw === 'g') return 'g';
     if (/^\d+$/.test(raw)) return raw;
-    return 'g';
+    return sanitizeGlobalInvariantName(raw, 'g');
   }
 
   function completeIntersectionCurveGenus(geometry) {
@@ -884,7 +1159,9 @@
     if (!geometry || geometry.dim !== 1) return null;
     if (geometry.type === 'curve') {
       const genus = sanitizeGenusInput(geometry.genus);
-      return /^\d+$/.test(genus) ? Number(genus) : null;
+      if (/^\d+$/.test(genus)) return Number(genus);
+      const scalarValue = scalarExpressionIntegerValue(genus, { kind: 'variety', id: geometry.varietyId || 'curve', field: 'genus' });
+      return scalarValue != null ? scalarValue : null;
     }
     if (geometry.type === 'projective' && geometry.ambient === 1) return 0;
     if (geometry.type === 'complete-intersection') return completeIntersectionCurveGenus(geometry);
@@ -897,7 +1174,7 @@
 
   function sheafHasLocallyFreeLabel(sheaf) {
     if (!sheaf) return false;
-    if (['locally-free', 'tangent', 'cotangent', 'canonical', 'twist', 'universal-bundle', 'universal-line'].includes(sheaf.type)) return true;
+    if (['locally-free', 'structure', 'tangent', 'cotangent', 'canonical', 'twist', 'universal-bundle', 'universal-line'].includes(sheaf.type)) return true;
     if (!sheaf.construction) return false;
     if (sheaf.construction.type === 'direct-sum' || sheaf.construction.type === 'tensor') {
       return (sheaf.construction.sheafIds || [])
@@ -993,11 +1270,11 @@
   }
 
   function genusLatex(value) {
-    return sanitizeGenusInput(value);
+    return simplifyScalarExpressionLatex(sanitizeGenusInput(value), { kind: 'variety', id: activeVariety()?.id || 'draft', field: 'genus' });
   }
 
   function genusPlain(value) {
-    return sanitizeGenusInput(value);
+    return simplifyScalarExpressionPlain(sanitizeGenusInput(value), { kind: 'variety', id: activeVariety()?.id || 'draft', field: 'genus' });
   }
 
   function nextInputId(prefix) {
@@ -1022,6 +1299,10 @@
     return (state.sequences || []).find((item) => item.id === state.activeSequenceId) || null;
   }
 
+  function activeGlobalInvariant() {
+    return (state.globalInvariants || []).find((item) => item.id === state.activeGlobalInvariantId) || null;
+  }
+
   function selectedVariety() {
     return state.varieties.find((item) => item.id === state.activeVarietyId) || null;
   }
@@ -1038,7 +1319,12 @@
     return activeSequence();
   }
 
+  function selectedGlobalInvariant() {
+    return activeGlobalInvariant();
+  }
+
   function activeObjectForModifyMode() {
+    if (state.activeGlobalInvariantId) return selectedGlobalInvariant();
     if (state.activeSequenceId) return selectedSequence();
     if (state.activeMapId) return selectedMap();
     if (state.activeSheafId) return selectedSheaf();
@@ -1047,7 +1333,11 @@
   }
 
   function canvasHasObjects() {
-    return state.varieties.length > 0 || state.sheaves.length > 0 || state.maps.length > 0 || (state.sequences || []).length > 0;
+    return state.varieties.length > 0
+      || state.sheaves.length > 0
+      || state.maps.length > 0
+      || (state.sequences || []).length > 0
+      || (state.globalInvariants || []).length > 0;
   }
 
   function syncInputAvailabilityControls() {
@@ -1059,6 +1349,8 @@
       const option = refs.addObjectKind?.querySelector?.(`option[value="${kind}"]`);
       if (option) option.disabled = !hasBaseVariety;
     });
+    const numberOption = refs.addObjectKind?.querySelector?.('option[value="number"]');
+    if (numberOption) numberOption.disabled = false;
     const abelJacobiTypeOption = refs.combinedType?.querySelector?.('option[value="abel-jacobi"]');
     if (abelJacobiTypeOption) abelJacobiTypeOption.disabled = !hasAbelJacobiCurve;
     const sesTypeOption = refs.combinedType?.querySelector?.('option[value="short-exact-sequence"]');
@@ -1091,6 +1383,7 @@
   }
 
   function createKindIsAvailable(kind) {
+    if (kind === 'number') return true;
     if (kind === 'sheaf' || kind === 'map' || kind === 'combined') return state.varieties.length > 0;
     return true;
   }
@@ -1124,6 +1417,7 @@
   }
 
   function modifyKind() {
+    if (state.activeGlobalInvariantId) return 'number';
     if (state.activeSequenceId) return 'sequence';
     if (state.activeMapId) return 'map';
     return state.activeSheafId ? 'sheaf' : 'variety';
@@ -1133,6 +1427,10 @@
     return state.varieties.find((item) => item.id === state.activeVarietyId)?.id
       || state.varieties[0]?.id
       || null;
+  }
+
+  function clearActiveGlobalInvariant() {
+    state.activeGlobalInvariantId = null;
   }
 
   function draftBaseVariety() {
@@ -1272,20 +1570,23 @@
     syncInputAvailabilityControls();
     const modifying = inputIsModifyMode();
     const hasModifyTarget = !!activeObjectForModifyMode();
+    const showingNumber = modifying ? !!state.activeGlobalInvariantId : refs.addObjectKind?.value === 'number';
     const showingSequence = modifying && !!state.activeSequenceId;
-    const showingMap = modifying ? !!state.activeMapId : refs.addObjectKind?.value === 'map';
-    const showingCombinedAbelJacobi = !modifying && combinedAbelJacobiCreateMode();
+    const showingMap = !showingNumber && (modifying ? !!state.activeMapId : refs.addObjectKind?.value === 'map');
+    const showingCombinedAbelJacobi = !showingNumber && !modifying && combinedAbelJacobiCreateMode();
     const showingMapEditor = showingMap || showingCombinedAbelJacobi;
-    const showingCombinedStructure = showingSequence || (!modifying && (combinedSesCreateMode() || combinedBlowupCreateMode() || combinedGrassmannianTautologicalSesCreateMode() || combinedGrassmannianMapCreateMode()));
-    const showingSheaf = !showingMapEditor && !showingCombinedStructure && (modifying ? !!state.activeSheafId : refs.addObjectKind?.value === 'sheaf');
+    const showingCombinedStructure = !showingNumber && (showingSequence || (!modifying && (combinedSesCreateMode() || combinedBlowupCreateMode() || combinedGrassmannianTautologicalSesCreateMode() || combinedGrassmannianMapCreateMode())));
+    const showingSheaf = !showingNumber && !showingMapEditor && !showingCombinedStructure && (modifying ? !!state.activeSheafId : refs.addObjectKind?.value === 'sheaf');
     const waitingForSheafBase = inputIsCreateMode() && showingSheaf && !state.draftSheafBaseVarietyId;
     if (refs.addObjectKind) refs.addObjectKind.hidden = modifying;
     if (refs.combinedEditor) refs.combinedEditor.hidden = !showingSequence && (modifying || !combinedCreateMode());
     if (refs.inputOptions) refs.inputOptions.hidden = modifying;
     if (refs.modifyWarning) refs.modifyWarning.hidden = !modifying || hasModifyTarget;
-    refs.varietyEditor.hidden = modifying ? (showingSequence || showingSheaf || showingMapEditor || !hasModifyTarget) : (showingSheaf || showingMapEditor || showingCombinedStructure);
-    refs.sheafEditor.hidden = modifying ? (showingSequence || !showingSheaf || !hasModifyTarget) : !showingSheaf;
-    if (refs.mapEditor) refs.mapEditor.hidden = modifying ? (showingSequence || !showingMap || !hasModifyTarget) : !showingMapEditor;
+    if (refs.globalInvariantEditor) refs.globalInvariantEditor.hidden = !showingNumber || (modifying && !hasModifyTarget);
+    refs.varietyEditor.hidden = showingNumber || (modifying ? (showingSequence || showingSheaf || showingMapEditor || !hasModifyTarget) : (showingSheaf || showingMapEditor || showingCombinedStructure));
+    refs.sheafEditor.hidden = showingNumber || (modifying ? (showingSequence || !showingSheaf || !hasModifyTarget) : !showingSheaf);
+    if (refs.mapEditor) refs.mapEditor.hidden = showingNumber || (modifying ? (showingSequence || !showingMap || !hasModifyTarget) : !showingMapEditor);
+    syncGlobalInvariantDraftControls();
     syncMapCurveControls(showingMapEditor && modifying ? selectedMap() : null);
     syncRepetitionStyleLabels();
     syncInputModeControls();
@@ -1362,7 +1663,14 @@
   }
 
   function resetDraftForKind(kind = currentInputKind()) {
-    if (combinedProductCreateMode()) {
+    if (kind === 'number') {
+      if (refs.globalInvariantName) refs.globalInvariantName.value = nextGlobalInvariantName();
+      if (refs.globalInvariantValue) refs.globalInvariantValue.value = '0';
+      if (refs.globalInvariantModeSymbolic) refs.globalInvariantModeSymbolic.checked = true;
+      if (refs.globalInvariantModeInteger) refs.globalInvariantModeInteger.checked = false;
+      if (refs.globalInvariantReplace) refs.globalInvariantReplace.checked = false;
+      syncGlobalInvariantDraftControls();
+    } else if (combinedProductCreateMode()) {
       refs.varietyType.value = 'product';
       refs.dim.value = '3';
       refs.curveGenus.value = 'g';
@@ -1439,13 +1747,22 @@
       object.hiddenOnCanvas = false;
       state.hiddenObjects = hiddenObjectRefs();
     }
-    if (kind === 'variety') {
+    if (kind === 'number') {
+      state.activeGlobalInvariantId = id;
+      state.activeSequenceId = null;
+      state.activeVarietyId = null;
+      state.activeSheafId = null;
+      state.activeMapId = null;
+      syncMapCurveControls(null);
+    } else if (kind === 'variety') {
+      clearActiveGlobalInvariant();
       state.activeSequenceId = null;
       state.activeVarietyId = id;
       state.activeSheafId = null;
       state.activeMapId = null;
       syncMapCurveControls(null);
     } else if (kind === 'sheaf') {
+      clearActiveGlobalInvariant();
       state.activeSequenceId = null;
       state.activeSheafId = id;
       state.activeMapId = null;
@@ -1455,11 +1772,13 @@
       if (baseVariety) state.activeVarietyId = baseVariety.id;
       if (sheaf) refs.basis.value = normalizeBasisValue(sheaf.basis);
     } else if (kind === 'map') {
+      clearActiveGlobalInvariant();
       state.activeSequenceId = null;
       state.activeMapId = id;
       state.activeSheafId = null;
       syncMapCurveControls(selectedMap());
     } else if (kind === 'sequence') {
+      clearActiveGlobalInvariant();
       const sequence = state.sequences.find((item) => item.id === id) || null;
       if (!sequence) return;
       state.activeSequenceId = id;
@@ -1470,7 +1789,7 @@
       if (refs.addObjectKind) refs.addObjectKind.value = 'combined';
       if (refs.combinedType) refs.combinedType.value = 'short-exact-sequence';
     }
-    if (refs.addObjectKind && inputIsCreateMode() && (kind === 'variety' || kind === 'sheaf' || kind === 'map')) {
+    if (refs.addObjectKind && inputIsCreateMode() && (kind === 'variety' || kind === 'sheaf' || kind === 'map' || kind === 'number')) {
       refs.addObjectKind.value = kind;
     }
     if (options.mode) setInputMode(options.mode, { loadDraft: false });
@@ -1490,6 +1809,7 @@
     state.inputMode = mode === 'modify' && canvasHasObjects() ? 'modify' : 'create';
     if (refs.inputMode) refs.inputMode.value = state.inputMode;
     if (state.inputMode === 'modify' && options.clearSelection) {
+      state.activeGlobalInvariantId = null;
       state.activeVarietyId = null;
       state.activeSheafId = null;
       state.activeMapId = null;
@@ -1497,6 +1817,7 @@
       if (refs.combinedType) refs.combinedType.disabled = false;
     }
     if (state.inputMode === 'create') {
+      state.activeGlobalInvariantId = null;
       state.activeSheafId = null;
       state.activeMapId = null;
       state.activeSequenceId = null;
@@ -1528,6 +1849,13 @@
   function updateInputEditorTitles() {
     const kind = inputIsModifyMode() ? modifyKind() : currentInputKind();
     if (refs.combinedType) refs.combinedType.disabled = activeSesEditMode();
+    if (refs.globalInvariantEditorTitle) {
+      if (inputIsModifyMode() && kind === 'number') {
+        setInlineMath(refs.globalInvariantEditorTitle, `\\text{the number } ${globalInvariantLatex(activeGlobalInvariant())}`);
+      } else {
+        refs.globalInvariantEditorTitle.textContent = 'new rational number';
+      }
+    }
     if (refs.varietyEditorTitle) {
       if (combinedProductCreateMode()) {
         refs.varietyEditorTitle.textContent = 'new product construction';
@@ -1666,7 +1994,8 @@
   function loadActiveObjectIntoDraft(kind = currentInputKind()) {
     const item = activeObjectForKind(kind);
     if (!item) return;
-    if (kind === 'map') loadMapIntoDraft(item);
+    if (kind === 'number') loadGlobalInvariantIntoDraft(item);
+    else if (kind === 'map') loadMapIntoDraft(item);
     else if (kind === 'sheaf') loadSheafIntoDraft(item);
     else if (kind === 'sequence') loadShortExactSequenceIntoDraft(item);
     else loadVarietyIntoDraft(item);
@@ -1778,6 +2107,18 @@
     updateSheafMapDraftControls();
   }
 
+  function loadGlobalInvariantIntoDraft(invariant) {
+    if (!invariant) return;
+    if (refs.globalInvariantName) refs.globalInvariantName.value = invariant.name || 'a';
+    if (refs.globalInvariantValue) refs.globalInvariantValue.value = invariant.value ?? '0';
+    const hasValue = invariant.hasValue === true;
+    if (refs.globalInvariantModeSymbolic) refs.globalInvariantModeSymbolic.checked = !hasValue;
+    if (refs.globalInvariantModeInteger) refs.globalInvariantModeInteger.checked = hasValue;
+    if (refs.globalInvariantReplace) refs.globalInvariantReplace.checked = hasValue && invariant.replaceWithValue === true;
+    syncGlobalInvariantDraftControls();
+    updateInputEditorTitles();
+  }
+
   function loadMapIntoDraft(map) {
     if (refs.mapType) refs.mapType.value = map?.construction?.type === 'composition'
       ? 'composition'
@@ -1823,12 +2164,14 @@
 
   function activeObjectForKind(kind) {
     if (inputIsModifyMode()) {
+      if (kind === 'number') return selectedGlobalInvariant();
       if (kind === 'sequence') return selectedSequence();
       if (kind === 'map') return selectedMap();
       if (kind === 'sheaf') return selectedSheaf();
-      if (state.activeSequenceId) return null;
+      if (state.activeSequenceId || state.activeGlobalInvariantId) return null;
       return state.activeSheafId || state.activeMapId ? null : selectedVariety();
     }
+    if (kind === 'number') return activeGlobalInvariant();
     if (kind === 'map') return activeMap();
     return kind === 'sheaf' ? activeSheaf() : activeVariety();
   }
@@ -1840,6 +2183,7 @@
   function currentInputKind() {
     if (inputIsModifyMode()) return modifyKind();
     const value = refs.addObjectKind?.value;
+    if (value === 'number') return 'number';
     if (!state.varieties.length && (value === 'sheaf' || value === 'map' || value === 'combined')) return 'variety';
     if (value === 'map' || combinedAbelJacobiCreateMode()) return 'map';
     if (combinedSesCreateMode() || combinedGrassmannianTautologicalSesCreateMode() || combinedGrassmannianMapCreateMode()) return 'sheaf';
@@ -1879,6 +2223,15 @@
   }
 
   function deleteActiveObject(kind = currentInputKind()) {
+    if (kind === 'number') {
+      const active = activeGlobalInvariant();
+      if (!active) return;
+      state.globalInvariants = (state.globalInvariants || []).filter((item) => item.id !== active.id);
+      state.activeGlobalInvariantId = null;
+      if (inputIsModifyMode()) setInputMode('create', { resetDraft: true });
+      recompute();
+      return;
+    }
     if (kind === 'sequence') {
       const active = selectedSequence();
       if (!active) return;
@@ -1899,6 +2252,7 @@
     const removed = items.splice(index, 1)[0] || null;
     const next = items[Math.min(index, items.length - 1)] || null;
     if (deletingSheaf) {
+      clearActiveGlobalInvariant();
       state.activeSheafId = next?.id || null;
       state.maps = state.maps.filter((map) => !(map.domainKind === 'sheaf' && map.domainId === removed?.id) && !(map.codomainKind === 'sheaf' && map.codomainId === removed?.id));
       removeSequencesTouchingSheaves(new Set([removed?.id].filter(Boolean)));
@@ -1907,6 +2261,7 @@
         refs.basis.value = normalizeBasisValue(next.basis);
       }
     } else {
+      clearActiveGlobalInvariant();
       const removedSheafIds = new Set(state.sheaves.filter((sheaf) => sheaf.baseVarietyId === removed?.id).map((sheaf) => sheaf.id));
       state.activeVarietyId = next?.id || null;
       state.activeSheafId = null;
@@ -2168,7 +2523,72 @@
     refs.deleteObject.title = active ? `Delete selected ${kind}` : `No ${kind} to delete`;
   }
 
+  function readGlobalInvariantDraft() {
+    const existing = inputIsModifyMode() ? selectedGlobalInvariant() : null;
+    const fallback = existing?.name || nextGlobalInvariantName();
+    if (!globalInvariantNameIsValid(refs.globalInvariantName?.value)) {
+      syncGlobalInvariantDraftControls();
+      return null;
+    }
+    const name = sanitizeGlobalInvariantName(refs.globalInvariantName?.value, fallback);
+    const hasValue = !!refs.globalInvariantModeInteger?.checked;
+    const value = sanitizeIntegerString(refs.globalInvariantValue?.value, existing?.value || '0');
+    return {
+      type: 'rational-number',
+      name,
+      value,
+      hasValue,
+      replaceWithValue: hasValue && !!refs.globalInvariantReplace?.checked
+    };
+  }
+
+  function createGlobalInvariantFromDraft() {
+    const draft = readGlobalInvariantDraft();
+    if (!draft) return null;
+    const invariant = createDefaultGlobalInvariant(draft);
+    invariant.name = uniqueGlobalInvariantName(invariant.name);
+    if (refs.globalInvariantName) refs.globalInvariantName.value = invariant.name;
+    state.globalInvariants.push(invariant);
+    state.activeGlobalInvariantId = invariant.id;
+    resetDraftForKind('number');
+    return invariant;
+  }
+
+  function updateGlobalInvariantFromDraft(invariant) {
+    if (!invariant) return null;
+    const beforeName = invariant.name;
+    const draft = readGlobalInvariantDraft();
+    if (!draft) return null;
+    const nextName = uniqueGlobalInvariantName(draft.name, invariant.id);
+    Object.assign(invariant, draft, { name: nextName });
+    if (beforeName !== nextName) renameGlobalInvariantReferences(beforeName, nextName);
+    if (refs.globalInvariantName) refs.globalInvariantName.value = invariant.name;
+    syncGlobalInvariantDraftControls();
+    return invariant;
+  }
+
+  function syncGlobalInvariantDraftControls() {
+    const hasValue = !!refs.globalInvariantModeInteger?.checked;
+    if (refs.globalInvariantValueRow) refs.globalInvariantValueRow.hidden = !hasValue;
+    if (refs.globalInvariantValue) refs.globalInvariantValue.disabled = !hasValue;
+    if (refs.globalInvariantReplace) refs.globalInvariantReplace.disabled = !hasValue;
+    if (!hasValue && refs.globalInvariantReplace) refs.globalInvariantReplace.checked = false;
+    if (refs.globalInvariantUsage) {
+      const invariant = inputIsModifyMode() ? selectedGlobalInvariant() : null;
+      const showingNumberEditor = inputIsModifyMode()
+        ? !!state.activeGlobalInvariantId
+        : refs.addObjectKind?.value === 'number';
+      const invalidName = showingNumberEditor && !globalInvariantNameIsValid(refs.globalInvariantName?.value);
+      const refsText = invalidName
+        ? globalInvariantNameWarning()
+        : (invariant ? formatGlobalInvariantReferences(invariant) : 'Used after you place this symbol in a sheaf rank or curve genus field.');
+      refs.globalInvariantUsage.textContent = refsText;
+      refs.globalInvariantUsage.classList.toggle('is-warning', invalidName);
+    }
+  }
+
   function createObjectFromDraft(kind = currentInputKind()) {
+    if (kind === 'number') return createGlobalInvariantFromDraft();
     if (combinedProductCreateMode()) return createProductVarietyFromDraft();
     if (combinedAbelJacobiCreateMode()) return createAbelJacobiMapFromDraft();
     if (combinedSesCreateMode()) return createSesFromDraft();
@@ -2343,6 +2763,7 @@
   function updateObjectFromDraft(kind = currentInputKind()) {
     const active = activeObjectForKind(kind);
     if (!active) return null;
+    if (kind === 'number') return updateGlobalInvariantFromDraft(active);
     if (kind === 'sequence') return updateShortExactSequenceFromDraft();
     if (kind === 'map') {
       if (abelJacobiMapInputMode()) return null;
@@ -2453,6 +2874,7 @@
       if (combinedProductCreateMode()) refs.varietyType.value = 'product';
       if (combinedAbelJacobiCreateMode() && refs.mapType) refs.mapType.value = 'abel-jacobi';
       if (refs.addObjectKind.value === 'variety') state.activeSheafId = null;
+      clearActiveGlobalInvariant();
       if (inputIsModifyMode()) {
         if (!activeObjectForKind(currentInputKind())) setInputMode('create', { resetDraft: true });
         else loadActiveObjectIntoDraft(currentInputKind());
@@ -2578,6 +3000,7 @@
           setCanvasPickEnabled(false, { render: false });
         } else {
           if (kind === 'sheaf') state.draftSheafBaseVarietyId = null;
+          if (kind === 'number' && changed?.id) activateObject('number', changed.id, { mode: 'modify', loadDraft: true });
           setCanvasPickEnabled(false, { render: false });
         }
         recompute();
@@ -2949,6 +3372,44 @@
     if (refs.homologyAssignmentCancel) {
       refs.homologyAssignmentCancel.addEventListener('click', clearHomologyMonomialAssignmentForm);
     }
+    if (refs.status) {
+      refs.status.addEventListener('click', (event) => {
+        const invariantChip = event.target.closest('[data-global-invariant-id]');
+        if (!invariantChip) return;
+        event.preventDefault();
+        activateObject('number', invariantChip.dataset.globalInvariantId, { mode: 'modify', loadDraft: true });
+        recompute();
+      });
+      refs.status.addEventListener('keydown', (event) => {
+        const invariantChip = event.target.closest('[data-global-invariant-id]');
+        if (!invariantChip || (event.key !== 'Enter' && event.key !== ' ')) return;
+        event.preventDefault();
+        activateObject('number', invariantChip.dataset.globalInvariantId, { mode: 'modify', loadDraft: true });
+        recompute();
+      });
+    }
+    if (refs.globalInvariantName) {
+      refs.globalInvariantName.addEventListener('input', () => {
+        syncGlobalInvariantDraftControls();
+        normalizeControlVisibility();
+        updateInputEditorTitles();
+      });
+      refs.globalInvariantName.addEventListener('change', () => {
+        if (globalInvariantNameIsValid(refs.globalInvariantName.value)) {
+          refs.globalInvariantName.value = sanitizeGlobalInvariantName(refs.globalInvariantName.value, nextGlobalInvariantName());
+        }
+        syncGlobalInvariantDraftControls();
+        normalizeControlVisibility();
+        updateInputEditorTitles();
+      });
+    }
+    if (refs.globalInvariantModeSymbolic) refs.globalInvariantModeSymbolic.addEventListener('change', syncGlobalInvariantDraftControls);
+    if (refs.globalInvariantModeInteger) refs.globalInvariantModeInteger.addEventListener('change', syncGlobalInvariantDraftControls);
+    if (refs.globalInvariantValue) {
+      refs.globalInvariantValue.addEventListener('change', () => {
+        refs.globalInvariantValue.value = sanitizeIntegerString(refs.globalInvariantValue.value, '0');
+      });
+    }
     if (refs.homologyAssignmentRhs) {
       refs.homologyAssignmentRhs.addEventListener('keydown', (event) => {
         if (event.key !== 'Enter') return;
@@ -2968,9 +3429,16 @@
     if (refs.homologyRules) {
       refs.homologyRules.addEventListener('input', (event) => {
         const mapInput = event.target.closest('input[data-map-homology-rule]');
-        if (!mapInput) return;
-        const toggle = mapInput.closest('.homology-rule-row')?.querySelector('[data-map-homology-assign]');
-        if (toggle && String(mapInput.value || '').trim()) toggle.checked = true;
+        if (mapInput) {
+          const toggle = mapInput.closest('.homology-rule-row')?.querySelector('[data-map-homology-assign]');
+          if (toggle && String(mapInput.value || '').trim()) toggle.checked = true;
+          return;
+        }
+        const sheafInput = event.target.closest('input[data-sheaf-homology-rule], [data-sheaf-homology-coeff]');
+        if (sheafInput) {
+          const toggle = sheafInput.closest('.homology-rule-row')?.querySelector('[data-sheaf-homology-assign]');
+          if (toggle && String(sheafInput.value || '').trim()) toggle.checked = true;
+        }
       });
       refs.homologyRules.addEventListener('change', (event) => {
         const toggle = event.target.closest('[data-homology-rule-toggle]');
@@ -3106,6 +3574,13 @@
     }
     refs.canvasLabels.addEventListener('click', (event) => {
       if (Date.now() < state.suppressLabelClickUntil) return;
+      const invariantChip = event.target.closest('[data-global-invariant-id]');
+      if (invariantChip) {
+        event.preventDefault();
+        activateObject('number', invariantChip.dataset.globalInvariantId, { mode: 'modify', loadDraft: true });
+        recompute();
+        return;
+      }
       const sequenceControl = event.target.closest('[data-object-kind="sequence"][data-object-id]');
       if (sequenceControl) {
         event.preventDefault();
@@ -3121,6 +3596,13 @@
       selectObject(target.dataset.objectKind, target.dataset.objectId);
     });
     refs.canvasLabels.addEventListener('keydown', (event) => {
+      const invariantChip = event.target.closest('[data-global-invariant-id]');
+      if (invariantChip && (event.key === 'Enter' || event.key === ' ')) {
+        event.preventDefault();
+        activateObject('number', invariantChip.dataset.globalInvariantId, { mode: 'modify', loadDraft: true });
+        recompute();
+        return;
+      }
       const sequenceTailControl = event.target.closest('[data-sequence-tail-control]');
       if (sequenceTailControl && handleSequenceTailControlKey(event, sequenceTailControl)) {
         return;
@@ -3308,6 +3790,10 @@
       if (deleteMapHomologyRuleById(ruleId)) recompute();
       return;
     }
+    if (context.kind === 'sheaf') {
+      if (deleteSheafHomologyRuleById(ruleId, context)) recompute();
+      return;
+    }
     const variety = context.kind === 'variety' ? context.variety : null;
     if (!variety) return;
     const geometry = geometryFromVariety(variety);
@@ -3327,6 +3813,14 @@
       if (homology.rules.length !== before) changed = true;
     });
     return changed;
+  }
+
+  function deleteSheafHomologyRuleById(ruleId, context = activeHomologySheafContext()) {
+    if (!context?.sheafObject || !context.geometry) return false;
+    const homology = ensureSheafHomologySystem(context.sheafObject, context.geometry);
+    const before = homology.rules.length;
+    homology.rules = homology.rules.filter((rule) => rule.builtin || rule.id !== ruleId);
+    return homology.rules.length !== before;
   }
 
   function addHomologyClassFromControls() {
@@ -3374,6 +3868,11 @@
       if (refs.homologyMessage) refs.homologyMessage.textContent = error.message || 'Invalid rule.';
       return;
     }
+    const validationMessage = validateHomologyRuleInput(rule, { ...geometry, homology });
+    if (validationMessage) {
+      if (refs.homologyMessage) refs.homologyMessage.textContent = validationMessage;
+      return;
+    }
     homology.rules.push(rule);
     if (refs.homologyRuleEquation) refs.homologyRuleEquation.value = '';
     if (refs.homologyMessage) refs.homologyMessage.textContent = '';
@@ -3385,6 +3884,11 @@
     if (!variety || !key || !refs.homologyAssignmentForm) return;
     const geometry = activeHomologyGeometry() || geometryFromVariety(variety);
     if (!geometry) return;
+    const reductionMessage = homologyMonomialReductionWarning(geometry, key, null, 'left');
+    if (reductionMessage) {
+      if (refs.homologyMessage) refs.homologyMessage.textContent = reductionMessage;
+      return;
+    }
     defineHomologyVariables(geometry);
     refs.homologyAssignmentForm.hidden = false;
     refs.homologyAssignmentForm.dataset.monomialKey = key;
@@ -3458,6 +3962,11 @@
       return;
     }
     const homology = ensureHomologySystem(variety, geometry);
+    const validationMessage = validateHomologyRuleInput(rule, { ...geometry, homology });
+    if (validationMessage) {
+      if (refs.homologyMessage) refs.homologyMessage.textContent = validationMessage;
+      return;
+    }
     homology.rules = withoutHomologyRuleForMonomial(homology.rules, key);
     homology.rules.push(rule);
     clearHomologyMonomialAssignmentForm();
@@ -3471,6 +3980,7 @@
     const productBidegree = productHomologyBidegreeForPowers(parseMonoKey(key), geometry);
     const expressions = homologyDisplayMonomialsOfCohomologyDegree(geometry, degree, { productBidegree })
       .filter((mono) => mono.key !== key)
+      .filter((mono) => homologyMonomialIsRuleNormalForm(geometry, mono.key))
       .slice(0, 3)
       .map((mono) => mono.plain || mono.latex || '1');
     return expressions.join('+') || '0';
@@ -3518,7 +4028,8 @@
     if (cohomologyDegree == null) return '<span class="homology-coefficient-empty">0</span>';
     const productBidegree = productHomologyBidegreeForPowers(parseMonoKey(key), geometry);
     const terms = homologyDisplayMonomialsOfCohomologyDegree(geometry, cohomologyDegree, { productBidegree })
-      .filter((mono) => mono.key !== key);
+      .filter((mono) => mono.key !== key)
+      .filter((mono) => homologyMonomialIsRuleNormalForm(geometry, mono.key));
     if (!terms.length) return '<span class="homology-coefficient-empty">0</span>';
     return terms.map((mono, index) => `
       ${index ? '<span class="homology-coefficient-plus">+</span>' : ''}
@@ -6017,6 +6528,8 @@
     if (kind === 'variety') return latexToPlain(state.varieties.find((item) => item.id === id)?.name || 'X');
     if (kind === 'sheaf') return latexToPlain(state.sheaves.find((item) => item.id === id)?.name || 'E');
     if (kind === 'map') return latexToPlain(state.maps.find((item) => item.id === id)?.name || 'f');
+    if (kind === 'sequence') return (state.sequences || []).find((item) => item.id === id)?.id || 'SES';
+    if (kind === 'number') return (state.globalInvariants || []).find((item) => item.id === id)?.name || 'number';
     return '';
   }
 
@@ -6184,6 +6697,7 @@
   }
 
   function defaultSheafNameFor(type, rankPlain, twist, variety, geometry = null) {
+    if (type === 'structure') return `\\mathcal{O}_{${variety}}`;
     if (type === 'locally-free') return rankPlain === '1' ? '\\mathcal{L}' : '\\mathcal{E}';
     if (type === 'tangent') return `\\mathcal{T}_{${variety}}`;
     if (type === 'cotangent') return `\\Omega^1_{${variety}}`;
@@ -6234,7 +6748,7 @@
 
   function syncDefaultRank(force = false) {
     if (!refs.rank || !force) return;
-    if (refs.sheafType.value === 'locally-free') refs.rank.value = '1';
+    if (refs.sheafType.value === 'locally-free' || refs.sheafType.value === 'structure') refs.rank.value = '1';
     else if (refs.sheafType.value === 'abstract') refs.rank.value = 'r';
     else if (isUniversalBundleSheafType(refs.sheafType.value)) {
       const geometry = draftBaseVariety() ? geometryFromVariety(draftBaseVariety()) : null;
@@ -7024,16 +7538,17 @@
     syncSheafBaseOptions();
     const hasVariety = state.varieties.length > 0;
     const hasSheaf = !!activeSheaf();
+    const draftingNumber = inputIsModifyMode() ? !!state.activeGlobalInvariantId : refs.addObjectKind?.value === 'number';
     const editingSheaf = inputIsModifyMode() && !!state.activeSheafId;
     const editingMap = inputIsModifyMode() && !!state.activeMapId;
-    const draftingMap = inputIsModifyMode() ? editingMap : (refs.addObjectKind?.value === 'map' || combinedAbelJacobiCreateMode());
+    const draftingMap = !draftingNumber && (inputIsModifyMode() ? editingMap : (refs.addObjectKind?.value === 'map' || combinedAbelJacobiCreateMode()));
     const draftingCombinedSes = combinedSesCreateMode();
     const draftingCombinedBlowup = combinedBlowupCreateMode();
     const draftingCombinedTautologicalSes = combinedGrassmannianTautologicalSesCreateMode();
     const draftingCombinedGrassmannianMap = combinedGrassmannianMapCreateMode();
     const draftingCombinedStructure = draftingCombinedSes || draftingCombinedBlowup || draftingCombinedTautologicalSes || draftingCombinedGrassmannianMap;
-    const draftingSheaf = !draftingMap && !draftingCombinedStructure && (inputIsModifyMode() ? editingSheaf : refs.addObjectKind?.value === 'sheaf');
-    const draftingVariety = !draftingMap && !draftingSheaf;
+    const draftingSheaf = !draftingNumber && !draftingMap && !draftingCombinedStructure && (inputIsModifyMode() ? editingSheaf : refs.addObjectKind?.value === 'sheaf');
+    const draftingVariety = !draftingNumber && !draftingMap && !draftingSheaf;
     syncProductVarietyOption();
     const draftVariety = refs.varietyType.value;
     const activeVarietyType = activeVariety()?.type || 'abstract';
@@ -7199,13 +7714,16 @@
       const tautologicalSesReady = !draftingCombinedTautologicalSes || !!tautologicalSesConstructionData();
       const grassmannianMapParams = draftingCombinedGrassmannianMap ? syncGrassmannianMapControls() : null;
       const grassmannianMapReady = !draftingCombinedGrassmannianMap || !!grassmannianMapConstructionData();
-      refs.addObject.disabled = (draftingMap && !mapReady) || (productNeedsFactors && !productReady) || !grassmannianReady || !sesReady || !sesEditReady || !blowupReady || !tautologicalSesReady || !grassmannianMapReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
+      const numberReady = !draftingNumber || globalInvariantNameIsValid(refs.globalInvariantName?.value);
+      refs.addObject.disabled = (draftingMap && !mapReady) || (productNeedsFactors && !productReady) || !grassmannianReady || !sesReady || !sesEditReady || !blowupReady || !tautologicalSesReady || !grassmannianMapReady || !numberReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
       refs.addObject.textContent = inputIsModifyMode() ? 'update' : (combinedCreateMode() ? 'build' : 'add');
       let addTitle = '';
       if (creatingMap) {
         addTitle = mapCompositionInputMode()
           ? mapCompositionPickHint()
           : (abelJacobiMapInputMode() ? abelJacobiMapPickHint() : ordinaryMapPickHint());
+      } else if (!numberReady) {
+        addTitle = globalInvariantNameWarning();
       } else if (draftingCombinedSes) {
         addTitle = activeSesEditMode() && !sesEditReady ? 'Use existing sheaves and maps for all five SES slots' : sesPickHint();
       } else if (draftingCombinedBlowup) {
@@ -7477,12 +7995,13 @@
 
   function normalizeSheafHomologyRule(rule, sheaf, geometry) {
     if (!rule || typeof rule !== 'object') return null;
+    const ruleGeometry = sheafHomologyGeometry(sheaf, geometry);
     const sheafDefs = sheafHomologyClassDefinitions(sheaf, geometry);
-    const defs = [...homologyClassDefinitions(geometry), ...sheafDefs];
+    const defs = [...homologyClassDefinitions(ruleGeometry), ...sheafDefs];
     sheafDefs.forEach(defineSheafClassVariable);
-    const variableIds = new Set(defs.flatMap((def) => [...homologyDefVariableIds(def, geometry)]));
-    const lhsPowers = normalizeSheafHomologyPowers(rule.lhs?.powers || rule.lhsPowers, variableIds, geometry);
-    const rhsTerms = normalizeSheafHomologyRuleTerms(rule.rhs || rule.rhsTerms, variableIds, geometry);
+    const variableIds = new Set(defs.flatMap((def) => [...homologyDefVariableIds(def, ruleGeometry)]));
+    const lhsPowers = normalizeSheafHomologyPowers(rule.lhs?.powers || rule.lhsPowers, variableIds, ruleGeometry);
+    const rhsTerms = normalizeSheafHomologyRuleTerms(rule.rhs || rule.rhsTerms, variableIds, ruleGeometry);
     if (!lhsPowers || !rhsTerms) return null;
     const lhsIds = Object.keys(lhsPowers);
     if (lhsIds.length !== 1 || !sheafDefs.some((def) => def.id === lhsIds[0]) || lhsPowers[lhsIds[0]] !== 1) return null;
@@ -7493,7 +8012,7 @@
       lhs: { powers: lhsPowers },
       rhs: rhsTerms
     };
-    return homologyRulePreservesDegree(normalized, defs, { geometry }) ? normalized : null;
+    return homologyRulePreservesDegree(normalized, defs, { geometry: ruleGeometry }) ? normalized : null;
   }
 
   function normalizeSheafHomologyPowers(powers, variableIds, geometry) {
@@ -9022,7 +9541,9 @@
     let basis = normalizeBasisValue(sheaf.basis);
     if (basis === 'roots' && !sheafSupportsChernRoots(sheaf)) basis = 'chern';
     const baseVariety = baseVarietyForSheaf(sheaf);
-    const rankPlain = isUniversalBundleSheafType(type) ? universalBundleRankPlain(geometry) : sanitizeRankInput(sheaf.rank);
+    const rankPlain = type === 'structure'
+      ? '1'
+      : (isUniversalBundleSheafType(type) ? universalBundleRankPlain(geometry) : sanitizeRankInput(sheaf.rank));
     const labelLatex = sanitizeMathLabel(sheaf.name, defaultSheafNameFor(type, rankPlain, twist, geometry?.labelLatex || 'X', geometry));
     const specialLabels = sheafHasLocallyFreeLabel(sheaf) ? ['locally-free'] : [];
     Object.assign(sheaf, { type, twist: String(twist), basis, rank: rankPlain, name: labelLatex, baseVarietyId: baseVariety?.id || sheaf.baseVarietyId || null, specialLabels });
@@ -9032,7 +9553,7 @@
       baseVarietyId: sheaf.baseVarietyId,
       basis,
       rankPlain,
-      rankLatex: symbolToLatex(rankPlain),
+      rankLatex: simplifyScalarExpressionLatex(rankPlain, { kind: 'sheaf', id: sheaf.id, field: 'rank' }),
       labelLatex,
       labelPlain: latexToPlain(labelLatex),
       specialLabels,
@@ -9173,7 +9694,7 @@
     const twist = normalizedInt(refs.twist.value, -24, 24, 1);
     let basis = normalizeBasisValue(refs.basis.value);
     if (basis === 'roots' && type !== 'abstract' && !sheafHasLocallyFreeLabel({ type })) basis = 'chern';
-    const rankPlain = sanitizeRankInput(refs.rank.value);
+    const rankPlain = type === 'structure' ? '1' : sanitizeRankInput(refs.rank.value);
     refs.rank.value = rankPlain;
     const labelLatex = sanitizeMathLabel(refs.sheafName.value, defaultSheafNameLatex());
     refs.sheafName.value = labelLatex;
@@ -9182,7 +9703,7 @@
       twist,
       basis,
       rankPlain,
-      rankLatex: symbolToLatex(rankPlain),
+      rankLatex: simplifyScalarExpressionLatex(rankPlain),
       labelLatex,
       labelPlain: latexToPlain(labelLatex)
     };
@@ -9278,6 +9799,7 @@
   function buildBundleForSheaf(geometry, sheaf, options = {}) {
     const d = geometry.dim;
     if (sheaf.construction) return buildConstructedSheafBundle(geometry, sheaf, options);
+    if (sheaf.type === 'structure') return buildTrivialBundle(d, 1, sheaf.labelLatex, sheaf.labelPlain);
     if (sheaf.type === 'locally-free') return buildLocallyFreeBundle(d, sheaf, options);
     if (sheaf.type === 'abstract') return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
     if (geometryHasNumericalCurveLabel(geometry) && (sheaf.type === 'tangent' || sheaf.type === 'cotangent' || sheaf.type === 'canonical')) {
@@ -9652,10 +10174,11 @@
       out = maybeExpandMapHomologyVariables(out, options);
       out = simplifyProductBoxPolynomial(out, geometry, options);
       defineHomologyVariables(geometry);
-      for (const rule of rules) out = applyOneHomologyRule(out, rule, geometry?.dim ?? MAX_DIMENSION);
+      out = applyHomologyRuleSweep(out, rules, geometry?.dim ?? MAX_DIMENSION);
       out = maybeExpandMapHomologyVariables(out, options);
       out = simplifyProductBoxPolynomial(out, geometry, options);
       defineHomologyVariables(geometry);
+      out = applyHomologyRuleSweep(out, rules, geometry?.dim ?? MAX_DIMENSION);
       if (polyEquals(before, out)) return out.truncate(geometry?.dim ?? MAX_DIMENSION);
     }
     defineHomologyVariables(geometry);
@@ -9756,6 +10279,12 @@
     return true;
   }
 
+  function polySignature(poly) {
+    return sortedTerms(Poly.from(poly))
+      .map(([key, coeff]) => `${key}:${coeff.num}/${coeff.den}`)
+      .join(';');
+  }
+
   function expandNestedMapHomologyVariables(poly, options = {}) {
     poly = Poly.from(poly);
     const geometry = options.geometry || null;
@@ -9823,6 +10352,21 @@
     if (data.operation === 'pullback') return pullbackPolynomial(simplifiedSource, map).truncate(targetGeometry.dim);
     if (data.operation === 'pushforward') return pushforwardPolynomialByDegree(map, simplifiedSource, sourceGeometry.dim, targetGeometry.dim, { proper: false });
     return Poly.variable(id);
+  }
+
+  function applyHomologyRuleSweep(poly, rules, maxDegree) {
+    let out = Poly.from(poly);
+    const seen = new Set([polySignature(out)]);
+    const limit = Math.max(1, Math.min(64, rules.length + 1));
+    for (let step = 0; step < limit; step += 1) {
+      const before = out;
+      for (const rule of rules) out = applyOneHomologyRule(out, rule, maxDegree);
+      if (polyEquals(before, out)) return out.truncate(maxDegree);
+      const signature = polySignature(out);
+      if (seen.has(signature)) return out.truncate(maxDegree);
+      seen.add(signature);
+    }
+    return out.truncate(maxDegree);
   }
 
   function applyOneHomologyRule(poly, rule, maxDegree) {
@@ -9894,7 +10438,7 @@
     if (!map || !sourceGeometry || !targetGeometry) return [];
     const rules = [];
     if (sourceGeometry.type === 'point') {
-      const variableId = defineMapHomologyVariable(map, 'pushforward', 'unit', targetGeometry.dim, '1', {
+      const variableId = defineMapHomologyVariable(map, 'pushforward', mapSourceUnitVariableId(map), targetGeometry.dim, '1', {
         cohomologyDegree: 2 * targetGeometry.dim,
         sourceKey: ''
       });
@@ -10230,6 +10774,52 @@
     return allTerms.some((term) => Object.prototype.hasOwnProperty.call(term.powers || {}, variableId));
   }
 
+  function validateHomologyRuleInput(rule, geometry) {
+    if (!rule || !geometry) return '';
+    const existingRules = (geometry.homology?.rules || []).filter((existing) => (
+      existing.enabled !== false
+      && !homologyRuleHasSameLhs(existing, rule)
+    ));
+    if (!existingRules.length) return '';
+    const lhsKey = monoKey(rule.lhs?.powers || {});
+    const lhsMessage = homologyMonomialReductionWarning(geometry, lhsKey, existingRules, 'left');
+    if (lhsMessage) return lhsMessage;
+    const reducible = (rule.rhs || []).find((term) => {
+      const key = monoKey(term.powers || {});
+      return key && !homologyMonomialIsRuleNormalForm(geometry, key, existingRules);
+    });
+    if (!reducible) return '';
+    return homologyMonomialReductionWarning(geometry, monoKey(reducible.powers || {}), existingRules, 'right');
+  }
+
+  function homologyMonomialReductionWarning(geometry, key, rules = null, side = 'right') {
+    if (!key || homologyMonomialIsRuleNormalForm(geometry, key, rules)) return '';
+    const activeRules = rules || (geometry?.homology?.rules || []).filter((rule) => rule.enabled !== false);
+    const simplified = applyHomologyRules(polyFromPowers(parseMonoKey(key)), {
+      geometry,
+      homology: { ...(geometry?.homology || {}), rules: activeRules },
+      homologyRulePasses: Math.max(1, normalizedInt(state.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES))
+    });
+    const from = monomialPlain(key) || '1';
+    const to = formatPolyPlain(simplified);
+    return side === 'left'
+      ? `${from} is already determined as ${to}. Choose an undetermined expression to assign.`
+      : `${from} is already determined as ${to}. Use the simplified expression instead.`;
+  }
+
+  function homologyMonomialIsRuleNormalForm(geometry, key, rules = null) {
+    if (!key) return true;
+    const activeRules = rules || (geometry?.homology?.rules || []).filter((rule) => rule.enabled !== false);
+    if (!activeRules.length) return true;
+    const original = polyFromPowers(parseMonoKey(key));
+    const simplified = applyHomologyRules(original, {
+      geometry,
+      homology: { ...(geometry?.homology || {}), rules: activeRules },
+      homologyRulePasses: Math.max(1, normalizedInt(state.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES))
+    });
+    return polyEquals(original, simplified);
+  }
+
   function homologyPowersDegree(powers, defs, options = {}) {
     const resolveMapVariables = options.resolveMapVariables !== false;
     let degree = 0;
@@ -10299,19 +10889,31 @@
   }
 
   function removeMonomialFactor(powers, factorPowers, count) {
-    const repeatedFactor = {};
+    const factorization = gradedMonomialFactorization(powers, factorPowers, count);
+    if (!factorization) return null;
+    return {
+      remainder: polyFromPowers(factorization.remainderPowers),
+      sign: factorization.sign
+    };
+  }
+
+  function gradedMonomialFactorization(powers, factorPowers, count = 1) {
+    const repeatedFactorPowers = {};
     for (const [id, exp] of Object.entries(factorPowers || {})) {
-      repeatedFactor[id] = (Number(exp) || 0) * count;
+      const exponent = (Number(exp) || 0) * count;
+      if (exponent > 0) repeatedFactorPowers[id] = exponent;
     }
-    const out = { ...powers };
-    for (const [id, exp] of Object.entries(repeatedFactor)) {
-      out[id] = (out[id] || 0) - exp;
-      if (out[id] <= 0) delete out[id];
+    if (!Object.keys(repeatedFactorPowers).length) return null;
+    const remainderPowers = { ...powers };
+    for (const [id, exp] of Object.entries(repeatedFactorPowers)) {
+      remainderPowers[id] = (remainderPowers[id] || 0) - exp;
+      if (remainderPowers[id] < 0) return null;
+      if (remainderPowers[id] === 0) delete remainderPowers[id];
     }
-    const product = multiplyMonomialPowers(repeatedFactor, out);
+    const product = multiplyMonomialPowers(repeatedFactorPowers, remainderPowers);
     if (!product) return null;
     return {
-      remainder: polyFromPowers(out),
+      remainderPowers,
       sign: product.sign
     };
   }
@@ -10474,14 +11076,14 @@
   }
 
   function rankSumDisplay(left, right, latex = true) {
-    if (/^-?\d+$/.test(left || '') && /^-?\d+$/.test(right || '')) return String(Number(left) + Number(right));
-    return latex ? `${rankDisplayTerm(left, true)}+${rankDisplayTerm(right, true)}` : `(${left})+(${right})`;
+    const text = `${left || '0'}+${right || '0'}`;
+    return latex ? simplifyScalarExpressionLatex(text) : simplifyScalarExpressionPlain(text);
   }
 
   function rankDifferenceDisplay(left, right, latex = true, fallback = 'r') {
-    if (/^-?\d+$/.test(left || '') && /^-?\d+$/.test(right || '')) return String(Number(left) - Number(right));
     if (!left || !right) return fallback;
-    return latex ? `${rankDisplayTerm(left, true)}-${rankDisplayTerm(right, true)}` : `(${left})-(${right})`;
+    const text = `${left}-${right}`;
+    return latex ? simplifyScalarExpressionLatex(text) : simplifyScalarExpressionPlain(text);
   }
 
   function rankDisplayTerm(value, latex = true) {
@@ -10497,10 +11099,7 @@
     if (!map || !sourceSheaf || !codomain) return null;
     const codomainGeometry = geometryFromVariety(codomain);
     defineBaseHomologyVariables(codomainGeometry);
-    const source = sheafFromObject(sourceSheaf, codomainGeometry);
-    const sourceBundle = buildBundleForSheaf(codomainGeometry, source, {
-      variablePrefix: constructionVariablePrefix(sourceSheaf, 'pullbackSource')
-    });
+    const sourceBundle = buildSourceSheafBundle(codomainGeometry, sourceSheaf);
     const chComps = pullbackComponentArray(sourceBundle.chComps, geometry.dim, map);
     defineHomologyVariables(geometry);
     return buildBundleFromCh(chComps, sourceBundle.rankLatex, sourceBundle.rankPlain, sheaf.labelLatex, sheaf.labelPlain);
@@ -10513,10 +11112,7 @@
     if (!map || !sourceSheaf || !domain) return null;
     const domainGeometry = geometryFromVariety(domain);
     defineBaseHomologyVariables(domainGeometry);
-    const source = sheafFromObject(sourceSheaf, domainGeometry);
-    const sourceBundle = buildBundleForSheaf(domainGeometry, source, {
-      variablePrefix: constructionVariablePrefix(sourceSheaf, 'pushforwardSource')
-    });
+    const sourceBundle = buildSourceSheafBundle(domainGeometry, sourceSheaf);
     const sourceTangent = buildTangentClassBundle(domainGeometry);
     const sourceChTotal = bundleChernCharacterTotal(sourceBundle, domainGeometry.dim, 'pushSourceRank');
     const grrSource = sourceChTotal.mul(sourceTangent.todd, domainGeometry.dim);
@@ -10738,7 +11334,10 @@
 
   function pushforwardTermVariableId(map, sourceKey, targetDegree, construction) {
     if (!sourceKey) {
-      return defineMapHomologyVariable(map, 'pushforward', 'unit', targetDegree, '1', { sourceKey: '' });
+      return defineMapHomologyVariable(map, 'pushforward', mapSourceUnitVariableId(map), targetDegree, '1', {
+        sourceKey: '',
+        ...(Number.isInteger(construction?.cohomologyDegree) ? { cohomologyDegree: construction.cohomologyDegree } : {})
+      });
     }
     const powers = parseMonoKey(sourceKey);
     const ids = Object.keys(powers);
@@ -10763,6 +11362,10 @@
 
   function pushforwardClassOperatorLatex(map, construction = {}) {
     return mapPushforwardOperatorLatex(map);
+  }
+
+  function mapSourceUnitVariableId(map) {
+    return homologyVariableId(HOMOLOGY_UNIT_CLASS, geometryByVarietyId(map?.domainId));
   }
 
   function mapHomologyVariableId(map, operation, sourceId) {
@@ -10849,24 +11452,19 @@
 
   function rankAsDegreeZeroPoly(bundle, idSeed) {
     const plain = String(bundle.rankPlain || '').trim();
-    if (/^-?\d+$/.test(plain)) return Poly.constant(BigInt(plain));
+    const poly = scalarExpressionPoly(plain || bundle.rankLatex || 'r');
+    if (poly) return poly;
     const id = `rank${constructionSafeId(bundle.rankLatex || bundle.rankPlain || idSeed)}`;
     defineVariable(id, 0, bundle.rankLatex || plain || 'r');
     return Poly.variable(id);
   }
 
   function rankSumLatex(left, right) {
-    if (/^-?\d+$/.test(left.rankPlain || '') && /^-?\d+$/.test(right.rankPlain || '')) {
-      return String(Number(left.rankPlain) + Number(right.rankPlain));
-    }
-    return `${rankLatexTerm(left)}+${rankLatexTerm(right)}`;
+    return simplifyScalarExpressionLatex(`${left.rankPlain || '0'}+${right.rankPlain || '0'}`);
   }
 
   function rankSumPlain(left, right) {
-    if (/^-?\d+$/.test(left.rankPlain || '') && /^-?\d+$/.test(right.rankPlain || '')) {
-      return String(Number(left.rankPlain) + Number(right.rankPlain));
-    }
-    return `${left.rankPlain || 'r'}+${right.rankPlain || 's'}`;
+    return simplifyScalarExpressionPlain(`${left.rankPlain || '0'}+${right.rankPlain || '0'}`);
   }
 
   function rankProductLatex(left, right) {
@@ -11639,6 +12237,15 @@
         twist: 0,
         subjectLatex: `\\mathcal{O}_{${geometry.labelLatex}}`,
         subjectPlain: `O_${geometry.labelPlain}`,
+        message: embeddedGeometrySupportsLineCohomology(geometry) ? '' : 'Structure-sheaf cohomology read from the Hodge row h^{0,i}.'
+      };
+    }
+    if (sheaf.type === 'structure') {
+      return {
+        kind: embeddedGeometrySupportsLineCohomology(geometry) ? 'line' : 'structure',
+        twist: 0,
+        subjectLatex: sheafLabelLatex(sheaf),
+        subjectPlain: sheafLabelPlain(sheaf),
         message: embeddedGeometrySupportsLineCohomology(geometry) ? '' : 'Structure-sheaf cohomology read from the Hodge row h^{0,i}.'
       };
     }
@@ -12477,13 +13084,29 @@
   }
 
   function homologyExpressionListHtml(geometry, cohomologyDegree, options = {}) {
-    const expressions = homologyDisplayMonomialsOfCohomologyDegree(geometry, cohomologyDegree);
+    const expressions = homologyDisplayMonomialsOfCohomologyDegree(geometry, cohomologyDegree)
+      .map((mono) => ({
+        ...mono,
+        displayLatex: homologyExpressionDisplayLatex(geometry, mono)
+      }))
+      .filter((mono) => mono.displayLatex !== '0');
     if (!expressions.length) return '<span class="homology-coefficient-empty">0</span>';
     return `<div class="homology-expression-list">${expressions.map((mono) => `
       ${options.assignable && mono.key
-        ? `<button class="homology-expression-token" type="button" data-homology-assign-monomial="${escapeHtml(mono.key)}">\\(${mono.latex || '1'}\\)</button>`
-        : `<span>\\(${mono.latex || '1'}\\)</span>`}
+        ? `<button class="homology-expression-token" type="button" data-homology-assign-monomial="${escapeHtml(mono.key)}" title="${escapeHtml(mono.plain || '1')}">\\(${mono.displayLatex}\\)</button>`
+        : `<span>\\(${mono.displayLatex}\\)</span>`}
     `).join('')}</div>`;
+  }
+
+  function homologyExpressionDisplayLatex(geometry, mono) {
+    if (!mono?.key) return mono?.latex || '1';
+    const original = polyFromPowers(parseMonoKey(mono.key));
+    const simplified = applyHomologyRules(original, {
+      geometry,
+      homology: geometry?.homology,
+      homologyRulePasses: Math.max(1, normalizedInt(state.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES))
+    });
+    return formatPolyLatex(simplified);
   }
 
   function homologyDisplayMonomialsOfDegree(geometry, degree, options = {}) {
@@ -12656,11 +13279,24 @@
       return;
     }
     const coefficientMode = state.homologyMapInputMode === 'coefficients';
-    refs.homologyRules.innerHTML = defs.map((def) => (
-      coefficientMode
-        ? renderSheafHomologyCoefficientRow(def, defaultRules)
-        : renderSheafHomologyFormulaRow(def, defaultRules)
-    )).join('');
+    const rows = defs.map((def) => {
+      const storedRule = storedSheafHomologyRuleForDef(def);
+      return {
+        stored: !!storedRule,
+        html: storedRule
+          ? renderSavedSheafHomologyRow(def, storedRule)
+          : (coefficientMode
+              ? renderSheafHomologyCoefficientRow(def, defaultRules)
+              : renderSheafHomologyFormulaRow(def, defaultRules))
+      };
+    });
+    const savedRows = rows.filter((row) => row.stored).map((row) => row.html);
+    const waitingRows = rows.filter((row) => !row.stored).map((row) => row.html);
+    refs.homologyRules.innerHTML = [
+      ...savedRows,
+      savedRows.length && waitingRows.length ? '<div class="homology-rule-separator" aria-hidden="true"></div>' : '',
+      ...waitingRows
+    ].filter(Boolean).join('');
   }
 
   function renderSheafHomologyDefaultRules(defs, defaultRules) {
@@ -12688,17 +13324,34 @@
     return '<span class="homology-symbol-kind">special</span>';
   }
 
+  function renderSavedSheafHomologyRow(def, rule) {
+    return `
+      <div class="homology-rule-row is-map-relation is-saved">
+        <span>\\(${def.symbolLatex}=\\)</span>
+        <span>\\(${formatPolyLatex(homologyRuleRhsPoly(rule))}\\)</span>
+        ${rule.builtin
+          ? '<span class="homology-symbol-kind">special</span>'
+          : `<button class="btn btn-ghost homology-rule-delete" type="button" data-homology-rule-delete="${escapeHtml(rule.id)}">delete</button>`}
+      </div>
+    `;
+  }
+
   function renderSheafHomologyFormulaRow(def, defaultRules = []) {
     defineHomologyVariables(def.geometry);
     defineSheafClassVariable(def);
     const rule = sheafHomologyRuleForDef(def, defaultRules);
     const value = rule ? formatHomologyInputPoly(homologyRuleRhsPoly(rule)) : '';
     const disabled = rule?.builtin ? 'disabled' : '';
+    const checked = value ? ' checked' : '';
     return `
       <div class="homology-rule-row is-map-relation">
         <span>\\(${def.symbolLatex}=\\)</span>
         <input class="sheaf-input homology-map-rule-input" type="text" value="${escapeHtml(value)}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Right side for ${escapeHtml(latexToPlain(def.symbolLatex))}" data-sheaf-homology-rule="${escapeHtml(def.id)}" ${disabled}>
-        ${rule?.builtin ? '<span class="homology-symbol-kind">special</span>' : ''}
+        ${rule?.builtin
+          ? '<span class="homology-symbol-kind">special</span>'
+          : `<label class="homology-map-assign-toggle">
+              <input type="checkbox" data-sheaf-homology-assign aria-label="Include this relation when updating"${checked}>
+            </label>`}
       </div>
     `;
   }
@@ -12710,6 +13363,7 @@
     const coefficients = rule ? homologyRuleCoefficientMap(rule) : new Map();
     const terms = homologyDisplayMonomialsOfDegree(def.sourceGeometry || def.geometry, def.degree);
     const disabled = rule?.builtin ? 'disabled' : '';
+    const checked = coefficients.size ? ' checked' : '';
     const editor = terms.length
       ? terms.map((mono, index) => `
           ${index ? '<span class="homology-coefficient-plus">+</span>' : ''}
@@ -12725,7 +13379,11 @@
         <div class="homology-coefficient-editor" data-sheaf-homology-coeff-editor data-sheaf-homology-rule="${escapeHtml(def.id)}">
           ${editor}
         </div>
-        ${rule?.builtin ? '<span class="homology-symbol-kind">special</span>' : ''}
+        ${rule?.builtin
+          ? '<span class="homology-symbol-kind">special</span>'
+          : `<label class="homology-map-assign-toggle">
+              <input type="checkbox" data-sheaf-homology-assign aria-label="Include this relation when updating"${checked}>
+            </label>`}
       </div>
     `;
   }
@@ -12760,6 +13418,7 @@
         kind,
         geometry: ruleGeometry,
         sourceGeometry: geometry,
+        sheafObject: sheaf.sourceObject || sheaf,
         variableId: id,
         symbolLatex: basis === 'character'
           ? `\\operatorname{ch}_{${degree}}(${labelLatex})`
@@ -12782,13 +13441,17 @@
     defineSheafClassVariable(def);
     const defaultRule = mapHomologyRuleForVariable(defaultRules, def.id, { includeBuiltin: true });
     if (defaultRule) return defaultRule;
-    const sheafObject = selectedSheaf();
+    return storedSheafHomologyRuleForDef(def);
+  }
+
+  function storedSheafHomologyRuleForDef(def) {
+    const sheafObject = def?.sheafObject || selectedSheaf();
     const homology = sheafObject ? ensureSheafHomologySystem(sheafObject, def.sourceGeometry || def.geometry) : null;
     return (homology?.rules || []).find((rule) => (
       !rule.builtin
       && rule.lhs?.powers
       && Object.keys(rule.lhs.powers).length === 1
-      && rule.lhs.powers[def.id] === 1
+      && rule.lhs.powers[def?.id] === 1
     )) || null;
   }
 
@@ -12911,19 +13574,34 @@
     return !toggle || toggle.checked;
   }
 
+  function sheafHomologyControlShouldUpdate(control) {
+    const row = control.closest?.('.homology-rule-row');
+    const toggle = row?.querySelector('[data-sheaf-homology-assign]');
+    return !toggle || toggle.checked;
+  }
+
   function updateAllSheafHomologyAssignments(context = activeHomologySheafContext()) {
     if (!refs.homologyRules || !context) return;
     const controls = state.homologyMapInputMode === 'coefficients'
       ? Array.from(refs.homologyRules.querySelectorAll('[data-sheaf-homology-coeff-editor]'))
       : Array.from(refs.homologyRules.querySelectorAll('input[data-sheaf-homology-rule]'));
     let changed = 0;
+    let skipped = 0;
     for (const control of controls) {
+      if (!sheafHomologyControlShouldUpdate(control)) {
+        skipped += 1;
+        continue;
+      }
       if (state.homologyMapInputMode === 'coefficients') {
         if (setSheafHomologyRuleFromCoefficientEditor(control, context, { deferRecompute: true })) changed += 1;
       } else if (setSheafHomologyRuleFromInput(control, context, { deferRecompute: true })) changed += 1;
     }
     recompute();
-    if (refs.homologyMessage) refs.homologyMessage.textContent = changed ? `Updated ${changed} relation${changed === 1 ? '' : 's'}.` : 'No relations changed.';
+    if (refs.homologyMessage) {
+      refs.homologyMessage.textContent = changed
+        ? `Updated ${changed} relation${changed === 1 ? '' : 's'}.`
+        : (skipped ? 'No checked relations changed.' : 'No relations changed.');
+    }
   }
 
   function assignmentTermsChanged(before, nextTerms) {
@@ -12999,7 +13677,7 @@
     if (!context) return null;
     const defId = control.dataset.sheafHomologyRule;
     const def = sheafHomologyClassDefinitions(context.sheaf, context.geometry).find((item) => item.id === defId);
-    return def ? { ...context, def, geometry: def.geometry } : null;
+    return def ? { ...context, def, geometry: def.geometry, sourceGeometry: def.sourceGeometry || context.geometry } : null;
   }
 
   function clearMapHomologyRule(context, options = {}) {
@@ -13065,7 +13743,7 @@
     homology.rules = withoutMapHomologyRuleForVariable(homology.rules, def.id);
     homology.rules.push(rule);
     finishSheafHomologyRuleUpdate(options);
-    return assignmentTermsChanged(before, rule.rhs);
+    return !before || assignmentTermsChanged(before, rule.rhs);
   }
 
   function mapHomologyRuleForVariable(rules, variableId, options = {}) {
@@ -13163,6 +13841,34 @@
     return homologyRulePlainEquation(rule, geometry);
   }
 
+  function renderStatusLine(extra = '') {
+    if (!refs.status) return;
+    const countText = [
+      `${state.varieties.length} variet${state.varieties.length === 1 ? 'y' : 'ies'}`,
+      `${state.sheaves.length} ${state.sheaves.length === 1 ? 'sheaf' : 'sheaves'}`,
+      `${state.maps.length} map${state.maps.length === 1 ? '' : 's'}`,
+      `${(state.sequences || []).length} SES`
+    ].concat(extra ? [extra] : []).join(' · ');
+    const invariants = visibleGlobalInvariants();
+    refs.status.innerHTML = `${escapeHtml(countText)}${invariants.length ? renderGlobalInvariantChips(invariants) : ''}`;
+    if (invariants.length) typeset(refs.status);
+  }
+
+  function visibleGlobalInvariants() {
+    refreshGlobalInvariantReferences();
+    return (state.globalInvariants || []).filter((invariant) => !invariant.auto || globalInvariantReferences(invariant).length || invariant.hasValue);
+  }
+
+  function renderGlobalInvariantChips(invariants) {
+    return `<span class="global-invariant-list">${invariants.map((invariant) => {
+      const active = invariant.id === state.activeGlobalInvariantId ? ' is-active' : '';
+      const replaced = invariant.hasValue && invariant.replaceWithValue ? ' is-replaced' : '';
+      const chipValue = globalInvariantChipValue(invariant);
+      const label = `${symbolToLatex(invariant.name)}${chipValue ? `\\mapsto ${chipValue}` : ''}`;
+      return `<button class="global-invariant-chip${active}${replaced}" type="button" data-global-invariant-id="${escapeHtml(invariant.id)}" title="${escapeHtml(formatGlobalInvariantReferences(invariant))}">\\(${label}\\)</button>`;
+    }).join('')}</span>`;
+  }
+
   function renderResult(result) {
     const { geometry, bundle } = result;
     const badgeParts = [];
@@ -13170,7 +13876,7 @@
     if (bundle) badgeParts.push(bundle.labelLatex);
     setInlineMath(refs.objectBadge, badgeParts.length ? badgeParts.join(',\\ ') : '\\text{empty}');
     const basis = basisStatusLabel(result.sheaf?.basis);
-    refs.status.textContent = `${state.varieties.length} variet${state.varieties.length === 1 ? 'y' : 'ies'} · ${state.sheaves.length} ${state.sheaves.length === 1 ? 'sheaf' : 'sheaves'} · ${state.maps.length} map${state.maps.length === 1 ? '' : 's'} · ${(state.sequences || []).length} SES${bundle ? ` · ${basis} basis` : ''}`;
+    renderStatusLine(bundle ? `${basis} basis` : '');
     setInlineMath(refs.ringSummary, geometry ? `A^*(${geometry.labelLatex})_{\\le ${geometry.dim}}` : '\\text{add a variety}');
     renderHomologyPanel(result);
     if (result.classRows.length) {
@@ -15550,6 +16256,7 @@
   }
 
   function objectByKind(kind, id) {
+    if (kind === 'number') return (state.globalInvariants || []).find((entry) => entry.id === id);
     if (kind === 'sheaf') return state.sheaves.find((entry) => entry.id === id);
     if (kind === 'map') return state.maps.find((entry) => entry.id === id);
     if (kind === 'sequence') return (state.sequences || []).find((entry) => entry.id === id);
@@ -15750,7 +16457,7 @@
       `\\operatorname{type}=\\text{${varietyTypeLabel(variety.type)}}`,
       `\\dim=${geometry.dim}`
     ];
-    if (geometryHasNumericalCurveLabel(geometry)) parts.push(`g=${genusLatex(numericalCurveGenus(geometry))}`);
+    if (geometryHasNumericalCurveLabel(geometry)) parts.push(`g=${genusLatex(geometry.type === 'curve' ? geometry.genus : numericalCurveGenus(geometry))}`);
     if (geometry.type === 'projective') parts.push(`\\text{ambient}=\\mathbb{P}^{${geometry.ambient}}`);
     if (geometry.type === 'grassmannian') parts.push(`(r,n)=(${geometry.grassmannianR},${geometry.grassmannianN})`);
     if (geometry.type === 'complete-intersection') {
@@ -15762,10 +16469,11 @@
 
   function exportSheafLatex(sheaf) {
     const base = baseVarietyForSheaf(sheaf);
+    const rank = sanitizeRankInput(sheaf.rank);
     const parts = [
       `${sanitizeMathLabel(sheaf.name, '\\mathcal{E}')}`,
       `\\operatorname{type}=\\text{${sheafTypeLabel(sheaf.type)}}`,
-      `\\operatorname{rk}=${symbolToLatex(sanitizeRankInput(sheaf.rank))}`
+      `\\operatorname{rk}=${simplifyScalarExpressionLatex(rank, { kind: 'sheaf', id: sheaf.id, field: 'rank' })}`
     ];
     if (base) parts.push(`\\text{base}=${sanitizeMathLabel(base.name, 'X')}`);
     if (sheaf.type === 'twist') parts.push(`r=${normalizedInt(sheaf.twist, -24, 24, 1)}`);
@@ -15785,7 +16493,7 @@
       `type ${varietyTypeLabel(variety.type)}`,
       `dim ${geometry.dim}`
     ];
-    if (geometryHasNumericalCurveLabel(geometry)) parts.push(`genus ${genusPlain(numericalCurveGenus(geometry))}`);
+    if (geometryHasNumericalCurveLabel(geometry)) parts.push(`genus ${genusPlain(geometry.type === 'curve' ? geometry.genus : numericalCurveGenus(geometry))}`);
     if (geometry.type === 'projective') parts.push(`ambient P^${geometry.ambient}`);
     if (geometry.type === 'grassmannian') parts.push(`r ${geometry.grassmannianR}`, `n ${geometry.grassmannianN}`);
     if (geometry.type === 'complete-intersection') {
@@ -15830,6 +16538,7 @@
   }
 
   function sheafTypeLabel(type) {
+    if (type === 'structure') return 'structure sheaf';
     if (type === 'locally-free') return 'locally free';
     if (type === 'tangent') return 'tangent sheaf';
     if (type === 'cotangent') return 'cotangent sheaf';
@@ -16248,28 +16957,29 @@
   function sanitizeRankInput(value) {
     const raw = String(value || '').trim();
     if (/^-?\d+$/.test(raw)) return raw;
+    const simplified = simplifyScalarExpressionPlain(raw);
+    if (simplified && /^[A-Za-z0-9_+\-\s]+$/.test(simplified)) return simplified.replace(/\s+/g, '');
     if (/^[A-Za-z][A-Za-z0-9_]{0,15}$/.test(raw)) return raw;
     return 'r';
   }
 
   function numericRankFromPlain(value) {
     const raw = String(value || '').trim();
-    if (!/^\d+$/.test(raw)) return null;
-    return Math.min(MAX_DIMENSION, Number(raw));
+    if (/^\d+$/.test(raw)) return Math.min(MAX_DIMENSION, Number(raw));
+    const scalarValue = scalarExpressionIntegerValue(raw);
+    return scalarValue != null && scalarValue >= 0 ? Math.min(MAX_DIMENSION, scalarValue) : null;
   }
 
   function explicitRootRankFromPlain(value) {
     const raw = String(value || '').trim();
-    if (!/^\d+$/.test(raw)) return null;
-    const rank = Number(raw);
+    const rank = /^\d+$/.test(raw) ? Number(raw) : scalarExpressionIntegerValue(raw);
     if (!Number.isInteger(rank) || rank < 0 || rank > MAX_EXPLICIT_ROOT_FACTORS) return null;
     return rank;
   }
 
   function rootExpansionRankFromPlain(value, d = MAX_DIMENSION) {
     const raw = String(value || '').trim();
-    if (!/^\d+$/.test(raw)) return null;
-    const rank = Number(raw);
+    const rank = /^\d+$/.test(raw) ? Number(raw) : scalarExpressionIntegerValue(raw);
     if (!Number.isInteger(rank) || rank < 0) return null;
     const monomialBound = binomial(rank + d, d);
     if (!Number.isFinite(monomialBound) || monomialBound > MAX_ROOT_EXPANSION_MONOMIALS) return null;
@@ -16623,7 +17333,7 @@
   }
 
   function symbolToLatex(value) {
-    const raw = sanitizeRankInput(value);
+    const raw = sanitizeGlobalInvariantName(value, 'r');
     if (/^-?\d+$/.test(raw)) return raw;
     const greek = { rho: '\\rho', alpha: '\\alpha', beta: '\\beta', gamma: '\\gamma' };
     if (greek[raw]) return greek[raw];
