@@ -306,13 +306,90 @@
   }
 
   function htmlRows(rows) {
-    return rows.map(([label, value]) =>
-      `<div class="stat-row"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`
-    ).join('');
+    return rows.map(([label, value]) => {
+      const valueClass = String(value).includes('\\(') || String(value).includes('\\[')
+        ? 'stat-value math-stat-value'
+        : 'stat-value';
+      return `<div class="stat-row"><span class="stat-label">${label}</span><span class="${valueClass}">${value}</span></div>`;
+    }).join('');
   }
 
   function escapeHtml(value) {
     return String(value).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  }
+
+  function inlineMath(latex) {
+    return `\\(${latex}\\)`;
+  }
+
+  function displayMath(latex) {
+    return `\\[${latex}\\]`;
+  }
+
+  function typeLatex(type = state.type, rank = state.rank) {
+    if (type === 'A' || type === 'B' || type === 'C' || type === 'D') return `${type}_{${rank}}`;
+    if (type === 'E6') return 'E_{6}';
+    if (type === 'E7') return 'E_{7}';
+    if (type === 'E8') return 'E_{8}';
+    if (type === 'F4') return 'F_{4}';
+    if (type === 'G2') return 'G_{2}';
+    return escapeHtml(type);
+  }
+
+  function lieAlgebraLatex(type = state.type, rank = state.rank) {
+    if (type === 'A') return `\\mathfrak{sl}_{${rank + 1}}`;
+    if (type === 'B') return `\\mathfrak{so}_{${2 * rank + 1}}`;
+    if (type === 'C') return `\\mathfrak{sp}_{${2 * rank}}`;
+    if (type === 'D') return `\\mathfrak{so}_{${2 * rank}}`;
+    if (type === 'E6') return '\\mathfrak{e}_{6}';
+    if (type === 'E7') return '\\mathfrak{e}_{7}';
+    if (type === 'E8') return '\\mathfrak{e}_{8}';
+    if (type === 'F4') return '\\mathfrak{f}_{4}';
+    if (type === 'G2') return '\\mathfrak{g}_{2}';
+    return typeLatex(type, rank);
+  }
+
+  function centerLatex(type, rank) {
+    if (type === 'A') return `\\mathbb{Z}/${rank + 1}\\mathbb{Z}`;
+    if (type === 'B' || type === 'C' || type === 'E7') return '\\mathbb{Z}/2\\mathbb{Z}';
+    if (type === 'D') return rank % 2 === 0 ? '(\\mathbb{Z}/2\\mathbb{Z})^{2}' : '\\mathbb{Z}/4\\mathbb{Z}';
+    if (type === 'E6') return '\\mathbb{Z}/3\\mathbb{Z}';
+    return '\\{1\\}';
+  }
+
+  function fractionLatex(value) {
+    const text = approxFraction(value);
+    if (!text.includes('/')) return text;
+    const sign = text.startsWith('-') ? '-' : '';
+    const [num, den] = text.replace('-', '').split('/');
+    return `${sign}\\frac{${num}}{${den}}`;
+  }
+
+  function vectorLatex(values) {
+    return `\\left[${values.map((x) => Number.isInteger(x) ? String(x) : fractionLatex(x)).join(', ')}\\right]`;
+  }
+
+  function rootsLatex(values) {
+    return values.length ? values.map((value) => `\\alpha_{${value}}`).join(', ') : '\\varnothing';
+  }
+
+  function typeSetTarget() {
+    return document.querySelector('main');
+  }
+
+  let mathTypesetQueued = false;
+  function queueMathTypeset() {
+    const target = typeSetTarget();
+    if (!target || !window.MathJax || mathTypesetQueued) return;
+    mathTypesetQueued = true;
+    const run = () => {
+      mathTypesetQueued = false;
+      if (!window.MathJax?.typesetPromise) return;
+      if (window.MathJax.typesetClear) window.MathJax.typesetClear([target]);
+      window.MathJax.typesetPromise([target]).catch(() => {});
+    };
+    if (window.MathJax.startup?.promise) window.MathJax.startup.promise.then(run).catch(() => { mathTypesetQueued = false; });
+    else window.setTimeout(run, 0);
   }
 
   function layoutNodes(type, rank, width, height) {
@@ -399,7 +476,7 @@
     ctx.font = '13px JetBrains Mono, monospace';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillText(`${typeLabel()}   ${TYPE_DESC[state.type](state.rank)}`, 22, 20);
+    ctx.fillText(`rank ${state.rank}`, 22, 20);
   }
 
   function drawEdge(ctx, a, b, multiplicity, arrowTarget) {
@@ -455,25 +532,27 @@
     drawDynkin();
     renderInvariants();
     renderVertexData();
+    renderParabolic();
     renderCartan();
     renderExport();
+    queueMathTypeset();
   }
 
   function renderInvariants() {
     const info = invariants(state.type, state.rank, state.cartan, state.roots);
-    $('dynkin-status').textContent = info.label;
-    $('dynkin-root-count-label').textContent = `positive roots: ${info.positiveRoots}`;
+    $('dynkin-status').innerHTML = inlineMath(typeLatex());
+    $('dynkin-root-count-label').innerHTML = `positive roots: ${inlineMath(String(info.positiveRoots))}`;
     $('dynkin-invariants').innerHTML = htmlRows([
-      ['Lie algebra', `${info.label} ${escapeHtml(info.desc)}`],
-      ['rank', info.rank],
-      ['dimension', info.dimension],
-      ['roots', `${info.roots} total, ${info.positiveRoots} positive`],
-      ['Coxeter h', info.coxeter],
-      ['dual Coxeter h^vee', info.dualCoxeter],
-      ['exponents', info.exponents.join(', ')],
+      ['Lie algebra', inlineMath(`${typeLatex()}\\quad ${lieAlgebraLatex()}`)],
+      ['rank', inlineMath(String(info.rank))],
+      ['dimension', inlineMath(String(info.dimension))],
+      ['roots', inlineMath(`${info.roots}\\text{ total},\\ ${info.positiveRoots}\\text{ positive}`)],
+      [inlineMath('h'), inlineMath(String(info.coxeter))],
+      [inlineMath('h^\\vee'), inlineMath(String(info.dualCoxeter))],
+      ['exponents', inlineMath(info.exponents.join(', '))],
       ['Weyl group order', formatBigInt(info.weylOrder)],
-      ['det Cartan', info.determinant],
-      ['P/Q', info.center]
+      [inlineMath('\\det C'), inlineMath(String(info.determinant))],
+      [inlineMath('P/Q'), inlineMath(centerLatex(state.type, state.rank))]
     ]);
   }
 
@@ -488,29 +567,191 @@
     const maxLength = Math.max(...sym);
     const normalizedLength = 2 * sym[i] / maxLength;
     const neighbors = C[i].map((value, j) => value || C[j][i] ? j + 1 : null).filter((value) => value && value !== i + 1);
-    $('dynkin-selected-label').textContent = `selected vertex: ${i + 1}`;
+    $('dynkin-selected-label').innerHTML = `selected vertex: ${inlineMath(`\\alpha_{${i + 1}}`)}`;
     $('dynkin-vertex-data').innerHTML = htmlRows([
-      ['simple root', `alpha_${i + 1}`],
-      ['root length^2', approxFraction(normalizedLength)],
-      ['neighbors', neighbors.length ? neighbors.join(', ') : 'none'],
-      ['Cartan row', formatVector(C[i])],
-      ['Cartan column', formatVector(C.map((row) => row[i]))],
-      ['highest-root mark', highest[i]],
-      ['highest root', formatVector(highest)],
-      ['omega in simple roots', formatVector(omega)]
+      ['simple root', inlineMath(`\\alpha_{${i + 1}}`)],
+      [inlineMath('(\\alpha,\\alpha)'), inlineMath(fractionLatex(normalizedLength))],
+      ['neighbors', inlineMath(rootsLatex(neighbors))],
+      ['Cartan row', inlineMath(vectorLatex(C[i]))],
+      ['Cartan column', inlineMath(vectorLatex(C.map((row) => row[i])))],
+      ['highest-root mark', inlineMath(String(highest[i]))],
+      ['highest root', inlineMath(vectorLatex(highest))],
+      [inlineMath('\\omega_i'), inlineMath(vectorLatex(omega))]
     ]);
   }
 
+  function parabolicData(type, rank, selected, roots) {
+    const node = selected + 1;
+    const leviPositiveRoots = roots.filter((root) => root[selected] === 0).length;
+    const nilradicalDimension = roots.length - leviPositiveRoots;
+    const dimension = rank + roots.length + leviPositiveRoots;
+    return {
+      node,
+      rootDefinition: `p_${node} = h + sum_{beta > 0} g_beta + sum_{beta > 0, coeff_${node}(beta)=0} g_{-beta}`,
+      rootDefinitionLatex: `\\mathfrak{p}_{${node}}=\\mathfrak{h}\\oplus\\bigoplus_{\\beta\\in\\Phi^+}\\mathfrak{g}_{\\beta}\\oplus\\bigoplus_{\\substack{\\beta\\in\\Phi^+\\\\\\operatorname{coeff}_{\\alpha_{${node}}}(\\beta)=0}}\\mathfrak{g}_{-\\beta}`,
+      leviPositiveRoots,
+      nilradicalDimension,
+      dimension,
+      model: parabolicMatrixModel(type, rank, selected)
+    };
+  }
+
+  function parabolicMatrixModel(type, rank, selected) {
+    const i = selected + 1;
+    if (type === 'A') {
+      return {
+        title: `sl(${rank + 1})`,
+        titleLatex: lieAlgebraLatex(type, rank),
+        blockSizes: [i, rank + 1 - i],
+        matrixShape: upperShape(2),
+        flag: `\\mathbb{C}^{${i}}\\subset\\mathbb{C}^{${rank + 1}}`,
+        definitionLines: [
+          `${inlineMath(`\\mathfrak{sl}_{${rank + 1}}=\\{X\\in\\operatorname{Mat}_{${rank + 1}}:\\operatorname{tr}(X)=0\\}`)}.`,
+          `${inlineMath(`\\mathfrak{p}_{${i}}`)} is the trace-zero part of matrices upper triangular for the block split ${inlineMath(`${i}\\mid ${rank + 1 - i}`)}.`
+        ]
+      };
+    }
+    if (type === 'B') {
+      const middle = 2 * (rank - i) + 1;
+      return {
+        title: `so(${2 * rank + 1})`,
+        titleLatex: lieAlgebraLatex(type, rank),
+        blockSizes: [i, middle, i],
+        matrixShape: upperShape(3),
+        flag: `U_{${i}}\\subset U_{${i}}^{\\perp}`,
+        definitionLines: [
+          `Use the adapted basis ${inlineMath(`U_{${i}}\\mid W\\mid U_{${i}}^{\\vee}`)}, where ${inlineMath(`\\dim W=${middle}`)}.`,
+          `${inlineMath(`\\mathfrak{so}_{${2 * rank + 1}}=\\{X\\in\\mathfrak{gl}(V):X^T J+JX=0\\}`)}, ${inlineMath(`J=\\begin{pmatrix}0&0&I_{${i}}\\\\0&J_W&0\\\\I_{${i}}&0&0\\end{pmatrix}`)}.`,
+          `${inlineMath(`\\mathfrak{p}_{${i}}=\\{X\\in\\mathfrak{so}_{${2 * rank + 1}}:XU_{${i}}\\subset U_{${i}}\\}`)}; the starred blocks are still constrained by ${inlineMath(`X^T J+JX=0`)}.`
+        ]
+      };
+    }
+    if (type === 'C') {
+      const middle = 2 * (rank - i);
+      const blockSizes = middle > 0 ? [i, middle, i] : [i, i];
+      const split = blockSizes.join(' | ');
+      const basisLine = middle > 0
+        ? `Use the adapted symplectic basis ${inlineMath(`U_{${i}}\\mid W\\mid U_{${i}}^{\\vee}`)}, where ${inlineMath(`\\dim W=${middle}`)}.`
+        : `Use the adapted symplectic basis ${inlineMath(`L\\mid L^{\\vee}`)} for a Lagrangian subspace ${inlineMath(`L=U_{${i}}`)}.`;
+      const formLine = middle > 0
+        ? `${inlineMath(`\\mathfrak{sp}_{${2 * rank}}=\\{X\\in\\mathfrak{gl}(V):X^T J+JX=0\\}`)}, ${inlineMath(`J=\\begin{pmatrix}0&0&I_{${i}}\\\\0&J_W&0\\\\-I_{${i}}&0&0\\end{pmatrix}`)}.`
+        : `${inlineMath(`\\mathfrak{sp}_{${2 * rank}}=\\{X\\in\\mathfrak{gl}(V):X^T J+JX=0\\}`)}, ${inlineMath(`J=\\begin{pmatrix}0&I_{${i}}\\\\-I_{${i}}&0\\end{pmatrix}`)}.`;
+      return {
+        title: `sp(${2 * rank})`,
+        titleLatex: lieAlgebraLatex(type, rank),
+        blockSizes,
+        matrixShape: middle > 0 ? upperShape(3) : upperShape(2),
+        flag: i === rank ? `U_{${i}}\\text{ Lagrangian}` : `U_{${i}}\\subset U_{${i}}^{\\perp}`,
+        definitionLines: [
+          basisLine,
+          formLine,
+          `${inlineMath(`\\mathfrak{p}_{${i}}=\\{X\\in\\mathfrak{sp}_{${2 * rank}}:XU_{${i}}\\subset U_{${i}}\\}`)} for the expanded split ${inlineMath(split.replaceAll(' | ', '\\mid '))}.`
+        ]
+      };
+    }
+    if (type === 'D') {
+      if (i <= rank - 2) {
+        return {
+          title: `so(${2 * rank})`,
+          titleLatex: lieAlgebraLatex(type, rank),
+          blockSizes: [i, 2 * (rank - i), i],
+          matrixShape: upperShape(3),
+          flag: `U_{${i}}\\subset U_{${i}}^{\\perp}`,
+          definitionLines: [
+            `Use the adapted basis ${inlineMath(`U_{${i}}\\mid W\\mid U_{${i}}^{\\vee}`)}, where ${inlineMath(`\\dim W=${2 * (rank - i)}`)}.`,
+            `${inlineMath(`\\mathfrak{so}_{${2 * rank}}=\\{X\\in\\mathfrak{gl}(V):X^T J+JX=0\\}`)}, ${inlineMath(`J=\\begin{pmatrix}0&0&I_{${i}}\\\\0&J_W&0\\\\I_{${i}}&0&0\\end{pmatrix}`)}.`,
+            `${inlineMath(`\\mathfrak{p}_{${i}}=\\{X\\in\\mathfrak{so}_{${2 * rank}}:XU_{${i}}\\subset U_{${i}}\\}`)}; the starred blocks are still constrained by ${inlineMath(`X^T J+JX=0`)}.`
+          ]
+        };
+      }
+      const spinBasis = i === rank
+        ? `\\langle e_1,\\ldots,e_n\\rangle`
+        : `\\langle e_1,\\ldots,e_{n-1},e_n^*\\rangle`;
+      return {
+        title: `so(${2 * rank})`,
+        titleLatex: lieAlgebraLatex(type, rank),
+        blockSizes: [rank, rank],
+        matrixShape: upperShape(2),
+        flag: `L=${spinBasis}`,
+        definitionLines: [
+          `Use the adapted basis ${inlineMath(`L\\mid L^{\\vee}`)}, where ${inlineMath(`L=${spinBasis}`)}.`,
+          `${inlineMath(`\\mathfrak{so}_{${2 * rank}}=\\{X\\in\\mathfrak{gl}(V):X^T J+JX=0\\}`)}, ${inlineMath(`J=\\begin{pmatrix}0&I_{${rank}}\\\\I_{${rank}}&0\\end{pmatrix}`)}.`,
+          `${inlineMath(`\\mathfrak{p}_{${i}}`)} is the block upper triangular part of this ${inlineMath(`\\mathfrak{so}_{${2 * rank}}`)} for the split ${inlineMath(`${rank}\\mid ${rank}`)}.`
+        ]
+      };
+    }
+    return {
+      title: typeLabel(type, rank),
+      titleLatex: lieAlgebraLatex(type, rank),
+      blockSizes: [],
+      matrixShape: [],
+      flag: '\\text{root-space standard parabolic}',
+      definitionLines: [
+        `No compact classical block matrix model is attached here.`,
+        `The displayed ${inlineMath(`\\mathfrak{p}_{${i}}`)} is the standard maximal parabolic defined by crossing ${inlineMath(`\\alpha_{${i}}`)}.`
+      ]
+    };
+  }
+
+  function renderParabolic() {
+    const data = parabolicData(state.type, state.rank, state.selected, state.roots);
+    const model = data.model;
+    const blockText = model.blockSizes.length ? inlineMath(model.blockSizes.join('\\mid ')) : 'root-space only';
+    const definitionHtml = model.definitionLines
+      .map((line) => `<div>${line}</div>`)
+      .join('');
+    $('dynkin-parabolic').innerHTML = [
+      `<div class="parabolic-summary">standard maximal parabolic for crossed node ${inlineMath(`\\alpha_{${data.node}}`)}<br>model: ${inlineMath(model.titleLatex)}<br>blocks: ${blockText}</div>`,
+      renderParabolicMatrix(model, data.node),
+      `<div class="parabolic-definition">${displayMath(data.rootDefinitionLatex)}</div>`,
+      `<div class="parabolic-tex-lines">${definitionHtml}</div>`,
+      htmlRows([
+        ['flag', inlineMath(model.flag)],
+        [inlineMath('\\dim\\mathfrak{p}'), inlineMath(String(data.dimension))],
+        [inlineMath('\\dim\\mathfrak{u}'), inlineMath(String(data.nilradicalDimension))],
+        ['Levi positive roots', inlineMath(String(data.leviPositiveRoots))]
+      ])
+    ].join('');
+  }
+
+  function renderParabolicMatrix(model, node) {
+    if (!model.matrixShape.length) return '';
+    const matrix = matrixShapeLatex(model.matrixShape, model.blockSizes);
+    return `<div class="parabolic-matrix-wrap">${displayMath(`\\mathfrak{p}_{${node}}=${matrix}`)}</div>`;
+  }
+
+  function upperShape(size) {
+    return Array.from({ length: size }, (_, r) => Array.from({ length: size }, (_, c) => c >= r));
+  }
+
+  function matrixShapeLatex(shape, blockSizes) {
+    const rows = [];
+    shape.forEach((blockRow, r) => {
+      for (let innerRow = 0; innerRow < blockSizes[r]; innerRow++) {
+        const cells = [];
+        blockRow.forEach((free, c) => {
+          for (let innerCol = 0; innerCol < blockSizes[c]; innerCol++) {
+            cells.push(free ? '\\ast' : '');
+          }
+        });
+        rows.push(cells.join(' & '));
+      }
+    });
+    return `\\begin{pmatrix}${rows.join('\\\\')}\\end{pmatrix}`;
+  }
+
   function renderCartan() {
-    const header = Array.from({ length: state.rank }, (_, i) => `<th>${i + 1}</th>`).join('');
-    const body = state.cartan.map((row, i) =>
-      `<tr><td>${i + 1}</td>${row.map((x) => `<td>${x}</td>`).join('')}</tr>`
-    ).join('');
-    $('dynkin-cartan').innerHTML = `<table class="dynkin-table"><thead><tr><th></th>${header}</tr></thead><tbody>${body}</tbody></table>`;
+    $('dynkin-cartan').innerHTML = displayMath(matrixLatex(state.cartan, 'pmatrix'));
+  }
+
+  function matrixLatex(matrix, environment = 'bmatrix') {
+    const rows = matrix.map((row) => row.join(' & ')).join('\\\\');
+    return `\\begin{${environment}}${rows}\\end{${environment}}`;
   }
 
   function renderExport() {
     const info = invariants(state.type, state.rank, state.cartan, state.roots);
+    const parabolic = parabolicData(state.type, state.rank, state.selected, state.roots);
     const payload = {
       calculator: 'Dynkin diagram calculator',
       type: info.label,
@@ -520,7 +761,19 @@
       positiveRoots: info.positiveRoots,
       coxeterNumber: info.coxeter,
       dualCoxeterNumber: info.dualCoxeter,
-      cartanMatrix: state.cartan
+      cartanMatrix: state.cartan,
+      parabolic: {
+        selectedNode: parabolic.node,
+        rootDefinition: parabolic.rootDefinition,
+        dimension: parabolic.dimension,
+        nilradicalDimension: parabolic.nilradicalDimension,
+        leviPositiveRoots: parabolic.leviPositiveRoots,
+        matrixModel: {
+          lieAlgebra: parabolic.model.title,
+          flag: parabolic.model.flag,
+          blockSizes: parabolic.model.blockSizes
+        }
+      }
     };
     $('dynkin-export-out').value = JSON.stringify(payload, null, 2);
   }
