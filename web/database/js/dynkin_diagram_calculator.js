@@ -42,6 +42,10 @@
     return type === 'A' || type === 'B' || type === 'C' || type === 'D';
   }
 
+  function isSimplyLacedFinite(type) {
+    return type === 'A' || type === 'D' || type === 'E6' || type === 'E7' || type === 'E8';
+  }
+
   function typeLabel(type = state.type, rank = state.rank) {
     return TYPE_NAMES[type] ? TYPE_NAMES[type](rank) : type;
   }
@@ -415,6 +419,7 @@
       '.parabolic-matrix-wrap',
       '.parabolic-detail-group',
       '.parabolic-stats',
+      '#dynkin-starting-function',
       '#dynkin-cartan'
     ];
     return targetSelectors
@@ -580,6 +585,7 @@
     renderInvariants();
     renderVertexData();
     renderParabolic();
+    renderStartingFunction();
     renderCartan();
     renderExport();
     queueMathTypeset();
@@ -851,6 +857,130 @@
 
   function compactMatrixLatex(rows) {
     return `\\left(\\begin{smallmatrix}${rows.join('\\\\')}\\end{smallmatrix}\\right)`;
+  }
+
+  function renderStartingFunction() {
+    const target = $('dynkin-starting-function');
+    const selected = selectedIndices()[0];
+    if (!isSimplyLacedFinite(state.type)) {
+      target.innerHTML = `<div class="starting-note">${inlineMath('\\dim\\operatorname{Hom}(P(i),M)')} is shown here for Dynkin types ${inlineMath('A,D,E')}.</div>`;
+      return;
+    }
+    const chart = startingFunctionChart(state.type, state.rank, state.cartan, selected);
+    const grid = chart.cells
+      .map((cell) => {
+        const value = cell.value ? inlineMath(String(cell.value)) : '&nbsp;';
+        const className = cell.value ? 'starting-chart-cell' : 'starting-chart-cell is-empty';
+        const title = cell.value ? ` title="${escapeHtml(rootTooltip(cell.root))}"` : '';
+        return `<span class="${className}" style="grid-row:${cell.row};grid-column:${cell.col};"${title}>${value}</span>`;
+      })
+      .join('');
+    target.innerHTML = [
+      `<div class="starting-summary">${inlineMath(`M_\\beta\\mapsto\\dim\\operatorname{Hom}(P(${selected + 1}),M_\\beta)=\\operatorname{coeff}_{\\alpha_{${selected + 1}}}(\\beta)`)}.</div>`,
+      `<div class="starting-chart-wrap"><div class="starting-chart-grid" style="--starting-cols:${chart.columns};">${grid}</div></div>`
+    ].join('');
+  }
+
+  function startingFunctionChart(type, rank, C, selected) {
+    const columnsByVertex = startingFunctionVertexColumns(type, rank);
+    const colors = bipartiteColorClasses(C, columnsByVertex);
+    const rows = [];
+    const seen = new Set();
+    const coxeter = invariants(type, rank, C, state.roots).coxeter;
+    const rowCount = coxeter - 1;
+    const startColor = colors[0].includes(selected) ? 0 : 1;
+    const columns = Math.max(...columnsByVertex);
+    const prefix = [];
+    for (let row = 0; row < rowCount; row++) {
+      const color = (startColor + row) % 2;
+      const vertices = colors[color];
+      vertices.forEach((vertex, index) => {
+        let root = simpleRoot(rank, vertex);
+        for (let step = prefix.length - 1; step >= 0; step--) {
+          root = reflectRoot(root, prefix[step], C);
+        }
+        const rootKey = key(root);
+        if (root[selected] > 0 && root.every((value) => value >= 0) && !seen.has(rootKey)) {
+          rows.push({
+            row: row + 1,
+            col: columnsByVertex[vertex],
+            value: root[selected],
+            root
+          });
+          seen.add(rootKey);
+        }
+      });
+      prefix.push(...vertices);
+    }
+    return normalizeStartingFunctionColumns(rows, columns);
+  }
+
+  function normalizeStartingFunctionColumns(cells, fallbackColumns) {
+    if (!cells.length) return { cells, columns: fallbackColumns };
+    const minColumn = Math.min(...cells.map((cell) => cell.col));
+    const maxColumn = Math.max(...cells.map((cell) => cell.col));
+    const normalized = cells.map((cell) => ({ ...cell, col: cell.col - minColumn + 1 }));
+    return { cells: normalized, columns: maxColumn - minColumn + 1 };
+  }
+
+  function startingFunctionVertexColumns(type, rank) {
+    if (type === 'A') {
+      return Array.from({ length: rank }, (_, index) => rank - index);
+    }
+    if (type === 'D') {
+      const columns = Array(rank).fill(1);
+      for (let index = 0; index <= rank - 4; index++) columns[index] = rank - index;
+      columns[rank - 3] = 2;
+      columns[rank - 2] = 1;
+      columns[rank - 1] = 3;
+      return columns;
+    }
+    if (type === 'E6' || type === 'E7' || type === 'E8') {
+      const columns = Array(rank).fill(1);
+      for (let index = 0; index <= rank - 2; index++) columns[index] = rank - index;
+      columns[rank - 1] = rank - 2;
+      return columns;
+    }
+    return Array.from({ length: rank }, (_, index) => index + 1);
+  }
+
+  function bipartiteColorClasses(C, columnsByVertex) {
+    const colors = [[], []];
+    const assigned = Array(C.length).fill(null);
+    for (let start = 0; start < C.length; start++) {
+      if (assigned[start] != null) continue;
+      assigned[start] = 0;
+      const queue = [start];
+      while (queue.length) {
+        const current = queue.shift();
+        for (let next = 0; next < C.length; next++) {
+          if (!C[current][next] && !C[next][current]) continue;
+          if (assigned[next] == null) {
+            assigned[next] = 1 - assigned[current];
+            queue.push(next);
+          }
+        }
+      }
+    }
+    assigned.forEach((color, vertex) => colors[color].push(vertex));
+    return colors.map((group) => group.sort((a, b) => columnsByVertex[a] - columnsByVertex[b] || a - b));
+  }
+
+  function simpleRoot(rank, vertex) {
+    const root = Array(rank).fill(0);
+    root[vertex] = 1;
+    return root;
+  }
+
+  function reflectRoot(root, vertex, C) {
+    const bracket = root.reduce((sum, value, index) => sum + value * C[index][vertex], 0);
+    const next = root.slice();
+    next[vertex] -= bracket;
+    return next;
+  }
+
+  function rootTooltip(root) {
+    return `beta = ${root.map((value, index) => value ? `${value === 1 ? '' : value}alpha_${index + 1}` : '').filter(Boolean).join(' + ')}`;
   }
 
   function renderCartan() {

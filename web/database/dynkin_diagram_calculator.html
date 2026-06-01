@@ -272,6 +272,62 @@
       contain: inline-size layout paint;
     }
 
+    .starting-card-body {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .starting-summary,
+    .starting-note {
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.96rem;
+      line-height: 1.35;
+      color: var(--muted);
+      min-width: 0;
+    }
+
+    .starting-chart-wrap {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow: auto;
+      padding: 4px 0 8px;
+      scrollbar-gutter: stable;
+      contain: inline-size layout paint;
+    }
+
+    .starting-chart-grid {
+      display: grid;
+      --starting-cell: 24px;
+      grid-template-columns: repeat(var(--starting-cols), var(--starting-cell));
+      grid-auto-rows: var(--starting-cell);
+      gap: 0;
+      width: max-content;
+      min-width: max-content;
+      margin: 0 auto;
+      align-items: center;
+      justify-items: center;
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 1.08rem;
+      line-height: 1;
+      color: var(--text);
+    }
+
+    .starting-chart-cell {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: var(--starting-cell);
+      min-height: var(--starting-cell);
+      text-align: center;
+    }
+
+    .starting-chart-cell.is-empty {
+      color: transparent;
+      user-select: none;
+    }
+
     .math-stat-value {
       font-family: 'EB Garamond', Georgia, serif;
       font-size: 0.96rem;
@@ -379,6 +435,11 @@
     <section class="card" draggable="true">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Parabolic Subalgebra</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body parabolic-card-body" id="dynkin-parabolic"></div>
+    </section>
+
+    <section class="card" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Starting Function</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body starting-card-body" id="dynkin-starting-function"></div>
     </section>
 
     <section class="card collapsed" draggable="true">
