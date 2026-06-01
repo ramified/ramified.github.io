@@ -16,6 +16,11 @@
       min-width: 0;
     }
 
+    .dynkin-layout > .side,
+    .dynkin-layout .card {
+      min-width: 0;
+    }
+
     .dynkin-canvas {
       width: 100%;
       height: auto;
@@ -53,6 +58,25 @@
       width: 58px;
       padding: 4px 7px;
       text-align: center;
+    }
+
+    .dynkin-check-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .dynkin-check-label input {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent);
+      cursor: pointer;
     }
 
     .dynkin-toolbar-group select:focus,
@@ -132,6 +156,9 @@
     .parabolic-card-body {
       display: grid;
       gap: 10px;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
     }
 
     .parabolic-summary {
@@ -139,12 +166,41 @@
       font-size: 0.72rem;
       line-height: 1.45;
       color: var(--muted);
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-gutter: stable;
     }
 
     .parabolic-matrix-wrap {
       overflow: auto;
       padding: 2px 0 6px;
       scrollbar-gutter: stable;
+      width: 100%;
+      inline-size: 100%;
+      max-width: 100%;
+      max-inline-size: 100%;
+      min-width: 0;
+      min-inline-size: 0;
+      box-sizing: border-box;
+      contain: layout paint;
+      contain: inline-size layout paint;
+    }
+
+    .parabolic-detail-group {
+      display: grid;
+      gap: 8px;
+      width: 100%;
+      inline-size: 100%;
+      min-width: 0;
+      min-inline-size: 0;
+      max-width: 100%;
+      max-inline-size: 100%;
+      overflow: hidden;
+      box-sizing: border-box;
+      contain: layout paint;
+      contain: inline-size layout paint;
     }
 
     .parabolic-matrix-wrap mjx-container[jax="CHTML"][display="true"] {
@@ -157,6 +213,22 @@
       font-size: 1rem;
       line-height: 1.35;
       color: var(--text);
+      width: 100%;
+      inline-size: 100%;
+      max-width: 100%;
+      max-inline-size: 100%;
+      min-width: 0;
+      min-inline-size: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-gutter: stable;
+      box-sizing: border-box;
+      contain: layout paint;
+      contain: inline-size layout paint;
+    }
+
+    .parabolic-definition mjx-container[jax="CHTML"][display="true"] {
+      min-width: max-content;
     }
 
     .parabolic-tex-lines {
@@ -166,6 +238,38 @@
       font-size: 0.95rem;
       color: var(--muted);
       line-height: 1.35;
+      width: 100%;
+      inline-size: 100%;
+      max-width: 100%;
+      max-inline-size: 100%;
+      min-width: 0;
+      min-inline-size: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-gutter: stable;
+      box-sizing: border-box;
+      contain: layout paint;
+      contain: inline-size layout paint;
+    }
+
+    .parabolic-tex-lines > div {
+      width: max-content;
+      min-width: 100%;
+    }
+
+    .parabolic-stats {
+      width: 100%;
+      inline-size: 100%;
+      max-width: 100%;
+      max-inline-size: 100%;
+      min-width: 0;
+      min-inline-size: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-gutter: stable;
+      box-sizing: border-box;
+      contain: layout paint;
+      contain: inline-size layout paint;
     }
 
     .math-stat-value {
@@ -245,6 +349,10 @@
             <label class="stat-label" for="dynkin-rank">rank</label>
             <input id="dynkin-rank" type="number" min="1" max="12" value="6">
           </span>
+          <label class="dynkin-check-label" for="dynkin-multi-select">
+            <input id="dynkin-multi-select" type="checkbox">
+            <span>select multi-vertices</span>
+          </label>
         </span>
       </div>
     </header>
