@@ -295,6 +295,35 @@
       border-color: var(--accent);
     }
 
+    .boundary-chain-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .background-slider-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .background-slider-controls input[type=range] {
+      flex: 1 1 auto;
+      min-width: 64px;
+      accent-color: var(--accent);
+    }
+
+    .background-slider-controls output {
+      min-width: 34px;
+      text-align: right;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+    }
+
     .mosaic-chip {
       display: inline-flex;
       align-items: center;
@@ -879,7 +908,22 @@
             <select id="background-action">
               <option value="tile">Remove / recover tiles</option>
               <option value="boundary">Add / remove boundary</option>
+              <option value="glue-boundary">Glue boundary</option>
             </select>
+          </div>
+          <div class="mosaic-inline-row" id="background-multi-edge-row">
+            <span class="input-label">Multi-edges</span>
+            <span class="boundary-chain-controls">
+              <label class="opt-row"><input type="checkbox" id="background-multi-edges" checked> on</label>
+              <button class="btn btn-ghost" id="background-begin-second-chain" type="button" disabled>begin second</button>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="background-cusp-marker-row">
+            <span class="input-label">Cusp dot</span>
+            <span class="background-slider-controls">
+              <input type="range" id="background-cusp-marker-scale" min="0.35" max="1.4" step="0.05" value="0.7">
+              <output id="background-cusp-marker-scale-value">0.70</output>
+            </span>
           </div>
         </div>
         <div class="input-mode-panel" data-input-panel="decoration">
@@ -933,6 +977,8 @@
         <div class="stat-row" id="out-tiles-row"><span class="stat-label" id="out-tiles-label">Filled tiles</span><span class="stat-value" id="out-tiles">0</span></div>
         <div class="stat-row" id="out-open-ends-row"><span class="stat-label" id="out-open-ends-label">Open ends</span><span class="stat-value" id="out-open-ends">0</span></div>
         <div class="stat-row" id="out-components-row"><span class="stat-label" id="out-components-label">Components</span><span class="stat-value" id="out-components">0</span></div>
+        <div class="stat-row" id="out-genus-row" hidden><span class="stat-label">Genus</span><span class="stat-value" id="out-genus">-</span></div>
+        <div class="stat-row" id="out-cusps-row" hidden><span class="stat-label">Cusps</span><span class="stat-value" id="out-cusps">-</span></div>
       </div>
     </section>
 

@@ -51,6 +51,8 @@
     pipe: '#2f3437'
   };
   const COMPONENT_COLOR_PALETTE = ['#b23a48', '#1f7a8c', '#6a4c93', '#c47f17'];
+  const GLUED_BOUNDARY_COLORS = ['#1f7a8c', '#b23a48', '#6a4c93', '#c47f17', '#2f855a', '#8a4f7d'];
+  const DEFAULT_BACKGROUND_CUSP_MARKER_SCALE = 0.7;
   const KNOT_PRESETS = [
     {
       id: 'hopf-link',
@@ -253,6 +255,13 @@
     tiles: [],
     removedTiles: new Set(),
     cutEdges: new Set(),
+    gluedEdges: [],
+    pendingGlueEdge: null,
+    pendingGlueChains: null,
+    backgroundMultiEdges: true,
+    backgroundCuspMarkerScale: DEFAULT_BACKGROUND_CUSP_MARKER_SCALE,
+    backgroundHoverCusp: null,
+    selectedBackgroundCusp: null,
     edits: 0,
     showErrors: true,
     showCoords: false,
@@ -383,6 +392,12 @@
       ? refs.inputMode.querySelector('option[value="background"]')
       : null;
     refs.backgroundAction = document.getElementById('background-action');
+    refs.backgroundMultiEdgeRow = document.getElementById('background-multi-edge-row');
+    refs.backgroundMultiEdges = document.getElementById('background-multi-edges');
+    refs.backgroundBeginSecondChain = document.getElementById('background-begin-second-chain');
+    refs.backgroundCuspMarkerRow = document.getElementById('background-cusp-marker-row');
+    refs.backgroundCuspMarkerScale = document.getElementById('background-cusp-marker-scale');
+    refs.backgroundCuspMarkerScaleValue = document.getElementById('background-cusp-marker-scale-value');
     refs.editMode = document.getElementById('edit-mode');
     refs.drawAction = document.getElementById('draw-action');
     refs.drawVertexOption = refs.drawAction
@@ -474,12 +489,16 @@
       tilesRow: document.getElementById('out-tiles-row'),
       openEndsRow: document.getElementById('out-open-ends-row'),
       componentsRow: document.getElementById('out-components-row'),
+      genusRow: document.getElementById('out-genus-row'),
+      cuspsRow: document.getElementById('out-cusps-row'),
       tilesLabel: document.getElementById('out-tiles-label'),
       openEndsLabel: document.getElementById('out-open-ends-label'),
       componentsLabel: document.getElementById('out-components-label'),
       tiles: document.getElementById('out-tiles'),
       openEnds: document.getElementById('out-open-ends'),
-      components: document.getElementById('out-components')
+      components: document.getElementById('out-components'),
+      genus: document.getElementById('out-genus'),
+      cusps: document.getElementById('out-cusps')
     };
   }
 
@@ -523,7 +542,27 @@
         refs.backgroundAction.value = state.backgroundAction;
         state.hoverIndex = -1;
         state.backgroundHoverEdge = null;
+        if (!isBackgroundGlueAction()) clearPendingGlueEdge();
+        syncBackgroundModeControls();
         syncMainCanvasCursor();
+        updateReport(false);
+      });
+    }
+    if (refs.backgroundMultiEdges) {
+      refs.backgroundMultiEdges.addEventListener('change', () => {
+        state.backgroundMultiEdges = refs.backgroundMultiEdges.checked;
+        clearPendingGlueEdge();
+        syncBackgroundModeControls();
+        updateReport(false);
+      });
+    }
+    if (refs.backgroundBeginSecondChain) {
+      refs.backgroundBeginSecondChain.addEventListener('click', beginSecondGlueBoundaryChain);
+    }
+    if (refs.backgroundCuspMarkerScale) {
+      refs.backgroundCuspMarkerScale.addEventListener('input', () => {
+        state.backgroundCuspMarkerScale = normalizeBackgroundCuspMarkerScale(refs.backgroundCuspMarkerScale.value);
+        syncBackgroundModeControls();
         updateReport(false);
       });
     }
@@ -835,6 +874,7 @@
     state.pickHoverHit = null;
     state.decorationHoverHit = null;
     state.backgroundHoverEdge = null;
+    if (state.inputMode !== 'background') clearPendingGlueEdge();
     syncMainCanvasCursor();
     if (state.inputMode !== 'pick' && !state.displayPick && options.clearPick !== false) {
       state.pickedComponent = null;
@@ -846,6 +886,7 @@
     updateInputModePanels();
     syncImportPresetControls();
     updateDrawModeControls();
+    syncBackgroundModeControls();
     updateInputModePanels();
     updateInputModeLock();
     updateReport(false);
@@ -1159,6 +1200,7 @@
       state.hoverIndex = -1;
       state.decorationHoverHit = null;
       state.backgroundHoverEdge = null;
+      state.backgroundHoverCusp = null;
       syncMainCanvasCursor();
       draw(analyze());
     });
@@ -1175,6 +1217,7 @@
       }
       if (state.inputMode === 'background') {
         const debugChanged = clearDrawDebugHit(false);
+        const cusp = backgroundCuspHitTest(event.clientX, event.clientY);
         const edge = isBackgroundBoundaryAction()
           ? backgroundEdgeHitTest(event.clientX, event.clientY)
           : null;
@@ -1182,9 +1225,11 @@
           ? -1
           : hitTest(event.clientX, event.clientY, { includeRemoved: true });
         const edgeChanged = !sameBackgroundEdgeHit(edge, state.backgroundHoverEdge);
-        if (hit !== state.hoverIndex || edgeChanged || state.decorationHoverHit || debugChanged) {
+        const cuspChanged = !sameBackgroundCuspHit(cusp, state.backgroundHoverCusp);
+        if (hit !== state.hoverIndex || edgeChanged || cuspChanged || state.decorationHoverHit || debugChanged) {
           state.hoverIndex = hit;
           state.backgroundHoverEdge = edge;
+          state.backgroundHoverCusp = cusp;
           state.decorationHoverHit = null;
           syncMainCanvasCursor();
           draw(analyze());
@@ -1325,11 +1370,17 @@
     state.lattice = LATTICES[latticeName] ? latticeName : 'hexagonal';
     state.boundaryMode = boundaryMode;
     state.wrapped = boundaryMode === 'wrapped';
+    if (boundaryMode === 'glued') state.inputMode = 'background';
     state.removedTiles = new Set();
     state.cutEdges = new Set();
+    state.gluedEdges = [];
+    state.pendingGlueEdge = null;
+    state.pendingGlueChains = null;
     state.edits = 0;
     state.hoverIndex = -1;
     state.backgroundHoverEdge = null;
+    state.backgroundHoverCusp = null;
+    state.selectedBackgroundCusp = null;
     state.drawDebugHit = null;
     state.pickHoverHit = null;
     state.pickedComponent = null;
@@ -1374,6 +1425,7 @@
     const oldHalfEdgeDecorations = { ...state.halfEdgeDecorations };
     const oldRemovedTiles = cloneRemovedTileSet();
     const oldCutEdges = cloneCutEdgeSet();
+    const oldGluedEdges = cloneGluedEdges();
     const oldBoundaryMode = state.boundaryMode;
 
     state.rows = rows;
@@ -1389,6 +1441,10 @@
     state.pickedAnchor = null;
     state.decorationHoverHit = null;
     state.backgroundHoverEdge = null;
+    state.backgroundHoverCusp = null;
+    state.selectedBackgroundCusp = null;
+    state.pendingGlueEdge = null;
+    state.pendingGlueChains = null;
     syncMainCanvasCursor();
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
@@ -1407,7 +1463,13 @@
     state.cutEdges = oldLattice !== nextLattice
       ? new Set()
       : reshapeCutEdges(oldCutEdges, oldRows, oldCols, rows, cols);
+    state.gluedEdges = oldLattice !== nextLattice
+      ? []
+      : reshapeGluedEdges(oldGluedEdges, oldRows, oldCols, rows, cols);
+    state.pendingGlueEdge = null;
+    state.pendingGlueChains = null;
     pruneCutEdges();
+    pruneGluedEdges();
     state.standardDualGraphInput = null;
     syncAllInputs(rows, cols, state.lattice, state.boundaryMode);
     renderTilePalette();
@@ -1456,6 +1518,30 @@
       next.add(cutEdgeKey(indexOf(leftRow, leftCol, cols), indexOf(rightRow, rightCol, cols)));
     });
     return next;
+  }
+
+  function reshapeGluedEdges(oldGluedEdges, oldRows, oldCols, rows, cols) {
+    if (!Array.isArray(oldGluedEdges) || !oldGluedEdges.length) return [];
+    return oldGluedEdges
+      .map((pair) => ({
+        first: reshapeBoundaryEdge(pair.first, oldRows, oldCols, rows, cols),
+        second: reshapeBoundaryEdge(pair.second, oldRows, oldCols, rows, cols)
+      }))
+      .filter((pair) => pair.first && pair.second);
+  }
+
+  function reshapeBoundaryEdge(edge, oldRows, oldCols, rows, cols) {
+    if (!edge) return null;
+    const oldIndex = Number(edge.index);
+    const dir = Number(edge.dir);
+    if (!Number.isInteger(oldIndex) || !Number.isInteger(dir)) return null;
+    const row = Math.floor(oldIndex / oldCols);
+    const col = oldIndex % oldCols;
+    if (row < 0 || row >= rows || col < 0 || col >= cols) return null;
+    return {
+      index: indexOf(row, col, cols),
+      dir
+    };
   }
 
   function reshapeVertexDecorations(oldDecorations, oldRows, oldCols, rows, cols) {
@@ -1661,6 +1747,7 @@
     const oldLattice = state.lattice;
     const oldRemovedTiles = cloneRemovedTileSet();
     const oldCutEdges = cloneCutEdgeSet();
+    const oldGluedEdges = cloneGluedEdges();
     const boundaryMode = resolveImportedBoundaryMode(options, state.boundaryMode);
     clearEditorDrag();
     cancelDrawGesture(false);
@@ -1677,8 +1764,12 @@
     state.cutEdges = hasImportedCutEdges(options)
       ? importCutEdges(options, rows, cols)
       : (oldLattice === latticeName ? reshapeCutEdges(oldCutEdges, oldRows, oldCols, rows, cols) : new Set());
+    state.gluedEdges = hasImportedGluedEdges(options)
+      ? importGluedEdges(options, rows, cols)
+      : (oldLattice === latticeName ? reshapeGluedEdges(oldGluedEdges, oldRows, oldCols, rows, cols) : []);
     state.wrappedViewMode = 'periodic';
     state.inputMode = 'import';
+    state.backgroundMultiEdges = true;
     state.editMode = 'rotate';
     state.drawAction = 'edge';
     state.drawLayer = 'above';
@@ -1697,6 +1788,8 @@
     state.pickHoverHit = null;
     state.decorationHoverHit = null;
     state.backgroundHoverEdge = null;
+    state.pendingGlueEdge = null;
+    state.pendingGlueChains = null;
     syncMainCanvasCursor();
     state.pickedComponent = null;
     state.pickedAnchor = null;
@@ -1711,6 +1804,7 @@
     state.halfEdgeDecorations = {};
     clearRemovedTileContents();
     pruneCutEdges();
+    pruneGluedEdges();
     state.dualGraphLayout = null;
     state.dualGraphStructureKey = '';
     state.dualGraphLayoutTimings = {};
@@ -1722,6 +1816,7 @@
     if (refs.showCoords) refs.showCoords.checked = state.showCoords;
     if (refs.colorComponents) refs.colorComponents.checked = state.colorComponents;
     if (refs.displayPick) refs.displayPick.checked = state.displayPick;
+    if (refs.backgroundMultiEdges) refs.backgroundMultiEdges.checked = !!state.backgroundMultiEdges;
     if (refs.importInput && typeof (options && options.importText) === 'string') refs.importInput.value = options.importText;
     renderTilePalette();
     resetView(false);
@@ -2228,6 +2323,7 @@
     const oldLattice = state.lattice;
     const oldRemovedTiles = cloneRemovedTileSet();
     const oldCutEdges = cloneCutEdgeSet();
+    const oldGluedEdges = cloneGluedEdges();
     const rows = clampInt(payload.rows, MIN_BOARD, MAX_BOARD, state.rows);
     const cols = clampInt(payload.cols, MIN_BOARD, MAX_BOARD, state.cols);
     const latticeName = LATTICES[payload.lattice] ? payload.lattice : state.lattice;
@@ -2244,6 +2340,13 @@
     state.wrappedViewMode = payload.wrappedViewMode === 'single' ? 'single' : 'periodic';
     state.inputMode = normalizeInputMode(payload.inputMode);
     state.backgroundAction = normalizeBackgroundAction(payload.backgroundAction || (payload.backgroundSpace && payload.backgroundSpace.action));
+    state.backgroundMultiEdges = payload.backgroundMultiEdges !== false
+      && !(payload.backgroundSpace && payload.backgroundSpace.multiEdges === false);
+    state.backgroundCuspMarkerScale = normalizeBackgroundCuspMarkerScale(
+      payload.backgroundCuspMarkerScale != null
+        ? payload.backgroundCuspMarkerScale
+        : (payload.backgroundSpace && payload.backgroundSpace.cuspMarkerScale)
+    );
     state.editMode = normalizeEditMode(payload.clickMode || payload.editMode);
     state.drawAction = normalizeDrawAction(payload.drawAction || (payload.display && payload.display.drawAction));
     if (state.diagramType === 'dual' && (payload.drawAddVertices || (payload.display && payload.display.drawAddVertices))) {
@@ -2272,6 +2375,8 @@
     state.pickHoverHit = null;
     state.decorationHoverHit = null;
     state.backgroundHoverEdge = null;
+    state.pendingGlueEdge = null;
+    state.pendingGlueChains = null;
     syncMainCanvasCursor();
     state.pickedComponent = null;
     state.pickedAnchor = null;
@@ -2284,10 +2389,14 @@
     state.cutEdges = hasImportedCutEdges(payload)
       ? importCutEdges(payload, rows, cols)
       : (oldLattice === latticeName ? reshapeCutEdges(oldCutEdges, oldRows, oldCols, rows, cols) : new Set());
+    state.gluedEdges = hasImportedGluedEdges(payload)
+      ? importGluedEdges(payload, rows, cols)
+      : (oldLattice === latticeName ? reshapeGluedEdges(oldGluedEdges, oldRows, oldCols, rows, cols) : []);
     state.vertexDecorations = importVertexDecorations(payload, rows, cols);
     state.halfEdgeDecorations = importHalfEdgeDecorations(payload);
     clearRemovedTileContents();
     pruneCutEdges();
+    pruneGluedEdges();
 
     syncAllInputs(rows, cols, state.lattice, state.boundaryMode);
     refs.showErrors.checked = state.showErrors;
@@ -2298,6 +2407,7 @@
     refs.knotCodeKind.value = state.knotCodeKind;
     refs.drawStyle.value = state.drawStyle;
     if (refs.backgroundAction) refs.backgroundAction.value = state.backgroundAction;
+    if (refs.backgroundMultiEdges) refs.backgroundMultiEdges.checked = !!state.backgroundMultiEdges;
     if (refs.halfEdgeLabelStyle) refs.halfEdgeLabelStyle.value = state.halfEdgeLabelStyle;
     if (refs.clearVertexDecorations) refs.clearVertexDecorations.checked = !!state.clearVertexDecorations;
     if (refs.clearHalfEdgeDecorations) refs.clearHalfEdgeDecorations.checked = !!state.clearHalfEdgeDecorations;
@@ -2362,6 +2472,68 @@
       if (isValidCutEdgeKey(key, rows, cols)) cuts.add(key);
     });
     return cuts;
+  }
+
+  function importGluedEdges(payload, rows, cols) {
+    const glued = [];
+    if (!payload || typeof payload !== 'object') return glued;
+    const entries = [];
+    if (Array.isArray(payload.gluedEdges)) entries.push(...payload.gluedEdges);
+    if (Array.isArray(payload.backgroundGluedEdges)) entries.push(...payload.backgroundGluedEdges);
+    if (payload.backgroundSpace && typeof payload.backgroundSpace === 'object') {
+      if (Array.isArray(payload.backgroundSpace.gluedEdges)) entries.push(...payload.backgroundSpace.gluedEdges);
+      if (Array.isArray(payload.backgroundSpace.gluedBoundaries)) entries.push(...payload.backgroundSpace.gluedBoundaries);
+    }
+
+    const seen = new Set();
+    entries.forEach((entry) => {
+      const pair = importedGluedBoundaryPair(entry, rows, cols);
+      if (!pair) return;
+      const key = gluedPairKey(pair);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      glued.push(pair);
+    });
+    return glued;
+  }
+
+  function importedGluedBoundaryPair(entry, rows, cols) {
+    if (Array.isArray(entry) && entry.length >= 2) {
+      const first = importedBoundaryEdge(entry[0], rows, cols);
+      const second = importedBoundaryEdge(entry[1], rows, cols);
+      return first && second ? { first, second, group: null } : null;
+    }
+    if (!entry || typeof entry !== 'object') return null;
+    const firstValue = firstPresentValue(entry, ['first', 'left', 'a', 'from']);
+    const secondValue = firstPresentValue(entry, ['second', 'right', 'b', 'to']);
+    const first = importedBoundaryEdge(firstValue, rows, cols);
+    const second = importedBoundaryEdge(secondValue, rows, cols);
+    return first && second ? { first, second, group: normalizeGlueGroup(entry.group) } : null;
+  }
+
+  function importedBoundaryEdge(value, rows, cols) {
+    if (!value || typeof value !== 'object') return null;
+    const index = importedEndpointIndex(value, rows, cols);
+    if (index < 0) return null;
+    const dirValue = value.dir != null ? value.dir : value.edge;
+    if (dirValue == null) return null;
+    const dir = strictImportedDir(dirValue);
+    if (dir == null) return null;
+    const edge = { index, dir };
+    return isValidBoundaryEdge(edge, rows, cols) ? edge : null;
+  }
+
+  function strictImportedDir(value) {
+    const lattice = getLattice();
+    if (typeof value === 'string') {
+      const normalized = value.trim().toUpperCase();
+      const named = lattice.dirNames.findIndex((name) => name.toUpperCase() === normalized);
+      if (named >= 0) return named;
+      if (!/^-?\d+$/.test(normalized)) return null;
+    }
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    return modulo(Math.trunc(parsed), lattice.sides);
   }
 
   function importedCutEdgeEndpoints(entry, rows, cols) {
@@ -2435,6 +2607,17 @@
     ));
   }
 
+  function hasImportedGluedEdges(payload) {
+    return !!(payload && typeof payload === 'object' && (
+      Array.isArray(payload.gluedEdges)
+      || Array.isArray(payload.backgroundGluedEdges)
+      || (payload.backgroundSpace && typeof payload.backgroundSpace === 'object' && (
+        Array.isArray(payload.backgroundSpace.gluedEdges)
+        || Array.isArray(payload.backgroundSpace.gluedBoundaries)
+      ))
+    ));
+  }
+
   function hasImportedCutEdgeEntries(payload) {
     return !!(payload && typeof payload === 'object' && (
       (Array.isArray(payload.cutEdges) && payload.cutEdges.length > 0)
@@ -2442,6 +2625,17 @@
       || (payload.backgroundSpace && typeof payload.backgroundSpace === 'object' && (
         (Array.isArray(payload.backgroundSpace.cutEdges) && payload.backgroundSpace.cutEdges.length > 0)
         || (Array.isArray(payload.backgroundSpace.boundaries) && payload.backgroundSpace.boundaries.length > 0)
+      ))
+    ));
+  }
+
+  function hasImportedGluedEdgeEntries(payload) {
+    return !!(payload && typeof payload === 'object' && (
+      (Array.isArray(payload.gluedEdges) && payload.gluedEdges.length > 0)
+      || (Array.isArray(payload.backgroundGluedEdges) && payload.backgroundGluedEdges.length > 0)
+      || (payload.backgroundSpace && typeof payload.backgroundSpace === 'object' && (
+        (Array.isArray(payload.backgroundSpace.gluedEdges) && payload.backgroundSpace.gluedEdges.length > 0)
+        || (Array.isArray(payload.backgroundSpace.gluedBoundaries) && payload.backgroundSpace.gluedBoundaries.length > 0)
       ))
     ));
   }
@@ -2468,7 +2662,7 @@
     if (boundary === 'wrapped' || boundary === 'glued') return boundary;
     if (boundaryMode === 'wrapped' || boundaryMode === 'glued') return boundaryMode;
     if (payload.wrapped === true) return 'wrapped';
-    if (hasImportedRemovedTileEntries(payload) || hasImportedCutEdgeEntries(payload)) return 'glued';
+    if (hasImportedRemovedTileEntries(payload) || hasImportedCutEdgeEntries(payload) || hasImportedGluedEdgeEntries(payload)) return 'glued';
     return fallback;
   }
 
@@ -2586,6 +2780,9 @@
     state.tiles = Array(state.rows * state.cols).fill(null);
     state.removedTiles = new Set();
     state.cutEdges = new Set();
+    state.gluedEdges = [];
+    state.pendingGlueEdge = null;
+    state.pendingGlueChains = null;
     state.vertexDecorations = {};
     state.halfEdgeDecorations = {};
     state.standardDualGraphInput = null;
@@ -2665,6 +2862,10 @@
     if (!refs.canvas) return;
     if (isDecorationMode()) {
       refs.canvas.style.cursor = state.decorationHoverHit ? 'pointer' : 'default';
+      return;
+    }
+    if (state.inputMode === 'background' && state.backgroundHoverCusp) {
+      refs.canvas.style.cursor = 'pointer';
       return;
     }
     if (state.inputMode === 'background' && isBackgroundBoundaryAction()) {
@@ -2961,6 +3162,18 @@
     return state.cutEdges instanceof Set ? new Set(state.cutEdges) : new Set();
   }
 
+  function cloneGluedEdges() {
+    return Array.isArray(state.gluedEdges)
+      ? state.gluedEdges
+        .map((pair) => ({
+          first: cloneBoundaryEdge(pair.first),
+          second: cloneBoundaryEdge(pair.second),
+          group: normalizeGlueGroup(pair.group)
+        }))
+        .filter((pair) => pair.first && pair.second)
+      : [];
+  }
+
   function cutEdgeKey(leftIndex, rightIndex) {
     const left = Number(leftIndex);
     const right = Number(rightIndex);
@@ -2983,6 +3196,155 @@
       && state.cutEdges.has(cutEdgeKey(leftIndex, rightIndex));
   }
 
+  function cloneBoundaryEdge(edge) {
+    if (!edge) return null;
+    const index = Number(edge.index);
+    const dir = Number(edge.dir);
+    const sides = getLattice().sides;
+    if (!Number.isInteger(index) || index < 0 || index >= state.rows * state.cols) return null;
+    if (!Number.isInteger(dir)) return null;
+    return {
+      index,
+      dir: normalizeDir(dir, sides)
+    };
+  }
+
+  function boundaryEdgeKey(edge) {
+    const normalized = cloneBoundaryEdge(edge);
+    return normalized ? `${normalized.index}:${normalized.dir}` : '';
+  }
+
+  function sameBoundaryEdge(left, right) {
+    return boundaryEdgeKey(left) === boundaryEdgeKey(right);
+  }
+
+  function gluedPairKey(pair) {
+    if (!pair) return '';
+    const first = boundaryEdgeKey(pair.first);
+    const second = boundaryEdgeKey(pair.second);
+    if (!first || !second) return '';
+    return first < second ? `${first}|${second}` : `${second}|${first}`;
+  }
+
+  function normalizeGlueGroup(group) {
+    const value = Number(group);
+    return Number.isInteger(value) && value >= 0 ? value : null;
+  }
+
+  function nextGlueGroup() {
+    const groups = cloneGluedEdges()
+      .map((pair) => normalizeGlueGroup(pair.group))
+      .filter((group) => group != null);
+    return groups.length ? Math.max(...groups) + 1 : 0;
+  }
+
+  function gluedBoundaryPartner(index, dir) {
+    const key = boundaryEdgeKey({ index, dir });
+    if (!key) return null;
+    for (const pair of cloneGluedEdges()) {
+      const firstKey = boundaryEdgeKey(pair.first);
+      const secondKey = boundaryEdgeKey(pair.second);
+      if (firstKey === key) return cloneBoundaryEdge(pair.second);
+      if (secondKey === key) return cloneBoundaryEdge(pair.first);
+    }
+    return null;
+  }
+
+  function isValidBoundaryEdge(edge, rows = state.rows, cols = state.cols) {
+    if (!edge) return false;
+    const index = Number(edge.index);
+    const dir = normalizeDir(edge.dir, getLattice().sides);
+    const total = rows * cols;
+    if (!Number.isInteger(index) || index < 0 || index >= total) return false;
+    if (!Number.isInteger(dir)) return false;
+    if (rows === state.rows && cols === state.cols && !tileExists(index)) return false;
+    const row = Math.floor(index / cols);
+    const col = index % cols;
+    const next = neighbor(row, col, dir, rows, cols, getLattice(), false);
+    if (!next) return true;
+    const nextIndex = indexOf(next.row, next.col, cols);
+    if (rows === state.rows && cols === state.cols) {
+      return !tileExists(nextIndex) || hasCutEdgeBetween(index, nextIndex);
+    }
+    return false;
+  }
+
+  function isGluedBoundaryEdge(index, dir) {
+    return !!gluedBoundaryPartner(index, dir);
+  }
+
+  function hasGluedBoundaryPairs() {
+    return cloneGluedEdges().length > 0;
+  }
+
+  function clearPendingGlueEdge() {
+    state.pendingGlueEdge = null;
+    state.pendingGlueChains = null;
+  }
+
+  function removeGluedEdgesForBoundaryEdge(edge) {
+    const key = boundaryEdgeKey(edge);
+    if (!key) return;
+    if (Array.isArray(state.gluedEdges) && state.gluedEdges.length) {
+      state.gluedEdges = state.gluedEdges.filter((pair) => (
+        boundaryEdgeKey(pair.first) !== key && boundaryEdgeKey(pair.second) !== key
+      ));
+    }
+    if (state.pendingGlueEdge && boundaryEdgeKey(state.pendingGlueEdge) === key) clearPendingGlueEdge();
+    if (state.pendingGlueChains && edgeInGlueChains(edge, state.pendingGlueChains)) trimPendingGlueChainAt(edge, state.pendingGlueChains);
+  }
+
+  function removeGluedEdgesForTile(index) {
+    if (Array.isArray(state.gluedEdges) && state.gluedEdges.length) {
+      state.gluedEdges = state.gluedEdges.filter((pair) => (
+        pair.first.index !== index && pair.second.index !== index
+      ));
+    }
+    if (state.pendingGlueEdge && state.pendingGlueEdge.index === index) clearPendingGlueEdge();
+    if (state.pendingGlueChains && (
+      (state.pendingGlueChains.first || []).some((edge) => edge.index === index)
+      || (state.pendingGlueChains.second || []).some((edge) => edge.index === index)
+    )) clearPendingGlueEdge();
+  }
+
+  function pruneGluedEdges() {
+    if (!Array.isArray(state.gluedEdges) || !state.gluedEdges.length) {
+      state.gluedEdges = [];
+      return;
+    }
+    const seen = new Set();
+    state.gluedEdges = state.gluedEdges
+      .map((pair) => {
+        const first = cloneBoundaryEdge(pair.first);
+        const second = cloneBoundaryEdge(pair.second);
+        if (!first || !second) return null;
+        if (sameBoundaryEdge(first, second)) return null;
+        if (!isValidBoundaryEdge(first) || !isValidBoundaryEdge(second)) return null;
+        const key = gluedPairKey({ first, second });
+        if (!key || seen.has(key)) return null;
+        seen.add(key);
+        return { first, second, group: normalizeGlueGroup(pair.group) };
+      })
+      .filter(Boolean);
+    if (state.pendingGlueEdge && !isValidBoundaryEdge(state.pendingGlueEdge)) clearPendingGlueEdge();
+    prunePendingGlueChains();
+  }
+
+  function prunePendingGlueChains() {
+    const chains = state.pendingGlueChains;
+    if (!chains) return;
+    const first = (chains.first || []).filter((edge) => isValidBoundaryEdge(edge));
+    const second = (chains.second || []).filter((edge) => isValidBoundaryEdge(edge));
+    if (!first.length && !second.length) {
+      state.pendingGlueChains = null;
+      return;
+    }
+    chains.first = first;
+    chains.second = second;
+    if (!chains.first.length) chains.phase = 'first';
+    else if (chains.second.length) chains.phase = 'second';
+  }
+
   function isValidCutEdgeKey(key, rows = state.rows, cols = state.cols) {
     const parsed = parseCutEdgeKey(key);
     if (!parsed) return false;
@@ -2999,21 +3361,25 @@
   }
 
   function removeCutEdgesForTile(index) {
-    if (!(state.cutEdges instanceof Set) || state.cutEdges.size === 0) return;
-    state.cutEdges.forEach((key) => {
-      const parsed = parseCutEdgeKey(key);
-      if (parsed && (parsed.left === index || parsed.right === index)) state.cutEdges.delete(key);
-    });
+    if (state.cutEdges instanceof Set && state.cutEdges.size > 0) {
+      state.cutEdges.forEach((key) => {
+        const parsed = parseCutEdgeKey(key);
+        if (parsed && (parsed.left === index || parsed.right === index)) state.cutEdges.delete(key);
+      });
+    }
+    removeGluedEdgesForTile(index);
   }
 
   function pruneCutEdges() {
-    if (!(state.cutEdges instanceof Set) || state.cutEdges.size === 0) return;
-    state.cutEdges.forEach((key) => {
-      const parsed = parseCutEdgeKey(key);
-      if (!parsed || !isValidCutEdgeKey(key) || !tileExists(parsed.left) || !tileExists(parsed.right)) {
-        state.cutEdges.delete(key);
-      }
-    });
+    if (state.cutEdges instanceof Set && state.cutEdges.size > 0) {
+      state.cutEdges.forEach((key) => {
+        const parsed = parseCutEdgeKey(key);
+        if (!parsed || !isValidCutEdgeKey(key) || !tileExists(parsed.left) || !tileExists(parsed.right)) {
+          state.cutEdges.delete(key);
+        }
+      });
+    }
+    pruneGluedEdges();
   }
 
   function clearTileForRemoval(index) {
@@ -3021,6 +3387,7 @@
     state.tiles[index] = null;
     delete state.vertexDecorations[index];
     removeCutEdgesForTile(index);
+    removeGluedEdgesForTile(index);
     state.pickedComponent = null;
     state.pickedAnchor = null;
     state.pickHoverHit = null;
@@ -3034,6 +3401,7 @@
       state.tiles[index] = null;
       delete state.vertexDecorations[index];
       removeCutEdgesForTile(index);
+      removeGluedEdgesForTile(index);
     });
     state.pickedComponent = null;
     state.pickedAnchor = null;
@@ -3050,6 +3418,7 @@
     } else {
       state.removedTiles.delete(index);
     }
+    pruneGluedEdges();
     pruneHalfEdgeDecorations();
     state.edits += 1;
     updateReport(false);
@@ -3062,13 +3431,319 @@
     if (!key) return false;
     if (!tileExists(edge.index) || !tileExists(edge.nextIndex)) return false;
     clearStandardDualGraphInput();
-    if (state.cutEdges.has(key)) state.cutEdges.delete(key);
-    else state.cutEdges.add(key);
+    if (state.cutEdges.has(key)) {
+      state.cutEdges.delete(key);
+    } else {
+      removeGluedEdgesForBoundaryEdge({ index: edge.index, dir: edge.dir });
+      removeGluedEdgesForBoundaryEdge({ index: edge.nextIndex, dir: getLattice().opposite[edge.dir] });
+      state.cutEdges.add(key);
+    }
     state.backgroundHoverEdge = null;
     pruneHalfEdgeDecorations();
     state.edits += 1;
     updateReport(false);
     return true;
+  }
+
+  function toggleGlueBoundary(edge) {
+    if (!isGluedBoundaryMode() || !edge) return false;
+    const boundaryEdge = {
+      index: edge.index,
+      dir: edge.dir
+    };
+    if (!isValidBoundaryEdge(boundaryEdge)) return false;
+    clearStandardDualGraphInput();
+
+    const existingPair = gluedPairForBoundaryEdge(boundaryEdge);
+    if (existingPair) {
+      state.gluedEdges = cloneGluedEdges().filter((pair) => gluedPairKey(pair) !== gluedPairKey(existingPair));
+      if (state.pendingGlueEdge && (
+        sameBoundaryEdge(state.pendingGlueEdge, existingPair.first)
+        || sameBoundaryEdge(state.pendingGlueEdge, existingPair.second)
+      )) clearPendingGlueEdge();
+      state.backgroundHoverEdge = null;
+      pruneHalfEdgeDecorations();
+      state.edits += 1;
+      updateReport(false);
+      return true;
+    }
+
+    if (!state.pendingGlueEdge || !isValidBoundaryEdge(state.pendingGlueEdge)) {
+      state.pendingGlueEdge = cloneBoundaryEdge(boundaryEdge);
+      state.backgroundHoverEdge = null;
+      updateReport(false);
+      return true;
+    }
+
+    if (sameBoundaryEdge(state.pendingGlueEdge, boundaryEdge)) {
+      clearPendingGlueEdge();
+      state.backgroundHoverEdge = null;
+      updateReport(false);
+      return true;
+    }
+
+    const first = cloneBoundaryEdge(state.pendingGlueEdge);
+    const second = cloneBoundaryEdge(boundaryEdge);
+    if (!first || !second) {
+      clearPendingGlueEdge();
+      updateReport(false);
+      return false;
+    }
+
+    removeGluedEdgesForBoundaryEdge(first);
+    removeGluedEdgesForBoundaryEdge(second);
+    state.gluedEdges.push({ first, second, group: nextGlueGroup() });
+    clearPendingGlueEdge();
+    pruneGluedEdges();
+    state.backgroundHoverEdge = null;
+    pruneHalfEdgeDecorations();
+    state.edits += 1;
+    updateReport(false);
+    return true;
+  }
+
+  function gluedPairForBoundaryEdge(edge) {
+    const key = boundaryEdgeKey(edge);
+    if (!key) return null;
+    return cloneGluedEdges().find((pair) => (
+      boundaryEdgeKey(pair.first) === key || boundaryEdgeKey(pair.second) === key
+    )) || null;
+  }
+
+  function toggleGlueBoundaryMulti(edge) {
+    if (!isGluedBoundaryMode() || !edge) return false;
+    const boundaryEdge = cloneBoundaryEdge({ index: edge.index, dir: edge.dir });
+    if (!boundaryEdge || !isValidBoundaryEdge(boundaryEdge)) return false;
+    clearStandardDualGraphInput();
+
+    const existingPair = gluedPairForBoundaryEdge(boundaryEdge);
+    if (existingPair && !hasPendingGlueChains()) {
+      state.gluedEdges = cloneGluedEdges().filter((pair) => gluedPairKey(pair) !== gluedPairKey(existingPair));
+      state.backgroundHoverEdge = null;
+      pruneHalfEdgeDecorations();
+      state.edits += 1;
+      updateReport(false);
+      return true;
+    }
+
+    const chains = ensurePendingGlueChains();
+    if (edgeInGlueChains(boundaryEdge, chains)) {
+      trimPendingGlueChainAt(boundaryEdge, chains);
+      state.backgroundHoverEdge = null;
+      updateReport(false);
+      return true;
+    }
+
+    const active = chains.phase === 'second' ? chains.second : chains.first;
+    if (active.length > 0 && !isAdjacentBoundaryEdge(active[active.length - 1], boundaryEdge)) {
+      if (chains.phase === 'second') {
+        chains.second = [boundaryEdge];
+        showBackgroundGlueHint(`second chain restarted: 1/${chains.first.length} edge${chains.first.length === 1 ? '' : 's'}`);
+        if (chains.second.length === chains.first.length) {
+          commitPendingGlueChains(chains);
+          return true;
+        }
+      } else {
+        chains.first = [boundaryEdge];
+        chains.second = [];
+        showBackgroundGlueHint('first chain restarted: 1 edge');
+      }
+      state.backgroundHoverEdge = null;
+      updateReport(false);
+      return true;
+    }
+
+    active.push(boundaryEdge);
+    if (chains.phase === 'first' && chains.first.length > 0 && chains.second.length === 0) {
+      state.backgroundHoverEdge = null;
+      updateReport(false);
+      return true;
+    }
+
+    if (chains.phase === 'second' && chains.second.length === chains.first.length) {
+      commitPendingGlueChains(chains);
+      return true;
+    }
+
+    state.backgroundHoverEdge = null;
+    updateReport(false);
+    return true;
+  }
+
+  function beginSecondGlueBoundaryChain() {
+    if (!isGluedBoundaryMode() || !isBackgroundGlueAction() || !state.backgroundMultiEdges) return;
+    const chains = state.pendingGlueChains;
+    const firstCount = chains && Array.isArray(chains.first) ? chains.first.length : 0;
+    if (!chains || chains.phase !== 'first' || firstCount === 0) return;
+    chains.phase = 'second';
+    chains.second = [];
+    state.backgroundHoverEdge = null;
+    updateReport(false);
+  }
+
+  function selectBackgroundCusp(hit) {
+    if (!hit || !hit.id) return false;
+    state.selectedBackgroundCusp = state.selectedBackgroundCusp === hit.id ? null : hit.id;
+    state.backgroundHoverCusp = hit;
+    updateReport(false);
+    return true;
+  }
+
+  function ensurePendingGlueChains() {
+    if (!state.pendingGlueChains) {
+      state.pendingGlueChains = {
+        phase: 'first',
+        first: [],
+        second: []
+      };
+    }
+    return state.pendingGlueChains;
+  }
+
+  function hasPendingGlueChains() {
+    const chains = state.pendingGlueChains;
+    return !!(chains && (
+      (Array.isArray(chains.first) && chains.first.length)
+      || (Array.isArray(chains.second) && chains.second.length)
+    ));
+  }
+
+  function pendingGlueStatusText() {
+    if (!isBackgroundGlueAction()) return '';
+    const chains = state.pendingGlueChains;
+    if (chains && ((chains.first || []).length || (chains.second || []).length)) {
+      const firstCount = (chains.first || []).length;
+      const secondCount = (chains.second || []).length;
+      if (chains.phase === 'second') {
+        return `glue boundary: second chain ${secondCount}/${firstCount} edge${firstCount === 1 ? '' : 's'}; choose the matching edge${firstCount === 1 ? '' : 's'}`;
+      }
+      return `glue boundary: first chain ${firstCount} edge${firstCount === 1 ? '' : 's'}; press begin second when done`;
+    }
+    if (state.pendingGlueEdge) return 'glue boundary: choose the matching edge';
+    return '';
+  }
+
+  function selectedBackgroundCuspStatusText(background = null) {
+    if (!state.selectedBackgroundCusp) return '';
+    const vertex = selectedBackgroundCusp(background);
+    if (!vertex) return '';
+    const angle = formatCuspAngle(vertex);
+    const corners = (vertex.corners || []).map(formatCuspCorner).join(', ');
+    const vertexCount = vertex.corners.length;
+    const vertexText = `${vertexCount} identified vert${vertexCount === 1 ? 'ex' : 'ices'}`;
+    if (isBackgroundConeCusp(vertex)) {
+      return `${vertex.label || 'cusp'}: ${vertexText}, cone angle ${angle}; ${corners}`;
+    }
+    return `${vertex.label || 'vertex'}: ${vertexText}, not a cusp, total angle ${angle}; ${corners}`;
+  }
+
+  function selectedBackgroundCusp(background = null) {
+    const key = state.selectedBackgroundCusp;
+    if (!key) return null;
+    if (background && !background.closedSurface) {
+      state.selectedBackgroundCusp = null;
+      return null;
+    }
+    const vertices = computeBackgroundMarkedBoundaryVertices();
+    const vertex = vertices.find((entry) => entry.id === key) || null;
+    if (!vertex) state.selectedBackgroundCusp = null;
+    return vertex;
+  }
+
+  function formatCuspAngle(cusp) {
+    const degrees = Number(cusp && cusp.angleDegrees);
+    if (!Number.isFinite(degrees)) return '-';
+    const rounded = Math.abs(degrees - Math.round(degrees)) < 1e-6
+      ? Math.round(degrees)
+      : Number(degrees.toFixed(2));
+    const piText = formatPiMultiple(cusp.angleRadians);
+    return piText ? `${rounded}deg (${piText})` : `${rounded}deg`;
+  }
+
+  function formatPiMultiple(radians) {
+    const ratio = Number(radians) / Math.PI;
+    if (!Number.isFinite(ratio)) return '';
+    const denominator = 6;
+    const numerator = Math.round(ratio * denominator);
+    if (Math.abs(ratio - numerator / denominator) > 1e-6) return '';
+    const divisor = gcd(Math.abs(numerator), denominator);
+    const top = numerator / divisor;
+    const bottom = denominator / divisor;
+    if (top === 0) return '0';
+    if (bottom === 1) return top === 1 ? 'pi' : `${top}pi`;
+    return top === 1 ? `pi/${bottom}` : `${top}pi/${bottom}`;
+  }
+
+  function formatCuspCorner(corner) {
+    if (!corner) return '';
+    return `r${corner.row + 1}c${corner.col + 1}:v${corner.vertex + 1}`;
+  }
+
+  function showBackgroundGlueHint(message) {
+    if (refs.statusLine && message) refs.statusLine.textContent = message;
+  }
+
+  function edgeInGlueChains(edge, chains = state.pendingGlueChains) {
+    if (!chains) return false;
+    return (chains.first || []).some((item) => sameBoundaryEdge(item, edge))
+      || (chains.second || []).some((item) => sameBoundaryEdge(item, edge));
+  }
+
+  function trimPendingGlueChainAt(edge, chains = state.pendingGlueChains) {
+    if (!chains) return;
+    const secondIndex = (chains.second || []).findIndex((item) => sameBoundaryEdge(item, edge));
+    if (secondIndex >= 0) {
+      chains.second = chains.second.slice(0, secondIndex);
+      chains.phase = 'second';
+      return;
+    }
+    const firstIndex = (chains.first || []).findIndex((item) => sameBoundaryEdge(item, edge));
+    if (firstIndex >= 0) {
+      chains.first = chains.first.slice(0, firstIndex);
+      chains.second = [];
+      chains.phase = 'first';
+    }
+  }
+
+  function commitPendingGlueChains(chains) {
+    if (!chains || chains.first.length !== chains.second.length || chains.first.length === 0) return false;
+    const group = nextGlueGroup();
+    const nextPairs = chains.first.map((first, index) => ({
+      first: cloneBoundaryEdge(first),
+      second: cloneBoundaryEdge(chains.second[index]),
+      group
+    })).filter((pair) => (
+      pair.first
+      && pair.second
+      && !sameBoundaryEdge(pair.first, pair.second)
+      && isValidBoundaryEdge(pair.first)
+      && isValidBoundaryEdge(pair.second)
+    ));
+    if (nextPairs.length !== chains.first.length) {
+      clearPendingGlueEdge();
+      updateReport(false);
+      return false;
+    }
+
+    nextPairs.forEach((pair) => {
+      removeGluedEdgesForBoundaryEdge(pair.first);
+      removeGluedEdgesForBoundaryEdge(pair.second);
+    });
+    state.gluedEdges.push(...nextPairs);
+    clearPendingGlueEdge();
+    pruneGluedEdges();
+    state.backgroundHoverEdge = null;
+    pruneHalfEdgeDecorations();
+    state.edits += 1;
+    updateReport(false);
+    return true;
+  }
+
+  function isAdjacentBoundaryEdge(left, right) {
+    const leftVertices = boundaryEdgeLogicalVertexKeys(left);
+    const rightVertices = boundaryEdgeLogicalVertexKeys(right);
+    if (!leftVertices.length || !rightVertices.length) return false;
+    return leftVertices.some((key) => rightVertices.includes(key));
   }
 
   function rotateTile(index, steps) {
@@ -4109,19 +4784,37 @@
   }
 
   function isBackgroundBoundaryAction() {
-    return state.backgroundAction === 'boundary';
+    return state.backgroundAction === 'boundary' || state.backgroundAction === 'glue-boundary';
+  }
+
+  function isBackgroundGlueAction() {
+    return state.backgroundAction === 'glue-boundary';
+  }
+
+  function isClosedBackgroundSurface(report = null) {
+    if (!isGluedBoundaryMode()) return false;
+    const background = report && report.background ? report.background : analyzeBackgroundSpace();
+    return !!(background && background.closedSurface);
   }
 
   function backgroundEdgeHitTest(clientX, clientY) {
     if (!isGluedBoundaryMode()) return null;
-    const hit = sharedEdgeHitTest(clientX, clientY);
+    const hit = isBackgroundGlueAction()
+      ? boundaryEdgeHitTest(clientX, clientY)
+      : sharedEdgeHitTest(clientX, clientY);
     if (!hit) return null;
     return hit;
   }
 
   function sameBackgroundEdgeHit(left, right) {
     if (!left || !right) return left === right;
+    if (left.nextIndex == null || right.nextIndex == null) return boundaryEdgeKey(left) === boundaryEdgeKey(right);
     return cutEdgeKey(left.index, left.nextIndex) === cutEdgeKey(right.index, right.nextIndex);
+  }
+
+  function sameBackgroundCuspHit(left, right) {
+    if (!left || !right) return left === right;
+    return left.id === right.id;
   }
 
   function handlePointerDown(event) {
@@ -4329,6 +5022,7 @@
   }
 
   function beginBackgroundGesture(event) {
+    const cusp = backgroundCuspHitTest(event.clientX, event.clientY);
     const edge = isBackgroundBoundaryAction()
       ? backgroundEdgeHitTest(event.clientX, event.clientY)
       : null;
@@ -4339,6 +5033,7 @@
       id: event.pointerId,
       index: hit,
       backgroundEdge: edge,
+      backgroundCusp: cusp,
       x: event.clientX,
       y: event.clientY,
       lastX: event.clientX,
@@ -4347,9 +5042,11 @@
     };
     clearDrawDebugHit(false);
     const edgeChanged = !sameBackgroundEdgeHit(edge, state.backgroundHoverEdge);
-    if (hit !== state.hoverIndex || edgeChanged) {
+    const cuspChanged = !sameBackgroundCuspHit(cusp, state.backgroundHoverCusp);
+    if (hit !== state.hoverIndex || edgeChanged || cuspChanged) {
       state.hoverIndex = hit;
       state.backgroundHoverEdge = edge;
+      state.backgroundHoverCusp = cusp;
       syncMainCanvasCursor();
       draw(analyze());
     }
@@ -4361,6 +5058,7 @@
     const dx = event.clientX - pointerState.x;
     const dy = event.clientY - pointerState.y;
     if (Math.hypot(dx, dy) > 10) pointerState.moved = true;
+    const cusp = backgroundCuspHitTest(event.clientX, event.clientY);
     const edge = isBackgroundBoundaryAction()
       ? backgroundEdgeHitTest(event.clientX, event.clientY)
       : null;
@@ -4368,9 +5066,11 @@
       ? -1
       : hitTest(event.clientX, event.clientY, { includeRemoved: true });
     const edgeChanged = !sameBackgroundEdgeHit(edge, state.backgroundHoverEdge);
-    if (hit !== state.hoverIndex || edgeChanged) {
+    const cuspChanged = !sameBackgroundCuspHit(cusp, state.backgroundHoverCusp);
+    if (hit !== state.hoverIndex || edgeChanged || cuspChanged) {
       state.hoverIndex = hit;
       state.backgroundHoverEdge = edge;
+      state.backgroundHoverCusp = cusp;
       syncMainCanvasCursor();
       draw(analyze());
     }
@@ -4378,14 +5078,23 @@
 
   function finishBackgroundGesture(event) {
     if (!pointerState || event.pointerId !== pointerState.id) return;
+    const cusp = isOverCanvas(event.clientX, event.clientY)
+      ? backgroundCuspHitTest(event.clientX, event.clientY)
+      : null;
     const edge = isOverCanvas(event.clientX, event.clientY) && isBackgroundBoundaryAction()
       ? backgroundEdgeHitTest(event.clientX, event.clientY)
       : null;
     const hit = isOverCanvas(event.clientX, event.clientY) && !isBackgroundBoundaryAction()
       ? hitTest(event.clientX, event.clientY, { includeRemoved: true })
       : -1;
-    if (!pointerState.moved && isBackgroundBoundaryAction() && sameBackgroundEdgeHit(edge, pointerState.backgroundEdge)) {
-      toggleBackgroundBoundary(edge);
+    if (!pointerState.moved && cusp && sameBackgroundCuspHit(cusp, pointerState.backgroundCusp)) {
+      selectBackgroundCusp(cusp);
+    } else if (!pointerState.moved && isBackgroundBoundaryAction() && sameBackgroundEdgeHit(edge, pointerState.backgroundEdge)) {
+      if (isBackgroundGlueAction()) {
+        if (state.backgroundMultiEdges) toggleGlueBoundaryMulti(edge);
+        else toggleGlueBoundary(edge);
+      }
+      else toggleBackgroundBoundary(edge);
     } else if (!pointerState.moved && hit === pointerState.index && hit >= 0) {
       toggleBackgroundTile(hit);
     }
@@ -4573,16 +5282,12 @@
     }
 
     portMeta.forEach((port, id) => {
-      const row = Math.floor(port.index / state.cols);
-      const col = port.index % state.cols;
-      const next = connectedNeighbor(row, col, port.dir, lattice);
+      const next = connectedSurfaceNeighbor(port.index, port.dir, lattice);
       if (!next) {
         openEnds += 1;
         return;
       }
-      const nextIndex = indexOf(next.row, next.col, state.cols);
-      const opposite = lattice.opposite[port.dir];
-      const nextId = portIds.get(portKey(nextIndex, opposite));
+      const nextId = portIds.get(portKey(next.index, next.dir));
       if (nextId == null) {
         openEnds += 1;
         return;
@@ -4686,16 +5391,12 @@
     }
 
     portMeta.forEach((port) => {
-      const row = Math.floor(port.index / state.cols);
-      const col = port.index % state.cols;
-      const next = connectedNeighbor(row, col, port.dir, lattice);
+      const next = connectedSurfaceNeighbor(port.index, port.dir, lattice);
       if (!next) {
         openEnds += 1;
         return;
       }
-      const nextIndex = indexOf(next.row, next.col, state.cols);
-      const opposite = lattice.opposite[port.dir];
-      const nextId = portIds.get(`p:${nextIndex}:${opposite}`);
+      const nextId = portIds.get(`p:${next.index}:${next.dir}`);
       if (nextId == null) {
         openEnds += 1;
         return;
@@ -4764,11 +5465,21 @@
       for (let dir = 0; dir < lattice.sides; dir += 1) {
         const next = neighbor(row, col, dir, state.rows, state.cols, lattice, state.wrapped);
         if (!next) {
+          const partner = gluedBoundaryPartner(index, dir);
+          if (partner && tileExists(partner.index)) {
+            union(parent, rank, index, partner.index);
+            continue;
+          }
           unmatchedBoundaries += 1;
           continue;
         }
         const nextIndex = indexOf(next.row, next.col, state.cols);
         if (!tileExists(nextIndex) || hasCutEdgeBetween(index, nextIndex)) {
+          const partner = gluedBoundaryPartner(index, dir);
+          if (partner && tileExists(partner.index)) {
+            union(parent, rank, index, partner.index);
+            continue;
+          }
           unmatchedBoundaries += 1;
           continue;
         }
@@ -4781,14 +5492,312 @@
       if (tileExists(index)) componentRoots.add(find(parent, index));
     }
 
+    const surface = analyzeClosedBackgroundSurface({
+      total,
+      existing,
+      unmatchedBoundaries,
+      components: componentRoots.size
+    });
+
     return {
       total,
       existing,
       removed,
       cutEdges: cloneCutEdgeSet().size,
+      gluedEdges: cloneGluedEdges().length,
       unmatchedBoundaries,
-      components: componentRoots.size
+      components: componentRoots.size,
+      closedSurface: surface.closedSurface,
+      genus: surface.genus,
+      cusps: surface.cusps,
+      eulerCharacteristic: surface.eulerCharacteristic
     };
+  }
+
+  function analyzeClosedBackgroundSurface(background) {
+    const closedSurface = !!(
+      background
+      && isGluedBoundaryMode()
+      && background.existing > 0
+      && background.components === 1
+      && background.unmatchedBoundaries === 0
+    );
+    if (!closedSurface) {
+      return {
+        closedSurface: false,
+        genus: null,
+        cusps: null,
+        eulerCharacteristic: null,
+        quotientVertices: []
+      };
+    }
+
+    const quotient = computeBackgroundQuotientVertices();
+    const faces = background.existing;
+    const edges = countBackgroundSurfaceEdges();
+    const vertices = quotient.vertices.length;
+    const cuspVertices = backgroundCuspVerticesFromQuotient(quotient.vertices);
+    const eulerCharacteristic = vertices - edges + faces;
+    const genusValue = (2 - eulerCharacteristic) / 2;
+    const genus = Math.abs(genusValue - Math.round(genusValue)) < 1e-6
+      ? Math.round(genusValue)
+      : Number(genusValue.toFixed(3));
+    return {
+      closedSurface: true,
+      genus,
+      cusps: cuspVertices.length,
+      eulerCharacteristic,
+      quotientVertices: quotient.vertices,
+      cuspVertices
+    };
+  }
+
+  function countBackgroundSurfaceEdges() {
+    const lattice = getLattice();
+    let internalEdges = 0;
+    let gluedEdges = 0;
+    for (let index = 0; index < state.rows * state.cols; index += 1) {
+      if (!tileExists(index)) continue;
+      const row = Math.floor(index / state.cols);
+      const col = index % state.cols;
+      for (let dir = 0; dir < lattice.sides; dir += 1) {
+        const next = neighbor(row, col, dir, state.rows, state.cols, lattice, state.wrapped);
+        if (!next) continue;
+        const nextIndex = indexOf(next.row, next.col, state.cols);
+        if (index < nextIndex && tileExists(nextIndex) && !hasCutEdgeBetween(index, nextIndex)) {
+          internalEdges += 1;
+        }
+      }
+    }
+    cloneGluedEdges().forEach((pair) => {
+      if (isValidBoundaryEdge(pair.first) && isValidBoundaryEdge(pair.second)) gluedEdges += 1;
+    });
+    return internalEdges + gluedEdges;
+  }
+
+  function computeBackgroundQuotientVertices() {
+    const lattice = getLattice();
+    const cornerCount = state.rows * state.cols * lattice.sides;
+    const parent = Array.from({ length: cornerCount }, (_, index) => index);
+    const rank = Array(cornerCount).fill(0);
+    const cornerId = (index, vertex) => (index * lattice.sides) + modulo(vertex, lattice.sides);
+
+    const unionSurfaceEdgeCorners = (left, right) => {
+      if (!left || !right) return;
+      union(parent, rank, cornerId(left.index, left.start), cornerId(right.index, right.end));
+      union(parent, rank, cornerId(left.index, left.end), cornerId(right.index, right.start));
+    };
+
+    const logicalVertexIds = new Map();
+    for (let index = 0; index < state.rows * state.cols; index += 1) {
+      if (!tileExists(index)) continue;
+      for (let vertex = 0; vertex < lattice.sides; vertex += 1) {
+        const key = tileCornerLogicalVertexKey(index, vertex);
+        if (logicalVertexIds.has(key)) union(parent, rank, cornerId(index, vertex), logicalVertexIds.get(key));
+        else logicalVertexIds.set(key, cornerId(index, vertex));
+      }
+      const row = Math.floor(index / state.cols);
+      const col = index % state.cols;
+      for (let dir = 0; dir < lattice.sides; dir += 1) {
+        const next = neighbor(row, col, dir, state.rows, state.cols, lattice, state.wrapped);
+        if (!next) continue;
+        const nextIndex = indexOf(next.row, next.col, state.cols);
+        if (index >= nextIndex || !tileExists(nextIndex) || hasCutEdgeBetween(index, nextIndex)) continue;
+        unionSurfaceEdgeCorners(
+          orientedBoundaryEdgeCorners(index, dir),
+          orientedBoundaryEdgeCorners(nextIndex, lattice.opposite[dir])
+        );
+      }
+    }
+
+    cloneGluedEdges().forEach((pair) => {
+      const first = cloneBoundaryEdge(pair.first);
+      const second = cloneBoundaryEdge(pair.second);
+      if (!isValidBoundaryEdge(first) || !isValidBoundaryEdge(second)) return;
+      unionSurfaceEdgeCorners(
+        orientedBoundaryEdgeCorners(first.index, first.dir),
+        orientedBoundaryEdgeCorners(second.index, second.dir)
+      );
+    });
+
+    const roots = new Map();
+    const cornerAngle = tileCornerAngle();
+    for (let index = 0; index < state.rows * state.cols; index += 1) {
+      if (!tileExists(index)) continue;
+      for (let vertex = 0; vertex < lattice.sides; vertex += 1) {
+        const root = find(parent, cornerId(index, vertex));
+        if (!roots.has(root)) {
+          roots.set(root, {
+            id: '',
+            angleRadians: 0,
+            corners: []
+          });
+        }
+        const cell = geometry && geometry.cells ? geometry.cells[index] : null;
+        const point = cell ? tileCornerPoint(index, vertex) : null;
+        roots.get(root).angleRadians += cornerAngle;
+        roots.get(root).corners.push({
+          index,
+          row: Math.floor(index / state.cols),
+          col: index % state.cols,
+          vertex,
+          point
+        });
+      }
+    }
+
+    const vertices = Array.from(roots.values()).map((entry) => {
+      const key = backgroundCuspKey(entry);
+      return {
+        ...entry,
+        id: key,
+        representative: entry.corners[0] || null,
+        angleDegrees: entry.angleRadians * 180 / Math.PI
+      };
+    }).sort(compareBackgroundCusps);
+    vertices.forEach((entry, index) => {
+      entry.label = `V${index + 1}`;
+    });
+    return { vertices };
+  }
+
+  function computeBackgroundCuspVertices() {
+    return backgroundCuspVerticesFromQuotient(computeBackgroundQuotientVertices().vertices);
+  }
+
+  function computeBackgroundMarkedBoundaryVertices() {
+    const gluedKeys = gluedBoundaryLogicalVertexKeySet();
+    if (!gluedKeys.size) return computeBackgroundCuspVertices();
+    const vertices = computeBackgroundQuotientVertices().vertices
+      .filter((entry) => (
+        isBackgroundConeCusp(entry)
+        || (entry.corners || []).some((corner) => gluedKeys.has(tileCornerLogicalVertexKey(corner.index, corner.vertex)))
+      ))
+      .sort(compareBackgroundCusps);
+    let cuspIndex = 0;
+    let vertexIndex = 0;
+    vertices.forEach((entry) => {
+      if (isBackgroundConeCusp(entry)) {
+        cuspIndex += 1;
+        entry.label = `C${cuspIndex}`;
+      } else {
+        vertexIndex += 1;
+        entry.label = `B${vertexIndex}`;
+      }
+    });
+    return vertices;
+  }
+
+  function backgroundCuspVerticesFromQuotient(vertices) {
+    const cusps = (vertices || [])
+      .filter(isBackgroundConeCusp)
+      .sort(compareBackgroundCusps);
+    cusps.forEach((entry, index) => {
+      entry.label = `C${index + 1}`;
+    });
+    return cusps;
+  }
+
+  function gluedBoundaryLogicalVertexKeySet() {
+    const keys = new Set();
+    cloneGluedEdges().forEach((pair) => {
+      [pair.first, pair.second].forEach((edge) => {
+        boundaryEdgeLogicalVertexKeys(edge).forEach((key) => {
+          if (key) keys.add(key);
+        });
+      });
+    });
+    return keys;
+  }
+
+  function isBackgroundConeCusp(vertex) {
+    const angle = Number(vertex && vertex.angleRadians);
+    return Number.isFinite(angle) && Math.abs(angle - (Math.PI * 2)) > 1e-6;
+  }
+
+  function compareBackgroundCusps(left, right) {
+    const a = left.representative || {};
+    const b = right.representative || {};
+    return (a.index - b.index) || (a.vertex - b.vertex) || String(left.id).localeCompare(String(right.id));
+  }
+
+  function backgroundCuspKey(cusp) {
+    return (cusp.corners || [])
+      .map((corner) => `${corner.index}:${corner.vertex}`)
+      .sort()
+      .join('|');
+  }
+
+  function boundaryEdgeLogicalVertexKeys(edge) {
+    const normalized = cloneBoundaryEdge(edge);
+    if (!normalized || !isValidBoundaryEdge(normalized)) return [];
+    const corners = orientedBoundaryEdgeCorners(normalized.index, normalized.dir);
+    return [
+      tileCornerLogicalVertexKey(corners.index, corners.start),
+      tileCornerLogicalVertexKey(corners.index, corners.end)
+    ];
+  }
+
+  function tileCornerLogicalVertexKey(index, vertex) {
+    const lattice = getLattice();
+    const normalizedVertex = modulo(vertex, lattice.sides);
+    const row = Math.floor(index / state.cols);
+    const col = index % state.cols;
+    if (lattice.shape === 'square') {
+      const offsets = [
+        [0, 0],
+        [0, 1],
+        [1, 1],
+        [1, 0]
+      ];
+      const offset = offsets[normalizedVertex] || [0, 0];
+      return `s:${row + offset[0]}:${col + offset[1]}`;
+    }
+    const axial = offsetToAxial(row, col);
+    const vertexOffsets = [
+      [1, 1],
+      [0, 2],
+      [-1, 1],
+      [-1, -1],
+      [0, -2],
+      [1, -1]
+    ];
+    const offset = vertexOffsets[normalizedVertex] || [0, 0];
+    return `h:${(2 * axial.q) + axial.r + offset[0]}:${(3 * axial.r) + offset[1]}`;
+  }
+
+  function orientedBoundaryEdgeCorners(index, dir) {
+    const lattice = getLattice();
+    if (lattice.shape === 'square') {
+      return {
+        index,
+        start: modulo(dir + 1, lattice.sides),
+        end: modulo(dir + 2, lattice.sides)
+      };
+    }
+    return {
+      index,
+      start: modulo(dir - 1, lattice.sides),
+      end: modulo(dir, lattice.sides)
+    };
+  }
+
+  function tileCornerAngle() {
+    const lattice = getLattice();
+    return lattice.shape === 'square' ? Math.PI / 2 : (2 * Math.PI / 3);
+  }
+
+  function tileCornerPoint(index, vertex) {
+    if (!geometry || !geometry.cells || !geometry.cells[index]) return null;
+    const cell = geometry.cells[index];
+    const points = tilePoints(cell.x, cell.y, geometry.radius * 0.96);
+    return points[modulo(vertex, getLattice().sides)] || null;
+  }
+
+  function tileCenterPoint(index) {
+    if (!geometry || !geometry.cells || !geometry.cells[index]) return null;
+    const cell = geometry.cells[index];
+    return { x: cell.x, y: cell.y };
   }
 
   function updateReport(manualCheck) {
@@ -4806,11 +5815,23 @@
     refs.statusLine.classList.toggle('mosaic-status-bad', report.openEnds > 0);
 
     refs.infoLine.textContent = `${getLattice().label}, ${isDualGraph() ? 'dual graph' : 'knot/link'}, ${boundaryModeLabel()} / ${report.active} filled`;
+    syncBackgroundModeControls();
     if (isGluedBoundaryMode() && state.inputMode === 'background') {
       const background = report.background || analyzeBackgroundSpace();
+      if (!background.closedSurface) {
+        state.selectedBackgroundCusp = null;
+        state.backgroundHoverCusp = null;
+      }
       refs.statusBadge.textContent = 'background';
       refs.statusBadge.classList.remove('mosaic-status-good', 'mosaic-status-bad');
-      refs.statusLine.textContent = `${background.existing} existing tile${background.existing === 1 ? '' : 's'}, ${background.components} component${background.components === 1 ? '' : 's'}, ${background.unmatchedBoundaries} unmatched boundar${background.unmatchedBoundaries === 1 ? 'y' : 'ies'}`;
+      const glueText = background.gluedEdges > 0
+        ? `, ${background.gluedEdges} glued pair${background.gluedEdges === 1 ? '' : 's'}`
+        : '';
+      const surfaceText = background.closedSurface
+        ? `, genus ${background.genus}, ${background.cusps} cusp${background.cusps === 1 ? '' : 's'}`
+        : '';
+      const pendingGlueText = pendingGlueStatusText();
+      refs.statusLine.textContent = pendingGlueText || selectedBackgroundCuspStatusText(background) || `${background.existing} existing tile${background.existing === 1 ? '' : 's'}, ${background.components} component${background.components === 1 ? '' : 's'}, ${background.unmatchedBoundaries} unmatched boundar${background.unmatchedBoundaries === 1 ? 'y' : 'ies'}${glueText}${surfaceText}`;
       refs.statusLine.classList.remove('mosaic-status-good', 'mosaic-status-bad');
     }
 
@@ -4831,9 +5852,13 @@
       if (refs.out.openEndsLabel) refs.out.openEndsLabel.textContent = 'Unmatched boundaries';
       if (refs.out.componentsLabel) refs.out.componentsLabel.textContent = 'Components';
       if (refs.out.componentsRow) refs.out.componentsRow.hidden = false;
+      if (refs.out.genusRow) refs.out.genusRow.hidden = !background.closedSurface;
+      if (refs.out.cuspsRow) refs.out.cuspsRow.hidden = !background.closedSurface;
       refs.out.tiles.textContent = `${background.existing}/${background.total}`;
       refs.out.openEnds.textContent = String(background.unmatchedBoundaries);
       refs.out.components.textContent = String(background.components);
+      if (refs.out.genus) refs.out.genus.textContent = background.closedSurface ? String(background.genus) : '-';
+      if (refs.out.cusps) refs.out.cusps.textContent = background.closedSurface ? String(background.cusps) : '-';
       return;
     }
 
@@ -4842,6 +5867,8 @@
     if (refs.out.openEndsLabel) refs.out.openEndsLabel.textContent = 'Open ends';
     if (refs.out.componentsLabel) refs.out.componentsLabel.textContent = 'Components';
     if (refs.out.componentsRow) refs.out.componentsRow.hidden = false;
+    if (refs.out.genusRow) refs.out.genusRow.hidden = true;
+    if (refs.out.cuspsRow) refs.out.cuspsRow.hidden = true;
     refs.out.tiles.textContent = `${report.active}/${report.total}`;
     refs.out.openEnds.textContent = String(report.openEnds);
     refs.out.components.textContent = String(report.components);
@@ -5270,9 +6297,7 @@
         let current = { index: vertex.index, dir: startDir };
 
         while (true) {
-          const row = Math.floor(current.index / state.cols);
-          const col = current.index % state.cols;
-          const next = connectedNeighbor(row, col, current.dir, lattice);
+          const next = connectedSurfaceNeighbor(current.index, current.dir, lattice);
 
           if (!next) {
             // Open end - this is a leg
@@ -5285,8 +6310,8 @@
             break;
           }
 
-          const nextIndex = indexOf(next.row, next.col, state.cols);
-          const opposite = lattice.opposite[current.dir];
+          const nextIndex = next.index;
+          const opposite = next.dir;
 
           if (isVertexTileValue(state.tiles[nextIndex])) {
             // Only a matching spoke on the target vertex closes a dual graph edge.
@@ -10237,9 +11262,9 @@
         kind: report.components > 1 ? 'link' : 'knot'
       };
     }
-    if (state.wrapped) {
+    if (state.wrapped || hasGluedBoundaryPairs()) {
       return {
-        status: `wrapped ${report.components > 1 ? 'link' : 'knot'} candidate`,
+        status: `${state.wrapped ? 'wrapped' : 'glued-boundary'} ${report.components > 1 ? 'link' : 'knot'} candidate`,
         name: 'further exploration remains experimental',
         candidates: [],
         pd: '',
@@ -10427,6 +11452,7 @@
     if (graphData && graphData.isValid) drawHalfEdgeDecorationLabels(ctx, graphData, palette);
     drawDrawDebugOverlay(ctx, palette, report);
     drawBackgroundHoverOverlay(ctx, palette);
+    drawBackgroundCuspOverlay(ctx, palette, report);
     drawPickHoverOverlay(ctx, palette, report);
     drawDragGhost(ctx, palette);
   }
@@ -10442,19 +11468,235 @@
   }
 
   function drawBackgroundHoverOverlay(ctx, palette) {
-    if (!isGluedBoundaryMode() || state.inputMode !== 'background' || !state.backgroundHoverEdge) return;
+    if (!isGluedBoundaryMode() || state.inputMode !== 'background') return;
+    drawPendingGlueChains(ctx);
+    if (state.pendingGlueEdge) {
+      const pendingSegment = boundaryEdgeSegment(state.pendingGlueEdge);
+      if (pendingSegment) {
+        ctx.save();
+        ctx.lineCap = 'round';
+        drawHoverEdgeSegment(ctx, pendingSegment, palette.accent2, hoverEdgeLineWidth(geometry.radius) * 1.25);
+        ctx.restore();
+      }
+    }
+    if (!state.backgroundHoverEdge) return;
     const hit = state.backgroundHoverEdge;
-    const cell = geometry.cells[hit.index];
-    const nextCell = geometry.cells[hit.nextIndex];
-    if (!cell || !nextCell) return;
     const radius = geometry.radius;
     const lineWidth = hoverEdgeLineWidth(radius);
     ctx.save();
     ctx.lineCap = 'round';
-    pairedTileEdgeSegmentsBetweenCells(cell, nextCell, hit.dir, radius).forEach((edgeSegment) => {
-      drawHoverEdgeSegment(ctx, edgeSegment, palette.accent, lineWidth);
+    if (hit.nextIndex == null) {
+      const segment = boundaryEdgeSegment(hit);
+      if (segment) drawHoverEdgeSegment(ctx, segment, palette.accent, lineWidth);
+    } else {
+      const cell = geometry.cells[hit.index];
+      const nextCell = geometry.cells[hit.nextIndex];
+      if (cell && nextCell) {
+        pairedTileEdgeSegmentsBetweenCells(cell, nextCell, hit.dir, radius).forEach((edgeSegment) => {
+          drawHoverEdgeSegment(ctx, edgeSegment, palette.accent, lineWidth);
+        });
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawBackgroundCuspOverlay(ctx, palette, report) {
+    if (state.inputMode !== 'background') return;
+    if (!isClosedBackgroundSurface(report)) return;
+    const vertices = computeBackgroundMarkedBoundaryVertices();
+    if (!vertices.length) return;
+    const selectedKey = state.selectedBackgroundCusp;
+    const hoverKey = state.backgroundHoverCusp && state.backgroundHoverCusp.id;
+    ctx.save();
+    vertices.forEach((vertex) => {
+      const active = vertex.id === selectedKey;
+      const hover = vertex.id === hoverKey;
+      drawBackgroundCuspMarker(ctx, vertex, palette, active, hover);
+      if (active) drawBackgroundCuspCornerHighlights(ctx, vertex, palette);
     });
     ctx.restore();
+  }
+
+  function drawBackgroundCuspMarker(ctx, vertex, palette, active, hover) {
+    if (!vertex || !Array.isArray(vertex.corners)) return;
+    const radius = geometry.radius;
+    const markerScale = normalizeBackgroundCuspMarkerScale(state.backgroundCuspMarkerScale);
+    const markerRadius = Math.max(0.8, radius * 0.11 * markerScale);
+    const markerStroke = Math.max(0.55, Math.min(radius * 0.025, markerRadius * 0.38));
+    const cusp = isBackgroundConeCusp(vertex);
+    const positions = backgroundCuspDisplayPositions(vertex);
+    ctx.save();
+    positions.forEach((entry) => {
+      const point = entry.point;
+      if (!point) return;
+      ctx.fillStyle = cusp ? 'rgba(255,253,248,0.94)' : 'rgba(128,128,128,0.30)';
+      circle(ctx, point.x, point.y, markerRadius * 1.28);
+      ctx.strokeStyle = cusp
+        ? (active || hover ? 'rgba(47,52,55,0.62)' : 'rgba(47,52,55,0.45)')
+        : (active || hover ? 'rgba(92,92,92,0.86)' : 'rgba(92,92,92,0.58)');
+      ctx.lineWidth = markerStroke;
+      ctx.stroke();
+      ctx.fillStyle = cusp ? '#fffdf8' : 'rgba(132,132,132,0.68)';
+      circle(ctx, point.x, point.y, markerRadius);
+      ctx.strokeStyle = cusp ? '#fffdf8' : 'rgba(255,253,248,0.80)';
+      ctx.lineWidth = Math.max(0.45, markerStroke * 0.75);
+      ctx.stroke();
+      if (active || hover) {
+        drawPlainTextLabel(
+          ctx,
+          point.x,
+          point.y - markerRadius * 2.2,
+          vertex.label || '',
+          cusp ? (active ? '#b23a48' : palette.accent) : '#666666',
+          Math.max(8, radius * 0.18)
+        );
+      }
+    });
+    ctx.restore();
+  }
+
+  function drawBackgroundCuspCornerHighlights(ctx, cusp, palette) {
+    const radius = geometry.radius;
+    const positions = backgroundCuspDisplayPositions(cusp);
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    positions.forEach((entry) => {
+      backgroundCuspAngleFans(entry).forEach((fan, index) => {
+        drawBackgroundCuspAngleFan(
+          ctx,
+          fan,
+          index % 2 === 0 ? '#b23a48' : '#1f7a8c',
+          radius
+        );
+      });
+    });
+    ctx.restore();
+  }
+
+  function backgroundCuspAngleFans(entry) {
+    if (!entry || !entry.point || !Array.isArray(entry.corners)) return [];
+    return entry.corners
+      .map((corner) => backgroundCuspCornerFan(entry.point, corner))
+      .filter(Boolean);
+  }
+
+  function backgroundCuspCornerFan(origin, corner) {
+    const center = tileCenterPoint(corner && corner.index);
+    if (!origin || !center || !corner) return null;
+    const lattice = getLattice();
+    const vertex = modulo(corner.vertex, lattice.sides);
+    const points = tilePoints(center.x, center.y, geometry.radius * 0.96);
+    const current = points[vertex];
+    const previous = points[modulo(vertex - 1, lattice.sides)];
+    const next = points[modulo(vertex + 1, lattice.sides)];
+    if (!current || !previous || !next) return null;
+    return {
+      origin,
+      from: normalizeVector(previous.x - current.x, previous.y - current.y, -1, 0),
+      to: normalizeVector(next.x - current.x, next.y - current.y, 1, 0)
+    };
+  }
+
+  function drawBackgroundCuspAngleFan(ctx, fan, color, radius) {
+    if (!fan || !fan.origin || !fan.from || !fan.to) return;
+    const startAngle = Math.atan2(fan.from.y, fan.from.x);
+    const sweep = signedAngleBetween(fan.from, fan.to);
+    const fanRadius = Math.max(8, radius * 0.31);
+    const innerRadius = Math.max(3.5, radius * 0.08);
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(
+      fan.origin.x + (fan.from.x * innerRadius),
+      fan.origin.y + (fan.from.y * innerRadius)
+    );
+    ctx.lineTo(
+      fan.origin.x + (fan.from.x * fanRadius),
+      fan.origin.y + (fan.from.y * fanRadius)
+    );
+    ctx.arc(
+      fan.origin.x,
+      fan.origin.y,
+      fanRadius,
+      startAngle,
+      startAngle + sweep,
+      sweep < 0
+    );
+    ctx.lineTo(
+      fan.origin.x + (fan.to.x * innerRadius),
+      fan.origin.y + (fan.to.y * innerRadius)
+    );
+    ctx.arc(
+      fan.origin.x,
+      fan.origin.y,
+      innerRadius,
+      startAngle + sweep,
+      startAngle,
+      sweep >= 0
+    );
+    ctx.closePath();
+    ctx.fillStyle = color === '#1f7a8c' ? 'rgba(31,122,140,0.24)' : 'rgba(178,58,72,0.24)';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(1.1, radius * 0.03);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function backgroundCuspDisplayPositions(cusp) {
+    if (!cusp || !Array.isArray(cusp.corners) || !geometry) return [];
+    const clusters = new Map();
+    cusp.corners.forEach((corner) => {
+      const point = tileCornerPoint(corner.index, corner.vertex);
+      if (!point) return;
+      const key = tileCornerLogicalVertexKey(corner.index, corner.vertex);
+      let cluster = clusters.get(key);
+      if (!cluster) {
+        cluster = { point: { x: point.x, y: point.y }, corners: [] };
+        clusters.set(key, cluster);
+      }
+      cluster.corners.push(corner);
+      cluster.point = averagePoints(cluster.corners
+        .map((item) => tileCornerPoint(item.index, item.vertex))
+        .filter(Boolean));
+    });
+    return Array.from(clusters.values());
+  }
+
+  function drawPendingGlueChains(ctx) {
+    const chains = state.pendingGlueChains;
+    if (!chains) return;
+    ctx.save();
+    const first = chains.first || [];
+    const second = chains.second || [];
+    const color = pendingGlueColor();
+    first.forEach((edge, index) => {
+      drawPendingGlueEdge(ctx, edge, color, false);
+    });
+    second.forEach((edge, index) => {
+      drawPendingGlueEdge(ctx, edge, color, true);
+    });
+    ctx.restore();
+  }
+
+  function drawPendingGlueEdge(ctx, edge, color, reverse) {
+    const segment = boundaryEdgeSegment(edge);
+    if (!segment) return;
+    const lineWidth = hoverEdgeLineWidth(geometry.radius) * 1.25;
+    ctx.save();
+    ctx.globalAlpha = 0.78;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    drawBackgroundBoundarySegment(ctx, segment);
+    drawSegmentArrow(ctx, segment, reverse, color, lineWidth);
+    ctx.restore();
+  }
+
+  function pendingGlueColor() {
+    return gluedBoundaryColor(nextGlueGroup());
   }
 
   function drawBackgroundBoundaries(ctx) {
@@ -10472,7 +11714,7 @@
       const cell = geometry.cells[index];
       if (!cell) continue;
       for (let dir = 0; dir < lattice.sides; dir += 1) {
-        if (!isBackgroundBoundaryEdge(index, dir)) continue;
+        if (!isBackgroundBoundaryEdge(index, dir) || isGluedBoundaryEdge(index, dir)) continue;
         const next = neighbor(cell.row, cell.col, dir, state.rows, state.cols, lattice, state.wrapped);
         if (next) {
           const nextIndex = indexOf(next.row, next.col, state.cols);
@@ -10490,7 +11732,81 @@
         drawBackgroundBoundarySegment(ctx, segment);
       }
     }
+    drawGluedBoundaryPairs(ctx);
     ctx.restore();
+  }
+
+  function drawGluedBoundaryPairs(ctx) {
+    const pairs = cloneGluedEdges();
+    if (!pairs.length) return;
+    pairs.forEach((pair, pairIndex) => {
+      const color = gluedBoundaryColor(gluePairGroup(pair, pairIndex));
+      drawGluedBoundaryEdge(ctx, pair.first, color, false);
+      drawGluedBoundaryEdge(ctx, pair.second, color, true);
+    });
+  }
+
+  function drawGluedBoundaryEdge(ctx, edge, color, reverse) {
+    const segment = boundaryEdgeSegment(edge);
+    if (!segment) return;
+    const lineWidth = hoverEdgeLineWidth(geometry.radius) * 1.15;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    drawBackgroundBoundarySegment(ctx, segment);
+    drawSegmentArrow(ctx, segment, reverse, color, lineWidth);
+    ctx.restore();
+  }
+
+  function drawSegmentArrow(ctx, segment, reverse, color, lineWidth) {
+    const start = reverse ? segment.end : segment.start;
+    const end = reverse ? segment.start : segment.end;
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 0.001) return;
+    const ux = dx / length;
+    const uy = dy / length;
+    const size = Math.max(5.5, geometry.radius * 0.15);
+    const tip = {
+      x: start.x + dx * 0.62,
+      y: start.y + dy * 0.62
+    };
+    const base = {
+      x: tip.x - ux * size,
+      y: tip.y - uy * size
+    };
+    const normal = { x: -uy, y: ux };
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(base.x + normal.x * size * 0.46, base.y + normal.y * size * 0.46);
+    ctx.lineTo(base.x - normal.x * size * 0.46, base.y - normal.y * size * 0.46);
+    ctx.closePath();
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, lineWidth * 0.58);
+    ctx.strokeStyle = color;
+    ctx.stroke();
+  }
+
+  function gluedBoundaryColor(pairIndex) {
+    return GLUED_BOUNDARY_COLORS[modulo(pairIndex, GLUED_BOUNDARY_COLORS.length)];
+  }
+
+  function gluePairGroup(pair, fallback) {
+    const group = normalizeGlueGroup(pair && pair.group);
+    return group == null ? fallback : group;
+  }
+
+  function boundaryEdgeSegment(edge, radiusScale = 0.96) {
+    const normalized = cloneBoundaryEdge(edge);
+    if (!normalized) return null;
+    const cell = geometry.cells[normalized.index];
+    if (!cell) return null;
+    return edgeSegmentPoints(cell.x, cell.y, normalized.dir, geometry.radius * radiusScale);
   }
 
   function drawBackgroundBoundarySegment(ctx, segment) {
@@ -11562,6 +12878,16 @@
     return sharedEdgeHitAtBoardPoint(clientPointToBoardPoint(clientX, clientY));
   }
 
+  function boundaryEdgeHitTest(clientX, clientY) {
+    if (!geometry) return null;
+    return boundaryEdgeHitAtBoardPoint(clientPointToBoardPoint(clientX, clientY));
+  }
+
+  function backgroundCuspHitTest(clientX, clientY) {
+    if (!geometry || !isClosedBackgroundSurface()) return null;
+    return backgroundCuspHitAtBoardPoint(clientPointToBoardPoint(clientX, clientY));
+  }
+
   function updateDrawDebugFromPoint(clientX, clientY, redraw = true) {
     if (state.inputMode !== 'draw' || !isDrawGestureAction() || state.drawStyle === 'none') return false;
     const hit = dualGraphDrawDebugHit(clientX, clientY) || edgeHitTest(clientX, clientY, 0);
@@ -11704,6 +13030,63 @@
     return best;
   }
 
+  function boundaryEdgeHitAtBoardPoint(point) {
+    const offsets = state.wrapped ? getBoardCopyOffsets() : [{ x: 0, y: 0 }];
+    const lattice = getLattice();
+    let best = null;
+    const maxDistance = Math.max(6, geometry.radius * 0.18);
+    for (const offset of offsets) {
+      const local = {
+        x: point.x - offset.x,
+        y: point.y - offset.y
+      };
+      for (let index = 0; index < geometry.cells.length; index += 1) {
+        if (!tileExists(index)) continue;
+        const cell = geometry.cells[index];
+        if (!cell) continue;
+        if (Math.abs(local.x - cell.x) > geometry.radius * 1.25 || Math.abs(local.y - cell.y) > geometry.radius * 1.25) continue;
+        for (let dir = 0; dir < lattice.sides; dir += 1) {
+          if (!isBackgroundBoundaryEdge(index, dir)) continue;
+          const segment = edgeSegmentPoints(cell.x, cell.y, dir, geometry.radius * 0.96);
+          const projection = projectPointToSegment(local, segment.start, segment.end);
+          if (projection.distance > maxDistance) continue;
+          if (!best || projection.distance < best.distance) {
+            best = {
+              index,
+              dir,
+              offset,
+              distance: projection.distance,
+              point: projection.point
+            };
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  function backgroundCuspHitAtBoardPoint(point) {
+    const vertices = computeBackgroundMarkedBoundaryVertices();
+    const maxDistance = Math.max(7, geometry.radius * 0.2);
+    let best = null;
+    vertices.forEach((vertex) => {
+      backgroundCuspDisplayPositions(vertex).forEach((entry) => {
+        const displayPoint = entry.point;
+        if (!displayPoint) return;
+        const distance = Math.hypot(point.x - displayPoint.x, point.y - displayPoint.y);
+        if (distance > maxDistance) return;
+        if (!best || distance < best.distance) {
+          best = {
+            id: vertex.id,
+            label: vertex.label,
+            distance
+          };
+        }
+      });
+    });
+    return best;
+  }
+
   function drawExitDirection(clientX, clientY, tileState) {
     return drawExitDirectionFromPoint(clientPointToBoardPoint(clientX, clientY), tileState);
   }
@@ -11828,12 +13211,9 @@
 
   function hasMatchingConnection(index, dir) {
     const lattice = getLattice();
-    const row = Math.floor(index / state.cols);
-    const col = index % state.cols;
-    const next = connectedNeighbor(row, col, dir, lattice);
+    const next = connectedSurfaceNeighbor(index, dir, lattice);
     if (!next) return false;
-    const nextIndex = indexOf(next.row, next.col, state.cols);
-    return !!(tileToMask(state.tiles[nextIndex]) & (1 << lattice.opposite[dir]));
+    return !!(tileToMask(state.tiles[next.index]) & (1 << next.dir));
   }
 
   function connectedNeighbor(row, col, dir, lattice = getLattice()) {
@@ -11844,6 +13224,30 @@
     const nextIndex = indexOf(next.row, next.col, state.cols);
     if (hasCutEdgeBetween(index, nextIndex)) return null;
     return tileExists(nextIndex) ? next : null;
+  }
+
+  function connectedSurfaceNeighbor(index, dir, lattice = getLattice()) {
+    if (!tileExists(index)) return null;
+    const row = Math.floor(index / state.cols);
+    const col = index % state.cols;
+    const direct = connectedNeighbor(row, col, dir, lattice);
+    if (direct) {
+      const nextIndex = indexOf(direct.row, direct.col, state.cols);
+      return {
+        index: nextIndex,
+        row: direct.row,
+        col: direct.col,
+        dir: lattice.opposite[dir]
+      };
+    }
+    const partner = gluedBoundaryPartner(index, dir);
+    if (!partner || !tileExists(partner.index)) return null;
+    return {
+      index: partner.index,
+      row: Math.floor(partner.index / state.cols),
+      col: partner.index % state.cols,
+      dir: partner.dir
+    };
   }
 
   function refreshExport() {
@@ -11857,6 +13261,8 @@
       wrappedViewMode: state.wrappedViewMode,
       inputMode: state.inputMode,
       backgroundAction: state.backgroundAction,
+      backgroundMultiEdges: !!state.backgroundMultiEdges,
+      backgroundCuspMarkerScale: normalizeBackgroundCuspMarkerScale(state.backgroundCuspMarkerScale),
       clickMode: state.editMode,
       drawAction: state.drawAction,
       knotCodeKind: state.knotCodeKind,
@@ -11886,9 +13292,10 @@
       cols: state.cols,
       edits: state.edits,
       filledTiles: report.active,
-      backgroundSpace: report.background || analyzeBackgroundSpace(),
+      backgroundSpace: backgroundSpaceForExport(report),
       removedTiles: removedTilesForExport(),
       cutEdges: cutEdgesForExport(),
+      gluedEdges: gluedEdgesForExport(),
       tiles: state.tiles.map((tile, index) => {
         const mask = tileToMask(tile);
         return {
@@ -11915,6 +13322,15 @@
     }));
   }
 
+  function backgroundSpaceForExport(report) {
+    return {
+      ...(report.background || analyzeBackgroundSpace()),
+      action: state.backgroundAction,
+      multiEdges: !!state.backgroundMultiEdges,
+      cuspMarkerScale: normalizeBackgroundCuspMarkerScale(state.backgroundCuspMarkerScale)
+    };
+  }
+
   function cutEdgesForExport() {
     return Array.from(cloneCutEdgeSet()).sort().map((key) => {
       const parsed = parseCutEdgeKey(key);
@@ -11936,6 +13352,32 @@
         }
       };
     }).filter(Boolean);
+  }
+
+  function gluedEdgesForExport() {
+    return cloneGluedEdges().map((pair, pairIndex) => ({
+      id: pairIndex + 1,
+      group: gluePairGroup(pair, pairIndex),
+      color: gluedBoundaryColor(gluePairGroup(pair, pairIndex)),
+      orientation: 'opposite',
+      first: boundaryEdgeForExport(pair.first),
+      second: boundaryEdgeForExport(pair.second)
+    })).filter((pair) => pair.first && pair.second);
+  }
+
+  function boundaryEdgeForExport(edge) {
+    const normalized = cloneBoundaryEdge(edge);
+    if (!normalized) return null;
+    const row = Math.floor(normalized.index / state.cols);
+    const col = normalized.index % state.cols;
+    const lattice = getLattice();
+    return {
+      row: row + 1,
+      col: col + 1,
+      index: normalized.index,
+      dir: normalized.dir,
+      edge: lattice.dirNames[normalized.dir]
+    };
   }
 
   function copyExport() {
@@ -12013,6 +13455,7 @@
     syncImportPresetControls();
     updateInputModePanels();
     updateDrawModeControls();
+    syncBackgroundModeControls();
     updateInputModeLock();
     updateDisplayControls();
     updatePickControls();
@@ -12024,6 +13467,31 @@
       const modes = (panel.dataset.inputPanel || '').split(/\s+/);
       panel.hidden = !modes.includes(state.inputMode);
     });
+  }
+
+  function syncBackgroundModeControls() {
+    const glueAction = isBackgroundGlueAction();
+    const chains = state.pendingGlueChains;
+    const canBeginSecond = !!(
+      glueAction
+      && state.backgroundMultiEdges
+      && chains
+      && chains.phase === 'first'
+      && Array.isArray(chains.first)
+      && chains.first.length > 0
+    );
+    if (refs.backgroundMultiEdges) refs.backgroundMultiEdges.checked = !!state.backgroundMultiEdges;
+    if (refs.backgroundMultiEdgeRow) refs.backgroundMultiEdgeRow.hidden = !glueAction;
+    if (refs.backgroundBeginSecondChain) {
+      refs.backgroundBeginSecondChain.hidden = !glueAction || !state.backgroundMultiEdges;
+      refs.backgroundBeginSecondChain.disabled = !canBeginSecond;
+    }
+    if (refs.backgroundCuspMarkerRow) refs.backgroundCuspMarkerRow.hidden = !isGluedBoundaryMode();
+    if (refs.backgroundCuspMarkerScale) {
+      const scale = normalizeBackgroundCuspMarkerScale(state.backgroundCuspMarkerScale);
+      refs.backgroundCuspMarkerScale.value = scale.toFixed(2);
+      if (refs.backgroundCuspMarkerScaleValue) refs.backgroundCuspMarkerScaleValue.textContent = scale.toFixed(2);
+    }
   }
 
   function syncRiemannNodeControls() {
@@ -12105,6 +13573,7 @@
     }
     refs.drawLayer.disabled = state.drawAction !== 'edge';
     refs.drawStyle.disabled = !isDrawGestureAction();
+    syncBackgroundModeControls();
   }
 
   function updateDisplayControls() {
@@ -12412,6 +13881,11 @@
   }
 
   function syncInputModeForBoundaryChange(oldMode, nextMode) {
+    if (nextMode === 'glued' && oldMode !== 'glued') {
+      if (state.inputMode !== 'background') state.backgroundReturnInputMode = state.inputMode;
+      state.inputMode = 'background';
+      return;
+    }
     if (oldMode === 'glued' && nextMode !== 'glued' && state.inputMode === 'background') {
       state.inputMode = normalizeInputMode(state.backgroundReturnInputMode || 'draw');
     }
@@ -12441,7 +13915,20 @@
   }
 
   function normalizeBackgroundAction(action) {
-    return action === 'boundary' || action === 'add-boundary' || action === 'addBoundary' ? 'boundary' : 'tile';
+    if (action === 'boundary' || action === 'add-boundary' || action === 'addBoundary') return 'boundary';
+    if (
+      action === 'glue-boundary'
+      || action === 'glueBoundary'
+      || action === 'glued-boundary'
+      || action === 'gluedBoundary'
+    ) return 'glue-boundary';
+    return 'tile';
+  }
+
+  function normalizeBackgroundCuspMarkerScale(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return DEFAULT_BACKGROUND_CUSP_MARKER_SCALE;
+    return clamp(number, 0.35, 1.4);
   }
 
   function normalizeDualGraphLayoutMethod(method) {
@@ -12640,6 +14127,17 @@
     return true;
   }
 
+  function gcd(left, right) {
+    let a = Math.abs(Math.trunc(left));
+    let b = Math.abs(Math.trunc(right));
+    while (b) {
+      const next = a % b;
+      a = b;
+      b = next;
+    }
+    return a || 1;
+  }
+
   function tilePoints(x, y, radius) {
     const lattice = getLattice();
     if (lattice.shape === 'square') return squarePoints(x, y, radius);
@@ -12815,6 +14313,14 @@
 
   function moduloAngle(angle) {
     return modulo(angle, Math.PI * 2);
+  }
+
+  function signedAngleBetween(from, to) {
+    const angle = Math.atan2((from.x * to.y) - (from.y * to.x), (from.x * to.x) + (from.y * to.y));
+    if (!Number.isFinite(angle)) return 0;
+    if (angle > Math.PI) return angle - (Math.PI * 2);
+    if (angle < -Math.PI) return angle + (Math.PI * 2);
+    return angle;
   }
 
   function modulo(value, size) {
