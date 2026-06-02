@@ -11,7 +11,11 @@
     selectedSet: [0],
     hitboxes: [],
     roots: [],
-    cartan: []
+    cartan: [],
+    startingFunctionLayouts: {},
+    startingFunctionHeaderVisible: true,
+    startingFunctionTransposed: false,
+    startingFunctionWide: false
   };
 
   const EXCEPTIONAL_RANK = { E6: 6, E7: 7, E8: 8, F4: 4, G2: 2 };
@@ -46,6 +50,10 @@
     return type === 'A' || type === 'D' || type === 'E6' || type === 'E7' || type === 'E8';
   }
 
+  function supportsStartingFunction(type) {
+    return isSimplyLacedFinite(type) || type === 'B' || type === 'C' || type === 'F4' || type === 'G2';
+  }
+
   function typeLabel(type = state.type, rank = state.rank) {
     return TYPE_NAMES[type] ? TYPE_NAMES[type](rank) : type;
   }
@@ -62,6 +70,10 @@
     const bounds = rankBounds(type);
     const n = Math.floor(Number(value) || bounds.fallback);
     return Math.max(bounds.min, Math.min(bounds.max, n));
+  }
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
   }
 
   function makeMatrix(n, callback) {
@@ -399,7 +411,6 @@
       .filter((index, position, values) => values.indexOf(index) === position)
       .sort((a, b) => a - b);
     if (!state.selectedSet.length) state.selectedSet = [state.selected];
-    if (!state.selectedSet.includes(state.selected)) state.selected = state.selectedSet[0];
   }
 
   function typeSetTarget() {
@@ -861,35 +872,29 @@
 
   function renderStartingFunction() {
     const target = $('dynkin-starting-function');
-    const selected = selectedIndices()[0];
-    if (!isSimplyLacedFinite(state.type)) {
-      target.innerHTML = `<div class="starting-note">${inlineMath('\\dim\\operatorname{Hom}(P(i),M)')} is shown here for Dynkin types ${inlineMath('A,D,E')}.</div>`;
+    const selected = state.selected;
+    const available = supportsStartingFunction(state.type);
+    syncStartingFunctionControls(available);
+    if (!available) {
+      target.innerHTML = `<div class="starting-note">${inlineMath('\\dim\\operatorname{Hom}(P(i),M)')} is shown here for Dynkin types ${inlineMath('A,B,C,D,E,F_4,G_2')}.</div>`;
       return;
     }
-    const chart = startingFunctionChart(state.type, state.rank, state.cartan, selected);
-    const grid = chart.cells
-      .map((cell) => {
-        const value = cell.value ? inlineMath(String(cell.value)) : '&nbsp;';
-        const className = cell.value ? 'starting-chart-cell' : 'starting-chart-cell is-empty';
-        const title = cell.value ? ` title="${escapeHtml(rootTooltip(cell.root))}"` : '';
-        return `<span class="${className}" style="grid-row:${cell.row};grid-column:${cell.col};"${title}>${value}</span>`;
-      })
-      .join('');
+    const layout = getStartingFunctionLayout(state.type, state.rank, state.cartan);
+    const chart = startingFunctionChart(state.type, state.rank, state.cartan, selected, layout);
     target.innerHTML = [
       `<div class="starting-summary">${inlineMath(`M_\\beta\\mapsto\\dim\\operatorname{Hom}(P(${selected + 1}),M_\\beta)=\\operatorname{coeff}_{\\alpha_{${selected + 1}}}(\\beta)`)}.</div>`,
-      `<div class="starting-chart-wrap"><div class="starting-chart-grid" style="--starting-cols:${chart.columns};">${grid}</div></div>`
+      startingFunctionChartMarkup(chart, layout)
     ].join('');
   }
 
-  function startingFunctionChart(type, rank, C, selected) {
-    const columnsByVertex = startingFunctionVertexColumns(type, rank);
+  function startingFunctionChart(type, rank, C, selected, layout) {
+    const columnsByVertex = layout.positions.map((position) => position.col);
     const colors = bipartiteColorClasses(C, columnsByVertex);
     const rows = [];
     const seen = new Set();
     const coxeter = invariants(type, rank, C, state.roots).coxeter;
     const rowCount = coxeter - 1;
     const startColor = colors[0].includes(selected) ? 0 : 1;
-    const columns = Math.max(...columnsByVertex);
     const prefix = [];
     for (let row = 0; row < rowCount; row++) {
       const color = (startColor + row) % 2;
@@ -912,40 +917,189 @@
       });
       prefix.push(...vertices);
     }
-    return normalizeStartingFunctionColumns(rows, columns);
+    return { cells: rows, columns: layout.columns, rows: rowCount };
   }
 
-  function normalizeStartingFunctionColumns(cells, fallbackColumns) {
-    if (!cells.length) return { cells, columns: fallbackColumns };
-    const minColumn = Math.min(...cells.map((cell) => cell.col));
-    const maxColumn = Math.max(...cells.map((cell) => cell.col));
-    const normalized = cells.map((cell) => ({ ...cell, col: cell.col - minColumn + 1 }));
-    return { cells: normalized, columns: maxColumn - minColumn + 1 };
+  function startingFunctionChartMarkup(chart, layout) {
+    if (state.startingFunctionTransposed) return transposedStartingFunctionMarkup(chart, layout);
+
+    const header = state.startingFunctionHeaderVisible
+      ? `<div class="starting-vertex-grid" data-starting-columns="${chart.columns}" aria-label="Starting function vertex columns">` +
+          `${startingFunctionVertexLineSvg(layout, state.cartan, false, chart.columns, 2)}` +
+          `${startingFunctionVertexLabels(layout, false)}` +
+        `</div>`
+      : '';
+    return `<div class="starting-chart-wrap"><div class="starting-chart-stack" style="--starting-cols:${chart.columns};">` +
+      header +
+      `<div class="starting-chart-grid">${startingFunctionCells(chart.cells, 0, false)}</div>` +
+    `</div></div>`;
   }
 
-  function startingFunctionVertexColumns(type, rank) {
-    if (type === 'A') {
-      return Array.from({ length: rank }, (_, index) => rank - index);
+  function transposedStartingFunctionMarkup(chart, layout) {
+    const headerOffset = state.startingFunctionHeaderVisible ? 2 : 0;
+    const totalColumns = headerOffset + chart.rows;
+    const header = state.startingFunctionHeaderVisible
+      ? startingFunctionVertexLineSvg(layout, state.cartan, true, totalColumns, chart.columns) + startingFunctionVertexLabels(layout, true)
+      : '';
+    return `<div class="starting-chart-wrap"><div class="starting-chart-stack">` +
+      `<div class="starting-transpose-grid" data-starting-columns="${chart.columns}" data-starting-transposed="true" ` +
+        `style="--starting-transpose-cols:${totalColumns};--starting-transpose-rows:${chart.columns};">` +
+        header +
+        `${startingFunctionCells(chart.cells, headerOffset, true)}` +
+      `</div>` +
+    `</div></div>`;
+  }
+
+  function startingFunctionCells(cells, columnOffset, transposed) {
+    return cells
+      .map((cell) => {
+        const value = cell.value ? inlineMath(String(cell.value)) : '&nbsp;';
+        const className = cell.value ? 'starting-chart-cell' : 'starting-chart-cell is-empty';
+        const title = cell.value ? ` title="${escapeHtml(rootTooltip(cell.root))}"` : '';
+        const row = transposed ? cell.col : cell.row;
+        const col = transposed ? cell.row + columnOffset : cell.col;
+        return `<span class="${className}" style="grid-row:${row};grid-column:${col};"${title}>${value}</span>`;
+      })
+      .join('');
+  }
+
+  function startingFunctionVertexLabels(layout, transposed) {
+    return layout.positions
+      .map((position, vertex) => {
+        const selected = vertex === state.selected ? ' is-selected' : '';
+        const row = transposed ? position.col : position.row;
+        const col = transposed ? position.row : position.col;
+        return `<button type="button" class="starting-vertex-label${selected}" ` +
+          `data-starting-vertex="${vertex}" data-starting-row="${position.row}" data-starting-column="${position.col}" ` +
+          `data-starting-transposed="${transposed ? 'true' : 'false'}" ` +
+          `style="grid-row:${row};grid-column:${col};" aria-label="Vertex ${vertex + 1}">${vertex + 1}</button>`;
+      })
+      .join('');
+  }
+
+  function startingFunctionVertexLineSvg(layout, C, transposed, viewColumns, viewRows) {
+    const lines = [];
+    for (let i = 0; i < C.length; i++) {
+      for (let j = i + 1; j < C.length; j++) {
+        if (!C[i][j] && !C[j][i]) continue;
+        const a = layout.positions[i];
+        const b = layout.positions[j];
+        if (!a || !b) continue;
+        const start = {
+          x: transposed ? a.row - 0.5 : a.col - 0.5,
+          y: transposed ? a.col - 0.5 : a.row - 0.5
+        };
+        const end = {
+          x: transposed ? b.row - 0.5 : b.col - 0.5,
+          y: transposed ? b.col - 0.5 : b.row - 0.5
+        };
+        const multiplicity = Math.max(1, Math.abs(C[i][j] * C[j][i]));
+        const arrowTarget = multiplicity > 1
+          ? (Math.abs(C[i][j]) > Math.abs(C[j][i]) ? end : start)
+          : null;
+        lines.push(startingFunctionEdgeSvg(start, end, multiplicity, arrowTarget));
+      }
     }
-    if (type === 'D') {
-      const columns = Array(rank).fill(1);
-      for (let index = 0; index <= rank - 4; index++) columns[index] = rank - index;
-      columns[rank - 3] = 2;
-      columns[rank - 2] = 1;
-      columns[rank - 1] = 3;
-      return columns;
-    }
+    if (!lines.length) return '';
+    return `<svg class="starting-vertex-lines" viewBox="0 0 ${viewColumns} ${viewRows}" preserveAspectRatio="none" aria-hidden="true">${lines.join('')}</svg>`;
+  }
+
+  function startingFunctionEdgeSvg(start, end, multiplicity, arrowTarget) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const px = -dy / len;
+    const py = dx / len;
+    const offsetScale = 0.075;
+    const offsets = multiplicity === 1 ? [0] : multiplicity === 2 ? [-offsetScale, offsetScale] : [-offsetScale * 1.35, 0, offsetScale * 1.35];
+    const lines = offsets.map((offset) => {
+      const x1 = start.x + px * offset;
+      const y1 = start.y + py * offset;
+      const x2 = end.x + px * offset;
+      const y2 = end.y + py * offset;
+      return `<line x1="${formatSvgNumber(x1)}" y1="${formatSvgNumber(y1)}" x2="${formatSvgNumber(x2)}" y2="${formatSvgNumber(y2)}" vector-effect="non-scaling-stroke"></line>`;
+    });
+    if (arrowTarget) lines.push(startingFunctionArrowSvg(start, end, arrowTarget === end));
+    return lines.join('');
+  }
+
+  function startingFunctionArrowSvg(start, end, pointsToEnd) {
+    const from = pointsToEnd ? start : end;
+    const to = pointsToEnd ? end : start;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const px = -uy;
+    const py = ux;
+    const tipX = to.x - ux * 0.48;
+    const tipY = to.y - uy * 0.48;
+    const back = 0.17;
+    const wing = 0.115;
+    const x1 = tipX - ux * back + px * wing;
+    const y1 = tipY - uy * back + py * wing;
+    const x2 = tipX - ux * back - px * wing;
+    const y2 = tipY - uy * back - py * wing;
+    return `<path d="M ${formatSvgNumber(x1)} ${formatSvgNumber(y1)} L ${formatSvgNumber(tipX)} ${formatSvgNumber(tipY)} L ${formatSvgNumber(x2)} ${formatSvgNumber(y2)}" vector-effect="non-scaling-stroke"></path>`;
+  }
+
+  function formatSvgNumber(value) {
+    return Number(value.toFixed(4));
+  }
+
+  function getStartingFunctionLayout(type, rank, C) {
+    const layoutKey = startingFunctionLayoutKey(type, rank);
+    const existing = state.startingFunctionLayouts[layoutKey];
+    if (isValidStartingFunctionLayout(existing, rank)) return existing;
+    const layout = defaultStartingFunctionLayout(type, rank, C);
+    state.startingFunctionLayouts[layoutKey] = layout;
+    return layout;
+  }
+
+  function startingFunctionLayoutKey(type, rank) {
+    return `${type}:${rank}`;
+  }
+
+  function isValidStartingFunctionLayout(layout, rank) {
+    return Boolean(layout && Number.isInteger(layout.columns) && layout.columns > 0 &&
+      Array.isArray(layout.positions) && layout.positions.length === rank &&
+      layout.positions.every((position) => position &&
+        (position.row === 1 || position.row === 2) &&
+        Number.isInteger(position.col) &&
+        position.col >= 1 &&
+        position.col <= layout.columns));
+  }
+
+  function defaultStartingFunctionLayout(type, rank, C) {
+    const colors = bipartiteVertexColors(C);
+    const columns = startingFunctionDefaultColumnCount(type, rank);
+    const positions = Array.from({ length: rank }, (_, vertex) => ({
+      row: (colors[vertex] || 0) + 1,
+      col: startingFunctionDefaultColumn(type, rank, vertex)
+    }));
+    return { columns, positions };
+  }
+
+  function startingFunctionDefaultColumnCount(type, rank) {
+    return (type === 'E6' || type === 'E7' || type === 'E8') ? rank - 1 : rank;
+  }
+
+  function startingFunctionDefaultColumn(type, rank, vertex) {
     if (type === 'E6' || type === 'E7' || type === 'E8') {
-      const columns = Array(rank).fill(1);
-      for (let index = 0; index <= rank - 2; index++) columns[index] = rank - index;
-      columns[rank - 1] = rank - 2;
-      return columns;
+      return vertex === rank - 1 ? 3 : vertex + 1;
     }
-    return Array.from({ length: rank }, (_, index) => index + 1);
+    return vertex + 1;
   }
 
   function bipartiteColorClasses(C, columnsByVertex) {
     const colors = [[], []];
+    const assigned = bipartiteVertexColors(C);
+    assigned.forEach((color, vertex) => colors[color].push(vertex));
+    return colors.map((group) => group.sort((a, b) => columnsByVertex[a] - columnsByVertex[b] || a - b));
+  }
+
+  function bipartiteVertexColors(C) {
     const assigned = Array(C.length).fill(null);
     for (let start = 0; start < C.length; start++) {
       if (assigned[start] != null) continue;
@@ -962,8 +1116,7 @@
         }
       }
     }
-    assigned.forEach((color, vertex) => colors[color].push(vertex));
-    return colors.map((group) => group.sort((a, b) => columnsByVertex[a] - columnsByVertex[b] || a - b));
+    return assigned.map((color) => color || 0);
   }
 
   function simpleRoot(rank, vertex) {
@@ -1061,6 +1214,24 @@
     render();
   }
 
+  function setStartingFunctionHeaderVisible(visible) {
+    state.startingFunctionHeaderVisible = Boolean(visible);
+    renderStartingFunction();
+    queueMathTypeset();
+  }
+
+  function setStartingFunctionTransposed(transposed) {
+    state.startingFunctionTransposed = Boolean(transposed);
+    renderStartingFunction();
+    queueMathTypeset();
+  }
+
+  function setStartingFunctionWide(enabled) {
+    const canUseWide = window.matchMedia('(min-width: 960px)').matches;
+    state.startingFunctionWide = Boolean(enabled) && canUseWide;
+    syncStartingFunctionWidePlacement();
+  }
+
   function bindInputs() {
     $('dynkin-type').addEventListener('change', (event) => setType(event.target.value));
     $('dynkin-rank').addEventListener('change', (event) => setRank(event.target.value));
@@ -1073,6 +1244,158 @@
     });
     $('dynkin-canvas').addEventListener('click', handleCanvasClick);
     window.addEventListener('resize', drawDynkin);
+    window.addEventListener('resize', syncStartingFunctionWidePlacement);
+    $('dynkin-starting-toggle-header')?.addEventListener('click', () => {
+      setStartingFunctionHeaderVisible(!state.startingFunctionHeaderVisible);
+    });
+    $('dynkin-starting-transpose')?.addEventListener('click', () => {
+      setStartingFunctionTransposed(!state.startingFunctionTransposed);
+    });
+    $('dynkin-starting-wide')?.addEventListener('click', () => {
+      setStartingFunctionWide(!state.startingFunctionWide);
+    });
+    syncStartingFunctionWidePlacement();
+  }
+
+  function syncStartingFunctionControls(available = supportsStartingFunction(state.type)) {
+    const headerButton = $('dynkin-starting-toggle-header');
+    const transposeButton = $('dynkin-starting-transpose');
+    const wideButton = $('dynkin-starting-wide');
+    if (headerButton) {
+      headerButton.textContent = state.startingFunctionHeaderVisible ? 'hide header' : 'show header';
+      headerButton.setAttribute('aria-pressed', state.startingFunctionHeaderVisible ? 'true' : 'false');
+      headerButton.disabled = !available;
+    }
+    if (transposeButton) {
+      transposeButton.setAttribute('aria-pressed', state.startingFunctionTransposed ? 'true' : 'false');
+      transposeButton.disabled = !available;
+    }
+    if (wideButton) {
+      const canUseWide = window.matchMedia('(min-width: 960px)').matches;
+      wideButton.textContent = state.startingFunctionWide ? 'side' : 'wide';
+      wideButton.setAttribute('aria-pressed', state.startingFunctionWide ? 'true' : 'false');
+      wideButton.disabled = !available || !canUseWide;
+    }
+  }
+
+  function syncStartingFunctionWidePlacement() {
+    const card = $('dynkin-starting-card');
+    const sideAnchor = $('dynkin-starting-side-anchor');
+    const wideHost = $('dynkin-starting-wide-host');
+    if (!card || !sideAnchor || !wideHost) return;
+    const canUseWide = window.matchMedia('(min-width: 960px)').matches;
+    if (!canUseWide) state.startingFunctionWide = false;
+    if (state.startingFunctionWide) {
+      if (card.parentElement !== wideHost) wideHost.appendChild(card);
+    } else if (sideAnchor.parentElement && card.parentElement !== sideAnchor.parentElement) {
+      sideAnchor.insertAdjacentElement('afterend', card);
+    }
+    card.classList.toggle('wide', state.startingFunctionWide);
+    wideHost.hidden = !state.startingFunctionWide;
+    syncStartingFunctionControls();
+  }
+
+  function bindStartingFunctionDrag() {
+    const target = $('dynkin-starting-function');
+    if (!target) return;
+
+    let drag = null;
+    const pointerOptions = { passive: false };
+
+    target.addEventListener('pointerdown', (event) => {
+      const label = event.target.closest('.starting-vertex-label');
+      if (!label || !target.contains(label)) return;
+      const grid = label.closest('.starting-vertex-grid,.starting-transpose-grid');
+      if (!grid) return;
+
+      const vertex = Number(label.dataset.startingVertex);
+      const row = Number(label.dataset.startingRow);
+      const column = Number(label.dataset.startingColumn);
+      const columns = Number(grid.dataset.startingColumns);
+      const transposed = label.dataset.startingTransposed === 'true';
+      if (!Number.isInteger(vertex) || !Number.isInteger(row) || !Number.isInteger(column) || !Number.isInteger(columns)) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const gridRect = grid.getBoundingClientRect();
+      const cellSize = transposed
+        ? gridRect.height / Math.max(1, columns)
+        : gridRect.width / Math.max(1, columns);
+      drag = {
+        pointerId: event.pointerId,
+        label,
+        vertex,
+        row,
+        column,
+        columns,
+        transposed,
+        startPosition: transposed ? event.clientY : event.clientX,
+        currentPosition: transposed ? event.clientY : event.clientX,
+        gridStart: transposed ? gridRect.top : gridRect.left,
+        cellSize
+      };
+      label.classList.add('is-dragging');
+      if (label.setPointerCapture) {
+        try { label.setPointerCapture(event.pointerId); } catch (_) {}
+      }
+      document.addEventListener('pointermove', handleStartingFunctionDragMove, pointerOptions);
+      document.addEventListener('pointerup', finishStartingFunctionDrag, pointerOptions);
+      document.addEventListener('pointercancel', finishStartingFunctionDrag, pointerOptions);
+    }, pointerOptions);
+
+    function handleStartingFunctionDragMove(event) {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      event.preventDefault();
+      const minPosition = drag.gridStart + drag.cellSize / 2;
+      const maxPosition = drag.gridStart + drag.cellSize * (drag.columns - 0.5);
+      const pointerPosition = drag.transposed ? event.clientY : event.clientX;
+      drag.currentPosition = clamp(pointerPosition, minPosition, maxPosition);
+      const delta = drag.currentPosition - drag.startPosition;
+      drag.label.style.transform = drag.transposed ? `translateY(${delta}px)` : `translateX(${delta}px)`;
+    }
+
+    function finishStartingFunctionDrag(event) {
+      if (!drag || (event && event.pointerId !== drag.pointerId)) return;
+      if (event) event.preventDefault();
+
+      document.removeEventListener('pointermove', handleStartingFunctionDragMove, pointerOptions);
+      document.removeEventListener('pointerup', finishStartingFunctionDrag, pointerOptions);
+      document.removeEventListener('pointercancel', finishStartingFunctionDrag, pointerOptions);
+
+      const finishedDrag = drag;
+      drag = null;
+      finishedDrag.label.classList.remove('is-dragging');
+      finishedDrag.label.style.transform = '';
+
+      if (!event || event.type === 'pointercancel') return;
+      const minPosition = finishedDrag.gridStart + finishedDrag.cellSize / 2;
+      const maxPosition = finishedDrag.gridStart + finishedDrag.cellSize * (finishedDrag.columns - 0.5);
+      const pointerPosition = finishedDrag.transposed ? event.clientY : event.clientX;
+      finishedDrag.currentPosition = clamp(pointerPosition, minPosition, maxPosition);
+      const targetColumn = clamp(
+        Math.floor((finishedDrag.currentPosition - finishedDrag.gridStart) / finishedDrag.cellSize) + 1,
+        1,
+        finishedDrag.columns
+      );
+      moveStartingFunctionVertex(finishedDrag.vertex, finishedDrag.row, targetColumn);
+    }
+  }
+
+  function moveStartingFunctionVertex(vertex, row, targetColumn) {
+    const layout = getStartingFunctionLayout(state.type, state.rank, state.cartan);
+    const current = layout.positions[vertex];
+    if (!current || current.row !== row || current.col === targetColumn) return;
+
+    const occupant = layout.positions.findIndex((position, index) =>
+      index !== vertex && position.row === row && position.col === targetColumn
+    );
+    if (occupant >= 0) {
+      layout.positions[occupant] = { ...layout.positions[occupant], col: current.col };
+    }
+    layout.positions[vertex] = { ...current, col: targetColumn };
+    renderStartingFunction();
+    queueMathTypeset();
   }
 
   function handleCanvasClick(event) {
@@ -1214,6 +1537,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     bindInputs();
+    bindStartingFunctionDrag();
     bindCards();
     render();
   });
