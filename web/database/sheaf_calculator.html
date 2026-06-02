@@ -79,6 +79,10 @@
       display: none !important;
     }
 
+    .sheaf-import-panel[hidden] {
+      display: none !important;
+    }
+
     .card[hidden],
     .sheaf-input-reveal-actions[hidden] {
       display: none !important;
@@ -88,6 +92,53 @@
       margin: 0;
       min-width: 0;
       white-space: nowrap;
+    }
+
+    .sheaf-import-panel {
+      display: grid;
+      gap: 7px;
+      padding-top: 9px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .sheaf-import-input {
+      width: 100%;
+      min-height: 58px;
+      max-height: 150px;
+      resize: vertical;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.35;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      padding: 6px 8px;
+    }
+
+    .sheaf-import-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 7px;
+      flex-wrap: wrap;
+    }
+
+    .sheaf-import-message {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      line-height: 1.35;
+      min-height: 1em;
+      overflow-wrap: anywhere;
+    }
+
+    .sheaf-import-message.is-error {
+      color: var(--accent2);
+    }
+
+    .sheaf-warning-check {
+      color: var(--accent2);
     }
 
     .sheaf-editor-title {
@@ -685,6 +736,13 @@
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.78rem;
       line-height: 1;
+    }
+
+    .sheaf-self-sum-count {
+      width: 58px;
+      flex: 0 0 58px;
+      padding: 4px 6px;
+      text-align: center;
     }
 
     .sheaf-base-pick-button[aria-pressed="true"] {
@@ -1546,6 +1604,7 @@
             <button class="btn btn-ghost sheaf-object-button" id="add-object" type="button">add</button>
             <button class="btn btn-ghost sheaf-object-button" id="delete-object" type="button">delete</button>
             <button class="btn btn-ghost sheaf-object-button" id="input-pick-mode" type="button" aria-pressed="false" hidden>cancel</button>
+            <button class="btn btn-ghost sheaf-object-button" id="import-preset-toggle" type="button" aria-expanded="false">import</button>
           </div>
           <div class="sheaf-input-options" id="input-options">
             <label class="opt-row" for="repeat-names">
@@ -1558,6 +1617,14 @@
               <option value="paren">X,X^{(1)},X^{(2)}...</option>
               <option value="subscript">X,X_{1},X_{2}...</option>
             </select>
+          </div>
+          <div class="sheaf-import-panel" id="import-preset-panel" hidden>
+            <textarea id="import-preset-input" class="sheaf-import-input" spellcheck="false" autocomplete="off" placeholder="Paste Preset JSON"></textarea>
+            <div class="sheaf-import-actions">
+              <span class="sheaf-import-message" id="import-preset-message"></span>
+              <button class="btn btn-ghost sheaf-object-button" id="import-preset-cancel" type="button">cancel</button>
+              <button class="btn btn-ghost sheaf-object-button" id="import-preset-apply" type="button">load</button>
+            </div>
           </div>
         </div>
 
@@ -1764,6 +1831,8 @@
               <option value="twist" id="sheaf-twist-option">Oₓ(r)</option>
               <option value="universal-bundle" id="sheaf-universal-bundle-option">Universal bundle</option>
               <option value="direct-sum">Direct sum</option>
+              <option value="self-direct-sum">Self direct sum</option>
+              <option value="ideal-sheaf">Ideal sheaf</option>
               <option value="tensor">Tensor product</option>
               <option value="schur">Schur functor</option>
               <option value="map-operation">Pullback / pushforward</option>
@@ -1796,6 +1865,32 @@
             </label>
           </div>
           <div class="sheaf-note" id="sheaf-binary-pick-note" hidden>pick two sheaves on the same base</div>
+          <div class="sheaf-field-row" id="sheaf-self-sum-formula-row" hidden>
+            <span class="input-label">parent</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-self-sum-parent-button" type="button" data-sheaf-self-sum-pick="parent">sheaf</button>
+              <span class="sheaf-map-formula-mark">^{&oplus;</span>
+              <input id="sheaf-self-sum-count" class="sheaf-input sheaf-self-sum-count" type="number" min="1" max="99" value="2" aria-label="self direct sum multiplicity">
+              <span class="sheaf-map-formula-mark">}</span>
+            </div>
+          </div>
+          <div class="sheaf-note" id="sheaf-self-sum-pick-note" hidden>pick a sheaf and a positive integer</div>
+          <div class="sheaf-field-row" id="sheaf-ideal-formula-row" hidden>
+            <span class="input-label">map</span>
+            <div class="sheaf-map-formula-picker">
+              <span class="sheaf-map-formula-mark">I_{</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-ideal-map-button" type="button">map</button>
+              <span class="sheaf-map-formula-mark">}</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-ideal-confirm-row" hidden>
+            <span class="input-label">warning</span>
+            <label class="opt-row sheaf-warning-check">
+              <input id="sheaf-ideal-confirm" type="checkbox">
+              <span>f is an embedding, and not an iso</span>
+            </label>
+          </div>
+          <div class="sheaf-note" id="sheaf-ideal-pick-note" hidden>pick an embedding map X -> Y</div>
           <div class="sheaf-field-row" id="sheaf-schur-formula-row" hidden>
             <span class="input-label">parent</span>
             <div class="sheaf-map-formula-picker">
@@ -2067,6 +2162,7 @@
             <option value="latex" selected>LaTeX</option>
             <option value="plain">Plain text</option>
             <option value="sage">SageMath note</option>
+            <option value="preset-json">Preset JSON</option>
           </select>
         </div>
         <div class="action-row sheaf-export-actions">

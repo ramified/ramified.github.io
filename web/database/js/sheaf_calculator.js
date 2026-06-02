@@ -9,6 +9,7 @@
   const MAX_ROOT_EXPANSION_MONOMIALS = 1500;
   const MAX_EXPLICIT_ROOT_FACTORS = 64;
   const MAX_SCHUR_PARTITION_SIZE = 12;
+  const MAX_SELF_DIRECT_SUM_MULTIPLICITY = 99;
   const MAX_GRASSMANNIAN_N = MAX_DIMENSION + 1;
   const DEFAULT_HOMOLOGY_RULE_PASSES = 1;
   const DEFAULT_VARIETY_SPACING_PX = 110;
@@ -108,7 +109,9 @@
     sequenceTailDrag: null,
     sheafBinaryDraft: null,
     sheafBinaryPickTarget: 'left',
+    sheafSelfSumDraft: null,
     sheafSchurDraft: null,
+    sheafIdealDraft: null,
     sheafMapDraft: null,
     sheafMapPickTarget: 'map',
     canvasPickEnabled: false,
@@ -207,6 +210,15 @@
     refs.sheafBinaryExactRow = $('sheaf-binary-exact-row');
     refs.sheafBinaryExact = $('sheaf-binary-exact');
     refs.sheafBinaryPickNote = $('sheaf-binary-pick-note');
+    refs.sheafSelfSumFormulaRow = $('sheaf-self-sum-formula-row');
+    refs.sheafSelfSumParentButton = $('sheaf-self-sum-parent-button');
+    refs.sheafSelfSumCount = $('sheaf-self-sum-count');
+    refs.sheafSelfSumPickNote = $('sheaf-self-sum-pick-note');
+    refs.sheafIdealFormulaRow = $('sheaf-ideal-formula-row');
+    refs.sheafIdealMapButton = $('sheaf-ideal-map-button');
+    refs.sheafIdealConfirmRow = $('sheaf-ideal-confirm-row');
+    refs.sheafIdealConfirm = $('sheaf-ideal-confirm');
+    refs.sheafIdealPickNote = $('sheaf-ideal-pick-note');
     refs.sheafSchurFormulaRow = $('sheaf-schur-formula-row');
     refs.sheafSchurParentButton = $('sheaf-schur-parent-button');
     refs.sheafSchurDiagramPreview = $('sheaf-schur-diagram-preview');
@@ -249,6 +261,12 @@
     refs.resetMapPick = $('reset-map-pick');
     refs.inputMode = $('input-mode');
     refs.inputPickMode = $('input-pick-mode');
+    refs.importPresetToggle = $('import-preset-toggle');
+    refs.importPresetPanel = $('import-preset-panel');
+    refs.importPresetInput = $('import-preset-input');
+    refs.importPresetApply = $('import-preset-apply');
+    refs.importPresetCancel = $('import-preset-cancel');
+    refs.importPresetMessage = $('import-preset-message');
     refs.addObjectKind = $('add-object-kind');
     refs.globalInvariantEditor = $('global-invariant-editor');
     refs.globalInvariantEditorTitle = $('global-invariant-editor-title');
@@ -505,6 +523,12 @@
     if (sheafBinaryInputMode() && inputIsCreateMode()) {
       return addBinarySheafFromDraft();
     }
+    if (sheafSelfSumInputMode() && inputIsCreateMode()) {
+      return addSelfSumSheafFromDraft();
+    }
+    if (sheafIdealInputMode() && inputIsCreateMode()) {
+      return addIdealSheafFromDraft();
+    }
     if (sheafSchurInputMode() && inputIsCreateMode()) {
       return addSchurSheafFromDraft();
     }
@@ -524,6 +548,28 @@
     const sheaf = createBinarySheafConstruction(data);
     if (!sheaf) return null;
     clearSheafBinaryDraft();
+    state.draftSheafNameDirty = false;
+    refs.sheafName.value = defaultCreateSheafNameLatex();
+    return sheaf;
+  }
+
+  function addSelfSumSheafFromDraft() {
+    const data = selfSumSheafConstructionData();
+    if (!data) return null;
+    const sheaf = createSelfSumSheafConstruction(data);
+    if (!sheaf) return null;
+    clearSheafSelfSumDraft();
+    state.draftSheafNameDirty = false;
+    refs.sheafName.value = defaultCreateSheafNameLatex();
+    return sheaf;
+  }
+
+  function addIdealSheafFromDraft() {
+    const data = idealSheafConstructionData();
+    if (!data) return null;
+    const sheaf = createIdealSheafConstruction(data);
+    if (!sheaf) return null;
+    clearSheafIdealDraft();
     state.draftSheafNameDirty = false;
     refs.sheafName.value = defaultCreateSheafNameLatex();
     return sheaf;
@@ -586,6 +632,48 @@
     syncObjectLineage(sheaf, 'sheaf');
     refreshConstructedObjects();
     return sheaf;
+  }
+
+  function updateSelfSumSheafFromDraft(sheaf) {
+    const data = selfSumSheafConstructionData();
+    if (!sheaf || !data) return null;
+    const oldBaseId = sheaf.baseVarietyId;
+    sheaf.type = 'abstract';
+    sheaf.name = data.name;
+    sheaf.twist = '1';
+    sheaf.rank = selfSumRankPlaceholder(data.parent, data.multiplicity);
+    sheaf.baseVarietyId = data.baseVarietyId;
+    sheaf.basis = 'chern';
+    sheaf.nameDirty = data.nameDirty;
+    sheaf.construction = {
+      type: 'self-direct-sum',
+      sheafId: data.parent.id,
+      multiplicity: data.multiplicity,
+      defaultName: data.defaultName
+    };
+    const baseVariety = baseVarietyForSheaf(sheaf);
+    if (oldBaseId !== sheaf.baseVarietyId) {
+      positionSheafNearBase(sheaf, baseVariety);
+      avoidCanvasLabelOverlap(sheaf);
+    }
+    if (baseVariety) sheafFromObject(sheaf, geometryFromVariety(baseVariety));
+    state.activeSequenceId = null;
+    state.activeSheafId = sheaf.id;
+    state.activeVarietyId = sheaf.baseVarietyId || defaultBaseVarietyId();
+    state.activeMapId = null;
+    refs.basis.value = normalizeBasisValue(sheaf.basis);
+    syncObjectLineage(sheaf, 'sheaf');
+    refreshConstructedObjects();
+    return sheaf;
+  }
+
+  function updateIdealSheafFromDraft(sheaf) {
+    const data = idealSheafConstructionData();
+    if (!sheaf || !data) return null;
+    const ideal = createIdealSheafConstruction(data, { replaceSheaf: sheaf });
+    if (!ideal) return null;
+    refs.basis.value = normalizeBasisValue(ideal.basis);
+    return ideal;
   }
 
   function updateSchurSheafFromDraft(sheaf) {
@@ -710,6 +798,47 @@
       parent,
       partition,
       baseVarietyId: parent.baseVarietyId,
+      defaultName,
+      name,
+      nameDirty: state.draftSheafNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName)
+    };
+  }
+
+  function selfSumSheafConstructionData() {
+    if (refs.sheafType?.value !== 'self-direct-sum') return null;
+    const parent = sheafSelfSumDraftSheaf();
+    const multiplicity = currentSelfSumMultiplicity();
+    if (!parent || !allowableSheafSelfSumPick(parent.id)) return null;
+    const defaultName = defaultSelfSumSheafNameFromObjects(parent, multiplicity);
+    const name = state.draftSheafNameDirty
+      ? sanitizeMathLabel(refs.sheafName.value, defaultName)
+      : defaultName;
+    return {
+      parent,
+      multiplicity,
+      baseVarietyId: parent.baseVarietyId,
+      defaultName,
+      name,
+      nameDirty: state.draftSheafNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName)
+    };
+  }
+
+  function idealSheafConstructionData() {
+    if (refs.sheafType?.value !== 'ideal-sheaf') return null;
+    const map = sheafIdealDraftMap();
+    if (!map || !allowableSheafIdealMapPick(map.id) || !refs.sheafIdealConfirm?.checked) return null;
+    const domain = state.varieties.find((variety) => variety.id === map.domainId);
+    const codomain = state.varieties.find((variety) => variety.id === map.codomainId);
+    if (!domain || !codomain) return null;
+    const defaultName = defaultIdealSheafNameFromObjects(map);
+    const name = state.draftSheafNameDirty
+      ? sanitizeMathLabel(refs.sheafName.value, defaultName)
+      : defaultName;
+    return {
+      map,
+      domain,
+      codomain,
+      baseVarietyId: codomain.id,
       defaultName,
       name,
       nameDirty: state.draftSheafNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName)
@@ -1180,6 +1309,9 @@
       return (sheaf.construction.sheafIds || [])
         .map((id) => state.sheaves.find((item) => item.id === id))
         .every((item) => sheafHasLocallyFreeLabel(item));
+    }
+    if (sheaf.construction.type === 'self-direct-sum') {
+      return sheafHasLocallyFreeLabel(state.sheaves.find((item) => item.id === sheaf.construction.sheafId));
     }
     if (sheaf.construction.type === 'schur') {
       return sheafHasLocallyFreeLabel(state.sheaves.find((item) => item.id === sheaf.construction.sheafId));
@@ -1711,7 +1843,9 @@
       refs.basis.value = 'chern';
       state.draftSheafBaseVarietyId = null;
       clearSheafBinaryDraft();
+      clearSheafSelfSumDraft();
       clearSheafSchurDraft();
+      clearSheafIdealDraft();
       clearSheafMapDraft();
       state.draftSheafNameDirty = false;
       syncSheafBaseOptions(true);
@@ -2024,10 +2158,12 @@
   function loadSheafIntoDraft(sheaf) {
     const mapConstruction = sheafMapConstructionType(sheaf);
     const binaryConstruction = sheafBinaryConstructionType(sheaf);
+    const selfSumConstruction = sheafSelfSumConstructionType(sheaf);
+    const idealConstruction = sheafIdealConstructionType(sheaf);
     const schurConstruction = sheafSchurConstructionType(sheaf);
     const canonicalType = canonicalSheafType(sheaf.type);
     sheaf.type = canonicalType;
-    refs.sheafType.value = mapConstruction ? 'map-operation' : (schurConstruction || binaryConstruction || canonicalType);
+    refs.sheafType.value = mapConstruction ? 'map-operation' : (idealConstruction || schurConstruction || selfSumConstruction || binaryConstruction || canonicalType);
     refs.sheafName.value = sheaf.name || defaultSheafNameLatex();
     refs.twist.value = sheaf.twist ?? '1';
     refs.rank.value = sheaf.rank || 'r';
@@ -2041,19 +2177,39 @@
     updateSheafBaseButton();
     if (mapConstruction) {
       clearSheafBinaryDraft();
+      clearSheafSelfSumDraft();
+      clearSheafIdealDraft();
       clearSheafSchurDraft();
       loadMapOperationSheafIntoDraft(sheaf);
+    } else if (idealConstruction) {
+      clearSheafMapDraft();
+      clearSheafBinaryDraft();
+      clearSheafSelfSumDraft();
+      clearSheafSchurDraft();
+      loadIdealSheafIntoDraft(sheaf);
     } else if (schurConstruction) {
       clearSheafMapDraft();
       clearSheafBinaryDraft();
+      clearSheafSelfSumDraft();
+      clearSheafIdealDraft();
       loadSchurSheafIntoDraft(sheaf);
+    } else if (selfSumConstruction) {
+      clearSheafMapDraft();
+      clearSheafBinaryDraft();
+      clearSheafIdealDraft();
+      clearSheafSchurDraft();
+      loadSelfSumSheafIntoDraft(sheaf);
     } else if (binaryConstruction) {
       clearSheafMapDraft();
+      clearSheafSelfSumDraft();
+      clearSheafIdealDraft();
       clearSheafSchurDraft();
       loadBinarySheafIntoDraft(sheaf);
     } else {
       clearSheafMapDraft();
       clearSheafBinaryDraft();
+      clearSheafSelfSumDraft();
+      clearSheafIdealDraft();
       clearSheafSchurDraft();
     }
     updateInputEditorTitles();
@@ -2062,6 +2218,14 @@
   function sheafBinaryConstructionType(sheaf) {
     const type = sheaf?.construction?.type;
     return type === 'direct-sum' || type === 'tensor' ? type : null;
+  }
+
+  function sheafSelfSumConstructionType(sheaf) {
+    return sheaf?.construction?.type === 'self-direct-sum' ? 'self-direct-sum' : null;
+  }
+
+  function sheafIdealConstructionType(sheaf) {
+    return sheaf?.construction?.type === 'ses-term' && sheaf.construction.idealSheafMapId ? 'ideal-sheaf' : null;
   }
 
   function sheafSchurConstructionType(sheaf) {
@@ -2081,6 +2245,24 @@
     state.sheafBinaryPickTarget = 'left';
     if (refs.sheafBinaryExact) refs.sheafBinaryExact.checked = !!construction.exact;
     updateSheafBinaryDraftControls();
+  }
+
+  function loadSelfSumSheafIntoDraft(sheaf) {
+    const construction = sheaf?.construction || {};
+    state.sheafSelfSumDraft = {
+      sheafId: construction.sheafId || null
+    };
+    if (refs.sheafSelfSumCount) refs.sheafSelfSumCount.value = String(normalizeSelfSumMultiplicity(construction.multiplicity));
+    updateSheafSelfSumDraftControls();
+  }
+
+  function loadIdealSheafIntoDraft(sheaf) {
+    const construction = sheaf?.construction || {};
+    state.sheafIdealDraft = {
+      mapId: construction.idealSheafMapId || null
+    };
+    if (refs.sheafIdealConfirm) refs.sheafIdealConfirm.checked = true;
+    updateSheafIdealDraftControls();
   }
 
   function loadSchurSheafIntoDraft(sheaf) {
@@ -2771,6 +2953,8 @@
     }
     if (kind === 'sheaf') {
       if (sheafBinaryInputMode()) return updateBinarySheafFromDraft(active);
+      if (sheafSelfSumInputMode()) return updateSelfSumSheafFromDraft(active);
+      if (sheafIdealInputMode()) return updateIdealSheafFromDraft(active);
       if (sheafSchurInputMode()) return updateSchurSheafFromDraft(active);
       if (refs.sheafType?.value === 'map-operation') return updateMapOperationSheafFromDraft(active);
       const oldBaseId = active.baseVarietyId;
@@ -2868,6 +3052,7 @@
       clearGrassmannianMapDraft();
       clearMapDraft();
       clearSheafBinaryDraft();
+      clearSheafSelfSumDraft();
       clearSheafSchurDraft();
       clearSheafMapDraft();
       setCanvasPickEnabled(false, { render: false });
@@ -2977,6 +3162,28 @@
       refs.inputPickMode.addEventListener('click', () => {
         setCanvasPickEnabled(false);
         normalizeControlVisibility();
+      });
+    }
+    if (refs.importPresetToggle) {
+      refs.importPresetToggle.addEventListener('click', () => {
+        const show = !!refs.importPresetPanel?.hidden;
+        setPresetImportPanelVisible(show);
+      });
+    }
+    if (refs.importPresetCancel) {
+      refs.importPresetCancel.addEventListener('click', () => {
+        if (refs.importPresetInput) refs.importPresetInput.value = '';
+        setPresetImportPanelVisible(false);
+      });
+    }
+    if (refs.importPresetApply) {
+      refs.importPresetApply.addEventListener('click', () => {
+        try {
+          importPresetFromText(refs.importPresetInput?.value || '');
+        } catch (error) {
+          showPresetImportMessage(error?.message || 'Unable to import preset.', true);
+          reportInputActionError(error);
+        }
       });
     }
     refs.addObject.addEventListener('click', () => {
@@ -3102,12 +3309,19 @@
       const type = refs.sheafType.value;
       if (type !== 'map-operation') clearSheafMapDraft();
       if (type !== 'direct-sum' && type !== 'tensor') clearSheafBinaryDraft();
+      if (type !== 'self-direct-sum') clearSheafSelfSumDraft();
+      if (type !== 'ideal-sheaf') clearSheafIdealDraft();
       if (type !== 'schur') clearSheafSchurDraft();
       if (type === 'map-operation' && inputIsModifyMode()) {
         const sheaf = activeSheaf();
         if (sheafMapConstructionType(sheaf)) loadMapOperationSheafIntoDraft(sheaf);
       } else if (type === 'map-operation') {
         state.sheafMapPickTarget = 'map';
+      } else if (type === 'ideal-sheaf' && inputIsModifyMode()) {
+        const sheaf = activeSheaf();
+        if (sheafIdealConstructionType(sheaf)) loadIdealSheafIntoDraft(sheaf);
+      } else if (type === 'ideal-sheaf') {
+        state.sheafIdealDraft = state.sheafIdealDraft || {};
       } else if (type === 'schur' && inputIsModifyMode()) {
         const sheaf = activeSheaf();
         if (sheafSchurConstructionType(sheaf)) loadSchurSheafIntoDraft(sheaf);
@@ -3118,6 +3332,11 @@
         if (sheafBinaryConstructionType(sheaf)) loadBinarySheafIntoDraft(sheaf);
       } else if (type === 'direct-sum' || type === 'tensor') {
         state.sheafBinaryPickTarget = 'left';
+      } else if (type === 'self-direct-sum' && inputIsModifyMode()) {
+        const sheaf = activeSheaf();
+        if (sheafSelfSumConstructionType(sheaf)) loadSelfSumSheafIntoDraft(sheaf);
+      } else if (type === 'self-direct-sum') {
+        state.sheafSelfSumDraft = state.sheafSelfSumDraft || {};
       }
       syncDefaultRank(true);
       syncDefaultSheafName();
@@ -3208,6 +3427,7 @@
           state.draftSheafBaseVarietyId = refs.sheafBaseVariety.value;
           clearSheafMapDraft();
           clearSheafBinaryDraft();
+          clearSheafSelfSumDraft();
           clearSheafSchurDraft();
           updateSheafBaseButton();
         }
@@ -3257,6 +3477,40 @@
         setSheafBinaryPickTarget(button.dataset.sheafBinaryPick || 'left');
       });
     });
+    if (refs.sheafSelfSumParentButton) {
+      refs.sheafSelfSumParentButton.addEventListener('click', () => {
+        setSheafSelfSumPickTarget();
+      });
+    }
+    if (refs.sheafIdealMapButton) {
+      refs.sheafIdealMapButton.addEventListener('click', () => {
+        setSheafIdealPickTarget();
+      });
+    }
+    if (refs.sheafIdealConfirm) {
+      refs.sheafIdealConfirm.addEventListener('change', () => {
+        updateSheafIdealDraftControls();
+        syncDefaultRank(true);
+        syncDefaultSheafName();
+        normalizeControlVisibility();
+      });
+    }
+    if (refs.sheafSelfSumCount) {
+      refs.sheafSelfSumCount.addEventListener('input', () => {
+        updateSheafSelfSumDraftControls();
+        syncDefaultRank(true);
+        syncDefaultSheafName();
+        normalizeControlVisibility();
+      });
+      refs.sheafSelfSumCount.addEventListener('change', () => {
+        refs.sheafSelfSumCount.value = String(currentSelfSumMultiplicity());
+        updateSheafSelfSumDraftControls({ normalizeCount: true });
+        syncDefaultRank(true);
+        syncDefaultSheafName();
+        normalizeControlVisibility();
+        recompute();
+      });
+    }
     if (refs.sheafBinaryExact) {
       refs.sheafBinaryExact.addEventListener('change', () => {
         syncDefaultSheafName();
@@ -4204,6 +4458,279 @@
     return addSheafObject(sheaf);
   }
 
+  function createSelfSumSheafConstruction(data) {
+    const sheaf = {
+      id: nextInputId('E'),
+      type: 'abstract',
+      name: uniqueConstructedObjectName('sheaf', data.name),
+      twist: '1',
+      rank: selfSumRankPlaceholder(data.parent, data.multiplicity),
+      baseVarietyId: data.baseVarietyId,
+      basis: 'chern',
+      nameDirty: data.nameDirty,
+      construction: {
+        type: 'self-direct-sum',
+        sheafId: data.parent.id,
+        multiplicity: data.multiplicity,
+        defaultName: data.defaultName
+      }
+    };
+    syncObjectLineage(sheaf, 'sheaf');
+    positionSheafNearBase(sheaf, baseVarietyForSheaf(sheaf));
+    avoidCanvasLabelOverlap(sheaf);
+    return addSheafObject(sheaf);
+  }
+
+  function createIdealSheafConstruction(data, options = {}) {
+    if (!data?.map || !data.domain || !data.codomain) return null;
+    const replacing = options.replaceSheaf || null;
+    if (replacing) cleanupIdealSheafScaffolding(replacing);
+    const sourceStructure = ensureStructureSheafForVariety(data.domain);
+    const targetStructure = ensureStructureSheafForVariety(data.codomain);
+    if (!sourceStructure || !targetStructure) return null;
+    const pushedStructure = ensureIdealPushforwardSheaf(data, sourceStructure);
+    if (!pushedStructure) return null;
+    const ideal = replacing || {
+      id: nextInputId('E')
+    };
+    const oldBaseId = ideal.baseVarietyId;
+    Object.assign(ideal, {
+      type: 'abstract',
+      name: replacing ? data.name : uniqueConstructedObjectName('sheaf', data.name),
+      twist: '1',
+      rank: 'r',
+      baseVarietyId: data.codomain.id,
+      basis: 'chern',
+      nameDirty: data.nameDirty,
+      hiddenOnCanvas: false,
+      construction: {
+        type: 'ses-term',
+        role: 'subobject',
+        sourceSheafIds: [targetStructure.id, pushedStructure.id],
+        idealSheafMapId: data.map.id,
+        structureSheafId: sourceStructure.id,
+        targetStructureSheafId: targetStructure.id,
+        pushforwardSheafId: pushedStructure.id,
+        defaultName: data.defaultName
+      }
+    });
+    syncObjectLineage(ideal, 'sheaf');
+    if (!replacing) {
+      positionSheafNearBase(ideal, data.codomain);
+      avoidCanvasLabelOverlap(ideal);
+      addSheafObject(ideal, { activate: false });
+    } else if (oldBaseId !== ideal.baseVarietyId) {
+      positionSheafNearBase(ideal, data.codomain);
+      avoidCanvasLabelOverlap(ideal);
+    }
+    const sequence = createShortExactSequenceFromObjects({
+      sheafA: ideal,
+      sheafB: targetStructure,
+      sheafC: pushedStructure,
+      baseVarietyId: data.codomain.id,
+      autoMapABName: '\\iota',
+      autoMapBCName: '\\pi'
+    });
+    if (sequence) {
+      ideal.construction.sequenceId = sequence.id;
+      ideal.construction.inclusionMapId = sequence.mapIds?.[0] || null;
+      ideal.construction.quotientMapId = sequence.mapIds?.[1] || null;
+      (sequence.mapIds || []).forEach((mapId) => {
+        const map = state.maps.find((item) => item.id === mapId);
+        if (map) map.hiddenOnCanvas = true;
+      });
+      syncObjectLineage(ideal, 'sheaf');
+    }
+    ensureIdealSheafHomologyRules(data);
+    state.activeSequenceId = null;
+    state.activeSheafId = ideal.id;
+    state.activeVarietyId = data.codomain.id;
+    state.activeMapId = null;
+    state.hiddenObjects = hiddenObjectRefs();
+    refreshConstructedObjects();
+    return ideal;
+  }
+
+  function cleanupIdealSheafScaffolding(sheaf) {
+    if (!sheaf) return;
+    const construction = sheaf.construction || {};
+    const sequenceIds = new Set([
+      construction.sequenceId,
+      ...(sheaf.sequenceMemberships || []).map((item) => item.sequenceId)
+    ].filter(Boolean));
+    const mapIds = new Set([construction.inclusionMapId, construction.quotientMapId].filter(Boolean));
+    sequenceIds.forEach((sequenceId) => {
+      const sequence = state.sequences.find((item) => item.id === sequenceId);
+      (sequence?.mapIds || []).forEach((mapId) => mapIds.add(mapId));
+      detachShortExactSequenceMemberships(sequenceId);
+    });
+    state.sequences = state.sequences.filter((sequence) => !sequenceIds.has(sequence.id));
+    state.maps = state.maps.filter((map) => !mapIds.has(map.id));
+    delete sheaf.sequenceMemberships;
+  }
+
+  function ensureStructureSheafForVariety(variety) {
+    if (!variety) return null;
+    const geometry = geometryFromVariety(variety);
+    const defaultName = defaultSheafNameFor('structure', '1', 1, geometry.labelLatex, geometry);
+    const existing = state.sheaves.find((sheaf) => (
+      sheaf.baseVarietyId === variety.id
+      && sheaf.type === 'structure'
+      && !sheaf.construction
+      && sheaf.hiddenOnCanvas
+    ));
+    if (existing) {
+      existing.rank = '1';
+      existing.twist = '1';
+      existing.basis = 'chern';
+      if (!existing.nameDirty) existing.name = defaultName;
+      sheafFromObject(existing, geometry);
+      return existing;
+    }
+    const sheaf = {
+      id: nextInputId('E'),
+      type: 'structure',
+      name: defaultName,
+      twist: '1',
+      rank: '1',
+      baseVarietyId: variety.id,
+      basis: 'chern',
+      nameDirty: false,
+      hiddenOnCanvas: true
+    };
+    positionSheafNearBase(sheaf, variety);
+    avoidCanvasLabelOverlap(sheaf);
+    sheafFromObject(sheaf, geometry);
+    return addSheafObject(sheaf, { activate: false });
+  }
+
+  function ensureIdealPushforwardSheaf(data, sourceStructure) {
+    const defaultName = defaultPushforwardSheafNameFromObjects(data.map, sourceStructure, { proper: true });
+    const existing = state.sheaves.find((sheaf) => (
+      sheaf.construction?.type === 'pushforward'
+      && sheaf.construction.mapId === data.map.id
+      && sheaf.construction.sheafId === sourceStructure.id
+      && sheaf.construction.proper === true
+      && sheaf.hiddenOnCanvas
+    ));
+    if (existing) {
+      existing.baseVarietyId = data.codomain.id;
+      existing.rank = 'r';
+      existing.basis = 'chern';
+      existing.construction.exact = true;
+      existing.construction.defaultName = defaultName;
+      if (!existing.nameDirty) existing.name = defaultName;
+      syncObjectLineage(existing, 'sheaf');
+      return existing;
+    }
+    const sheaf = {
+      id: nextInputId('E'),
+      type: 'abstract',
+      name: defaultName,
+      twist: '1',
+      rank: 'r',
+      baseVarietyId: data.codomain.id,
+      basis: 'chern',
+      nameDirty: false,
+      hiddenOnCanvas: true,
+      construction: {
+        type: 'pushforward',
+        mapId: data.map.id,
+        sheafId: sourceStructure.id,
+        exact: true,
+        proper: true,
+        defaultName
+      }
+    };
+    syncObjectLineage(sheaf, 'sheaf');
+    positionSheafNearBase(sheaf, data.codomain);
+    avoidCanvasLabelOverlap(sheaf);
+    return addSheafObject(sheaf, { activate: false });
+  }
+
+  function ensureIdealSheafHomologyRules(data) {
+    if (!data?.map || !data.domain || !data.codomain) return false;
+    const sourceGeometry = geometryFromVariety(data.domain);
+    let targetGeometry = geometryFromVariety(data.codomain);
+    if (!Number.isInteger(sourceGeometry?.dim) || !Number.isInteger(targetGeometry?.dim)) return false;
+    const codim = Math.max(0, Math.min(targetGeometry.dim, targetGeometry.dim - sourceGeometry.dim));
+    const homology = ensureHomologySystem(data.codomain, targetGeometry);
+    const classId = idealSheafImageClassId(data.map);
+    const classSymbol = idealSheafImageClassSymbol(data.domain);
+    const nextClass = {
+      id: classId,
+      symbol: classSymbol,
+      degree: codim,
+      cohomologyDegree: 2 * codim
+    };
+    homology.customClasses = [
+      ...(homology.customClasses || []).filter((item) => item.id !== classId),
+      nextClass
+    ];
+    targetGeometry = geometryFromVariety(data.codomain);
+    const targetClassId = homologyVariableId(classId, targetGeometry);
+    const unitPushforwardId = defineMapHomologyVariable(data.map, 'pushforward', mapSourceUnitVariableId(data.map), codim, '1', {
+      cohomologyDegree: 2 * codim,
+      sourceKey: ''
+    });
+    const rules = (data.codomain.homology?.rules || []).filter((rule) => !idealSheafRuleIds(data.map).includes(rule.id));
+    const unitRule = normalizeHomologyRule({
+      id: idealSheafUnitRuleId(data.map),
+      enabled: true,
+      lhs: { powers: { [unitPushforwardId]: 1 } },
+      rhs: [{ coefficient: '1', powers: { [targetClassId]: 1 } }]
+    }, targetGeometry, { includeMapClasses: true, preserveUnknownVariables: true });
+    if (unitRule) rules.push(unitRule);
+    const pointRule = idealSheafPointPushforwardRule(data.map, sourceGeometry, targetGeometry);
+    if (pointRule) rules.push(pointRule);
+    data.codomain.homology.rules = rules;
+    ensureHomologySystem(data.codomain, targetGeometry);
+    return true;
+  }
+
+  function idealSheafImageClassId(map) {
+    return `ideal_${variableIdSafe(map?.id || 'map')}_image`;
+  }
+
+  function idealSheafImageClassSymbol(domain) {
+    return sanitizeHomologySymbol(`[${sanitizeMathLabel(domain?.name, 'X')}]`, '[X]');
+  }
+
+  function idealSheafUnitRuleId(map) {
+    return `map-rule-${mapHomologyVariableId(map, 'pushforward', mapSourceUnitVariableId(map))}`;
+  }
+
+  function idealSheafPointRuleId(map) {
+    return `map-rule-pushforward_${variableIdSafe(map?.id || 'map')}_point`;
+  }
+
+  function idealSheafRuleIds(map) {
+    return [idealSheafUnitRuleId(map), idealSheafPointRuleId(map)];
+  }
+
+  function idealSheafPointPushforwardRule(map, sourceGeometry, targetGeometry) {
+    if (!map || !sourceGeometry || !targetGeometry) return null;
+    const sourcePointId = homologyVariableId(HOMOLOGY_POINT_CLASS, sourceGeometry);
+    const targetPointId = homologyVariableId(HOMOLOGY_POINT_CLASS, targetGeometry);
+    const sourcePoint = homologyClassDefById(sourceGeometry, HOMOLOGY_POINT_CLASS);
+    const targetDegree = mapOperationTargetDegree('pushforward', sourceGeometry.dim, sourceGeometry, targetGeometry);
+    const targetCohomologyDegree = mapOperationTargetCohomologyDegree('pushforward', 2 * sourceGeometry.dim, sourceGeometry, targetGeometry);
+    if (targetDegree == null || targetCohomologyDegree == null) return null;
+    defineVariable(sourcePointId, sourceGeometry.dim, sourcePoint?.symbolLatex || '[p]', {
+      cohomologyDegree: sourcePoint?.cohomologyDegree ?? 2 * sourceGeometry.dim
+    });
+    const variableId = defineMapHomologyVariable(map, 'pushforward', sourcePointId, targetDegree, sourcePoint?.symbolLatex || '[p]', {
+      cohomologyDegree: targetCohomologyDegree,
+      sourceKey: monoKey({ [sourcePointId]: 1 })
+    });
+    return normalizeHomologyRule({
+      id: idealSheafPointRuleId(map),
+      enabled: true,
+      lhs: { powers: { [variableId]: 1 } },
+      rhs: [{ coefficient: '1', powers: { [targetPointId]: 1 } }]
+    }, targetGeometry, { includeMapClasses: true, preserveUnknownVariables: true });
+  }
+
   function createSchurSheafConstruction(data) {
     const sheaf = {
       id: nextInputId('E'),
@@ -4900,6 +5427,16 @@
     return `${sanitizeMathLabel(left?.name, '\\mathcal{E}')}${operationLatex}${sanitizeMathLabel(right?.name, '\\mathcal{F}')}`;
   }
 
+  function defaultSelfSumSheafNameFromObjects(parent, multiplicity) {
+    return `${sanitizeMathLabel(parent?.name, '\\mathcal{E}')}^{\\oplus ${normalizeSelfSumMultiplicity(multiplicity)}}`;
+  }
+
+  function defaultIdealSheafNameFromObjects(map) {
+    const domain = state.varieties.find((variety) => variety.id === map?.domainId);
+    const label = sanitizeMathLabel(domain?.name, 'X');
+    return /^[A-Za-z0-9]+$/.test(label) ? `I_${label}` : `I_{${label}}`;
+  }
+
   function defaultSchurSheafNameFromObjects(parent, partition) {
     return `\\mathbb{S}_{${schurPartitionLatex(partition)}}${sanitizeMathLabel(parent?.name, '\\mathcal{E}')}`;
   }
@@ -4985,6 +5522,13 @@
     return 'r';
   }
 
+  function selfSumRankPlaceholder(parent, multiplicity) {
+    const rank = sanitizeRankInput(parent?.rank);
+    const n = normalizeSelfSumMultiplicity(multiplicity);
+    if (/^-?\d+$/.test(rank)) return String(Number(rank) * n);
+    return 'r';
+  }
+
   function schurRankPlaceholder(parent, partition) {
     const rank = sanitizeRankInput(parent?.rank);
     const numericRank = numericRankFromPlain(rank);
@@ -5020,6 +5564,11 @@
   }
 
   function setCanvasPickEnabled(enabled, options = {}) {
+    if (!refs.inputPickMode) {
+      state.canvasPickEnabled = false;
+      state.mapDrag = null;
+      return;
+    }
     state.canvasPickEnabled = !!enabled && canvasPickAvailable();
     if (!state.canvasPickEnabled) {
       state.mapDrag = null;
@@ -5038,6 +5587,10 @@
     if (kind === 'sheaf') {
       if (sheafBinaryInputMode()) {
         state.sheafBinaryPickTarget = sheafBinaryDraftSheaf('left') ? 'right' : 'left';
+      } else if (sheafSelfSumInputMode()) {
+        state.sheafSelfSumDraft = state.sheafSelfSumDraft || {};
+      } else if (sheafIdealInputMode()) {
+        state.sheafIdealDraft = state.sheafIdealDraft || {};
       } else if (sheafSchurInputMode()) {
         state.sheafSchurDraft = state.sheafSchurDraft || {};
       } else if (sheafMapOperationInputMode()) {
@@ -5068,6 +5621,8 @@
     if (productVarietyInputMode()) return productPickableVarieties().length > 0;
     if (mapInputMode()) return mapPickAvailable();
     if (sheafBinaryInputMode()) return sheafBinaryPickableSheaves().length > 0;
+    if (sheafSelfSumInputMode()) return sheafSelfSumPickableSheaves().length > 0;
+    if (sheafIdealInputMode()) return sheafIdealPickableMaps().length > 0;
     if (sheafSchurInputMode()) return sheafSchurPickableSheaves().length > 0;
     if (sheafMapOperationInputMode()) {
       return state.maps.some((map) => allowableSheafMapOperationMap(map.id))
@@ -5133,6 +5688,18 @@
     state.sheafBinaryPickTarget = 'left';
     if (refs.sheafBinaryExact) refs.sheafBinaryExact.checked = false;
     updateSheafBinaryDraftControls();
+  }
+
+  function clearSheafSelfSumDraft() {
+    state.sheafSelfSumDraft = null;
+    if (refs.sheafSelfSumCount) refs.sheafSelfSumCount.value = '2';
+    updateSheafSelfSumDraftControls({ normalizeCount: true });
+  }
+
+  function clearSheafIdealDraft() {
+    state.sheafIdealDraft = null;
+    if (refs.sheafIdealConfirm) refs.sheafIdealConfirm.checked = false;
+    updateSheafIdealDraftControls();
   }
 
   function clearSheafSchurDraft() {
@@ -5726,6 +6293,14 @@
       handleSheafBinaryPick(kind, id);
       return true;
     }
+    if (sheafSelfSumInputMode()) {
+      handleSheafSelfSumPick(kind, id);
+      return true;
+    }
+    if (sheafIdealInputMode()) {
+      handleSheafIdealPick(kind, id);
+      return true;
+    }
     if (sheafSchurInputMode()) {
       handleSheafSchurPick(kind, id);
       return true;
@@ -5763,6 +6338,16 @@
     return kind === 'sheaf' && (refs.sheafType?.value === 'direct-sum' || refs.sheafType?.value === 'tensor');
   }
 
+  function sheafSelfSumInputMode() {
+    const kind = inputIsModifyMode() ? modifyKind() : currentInputKind();
+    return kind === 'sheaf' && refs.sheafType?.value === 'self-direct-sum';
+  }
+
+  function sheafIdealInputMode() {
+    const kind = inputIsModifyMode() ? modifyKind() : currentInputKind();
+    return kind === 'sheaf' && refs.sheafType?.value === 'ideal-sheaf';
+  }
+
   function sheafSchurInputMode() {
     const kind = inputIsModifyMode() ? modifyKind() : currentInputKind();
     return kind === 'sheaf' && refs.sheafType?.value === 'schur';
@@ -5775,6 +6360,8 @@
       && !combinedGrassmannianMapCreateMode()
       && !sheafMapOperationInputMode()
       && !sheafBinaryInputMode()
+      && !sheafSelfSumInputMode()
+      && !sheafIdealInputMode()
       && !sheafSchurInputMode()
       && state.varieties.length > 0;
   }
@@ -5881,6 +6468,20 @@
     return state.sheaves.find((sheaf) => sheaf.id === id) || null;
   }
 
+  function sheafSelfSumDraftSheaf() {
+    const id = state.sheafSelfSumDraft?.sheafId;
+    return state.sheaves.find((sheaf) => sheaf.id === id) || null;
+  }
+
+  function sheafIdealDraftMap() {
+    const id = state.sheafIdealDraft?.mapId;
+    return state.maps.find((map) => map.id === id) || null;
+  }
+
+  function currentSelfSumMultiplicity() {
+    return normalizeSelfSumMultiplicity(refs.sheafSelfSumCount?.value);
+  }
+
   function sheafBinaryDraftIds() {
     const ids = state.sheafBinaryDraft?.sheafIds || [];
     return [ids[0] || null, ids[1] || null];
@@ -5890,6 +6491,22 @@
     state.sheafBinaryPickTarget = target === 'right' ? 'right' : 'left';
     setCanvasPickEnabled(true, { render: false });
     updateSheafBinaryDraftControls();
+    syncGlobalPickButton();
+    renderCanvas(state.lastResult);
+  }
+
+  function setSheafSelfSumPickTarget() {
+    state.sheafSelfSumDraft = state.sheafSelfSumDraft || {};
+    setCanvasPickEnabled(true, { render: false });
+    updateSheafSelfSumDraftControls();
+    syncGlobalPickButton();
+    renderCanvas(state.lastResult);
+  }
+
+  function setSheafIdealPickTarget() {
+    state.sheafIdealDraft = state.sheafIdealDraft || {};
+    setCanvasPickEnabled(true, { render: false });
+    updateSheafIdealDraftControls();
     syncGlobalPickButton();
     renderCanvas(state.lastResult);
   }
@@ -5915,6 +6532,31 @@
     return !other || sheaf.baseVarietyId === other.baseVarietyId;
   }
 
+  function sheafSelfSumPickableSheaves() {
+    return state.sheaves.filter((sheaf) => allowableSheafSelfSumPick(sheaf.id));
+  }
+
+  function allowableSheafSelfSumPick(sheafId) {
+    const sheaf = state.sheaves.find((item) => item.id === sheafId);
+    return !!sheaf && !(inputIsModifyMode() && sheaf.id === state.activeSheafId);
+  }
+
+  function sheafIdealPickableMaps() {
+    return state.maps.filter((map) => allowableSheafIdealMapPick(map.id));
+  }
+
+  function allowableSheafIdealMapPick(mapId) {
+    const map = state.maps.find((item) => item.id === mapId);
+    if (!map || map.hiddenOnCanvas || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return false;
+    if (!map.domainId || !map.codomainId || map.domainId === map.codomainId) return false;
+    const domain = state.varieties.find((variety) => variety.id === map.domainId);
+    const codomain = state.varieties.find((variety) => variety.id === map.codomainId);
+    if (!domain || !codomain) return false;
+    const sourceDim = geometryFromVariety(domain).dim;
+    const targetDim = geometryFromVariety(codomain).dim;
+    return Number.isInteger(sourceDim) && Number.isInteger(targetDim) && targetDim >= sourceDim;
+  }
+
   function sheafSchurDraftSheaf() {
     const id = state.sheafSchurDraft?.sheafId;
     return state.sheaves.find((sheaf) => sheaf.id === id) || null;
@@ -5936,6 +6578,26 @@
     state.sheafSchurDraft = { sheafId: id };
     setCanvasPickEnabled(false, { render: false });
     updateSheafSchurDraftControls();
+    syncDefaultRank(true);
+    syncDefaultSheafName();
+    recompute();
+  }
+
+  function handleSheafSelfSumPick(kind, id) {
+    if (kind !== 'sheaf' || !allowableSheafSelfSumPick(id)) return;
+    state.sheafSelfSumDraft = { sheafId: id };
+    setCanvasPickEnabled(false, { render: false });
+    updateSheafSelfSumDraftControls();
+    syncDefaultRank(true);
+    syncDefaultSheafName();
+    recompute();
+  }
+
+  function handleSheafIdealPick(kind, id) {
+    if (kind !== 'map' || !allowableSheafIdealMapPick(id)) return;
+    state.sheafIdealDraft = { mapId: id };
+    setCanvasPickEnabled(false, { render: false });
+    updateSheafIdealDraftControls();
     syncDefaultRank(true);
     syncDefaultSheafName();
     recompute();
@@ -5972,6 +6634,32 @@
     if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
   }
 
+  function updateSheafSelfSumDraftControls(options = {}) {
+    const show = sheafSelfSumInputMode();
+    if (refs.sheafSelfSumFormulaRow) refs.sheafSelfSumFormulaRow.hidden = !show;
+    if (refs.sheafSelfSumCount && options.normalizeCount) refs.sheafSelfSumCount.value = String(currentSelfSumMultiplicity());
+    updateSheafSelfSumSlotButton(refs.sheafSelfSumParentButton, sheafSelfSumDraftSheaf());
+    if (refs.sheafSelfSumPickNote) {
+      refs.sheafSelfSumPickNote.hidden = !show;
+      refs.sheafSelfSumPickNote.textContent = sheafSelfSumPickHint();
+    }
+    syncGlobalPickButton();
+    if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
+  }
+
+  function updateSheafIdealDraftControls() {
+    const show = sheafIdealInputMode();
+    if (refs.sheafIdealFormulaRow) refs.sheafIdealFormulaRow.hidden = !show;
+    if (refs.sheafIdealConfirmRow) refs.sheafIdealConfirmRow.hidden = !show;
+    updateSheafIdealMapButton(refs.sheafIdealMapButton, sheafIdealDraftMap());
+    if (refs.sheafIdealPickNote) {
+      refs.sheafIdealPickNote.hidden = !show;
+      refs.sheafIdealPickNote.textContent = sheafIdealPickHint();
+    }
+    syncGlobalPickButton();
+    if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
+  }
+
   function updateSheafBinarySlotButton(button, sheaf, target) {
     if (!button) return;
     button.setAttribute('aria-pressed', state.canvasPickEnabled && sheafBinaryInputMode() && state.sheafBinaryPickTarget === target ? 'true' : 'false');
@@ -5979,6 +6667,22 @@
     const label = sheaf ? latexToPlain(sanitizeMathLabel(sheaf.name, '\\mathcal{E}')) : fallback;
     button.textContent = label;
     button.title = sheaf ? `Replace ${label}` : `Pick ${fallback} on the canvas`;
+  }
+
+  function updateSheafSelfSumSlotButton(button, sheaf) {
+    if (!button) return;
+    button.setAttribute('aria-pressed', state.canvasPickEnabled && sheafSelfSumInputMode() ? 'true' : 'false');
+    const label = sheaf ? latexToPlain(sanitizeMathLabel(sheaf.name, '\\mathcal{E}')) : 'sheaf';
+    button.textContent = sheaf ? label : 'pick sheaf';
+    button.title = sheaf ? `Replace ${label}` : 'Pick a sheaf on the canvas';
+  }
+
+  function updateSheafIdealMapButton(button, map) {
+    if (!button) return;
+    button.setAttribute('aria-pressed', state.canvasPickEnabled && sheafIdealInputMode() ? 'true' : 'false');
+    const label = map ? latexToPlain(sanitizeMathLabel(map.name, 'f')) : 'map';
+    button.textContent = map ? label : 'pick map';
+    button.title = map ? `Replace ${label}` : 'Pick an embedding map on the canvas';
   }
 
   function sheafBinaryPickHint() {
@@ -5989,6 +6693,19 @@
     if (!state.sheaves.some((sheaf) => allowableSheafBinaryPick(sheaf.id, 'right'))) return 'add a sheaf on the same base';
     if (!right) return 'click the second sheaf on the same base';
     return inputIsModifyMode() ? 'click update to rebuild the sheaf' : 'click add to create the sheaf';
+  }
+
+  function sheafSelfSumPickHint() {
+    if (!sheafSelfSumPickableSheaves().length) return 'add a sheaf first';
+    if (!sheafSelfSumDraftSheaf()) return 'click a sheaf on the canvas';
+    return inputIsModifyMode() ? 'click update to rebuild the self direct sum' : 'click add to create the self direct sum';
+  }
+
+  function sheafIdealPickHint() {
+    if (!sheafIdealPickableMaps().length) return 'add a non-loop variety map X -> Y first';
+    if (!sheafIdealDraftMap()) return 'click the embedding map X -> Y';
+    if (!refs.sheafIdealConfirm?.checked) return 'verify: f is an embedding, and not an iso';
+    return inputIsModifyMode() ? 'click update to rebuild the ideal sheaf' : 'click add to create the ideal sheaf';
   }
 
   function updateSheafSchurDraftControls() {
@@ -6663,6 +7380,16 @@
       const data = binarySheafConstructionData();
       if (data?.defaultName) return data.defaultName;
     }
+    if (refs.sheafType?.value === 'self-direct-sum') {
+      const data = selfSumSheafConstructionData();
+      if (data?.defaultName) return data.defaultName;
+    }
+    if (refs.sheafType?.value === 'ideal-sheaf') {
+      const data = idealSheafConstructionData();
+      if (data?.defaultName) return data.defaultName;
+      const map = sheafIdealDraftMap();
+      if (map) return defaultIdealSheafNameFromObjects(map);
+    }
     if (refs.sheafType?.value === 'schur') {
       const data = schurSheafConstructionData();
       if (data?.defaultName) return data.defaultName;
@@ -6757,6 +7484,13 @@
     else if (refs.sheafType.value === 'direct-sum' || refs.sheafType.value === 'tensor') {
       const data = binarySheafConstructionData();
       refs.rank.value = data ? constructionRankPlaceholder(data.operation, data.left, data.right) : 'r';
+    }
+    else if (refs.sheafType.value === 'self-direct-sum') {
+      const data = selfSumSheafConstructionData();
+      refs.rank.value = data ? selfSumRankPlaceholder(data.parent, data.multiplicity) : 'r';
+    }
+    else if (refs.sheafType.value === 'ideal-sheaf') {
+      refs.rank.value = 'r';
     }
     else if (refs.sheafType.value === 'schur') {
       const data = schurSheafConstructionData();
@@ -6863,6 +7597,12 @@
     if (kind === 'sheaf' && (construction.type === 'direct-sum' || construction.type === 'tensor')) {
       return {
         parents: (construction.sheafIds || []).map((id, index) => parent('sheaf', id, index === 0 ? 'left-summand' : 'right-summand')),
+        subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'base')] : []
+      };
+    }
+    if (kind === 'sheaf' && construction.type === 'self-direct-sum') {
+      return {
+        parents: [parent('sheaf', construction.sheafId, 'summand')].filter((item) => item.id),
         subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'base')] : []
       };
     }
@@ -7115,6 +7855,7 @@
     const construction = sheaf?.construction;
     if (!construction) return false;
     if (construction.type === 'direct-sum' || construction.type === 'tensor') return refreshBinaryConstructedSheaf(sheaf, construction);
+    if (construction.type === 'self-direct-sum') return refreshSelfSumConstructedSheaf(sheaf, construction);
     if (construction.type === 'schur') return refreshSchurConstructedSheaf(sheaf, construction);
     if (construction.type === 'pullback' || construction.type === 'pushforward') return refreshMapConstructedSheaf(sheaf, construction);
     if (construction.type === 'ses-term') return refreshSesTermSheaf(sheaf, construction);
@@ -7138,6 +7879,43 @@
       changed = true;
     }
     if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(nextDefault)) {
+      sheaf.name = nextDefault;
+      changed = true;
+    }
+    if (construction.defaultName !== nextDefault) {
+      construction.defaultName = nextDefault;
+      changed = true;
+    }
+    if (syncObjectLineage(sheaf, 'sheaf')) changed = true;
+    return changed;
+  }
+
+  function refreshSelfSumConstructedSheaf(sheaf, construction) {
+    const parent = state.sheaves.find((item) => item.id === construction.sheafId);
+    if (!parent) return false;
+    const multiplicity = normalizeSelfSumMultiplicity(construction.multiplicity);
+    const oldDefault = construction.defaultName || defaultSelfSumSheafNameFromObjects(parent, multiplicity);
+    const nextDefault = defaultSelfSumSheafNameFromObjects(parent, multiplicity);
+    let changed = false;
+    if (sheaf.baseVarietyId !== parent.baseVarietyId) {
+      sheaf.baseVarietyId = parent.baseVarietyId;
+      changed = true;
+    }
+    const nextRank = selfSumRankPlaceholder(parent, multiplicity);
+    if (sheaf.rank !== nextRank) {
+      sheaf.rank = nextRank;
+      changed = true;
+    }
+    const nextBasis = 'chern';
+    if (sheaf.basis !== nextBasis) {
+      sheaf.basis = nextBasis;
+      changed = true;
+    }
+    if (construction.multiplicity !== multiplicity) {
+      construction.multiplicity = multiplicity;
+      changed = true;
+    }
+    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) === canonicalMathLabel(oldDefault) && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(nextDefault)) {
       sheaf.name = nextDefault;
       changed = true;
     }
@@ -7558,13 +8336,17 @@
     let draftSheaf = refs.sheafType.value;
     const hasTwistBase = state.varieties.some((variety) => varietySupportsTwist(variety.type || 'abstract'));
     const hasUniversalBundleBase = state.varieties.some((variety) => varietySupportsUniversalBundle(variety.type || 'abstract'));
-    const sheafTypeHasParentRow = (type) => type === 'map-operation' || type === 'direct-sum' || type === 'tensor' || type === 'schur';
+    const sheafTypeHasParentRow = (type) => type === 'map-operation' || type === 'direct-sum' || type === 'self-direct-sum' || type === 'ideal-sheaf' || type === 'tensor' || type === 'schur';
     let sheafHasParentRow = false;
     let waitingForSheafBase = false;
     let editingSheafMapOperation = false;
     let creatingSheafMapOperation = false;
     let editingSheafBinary = false;
     let creatingSheafBinary = false;
+    let editingSheafSelfSum = false;
+    let creatingSheafSelfSum = false;
+    let editingSheafIdeal = false;
+    let creatingSheafIdeal = false;
     let editingSheafSchur = false;
     let creatingSheafSchur = false;
     const refreshSheafTypeFlags = () => {
@@ -7574,6 +8356,10 @@
       creatingSheafMapOperation = inputIsCreateMode() && draftingSheaf && draftSheaf === 'map-operation';
       editingSheafBinary = inputIsModifyMode() && draftingSheaf && (draftSheaf === 'direct-sum' || draftSheaf === 'tensor');
       creatingSheafBinary = inputIsCreateMode() && draftingSheaf && (draftSheaf === 'direct-sum' || draftSheaf === 'tensor');
+      editingSheafSelfSum = inputIsModifyMode() && draftingSheaf && draftSheaf === 'self-direct-sum';
+      creatingSheafSelfSum = inputIsCreateMode() && draftingSheaf && draftSheaf === 'self-direct-sum';
+      editingSheafIdeal = inputIsModifyMode() && draftingSheaf && draftSheaf === 'ideal-sheaf';
+      creatingSheafIdeal = inputIsCreateMode() && draftingSheaf && draftSheaf === 'ideal-sheaf';
       editingSheafSchur = inputIsModifyMode() && draftingSheaf && draftSheaf === 'schur';
       creatingSheafSchur = inputIsCreateMode() && draftingSheaf && draftSheaf === 'schur';
     };
@@ -7588,6 +8374,8 @@
       && state.maps.some((map) => map.domainKind === 'variety' && map.codomainKind === 'variety')
       && state.sheaves.some((sheaf) => !editingSheafMapOperation || sheaf.id !== state.activeSheafId);
     const canBinarySheaf = state.sheaves.filter((sheaf) => !editingSheafBinary || sheaf.id !== state.activeSheafId).length > 0;
+    const canSelfSumSheaf = state.sheaves.some((sheaf) => !editingSheafSelfSum || sheaf.id !== state.activeSheafId);
+    const canIdealSheaf = state.maps.some((map) => allowableSheafIdealMapPick(map.id)) || editingSheafIdeal;
     const canSchurSheaf = state.sheaves.some((sheaf) => (
       (!editingSheafSchur || sheaf.id !== state.activeSheafId) && sheafHasLocallyFreeLabel(sheaf)
     ));
@@ -7619,6 +8407,24 @@
       refs.sheafType.value = 'abstract';
       draftSheaf = 'abstract';
       clearSheafBinaryDraft();
+      syncDefaultRank(true);
+      syncDefaultSheafName();
+    }
+    const selfSumOption = refs.sheafType?.querySelector?.('option[value="self-direct-sum"]');
+    if (selfSumOption) selfSumOption.disabled = !canSelfSumSheaf;
+    if (!canSelfSumSheaf && draftSheaf === 'self-direct-sum' && !editingSheafSelfSum) {
+      refs.sheafType.value = 'abstract';
+      draftSheaf = 'abstract';
+      clearSheafSelfSumDraft();
+      syncDefaultRank(true);
+      syncDefaultSheafName();
+    }
+    const idealOption = refs.sheafType?.querySelector?.('option[value="ideal-sheaf"]');
+    if (idealOption) idealOption.disabled = !canIdealSheaf;
+    if (!canIdealSheaf && draftSheaf === 'ideal-sheaf' && !editingSheafIdeal) {
+      refs.sheafType.value = 'abstract';
+      draftSheaf = 'abstract';
+      clearSheafIdealDraft();
       syncDefaultRank(true);
       syncDefaultSheafName();
     }
@@ -7672,6 +8478,8 @@
     else if (refs.dim) refs.dim.readOnly = false;
     refs.twistRow.hidden = !draftingSheaf || draftSheaf !== 'twist';
     updateSheafBinaryDraftControls();
+    updateSheafSelfSumDraftControls();
+    updateSheafIdealDraftControls();
     updateSheafSchurDraftControls();
     updateSheafMapDraftControls();
     updateMapDraftControls();
@@ -7689,7 +8497,7 @@
     updateSheafBaseButton();
     if (refs.addObject) {
       const editingSequence = activeSesEditMode();
-      const canAddSheaf = !draftingSheaf || creatingSheafMapOperation || creatingSheafBinary || creatingSheafSchur || !!draftBase;
+      const canAddSheaf = !draftingSheaf || creatingSheafMapOperation || creatingSheafBinary || creatingSheafSelfSum || creatingSheafIdeal || creatingSheafSchur || !!draftBase;
       const hasEditableObject = !inputIsModifyMode() || editingSequence || !!activeObjectForKind(currentInputKind());
       const creatingMap = draftingMap && inputIsCreateMode();
       const mapReady = !draftingMap || !!(mapCompositionInputMode()
@@ -7700,8 +8508,10 @@
       const creatingSheaf = draftingSheaf && inputIsCreateMode();
       const sheafMapReady = !(creatingSheafMapOperation || editingSheafMapOperation) || !!mapOperationSheafConstructionData();
       const sheafBinaryReady = !(creatingSheafBinary || editingSheafBinary) || !!binarySheafConstructionData();
+      const sheafSelfSumReady = !(creatingSheafSelfSum || editingSheafSelfSum) || !!selfSumSheafConstructionData();
+      const sheafIdealReady = !(creatingSheafIdeal || editingSheafIdeal) || !!idealSheafConstructionData();
       const sheafSchurReady = !(creatingSheafSchur || editingSheafSchur) || !!schurSheafConstructionData();
-      const creatingParentSheaf = creatingSheafMapOperation || creatingSheafBinary || creatingSheafSchur;
+      const creatingParentSheaf = creatingSheafMapOperation || creatingSheafBinary || creatingSheafSelfSum || creatingSheafIdeal || creatingSheafSchur;
       const productFactors = productDraftFactors();
       const productDim = productFactors.length === 2 ? productDimensionFromFactors(productFactors[0], productFactors[1]) : 0;
       const productNeedsFactors = creatingProduct || updatingProduct;
@@ -7715,7 +8525,7 @@
       const grassmannianMapParams = draftingCombinedGrassmannianMap ? syncGrassmannianMapControls() : null;
       const grassmannianMapReady = !draftingCombinedGrassmannianMap || !!grassmannianMapConstructionData();
       const numberReady = !draftingNumber || globalInvariantNameIsValid(refs.globalInvariantName?.value);
-      refs.addObject.disabled = (draftingMap && !mapReady) || (productNeedsFactors && !productReady) || !grassmannianReady || !sesReady || !sesEditReady || !blowupReady || !tautologicalSesReady || !grassmannianMapReady || !numberReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
+      refs.addObject.disabled = (draftingMap && !mapReady) || (productNeedsFactors && !productReady) || !grassmannianReady || !sesReady || !sesEditReady || !blowupReady || !tautologicalSesReady || !grassmannianMapReady || !numberReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSelfSum || editingSheafSelfSum) && !sheafSelfSumReady) || ((creatingSheafIdeal || editingSheafIdeal) && !sheafIdealReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
       refs.addObject.textContent = inputIsModifyMode() ? 'update' : (combinedCreateMode() ? 'build' : 'add');
       let addTitle = '';
       if (creatingMap) {
@@ -7742,6 +8552,10 @@
         addTitle = sheafMapPickHint();
       } else if ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) {
         addTitle = sheafBinaryPickHint();
+      } else if ((creatingSheafSelfSum || editingSheafSelfSum) && !sheafSelfSumReady) {
+        addTitle = sheafSelfSumPickHint();
+      } else if ((creatingSheafIdeal || editingSheafIdeal) && !sheafIdealReady) {
+        addTitle = sheafIdealPickHint();
       } else if ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) {
         addTitle = sheafSchurPickHint();
       } else if (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) {
@@ -10437,6 +11251,20 @@
     const sourceGeometry = geometryByVarietyId(map?.domainId);
     if (!map || !sourceGeometry || !targetGeometry) return [];
     const rules = [];
+    if (sourceGeometry.type !== 'point' && targetGeometry.type !== 'point') {
+      const sourcePoint = homologyClassDefById(sourceGeometry, HOMOLOGY_POINT_CLASS);
+      const targetPoint = homologyClassDefById(targetGeometry, HOMOLOGY_POINT_CLASS);
+      const targetDef = mapOperationHomologyClassDefinition(map, 'pushforward', sourcePoint, targetGeometry);
+      if (targetDef && targetPoint) {
+        rules.push({
+          id: `default-point-pushforward-${map.id}`,
+          builtin: true,
+          enabled: true,
+          lhs: { powers: { [homologyDefVariableId(targetDef, targetGeometry)]: 1 } },
+          rhs: [{ coefficient: '1', powers: { [homologyDefVariableId(targetPoint, targetGeometry)]: 1 } }]
+        });
+      }
+    }
     if (sourceGeometry.type === 'point') {
       const variableId = defineMapHomologyVariable(map, 'pushforward', mapSourceUnitVariableId(map), targetGeometry.dim, '1', {
         cohomologyDegree: 2 * targetGeometry.dim,
@@ -10974,6 +11802,12 @@
         ? buildDirectSumBundle(geometry.dim, sheaf, left, right)
         : buildTensorBundle(geometry.dim, sheaf, left, right);
     }
+    if (construction.type === 'self-direct-sum') {
+      const parentObject = state.sheaves.find((item) => item.id === construction.sheafId);
+      if (!parentObject) return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
+      const parent = buildSourceSheafBundle(geometry, parentObject);
+      return buildSelfDirectSumBundle(geometry.dim, sheaf, parent, construction.multiplicity);
+    }
     if (construction.type === 'schur') {
       const parentObject = state.sheaves.find((item) => item.id === construction.sheafId);
       const partition = normalizeSchurPartition(construction.partition);
@@ -11397,6 +12231,15 @@
     return buildBundleFromCh(chComps, rankSumLatex(left, right), rankSumPlain(left, right), sheaf.labelLatex, sheaf.labelPlain);
   }
 
+  function buildSelfDirectSumBundle(d, sheaf, parent, multiplicity) {
+    const n = normalizeSelfSumMultiplicity(multiplicity);
+    const chComps = zeroComponentArray(d);
+    for (let i = 1; i <= d; i++) {
+      chComps[i] = componentOrZero(parent.chComps, i).scale(fraction(n));
+    }
+    return buildBundleFromCh(chComps, selfSumRankLatex(parent, n), selfSumRankPlain(parent, n), sheaf.labelLatex, sheaf.labelPlain);
+  }
+
   function buildTensorBundle(d, sheaf, left, right) {
     const chComps = zeroComponentArray(d);
     const leftRank = rankAsDegreeZeroPoly(left, `${constructionSafeId(sheaf.labelPlain)}Left`);
@@ -11479,6 +12322,20 @@
       return String(Number(left.rankPlain) * Number(right.rankPlain));
     }
     return `(${left.rankPlain || 'r'})*(${right.rankPlain || 's'})`;
+  }
+
+  function selfSumRankLatex(parent, multiplicity) {
+    const rank = parent.rankLatex || parent.rankPlain || 'r';
+    if (/^-?\d+$/.test(parent.rankPlain || '')) return String(Number(parent.rankPlain) * multiplicity);
+    if (multiplicity === 1) return rank;
+    return `${multiplicity}${rankLatexTerm(parent)}`;
+  }
+
+  function selfSumRankPlain(parent, multiplicity) {
+    const rank = parent.rankPlain || 'r';
+    if (/^-?\d+$/.test(rank)) return String(Number(rank) * multiplicity);
+    if (multiplicity === 1) return rank;
+    return `${multiplicity}*(${rank})`;
   }
 
   function rankLatexTerm(bundle) {
@@ -14349,6 +15206,10 @@
         if (state.sheafMapDraft?.mapId === map.id) classes.push('is-active');
         else if (state.canvasPickEnabled && state.sheafMapPickTarget === 'map' && allowableSheafMapOperationMap(map.id)) classes.push('is-pick-candidate');
       }
+      if (sheafIdealInputMode()) {
+        if (state.sheafIdealDraft?.mapId === map.id) classes.push('is-active');
+        else if (state.canvasPickEnabled && allowableSheafIdealMapPick(map.id)) classes.push('is-pick-candidate');
+      }
       if (mapCompositionInputMode()) {
         const ids = mapDraftMapIds();
         if (ids[0] === map.id) classes.push('is-map-domain');
@@ -14528,6 +15389,11 @@
         if (ids[0] === sheaf.id) classes.push('is-map-domain');
         if (ids[1] === sheaf.id) classes.push('is-map-codomain');
         if (state.canvasPickEnabled && ids[0] !== sheaf.id && ids[1] !== sheaf.id && allowableSheafBinaryPick(sheaf.id)) classes.push('is-pick-candidate');
+      }
+      if (sheafSelfSumInputMode()) {
+        const parent = sheafSelfSumDraftSheaf();
+        if (parent?.id === sheaf.id) classes.push('is-active');
+        else if (state.canvasPickEnabled && allowableSheafSelfSumPick(sheaf.id)) classes.push('is-pick-candidate');
       }
       if (combinedSesCreateMode()) {
         const draft = sesDraftIds();
@@ -16376,6 +17242,7 @@
   }
 
   function exportResult(result, format, scope = 'main') {
+    if (format === 'preset-json') return exportPresetState();
     if (scope === 'classes') {
       if (!result.classRows.length) return `No characteristic classes available. ${classChartEmptyMessage()}`;
       return exportClassChart(result, format);
@@ -16385,6 +17252,647 @@
       return exportHodgeChart(result, format);
     }
     return exportMainCanvas(result, format);
+  }
+
+  function exportPresetState() {
+    return JSON.stringify(buildPresetState());
+  }
+
+  function setPresetImportPanelVisible(visible) {
+    if (!refs.importPresetPanel) return;
+    refs.importPresetPanel.hidden = !visible;
+    if (refs.importPresetToggle) refs.importPresetToggle.setAttribute('aria-expanded', visible ? 'true' : 'false');
+    showPresetImportMessage('', false);
+    if (visible) refs.importPresetInput?.focus?.();
+  }
+
+  function showPresetImportMessage(message, isError = false) {
+    if (!refs.importPresetMessage) return;
+    refs.importPresetMessage.textContent = message || '';
+    refs.importPresetMessage.classList.toggle('is-error', !!isError);
+  }
+
+  function importPresetFromText(text) {
+    const raw = String(text || '').trim();
+    if (!raw) throw new Error('Paste Preset JSON before loading.');
+    let preset;
+    try {
+      preset = JSON.parse(raw);
+    } catch (_) {
+      throw new Error('Preset JSON is not valid JSON.');
+    }
+    applyPresetState(preset);
+    showPresetImportMessage('loaded', false);
+    if (refs.status) refs.status.textContent = 'preset imported';
+    if (refs.importPresetInput) refs.importPresetInput.value = '';
+    setPresetImportPanelVisible(false);
+    return true;
+  }
+
+  function applyPresetState(preset) {
+    validatePresetEnvelope(preset);
+    const normalized = normalizePresetState(preset);
+    replaceInputState(normalized);
+    applyPresetOptions(normalized.options || {});
+    activatePresetSelection(normalized.active || {});
+    completePresetImport();
+    return normalized;
+  }
+
+  function validatePresetEnvelope(preset) {
+    if (!preset || typeof preset !== 'object' || Array.isArray(preset)) throw new Error('Preset must be a JSON object.');
+    if (preset.schema !== 'sheaf-calculator-preset') throw new Error('Preset schema is not for this calculator.');
+    if (Number(preset.version || 0) !== 1) throw new Error(`Preset version ${preset.version || '?'} is not supported.`);
+  }
+
+  function normalizePresetState(preset) {
+    const objects = preset.objects && typeof preset.objects === 'object' ? preset.objects : {};
+    const normalized = {
+      active: sanitizePresetActive(preset.active),
+      options: sanitizePresetOptions(preset.options),
+      hidden: sanitizePresetHiddenRefs(preset.hidden),
+      nextObjectIndex: normalizedInt(preset.nextObjectIndex, 1, 1000000, 1),
+      objects: {
+        numbers: sanitizePresetObjects(objects.numbers, sanitizePresetGlobalInvariant),
+        varieties: sanitizePresetObjects(objects.varieties, sanitizePresetVariety),
+        sheaves: sanitizePresetObjects(objects.sheaves, sanitizePresetSheaf),
+        maps: sanitizePresetObjects(objects.maps, sanitizePresetMap),
+        sequences: sanitizePresetObjects(objects.sequences, sanitizePresetSequence)
+      }
+    };
+    ensurePresetCollectionsHaveUniqueIds(normalized.objects);
+    return normalized;
+  }
+
+  function sanitizePresetObjects(items, sanitizer) {
+    if (!Array.isArray(items)) return [];
+    return items.map(sanitizer).filter(Boolean);
+  }
+
+  function sanitizePresetGlobalInvariant(item) {
+    if (!item || typeof item !== 'object') return null;
+    const id = sanitizePresetId(item.id);
+    if (!id) return null;
+    const invariant = {
+      id,
+      type: 'rational-number',
+      name: sanitizeGlobalInvariantName(item.name, 'a'),
+      value: sanitizeIntegerString(item.value, '0'),
+      hasValue: item.hasValue === true,
+      replaceWithValue: item.replaceWithValue === true,
+      auto: item.auto === true,
+      unused: item.unused === true
+    };
+    if (Array.isArray(item.sources)) invariant.sources = item.sources.map((source) => sanitizePresetId(source)).filter(Boolean);
+    return invariant;
+  }
+
+  function sanitizePresetVariety(item) {
+    if (!item || typeof item !== 'object') return null;
+    const id = sanitizePresetId(item.id);
+    if (!id) return null;
+    const type = sanitizePresetEnum(item.type, ['abstract', 'projective', 'grassmannian', 'curve', 'abelian', 'point', 'complete-intersection'], 'abstract');
+    const variety = {
+      id,
+      type,
+      dim: sanitizeDimensionText(item.dim ?? '3'),
+      name: sanitizeMathLabel(item.name, type === 'projective' ? '\\mathbb{P}^3' : 'X'),
+      genus: sanitizeGenusInput(item.genus),
+      ciDegrees: sanitizePresetString(item.ciDegrees, '', 80),
+      nameDirty: item.nameDirty === true,
+      hiddenOnCanvas: item.hiddenOnCanvas === true,
+      grassmannianR: String(normalizedInt(item.grassmannianR, 1, MAX_GRASSMANNIAN_N, 2)),
+      grassmannianN: String(normalizedInt(item.grassmannianN, 2, MAX_GRASSMANNIAN_N, 4)),
+      grassmannianYoungBasis: item.grassmannianYoungBasis === true
+    };
+    const ciAmbient = normalizedInt(item.ciAmbient, 0, MAX_AMBIENT, NaN);
+    if (Number.isFinite(ciAmbient)) variety.ciAmbient = String(ciAmbient);
+    copyPresetCanvasPosition(item, variety);
+    if (item.homology && typeof item.homology === 'object') variety.homology = cloneSerializableValue(item.homology);
+    const construction = sanitizePresetConstruction(item.construction, 'variety');
+    if (construction) variety.construction = construction;
+    return variety;
+  }
+
+  function sanitizePresetSheaf(item) {
+    if (!item || typeof item !== 'object') return null;
+    const id = sanitizePresetId(item.id);
+    if (!id) return null;
+    const type = canonicalSheafType(sanitizePresetEnum(item.type, ['abstract', 'locally-free', 'structure', 'tangent', 'cotangent', 'canonical', 'twist', 'universal-bundle', 'universal-line'], 'abstract'));
+    const sheaf = {
+      id,
+      type,
+      name: sanitizeMathLabel(item.name, '\\mathcal{E}'),
+      twist: String(normalizedInt(item.twist, -24, 24, 1)),
+      rank: sanitizeRankInput(item.rank),
+      baseVarietyId: sanitizePresetId(item.baseVarietyId),
+      basis: normalizeBasisValue(item.basis),
+      nameDirty: item.nameDirty === true,
+      hiddenOnCanvas: item.hiddenOnCanvas === true
+    };
+    copyPresetCanvasPosition(item, sheaf);
+    if (item.homology && typeof item.homology === 'object') sheaf.homology = cloneSerializableValue(item.homology);
+    const construction = sanitizePresetConstruction(item.construction, 'sheaf');
+    if (construction) sheaf.construction = construction;
+    return sheaf;
+  }
+
+  function sanitizePresetMap(item) {
+    if (!item || typeof item !== 'object') return null;
+    const id = sanitizePresetId(item.id);
+    if (!id) return null;
+    const map = {
+      id,
+      name: sanitizeMathLabel(item.name, 'f'),
+      domainKind: sanitizePresetEndpointKind(item.domainKind),
+      domainId: sanitizePresetId(item.domainId),
+      codomainKind: sanitizePresetEndpointKind(item.codomainKind),
+      codomainId: sanitizePresetId(item.codomainId),
+      nameDirty: item.nameDirty === true,
+      hiddenOnCanvas: item.hiddenOnCanvas === true,
+      modified: item.modified === true
+    };
+    const bend = Number(item.defaultBendPx);
+    if (Number.isFinite(bend)) map.defaultBendPx = clamp(bend, -240, 240);
+    map.labelOffset = normalizedMapLabelOffset(item.labelOffset);
+    const labelT = Number(item.labelT);
+    map.labelT = Number.isFinite(labelT) ? clamp(labelT, 0.06, 0.94) : DEFAULT_MAP_LABEL_T;
+    copyPresetCanvasPosition(item, map);
+    const construction = sanitizePresetConstruction(item.construction, 'map');
+    if (construction) map.construction = construction;
+    const curve = normalizeMapCurve(item.curve);
+    if (curve) map.curve = curve;
+    return map.domainKind && map.domainId && map.codomainKind && map.codomainId ? map : null;
+  }
+
+  function sanitizePresetSequence(item) {
+    if (!item || typeof item !== 'object') return null;
+    const id = sanitizePresetId(item.id);
+    if (!id) return null;
+    return {
+      id,
+      type: item.type === 'short-exact-sequence' ? 'short-exact-sequence' : 'short-exact-sequence',
+      sheafIds: Array.isArray(item.sheafIds) ? item.sheafIds.map(sanitizePresetId).filter(Boolean).slice(0, 3) : [],
+      mapIds: Array.isArray(item.mapIds) ? item.mapIds.map(sanitizePresetId).filter(Boolean).slice(0, 2) : [],
+      baseVarietyId: sanitizePresetId(item.baseVarietyId),
+      tail: normalizeSequenceTailCurve(item.tail) || normalizeSequenceTailCurve({ pointCount: DEFAULT_SEQUENCE_TAIL_POINT_COUNT }),
+      modified: item.modified === true
+    };
+  }
+
+  function sanitizePresetConstruction(construction, ownerKind) {
+    if (!construction || typeof construction !== 'object') return null;
+    const type = construction.type;
+    const out = { type };
+    if (ownerKind === 'variety' && type === 'product') {
+      out.varietyIds = Array.isArray(construction.varietyIds) ? construction.varietyIds.map(sanitizePresetId).filter(Boolean).slice(0, 2) : [];
+    } else if (ownerKind === 'variety' && type === 'jacobian') {
+      out.curveId = sanitizePresetId(construction.curveId);
+      out.nameDirty = construction.nameDirty === true;
+    } else if (ownerKind === 'variety' && type === 'blow-up-point') {
+      out.baseId = sanitizePresetId(construction.baseId);
+      out.pointId = sanitizePresetId(construction.pointId);
+    } else if (ownerKind === 'variety' && type === 'grassmannian-target') {
+      out.sheafId = sanitizePresetId(construction.sheafId);
+      out.baseId = sanitizePresetId(construction.baseId);
+    } else if (ownerKind === 'sheaf' && (type === 'direct-sum' || type === 'tensor')) {
+      out.sheafIds = Array.isArray(construction.sheafIds) ? construction.sheafIds.map(sanitizePresetId).filter(Boolean).slice(0, 2) : [];
+      out.derived = construction.derived === true;
+      out.exact = construction.exact === true;
+    } else if (ownerKind === 'sheaf' && type === 'self-direct-sum') {
+      out.sheafId = sanitizePresetId(construction.sheafId);
+      out.multiplicity = normalizeSelfSumMultiplicity(construction.multiplicity);
+    } else if (ownerKind === 'sheaf' && type === 'schur') {
+      out.sheafId = sanitizePresetId(construction.sheafId);
+      out.partition = normalizeSchurPartition(construction.partition) || [1];
+    } else if (ownerKind === 'sheaf' && (type === 'pullback' || type === 'pushforward')) {
+      out.mapId = sanitizePresetId(construction.mapId);
+      out.sheafId = sanitizePresetId(construction.sheafId);
+      out.derived = construction.derived === true;
+      out.exact = construction.exact === true;
+      out.proper = type === 'pushforward' && construction.proper === true;
+    } else if (ownerKind === 'sheaf' && type === 'ses-term') {
+      out.role = sanitizePresetEnum(construction.role, ['subobject', 'extension', 'quotient'], 'extension');
+      out.sourceSheafIds = Array.isArray(construction.sourceSheafIds) ? construction.sourceSheafIds.map(sanitizePresetId).filter(Boolean).slice(0, 3) : [];
+      out.idealSheafMapId = sanitizePresetId(construction.idealSheafMapId);
+      out.structureSheafId = sanitizePresetId(construction.structureSheafId);
+      out.targetStructureSheafId = sanitizePresetId(construction.targetStructureSheafId);
+      out.pushforwardSheafId = sanitizePresetId(construction.pushforwardSheafId);
+      out.sequenceId = sanitizePresetId(construction.sequenceId);
+      out.inclusionMapId = sanitizePresetId(construction.inclusionMapId);
+      out.quotientMapId = sanitizePresetId(construction.quotientMapId);
+    } else if (ownerKind === 'sheaf' && type === 'trivial-bundle') {
+      out.rank = sanitizeRankInput(construction.rank);
+    } else if (ownerKind === 'map' && type === 'composition') {
+      out.mapIds = Array.isArray(construction.mapIds) ? construction.mapIds.map(sanitizePresetId).filter(Boolean).slice(0, 2) : [];
+      out.nameDirty = construction.nameDirty === true;
+    } else if (ownerKind === 'map' && type === 'projection') {
+      out.productId = sanitizePresetId(construction.productId);
+      out.factorIndex = normalizedInt(construction.factorIndex, 0, 1, 0);
+      out.nameDirty = construction.nameDirty === true;
+    } else if (ownerKind === 'map' && type === 'abel-jacobi') {
+      out.curveId = sanitizePresetId(construction.curveId);
+      out.jacobianId = sanitizePresetId(construction.jacobianId);
+      out.nameDirty = construction.nameDirty === true;
+    } else if (ownerKind === 'map' && type === 'short-exact-sequence-map') {
+      out.sequenceId = sanitizePresetId(construction.sequenceId);
+      out.position = normalizedInt(construction.position, 0, 1, 0);
+      out.sheafIds = Array.isArray(construction.sheafIds) ? construction.sheafIds.map(sanitizePresetId).filter(Boolean).slice(0, 3) : [];
+      out.nameDirty = construction.nameDirty === true;
+    } else if (ownerKind === 'map' && type === 'blow-down') {
+      out.blowupId = sanitizePresetId(construction.blowupId);
+      out.baseId = sanitizePresetId(construction.baseId);
+      out.pointId = sanitizePresetId(construction.pointId);
+      out.nameDirty = construction.nameDirty === true;
+    } else if (ownerKind === 'map' && type === 'grassmannian-map') {
+      out.sheafId = sanitizePresetId(construction.sheafId);
+      out.baseId = sanitizePresetId(construction.baseId);
+      out.targetId = sanitizePresetId(construction.targetId);
+      out.nameDirty = construction.nameDirty === true;
+    } else {
+      return null;
+    }
+    if (construction.defaultName != null) out.defaultName = sanitizeMathLabel(construction.defaultName, '');
+    return compactSerializable(out);
+  }
+
+  function replaceInputState(preset) {
+    state.globalInvariants = preset.objects.numbers;
+    state.varieties = preset.objects.varieties;
+    state.sheaves = preset.objects.sheaves;
+    state.maps = preset.objects.maps;
+    state.sequences = preset.objects.sequences;
+    normalizeImportedReferences();
+    applyPresetHiddenRefs(preset.hidden);
+    refreshConstructedObjects();
+    state.nextObjectId = Math.max(preset.nextObjectIndex, nextPresetObjectIndex());
+    state.labelDrag = null;
+    state.mapDrag = null;
+    state.mapControlDrag = null;
+    state.sequenceTailDrag = null;
+    state.productDraft = null;
+    state.sesDraft = null;
+    state.blowupDraft = null;
+    state.tautologicalSesDraft = null;
+    state.grassmannianMapDraft = null;
+    state.mapDraft = null;
+    state.sheafBinaryDraft = null;
+    state.sheafSelfSumDraft = null;
+    state.sheafIdealDraft = null;
+    state.sheafSchurDraft = null;
+    state.sheafMapDraft = null;
+    setCanvasPickEnabled(false, { render: false });
+  }
+
+  function normalizeImportedReferences() {
+    const varietyIds = new Set(state.varieties.map((item) => item.id));
+    state.sheaves = state.sheaves.filter((sheaf) => !sheaf.baseVarietyId || varietyIds.has(sheaf.baseVarietyId));
+    const sheafIds = new Set(state.sheaves.map((item) => item.id));
+    state.maps = state.maps.filter((map) => (
+      map.domainKind === map.codomainKind
+      && endpointSetForKind(map.domainKind, varietyIds, sheafIds).has(map.domainId)
+      && endpointSetForKind(map.codomainKind, varietyIds, sheafIds).has(map.codomainId)
+    ));
+    const currentMapIds = new Set(state.maps.map((item) => item.id));
+    const currentSheafIds = new Set(state.sheaves.map((item) => item.id));
+    state.sequences = state.sequences.filter((sequence) => (
+      (sequence.sheafIds || []).every((id) => currentSheafIds.has(id))
+      && (sequence.mapIds || []).every((id) => currentMapIds.has(id))
+    ));
+    state.sequences.forEach(attachShortExactSequenceMemberships);
+    [...state.varieties, ...state.sheaves, ...state.maps].forEach((object) => syncObjectLineage(object));
+  }
+
+  function endpointSetForKind(kind, varietyIds, sheafIds) {
+    if (kind === 'sheaf') return sheafIds;
+    return kind === 'variety' ? varietyIds : new Set();
+  }
+
+  function applyPresetOptions(options) {
+    if (refs.repeatNames) refs.repeatNames.checked = options.repeatNames === true;
+    if (refs.repeatStyle) refs.repeatStyle.value = sanitizePresetEnum(options.repeatStyle, ['letters', 'prime', 'paren', 'subscript'], 'letters');
+    if (refs.basis) refs.basis.value = normalizeBasisValue(options.classBasis);
+    if (refs.rootForm) refs.rootForm.value = sanitizePresetEnum(options.rootForm, ['product', 'expanded'], 'product');
+    if (refs.classTermOnly) refs.classTermOnly.checked = options.classTermOnly === true;
+    if (refs.classTermIndex) refs.classTermIndex.value = String(normalizedInt(options.classTermIndex, 0, MAX_DIMENSION, 1));
+    state.hodgeExpanded = options.hodgeExpanded === true;
+    state.hodgeWide = options.hodgeWide === true;
+    state.hodgeCellSize = normalizedInt(options.hodgeCellSize, 15, 30, 20);
+    state.revealedCharts = {
+      hodge: options.revealedCharts?.hodge === true,
+      classes: options.revealedCharts?.classes === true,
+      cohomology: options.revealedCharts?.cohomology === true
+    };
+    state.homologyRulePasses = normalizedInt(options.homologyRulePasses, 1, 20, DEFAULT_HOMOLOGY_RULE_PASSES);
+    const homologyInputMode = options.homologyMapInputMode === 'expression' ? 'formula' : options.homologyMapInputMode;
+    state.homologyMapInputMode = sanitizePresetEnum(homologyInputMode, ['coefficients', 'formula'], 'coefficients');
+    state.homologyExpressionTransposed = options.homologyExpressionTransposed === true;
+    state.exportScope = sanitizePresetEnum(options.exportScope, ['main', 'classes', 'hodge'], 'main');
+    if (refs.hodgeExpanded) refs.hodgeExpanded.checked = !!state.hodgeExpanded;
+    if (refs.hodgeCellSize) refs.hodgeCellSize.value = String(state.hodgeCellSize);
+    if (refs.hodgeCellSizeValue) refs.hodgeCellSizeValue.textContent = `${state.hodgeCellSize}px`;
+    if (refs.homologyMapInputMode) refs.homologyMapInputMode.value = state.homologyMapInputMode;
+    if (refs.homologyTransposeExpressions) refs.homologyTransposeExpressions.setAttribute('aria-pressed', state.homologyExpressionTransposed ? 'true' : 'false');
+    if (refs.exportFormat && refs.exportFormat.value === 'preset-json') refs.exportFormat.value = 'preset-json';
+  }
+
+  function activatePresetSelection(active) {
+    state.activeGlobalInvariantId = null;
+    state.activeVarietyId = state.varieties[0]?.id || null;
+    state.activeSheafId = null;
+    state.activeMapId = null;
+    state.activeSequenceId = null;
+    const desiredKind = sanitizePresetEnum(active.kind, ['number', 'variety', 'sheaf', 'map', 'sequence'], 'variety');
+    const desired = {
+      number: active.numberId,
+      variety: active.varietyId,
+      sheaf: active.sheafId,
+      map: active.mapId,
+      sequence: active.sequenceId
+    };
+    const kind = objectByKind(desiredKind, desired[desiredKind]) ? desiredKind : firstPresetActiveKind();
+    const desiredId = kind ? desired[kind] : null;
+    const id = kind ? (objectByKind(kind, desiredId) ? desiredId : firstPresetActiveId(kind)) : null;
+    if (kind === 'number') state.activeGlobalInvariantId = id;
+    else if (kind === 'variety') state.activeVarietyId = id;
+    else if (kind === 'sheaf') {
+      state.activeSheafId = id;
+      state.activeVarietyId = state.sheaves.find((sheaf) => sheaf.id === id)?.baseVarietyId || state.activeVarietyId;
+    } else if (kind === 'map') state.activeMapId = id;
+    else if (kind === 'sequence') {
+      state.activeSequenceId = id;
+      state.activeVarietyId = state.sequences.find((sequence) => sequence.id === id)?.baseVarietyId || state.activeVarietyId;
+    }
+    if (!hasInputControlDom()) {
+      state.inputMode = active.mode === 'create' ? 'create' : 'modify';
+      return;
+    }
+    setInputMode(active.mode === 'create' ? 'create' : 'modify', { loadDraft: false });
+    if (state.inputMode === 'modify' && activeObjectForModifyMode()) loadActiveObjectIntoDraft(modifyKind());
+    else if (state.inputMode === 'create') resetDraftForKind(firstPresetCreateKind(active.kind));
+  }
+
+  function completePresetImport() {
+    if (!hasInputControlDom()) {
+      state.hiddenObjects = hiddenObjectRefs();
+      return;
+    }
+    syncSheafBaseOptions(true);
+    syncInputEditorVisibility();
+    normalizeControlVisibility();
+    syncShowCanvasButton();
+    syncHodgeWidePlacement();
+    recompute();
+    typeset(refs.varietyEditor);
+    typeset(refs.sheafEditor);
+    typeset(refs.mapEditor);
+    typeset(refs.combinedEditor);
+  }
+
+  function hasInputControlDom() {
+    return !!(refs.inputMode && refs.addObjectKind && refs.varietyEditor && refs.sheafEditor);
+  }
+
+  function firstPresetActiveKind() {
+    if (state.sheaves.length) return 'sheaf';
+    if (state.varieties.length) return 'variety';
+    if (state.maps.length) return 'map';
+    if ((state.sequences || []).length) return 'sequence';
+    if ((state.globalInvariants || []).length) return 'number';
+    return null;
+  }
+
+  function firstPresetActiveId(kind) {
+    if (kind === 'number') return state.globalInvariants[0]?.id || null;
+    if (kind === 'sheaf') return state.sheaves[0]?.id || null;
+    if (kind === 'map') return state.maps[0]?.id || null;
+    if (kind === 'sequence') return state.sequences[0]?.id || null;
+    return state.varieties[0]?.id || null;
+  }
+
+  function firstPresetCreateKind(kind) {
+    return sanitizePresetEnum(kind, ['number', 'variety', 'sheaf', 'map'], 'variety');
+  }
+
+  function sanitizePresetActive(active) {
+    const source = active && typeof active === 'object' ? active : {};
+    return {
+      mode: source.mode === 'create' ? 'create' : 'modify',
+      kind: sanitizePresetEnum(source.kind, ['number', 'variety', 'sheaf', 'map', 'sequence'], 'variety'),
+      varietyId: sanitizePresetId(source.varietyId),
+      sheafId: sanitizePresetId(source.sheafId),
+      mapId: sanitizePresetId(source.mapId),
+      sequenceId: sanitizePresetId(source.sequenceId),
+      numberId: sanitizePresetId(source.numberId)
+    };
+  }
+
+  function sanitizePresetOptions(options) {
+    return options && typeof options === 'object' ? options : {};
+  }
+
+  function sanitizePresetHiddenRefs(items) {
+    if (!Array.isArray(items)) return [];
+    const kinds = ['number', 'variety', 'sheaf', 'map', 'sequence-tail'];
+    return items.map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const kind = sanitizePresetEnum(item.kind, kinds, null);
+      const id = sanitizePresetId(item.id);
+      return kind && id ? { kind, id } : null;
+    }).filter(Boolean);
+  }
+
+  function applyPresetHiddenRefs(hiddenRefs) {
+    const keys = new Set((hiddenRefs || []).map((item) => `${item.kind}:${item.id}`));
+    state.varieties.forEach((item) => { item.hiddenOnCanvas = keys.has(`variety:${item.id}`); });
+    state.sheaves.forEach((item) => { item.hiddenOnCanvas = keys.has(`sheaf:${item.id}`); });
+    state.maps.forEach((item) => { item.hiddenOnCanvas = keys.has(`map:${item.id}`); });
+    state.sequences.forEach((sequence) => {
+      sequence.tail = normalizeSequenceTailCurve(sequence.tail) || {};
+      sequence.tail.hiddenOnCanvas = keys.has(`sequence-tail:${sequence.id}`);
+    });
+    state.hiddenObjects = hiddenObjectRefs();
+  }
+
+  function sanitizePresetId(value) {
+    const text = String(value ?? '').trim();
+    if (!text || text.length > 80) return null;
+    return /^[A-Za-z][A-Za-z0-9_.:-]*$/.test(text) ? text : null;
+  }
+
+  function sanitizePresetEndpointKind(value) {
+    return value === 'sheaf' || value === 'variety' ? value : null;
+  }
+
+  function sanitizePresetEnum(value, allowed, fallback) {
+    return allowed.includes(value) ? value : fallback;
+  }
+
+  function sanitizePresetString(value, fallback = '', maxLength = 120) {
+    const text = String(value ?? fallback);
+    return text.length > maxLength ? text.slice(0, maxLength) : text;
+  }
+
+  function copyPresetCanvasPosition(source, target) {
+    const x = Number(source.labelX);
+    const y = Number(source.labelY);
+    if (Number.isFinite(x)) target.labelX = clamp(x, 0.04, 0.96);
+    if (Number.isFinite(y)) target.labelY = clamp(y, 0.07, 0.93);
+    if (source.labelPositionDirty === true) target.labelPositionDirty = true;
+  }
+
+  function ensurePresetCollectionsHaveUniqueIds(objects) {
+    const seen = new Set();
+    Object.values(objects).forEach((items) => {
+      items.forEach((item) => {
+        if (!item?.id || seen.has(item.id)) item.id = null;
+        else seen.add(item.id);
+      });
+    });
+    Object.keys(objects).forEach((key) => {
+      objects[key] = objects[key].filter((item) => item?.id);
+    });
+  }
+
+  function nextPresetObjectIndex() {
+    let max = 0;
+    const visit = (id) => {
+      const match = String(id || '').match(/(\d+)$/);
+      if (match) max = Math.max(max, Number(match[1]));
+    };
+    [
+      ...state.varieties,
+      ...state.sheaves,
+      ...state.maps,
+      ...(state.sequences || []),
+      ...(state.globalInvariants || [])
+    ].forEach((item) => visit(item.id));
+    return max + 1;
+  }
+
+  function buildPresetState() {
+    const inputKind = currentInputKind();
+    return compactSerializable({
+      schema: 'sheaf-calculator-preset',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      active: {
+        mode: state.inputMode,
+        kind: inputKind,
+        varietyId: state.activeVarietyId,
+        sheafId: state.activeSheafId,
+        mapId: state.activeMapId,
+        sequenceId: state.activeSequenceId,
+        numberId: state.activeGlobalInvariantId
+      },
+      options: {
+        repeatNames: !!refs.repeatNames?.checked,
+        repeatStyle: refs.repeatStyle?.value || 'letters',
+        classBasis: refs.basis?.value || 'chern',
+        rootForm: refs.rootForm?.value || 'product',
+        classTermOnly: !!refs.classTermOnly?.checked,
+        classTermIndex: normalizedInt(refs.classTermIndex?.value, 0, MAX_DIMENSION, 1),
+        hodgeExpanded: !!state.hodgeExpanded,
+        hodgeWide: !!state.hodgeWide,
+        hodgeCellSize: state.hodgeCellSize,
+        revealedCharts: { ...state.revealedCharts },
+        homologyRulePasses: state.homologyRulePasses,
+        homologyMapInputMode: state.homologyMapInputMode,
+        homologyExpressionTransposed: state.homologyExpressionTransposed,
+        exportScope: state.exportScope || 'main'
+      },
+      objects: {
+        numbers: (state.globalInvariants || []).map(presetGlobalInvariant),
+        varieties: state.varieties.map(presetVariety),
+        sheaves: state.sheaves.map(presetSheaf),
+        maps: state.maps.map(presetMap),
+        sequences: (state.sequences || []).map(presetSequence)
+      },
+      hidden: hiddenObjectRefs(),
+      nextObjectIndex: state.nextObjectId
+    });
+  }
+
+  function presetGlobalInvariant(invariant) {
+    return pickSerializable(invariant, [
+      'id', 'type', 'name', 'value', 'hasValue', 'replaceWithValue',
+      'auto', 'unused', 'sources'
+    ]);
+  }
+
+  function presetVariety(variety) {
+    return pickSerializable(variety, [
+      'id', 'type', 'dim', 'name', 'genus', 'ciDegrees', 'ciAmbient',
+      'grassmannianR', 'grassmannianN', 'grassmannianYoungBasis',
+      'homology', 'construction', 'nameDirty', 'hiddenOnCanvas',
+      'labelX', 'labelY', 'labelPositionDirty'
+    ]);
+  }
+
+  function presetSheaf(sheaf) {
+    return pickSerializable(sheaf, [
+      'id', 'type', 'name', 'twist', 'rank', 'baseVarietyId', 'basis',
+      'homology', 'construction', 'nameDirty', 'hiddenOnCanvas',
+      'labelX', 'labelY', 'labelPositionDirty'
+    ]);
+  }
+
+  function presetMap(map) {
+    return pickSerializable(map, [
+      'id', 'name', 'domainKind', 'domainId', 'codomainKind', 'codomainId',
+      'construction', 'curve', 'nameDirty', 'hiddenOnCanvas', 'modified',
+      'defaultBendPx', 'labelOffset', 'labelT', 'labelX', 'labelY',
+      'labelPositionDirty'
+    ]);
+  }
+
+  function presetSequence(sequence) {
+    return pickSerializable(sequence, [
+      'id', 'type', 'sheafIds', 'mapIds', 'baseVarietyId',
+      'tail', 'modified'
+    ]);
+  }
+
+  function pickSerializable(source, keys) {
+    const out = {};
+    keys.forEach((key) => {
+      if (!Object.prototype.hasOwnProperty.call(source || {}, key)) return;
+      const value = source[key];
+      if (value === undefined || typeof value === 'function') return;
+      out[key] = cloneSerializableValue(value);
+    });
+    return compactSerializable(out);
+  }
+
+  function cloneSerializableValue(value) {
+    if (value == null) return value;
+    if (Array.isArray(value)) return value.map(cloneSerializableValue);
+    if (typeof value === 'object') {
+      const out = {};
+      Object.keys(value).forEach((key) => {
+        if (key === 'parents' || key === 'subobjects' || key === 'sourceObject') return;
+        const item = value[key];
+        if (item === undefined || typeof item === 'function') return;
+        out[key] = cloneSerializableValue(item);
+      });
+      return compactSerializable(out);
+    }
+    return value;
+  }
+
+  function compactSerializable(value) {
+    if (Array.isArray(value)) return value.map(compactSerializable);
+    if (!value || typeof value !== 'object') return value;
+    const out = {};
+    Object.entries(value).forEach(([key, item]) => {
+      const compact = compactSerializable(item);
+      if (compact == null) return;
+      if (compact === false) return;
+      if (Array.isArray(compact) && compact.length === 0) return;
+      if (typeof compact === 'object' && !Array.isArray(compact) && Object.keys(compact).length === 0) return;
+      out[key] = compact;
+    });
+    return out;
   }
 
   function exportMainCanvas(result, format) {
@@ -16477,6 +17985,7 @@
     ];
     if (base) parts.push(`\\text{base}=${sanitizeMathLabel(base.name, 'X')}`);
     if (sheaf.type === 'twist') parts.push(`r=${normalizedInt(sheaf.twist, -24, 24, 1)}`);
+    if (sheaf.construction?.type === 'self-direct-sum') parts.push(`n=${normalizeSelfSumMultiplicity(sheaf.construction.multiplicity)}`);
     if (sheaf.construction?.type === 'schur') parts.push(`\\lambda=${schurPartitionLatex(sheaf.construction.partition)}`);
     parts.push(`\\text{basis}=\\text{${basisLabel(sheaf.basis)}}`);
     return parts.join(',\\ ');
@@ -16512,6 +18021,7 @@
     ];
     if (base) parts.push(`base ${latexToPlain(base.name)}`);
     if (sheaf.type === 'twist') parts.push(`twist ${normalizedInt(sheaf.twist, -24, 24, 1)}`);
+    if (sheaf.construction?.type === 'self-direct-sum') parts.push(`multiplicity ${normalizeSelfSumMultiplicity(sheaf.construction.multiplicity)}`);
     if (sheaf.construction?.type === 'schur') parts.push(`diagram ${formatSchurPartitionInput(sheaf.construction.partition)}`);
     parts.push(`basis ${basisLabel(sheaf.basis)}`);
     return parts.join('; ');
@@ -16545,6 +18055,7 @@
     if (type === 'canonical') return 'canonical sheaf';
     if (type === 'twist') return 'twist';
     if (isUniversalBundleSheafType(type)) return 'universal bundle';
+    if (type === 'self-direct-sum') return 'self direct sum';
     if (type === 'schur') return 'Schur functor';
     return 'abstract sheaf';
   }
@@ -16952,6 +18463,10 @@
     const number = Math.floor(Number(value));
     if (!Number.isFinite(number)) return fallback;
     return Math.max(min, Math.min(max, number));
+  }
+
+  function normalizeSelfSumMultiplicity(value) {
+    return normalizedInt(value, 1, MAX_SELF_DIRECT_SUM_MULTIPLICITY, 2);
   }
 
   function sanitizeRankInput(value) {

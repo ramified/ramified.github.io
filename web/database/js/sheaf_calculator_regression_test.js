@@ -38,7 +38,11 @@ function loadCalculator() {
     setSequenceTailPoint,
     sequenceTailPointCount,
     createBlowupPointConstruction,
-    createGrassmannianMapConstruction
+    createGrassmannianMapConstruction,
+    createIdealSheafConstruction,
+    buildPresetState,
+    applyPresetState,
+    importPresetFromText
   };
 })();`);
   return vm.runInNewContext(source, {
@@ -96,6 +100,92 @@ function testAbelianSpecialSheavesAreTrivial() {
   assert.strictEqual(characterPlain(canonicalRows), '1');
 }
 
+function testSelfDirectSumScalesChernCharacter() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'P2', type: 'projective', dim: '2', name: '\\mathbb{P}^2' }];
+  api.state.sheaves = [
+    { id: 'O1', type: 'twist', twist: '1', basis: 'chern', rank: '1', name: '\\mathcal{O}(1)', baseVarietyId: 'P2' }
+  ];
+
+  const rows = characteristicRows(api, {
+    id: 'sum',
+    type: 'abstract',
+    basis: 'chern',
+    rank: '3',
+    name: '\\mathcal{O}(1)^{\\oplus 3}',
+    baseVarietyId: 'P2',
+    construction: { type: 'self-direct-sum', sheafId: 'O1', multiplicity: 3 }
+  });
+
+  assert.strictEqual(chernPlain(rows), '1 + 3*H + 3*[p]');
+  assert.strictEqual(characterPlain(rows), '3 + 3*H + 3/2*[p]');
+}
+
+function testPresetStateIncludesRecoverableConstructionData() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'P2', type: 'projective', dim: '2', name: '\\mathbb{P}^2', labelX: 0.25, labelY: 0.6 }];
+  api.state.sheaves = [
+    { id: 'O1', type: 'twist', twist: '1', basis: 'chern', rank: '1', name: '\\mathcal{O}(1)', baseVarietyId: 'P2' },
+    {
+      id: 'sum',
+      type: 'abstract',
+      basis: 'chern',
+      rank: '3',
+      name: '\\mathcal{O}(1)^{\\oplus 3}',
+      baseVarietyId: 'P2',
+      construction: { type: 'self-direct-sum', sheafId: 'O1', multiplicity: 3 }
+    }
+  ];
+  api.state.activeVarietyId = 'P2';
+  api.state.activeSheafId = 'sum';
+
+  const preset = api.buildPresetState();
+  assert.strictEqual(preset.schema, 'sheaf-calculator-preset');
+  assert.strictEqual(preset.version, 1);
+  assert.strictEqual(preset.active.sheafId, 'sum');
+  assert.strictEqual(preset.objects.varieties[0].id, 'P2');
+  assert.strictEqual(preset.objects.sheaves[1].construction.type, 'self-direct-sum');
+  assert.strictEqual(preset.objects.sheaves[1].construction.multiplicity, 3);
+  assert.strictEqual(preset.objects.sheaves[1].construction.sheafId, 'O1');
+}
+
+function testPresetImportRestoresRecoverableState() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'P2', type: 'projective', dim: '2', name: '\\mathbb{P}^2', labelX: 0.25, labelY: 0.6 }];
+  api.state.sheaves = [
+    { id: 'O1', type: 'twist', twist: '1', basis: 'chern', rank: '1', name: '\\mathcal{O}(1)', baseVarietyId: 'P2' },
+    {
+      id: 'sum',
+      type: 'abstract',
+      basis: 'chern',
+      rank: '3',
+      name: '\\mathcal{O}(1)^{\\oplus 3}',
+      baseVarietyId: 'P2',
+      construction: { type: 'self-direct-sum', sheafId: 'O1', multiplicity: 3 }
+    }
+  ];
+  api.state.activeVarietyId = 'P2';
+  api.state.activeSheafId = 'sum';
+  api.state.inputMode = 'modify';
+  api.state.nextObjectId = 12;
+
+  const presetText = JSON.stringify(api.buildPresetState());
+  api.state.varieties = [];
+  api.state.sheaves = [];
+  api.state.activeVarietyId = null;
+  api.state.activeSheafId = null;
+
+  api.importPresetFromText(presetText);
+  assert.strictEqual(api.state.activeSheafId, 'sum');
+  assert.strictEqual(api.state.activeVarietyId, 'P2');
+  assert.strictEqual(api.state.nextObjectId, 12);
+  assert.strictEqual(api.state.sheaves[1].construction.type, 'self-direct-sum');
+
+  const rows = characteristicRows(api, api.state.sheaves[1]);
+  assert.strictEqual(chernPlain(rows), '1 + 3*H + 3*[p]');
+  assert.strictEqual(characterPlain(rows), '3 + 3*H + 3/2*[p]');
+}
+
 function testPointClassDefaultsToUnit() {
   const api = loadCalculator();
   api.state.varieties = [{ id: 'pt', type: 'point', dim: '0', name: '\\{*\\}' }];
@@ -117,6 +207,24 @@ function testPointSourcePushforwardDefaultsToTargetPoint() {
   ];
   const targetGeometry = api.geometryFromVariety(api.state.varieties[1]);
   const pushed = api.pushforwardPolynomialByDegree(api.state.maps[0], api.polyFromPowers({}), 0, 2, {});
+  const reduced = api.applyHomologyRules(pushed, { geometry: targetGeometry, homology: targetGeometry.homology });
+  assert.strictEqual(api.formatPolyPlain(reduced), '[p]');
+}
+
+function testPointPushforwardDefaultsToTargetPoint() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'X', type: 'abstract', dim: '1', name: 'X' },
+    { id: 'Y', type: 'abstract', dim: '3', name: 'Y' }
+  ];
+  api.state.maps = [
+    { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' }
+  ];
+  const sourceGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const targetGeometry = api.geometryFromVariety(api.state.varieties[1]);
+  const sourcePointId = api.homologyVariableId(api.HOMOLOGY_POINT_CLASS, sourceGeometry);
+  const sourcePoint = api.polyFromPowers({ [sourcePointId]: 1 });
+  const pushed = api.pushforwardPolynomialByDegree(api.state.maps[0], sourcePoint, 1, 3, {});
   const reduced = api.applyHomologyRules(pushed, { geometry: targetGeometry, homology: targetGeometry.homology });
   assert.strictEqual(api.formatPolyPlain(reduced), '[p]');
 }
@@ -590,6 +698,79 @@ function testGrassmannianMapConstructionCreatesTargetAndMap() {
   assert.strictEqual(map.construction.type, 'grassmannian-map');
 }
 
+function testIdealSheafConstructionCreatesHiddenSesAndImageClass() {
+  const api = loadCalculator();
+  const source = { id: 'X', type: 'abstract', dim: '1', name: 'X', labelX: 0.35, labelY: 0.65 };
+  const target = { id: 'Y', type: 'abstract', dim: '3', name: 'Y', labelX: 0.62, labelY: 0.65 };
+  const map = { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' };
+  api.state.varieties = [source, target];
+  api.state.maps = [map];
+
+  const ideal = api.createIdealSheafConstruction({
+    map,
+    domain: source,
+    codomain: target,
+    baseVarietyId: 'Y',
+    defaultName: 'I_X',
+    name: 'I_X',
+    nameDirty: false
+  });
+
+  assert(ideal);
+  assert.strictEqual(ideal.baseVarietyId, 'Y');
+  assert.strictEqual(ideal.construction.type, 'ses-term');
+  assert.strictEqual(ideal.construction.role, 'subobject');
+  assert.strictEqual(ideal.construction.idealSheafMapId, 'f');
+  assert.strictEqual(api.state.sequences.length, 1);
+  assert.strictEqual(api.state.sequences[0].sheafIds[0], ideal.id);
+  assert.strictEqual(api.state.maps.filter((item) => item.domainKind === 'sheaf').length, 2);
+  assert(api.state.sheaves.find((item) => item.baseVarietyId === 'X' && item.type === 'structure')?.hiddenOnCanvas);
+  assert(api.state.sheaves.find((item) => item.baseVarietyId === 'Y' && item.type === 'structure')?.hiddenOnCanvas);
+  const pushed = api.state.sheaves.find((item) => item.construction?.type === 'pushforward');
+  assert(pushed?.hiddenOnCanvas);
+  assert.strictEqual(pushed.construction.mapId, 'f');
+  assert.strictEqual(pushed.construction.proper, true);
+
+  const imageClass = target.homology.customClasses.find((item) => item.id === 'ideal_f_image');
+  assert(imageClass);
+  assert.strictEqual(imageClass.symbol, '[X]');
+  assert.strictEqual(imageClass.degree, 2);
+  assert.strictEqual(imageClass.cohomologyDegree, 4);
+  const rule = target.homology.rules.find((item) => item.id === 'map-rule-map_pushforward_f_homology_v_X_unit');
+  assert(rule);
+  assert(rule.rhs.some((term) => term.powers.homology_v_Y_ideal_f_image === 1));
+  assert.strictEqual(api.state.activeSheafId, ideal.id);
+}
+
+function testPresetImportPreservesIdealSheafMarker() {
+  const api = loadCalculator();
+  const source = { id: 'X', type: 'abstract', dim: '1', name: 'X', labelX: 0.35, labelY: 0.65 };
+  const target = { id: 'Y', type: 'abstract', dim: '3', name: 'Y', labelX: 0.62, labelY: 0.65 };
+  const map = { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' };
+  api.state.varieties = [source, target];
+  api.state.maps = [map];
+  const ideal = api.createIdealSheafConstruction({
+    map,
+    domain: source,
+    codomain: target,
+    baseVarietyId: 'Y',
+    defaultName: 'I_X',
+    name: 'I_X',
+    nameDirty: false
+  });
+  api.state.activeSheafId = ideal.id;
+  api.state.activeVarietyId = 'Y';
+  const presetText = JSON.stringify(api.buildPresetState());
+
+  const restored = loadCalculator();
+  restored.importPresetFromText(presetText);
+  const restoredIdeal = restored.state.sheaves.find((sheaf) => sheaf.name === 'I_X');
+  assert(restoredIdeal);
+  assert.strictEqual(restoredIdeal.construction.idealSheafMapId, 'f');
+  assert.strictEqual(restored.state.activeSheafId, restoredIdeal.id);
+  assert.strictEqual(restored.state.varieties.find((item) => item.id === 'Y').homology.customClasses[0].id, 'ideal_f_image');
+}
+
 testCurveToProjectivePullbackUsesCurvePoint();
 testProjectivePullbackStillUsesTargetHyperplane();
 testDuplicateDisplayNamesHaveDistinctInternalClasses();
@@ -597,8 +778,12 @@ testDuplicateSheafNamesHaveDistinctInternalClasses();
 testGrassmannianUsesTautologicalBundleClasses();
 testGrassmannianYoungBasisRulesExpressTautologicalClasses();
 testAbelianSpecialSheavesAreTrivial();
+testSelfDirectSumScalesChernCharacter();
+testPresetStateIncludesRecoverableConstructionData();
+testPresetImportRestoresRecoverableState();
 testPointClassDefaultsToUnit();
 testPointSourcePushforwardDefaultsToTargetPoint();
+testPointPushforwardDefaultsToTargetPoint();
 testMapToPointPushforwardOfPointDefaultsToOne();
 testOutOfRangeMapHomologyRelationsAreOmitted();
 testStraightMapIsDefaultNoControlCase();
@@ -612,5 +797,7 @@ testShortExactSequenceStraightTailUsesZeroPoints();
 testShortExactSequenceTailHideAndShowRestoresGeometry();
 testBlowupPointConstructionCreatesVarietyAndMap();
 testGrassmannianMapConstructionCreatesTargetAndMap();
+testIdealSheafConstructionCreatesHiddenSesAndImageClass();
+testPresetImportPreservesIdealSheafMarker();
 
 console.log('sheaf calculator regression tests passed');
