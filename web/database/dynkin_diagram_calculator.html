@@ -72,6 +72,10 @@
       user-select: none;
     }
 
+    .dynkin-check-label[hidden] {
+      display: none !important;
+    }
+
     .dynkin-check-label input {
       width: 14px;
       height: 14px;
@@ -400,6 +404,10 @@
       z-index: 0;
     }
 
+    .starting-vertex-lines.is-interactive {
+      pointer-events: auto;
+    }
+
     .starting-vertex-lines line,
     .starting-vertex-lines path {
       stroke: #1a1612;
@@ -461,6 +469,106 @@
     .starting-chart-cell.is-empty {
       color: transparent;
       user-select: none;
+    }
+
+    .ar-summary,
+    .ar-note {
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.96rem;
+      line-height: 1.35;
+      color: var(--muted);
+      min-width: 0;
+    }
+
+    .ar-chart-wrap {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      max-height: min(70vh, 720px);
+      overflow: auto;
+      padding: 4px 0 8px;
+      scrollbar-gutter: stable;
+      contain: inline-size layout paint;
+    }
+
+    .ar-chart-stack {
+      --starting-cell: 68px;
+      width: max-content;
+      min-width: max-content;
+      margin: 0 auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1;
+      color: var(--text);
+    }
+
+    .ar-vector-cell {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: var(--starting-cell);
+      min-height: var(--starting-cell);
+      text-align: center;
+      line-height: 1;
+      white-space: nowrap;
+      position: relative;
+      z-index: 1;
+    }
+
+    .ar-vector-label {
+      display: inline-grid;
+      gap: 2px;
+      place-items: center;
+      padding: 2px 5px;
+      background: transparent;
+      color: #1a1612;
+      line-height: 1.05;
+    }
+
+    .ar-vector-label.is-diagram {
+      gap: 0;
+      grid-template-columns: repeat(var(--ar-vector-cols), 1ch);
+      grid-template-rows: repeat(var(--ar-vector-rows), 1em);
+    }
+
+    .ar-vector-label.is-single {
+      font-size: 0.74rem;
+    }
+
+    .ar-vector-label span {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0.8em;
+    }
+
+    .ar-vector-label span.is-hidden-coordinate {
+      color: transparent;
+      user-select: none;
+    }
+
+    .ar-arrow-lines {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: visible;
+      z-index: 0;
+    }
+
+    .ar-arrow-lines path {
+      fill: none;
+      stroke: #7a6f65;
+      stroke-width: 1.15px;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .ar-arrow-lines path.is-dashed {
+      stroke-dasharray: 3 3;
+      opacity: 0.72;
     }
 
     .math-stat-value {
@@ -544,11 +652,15 @@
             <input id="dynkin-multi-select" type="checkbox">
             <span>select multi-vertices</span>
           </label>
+          <label class="dynkin-check-label" for="dynkin-quiver-mode" title="Orient every edge for ADE types">
+            <input id="dynkin-quiver-mode" type="checkbox">
+            <span>quiver arrows</span>
+          </label>
         </span>
       </div>
     </header>
     <div class="dynkin-stage">
-      <canvas id="dynkin-canvas" class="dynkin-canvas" width="900" height="420"></canvas>
+      <canvas id="dynkin-canvas" class="dynkin-canvas" width="900" height="360"></canvas>
     </div>
     <div class="dynkin-underbar">
       <span id="dynkin-selected-label">selected vertex: \(\alpha_{1}\)</span>
@@ -580,6 +692,14 @@
         <div class="starting-card-actions" id="dynkin-starting-actions">
           <button class="btn btn-ghost" id="dynkin-starting-toggle-header" type="button" aria-pressed="true">hide header</button>
           <button class="btn btn-ghost" id="dynkin-starting-transpose" type="button" aria-pressed="false">transpose</button>
+          <label class="dynkin-check-label" for="dynkin-starting-ar-mode" title="Turn on quiver arrows first">
+            <input id="dynkin-starting-ar-mode" type="checkbox" disabled>
+            <span>AR quiver</span>
+          </label>
+          <label class="dynkin-check-label" for="dynkin-ar-hide-unselected" title="Show only selected coordinates in AR dimension vectors" hidden>
+            <input id="dynkin-ar-hide-unselected" type="checkbox" disabled>
+            <span>hide non-selected vertices</span>
+          </label>
           <button class="btn btn-ghost starting-wide-toggle" id="dynkin-starting-wide" type="button" aria-pressed="false">wide</button>
         </div>
         <div class="starting-output" id="dynkin-starting-function"></div>

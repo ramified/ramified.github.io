@@ -3,6 +3,8 @@
 
   const $ = (id) => document.getElementById(id);
   const key = (v) => v.join(',');
+  const CANVAS_WIDTH = 900;
+  const CANVAS_HEIGHT = 360;
   const state = {
     type: 'E6',
     rank: 6,
@@ -10,12 +12,17 @@
     multiSelect: false,
     selectedSet: [0],
     hitboxes: [],
+    edgeHitboxes: [],
     roots: [],
     cartan: [],
+    quiverMode: false,
+    quiverOrientations: {},
     startingFunctionLayouts: {},
     startingFunctionHeaderVisible: true,
     startingFunctionTransposed: false,
-    startingFunctionWide: false
+    startingFunctionWide: false,
+    startingFunctionARMode: false,
+    arHideUnselected: false
   };
 
   const EXCEPTIONAL_RANK = { E6: 6, E7: 7, E8: 8, F4: 4, G2: 2 };
@@ -52,6 +59,10 @@
 
   function supportsStartingFunction(type) {
     return isSimplyLacedFinite(type) || type === 'B' || type === 'C' || type === 'F4' || type === 'G2';
+  }
+
+  function supportsQuiverOrientation(type) {
+    return isSimplyLacedFinite(type);
   }
 
   function typeLabel(type = state.type, rank = state.rank) {
@@ -486,8 +497,8 @@
     const canvas = $('dynkin-canvas');
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
-    const W = 900;
-    const H = 420;
+    const W = CANVAS_WIDTH;
+    const H = CANVAS_HEIGHT;
     canvas.width = W * dpr;
     canvas.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -497,7 +508,10 @@
 
     const nodes = layoutNodes(state.type, state.rank, W, H);
     state.hitboxes = nodes.map((node, index) => ({ ...node, r: 20, index }));
+    state.edgeHitboxes = [];
     const C = state.cartan;
+    const useQuiverArrows = state.quiverMode && supportsQuiverOrientation(state.type);
+    const quiverOrientations = useQuiverArrows ? getQuiverOrientations(state.type, state.rank, C) : null;
 
     ctx.save();
     ctx.lineCap = 'round';
@@ -507,10 +521,13 @@
         if (!C[i][j] && !C[j][i]) continue;
         const multiplicity = Math.max(1, Math.abs(C[i][j] * C[j][i]));
         let arrowTarget = null;
-        if (multiplicity > 1) {
+        if (useQuiverArrows) {
+          arrowTarget = quiverOrientations[edgeKey(i, j)] === -1 ? i : j;
+        } else if (multiplicity > 1) {
           arrowTarget = Math.abs(C[i][j]) > Math.abs(C[j][i]) ? j : i;
         }
-        drawEdge(ctx, nodes[i], nodes[j], multiplicity, arrowTarget === j ? nodes[j] : arrowTarget === i ? nodes[i] : null);
+        const geometry = drawEdge(ctx, nodes[i], nodes[j], multiplicity, arrowTarget === j ? nodes[j] : arrowTarget === i ? nodes[i] : null);
+        state.edgeHitboxes.push({ i, j, ...geometry });
       }
     }
     ctx.restore();
@@ -563,6 +580,7 @@
       ctx.stroke();
     });
     if (arrowTarget) drawArrowHead(ctx, a, b, arrowTarget === b);
+    return { x1: start.x, y1: start.y, x2: end.x, y2: end.y };
   }
 
   function drawArrowHead(ctx, a, b, pointsToB) {
@@ -575,8 +593,8 @@
     const uy = dy / len;
     const baseX = to.x - ux * 30;
     const baseY = to.y - uy * 30;
-    const wing = 9;
     const back = 13;
+    const wing = 9;
     ctx.beginPath();
     ctx.moveTo(baseX, baseY);
     ctx.lineTo(baseX - ux * back - uy * wing, baseY - uy * back + ux * wing);
@@ -599,6 +617,7 @@
     renderStartingFunction();
     renderCartan();
     renderExport();
+    syncQuiverControls();
     queueMathTypeset();
   }
 
@@ -880,6 +899,14 @@
       return;
     }
     const layout = getStartingFunctionLayout(state.type, state.rank, state.cartan);
+    if (state.startingFunctionARMode && canShowStartingFunctionAR()) {
+      const data = auslanderReitenDataFromStartingFunctions(state.type, state.rank, state.cartan, layout);
+      target.innerHTML = [
+        `<div class="ar-summary">${inlineMath('\\Gamma_Q')} simulated from the starting-function charts for the current ${inlineMath('A,D,E')} quiver orientation.</div>`,
+        auslanderReitenChartMarkup(data, layout)
+      ].join('');
+      return;
+    }
     const chart = startingFunctionChart(state.type, state.rank, state.cartan, selected, layout);
     target.innerHTML = [
       `<div class="starting-summary">${inlineMath(`M_\\beta\\mapsto\\dim\\operatorname{Hom}(P(${selected + 1}),M_\\beta)=\\operatorname{coeff}_{\\alpha_{${selected + 1}}}(\\beta)`)}.</div>`,
@@ -887,18 +914,22 @@
     ].join('');
   }
 
+  function canShowStartingFunctionAR() {
+    return state.quiverMode && supportsQuiverOrientation(state.type);
+  }
+
   function startingFunctionChart(type, rank, C, selected, layout) {
     const columnsByVertex = layout.positions.map((position) => position.col);
-    const colors = bipartiteColorClasses(C, columnsByVertex);
+    const layers = startingFunctionLayers(type, rank, C, columnsByVertex);
     const rows = [];
     const seen = new Set();
     const coxeter = invariants(type, rank, C, state.roots).coxeter;
     const rowCount = coxeter - 1;
-    const startColor = colors[0].includes(selected) ? 0 : 1;
+    const startColor = layers.findIndex((layer) => layer.includes(selected));
     const prefix = [];
     for (let row = 0; row < rowCount; row++) {
-      const color = (startColor + row) % 2;
-      const vertices = colors[color];
+      const color = startColor >= 0 ? (startColor + row) % layers.length : row % layers.length;
+      const vertices = layers[color] || [];
       vertices.forEach((vertex, index) => {
         let root = simpleRoot(rank, vertex);
         for (let step = prefix.length - 1; step >= 0; step--) {
@@ -918,6 +949,10 @@
       prefix.push(...vertices);
     }
     return { cells: rows, columns: layout.columns, rows: rowCount };
+  }
+
+  function startingFunctionLayers(type, rank, C, columnsByVertex) {
+    return bipartiteColorClasses(C, columnsByVertex);
   }
 
   function startingFunctionChartMarkup(chart, layout) {
@@ -964,9 +999,10 @@
   }
 
   function startingFunctionVertexLabels(layout, transposed) {
+    const selectedVertices = startingFunctionHeaderSelection();
     return layout.positions
       .map((position, vertex) => {
-        const selected = vertex === state.selected ? ' is-selected' : '';
+        const selected = selectedVertices.has(vertex) ? ' is-selected' : '';
         const row = transposed ? position.col : position.row;
         const col = transposed ? position.row : position.col;
         return `<button type="button" class="starting-vertex-label${selected}" ` +
@@ -977,8 +1013,17 @@
       .join('');
   }
 
-  function startingFunctionVertexLineSvg(layout, C, transposed, viewColumns, viewRows) {
+  function startingFunctionHeaderSelection() {
+    return state.startingFunctionARMode && canShowStartingFunctionAR()
+      ? new Set(selectedIndices())
+      : new Set([state.selected]);
+  }
+
+  function startingFunctionVertexLineSvg(layout, C, transposed, viewColumns, viewRows, options = {}) {
     const lines = [];
+    const quiverOrientations = options.quiver && state.quiverMode && supportsQuiverOrientation(state.type)
+      ? getQuiverOrientations(state.type, state.rank, C)
+      : null;
     for (let i = 0; i < C.length; i++) {
       for (let j = i + 1; j < C.length; j++) {
         if (!C[i][j] && !C[j][i]) continue;
@@ -994,14 +1039,19 @@
           y: transposed ? b.col - 0.5 : b.row - 0.5
         };
         const multiplicity = Math.max(1, Math.abs(C[i][j] * C[j][i]));
-        const arrowTarget = multiplicity > 1
-          ? (Math.abs(C[i][j]) > Math.abs(C[j][i]) ? end : start)
-          : null;
+        let arrowTarget = null;
+        if (quiverOrientations) {
+          arrowTarget = quiverOrientations[edgeKey(i, j)] === -1 ? start : end;
+        } else if (multiplicity > 1) {
+          arrowTarget = Math.abs(C[i][j]) > Math.abs(C[j][i]) ? end : start;
+        }
         lines.push(startingFunctionEdgeSvg(start, end, multiplicity, arrowTarget));
       }
     }
     if (!lines.length) return '';
-    return `<svg class="starting-vertex-lines" viewBox="0 0 ${viewColumns} ${viewRows}" preserveAspectRatio="none" aria-hidden="true">${lines.join('')}</svg>`;
+    const interactive = options.interactive ? ' is-interactive' : '';
+    const ariaHidden = options.interactive ? 'false' : 'true';
+    return `<svg class="starting-vertex-lines${interactive}" viewBox="0 0 ${viewColumns} ${viewRows}" preserveAspectRatio="none" aria-hidden="${ariaHidden}">${lines.join('')}</svg>`;
   }
 
   function startingFunctionEdgeSvg(start, end, multiplicity, arrowTarget) {
@@ -1046,6 +1096,293 @@
 
   function formatSvgNumber(value) {
     return Number(value.toFixed(4));
+  }
+
+  function auslanderReitenDataFromStartingFunctions(type, rank, C, layout) {
+    const columnsByVertex = layout.positions.map((position) => position.col);
+    const layers = bipartiteColorClasses(C, columnsByVertex);
+    const heights = quiverVertexHeights(rank, C, getQuiverOrientations(type, rank, C));
+    const minHeight = Math.min(...heights);
+    const normalizedHeights = heights.map((height) => height - minHeight);
+    const charts = Array.from({ length: rank }, (_, vertex) => startingFunctionRowsForVertex(type, rank, C, vertex, layers, columnsByVertex));
+    const cellsByPosition = new Map();
+    for (let vertex = 0; vertex < rank; vertex++) {
+      const shift = normalizedHeights[vertex];
+      charts[vertex].forEach((cell) => {
+        const row = cell.row + shift;
+        const col = cell.col;
+        const positionKey = `${row}:${col}`;
+        if (!cellsByPosition.has(positionKey)) {
+          cellsByPosition.set(positionKey, {
+            row,
+            col,
+            vertex: cell.vertex,
+            root: Array(rank).fill(0)
+          });
+        }
+        const positionCell = cellsByPosition.get(positionKey);
+        if (positionCell.vertex == null) positionCell.vertex = cell.vertex;
+        positionCell.root[vertex] = cell.value;
+      });
+    }
+    const cells = Array.from(cellsByPosition.values())
+      .map((cell) => ({ ...cell, key: key(cell.root) }))
+      .sort((a, b) => a.row - b.row || a.col - b.col);
+    return {
+      cells,
+      columns: layout.columns,
+      rows: Math.max(...cells.map((cell) => cell.row), 1),
+      heights: normalizedHeights,
+      cartan: C,
+      crowdedColumns: startingFunctionCrowdedColumns(layout)
+    };
+  }
+
+  function startingFunctionCrowdedColumns(layout) {
+    const counts = new Map();
+    layout.positions.forEach((position) => {
+      counts.set(position.col, (counts.get(position.col) || 0) + 1);
+    });
+    return new Set(Array.from(counts.entries())
+      .filter(([, count]) => count > 1)
+      .map(([column]) => column));
+  }
+
+  function startingFunctionRowsForVertex(type, rank, C, selected, layers, columnsByVertex) {
+    const rows = [];
+    const seen = new Set();
+    const coxeter = invariants(type, rank, C, state.roots).coxeter;
+    const rowCount = coxeter - 1;
+    const startColor = layers.findIndex((layer) => layer.includes(selected));
+    const prefix = [];
+    for (let row = 0; row < rowCount; row++) {
+      const color = startColor >= 0 ? (startColor + row) % layers.length : row % layers.length;
+      const vertices = layers[color] || [];
+      vertices.forEach((vertex) => {
+        let root = simpleRoot(rank, vertex);
+        for (let step = prefix.length - 1; step >= 0; step--) {
+          root = reflectRoot(root, prefix[step], C);
+        }
+        const rootKey = key(root);
+        if (root[selected] > 0 && root.every((value) => value >= 0) && !seen.has(rootKey)) {
+          rows.push({
+            row: row + 1,
+            col: columnsByVertex[vertex],
+            vertex,
+            value: root[selected],
+            root
+          });
+          seen.add(rootKey);
+        }
+      });
+      prefix.push(...vertices);
+    }
+    return rows;
+  }
+
+  function quiverVertexHeights(rank, C, orientations) {
+    const heights = Array(rank).fill(null);
+    for (let start = 0; start < rank; start++) {
+      if (heights[start] != null) continue;
+      heights[start] = 0;
+      const queue = [start];
+      while (queue.length) {
+        const vertex = queue.shift();
+        for (let neighbor = 0; neighbor < rank; neighbor++) {
+          if (neighbor === vertex || (!C[vertex][neighbor] && !C[neighbor][vertex])) continue;
+          const delta = quiverHeightDelta(vertex, neighbor, orientations);
+          const nextHeight = heights[vertex] + delta;
+          if (heights[neighbor] == null) {
+            heights[neighbor] = nextHeight;
+            queue.push(neighbor);
+          }
+        }
+      }
+    }
+    return heights.map((height) => height ?? 0);
+  }
+
+  function quiverHeightDelta(from, to, orientations) {
+    const sign = orientations[edgeKey(from, to)] || 1;
+    const low = Math.min(from, to);
+    const high = Math.max(from, to);
+    const tail = sign === 1 ? low : high;
+    const head = sign === 1 ? high : low;
+    if (from === tail && to === head) return 1;
+    if (from === head && to === tail) return -1;
+    return 0;
+  }
+
+  function auslanderReitenChartMarkup(data, layout) {
+    if (state.startingFunctionTransposed) return transposedAuslanderReitenChartMarkup(data, layout);
+    const header = state.startingFunctionHeaderVisible
+      ? `<div class="starting-vertex-grid" data-starting-columns="${data.columns}" aria-label="AR quiver vertex columns">` +
+          `${startingFunctionVertexLineSvg(layout, state.cartan, false, data.columns, 2, { quiver: true, interactive: true })}` +
+          `${startingFunctionVertexLabels(layout, false)}` +
+        `</div>`
+      : '';
+    return `<div class="ar-chart-wrap"><div class="ar-chart-stack" style="--starting-cols:${data.columns};">` +
+      header +
+      `<div class="starting-chart-grid" style="position:relative;">${auslanderReitenArrowSvg(data, 0, false)}${auslanderReitenCells(data, 0, false)}</div>` +
+    `</div></div>`;
+  }
+
+  function transposedAuslanderReitenChartMarkup(data, layout) {
+    const headerOffset = state.startingFunctionHeaderVisible ? 2 : 0;
+    const totalColumns = headerOffset + data.rows;
+    const header = state.startingFunctionHeaderVisible
+      ? startingFunctionVertexLineSvg(layout, state.cartan, true, totalColumns, data.columns, { quiver: true, interactive: true }) + startingFunctionVertexLabels(layout, true)
+      : '';
+    return `<div class="ar-chart-wrap"><div class="ar-chart-stack">` +
+      `<div class="starting-transpose-grid" data-starting-columns="${data.columns}" data-starting-transposed="true" ` +
+        `style="--starting-transpose-cols:${totalColumns};--starting-transpose-rows:${data.columns};">` +
+        header +
+        `${auslanderReitenArrowSvg(data, headerOffset, true)}` +
+        `${auslanderReitenCells(data, headerOffset, true)}` +
+      `</div>` +
+    `</div></div>`;
+  }
+
+  function auslanderReitenCells(data, columnOffset, transposed) {
+    const visibleVertices = state.arHideUnselected && state.startingFunctionARMode
+      ? new Set(selectedIndices())
+      : null;
+    return data.cells.map((cell) => {
+      const viewRow = transposed ? cell.col : cell.row;
+      const viewCol = transposed ? cell.row + columnOffset : cell.col;
+      const title = ` title="${escapeHtml(rootTooltip(cell.root))}"`;
+      return `<span class="ar-vector-cell" style="grid-row:${viewRow};grid-column:${viewCol};"${title}>${dimensionVectorLabel(cell.root, state.type, state.rank, visibleVertices)}</span>`;
+    }).join('');
+  }
+
+  function dimensionVectorLabel(root, type, rank, visibleVertices = null) {
+    if (!root.some(Boolean)) return '<span class="ar-vector-label is-single">0</span>';
+    if (root.length === 1) return `<span class="ar-vector-label is-single">${root[0]}</span>`;
+    const layout = dimensionVectorLayout(type, rank);
+    if (!layout) return `<span class="ar-vector-label is-single">${escapeHtml(root.join(''))}</span>`;
+    const entries = root.map((value, index) => {
+      const point = layout.points[index] || { row: 1, col: index + 1 };
+      const hidden = visibleVertices && !visibleVertices.has(index) ? ' class="is-hidden-coordinate"' : '';
+      return `<span${hidden} style="grid-row:${point.row};grid-column:${point.col};">${escapeHtml(String(value || 0))}</span>`;
+    }).join('');
+    return `<span class="ar-vector-label is-diagram" style="--ar-vector-cols:${layout.columns};--ar-vector-rows:${layout.rows};">${entries}</span>`;
+  }
+
+  function dimensionVectorLayout(type, rank) {
+    if (type === 'A') {
+      return {
+        columns: rank,
+        rows: 1,
+        points: Array.from({ length: rank }, (_, index) => ({ row: 1, col: index + 1 }))
+      };
+    }
+    if (type === 'D') {
+      const columns = Math.max(3, rank - 1);
+      const points = Array(rank);
+      for (let index = 0; index <= rank - 3; index++) points[index] = { row: 2, col: index + 1 };
+      points[rank - 2] = { row: 1, col: columns };
+      points[rank - 1] = { row: 3, col: columns };
+      return { columns, rows: 3, points };
+    }
+    if (type === 'E6' || type === 'E7' || type === 'E8') {
+      const points = Array(rank);
+      for (let index = 0; index <= rank - 2; index++) points[index] = { row: 2, col: index + 1 };
+      points[rank - 1] = { row: 1, col: 3 };
+      return { columns: rank - 1, rows: 2, points };
+    }
+    return null;
+  }
+
+  function auslanderReitenArrowSvg(data, columnOffset, transposed) {
+    const arrows = [
+      ...auslanderReitenSolidArrows(data),
+      ...auslanderReitenDashedArrows(data)
+    ];
+    if (!arrows.length) return '';
+    const columns = transposed ? data.rows + columnOffset : data.columns;
+    const rows = transposed ? data.columns : data.rows;
+    const paths = arrows.map((arrow) => arArrowPath(arrow.from, arrow.to, columnOffset, transposed, arrow.dashed)).join('');
+    return `<svg class="ar-arrow-lines" viewBox="0 0 ${columns} ${rows}" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>`;
+  }
+
+  function auslanderReitenSolidArrows(data) {
+    const cells = data.cells;
+    const arrows = [];
+    for (let i = 0; i < cells.length; i++) {
+      for (let j = i + 1; j < cells.length; j++) {
+        const a = cells[i];
+        const b = cells[j];
+        if (Math.abs(a.row - b.row) !== 1) continue;
+        if (!areDynkinAdjacent(data.cartan, a.vertex, b.vertex)) continue;
+        const from = a.row < b.row ? a : b;
+        const to = a.row < b.row ? b : a;
+        arrows.push({ from, to, dashed: false });
+      }
+    }
+    return uniqueArArrows(arrows);
+  }
+
+  function auslanderReitenDashedArrows(data) {
+    const cells = data.cells;
+    const arrows = [];
+    for (let i = 0; i < cells.length; i++) {
+      for (let j = i + 1; j < cells.length; j++) {
+        const a = cells[i];
+        const b = cells[j];
+        if (Math.abs(a.row - b.row) !== 2) continue;
+        if (a.vertex == null || a.vertex !== b.vertex) continue;
+        if (data.crowdedColumns && data.crowdedColumns.has(a.col)) continue;
+        const from = a.row > b.row ? a : b;
+        const to = a.row > b.row ? b : a;
+        arrows.push({ from, to, dashed: true });
+      }
+    }
+    return uniqueArArrows(arrows);
+  }
+
+  function areDynkinAdjacent(C, a, b) {
+    return Number.isInteger(a) && Number.isInteger(b) && a !== b &&
+      Boolean((C[a] && C[a][b]) || (C[b] && C[b][a]));
+  }
+
+  function uniqueArArrows(arrows) {
+    const seen = new Set();
+    return arrows.filter((arrow) => {
+      const arrowKey = `${arCellKey(arrow.from)}>${arCellKey(arrow.to)}:${arrow.dashed ? 'd' : 's'}`;
+      if (seen.has(arrowKey)) return false;
+      seen.add(arrowKey);
+      return true;
+    });
+  }
+
+  function arCellKey(cell) {
+    return `${cell.row}:${cell.col}:${cell.vertex}:${cell.key}`;
+  }
+
+  function arArrowPath(from, to, columnOffset, transposed, dashed) {
+    const x1 = transposed ? from.row + columnOffset - 0.5 : from.col - 0.5;
+    const y1 = transposed ? from.col - 0.5 : from.row - 0.5;
+    const x2 = transposed ? to.row + columnOffset - 0.5 : to.col - 0.5;
+    const y2 = transposed ? to.col - 0.5 : to.row - 0.5;
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const startX = x1 + ux * 0.26;
+    const startY = y1 + uy * 0.26;
+    const tipX = x2 - ux * 0.28;
+    const tipY = y2 - uy * 0.28;
+    const back = 0.12;
+    const wing = 0.075;
+    const px = -uy;
+    const py = ux;
+    const a1x = tipX - ux * back + px * wing;
+    const a1y = tipY - uy * back + py * wing;
+    const a2x = tipX - ux * back - px * wing;
+    const a2y = tipY - uy * back - py * wing;
+    const className = dashed ? ' class="is-dashed"' : '';
+    return `<path${className} d="M ${formatSvgNumber(startX)} ${formatSvgNumber(startY)} L ${formatSvgNumber(tipX)} ${formatSvgNumber(tipY)} M ${formatSvgNumber(a1x)} ${formatSvgNumber(a1y)} L ${formatSvgNumber(tipX)} ${formatSvgNumber(tipY)} L ${formatSvgNumber(a2x)} ${formatSvgNumber(a2y)}" vector-effect="non-scaling-stroke"></path>`;
   }
 
   function getStartingFunctionLayout(type, rank, C) {
@@ -1099,6 +1436,50 @@
     return colors.map((group) => group.sort((a, b) => columnsByVertex[a] - columnsByVertex[b] || a - b));
   }
 
+  function orientedStartingFunctionLayers(C, columnsByVertex, orientations) {
+    const rank = C.length;
+    const current = { ...orientations };
+    const layers = [];
+    const maxLayers = Math.max(2, rank * 4);
+    for (let step = 0; step < maxLayers; step++) {
+      const sources = [];
+      for (let vertex = 0; vertex < rank; vertex++) {
+        if (isQuiverSource(vertex, C, current)) sources.push(vertex);
+      }
+      const layer = (sources.length ? sources : [step % rank])
+        .sort((a, b) => columnsByVertex[a] - columnsByVertex[b] || a - b);
+      layers.push(layer);
+      layer.forEach((vertex) => reverseIncidentQuiverEdges(vertex, C, current));
+      if (layers.length >= 2 && quiverOrientationMatches(current, orientations)) break;
+    }
+    return layers.length ? layers : bipartiteColorClasses(C, columnsByVertex);
+  }
+
+  function isQuiverSource(vertex, C, orientations) {
+    for (let neighbor = 0; neighbor < C.length; neighbor++) {
+      if (neighbor === vertex || (!C[vertex][neighbor] && !C[neighbor][vertex])) continue;
+      const sign = orientations[edgeKey(vertex, neighbor)] || 1;
+      const low = Math.min(vertex, neighbor);
+      const high = Math.max(vertex, neighbor);
+      const tail = sign === 1 ? low : high;
+      if (tail !== vertex) return false;
+    }
+    return true;
+  }
+
+  function reverseIncidentQuiverEdges(vertex, C, orientations) {
+    for (let neighbor = 0; neighbor < C.length; neighbor++) {
+      if (neighbor === vertex || (!C[vertex][neighbor] && !C[neighbor][vertex])) continue;
+      const keyName = edgeKey(vertex, neighbor);
+      orientations[keyName] = -(orientations[keyName] || 1);
+    }
+  }
+
+  function quiverOrientationMatches(a, b) {
+    const keys = Object.keys(b);
+    return keys.length > 0 && keys.every((keyName) => a[keyName] === b[keyName]);
+  }
+
   function bipartiteVertexColors(C) {
     const assigned = Array(C.length).fill(null);
     for (let start = 0; start < C.length; start++) {
@@ -1145,6 +1526,54 @@
     return `\\begin{${environment}}${rows}\\end{${environment}}`;
   }
 
+  function edgeKey(i, j) {
+    return i < j ? `${i}-${j}` : `${j}-${i}`;
+  }
+
+  function quiverLayoutKey(type, rank) {
+    return `${type}:${rank}`;
+  }
+
+  function defaultQuiverOrientations(C) {
+    const orientations = {};
+    for (let i = 0; i < C.length; i++) {
+      for (let j = i + 1; j < C.length; j++) {
+        if (!C[i][j] && !C[j][i]) continue;
+        const multiplicity = Math.max(1, Math.abs(C[i][j] * C[j][i]));
+        orientations[edgeKey(i, j)] = multiplicity === 1
+          ? 1
+          : Math.abs(C[i][j]) > Math.abs(C[j][i]) ? 1 : -1;
+      }
+    }
+    return orientations;
+  }
+
+  function getQuiverOrientations(type, rank, C) {
+    const layoutKey = quiverLayoutKey(type, rank);
+    const defaults = defaultQuiverOrientations(C);
+    const existing = state.quiverOrientations[layoutKey];
+    if (!existing) {
+      state.quiverOrientations[layoutKey] = defaults;
+      return defaults;
+    }
+    const next = { ...defaults };
+    Object.keys(next).forEach((key) => {
+      if (existing[key] === -1 || existing[key] === 1) next[key] = existing[key];
+    });
+    state.quiverOrientations[layoutKey] = next;
+    return next;
+  }
+
+  function toggleQuiverEdge(i, j) {
+    if (!state.quiverMode || !supportsQuiverOrientation(state.type)) return;
+    const orientations = getQuiverOrientations(state.type, state.rank, state.cartan);
+    const keyName = edgeKey(i, j);
+    orientations[keyName] = -(orientations[keyName] || 1);
+    drawDynkin();
+    renderStartingFunction();
+    queueMathTypeset();
+  }
+
   function renderExport() {
     const info = invariants(state.type, state.rank, state.cartan, state.roots);
     const indices = selectedIndices();
@@ -1156,6 +1585,12 @@
       selectedVertex: state.selected + 1,
       selectedVertices: indices.map((index) => index + 1),
       multiSelect: state.multiSelect,
+      quiver: {
+        enabled: state.quiverMode && supportsQuiverOrientation(state.type),
+        orientations: supportsQuiverOrientation(state.type)
+          ? getQuiverOrientations(state.type, state.rank, state.cartan)
+          : null
+      },
       dimension: info.dimension,
       positiveRoots: info.positiveRoots,
       coxeterNumber: info.coxeter,
@@ -1183,6 +1618,7 @@
     rankWrap.style.display = isClassical(state.type) ? 'inline-flex' : 'none';
     $('dynkin-type').value = state.type;
     $('dynkin-multi-select').checked = state.multiSelect;
+    syncQuiverControls();
     const input = $('dynkin-rank');
     const bounds = rankBounds(state.type);
     input.min = String(bounds.min);
@@ -1193,6 +1629,8 @@
   function setType(type) {
     state.type = type;
     state.rank = EXCEPTIONAL_RANK[type] || clampRank(type, state.rank);
+    if (!supportsQuiverOrientation(state.type)) state.quiverMode = false;
+    if (!canShowStartingFunctionAR()) state.startingFunctionARMode = false;
     clampSelection();
     render();
   }
@@ -1212,6 +1650,27 @@
       state.selectedSet = [state.selected];
     }
     render();
+  }
+
+  function setQuiverMode(enabled) {
+    state.quiverMode = Boolean(enabled) && supportsQuiverOrientation(state.type);
+    if (!canShowStartingFunctionAR()) state.startingFunctionARMode = false;
+    drawDynkin();
+    syncQuiverControls();
+    renderStartingFunction();
+    queueMathTypeset();
+  }
+
+  function setStartingFunctionARMode(enabled) {
+    state.startingFunctionARMode = Boolean(enabled) && canShowStartingFunctionAR();
+    renderStartingFunction();
+    queueMathTypeset();
+  }
+
+  function setArHideUnselected(enabled) {
+    state.arHideUnselected = Boolean(enabled);
+    renderStartingFunction();
+    queueMathTypeset();
   }
 
   function setStartingFunctionHeaderVisible(visible) {
@@ -1236,6 +1695,9 @@
     $('dynkin-type').addEventListener('change', (event) => setType(event.target.value));
     $('dynkin-rank').addEventListener('change', (event) => setRank(event.target.value));
     $('dynkin-multi-select').addEventListener('change', (event) => setMultiSelect(event.target.checked));
+    $('dynkin-quiver-mode')?.addEventListener('change', (event) => setQuiverMode(event.target.checked));
+    $('dynkin-starting-ar-mode')?.addEventListener('change', (event) => setStartingFunctionARMode(event.target.checked));
+    $('dynkin-ar-hide-unselected')?.addEventListener('change', (event) => setArHideUnselected(event.target.checked));
     $('dynkin-refresh-export').addEventListener('click', renderExport);
     $('dynkin-select-export').addEventListener('click', () => {
       const out = $('dynkin-export-out');
@@ -1257,10 +1719,29 @@
     syncStartingFunctionWidePlacement();
   }
 
+  function syncQuiverControls() {
+    const quiver = $('dynkin-quiver-mode');
+    if (!quiver) return;
+    const canUseQuiver = supportsQuiverOrientation(state.type);
+    if (!canUseQuiver) state.quiverMode = false;
+    quiver.checked = state.quiverMode;
+    quiver.disabled = !canUseQuiver;
+    const label = quiver.closest('label');
+    if (label) {
+      label.title = canUseQuiver
+        ? 'Orient every edge; click an edge on the canvas to reverse it'
+        : 'Ordinary quiver orientation is only enabled for simply-laced ADE types';
+    }
+  }
+
   function syncStartingFunctionControls(available = supportsStartingFunction(state.type)) {
     const headerButton = $('dynkin-starting-toggle-header');
     const transposeButton = $('dynkin-starting-transpose');
+    const arModeCheckbox = $('dynkin-starting-ar-mode');
+    const hideUnselectedCheckbox = $('dynkin-ar-hide-unselected');
     const wideButton = $('dynkin-starting-wide');
+    const canUseAR = available && canShowStartingFunctionAR();
+    if (!canUseAR) state.startingFunctionARMode = false;
     if (headerButton) {
       headerButton.textContent = state.startingFunctionHeaderVisible ? 'hide header' : 'show header';
       headerButton.setAttribute('aria-pressed', state.startingFunctionHeaderVisible ? 'true' : 'false');
@@ -1269,6 +1750,28 @@
     if (transposeButton) {
       transposeButton.setAttribute('aria-pressed', state.startingFunctionTransposed ? 'true' : 'false');
       transposeButton.disabled = !available;
+    }
+    if (arModeCheckbox) {
+      arModeCheckbox.checked = state.startingFunctionARMode;
+      arModeCheckbox.disabled = !canUseAR;
+      const label = arModeCheckbox.closest('label');
+      if (label) {
+        label.title = canUseAR
+          ? 'Show the Auslander-Reiten quiver in this chart'
+          : 'Turn on ADE quiver arrows first';
+      }
+    }
+    if (hideUnselectedCheckbox) {
+      const canHide = canUseAR && state.startingFunctionARMode;
+      hideUnselectedCheckbox.checked = canHide && state.arHideUnselected;
+      hideUnselectedCheckbox.disabled = !canHide;
+      const label = hideUnselectedCheckbox.closest('label');
+      if (label) {
+        label.hidden = !canHide;
+        label.title = canHide
+          ? 'Hide coordinates for vertices that are not selected'
+          : 'Available in AR quiver mode';
+      }
     }
     if (wideButton) {
       const canUseWide = window.matchMedia('(min-width: 960px)').matches;
@@ -1296,13 +1799,23 @@
   }
 
   function bindStartingFunctionDrag() {
-    const target = $('dynkin-starting-function');
-    if (!target) return;
+    const targets = [$('dynkin-starting-function')].filter(Boolean);
+    if (!targets.length) return;
 
-    let drag = null;
+    let gesture = null;
     const pointerOptions = { passive: false };
 
-    target.addEventListener('pointerdown', (event) => {
+    targets.forEach((target) => target.addEventListener('click', (event) => {
+      if (!state.startingFunctionARMode || !canShowStartingFunctionAR()) return;
+      if (event.target.closest('.starting-vertex-label')) return;
+      const edge = nearestStartingHeaderEdge(event);
+      if (!edge) return;
+      event.preventDefault();
+      event.stopPropagation();
+      toggleQuiverEdge(edge.i, edge.j);
+    }));
+
+    targets.forEach((target) => target.addEventListener('pointerdown', (event) => {
       const label = event.target.closest('.starting-vertex-label');
       if (!label || !target.contains(label)) return;
       const grid = label.closest('.starting-vertex-grid,.starting-transpose-grid');
@@ -1319,10 +1832,11 @@
       event.stopPropagation();
 
       const gridRect = grid.getBoundingClientRect();
+      const labelRect = label.getBoundingClientRect();
       const cellSize = transposed
         ? gridRect.height / Math.max(1, columns)
         : gridRect.width / Math.max(1, columns);
-      drag = {
+      gesture = {
         pointerId: event.pointerId,
         label,
         vertex,
@@ -1330,56 +1844,107 @@
         column,
         columns,
         transposed,
+        dragging: false,
         startPosition: transposed ? event.clientY : event.clientX,
         currentPosition: transposed ? event.clientY : event.clientX,
         gridStart: transposed ? gridRect.top : gridRect.left,
-        cellSize
+        cellSize,
+        circleCenterX: labelRect.left + labelRect.width / 2,
+        circleCenterY: labelRect.top + labelRect.height / 2,
+        circleRadius: Math.max(labelRect.width, labelRect.height) / 2 + 2
       };
-      label.classList.add('is-dragging');
       if (label.setPointerCapture) {
         try { label.setPointerCapture(event.pointerId); } catch (_) {}
       }
-      document.addEventListener('pointermove', handleStartingFunctionDragMove, pointerOptions);
-      document.addEventListener('pointerup', finishStartingFunctionDrag, pointerOptions);
-      document.addEventListener('pointercancel', finishStartingFunctionDrag, pointerOptions);
-    }, pointerOptions);
+      document.addEventListener('pointermove', handleStartingFunctionPointerMove, pointerOptions);
+      document.addEventListener('pointerup', finishStartingFunctionGesture, pointerOptions);
+      document.addEventListener('pointercancel', finishStartingFunctionGesture, pointerOptions);
+    }, pointerOptions));
 
-    function handleStartingFunctionDragMove(event) {
-      if (!drag || event.pointerId !== drag.pointerId) return;
+    function handleStartingFunctionPointerMove(event) {
+      if (!gesture || event.pointerId !== gesture.pointerId) return;
       event.preventDefault();
-      const minPosition = drag.gridStart + drag.cellSize / 2;
-      const maxPosition = drag.gridStart + drag.cellSize * (drag.columns - 0.5);
-      const pointerPosition = drag.transposed ? event.clientY : event.clientX;
-      drag.currentPosition = clamp(pointerPosition, minPosition, maxPosition);
-      const delta = drag.currentPosition - drag.startPosition;
-      drag.label.style.transform = drag.transposed ? `translateY(${delta}px)` : `translateX(${delta}px)`;
+      if (!gesture.dragging && !pointInsideOriginalCircle(gesture, event.clientX, event.clientY)) {
+        gesture.dragging = true;
+        gesture.label.classList.add('is-dragging');
+      }
+      if (!gesture.dragging) return;
+      const minPosition = gesture.gridStart + gesture.cellSize / 2;
+      const maxPosition = gesture.gridStart + gesture.cellSize * (gesture.columns - 0.5);
+      const pointerPosition = gesture.transposed ? event.clientY : event.clientX;
+      gesture.currentPosition = clamp(pointerPosition, minPosition, maxPosition);
+      const delta = gesture.currentPosition - gesture.startPosition;
+      gesture.label.style.transform = gesture.transposed ? `translateY(${delta}px)` : `translateX(${delta}px)`;
     }
 
-    function finishStartingFunctionDrag(event) {
-      if (!drag || (event && event.pointerId !== drag.pointerId)) return;
+    function finishStartingFunctionGesture(event) {
+      if (!gesture || (event && event.pointerId !== gesture.pointerId)) return;
       if (event) event.preventDefault();
 
-      document.removeEventListener('pointermove', handleStartingFunctionDragMove, pointerOptions);
-      document.removeEventListener('pointerup', finishStartingFunctionDrag, pointerOptions);
-      document.removeEventListener('pointercancel', finishStartingFunctionDrag, pointerOptions);
+      document.removeEventListener('pointermove', handleStartingFunctionPointerMove, pointerOptions);
+      document.removeEventListener('pointerup', finishStartingFunctionGesture, pointerOptions);
+      document.removeEventListener('pointercancel', finishStartingFunctionGesture, pointerOptions);
 
-      const finishedDrag = drag;
-      drag = null;
-      finishedDrag.label.classList.remove('is-dragging');
-      finishedDrag.label.style.transform = '';
+      const finishedGesture = gesture;
+      gesture = null;
+      finishedGesture.label.classList.remove('is-dragging');
+      finishedGesture.label.style.transform = '';
 
       if (!event || event.type === 'pointercancel') return;
-      const minPosition = finishedDrag.gridStart + finishedDrag.cellSize / 2;
-      const maxPosition = finishedDrag.gridStart + finishedDrag.cellSize * (finishedDrag.columns - 0.5);
-      const pointerPosition = finishedDrag.transposed ? event.clientY : event.clientX;
-      finishedDrag.currentPosition = clamp(pointerPosition, minPosition, maxPosition);
+      if (!finishedGesture.dragging && !pointInsideOriginalCircle(finishedGesture, event.clientX, event.clientY)) {
+        finishedGesture.dragging = true;
+      }
+      if (!finishedGesture.dragging) {
+        selectDynkinVertex(finishedGesture.vertex);
+        return;
+      }
+
+      const minPosition = finishedGesture.gridStart + finishedGesture.cellSize / 2;
+      const maxPosition = finishedGesture.gridStart + finishedGesture.cellSize * (finishedGesture.columns - 0.5);
+      const pointerPosition = finishedGesture.transposed ? event.clientY : event.clientX;
+      finishedGesture.currentPosition = clamp(pointerPosition, minPosition, maxPosition);
       const targetColumn = clamp(
-        Math.floor((finishedDrag.currentPosition - finishedDrag.gridStart) / finishedDrag.cellSize) + 1,
+        Math.floor((finishedGesture.currentPosition - finishedGesture.gridStart) / finishedGesture.cellSize) + 1,
         1,
-        finishedDrag.columns
+        finishedGesture.columns
       );
-      moveStartingFunctionVertex(finishedDrag.vertex, finishedDrag.row, targetColumn);
+      moveStartingFunctionVertex(finishedGesture.vertex, finishedGesture.row, targetColumn);
     }
+
+    function pointInsideOriginalCircle(activeGesture, x, y) {
+      return Math.hypot(x - activeGesture.circleCenterX, y - activeGesture.circleCenterY) <= activeGesture.circleRadius;
+    }
+  }
+
+  function nearestStartingHeaderEdge(event) {
+    const grid = event.target.closest('.starting-vertex-grid,.starting-transpose-grid');
+    if (!grid || !state.cartan.length) return null;
+    const columns = Number(grid.dataset.startingColumns);
+    if (!Number.isInteger(columns) || columns <= 0) return null;
+    const transposed = grid.dataset.startingTransposed === 'true';
+    const rect = grid.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const cellSize = transposed ? rect.height / columns : rect.width / columns;
+    if (!cellSize) return null;
+    const x = (event.clientX - rect.left) / cellSize;
+    const y = (event.clientY - rect.top) / cellSize;
+    const layout = getStartingFunctionLayout(state.type, state.rank, state.cartan);
+    let best = null;
+    for (let i = 0; i < state.cartan.length; i++) {
+      for (let j = i + 1; j < state.cartan.length; j++) {
+        if (!state.cartan[i][j] && !state.cartan[j][i]) continue;
+        const a = layout.positions[i];
+        const b = layout.positions[j];
+        if (!a || !b) continue;
+        const x1 = transposed ? a.row - 0.5 : a.col - 0.5;
+        const y1 = transposed ? a.col - 0.5 : a.row - 0.5;
+        const x2 = transposed ? b.row - 0.5 : b.col - 0.5;
+        const y2 = transposed ? b.col - 0.5 : b.row - 0.5;
+        const dist = pointSegmentDistance(x, y, x1, y1, x2, y2);
+        if (dist <= 0.26 && (!best || dist < best.dist)) best = { i, j, dist };
+      }
+    }
+    return best;
   }
 
   function moveStartingFunctionVertex(vertex, row, targetColumn) {
@@ -1398,30 +1963,60 @@
     queueMathTypeset();
   }
 
+  function selectDynkinVertex(index) {
+    if (!Number.isInteger(index) || index < 0 || index >= state.rank) return;
+    if (state.multiSelect) {
+      const set = new Set(state.selectedSet);
+      if (set.has(index) && set.size > 1) set.delete(index);
+      else set.add(index);
+      state.selectedSet = Array.from(set).sort((a, b) => a - b);
+      state.selected = index;
+    } else {
+      state.selected = index;
+      state.selectedSet = [state.selected];
+    }
+    render();
+  }
+
   function handleCanvasClick(event) {
     const canvas = $('dynkin-canvas');
     const rect = canvas.getBoundingClientRect();
-    const x = (event.clientX - rect.left) * 900 / rect.width;
-    const y = (event.clientY - rect.top) * 420 / rect.height;
+    const x = (event.clientX - rect.left) * CANVAS_WIDTH / rect.width;
+    const y = (event.clientY - rect.top) * CANVAS_HEIGHT / rect.height;
+    if (state.quiverMode && supportsQuiverOrientation(state.type)) {
+      const edge = nearestEdgeHit(x, y);
+      if (edge) {
+        toggleQuiverEdge(edge.i, edge.j);
+        return;
+      }
+    }
     let best = null;
     for (const hit of state.hitboxes) {
       const dist = Math.hypot(x - hit.x, y - hit.y);
       if (dist <= hit.r + 8 && (!best || dist < best.dist)) best = { hit, dist };
     }
     if (best) {
-      if (state.multiSelect) {
-        const index = best.hit.index;
-        const set = new Set(state.selectedSet);
-        if (set.has(index) && set.size > 1) set.delete(index);
-        else set.add(index);
-        state.selectedSet = Array.from(set).sort((a, b) => a - b);
-        state.selected = index;
-      } else {
-        state.selected = best.hit.index;
-        state.selectedSet = [state.selected];
-      }
-      render();
+      selectDynkinVertex(best.hit.index);
     }
+  }
+
+  function nearestEdgeHit(x, y) {
+    let best = null;
+    for (const edge of state.edgeHitboxes || []) {
+      const dist = pointSegmentDistance(x, y, edge.x1, edge.y1, edge.x2, edge.y2);
+      if (dist <= 12 && (!best || dist < best.dist)) best = { ...edge, dist };
+    }
+    return best;
+  }
+
+  function pointSegmentDistance(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lenSq = dx * dx + dy * dy || 1;
+    const t = clamp(((px - x1) * dx + (py - y1) * dy) / lenSq, 0, 1);
+    const x = x1 + dx * t;
+    const y = y1 + dy * t;
+    return Math.hypot(px - x, py - y);
   }
 
   function bindCards() {
