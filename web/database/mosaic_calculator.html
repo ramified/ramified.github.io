@@ -774,10 +774,16 @@
             </select>
           </label>
         </span>
-        <label class="mosaic-toolbar-toggle" title="Connect opposite edges">
-          <input type="checkbox" id="wrap-board">
-          wrapped
-        </label>
+        <span class="mosaic-toolbar-group" aria-label="Canvas boundary">
+          <label title="Canvas boundary">
+            <span>boundary</span>
+            <select id="boundary-mode" class="mosaic-toolbar-select">
+              <option value="grid">Grid</option>
+              <option value="wrapped">Wrapped</option>
+              <option value="glued">Glued</option>
+            </select>
+          </label>
+        </span>
         <span class="canvas-size-inline" aria-label="Board size">
           <label title="Mosaic rows">
             <span>rows</span>
@@ -808,18 +814,19 @@
     <section class="card">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
-        <div class="mosaic-inline-row">
+        <div class="mosaic-inline-row" id="diagram-type-row">
           <span class="input-label">Diagram</span>
           <select id="diagram-type">
             <option value="link">Knot / link</option>
             <option value="dual">Dual graph</option>
           </select>
         </div>
-        <div class="mosaic-inline-row">
+        <div class="mosaic-inline-row" id="input-mode-row">
           <span class="input-label">Mode</span>
           <select id="input-mode">
             <option value="draw">Draw</option>
             <option value="tiling">Tiling</option>
+            <option value="background" hidden disabled>Background space</option>
             <option value="decoration" hidden disabled>Decoration</option>
             <option value="pick">Pick</option>
             <option value="import">Import</option>
@@ -864,6 +871,15 @@
           <div class="input-method">
             <span class="input-label">Tiling preferences</span>
             <div id="tile-palette" class="tile-palette-grid" aria-label="Tiling preferences"></div>
+          </div>
+        </div>
+        <div class="input-mode-panel" data-input-panel="background">
+          <div class="mosaic-inline-row">
+            <span class="input-label">Click action</span>
+            <select id="background-action">
+              <option value="tile">Remove / recover tiles</option>
+              <option value="boundary">Add / remove boundary</option>
+            </select>
           </div>
         </div>
         <div class="input-mode-panel" data-input-panel="decoration">
@@ -911,12 +927,12 @@
       </div>
     </section>
 
-    <section class="card">
-      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Statistics</span><em class="toggle-icon">&#9662;</em></div>
+    <section class="card" id="statistics-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label" id="statistics-card-label">Statistics</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
-        <div class="stat-row"><span class="stat-label">Filled tiles</span><span class="stat-value" id="out-tiles">0</span></div>
-        <div class="stat-row"><span class="stat-label">Open ends</span><span class="stat-value" id="out-open-ends">0</span></div>
-        <div class="stat-row"><span class="stat-label">Components</span><span class="stat-value" id="out-components">0</span></div>
+        <div class="stat-row" id="out-tiles-row"><span class="stat-label" id="out-tiles-label">Filled tiles</span><span class="stat-value" id="out-tiles">0</span></div>
+        <div class="stat-row" id="out-open-ends-row"><span class="stat-label" id="out-open-ends-label">Open ends</span><span class="stat-value" id="out-open-ends">0</span></div>
+        <div class="stat-row" id="out-components-row"><span class="stat-label" id="out-components-label">Components</span><span class="stat-value" id="out-components">0</span></div>
       </div>
     </section>
 

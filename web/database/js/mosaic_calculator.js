@@ -248,8 +248,11 @@
     cols: 5,
     lattice: 'hexagonal',
     diagramType: 'link',
+    boundaryMode: 'grid',
     wrapped: false,
     tiles: [],
+    removedTiles: new Set(),
+    cutEdges: new Set(),
     edits: 0,
     showErrors: true,
     showCoords: false,
@@ -264,6 +267,8 @@
     viewX: 0,
     viewY: 0,
     inputMode: 'draw',
+    backgroundReturnInputMode: 'draw',
+    backgroundAction: 'tile',
     displayPickInputLocked: false,
     displayPickReturnMode: 'draw',
     editMode: 'rotate',
@@ -284,6 +289,7 @@
     pickHoverHit: null,
     drawDebugHit: null,
     hoverIndex: -1,
+    backgroundHoverEdge: null,
     dualGraphLayout: null,
     dualGraphLayoutMethod: 'force',
     dualGraphLayoutTimings: {},
@@ -369,7 +375,14 @@
       ? refs.inputMode.querySelector('option[value="decoration"]')
       : null;
     refs.latticeSelect = document.getElementById('lattice-select');
+    refs.boundaryMode = document.getElementById('boundary-mode');
     refs.wrapBoard = document.getElementById('wrap-board');
+    refs.diagramTypeRow = document.getElementById('diagram-type-row');
+    refs.inputModeRow = document.getElementById('input-mode-row');
+    refs.inputBackgroundOption = refs.inputMode
+      ? refs.inputMode.querySelector('option[value="background"]')
+      : null;
+    refs.backgroundAction = document.getElementById('background-action');
     refs.editMode = document.getElementById('edit-mode');
     refs.drawAction = document.getElementById('draw-action');
     refs.drawVertexOption = refs.drawAction
@@ -457,6 +470,13 @@
     refs.inputPanels = Array.from(document.querySelectorAll('[data-input-panel]'));
 
     refs.out = {
+      cardLabel: document.getElementById('statistics-card-label'),
+      tilesRow: document.getElementById('out-tiles-row'),
+      openEndsRow: document.getElementById('out-open-ends-row'),
+      componentsRow: document.getElementById('out-components-row'),
+      tilesLabel: document.getElementById('out-tiles-label'),
+      openEndsLabel: document.getElementById('out-open-ends-label'),
+      componentsLabel: document.getElementById('out-components-label'),
       tiles: document.getElementById('out-tiles'),
       openEnds: document.getElementById('out-open-ends'),
       components: document.getElementById('out-components')
@@ -473,7 +493,8 @@
       setInputMode(refs.inputMode.value);
     });
     refs.latticeSelect.addEventListener('change', () => generateFromControls());
-    refs.wrapBoard.addEventListener('change', () => generateFromControls());
+    if (refs.boundaryMode) refs.boundaryMode.addEventListener('change', () => generateFromControls());
+    if (refs.wrapBoard) refs.wrapBoard.addEventListener('change', () => generateFromControls());
     refs.editMode.addEventListener('change', () => {
       state.editMode = normalizeEditMode(refs.editMode.value);
       refreshExport();
@@ -496,6 +517,16 @@
       state.drawDebugHit = null;
       updateReport(false);
     });
+    if (refs.backgroundAction) {
+      refs.backgroundAction.addEventListener('change', () => {
+        state.backgroundAction = normalizeBackgroundAction(refs.backgroundAction.value);
+        refs.backgroundAction.value = state.backgroundAction;
+        state.hoverIndex = -1;
+        state.backgroundHoverEdge = null;
+        syncMainCanvasCursor();
+        updateReport(false);
+      });
+    }
     if (refs.halfEdgeLabelStyle) {
       refs.halfEdgeLabelStyle.addEventListener('change', () => {
         state.halfEdgeLabelStyle = normalizeHalfEdgeLabelStyle(refs.halfEdgeLabelStyle.value);
@@ -796,12 +827,14 @@
 
   function setInputMode(mode, options = {}) {
     state.inputMode = normalizeInputMode(mode);
+    if (state.inputMode !== 'background') state.backgroundReturnInputMode = state.inputMode;
     refs.inputMode.value = state.inputMode;
     clearDecorationClickTimer();
     state.hoverIndex = -1;
     state.drawDebugHit = null;
     state.pickHoverHit = null;
     state.decorationHoverHit = null;
+    state.backgroundHoverEdge = null;
     syncMainCanvasCursor();
     if (state.inputMode !== 'pick' && !state.displayPick && options.clearPick !== false) {
       state.pickedComponent = null;
@@ -821,7 +854,7 @@
   function setDiagramType(type) {
     const nextType = normalizeDiagramType(type);
     if (nextType === state.diagramType) {
-      syncAllInputs(state.rows, state.cols, state.lattice, state.wrapped);
+      syncAllInputs(state.rows, state.cols, state.lattice, state.boundaryMode);
       renderTilePalette();
       updateReport(false);
       return;
@@ -860,7 +893,7 @@
     state.selectedPaletteId = '';
     state.componentColors = [];
     state.edits += 1;
-    syncAllInputs(state.rows, state.cols, state.lattice, state.wrapped);
+    syncAllInputs(state.rows, state.cols, state.lattice, state.boundaryMode);
     renderTilePalette();
     updateReport(false);
   }
@@ -1109,7 +1142,7 @@
           if (state.drawAction === 'edge' && isDualGraph()) {
             toggleVertexTileAtIndex(hit);
             updateReport(false);
-          } else if (!isTileEmpty(state.tiles[hit])) {
+          } else if (tileExists(hit) && !isTileEmpty(state.tiles[hit])) {
             if (state.drawAction === 'edge') cycleTilePairs(hit);
             else applyDrawTileAction(hit, -1);
           }
@@ -1118,13 +1151,14 @@
       }
       if (!isTilingMode()) return;
       const hit = hitTest(event.clientX, event.clientY);
-      if (hit >= 0 && !isTileEmpty(state.tiles[hit])) editExistingTile(hit, -1);
+      if (hit >= 0 && tileExists(hit) && !isTileEmpty(state.tiles[hit])) editExistingTile(hit, -1);
     });
     refs.canvas.addEventListener('mouseleave', () => {
       clearDrawDebugHit(false);
       clearPickHoverHit(false);
       state.hoverIndex = -1;
       state.decorationHoverHit = null;
+      state.backgroundHoverEdge = null;
       syncMainCanvasCursor();
       draw(analyze());
     });
@@ -1133,6 +1167,24 @@
       if (state.inputMode === 'import') {
         if (state.hoverIndex !== -1) {
           state.hoverIndex = -1;
+          state.decorationHoverHit = null;
+          syncMainCanvasCursor();
+          draw(analyze());
+        }
+        return;
+      }
+      if (state.inputMode === 'background') {
+        const debugChanged = clearDrawDebugHit(false);
+        const edge = isBackgroundBoundaryAction()
+          ? backgroundEdgeHitTest(event.clientX, event.clientY)
+          : null;
+        const hit = isBackgroundBoundaryAction()
+          ? -1
+          : hitTest(event.clientX, event.clientY, { includeRemoved: true });
+        const edgeChanged = !sameBackgroundEdgeHit(edge, state.backgroundHoverEdge);
+        if (hit !== state.hoverIndex || edgeChanged || state.decorationHoverHit || debugChanged) {
+          state.hoverIndex = hit;
+          state.backgroundHoverEdge = edge;
           state.decorationHoverHit = null;
           syncMainCanvasCursor();
           draw(analyze());
@@ -1260,17 +1312,24 @@
     const rows = clampInt(refs.gridRows.value, MIN_BOARD, MAX_BOARD, state.rows);
     const cols = clampInt(refs.gridCols.value, MIN_BOARD, MAX_BOARD, state.cols);
     const latticeName = LATTICES[refs.latticeSelect.value] ? refs.latticeSelect.value : state.lattice;
-    const wrapped = refs.wrapBoard.checked;
-    reshapeBoard(rows, cols, latticeName, wrapped);
+    const boundaryMode = refs.boundaryMode
+      ? normalizeBoundaryMode(refs.boundaryMode.value)
+      : normalizeBoundaryMode(!!(refs.wrapBoard && refs.wrapBoard.checked));
+    reshapeBoard(rows, cols, latticeName, boundaryMode);
   }
 
-  function createBoard(rows, cols, latticeName, wrapped) {
+  function createBoard(rows, cols, latticeName, boundaryInput) {
+    const boundaryMode = normalizeBoundaryMode(boundaryInput);
     state.rows = rows;
     state.cols = cols;
     state.lattice = LATTICES[latticeName] ? latticeName : 'hexagonal';
-    state.wrapped = !!wrapped;
+    state.boundaryMode = boundaryMode;
+    state.wrapped = boundaryMode === 'wrapped';
+    state.removedTiles = new Set();
+    state.cutEdges = new Set();
     state.edits = 0;
     state.hoverIndex = -1;
+    state.backgroundHoverEdge = null;
     state.drawDebugHit = null;
     state.pickHoverHit = null;
     state.pickedComponent = null;
@@ -1284,22 +1343,23 @@
     state.halfEdgeDecorations = {};
     state.standardDualGraphInput = null;
     state.tiles = Array(rows * cols).fill(null);
-    syncAllInputs(rows, cols, state.lattice, state.wrapped);
+    syncAllInputs(rows, cols, state.lattice, state.boundaryMode);
     renderTilePalette();
     resetView(false);
     resizeCanvas();
     updateReport(false);
   }
 
-  function reshapeBoard(rows, cols, latticeName, wrapped) {
+  function reshapeBoard(rows, cols, latticeName, boundaryInput) {
     const nextLattice = LATTICES[latticeName] ? latticeName : state.lattice;
-    const nextWrapped = !!wrapped;
+    const nextBoundaryMode = normalizeBoundaryMode(boundaryInput);
+    const nextWrapped = nextBoundaryMode === 'wrapped';
     const sameShape = rows === state.rows
       && cols === state.cols
       && nextLattice === state.lattice
-      && nextWrapped === state.wrapped;
+      && nextBoundaryMode === state.boundaryMode;
     if (sameShape) {
-      syncAllInputs(rows, cols, state.lattice, state.wrapped);
+      syncAllInputs(rows, cols, state.lattice, state.boundaryMode);
       return;
     }
 
@@ -1312,17 +1372,23 @@
     const oldTiles = state.tiles.slice();
     const oldDecorations = { ...state.vertexDecorations };
     const oldHalfEdgeDecorations = { ...state.halfEdgeDecorations };
+    const oldRemovedTiles = cloneRemovedTileSet();
+    const oldCutEdges = cloneCutEdgeSet();
+    const oldBoundaryMode = state.boundaryMode;
 
     state.rows = rows;
     state.cols = cols;
     state.lattice = nextLattice;
+    state.boundaryMode = nextBoundaryMode;
     state.wrapped = nextWrapped;
+    syncInputModeForBoundaryChange(oldBoundaryMode, nextBoundaryMode);
     state.hoverIndex = -1;
     state.drawDebugHit = null;
     state.pickHoverHit = null;
     state.pickedComponent = null;
     state.pickedAnchor = null;
     state.decorationHoverHit = null;
+    state.backgroundHoverEdge = null;
     syncMainCanvasCursor();
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
@@ -1337,8 +1403,13 @@
       ? {}
       : reshapeVertexDecorations(oldDecorations, oldRows, oldCols, rows, cols);
     state.halfEdgeDecorations = oldLattice !== nextLattice ? {} : oldHalfEdgeDecorations;
+    state.removedTiles = reshapeRemovedTiles(oldRemovedTiles, oldRows, oldCols, rows, cols);
+    state.cutEdges = oldLattice !== nextLattice
+      ? new Set()
+      : reshapeCutEdges(oldCutEdges, oldRows, oldCols, rows, cols);
+    pruneCutEdges();
     state.standardDualGraphInput = null;
-    syncAllInputs(rows, cols, state.lattice, state.wrapped);
+    syncAllInputs(rows, cols, state.lattice, state.boundaryMode);
     renderTilePalette();
     resetView(false);
     resizeCanvas();
@@ -1356,6 +1427,34 @@
         next[nextIndex] = adaptTileToSides(oldTiles[oldIndex], sides);
       }
     }
+    return next;
+  }
+
+  function reshapeRemovedTiles(oldRemovedTiles, oldRows, oldCols, rows, cols) {
+    const next = new Set();
+    const rowLimit = Math.min(oldRows, rows);
+    const colLimit = Math.min(oldCols, cols);
+    for (let row = 0; row < rowLimit; row += 1) {
+      for (let col = 0; col < colLimit; col += 1) {
+        const oldIndex = indexOf(row, col, oldCols);
+        if (oldRemovedTiles.has(oldIndex)) next.add(indexOf(row, col, cols));
+      }
+    }
+    return next;
+  }
+
+  function reshapeCutEdges(oldCutEdges, oldRows, oldCols, rows, cols) {
+    const next = new Set();
+    oldCutEdges.forEach((key) => {
+      const parsed = parseCutEdgeKey(key);
+      if (!parsed) return;
+      const leftRow = Math.floor(parsed.left / oldCols);
+      const leftCol = parsed.left % oldCols;
+      const rightRow = Math.floor(parsed.right / oldCols);
+      const rightCol = parsed.right % oldCols;
+      if (leftRow >= rows || leftCol >= cols || rightRow >= rows || rightCol >= cols) return;
+      next.add(cutEdgeKey(indexOf(leftRow, leftCol, cols), indexOf(rightRow, rightCol, cols)));
+    });
     return next;
   }
 
@@ -1557,6 +1656,12 @@
     const rows = clampInt(options && options.rows, MIN_BOARD, MAX_BOARD, 5);
     const cols = clampInt(options && options.cols, MIN_BOARD, MAX_BOARD, 5);
     const latticeName = options && LATTICES[options.latticeName] ? options.latticeName : 'hexagonal';
+    const oldRows = state.rows;
+    const oldCols = state.cols;
+    const oldLattice = state.lattice;
+    const oldRemovedTiles = cloneRemovedTileSet();
+    const oldCutEdges = cloneCutEdgeSet();
+    const boundaryMode = resolveImportedBoundaryMode(options, state.boundaryMode);
     clearEditorDrag();
     cancelDrawGesture(false);
     clearDecorationClickTimer();
@@ -1564,7 +1669,14 @@
     state.cols = cols;
     state.lattice = latticeName;
     state.diagramType = 'dual';
-    state.wrapped = false;
+    state.boundaryMode = boundaryMode;
+    state.wrapped = boundaryMode === 'wrapped';
+    state.removedTiles = hasImportedRemovedTiles(options)
+      ? importRemovedTiles(options, rows, cols)
+      : reshapeRemovedTiles(oldRemovedTiles, oldRows, oldCols, rows, cols);
+    state.cutEdges = hasImportedCutEdges(options)
+      ? importCutEdges(options, rows, cols)
+      : (oldLattice === latticeName ? reshapeCutEdges(oldCutEdges, oldRows, oldCols, rows, cols) : new Set());
     state.wrappedViewMode = 'periodic';
     state.inputMode = 'import';
     state.editMode = 'rotate';
@@ -1584,6 +1696,7 @@
     state.drawDebugHit = null;
     state.pickHoverHit = null;
     state.decorationHoverHit = null;
+    state.backgroundHoverEdge = null;
     syncMainCanvasCursor();
     state.pickedComponent = null;
     state.pickedAnchor = null;
@@ -1596,12 +1709,14 @@
     });
     state.vertexDecorations = { ...(options && options.vertexDecorations ? options.vertexDecorations : {}) };
     state.halfEdgeDecorations = {};
+    clearRemovedTileContents();
+    pruneCutEdges();
     state.dualGraphLayout = null;
     state.dualGraphStructureKey = '';
     state.dualGraphLayoutTimings = {};
     clearDualGraphDegenerationChart();
 
-    syncAllInputs(rows, cols, state.lattice, state.wrapped);
+    syncAllInputs(rows, cols, state.lattice, state.boundaryMode);
     syncImportPresetControls();
     if (refs.showErrors) refs.showErrors.checked = state.showErrors;
     if (refs.showCoords) refs.showCoords.checked = state.showCoords;
@@ -2003,6 +2118,7 @@
     const normalized = normalizeStandardDualGraphInput(graph);
     if (!normalized.isValid) throw new Error(normalized.reason || 'dual graph import failed');
     state.diagramType = 'dual';
+    state.wrapped = state.boundaryMode === 'wrapped';
     state.inputMode = 'import';
     state.standardDualGraphInput = {
       genera: normalized.genera.slice(),
@@ -2017,11 +2133,12 @@
     state.pickedAnchor = null;
     state.pickHoverHit = null;
     state.decorationHoverHit = null;
+    state.backgroundHoverEdge = null;
     state.dualGraphLayout = null;
     state.dualGraphStructureKey = '';
     state.dualGraphLayoutTimings = {};
     clearDualGraphDegenerationChart();
-    syncAllInputs(state.rows, state.cols, state.lattice, state.wrapped);
+    syncAllInputs(state.rows, state.cols, state.lattice, state.boundaryMode);
     renderTilePalette();
     updateReport(false);
   }
@@ -2106,19 +2223,27 @@
   function applyImportedMosaic(payload) {
     if (!payload || typeof payload !== 'object') throw new Error('mosaic data must be an object');
     state.standardDualGraphInput = null;
+    const oldRows = state.rows;
+    const oldCols = state.cols;
+    const oldLattice = state.lattice;
+    const oldRemovedTiles = cloneRemovedTileSet();
+    const oldCutEdges = cloneCutEdgeSet();
     const rows = clampInt(payload.rows, MIN_BOARD, MAX_BOARD, state.rows);
     const cols = clampInt(payload.cols, MIN_BOARD, MAX_BOARD, state.cols);
     const latticeName = LATTICES[payload.lattice] ? payload.lattice : state.lattice;
     const diagramType = normalizeDiagramType(payload.diagramType || payload.type);
-    const wrapped = payload.boundary === 'wrapped' || payload.wrapped === true;
+    const boundaryMode = resolveImportedBoundaryMode(payload, state.boundaryMode);
+    const wrapped = boundaryMode === 'wrapped';
 
     state.rows = rows;
     state.cols = cols;
     state.lattice = latticeName;
     state.diagramType = diagramType;
+    state.boundaryMode = boundaryMode;
     state.wrapped = wrapped;
     state.wrappedViewMode = payload.wrappedViewMode === 'single' ? 'single' : 'periodic';
     state.inputMode = normalizeInputMode(payload.inputMode);
+    state.backgroundAction = normalizeBackgroundAction(payload.backgroundAction || (payload.backgroundSpace && payload.backgroundSpace.action));
     state.editMode = normalizeEditMode(payload.clickMode || payload.editMode);
     state.drawAction = normalizeDrawAction(payload.drawAction || (payload.display && payload.display.drawAction));
     if (state.diagramType === 'dual' && (payload.drawAddVertices || (payload.display && payload.display.drawAddVertices))) {
@@ -2146,16 +2271,25 @@
     state.drawDebugHit = null;
     state.pickHoverHit = null;
     state.decorationHoverHit = null;
+    state.backgroundHoverEdge = null;
     syncMainCanvasCursor();
     state.pickedComponent = null;
     state.pickedAnchor = null;
     state.selectedTile = null;
     state.selectedPaletteId = '';
     state.tiles = importTiles(payload.tiles, rows, cols);
+    state.removedTiles = hasImportedRemovedTiles(payload)
+      ? importRemovedTiles(payload, rows, cols)
+      : reshapeRemovedTiles(oldRemovedTiles, oldRows, oldCols, rows, cols);
+    state.cutEdges = hasImportedCutEdges(payload)
+      ? importCutEdges(payload, rows, cols)
+      : (oldLattice === latticeName ? reshapeCutEdges(oldCutEdges, oldRows, oldCols, rows, cols) : new Set());
     state.vertexDecorations = importVertexDecorations(payload, rows, cols);
     state.halfEdgeDecorations = importHalfEdgeDecorations(payload);
+    clearRemovedTileContents();
+    pruneCutEdges();
 
-    syncAllInputs(rows, cols, state.lattice, state.wrapped);
+    syncAllInputs(rows, cols, state.lattice, state.boundaryMode);
     refs.showErrors.checked = state.showErrors;
     refs.showCoords.checked = state.showCoords;
     refs.colorComponents.checked = state.colorComponents;
@@ -2163,6 +2297,7 @@
     refs.drawAction.value = state.drawAction;
     refs.knotCodeKind.value = state.knotCodeKind;
     refs.drawStyle.value = state.drawStyle;
+    if (refs.backgroundAction) refs.backgroundAction.value = state.backgroundAction;
     if (refs.halfEdgeLabelStyle) refs.halfEdgeLabelStyle.value = state.halfEdgeLabelStyle;
     if (refs.clearVertexDecorations) refs.clearVertexDecorations.checked = !!state.clearVertexDecorations;
     if (refs.clearHalfEdgeDecorations) refs.clearHalfEdgeDecorations.checked = !!state.clearHalfEdgeDecorations;
@@ -2182,6 +2317,159 @@
       tiles[index] = importedTileValue(entry);
     });
     return tiles;
+  }
+
+  function importRemovedTiles(payload, rows, cols) {
+    const removed = new Set();
+    if (!payload || typeof payload !== 'object') return removed;
+    const sources = [];
+    if (Array.isArray(payload.removedTiles)) sources.push(...payload.removedTiles);
+    if (Array.isArray(payload.backgroundRemovedTiles)) sources.push(...payload.backgroundRemovedTiles);
+
+    sources.forEach((entry) => {
+      let index = -1;
+      if (Number.isInteger(Number(entry))) {
+        index = Number(entry);
+      } else if (entry && typeof entry === 'object') {
+        const row = Number(entry.row);
+        const col = Number(entry.col);
+        if (Number.isInteger(row) && Number.isInteger(col) && row >= 1 && row <= rows && col >= 1 && col <= cols) {
+          index = indexOf(row - 1, col - 1, cols);
+        } else if (Number.isInteger(Number(entry.index))) {
+          index = Number(entry.index);
+        }
+      }
+      if (Number.isInteger(index) && index >= 0 && index < rows * cols) removed.add(index);
+    });
+    return removed;
+  }
+
+  function importCutEdges(payload, rows, cols) {
+    const cuts = new Set();
+    if (!payload || typeof payload !== 'object') return cuts;
+    const entries = [];
+    if (Array.isArray(payload.cutEdges)) entries.push(...payload.cutEdges);
+    if (Array.isArray(payload.backgroundCutEdges)) entries.push(...payload.backgroundCutEdges);
+    if (payload.backgroundSpace && typeof payload.backgroundSpace === 'object') {
+      if (Array.isArray(payload.backgroundSpace.cutEdges)) entries.push(...payload.backgroundSpace.cutEdges);
+      if (Array.isArray(payload.backgroundSpace.boundaries)) entries.push(...payload.backgroundSpace.boundaries);
+    }
+
+    entries.forEach((entry) => {
+      const endpoints = importedCutEdgeEndpoints(entry, rows, cols);
+      if (!endpoints) return;
+      const key = cutEdgeKey(endpoints.left, endpoints.right);
+      if (isValidCutEdgeKey(key, rows, cols)) cuts.add(key);
+    });
+    return cuts;
+  }
+
+  function importedCutEdgeEndpoints(entry, rows, cols) {
+    if (Array.isArray(entry) && entry.length >= 2) {
+      const left = importedEndpointIndex(entry[0], rows, cols);
+      const right = importedEndpointIndex(entry[1], rows, cols);
+      return left >= 0 && right >= 0 ? { left, right } : null;
+    }
+    if (!entry || typeof entry !== 'object') return null;
+    const leftValue = firstPresentValue(entry, ['left', 'a', 'from', 'first']);
+    const rightValue = firstPresentValue(entry, ['right', 'b', 'to', 'second']);
+    const left = importedEndpointIndex(leftValue, rows, cols);
+    const right = importedEndpointIndex(rightValue, rows, cols);
+    if (left >= 0 && right >= 0) return { left, right };
+    if (Number.isInteger(Number(entry.leftIndex)) && Number.isInteger(Number(entry.rightIndex))) {
+      return {
+        left: Number(entry.leftIndex),
+        right: Number(entry.rightIndex)
+      };
+    }
+    if (Number.isInteger(Number(entry.index)) && entry.dir != null) {
+      const index = Number(entry.index);
+      const row = Math.floor(index / cols);
+      const col = index % cols;
+      const next = neighbor(row, col, normalizeDir(entry.dir, getLattice().sides), rows, cols, getLattice(), false);
+      return next ? { left: index, right: indexOf(next.row, next.col, cols) } : null;
+    }
+    return null;
+  }
+
+  function firstPresentValue(source, keys) {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(source, key)) return source[key];
+    }
+    return undefined;
+  }
+
+  function importedEndpointIndex(value, rows, cols) {
+    if (Number.isInteger(Number(value))) {
+      const index = Number(value);
+      return index >= 0 && index < rows * cols ? index : -1;
+    }
+    if (value && typeof value === 'object') {
+      const row = Number(value.row);
+      const col = Number(value.col);
+      if (Number.isInteger(row) && Number.isInteger(col) && row >= 1 && row <= rows && col >= 1 && col <= cols) {
+        return indexOf(row - 1, col - 1, cols);
+      }
+      if (Number.isInteger(Number(value.index))) {
+        const index = Number(value.index);
+        return index >= 0 && index < rows * cols ? index : -1;
+      }
+    }
+    return -1;
+  }
+
+  function hasImportedRemovedTiles(payload) {
+    return !!(payload && typeof payload === 'object' && (
+      Array.isArray(payload.removedTiles) || Array.isArray(payload.backgroundRemovedTiles)
+    ));
+  }
+
+  function hasImportedCutEdges(payload) {
+    return !!(payload && typeof payload === 'object' && (
+      Array.isArray(payload.cutEdges)
+      || Array.isArray(payload.backgroundCutEdges)
+      || (payload.backgroundSpace && typeof payload.backgroundSpace === 'object' && (
+        Array.isArray(payload.backgroundSpace.cutEdges)
+        || Array.isArray(payload.backgroundSpace.boundaries)
+      ))
+    ));
+  }
+
+  function hasImportedCutEdgeEntries(payload) {
+    return !!(payload && typeof payload === 'object' && (
+      (Array.isArray(payload.cutEdges) && payload.cutEdges.length > 0)
+      || (Array.isArray(payload.backgroundCutEdges) && payload.backgroundCutEdges.length > 0)
+      || (payload.backgroundSpace && typeof payload.backgroundSpace === 'object' && (
+        (Array.isArray(payload.backgroundSpace.cutEdges) && payload.backgroundSpace.cutEdges.length > 0)
+        || (Array.isArray(payload.backgroundSpace.boundaries) && payload.backgroundSpace.boundaries.length > 0)
+      ))
+    ));
+  }
+
+  function hasImportedRemovedTileEntries(payload) {
+    return !!(payload && typeof payload === 'object' && (
+      (Array.isArray(payload.removedTiles) && payload.removedTiles.length > 0)
+      || (Array.isArray(payload.backgroundRemovedTiles) && payload.backgroundRemovedTiles.length > 0)
+    ));
+  }
+
+  function importedBoundaryModeValue(value) {
+    if (value === true || value === 'true' || value === 'wrapped') return 'wrapped';
+    if (value === 'glued' || value === 'glue' || value === 'background') return 'glued';
+    if (value === 'grid') return 'grid';
+    return '';
+  }
+
+  function resolveImportedBoundaryMode(payload, fallbackMode) {
+    const fallback = normalizeBoundaryMode(fallbackMode);
+    if (!payload || typeof payload !== 'object') return fallback;
+    const boundary = importedBoundaryModeValue(payload.boundary);
+    const boundaryMode = importedBoundaryModeValue(payload.boundaryMode);
+    if (boundary === 'wrapped' || boundary === 'glued') return boundary;
+    if (boundaryMode === 'wrapped' || boundaryMode === 'glued') return boundaryMode;
+    if (payload.wrapped === true) return 'wrapped';
+    if (hasImportedRemovedTileEntries(payload) || hasImportedCutEdgeEntries(payload)) return 'glued';
+    return fallback;
   }
 
   function importedTileIndex(entry, entryIndex, rows, cols) {
@@ -2296,12 +2584,15 @@
     const returnMode = state.displayPickReturnMode || 'draw';
     clearDecorationClickTimer();
     state.tiles = Array(state.rows * state.cols).fill(null);
+    state.removedTiles = new Set();
+    state.cutEdges = new Set();
     state.vertexDecorations = {};
     state.halfEdgeDecorations = {};
     state.standardDualGraphInput = null;
     state.pickedComponent = null;
     state.pickedAnchor = null;
     state.pickHoverHit = null;
+    state.backgroundHoverEdge = null;
     state.displayPick = false;
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
@@ -2320,7 +2611,7 @@
   function vertexDecorationHitTest(clientX, clientY) {
     if (!isDecorationMode()) return -1;
     const hit = hitTest(clientX, clientY);
-    return hit >= 0 && isVertexTileValue(state.tiles[hit]) ? hit : -1;
+    return hit >= 0 && tileExists(hit) && isVertexTileValue(state.tiles[hit]) ? hit : -1;
   }
 
   function halfEdgeDecorationHitTest(clientX, clientY) {
@@ -2374,6 +2665,10 @@
     if (!refs.canvas) return;
     if (isDecorationMode()) {
       refs.canvas.style.cursor = state.decorationHoverHit ? 'pointer' : 'default';
+      return;
+    }
+    if (state.inputMode === 'background' && isBackgroundBoundaryAction()) {
+      refs.canvas.style.cursor = state.backgroundHoverEdge ? 'pointer' : 'default';
       return;
     }
     refs.canvas.style.cursor = '';
@@ -2647,8 +2942,137 @@
     if (state.standardDualGraphInput) state.standardDualGraphInput = null;
   }
 
+  function isGluedBoundaryMode() {
+    return state.boundaryMode === 'glued';
+  }
+
+  function tileExists(index) {
+    return Number.isInteger(index)
+      && index >= 0
+      && index < state.rows * state.cols
+      && (!isGluedBoundaryMode() || !state.removedTiles.has(index));
+  }
+
+  function cloneRemovedTileSet() {
+    return state.removedTiles instanceof Set ? new Set(state.removedTiles) : new Set();
+  }
+
+  function cloneCutEdgeSet() {
+    return state.cutEdges instanceof Set ? new Set(state.cutEdges) : new Set();
+  }
+
+  function cutEdgeKey(leftIndex, rightIndex) {
+    const left = Number(leftIndex);
+    const right = Number(rightIndex);
+    if (!Number.isInteger(left) || !Number.isInteger(right) || left === right) return '';
+    return left < right ? `${left}:${right}` : `${right}:${left}`;
+  }
+
+  function parseCutEdgeKey(key) {
+    const match = /^(\d+):(\d+)$/.exec(String(key || ''));
+    if (!match) return null;
+    return {
+      left: Number(match[1]),
+      right: Number(match[2])
+    };
+  }
+
+  function hasCutEdgeBetween(leftIndex, rightIndex) {
+    return isGluedBoundaryMode()
+      && state.cutEdges instanceof Set
+      && state.cutEdges.has(cutEdgeKey(leftIndex, rightIndex));
+  }
+
+  function isValidCutEdgeKey(key, rows = state.rows, cols = state.cols) {
+    const parsed = parseCutEdgeKey(key);
+    if (!parsed) return false;
+    const total = rows * cols;
+    if (parsed.left < 0 || parsed.left >= total || parsed.right < 0 || parsed.right >= total) return false;
+    const lattice = getLattice();
+    const leftRow = Math.floor(parsed.left / cols);
+    const leftCol = parsed.left % cols;
+    for (let dir = 0; dir < lattice.sides; dir += 1) {
+      const next = neighbor(leftRow, leftCol, dir, rows, cols, lattice, false);
+      if (next && indexOf(next.row, next.col, cols) === parsed.right) return true;
+    }
+    return false;
+  }
+
+  function removeCutEdgesForTile(index) {
+    if (!(state.cutEdges instanceof Set) || state.cutEdges.size === 0) return;
+    state.cutEdges.forEach((key) => {
+      const parsed = parseCutEdgeKey(key);
+      if (parsed && (parsed.left === index || parsed.right === index)) state.cutEdges.delete(key);
+    });
+  }
+
+  function pruneCutEdges() {
+    if (!(state.cutEdges instanceof Set) || state.cutEdges.size === 0) return;
+    state.cutEdges.forEach((key) => {
+      const parsed = parseCutEdgeKey(key);
+      if (!parsed || !isValidCutEdgeKey(key) || !tileExists(parsed.left) || !tileExists(parsed.right)) {
+        state.cutEdges.delete(key);
+      }
+    });
+  }
+
+  function clearTileForRemoval(index) {
+    if (index < 0 || index >= state.tiles.length) return;
+    state.tiles[index] = null;
+    delete state.vertexDecorations[index];
+    removeCutEdgesForTile(index);
+    state.pickedComponent = null;
+    state.pickedAnchor = null;
+    state.pickHoverHit = null;
+    state.backgroundHoverEdge = null;
+  }
+
+  function clearRemovedTileContents() {
+    if (!isGluedBoundaryMode()) return;
+    cloneRemovedTileSet().forEach((index) => {
+      if (index < 0 || index >= state.tiles.length) return;
+      state.tiles[index] = null;
+      delete state.vertexDecorations[index];
+      removeCutEdgesForTile(index);
+    });
+    state.pickedComponent = null;
+    state.pickedAnchor = null;
+    state.pickHoverHit = null;
+  }
+
+  function toggleBackgroundTile(index) {
+    if (!isGluedBoundaryMode() || index < 0 || index >= state.rows * state.cols) return false;
+    clearStandardDualGraphInput();
+    const removing = !state.removedTiles.has(index);
+    if (removing) {
+      state.removedTiles.add(index);
+      clearTileForRemoval(index);
+    } else {
+      state.removedTiles.delete(index);
+    }
+    pruneHalfEdgeDecorations();
+    state.edits += 1;
+    updateReport(false);
+    return true;
+  }
+
+  function toggleBackgroundBoundary(edge) {
+    if (!isGluedBoundaryMode() || !edge) return false;
+    const key = cutEdgeKey(edge.index, edge.nextIndex);
+    if (!key) return false;
+    if (!tileExists(edge.index) || !tileExists(edge.nextIndex)) return false;
+    clearStandardDualGraphInput();
+    if (state.cutEdges.has(key)) state.cutEdges.delete(key);
+    else state.cutEdges.add(key);
+    state.backgroundHoverEdge = null;
+    pruneHalfEdgeDecorations();
+    state.edits += 1;
+    updateReport(false);
+    return true;
+  }
+
   function rotateTile(index, steps) {
-    if (isTileEmpty(state.tiles[index])) return;
+    if (!tileExists(index) || isTileEmpty(state.tiles[index])) return;
     const next = rotateTileValue(state.tiles[index], steps);
     if (tilesEqual(state.tiles[index], next)) return;
     clearStandardDualGraphInput();
@@ -2658,6 +3082,7 @@
   }
 
   function editExistingTile(index, direction) {
+    if (!tileExists(index)) return;
     if (state.editMode === 'reorder') {
       if (direction > 0) cycleTilePairs(index);
       else reverseTilePairs(index);
@@ -2694,6 +3119,7 @@
 
   function applyDrawTileAction(index, direction) {
     if (index < 0) return false;
+    if (!tileExists(index)) return false;
     if (state.drawAction === 'vertex') {
       return direction > 0 && toggleVertexTileAtIndex(index);
     }
@@ -2715,6 +3141,7 @@
   }
 
   function randomizeTile(index) {
+    if (!tileExists(index)) return;
     if (isDualGraph() && isVertexTileValue(state.tiles[index])) {
       return;
     }
@@ -2745,7 +3172,7 @@
   }
 
   function placeTile(index, tile) {
-    if (index < 0 || isTileEmpty(tile)) return;
+    if (index < 0 || !tileExists(index) || isTileEmpty(tile)) return;
     if (tilesEqual(state.tiles[index], tile)) return;
     clearStandardDualGraphInput();
     state.tiles[index] = cloneTile(tile);
@@ -2756,7 +3183,7 @@
   }
 
   function deleteTile(index) {
-    if (index < 0 || isTileEmpty(state.tiles[index])) return;
+    if (index < 0 || !tileExists(index) || isTileEmpty(state.tiles[index])) return;
     clearStandardDualGraphInput();
     state.tiles[index] = null;
     delete state.vertexDecorations[index];
@@ -2767,6 +3194,7 @@
 
   function moveTile(fromIndex, toIndex) {
     if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+    if (!tileExists(fromIndex) || !tileExists(toIndex)) return;
     const tile = state.tiles[fromIndex];
     if (isTileEmpty(tile)) return;
     clearStandardDualGraphInput();
@@ -2785,7 +3213,7 @@
     const point = clientPointToBoardPoint(event.clientX, event.clientY);
     const tileHit = tileHitTest(event.clientX, event.clientY, 1.02);
 
-    if (!tileHit) {
+    if (!tileHit || !tileExists(tileHit.index)) {
       updateDrawDebugFromPoint(event.clientX, event.clientY, false);
       return;
     }
@@ -2862,7 +3290,7 @@
 
     if (!drawState.current) {
       const tileHit = tileHitTest(event.clientX, event.clientY, 1.02);
-      if (!tileHit) return;
+      if (!tileHit || !tileExists(tileHit.index)) return;
 
       const tile = state.tiles[tileHit.index];
       const isVertex = isVertexTileValue(tile);
@@ -3227,12 +3655,12 @@
   function shouldDrawDualGraphVertex(clientX, clientY) {
     if (!isDualGraph()) return false;
     const hit = tileHitTest(clientX, clientY, 1.02);
-    if (!hit) return false;
+    if (!hit || !tileExists(hit.index)) return false;
     return state.drawAction === 'edge' && isVertexTileValue(state.tiles[hit.index]);
   }
 
   function toggleVertexTileAtIndex(index) {
-    if (!isDualGraph() || index < 0 || index >= state.tiles.length) return false;
+    if (!isDualGraph() || index < 0 || index >= state.tiles.length || !tileExists(index)) return false;
     const tile = state.tiles[index];
       if (isVertexTileValue(tile)) {
         clearStandardDualGraphInput();
@@ -3260,14 +3688,14 @@
   function findOpenEndsPointingToTile(targetIndex) {
     const lattice = getLattice();
     const cell = geometry.cells[targetIndex];
-    if (!cell) return [];
+    if (!cell || !tileExists(targetIndex)) return [];
 
     const openDirs = [];
 
     // Check each direction from the target tile
     for (let dir = 0; dir < lattice.sides; dir++) {
       // Find the neighbor in this direction
-      const neighborInfo = neighbor(cell.row, cell.col, dir, state.rows, state.cols, lattice, state.wrapped);
+      const neighborInfo = connectedNeighbor(cell.row, cell.col, dir, lattice);
       if (!neighborInfo) continue;
 
       const neighborIndex = indexOf(neighborInfo.row, neighborInfo.col, state.cols);
@@ -3571,6 +3999,7 @@
     let changed = false;
 
     state.tiles = state.tiles.map((tile, tileIndex) => {
+      if (!tileExists(tileIndex)) return null;
       const arcs = normalizeTile(tile);
       if (!arcs.length) {
         if (tile != null) changed = true;
@@ -3596,6 +4025,7 @@
     let changed = false;
 
     state.tiles = state.tiles.map((tile, tileIndex) => {
+      if (!tileExists(tileIndex)) return null;
       if (isTileEmpty(tile)) return null;
       if (isVertexTileValue(tile)) {
         const spokes = normalizeVertexTile(tile);
@@ -3678,6 +4108,22 @@
       && Math.abs(left.offset.y - right.offset.y) < 0.001;
   }
 
+  function isBackgroundBoundaryAction() {
+    return state.backgroundAction === 'boundary';
+  }
+
+  function backgroundEdgeHitTest(clientX, clientY) {
+    if (!isGluedBoundaryMode()) return null;
+    const hit = sharedEdgeHitTest(clientX, clientY);
+    if (!hit) return null;
+    return hit;
+  }
+
+  function sameBackgroundEdgeHit(left, right) {
+    if (!left || !right) return left === right;
+    return cutEdgeKey(left.index, left.nextIndex) === cutEdgeKey(right.index, right.nextIndex);
+  }
+
   function handlePointerDown(event) {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -3690,6 +4136,11 @@
       return;
     }
 
+    if (state.inputMode === 'background') {
+      beginBackgroundGesture(event);
+      event.preventDefault();
+      return;
+    }
     if (state.inputMode === 'draw') {
       if (isDrawGestureAction()) {
         if (shouldDrawDualGraphVertex(event.clientX, event.clientY)) beginDualGraphDrawGesture(event);
@@ -3727,7 +4178,7 @@
     }
 
     const hit = hitTest(event.clientX, event.clientY);
-    const existingTile = hit >= 0 ? state.tiles[hit] : null;
+    const existingTile = hit >= 0 && tileExists(hit) ? state.tiles[hit] : null;
     pointerState = {
       id: event.pointerId,
       index: hit,
@@ -3758,6 +4209,11 @@
       return;
     }
 
+    if (state.inputMode === 'background') {
+      updateBackgroundGesture(event);
+      event.preventDefault();
+      return;
+    }
     if (drawState && event.pointerId === drawState.pointerId) {
       if (pointerState && event.pointerId === pointerState.id) {
         const dx = event.clientX - pointerState.x;
@@ -3813,6 +4269,11 @@
   }
 
   function handlePointerUp(event) {
+    if (state.inputMode === 'background') {
+      finishBackgroundGesture(event);
+      clearPointerState(event);
+      return;
+    }
     if (drawState && event.pointerId === drawState.pointerId) {
       const handledClick = handleDrawClick(event);
       finishDrawGesture(event);
@@ -3859,12 +4320,75 @@
       clearPointerState(event);
       return;
     }
-    if (!pointerState.moved && hit === pointerState.index && hit >= 0 && !longPressFired) {
+    if (!pointerState.moved && hit === pointerState.index && hit >= 0 && tileExists(hit) && !longPressFired) {
       if (!isTileEmpty(state.tiles[hit])) editExistingTile(hit, 1);
       else if (!isTileEmpty(state.selectedTile)) placeTile(hit, state.selectedTile);
     }
     clearEditorDrag();
     clearPointerState(event);
+  }
+
+  function beginBackgroundGesture(event) {
+    const edge = isBackgroundBoundaryAction()
+      ? backgroundEdgeHitTest(event.clientX, event.clientY)
+      : null;
+    const hit = isBackgroundBoundaryAction()
+      ? -1
+      : hitTest(event.clientX, event.clientY, { includeRemoved: true });
+    pointerState = {
+      id: event.pointerId,
+      index: hit,
+      backgroundEdge: edge,
+      x: event.clientX,
+      y: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      moved: false
+    };
+    clearDrawDebugHit(false);
+    const edgeChanged = !sameBackgroundEdgeHit(edge, state.backgroundHoverEdge);
+    if (hit !== state.hoverIndex || edgeChanged) {
+      state.hoverIndex = hit;
+      state.backgroundHoverEdge = edge;
+      syncMainCanvasCursor();
+      draw(analyze());
+    }
+    refs.canvas.setPointerCapture(event.pointerId);
+  }
+
+  function updateBackgroundGesture(event) {
+    if (!pointerState || event.pointerId !== pointerState.id) return;
+    const dx = event.clientX - pointerState.x;
+    const dy = event.clientY - pointerState.y;
+    if (Math.hypot(dx, dy) > 10) pointerState.moved = true;
+    const edge = isBackgroundBoundaryAction()
+      ? backgroundEdgeHitTest(event.clientX, event.clientY)
+      : null;
+    const hit = isBackgroundBoundaryAction()
+      ? -1
+      : hitTest(event.clientX, event.clientY, { includeRemoved: true });
+    const edgeChanged = !sameBackgroundEdgeHit(edge, state.backgroundHoverEdge);
+    if (hit !== state.hoverIndex || edgeChanged) {
+      state.hoverIndex = hit;
+      state.backgroundHoverEdge = edge;
+      syncMainCanvasCursor();
+      draw(analyze());
+    }
+  }
+
+  function finishBackgroundGesture(event) {
+    if (!pointerState || event.pointerId !== pointerState.id) return;
+    const edge = isOverCanvas(event.clientX, event.clientY) && isBackgroundBoundaryAction()
+      ? backgroundEdgeHitTest(event.clientX, event.clientY)
+      : null;
+    const hit = isOverCanvas(event.clientX, event.clientY) && !isBackgroundBoundaryAction()
+      ? hitTest(event.clientX, event.clientY, { includeRemoved: true })
+      : -1;
+    if (!pointerState.moved && isBackgroundBoundaryAction() && sameBackgroundEdgeHit(edge, pointerState.backgroundEdge)) {
+      toggleBackgroundBoundary(edge);
+    } else if (!pointerState.moved && hit === pointerState.index && hit >= 0) {
+      toggleBackgroundTile(hit);
+    }
   }
 
   function clearPointerState(event) {
@@ -4012,7 +4536,7 @@
   function analyzeLinkMosaic() {
     const total = state.rows * state.cols;
     const lattice = getLattice();
-    const active = state.tiles.reduce((count, tile) => count + (isTileEmpty(tile) ? 0 : 1), 0);
+    const active = state.tiles.reduce((count, tile, index) => count + (!tileExists(index) || isTileEmpty(tile) ? 0 : 1), 0);
     const parent = [];
     const rank = [];
     const portIds = new Map();
@@ -4039,6 +4563,7 @@
     };
 
     for (let index = 0; index < total; index += 1) {
+      if (!tileExists(index)) continue;
       normalizeTile(state.tiles[index]).forEach((pair, pairIndex) => {
         const left = ensurePort(index, pair[0]);
         const right = ensurePort(index, pair[1]);
@@ -4050,7 +4575,7 @@
     portMeta.forEach((port, id) => {
       const row = Math.floor(port.index / state.cols);
       const col = port.index % state.cols;
-      const next = neighbor(row, col, port.dir, state.rows, state.cols, lattice, state.wrapped);
+      const next = connectedNeighbor(row, col, port.dir, lattice);
       if (!next) {
         openEnds += 1;
         return;
@@ -4092,6 +4617,7 @@
     return {
       total,
       active,
+      background: analyzeBackgroundSpace(),
       alignedEdges,
       openEnds,
       components,
@@ -4105,7 +4631,7 @@
   function analyzeDualGraph() {
     const total = state.rows * state.cols;
     const lattice = getLattice();
-    const active = state.tiles.reduce((count, tile) => count + (isTileEmpty(tile) ? 0 : 1), 0);
+    const active = state.tiles.reduce((count, tile, index) => count + (!tileExists(index) || isTileEmpty(tile) ? 0 : 1), 0);
     const parent = [];
     const rank = [];
     const nodeIds = new Map();
@@ -4140,7 +4666,7 @@
     };
 
     for (let index = 0; index < total; index += 1) {
-      if (isTileEmpty(state.tiles[index])) continue;
+      if (!tileExists(index) || isTileEmpty(state.tiles[index])) continue;
       const arcs = normalizeTile(state.tiles[index]);
       arcs.forEach((pair, pairIndex) => {
         const left = ensurePort(index, pair[0]);
@@ -4162,7 +4688,7 @@
     portMeta.forEach((port) => {
       const row = Math.floor(port.index / state.cols);
       const col = port.index % state.cols;
-      const next = neighbor(row, col, port.dir, state.rows, state.cols, lattice, state.wrapped);
+      const next = connectedNeighbor(row, col, port.dir, lattice);
       if (!next) {
         openEnds += 1;
         return;
@@ -4206,6 +4732,7 @@
     return {
       total,
       active,
+      background: analyzeBackgroundSpace(),
       alignedEdges,
       openEnds,
       components,
@@ -4217,14 +4744,59 @@
     };
   }
 
+  function analyzeBackgroundSpace() {
+    const total = state.rows * state.cols;
+    const lattice = getLattice();
+    const parent = Array.from({ length: total }, (_, index) => index);
+    const rank = Array(total).fill(0);
+    let existing = 0;
+    let removed = 0;
+    let unmatchedBoundaries = 0;
+
+    for (let index = 0; index < total; index += 1) {
+      if (!tileExists(index)) {
+        removed += 1;
+        continue;
+      }
+      existing += 1;
+      const row = Math.floor(index / state.cols);
+      const col = index % state.cols;
+      for (let dir = 0; dir < lattice.sides; dir += 1) {
+        const next = neighbor(row, col, dir, state.rows, state.cols, lattice, state.wrapped);
+        if (!next) {
+          unmatchedBoundaries += 1;
+          continue;
+        }
+        const nextIndex = indexOf(next.row, next.col, state.cols);
+        if (!tileExists(nextIndex) || hasCutEdgeBetween(index, nextIndex)) {
+          unmatchedBoundaries += 1;
+          continue;
+        }
+        if (index < nextIndex) union(parent, rank, index, nextIndex);
+      }
+    }
+
+    const componentRoots = new Set();
+    for (let index = 0; index < total; index += 1) {
+      if (tileExists(index)) componentRoots.add(find(parent, index));
+    }
+
+    return {
+      total,
+      existing,
+      removed,
+      cutEdges: cloneCutEdgeSet().size,
+      unmatchedBoundaries,
+      components: componentRoots.size
+    };
+  }
+
   function updateReport(manualCheck) {
     pruneVertexDecorations();
     const report = analyze();
     if (isDualGraph()) pruneHalfEdgeDecorations();
     normalizePickedComponent(report);
-    refs.out.tiles.textContent = `${report.active}/${report.total}`;
-    refs.out.openEnds.textContent = String(report.openEnds);
-    refs.out.components.textContent = String(report.components);
+    updateStatisticsChart(report);
 
     refs.statusBadge.textContent = report.label;
     refs.statusBadge.classList.toggle('mosaic-status-good', report.label === 'closed');
@@ -4232,7 +4804,15 @@
     refs.statusLine.textContent = manualCheck ? `checked: ${report.message}` : report.message;
     refs.statusLine.classList.toggle('mosaic-status-good', report.label === 'closed');
     refs.statusLine.classList.toggle('mosaic-status-bad', report.openEnds > 0);
-    refs.infoLine.textContent = `${getLattice().label}, ${isDualGraph() ? 'dual graph' : 'knot/link'}, ${state.wrapped ? 'wrapped' : 'open'} · ${report.active} filled`;
+
+    refs.infoLine.textContent = `${getLattice().label}, ${isDualGraph() ? 'dual graph' : 'knot/link'}, ${boundaryModeLabel()} / ${report.active} filled`;
+    if (isGluedBoundaryMode() && state.inputMode === 'background') {
+      const background = report.background || analyzeBackgroundSpace();
+      refs.statusBadge.textContent = 'background';
+      refs.statusBadge.classList.remove('mosaic-status-good', 'mosaic-status-bad');
+      refs.statusLine.textContent = `${background.existing} existing tile${background.existing === 1 ? '' : 's'}, ${background.components} component${background.components === 1 ? '' : 's'}, ${background.unmatchedBoundaries} unmatched boundar${background.unmatchedBoundaries === 1 ? 'y' : 'ies'}`;
+      refs.statusLine.classList.remove('mosaic-status-good', 'mosaic-status-bad');
+    }
 
     updatePickControls();
     updateDisplayControls();
@@ -4240,6 +4820,31 @@
     else updateDualGraphCard(report);
     refreshExport();
     draw(report);
+  }
+
+  function updateStatisticsChart(report) {
+    if (!refs.out || !refs.out.tiles) return;
+    if (isGluedBoundaryMode() && state.inputMode === 'background') {
+      const background = report.background || analyzeBackgroundSpace();
+      if (refs.out.cardLabel) refs.out.cardLabel.textContent = 'Background Space Statistics';
+      if (refs.out.tilesLabel) refs.out.tilesLabel.textContent = 'Existing tiles';
+      if (refs.out.openEndsLabel) refs.out.openEndsLabel.textContent = 'Unmatched boundaries';
+      if (refs.out.componentsLabel) refs.out.componentsLabel.textContent = 'Components';
+      if (refs.out.componentsRow) refs.out.componentsRow.hidden = false;
+      refs.out.tiles.textContent = `${background.existing}/${background.total}`;
+      refs.out.openEnds.textContent = String(background.unmatchedBoundaries);
+      refs.out.components.textContent = String(background.components);
+      return;
+    }
+
+    if (refs.out.cardLabel) refs.out.cardLabel.textContent = 'Statistics';
+    if (refs.out.tilesLabel) refs.out.tilesLabel.textContent = 'Filled tiles';
+    if (refs.out.openEndsLabel) refs.out.openEndsLabel.textContent = 'Open ends';
+    if (refs.out.componentsLabel) refs.out.componentsLabel.textContent = 'Components';
+    if (refs.out.componentsRow) refs.out.componentsRow.hidden = false;
+    refs.out.tiles.textContent = `${report.active}/${report.total}`;
+    refs.out.openEnds.textContent = String(report.openEnds);
+    refs.out.components.textContent = String(report.components);
   }
 
   function normalizePickedComponent(report) {
@@ -4634,7 +5239,7 @@
 
     // Collect vertices
     for (let index = 0; index < state.tiles.length; index += 1) {
-      if (isVertexTileValue(state.tiles[index])) {
+      if (tileExists(index) && isVertexTileValue(state.tiles[index])) {
         const row = Math.floor(index / state.cols);
         const col = index % state.cols;
         vertices.push({ index, row, col });
@@ -4667,7 +5272,7 @@
         while (true) {
           const row = Math.floor(current.index / state.cols);
           const col = current.index % state.cols;
-          const next = neighbor(row, col, current.dir, state.rows, state.cols, lattice, state.wrapped);
+          const next = connectedNeighbor(row, col, current.dir, lattice);
 
           if (!next) {
             // Open end - this is a leg
@@ -9377,7 +9982,7 @@
       if (!fromNode || !toNode) return;
 
       if (edge.from === edge.to) {
-        // Loop: connect vertex → node0 → node1 → node2 → vertex
+        // Loop: connect vertex -> node0 -> node1 -> node2 -> vertex
         const node0 = layout.nodeMap.get(`e${i}_0`);
         const node1 = layout.nodeMap.get(`e${i}_1`);
         const node2 = layout.nodeMap.get(`e${i}_2`);
@@ -9821,6 +10426,7 @@
     drawBoardCopy(ctx, report, palette, { x: 0, y: 0, copyCol: 0, copyRow: 0 }, null);
     if (graphData && graphData.isValid) drawHalfEdgeDecorationLabels(ctx, graphData, palette);
     drawDrawDebugOverlay(ctx, palette, report);
+    drawBackgroundHoverOverlay(ctx, palette);
     drawPickHoverOverlay(ctx, palette, report);
     drawDragGhost(ctx, palette);
   }
@@ -9831,7 +10437,99 @@
     for (let index = 0; index < state.tiles.length; index += 1) {
       drawTile(ctx, index, report, palette, offset, pickedLift);
     }
+    drawBackgroundBoundaries(ctx);
     ctx.restore();
+  }
+
+  function drawBackgroundHoverOverlay(ctx, palette) {
+    if (!isGluedBoundaryMode() || state.inputMode !== 'background' || !state.backgroundHoverEdge) return;
+    const hit = state.backgroundHoverEdge;
+    const cell = geometry.cells[hit.index];
+    const nextCell = geometry.cells[hit.nextIndex];
+    if (!cell || !nextCell) return;
+    const radius = geometry.radius;
+    const lineWidth = hoverEdgeLineWidth(radius);
+    ctx.save();
+    ctx.lineCap = 'round';
+    pairedTileEdgeSegmentsBetweenCells(cell, nextCell, hit.dir, radius).forEach((edgeSegment) => {
+      drawHoverEdgeSegment(ctx, edgeSegment, palette.accent, lineWidth);
+    });
+    ctx.restore();
+  }
+
+  function drawBackgroundBoundaries(ctx) {
+    if (!isGluedBoundaryMode()) return;
+    const lattice = getLattice();
+    const radius = geometry.radius;
+    const lineWidth = hoverEdgeLineWidth(radius);
+    ctx.save();
+    ctx.strokeStyle = '#111111';
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let index = 0; index < state.rows * state.cols; index += 1) {
+      if (!tileExists(index)) continue;
+      const cell = geometry.cells[index];
+      if (!cell) continue;
+      for (let dir = 0; dir < lattice.sides; dir += 1) {
+        if (!isBackgroundBoundaryEdge(index, dir)) continue;
+        const next = neighbor(cell.row, cell.col, dir, state.rows, state.cols, lattice, state.wrapped);
+        if (next) {
+          const nextIndex = indexOf(next.row, next.col, state.cols);
+          if (tileExists(nextIndex)) {
+            if (!hasCutEdgeBetween(index, nextIndex)) continue;
+            const nextCell = geometry.cells[nextIndex];
+            if (!nextCell) continue;
+            pairedTileEdgeSegmentsBetweenCells(cell, nextCell, dir, radius).forEach((edgeSegment) => {
+              drawBackgroundBoundarySegment(ctx, edgeSegment);
+            });
+            continue;
+          }
+        }
+        const segment = edgeSegmentPoints(cell.x, cell.y, dir, radius * 0.96);
+        drawBackgroundBoundarySegment(ctx, segment);
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawBackgroundBoundarySegment(ctx, segment) {
+    ctx.beginPath();
+    ctx.moveTo(segment.start.x, segment.start.y);
+    ctx.lineTo(segment.end.x, segment.end.y);
+    ctx.stroke();
+  }
+
+  function drawHoverEdgeSegment(ctx, segment, color, width) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(segment.start.x, segment.start.y);
+    ctx.lineTo(segment.end.x, segment.end.y);
+    ctx.stroke();
+  }
+
+  function hoverEdgeLineWidth(radius = geometry.radius) {
+    return Math.max(1.8, radius * 0.055);
+  }
+
+  function pairedTileEdgeSegmentsBetweenCells(cell, nextCell, dir, radius) {
+    const lattice = getLattice();
+    return [
+      edgeSegmentPoints(cell.x, cell.y, dir, radius * 0.96),
+      edgeSegmentPoints(nextCell.x, nextCell.y, lattice.opposite[dir], radius * 0.96)
+    ];
+  }
+
+  function isBackgroundBoundaryEdge(index, dir) {
+    if (!tileExists(index)) return false;
+    const lattice = getLattice();
+    const row = Math.floor(index / state.cols);
+    const col = index % state.cols;
+    const next = neighbor(row, col, dir, state.rows, state.cols, lattice, state.wrapped);
+    if (!next) return true;
+    const nextIndex = indexOf(next.row, next.col, state.cols);
+    return !tileExists(nextIndex) || hasCutEdgeBetween(index, nextIndex);
   }
 
   function drawDragGhost(ctx, palette) {
@@ -10002,12 +10700,7 @@
 
   function drawPickEdgeMarker(ctx, x, y, dir, radius, color, width) {
     const segment = edgeSegmentPoints(x, y, dir, radius * 0.96);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.beginPath();
-    ctx.moveTo(segment.start.x, segment.start.y);
-    ctx.lineTo(segment.end.x, segment.end.y);
-    ctx.stroke();
+    drawHoverEdgeSegment(ctx, segment, color, width);
   }
 
   function edgeMarkerMidpoint(x, y, dir, radius) {
@@ -10114,7 +10807,7 @@
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    const markerWidth = Math.max(1.8, radius * 0.055);
+    const markerWidth = hoverEdgeLineWidth(radius);
     markers.forEach((marker) => {
       drawPickEdgeMarker(
         ctx,
@@ -10379,12 +11072,13 @@
     const cell = geometry.cells[index];
     if (!cell) return;
     const radius = geometry.radius;
+    const exists = tileExists(index);
     const tile = state.tiles[index];
     const mask = tileToMask(tile);
-    const hasTile = !isTileEmpty(tile);
+    const hasTile = exists && !isTileEmpty(tile);
     const points = tilePoints(cell.x, cell.y, radius * 0.96);
     const isDragTarget = !!state.drag && index === state.dragPreviewIndex;
-    const isDragSource = !!state.drag && state.drag.active && state.drag.type === 'canvas' && state.drag.sourceIndex === index;
+    const isDragSource = exists && !!state.drag && state.drag.active && state.drag.type === 'canvas' && state.drag.sourceIndex === index;
     const displayTile = isDragTarget && !isTileEmpty(state.drag.tile) ? state.drag.tile : tile;
     const arcComponents = !isDragTarget && report.arcComponents
       ? report.arcComponents[index]
@@ -10392,9 +11086,10 @@
     const spokeComponents = !isDragTarget && report.spokeComponents
       ? report.spokeComponents[index]
       : null;
-    const isHover = (isTilingMode() || (state.inputMode === 'draw' && !isDrawGestureAction()))
+    const isHover = exists && (isTilingMode() || (state.inputMode === 'draw' && !isDrawGestureAction()))
       && index === state.hoverIndex;
     const isDecorationHover = isDecorationMode() && index === state.hoverIndex;
+    const isBackgroundHover = isGluedBoundaryMode() && state.inputMode === 'background' && index === state.hoverIndex;
 
     ctx.beginPath();
     points.forEach((point, pointIndex) => {
@@ -10402,11 +11097,19 @@
       else ctx.lineTo(point.x, point.y);
     });
     ctx.closePath();
-    ctx.fillStyle = isDragTarget ? 'rgba(61,107,79,0.12)' : (isDragSource ? '#eee7dd' : (hasTile ? '#fffdf8' : '#f8f5ee'));
-    ctx.strokeStyle = (isHover || isDecorationHover || isDragTarget) ? palette.accent : palette.border;
-    ctx.lineWidth = (isHover || isDecorationHover || isDragTarget) ? 2 : 1;
+    ctx.fillStyle = !exists
+      ? '#e6e0d6'
+      : (isDragTarget ? 'rgba(61,107,79,0.12)' : (isDragSource ? '#eee7dd' : (hasTile ? '#fffdf8' : '#f8f5ee')));
+    ctx.strokeStyle = (isHover || isDecorationHover || isBackgroundHover || isDragTarget) ? palette.accent : palette.border;
+    ctx.lineWidth = (isHover || isDecorationHover || isBackgroundHover || isDragTarget) ? 2 : 1;
     ctx.fill();
     ctx.stroke();
+
+    if (!exists) {
+      drawRemovedTileMark(ctx, cell, palette);
+      if (state.showCoords) drawCellLabel(ctx, cell, palette);
+      return;
+    }
 
     if (isDualGraph() && isVertexTileValue(displayTile)) {
       drawGraphTile(ctx, cell, displayTile, palette, null, spokeComponents, {
@@ -10427,6 +11130,22 @@
 
     if (state.showErrors && !isDragTarget) drawOpenEndMarks(ctx, index, cell, mask, palette);
     if (state.showCoords) drawCellLabel(ctx, cell, palette);
+  }
+
+  function drawRemovedTileMark(ctx, cell, palette) {
+    if (!isGluedBoundaryMode()) return;
+    const radius = geometry.radius;
+    ctx.save();
+    ctx.strokeStyle = palette.muted;
+    ctx.globalAlpha = 0.42;
+    ctx.lineWidth = Math.max(1, radius * 0.035);
+    ctx.beginPath();
+    ctx.moveTo(cell.x - radius * 0.18, cell.y - radius * 0.18);
+    ctx.lineTo(cell.x + radius * 0.18, cell.y + radius * 0.18);
+    ctx.moveTo(cell.x + radius * 0.18, cell.y - radius * 0.18);
+    ctx.lineTo(cell.x - radius * 0.18, cell.y + radius * 0.18);
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawVertexDecoration(ctx, cell, value, palette, radius) {
@@ -10806,8 +11525,9 @@
     if (hadPreview) draw(analyze());
   }
 
-  function hitTest(clientX, clientY) {
+  function hitTest(clientX, clientY, options = {}) {
     if (!geometry) return -1;
+    const includeRemoved = !!options.includeRemoved;
     const point = state.wrapped
       ? screenPointToWorld(clientPointToLogical(clientX, clientY))
       : clientPointToLogical(clientX, clientY);
@@ -10817,6 +11537,7 @@
       const x = point.x - offset.x;
       const y = point.y - offset.y;
       for (let index = 0; index < geometry.cells.length; index += 1) {
+        if (!includeRemoved && !tileExists(index)) continue;
         const cell = geometry.cells[index];
         if (!cell) continue;
         if (Math.abs(x - cell.x) > geometry.radius || Math.abs(y - cell.y) > geometry.radius) continue;
@@ -10834,6 +11555,11 @@
   function edgeHitTest(clientX, clientY, minDistanceRatio = 0.42) {
     if (!geometry) return null;
     return edgeHitAtBoardPoint(clientPointToBoardPoint(clientX, clientY), minDistanceRatio);
+  }
+
+  function sharedEdgeHitTest(clientX, clientY) {
+    if (!geometry) return null;
+    return sharedEdgeHitAtBoardPoint(clientPointToBoardPoint(clientX, clientY));
   }
 
   function updateDrawDebugFromPoint(clientX, clientY, redraw = true) {
@@ -10939,6 +11665,45 @@
     };
   }
 
+  function sharedEdgeHitAtBoardPoint(point) {
+    const offsets = state.wrapped ? getBoardCopyOffsets() : [{ x: 0, y: 0 }];
+    const lattice = getLattice();
+    let best = null;
+    const maxDistance = Math.max(6, geometry.radius * 0.18);
+    for (const offset of offsets) {
+      const local = {
+        x: point.x - offset.x,
+        y: point.y - offset.y
+      };
+      for (let index = 0; index < geometry.cells.length; index += 1) {
+        if (!tileExists(index)) continue;
+        const cell = geometry.cells[index];
+        if (!cell) continue;
+        if (Math.abs(local.x - cell.x) > geometry.radius * 1.18 || Math.abs(local.y - cell.y) > geometry.radius * 1.18) continue;
+        for (let dir = 0; dir < lattice.sides; dir += 1) {
+          const next = neighbor(cell.row, cell.col, dir, state.rows, state.cols, lattice, state.wrapped);
+          if (!next) continue;
+          const nextIndex = indexOf(next.row, next.col, state.cols);
+          if (index > nextIndex || !tileExists(nextIndex)) continue;
+          const segment = edgeSegmentPoints(cell.x, cell.y, dir, geometry.radius * 0.96);
+          const projection = projectPointToSegment(local, segment.start, segment.end);
+          if (projection.distance > maxDistance) continue;
+          if (!best || projection.distance < best.distance) {
+            best = {
+              index,
+              dir,
+              nextIndex,
+              offset,
+              distance: projection.distance,
+              point: projection.point
+            };
+          }
+        }
+      }
+    }
+    return best;
+  }
+
   function drawExitDirection(clientX, clientY, tileState) {
     return drawExitDirectionFromPoint(clientPointToBoardPoint(clientX, clientY), tileState);
   }
@@ -10973,7 +11738,7 @@
     const lattice = getLattice();
     const cell = geometry.cells[tileState.index];
     if (!cell) return null;
-    const next = neighbor(cell.row, cell.col, exitDir, state.rows, state.cols, lattice, state.wrapped);
+    const next = connectedNeighbor(cell.row, cell.col, exitDir, lattice);
     if (!next) return null;
     const index = indexOf(next.row, next.col, state.cols);
     return {
@@ -11025,6 +11790,7 @@
         y: point.y - offset.y
       };
       for (let index = 0; index < geometry.cells.length; index += 1) {
+        if (!tileExists(index)) continue;
         const cell = geometry.cells[index];
         if (!cell) continue;
         const radius = geometry.radius * radiusScale;
@@ -11064,10 +11830,20 @@
     const lattice = getLattice();
     const row = Math.floor(index / state.cols);
     const col = index % state.cols;
-    const next = neighbor(row, col, dir, state.rows, state.cols, lattice, state.wrapped);
+    const next = connectedNeighbor(row, col, dir, lattice);
     if (!next) return false;
     const nextIndex = indexOf(next.row, next.col, state.cols);
     return !!(tileToMask(state.tiles[nextIndex]) & (1 << lattice.opposite[dir]));
+  }
+
+  function connectedNeighbor(row, col, dir, lattice = getLattice()) {
+    const index = indexOf(row, col, state.cols);
+    if (!tileExists(index)) return null;
+    const next = neighbor(row, col, dir, state.rows, state.cols, lattice, state.wrapped);
+    if (!next) return null;
+    const nextIndex = indexOf(next.row, next.col, state.cols);
+    if (hasCutEdgeBetween(index, nextIndex)) return null;
+    return tileExists(nextIndex) ? next : null;
   }
 
   function refreshExport() {
@@ -11077,9 +11853,10 @@
       name: 'Mosaic Calculator',
       lattice: state.lattice,
       diagramType: state.diagramType,
-      boundary: state.wrapped ? 'wrapped' : 'open',
+      boundary: state.boundaryMode,
       wrappedViewMode: state.wrappedViewMode,
       inputMode: state.inputMode,
+      backgroundAction: state.backgroundAction,
       clickMode: state.editMode,
       drawAction: state.drawAction,
       knotCodeKind: state.knotCodeKind,
@@ -11109,6 +11886,9 @@
       cols: state.cols,
       edits: state.edits,
       filledTiles: report.active,
+      backgroundSpace: report.background || analyzeBackgroundSpace(),
+      removedTiles: removedTilesForExport(),
+      cutEdges: cutEdgesForExport(),
       tiles: state.tiles.map((tile, index) => {
         const mask = tileToMask(tile);
         return {
@@ -11125,6 +11905,37 @@
       dualGraph: isDualGraph() ? buildDualGraphExport(report, lattice) : null
     };
     refs.exportOut.value = JSON.stringify(payload, null, 2);
+  }
+
+  function removedTilesForExport() {
+    return Array.from(cloneRemovedTileSet()).sort((left, right) => left - right).map((index) => ({
+      row: Math.floor(index / state.cols) + 1,
+      col: (index % state.cols) + 1,
+      index
+    }));
+  }
+
+  function cutEdgesForExport() {
+    return Array.from(cloneCutEdgeSet()).sort().map((key) => {
+      const parsed = parseCutEdgeKey(key);
+      if (!parsed) return null;
+      const leftRow = Math.floor(parsed.left / state.cols);
+      const leftCol = parsed.left % state.cols;
+      const rightRow = Math.floor(parsed.right / state.cols);
+      const rightCol = parsed.right % state.cols;
+      return {
+        left: {
+          row: leftRow + 1,
+          col: leftCol + 1,
+          index: parsed.left
+        },
+        right: {
+          row: rightRow + 1,
+          col: rightCol + 1,
+          index: parsed.right
+        }
+      };
+    }).filter(Boolean);
   }
 
   function copyExport() {
@@ -11167,17 +11978,20 @@
   }
 
   function syncAllInputs(rows, cols, latticeName, wrapped) {
+    const boundaryMode = normalizeBoundaryMode(wrapped);
     refs.gridRows.value = rows;
     refs.gridCols.value = cols;
     refs.diagramType.value = state.diagramType;
     refs.inputMode.value = state.inputMode;
     refs.latticeSelect.value = latticeName;
-    refs.wrapBoard.checked = wrapped;
+    if (refs.boundaryMode) refs.boundaryMode.value = boundaryMode;
+    if (refs.wrapBoard) refs.wrapBoard.checked = boundaryMode === 'wrapped';
     refs.editMode.value = state.editMode;
     refs.drawAction.value = state.drawAction;
     refs.knotCodeKind.value = state.knotCodeKind;
     refs.drawLayer.value = state.drawLayer;
     refs.drawStyle.value = state.drawStyle;
+    if (refs.backgroundAction) refs.backgroundAction.value = state.backgroundAction;
     if (refs.halfEdgeLabelStyle) refs.halfEdgeLabelStyle.value = normalizeHalfEdgeLabelStyle(state.halfEdgeLabelStyle);
     if (refs.clearVertexDecorations) refs.clearVertexDecorations.checked = !!state.clearVertexDecorations;
     if (refs.clearHalfEdgeDecorations) refs.clearHalfEdgeDecorations.checked = !!state.clearHalfEdgeDecorations;
@@ -11259,6 +12073,15 @@
 
   function updateDrawModeControls() {
     if (!refs.drawLayer || !refs.drawStyle) return;
+    if (refs.inputBackgroundOption) {
+      refs.inputBackgroundOption.hidden = !isGluedBoundaryMode();
+      refs.inputBackgroundOption.disabled = !isGluedBoundaryMode();
+    }
+    if (refs.diagramTypeRow) refs.diagramTypeRow.hidden = false;
+    if (!isGluedBoundaryMode() && state.inputMode === 'background') {
+      state.inputMode = 'draw';
+      refs.inputMode.value = state.inputMode;
+    }
     if (!isDualGraph() && state.inputMode === 'decoration') {
       state.inputMode = 'draw';
       refs.inputMode.value = state.inputMode;
@@ -11576,6 +12399,24 @@
     return type === 'dual' || type === 'dualGraph' || type === 'dual-graph' ? 'dual' : 'link';
   }
 
+  function normalizeBoundaryMode(mode) {
+    if (mode === true || mode === 'true' || mode === 'wrapped') return 'wrapped';
+    if (mode === 'glued' || mode === 'glue' || mode === 'background') return 'glued';
+    return 'grid';
+  }
+
+  function boundaryModeLabel() {
+    if (state.boundaryMode === 'wrapped') return 'wrapped';
+    if (state.boundaryMode === 'glued') return 'glued';
+    return 'grid';
+  }
+
+  function syncInputModeForBoundaryChange(oldMode, nextMode) {
+    if (oldMode === 'glued' && nextMode !== 'glued' && state.inputMode === 'background') {
+      state.inputMode = normalizeInputMode(state.backgroundReturnInputMode || 'draw');
+    }
+  }
+
   function isDualGraph() {
     return state.diagramType === 'dual';
   }
@@ -11595,7 +12436,12 @@
   function normalizeInputMode(mode) {
     if (mode === 'drag') return 'tiling';
     if (mode === 'decoration') return isDualGraph() ? 'decoration' : 'draw';
+    if (mode === 'background') return isGluedBoundaryMode() ? 'background' : 'draw';
     return ['draw', 'tiling', 'pick', 'import'].includes(mode) ? mode : 'draw';
+  }
+
+  function normalizeBackgroundAction(action) {
+    return action === 'boundary' || action === 'add-boundary' || action === 'addBoundary' ? 'boundary' : 'tile';
   }
 
   function normalizeDualGraphLayoutMethod(method) {
