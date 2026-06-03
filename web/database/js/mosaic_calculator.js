@@ -53,6 +53,13 @@
   const COMPONENT_COLOR_PALETTE = ['#b23a48', '#1f7a8c', '#6a4c93', '#c47f17'];
   const GLUED_BOUNDARY_COLORS = ['#1f7a8c', '#b23a48', '#6a4c93', '#c47f17', '#2f855a', '#8a4f7d'];
   const DEFAULT_BACKGROUND_CUSP_MARKER_SCALE = 0.7;
+  const DEFAULT_BACKGROUND_BILLIARD_SPEED = 0.2;
+  const DEFAULT_BACKGROUND_BILLIARD_TRAIL_LENGTH = 200;
+  const DEFAULT_BACKGROUND_BILLIARD_TRAIL_INFINITY = 400;
+  const DEFAULT_BACKGROUND_BILLIARD_ARROW_LENGTH = 20;
+  const DEFAULT_BACKGROUND_BILLIARD_HIT_MARKERS = 'boundary';
+  const BACKGROUND_BILLIARD_MAX_HITS = 720;
+  const BACKGROUND_BILLIARD_MAX_COLLISIONS_PER_FRAME = 80;
   const KNOT_PRESETS = [
     {
       id: 'hopf-link',
@@ -260,7 +267,22 @@
     pendingGlueChains: null,
     backgroundMultiEdges: true,
     backgroundCuspMarkerScale: DEFAULT_BACKGROUND_CUSP_MARKER_SCALE,
+    backgroundBilliardSpeed: DEFAULT_BACKGROUND_BILLIARD_SPEED,
+    backgroundBilliardTrailLength: DEFAULT_BACKGROUND_BILLIARD_TRAIL_LENGTH,
+    backgroundBilliardArrowLength: DEFAULT_BACKGROUND_BILLIARD_ARROW_LENGTH,
+    backgroundBilliardHitMarkers: DEFAULT_BACKGROUND_BILLIARD_HIT_MARKERS,
     backgroundHoverCusp: null,
+    backgroundBilliard: {
+      tileIndex: -1,
+      position: null,
+      direction: null,
+      aimPoint: null,
+      hitPoints: [],
+      trailPoints: [],
+      playing: false,
+      frame: null,
+      lastTime: 0
+    },
     selectedBackgroundCusp: null,
     edits: 0,
     showErrors: true,
@@ -395,6 +417,20 @@
     refs.backgroundMultiEdgeRow = document.getElementById('background-multi-edge-row');
     refs.backgroundMultiEdges = document.getElementById('background-multi-edges');
     refs.backgroundBeginSecondChain = document.getElementById('background-begin-second-chain');
+    refs.backgroundBilliardRow = document.getElementById('background-billiard-row');
+    refs.backgroundBilliardPlay = document.getElementById('background-billiard-play');
+    refs.backgroundBilliardClear = document.getElementById('background-billiard-clear');
+    refs.backgroundBilliardSpeedRow = document.getElementById('background-billiard-speed-row');
+    refs.backgroundBilliardSpeed = document.getElementById('background-billiard-speed');
+    refs.backgroundBilliardSpeedValue = document.getElementById('background-billiard-speed-value');
+    refs.backgroundBilliardTrailRow = document.getElementById('background-billiard-trail-row');
+    refs.backgroundBilliardTrail = document.getElementById('background-billiard-trail');
+    refs.backgroundBilliardTrailValue = document.getElementById('background-billiard-trail-value');
+    refs.backgroundBilliardArrowRow = document.getElementById('background-billiard-arrow-row');
+    refs.backgroundBilliardArrow = document.getElementById('background-billiard-arrow');
+    refs.backgroundBilliardArrowValue = document.getElementById('background-billiard-arrow-value');
+    refs.backgroundBilliardHitRow = document.getElementById('background-billiard-hit-row');
+    refs.backgroundBilliardHitMarkers = document.getElementById('background-billiard-hit-markers');
     refs.backgroundCuspMarkerRow = document.getElementById('background-cusp-marker-row');
     refs.backgroundCuspMarkerScale = document.getElementById('background-cusp-marker-scale');
     refs.backgroundCuspMarkerScaleValue = document.getElementById('background-cusp-marker-scale-value');
@@ -542,7 +578,9 @@
         refs.backgroundAction.value = state.backgroundAction;
         state.hoverIndex = -1;
         state.backgroundHoverEdge = null;
+        state.backgroundHoverCusp = null;
         if (!isBackgroundGlueAction()) clearPendingGlueEdge();
+        if (!isBackgroundBilliardAction()) stopBackgroundBilliard(false);
         syncBackgroundModeControls();
         syncMainCanvasCursor();
         updateReport(false);
@@ -558,6 +596,44 @@
     }
     if (refs.backgroundBeginSecondChain) {
       refs.backgroundBeginSecondChain.addEventListener('click', beginSecondGlueBoundaryChain);
+    }
+    if (refs.backgroundBilliardPlay) {
+      refs.backgroundBilliardPlay.addEventListener('click', toggleBackgroundBilliardPlayback);
+    }
+    if (refs.backgroundBilliardClear) {
+      refs.backgroundBilliardClear.addEventListener('click', () => clearBackgroundBilliard(true));
+    }
+    if (refs.backgroundBilliardSpeed) {
+      refs.backgroundBilliardSpeed.addEventListener('input', () => {
+        state.backgroundBilliardSpeed = normalizeBackgroundBilliardSpeed(refs.backgroundBilliardSpeed.value);
+        syncBackgroundBilliardControls();
+        refreshExport();
+      });
+    }
+    if (refs.backgroundBilliardTrail) {
+      refs.backgroundBilliardTrail.addEventListener('input', () => {
+        state.backgroundBilliardTrailLength = normalizeBackgroundBilliardTrailLength(refs.backgroundBilliardTrail.value);
+        trimBackgroundBilliardTrail();
+        syncBackgroundBilliardControls();
+        draw(analyze());
+        refreshExport();
+      });
+    }
+    if (refs.backgroundBilliardArrow) {
+      refs.backgroundBilliardArrow.addEventListener('input', () => {
+        state.backgroundBilliardArrowLength = normalizeBackgroundBilliardArrowLength(refs.backgroundBilliardArrow.value);
+        syncBackgroundBilliardControls();
+        draw(analyze());
+        refreshExport();
+      });
+    }
+    if (refs.backgroundBilliardHitMarkers) {
+      refs.backgroundBilliardHitMarkers.addEventListener('change', () => {
+        state.backgroundBilliardHitMarkers = normalizeBackgroundBilliardHitMarkers(refs.backgroundBilliardHitMarkers.value);
+        refs.backgroundBilliardHitMarkers.value = state.backgroundBilliardHitMarkers;
+        draw(analyze());
+        refreshExport();
+      });
     }
     if (refs.backgroundCuspMarkerScale) {
       refs.backgroundCuspMarkerScale.addEventListener('input', () => {
@@ -855,7 +931,9 @@
       });
     }
     window.addEventListener('resize', debounce(() => {
+      const oldGeometry = geometry;
       resizeCanvas();
+      remapBackgroundBilliardAfterResize(oldGeometry);
       normalizeViewOffset();
       syncDualGraphDegenerationWidePlacement();
       draw(analyze());
@@ -874,7 +952,9 @@
     state.pickHoverHit = null;
     state.decorationHoverHit = null;
     state.backgroundHoverEdge = null;
+    state.backgroundHoverCusp = null;
     if (state.inputMode !== 'background') clearPendingGlueEdge();
+    if (state.inputMode !== 'background') stopBackgroundBilliard(false);
     syncMainCanvasCursor();
     if (state.inputMode !== 'pick' && !state.displayPick && options.clearPick !== false) {
       state.pickedComponent = null;
@@ -1201,6 +1281,7 @@
       state.decorationHoverHit = null;
       state.backgroundHoverEdge = null;
       state.backgroundHoverCusp = null;
+      if (state.backgroundBilliard) state.backgroundBilliard.aimPoint = null;
       syncMainCanvasCursor();
       draw(analyze());
     });
@@ -1217,16 +1298,18 @@
       }
       if (state.inputMode === 'background') {
         const debugChanged = clearDrawDebugHit(false);
-        const cusp = backgroundCuspHitTest(event.clientX, event.clientY);
-        const edge = isBackgroundBoundaryAction()
+        const isBilliard = isBackgroundBilliardAction();
+        const cusp = isBilliard ? null : backgroundCuspHitTest(event.clientX, event.clientY);
+        const edge = !isBilliard && isBackgroundBoundaryAction()
           ? backgroundEdgeHitTest(event.clientX, event.clientY)
           : null;
-        const hit = isBackgroundBoundaryAction()
+        const hit = !isBilliard && isBackgroundBoundaryAction()
           ? -1
-          : hitTest(event.clientX, event.clientY, { includeRemoved: true });
+          : backgroundTileHitIndex(event.clientX, event.clientY);
+        const aimChanged = isBilliard ? updateBackgroundBilliardAim(event.clientX, event.clientY, false) : false;
         const edgeChanged = !sameBackgroundEdgeHit(edge, state.backgroundHoverEdge);
         const cuspChanged = !sameBackgroundCuspHit(cusp, state.backgroundHoverCusp);
-        if (hit !== state.hoverIndex || edgeChanged || cuspChanged || state.decorationHoverHit || debugChanged) {
+        if (hit !== state.hoverIndex || edgeChanged || cuspChanged || state.decorationHoverHit || debugChanged || aimChanged) {
           state.hoverIndex = hit;
           state.backgroundHoverEdge = edge;
           state.backgroundHoverCusp = cusp;
@@ -1380,6 +1463,7 @@
     state.hoverIndex = -1;
     state.backgroundHoverEdge = null;
     state.backgroundHoverCusp = null;
+    clearBackgroundBilliard(false);
     state.selectedBackgroundCusp = null;
     state.drawDebugHit = null;
     state.pickHoverHit = null;
@@ -1442,6 +1526,7 @@
     state.decorationHoverHit = null;
     state.backgroundHoverEdge = null;
     state.backgroundHoverCusp = null;
+    clearBackgroundBilliard(false);
     state.selectedBackgroundCusp = null;
     state.pendingGlueEdge = null;
     state.pendingGlueChains = null;
@@ -1790,6 +1875,7 @@
     state.backgroundHoverEdge = null;
     state.pendingGlueEdge = null;
     state.pendingGlueChains = null;
+    clearBackgroundBilliard(false);
     syncMainCanvasCursor();
     state.pickedComponent = null;
     state.pickedAnchor = null;
@@ -2347,6 +2433,25 @@
         ? payload.backgroundCuspMarkerScale
         : (payload.backgroundSpace && payload.backgroundSpace.cuspMarkerScale)
     );
+    state.backgroundBilliardSpeed = normalizeBackgroundBilliardSpeed(
+      payload.backgroundBilliardSpeed != null
+        ? payload.backgroundBilliardSpeed
+        : (payload.backgroundSpace && payload.backgroundSpace.billiardSpeed)
+    );
+    state.backgroundBilliardTrailLength = normalizeBackgroundBilliardTrailLength(
+      payload.backgroundBilliardTrailLength != null
+        ? payload.backgroundBilliardTrailLength
+        : (payload.backgroundSpace && payload.backgroundSpace.billiardTrailLength)
+    );
+    state.backgroundBilliardArrowLength = normalizeBackgroundBilliardArrowLength(
+      payload.backgroundBilliardArrowLength != null
+        ? payload.backgroundBilliardArrowLength
+        : (payload.backgroundSpace && payload.backgroundSpace.billiardArrowLength)
+    );
+    state.backgroundBilliardHitMarkers = normalizeBackgroundBilliardHitMarkers(
+      payload.backgroundBilliardHitMarkers
+      || (payload.backgroundSpace && payload.backgroundSpace.billiardHitMarkers)
+    );
     state.editMode = normalizeEditMode(payload.clickMode || payload.editMode);
     state.drawAction = normalizeDrawAction(payload.drawAction || (payload.display && payload.display.drawAction));
     if (state.diagramType === 'dual' && (payload.drawAddVertices || (payload.display && payload.display.drawAddVertices))) {
@@ -2377,6 +2482,7 @@
     state.backgroundHoverEdge = null;
     state.pendingGlueEdge = null;
     state.pendingGlueChains = null;
+    clearBackgroundBilliard(false);
     syncMainCanvasCursor();
     state.pickedComponent = null;
     state.pickedAnchor = null;
@@ -2408,11 +2514,13 @@
     refs.drawStyle.value = state.drawStyle;
     if (refs.backgroundAction) refs.backgroundAction.value = state.backgroundAction;
     if (refs.backgroundMultiEdges) refs.backgroundMultiEdges.checked = !!state.backgroundMultiEdges;
+    syncBackgroundBilliardControls();
     if (refs.halfEdgeLabelStyle) refs.halfEdgeLabelStyle.value = state.halfEdgeLabelStyle;
     if (refs.clearVertexDecorations) refs.clearVertexDecorations.checked = !!state.clearVertexDecorations;
     if (refs.clearHalfEdgeDecorations) refs.clearHalfEdgeDecorations.checked = !!state.clearHalfEdgeDecorations;
     renderTilePalette();
     resizeCanvas();
+    importBackgroundBilliardState(payload);
     applyImportedView(payload.view);
     updateReport(false);
   }
@@ -2758,6 +2866,56 @@
     return decorations;
   }
 
+  function importBackgroundBilliardState(payload) {
+    const source = payload && typeof payload === 'object'
+      ? (payload.backgroundBilliard || (payload.backgroundSpace && payload.backgroundSpace.billiard))
+      : null;
+    if (!source || typeof source !== 'object' || !geometry || !Array.isArray(geometry.cells)) return;
+    const index = importedEndpointIndex(source.tile || source, state.rows, state.cols);
+    if (index < 0 || !tileExists(index)) return;
+    const cell = geometry.cells[index];
+    if (!cell || !Number.isFinite(geometry.radius) || geometry.radius <= 0) return;
+    const local = source.local || source.offset || source.position || {};
+    const localX = Number(local.x);
+    const localY = Number(local.y);
+    if (!Number.isFinite(localX) || !Number.isFinite(localY)) return;
+    const position = {
+      x: cell.x + (localX * geometry.radius),
+      y: cell.y + (localY * geometry.radius)
+    };
+    const hit = tileHitAtBoardPoint(position, 1);
+    if (!hit || hit.index !== index) return;
+    const direction = importBackgroundBilliardDirection(source);
+    state.backgroundBilliard = {
+      ...resetBackgroundBilliardState(),
+      tileIndex: index,
+      position,
+      direction,
+      aimPoint: direction ? {
+        x: position.x + direction.x * normalizeBackgroundBilliardArrowLength(state.backgroundBilliardArrowLength),
+        y: position.y + direction.y * normalizeBackgroundBilliardArrowLength(state.backgroundBilliardArrowLength)
+      } : null,
+      trailPoints: [{ x: position.x, y: position.y }]
+    };
+    syncBackgroundBilliardControls();
+  }
+
+  function importBackgroundBilliardDirection(source) {
+    if (!source || typeof source !== 'object') return null;
+    if (source.direction && typeof source.direction === 'object') {
+      const dx = Number(source.direction.x);
+      const dy = Number(source.direction.y);
+      if (Number.isFinite(dx) && Number.isFinite(dy) && Math.hypot(dx, dy) >= 0.001) {
+        return normalizeVector(dx, dy, 1, 0);
+      }
+    }
+    const angle = source.angleRadians != null ? Number(source.angleRadians) : (
+      source.angleDegrees != null ? Number(source.angleDegrees) * Math.PI / 180 : Number(source.angle)
+    );
+    if (!Number.isFinite(angle)) return null;
+    return normalizeVector(Math.cos(angle), Math.sin(angle), 1, 0);
+  }
+
   function applyImportedView(view) {
     state.viewScale = 1;
     state.viewX = 0;
@@ -2793,6 +2951,7 @@
     state.displayPick = false;
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
+    clearBackgroundBilliard(false);
     if (refs.displayPick) refs.displayPick.checked = false;
     if (shouldRestoreInputMode) {
       state.inputMode = normalizeInputMode(returnMode);
@@ -2862,6 +3021,10 @@
     if (!refs.canvas) return;
     if (isDecorationMode()) {
       refs.canvas.style.cursor = state.decorationHoverHit ? 'pointer' : 'default';
+      return;
+    }
+    if (state.inputMode === 'background' && isBackgroundBilliardAction()) {
+      refs.canvas.style.cursor = state.backgroundBilliard && state.backgroundBilliard.playing ? 'default' : 'crosshair';
       return;
     }
     if (state.inputMode === 'background' && state.backgroundHoverCusp) {
@@ -3410,6 +3573,7 @@
 
   function toggleBackgroundTile(index) {
     if (!isGluedBoundaryMode() || index < 0 || index >= state.rows * state.cols) return false;
+    clearBackgroundBilliard(false);
     clearStandardDualGraphInput();
     const removing = !state.removedTiles.has(index);
     if (removing) {
@@ -3430,6 +3594,7 @@
     const key = cutEdgeKey(edge.index, edge.nextIndex);
     if (!key) return false;
     if (!tileExists(edge.index) || !tileExists(edge.nextIndex)) return false;
+    clearBackgroundBilliard(false);
     clearStandardDualGraphInput();
     if (state.cutEdges.has(key)) {
       state.cutEdges.delete(key);
@@ -3452,6 +3617,7 @@
       dir: edge.dir
     };
     if (!isValidBoundaryEdge(boundaryEdge)) return false;
+    clearBackgroundBilliard(false);
     clearStandardDualGraphInput();
 
     const existingPair = gluedPairForBoundaryEdge(boundaryEdge);
@@ -3514,6 +3680,7 @@
     if (!isGluedBoundaryMode() || !edge) return false;
     const boundaryEdge = cloneBoundaryEdge({ index: edge.index, dir: edge.dir });
     if (!boundaryEdge || !isValidBoundaryEdge(boundaryEdge)) return false;
+    clearBackgroundBilliard(false);
     clearStandardDualGraphInput();
 
     const existingPair = gluedPairForBoundaryEdge(boundaryEdge);
@@ -3650,6 +3817,469 @@
     return vertex;
   }
 
+  function resetBackgroundBilliardState() {
+    return {
+      tileIndex: -1,
+      position: null,
+      direction: null,
+      aimPoint: null,
+      hitPoints: [],
+      trailPoints: [],
+      playing: false,
+      frame: null,
+      lastTime: 0
+    };
+  }
+
+  function backgroundBilliardState() {
+    if (!state.backgroundBilliard || typeof state.backgroundBilliard !== 'object') {
+      state.backgroundBilliard = resetBackgroundBilliardState();
+    }
+    return state.backgroundBilliard;
+  }
+
+  function stopBackgroundBilliard(redraw = true) {
+    const billiard = backgroundBilliardState();
+    if (billiard.frame != null) {
+      window.cancelAnimationFrame(billiard.frame);
+      billiard.frame = null;
+    }
+    billiard.playing = false;
+    billiard.lastTime = 0;
+    syncBackgroundBilliardControls();
+    syncMainCanvasCursor();
+    if (redraw) draw(analyze());
+  }
+
+  function clearBackgroundBilliard(redraw = true) {
+    const current = backgroundBilliardState();
+    if (current.frame != null) window.cancelAnimationFrame(current.frame);
+    state.backgroundBilliard = resetBackgroundBilliardState();
+    syncBackgroundBilliardControls();
+    syncMainCanvasCursor();
+    if (redraw) updateReport(false);
+  }
+
+  function remapBackgroundBilliardAfterResize(oldGeometry) {
+    const billiard = backgroundBilliardState();
+    if (!oldGeometry || !geometry || !billiard.position || billiard.tileIndex < 0) return;
+    const oldCell = oldGeometry.cells && oldGeometry.cells[billiard.tileIndex];
+    const nextCell = geometry.cells && geometry.cells[billiard.tileIndex];
+    if (!oldCell || !nextCell || !Number.isFinite(oldGeometry.radius) || oldGeometry.radius <= 0) {
+      clearBackgroundBilliard(false);
+      return;
+    }
+    const scale = geometry.radius / oldGeometry.radius;
+    const oldPosition = billiard.position;
+    billiard.position = {
+      x: nextCell.x + ((billiard.position.x - oldCell.x) * scale),
+      y: nextCell.y + ((billiard.position.y - oldCell.y) * scale)
+    };
+    if (billiard.aimPoint) {
+      billiard.aimPoint = {
+        x: nextCell.x + ((billiard.aimPoint.x - oldCell.x) * scale),
+        y: nextCell.y + ((billiard.aimPoint.y - oldCell.y) * scale)
+      };
+    }
+    billiard.hitPoints = [];
+    billiard.trailPoints = oldPosition ? [{ ...billiard.position }] : [];
+    trimBackgroundBilliardTrail();
+  }
+
+  function syncBackgroundBilliardControls() {
+    const billiard = backgroundBilliardState();
+    const show = isGluedBoundaryMode() && state.inputMode === 'background' && isBackgroundBilliardAction();
+    if (refs.backgroundBilliardRow) refs.backgroundBilliardRow.hidden = !show;
+    if (refs.backgroundBilliardSpeedRow) refs.backgroundBilliardSpeedRow.hidden = !show;
+    if (refs.backgroundBilliardTrailRow) refs.backgroundBilliardTrailRow.hidden = !show;
+    if (refs.backgroundBilliardArrowRow) refs.backgroundBilliardArrowRow.hidden = !show;
+    if (refs.backgroundBilliardHitRow) refs.backgroundBilliardHitRow.hidden = !show;
+    if (refs.backgroundBilliardPlay) {
+      let playLabel = 'add point';
+      let playDisabled = true;
+      if (billiard.playing) {
+        playLabel = 'stop';
+        playDisabled = false;
+      } else if (billiard.position && !billiard.direction) {
+        playLabel = 'choose direction';
+      } else if (billiard.position && billiard.direction) {
+        playLabel = 'play';
+        playDisabled = false;
+      }
+      refs.backgroundBilliardPlay.textContent = playLabel;
+      refs.backgroundBilliardPlay.disabled = !show || playDisabled;
+    }
+    if (refs.backgroundBilliardClear) {
+      refs.backgroundBilliardClear.disabled = !show || (!billiard.position && !billiard.direction && !billiard.hitPoints.length && !billiard.trailPoints.length);
+    }
+    if (refs.backgroundBilliardSpeed) {
+      const speed = normalizeBackgroundBilliardSpeed(state.backgroundBilliardSpeed);
+      refs.backgroundBilliardSpeed.value = speed.toFixed(2);
+      if (refs.backgroundBilliardSpeedValue) refs.backgroundBilliardSpeedValue.textContent = speed.toFixed(2);
+    }
+    if (refs.backgroundBilliardTrail) {
+      const trailLength = normalizeBackgroundBilliardTrailLength(state.backgroundBilliardTrailLength);
+      refs.backgroundBilliardTrail.value = String(Math.round(trailLength));
+      if (refs.backgroundBilliardTrailValue) refs.backgroundBilliardTrailValue.textContent = formatBackgroundBilliardTrailLength(trailLength);
+    }
+    if (refs.backgroundBilliardArrow) {
+      const arrowLength = normalizeBackgroundBilliardArrowLength(state.backgroundBilliardArrowLength);
+      refs.backgroundBilliardArrow.value = String(Math.round(arrowLength));
+      if (refs.backgroundBilliardArrowValue) refs.backgroundBilliardArrowValue.textContent = String(Math.round(arrowLength));
+    }
+    if (refs.backgroundBilliardHitMarkers) {
+      refs.backgroundBilliardHitMarkers.value = normalizeBackgroundBilliardHitMarkers(state.backgroundBilliardHitMarkers);
+    }
+  }
+
+  function toggleBackgroundBilliardPlayback() {
+    const billiard = backgroundBilliardState();
+    if (billiard.playing) {
+      stopBackgroundBilliard(true);
+      return;
+    }
+    if (!billiard.position || !billiard.direction || billiard.tileIndex < 0 || !tileExists(billiard.tileIndex)) return;
+    if (!Array.isArray(billiard.trailPoints) || !billiard.trailPoints.length) {
+      billiard.trailPoints = [{ x: billiard.position.x, y: billiard.position.y }];
+    }
+    billiard.playing = true;
+    billiard.lastTime = 0;
+    syncBackgroundBilliardControls();
+    syncMainCanvasCursor();
+    billiard.frame = window.requestAnimationFrame(stepBackgroundBilliardAnimation);
+  }
+
+  function stepBackgroundBilliardAnimation(timestamp) {
+    const billiard = backgroundBilliardState();
+    if (!billiard.playing) {
+      billiard.frame = null;
+      syncBackgroundBilliardControls();
+      return;
+    }
+    if (!billiard.lastTime) billiard.lastTime = timestamp;
+    const elapsed = clamp(timestamp - billiard.lastTime, 0, 48);
+    billiard.lastTime = timestamp;
+    advanceBackgroundBilliard(normalizeBackgroundBilliardSpeed(state.backgroundBilliardSpeed) * elapsed);
+    draw(analyze());
+    if (billiard.playing) billiard.frame = window.requestAnimationFrame(stepBackgroundBilliardAnimation);
+    else syncBackgroundBilliardControls();
+  }
+
+  function handleBackgroundBilliardClick(clientX, clientY) {
+    if (!isGluedBoundaryMode()) return false;
+    const point = clientPointToBoardPoint(clientX, clientY);
+    const billiard = backgroundBilliardState();
+    if (!billiard.position || billiard.playing) {
+      const hit = tileHitAtBoardPoint(point, 1);
+      if (!hit || !tileExists(hit.index)) return false;
+      stopBackgroundBilliard(false);
+      state.backgroundBilliard = {
+        ...resetBackgroundBilliardState(),
+        tileIndex: hit.index,
+        position: { x: point.x, y: point.y },
+        trailPoints: [{ x: point.x, y: point.y }],
+        aimPoint: null
+      };
+      syncBackgroundBilliardControls();
+      updateReport(false);
+      return true;
+    }
+
+    const dx = point.x - billiard.position.x;
+    const dy = point.y - billiard.position.y;
+    if (Math.hypot(dx, dy) < Math.max(4, geometry.radius * 0.12)) return false;
+    billiard.direction = normalizeVector(dx, dy, 1, 0);
+    billiard.aimPoint = { x: point.x, y: point.y };
+    syncBackgroundBilliardControls();
+    updateReport(false);
+    return true;
+  }
+
+  function updateBackgroundBilliardAim(clientX, clientY, redraw = true) {
+    const billiard = backgroundBilliardState();
+    if (!isBackgroundBilliardAction() || billiard.playing || !billiard.position || billiard.direction) {
+      if (billiard.aimPoint && (!isBackgroundBilliardAction() || billiard.playing)) {
+        billiard.aimPoint = null;
+        if (redraw) draw(analyze());
+        return true;
+      }
+      return false;
+    }
+    const point = clientPointToBoardPoint(clientX, clientY);
+    const next = { x: point.x, y: point.y };
+    if (billiard.aimPoint && Math.hypot(billiard.aimPoint.x - next.x, billiard.aimPoint.y - next.y) < 0.5) return false;
+    billiard.aimPoint = next;
+    if (redraw) draw(analyze());
+    return true;
+  }
+
+  function backgroundTileHitIndex(clientX, clientY) {
+    const hit = tileHitAtBoardPoint(clientPointToBoardPoint(clientX, clientY), 1);
+    return hit ? hit.index : -1;
+  }
+
+  function backgroundBilliardStatusText() {
+    if (!isBackgroundBilliardAction()) return '';
+    const billiard = backgroundBilliardState();
+    if (!billiard.position) return 'geodesic: click inside an existing tile to place the point';
+    if (!billiard.direction) return 'geodesic: click a second point to choose direction';
+    return `geodesic: ${billiard.playing ? 'playing' : 'ready'}, ${billiard.hitPoints.length} hit${billiard.hitPoints.length === 1 ? '' : 's'}`;
+  }
+
+  function advanceBackgroundBilliard(distance) {
+    const billiard = backgroundBilliardState();
+    if (!billiard.position || !billiard.direction || billiard.tileIndex < 0 || !Number.isFinite(distance) || distance <= 0) return;
+    appendBackgroundBilliardTrailPoint(billiard.position);
+    let remaining = distance;
+    let guard = 0;
+    while (remaining > 0.001 && guard < BACKGROUND_BILLIARD_MAX_COLLISIONS_PER_FRAME) {
+      guard += 1;
+      const hit = nextBackgroundBilliardEdgeHit(billiard);
+      if (!hit) {
+        billiard.position = {
+          x: billiard.position.x + billiard.direction.x * remaining,
+          y: billiard.position.y + billiard.direction.y * remaining
+        };
+        appendBackgroundBilliardTrailPoint(billiard.position);
+        return;
+      }
+      if (hit.distance > remaining) {
+        billiard.position = {
+          x: billiard.position.x + billiard.direction.x * remaining,
+          y: billiard.position.y + billiard.direction.y * remaining
+        };
+        appendBackgroundBilliardTrailPoint(billiard.position);
+        return;
+      }
+      billiard.position = {
+        x: hit.point.x,
+        y: hit.point.y
+      };
+      appendBackgroundBilliardTrailPoint(billiard.position);
+      const transitioned = applyBackgroundBilliardBoundaryHit(billiard, hit);
+      remaining -= Math.max(hit.distance, 0);
+      if (!transitioned) {
+        stopBackgroundBilliard(false);
+        return;
+      }
+    }
+    if (guard >= BACKGROUND_BILLIARD_MAX_COLLISIONS_PER_FRAME) {
+      stopBackgroundBilliard(false);
+    }
+  }
+
+  function nextBackgroundBilliardEdgeHit(billiard) {
+    const cell = geometry && geometry.cells ? geometry.cells[billiard.tileIndex] : null;
+    if (!cell || !billiard.position || !billiard.direction) return null;
+    const lattice = getLattice();
+    let best = null;
+    for (let dir = 0; dir < lattice.sides; dir += 1) {
+      const segment = edgeSegmentPoints(cell.x, cell.y, dir, geometry.radius);
+      const rayHit = raySegmentIntersection(billiard.position, billiard.direction, segment.start, segment.end);
+      if (!rayHit) continue;
+      if (rayHit.rayDistance < 0.0008) continue;
+      if (!best || rayHit.rayDistance < best.distance) {
+        best = {
+          index: billiard.tileIndex,
+          dir,
+          point: rayHit.point,
+          edgeT: rayHit.segmentT,
+          distance: rayHit.rayDistance,
+          segment
+        };
+      }
+    }
+    return best;
+  }
+
+  function applyBackgroundBilliardBoundaryHit(billiard, hit) {
+    const lattice = getLattice();
+    const next = backgroundBilliardNeighbor(hit.index, hit.dir);
+    if (next) {
+      const epsilon = Math.max(0.02, geometry.radius * 0.0008);
+      recordBackgroundBilliardHit(hit.point, 'internal');
+      billiard.tileIndex = next.index;
+      billiard.position = {
+        x: hit.point.x + billiard.direction.x * epsilon,
+        y: hit.point.y + billiard.direction.y * epsilon
+      };
+      return true;
+    }
+
+    const pair = gluedPairForBoundaryEdge({ index: hit.index, dir: hit.dir });
+    if (pair) {
+      const hitEdge = { index: hit.index, dir: hit.dir };
+      const hitIsFirst = sameBoundaryEdge(hitEdge, pair.first);
+      const partner = hitIsFirst ? pair.second : pair.first;
+      if (!partner || !isValidBoundaryEdge(partner)) return false;
+      const transfer = backgroundBilliardGluedTransfer(
+        hit,
+        partner,
+        billiard.direction,
+        hitIsFirst ? false : true,
+        hitIsFirst ? true : false
+      );
+      if (!transfer) return false;
+      const epsilon = Math.max(0.02, geometry.radius * 0.0008);
+      recordBackgroundBilliardHit(hit.point, 'glued');
+      billiard.tileIndex = partner.index;
+      appendBackgroundBilliardTrailPoint(transfer.point, true);
+      billiard.position = {
+        x: transfer.point.x + transfer.direction.x * epsilon,
+        y: transfer.point.y + transfer.direction.y * epsilon
+      };
+      billiard.direction = transfer.direction;
+      recordBackgroundBilliardHit(transfer.point, 'glued');
+      return true;
+    }
+
+    recordBackgroundBilliardHit(hit.point, 'boundary');
+    billiard.direction = reflectVectorAcrossSegment(billiard.direction, hit.segment);
+    const epsilon = Math.max(0.02, geometry.radius * 0.0008);
+    billiard.position = {
+      x: hit.point.x + billiard.direction.x * epsilon,
+      y: hit.point.y + billiard.direction.y * epsilon
+    };
+    return true;
+  }
+
+  function backgroundBilliardNeighbor(index, dir) {
+    if (!tileExists(index)) return null;
+    const lattice = getLattice();
+    const row = Math.floor(index / state.cols);
+    const col = index % state.cols;
+    const next = neighbor(row, col, dir, state.rows, state.cols, lattice, false);
+    if (!next) return null;
+    const nextIndex = indexOf(next.row, next.col, state.cols);
+    if (!tileExists(nextIndex) || hasCutEdgeBetween(index, nextIndex)) return null;
+    return { index: nextIndex, dir: lattice.opposite[dir] };
+  }
+
+  function backgroundBilliardGluedTransfer(hit, partner, direction, currentReverse, partnerReverse) {
+    const partnerSegment = boundaryEdgeSegment(partner, 1);
+    if (!partnerSegment) return null;
+    const firstBasis = orientedEdgeBasis(hit.segment, currentReverse, hit.index);
+    const secondBasis = orientedEdgeBasis(partnerSegment, partnerReverse, partner.index);
+    const tangentComponent = (direction.x * firstBasis.tangent.x) + (direction.y * firstBasis.tangent.y);
+    const inwardComponent = (direction.x * firstBasis.inward.x) + (direction.y * firstBasis.inward.y);
+    const nextDirection = normalizeVector(
+      (secondBasis.tangent.x * tangentComponent) - (secondBasis.inward.x * inwardComponent),
+      (secondBasis.tangent.y * tangentComponent) - (secondBasis.inward.y * inwardComponent),
+      secondBasis.inward.x,
+      secondBasis.inward.y
+    );
+    const t = clamp(hit.edgeT, 0, 1);
+    const partnerT = 1 - t;
+    return {
+      point: {
+        x: partnerSegment.start.x + (partnerSegment.end.x - partnerSegment.start.x) * partnerT,
+        y: partnerSegment.start.y + (partnerSegment.end.y - partnerSegment.start.y) * partnerT
+      },
+      direction: nextDirection
+    };
+  }
+
+  function orientedEdgeBasis(segment, reverse, index = -1) {
+    const start = reverse ? segment.end : segment.start;
+    const end = reverse ? segment.start : segment.end;
+    const tangent = normalizeVector(end.x - start.x, end.y - start.y, 1, 0);
+    const midpoint = {
+      x: (segment.start.x + segment.end.x) / 2,
+      y: (segment.start.y + segment.end.y) / 2
+    };
+    const cell = geometry && geometry.cells ? geometry.cells[index] : null;
+    const inward = cell
+      ? normalizeVector(cell.x - midpoint.x, cell.y - midpoint.y, -tangent.y, tangent.x)
+      : normalizeVector(-tangent.y, tangent.x, 0, 1);
+    return {
+      tangent,
+      inward
+    };
+  }
+
+  function reflectVectorAcrossSegment(vector, segment) {
+    const tangent = normalizeVector(segment.end.x - segment.start.x, segment.end.y - segment.start.y, 1, 0);
+    const dot = (vector.x * tangent.x) + (vector.y * tangent.y);
+    return normalizeVector(
+      (2 * dot * tangent.x) - vector.x,
+      (2 * dot * tangent.y) - vector.y,
+      -vector.x,
+      -vector.y
+    );
+  }
+
+  function raySegmentIntersection(origin, direction, start, end) {
+    const sx = end.x - start.x;
+    const sy = end.y - start.y;
+    const cross = (direction.x * sy) - (direction.y * sx);
+    if (Math.abs(cross) < 0.000001) return null;
+    const qx = start.x - origin.x;
+    const qy = start.y - origin.y;
+    const rayDistance = ((qx * sy) - (qy * sx)) / cross;
+    const segmentT = ((qx * direction.y) - (qy * direction.x)) / cross;
+    if (rayDistance < 0 || segmentT < -0.000001 || segmentT > 1.000001) return null;
+    return {
+      rayDistance,
+      segmentT: clamp(segmentT, 0, 1),
+      point: {
+        x: origin.x + direction.x * rayDistance,
+        y: origin.y + direction.y * rayDistance
+      }
+    };
+  }
+
+  function appendBackgroundBilliardTrailPoint(point, breakBefore = false) {
+    const billiard = backgroundBilliardState();
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+    if (!Array.isArray(billiard.trailPoints)) billiard.trailPoints = [];
+    const last = billiard.trailPoints[billiard.trailPoints.length - 1];
+    if (!breakBefore && last && Math.hypot(last.x - point.x, last.y - point.y) < 0.25) return;
+    billiard.trailPoints.push({ x: point.x, y: point.y, breakBefore: !!breakBefore });
+    trimBackgroundBilliardTrail();
+  }
+
+  function trimBackgroundBilliardTrail() {
+    const billiard = backgroundBilliardState();
+    if (!Array.isArray(billiard.trailPoints) || billiard.trailPoints.length <= 1) return;
+    const trailLength = normalizeBackgroundBilliardTrailLength(state.backgroundBilliardTrailLength);
+    if (isInfiniteBackgroundBilliardTrailLength(trailLength)) return;
+    let remaining = trailLength;
+    if (remaining <= 0) {
+      billiard.trailPoints = billiard.position ? [{ x: billiard.position.x, y: billiard.position.y }] : [];
+      return;
+    }
+    const kept = [{ ...billiard.trailPoints[billiard.trailPoints.length - 1] }];
+    for (let index = billiard.trailPoints.length - 2; index >= 0; index -= 1) {
+      const current = billiard.trailPoints[index];
+      const next = kept[kept.length - 1];
+      const segmentLength = next.breakBefore ? 0 : Math.hypot(next.x - current.x, next.y - current.y);
+      if (segmentLength <= remaining) {
+        kept.push({ ...current });
+        remaining -= segmentLength;
+        continue;
+      }
+      if (segmentLength > 0.001 && remaining > 0) {
+        const ratio = remaining / segmentLength;
+        kept.push({
+          x: next.x + (current.x - next.x) * ratio,
+          y: next.y + (current.y - next.y) * ratio
+        });
+      }
+      break;
+    }
+    billiard.trailPoints = kept.reverse();
+    if (billiard.trailPoints.length) billiard.trailPoints[0].breakBefore = false;
+  }
+
+  function recordBackgroundBilliardHit(point, kind = 'boundary') {
+    const billiard = backgroundBilliardState();
+    if (!point) return;
+    billiard.hitPoints.push({ x: point.x, y: point.y, kind });
+    if (billiard.hitPoints.length > BACKGROUND_BILLIARD_MAX_HITS) {
+      billiard.hitPoints.splice(0, billiard.hitPoints.length - BACKGROUND_BILLIARD_MAX_HITS);
+    }
+  }
+
   function formatCuspAngle(cusp) {
     const degrees = Number(cusp && cusp.angleDegrees);
     if (!Number.isFinite(degrees)) return '-';
@@ -3707,6 +4337,7 @@
 
   function commitPendingGlueChains(chains) {
     if (!chains || chains.first.length !== chains.second.length || chains.first.length === 0) return false;
+    clearBackgroundBilliard(false);
     const group = nextGlueGroup();
     const nextPairs = chains.first.map((first, index) => ({
       first: cloneBoundaryEdge(first),
@@ -4791,6 +5422,10 @@
     return state.backgroundAction === 'glue-boundary';
   }
 
+  function isBackgroundBilliardAction() {
+    return state.backgroundAction === 'billiard';
+  }
+
   function isClosedBackgroundSurface(report = null) {
     if (!isGluedBoundaryMode()) return false;
     const background = report && report.background ? report.background : analyzeBackgroundSpace();
@@ -5022,13 +5657,16 @@
   }
 
   function beginBackgroundGesture(event) {
-    const cusp = backgroundCuspHitTest(event.clientX, event.clientY);
-    const edge = isBackgroundBoundaryAction()
+    const isBilliard = isBackgroundBilliardAction();
+    const cusp = isBilliard ? null : backgroundCuspHitTest(event.clientX, event.clientY);
+    const edge = !isBilliard && isBackgroundBoundaryAction()
       ? backgroundEdgeHitTest(event.clientX, event.clientY)
       : null;
-    const hit = isBackgroundBoundaryAction()
+    const hit = isBilliard
+      ? backgroundTileHitIndex(event.clientX, event.clientY)
+      : (isBackgroundBoundaryAction()
       ? -1
-      : hitTest(event.clientX, event.clientY, { includeRemoved: true });
+      : hitTest(event.clientX, event.clientY, { includeRemoved: true }));
     pointerState = {
       id: event.pointerId,
       index: hit,
@@ -5041,6 +5679,7 @@
       moved: false
     };
     clearDrawDebugHit(false);
+    if (isBilliard) updateBackgroundBilliardAim(event.clientX, event.clientY, false);
     const edgeChanged = !sameBackgroundEdgeHit(edge, state.backgroundHoverEdge);
     const cuspChanged = !sameBackgroundCuspHit(cusp, state.backgroundHoverCusp);
     if (hit !== state.hoverIndex || edgeChanged || cuspChanged) {
@@ -5058,16 +5697,20 @@
     const dx = event.clientX - pointerState.x;
     const dy = event.clientY - pointerState.y;
     if (Math.hypot(dx, dy) > 10) pointerState.moved = true;
-    const cusp = backgroundCuspHitTest(event.clientX, event.clientY);
-    const edge = isBackgroundBoundaryAction()
+    const isBilliard = isBackgroundBilliardAction();
+    const cusp = isBilliard ? null : backgroundCuspHitTest(event.clientX, event.clientY);
+    const edge = !isBilliard && isBackgroundBoundaryAction()
       ? backgroundEdgeHitTest(event.clientX, event.clientY)
       : null;
-    const hit = isBackgroundBoundaryAction()
+    const hit = isBilliard
+      ? backgroundTileHitIndex(event.clientX, event.clientY)
+      : (isBackgroundBoundaryAction()
       ? -1
-      : hitTest(event.clientX, event.clientY, { includeRemoved: true });
+      : hitTest(event.clientX, event.clientY, { includeRemoved: true }));
+    const aimChanged = isBilliard ? updateBackgroundBilliardAim(event.clientX, event.clientY, false) : false;
     const edgeChanged = !sameBackgroundEdgeHit(edge, state.backgroundHoverEdge);
     const cuspChanged = !sameBackgroundCuspHit(cusp, state.backgroundHoverCusp);
-    if (hit !== state.hoverIndex || edgeChanged || cuspChanged) {
+    if (hit !== state.hoverIndex || edgeChanged || cuspChanged || aimChanged) {
       state.hoverIndex = hit;
       state.backgroundHoverEdge = edge;
       state.backgroundHoverCusp = cusp;
@@ -5078,6 +5721,12 @@
 
   function finishBackgroundGesture(event) {
     if (!pointerState || event.pointerId !== pointerState.id) return;
+    if (isBackgroundBilliardAction()) {
+      if (!pointerState.moved && isOverCanvas(event.clientX, event.clientY)) {
+        handleBackgroundBilliardClick(event.clientX, event.clientY);
+      }
+      return;
+    }
     const cusp = isOverCanvas(event.clientX, event.clientY)
       ? backgroundCuspHitTest(event.clientX, event.clientY)
       : null;
@@ -5830,8 +6479,8 @@
       const surfaceText = background.closedSurface
         ? `, genus ${background.genus}, ${background.cusps} cusp${background.cusps === 1 ? '' : 's'}`
         : '';
-      const pendingGlueText = pendingGlueStatusText();
-      refs.statusLine.textContent = pendingGlueText || selectedBackgroundCuspStatusText(background) || `${background.existing} existing tile${background.existing === 1 ? '' : 's'}, ${background.components} component${background.components === 1 ? '' : 's'}, ${background.unmatchedBoundaries} unmatched boundar${background.unmatchedBoundaries === 1 ? 'y' : 'ies'}${glueText}${surfaceText}`;
+    const pendingGlueText = pendingGlueStatusText();
+      refs.statusLine.textContent = pendingGlueText || backgroundBilliardStatusText() || selectedBackgroundCuspStatusText(background) || `${background.existing} existing tile${background.existing === 1 ? '' : 's'}, ${background.components} component${background.components === 1 ? '' : 's'}, ${background.unmatchedBoundaries} unmatched boundar${background.unmatchedBoundaries === 1 ? 'y' : 'ies'}${glueText}${surfaceText}`;
       refs.statusLine.classList.remove('mosaic-status-good', 'mosaic-status-bad');
     }
 
@@ -11453,6 +12102,7 @@
     drawDrawDebugOverlay(ctx, palette, report);
     drawBackgroundHoverOverlay(ctx, palette);
     drawBackgroundCuspOverlay(ctx, palette, report);
+    drawBackgroundBilliardOverlay(ctx, palette);
     drawPickHoverOverlay(ctx, palette, report);
     drawDragGhost(ctx, palette);
   }
@@ -11515,6 +12165,109 @@
       if (active) drawBackgroundCuspCornerHighlights(ctx, vertex, palette);
     });
     ctx.restore();
+  }
+
+  function drawBackgroundBilliardOverlay(ctx, palette) {
+    if (!isGluedBoundaryMode() || state.inputMode !== 'background' || !isBackgroundBilliardAction()) return;
+    const billiard = backgroundBilliardState();
+    const radius = geometry.radius;
+    ctx.save();
+    drawBackgroundBilliardTrail(ctx, billiard, radius);
+    const visibleHits = visibleBackgroundBilliardHits(billiard);
+    if (visibleHits.length) {
+      ctx.fillStyle = '#d11f1f';
+      visibleHits.forEach((point) => {
+        circle(ctx, point.x, point.y, Math.max(2.2, radius * 0.055));
+      });
+    }
+    if (billiard.position) {
+      if (billiard.direction) {
+        drawBackgroundBilliardDirectionArrow(ctx, billiard, radius);
+      } else if (billiard.aimPoint) {
+        ctx.strokeStyle = 'rgba(31,122,140,0.58)';
+        ctx.lineWidth = Math.max(1.1, radius * 0.032);
+        ctx.setLineDash([Math.max(3, radius * 0.09), Math.max(3, radius * 0.09)]);
+        ctx.beginPath();
+        ctx.moveTo(billiard.position.x, billiard.position.y);
+        ctx.lineTo(billiard.aimPoint.x, billiard.aimPoint.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.fillStyle = '#111111';
+      circle(ctx, billiard.position.x, billiard.position.y, Math.max(2.6, radius * 0.07));
+      ctx.strokeStyle = '#fffdf8';
+      ctx.lineWidth = Math.max(1, radius * 0.028);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawBackgroundBilliardDirectionArrow(ctx, billiard, radius) {
+    if (!billiard || !billiard.position || !billiard.direction) return;
+    const arrowLength = normalizeBackgroundBilliardArrowLength(state.backgroundBilliardArrowLength);
+    if (arrowLength <= 0) return;
+    const tail = {
+      x: billiard.position.x,
+      y: billiard.position.y
+    };
+    const head = {
+      x: tail.x + billiard.direction.x * arrowLength,
+      y: tail.y + billiard.direction.y * arrowLength
+    };
+    const lineWidth = Math.max(1.6, radius * 0.045);
+    const headLength = Math.min(Math.max(5, radius * 0.14), arrowLength * 0.46);
+    const headHalfAngle = Math.PI / 7;
+    const directionAngle = Math.atan2(billiard.direction.y, billiard.direction.x);
+    const leftAngle = directionAngle + Math.PI - headHalfAngle;
+    const rightAngle = directionAngle + Math.PI + headHalfAngle;
+    ctx.save();
+    ctx.strokeStyle = '#1f7a8c';
+    ctx.fillStyle = '#1f7a8c';
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(tail.x, tail.y);
+    ctx.lineTo(head.x, head.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(head.x, head.y);
+    ctx.lineTo(
+      head.x + Math.cos(leftAngle) * headLength,
+      head.y + Math.sin(leftAngle) * headLength
+    );
+    ctx.lineTo(
+      head.x + Math.cos(rightAngle) * headLength,
+      head.y + Math.sin(rightAngle) * headLength
+    );
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawBackgroundBilliardTrail(ctx, billiard, radius) {
+    const trail = Array.isArray(billiard.trailPoints) ? billiard.trailPoints : [];
+    if (trail.length < 2) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(31,122,210,0.78)';
+    ctx.lineWidth = Math.max(1.7, radius * 0.048);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    trail.forEach((point, index) => {
+      if (index === 0 || point.breakBefore) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function visibleBackgroundBilliardHits(billiard) {
+    const mode = normalizeBackgroundBilliardHitMarkers(state.backgroundBilliardHitMarkers);
+    if (mode === 'none') return [];
+    const hits = Array.isArray(billiard.hitPoints) ? billiard.hitPoints : [];
+    if (mode === 'boundary') return hits.filter((point) => point.kind === 'boundary' || point.kind === 'glued');
+    return hits;
   }
 
   function drawBackgroundCuspMarker(ctx, vertex, palette, active, hover) {
@@ -13253,6 +14006,7 @@
   function refreshExport() {
     const report = analyze();
     const lattice = getLattice();
+    const backgroundBilliard = backgroundBilliardForExport();
     const payload = {
       name: 'Mosaic Calculator',
       lattice: state.lattice,
@@ -13263,6 +14017,11 @@
       backgroundAction: state.backgroundAction,
       backgroundMultiEdges: !!state.backgroundMultiEdges,
       backgroundCuspMarkerScale: normalizeBackgroundCuspMarkerScale(state.backgroundCuspMarkerScale),
+      backgroundBilliardSpeed: normalizeBackgroundBilliardSpeed(state.backgroundBilliardSpeed),
+      backgroundBilliardTrailLength: normalizeBackgroundBilliardTrailLength(state.backgroundBilliardTrailLength),
+      backgroundBilliardArrowLength: normalizeBackgroundBilliardArrowLength(state.backgroundBilliardArrowLength),
+      backgroundBilliardHitMarkers: normalizeBackgroundBilliardHitMarkers(state.backgroundBilliardHitMarkers),
+      backgroundBilliard: backgroundBilliard || undefined,
       clickMode: state.editMode,
       drawAction: state.drawAction,
       knotCodeKind: state.knotCodeKind,
@@ -13327,7 +14086,35 @@
       ...(report.background || analyzeBackgroundSpace()),
       action: state.backgroundAction,
       multiEdges: !!state.backgroundMultiEdges,
-      cuspMarkerScale: normalizeBackgroundCuspMarkerScale(state.backgroundCuspMarkerScale)
+      cuspMarkerScale: normalizeBackgroundCuspMarkerScale(state.backgroundCuspMarkerScale),
+      billiardSpeed: normalizeBackgroundBilliardSpeed(state.backgroundBilliardSpeed),
+      billiardTrailLength: normalizeBackgroundBilliardTrailLength(state.backgroundBilliardTrailLength),
+      billiardArrowLength: normalizeBackgroundBilliardArrowLength(state.backgroundBilliardArrowLength),
+      billiardHitMarkers: normalizeBackgroundBilliardHitMarkers(state.backgroundBilliardHitMarkers)
+    };
+  }
+
+  function backgroundBilliardForExport() {
+    const billiard = backgroundBilliardState();
+    if (!billiard.position || billiard.tileIndex < 0 || !tileExists(billiard.tileIndex)) return null;
+    const cell = geometry && geometry.cells ? geometry.cells[billiard.tileIndex] : null;
+    if (!cell || !Number.isFinite(geometry.radius) || geometry.radius <= 0) return null;
+    const direction = billiard.direction && Number.isFinite(billiard.direction.x) && Number.isFinite(billiard.direction.y)
+      ? normalizeVector(billiard.direction.x, billiard.direction.y, 1, 0)
+      : null;
+    const angleRadians = direction ? Math.atan2(direction.y, direction.x) : null;
+    return {
+      tile: {
+        row: Math.floor(billiard.tileIndex / state.cols) + 1,
+        col: (billiard.tileIndex % state.cols) + 1,
+        index: billiard.tileIndex
+      },
+      local: {
+        x: roundExportNumber((billiard.position.x - cell.x) / geometry.radius, 6),
+        y: roundExportNumber((billiard.position.y - cell.y) / geometry.radius, 6)
+      },
+      angleRadians: angleRadians == null ? undefined : roundExportNumber(angleRadians, 6),
+      angleDegrees: angleRadians == null ? undefined : roundExportNumber(angleRadians * 180 / Math.PI, 4)
     };
   }
 
@@ -13471,6 +14258,7 @@
 
   function syncBackgroundModeControls() {
     const glueAction = isBackgroundGlueAction();
+    const billiardAction = isBackgroundBilliardAction();
     const chains = state.pendingGlueChains;
     const canBeginSecond = !!(
       glueAction
@@ -13482,6 +14270,7 @@
     );
     if (refs.backgroundMultiEdges) refs.backgroundMultiEdges.checked = !!state.backgroundMultiEdges;
     if (refs.backgroundMultiEdgeRow) refs.backgroundMultiEdgeRow.hidden = !glueAction;
+    if (refs.backgroundBilliardRow) refs.backgroundBilliardRow.hidden = !billiardAction;
     if (refs.backgroundBeginSecondChain) {
       refs.backgroundBeginSecondChain.hidden = !glueAction || !state.backgroundMultiEdges;
       refs.backgroundBeginSecondChain.disabled = !canBeginSecond;
@@ -13492,6 +14281,7 @@
       refs.backgroundCuspMarkerScale.value = scale.toFixed(2);
       if (refs.backgroundCuspMarkerScaleValue) refs.backgroundCuspMarkerScaleValue.textContent = scale.toFixed(2);
     }
+    syncBackgroundBilliardControls();
   }
 
   function syncRiemannNodeControls() {
@@ -13922,6 +14712,7 @@
       || action === 'glued-boundary'
       || action === 'gluedBoundary'
     ) return 'glue-boundary';
+    if (action === 'billiard' || action === 'billiards') return 'billiard';
     return 'tile';
   }
 
@@ -13929,6 +14720,39 @@
     const number = Number(value);
     if (!Number.isFinite(number)) return DEFAULT_BACKGROUND_CUSP_MARKER_SCALE;
     return clamp(number, 0.35, 1.4);
+  }
+
+  function normalizeBackgroundBilliardSpeed(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return DEFAULT_BACKGROUND_BILLIARD_SPEED;
+    return clamp(number, 0.02, 0.38);
+  }
+
+  function normalizeBackgroundBilliardTrailLength(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return DEFAULT_BACKGROUND_BILLIARD_TRAIL_LENGTH;
+    return clamp(Math.round(number), 0, DEFAULT_BACKGROUND_BILLIARD_TRAIL_INFINITY);
+  }
+
+  function isInfiniteBackgroundBilliardTrailLength(value) {
+    return normalizeBackgroundBilliardTrailLength(value) >= DEFAULT_BACKGROUND_BILLIARD_TRAIL_INFINITY;
+  }
+
+  function formatBackgroundBilliardTrailLength(value) {
+    return isInfiniteBackgroundBilliardTrailLength(value) ? '\u221e' : String(Math.round(normalizeBackgroundBilliardTrailLength(value)));
+  }
+
+  function normalizeBackgroundBilliardArrowLength(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return DEFAULT_BACKGROUND_BILLIARD_ARROW_LENGTH;
+    return clamp(Math.round(number), 0, 40);
+  }
+
+  function normalizeBackgroundBilliardHitMarkers(value) {
+    const normalized = String(value || '').toLowerCase();
+    if (normalized === 'none') return 'none';
+    if (normalized === 'boundary' || normalized === 'boundary-glued' || normalized === 'glued') return 'boundary';
+    return DEFAULT_BACKGROUND_BILLIARD_HIT_MARKERS;
   }
 
   function normalizeDualGraphLayoutMethod(method) {
@@ -14335,6 +15159,14 @@
     const parsed = Number.parseInt(value, 10);
     if (!Number.isFinite(parsed)) return fallback;
     return clamp(parsed, min, max);
+  }
+
+  function roundExportNumber(value, decimals = 4) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return 0;
+    const scale = 10 ** Math.max(0, Math.trunc(decimals));
+    const rounded = Math.round(number * scale) / scale;
+    return Object.is(rounded, -0) ? 0 : rounded;
   }
 
   function debounce(callback, delay) {

@@ -303,6 +303,19 @@
       min-width: 0;
     }
 
+    .billiard-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .billiard-controls .btn {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+    }
+
     .background-slider-controls {
       display: flex;
       align-items: center;
@@ -909,6 +922,43 @@
               <option value="tile">Remove / recover tiles</option>
               <option value="boundary">Add / remove boundary</option>
               <option value="glue-boundary">Glue boundary</option>
+              <option value="billiard">Billiard / geodesic</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row" id="background-billiard-row">
+            <span class="input-label">Geodesic</span>
+            <span class="billiard-controls">
+              <button class="btn" id="background-billiard-play" type="button">add point</button>
+              <button class="btn btn-ghost" id="background-billiard-clear" type="button">clear</button>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="background-billiard-speed-row">
+            <span class="input-label">Speed</span>
+            <span class="background-slider-controls">
+              <input type="range" id="background-billiard-speed" min="0.02" max="0.38" step="0.02" value="0.20">
+              <output id="background-billiard-speed-value">0.20</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="background-billiard-trail-row">
+            <span class="input-label">Trail</span>
+            <span class="background-slider-controls">
+              <input type="range" id="background-billiard-trail" min="0" max="400" step="10" value="200">
+              <output id="background-billiard-trail-value">200</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="background-billiard-arrow-row">
+            <span class="input-label">Arrow</span>
+            <span class="background-slider-controls">
+              <input type="range" id="background-billiard-arrow" min="0" max="40" step="2" value="20">
+              <output id="background-billiard-arrow-value">20</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="background-billiard-hit-row">
+            <span class="input-label">Hit dots</span>
+            <select id="background-billiard-hit-markers">
+              <option value="all">All</option>
+              <option value="boundary" selected>Boundary / glued</option>
+              <option value="none">None</option>
             </select>
           </div>
           <div class="mosaic-inline-row" id="background-multi-edge-row">
