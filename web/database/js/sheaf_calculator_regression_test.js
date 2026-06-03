@@ -12,6 +12,7 @@ function loadCalculator() {
     sheafFromObject,
     buildBundleForSheaf,
     buildCharacteristicClasses,
+    buildHodgeNumbers,
     applyHomologyRules,
     polyFromPowers,
     pushforwardPolynomialByDegree,
@@ -19,7 +20,12 @@ function loadCalculator() {
     mapHomologyClassDefinitions,
     homologyClassDefinitions,
     homologyVariableId,
+    homologyDefVariableId,
     standardHomologyRules,
+    defaultMapHomologyRulesForGeometry,
+    deleteMapHomologyRuleById,
+    mapHomologyPromotionContext,
+    addMapHomologyClassToTargetHomology,
     HOMOLOGY_HYPERPLANE_CLASS,
     HOMOLOGY_POINT_CLASS,
     standardMapCurve,
@@ -39,7 +45,11 @@ function loadCalculator() {
     sequenceTailPointCount,
     createBlowupPointConstruction,
     createGrassmannianMapConstruction,
+    createDualSheafConstruction,
     createIdealSheafConstruction,
+    createNormalBundleConstruction,
+    createRelativeSheafConstruction,
+    refreshConstructedObjects,
     buildPresetState,
     applyPresetState,
     importPresetFromText
@@ -186,6 +196,58 @@ function testPresetImportRestoresRecoverableState() {
   assert.strictEqual(characterPlain(rows), '3 + 3*H + 3/2*[p]');
 }
 
+function testDualSheafUsesAlternatingChernClasses() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '3', name: 'X', labelX: 0.25, labelY: 0.6 }];
+  const parent = {
+    id: 'E',
+    type: 'abstract',
+    basis: 'chern',
+    rank: '3',
+    name: '\\mathcal{E}',
+    baseVarietyId: 'X',
+    labelX: 0.32,
+    labelY: 0.4
+  };
+  api.state.sheaves = [parent];
+
+  const dual = api.createDualSheafConstruction({
+    parent,
+    baseVarietyId: 'X',
+    defaultName: '\\mathcal{E}^{\\vee}',
+    name: '\\mathcal{E}^{\\vee}',
+    nameDirty: false
+  });
+
+  assert.strictEqual(dual.construction.type, 'dual');
+  assert.strictEqual(dual.construction.sheafId, 'E');
+  assert.strictEqual(dual.baseVarietyId, 'X');
+  assert.strictEqual(dual.rank, '3');
+
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const sheaf = api.sheafFromObject(dual, geometry);
+  const result = api.buildCharacteristicClasses(geometry, sheaf);
+  assert.strictEqual(chernPlain(result.classRows), '1 - c_1(E) + c_2(E) - c_3(E)');
+
+  const rules = result.bundle.defaultSheafHomologyRules;
+  assert.strictEqual(rules.length, 3);
+  assert.strictEqual(rules[0].rhs[0].coefficient, '-1');
+  assert.strictEqual(Object.keys(rules[0].rhs[0].powers)[0], 'sheaf_E_c1');
+  assert.strictEqual(rules[1].rhs[0].coefficient, '1');
+  assert.strictEqual(Object.keys(rules[1].rhs[0].powers)[0], 'sheaf_E_c2');
+  assert.strictEqual(rules[2].rhs[0].coefficient, '-1');
+  assert.strictEqual(Object.keys(rules[2].rhs[0].powers)[0], 'sheaf_E_c3');
+
+  api.state.activeVarietyId = 'X';
+  api.state.activeSheafId = dual.id;
+  const restored = loadCalculator();
+  restored.importPresetFromText(JSON.stringify(api.buildPresetState()));
+  const restoredDual = restored.state.sheaves.find((item) => item.name === '\\mathcal{E}^{\\vee}');
+  assert(restoredDual);
+  assert.strictEqual(restoredDual.construction.type, 'dual');
+  assert.strictEqual(restoredDual.construction.sheafId, 'E');
+}
+
 function testPointClassDefaultsToUnit() {
   const api = loadCalculator();
   api.state.varieties = [{ id: 'pt', type: 'point', dim: '0', name: '\\{*\\}' }];
@@ -270,6 +332,59 @@ function testOutOfRangeMapHomologyRelationsAreOmitted() {
   assert.strictEqual(pushforwardDefs.length, 1);
   assert.strictEqual(pushforwardDefs[0].degree, 0);
   assert.match(pushforwardDefs[0].kind, /point/);
+}
+
+function testMapHomologyClassPromotionAddsClassToRowVariety() {
+  const api = loadCalculator();
+  const domain = { id: 'Y', type: 'abstract', dim: '2', name: 'Y' };
+  const codomain = { id: 'S', type: 'abstract', dim: '2', name: 'S' };
+  api.state.varieties = [domain, codomain];
+  api.state.maps = [
+    { id: 'f', name: 'f', domainKind: 'variety', domainId: 'Y', codomainKind: 'variety', codomainId: 'S' }
+  ];
+  api.state.activeHomologyTarget = { kind: 'map', id: 'f' };
+
+  const domainGeometry = api.geometryFromVariety(domain);
+  const pullbackDef = api.homologyClassDefinitions(domainGeometry)
+    .find((def) => def.id === 'pullback_f_point');
+  assert(pullbackDef);
+  const pullbackVariableId = api.homologyDefVariableId(pullbackDef, domainGeometry);
+  const pullbackContext = api.mapHomologyPromotionContext(pullbackDef.id, domain.id);
+  assert(api.addMapHomologyClassToTargetHomology(pullbackDef, pullbackContext));
+  const promotedPullback = domain.homology.customClasses.find((item) => item.id === pullbackDef.id);
+  assert(promotedPullback);
+  assert.strictEqual(promotedPullback.special, 'map-homology');
+  assert.strictEqual(promotedPullback.variableId, pullbackVariableId);
+  const promotedDomainGeometry = api.geometryFromVariety(domain);
+  assert.strictEqual(
+    api.homologyClassDefinitions(promotedDomainGeometry).find((def) => def.id === pullbackDef.id).variableId,
+    pullbackVariableId
+  );
+
+  const point = { id: 'p', type: 'point', dim: '0', name: 'p' };
+  const target = { id: 'X', type: 'abstract', dim: '2', name: 'X' };
+  api.state.varieties = [point, target];
+  api.state.maps = [
+    { id: 'i', name: 'i', domainKind: 'variety', domainId: 'p', codomainKind: 'variety', codomainId: 'X' }
+  ];
+  api.state.activeHomologyTarget = { kind: 'map', id: 'i' };
+
+  const targetGeometry = api.geometryFromVariety(target);
+  const pushforwardDef = api.homologyClassDefinitions(targetGeometry)
+    .find((def) => def.kind.includes('pushforward'));
+  assert(pushforwardDef);
+  const pushforwardVariableId = api.homologyDefVariableId(pushforwardDef, targetGeometry);
+  const pushforwardContext = api.mapHomologyPromotionContext(pushforwardDef.id, target.id);
+  assert(api.addMapHomologyClassToTargetHomology(pushforwardDef, pushforwardContext));
+  const promotedPushforward = target.homology.customClasses.find((item) => item.id === pushforwardDef.id);
+  assert(promotedPushforward);
+  assert.strictEqual(promotedPushforward.special, 'map-homology');
+  assert.strictEqual(promotedPushforward.variableId, pushforwardVariableId);
+  const promotedTargetGeometry = api.geometryFromVariety(target);
+  assert.strictEqual(
+    api.homologyClassDefinitions(promotedTargetGeometry).find((def) => def.id === pushforwardDef.id).variableId,
+    pushforwardVariableId
+  );
 }
 
 function testCurveToProjectivePullbackUsesCurvePoint() {
@@ -671,6 +786,194 @@ function testBlowupPointConstructionCreatesVarietyAndMap() {
   assert.strictEqual(api.state.maps[0].codomainId, 'X');
 }
 
+function testBlowupPointConstructionDefaultsCenterAndExceptionalClass() {
+  const api = loadCalculator();
+  const base = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const blowup = api.createBlowupPointConstruction({
+    base,
+    point: null,
+    centerLabel: 'p',
+    defaultName: '\\operatorname{Bl}_{p}(X)',
+    name: '\\operatorname{Bl}_{p}(X)'
+  });
+
+  assert(blowup);
+  assert.strictEqual(blowup.name, '\\operatorname{Bl}_{p}(X)');
+  assert.strictEqual(blowup.construction.pointId, null);
+  assert.strictEqual(blowup.construction.pointLabel, 'p');
+  assert.strictEqual(api.state.maps[0].construction.pointId, null);
+  assert.strictEqual(api.state.maps[0].construction.pointLabel, 'p');
+
+  const geometry = api.geometryFromVariety(blowup);
+  const exceptional = api.homologyClassDefinitions(geometry).find((def) => def.id === 'exceptional_divisor');
+  assert(exceptional);
+  assert.strictEqual(exceptional.symbolLatex, 'E');
+  assert.strictEqual(exceptional.degree, 1);
+
+  const exceptionalId = api.homologyVariableId('exceptional_divisor', geometry);
+  const square = api.polyFromPowers({ [exceptionalId]: 2 });
+  const reduced = api.applyHomologyRules(square, { geometry, homology: geometry.homology });
+  assert.strictEqual(api.formatPolyPlain(reduced), '-[p]');
+
+  const pointPullbackRule = geometry.homology.rules.find((rule) => rule.id === 'blowup-point-pullback');
+  assert.strictEqual(pointPullbackRule, undefined);
+  assert.strictEqual(
+    api.homologyClassDefinitions(geometry).some((def) => def.id === `pullback_${api.state.maps[0].id}_point`),
+    false
+  );
+  const pointPullbackDefault = api.defaultMapHomologyRulesForGeometry(geometry)
+    .find((rule) => rule.id === `default-blowdown-point-pullback-${api.state.maps[0].id}`);
+  assert(pointPullbackDefault);
+  const pullbackPointId = Object.keys(pointPullbackDefault.lhs.powers)[0];
+  assert(pullbackPointId.startsWith('map_pullback_'));
+  const pointPullback = api.polyFromPowers({ [pullbackPointId]: 1 });
+  const reducedPointPullback = api.applyHomologyRules(pointPullback, { geometry, homology: geometry.homology });
+  assert.strictEqual(api.formatPolyPlain(reducedPointPullback), '[p]');
+}
+
+function testBlowupMapDefaultsAreGeneratedAndDeletable() {
+  const api = loadCalculator();
+  const base = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const blowup = api.createBlowupPointConstruction({
+    base,
+    point: null,
+    centerLabel: 'p',
+    defaultName: '\\operatorname{Bl}_{p}(X)',
+    name: '\\operatorname{Bl}_{p}(X)'
+  });
+  const map = api.state.maps[0];
+  const baseGeometry = api.geometryFromVariety(base);
+  const blowupGeometry = api.geometryFromVariety(blowup);
+  const rules = api.defaultMapHomologyRulesForGeometry(baseGeometry);
+  const unitRule = rules.find((rule) => rule.id === `default-blowdown-unit-pushforward-${map.id}`);
+  assert(unitRule);
+  const unitPushforwardId = Object.keys(unitRule.lhs.powers)[0];
+  const reducedUnitPushforward = api.applyHomologyRules(api.polyFromPowers({ [unitPushforwardId]: 1 }), {
+    geometry: baseGeometry,
+    homology: baseGeometry.homology
+  });
+  assert.strictEqual(api.formatPolyPlain(reducedUnitPushforward), '1');
+
+  api.state.activeHomologyTarget = { kind: 'map', id: map.id };
+  assert(api.deleteMapHomologyRuleById(unitRule.id));
+  const suppressedGeometry = api.geometryFromVariety(base);
+  assert.strictEqual(api.defaultMapHomologyRulesForGeometry(suppressedGeometry).some((rule) => rule.id === unitRule.id), false);
+  const unreducedUnitPushforward = api.applyHomologyRules(api.polyFromPowers({ [unitPushforwardId]: 1 }), {
+    geometry: suppressedGeometry,
+    homology: suppressedGeometry.homology
+  });
+  assert.notStrictEqual(api.formatPolyPlain(unreducedUnitPushforward), '1');
+
+  assert.strictEqual(
+    (blowupGeometry.homology?.customClasses || []).some((def) => def.id === `pullback_${map.id}_point`),
+    false
+  );
+  assert.strictEqual(rules.some((rule) => rule.id.startsWith(`default-blowdown-projection-${map.id}-`)), false);
+}
+
+function testBlowupOfGrassmannianAddsPullbacksAndUsesProjectionFormula() {
+  const api = loadCalculator();
+  const base = {
+    id: 'G',
+    type: 'grassmannian',
+    dim: '4',
+    name: '\\operatorname{Gr}(2,4)',
+    grassmannianR: '2',
+    grassmannianN: '4',
+    labelX: 0.4,
+    labelY: 0.7
+  };
+  api.state.varieties = [base];
+
+  const blowup = api.createBlowupPointConstruction({
+    base,
+    point: null,
+    centerLabel: 'p',
+    defaultName: '\\operatorname{Bl}_{p}(\\operatorname{Gr}(2,4))',
+    name: '\\operatorname{Bl}_{p}(\\operatorname{Gr}(2,4))'
+  });
+  const map = api.state.maps[0];
+  const baseGeometry = api.geometryFromVariety(base);
+  const blowupGeometry = api.geometryFromVariety(blowup);
+  const pullbackC1 = (blowupGeometry.homology?.customClasses || [])
+    .find((item) => item.id === `pullback_${map.id}_grassmannian_s_1`);
+  const pullbackC2 = (blowupGeometry.homology?.customClasses || [])
+    .find((item) => item.id === `pullback_${map.id}_grassmannian_s_2`);
+  assert(pullbackC1);
+  assert(pullbackC2);
+  assert.strictEqual(pullbackC1.special, 'map-homology');
+  assert.strictEqual(pullbackC1.variableId, `map_pullback_${map.id}_homology_v_${base.id}_grassmannian_s_1`);
+  assert.strictEqual(
+    (blowupGeometry.homology?.customClasses || []).some((item) => item.id === `pullback_${map.id}_point`),
+    false
+  );
+  assert.strictEqual(
+    api.defaultMapHomologyRulesForGeometry(baseGeometry)
+      .some((rule) => rule.id.startsWith(`default-blowdown-projection-${map.id}-`)),
+    false
+  );
+
+  api.state.activeHomologyTarget = { kind: 'map', id: map.id };
+  assert.strictEqual(
+    api.homologyClassDefinitions(baseGeometry)
+      .some((def) => def.id === `pushforward_${map.id}_${pullbackC1.id}`),
+    false
+  );
+  const pullbackC1Def = api.homologyClassDefinitions(blowupGeometry).find((def) => def.id === pullbackC1.id);
+  const reducedPushforward = api.pushforwardPolynomialByDegree(
+    map,
+    api.polyFromPowers({ [api.homologyDefVariableId(pullbackC1Def, blowupGeometry)]: 1 }),
+    blowupGeometry.dim,
+    baseGeometry.dim,
+    { proper: false }
+  );
+  assert.strictEqual(api.formatPolyPlain(api.applyHomologyRules(reducedPushforward, {
+    geometry: baseGeometry,
+    homology: baseGeometry.homology
+  })), 'c_1(S)');
+
+  const exceptionalDef = api.homologyClassDefinitions(blowupGeometry).find((def) => def.id === 'exceptional_divisor');
+  const c1TimesExceptional = api.polyFromPowers({
+    [api.homologyDefVariableId(pullbackC1Def, blowupGeometry)]: 1,
+    [api.homologyDefVariableId(exceptionalDef, blowupGeometry)]: 1
+  });
+  const productPushforward = api.pushforwardPolynomialByDegree(
+    map,
+    c1TimesExceptional,
+    blowupGeometry.dim,
+    baseGeometry.dim,
+    { proper: false }
+  );
+  assert.strictEqual(api.formatPolyPlain(productPushforward), 'c_1(S)*beta_*left(Eright)');
+}
+
+function testPointBlowupHodgeNumbersAddExceptionalDiagonal() {
+  const api = loadCalculator();
+  const base = { id: 'P3', type: 'projective', dim: '3', name: '\\mathbb{P}^3', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const blowup = api.createBlowupPointConstruction({
+    base,
+    point: null,
+    centerLabel: 'p',
+    defaultName: '\\operatorname{Bl}_{p}(\\mathbb{P}^3)',
+    name: '\\operatorname{Bl}_{p}(\\mathbb{P}^3)'
+  });
+  const geometry = api.geometryFromVariety(blowup);
+  const hodge = api.buildHodgeNumbers(geometry);
+
+  assert.strictEqual(hodge.entries[0][0].plain, '1');
+  assert.strictEqual(hodge.entries[1][1].plain, '2');
+  assert.strictEqual(hodge.entries[2][2].plain, '2');
+  assert.strictEqual(hodge.entries[3][3].plain, '1');
+  assert.strictEqual(hodge.entries[1][2].plain, '0');
+  assert(hodge.message.includes('Point blow-up'));
+}
+
 function testGrassmannianMapConstructionCreatesTargetAndMap() {
   const api = loadCalculator();
   const base = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.4, labelY: 0.7 };
@@ -742,6 +1045,280 @@ function testIdealSheafConstructionCreatesHiddenSesAndImageClass() {
   assert.strictEqual(api.state.activeSheafId, ideal.id);
 }
 
+function testNormalBundleConstructionCreatesHiddenTangentSes() {
+  const api = loadCalculator();
+  const source = { id: 'X', type: 'abstract', dim: '3', name: 'X', labelX: 0.3, labelY: 0.65 };
+  const target = { id: 'Y', type: 'abstract', dim: '5', name: 'Y', labelX: 0.6, labelY: 0.65 };
+  const map = { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' };
+  api.state.varieties = [source, target];
+  api.state.maps = [map];
+
+  const normal = api.createNormalBundleConstruction({
+    map,
+    domain: source,
+    codomain: target,
+    baseVarietyId: 'X',
+    defaultName: '\\mathcal{N}_{X/Y}',
+    name: '\\mathcal{N}_{X/Y}',
+    nameDirty: false
+  });
+
+  assert(normal);
+  assert.strictEqual(normal.baseVarietyId, 'X');
+  assert.strictEqual(normal.rank, '2');
+  assert.strictEqual(normal.construction.type, 'ses-term');
+  assert.strictEqual(normal.construction.role, 'quotient');
+  assert.strictEqual(normal.construction.normalBundleMapId, 'f');
+  assert.strictEqual(normal.construction.cleanEmbeddingConfirmed, true);
+
+  const sourceTangent = api.state.sheaves.find((item) => item.id === normal.construction.sourceTangentSheafId);
+  const targetTangent = api.state.sheaves.find((item) => item.id === normal.construction.targetTangentSheafId);
+  const pulledTargetTangent = api.state.sheaves.find((item) => item.id === normal.construction.pulledTargetTangentSheafId);
+  assert.strictEqual(sourceTangent?.type, 'tangent');
+  assert.strictEqual(sourceTangent.baseVarietyId, 'X');
+  assert.strictEqual(sourceTangent.hiddenOnCanvas, true);
+  assert.strictEqual(targetTangent?.type, 'tangent');
+  assert.strictEqual(targetTangent.baseVarietyId, 'Y');
+  assert.strictEqual(targetTangent.hiddenOnCanvas, true);
+  assert.strictEqual(pulledTargetTangent?.construction?.type, 'pullback');
+  assert.strictEqual(pulledTargetTangent.construction.mapId, 'f');
+  assert.strictEqual(pulledTargetTangent.construction.sheafId, targetTangent.id);
+  assert.strictEqual(pulledTargetTangent.construction.exact, true);
+  assert.strictEqual(pulledTargetTangent.construction.derived, false);
+  assert.strictEqual(pulledTargetTangent.hiddenOnCanvas, true);
+  assert.match(pulledTargetTangent.name, /^f\^\{\*\}/);
+
+  assert.strictEqual(api.state.sequences.length, 1);
+  const sequence = api.state.sequences[0];
+  assert.strictEqual(sequence.sheafIds.join(','), [sourceTangent.id, pulledTargetTangent.id, normal.id].join(','));
+  assert.strictEqual(sequence.baseVarietyId, 'X');
+  assert.strictEqual(sequence.tail.hiddenOnCanvas, true);
+  assert.strictEqual(api.state.maps.filter((item) => item.domainKind === 'sheaf').length, 2);
+  sequence.mapIds.forEach((mapId) => {
+    const sequenceMap = api.state.maps.find((item) => item.id === mapId);
+    assert.strictEqual(sequenceMap.hiddenOnCanvas, true);
+  });
+  assert.strictEqual(api.state.activeSheafId, normal.id);
+}
+
+function testRelativeTangentConstructionCreatesHiddenTangentSes() {
+  const api = loadCalculator();
+  const source = { id: 'X', type: 'abstract', dim: '3', name: 'X', labelX: 0.3, labelY: 0.65 };
+  const target = { id: 'Y', type: 'abstract', dim: '1', name: 'Y', labelX: 0.6, labelY: 0.65 };
+  const map = { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' };
+  api.state.varieties = [source, target];
+  api.state.maps = [map];
+
+  const relative = api.createRelativeSheafConstruction({
+    type: 'tangent',
+    map,
+    domain: source,
+    codomain: target,
+    baseVarietyId: 'X',
+    defaultName: '\\mathcal{T}_{X/Y}',
+    name: '\\mathcal{T}_{X/Y}',
+    nameDirty: false
+  });
+
+  assert(relative);
+  assert.strictEqual(relative.baseVarietyId, 'X');
+  assert.strictEqual(relative.rank, '2');
+  assert.strictEqual(relative.construction.type, 'ses-term');
+  assert.strictEqual(relative.construction.role, 'subobject');
+  assert.strictEqual(relative.construction.relativeSheafMapId, 'f');
+  assert.strictEqual(relative.construction.relativeSheafType, 'tangent');
+  assert.strictEqual(relative.construction.smoothSubmersionConfirmed, true);
+
+  const sourceTangent = api.state.sheaves.find((item) => item.id === relative.construction.sourceDifferentialSheafId);
+  const targetTangent = api.state.sheaves.find((item) => item.id === relative.construction.targetDifferentialSheafId);
+  const pulledTargetTangent = api.state.sheaves.find((item) => item.id === relative.construction.pulledTargetDifferentialSheafId);
+  assert.strictEqual(sourceTangent?.type, 'tangent');
+  assert.strictEqual(sourceTangent.baseVarietyId, 'X');
+  assert.strictEqual(sourceTangent.hiddenOnCanvas, true);
+  assert.strictEqual(targetTangent?.type, 'tangent');
+  assert.strictEqual(targetTangent.baseVarietyId, 'Y');
+  assert.strictEqual(targetTangent.hiddenOnCanvas, true);
+  assert.strictEqual(pulledTargetTangent?.construction?.type, 'pullback');
+  assert.strictEqual(pulledTargetTangent.construction.mapId, 'f');
+  assert.strictEqual(pulledTargetTangent.construction.sheafId, targetTangent.id);
+  assert.strictEqual(pulledTargetTangent.construction.exact, true);
+  assert.strictEqual(pulledTargetTangent.construction.derived, false);
+  assert.strictEqual(pulledTargetTangent.hiddenOnCanvas, true);
+  assert.strictEqual(relative.construction.sourceSheafIds.join(','), [sourceTangent.id, pulledTargetTangent.id].join(','));
+
+  assert.strictEqual(api.state.sequences.length, 1);
+  const sequence = api.state.sequences[0];
+  assert.strictEqual(sequence.sheafIds.join(','), [relative.id, sourceTangent.id, pulledTargetTangent.id].join(','));
+  assert.strictEqual(sequence.baseVarietyId, 'X');
+  assert.strictEqual(sequence.tail.hiddenOnCanvas, true);
+  sequence.mapIds.forEach((mapId) => {
+    const sequenceMap = api.state.maps.find((item) => item.id === mapId);
+    assert.strictEqual(sequenceMap.hiddenOnCanvas, true);
+  });
+  assert.strictEqual(api.state.activeSheafId, relative.id);
+}
+
+function testRelativeCotangentConstructionCreatesHiddenCotangentSes() {
+  const api = loadCalculator();
+  const source = { id: 'X', type: 'abstract', dim: '3', name: 'X', labelX: 0.3, labelY: 0.65 };
+  const target = { id: 'Y', type: 'abstract', dim: '1', name: 'Y', labelX: 0.6, labelY: 0.65 };
+  const map = { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' };
+  api.state.varieties = [source, target];
+  api.state.maps = [map];
+
+  const relative = api.createRelativeSheafConstruction({
+    type: 'cotangent',
+    map,
+    domain: source,
+    codomain: target,
+    baseVarietyId: 'X',
+    defaultName: '\\Omega^1_{X/Y}',
+    name: '\\Omega^1_{X/Y}',
+    nameDirty: false
+  });
+
+  assert(relative);
+  assert.strictEqual(relative.baseVarietyId, 'X');
+  assert.strictEqual(relative.rank, '2');
+  assert.strictEqual(relative.construction.type, 'ses-term');
+  assert.strictEqual(relative.construction.role, 'quotient');
+  assert.strictEqual(relative.construction.relativeSheafMapId, 'f');
+  assert.strictEqual(relative.construction.relativeSheafType, 'cotangent');
+  assert.strictEqual(relative.construction.smoothSubmersionConfirmed, true);
+
+  const sourceCotangent = api.state.sheaves.find((item) => item.id === relative.construction.sourceDifferentialSheafId);
+  const targetCotangent = api.state.sheaves.find((item) => item.id === relative.construction.targetDifferentialSheafId);
+  const pulledTargetCotangent = api.state.sheaves.find((item) => item.id === relative.construction.pulledTargetDifferentialSheafId);
+  assert.strictEqual(sourceCotangent?.type, 'cotangent');
+  assert.strictEqual(sourceCotangent.baseVarietyId, 'X');
+  assert.strictEqual(sourceCotangent.hiddenOnCanvas, true);
+  assert.strictEqual(targetCotangent?.type, 'cotangent');
+  assert.strictEqual(targetCotangent.baseVarietyId, 'Y');
+  assert.strictEqual(targetCotangent.hiddenOnCanvas, true);
+  assert.strictEqual(pulledTargetCotangent?.construction?.type, 'pullback');
+  assert.strictEqual(pulledTargetCotangent.construction.mapId, 'f');
+  assert.strictEqual(pulledTargetCotangent.construction.sheafId, targetCotangent.id);
+  assert.strictEqual(pulledTargetCotangent.construction.exact, true);
+  assert.strictEqual(pulledTargetCotangent.construction.derived, false);
+  assert.strictEqual(pulledTargetCotangent.hiddenOnCanvas, true);
+  assert.strictEqual(relative.construction.sourceSheafIds.join(','), [pulledTargetCotangent.id, sourceCotangent.id].join(','));
+
+  assert.strictEqual(api.state.sequences.length, 1);
+  const sequence = api.state.sequences[0];
+  assert.strictEqual(sequence.sheafIds.join(','), [pulledTargetCotangent.id, sourceCotangent.id, relative.id].join(','));
+  assert.strictEqual(sequence.baseVarietyId, 'X');
+  assert.strictEqual(sequence.tail.hiddenOnCanvas, true);
+  sequence.mapIds.forEach((mapId) => {
+    const sequenceMap = api.state.maps.find((item) => item.id === mapId);
+    assert.strictEqual(sequenceMap.hiddenOnCanvas, true);
+  });
+  assert.strictEqual(api.state.activeSheafId, relative.id);
+}
+
+function testPresetImportPreservesRelativeSheafMarker() {
+  const api = loadCalculator();
+  const source = { id: 'X', type: 'abstract', dim: '3', name: 'X', labelX: 0.3, labelY: 0.65 };
+  const target = { id: 'Y', type: 'abstract', dim: '1', name: 'Y', labelX: 0.6, labelY: 0.65 };
+  const map = { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' };
+  api.state.varieties = [source, target];
+  api.state.maps = [map];
+  const relative = api.createRelativeSheafConstruction({
+    type: 'cotangent',
+    map,
+    domain: source,
+    codomain: target,
+    baseVarietyId: 'X',
+    defaultName: '\\Omega^1_{X/Y}',
+    name: '\\Omega^1_{X/Y}',
+    nameDirty: false
+  });
+  api.state.activeSheafId = relative.id;
+  api.state.activeVarietyId = 'X';
+  const presetText = JSON.stringify(api.buildPresetState());
+
+  const restored = loadCalculator();
+  restored.importPresetFromText(presetText);
+  const restoredRelative = restored.state.sheaves.find((sheaf) => sheaf.name === '\\Omega^1_{X/Y}');
+  assert(restoredRelative);
+  assert.strictEqual(restoredRelative.construction.relativeSheafMapId, 'f');
+  assert.strictEqual(restoredRelative.construction.relativeSheafType, 'cotangent');
+  assert.strictEqual(restoredRelative.construction.smoothSubmersionConfirmed, true);
+  assert.strictEqual(restoredRelative.rank, '2');
+  assert.strictEqual(restored.state.activeSheafId, restoredRelative.id);
+}
+
+function testNormalBundleShowKeepsRevealedScaffoldingStable() {
+  const api = loadCalculator();
+  const source = { id: 'X', type: 'abstract', dim: '3', name: 'X', labelX: 0.3, labelY: 0.65 };
+  const target = { id: 'Y', type: 'abstract', dim: '5', name: 'Y', labelX: 0.6, labelY: 0.65 };
+  const map = { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' };
+  api.state.varieties = [source, target];
+  api.state.maps = [map];
+  const normal = api.createNormalBundleConstruction({
+    map,
+    domain: source,
+    codomain: target,
+    baseVarietyId: 'X',
+    defaultName: '\\mathcal{N}_{X/Y}',
+    name: '\\mathcal{N}_{X/Y}',
+    nameDirty: false
+  });
+  const counts = () => ({
+    tangents: api.state.sheaves.filter((item) => item.type === 'tangent').length,
+    pullbacks: api.state.sheaves.filter((item) => item.construction?.type === 'pullback').length,
+    sheafMaps: api.state.maps.filter((item) => item.construction?.type === 'short-exact-sequence-map').length,
+    sequences: api.state.sequences.length
+  });
+  const before = counts();
+
+  api.showHiddenCanvasObjects();
+  api.refreshConstructedObjects();
+
+  assert.deepStrictEqual(counts(), before);
+  const sourceTangent = api.state.sheaves.find((item) => item.id === normal.construction.sourceTangentSheafId);
+  const targetTangent = api.state.sheaves.find((item) => item.id === normal.construction.targetTangentSheafId);
+  const pulledTargetTangent = api.state.sheaves.find((item) => item.id === normal.construction.pulledTargetTangentSheafId);
+  assert.strictEqual(sourceTangent.hiddenOnCanvas, false);
+  assert.strictEqual(targetTangent.hiddenOnCanvas, false);
+  assert.strictEqual(pulledTargetTangent.hiddenOnCanvas, false);
+  const sequence = api.state.sequences.find((item) => item.id === normal.construction.sequenceId);
+  assert.strictEqual(sequence.tail.hiddenOnCanvas, false);
+  sequence.mapIds.forEach((mapId) => {
+    const sequenceMap = api.state.maps.find((item) => item.id === mapId);
+    assert.strictEqual(sequenceMap.hiddenOnCanvas, false);
+  });
+}
+
+function testPresetImportPreservesNormalBundleMarker() {
+  const api = loadCalculator();
+  const source = { id: 'X', type: 'abstract', dim: '3', name: 'X', labelX: 0.3, labelY: 0.65 };
+  const target = { id: 'Y', type: 'abstract', dim: '5', name: 'Y', labelX: 0.6, labelY: 0.65 };
+  const map = { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' };
+  api.state.varieties = [source, target];
+  api.state.maps = [map];
+  const normal = api.createNormalBundleConstruction({
+    map,
+    domain: source,
+    codomain: target,
+    baseVarietyId: 'X',
+    defaultName: '\\mathcal{N}_{X/Y}',
+    name: '\\mathcal{N}_{X/Y}',
+    nameDirty: false
+  });
+  api.state.activeSheafId = normal.id;
+  api.state.activeVarietyId = 'X';
+  const presetText = JSON.stringify(api.buildPresetState());
+
+  const restored = loadCalculator();
+  restored.importPresetFromText(presetText);
+  const restoredNormal = restored.state.sheaves.find((sheaf) => sheaf.name === '\\mathcal{N}_{X/Y}');
+  assert(restoredNormal);
+  assert.strictEqual(restoredNormal.construction.normalBundleMapId, 'f');
+  assert.strictEqual(restoredNormal.construction.cleanEmbeddingConfirmed, true);
+  assert.strictEqual(restoredNormal.rank, '2');
+  assert.strictEqual(restored.state.activeSheafId, restoredNormal.id);
+}
+
 function testPresetImportPreservesIdealSheafMarker() {
   const api = loadCalculator();
   const source = { id: 'X', type: 'abstract', dim: '1', name: 'X', labelX: 0.35, labelY: 0.65 };
@@ -781,11 +1358,13 @@ testAbelianSpecialSheavesAreTrivial();
 testSelfDirectSumScalesChernCharacter();
 testPresetStateIncludesRecoverableConstructionData();
 testPresetImportRestoresRecoverableState();
+testDualSheafUsesAlternatingChernClasses();
 testPointClassDefaultsToUnit();
 testPointSourcePushforwardDefaultsToTargetPoint();
 testPointPushforwardDefaultsToTargetPoint();
 testMapToPointPushforwardOfPointDefaultsToOne();
 testOutOfRangeMapHomologyRelationsAreOmitted();
+testMapHomologyClassPromotionAddsClassToRowVariety();
 testStraightMapIsDefaultNoControlCase();
 testEndpointMovePreservesAttachedHandleVector();
 testMapControlCanMoveOutsideCanvas();
@@ -796,8 +1375,18 @@ testShortExactSequenceTailPointCountKeepsFreeEndpoint();
 testShortExactSequenceStraightTailUsesZeroPoints();
 testShortExactSequenceTailHideAndShowRestoresGeometry();
 testBlowupPointConstructionCreatesVarietyAndMap();
+testBlowupPointConstructionDefaultsCenterAndExceptionalClass();
+testBlowupMapDefaultsAreGeneratedAndDeletable();
+testBlowupOfGrassmannianAddsPullbacksAndUsesProjectionFormula();
+testPointBlowupHodgeNumbersAddExceptionalDiagonal();
 testGrassmannianMapConstructionCreatesTargetAndMap();
 testIdealSheafConstructionCreatesHiddenSesAndImageClass();
+testNormalBundleConstructionCreatesHiddenTangentSes();
+testRelativeTangentConstructionCreatesHiddenTangentSes();
+testRelativeCotangentConstructionCreatesHiddenCotangentSes();
+testPresetImportPreservesNormalBundleMarker();
+testPresetImportPreservesRelativeSheafMarker();
+testNormalBundleShowKeepsRevealedScaffoldingStable();
 testPresetImportPreservesIdealSheafMarker();
 
 console.log('sheaf calculator regression tests passed');

@@ -1023,9 +1023,73 @@
     }
 
     .homology-symbol-row span,
+    .homology-symbol-name,
     .homology-rule-row span {
       min-width: 0;
       overflow-wrap: anywhere;
+    }
+
+    .homology-symbol-name {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      cursor: text;
+    }
+
+    .homology-symbol-name:hover,
+    .homology-symbol-name:focus {
+      color: var(--accent);
+      outline: none;
+    }
+
+    .sheaf-chern-class-name,
+    .homology-promotion-name {
+      cursor: pointer;
+    }
+
+    .homology-symbol-edit {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 7px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .homology-promotion-prompt {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 7px 10px;
+      align-items: center;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--surface);
+      box-shadow: 0 4px 12px rgba(40, 34, 20, 0.14);
+      color: var(--text);
+      font-size: 0.8rem;
+      line-height: 1.35;
+    }
+
+    .homology-promotion-prompt > span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .homology-promotion-skip {
+      grid-column: 1 / -1;
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.76rem;
+    }
+
+    .homology-promotion-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 7px;
+      grid-column: 1 / -1;
     }
 
     .homology-map-rule-input {
@@ -1242,6 +1306,21 @@
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.7rem;
       white-space: nowrap;
+    }
+
+    .homology-standard-delete {
+      padding: 2px 6px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--panel);
+      cursor: pointer;
+    }
+
+    .homology-standard-delete:hover,
+    .homology-standard-delete:focus {
+      border-color: var(--danger);
+      color: var(--danger);
+      outline: none;
     }
 
     .homology-rule-toggle {
@@ -1832,7 +1911,11 @@
               <option value="universal-bundle" id="sheaf-universal-bundle-option">Universal bundle</option>
               <option value="direct-sum">Direct sum</option>
               <option value="self-direct-sum">Self direct sum</option>
+              <option value="dual">Dual sheaf</option>
               <option value="ideal-sheaf">Ideal sheaf</option>
+              <option value="normal-bundle">Normal bundle</option>
+              <option value="relative-tangent">Relative tangent</option>
+              <option value="relative-cotangent">Relative cotangent</option>
               <option value="tensor">Tensor product</option>
               <option value="schur">Schur functor</option>
               <option value="map-operation">Pullback / pushforward</option>
@@ -1875,6 +1958,14 @@
             </div>
           </div>
           <div class="sheaf-note" id="sheaf-self-sum-pick-note" hidden>pick a sheaf and a positive integer</div>
+          <div class="sheaf-field-row" id="sheaf-dual-formula-row" hidden>
+            <span class="input-label">parent</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-dual-parent-button" type="button" data-sheaf-dual-pick="parent">sheaf</button>
+              <span class="sheaf-map-formula-mark">^{\vee}</span>
+            </div>
+          </div>
+          <div class="sheaf-note" id="sheaf-dual-pick-note" hidden>pick a sheaf on the canvas</div>
           <div class="sheaf-field-row" id="sheaf-ideal-formula-row" hidden>
             <span class="input-label">map</span>
             <div class="sheaf-map-formula-picker">
@@ -1891,6 +1982,38 @@
             </label>
           </div>
           <div class="sheaf-note" id="sheaf-ideal-pick-note" hidden>pick an embedding map X -> Y</div>
+          <div class="sheaf-field-row" id="sheaf-normal-formula-row" hidden>
+            <span class="input-label">map</span>
+            <div class="sheaf-map-formula-picker">
+              <span class="sheaf-map-formula-mark">N_{</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-normal-map-button" type="button">map</button>
+              <span class="sheaf-map-formula-mark">}</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-normal-confirm-row" hidden>
+            <span class="input-label">warning</span>
+            <label class="opt-row sheaf-warning-check">
+              <input id="sheaf-normal-confirm" type="checkbox">
+              <span>f is a regular/lci closed embedding, and X,Y are smooth</span>
+            </label>
+          </div>
+          <div class="sheaf-note" id="sheaf-normal-pick-note" hidden>pick a closed embedding map X -> Y</div>
+          <div class="sheaf-field-row" id="sheaf-relative-formula-row" hidden>
+            <span class="input-label">map</span>
+            <div class="sheaf-map-formula-picker">
+              <span class="sheaf-map-formula-mark" id="sheaf-relative-symbol">T_{</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-relative-map-button" type="button">map</button>
+              <span class="sheaf-map-formula-mark">}</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-relative-confirm-row" hidden>
+            <span class="input-label">warning</span>
+            <label class="opt-row sheaf-warning-check">
+              <input id="sheaf-relative-confirm" type="checkbox">
+              <span>f is smooth/submersive, and X,Y are smooth</span>
+            </label>
+          </div>
+          <div class="sheaf-note" id="sheaf-relative-pick-note" hidden>pick a smooth map X -> Y</div>
           <div class="sheaf-field-row" id="sheaf-schur-formula-row" hidden>
             <span class="input-label">parent</span>
             <div class="sheaf-map-formula-picker">
