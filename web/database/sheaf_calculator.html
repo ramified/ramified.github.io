@@ -1820,6 +1820,20 @@
               </label>
             </div>
           </div>
+          <div class="sheaf-field-row" id="grassmannian-map-generically-generated-row" hidden>
+            <span class="input-label">base locus</span>
+            <label class="opt-row">
+              <input id="grassmannian-map-generically-generated" type="checkbox">
+              not all of X
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="grassmannian-map-base-point-free-row" hidden>
+            <span class="input-label">morphism</span>
+            <label class="opt-row sheaf-warning-check">
+              <input id="grassmannian-map-base-point-free" type="checkbox">
+              base locus is empty
+            </label>
+          </div>
           <div class="sheaf-note" id="grassmannian-map-pick-note" hidden>pick a locally free sheaf</div>
         </div>
 
@@ -1912,6 +1926,7 @@
               <option value="direct-sum">Direct sum</option>
               <option value="self-direct-sum">Self direct sum</option>
               <option value="dual">Dual sheaf</option>
+              <option value="internal-hom">Internal Hom</option>
               <option value="ideal-sheaf">Ideal sheaf</option>
               <option value="normal-bundle">Normal bundle</option>
               <option value="relative-tangent">Relative tangent</option>
@@ -1966,6 +1981,24 @@
             </div>
           </div>
           <div class="sheaf-note" id="sheaf-dual-pick-note" hidden>pick a sheaf on the canvas</div>
+          <div class="sheaf-field-row" id="sheaf-internal-hom-formula-row" hidden>
+            <span class="input-label">parents</span>
+            <div class="sheaf-map-formula-picker">
+              <span class="sheaf-map-formula-mark" id="sheaf-internal-hom-symbol">RHom(</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-internal-hom-source-button" type="button" data-sheaf-internal-hom-pick="source">sheaf</button>
+              <span class="sheaf-map-formula-mark">,</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-internal-hom-target-button" type="button" data-sheaf-internal-hom-pick="target">sheaf</button>
+              <span class="sheaf-map-formula-mark">)</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-internal-hom-exact-row" hidden>
+            <span class="input-label">exact</span>
+            <label class="opt-row">
+              <input id="sheaf-internal-hom-exact" type="checkbox">
+              <span>ordinary Hom</span>
+            </label>
+          </div>
+          <div class="sheaf-note" id="sheaf-internal-hom-pick-note" hidden>pick two sheaves on the same base</div>
           <div class="sheaf-field-row" id="sheaf-ideal-formula-row" hidden>
             <span class="input-label">map</span>
             <div class="sheaf-map-formula-picker">

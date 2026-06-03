@@ -46,6 +46,7 @@ function loadCalculator() {
     createBlowupPointConstruction,
     createGrassmannianMapConstruction,
     createDualSheafConstruction,
+    createInternalHomSheafConstruction,
     createIdealSheafConstruction,
     createNormalBundleConstruction,
     createRelativeSheafConstruction,
@@ -246,6 +247,228 @@ function testDualSheafUsesAlternatingChernClasses() {
   assert(restoredDual);
   assert.strictEqual(restoredDual.construction.type, 'dual');
   assert.strictEqual(restoredDual.construction.sheafId, 'E');
+}
+
+function testDualSheafNameMergesExistingExponent() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.25, labelY: 0.6 }];
+  const parent = {
+    id: 'E1',
+    type: 'abstract',
+    basis: 'chern',
+    rank: '2',
+    name: '\\mathcal{E}^{1}',
+    baseVarietyId: 'X',
+    labelX: 0.32,
+    labelY: 0.4
+  };
+  api.state.sheaves = [parent];
+
+  const dual = api.createDualSheafConstruction({
+    parent,
+    baseVarietyId: 'X',
+    defaultName: '\\mathcal{E}^{1,\\vee}',
+    name: '\\mathcal{E}^{1,\\vee}',
+    nameDirty: false
+  });
+
+  assert.strictEqual(dual.name, '\\mathcal{E}^{1,\\vee}');
+  assert(!dual.name.includes('}^{\\vee}'));
+  assert.strictEqual(dual.construction.type, 'dual');
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const sheaf = api.sheafFromObject(dual, geometry);
+  const result = api.buildCharacteristicClasses(geometry, sheaf);
+  assert.strictEqual(result.bundle.labelLatex, '\\mathcal{E}^{1,\\vee}');
+}
+
+function testDualSheafSimplifiesLineAndStructureSheaves() {
+  const api = loadCalculator();
+  const projective = { id: 'P2', type: 'projective', dim: '2', name: '\\mathbb{P}^{2}', labelX: 0.25, labelY: 0.6 };
+  const twist = {
+    id: 'O3',
+    type: 'twist',
+    basis: 'chern',
+    twist: '3',
+    rank: '1',
+    name: '\\mathcal{O}_{\\mathbb{P}^{2}}(3)',
+    baseVarietyId: 'P2'
+  };
+  const structure = {
+    id: 'OX',
+    type: 'structure',
+    basis: 'chern',
+    twist: '1',
+    rank: '1',
+    name: '\\mathcal{O}_{\\mathbb{P}^{2}}',
+    baseVarietyId: 'P2'
+  };
+  api.state.varieties = [projective];
+  api.state.sheaves = [twist, structure];
+
+  const twistDual = api.createDualSheafConstruction({
+    parent: twist,
+    baseVarietyId: 'P2',
+    defaultName: '\\mathcal{O}_{\\mathbb{P}^{2}}(-3)',
+    name: '\\mathcal{O}_{\\mathbb{P}^{2}}(-3)',
+    nameDirty: false
+  });
+  assert.strictEqual(twistDual.type, 'twist');
+  assert.strictEqual(twistDual.twist, '-3');
+  assert.strictEqual(twistDual.construction, undefined);
+  assert.strictEqual(chernPlain(characteristicRows(api, twistDual)), '1 - 3*H');
+
+  const structureDual = api.createDualSheafConstruction({
+    parent: structure,
+    baseVarietyId: 'P2',
+    defaultName: '\\mathcal{O}_{\\mathbb{P}^{2}}',
+    name: '\\mathcal{O}_{\\mathbb{P}^{2}}',
+    nameDirty: false
+  });
+  assert.strictEqual(structureDual.type, 'structure');
+  assert.strictEqual(structureDual.construction, undefined);
+  assert.strictEqual(chernPlain(characteristicRows(api, structureDual)), '1');
+}
+
+function testInternalHomCreatesHiddenDualTensor() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '3', name: 'X', labelX: 0.25, labelY: 0.6 }];
+  const source = {
+    id: 'E',
+    type: 'abstract',
+    basis: 'chern',
+    rank: '2',
+    name: '\\mathcal{E}',
+    baseVarietyId: 'X',
+    labelX: 0.32,
+    labelY: 0.4
+  };
+  const target = {
+    id: 'F',
+    type: 'abstract',
+    basis: 'chern',
+    rank: '3',
+    name: '\\mathcal{F}',
+    baseVarietyId: 'X',
+    labelX: 0.48,
+    labelY: 0.4
+  };
+  api.state.sheaves = [source, target];
+
+  const internalHom = api.createInternalHomSheafConstruction({
+    source,
+    target,
+    baseVarietyId: 'X',
+    exact: false,
+    derived: true,
+    defaultName: '\\mathcal{RHom}(\\mathcal{E}, \\mathcal{F})',
+    tensorDefaultName: '\\mathcal{E}^{\\vee}\\otimes^{\\mathbf{L}}\\mathcal{F}',
+    name: '\\mathcal{RHom}(\\mathcal{E}, \\mathcal{F})',
+    nameDirty: false
+  });
+
+  assert(internalHom);
+  assert.strictEqual(internalHom.name, '\\mathcal{RHom}(\\mathcal{E}, \\mathcal{F})');
+  assert.strictEqual(internalHom.rank, '6');
+  assert.strictEqual(internalHom.construction.type, 'tensor');
+  assert.strictEqual(internalHom.construction.internalHom, true);
+  assert.strictEqual(internalHom.construction.derived, true);
+  assert.strictEqual(internalHom.construction.exact, false);
+  assert.strictEqual(internalHom.construction.sourceSheafId, 'E');
+  assert.strictEqual(internalHom.construction.targetSheafId, 'F');
+
+  const hiddenDual = api.state.sheaves.find((item) => item.id === internalHom.construction.dualSheafId);
+  assert(hiddenDual);
+  assert.strictEqual(hiddenDual.hiddenOnCanvas, true);
+  assert.strictEqual(hiddenDual.construction.type, 'dual');
+  assert.strictEqual(hiddenDual.construction.sheafId, 'E');
+  assert.strictEqual(hiddenDual.construction.internalHomDual, true);
+  assert.deepStrictEqual(internalHom.construction.sheafIds, [hiddenDual.id, 'F']);
+
+  const before = {
+    sheaves: api.state.sheaves.length,
+    duals: api.state.sheaves.filter((item) => item.construction?.internalHomDual).length
+  };
+  api.refreshConstructedObjects();
+  assert.deepStrictEqual({
+    sheaves: api.state.sheaves.length,
+    duals: api.state.sheaves.filter((item) => item.construction?.internalHomDual).length
+  }, before);
+
+  api.state.activeVarietyId = 'X';
+  api.state.activeSheafId = internalHom.id;
+  const restored = loadCalculator();
+  restored.importPresetFromText(JSON.stringify(api.buildPresetState()));
+  const restoredInternalHom = restored.state.sheaves.find((item) => item.name === '\\mathcal{RHom}(\\mathcal{E}, \\mathcal{F})');
+  assert(restoredInternalHom);
+  assert.strictEqual(restoredInternalHom.construction.internalHom, true);
+  assert.strictEqual(restoredInternalHom.construction.sourceSheafId, 'E');
+  assert.strictEqual(restoredInternalHom.construction.targetSheafId, 'F');
+  const restoredDual = restored.state.sheaves.find((item) => item.id === restoredInternalHom.construction.dualSheafId);
+  assert.strictEqual(restoredDual.hiddenOnCanvas, true);
+}
+
+function testExactInternalHomUsesOrdinaryHomName() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.25, labelY: 0.6 }];
+  const source = { id: 'E', type: 'abstract', basis: 'chern', rank: 'r', name: '\\mathcal{E}', baseVarietyId: 'X' };
+  const target = { id: 'F', type: 'abstract', basis: 'chern', rank: 'r', name: '\\mathcal{F}', baseVarietyId: 'X' };
+  api.state.sheaves = [source, target];
+
+  const internalHom = api.createInternalHomSheafConstruction({
+    source,
+    target,
+    baseVarietyId: 'X',
+    exact: true,
+    derived: false,
+    defaultName: '\\mathcal{H}om(\\mathcal{E}, \\mathcal{F})',
+    tensorDefaultName: '\\mathcal{E}^{\\vee}\\otimes\\mathcal{F}',
+    name: '\\mathcal{H}om(\\mathcal{E}, \\mathcal{F})',
+    nameDirty: false
+  });
+
+  assert.strictEqual(internalHom.name, '\\mathcal{H}om(\\mathcal{E}, \\mathcal{F})');
+  assert.strictEqual(internalHom.construction.derived, false);
+  assert.strictEqual(internalHom.construction.exact, true);
+}
+
+function testInternalHomUpdateReusesHiddenDual() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.25, labelY: 0.6 }];
+  const source = { id: 'E', type: 'abstract', basis: 'chern', rank: '2', name: '\\mathcal{E}', baseVarietyId: 'X' };
+  const target = { id: 'F', type: 'abstract', basis: 'chern', rank: '3', name: '\\mathcal{F}', baseVarietyId: 'X' };
+  api.state.sheaves = [source, target];
+
+  const internalHom = api.createInternalHomSheafConstruction({
+    source,
+    target,
+    baseVarietyId: 'X',
+    exact: false,
+    derived: true,
+    defaultName: '\\mathcal{RHom}(\\mathcal{E}, \\mathcal{F})',
+    tensorDefaultName: '\\mathcal{E}^{\\vee}\\otimes^{\\mathbf{L}}\\mathcal{F}',
+    name: '\\mathcal{RHom}(\\mathcal{E}, \\mathcal{F})',
+    nameDirty: false
+  });
+  const dualId = internalHom.construction.dualSheafId;
+  const dualCount = api.state.sheaves.filter((item) => item.construction?.internalHomDual).length;
+
+  const updated = api.createInternalHomSheafConstruction({
+    source,
+    target,
+    baseVarietyId: 'X',
+    exact: true,
+    derived: false,
+    defaultName: '\\mathcal{H}om(\\mathcal{E}, \\mathcal{F})',
+    tensorDefaultName: '\\mathcal{E}^{\\vee}\\otimes\\mathcal{F}',
+    name: '\\mathcal{H}om(\\mathcal{E}, \\mathcal{F})',
+    nameDirty: false
+  }, { replaceSheaf: internalHom });
+
+  assert.strictEqual(updated.id, internalHom.id);
+  assert.strictEqual(updated.construction.dualSheafId, dualId);
+  assert.strictEqual(updated.construction.sheafIds[0], dualId);
+  assert.strictEqual(api.state.sheaves.filter((item) => item.construction?.internalHomDual).length, dualCount);
+  assert.strictEqual(api.state.sheaves.find((item) => item.id === dualId).hiddenOnCanvas, true);
 }
 
 function testPointClassDefaultsToUnit() {
@@ -985,6 +1208,8 @@ function testGrassmannianMapConstructionCreatesTargetAndMap() {
     bundle,
     base,
     params: { r: 2, n: 4, dim: 4 },
+    genericallyGenerated: true,
+    basePointFree: true,
     defaultTargetName: '\\operatorname{Gr}(2,4)',
     targetName: '\\operatorname{Gr}(2,4)',
     mapName: '\\varphi_{\\mathcal{E}}'
@@ -994,11 +1219,119 @@ function testGrassmannianMapConstructionCreatesTargetAndMap() {
   assert.strictEqual(api.state.varieties.length, 2);
   assert.strictEqual(api.state.maps.length, 1);
   const target = api.state.varieties[1];
+  const grassmannianMap = api.state.maps[0];
   assert.strictEqual(target.type, 'grassmannian');
   assert.strictEqual(target.construction.type, 'grassmannian-target');
-  assert.strictEqual(map.domainId, 'X');
-  assert.strictEqual(map.codomainId, target.id);
-  assert.strictEqual(map.construction.type, 'grassmannian-map');
+  assert.strictEqual(grassmannianMap.domainId, 'X');
+  assert.strictEqual(grassmannianMap.codomainId, target.id);
+  assert.strictEqual(grassmannianMap.construction.type, 'grassmannian-map');
+  assert.strictEqual(grassmannianMap.construction.basePointFree, true);
+
+  const universal = api.state.sheaves.find((item) => item.type === 'universal-bundle' && item.baseVarietyId === target.id);
+  assert(universal?.hiddenOnCanvas);
+  const dual = api.state.sheaves.find((item) => item.construction?.type === 'dual' && item.construction.sheafId === universal.id);
+  assert(dual?.hiddenOnCanvas);
+  const pullback = api.state.sheaves.find((item) => item.construction?.grassmannianMapPullback);
+  assert(pullback);
+  assert.strictEqual(pullback.baseVarietyId, 'X');
+  assert.strictEqual(pullback.construction.mapId, grassmannianMap.id);
+  assert.strictEqual(pullback.construction.sheafId, dual.id);
+  assert.strictEqual(pullback.construction.sourceSheafId, 'E');
+  assert.strictEqual(api.state.activeSheafId, pullback.id);
+  const geometry = api.geometryFromVariety(base);
+  const sourceSheaf = api.sheafFromObject(bundle, geometry);
+  const sourceRows = api.buildCharacteristicClasses(geometry, sourceSheaf).classRows;
+  assert(chernPlain(sourceRows).includes('varphi_E^*'));
+  assert(!chernPlain(sourceRows).includes('c_1(E)'));
+  const sourceRules = bundle.homology?.rules || [];
+  const c1Rule = sourceRules.find((rule) => rule.lhs?.powers?.sheaf_E_c1 === 1);
+  const c2Rule = sourceRules.find((rule) => rule.lhs?.powers?.sheaf_E_c2 === 1);
+  assert(c1Rule, 'expected a default rule for c_1(E)');
+  assert(c2Rule, 'expected a default rule for c_2(E)');
+  assert.strictEqual(c1Rule.preserveUnknownVariables, true);
+  assert.strictEqual(c1Rule.rhs[0].coefficient, '-1');
+  assert.strictEqual(c2Rule.rhs[0].coefficient, '1');
+  const c1RhsKeys = Object.keys(c1Rule.rhs[0].powers || {});
+  assert.strictEqual(c1RhsKeys.length, 1);
+  assert(c1RhsKeys[0].startsWith(`map_pullback_${grassmannianMap.id}_`));
+  assert(c1RhsKeys[0].endsWith('grassmannian_s_1'));
+
+  const restored = loadCalculator();
+  api.state.activeVarietyId = 'X';
+  api.state.activeSheafId = pullback.id;
+  restored.importPresetFromText(JSON.stringify(api.buildPresetState()));
+  const restoredPullback = restored.state.sheaves.find((item) => item.construction?.grassmannianMapPullback);
+  assert(restoredPullback);
+  assert.strictEqual(restoredPullback.construction.sourceSheafId, 'E');
+  assert.strictEqual(restored.state.maps[0].construction.basePointFree, true);
+  const restoredSource = restored.state.sheaves.find((item) => item.id === 'E');
+  const restoredRule = restoredSource.homology?.rules?.find((rule) => rule.lhs?.powers?.sheaf_E_c1 === 1);
+  assert(restoredRule);
+  assert.strictEqual(restoredRule.preserveUnknownVariables, true);
+}
+
+function testGrassmannianMapGenericallyGeneratedOnlyIsRational() {
+  const api = loadCalculator();
+  const base = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.4, labelY: 0.7 };
+  const bundle = { id: 'E', type: 'locally-free', basis: 'chern', rank: '2', name: '\\mathcal{E}', baseVarietyId: 'X', labelX: 0.45, labelY: 0.4 };
+  api.state.varieties = [base];
+  api.state.sheaves = [bundle];
+
+  const map = api.createGrassmannianMapConstruction({
+    bundle,
+    base,
+    params: { r: 2, n: 5, dim: 6 },
+    genericallyGenerated: true,
+    basePointFree: false,
+    defaultTargetName: '\\operatorname{Gr}(2,5)',
+    targetName: '\\operatorname{Gr}(2,5)',
+    mapName: '\\varphi_{\\mathcal{E}}'
+  });
+
+  assert(map);
+  assert.strictEqual(api.state.varieties.length, 2);
+  assert.strictEqual(api.state.maps.length, 1);
+  assert.strictEqual(api.state.sheaves.length, 1);
+  assert.strictEqual(map.construction.genericallyGenerated, true);
+  assert.strictEqual(map.construction.basePointFree, false);
+  assert.strictEqual(map.construction.linearSystemDimension, 5);
+}
+
+function testRankOneGrassmannianMapUsesProjectiveSpaceAndTwists() {
+  const api = loadCalculator();
+  const base = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.4, labelY: 0.7 };
+  const bundle = { id: 'L', type: 'locally-free', basis: 'chern', rank: '1', name: '\\mathcal{L}', baseVarietyId: 'X', labelX: 0.45, labelY: 0.4 };
+  api.state.varieties = [base];
+  api.state.sheaves = [bundle];
+
+  api.createGrassmannianMapConstruction({
+    bundle,
+    base,
+    params: { r: 1, n: 4, dim: 3 },
+    genericallyGenerated: true,
+    basePointFree: true,
+    defaultTargetName: '\\mathbb{P}^{3}',
+    targetName: '\\mathbb{P}^{3}',
+    mapName: '\\varphi_{\\mathcal{L}}'
+  });
+
+  const target = api.state.varieties[1];
+  const map = api.state.maps[0];
+  assert.strictEqual(target.type, 'projective');
+  assert.strictEqual(target.name, '\\mathbb{P}^{3}');
+  assert.strictEqual(target.construction.projectiveModel, true);
+  assert.strictEqual(map.construction.projectiveModel, true);
+  const tautological = api.state.sheaves.find((item) => item.baseVarietyId === target.id && item.type === 'twist' && item.twist === '-1');
+  const dual = api.state.sheaves.find((item) => item.baseVarietyId === target.id && item.type === 'twist' && item.twist === '1');
+  assert(tautological);
+  assert(dual);
+  assert.strictEqual(tautological.name, '\\mathcal{O}_{\\mathbb{P}^{3}}(-1)');
+  assert.strictEqual(dual.name, '\\mathcal{O}_{\\mathbb{P}^{3}}(1)');
+  assert.strictEqual(dual.construction, undefined);
+  const rule = bundle.homology?.rules?.find((item) => item.lhs?.powers?.sheaf_L_c1 === 1);
+  assert(rule);
+  assert.strictEqual(rule.rhs[0].coefficient, '1');
+  assert(Object.keys(rule.rhs[0].powers || {})[0].endsWith('_H'));
 }
 
 function testIdealSheafConstructionCreatesHiddenSesAndImageClass() {
@@ -1359,6 +1692,11 @@ testSelfDirectSumScalesChernCharacter();
 testPresetStateIncludesRecoverableConstructionData();
 testPresetImportRestoresRecoverableState();
 testDualSheafUsesAlternatingChernClasses();
+testDualSheafNameMergesExistingExponent();
+testDualSheafSimplifiesLineAndStructureSheaves();
+testInternalHomCreatesHiddenDualTensor();
+testExactInternalHomUsesOrdinaryHomName();
+testInternalHomUpdateReusesHiddenDual();
 testPointClassDefaultsToUnit();
 testPointSourcePushforwardDefaultsToTargetPoint();
 testPointPushforwardDefaultsToTargetPoint();
@@ -1380,6 +1718,8 @@ testBlowupMapDefaultsAreGeneratedAndDeletable();
 testBlowupOfGrassmannianAddsPullbacksAndUsesProjectionFormula();
 testPointBlowupHodgeNumbersAddExceptionalDiagonal();
 testGrassmannianMapConstructionCreatesTargetAndMap();
+testGrassmannianMapGenericallyGeneratedOnlyIsRational();
+testRankOneGrassmannianMapUsesProjectiveSpaceAndTwists();
 testIdealSheafConstructionCreatesHiddenSesAndImageClass();
 testNormalBundleConstructionCreatesHiddenTangentSes();
 testRelativeTangentConstructionCreatesHiddenTangentSes();
