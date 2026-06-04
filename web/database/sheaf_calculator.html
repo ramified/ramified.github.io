@@ -1751,6 +1751,7 @@
               <option value="short-exact-sequence">Short exact sequence / triangle</option>
               <option value="grassmannian-tautological-ses">Tautological SES</option>
               <option value="blow-up-point">Blow-up of a point</option>
+              <option value="ramified-cover">Ramified cover</option>
               <option value="grassmannian-map">Map to Grassmannian</option>
             </select>
           </div>
@@ -1791,6 +1792,45 @@
             </div>
           </div>
           <div class="sheaf-note" id="blowup-pick-note" hidden>pick a variety and a point</div>
+          <div class="sheaf-field-row" id="ramified-cover-base-row" hidden>
+            <span class="input-label">base</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="ramified-cover-base-button" type="button">variety</button>
+              <span class="sheaf-map-formula-mark">&larr;</span>
+              <span class="sheaf-map-formula-mark" id="ramified-cover-preview">Y</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="ramified-cover-degree-row" hidden>
+            <label class="input-label" for="ramified-cover-degree">degree</label>
+            <input id="ramified-cover-degree" class="sheaf-input" type="number" min="1" max="99" step="1" value="2">
+          </div>
+          <div class="sheaf-field-row" id="ramified-cover-mode-row" hidden>
+            <label class="input-label" for="ramified-cover-mode">mode</label>
+            <select id="ramified-cover-mode" class="sheaf-select">
+              <option value="cyclic" selected>Cyclic</option>
+              <option value="general">General finite</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row" id="ramified-cover-branch-row" hidden>
+            <label class="input-label" for="ramified-cover-branch-symbol">branch</label>
+            <input id="ramified-cover-branch-symbol" class="sheaf-input" type="text" value="B" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row" id="ramified-cover-ramification-row" hidden>
+            <label class="input-label" for="ramified-cover-ramification-symbol">ramification</label>
+            <input id="ramified-cover-ramification-symbol" class="sheaf-input" type="text" value="R" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row" id="ramified-cover-smooth-row" hidden>
+            <span class="input-label">smooth</span>
+            <label class="opt-row sheaf-warning-check">
+              <input id="ramified-cover-smooth-confirm" type="checkbox">
+              smooth base and smooth branch divisor
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="ramified-cover-root-row" hidden>
+            <label class="input-label" for="ramified-cover-branch-degree">branch degree</label>
+            <input id="ramified-cover-branch-degree" class="sheaf-input" type="number" min="1" max="99" step="1" value="4">
+          </div>
+          <div class="sheaf-note" id="ramified-cover-pick-note" hidden>pick a base variety</div>
           <div class="sheaf-field-row" id="tautological-ses-base-row" hidden>
             <span class="input-label">base</span>
             <div class="sheaf-map-formula-picker">
@@ -2159,6 +2199,36 @@
               <input id="map-label-offset" type="range" min="-25" max="25" step="1" value="-18">
               <output id="map-label-offset-value" for="map-label-offset">-18px</output>
             </label>
+          </div>
+          <div class="sheaf-field-row" id="map-ramified-cover-degree-row" hidden>
+            <label class="input-label" for="map-ramified-cover-degree">degree</label>
+            <input id="map-ramified-cover-degree" class="sheaf-input" type="number" min="1" max="99" step="1" value="2">
+          </div>
+          <div class="sheaf-field-row" id="map-ramified-cover-mode-row" hidden>
+            <label class="input-label" for="map-ramified-cover-mode">mode</label>
+            <select id="map-ramified-cover-mode" class="sheaf-select">
+              <option value="cyclic">Cyclic</option>
+              <option value="general">General finite</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row" id="map-ramified-cover-branch-row" hidden>
+            <label class="input-label" for="map-ramified-cover-branch-symbol">branch</label>
+            <input id="map-ramified-cover-branch-symbol" class="sheaf-input" type="text" value="B" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row" id="map-ramified-cover-ramification-row" hidden>
+            <label class="input-label" for="map-ramified-cover-ramification-symbol">ramification</label>
+            <input id="map-ramified-cover-ramification-symbol" class="sheaf-input" type="text" value="R" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row" id="map-ramified-cover-smooth-row" hidden>
+            <span class="input-label">smooth</span>
+            <label class="opt-row sheaf-warning-check">
+              <input id="map-ramified-cover-smooth-confirm" type="checkbox">
+              smooth base and smooth branch divisor
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="map-ramified-cover-branch-degree-row" hidden>
+            <label class="input-label" for="map-ramified-cover-branch-degree">branch degree</label>
+            <input id="map-ramified-cover-branch-degree" class="sheaf-input" type="number" min="1" max="99" step="1" value="4">
           </div>
           <div class="map-pick-status" id="map-pick-status">pick a domain</div>
           <div class="map-pick-actions">

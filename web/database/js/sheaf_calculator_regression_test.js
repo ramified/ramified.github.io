@@ -28,6 +28,9 @@ function loadCalculator() {
     addMapHomologyClassToTargetHomology,
     HOMOLOGY_HYPERPLANE_CLASS,
     HOMOLOGY_POINT_CLASS,
+    HOMOLOGY_BRANCH_DIVISOR_CLASS,
+    HOMOLOGY_RAMIFICATION_DIVISOR_CLASS,
+    HOMOLOGY_CYCLIC_ROOT_CLASS,
     standardMapCurve,
     isStraightMapCurve,
     mapCurveAnchorCount,
@@ -44,6 +47,7 @@ function loadCalculator() {
     setSequenceTailPoint,
     sequenceTailPointCount,
     createBlowupPointConstruction,
+    createRamifiedCoverConstruction,
     createGrassmannianMapConstruction,
     createDualSheafConstruction,
     createInternalHomSheafConstruction,
@@ -382,7 +386,7 @@ function testInternalHomCreatesHiddenDualTensor() {
   assert.strictEqual(hiddenDual.construction.type, 'dual');
   assert.strictEqual(hiddenDual.construction.sheafId, 'E');
   assert.strictEqual(hiddenDual.construction.internalHomDual, true);
-  assert.deepStrictEqual(internalHom.construction.sheafIds, [hiddenDual.id, 'F']);
+  assert.deepStrictEqual(Array.from(internalHom.construction.sheafIds), [hiddenDual.id, 'F']);
 
   const before = {
     sheaves: api.state.sheaves.length,
@@ -543,13 +547,13 @@ function testOutOfRangeMapHomologyRelationsAreOmitted() {
     { id: 'q', name: 'q', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'pt' }
   ];
 
-  api.state.activeMapId = 'i';
+  api.state.activeHomologyTarget = { kind: 'map', id: 'i' };
   const pointGeometry = api.geometryFromVariety(api.state.varieties[0]);
   const pullbackDefs = api.mapHomologyClassDefinitions(pointGeometry);
   assert.strictEqual(pullbackDefs.length, 1);
   assert.strictEqual(pullbackDefs[0].degree, 0);
 
-  api.state.activeMapId = 'q';
+  api.state.activeHomologyTarget = { kind: 'map', id: 'q' };
   const targetPointGeometry = api.geometryFromVariety(api.state.varieties[0]);
   const pushforwardDefs = api.mapHomologyClassDefinitions(targetPointGeometry);
   assert.strictEqual(pushforwardDefs.length, 1);
@@ -1197,6 +1201,354 @@ function testPointBlowupHodgeNumbersAddExceptionalDiagonal() {
   assert(hodge.message.includes('Point blow-up'));
 }
 
+function testCurvePointBlowupHodgeNumbersAreUnchanged() {
+  const api = loadCalculator();
+  const base = { id: 'C', type: 'curve', dim: '1', genus: '3', name: 'C', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const blowup = api.createBlowupPointConstruction({
+    base,
+    point: null,
+    centerLabel: 'p',
+    defaultName: '\\operatorname{Bl}_{p}(C)',
+    name: '\\operatorname{Bl}_{p}(C)'
+  });
+  const hodge = api.buildHodgeNumbers(api.geometryFromVariety(blowup));
+
+  assert.strictEqual(hodge.entries[0][0].plain, '1');
+  assert.strictEqual(hodge.entries[0][1].plain, '3');
+  assert.strictEqual(hodge.entries[1][0].plain, '3');
+  assert.strictEqual(hodge.entries[1][1].plain, '1');
+  assert(hodge.message.includes('unchanged'));
+}
+
+function testSymbolicGenusCurvePointBlowupHodgeNumbersAreUnchanged() {
+  const api = loadCalculator();
+  const base = { id: 'C', type: 'curve', dim: '1', genus: 'g', name: 'C', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const blowup = api.createBlowupPointConstruction({
+    base,
+    point: null,
+    centerLabel: 'p',
+    defaultName: '\\operatorname{Bl}_{p}(C)',
+    name: '\\operatorname{Bl}_{p}(C)'
+  });
+  const hodge = api.buildHodgeNumbers(api.geometryFromVariety(blowup));
+
+  assert.strictEqual(hodge.entries[0][0].plain, '1');
+  assert.strictEqual(hodge.entries[0][1].plain, 'g');
+  assert.strictEqual(hodge.entries[1][0].plain, 'g');
+  assert.strictEqual(hodge.entries[1][1].plain, '1');
+  assert(hodge.message.includes('unchanged'));
+}
+
+function testRamifiedCoverConstructionCreatesCoverMapAndHomology() {
+  const api = loadCalculator();
+  const base = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 3,
+    coverMode: 'general',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    defaultName: 'Y',
+    name: 'Y'
+  });
+
+  assert(cover);
+  assert.strictEqual(api.state.varieties.length, 2);
+  assert.strictEqual(api.state.maps.length, 1);
+  const map = api.state.maps[0];
+  assert.strictEqual(cover.construction.type, 'ramified-cover');
+  assert.strictEqual(map.construction.type, 'ramified-cover-map');
+  assert.strictEqual(map.domainId, cover.id);
+  assert.strictEqual(map.codomainId, 'X');
+  assert.strictEqual(api.geometryFromVariety(cover).dim, api.geometryFromVariety(base).dim);
+  assert(cover.parents.some((item) => item.id === 'X' && item.role === 'base'));
+
+  const baseGeometry = api.geometryFromVariety(base);
+  const coverGeometry = api.geometryFromVariety(cover);
+  const branch = api.homologyClassDefinitions(baseGeometry).find((def) => def.id === api.HOMOLOGY_BRANCH_DIVISOR_CLASS);
+  const ramification = api.homologyClassDefinitions(coverGeometry).find((def) => def.id === api.HOMOLOGY_RAMIFICATION_DIVISOR_CLASS);
+  assert(branch);
+  assert(ramification);
+  assert.strictEqual(branch.cohomologyDegree, 2);
+  assert.strictEqual(ramification.cohomologyDegree, 2);
+
+  const rule = api.defaultMapHomologyRulesForGeometry(baseGeometry)
+    .find((item) => item.id === `default-ramified-cover-unit-pushforward-${map.id}`);
+  assert(rule);
+  const unitPushforwardId = Object.keys(rule.lhs.powers)[0];
+  const reduced = api.applyHomologyRules(api.polyFromPowers({ [unitPushforwardId]: 1 }), {
+    geometry: baseGeometry,
+    homology: baseGeometry.homology
+  });
+  assert.strictEqual(api.formatPolyPlain(reduced), '3');
+}
+
+function testCyclicRamifiedCoverAddsBranchRamificationRule() {
+  const api = loadCalculator();
+  const base = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 4,
+    coverMode: 'cyclic',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    defaultName: 'Y',
+    name: 'Y'
+  });
+  const map = api.state.maps[0];
+  const coverGeometry = api.geometryFromVariety(cover);
+  const rule = coverGeometry.homology.rules.find((item) => item.id === `default-ramified-cover-cyclic-branch-${map.id}`);
+  assert(rule);
+  const rhs = rule.rhs[0];
+  assert.strictEqual(rhs.coefficient, '4');
+  const rhsId = Object.keys(rhs.powers)[0];
+  const ramificationDef = api.homologyClassDefinitions(coverGeometry).find((def) => def.id === api.HOMOLOGY_RAMIFICATION_DIVISOR_CLASS);
+  assert.strictEqual(rhsId, api.homologyDefVariableId(ramificationDef, coverGeometry));
+}
+
+function testSmoothCyclicRamifiedCoverAddsRootClassAndHodgeNumbers() {
+  const api = loadCalculator();
+  const base = { id: 'P3', type: 'projective', dim: '3', name: '\\mathbb{P}^{3}', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 2,
+    coverMode: 'cyclic',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    smoothCyclic: true,
+    branchDegree: 4,
+    defaultName: '\\widetilde{\\mathbb{P}^{3}}',
+    name: 'Y'
+  });
+
+  const baseGeometry = api.geometryFromVariety(base);
+  const coverGeometry = api.geometryFromVariety(cover);
+  const root = api.homologyClassDefinitions(baseGeometry).find((def) => def.id === api.HOMOLOGY_CYCLIC_ROOT_CLASS);
+  assert(root);
+  assert.strictEqual(root.cohomologyDegree, 2);
+  const rootRule = baseGeometry.homology.rules.find((item) => item.id === `default-ramified-cover-root-branch-${cover.id}`);
+  assert(rootRule);
+  assert.strictEqual(rootRule.rhs[0].coefficient, '2');
+
+  const hodge = api.buildHodgeNumbers(coverGeometry);
+  assert.strictEqual(hodge.entries[0][0].plain, '1');
+  assert.strictEqual(hodge.entries[1][1].plain, '1');
+  assert.strictEqual(hodge.entries[2][1].plain, '10');
+  assert.strictEqual(hodge.entries[1][2].plain, '10');
+  assert.strictEqual(hodge.entries[3][3].plain, '1');
+  assert(hodge.message.includes('smooth hypersurface of degree 4'));
+  assert(hodge.message.includes('L=O(2)'));
+  assert.strictEqual(cover.construction.branchDegree, 4);
+  assert.strictEqual(cover.construction.rootTwist, 2);
+  const rootSheaf = api.state.sheaves.find((item) => item.id === cover.construction.rootSheafId);
+  assert(rootSheaf);
+  assert.strictEqual(rootSheaf.construction.type, 'ramified-cover-root');
+  assert.strictEqual(rootSheaf.type, 'twist');
+  assert.strictEqual(rootSheaf.twist, '2');
+  assert.strictEqual(rootSheaf.baseVarietyId, 'P3');
+
+  cover.construction.branchDegree = 8;
+  cover.construction.rootTwist = 4;
+  const branchEightHodge = api.buildHodgeNumbers(api.geometryFromVariety(cover));
+  assert.strictEqual(branchEightHodge.entries[2][1].plain, '149');
+}
+
+function testRamifiedCoverPresetRoundTripAndDegreeOneSuppression() {
+  const api = loadCalculator();
+  const base = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 1,
+    coverMode: 'cyclic',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    defaultName: 'Y',
+    name: 'Y'
+  });
+  const coverGeometry = api.geometryFromVariety(cover);
+  assert.strictEqual(api.homologyClassDefinitions(api.geometryFromVariety(base)).some((def) => def.id === api.HOMOLOGY_BRANCH_DIVISOR_CLASS), false);
+  assert.strictEqual(api.homologyClassDefinitions(coverGeometry).some((def) => def.id === api.HOMOLOGY_RAMIFICATION_DIVISOR_CLASS), false);
+
+  const presetText = JSON.stringify(api.buildPresetState());
+  const restored = loadCalculator();
+  restored.importPresetFromText(presetText);
+  const restoredCover = restored.state.varieties.find((item) => item.construction?.type === 'ramified-cover');
+  const restoredMap = restored.state.maps.find((item) => item.construction?.type === 'ramified-cover-map');
+  assert(restoredCover);
+  assert(restoredMap);
+  assert.strictEqual(restoredCover.construction.degree, 1);
+  assert.strictEqual(restoredCover.construction.coverMode, 'cyclic');
+  assert.strictEqual(restoredCover.construction.branchSymbol, 'B');
+  assert.strictEqual(restoredCover.construction.ramificationSymbol, 'R');
+}
+
+function testRamifiedCoverPresetRoundTripBranchDegree() {
+  const api = loadCalculator();
+  const base = { id: 'P3', type: 'projective', dim: '3', name: '\\mathbb{P}^{3}', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  api.createRamifiedCoverConstruction({
+    base,
+    degree: 2,
+    coverMode: 'cyclic',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    smoothCyclic: true,
+    branchDegree: 4,
+    defaultName: '\\widetilde{\\mathbb{P}^{3}}',
+    name: 'Y'
+  });
+
+  const presetText = JSON.stringify(api.buildPresetState());
+  const restored = loadCalculator();
+  restored.importPresetFromText(presetText);
+  const restoredCover = restored.state.varieties.find((item) => item.construction?.type === 'ramified-cover');
+  const restoredMap = restored.state.maps.find((item) => item.construction?.type === 'ramified-cover-map');
+  assert(restoredCover);
+  assert(restoredMap);
+  assert.strictEqual(restoredCover.construction.branchDegree, 4);
+  assert.strictEqual(restoredCover.construction.rootTwist, 2);
+  assert.strictEqual(restoredMap.construction.branchDegree, 4);
+  assert.strictEqual(restoredMap.construction.rootTwist, 2);
+  const restoredRoot = restored.state.sheaves.find((item) => item.id === restoredCover.construction.rootSheafId);
+  assert(restoredRoot);
+  assert.strictEqual(restoredRoot.construction.type, 'ramified-cover-root');
+  assert.strictEqual(restoredRoot.construction.branchDegree, 4);
+}
+
+function testRamifiedCoverMapConstructionUpdatesCoverData() {
+  const api = loadCalculator();
+  const base = { id: 'P3', type: 'projective', dim: '3', name: '\\mathbb{P}^{3}', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 2,
+    coverMode: 'cyclic',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    smoothCyclic: true,
+    branchDegree: 4,
+    defaultName: '\\widetilde{\\mathbb{P}^{3}}',
+    name: 'Y'
+  });
+  const map = api.state.maps.find((item) => item.construction?.type === 'ramified-cover-map');
+  map.construction.degree = 3;
+  map.construction.coverMode = 'cyclic';
+  map.construction.smoothCyclic = true;
+  map.construction.branchDegree = 6;
+  map.construction.rootTwist = 2;
+  map.construction.branchSymbol = 'D';
+  map.construction.ramificationSymbol = 'E';
+
+  api.refreshConstructedObjects();
+
+  assert.strictEqual(cover.construction.degree, 3);
+  assert.strictEqual(cover.construction.coverMode, 'cyclic');
+  assert.strictEqual(cover.construction.smoothCyclic, true);
+  assert.strictEqual(cover.construction.branchDegree, 6);
+  assert.strictEqual(cover.construction.rootTwist, 2);
+  assert.strictEqual(cover.construction.branchSymbol, 'D');
+  assert.strictEqual(cover.construction.ramificationSymbol, 'E');
+  const rootSheaf = api.state.sheaves.find((item) => item.id === cover.construction.rootSheafId);
+  assert(rootSheaf);
+  assert.strictEqual(rootSheaf.twist, '2');
+  assert.strictEqual(rootSheaf.construction.branchDegree, 6);
+}
+
+function testRamifiedCoverMapGeneralModeSuppressesSmoothCyclicData() {
+  const api = loadCalculator();
+  const base = { id: 'P3', type: 'projective', dim: '3', name: '\\mathbb{P}^{3}', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 2,
+    coverMode: 'cyclic',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    smoothCyclic: true,
+    branchDegree: 4,
+    defaultName: '\\widetilde{\\mathbb{P}^{3}}',
+    name: 'Y'
+  });
+  const map = api.state.maps.find((item) => item.construction?.type === 'ramified-cover-map');
+  map.construction.coverMode = 'general';
+  map.construction.smoothCyclic = false;
+  map.construction.branchDegree = null;
+  map.construction.rootTwist = null;
+
+  api.refreshConstructedObjects();
+
+  assert.strictEqual(cover.construction.coverMode, 'general');
+  assert.strictEqual(cover.construction.smoothCyclic, false);
+  assert.strictEqual(cover.construction.branchDegree, null);
+  assert.strictEqual(cover.construction.rootTwist, null);
+  assert.strictEqual(api.state.sheaves.some((item) => item.construction?.type === 'ramified-cover-root'), false);
+  assert.strictEqual(api.buildHodgeNumbers(api.geometryFromVariety(cover)).entries[2][1].plain, 'h^2,1');
+}
+
+function testRamifiedCoverRefreshPreservesConstructionAfterDimensionEdit() {
+  const api = loadCalculator();
+  const base = { id: 'X', type: 'abstract', dim: '3', name: 'X', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 2,
+    coverMode: 'general',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    defaultName: '\\widetilde{X}',
+    name: '\\widetilde{X}'
+  });
+  cover.dim = '5';
+  cover.type = 'curve';
+
+  api.refreshConstructedObjects();
+
+  assert.strictEqual(cover.construction.type, 'ramified-cover');
+  assert.strictEqual(cover.type, 'abstract');
+  assert.strictEqual(cover.dim, '3');
+  const map = api.state.maps.find((item) => item.id === cover.construction.mapId);
+  assert.strictEqual(map.construction.type, 'ramified-cover-map');
+}
+
+function testSmoothCyclicCurveRamifiedCoverUsesRiemannHurwitz() {
+  const api = loadCalculator();
+  const base = { id: 'P1', type: 'projective', dim: '1', name: '\\mathbb{P}^{1}', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 2,
+    coverMode: 'cyclic',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    smoothCyclic: true,
+    branchDegree: 4,
+    defaultName: '\\widetilde{\\mathbb{P}^{1}}',
+    name: 'Y'
+  });
+  const hodge = api.buildHodgeNumbers(api.geometryFromVariety(cover));
+
+  assert.strictEqual(hodge.entries[0][1].plain, '1');
+  assert.strictEqual(hodge.entries[1][0].plain, '1');
+  assert(hodge.message.includes('Riemann-Hurwitz'));
+}
+
 function testGrassmannianMapConstructionCreatesTargetAndMap() {
   const api = loadCalculator();
   const base = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.4, labelY: 0.7 };
@@ -1327,7 +1679,7 @@ function testRankOneGrassmannianMapUsesProjectiveSpaceAndTwists() {
   assert(dual);
   assert.strictEqual(tautological.name, '\\mathcal{O}_{\\mathbb{P}^{3}}(-1)');
   assert.strictEqual(dual.name, '\\mathcal{O}_{\\mathbb{P}^{3}}(1)');
-  assert.strictEqual(dual.construction, undefined);
+  assert.strictEqual(dual.construction ?? undefined, undefined);
   const rule = bundle.homology?.rules?.find((item) => item.lhs?.powers?.sheaf_L_c1 === 1);
   assert(rule);
   assert.strictEqual(rule.rhs[0].coefficient, '1');
@@ -1717,6 +2069,17 @@ testBlowupPointConstructionDefaultsCenterAndExceptionalClass();
 testBlowupMapDefaultsAreGeneratedAndDeletable();
 testBlowupOfGrassmannianAddsPullbacksAndUsesProjectionFormula();
 testPointBlowupHodgeNumbersAddExceptionalDiagonal();
+testCurvePointBlowupHodgeNumbersAreUnchanged();
+testSymbolicGenusCurvePointBlowupHodgeNumbersAreUnchanged();
+testRamifiedCoverConstructionCreatesCoverMapAndHomology();
+testCyclicRamifiedCoverAddsBranchRamificationRule();
+testSmoothCyclicRamifiedCoverAddsRootClassAndHodgeNumbers();
+testRamifiedCoverPresetRoundTripAndDegreeOneSuppression();
+testRamifiedCoverPresetRoundTripBranchDegree();
+testRamifiedCoverMapConstructionUpdatesCoverData();
+testRamifiedCoverMapGeneralModeSuppressesSmoothCyclicData();
+testRamifiedCoverRefreshPreservesConstructionAfterDimensionEdit();
+testSmoothCyclicCurveRamifiedCoverUsesRiemannHurwitz();
 testGrassmannianMapConstructionCreatesTargetAndMap();
 testGrassmannianMapGenericallyGeneratedOnlyIsRational();
 testRankOneGrassmannianMapUsesProjectiveSpaceAndTwists();
