@@ -303,6 +303,38 @@
       min-width: 0;
     }
 
+    .boundary-chain-length {
+      width: 64px;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+    }
+
+    .boundary-chain-length:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .stat-action-value {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .stat-compute-btn {
+      padding: 2px 7px;
+      font-size: 0.72rem;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
     .billiard-controls {
       display: flex;
       align-items: center;
@@ -922,6 +954,7 @@
               <option value="tile">Remove / recover tiles</option>
               <option value="boundary">Add / remove boundary</option>
               <option value="glue-boundary">Glue boundary</option>
+              <option value="reverse-glue" hidden disabled>Reverse arrows</option>
               <option value="billiard">Billiard / geodesic</option>
             </select>
           </div>
@@ -966,6 +999,13 @@
             <span class="boundary-chain-controls">
               <label class="opt-row"><input type="checkbox" id="background-multi-edges" checked> on</label>
               <button class="btn btn-ghost" id="background-begin-second-chain" type="button" disabled>begin second</button>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="background-chain-settings-row">
+            <span class="input-label">Chain</span>
+            <span class="boundary-chain-controls">
+              <label class="opt-row">length <input class="boundary-chain-length" type="number" id="background-chain-length" min="1" max="96" value="1"></label>
+              <label class="opt-row"><input type="checkbox" id="background-chain-reversed"> reversed</label>
             </span>
           </div>
           <div class="mosaic-inline-row" id="background-cusp-marker-row">
@@ -1026,6 +1066,8 @@
       <div class="card-body">
         <div class="stat-row" id="out-tiles-row"><span class="stat-label" id="out-tiles-label">Filled tiles</span><span class="stat-value" id="out-tiles">0</span></div>
         <div class="stat-row" id="out-open-ends-row"><span class="stat-label" id="out-open-ends-label">Open ends</span><span class="stat-value" id="out-open-ends">0</span></div>
+        <div class="stat-row" id="out-boundary-components-row" hidden><span class="stat-label" id="out-boundary-components-label">Boundary components</span><span class="stat-value" id="out-boundary-components">0</span></div>
+        <div class="stat-row" id="out-orientable-row" hidden><span class="stat-label" id="out-orientable-label">Orientable</span><span class="stat-value stat-action-value"><span id="out-orientable">not computed</span><button class="btn btn-ghost stat-compute-btn" id="compute-background-orientable" type="button">compute</button></span></div>
         <div class="stat-row" id="out-components-row"><span class="stat-label" id="out-components-label">Components</span><span class="stat-value" id="out-components">0</span></div>
         <div class="stat-row" id="out-genus-row" hidden><span class="stat-label">Genus</span><span class="stat-value" id="out-genus">-</span></div>
         <div class="stat-row" id="out-cusps-row" hidden><span class="stat-label">Cusps</span><span class="stat-value" id="out-cusps">-</span></div>

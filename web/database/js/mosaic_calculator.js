@@ -266,6 +266,11 @@
     pendingGlueEdge: null,
     pendingGlueChains: null,
     backgroundMultiEdges: true,
+    backgroundChainLength: 1,
+    backgroundChainReversed: false,
+    backgroundGlueWarning: '',
+    backgroundGlueFlicker: null,
+    backgroundOrientability: null,
     backgroundCuspMarkerScale: DEFAULT_BACKGROUND_CUSP_MARKER_SCALE,
     backgroundBilliardSpeed: DEFAULT_BACKGROUND_BILLIARD_SPEED,
     backgroundBilliardTrailLength: DEFAULT_BACKGROUND_BILLIARD_TRAIL_LENGTH,
@@ -279,6 +284,7 @@
       aimPoint: null,
       hitPoints: [],
       trailPoints: [],
+      trailColorMode: 'blue',
       playing: false,
       frame: null,
       lastTime: 0
@@ -414,9 +420,15 @@
       ? refs.inputMode.querySelector('option[value="background"]')
       : null;
     refs.backgroundAction = document.getElementById('background-action');
+    refs.backgroundReverseGlueOption = refs.backgroundAction
+      ? refs.backgroundAction.querySelector('option[value="reverse-glue"]')
+      : null;
     refs.backgroundMultiEdgeRow = document.getElementById('background-multi-edge-row');
     refs.backgroundMultiEdges = document.getElementById('background-multi-edges');
     refs.backgroundBeginSecondChain = document.getElementById('background-begin-second-chain');
+    refs.backgroundChainSettingsRow = document.getElementById('background-chain-settings-row');
+    refs.backgroundChainLength = document.getElementById('background-chain-length');
+    refs.backgroundChainReversed = document.getElementById('background-chain-reversed');
     refs.backgroundBilliardRow = document.getElementById('background-billiard-row');
     refs.backgroundBilliardPlay = document.getElementById('background-billiard-play');
     refs.backgroundBilliardClear = document.getElementById('background-billiard-clear');
@@ -524,14 +536,21 @@
       cardLabel: document.getElementById('statistics-card-label'),
       tilesRow: document.getElementById('out-tiles-row'),
       openEndsRow: document.getElementById('out-open-ends-row'),
+      boundaryComponentsRow: document.getElementById('out-boundary-components-row'),
+      orientableRow: document.getElementById('out-orientable-row'),
       componentsRow: document.getElementById('out-components-row'),
       genusRow: document.getElementById('out-genus-row'),
       cuspsRow: document.getElementById('out-cusps-row'),
       tilesLabel: document.getElementById('out-tiles-label'),
       openEndsLabel: document.getElementById('out-open-ends-label'),
+      boundaryComponentsLabel: document.getElementById('out-boundary-components-label'),
+      orientableLabel: document.getElementById('out-orientable-label'),
       componentsLabel: document.getElementById('out-components-label'),
       tiles: document.getElementById('out-tiles'),
       openEnds: document.getElementById('out-open-ends'),
+      boundaryComponents: document.getElementById('out-boundary-components'),
+      orientable: document.getElementById('out-orientable'),
+      computeOrientable: document.getElementById('compute-background-orientable'),
       components: document.getElementById('out-components'),
       genus: document.getElementById('out-genus'),
       cusps: document.getElementById('out-cusps')
@@ -590,6 +609,23 @@
       refs.backgroundMultiEdges.addEventListener('change', () => {
         state.backgroundMultiEdges = refs.backgroundMultiEdges.checked;
         clearPendingGlueEdge();
+        syncBackgroundModeControls();
+        updateReport(false);
+      });
+    }
+    if (refs.backgroundChainLength) {
+      refs.backgroundChainLength.addEventListener('change', () => {
+        state.backgroundChainLength = normalizeBackgroundChainLength(refs.backgroundChainLength.value);
+        rebuildPendingGlueChainsFromSettings();
+        syncBackgroundModeControls();
+        updateReport(false);
+      });
+    }
+    if (refs.backgroundChainReversed) {
+      refs.backgroundChainReversed.addEventListener('change', () => {
+        state.backgroundChainReversed = !!refs.backgroundChainReversed.checked;
+        setActivePendingGlueChainReversed(state.backgroundChainReversed);
+        rebuildPendingGlueChainsFromSettings();
         syncBackgroundModeControls();
         updateReport(false);
       });
@@ -725,6 +761,9 @@
     }
     if (refs.computeDegenerations) {
       refs.computeDegenerations.addEventListener('click', computeAndRenderDualGraphDegenerations);
+    }
+    if (refs.out && refs.out.computeOrientable) {
+      refs.out.computeOrientable.addEventListener('click', computeAndShowBackgroundOrientability);
     }
     if (refs.exportDegenerations) {
       refs.exportDegenerations.addEventListener('click', exportDualGraphDegenerations);
@@ -1457,8 +1496,11 @@
     state.removedTiles = new Set();
     state.cutEdges = new Set();
     state.gluedEdges = [];
-    state.pendingGlueEdge = null;
-    state.pendingGlueChains = null;
+    clearPendingGlueEdge();
+    state.backgroundChainLength = 1;
+    state.backgroundChainReversed = false;
+    state.backgroundGlueWarning = '';
+    state.backgroundOrientability = null;
     state.edits = 0;
     state.hoverIndex = -1;
     state.backgroundHoverEdge = null;
@@ -1528,8 +1570,9 @@
     state.backgroundHoverCusp = null;
     clearBackgroundBilliard(false);
     state.selectedBackgroundCusp = null;
-    state.pendingGlueEdge = null;
-    state.pendingGlueChains = null;
+    clearPendingGlueEdge();
+    state.backgroundGlueWarning = '';
+    state.backgroundOrientability = null;
     syncMainCanvasCursor();
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
@@ -1551,8 +1594,7 @@
     state.gluedEdges = oldLattice !== nextLattice
       ? []
       : reshapeGluedEdges(oldGluedEdges, oldRows, oldCols, rows, cols);
-    state.pendingGlueEdge = null;
-    state.pendingGlueChains = null;
+    clearPendingGlueEdge();
     pruneCutEdges();
     pruneGluedEdges();
     state.standardDualGraphInput = null;
@@ -1610,7 +1652,9 @@
     return oldGluedEdges
       .map((pair) => ({
         first: reshapeBoundaryEdge(pair.first, oldRows, oldCols, rows, cols),
-        second: reshapeBoundaryEdge(pair.second, oldRows, oldCols, rows, cols)
+        second: reshapeBoundaryEdge(pair.second, oldRows, oldCols, rows, cols),
+        group: normalizeGlueGroup(pair.group),
+        reversed: !!pair.reversed
       }))
       .filter((pair) => pair.first && pair.second);
   }
@@ -1855,6 +1899,10 @@
     state.wrappedViewMode = 'periodic';
     state.inputMode = 'import';
     state.backgroundMultiEdges = true;
+    state.backgroundChainLength = 1;
+    state.backgroundChainReversed = false;
+    state.backgroundGlueWarning = '';
+    state.backgroundOrientability = null;
     state.editMode = 'rotate';
     state.drawAction = 'edge';
     state.drawLayer = 'above';
@@ -1873,8 +1921,7 @@
     state.pickHoverHit = null;
     state.decorationHoverHit = null;
     state.backgroundHoverEdge = null;
-    state.pendingGlueEdge = null;
-    state.pendingGlueChains = null;
+    clearPendingGlueEdge();
     clearBackgroundBilliard(false);
     syncMainCanvasCursor();
     state.pickedComponent = null;
@@ -2428,6 +2475,15 @@
     state.backgroundAction = normalizeBackgroundAction(payload.backgroundAction || (payload.backgroundSpace && payload.backgroundSpace.action));
     state.backgroundMultiEdges = payload.backgroundMultiEdges !== false
       && !(payload.backgroundSpace && payload.backgroundSpace.multiEdges === false);
+    state.backgroundChainLength = normalizeBackgroundChainLength(
+      payload.backgroundChainLength != null
+        ? payload.backgroundChainLength
+        : (payload.backgroundSpace && payload.backgroundSpace.chainLength)
+    );
+    state.backgroundChainReversed = !!(
+      payload.backgroundChainReversed
+      || (payload.backgroundSpace && payload.backgroundSpace.chainReversed)
+    );
     state.backgroundCuspMarkerScale = normalizeBackgroundCuspMarkerScale(
       payload.backgroundCuspMarkerScale != null
         ? payload.backgroundCuspMarkerScale
@@ -2472,6 +2528,7 @@
       || (payload.display && payload.display.drawDebug ? 'debug' : 'shade')
     );
     state.edits = Number.isFinite(Number(payload.edits)) ? Math.max(0, Math.trunc(Number(payload.edits))) : 0;
+    state.backgroundOrientability = null;
     state.halfEdgeLabelStyle = normalizeHalfEdgeLabelStyle(payload.halfEdgeLabelStyle || (payload.display && payload.display.halfEdgeLabelStyle));
     state.clearVertexDecorations = payload.clearVertexDecorations !== false;
     state.clearHalfEdgeDecorations = payload.clearHalfEdgeDecorations !== false;
@@ -2480,8 +2537,7 @@
     state.pickHoverHit = null;
     state.decorationHoverHit = null;
     state.backgroundHoverEdge = null;
-    state.pendingGlueEdge = null;
-    state.pendingGlueChains = null;
+    clearPendingGlueEdge();
     clearBackgroundBilliard(false);
     syncMainCanvasCursor();
     state.pickedComponent = null;
@@ -2609,14 +2665,16 @@
     if (Array.isArray(entry) && entry.length >= 2) {
       const first = importedBoundaryEdge(entry[0], rows, cols);
       const second = importedBoundaryEdge(entry[1], rows, cols);
-      return first && second ? { first, second, group: null } : null;
+      return first && second ? { first, second, group: null, reversed: false } : null;
     }
     if (!entry || typeof entry !== 'object') return null;
     const firstValue = firstPresentValue(entry, ['first', 'left', 'a', 'from']);
     const secondValue = firstPresentValue(entry, ['second', 'right', 'b', 'to']);
     const first = importedBoundaryEdge(firstValue, rows, cols);
     const second = importedBoundaryEdge(secondValue, rows, cols);
-    return first && second ? { first, second, group: normalizeGlueGroup(entry.group) } : null;
+    return first && second
+      ? { first, second, group: normalizeGlueGroup(entry.group), reversed: !!(entry.reversed || entry.orientation === 'reversed') }
+      : null;
   }
 
   function importedBoundaryEdge(value, rows, cols) {
@@ -2895,7 +2953,8 @@
         x: position.x + direction.x * normalizeBackgroundBilliardArrowLength(state.backgroundBilliardArrowLength),
         y: position.y + direction.y * normalizeBackgroundBilliardArrowLength(state.backgroundBilliardArrowLength)
       } : null,
-      trailPoints: [{ x: position.x, y: position.y }]
+      trailPoints: [{ x: position.x, y: position.y, colorMode: 'blue' }],
+      trailColorMode: 'blue'
     };
     syncBackgroundBilliardControls();
   }
@@ -2939,8 +2998,7 @@
     state.removedTiles = new Set();
     state.cutEdges = new Set();
     state.gluedEdges = [];
-    state.pendingGlueEdge = null;
-    state.pendingGlueChains = null;
+    clearPendingGlueEdge();
     state.vertexDecorations = {};
     state.halfEdgeDecorations = {};
     state.standardDualGraphInput = null;
@@ -2951,6 +3009,7 @@
     state.displayPick = false;
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
+    state.backgroundOrientability = null;
     clearBackgroundBilliard(false);
     if (refs.displayPick) refs.displayPick.checked = false;
     if (shouldRestoreInputMode) {
@@ -3331,7 +3390,8 @@
         .map((pair) => ({
           first: cloneBoundaryEdge(pair.first),
           second: cloneBoundaryEdge(pair.second),
-          group: normalizeGlueGroup(pair.group)
+          group: normalizeGlueGroup(pair.group),
+          reversed: !!pair.reversed
         }))
         .filter((pair) => pair.first && pair.second)
       : [];
@@ -3443,6 +3503,11 @@
   function clearPendingGlueEdge() {
     state.pendingGlueEdge = null;
     state.pendingGlueChains = null;
+    state.backgroundGlueWarning = '';
+    if (state.backgroundGlueFlicker && state.backgroundGlueFlicker.frame != null) {
+      window.cancelAnimationFrame(state.backgroundGlueFlicker.frame);
+    }
+    state.backgroundGlueFlicker = null;
   }
 
   function removeGluedEdgesForBoundaryEdge(edge) {
@@ -3454,7 +3519,7 @@
       ));
     }
     if (state.pendingGlueEdge && boundaryEdgeKey(state.pendingGlueEdge) === key) clearPendingGlueEdge();
-    if (state.pendingGlueChains && edgeInGlueChains(edge, state.pendingGlueChains)) trimPendingGlueChainAt(edge, state.pendingGlueChains);
+    if (state.pendingGlueChains && edgeInGlueChains(edge, state.pendingGlueChains)) clearPendingGlueEdge();
   }
 
   function removeGluedEdgesForTile(index) {
@@ -3486,7 +3551,7 @@
         const key = gluedPairKey({ first, second });
         if (!key || seen.has(key)) return null;
         seen.add(key);
-        return { first, second, group: normalizeGlueGroup(pair.group) };
+        return { first, second, group: normalizeGlueGroup(pair.group), reversed: !!pair.reversed };
       })
       .filter(Boolean);
     if (state.pendingGlueEdge && !isValidBoundaryEdge(state.pendingGlueEdge)) clearPendingGlueEdge();
@@ -3499,7 +3564,7 @@
     const first = (chains.first || []).filter((edge) => isValidBoundaryEdge(edge));
     const second = (chains.second || []).filter((edge) => isValidBoundaryEdge(edge));
     if (!first.length && !second.length) {
-      state.pendingGlueChains = null;
+      clearPendingGlueEdge();
       return;
     }
     chains.first = first;
@@ -3658,7 +3723,7 @@
 
     removeGluedEdgesForBoundaryEdge(first);
     removeGluedEdgesForBoundaryEdge(second);
-    state.gluedEdges.push({ first, second, group: nextGlueGroup() });
+    state.gluedEdges.push({ first, second, group: nextGlueGroup(), reversed: false });
     clearPendingGlueEdge();
     pruneGluedEdges();
     state.backgroundHoverEdge = null;
@@ -3692,47 +3757,41 @@
       updateReport(false);
       return true;
     }
+    if (!isUngluedBackgroundBoundaryEdge(boundaryEdge)) return false;
 
     const chains = ensurePendingGlueChains();
-    if (edgeInGlueChains(boundaryEdge, chains)) {
-      trimPendingGlueChainAt(boundaryEdge, chains);
-      state.backgroundHoverEdge = null;
-      updateReport(false);
-      return true;
-    }
-
-    const active = chains.phase === 'second' ? chains.second : chains.first;
-    if (active.length > 0 && !isAdjacentBoundaryEdge(active[active.length - 1], boundaryEdge)) {
-      if (chains.phase === 'second') {
-        chains.second = [boundaryEdge];
-        showBackgroundGlueHint(`second chain restarted: 1/${chains.first.length} edge${chains.first.length === 1 ? '' : 's'}`);
-        if (chains.second.length === chains.first.length) {
-          commitPendingGlueChains(chains);
-          return true;
-        }
-      } else {
-        chains.first = [boundaryEdge];
-        chains.second = [];
-        showBackgroundGlueHint('first chain restarted: 1 edge');
-      }
-      state.backgroundHoverEdge = null;
-      updateReport(false);
-      return true;
-    }
-
-    active.push(boundaryEdge);
-    if (chains.phase === 'first' && chains.first.length > 0 && chains.second.length === 0) {
-      state.backgroundHoverEdge = null;
-      updateReport(false);
-      return true;
-    }
-
-    if (chains.phase === 'second' && chains.second.length === chains.first.length) {
-      commitPendingGlueChains(chains);
-      return true;
-    }
-
+    updatePendingGlueChainFromClick(chains, boundaryEdge);
     state.backgroundHoverEdge = null;
+    syncBackgroundModeControls();
+    updateReport(false);
+    return true;
+  }
+
+  function reverseGluedBoundaryGroupAt(edge) {
+    if (!edge || !hasGluedBoundaryPairs()) return false;
+    const pairs = cloneGluedEdges();
+    const hitKey = boundaryEdgeKey({ index: edge.index, dir: edge.dir });
+    const hitIndex = pairs.findIndex((pair) => (
+      boundaryEdgeKey(pair.first) === hitKey || boundaryEdgeKey(pair.second) === hitKey
+    ));
+    if (hitIndex < 0) return false;
+    const group = gluePairGroup(pairs[hitIndex], hitIndex);
+    const groupPairs = pairs
+      .map((pair, index) => ({ pair, index }))
+      .filter((entry) => gluePairGroup(entry.pair, entry.index) === group);
+    if (!groupPairs.length) return false;
+    const nextReversed = !groupPairs.some((entry) => entry.pair.reversed);
+    const nextSecondEdges = groupPairs.map((entry) => cloneBoundaryEdge(entry.pair.second)).reverse();
+    groupPairs.forEach((entry, index) => {
+      entry.pair.second = nextSecondEdges[index];
+      entry.pair.reversed = nextReversed;
+    });
+    clearBackgroundBilliard(false);
+    clearStandardDualGraphInput();
+    state.gluedEdges = pairs;
+    pruneGluedEdges();
+    state.backgroundHoverEdge = null;
+    state.edits += 1;
     updateReport(false);
     return true;
   }
@@ -3741,10 +3800,17 @@
     if (!isGluedBoundaryMode() || !isBackgroundGlueAction() || !state.backgroundMultiEdges) return;
     const chains = state.pendingGlueChains;
     const firstCount = chains && Array.isArray(chains.first) ? chains.first.length : 0;
-    if (!chains || chains.phase !== 'first' || firstCount === 0) return;
+    if (!chains || firstCount === 0) return;
+    if (chains.phase === 'second') {
+      commitPendingGlueChains(chains);
+      return;
+    }
     chains.phase = 'second';
     chains.second = [];
+    chains.secondStart = null;
+    chains.secondReversed = !!state.backgroundChainReversed;
     state.backgroundHoverEdge = null;
+    syncBackgroundModeControls();
     updateReport(false);
   }
 
@@ -3761,7 +3827,11 @@
       state.pendingGlueChains = {
         phase: 'first',
         first: [],
-        second: []
+        second: [],
+        firstStart: null,
+        secondStart: null,
+        firstReversed: !!state.backgroundChainReversed,
+        secondReversed: !!state.backgroundChainReversed
       };
     }
     return state.pendingGlueChains;
@@ -3775,16 +3845,178 @@
     ));
   }
 
+  function updatePendingGlueChainFromClick(chains, edge) {
+    if (!chains || !edge) return false;
+    const phase = chains.phase === 'second' ? 'second' : 'first';
+    const startKey = phase === 'second' ? 'secondStart' : 'firstStart';
+    const chainKey = phase === 'second' ? 'second' : 'first';
+    const existingChain = Array.isArray(chains[chainKey]) ? chains[chainKey] : [];
+
+    if (!chains[startKey] || !existingChain.length) {
+      setPendingGlueChainStart(chains, phase, edge);
+      return true;
+    }
+
+    const lengthDelta = pendingGlueChainLengthDelta(existingChain, edge);
+    if (lengthDelta !== 0) {
+      applyPendingGlueChainLengthDelta(lengthDelta);
+      return true;
+    }
+
+    if (updatePendingGlueChainDirectionFromClick(existingChain, edge)) {
+      rebuildPendingGlueChainsFromSettings();
+      return true;
+    }
+
+    if (existingChain.length === 1) {
+      const expectedForward = nextBackgroundBoundaryComponentEdge(existingChain[0]);
+      const expectedBackward = previousBackgroundBoundaryComponentEdge(existingChain[0]);
+      if (sameBoundaryEdge(edge, expectedForward) || sameBoundaryEdge(edge, expectedBackward)) {
+        state.backgroundChainReversed = sameBoundaryEdge(edge, expectedBackward);
+        state.backgroundChainLength = normalizeBackgroundChainLength(2);
+        rebuildPendingGlueChainsFromSettings();
+        return true;
+      }
+    }
+
+    setPendingGlueChainStart(chains, phase, edge);
+    return true;
+  }
+
+  function updatePendingGlueChainDirectionFromClick(chain, edge) {
+    if (!Array.isArray(chain) || !chain.length || !edge) return false;
+    const start = chain[0];
+    const currentReversed = activePendingGlueChainReversed();
+    const forward = nextBackgroundBoundaryComponentEdge(start);
+    const backward = previousBackgroundBoundaryComponentEdge(start);
+    if (currentReversed && sameBoundaryEdge(edge, forward)) {
+      setActivePendingGlueChainReversed(false);
+      if (state.backgroundChainLength < 2) state.backgroundChainLength = normalizeBackgroundChainLength(2);
+      return true;
+    }
+    if (!currentReversed && sameBoundaryEdge(edge, backward)) {
+      setActivePendingGlueChainReversed(true);
+      if (state.backgroundChainLength < 2) state.backgroundChainLength = normalizeBackgroundChainLength(2);
+      return true;
+    }
+    return false;
+  }
+
+  function setPendingGlueChainStart(chains, phase, edge) {
+    const start = cloneBoundaryEdge(edge);
+    if (!chains || !isUngluedBackgroundBoundaryEdge(start)) return false;
+    const reversed = pendingGlueChainReversed(chains, phase);
+    const result = buildBackgroundBoundaryChainResult(start, state.backgroundChainLength, reversed);
+    const chain = result.chain;
+    if (!chain.length) {
+      startBackgroundGlueFlicker(result.attempt || [start]);
+      if (phase === 'second') {
+        if (!chains.secondStart || !chains.second.length) {
+          chains.secondStart = start;
+          chains.second = [];
+        }
+      } else if (!chains.firstStart || !chains.first.length) {
+        chains.phase = 'first';
+        chains.firstStart = start;
+        chains.first = [];
+        chains.secondStart = null;
+        chains.second = [];
+      }
+      setBackgroundGlueWarning(result.warning || 'coincide happens');
+      return false;
+    }
+    if (phase === 'second' && chainsOverlap(chain, chains.first)) {
+      startBackgroundGlueFlicker(overlappingChainEdges(chain, chains.first));
+      if (!chains.secondStart || !chains.second.length) {
+        chains.secondStart = start;
+        chains.second = [];
+      }
+      setBackgroundGlueWarning('coincide happens');
+      return false;
+    }
+    if (phase === 'first') updateFirstGlueChainSpaceWarning(chain);
+    else clearBackgroundGlueWarning();
+    if (phase === 'second') {
+      chains.secondStart = start;
+      chains.second = chain;
+      chains.secondReversed = reversed;
+    } else {
+      chains.phase = 'first';
+      chains.firstStart = start;
+      chains.first = chain;
+      chains.firstReversed = reversed;
+      chains.secondStart = null;
+      chains.second = [];
+    }
+    return true;
+  }
+
+  function updateFirstGlueChainSpaceWarning(chain) {
+    const totalBoundaryEdges = countUngluedBackgroundBoundaryEdges();
+    if (Array.isArray(chain) && totalBoundaryEdges > 0 && chain.length > totalBoundaryEdges / 2) {
+      setBackgroundGlueWarning('there is no space for making a second chain');
+      return;
+    }
+    clearBackgroundGlueWarning();
+  }
+
+  function pendingGlueChainLengthDelta(chain, edge) {
+    if (!Array.isArray(chain) || !chain.length || !edge) return 0;
+    const normalized = cloneBoundaryEdge(edge);
+    if (!normalized) return 0;
+    if (chain.length > 1 && sameBoundaryEdge(normalized, chain[chain.length - 1])) return -1;
+    const tail = chain[chain.length - 1];
+    const extension = activePendingGlueChainReversed()
+      ? previousBackgroundBoundaryComponentEdge(tail)
+      : nextBackgroundBoundaryComponentEdge(tail);
+    if (sameBoundaryEdge(normalized, extension)) return 1;
+    return 0;
+  }
+
+  function applyPendingGlueChainLengthDelta(delta) {
+    const previousLength = normalizeBackgroundChainLength(state.backgroundChainLength);
+    state.backgroundChainLength = normalizeBackgroundChainLength(previousLength + delta);
+    rebuildPendingGlueChainsFromSettings();
+    if (state.backgroundGlueWarning === 'coincide happens') {
+      state.backgroundChainLength = previousLength;
+      rebuildPendingGlueChainsFromSettings();
+      setBackgroundGlueWarning('coincide happens');
+    }
+  }
+
+  function pendingGlueChainReversed(chains, phase) {
+    if (!chains) return !!state.backgroundChainReversed;
+    if (phase === 'second') return !!chains.secondReversed;
+    return !!chains.firstReversed;
+  }
+
+  function activePendingGlueChainReversed() {
+    const chains = state.pendingGlueChains;
+    const phase = chains && chains.phase === 'second' ? 'second' : 'first';
+    return pendingGlueChainReversed(chains, phase);
+  }
+
+  function setActivePendingGlueChainReversed(reversed) {
+    const chains = ensurePendingGlueChains();
+    if (chains.phase === 'second') chains.secondReversed = !!reversed;
+    else chains.firstReversed = !!reversed;
+    state.backgroundChainReversed = !!reversed;
+  }
+
   function pendingGlueStatusText() {
     if (!isBackgroundGlueAction()) return '';
+    if (state.backgroundGlueWarning) return state.backgroundGlueWarning;
     const chains = state.pendingGlueChains;
     if (chains && ((chains.first || []).length || (chains.second || []).length)) {
       const firstCount = (chains.first || []).length;
       const secondCount = (chains.second || []).length;
+      const expectedCount = normalizeBackgroundChainLength(state.backgroundChainLength);
+      const firstShortText = firstCount < expectedCount ? ` (${firstCount}/${expectedCount} available)` : '';
       if (chains.phase === 'second') {
-        return `glue boundary: second chain ${secondCount}/${firstCount} edge${firstCount === 1 ? '' : 's'}; choose the matching edge${firstCount === 1 ? '' : 's'}`;
+        const secondShortText = secondCount > 0 && secondCount < expectedCount ? ` (${secondCount}/${expectedCount} available)` : '';
+        return `glue boundary: second chain ${secondCount}/${expectedCount} edge${expectedCount === 1 ? '' : 's'}${secondShortText}; choose start edge, then finish`;
       }
-      return `glue boundary: first chain ${firstCount} edge${firstCount === 1 ? '' : 's'}; press begin second when done`;
+      return `glue boundary: first chain ${firstCount} edge${firstCount === 1 ? '' : 's'}${firstShortText}; choose start edge or adjust length`;
     }
     if (state.pendingGlueEdge) return 'glue boundary: choose the matching edge';
     return '';
@@ -3825,6 +4057,7 @@
       aimPoint: null,
       hitPoints: [],
       trailPoints: [],
+      trailColorMode: 'blue',
       playing: false,
       frame: null,
       lastTime: 0
@@ -3847,6 +4080,7 @@
     billiard.playing = false;
     billiard.lastTime = 0;
     syncBackgroundBilliardControls();
+    syncBackgroundBilliardStatusLine();
     syncMainCanvasCursor();
     if (redraw) draw(analyze());
   }
@@ -3940,11 +4174,12 @@
     }
     if (!billiard.position || !billiard.direction || billiard.tileIndex < 0 || !tileExists(billiard.tileIndex)) return;
     if (!Array.isArray(billiard.trailPoints) || !billiard.trailPoints.length) {
-      billiard.trailPoints = [{ x: billiard.position.x, y: billiard.position.y }];
+      billiard.trailPoints = [{ x: billiard.position.x, y: billiard.position.y, colorMode: billiard.trailColorMode === 'purple' ? 'purple' : 'blue' }];
     }
     billiard.playing = true;
     billiard.lastTime = 0;
     syncBackgroundBilliardControls();
+    syncBackgroundBilliardStatusLine();
     syncMainCanvasCursor();
     billiard.frame = window.requestAnimationFrame(stepBackgroundBilliardAnimation);
   }
@@ -3960,9 +4195,13 @@
     const elapsed = clamp(timestamp - billiard.lastTime, 0, 48);
     billiard.lastTime = timestamp;
     advanceBackgroundBilliard(normalizeBackgroundBilliardSpeed(state.backgroundBilliardSpeed) * elapsed);
+    syncBackgroundBilliardStatusLine();
     draw(analyze());
     if (billiard.playing) billiard.frame = window.requestAnimationFrame(stepBackgroundBilliardAnimation);
-    else syncBackgroundBilliardControls();
+    else {
+      syncBackgroundBilliardControls();
+      syncBackgroundBilliardStatusLine();
+    }
   }
 
   function handleBackgroundBilliardClick(clientX, clientY) {
@@ -3977,7 +4216,8 @@
         ...resetBackgroundBilliardState(),
         tileIndex: hit.index,
         position: { x: point.x, y: point.y },
-        trailPoints: [{ x: point.x, y: point.y }],
+        trailPoints: [{ x: point.x, y: point.y, colorMode: 'blue' }],
+        trailColorMode: 'blue',
         aimPoint: null
       };
       syncBackgroundBilliardControls();
@@ -4023,7 +4263,22 @@
     const billiard = backgroundBilliardState();
     if (!billiard.position) return 'geodesic: click inside an existing tile to place the point';
     if (!billiard.direction) return 'geodesic: click a second point to choose direction';
-    return `geodesic: ${billiard.playing ? 'playing' : 'ready'}, ${billiard.hitPoints.length} hit${billiard.hitPoints.length === 1 ? '' : 's'}`;
+    const boundaryHits = backgroundBilliardBoundaryHitCount(billiard);
+    return `geodesic: ${billiard.playing ? 'playing' : 'ready'}, ${boundaryHits} hit${boundaryHits === 1 ? '' : 's'}`;
+  }
+
+  function backgroundBilliardBoundaryHitCount(billiard) {
+    const hits = billiard && Array.isArray(billiard.hitPoints) ? billiard.hitPoints : [];
+    return hits.filter((point) => point.kind === 'boundary').length;
+  }
+
+  function syncBackgroundBilliardStatusLine() {
+    if (!refs.statusLine) return;
+    if (!isGluedBoundaryMode() || state.inputMode !== 'background') return;
+    const statusText = pendingGlueStatusText() || backgroundBilliardStatusText();
+    if (!statusText) return;
+    refs.statusLine.textContent = statusText;
+    refs.statusLine.classList.remove('mosaic-status-good', 'mosaic-status-bad');
   }
 
   function advanceBackgroundBilliard(distance) {
@@ -4112,18 +4367,23 @@
       const hitIsFirst = sameBoundaryEdge(hitEdge, pair.first);
       const partner = hitIsFirst ? pair.second : pair.first;
       if (!partner || !isValidBoundaryEdge(partner)) return false;
+      const firstReverse = !!pair.reversed;
+      const secondReverse = !pair.reversed;
       const transfer = backgroundBilliardGluedTransfer(
         hit,
         partner,
         billiard.direction,
-        hitIsFirst ? false : true,
-        hitIsFirst ? true : false
+        hitIsFirst ? firstReverse : secondReverse,
+        hitIsFirst ? secondReverse : firstReverse
       );
       if (!transfer) return false;
       const epsilon = Math.max(0.02, geometry.radius * 0.0008);
       recordBackgroundBilliardHit(hit.point, 'glued');
       billiard.tileIndex = partner.index;
       appendBackgroundBilliardTrailPoint(transfer.point, true);
+      if (pair.reversed) {
+        billiard.trailColorMode = billiard.trailColorMode === 'purple' ? 'blue' : 'purple';
+      }
       billiard.position = {
         x: transfer.point.x + transfer.direction.x * epsilon,
         y: transfer.point.y + transfer.direction.y * epsilon
@@ -4169,7 +4429,8 @@
       secondBasis.inward.y
     );
     const t = clamp(hit.edgeT, 0, 1);
-    const partnerT = 1 - t;
+    const sourceT = currentReverse ? 1 - t : t;
+    const partnerT = partnerReverse ? 1 - sourceT : sourceT;
     return {
       point: {
         x: partnerSegment.start.x + (partnerSegment.end.x - partnerSegment.start.x) * partnerT,
@@ -4234,7 +4495,12 @@
     if (!Array.isArray(billiard.trailPoints)) billiard.trailPoints = [];
     const last = billiard.trailPoints[billiard.trailPoints.length - 1];
     if (!breakBefore && last && Math.hypot(last.x - point.x, last.y - point.y) < 0.25) return;
-    billiard.trailPoints.push({ x: point.x, y: point.y, breakBefore: !!breakBefore });
+    billiard.trailPoints.push({
+      x: point.x,
+      y: point.y,
+      breakBefore: !!breakBefore,
+      colorMode: billiard.trailColorMode === 'purple' ? 'purple' : 'blue'
+    });
     trimBackgroundBilliardTrail();
   }
 
@@ -4245,7 +4511,9 @@
     if (isInfiniteBackgroundBilliardTrailLength(trailLength)) return;
     let remaining = trailLength;
     if (remaining <= 0) {
-      billiard.trailPoints = billiard.position ? [{ x: billiard.position.x, y: billiard.position.y }] : [];
+      billiard.trailPoints = billiard.position
+        ? [{ x: billiard.position.x, y: billiard.position.y, colorMode: billiard.trailColorMode === 'purple' ? 'purple' : 'blue' }]
+        : [];
       return;
     }
     const kept = [{ ...billiard.trailPoints[billiard.trailPoints.length - 1] }];
@@ -4262,7 +4530,8 @@
         const ratio = remaining / segmentLength;
         kept.push({
           x: next.x + (current.x - next.x) * ratio,
-          y: next.y + (current.y - next.y) * ratio
+          y: next.y + (current.y - next.y) * ratio,
+          colorMode: next.colorMode || current.colorMode || 'blue'
         });
       }
       break;
@@ -4313,45 +4582,90 @@
     if (refs.statusLine && message) refs.statusLine.textContent = message;
   }
 
+  function setBackgroundGlueWarning(message) {
+    state.backgroundGlueWarning = message || '';
+  }
+
+  function clearBackgroundGlueWarning() {
+    state.backgroundGlueWarning = '';
+  }
+
+  function startBackgroundGlueFlicker(edges) {
+    const flickerEdges = (Array.isArray(edges) ? edges : [])
+      .map(cloneBoundaryEdge)
+      .filter(Boolean);
+    if (!flickerEdges.length) return;
+    if (state.backgroundGlueFlicker && state.backgroundGlueFlicker.frame != null) {
+      window.cancelAnimationFrame(state.backgroundGlueFlicker.frame);
+    }
+    state.backgroundGlueFlicker = {
+      edges: flickerEdges,
+      start: performance.now(),
+      duration: 2700,
+      flashes: 3,
+      frame: null
+    };
+    tickBackgroundGlueFlicker();
+  }
+
+  function tickBackgroundGlueFlicker() {
+    const flicker = state.backgroundGlueFlicker;
+    if (!flicker) return;
+    const elapsed = performance.now() - flicker.start;
+    if (elapsed >= flicker.duration) {
+      state.backgroundGlueFlicker = null;
+      draw(analyze());
+      return;
+    }
+    draw(analyze());
+    flicker.frame = window.requestAnimationFrame(tickBackgroundGlueFlicker);
+  }
+
   function edgeInGlueChains(edge, chains = state.pendingGlueChains) {
     if (!chains) return false;
     return (chains.first || []).some((item) => sameBoundaryEdge(item, edge))
       || (chains.second || []).some((item) => sameBoundaryEdge(item, edge));
   }
 
-  function trimPendingGlueChainAt(edge, chains = state.pendingGlueChains) {
-    if (!chains) return;
-    const secondIndex = (chains.second || []).findIndex((item) => sameBoundaryEdge(item, edge));
-    if (secondIndex >= 0) {
-      chains.second = chains.second.slice(0, secondIndex);
-      chains.phase = 'second';
-      return;
-    }
-    const firstIndex = (chains.first || []).findIndex((item) => sameBoundaryEdge(item, edge));
-    if (firstIndex >= 0) {
-      chains.first = chains.first.slice(0, firstIndex);
-      chains.second = [];
-      chains.phase = 'first';
-    }
+  function chainsOverlap(left, right) {
+    if (!Array.isArray(left) || !Array.isArray(right) || !left.length || !right.length) return false;
+    const keys = new Set(left.map(boundaryEdgeKey).filter(Boolean));
+    return right.some((edge) => keys.has(boundaryEdgeKey(edge)));
+  }
+
+  function overlappingChainEdges(left, right) {
+    if (!Array.isArray(left) || !Array.isArray(right)) return [];
+    const rightKeys = new Set(right.map(boundaryEdgeKey).filter(Boolean));
+    const leftKeys = new Set(left.map(boundaryEdgeKey).filter(Boolean));
+    return left
+      .filter((edge) => rightKeys.has(boundaryEdgeKey(edge)))
+      .concat(right.filter((edge) => leftKeys.has(boundaryEdgeKey(edge))));
   }
 
   function commitPendingGlueChains(chains) {
     if (!chains || chains.first.length !== chains.second.length || chains.first.length === 0) return false;
+    if (chains.first.length !== normalizeBackgroundChainLength(state.backgroundChainLength)) return false;
     clearBackgroundBilliard(false);
     const group = nextGlueGroup();
-    const nextPairs = chains.first.map((first, index) => ({
+    const firstChain = commitReadyGlueChain(chains.first);
+    const secondChain = commitReadyGlueChain(chains.second);
+    if (firstChain.length !== secondChain.length || firstChain.length === 0) return false;
+    const nextPairs = firstChain.map((first, index) => ({
       first: cloneBoundaryEdge(first),
-      second: cloneBoundaryEdge(chains.second[index]),
-      group
+      second: cloneBoundaryEdge(secondChain[index]),
+      group,
+      reversed: false
     })).filter((pair) => (
       pair.first
       && pair.second
       && !sameBoundaryEdge(pair.first, pair.second)
-      && isValidBoundaryEdge(pair.first)
-      && isValidBoundaryEdge(pair.second)
+      && isUngluedBackgroundBoundaryEdge(pair.first)
+      && isUngluedBackgroundBoundaryEdge(pair.second)
     ));
-    if (nextPairs.length !== chains.first.length) {
-      clearPendingGlueEdge();
+    if (nextPairs.length !== firstChain.length) {
+      setBackgroundGlueWarning('coincide happens');
+      startBackgroundGlueFlicker(firstChain.concat(secondChain));
+      syncBackgroundModeControls();
       updateReport(false);
       return false;
     }
@@ -4370,11 +4684,71 @@
     return true;
   }
 
-  function isAdjacentBoundaryEdge(left, right) {
-    const leftVertices = boundaryEdgeLogicalVertexKeys(left);
-    const rightVertices = boundaryEdgeLogicalVertexKeys(right);
-    if (!leftVertices.length || !rightVertices.length) return false;
-    return leftVertices.some((key) => rightVertices.includes(key));
+  function commitReadyGlueChain(chain) {
+    if (!Array.isArray(chain) || chain.length < 2) return Array.isArray(chain) ? chain.slice() : [];
+    if (sameBoundaryEdge(chain[0], chain[chain.length - 1])) return chain.slice(0, -1);
+    return chain.slice();
+  }
+
+  function isBackgroundBoundaryChainContinuation(left, right) {
+    const normalizedLeft = cloneBoundaryEdge(left);
+    const normalizedRight = cloneBoundaryEdge(right);
+    if (!isUngluedBackgroundBoundaryEdge(normalizedLeft) || !isUngluedBackgroundBoundaryEdge(normalizedRight)) return false;
+    return sameBoundaryEdge(nextBackgroundBoundaryComponentEdge(normalizedLeft), normalizedRight)
+      || sameBoundaryEdge(previousBackgroundBoundaryComponentEdge(normalizedLeft), normalizedRight);
+  }
+
+  function buildBackgroundBoundaryChainResult(start, length = state.backgroundChainLength, reversed = state.backgroundChainReversed) {
+    const first = cloneBoundaryEdge(start);
+    if (!isUngluedBackgroundBoundaryEdge(first)) return { chain: [], warning: '', attempt: [] };
+    const targetLength = normalizeBackgroundChainLength(length);
+    const chain = [first];
+    const seen = new Set([boundaryEdgeKey(first)]);
+    let current = first;
+    for (let index = 1; index < targetLength; index += 1) {
+      const next = reversed
+        ? previousBackgroundBoundaryComponentEdge(current)
+        : nextBackgroundBoundaryComponentEdge(current);
+      const nextKey = boundaryEdgeKey(next);
+      if (!next || !nextKey) return { chain: [], warning: 'coincide happens', attempt: chain };
+      if (seen.has(nextKey)) {
+        return { chain: [], warning: 'coincide happens', attempt: chain.concat([next]) };
+      }
+      chain.push(next);
+      seen.add(nextKey);
+      current = next;
+    }
+    return { chain, warning: '', attempt: chain };
+  }
+
+  function buildBackgroundBoundaryChain(start, length = state.backgroundChainLength, reversed = state.backgroundChainReversed) {
+    return buildBackgroundBoundaryChainResult(start, length, reversed).chain;
+  }
+
+  function rebuildPendingGlueChainsFromSettings() {
+    const chains = state.pendingGlueChains;
+    if (!chains) return;
+    clearBackgroundGlueWarning();
+    if (chains.firstStart) {
+      const firstResult = buildBackgroundBoundaryChainResult(chains.firstStart, state.backgroundChainLength, pendingGlueChainReversed(chains, 'first'));
+      chains.first = firstResult.chain;
+      if (firstResult.warning) {
+        setBackgroundGlueWarning(firstResult.warning);
+        startBackgroundGlueFlicker(firstResult.attempt || [chains.firstStart]);
+      }
+    }
+    if (chains.secondStart) {
+      const secondResult = buildBackgroundBoundaryChainResult(chains.secondStart, state.backgroundChainLength, pendingGlueChainReversed(chains, 'second'));
+      chains.second = secondResult.chain;
+      if (secondResult.warning || chainsOverlap(chains.second, chains.first)) {
+        setBackgroundGlueWarning(secondResult.warning || 'coincide happens');
+        startBackgroundGlueFlicker(secondResult.warning
+          ? secondResult.attempt || [chains.secondStart]
+          : overlappingChainEdges(chains.second, chains.first));
+        chains.second = [];
+      }
+    }
+    if (!state.backgroundGlueWarning && chains.first.length) updateFirstGlueChainSpaceWarning(chains.first);
   }
 
   function rotateTile(index, steps) {
@@ -5415,11 +5789,17 @@
   }
 
   function isBackgroundBoundaryAction() {
-    return state.backgroundAction === 'boundary' || state.backgroundAction === 'glue-boundary';
+    return state.backgroundAction === 'boundary'
+      || state.backgroundAction === 'glue-boundary'
+      || state.backgroundAction === 'reverse-glue';
   }
 
   function isBackgroundGlueAction() {
     return state.backgroundAction === 'glue-boundary';
+  }
+
+  function isBackgroundReverseGlueAction() {
+    return state.backgroundAction === 'reverse-glue';
   }
 
   function isBackgroundBilliardAction() {
@@ -5434,10 +5814,11 @@
 
   function backgroundEdgeHitTest(clientX, clientY) {
     if (!isGluedBoundaryMode()) return null;
-    const hit = isBackgroundGlueAction()
+    const hit = isBackgroundGlueAction() || isBackgroundReverseGlueAction()
       ? boundaryEdgeHitTest(clientX, clientY)
       : sharedEdgeHitTest(clientX, clientY);
     if (!hit) return null;
+    if (isBackgroundReverseGlueAction() && !gluedPairForBoundaryEdge({ index: hit.index, dir: hit.dir })) return null;
     return hit;
   }
 
@@ -5739,7 +6120,9 @@
     if (!pointerState.moved && cusp && sameBackgroundCuspHit(cusp, pointerState.backgroundCusp)) {
       selectBackgroundCusp(cusp);
     } else if (!pointerState.moved && isBackgroundBoundaryAction() && sameBackgroundEdgeHit(edge, pointerState.backgroundEdge)) {
-      if (isBackgroundGlueAction()) {
+      if (isBackgroundReverseGlueAction()) {
+        reverseGluedBoundaryGroupAt(edge);
+      } else if (isBackgroundGlueAction()) {
         if (state.backgroundMultiEdges) toggleGlueBoundaryMulti(edge);
         else toggleGlueBoundary(edge);
       }
@@ -6141,10 +6524,12 @@
       if (tileExists(index)) componentRoots.add(find(parent, index));
     }
 
+    const boundaryComponents = countBackgroundBoundaryComponents();
     const surface = analyzeClosedBackgroundSurface({
       total,
       existing,
       unmatchedBoundaries,
+      boundaryComponents,
       components: componentRoots.size
     });
 
@@ -6155,11 +6540,170 @@
       cutEdges: cloneCutEdgeSet().size,
       gluedEdges: cloneGluedEdges().length,
       unmatchedBoundaries,
+      boundaryComponents,
       components: componentRoots.size,
       closedSurface: surface.closedSurface,
       genus: surface.genus,
       cusps: surface.cusps,
       eulerCharacteristic: surface.eulerCharacteristic
+    };
+  }
+
+  function countBackgroundBoundaryComponents() {
+    const lattice = getLattice();
+    const boundaryEdges = [];
+    for (let index = 0; index < state.rows * state.cols; index += 1) {
+      if (!tileExists(index)) continue;
+      for (let dir = 0; dir < lattice.sides; dir += 1) {
+        const edge = { index, dir };
+        if (isUngluedBackgroundBoundaryEdge(edge)) boundaryEdges.push(edge);
+      }
+    }
+    const unvisited = new Set(boundaryEdges.map(boundaryEdgeKey));
+    const maxSteps = Math.max(1, state.rows * state.cols * lattice.sides + cloneGluedEdges().length * 2);
+    let components = 0;
+    boundaryEdges.forEach((start) => {
+      const startKey = boundaryEdgeKey(start);
+      if (!unvisited.has(startKey)) return;
+      components += 1;
+      let current = cloneBoundaryEdge(start);
+      const localVisited = new Set();
+      for (let guard = 0; current && guard < maxSteps; guard += 1) {
+        const currentKey = boundaryEdgeKey(current);
+        if (!currentKey || localVisited.has(currentKey)) break;
+        localVisited.add(currentKey);
+        unvisited.delete(currentKey);
+        const next = nextBackgroundBoundaryComponentEdge(current);
+        if (!next) break;
+        const nextKey = boundaryEdgeKey(next);
+        if (nextKey === startKey) {
+          unvisited.delete(nextKey);
+          break;
+        }
+        if (!unvisited.has(nextKey)) break;
+        current = next;
+      }
+    });
+    return components;
+  }
+
+  function countUngluedBackgroundBoundaryEdges() {
+    const lattice = getLattice();
+    let count = 0;
+    for (let index = 0; index < state.rows * state.cols; index += 1) {
+      if (!tileExists(index)) continue;
+      for (let dir = 0; dir < lattice.sides; dir += 1) {
+        if (isUngluedBackgroundBoundaryEdge({ index, dir })) count += 1;
+      }
+    }
+    return count;
+  }
+
+  function computeAndShowBackgroundOrientability() {
+    if (!isGluedBoundaryMode()) return;
+    state.backgroundOrientability = computeBackgroundOrientability();
+    updateReport(false);
+  }
+
+  function computeBackgroundOrientability() {
+    const result = {
+      edits: state.edits,
+      computed: true,
+      orientable: true,
+      componentColors: new Map()
+    };
+    const total = state.rows * state.cols;
+    const parent = Array.from({ length: total }, (_, index) => index);
+    const rank = Array(total).fill(0);
+    const parity = Array(total).fill(0);
+    const lattice = getLattice();
+
+    for (let index = 0; index < total; index += 1) {
+      if (!tileExists(index)) continue;
+      const row = Math.floor(index / state.cols);
+      const col = index % state.cols;
+      for (let dir = 0; dir < lattice.sides; dir += 1) {
+        const next = neighbor(row, col, dir, state.rows, state.cols, lattice, false);
+        if (!next) continue;
+        const nextIndex = indexOf(next.row, next.col, state.cols);
+        if (index >= nextIndex || !tileExists(nextIndex) || hasCutEdgeBetween(index, nextIndex)) continue;
+        if (!unionParity(parent, rank, parity, index, nextIndex, 0)) result.orientable = false;
+      }
+    }
+
+    cloneGluedEdges().forEach((pair) => {
+      if (!isValidBoundaryEdge(pair.first) || !isValidBoundaryEdge(pair.second)) return;
+      if (!tileExists(pair.first.index) || !tileExists(pair.second.index)) return;
+      const requiredDifference = pair.reversed ? 1 : 0;
+      if (!unionParity(parent, rank, parity, pair.first.index, pair.second.index, requiredDifference)) {
+        result.orientable = false;
+      }
+    });
+
+    const roots = new Map();
+    for (let index = 0; index < total; index += 1) {
+      if (!tileExists(index)) continue;
+      const info = findParity(parent, parity, index);
+      if (!roots.has(info.root)) roots.set(info.root, { root: info.root, color: info.value });
+    }
+    result.componentColors = roots;
+    return result;
+  }
+
+  function nextBackgroundBoundaryComponentEdge(edge) {
+    const lattice = getLattice();
+    let current = cloneBoundaryEdge(edge);
+    const maxSteps = Math.max(1, state.rows * state.cols * lattice.sides + cloneGluedEdges().length * 2);
+    for (let guard = 0; current && guard < maxSteps; guard += 1) {
+      const nextEdge = {
+        index: current.index,
+        dir: normalizeDir(current.dir + 1, lattice.sides)
+      };
+      if (isUngluedBackgroundBoundaryEdge(nextEdge)) return nextEdge;
+      current = backgroundBoundaryEdgeTransition(nextEdge);
+    }
+    return null;
+  }
+
+  function previousBackgroundBoundaryComponentEdge(edge) {
+    const lattice = getLattice();
+    let current = cloneBoundaryEdge(edge);
+    const maxSteps = Math.max(1, state.rows * state.cols * lattice.sides + cloneGluedEdges().length * 2);
+    for (let guard = 0; current && guard < maxSteps; guard += 1) {
+      const previousEdge = {
+        index: current.index,
+        dir: normalizeDir(current.dir - 1, lattice.sides)
+      };
+      if (isUngluedBackgroundBoundaryEdge(previousEdge)) return previousEdge;
+      current = backgroundBoundaryEdgeTransition(previousEdge);
+    }
+    return null;
+  }
+
+  function isUngluedBackgroundBoundaryEdge(edge) {
+    const normalized = cloneBoundaryEdge(edge);
+    if (!normalized || !isValidBoundaryEdge(normalized)) return false;
+    const partner = gluedBoundaryPartner(normalized.index, normalized.dir);
+    return !(partner && tileExists(partner.index) && isValidBoundaryEdge(partner));
+  }
+
+  function backgroundBoundaryEdgeTransition(edge) {
+    const normalized = cloneBoundaryEdge(edge);
+    if (!normalized || !tileExists(normalized.index)) return null;
+    const gluedPartner = gluedBoundaryPartner(normalized.index, normalized.dir);
+    if (gluedPartner && tileExists(gluedPartner.index) && isValidBoundaryEdge(gluedPartner)) {
+      return cloneBoundaryEdge(gluedPartner);
+    }
+    const lattice = getLattice();
+    const row = Math.floor(normalized.index / state.cols);
+    const col = normalized.index % state.cols;
+    const next = neighbor(row, col, normalized.dir, state.rows, state.cols, lattice, state.wrapped);
+    if (!next) return null;
+    const nextIndex = indexOf(next.row, next.col, state.cols);
+    if (!tileExists(nextIndex) || hasCutEdgeBetween(normalized.index, nextIndex)) return null;
+    return {
+      index: nextIndex,
+      dir: lattice.opposite[normalized.dir]
     };
   }
 
@@ -6231,10 +6775,10 @@
     const rank = Array(cornerCount).fill(0);
     const cornerId = (index, vertex) => (index * lattice.sides) + modulo(vertex, lattice.sides);
 
-    const unionSurfaceEdgeCorners = (left, right) => {
+    const unionSurfaceEdgeCorners = (left, right, reversed = false) => {
       if (!left || !right) return;
-      union(parent, rank, cornerId(left.index, left.start), cornerId(right.index, right.end));
-      union(parent, rank, cornerId(left.index, left.end), cornerId(right.index, right.start));
+      union(parent, rank, cornerId(left.index, left.start), cornerId(right.index, reversed ? right.start : right.end));
+      union(parent, rank, cornerId(left.index, left.end), cornerId(right.index, reversed ? right.end : right.start));
     };
 
     const logicalVertexIds = new Map();
@@ -6265,7 +6809,8 @@
       if (!isValidBoundaryEdge(first) || !isValidBoundaryEdge(second)) return;
       unionSurfaceEdgeCorners(
         orientedBoundaryEdgeCorners(first.index, first.dir),
-        orientedBoundaryEdgeCorners(second.index, second.dir)
+        orientedBoundaryEdgeCorners(second.index, second.dir),
+        !!pair.reversed
       );
     });
 
@@ -6499,12 +7044,18 @@
       if (refs.out.cardLabel) refs.out.cardLabel.textContent = 'Background Space Statistics';
       if (refs.out.tilesLabel) refs.out.tilesLabel.textContent = 'Existing tiles';
       if (refs.out.openEndsLabel) refs.out.openEndsLabel.textContent = 'Unmatched boundaries';
+      if (refs.out.boundaryComponentsLabel) refs.out.boundaryComponentsLabel.textContent = 'Boundary components';
+      if (refs.out.boundaryComponentsRow) refs.out.boundaryComponentsRow.hidden = false;
+      if (refs.out.orientableLabel) refs.out.orientableLabel.textContent = 'Orientable';
+      if (refs.out.orientableRow) refs.out.orientableRow.hidden = false;
       if (refs.out.componentsLabel) refs.out.componentsLabel.textContent = 'Components';
       if (refs.out.componentsRow) refs.out.componentsRow.hidden = false;
       if (refs.out.genusRow) refs.out.genusRow.hidden = !background.closedSurface;
       if (refs.out.cuspsRow) refs.out.cuspsRow.hidden = !background.closedSurface;
       refs.out.tiles.textContent = `${background.existing}/${background.total}`;
       refs.out.openEnds.textContent = String(background.unmatchedBoundaries);
+      if (refs.out.boundaryComponents) refs.out.boundaryComponents.textContent = String(background.boundaryComponents);
+      syncBackgroundOrientabilityStatistic();
       refs.out.components.textContent = String(background.components);
       if (refs.out.genus) refs.out.genus.textContent = background.closedSurface ? String(background.genus) : '-';
       if (refs.out.cusps) refs.out.cusps.textContent = background.closedSurface ? String(background.cusps) : '-';
@@ -6514,6 +7065,8 @@
     if (refs.out.cardLabel) refs.out.cardLabel.textContent = 'Statistics';
     if (refs.out.tilesLabel) refs.out.tilesLabel.textContent = 'Filled tiles';
     if (refs.out.openEndsLabel) refs.out.openEndsLabel.textContent = 'Open ends';
+    if (refs.out.boundaryComponentsRow) refs.out.boundaryComponentsRow.hidden = true;
+    if (refs.out.orientableRow) refs.out.orientableRow.hidden = true;
     if (refs.out.componentsLabel) refs.out.componentsLabel.textContent = 'Components';
     if (refs.out.componentsRow) refs.out.componentsRow.hidden = false;
     if (refs.out.genusRow) refs.out.genusRow.hidden = true;
@@ -6521,6 +7074,22 @@
     refs.out.tiles.textContent = `${report.active}/${report.total}`;
     refs.out.openEnds.textContent = String(report.openEnds);
     refs.out.components.textContent = String(report.components);
+  }
+
+  function syncBackgroundOrientabilityStatistic() {
+    if (!refs.out || !refs.out.orientable) return;
+    const cached = state.backgroundOrientability;
+    if (cached && cached.edits === state.edits && cached.computed) {
+      refs.out.orientable.textContent = cached.orientable ? 'yes' : 'no';
+      refs.out.orientable.classList.toggle('mosaic-status-good', !!cached.orientable);
+      refs.out.orientable.classList.toggle('mosaic-status-bad', !cached.orientable);
+    } else {
+      refs.out.orientable.textContent = 'not computed';
+      refs.out.orientable.classList.remove('mosaic-status-good', 'mosaic-status-bad');
+    }
+    if (refs.out.computeOrientable) {
+      refs.out.computeOrientable.disabled = !isGluedBoundaryMode() || state.inputMode !== 'background';
+    }
   }
 
   function normalizePickedComponent(report) {
@@ -12249,17 +12818,24 @@
     const trail = Array.isArray(billiard.trailPoints) ? billiard.trailPoints : [];
     if (trail.length < 2) return;
     ctx.save();
-    ctx.strokeStyle = 'rgba(31,122,210,0.78)';
     ctx.lineWidth = Math.max(1.7, radius * 0.048);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.beginPath();
-    trail.forEach((point, index) => {
-      if (index === 0 || point.breakBefore) ctx.moveTo(point.x, point.y);
-      else ctx.lineTo(point.x, point.y);
-    });
-    ctx.stroke();
+    for (let index = 1; index < trail.length; index += 1) {
+      const previous = trail[index - 1];
+      const point = trail[index];
+      if (point.breakBefore) continue;
+      ctx.strokeStyle = backgroundBilliardTrailColor(point.colorMode || previous.colorMode);
+      ctx.beginPath();
+      ctx.moveTo(previous.x, previous.y);
+      ctx.lineTo(point.x, point.y);
+      ctx.stroke();
+    }
     ctx.restore();
+  }
+
+  function backgroundBilliardTrailColor(mode) {
+    return mode === 'purple' ? 'rgba(111,66,193,0.82)' : 'rgba(31,122,210,0.78)';
   }
 
   function visibleBackgroundBilliardHits(billiard) {
@@ -12418,10 +12994,10 @@
 
   function drawPendingGlueChains(ctx) {
     const chains = state.pendingGlueChains;
-    if (!chains) return;
+    if (!chains && !state.backgroundGlueFlicker) return;
     ctx.save();
-    const first = chains.first || [];
-    const second = chains.second || [];
+    const first = chains ? chains.first || [] : [];
+    const second = chains ? chains.second || [] : [];
     const color = pendingGlueColor();
     first.forEach((edge, index) => {
       drawPendingGlueEdge(ctx, edge, color, false);
@@ -12429,15 +13005,16 @@
     second.forEach((edge, index) => {
       drawPendingGlueEdge(ctx, edge, color, true);
     });
+    drawBackgroundGlueFlicker(ctx);
     ctx.restore();
   }
 
-  function drawPendingGlueEdge(ctx, edge, color, reverse) {
+  function drawPendingGlueEdge(ctx, edge, color, reverse, alpha = 0.78, widthScale = 1) {
     const segment = boundaryEdgeSegment(edge);
     if (!segment) return;
-    const lineWidth = hoverEdgeLineWidth(geometry.radius) * 1.25;
+    const lineWidth = hoverEdgeLineWidth(geometry.radius) * 1.25 * widthScale;
     ctx.save();
-    ctx.globalAlpha = 0.78;
+    ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
     ctx.lineWidth = lineWidth;
@@ -12450,6 +13027,17 @@
 
   function pendingGlueColor() {
     return gluedBoundaryColor(nextGlueGroup());
+  }
+
+  function drawBackgroundGlueFlicker(ctx) {
+    const flicker = state.backgroundGlueFlicker;
+    if (!flicker || !Array.isArray(flicker.edges) || !flicker.edges.length) return;
+    const elapsed = performance.now() - flicker.start;
+    const phase = Math.floor((elapsed / flicker.duration) * flicker.flashes * 2);
+    if (phase % 2 !== 0) return;
+    flicker.edges.forEach((edge) => {
+      drawPendingGlueEdge(ctx, edge, '#b23a48', false, 1, 3.2);
+    });
   }
 
   function drawBackgroundBoundaries(ctx) {
@@ -12494,8 +13082,8 @@
     if (!pairs.length) return;
     pairs.forEach((pair, pairIndex) => {
       const color = gluedBoundaryColor(gluePairGroup(pair, pairIndex));
-      drawGluedBoundaryEdge(ctx, pair.first, color, false);
-      drawGluedBoundaryEdge(ctx, pair.second, color, true);
+      drawGluedBoundaryEdge(ctx, pair.first, color, !!pair.reversed);
+      drawGluedBoundaryEdge(ctx, pair.second, color, !pair.reversed);
     });
   }
 
@@ -14086,6 +14674,8 @@
       ...(report.background || analyzeBackgroundSpace()),
       action: state.backgroundAction,
       multiEdges: !!state.backgroundMultiEdges,
+      chainLength: normalizeBackgroundChainLength(state.backgroundChainLength),
+      chainReversed: !!state.backgroundChainReversed,
       cuspMarkerScale: normalizeBackgroundCuspMarkerScale(state.backgroundCuspMarkerScale),
       billiardSpeed: normalizeBackgroundBilliardSpeed(state.backgroundBilliardSpeed),
       billiardTrailLength: normalizeBackgroundBilliardTrailLength(state.backgroundBilliardTrailLength),
@@ -14146,7 +14736,8 @@
       id: pairIndex + 1,
       group: gluePairGroup(pair, pairIndex),
       color: gluedBoundaryColor(gluePairGroup(pair, pairIndex)),
-      orientation: 'opposite',
+      orientation: pair.reversed ? 'reversed' : 'opposite',
+      reversed: !!pair.reversed,
       first: boundaryEdgeForExport(pair.first),
       second: boundaryEdgeForExport(pair.second)
     })).filter((pair) => pair.first && pair.second);
@@ -14259,21 +14850,39 @@
   function syncBackgroundModeControls() {
     const glueAction = isBackgroundGlueAction();
     const billiardAction = isBackgroundBilliardAction();
+    const hasGlue = hasGluedBoundaryPairs();
+    if (refs.backgroundReverseGlueOption) {
+      refs.backgroundReverseGlueOption.hidden = !hasGlue;
+      refs.backgroundReverseGlueOption.disabled = !hasGlue;
+    }
+    if (!hasGlue && state.backgroundAction === 'reverse-glue') state.backgroundAction = 'tile';
+    if (refs.backgroundAction) refs.backgroundAction.value = state.backgroundAction;
     const chains = state.pendingGlueChains;
-    const canBeginSecond = !!(
+    const firstCount = chains && Array.isArray(chains.first) ? chains.first.length : 0;
+    const secondCount = chains && Array.isArray(chains.second) ? chains.second.length : 0;
+    const expectedCount = normalizeBackgroundChainLength(state.backgroundChainLength);
+    const canUseChainButton = !!(
       glueAction
       && state.backgroundMultiEdges
       && chains
-      && chains.phase === 'first'
-      && Array.isArray(chains.first)
-      && chains.first.length > 0
+      && firstCount === expectedCount
+      && (chains.phase === 'first' || secondCount === expectedCount)
     );
     if (refs.backgroundMultiEdges) refs.backgroundMultiEdges.checked = !!state.backgroundMultiEdges;
     if (refs.backgroundMultiEdgeRow) refs.backgroundMultiEdgeRow.hidden = !glueAction;
+    if (refs.backgroundChainSettingsRow) refs.backgroundChainSettingsRow.hidden = !glueAction || !state.backgroundMultiEdges;
+    if (refs.backgroundChainLength) {
+      refs.backgroundChainLength.max = String(Math.max(1, state.rows * state.cols * getLattice().sides));
+      refs.backgroundChainLength.value = String(normalizeBackgroundChainLength(state.backgroundChainLength));
+    }
+    if (refs.backgroundChainReversed) {
+      refs.backgroundChainReversed.checked = activePendingGlueChainReversed();
+    }
     if (refs.backgroundBilliardRow) refs.backgroundBilliardRow.hidden = !billiardAction;
     if (refs.backgroundBeginSecondChain) {
       refs.backgroundBeginSecondChain.hidden = !glueAction || !state.backgroundMultiEdges;
-      refs.backgroundBeginSecondChain.disabled = !canBeginSecond;
+      refs.backgroundBeginSecondChain.textContent = chains && chains.phase === 'second' ? 'finish' : 'begin second';
+      refs.backgroundBeginSecondChain.disabled = !canUseChainButton;
     }
     if (refs.backgroundCuspMarkerRow) refs.backgroundCuspMarkerRow.hidden = !isGluedBoundaryMode();
     if (refs.backgroundCuspMarkerScale) {
@@ -14712,6 +15321,12 @@
       || action === 'glued-boundary'
       || action === 'gluedBoundary'
     ) return 'glue-boundary';
+    if (
+      action === 'reverse-glue'
+      || action === 'reverseGlue'
+      || action === 'reverse-arrows'
+      || action === 'reverseArrows'
+    ) return hasGluedBoundaryPairs() ? 'reverse-glue' : 'tile';
     if (action === 'billiard' || action === 'billiards') return 'billiard';
     return 'tile';
   }
@@ -14753,6 +15368,14 @@
     if (normalized === 'none') return 'none';
     if (normalized === 'boundary' || normalized === 'boundary-glued' || normalized === 'glued') return 'boundary';
     return DEFAULT_BACKGROUND_BILLIARD_HIT_MARKERS;
+  }
+
+  function normalizeBackgroundChainLength(value) {
+    const number = Number(value);
+    const lattice = getLattice();
+    const maxLength = Math.max(1, state.rows * state.cols * lattice.sides);
+    if (!Number.isFinite(number)) return 1;
+    return clamp(Math.round(number), 1, maxLength);
   }
 
   function normalizeDualGraphLayoutMethod(method) {
@@ -14947,6 +15570,42 @@
       rootRight = temp;
     }
     parent[rootRight] = rootLeft;
+    if (rank[rootLeft] === rank[rootRight]) rank[rootLeft] += 1;
+    return true;
+  }
+
+  function findParity(parent, parity, item) {
+    if (parent[item] === item) return { root: item, value: 0 };
+    const info = findParity(parent, parity, parent[item]);
+    parity[item] ^= info.value;
+    parent[item] = info.root;
+    return {
+      root: parent[item],
+      value: parity[item]
+    };
+  }
+
+  function unionParity(parent, rank, parity, left, right, difference) {
+    const leftInfo = findParity(parent, parity, left);
+    const rightInfo = findParity(parent, parity, right);
+    const requiredDifference = Number(difference) & 1;
+    if (leftInfo.root === rightInfo.root) {
+      return (leftInfo.value ^ rightInfo.value) === requiredDifference;
+    }
+    let rootLeft = leftInfo.root;
+    let rootRight = rightInfo.root;
+    let valueLeft = leftInfo.value;
+    let valueRight = rightInfo.value;
+    if (rank[rootLeft] < rank[rootRight]) {
+      const tempRoot = rootLeft;
+      rootLeft = rootRight;
+      rootRight = tempRoot;
+      const tempValue = valueLeft;
+      valueLeft = valueRight;
+      valueRight = tempValue;
+    }
+    parent[rootRight] = rootLeft;
+    parity[rootRight] = valueLeft ^ valueRight ^ requiredDifference;
     if (rank[rootLeft] === rank[rootRight]) rank[rootLeft] += 1;
     return true;
   }
