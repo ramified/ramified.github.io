@@ -1650,12 +1650,17 @@
   function reshapeGluedEdges(oldGluedEdges, oldRows, oldCols, rows, cols) {
     if (!Array.isArray(oldGluedEdges) || !oldGluedEdges.length) return [];
     return oldGluedEdges
-      .map((pair) => ({
-        first: reshapeBoundaryEdge(pair.first, oldRows, oldCols, rows, cols),
-        second: reshapeBoundaryEdge(pair.second, oldRows, oldCols, rows, cols),
-        group: normalizeGlueGroup(pair.group),
-        reversed: !!pair.reversed
-      }))
+      .map((pair) => {
+        const orientation = normalizeGluePairOrientation(pair);
+        return {
+          first: reshapeBoundaryEdge(pair.first, oldRows, oldCols, rows, cols),
+          second: reshapeBoundaryEdge(pair.second, oldRows, oldCols, rows, cols),
+          group: normalizeGlueGroup(pair.group),
+          reversed: orientation.reversed,
+          firstArrowReversed: orientation.firstArrowReversed,
+          secondArrowReversed: orientation.secondArrowReversed
+        };
+      })
       .filter((pair) => pair.first && pair.second);
   }
 
@@ -2665,16 +2670,25 @@
     if (Array.isArray(entry) && entry.length >= 2) {
       const first = importedBoundaryEdge(entry[0], rows, cols);
       const second = importedBoundaryEdge(entry[1], rows, cols);
-      return first && second ? { first, second, group: null, reversed: false } : null;
+      return first && second
+        ? { first, second, group: null, reversed: false, firstArrowReversed: false, secondArrowReversed: true }
+        : null;
     }
     if (!entry || typeof entry !== 'object') return null;
     const firstValue = firstPresentValue(entry, ['first', 'left', 'a', 'from']);
     const secondValue = firstPresentValue(entry, ['second', 'right', 'b', 'to']);
     const first = importedBoundaryEdge(firstValue, rows, cols);
     const second = importedBoundaryEdge(secondValue, rows, cols);
-    return first && second
-      ? { first, second, group: normalizeGlueGroup(entry.group), reversed: !!(entry.reversed || entry.orientation === 'reversed') }
-      : null;
+    if (!first || !second) return null;
+    const orientation = normalizeGluePairOrientation(entry);
+    return {
+      first,
+      second,
+      group: normalizeGlueGroup(entry.group),
+      reversed: orientation.reversed,
+      firstArrowReversed: orientation.firstArrowReversed,
+      secondArrowReversed: orientation.secondArrowReversed
+    };
   }
 
   function importedBoundaryEdge(value, rows, cols) {
@@ -3387,12 +3401,17 @@
   function cloneGluedEdges() {
     return Array.isArray(state.gluedEdges)
       ? state.gluedEdges
-        .map((pair) => ({
-          first: cloneBoundaryEdge(pair.first),
-          second: cloneBoundaryEdge(pair.second),
-          group: normalizeGlueGroup(pair.group),
-          reversed: !!pair.reversed
-        }))
+        .map((pair) => {
+          const orientation = normalizeGluePairOrientation(pair);
+          return {
+            first: cloneBoundaryEdge(pair.first),
+            second: cloneBoundaryEdge(pair.second),
+            group: normalizeGlueGroup(pair.group),
+            reversed: orientation.reversed,
+            firstArrowReversed: orientation.firstArrowReversed,
+            secondArrowReversed: orientation.secondArrowReversed
+          };
+        })
         .filter((pair) => pair.first && pair.second)
       : [];
   }
@@ -3452,6 +3471,44 @@
   function normalizeGlueGroup(group) {
     const value = Number(group);
     return Number.isInteger(value) && value >= 0 ? value : null;
+  }
+
+  function normalizeBooleanFlag(value) {
+    if (value === true || value === 1) return true;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
+    }
+    return false;
+  }
+
+  function normalizeGluePairReversed(pair) {
+    if (!pair || typeof pair !== 'object') return false;
+    if (Object.prototype.hasOwnProperty.call(pair, 'reversed')) return normalizeBooleanFlag(pair.reversed);
+    return pair.orientation === 'reversed';
+  }
+
+  function normalizeGluePairOrientation(pair) {
+    const reversed = normalizeGluePairReversed(pair);
+    const hasFirstArrow = !!(pair && typeof pair === 'object'
+      && Object.prototype.hasOwnProperty.call(pair, 'firstArrowReversed'));
+    const hasSecondArrow = !!(pair && typeof pair === 'object'
+      && Object.prototype.hasOwnProperty.call(pair, 'secondArrowReversed'));
+    const firstArrowReversed = hasFirstArrow ? normalizeBooleanFlag(pair.firstArrowReversed) : reversed;
+    const secondArrowReversed = hasSecondArrow ? normalizeBooleanFlag(pair.secondArrowReversed) : !reversed;
+    return {
+      reversed,
+      firstArrowReversed,
+      secondArrowReversed
+    };
+  }
+
+  function gluePairFirstArrowReversed(pair) {
+    return normalizeGluePairOrientation(pair).firstArrowReversed;
+  }
+
+  function gluePairSecondArrowReversed(pair) {
+    return normalizeGluePairOrientation(pair).secondArrowReversed;
   }
 
   function nextGlueGroup() {
@@ -3551,7 +3608,15 @@
         const key = gluedPairKey({ first, second });
         if (!key || seen.has(key)) return null;
         seen.add(key);
-        return { first, second, group: normalizeGlueGroup(pair.group), reversed: !!pair.reversed };
+        const orientation = normalizeGluePairOrientation(pair);
+        return {
+          first,
+          second,
+          group: normalizeGlueGroup(pair.group),
+          reversed: orientation.reversed,
+          firstArrowReversed: orientation.firstArrowReversed,
+          secondArrowReversed: orientation.secondArrowReversed
+        };
       })
       .filter(Boolean);
     if (state.pendingGlueEdge && !isValidBoundaryEdge(state.pendingGlueEdge)) clearPendingGlueEdge();
@@ -3723,7 +3788,14 @@
 
     removeGluedEdgesForBoundaryEdge(first);
     removeGluedEdgesForBoundaryEdge(second);
-    state.gluedEdges.push({ first, second, group: nextGlueGroup(), reversed: false });
+    state.gluedEdges.push({
+      first,
+      second,
+      group: nextGlueGroup(),
+      reversed: false,
+      firstArrowReversed: false,
+      secondArrowReversed: true
+    });
     clearPendingGlueEdge();
     pruneGluedEdges();
     state.backgroundHoverEdge = null;
@@ -3775,15 +3847,22 @@
       boundaryEdgeKey(pair.first) === hitKey || boundaryEdgeKey(pair.second) === hitKey
     ));
     if (hitIndex < 0) return false;
+    const hitSide = boundaryEdgeKey(pairs[hitIndex].first) === hitKey ? 'first' : 'second';
     const group = gluePairGroup(pairs[hitIndex], hitIndex);
     const groupPairs = pairs
       .map((pair, index) => ({ pair, index }))
       .filter((entry) => gluePairGroup(entry.pair, entry.index) === group);
     if (!groupPairs.length) return false;
     const nextReversed = !groupPairs.some((entry) => entry.pair.reversed);
-    const nextSecondEdges = groupPairs.map((entry) => cloneBoundaryEdge(entry.pair.second)).reverse();
+    const nextEdges = groupPairs.map((entry) => cloneBoundaryEdge(entry.pair[hitSide])).reverse();
     groupPairs.forEach((entry, index) => {
-      entry.pair.second = nextSecondEdges[index];
+      let firstArrowReversed = gluePairFirstArrowReversed(entry.pair);
+      let secondArrowReversed = gluePairSecondArrowReversed(entry.pair);
+      entry.pair[hitSide] = nextEdges[index];
+      if (hitSide === 'first') firstArrowReversed = !firstArrowReversed;
+      else secondArrowReversed = !secondArrowReversed;
+      entry.pair.firstArrowReversed = firstArrowReversed;
+      entry.pair.secondArrowReversed = secondArrowReversed;
       entry.pair.reversed = nextReversed;
     });
     clearBackgroundBilliard(false);
@@ -4352,7 +4431,6 @@
     const next = backgroundBilliardNeighbor(hit.index, hit.dir);
     if (next) {
       const epsilon = Math.max(0.02, geometry.radius * 0.0008);
-      recordBackgroundBilliardHit(hit.point, 'internal');
       billiard.tileIndex = next.index;
       billiard.position = {
         x: hit.point.x + billiard.direction.x * epsilon,
@@ -4367,8 +4445,8 @@
       const hitIsFirst = sameBoundaryEdge(hitEdge, pair.first);
       const partner = hitIsFirst ? pair.second : pair.first;
       if (!partner || !isValidBoundaryEdge(partner)) return false;
-      const firstReverse = !!pair.reversed;
-      const secondReverse = !pair.reversed;
+      const firstReverse = gluePairFirstArrowReversed(pair);
+      const secondReverse = gluePairSecondArrowReversed(pair);
       const transfer = backgroundBilliardGluedTransfer(
         hit,
         partner,
@@ -4381,7 +4459,7 @@
       recordBackgroundBilliardHit(hit.point, 'glued');
       billiard.tileIndex = partner.index;
       appendBackgroundBilliardTrailPoint(transfer.point, true);
-      if (pair.reversed) {
+      if (firstReverse === secondReverse) {
         billiard.trailColorMode = billiard.trailColorMode === 'purple' ? 'blue' : 'purple';
       }
       billiard.position = {
@@ -4654,7 +4732,9 @@
       first: cloneBoundaryEdge(first),
       second: cloneBoundaryEdge(secondChain[index]),
       group,
-      reversed: false
+      reversed: false,
+      firstArrowReversed: false,
+      secondArrowReversed: true
     })).filter((pair) => (
       pair.first
       && pair.second
@@ -12842,8 +12922,7 @@
     const mode = normalizeBackgroundBilliardHitMarkers(state.backgroundBilliardHitMarkers);
     if (mode === 'none') return [];
     const hits = Array.isArray(billiard.hitPoints) ? billiard.hitPoints : [];
-    if (mode === 'boundary') return hits.filter((point) => point.kind === 'boundary' || point.kind === 'glued');
-    return hits;
+    return hits.filter((point) => point.kind === 'boundary' || point.kind === 'glued');
   }
 
   function drawBackgroundCuspMarker(ctx, vertex, palette, active, hover) {
@@ -13082,8 +13161,8 @@
     if (!pairs.length) return;
     pairs.forEach((pair, pairIndex) => {
       const color = gluedBoundaryColor(gluePairGroup(pair, pairIndex));
-      drawGluedBoundaryEdge(ctx, pair.first, color, !!pair.reversed);
-      drawGluedBoundaryEdge(ctx, pair.second, color, !pair.reversed);
+      drawGluedBoundaryEdge(ctx, pair.first, color, gluePairFirstArrowReversed(pair));
+      drawGluedBoundaryEdge(ctx, pair.second, color, gluePairSecondArrowReversed(pair));
     });
   }
 
@@ -14738,6 +14817,8 @@
       color: gluedBoundaryColor(gluePairGroup(pair, pairIndex)),
       orientation: pair.reversed ? 'reversed' : 'opposite',
       reversed: !!pair.reversed,
+      firstArrowReversed: gluePairFirstArrowReversed(pair),
+      secondArrowReversed: gluePairSecondArrowReversed(pair),
       first: boundaryEdgeForExport(pair.first),
       second: boundaryEdgeForExport(pair.second)
     })).filter((pair) => pair.first && pair.second);

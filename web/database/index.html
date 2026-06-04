@@ -225,131 +225,38 @@
 
 <script>
 (() => {
-  const gifPattern = /^(.*_gif_)\d+(\.gif)$/i;
   const masonryState = new WeakMap();
-
-  const formatRatio = ({ width, height }) => (
-    width && height ? `${width} / ${height}` : null
-  );
-
-  const readFirstBytes = async (response, byteCount) => {
-    if (!response.body) {
-      return new Uint8Array(await response.arrayBuffer()).slice(0, byteCount);
-    }
-
-    const reader = response.body.getReader();
-    const chunks = [];
-    let received = 0;
-
-    while (received < byteCount) {
-      const { done, value } = await reader.read();
-
-      if (done) {
-        break;
-      }
-
-      chunks.push(value);
-      received += value.byteLength;
-    }
-
-    await reader.cancel();
-
-    if (received < byteCount) {
-      return null;
-    }
-
-    const bytes = new Uint8Array(byteCount);
-    let offset = 0;
-
-    chunks.forEach((chunk) => {
-      const remaining = byteCount - offset;
-
-      if (remaining > 0) {
-        bytes.set(chunk.slice(0, remaining), offset);
-        offset += Math.min(chunk.byteLength, remaining);
-      }
-    });
-
-    return bytes;
-  };
-
-  const readGifHeaderSize = async (src) => {
-    try {
-      const response = await fetch(src, { headers: { Range: 'bytes=0-9' } });
-
-      if (!response.ok) {
-        return null;
-      }
-
-      const bytes = await readFirstBytes(response, 10);
-
-      if (!bytes) {
-        return null;
-      }
-
-      const signature = String.fromCharCode(...bytes.slice(0, 6));
-
-      if (signature !== 'GIF87a' && signature !== 'GIF89a') {
-        return null;
-      }
-
-      const view = new DataView(bytes.buffer);
-
-      return {
-        width: view.getUint16(6, true),
-        height: view.getUint16(8, true)
-      };
-    } catch (error) {
-      return null;
-    }
-  };
-
-  const loadGifSize = (src) => new Promise((resolve) => {
-    const image = new Image();
-
-    image.onload = () => resolve({
-      width: image.naturalWidth,
-      height: image.naturalHeight
-    });
-    image.onerror = () => resolve(null);
-    image.src = src;
-  });
-
-  const probeGif = async (src) => {
-    const size = await readGifHeaderSize(src) || await loadGifSize(src);
-
-    if (!size) {
-      return null;
-    }
-
-    return {
-      src,
-      ...size,
-      ratio: formatRatio(size)
-    };
-  };
-
-  const collectSequentialGifs = async (firstSrc) => {
-    const match = firstSrc.match(gifPattern);
-
-    if (!match) {
-      const loaded = await probeGif(firstSrc);
-      return loaded ? [loaded] : [];
-    }
-
-    const gifs = [];
-
-    for (let index = 1; ; index += 1) {
-      const loaded = await probeGif(`${match[1]}${index}${match[2]}`);
-
-      if (!loaded) {
-        break;
-      }
-
-      gifs.push(loaded);
-    }
-
-    return gifs;
+  const gifManifest = {
+    'gif/young_diagrams_gif_1.gif': [
+      { src: 'gif/young_diagrams_gif_1.gif', width: 522, height: 747 },
+      { src: 'gif/young_diagrams_gif_2.gif', width: 349, height: 528 }
+    ],
+    'gif/double_young_diagram_gif_1.gif': [
+      { src: 'gif/double_young_diagram_gif_1.gif', width: 1236, height: 701 },
+      { src: 'gif/double_young_diagram_gif_2.gif', width: 587, height: 552 }
+    ],
+    'gif/mosaic_calculator_gif_1.gif': [
+      { src: 'gif/mosaic_calculator_gif_1.gif', width: 726, height: 608 },
+      { src: 'gif/mosaic_calculator_gif_2.gif', width: 726, height: 608 },
+      { src: 'gif/mosaic_calculator_gif_3.gif', width: 528, height: 807 },
+      { src: 'gif/mosaic_calculator_gif_4.gif', width: 384, height: 451 },
+      { src: 'gif/mosaic_calculator_gif_5.gif', width: 813, height: 793 },
+      { src: 'gif/mosaic_calculator_gif_6.gif', width: 674, height: 678 },
+      { src: 'gif/mosaic_calculator_gif_7.gif', width: 917, height: 571 }
+    ],
+    'gif/matrix_calculator_gif_1.gif': [
+      { src: 'gif/matrix_calculator_gif_1.gif', width: 732, height: 372 },
+      { src: 'gif/matrix_calculator_gif_2.gif', width: 732, height: 372 }
+    ],
+    'gif/sheaf_calculator_gif_1.gif': [
+      { src: 'gif/sheaf_calculator_gif_1.gif', width: 591, height: 492 },
+      { src: 'gif/sheaf_calculator_gif_2.gif', width: 1185, height: 597 }
+    ],
+    'gif/dynkin_diagram_calculator_gif_1.gif': [
+      { src: 'gif/dynkin_diagram_calculator_gif_1.gif', width: 587, height: 698 },
+      { src: 'gif/dynkin_diagram_calculator_gif_2.gif', width: 569, height: 435 },
+      { src: 'gif/dynkin_diagram_calculator_gif_3.gif', width: 1155, height: 797 }
+    ]
   };
 
   const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
@@ -425,18 +332,18 @@
     document.querySelectorAll('.applet-grid').forEach(arrangeMasonryGrid);
   };
 
-  const gifTasks = Array.from(document.querySelectorAll('.demo-frame object[data]')).map(async (object) => {
+  document.querySelectorAll('.demo-frame object[data]').forEach((object) => {
     const frame = object.closest('.demo-frame');
-    const gifs = await collectSequentialGifs(object.getAttribute('data'));
+    const gifs = gifManifest[object.getAttribute('data')];
 
-    if (!gifs.length) {
+    if (!gifs || !gifs.length) {
       return;
     }
 
     const selected = randomItem(gifs);
 
-    if (selected.ratio && frame) {
-      frame.style.aspectRatio = selected.ratio;
+    if (frame) {
+      frame.style.aspectRatio = `${selected.width} / ${selected.height}`;
     }
 
     object.setAttribute('width', selected.width);
@@ -444,10 +351,8 @@
     object.setAttribute('data', selected.src);
   });
 
-  Promise.all(gifTasks).then(() => {
-    arrangeAllMasonryGrids();
-    window.addEventListener('resize', arrangeAllMasonryGrids);
-  });
+  arrangeAllMasonryGrids();
+  window.addEventListener('resize', arrangeAllMasonryGrids);
 })();
 </script>
 </body>
