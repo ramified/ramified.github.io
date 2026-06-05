@@ -4888,9 +4888,10 @@
     const firstChain = commitReadyGlueChain(chains.first);
     const secondChain = commitReadyGlueChain(chains.second);
     if (firstChain.length !== secondChain.length || firstChain.length === 0) return false;
+    const secondArrowOrder = secondChain.slice().reverse();
     const nextPairs = firstChain.map((first, index) => ({
       first: cloneBoundaryEdge(first),
-      second: cloneBoundaryEdge(secondChain[index]),
+      second: cloneBoundaryEdge(secondArrowOrder[index]),
       group,
       reversed: false,
       firstArrowReversed: false,
