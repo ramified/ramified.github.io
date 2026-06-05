@@ -657,6 +657,55 @@
       }
     }
 
+    .wander-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .wander-actions .btn {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+    }
+
+    .wander-status {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .wander-canvas-wrap {
+      margin-top: 8px;
+    }
+
+    #wander-canvas {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: #fffdf8;
+      cursor: pointer;
+      touch-action: none;
+      display: block;
+      max-height: none !important;
+    }
+
+    #wander-card.wide {
+      margin-top: 16px;
+    }
+
+    .wander-open-row[hidden],
+    #wander-side-host[hidden],
+    #wander-wide-host[hidden] {
+      display: none !important;
+    }
+
     .mosaic-decoration-actions {
       display: flex;
       align-items: center;
@@ -882,6 +931,7 @@
       <span id="info-line">hexagonal, open</span>
     </div>
     <section id="dual-graph-degenerations-wide-host" hidden></section>
+    <section id="wander-wide-host" hidden></section>
   </section>
 
   <aside class="side">
@@ -951,6 +1001,7 @@
           <div class="mosaic-inline-row">
             <span class="input-label">Click action</span>
             <select id="background-action">
+              <option value="occupied" hidden disabled>Occupied</option>
               <option value="tile">Remove / recover tiles</option>
               <option value="boundary">Add / remove boundary</option>
               <option value="glue-boundary">Glue boundary</option>
@@ -1209,8 +1260,36 @@
             <option value="single">Single board</option>
           </select>
         </div>
+        <div class="mosaic-inline-row wander-open-row" id="wander-open-row" hidden>
+          <span class="input-label">Universal cover</span>
+          <button class="btn btn-ghost" id="open-wander" type="button">open wander</button>
+        </div>
       </div>
     </section>
+
+    <div id="wander-side-host" hidden>
+      <section class="card collapsed" id="wander-card" hidden>
+        <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Wandering In The Universal Cover</span><em class="toggle-icon">&#9662;</em></div>
+        <div class="card-body">
+          <div class="wander-actions">
+            <button class="btn" id="wander-choose-start" type="button">select</button>
+            <button class="btn btn-ghost" id="wander-reset" type="button">reset</button>
+            <button class="btn btn-ghost" id="wander-toggle-wide" type="button">side</button>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Radius</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-marker-radius" min="0.55" max="2.5" step="0.05" value="2.00">
+              <output id="wander-marker-radius-value">2.00</output>
+            </span>
+          </div>
+          <span class="wander-status" id="wander-status">select a start tile on the main canvas</span>
+          <div class="wander-canvas-wrap">
+            <canvas id="wander-canvas" width="420" height="320" tabindex="0" aria-label="Wandering in the universal cover"></canvas>
+          </div>
+        </div>
+      </section>
+    </div>
 
     <section class="card collapsed" id="knot-card">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Knot/link</span><em class="toggle-icon">&#9662;</em></div>

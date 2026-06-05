@@ -38,6 +38,10 @@
   const DRAW_START_EDGE_RATIO = 0.42;
   const DRAW_EXIT_EDGE_RATIO = 0.94;
   const DRAW_BACKTRACK_EDGE_RATIO = 1.03;
+  const WANDER_MOVE_ANIMATION_MS = 260;
+  const WANDER_BOUNCE_ANIMATION_MS = 380;
+  const WANDER_BOUNCE_EDGE_RATIO = 0.72;
+  const WANDER_CAMERA_ANIMATION_MS = 520;
   const PICK_UNCONNECTED_LIFT_ALPHA = 0.32;
   const HEX_AXIAL_DELTAS = [
     [1, 0],
@@ -371,11 +375,29 @@
     showRiemannBezierCurve: false,
     showDualGraphCanvas: false,
     showRiemannSurfaceCanvas: false,
-    showAlgebraicCurveCanvas: false
+    showAlgebraicCurveCanvas: false,
+    wanderOpen: false,
+    wanderWide: true,
+    wanderSelectingStart: false,
+    wanderSelectionReturnInputMode: '',
+    wanderSelectionReturnBackgroundAction: '',
+    wanderStartIndex: -1,
+    wanderTiles: [],
+    wanderCurrentId: null,
+    wanderHoverEdge: null,
+    wanderBounce: null,
+    wanderAnimation: null,
+    wanderCameraX: 0,
+    wanderCameraY: 0,
+    wanderCameraAnimation: null,
+    wanderMarkerRadius: 2,
+    wanderNextId: 1,
+    wanderBoardKey: ''
   };
 
   const refs = {};
   let geometry = null;
+  let wanderGeometry = null;
   let pointerState = null;
   const activePointers = new Map();
   let pinchState = null;
@@ -420,6 +442,9 @@
       ? refs.inputMode.querySelector('option[value="background"]')
       : null;
     refs.backgroundAction = document.getElementById('background-action');
+    refs.backgroundOccupiedOption = refs.backgroundAction
+      ? refs.backgroundAction.querySelector('option[value="occupied"]')
+      : null;
     refs.backgroundReverseGlueOption = refs.backgroundAction
       ? refs.backgroundAction.querySelector('option[value="reverse-glue"]')
       : null;
@@ -465,6 +490,18 @@
     refs.displayPick = document.getElementById('display-pick');
     refs.wrappedViewRow = document.getElementById('wrapped-view-row');
     refs.wrappedViewMode = document.getElementById('wrapped-view-mode');
+    refs.wanderOpenRow = document.getElementById('wander-open-row');
+    refs.openWander = document.getElementById('open-wander');
+    refs.wanderSideHost = document.getElementById('wander-side-host');
+    refs.wanderWideHost = document.getElementById('wander-wide-host');
+    refs.wanderCard = document.getElementById('wander-card');
+    refs.wanderCanvas = document.getElementById('wander-canvas');
+    refs.wanderStatus = document.getElementById('wander-status');
+    refs.wanderChooseStart = document.getElementById('wander-choose-start');
+    refs.wanderReset = document.getElementById('wander-reset');
+    refs.wanderToggleWide = document.getElementById('wander-toggle-wide');
+    refs.wanderMarkerRadius = document.getElementById('wander-marker-radius');
+    refs.wanderMarkerRadiusValue = document.getElementById('wander-marker-radius-value');
     refs.knotStatus = document.getElementById('knot-status');
     refs.knotCard = document.getElementById('knot-card');
     refs.knotNameRow = document.getElementById('knot-name-row');
@@ -743,6 +780,43 @@
       normalizeViewOffset();
       updateReport(false);
     });
+    if (refs.openWander) {
+      refs.openWander.addEventListener('click', openWanderChart);
+    }
+    if (refs.wanderChooseStart) {
+      refs.wanderChooseStart.addEventListener('click', beginWanderStartSelection);
+    }
+    if (refs.wanderReset) {
+      refs.wanderReset.addEventListener('click', () => {
+        resetWanderPath('select a start tile on the main canvas', true);
+        draw(analyze());
+      });
+    }
+    if (refs.wanderToggleWide) {
+      refs.wanderToggleWide.addEventListener('click', () => setWanderWide(!state.wanderWide));
+    }
+    if (refs.wanderMarkerRadius) {
+      refs.wanderMarkerRadius.addEventListener('input', () => {
+        state.wanderMarkerRadius = normalizeWanderMarkerRadius(refs.wanderMarkerRadius.value);
+        syncWanderMarkerRadiusControl();
+        draw(analyze());
+        focusWanderCanvas();
+      });
+    }
+    if (refs.wanderCanvas) {
+      refs.wanderCanvas.addEventListener('pointerdown', handleWanderPointerDown);
+      refs.wanderCanvas.addEventListener('pointermove', handleWanderPointerMove);
+      refs.wanderCanvas.addEventListener('mouseleave', () => {
+        state.wanderHoverEdge = null;
+        renderWanderChart();
+      });
+      bindTouchFallback(refs.wanderCanvas, {
+        touchstart: handleWanderPointerDown,
+        touchmove: handleWanderPointerMove
+      });
+      refs.wanderCanvas.addEventListener('contextmenu', (event) => event.preventDefault());
+    }
+    document.addEventListener('keydown', handleWanderKeyDown);
     refs.knotCodeKind.addEventListener('change', () => {
       state.knotCodeKind = normalizeKnotCodeKind(refs.knotCodeKind.value);
       updateKnotCard(analyze());
@@ -972,9 +1046,11 @@
     window.addEventListener('resize', debounce(() => {
       const oldGeometry = geometry;
       resizeCanvas();
+      resizeWanderCanvas();
       remapBackgroundBilliardAfterResize(oldGeometry);
       normalizeViewOffset();
       syncDualGraphDegenerationWidePlacement();
+      syncWanderPlacement();
       draw(analyze());
     }, 80));
 
@@ -1522,6 +1598,7 @@
     state.tiles = Array(rows * cols).fill(null);
     syncAllInputs(rows, cols, state.lattice, state.boundaryMode);
     renderTilePalette();
+    resetWanderForBoardChange('');
     resetView(false);
     resizeCanvas();
     updateReport(false);
@@ -1600,6 +1677,7 @@
     state.standardDualGraphInput = null;
     syncAllInputs(rows, cols, state.lattice, state.boundaryMode);
     renderTilePalette();
+    resetWanderForBoardChange('wander reset: board changed');
     resetView(false);
     resizeCanvas();
     updateReport(false);
@@ -3092,6 +3170,10 @@
 
   function syncMainCanvasCursor() {
     if (!refs.canvas) return;
+    if (state.wanderSelectingStart) {
+      refs.canvas.style.cursor = 'copy';
+      return;
+    }
     if (isDecorationMode()) {
       refs.canvas.style.cursor = state.decorationHoverHit ? 'pointer' : 'default';
       return;
@@ -5869,20 +5951,24 @@
   }
 
   function isBackgroundBoundaryAction() {
+    if (state.wanderSelectingStart) return false;
     return state.backgroundAction === 'boundary'
       || state.backgroundAction === 'glue-boundary'
       || state.backgroundAction === 'reverse-glue';
   }
 
   function isBackgroundGlueAction() {
+    if (state.wanderSelectingStart) return false;
     return state.backgroundAction === 'glue-boundary';
   }
 
   function isBackgroundReverseGlueAction() {
+    if (state.wanderSelectingStart) return false;
     return state.backgroundAction === 'reverse-glue';
   }
 
   function isBackgroundBilliardAction() {
+    if (state.wanderSelectingStart) return false;
     return state.backgroundAction === 'billiard';
   }
 
@@ -5915,6 +6001,11 @@
 
   function handlePointerDown(event) {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (state.wanderSelectingStart) {
+      handleWanderStartPointerDown(event);
+      event.preventDefault();
+      return;
+    }
     activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (state.wrapped && activePointers.size >= 2) {
       clearLongPressTimer();
@@ -7076,6 +7167,7 @@
 
   function updateReport(manualCheck) {
     pruneVertexDecorations();
+    validateWanderBoardState();
     const report = analyze();
     if (isDualGraph()) pruneHalfEdgeDecorations();
     normalizePickedComponent(report);
@@ -7235,7 +7327,7 @@
 
   function updateInputModeLock() {
     if (!refs.inputMode) return;
-    refs.inputMode.disabled = !!state.displayPickInputLocked;
+    refs.inputMode.disabled = !!state.displayPickInputLocked || !!state.wanderSelectingStart;
   }
 
   function updateKnotCard(report) {
@@ -12743,6 +12835,8 @@
       drawPickHoverOverlay(ctx, palette, report);
       ctx.restore();
       drawDragGhost(ctx, palette);
+      drawMainWanderMarker(ctx, palette);
+      renderWanderChart();
       return;
     }
 
@@ -12754,6 +12848,8 @@
     drawBackgroundBilliardOverlay(ctx, palette);
     drawPickHoverOverlay(ctx, palette, report);
     drawDragGhost(ctx, palette);
+    drawMainWanderMarker(ctx, palette);
+    renderWanderChart();
   }
 
   function drawBoardCopy(ctx, report, palette, offset, pickedLift) {
@@ -12768,6 +12864,7 @@
 
   function drawBackgroundHoverOverlay(ctx, palette) {
     if (!isGluedBoundaryMode() || state.inputMode !== 'background') return;
+    if (state.wanderSelectingStart) return;
     drawPendingGlueChains(ctx);
     if (state.pendingGlueEdge) {
       const pendingSegment = boundaryEdgeSegment(state.pendingGlueEdge);
@@ -13004,6 +13101,790 @@
       from: normalizeVector(previous.x - current.x, previous.y - current.y, -1, 0),
       to: normalizeVector(next.x - current.x, next.y - current.y, 1, 0)
     };
+  }
+
+  function resizeWanderCanvas() {
+    if (!refs.wanderCanvas) return;
+    const host = refs.wanderCanvas.parentElement || refs.wanderCard || refs.canvasWrap;
+    const hostWidth = host ? (host.clientWidth || host.getBoundingClientRect().width || 420) : 420;
+    const widthAvailable = Math.max(260, Math.floor(hostWidth));
+    const dpr = clamp(window.devicePixelRatio || 1, 1, 2.5);
+    const logicalWidth = Math.ceil(widthAvailable);
+    const logicalHeight = Math.ceil(state.wanderWide
+      ? clamp(widthAvailable * 0.62, 320, 680)
+      : clamp(widthAvailable * 0.78, 260, 420));
+    const radius = clamp(widthAvailable / (state.wanderWide ? 15 : 9), 18, state.wanderWide ? 42 : 34);
+    refs.wanderCanvas.width = Math.max(1, Math.ceil(logicalWidth * dpr));
+    refs.wanderCanvas.height = Math.max(1, Math.ceil(logicalHeight * dpr));
+    refs.wanderCanvas.style.aspectRatio = `${logicalWidth} / ${logicalHeight}`;
+    refs.wanderCanvas.style.width = `${logicalWidth}px`;
+    refs.wanderCanvas.style.height = `${logicalHeight}px`;
+    wanderGeometry = {
+      width: logicalWidth,
+      height: logicalHeight,
+      radius,
+      dpr
+    };
+    updateWanderTileCenters();
+  }
+
+  function updateWanderTileCenters() {
+    if (!wanderGeometry || !Array.isArray(state.wanderTiles)) return;
+    const center = wanderCanvasCenter();
+    const spacing = wanderTileSpacing(wanderGeometry.radius);
+    state.wanderTiles.forEach((tile) => {
+      const point = wanderCoverPoint(tile.coverQ, tile.coverR, spacing);
+      tile.x = center.x + point.x + state.wanderCameraX;
+      tile.y = center.y + point.y + state.wanderCameraY;
+    });
+  }
+
+  function wanderCanvasCenter() {
+    return wanderGeometry
+      ? { x: wanderGeometry.width / 2, y: wanderGeometry.height / 2 }
+      : { x: 0, y: 0 };
+  }
+
+  function visibleWanderTiles() {
+    const visibleByPosition = new Map();
+    state.wanderTiles.forEach((tile) => {
+      visibleByPosition.set(wanderDisplayPositionKey(tile), tile);
+    });
+    return state.wanderTiles.filter((tile) => visibleByPosition.get(wanderDisplayPositionKey(tile)) === tile);
+  }
+
+  function isVisibleWanderTile(tile) {
+    if (!tile) return false;
+    return visibleWanderTiles().includes(tile);
+  }
+
+  function wanderDisplayPositionKey(tile) {
+    return tile ? `${tile.coverQ},${tile.coverR}` : '';
+  }
+
+  function wanderTileSpacing(radius) {
+    const lattice = getLattice();
+    return lattice.shape === 'square'
+      ? { x: radius * 2, y: radius * 2 }
+      : { x: Math.sqrt(3) * radius, y: 1.5 * radius };
+  }
+
+  function wanderCoverPoint(q, r, spacing) {
+    const lattice = getLattice();
+    if (lattice.shape === 'square') return { x: q * spacing.x, y: r * spacing.y };
+    return {
+      x: spacing.x * (q + r / 2),
+      y: spacing.y * r
+    };
+  }
+
+  function renderWanderChart() {
+    if (!refs.wanderCanvas) return;
+    if (!wanderGeometry) resizeWanderCanvas();
+    if (!wanderGeometry) return;
+    updateWanderTileCenters();
+    const ctx = refs.wanderCanvas.getContext('2d');
+    const palette = getPalette();
+    ctx.setTransform(wanderGeometry.dpr, 0, 0, wanderGeometry.dpr, 0, 0);
+    ctx.clearRect(0, 0, wanderGeometry.width, wanderGeometry.height);
+    ctx.fillStyle = '#fffdf8';
+    ctx.fillRect(0, 0, wanderGeometry.width, wanderGeometry.height);
+
+    if (!state.wanderOpen || !isGluedBoundaryMode()) {
+      drawWanderEmptyMessage(ctx, 'available in glued boundary mode', palette);
+      return;
+    }
+    if (!state.wanderTiles.length) {
+      drawWanderEmptyMessage(ctx, state.wanderSelectingStart ? 'select a tile on the main canvas' : 'select a start tile', palette);
+      return;
+    }
+
+    const visibleTiles = visibleWanderTiles();
+    drawWanderConnectors(ctx, palette, visibleTiles);
+    visibleTiles.forEach((tile) => drawWanderTile(ctx, tile, palette));
+    drawWanderHover(ctx, palette);
+    drawWanderCurrentMarker(ctx, palette);
+  }
+
+  function drawWanderEmptyMessage(ctx, text, palette) {
+    ctx.save();
+    ctx.fillStyle = palette.muted;
+    ctx.font = '13px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, wanderGeometry.width / 2, wanderGeometry.height / 2);
+    ctx.restore();
+  }
+
+  function drawWanderConnectors(ctx, palette, tiles = visibleWanderTiles()) {
+    const visibleIds = new Set(tiles.map((tile) => tile.id));
+    const byId = new Map(state.wanderTiles.map((tile) => [tile.id, tile]));
+    ctx.save();
+    ctx.lineWidth = Math.max(1.2, wanderGeometry.radius * 0.035);
+    ctx.lineCap = 'round';
+    tiles.forEach((tile) => {
+      if (!tile.parentId || !visibleIds.has(tile.parentId)) return;
+      const parent = byId.get(tile.parentId);
+      if (!parent) return;
+      ctx.strokeStyle = tile.via === 'glued' ? 'rgba(31,122,140,0.55)' : 'rgba(122,111,101,0.42)';
+      if (tile.via === 'glued' && ctx.setLineDash) ctx.setLineDash([Math.max(3, wanderGeometry.radius * 0.12), Math.max(3, wanderGeometry.radius * 0.1)]);
+      else if (ctx.setLineDash) ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(parent.x, parent.y);
+      ctx.lineTo(tile.x, tile.y);
+      ctx.stroke();
+    });
+    if (ctx.setLineDash) ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function drawWanderTile(ctx, tile, palette) {
+    if (!tile || !Number.isFinite(tile.x) || !Number.isFinite(tile.y)) return;
+    const radius = wanderGeometry.radius;
+    const active = tile.id === state.wanderCurrentId;
+    const empty = isTileEmpty(tile.tile);
+    const points = tilePoints(tile.x, tile.y, radius * 0.96);
+    ctx.save();
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = active ? 'rgba(61,107,79,0.08)' : (empty ? '#f8f5ee' : '#fffdf8');
+    ctx.strokeStyle = active ? palette.accent : palette.border;
+    ctx.lineWidth = active ? 2 : 1;
+    ctx.fill();
+    ctx.stroke();
+    if (isDualGraph() && isVertexTileValue(tile.tile)) drawGraphTile(ctx, { x: tile.x, y: tile.y }, tile.tile, palette, radius);
+    else drawPipe(ctx, { x: tile.x, y: tile.y }, tile.tile, palette, radius);
+    drawWanderBlackBoundaries(ctx, tile);
+    drawPlainTextLabel(ctx, tile.x, tile.y + radius * 0.66, formatWanderSourceTile(tile.sourceIndex), palette.muted, Math.max(8, radius * 0.18));
+    ctx.restore();
+  }
+
+  function drawWanderBlackBoundaries(ctx, tile) {
+    if (!tile || !tileExists(tile.sourceIndex)) return;
+    const lattice = getLattice();
+    const radius = wanderGeometry.radius;
+    ctx.save();
+    ctx.strokeStyle = '#111111';
+    ctx.lineWidth = hoverEdgeLineWidth(radius);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let dir = 0; dir < lattice.sides; dir += 1) {
+      if (!isBackgroundBoundaryEdge(tile.sourceIndex, dir) || isGluedBoundaryEdge(tile.sourceIndex, dir)) continue;
+      const visibleDir = transformDir(dir, tileTransform(tile));
+      drawBackgroundBoundarySegment(ctx, edgeSegmentPoints(tile.x, tile.y, visibleDir, radius * 0.96));
+    }
+    ctx.restore();
+  }
+
+  function drawWanderHover(ctx, palette) {
+    const hover = state.wanderHoverEdge;
+    if (!hover) return;
+    const tile = wanderTileById(hover.id);
+    if (!tile || !isVisibleWanderTile(tile)) return;
+    const segment = edgeSegmentPoints(tile.x, tile.y, hover.dir, wanderGeometry.radius * 0.96);
+    ctxSaveStrokeHover(palette, segment, hover.kind === 'glued' ? '#1f7a8c' : (hover.kind === 'boundary' ? '#b23a48' : palette.accent));
+  }
+
+  function ctxSaveStrokeHover(palette, segment, color) {
+    const ctx = refs.wanderCanvas.getContext('2d');
+    ctx.save();
+    ctx.strokeStyle = color || palette.accent;
+    ctx.lineWidth = Math.max(2, wanderGeometry.radius * 0.07);
+    ctx.lineCap = 'round';
+    drawHoverEdgeSegment(ctx, segment, ctx.strokeStyle, ctx.lineWidth);
+    ctx.restore();
+  }
+
+  function drawWanderCurrentMarker(ctx, palette) {
+    const current = currentWanderTile();
+    if (!current) return;
+    const marker = wanderAnimatedMarkerPosition('wander', current);
+    ctx.save();
+    drawWanderCylinderMarker(ctx, marker.x, marker.y, wanderGeometry.radius, false, palette);
+    ctx.restore();
+  }
+
+  function drawMainWanderMarker(ctx, palette) {
+    const current = currentWanderTile();
+    if (!current || !state.wanderOpen || !isGluedBoundaryMode()) return;
+    if (!tileExists(current.sourceIndex)) return;
+    const cell = geometry && geometry.cells ? geometry.cells[current.sourceIndex] : null;
+    if (!cell) return;
+    const marker = wanderAnimatedMarkerPosition('main', current, cell);
+    drawWanderCylinderMarker(ctx, marker.x, marker.y, geometry.radius, false, palette);
+  }
+
+  function drawWanderCylinderMarker(ctx, x, y, radius, bounce, palette) {
+    const scale = normalizeWanderMarkerRadius(state.wanderMarkerRadius);
+    const markerRadius = radius * scale;
+    const width = Math.max(8, markerRadius * 0.24);
+    const height = Math.max(6, markerRadius * 0.16);
+    const topHeight = Math.max(3, height * 0.46);
+    const baseColor = '#9fd7ff';
+    const sideColor = '#5aaee8';
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.2)';
+    ctx.shadowBlur = Math.max(1, markerRadius * 0.045);
+    ctx.shadowOffsetY = Math.max(1, markerRadius * 0.025);
+    ctx.fillStyle = sideColor;
+    ctx.strokeStyle = '#111111';
+    ctx.lineWidth = Math.max(1, markerRadius * 0.028);
+    ctx.beginPath();
+    ctx.moveTo(x - width * 0.5, y - height * 0.12);
+    ctx.lineTo(x - width * 0.5, y + height * 0.52);
+    ctx.ellipse(x, y + height * 0.52, width * 0.5, topHeight * 0.5, 0, Math.PI, 0, true);
+    ctx.lineTo(x + width * 0.5, y - height * 0.12);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.fillStyle = baseColor;
+    ctx.beginPath();
+    ctx.ellipse(x, y - height * 0.12, width * 0.5, topHeight * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function wanderAnimatedMarkerPosition(kind, current, mainCell = null) {
+    const fallback = kind === 'main'
+      ? { x: mainCell ? mainCell.x : 0, y: mainCell ? mainCell.y : 0 }
+      : { x: current.x, y: current.y };
+    const animation = state.wanderAnimation;
+    if (!animation || animation.targetTileId !== current.id) return fallback;
+    const points = kind === 'main' ? animation.main : animation.wander;
+    if (!points || !points.from || !points.to) return fallback;
+    const progress = clamp((performance.now() - animation.startedAt) / Math.max(1, animation.duration), 0, 1);
+    if (animation.kind === 'bounce') {
+      const leg = progress < 0.5 ? progress * 2 : (1 - progress) * 2;
+      const eased = easeInOutCubic(leg);
+      return lerpPoint(points.from, points.to, eased);
+    }
+    return lerpPoint(points.from, points.to, easeInOutCubic(progress));
+  }
+
+  function startWanderMarkerAnimation(animation) {
+    stopWanderMarkerAnimation(false);
+    if (!animation || !animation.wander || !animation.wander.from || !animation.wander.to) return;
+    state.wanderAnimation = {
+      ...animation,
+      startedAt: performance.now(),
+      frame: null
+    };
+    draw(analyze());
+    const tick = () => {
+      const current = state.wanderAnimation;
+      if (!current) return;
+      const progress = (performance.now() - current.startedAt) / Math.max(1, current.duration);
+      draw(analyze());
+      if (progress >= 1) {
+        const done = state.wanderAnimation;
+        state.wanderAnimation = null;
+        draw(analyze());
+        if (done && done.recenterTileId != null) {
+          maybeRecenterWanderCamera(wanderTileById(done.recenterTileId), true);
+        }
+        return;
+      }
+      current.frame = window.requestAnimationFrame(tick);
+    };
+    state.wanderAnimation.frame = window.requestAnimationFrame(tick);
+  }
+
+  function stopWanderMarkerAnimation(redraw = true) {
+    const animation = state.wanderAnimation;
+    if (animation && animation.frame != null) window.cancelAnimationFrame(animation.frame);
+    state.wanderAnimation = null;
+    if (redraw) draw(analyze());
+  }
+
+  function maybeRecenterWanderCamera(tile, animate = true) {
+    if (!tile || !wanderGeometry) return false;
+    updateWanderTileCenters();
+    const margin = Math.max(wanderGeometry.radius * 1.35, 34);
+    const outOfScope = tile.x < margin
+      || tile.x > wanderGeometry.width - margin
+      || tile.y < margin
+      || tile.y > wanderGeometry.height - margin;
+    if (!outOfScope) return false;
+    const center = wanderCanvasCenter();
+    const dx = center.x - tile.x;
+    const dy = center.y - tile.y;
+    startWanderCameraAnimation(state.wanderCameraX + dx, state.wanderCameraY + dy, animate);
+    return true;
+  }
+
+  function startWanderCameraAnimation(targetX, targetY, animate = true) {
+    stopWanderCameraAnimation(false);
+    if (!animate) {
+      state.wanderCameraX = targetX;
+      state.wanderCameraY = targetY;
+      updateWanderTileCenters();
+      draw(analyze());
+      return;
+    }
+    const fromX = state.wanderCameraX;
+    const fromY = state.wanderCameraY;
+    if (Math.hypot(targetX - fromX, targetY - fromY) < 0.5) return;
+    state.wanderCameraAnimation = {
+      fromX,
+      fromY,
+      targetX,
+      targetY,
+      startedAt: performance.now(),
+      duration: WANDER_CAMERA_ANIMATION_MS,
+      frame: null
+    };
+    const tick = () => {
+      const animation = state.wanderCameraAnimation;
+      if (!animation) return;
+      const progress = clamp((performance.now() - animation.startedAt) / Math.max(1, animation.duration), 0, 1);
+      const eased = easeInOutCubic(progress);
+      state.wanderCameraX = animation.fromX + ((animation.targetX - animation.fromX) * eased);
+      state.wanderCameraY = animation.fromY + ((animation.targetY - animation.fromY) * eased);
+      updateWanderTileCenters();
+      draw(analyze());
+      if (progress >= 1) {
+        state.wanderCameraAnimation = null;
+        state.wanderCameraX = animation.targetX;
+        state.wanderCameraY = animation.targetY;
+        updateWanderTileCenters();
+        draw(analyze());
+        return;
+      }
+      animation.frame = window.requestAnimationFrame(tick);
+    };
+    state.wanderCameraAnimation.frame = window.requestAnimationFrame(tick);
+  }
+
+  function stopWanderCameraAnimation(redraw = true) {
+    const animation = state.wanderCameraAnimation;
+    if (animation && animation.frame != null) window.cancelAnimationFrame(animation.frame);
+    state.wanderCameraAnimation = null;
+    if (redraw) draw(analyze());
+  }
+
+  function buildWanderMoveAnimation(fromTile, toTile) {
+    if (!fromTile || !toTile) return null;
+    return {
+      kind: 'move',
+      targetTileId: toTile.id,
+      recenterTileId: toTile.id,
+      duration: WANDER_MOVE_ANIMATION_MS,
+      wander: {
+        from: { x: fromTile.x, y: fromTile.y },
+        to: { x: toTile.x, y: toTile.y }
+      },
+      main: {
+        from: mainMarkerPointForSource(fromTile.sourceIndex),
+        to: mainMarkerPointForSource(toTile.sourceIndex)
+      }
+    };
+  }
+
+  function buildWanderBounceAnimation(tile, visibleDir) {
+    if (!tile) return null;
+    const wanderBouncePoint = wanderEdgeBouncePoint(tile, visibleDir);
+    const mainBouncePoint = mainEdgeBouncePoint(tile.sourceIndex, inverseTransformDir(visibleDir, tileTransform(tile)));
+    return {
+      kind: 'bounce',
+      targetTileId: tile.id,
+      duration: WANDER_BOUNCE_ANIMATION_MS,
+      wander: {
+        from: { x: tile.x, y: tile.y },
+        to: wanderBouncePoint || { x: tile.x, y: tile.y }
+      },
+      main: {
+        from: mainMarkerPointForSource(tile.sourceIndex),
+        to: mainBouncePoint || mainMarkerPointForSource(tile.sourceIndex)
+      }
+    };
+  }
+
+  function wanderEdgeBouncePoint(tile, visibleDir) {
+    if (!tile || !wanderGeometry) return null;
+    return pointAlongDirection(tile.x, tile.y, visibleDir, wanderGeometry.radius * WANDER_BOUNCE_EDGE_RATIO);
+  }
+
+  function mainEdgeBouncePoint(sourceIndex, sourceDir) {
+    if (!geometry || !geometry.cells || !tileExists(sourceIndex)) return null;
+    const cell = geometry.cells[sourceIndex];
+    if (!cell) return null;
+    return pointAlongDirection(cell.x, cell.y, sourceDir, geometry.radius * WANDER_BOUNCE_EDGE_RATIO);
+  }
+
+  function mainMarkerPointForSource(sourceIndex) {
+    const cell = geometry && geometry.cells ? geometry.cells[sourceIndex] : null;
+    return cell ? { x: cell.x, y: cell.y } : null;
+  }
+
+  function pointAlongDirection(x, y, dir, distance) {
+    const angle = getLattice().angles[normalizeDir(dir, getLattice().sides)] || 0;
+    return {
+      x: x + Math.cos(angle) * distance,
+      y: y + Math.sin(angle) * distance
+    };
+  }
+
+  function lerpPoint(from, to, amount) {
+    if (!from || !to) return from || to || { x: 0, y: 0 };
+    return {
+      x: from.x + ((to.x - from.x) * amount),
+      y: from.y + ((to.y - from.y) * amount)
+    };
+  }
+
+  function easeInOutCubic(value) {
+    const t = clamp(value, 0, 1);
+    return t < 0.5
+      ? 4 * t * t * t
+      : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  function handleWanderPointerDown(event) {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    event.preventDefault();
+    if (!isGluedBoundaryMode()) return;
+    focusWanderCanvas();
+    if (!state.wanderTiles.length) {
+      return;
+    }
+    const hit = wanderEdgeHitTest(event.clientX, event.clientY);
+    if (!hit) {
+      const tileHit = wanderTileHitTest(event.clientX, event.clientY);
+      if (tileHit) {
+        state.wanderCurrentId = tileHit.id;
+        state.wanderBounce = null;
+        syncWanderStatus();
+        focusWanderCanvas();
+        draw(analyze());
+      }
+      return;
+    }
+    stepWanderFromEdge(hit);
+  }
+
+  function handleWanderPointerMove(event) {
+    if (!state.wanderOpen || !state.wanderTiles.length || !isGluedBoundaryMode()) return;
+    const hit = wanderEdgeHitTest(event.clientX, event.clientY);
+    const next = hit
+      ? {
+        id: hit.id,
+        dir: hit.dir,
+        kind: wanderTransition(hit.tile, hit.dir).kind
+      }
+      : null;
+    if (sameWanderHoverEdge(state.wanderHoverEdge, next)) return;
+    state.wanderHoverEdge = next;
+    renderWanderChart();
+  }
+
+  function handleWanderKeyDown(event) {
+    if (!state.wanderOpen || state.wanderSelectingStart || !state.wanderTiles.length || !isGluedBoundaryMode()) return;
+    if (!event || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (isEditableWanderKeyTarget(event.target)) return;
+    const current = currentWanderTile();
+    const dir = wanderDirectionForKey(event.key);
+    if (!current || dir == null) return;
+    event.preventDefault();
+    stepWanderFromEdge({ id: current.id, tile: current, dir });
+  }
+
+  function isEditableWanderKeyTarget(target) {
+    const element = target && target.nodeType === 1 ? target : (target && target.parentElement);
+    if (!element) return false;
+    if (element.isContentEditable) return true;
+    return !!element.closest('input, textarea, select, [contenteditable="true"]');
+  }
+
+  function wanderDirectionForKey(key) {
+    const normalized = String(key || '').toLowerCase();
+    const lattice = getLattice();
+    if (lattice.shape === 'square') {
+      if (normalized === 'd' || normalized === 'arrowright') return 0;
+      if (normalized === 's' || normalized === 'arrowdown') return 1;
+      if (normalized === 'a' || normalized === 'arrowleft') return 2;
+      if (normalized === 'w' || normalized === 'arrowup') return 3;
+      return null;
+    }
+    if (normalized === 'd') return 0;
+    if (normalized === 'x') return 1;
+    if (normalized === 'z') return 2;
+    if (normalized === 'a') return 3;
+    if (normalized === 'w') return 4;
+    if (normalized === 'e') return 5;
+    return null;
+  }
+
+  function stepWanderFromEdge(hit) {
+    if (!hit || !hit.tile) return false;
+    focusWanderCanvas();
+    const transition = wanderTransition(hit.tile, hit.dir);
+    state.wanderCurrentId = hit.tile.id;
+    state.wanderHoverEdge = null;
+    if (!transition || transition.kind === 'boundary') {
+      const animation = buildWanderBounceAnimation(hit.tile, hit.dir);
+      state.wanderBounce = {
+        tileId: hit.tile.id,
+        sourceIndex: hit.tile.sourceIndex,
+        dir: hit.dir,
+        reason: transition && transition.reason ? transition.reason : 'boundary'
+      };
+      syncWanderStatus(`boundary bounce at ${formatWanderSourceTile(hit.tile.sourceIndex)}`);
+      startWanderMarkerAnimation(animation);
+      return false;
+    }
+
+    const existing = findMatchingWanderTile(transition);
+    if (existing) {
+      const animation = buildWanderMoveAnimation(hit.tile, existing);
+      state.wanderCurrentId = existing.id;
+      state.wanderBounce = null;
+      syncWanderStatus();
+      startWanderMarkerAnimation(animation);
+      return true;
+    }
+
+    const nextTile = {
+      id: state.wanderNextId++,
+      sourceIndex: transition.sourceIndex,
+      tile: transformTileValue(state.tiles[transition.sourceIndex], transition.transform),
+      rotation: transition.transform.rotation,
+      flip: transition.transform.flip,
+      coverQ: transition.coverQ,
+      coverR: transition.coverR,
+      parentId: hit.tile.id,
+      fromDir: hit.dir,
+      via: transition.kind,
+      glueGroup: transition.glueGroup == null ? null : transition.glueGroup
+    };
+    state.wanderTiles.push(nextTile);
+    state.wanderCurrentId = nextTile.id;
+    state.wanderBounce = null;
+    updateWanderTileCenters();
+    const animation = buildWanderMoveAnimation(hit.tile, nextTile);
+    syncWanderStatus(transition.kind === 'glued'
+      ? `glued to ${formatWanderSourceTile(nextTile.sourceIndex)}`
+      : `moved to ${formatWanderSourceTile(nextTile.sourceIndex)}`);
+    startWanderMarkerAnimation(animation);
+    return true;
+  }
+
+  function wanderTransition(tile, visibleDir) {
+    if (!tile || !Number.isInteger(visibleDir)) return { kind: 'boundary', reason: 'miss' };
+    const lattice = getLattice();
+    const sourceDir = inverseTransformDir(visibleDir, tileTransform(tile));
+    const direct = backgroundBilliardNeighbor(tile.sourceIndex, sourceDir);
+    const step = wanderCoverStep(visibleDir);
+    const coverQ = tile.coverQ + step.q;
+    const coverR = tile.coverR + step.r;
+    if (direct) {
+      return {
+        kind: 'ordinary',
+        sourceIndex: direct.index,
+        sourceEntryDir: direct.dir,
+        transform: tileTransform(tile),
+        coverQ,
+        coverR
+      };
+    }
+
+    const pair = gluedPairForBoundaryEdge({ index: tile.sourceIndex, dir: sourceDir });
+    if (!pair) return { kind: 'boundary', reason: 'real boundary' };
+    const hitIsFirst = sameBoundaryEdge({ index: tile.sourceIndex, dir: sourceDir }, pair.first);
+    const partner = hitIsFirst ? pair.second : pair.first;
+    if (!partner || !tileExists(partner.index)) {
+      return { kind: 'boundary', reason: 'blocked glued partner' };
+    }
+    const firstReverse = gluePairFirstArrowReversed(pair);
+    const secondReverse = gluePairSecondArrowReversed(pair);
+    const currentReverse = hitIsFirst ? firstReverse : secondReverse;
+    const partnerReverse = hitIsFirst ? secondReverse : firstReverse;
+    const flip = !!tile.flip !== (currentReverse === partnerReverse);
+    const visibleEntryDir = lattice.opposite[visibleDir];
+    const transform = {
+      rotation: transformRotationForVisibleDir(partner.dir, visibleEntryDir, flip),
+      flip
+    };
+    const pairIndex = cloneGluedEdges().findIndex((candidate) => gluedPairKey(candidate) === gluedPairKey(pair));
+    return {
+      kind: 'glued',
+      sourceIndex: partner.index,
+      sourceEntryDir: partner.dir,
+      transform,
+      coverQ,
+      coverR,
+      glueGroup: gluePairGroup(pair, pairIndex)
+    };
+  }
+
+  function tileTransform(tile) {
+    return {
+      rotation: normalizeTransformRotation(tile && tile.rotation),
+      flip: !!(tile && tile.flip)
+    };
+  }
+
+  function transformRotationForVisibleDir(sourceDir, visibleDir, flip) {
+    const sides = getLattice().sides;
+    return normalizeTransformRotation(flip
+      ? visibleDir + sourceDir
+      : visibleDir - sourceDir, sides);
+  }
+
+  function normalizeTransformRotation(rotation, sides = getLattice().sides) {
+    const value = Number(rotation);
+    return modulo(Number.isFinite(value) ? Math.trunc(value) : 0, sides);
+  }
+
+  function transformDir(dir, transform) {
+    const sides = getLattice().sides;
+    const source = normalizeDir(dir, sides);
+    const rotation = normalizeTransformRotation(transform && transform.rotation, sides);
+    return (transform && transform.flip)
+      ? modulo(rotation - source, sides)
+      : modulo(source + rotation, sides);
+  }
+
+  function inverseTransformDir(dir, transform) {
+    const sides = getLattice().sides;
+    const visible = normalizeDir(dir, sides);
+    const rotation = normalizeTransformRotation(transform && transform.rotation, sides);
+    return (transform && transform.flip)
+      ? modulo(rotation - visible, sides)
+      : modulo(visible - rotation, sides);
+  }
+
+  function transformTileValue(tile, transform) {
+    if (tile == null) return null;
+    const normalizedTransform = tileTransform(transform || {});
+    if (isVertexTileValue(tile)) {
+      return vertexTileFromDirs(normalizeVertexTile(tile).map((dir) => transformDir(dir, normalizedTransform)));
+    }
+    return normalizeTile(tile).map((pair) => [
+      transformDir(pair[0], normalizedTransform),
+      transformDir(pair[1], normalizedTransform)
+    ]);
+  }
+
+  function wanderCoverStep(visibleDir) {
+    const lattice = getLattice();
+    if (lattice.shape === 'square') {
+      const offsets = getOffsets(0, lattice);
+      return { q: offsets[visibleDir][1], r: offsets[visibleDir][0] };
+    }
+    const delta = HEX_AXIAL_DELTAS[visibleDir] || [0, 0];
+    return { q: delta[0], r: delta[1] };
+  }
+
+  function wanderEdgeHitTest(clientX, clientY) {
+    const hit = wanderTileHitTest(clientX, clientY);
+    if (!hit) return null;
+    const dx = hit.point.x - hit.tile.x;
+    const dy = hit.point.y - hit.tile.y;
+    if (Math.hypot(dx, dy) < wanderGeometry.radius * 0.34) return null;
+    const dir = nearestDirectionFromVector(dx, dy);
+    if (dir < 0) return null;
+    return {
+      id: hit.tile.id,
+      tile: hit.tile,
+      dir,
+      point: hit.point
+    };
+  }
+
+  function wanderTileHitTest(clientX, clientY) {
+    if (!wanderGeometry || !state.wanderTiles.length) return null;
+    const point = clientPointToWanderPoint(clientX, clientY);
+    const tiles = visibleWanderTiles();
+    for (let index = tiles.length - 1; index >= 0; index -= 1) {
+      const tile = tiles[index];
+      if (!Number.isFinite(tile.x) || !Number.isFinite(tile.y)) continue;
+      const radius = wanderGeometry.radius * 0.96;
+      if (Math.abs(point.x - tile.x) > radius || Math.abs(point.y - tile.y) > radius) continue;
+      if (pointInPolygon(point, tilePoints(tile.x, tile.y, radius))) {
+        return { tile, id: tile.id, point };
+      }
+    }
+    return null;
+  }
+
+  function clientPointToWanderPoint(clientX, clientY) {
+    const rect = refs.wanderCanvas.getBoundingClientRect();
+    const scaleX = wanderGeometry.width / Math.max(1, rect.width);
+    const scaleY = wanderGeometry.height / Math.max(1, rect.height);
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY
+    };
+  }
+
+  function currentWanderTile() {
+    return wanderTileById(state.wanderCurrentId);
+  }
+
+  function focusWanderCanvas() {
+    if (!refs.wanderCanvas || !state.wanderOpen || !isGluedBoundaryMode()) return;
+    if (typeof refs.wanderCanvas.focus === 'function') refs.wanderCanvas.focus({ preventScroll: true });
+  }
+
+  function wanderTileById(id) {
+    return state.wanderTiles.find((tile) => tile.id === id) || null;
+  }
+
+  function findMatchingWanderTile(transition) {
+    if (!transition) return null;
+    const transform = tileTransform(transition.transform);
+    return state.wanderTiles.find((tile) => (
+      tile.coverQ === transition.coverQ
+      && tile.coverR === transition.coverR
+      && tile.sourceIndex === transition.sourceIndex
+      && normalizeTransformRotation(tile.rotation) === transform.rotation
+      && !!tile.flip === !!transform.flip
+    )) || null;
+  }
+
+  function sameWanderHoverEdge(left, right) {
+    if (!left || !right) return left === right;
+    return left.id === right.id && left.dir === right.dir && left.kind === right.kind;
+  }
+
+  function currentWanderBoardKey() {
+    const glued = cloneGluedEdges().map((pair, index) => ({
+      first: boundaryEdgeKey(pair.first),
+      second: boundaryEdgeKey(pair.second),
+      group: gluePairGroup(pair, index),
+      reversed: !!pair.reversed,
+      firstArrowReversed: gluePairFirstArrowReversed(pair),
+      secondArrowReversed: gluePairSecondArrowReversed(pair)
+    }));
+    return JSON.stringify({
+      rows: state.rows,
+      cols: state.cols,
+      lattice: state.lattice,
+      boundaryMode: state.boundaryMode,
+      tiles: state.tiles,
+      removed: Array.from(cloneRemovedTileSet()).sort((a, b) => a - b),
+      cuts: Array.from(cloneCutEdgeSet()).sort(),
+      glued
+    });
+  }
+
+  function validateWanderBoardState() {
+    if (!state.wanderOpen && !state.wanderTiles.length && !state.wanderSelectingStart) return;
+    if (!isGluedBoundaryMode()) {
+      resetWanderPath('', false);
+      return;
+    }
+    if (state.wanderTiles.length && state.wanderBoardKey && state.wanderBoardKey !== currentWanderBoardKey()) {
+      resetWanderPath('wander reset: board changed', true);
+    }
   }
 
   function drawBackgroundCuspAngleFan(ctx, fan, color, radius) {
@@ -14929,15 +15810,23 @@
   }
 
   function syncBackgroundModeControls() {
-    const glueAction = isBackgroundGlueAction();
-    const billiardAction = isBackgroundBilliardAction();
+    const occupiedAction = !!state.wanderSelectingStart;
+    const glueAction = !occupiedAction && isBackgroundGlueAction();
+    const billiardAction = !occupiedAction && isBackgroundBilliardAction();
     const hasGlue = hasGluedBoundaryPairs();
+    if (refs.backgroundOccupiedOption) {
+      refs.backgroundOccupiedOption.hidden = !occupiedAction;
+      refs.backgroundOccupiedOption.disabled = !occupiedAction;
+    }
     if (refs.backgroundReverseGlueOption) {
       refs.backgroundReverseGlueOption.hidden = !hasGlue;
       refs.backgroundReverseGlueOption.disabled = !hasGlue;
     }
     if (!hasGlue && state.backgroundAction === 'reverse-glue') state.backgroundAction = 'tile';
-    if (refs.backgroundAction) refs.backgroundAction.value = state.backgroundAction;
+    if (refs.backgroundAction) {
+      refs.backgroundAction.value = occupiedAction ? 'occupied' : state.backgroundAction;
+      refs.backgroundAction.disabled = occupiedAction;
+    }
     const chains = state.pendingGlueChains;
     const firstCount = chains && Array.isArray(chains.first) ? chains.first.length : 0;
     const secondCount = chains && Array.isArray(chains.second) ? chains.second.length : 0;
@@ -14972,6 +15861,242 @@
       if (refs.backgroundCuspMarkerScaleValue) refs.backgroundCuspMarkerScaleValue.textContent = scale.toFixed(2);
     }
     syncBackgroundBilliardControls();
+  }
+
+  function openWanderChart() {
+    if (!isGluedBoundaryMode()) return;
+    state.wanderOpen = true;
+    if (!state.wanderTiles.length) state.wanderWide = true;
+    if (refs.wanderCard) refs.wanderCard.classList.remove('collapsed');
+    syncWanderControls();
+    resizeWanderCanvas();
+    renderWanderChart();
+    syncMainCanvasCursor();
+    focusWanderCanvas();
+  }
+
+  function beginWanderStartSelection() {
+    if (!isGluedBoundaryMode()) return;
+    if (state.wanderSelectingStart) {
+      cancelWanderStartSelection();
+      return;
+    }
+    enterWanderStartSelection();
+  }
+
+  function enterWanderStartSelection() {
+    if (!isGluedBoundaryMode()) return;
+    state.wanderOpen = true;
+    if (!state.wanderSelectingStart) {
+      state.wanderSelectionReturnInputMode = state.inputMode;
+      state.wanderSelectionReturnBackgroundAction = state.backgroundAction;
+    }
+    state.wanderSelectingStart = true;
+    applyWanderSelectionInputMode();
+    syncWanderControls();
+    renderWanderChart();
+    syncMainCanvasCursor();
+    if (refs.statusLine) refs.statusLine.textContent = 'wander: click an existing tile on the main canvas';
+  }
+
+  function cancelWanderStartSelection(message = 'wander start cancelled') {
+    if (!state.wanderSelectingStart) return;
+    state.wanderSelectingStart = false;
+    restoreWanderSelectionInputMode();
+    syncWanderControls(message);
+    renderWanderChart();
+    syncMainCanvasCursor();
+  }
+
+  function restoreWanderSelectionInputMode() {
+    const returnMode = state.wanderSelectionReturnInputMode || state.inputMode;
+    const returnAction = state.wanderSelectionReturnBackgroundAction || state.backgroundAction;
+    state.wanderSelectionReturnInputMode = '';
+    state.wanderSelectionReturnBackgroundAction = '';
+    state.inputMode = normalizeInputMode(returnMode);
+    state.backgroundAction = normalizeBackgroundAction(returnAction);
+    if (refs.inputMode) refs.inputMode.value = state.inputMode;
+    updateInputModePanels();
+    updateInputModeLock();
+    syncBackgroundModeControls();
+  }
+
+  function applyWanderSelectionInputMode() {
+    state.inputMode = 'background';
+    state.hoverIndex = -1;
+    state.backgroundHoverEdge = null;
+    state.backgroundHoverCusp = null;
+    state.decorationHoverHit = null;
+    if (state.backgroundBilliard) state.backgroundBilliard.aimPoint = null;
+    clearDrawDebugHit(false);
+    if (refs.inputMode) refs.inputMode.value = state.inputMode;
+    updateInputModePanels();
+    updateInputModeLock();
+    syncBackgroundModeControls();
+  }
+
+  function setWanderWide(enabled) {
+    stopWanderMarkerAnimation(false);
+    stopWanderCameraAnimation(false);
+    state.wanderWide = !!enabled;
+    syncWanderPlacement();
+    resizeWanderCanvas();
+    renderWanderChart();
+    focusWanderCanvas();
+  }
+
+  function resetWanderPath(message = '', keepOpen = false) {
+    stopWanderMarkerAnimation(false);
+    stopWanderCameraAnimation(false);
+    const wasSelecting = state.wanderSelectingStart;
+    state.wanderTiles = [];
+    state.wanderCurrentId = null;
+    state.wanderHoverEdge = null;
+    state.wanderBounce = null;
+    state.wanderStartIndex = -1;
+    state.wanderNextId = 1;
+    state.wanderBoardKey = '';
+    state.wanderCameraX = 0;
+    state.wanderCameraY = 0;
+    state.wanderSelectingStart = false;
+    if (wasSelecting) restoreWanderSelectionInputMode();
+    if (!keepOpen) state.wanderOpen = false;
+    syncWanderControls(message);
+    renderWanderChart();
+    syncMainCanvasCursor();
+  }
+
+  function resetWanderForBoardChange(message = 'wander reset: board changed') {
+    if (!state.wanderOpen && !state.wanderTiles.length) return;
+    resetWanderPath(message, state.wanderOpen && isGluedBoundaryMode());
+  }
+
+  function syncWanderControls(message = '') {
+    const available = isGluedBoundaryMode();
+    if (!available) {
+      state.wanderSelectingStart = false;
+      state.wanderOpen = false;
+    }
+    if (refs.wanderOpenRow) refs.wanderOpenRow.hidden = !available;
+    if (refs.openWander) refs.openWander.disabled = !available;
+    if (refs.wanderCard) refs.wanderCard.hidden = !available || !state.wanderOpen;
+    if (refs.wanderChooseStart) {
+      refs.wanderChooseStart.disabled = !available;
+      refs.wanderChooseStart.textContent = state.wanderSelectingStart ? 'cancel' : 'select';
+    }
+    if (refs.wanderReset) refs.wanderReset.disabled = !available || (!state.wanderTiles.length && !state.wanderSelectingStart);
+    syncWanderMarkerRadiusControl();
+    syncWanderPlacement();
+    syncWanderStatus(message);
+  }
+
+  function normalizeWanderMarkerRadius(value) {
+    const parsed = Number(value);
+    return clamp(Number.isFinite(parsed) ? parsed : 2, 0.55, 2.5);
+  }
+
+  function syncWanderMarkerRadiusControl() {
+    const value = normalizeWanderMarkerRadius(state.wanderMarkerRadius);
+    state.wanderMarkerRadius = value;
+    if (refs.wanderMarkerRadius) refs.wanderMarkerRadius.value = value.toFixed(2);
+    if (refs.wanderMarkerRadiusValue) refs.wanderMarkerRadiusValue.textContent = value.toFixed(2);
+  }
+
+  function syncWanderStatus(message = '') {
+    if (!refs.wanderStatus) return;
+    if (message) {
+      refs.wanderStatus.textContent = message;
+      return;
+    }
+    if (!isGluedBoundaryMode()) {
+      refs.wanderStatus.textContent = 'available in glued boundary mode';
+      return;
+    }
+    if (state.wanderSelectingStart) {
+      refs.wanderStatus.textContent = 'click an existing tile on the main canvas';
+      return;
+    }
+    if (!state.wanderTiles.length) {
+      refs.wanderStatus.textContent = 'select a start tile on the main canvas';
+      return;
+    }
+    if (state.wanderBounce) {
+      refs.wanderStatus.textContent = `boundary bounce at ${formatWanderSourceTile(state.wanderBounce.sourceIndex)}`;
+      return;
+    }
+    const current = currentWanderTile();
+    refs.wanderStatus.textContent = current
+      ? `current: ${formatWanderSourceTile(current.sourceIndex)}; click an edge to wander`
+      : 'click an edge to wander';
+  }
+
+  function syncWanderPlacement() {
+    const card = refs.wanderCard;
+    const sideHost = refs.wanderSideHost;
+    const wideHost = refs.wanderWideHost;
+    if (!card || !sideHost || !wideHost) return;
+    const available = isGluedBoundaryMode() && state.wanderOpen;
+    const target = state.wanderWide ? wideHost : sideHost;
+    if (card.parentElement !== target) target.appendChild(card);
+    card.classList.toggle('wide', state.wanderWide);
+    wideHost.hidden = !(available && state.wanderWide);
+    sideHost.hidden = !(available && !state.wanderWide);
+    if (refs.wanderToggleWide) {
+      refs.wanderToggleWide.textContent = state.wanderWide ? 'side' : 'wide';
+      refs.wanderToggleWide.setAttribute('aria-pressed', state.wanderWide ? 'true' : 'false');
+      refs.wanderToggleWide.disabled = !isGluedBoundaryMode();
+    }
+  }
+
+  function formatWanderSourceTile(index) {
+    if (!Number.isInteger(index) || index < 0) return 'tile -';
+    return `r${Math.floor(index / state.cols) + 1}c${(index % state.cols) + 1}`;
+  }
+
+  function handleWanderStartPointerDown(event) {
+    const hit = tileHitTest(event.clientX, event.clientY, 0.96);
+    const index = hit ? hit.index : -1;
+    if (index < 0 || !tileExists(index)) {
+      syncWanderStatus('wander: choose an existing tile');
+      renderWanderChart();
+      return;
+    }
+    startWanderAtTile(index);
+  }
+
+  function startWanderAtTile(index) {
+    if (!tileExists(index)) return false;
+    stopWanderMarkerAnimation(false);
+    stopWanderCameraAnimation(false);
+    const wasSelecting = state.wanderSelectingStart;
+    state.wanderOpen = true;
+    state.wanderSelectingStart = false;
+    state.wanderStartIndex = index;
+    state.wanderNextId = 2;
+    state.wanderCurrentId = 1;
+    state.wanderHoverEdge = null;
+    state.wanderBounce = null;
+    state.wanderCameraX = 0;
+    state.wanderCameraY = 0;
+    state.wanderBoardKey = currentWanderBoardKey();
+    state.wanderTiles = [{
+      id: 1,
+      sourceIndex: index,
+      tile: cloneTile(state.tiles[index]),
+      rotation: 0,
+      coverQ: 0,
+      coverR: 0,
+      parentId: null,
+      fromDir: null,
+      via: 'start'
+    }];
+    if (wasSelecting) restoreWanderSelectionInputMode();
+    syncWanderControls(`wander started at ${formatWanderSourceTile(index)}`);
+    resizeWanderCanvas();
+    renderWanderChart();
+    focusWanderCanvas();
+    draw(analyze());
+    return true;
   }
 
   function syncRiemannNodeControls() {
@@ -15065,6 +16190,7 @@
     if (refs.dualGraphCard) refs.dualGraphCard.hidden = !isDualGraph();
     if (refs.dualGraphDegenerationsCard) refs.dualGraphDegenerationsCard.hidden = !isDualGraph();
     syncDualGraphDegenerationWidePlacement();
+    syncWanderControls();
   }
 
   function generateTilePreferences(lattice) {
