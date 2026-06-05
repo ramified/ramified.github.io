@@ -935,6 +935,109 @@
   </section>
 
   <aside class="side">
+    <div id="wander-side-host" hidden>
+      <section class="card collapsed" id="wander-card" hidden>
+        <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Wandering In The Universal Cover</span><em class="toggle-icon">&#9662;</em></div>
+        <div class="card-body">
+          <div class="wander-actions">
+            <button class="btn" id="wander-choose-start" type="button">select</button>
+            <button class="btn btn-ghost" id="wander-reset" type="button">reset</button>
+            <button class="btn btn-ghost" id="wander-toggle-wide" type="button">side</button>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Radius</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-marker-radius" min="0.55" max="2.5" step="0.05" value="2.00">
+              <output id="wander-marker-radius-value">2.00</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Smoke</span>
+            <select id="wander-smoke-color">
+              <option value="blue" selected>blue</option>
+              <option value="yellow">yellow</option>
+              <option value="white">white</option>
+              <option value="gray">gray</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Brightness</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-brightness" min="0.25" max="1.8" step="0.05" value="1.00">
+              <output id="wander-smoke-brightness-value">1.00</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Shape</span>
+            <select id="wander-smoke-shape">
+              <option value="tile">tile</option>
+              <option value="puff">puff</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Thickness</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-thickness" min="0.35" max="2.5" step="0.05" value="2.00">
+              <output id="wander-smoke-thickness-value">2.00</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Opacity</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-opacity" min="0.15" max="1" step="0.05" value="1.00">
+              <output id="wander-smoke-opacity-value">1.00</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Inner</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-gradient-inner" min="0" max="0.45" step="0.01" value="0.00">
+              <output id="wander-smoke-gradient-inner-value">0.00</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Middle</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-gradient-mid" min="0.2" max="0.9" step="0.01" value="0.50">
+              <output id="wander-smoke-gradient-mid-value">0.50</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Edge</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-gradient-edge" min="0.55" max="1" step="0.01" value="1.00">
+              <output id="wander-smoke-gradient-edge-value">1.00</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Inner alpha</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-alpha-inner" min="0" max="1" step="0.01" value="1.00">
+              <output id="wander-smoke-alpha-inner-value">1.00</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Middle alpha</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-alpha-mid" min="0" max="1" step="0.01" value="0.50">
+              <output id="wander-smoke-alpha-mid-value">0.50</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Edge alpha</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-alpha-edge" min="0" max="1" step="0.01" value="0.00">
+              <output id="wander-smoke-alpha-edge-value">0.00</output>
+            </span>
+          </div>
+          <span class="wander-status" id="wander-status">select a start tile on the main canvas</span>
+          <div class="wander-canvas-wrap">
+            <canvas id="wander-canvas" width="420" height="320" tabindex="0" aria-label="Wandering in the universal cover"></canvas>
+          </div>
+        </div>
+      </section>
+    </div>
+
     <section class="card">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
@@ -1266,30 +1369,6 @@
         </div>
       </div>
     </section>
-
-    <div id="wander-side-host" hidden>
-      <section class="card collapsed" id="wander-card" hidden>
-        <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Wandering In The Universal Cover</span><em class="toggle-icon">&#9662;</em></div>
-        <div class="card-body">
-          <div class="wander-actions">
-            <button class="btn" id="wander-choose-start" type="button">select</button>
-            <button class="btn btn-ghost" id="wander-reset" type="button">reset</button>
-            <button class="btn btn-ghost" id="wander-toggle-wide" type="button">side</button>
-          </div>
-          <div class="mosaic-inline-row">
-            <span class="input-label">Radius</span>
-            <span class="background-slider-controls">
-              <input type="range" id="wander-marker-radius" min="0.55" max="2.5" step="0.05" value="2.00">
-              <output id="wander-marker-radius-value">2.00</output>
-            </span>
-          </div>
-          <span class="wander-status" id="wander-status">select a start tile on the main canvas</span>
-          <div class="wander-canvas-wrap">
-            <canvas id="wander-canvas" width="420" height="320" tabindex="0" aria-label="Wandering in the universal cover"></canvas>
-          </div>
-        </div>
-      </section>
-    </div>
 
     <section class="card collapsed" id="knot-card">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Knot/link</span><em class="toggle-icon">&#9662;</em></div>

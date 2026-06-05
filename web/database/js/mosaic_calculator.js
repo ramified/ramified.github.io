@@ -377,7 +377,7 @@
     showRiemannSurfaceCanvas: false,
     showAlgebraicCurveCanvas: false,
     wanderOpen: false,
-    wanderWide: true,
+    wanderWide: false,
     wanderSelectingStart: false,
     wanderSelectionReturnInputMode: '',
     wanderSelectionReturnBackgroundAction: '',
@@ -391,6 +391,18 @@
     wanderCameraY: 0,
     wanderCameraAnimation: null,
     wanderMarkerRadius: 2,
+    wanderSmokeMarks: [],
+    wanderSmokeColor: 'blue',
+    wanderSmokeBrightness: 1,
+    wanderSmokeShape: 'tile',
+    wanderSmokeThickness: 2,
+    wanderSmokeOpacity: 1,
+    wanderSmokeGradientInner: 0,
+    wanderSmokeGradientMid: 0.5,
+    wanderSmokeGradientEdge: 1,
+    wanderSmokeAlphaInner: 1,
+    wanderSmokeAlphaMid: 0.5,
+    wanderSmokeAlphaEdge: 0,
     wanderNextId: 1,
     wanderBoardKey: ''
   };
@@ -502,6 +514,26 @@
     refs.wanderToggleWide = document.getElementById('wander-toggle-wide');
     refs.wanderMarkerRadius = document.getElementById('wander-marker-radius');
     refs.wanderMarkerRadiusValue = document.getElementById('wander-marker-radius-value');
+    refs.wanderSmokeColor = document.getElementById('wander-smoke-color');
+    refs.wanderSmokeBrightness = document.getElementById('wander-smoke-brightness');
+    refs.wanderSmokeBrightnessValue = document.getElementById('wander-smoke-brightness-value');
+    refs.wanderSmokeShape = document.getElementById('wander-smoke-shape');
+    refs.wanderSmokeThickness = document.getElementById('wander-smoke-thickness');
+    refs.wanderSmokeThicknessValue = document.getElementById('wander-smoke-thickness-value');
+    refs.wanderSmokeOpacity = document.getElementById('wander-smoke-opacity');
+    refs.wanderSmokeOpacityValue = document.getElementById('wander-smoke-opacity-value');
+    refs.wanderSmokeGradientInner = document.getElementById('wander-smoke-gradient-inner');
+    refs.wanderSmokeGradientInnerValue = document.getElementById('wander-smoke-gradient-inner-value');
+    refs.wanderSmokeGradientMid = document.getElementById('wander-smoke-gradient-mid');
+    refs.wanderSmokeGradientMidValue = document.getElementById('wander-smoke-gradient-mid-value');
+    refs.wanderSmokeGradientEdge = document.getElementById('wander-smoke-gradient-edge');
+    refs.wanderSmokeGradientEdgeValue = document.getElementById('wander-smoke-gradient-edge-value');
+    refs.wanderSmokeAlphaInner = document.getElementById('wander-smoke-alpha-inner');
+    refs.wanderSmokeAlphaInnerValue = document.getElementById('wander-smoke-alpha-inner-value');
+    refs.wanderSmokeAlphaMid = document.getElementById('wander-smoke-alpha-mid');
+    refs.wanderSmokeAlphaMidValue = document.getElementById('wander-smoke-alpha-mid-value');
+    refs.wanderSmokeAlphaEdge = document.getElementById('wander-smoke-alpha-edge');
+    refs.wanderSmokeAlphaEdgeValue = document.getElementById('wander-smoke-alpha-edge-value');
     refs.knotStatus = document.getElementById('knot-status');
     refs.knotCard = document.getElementById('knot-card');
     refs.knotNameRow = document.getElementById('knot-name-row');
@@ -803,6 +835,52 @@
         focusWanderCanvas();
       });
     }
+    if (refs.wanderSmokeColor) {
+      refs.wanderSmokeColor.addEventListener('change', () => {
+        state.wanderSmokeColor = normalizeWanderSmokeColor(refs.wanderSmokeColor.value);
+        syncWanderSmokeControls();
+        draw(analyze());
+        focusWanderCanvas();
+      });
+    }
+    if (refs.wanderSmokeBrightness) {
+      refs.wanderSmokeBrightness.addEventListener('input', () => {
+        state.wanderSmokeBrightness = normalizeWanderSmokeBrightness(refs.wanderSmokeBrightness.value);
+        syncWanderSmokeControls();
+        draw(analyze());
+        focusWanderCanvas();
+      });
+    }
+    if (refs.wanderSmokeShape) {
+      refs.wanderSmokeShape.addEventListener('change', () => {
+        state.wanderSmokeShape = normalizeWanderSmokeShape(refs.wanderSmokeShape.value);
+        syncWanderSmokeControls();
+        draw(analyze());
+        focusWanderCanvas();
+      });
+    }
+    if (refs.wanderSmokeThickness) {
+      refs.wanderSmokeThickness.addEventListener('input', () => {
+        state.wanderSmokeThickness = normalizeWanderSmokeThickness(refs.wanderSmokeThickness.value);
+        syncWanderSmokeControls();
+        draw(analyze());
+        focusWanderCanvas();
+      });
+    }
+    if (refs.wanderSmokeOpacity) {
+      refs.wanderSmokeOpacity.addEventListener('input', () => {
+        state.wanderSmokeOpacity = normalizeWanderSmokeOpacity(refs.wanderSmokeOpacity.value);
+        syncWanderSmokeControls();
+        draw(analyze());
+        focusWanderCanvas();
+      });
+    }
+    bindWanderSmokeGradientControl(refs.wanderSmokeGradientInner, 'wanderSmokeGradientInner');
+    bindWanderSmokeGradientControl(refs.wanderSmokeGradientMid, 'wanderSmokeGradientMid');
+    bindWanderSmokeGradientControl(refs.wanderSmokeGradientEdge, 'wanderSmokeGradientEdge');
+    bindWanderSmokeAlphaControl(refs.wanderSmokeAlphaInner, 'wanderSmokeAlphaInner');
+    bindWanderSmokeAlphaControl(refs.wanderSmokeAlphaMid, 'wanderSmokeAlphaMid');
+    bindWanderSmokeAlphaControl(refs.wanderSmokeAlphaEdge, 'wanderSmokeAlphaEdge');
     if (refs.wanderCanvas) {
       refs.wanderCanvas.addEventListener('pointerdown', handleWanderPointerDown);
       refs.wanderCanvas.addEventListener('pointermove', handleWanderPointerMove);
@@ -13200,8 +13278,10 @@
     }
 
     const visibleTiles = visibleWanderTiles();
+    const smokeSources = wanderSmokeSourceTiles(visibleTiles);
     drawWanderConnectors(ctx, palette, visibleTiles);
     visibleTiles.forEach((tile) => drawWanderTile(ctx, tile, palette));
+    drawWanderSmokeLayers(ctx, palette, visibleTiles, smokeSources);
     drawWanderHover(ctx, palette);
     drawWanderCurrentMarker(ctx, palette);
   }
@@ -13261,6 +13341,342 @@
     drawWanderBlackBoundaries(ctx, tile);
     drawPlainTextLabel(ctx, tile.x, tile.y + radius * 0.66, formatWanderSourceTile(tile.sourceIndex), palette.muted, Math.max(8, radius * 0.18));
     ctx.restore();
+  }
+
+  function addWanderSmokeMark(tile) {
+    if (!tile) return;
+    if (!Array.isArray(state.wanderSmokeMarks)) state.wanderSmokeMarks = [];
+    state.wanderSmokeMarks = state.wanderSmokeMarks.filter((mark) => mark.tileId !== tile.id);
+    state.wanderSmokeMarks.push({
+      tileId: tile.id,
+      coverQ: tile.coverQ,
+      coverR: tile.coverR,
+      createdAt: Date.now()
+    });
+  }
+
+  function refreshWanderTileVisibility(tile) {
+    if (!tile || !Array.isArray(state.wanderTiles)) return null;
+    const index = state.wanderTiles.findIndex((entry) => entry.id === tile.id);
+    if (index < 0) return tile;
+    const [freshTile] = state.wanderTiles.splice(index, 1);
+    state.wanderTiles.push(freshTile);
+    return freshTile;
+  }
+
+  function wanderSmokeSourceTiles(visibleTiles) {
+    const sourceIds = new Set();
+    const visibleById = new Map(visibleTiles.map((tile) => [tile.id, tile]));
+    const visibleByPosition = new Map(visibleTiles.map((tile) => [wanderDisplayPositionKey(tile), tile]));
+    (Array.isArray(state.wanderSmokeMarks) ? state.wanderSmokeMarks : []).forEach((mark) => {
+      const markedTile = visibleById.get(mark.tileId)
+        || visibleByPosition.get(`${mark.coverQ},${mark.coverR}`);
+      if (markedTile) sourceIds.add(markedTile.id);
+    });
+    visibleTiles.forEach((tile) => {
+      if (hasHiddenWanderTileAtPosition(tile)) sourceIds.add(tile.id);
+    });
+    return visibleTiles.filter((tile) => sourceIds.has(tile.id));
+  }
+
+  function hasHiddenWanderTileAtPosition(tile) {
+    if (!tile) return false;
+    const key = wanderDisplayPositionKey(tile);
+    return state.wanderTiles.some((other) => other.id !== tile.id && wanderDisplayPositionKey(other) === key);
+  }
+
+  function drawWanderSmokeLayers(ctx, palette, visibleTiles, smokeSources) {
+    if (!smokeSources.length || !wanderGeometry) return;
+    smokeSources.forEach((source) => {
+      drawWanderSmokeLayer(ctx, source);
+      const protectedTiles = smokeProtectedWanderTilesForSource(visibleTiles, source);
+      drawWanderConnectors(ctx, palette, protectedTiles);
+      protectedTiles.forEach((tile) => drawWanderTile(ctx, tile, palette));
+    });
+  }
+
+  function smokeProtectedWanderTilesForSource(visibleTiles, source) {
+    if (!source) return [];
+    const protectedIds = new Set([source.id]);
+    visibleTiles.forEach((tile) => {
+      if (isWanderTileConnectedAcrossSmokeEdge(source, tile)) protectedIds.add(tile.id);
+    });
+    return visibleTiles.filter((tile) => protectedIds.has(tile.id));
+  }
+
+  function isWanderTileConnectedAcrossSmokeEdge(source, target) {
+    if (!source || !target || source.id === target.id) return false;
+    const lattice = getLattice();
+    for (let visibleDir = 0; visibleDir < lattice.sides; visibleDir += 1) {
+      const step = wanderCoverStep(visibleDir);
+      if (source.coverQ + step.q !== target.coverQ || source.coverR + step.r !== target.coverR) continue;
+      if (wanderTransitionMatchesTile(wanderTransition(source, visibleDir), target)) return true;
+    }
+    return false;
+  }
+
+  function wanderTransitionMatchesTile(transition, tile) {
+    if (!transition || transition.kind === 'boundary' || !tile) return false;
+    const transform = tileTransform(transition.transform);
+    return tile.coverQ === transition.coverQ
+      && tile.coverR === transition.coverR
+      && tile.sourceIndex === transition.sourceIndex
+      && normalizeTransformRotation(tile.rotation) === transform.rotation
+      && !!tile.flip === !!transform.flip;
+  }
+
+  function drawWanderSmokeLayer(ctx, tile) {
+    if (!tile || !wanderGeometry) return;
+    const radius = wanderGeometry.radius;
+    const colors = wanderSmokePalette();
+    const shape = normalizeWanderSmokeShape(state.wanderSmokeShape);
+    ctx.save();
+    ctx.globalAlpha *= normalizeWanderSmokeOpacity(state.wanderSmokeOpacity);
+    if (shape === 'puff') drawWanderSmokeCloud(ctx, tile, radius, colors);
+    else drawWanderSmokeTile(ctx, tile, radius, colors);
+    ctx.restore();
+  }
+
+  function drawWanderSmokeTile(ctx, tile, radius, colors) {
+    if (!tile) return;
+    const stops = normalizedWanderSmokeGradientStops();
+    const alphas = normalizedWanderSmokeAlphas();
+    const rgb = wanderSmokeRgbStops();
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    const steps = 32;
+    const centerPolygon = wanderSmokeTilePolygon(tile, radius, 0);
+    if (centerPolygon.length >= 3) {
+      drawWanderSmokePath(ctx, centerPolygon);
+      ctx.fillStyle = tileSmokeColorAt(0, stops, rgb, alphas);
+      ctx.fill();
+    }
+    for (let index = 1; index <= steps; index += 1) {
+      const innerAmount = (index - 1) / steps;
+      const outerAmount = index / steps;
+      const innerPolygon = wanderSmokeTilePolygon(tile, radius, innerAmount);
+      const outerPolygon = wanderSmokeTilePolygon(tile, radius, outerAmount);
+      if (innerPolygon.length < 3 || outerPolygon.length < 3) continue;
+      const color = tileSmokeColorAt((innerAmount + outerAmount) * 0.5, stops, rgb, alphas);
+      if (!color) continue;
+      drawWanderSmokeRingPath(ctx, outerPolygon, innerPolygon);
+      ctx.fillStyle = color;
+      ctx.fill('evenodd');
+    }
+    ctx.restore();
+  }
+
+  function tileSmokeColorAt(amount, stops, rgb, alphas) {
+    const t = clamp(amount, 0, 1);
+    if (t <= stops.inner) return smokeRgba(rgb.inner, alphas.inner);
+    if (t <= stops.mid) {
+      const mix = (t - stops.inner) / Math.max(0.001, stops.mid - stops.inner);
+      return smokeRgba(lerpRgb(rgb.inner, rgb.mid, mix), lerpNumber(alphas.inner, alphas.mid, mix));
+    }
+    const mix = (t - stops.mid) / Math.max(0.001, stops.edge - stops.mid);
+    return smokeRgba(lerpRgb(rgb.mid, rgb.outer, mix), lerpNumber(alphas.mid, alphas.edge, mix));
+  }
+
+  function drawWanderSmokeCloud(ctx, tile, radius, colors) {
+    if (!tile) return;
+    const angles = getLattice().angles;
+    const thickness = normalizeWanderSmokeThickness(state.wanderSmokeThickness);
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    if (wanderRealBoundaryVisibleDirs(tile).length) {
+      drawWanderSmokePath(ctx, wanderSmokeTilePolygon(tile, radius));
+      ctx.clip();
+    }
+    angles.forEach((angle, index) => {
+      const offset = radius * thickness * (0.56 + (index % 2) * 0.08);
+      const puffRadius = radius * thickness * (0.62 + (index % 3) * 0.08);
+      drawWanderSmokePuff(
+        ctx,
+        tile.x + Math.cos(angle) * offset,
+        tile.y + Math.sin(angle) * offset,
+        puffRadius,
+        colors
+      );
+    });
+    drawWanderSmokePuff(ctx, tile.x, tile.y, radius * thickness * 0.72, colors);
+    ctx.restore();
+  }
+
+  function wanderSmokeTilePolygon(tile, radius, amount = 1) {
+    if (!tile) return [];
+    const thickness = normalizeWanderSmokeThickness(state.wanderSmokeThickness);
+    const baseScale = 0.96;
+    const outerScale = baseScale + (0.32 * thickness);
+    const scale = baseScale + ((outerScale - baseScale) * clamp(amount, 0, 1));
+    let points = tilePoints(tile.x, tile.y, radius * scale);
+    wanderRealBoundaryVisibleDirs(tile).forEach((visibleDir) => {
+      const segment = edgeSegmentPoints(tile.x, tile.y, visibleDir, radius * 0.96);
+      points = clipPolygonToInteriorSide(points, segment, { x: tile.x, y: tile.y });
+    });
+    return points;
+  }
+
+  function wanderRealBoundaryVisibleDirs(tile) {
+    if (!tile || !tileExists(tile.sourceIndex)) return [];
+    const lattice = getLattice();
+    const transform = tileTransform(tile);
+    const dirs = [];
+    for (let sourceDir = 0; sourceDir < lattice.sides; sourceDir += 1) {
+      if (!isBackgroundBoundaryEdge(tile.sourceIndex, sourceDir) || isGluedBoundaryEdge(tile.sourceIndex, sourceDir)) continue;
+      dirs.push(transformDir(sourceDir, transform));
+    }
+    return dirs;
+  }
+
+  function drawWanderSmokePath(ctx, points) {
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.closePath();
+  }
+
+  function drawWanderSmokeRingPath(ctx, outerPoints, innerPoints) {
+    ctx.beginPath();
+    outerPoints.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.closePath();
+    innerPoints.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.closePath();
+  }
+
+  function clipPolygonToInteriorSide(points, segment, insidePoint) {
+    if (!Array.isArray(points) || points.length < 3 || !segment || !insidePoint) return points || [];
+    const edgeX = segment.end.x - segment.start.x;
+    const edgeY = segment.end.y - segment.start.y;
+    const sideValue = (point) => (
+      (edgeX * (point.y - segment.start.y)) - (edgeY * (point.x - segment.start.x))
+    );
+    const insideSign = sideValue(insidePoint) >= 0 ? 1 : -1;
+    const epsilon = 0.000001;
+    const isInside = (point) => sideValue(point) * insideSign >= -epsilon;
+    const intersection = (from, to) => {
+      const fromSide = sideValue(from);
+      const toSide = sideValue(to);
+      const denominator = fromSide - toSide;
+      const amount = Math.abs(denominator) < epsilon ? 0 : clamp(fromSide / denominator, 0, 1);
+      return {
+        x: from.x + ((to.x - from.x) * amount),
+        y: from.y + ((to.y - from.y) * amount)
+      };
+    };
+    const clipped = [];
+    let previous = points[points.length - 1];
+    let previousInside = isInside(previous);
+    points.forEach((current) => {
+      const currentInside = isInside(current);
+      if (currentInside) {
+        if (!previousInside) clipped.push(intersection(previous, current));
+        clipped.push(current);
+      } else if (previousInside) {
+        clipped.push(intersection(previous, current));
+      }
+      previous = current;
+      previousInside = currentInside;
+    });
+    return clipped;
+  }
+
+  function drawWanderSmokePuff(ctx, x, y, radius, colors) {
+    const gradient = ctx.createRadialGradient(x, y, radius * 0.12, x, y, radius);
+    gradient.addColorStop(0, colors.inner);
+    gradient.addColorStop(0.58, colors.mid);
+    gradient.addColorStop(1, colors.outer);
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function smokeRgba(rgb, alpha) {
+    return `rgba(${Math.round(rgb[0])},${Math.round(rgb[1])},${Math.round(rgb[2])},${clamp(alpha, 0, 1)})`;
+  }
+
+  function scaleSmokeRgb(rgb) {
+    const brightness = normalizeWanderSmokeBrightness(state.wanderSmokeBrightness);
+    return rgb.map((channel) => clamp(channel * brightness, 0, 255));
+  }
+
+  function lerpRgb(from, to, amount) {
+    const t = clamp(amount, 0, 1);
+    return [
+      lerpNumber(from[0], to[0], t),
+      lerpNumber(from[1], to[1], t),
+      lerpNumber(from[2], to[2], t)
+    ];
+  }
+
+  function lerpNumber(from, to, amount) {
+    const t = clamp(amount, 0, 1);
+    return from + ((to - from) * t);
+  }
+
+  function wanderSmokeRgbStops() {
+    let base;
+    switch (normalizeWanderSmokeColor(state.wanderSmokeColor)) {
+      case 'yellow':
+        base = [232, 194, 75];
+        break;
+      case 'gray':
+        base = [158, 158, 158];
+        break;
+      case 'white':
+        base = [235, 231, 223];
+        break;
+      case 'blue':
+      default:
+        base = [126, 190, 235];
+        break;
+    }
+    const scaled = scaleSmokeRgb(base);
+    return { inner: scaled, mid: scaled, outer: scaled };
+  }
+
+  function wanderSmokePalette() {
+    const alpha = normalizedWanderSmokeAlphas();
+    const rgb = wanderSmokeRgbStops();
+    switch (normalizeWanderSmokeColor(state.wanderSmokeColor)) {
+      case 'blue':
+        return {
+          inner: smokeRgba(rgb.inner, alpha.inner),
+          mid: smokeRgba(rgb.mid, alpha.mid),
+          outer: smokeRgba(rgb.outer, alpha.edge),
+          rim: 'rgba(78,142,196,0.38)'
+        };
+      case 'yellow':
+        return {
+          inner: smokeRgba(rgb.inner, alpha.inner),
+          mid: smokeRgba(rgb.mid, alpha.mid),
+          outer: smokeRgba(rgb.outer, alpha.edge),
+          rim: 'rgba(190,144,36,0.36)'
+        };
+      case 'gray':
+        return {
+          inner: smokeRgba(rgb.inner, alpha.inner),
+          mid: smokeRgba(rgb.mid, alpha.mid),
+          outer: smokeRgba(rgb.outer, alpha.edge),
+          rim: 'rgba(112,112,112,0.34)'
+        };
+      case 'white':
+      default:
+        return {
+          inner: smokeRgba(rgb.inner, alpha.inner),
+          mid: smokeRgba(rgb.mid, alpha.mid),
+          outer: smokeRgba(rgb.outer, alpha.edge),
+          rim: 'rgba(190,184,174,0.34)'
+        };
+    }
   }
 
   function drawWanderBlackBoundaries(ctx, tile) {
@@ -13559,8 +13975,10 @@
     if (!hit) {
       const tileHit = wanderTileHitTest(event.clientX, event.clientY);
       if (tileHit) {
-        state.wanderCurrentId = tileHit.id;
+        const refreshed = refreshWanderTileVisibility(tileHit.tile) || tileHit.tile;
+        state.wanderCurrentId = refreshed.id;
         state.wanderBounce = null;
+        addWanderSmokeMark(refreshed);
         syncWanderStatus();
         focusWanderCanvas();
         draw(analyze());
@@ -13644,8 +14062,10 @@
     const existing = findMatchingWanderTile(transition);
     if (existing) {
       const animation = buildWanderMoveAnimation(hit.tile, existing);
-      state.wanderCurrentId = existing.id;
+      const refreshed = refreshWanderTileVisibility(existing) || existing;
+      state.wanderCurrentId = refreshed.id;
       state.wanderBounce = null;
+      addWanderSmokeMark(refreshed);
       syncWanderStatus();
       startWanderMarkerAnimation(animation);
       return true;
@@ -13665,6 +14085,8 @@
       glueGroup: transition.glueGroup == null ? null : transition.glueGroup
     };
     state.wanderTiles.push(nextTile);
+    refreshWanderTileVisibility(nextTile);
+    addWanderSmokeMark(nextTile);
     state.wanderCurrentId = nextTile.id;
     state.wanderBounce = null;
     updateWanderTileCenters();
@@ -15866,7 +16288,6 @@
   function openWanderChart() {
     if (!isGluedBoundaryMode()) return;
     state.wanderOpen = true;
-    if (!state.wanderTiles.length) state.wanderWide = true;
     if (refs.wanderCard) refs.wanderCard.classList.remove('collapsed');
     syncWanderControls();
     resizeWanderCanvas();
@@ -15954,6 +16375,7 @@
     state.wanderHoverEdge = null;
     state.wanderBounce = null;
     state.wanderStartIndex = -1;
+    state.wanderSmokeMarks = [];
     state.wanderNextId = 1;
     state.wanderBoardKey = '';
     state.wanderCameraX = 0;
@@ -15986,6 +16408,7 @@
     }
     if (refs.wanderReset) refs.wanderReset.disabled = !available || (!state.wanderTiles.length && !state.wanderSelectingStart);
     syncWanderMarkerRadiusControl();
+    syncWanderSmokeControls();
     syncWanderPlacement();
     syncWanderStatus(message);
   }
@@ -16000,6 +16423,152 @@
     state.wanderMarkerRadius = value;
     if (refs.wanderMarkerRadius) refs.wanderMarkerRadius.value = value.toFixed(2);
     if (refs.wanderMarkerRadiusValue) refs.wanderMarkerRadiusValue.textContent = value.toFixed(2);
+  }
+
+  function normalizeWanderSmokeColor(value) {
+    const normalized = String(value || '').toLowerCase();
+    return ['white', 'blue', 'yellow', 'gray'].includes(normalized) ? normalized : 'white';
+  }
+
+  function normalizeWanderSmokeShape(value) {
+    const normalized = String(value || '').toLowerCase();
+    return normalized === 'puff' ? 'puff' : 'tile';
+  }
+
+  function normalizeWanderSmokeBrightness(value) {
+    const parsed = Number(value);
+    return clamp(Number.isFinite(parsed) ? parsed : 1, 0.25, 1.8);
+  }
+
+  function normalizeWanderSmokeThickness(value) {
+    const parsed = Number(value);
+    return clamp(Number.isFinite(parsed) ? parsed : 2, 0.35, 2.5);
+  }
+
+  function normalizeWanderSmokeOpacity(value) {
+    const parsed = Number(value);
+    return clamp(Number.isFinite(parsed) ? parsed : 1, 0.15, 1);
+  }
+
+  function normalizeWanderSmokeGradientStop(value, fallback) {
+    const parsed = Number(value);
+    return clamp(Number.isFinite(parsed) ? parsed : fallback, 0, 1);
+  }
+
+  function normalizedWanderSmokeGradientStops() {
+    const inner = clamp(normalizeWanderSmokeGradientStop(state.wanderSmokeGradientInner, 0), 0, 0.9);
+    const edge = clamp(normalizeWanderSmokeGradientStop(state.wanderSmokeGradientEdge, 1), 0.1, 1);
+    const minMid = Math.min(0.98, inner + 0.01);
+    const maxMid = Math.max(minMid, edge - 0.01);
+    const mid = clamp(normalizeWanderSmokeGradientStop(state.wanderSmokeGradientMid, 0.5), minMid, maxMid);
+    return {
+      inner: Math.min(inner, mid - 0.01),
+      mid,
+      edge: Math.max(edge, mid + 0.01)
+    };
+  }
+
+  function normalizeWanderSmokeAlpha(value, fallback) {
+    const parsed = Number(value);
+    return clamp(Number.isFinite(parsed) ? parsed : fallback, 0, 1);
+  }
+
+  function normalizedWanderSmokeAlphas() {
+    return {
+      inner: normalizeWanderSmokeAlpha(state.wanderSmokeAlphaInner, 1),
+      mid: normalizeWanderSmokeAlpha(state.wanderSmokeAlphaMid, 0.5),
+      edge: normalizeWanderSmokeAlpha(state.wanderSmokeAlphaEdge, 0)
+    };
+  }
+
+  function bindWanderSmokeGradientControl(input, key) {
+    if (!input) return;
+    input.addEventListener('input', () => {
+      state[key] = normalizeWanderSmokeGradientStop(input.value, key === 'wanderSmokeGradientMid' ? 0.5 : (key === 'wanderSmokeGradientEdge' ? 1 : 0));
+      syncWanderSmokeControls();
+      draw(analyze());
+      focusWanderCanvas();
+    });
+  }
+
+  function bindWanderSmokeAlphaControl(input, key) {
+    if (!input) return;
+    input.addEventListener('input', () => {
+      state[key] = normalizeWanderSmokeAlpha(input.value, key === 'wanderSmokeAlphaMid' ? 0.5 : (key === 'wanderSmokeAlphaEdge' ? 0 : 1));
+      syncWanderSmokeControls();
+      draw(analyze());
+      focusWanderCanvas();
+    });
+  }
+
+  function syncWanderSmokeControls() {
+    state.wanderSmokeColor = normalizeWanderSmokeColor(state.wanderSmokeColor);
+    state.wanderSmokeBrightness = normalizeWanderSmokeBrightness(state.wanderSmokeBrightness);
+    state.wanderSmokeShape = normalizeWanderSmokeShape(state.wanderSmokeShape);
+    state.wanderSmokeThickness = normalizeWanderSmokeThickness(state.wanderSmokeThickness);
+    state.wanderSmokeOpacity = normalizeWanderSmokeOpacity(state.wanderSmokeOpacity);
+    const gradientStops = normalizedWanderSmokeGradientStops();
+    state.wanderSmokeGradientInner = gradientStops.inner;
+    state.wanderSmokeGradientMid = gradientStops.mid;
+    state.wanderSmokeGradientEdge = gradientStops.edge;
+    const alphas = normalizedWanderSmokeAlphas();
+    state.wanderSmokeAlphaInner = alphas.inner;
+    state.wanderSmokeAlphaMid = alphas.mid;
+    state.wanderSmokeAlphaEdge = alphas.edge;
+    const available = isGluedBoundaryMode();
+    if (refs.wanderSmokeColor) {
+      refs.wanderSmokeColor.value = state.wanderSmokeColor;
+      refs.wanderSmokeColor.disabled = !available;
+    }
+    if (refs.wanderSmokeBrightness) {
+      refs.wanderSmokeBrightness.value = state.wanderSmokeBrightness.toFixed(2);
+      refs.wanderSmokeBrightness.disabled = !available;
+    }
+    if (refs.wanderSmokeBrightnessValue) refs.wanderSmokeBrightnessValue.textContent = state.wanderSmokeBrightness.toFixed(2);
+    if (refs.wanderSmokeShape) {
+      refs.wanderSmokeShape.value = state.wanderSmokeShape;
+      refs.wanderSmokeShape.disabled = !available;
+    }
+    if (refs.wanderSmokeThickness) {
+      refs.wanderSmokeThickness.value = state.wanderSmokeThickness.toFixed(2);
+      refs.wanderSmokeThickness.disabled = !available;
+    }
+    if (refs.wanderSmokeThicknessValue) refs.wanderSmokeThicknessValue.textContent = state.wanderSmokeThickness.toFixed(2);
+    if (refs.wanderSmokeOpacity) {
+      refs.wanderSmokeOpacity.value = state.wanderSmokeOpacity.toFixed(2);
+      refs.wanderSmokeOpacity.disabled = !available;
+    }
+    if (refs.wanderSmokeOpacityValue) refs.wanderSmokeOpacityValue.textContent = state.wanderSmokeOpacity.toFixed(2);
+    if (refs.wanderSmokeGradientInner) {
+      refs.wanderSmokeGradientInner.value = state.wanderSmokeGradientInner.toFixed(2);
+      refs.wanderSmokeGradientInner.disabled = !available;
+    }
+    if (refs.wanderSmokeGradientInnerValue) refs.wanderSmokeGradientInnerValue.textContent = state.wanderSmokeGradientInner.toFixed(2);
+    if (refs.wanderSmokeGradientMid) {
+      refs.wanderSmokeGradientMid.value = state.wanderSmokeGradientMid.toFixed(2);
+      refs.wanderSmokeGradientMid.disabled = !available;
+    }
+    if (refs.wanderSmokeGradientMidValue) refs.wanderSmokeGradientMidValue.textContent = state.wanderSmokeGradientMid.toFixed(2);
+    if (refs.wanderSmokeGradientEdge) {
+      refs.wanderSmokeGradientEdge.value = state.wanderSmokeGradientEdge.toFixed(2);
+      refs.wanderSmokeGradientEdge.disabled = !available;
+    }
+    if (refs.wanderSmokeGradientEdgeValue) refs.wanderSmokeGradientEdgeValue.textContent = state.wanderSmokeGradientEdge.toFixed(2);
+    if (refs.wanderSmokeAlphaInner) {
+      refs.wanderSmokeAlphaInner.value = state.wanderSmokeAlphaInner.toFixed(2);
+      refs.wanderSmokeAlphaInner.disabled = !available;
+    }
+    if (refs.wanderSmokeAlphaInnerValue) refs.wanderSmokeAlphaInnerValue.textContent = state.wanderSmokeAlphaInner.toFixed(2);
+    if (refs.wanderSmokeAlphaMid) {
+      refs.wanderSmokeAlphaMid.value = state.wanderSmokeAlphaMid.toFixed(2);
+      refs.wanderSmokeAlphaMid.disabled = !available;
+    }
+    if (refs.wanderSmokeAlphaMidValue) refs.wanderSmokeAlphaMidValue.textContent = state.wanderSmokeAlphaMid.toFixed(2);
+    if (refs.wanderSmokeAlphaEdge) {
+      refs.wanderSmokeAlphaEdge.value = state.wanderSmokeAlphaEdge.toFixed(2);
+      refs.wanderSmokeAlphaEdge.disabled = !available;
+    }
+    if (refs.wanderSmokeAlphaEdgeValue) refs.wanderSmokeAlphaEdgeValue.textContent = state.wanderSmokeAlphaEdge.toFixed(2);
   }
 
   function syncWanderStatus(message = '') {
@@ -16076,6 +16645,7 @@
     state.wanderCurrentId = 1;
     state.wanderHoverEdge = null;
     state.wanderBounce = null;
+    state.wanderSmokeMarks = [];
     state.wanderCameraX = 0;
     state.wanderCameraY = 0;
     state.wanderBoardKey = currentWanderBoardKey();
@@ -16090,6 +16660,7 @@
       fromDir: null,
       via: 'start'
     }];
+    addWanderSmokeMark(state.wanderTiles[0]);
     if (wasSelecting) restoreWanderSelectionInputMode();
     syncWanderControls(`wander started at ${formatWanderSourceTile(index)}`);
     resizeWanderCanvas();
