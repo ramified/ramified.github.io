@@ -17708,6 +17708,7 @@
 
   function homologyExpressionListHtml(geometry, cohomologyDegree, options = {}) {
     const expressions = homologyDisplayMonomialsOfCohomologyDegree(geometry, cohomologyDegree)
+      .filter((mono) => !mono.key || homologyMonomialIsRuleNormalForm(geometry, mono.key))
       .map((mono) => ({
         ...mono,
         displayLatex: homologyExpressionDisplayLatex(geometry, mono)
