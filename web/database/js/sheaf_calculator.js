@@ -924,7 +924,7 @@
     sheaf.twist = '1';
     sheaf.rank = isPullback ? sanitizeRankInput(data.sheaf.rank) : 'r';
     sheaf.baseVarietyId = isPullback ? data.map.domainId : data.map.codomainId;
-    sheaf.basis = normalizeBasisValue(data.sheaf.basis);
+    sheaf.basis = 'chern';
     sheaf.nameDirty = data.nameDirty;
     sheaf.construction = {
       type: isPullback ? 'pullback' : 'pushforward',
@@ -2733,6 +2733,7 @@
 
   function sheafRelativeConstructionType(sheaf) {
     if (sheaf?.construction?.type !== 'ses-term' || !sheaf.construction.relativeSheafMapId) return null;
+    if (sheaf.construction.ramifiedCoverRelative === true || sheaf.construction.ramifiedCoverTangentQuotient === true) return null;
     return sheaf.construction.relativeSheafType === 'cotangent' ? 'relative-cotangent' : 'relative-tangent';
   }
 
@@ -2980,6 +2981,10 @@
     if (!active) return;
     const index = items.findIndex((item) => item.id === active.id);
     if (index < 0) return;
+    if (deletingSheaf && (deleteRamifiedCoverCotangentGeneratedSheaf(active.id) || deleteRamifiedCoverTangentGeneratedSheaf(active.id))) {
+      recompute();
+      return;
+    }
     const removed = items.splice(index, 1)[0] || null;
     const next = items[Math.min(index, items.length - 1)] || null;
     if (deletingSheaf) {
@@ -3024,6 +3029,10 @@
   function removeCanvasObject(kind, id) {
     if (kind === 'sequence') {
       deleteShortExactSequence(id);
+      return;
+    }
+    if (kind === 'sheaf' && (deleteRamifiedCoverCotangentGeneratedSheaf(id) || deleteRamifiedCoverTangentGeneratedSheaf(id))) {
+      recompute();
       return;
     }
     if (kind === 'map') {
@@ -3138,6 +3147,196 @@
     }
     state.hiddenObjects = hiddenObjectRefs();
     recompute();
+  }
+
+  function deleteRamifiedCoverCotangentGeneratedSheaf(sheafId) {
+    const data = ramifiedCoverCotangentGeneratedSheafData(sheafId);
+    if (!data) return false;
+    setRamifiedCoverCotangentRoleSuppressed(data.cover, data.role, true);
+    clearRamifiedCoverCotangentRoleReferences(data);
+    removeGeneratedSheafObject(sheafId);
+    state.hiddenObjects = hiddenObjectRefs();
+    return true;
+  }
+
+  function ramifiedCoverCotangentGeneratedSheafData(sheafId) {
+    const sheaf = state.sheaves.find((item) => item.id === sheafId);
+    if (!sheaf) return null;
+    const construction = sheaf?.construction || {};
+    if (construction.type === 'ses-term' && (construction.ramifiedCoverCotangent === true || construction.ramifiedCoverRelative === true)) {
+      const map = state.maps.find((item) => item.id === (construction.ramifiedCoverMapId || construction.relativeSheafMapId));
+      const context = smoothCyclicRamifiedCoverContextFromMap(map);
+      if (!context) return null;
+      return {
+        role: construction.ramifiedCoverCotangent === true ? 'cotangent' : 'relative',
+        cover: context.cover,
+        map: context.map,
+        sheaf
+      };
+    }
+    if (construction.type !== 'pullback') return null;
+    const map = state.maps.find((item) => item.id === construction.mapId);
+    const context = smoothCyclicRamifiedCoverContextFromMap(map);
+    const source = state.sheaves.find((item) => item.id === construction.sheafId);
+    if (!context || sheaf.baseVarietyId !== context.cover.id || source?.baseVarietyId !== context.base.id || source.type !== 'cotangent') return null;
+    return {
+      role: 'pulled-target',
+      cover: context.cover,
+      map: context.map,
+      sheaf
+    };
+  }
+
+  function ramifiedCoverCotangentRoleIsSuppressed(cover, role) {
+    if (!cover?.construction || cover.construction.type !== 'ramified-cover') return false;
+    return ramifiedCoverCotangentSuppressedRoles(cover).includes(role);
+  }
+
+  function ramifiedCoverCotangentSuppressedRoles(cover) {
+    return sanitizeRamifiedCoverCotangentSuppressedRoles(cover?.construction?.suppressedCotangentRoles);
+  }
+
+  function sanitizeRamifiedCoverCotangentSuppressedRoles(roles) {
+    const allowed = new Set(['pulled-target', 'relative', 'cotangent']);
+    if (!Array.isArray(roles)) return [];
+    return roles.filter((role, index) => allowed.has(role) && roles.indexOf(role) === index);
+  }
+
+  function setRamifiedCoverCotangentRoleSuppressed(cover, role, suppressed) {
+    if (!cover?.construction || cover.construction.type !== 'ramified-cover') return false;
+    const allowed = new Set(['pulled-target', 'relative', 'cotangent']);
+    if (!allowed.has(role)) return false;
+    const roles = new Set(ramifiedCoverCotangentSuppressedRoles(cover));
+    const hadRole = roles.has(role);
+    if (suppressed) roles.add(role);
+    else roles.delete(role);
+    const nextRoles = [...roles];
+    if (nextRoles.length) cover.construction.suppressedCotangentRoles = nextRoles;
+    else delete cover.construction.suppressedCotangentRoles;
+    return hadRole !== roles.has(role);
+  }
+
+  function removeGeneratedSheafObject(sheafId) {
+    const removed = state.sheaves.find((sheaf) => sheaf.id === sheafId);
+    if (!removed) return false;
+    cleanupInternalHomScaffolding(removed);
+    cleanupSesScaffoldingForSheaf(removed, removed.construction);
+    state.sheaves = state.sheaves.filter((sheaf) => sheaf.id !== sheafId);
+    state.maps = state.maps.filter((map) => !(map.domainKind === 'sheaf' && map.domainId === sheafId) && !(map.codomainKind === 'sheaf' && map.codomainId === sheafId));
+    removeSequencesTouchingSheaves(new Set([sheafId]));
+    if (state.activeSheafId === sheafId) state.activeSheafId = null;
+    if (state.activeMapId && !state.maps.some((map) => map.id === state.activeMapId)) state.activeMapId = null;
+    clearMapDraft();
+    syncSheafBaseOptions(true);
+    return true;
+  }
+
+  function clearRamifiedCoverCotangentRoleReferences(data) {
+    const construction = data.cover?.construction || {};
+    if (data.role === 'cotangent' && construction.cotangentSheafId === data.sheaf.id) construction.cotangentSheafId = null;
+    if (data.role === 'relative' && construction.relativeCotangentSheafId === data.sheaf.id) construction.relativeCotangentSheafId = null;
+    state.sheaves.forEach((item) => {
+      const itemConstruction = item.construction || {};
+      if (itemConstruction.ramifiedCoverMapId !== data.map.id && itemConstruction.relativeSheafMapId !== data.map.id) return;
+      if (data.role === 'pulled-target' && itemConstruction.pulledTargetDifferentialSheafId === data.sheaf.id) {
+        itemConstruction.pulledTargetDifferentialSheafId = null;
+      }
+      if (data.role === 'relative' && itemConstruction.relativeCotangentSheafId === data.sheaf.id) {
+        itemConstruction.relativeCotangentSheafId = null;
+      }
+      if ((data.role === 'pulled-target' || data.role === 'relative') && Array.isArray(itemConstruction.sourceSheafIds)) {
+        itemConstruction.sourceSheafIds = itemConstruction.sourceSheafIds.filter((id) => id !== data.sheaf.id);
+      }
+    });
+  }
+
+  function deleteRamifiedCoverTangentGeneratedSheaf(sheafId) {
+    const data = ramifiedCoverTangentGeneratedSheafData(sheafId);
+    if (!data) return false;
+    setRamifiedCoverTangentRoleSuppressed(data.cover, data.role, true);
+    clearRamifiedCoverTangentRoleReferences(data);
+    removeGeneratedSheafObject(sheafId);
+    state.hiddenObjects = hiddenObjectRefs();
+    return true;
+  }
+
+  function ramifiedCoverTangentGeneratedSheafData(sheafId) {
+    const sheaf = state.sheaves.find((item) => item.id === sheafId);
+    if (!sheaf) return null;
+    const construction = sheaf?.construction || {};
+    if (construction.type === 'ses-term' && (construction.ramifiedCoverTangent === true || construction.ramifiedCoverTangentQuotient === true)) {
+      const map = state.maps.find((item) => item.id === construction.ramifiedCoverMapId);
+      const context = smoothCyclicRamifiedCoverContextFromMap(map);
+      if (!context) return null;
+      return {
+        role: construction.ramifiedCoverTangent === true ? 'tangent' : 'quotient',
+        cover: context.cover,
+        map: context.map,
+        sheaf
+      };
+    }
+    if (construction.type !== 'pullback') return null;
+    const map = state.maps.find((item) => item.id === construction.mapId);
+    const context = smoothCyclicRamifiedCoverContextFromMap(map);
+    const source = state.sheaves.find((item) => item.id === construction.sheafId);
+    if (!context || sheaf.baseVarietyId !== context.cover.id || source?.baseVarietyId !== context.base.id || source.type !== 'tangent') return null;
+    return {
+      role: 'pulled-target',
+      cover: context.cover,
+      map: context.map,
+      sheaf
+    };
+  }
+
+  function ramifiedCoverTangentRoleIsSuppressed(cover, role) {
+    if (!cover?.construction || cover.construction.type !== 'ramified-cover') return false;
+    return ramifiedCoverTangentSuppressedRoles(cover).includes(role);
+  }
+
+  function ramifiedCoverTangentSuppressedRoles(cover) {
+    return sanitizeRamifiedCoverTangentSuppressedRoles(cover?.construction?.suppressedTangentRoles);
+  }
+
+  function sanitizeRamifiedCoverTangentSuppressedRoles(roles) {
+    const allowed = new Set(['pulled-target', 'quotient', 'tangent']);
+    if (!Array.isArray(roles)) return [];
+    return roles.filter((role, index) => allowed.has(role) && roles.indexOf(role) === index);
+  }
+
+  function setRamifiedCoverTangentRoleSuppressed(cover, role, suppressed) {
+    if (!cover?.construction || cover.construction.type !== 'ramified-cover') return false;
+    const allowed = new Set(['pulled-target', 'quotient', 'tangent']);
+    if (!allowed.has(role)) return false;
+    const roles = new Set(ramifiedCoverTangentSuppressedRoles(cover));
+    const hadRole = roles.has(role);
+    if (suppressed) roles.add(role);
+    else roles.delete(role);
+    const nextRoles = [...roles];
+    if (nextRoles.length) cover.construction.suppressedTangentRoles = nextRoles;
+    else delete cover.construction.suppressedTangentRoles;
+    return hadRole !== roles.has(role);
+  }
+
+  function clearRamifiedCoverTangentRoleReferences(data) {
+    const construction = data.cover?.construction || {};
+    if (data.role === 'tangent' && construction.tangentSheafId === data.sheaf.id) construction.tangentSheafId = null;
+    if (data.role === 'quotient' && construction.relativeTangentSheafId === data.sheaf.id) construction.relativeTangentSheafId = null;
+    state.sheaves.forEach((item) => {
+      const itemConstruction = item.construction || {};
+      if (itemConstruction.ramifiedCoverMapId !== data.map.id) return;
+      if (data.role === 'pulled-target' && itemConstruction.pulledTargetTangentSheafId === data.sheaf.id) {
+        itemConstruction.pulledTargetTangentSheafId = null;
+      }
+      if (data.role === 'tangent' && itemConstruction.sourceTangentSheafId === data.sheaf.id) {
+        itemConstruction.sourceTangentSheafId = null;
+      }
+      if (data.role === 'quotient' && itemConstruction.relativeTangentSheafId === data.sheaf.id) {
+        itemConstruction.relativeTangentSheafId = null;
+      }
+      if ((data.role === 'pulled-target' || data.role === 'tangent' || data.role === 'quotient') && Array.isArray(itemConstruction.sourceSheafIds)) {
+        itemConstruction.sourceSheafIds = itemConstruction.sourceSheafIds.filter((id) => id !== data.sheaf.id);
+      }
+    });
   }
 
   function hideShortExactSequenceTail(sequenceId) {
@@ -4703,11 +4902,13 @@
     if (!sheafObject) return null;
     const variety = baseVarietyForSheaf(sheafObject);
     if (!variety) return null;
-    const geometry = result?.geometry?.varietyId === variety.id
+    const resultMatchesSheaf = result?.sheaf?.sourceObject === sheafObject
+      && result?.geometry?.varietyId === variety.id;
+    const geometry = resultMatchesSheaf
       ? result.geometry
       : geometryFromVariety(variety);
     if (!geometry) return null;
-    const sheaf = result?.sheaf?.sourceObject === sheafObject
+    const sheaf = resultMatchesSheaf
       ? result.sheaf
       : sheafFromObject(sheafObject, geometry);
     return { sheafObject, sheaf, variety, geometry, result };
@@ -4897,8 +5098,35 @@
     return !!context
       && !!def
       && def.kind === 'chern'
-      && sheafUsesFreeClassVariables(context.sheaf)
+      && (sheafUsesFreeClassVariables(context.sheaf) || !!computedSheafChernClassRule(def, context))
       && !sheafChernClassIsInBaseHomology(def, context.geometry);
+  }
+
+  function computedSheafChernClassRule(def, context = activeHomologySheafContext()) {
+    if (!context || !def || def.kind !== 'chern' || sheafUsesFreeClassVariables(context.sheaf)) return null;
+    const rules = resultMatchesHomologySheafContext(context.result, context)
+      ? (context.result?.bundle?.defaultSheafHomologyRules || [])
+      : defaultSheafHomologyRulesForContext(context);
+    return sheafHomologyRuleForDef(def, rules);
+  }
+
+  function resultMatchesHomologySheafContext(result, context) {
+    return !!result
+      && !!context?.sheafObject
+      && result.sheaf?.sourceObject === context.sheafObject
+      && result.geometry?.varietyId === context.geometry?.varietyId;
+  }
+
+  function defaultSheafHomologyRulesForContext(context) {
+    if (!context?.sheaf || !context.geometry) return [];
+    try {
+      const bundle = resultMatchesHomologySheafContext(context.result, context)
+        ? context.result?.bundle
+        : buildBundleForSheaf(context.geometry, context.sheaf);
+      return defaultSheafHomologyRulesFromBundle(context.sheaf, context.geometry, bundle);
+    } catch (error) {
+      return [];
+    }
   }
 
   function sheafChernClassUsesBaseHomology(def, context = activeHomologySheafContext()) {
@@ -5135,6 +5363,777 @@
     return changed;
   }
 
+  function ensureRamifiedCoverCotangentSes(base, cover, map = null) {
+    const context = smoothCyclicRamifiedCoverContextFromMap(map || ramifiedCoverMapForCover(cover));
+    const construction = cover?.construction;
+    if (!construction || construction.type !== 'ramified-cover') return false;
+    if (!context || context.cover.id !== cover.id || context.base.id !== base?.id) {
+      return removeRamifiedCoverCotangentScaffolding(construction);
+    }
+    const suppressPulledTarget = ramifiedCoverCotangentRoleIsSuppressed(cover, 'pulled-target');
+    const suppressRelative = ramifiedCoverCotangentRoleIsSuppressed(cover, 'relative');
+    const suppressCotangent = ramifiedCoverCotangentRoleIsSuppressed(cover, 'cotangent');
+    const targetCotangent = ensureCotangentSheafForVariety(base);
+    if (!targetCotangent) return false;
+
+    let changed = false;
+    if (suppressPulledTarget) {
+      if (removeRamifiedCoverCotangentSequence(construction)) changed = true;
+      state.hiddenObjects = hiddenObjectRefs();
+      return changed;
+    }
+    const pulledTarget = ensureRelativePulledTargetSheaf({
+      map: context.map,
+      domain: cover,
+      codomain: base,
+      type: 'cotangent'
+    }, targetCotangent);
+    if (!pulledTarget) return changed;
+    if (suppressRelative) {
+      if (removeRamifiedCoverCotangentSequence(construction)) changed = true;
+      state.hiddenObjects = hiddenObjectRefs();
+      return changed;
+    }
+    const relative = ensureRamifiedCoverRelativeCotangentSheaf(context, pulledTarget);
+    if (!relative) return changed;
+    if (construction.relativeCotangentSheafId !== relative.id) {
+      construction.relativeCotangentSheafId = relative.id;
+      changed = true;
+    }
+    if (suppressCotangent) {
+      if (removeRamifiedCoverCotangentSequence(construction)) changed = true;
+      state.hiddenObjects = hiddenObjectRefs();
+      return changed;
+    }
+    const cotangent = ensureRamifiedCoverCotangentSheaf(context, pulledTarget, relative);
+    if (!cotangent) return changed;
+    if (syncRamifiedCoverCotangentSequence(context, pulledTarget, cotangent, relative)) changed = true;
+    if (construction.cotangentSheafId !== cotangent.id) {
+      construction.cotangentSheafId = cotangent.id;
+      changed = true;
+    }
+    if (syncObjectLineage(relative, 'sheaf')) changed = true;
+    if (syncObjectLineage(cotangent, 'sheaf')) changed = true;
+    state.hiddenObjects = hiddenObjectRefs();
+    return changed;
+  }
+
+  function ensureRamifiedCoverRelativeCotangentSheaf(context, pulledTarget) {
+    const { map, cover, base, coverGeometry, degree } = context;
+    const defaultName = defaultRelativeSheafNameFromObjects(map, 'cotangent');
+    let sheaf = preferredRamifiedCoverRelativeCotangentSheaf(context);
+    let created = false;
+    if (!sheaf) {
+      sheaf = {
+        id: nextInputId('E'),
+        type: 'abstract',
+        name: uniqueConstructedObjectName('sheaf', defaultName),
+        twist: '1',
+        rank: '0',
+        baseVarietyId: cover.id,
+        basis: 'chern',
+        nameDirty: false,
+        hiddenOnCanvas: true,
+        construction: {}
+      };
+      positionSheafNearBase(sheaf, cover);
+      avoidCanvasLabelOverlap(sheaf);
+      addSheafObject(sheaf, { activate: false });
+      created = true;
+    }
+    const cleaned = cleanupDuplicateRamifiedCoverRelativeCotangentSheaves(context, sheaf.id);
+    const nextConstruction = {
+      ...(sheaf.construction || {}),
+      type: 'ses-term',
+      role: 'quotient',
+      sourceSheafIds: [pulledTarget.id],
+      relativeSheafMapId: map.id,
+      relativeSheafType: 'cotangent',
+      ramifiedCoverRelative: true,
+      ramifiedCoverMapId: map.id,
+      ramifiedCoverId: cover.id,
+      ramifiedBaseId: base.id,
+      coverDegree: degree,
+      pulledTargetDifferentialSheafId: pulledTarget.id,
+      smoothSubmersionConfirmed: false,
+      defaultName
+    };
+    let changed = created || cleaned;
+    const nextFields = {
+      type: 'abstract',
+      twist: '1',
+      rank: '0',
+      baseVarietyId: cover.id,
+      basis: 'chern'
+    };
+    Object.entries(nextFields).forEach(([key, value]) => {
+      if (sheaf[key] !== value) {
+        sheaf[key] = value;
+        changed = true;
+      }
+    });
+    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(defaultName)) {
+      sheaf.name = defaultName;
+      changed = true;
+    }
+    if (JSON.stringify(sheaf.construction || {}) !== JSON.stringify(nextConstruction)) {
+      sheaf.construction = nextConstruction;
+      changed = true;
+    }
+    if (changed) sheafFromObject(sheaf, coverGeometry);
+    return sheaf;
+  }
+
+  function preferredRamifiedCoverRelativeCotangentSheaf(context) {
+    const candidates = ramifiedCoverRelativeCotangentSheafCandidates(context);
+    if (!candidates.length) return null;
+    return candidates.find((item) => !item.hiddenOnCanvas)
+      || candidates.find((item) => item.id === context.cover.construction?.relativeCotangentSheafId)
+      || candidates.find((item) => item.construction?.ramifiedCoverRelative === true)
+      || candidates[0];
+  }
+
+  function ramifiedCoverRelativeCotangentSheafCandidates(context) {
+    const mapId = context?.map?.id;
+    const coverId = context?.cover?.id;
+    if (!mapId || !coverId) return [];
+    return state.sheaves.filter((item) => (
+      item.baseVarietyId === coverId
+      && item.construction?.type === 'ses-term'
+      && item.construction.ramifiedCoverCotangent !== true
+      && item.construction.relativeSheafType === 'cotangent'
+      && (item.construction.relativeSheafMapId === mapId || item.construction.ramifiedCoverMapId === mapId)
+    ));
+  }
+
+  function cleanupDuplicateRamifiedCoverRelativeCotangentSheaves(context, keepId) {
+    const duplicates = ramifiedCoverRelativeCotangentSheafCandidates(context)
+      .filter((item) => item.id !== keepId);
+    duplicates.forEach((sheaf) => {
+      cleanupSesScaffoldingForSheaf(sheaf, sheaf.construction);
+      state.sheaves = state.sheaves.filter((item) => item.id !== sheaf.id);
+      if (state.activeSheafId === sheaf.id) state.activeSheafId = keepId || null;
+    });
+    return duplicates.length > 0;
+  }
+
+  function ensureRamifiedCoverCotangentSheaf(context, pulledTarget, relative) {
+    const { map, cover, base, coverGeometry, degree } = context;
+    const defaultName = defaultSheafNameFor('cotangent', '1', 'r', coverGeometry.labelLatex, coverGeometry);
+    let sheaf = state.sheaves.find((item) => (
+      item.id === cover.construction?.cotangentSheafId
+      && item.construction?.ramifiedCoverCotangent === true
+    )) || state.sheaves.find((item) => (
+      item.baseVarietyId === cover.id
+      && item.construction?.ramifiedCoverCotangent === true
+      && item.construction.ramifiedCoverMapId === map.id
+    )) || ramifiedCoverCotangentSheafCandidate(context, pulledTarget, relative);
+    let created = false;
+    if (!sheaf) {
+      sheaf = {
+        id: nextInputId('E'),
+        type: 'cotangent',
+        name: defaultName,
+        twist: '1',
+        rank: String(coverGeometry.dim),
+        baseVarietyId: cover.id,
+        basis: 'chern',
+        nameDirty: false,
+        hiddenOnCanvas: true,
+        construction: {}
+      };
+      positionSheafNearBase(sheaf, cover);
+      avoidCanvasLabelOverlap(sheaf);
+      addSheafObject(sheaf, { activate: false });
+      created = true;
+    }
+    const cleaned = cleanupDuplicateRamifiedCoverCotangentSheaves(context, sheaf.id);
+    const nextSources = [pulledTarget.id, relative.id];
+    const nextConstruction = {
+      ...(sheaf.construction || {}),
+      type: 'ses-term',
+      role: 'extension',
+      sourceSheafIds: nextSources,
+      ramifiedCoverCotangent: true,
+      ramifiedCoverMapId: map.id,
+      ramifiedCoverId: cover.id,
+      ramifiedBaseId: base.id,
+      coverDegree: degree,
+      pulledTargetDifferentialSheafId: pulledTarget.id,
+      relativeCotangentSheafId: relative.id,
+      defaultName
+    };
+    let changed = created || cleaned;
+    const nextFields = {
+      type: 'cotangent',
+      twist: '1',
+      rank: String(coverGeometry.dim),
+      baseVarietyId: cover.id,
+      basis: 'chern'
+    };
+    Object.entries(nextFields).forEach(([key, value]) => {
+      if (sheaf[key] !== value) {
+        sheaf[key] = value;
+        changed = true;
+      }
+    });
+    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(defaultName)) {
+      sheaf.name = defaultName;
+      changed = true;
+    }
+    if (JSON.stringify(sheaf.construction || {}) !== JSON.stringify(nextConstruction)) {
+      sheaf.construction = nextConstruction;
+      changed = true;
+    }
+    if (changed) sheafFromObject(sheaf, coverGeometry);
+    return sheaf;
+  }
+
+  function ramifiedCoverCotangentSheafCandidate(context, pulledTarget, relative) {
+    return state.sheaves.find((item) => (
+      item.baseVarietyId === context.cover.id
+      && item.type === 'cotangent'
+      && !item.construction
+    )) || state.sheaves.find((item) => (
+      item.baseVarietyId === context.cover.id
+      && item.type === 'cotangent'
+      && item.construction?.type === 'ses-term'
+      && item.construction.ramifiedCoverRelative !== true
+      && item.construction.relativeSheafMapId === context.map.id
+      && item.construction.relativeSheafType === 'cotangent'
+      && (item.construction.sourceSheafIds || []).includes(pulledTarget.id)
+      && item.id !== relative.id
+    )) || null;
+  }
+
+  function cleanupDuplicateRamifiedCoverCotangentSheaves(context, keepId) {
+    const duplicates = state.sheaves.filter((item) => (
+      item.id !== keepId
+      && item.baseVarietyId === context.cover.id
+      && item.construction?.type === 'ses-term'
+      && item.construction.ramifiedCoverCotangent === true
+      && item.construction.ramifiedCoverMapId === context.map.id
+    ));
+    duplicates.forEach((sheaf) => {
+      cleanupSesScaffoldingForSheaf(sheaf, sheaf.construction);
+      state.sheaves = state.sheaves.filter((item) => item.id !== sheaf.id);
+      if (state.activeSheafId === sheaf.id) state.activeSheafId = keepId || null;
+    });
+    return duplicates.length > 0;
+  }
+
+  function syncRamifiedCoverCotangentSequence(context, pulledTarget, cotangent, relative) {
+    if (!context || !pulledTarget || !cotangent || !relative) return false;
+    const { cover } = context;
+    const construction = cotangent.construction || {};
+    const nextSheafIds = [pulledTarget.id, cotangent.id, relative.id];
+    let sequence = construction.sequenceId ? state.sequences.find((item) => item.id === construction.sequenceId) : null;
+    if (!sequence) sequence = shortExactSequenceForSheafIds(nextSheafIds);
+    let created = false;
+    if (!sequence) {
+      const previousActive = {
+        sequenceId: state.activeSequenceId,
+        sheafId: state.activeSheafId,
+        varietyId: state.activeVarietyId,
+        mapId: state.activeMapId
+      };
+      sequence = createShortExactSequenceFromObjects({
+        sheafA: pulledTarget,
+        sheafB: cotangent,
+        sheafC: relative,
+        baseVarietyId: cover.id,
+        autoMapABName: '\\iota',
+        autoMapBCName: '\\pi'
+      });
+      state.activeSequenceId = previousActive.sequenceId;
+      state.activeSheafId = previousActive.sheafId;
+      state.activeVarietyId = previousActive.varietyId;
+      state.activeMapId = previousActive.mapId;
+      if (!sequence) return false;
+      created = true;
+    }
+    let changed = created;
+    if (JSON.stringify(sequence.sheafIds || []) !== JSON.stringify(nextSheafIds)) {
+      detachShortExactSequenceMemberships(sequence.id);
+      sequence.sheafIds = nextSheafIds;
+      attachShortExactSequenceMemberships(sequence);
+      changed = true;
+    }
+    if (sequence.baseVarietyId !== cover.id) {
+      sequence.baseVarietyId = cover.id;
+      changed = true;
+    }
+    if (created && !sequence.tail?.hiddenOnCanvas) {
+      sequence.tail = { ...normalizeSequenceTailCurve(sequence.tail), hiddenOnCanvas: true };
+      changed = true;
+    }
+    (sequence.mapIds || []).forEach((mapId) => {
+      const sequenceMap = state.maps.find((item) => item.id === mapId);
+      if (!sequenceMap) return;
+      if (created && sequenceMap.hiddenOnCanvas !== true) {
+        sequenceMap.hiddenOnCanvas = true;
+        changed = true;
+      }
+      const nextConstruction = {
+        ...(sequenceMap.construction || {}),
+        type: 'short-exact-sequence-map',
+        sequenceId: sequence.id,
+        position: sequence.mapIds.indexOf(mapId),
+        sheafIds: nextSheafIds,
+        defaultName: sequenceMap.construction?.defaultName || sequenceMap.name
+      };
+      if (JSON.stringify(sequenceMap.construction || {}) !== JSON.stringify(nextConstruction)) {
+        sequenceMap.construction = nextConstruction;
+        changed = true;
+      }
+    });
+    [cotangent, relative].forEach((sheaf) => {
+      if (!sheaf.construction) return;
+      if (sheaf.construction.sequenceId !== sequence.id) {
+        sheaf.construction.sequenceId = sequence.id;
+        changed = true;
+      }
+      const inclusionMapId = sequence.mapIds?.[0] || null;
+      const quotientMapId = sequence.mapIds?.[1] || null;
+      if (sheaf.construction.inclusionMapId !== inclusionMapId) {
+        sheaf.construction.inclusionMapId = inclusionMapId;
+        changed = true;
+      }
+      if (sheaf.construction.quotientMapId !== quotientMapId) {
+        sheaf.construction.quotientMapId = quotientMapId;
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
+  function removeRamifiedCoverCotangentSequence(construction) {
+    if (!construction) return false;
+    const sequenceIds = new Set();
+    [construction.cotangentSheafId, construction.relativeCotangentSheafId].filter(Boolean).forEach((id) => {
+      const sheaf = state.sheaves.find((item) => item.id === id);
+      const sheafConstruction = sheaf?.construction || {};
+      if (sheafConstruction.ramifiedCoverCotangent === true || sheafConstruction.ramifiedCoverRelative === true) {
+        if (sheafConstruction.sequenceId) sequenceIds.add(sheafConstruction.sequenceId);
+      }
+    });
+    state.sequences.forEach((sequence) => {
+      const sheafIds = sequence.sheafIds || [];
+      if (construction.cotangentSheafId && sheafIds.includes(construction.cotangentSheafId)) sequenceIds.add(sequence.id);
+    });
+    if (!sequenceIds.size) return false;
+    sequenceIds.forEach((sequenceId) => detachShortExactSequenceMemberships(sequenceId));
+    state.sequences = state.sequences.filter((sequence) => !sequenceIds.has(sequence.id));
+    state.maps = state.maps.filter((map) => !sequenceIds.has(map.construction?.sequenceId));
+    state.sheaves.forEach((sheaf) => {
+      const sheafConstruction = sheaf.construction;
+      if (!sheafConstruction || !sequenceIds.has(sheafConstruction.sequenceId)) return;
+      delete sheafConstruction.sequenceId;
+      delete sheafConstruction.inclusionMapId;
+      delete sheafConstruction.quotientMapId;
+    });
+    if (sequenceIds.has(state.activeSequenceId)) state.activeSequenceId = null;
+    if (state.activeMapId && !state.maps.some((map) => map.id === state.activeMapId)) state.activeMapId = null;
+    return true;
+  }
+
+  function removeRamifiedCoverCotangentScaffolding(construction) {
+    if (!construction) return false;
+    let changed = false;
+    const ids = [construction.cotangentSheafId, construction.relativeCotangentSheafId].filter(Boolean);
+    ids.forEach((id) => {
+      const sheaf = state.sheaves.find((item) => item.id === id);
+      if (!sheaf) return;
+      if (sheaf.construction?.ramifiedCoverCotangent !== true && sheaf.construction?.ramifiedCoverRelative !== true) return;
+      cleanupSesScaffoldingForSheaf(sheaf, sheaf.construction);
+      state.sheaves = state.sheaves.filter((item) => item.id !== id);
+      if (state.activeSheafId === id) state.activeSheafId = null;
+      changed = true;
+    });
+    if (construction.cotangentSheafId != null) {
+      construction.cotangentSheafId = null;
+      changed = true;
+    }
+    if (construction.relativeCotangentSheafId != null) {
+      construction.relativeCotangentSheafId = null;
+      changed = true;
+    }
+    if (changed) state.hiddenObjects = hiddenObjectRefs();
+    return changed;
+  }
+
+  function ensureRamifiedCoverTangentSes(base, cover, map = null) {
+    const context = smoothCyclicRamifiedCoverContextFromMap(map || ramifiedCoverMapForCover(cover));
+    const construction = cover?.construction;
+    if (!construction || construction.type !== 'ramified-cover') return false;
+    if (!context || context.cover.id !== cover.id || context.base.id !== base?.id) {
+      return removeRamifiedCoverTangentScaffolding(construction);
+    }
+    const suppressTangent = ramifiedCoverTangentRoleIsSuppressed(cover, 'tangent');
+    const suppressPulledTarget = ramifiedCoverTangentRoleIsSuppressed(cover, 'pulled-target');
+    const suppressQuotient = ramifiedCoverTangentRoleIsSuppressed(cover, 'quotient');
+    const targetTangent = ensureTangentSheafForVariety(base);
+    if (!targetTangent) return false;
+
+    let changed = false;
+    if (suppressTangent) {
+      if (removeRamifiedCoverTangentSequence(construction)) changed = true;
+      state.hiddenObjects = hiddenObjectRefs();
+      return changed;
+    }
+    const tangent = ensureRamifiedCoverTangentSheaf(context);
+    if (!tangent) return changed;
+    if (construction.tangentSheafId !== tangent.id) {
+      construction.tangentSheafId = tangent.id;
+      changed = true;
+    }
+    if (suppressPulledTarget) {
+      if (removeRamifiedCoverTangentSequence(construction)) changed = true;
+      state.hiddenObjects = hiddenObjectRefs();
+      return changed;
+    }
+    const pulledTarget = ensureRelativePulledTargetSheaf({
+      map: context.map,
+      domain: cover,
+      codomain: base,
+      type: 'tangent'
+    }, targetTangent);
+    if (!pulledTarget) return changed;
+    if (suppressQuotient) {
+      if (removeRamifiedCoverTangentSequence(construction)) changed = true;
+      state.hiddenObjects = hiddenObjectRefs();
+      return changed;
+    }
+    const quotient = ensureRamifiedCoverTangentQuotientSheaf(context, tangent, pulledTarget);
+    if (!quotient) return changed;
+    if (syncRamifiedCoverTangentSequence(context, tangent, pulledTarget, quotient)) changed = true;
+    if (construction.relativeTangentSheafId !== quotient.id) {
+      construction.relativeTangentSheafId = quotient.id;
+      changed = true;
+    }
+    if (syncObjectLineage(tangent, 'sheaf')) changed = true;
+    if (syncObjectLineage(quotient, 'sheaf')) changed = true;
+    state.hiddenObjects = hiddenObjectRefs();
+    return changed;
+  }
+
+  function ensureRamifiedCoverTangentSheaf(context) {
+    const { map, cover, base, coverGeometry, degree } = context;
+    const defaultName = defaultSheafNameFor('tangent', '1', 'r', coverGeometry.labelLatex, coverGeometry);
+    let sheaf = state.sheaves.find((item) => (
+      item.id === cover.construction?.tangentSheafId
+      && item.construction?.ramifiedCoverTangent === true
+    )) || state.sheaves.find((item) => (
+      item.baseVarietyId === cover.id
+      && item.construction?.ramifiedCoverTangent === true
+      && item.construction.ramifiedCoverMapId === map.id
+    )) || state.sheaves.find((item) => (
+      item.baseVarietyId === cover.id
+      && item.type === 'tangent'
+      && !item.construction
+    ));
+    let created = false;
+    if (!sheaf) {
+      sheaf = {
+        id: nextInputId('E'),
+        type: 'tangent',
+        name: defaultName,
+        twist: '1',
+        rank: String(coverGeometry.dim),
+        baseVarietyId: cover.id,
+        basis: 'chern',
+        nameDirty: false,
+        hiddenOnCanvas: true,
+        construction: {}
+      };
+      positionSheafNearBase(sheaf, cover);
+      avoidCanvasLabelOverlap(sheaf);
+      addSheafObject(sheaf, { activate: false });
+      created = true;
+    }
+    const cleaned = cleanupDuplicateRamifiedCoverTangentSheaves(context, sheaf.id);
+    const nextConstruction = {
+      ...(sheaf.construction || {}),
+      type: 'ses-term',
+      role: 'subobject',
+      sourceSheafIds: [],
+      ramifiedCoverTangent: true,
+      ramifiedCoverMapId: map.id,
+      ramifiedCoverId: cover.id,
+      ramifiedBaseId: base.id,
+      coverDegree: degree,
+      defaultName
+    };
+    let changed = created || cleaned;
+    const nextFields = {
+      type: 'tangent',
+      twist: '1',
+      rank: String(coverGeometry.dim),
+      baseVarietyId: cover.id,
+      basis: 'chern'
+    };
+    Object.entries(nextFields).forEach(([key, value]) => {
+      if (sheaf[key] !== value) {
+        sheaf[key] = value;
+        changed = true;
+      }
+    });
+    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(defaultName)) {
+      sheaf.name = defaultName;
+      changed = true;
+    }
+    if (JSON.stringify(sheaf.construction || {}) !== JSON.stringify(nextConstruction)) {
+      sheaf.construction = nextConstruction;
+      changed = true;
+    }
+    if (changed) sheafFromObject(sheaf, coverGeometry);
+    return sheaf;
+  }
+
+  function cleanupDuplicateRamifiedCoverTangentSheaves(context, keepId) {
+    const duplicates = state.sheaves.filter((item) => (
+      item.id !== keepId
+      && item.baseVarietyId === context.cover.id
+      && item.construction?.type === 'ses-term'
+      && item.construction.ramifiedCoverTangent === true
+      && item.construction.ramifiedCoverMapId === context.map.id
+    ));
+    duplicates.forEach((sheaf) => {
+      cleanupSesScaffoldingForSheaf(sheaf, sheaf.construction);
+      state.sheaves = state.sheaves.filter((item) => item.id !== sheaf.id);
+      if (state.activeSheafId === sheaf.id) state.activeSheafId = keepId || null;
+    });
+    return duplicates.length > 0;
+  }
+
+  function ensureRamifiedCoverTangentQuotientSheaf(context, tangent, pulledTarget) {
+    const { map, cover, base, degree } = context;
+    const defaultName = defaultRamifiedCoverTangentQuotientNameFromObjects(map);
+    let sheaf = state.sheaves.find((item) => (
+      item.id === cover.construction?.relativeTangentSheafId
+      && item.construction?.ramifiedCoverTangentQuotient === true
+    )) || state.sheaves.find((item) => (
+      item.baseVarietyId === cover.id
+      && item.construction?.ramifiedCoverTangentQuotient === true
+      && item.construction.ramifiedCoverMapId === map.id
+    ));
+    let created = false;
+    if (!sheaf) {
+      sheaf = {
+        id: nextInputId('E'),
+        type: 'abstract',
+        name: uniqueConstructedObjectName('sheaf', defaultName),
+        twist: '1',
+        rank: '0',
+        baseVarietyId: cover.id,
+        basis: 'chern',
+        nameDirty: false,
+        hiddenOnCanvas: true,
+        construction: {}
+      };
+      positionSheafNearBase(sheaf, cover);
+      avoidCanvasLabelOverlap(sheaf);
+      addSheafObject(sheaf, { activate: false });
+      created = true;
+    }
+    const cleaned = cleanupDuplicateRamifiedCoverTangentQuotientSheaves(context, sheaf.id);
+    const nextConstruction = {
+      ...(sheaf.construction || {}),
+      type: 'ses-term',
+      role: 'quotient',
+      sourceSheafIds: [tangent.id, pulledTarget.id],
+      relativeSheafType: 'tangent',
+      ramifiedCoverTangentQuotient: true,
+      ramifiedCoverMapId: map.id,
+      ramifiedCoverId: cover.id,
+      ramifiedBaseId: base.id,
+      coverDegree: degree,
+      sourceTangentSheafId: tangent.id,
+      pulledTargetTangentSheafId: pulledTarget.id,
+      defaultName
+    };
+    let changed = created || cleaned;
+    const nextFields = {
+      type: 'abstract',
+      twist: '1',
+      rank: '0',
+      baseVarietyId: cover.id,
+      basis: 'chern'
+    };
+    Object.entries(nextFields).forEach(([key, value]) => {
+      if (sheaf[key] !== value) {
+        sheaf[key] = value;
+        changed = true;
+      }
+    });
+    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(defaultName)) {
+      sheaf.name = defaultName;
+      changed = true;
+    }
+    if (JSON.stringify(sheaf.construction || {}) !== JSON.stringify(nextConstruction)) {
+      sheaf.construction = nextConstruction;
+      changed = true;
+    }
+    return sheaf;
+  }
+
+  function cleanupDuplicateRamifiedCoverTangentQuotientSheaves(context, keepId) {
+    const duplicates = state.sheaves.filter((item) => (
+      item.id !== keepId
+      && item.baseVarietyId === context.cover.id
+      && item.construction?.type === 'ses-term'
+      && item.construction.ramifiedCoverTangentQuotient === true
+      && item.construction.ramifiedCoverMapId === context.map.id
+    ));
+    duplicates.forEach((sheaf) => {
+      cleanupSesScaffoldingForSheaf(sheaf, sheaf.construction);
+      state.sheaves = state.sheaves.filter((item) => item.id !== sheaf.id);
+      if (state.activeSheafId === sheaf.id) state.activeSheafId = keepId || null;
+    });
+    return duplicates.length > 0;
+  }
+
+  function syncRamifiedCoverTangentSequence(context, tangent, pulledTarget, quotient) {
+    if (!context || !tangent || !pulledTarget || !quotient) return false;
+    const { cover } = context;
+    const construction = quotient.construction || {};
+    const nextSheafIds = [tangent.id, pulledTarget.id, quotient.id];
+    let sequence = construction.sequenceId ? state.sequences.find((item) => item.id === construction.sequenceId) : null;
+    if (!sequence) sequence = shortExactSequenceForSheafIds(nextSheafIds);
+    let created = false;
+    if (!sequence) {
+      const previousActive = {
+        sequenceId: state.activeSequenceId,
+        sheafId: state.activeSheafId,
+        varietyId: state.activeVarietyId,
+        mapId: state.activeMapId
+      };
+      sequence = createShortExactSequenceFromObjects({
+        sheafA: tangent,
+        sheafB: pulledTarget,
+        sheafC: quotient,
+        baseVarietyId: cover.id,
+        autoMapABName: 'd\\pi',
+        autoMapBCName: '\\rho'
+      });
+      state.activeSequenceId = previousActive.sequenceId;
+      state.activeSheafId = previousActive.sheafId;
+      state.activeVarietyId = previousActive.varietyId;
+      state.activeMapId = previousActive.mapId;
+      if (!sequence) return false;
+      created = true;
+    }
+    let changed = created;
+    if (JSON.stringify(sequence.sheafIds || []) !== JSON.stringify(nextSheafIds)) {
+      detachShortExactSequenceMemberships(sequence.id);
+      sequence.sheafIds = nextSheafIds;
+      attachShortExactSequenceMemberships(sequence);
+      changed = true;
+    }
+    if (sequence.baseVarietyId !== cover.id) {
+      sequence.baseVarietyId = cover.id;
+      changed = true;
+    }
+    if (created && !sequence.tail?.hiddenOnCanvas) {
+      sequence.tail = { ...normalizeSequenceTailCurve(sequence.tail), hiddenOnCanvas: true };
+      changed = true;
+    }
+    (sequence.mapIds || []).forEach((mapId) => {
+      const sequenceMap = state.maps.find((item) => item.id === mapId);
+      if (!sequenceMap) return;
+      if (created && sequenceMap.hiddenOnCanvas !== true) {
+        sequenceMap.hiddenOnCanvas = true;
+        changed = true;
+      }
+      const nextConstruction = {
+        ...(sequenceMap.construction || {}),
+        type: 'short-exact-sequence-map',
+        sequenceId: sequence.id,
+        position: sequence.mapIds.indexOf(mapId),
+        sheafIds: nextSheafIds,
+        defaultName: sequenceMap.construction?.defaultName || sequenceMap.name
+      };
+      if (JSON.stringify(sequenceMap.construction || {}) !== JSON.stringify(nextConstruction)) {
+        sequenceMap.construction = nextConstruction;
+        changed = true;
+      }
+    });
+    [tangent, quotient].forEach((sheaf) => {
+      if (!sheaf.construction) return;
+      if (sheaf.construction.sequenceId !== sequence.id) {
+        sheaf.construction.sequenceId = sequence.id;
+        changed = true;
+      }
+      const inclusionMapId = sequence.mapIds?.[0] || null;
+      const quotientMapId = sequence.mapIds?.[1] || null;
+      if (sheaf.construction.inclusionMapId !== inclusionMapId) {
+        sheaf.construction.inclusionMapId = inclusionMapId;
+        changed = true;
+      }
+      if (sheaf.construction.quotientMapId !== quotientMapId) {
+        sheaf.construction.quotientMapId = quotientMapId;
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
+  function removeRamifiedCoverTangentSequence(construction) {
+    if (!construction) return false;
+    const sequenceIds = new Set();
+    [construction.tangentSheafId, construction.relativeTangentSheafId].filter(Boolean).forEach((id) => {
+      const sheaf = state.sheaves.find((item) => item.id === id);
+      const sheafConstruction = sheaf?.construction || {};
+      if (sheafConstruction.ramifiedCoverTangent === true || sheafConstruction.ramifiedCoverTangentQuotient === true) {
+        if (sheafConstruction.sequenceId) sequenceIds.add(sheafConstruction.sequenceId);
+      }
+    });
+    state.sequences.forEach((sequence) => {
+      const sheafIds = sequence.sheafIds || [];
+      if (construction.tangentSheafId && sheafIds.includes(construction.tangentSheafId)) sequenceIds.add(sequence.id);
+      if (construction.relativeTangentSheafId && sheafIds.includes(construction.relativeTangentSheafId)) sequenceIds.add(sequence.id);
+    });
+    if (!sequenceIds.size) return false;
+    sequenceIds.forEach((sequenceId) => detachShortExactSequenceMemberships(sequenceId));
+    state.sequences = state.sequences.filter((sequence) => !sequenceIds.has(sequence.id));
+    state.maps = state.maps.filter((map) => !sequenceIds.has(map.construction?.sequenceId));
+    state.sheaves.forEach((sheaf) => {
+      const sheafConstruction = sheaf.construction;
+      if (!sheafConstruction || !sequenceIds.has(sheafConstruction.sequenceId)) return;
+      delete sheafConstruction.sequenceId;
+      delete sheafConstruction.inclusionMapId;
+      delete sheafConstruction.quotientMapId;
+    });
+    if (sequenceIds.has(state.activeSequenceId)) state.activeSequenceId = null;
+    if (state.activeMapId && !state.maps.some((map) => map.id === state.activeMapId)) state.activeMapId = null;
+    return true;
+  }
+
+  function removeRamifiedCoverTangentScaffolding(construction) {
+    if (!construction) return false;
+    let changed = false;
+    const ids = [construction.tangentSheafId, construction.relativeTangentSheafId].filter(Boolean);
+    ids.forEach((id) => {
+      const sheaf = state.sheaves.find((item) => item.id === id);
+      if (!sheaf) return;
+      if (sheaf.construction?.ramifiedCoverTangent !== true && sheaf.construction?.ramifiedCoverTangentQuotient !== true) return;
+      cleanupSesScaffoldingForSheaf(sheaf, sheaf.construction);
+      state.sheaves = state.sheaves.filter((item) => item.id !== id);
+      if (state.activeSheafId === id) state.activeSheafId = null;
+      changed = true;
+    });
+    if (construction.tangentSheafId != null) {
+      construction.tangentSheafId = null;
+      changed = true;
+    }
+    if (construction.relativeTangentSheafId != null) {
+      construction.relativeTangentSheafId = null;
+      changed = true;
+    }
+    if (changed) state.hiddenObjects = hiddenObjectRefs();
+    return changed;
+  }
+
   function removeRamifiedCoverRootLineBundle(construction) {
     if (!construction?.rootSheafId) return false;
     const rootSheafId = construction.rootSheafId;
@@ -5202,6 +6201,7 @@
       lhs: { powers: { [pullbackId]: 1 } },
       rhs: [{ coefficient: String(degree), powers: { [ramificationId]: 1 } }]
     };
+    if (automaticHomologyRuleIsSuppressed(homology, rule)) return false;
     const existing = homology.rules.find((item) => item.id === rule.id);
     const nextSignature = JSON.stringify(rule);
     if (existing && JSON.stringify(existing) === nextSignature) return false;
@@ -5237,6 +6237,7 @@
       lhs: { powers: { [branchId]: 1 } },
       rhs: [{ coefficient: String(degree), powers: { [rootId]: 1 } }]
     };
+    if (automaticHomologyRuleIsSuppressed(homology, rule)) return changed;
     const existing = homology.rules.find((item) => item.id === rule.id);
     if (existing && JSON.stringify(existing) === JSON.stringify(rule)) return changed;
     homology.rules = withoutHomologyRuleForVariable(homology.rules, branchId, { includeBuiltin: true });
@@ -5343,6 +6344,12 @@
   }
 
   function deleteHomologyRuleFromList(rules, ruleId) {
+    const storedRule = (rules || []).find((rule) => rule.id === ruleId);
+    if (storedRule?.automatic === 'ramified-cover') {
+      return (rules || []).map((rule) => (
+        rule.id === ruleId ? { ...rule, enabled: false, deleted: true } : rule
+      ));
+    }
     if (!isStandardHomologyRuleId(ruleId)) return (rules || []).filter((rule) => rule.builtin || rule.id !== ruleId);
     return (rules || []).map((rule) => (
       rule.id === ruleId ? { ...rule, enabled: false, deleted: true } : rule
@@ -6176,6 +7183,8 @@
 
   function ensureTangentSheafForVariety(variety) {
     if (!variety) return null;
+    const ramifiedCoverTangent = ramifiedCoverTangentSheafForVariety(variety);
+    if (ramifiedCoverTangent) return ramifiedCoverTangent;
     const geometry = geometryFromVariety(variety);
     const defaultName = defaultSheafNameFor('tangent', '1', 'r', geometry.labelLatex, geometry);
     const existing = state.sheaves.find((sheaf) => (
@@ -6253,6 +7262,8 @@
 
   function ensureCotangentSheafForVariety(variety) {
     if (!variety) return null;
+    const ramifiedCoverCotangent = ramifiedCoverCotangentSheafForVariety(variety);
+    if (ramifiedCoverCotangent) return ramifiedCoverCotangent;
     const geometry = geometryFromVariety(variety);
     const defaultName = defaultSheafNameFor('cotangent', '1', 'r', geometry.labelLatex, geometry);
     const existing = state.sheaves.find((sheaf) => (
@@ -6283,6 +7294,45 @@
     avoidCanvasLabelOverlap(sheaf);
     sheafFromObject(sheaf, geometry);
     return addSheafObject(sheaf, { activate: false });
+  }
+
+  function ramifiedCoverCotangentSheafForVariety(variety) {
+    if (!variety?.construction || variety.construction.type !== 'ramified-cover') return null;
+    const map = ramifiedCoverMapForCover(variety);
+    if (!smoothCyclicRamifiedCoverContextFromMap(map)) return null;
+    return state.sheaves.find((sheaf) => (
+      sheaf.id === variety.construction.cotangentSheafId
+      && sheaf.construction?.ramifiedCoverCotangent === true
+    )) || state.sheaves.find((sheaf) => (
+      sheaf.baseVarietyId === variety.id
+      && sheaf.construction?.ramifiedCoverCotangent === true
+      && sheaf.construction.ramifiedCoverMapId === map?.id
+    )) || null;
+  }
+
+  function ramifiedCoverTangentSheafForVariety(variety) {
+    if (!variety?.construction || variety.construction.type !== 'ramified-cover') return null;
+    const map = ramifiedCoverMapForCover(variety);
+    if (!smoothCyclicRamifiedCoverContextFromMap(map)) return null;
+    return state.sheaves.find((sheaf) => (
+      sheaf.id === variety.construction.tangentSheafId
+      && sheaf.construction?.ramifiedCoverTangent === true
+    )) || state.sheaves.find((sheaf) => (
+      sheaf.baseVarietyId === variety.id
+      && sheaf.construction?.ramifiedCoverTangent === true
+      && sheaf.construction.ramifiedCoverMapId === map?.id
+    )) || null;
+  }
+
+  function ramifiedCoverMapForCover(cover) {
+    if (!cover?.construction || cover.construction.type !== 'ramified-cover') return null;
+    return state.maps.find((item) => item.id === cover.construction.mapId && item.construction?.type === 'ramified-cover-map')
+      || state.maps.find((item) => item.construction?.type === 'ramified-cover-map'
+        && item.domainKind === 'variety'
+        && item.domainId === cover.id
+        && item.codomainKind === 'variety'
+        && item.codomainId === cover.construction.baseId)
+      || null;
   }
 
   function ensureRelativePulledTargetSheaf(data, targetSheaf) {
@@ -6752,6 +7802,15 @@
     });
   }
 
+  function shortExactSequenceForSheafIds(sheafIds) {
+    const key = JSON.stringify(sheafIds || []);
+    if (!key || key === '[]') return null;
+    return (state.sequences || []).find((sequence) => (
+      sequence.type === 'short-exact-sequence'
+      && JSON.stringify(sequence.sheafIds || []) === key
+    )) || null;
+  }
+
   function detachShortExactSequenceMemberships(sequenceId) {
     state.sheaves.forEach((sheaf) => {
       const memberships = sheaf.sequenceMemberships || [];
@@ -7150,6 +8209,8 @@
     }
     ensureRamifiedCoverHomologyClasses(data.base, cover, map);
     ensureRamifiedCoverRootLineBundle(data.base, cover, map);
+    ensureRamifiedCoverCotangentSes(data.base, cover, map);
+    ensureRamifiedCoverTangentSes(data.base, cover, map);
     state.activeMapId = map?.id || null;
     return cover;
   }
@@ -7458,7 +8519,7 @@
       twist: '1',
       rank: isPullback ? data.sheaf.rank : 'r',
       baseVarietyId: isPullback ? data.map.domainId : data.map.codomainId,
-      basis: normalizeBasisValue(data.sheaf.basis),
+      basis: 'chern',
       nameDirty: data.nameDirty,
       construction: {
         type: isPullback ? 'pullback' : 'pushforward',
@@ -7567,6 +8628,14 @@
     return type === 'cotangent'
       ? `\\Omega^1_{${source}/${target}}`
       : `\\mathcal{T}_{${source}/${target}}`;
+  }
+
+  function defaultRamifiedCoverTangentQuotientNameFromObjects(map) {
+    const domain = state.varieties.find((variety) => variety.id === map?.domainId);
+    const codomain = state.varieties.find((variety) => variety.id === map?.codomainId);
+    const source = sanitizeMathLabel(domain?.name, 'X');
+    const target = sanitizeMathLabel(codomain?.name, 'Y');
+    return `\\mathcal{Q}_{${source}/${target}}`;
   }
 
   function normalBundleRankPlaceholder(domain, codomain) {
@@ -10253,7 +11322,11 @@
         parents: [parent('variety', construction.baseId, 'base')].filter((item) => item.id),
         subobjects: [
           construction.mapId ? parent('map', construction.mapId, 'covering-map') : null,
-          construction.rootSheafId ? parent('sheaf', construction.rootSheafId, 'root-line-bundle') : null
+          construction.rootSheafId ? parent('sheaf', construction.rootSheafId, 'root-line-bundle') : null,
+          construction.cotangentSheafId ? parent('sheaf', construction.cotangentSheafId, 'cotangent-ses') : null,
+          construction.relativeCotangentSheafId ? parent('sheaf', construction.relativeCotangentSheafId, 'relative-cotangent') : null,
+          construction.tangentSheafId ? parent('sheaf', construction.tangentSheafId, 'tangent-ses') : null,
+          construction.relativeTangentSheafId ? parent('sheaf', construction.relativeTangentSheafId, 'relative-tangent') : null
         ].filter(Boolean)
       };
     }
@@ -10320,6 +11393,46 @@
       };
     }
     if (kind === 'sheaf' && construction.type === 'ses-term') {
+      if (construction.ramifiedCoverCotangent === true) {
+        return {
+          parents: [
+            parent('map', construction.ramifiedCoverMapId, 'covering-map'),
+            parent('sheaf', construction.pulledTargetDifferentialSheafId, 'pulled-base-cotangent'),
+            parent('sheaf', construction.relativeCotangentSheafId, 'relative-cotangent')
+          ].filter((item) => item.id),
+          subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'cover')] : []
+        };
+      }
+      if (construction.ramifiedCoverRelative === true) {
+        return {
+          parents: [
+            parent('map', construction.ramifiedCoverMapId || construction.relativeSheafMapId, 'covering-map'),
+            parent('variety', construction.ramifiedCoverId, 'cover'),
+            parent('variety', construction.ramifiedBaseId, 'base')
+          ].filter((item) => item.id),
+          subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'cover')] : []
+        };
+      }
+      if (construction.ramifiedCoverTangent === true) {
+        return {
+          parents: [
+            parent('map', construction.ramifiedCoverMapId, 'covering-map'),
+            parent('variety', construction.ramifiedCoverId, 'cover'),
+            parent('variety', construction.ramifiedBaseId, 'base')
+          ].filter((item) => item.id),
+          subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'cover')] : []
+        };
+      }
+      if (construction.ramifiedCoverTangentQuotient === true) {
+        return {
+          parents: [
+            parent('map', construction.ramifiedCoverMapId, 'covering-map'),
+            parent('sheaf', construction.sourceTangentSheafId, 'source-tangent'),
+            parent('sheaf', construction.pulledTargetTangentSheafId, 'pulled-base-tangent')
+          ].filter((item) => item.id),
+          subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'cover')] : []
+        };
+      }
       return {
         parents: (construction.sourceSheafIds || []).map((id) => parent('sheaf', id, 'known-term')),
         subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'base')] : []
@@ -10574,6 +11687,8 @@
     }
     if (ensureRamifiedCoverHomologyClasses(base, variety, map)) changed = true;
     if (ensureRamifiedCoverRootLineBundle(base, variety, map)) changed = true;
+    if (ensureRamifiedCoverCotangentSes(base, variety, map)) changed = true;
+    if (ensureRamifiedCoverTangentSes(base, variety, map)) changed = true;
     if (syncObjectLineage(variety, 'variety')) changed = true;
     return changed;
   }
@@ -10911,6 +12026,9 @@
   }
 
   function refreshSesTermSheaf(sheaf, construction) {
+    if (construction.ramifiedCoverCotangent === true) return refreshRamifiedCoverCotangentSheaf(sheaf, construction);
+    if (construction.ramifiedCoverTangent === true) return refreshRamifiedCoverTangentSheaf(sheaf, construction);
+    if (construction.ramifiedCoverTangentQuotient === true) return refreshRamifiedCoverTangentQuotientSheaf(sheaf, construction);
     if (construction.normalBundleMapId) return refreshNormalBundleSheaf(sheaf, construction);
     if (construction.relativeSheafMapId) return refreshRelativeSheaf(sheaf, construction);
     return refreshGenericSesTermSheaf(sheaf, construction);
@@ -10935,6 +12053,161 @@
     }
     if (!sheaf.nameDirty && construction.defaultName && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(construction.defaultName)) {
       sheaf.name = construction.defaultName;
+      changed = true;
+    }
+    if (syncObjectLineage(sheaf, 'sheaf')) changed = true;
+    return changed;
+  }
+
+  function refreshRamifiedCoverCotangentSheaf(sheaf, construction) {
+    const map = state.maps.find((item) => item.id === construction.ramifiedCoverMapId);
+    const context = smoothCyclicRamifiedCoverContextFromMap(map);
+    if (!context) return refreshGenericSesTermSheaf(sheaf, construction);
+    const defaultName = defaultSheafNameFor('cotangent', '1', 'r', context.coverGeometry.labelLatex, context.coverGeometry);
+    let changed = false;
+    const nextFields = {
+      type: 'cotangent',
+      twist: '1',
+      rank: String(context.coverGeometry.dim),
+      baseVarietyId: context.cover.id,
+      basis: 'chern'
+    };
+    Object.entries(nextFields).forEach(([key, value]) => {
+      if (sheaf[key] !== value) {
+        sheaf[key] = value;
+        changed = true;
+      }
+    });
+    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(defaultName)) {
+      sheaf.name = defaultName;
+      changed = true;
+    }
+    const pulledTarget = state.sheaves.find((item) => item.id === construction.pulledTargetDifferentialSheafId);
+    const relative = state.sheaves.find((item) => item.id === construction.relativeCotangentSheafId);
+    const nextSources = [pulledTarget, relative].filter(Boolean).map((item) => item.id);
+    if (nextSources.length === 2 && JSON.stringify(construction.sourceSheafIds || []) !== JSON.stringify(nextSources)) {
+      construction.sourceSheafIds = nextSources;
+      changed = true;
+    }
+    const nextConstruction = {
+      ...construction,
+      type: 'ses-term',
+      role: 'extension',
+      ramifiedCoverCotangent: true,
+      ramifiedCoverMapId: map.id,
+      ramifiedCoverId: context.cover.id,
+      ramifiedBaseId: context.base.id,
+      coverDegree: context.degree,
+      defaultName
+    };
+    if (JSON.stringify(construction) !== JSON.stringify(nextConstruction)) {
+      sheaf.construction = nextConstruction;
+      changed = true;
+    }
+    if (context.cover.construction?.cotangentSheafId !== sheaf.id) {
+      context.cover.construction.cotangentSheafId = sheaf.id;
+      changed = true;
+    }
+    if (syncObjectLineage(sheaf, 'sheaf')) changed = true;
+    return changed;
+  }
+
+  function refreshRamifiedCoverTangentSheaf(sheaf, construction) {
+    const map = state.maps.find((item) => item.id === construction.ramifiedCoverMapId);
+    const context = smoothCyclicRamifiedCoverContextFromMap(map);
+    if (!context) return refreshGenericSesTermSheaf(sheaf, construction);
+    const defaultName = defaultSheafNameFor('tangent', '1', 'r', context.coverGeometry.labelLatex, context.coverGeometry);
+    let changed = false;
+    const nextFields = {
+      type: 'tangent',
+      twist: '1',
+      rank: String(context.coverGeometry.dim),
+      baseVarietyId: context.cover.id,
+      basis: 'chern'
+    };
+    Object.entries(nextFields).forEach(([key, value]) => {
+      if (sheaf[key] !== value) {
+        sheaf[key] = value;
+        changed = true;
+      }
+    });
+    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(defaultName)) {
+      sheaf.name = defaultName;
+      changed = true;
+    }
+    const nextConstruction = {
+      ...construction,
+      type: 'ses-term',
+      role: 'subobject',
+      ramifiedCoverTangent: true,
+      ramifiedCoverMapId: map.id,
+      ramifiedCoverId: context.cover.id,
+      ramifiedBaseId: context.base.id,
+      coverDegree: context.degree,
+      defaultName
+    };
+    if (JSON.stringify(construction) !== JSON.stringify(nextConstruction)) {
+      sheaf.construction = nextConstruction;
+      changed = true;
+    }
+    if (context.cover.construction?.tangentSheafId !== sheaf.id) {
+      context.cover.construction.tangentSheafId = sheaf.id;
+      changed = true;
+    }
+    if (syncObjectLineage(sheaf, 'sheaf')) changed = true;
+    return changed;
+  }
+
+  function refreshRamifiedCoverTangentQuotientSheaf(sheaf, construction) {
+    const map = state.maps.find((item) => item.id === construction.ramifiedCoverMapId);
+    const context = smoothCyclicRamifiedCoverContextFromMap(map);
+    if (!context) return refreshGenericSesTermSheaf(sheaf, construction);
+    const defaultName = defaultRamifiedCoverTangentQuotientNameFromObjects(map);
+    let changed = false;
+    const nextFields = {
+      type: 'abstract',
+      twist: '1',
+      rank: '0',
+      baseVarietyId: context.cover.id,
+      basis: 'chern'
+    };
+    Object.entries(nextFields).forEach(([key, value]) => {
+      if (sheaf[key] !== value) {
+        sheaf[key] = value;
+        changed = true;
+      }
+    });
+    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(defaultName)) {
+      sheaf.name = defaultName;
+      changed = true;
+    }
+    const tangent = state.sheaves.find((item) => item.id === construction.sourceTangentSheafId);
+    const pulledTarget = ramifiedCoverTangentRoleIsSuppressed(context.cover, 'pulled-target')
+      ? null
+      : state.sheaves.find((item) => item.id === construction.pulledTargetTangentSheafId);
+    const nextSources = [tangent, pulledTarget].filter(Boolean).map((item) => item.id);
+    if (nextSources.length === 2 && JSON.stringify(construction.sourceSheafIds || []) !== JSON.stringify(nextSources)) {
+      construction.sourceSheafIds = nextSources;
+      changed = true;
+    }
+    const nextConstruction = {
+      ...construction,
+      type: 'ses-term',
+      role: 'quotient',
+      relativeSheafType: 'tangent',
+      ramifiedCoverTangentQuotient: true,
+      ramifiedCoverMapId: map.id,
+      ramifiedCoverId: context.cover.id,
+      ramifiedBaseId: context.base.id,
+      coverDegree: context.degree,
+      defaultName
+    };
+    if (JSON.stringify(construction) !== JSON.stringify(nextConstruction)) {
+      sheaf.construction = nextConstruction;
+      changed = true;
+    }
+    if (context.cover.construction?.relativeTangentSheafId !== sheaf.id) {
+      context.cover.construction.relativeTangentSheafId = sheaf.id;
       changed = true;
     }
     if (syncObjectLineage(sheaf, 'sheaf')) changed = true;
@@ -11066,6 +12339,7 @@
   }
 
   function refreshRelativeSheaf(sheaf, construction) {
+    if (construction.ramifiedCoverRelative === true) return refreshRamifiedCoverRelativeCotangentSheaf(sheaf, construction);
     const map = state.maps.find((item) => item.id === construction.relativeSheafMapId);
     if (!map || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return refreshGenericSesTermSheaf(sheaf, construction);
     const domain = state.varieties.find((variety) => variety.id === map.domainId);
@@ -11122,6 +12396,64 @@
     }
     if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(nextDefault)) {
       sheaf.name = nextDefault;
+      changed = true;
+    }
+    if (syncObjectLineage(sheaf, 'sheaf')) changed = true;
+    return changed;
+  }
+
+  function refreshRamifiedCoverRelativeCotangentSheaf(sheaf, construction) {
+    const map = state.maps.find((item) => item.id === construction.relativeSheafMapId || item.id === construction.ramifiedCoverMapId);
+    const context = smoothCyclicRamifiedCoverContextFromMap(map);
+    if (!context) return refreshGenericSesTermSheaf(sheaf, construction);
+    const defaultName = defaultRelativeSheafNameFromObjects(map, 'cotangent');
+    let changed = false;
+    const nextFields = {
+      type: 'abstract',
+      twist: '1',
+      rank: '0',
+      baseVarietyId: context.cover.id,
+      basis: 'chern'
+    };
+    Object.entries(nextFields).forEach(([key, value]) => {
+      if (sheaf[key] !== value) {
+        sheaf[key] = value;
+        changed = true;
+      }
+    });
+    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(defaultName)) {
+      sheaf.name = defaultName;
+      changed = true;
+    }
+    const pulledTarget = ramifiedCoverCotangentRoleIsSuppressed(context.cover, 'pulled-target')
+      ? null
+      : (state.sheaves.find((item) => item.id === construction.pulledTargetDifferentialSheafId)
+        || state.sheaves.find((item) => item.construction?.type === 'pullback'
+          && item.construction.mapId === map.id
+          && item.baseVarietyId === context.cover.id));
+    const nextSources = pulledTarget ? [pulledTarget.id] : (construction.sourceSheafIds || []);
+    const nextConstruction = {
+      ...construction,
+      type: 'ses-term',
+      role: 'quotient',
+      sourceSheafIds: nextSources,
+      relativeSheafMapId: map.id,
+      relativeSheafType: 'cotangent',
+      ramifiedCoverRelative: true,
+      ramifiedCoverMapId: map.id,
+      ramifiedCoverId: context.cover.id,
+      ramifiedBaseId: context.base.id,
+      coverDegree: context.degree,
+      pulledTargetDifferentialSheafId: pulledTarget?.id || construction.pulledTargetDifferentialSheafId || null,
+      smoothSubmersionConfirmed: false,
+      defaultName
+    };
+    if (JSON.stringify(construction) !== JSON.stringify(nextConstruction)) {
+      sheaf.construction = nextConstruction;
+      changed = true;
+    }
+    if (context.cover.construction?.relativeCotangentSheafId !== sheaf.id) {
+      context.cover.construction.relativeCotangentSheafId = sheaf.id;
       changed = true;
     }
     if (syncObjectLineage(sheaf, 'sheaf')) changed = true;
@@ -11374,6 +12706,8 @@
     }
     if (ensureRamifiedCoverHomologyClasses(base, cover, map)) changed = true;
     if (ensureRamifiedCoverRootLineBundle(base, cover, map)) changed = true;
+    if (ensureRamifiedCoverCotangentSes(base, cover, map)) changed = true;
+    if (ensureRamifiedCoverTangentSes(base, cover, map)) changed = true;
     if (syncObjectLineage(map, 'map')) changed = true;
     return changed;
   }
@@ -14088,6 +15422,14 @@
     const d = geometry.dim;
     if (sheaf.construction) return buildConstructedSheafBundle(geometry, sheaf, options);
     if (sheaf.type === 'structure') return buildTrivialBundle(d, 1, sheaf.labelLatex, sheaf.labelPlain);
+    if (sheaf.type === 'tangent') {
+      const ramifiedTangent = buildRamifiedCoverTangentBundle(geometry, sheaf);
+      if (ramifiedTangent) return ramifiedTangent;
+    }
+    if (sheaf.type === 'cotangent') {
+      const ramifiedCotangent = buildRamifiedCoverCotangentBundle(geometry, sheaf);
+      if (ramifiedCotangent) return ramifiedCotangent;
+    }
     if (sheaf.type === 'locally-free') return buildLocallyFreeBundle(d, sheaf, options);
     if (sheaf.type === 'abstract') return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
     if (geometryHasNumericalCurveLabel(geometry) && (sheaf.type === 'tangent' || sheaf.type === 'cotangent' || sheaf.type === 'canonical')) {
@@ -15091,6 +16433,28 @@
     return { map, cover, base, coverGeometry, baseGeometry, degree };
   }
 
+  function smoothCyclicRamifiedCoverContextFromMap(map) {
+    const context = ramifiedCoverMapContext(map);
+    if (!context || context.coverGeometry.dim <= 0 || context.baseGeometry.dim <= 0) return null;
+    const coverConstruction = context.cover.construction?.type === 'ramified-cover' ? context.cover.construction : null;
+    const mapConstruction = map?.construction || {};
+    const degree = normalizeRamifiedCoverDegree(coverConstruction?.degree ?? mapConstruction.degree ?? context.degree);
+    if (degree <= 1) return null;
+    const coverSmooth = normalizeRamifiedCoverSmoothCyclicConstruction(coverConstruction || mapConstruction);
+    const mapSmooth = normalizeRamifiedCoverSmoothCyclicConstruction(mapConstruction);
+    const smooth = coverSmooth.smoothCyclic === true ? coverSmooth : mapSmooth;
+    const cyclic = (coverConstruction?.coverMode === 'cyclic' || mapConstruction.coverMode === 'cyclic')
+      && smooth.smoothCyclic === true;
+    if (!cyclic) return null;
+    if (!homologyClassDefById(context.coverGeometry, HOMOLOGY_RAMIFICATION_DIVISOR_CLASS)) return null;
+    return {
+      ...context,
+      degree,
+      branchDegree: smooth.branchDegree,
+      rootTwist: smooth.rootTwist
+    };
+  }
+
   function uniqueHomologyRulesByLhs(rules) {
     const seen = new Set();
     const out = [];
@@ -15105,6 +16469,17 @@
 
   function homologyRuleHasSameLhs(left, right) {
     return monoKey(left?.lhs?.powers || {}) === monoKey(right?.lhs?.powers || {});
+  }
+
+  function automaticHomologyRuleIsSuppressed(homology, rule) {
+    const key = monoKey(rule?.lhs?.powers || {});
+    if (!key) return false;
+    return (homology?.rules || []).some((stored) => (
+      stored.enabled === false
+      && stored.deleted === true
+      && stored.automatic === rule.automatic
+      && (stored.id === rule.id || monoKey(stored.lhs?.powers || {}) === key)
+    ));
   }
 
   function defaultMapHomologyRuleIsSuppressed(geometry, rule) {
@@ -15347,6 +16722,14 @@
       return buildLocallyFreeBundle(geometry.dim, sheaf, { ...options, chernSubjectLatex: sheaf.labelLatex, characterSubjectLatex: sheaf.labelLatex });
     }
     if (construction.type === 'ses-term') {
+      const ramifiedTangent = construction.ramifiedCoverTangent === true
+        ? buildRamifiedCoverTangentBundle(geometry, sheaf)
+        : null;
+      if (ramifiedTangent) return ramifiedTangent;
+      const ramifiedRelative = buildRamifiedCoverRelativeCotangentBundle(geometry, sheaf, construction);
+      if (ramifiedRelative) return ramifiedRelative;
+      const ramifiedTangentQuotient = buildRamifiedCoverTangentQuotientBundle(geometry, sheaf, construction);
+      if (ramifiedTangentQuotient) return ramifiedTangentQuotient;
       const inferred = buildSesTermBundle(geometry, sheaf, construction);
       if (inferred) return inferred;
       return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
@@ -15443,6 +16826,105 @@
     return buildBundleFromCh(chComps, rankLatex, rankPlain, sheaf.labelLatex, sheaf.labelPlain);
   }
 
+  function buildRamifiedCoverRelativeCotangentBundle(geometry, sheaf, construction) {
+    if (construction?.ramifiedCoverRelative !== true || construction.relativeSheafType !== 'cotangent') return null;
+    const map = state.maps.find((item) => item.id === construction.relativeSheafMapId || item.id === construction.ramifiedCoverMapId);
+    const context = smoothCyclicRamifiedCoverContextFromMap(map);
+    if (!context || context.coverGeometry.varietyId !== geometry?.varietyId) return null;
+    const ramificationDef = homologyClassDefById(geometry, HOMOLOGY_RAMIFICATION_DIVISOR_CLASS);
+    if (!ramificationDef) return null;
+    const d = geometry.dim;
+    const ramificationId = homologyDefVariableId(ramificationDef, geometry);
+    defineVariable(ramificationId, ramificationDef.degree, ramificationDef.symbolLatex, homologyDefinitionVariableMeta(ramificationDef));
+    const r = Poly.variable(ramificationId);
+    const cComps = zeroComponentArray(d);
+    let rPower = Poly.one();
+    for (let i = 1; i <= d; i += 1) {
+      rPower = rPower.mul(r, d);
+      cComps[i] = rPower.scale(fraction(bigintPow(BigInt(context.degree), i - 1) * BigInt(context.degree - 1)));
+    }
+    return buildBundleFromChern(cComps, '0', '0', sheaf.labelLatex, sheaf.labelPlain);
+  }
+
+  function buildRamifiedCoverCotangentBundle(geometry, sheaf) {
+    if (!geometry?.specialLabels?.includes('ramified-cover') || sheaf?.baseVarietyId !== geometry.varietyId) return null;
+    if (sheaf?.construction && sheaf.construction.ramifiedCoverCotangent !== true) return null;
+    const map = state.maps.find((item) => item.id === geometry.ramifiedCoverMapId)
+      || state.maps.find((item) => item.construction?.type === 'ramified-cover-map'
+        && item.domainKind === 'variety'
+        && item.domainId === geometry.varietyId);
+    const context = smoothCyclicRamifiedCoverContextFromMap(map);
+    if (!context || context.coverGeometry.varietyId !== geometry.varietyId) return null;
+    const baseCotangent = state.sheaves.find((item) => item.baseVarietyId === context.base.id && item.type === 'cotangent' && !item.construction)
+      || null;
+    if (!baseCotangent) return null;
+    const pulledTarget = state.sheaves.find((item) => item.construction?.type === 'pullback'
+      && item.construction.mapId === context.map.id
+      && item.construction.sheafId === baseCotangent.id
+      && item.baseVarietyId === context.cover.id);
+    const relative = state.sheaves.find((item) => item.id === context.cover.construction?.relativeCotangentSheafId)
+      || null;
+    if (!pulledTarget || !relative) return null;
+    const d = geometry.dim;
+    const pulledBundle = buildSourceSheafBundle(geometry, pulledTarget);
+    const relativeBundle = buildSourceSheafBundle(geometry, relative);
+    const chComps = zeroComponentArray(d);
+    for (let i = 1; i <= d; i += 1) {
+      chComps[i] = componentOrZero(pulledBundle.chComps, i).add(componentOrZero(relativeBundle.chComps, i));
+    }
+    return buildBundleFromCh(chComps, String(d), String(d), sheaf.labelLatex, sheaf.labelPlain);
+  }
+
+  function buildRamifiedCoverTangentBundle(geometry, sheaf) {
+    if (!geometry?.specialLabels?.includes('ramified-cover') || sheaf?.baseVarietyId !== geometry.varietyId) return null;
+    if (sheaf?.construction && sheaf.construction.ramifiedCoverTangent !== true) return null;
+    const map = state.maps.find((item) => item.id === geometry.ramifiedCoverMapId)
+      || state.maps.find((item) => item.construction?.type === 'ramified-cover-map'
+        && item.domainKind === 'variety'
+        && item.domainId === geometry.varietyId);
+    const context = smoothCyclicRamifiedCoverContextFromMap(map);
+    if (!context || context.coverGeometry.varietyId !== geometry.varietyId) return null;
+    const baseTangent = state.sheaves.find((item) => item.baseVarietyId === context.base.id && item.type === 'tangent' && !item.construction)
+      || null;
+    if (!baseTangent) return null;
+    const pulledTarget = state.sheaves.find((item) => item.construction?.type === 'pullback'
+      && item.construction.mapId === context.map.id
+      && item.construction.sheafId === baseTangent.id
+      && item.baseVarietyId === context.cover.id);
+    const quotient = state.sheaves.find((item) => item.id === context.cover.construction?.relativeTangentSheafId)
+      || null;
+    if (!pulledTarget || !quotient) return null;
+    const d = geometry.dim;
+    const pulledBundle = buildSourceSheafBundle(geometry, pulledTarget);
+    const quotientBundle = buildSourceSheafBundle(geometry, quotient);
+    const chComps = zeroComponentArray(d);
+    for (let i = 1; i <= d; i += 1) {
+      chComps[i] = componentOrZero(pulledBundle.chComps, i).sub(componentOrZero(quotientBundle.chComps, i));
+    }
+    return buildBundleFromCh(chComps, String(d), String(d), sheaf.labelLatex, sheaf.labelPlain);
+  }
+
+  function buildRamifiedCoverTangentQuotientBundle(geometry, sheaf, construction) {
+    if (construction?.ramifiedCoverTangentQuotient !== true || construction.relativeSheafType !== 'tangent') return null;
+    const map = state.maps.find((item) => item.id === construction.ramifiedCoverMapId);
+    const context = smoothCyclicRamifiedCoverContextFromMap(map);
+    if (!context || context.coverGeometry.varietyId !== geometry?.varietyId) return null;
+    const ramificationDef = homologyClassDefById(geometry, HOMOLOGY_RAMIFICATION_DIVISOR_CLASS);
+    if (!ramificationDef) return null;
+    const d = geometry.dim;
+    const ramificationId = homologyDefVariableId(ramificationDef, geometry);
+    defineVariable(ramificationId, ramificationDef.degree, ramificationDef.symbolLatex, homologyDefinitionVariableMeta(ramificationDef));
+    const r = Poly.variable(ramificationId);
+    const cComps = zeroComponentArray(d);
+    let rPower = Poly.one();
+    for (let i = 1; i <= d; i += 1) {
+      rPower = rPower.mul(r, d);
+      const sign = i % 2 === 1 ? 1 : -1;
+      cComps[i] = rPower.scale(fraction(sign * (context.degree - 1)));
+    }
+    return buildBundleFromChern(cComps, '0', '0', sheaf.labelLatex, sheaf.labelPlain);
+  }
+
   function sesSequenceForTermSheaf(sheaf) {
     const source = sheaf?.sourceObject || sheaf;
     return (state.sequences || []).find((sequence) => (
@@ -15536,7 +17018,7 @@
     const labelLatex = `\\mathcal{T}_{${geometry.labelLatex}}`;
     return buildBundleForSheaf(geometry, {
       type: 'tangent',
-      basis: 'character',
+      basis: 'chern',
       labelLatex,
       labelPlain: latexToPlain(labelLatex),
       rankLatex: String(geometry.dim),
@@ -15706,7 +17188,7 @@
     const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
     if (data?.kind !== 'mapHomology' || data.operation !== 'pullback') return null;
     if (!sameMapId(data.mapId, map?.id)) return null;
-    if (data.sourceKey || data.sourceKey === '') return flattenProjectionSourcePowers(parseMonoKey(data.sourceKey));
+    if (data.sourceKey || data.sourceKey === '') return parseMonoKey(data.sourceKey);
     return parseMonoKey(monoKey({ [data.sourceId]: 1 }));
   }
 
@@ -17575,7 +19057,10 @@
     if (refs.homologyAddClass) refs.homologyAddClass.hidden = true;
     if (refs.homologyAddRule) refs.homologyAddRule.hidden = true;
     ensureSheafHomologySystem(sheafObject, geometry);
-    renderSheafHomologyRuleInputs(sheafHomologyClassDefinitions(sheaf, geometry), result?.bundle?.defaultSheafHomologyRules || []);
+    const defaultRules = resultMatchesHomologySheafContext(result, context)
+      ? (result?.bundle?.defaultSheafHomologyRules || [])
+      : defaultSheafHomologyRulesForContext(context);
+    renderSheafHomologyRuleInputs(sheafHomologyClassDefinitions(sheaf, geometry), defaultRules);
     if (refs.homologyMessage) refs.homologyMessage.textContent = '';
     typeset(refs.homologyCard);
   }
@@ -17995,6 +19480,9 @@
     if (tangentChernClassRowCanAdd(context, def.degree)) {
       return `<button class="btn btn-ghost homology-rule-delete" type="button" data-add-tangent-chern-class="${escapeHtml(def.degree)}">add class</button>`;
     }
+    if (sheafChernClassCanPromote(def, context)) {
+      return `<button class="btn btn-ghost homology-rule-delete" type="button" data-add-sheaf-chern-class="${escapeHtml(def.id)}">add class</button>`;
+    }
     return '<span class="homology-symbol-kind">special</span>';
   }
 
@@ -18107,7 +19595,7 @@
     const labelLatex = sheafLabelLatex(sheaf);
     const labelPlain = sheafLabelPlain(sheaf);
     const numericRank = numericRankFromPlain(sheaf.rankPlain);
-    const maxIndex = basis === 'character' && numericRank != null
+    const maxIndex = basis === 'character' && numericRank != null && numericRank > 0
       ? Math.min(geometry.dim, numericRank)
       : geometry.dim;
     const kind = basis === 'character' ? 'character' : 'chern';
@@ -21341,6 +22829,14 @@
       out.baseId = sanitizePresetId(construction.baseId);
       out.mapId = sanitizePresetId(construction.mapId);
       out.rootSheafId = sanitizePresetId(construction.rootSheafId);
+      out.cotangentSheafId = sanitizePresetId(construction.cotangentSheafId);
+      out.relativeCotangentSheafId = sanitizePresetId(construction.relativeCotangentSheafId);
+      out.tangentSheafId = sanitizePresetId(construction.tangentSheafId);
+      out.relativeTangentSheafId = sanitizePresetId(construction.relativeTangentSheafId);
+      const suppressedCotangentRoles = sanitizeRamifiedCoverCotangentSuppressedRoles(construction.suppressedCotangentRoles);
+      if (suppressedCotangentRoles.length) out.suppressedCotangentRoles = suppressedCotangentRoles;
+      const suppressedTangentRoles = sanitizeRamifiedCoverTangentSuppressedRoles(construction.suppressedTangentRoles);
+      if (suppressedTangentRoles.length) out.suppressedTangentRoles = suppressedTangentRoles;
       out.degree = normalizeRamifiedCoverDegree(construction.degree);
       out.coverMode = sanitizePresetEnum(construction.coverMode, ['general', 'cyclic'], 'general');
       out.branchSymbol = sanitizeHomologySymbol(construction.branchSymbol, 'B');
@@ -21405,6 +22901,16 @@
       out.targetDifferentialSheafId = sanitizePresetId(construction.targetDifferentialSheafId);
       out.pulledTargetDifferentialSheafId = sanitizePresetId(construction.pulledTargetDifferentialSheafId);
       out.smoothSubmersionConfirmed = construction.smoothSubmersionConfirmed === true;
+      out.ramifiedCoverRelative = construction.ramifiedCoverRelative === true;
+      out.ramifiedCoverCotangent = construction.ramifiedCoverCotangent === true;
+      out.ramifiedCoverTangent = construction.ramifiedCoverTangent === true;
+      out.ramifiedCoverTangentQuotient = construction.ramifiedCoverTangentQuotient === true;
+      out.ramifiedCoverMapId = sanitizePresetId(construction.ramifiedCoverMapId);
+      out.ramifiedCoverId = sanitizePresetId(construction.ramifiedCoverId);
+      out.ramifiedBaseId = sanitizePresetId(construction.ramifiedBaseId);
+      out.coverDegree = normalizeRamifiedCoverDegree(construction.coverDegree);
+      out.relativeCotangentSheafId = sanitizePresetId(construction.relativeCotangentSheafId);
+      out.relativeTangentSheafId = sanitizePresetId(construction.relativeTangentSheafId);
       out.sequenceId = sanitizePresetId(construction.sequenceId);
       out.inclusionMapId = sanitizePresetId(construction.inclusionMapId);
       out.quotientMapId = sanitizePresetId(construction.quotientMapId);
