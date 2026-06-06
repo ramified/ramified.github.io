@@ -1,9 +1,10 @@
 (() => {
   'use strict';
 
-  const MAX_DIMENSION = 8;
+  const MAX_DIMENSION = 15;
+  const MAX_HODGE_GRID_DIMENSION = 12;
   const MAX_CI_EQUATIONS = 8;
-  const MAX_AMBIENT = 16;
+  const MAX_AMBIENT = MAX_DIMENSION + MAX_CI_EQUATIONS;
   const MAX_CI_DEGREE = 99;
   const MAX_CI_SLIDER_DEGREE = 12;
   const MAX_ROOT_EXPANSION_MONOMIALS = 1500;
@@ -11,7 +12,7 @@
   const MAX_SCHUR_PARTITION_SIZE = 12;
   const MAX_SELF_DIRECT_SUM_MULTIPLICITY = 99;
   const MAX_GRASSMANNIAN_N = MAX_DIMENSION + 1;
-  const MAX_PPAV_GENUS = 3;
+  const MAX_PPAV_GENUS = maxPpavGenusForDimension(MAX_DIMENSION);
   const DEFAULT_HOMOLOGY_RULE_PASSES = 1;
   const MAX_HOMOLOGY_RULE_PASSES = 8;
   const RECOMPUTE_DELAY_MS = 16;
@@ -489,6 +490,11 @@
     refs.hodgeCellSize = $('hodge-cell-size');
     refs.hodgeCellSizeValue = $('hodge-cell-size-value');
     refs.hodgeActions = $('hodge-actions');
+    refs.hodgeQuery = $('hodge-query');
+    refs.hodgeQueryP = $('hodge-query-p');
+    refs.hodgeQueryQ = $('hodge-query-q');
+    refs.hodgeQueryRun = $('hodge-query-run');
+    refs.hodgeQueryOutput = $('hodge-query-output');
     refs.hodgeChart = $('hodge-chart');
     refs.hodgeMessage = $('hodge-message');
     refs.exportHodge = $('export-hodge');
@@ -4832,6 +4838,18 @@
     if (refs.exportHodge) {
       refs.exportHodge.addEventListener('click', () => openChartExport('hodge'));
     }
+    if (refs.hodgeQueryRun) {
+      refs.hodgeQueryRun.addEventListener('click', () => updateHodgeQueryResult());
+    }
+    [refs.hodgeQueryP, refs.hodgeQueryQ].forEach((input) => {
+      if (!input) return;
+      input.addEventListener('change', () => updateHodgeQueryResult());
+      input.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        updateHodgeQueryResult();
+      });
+    });
     if (refs.cohomologyDimOnly) {
       refs.cohomologyDimOnly.addEventListener('change', () => {
         if (state.lastResult) {
@@ -4860,7 +4878,7 @@
     refs.exportFormat.addEventListener('change', () => refreshExport());
     refs.hodgeExpanded.addEventListener('change', () => {
       state.hodgeExpanded = refs.hodgeExpanded.checked;
-      if (state.lastResult?.hodge) {
+      if (state.lastResult?.hodge && !hodgeIsQueryOnly(state.lastResult.hodge, state.lastResult.geometry)) {
         renderHodgeChart(state.lastResult);
         typeset(refs.hodgeChart);
       }
@@ -11551,7 +11569,13 @@
 
   function ppavModuliDimension(genus) {
     const g = normalizedInt(genus, 1, MAX_PPAV_GENUS, 2);
-    return Math.min(MAX_DIMENSION, (g * (g + 1)) / 2);
+    return (g * (g + 1)) / 2;
+  }
+
+  function maxPpavGenusForDimension(maxDimension) {
+    let genus = 1;
+    while (((genus + 1) * (genus + 2)) / 2 <= maxDimension) genus += 1;
+    return genus;
   }
 
   function normalizedGrassmannianParams(source = {}) {
@@ -13655,6 +13679,7 @@
       }
       if (refs.hodgeActions) refs.hodgeActions.hidden = true;
       if (refs.hodgeCard) refs.hodgeCard.hidden = true;
+      if (refs.hodgeQuery) refs.hodgeQuery.hidden = true;
       if (refs.hodgeChart) {
         refs.hodgeChart.hidden = true;
         refs.hodgeChart.innerHTML = '';
@@ -19230,6 +19255,7 @@
 
   function buildHodgeNumbers(geometry) {
     const d = geometry.dim;
+    if (d > MAX_HODGE_GRID_DIMENSION) return buildLargeDimensionHodgeNumbers(geometry);
     if (geometryIsPointBlowup(geometry)) {
       const blowupHodge = buildPointBlowupHodgeNumbers(geometry);
       if (blowupHodge) return blowupHodge;
@@ -19348,6 +19374,154 @@
     };
   }
 
+  function buildLargeDimensionHodgeNumbers(geometry) {
+    const queryAvailable = hodgeQueryIsSupported(geometry);
+    return {
+      entries: null,
+      queryOnly: true,
+      queryAvailable,
+      message: queryAvailable
+        ? `Dimension ${geometry.dim} is above the full Hodge-table display limit ${MAX_HODGE_GRID_DIMENSION}; use the single-entry query below.`
+        : `Dimension ${geometry.dim} is above the full Hodge-table display limit ${MAX_HODGE_GRID_DIMENSION}, and this calculator does not know individual Hodge numbers for this variety.`
+    };
+  }
+
+  function hodgeQueryIsSupported(geometry) {
+    return !!hodgeEntryAt(geometry, 0, 0);
+  }
+
+  function hodgeEntryAt(geometry, p, q) {
+    const d = geometry?.dim;
+    if (!Number.isInteger(d)) return null;
+    if (!Number.isInteger(p) || !Number.isInteger(q) || p < 0 || q < 0 || p > d || q > d) return null;
+    if (geometryIsPointBlowup(geometry)) return pointBlowupHodgeEntryAt(geometry, p, q);
+    if (geometry.type === 'point') return numericHodgeEntry(p === 0 && q === 0 ? 1n : 0n);
+    if (geometry.type === 'abelian') return numericHodgeEntry(binomialBigInt(d, p) * binomialBigInt(d, q));
+    if (geometry.type === 'grassmannian') {
+      const params = grassmannianParamsFromGeometry(geometry);
+      if (!params) return null;
+      const diagonal = p === q ? (grassmannianBettiNumbers(params.r, params.n)[p] || 0n) : 0n;
+      return numericHodgeEntry(diagonal);
+    }
+    if (geometryHasNumericalCurveLabel(geometry)) return curveHodgeEntryAt(numericalCurveGenus(geometry), p, q);
+    if (geometry.type === 'curve') return curveHodgeEntryAt(genusLatex(geometry.genus), p, q, genusPlain(geometry.genus));
+    if (geometry.type === 'product' && Array.isArray(geometry.productFactors) && geometry.productFactors.length === 2) {
+      return productHodgeEntryAt(geometry, p, q);
+    }
+    if (geometry.type === 'abstract') {
+      const coverEntry = smoothCyclicRamifiedCoverHodgeEntryAt(geometry, p, q);
+      if (coverEntry) return coverEntry;
+      if (d === 2) return abstractSurfaceHodgeEntryAt(p, q);
+      return null;
+    }
+    if (geometry.type === 'ppav-moduli') return null;
+    return completeIntersectionHodgeEntryAt(geometry, p, q);
+  }
+
+  function numericHodgeEntry(value) {
+    const text = value instanceof Fraction ? formatFractionLatex(value) : String(value);
+    return {
+      latex: text,
+      plain: value instanceof Fraction ? formatFractionPlain(value) : String(value)
+    };
+  }
+
+  function curveHodgeEntryAt(genusLatexValue, p, q, genusPlainValue = null) {
+    if (p > 1 || q > 1) return null;
+    if ((p === 0 && q === 0) || (p === 1 && q === 1)) return numericHodgeEntry(1n);
+    if ((p === 0 && q === 1) || (p === 1 && q === 0)) {
+      const latex = String(genusLatexValue ?? 'g');
+      return {
+        latex,
+        plain: String(genusPlainValue ?? latexToPlain(latex))
+      };
+    }
+    return numericHodgeEntry(0n);
+  }
+
+  function abstractSurfaceHodgeEntryAt(p, q) {
+    const rows = [
+      ['1', 'q', 'p_g'],
+      ['q', 'h^{1,1}', 'q'],
+      ['p_g', 'q', '1']
+    ];
+    const latex = rows[p]?.[q];
+    if (!latex) return null;
+    return { latex, plain: latexToPlain(latex) };
+  }
+
+  function productHodgeEntryAt(geometry, p, q) {
+    const [leftGeometry, rightGeometry] = geometry.productFactors;
+    const leftDim = leftGeometry.dim;
+    const rightDim = rightGeometry.dim;
+    const terms = [];
+    for (let a = 0; a <= leftDim; a += 1) {
+      const b = p - a;
+      if (b < 0 || b > rightDim) continue;
+      for (let c = 0; c <= leftDim; c += 1) {
+        const e = q - c;
+        if (e < 0 || e > rightDim) continue;
+        const left = hodgeEntryAt(leftGeometry, a, c);
+        const right = hodgeEntryAt(rightGeometry, b, e);
+        if (!left || !right) return null;
+        terms.push(multiplyHodgeEntries(left, right));
+      }
+    }
+    return sumHodgeEntries(terms);
+  }
+
+  function pointBlowupHodgeEntryAt(geometry, p, q) {
+    const baseGeometry = geometryByVarietyId(geometry?.blowupBaseId);
+    if (!baseGeometry || baseGeometry.dim !== geometry.dim) return null;
+    const baseEntry = hodgeEntryAt(baseGeometry, p, q);
+    if (!baseEntry) return null;
+    if (geometry.dim === 1 || p !== q || p < 1 || p > geometry.dim - 1) return baseEntry;
+    return sumHodgeEntries([baseEntry, numericHodgeEntry(1n)]);
+  }
+
+  function smoothCyclicRamifiedCoverHodgeEntryAt(geometry, p, q) {
+    if (!geometry?.specialLabels?.includes('ramified-cover') || geometry.ramifiedCoverSmoothCyclic !== true) return null;
+    const baseGeometry = geometryByVarietyId(geometry.ramifiedCoverBaseId);
+    if (!baseGeometry || baseGeometry.dim !== geometry.dim) return null;
+    const degree = normalizeRamifiedCoverDegree(geometry.ramifiedCoverDegree);
+    const branchDegree = parseRamifiedCoverBranchDegree(geometry.ramifiedCoverBranchDegree);
+    const rootTwist = ramifiedCoverRootTwistFromBranchDegree(branchDegree, degree);
+    if (degree <= 1 || rootTwist == null) return null;
+    if (geometry.dim === 1 && baseGeometry.dim === 1) {
+      const curveHodge = smoothCyclicCurveCoverGenusEntry(geometry, baseGeometry, degree, branchDegree, p, q);
+      if (curveHodge) return curveHodge;
+    }
+    if (baseGeometry.type !== 'projective') return null;
+    let entry = numericHodgeEntry(p === q ? 1n : 0n);
+    if (q === geometry.dim - p) {
+      const primitive = smoothCyclicCoverPrimitiveHodgeNumber(geometry.dim, degree, rootTwist, p);
+      if (primitive > 0n) entry = sumHodgeEntries([entry, numericHodgeEntry(primitive)]);
+    }
+    return entry;
+  }
+
+  function smoothCyclicCurveCoverGenusEntry(geometry, baseGeometry, degree, branchDegree, p, q) {
+    const baseGenus = numericalCurveGenus(baseGeometry);
+    if (baseGenus == null) return null;
+    const numerator = degree * (2 * baseGenus - 2) + (degree - 1) * branchDegree + 2;
+    if (!Number.isInteger(numerator) || numerator < 0 || numerator % 2 !== 0) return null;
+    return curveHodgeEntryAt(String(numerator / 2), p, q);
+  }
+
+  function completeIntersectionHodgeEntryAt(geometry, p, q) {
+    if (geometry.type !== 'projective' && geometry.type !== 'complete-intersection') return null;
+    const d = geometry.dim;
+    if (geometry.type === 'projective' || !geometry.degrees?.length) return numericHodgeEntry(p === q ? 1n : 0n);
+    let value = p === q ? Fraction.one() : Fraction.zero();
+    if (q === d - p) {
+      const chi = chiYCoefficientsForCompleteIntersection(geometry);
+      const diagonal = fraction(p % 2 === 0 ? 1 : -1);
+      const sign = fraction((d - p) % 2 === 0 ? 1 : -1);
+      value = value.add(chi[p].sub(diagonal).mul(sign));
+    }
+    return numericHodgeEntry(value);
+  }
+
   function buildAbelianHodgeNumbers(geometry) {
     const d = geometry.dim;
     return {
@@ -19413,6 +19587,9 @@
   }
 
   function productHodgeNumbers(left, right, geometry) {
+    if (!hodgeEntriesHaveShape(left?.entries, geometry.productFactors[0].dim) || !hodgeEntriesHaveShape(right?.entries, geometry.productFactors[1].dim)) {
+      return buildLargeDimensionHodgeNumbers(geometry);
+    }
     const leftDim = geometry.productFactors[0].dim;
     const rightDim = geometry.productFactors[1].dim;
     const entries = Array.from({ length: geometry.dim + 1 }, (_, p) => (
@@ -19829,15 +20006,28 @@
   }
 
   function hodgeRowSheafCohomologyDimensions(geometry, hodge, p) {
-    if (!hodge?.entries?.[0]) return null;
-    if (!Number.isInteger(p) || p < 0 || p > geometry.dim || !hodge.entries[p]) return null;
-    return Array.from({ length: geometry.dim + 1 }, (_, i) => {
-      const entry = hodge.entries[p][i] || { latex: '0', plain: '0' };
-      return {
+    if (!Number.isInteger(p) || p < 0 || p > geometry.dim) return null;
+    if (hodgeEntriesHaveShape(hodge?.entries, geometry.dim)) {
+      if (!hodge.entries[p]) return null;
+      return Array.from({ length: geometry.dim + 1 }, (_, i) => {
+        const entry = hodge.entries[p][i] || { latex: '0', plain: '0' };
+        return {
+          latex: entry.latex || '0',
+          plain: entry.plain || latexToPlain(entry.latex || '0')
+        };
+      });
+    }
+    if (!hodge?.queryAvailable) return null;
+    const dimensions = [];
+    for (let i = 0; i <= geometry.dim; i += 1) {
+      const entry = hodgeEntryAt(geometry, p, i);
+      if (!entry) return null;
+      dimensions.push({
         latex: entry.latex || '0',
         plain: entry.plain || latexToPlain(entry.latex || '0')
-      };
-    });
+      });
+    }
+    return dimensions;
   }
 
   function zeroSheafCohomologyDimensions(geometry) {
@@ -21435,12 +21625,11 @@
     renderHomologyPanel(result);
     renderClassChart(result);
     if (result.hodge) {
-      if (refs.hodgeActions) refs.hodgeActions.hidden = false;
-      refs.hodgeChart.hidden = false;
       refs.hodgeMessage.hidden = false;
       renderHodgeChart(result);
     } else {
       if (refs.hodgeActions) refs.hodgeActions.hidden = true;
+      if (refs.hodgeQuery) refs.hodgeQuery.hidden = true;
       refs.hodgeChart.hidden = true;
       refs.hodgeChart.innerHTML = '';
       refs.hodgeMessage.hidden = false;
@@ -21612,6 +21801,13 @@
   }
 
   function renderHodgeChart(result) {
+    if (hodgeIsQueryOnly(result?.hodge, result?.geometry)) {
+      renderHodgeQueryOnly(result);
+      return;
+    }
+    syncHodgeActionsForMode(true);
+    hideHodgeQuery();
+    if (refs.hodgeChart) refs.hodgeChart.hidden = false;
     const d = result.geometry.dim;
     const entries = result.hodge.entries;
     const expanded = state.hodgeExpanded;
@@ -21700,7 +21896,74 @@
     refs.hodgeMessage.textContent = result.hodge.message;
   }
 
+  function hodgeIsQueryOnly(hodge, geometry = state.lastResult?.geometry) {
+    return !!hodge?.queryOnly || !hodgeEntriesHaveShape(hodge?.entries, geometry?.dim ?? 0);
+  }
+
+  function renderHodgeQueryOnly(result) {
+    syncHodgeActionsForMode(false);
+    if (refs.hodgeChart) {
+      refs.hodgeChart.hidden = true;
+      refs.hodgeChart.innerHTML = '';
+      refs.hodgeChart.setAttribute('aria-expanded', 'false');
+    }
+    if (refs.hodgeQuery) refs.hodgeQuery.hidden = !result.hodge.queryAvailable;
+    if (refs.hodgeMessage) {
+      refs.hodgeMessage.hidden = false;
+      refs.hodgeMessage.textContent = result.hodge.message || '';
+    }
+    setHodgeWide(false);
+    syncHodgeQueryControls(result);
+    updateHodgeQueryResult(result);
+  }
+
+  function hideHodgeQuery() {
+    if (refs.hodgeQuery) refs.hodgeQuery.hidden = true;
+    if (refs.hodgeQueryOutput) refs.hodgeQueryOutput.textContent = '';
+  }
+
+  function syncHodgeActionsForMode(fullTable) {
+    if (refs.hodgeActions) refs.hodgeActions.hidden = false;
+    const expandedControl = refs.hodgeExpanded?.closest?.('label');
+    const cellSizeControl = refs.hodgeCellSize?.closest?.('label');
+    if (expandedControl) expandedControl.hidden = !fullTable;
+    if (cellSizeControl) cellSizeControl.hidden = !fullTable;
+    if (refs.toggleHodgeWide) refs.toggleHodgeWide.hidden = !fullTable;
+  }
+
+  function syncHodgeQueryControls(result = state.lastResult) {
+    const dim = result?.geometry?.dim ?? 0;
+    [refs.hodgeQueryP, refs.hodgeQueryQ].forEach((input) => {
+      if (!input) return;
+      input.max = String(dim);
+      input.value = String(normalizedInt(input.value, 0, dim, 0));
+      input.disabled = !result?.hodge?.queryAvailable;
+    });
+    if (refs.hodgeQueryRun) refs.hodgeQueryRun.disabled = !result?.hodge?.queryAvailable;
+  }
+
+  function updateHodgeQueryResult(result = state.lastResult) {
+    if (!refs.hodgeQueryOutput) return;
+    if (!result?.geometry || !result?.hodge?.queryAvailable) {
+      refs.hodgeQueryOutput.textContent = '';
+      return;
+    }
+    const dim = result.geometry.dim;
+    const p = normalizedInt(refs.hodgeQueryP?.value, 0, dim, 0);
+    const q = normalizedInt(refs.hodgeQueryQ?.value, 0, dim, 0);
+    if (refs.hodgeQueryP) refs.hodgeQueryP.value = String(p);
+    if (refs.hodgeQueryQ) refs.hodgeQueryQ.value = String(q);
+    const entry = hodgeEntryAt(result.geometry, p, q);
+    if (!entry) {
+      refs.hodgeQueryOutput.textContent = `h^${p},${q} is not computable for this input.`;
+      return;
+    }
+    refs.hodgeQueryOutput.innerHTML = `\\(h^{${p},${q}}=${entry.latex}\\)`;
+    typeset(refs.hodgeQueryOutput);
+  }
+
   function toggleHodgeExpanded() {
+    if (hodgeIsQueryOnly(state.lastResult?.hodge)) return;
     state.hodgeExpanded = !state.hodgeExpanded;
     if (state.lastResult?.hodge) {
       renderHodgeChart(state.lastResult);
@@ -21752,6 +22015,7 @@
 
   function hodgeChiDisplays(result) {
     const d = result.geometry.dim;
+    if (!hodgeEntriesHaveShape(result.hodge?.entries, d)) return [];
     if (result.geometry.type === 'abstract') {
       const variety = result.geometry.labelLatex;
       return Array.from({ length: d + 1 }, (_, p) => {
@@ -21766,6 +22030,7 @@
 
   function hodgeBettiDisplays(result) {
     const d = result.geometry.dim;
+    if (!hodgeEntriesHaveShape(result.hodge?.entries, d)) return [];
     if (result.geometry.type === 'abstract') {
       return Array.from({ length: 2 * d + 1 }, (_, k) => `b_{${k}}`);
     }
@@ -21774,6 +22039,7 @@
 
   function hodgeEulerDisplay(result) {
     const d = result.geometry.dim;
+    if (!hodgeEntriesHaveShape(result.hodge?.entries, d)) return 'e';
     if (result.geometry.type === 'abstract') return 'e';
     let total = Fraction.zero();
     for (let p = 0; p <= d; p++) {
@@ -24941,6 +25207,7 @@
   }
 
   function exportHodgeChart(result, format) {
+    if (hodgeIsQueryOnly(result.hodge, result.geometry)) return exportHodgeQueryOnly(result, format);
     const lines = [];
     if (format === 'latex') {
       lines.push('% Sheaf Calculator: Hodge numbers');
@@ -24960,6 +25227,28 @@
     lines.push(`X: ${result.geometry.labelPlain}`);
     lines.push(...exportHodgeLines(result, 'plain'));
     if (state.hodgeExpanded) lines.push(...exportExpandedHodgeLines(result, 'plain'));
+    return lines.join('\n');
+  }
+
+  function exportHodgeQueryOnly(result, format) {
+    const lines = [];
+    const p = normalizedInt(refs.hodgeQueryP?.value, 0, result.geometry.dim, 0);
+    const q = normalizedInt(refs.hodgeQueryQ?.value, 0, result.geometry.dim, 0);
+    const entry = result.hodge.queryAvailable ? hodgeEntryAt(result.geometry, p, q) : null;
+    if (format === 'latex') {
+      lines.push('% Sheaf Calculator: Hodge numbers');
+      lines.push(`% X: ${result.geometry.labelPlain}`);
+      lines.push(`% ${result.hodge.message || 'Full Hodge table omitted.'}`);
+      if (entry) lines.push(`\\[h^{${p},${q}}(${result.geometry.labelLatex}) = ${entry.latex}\\]`);
+      else lines.push('% No individual Hodge-number query is available for this input.');
+      return lines.join('\n');
+    }
+    const prefix = format === 'sage' ? '# ' : '';
+    lines.push(`${prefix}Sheaf Calculator: Hodge numbers`);
+    lines.push(`${prefix}X: ${result.geometry.labelPlain}`);
+    lines.push(`${prefix}${result.hodge.message || 'Full Hodge table omitted.'}`);
+    if (entry) lines.push(`h^${p},${q} = ${entry.plain}`);
+    else lines.push(`${prefix}No individual Hodge-number query is available for this input.`);
     return lines.join('\n');
   }
 

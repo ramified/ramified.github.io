@@ -168,6 +168,7 @@
     .map-curve-row[hidden],
     .sheaf-chart-actions[hidden],
     .hodge-card-actions[hidden],
+    .hodge-query[hidden],
     .sheaf-class-scroll[hidden],
     .sheaf-cohomology-chart[hidden],
     .hodge-grid[hidden],
@@ -1569,6 +1570,36 @@
       stroke-dasharray: 0.08 0.18;
     }
 
+    .hodge-query {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 6px 0 10px;
+      padding: 8px 0;
+      border-bottom: 1px dotted var(--border);
+    }
+
+    .hodge-query-index {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+    }
+
+    .hodge-query-index input {
+      width: 52px;
+      font-size: 0.74rem;
+    }
+
+    .hodge-query-output {
+      min-height: 22px;
+      color: var(--text);
+      font-size: 0.86rem;
+    }
+
     .sheaf-badge {
       display: inline-flex;
       align-items: center;
@@ -1909,7 +1940,7 @@
           <div class="sheaf-note" id="product-pick-note" hidden>click two varieties on the canvas</div>
           <div class="sheaf-field-row" id="ppav-genus-row" hidden>
             <label class="input-label" for="ppav-genus">genus</label>
-            <input type="number" id="ppav-genus" class="sheaf-input" min="1" max="3" value="2">
+            <input type="number" id="ppav-genus" class="sheaf-input" min="1" max="5" value="2">
           </div>
           <div class="sheaf-field-row" id="grassmannian-params-row" hidden>
             <span class="input-label">parameters</span>
@@ -1926,7 +1957,7 @@
           </div>
           <div class="sheaf-field-row">
             <label class="input-label" for="variety-dim">dimension</label>
-            <input type="number" id="variety-dim" class="sheaf-input" min="0" max="8" value="3">
+            <input type="number" id="variety-dim" class="sheaf-input" min="0" max="15" value="3">
           </div>
           <div class="sheaf-field-row" id="point-name-preset-row" hidden>
             <span class="input-label">preset</span>
@@ -2285,7 +2316,7 @@
         <div class="sheaf-inline-row" id="class-term-row">
           <span class="input-label">terms</span>
           <div class="sheaf-term-only-control">
-            <input id="class-term-index" class="sheaf-input" type="number" min="0" max="8" value="1" aria-label="term index" disabled>
+            <input id="class-term-index" class="sheaf-input" type="number" min="0" max="15" value="1" aria-label="term index" disabled>
             <span>th term only</span>
             <input type="checkbox" id="class-term-only" aria-label="only compute selected term">
           </div>
@@ -2362,7 +2393,7 @@
         <div class="homology-rule-list" id="homology-rules"></div>
         <div class="homology-add-class" id="homology-add-class">
           <input id="homology-class-symbol" class="sheaf-input" type="text" value="" maxlength="48" spellcheck="false" autocomplete="off" aria-label="Homology class symbol" placeholder="A">
-          <input id="homology-class-degree" class="sheaf-input" type="number" value="2" min="0" max="16" step="1" aria-label="Homology class degree">
+          <input id="homology-class-degree" class="sheaf-input" type="number" value="2" min="0" max="30" step="1" aria-label="Homology class degree">
           <button class="btn btn-ghost sheaf-object-button homology-add-button" id="homology-add-class-button" type="button">add class</button>
         </div>
         <div class="homology-add-rule" id="homology-add-rule">
@@ -2389,6 +2420,18 @@
           </label>
           <button class="btn btn-ghost hodge-wide-toggle" id="toggle-hodge-wide" type="button" aria-pressed="false">wide</button>
           <button class="btn btn-ghost sheaf-chart-export hodge-export-button" id="export-hodge" type="button">export</button>
+        </div>
+        <div class="hodge-query" id="hodge-query" hidden>
+          <label class="hodge-query-index" for="hodge-query-p">
+            <span>p</span>
+            <input type="number" id="hodge-query-p" class="sheaf-input" min="0" max="15" value="0">
+          </label>
+          <label class="hodge-query-index" for="hodge-query-q">
+            <span>q</span>
+            <input type="number" id="hodge-query-q" class="sheaf-input" min="0" max="15" value="0">
+          </label>
+          <button class="btn btn-ghost" id="hodge-query-run" type="button">compute</button>
+          <span class="hodge-query-output" id="hodge-query-output"></span>
         </div>
         <div id="hodge-chart" class="hodge-grid" role="button" tabindex="0" aria-expanded="false"></div>
         <div id="hodge-message" class="hint"></div>

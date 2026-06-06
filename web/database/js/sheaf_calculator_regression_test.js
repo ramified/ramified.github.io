@@ -14,6 +14,8 @@ function loadCalculator() {
     buildBundleForSheaf,
     buildCharacteristicClasses,
     buildHodgeNumbers,
+    buildSheafCohomology,
+    hodgeEntryAt,
     applyHomologyRules,
     createSymbolicBudget,
     currentHomologyRulePasses,
@@ -40,6 +42,8 @@ function loadCalculator() {
     tangentChernHomologyClassSymbol,
     tangentChernSheafDefForIndex,
     ppavLambdaClassId,
+    MAX_DIMENSION,
+    MAX_HODGE_GRID_DIMENSION,
     sheafChernClassUsesBaseHomology,
     computedSheafChernClassRule,
     baseHomologyRuleFromSheafChernRule,
@@ -936,6 +940,43 @@ function testPpavModuliPresetRoundTrip() {
   assert.strictEqual(variety.type, 'ppav-moduli');
   assert.strictEqual(variety.ppavGenus, '3');
   assert.strictEqual(restored.geometryFromVariety(variety).dim, 6);
+}
+
+function testHigherDimensionPpavUsesTrueDimensionAndQueryOnlyHodge() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'A5', type: 'ppav-moduli', ppavGenus: '5', name: '\\mathcal{A}_{5}' }];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  assert.strictEqual(api.MAX_DIMENSION, 15);
+  assert.strictEqual(api.MAX_HODGE_GRID_DIMENSION, 12);
+  assert.strictEqual(geometry.dim, 15);
+  assert.strictEqual(geometry.ppavGenus, 5);
+  const hodge = api.buildHodgeNumbers(geometry);
+  assert.strictEqual(hodge.queryOnly, true);
+  assert.strictEqual(hodge.queryAvailable, false);
+  assert.strictEqual(hodge.entries, null);
+}
+
+function testLargeAbelianHodgeUsesSingleEntryQuery() {
+  const api = loadCalculator();
+  const geometry = api.geometryFromVariety({ id: 'A13', type: 'abelian', dim: '13', name: 'A' });
+  const hodge = api.buildHodgeNumbers(geometry);
+  assert.strictEqual(hodge.queryOnly, true);
+  assert.strictEqual(hodge.queryAvailable, true);
+  assert.strictEqual(hodge.entries, null);
+  assert.strictEqual(api.hodgeEntryAt(geometry, 2, 3).plain, '22308');
+  const cohomology = api.buildSheafCohomology(geometry, null, hodge);
+  assert(cohomology.dimensions);
+  assert.strictEqual(cohomology.dimensions.length, 14);
+  assert.strictEqual(cohomology.dimensions[1].plain, '13');
+}
+
+function testTwelveDimensionalHodgeStillRendersFullTable() {
+  const api = loadCalculator();
+  const geometry = api.geometryFromVariety({ id: 'P12', type: 'projective', dim: '12', name: '\\mathbb{P}^{12}' });
+  const hodge = api.buildHodgeNumbers(geometry);
+  assert.strictEqual(hodge.queryOnly, undefined);
+  assert.strictEqual(hodge.entries.length, 13);
+  assert.strictEqual(hodge.entries[12][12].plain, '1');
 }
 
 function testStraightMapIsDefaultNoControlCase() {
@@ -2505,6 +2546,9 @@ testGrassmannianYoungBasisRulesExpressTautologicalClasses();
 testPpavModuliUsesLambdaClassesAndRules();
 testPpavModuliTangentChernClassesAreTautological();
 testPpavModuliPresetRoundTrip();
+testHigherDimensionPpavUsesTrueDimensionAndQueryOnlyHodge();
+testLargeAbelianHodgeUsesSingleEntryQuery();
+testTwelveDimensionalHodgeStillRendersFullTable();
 testAbelianSpecialSheavesAreTrivial();
 testSelfDirectSumScalesChernCharacter();
 testDivisorLineBundleUsesAssignedDivisorChernClass();
