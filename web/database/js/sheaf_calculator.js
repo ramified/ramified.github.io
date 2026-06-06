@@ -12,6 +12,14 @@
   const MAX_SELF_DIRECT_SUM_MULTIPLICITY = 99;
   const MAX_GRASSMANNIAN_N = MAX_DIMENSION + 1;
   const DEFAULT_HOMOLOGY_RULE_PASSES = 1;
+  const MAX_HOMOLOGY_RULE_PASSES = 8;
+  const RECOMPUTE_DELAY_MS = 16;
+  const CLASS_REFRESH_DELAY_MS = 16;
+  const SYMBOLIC_WORK_BUDGET = {
+    maxTerms: 6000,
+    maxOps: 90000,
+    maxMillis: 700
+  };
   const DEFAULT_VARIETY_SPACING_PX = 110;
   const DEFAULT_FIRST_VARIETY_X = 0.22;
   const DEFAULT_FIRST_VARIETY_Y = 0.6;
@@ -86,6 +94,13 @@
   const completeSymmetricCache = new Map();
   const schurPowerPolynomialCache = new Map();
   const integerPartitionCountCache = new Map();
+  class SymbolicBudgetExceeded extends Error {
+    constructor(message) {
+      super(message);
+      this.name = 'SymbolicBudgetExceeded';
+      this.symbolicBudgetExceeded = true;
+    }
+  }
   const state = {
     lastResult: null,
     varieties: [],
@@ -157,6 +172,18 @@
     exportScope: 'main',
     suppressLabelClickUntil: 0,
     suppressCardToggleUntil: 0,
+    recomputeTimer: null,
+    recomputeJobId: 0,
+    recomputeBusy: false,
+    pendingRecomputeReason: '',
+    classRefreshTimer: null,
+    classRefreshJobId: 0,
+    classRefreshBusy: false,
+    pendingClassRefreshReason: '',
+    simplificationCache: new Map(),
+    currentSymbolicBudget: null,
+    currentRecomputeBudget: null,
+    symbolicWarnings: [],
     mathJaxQueue: Promise.resolve()
   };
 
@@ -172,7 +199,7 @@
     bindControls();
     bindCards();
     syncHodgeWidePlacement();
-    recompute();
+    recompute('initial render');
     window.addEventListener('resize', debounce(() => {
       renderCanvas(state.lastResult);
       syncHodgeWidePlacement();
@@ -409,6 +436,7 @@
     refs.classChart = $('class-chart');
     refs.classMessage = $('class-message');
     refs.furtherSimplify = $('further-simplify');
+    refs.resetSimplify = $('reset-simplify');
     refs.exportClasses = $('export-classes');
     refs.cohomologyCard = $('cohomology-card');
     refs.cohomologyActions = $('cohomology-actions');
@@ -4456,13 +4484,13 @@
     if (refs.rootForm) {
       refs.rootForm.addEventListener('change', () => {
         syncClassDisplayControls();
-        recompute();
+        refreshClassDisplayOnly('class display');
       });
     }
     if (refs.classTermOnly) {
       refs.classTermOnly.addEventListener('change', () => {
         syncClassDisplayControls();
-        recompute();
+        refreshClassDisplayOnly('class display');
       });
     }
     if (refs.classTermIndex) {
@@ -4470,7 +4498,7 @@
         const max = normalizedInt(refs.classTermIndex.max, 0, MAX_DIMENSION, MAX_DIMENSION);
         refs.classTermIndex.value = String(normalizedInt(refs.classTermIndex.value, 0, max, 1));
         syncClassDisplayControls();
-        recompute();
+        refreshClassDisplayOnly('class display');
       });
     }
     if (refs.homologyHyperplaneSymbol) {
@@ -4610,7 +4638,7 @@
       refs.homologyRules.addEventListener('click', (event) => {
         const tangentClassButton = event.target.closest('[data-add-tangent-chern-class]');
         if (tangentClassButton) {
-          addTangentChernClassToBaseHomology(normalizedInt(tangentClassButton.dataset.addTangentChernClass, 1, MAX_DIMENSION, 1));
+          requestSheafChernClassPromotion(tangentClassButton.dataset.addTangentChernClass, { tangent: true });
           return;
         }
         const sheafChernClass = event.target.closest('[data-add-sheaf-chern-class]');
@@ -4707,8 +4735,14 @@
     }
     if (refs.furtherSimplify) {
       refs.furtherSimplify.addEventListener('click', () => {
-        state.homologyRulePasses += 1;
-        recompute();
+        state.homologyRulePasses = Math.min(MAX_HOMOLOGY_RULE_PASSES, currentHomologyRulePasses() + 1);
+        refreshClassDisplayOnly('simplification');
+      });
+    }
+    if (refs.resetSimplify) {
+      refs.resetSimplify.addEventListener('click', () => {
+        resetHomologyRulePasses();
+        refreshClassDisplayOnly('simplification reset');
       });
     }
     if (refs.toggleHodgeCard) {
@@ -5005,38 +5039,48 @@
     recompute();
   }
 
-  function addTangentChernClassToBaseHomology(index) {
+  function addTangentChernClassToBaseHomology(index, context = activeHomologySheafContext()) {
     resetHomologyRulePasses();
-    const context = activeHomologySheafContext();
     if (!context || !tangentChernClassRowCanAdd(context, index)) return;
     const { variety, geometry } = context;
     const homology = ensureHomologySystem(variety, geometry);
     const id = tangentChernHomologyClassId(index);
     const symbol = tangentChernHomologyClassSymbol(geometry, index);
+    const def = tangentChernSheafDefForIndex(context, index);
+    const computedRule = computedSheafChernClassRule(def, context);
     if (!homology.customClasses.some((item) => item.id === id)) {
       homology.customClasses.push({
         id,
         symbol,
         degree: index,
+        cohomologyDegree: 2 * index,
         special: 'tangent-chern'
       });
     }
     homology.classes[id] = { ...(homology.classes[id] || {}), symbol };
+    if (computedRule) {
+      copySheafChernRuleToBaseHomology(homology, computedRule, id, context);
+    }
     recompute();
     if (refs.homologyMessage) refs.homologyMessage.textContent = `Added c_${index}(${geometry.labelPlain}) to homology of ${geometry.labelPlain}.`;
   }
 
-  function requestSheafChernClassPromotion(defId) {
+  function requestSheafChernClassPromotion(defId, options = {}) {
     const context = activeHomologySheafContext();
-    const def = sheafChernClassDefById(defId, context);
+    const def = options.tangent
+      ? tangentChernSheafDefForIndex(context, normalizedInt(defId, 1, MAX_DIMENSION, 1))
+      : sheafChernClassDefById(defId, context);
     if (!sheafChernClassCanPromote(def, context)) return;
     if (state.skipHomologyClassPromotionPrompt) {
-      addSheafChernClassToBaseHomology(def, context);
+      if (sheafChernDefTangentHomologyClassId(def, context)) addTangentChernClassToBaseHomology(def.degree, context);
+      else addSheafChernClassToBaseHomology(def, context);
       return;
     }
     state.homologyClassPromotionPrompt = {
       type: 'sheaf-chern',
       defId: def.id,
+      tangent: !!sheafChernDefTangentHomologyClassId(def, context),
+      tangentIndex: sheafChernDefTangentHomologyClassId(def, context) ? def.degree : null,
       sheafId: context.sheafObject?.id || null,
       varietyId: context.variety?.id || null
     };
@@ -5055,7 +5099,8 @@
     state.homologyClassPromotionPrompt = null;
     if (remember && action === 'yes') state.skipHomologyClassPromotionPrompt = true;
     if (action === 'yes' && def) {
-      addSheafChernClassToBaseHomology(def, context);
+      if (prompt.tangent === true) addTangentChernClassToBaseHomology(prompt.tangentIndex || def.degree, context);
+      else addSheafChernClassToBaseHomology(def, context);
       return;
     }
     renderHomologyPanel(state.lastResult);
@@ -5067,6 +5112,7 @@
     const { variety, geometry } = context;
     const homology = ensureHomologySystem(variety, geometry);
     const symbol = sanitizeHomologySymbol(def.symbolLatex, `c_{${def.degree}}(${sheafLabelLatex(context.sheaf)})`);
+    const computedRule = computedSheafChernClassRule(def, context);
     if (!homology.customClasses.some((item) => item.id === def.id)) {
       homology.customClasses.push({
         id: def.id,
@@ -5077,11 +5123,96 @@
       });
     }
     homology.classes[def.id] = { ...(homology.classes[def.id] || {}), symbol };
+    if (computedRule) {
+      copySheafChernRuleToBaseHomology(homology, computedRule, def.id, context);
+    }
     const sheafHomology = ensureSheafHomologySystem(context.sheafObject, geometry);
     sheafHomology.rules = withoutHomologyRuleForVariable(sheafHomology.rules, def.id, { includeBuiltin: true });
     recompute();
     if (refs.homologyMessage) refs.homologyMessage.textContent = `Added ${def.symbolPlain} to homology of ${geometry.labelPlain}.`;
     return true;
+  }
+
+  function copySheafChernRuleToBaseHomology(homology, rule, classId, context) {
+    const baseRule = baseHomologyRuleFromSheafChernRule(rule, classId, context);
+    if (!baseRule) return false;
+    const variableId = homologyVariableId(classId, context.geometry);
+    const previous = mapHomologyRuleForVariable(homology.rules, variableId, { includeBuiltin: true });
+    homology.rules = withoutHomologyRuleForVariable(homology.rules, variableId, { includeBuiltin: true });
+    homology.rules.push(baseRule);
+    return !previous || JSON.stringify(previous) !== JSON.stringify(baseRule);
+  }
+
+  function baseHomologyRuleFromSheafChernRule(rule, classId, context) {
+    const geometry = context?.geometry;
+    if (!rule || !geometry) return null;
+    const candidate = {
+      id: `promoted-${classId}`,
+      builtin: false,
+      enabled: rule?.enabled !== false,
+      lhs: { powers: { [homologyVariableId(classId, geometry)]: 1 } },
+      rhs: translateSheafChernRuleTermsToBaseHomology(rule?.rhs || [], context)
+    };
+    const normalized = normalizeHomologyRule(candidate, geometry, {
+      includeMapClasses: true,
+      preserveUnknownVariables: true
+    });
+    if (!normalized) return null;
+    const defs = homologyClassDefinitions(geometry);
+    const available = new Set(defs.flatMap((def) => [...homologyDefVariableIds(def, geometry)]));
+    return homologyRulePreservesDegree(normalized, defs, { geometry })
+      && homologyRuleUsesAvailableVariables(normalized, available)
+      ? normalized
+      : null;
+  }
+
+  function translateSheafChernRuleTermsToBaseHomology(terms, context) {
+    return (terms || []).map((term) => ({
+      coefficient: term.coefficient || '1',
+      powers: translateSheafChernRulePowersToBaseHomology(term.powers || {}, context)
+    }));
+  }
+
+  function translateSheafChernRulePowersToBaseHomology(powers, context) {
+    const out = {};
+    for (const [id, exponent] of Object.entries(powers || {})) {
+      const nextId = tangentChernRuleVariableToBaseHomologyVariable(id, context) || id;
+      out[nextId] = (out[nextId] || 0) + exponent;
+    }
+    return out;
+  }
+
+  function tangentChernRuleVariableToBaseHomologyVariable(id, context) {
+    if (!context || context.sheaf?.type !== 'tangent') return null;
+    const index = tangentChernIndexFromRuleVariable(id, context.geometry);
+    if (!index) return null;
+    const classId = tangentChernHomologyClassId(index);
+    if (!context.geometry?.homology?.customClasses?.some((item) => item.id === classId)) return null;
+    return homologyVariableId(classId, context.geometry);
+  }
+
+  function tangentChernIndexFromRuleVariable(id, geometry) {
+    const text = String(id || '');
+    const promoted = text.match(new RegExp(`${HOMOLOGY_TANGENT_CHERN_CLASS_PREFIX}(\\d+)$`));
+    if (promoted) return normalizedInt(promoted[1], 1, MAX_DIMENSION, 1);
+    const scoped = text.match(/_tangent_(\d+)$/);
+    if (scoped && text.startsWith(`chern_${homologyScopeId(geometry)}_tangent_`)) {
+      return normalizedInt(scoped[1], 1, MAX_DIMENSION, 1);
+    }
+    return null;
+  }
+
+  function tangentChernSheafDefForIndex(context, index) {
+    if (!context || !Number.isInteger(index)) return null;
+    return sheafHomologyClassDefinitions(context.sheaf, context.geometry)
+      .find((def) => def.kind === 'chern' && def.degree === index) || null;
+  }
+
+  function sheafChernDefTangentHomologyClassId(def, context) {
+    if (!context || !def || def.kind !== 'chern') return null;
+    return tangentChernClassRowCanAddIgnoringPromotion(context, def.degree)
+      ? tangentChernHomologyClassId(def.degree)
+      : null;
   }
 
   function sheafChernClassDefById(defId, context = activeHomologySheafContext()) {
@@ -5090,8 +5221,11 @@
       .find((def) => def.kind === 'chern' && def.id === defId) || null;
   }
 
-  function sheafChernClassIsInBaseHomology(def, geometry) {
-    return !!def && !!homologyClassDefById(geometry, def.id);
+  function sheafChernClassIsInBaseHomology(def, geometry, context = null) {
+    if (!def || !geometry) return false;
+    const tangentClassId = sheafChernDefTangentHomologyClassId(def, context);
+    if (tangentClassId) return !!homologyClassDefById(geometry, tangentClassId);
+    return !!homologyClassDefById(geometry, def.id);
   }
 
   function sheafChernClassCanPromote(def, context = activeHomologySheafContext()) {
@@ -5099,7 +5233,7 @@
       && !!def
       && def.kind === 'chern'
       && (sheafUsesFreeClassVariables(context.sheaf) || !!computedSheafChernClassRule(def, context))
-      && !sheafChernClassIsInBaseHomology(def, context.geometry);
+      && !sheafChernClassIsInBaseHomology(def, context.geometry, context);
   }
 
   function computedSheafChernClassRule(def, context = activeHomologySheafContext()) {
@@ -5130,11 +5264,12 @@
   }
 
   function sheafChernClassUsesBaseHomology(def, context = activeHomologySheafContext()) {
-    return !!context
-      && !!def
-      && def.kind === 'chern'
-      && sheafUsesFreeClassVariables(context.sheaf)
-      && sheafChernClassIsInBaseHomology(def, context.geometry);
+    if (!context || !def || def.kind !== 'chern') return false;
+    if (sheafChernDefTangentHomologyClassId(def, context)) {
+      return sheafChernClassIsInBaseHomology(def, context.geometry, context);
+    }
+    return sheafUsesFreeClassVariables(context.sheaf)
+      && sheafChernClassIsInBaseHomology(def, context.geometry, context);
   }
 
   function requestMapHomologyClassPromotion(defId, varietyId = '') {
@@ -7912,10 +8047,7 @@
   function updateTautologicalSesDraftControls() {
     const show = combinedGrassmannianTautologicalSesCreateMode();
     if (refs.tautologicalSesBaseRow) refs.tautologicalSesBaseRow.hidden = !show;
-    if (refs.tautologicalSesPickNote) {
-      refs.tautologicalSesPickNote.hidden = !show;
-      refs.tautologicalSesPickNote.textContent = tautologicalSesPickHint();
-    }
+    syncPickFlowNote(refs.tautologicalSesPickNote, 'tautological-ses', show);
     updateCombinedVarietySlotButton(
       refs.tautologicalSesBaseButton,
       tautologicalSesDraftBase(),
@@ -8835,28 +8967,111 @@
     return state.canvasPickEnabled;
   }
 
-  function canvasPickAvailable() {
-    if (combinedSesCreateMode()) return sesPickAvailable();
-    if (combinedBlowupCreateMode()) return blowupPickAvailable();
-    if (combinedRamifiedCoverCreateMode()) return ramifiedCoverPickAvailable();
-    if (combinedGrassmannianTautologicalSesCreateMode()) return tautologicalSesPickAvailable();
-    if (combinedGrassmannianMapCreateMode()) return grassmannianMapPickAvailable();
-    if (productVarietyInputMode()) return productPickableVarieties().length > 0;
-    if (mapInputMode()) return mapPickAvailable();
-    if (sheafBinaryInputMode()) return sheafBinaryPickableSheaves().length > 0;
-    if (sheafSelfSumInputMode()) return sheafSelfSumPickableSheaves().length > 0;
-    if (sheafDualInputMode()) return sheafDualPickableSheaves().length > 0;
-    if (sheafInternalHomInputMode()) return sheafInternalHomPickableSheaves().length > 0;
-    if (sheafIdealInputMode()) return sheafIdealPickableMaps().length > 0;
-    if (sheafNormalInputMode()) return sheafNormalPickableMaps().length > 0;
-    if (sheafRelativeInputMode()) return sheafRelativePickableMaps().length > 0;
-    if (sheafSchurInputMode()) return sheafSchurPickableSheaves().length > 0;
-    if (sheafMapOperationInputMode()) {
-      return state.maps.some((map) => allowableSheafMapOperationMap(map.id))
-        || state.sheaves.some((sheaf) => allowableSheafMapOperationSheaf(sheaf.id));
+  function activePickFlow() {
+    return PICK_FLOW_REGISTRY.find((flow) => {
+      try {
+        return !!flow.active();
+      } catch (_) {
+        return false;
+      }
+    }) || null;
+  }
+
+  function pickFlowAvailable(flow = activePickFlow()) {
+    if (!flow) return false;
+    try {
+      return !!flow.available();
+    } catch (_) {
+      return false;
     }
-    if (sheafBasePickInputMode()) return state.varieties.some((variety) => allowableSheafBase(variety.id));
-    return false;
+  }
+
+  function pickFlowComplete(flow = activePickFlow()) {
+    if (!flow || typeof flow.complete !== 'function') return false;
+    try {
+      return !!flow.complete();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function pickFlowReady(id) {
+    return pickFlowComplete(pickFlowById(id));
+  }
+
+  function pickFlowHint(flow = activePickFlow()) {
+    if (!flow || typeof flow.hint !== 'function') return '';
+    try {
+      return String(flow.hint() || '');
+    } catch (error) {
+      return error?.message || '';
+    }
+  }
+
+  function syncPickFlowNote(element, flowId, show) {
+    if (!element) return;
+    element.hidden = !show;
+    if (!show) return;
+    element.textContent = pickFlowHint(pickFlowById(flowId));
+  }
+
+  function pickFlowById(id) {
+    return PICK_FLOW_REGISTRY.find((flow) => flow.id === id) || null;
+  }
+
+  function pickFlowCandidate(kind, id, flow = activePickFlow()) {
+    if (!flow) return false;
+    const allowed = typeof flow.allowedObjectKinds === 'function' ? flow.allowedObjectKinds() : flow.allowedObjectKinds;
+    if (Array.isArray(allowed) && allowed.length && !allowed.includes(kind)) return false;
+    try {
+      return !!flow.candidate(kind, id);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function pickFlowSelectedState(kind, id, flow = activePickFlow()) {
+    if (!flow || typeof flow.selectedState !== 'function') return null;
+    try {
+      return flow.selectedState(kind, id) || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function pickFlowCandidateClass(kind, id, flow = activePickFlow()) {
+    if (!state.canvasPickEnabled || !flow) return '';
+    if (typeof flow.paintCandidate === 'function') {
+      try {
+        if (!flow.paintCandidate(kind, id)) return '';
+      } catch (_) {
+        return '';
+      }
+    } else if (!pickFlowCandidate(kind, id, flow)) {
+      return '';
+    }
+    if (typeof flow?.candidateClass === 'function') return flow.candidateClass(kind, id) || 'is-pick-candidate';
+    return flow?.candidateClass || 'is-pick-candidate';
+  }
+
+  function addPickFlowClasses(classes, kind, id, flow = activePickFlow()) {
+    const selected = pickFlowSelectedState(kind, id, flow);
+    if (selected === 'domain') classes.push('is-map-domain');
+    else if (selected === 'codomain') classes.push('is-map-codomain');
+    else if (selected === 'active') classes.push('is-active');
+    const candidateClass = pickFlowCandidateClass(kind, id, flow);
+    if (candidateClass) classes.push(candidateClass);
+  }
+
+  function handleActivePickFlow(kind, id) {
+    const flow = activePickFlow();
+    if (!flow) return false;
+    if (pickFlowCandidate(kind, id, flow)) flow.handle(kind, id);
+    return true;
+  }
+
+  function canvasPickAvailable() {
+    return pickFlowAvailable();
   }
 
   function syncGlobalPickButton() {
@@ -8972,6 +9187,330 @@
     updateProductDraftControls();
   }
 
+  const PICK_FLOW_REGISTRY = [{
+    id: 'short-exact-sequence',
+    slots: ['sheaf-a', 'map-ab', 'sheaf-b', 'map-bc', 'sheaf-c'],
+    active: () => combinedSesCreateMode(),
+    allowedObjectKinds: () => {
+      const target = state.sesPickTarget || 'sheaf-a';
+      return target === 'map-ab' || target === 'map-bc' ? ['map'] : ['sheaf'];
+    },
+    available: () => sesPickAvailable(),
+    candidate: (kind, id) => {
+      const target = state.sesPickTarget || 'sheaf-a';
+      if (kind === 'map' && (target === 'map-ab' || target === 'map-bc')) {
+        return activeSesEditMode() ? allowableSesFixedMapPick(id, target) : allowableSesMapPick(id, target);
+      }
+      return kind === 'sheaf' && allowableSesSheafPick(id, target);
+    },
+    selectedState: (kind, id) => {
+      const draft = sesDraftIds();
+      if (kind === 'map') {
+        if (draft.mapABId === id) return 'domain';
+        if (draft.mapBCId === id) return 'codomain';
+      }
+      if (kind === 'sheaf') {
+        if (draft.sheafAId === id) return 'domain';
+        if (draft.sheafBId === id) return 'active';
+        if (draft.sheafCId === id) return 'codomain';
+      }
+      return null;
+    },
+    complete: () => !!shortExactSequenceData(),
+    hint: () => sesPickHint(),
+    nextSlot: () => state.sesPickTarget || nextSesPickTarget(),
+    handle: (kind, id) => handleSesPick(kind, id)
+  }, {
+    id: 'blowup',
+    slots: ['base', 'point'],
+    active: () => combinedBlowupCreateMode(),
+    allowedObjectKinds: () => ['variety'],
+    available: () => blowupPickAvailable(),
+    candidate: (kind, id) => kind === 'variety' && allowableBlowupPick(id, state.blowupPickTarget),
+    selectedState: (kind, id) => {
+      if (kind !== 'variety') return null;
+      if (blowupDraftVariety('base')?.id === id) return 'domain';
+      if (blowupDraftVariety('point')?.id === id) return 'codomain';
+      return null;
+    },
+    complete: () => !!blowupConstructionData(),
+    hint: () => blowupPickHint(),
+    nextSlot: () => state.blowupPickTarget || 'base',
+    handle: (kind, id) => handleBlowupPick(kind, id)
+  }, {
+    id: 'ramified-cover',
+    slots: ['base'],
+    active: () => combinedRamifiedCoverCreateMode(),
+    allowedObjectKinds: () => ['variety'],
+    available: () => ramifiedCoverPickAvailable(),
+    candidate: (kind, id) => kind === 'variety' && allowableRamifiedCoverBasePick(id),
+    selectedState: (kind, id) => kind === 'variety' && ramifiedCoverDraftBase()?.id === id ? 'codomain' : null,
+    complete: () => !!ramifiedCoverConstructionData(),
+    hint: () => ramifiedCoverPickHint(),
+    nextSlot: () => 'base',
+    handle: (kind, id) => handleRamifiedCoverPick(kind, id)
+  }, {
+    id: 'tautological-ses',
+    slots: ['base'],
+    active: () => combinedGrassmannianTautologicalSesCreateMode(),
+    allowedObjectKinds: () => ['variety'],
+    available: () => tautologicalSesPickAvailable(),
+    candidate: (kind, id) => kind === 'variety' && allowableTautologicalSesBasePick(id),
+    selectedState: (kind, id) => kind === 'variety' && tautologicalSesDraftBase()?.id === id ? 'active' : null,
+    complete: () => !!tautologicalSesConstructionData(),
+    hint: () => tautologicalSesPickHint(),
+    nextSlot: () => 'base',
+    handle: (kind, id) => handleTautologicalSesPick(kind, id)
+  }, {
+    id: 'grassmannian-map',
+    slots: ['bundle'],
+    active: () => combinedGrassmannianMapCreateMode(),
+    allowedObjectKinds: () => ['sheaf'],
+    available: () => grassmannianMapPickAvailable(),
+    candidate: (kind, id) => kind === 'sheaf' && allowableGrassmannianMapSheafPick(id),
+    selectedState: (kind, id) => kind === 'sheaf' && grassmannianMapDraftSheaf()?.id === id ? 'active' : null,
+    complete: () => !!grassmannianMapConstructionData(),
+    hint: () => grassmannianMapPickHint(),
+    nextSlot: () => state.grassmannianMapPickTarget || 'bundle',
+    handle: (kind, id) => handleGrassmannianMapPick(kind, id)
+  }, {
+    id: 'product',
+    slots: ['factor-a', 'factor-b'],
+    active: () => productVarietyInputMode(),
+    allowedObjectKinds: () => ['variety'],
+    available: () => productPickableVarieties().length > 0,
+    candidate: (kind, id) => kind === 'variety' && productCanPickVariety(id),
+    paintCandidate: (kind, id) => {
+      const ids = productDraftFactorIds();
+      return kind === 'variety' && ids[0] !== id && ids[1] !== id && productCanPickVariety(id);
+    },
+    selectedState: (kind, id) => {
+      if (kind !== 'variety') return null;
+      const ids = productDraftFactorIds();
+      if (ids[0] === id) return 'domain';
+      if (ids[1] === id) return 'codomain';
+      return null;
+    },
+    complete: () => productDraftFactors().length === 2,
+    hint: () => productPickHint(),
+    nextSlot: () => state.productPickIndex === 1 ? 'factor-b' : 'factor-a',
+    handle: (kind, id) => { if (kind === 'variety') handleProductPick(id); }
+  }, {
+    id: 'map-composition',
+    slots: ['first', 'second'],
+    active: () => mapCompositionInputMode(),
+    allowedObjectKinds: () => ['map'],
+    available: () => state.maps.some((map) => allowableMapCompositionPick(map.id)),
+    candidate: (kind, id) => kind === 'map' && allowableMapCompositionPick(id),
+    paintCandidate: (kind, id) => {
+      const ids = mapDraftMapIds();
+      return kind === 'map' && ids[0] !== id && ids[1] !== id && allowableMapCompositionPick(id);
+    },
+    selectedState: (kind, id) => {
+      if (kind !== 'map') return null;
+      const ids = mapDraftMapIds();
+      if (ids[0] === id) return 'domain';
+      if (ids[1] === id) return 'codomain';
+      return null;
+    },
+    complete: () => !!mapCompositionConstructionData(),
+    hint: () => mapCompositionPickHint(),
+    nextSlot: () => state.mapPickTarget === 'second' ? 'second' : 'first',
+    handle: (kind, id) => handleMapPick(kind, id)
+  }, {
+    id: 'abel-jacobi-map',
+    slots: ['curve'],
+    active: () => abelJacobiMapInputMode(),
+    allowedObjectKinds: () => ['variety'],
+    available: () => abelJacobiCurveVarieties().length > 0,
+    candidate: (kind, id) => kind === 'variety' && allowableAbelJacobiCurvePick(id),
+    selectedState: (kind, id) => kind === 'variety' && mapDraftAbelJacobiCurve()?.id === id ? 'domain' : null,
+    complete: () => !!mapDraftAbelJacobiCurve(),
+    hint: () => abelJacobiMapPickHint(),
+    nextSlot: () => 'curve',
+    handle: (kind, id) => handleMapPick(kind, id)
+  }, {
+    id: 'ordinary-map',
+    slots: ['domain', 'codomain'],
+    active: () => ordinaryMapInputMode(),
+    allowedObjectKinds: () => [sheafMapInputMode() ? 'sheaf' : 'variety'],
+    available: () => mapPickAvailable(),
+    candidate: (kind, id) => {
+      const endpointKind = sheafMapInputMode() ? 'sheaf' : 'variety';
+      if (kind !== endpointKind) return false;
+      const collection = endpointKind === 'sheaf' ? visibleCanvasSheaves() : visibleCanvasVarieties();
+      return collection.some((item) => item.id === id);
+    },
+    paintCandidate: (kind, id) => {
+      const endpointKind = sheafMapInputMode() ? 'sheaf' : 'variety';
+      if (kind !== endpointKind) return false;
+      const collection = endpointKind === 'sheaf' ? visibleCanvasSheaves() : visibleCanvasVarieties();
+      if (!collection.some((item) => item.id === id)) return false;
+      const domain = mapDraftEndpointObject('domain');
+      const codomain = mapDraftEndpointObject('codomain');
+      return domain?.id !== id && codomain?.id !== id;
+    },
+    candidateClass: () => state.mapPickTarget === 'codomain' ? 'is-map-codomain-candidate' : 'is-pick-candidate',
+    selectedState: (kind, id) => {
+      if (kind !== (sheafMapInputMode() ? 'sheaf' : 'variety')) return null;
+      if (mapDraftEndpointObject('domain')?.id === id) return 'domain';
+      if (mapDraftEndpointObject('codomain')?.id === id) return 'codomain';
+      return null;
+    },
+    complete: () => !!ordinaryMapDraftData(),
+    hint: () => ordinaryMapPickHint(),
+    nextSlot: () => state.mapPickTarget === 'codomain' ? 'codomain' : 'domain',
+    handle: (kind, id) => handleMapPick(kind, id)
+  }, {
+    id: 'sheaf-binary',
+    slots: ['left', 'right'],
+    active: () => sheafBinaryInputMode(),
+    allowedObjectKinds: () => ['sheaf'],
+    available: () => sheafBinaryPickableSheaves().length > 0,
+    candidate: (kind, id) => kind === 'sheaf' && allowableSheafBinaryPick(id),
+    paintCandidate: (kind, id) => {
+      const ids = sheafBinaryDraftIds();
+      return kind === 'sheaf' && ids[0] !== id && ids[1] !== id && allowableSheafBinaryPick(id);
+    },
+    selectedState: (kind, id) => {
+      if (kind !== 'sheaf') return null;
+      const ids = sheafBinaryDraftIds();
+      if (ids[0] === id) return 'domain';
+      if (ids[1] === id) return 'codomain';
+      return null;
+    },
+    complete: () => !!binarySheafConstructionData(),
+    hint: () => sheafBinaryPickHint(),
+    nextSlot: () => state.sheafBinaryPickTarget || 'left',
+    handle: (kind, id) => handleSheafBinaryPick(kind, id)
+  }, {
+    id: 'sheaf-self-sum',
+    slots: ['parent'],
+    active: () => sheafSelfSumInputMode(),
+    allowedObjectKinds: () => ['sheaf'],
+    available: () => sheafSelfSumPickableSheaves().length > 0,
+    candidate: (kind, id) => kind === 'sheaf' && allowableSheafSelfSumPick(id),
+    selectedState: (kind, id) => kind === 'sheaf' && sheafSelfSumDraftSheaf()?.id === id ? 'active' : null,
+    complete: () => !!selfSumSheafConstructionData(),
+    hint: () => sheafSelfSumPickHint(),
+    nextSlot: () => 'parent',
+    handle: (kind, id) => handleSheafSelfSumPick(kind, id)
+  }, {
+    id: 'sheaf-dual',
+    slots: ['parent'],
+    active: () => sheafDualInputMode(),
+    allowedObjectKinds: () => ['sheaf'],
+    available: () => sheafDualPickableSheaves().length > 0,
+    candidate: (kind, id) => kind === 'sheaf' && allowableSheafDualPick(id),
+    selectedState: (kind, id) => kind === 'sheaf' && sheafDualDraftSheaf()?.id === id ? 'active' : null,
+    complete: () => !!dualSheafConstructionData(),
+    hint: () => sheafDualPickHint(),
+    nextSlot: () => 'parent',
+    handle: (kind, id) => handleSheafDualPick(kind, id)
+  }, {
+    id: 'sheaf-internal-hom',
+    slots: ['source', 'target'],
+    active: () => sheafInternalHomInputMode(),
+    allowedObjectKinds: () => ['sheaf'],
+    available: () => sheafInternalHomPickableSheaves().length > 0,
+    candidate: (kind, id) => kind === 'sheaf' && allowableSheafInternalHomPick(id),
+    paintCandidate: (kind, id) => {
+      const ids = sheafInternalHomDraftIds();
+      return kind === 'sheaf' && ids[0] !== id && ids[1] !== id && allowableSheafInternalHomPick(id);
+    },
+    selectedState: (kind, id) => {
+      if (kind !== 'sheaf') return null;
+      const ids = sheafInternalHomDraftIds();
+      if (ids[0] === id) return 'domain';
+      if (ids[1] === id) return 'codomain';
+      return null;
+    },
+    complete: () => !!internalHomSheafConstructionData(),
+    hint: () => sheafInternalHomPickHint(),
+    nextSlot: () => state.sheafInternalHomPickTarget || 'source',
+    handle: (kind, id) => handleSheafInternalHomPick(kind, id)
+  }, {
+    id: 'sheaf-ideal',
+    slots: ['map'],
+    active: () => sheafIdealInputMode(),
+    allowedObjectKinds: () => ['map'],
+    available: () => sheafIdealPickableMaps().length > 0,
+    candidate: (kind, id) => kind === 'map' && allowableSheafIdealMapPick(id),
+    selectedState: (kind, id) => kind === 'map' && sheafIdealDraftMap()?.id === id ? 'active' : null,
+    complete: () => !!idealSheafConstructionData(),
+    hint: () => sheafIdealPickHint(),
+    nextSlot: () => 'map',
+    handle: (kind, id) => handleSheafIdealPick(kind, id)
+  }, {
+    id: 'sheaf-normal',
+    slots: ['map'],
+    active: () => sheafNormalInputMode(),
+    allowedObjectKinds: () => ['map'],
+    available: () => sheafNormalPickableMaps().length > 0,
+    candidate: (kind, id) => kind === 'map' && allowableSheafNormalMapPick(id),
+    selectedState: (kind, id) => kind === 'map' && sheafNormalDraftMap()?.id === id ? 'active' : null,
+    complete: () => !!normalBundleConstructionData(),
+    hint: () => sheafNormalPickHint(),
+    nextSlot: () => 'map',
+    handle: (kind, id) => handleSheafNormalPick(kind, id)
+  }, {
+    id: 'sheaf-relative',
+    slots: ['map'],
+    active: () => sheafRelativeInputMode(),
+    allowedObjectKinds: () => ['map'],
+    available: () => sheafRelativePickableMaps().length > 0,
+    candidate: (kind, id) => kind === 'map' && allowableSheafRelativeMapPick(id),
+    selectedState: (kind, id) => kind === 'map' && sheafRelativeDraftMap()?.id === id ? 'active' : null,
+    complete: () => !!relativeSheafConstructionData(),
+    hint: () => sheafRelativePickHint(),
+    nextSlot: () => 'map',
+    handle: (kind, id) => handleSheafRelativePick(kind, id)
+  }, {
+    id: 'sheaf-schur',
+    slots: ['parent'],
+    active: () => sheafSchurInputMode(),
+    allowedObjectKinds: () => ['sheaf'],
+    available: () => sheafSchurPickableSheaves().length > 0,
+    candidate: (kind, id) => kind === 'sheaf' && allowableSheafSchurPick(id),
+    selectedState: (kind, id) => kind === 'sheaf' && sheafSchurDraftSheaf()?.id === id ? 'active' : null,
+    complete: () => !!schurSheafConstructionData(),
+    hint: () => sheafSchurPickHint(),
+    nextSlot: () => 'parent',
+    handle: (kind, id) => handleSheafSchurPick(kind, id)
+  }, {
+    id: 'sheaf-map-operation',
+    slots: ['map', 'sheaf'],
+    active: () => sheafMapOperationInputMode(),
+    allowedObjectKinds: () => state.sheafMapPickTarget === 'sheaf' ? ['sheaf'] : ['map'],
+    available: () => state.maps.some((map) => allowableSheafMapOperationMap(map.id))
+      || state.sheaves.some((sheaf) => allowableSheafMapOperationSheaf(sheaf.id)),
+    candidate: (kind, id) => (
+      (kind === 'map' && state.sheafMapPickTarget === 'map' && allowableSheafMapOperationMap(id))
+      || (kind === 'sheaf' && state.sheafMapPickTarget === 'sheaf' && allowableSheafMapOperationSheaf(id))
+    ),
+    selectedState: (kind, id) => {
+      if (kind === 'map' && state.sheafMapDraft?.mapId === id) return 'active';
+      if (kind === 'sheaf' && state.sheafMapDraft?.sheafId === id) return 'active';
+      return null;
+    },
+    complete: () => !!mapOperationSheafConstructionData(),
+    hint: () => sheafMapPickHint(),
+    nextSlot: () => state.sheafMapPickTarget || 'map',
+    handle: (kind, id) => handleSheafMapOperationPick(kind, id)
+  }, {
+    id: 'sheaf-base',
+    slots: ['base'],
+    active: () => sheafBasePickInputMode(),
+    allowedObjectKinds: () => ['variety'],
+    available: () => state.varieties.some((variety) => allowableSheafBase(variety.id)),
+    candidate: (kind, id) => kind === 'variety' && allowableSheafBase(id),
+    selectedState: (kind, id) => kind === 'variety' && state.draftSheafBaseVarietyId === id ? 'active' : null,
+    complete: () => !!state.draftSheafBaseVarietyId,
+    hint: () => state.varieties.length ? 'Pick a base variety on the canvas first' : 'Add a variety first',
+    nextSlot: () => 'base',
+    handle: (kind, id) => { if (kind === 'variety') chooseSheafBaseFromCanvas(id); }
+  }];
+
   function updateCombinedDraftControls() {
     updateSesDraftControls();
     updateBlowupDraftControls();
@@ -9000,10 +9539,7 @@
     if (refs.productFactorsRow) refs.productFactorsRow.hidden = false;
     updateProductFactorButton(refs.productFactorA, slots[0], 0);
     updateProductFactorButton(refs.productFactorB, slots[1], 1);
-    if (refs.productPickNote) {
-      refs.productPickNote.hidden = false;
-      refs.productPickNote.textContent = productPickHint(slots);
-    }
+    syncPickFlowNote(refs.productPickNote, 'product', true);
     if (refs.dim) {
       const dim = productDimensionFromSlots(slots);
       refs.dim.value = String(Math.min(dim, MAX_DIMENSION));
@@ -9288,10 +9824,7 @@
     const show = combinedSesCreateMode();
     if (refs.sesParentsRow) refs.sesParentsRow.hidden = !show;
     syncSequenceTailControls(activeSesDraftSequence());
-    if (refs.sesPickNote) {
-      refs.sesPickNote.hidden = !show;
-      refs.sesPickNote.textContent = sesPickHint();
-    }
+    syncPickFlowNote(refs.sesPickNote, 'short-exact-sequence', show);
     updateSesSlotButton(refs.sesLeftButton, sesDraftSheaf('sheaf-a'), 'sheaf-a');
     updateSesSlotButton(refs.sesFirstMapButton, sesDraftMap('map-ab'), 'map-ab');
     updateSesSlotButton(refs.sesMiddleButton, sesDraftSheaf('sheaf-b'), 'sheaf-b');
@@ -9396,10 +9929,7 @@
   function updateBlowupDraftControls() {
     const show = combinedBlowupCreateMode();
     if (refs.blowupParentsRow) refs.blowupParentsRow.hidden = !show;
-    if (refs.blowupPickNote) {
-      refs.blowupPickNote.hidden = !show;
-      refs.blowupPickNote.textContent = blowupPickHint();
-    }
+    syncPickFlowNote(refs.blowupPickNote, 'blowup', show);
     updateCombinedVarietySlotButton(refs.blowupBaseButton, blowupDraftVariety('base'), 'base', combinedBlowupCreateMode() && state.blowupPickTarget === 'base');
     updateCombinedVarietySlotButton(refs.blowupPointButton, blowupDraftVariety('point'), 'point', combinedBlowupCreateMode() && state.blowupPickTarget === 'point');
     if (refs.blowupPointButton && show && !blowupDraftVariety('point')) {
@@ -9464,10 +9994,7 @@
     const cyclic = refs.ramifiedCoverMode?.value === 'cyclic';
     if (refs.ramifiedCoverSmoothRow) refs.ramifiedCoverSmoothRow.hidden = !show || !cyclic || degree <= 1;
     if (refs.ramifiedCoverRootRow) refs.ramifiedCoverRootRow.hidden = !show || !cyclic || degree <= 1 || !refs.ramifiedCoverSmoothConfirm?.checked;
-    if (refs.ramifiedCoverPickNote) {
-      refs.ramifiedCoverPickNote.hidden = !show;
-      refs.ramifiedCoverPickNote.textContent = ramifiedCoverPickHint();
-    }
+    syncPickFlowNote(refs.ramifiedCoverPickNote, 'ramified-cover', show);
     updateCombinedVarietySlotButton(refs.ramifiedCoverBaseButton, ramifiedCoverDraftBase(), 'base', combinedRamifiedCoverCreateMode());
     if (refs.ramifiedCoverPreview) refs.ramifiedCoverPreview.textContent = latexToPlain(defaultRamifiedCoverNameFromObjects(ramifiedCoverDraftBase()));
     syncGlobalPickButton();
@@ -9535,10 +10062,7 @@
     if (refs.grassmannianMapGenericallyGeneratedRow) refs.grassmannianMapGenericallyGeneratedRow.hidden = !show;
     if (refs.grassmannianMapBasePointFreeRow) refs.grassmannianMapBasePointFreeRow.hidden = !show;
     const params = syncGrassmannianMapControls();
-    if (refs.grassmannianMapPickNote) {
-      refs.grassmannianMapPickNote.hidden = !show;
-      refs.grassmannianMapPickNote.textContent = grassmannianMapPickHint(params);
-    }
+    syncPickFlowNote(refs.grassmannianMapPickNote, 'grassmannian-map', show);
     const sheaf = grassmannianMapDraftSheaf();
     if (refs.grassmannianMapBundleButton) {
       const label = sheaf ? latexToPlain(sanitizeMathLabel(sheaf.name, '\\mathcal{E}')) : 'bundle';
@@ -9622,91 +10146,14 @@
       refs.mapPickStatus.textContent = ramifiedCoverMapPickHint(selected);
       return;
     }
-    if (mapCompositionInputMode()) {
-      refs.mapPickStatus.textContent = mapCompositionPickHint();
-      return;
-    }
-    if (abelJacobiMapInputMode()) {
-      refs.mapPickStatus.textContent = abelJacobiMapPickHint();
-      return;
-    }
-    refs.mapPickStatus.textContent = ordinaryMapPickHint();
+    refs.mapPickStatus.textContent = pickFlowHint(activePickFlow());
   }
 
   function handleCanvasPickClick(target) {
     const kind = target.dataset.objectKind;
     const id = target.dataset.objectId;
     if (!state.canvasPickEnabled) return false;
-    if (combinedSesCreateMode()) {
-      handleSesPick(kind, id);
-      return true;
-    }
-    if (combinedBlowupCreateMode()) {
-      handleBlowupPick(kind, id);
-      return true;
-    }
-    if (combinedRamifiedCoverCreateMode()) {
-      handleRamifiedCoverPick(kind, id);
-      return true;
-    }
-    if (combinedGrassmannianTautologicalSesCreateMode()) {
-      handleTautologicalSesPick(kind, id);
-      return true;
-    }
-    if (combinedGrassmannianMapCreateMode()) {
-      handleGrassmannianMapPick(kind, id);
-      return true;
-    }
-    if (productVarietyInputMode()) {
-      if (kind === 'variety') handleProductPick(id);
-      return true;
-    }
-    if (mapInputMode()) {
-      handleMapPick(kind, id);
-      return true;
-    }
-    if (sheafBinaryInputMode()) {
-      handleSheafBinaryPick(kind, id);
-      return true;
-    }
-    if (sheafSelfSumInputMode()) {
-      handleSheafSelfSumPick(kind, id);
-      return true;
-    }
-    if (sheafDualInputMode()) {
-      handleSheafDualPick(kind, id);
-      return true;
-    }
-    if (sheafInternalHomInputMode()) {
-      handleSheafInternalHomPick(kind, id);
-      return true;
-    }
-    if (sheafIdealInputMode()) {
-      handleSheafIdealPick(kind, id);
-      return true;
-    }
-    if (sheafNormalInputMode()) {
-      handleSheafNormalPick(kind, id);
-      return true;
-    }
-    if (sheafRelativeInputMode()) {
-      handleSheafRelativePick(kind, id);
-      return true;
-    }
-    if (sheafSchurInputMode()) {
-      handleSheafSchurPick(kind, id);
-      return true;
-    }
-    if (sheafMapOperationInputMode()) {
-      handleSheafMapOperationPick(kind, id);
-      return true;
-    }
-    if (sheafBasePickInputMode()) {
-      if (kind !== 'variety') return true;
-      chooseSheafBaseFromCanvas(id);
-      return true;
-    }
-    return false;
+    return handleActivePickFlow(kind, id);
   }
 
   function creatingProductVariety() {
@@ -10189,10 +10636,7 @@
     if (refs.sheafBinarySymbol) refs.sheafBinarySymbol.textContent = refs.sheafType?.value === 'tensor' ? String.fromCharCode(0x2297) : String.fromCharCode(0x2295);
     updateSheafBinarySlotButton(refs.sheafBinaryLeftButton, sheafBinaryDraftSheaf('left'), 'left');
     updateSheafBinarySlotButton(refs.sheafBinaryRightButton, sheafBinaryDraftSheaf('right'), 'right');
-    if (refs.sheafBinaryPickNote) {
-      refs.sheafBinaryPickNote.hidden = !show;
-      refs.sheafBinaryPickNote.textContent = sheafBinaryPickHint();
-    }
+    syncPickFlowNote(refs.sheafBinaryPickNote, 'sheaf-binary', show);
     syncGlobalPickButton();
     if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
   }
@@ -10202,10 +10646,7 @@
     if (refs.sheafSelfSumFormulaRow) refs.sheafSelfSumFormulaRow.hidden = !show;
     if (refs.sheafSelfSumCount && options.normalizeCount) refs.sheafSelfSumCount.value = String(currentSelfSumMultiplicity());
     updateSheafSelfSumSlotButton(refs.sheafSelfSumParentButton, sheafSelfSumDraftSheaf());
-    if (refs.sheafSelfSumPickNote) {
-      refs.sheafSelfSumPickNote.hidden = !show;
-      refs.sheafSelfSumPickNote.textContent = sheafSelfSumPickHint();
-    }
+    syncPickFlowNote(refs.sheafSelfSumPickNote, 'sheaf-self-sum', show);
     syncGlobalPickButton();
     if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
   }
@@ -10214,10 +10655,7 @@
     const show = sheafDualInputMode();
     if (refs.sheafDualFormulaRow) refs.sheafDualFormulaRow.hidden = !show;
     updateSheafDualSlotButton(refs.sheafDualParentButton, sheafDualDraftSheaf());
-    if (refs.sheafDualPickNote) {
-      refs.sheafDualPickNote.hidden = !show;
-      refs.sheafDualPickNote.textContent = sheafDualPickHint();
-    }
+    syncPickFlowNote(refs.sheafDualPickNote, 'sheaf-dual', show);
     syncGlobalPickButton();
     if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
   }
@@ -10229,10 +10667,7 @@
     if (refs.sheafInternalHomSymbol) refs.sheafInternalHomSymbol.textContent = refs.sheafInternalHomExact?.checked ? 'Hom(' : 'RHom(';
     updateSheafInternalHomSlotButton(refs.sheafInternalHomSourceButton, sheafInternalHomDraftSheaf('source'), 'source');
     updateSheafInternalHomSlotButton(refs.sheafInternalHomTargetButton, sheafInternalHomDraftSheaf('target'), 'target');
-    if (refs.sheafInternalHomPickNote) {
-      refs.sheafInternalHomPickNote.hidden = !show;
-      refs.sheafInternalHomPickNote.textContent = sheafInternalHomPickHint();
-    }
+    syncPickFlowNote(refs.sheafInternalHomPickNote, 'sheaf-internal-hom', show);
     syncGlobalPickButton();
     if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
   }
@@ -10242,10 +10677,7 @@
     if (refs.sheafIdealFormulaRow) refs.sheafIdealFormulaRow.hidden = !show;
     if (refs.sheafIdealConfirmRow) refs.sheafIdealConfirmRow.hidden = !show;
     updateSheafIdealMapButton(refs.sheafIdealMapButton, sheafIdealDraftMap());
-    if (refs.sheafIdealPickNote) {
-      refs.sheafIdealPickNote.hidden = !show;
-      refs.sheafIdealPickNote.textContent = sheafIdealPickHint();
-    }
+    syncPickFlowNote(refs.sheafIdealPickNote, 'sheaf-ideal', show);
     syncGlobalPickButton();
     if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
   }
@@ -10255,10 +10687,7 @@
     if (refs.sheafNormalFormulaRow) refs.sheafNormalFormulaRow.hidden = !show;
     if (refs.sheafNormalConfirmRow) refs.sheafNormalConfirmRow.hidden = !show;
     updateSheafNormalMapButton(refs.sheafNormalMapButton, sheafNormalDraftMap());
-    if (refs.sheafNormalPickNote) {
-      refs.sheafNormalPickNote.hidden = !show;
-      refs.sheafNormalPickNote.textContent = sheafNormalPickHint();
-    }
+    syncPickFlowNote(refs.sheafNormalPickNote, 'sheaf-normal', show);
     syncGlobalPickButton();
     if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
   }
@@ -10270,10 +10699,7 @@
     if (refs.sheafRelativeConfirmRow) refs.sheafRelativeConfirmRow.hidden = !show;
     if (refs.sheafRelativeSymbol) refs.sheafRelativeSymbol.textContent = isCotangent ? 'Omega^1_{' : 'T_{';
     updateSheafRelativeMapButton(refs.sheafRelativeMapButton, sheafRelativeDraftMap());
-    if (refs.sheafRelativePickNote) {
-      refs.sheafRelativePickNote.hidden = !show;
-      refs.sheafRelativePickNote.textContent = sheafRelativePickHint();
-    }
+    syncPickFlowNote(refs.sheafRelativePickNote, 'sheaf-relative', show);
     syncGlobalPickButton();
     if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
   }
@@ -10398,10 +10824,7 @@
       setInlineMath(refs.sheafSchurDiagramPreview, `_{${schurPartitionLatex(partition || [2, 1])}}`);
     }
     updateSheafSchurSlotButton(refs.sheafSchurParentButton, sheafSchurDraftSheaf());
-    if (refs.sheafSchurPickNote) {
-      refs.sheafSchurPickNote.hidden = !show;
-      refs.sheafSchurPickNote.textContent = sheafSchurPickHint(partition);
-    }
+    syncPickFlowNote(refs.sheafSchurPickNote, 'sheaf-schur', show);
     syncGlobalPickButton();
     if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
   }
@@ -10509,10 +10932,7 @@
     if (refs.sheafMapProperRow) refs.sheafMapProperRow.hidden = !show || operation !== 'pushforward';
     if (refs.sheafMapProper && operation === 'pullback') refs.sheafMapProper.checked = false;
     updateSheafMapFormulaControls(show, operation);
-    if (refs.sheafMapPickNote) {
-      refs.sheafMapPickNote.hidden = !show;
-      refs.sheafMapPickNote.textContent = sheafMapPickHint(base, map);
-    }
+    syncPickFlowNote(refs.sheafMapPickNote, 'sheaf-map-operation', show);
     syncGlobalPickButton();
     if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
   }
@@ -12836,7 +13256,48 @@
     return changed;
   }
 
-  function recompute() {
+  function recompute(reason = 'update', options = {}) {
+    if (options.immediate || !canScheduleRecompute()) {
+      const jobId = ++state.recomputeJobId;
+      if (state.recomputeTimer) {
+        clearTimeout(state.recomputeTimer);
+        state.recomputeTimer = null;
+      }
+      clearPendingClassRefresh();
+      return runRecompute(jobId, reason);
+    }
+    return scheduleRecompute(reason, options);
+  }
+
+  function canScheduleRecompute() {
+    return !!(refs.status && typeof setTimeout === 'function' && typeof clearTimeout === 'function');
+  }
+
+  function scheduleRecompute(reason = 'update', options = {}) {
+    const delay = Number.isFinite(options.delay) ? Math.max(0, options.delay) : RECOMPUTE_DELAY_MS;
+    const jobId = ++state.recomputeJobId;
+    state.pendingRecomputeReason = reason;
+    if (state.recomputeTimer) clearTimeout(state.recomputeTimer);
+    clearPendingClassRefresh();
+    setRecomputeBusy(true, reason);
+    state.recomputeTimer = setTimeout(() => {
+      if (jobId !== state.recomputeJobId) return;
+      state.recomputeTimer = null;
+      runRecompute(jobId, state.pendingRecomputeReason || reason);
+    }, delay);
+    return null;
+  }
+
+  function runRecompute(jobId, reason = 'update') {
+    if (jobId !== state.recomputeJobId) return state.lastResult;
+    state.pendingRecomputeReason = '';
+    state.simplificationCache.clear();
+    state.symbolicWarnings = [];
+    const budget = createSymbolicBudget(reason);
+    state.currentRecomputeBudget = budget;
+    state.currentSymbolicBudget = budget;
+    clearPendingClassRefresh();
+    setRecomputeBusy(true, reason);
     try {
       refreshConstructedObjects();
       normalizeActiveHomologyTarget();
@@ -12852,6 +13313,7 @@
       if (refs.classMessage) refs.classMessage.textContent = '';
       renderResult(result);
       refreshExport();
+      return result;
     } catch (error) {
       state.lastResult = null;
       if (refs.status) refs.status.textContent = error.message || 'unable to compute';
@@ -12889,6 +13351,11 @@
       renderHomologyPanel(null);
       renderCanvas(null);
       syncChartRevealControls(null);
+      return null;
+    } finally {
+      state.currentSymbolicBudget = null;
+      state.currentRecomputeBudget = null;
+      setRecomputeBusy(false);
     }
   }
 
@@ -12917,6 +13384,121 @@
 
   function resetHomologyRulePasses() {
     state.homologyRulePasses = DEFAULT_HOMOLOGY_RULE_PASSES;
+  }
+
+  function currentHomologyRulePasses(value = state.homologyRulePasses) {
+    return normalizedInt(value, 1, MAX_HOMOLOGY_RULE_PASSES, DEFAULT_HOMOLOGY_RULE_PASSES);
+  }
+
+  function setRecomputeBusy(busy, reason = '') {
+    state.recomputeBusy = !!busy;
+    syncHeavyOperationControls(state.lastResult);
+    if (!busy || !refs.status) return;
+    refs.status.textContent = reason ? `computing ${reason}...` : 'computing...';
+  }
+
+  function setClassRefreshBusy(busy, reason = '') {
+    state.classRefreshBusy = !!busy;
+    syncHeavyOperationControls(state.lastResult);
+    if (!busy || !refs.status) return;
+    refs.status.textContent = reason ? `computing ${reason}...` : 'computing...';
+  }
+
+  function clearPendingClassRefresh() {
+    if (!state.classRefreshTimer) return;
+    clearTimeout(state.classRefreshTimer);
+    state.classRefreshTimer = null;
+    state.pendingClassRefreshReason = '';
+    state.classRefreshJobId += 1;
+    setClassRefreshBusy(false);
+  }
+
+  function renderStatusForResult(result = state.lastResult) {
+    const basis = basisStatusLabel(result?.sheaf?.basis);
+    renderStatusLine(result?.bundle ? `${basis} basis` : '');
+  }
+
+  function syncHeavyOperationControls(result = state.lastResult) {
+    const busy = !!state.recomputeBusy || !!state.recomputeTimer || !!state.classRefreshBusy || !!state.classRefreshTimer;
+    const passCount = currentHomologyRulePasses();
+    if (refs.furtherSimplify) {
+      const hasClasses = !!result?.classRows?.length;
+      refs.furtherSimplify.disabled = busy || !hasClasses || passCount >= MAX_HOMOLOGY_RULE_PASSES;
+      refs.furtherSimplify.textContent = passCount >= MAX_HOMOLOGY_RULE_PASSES
+        ? `simplify limit (${passCount}/${MAX_HOMOLOGY_RULE_PASSES})`
+        : `further simplify (${passCount}/${MAX_HOMOLOGY_RULE_PASSES})`;
+      refs.furtherSimplify.title = passCount >= MAX_HOMOLOGY_RULE_PASSES
+        ? 'The simplification pass limit protects the browser from very large symbolic reductions.'
+        : 'Run one more homology-rule simplification pass. This may be slower for large expressions.';
+    }
+    if (refs.resetSimplify) {
+      refs.resetSimplify.hidden = passCount <= DEFAULT_HOMOLOGY_RULE_PASSES;
+      refs.resetSimplify.disabled = busy;
+      refs.resetSimplify.title = 'Return to the default simplification pass count.';
+    }
+    [refs.rootForm, refs.classTermOnly, refs.classTermIndex, refs.basis, refs.exportClasses].forEach((control) => {
+      setControlBusyDisabled(control, busy);
+    });
+  }
+
+  function setControlBusyDisabled(control, busy) {
+    if (!control) return;
+    if (busy) {
+      if (!control.dataset.recomputeBusyDisabled) {
+        control.dataset.recomputeBusyDisabled = control.disabled ? 'preserve' : 'set';
+      }
+      control.disabled = true;
+      return;
+    }
+    if (!control.dataset.recomputeBusyDisabled) return;
+    if (control.dataset.recomputeBusyDisabled === 'set') control.disabled = false;
+    delete control.dataset.recomputeBusyDisabled;
+  }
+
+  function createSymbolicBudget(reason = '', overrides = {}) {
+    return {
+      ...SYMBOLIC_WORK_BUDGET,
+      ...overrides,
+      reason,
+      ops: 0,
+      startedAt: nowMs()
+    };
+  }
+
+  function nowMs() {
+    if (typeof performance !== 'undefined' && typeof performance.now === 'function') return performance.now();
+    return Date.now();
+  }
+
+  function symbolicBudgetFromOptions(options = {}) {
+    if (options.budget === false) return null;
+    return options.budget || state.currentSymbolicBudget || null;
+  }
+
+  function chargeSymbolicWork(amount = 1, termCount = 0, label = 'symbolic calculation', options = {}) {
+    const budget = symbolicBudgetFromOptions(options);
+    if (!budget) return;
+    budget.ops += Math.max(1, Number(amount) || 1);
+    const elapsed = nowMs() - budget.startedAt;
+    if (termCount > budget.maxTerms) {
+      throw new SymbolicBudgetExceeded(`${label} produced ${termCount} terms, above the safety limit ${budget.maxTerms}.`);
+    }
+    if (budget.ops > budget.maxOps) {
+      throw new SymbolicBudgetExceeded(`${label} exceeded the symbolic work limit.`);
+    }
+    if (elapsed > budget.maxMillis) {
+      throw new SymbolicBudgetExceeded(`${label} took too long to simplify safely.`);
+    }
+  }
+
+  function recordSymbolicWarning(message) {
+    const text = String(message || 'Simplification was limited to keep the browser responsive.').trim();
+    if (!text) return;
+    if (!state.symbolicWarnings.includes(text)) state.symbolicWarnings.push(text);
+  }
+
+  function symbolicWarningText() {
+    return (state.symbolicWarnings || []).join(' ');
   }
 
   function buildResult(geometry, sheaf) {
@@ -13200,58 +13782,54 @@
       const hasEditableObject = !inputIsModifyMode() || editingSequence || !!activeObjectForKind(currentInputKind());
       const creatingMap = draftingMap && inputIsCreateMode();
       const editingRamifiedCoverMap = inputIsModifyMode() && selectedMap()?.construction?.type === 'ramified-cover-map';
-      const mapReady = !draftingMap || !!(mapCompositionInputMode()
-        ? mapCompositionConstructionData()
-        : (abelJacobiMapInputMode() ? mapDraftAbelJacobiCurve() : ordinaryMapDraftData()));
+      const mapReady = !draftingMap || pickFlowComplete(activePickFlow());
       const ramifiedCoverMapReady = !editingRamifiedCoverMap || !!ramifiedCoverMapControlData(selectedMap());
       const creatingProduct = showProduct;
       const updatingProduct = editingProduct && selectedVariety()?.construction?.type === 'product';
       const creatingSheaf = draftingSheaf && inputIsCreateMode();
-      const sheafMapReady = !(creatingSheafMapOperation || editingSheafMapOperation) || !!mapOperationSheafConstructionData();
-      const sheafBinaryReady = !(creatingSheafBinary || editingSheafBinary) || !!binarySheafConstructionData();
-      const sheafSelfSumReady = !(creatingSheafSelfSum || editingSheafSelfSum) || !!selfSumSheafConstructionData();
-      const sheafDualReady = !(creatingSheafDual || editingSheafDual) || !!dualSheafConstructionData();
-      const sheafInternalHomReady = !(creatingSheafInternalHom || editingSheafInternalHom) || !!internalHomSheafConstructionData();
-      const sheafIdealReady = !(creatingSheafIdeal || editingSheafIdeal) || !!idealSheafConstructionData();
-      const sheafNormalReady = !(creatingSheafNormal || editingSheafNormal) || !!normalBundleConstructionData();
-      const sheafRelativeReady = !(creatingSheafRelative || editingSheafRelative) || !!relativeSheafConstructionData();
-      const sheafSchurReady = !(creatingSheafSchur || editingSheafSchur) || !!schurSheafConstructionData();
+      const sheafMapReady = !(creatingSheafMapOperation || editingSheafMapOperation) || pickFlowReady('sheaf-map-operation');
+      const sheafBinaryReady = !(creatingSheafBinary || editingSheafBinary) || pickFlowReady('sheaf-binary');
+      const sheafSelfSumReady = !(creatingSheafSelfSum || editingSheafSelfSum) || pickFlowReady('sheaf-self-sum');
+      const sheafDualReady = !(creatingSheafDual || editingSheafDual) || pickFlowReady('sheaf-dual');
+      const sheafInternalHomReady = !(creatingSheafInternalHom || editingSheafInternalHom) || pickFlowReady('sheaf-internal-hom');
+      const sheafIdealReady = !(creatingSheafIdeal || editingSheafIdeal) || pickFlowReady('sheaf-ideal');
+      const sheafNormalReady = !(creatingSheafNormal || editingSheafNormal) || pickFlowReady('sheaf-normal');
+      const sheafRelativeReady = !(creatingSheafRelative || editingSheafRelative) || pickFlowReady('sheaf-relative');
+      const sheafSchurReady = !(creatingSheafSchur || editingSheafSchur) || pickFlowReady('sheaf-schur');
       const creatingParentSheaf = creatingSheafMapOperation || creatingSheafBinary || creatingSheafSelfSum || creatingSheafDual || creatingSheafInternalHom || creatingSheafIdeal || creatingSheafNormal || creatingSheafRelative || creatingSheafSchur;
       const productFactors = productDraftFactors();
       const productDim = productFactors.length === 2 ? productDimensionFromFactors(productFactors[0], productFactors[1]) : 0;
       const productNeedsFactors = creatingProduct || updatingProduct;
-      const productReady = !productNeedsFactors || (productFactors.length === 2 && productDim <= MAX_DIMENSION);
+      const productReady = !productNeedsFactors || (pickFlowReady('product') && productDim <= MAX_DIMENSION);
       const grassmannianParams = draftingVariety && draftVariety === 'grassmannian' ? syncGrassmannianControls() : null;
       const grassmannianReady = !grassmannianParams || grassmannianParams.dim <= MAX_DIMENSION;
-      const sesReady = !draftingCombinedSes || !!shortExactSequenceData();
+      const sesReady = !draftingCombinedSes || pickFlowReady('short-exact-sequence');
       const sesEditReady = !activeSesEditMode() || !!shortExactSequenceData({ requireComplete: true, requireMaps: true });
-      const blowupReady = !draftingCombinedBlowup || !!blowupConstructionData();
-      const ramifiedCoverReady = !draftingCombinedRamifiedCover || !!ramifiedCoverConstructionData();
-      const tautologicalSesReady = !draftingCombinedTautologicalSes || !!tautologicalSesConstructionData();
+      const blowupReady = !draftingCombinedBlowup || pickFlowReady('blowup');
+      const ramifiedCoverReady = !draftingCombinedRamifiedCover || pickFlowReady('ramified-cover');
+      const tautologicalSesReady = !draftingCombinedTautologicalSes || pickFlowReady('tautological-ses');
       const grassmannianMapParams = draftingCombinedGrassmannianMap ? syncGrassmannianMapControls() : null;
-      const grassmannianMapReady = !draftingCombinedGrassmannianMap || !!grassmannianMapConstructionData();
+      const grassmannianMapReady = !draftingCombinedGrassmannianMap || pickFlowReady('grassmannian-map');
       const numberReady = !draftingNumber || globalInvariantNameIsValid(refs.globalInvariantName?.value);
       refs.addObject.disabled = (draftingMap && !mapReady) || !ramifiedCoverMapReady || (productNeedsFactors && !productReady) || !grassmannianReady || !sesReady || !sesEditReady || !blowupReady || !ramifiedCoverReady || !tautologicalSesReady || !grassmannianMapReady || !numberReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSelfSum || editingSheafSelfSum) && !sheafSelfSumReady) || ((creatingSheafDual || editingSheafDual) && !sheafDualReady) || ((creatingSheafInternalHom || editingSheafInternalHom) && !sheafInternalHomReady) || ((creatingSheafIdeal || editingSheafIdeal) && !sheafIdealReady) || ((creatingSheafNormal || editingSheafNormal) && !sheafNormalReady) || ((creatingSheafRelative || editingSheafRelative) && !sheafRelativeReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
       refs.addObject.textContent = inputIsModifyMode() ? 'update' : (combinedCreateMode() ? 'build' : 'add');
       let addTitle = '';
       if (creatingMap) {
-        addTitle = mapCompositionInputMode()
-          ? mapCompositionPickHint()
-          : (abelJacobiMapInputMode() ? abelJacobiMapPickHint() : ordinaryMapPickHint());
+        addTitle = pickFlowHint(activePickFlow());
       } else if (editingRamifiedCoverMap && !ramifiedCoverMapReady) {
         addTitle = ramifiedCoverMapPickHint(selectedMap());
       } else if (!numberReady) {
         addTitle = globalInvariantNameWarning();
       } else if (draftingCombinedSes) {
-        addTitle = activeSesEditMode() && !sesEditReady ? 'Use existing sheaves and maps for all five SES slots' : sesPickHint();
+        addTitle = activeSesEditMode() && !sesEditReady ? 'Use existing sheaves and maps for all five SES slots' : pickFlowHint(pickFlowById('short-exact-sequence'));
       } else if (draftingCombinedBlowup) {
-        addTitle = blowupPickHint();
+        addTitle = pickFlowHint(pickFlowById('blowup'));
       } else if (draftingCombinedRamifiedCover) {
-        addTitle = ramifiedCoverPickHint();
+        addTitle = pickFlowHint(pickFlowById('ramified-cover'));
       } else if (draftingCombinedTautologicalSes) {
-        addTitle = tautologicalSesPickHint();
+        addTitle = pickFlowHint(pickFlowById('tautological-ses'));
       } else if (draftingCombinedGrassmannianMap) {
-        addTitle = grassmannianMapPickHint(grassmannianMapParams);
+        addTitle = pickFlowHint(pickFlowById('grassmannian-map'));
       } else if (!grassmannianReady) {
         addTitle = `Grassmannian dimension ${grassmannianParams.dim} exceeds the calculator limit ${MAX_DIMENSION}`;
       } else if (productNeedsFactors) {
@@ -13259,25 +13837,25 @@
           ? `Product dimension ${productDim} exceeds the calculator limit ${MAX_DIMENSION}`
           : 'Pick two varieties on the canvas';
       } else if ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) {
-        addTitle = sheafMapPickHint();
+        addTitle = pickFlowHint(pickFlowById('sheaf-map-operation'));
       } else if ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) {
-        addTitle = sheafBinaryPickHint();
+        addTitle = pickFlowHint(pickFlowById('sheaf-binary'));
       } else if ((creatingSheafSelfSum || editingSheafSelfSum) && !sheafSelfSumReady) {
-        addTitle = sheafSelfSumPickHint();
+        addTitle = pickFlowHint(pickFlowById('sheaf-self-sum'));
       } else if ((creatingSheafDual || editingSheafDual) && !sheafDualReady) {
-        addTitle = sheafDualPickHint();
+        addTitle = pickFlowHint(pickFlowById('sheaf-dual'));
       } else if ((creatingSheafInternalHom || editingSheafInternalHom) && !sheafInternalHomReady) {
-        addTitle = sheafInternalHomPickHint();
+        addTitle = pickFlowHint(pickFlowById('sheaf-internal-hom'));
       } else if ((creatingSheafIdeal || editingSheafIdeal) && !sheafIdealReady) {
-        addTitle = sheafIdealPickHint();
+        addTitle = pickFlowHint(pickFlowById('sheaf-ideal'));
       } else if ((creatingSheafNormal || editingSheafNormal) && !sheafNormalReady) {
-        addTitle = sheafNormalPickHint();
+        addTitle = pickFlowHint(pickFlowById('sheaf-normal'));
       } else if ((creatingSheafRelative || editingSheafRelative) && !sheafRelativeReady) {
-        addTitle = sheafRelativePickHint();
+        addTitle = pickFlowHint(pickFlowById('sheaf-relative'));
       } else if ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) {
-        addTitle = sheafSchurPickHint();
+        addTitle = pickFlowHint(pickFlowById('sheaf-schur'));
       } else if (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) {
-        addTitle = hasVariety ? 'Pick a base variety on the canvas first' : 'Add a variety first';
+        addTitle = pickFlowHint(pickFlowById('sheaf-base'));
       } else if (draftingSheaf && !creatingParentSheaf && !draftBase) {
         addTitle = 'Add a base variety first';
       }
@@ -14132,6 +14710,11 @@
   }
 
   function tangentChernClassRowCanAdd(context, index) {
+    return tangentChernClassRowCanAddIgnoringPromotion(context, index)
+      && !context.geometry.homology?.customClasses?.some((item) => item.id === tangentChernHomologyClassId(index));
+  }
+
+  function tangentChernClassRowCanAddIgnoringPromotion(context, index) {
     return !!context
       && context.geometry?.type === 'abstract'
       && context.sheaf?.type === 'tangent'
@@ -14139,8 +14722,7 @@
       && Number.isInteger(index)
       && Number.isInteger(context.geometry.dim)
       && index >= 1
-      && index <= context.geometry.dim
-      && !context.geometry.homology?.customClasses?.some((item) => item.id === tangentChernHomologyClassId(index));
+      && index <= context.geometry.dim;
   }
 
   function homologyVariableId(classId, geometry = null) {
@@ -14562,7 +15144,7 @@
       ? geometryByVarietyId(map.domainId)
       : geometryByVarietyId(map.codomainId);
     const sourceId = sourceGeometry ? canonicalHomologyVariableId(parsed.sourceId, sourceGeometry) : parsed.sourceId;
-    const sourceData = sourceGeometry ? homologyVariableDataById(sourceGeometry, sourceId) : null;
+    const sourceData = sourceGeometry ? homologyVariableDataById(sourceGeometry, sourceId) || tangentChernVariableDataById(sourceGeometry, sourceId) : null;
     if (!sourceData || !targetGeometry) return null;
     const variableId = defineMapHomologyVariable(map, parsed.operation, sourceId, parsed.operation === 'pullback'
       ? sourceData.degree
@@ -14571,7 +15153,7 @@
           ? sourceData.cohomologyDegree
           : sourceData.cohomologyDegree + 2 * (targetGeometry.dim - sourceGeometry.dim),
         sourceKey: monoKey({ [sourceId]: 1 })
-      });
+    });
     return VARS.get(variableId) || VARS.get(id) || null;
   }
 
@@ -14588,6 +15170,22 @@
     const def = homologyClassDefinitions(geometry).find((item) => homologyDefVariableId(item, geometry) === normalizedId);
     if (!def) return null;
     return { degree: def.degree, cohomologyDegree: def.cohomologyDegree, latex: def.symbolLatex, plain: def.symbolPlain, ...homologyDefinitionVariableMeta(def) };
+  }
+
+  function tangentChernVariableDataById(geometry, variableId) {
+    const index = tangentChernIndexFromRuleVariable(variableId, geometry);
+    if (!index) return null;
+    const promotedClassId = tangentChernHomologyClassId(index);
+    const promotedId = homologyVariableId(promotedClassId, geometry);
+    if (variableId !== promotedId && variableId !== `chern_${homologyScopeId(geometry)}_tangent_${index}`) return null;
+    const latex = tangentChernHomologyClassSymbol(geometry, index);
+    return {
+      degree: index,
+      cohomologyDegree: 2 * index,
+      latex,
+      plain: latexToPlain(latex),
+      kind: 'tangentChern'
+    };
   }
 
   function standardHomologyRules(geometry, existingRules = new Map()) {
@@ -15345,7 +15943,7 @@
         homology: ruleGeometry.homology,
         sheaf,
         baseGeometry: geometry,
-        homologyRulePasses: Math.max(1, normalizedInt(state.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES))
+        homologyRulePasses: currentHomologyRulePasses()
       };
       applySheafHomologyRulesToBundle(bundle, d, sheafDisplayOptions);
     }
@@ -15456,7 +16054,7 @@
       termIndex,
       geometry,
       homology: geometry.homology || null,
-      homologyRulePasses: Math.max(1, normalizedInt(state.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES))
+      homologyRulePasses: currentHomologyRulePasses()
     };
   }
 
@@ -15470,20 +16068,46 @@
     return buildStandardClassRows(bundle, d, options);
   }
 
+  function formatClassPoly(poly, options) {
+    const simplified = applyHomologyRulesCached(poly, options);
+    return {
+      latex: formatPolyLatex(simplified),
+      plain: formatPolyPlain(simplified)
+    };
+  }
+
   function formatClassPolyLatex(poly, options) {
-    return formatPolyLatex(applyHomologyRules(poly, options));
+    return formatClassPoly(poly, options).latex;
   }
 
   function formatClassPolyPlain(poly, options) {
-    return formatPolyPlain(applyHomologyRules(poly, options));
+    return formatClassPoly(poly, options).plain;
+  }
+
+  function formatRankPlusClassPoly(rankLatex, rankPlain, poly, options) {
+    const simplified = applyHomologyRulesCached(poly, options);
+    return {
+      latex: formatRankPlusPolyLatex(rankLatex, simplified),
+      plain: formatRankPlusPolyPlain(rankPlain, simplified)
+    };
   }
 
   function formatRankPlusClassPolyLatex(rank, poly, options) {
-    return formatRankPlusPolyLatex(rank, applyHomologyRules(poly, options));
+    return formatRankPlusClassPoly(rank, rank, poly, options).latex;
   }
 
   function formatRankPlusClassPolyPlain(rank, poly, options) {
-    return formatRankPlusPolyPlain(rank, applyHomologyRules(poly, options));
+    return formatRankPlusClassPoly(rank, rank, poly, options).plain;
+  }
+
+  function classPolyRow(label, labelLatex, key, poly, options) {
+    const display = formatClassPoly(poly, options);
+    return { label, labelLatex, key, latex: display.latex, plain: display.plain };
+  }
+
+  function rankPlusClassPolyRow(label, labelLatex, key, rankLatex, rankPlain, poly, options) {
+    const display = formatRankPlusClassPoly(rankLatex, rankPlain, poly, options);
+    return { label, labelLatex, key, latex: display.latex, plain: display.plain };
   }
 
   function buildStandardClassRows(bundle, d, options) {
@@ -15491,19 +16115,21 @@
       const i = options.termIndex;
       const suffix = `_{${i}}`;
       return [
-        { label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `chern_${i}`, latex: formatClassPolyLatex(i === 0 ? Poly.one() : componentOrZero(bundle.cComps, i), options), plain: formatClassPolyPlain(i === 0 ? Poly.one() : componentOrZero(bundle.cComps, i), options) },
-        { label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `character_${i}`, latex: i === 0 ? (bundle.rankLatex || '0') : formatClassPolyLatex(componentOrZero(bundle.chComps, i), options), plain: i === 0 ? (bundle.rankPlain || '0') : formatClassPolyPlain(componentOrZero(bundle.chComps, i), options) },
-        { label: `td_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}${suffix}(${bundle.labelLatex})`, key: `todd_${i}`, latex: formatClassPolyLatex(homogeneousPart(bundle.todd, i), options), plain: formatClassPolyPlain(homogeneousPart(bundle.todd, i), options) },
-        { label: `s_${i}(${bundle.labelPlain})`, labelLatex: `s${suffix}(${bundle.labelLatex})`, key: `segre_${i}`, latex: formatClassPolyLatex(homogeneousPart(bundle.segre, i), options), plain: formatClassPolyPlain(homogeneousPart(bundle.segre, i), options) },
-        { label: `sqrt td_${i}(${bundle.labelPlain})`, labelLatex: `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, key: `sqrtTodd_${i}`, latex: formatClassPolyLatex(homogeneousPart(bundle.sqrtTodd, i), options), plain: formatClassPolyPlain(homogeneousPart(bundle.sqrtTodd, i), options) }
+        classPolyRow(`c_${i}(${bundle.labelPlain})`, `c${suffix}(${bundle.labelLatex})`, `chern_${i}`, i === 0 ? Poly.one() : componentOrZero(bundle.cComps, i), options),
+        i === 0
+          ? { label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `character_${i}`, latex: bundle.rankLatex || '0', plain: bundle.rankPlain || '0' }
+          : classPolyRow(`ch_${i}(${bundle.labelPlain})`, `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, `character_${i}`, componentOrZero(bundle.chComps, i), options),
+        classPolyRow(`td_${i}(${bundle.labelPlain})`, `\\operatorname{td}${suffix}(${bundle.labelLatex})`, `todd_${i}`, homogeneousPart(bundle.todd, i), options),
+        classPolyRow(`s_${i}(${bundle.labelPlain})`, `s${suffix}(${bundle.labelLatex})`, `segre_${i}`, homogeneousPart(bundle.segre, i), options),
+        classPolyRow(`sqrt td_${i}(${bundle.labelPlain})`, `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, `sqrtTodd_${i}`, homogeneousPart(bundle.sqrtTodd, i), options)
       ];
     }
     return [
-      { label: `c(${bundle.labelPlain})`, labelLatex: `c(${bundle.labelLatex})`, key: 'chern', latex: formatClassPolyLatex(bundle.cTotal, options), plain: formatClassPolyPlain(bundle.cTotal, options) },
-      { label: `ch(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}(${bundle.labelLatex})`, key: 'character', latex: formatRankPlusClassPolyLatex(bundle.rankLatex, positiveTotal(bundle.chComps, d), options), plain: formatRankPlusClassPolyPlain(bundle.rankPlain, positiveTotal(bundle.chComps, d), options) },
-      { label: `td(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}(${bundle.labelLatex})`, key: 'todd', latex: formatClassPolyLatex(bundle.todd, options), plain: formatClassPolyPlain(bundle.todd, options) },
-      { label: `s(${bundle.labelPlain})`, labelLatex: `s(${bundle.labelLatex})`, key: 'segre', latex: formatClassPolyLatex(bundle.segre, options), plain: formatClassPolyPlain(bundle.segre, options) },
-      { label: `sqrt td(${bundle.labelPlain})`, labelLatex: `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, key: 'sqrtTodd', latex: formatClassPolyLatex(bundle.sqrtTodd, options), plain: formatClassPolyPlain(bundle.sqrtTodd, options) }
+      classPolyRow(`c(${bundle.labelPlain})`, `c(${bundle.labelLatex})`, 'chern', bundle.cTotal, options),
+      rankPlusClassPolyRow(`ch(${bundle.labelPlain})`, `\\operatorname{ch}(${bundle.labelLatex})`, 'character', bundle.rankLatex, bundle.rankPlain, positiveTotal(bundle.chComps, d), options),
+      classPolyRow(`td(${bundle.labelPlain})`, `\\operatorname{td}(${bundle.labelLatex})`, 'todd', bundle.todd, options),
+      classPolyRow(`s(${bundle.labelPlain})`, `s(${bundle.labelLatex})`, 'segre', bundle.segre, options),
+      classPolyRow(`sqrt td(${bundle.labelPlain})`, `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, 'sqrtTodd', bundle.sqrtTodd, options)
     ];
   }
 
@@ -15770,16 +16396,87 @@
     return new Poly(terms);
   }
 
+  function applyHomologyRulesCached(poly, options = {}) {
+    const key = homologySimplificationCacheKey(poly, options);
+    if (!key) return applyHomologyRules(poly, options);
+    const cached = state.simplificationCache.get(key);
+    if (cached) return cached;
+    const result = applyHomologyRules(poly, options);
+    state.simplificationCache.set(key, result);
+    return result;
+  }
+
+  function homologySimplificationCacheKey(poly, options = {}) {
+    try {
+      const geometry = options.geometry || null;
+      return [
+        polySignature(poly),
+        geometrySignature(geometry),
+        homologyRulesSignature(options.homology || geometry?.homology || null),
+        options.includeDefaultMapRules === false ? 'noDefaultMaps' : 'defaultMaps',
+        options.expandNestedMaps === false ? 'noNestedMaps' : 'nestedMaps',
+        options.simplifyProductBoxes === false ? 'noProductBoxes' : 'productBoxes',
+        currentHomologyRulePasses(options.homologyRulePasses)
+      ].join('::');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function geometrySignature(geometry) {
+    if (!geometry) return 'none';
+    return [
+      geometry.varietyId || '',
+      geometry.type || '',
+      geometry.dim ?? '',
+      Array.isArray(geometry.degrees) ? geometry.degrees.join(',') : '',
+      geometry.grassmannianR ?? '',
+      geometry.grassmannianN ?? '',
+      geometry.grassmannianYoungBasis === true ? 'young' : 'standard'
+    ].join('|');
+  }
+
+  function homologyRulesSignature(homology) {
+    const rules = (homology?.rules || [])
+      .filter((rule) => !rule.deleted)
+      .map((rule) => [
+        rule.enabled === false ? 'off' : 'on',
+        rule.builtin ? 'builtin' : 'custom',
+        monoKey(rule.lhs?.powers || {}),
+        serializeHomologyRuleTerms(rule.rhs || [])
+      ].join(':'))
+      .sort();
+    const classes = (homology?.customClasses || [])
+      .map((item) => `${item.id}:${item.symbol || item.symbolLatex || ''}:${item.degree ?? ''}:${item.cohomologyDegree ?? ''}`)
+      .sort();
+    return `${rules.join(';')}#${classes.join(';')}`;
+  }
+
   function applyHomologyRules(poly, options = {}) {
+    const original = Poly.from(poly);
+    try {
+      return applyHomologyRulesBudgeted(original, options);
+    } catch (error) {
+      if (error?.symbolicBudgetExceeded) {
+        recordSymbolicWarning(`${error.message} Showing a partially simplified expression.`);
+        return original.truncate(options.geometry?.dim ?? MAX_DIMENSION);
+      }
+      throw error;
+    }
+  }
+
+  function applyHomologyRulesBudgeted(poly, options = {}) {
     poly = Poly.from(poly);
     const geometry = options.geometry || null;
     const homology = options.homology || geometry?.homology || null;
+    chargeSymbolicWork(poly.terms.size || 1, poly.terms.size, 'homology simplification', options);
     defineHomologyVariables(geometry);
     const startPoly = simplifyProductBoxPolynomial(
       maybeExpandMapHomologyVariables(poly, options),
       geometry,
       options
     );
+    chargeSymbolicWork(startPoly.terms.size || 1, startPoly.terms.size, 'homology simplification', options);
     // Map expansion inspects source varieties and can rebind shared symbols such as [p].
     // Rebind the target geometry before checking or applying target-side rules.
     defineHomologyVariables(geometry);
@@ -15798,13 +16495,15 @@
     defineHomologyVariables(geometry);
     if (!rules.length) return startPoly.truncate(geometry?.dim ?? MAX_DIMENSION);
     let out = startPoly;
-    const passes = Math.max(1, normalizedInt(options.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES));
+    const passes = currentHomologyRulePasses(options.homologyRulePasses);
     for (let pass = 1; pass <= passes; pass += 1) {
+      chargeSymbolicWork(out.terms.size + rules.length, out.terms.size, 'homology rule pass', options);
       const before = out;
       out = maybeExpandMapHomologyVariables(out, options);
       out = simplifyProductBoxPolynomial(out, geometry, options);
       defineHomologyVariables(geometry);
-      out = applyHomologyRuleSweep(out, rules, geometry?.dim ?? MAX_DIMENSION);
+      out = applyHomologyRuleSweep(out, rules, geometry?.dim ?? MAX_DIMENSION, options);
+      chargeSymbolicWork(out.terms.size || 1, out.terms.size, 'homology rule pass', options);
       if (polyEquals(before, out)) return out.truncate(geometry?.dim ?? MAX_DIMENSION);
     }
     defineHomologyVariables(geometry);
@@ -15820,6 +16519,7 @@
     if (options.simplifyProductBoxes === false || !productGeometryContext(geometry)) return Poly.from(poly);
     let out = Poly.from(poly);
     for (let pass = 0; pass < 4; pass += 1) {
+      chargeSymbolicWork(out.terms.size || 1, out.terms.size, 'product-box simplification', options);
       const next = simplifyProductBoxPolynomialOnce(out, geometry, options);
       if (polyEquals(next, out)) return out.truncate(geometry?.dim ?? MAX_DIMENSION);
       out = next;
@@ -15831,6 +16531,7 @@
     const maxDegree = geometry?.dim ?? MAX_DIMENSION;
     const terms = new Map();
     for (const [key, coeff] of Poly.from(poly).terms) {
+      chargeSymbolicWork(1, terms.size, 'product-box simplification', options);
       const replacement = simplifyProductBoxMonomial(parseMonoKey(key), geometry, options);
       const expanded = (replacement || polyFromPowers(parseMonoKey(key))).scale(coeff);
       for (const [nextKey, nextCoeff] of expanded.terms) {
@@ -15845,6 +16546,7 @@
   function simplifyProductBoxMonomial(powers, geometry, options = {}) {
     const context = productGeometryContext(geometry);
     if (!context) return null;
+    const childOptions = { ...options, budget: symbolicBudgetFromOptions(options) };
     let totalLeft = Poly.one();
     let totalRight = Poly.one();
     const residualPowers = {};
@@ -15861,8 +16563,8 @@
       foundBox = true;
       const leftFactor = polyPower(polyFromPowers(parseMonoKey(box.leftKey || '')), exponent, context.leftGeometry.dim);
       const rightFactor = polyPower(polyFromPowers(parseMonoKey(box.rightKey || '')), exponent, context.rightGeometry.dim);
-      totalLeft = totalLeft.mul(leftFactor, context.leftGeometry.dim);
-      totalRight = totalRight.mul(rightFactor, context.rightGeometry.dim);
+      totalLeft = totalLeft.mul(leftFactor, context.leftGeometry.dim, childOptions);
+      totalRight = totalRight.mul(rightFactor, context.rightGeometry.dim, childOptions);
       if (totalLeft.isZero() || totalRight.isZero()) return Poly.zero();
     }
     if (!foundBox) return null;
@@ -15872,7 +16574,8 @@
       expandNestedMaps: false,
       simplifyProductBoxes: false,
       includeDefaultMapRules: false,
-      homologyRulePasses: options.homologyRulePasses
+      homologyRulePasses: options.homologyRulePasses,
+      budget: childOptions.budget
     });
     totalRight = applyHomologyRules(totalRight, {
       geometry: context.rightGeometry,
@@ -15880,7 +16583,8 @@
       expandNestedMaps: false,
       simplifyProductBoxes: false,
       includeDefaultMapRules: false,
-      homologyRulePasses: options.homologyRulePasses
+      homologyRulePasses: options.homologyRulePasses,
+      budget: childOptions.budget
     });
     let out = Poly.zero();
     for (const [leftKey, leftCoeff] of totalLeft.terms) {
@@ -15891,7 +16595,7 @@
       }
     }
     const residual = polyFromPowers(residualPowers);
-    return out.mul(residual, maxDegree).truncate(maxDegree);
+    return out.mul(residual, maxDegree, childOptions).truncate(maxDegree);
   }
 
   function polyEquals(a, b) {
@@ -15917,6 +16621,7 @@
     const maxDegree = geometry?.dim ?? MAX_DIMENSION;
     let out = poly;
     for (let pass = 0; pass < 4; pass += 1) {
+      chargeSymbolicWork(out.terms.size || 1, out.terms.size, 'nested map expansion', options);
       const next = expandNestedMapHomologyVariablesOnce(out, options, maxDegree);
       if (polyEquals(next, out)) return out.truncate(maxDegree);
       out = next;
@@ -15929,8 +16634,9 @@
     for (const [key, coeff] of Poly.from(poly).terms) {
       let replacement = Poly.one();
       for (const [id, exp] of Object.entries(parseMonoKey(key))) {
+        chargeSymbolicWork(1, terms.size, 'nested map expansion', options);
         const factor = expandOneMapHomologyVariable(id, options);
-        replacement = replacement.mul(polyPower(factor, exp, maxDegree), maxDegree);
+        replacement = replacement.mul(polyPower(factor, exp, maxDegree, options), maxDegree, options);
       }
       replacement = replacement.scale(coeff);
       for (const [nextKey, nextCoeff] of replacement.terms) {
@@ -15972,7 +16678,8 @@
       homologyRulePasses: options.homologyRulePasses,
       expandNestedMaps: true,
       includeDefaultMapRules: false,
-      mapExpansionStack: new Set([...seen, id])
+      mapExpansionStack: new Set([...seen, id]),
+      budget: symbolicBudgetFromOptions(options)
     });
     if (polyEquals(sourcePoly, simplifiedSource)) return Poly.variable(id);
     if (data.operation === 'pullback') return pullbackPolynomial(simplifiedSource, map).truncate(targetGeometry.dim);
@@ -15980,22 +16687,23 @@
     return Poly.variable(id);
   }
 
-  function applyHomologyRuleSweep(poly, rules, maxDegree) {
+  function applyHomologyRuleSweep(poly, rules, maxDegree, options = {}) {
     let out = Poly.from(poly);
-    for (const rule of rules) out = applyOneHomologyRule(out, rule, maxDegree);
+    for (const rule of rules) out = applyOneHomologyRule(out, rule, maxDegree, options);
     return out.truncate(maxDegree);
   }
 
-  function applyOneHomologyRule(poly, rule, maxDegree) {
+  function applyOneHomologyRule(poly, rule, maxDegree, options = {}) {
     const lhsPowers = rule.lhs?.powers || {};
     const rhs = homologyRuleRhsPoly(rule);
     const terms = new Map();
     for (const [key, coeff] of poly.terms) {
+      chargeSymbolicWork(1 + rhs.terms.size, terms.size, 'homology rule application', options);
       const powers = parseMonoKey(key);
       const count = monomialFactorCount(powers, lhsPowers);
       const factorization = count > 0 ? removeMonomialFactor(powers, lhsPowers, count) : null;
       const replacement = count > 0 && factorization
-        ? polyPower(rhs, count, maxDegree).mul(factorization.remainder, maxDegree).scale(coeff.mul(factorization.sign))
+        ? polyPower(rhs, count, maxDegree, options).mul(factorization.remainder, maxDegree, options).scale(coeff.mul(factorization.sign))
         : polyFromPowers(powers).scale(coeff);
       for (const [nextKey, nextCoeff] of replacement.terms) {
         const next = (terms.get(nextKey) || Fraction.zero()).add(nextCoeff);
@@ -16351,7 +17059,7 @@
       expandNestedMaps: false,
       simplifyProductBoxes: false,
       includeDefaultMapRules: false,
-      homologyRulePasses: Math.max(1, normalizedInt(state.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES))
+      homologyRulePasses: currentHomologyRulePasses()
     });
     const integral = integrateTopHomologyClass(fiberPoly, fiberGeometry);
     if (integral == null) return null;
@@ -16362,7 +17070,7 @@
       expandNestedMaps: false,
       simplifyProductBoxes: false,
       includeDefaultMapRules: false,
-      homologyRulePasses: Math.max(1, normalizedInt(state.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES))
+      homologyRulePasses: currentHomologyRulePasses()
     });
     return keptPoly.scale(integral).truncate(keptGeometry.dim);
   }
@@ -16549,7 +17257,7 @@
     const simplified = applyHomologyRules(polyFromPowers(parseMonoKey(key)), {
       geometry,
       homology: { ...(geometry?.homology || {}), rules: activeRules },
-      homologyRulePasses: Math.max(1, normalizedInt(state.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES))
+      homologyRulePasses: currentHomologyRulePasses()
     });
     const from = monomialPlain(key) || '1';
     const to = formatPolyPlain(simplified);
@@ -16566,7 +17274,7 @@
     const simplified = applyHomologyRules(original, {
       geometry,
       homology: { ...(geometry?.homology || {}), rules: activeRules },
-      homologyRulePasses: Math.max(1, normalizedInt(state.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES))
+      homologyRulePasses: currentHomologyRulePasses()
     });
     return polyEquals(original, simplified);
   }
@@ -16669,9 +17377,12 @@
     };
   }
 
-  function polyPower(poly, exponent, maxDegree) {
+  function polyPower(poly, exponent, maxDegree, options = {}) {
     let out = Poly.one();
-    for (let i = 0; i < exponent; i++) out = out.mul(poly, maxDegree);
+    for (let i = 0; i < exponent; i++) {
+      chargeSymbolicWork(Poly.from(poly).terms.size || 1, out.terms.size, 'polynomial power', options);
+      out = out.mul(poly, maxDegree, options);
+    }
     return out;
   }
 
@@ -16796,7 +17507,7 @@
       homology: ruleGeometry.homology,
       sheaf,
       baseGeometry: geometry,
-      homologyRulePasses: Math.max(1, normalizedInt(state.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES))
+      homologyRulePasses: currentHomologyRulePasses()
     });
   }
 
@@ -17006,7 +17717,7 @@
     const rankDisplayOptions = {
       geometry,
       homology: geometry.homology || null,
-      homologyRulePasses: Math.max(1, normalizedInt(state.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES))
+      homologyRulePasses: currentHomologyRulePasses()
     };
     const reducedRankPoly = applyHomologyRules(rankPoly, rankDisplayOptions);
     const rankLatex = reducedRankPoly.isZero() ? '0' : formatPolyLatex(reducedRankPoly);
@@ -18757,9 +19468,10 @@
       return new Poly(terms);
     }
 
-    mul(other, maxDegree = MAX_DIMENSION) {
+    mul(other, maxDegree = MAX_DIMENSION, options = {}) {
       other = Poly.from(other);
       if (this.isZero() || other.isZero()) return Poly.zero();
+      chargeSymbolicWork(Math.max(1, this.terms.size * other.terms.size), Math.max(this.terms.size, other.terms.size), 'polynomial multiplication', options);
       const terms = new Map();
       for (const [aKey, aCoeff] of this.terms) {
         const aPowers = parseMonoKey(aKey);
@@ -18771,6 +19483,7 @@
           const next = (terms.get(key) || Fraction.zero()).add(aCoeff.mul(bCoeff).mul(product.sign));
           if (next.isZero()) terms.delete(key);
           else terms.set(key, next);
+          chargeSymbolicWork(1, terms.size, 'polynomial multiplication', options);
         }
       }
       return new Poly(terms);
@@ -19213,7 +19926,7 @@
     const simplified = applyHomologyRules(original, {
       geometry,
       homology: geometry?.homology,
-      homologyRulePasses: Math.max(1, normalizedInt(state.homologyRulePasses, 1, 999, DEFAULT_HOMOLOGY_RULE_PASSES))
+      homologyRulePasses: currentHomologyRulePasses()
     });
     return formatPolyLatex(simplified);
   }
@@ -19478,10 +20191,10 @@
 
   function renderSheafHomologySpecialAction(def, context = activeHomologySheafContext()) {
     if (tangentChernClassRowCanAdd(context, def.degree)) {
-      return `<button class="btn btn-ghost homology-rule-delete" type="button" data-add-tangent-chern-class="${escapeHtml(def.degree)}">add class</button>`;
+      return '<span class="homology-symbol-kind">special</span>';
     }
     if (sheafChernClassCanPromote(def, context)) {
-      return `<button class="btn btn-ghost homology-rule-delete" type="button" data-add-sheaf-chern-class="${escapeHtml(def.id)}">add class</button>`;
+      return '<span class="homology-symbol-kind">special</span>';
     }
     return '<span class="homology-symbol-kind">special</span>';
   }
@@ -19554,6 +20267,11 @@
   }
 
   function renderSheafHomologyLhs(def) {
+    const context = activeHomologySheafContext();
+    if (tangentChernClassRowCanAdd(context, def.degree)) {
+      const displayLatex = tangentChernHomologyClassSymbol(context.geometry, def.degree);
+      return `<button class="homology-symbol-name sheaf-chern-class-name" type="button" data-add-tangent-chern-class="${escapeHtml(def.degree)}" title="Add this tangent Chern class to homology of X">\\(${displayLatex}=\\)</button>`;
+    }
     if (sheafChernClassCanPromote(def)) {
       return `<button class="homology-symbol-name sheaf-chern-class-name" type="button" data-add-sheaf-chern-class="${escapeHtml(def.id)}" title="Add this Chern class to homology of X">\\(${def.symbolLatex}=\\)</button>`;
     }
@@ -19565,9 +20283,12 @@
     if (!prompt || prompt.type !== 'sheaf-chern' || prompt.defId !== def.id) return '';
     const context = activeHomologySheafContext();
     if (!context || context.sheafObject?.id !== prompt.sheafId || context.variety?.id !== prompt.varietyId) return '';
+    const displayLatex = prompt.tangent === true
+      ? tangentChernHomologyClassSymbol(context.geometry, prompt.tangentIndex || def.degree)
+      : def.symbolLatex;
     return `
       <div class="homology-promotion-prompt">
-        <span>Add \\(${def.symbolLatex}\\) to homology classes of \\(${context.geometry.labelLatex}\\)?</span>
+        <span>Add \\(${displayLatex}\\) to homology classes of \\(${context.geometry.labelLatex}\\)?</span>
         <label class="opt-row homology-promotion-skip">
           <input type="checkbox" data-homology-promotion-prompt-skip>
           do not pop up next time
@@ -20069,34 +20790,10 @@
     if (geometry) badgeParts.push(geometry.labelLatex);
     if (bundle) badgeParts.push(bundle.labelLatex);
     setInlineMath(refs.objectBadge, badgeParts.length ? badgeParts.join(',\\ ') : '\\text{empty}');
-    const basis = basisStatusLabel(result.sheaf?.basis);
-    renderStatusLine(bundle ? `${basis} basis` : '');
+    renderStatusForResult(result);
     setInlineMath(refs.ringSummary, geometry ? `A^*(${geometry.labelLatex})_{\\le ${geometry.dim}}` : '\\text{add a variety}');
     renderHomologyPanel(result);
-    if (result.classRows.length) {
-      if (refs.classActions) refs.classActions.hidden = false;
-      if (refs.furtherSimplify) refs.furtherSimplify.textContent = `further simplify (${result.classDisplay?.homologyRulePasses || DEFAULT_HOMOLOGY_RULE_PASSES})`;
-      syncClassDisplayControls(result);
-      refs.classChart.hidden = false;
-      refs.classMessage.hidden = true;
-      refs.classChart.innerHTML = result.classRows.map((row) => `
-        <div class="sheaf-formula-row">
-          <span class="sheaf-formula-label">\\(${row.labelLatex}\\)</span>
-          <span class="sheaf-formula-value">\\(${row.latex}\\)</span>
-        </div>
-      `).join('');
-      refs.classMessage.textContent = '';
-    } else {
-      if (refs.classActions) refs.classActions.hidden = true;
-      refs.basisRow.hidden = true;
-      if (refs.rootFormRow) refs.rootFormRow.hidden = true;
-      if (refs.classTermRow) refs.classTermRow.hidden = true;
-      refs.classChart.hidden = true;
-      refs.classChart.innerHTML = '';
-      refs.classMessage.className = 'hint';
-      refs.classMessage.hidden = false;
-      refs.classMessage.textContent = classChartEmptyMessage();
-    }
+    renderClassChart(result);
     if (result.hodge) {
       if (refs.hodgeActions) refs.hodgeActions.hidden = false;
       refs.hodgeChart.hidden = false;
@@ -20115,6 +20812,88 @@
     typeset(refs.cohomologyChart);
     typeset(refs.hodgeChart);
     renderCanvas(result);
+  }
+
+  function refreshClassDisplayOnly(reason = 'class display') {
+    if (!canScheduleRecompute()) {
+      const jobId = ++state.classRefreshJobId;
+      return runClassDisplayRefresh(jobId, reason);
+    }
+    return scheduleClassDisplayRefresh(reason);
+  }
+
+  function scheduleClassDisplayRefresh(reason = 'class display', options = {}) {
+    const delay = Number.isFinite(options.delay) ? Math.max(0, options.delay) : CLASS_REFRESH_DELAY_MS;
+    const jobId = ++state.classRefreshJobId;
+    state.pendingClassRefreshReason = reason;
+    if (state.classRefreshTimer) clearTimeout(state.classRefreshTimer);
+    setClassRefreshBusy(true, reason);
+    state.classRefreshTimer = setTimeout(() => {
+      if (jobId !== state.classRefreshJobId) return;
+      state.classRefreshTimer = null;
+      runClassDisplayRefresh(jobId, state.pendingClassRefreshReason || reason);
+    }, delay);
+    return null;
+  }
+
+  function runClassDisplayRefresh(jobId, reason = 'class display') {
+    if (jobId !== state.classRefreshJobId) return state.lastResult;
+    state.pendingClassRefreshReason = '';
+    const result = state.lastResult;
+    if (!result?.bundle || !result?.geometry) {
+      return recompute(reason);
+    }
+    state.simplificationCache.clear();
+    state.symbolicWarnings = [];
+    const budget = createSymbolicBudget(reason);
+    state.currentSymbolicBudget = budget;
+    setClassRefreshBusy(true, reason);
+    try {
+      result.classDisplay = classDisplayOptions(result.geometry, result.sheaf);
+      result.classRows = buildClassRows(result.bundle, result.geometry.dim, result.classDisplay);
+      renderClassChart(result);
+      typeset(refs.classChart);
+      refreshExport(state.exportScope || 'main');
+      renderStatusForResult(result);
+      return result;
+    } catch (error) {
+      reportInputActionError(error);
+      return null;
+    } finally {
+      state.currentSymbolicBudget = null;
+      setClassRefreshBusy(false);
+    }
+  }
+
+  function renderClassChart(result = state.lastResult) {
+    if (!refs.classChart || !refs.classMessage) return;
+    if (result?.classRows?.length) {
+      if (refs.classActions) refs.classActions.hidden = false;
+      syncClassDisplayControls(result);
+      syncHeavyOperationControls(result);
+      refs.classChart.hidden = false;
+      refs.classChart.innerHTML = result.classRows.map((row) => `
+        <div class="sheaf-formula-row">
+          <span class="sheaf-formula-label">\\(${row.labelLatex}\\)</span>
+          <span class="sheaf-formula-value">\\(${row.latex}\\)</span>
+        </div>
+      `).join('');
+      const warning = symbolicWarningText();
+      refs.classMessage.className = warning ? 'hint' : 'err';
+      refs.classMessage.hidden = !warning;
+      refs.classMessage.textContent = warning;
+      return;
+    }
+    if (refs.classActions) refs.classActions.hidden = true;
+    refs.basisRow.hidden = true;
+    if (refs.rootFormRow) refs.rootFormRow.hidden = true;
+    if (refs.classTermRow) refs.classTermRow.hidden = true;
+    refs.classChart.hidden = true;
+    refs.classChart.innerHTML = '';
+    refs.classMessage.className = 'hint';
+    refs.classMessage.hidden = false;
+    refs.classMessage.textContent = classChartEmptyMessage();
+    syncHeavyOperationControls(result);
   }
 
   function classChartEmptyMessage() {
@@ -20532,6 +21311,7 @@
   function canvasOverviewLabels(width, height) {
     const labels = canvasObjectLabels(width, height);
     const showSelection = inputIsModifyMode();
+    const pickFlow = activePickFlow();
     visibleCanvasMaps().forEach((map) => {
       const endpoints = mapEndpointLabels(map, labels);
       if (!endpoints) return;
@@ -20539,34 +21319,7 @@
       const name = sanitizeMathLabel(map.name, 'f');
       const classes = ['sheaf-canvas-label', 'is-map'];
       if (showSelection && map.id === state.activeMapId) classes.push('is-active');
-      if (sheafMapOperationInputMode()) {
-        if (state.sheafMapDraft?.mapId === map.id) classes.push('is-active');
-        else if (state.canvasPickEnabled && state.sheafMapPickTarget === 'map' && allowableSheafMapOperationMap(map.id)) classes.push('is-pick-candidate');
-      }
-      if (sheafIdealInputMode()) {
-        if (state.sheafIdealDraft?.mapId === map.id) classes.push('is-active');
-        else if (state.canvasPickEnabled && allowableSheafIdealMapPick(map.id)) classes.push('is-pick-candidate');
-      }
-      if (sheafNormalInputMode()) {
-        if (state.sheafNormalDraft?.mapId === map.id) classes.push('is-active');
-        else if (state.canvasPickEnabled && allowableSheafNormalMapPick(map.id)) classes.push('is-pick-candidate');
-      }
-      if (sheafRelativeInputMode()) {
-        if (state.sheafRelativeDraft?.mapId === map.id) classes.push('is-active');
-        else if (state.canvasPickEnabled && allowableSheafRelativeMapPick(map.id)) classes.push('is-pick-candidate');
-      }
-      if (mapCompositionInputMode()) {
-        const ids = mapDraftMapIds();
-        if (ids[0] === map.id) classes.push('is-map-domain');
-        if (ids[1] === map.id) classes.push('is-map-codomain');
-        if (state.canvasPickEnabled && ids[0] !== map.id && ids[1] !== map.id && allowableMapCompositionPick(map.id)) classes.push('is-pick-candidate');
-      }
-      if (combinedSesCreateMode()) {
-        const draft = sesDraftIds();
-        if (draft.mapABId === map.id) classes.push('is-map-domain');
-        if (draft.mapBCId === map.id) classes.push('is-map-codomain');
-        if (state.canvasPickEnabled && allowableSesMapPick(map.id, state.sesPickTarget)) classes.push('is-pick-candidate');
-      }
+      addPickFlowClasses(classes, 'map', map.id, pickFlow);
       labels.push({
         x: pos.x,
         y: pos.y,
@@ -20662,6 +21415,7 @@
     const layout = canvasOverviewLayout(width, height, compact);
     const labels = [];
     const showSelection = inputIsModifyMode();
+    const pickFlow = activePickFlow();
     const varieties = visibleCanvasVarieties();
     const sheaves = visibleCanvasSheaves();
     varieties.forEach((variety, index) => {
@@ -20673,46 +21427,9 @@
       const activeEndpointRole = activeMapEndpointRole('variety', variety.id);
       if (activeEndpointRole === 'domain') classes.push('is-map-domain');
       else if (activeEndpointRole === 'codomain') classes.push('is-map-codomain');
-      if (productVarietyInputMode()) {
-        const productIds = productDraftFactorIds();
-        if (productIds[0] === variety.id) classes.push('is-map-domain');
-        if (productIds[1] === variety.id) classes.push('is-map-codomain');
-        if (state.canvasPickEnabled && productIds[0] !== variety.id && productIds[1] !== variety.id && productCanPickVariety(variety.id)) {
-          classes.push('is-pick-candidate');
-        }
-      }
-      if (combinedBlowupCreateMode()) {
-        const base = blowupDraftVariety('base');
-        const point = blowupDraftVariety('point');
-        if (base?.id === variety.id) classes.push('is-map-domain');
-        if (point?.id === variety.id) classes.push('is-map-codomain');
-        if (state.canvasPickEnabled && allowableBlowupPick(variety.id, state.blowupPickTarget)) classes.push('is-pick-candidate');
-      }
-      if (combinedRamifiedCoverCreateMode()) {
-        const base = ramifiedCoverDraftBase();
-        if (base?.id === variety.id) classes.push('is-map-codomain');
-        else if (state.canvasPickEnabled && allowableRamifiedCoverBasePick(variety.id)) classes.push('is-pick-candidate');
-      }
-      if (combinedGrassmannianTautologicalSesCreateMode()) {
-        const base = tautologicalSesDraftBase();
-        if (base?.id === variety.id) classes.push('is-active');
-        else if (state.canvasPickEnabled && allowableTautologicalSesBasePick(variety.id)) classes.push('is-pick-candidate');
-      }
       const creatingMapOperationSheaf = sheafMapOperationInputMode() && inputIsCreateMode();
-      if (state.canvasPickEnabled && sheafBasePickInputMode() && allowableSheafBase(variety.id)) classes.push('is-pick-candidate');
       if (currentInputKind() === 'sheaf' && inputIsCreateMode() && !creatingMapOperationSheaf && state.draftSheafBaseVarietyId === variety.id) classes.push('is-active');
-      if (ordinaryMapInputMode() && !sheafMapInputMode()) {
-        const domain = mapDraftEndpointObject('domain');
-        const codomain = mapDraftEndpointObject('codomain');
-        if (domain?.id === variety.id) classes.push('is-map-domain');
-        else if (codomain?.id === variety.id) classes.push('is-map-codomain');
-        else if (state.canvasPickEnabled) classes.push(state.mapPickTarget === 'codomain' ? 'is-map-codomain-candidate' : 'is-pick-candidate');
-      }
-      if (abelJacobiMapInputMode()) {
-        const sourceCurve = mapDraftAbelJacobiCurve();
-        if (sourceCurve?.id === variety.id) classes.push('is-map-domain');
-        else if (state.canvasPickEnabled && allowableAbelJacobiCurvePick(variety.id)) classes.push('is-pick-candidate');
-      }
+      addPickFlowClasses(classes, 'variety', variety.id, pickFlow);
       if (sheafMapOperationInputMode() && sheafMapDraftBase()?.id === variety.id) classes.push('is-active');
       labels.push({
         x: pos.x,
@@ -20734,56 +21451,7 @@
       const activeEndpointRole = activeMapEndpointRole('sheaf', sheaf.id);
       if (activeEndpointRole === 'domain') classes.push('is-map-domain');
       else if (activeEndpointRole === 'codomain') classes.push('is-map-codomain');
-      if (sheafBinaryInputMode()) {
-        const ids = sheafBinaryDraftIds();
-        if (ids[0] === sheaf.id) classes.push('is-map-domain');
-        if (ids[1] === sheaf.id) classes.push('is-map-codomain');
-        if (state.canvasPickEnabled && ids[0] !== sheaf.id && ids[1] !== sheaf.id && allowableSheafBinaryPick(sheaf.id)) classes.push('is-pick-candidate');
-      }
-      if (sheafSelfSumInputMode()) {
-        const parent = sheafSelfSumDraftSheaf();
-        if (parent?.id === sheaf.id) classes.push('is-active');
-        else if (state.canvasPickEnabled && allowableSheafSelfSumPick(sheaf.id)) classes.push('is-pick-candidate');
-      }
-      if (sheafDualInputMode()) {
-        const parent = sheafDualDraftSheaf();
-        if (parent?.id === sheaf.id) classes.push('is-active');
-        else if (state.canvasPickEnabled && allowableSheafDualPick(sheaf.id)) classes.push('is-pick-candidate');
-      }
-      if (sheafInternalHomInputMode()) {
-        const ids = sheafInternalHomDraftIds();
-        if (ids[0] === sheaf.id) classes.push('is-map-domain');
-        if (ids[1] === sheaf.id) classes.push('is-map-codomain');
-        if (state.canvasPickEnabled && ids[0] !== sheaf.id && ids[1] !== sheaf.id && allowableSheafInternalHomPick(sheaf.id)) classes.push('is-pick-candidate');
-      }
-      if (combinedSesCreateMode()) {
-        const draft = sesDraftIds();
-        if (draft.sheafAId === sheaf.id) classes.push('is-map-domain');
-        if (draft.sheafBId === sheaf.id) classes.push('is-active');
-        if (draft.sheafCId === sheaf.id) classes.push('is-map-codomain');
-        if (state.canvasPickEnabled && allowableSesSheafPick(sheaf.id, state.sesPickTarget)) classes.push('is-pick-candidate');
-      }
-      if (combinedGrassmannianMapCreateMode()) {
-        const parent = grassmannianMapDraftSheaf();
-        if (parent?.id === sheaf.id) classes.push('is-active');
-        else if (state.canvasPickEnabled && allowableGrassmannianMapSheafPick(sheaf.id)) classes.push('is-pick-candidate');
-      }
-      if (sheafSchurInputMode()) {
-        const parent = sheafSchurDraftSheaf();
-        if (parent?.id === sheaf.id) classes.push('is-active');
-        else if (state.canvasPickEnabled && allowableSheafSchurPick(sheaf.id)) classes.push('is-pick-candidate');
-      }
-      if (sheafMapOperationInputMode()) {
-        if (state.sheafMapDraft?.sheafId === sheaf.id) classes.push('is-active');
-        else if (state.canvasPickEnabled && state.sheafMapPickTarget === 'sheaf' && allowableSheafMapOperationSheaf(sheaf.id)) classes.push('is-pick-candidate');
-      }
-      if (ordinaryMapInputMode() && sheafMapInputMode()) {
-        const domain = mapDraftEndpointObject('domain');
-        const codomain = mapDraftEndpointObject('codomain');
-        if (domain?.id === sheaf.id) classes.push('is-map-domain');
-        else if (codomain?.id === sheaf.id) classes.push('is-map-codomain');
-        else if (state.canvasPickEnabled) classes.push(state.mapPickTarget === 'codomain' ? 'is-map-codomain-candidate' : 'is-pick-candidate');
-      }
+      addPickFlowClasses(classes, 'sheaf', sheaf.id, pickFlow);
       labels.push({
         x: pos.x,
         y: pos.y,
@@ -23051,7 +23719,7 @@
       classes: options.revealedCharts?.classes === true,
       cohomology: options.revealedCharts?.cohomology === true
     };
-    state.homologyRulePasses = normalizedInt(options.homologyRulePasses, 1, 20, DEFAULT_HOMOLOGY_RULE_PASSES);
+    state.homologyRulePasses = currentHomologyRulePasses(options.homologyRulePasses);
     const homologyInputMode = options.homologyMapInputMode === 'expression' ? 'formula' : options.homologyMapInputMode;
     state.homologyMapInputMode = sanitizePresetEnum(homologyInputMode, ['coefficients', 'formula'], 'coefficients');
     state.homologyExpressionTransposed = options.homologyExpressionTransposed === true;

@@ -7,6 +7,7 @@ function loadCalculator() {
   let source = fs.readFileSync(path.join(__dirname, 'sheaf_calculator.js'), 'utf8');
   source = source.replace(/\}\)\(\);\s*$/, `return {
     state,
+    refs,
     VARS,
     geometryFromVariety,
     sheafFromObject,
@@ -14,6 +15,10 @@ function loadCalculator() {
     buildCharacteristicClasses,
     buildHodgeNumbers,
     applyHomologyRules,
+    createSymbolicBudget,
+    currentHomologyRulePasses,
+    classDisplayOptions,
+    buildClassRows,
     polyFromPowers,
     pushforwardPolynomialByDegree,
     formatPolyPlain,
@@ -26,6 +31,16 @@ function loadCalculator() {
     deleteMapHomologyRuleById,
     mapHomologyPromotionContext,
     addMapHomologyClassToTargetHomology,
+    requestSheafChernClassPromotion,
+    answerSheafChernClassPrompt,
+    tangentChernHomologyClassId,
+    tangentChernHomologyClassSymbol,
+    tangentChernSheafDefForIndex,
+    sheafChernClassUsesBaseHomology,
+    computedSheafChernClassRule,
+    baseHomologyRuleFromSheafChernRule,
+    renderSheafHomologyLhs,
+    renderSheafHomologySpecialAction,
     HOMOLOGY_HYPERPLANE_CLASS,
     HOMOLOGY_POINT_CLASS,
     HOMOLOGY_BRANCH_DIVISOR_CLASS,
@@ -54,6 +69,14 @@ function loadCalculator() {
     createIdealSheafConstruction,
     createNormalBundleConstruction,
     createRelativeSheafConstruction,
+    activePickFlow,
+    canvasPickAvailable,
+    pickFlowHint,
+    pickFlowComplete,
+    pickFlowCandidate,
+    pickFlowSelectedState,
+    syncPickFlowNote,
+    handleActivePickFlow,
     refreshConstructedObjects,
     buildPresetState,
     applyPresetState,
@@ -1363,6 +1386,88 @@ function testSmoothCyclicRamifiedCoverAddsRootClassAndHodgeNumbers() {
   assert.strictEqual(branchEightHodge.entries[2][1].plain, '149');
 }
 
+function testTangentHomologyPromotionUsesVarietyDisplay() {
+  const api = loadCalculator();
+  const variety = { id: 'X', type: 'abstract', dim: '2', name: 'X' };
+  const tangent = { id: 'TX', type: 'tangent', basis: 'chern', rank: '2', name: '\\mathcal{T}_{X}', baseVarietyId: 'X' };
+  api.state.varieties = [variety];
+  api.state.sheaves = [tangent];
+  api.state.activeHomologyTarget = { kind: 'sheaf', id: 'TX' };
+
+  const geometry = api.geometryFromVariety(variety);
+  const sheaf = api.sheafFromObject(tangent, geometry);
+  api.state.lastResult = api.buildCharacteristicClasses(geometry, sheaf);
+  const context = { sheafObject: tangent, sheaf, variety, geometry, result: api.state.lastResult };
+  const def = api.tangentChernSheafDefForIndex(context, 1);
+  const lhs = api.renderSheafHomologyLhs(def);
+  const action = api.renderSheafHomologySpecialAction(def, context);
+
+  assert(lhs.includes('data-add-tangent-chern-class="1"'));
+  assert(lhs.includes('c_{1}(X)='));
+  assert(!lhs.includes('\\mathcal{T}_{X}'));
+  assert(!action.includes('add class'));
+  api.requestSheafChernClassPromotion('1', { tangent: true });
+  assert.strictEqual(api.state.homologyClassPromotionPrompt.type, 'sheaf-chern');
+  assert.strictEqual(api.state.homologyClassPromotionPrompt.tangent, true);
+  assert.strictEqual(api.state.homologyClassPromotionPrompt.tangentIndex, 1);
+}
+
+function testRamifiedCoverTangentPromotionCopiesComputedRuleToVariety() {
+  const api = loadCalculator();
+  const base = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 2,
+    coverMode: 'cyclic',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    smoothCyclic: true,
+    branchDegree: 4,
+    defaultName: 'Y',
+    name: 'Y'
+  });
+  const tangent = api.state.sheaves.find((item) => item.construction?.ramifiedCoverTangent === true);
+  assert(tangent);
+  api.state.activeHomologyTarget = { kind: 'sheaf', id: tangent.id };
+  let coverGeometry = api.geometryFromVariety(cover);
+  const sheaf = api.sheafFromObject(tangent, coverGeometry);
+  api.state.lastResult = api.buildCharacteristicClasses(coverGeometry, sheaf);
+  const context = { sheafObject: tangent, sheaf, variety: cover, geometry: coverGeometry, result: api.state.lastResult };
+  const def = api.tangentChernSheafDefForIndex(context, 1);
+  assert(api.computedSheafChernClassRule(def, context));
+
+  api.requestSheafChernClassPromotion('1', { tangent: true });
+  assert.strictEqual(api.state.homologyClassPromotionPrompt.tangent, true);
+  api.answerSheafChernClassPrompt('yes');
+  coverGeometry = api.geometryFromVariety(cover);
+  const tangentClassId = api.tangentChernHomologyClassId(1);
+  const tangentClass = cover.homology.customClasses.find((item) => item.id === tangentClassId);
+  assert(tangentClass);
+  assert.strictEqual(tangentClass.symbol, 'c_{1}(Y)');
+  assert.strictEqual(api.sheafChernClassUsesBaseHomology(def, {
+    ...context,
+    geometry: coverGeometry,
+    result: api.state.lastResult
+  }), true);
+
+  const variableId = api.homologyVariableId(tangentClassId, coverGeometry);
+  const rule = cover.homology.rules.find((item) => item.lhs?.powers?.[variableId] === 1);
+  assert(rule);
+  const rhsIds = new Set(rule.rhs.flatMap((term) => Object.keys(term.powers || {})));
+  assert(rhsIds.has(api.homologyVariableId(api.HOMOLOGY_RAMIFICATION_DIVISOR_CLASS, coverGeometry)));
+  assert(Array.from(rhsIds).some((id) => id.startsWith('map_pullback_') && id.includes('_tangent_1')));
+
+  const reduced = api.applyHomologyRules(api.polyFromPowers({ [variableId]: 1 }), {
+    geometry: coverGeometry,
+    homology: coverGeometry.homology
+  });
+  const plain = api.formatPolyPlain(reduced);
+  assert(plain.includes('-R'));
+  assert(plain.includes('c_1(X)'));
+}
+
 function testRamifiedCoverPresetRoundTripAndDegreeOneSuppression() {
   const api = loadCalculator();
   const base = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.4, labelY: 0.7 };
@@ -2033,6 +2138,128 @@ function testPresetImportPreservesIdealSheafMarker() {
   assert.strictEqual(restored.state.varieties.find((item) => item.id === 'Y').homology.customClasses[0].id, 'ideal_f_image');
 }
 
+function testHomologyRulePassesAreCapped() {
+  const api = loadCalculator();
+  assert.strictEqual(api.currentHomologyRulePasses(1), 1);
+  assert.strictEqual(api.currentHomologyRulePasses(999), 8);
+  api.state.homologyRulePasses = 999;
+  assert.strictEqual(api.currentHomologyRulePasses(), 8);
+}
+
+function testSymbolicBudgetFallbackKeepsUnsimplifiedPolynomial() {
+  const api = loadCalculator();
+  const geometry = {
+    type: 'abstract',
+    dim: 2,
+    labelLatex: 'X',
+    labelPlain: 'X',
+    varietyId: 'X',
+    homology: {
+      rules: [{
+        id: 'budget-rule',
+        enabled: true,
+        lhs: { powers: { a: 1 } },
+        rhs: [
+          { coefficient: '1', powers: { b: 1 } },
+          { coefficient: '1', powers: { c: 1 } }
+        ]
+      }]
+    }
+  };
+  api.VARS.clear();
+  api.VARS.set('a', { degree: 1, latex: 'a', plain: 'a' });
+  api.VARS.set('b', { degree: 1, latex: 'b', plain: 'b' });
+  api.VARS.set('c', { degree: 1, latex: 'c', plain: 'c' });
+  const poly = api.polyFromPowers({ a: 1 });
+  const simplified = api.applyHomologyRules(poly, {
+    geometry,
+    homology: geometry.homology,
+    includeDefaultMapRules: false,
+    budget: api.createSymbolicBudget('test', { maxOps: 1, maxTerms: 100, maxMillis: 10000 })
+  });
+  assert.strictEqual(api.formatPolyPlain(simplified), 'a');
+  assert(api.state.symbolicWarnings.some((warning) => warning.includes('symbolic work limit')));
+}
+
+function testClassDisplayUsesCappedPasses() {
+  const api = loadCalculator();
+  api.state.homologyRulePasses = 999;
+  const geometry = api.geometryFromVariety({ id: 'X', type: 'abstract', dim: '2', name: 'X' });
+  const sheafObject = { id: 'E', type: 'abstract', basis: 'chern', rank: '2', name: 'E', baseVarietyId: 'X' };
+  const sheaf = api.sheafFromObject(sheafObject, geometry);
+  const bundle = api.buildBundleForSheaf(geometry, sheaf, { geometry });
+  const options = api.classDisplayOptions(geometry, sheaf);
+  assert.strictEqual(options.homologyRulePasses, 8);
+  const rows = api.buildClassRows(bundle, geometry.dim, options);
+  assert(rows.some((row) => row.key === 'chern'));
+}
+
+function testProductPickFlowRegistryCoversCandidatesAndSelection() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'X', type: 'abstract', dim: '1', name: 'X' },
+    { id: 'Y', type: 'abstract', dim: '1', name: 'Y' }
+  ];
+  api.refs.addObjectKind = { value: 'combined' };
+  api.refs.combinedType = { value: 'product' };
+  api.state.productDraft = { varietyIds: ['X'] };
+  const flow = api.activePickFlow();
+  assert.strictEqual(flow.id, 'product');
+  assert.strictEqual(api.canvasPickAvailable(), true);
+  assert.strictEqual(api.pickFlowSelectedState('variety', 'X'), 'domain');
+  assert.strictEqual(api.pickFlowCandidate('variety', 'Y'), true);
+  assert.strictEqual(api.pickFlowComplete(flow), false);
+  assert(api.pickFlowHint(flow).includes('second variety'));
+  const note = { hidden: true, textContent: '' };
+  api.syncPickFlowNote(note, 'product', true);
+  assert.strictEqual(note.hidden, false);
+  assert.strictEqual(note.textContent, api.pickFlowHint(flow));
+  assert.strictEqual(api.handleActivePickFlow('sheaf', 'missing'), true);
+  assert.deepStrictEqual(api.state.productDraft.varietyIds, ['X']);
+}
+
+function testMapCompositionPickFlowRegistryCoversMapCandidates() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'X', type: 'abstract', dim: '1', name: 'X' },
+    { id: 'Y', type: 'abstract', dim: '1', name: 'Y' },
+    { id: 'Z', type: 'abstract', dim: '1', name: 'Z' }
+  ];
+  api.state.maps = [
+    { id: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y', name: 'f' },
+    { id: 'g', domainKind: 'variety', domainId: 'Y', codomainKind: 'variety', codomainId: 'Z', name: 'g' }
+  ];
+  api.refs.addObjectKind = { value: 'map' };
+  api.refs.mapType = { value: 'composition' };
+  api.state.mapDraft = { type: 'composition', mapIds: ['f'] };
+  api.state.mapPickTarget = 'second';
+  const flow = api.activePickFlow();
+  assert.strictEqual(flow.id, 'map-composition');
+  assert.strictEqual(api.canvasPickAvailable(), true);
+  assert.strictEqual(api.pickFlowSelectedState('map', 'f'), 'domain');
+  assert.strictEqual(api.pickFlowCandidate('map', 'g'), true);
+}
+
+function testSheafBinaryPickFlowRegistryCoversSheafCandidates() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '1', name: 'X' }];
+  api.state.sheaves = [
+    { id: 'E', type: 'abstract', basis: 'chern', rank: '1', name: 'E', baseVarietyId: 'X' },
+    { id: 'F', type: 'abstract', basis: 'chern', rank: '1', name: 'F', baseVarietyId: 'X' }
+  ];
+  api.refs.addObjectKind = { value: 'sheaf' };
+  api.refs.sheafType = { value: 'direct-sum' };
+  api.state.sheafBinaryDraft = { sheafIds: ['E'] };
+  api.state.sheafBinaryPickTarget = 'right';
+  const flow = api.activePickFlow();
+  assert.strictEqual(flow.id, 'sheaf-binary');
+  assert.strictEqual(api.canvasPickAvailable(), true);
+  assert.strictEqual(api.pickFlowSelectedState('sheaf', 'E'), 'domain');
+  assert.strictEqual(api.pickFlowCandidate('sheaf', 'F'), true);
+  assert.strictEqual(api.pickFlowComplete(flow), false);
+  assert(api.pickFlowHint(flow).includes('second sheaf'));
+}
+
 testCurveToProjectivePullbackUsesCurvePoint();
 testProjectivePullbackStillUsesTargetHyperplane();
 testDuplicateDisplayNamesHaveDistinctInternalClasses();
@@ -2074,6 +2301,8 @@ testSymbolicGenusCurvePointBlowupHodgeNumbersAreUnchanged();
 testRamifiedCoverConstructionCreatesCoverMapAndHomology();
 testCyclicRamifiedCoverAddsBranchRamificationRule();
 testSmoothCyclicRamifiedCoverAddsRootClassAndHodgeNumbers();
+testTangentHomologyPromotionUsesVarietyDisplay();
+testRamifiedCoverTangentPromotionCopiesComputedRuleToVariety();
 testRamifiedCoverPresetRoundTripAndDegreeOneSuppression();
 testRamifiedCoverPresetRoundTripBranchDegree();
 testRamifiedCoverMapConstructionUpdatesCoverData();
@@ -2091,5 +2320,11 @@ testPresetImportPreservesNormalBundleMarker();
 testPresetImportPreservesRelativeSheafMarker();
 testNormalBundleShowKeepsRevealedScaffoldingStable();
 testPresetImportPreservesIdealSheafMarker();
+testHomologyRulePassesAreCapped();
+testSymbolicBudgetFallbackKeepsUnsimplifiedPolynomial();
+testClassDisplayUsesCappedPasses();
+testProductPickFlowRegistryCoversCandidatesAndSelection();
+testMapCompositionPickFlowRegistryCoversMapCandidates();
+testSheafBinaryPickFlowRegistryCoversSheafCandidates();
 
 console.log('sheaf calculator regression tests passed');
