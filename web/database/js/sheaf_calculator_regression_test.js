@@ -39,6 +39,7 @@ function loadCalculator() {
     tangentChernHomologyClassId,
     tangentChernHomologyClassSymbol,
     tangentChernSheafDefForIndex,
+    ppavLambdaClassId,
     sheafChernClassUsesBaseHomology,
     computedSheafChernClassRule,
     baseHomologyRuleFromSheafChernRule,
@@ -881,6 +882,60 @@ function testGrassmannianYoungBasisRulesExpressTautologicalClasses() {
   });
   assert.strictEqual(chernPlain(twistRows), `1 + sigma_1`);
   assert.notStrictEqual(sigma1Id, sigma11Id);
+}
+
+function testPpavModuliUsesLambdaClassesAndRules() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'A2', type: 'ppav-moduli', ppavGenus: '2', name: '\\mathcal{A}_{2}' }];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  assert.strictEqual(geometry.dim, 3);
+  assert.strictEqual(geometry.ppavGenus, 2);
+
+  const defs = api.homologyClassDefinitions(geometry);
+  const tautological = defs.filter((def) => def.kind === 'tautological');
+  assert.deepStrictEqual(Array.from(tautological, (def) => def.id), ['ppav_lambda_1', 'ppav_lambda_2']);
+  assert.deepStrictEqual(Array.from(tautological, (def) => def.symbolLatex), ['\\lambda_{1}', '\\lambda_{2}']);
+
+  const lambda1Id = api.homologyVariableId(api.ppavLambdaClassId(1), geometry);
+  const lambda2Id = api.homologyVariableId(api.ppavLambdaClassId(2), geometry);
+  assert.strictEqual(
+    api.formatPolyPlain(api.applyHomologyRules(api.polyFromPowers({ [lambda2Id]: 1 }), { geometry, homology: geometry.homology })),
+    '0'
+  );
+  assert.strictEqual(
+    api.formatPolyPlain(api.applyHomologyRules(api.polyFromPowers({ [lambda1Id]: 2 }), { geometry, homology: geometry.homology })),
+    '0'
+  );
+}
+
+function testPpavModuliTangentChernClassesAreTautological() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'A3', type: 'ppav-moduli', ppavGenus: '3', name: '\\mathcal{A}_{3}' }];
+  const tangentRows = characteristicRows(api, {
+    id: 'TA3',
+    type: 'tangent',
+    basis: 'chern',
+    rank: '6',
+    name: 'T',
+    baseVarietyId: 'A3'
+  });
+  const total = chernPlain(tangentRows);
+  assert(total.includes('1 - 4*lambda_1'));
+  assert(total.includes('15/2*lambda_1^2'));
+  assert(total.includes('15/2*lambda_1^3'));
+}
+
+function testPpavModuliPresetRoundTrip() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'A3', type: 'ppav-moduli', ppavGenus: '3', name: '\\mathcal{A}_{3}' }];
+  api.state.activeVarietyId = 'A3';
+  const preset = api.buildPresetState();
+  const restored = loadCalculator();
+  restored.applyPresetState(preset);
+  const variety = restored.state.varieties[0];
+  assert.strictEqual(variety.type, 'ppav-moduli');
+  assert.strictEqual(variety.ppavGenus, '3');
+  assert.strictEqual(restored.geometryFromVariety(variety).dim, 6);
 }
 
 function testStraightMapIsDefaultNoControlCase() {
@@ -2447,6 +2502,9 @@ testDuplicateDisplayNamesHaveDistinctInternalClasses();
 testDuplicateSheafNamesHaveDistinctInternalClasses();
 testGrassmannianUsesTautologicalBundleClasses();
 testGrassmannianYoungBasisRulesExpressTautologicalClasses();
+testPpavModuliUsesLambdaClassesAndRules();
+testPpavModuliTangentChernClassesAreTautological();
+testPpavModuliPresetRoundTrip();
 testAbelianSpecialSheavesAreTrivial();
 testSelfDirectSumScalesChernCharacter();
 testDivisorLineBundleUsesAssignedDivisorChernClass();

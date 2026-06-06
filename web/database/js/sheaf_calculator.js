@@ -11,6 +11,7 @@
   const MAX_SCHUR_PARTITION_SIZE = 12;
   const MAX_SELF_DIRECT_SUM_MULTIPLICITY = 99;
   const MAX_GRASSMANNIAN_N = MAX_DIMENSION + 1;
+  const MAX_PPAV_GENUS = 3;
   const DEFAULT_HOMOLOGY_RULE_PASSES = 1;
   const MAX_HOMOLOGY_RULE_PASSES = 8;
   const RECOMPUTE_DELAY_MS = 16;
@@ -76,6 +77,8 @@
   const HOMOLOGY_GRASSMANNIAN_TAUTOLOGICAL_CLASS_PREFIX = 'grassmannian_s_';
   const HOMOLOGY_GRASSMANNIAN_YOUNG_CLASS_PREFIX = 'grassmannian_young_';
   const HOMOLOGY_GRASSMANNIAN_RULE_PREFIX = 'grassmannian-';
+  const HOMOLOGY_PPAV_LAMBDA_CLASS_PREFIX = 'ppav_lambda_';
+  const HOMOLOGY_PPAV_RULE_PREFIX = 'ppav-tautological-';
   const HOMOLOGY_TANGENT_CHERN_CLASS_PREFIX = 'tangent_chern_';
   const HOMOLOGY_EXCEPTIONAL_DIVISOR_CLASS = 'exceptional_divisor';
   const HOMOLOGY_BRANCH_DIVISOR_CLASS = 'branch_divisor';
@@ -223,6 +226,8 @@
     refs.varietyType = $('variety-type');
     refs.curveGenusRow = $('curve-genus-row');
     refs.curveGenus = $('curve-genus');
+    refs.ppavGenusRow = $('ppav-genus-row');
+    refs.ppavGenus = $('ppav-genus');
     refs.ciDegreesRow = $('ci-degrees-row');
     refs.ciDegrees = $('ci-degrees');
     refs.ciEquationCountRow = $('ci-equation-count-row');
@@ -523,6 +528,7 @@
       dim: '3',
       name: 'X',
       genus: 'g',
+      ppavGenus: '2',
       grassmannianR: '2',
       grassmannianN: '4',
       grassmannianYoungBasis: false,
@@ -1205,6 +1211,7 @@
     const defaultName = defaultVarietyNameLatex();
     const name = sanitizeMathLabel(refs.varietyName.value, defaultName);
     const grassmannian = syncGrassmannianControls();
+    const ppav = syncPpavControls();
     if (refs.varietyType.value === 'grassmannian' && grassmannian.dim > MAX_DIMENSION) {
       throw new Error(`Grassmannian dimension ${grassmannian.dim} exceeds the calculator limit ${MAX_DIMENSION}.`);
     }
@@ -1213,6 +1220,7 @@
       dim: normalizedDraftDimension(),
       name,
       genus: sanitizeGenusInput(refs.curveGenus.value),
+      ppavGenus: String(ppav.genus),
       grassmannianR: String(grassmannian.r),
       grassmannianN: String(grassmannian.n),
       grassmannianYoungBasis: refs.varietyType.value === 'grassmannian' && active?.grassmannianYoungBasis === true,
@@ -1326,6 +1334,7 @@
     if (refs.varietyType?.value === 'curve') return curveDefaultName(refs.curveGenus?.value);
     if (refs.varietyType?.value === 'point') return POINT_VARIETY_NAMES[0];
     if (refs.varietyType?.value === 'abelian') return 'A';
+    if (refs.varietyType?.value === 'ppav-moduli') return defaultVarietyNameLatex();
     return 'X';
   }
 
@@ -2145,6 +2154,7 @@
       refs.varietyType.value = 'product';
       refs.dim.value = '3';
       refs.curveGenus.value = 'g';
+      if (refs.ppavGenus) refs.ppavGenus.value = '2';
       refs.grassmannianR.value = '2';
       refs.grassmannianN.value = '4';
       refs.ciDegrees.value = '';
@@ -2213,6 +2223,7 @@
       refs.varietyType.value = 'abstract';
       refs.dim.value = '3';
       refs.curveGenus.value = 'g';
+      if (refs.ppavGenus) refs.ppavGenus.value = '2';
       refs.grassmannianR.value = '2';
       refs.grassmannianN.value = '4';
       refs.ciDegrees.value = '';
@@ -2612,6 +2623,7 @@
     refs.dim.value = variety.dim ?? '3';
     refs.varietyName.value = variety.name || defaultVarietyNameLatex();
     refs.curveGenus.value = variety.genus || 'g';
+    if (refs.ppavGenus) refs.ppavGenus.value = variety.ppavGenus || '2';
     refs.grassmannianR.value = variety.grassmannianR || '2';
     refs.grassmannianN.value = variety.grassmannianN || '4';
     refs.ciDegrees.value = variety.ciDegrees || '';
@@ -4089,6 +4101,7 @@
       if (refs.varietyType.value === 'curve') refs.dim.value = '1';
       else if (refs.varietyType.value === 'point') refs.dim.value = '0';
       else if (refs.varietyType.value === 'grassmannian') syncGrassmannianControls();
+      else if (refs.varietyType.value === 'ppav-moduli') syncPpavControls();
       else refs.dim.value = String(dim);
       if (refs.varietyType.value !== 'product') clearProductDraft();
       else if (inputIsCreateMode() && currentInputKind() === 'variety') activateProductFactorPick(0, { render: false });
@@ -4101,11 +4114,31 @@
     });
     refs.dim.addEventListener('change', () => {
       const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
-      refs.dim.value = refs.varietyType.value === 'curve' ? '1' : (refs.varietyType.value === 'point' ? '0' : (refs.varietyType.value === 'grassmannian' ? String(syncGrassmannianControls().dim) : String(dim)));
+      refs.dim.value = refs.varietyType.value === 'curve'
+        ? '1'
+        : (refs.varietyType.value === 'point'
+            ? '0'
+            : (refs.varietyType.value === 'grassmannian'
+                ? String(syncGrassmannianControls().dim)
+                : (refs.varietyType.value === 'ppav-moduli' ? String(syncPpavControls().dim) : String(dim))));
       if (refs.varietyType.value === 'complete-intersection') syncCompleteIntersectionControls();
       syncDefaultVarietyName();
       syncDefaultSheafName();
     });
+    if (refs.ppavGenus) {
+      refs.ppavGenus.addEventListener('input', () => {
+        if (refs.varietyType?.value !== 'ppav-moduli') return;
+        syncPpavControls();
+        syncDefaultVarietyName();
+        syncDefaultSheafName();
+      });
+      refs.ppavGenus.addEventListener('change', () => {
+        if (refs.varietyType?.value !== 'ppav-moduli') return;
+        syncPpavControls();
+        syncDefaultVarietyName();
+        syncDefaultSheafName();
+      });
+    }
     [refs.grassmannianR, refs.grassmannianN].forEach((input) => {
       if (!input) return;
       input.addEventListener('input', () => {
@@ -11492,7 +11525,33 @@
   function normalizedDraftDimension() {
     if (refs.varietyType?.value === 'point') return '0';
     if (refs.varietyType?.value === 'grassmannian') return String(syncGrassmannianControls().dim);
+    if (refs.varietyType?.value === 'ppav-moduli') return String(syncPpavControls().dim);
     return String(normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3));
+  }
+
+  function normalizedPpavParams(source = {}) {
+    const genus = normalizedInt(source.ppavGenus ?? source.genus ?? refs.ppavGenus?.value, 1, MAX_PPAV_GENUS, 2);
+    return {
+      genus,
+      dim: ppavModuliDimension(genus)
+    };
+  }
+
+  function syncPpavControls() {
+    const params = normalizedPpavParams();
+    if (refs.ppavGenus) {
+      refs.ppavGenus.max = String(MAX_PPAV_GENUS);
+      refs.ppavGenus.value = String(params.genus);
+    }
+    if (refs.dim && refs.varietyType?.value === 'ppav-moduli') {
+      refs.dim.value = String(params.dim);
+    }
+    return params;
+  }
+
+  function ppavModuliDimension(genus) {
+    const g = normalizedInt(genus, 1, MAX_PPAV_GENUS, 2);
+    return Math.min(MAX_DIMENSION, (g * (g + 1)) / 2);
   }
 
   function normalizedGrassmannianParams(source = {}) {
@@ -11711,6 +11770,10 @@
     if (type === 'grassmannian') {
       const { r, n } = syncGrassmannianControls();
       return `\\operatorname{Gr}(${r},${n})`;
+    }
+    if (type === 'ppav-moduli') {
+      const { genus } = syncPpavControls();
+      return `\\mathcal{A}_{${genus}}`;
     }
     if (type === 'curve') return curveDefaultName(refs.curveGenus.value);
     if (type === 'abelian') return 'A';
@@ -14006,6 +14069,7 @@
     const showCurve = draftVariety === 'curve';
     const showPoint = draftVariety === 'point';
     const showGrassmannian = draftVariety === 'grassmannian';
+    const showPpavModuli = draftVariety === 'ppav-moduli';
     const showCi = draftVariety === 'complete-intersection';
     const showProduct = (draftVariety === 'product' && !inputIsModifyMode() && currentInputKind() === 'variety') || combinedProductCreateMode();
     const editingProduct = draftVariety === 'product' && inputIsModifyMode() && currentInputKind() === 'variety';
@@ -14021,13 +14085,15 @@
     if (refs.varietyName) refs.varietyName.closest('.sheaf-field-row').hidden = showProduct && productDraftFactors().length < 2;
     if (refs.grassmannianParamsRow) refs.grassmannianParamsRow.hidden = !showGrassmannian;
     if (showGrassmannian) syncGrassmannianControls();
+    if (refs.ppavGenusRow) refs.ppavGenusRow.hidden = !showPpavModuli;
+    if (showPpavModuli) syncPpavControls();
     if (refs.pointNamePresetRow) refs.pointNamePresetRow.hidden = !showPoint;
     if (refs.curveGenusRow) refs.curveGenusRow.hidden = !showCurve;
     refs.ciDegreesRow.hidden = !showCi;
     if (refs.ciEquationCountRow) refs.ciEquationCountRow.hidden = !showCi;
     if (refs.ciDegreeSliders) refs.ciDegreeSliders.hidden = !showCi || completeIntersectionDegrees().length === 0;
     refs.ciNote.hidden = !showCi;
-    if (refs.dim && showGrassmannian) refs.dim.readOnly = true;
+    if (refs.dim && (showGrassmannian || showPpavModuli)) refs.dim.readOnly = true;
     else if (refs.dim) refs.dim.readOnly = false;
     refs.twistRow.hidden = !draftingSheaf || draftSheaf !== 'twist';
     if (refs.sheafDivisorRow) refs.sheafDivisorRow.hidden = !draftingSheaf || draftSheaf !== 'divisor-line';
@@ -14220,6 +14286,28 @@
         grassmannianN: n,
         grassmannianQRank: n - r,
         grassmannianYoungBasis: variety.grassmannianYoungBasis === true
+      };
+      return attachHomologyToGeometry(variety, geometry);
+    }
+    if (type === 'ppav-moduli') {
+      const { genus, dim } = normalizedPpavParams(variety);
+      const labelLatex = sanitizeMathLabel(variety.name, `\\mathcal{A}_{${genus}}`);
+      Object.assign(variety, {
+        dim: String(dim),
+        ppavGenus: String(genus),
+        name: labelLatex
+      });
+      const geometry = {
+        type,
+        dim,
+        ambient: null,
+        degrees: [],
+        codim: null,
+        labelLatex,
+        labelPlain: latexToPlain(labelLatex),
+        ambientLatex: 'ppav moduli',
+        ambientPlain: 'ppav moduli',
+        ppavGenus: genus
       };
       return attachHomologyToGeometry(variety, geometry);
     }
@@ -14515,6 +14603,7 @@
       ));
     }
     defs.push(...grassmannianHomologyClassDefinitions(geometry, homology));
+    defs.push(...ppavHomologyClassDefinitions(geometry, homology));
     if (varietyHasHyperplaneClass(geometry.type)) {
       defs.push(homologyClassDefinition(
         HOMOLOGY_HYPERPLANE_CLASS,
@@ -14734,6 +14823,58 @@
     return { r, n, q, dim };
   }
 
+  function ppavParamsFromGeometry(geometry) {
+    if (geometry?.type !== 'ppav-moduli') return null;
+    const genus = normalizedInt(geometry.ppavGenus, 1, MAX_PPAV_GENUS, 2);
+    return { genus, dim: ppavModuliDimension(genus) };
+  }
+
+  function ppavHomologyClassDefinitions(geometry, homology) {
+    const params = ppavParamsFromGeometry(geometry);
+    if (!params) return [];
+    const defs = [];
+    for (let index = 1; index <= Math.min(params.genus, geometry.dim); index += 1) {
+      const symbol = ppavLambdaClassSymbol(index);
+      defs.push(homologyClassDefinition(
+        ppavLambdaClassId(index),
+        index,
+        symbol,
+        'tautological',
+        homology,
+        symbol,
+        geometry
+      ));
+    }
+    return defs;
+  }
+
+  function ppavLambdaClassId(index) {
+    return `${HOMOLOGY_PPAV_LAMBDA_CLASS_PREFIX}${index}`;
+  }
+
+  function ppavLambdaClassSymbol(index) {
+    return `\\lambda_{${index}}`;
+  }
+
+  function ppavLambdaClassPoly(geometry, index) {
+    const classId = ppavLambdaClassId(index);
+    const id = homologyVariableId(classId, geometry);
+    const def = homologyClassDefById(geometry, classId);
+    defineVariable(id, index, def?.symbolLatex || ppavLambdaClassSymbol(index));
+    return Poly.variable(id);
+  }
+
+  function ppavHodgeBundleChernComponents(geometry) {
+    const params = ppavParamsFromGeometry(geometry);
+    const d = geometry.dim;
+    const comps = zeroComponentArray(d);
+    if (!params) return comps;
+    for (let index = 1; index <= Math.min(params.genus, d); index += 1) {
+      comps[index] = ppavLambdaClassPoly(geometry, index);
+    }
+    return comps;
+  }
+
   function productGeometryContext(geometry) {
     if (geometry?.type !== 'product' || !Array.isArray(geometry.productFactors) || geometry.productFactors.length !== 2) return null;
     const [leftGeometry, rightGeometry] = geometry.productFactors;
@@ -14903,6 +15044,7 @@
       || isCurveSymplecticClassId(id)
       || String(id || '').startsWith(HOMOLOGY_GRASSMANNIAN_TAUTOLOGICAL_CLASS_PREFIX)
       || String(id || '').startsWith(HOMOLOGY_GRASSMANNIAN_YOUNG_CLASS_PREFIX)
+      || String(id || '').startsWith(HOMOLOGY_PPAV_LAMBDA_CLASS_PREFIX)
       || String(id || '').startsWith(HOMOLOGY_PRODUCT_BOX_CLASS_PREFIX);
   }
 
@@ -15037,6 +15179,9 @@
     if (classId === HOMOLOGY_UNIT_CLASS) return `homology_${scope}_unit`;
     if (classId === HOMOLOGY_HYPERPLANE_CLASS) return `homology_${scope}_H`;
     if (String(classId || '').startsWith(HOMOLOGY_GRASSMANNIAN_TAUTOLOGICAL_CLASS_PREFIX)) {
+      return `homology_${scope}_${variableIdSafe(classId)}`;
+    }
+    if (String(classId || '').startsWith(HOMOLOGY_PPAV_LAMBDA_CLASS_PREFIX)) {
       return `homology_${scope}_${variableIdSafe(classId)}`;
     }
     if (classId === HOMOLOGY_POINT_CLASS) return `homology_${scope}_point`;
@@ -15470,6 +15615,7 @@
     return [
       standardPointHomologyUnitRule(geometry, existingRules.get(HOMOLOGY_POINT_UNIT_RULE_ID)),
       ...standardGrassmannianRules(geometry, existingRules),
+      ...standardPpavRules(geometry, existingRules),
       standardHomologyTopRule(geometry, existingRules.get(HOMOLOGY_TOP_RULE_ID)),
       ...standardCurveSymplecticRules(geometry, existingRules),
       ...standardJacobianSymplecticRules(geometry, existingRules),
@@ -15490,6 +15636,7 @@
       || text === HOMOLOGY_JACOBIAN_TOP_RULE_ID
       || text.startsWith(HOMOLOGY_CURVE_SYMPLECTIC_RULE_PREFIX)
       || text.startsWith(HOMOLOGY_GRASSMANNIAN_RULE_PREFIX)
+      || text.startsWith(HOMOLOGY_PPAV_RULE_PREFIX)
       || text.startsWith(HOMOLOGY_PRODUCT_BOX_RULE_PREFIX);
   }
 
@@ -15593,6 +15740,67 @@
       });
     }
     return rules;
+  }
+
+  function standardPpavRules(geometry, existingRules = new Map()) {
+    const params = ppavParamsFromGeometry(geometry);
+    if (!params) return [];
+    const rules = [];
+    defineHomologyVariables(geometry);
+    for (let index = 1; index <= Math.min(params.genus, geometry.dim); index += 1) {
+      ppavLambdaClassPoly(geometry, index);
+    }
+    for (let index = 2; index <= Math.min(params.genus, geometry.dim); index += 2) {
+      const lhsId = homologyVariableId(ppavLambdaClassId(index), geometry);
+      const rhs = ppavEvenLambdaRuleRhs(geometry, index);
+      const ruleId = `${HOMOLOGY_PPAV_RULE_PREFIX}lambda-${index}`;
+      rules.push({
+        id: ruleId,
+        builtin: true,
+        enabled: existingRules.get(ruleId)?.enabled !== false,
+        lhs: { powers: { [lhsId]: 1 } },
+        rhs: serializeHomologyPoly(rhs)
+      });
+    }
+    if (params.genus > 0) {
+      const topId = homologyVariableId(ppavLambdaClassId(params.genus), geometry);
+      const ruleId = `${HOMOLOGY_PPAV_RULE_PREFIX}lambda-g-open-zero`;
+      rules.push({
+        id: ruleId,
+        builtin: true,
+        enabled: existingRules.get(ruleId)?.enabled !== false,
+        lhs: { powers: { [topId]: 1 } },
+        rhs: []
+      });
+    }
+    rules.push(...standardPpavOpenNilpotenceRules(geometry, params, existingRules));
+    return rules;
+  }
+
+  function ppavEvenLambdaRuleRhs(geometry, index) {
+    const lhs = ppavLambdaClassPoly(geometry, index);
+    let relation = lhs.scale(fraction(2));
+    for (let left = 1; left < index; left += 1) {
+      const right = index - left;
+      if (right > (ppavParamsFromGeometry(geometry)?.genus || 0)) continue;
+      const sign = right % 2 === 0 ? 1 : -1;
+      relation = relation.add(ppavLambdaClassPoly(geometry, left).mul(ppavLambdaClassPoly(geometry, right), geometry.dim).scale(fraction(sign)));
+    }
+    return relation.sub(lhs.scale(fraction(2))).scale(fraction(-1, 2)).truncate(geometry.dim);
+  }
+
+  function standardPpavOpenNilpotenceRules(geometry, params, existingRules = new Map()) {
+    const nilpotentPower = params.genus === 2 ? 2 : (params.genus === 3 ? 4 : null);
+    if (!nilpotentPower || nilpotentPower > geometry.dim) return [];
+    const lambda1Id = homologyVariableId(ppavLambdaClassId(1), geometry);
+    const ruleId = `${HOMOLOGY_PPAV_RULE_PREFIX}lambda-1-power-${nilpotentPower}-open-zero`;
+    return [{
+      id: ruleId,
+      builtin: true,
+      enabled: existingRules.get(ruleId)?.enabled !== false,
+      lhs: { powers: { [lambda1Id]: nilpotentPower } },
+      rhs: []
+    }];
   }
 
   function grassmannianQuotientChernComponents(geometry) {
@@ -16110,6 +16318,23 @@
         grassmannianYoungBasis: activeVariety()?.grassmannianYoungBasis === true
       };
     }
+    if (type === 'ppav-moduli') {
+      const { genus, dim } = syncPpavControls();
+      const labelLatex = sanitizeMathLabel(refs.varietyName.value, `\\mathcal{A}_{${genus}}`);
+      refs.varietyName.value = labelLatex;
+      return {
+        type,
+        dim,
+        ambient: null,
+        degrees: [],
+        codim: null,
+        labelLatex,
+        labelPlain: latexToPlain(labelLatex),
+        ambientLatex: 'ppav moduli',
+        ambientPlain: 'ppav moduli',
+        ppavGenus: genus
+      };
+    }
     if (type === 'curve') {
       refs.dim.value = '1';
       refs.curveGenus.value = sanitizeGenusInput(refs.curveGenus.value);
@@ -16327,6 +16552,7 @@
     if (geometryHasNumericalCurveLabel(geometry) && (sheaf.type === 'tangent' || sheaf.type === 'cotangent' || sheaf.type === 'canonical')) {
       return buildCurveLineBundle(geometry, sheaf, sheaf.type);
     }
+    if (geometry.type === 'ppav-moduli') return buildPpavModuliSheafBundle(geometry, sheaf, options);
     if (geometry.type === 'grassmannian') return buildGrassmannianSheafBundle(geometry, sheaf, options);
     if (geometry.type === 'abstract' || geometry.type === 'curve' || geometry.type === 'abelian' || geometry.type === 'point') return buildAbstractGeometrySheaf(geometry, sheaf, options);
     return buildEmbeddedGeometrySheaf(geometry, sheaf, options);
@@ -18637,6 +18863,54 @@
     return buildLineFromFirstChern(grassmannianPluckerFirstChernPoly(geometry).scale(fraction(twist)), d, labelLatex, labelPlain);
   }
 
+  function buildPpavModuliSheafBundle(geometry, sheaf, options = {}) {
+    const d = geometry.dim;
+    if (sheaf.type === 'tangent') {
+      return relabelBundle(buildPpavModuliTangentBundle(geometry), sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
+    }
+    if (sheaf.type === 'cotangent') {
+      return relabelBundle(buildPpavModuliCotangentBundle(geometry), sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
+    }
+    if (sheaf.type === 'canonical') {
+      const firstChern = ppavLambdaClassPoly(geometry, 1).scale(fraction(geometry.ppavGenus + 1));
+      return buildLineFromFirstChern(firstChern, d, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
+    }
+    return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
+  }
+
+  function buildPpavModuliTangentBundle(geometry) {
+    const params = ppavParamsFromGeometry(geometry);
+    if (!params) return buildTrivialBundle(geometry.dim, geometry.dim, `\\mathcal{T}_{${geometry.labelLatex}}`, `T_${geometry.labelPlain}`);
+    const d = geometry.dim;
+    const hodgePowerSums = powerSumsFromChern(ppavHodgeBundleChernComponents(geometry), d);
+    const tangentPowerSums = zeroComponentArray(d);
+    for (let k = 1; k <= d; k += 1) {
+      const sign = k % 2 === 0 ? 1 : -1;
+      let component = hodgePowerSums[k].scale(fraction(BigInt(sign) * (bigintPow(2n, k - 1) + BigInt(params.genus))));
+      for (let a = 1; a < k; a += 1) {
+        const b = k - a;
+        const binom = binomialBigInt(k, a);
+        component = component.add(hodgePowerSums[a].mul(hodgePowerSums[b], d).scale(fraction(BigInt(sign) * binom, 2n)));
+      }
+      tangentPowerSums[k] = component.truncate(d);
+    }
+    const rank = String(params.genus * (params.genus + 1) / 2);
+    return buildBundleFromPowerSums(tangentPowerSums, rank, rank, `\\mathcal{T}_{${geometry.labelLatex}}`, `T_${geometry.labelPlain}`);
+  }
+
+  function buildPpavModuliCotangentBundle(geometry) {
+    const tangent = buildPpavModuliTangentBundle(geometry);
+    const chComps = tangent.chComps.map((comp, i) => (
+      i === 0 ? comp : comp.scale(fraction(i % 2 === 0 ? 1 : -1))
+    ));
+    return buildBundleFromCh(chComps, tangent.rankLatex, tangent.rankPlain, `\\Omega^1_{${geometry.labelLatex}}`, `Omega^1_${geometry.labelPlain}`);
+  }
+
+  function buildBundleFromPowerSums(pComps, rankLatex, rankPlain, labelLatex, labelPlain) {
+    const d = pComps.length - 1;
+    return buildBundleFromCh(chComponentsFromPowerSums(pComps, d), rankLatex, rankPlain, labelLatex, labelPlain);
+  }
+
   function relabelBundle(bundle, labelLatex, labelPlain) {
     return {
       ...bundle,
@@ -18972,6 +19246,9 @@
     if (geometry.type === 'grassmannian') {
       return buildGrassmannianHodgeNumbers(geometry);
     }
+    if (geometry.type === 'ppav-moduli') {
+      return buildPpavModuliHodgeNumbers(geometry);
+    }
     if (geometryHasNumericalCurveLabel(geometry)) {
       const genus = String(numericalCurveGenus(geometry));
       return {
@@ -19102,6 +19379,19 @@
         })
       )),
       message: 'Grassmannian Hodge numbers: Schubert classes are pure of type (p,p).'
+    };
+  }
+
+  function buildPpavModuliHodgeNumbers(geometry) {
+    const d = geometry.dim;
+    return {
+      entries: Array.from({ length: d + 1 }, (_, p) => (
+        Array.from({ length: d + 1 }, (_, q) => ({
+          latex: `h^{${p},${q}}(\\mathcal{A}_{${geometry.ppavGenus}})`,
+          plain: `h^${p},${q}(A_${geometry.ppavGenus})`
+        }))
+      )),
+      message: 'Moduli of principally polarized abelian varieties: Hodge numbers are left symbolic.'
     };
   }
 
@@ -23741,13 +24031,14 @@
     if (!item || typeof item !== 'object') return null;
     const id = sanitizePresetId(item.id);
     if (!id) return null;
-    const type = sanitizePresetEnum(item.type, ['abstract', 'projective', 'grassmannian', 'curve', 'abelian', 'point', 'complete-intersection'], 'abstract');
+    const type = sanitizePresetEnum(item.type, ['abstract', 'projective', 'grassmannian', 'curve', 'abelian', 'ppav-moduli', 'point', 'complete-intersection'], 'abstract');
     const variety = {
       id,
       type,
       dim: sanitizeDimensionText(item.dim ?? '3'),
-      name: sanitizeMathLabel(item.name, type === 'projective' ? '\\mathbb{P}^3' : 'X'),
+      name: sanitizeMathLabel(item.name, type === 'projective' ? '\\mathbb{P}^3' : (type === 'ppav-moduli' ? '\\mathcal{A}_{2}' : 'X')),
       genus: sanitizeGenusInput(item.genus),
+      ppavGenus: String(normalizedInt(item.ppavGenus ?? item.genus, 1, MAX_PPAV_GENUS, 2)),
       ciDegrees: sanitizePresetString(item.ciDegrees, '', 80),
       nameDirty: item.nameDirty === true,
       hiddenOnCanvas: item.hiddenOnCanvas === true,
@@ -24318,7 +24609,7 @@
 
   function presetVariety(variety) {
     return pickSerializable(variety, [
-      'id', 'type', 'dim', 'name', 'genus', 'ciDegrees', 'ciAmbient',
+      'id', 'type', 'dim', 'name', 'genus', 'ppavGenus', 'ciDegrees', 'ciAmbient',
       'grassmannianR', 'grassmannianN', 'grassmannianYoungBasis',
       'homology', 'construction', 'nameDirty', 'hiddenOnCanvas',
       'labelX', 'labelY', 'labelPositionDirty'
@@ -24464,6 +24755,7 @@
     if (geometryHasNumericalCurveLabel(geometry)) parts.push(`g=${genusLatex(geometry.type === 'curve' ? geometry.genus : numericalCurveGenus(geometry))}`);
     if (geometry.type === 'projective') parts.push(`\\text{ambient}=\\mathbb{P}^{${geometry.ambient}}`);
     if (geometry.type === 'grassmannian') parts.push(`(r,n)=(${geometry.grassmannianR},${geometry.grassmannianN})`);
+    if (geometry.type === 'ppav-moduli') parts.push(`g=${geometry.ppavGenus}`);
     if (geometry.type === 'complete-intersection') {
       parts.push(`\\text{ambient}=\\mathbb{P}^{${geometry.ambient}}`);
       parts.push(`\\text{degrees}=(${geometry.degrees.join(',') || '0'})`);
@@ -24516,6 +24808,7 @@
     if (geometryHasNumericalCurveLabel(geometry)) parts.push(`genus ${genusPlain(geometry.type === 'curve' ? geometry.genus : numericalCurveGenus(geometry))}`);
     if (geometry.type === 'projective') parts.push(`ambient P^${geometry.ambient}`);
     if (geometry.type === 'grassmannian') parts.push(`r ${geometry.grassmannianR}`, `n ${geometry.grassmannianN}`);
+    if (geometry.type === 'ppav-moduli') parts.push(`genus ${geometry.ppavGenus}`);
     if (geometry.type === 'complete-intersection') {
       parts.push(`ambient P^${geometry.ambient}`);
       parts.push(`degrees ${geometry.degrees.join(',') || 'none'}`);
@@ -24569,6 +24862,7 @@
     if (type === 'grassmannian') return 'Grassmannian';
     if (type === 'curve') return 'curve';
     if (type === 'abelian') return 'abelian variety';
+    if (type === 'ppav-moduli') return 'moduli of ppav';
     if (type === 'point') return 'point';
     return 'abstract variety';
   }
