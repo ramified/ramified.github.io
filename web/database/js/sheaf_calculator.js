@@ -142,6 +142,7 @@
     sheafNormalDraft: null,
     sheafRelativeDraft: null,
     sheafMapDraft: null,
+    sheafDivisorDraft: null,
     sheafMapPickTarget: 'map',
     canvasPickEnabled: false,
     draftSheafBaseVarietyId: null,
@@ -415,6 +416,8 @@
     refs.universalBundleOption = $('sheaf-universal-bundle-option');
     refs.twistRow = $('twist-row');
     refs.twist = $('twist-r');
+    refs.sheafDivisorRow = $('sheaf-divisor-row');
+    refs.sheafDivisorCoefficients = $('sheaf-divisor-coefficients');
     refs.basisRow = $('basis-row');
     refs.basis = $('abstract-basis');
     refs.rootFormRow = $('root-form-row');
@@ -1223,13 +1226,15 @@
     const defaultName = defaultSheafNameLatex(baseVariety);
     const name = sanitizeMathLabel(refs.sheafName.value, defaultName);
     const type = canonicalSheafType(refs.sheafType.value);
+    const geometry = baseVariety ? geometryFromVariety(baseVariety) : null;
     return {
       type,
       name,
       twist: refs.twist.value,
-      rank: type === 'structure' ? '1' : refs.rank.value,
+      rank: type === 'structure' || type === 'divisor-line' ? '1' : refs.rank.value,
       baseVarietyId: baseVariety?.id || null,
       basis: normalizeBasisValue(refs.basis.value),
+      ...(type === 'divisor-line' ? { divisorCoefficients: sanitizeDivisorCoefficients(currentSheafDivisorCoefficients(), geometry) } : {}),
       nameDirty: state.draftSheafNameDirty || name !== defaultName
     };
   }
@@ -1627,7 +1632,7 @@
 
   function sheafHasLocallyFreeLabel(sheaf) {
     if (!sheaf) return false;
-    if (['locally-free', 'structure', 'tangent', 'cotangent', 'canonical', 'twist', 'universal-bundle', 'universal-line'].includes(sheaf.type)) return true;
+    if (['locally-free', 'structure', 'tangent', 'cotangent', 'canonical', 'twist', 'divisor-line', 'universal-bundle', 'universal-line'].includes(sheaf.type)) return true;
     if (!sheaf.construction) return false;
     if (sheaf.construction.type === 'direct-sum' || sheaf.construction.type === 'tensor') {
       return (sheaf.construction.sheafIds || [])
@@ -1653,6 +1658,13 @@
 
   function varietySupportsTwist(type) {
     return varietyHasHyperplaneClass(type) || type === 'grassmannian';
+  }
+
+  function ramifiedCoverBranchDegreeSupportedForGeometry(geometry) {
+    return !!geometry
+      && Number.isInteger(geometry.dim)
+      && geometry.dim > 0
+      && (geometry.dim === 1 || varietySupportsTwist(geometry.type));
   }
 
   function varietySupportsUniversalBundle(type) {
@@ -2432,12 +2444,14 @@
     const degree = normalizeRamifiedCoverDegree(refs.mapRamifiedCoverDegree?.value);
     const cyclic = refs.mapRamifiedCoverMode?.value === 'cyclic';
     const smooth = refs.mapRamifiedCoverSmoothConfirm?.checked === true;
+    const baseGeometry = map?.codomainKind === 'variety' ? geometryByVarietyId(map.codomainId) : null;
+    const supportsBranchDegree = ramifiedCoverBranchDegreeSupportedForGeometry(baseGeometry);
     if (refs.mapRamifiedCoverDegreeRow) refs.mapRamifiedCoverDegreeRow.hidden = !show;
     if (refs.mapRamifiedCoverModeRow) refs.mapRamifiedCoverModeRow.hidden = !show;
     if (refs.mapRamifiedCoverBranchRow) refs.mapRamifiedCoverBranchRow.hidden = !show || degree <= 1;
     if (refs.mapRamifiedCoverRamificationRow) refs.mapRamifiedCoverRamificationRow.hidden = !show || degree <= 1;
     if (refs.mapRamifiedCoverSmoothRow) refs.mapRamifiedCoverSmoothRow.hidden = !show || !cyclic || degree <= 1;
-    if (refs.mapRamifiedCoverBranchDegreeRow) refs.mapRamifiedCoverBranchDegreeRow.hidden = !show || !cyclic || degree <= 1 || !smooth;
+    if (refs.mapRamifiedCoverBranchDegreeRow) refs.mapRamifiedCoverBranchDegreeRow.hidden = !show || !cyclic || degree <= 1 || !smooth || !supportsBranchDegree;
   }
 
   function ramifiedCoverMapControlData(map = inputIsModifyMode() ? selectedMap() : null) {
@@ -2447,9 +2461,11 @@
     if (degree == null) return null;
     const coverMode = refs.mapRamifiedCoverMode?.value === 'cyclic' ? 'cyclic' : 'general';
     const smoothCyclic = coverMode === 'cyclic' && degree > 1 && refs.mapRamifiedCoverSmoothConfirm?.checked === true;
-    const branchDegree = smoothCyclic ? parseRamifiedCoverBranchDegree(refs.mapRamifiedCoverBranchDegree?.value) : null;
-    const rootTwist = smoothCyclic ? ramifiedCoverRootTwistFromBranchDegree(branchDegree, degree) : null;
-    if (smoothCyclic && rootTwist == null) return null;
+    const baseGeometry = map?.codomainKind === 'variety' ? geometryByVarietyId(map.codomainId) : null;
+    const supportsBranchDegree = smoothCyclic && ramifiedCoverBranchDegreeSupportedForGeometry(baseGeometry);
+    const branchDegree = supportsBranchDegree ? parseRamifiedCoverBranchDegree(refs.mapRamifiedCoverBranchDegree?.value) : null;
+    const rootTwist = supportsBranchDegree ? ramifiedCoverRootTwistFromBranchDegree(branchDegree, degree) : null;
+    if (supportsBranchDegree && rootTwist == null) return null;
     return {
       degree,
       coverMode,
@@ -2467,10 +2483,14 @@
     if (degree == null) return 'degree must be an integer from 1 to 99';
     if (degree === 1) return 'update the covering map; branch and ramification data are suppressed for degree 1';
     if (refs.mapRamifiedCoverMode?.value === 'cyclic' && refs.mapRamifiedCoverSmoothConfirm?.checked) {
-      const branchDegree = parseRamifiedCoverBranchDegree(refs.mapRamifiedCoverBranchDegree?.value);
-      if (branchDegree == null) return 'branch degree must be an integer from 1 to 99';
-      if (ramifiedCoverRootTwistFromBranchDegree(branchDegree, degree) == null) return 'branch degree must be divisible by the cover degree so B=nL';
-      return 'update the covering map; the cover will inherit the smooth cyclic branch data';
+      const baseGeometry = map?.codomainKind === 'variety' ? geometryByVarietyId(map.codomainId) : null;
+      if (ramifiedCoverBranchDegreeSupportedForGeometry(baseGeometry)) {
+        const branchDegree = parseRamifiedCoverBranchDegree(refs.mapRamifiedCoverBranchDegree?.value);
+        if (branchDegree == null) return 'branch degree must be an integer from 1 to 99';
+        if (ramifiedCoverRootTwistFromBranchDegree(branchDegree, degree) == null) return 'branch degree must be divisible by the cover degree so B=nL';
+        return 'update the covering map; the cover will inherit the smooth cyclic branch data';
+      }
+      return 'update the covering map; smooth cyclic formulas stay symbolic because this base has no branch degree field';
     }
     if (refs.mapRamifiedCoverMode?.value === 'cyclic') return 'update the covering map; the cover will inherit the cyclic homology relation';
     return 'update the covering map; the cover will inherit the general finite-map data';
@@ -2622,6 +2642,9 @@
     refs.twist.value = sheaf.twist ?? '1';
     refs.rank.value = sheaf.rank || 'r';
     refs.basis.value = normalizeBasisValue(sheaf.basis);
+    state.sheafDivisorDraft = canonicalType === 'divisor-line'
+      ? { coefficients: divisorCoefficientsFromSheaf(sheaf, sheaf.baseVarietyId ? geometryFromVariety(baseVarietyForSheaf(sheaf)) : null) }
+      : null;
     state.draftSheafNameDirty = !!sheaf.nameDirty;
     syncSheafBaseOptions();
     state.draftSheafBaseVarietyId = sheaf.baseVarietyId || null;
@@ -2629,6 +2652,7 @@
       refs.sheafBaseVariety.value = sheaf.baseVarietyId;
     }
     updateSheafBaseButton();
+    updateSheafDivisorControls();
     if (mapConstruction) {
       clearSheafBinaryDraft();
       clearSheafSelfSumDraft();
@@ -4156,6 +4180,7 @@
       if (type !== 'normal-bundle') clearSheafNormalDraft();
       if (type !== 'relative-tangent' && type !== 'relative-cotangent') clearSheafRelativeDraft();
       if (type !== 'schur') clearSheafSchurDraft();
+      if (type !== 'divisor-line') state.sheafDivisorDraft = null;
       if (type === 'map-operation' && inputIsModifyMode()) {
         const sheaf = activeSheaf();
         if (sheafMapConstructionType(sheaf)) loadMapOperationSheafIntoDraft(sheaf);
@@ -4201,8 +4226,11 @@
         if (sheafSelfSumConstructionType(sheaf)) loadSelfSumSheafIntoDraft(sheaf);
       } else if (type === 'self-direct-sum') {
         state.sheafSelfSumDraft = state.sheafSelfSumDraft || {};
+      } else if (type === 'divisor-line') {
+        state.sheafDivisorDraft = state.sheafDivisorDraft || { coefficients: {} };
       }
       syncDefaultRank(true);
+      updateSheafDivisorControls();
       syncDefaultSheafName();
       normalizeControlVisibility();
       activateFirstCreateBlankPick({ kind: 'sheaf', render: false });
@@ -4308,9 +4336,11 @@
         clearSheafSchurDraft();
         clearSheafIdealDraft();
         clearSheafNormalDraft();
+        state.sheafDivisorDraft = refs.sheafType?.value === 'divisor-line' ? { coefficients: {} } : null;
           updateSheafBaseButton();
         }
         syncDefaultRank(true);
+        updateSheafDivisorControls();
         syncDefaultSheafName();
         normalizeControlVisibility();
         recompute();
@@ -4475,6 +4505,18 @@
       refs.twist.value = String(normalizedInt(refs.twist.value, -24, 24, 1));
       syncDefaultSheafName();
     });
+    if (refs.sheafDivisorCoefficients) {
+      refs.sheafDivisorCoefficients.addEventListener('input', () => {
+        state.sheafDivisorDraft = { coefficients: currentSheafDivisorCoefficients() };
+        syncDefaultSheafName();
+      });
+      refs.sheafDivisorCoefficients.addEventListener('change', () => {
+        state.sheafDivisorDraft = { coefficients: currentSheafDivisorCoefficients() };
+        updateSheafDivisorControls();
+        syncDefaultSheafName();
+        recompute();
+      });
+    }
     refs.basis.addEventListener('change', () => {
       const sheaf = activeSheaf();
       if (sheaf) sheaf.basis = normalizeBasisValue(refs.basis.value);
@@ -5411,6 +5453,7 @@
       if (removeRamifiedCoverCustomClass(cover, HOMOLOGY_RAMIFICATION_DIVISOR_CLASS)) removed = true;
       if (removeCyclicRamifiedCoverRule(cover, map)) removed = true;
       if (removeCyclicRootBranchRule(base, cover, map)) removed = true;
+      if (removeProjectiveBranchDegreeRule(base, cover)) removed = true;
       return removed;
     }
     const branchSymbol = sanitizeHomologySymbol(cover.construction.branchSymbol, 'B');
@@ -5418,10 +5461,15 @@
     let changed = false;
     if (addRamifiedCoverCustomClass(base, baseGeometry, HOMOLOGY_BRANCH_DIVISOR_CLASS, branchSymbol, 'ramified-cover')) changed = true;
     if (addRamifiedCoverCustomClass(cover, coverGeometry, HOMOLOGY_RAMIFICATION_DIVISOR_CLASS, ramificationSymbol, 'ramified-cover')) changed = true;
+    if (projectiveRamifiedCoverBranchDegree(baseGeometry, cover) != null) {
+      if (addProjectiveBranchDegreeRule(base, baseGeometry, cover)) changed = true;
+    } else if (removeProjectiveBranchDegreeRule(base, cover)) {
+      changed = true;
+    }
     if (cover.construction.coverMode === 'cyclic' && map) {
       if (addCyclicRamifiedCoverRule(cover, coverGeometry, map, degree)) changed = true;
-      if (cover.construction.smoothCyclic === true && addCyclicRootClassAndRule(base, baseGeometry, cover, degree)) changed = true;
-      else if (cover.construction.smoothCyclic !== true && removeCyclicRootBranchRule(base, cover, map)) changed = true;
+      if (cover.construction.smoothCyclic === true && cover.construction.rootTwist != null && addCyclicRootClassAndRule(base, baseGeometry, cover, degree)) changed = true;
+      else if ((cover.construction.smoothCyclic !== true || cover.construction.rootTwist == null) && removeCyclicRootBranchRule(base, cover, map)) changed = true;
     } else if (removeCyclicRamifiedCoverRule(cover, map)) {
       changed = true;
       if (removeCyclicRootBranchRule(base, cover, map)) changed = true;
@@ -5433,7 +5481,7 @@
     const construction = cover?.construction;
     if (!base || !cover || !construction || construction.type !== 'ramified-cover') return false;
     const smooth = normalizeRamifiedCoverSmoothCyclicConstruction(construction);
-    if (smooth.smoothCyclic !== true) return removeRamifiedCoverRootLineBundle(construction);
+    if (smooth.smoothCyclic !== true || smooth.rootTwist == null) return removeRamifiedCoverRootLineBundle(construction);
     const baseGeometry = geometryFromVariety(base);
     const defaultName = defaultRamifiedCoverRootLineBundleName(base, smooth.rootTwist);
     let sheaf = state.sheaves.find((item) => item.id === construction.rootSheafId && item.construction?.type === 'ramified-cover-root');
@@ -6358,6 +6406,12 @@
     if (rootTwist == null) return false;
     let changed = false;
     if (addRamifiedCoverCustomClass(base, baseGeometry, HOMOLOGY_CYCLIC_ROOT_CLASS, 'L', 'ramified-cover')) changed = true;
+    if (projectiveRamifiedCoverBranchDegree(baseGeometry, cover) != null) {
+      if (removeStoredHomologyRuleById(base, `default-ramified-cover-root-branch-${cover.id}`)) changed = true;
+      if (addProjectiveRootHyperplaneRule(base, baseGeometry, cover, rootTwist)) changed = true;
+      return changed;
+    }
+    if (removeStoredHomologyRuleById(base, `default-ramified-cover-root-hyperplane-${cover.id}`)) changed = true;
     const branchDef = homologyClassDefById(baseGeometry, HOMOLOGY_BRANCH_DIVISOR_CLASS);
     const rootDef = homologyClassDefById(baseGeometry, HOMOLOGY_CYCLIC_ROOT_CLASS);
     if (!branchDef || !rootDef) return changed;
@@ -6380,15 +6434,82 @@
     return true;
   }
 
+  function projectiveRamifiedCoverBranchDegree(baseGeometry, cover) {
+    if (baseGeometry?.type !== 'projective' || !Number.isInteger(baseGeometry.dim) || baseGeometry.dim <= 0) return null;
+    return parseRamifiedCoverBranchDegree(cover?.construction?.branchDegree);
+  }
+
+  function addProjectiveBranchDegreeRule(base, baseGeometry, cover) {
+    const branchDegree = projectiveRamifiedCoverBranchDegree(baseGeometry, cover);
+    if (branchDegree == null) return false;
+    const branchDef = homologyClassDefById(baseGeometry, HOMOLOGY_BRANCH_DIVISOR_CLASS);
+    const hyperplaneDef = homologyClassDefById(baseGeometry, HOMOLOGY_HYPERPLANE_CLASS);
+    if (!branchDef || !hyperplaneDef) return false;
+    const homology = ensureHomologySystem(base, baseGeometry);
+    const branchId = homologyDefVariableId(branchDef, baseGeometry);
+    const hyperplaneId = homologyDefVariableId(hyperplaneDef, baseGeometry);
+    const rule = {
+      id: `default-ramified-cover-projective-branch-degree-${cover.id}`,
+      builtin: true,
+      automatic: 'ramified-cover',
+      enabled: true,
+      lhs: { powers: { [branchId]: 1 } },
+      rhs: [{ coefficient: String(branchDegree), powers: { [hyperplaneId]: 1 } }]
+    };
+    if (automaticHomologyRuleIsSuppressed(homology, rule)) return false;
+    const existing = homology.rules.find((item) => item.id === rule.id);
+    if (existing && JSON.stringify(existing) === JSON.stringify(rule)) return false;
+    homology.rules = withoutHomologyRuleForVariable(homology.rules, branchId, { includeBuiltin: true });
+    homology.rules.push(rule);
+    return true;
+  }
+
+  function removeProjectiveBranchDegreeRule(base, cover) {
+    return removeStoredHomologyRuleById(base, `default-ramified-cover-projective-branch-degree-${cover?.id}`);
+  }
+
+  function addProjectiveRootHyperplaneRule(base, baseGeometry, cover, rootTwist) {
+    const rootDef = homologyClassDefById(baseGeometry, HOMOLOGY_CYCLIC_ROOT_CLASS);
+    const hyperplaneDef = homologyClassDefById(baseGeometry, HOMOLOGY_HYPERPLANE_CLASS);
+    if (!rootDef || !hyperplaneDef) return false;
+    const homology = ensureHomologySystem(base, baseGeometry);
+    const rootId = homologyDefVariableId(rootDef, baseGeometry);
+    const hyperplaneId = homologyDefVariableId(hyperplaneDef, baseGeometry);
+    const rule = {
+      id: `default-ramified-cover-root-hyperplane-${cover.id}`,
+      builtin: true,
+      automatic: 'ramified-cover',
+      enabled: true,
+      lhs: { powers: { [rootId]: 1 } },
+      rhs: [{ coefficient: String(rootTwist), powers: { [hyperplaneId]: 1 } }]
+    };
+    if (automaticHomologyRuleIsSuppressed(homology, rule)) return false;
+    const existing = homology.rules.find((item) => item.id === rule.id);
+    if (existing && JSON.stringify(existing) === JSON.stringify(rule)) return false;
+    homology.rules = withoutHomologyRuleForVariable(homology.rules, rootId, { includeBuiltin: true });
+    homology.rules.push(rule);
+    return true;
+  }
+
   function removeCyclicRootBranchRule(base, cover) {
     if (!base?.homology || !Array.isArray(base.homology.rules) || !cover) return false;
-    const id = `default-ramified-cover-root-branch-${cover.id}`;
+    const ids = new Set([
+      `default-ramified-cover-root-branch-${cover.id}`,
+      `default-ramified-cover-root-hyperplane-${cover.id}`
+    ]);
     const beforeRules = base.homology.rules.length;
-    base.homology.rules = base.homology.rules.filter((rule) => rule.id !== id);
+    base.homology.rules = base.homology.rules.filter((rule) => !ids.has(rule.id));
     const removedClass = ramifiedCoverBaseHasSmoothCyclicRoot(base.id, cover.id)
       ? false
       : removeRamifiedCoverCustomClass(base, HOMOLOGY_CYCLIC_ROOT_CLASS);
     return removedClass || base.homology.rules.length !== beforeRules;
+  }
+
+  function removeStoredHomologyRuleById(variety, id) {
+    if (!variety?.homology || !Array.isArray(variety.homology.rules) || !id) return false;
+    const before = variety.homology.rules.length;
+    variety.homology.rules = variety.homology.rules.filter((rule) => rule.id !== id);
+    return variety.homology.rules.length !== before;
   }
 
   function ramifiedCoverBaseHasSmoothCyclicRoot(baseId, excludingCoverId = null) {
@@ -8199,9 +8320,10 @@
     const baseGeometry = geometryFromVariety(base);
     const coverMode = refs.ramifiedCoverMode?.value === 'cyclic' ? 'cyclic' : 'general';
     const smoothCyclic = coverMode === 'cyclic' && degree > 1 && refs.ramifiedCoverSmoothConfirm?.checked === true;
-    const branchDegree = smoothCyclic ? parseRamifiedCoverBranchDegree(refs.ramifiedCoverBranchDegree?.value) : null;
-    const rootTwist = smoothCyclic ? ramifiedCoverRootTwistFromBranchDegree(branchDegree, degree) : null;
-    if (smoothCyclic && rootTwist == null) return null;
+    const supportsBranchDegree = smoothCyclic && ramifiedCoverBranchDegreeSupportedForGeometry(baseGeometry);
+    const branchDegree = supportsBranchDegree ? parseRamifiedCoverBranchDegree(refs.ramifiedCoverBranchDegree?.value) : null;
+    const rootTwist = supportsBranchDegree ? ramifiedCoverRootTwistFromBranchDegree(branchDegree, degree) : null;
+    if (supportsBranchDegree && rootTwist == null) return null;
     const defaultName = defaultRamifiedCoverNameFromObjects(base);
     const branchSymbol = degree > 1 && baseGeometry.dim > 0
       ? sanitizeHomologySymbol(refs.ramifiedCoverBranchSymbol?.value, 'B')
@@ -8276,12 +8398,13 @@
     const baseGeometry = geometryFromVariety(data.base);
     const degree = normalizeRamifiedCoverDegree(data.degree);
     const coverMode = data.coverMode === 'cyclic' ? 'cyclic' : 'general';
+    const supportsBranchDegree = ramifiedCoverBranchDegreeSupportedForGeometry(baseGeometry);
     const smoothCyclic = normalizeRamifiedCoverSmoothCyclicConstruction({
       degree,
       coverMode,
       smoothCyclic: data.smoothCyclic === true,
-      branchDegree: data.branchDegree,
-      rootTwist: data.rootTwist
+      branchDegree: supportsBranchDegree ? data.branchDegree : null,
+      rootTwist: supportsBranchDegree ? data.rootTwist : null
     });
     const cover = {
       id: nextInputId('X'),
@@ -8299,8 +8422,8 @@
         branchSymbol: data.branchSymbol,
         ramificationSymbol: data.ramificationSymbol,
         smoothCyclic: smoothCyclic.smoothCyclic,
-        branchDegree: smoothCyclic.branchDegree,
-        rootTwist: smoothCyclic.rootTwist,
+        branchDegree: supportsBranchDegree ? smoothCyclic.branchDegree : null,
+        rootTwist: supportsBranchDegree ? smoothCyclic.rootTwist : null,
         defaultName: data.defaultName
       }
     };
@@ -8328,8 +8451,8 @@
           branchSymbol: data.branchSymbol,
           ramificationSymbol: data.ramificationSymbol,
           smoothCyclic: smoothCyclic.smoothCyclic,
-          branchDegree: smoothCyclic.branchDegree,
-          rootTwist: smoothCyclic.rootTwist,
+          branchDegree: supportsBranchDegree ? smoothCyclic.branchDegree : null,
+          rootTwist: supportsBranchDegree ? smoothCyclic.rootTwist : null,
           defaultName: mapDefaultName,
           nameDirty: false
         }
@@ -8620,9 +8743,11 @@
     const degree = normalizeRamifiedCoverDegree(construction.degree);
     const branchDegree = ramifiedCoverBranchDegreeFromConstruction(construction);
     const rootTwist = ramifiedCoverRootTwistFromBranchDegree(branchDegree, degree);
-    return rootTwist == null
-      ? { smoothCyclic: false, branchDegree: null, rootTwist: null }
-      : { smoothCyclic: true, branchDegree, rootTwist };
+    return {
+      smoothCyclic: true,
+      branchDegree: rootTwist == null ? null : branchDegree,
+      rootTwist
+    };
   }
 
   function ramifiedCoverDegreeFromMap(map) {
@@ -9987,13 +10112,15 @@
     if (refs.ramifiedCoverDegreeRow) refs.ramifiedCoverDegreeRow.hidden = !show;
     if (refs.ramifiedCoverModeRow) refs.ramifiedCoverModeRow.hidden = !show;
     const degree = normalizeRamifiedCoverDegree(refs.ramifiedCoverDegree?.value);
-    const positiveDim = ramifiedCoverDraftBase() ? geometryFromVariety(ramifiedCoverDraftBase()).dim > 0 : true;
+    const baseGeometry = ramifiedCoverDraftBase() ? geometryFromVariety(ramifiedCoverDraftBase()) : null;
+    const positiveDim = baseGeometry ? baseGeometry.dim > 0 : true;
     const showDivisors = show && degree > 1 && positiveDim;
     if (refs.ramifiedCoverBranchRow) refs.ramifiedCoverBranchRow.hidden = !showDivisors;
     if (refs.ramifiedCoverRamificationRow) refs.ramifiedCoverRamificationRow.hidden = !showDivisors;
     const cyclic = refs.ramifiedCoverMode?.value === 'cyclic';
     if (refs.ramifiedCoverSmoothRow) refs.ramifiedCoverSmoothRow.hidden = !show || !cyclic || degree <= 1;
-    if (refs.ramifiedCoverRootRow) refs.ramifiedCoverRootRow.hidden = !show || !cyclic || degree <= 1 || !refs.ramifiedCoverSmoothConfirm?.checked;
+    const supportsBranchDegree = ramifiedCoverBranchDegreeSupportedForGeometry(baseGeometry);
+    if (refs.ramifiedCoverRootRow) refs.ramifiedCoverRootRow.hidden = !show || !cyclic || degree <= 1 || !refs.ramifiedCoverSmoothConfirm?.checked || !supportsBranchDegree;
     syncPickFlowNote(refs.ramifiedCoverPickNote, 'ramified-cover', show);
     updateCombinedVarietySlotButton(refs.ramifiedCoverBaseButton, ramifiedCoverDraftBase(), 'base', combinedRamifiedCoverCreateMode());
     if (refs.ramifiedCoverPreview) refs.ramifiedCoverPreview.textContent = latexToPlain(defaultRamifiedCoverNameFromObjects(ramifiedCoverDraftBase()));
@@ -10010,10 +10137,13 @@
     if (geometry.dim === 0) return 'click build to add an unramified finite cover; divisor classes are suppressed over a point';
     if (degree === 1) return 'click build to add the degree 1 finite cover; branch and ramification classes are suppressed';
     if (refs.ramifiedCoverMode?.value === 'cyclic' && refs.ramifiedCoverSmoothConfirm?.checked) {
-      const branchDegree = parseRamifiedCoverBranchDegree(refs.ramifiedCoverBranchDegree?.value);
-      if (branchDegree == null) return 'branch degree must be an integer from 1 to 99';
-      if (ramifiedCoverRootTwistFromBranchDegree(branchDegree, degree) == null) return 'branch degree must be divisible by the cover degree so B=nL';
-      return 'click build to add the smooth cyclic cover, root class L, and computable Hodge data when the base is projective space';
+      if (ramifiedCoverBranchDegreeSupportedForGeometry(geometry)) {
+        const branchDegree = parseRamifiedCoverBranchDegree(refs.ramifiedCoverBranchDegree?.value);
+        if (branchDegree == null) return 'branch degree must be an integer from 1 to 99';
+        if (ramifiedCoverRootTwistFromBranchDegree(branchDegree, degree) == null) return 'branch degree must be divisible by the cover degree so B=nL';
+        return 'click build to add the smooth cyclic cover, root class L, and computable Hodge data when the base has a degree class';
+      }
+      return 'click build to add a smooth cyclic cover with symbolic branch and ramification classes';
     }
     if (refs.ramifiedCoverMode?.value === 'cyclic') return 'click build to add the cyclic ramified cover and cyclic homology relation';
     return 'click build to record only a degree n finite map; branch geometry, smoothness, normality, Galois group, and Hodge numbers stay symbolic';
@@ -11447,6 +11577,127 @@
     syncDefaultSheafName();
   }
 
+  function divisorHomologyClassDefinitions(geometry) {
+    return baseHomologyClassDefinitions(geometry)
+      .filter((def) => def.degree === 1 && def.cohomologyDegree === 2 && def.id !== HOMOLOGY_UNIT_CLASS);
+  }
+
+  function sanitizeDivisorCoefficients(value, geometry = null) {
+    const allowed = geometry ? new Set(divisorHomologyClassDefinitions(geometry).map((def) => def.id)) : null;
+    const out = {};
+    Object.entries(value || {}).forEach(([id, rawCoeff]) => {
+      const classId = String(id || '').trim();
+      if (!classId || (allowed && !allowed.has(classId))) return;
+      let coeff;
+      try {
+        coeff = parseRuleCoefficient(rawCoeff || '0');
+      } catch (_) {
+        return;
+      }
+      if (coeff.isZero()) return;
+      out[classId] = formatFractionPlain(coeff);
+    });
+    return out;
+  }
+
+  function currentSheafDivisorCoefficients() {
+    const coefficients = {};
+    if (!refs.sheafDivisorCoefficients) return sanitizeDivisorCoefficients(state.sheafDivisorDraft?.coefficients || {}, draftBaseVariety() ? geometryFromVariety(draftBaseVariety()) : null);
+    let inputCount = 0;
+    for (const input of refs.sheafDivisorCoefficients.querySelectorAll('[data-sheaf-divisor-coeff]')) {
+      inputCount += 1;
+      const classId = input.dataset.sheafDivisorClass || '';
+      try {
+        const coeff = parseRuleCoefficient(input.value || '0');
+        if (!coeff.isZero()) coefficients[classId] = formatFractionPlain(coeff);
+      } catch (_) {
+        coefficients[classId] = input.value || '';
+      }
+    }
+    return inputCount
+      ? sanitizeDivisorCoefficients(coefficients, draftBaseVariety() ? geometryFromVariety(draftBaseVariety()) : null)
+      : sanitizeDivisorCoefficients(state.sheafDivisorDraft?.coefficients || {}, draftBaseVariety() ? geometryFromVariety(draftBaseVariety()) : null);
+  }
+
+  function divisorCoefficientsFromSheaf(sheaf, geometry = null) {
+    return sanitizeDivisorCoefficients(sheaf?.divisorCoefficients || {}, geometry);
+  }
+
+  function divisorPolynomialFromCoefficients(coefficients, geometry) {
+    let out = Poly.zero();
+    for (const [classId, rawCoeff] of Object.entries(sanitizeDivisorCoefficients(coefficients, geometry))) {
+      const def = homologyClassDefById(geometry, classId);
+      if (!def) continue;
+      const variableId = homologyDefVariableId(def, geometry);
+      defineVariable(variableId, def.degree, def.symbolLatex, homologyDefinitionVariableMeta(def));
+      out = out.add(Poly.variable(variableId).scale(parseRuleCoefficient(rawCoeff)));
+    }
+    return out.truncate(geometry?.dim ?? MAX_DIMENSION);
+  }
+
+  function divisorLatexFromCoefficients(coefficients, geometry, fallback = 'D') {
+    const terms = [];
+    for (const [classId, rawCoeff] of Object.entries(sanitizeDivisorCoefficients(coefficients, geometry))) {
+      const def = homologyClassDefById(geometry, classId);
+      if (!def) continue;
+      const coeff = parseRuleCoefficient(rawCoeff);
+      const abs = coeff.abs();
+      const sign = coeff.sign() < 0 ? '-' : '+';
+      const body = abs.isOne() ? def.symbolLatex : `${abs.toLatexAbs()}${def.symbolLatex}`;
+      terms.push({ sign, body });
+    }
+    if (!terms.length) return fallback;
+    return terms.map((term, index) => {
+      if (index === 0) return term.sign === '-' ? `-${term.body}` : term.body;
+      return ` ${term.sign} ${term.body}`;
+    }).join('');
+  }
+
+  function divisorPlainFromCoefficients(coefficients, geometry, fallback = 'D') {
+    const terms = [];
+    for (const [classId, rawCoeff] of Object.entries(sanitizeDivisorCoefficients(coefficients, geometry))) {
+      const def = homologyClassDefById(geometry, classId);
+      if (!def) continue;
+      const coeff = parseRuleCoefficient(rawCoeff);
+      const abs = coeff.abs();
+      const sign = coeff.sign() < 0 ? '-' : '+';
+      const body = abs.isOne() ? def.symbolPlain : `${abs.toPlainAbs()}*${def.symbolPlain}`;
+      terms.push({ sign, body });
+    }
+    if (!terms.length) return fallback;
+    return terms.map((term, index) => {
+      if (index === 0) return term.sign === '-' ? `-${term.body}` : term.body;
+      return ` ${term.sign} ${term.body}`;
+    }).join('');
+  }
+
+  function defaultDivisorLineSheafName(baseVariety = draftBaseVariety()) {
+    const geometry = baseVariety ? geometryFromVariety(baseVariety) : null;
+    const divisor = divisorLatexFromCoefficients(currentSheafDivisorCoefficients(), geometry, 'D');
+    return `\\mathcal{O}_{${geometry?.labelLatex || sanitizeMathLabel(baseVariety?.name, 'X')}}(${divisor})`;
+  }
+
+  function updateSheafDivisorControls() {
+    if (!refs.sheafDivisorCoefficients) return;
+    const base = draftBaseVariety();
+    const geometry = base ? geometryFromVariety(base) : null;
+    const defs = geometry ? divisorHomologyClassDefinitions(geometry) : [];
+    const current = sanitizeDivisorCoefficients(state.sheafDivisorDraft?.coefficients || {}, geometry);
+    if (!Object.keys(current).length && inputIsModifyMode() && activeSheaf()?.type === 'divisor-line') {
+      Object.assign(current, divisorCoefficientsFromSheaf(activeSheaf(), geometry));
+    }
+    refs.sheafDivisorCoefficients.innerHTML = defs.length
+      ? defs.map((def, index) => `
+          ${index ? '<span class="homology-coefficient-plus">+</span>' : ''}
+          <label class="homology-coefficient-term">
+            <input class="sheaf-input homology-coefficient-input" type="text" value="${escapeHtml(current[def.id] || '')}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Coefficient of ${escapeHtml(def.symbolPlain)} in D" data-sheaf-divisor-coeff data-sheaf-divisor-class="${escapeHtml(def.id)}">
+            <span>\\(${def.symbolLatex}\\)</span>
+          </label>
+        `).join('')
+      : '<span class="homology-coefficient-empty">no H^2 classes</span>';
+    typeset(refs.sheafDivisorCoefficients);
+  }
+
   function defaultVarietyNameLatex() {
     const type = refs.varietyType.value;
     if (type === 'product') {
@@ -11524,6 +11775,9 @@
       const data = mapOperationSheafConstructionData();
       if (data?.defaultName) return data.defaultName;
     }
+    if (refs.sheafType?.value === 'divisor-line') {
+      return defaultDivisorLineSheafName(baseVarietyOverride || draftBaseVariety() || activeVariety());
+    }
     const baseVariety = baseVarietyOverride || draftBaseVariety() || activeVariety();
     const geometry = baseVariety ? geometryFromVariety(baseVariety) : null;
     const variety = geometry ? geometry.labelLatex : 'X';
@@ -11556,6 +11810,7 @@
     if (type === 'cotangent') return `\\Omega^1_{${variety}}`;
     if (type === 'canonical') return `K_{${variety}}`;
     if (type === 'twist') return `\\mathcal{O}_{${variety}}(${twist})`;
+    if (type === 'divisor-line') return `\\mathcal{O}_{${variety}}(D)`;
     if (isUniversalBundleSheafType(type)) return geometry?.type === 'grassmannian' ? 'S' : `\\mathcal{O}_{${variety}}(-1)`;
     return '\\mathcal{E}';
   }
@@ -11601,7 +11856,7 @@
 
   function syncDefaultRank(force = false) {
     if (!refs.rank || !force) return;
-    if (refs.sheafType.value === 'locally-free' || refs.sheafType.value === 'structure') refs.rank.value = '1';
+    if (refs.sheafType.value === 'locally-free' || refs.sheafType.value === 'structure' || refs.sheafType.value === 'divisor-line') refs.rank.value = '1';
     else if (refs.sheafType.value === 'abstract') refs.rank.value = 'r';
     else if (isUniversalBundleSheafType(refs.sheafType.value)) {
       const geometry = draftBaseVariety() ? geometryFromVariety(draftBaseVariety()) : null;
@@ -12092,10 +12347,15 @@
     construction.coverMode = construction.coverMode === 'cyclic' ? 'cyclic' : 'general';
     construction.branchSymbol = sanitizeHomologySymbol(construction.branchSymbol, 'B');
     construction.ramificationSymbol = sanitizeHomologySymbol(construction.ramificationSymbol, 'R');
-    const normalizedSmoothCyclic = normalizeRamifiedCoverSmoothCyclicConstruction(construction);
+    const supportsBranchDegree = ramifiedCoverBranchDegreeSupportedForGeometry(baseGeometry);
+    const normalizedSmoothCyclic = normalizeRamifiedCoverSmoothCyclicConstruction({
+      ...construction,
+      branchDegree: supportsBranchDegree ? construction.branchDegree : null,
+      rootTwist: supportsBranchDegree ? construction.rootTwist : null
+    });
     construction.smoothCyclic = normalizedSmoothCyclic.smoothCyclic;
-    construction.branchDegree = normalizedSmoothCyclic.branchDegree;
-    construction.rootTwist = normalizedSmoothCyclic.rootTwist;
+    construction.branchDegree = supportsBranchDegree ? normalizedSmoothCyclic.branchDegree : null;
+    construction.rootTwist = supportsBranchDegree ? normalizedSmoothCyclic.rootTwist : null;
     const map = state.maps.find((item) => item.construction?.type === 'ramified-cover-map'
       && item.domainKind === 'variety'
       && item.domainId === variety.id
@@ -13080,11 +13340,13 @@
       && degree > 1
       && (construction.smoothCyclic === true
         || (construction.smoothCyclic == null && coverConstruction?.smoothCyclic === true));
-    const branchDegree = smoothCyclic
+    const baseGeometry = geometryFromVariety(base);
+    const supportsBranchDegree = smoothCyclic && ramifiedCoverBranchDegreeSupportedForGeometry(baseGeometry);
+    const branchDegree = supportsBranchDegree
       ? (ramifiedCoverBranchDegreeFromConstruction(construction) ?? ramifiedCoverBranchDegreeFromConstruction(coverConstruction))
       : null;
-    const rootTwist = smoothCyclic ? ramifiedCoverRootTwistFromBranchDegree(branchDegree, degree) : null;
-    const validSmoothCyclic = smoothCyclic && rootTwist != null;
+    const rootTwist = supportsBranchDegree ? ramifiedCoverRootTwistFromBranchDegree(branchDegree, degree) : null;
+    const normalizedSmoothCyclic = smoothCyclic && (!supportsBranchDegree || rootTwist != null);
     const nextFields = {
       coverId: cover.id,
       baseId: base.id,
@@ -13092,9 +13354,9 @@
       coverMode,
       branchSymbol,
       ramificationSymbol,
-      smoothCyclic: validSmoothCyclic,
-      branchDegree: validSmoothCyclic ? branchDegree : null,
-      rootTwist: validSmoothCyclic ? rootTwist : null
+      smoothCyclic: normalizedSmoothCyclic,
+      branchDegree: normalizedSmoothCyclic && rootTwist != null ? branchDegree : null,
+      rootTwist: normalizedSmoothCyclic ? rootTwist : null
     };
     Object.entries(nextFields).forEach(([key, value]) => {
       if (construction[key] !== value) {
@@ -13112,9 +13374,9 @@
         coverMode,
         branchSymbol,
         ramificationSymbol,
-        smoothCyclic: validSmoothCyclic,
-        branchDegree: validSmoothCyclic ? branchDegree : null,
-        rootTwist: validSmoothCyclic ? rootTwist : null,
+        smoothCyclic: normalizedSmoothCyclic,
+        branchDegree: normalizedSmoothCyclic && rootTwist != null ? branchDegree : null,
+        rootTwist: normalizedSmoothCyclic ? rootTwist : null,
         rootSheafId: coverConstruction.rootSheafId || construction.rootSheafId || null,
         mapId: map.id
       }).forEach(([key, value]) => {
@@ -13601,6 +13863,11 @@
     const canUniversalBundle = draftingSheaf
       ? (waitingForSheafBase ? hasUniversalBundleBase : !!draftBase && varietySupportsUniversalBundle(draftBaseType))
       : hasVariety && varietySupportsUniversalBundle(activeVarietyType);
+    const canDivisorLine = draftingSheaf
+      ? (waitingForSheafBase
+          ? state.varieties.some((variety) => divisorHomologyClassDefinitions(geometryFromVariety(variety)).length > 0)
+          : !!draftBase && divisorHomologyClassDefinitions(geometryFromVariety(draftBase)).length > 0)
+      : hasVariety && !!activeVariety() && divisorHomologyClassDefinitions(geometryFromVariety(activeVariety())).length > 0;
     const canMapOperationSheaf = hasVariety
       && state.maps.some((map) => map.domainKind === 'variety' && map.codomainKind === 'variety')
       && state.sheaves.some((sheaf) => !editingSheafMapOperation || sheaf.id !== state.activeSheafId);
@@ -13626,6 +13893,8 @@
       refs.universalBundleOption.hidden = !canUniversalBundle;
       refs.universalBundleOption.disabled = !canUniversalBundle;
     }
+    const divisorLineOption = refs.sheafType?.querySelector?.('option[value="divisor-line"]');
+    if (divisorLineOption) divisorLineOption.disabled = !canDivisorLine;
     const mapOperationOption = refs.sheafType?.querySelector?.('option[value="map-operation"]');
     if (mapOperationOption) {
       mapOperationOption.disabled = !canMapOperationSheaf;
@@ -13720,6 +13989,13 @@
       syncDefaultRank(true);
       syncDefaultSheafName();
     }
+    if (!canDivisorLine && draftSheaf === 'divisor-line') {
+      refs.sheafType.value = 'abstract';
+      draftSheaf = 'abstract';
+      state.sheafDivisorDraft = null;
+      syncDefaultRank(true);
+      syncDefaultSheafName();
+    }
     if (!canUniversalBundle && isUniversalBundleSheafType(draftSheaf)) {
       refs.sheafType.value = 'abstract';
       draftSheaf = 'abstract';
@@ -13754,6 +14030,8 @@
     if (refs.dim && showGrassmannian) refs.dim.readOnly = true;
     else if (refs.dim) refs.dim.readOnly = false;
     refs.twistRow.hidden = !draftingSheaf || draftSheaf !== 'twist';
+    if (refs.sheafDivisorRow) refs.sheafDivisorRow.hidden = !draftingSheaf || draftSheaf !== 'divisor-line';
+    if (draftingSheaf && draftSheaf === 'divisor-line') updateSheafDivisorControls();
     updateSheafBinaryDraftControls();
     updateSheafSelfSumDraftControls();
     updateSheafDualDraftControls();
@@ -15765,18 +16043,29 @@
       ? '1'
       : (isUniversalBundleSheafType(type) ? universalBundleRankPlain(geometry) : sanitizeRankInput(sheaf.rank));
     const labelLatex = sanitizeMathLabel(sheaf.name, defaultSheafNameFor(type, rankPlain, twist, geometry?.labelLatex || 'X', geometry));
+    const divisorCoefficients = type === 'divisor-line' ? divisorCoefficientsFromSheaf(sheaf, geometry) : {};
     const specialLabels = sheafHasLocallyFreeLabel(sheaf) ? ['locally-free'] : [];
-    Object.assign(sheaf, { type, twist: String(twist), basis, rank: rankPlain, name: labelLatex, baseVarietyId: baseVariety?.id || sheaf.baseVarietyId || null, specialLabels });
+    Object.assign(sheaf, {
+      type,
+      twist: String(twist),
+      basis,
+      rank: type === 'divisor-line' ? '1' : rankPlain,
+      name: labelLatex,
+      baseVarietyId: baseVariety?.id || sheaf.baseVarietyId || null,
+      specialLabels,
+      ...(type === 'divisor-line' ? { divisorCoefficients } : {})
+    });
     return {
       type,
       twist,
       baseVarietyId: sheaf.baseVarietyId,
       basis,
-      rankPlain,
-      rankLatex: simplifyScalarExpressionLatex(rankPlain, { kind: 'sheaf', id: sheaf.id, field: 'rank' }),
+      rankPlain: type === 'divisor-line' ? '1' : rankPlain,
+      rankLatex: type === 'divisor-line' ? '1' : simplifyScalarExpressionLatex(rankPlain, { kind: 'sheaf', id: sheaf.id, field: 'rank' }),
       labelLatex,
       labelPlain: latexToPlain(labelLatex),
       specialLabels,
+      divisorCoefficients,
       construction: sheaf.construction || null,
       sourceObject: sheaf
     };
@@ -15914,18 +16203,20 @@
     const twist = normalizedInt(refs.twist.value, -24, 24, 1);
     let basis = normalizeBasisValue(refs.basis.value);
     if (basis === 'roots' && type !== 'abstract' && !sheafHasLocallyFreeLabel({ type })) basis = 'chern';
-    const rankPlain = type === 'structure' ? '1' : sanitizeRankInput(refs.rank.value);
+    const rankPlain = type === 'structure' || type === 'divisor-line' ? '1' : sanitizeRankInput(refs.rank.value);
     refs.rank.value = rankPlain;
     const labelLatex = sanitizeMathLabel(refs.sheafName.value, defaultSheafNameLatex());
     refs.sheafName.value = labelLatex;
+    const geometry = draftBaseVariety() ? geometryFromVariety(draftBaseVariety()) : null;
     return {
       type,
       twist,
       basis,
       rankPlain,
-      rankLatex: simplifyScalarExpressionLatex(rankPlain),
+      rankLatex: type === 'divisor-line' ? '1' : simplifyScalarExpressionLatex(rankPlain),
       labelLatex,
-      labelPlain: latexToPlain(labelLatex)
+      labelPlain: latexToPlain(labelLatex),
+      ...(type === 'divisor-line' ? { divisorCoefficients: sanitizeDivisorCoefficients(currentSheafDivisorCoefficients(), geometry) } : {})
     };
   }
 
@@ -16020,6 +16311,9 @@
     const d = geometry.dim;
     if (sheaf.construction) return buildConstructedSheafBundle(geometry, sheaf, options);
     if (sheaf.type === 'structure') return buildTrivialBundle(d, 1, sheaf.labelLatex, sheaf.labelPlain);
+    if (sheaf.type === 'divisor-line') {
+      return buildLineFromFirstChern(divisorPolynomialFromCoefficients(sheaf.divisorCoefficients, geometry), d, sheaf.labelLatex, sheaf.labelPlain);
+    }
     if (sheaf.type === 'tangent') {
       const ramifiedTangent = buildRamifiedCoverTangentBundle(geometry, sheaf);
       if (ramifiedTangent) return ramifiedTangent;
@@ -16853,13 +17147,31 @@
       cohomologyDegree: 0,
       sourceKey: ''
     });
-    return [{
+    const rules = [{
       id: `default-ramified-cover-unit-pushforward-${map.id}`,
       builtin: true,
       enabled: true,
       lhs: { powers: { [variableId]: 1 } },
       rhs: [{ coefficient: String(context.degree), powers: {} }]
     }];
+    for (const mono of homologyMonomialDefinitions(context.coverGeometry)) {
+      if (!mono.key) continue;
+      const pushed = ramifiedCoverPushforwardSourceKey(map, mono.key, context.coverGeometry.dim, context.baseGeometry.dim);
+      if (!pushed || pushed.isZero()) continue;
+      const sourcePowers = parseMonoKey(mono.key);
+      const ramificationId = homologyVariableId(HOMOLOGY_RAMIFICATION_DIVISOR_CLASS, context.coverGeometry);
+      if (!sourcePowers[ramificationId]) continue;
+      const def = mapPushforwardMonomialClassDefinition(map, mono, context.coverGeometry, context.baseGeometry);
+      if (!def) continue;
+      rules.push({
+        id: `default-ramified-cover-ramification-pushforward-${map.id}-${hashString(mono.key)}`,
+        builtin: true,
+        enabled: true,
+        lhs: { powers: { [homologyDefVariableId(def, context.baseGeometry)]: 1 } },
+        rhs: serializeHomologyPoly(pushed)
+      });
+    }
+    return rules;
   }
 
   function defaultBlowdownPullbackRules(map, blowupGeometry = geometryByVarietyId(map?.domainId)) {
@@ -17789,12 +18101,50 @@
     const context = ramifiedCoverMapContext(map);
     if (!context || context.coverGeometry.dim !== sourceDim || context.baseGeometry.dim !== targetDim || sourceDim !== targetDim) return null;
     if (!sourceKey) return Poly.one().scale(fraction(context.degree));
+    const branched = ramifiedCoverBranchPushforwardSourceKey(map, sourceKey, context);
+    if (branched) return branched;
     const source = polyFromPowers(parseMonoKey(sourceKey));
     for (const mono of homologyMonomialDefinitions(context.baseGeometry)) {
       const pulled = pullbackPolynomial(polyFromPowers(parseMonoKey(mono.key || '')), map).truncate(sourceDim);
       if (polyEquals(source, pulled)) return polyFromPowers(parseMonoKey(mono.key || '')).scale(fraction(context.degree));
     }
     return null;
+  }
+
+  function ramifiedCoverBranchPushforwardSourceKey(map, sourceKey, context) {
+    if (!context || !sourceKey || context.degree <= 1) return null;
+    if (context.cover.construction?.coverMode !== 'cyclic' && map?.construction?.coverMode !== 'cyclic') return null;
+    const branchDef = homologyClassDefById(context.baseGeometry, HOMOLOGY_BRANCH_DIVISOR_CLASS);
+    const ramificationDef = homologyClassDefById(context.coverGeometry, HOMOLOGY_RAMIFICATION_DIVISOR_CLASS);
+    if (!branchDef || !ramificationDef) return null;
+    const ramificationId = homologyDefVariableId(ramificationDef, context.coverGeometry);
+    const branchId = homologyDefVariableId(branchDef, context.baseGeometry);
+    const sourcePowers = parseMonoKey(sourceKey);
+    let ramificationExponent = 0;
+    const basePowers = {};
+    for (const [id, exp] of Object.entries(sourcePowers)) {
+      const exponent = Number(exp) || 0;
+      if (exponent <= 0) continue;
+      if (id === ramificationId) {
+        ramificationExponent += exponent;
+        continue;
+      }
+      const pullbackSourcePowers = sameMapPullbackSourcePowers(map, id);
+      if (!pullbackSourcePowers) return null;
+      for (const [sourceId, sourceExp] of Object.entries(pullbackSourcePowers)) {
+        const sourceExponent = Number(sourceExp) || 0;
+        if (sourceExponent <= 0) continue;
+        const unitId = homologyVariableId(HOMOLOGY_UNIT_CLASS, context.baseGeometry);
+        if (sourceId === unitId || legacyBaseHomologyClassId(sourceId) === HOMOLOGY_UNIT_CLASS) continue;
+        basePowers[sourceId] = (basePowers[sourceId] || 0) + sourceExponent * exponent;
+      }
+    }
+    if (ramificationExponent <= 0) return null;
+    basePowers[branchId] = (basePowers[branchId] || 0) + ramificationExponent;
+    const coefficient = ramificationExponent === 1
+      ? Fraction.one()
+      : fraction(1, bigintPow(BigInt(context.degree), ramificationExponent - 1));
+    return polyFromPowers(basePowers).scale(coefficient).truncate(context.baseGeometry.dim);
   }
 
   function projectionFormulaPushforwardSourceKey(map, sourceKey, sourceDim, targetDim, construction = {}) {
@@ -23418,18 +23768,19 @@
     if (!item || typeof item !== 'object') return null;
     const id = sanitizePresetId(item.id);
     if (!id) return null;
-    const type = canonicalSheafType(sanitizePresetEnum(item.type, ['abstract', 'locally-free', 'structure', 'tangent', 'cotangent', 'canonical', 'twist', 'universal-bundle', 'universal-line'], 'abstract'));
+    const type = canonicalSheafType(sanitizePresetEnum(item.type, ['abstract', 'locally-free', 'structure', 'tangent', 'cotangent', 'canonical', 'twist', 'divisor-line', 'universal-bundle', 'universal-line'], 'abstract'));
     const sheaf = {
       id,
       type,
       name: sanitizeMathLabel(item.name, '\\mathcal{E}'),
       twist: String(normalizedInt(item.twist, -24, 24, 1)),
-      rank: sanitizeRankInput(item.rank),
+      rank: type === 'divisor-line' ? '1' : sanitizeRankInput(item.rank),
       baseVarietyId: sanitizePresetId(item.baseVarietyId),
       basis: normalizeBasisValue(item.basis),
       nameDirty: item.nameDirty === true,
       hiddenOnCanvas: item.hiddenOnCanvas === true
     };
+    if (type === 'divisor-line') sheaf.divisorCoefficients = sanitizeDivisorCoefficients(item.divisorCoefficients || {});
     copyPresetCanvasPosition(item, sheaf);
     if (item.homology && typeof item.homology === 'object') sheaf.homology = cloneSerializableValue(item.homology);
     const construction = sanitizePresetConstruction(item.construction, 'sheaf');
@@ -23977,7 +24328,7 @@
   function presetSheaf(sheaf) {
     return pickSerializable(sheaf, [
       'id', 'type', 'name', 'twist', 'rank', 'baseVarietyId', 'basis',
-      'homology', 'construction', 'nameDirty', 'hiddenOnCanvas',
+      'divisorCoefficients', 'homology', 'construction', 'nameDirty', 'hiddenOnCanvas',
       'labelX', 'labelY', 'labelPositionDirty'
     ]);
   }
@@ -24143,6 +24494,7 @@
     ];
     if (base) parts.push(`\\text{base}=${sanitizeMathLabel(base.name, 'X')}`);
     if (sheaf.type === 'twist') parts.push(`r=${normalizedInt(sheaf.twist, -24, 24, 1)}`);
+    if (sheaf.type === 'divisor-line' && base) parts.push(`D=${divisorLatexFromCoefficients(sheaf.divisorCoefficients, geometryFromVariety(base), '0')}`);
     if (sheaf.construction?.type === 'self-direct-sum') parts.push(`n=${normalizeSelfSumMultiplicity(sheaf.construction.multiplicity)}`);
     if (sheaf.construction?.type === 'schur') parts.push(`\\lambda=${schurPartitionLatex(sheaf.construction.partition)}`);
     parts.push(`\\text{basis}=\\text{${basisLabel(sheaf.basis)}}`);
@@ -24193,6 +24545,7 @@
     ];
     if (base) parts.push(`base ${latexToPlain(base.name)}`);
     if (sheaf.type === 'twist') parts.push(`twist ${normalizedInt(sheaf.twist, -24, 24, 1)}`);
+    if (sheaf.type === 'divisor-line' && base) parts.push(`D ${divisorPlainFromCoefficients(sheaf.divisorCoefficients, geometryFromVariety(base), '0')}`);
     if (sheaf.construction?.type === 'self-direct-sum') parts.push(`multiplicity ${normalizeSelfSumMultiplicity(sheaf.construction.multiplicity)}`);
     if (sheaf.construction?.type === 'schur') parts.push(`diagram ${formatSchurPartitionInput(sheaf.construction.partition)}`);
     parts.push(`basis ${basisLabel(sheaf.basis)}`);
@@ -24227,6 +24580,7 @@
     if (type === 'cotangent') return 'cotangent sheaf';
     if (type === 'canonical') return 'canonical sheaf';
     if (type === 'twist') return 'twist';
+    if (type === 'divisor-line') return 'divisor line bundle';
     if (isUniversalBundleSheafType(type)) return 'universal bundle';
     if (type === 'self-direct-sum') return 'self direct sum';
     if (type === 'dual') return 'dual sheaf';

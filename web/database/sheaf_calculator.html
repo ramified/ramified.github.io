@@ -1297,6 +1297,11 @@
       font-size: 0.72rem;
     }
 
+    .sheaf-divisor-coefficients .homology-coefficient-term span {
+      font-size: 0.72rem;
+      line-height: 1.35;
+    }
+
     .homology-custom-class-row {
       grid-template-columns: minmax(0, 1fr) 76px auto;
     }
@@ -1962,6 +1967,7 @@
               <option value="cotangent">Cotangent sheaf Ω¹ₓ</option>
               <option value="canonical">Canonical sheaf Kₓ</option>
               <option value="twist" id="sheaf-twist-option">Oₓ(r)</option>
+              <option value="divisor-line">O_X(D)</option>
               <option value="universal-bundle" id="sheaf-universal-bundle-option">Universal bundle</option>
               <option value="direct-sum">Direct sum</option>
               <option value="self-direct-sum">Self direct sum</option>
@@ -2135,6 +2141,10 @@
           <div class="sheaf-field-row" id="twist-row" hidden>
             <label class="input-label sheaf-lower-label" for="twist-r">r</label>
             <input id="twist-r" class="sheaf-input" type="number" min="-24" max="24" value="1">
+          </div>
+          <div class="sheaf-field-row" id="sheaf-divisor-row" hidden>
+            <span class="input-label">D</span>
+            <div class="homology-coefficient-editor sheaf-divisor-coefficients" id="sheaf-divisor-coefficients"></div>
           </div>
           <div class="sheaf-field-row" id="rank-row">
             <label class="input-label" for="rank-symbol">rank</label>

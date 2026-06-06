@@ -26,6 +26,9 @@ function loadCalculator() {
     homologyClassDefinitions,
     homologyVariableId,
     homologyDefVariableId,
+    divisorHomologyClassDefinitions,
+    divisorLatexFromCoefficients,
+    divisorPlainFromCoefficients,
     standardHomologyRules,
     defaultMapHomologyRulesForGeometry,
     deleteMapHomologyRuleById,
@@ -157,6 +160,69 @@ function testSelfDirectSumScalesChernCharacter() {
 
   assert.strictEqual(chernPlain(rows), '1 + 3*H + 3*[p]');
   assert.strictEqual(characterPlain(rows), '3 + 3*H + 3/2*[p]');
+}
+
+function testDivisorLineBundleUsesAssignedDivisorChernClass() {
+  const api = loadCalculator();
+  api.state.varieties = [{
+    id: 'P2',
+    type: 'projective',
+    dim: '2',
+    name: '\\mathbb{P}^2',
+    homology: {
+      customClasses: [{ id: 'branch', symbol: 'B', degree: 1, cohomologyDegree: 2 }]
+    }
+  }];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const hyperplaneId = api.HOMOLOGY_HYPERPLANE_CLASS;
+  const rows = characteristicRows(api, {
+    id: 'OD',
+    type: 'divisor-line',
+    basis: 'chern',
+    rank: '1',
+    name: '\\mathcal{O}(D)',
+    baseVarietyId: 'P2',
+    divisorCoefficients: {
+      [hyperplaneId]: '2',
+      branch: '-1'
+    }
+  });
+
+  assert.strictEqual(api.divisorHomologyClassDefinitions(geometry).some((def) => def.id === 'branch'), true);
+  assert.strictEqual(api.divisorLatexFromCoefficients({ [hyperplaneId]: '2', branch: '-1' }, geometry), '2H - B');
+  assert.strictEqual(api.divisorPlainFromCoefficients({ [hyperplaneId]: '2', branch: '-1' }, geometry), '2*H - B');
+  assert.strictEqual(chernPlain(rows), '1 - B + 2*H');
+  assert.strictEqual(characterPlain(rows), '1 - B + 2*H - 2*B*H + 1/2*B^2 + 2*[p]');
+}
+
+function testDivisorLineBundlePresetRoundTrip() {
+  const api = loadCalculator();
+  api.state.varieties = [{
+    id: 'P2',
+    type: 'projective',
+    dim: '2',
+    name: '\\mathbb{P}^2',
+    labelX: 0.25,
+    labelY: 0.6
+  }];
+  api.state.sheaves = [{
+    id: 'OD',
+    type: 'divisor-line',
+    basis: 'chern',
+    rank: '1',
+    name: '\\mathcal{O}(2H)',
+    baseVarietyId: 'P2',
+    divisorCoefficients: { [api.HOMOLOGY_HYPERPLANE_CLASS]: '2' }
+  }];
+
+  const presetText = JSON.stringify(api.buildPresetState());
+  const restored = loadCalculator();
+  restored.importPresetFromText(presetText);
+  const sheaf = restored.state.sheaves.find((item) => item.id === 'OD');
+  assert(sheaf);
+  assert.strictEqual(sheaf.type, 'divisor-line');
+  assert.strictEqual(sheaf.divisorCoefficients[api.HOMOLOGY_HYPERPLANE_CLASS], '2');
+  assert.strictEqual(chernPlain(characteristicRows(restored, sheaf)), '1 + 2*H');
 }
 
 function testPresetStateIncludesRecoverableConstructionData() {
@@ -1337,6 +1403,84 @@ function testCyclicRamifiedCoverAddsBranchRamificationRule() {
   assert.strictEqual(rhsId, api.homologyDefVariableId(ramificationDef, coverGeometry));
 }
 
+function testCyclicRamifiedCoverAddsRamificationPushforwardRules() {
+  const api = loadCalculator();
+  const base = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 4,
+    coverMode: 'cyclic',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    defaultName: 'Y',
+    name: 'Y'
+  });
+
+  const map = api.state.maps[0];
+  const baseGeometry = api.geometryFromVariety(base);
+  const coverGeometry = api.geometryFromVariety(cover);
+  const branchDef = api.homologyClassDefinitions(baseGeometry).find((def) => def.id === api.HOMOLOGY_BRANCH_DIVISOR_CLASS);
+  const ramificationDef = api.homologyClassDefinitions(coverGeometry).find((def) => def.id === api.HOMOLOGY_RAMIFICATION_DIVISOR_CLASS);
+  const branchId = api.homologyDefVariableId(branchDef, baseGeometry);
+  const ramificationId = api.homologyDefVariableId(ramificationDef, coverGeometry);
+  const rules = api.defaultMapHomologyRulesForGeometry(baseGeometry);
+  const ramificationRule = rules.find((rule) => rule.id.startsWith(`default-ramified-cover-ramification-pushforward-${map.id}-`)
+    && rule.rhs.length === 1
+    && rule.rhs[0].coefficient === '1'
+    && rule.rhs[0].powers[branchId] === 1);
+  assert(ramificationRule);
+  const ramificationPushforwardId = Object.keys(ramificationRule.lhs.powers)[0];
+  const reduced = api.applyHomologyRules(api.polyFromPowers({ [ramificationPushforwardId]: 1 }), {
+    geometry: baseGeometry,
+    homology: baseGeometry.homology
+  });
+  assert.strictEqual(api.formatPolyPlain(reduced), 'B');
+
+  const pushedSquare = api.pushforwardPolynomialByDegree(
+    map,
+    api.polyFromPowers({ [ramificationId]: 2 }),
+    coverGeometry.dim,
+    baseGeometry.dim,
+    {}
+  );
+  assert.strictEqual(api.formatPolyPlain(pushedSquare), '1/4*B^2');
+}
+
+function testGeneralRamifiedCoverDoesNotAddRamificationPushforwardRule() {
+  const api = loadCalculator();
+  const base = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 4,
+    coverMode: 'general',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    defaultName: 'Y',
+    name: 'Y'
+  });
+
+  const map = api.state.maps[0];
+  const baseGeometry = api.geometryFromVariety(base);
+  const coverGeometry = api.geometryFromVariety(cover);
+  const ramificationDef = api.homologyClassDefinitions(coverGeometry).find((def) => def.id === api.HOMOLOGY_RAMIFICATION_DIVISOR_CLASS);
+  const ramificationId = api.homologyDefVariableId(ramificationDef, coverGeometry);
+  assert(!api.defaultMapHomologyRulesForGeometry(baseGeometry)
+    .some((rule) => rule.id.startsWith(`default-ramified-cover-ramification-pushforward-${map.id}-`)));
+
+  const pushed = api.pushforwardPolynomialByDegree(
+    map,
+    api.polyFromPowers({ [ramificationId]: 1 }),
+    coverGeometry.dim,
+    baseGeometry.dim,
+    {}
+  );
+  assert.notStrictEqual(api.formatPolyPlain(pushed), 'B');
+}
+
 function testSmoothCyclicRamifiedCoverAddsRootClassAndHodgeNumbers() {
   const api = loadCalculator();
   const base = { id: 'P3', type: 'projective', dim: '3', name: '\\mathbb{P}^{3}', labelX: 0.4, labelY: 0.7 };
@@ -1359,9 +1503,19 @@ function testSmoothCyclicRamifiedCoverAddsRootClassAndHodgeNumbers() {
   const root = api.homologyClassDefinitions(baseGeometry).find((def) => def.id === api.HOMOLOGY_CYCLIC_ROOT_CLASS);
   assert(root);
   assert.strictEqual(root.cohomologyDegree, 2);
-  const rootRule = baseGeometry.homology.rules.find((item) => item.id === `default-ramified-cover-root-branch-${cover.id}`);
+  const branch = api.homologyClassDefinitions(baseGeometry).find((def) => def.id === api.HOMOLOGY_BRANCH_DIVISOR_CLASS);
+  const hyperplane = api.homologyClassDefinitions(baseGeometry).find((def) => def.id === api.HOMOLOGY_HYPERPLANE_CLASS);
+  const branchRule = baseGeometry.homology.rules.find((item) => item.id === `default-ramified-cover-projective-branch-degree-${cover.id}`);
+  assert(branchRule);
+  assert.strictEqual(branchRule.rhs[0].coefficient, '4');
+  assert.strictEqual(Object.keys(branchRule.lhs.powers)[0], api.homologyDefVariableId(branch, baseGeometry));
+  assert.strictEqual(Object.keys(branchRule.rhs[0].powers)[0], api.homologyDefVariableId(hyperplane, baseGeometry));
+  const rootRule = baseGeometry.homology.rules.find((item) => item.id === `default-ramified-cover-root-hyperplane-${cover.id}`);
   assert(rootRule);
   assert.strictEqual(rootRule.rhs[0].coefficient, '2');
+  assert.strictEqual(Object.keys(rootRule.lhs.powers)[0], api.homologyDefVariableId(root, baseGeometry));
+  assert.strictEqual(Object.keys(rootRule.rhs[0].powers)[0], api.homologyDefVariableId(hyperplane, baseGeometry));
+  assert(!baseGeometry.homology.rules.some((item) => item.id === `default-ramified-cover-root-branch-${cover.id}`));
 
   const hodge = api.buildHodgeNumbers(coverGeometry);
   assert.strictEqual(hodge.entries[0][0].plain, '1');
@@ -1466,6 +1620,33 @@ function testRamifiedCoverTangentPromotionCopiesComputedRuleToVariety() {
   const plain = api.formatPolyPlain(reduced);
   assert(plain.includes('-R'));
   assert(plain.includes('c_1(X)'));
+}
+
+function testAbstractSmoothCyclicRamifiedCoverKeepsBranchDegreeSymbolic() {
+  const api = loadCalculator();
+  const base = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 2,
+    coverMode: 'cyclic',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    smoothCyclic: true,
+    branchDegree: 4,
+    rootTwist: 2,
+    defaultName: 'Y',
+    name: 'Y'
+  });
+
+  assert.strictEqual(cover.construction.smoothCyclic, true);
+  assert.strictEqual(cover.construction.branchDegree, null);
+  assert.strictEqual(cover.construction.rootTwist, null);
+  assert.strictEqual(api.state.sheaves.some((item) => item.construction?.type === 'ramified-cover-root'), false);
+  assert(!base.homology?.rules?.some((item) => String(item.id || '').startsWith('default-ramified-cover-projective-branch-degree-')));
+  assert(!base.homology?.rules?.some((item) => String(item.id || '').startsWith('default-ramified-cover-root-hyperplane-')));
+  assert.strictEqual(api.buildHodgeNumbers(api.geometryFromVariety(cover)).entries[1][1].plain, 'h^1,1');
 }
 
 function testRamifiedCoverPresetRoundTripAndDegreeOneSuppression() {
@@ -2268,6 +2449,8 @@ testGrassmannianUsesTautologicalBundleClasses();
 testGrassmannianYoungBasisRulesExpressTautologicalClasses();
 testAbelianSpecialSheavesAreTrivial();
 testSelfDirectSumScalesChernCharacter();
+testDivisorLineBundleUsesAssignedDivisorChernClass();
+testDivisorLineBundlePresetRoundTrip();
 testPresetStateIncludesRecoverableConstructionData();
 testPresetImportRestoresRecoverableState();
 testDualSheafUsesAlternatingChernClasses();
@@ -2300,9 +2483,12 @@ testCurvePointBlowupHodgeNumbersAreUnchanged();
 testSymbolicGenusCurvePointBlowupHodgeNumbersAreUnchanged();
 testRamifiedCoverConstructionCreatesCoverMapAndHomology();
 testCyclicRamifiedCoverAddsBranchRamificationRule();
+testCyclicRamifiedCoverAddsRamificationPushforwardRules();
+testGeneralRamifiedCoverDoesNotAddRamificationPushforwardRule();
 testSmoothCyclicRamifiedCoverAddsRootClassAndHodgeNumbers();
 testTangentHomologyPromotionUsesVarietyDisplay();
 testRamifiedCoverTangentPromotionCopiesComputedRuleToVariety();
+testAbstractSmoothCyclicRamifiedCoverKeepsBranchDegreeSymbolic();
 testRamifiedCoverPresetRoundTripAndDegreeOneSuppression();
 testRamifiedCoverPresetRoundTripBranchDegree();
 testRamifiedCoverMapConstructionUpdatesCoverData();
