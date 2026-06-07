@@ -1548,14 +1548,21 @@
   function scalarReferenceRecords() {
     const records = [];
     state.varieties.forEach((variety) => {
-      if ((variety.type || 'abstract') !== 'curve') return;
-      addScalarReferenceRecord(records, variety, 'variety', 'genus', variety.genus);
+      if ((variety.type || 'abstract') === 'curve') {
+        addScalarReferenceRecord(records, variety, 'variety', 'genus', variety.genus);
+      }
+      (variety.homology?.rules || []).forEach((rule) => {
+        addHomologyCoefficientReferenceRecords(records, variety, 'variety', rule);
+      });
     });
     state.sheaves.forEach((sheaf) => {
       addScalarReferenceRecord(records, sheaf, 'sheaf', 'rank', sheaf.rank);
       if (sheaf.construction?.type === 'picard-poincare-line-bundle') {
         addScalarReferenceRecord(records, sheaf, 'sheaf', 'degree', sheaf.construction.degreeSymbol);
       }
+      (sheaf.homology?.rules || []).forEach((rule) => {
+        addHomologyCoefficientReferenceRecords(records, sheaf, 'sheaf', rule);
+      });
     });
     return records;
   }
@@ -1564,6 +1571,13 @@
     const symbols = scalarSymbolsInText(value);
     if (!symbols.length) return;
     records.push({ kind, id: object.id, field, object, symbols });
+  }
+
+  function addHomologyCoefficientReferenceRecords(records, object, kind, rule) {
+    if (!Array.isArray(rule?.rhs)) return;
+    rule.rhs.forEach((term) => {
+      addScalarReferenceRecord(records, object, kind, 'homology', term?.coefficient);
+    });
   }
 
   function scalarSymbolsInText(value) {
@@ -1614,12 +1628,26 @@
       if ((variety.type || 'abstract') !== 'curve') return;
       if (scalarSymbolsInText(variety.genus).includes(before)) variety.genus = replace(variety.genus);
     });
+    state.varieties.forEach((variety) => {
+      renameHomologyCoefficientReferences(variety.homology?.rules, before, replace);
+    });
     state.sheaves.forEach((sheaf) => {
       if (scalarSymbolsInText(sheaf.rank).includes(before)) sheaf.rank = replace(sheaf.rank);
       if (sheaf.construction?.type === 'picard-poincare-line-bundle'
         && scalarSymbolsInText(sheaf.construction.degreeSymbol).includes(before)) {
         sheaf.construction.degreeSymbol = replace(sheaf.construction.degreeSymbol);
       }
+      renameHomologyCoefficientReferences(sheaf.homology?.rules, before, replace);
+    });
+  }
+
+  function renameHomologyCoefficientReferences(rules, before, replace) {
+    (rules || []).forEach((rule) => {
+      (rule.rhs || []).forEach((term) => {
+        if (scalarSymbolsInText(term?.coefficient).includes(before)) {
+          term.coefficient = replace(term.coefficient);
+        }
+      });
     });
   }
 
@@ -5458,7 +5486,11 @@
     return !!context
       && !!def
       && def.kind === 'chern'
-      && (sheafUsesFreeClassVariables(context.sheaf) || !!computedSheafChernClassRule(def, context))
+      && (
+        sheafUsesFreeClassVariables(context.sheaf)
+        || !!computedSheafChernClassRule(def, context)
+        || !!sheafChernDefTangentHomologyClassId(def, context)
+      )
       && !sheafChernClassIsInBaseHomology(def, context.geometry, context);
   }
 
@@ -7020,14 +7052,14 @@
       sawInput = true;
       let coefficient;
       try {
-        coefficient = parseRuleCoefficient(raw);
+        coefficient = parseSymbolicRuleCoefficient(raw);
       } catch (error) {
         if (refs.homologyMessage) refs.homologyMessage.textContent = error.message || 'Invalid coefficient.';
         return null;
       }
-      if (coefficient.isZero()) continue;
+      if (ruleCoefficientIsZero(coefficient)) continue;
       terms.push({
-        coefficient: formatFractionPlain(coefficient),
+        coefficient: formatRuleCoefficientPlain(coefficient),
         powers: parseMonoKey(input.dataset.monomialKey || '')
       });
     }
@@ -15276,11 +15308,11 @@
       const powers = normalizeSheafHomologyPowers(term.powers || {}, variableIds, options) || {};
       let coefficient;
       try {
-        coefficient = formatFractionPlain(parseRuleCoefficient(term.coefficient || '1'));
+        coefficient = formatRuleCoefficientPlain(parseSymbolicRuleCoefficient(term.coefficient || '1'));
       } catch (_) {
         return null;
       }
-      if (parseRuleCoefficient(coefficient).isZero()) continue;
+      if (ruleCoefficientIsZero(parseSymbolicRuleCoefficient(coefficient))) continue;
       out.push({ coefficient, powers });
     }
     return out;
@@ -16729,7 +16761,7 @@
       try {
         rhsTerms = [
           {
-            coefficient: formatFractionPlain(parseRuleCoefficient(rule.coefficient || '1')),
+            coefficient: formatRuleCoefficientPlain(parseSymbolicRuleCoefficient(rule.coefficient || '1')),
             powers: { [homologyDefVariableId(targetDef, geometry)]: 1 }
           }
         ];
@@ -16781,11 +16813,11 @@
       const powers = normalizeHomologyPowers(term.powers || {}, variableIds, options) || {};
       let coefficient;
       try {
-        coefficient = formatFractionPlain(parseRuleCoefficient(term.coefficient || '1'));
+        coefficient = formatRuleCoefficientPlain(parseSymbolicRuleCoefficient(term.coefficient || '1'));
       } catch (_) {
         return null;
       }
-      if (parseRuleCoefficient(coefficient).isZero()) continue;
+      if (ruleCoefficientIsZero(parseSymbolicRuleCoefficient(coefficient))) continue;
       out.push({ coefficient, powers });
     }
     return out;
@@ -16793,7 +16825,7 @@
 
   function serializeHomologyPoly(poly) {
     return sortedTerms(poly).map(([key, coeff]) => ({
-      coefficient: formatFractionPlain(coeff),
+      coefficient: formatRuleCoefficientPlain(coeff),
       powers: parseMonoKey(key)
     }));
   }
@@ -16802,16 +16834,34 @@
     if (!Array.isArray(rule?.rhs)) return Poly.zero();
     let out = Poly.zero();
     for (const term of rule.rhs) {
-      let coeff;
+      let split;
       try {
-        coeff = parseRuleCoefficient(term.coefficient || '1');
+        split = splitHomologyRuleTermCoefficient(term);
       } catch (_) {
         continue;
       }
-      if (coeff.isZero()) continue;
-      out = out.add(polyFromPowers(term.powers || {}).scale(coeff));
+      if (split.coefficient.isZero()) continue;
+      out = out.add(polyFromPowers(split.powers || {}).mul(split.coefficient, MAX_DIMENSION));
     }
     return out;
+  }
+
+  function splitHomologyRuleTermCoefficient(term) {
+    const coefficient = Poly.from(parseSymbolicRuleCoefficient(term?.coefficient || '1'));
+    const scalarPowers = {};
+    const homologyPowers = {};
+    for (const [id, exp] of Object.entries(term?.powers || {})) {
+      const exponent = Number(exp) || 0;
+      if (exponent <= 0) continue;
+      const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+      const target = data && data.degree === 0 ? scalarPowers : homologyPowers;
+      target[id] = (target[id] || 0) + exponent;
+    }
+    const scalar = Object.keys(scalarPowers).length ? polyFromPowers(scalarPowers) : Poly.one();
+    return {
+      coefficient: coefficient.mul(scalar, MAX_DIMENSION),
+      powers: homologyPowers
+    };
   }
 
   function homologyRuleRhsLatex(rule) {
@@ -16837,8 +16887,8 @@
     return terms.map((term, index) => {
       const coeff = parseRuleCoefficientSafe(term?.coefficient || '1');
       if (coeff.isZero()) return '';
-      const sign = coeff.sign();
-      const body = formatTermLatex(monoKey(term?.powers || {}), coeff.abs());
+      const sign = ruleCoefficientSign(coeff);
+      const body = formatTermLatexWithCoefficient(monoKey(term?.powers || {}), ruleCoefficientAbs(coeff), formatRuleCoefficientLatex);
       if (!body) return '';
       if (index === 0) return sign < 0 ? `-${body}` : body;
       return sign < 0 ? `-${body}` : `+${body}`;
@@ -16850,8 +16900,8 @@
     return terms.map((term, index) => {
       const coeff = parseRuleCoefficientSafe(term?.coefficient || '1');
       if (coeff.isZero()) return '';
-      const sign = coeff.sign();
-      const body = formatHomologyInputTerm(monoKey(term?.powers || {}), coeff.abs());
+      const sign = ruleCoefficientSign(coeff);
+      const body = formatHomologyInputTermWithCoefficient(monoKey(term?.powers || {}), ruleCoefficientAbs(coeff));
       if (!body) return '';
       if (index === 0) return sign < 0 ? `-${body}` : body;
       return sign < 0 ? `-${body}` : `+${body}`;
@@ -16860,7 +16910,7 @@
 
   function parseRuleCoefficientSafe(value) {
     try {
-      return parseRuleCoefficient(value || '1');
+      return parseSymbolicRuleCoefficient(value || '1');
     } catch (_) {
       return Fraction.one();
     }
@@ -16889,6 +16939,13 @@
     if (!mono) return absCoeff.toPlainAbs();
     if (absCoeff.isOne()) return mono;
     return `${absCoeff.toPlainAbs()}${mono}`;
+  }
+
+  function formatHomologyInputTermWithCoefficient(key, absCoeff) {
+    const mono = homologyRuleInputMonomial(parseMonoKey(key));
+    if (!mono) return formatRuleCoefficientPlain(absCoeff);
+    if (ruleCoefficientIsOne(absCoeff)) return mono;
+    return `${formatRuleCoefficientPlain(absCoeff)}${mono}`;
   }
 
   function homologyRuleInputMonomial(powers) {
@@ -17368,14 +17425,14 @@
     if (lhsIds.length !== 1 || lhsPowers[lhsIds[0]] !== 1) return false;
     const terms = rule?.rhs || [];
     return terms.length === 1
-      && parseRuleCoefficient(terms[0].coefficient || '1').isOne()
+      && ruleCoefficientIsOne(parseSymbolicRuleCoefficient(terms[0].coefficient || '1'))
       && monoKey(terms[0].powers || {}) === monoKey(lhsPowers);
   }
 
   function sheafHomologyRuleIsFormalTangentIdentity(rule, def, sheaf, geometry) {
     if (sheaf?.type !== 'tangent' || sheaf.construction || geometry?.type !== 'abstract' || !def?.degree) return false;
     const terms = rule?.rhs || [];
-    if (terms.length !== 1 || !parseRuleCoefficient(terms[0].coefficient || '1').isOne()) return false;
+    if (terms.length !== 1 || !ruleCoefficientIsOne(parseSymbolicRuleCoefficient(terms[0].coefficient || '1'))) return false;
     const rhsPowers = terms[0].powers || {};
     const rhsIds = Object.keys(rhsPowers);
     if (rhsIds.length !== 1 || rhsPowers[rhsIds[0]] !== 1) return false;
@@ -18709,7 +18766,7 @@
       : null;
     const rhsTerms = (rule.rhs || []).filter((term) => {
       try {
-        return !parseRuleCoefficient(term?.coefficient || '1').isZero();
+        return !ruleCoefficientIsZero(parseSymbolicRuleCoefficient(term?.coefficient || '1'));
       } catch (_) {
         return false;
       }
@@ -21352,7 +21409,7 @@
     const powers = parseMonoKey(key);
     for (const [id, exp] of Object.entries(powers)) {
       const data = VARS.get(id);
-      degree += (data ? data.degree : 1) * exp;
+      degree += (data ? (data.degree || 0) : 1) * exp;
     }
     return degree;
   }
@@ -21403,6 +21460,13 @@
     return `${absCoeff.toLatexAbs()}\\,${mono}`;
   }
 
+  function formatTermLatexWithCoefficient(key, absCoeff, formatCoefficient = formatRuleCoefficientLatex) {
+    const mono = monomialLatex(key);
+    if (!mono) return formatCoefficient(absCoeff);
+    if (ruleCoefficientIsOne(absCoeff)) return mono;
+    return `${formatCoefficient(absCoeff)}\\,${mono}`;
+  }
+
   function formatPolyPlain(poly) {
     poly = Poly.from(poly);
     if (poly.isZero()) return '0';
@@ -21421,6 +21485,13 @@
     if (!mono) return absCoeff.toPlainAbs();
     if (absCoeff.isOne()) return mono;
     return `${absCoeff.toPlainAbs()}*${mono}`;
+  }
+
+  function formatTermPlainWithCoefficient(key, absCoeff, formatCoefficient = formatRuleCoefficientPlain) {
+    const mono = monomialPlain(key);
+    if (!mono) return formatCoefficient(absCoeff);
+    if (ruleCoefficientIsOne(absCoeff)) return mono;
+    return `${formatCoefficient(absCoeff)}*${mono}`;
   }
 
   function formatRankPlusPolyLatex(rank, poly) {
@@ -22170,9 +22241,22 @@
 
   function homologyRuleCoefficientMap(rule) {
     const out = new Map();
-    sortedTerms(homologyRuleRhsPoly(rule)).forEach(([key, coeff]) => {
-      out.set(key, formatFractionPlain(coeff));
-    });
+    for (const term of rule?.rhs || []) {
+      let split;
+      try {
+        split = splitHomologyRuleTermCoefficient(term);
+      } catch (_) {
+        continue;
+      }
+      if (split.coefficient.isZero()) continue;
+      const key = monoKey(split.powers || {});
+      const current = out.get(key) || Poly.zero();
+      out.set(key, current.add(split.coefficient));
+    }
+    for (const [key, coefficient] of Array.from(out.entries())) {
+      if (coefficient.isZero()) out.delete(key);
+      else out.set(key, formatRuleCoefficientPlain(scalarPolyAsFraction(coefficient) || coefficient));
+    }
     return out;
   }
 
@@ -22329,14 +22413,14 @@
       if (!raw) continue;
       let coefficient;
       try {
-        coefficient = parseRuleCoefficient(raw);
+        coefficient = parseSymbolicRuleCoefficient(raw);
       } catch (error) {
         if (refs.homologyMessage) refs.homologyMessage.textContent = error.message || 'Invalid coefficient.';
         return false;
       }
-      if (coefficient.isZero()) continue;
+      if (ruleCoefficientIsZero(coefficient)) continue;
       terms.push({
-        coefficient: formatFractionPlain(coefficient),
+        coefficient: formatRuleCoefficientPlain(coefficient),
         powers: parseMonoKey(input.dataset.monomialKey || '')
       });
     }
@@ -22424,7 +22508,7 @@
     try {
       return JSON.stringify((terms || [])
         .map((term) => ({
-          coefficient: formatFractionPlain(parseRuleCoefficient(term.coefficient || '1')),
+          coefficient: formatRuleCoefficientPlain(parseSymbolicRuleCoefficient(term.coefficient || '1')),
           powers: monoKey(term.powers || {})
         }))
         .sort((left, right) => left.powers.localeCompare(right.powers) || left.coefficient.localeCompare(right.coefficient)));
@@ -22469,14 +22553,14 @@
       if (!raw) continue;
       let coefficient;
       try {
-        coefficient = parseRuleCoefficient(raw);
+        coefficient = parseSymbolicRuleCoefficient(raw);
       } catch (error) {
         if (refs.homologyMessage) refs.homologyMessage.textContent = error.message || 'Invalid coefficient.';
         return false;
       }
-      if (coefficient.isZero()) continue;
+      if (ruleCoefficientIsZero(coefficient)) continue;
       terms.push({
-        coefficient: formatFractionPlain(coefficient),
+        coefficient: formatRuleCoefficientPlain(coefficient),
         powers: parseMonoKey(input.dataset.monomialKey || '')
       });
     }
@@ -27042,10 +27126,223 @@
     const raw = String(value || '1').trim().replace(/\s+/g, '');
     if (!raw) return Fraction.one();
     const match = raw.match(/^([+-]?\d+)(?:\/(\d+))?$/);
-    if (!match) throw new Error('Rule coefficient must be an integer or fraction.');
-    const den = BigInt(match[2] || '1');
-    if (den === 0n) throw new Error('Rule coefficient has zero denominator.');
-    return new Fraction(BigInt(match[1]), den);
+    if (match) {
+      const den = BigInt(match[2] || '1');
+      if (den === 0n) throw new Error('Rule coefficient has zero denominator.');
+      return new Fraction(BigInt(match[1]), den);
+    }
+    throw new Error('Rule coefficient must be an integer or fraction.');
+  }
+
+  function parseSymbolicRuleCoefficient(value) {
+    const raw = String(value || '1').trim();
+    if (!raw) return Fraction.one();
+    const rational = raw.replace(/\s+/g, '').match(/^([+-]?\d+)(?:\/(\d+))?$/);
+    if (rational) return parseRuleCoefficient(raw);
+    const parsed = parseRuleCoefficientExpression(raw);
+    return scalarPolyAsFraction(parsed) || parsed;
+  }
+
+  function parseRuleCoefficientExpression(value, source = { kind: 'number', id: 'homology', field: 'homology' }) {
+    const parser = createRuleCoefficientParser(value, source);
+    const poly = parser.parseExpression();
+    if (!parser.done()) throw new Error(`Unexpected coefficient text near "${parser.remaining()}".`);
+    return poly;
+  }
+
+  function scalarPolyAsFraction(poly) {
+    poly = Poly.from(poly);
+    if (poly.terms.size !== 1) return null;
+    const coeff = poly.terms.get('');
+    return coeff || null;
+  }
+
+  function createRuleCoefficientParser(value, source) {
+    const text = String(value || '1')
+      .replace(/\\cdot/g, '*')
+      .replace(/\\,/g, '')
+      .replace(/\s+/g, '');
+    let index = 0;
+    const parser = {
+      done() {
+        return index >= text.length;
+      },
+      remaining() {
+        return text.slice(index);
+      },
+      parseExpression() {
+        let sign = 1;
+        if (text[index] === '+' || text[index] === '-') {
+          sign = text[index] === '-' ? -1 : 1;
+          index += 1;
+        }
+        let out = this.parseTerm().scale(fraction(sign));
+        while (index < text.length && (text[index] === '+' || text[index] === '-')) {
+          const nextSign = text[index] === '-' ? -1 : 1;
+          index += 1;
+          out = out.add(this.parseTerm().scale(fraction(nextSign)));
+        }
+        return out;
+      },
+      parseTerm() {
+        let out = this.parseFactor();
+        while (index < text.length) {
+          const char = text[index];
+          if (char === '+' || char === '-' || char === ')') break;
+          if (char === '*') {
+            index += 1;
+            out = out.mul(this.parseFactor(), MAX_DIMENSION);
+            continue;
+          }
+          if (char === '/') {
+            index += 1;
+            out = out.mul(reciprocalRuleCoefficientFactor(this.parseFactor()), MAX_DIMENSION);
+            continue;
+          }
+          if (coefficientFactorCanStart(char)) {
+            out = out.mul(this.parseFactor(), MAX_DIMENSION);
+            continue;
+          }
+          break;
+        }
+        return out;
+      },
+      parseFactor() {
+        let sign = 1;
+        while (text[index] === '+' || text[index] === '-') {
+          if (text[index] === '-') sign *= -1;
+          index += 1;
+        }
+        let base;
+        const char = text[index];
+        if (char === '(') {
+          index += 1;
+          base = this.parseExpression();
+          if (text[index] !== ')') throw new Error('Coefficient has an unmatched parenthesis.');
+          index += 1;
+        } else if (/\d/.test(char || '')) {
+          const match = text.slice(index).match(/^\d+/);
+          index += match[0].length;
+          base = Poly.constant(BigInt(match[0]));
+        } else if (/[A-Za-z]/.test(char || '')) {
+          const match = text.slice(index).match(/^[A-Za-z][A-Za-z0-9_]*/);
+          index += match[0].length;
+          base = coefficientIdentifierPoly(match[0], source);
+        } else {
+          throw new Error(`Invalid coefficient near "${text.slice(index) || value}".`);
+        }
+        if (text[index] === '^') {
+          index += 1;
+          const exponentMatch = text.slice(index).match(/^(?:\{(\d+)\}|(\d+))/);
+          if (!exponentMatch) throw new Error('Coefficient exponent must be a nonnegative integer.');
+          index += exponentMatch[0].length;
+          base = polyPower(base, normalizedInt(exponentMatch[1] || exponentMatch[2], 0, MAX_DIMENSION, 1), MAX_DIMENSION);
+        }
+        return sign < 0 ? base.neg() : base;
+      }
+    };
+    return parser;
+  }
+
+  function coefficientFactorCanStart(char) {
+    return !!char && (char === '(' || /[A-Za-z0-9]/.test(char));
+  }
+
+  function coefficientIdentifierPoly(identifier, source) {
+    const symbols = splitCoefficientIdentifier(identifier);
+    if (!symbols.length) throw new Error(`Unknown coefficient symbol "${identifier}".`);
+    return symbols.reduce((product, symbol) => {
+      const registered = registerGlobalInvariantVariable(symbol, source);
+      if (!registered) throw new Error(`Unknown coefficient symbol "${symbol}".`);
+      const value = globalInvariantValue(registered.invariant);
+      const factor = value == null ? Poly.variable(registered.id) : Poly.constant(BigInt(value));
+      return product.mul(factor, MAX_DIMENSION);
+    }, Poly.one());
+  }
+
+  function splitCoefficientIdentifier(identifier) {
+    const raw = sanitizeGlobalInvariantName(identifier, '');
+    if (!raw) return [];
+    const known = new Set((state.globalInvariants || []).map((item) => sanitizeGlobalInvariantName(item.name, '')));
+    if (known.has(raw)) return [raw];
+    const split = splitKnownCoefficientIdentifier(raw, known);
+    if (split.length > 1) return split;
+    return [raw];
+  }
+
+  function splitKnownCoefficientIdentifier(raw, known) {
+    if (!known.size || raw.includes('_')) return [];
+    const memo = new Map();
+    const visit = (offset) => {
+      if (offset === raw.length) return [];
+      if (memo.has(offset)) return memo.get(offset);
+      let best = null;
+      for (let end = raw.length; end > offset; end -= 1) {
+        const part = raw.slice(offset, end);
+        if (!known.has(part)) continue;
+        const rest = visit(end);
+        if (rest || end === raw.length) {
+          const candidate = [part, ...(rest || [])];
+          if (!best || candidate.length < best.length) best = candidate;
+        }
+      }
+      memo.set(offset, best);
+      return best;
+    };
+    return visit(0) || [];
+  }
+
+  function reciprocalRuleCoefficientFactor(poly) {
+    poly = Poly.from(poly);
+    const constant = scalarPolyAsFraction(poly);
+    if (constant) {
+      if (constant.isZero()) throw new Error('Rule coefficient has zero denominator.');
+      return Poly.constant(Fraction.one().div(constant));
+    }
+    if (poly.isZero()) throw new Error('Rule coefficient has zero denominator.');
+    const plain = formatRuleCoefficientPlain(poly);
+    const latex = formatRuleCoefficientLatex(poly);
+    const id = `scalar_inverse_${hashString(plain)}`;
+    defineVariable(id, 0, `\\frac{1}{${latex}}`, {
+      kind: 'scalarCoefficient',
+      plain: `1/(${plain})`
+    });
+    return Poly.variable(id);
+  }
+
+  function ruleCoefficientIsZero(value) {
+    return value instanceof Fraction ? value.isZero() : Poly.from(value).isZero();
+  }
+
+  function ruleCoefficientIsOne(value) {
+    if (value instanceof Fraction) return value.isOne();
+    value = Poly.from(value);
+    return value.terms.size === 1 && (value.terms.get('') || Fraction.zero()).isOne();
+  }
+
+  function ruleCoefficientSign(value) {
+    if (value instanceof Fraction) return value.sign();
+    const terms = sortedTerms(Poly.from(value));
+    return terms.length ? terms[0][1].sign() : 0;
+  }
+
+  function ruleCoefficientAbs(value) {
+    if (value instanceof Fraction) return value.abs();
+    return ruleCoefficientSign(value) < 0 ? Poly.from(value).neg() : Poly.from(value);
+  }
+
+  function formatRuleCoefficientLatex(value) {
+    if (value instanceof Fraction) return formatFractionLatex(value);
+    value = Poly.from(value);
+    const body = formatPolyLatex(value);
+    return value.terms.size > 1 ? `\\left(${body}\\right)` : body;
+  }
+
+  function formatRuleCoefficientPlain(value) {
+    if (value instanceof Fraction) return formatFractionPlain(value);
+    value = Poly.from(value);
+    const body = formatPolyPlain(value);
+    return value.terms.size > 1 ? `(${body})` : body;
   }
 
   function sheafLabelLatex(sheaf) {

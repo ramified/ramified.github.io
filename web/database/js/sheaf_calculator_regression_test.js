@@ -19,6 +19,11 @@ function loadCalculator() {
     applyHomologyRules,
     createSymbolicBudget,
     currentHomologyRulePasses,
+    parseSymbolicRuleCoefficient,
+    formatRuleCoefficientPlain,
+    homologyRuleRhsPoly,
+    homologyRuleCoefficientMap,
+    normalizeHomologyRule,
     classDisplayOptions,
     buildClassRows,
     polyFromPowers,
@@ -2458,6 +2463,51 @@ function testSymbolicBudgetFallbackKeepsUnsimplifiedPolynomial() {
   assert(api.state.symbolicWarnings.some((warning) => warning.includes('symbolic work limit')));
 }
 
+function testHomologyCoefficientEditorAcceptsSymbolicRationalPolynomials() {
+  const api = loadCalculator();
+  api.state.globalInvariants = [
+    { id: 'Nr', type: 'rational-number', name: 'r', value: '0', hasValue: false, replaceWithValue: false },
+    { id: 'Nd', type: 'rational-number', name: 'd', value: '0', hasValue: false, replaceWithValue: false }
+  ];
+  const geometry = {
+    type: 'abstract',
+    dim: 2,
+    labelLatex: 'X',
+    labelPlain: 'X',
+    varietyId: 'X',
+    homology: {
+      customClasses: [{ id: 'H', symbol: 'H', degree: 1, cohomologyDegree: 2 }],
+      rules: []
+    }
+  };
+  api.VARS.clear();
+  api.homologyClassDefinitions(geometry).forEach((def) => {
+    api.VARS.set(api.homologyDefVariableId(def, geometry), {
+      degree: def.degree,
+      cohomologyDegree: def.cohomologyDegree,
+      latex: def.symbolLatex,
+      plain: def.symbolPlain
+    });
+  });
+
+  const symbolic = api.parseSymbolicRuleCoefficient('3rd+d^3');
+  assert.strictEqual(api.formatRuleCoefficientPlain(symbolic), '(3*d*r + d^3)');
+
+  const rationalSymbolic = api.parseSymbolicRuleCoefficient('1/3*rd+1/(3r)');
+  assert.strictEqual(api.formatRuleCoefficientPlain(rationalSymbolic), '(1/3*d*r + 1/(3*r))');
+
+  const hId = api.homologyDefVariableId(api.homologyClassDefinitions(geometry).find((def) => def.id === 'H'), geometry);
+  const normalized = api.normalizeHomologyRule({
+    id: 'symbolic-coeff',
+    lhs: { powers: { [hId]: 1 } },
+    rhs: [{ coefficient: '3rd+d^3', powers: { [hId]: 1 } }]
+  }, geometry);
+  assert(normalized);
+  assert.strictEqual(normalized.rhs[0].coefficient, '(3*d*r + d^3)');
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(normalized)), '3*d*r*H + d^3*H');
+  assert.strictEqual(api.homologyRuleCoefficientMap(normalized).get(`${hId}:1`), '(3*d*r + d^3)');
+}
+
 function testClassDisplayUsesCappedPasses() {
   const api = loadCalculator();
   api.state.homologyRulePasses = 999;
@@ -2610,6 +2660,7 @@ testNormalBundleShowKeepsRevealedScaffoldingStable();
 testPresetImportPreservesIdealSheafMarker();
 testHomologyRulePassesAreCapped();
 testSymbolicBudgetFallbackKeepsUnsimplifiedPolynomial();
+testHomologyCoefficientEditorAcceptsSymbolicRationalPolynomials();
 testClassDisplayUsesCappedPasses();
 testProductPickFlowRegistryCoversCandidatesAndSelection();
 testMapCompositionPickFlowRegistryCoversMapCandidates();
