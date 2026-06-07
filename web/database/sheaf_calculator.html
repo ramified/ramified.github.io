@@ -1159,7 +1159,17 @@
     .homology-expression-actions {
       display: flex;
       justify-content: flex-end;
+      gap: 6px;
+      flex-wrap: wrap;
       margin-top: 7px;
+    }
+
+    .homology-symbol-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin: 6px 0 8px;
     }
 
     .homology-expression-table {
@@ -2390,6 +2400,9 @@
           <input id="homology-point-symbol" class="sheaf-input" type="text" value="[p]" maxlength="48" spellcheck="false" autocomplete="off">
         </div>
         <div class="homology-symbol-list" id="homology-symbols"></div>
+        <div class="homology-symbol-actions">
+          <button class="btn btn-ghost homology-transpose-button" id="homology-jacobian-basis-action" type="button" hidden>add basis</button>
+        </div>
         <div class="homology-rule-list" id="homology-rules"></div>
         <div class="homology-add-class" id="homology-add-class">
           <input id="homology-class-symbol" class="sheaf-input" type="text" value="" maxlength="48" spellcheck="false" autocomplete="off" aria-label="Homology class symbol" placeholder="A">
