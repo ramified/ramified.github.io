@@ -486,6 +486,10 @@
     refs.homologyAddClass = $('homology-add-class');
     refs.homologyClassSymbol = $('homology-class-symbol');
     refs.homologyClassDegree = $('homology-class-degree');
+    refs.homologyClassDegreeMode = $('homology-class-degree-mode');
+    refs.homologyClassBidegree = $('homology-class-bidegree');
+    refs.homologyClassBidegreeLeft = $('homology-class-bidegree-left');
+    refs.homologyClassBidegreeRight = $('homology-class-bidegree-right');
     refs.homologyAddClassButton = $('homology-add-class-button');
     refs.homologyAddRule = $('homology-add-rule');
     refs.homologyRuleEquation = $('homology-rule-equation');
@@ -4919,7 +4923,23 @@
           return;
         }
         const degreeInput = event.target.closest('[data-homology-class-degree]');
-        if (degreeInput) updateHomologyClassDegree(degreeInput.dataset.homologyClassDegree, degreeInput.value);
+        if (degreeInput) {
+          updateHomologyClassDegree(degreeInput.dataset.homologyClassDegree, degreeInput.value);
+          return;
+        }
+        const degreeMode = event.target.closest('[data-homology-class-degree-mode]');
+        if (degreeMode) {
+          updateHomologyClassDegreeMode(degreeMode.dataset.homologyClassDegreeMode, degreeMode.value);
+          return;
+        }
+        const bidegreeInput = event.target.closest('[data-homology-class-bidegree]');
+        if (bidegreeInput) {
+          updateHomologyClassBidegree(
+            bidegreeInput.dataset.homologyClassBidegree,
+            bidegreeInput.dataset.bidegreeSide,
+            bidegreeInput.value
+          );
+        }
       });
       refs.homologySymbols.addEventListener('keydown', (event) => {
         const editInput = event.target.closest('[data-homology-symbol-edit]');
@@ -4954,7 +4974,15 @@
       refs.homologyClassDegree.addEventListener('change', () => {
         const geometry = activeHomologyGeometry();
         refs.homologyClassDegree.value = String(normalizedInt(refs.homologyClassDegree.value, 0, 2 * (geometry?.dim ?? MAX_DIMENSION), 2));
+        syncHomologyClassDegreeCreator(geometry);
       });
+    }
+    [refs.homologyClassBidegreeLeft, refs.homologyClassBidegreeRight].forEach((input) => {
+      if (!input) return;
+      input.addEventListener('change', () => syncHomologyClassDegreeCreator(activeHomologyGeometry()));
+    });
+    if (refs.homologyClassDegreeMode) {
+      refs.homologyClassDegreeMode.addEventListener('change', () => syncHomologyClassDegreeCreator(activeHomologyGeometry(), { resetModeFields: true }));
     }
     if (refs.homologyAddClassButton) {
       refs.homologyAddClassButton.addEventListener('click', addHomologyClassFromControls);
@@ -5277,6 +5305,60 @@
     const cohomologyDegree = normalizedInt(value, 0, 2 * geometry.dim, custom.cohomologyDegree ?? homologyClassCohomologyDegree(custom));
     custom.cohomologyDegree = cohomologyDegree;
     custom.degree = cohomologyDegree / 2;
+    const normalizedBidegree = normalizeCustomHomologyBidegree(custom.productBidegree, geometry, cohomologyDegree);
+    if (normalizedBidegree) custom.productBidegree = normalizedBidegree;
+    else delete custom.productBidegree;
+    homology.rules = homology.rules.filter((rule) => rule.builtin || !homologyRuleContainsVariable(rule, variableId));
+    recompute();
+  }
+
+  function updateHomologyClassBidegree(classId, side, value) {
+    resetHomologyRulePasses();
+    const variety = activeHomologyVariety();
+    if (!variety) return;
+    const geometry = geometryFromVariety(variety);
+    const context = productGeometryContext(geometry);
+    if (!context) return;
+    const homology = ensureHomologySystem(variety, geometry);
+    const custom = homology.customClasses.find((item) => item.id === classId);
+    if (!custom) return;
+    const maxLeft = 2 * context.leftGeometry.dim;
+    const maxRight = 2 * context.rightGeometry.dim;
+    const current = normalizeCustomHomologyBidegree(custom.productBidegree, geometry)
+      || defaultProductBidegreeForCohomologyDegree(geometry, homologyClassCohomologyDegree(custom));
+    const leftInput = side === 'left'
+      ? normalizedInt(value, 0, maxLeft, current[0])
+      : current[0];
+    const rightInput = side === 'right'
+      ? normalizedInt(value, 0, maxRight, current[1])
+      : current[1];
+    const productBidegree = normalizeCustomHomologyBidegree([leftInput, rightInput], geometry)
+      || current;
+    custom.productBidegree = productBidegree;
+    custom.cohomologyDegree = productBidegree[0] + productBidegree[1];
+    custom.degree = custom.cohomologyDegree / 2;
+    homology.rules = homology.rules.filter((rule) => rule.builtin || !homologyRuleContainsVariable(rule, homologyVariableId(classId, geometry)));
+    recompute();
+  }
+
+  function updateHomologyClassDegreeMode(classId, mode) {
+    resetHomologyRulePasses();
+    const variety = activeHomologyVariety();
+    if (!variety) return;
+    const geometry = geometryFromVariety(variety);
+    const context = productGeometryContext(geometry);
+    if (!context) return;
+    const homology = ensureHomologySystem(variety, geometry);
+    const custom = homology.customClasses.find((item) => item.id === classId);
+    if (!custom) return;
+    const variableId = homologyVariableId(classId, geometry);
+    if (mode === 'total') {
+      delete custom.productBidegree;
+    } else {
+      const cohomologyDegree = homologyClassCohomologyDegree(custom);
+      custom.productBidegree = normalizeCustomHomologyBidegree(custom.productBidegree, geometry, cohomologyDegree)
+        || defaultProductBidegreeForCohomologyDegree(geometry, cohomologyDegree);
+    }
     homology.rules = homology.rules.filter((rule) => rule.builtin || !homologyRuleContainsVariable(rule, variableId));
     recompute();
   }
@@ -5588,7 +5670,8 @@
         degree: def.degree,
         cohomologyDegree: def.cohomologyDegree,
         special: 'map-homology',
-        variableId
+        variableId,
+        ...(Array.isArray(def.productBidegree) ? { productBidegree: def.productBidegree } : {})
       });
     }
     homology.classes[def.id] = { ...(homology.classes[def.id] || {}), symbol };
@@ -5640,7 +5723,8 @@
         degree: pullbackDef.degree,
         cohomologyDegree: pullbackDef.cohomologyDegree,
         special: 'map-homology',
-        variableId
+        variableId,
+        ...(Array.isArray(pullbackDef.productBidegree) ? { productBidegree: pullbackDef.productBidegree } : {})
       });
       homology.classes[pullbackDef.id] = { ...(homology.classes[pullbackDef.id] || {}), symbol };
       delete homology.classes[pullbackDef.id].deleted;
@@ -6869,13 +6953,24 @@
     if (!geometry) return;
     const homology = ensureHomologySystem(variety, geometry);
     const symbol = sanitizeHomologySymbol(refs.homologyClassSymbol?.value || '', nextHomologyClassSymbol(homology, geometry));
-    const cohomologyDegree = normalizedInt(refs.homologyClassDegree?.value, 0, 2 * geometry.dim, Math.min(2, 2 * geometry.dim));
+    const degreeInput = readHomologyClassDegreeFromControls(geometry);
+    const cohomologyDegree = degreeInput.cohomologyDegree;
     const degree = cohomologyDegree / 2;
     const id = nextInputId('C');
-    homology.customClasses.push({ id, symbol, degree, cohomologyDegree });
+    const productBidegree = degreeInput.productBidegree;
+    homology.customClasses.push({
+      id,
+      symbol,
+      degree,
+      cohomologyDegree,
+      ...(productBidegree ? { productBidegree } : {})
+    });
     homology.classes[id] = { symbol };
     if (refs.homologyClassSymbol) refs.homologyClassSymbol.value = '';
     if (refs.homologyClassDegree) refs.homologyClassDegree.value = String(Math.min(2, 2 * geometry.dim));
+    if (refs.homologyClassBidegreeLeft) refs.homologyClassBidegreeLeft.value = '';
+    if (refs.homologyClassBidegreeRight) refs.homologyClassBidegreeRight.value = '';
+    syncHomologyClassDegreeCreator(geometry);
     recompute();
   }
 
@@ -7286,8 +7381,14 @@
         symbol,
         degree: 1,
         cohomologyDegree: 2,
+        productBidegree: [1, 1],
         special: 'picard-canonical'
       });
+      changed = true;
+    }
+    const custom = homology.customClasses.find((item) => item.id === classId);
+    if (custom && !productBidegreesEqual(custom.productBidegree, [1, 1])) {
+      custom.productBidegree = [1, 1];
       changed = true;
     }
     const existing = homology.classes[classId] || {};
@@ -7314,8 +7415,14 @@
         degree: etaDef.degree,
         cohomologyDegree: etaDef.cohomologyDegree,
         special: 'map-homology',
-        variableId
+        variableId,
+        ...(Array.isArray(etaDef.productBidegree) ? { productBidegree: etaDef.productBidegree } : {})
       });
+      changed = true;
+    }
+    const custom = homology.customClasses.find((item) => item.id === classId);
+    if (custom && Array.isArray(etaDef.productBidegree) && !productBidegreesEqual(custom.productBidegree, etaDef.productBidegree)) {
+      custom.productBidegree = etaDef.productBidegree;
       changed = true;
     }
     const existing = homology.classes[classId] || {};
@@ -15414,6 +15521,7 @@
         geometry
       );
       if (normalized.special) def.special = normalized.special;
+      if (Array.isArray(normalized.productBidegree)) def.productBidegree = normalized.productBidegree;
       defs.push(def);
     }
     return defs;
@@ -15792,7 +15900,76 @@
     const symbol = sanitizeHomologySymbol(item.symbol, fallback);
     const special = ['tangent-chern', 'sheaf-chern', 'map-homology', 'ramified-cover', 'picard-canonical'].includes(item.special) ? item.special : null;
     const variableId = special === 'map-homology' ? sanitizeHomologyVariableId(item.variableId) : null;
-    return { id, symbol, degree, cohomologyDegree, special, ...(variableId ? { variableId } : {}) };
+    const productBidegree = normalizeCustomHomologyBidegree(item.productBidegree, geometry, cohomologyDegree);
+    return {
+      id,
+      symbol,
+      degree,
+      cohomologyDegree,
+      special,
+      ...(variableId ? { variableId } : {}),
+      ...(productBidegree ? { productBidegree } : {})
+    };
+  }
+
+  function normalizeCustomHomologyBidegree(value, geometry, cohomologyDegree = null) {
+    const context = productGeometryContext(geometry);
+    if (!context || !Array.isArray(value) || value.length < 2) return null;
+    const left = Math.floor(Number(value[0]));
+    const right = Math.floor(Number(value[1]));
+    if (!Number.isInteger(left) || !Number.isInteger(right)) return null;
+    const bidegree = [left, right];
+    if (!productBidegreeFits(context, bidegree)) return null;
+    if (Number.isInteger(cohomologyDegree) && left + right !== cohomologyDegree) return null;
+    return bidegree;
+  }
+
+  function defaultProductBidegreeForCohomologyDegree(geometry, cohomologyDegree) {
+    const context = productGeometryContext(geometry);
+    if (!context) return null;
+    const degree = normalizedInt(cohomologyDegree, 0, 2 * (geometry?.dim ?? MAX_DIMENSION), 0);
+    const maxLeft = 2 * context.leftGeometry.dim;
+    const maxRight = 2 * context.rightGeometry.dim;
+    const minLeft = Math.max(0, degree - maxRight);
+    const maxAllowedLeft = Math.min(maxLeft, degree);
+    const left = Math.max(minLeft, Math.min(maxAllowedLeft, Math.round(degree / 2)));
+    return [left, degree - left];
+  }
+
+  function readHomologyClassDegreeFromControls(geometry) {
+    const totalDegree = normalizedInt(refs.homologyClassDegree?.value, 0, 2 * geometry.dim, Math.min(2, 2 * geometry.dim));
+    const context = productGeometryContext(geometry);
+    if (!context || homologyClassCreatorDegreeMode() !== 'bidegree') {
+      return { cohomologyDegree: totalDegree, productBidegree: null };
+    }
+    const fallback = defaultProductBidegreeForCohomologyDegree(geometry, totalDegree) || [0, 0];
+    const productBidegree = readHomologyClassBidegreeFromControls(geometry, fallback);
+    return {
+      cohomologyDegree: productBidegree[0] + productBidegree[1],
+      productBidegree
+    };
+  }
+
+  function readHomologyClassBidegreeFromControls(geometry, fallback = null) {
+    const context = productGeometryContext(geometry);
+    if (!context) return null;
+    const defaultBidegree = fallback || defaultProductBidegreeForCohomologyDegree(
+      geometry,
+      normalizedInt(refs.homologyClassDegree?.value, 0, 2 * geometry.dim, Math.min(2, 2 * geometry.dim))
+    ) || [0, 0];
+    const rawLeft = String(refs.homologyClassBidegreeLeft?.value ?? '').trim();
+    const rawRight = String(refs.homologyClassBidegreeRight?.value ?? '').trim();
+    const left = rawLeft
+      ? normalizedInt(rawLeft, 0, 2 * context.leftGeometry.dim, defaultBidegree[0])
+      : defaultBidegree[0];
+    const right = rawRight
+      ? normalizedInt(rawRight, 0, 2 * context.rightGeometry.dim, defaultBidegree[1])
+      : defaultBidegree[1];
+    return normalizeCustomHomologyBidegree([left, right], geometry) || defaultBidegree;
+  }
+
+  function homologyClassCreatorDegreeMode() {
+    return refs.homologyClassDegreeMode?.value === 'total' ? 'total' : 'bidegree';
   }
 
   function homologyClassCohomologyDegree(item) {
@@ -15919,7 +16096,8 @@
       defaultSymbol,
       kind,
       symbolLatex: symbol,
-      symbolPlain: latexToPlain(symbol)
+      symbolPlain: latexToPlain(symbol),
+      ...(Array.isArray(custom?.productBidegree) ? { productBidegree: custom.productBidegree } : {})
     };
   }
 
@@ -17893,7 +18071,7 @@
       ].join(':'))
       .sort();
     const classes = (homology?.customClasses || [])
-      .map((item) => `${item.id}:${item.symbol || item.symbolLatex || ''}:${item.degree ?? ''}:${item.cohomologyDegree ?? ''}`)
+      .map((item) => `${item.id}:${item.symbol || item.symbolLatex || ''}:${item.degree ?? ''}:${item.cohomologyDegree ?? ''}:${Array.isArray(item.productBidegree) ? item.productBidegree.join(',') : ''}`)
       .sort();
     return `${rules.join(';')}#${classes.join(';')}`;
   }
@@ -17939,7 +18117,7 @@
       && homologyRuleUsesAvailableVariables(rule, available)
     ));
     defineHomologyVariables(geometry);
-    if (!rules.length) return startPoly.truncate(geometry?.dim ?? MAX_DIMENSION);
+    if (!rules.length) return truncateProductBidegreePolynomial(startPoly, geometry).truncate(geometry?.dim ?? MAX_DIMENSION);
     let out = startPoly;
     const passes = currentHomologyRulePasses(options.homologyRulePasses);
     for (let pass = 1; pass <= passes; pass += 1) {
@@ -17950,10 +18128,10 @@
       defineHomologyVariables(geometry);
       out = applyHomologyRuleSweep(out, rules, geometry?.dim ?? MAX_DIMENSION, options);
       chargeSymbolicWork(out.terms.size || 1, out.terms.size, 'homology rule pass', options);
-      if (polyEquals(before, out)) return out.truncate(geometry?.dim ?? MAX_DIMENSION);
+      if (polyEquals(before, out)) return truncateProductBidegreePolynomial(out, geometry).truncate(geometry?.dim ?? MAX_DIMENSION);
     }
     defineHomologyVariables(geometry);
-    return out.truncate(geometry?.dim ?? MAX_DIMENSION);
+    return truncateProductBidegreePolynomial(out, geometry).truncate(geometry?.dim ?? MAX_DIMENSION);
   }
 
   function maybeExpandMapHomologyVariables(poly, options = {}) {
@@ -17962,15 +18140,28 @@
   }
 
   function simplifyProductBoxPolynomial(poly, geometry, options = {}) {
-    if (options.simplifyProductBoxes === false || !productGeometryContext(geometry)) return Poly.from(poly);
+    if (options.simplifyProductBoxes === false || !productGeometryContext(geometry)) return truncateProductBidegreePolynomial(poly, geometry);
     let out = Poly.from(poly);
     for (let pass = 0; pass < 4; pass += 1) {
       chargeSymbolicWork(out.terms.size || 1, out.terms.size, 'product-box simplification', options);
       const next = simplifyProductBoxPolynomialOnce(out, geometry, options);
-      if (polyEquals(next, out)) return out.truncate(geometry?.dim ?? MAX_DIMENSION);
+      if (polyEquals(next, out)) return truncateProductBidegreePolynomial(out, geometry).truncate(geometry?.dim ?? MAX_DIMENSION);
       out = next;
     }
-    return out.truncate(geometry?.dim ?? MAX_DIMENSION);
+    return truncateProductBidegreePolynomial(out, geometry).truncate(geometry?.dim ?? MAX_DIMENSION);
+  }
+
+  function truncateProductBidegreePolynomial(poly, geometry) {
+    const context = productGeometryContext(geometry);
+    if (!context) return Poly.from(poly);
+    defineHomologyVariables(geometry);
+    const terms = new Map();
+    for (const [key, coeff] of Poly.from(poly).terms) {
+      const bidegree = productHomologyBidegreeForPowers(parseMonoKey(key), geometry, context);
+      if (bidegree && !productBidegreeFits(context, bidegree)) continue;
+      terms.set(key, coeff);
+    }
+    return new Poly(terms);
   }
 
   function simplifyProductBoxPolynomialOnce(poly, geometry, options = {}) {
@@ -21882,6 +22073,7 @@
 
   function renderHomologySymbols(geometry, defs) {
     if (!refs.homologySymbols) return;
+    const productContext = productGeometryContext(geometry);
     refs.homologySymbols.hidden = defs.length === 0;
     refs.homologySymbols.innerHTML = defs.map((def) => {
       const editing = state.editingHomologySymbolId === def.id
@@ -21894,18 +22086,46 @@
         : `<button class="homology-symbol-name" type="button" data-homology-symbol-start="${escapeHtml(def.id)}" title="Rename homology class">\\(${def.symbolLatex}\\in ${homologyCohomologyGroupLatex(def.cohomologyDegree, geometry.labelLatex)}\\)</button>`;
       const className = [
         'homology-symbol-row',
-        def.kind === 'custom' ? 'homology-custom-class-row' : ''
+        def.kind === 'custom' ? 'homology-custom-class-row' : '',
+        editing ? 'is-editing' : ''
       ].filter(Boolean).join(' ');
+      const productBidegree = Array.isArray(def.productBidegree) ? def.productBidegree : null;
+      const productBidegreeFallback = productContext
+        ? defaultProductBidegreeForCohomologyDegree(geometry, def.cohomologyDegree)
+        : null;
+      const degreeMode = productContext && !productBidegree ? 'total' : 'bidegree';
+      const degreeModeControl = productContext && def.kind === 'custom' && editing ? `
+        <select class="sheaf-select homology-degree-mode" aria-label="Custom homology degree mode" data-homology-class-degree-mode="${escapeHtml(def.id)}">
+          <option value="bidegree" ${degreeMode === 'bidegree' ? 'selected' : ''}>bidegree</option>
+          <option value="total" ${degreeMode === 'total' ? 'selected' : ''}>total</option>
+        </select>
+      ` : '';
+      const degreeControl = productContext
+        ? (degreeMode === 'bidegree' ? `
+            <div class="homology-product-bidegree" title="Product bidegree">
+              <input class="sheaf-input homology-map-rule-input" type="number" min="0" max="${2 * productContext.leftGeometry.dim}" step="1" value="${escapeHtml((productBidegree || productBidegreeFallback || [0, 0])[0])}" aria-label="Left product bidegree" data-homology-class-bidegree="${escapeHtml(def.id)}" data-bidegree-side="left">
+              <input class="sheaf-input homology-map-rule-input" type="number" min="0" max="${2 * productContext.rightGeometry.dim}" step="1" value="${escapeHtml((productBidegree || productBidegreeFallback || [0, 0])[1])}" aria-label="Right product bidegree" data-homology-class-bidegree="${escapeHtml(def.id)}" data-bidegree-side="right">
+            </div>
+          ` : `
+            <input class="sheaf-input homology-map-rule-input homology-total-degree-input" type="number" min="0" max="${2 * geometry.dim}" step="1" value="${escapeHtml(def.cohomologyDegree)}" aria-label="Custom homology class degree" data-homology-class-degree="${escapeHtml(def.id)}">
+          `)
+        : `<input class="sheaf-input homology-map-rule-input homology-total-degree-input" type="number" min="0" max="${2 * geometry.dim}" step="1" value="${escapeHtml(def.cohomologyDegree)}" aria-label="Custom homology class degree" data-homology-class-degree="${escapeHtml(def.id)}">`;
+      const degreeDetailsControl = def.kind === 'custom' && editing ? `
+        <div class="homology-symbol-edit-details ${productContext ? 'has-product-degree-mode' : ''}">
+          ${degreeModeControl}
+          ${degreeControl}
+        </div>
+      ` : '';
       return `
         <div class="${className}">
           ${symbolControl}
           ${def.kind === 'custom' ? `
-            <input class="sheaf-input homology-map-rule-input" type="number" min="0" max="${2 * geometry.dim}" step="1" value="${escapeHtml(def.cohomologyDegree)}" aria-label="Custom homology class degree" data-homology-class-degree="${escapeHtml(def.id)}">
             <button class="btn btn-ghost homology-rule-delete" type="button" data-homology-class-delete="${escapeHtml(def.id)}">delete</button>
           ` : `
             <span class="homology-symbol-kind">${escapeHtml(def.kind)}</span>
           `}
         </div>
+        ${degreeDetailsControl}
       `;
     }).join('');
   }
@@ -22697,9 +22917,55 @@
       refs.homologyClassDegree.max = String(2 * geometry.dim);
       refs.homologyClassDegree.value = String(normalizedInt(refs.homologyClassDegree.value, 0, 2 * geometry.dim, Math.min(2, 2 * geometry.dim)));
     }
+    syncHomologyClassDegreeCreator(geometry);
     if (refs.homologyClassSymbol && geometry && !refs.homologyClassSymbol.value) {
       refs.homologyClassSymbol.placeholder = nextHomologyClassSymbol(geometry.homology, geometry);
     }
+  }
+
+  function syncHomologyClassDegreeCreator(geometry, options = {}) {
+    const context = productGeometryContext(geometry);
+    if (refs.homologyClassDegreeMode) refs.homologyClassDegreeMode.hidden = !context;
+    if (!context) {
+      if (refs.homologyClassDegree) refs.homologyClassDegree.hidden = false;
+      if (refs.homologyClassBidegree) refs.homologyClassBidegree.hidden = true;
+      return;
+    }
+    const mode = homologyClassCreatorDegreeMode();
+    if (refs.homologyClassDegree) refs.homologyClassDegree.hidden = mode !== 'total';
+    if (refs.homologyClassBidegree) refs.homologyClassBidegree.hidden = mode !== 'bidegree';
+    const totalDegree = normalizedInt(refs.homologyClassDegree?.value, 0, 2 * geometry.dim, Math.min(2, 2 * geometry.dim));
+    const fallback = defaultProductBidegreeForCohomologyDegree(geometry, totalDegree) || [0, 0];
+    const maxLeft = 2 * context.leftGeometry.dim;
+    const maxRight = 2 * context.rightGeometry.dim;
+    if (refs.homologyClassBidegreeLeft) refs.homologyClassBidegreeLeft.max = String(maxLeft);
+    if (refs.homologyClassBidegreeRight) refs.homologyClassBidegreeRight.max = String(maxRight);
+    if (refs.homologyClassBidegreeLeft) refs.homologyClassBidegreeLeft.placeholder = String(fallback[0]);
+    if (refs.homologyClassBidegreeRight) refs.homologyClassBidegreeRight.placeholder = String(fallback[1]);
+    if (mode === 'total') {
+      if (options.resetModeFields) {
+        if (refs.homologyClassBidegreeLeft) refs.homologyClassBidegreeLeft.value = '';
+        if (refs.homologyClassBidegreeRight) refs.homologyClassBidegreeRight.value = '';
+      }
+      return;
+    }
+    if (options.resetModeFields) {
+      if (refs.homologyClassBidegreeLeft) refs.homologyClassBidegreeLeft.value = String(fallback[0]);
+      if (refs.homologyClassBidegreeRight) refs.homologyClassBidegreeRight.value = String(fallback[1]);
+    }
+    const rawLeft = String(refs.homologyClassBidegreeLeft?.value ?? '').trim();
+    const rawRight = String(refs.homologyClassBidegreeRight?.value ?? '').trim();
+    let left = rawLeft
+      ? normalizedInt(rawLeft, 0, maxLeft, fallback[0])
+      : fallback[0];
+    let right = rawRight
+      ? normalizedInt(rawRight, 0, maxRight, fallback[1])
+      : fallback[1];
+    let bidegree = normalizeCustomHomologyBidegree([left, right], geometry);
+    if (!bidegree) bidegree = fallback;
+    if (refs.homologyClassBidegreeLeft) refs.homologyClassBidegreeLeft.value = String(bidegree[0]);
+    if (refs.homologyClassBidegreeRight) refs.homologyClassBidegreeRight.value = String(bidegree[1]);
+    if (refs.homologyClassDegree) refs.homologyClassDegree.value = String(bidegree[0] + bidegree[1]);
   }
 
   function homologyActiveLatex(geometry) {

@@ -77,6 +77,7 @@ function loadCalculator() {
     createBlowupPointConstruction,
     createRamifiedCoverConstruction,
     createGrassmannianMapConstruction,
+    createPicardCanonicalConstruction,
     createDualSheafConstruction,
     createInternalHomSheafConstruction,
     createIdealSheafConstruction,
@@ -2508,6 +2509,59 @@ function testHomologyCoefficientEditorAcceptsSymbolicRationalPolynomials() {
   assert.strictEqual(api.homologyRuleCoefficientMap(normalized).get(`${hId}:1`), '(3*d*r + d^3)');
 }
 
+function testProductCustomClassBidegreeTruncatesImpossiblePowers() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'C', type: 'curve', genus: '2', name: 'C' },
+    { id: 'P', type: 'abelian', dim: '2', name: 'P' },
+    {
+      id: 'CP',
+      type: 'abstract',
+      dim: '3',
+      name: 'C\\times P',
+      construction: { type: 'product', varietyIds: ['C', 'P'], defaultName: 'C\\times P' },
+      homology: {
+        customClasses: [{
+          id: 'gamma',
+          symbol: '\\gamma',
+          degree: 1,
+          cohomologyDegree: 2,
+          productBidegree: [1, 1]
+        }],
+        rules: []
+      }
+    }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[2]);
+  const gamma = api.homologyClassDefinitions(geometry).find((def) => def.id === 'gamma');
+  assert.strictEqual(gamma.productBidegree?.join(','), '1,1');
+  const gammaId = api.homologyDefVariableId(gamma, geometry);
+  const cube = api.polyFromPowers({ [gammaId]: 3 });
+  assert.strictEqual(api.formatPolyPlain(api.applyHomologyRules(cube, { geometry, homology: geometry.homology })), '0');
+}
+
+function testPicardPoincareGammaDefaultsToProductBidegree() {
+  const api = loadCalculator();
+  const curve = { id: 'C', type: 'curve', genus: '2', name: 'C' };
+  api.state.varieties = [curve];
+  const sheaf = api.createPicardCanonicalConstruction({
+    curve,
+    genus: 2,
+    degreeSymbol: 'd',
+    degreeValue: ''
+  });
+  assert(sheaf);
+  const product = api.state.varieties.find((variety) => variety.construction?.type === 'product');
+  assert(product);
+  const geometry = api.geometryFromVariety(product);
+  const gamma = api.homologyClassDefinitions(geometry).find((def) => def.id === 'picard_poincare_gamma');
+  assert(gamma);
+  assert.strictEqual(gamma.productBidegree?.join(','), '1,1');
+  const gammaId = api.homologyDefVariableId(gamma, geometry);
+  const cube = api.polyFromPowers({ [gammaId]: 3 });
+  assert.strictEqual(api.formatPolyPlain(api.applyHomologyRules(cube, { geometry, homology: geometry.homology })), '0');
+}
+
 function testClassDisplayUsesCappedPasses() {
   const api = loadCalculator();
   api.state.homologyRulePasses = 999;
@@ -2661,6 +2715,8 @@ testPresetImportPreservesIdealSheafMarker();
 testHomologyRulePassesAreCapped();
 testSymbolicBudgetFallbackKeepsUnsimplifiedPolynomial();
 testHomologyCoefficientEditorAcceptsSymbolicRationalPolynomials();
+testProductCustomClassBidegreeTruncatesImpossiblePowers();
+testPicardPoincareGammaDefaultsToProductBidegree();
 testClassDisplayUsesCappedPasses();
 testProductPickFlowRegistryCoversCandidatesAndSelection();
 testMapCompositionPickFlowRegistryCoversMapCandidates();

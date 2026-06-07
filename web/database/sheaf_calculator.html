@@ -1314,7 +1314,47 @@
     }
 
     .homology-custom-class-row {
-      grid-template-columns: minmax(0, 1fr) 76px auto;
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .homology-symbol-edit-details {
+      display: grid;
+      grid-template-columns: minmax(0, 76px);
+      gap: 7px;
+      align-items: center;
+      justify-items: start;
+      min-width: 0;
+      padding-left: 9px;
+      border-left: 1px dotted var(--border);
+    }
+
+    .homology-symbol-edit-details.has-product-degree-mode {
+      grid-template-columns: 82px auto;
+    }
+
+    .homology-product-bidegree {
+      display: inline-grid;
+      grid-template-columns: repeat(2, minmax(0, 52px));
+      gap: 5px;
+      align-items: center;
+    }
+
+    .homology-product-bidegree[hidden] {
+      display: none;
+    }
+
+    .homology-product-bidegree .sheaf-input {
+      min-width: 0;
+      text-align: center;
+    }
+
+    .homology-degree-mode {
+      width: 82px;
+      min-width: 0;
+    }
+
+    .homology-total-degree-input {
+      width: 76px;
     }
 
     .homology-symbol-kind {
@@ -1358,7 +1398,7 @@
 
     .homology-add-class {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 70px auto;
+      grid-template-columns: minmax(0, 1fr) 82px auto auto;
       gap: 7px;
       align-items: center;
       margin-top: 10px;
@@ -1634,7 +1674,8 @@
         grid-template-columns: 96px minmax(0, 1fr);
       }
 
-      .homology-add-rule {
+      .homology-add-rule,
+      .homology-add-class {
         grid-template-columns: minmax(0, 1fr);
       }
 
@@ -1652,7 +1693,8 @@
         grid-template-columns: minmax(0, 1fr);
       }
 
-      .homology-add-rule .homology-add-button {
+      .homology-add-rule .homology-add-button,
+      .homology-add-class .homology-add-button {
         grid-column: 1 / -1;
       }
 
@@ -2420,7 +2462,15 @@
         <div class="homology-rule-list" id="homology-rules"></div>
         <div class="homology-add-class" id="homology-add-class">
           <input id="homology-class-symbol" class="sheaf-input" type="text" value="" maxlength="48" spellcheck="false" autocomplete="off" aria-label="Homology class symbol" placeholder="A">
+          <select id="homology-class-degree-mode" class="sheaf-select homology-degree-mode" aria-label="Homology class degree mode" hidden>
+            <option value="bidegree">bidegree</option>
+            <option value="total">total</option>
+          </select>
           <input id="homology-class-degree" class="sheaf-input" type="number" value="2" min="0" max="30" step="1" aria-label="Homology class degree">
+          <div class="homology-product-bidegree" id="homology-class-bidegree" hidden>
+            <input id="homology-class-bidegree-left" class="sheaf-input" type="number" value="" min="0" max="30" step="1" aria-label="Left product bidegree">
+            <input id="homology-class-bidegree-right" class="sheaf-input" type="number" value="" min="0" max="30" step="1" aria-label="Right product bidegree">
+          </div>
           <button class="btn btn-ghost sheaf-object-button homology-add-button" id="homology-add-class-button" type="button">add class</button>
         </div>
         <div class="homology-add-rule" id="homology-add-rule">
