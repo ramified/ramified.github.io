@@ -131,6 +131,7 @@
     tautologicalSesDraft: null,
     grassmannianMapDraft: null,
     grassmannianMapPickTarget: 'bundle',
+    picardCanonicalDraft: null,
     mapDraft: null,
     mapPickTarget: 'domain',
     mapDrag: null,
@@ -409,6 +410,12 @@
     refs.grassmannianMapBasePointFreeRow = $('grassmannian-map-base-point-free-row');
     refs.grassmannianMapBasePointFree = $('grassmannian-map-base-point-free');
     refs.grassmannianMapPickNote = $('grassmannian-map-pick-note');
+    refs.picardCanonicalCurveRow = $('picard-canonical-curve-row');
+    refs.picardCanonicalCurveButton = $('picard-canonical-curve-button');
+    refs.picardCanonicalPreview = $('picard-canonical-preview');
+    refs.picardCanonicalDegreeRow = $('picard-canonical-degree-row');
+    refs.picardCanonicalDegree = $('picard-canonical-degree');
+    refs.picardCanonicalPickNote = $('picard-canonical-pick-note');
     refs.inputOptions = $('input-options');
     refs.modifyWarning = $('modify-warning');
     refs.inputRevealActions = $('input-reveal-actions');
@@ -1447,6 +1454,16 @@
     return { invariant, id };
   }
 
+  function defineGlobalInvariantVariables() {
+    (state.globalInvariants || []).forEach((invariant) => {
+      const id = globalInvariantVariableId(invariant);
+      defineVariable(id, 0, globalInvariantLatex(invariant), {
+        kind: 'globalInvariant',
+        globalInvariantId: invariant.id
+      });
+    });
+  }
+
   function globalInvariantVariableId(invariantOrName) {
     const name = typeof invariantOrName === 'string' ? invariantOrName : invariantOrName?.name;
     return `global_${variableIdSafe(globalInvariantKey(name || 'a'))}`;
@@ -1536,6 +1553,9 @@
     });
     state.sheaves.forEach((sheaf) => {
       addScalarReferenceRecord(records, sheaf, 'sheaf', 'rank', sheaf.rank);
+      if (sheaf.construction?.type === 'picard-poincare-line-bundle') {
+        addScalarReferenceRecord(records, sheaf, 'sheaf', 'degree', sheaf.construction.degreeSymbol);
+      }
     });
     return records;
   }
@@ -1596,6 +1616,10 @@
     });
     state.sheaves.forEach((sheaf) => {
       if (scalarSymbolsInText(sheaf.rank).includes(before)) sheaf.rank = replace(sheaf.rank);
+      if (sheaf.construction?.type === 'picard-poincare-line-bundle'
+        && scalarSymbolsInText(sheaf.construction.degreeSymbol).includes(before)) {
+        sheaf.construction.degreeSymbol = replace(sheaf.construction.degreeSymbol);
+      }
     });
   }
 
@@ -1832,6 +1856,7 @@
     const hasBaseVariety = state.varieties.length > 0;
     const hasCanvasObjects = canvasHasObjects();
     const hasAbelJacobiCurve = abelJacobiCurveVarieties().length > 0;
+    const hasPicardCanonicalCurve = picardCanonicalCurveVarieties().length > 0;
     const hasSheaf = state.sheaves.length > 0;
     ['sheaf', 'map', 'combined'].forEach((kind) => {
       const option = refs.addObjectKind?.querySelector?.(`option[value="${kind}"]`);
@@ -1841,6 +1866,8 @@
     if (numberOption) numberOption.disabled = false;
     const abelJacobiTypeOption = refs.combinedType?.querySelector?.('option[value="abel-jacobi"]');
     if (abelJacobiTypeOption) abelJacobiTypeOption.disabled = !hasAbelJacobiCurve;
+    const picardCanonicalTypeOption = refs.combinedType?.querySelector?.('option[value="picard-canonical"]');
+    if (picardCanonicalTypeOption) picardCanonicalTypeOption.disabled = !hasPicardCanonicalCurve;
     const sesTypeOption = refs.combinedType?.querySelector?.('option[value="short-exact-sequence"]');
     if (sesTypeOption) sesTypeOption.disabled = !hasSheaf && !activeSesEditMode();
     const tautologicalSesTypeOption = refs.combinedType?.querySelector?.('option[value="grassmannian-tautological-ses"]');
@@ -1848,6 +1875,10 @@
     if (tautologicalSesTypeOption) tautologicalSesTypeOption.disabled = !hasTautologicalSesBase;
     if (combinedCreateMode() && refs.combinedType?.value === 'abel-jacobi' && !hasAbelJacobiCurve) {
       refs.combinedType.value = 'product';
+    }
+    if (combinedCreateMode() && refs.combinedType?.value === 'picard-canonical' && !hasPicardCanonicalCurve) {
+      refs.combinedType.value = 'product';
+      clearPicardCanonicalDraft();
     }
     if (combinedCreateMode() && refs.combinedType?.value === 'short-exact-sequence' && !hasSheaf) {
       refs.combinedType.value = 'product';
@@ -2063,7 +2094,7 @@
     const showingMap = !showingNumber && (modifying ? !!state.activeMapId : refs.addObjectKind?.value === 'map');
     const showingCombinedAbelJacobi = !showingNumber && !modifying && combinedAbelJacobiCreateMode();
     const showingMapEditor = showingMap || showingCombinedAbelJacobi;
-    const showingCombinedStructure = !showingNumber && (showingSequence || (!modifying && (combinedSesCreateMode() || combinedBlowupCreateMode() || combinedRamifiedCoverCreateMode() || combinedGrassmannianTautologicalSesCreateMode() || combinedGrassmannianMapCreateMode())));
+    const showingCombinedStructure = !showingNumber && (showingSequence || (!modifying && (combinedSesCreateMode() || combinedBlowupCreateMode() || combinedRamifiedCoverCreateMode() || combinedGrassmannianTautologicalSesCreateMode() || combinedGrassmannianMapCreateMode() || combinedPicardCanonicalCreateMode())));
     const showingSheaf = !showingNumber && !showingMapEditor && !showingCombinedStructure && (modifying ? !!state.activeSheafId : refs.addObjectKind?.value === 'sheaf');
     const waitingForSheafBase = inputIsCreateMode() && showingSheaf && !state.draftSheafBaseVarietyId;
     if (refs.addObjectKind) refs.addObjectKind.hidden = modifying;
@@ -2203,6 +2234,10 @@
       if (refs.grassmannianMapR) refs.grassmannianMapR.value = '2';
       if (refs.grassmannianMapN) refs.grassmannianMapN.value = '4';
       activateGrassmannianMapPick({ render: false });
+    } else if (combinedPicardCanonicalCreateMode()) {
+      clearPicardCanonicalDraft();
+      if (refs.picardCanonicalDegree) refs.picardCanonicalDegree.value = 'd';
+      activatePicardCanonicalPick({ render: false });
     } else if (kind === 'sheaf') {
       refs.sheafType.value = 'abstract';
       refs.twist.value = '1';
@@ -2997,7 +3032,7 @@
     if (value === 'number') return 'number';
     if (!state.varieties.length && (value === 'sheaf' || value === 'map' || value === 'combined')) return 'variety';
     if (value === 'map' || combinedAbelJacobiCreateMode()) return 'map';
-    if (combinedSesCreateMode() || combinedGrassmannianTautologicalSesCreateMode() || combinedGrassmannianMapCreateMode()) return 'sheaf';
+    if (combinedSesCreateMode() || combinedGrassmannianTautologicalSesCreateMode() || combinedGrassmannianMapCreateMode() || combinedPicardCanonicalCreateMode()) return 'sheaf';
     return value === 'sheaf' ? 'sheaf' : 'variety';
   }
 
@@ -3031,6 +3066,10 @@
 
   function combinedGrassmannianMapCreateMode() {
     return combinedCreateMode() && refs.combinedType?.value === 'grassmannian-map';
+  }
+
+  function combinedPicardCanonicalCreateMode() {
+    return combinedCreateMode() && refs.combinedType?.value === 'picard-canonical';
   }
 
   function activeSesEditMode() {
@@ -3597,7 +3636,7 @@
       const invalidName = showingNumberEditor && !globalInvariantNameIsValid(refs.globalInvariantName?.value);
       const refsText = invalidName
         ? globalInvariantNameWarning()
-        : (invariant ? formatGlobalInvariantReferences(invariant) : 'Used after you place this symbol in a sheaf rank or curve genus field.');
+        : (invariant ? formatGlobalInvariantReferences(invariant) : 'Used after you place this symbol in a sheaf rank, Picard degree, or curve genus field.');
       refs.globalInvariantUsage.textContent = refsText;
       refs.globalInvariantUsage.classList.toggle('is-warning', invalidName);
     }
@@ -3612,6 +3651,7 @@
     if (combinedBlowupCreateMode()) return createBlowupPointFromDraft();
     if (combinedRamifiedCoverCreateMode()) return createRamifiedCoverFromDraft();
     if (combinedGrassmannianMapCreateMode()) return createGrassmannianMapFromDraft();
+    if (combinedPicardCanonicalCreateMode()) return createPicardCanonicalFromDraft();
     if (kind === 'map') return createMapFromDraft();
     if (kind === 'sheaf') {
       return addSheafFromDraft();
@@ -3954,6 +3994,7 @@
       clearRamifiedCoverDraft();
       clearTautologicalSesDraft();
       clearGrassmannianMapDraft();
+      clearPicardCanonicalDraft();
       clearMapDraft();
       clearSheafBinaryDraft();
       clearSheafSelfSumDraft();
@@ -3988,6 +4029,7 @@
       else if (combinedRamifiedCoverCreateMode()) activateRamifiedCoverPick({ render: false });
       else if (combinedGrassmannianTautologicalSesCreateMode()) activateTautologicalSesPick({ render: false });
       else if (combinedGrassmannianMapCreateMode()) activateGrassmannianMapPick({ render: false });
+      else if (combinedPicardCanonicalCreateMode()) activatePicardCanonicalPick({ render: false });
       else activateFirstCreateBlankPick({ render: false });
       recompute();
     });
@@ -4001,6 +4043,7 @@
         clearRamifiedCoverDraft();
         clearTautologicalSesDraft();
         clearGrassmannianMapDraft();
+        clearPicardCanonicalDraft();
         clearMapDraft();
         setCanvasPickEnabled(false, { render: false });
         if (combinedProductCreateMode()) refs.varietyType.value = 'product';
@@ -4017,6 +4060,7 @@
         else if (combinedRamifiedCoverCreateMode()) activateRamifiedCoverPick({ render: false });
         else if (combinedGrassmannianTautologicalSesCreateMode()) activateTautologicalSesPick({ render: false });
         else if (combinedGrassmannianMapCreateMode()) activateGrassmannianMapPick({ render: false });
+        else if (combinedPicardCanonicalCreateMode()) activatePicardCanonicalPick({ render: false });
         else activateFirstCreateBlankPick({ render: false });
         recompute();
       });
@@ -4063,6 +4107,24 @@
     if (refs.grassmannianMapBundleButton) {
       refs.grassmannianMapBundleButton.addEventListener('click', () => {
         activateGrassmannianMapPick();
+      });
+    }
+    if (refs.picardCanonicalCurveButton) {
+      refs.picardCanonicalCurveButton.addEventListener('click', () => {
+        activatePicardCanonicalPick();
+      });
+    }
+    if (refs.picardCanonicalDegree) {
+      refs.picardCanonicalDegree.addEventListener('input', () => {
+        updatePicardCanonicalDraftControls();
+        normalizeControlVisibility();
+      });
+      refs.picardCanonicalDegree.addEventListener('change', () => {
+        const raw = String(refs.picardCanonicalDegree.value || '').trim();
+        refs.picardCanonicalDegree.value = /^-?\d+$/.test(raw) ? raw : sanitizeGlobalInvariantName(raw, 'd');
+        updatePicardCanonicalDraftControls();
+        normalizeControlVisibility();
+        recompute();
       });
     }
     [refs.grassmannianMapR, refs.grassmannianMapN].forEach((input) => {
@@ -7045,6 +7107,232 @@
     return variety;
   }
 
+  function createPicardVariety(curve, degreeSymbol) {
+    const curveGeometry = geometryFromVariety(curve);
+    const genus = picardCanonicalCurveGenus(curveGeometry);
+    if (genus == null) return null;
+    const defaultName = defaultPicardVarietyNameFromCurve(curve, degreeSymbol);
+    const variety = {
+      id: nextInputId('X'),
+      type: 'abelian',
+      dim: String(genus),
+      name: uniqueConstructedObjectName('variety', defaultName),
+      genus: curve.genus || 'g',
+      ciDegrees: '',
+      nameDirty: false,
+      specialLabels: ['picard', 'theta-divisor'],
+      construction: {
+        type: 'picard-variety',
+        curveId: curve.id,
+        degreeSymbol: sanitizeGlobalInvariantName(degreeSymbol, 'd'),
+        defaultName,
+        nameDirty: false
+      }
+    };
+    ensureThetaClass(variety);
+    syncObjectLineage(variety, 'variety');
+    positionJacobianVarietyLabel(variety, curve);
+    state.varieties.push(variety);
+    avoidCanvasLabelOverlap(variety);
+    return variety;
+  }
+
+  function createPicardCanonicalConstruction(data) {
+    const picard = createPicardVariety(data.curve, data.degreeSymbol);
+    if (!picard) return null;
+    const curveGeometry = geometryFromVariety(data.curve);
+    const product = createProductVariety({
+      left: data.curve,
+      right: picard,
+      dim: curveGeometry.dim + geometryFromVariety(picard).dim,
+      defaultName: defaultCurvePicardProductName(data.curve, picard),
+      name: defaultCurvePicardProductName(data.curve, picard),
+      nameDirty: false
+    });
+    if (!product) return null;
+    const projectionCurve = projectionMapForProduct(product, 0);
+    const projectionPicard = projectionMapForProduct(product, 1);
+    if (projectionCurve) setProjectionDefaultName(projectionCurve, defaultPicardCurveProjectionName());
+    if (projectionPicard) setProjectionDefaultName(projectionPicard, defaultPicardProjectionName(picard));
+    const sheaf = createPicardPoincareSheaf(data, product, picard, projectionCurve, projectionPicard);
+    if (!sheaf) return product;
+    state.activeSequenceId = null;
+    state.activeVarietyId = product.id;
+    state.activeSheafId = sheaf.id;
+    state.activeMapId = projectionPicard?.id || projectionCurve?.id || null;
+    state.activeHomologyTarget = { kind: 'sheaf', id: sheaf.id };
+    return sheaf;
+  }
+
+  function createPicardPoincareSheaf(data, product, picard, projectionCurve, projectionPicard) {
+    const productGeometry = geometryFromVariety(product);
+    const sheaf = {
+      id: nextInputId('E'),
+      type: 'locally-free',
+      name: uniqueConstructedObjectName('sheaf', defaultPicardPoincareSheafName(data.degreeSymbol)),
+      twist: '1',
+      rank: '1',
+      baseVarietyId: product.id,
+      basis: 'chern',
+      nameDirty: false,
+      construction: {
+        type: 'picard-poincare-line-bundle',
+        curveId: data.curve.id,
+        picardId: picard.id,
+        productId: product.id,
+        curveProjectionId: projectionCurve?.id || null,
+        picardProjectionId: projectionPicard?.id || null,
+        degreeSymbol: data.degreeSymbol,
+        degreeValue: data.degreeValue,
+        defaultName: defaultPicardPoincareSheafName(data.degreeSymbol)
+      }
+    };
+    positionSheafNearBase(sheaf, product);
+    avoidCanvasLabelOverlap(sheaf);
+    syncObjectLineage(sheaf, 'sheaf');
+    ensurePicardCanonicalHomology(data.curve, picard, product, sheaf, projectionCurve);
+    sheafFromObject(sheaf, productGeometry);
+    addSheafObject(sheaf, { activate: false });
+    return sheaf;
+  }
+
+  function projectionMapForProduct(product, factorIndex) {
+    return state.maps.find((map) => (
+      map.construction?.type === 'projection'
+      && map.construction.productId === product?.id
+      && normalizedInt(map.construction.factorIndex, 0, 1, 0) === factorIndex
+    )) || null;
+  }
+
+  function setProjectionDefaultName(map, nextDefault) {
+    if (!map || !nextDefault) return false;
+    const oldDefault = map.construction?.defaultName || map.name;
+    let changed = false;
+    if (!map.nameDirty && canonicalMathLabel(map.name) === canonicalMathLabel(oldDefault) && canonicalMathLabel(map.name) !== canonicalMathLabel(nextDefault)) {
+      map.name = uniqueConstructedObjectName('map', nextDefault);
+      changed = true;
+    }
+    if (map.construction) {
+      map.construction.defaultName = nextDefault;
+      map.construction.nameDirty = false;
+    }
+    map.nameDirty = false;
+    syncObjectLineage(map, 'map');
+    return changed;
+  }
+
+  function ensurePicardCanonicalHomology(curve, picard, product, sheaf, projectionCurve) {
+    if (!curve || !picard || !product || !sheaf) return false;
+    let changed = false;
+    ensureThetaClass(picard);
+    const productGeometry = geometryFromVariety(product);
+    const picardGeometry = geometryFromVariety(picard);
+    const homology = ensureHomologySystem(product, productGeometry);
+    if (ensurePicardPoincareGammaClass(product, productGeometry)) changed = true;
+    const etaResult = projectionCurve ? ensurePicardProjectionPointClass(product, productGeometry, projectionCurve) : null;
+    if (etaResult?.changed) changed = true;
+    const sheafHomology = ensureSheafHomologySystem(sheaf, productGeometry);
+    const rule = picardPoincareFirstChernRule(sheaf, productGeometry, projectionCurve, etaResult?.def || null, picardGeometry);
+    if (rule) {
+      const previous = JSON.stringify(sheafHomology.rules || []);
+      sheafHomology.rules = (sheafHomology.rules || []).filter((item) => item.id !== rule.id);
+      sheafHomology.rules.push(rule);
+      if (JSON.stringify(sheafHomology.rules || []) !== previous) changed = true;
+    }
+    product.homology = homology;
+    return changed;
+  }
+
+  function ensurePicardPoincareGammaClass(product, productGeometry) {
+    const homology = ensureHomologySystem(product, productGeometry);
+    const classId = 'picard_poincare_gamma';
+    const symbol = '\\gamma';
+    let changed = false;
+    if (!homology.customClasses.some((item) => item.id === classId)) {
+      homology.customClasses.push({
+        id: classId,
+        symbol,
+        degree: 1,
+        cohomologyDegree: 2,
+        special: 'picard-canonical'
+      });
+      changed = true;
+    }
+    const existing = homology.classes[classId] || {};
+    if (existing.symbol !== symbol || existing.deleted) changed = true;
+    homology.classes[classId] = { ...existing, symbol };
+    delete homology.classes[classId].deleted;
+    return changed;
+  }
+
+  function ensurePicardProjectionPointClass(product, productGeometry, projectionCurve) {
+    const curveGeometry = geometryByVarietyId(projectionCurve?.codomainId);
+    const pointDef = homologyClassDefById(curveGeometry, HOMOLOGY_POINT_CLASS);
+    if (!pointDef) return null;
+    const etaDef = mapOperationHomologyClassDefinition(projectionCurve, 'pullback', pointDef, productGeometry);
+    if (!etaDef) return null;
+    const homology = ensureHomologySystem(product, productGeometry);
+    const classId = 'picard_eta';
+    const variableId = homologyDefVariableId(etaDef, productGeometry);
+    let changed = false;
+    if (!homology.customClasses.some((item) => item.id === classId)) {
+      homology.customClasses.push({
+        id: classId,
+        symbol: '\\eta',
+        degree: etaDef.degree,
+        cohomologyDegree: etaDef.cohomologyDegree,
+        special: 'map-homology',
+        variableId
+      });
+      changed = true;
+    }
+    const existing = homology.classes[classId] || {};
+    if (existing.symbol !== '\\eta' || existing.deleted) changed = true;
+    homology.classes[classId] = { ...existing, symbol: '\\eta' };
+    delete homology.classes[classId].deleted;
+    return { def: etaDef, changed };
+  }
+
+  function picardPoincareFirstChernRule(sheaf, productGeometry, projectionCurve, etaDef, picardGeometry) {
+    const c1Id = `sheaf_${variableIdSafe(sheaf.id)}_c1`;
+    const gammaDef = homologyClassDefById(productGeometry, 'picard_poincare_gamma');
+    const gammaId = homologyDefVariableId(gammaDef, productGeometry);
+    const etaId = etaDef ? homologyDefVariableId(etaDef, productGeometry) : null;
+    if (!gammaId) return null;
+    const rhs = [{ coefficient: '1', powers: { [gammaId]: 1 } }];
+    const degreeSymbol = sanitizeGlobalInvariantName(sheaf.construction?.degreeSymbol, 'd');
+    const rawDegreeValue = String(sheaf.construction?.degreeValue ?? '').trim();
+    const degreeValue = /^-?\d+$/.test(rawDegreeValue) ? rawDegreeValue : '';
+    if (etaId) {
+      if (degreeValue !== '') {
+        setPicardDegreeInvariantValue(degreeSymbol, degreeValue, sheaf);
+        rhs.push({ coefficient: degreeValue, powers: { [etaId]: 1 } });
+      } else {
+        const scalarId = globalInvariantVariableId(degreeSymbol);
+        registerGlobalInvariantVariable(degreeSymbol, { kind: 'sheaf', id: sheaf.id, field: 'degree' });
+        defineVariable(scalarId, 0, symbolToLatex(degreeSymbol), { kind: 'globalInvariant' });
+        rhs.push({ coefficient: '1', powers: { [scalarId]: 1, [etaId]: 1 } });
+      }
+    }
+    return {
+      id: `sheaf-rule-${c1Id}`,
+      builtin: false,
+      preserveUnknownVariables: true,
+      enabled: true,
+      lhs: { powers: { [c1Id]: 1 } },
+      rhs
+    };
+  }
+
+  function setPicardDegreeInvariantValue(degreeSymbol, degreeValue, sheaf) {
+    const registered = registerGlobalInvariantVariable(degreeSymbol, { kind: 'sheaf', id: sheaf.id, field: 'degree' });
+    if (!registered?.invariant) return null;
+    registered.invariant.hasValue = true;
+    registered.invariant.value = degreeValue;
+    registered.invariant.replaceWithValue = true;
+    return registered.invariant;
+  }
+
   function ensureThetaClass(variety) {
     if (!variety) return;
     const homology = variety.homology && typeof variety.homology === 'object' ? variety.homology : {};
@@ -8102,6 +8390,15 @@
     return created;
   }
 
+  function createPicardCanonicalFromDraft() {
+    const data = picardCanonicalConstructionData();
+    if (!data) return null;
+    const created = createPicardCanonicalConstruction(data);
+    if (!created) return null;
+    clearPicardCanonicalDraft();
+    return created;
+  }
+
   function buildShortExactSequence(data) {
     const sheaves = [data.sheafA, data.sheafB, data.sheafC];
     const missingIndex = sheaves.findIndex((sheaf) => !sheaf);
@@ -8961,6 +9258,21 @@
     return `${sanitizeMathLabel(left?.name, 'X')}\\times ${sanitizeMathLabel(right?.name, 'Y')}`;
   }
 
+  function defaultPicardVarietyNameFromCurve(curve, degreeSymbol = 'd') {
+    const curveName = sanitizeMathLabel(curve?.name, 'C');
+    const degree = symbolToLatex(sanitizeGlobalInvariantName(degreeSymbol, 'd'));
+    return `Pic^${degree}(${curveName})`;
+  }
+
+  function defaultCurvePicardProductName(curve, picard) {
+    return `${sanitizeMathLabel(curve?.name, 'C')}\\times ${sanitizeMathLabel(picard?.name, 'Pic^d(C)')}`;
+  }
+
+  function defaultPicardPoincareSheafName(degreeSymbol = 'd') {
+    const degree = symbolToLatex(sanitizeGlobalInvariantName(degreeSymbol, 'd'));
+    return `\\mathcal{P}_{${degree}}`;
+  }
+
   function defaultBinarySheafName(leftId, rightId, operationLatex) {
     const left = state.sheaves.find((item) => item.id === leftId);
     const right = state.sheaves.find((item) => item.id === rightId);
@@ -9137,6 +9449,14 @@
     return repeatedFactor ? `\\pi_{${factorName},${factorIndex + 1}}` : `\\pi_{${factorName}}`;
   }
 
+  function defaultPicardCurveProjectionName() {
+    return '\\pi_{C}';
+  }
+
+  function defaultPicardProjectionName(picard) {
+    return `\\pi_{${sanitizeMathLabel(picard?.name, 'Pic^d(C)')}}`;
+  }
+
   function defaultJacobianNameFromCurve(curve) {
     return `\\operatorname{Jac}(${sanitizeMathLabel(curve?.name, 'C')})`;
   }
@@ -9240,6 +9560,7 @@
     if (combinedRamifiedCoverCreateMode()) return activateRamifiedCoverPick(options);
     if (combinedGrassmannianTautologicalSesCreateMode()) return activateTautologicalSesPick(options);
     if (combinedGrassmannianMapCreateMode()) return activateGrassmannianMapPick(options);
+    if (combinedPicardCanonicalCreateMode()) return activatePicardCanonicalPick(options);
     if (kind === 'sheaf') {
       if (sheafBinaryInputMode()) {
         state.sheafBinaryPickTarget = sheafBinaryDraftSheaf('left') ? 'right' : 'left';
@@ -9434,6 +9755,11 @@
     updateGrassmannianMapDraftControls();
   }
 
+  function clearPicardCanonicalDraft() {
+    state.picardCanonicalDraft = null;
+    updatePicardCanonicalDraftControls();
+  }
+
   function clearSheafMapDraft() {
     state.sheafMapDraft = null;
     state.sheafMapPickTarget = 'map';
@@ -9583,6 +9909,18 @@
     hint: () => grassmannianMapPickHint(),
     nextSlot: () => state.grassmannianMapPickTarget || 'bundle',
     handle: (kind, id) => handleGrassmannianMapPick(kind, id)
+  }, {
+    id: 'picard-canonical',
+    slots: ['curve'],
+    active: () => combinedPicardCanonicalCreateMode(),
+    allowedObjectKinds: () => ['variety'],
+    available: () => picardCanonicalPickAvailable(),
+    candidate: (kind, id) => kind === 'variety' && allowablePicardCanonicalCurvePick(id),
+    selectedState: (kind, id) => kind === 'variety' && picardCanonicalDraftCurve()?.id === id ? 'domain' : null,
+    complete: () => !!picardCanonicalConstructionData(),
+    hint: () => picardCanonicalPickHint(),
+    nextSlot: () => 'curve',
+    handle: (kind, id) => handlePicardCanonicalPick(kind, id)
   }, {
     id: 'product',
     slots: ['factor-a', 'factor-b'],
@@ -9827,6 +10165,7 @@
     updateRamifiedCoverDraftControls();
     updateTautologicalSesDraftControls();
     updateGrassmannianMapDraftControls();
+    updatePicardCanonicalDraftControls();
   }
 
   function activateProductFactorPick(index = 0, options = {}) {
@@ -10431,6 +10770,98 @@
       return 'click build to add a dotted rational map; check empty base locus to construct the pullback bundle';
     }
     return 'click build to add the morphism and identify E with the pullback of S^vee';
+  }
+
+  function picardCanonicalDraftCurve() {
+    const id = state.picardCanonicalDraft?.curveId;
+    return state.varieties.find((variety) => variety.id === id) || null;
+  }
+
+  function picardCanonicalCurveGenus(geometry) {
+    if (geometry?.type !== 'curve') return null;
+    const genus = numericalCurveGenus(geometry);
+    return Number.isInteger(genus) && genus >= 0 && genus <= MAX_DIMENSION - 1 ? genus : null;
+  }
+
+  function picardCanonicalCurveVarieties() {
+    return state.varieties.filter((variety) => picardCanonicalCurveGenus(geometryFromVariety(variety)) != null);
+  }
+
+  function picardCanonicalPickAvailable() {
+    return combinedPicardCanonicalCreateMode() && state.varieties.some((variety) => allowablePicardCanonicalCurvePick(variety.id));
+  }
+
+  function allowablePicardCanonicalCurvePick(varietyId) {
+    const variety = state.varieties.find((item) => item.id === varietyId);
+    return !!variety && !variety.hiddenOnCanvas && picardCanonicalCurveGenus(geometryFromVariety(variety)) != null;
+  }
+
+  function activatePicardCanonicalPick(options = {}) {
+    if (!combinedPicardCanonicalCreateMode()) return false;
+    setCanvasPickEnabled(true, { render: false });
+    updatePicardCanonicalDraftControls();
+    syncGlobalPickButton();
+    if (options.render !== false) renderCanvas(state.lastResult);
+    return state.canvasPickEnabled;
+  }
+
+  function handlePicardCanonicalPick(kind, id) {
+    if (kind !== 'variety' || !allowablePicardCanonicalCurvePick(id)) return;
+    state.picardCanonicalDraft = { ...(state.picardCanonicalDraft || {}), curveId: id };
+    setCanvasPickEnabled(false, { render: false });
+    updatePicardCanonicalDraftControls();
+    recompute();
+  }
+
+  function updatePicardCanonicalDraftControls() {
+    const show = combinedPicardCanonicalCreateMode();
+    if (refs.picardCanonicalCurveRow) refs.picardCanonicalCurveRow.hidden = !show;
+    if (refs.picardCanonicalDegreeRow) refs.picardCanonicalDegreeRow.hidden = !show;
+    syncPickFlowNote(refs.picardCanonicalPickNote, 'picard-canonical', show);
+    const curve = picardCanonicalDraftCurve();
+    if (refs.picardCanonicalCurveButton) {
+      const label = curve ? latexToPlain(sanitizeMathLabel(curve.name, 'C')) : 'curve';
+      refs.picardCanonicalCurveButton.textContent = label;
+      refs.picardCanonicalCurveButton.title = curve ? `Replace ${label}` : 'Pick a curve on the canvas';
+      refs.picardCanonicalCurveButton.setAttribute('aria-pressed', state.canvasPickEnabled && show ? 'true' : 'false');
+    }
+    if (refs.picardCanonicalPreview) {
+      const symbol = picardCanonicalDegreeSymbol();
+      const curveName = sanitizeMathLabel(curve?.name, 'C');
+      refs.picardCanonicalPreview.textContent = latexToPlain(`Pic^${symbol}(${curveName})`);
+    }
+    syncGlobalPickButton();
+  }
+
+  function picardCanonicalDegreeSymbol() {
+    const text = String(refs.picardCanonicalDegree?.value || 'd').trim();
+    if (/^-?\d+$/.test(text)) return 'd';
+    return sanitizeGlobalInvariantName(text, 'd');
+  }
+
+  function picardCanonicalDegreeValue() {
+    const text = String(refs.picardCanonicalDegree?.value || '').trim();
+    return /^-?\d+$/.test(text) ? text : '';
+  }
+
+  function picardCanonicalConstructionData() {
+    const curve = picardCanonicalDraftCurve();
+    if (!curve || !allowablePicardCanonicalCurvePick(curve.id)) return null;
+    const genus = picardCanonicalCurveGenus(geometryFromVariety(curve));
+    if (genus == null || genus + 1 > MAX_DIMENSION) return null;
+    const degreeSymbol = picardCanonicalDegreeSymbol();
+    const degreeValue = picardCanonicalDegreeValue();
+    return { curve, genus, degreeSymbol, degreeValue };
+  }
+
+  function picardCanonicalPickHint() {
+    if (!picardCanonicalCurveVarieties().length) return 'add a curve with numerical genus first';
+    const curve = picardCanonicalDraftCurve();
+    if (!curve) return 'click the curve C on the canvas';
+    const genus = picardCanonicalCurveGenus(geometryFromVariety(curve));
+    if (genus == null) return 'choose a curve with genus resolving to an integer';
+    if (genus + 1 > MAX_DIMENSION) return `dimension ${genus + 1} exceeds the calculator limit ${MAX_DIMENSION}`;
+    return 'click build to add Pic^d(C), C x Pic^d(C), projections, and the Poincare line bundle';
   }
 
   function updateCombinedVarietySlotButton(button, variety, fallback, picking) {
@@ -12209,6 +12640,12 @@
         subobjects: []
       };
     }
+    if (kind === 'variety' && construction.type === 'picard-variety') {
+      return {
+        parents: [parent('variety', construction.curveId, 'curve')].filter((item) => item.id),
+        subobjects: []
+      };
+    }
     if (kind === 'variety' && construction.type === 'blow-up-point') {
       return {
         parents: [
@@ -12280,6 +12717,18 @@
           parent('variety', construction.baseId, 'base'),
           parent('variety', construction.coverId, 'cover'),
           parent('map', construction.mapId, 'covering-map')
+        ].filter((item) => item.id),
+        subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'base')] : []
+      };
+    }
+    if (kind === 'sheaf' && construction.type === 'picard-poincare-line-bundle') {
+      return {
+        parents: [
+          parent('variety', construction.curveId, 'curve'),
+          parent('variety', construction.picardId, 'picard-variety'),
+          parent('variety', construction.productId, 'product'),
+          parent('map', construction.curveProjectionId, 'curve-projection'),
+          parent('map', construction.picardProjectionId, 'picard-projection')
         ].filter((item) => item.id),
         subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'base')] : []
       };
@@ -12437,6 +12886,7 @@
   function refreshConstructedVariety(variety) {
     const construction = variety?.construction;
     if (construction?.type === 'jacobian') return refreshJacobianVariety(variety, construction);
+    if (construction?.type === 'picard-variety') return refreshPicardVariety(variety, construction);
     if (construction?.type === 'blow-up-point') return refreshBlowupVariety(variety, construction);
     if (construction?.type === 'ramified-cover') return refreshRamifiedCoverVariety(variety, construction);
     if (construction?.type === 'grassmannian-target') return refreshGrassmannianTargetVariety(variety, construction);
@@ -12507,6 +12957,62 @@
     }
     if (!variety.specialLabels?.includes('jacobian')) {
       variety.specialLabels = [...(variety.specialLabels || []), 'jacobian'];
+      changed = true;
+    }
+    ensureThetaClass(variety);
+    if (syncObjectLineage(variety, 'variety')) changed = true;
+    return changed;
+  }
+
+  function refreshPicardVariety(variety, construction) {
+    const curve = state.varieties.find((item) => item.id === construction.curveId);
+    if (!curve) return false;
+    const curveGeometry = geometryFromVariety(curve);
+    const genus = picardCanonicalCurveGenus(curveGeometry);
+    if (genus == null) return false;
+    const degreeSymbol = sanitizeGlobalInvariantName(construction.degreeSymbol, 'd');
+    const oldDefault = construction.defaultName || defaultPicardVarietyNameFromCurve(curve, degreeSymbol);
+    const nextDefault = defaultPicardVarietyNameFromCurve(curve, degreeSymbol);
+    let changed = false;
+    if (variety.type !== 'abelian') {
+      variety.type = 'abelian';
+      changed = true;
+    }
+    if (String(variety.dim) !== String(genus)) {
+      variety.dim = String(genus);
+      changed = true;
+    }
+    if (variety.genus !== (curve.genus || 'g')) {
+      variety.genus = curve.genus || 'g';
+      changed = true;
+    }
+    const nameDirty = variety.nameDirty || construction.nameDirty;
+    if (!nameDirty && canonicalMathLabel(variety.name) === canonicalMathLabel(oldDefault) && canonicalMathLabel(variety.name) !== canonicalMathLabel(nextDefault)) {
+      variety.name = nextDefault;
+      changed = true;
+    }
+    if (variety.nameDirty !== !!nameDirty) {
+      variety.nameDirty = !!nameDirty;
+      changed = true;
+    }
+    if (construction.nameDirty !== !!nameDirty) {
+      construction.nameDirty = !!nameDirty;
+      changed = true;
+    }
+    if (construction.defaultName !== nextDefault) {
+      construction.defaultName = nextDefault;
+      changed = true;
+    }
+    if (construction.degreeSymbol !== degreeSymbol) {
+      construction.degreeSymbol = degreeSymbol;
+      changed = true;
+    }
+    const labels = new Set(variety.specialLabels || []);
+    labels.add('picard');
+    labels.add('theta-divisor');
+    const nextLabels = Array.from(labels);
+    if (JSON.stringify(variety.specialLabels || []) !== JSON.stringify(nextLabels)) {
+      variety.specialLabels = nextLabels;
       changed = true;
     }
     ensureThetaClass(variety);
@@ -12658,7 +13164,60 @@
     if (construction.type === 'pullback' || construction.type === 'pushforward') return refreshMapConstructedSheaf(sheaf, construction);
     if (construction.type === 'ses-term') return refreshSesTermSheaf(sheaf, construction);
     if (construction.type === 'ramified-cover-root') return refreshRamifiedCoverRootSheaf(sheaf, construction);
+    if (construction.type === 'picard-poincare-line-bundle') return refreshPicardPoincareSheaf(sheaf, construction);
     return false;
+  }
+
+  function refreshPicardPoincareSheaf(sheaf, construction) {
+    const curve = state.varieties.find((item) => item.id === construction.curveId);
+    const picard = state.varieties.find((item) => item.id === construction.picardId);
+    const product = state.varieties.find((item) => item.id === construction.productId || item.id === sheaf.baseVarietyId);
+    if (!curve || !picard || !product) return false;
+    const productGeometry = geometryFromVariety(product);
+    const projectionCurve = state.maps.find((item) => item.id === construction.curveProjectionId) || projectionMapForProduct(product, 0);
+    const projectionPicard = state.maps.find((item) => item.id === construction.picardProjectionId) || projectionMapForProduct(product, 1);
+    const degreeSymbol = sanitizeGlobalInvariantName(construction.degreeSymbol, 'd');
+    const rawDegreeValue = String(construction.degreeValue ?? '').trim();
+    const degreeValue = /^-?\d+$/.test(rawDegreeValue) ? rawDegreeValue : '';
+    const defaultName = defaultPicardPoincareSheafName(degreeSymbol);
+    let changed = false;
+    const nextFields = {
+      type: 'locally-free',
+      twist: '1',
+      rank: '1',
+      baseVarietyId: product.id,
+      basis: 'chern'
+    };
+    Object.entries(nextFields).forEach(([key, value]) => {
+      if (sheaf[key] !== value) {
+        sheaf[key] = value;
+        changed = true;
+      }
+    });
+    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(defaultName)) {
+      sheaf.name = defaultName;
+      changed = true;
+    }
+    const nextConstruction = {
+      ...construction,
+      type: 'picard-poincare-line-bundle',
+      curveId: curve.id,
+      picardId: picard.id,
+      productId: product.id,
+      curveProjectionId: projectionCurve?.id || null,
+      picardProjectionId: projectionPicard?.id || null,
+      degreeSymbol,
+      degreeValue,
+      defaultName
+    };
+    if (JSON.stringify(construction) !== JSON.stringify(nextConstruction)) {
+      sheaf.construction = nextConstruction;
+      changed = true;
+    }
+    if (ensurePicardCanonicalHomology(curve, picard, product, sheaf, projectionCurve)) changed = true;
+    sheafFromObject(sheaf, productGeometry);
+    if (syncObjectLineage(sheaf, 'sheaf')) changed = true;
+    return changed;
   }
 
   function refreshRamifiedCoverRootSheaf(sheaf, construction) {
@@ -13793,6 +14352,7 @@
       normalizeActiveHomologyTarget();
       normalizeControlVisibility();
       VARS.clear();
+      defineGlobalInvariantVariables();
       const chosenSheaf = inputIsModifyMode() ? selectedSheaf() : null;
       const chosenVariety = inputIsModifyMode() && modifyKind() === 'variety' ? selectedVariety() : null;
       const baseVariety = chosenSheaf ? baseVarietyForSheaf(chosenSheaf) : chosenVariety;
@@ -14030,7 +14590,8 @@
     const draftingCombinedRamifiedCover = combinedRamifiedCoverCreateMode();
     const draftingCombinedTautologicalSes = combinedGrassmannianTautologicalSesCreateMode();
     const draftingCombinedGrassmannianMap = combinedGrassmannianMapCreateMode();
-    const draftingCombinedStructure = draftingCombinedSes || draftingCombinedBlowup || draftingCombinedRamifiedCover || draftingCombinedTautologicalSes || draftingCombinedGrassmannianMap;
+    const draftingCombinedPicardCanonical = combinedPicardCanonicalCreateMode();
+    const draftingCombinedStructure = draftingCombinedSes || draftingCombinedBlowup || draftingCombinedRamifiedCover || draftingCombinedTautologicalSes || draftingCombinedGrassmannianMap || draftingCombinedPicardCanonical;
     const draftingSheaf = !draftingNumber && !draftingMap && !draftingCombinedStructure && (inputIsModifyMode() ? editingSheaf : refs.addObjectKind?.value === 'sheaf');
     const draftingVariety = !draftingNumber && !draftingMap && !draftingSheaf;
     syncProductVarietyOption();
@@ -14320,8 +14881,9 @@
       const tautologicalSesReady = !draftingCombinedTautologicalSes || pickFlowReady('tautological-ses');
       const grassmannianMapParams = draftingCombinedGrassmannianMap ? syncGrassmannianMapControls() : null;
       const grassmannianMapReady = !draftingCombinedGrassmannianMap || pickFlowReady('grassmannian-map');
+      const picardCanonicalReady = !draftingCombinedPicardCanonical || pickFlowReady('picard-canonical');
       const numberReady = !draftingNumber || globalInvariantNameIsValid(refs.globalInvariantName?.value);
-      refs.addObject.disabled = (draftingMap && !mapReady) || !ramifiedCoverMapReady || (productNeedsFactors && !productReady) || !grassmannianReady || !sesReady || !sesEditReady || !blowupReady || !ramifiedCoverReady || !tautologicalSesReady || !grassmannianMapReady || !numberReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSelfSum || editingSheafSelfSum) && !sheafSelfSumReady) || ((creatingSheafDual || editingSheafDual) && !sheafDualReady) || ((creatingSheafInternalHom || editingSheafInternalHom) && !sheafInternalHomReady) || ((creatingSheafIdeal || editingSheafIdeal) && !sheafIdealReady) || ((creatingSheafNormal || editingSheafNormal) && !sheafNormalReady) || ((creatingSheafRelative || editingSheafRelative) && !sheafRelativeReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
+      refs.addObject.disabled = (draftingMap && !mapReady) || !ramifiedCoverMapReady || (productNeedsFactors && !productReady) || !grassmannianReady || !sesReady || !sesEditReady || !blowupReady || !ramifiedCoverReady || !tautologicalSesReady || !grassmannianMapReady || !picardCanonicalReady || !numberReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSelfSum || editingSheafSelfSum) && !sheafSelfSumReady) || ((creatingSheafDual || editingSheafDual) && !sheafDualReady) || ((creatingSheafInternalHom || editingSheafInternalHom) && !sheafInternalHomReady) || ((creatingSheafIdeal || editingSheafIdeal) && !sheafIdealReady) || ((creatingSheafNormal || editingSheafNormal) && !sheafNormalReady) || ((creatingSheafRelative || editingSheafRelative) && !sheafRelativeReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
       refs.addObject.textContent = inputIsModifyMode() ? 'update' : (combinedCreateMode() ? 'build' : 'add');
       let addTitle = '';
       if (creatingMap) {
@@ -14340,6 +14902,8 @@
         addTitle = pickFlowHint(pickFlowById('tautological-ses'));
       } else if (draftingCombinedGrassmannianMap) {
         addTitle = pickFlowHint(pickFlowById('grassmannian-map'));
+      } else if (draftingCombinedPicardCanonical) {
+        addTitle = pickFlowHint(pickFlowById('picard-canonical'));
       } else if (!grassmannianReady) {
         addTitle = `Grassmannian dimension ${grassmannianParams.dim} exceeds the calculator limit ${MAX_DIMENSION}`;
       } else if (productNeedsFactors) {
@@ -15194,7 +15758,7 @@
     const degree = cohomologyDegree / 2;
     const fallback = String(item.symbol || id || 'A');
     const symbol = sanitizeHomologySymbol(item.symbol, fallback);
-    const special = ['tangent-chern', 'sheaf-chern', 'map-homology', 'ramified-cover'].includes(item.special) ? item.special : null;
+    const special = ['tangent-chern', 'sheaf-chern', 'map-homology', 'ramified-cover', 'picard-canonical'].includes(item.special) ? item.special : null;
     const variableId = special === 'map-homology' ? sanitizeHomologyVariableId(item.variableId) : null;
     return { id, symbol, degree, cohomologyDegree, special, ...(variableId ? { variableId } : {}) };
   }
@@ -16924,19 +17488,26 @@
     return { label, labelLatex, key, latex: display.latex, plain: display.plain };
   }
 
+  function shouldDisplayChernTerm(bundle, index) {
+    const rank = numericRankFromPlain(bundle?.rankPlain);
+    return !Number.isInteger(rank) || index <= rank;
+  }
+
   function buildStandardClassRows(bundle, d, options) {
     if (options.termMode === 'term') {
       const i = options.termIndex;
       const suffix = `_{${i}}`;
       return [
-        classPolyRow(`c_${i}(${bundle.labelPlain})`, `c${suffix}(${bundle.labelLatex})`, `chern_${i}`, i === 0 ? Poly.one() : componentOrZero(bundle.cComps, i), options),
+        shouldDisplayChernTerm(bundle, i)
+          ? classPolyRow(`c_${i}(${bundle.labelPlain})`, `c${suffix}(${bundle.labelLatex})`, `chern_${i}`, i === 0 ? Poly.one() : componentOrZero(bundle.cComps, i), options)
+          : null,
         i === 0
           ? { label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `character_${i}`, latex: bundle.rankLatex || '0', plain: bundle.rankPlain || '0' }
           : classPolyRow(`ch_${i}(${bundle.labelPlain})`, `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, `character_${i}`, componentOrZero(bundle.chComps, i), options),
         classPolyRow(`td_${i}(${bundle.labelPlain})`, `\\operatorname{td}${suffix}(${bundle.labelLatex})`, `todd_${i}`, homogeneousPart(bundle.todd, i), options),
         classPolyRow(`s_${i}(${bundle.labelPlain})`, `s${suffix}(${bundle.labelLatex})`, `segre_${i}`, homogeneousPart(bundle.segre, i), options),
         classPolyRow(`sqrt td_${i}(${bundle.labelPlain})`, `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, `sqrtTodd_${i}`, homogeneousPart(bundle.sqrtTodd, i), options)
-      ];
+      ].filter(Boolean);
     }
     return [
       classPolyRow(`c(${bundle.labelPlain})`, `c(${bundle.labelLatex})`, 'chern', bundle.cTotal, options),
@@ -16965,12 +17536,14 @@
         sqrtTodd: coefficientLatexPlain(total.sqrtTodd, i)
       };
       return [
-        { label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `root_chern_${i}`, latex: term.chern.latex, plain: term.chern.plain },
+        shouldDisplayChernTerm(bundle, i)
+          ? { label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `root_chern_${i}`, latex: term.chern.latex, plain: term.chern.plain }
+          : null,
         { label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `root_character_${i}`, latex: term.character.latex, plain: term.character.plain },
         { label: `td_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}${suffix}(${bundle.labelLatex})`, key: `root_todd_${i}`, latex: term.todd.latex, plain: term.todd.plain },
         { label: `s_${i}(${bundle.labelPlain})`, labelLatex: `s${suffix}(${bundle.labelLatex})`, key: `root_segre_${i}`, latex: term.segre.latex, plain: term.segre.plain },
         { label: `sqrt td_${i}(${bundle.labelPlain})`, labelLatex: `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, key: `root_sqrtTodd_${i}`, latex: term.sqrtTodd.latex, plain: term.sqrtTodd.plain }
-      ];
+      ].filter(Boolean);
     }
     return [
       { label: `c(${bundle.labelPlain})`, labelLatex: `c(${bundle.labelLatex})`, key: 'root_chern', latex: total.chern.latex, plain: total.chern.plain },
@@ -17090,12 +17663,14 @@
       const i = options.termIndex;
       const suffix = `_{${i}}`;
       return [
-        { label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `root_chern_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.chern, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.chern, i)) },
+        shouldDisplayChernTerm(bundle, i)
+          ? { label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `root_chern_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.chern, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.chern, i)) }
+          : null,
         { label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `root_character_${i}`, latex: i === 0 ? String(rank) : formatPolyLatex(homogeneousPart(rootDisplay.character, i)), plain: i === 0 ? String(rank) : formatPolyPlain(homogeneousPart(rootDisplay.character, i)) },
         { label: `td_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}${suffix}(${bundle.labelLatex})`, key: `root_todd_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.todd, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.todd, i)) },
         { label: `s_${i}(${bundle.labelPlain})`, labelLatex: `s${suffix}(${bundle.labelLatex})`, key: `root_segre_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.segre, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.segre, i)) },
         { label: `sqrt td_${i}(${bundle.labelPlain})`, labelLatex: `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, key: `root_sqrtTodd_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.sqrtTodd, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.sqrtTodd, i)) }
-      ];
+      ].filter(Boolean);
     }
     return [
       { label: `c(${bundle.labelPlain})`, labelLatex: `c(${bundle.labelLatex})`, key: 'root_chern', latex: formatPolyLatex(rootDisplay.chern), plain: formatPolyPlain(rootDisplay.chern) },
@@ -21608,7 +22183,7 @@
     const labelLatex = sheafLabelLatex(sheaf);
     const labelPlain = sheafLabelPlain(sheaf);
     const numericRank = numericRankFromPlain(sheaf.rankPlain);
-    const maxIndex = basis === 'character' && numericRank != null && numericRank > 0
+    const maxIndex = sheafHasLocallyFreeLabel(sheaf) && numericRank != null
       ? Math.min(geometry.dim, numericRank)
       : geometry.dim;
     const kind = basis === 'character' ? 'character' : 'chern';
@@ -24785,8 +25360,16 @@
       auto: item.auto === true,
       unused: item.unused === true
     };
-    if (Array.isArray(item.sources)) invariant.sources = item.sources.map((source) => sanitizePresetId(source)).filter(Boolean);
+    if (Array.isArray(item.sources)) invariant.sources = item.sources.map(sanitizePresetGlobalInvariantSource).filter(Boolean);
     return invariant;
+  }
+
+  function sanitizePresetGlobalInvariantSource(source) {
+    if (!source || typeof source !== 'object') return null;
+    const kind = sanitizePresetEnum(source.kind, ['variety', 'sheaf', 'map', 'sequence', 'number'], '');
+    const id = sanitizePresetId(source.id);
+    const field = sanitizePresetString(source.field, '', 32).replace(/[^A-Za-z0-9_-]/g, '');
+    return kind && id && field ? { kind, id, field } : null;
   }
 
   function sanitizePresetVariety(item) {
@@ -24893,6 +25476,10 @@
     } else if (ownerKind === 'variety' && type === 'jacobian') {
       out.curveId = sanitizePresetId(construction.curveId);
       out.nameDirty = construction.nameDirty === true;
+    } else if (ownerKind === 'variety' && type === 'picard-variety') {
+      out.curveId = sanitizePresetId(construction.curveId);
+      out.degreeSymbol = sanitizeGlobalInvariantName(construction.degreeSymbol, 'd');
+      out.nameDirty = construction.nameDirty === true;
     } else if (ownerKind === 'variety' && type === 'blow-up-point') {
       out.baseId = sanitizePresetId(construction.baseId);
       out.pointId = sanitizePresetId(construction.pointId);
@@ -24995,6 +25582,15 @@
       out.degree = parseRamifiedCoverRootTwist(construction.degree) || normalizeRamifiedCoverDegree(construction.degree);
       out.coverDegree = normalizeRamifiedCoverDegree(construction.coverDegree);
       out.branchDegree = parseRamifiedCoverBranchDegree(construction.branchDegree);
+    } else if (ownerKind === 'sheaf' && type === 'picard-poincare-line-bundle') {
+      out.curveId = sanitizePresetId(construction.curveId);
+      out.picardId = sanitizePresetId(construction.picardId);
+      out.productId = sanitizePresetId(construction.productId);
+      out.curveProjectionId = sanitizePresetId(construction.curveProjectionId);
+      out.picardProjectionId = sanitizePresetId(construction.picardProjectionId);
+      out.degreeSymbol = sanitizeGlobalInvariantName(construction.degreeSymbol, 'd');
+      const rawDegreeValue = String(construction.degreeValue ?? '').trim();
+      out.degreeValue = /^-?\d+$/.test(rawDegreeValue) ? rawDegreeValue : '';
     } else if (ownerKind === 'map' && type === 'composition') {
       out.mapIds = Array.isArray(construction.mapIds) ? construction.mapIds.map(sanitizePresetId).filter(Boolean).slice(0, 2) : [];
       out.nameDirty = construction.nameDirty === true;
@@ -25070,6 +25666,7 @@
     state.ramifiedCoverDraft = null;
     state.tautologicalSesDraft = null;
     state.grassmannianMapDraft = null;
+    state.picardCanonicalDraft = null;
     state.mapDraft = null;
     state.sheafBinaryDraft = null;
     state.sheafSelfSumDraft = null;

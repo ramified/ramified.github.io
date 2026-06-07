@@ -1799,6 +1799,7 @@
               <option value="blow-up-point">Blow-up of a point</option>
               <option value="ramified-cover">Ramified cover</option>
               <option value="grassmannian-map">Map to Grassmannian</option>
+              <option value="picard-canonical">Canonical line bundle of Pic^d(C)</option>
             </select>
           </div>
           <div class="sheaf-field-row" id="ses-parents-row" hidden>
@@ -1921,6 +1922,19 @@
             </label>
           </div>
           <div class="sheaf-note" id="grassmannian-map-pick-note" hidden>pick a locally free sheaf</div>
+          <div class="sheaf-field-row" id="picard-canonical-curve-row" hidden>
+            <span class="input-label">curve</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="picard-canonical-curve-button" type="button">curve</button>
+              <span class="sheaf-map-formula-mark">&rArr;</span>
+              <span class="sheaf-map-formula-mark" id="picard-canonical-preview">Pic^d(C)</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="picard-canonical-degree-row" hidden>
+            <label class="input-label" for="picard-canonical-degree">d</label>
+            <input id="picard-canonical-degree" class="sheaf-input" type="text" value="d" maxlength="16" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-note" id="picard-canonical-pick-note" hidden>pick a curve</div>
         </div>
 
         <div id="variety-editor" class="sheaf-input-editor">
