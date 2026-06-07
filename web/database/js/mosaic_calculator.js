@@ -299,6 +299,7 @@
     showCoords: false,
     colorComponents: true,
     displayPick: false,
+    showCusps: false,
     componentColors: [],
     drawStyle: 'shade',
     drawAction: 'edge',
@@ -428,6 +429,7 @@
     bindControls();
     bindCards();
     bindCanvas();
+    initCustomTooltips();
 
     createBoard(5, 5, state.lattice, state.wrapped);
   }
@@ -500,6 +502,8 @@
     refs.showCoords = document.getElementById('show-coords');
     refs.colorComponents = document.getElementById('color-components');
     refs.displayPick = document.getElementById('display-pick');
+    refs.showCuspsRow = document.getElementById('show-cusps-row');
+    refs.showCusps = document.getElementById('show-cusps');
     refs.wrappedViewRow = document.getElementById('wrapped-view-row');
     refs.wrappedViewMode = document.getElementById('wrapped-view-mode');
     refs.wanderOpenRow = document.getElementById('wander-open-row');
@@ -608,6 +612,7 @@
       boundaryComponentsRow: document.getElementById('out-boundary-components-row'),
       orientableRow: document.getElementById('out-orientable-row'),
       componentsRow: document.getElementById('out-components-row'),
+      surfaceTypeRow: document.getElementById('out-surface-type-row'),
       genusRow: document.getElementById('out-genus-row'),
       cuspsRow: document.getElementById('out-cusps-row'),
       tilesLabel: document.getElementById('out-tiles-label'),
@@ -615,12 +620,13 @@
       boundaryComponentsLabel: document.getElementById('out-boundary-components-label'),
       orientableLabel: document.getElementById('out-orientable-label'),
       componentsLabel: document.getElementById('out-components-label'),
+      genusLabel: document.getElementById('out-genus-label'),
       tiles: document.getElementById('out-tiles'),
       openEnds: document.getElementById('out-open-ends'),
       boundaryComponents: document.getElementById('out-boundary-components'),
       orientable: document.getElementById('out-orientable'),
-      computeOrientable: document.getElementById('compute-background-orientable'),
       components: document.getElementById('out-components'),
+      surfaceType: document.getElementById('out-surface-type'),
       genus: document.getElementById('out-genus'),
       cusps: document.getElementById('out-cusps')
     };
@@ -807,6 +813,17 @@
       }
       refreshExport();
     });
+    if (refs.showCusps) {
+      refs.showCusps.addEventListener('change', () => {
+        state.showCusps = refs.showCusps.checked;
+        if (!shouldShowBackgroundCusps()) {
+          state.backgroundHoverCusp = null;
+          state.selectedBackgroundCusp = null;
+        }
+        updateReport(false);
+        refreshExport();
+      });
+    }
     refs.wrappedViewMode.addEventListener('change', () => {
       state.wrappedViewMode = refs.wrappedViewMode.value === 'single' ? 'single' : 'periodic';
       normalizeViewOffset();
@@ -913,9 +930,6 @@
     }
     if (refs.computeDegenerations) {
       refs.computeDegenerations.addEventListener('click', computeAndRenderDualGraphDegenerations);
-    }
-    if (refs.out && refs.out.computeOrientable) {
-      refs.out.computeOrientable.addEventListener('click', computeAndShowBackgroundOrientability);
     }
     if (refs.exportDegenerations) {
       refs.exportDegenerations.addEventListener('click', exportDualGraphDegenerations);
@@ -1429,6 +1443,72 @@
       if (offset < 0 && offset > closest.offset) return { offset, element: card };
       return closest;
     }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+  }
+
+  function initCustomTooltips() {
+    if (document.body.dataset.customTooltipsReady === '1') return;
+    document.body.dataset.customTooltipsReady = '1';
+
+    const tip = document.createElement('div');
+    tip.className = 'custom-tooltip';
+    tip.setAttribute('role', 'tooltip');
+    document.body.appendChild(tip);
+
+    let activeEl = null;
+
+    function placeTooltip(el) {
+      const rect = el.getBoundingClientRect();
+      const margin = 10;
+      const gap = 8;
+      tip.style.left = '0px';
+      tip.style.top = '0px';
+      const tipRect = tip.getBoundingClientRect();
+      let left = rect.left + (rect.width / 2) - (tipRect.width / 2);
+      left = Math.max(margin, Math.min(left, window.innerWidth - tipRect.width - margin));
+      let top = rect.top - tipRect.height - gap;
+      if (top < margin) top = rect.bottom + gap;
+      top = Math.max(margin, Math.min(top, window.innerHeight - tipRect.height - margin));
+      tip.style.left = `${Math.round(left)}px`;
+      tip.style.top = `${Math.round(top)}px`;
+    }
+
+    function showTooltip(el) {
+      const text = el.getAttribute('data-tooltip');
+      if (!text) return;
+      activeEl = el;
+      tip.textContent = text;
+      tip.classList.add('visible');
+      placeTooltip(el);
+    }
+
+    function hideTooltip(el) {
+      if (el && activeEl && el !== activeEl) return;
+      tip.classList.remove('visible');
+      activeEl = null;
+    }
+
+    document.addEventListener('pointerenter', (event) => {
+      const el = event.target && event.target.closest ? event.target.closest('[data-tooltip]') : null;
+      if (el) showTooltip(el);
+    }, true);
+    document.addEventListener('pointerleave', (event) => {
+      const el = event.target && event.target.closest ? event.target.closest('[data-tooltip]') : null;
+      if (el) hideTooltip(el);
+    }, true);
+    document.addEventListener('focusin', (event) => {
+      const el = event.target && event.target.closest ? event.target.closest('[data-tooltip]') : null;
+      if (el) showTooltip(el);
+    });
+    document.addEventListener('focusout', (event) => {
+      const el = event.target && event.target.closest ? event.target.closest('[data-tooltip]') : null;
+      if (el) hideTooltip(el);
+    });
+    window.addEventListener('scroll', () => {
+      if (activeEl) placeTooltip(activeEl);
+    }, true);
+    window.addEventListener('resize', () => {
+      if (activeEl) placeTooltip(activeEl);
+    });
   }
 
   function bindCanvas() {
@@ -2073,6 +2153,7 @@
     state.showCoords = false;
     state.colorComponents = true;
     state.displayPick = false;
+    state.showCusps = false;
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
     state.componentColors = [];
@@ -2110,6 +2191,7 @@
     if (refs.showCoords) refs.showCoords.checked = state.showCoords;
     if (refs.colorComponents) refs.colorComponents.checked = state.colorComponents;
     if (refs.displayPick) refs.displayPick.checked = state.displayPick;
+    if (refs.showCusps) refs.showCusps.checked = state.showCusps;
     if (refs.backgroundMultiEdges) refs.backgroundMultiEdges.checked = !!state.backgroundMultiEdges;
     if (refs.importInput && typeof (options && options.importText) === 'string') refs.importInput.value = options.importText;
     renderTilePalette();
@@ -2680,6 +2762,7 @@
     state.showCoords = !!(payload.display && payload.display.showCoords);
     state.colorComponents = !(payload.display && payload.display.colorComponents === false);
     state.displayPick = !!(payload.display && payload.display.pick);
+    state.showCusps = !!(payload.display && payload.display.cusps);
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
     state.componentColors = [];
@@ -2726,6 +2809,7 @@
     refs.showCoords.checked = state.showCoords;
     refs.colorComponents.checked = state.colorComponents;
     refs.displayPick.checked = state.displayPick;
+    if (refs.showCusps) refs.showCusps.checked = state.showCusps;
     refs.drawAction.value = state.drawAction;
     refs.knotCodeKind.value = state.knotCodeKind;
     refs.drawStyle.value = state.drawStyle;
@@ -3177,11 +3261,13 @@
     state.pickHoverHit = null;
     state.backgroundHoverEdge = null;
     state.displayPick = false;
+    state.showCusps = false;
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
     state.backgroundOrientability = null;
     clearBackgroundBilliard(false);
     if (refs.displayPick) refs.displayPick.checked = false;
+    if (refs.showCusps) refs.showCusps.checked = false;
     if (shouldRestoreInputMode) {
       state.inputMode = normalizeInputMode(returnMode);
       refs.inputMode.value = state.inputMode;
@@ -4278,11 +4364,11 @@
   function selectedBackgroundCusp(background = null) {
     const key = state.selectedBackgroundCusp;
     if (!key) return null;
-    if (background && !background.closedSurface) {
+    if (!shouldShowBackgroundCusps()) {
       state.selectedBackgroundCusp = null;
       return null;
     }
-    const vertices = computeBackgroundMarkedBoundaryVertices();
+    const vertices = computeDisplayedBackgroundCuspVertices();
     const vertex = vertices.find((entry) => entry.id === key) || null;
     if (!vertex) state.selectedBackgroundCusp = null;
     return vertex;
@@ -6057,6 +6143,13 @@
     return !!(background && background.closedSurface);
   }
 
+  function shouldShowBackgroundCusps(report = null) {
+    if (!state.showCusps || !isGluedBoundaryMode()) return false;
+    const background = report && report.background ? report.background : analyzeBackgroundSpace();
+    if (!background || background.existing <= 0) return false;
+    return hasRealBlackBackgroundBoundaryEdges() || !!background.closedSurface;
+  }
+
   function backgroundEdgeHitTest(clientX, clientY) {
     if (!isGluedBoundaryMode()) return null;
     const hit = isBackgroundGlueAction() || isBackgroundReverseGlueAction()
@@ -6775,13 +6868,14 @@
     }
 
     const boundaryComponents = countBackgroundBoundaryComponents();
-    const surface = analyzeClosedBackgroundSurface({
+    const backgroundBase = {
       total,
       existing,
       unmatchedBoundaries,
       boundaryComponents,
       components: componentRoots.size
-    });
+    };
+    const surface = analyzeBackgroundSurface(backgroundBase);
 
     return {
       total,
@@ -6794,6 +6888,11 @@
       components: componentRoots.size,
       closedSurface: surface.closedSurface,
       genus: surface.genus,
+      nonorientableGenus: surface.nonorientableGenus,
+      orientable: surface.orientable,
+      surfaceType: surface.surfaceType,
+      surfaceTypeHtml: surface.surfaceTypeHtml,
+      surfaceTypeTooltip: surface.surfaceTypeTooltip,
       cusps: surface.cusps,
       eulerCharacteristic: surface.eulerCharacteristic
     };
@@ -6847,12 +6946,6 @@
       }
     }
     return count;
-  }
-
-  function computeAndShowBackgroundOrientability() {
-    if (!isGluedBoundaryMode()) return;
-    state.backgroundOrientability = computeBackgroundOrientability();
-    updateReport(false);
   }
 
   function computeBackgroundOrientability() {
@@ -6957,37 +7050,65 @@
     };
   }
 
-  function analyzeClosedBackgroundSurface(background) {
-    const closedSurface = !!(
+  function analyzeBackgroundSurface(background) {
+    const connectedSurface = !!(
       background
       && isGluedBoundaryMode()
       && background.existing > 0
       && background.components === 1
-      && background.unmatchedBoundaries === 0
     );
-    if (!closedSurface) {
+    const closedSurface = !!(connectedSurface && background.unmatchedBoundaries === 0);
+    if (!connectedSurface) {
       return {
         closedSurface: false,
         genus: null,
+        nonorientableGenus: null,
+        orientable: null,
+        surfaceType: '',
+        surfaceTypeHtml: '-',
+        surfaceTypeTooltip: '',
         cusps: null,
         eulerCharacteristic: null,
-        quotientVertices: []
+        quotientVertices: [],
+        cuspVertices: []
       };
     }
 
     const quotient = computeBackgroundQuotientVertices();
     const faces = background.existing;
-    const edges = countBackgroundSurfaceEdges();
+    const edges = countBackgroundSurfaceEdges(background);
     const vertices = quotient.vertices.length;
-    const cuspVertices = backgroundCuspVerticesFromQuotient(quotient.vertices);
+    const cuspVertices = computeBackgroundSurfaceCuspVertices(quotient.vertices);
     const eulerCharacteristic = vertices - edges + faces;
-    const genusValue = (2 - eulerCharacteristic) / 2;
-    const genus = Math.abs(genusValue - Math.round(genusValue)) < 1e-6
-      ? Math.round(genusValue)
-      : Number(genusValue.toFixed(3));
-    return {
-      closedSurface: true,
+    const orientability = backgroundOrientabilityForClassification();
+    const orientable = orientability ? !!orientability.orientable : true;
+    const boundaryComponents = Math.max(0, Number(background.boundaryComponents) || 0);
+    const genusValue = orientable
+      ? (2 - boundaryComponents - eulerCharacteristic) / 2
+      : null;
+    const nonorientableGenusValue = orientable
+      ? null
+      : (2 - boundaryComponents - eulerCharacteristic);
+    const genus = numericTopologyInvariant(genusValue);
+    const nonorientableGenus = numericTopologyInvariant(nonorientableGenusValue);
+    const classification = formatBackgroundSurfaceClassification({
+      orientable,
       genus,
+      nonorientableGenus,
+      boundaryComponents,
+      cusps: cuspVertices.length,
+      closedSurface,
+      eulerCharacteristic
+    });
+
+    return {
+      closedSurface,
+      genus,
+      nonorientableGenus,
+      orientable,
+      surfaceType: classification.plain,
+      surfaceTypeHtml: classification.html,
+      surfaceTypeTooltip: classification.tooltip,
       cusps: cuspVertices.length,
       eulerCharacteristic,
       quotientVertices: quotient.vertices,
@@ -6995,10 +7116,31 @@
     };
   }
 
-  function countBackgroundSurfaceEdges() {
+  function analyzeClosedBackgroundSurface(background) {
+    const surface = analyzeBackgroundSurface(background);
+    if (!surface.closedSurface) {
+      return {
+        closedSurface: false,
+        genus: null,
+        nonorientableGenus: null,
+        orientable: surface.orientable,
+        surfaceType: '',
+        surfaceTypeHtml: '-',
+        surfaceTypeTooltip: '',
+        cusps: null,
+        eulerCharacteristic: null,
+        quotientVertices: [],
+        cuspVertices: []
+      };
+    }
+    return surface;
+  }
+
+  function countBackgroundSurfaceEdges(background = null) {
     const lattice = getLattice();
     let internalEdges = 0;
     let gluedEdges = 0;
+    let boundaryEdges = 0;
     for (let index = 0; index < state.rows * state.cols; index += 1) {
       if (!tileExists(index)) continue;
       const row = Math.floor(index / state.cols);
@@ -7015,7 +7157,117 @@
     cloneGluedEdges().forEach((pair) => {
       if (isValidBoundaryEdge(pair.first) && isValidBoundaryEdge(pair.second)) gluedEdges += 1;
     });
-    return internalEdges + gluedEdges;
+    if (background && background.unmatchedBoundaries > 0) {
+      boundaryEdges = countUngluedBackgroundBoundaryEdges();
+    }
+    return internalEdges + gluedEdges + boundaryEdges;
+  }
+
+  function computeBackgroundSurfaceCuspVertices(vertices = null) {
+    if (!hasRealBlackBackgroundBoundaryEdges()) {
+      return backgroundCuspVerticesFromQuotient(vertices || computeBackgroundQuotientVertices().vertices);
+    }
+    return computeDisplayedBackgroundCuspVertices()
+      .filter(isBackgroundConeCusp)
+      .sort(compareBackgroundCusps);
+  }
+
+  function backgroundOrientabilityForClassification() {
+    const cached = state.backgroundOrientability;
+    if (cached && cached.edits === state.edits && cached.computed) return cached;
+    return computeBackgroundOrientability();
+  }
+
+  function numericTopologyInvariant(value) {
+    if (!Number.isFinite(value)) return null;
+    const rounded = Math.round(value);
+    return Math.abs(value - rounded) < 1e-6 ? rounded : Number(value.toFixed(3));
+  }
+
+  function formatBackgroundSurfaceClassification(surface) {
+    const orientable = !!(surface && surface.orientable);
+    const boundaryComponents = Math.max(0, Number(surface && surface.boundaryComponents) || 0);
+    const cusps = Math.max(0, Number(surface && surface.cusps) || 0);
+    const genus = surface ? surface.genus : null;
+    const nonorientableGenus = surface ? surface.nonorientableGenus : null;
+    const compact = orientable
+      ? formatOrientableSurfaceSymbol(genus, boundaryComponents, cusps)
+      : formatNonorientableSurfaceSymbol(nonorientableGenus, boundaryComponents, cusps);
+    const tooltip = orientable
+      ? formatOrientableSurfaceTooltip(genus, boundaryComponents, cusps)
+      : formatNonorientableSurfaceTooltip(nonorientableGenus, boundaryComponents, cusps);
+    return {
+      plain: compact.plain,
+      html: `<span class="tooltip-label" tabindex="0" data-tooltip="${escapeHtmlAttribute(tooltip)}">${compact.html}</span>`,
+      tooltip
+    };
+  }
+
+  function formatOrientableSurfaceSymbol(genus, boundaryComponents, cusps) {
+    const g = formatTopologyNumber(genus);
+    const b = formatTopologyNumber(boundaryComponents);
+    if (boundaryComponents === 0) {
+      const cuspSuffix = cusps > 0 ? `,${formatTopologyNumber(cusps)}` : '';
+      return {
+        plain: `M_${g}${cuspSuffix}`,
+        html: `&#x1D4DC;<sub>${g}${cuspSuffix}</sub>`
+      };
+    }
+    const cuspPlain = cusps > 0 ? `^${formatTopologyNumber(cusps)}` : '';
+    const cuspHtml = cusps > 0 ? `<sup>${formatTopologyNumber(cusps)}</sup>` : '';
+    return {
+      plain: `Sigma_${g},${b}${cuspPlain}`,
+      html: `&Sigma;<sub>${g},${b}</sub>${cuspHtml}`
+    };
+  }
+
+  function formatNonorientableSurfaceSymbol(nonorientableGenus, boundaryComponents, cusps) {
+    const h = formatTopologyNumber(nonorientableGenus);
+    const b = formatTopologyNumber(boundaryComponents);
+    const cuspPlain = cusps > 0 ? `^${formatTopologyNumber(cusps)}` : '';
+    const cuspHtml = cusps > 0 ? `<sup>${formatTopologyNumber(cusps)}</sup>` : '';
+    return {
+      plain: `N_${h},${b}${cuspPlain}`,
+      html: `N<sub>${h},${b}</sub>${cuspHtml}`
+    };
+  }
+
+  function formatOrientableSurfaceTooltip(genus, boundaryComponents, cusps) {
+    const base = Number(genus) === 0 ? 'S^2' : `T_${formatTopologyNumber(genus)}`;
+    const holesText = boundaryComponents === 0
+      ? 'no holes'
+      : `${boundaryComponents} hole${boundaryComponents === 1 ? '' : 's'}`;
+    const cuspText = `${cusps} cusp${cusps === 1 ? '' : 's'}`;
+    return `${base} with ${holesText}, ${cuspText}`;
+  }
+
+  function formatNonorientableSurfaceTooltip(nonorientableGenus, boundaryComponents, cusps) {
+    const holesText = boundaryComponents === 0
+      ? 'no holes'
+      : `${boundaryComponents} hole${boundaryComponents === 1 ? '' : 's'}`;
+    const cuspText = `${cusps} cusp${cusps === 1 ? '' : 's'}`;
+    return `P_${formatTopologyNumber(nonorientableGenus)} with ${holesText}, ${cuspText}`;
+  }
+
+  function formatTopologyNumber(value) {
+    if (value == null) return '?';
+    return Number.isFinite(Number(value)) ? String(value) : '?';
+  }
+
+  function formatBackgroundGenusEulerPair(background) {
+    if (!background || background.eulerCharacteristic == null) return '-';
+    const genusValue = background.orientable === false
+      ? background.nonorientableGenus
+      : background.genus;
+    return `(${formatTopologyNumber(genusValue)}, ${formatTopologyNumber(background.eulerCharacteristic)})`;
+  }
+
+  function escapeHtmlAttribute(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
   }
 
   function computeBackgroundQuotientVertices() {
@@ -7132,6 +7384,32 @@
     return vertices;
   }
 
+  function computeDisplayedBackgroundCuspVertices() {
+    if (!hasRealBlackBackgroundBoundaryEdges()) return computeBackgroundMarkedBoundaryVertices();
+    const blackBoundaryKeys = realBlackBoundaryLogicalVertexKeySet();
+    const displayed = computeBackgroundMarkedBoundaryVertices()
+      .filter((entry) => !(entry.corners || []).some((corner) => (
+        blackBoundaryKeys.has(tileCornerLogicalVertexKey(corner.index, corner.vertex))
+      )))
+      .sort(compareBackgroundCusps);
+    labelBackgroundDisplayedVertices(displayed);
+    return displayed;
+  }
+
+  function labelBackgroundDisplayedVertices(vertices) {
+    let cuspIndex = 0;
+    let vertexIndex = 0;
+    vertices.forEach((entry) => {
+      if (isBackgroundConeCusp(entry)) {
+        cuspIndex += 1;
+        entry.label = `C${cuspIndex}`;
+      } else {
+        vertexIndex += 1;
+        entry.label = `B${vertexIndex}`;
+      }
+    });
+  }
+
   function backgroundCuspVerticesFromQuotient(vertices) {
     const cusps = (vertices || [])
       .filter(isBackgroundConeCusp)
@@ -7152,6 +7430,40 @@
       });
     });
     return keys;
+  }
+
+  function hasRealBlackBackgroundBoundaryEdges() {
+    const lattice = getLattice();
+    for (let index = 0; index < state.rows * state.cols; index += 1) {
+      if (!tileExists(index)) continue;
+      for (let dir = 0; dir < lattice.sides; dir += 1) {
+        if (isRealBlackBackgroundBoundaryEdge({ index, dir })) return true;
+      }
+    }
+    return false;
+  }
+
+  function realBlackBoundaryLogicalVertexKeySet() {
+    const keys = new Set();
+    const lattice = getLattice();
+    for (let index = 0; index < state.rows * state.cols; index += 1) {
+      if (!tileExists(index)) continue;
+      for (let dir = 0; dir < lattice.sides; dir += 1) {
+        const edge = { index, dir };
+        if (!isRealBlackBackgroundBoundaryEdge(edge)) continue;
+        boundaryEdgeLogicalVertexKeys(edge).forEach((key) => {
+          if (key) keys.add(key);
+        });
+      }
+    }
+    return keys;
+  }
+
+  function isRealBlackBackgroundBoundaryEdge(edge) {
+    const normalized = cloneBoundaryEdge(edge);
+    if (!normalized) return false;
+    return isBackgroundBoundaryEdge(normalized.index, normalized.dir)
+      && !isGluedBoundaryEdge(normalized.index, normalized.dir);
   }
 
   function isBackgroundConeCusp(vertex) {
@@ -7263,7 +7575,7 @@
     syncBackgroundModeControls();
     if (isGluedBoundaryMode() && state.inputMode === 'background') {
       const background = report.background || analyzeBackgroundSpace();
-      if (!background.closedSurface) {
+      if (!shouldShowBackgroundCusps(report)) {
         state.selectedBackgroundCusp = null;
         state.backgroundHoverCusp = null;
       }
@@ -7272,8 +7584,8 @@
       const glueText = background.gluedEdges > 0
         ? `, ${background.gluedEdges} glued pair${background.gluedEdges === 1 ? '' : 's'}`
         : '';
-      const surfaceText = background.closedSurface
-        ? `, genus ${background.genus}, ${background.cusps} cusp${background.cusps === 1 ? '' : 's'}`
+      const surfaceText = background.surfaceType
+        ? `, ${background.surfaceType}, χ=${formatTopologyNumber(background.eulerCharacteristic)}, ${background.cusps} cusp${background.cusps === 1 ? '' : 's'}`
         : '';
     const pendingGlueText = pendingGlueStatusText();
       refs.statusLine.textContent = pendingGlueText || backgroundBilliardStatusText() || selectedBackgroundCuspStatusText(background) || `${background.existing} existing tile${background.existing === 1 ? '' : 's'}, ${background.components} component${background.components === 1 ? '' : 's'}, ${background.unmatchedBoundaries} unmatched boundar${background.unmatchedBoundaries === 1 ? 'y' : 'ies'}${glueText}${surfaceText}`;
@@ -7301,15 +7613,21 @@
       if (refs.out.orientableRow) refs.out.orientableRow.hidden = false;
       if (refs.out.componentsLabel) refs.out.componentsLabel.textContent = 'Components';
       if (refs.out.componentsRow) refs.out.componentsRow.hidden = false;
-      if (refs.out.genusRow) refs.out.genusRow.hidden = !background.closedSurface;
-      if (refs.out.cuspsRow) refs.out.cuspsRow.hidden = !background.closedSurface;
+      const hasSurfaceClassification = background.components === 1 && background.existing > 0;
+      if (refs.out.surfaceTypeRow) refs.out.surfaceTypeRow.hidden = !hasSurfaceClassification;
+      if (refs.out.genusRow) refs.out.genusRow.hidden = !hasSurfaceClassification;
+      if (refs.out.cuspsRow) refs.out.cuspsRow.hidden = !hasSurfaceClassification;
       refs.out.tiles.textContent = `${background.existing}/${background.total}`;
       refs.out.openEnds.textContent = String(background.unmatchedBoundaries);
       if (refs.out.boundaryComponents) refs.out.boundaryComponents.textContent = String(background.boundaryComponents);
-      syncBackgroundOrientabilityStatistic();
+      syncBackgroundOrientabilityStatistic(background);
       refs.out.components.textContent = String(background.components);
-      if (refs.out.genus) refs.out.genus.textContent = background.closedSurface ? String(background.genus) : '-';
-      if (refs.out.cusps) refs.out.cusps.textContent = background.closedSurface ? String(background.cusps) : '-';
+      if (refs.out.surfaceType) refs.out.surfaceType.innerHTML = hasSurfaceClassification ? (background.surfaceTypeHtml || '-') : '-';
+      if (refs.out.genusLabel) refs.out.genusLabel.textContent = background.orientable === false ? '(h, χ)' : '(g, χ)';
+      if (refs.out.genus) refs.out.genus.textContent = hasSurfaceClassification
+        ? formatBackgroundGenusEulerPair(background)
+        : '-';
+      if (refs.out.cusps) refs.out.cusps.textContent = hasSurfaceClassification ? String(background.cusps) : '-';
       return;
     }
 
@@ -7320,6 +7638,7 @@
     if (refs.out.orientableRow) refs.out.orientableRow.hidden = true;
     if (refs.out.componentsLabel) refs.out.componentsLabel.textContent = 'Components';
     if (refs.out.componentsRow) refs.out.componentsRow.hidden = false;
+    if (refs.out.surfaceTypeRow) refs.out.surfaceTypeRow.hidden = true;
     if (refs.out.genusRow) refs.out.genusRow.hidden = true;
     if (refs.out.cuspsRow) refs.out.cuspsRow.hidden = true;
     refs.out.tiles.textContent = `${report.active}/${report.total}`;
@@ -7327,19 +7646,15 @@
     refs.out.components.textContent = String(report.components);
   }
 
-  function syncBackgroundOrientabilityStatistic() {
+  function syncBackgroundOrientabilityStatistic(background = null) {
     if (!refs.out || !refs.out.orientable) return;
-    const cached = state.backgroundOrientability;
-    if (cached && cached.edits === state.edits && cached.computed) {
-      refs.out.orientable.textContent = cached.orientable ? 'yes' : 'no';
-      refs.out.orientable.classList.toggle('mosaic-status-good', !!cached.orientable);
-      refs.out.orientable.classList.toggle('mosaic-status-bad', !cached.orientable);
+    if (background && background.orientable != null) {
+      refs.out.orientable.textContent = background.orientable ? 'yes' : 'no';
+      refs.out.orientable.classList.toggle('mosaic-status-good', !!background.orientable);
+      refs.out.orientable.classList.toggle('mosaic-status-bad', !background.orientable);
     } else {
-      refs.out.orientable.textContent = 'not computed';
+      refs.out.orientable.textContent = '-';
       refs.out.orientable.classList.remove('mosaic-status-good', 'mosaic-status-bad');
-    }
-    if (refs.out.computeOrientable) {
-      refs.out.computeOrientable.disabled = !isGluedBoundaryMode() || state.inputMode !== 'background';
     }
   }
 
@@ -12976,9 +13291,8 @@
   }
 
   function drawBackgroundCuspOverlay(ctx, palette, report) {
-    if (state.inputMode !== 'background') return;
-    if (!isClosedBackgroundSurface(report)) return;
-    const vertices = computeBackgroundMarkedBoundaryVertices();
+    if (!shouldShowBackgroundCusps(report)) return;
+    const vertices = computeDisplayedBackgroundCuspVertices();
     if (!vertices.length) return;
     const selectedKey = state.selectedBackgroundCusp;
     const hoverKey = state.backgroundHoverCusp && state.backgroundHoverCusp.id;
@@ -15608,7 +15922,7 @@
   }
 
   function backgroundCuspHitTest(clientX, clientY) {
-    if (!geometry || !isClosedBackgroundSurface()) return null;
+    if (!geometry || !shouldShowBackgroundCusps()) return null;
     return backgroundCuspHitAtBoardPoint(clientPointToBoardPoint(clientX, clientY));
   }
 
@@ -15790,7 +16104,7 @@
   }
 
   function backgroundCuspHitAtBoardPoint(point) {
-    const vertices = computeBackgroundMarkedBoundaryVertices();
+    const vertices = computeDisplayedBackgroundCuspVertices();
     const maxDistance = Math.max(7, geometry.radius * 0.2);
     let best = null;
     vertices.forEach((vertex) => {
@@ -16007,6 +16321,7 @@
         showCoords: state.showCoords,
         colorComponents: state.colorComponents,
         pick: state.displayPick,
+        cusps: state.showCusps,
         drawAction: state.drawAction,
         knotCodeKind: state.knotCodeKind,
         drawStyle: state.drawStyle,
@@ -16202,6 +16517,7 @@
     if (refs.clearHalfEdgeDecorations) refs.clearHalfEdgeDecorations.checked = !!state.clearHalfEdgeDecorations;
     refs.colorComponents.checked = state.colorComponents;
     refs.displayPick.checked = state.displayPick;
+    if (refs.showCusps) refs.showCusps.checked = state.showCusps;
     syncDualGraphInvariantVisibility();
     if (refs.showDualGraphCanvas) refs.showDualGraphCanvas.checked = state.showDualGraphCanvas;
     if (refs.showRiemannSurfaceCanvas) refs.showRiemannSurfaceCanvas.checked = state.showRiemannSurfaceCanvas;
@@ -16757,6 +17073,15 @@
     if (refs.wrappedViewRow) {
       refs.wrappedViewRow.hidden = !state.wrapped;
       refs.wrappedViewMode.disabled = !state.wrapped;
+    }
+    if (refs.showCuspsRow) refs.showCuspsRow.hidden = !isGluedBoundaryMode();
+    if (refs.showCusps) refs.showCusps.disabled = !isGluedBoundaryMode();
+    if (!isGluedBoundaryMode()) {
+      state.backgroundHoverCusp = null;
+      state.selectedBackgroundCusp = null;
+    } else if (!shouldShowBackgroundCusps()) {
+      state.backgroundHoverCusp = null;
+      state.selectedBackgroundCusp = null;
     }
     if (refs.knotCard) refs.knotCard.hidden = isDualGraph();
     if (refs.dualGraphCard) refs.dualGraphCard.hidden = !isDualGraph();

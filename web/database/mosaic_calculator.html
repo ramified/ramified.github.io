@@ -1220,9 +1220,10 @@
         <div class="stat-row" id="out-tiles-row"><span class="stat-label" id="out-tiles-label">Filled tiles</span><span class="stat-value" id="out-tiles">0</span></div>
         <div class="stat-row" id="out-open-ends-row"><span class="stat-label" id="out-open-ends-label">Open ends</span><span class="stat-value" id="out-open-ends">0</span></div>
         <div class="stat-row" id="out-boundary-components-row" hidden><span class="stat-label" id="out-boundary-components-label">Boundary components</span><span class="stat-value" id="out-boundary-components">0</span></div>
-        <div class="stat-row" id="out-orientable-row" hidden><span class="stat-label" id="out-orientable-label">Orientable</span><span class="stat-value stat-action-value"><span id="out-orientable">not computed</span><button class="btn btn-ghost stat-compute-btn" id="compute-background-orientable" type="button">compute</button></span></div>
+        <div class="stat-row" id="out-orientable-row" hidden><span class="stat-label" id="out-orientable-label">Orientable</span><span class="stat-value" id="out-orientable">-</span></div>
         <div class="stat-row" id="out-components-row"><span class="stat-label" id="out-components-label">Components</span><span class="stat-value" id="out-components">0</span></div>
-        <div class="stat-row" id="out-genus-row" hidden><span class="stat-label">Genus</span><span class="stat-value" id="out-genus">-</span></div>
+        <div class="stat-row" id="out-surface-type-row" hidden><span class="stat-label">Type</span><span class="stat-value" id="out-surface-type">-</span></div>
+        <div class="stat-row" id="out-genus-row" hidden><span class="stat-label" id="out-genus-label">(genus, &chi;)</span><span class="stat-value" id="out-genus">-</span></div>
         <div class="stat-row" id="out-cusps-row" hidden><span class="stat-label">Cusps</span><span class="stat-value" id="out-cusps">-</span></div>
       </div>
     </section>
@@ -1355,6 +1356,7 @@
         <div class="mosaic-opt-pair">
           <label class="opt-row"><input type="checkbox" id="color-components" checked> Color components</label>
           <label class="opt-row"><input type="checkbox" id="display-pick"> Pick</label>
+          <label class="opt-row" id="show-cusps-row" hidden><input type="checkbox" id="show-cusps"> cusps</label>
         </div>
         <div class="mosaic-inline-row" id="wrapped-view-row" hidden>
           <span class="input-label">Wrapped view</span>

@@ -3683,6 +3683,38 @@
       updateInputEditorTitles();
       return map;
     }
+    if (abelJacobiMapInputMode()) {
+      const data = abelJacobiMapDraftData(map);
+      if (!data) return null;
+      const endpointsChanged = map.domainKind !== 'variety'
+        || map.domainId !== data.curve.id
+        || map.codomainKind !== 'variety'
+        || map.codomainId !== data.jacobian.id;
+      map.name = data.name;
+      map.domainKind = 'variety';
+      map.domainId = data.curve.id;
+      map.codomainKind = 'variety';
+      map.codomainId = data.jacobian.id;
+      map.nameDirty = data.nameDirty;
+      map.construction = {
+        type: 'abel-jacobi',
+        curveId: data.curve.id,
+        jacobianId: data.jacobian.id,
+        defaultName: data.defaultName,
+        nameDirty: data.nameDirty
+      };
+      if (endpointsChanged) {
+        map.curve = null;
+        map.defaultBendPx = isSelfMap(map) ? nextDefaultSelfMapAngle(map) : nextDefaultMapBend(map);
+      }
+      ensureCurveSymplecticBasis(data.curve);
+      ensureAbelJacobiKnownHomologyRules(map);
+      positionMapLabel(map);
+      syncObjectLineage(map, 'map');
+      refreshConstructedObjects();
+      updateInputEditorTitles();
+      return map;
+    }
     if (mapCompositionInputMode()) {
       const data = mapCompositionConstructionData();
       if (!data) return null;
@@ -3747,6 +3779,28 @@
     };
   }
 
+  function abelJacobiMapDraftData(map = selectedMap()) {
+    const curve = mapDraftAbelJacobiCurve();
+    if (!curve) return null;
+    const activeConstruction = map?.construction?.type === 'abel-jacobi' ? map.construction : null;
+    let jacobian = activeConstruction?.curveId === curve.id
+      ? state.varieties.find((item) => item.id === activeConstruction.jacobianId)
+      : null;
+    if (!jacobian) jacobian = createJacobianVariety(curve);
+    if (!jacobian) return null;
+    const defaultName = defaultAbelJacobiMapNameFromCurve(curve);
+    const name = state.draftMapNameDirty
+      ? sanitizeMathLabel(refs.mapName?.value, defaultName)
+      : readMapDraftName();
+    return {
+      curve,
+      jacobian,
+      defaultName,
+      name,
+      nameDirty: state.draftMapNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName)
+    };
+  }
+
   function mapCompositionConstructionData() {
     const [firstId, secondId] = mapDraftMapIds();
     const first = state.maps.find((item) => item.id === firstId);
@@ -3789,7 +3843,6 @@
     if (kind === 'number') return updateGlobalInvariantFromDraft(active);
     if (kind === 'sequence') return updateShortExactSequenceFromDraft();
     if (kind === 'map') {
-      if (abelJacobiMapInputMode()) return null;
       return updateMapFromDraft(active);
     }
     if (kind === 'sheaf') {
@@ -11427,7 +11480,7 @@
   function abelJacobiMapPickHint() {
     if (!abelJacobiCurveVarieties().length) return 'add a curve with positive numerical genus below 10 first';
     if (!mapDraftAbelJacobiCurve()) return 'click the source curve';
-    return inputIsModifyMode() ? 'Abel-Jacobi maps are rebuilt from the source curve' : 'click build to create the Jacobian and Abel-Jacobi map';
+    return inputIsModifyMode() ? 'click update to update the Abel-Jacobi map' : 'click build to create the Jacobian and Abel-Jacobi map';
   }
 
   function allowableMapCompositionPick(mapId, target = state.mapPickTarget) {
@@ -12000,6 +12053,10 @@
     if (refs.mapType?.value === 'composition') {
       const defaultName = defaultMapNameLatex();
       return inputIsModifyMode() ? defaultName : uniqueObjectName('map', defaultName);
+    }
+    if (refs.mapType?.value === 'abel-jacobi') {
+      const defaultName = defaultMapNameLatex();
+      return inputIsModifyMode() ? defaultName : uniqueConstructedObjectName('map', defaultName);
     }
     if (inputIsModifyMode()) return defaultMapNameLatex();
     if (!refs.repeatNames?.checked) return defaultMapNameLatex();
