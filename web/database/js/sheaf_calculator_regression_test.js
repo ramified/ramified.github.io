@@ -19,6 +19,7 @@ function loadCalculator() {
     applyHomologyRules,
     createSymbolicBudget,
     currentHomologyRulePasses,
+    chartRevealAvailability,
     parseSymbolicRuleCoefficient,
     formatRuleCoefficientPlain,
     homologyRuleRhsPoly,
@@ -52,6 +53,8 @@ function loadCalculator() {
     sheafChernClassUsesBaseHomology,
     computedSheafChernClassRule,
     baseHomologyRuleFromSheafChernRule,
+    sheafHomologyClassDefinitions,
+    sheafHomologyRuleForDef,
     renderSheafHomologyLhs,
     renderSheafHomologySpecialAction,
     HOMOLOGY_HYPERPLANE_CLASS,
@@ -753,6 +756,22 @@ function testCurveToProjectivePullbackUsesCurvePoint() {
     construction: { type: 'pullback', mapId: 'f', sheafId: 'O1' }
   });
   assert.strictEqual(chernPlain(rows), '1 + [p]');
+}
+
+function testCurveSymplecticBasisIsOptIn() {
+  const api = loadCalculator();
+  const curve = { id: 'C', type: 'curve', genus: '2', name: 'C' };
+  api.state.varieties = [curve];
+
+  const hiddenGeometry = api.geometryFromVariety(curve);
+  assert.strictEqual(api.homologyClassDefinitions(hiddenGeometry).some((def) => def.id === 'curve_a_1'), false);
+  assert.strictEqual(hiddenGeometry.homology.rules.some((rule) => String(rule.id).startsWith('curve-symplectic-')), false);
+
+  curve.homology.symplecticBasisConfirmed = true;
+  const visibleGeometry = api.geometryFromVariety(curve);
+  assert.strictEqual(api.homologyClassDefinitions(visibleGeometry).some((def) => def.id === 'curve_a_1'), true);
+  assert.strictEqual(api.homologyClassDefinitions(visibleGeometry).some((def) => def.id === 'curve_b_2'), true);
+  assert.strictEqual(visibleGeometry.homology.rules.some((rule) => String(rule.id).startsWith('curve-symplectic-')), true);
 }
 
 function testProjectivePullbackStillUsesTargetHyperplane() {
@@ -2540,6 +2559,110 @@ function testProductCustomClassBidegreeTruncatesImpossiblePowers() {
   assert.strictEqual(api.formatPolyPlain(api.applyHomologyRules(cube, { geometry, homology: geometry.homology })), '0');
 }
 
+function testProjectionPushforwardUsesFiberTopBidegree() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'X', type: 'projective', dim: '1', name: 'X' },
+    { id: 'Y', type: 'projective', dim: '1', name: 'Y' },
+    {
+      id: 'XY',
+      type: 'abstract',
+      dim: '2',
+      name: 'X\\times Y',
+      construction: { type: 'product', varietyIds: ['X', 'Y'], defaultName: 'X\\times Y' },
+      homology: { rules: [] }
+    }
+  ];
+  api.state.maps = [{
+    id: 'p1',
+    name: 'p_1',
+    domainKind: 'variety',
+    domainId: 'XY',
+    codomainKind: 'variety',
+    codomainId: 'X',
+    construction: { type: 'projection', productId: 'XY', factorIndex: 0 }
+  }];
+  api.state.activeHomologyTarget = { kind: 'map', id: 'p1' };
+  const productGeometry = api.geometryFromVariety(api.state.varieties[2]);
+  const targetGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const sourceDefs = api.homologyClassDefinitions(productGeometry);
+  const yGeometry = api.geometryFromVariety(api.state.varieties[1]);
+  const yPointId = api.homologyVariableId(api.HOMOLOGY_POINT_CLASS, yGeometry);
+  const fiberPointBox = sourceDefs.find((def) => def.productBox?.leftKey === '' && def.productBox?.rightKey === `${yPointId}:1`);
+  assert(fiberPointBox);
+
+  const sourceBidegrees = (defs) => defs
+    .map((def) => api.VARS.get(def.variableId)?.sourceKey || '')
+    .flatMap((sourceKey) => sourceKey.split('|').map((part) => part.split(':')[0]).filter(Boolean))
+    .map((id) => api.VARS.get(id)?.productBidegree)
+    .filter(Array.isArray)
+    .map((bidegree) => bidegree.join(','));
+
+  const candidateBidegrees = sourceBidegrees(api.mapHomologyClassDefinitions(targetGeometry));
+  assert(!candidateBidegrees.includes('2,0'));
+  assert(!candidateBidegrees.includes('0,2'));
+
+  const defaultBidegrees = sourceBidegrees(api.defaultMapHomologyRulesForGeometry(targetGeometry)
+    .filter((rule) => String(rule.id || '').startsWith('default-projection-pushforward-p1-'))
+    .map((rule) => ({ variableId: Object.keys(rule.lhs?.powers || {})[0] }))
+    .filter((def) => def.variableId));
+  assert(!defaultBidegrees.includes('2,0'));
+  assert(!defaultBidegrees.includes('0,2'));
+
+  const fiberPointBoxId = api.homologyDefVariableId(fiberPointBox, productGeometry);
+  const pushedFiberPoint = api.pushforwardPolynomialByDegree(
+    api.state.maps[0],
+    api.polyFromPowers({ [fiberPointBoxId]: 1 }),
+    productGeometry.dim,
+    targetGeometry.dim,
+    {}
+  );
+  assert.strictEqual(api.formatPolyPlain(pushedFiberPoint), '1');
+
+  const productPointId = api.homologyVariableId(api.HOMOLOGY_POINT_CLASS, productGeometry);
+  const pushedProductPoint = api.pushforwardPolynomialByDegree(
+    api.state.maps[0],
+    api.polyFromPowers({ [productPointId]: 1 }),
+    productGeometry.dim,
+    targetGeometry.dim,
+    {}
+  );
+  assert.strictEqual(api.formatPolyPlain(pushedProductPoint), '[p]');
+}
+
+function testProductBoxMultiplicationUsesKoszulSign() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'X', type: 'curve', genus: '1', name: 'X', homology: { symplecticBasisConfirmed: true } },
+    { id: 'Y', type: 'curve', genus: '1', name: 'Y', homology: { symplecticBasisConfirmed: true } },
+    {
+      id: 'XY',
+      type: 'abstract',
+      dim: '2',
+      name: 'X\\times Y',
+      construction: { type: 'product', varietyIds: ['X', 'Y'], defaultName: 'X\\times Y' },
+      homology: { rules: [] }
+    }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[2]);
+  const defs = api.homologyClassDefinitions(geometry);
+  const xGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const yGeometry = api.geometryFromVariety(api.state.varieties[1]);
+  const xA = api.homologyVariableId('curve_a_1', xGeometry);
+  const xB = api.homologyVariableId('curve_b_1', xGeometry);
+  const yA = api.homologyVariableId('curve_a_1', yGeometry);
+  const yB = api.homologyVariableId('curve_b_1', yGeometry);
+  const aa = defs.find((def) => def.productBox?.leftKey === `${xA}:1` && def.productBox?.rightKey === `${yA}:1`);
+  const bb = defs.find((def) => def.productBox?.leftKey === `${xB}:1` && def.productBox?.rightKey === `${yB}:1`);
+  assert(aa);
+  assert(bb);
+  const aaId = api.homologyDefVariableId(aa, geometry);
+  const bbId = api.homologyDefVariableId(bb, geometry);
+  const product = api.polyFromPowers({ [aaId]: 1 }).mul(api.polyFromPowers({ [bbId]: 1 }), geometry.dim);
+  const reduced = api.applyHomologyRules(product, { geometry, homology: geometry.homology });
+  assert.strictEqual(api.formatPolyPlain(reduced), '-[p]');
+}
+
 function testPicardPoincareGammaDefaultsToProductBidegree() {
   const api = loadCalculator();
   const curve = { id: 'C', type: 'curve', genus: '2', name: 'C' };
@@ -2560,6 +2683,155 @@ function testPicardPoincareGammaDefaultsToProductBidegree() {
   const gammaId = api.homologyDefVariableId(gamma, geometry);
   const cube = api.polyFromPowers({ [gammaId]: 3 });
   assert.strictEqual(api.formatPolyPlain(api.applyHomologyRules(cube, { geometry, homology: geometry.homology })), '0');
+
+  const sheafModel = api.sheafFromObject(sheaf, geometry);
+  const result = api.buildCharacteristicClasses(geometry, sheafModel);
+  const chern = chernPlain(result.classRows);
+  assert(chern.includes('gamma'));
+  assert(chern.includes('d*[p]boxtimes 1'));
+  assert(!chern.includes('c_2'));
+  assert(!chern.includes('c_3'));
+
+  const c1Def = api.sheafHomologyClassDefinitions(sheafModel, geometry).find((def) => def.degree === 1);
+  const defaultRule = result.bundle.defaultSheafHomologyRules.find((rule) => rule.lhs?.powers?.[c1Def.id] === 1);
+  assert(defaultRule);
+  assert.notStrictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(defaultRule)), '0');
+
+  const staleZeroRule = {
+    id: `default-sheaf-rule-${c1Def.id}`,
+    builtin: true,
+    enabled: true,
+    lhs: { powers: { [c1Def.id]: 1 } },
+    rhs: []
+  };
+  const displayedRule = api.sheafHomologyRuleForDef(c1Def, [staleZeroRule]);
+  const displayedPlain = api.formatPolyPlain(api.homologyRuleRhsPoly(displayedRule));
+  assert(displayedPlain.includes('gamma'));
+  assert(displayedPlain.includes('d*'));
+  assert.notStrictEqual(displayedPlain, '0');
+}
+
+function testPicardPoincareSheafKeepsClassRevealAvailableBeforeResult() {
+  const api = loadCalculator();
+  const curve = { id: 'C', type: 'curve', genus: '2', name: 'C' };
+  api.state.varieties = [curve];
+  const sheaf = api.createPicardCanonicalConstruction({
+    curve,
+    genus: 2,
+    degreeSymbol: 'd',
+    degreeValue: ''
+  });
+  assert(sheaf);
+  api.state.inputMode = 'modify';
+  api.state.activeSheafId = sheaf.id;
+  api.state.activeMapId = null;
+  api.state.lastResult = null;
+  assert.strictEqual(api.chartRevealAvailability(null).classes, true);
+}
+
+function testPicardPoincareLargeGenusThetaAndProjectionRules() {
+  const api = loadCalculator();
+  const genus = 9;
+  const curve = { id: 'C', type: 'curve', genus: String(genus), name: 'C' };
+  api.state.varieties = [curve];
+  const sheaf = api.createPicardCanonicalConstruction({
+    curve,
+    genus,
+    degreeSymbol: 'd',
+    degreeValue: ''
+  });
+  assert(sheaf);
+  const product = api.state.varieties.find((variety) => variety.construction?.type === 'product');
+  const picard = api.state.varieties.find((variety) => variety.construction?.type === 'picard-variety');
+  const projectionPicard = api.state.maps.find((map) => map.construction?.type === 'projection' && map.codomainId === picard.id);
+  assert(product);
+  assert(picard);
+  assert(projectionPicard);
+
+  const productGeometry = api.geometryFromVariety(product);
+  const picardGeometry = api.geometryFromVariety(picard);
+  const thetaDef = api.homologyClassDefinitions(picardGeometry).find((def) => def.id === 'theta');
+  assert(thetaDef);
+  const thetaId = api.homologyDefVariableId(thetaDef, picardGeometry);
+  const pointId = api.homologyVariableId(api.HOMOLOGY_POINT_CLASS, picardGeometry);
+  const thetaTopRule = api.standardHomologyRules(picardGeometry)
+    .find((rule) => rule.lhs?.powers?.[thetaId] === genus);
+  assert(thetaTopRule);
+  assert.strictEqual(thetaTopRule.rhs[0].coefficient, '362880');
+  assert.strictEqual(thetaTopRule.rhs[0].powers[pointId], 1);
+
+  const gammaDef = api.homologyClassDefinitions(productGeometry).find((def) => def.id === 'picard_poincare_gamma');
+  const etaDef = api.homologyClassDefinitions(productGeometry).find((def) => def.id === 'picard_eta');
+  assert(gammaDef);
+  assert(etaDef);
+  const gammaId = api.homologyDefVariableId(gammaDef, productGeometry);
+  const etaId = api.homologyDefVariableId(etaDef, productGeometry);
+  const projectionRules = api.defaultMapHomologyRulesForGeometry(picardGeometry);
+  const etaRule = projectionRules.find((rule) => rule.id === `default-picard-projection-eta-pushforward-${projectionPicard.id}`);
+  const gammaSquareRule = projectionRules.find((rule) => rule.id === `default-picard-projection-gamma-square-pushforward-${projectionPicard.id}`);
+  assert(etaRule);
+  assert(gammaSquareRule);
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(etaRule)), '1');
+  assert.strictEqual(api.VARS.get(Object.keys(etaRule.lhs.powers)[0])?.sourceKey, `${etaId}:1`);
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(gammaSquareRule)), '-2*Theta');
+  assert.strictEqual(api.VARS.get(Object.keys(gammaSquareRule.lhs.powers)[0])?.sourceKey, `${gammaId}:2`);
+
+  const sheafModel = api.sheafFromObject(sheaf, productGeometry);
+  const result = api.buildCharacteristicClasses(productGeometry, sheafModel);
+  const c1Def = api.sheafHomologyClassDefinitions(sheafModel, productGeometry).find((def) => def.degree === 1);
+  const displayedRule = api.sheafHomologyRuleForDef(c1Def, result.bundle.defaultSheafHomologyRules);
+  const displayedPlain = api.formatPolyPlain(api.homologyRuleRhsPoly(displayedRule));
+  assert(displayedPlain.includes('gamma'));
+  assert(displayedPlain.includes('d*eta'));
+  assert.notStrictEqual(displayedPlain, '0');
+}
+
+function testPicardPushforwardDoesNotInventHyperplaneClass() {
+  const api = loadCalculator();
+  const curve = { id: 'C', type: 'curve', genus: '3', name: 'C' };
+  api.state.varieties = [curve];
+  const poincare = api.createPicardCanonicalConstruction({
+    curve,
+    genus: 3,
+    degreeSymbol: 'd',
+    degreeValue: ''
+  });
+  assert(poincare);
+  const picard = api.state.varieties.find((variety) => variety.construction?.type === 'picard-variety');
+  const product = api.state.varieties.find((variety) => variety.construction?.type === 'product');
+  const projectionPicard = api.state.maps.find((map) => map.construction?.type === 'projection' && map.codomainId === picard.id);
+  assert(picard);
+  assert(product);
+  assert(projectionPicard);
+
+  const rows = characteristicRows(api, {
+    id: 'F',
+    type: 'abstract',
+    basis: 'chern',
+    twist: '1',
+    rank: 'r',
+    name: 'F',
+    baseVarietyId: picard.id,
+    construction: {
+      type: 'pushforward',
+      mapId: projectionPicard.id,
+      sheafId: poincare.id,
+      exact: true,
+      proper: true
+    }
+  });
+  const c = chernPlain(rows);
+  const ch = characterPlain(rows);
+  assert(!c.includes('H'));
+  assert(!ch.includes('H'));
+  assert(!ch.includes('pi_'));
+  assert(ch.includes('d'));
+  assert(ch.includes('Theta'));
+
+  const picardGeometry = api.geometryFromVariety(picard);
+  assert.strictEqual(api.homologyClassDefinitions(picardGeometry).some((def) => def.id === api.HOMOLOGY_HYPERPLANE_CLASS), false);
+  const hyperplaneVariables = Array.from(api.VARS.entries()).filter(([id, data]) => id.includes('_H') || data.latex === 'H');
+  assert.deepStrictEqual(hyperplaneVariables, []);
 }
 
 function testClassDisplayUsesCappedPasses() {
@@ -2642,6 +2914,7 @@ function testSheafBinaryPickFlowRegistryCoversSheafCandidates() {
 }
 
 testCurveToProjectivePullbackUsesCurvePoint();
+testCurveSymplecticBasisIsOptIn();
 testProjectivePullbackStillUsesTargetHyperplane();
 testDuplicateDisplayNamesHaveDistinctInternalClasses();
 testDuplicateSheafNamesHaveDistinctInternalClasses();
@@ -2716,7 +2989,12 @@ testHomologyRulePassesAreCapped();
 testSymbolicBudgetFallbackKeepsUnsimplifiedPolynomial();
 testHomologyCoefficientEditorAcceptsSymbolicRationalPolynomials();
 testProductCustomClassBidegreeTruncatesImpossiblePowers();
+testProjectionPushforwardUsesFiberTopBidegree();
+testProductBoxMultiplicationUsesKoszulSign();
 testPicardPoincareGammaDefaultsToProductBidegree();
+testPicardPoincareSheafKeepsClassRevealAvailableBeforeResult();
+testPicardPoincareLargeGenusThetaAndProjectionRules();
+testPicardPushforwardDoesNotInventHyperplaneClass();
 testClassDisplayUsesCappedPasses();
 testProductPickFlowRegistryCoversCandidatesAndSelection();
 testMapCompositionPickFlowRegistryCoversMapCandidates();

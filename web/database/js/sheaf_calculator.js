@@ -15,6 +15,7 @@
   const MAX_PPAV_GENUS = maxPpavGenusForDimension(MAX_DIMENSION);
   const DEFAULT_HOMOLOGY_RULE_PASSES = 1;
   const MAX_HOMOLOGY_RULE_PASSES = 8;
+  const HOMOLOGY_RULE_COLLAPSE_THRESHOLD = 10;
   const RECOMPUTE_DELAY_MS = 16;
   const CLASS_REFRESH_DELAY_MS = 16;
   const SYMBOLIC_WORK_BUDGET = {
@@ -170,6 +171,7 @@
     homologyRulePasses: DEFAULT_HOMOLOGY_RULE_PASSES,
     homologyMapInputMode: 'coefficients',
     homologyMapClassTableOpen: false,
+    homologyRuleListOpenByTarget: {},
     homologyExpressionTransposed: true,
     editingHomologySymbolId: null,
     editingHomologySymbolVarietyId: null,
@@ -2151,7 +2153,7 @@
     const kind = modifying ? modifyKind() : null;
     return {
       hodge: modifying && kind === 'variety' && !!result?.hodge,
-      classes: modifying && kind === 'sheaf' && !!result && !!selectedSheaf(),
+      classes: modifying && kind === 'sheaf' && !!selectedSheaf(),
       cohomology: modifying && kind === 'sheaf' && !!result?.cohomology?.dimensions?.length
     };
   }
@@ -3779,7 +3781,6 @@
         map.curve = null;
         map.defaultBendPx = isSelfMap(map) ? nextDefaultSelfMapAngle(map) : nextDefaultMapBend(map);
       }
-      ensureCurveSymplecticBasis(data.curve);
       ensureAbelJacobiKnownHomologyRules(map);
       positionMapLabel(map);
       syncObjectLineage(map, 'map');
@@ -4773,7 +4774,7 @@
     }
     if (refs.homologyJacobianBasisAction) {
       refs.homologyJacobianBasisAction.addEventListener('click', () => {
-        addJacobianSymplecticBasisFromPanel(refs.homologyJacobianBasisAction.dataset.addJacobianBasis || '');
+        addSymplecticBasisFromPanel(refs.homologyJacobianBasisAction.dataset.addJacobianBasis || '');
       });
     }
     if (refs.homologyUpdateAll) {
@@ -4872,6 +4873,11 @@
           return;
         }
       });
+      refs.homologyRules.addEventListener('toggle', (event) => {
+        const ruleDisclosure = event.target.closest('[data-homology-rule-disclosure]');
+        if (!ruleDisclosure) return;
+        state.homologyRuleListOpenByTarget[ruleDisclosure.dataset.homologyRuleDisclosure || 'default'] = ruleDisclosure.open;
+      }, true);
       refs.homologyRules.addEventListener('keydown', (event) => {
         const input = event.target.closest('input[data-map-homology-rule]');
         const coefficientInput = event.target.closest('[data-map-homology-coeff]');
@@ -7483,18 +7489,6 @@
     variety.homology = homology;
   }
 
-  function ensureCurveSymplecticBasis(curve) {
-    const geometry = geometryFromVariety(curve);
-    const genus = abelJacobiCurveGenus(geometry);
-    if (genus == null || genus === 0) return true;
-    const homology = curve.homology && typeof curve.homology === 'object' ? curve.homology : {};
-    if (homology.symplecticBasisConfirmed) return true;
-    homology.symplecticBasisConfirmed = true;
-    curve.homology = homology;
-    geometryFromVariety(curve);
-    return true;
-  }
-
   function createProjectionMapForProduct(product, factor, factorIndex) {
     if (!product || !factor) return null;
     const defaultName = defaultProjectionMapNameFromObjects(product, factor, factorIndex);
@@ -8426,7 +8420,6 @@
   function createAbelJacobiMapFromDraft() {
     const curve = mapDraftAbelJacobiCurve();
     if (!curve) return null;
-    ensureCurveSymplecticBasis(curve);
     const jacobian = createJacobianVariety(curve);
     if (!jacobian) return null;
     const defaultName = defaultAbelJacobiMapNameFromCurve(curve);
@@ -14400,7 +14393,6 @@
       construction.defaultName = nextDefault;
       changed = true;
     }
-    ensureCurveSymplecticBasis(curve);
     if (ensureAbelJacobiKnownHomologyRules(map)) changed = true;
     if (syncObjectLineage(map, 'map')) changed = true;
     return changed;
@@ -15203,6 +15195,11 @@
       const labelLatex = sanitizeMathLabel(variety.name, 'A');
       Object.assign(variety, { dim: String(dim), name: labelLatex });
       const isJacobian = variety.construction?.type === 'jacobian' || variety.specialLabels?.includes('jacobian');
+      const isPicard = variety.construction?.type === 'picard-variety' || variety.specialLabels?.includes('picard');
+      const specialLabels = [
+        ...(isJacobian ? ['jacobian'] : []),
+        ...(isPicard ? ['picard', 'theta-divisor'] : [])
+      ];
       const jacobianCurve = isJacobian
         ? state.varieties.find((item) => item.id === variety.construction?.curveId)
         : null;
@@ -15217,8 +15214,8 @@
         labelPlain: latexToPlain(labelLatex),
         ambientLatex: 'abelian',
         ambientPlain: 'abelian',
+        ...(specialLabels.length ? { specialLabels } : {}),
         ...(isJacobian ? {
-          specialLabels: ['jacobian'],
           jacobianCurveId: jacobianCurve?.id || variety.construction?.curveId || null,
           jacobianCurveGenus
         } : {})
@@ -15340,8 +15337,8 @@
     const deletedStandardRules = homology.rules.filter((rule) => isStandardHomologyRuleId(rule.id) && rule.deleted);
     const deletedStandardRuleIds = new Set(deletedStandardRules.map((rule) => rule.id));
     const customRules = homology.rules.filter((rule) => !isStandardHomologyRuleId(rule.id));
-    const standardRules = standardHomologyRules(geometry, existingStandardRules);
     const normalizationGeometry = { ...geometry, homology };
+    const standardRules = standardHomologyRules(normalizationGeometry, existingStandardRules);
     homology.rules = [
       ...standardRules.filter((rule) => !deletedStandardRuleIds.has(rule.id)),
       ...deletedStandardRules,
@@ -15541,35 +15538,42 @@
         const cohomologyDegree = left.cohomologyDegree + right.cohomologyDegree;
         if (cohomologyDegree > 2 * geometry.dim) continue;
         if (!productBidegreeFits(context, [left.cohomologyDegree, right.cohomologyDegree])) continue;
-        const productBox = {
-          factorIds: context.factorIds,
-          leftKey: left.key,
-          rightKey: right.key,
-          leftDegree: left.degree,
-          rightDegree: right.degree,
-          leftCohomologyDegree: left.cohomologyDegree,
-          rightCohomologyDegree: right.cohomologyDegree
-        };
-        const id = productBoxClassId(productBox);
-        const symbol = productBoxSymbolLatex(left.latex, right.latex);
-        const plain = productBoxSymbolPlain(left.plain, right.plain);
-        const def = homologyClassDefinition(
-          id,
-          degree,
-          symbol,
-          'product box',
-          homology,
-          symbol,
-          geometry
-        );
-        def.cohomologyDegree = cohomologyDegree;
-        def.symbolPlain = plain;
-        def.productBox = productBox;
+        const def = productBoxClassDefinitionFromMonomials(geometry, homology, left, right, context);
+        if (!def) continue;
         defs.push(def);
         if (defs.length >= MAX_PRODUCT_BOX_CLASSES) return defs;
       }
     }
     return defs;
+  }
+
+  function productBoxClassDefinitionFromMonomials(geometry, homology, left, right, context = productGeometryContext(geometry)) {
+    if (!context || !left || !right) return null;
+    const degree = left.degree + right.degree;
+    const cohomologyDegree = left.cohomologyDegree + right.cohomologyDegree;
+    const productBox = {
+      factorIds: context.factorIds,
+      leftKey: left.key,
+      rightKey: right.key,
+      leftDegree: left.degree,
+      rightDegree: right.degree,
+      leftCohomologyDegree: left.cohomologyDegree,
+      rightCohomologyDegree: right.cohomologyDegree
+    };
+    const symbol = productBoxSymbolLatex(left.latex, right.latex);
+    const def = homologyClassDefinition(
+      productBoxClassId(productBox),
+      degree,
+      symbol,
+      'product box',
+      homology,
+      symbol,
+      geometry
+    );
+    def.cohomologyDegree = cohomologyDegree;
+    def.symbolPlain = productBoxSymbolPlain(left.plain, right.plain);
+    def.productBox = productBox;
+    return def;
   }
 
   function grassmannianHomologyClassDefinitions(geometry, homology) {
@@ -15780,6 +15784,7 @@
       return [2 * context.leftGeometry.dim, 2 * context.rightGeometry.dim];
     }
     const data = VARS.get(variableId);
+    if (data?.degree === 0) return [0, 0];
     if (Array.isArray(data?.productBidegree)) return data.productBidegree;
     return productBidegreeFromBox(data?.productBox || productBoxDataForVariable(variableId));
   }
@@ -15827,6 +15832,41 @@
     if (!geometry) return [];
     return homologyMonomialDefinitions(geometry)
       .filter((mono) => mono.degree <= (geometry.dim ?? MAX_DIMENSION));
+  }
+
+  function productFactorBoxMonomialForKey(geometry, key) {
+    const normalizedKey = monoKey(parseMonoKey(key || ''));
+    if (!normalizedKey) {
+      return {
+        key: '',
+        degree: 0,
+        cohomologyDegree: 0,
+        latex: '1',
+        plain: '1'
+      };
+    }
+    const defs = baseHomologyClassDefinitions(geometry);
+    defs.forEach((def) => {
+      defineVariable(homologyDefVariableId(def, geometry), def.degree, def.symbolLatex, homologyDefinitionVariableMeta(def));
+    });
+    const powers = parseMonoKey(normalizedKey);
+    return {
+      key: normalizedKey,
+      degree: monoDegree(normalizedKey),
+      cohomologyDegree: Object.entries(powers).reduce((sum, [id, exp]) => {
+        const def = defs.find((item) => homologyDefVariableId(item, geometry) === id);
+        const data = VARS.get(id) || (def ? {
+          degree: def.degree,
+          cohomologyDegree: def.cohomologyDegree,
+          latex: def.symbolLatex,
+          plain: def.symbolPlain,
+          ...homologyDefinitionVariableMeta(def)
+        } : null);
+        return sum + (data?.cohomologyDegree ?? Math.round(2 * (data?.degree ?? 0))) * (Number(exp) || 0);
+      }, 0),
+      latex: monomialLatex(normalizedKey),
+      plain: monomialPlain(normalizedKey)
+    };
   }
 
   function productBoxClassId(productBox) {
@@ -15995,7 +16035,7 @@
   function curveSymplecticClassDefinitions(geometry, homology) {
     const genus = curveSmallNumericGenus(geometry) || jacobianCurveGenus(geometry);
     if (!genus) return [];
-    if (geometry?.specialLabels?.includes('jacobian') && homology?.jacobianSymplecticBasisAdded !== true) return [];
+    if (!symplecticBasisIsVisible(geometry, homology)) return [];
     const defs = [];
     for (let index = 1; index <= genus; index += 1) {
       defs.push(curveSymplecticClassDefinition('a', index, homology, geometry));
@@ -16023,38 +16063,59 @@
     return `${prefix}${index}`;
   }
 
+  function curveSymplecticBasisCanToggle(geometry, variety = null) {
+    return !!(!geometry?.specialLabels?.includes('jacobian')
+      && curveSmallNumericGenus(geometry)
+      && (variety || geometry.varietyId)
+      && geometry.homology?.symplecticBasisConfirmed !== true);
+  }
+
   function jacobianSymplecticBasisCanToggle(geometry, variety = null) {
-    return !!(geometry?.specialLabels?.includes('jacobian') && jacobianCurveGenus(geometry) && (variety || geometry.varietyId) && geometry.homology?.jacobianSymplecticBasisAdded !== true);
+    return !!(geometry?.specialLabels?.includes('jacobian')
+      && jacobianCurveGenus(geometry)
+      && (variety || geometry.varietyId)
+      && geometry.homology?.jacobianSymplecticBasisAdded !== true);
   }
 
-  function jacobianSymplecticBasisIsVisible(geometry) {
-    return !geometry?.specialLabels?.includes('jacobian') || geometry.homology?.jacobianSymplecticBasisAdded === true;
+  function symplecticBasisIsVisible(geometry, homology = geometry?.homology) {
+    if (geometry?.specialLabels?.includes('jacobian')) {
+      return homology?.jacobianSymplecticBasisAdded === true;
+    }
+    if (curveSmallNumericGenus(geometry)) {
+      return homology?.symplecticBasisConfirmed === true;
+    }
+    return true;
   }
 
-  function jacobianSymplecticDisplayGeometry(geometry) {
-    if (!geometry?.specialLabels?.includes('jacobian') || jacobianSymplecticBasisIsVisible(geometry)) return geometry;
+  function symplecticBasisCanToggle(geometry, variety = null) {
+    return curveSymplecticBasisCanToggle(geometry, variety) || jacobianSymplecticBasisCanToggle(geometry, variety);
+  }
+
+  function symplecticBasisDisplayGeometry(geometry) {
+    if (symplecticBasisIsVisible(geometry)) return geometry;
     return {
       ...geometry,
       homology: {
         ...(geometry.homology || {}),
-        rules: (geometry.homology?.rules || []).filter((rule) => !jacobianSymplecticDisplayRule(rule, geometry))
+        rules: (geometry.homology?.rules || []).filter((rule) => !symplecticBasisDisplayRule(rule, geometry))
       }
     };
   }
 
   function displayHomologyClassDefinitions(geometry, options = {}) {
-    return homologyClassDefinitions(geometry, options).filter((def) => !jacobianSymplecticClassIsHidden(geometry, def));
+    return homologyClassDefinitions(geometry, options).filter((def) => !symplecticBasisClassIsHidden(geometry, def));
   }
 
-  function jacobianSymplecticClassIsHidden(geometry, def) {
-    return geometry?.specialLabels?.includes('jacobian')
-      && !jacobianSymplecticBasisIsVisible(geometry)
-      && isCurveSymplecticClassId(def?.id);
+  function symplecticBasisClassIsHidden(geometry, def) {
+    return !symplecticBasisIsVisible(geometry) && isCurveSymplecticClassId(def?.id);
   }
 
-  function jacobianSymplecticDisplayRule(rule, geometry) {
-    if (!geometry?.specialLabels?.includes('jacobian') || jacobianSymplecticBasisIsVisible(geometry)) return false;
-    return rule?.id === HOMOLOGY_JACOBIAN_THETA_RULE_ID || rule?.id === HOMOLOGY_JACOBIAN_TOP_RULE_ID;
+  function symplecticBasisDisplayRule(rule, geometry) {
+    if (symplecticBasisIsVisible(geometry)) return false;
+    if (geometry?.specialLabels?.includes('jacobian')) {
+      return rule?.id === HOMOLOGY_JACOBIAN_THETA_RULE_ID || rule?.id === HOMOLOGY_JACOBIAN_TOP_RULE_ID;
+    }
+    return String(rule?.id || '').startsWith(HOMOLOGY_CURVE_SYMPLECTIC_RULE_PREFIX);
   }
 
   function geometryHasThetaClass(geometry) {
@@ -16303,9 +16364,30 @@
 
   function mapPushforwardClassDefinitions(map, domainGeometry, codomainGeometry) {
     return homologyMonomialDefinitions(domainGeometry)
+      .filter((mono) => projectionPushforwardSourceMonomialCanSurvive(map, mono, domainGeometry, codomainGeometry))
+      .filter((mono) => !projectionSourceKeyHasAutomaticPushforward(map, mono.key || '', domainGeometry, codomainGeometry))
       .map((mono) => mapPushforwardMonomialClassDefinition(map, mono, domainGeometry, codomainGeometry))
       .filter(Boolean)
       .filter((def) => !mapPushforwardDefUsesBlowdownProjectionFormula(map, def, domainGeometry, codomainGeometry));
+  }
+
+  function projectionPushforwardSourceMonomialCanSurvive(map, mono, domainGeometry, codomainGeometry) {
+    const context = projectionMapContext(map);
+    if (!context) return true;
+    if (context.productGeometry.varietyId !== domainGeometry?.varietyId) return true;
+    if (context.factorGeometry.varietyId !== codomainGeometry?.varietyId) return true;
+    const bidegree = productHomologyBidegreeForMonomial(mono, domainGeometry, context.productContext);
+    if (!bidegree) return true;
+    return projectionProductBidegreeHasTopFiber(context, bidegree);
+  }
+
+  function projectionSourceKeyCanSurvivePushforward(map, sourceKey, sourceDim, targetDim) {
+    const context = projectionMapContext(map);
+    if (!context || context.productGeometry.dim !== sourceDim || context.factorGeometry.dim !== targetDim) return true;
+    const bidegree = productHomologyBidegreeForPowers(parseMonoKey(sourceKey || ''), context.productGeometry, context.productContext);
+    if (!bidegree) return true;
+    if (!productBidegreeFits(context.productContext, bidegree)) return false;
+    return projectionProductBidegreeHasTopFiber(context, bidegree);
   }
 
   function mapPushforwardDefUsesBlowdownProjectionFormula(map, def, domainGeometry, codomainGeometry) {
@@ -16337,7 +16419,7 @@
       ? sourceDef.id
       : sourceVariableId;
     const productBidegree = mapOperationTargetProductBidegree(map, operation, sourceDef, sourceGeometry, targetGeometry);
-    defineMapHomologyVariable(map, operation, sourceId, degree, sourceDef.symbolLatex, {
+    const variableId = defineMapHomologyVariable(map, operation, sourceId, degree, sourceDef.symbolLatex, {
       cohomologyDegree,
       sourceKey,
       ...(productBidegree ? { productBidegree } : {})
@@ -16355,6 +16437,8 @@
       symbol,
       targetGeometry
     );
+    def.variableId = variableId;
+    def.sourceKey = sourceKey;
     if (productBidegree) def.productBidegree = productBidegree;
     return def;
   }
@@ -16415,9 +16499,9 @@
     const geometryDim = Number.isInteger(geometry?.dim) ? geometry.dim : MAX_DIMENSION;
     const requestedMaxDegree = Number.isFinite(options.maxDegree) ? options.maxDegree : geometryDim;
     const maxDegree = Math.min(requestedMaxDegree, geometryDim);
-    const assignedKeys = options.includeAssigned ? new Set() : assignedHomologyMonomialKeys(geometry);
     const productContext = productGeometryContext(geometry);
     const classDefs = Array.isArray(options.classDefs) ? options.classDefs : baseHomologyClassDefinitions(geometry);
+    const assignedKeys = options.includeAssigned ? new Set() : assignedHomologyMonomialKeys(geometry, classDefs);
     const positiveDefs = classDefs
       .filter((def) => def.degree > 0 && def.degree <= maxDegree)
       .map((def) => ({
@@ -16482,8 +16566,8 @@
     return Object.keys(powers || {}).some((id) => !!productBoxDataForVariable(id));
   }
 
-  function assignedHomologyMonomialKeys(geometry) {
-    const defs = homologyClassDefinitions(geometry, { includeMapClasses: false });
+  function assignedHomologyMonomialKeys(geometry, defs = null) {
+    defs = Array.isArray(defs) ? defs : homologyClassDefinitions(geometry, { includeMapClasses: false });
     const available = new Set(defs.flatMap((def) => [...homologyDefVariableIds(def, geometry)]));
     const keys = new Set();
     for (const rule of geometry?.homology?.rules || []) {
@@ -16807,7 +16891,7 @@
 
   function standardCurveSymplecticRules(geometry, existingRules = new Map()) {
     const genus = curveSmallNumericGenus(geometry);
-    if (!genus) return [];
+    if (!genus || geometry.homology?.symplecticBasisConfirmed !== true) return [];
     const basis = [];
     for (let index = 1; index <= genus; index += 1) {
       basis.push({ id: curveSymplecticClassId('a', index), kind: 'a', index });
@@ -16902,7 +16986,13 @@
     if (!Number.isInteger(geometry?.dim)) return null;
     const leftTopKey = productFactorTopClassKey(context.leftGeometry);
     const rightTopKey = productFactorTopClassKey(context.rightGeometry);
-    const def = productBoxDefForKeys(geometry, leftTopKey, rightTopKey);
+    const def = productBoxClassDefinitionFromMonomials(
+      geometry,
+      geometry.homology || {},
+      productFactorBoxMonomialForKey(context.leftGeometry, leftTopKey),
+      productFactorBoxMonomialForKey(context.rightGeometry, rightTopKey),
+      context
+    );
     if (!def) return null;
     const pointId = homologyVariableId(HOMOLOGY_POINT_CLASS, geometry);
     const defId = homologyDefVariableId(def, geometry);
@@ -17645,6 +17735,7 @@
     if (geometryHasNumericalCurveLabel(geometry) && (sheaf.type === 'tangent' || sheaf.type === 'cotangent' || sheaf.type === 'canonical')) {
       return buildCurveLineBundle(geometry, sheaf, sheaf.type);
     }
+    if (geometry.type === 'product') return buildProductGeometrySheaf(geometry, sheaf, options);
     if (geometry.type === 'ppav-moduli') return buildPpavModuliSheafBundle(geometry, sheaf, options);
     if (geometry.type === 'grassmannian') return buildGrassmannianSheafBundle(geometry, sheaf, options);
     if (geometry.type === 'abstract' || geometry.type === 'curve' || geometry.type === 'abelian' || geometry.type === 'point') return buildAbstractGeometrySheaf(geometry, sheaf, options);
@@ -18093,8 +18184,13 @@
     poly = Poly.from(poly);
     const geometry = options.geometry || null;
     const homology = options.homology || geometry?.homology || null;
+    const includeMapClasses = options.includeMapClasses !== false;
+    const defineTargetHomologyVariables = () => {
+      if (includeMapClasses) defineHomologyVariables(geometry);
+      else defineBaseHomologyVariables(geometry);
+    };
     chargeSymbolicWork(poly.terms.size || 1, poly.terms.size, 'homology simplification', options);
-    defineHomologyVariables(geometry);
+    defineTargetHomologyVariables();
     const startPoly = simplifyProductBoxPolynomial(
       maybeExpandMapHomologyVariables(poly, options),
       geometry,
@@ -18103,11 +18199,11 @@
     chargeSymbolicWork(startPoly.terms.size || 1, startPoly.terms.size, 'homology simplification', options);
     // Map expansion inspects source varieties and can rebind shared symbols such as [p].
     // Rebind the target geometry before checking or applying target-side rules.
-    defineHomologyVariables(geometry);
-    const defs = homologyClassDefinitions(geometry);
+    defineTargetHomologyVariables();
+    const defs = homologyClassDefinitions(geometry, { includeMapClasses });
     const available = new Set(defs.flatMap((def) => [...homologyDefVariableIds(def, geometry)]));
     const storedRules = homology?.rules || [];
-    const defaultRules = options.includeDefaultMapRules === false
+    const defaultRules = options.includeDefaultMapRules === false || !includeMapClasses
       ? []
       : defaultMapHomologyRulesForGeometry(geometry)
         .filter((rule) => !storedRules.some((stored) => homologyRuleHasSameLhs(stored, rule)));
@@ -18116,7 +18212,7 @@
       && homologyRulePreservesDegree(rule, defs, { geometry })
       && homologyRuleUsesAvailableVariables(rule, available)
     ));
-    defineHomologyVariables(geometry);
+    defineTargetHomologyVariables();
     if (!rules.length) return truncateProductBidegreePolynomial(startPoly, geometry).truncate(geometry?.dim ?? MAX_DIMENSION);
     let out = startPoly;
     const passes = currentHomologyRulePasses(options.homologyRulePasses);
@@ -18125,12 +18221,12 @@
       const before = out;
       out = maybeExpandMapHomologyVariables(out, options);
       out = simplifyProductBoxPolynomial(out, geometry, options);
-      defineHomologyVariables(geometry);
+      defineTargetHomologyVariables();
       out = applyHomologyRuleSweep(out, rules, geometry?.dim ?? MAX_DIMENSION, options);
       chargeSymbolicWork(out.terms.size || 1, out.terms.size, 'homology rule pass', options);
       if (polyEquals(before, out)) return truncateProductBidegreePolynomial(out, geometry).truncate(geometry?.dim ?? MAX_DIMENSION);
     }
-    defineHomologyVariables(geometry);
+    defineTargetHomologyVariables();
     return truncateProductBidegreePolynomial(out, geometry).truncate(geometry?.dim ?? MAX_DIMENSION);
   }
 
@@ -18186,9 +18282,11 @@
     const childOptions = { ...options, budget: symbolicBudgetFromOptions(options) };
     let totalLeft = Poly.one();
     let totalRight = Poly.one();
+    let boxSign = Fraction.one();
     const residualPowers = {};
     let foundBox = false;
     let maxDegree = geometry?.dim ?? MAX_DIMENSION;
+    const boxPowers = {};
     for (const [id, exp] of Object.entries(powers || {})) {
       const exponent = Number(exp) || 0;
       if (exponent <= 0) continue;
@@ -18198,6 +18296,7 @@
         continue;
       }
       foundBox = true;
+      boxPowers[id] = (boxPowers[id] || 0) + exponent;
       const leftFactor = polyPower(polyFromPowers(parseMonoKey(box.leftKey || '')), exponent, context.leftGeometry.dim);
       const rightFactor = polyPower(polyFromPowers(parseMonoKey(box.rightKey || '')), exponent, context.rightGeometry.dim);
       totalLeft = totalLeft.mul(leftFactor, context.leftGeometry.dim, childOptions);
@@ -18205,6 +18304,7 @@
       if (totalLeft.isZero() || totalRight.isZero()) return Poly.zero();
     }
     if (!foundBox) return null;
+    boxSign = productBoxMonomialKoszulSign(boxPowers);
     totalLeft = applyHomologyRules(totalLeft, {
       geometry: context.leftGeometry,
       homology: context.leftGeometry.homology,
@@ -18228,11 +18328,33 @@
       for (const [rightKey, rightCoeff] of totalRight.terms) {
         const boxPoly = productBoxPolyForKeys(geometry, leftKey, rightKey);
         if (boxPoly.isZero()) return null;
-        out = out.add(boxPoly.scale(leftCoeff.mul(rightCoeff)));
+        out = out.add(boxPoly.scale(leftCoeff.mul(rightCoeff).mul(boxSign)));
       }
     }
     const residual = polyFromPowers(residualPowers);
     return out.mul(residual, maxDegree, childOptions).truncate(maxDegree);
+  }
+
+  function productBoxMonomialKoszulSign(powers) {
+    const entries = Object.entries(powers || {})
+      .filter(([, exp]) => exp > 0)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([id, exp]) => ({ id, exp: Number(exp) || 0, box: productBoxDataForVariable(id) }))
+      .filter((entry) => entry.box);
+    let swaps = 0;
+    for (let i = 0; i < entries.length; i += 1) {
+      const left = entries[i];
+      const leftRightOdd = Math.abs(Number(left.box.rightCohomologyDegree || 0) % 2);
+      const leftLeftOdd = Math.abs(Number(left.box.leftCohomologyDegree || 0) % 2);
+      if (left.exp > 1 && leftRightOdd && leftLeftOdd) swaps += (left.exp * (left.exp - 1)) / 2;
+      if (!leftRightOdd) continue;
+      for (let j = i + 1; j < entries.length; j += 1) {
+        const right = entries[j];
+        const rightLeftOdd = Math.abs(Number(right.box.leftCohomologyDegree || 0) % 2);
+        if (rightLeftOdd) swaps += left.exp * right.exp;
+      }
+    }
+    return fraction(swaps % 2 === 0 ? 1 : -1);
   }
 
   function polyEquals(a, b) {
@@ -18416,6 +18538,8 @@
   function defaultPointPushforwardRules(map, targetGeometry = geometryByVarietyId(map?.codomainId)) {
     const sourceGeometry = geometryByVarietyId(map?.domainId);
     if (!map || !sourceGeometry || !targetGeometry) return [];
+    const projectionContext = projectionMapContext(map);
+    if (projectionContext?.factorGeometry.varietyId === targetGeometry.varietyId) return [];
     const rules = [];
     if (sourceGeometry.type !== 'point' && targetGeometry.type !== 'point') {
       const sourcePoint = homologyClassDefById(sourceGeometry, HOMOLOGY_POINT_CLASS);
@@ -18567,6 +18691,8 @@
     defineBaseHomologyVariables(context.factorGeometry);
     for (const sourceDef of homologyMonomialClassDefinitionsForMap(context.productGeometry)) {
       if (!sourceDef.productBox) continue;
+      if (!projectionProductBoxHasTopFiber(context, sourceDef.productBox)) continue;
+      if (projectionProductBoxHasPointFiber(context, sourceDef.productBox)) continue;
       const targetDef = mapOperationHomologyClassDefinition(map, 'pushforward', sourceDef, context.factorGeometry);
       if (!targetDef) continue;
       const rhs = projectionPushforwardProductBoxRhs(context, sourceDef.productBox);
@@ -18579,24 +18705,58 @@
         rhs: serializeHomologyPoly(rhs)
       });
     }
-    const pointRule = defaultProjectionPointPushforwardRule(map, context);
-    if (pointRule) rules.push(pointRule);
+    rules.push(...defaultPicardProjectionPushforwardRules(map, context));
     return rules;
   }
 
-  function defaultProjectionPointPushforwardRule(map, context) {
-    const sourcePoint = homologyClassDefById(context.productGeometry, HOMOLOGY_POINT_CLASS);
-    const targetPoint = homologyClassDefById(context.factorGeometry, HOMOLOGY_POINT_CLASS);
-    if (!sourcePoint || !targetPoint) return null;
-    const targetDef = mapOperationHomologyClassDefinition(map, 'pushforward', sourcePoint, context.factorGeometry);
-    if (!targetDef) return null;
-    return {
-      id: `default-projection-point-pushforward-${map.id}`,
-      builtin: true,
-      enabled: true,
-      lhs: { powers: { [homologyDefVariableId(targetDef, context.factorGeometry)]: 1 } },
-      rhs: [{ coefficient: '1', powers: { [homologyDefVariableId(targetPoint, context.factorGeometry)]: 1 } }]
-    };
+  function defaultPicardProjectionPushforwardRules(map, context = projectionMapContext(map)) {
+    if (!context || context.factorIndex !== 1) return [];
+    const picard = state.varieties.find((item) => item.id === context.factorGeometry.varietyId);
+    if (picard?.construction?.type !== 'picard-variety') return [];
+    if (context.otherGeometry?.type !== 'curve' || context.otherGeometry.dim !== 1) return [];
+    const etaDef = homologyClassDefById(context.productGeometry, 'picard_eta');
+    const gammaDef = homologyClassDefById(context.productGeometry, 'picard_poincare_gamma');
+    const thetaDef = homologyClassDefById(context.factorGeometry, HOMOLOGY_THETA_CLASS);
+    const rules = [];
+    if (etaDef) {
+      const targetDef = mapOperationHomologyClassDefinition(map, 'pushforward', etaDef, context.factorGeometry);
+      if (targetDef?.cohomologyDegree === 0) {
+        rules.push({
+          id: `default-picard-projection-eta-pushforward-${map.id}`,
+          builtin: true,
+          enabled: true,
+          lhs: { powers: { [homologyDefVariableId(targetDef, context.factorGeometry)]: 1 } },
+          rhs: [{ coefficient: '1', powers: {} }]
+        });
+      }
+    }
+    if (gammaDef && thetaDef) {
+      const gammaId = homologyDefVariableId(gammaDef, context.productGeometry);
+      defineVariable(gammaId, gammaDef.degree, gammaDef.symbolLatex, homologyDefinitionVariableMeta(gammaDef));
+      const gammaSquareKey = monoKey({ [gammaId]: 2 });
+      const gammaBidegree = productHomologyBidegreeForDef(gammaDef, context.productGeometry, context.productContext);
+      const gammaSquareMono = {
+        key: gammaSquareKey,
+        degree: 2 * gammaDef.degree,
+        cohomologyDegree: 2 * gammaDef.cohomologyDegree,
+        latex: monomialLatex(gammaSquareKey),
+        plain: monomialPlain(gammaSquareKey),
+        ...(gammaBidegree ? { productBidegree: addProductBidegrees(gammaBidegree, gammaBidegree) } : {})
+      };
+      const targetDef = projectionPushforwardSourceMonomialCanSurvive(map, gammaSquareMono, context.productGeometry, context.factorGeometry)
+        ? mapPushforwardMonomialClassDefinition(map, gammaSquareMono, context.productGeometry, context.factorGeometry)
+        : null;
+      if (targetDef?.cohomologyDegree === thetaDef.cohomologyDegree) {
+        rules.push({
+          id: `default-picard-projection-gamma-square-pushforward-${map.id}`,
+          builtin: true,
+          enabled: true,
+          lhs: { powers: { [homologyDefVariableId(targetDef, context.factorGeometry)]: 1 } },
+          rhs: [{ coefficient: '-2', powers: { [homologyDefVariableId(thetaDef, context.factorGeometry)]: 1 } }]
+        });
+      }
+    }
+    return rules;
   }
 
   function defaultAbelJacobiPullbackRules(map, curveGeometry = geometryByVarietyId(map?.domainId)) {
@@ -18605,6 +18765,7 @@
     const genus = jacobianCurveGenus(context.jacobianGeometry) || curveSmallNumericGenus(context.curveGeometry);
     if (!genus) return [];
     const rules = context.jacobianGeometry.homology?.jacobianSymplecticBasisAdded === true
+      && context.curveGeometry.homology?.symplecticBasisConfirmed === true
       ? defaultAbelJacobiSymplecticPullbackRules(map, context, genus)
       : [];
     const thetaDef = homologyClassDefById(context.jacobianGeometry, HOMOLOGY_THETA_CLASS);
@@ -18655,7 +18816,7 @@
     defineBaseHomologyVariables(context.curveGeometry);
     defineBaseHomologyVariables(context.jacobianGeometry);
     for (const mono of abelJacobiPushforwardSourceMonomials(context, genus, {
-      includeSymplectic: context.jacobianGeometry.homology?.jacobianSymplecticBasisAdded === true
+      includeSymplectic: context.curveGeometry.homology?.symplecticBasisConfirmed === true
     })) {
       const targetDef = mapPushforwardMonomialClassDefinition(map, mono, context.curveGeometry, context.jacobianGeometry);
       if (!targetDef) continue;
@@ -18763,7 +18924,10 @@
   }
 
   function removeCompactAbelJacobiSymplecticRules(context) {
-    if (context.jacobianGeometry.homology?.jacobianSymplecticBasisAdded === true) return false;
+    if (
+      context.jacobianGeometry.homology?.jacobianSymplecticBasisAdded === true
+      && context.curveGeometry.homology?.symplecticBasisConfirmed === true
+    ) return false;
     let changed = false;
     const prune = (variety) => {
       const homology = variety?.homology;
@@ -18795,6 +18959,54 @@
     });
   }
 
+  function projectionProductBoxHasTopFiber(context, productBox) {
+    return projectionProductBidegreeHasTopFiber(context, productBidegreeFromBox(productBox));
+  }
+
+  function projectionProductBoxHasPointFiber(context, productBox) {
+    if (!context || !productBox) return false;
+    const fiberKey = context.factorIndex === 0 ? productBox.rightKey : productBox.leftKey;
+    return monoKey(parseMonoKey(fiberKey || '')) === productFactorTopClassKey(context.otherGeometry);
+  }
+
+  function projectionProductBidegreeHasTopFiber(context, bidegree) {
+    if (!context || !bidegree || !Number.isInteger(context.otherGeometry?.dim)) return false;
+    const fiberDegree = context.factorIndex === 0 ? bidegree[1] : bidegree[0];
+    return fiberDegree === 2 * context.otherGeometry.dim;
+  }
+
+  function projectionSourceKeyHasAutomaticPushforward(map, sourceKey, domainGeometry, codomainGeometry) {
+    const context = projectionMapContext(map);
+    if (!context || context.productGeometry.varietyId !== domainGeometry?.varietyId || context.factorGeometry.varietyId !== codomainGeometry?.varietyId) return false;
+    const normalizedKey = monoKey(parseMonoKey(sourceKey || ''));
+    if (!normalizedKey) return context.otherGeometry.dim === 0;
+    const productPointKey = monoKey({ [homologyVariableId(HOMOLOGY_POINT_CLASS, context.productGeometry)]: 1 });
+    if (normalizedKey === productPointKey) return true;
+    const powers = parseMonoKey(normalizedKey);
+    const ids = Object.keys(powers);
+    if (ids.length !== 1 || powers[ids[0]] !== 1) return false;
+    const productBox = productBoxDataForVariable(ids[0]);
+    return !!productBox && projectionProductBoxHasPointFiber(context, productBox);
+  }
+
+  function projectionAutomaticPushforwardSourceKey(map, sourceKey, sourceDim, targetDim) {
+    const context = projectionMapContext(map);
+    if (!context || context.productGeometry.dim !== sourceDim || context.factorGeometry.dim !== targetDim) return null;
+    const normalizedKey = monoKey(parseMonoKey(sourceKey || ''));
+    if (!normalizedKey) return context.otherGeometry.dim === 0 ? Poly.one() : null;
+    const productPointKey = monoKey({ [homologyVariableId(HOMOLOGY_POINT_CLASS, context.productGeometry)]: 1 });
+    if (normalizedKey === productPointKey) {
+      const targetPoint = homologyClassDefById(context.factorGeometry, HOMOLOGY_POINT_CLASS);
+      return targetPoint ? Poly.variable(homologyDefVariableId(targetPoint, context.factorGeometry)) : null;
+    }
+    const powers = parseMonoKey(normalizedKey);
+    const ids = Object.keys(powers);
+    if (ids.length !== 1 || powers[ids[0]] !== 1) return null;
+    const productBox = productBoxDataForVariable(ids[0]);
+    if (!productBox || !projectionProductBoxHasPointFiber(context, productBox)) return null;
+    return projectionPushforwardProductBoxRhs(context, productBox);
+  }
+
   function projectionPushforwardProductBoxRhs(context, productBox) {
     const keptKey = context.factorIndex === 0 ? productBox.leftKey : productBox.rightKey;
     const fiberKey = context.factorIndex === 0 ? productBox.rightKey : productBox.leftKey;
@@ -18806,6 +19018,7 @@
       expandNestedMaps: false,
       simplifyProductBoxes: false,
       includeDefaultMapRules: false,
+      includeMapClasses: false,
       homologyRulePasses: currentHomologyRulePasses()
     });
     const integral = integrateTopHomologyClass(fiberPoly, fiberGeometry);
@@ -18817,6 +19030,7 @@
       expandNestedMaps: false,
       simplifyProductBoxes: false,
       includeDefaultMapRules: false,
+      includeMapClasses: false,
       homologyRulePasses: currentHomologyRulePasses()
     });
     return keptPoly.scale(integral).truncate(keptGeometry.dim);
@@ -19182,6 +19396,9 @@
 
   function buildConstructedSheafBundle(geometry, sheaf, options = {}) {
     const construction = sheaf.construction || {};
+    if (construction.type === 'picard-poincare-line-bundle') {
+      return buildPicardPoincareLineBundle(geometry, sheaf, options);
+    }
     if (construction.type === 'trivial-bundle') {
       const rank = sanitizeRankInput(construction.rank || sheaf.rankPlain || sheaf.rank);
       return buildTrivialBundle(geometry.dim, rank, sheaf.labelLatex, sheaf.labelPlain);
@@ -19253,6 +19470,21 @@
       });
     }
     return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
+  }
+
+  function buildPicardPoincareLineBundle(geometry, sheaf, options = {}) {
+    const bundle = buildLocallyFreeBundle(geometry.dim, sheaf, options);
+    if (!sheaf?.sourceObject) return bundle;
+    const homology = ensureSheafHomologySystem(sheaf.sourceObject, geometry);
+    if (!homology.rules?.length) return bundle;
+    const ruleGeometry = sheafHomologyGeometry(sheaf, geometry);
+    return applySheafHomologyRulesToBundle(bundle, geometry.dim, {
+      geometry: ruleGeometry,
+      homology: ruleGeometry.homology,
+      sheaf,
+      baseGeometry: geometry,
+      homologyRulePasses: currentHomologyRulePasses()
+    });
   }
 
   function buildSourceSheafBundle(geometry, sheafObject) {
@@ -19533,20 +19765,26 @@
       if (sourceDegree < 0 || sourceDegree > sourceDim) continue;
       const targetDegree = sourceDegree + degreeShift;
       if (targetDegree < 0 || targetDegree > targetDim) continue;
-      const projected = projectionFormulaPushforwardSourceKey(map, key, sourceDim, targetDim, construction);
-      if (projected) {
-        out = out.add(projected.scale(coeff));
-        continue;
-      }
-      const ramified = ramifiedCoverPushforwardSourceKey(map, key, sourceDim, targetDim);
-      if (ramified) {
-        out = out.add(ramified.scale(coeff));
-        continue;
-      }
-      const id = pushforwardTermVariableId(map, key, targetDegree, construction);
-      out = out.add(Poly.variable(id).scale(coeff));
+      const split = splitScalarAndPositivePowers(parseMonoKey(key));
+      const scalar = polyFromPowers(split.scalarPowers);
+      const sourceKey = monoKey(split.positivePowers);
+      const pushed = pushforwardSourceKeyPolynomial(map, sourceKey, targetDegree, sourceDim, targetDim, construction);
+      if (pushed.isZero()) continue;
+      out = out.add(scalar.mul(pushed, targetDim).scale(coeff));
     }
     return out.truncate(targetDim);
+  }
+
+  function pushforwardSourceKeyPolynomial(map, sourceKey, targetDegree, sourceDim, targetDim, construction) {
+    if (!projectionSourceKeyCanSurvivePushforward(map, sourceKey, sourceDim, targetDim)) return Poly.zero();
+    const automaticProjection = projectionAutomaticPushforwardSourceKey(map, sourceKey, sourceDim, targetDim);
+    if (automaticProjection) return automaticProjection;
+    const projected = projectionFormulaPushforwardSourceKey(map, sourceKey, sourceDim, targetDim, construction);
+    if (projected) return projected;
+    const ramified = ramifiedCoverPushforwardSourceKey(map, sourceKey, sourceDim, targetDim);
+    if (ramified) return ramified;
+    const id = pushforwardTermVariableId(map, sourceKey, targetDegree, construction);
+    return Poly.variable(id);
   }
 
   function ramifiedCoverPushforwardSourceKey(map, sourceKey, sourceDim, targetDim) {
@@ -19606,6 +19844,8 @@
     const remainingDegree = monoDegree(split.remainingKey);
     const remainingTargetDegree = remainingDegree + degreeShift;
     if (remainingTargetDegree < 0 || remainingTargetDegree > targetDim) return null;
+    const automaticProjection = projectionAutomaticPushforwardSourceKey(map, split.remainingKey, sourceDim, targetDim);
+    if (automaticProjection) return split.codomainFactor.mul(automaticProjection, targetDim).truncate(targetDim);
     const pushedId = pushforwardTermVariableId(map, split.remainingKey, remainingTargetDegree, construction);
     return split.codomainFactor.mul(Poly.variable(pushedId), targetDim).truncate(targetDim);
   }
@@ -20089,6 +20329,107 @@
     return buildLineFromFirstChern(grassmannianPluckerFirstChernPoly(geometry).scale(fraction(twist)), d, labelLatex, labelPlain);
   }
 
+  function buildProductGeometrySheaf(geometry, sheaf, options = {}) {
+    const context = productGeometryContext(geometry);
+    if (!context) return buildAbstractGeometrySheaf(geometry, sheaf, options);
+    if (sheaf.type === 'tangent' || sheaf.type === 'cotangent') {
+      const left = buildPulledProductFactorBundle(geometry, context.leftGeometry, sheaf.type, 0, sheaf);
+      const right = buildPulledProductFactorBundle(geometry, context.rightGeometry, sheaf.type, 1, sheaf);
+      if (left && right) return truncateProductBundleBidegrees(buildDirectSumBundle(geometry.dim, sheaf, left, right), geometry);
+      return buildAbstractGeometrySheaf(geometry, sheaf, options);
+    }
+    if (sheaf.type === 'canonical') {
+      const left = buildPulledProductFactorBundle(geometry, context.leftGeometry, 'canonical', 0, sheaf);
+      const right = buildPulledProductFactorBundle(geometry, context.rightGeometry, 'canonical', 1, sheaf);
+      if (left && right) return truncateProductBundleBidegrees(buildTensorBundle(geometry.dim, sheaf, left, right), geometry);
+      return buildAbstractGeometrySheaf(geometry, sheaf, options);
+    }
+    return buildAbstractGeometrySheaf(geometry, sheaf, options);
+  }
+
+  function buildPulledProductFactorBundle(productGeometry, factorGeometry, type, factorIndex, sheaf) {
+    const factorSheaf = productFactorSheafForType(factorGeometry, type, sheaf);
+    const factorBundle = buildBundleForSheaf(factorGeometry, factorSheaf, { geometry: factorGeometry });
+    const chComps = zeroComponentArray(productGeometry.dim);
+    for (let i = 1; i <= productGeometry.dim; i += 1) {
+      const pulled = productFactorPullbackPolynomial(productGeometry, componentOrZero(factorBundle.chComps, i), factorIndex);
+      if (!pulled) return null;
+      chComps[i] = pulled;
+    }
+    return truncateProductBundleBidegrees(buildBundleFromCh(
+      chComps,
+      factorBundle.rankLatex,
+      factorBundle.rankPlain,
+      productPulledBundleLabelLatex(factorBundle, factorIndex),
+      productPulledBundleLabelPlain(factorBundle, factorIndex)
+    ), productGeometry);
+  }
+
+  function productFactorSheafForType(factorGeometry, type, sheaf) {
+    const rank = type === 'canonical' ? '1' : String(factorGeometry.dim);
+    const labelLatex = type === 'canonical'
+      ? `K_{${factorGeometry.labelLatex}}`
+      : `${type === 'cotangent' ? '\\Omega^1' : '\\mathcal{T}'}_{${factorGeometry.labelLatex}}`;
+    return {
+      type,
+      twist: sheaf.twist,
+      basis: normalizeBasisValue(sheaf.basis),
+      rankPlain: rank,
+      rankLatex: rank,
+      labelLatex,
+      labelPlain: latexToPlain(labelLatex)
+    };
+  }
+
+  function productPulledBundleLabelLatex(bundle, factorIndex) {
+    return `\\pi_${factorIndex + 1}^{*}${bundle.labelLatex || '\\mathcal{E}'}`;
+  }
+
+  function productPulledBundleLabelPlain(bundle, factorIndex) {
+    return `pi_${factorIndex + 1}^*${bundle.labelPlain || bundle.labelLatex || 'E'}`;
+  }
+
+  function productFactorPullbackPolynomial(productGeometry, poly, factorIndex) {
+    let out = Poly.zero();
+    for (const [key, coeff] of Poly.from(poly).terms) {
+      const split = splitScalarAndPositivePowers(parseMonoKey(key));
+      const factorKey = monoKey(split.positivePowers);
+      const pulled = factorIndex === 0
+        ? productBoxPolyForKeys(productGeometry, factorKey, '')
+        : productBoxPolyForKeys(productGeometry, '', factorKey);
+      if (pulled.isZero() && factorKey) return null;
+      const scalar = polyFromPowers(split.scalarPowers);
+      out = out.add(pulled.mul(scalar, productGeometry.dim).scale(coeff));
+    }
+    return truncateProductBidegreePolynomial(out, productGeometry).truncate(productGeometry.dim);
+  }
+
+  function splitScalarAndPositivePowers(powers) {
+    const scalarPowers = {};
+    const positivePowers = {};
+    for (const [id, exp] of Object.entries(powers || {})) {
+      const exponent = Number(exp) || 0;
+      if (exponent <= 0) continue;
+      const degree = VARS.get(id)?.degree;
+      if (degree === 0) scalarPowers[id] = (scalarPowers[id] || 0) + exponent;
+      else positivePowers[id] = (positivePowers[id] || 0) + exponent;
+    }
+    return { scalarPowers, positivePowers };
+  }
+
+  function truncateProductBundleBidegrees(bundle, geometry) {
+    if (!productGeometryContext(geometry)) return bundle;
+    const truncateArray = (comps) => comps.map((comp) => truncateProductBidegreePolynomial(comp, geometry).truncate(geometry.dim));
+    bundle.cComps = truncateArray(bundle.cComps);
+    bundle.chComps = truncateArray(bundle.chComps);
+    bundle.pComps = truncateArray(bundle.pComps);
+    bundle.cTotal = truncateProductBidegreePolynomial(bundle.cTotal, geometry).truncate(geometry.dim);
+    bundle.segre = truncateProductBidegreePolynomial(bundle.segre, geometry).truncate(geometry.dim);
+    bundle.todd = truncateProductBidegreePolynomial(bundle.todd, geometry).truncate(geometry.dim);
+    bundle.sqrtTodd = truncateProductBidegreePolynomial(bundle.sqrtTodd, geometry).truncate(geometry.dim);
+    return bundle;
+  }
+
   function buildPpavModuliSheafBundle(geometry, sheaf, options = {}) {
     const d = geometry.dim;
     if (sheaf.type === 'tangent') {
@@ -20304,9 +20645,10 @@
   }
 
   function buildLineFromHyperplane(geometry, twist, d, labelLatex, labelPlain) {
-    const hyperplaneId = homologyVariableId(HOMOLOGY_HYPERPLANE_CLASS, geometry);
     const hyperplane = homologyClassDefById(geometry, HOMOLOGY_HYPERPLANE_CLASS);
-    defineVariable(hyperplaneId, 1, hyperplane?.symbolLatex || 'H');
+    if (!hyperplane) return buildLineFromFirstChern(Poly.zero(), d, labelLatex, labelPlain);
+    const hyperplaneId = homologyDefVariableId(hyperplane, geometry);
+    defineVariable(hyperplaneId, hyperplane.degree, hyperplane.symbolLatex, homologyDefinitionVariableMeta(hyperplane));
     return buildLineFromFirstChern(Poly.variable(hyperplaneId).scale(fraction(twist)), d, labelLatex, labelPlain);
   }
 
@@ -20355,9 +20697,10 @@
 
   function chComponentsFromLineTerms(geometry, terms, d) {
     const chComps = zeroComponentArray(d);
-    const hyperplaneId = homologyVariableId(HOMOLOGY_HYPERPLANE_CLASS, geometry);
     const hyperplane = homologyClassDefById(geometry, HOMOLOGY_HYPERPLANE_CLASS);
-    defineVariable(hyperplaneId, 1, hyperplane?.symbolLatex || 'H');
+    if (!hyperplane) return chComps;
+    const hyperplaneId = homologyDefVariableId(hyperplane, geometry);
+    defineVariable(hyperplaneId, hyperplane.degree, hyperplane.symbolLatex, homologyDefinitionVariableMeta(hyperplane));
     const H = Poly.variable(hyperplaneId);
     const powers = [Poly.one()];
     for (let i = 1; i <= d; i++) powers[i] = powers[i - 1].mul(H, d);
@@ -21730,7 +22073,7 @@
 
   function renderVarietyHomologyPanel(context) {
     const { variety, geometry } = context;
-    const displayGeometry = jacobianSymplecticDisplayGeometry(geometry);
+    const displayGeometry = symplecticBasisDisplayGeometry(geometry);
     const defs = displayHomologyClassDefinitions(geometry);
     const ruleDefs = homologyClassDefinitions(geometry);
     const baseDefs = baseHomologyClassDefinitions(geometry);
@@ -21761,6 +22104,28 @@
     if (show && refs.homologyGrassmannianYoungBasis) {
       refs.homologyGrassmannianYoungBasis.checked = variety.grassmannianYoungBasis === true;
     }
+  }
+
+  function addSymplecticBasisFromPanel(varietyId) {
+    const variety = state.varieties.find((item) => item.id === varietyId) || null;
+    const geometry = variety ? geometryFromVariety(variety) : null;
+    if (!variety || !geometry) return;
+    if (geometry.specialLabels?.includes('jacobian')) {
+      addJacobianSymplecticBasisFromPanel(varietyId);
+      return;
+    }
+    if (!curveSymplecticBasisCanToggle(geometry, variety)) return;
+    variety.homology = variety.homology && typeof variety.homology === 'object' ? variety.homology : {};
+    variety.homology.symplecticBasisConfirmed = true;
+    const nextGeometry = geometryFromVariety(variety);
+    const homology = ensureHomologySystem(variety, nextGeometry);
+    homology.symplecticBasisConfirmed = true;
+    state.maps
+      .filter((map) => map.construction?.type === 'abel-jacobi' && map.domainId === variety.id)
+      .forEach((map) => ensureAbelJacobiKnownHomologyRules(map));
+    clearHomologyMonomialAssignmentForm();
+    if (refs.homologyMessage) refs.homologyMessage.textContent = `Added the symplectic basis for ${nextGeometry.labelPlain}.`;
+    recompute('add curve basis');
   }
 
   function addJacobianSymplecticBasisFromPanel(varietyId) {
@@ -21981,7 +22346,7 @@
 
   function updateHomologyJacobianBasisAction(geometry) {
     if (!refs.homologyJacobianBasisAction) return;
-    const show = jacobianSymplecticBasisCanToggle(geometry);
+    const show = symplecticBasisCanToggle(geometry);
     refs.homologyJacobianBasisAction.hidden = !show;
     refs.homologyJacobianBasisAction.dataset.addJacobianBasis = show ? (geometry.varietyId || '') : '';
   }
@@ -22130,19 +22495,47 @@
     }).join('');
   }
 
+  function homologyRuleListTargetKey() {
+    const target = activeHomologyTarget();
+    if (target?.kind && target?.id) return `${target.kind}:${target.id}`;
+    return 'default';
+  }
+
+  function renderHomologyRuleListHtml(rows, options = {}) {
+    const items = (rows || []).filter(Boolean);
+    const count = options.count ?? items.length;
+    if (!items.length) return '';
+    const body = items.join('');
+    if (count <= HOMOLOGY_RULE_COLLAPSE_THRESHOLD) return body;
+    const targetKey = homologyRuleListTargetKey();
+    const open = !!state.homologyRuleListOpenByTarget[targetKey];
+    const noun = options.noun || 'rules';
+    const title = `${count} ${noun}`;
+    return `
+      <details class="homology-rule-disclosure" data-homology-rule-disclosure="${escapeHtml(targetKey)}" ${open ? 'open' : ''}>
+        <summary>
+          <span>${escapeHtml(title)}</span>
+        </summary>
+        <div class="homology-rule-scroll">
+          ${body}
+        </div>
+      </details>
+    `;
+  }
+
   function renderHomologyRules(geometry, defs) {
     if (!refs.homologyRules) return;
     const available = new Set(defs.flatMap((def) => [...homologyDefVariableIds(def, geometry)]));
     const rules = (geometry.homology?.rules || []).filter((rule) => (
       !rule.deleted
-      && !jacobianSymplecticDisplayRule(rule, geometry)
+      && !symplecticBasisDisplayRule(rule, geometry)
       &&
       homologyRulePreservesDegree(rule, defs, { geometry })
       && homologyRuleUsesAvailableVariables(rule, available)
     ));
     defineHomologyVariables(geometry);
     refs.homologyRules.hidden = rules.length === 0;
-    refs.homologyRules.innerHTML = rules.map((rule) => `
+    const rows = rules.map((rule) => `
       <div class="homology-rule-row" data-rule-id="${escapeHtml(rule.id)}">
         <label class="homology-rule-toggle">
           <input type="checkbox" data-homology-rule-toggle="${escapeHtml(rule.id)}" ${rule.enabled !== false ? 'checked' : ''}>
@@ -22150,7 +22543,8 @@
         </label>
         <button class="homology-symbol-kind homology-standard-delete" type="button" data-homology-rule-delete="${escapeHtml(rule.id)}" title="Delete this rule">delete</button>
       </div>
-    `).join('');
+    `);
+    refs.homologyRules.innerHTML = renderHomologyRuleListHtml(rows, { count: rules.length });
     bindRenderedHomologyRuleDeletes();
   }
 
@@ -22180,11 +22574,11 @@
     });
     const savedRows = rows.filter((row) => row.stored).map((row) => row.html);
     const waitingRows = rows.filter((row) => !row.stored).map((row) => row.html);
-    refs.homologyRules.innerHTML = [
+    refs.homologyRules.innerHTML = renderHomologyRuleListHtml([
       ...savedRows,
       savedRows.length && waitingRows.length ? '<div class="homology-rule-separator" aria-hidden="true"></div>' : '',
       ...waitingRows
-    ].filter(Boolean).join('');
+    ], { count: rows.length, noun: 'rules to generate' });
     bindRenderedHomologyRuleDeletes();
   }
 
@@ -22306,17 +22700,17 @@
     });
     const savedRows = rows.filter((row) => row.stored).map((row) => row.html);
     const waitingRows = rows.filter((row) => !row.stored).map((row) => row.html);
-    refs.homologyRules.innerHTML = [
+    refs.homologyRules.innerHTML = renderHomologyRuleListHtml([
       ...savedRows,
       savedRows.length && waitingRows.length ? '<div class="homology-rule-separator" aria-hidden="true"></div>' : '',
       ...waitingRows
-    ].filter(Boolean).join('');
+    ], { count: rows.length, noun: 'rules to generate' });
     bindRenderedHomologyRuleDeletes();
   }
 
   function renderSheafHomologyDefaultRules(defs, defaultRules) {
     const context = activeHomologySheafContext();
-    refs.homologyRules.innerHTML = defs.map((def) => {
+    const rows = defs.map((def) => {
       defineHomologyVariables(def.geometry);
       defineSheafClassVariable(def);
       const rule = sheafHomologyRuleForDef(def, defaultRules);
@@ -22330,7 +22724,8 @@
         </div>
         ${renderSheafChernClassPrompt(def)}
       `;
-    }).join('');
+    });
+    refs.homologyRules.innerHTML = renderHomologyRuleListHtml(rows, { count: defs.length });
     bindRenderedHomologyRuleDeletes();
   }
 
@@ -22523,9 +22918,11 @@
 
   function sheafHomologyRuleForDef(def, defaultRules = []) {
     defineSheafClassVariable(def);
+    const storedRule = storedSheafHomologyRuleForDef(def);
+    if (storedRule) return storedRule;
     const defaultRule = mapHomologyRuleForVariable(defaultRules, def.id, { includeBuiltin: true });
     if (defaultRule) return defaultRule;
-    return storedSheafHomologyRuleForDef(def);
+    return null;
   }
 
   function storedSheafHomologyRuleForDef(def) {
