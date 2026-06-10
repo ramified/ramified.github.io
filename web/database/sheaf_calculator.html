@@ -912,6 +912,136 @@
       font-size: 0.76rem;
     }
 
+    .sheaf-step-card .card-body {
+      overflow: visible;
+    }
+
+    #class-step-wide-host {
+      padding: 0 16px 16px;
+    }
+
+    #class-step-wide-host[hidden] {
+      display: none !important;
+    }
+
+    #class-step-card.wide {
+      margin-top: 16px;
+    }
+
+    .sheaf-step-panel {
+      border: 1px dotted var(--border);
+      background: color-mix(in srgb, var(--surface) 84%, var(--bg));
+      border-radius: 6px;
+      padding: 10px;
+      margin: 8px 0 10px;
+    }
+
+    .sheaf-step-panel.is-wide {
+      width: 100%;
+    }
+
+    .sheaf-step-panel[hidden],
+    .sheaf-step-row[hidden],
+    .sheaf-step-rules[hidden] {
+      display: none;
+    }
+
+    .sheaf-step-row,
+    .sheaf-step-options,
+    .sheaf-step-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .sheaf-step-row:last-child,
+    .sheaf-step-options:last-child,
+    .sheaf-step-controls:last-child {
+      margin-bottom: 0;
+    }
+
+    .sheaf-step-layout-toggle {
+      margin-left: auto;
+    }
+
+    .sheaf-step-work {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.9fr);
+      gap: 12px;
+      align-items: start;
+      border-top: 1px dotted var(--border);
+      border-bottom: 1px dotted var(--border);
+      padding: 8px 0;
+      margin: 8px 0;
+    }
+
+    .sheaf-step-panel:not(.is-side) .sheaf-step-work {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .sheaf-step-panel:not(.is-side) .sheaf-step-rules {
+      border-top: 1px dotted var(--border);
+      padding-top: 8px;
+    }
+
+    .sheaf-step-formula {
+      min-width: 0;
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 6px 0 10px;
+      white-space: nowrap;
+      scrollbar-gutter: stable;
+      scrollbar-color: color-mix(in srgb, var(--accent) 58%, var(--surface)) var(--surface);
+      scrollbar-width: thin;
+    }
+
+    .sheaf-step-formula mjx-container {
+      min-width: max-content;
+      max-width: none !important;
+    }
+
+    .sheaf-step-rule-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      border-top: 1px dotted var(--border);
+      padding: 6px 0;
+      font-size: 0.92rem;
+    }
+
+    .sheaf-step-rule-row:first-child {
+      border-top: 0;
+    }
+
+    .sheaf-step-rule-label {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .sheaf-step-rule-meta {
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-left: 6px;
+    }
+
+    @media (max-width: 820px) {
+      .sheaf-step-panel.is-wide {
+        width: auto;
+      }
+
+      .sheaf-step-work {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .sheaf-step-layout-toggle {
+        margin-left: 0;
+      }
+    }
+
     .sheaf-cohomology-chart {
       max-width: 100%;
       overflow: auto;
@@ -1781,6 +1911,7 @@
         <span id="ring-summary">\(A^*(X)_{\le 3}\)</span>
     </div>
     <section id="hodge-wide-host" hidden></section>
+    <section id="class-step-wide-host" hidden></section>
   </section>
 
   <aside class="side" id="cards">
@@ -2421,6 +2552,59 @@
         </div>
         <div id="class-chart" class="sheaf-class-scroll"></div>
         <div id="class-message" class="err"></div>
+        <div class="sheaf-chart-actions sheaf-step-entry" id="class-step-entry" hidden>
+          <button class="btn btn-ghost sheaf-chart-export" id="step-classes" type="button">step-by-step</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card sheaf-step-card" id="class-step-card" hidden>
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Step-by-Step Characteristic Class</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="sheaf-step-panel" id="class-step-panel" hidden>
+          <div class="sheaf-step-row">
+            <span class="input-label">target</span>
+            <select id="class-step-family" class="sheaf-select">
+              <option value="chern">c(F)</option>
+              <option value="character">ch(F)</option>
+              <option value="todd">td(F)</option>
+              <option value="segre">s(F)</option>
+              <option value="sqrtTodd">sqrt td(F)</option>
+            </select>
+            <label class="opt-row">
+              <input type="checkbox" id="class-step-term-only">
+              term
+            </label>
+            <input id="class-step-term-index" class="sheaf-input" type="number" min="0" max="15" value="1" aria-label="step term index" disabled>
+            <button class="btn btn-ghost sheaf-chart-export sheaf-step-layout-toggle" id="class-step-layout" type="button" aria-pressed="true">wide</button>
+          </div>
+          <div class="sheaf-step-work">
+            <div class="sheaf-step-formula" id="class-step-formula"></div>
+            <div class="sheaf-step-rules" id="class-step-rules"></div>
+          </div>
+          <div class="sheaf-step-options">
+            <label class="opt-row">
+              <input type="checkbox" id="class-step-use-cache">
+              use cached rules
+            </label>
+            <button class="btn btn-ghost sheaf-chart-export" id="class-step-check-switch" type="button">check rules for switching</button>
+            <label class="opt-row">
+              <input type="checkbox" id="class-step-once-per-rule" checked>
+              each rule only apply once
+            </label>
+            <label class="opt-row">
+              <input type="checkbox" id="class-step-one-pass">
+              apply rule 1...n once and stop
+            </label>
+          </div>
+          <div class="sheaf-step-controls">
+            <button class="btn btn-ghost sheaf-chart-export" id="class-step-apply" type="button">apply rules</button>
+            <button class="btn btn-ghost sheaf-chart-export" id="class-step-restart" type="button">restart</button>
+            <button class="btn btn-ghost sheaf-chart-export" id="class-step-export" type="button">export</button>
+            <button class="btn btn-ghost sheaf-chart-export" id="class-step-stop" type="button">stop</button>
+          </div>
+          <div class="hint" id="class-step-message"></div>
+        </div>
       </div>
     </section>
 

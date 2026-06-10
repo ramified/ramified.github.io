@@ -8,6 +8,7 @@ function loadCalculator() {
   source = source.replace(/\}\)\(\);\s*$/, `return {
     state,
     refs,
+    window,
     VARS,
     geometryFromVariety,
     sheafFromObject,
@@ -27,7 +28,24 @@ function loadCalculator() {
     normalizeHomologyRule,
     classDisplayOptions,
     buildClassRows,
+    exportResult,
+    classStepAutoFamily,
+    buildClassStepFallbackResult,
+    createClassStepSession,
+    classStepDisplayPoly,
+    collectClassStepRuleCandidates,
+    classStepMaterializeRule,
+    renderClassStepPanel,
+    stopClassStepSession,
+    applySelectedClassStepRules,
+    applyClassStepRulesToPoly,
+    applyOneHomologyRuleOnce,
+    buildClassRowsFromStepSession,
+    rememberClassStepComponents,
+    syncClassStepAvailability,
+    toggleClassStepLayout,
     polyFromPowers,
+    pullbackPolynomial,
     pushforwardPolynomialByDegree,
     formatPolyPlain,
     mapHomologyClassDefinitions,
@@ -105,9 +123,10 @@ function loadCalculator() {
     document: {
       addEventListener() {},
       getElementById() { return null; },
-      querySelectorAll() { return []; }
+      querySelectorAll() { return []; },
+      createComment(value) { return { nodeType: 8, value, parentElement: null, nextSibling: null }; }
     },
-    window: { addEventListener() {} },
+    window: { addEventListener() {}, matchMedia: () => ({ matches: true }) },
     MathJax: null,
     setTimeout,
     clearTimeout
@@ -2483,6 +2502,1008 @@ function testSymbolicBudgetFallbackKeepsUnsimplifiedPolynomial() {
   assert(api.state.symbolicWarnings.some((warning) => warning.includes('symbolic work limit')));
 }
 
+function testClassStepAutoTargetSelection() {
+  const api = loadCalculator();
+  assert.strictEqual(api.classStepAutoFamily({ basis: 'chern' }), 'chern');
+  assert.strictEqual(api.classStepAutoFamily({ basis: 'character' }), 'character');
+  assert.strictEqual(api.classStepAutoFamily({ basis: 'roots', type: 'abstract' }), 'chern');
+  assert.strictEqual(api.classStepAutoFamily({ basis: 'chern', construction: { type: 'pushforward' } }), 'character');
+}
+
+function testClassStepFormalRanksAreSheafSpecific() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '1', name: 'X' }];
+  api.state.sheaves = [
+    { id: 'E', type: 'abstract', basis: 'chern', rank: 'r', name: 'E', baseVarietyId: 'X' },
+    { id: 'F', type: 'abstract', basis: 'chern', rank: 'r', name: 'F', baseVarietyId: 'X' },
+    { id: 'G', type: 'abstract', basis: 'chern', rank: '2', name: 'G', baseVarietyId: 'X' }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const sessionFor = (sheafObject) => {
+    const sheaf = api.sheafFromObject(sheafObject, geometry);
+    return api.createClassStepSession(api.buildClassStepFallbackResult(geometry, sheaf, { message: 'test' }), 'character', 0);
+  };
+  assert.strictEqual(api.formatPolyPlain(sessionFor(api.state.sheaves[0]).rankComponent), 'r(E)');
+  assert.strictEqual(api.formatPolyPlain(sessionFor(api.state.sheaves[1]).rankComponent), 'r(F)');
+  assert.strictEqual(api.formatPolyPlain(sessionFor(api.state.sheaves[2]).rankComponent), '2');
+
+  api.state.globalInvariants = [{ id: 'auto-r', type: 'rational-number', name: 'r', hasValue: true, value: '5', replaceWithValue: true }];
+  assert.strictEqual(api.formatPolyPlain(sessionFor(api.state.sheaves[0]).rankComponent), '5');
+}
+
+function testClassStepDerivedCharacteristicTargets() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X' }];
+  api.state.sheaves = [{ id: 'E', type: 'abstract', basis: 'chern', rank: '2', name: 'E', baseVarietyId: 'X' }];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const sheaf = api.sheafFromObject(api.state.sheaves[0], geometry);
+  const result = api.buildClassStepFallbackResult(geometry, sheaf, { message: 'test' });
+  const toddSession = api.createClassStepSession(result, 'chern', 1, 'todd');
+  assert.strictEqual(toddSession.family, 'chern');
+  assert.strictEqual(toddSession.target, 'todd');
+  assert.strictEqual(api.buildClassRowsFromStepSession(toddSession, api.classDisplayOptions(geometry, sheaf))[0].label, 'td_1(E)');
+  assert(api.formatPolyPlain(api.classStepDisplayPoly(toddSession)).includes('c_1(E)'));
+
+  const segreSession = api.createClassStepSession(result, 'chern', null, 'segre');
+  segreSession.active = false;
+  segreSession.stopped = true;
+  const segreRows = api.buildClassRowsFromStepSession(segreSession, api.classDisplayOptions(geometry, sheaf));
+  assert.strictEqual(segreRows.length, 1);
+  assert.strictEqual(segreRows[0].key, 'segre');
+}
+
+function testClassStepDerivedTargetAppliesVisibleHomologyRule() {
+  const api = loadCalculator();
+  api.state.varieties = [{
+    id: 'A',
+    type: 'abstract',
+    dim: '2',
+    name: 'A',
+    homology: {
+      classes: { point: { symbol: '[p]' }, unit: { symbol: '1' } },
+      customClasses: [{ id: 'T', symbol: '\\Theta', cohomologyDegree: 2 }],
+      rules: []
+    }
+  }];
+  api.state.sheaves = [{ id: 'E', type: 'abstract', basis: 'chern', rank: '2', name: 'E', baseVarietyId: 'A' }];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const defs = api.homologyClassDefinitions(geometry);
+  const thetaId = api.homologyDefVariableId(defs.find((def) => def.id === 'T'), geometry);
+  const pointId = api.homologyDefVariableId(defs.find((def) => def.id === 'point'), geometry);
+  geometry.homology.rules = [{
+    id: 'theta-square-point',
+    enabled: true,
+    lhs: { powers: { [thetaId]: 2 } },
+    rhs: [{ coefficient: '2', powers: { [pointId]: 1 } }]
+  }];
+  const sheaf = api.sheafFromObject(api.state.sheaves[0], geometry);
+  const result = api.buildClassStepFallbackResult(geometry, sheaf, { message: 'test' });
+  api.state.lastResult = result;
+  const session = api.createClassStepSession(result, 'chern', 2, 'sqrtTodd');
+  const zero = api.polyFromPowers({}).sub(api.polyFromPowers({}));
+  session.components[1] = api.polyFromPowers({ [thetaId]: 1 });
+  session.components[2] = zero;
+  api.state.classStepSession = session;
+  session.candidates = api.collectClassStepRuleCandidates(session).map((candidate) => ({
+    ...candidate,
+    selected: (candidate.rules || [candidate.rule]).some((rule) => rule.id === 'theta-square-point')
+  }));
+  assert(api.formatPolyPlain(api.classStepDisplayPoly(session)).includes('Theta^2'));
+  assert(api.buildClassRowsFromStepSession(session, api.classDisplayOptions(geometry, sheaf))[0].plain.includes('[p]'));
+  assert(session.candidates.some((candidate) => candidate.selected),
+    session.candidates.map((candidate) => `${candidate.sourceLabel}:${candidate.rule.id}:${api.formatPolyPlain(api.homologyRuleRhsPoly(candidate.rule))}`).join(' | '));
+  api.applySelectedClassStepRules();
+  const after = api.formatPolyPlain(api.classStepDisplayPoly(session));
+  assert(after.includes('[p]'), after);
+  assert(!after.includes('Theta^2'), after);
+  assert.strictEqual(session.message, 'Applied selected rules.');
+}
+
+function testClassStepCandidatesOnlyIncludeApplicableRules() {
+  const api = loadCalculator();
+  const geometry = {
+    type: 'abstract',
+    dim: 2,
+    labelLatex: 'X',
+    labelPlain: 'X',
+    varietyId: 'X',
+    homology: {
+      customClasses: [
+        { id: 'A', symbol: 'A', degree: 1, cohomologyDegree: 2 },
+        { id: 'B', symbol: 'B', degree: 1, cohomologyDegree: 2 },
+        { id: 'C', symbol: 'C', degree: 1, cohomologyDegree: 2 }
+      ],
+      rules: []
+    }
+  };
+  const defs = api.homologyClassDefinitions(geometry);
+  const aId = api.homologyDefVariableId(defs.find((def) => def.id === 'A'), geometry);
+  const bId = api.homologyDefVariableId(defs.find((def) => def.id === 'B'), geometry);
+  const cId = api.homologyDefVariableId(defs.find((def) => def.id === 'C'), geometry);
+  geometry.homology.rules = [
+    { id: 'A-to-B', enabled: true, lhs: { powers: { [aId]: 1 } }, rhs: [{ coefficient: '1', powers: { [bId]: 1 } }] },
+    { id: 'C-to-B', enabled: true, lhs: { powers: { [cId]: 1 } }, rhs: [{ coefficient: '1', powers: { [bId]: 1 } }] }
+  ];
+  const session = {
+    geometry,
+    sheaf: { id: 'E', type: 'abstract', basis: 'chern', rankPlain: '2', rankLatex: '2', labelLatex: 'E', labelPlain: 'E', sourceObject: { id: 'E', basis: 'chern' } },
+    family: 'chern',
+    dimension: 2,
+    index: 1,
+    components: [api.polyFromPowers({}), api.polyFromPowers({ [aId]: 1 }), api.polyFromPowers({})]
+  };
+  const ids = api.collectClassStepRuleCandidates(session).map((candidate) => candidate.rule.id);
+  assert(ids.includes('A-to-B'));
+  assert(!ids.includes('C-to-B'));
+}
+
+function testClassStepStartsFromFormalConstructedSheafClassAndOffersSesRule() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X' }];
+  api.state.sheaves = [
+    { id: 'I', type: 'abstract', basis: 'chern', rank: '1', name: 'I_C', baseVarietyId: 'X', construction: { type: 'ses-term', role: 'subobject', sequenceId: 'S' } },
+    { id: 'O', type: 'structure', basis: 'chern', rank: '1', name: '\\mathcal{O}_X', baseVarietyId: 'X' },
+    { id: 'Q', type: 'abstract', basis: 'chern', rank: '1', name: 'Q', baseVarietyId: 'X' }
+  ];
+  api.state.sequences = [{ id: 'S', type: 'short-exact-sequence', sheafIds: ['I', 'O', 'Q'], mapIds: [], baseVarietyId: 'X' }];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const sheaf = api.sheafFromObject(api.state.sheaves[0], geometry);
+  const computedBundle = api.buildBundleForSheaf(geometry, sheaf, { geometry });
+  api.state.lastResult = { geometry, sheaf, bundle: computedBundle };
+  const session = api.createClassStepSession(api.state.lastResult, 'chern', 1);
+  const first = api.formatPolyPlain(session.components[1]);
+  assert(first.includes('c_1(I_C)'));
+  assert(!first.includes('c_1(Q)'));
+  const candidates = api.collectClassStepRuleCandidates(session);
+  const sesRule = candidates.find((candidate) => candidate.sourceLabel === 'SES');
+  assert(sesRule);
+  assert(api.formatPolyPlain(api.homologyRuleRhsPoly(sesRule.rule)).includes('c_1(Q)'));
+  assert.strictEqual(candidates.filter((candidate) => candidate.sourceLabel === 'SES').length, 1);
+}
+
+function testClassStepPushforwardOffersGrrRule() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'C', type: 'curve', dim: '1', name: 'C', genus: '4', homology: { classes: { unit: { symbol: '1' }, point: { symbol: '[p]' } } } },
+    {
+      id: 'J',
+      type: 'abelian',
+      dim: '4',
+      name: 'J',
+      genus: 'g',
+      homology: { classes: { theta: { symbol: '\\Theta' }, unit: { symbol: '1' }, point: { symbol: '[p]' } }, rules: [] },
+      construction: { type: 'jacobian', curveId: 'C' }
+    }
+  ];
+  api.state.maps = [{ id: 'AJ', name: 'AJ', domainKind: 'variety', domainId: 'C', codomainKind: 'variety', codomainId: 'J', construction: { type: 'abel-jacobi', curveId: 'C', jacobianId: 'J' } }];
+  api.state.sheaves = [
+    { id: 'T', type: 'tangent', basis: 'chern', rank: 'r', name: 'T_C', baseVarietyId: 'C' },
+    { id: 'P', type: 'abstract', basis: 'chern', rank: 'r', name: 'AJ_*T_C', baseVarietyId: 'J', construction: { type: 'pushforward', mapId: 'AJ', sheafId: 'T', exact: true, proper: true } }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[1]);
+  const sheaf = api.sheafFromObject(api.state.sheaves[1], geometry);
+  const result = api.buildClassStepFallbackResult(geometry, sheaf, { message: 'test' });
+  const session = api.createClassStepSession(result, 'character', null);
+  const grrRules = api.collectClassStepRuleCandidates(session).filter((candidate) => candidate.sourceLabel === 'GRR');
+  assert.strictEqual(grrRules.length, 1);
+  const grrRule = grrRules[0];
+  assert(grrRule.rules.some((rule) => api.formatPolyPlain(api.polyFromPowers(rule.lhs.powers)).includes('ch_3(AJ_*T_C)')));
+  assert(grrRule.rule.classStepDisplayLatex.includes('\\operatorname{ch}'));
+  assert(grrRule.rule.classStepDisplayLatex.includes('\\operatorname{td}'));
+  const ch3Rule = grrRule.rules.find((rule) => api.formatPolyPlain(api.polyFromPowers(rule.lhs.powers)).includes('ch_3(AJ_*T_C)'));
+  const materializedCh3 = api.classStepMaterializeRule(session, ch3Rule);
+  const ch3Plain = api.formatPolyPlain(api.homologyRuleRhsPoly(materializedCh3));
+  assert(ch3Plain.includes('AJ_*left(1right)'), ch3Plain);
+  assert(!ch3Plain.includes('Theta'), ch3Plain);
+  const ch4Rule = grrRule.rules.find((rule) => api.formatPolyPlain(api.polyFromPowers(rule.lhs.powers)).includes('ch_4(AJ_*T_C)'));
+  const materializedCh4 = api.classStepMaterializeRule(session, ch4Rule);
+  const ch4Plain = api.formatPolyPlain(api.homologyRuleRhsPoly(materializedCh4));
+  assert(ch4Plain.includes('td_1(C)'), ch4Plain);
+  assert(ch4Plain.includes('ch_1(T_C)'), ch4Plain);
+  assert(ch4Plain.includes('td_1(J)'), ch4Plain);
+  assert(!ch4Plain.includes('Theta'), ch4Plain);
+  session.components[4] = api.applyClassStepRulesToPoly(session.components[4], [materializedCh4], geometry.dim, { oncePerRule: true, onePass: true });
+  const nextCandidates = api.collectClassStepRuleCandidates(session).map((candidate) => candidate.sourceLabel);
+  assert(nextCandidates.includes('Todd'));
+  assert(nextCandidates.includes('Chern character'));
+}
+
+function testClassStepNestedPushforwardOffersGrrAfterSes() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'C', type: 'curve', dim: '1', name: 'C', genus: '4', homology: { classes: { unit: { symbol: '1' }, point: { symbol: '[p]' } } } },
+    { id: 'J', type: 'abelian', dim: '4', name: 'J', genus: 'g', homology: { classes: { theta: { symbol: '\\Theta' }, unit: { symbol: '1' }, point: { symbol: '[p]' } }, rules: [] }, construction: { type: 'jacobian', curveId: 'C' } }
+  ];
+  api.state.maps = [{ id: 'AJ', name: 'AJ', domainKind: 'variety', domainId: 'C', codomainKind: 'variety', codomainId: 'J', construction: { type: 'abel-jacobi', curveId: 'C', jacobianId: 'J' } }];
+  api.state.sheaves = [
+    { id: 'OC', type: 'structure', basis: 'chern', rank: '1', name: 'O_C', baseVarietyId: 'C' },
+    { id: 'OJ', type: 'structure', basis: 'chern', rank: '1', name: 'O_J', baseVarietyId: 'J' },
+    { id: 'P', type: 'abstract', basis: 'chern', rank: 'r', name: 'AJ_*O_C', baseVarietyId: 'J', construction: { type: 'pushforward', mapId: 'AJ', sheafId: 'OC', exact: true, proper: true } },
+    { id: 'I', type: 'abstract', basis: 'chern', rank: 'r', name: 'I_C', baseVarietyId: 'J', construction: { type: 'ses-term', role: 'subobject', sequenceId: 'S' } }
+  ];
+  api.state.sequences = [{ id: 'S', type: 'short-exact-sequence', sheafIds: ['I', 'OJ', 'P'], mapIds: [], baseVarietyId: 'J' }];
+  const geometry = api.geometryFromVariety(api.state.varieties[1]);
+  const sheaf = api.sheafFromObject(api.state.sheaves[3], geometry);
+  const result = api.buildClassStepFallbackResult(geometry, sheaf, { message: 'test' });
+  const session = api.createClassStepSession(result, 'chern', 1);
+  const ses = api.collectClassStepRuleCandidates(session).find((candidate) => candidate.sourceLabel === 'SES');
+  assert(ses);
+  session.components[1] = api.applyClassStepRulesToPoly(session.components[1], [ses.rule], geometry.dim, { oncePerRule: true, onePass: true });
+  const grr = api.collectClassStepRuleCandidates(session).find((candidate) => candidate.sourceLabel === 'GRR');
+  assert(grr);
+  assert.strictEqual(api.collectClassStepRuleCandidates(session).filter((candidate) => candidate.sourceLabel === 'GRR').length, 1);
+  assert(grr.rule.classStepDisplayLatex.includes('\\operatorname{ch}'));
+  assert(grr.rule.classStepDisplayLatex.includes('\\operatorname{td}'));
+  const materialized = api.classStepMaterializeRule(session, grr.rules[0]);
+  const grrPlain = api.formatPolyPlain(api.homologyRuleRhsPoly(materialized));
+  assert.strictEqual(grrPlain, '0');
+}
+
+function testClassStepTensorRulesForCharacterAndChern() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X' }];
+  api.state.sheaves = [
+    { id: 'E', type: 'abstract', basis: 'chern', rank: '2', name: 'E', baseVarietyId: 'X' },
+    { id: 'F', type: 'abstract', basis: 'chern', rank: '3', name: 'F', baseVarietyId: 'X' },
+    { id: 'T', type: 'abstract', basis: 'chern', rank: '6', name: 'E\\otimes F', baseVarietyId: 'X', construction: { type: 'tensor', sheafIds: ['E', 'F'], exact: true } }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const sheaf = api.sheafFromObject(api.state.sheaves[2], geometry);
+  const result = api.buildClassStepFallbackResult(geometry, sheaf, { message: 'test' });
+
+  const chSession = api.createClassStepSession(result, 'character', 1);
+  const chTensor = api.collectClassStepRuleCandidates(chSession).find((candidate) => candidate.sourceLabel === 'Tensor product');
+  assert(chTensor);
+  assert.strictEqual(api.collectClassStepRuleCandidates(chSession).filter((candidate) => candidate.sourceLabel === 'Tensor product').length, 1);
+  assert(chTensor.rule.classStepDisplayLatex.includes('\\operatorname{ch}'));
+  const chRule = api.classStepMaterializeRule(chSession, chTensor.rules[0]);
+  const chPlain = api.formatPolyPlain(api.homologyRuleRhsPoly(chRule));
+  assert(chPlain.includes('ch_1(E)'));
+  assert(chPlain.includes('ch_1(F)'));
+
+  const cSession = api.createClassStepSession(result, 'chern', 1);
+  const cTensor = api.collectClassStepRuleCandidates(cSession).find((candidate) => candidate.sourceLabel === 'Tensor product');
+  assert(cTensor);
+  assert.strictEqual(api.collectClassStepRuleCandidates(cSession).filter((candidate) => candidate.sourceLabel === 'Tensor product').length, 1);
+  assert(cTensor.rule.classStepDisplayLatex.includes('c('));
+  const cRule = api.classStepMaterializeRule(cSession, cTensor.rules[0]);
+  const cPlain = api.formatPolyPlain(api.homologyRuleRhsPoly(cRule));
+  assert(cPlain.includes('ch_1(E)'));
+  assert(cPlain.includes('ch_1(F)'));
+}
+
+function testClassStepWrapsPullbackSourceRulesInsidePushforward() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'C', type: 'curve', dim: '1', name: 'C', homology: { classes: { unit: { symbol: '1' }, point: { symbol: '[p]' } } } },
+    { id: 'Pic', type: 'abstract', dim: '1', name: 'Pic', homology: { classes: { unit: { symbol: '1' } }, rules: [] } },
+    { id: 'Prod', type: 'abstract', dim: '2', name: 'C\\times Pic', construction: { type: 'product', varietyIds: ['C', 'Pic'] }, homology: { classes: { unit: { symbol: '1' } }, rules: [] } }
+  ];
+  api.state.maps = [
+    { id: 'piC', name: '\\pi_C', domainKind: 'variety', domainId: 'Prod', codomainKind: 'variety', codomainId: 'C', construction: { type: 'projection', productId: 'Prod', factorIndex: 0 } },
+    { id: 'piPic', name: '\\pi_{Pic}', domainKind: 'variety', domainId: 'Prod', codomainKind: 'variety', codomainId: 'Pic', construction: { type: 'projection', productId: 'Prod', factorIndex: 1 } }
+  ];
+  api.state.sheaves = [
+    { id: 'L', type: 'locally-free', name: '\\mathcal{L}', rank: '1', baseVarietyId: 'C', basis: 'character', homology: { rules: [] } },
+    { id: 'F', type: 'abstract', name: 'F', rank: 'r', baseVarietyId: 'Pic', basis: 'character' }
+  ];
+  const curveGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const picGeometry = api.geometryFromVariety(api.state.varieties[1]);
+  const sourceSheaf = api.sheafFromObject(api.state.sheaves[0], curveGeometry);
+  const sourceResult = api.buildClassStepFallbackResult(curveGeometry, sourceSheaf, { message: 'test' });
+  const sourceSession = api.createClassStepSession(sourceResult, 'character', 1);
+  const ch1Key = Array.from(sourceSession.components[1].terms.keys())[0];
+  const ch1Id = ch1Key.split(':')[0];
+  const pointId = api.homologyVariableId(api.HOMOLOGY_POINT_CLASS, curveGeometry);
+  api.state.sheaves[0].homology.rules = [{
+    id: 'rule-ch1-L',
+    enabled: true,
+    lhs: { powers: { [ch1Id]: 1 } },
+    rhs: [{ coefficient: '4', powers: { [pointId]: 1 } }]
+  }];
+
+  const pulled = api.pullbackPolynomial(sourceSession.components[1], api.state.maps[0]);
+  const pullbackKey = Array.from(pulled.terms.keys())[0];
+  const pullbackId = pullbackKey.split(':')[0];
+  const pushedId = 'test_pushforward_pullback_ch1';
+  api.VARS.set(pushedId, {
+    kind: 'mapHomology',
+    mapId: 'piPic',
+    operation: 'pushforward',
+    sourceKey: `${pullbackId}:1`,
+    degree: 0,
+    cohomologyDegree: 0,
+    latex: '\\pi_{Pic,*}\\pi_C^*\\operatorname{ch}_1(\\mathcal{L})',
+    plain: 'piPic_*piC^*ch_1(L)'
+  });
+
+  const targetSheaf = api.sheafFromObject(api.state.sheaves[1], picGeometry);
+  const result = api.buildClassStepFallbackResult(picGeometry, targetSheaf, { message: 'test' });
+  const session = api.createClassStepSession(result, 'character', 0);
+  session.components[0] = api.polyFromPowers({ [pushedId]: 1 });
+  const candidates = api.collectClassStepRuleCandidates(session);
+  const wrapped = candidates.find((candidate) => candidate.sourceLabel === 'Pullback'
+    && candidate.rule.classStepDisplayLatex.includes('\\pi_C')
+    && candidate.rules.some((rule) => api.formatPolyPlain(api.homologyRuleRhsPoly(rule)) === '4'));
+  assert(wrapped, candidates.map((candidate) => `${candidate.sourceLabel}:${candidate.rule.classStepDisplayLatex}`).join(' | '));
+  session.components[0] = api.applyClassStepRulesToPoly(session.components[0], wrapped.rules, picGeometry.dim, {
+    oncePerRule: true,
+    onePass: true
+  });
+  assert.strictEqual(api.formatPolyPlain(session.components[0]), '4');
+}
+
+function testClassStepPicardPushforwardGroupsToddAndFindsTensor() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'C', type: 'curve', dim: '1', name: 'C', genus: '4', homology: { classes: { unit: { symbol: '1' }, point: { symbol: '[p]' } } } },
+    {
+      id: 'Pic',
+      type: 'abelian',
+      dim: '4',
+      name: 'Pic^d(C)',
+      genus: '4',
+      ppavGenus: '4',
+      homology: {
+        classes: { theta: { symbol: '\\Theta' }, unit: { symbol: '1' }, point: { symbol: '[p]' } },
+        rules: [{ id: 'top-theta-point', builtin: true, enabled: true, lhs: { powers: { homology_v_Pic_theta: 4 } }, rhs: [{ coefficient: '24', powers: { homology_v_Pic_point: 1 } }] }]
+      },
+      construction: { type: 'picard-variety', curveId: 'C', degreeSymbol: 'd' }
+    },
+    { id: 'Prod', type: 'abstract', dim: '5', name: 'C\\times Pic^d(C)', homology: { classes: { unit: { symbol: '1' }, point: { symbol: '[p]' } } }, construction: { type: 'product', varietyIds: ['C', 'Pic'] } }
+  ];
+  api.state.maps = [
+    { id: 'piC', name: '\\pi_{C}', domainKind: 'variety', domainId: 'Prod', codomainKind: 'variety', codomainId: 'C', construction: { type: 'projection', productId: 'Prod', factorIndex: 0 } },
+    { id: 'piPic', name: '\\pi_{Pic^d(C)}', domainKind: 'variety', domainId: 'Prod', codomainKind: 'variety', codomainId: 'Pic', construction: { type: 'projection', productId: 'Prod', factorIndex: 1 } }
+  ];
+  api.state.sheaves = [
+    { id: 'P', type: 'locally-free', name: '\\mathcal{P}_{d}', rank: '1', baseVarietyId: 'Prod', basis: 'chern', construction: { type: 'picard-poincare-line-bundle', curveId: 'C', picardId: 'Pic', productId: 'Prod', curveProjectionId: 'piC', picardProjectionId: 'piPic' } },
+    { id: 'E', type: 'locally-free', name: '\\mathcal{E}', rank: 'r', baseVarietyId: 'C', basis: 'chern' },
+    { id: 'LE', type: 'abstract', name: '\\mathbf{L}\\pi_{C}^{*}\\mathcal{E}', rank: 'r', baseVarietyId: 'Prod', basis: 'chern', construction: { type: 'pullback', mapId: 'piC', sheafId: 'E', exact: true } },
+    { id: 'Tensor', type: 'abstract', name: '\\mathcal{P}_{d} \\otimes^{\\mathbf{L}} \\mathbf{L}\\pi_{C}^{*}\\mathcal{E}', rank: 'r', baseVarietyId: 'Prod', basis: 'chern', construction: { type: 'tensor', sheafIds: ['P', 'LE'], exact: true } },
+    { id: 'F', type: 'abstract', name: 'F', rank: 'r', baseVarietyId: 'Pic', basis: 'chern', construction: { type: 'pushforward', mapId: 'piPic', sheafId: 'Tensor', exact: true, proper: true } }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[1]);
+  const sheaf = api.sheafFromObject(api.state.sheaves[4], geometry);
+  const result = api.buildClassStepFallbackResult(geometry, sheaf, { message: 'test' });
+  const session = api.createClassStepSession(result, 'character', null);
+  const grr = api.collectClassStepRuleCandidates(session).find((candidate) => candidate.sourceLabel === 'GRR');
+  assert(grr);
+  const materializedGrrRules = grr.rules.map((rule) => api.classStepMaterializeRule(session, rule));
+  for (let degree = 1; degree <= geometry.dim; degree += 1) {
+    session.components[degree] = api.applyClassStepRulesToPoly(session.components[degree], materializedGrrRules, geometry.dim, {
+      oncePerRule: true,
+      onePass: true
+    });
+  }
+  const candidates = api.collectClassStepRuleCandidates(session);
+  const picTodd = candidates.filter((candidate) => candidate.rule.classStepDisplayLatex === '\\operatorname{td}(Pic^d(C))');
+  const tensor = candidates.filter((candidate) => candidate.sourceLabel === 'Tensor product');
+  assert.strictEqual(picTodd.length, 1);
+  assert.strictEqual(tensor.length, 1);
+  assert.strictEqual(tensor[0].rules.length > 1, true);
+  assert(tensor[0].rule.classStepDisplayLatex.includes('\\otimes^{\\mathbf{L}}'));
+}
+
+function testClassStepPicardPoincarePushforwardToddStepMatchesNormalCharacter() {
+  const api = loadCalculator();
+  api.state.globalInvariants = [{ id: 'auto-d', type: 'rational-number', name: 'd', auto: true }];
+  api.state.varieties = [
+    { id: 'C', type: 'curve', dim: '1', name: 'C', genus: '3', homology: { classes: { unit: { symbol: '1' }, point: { symbol: '[p]' } } } },
+    {
+      id: 'Pic',
+      type: 'abelian',
+      dim: '3',
+      name: 'Pic^d(C)',
+      genus: '3',
+      homology: {
+        classes: { theta: { symbol: '\\Theta' }, unit: { symbol: '1' }, point: { symbol: '[p]' } },
+        rules: [{ id: 'top-theta-point', builtin: true, enabled: true, lhs: { powers: { homology_v_Pic_theta: 3 } }, rhs: [{ coefficient: '6', powers: { homology_v_Pic_point: 1 } }] }]
+      },
+      construction: { type: 'picard-variety', curveId: 'C', degreeSymbol: 'd' }
+    },
+    {
+      id: 'Prod',
+      type: 'abstract',
+      dim: '4',
+      name: 'C\\times Pic^d(C)',
+      construction: { type: 'product', varietyIds: ['C', 'Pic'] },
+      homology: {
+        classes: { unit: { symbol: '1' }, point: { symbol: '[p]' }, picard_poincare_gamma: { symbol: '\\gamma' }, picard_eta: { symbol: '\\eta' } },
+        customClasses: [
+          { id: 'picard_poincare_gamma', symbol: '\\gamma', degree: 1, cohomologyDegree: 2, special: 'picard-canonical', productBidegree: [1, 1] },
+          { id: 'picard_eta', symbol: '\\eta', degree: 1, cohomologyDegree: 2, special: 'map-homology', variableId: 'map_pullback_piC_homology_v_C_point', productBidegree: [2, 0] }
+        ],
+        rules: []
+      }
+    }
+  ];
+  api.state.maps = [
+    { id: 'piC', name: '\\pi_C', domainKind: 'variety', domainId: 'Prod', codomainKind: 'variety', codomainId: 'C', construction: { type: 'projection', productId: 'Prod', factorIndex: 0 } },
+    { id: 'piPic', name: '\\pi_{Pic^d(C)}', domainKind: 'variety', domainId: 'Prod', codomainKind: 'variety', codomainId: 'Pic', construction: { type: 'projection', productId: 'Prod', factorIndex: 1 } }
+  ];
+  api.state.sheaves = [
+    {
+      id: 'P',
+      type: 'locally-free',
+      name: '\\mathcal{P}_{d}',
+      rank: '1',
+      baseVarietyId: 'Prod',
+      basis: 'chern',
+      homology: {
+        rules: [{
+          id: 'sheaf-rule-sheaf_P_c1',
+          enabled: true,
+          lhs: { powers: { sheaf_P_c1: 1 } },
+          rhs: [
+            { coefficient: '1', powers: { homology_v_Prod_picard_poincare_gamma: 1 } },
+            { coefficient: '1', powers: { global_d: 1, map_pullback_piC_homology_v_C_point: 1 } }
+          ],
+          preserveUnknownVariables: true
+        }]
+      },
+      construction: { type: 'picard-poincare-line-bundle', curveId: 'C', picardId: 'Pic', productId: 'Prod', curveProjectionId: 'piC', picardProjectionId: 'piPic' }
+    },
+    { id: 'F', type: 'abstract', name: '\\pi_{Pic^d(C)}_{*}\\mathcal{P}_{d}', rank: 'r', baseVarietyId: 'Pic', basis: 'chern', construction: { type: 'pushforward', mapId: 'piPic', sheafId: 'P', exact: true, proper: true } }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[1]);
+  const sheaf = api.sheafFromObject(api.state.sheaves[1], geometry);
+  const normalBundle = api.buildBundleForSheaf(geometry, sheaf, { geometry });
+  const result = api.buildClassStepFallbackResult(geometry, sheaf, { message: 'test' });
+  const session = api.createClassStepSession(result, 'character', null);
+  let candidates = api.collectClassStepRuleCandidates(session);
+  const grr = candidates.find((candidate) => candidate.sourceLabel === 'GRR');
+  assert(grr);
+  const grrRules = grr.rules.map((rule) => api.classStepMaterializeRule(session, rule));
+  for (let degree = 0; degree <= geometry.dim; degree += 1) {
+    session.components[degree] = api.applyClassStepRulesToPoly(session.components[degree], grrRules, geometry.dim, {
+      oncePerRule: true,
+      onePass: true
+    });
+  }
+  const toddCandidates = api.collectClassStepRuleCandidates(session).filter((candidate) => candidate.sourceLabel === 'Todd');
+  assert(toddCandidates.some((candidate) => String(candidate.rule.id || '').startsWith('step-todd-class_step_td_v_Pic')));
+  assert(toddCandidates.some((candidate) => String(candidate.rule.id || '').startsWith('step-map-wrap-')));
+  assert(toddCandidates.filter((candidate) => candidate.selected !== false)
+    .every((candidate) => String(candidate.rule.id || '').startsWith('step-todd-class_step_td_v_Pic')));
+  api.state.classStepSession = session;
+  api.refs.classStepPanel = { hidden: false, classList: { toggle() {} } };
+  api.refs.classStepFormula = { innerHTML: '' };
+  api.refs.classStepRules = { hidden: false, innerHTML: '' };
+  api.refs.classStepMessage = { textContent: '' };
+  api.refs.classStepApply = { disabled: false };
+  session.candidates = toddCandidates;
+  for (let round = 0; round < 4; round += 1) {
+    const selectedToddRules = session.candidates
+      .filter((candidate) => candidate.selected !== false)
+      .flatMap((candidate) => candidate.rules.map((rule) => api.classStepMaterializeRule(session, rule)));
+    assert(selectedToddRules.length > 0);
+    for (let degree = 0; degree <= geometry.dim; degree += 1) {
+      session.components[degree] = api.applyClassStepRulesToPoly(session.components[degree], selectedToddRules, geometry.dim, {
+        oncePerRule: true,
+        onePass: true
+      });
+    }
+    api.renderClassStepPanel();
+    const selectedTargetTodd = session.candidates
+      .filter((candidate) => candidate.selected !== false)
+      .some((candidate) => String(candidate.rule.id || '').startsWith('step-todd-class_step_td_v_Pic'));
+    if (!selectedTargetTodd) break;
+  }
+  const postTargetToddCandidates = session.candidates.filter((candidate) => candidate.sourceLabel === 'Todd');
+  assert(postTargetToddCandidates
+    .some((candidate) => String(candidate.rule.id || '').startsWith('step-map-wrap-') && candidate.selected !== false),
+    postTargetToddCandidates.map((candidate) => `${candidate.rule.id}:${candidate.selected !== false}:${candidate.classStepAutoSelectionReason || ''}`).join(' | '));
+  for (let round = 0; round < 8; round += 1) {
+    candidates = api.collectClassStepRuleCandidates(session).filter((candidate) => candidate.sourceLabel !== 'GRR');
+    if (!candidates.length) break;
+    const rules = candidates.flatMap((candidate) => candidate.rules.map((rule) => api.classStepMaterializeRule(session, rule)));
+    for (let degree = 0; degree <= geometry.dim; degree += 1) {
+      session.components[degree] = api.applyClassStepRulesToPoly(session.components[degree], rules, geometry.dim, {
+        oncePerRule: true,
+        onePass: true
+      });
+    }
+  }
+  session.checkSwitchingRules = true;
+  candidates = api.collectClassStepRuleCandidates(session).filter((candidate) => candidate.sourceLabel === 'Switch c/ch');
+  assert(candidates.length > 0);
+  let rules = candidates.flatMap((candidate) => candidate.rules.map((rule) => api.classStepMaterializeRule(session, rule)));
+  for (let degree = 0; degree <= geometry.dim; degree += 1) {
+    session.components[degree] = api.applyClassStepRulesToPoly(session.components[degree], rules, geometry.dim, {
+      oncePerRule: true,
+      onePass: true
+    });
+  }
+  session.checkSwitchingRules = false;
+  const poincareCandidates = api.collectClassStepRuleCandidates(session)
+    .filter((candidate) => candidate.rule.id.includes('sheaf-rule-sheaf_P_c1'));
+  assert.strictEqual(poincareCandidates.length, 1);
+  assert(poincareCandidates[0].rules.length > 1);
+  for (let round = 0; round < 8; round += 1) {
+    candidates = api.collectClassStepRuleCandidates(session).filter((candidate) => candidate.sourceLabel !== 'GRR');
+    if (!candidates.length) break;
+    rules = candidates.flatMap((candidate) => candidate.rules.map((rule) => api.classStepMaterializeRule(session, rule)));
+    for (let degree = 0; degree <= geometry.dim; degree += 1) {
+      session.components[degree] = api.applyClassStepRulesToPoly(session.components[degree], rules, geometry.dim, {
+        oncePerRule: true,
+        onePass: true
+      });
+    }
+  }
+  assert.strictEqual(api.formatPolyPlain(session.components[0]), 'd - 2');
+  assert.strictEqual(api.formatPolyPlain(session.components[1]), '-Theta');
+  assert.strictEqual(api.formatPolyPlain(session.components[2]), '0');
+  assert.strictEqual(api.formatPolyPlain(session.components[3]), '0');
+  assert.notStrictEqual(api.formatPolyPlain(session.components[1]), '0');
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'd - 2 - Theta');
+
+  const uiSession = api.createClassStepSession(result, 'chern', null);
+  assert.strictEqual(uiSession.family, 'character');
+  const applyUiStep = (label, configure = null, switching = false) => {
+    uiSession.checkSwitchingRules = switching;
+    const stepCandidates = api.collectClassStepRuleCandidates(uiSession);
+    if (configure) configure(stepCandidates);
+    const selected = stepCandidates.filter((candidate) => candidate.selected !== false);
+    assert(selected.length > 0, label);
+    const stepRules = selected.flatMap((candidate) => candidate.rules.map((rule) => api.classStepMaterializeRule(uiSession, rule)));
+    for (let degree = 0; degree <= geometry.dim; degree += 1) {
+      uiSession.components[degree] = api.applyClassStepRulesToPoly(uiSession.components[degree], stepRules, geometry.dim, {
+        oncePerRule: true,
+        onePass: false
+      });
+    }
+  };
+  applyUiStep('ui GRR', (stepCandidates) => stepCandidates.forEach((candidate) => {
+    candidate.selected = candidate.sourceLabel === 'GRR';
+  }));
+  for (let round = 0; round < 6; round += 1) {
+    const selected = api.collectClassStepRuleCandidates(uiSession)
+      .filter((candidate) => candidate.sourceLabel !== 'GRR' && candidate.selected !== false);
+    if (!selected.length) break;
+    applyUiStep(`ui pre-switch ${round}`, (stepCandidates) => stepCandidates.forEach((candidate) => {
+      if (candidate.sourceLabel === 'GRR') candidate.selected = false;
+    }));
+  }
+  applyUiStep('ui switch', (stepCandidates) => stepCandidates.forEach((candidate) => {
+    candidate.selected = candidate.sourceLabel === 'Switch c/ch';
+  }), true);
+  uiSession.checkSwitchingRules = false;
+  for (let round = 0; round < 10; round += 1) {
+    const selected = api.collectClassStepRuleCandidates(uiSession)
+      .filter((candidate) => candidate.sourceLabel !== 'GRR' && candidate.selected !== false);
+    if (!selected.length) break;
+    applyUiStep(`ui post-switch ${round}`, (stepCandidates) => stepCandidates.forEach((candidate) => {
+      if (candidate.sourceLabel === 'GRR') candidate.selected = false;
+    }));
+  }
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(uiSession)), 'd - 2 - Theta');
+  assert(!api.collectClassStepRuleCandidates(uiSession).some((candidate) => candidate.sourceLabel === 'GRR'));
+  api.state.classStepSession = uiSession;
+  const stepLatexExport = api.exportResult(result, 'latex', 'step-classes');
+  assert(stepLatexExport.includes('% source: step-by-step characteristic class chart'));
+  assert(stepLatexExport.includes('d - 2'));
+  assert(stepLatexExport.includes('\\Theta'));
+
+  const legacyChernSession = api.createClassStepSession(result, 'character', null);
+  const rankComponent = legacyChernSession.rankComponent;
+  legacyChernSession.family = 'chern';
+  legacyChernSession.components = result.bundle.cComps.slice();
+  legacyChernSession.components[0] = api.polyFromPowers({});
+  legacyChernSession.rankComponent = rankComponent;
+  const legacyGrr = api.collectClassStepRuleCandidates(legacyChernSession)
+    .find((candidate) => candidate.sourceLabel === 'GRR');
+  assert(legacyGrr);
+  assert(legacyGrr.rules.some((rule) => rule.classStepRankRule === true));
+  const legacyRules = legacyGrr.rules.map((rule) => api.classStepMaterializeRule(legacyChernSession, rule));
+  const beforeRank = api.formatPolyPlain(legacyChernSession.rankComponent);
+  legacyChernSession.rankComponent = api.applyClassStepRulesToPoly(legacyChernSession.rankComponent, legacyRules, geometry.dim, {
+    oncePerRule: true,
+    onePass: false
+  });
+  assert(beforeRank.startsWith('r('), beforeRank);
+  assert.notStrictEqual(beforeRank, 'r');
+  const afterRank = api.formatPolyPlain(legacyChernSession.rankComponent);
+  assert.notStrictEqual(afterRank, beforeRank);
+  legacyChernSession.active = false;
+  legacyChernSession.stopped = true;
+  const ch0Rows = api.buildClassRowsFromStepSession(legacyChernSession, {
+    ...api.classDisplayOptions(geometry, sheaf),
+    termMode: 'term',
+    termIndex: 0
+  });
+  assert.strictEqual(ch0Rows.find((row) => row.key === 'character_0')?.plain, afterRank);
+}
+
+function testClassStepRepeatedDisplayedRulesOnlyAppearOnce() {
+  const api = loadCalculator();
+  const geometry = {
+    type: 'abstract',
+    dim: 2,
+    labelLatex: 'X',
+    labelPlain: 'X',
+    varietyId: 'X',
+    homology: {
+      customClasses: [
+        { id: 'A', symbol: 'A', degree: 1, cohomologyDegree: 2 },
+        { id: 'B', symbol: 'B', degree: 1, cohomologyDegree: 2 },
+        { id: 'C', symbol: 'C', degree: 1, cohomologyDegree: 2 }
+      ],
+      rules: []
+    }
+  };
+  const defs = api.homologyClassDefinitions(geometry);
+  const aId = api.homologyDefVariableId(defs.find((def) => def.id === 'A'), geometry);
+  const bId = api.homologyDefVariableId(defs.find((def) => def.id === 'B'), geometry);
+  const cId = api.homologyDefVariableId(defs.find((def) => def.id === 'C'), geometry);
+  geometry.homology.rules = [
+    { id: 'repeat-1', enabled: true, stepSourceLabel: 'repeat', classStepDisplayLatex: '\\mathcal{R}', lhs: { powers: { [aId]: 1 } }, rhs: [{ coefficient: '1', powers: { [cId]: 1 } }] },
+    { id: 'repeat-2', enabled: true, stepSourceLabel: 'repeat', classStepDisplayLatex: '\\mathcal{R}', lhs: { powers: { [bId]: 1 } }, rhs: [{ coefficient: '1', powers: { [cId]: 1 } }] }
+  ];
+  const session = {
+    geometry,
+    sheaf: { id: 'E', type: 'abstract', basis: 'chern', rankPlain: '2', rankLatex: '2', labelLatex: 'E', labelPlain: 'E', sourceObject: { id: 'E', basis: 'chern' } },
+    family: 'chern',
+    dimension: 2,
+    index: 1,
+    components: [api.polyFromPowers({}), api.polyFromPowers({ [aId]: 1 }).add(api.polyFromPowers({ [bId]: 1 })), api.polyFromPowers({})]
+  };
+  const candidates = api.collectClassStepRuleCandidates(session).filter((candidate) => candidate.sourceLabel === 'repeat');
+  assert.strictEqual(candidates.length, 1);
+  assert.strictEqual(candidates[0].rules.length, 2);
+}
+
+function testClassStepLayoutToggleDefaultsWideAndSwitchesSide() {
+  const api = loadCalculator();
+  const classList = new Set();
+  const sidebar = {
+    insertBefore(child, nextSibling) {
+      child.parentElement = sidebar;
+      child.nextSibling = nextSibling || null;
+    }
+  };
+  const wideHost = {
+    hidden: true,
+    appendChild(child) {
+      child.parentElement = wideHost;
+    }
+  };
+  const anchor = { parentElement: sidebar, nextSibling: null };
+  const cardClassList = new Set();
+  const card = {
+    hidden: true,
+    parentElement: sidebar,
+    classList: {
+      toggle(name, value) {
+        if (value) cardClassList.add(name);
+        else cardClassList.delete(name);
+      }
+    }
+  };
+  const panel = {
+    hidden: true,
+    classList: {
+      toggle(name, value) {
+        if (value) classList.add(name);
+        else classList.delete(name);
+      }
+    }
+  };
+  const button = {
+    textContent: '',
+    attributes: {},
+    title: '',
+    setAttribute(name, value) {
+      this.attributes[name] = value;
+    }
+  };
+  api.refs.classStepCard = card;
+  api.refs.classStepWideHost = wideHost;
+  api.refs.classStepSideAnchor = anchor;
+  api.refs.classStepPanel = panel;
+  api.refs.classStepLayout = button;
+  api.state.classStepSession = { layout: 'wide' };
+  api.toggleClassStepLayout();
+  assert.strictEqual(api.state.classStepSession.layout, 'side');
+  assert.strictEqual(card.parentElement, sidebar);
+  assert.strictEqual(classList.has('is-side'), true);
+  assert.strictEqual(classList.has('is-wide'), false);
+  assert.strictEqual(button.textContent, 'side');
+  api.toggleClassStepLayout();
+  assert.strictEqual(api.state.classStepSession.layout, 'wide');
+  assert.strictEqual(card.parentElement, wideHost);
+  assert.strictEqual(wideHost.hidden, false);
+  assert.strictEqual(cardClassList.has('wide'), true);
+  assert.strictEqual(classList.has('is-wide'), true);
+  assert.strictEqual(button.textContent, 'wide');
+}
+
+function testClassStepPhoneForcesSideLayout() {
+  const api = loadCalculator();
+  const classList = new Set();
+  const panel = {
+    classList: {
+      toggle(name, value) {
+        if (value) classList.add(name);
+        else classList.delete(name);
+      }
+    }
+  };
+  const button = {
+    hidden: false,
+    disabled: false,
+    textContent: '',
+    attributes: {},
+    title: '',
+    setAttribute(name, value) {
+      this.attributes[name] = value;
+    }
+  };
+  api.refs.classStepPanel = panel;
+  api.refs.classStepLayout = button;
+  api.refs.classStepWideHost = { hidden: false };
+  api.refs.classStepCard = { classList: { toggle() {} } };
+  api.state.classStepSession = { layout: 'side' };
+  const previous = api.window.matchMedia;
+  try {
+    api.window.matchMedia = () => ({ matches: false });
+    api.toggleClassStepLayout();
+  } finally {
+    api.window.matchMedia = previous;
+  }
+  assert.strictEqual(api.state.classStepSession.layout, 'side');
+  assert.strictEqual(classList.has('is-side'), true);
+  assert.strictEqual(button.hidden, true);
+  assert.strictEqual(button.disabled, true);
+}
+
+function testClassStepSessionOpensSeparateCard() {
+  const api = loadCalculator();
+  const classList = new Set(['collapsed']);
+  const card = {
+    hidden: true,
+    classList: {
+      remove(name) {
+        classList.delete(name);
+      }
+    }
+  };
+  const panel = {
+    hidden: true,
+    classList: { toggle() {} }
+  };
+  api.refs.classStepCard = card;
+  api.refs.classStepPanel = panel;
+  const geometry = api.geometryFromVariety({ id: 'X', type: 'abstract', dim: '1', name: 'X' });
+  const sheaf = api.sheafFromObject({ id: 'E', type: 'abstract', basis: 'chern', rank: '1', name: 'E', baseVarietyId: 'X' }, geometry);
+  const bundle = api.buildBundleForSheaf(geometry, sheaf, { geometry });
+  api.state.lastResult = { geometry, sheaf, bundle };
+  const session = api.createClassStepSession(api.state.lastResult, 'chern', 1);
+  api.state.classStepSession = session;
+  api.refs.classStepFamily = { value: '' };
+  api.refs.classStepTermOnly = { checked: false };
+  api.refs.classStepTermIndex = { max: '', disabled: false, value: '' };
+  api.refs.classStepFormula = { innerHTML: '' };
+  api.refs.classStepRules = { hidden: false, innerHTML: '' };
+  api.refs.classStepMessage = { textContent: '' };
+  api.refs.classStepApply = { disabled: true };
+  api.renderClassStepPanel();
+  assert.strictEqual(card.hidden, false);
+  assert.strictEqual(panel.hidden, false);
+  assert.strictEqual(classList.has('collapsed'), false);
+  api.stopClassStepSession();
+  assert.strictEqual(card.hidden, true);
+}
+
+function testClassStepRuleOnceAndOnePassSemantics() {
+  const api = loadCalculator();
+  const rule = {
+    id: 'a-to-b',
+    enabled: true,
+    lhs: { powers: { a: 1 } },
+    rhs: [{ coefficient: '1', powers: { b: 1 } }]
+  };
+  api.VARS.set('a', { degree: 1, latex: 'a', plain: 'a' });
+  api.VARS.set('b', { degree: 1, latex: 'b', plain: 'b' });
+  const square = api.polyFromPowers({ a: 2 });
+  const once = api.applyOneHomologyRuleOnce(square, rule, 2, {});
+  assert.strictEqual(api.formatPolyPlain(once), 'a*b');
+  const vanishingOnce = api.applyOneHomologyRuleOnce(square, { ...rule, rhs: [] }, 2, {});
+  assert.strictEqual(api.formatPolyPlain(vanishingOnce), '0');
+  const sweep = api.applyClassStepRulesToPoly(square, [rule], 2, { oncePerRule: false, onePass: true });
+  assert.strictEqual(api.formatPolyPlain(sweep), 'b^2');
+
+  const secondRule = {
+    id: 'b-to-c',
+    enabled: true,
+    lhs: { powers: { b: 1 } },
+    rhs: [{ coefficient: '1', powers: { c: 1 } }]
+  };
+  api.VARS.set('c', { degree: 1, latex: 'c', plain: 'c' });
+  const onePass = api.applyClassStepRulesToPoly(api.polyFromPowers({ a: 1 }), [rule, secondRule], 2, { oncePerRule: false, onePass: true });
+  assert.strictEqual(api.formatPolyPlain(onePass), 'c');
+}
+
+function testClassStepCachedRulesIncludeMapWrappedCandidates() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'X', type: 'abstract', dim: '1', name: 'X' },
+    { id: 'Y', type: 'abstract', dim: '1', name: 'Y' }
+  ];
+  api.state.maps = [{ id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' }];
+  const sourceGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const targetGeometry = api.geometryFromVariety(api.state.varieties[1]);
+  const sourceSheafObject = { id: 'E', type: 'abstract', basis: 'chern', rank: '1', name: 'E', baseVarietyId: 'X' };
+  const sourceSheaf = api.sheafFromObject(sourceSheafObject, sourceGeometry);
+  const sourceBundle = api.buildBundleForSheaf(sourceGeometry, sourceSheaf, { geometry: sourceGeometry });
+  api.state.lastResult = { geometry: sourceGeometry, sheaf: sourceSheaf, bundle: sourceBundle };
+  const sourceSession = api.createClassStepSession(api.state.lastResult, 'chern', 1);
+  sourceSession.components[1] = api.polyFromPowers({});
+  api.rememberClassStepComponents(sourceSession);
+
+  const map = api.state.maps[0];
+  const pushedFormal = api.pushforwardPolynomialByDegree(map, sourceSession.originalComponents[1], 1, 1, { proper: false });
+  const targetSheaf = { id: 'G', type: 'abstract', basis: 'chern', rankPlain: '1', rankLatex: '1', labelLatex: 'G', labelPlain: 'G', sourceObject: { id: 'G', basis: 'chern' } };
+  const targetBundle = api.buildBundleForSheaf(targetGeometry, targetSheaf, { geometry: targetGeometry });
+  api.state.lastResult = { geometry: targetGeometry, sheaf: targetSheaf, bundle: targetBundle };
+  api.refs.classStepUseCache = { checked: true };
+  const targetSession = api.createClassStepSession(api.state.lastResult, 'chern', 1);
+  targetSession.components[1] = pushedFormal;
+  const candidates = api.collectClassStepRuleCandidates(targetSession);
+  assert(candidates.some((candidate) => candidate.sourceLabel === 'cached pushforward'));
+}
+
+function testClassStepSwitchingRulesUnlockStoredOppositeBasisRule() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X' }];
+  api.state.maps = [{ id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'X' }];
+  api.state.sheaves = [
+    {
+      id: 'E',
+      type: 'locally-free',
+      basis: 'chern',
+      rank: '1',
+      name: 'E',
+      baseVarietyId: 'X',
+      homology: {
+        rules: [{
+          id: 'rule-c1-E',
+          enabled: true,
+          lhs: { powers: { sheaf_E_c1: 1 } },
+          rhs: []
+        }]
+      }
+    }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const sheaf = api.sheafFromObject(api.state.sheaves[0], geometry);
+  const result = api.buildClassStepFallbackResult(geometry, sheaf, { message: 'test' });
+  const session = api.createClassStepSession(result, 'character', 1);
+  assert(!api.collectClassStepRuleCandidates(session).some((candidate) => candidate.sourceLabel === 'Switch c/ch'));
+  session.checkSwitchingRules = true;
+  const switchRule = api.collectClassStepRuleCandidates(session).find((candidate) => candidate.sourceLabel === 'Switch c/ch');
+  assert(switchRule);
+  assert.strictEqual(switchRule.selected, false);
+  const afterSwitch = api.applyClassStepRulesToPoly(session.components[1], switchRule.rules, geometry.dim, { oncePerRule: true, onePass: true });
+  session.components[1] = afterSwitch;
+  assert(api.collectClassStepRuleCandidates(session).some((candidate) => candidate.rule.id === 'rule-c1-E'));
+}
+
+function testClassStepUseCacheRenderingSurvivesStaleVariableMetadata() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'X', type: 'abstract', dim: '1', name: 'X' },
+    { id: 'Y', type: 'abstract', dim: '1', name: 'Y' }
+  ];
+  api.state.maps = [{ id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' }];
+  const sourceGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const targetGeometry = api.geometryFromVariety(api.state.varieties[1]);
+  const sourceSheaf = api.sheafFromObject({ id: 'E', type: 'abstract', basis: 'chern', rank: '1', name: 'E', baseVarietyId: 'X' }, sourceGeometry);
+  api.state.lastResult = { geometry: sourceGeometry, sheaf: sourceSheaf, bundle: api.buildBundleForSheaf(sourceGeometry, sourceSheaf, { geometry: sourceGeometry }) };
+  const sourceSession = api.createClassStepSession(api.state.lastResult, 'chern', 1);
+  sourceSession.components[1] = api.polyFromPowers({});
+  api.rememberClassStepComponents(sourceSession);
+  api.VARS.clear();
+  const targetSheaf = api.sheafFromObject({ id: 'G', type: 'abstract', basis: 'chern', rank: '1', name: 'G', baseVarietyId: 'Y' }, targetGeometry);
+  api.state.lastResult = { geometry: targetGeometry, sheaf: targetSheaf, bundle: api.buildBundleForSheaf(targetGeometry, targetSheaf, { geometry: targetGeometry }) };
+  api.refs.classStepUseCache = { checked: true };
+  const targetSession = api.createClassStepSession(api.state.lastResult, 'chern', 1);
+  targetSession.components[1] = api.pushforwardPolynomialByDegree(api.state.maps[0], sourceSession.originalComponents[1], 1, 1, { proper: false });
+  assert.doesNotThrow(() => api.collectClassStepRuleCandidates(targetSession));
+}
+
+function testClassStepStopRowsUsePreservedComponents() {
+  const api = loadCalculator();
+  const geometry = api.geometryFromVariety({ id: 'X', type: 'abstract', dim: '2', name: 'X' });
+  const sheafObject = { id: 'E', type: 'abstract', basis: 'chern', rank: '2', name: 'E', baseVarietyId: 'X' };
+  const sheaf = api.sheafFromObject(sheafObject, geometry);
+  const bundle = api.buildBundleForSheaf(geometry, sheaf, { geometry });
+  api.state.lastResult = { geometry, sheaf, bundle, classDisplay: { expression: 'standard', termMode: 'total', geometry, homology: geometry.homology, homologyRulePasses: 1 } };
+  const session = api.createClassStepSession(api.state.lastResult, 'chern', null);
+  const zero = session.components[1].sub(session.components[1]);
+  session.components[1] = zero;
+  session.components[2] = zero;
+  session.active = false;
+  session.stopped = true;
+  const rows = api.buildClassRowsFromStepSession(session, api.state.lastResult.classDisplay);
+  assert(rows.some((row) => row.key === 'chern' && row.plain === '1'));
+  assert(rows.some((row) => row.key === 'character'));
+}
+
+function testClassStepEntryAvailableWhenRowsAreLimited() {
+  const api = loadCalculator();
+  const geometry = api.geometryFromVariety({ id: 'X', type: 'abstract', dim: '2', name: 'X' });
+  const sheafObject = { id: 'E', type: 'abstract', basis: 'chern', rank: '2', name: 'E', baseVarietyId: 'X' };
+  const sheaf = api.sheafFromObject(sheafObject, geometry);
+  const bundle = api.buildBundleForSheaf(geometry, sheaf, { geometry });
+  const entry = { hidden: true };
+  const button = { disabled: true };
+  const panel = { hidden: false };
+  const card = { hidden: true };
+  api.refs.classStepEntry = entry;
+  api.refs.stepClasses = button;
+  api.refs.classStepPanel = panel;
+  api.refs.classStepCard = card;
+  api.syncClassStepAvailability({
+    geometry,
+    sheaf,
+    bundle,
+    classRows: [],
+    classComputationLimited: true
+  });
+  assert.strictEqual(entry.hidden, false);
+  assert.strictEqual(button.disabled, false);
+  assert.strictEqual(panel.hidden, false);
+  assert.strictEqual(card.hidden, true);
+}
+
+function testClassStepEntryAvailableAfterErrorWithoutResult() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X' }];
+  api.state.sheaves = [{ id: 'F', type: 'abstract', basis: 'chern', rank: '2', name: 'F', baseVarietyId: 'X' }];
+  api.state.activeSheafId = 'F';
+  api.state.activeVarietyId = 'X';
+  api.state.inputMode = 'modify';
+  api.refs.inputMode = { value: 'modify' };
+  api.refs.addObjectKind = { value: 'sheaf' };
+  const entry = { hidden: true };
+  const button = { disabled: true };
+  const panel = { hidden: false };
+  const card = { hidden: true };
+  api.refs.classStepEntry = entry;
+  api.refs.stepClasses = button;
+  api.refs.classStepPanel = panel;
+  api.refs.classStepCard = card;
+  api.syncClassStepAvailability(null);
+  assert.strictEqual(entry.hidden, false);
+  assert.strictEqual(button.disabled, false);
+  assert.strictEqual(panel.hidden, false);
+  assert.strictEqual(card.hidden, true);
+}
+
+function testClassStepBudgetFailureKeepsLastFormula() {
+  const api = loadCalculator();
+  api.VARS.set('a', { degree: 1, latex: 'a', plain: 'a' });
+  api.VARS.set('b', { degree: 1, latex: 'b', plain: 'b' });
+  api.VARS.set('c', { degree: 1, latex: 'c', plain: 'c' });
+  const rule = {
+    id: 'explode',
+    enabled: true,
+    lhs: { powers: { a: 1 } },
+    rhs: [
+      { coefficient: '1', powers: { b: 1 } },
+      { coefficient: '1', powers: { c: 1 } }
+    ]
+  };
+  const original = api.polyFromPowers({ a: 1 });
+  assert.throws(() => api.applyClassStepRulesToPoly(original, [rule], 2, {
+    oncePerRule: false,
+    onePass: false,
+    budget: api.createSymbolicBudget('step', { maxOps: 1, maxTerms: 100, maxMillis: 10000 })
+  }), /symbolic work limit/);
+  assert.strictEqual(api.formatPolyPlain(original), 'a');
+}
+
 function testHomologyCoefficientEditorAcceptsSymbolicRationalPolynomials() {
   const api = loadCalculator();
   api.state.globalInvariants = [
@@ -2628,6 +3649,89 @@ function testProjectionPushforwardUsesFiberTopBidegree() {
     {}
   );
   assert.strictEqual(api.formatPolyPlain(pushedProductPoint), '[p]');
+}
+
+function testStepProjectionPushforwardUsesExistingProductBidegreeOnly() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'X', type: 'projective', dim: '1', name: 'X' },
+    { id: 'Y', type: 'projective', dim: '1', name: 'Y' },
+    {
+      id: 'XY',
+      type: 'abstract',
+      dim: '2',
+      name: 'X\\times Y',
+      construction: { type: 'product', varietyIds: ['X', 'Y'], defaultName: 'X\\times Y' },
+      homology: { rules: [] }
+    }
+  ];
+  api.state.maps = [{
+    id: 'p1',
+    name: 'p_1',
+    domainKind: 'variety',
+    domainId: 'XY',
+    codomainKind: 'variety',
+    codomainId: 'X',
+    construction: { type: 'projection', productId: 'XY', factorIndex: 0 }
+  }];
+  const productGeometry = api.geometryFromVariety(api.state.varieties[2]);
+  const targetGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const sourceDefs = api.homologyClassDefinitions(productGeometry);
+  const xGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const yGeometry = api.geometryFromVariety(api.state.varieties[1]);
+  const xPointId = api.homologyVariableId(api.HOMOLOGY_POINT_CLASS, xGeometry);
+  const yPointId = api.homologyVariableId(api.HOMOLOGY_POINT_CLASS, yGeometry);
+  const leftOnly = api.homologyDefVariableId(sourceDefs.find((def) => def.productBox?.leftKey === `${xPointId}:1` && def.productBox?.rightKey === ''), productGeometry);
+  const rightOnly = api.homologyDefVariableId(sourceDefs.find((def) => def.productBox?.leftKey === '' && def.productBox?.rightKey === `${yPointId}:1`), productGeometry);
+  const mixed = api.polyFromPowers({ [leftOnly]: 1 }).add(api.polyFromPowers({ [rightOnly]: 1 }));
+  const pushed = api.pushforwardPolynomialByDegree(api.state.maps[0], mixed, productGeometry.dim, targetGeometry.dim, {});
+  const plain = api.formatPolyPlain(pushed);
+  assert.strictEqual(plain, '1');
+}
+
+function testProjectionPullbackCarriesProductBidegreeForPushforwardVanishing() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'C', type: 'curve', dim: '1', name: 'C' },
+    { id: 'Pic', type: 'abelian', dim: '4', name: 'Pic^d(C)', genus: '4', homology: { classes: { theta: { symbol: '\\Theta' } }, rules: [] } },
+    {
+      id: 'Prod',
+      type: 'abstract',
+      dim: '5',
+      name: 'C\\times Pic^d(C)',
+      construction: { type: 'product', varietyIds: ['C', 'Pic'], defaultName: 'C\\times Pic^d(C)' },
+      homology: {
+        classes: { eta: { symbol: '\\eta' } },
+        customClasses: [{ id: 'eta', symbol: '\\eta', cohomologyDegree: 2, productBidegree: [2, 0] }],
+        rules: []
+      }
+    }
+  ];
+  api.state.sheaves = [
+    { id: 'E', type: 'abstract', name: '\\mathcal{E}', twist: '1', rank: 'r', baseVarietyId: 'C', basis: 'character' }
+  ];
+  api.state.maps = [
+    { id: 'piC', name: '\\pi_C', domainKind: 'variety', domainId: 'Prod', codomainKind: 'variety', codomainId: 'C', construction: { type: 'projection', productId: 'Prod', factorIndex: 0 } },
+    { id: 'piPic', name: '\\pi_{Pic}', domainKind: 'variety', domainId: 'Prod', codomainKind: 'variety', codomainId: 'Pic', construction: { type: 'projection', productId: 'Prod', factorIndex: 1 } }
+  ];
+  const curveGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const productGeometry = api.geometryFromVariety(api.state.varieties[2]);
+  const picGeometry = api.geometryFromVariety(api.state.varieties[1]);
+  const sheaf = api.sheafFromObject(api.state.sheaves[0], curveGeometry);
+  const curveBundle = api.buildBundleForSheaf(curveGeometry, sheaf, { geometry: curveGeometry });
+  const pulledCh1 = api.pullbackPolynomial(curveBundle.chComps[1], api.state.maps[0]);
+  const pulledKey = Array.from(pulledCh1.terms.keys())[0];
+  const pulledId = Object.keys((pulledKey || '').split('|').reduce((powers, part) => {
+    const [id, exp] = part.split(':');
+    if (id) powers[id] = Number(exp);
+    return powers;
+  }, {}))[0];
+  assert.strictEqual(api.VARS.get(pulledId)?.productBidegree?.join(','), '2,0');
+  const etaDef = api.homologyClassDefinitions(productGeometry).find((def) => def.id === 'eta');
+  const etaId = api.homologyDefVariableId(etaDef, productGeometry);
+  const term = api.polyFromPowers({ [etaId]: 1 }).mul(pulledCh1, productGeometry.dim);
+  const pushed = api.pushforwardPolynomialByDegree(api.state.maps[1], term, productGeometry.dim, picGeometry.dim, {});
+  assert.strictEqual(api.formatPolyPlain(pushed), '0');
 }
 
 function testProductBoxMultiplicationUsesKoszulSign() {
@@ -2987,9 +4091,35 @@ testNormalBundleShowKeepsRevealedScaffoldingStable();
 testPresetImportPreservesIdealSheafMarker();
 testHomologyRulePassesAreCapped();
 testSymbolicBudgetFallbackKeepsUnsimplifiedPolynomial();
+testClassStepAutoTargetSelection();
+testClassStepFormalRanksAreSheafSpecific();
+testClassStepDerivedCharacteristicTargets();
+testClassStepDerivedTargetAppliesVisibleHomologyRule();
+testClassStepCandidatesOnlyIncludeApplicableRules();
+testClassStepStartsFromFormalConstructedSheafClassAndOffersSesRule();
+testClassStepPushforwardOffersGrrRule();
+testClassStepNestedPushforwardOffersGrrAfterSes();
+testClassStepTensorRulesForCharacterAndChern();
+testClassStepWrapsPullbackSourceRulesInsidePushforward();
+testClassStepPicardPushforwardGroupsToddAndFindsTensor();
+testClassStepPicardPoincarePushforwardToddStepMatchesNormalCharacter();
+testClassStepRepeatedDisplayedRulesOnlyAppearOnce();
+testClassStepLayoutToggleDefaultsWideAndSwitchesSide();
+testClassStepPhoneForcesSideLayout();
+testClassStepSessionOpensSeparateCard();
+testClassStepRuleOnceAndOnePassSemantics();
+testClassStepCachedRulesIncludeMapWrappedCandidates();
+testClassStepSwitchingRulesUnlockStoredOppositeBasisRule();
+testClassStepUseCacheRenderingSurvivesStaleVariableMetadata();
+testClassStepStopRowsUsePreservedComponents();
+testClassStepEntryAvailableWhenRowsAreLimited();
+testClassStepEntryAvailableAfterErrorWithoutResult();
+testClassStepBudgetFailureKeepsLastFormula();
 testHomologyCoefficientEditorAcceptsSymbolicRationalPolynomials();
 testProductCustomClassBidegreeTruncatesImpossiblePowers();
 testProjectionPushforwardUsesFiberTopBidegree();
+testStepProjectionPushforwardUsesExistingProductBidegreeOnly();
+testProjectionPullbackCarriesProductBidegreeForPushforwardVanishing();
 testProductBoxMultiplicationUsesKoszulSign();
 testPicardPoincareGammaDefaultsToProductBidegree();
 testPicardPoincareSheafKeepsClassRevealAvailableBeforeResult();

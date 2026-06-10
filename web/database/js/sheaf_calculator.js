@@ -190,6 +190,8 @@
     classRefreshBusy: false,
     pendingClassRefreshReason: '',
     simplificationCache: new Map(),
+    classStepSession: null,
+    classStepCache: new Map(),
     currentSymbolicBudget: null,
     currentRecomputeBudget: null,
     symbolicWarnings: [],
@@ -454,6 +456,26 @@
     refs.classActions = $('class-actions');
     refs.classChart = $('class-chart');
     refs.classMessage = $('class-message');
+    refs.classStepEntry = $('class-step-entry');
+    refs.stepClasses = $('step-classes');
+    refs.classStepWideHost = $('class-step-wide-host');
+    refs.classStepCard = $('class-step-card');
+    refs.classStepPanel = $('class-step-panel');
+    refs.classStepFamily = $('class-step-family');
+    refs.classStepTermOnly = $('class-step-term-only');
+    refs.classStepTermIndex = $('class-step-term-index');
+    refs.classStepLayout = $('class-step-layout');
+    refs.classStepFormula = $('class-step-formula');
+    refs.classStepUseCache = $('class-step-use-cache');
+    refs.classStepCheckSwitch = $('class-step-check-switch');
+    refs.classStepOncePerRule = $('class-step-once-per-rule');
+    refs.classStepOnePass = $('class-step-one-pass');
+    refs.classStepRules = $('class-step-rules');
+    refs.classStepApply = $('class-step-apply');
+    refs.classStepRestart = $('class-step-restart');
+    refs.classStepStop = $('class-step-stop');
+    refs.classStepExport = $('class-step-export');
+    refs.classStepMessage = $('class-step-message');
     refs.furtherSimplify = $('further-simplify');
     refs.resetSimplify = $('reset-simplify');
     refs.exportClasses = $('export-classes');
@@ -5008,6 +5030,47 @@
     });
     if (refs.exportClasses) {
       refs.exportClasses.addEventListener('click', () => openChartExport('classes'));
+    }
+    if (refs.stepClasses) {
+      refs.stepClasses.addEventListener('click', () => startClassStepSessionFromControls());
+    }
+    if (refs.classStepFamily) {
+      refs.classStepFamily.addEventListener('change', () => restartClassStepSessionFromControls());
+    }
+    if (refs.classStepTermOnly) {
+      refs.classStepTermOnly.addEventListener('change', () => updateClassStepTermControls({ preserveTotal: true }));
+    }
+    if (refs.classStepTermIndex) {
+      refs.classStepTermIndex.addEventListener('change', () => updateClassStepTermControls({ preserveTotal: true }));
+    }
+    if (refs.classStepLayout) {
+      refs.classStepLayout.addEventListener('click', () => toggleClassStepLayout());
+    }
+    if (refs.classStepUseCache) {
+      refs.classStepUseCache.addEventListener('change', () => renderClassStepPanel());
+    }
+    if (refs.classStepCheckSwitch) {
+      refs.classStepCheckSwitch.addEventListener('click', () => checkClassStepSwitchingRules());
+    }
+    if (refs.classStepRules) {
+      refs.classStepRules.addEventListener('change', (event) => {
+        const checkbox = event.target.closest('[data-class-step-rule]');
+        if (!checkbox || !state.classStepSession) return;
+        const candidate = state.classStepSession.candidates.find((item) => item.id === checkbox.dataset.classStepRule);
+        if (candidate) candidate.selected = checkbox.checked;
+      });
+    }
+    if (refs.classStepApply) {
+      refs.classStepApply.addEventListener('click', () => applySelectedClassStepRules());
+    }
+    if (refs.classStepRestart) {
+      refs.classStepRestart.addEventListener('click', () => restartClassStepSessionFromControls());
+    }
+    if (refs.classStepStop) {
+      refs.classStepStop.addEventListener('click', () => stopClassStepSession());
+    }
+    if (refs.classStepExport) {
+      refs.classStepExport.addEventListener('click', () => openChartExport('step-classes'));
     }
     if (refs.furtherSimplify) {
       refs.furtherSimplify.addEventListener('click', () => {
@@ -14489,8 +14552,16 @@
       const baseVariety = chosenSheaf ? baseVarietyForSheaf(chosenSheaf) : chosenVariety;
       const geometry = baseVariety ? geometryFromVariety(baseVariety) : null;
       const sheaf = chosenSheaf && geometry ? sheafFromObject(chosenSheaf, geometry) : null;
-      const result = buildResult(geometry, sheaf);
+      let result;
+      try {
+        result = buildResult(geometry, sheaf);
+      } catch (error) {
+        if (!error?.symbolicBudgetExceeded || !geometry || !sheaf) throw error;
+        recordSymbolicWarning(error.message || 'Characteristic class computation exceeded the symbolic work limit.');
+        result = buildClassStepFallbackResult(geometry, sheaf, error);
+      }
       state.lastResult = result;
+      invalidateClassStepSessionIfStale(result);
       if (refs.classMessage) refs.classMessage.textContent = '';
       renderResult(result);
       refreshExport();
@@ -14552,6 +14623,7 @@
       refs.classMessage.textContent = message;
       refs.classMessage.hidden = false;
     }
+    syncClassStepAvailability(state.lastResult);
     if (refs.mapPickStatus && mapInputMode()) {
       refs.mapPickStatus.textContent = message;
       refs.mapPickStatus.hidden = false;
@@ -14618,7 +14690,8 @@
       refs.resetSimplify.disabled = busy;
       refs.resetSimplify.title = 'Return to the default simplification pass count.';
     }
-    [refs.rootForm, refs.classTermOnly, refs.classTermIndex, refs.basis, refs.exportClasses].forEach((control) => {
+    syncClassStepAvailability(result);
+    [refs.rootForm, refs.classTermOnly, refs.classTermIndex, refs.basis, refs.exportClasses, refs.stepClasses].forEach((control) => {
       setControlBusyDisabled(control, busy);
     });
   }
@@ -15778,6 +15851,11 @@
 
   function productHomologyBidegreeForVariable(id, geometry, context = productGeometryContext(geometry)) {
     if (!context) return null;
+    const rawData = VARS.get(id);
+    if (rawData?.degree === 0) return [0, 0];
+    if (Array.isArray(rawData?.productBidegree)) return rawData.productBidegree;
+    const rawProductBox = productBidegreeFromBox(rawData?.productBox || productBoxDataForVariable(id));
+    if (rawProductBox) return rawProductBox;
     const variableId = canonicalHomologyVariableId(id, geometry);
     if (variableId === homologyVariableId(HOMOLOGY_UNIT_CLASS, geometry)) return [0, 0];
     if (variableId === homologyVariableId(HOMOLOGY_POINT_CLASS, geometry)) {
@@ -15866,6 +15944,43 @@
       }, 0),
       latex: monomialLatex(normalizedKey),
       plain: monomialPlain(normalizedKey)
+    };
+  }
+
+  function buildClassStepFallbackResult(geometry, sheaf, error = null) {
+    defineHomologyVariables(geometry);
+    const bundle = buildClassStepPlaceholderBundle(geometry, sheaf);
+    const hodge = buildHodgeNumbers(geometry);
+    return {
+      geometry,
+      sheaf,
+      bundle,
+      hodge,
+      cohomology: buildSheafCohomology(geometry, sheaf, hodge),
+      classRows: [],
+      classDisplay: classDisplayOptions(geometry, sheaf),
+      classComputationLimited: true,
+      classComputationMessage: error?.message || 'Characteristic class computation exceeded the symbolic work limit.'
+    };
+  }
+
+  function buildClassStepPlaceholderBundle(geometry, sheaf) {
+    const chern = buildClassStepFormalData(geometry, sheaf, 'chern');
+    const character = buildClassStepFormalData(geometry, sheaf, 'character');
+    return {
+      cComps: chern.components,
+      chComps: character.components,
+      pComps: zeroComponentArray(geometry.dim),
+      cTotal: totalFromComponents(chern.components, geometry.dim, Poly.one()),
+      segre: Poly.one(),
+      todd: Poly.one(),
+      sqrtTodd: Poly.one(),
+      rankLatex: sheaf.rankLatex,
+      rankPlain: sheaf.rankPlain,
+      labelLatex: sheaf.labelLatex,
+      labelPlain: sheaf.labelPlain,
+      defaultSheafHomologyRules: [],
+      classStepPlaceholder: true
     };
   }
 
@@ -16445,10 +16560,15 @@
 
   function mapOperationTargetProductBidegree(map, operation, sourceDef, sourceGeometry, targetGeometry) {
     if (operation !== 'pullback' || targetGeometry?.type !== 'product') return null;
+    return projectionPullbackProductBidegree(map, sourceDef?.cohomologyDegree, targetGeometry, sourceGeometry);
+  }
+
+  function projectionPullbackProductBidegree(map, sourceCohomologyDegree, targetGeometry = null, sourceGeometry = null) {
     const context = projectionMapContext(map);
-    if (!context || context.productGeometry.varietyId !== targetGeometry.varietyId) return null;
+    if (!context) return null;
+    if (targetGeometry?.varietyId && context.productGeometry.varietyId !== targetGeometry.varietyId) return null;
     if (sourceGeometry?.varietyId && context.factorGeometry.varietyId && sourceGeometry.varietyId !== context.factorGeometry.varietyId) return null;
-    const degree = sourceDef?.cohomologyDegree;
+    const degree = Number(sourceCohomologyDegree);
     if (!Number.isFinite(degree)) return null;
     return context.factorIndex === 0 ? [degree, 0] : [0, degree];
   }
@@ -16612,16 +16732,24 @@
     const sourceKey = Object.prototype.hasOwnProperty.call(meta, 'sourceKey')
       ? meta.sourceKey
       : monoKey({ [sourceId]: 1 });
-    const cohomologyDegree = Number.isInteger(meta.cohomologyDegree)
+    const metaHasCohomologyDegree = Number.isInteger(meta.cohomologyDegree);
+    const cohomologyDegree = metaHasCohomologyDegree
       ? meta.cohomologyDegree
       : Math.round(2 * degree);
+    const normalizedMeta = { ...meta };
+    if (metaHasCohomologyDegree && !Array.isArray(normalizedMeta.productBidegree)) {
+      const productBidegree = operation === 'pullback'
+        ? projectionPullbackProductBidegree(map, cohomologyDegree)
+        : null;
+      if (productBidegree) normalizedMeta.productBidegree = productBidegree;
+    }
     defineVariable(id, degree, mapHomologySymbolLatex(map, operation, sourceLatex), {
       kind: 'mapHomology',
       mapId: map?.id || null,
       operation,
       sourceId,
       sourceKey,
-      ...meta,
+      ...normalizedMeta,
       cohomologyDegree
     });
     return id;
@@ -17770,6 +17898,1857 @@
       return buildProductRootClassRows(bundle, options);
     }
     return buildStandardClassRows(bundle, d, options);
+  }
+
+  function classStepAutoFamily(sheaf = state.lastResult?.sheaf || activeSheaf()) {
+    if (classStepSheafRequiresCharacterFamily(sheaf)) return 'character';
+    const basis = normalizeBasisValue(sheaf?.basis || refs.basis?.value);
+    return basis === 'character' ? 'character' : 'chern';
+  }
+
+  function classStepSheafRequiresCharacterFamily(sheaf) {
+    return sheaf?.construction?.type === 'pushforward';
+  }
+
+  function normalizeClassStepFamilyForSheaf(sheaf, family) {
+    if (classStepSheafRequiresCharacterFamily(sheaf)) return 'character';
+    return family === 'character' ? 'character' : 'chern';
+  }
+
+  function classStepSignature(result = state.lastResult, family = null) {
+    if (!result?.geometry || !result?.sheaf || !result?.bundle) return '';
+    const selectedFamily = family || classStepAutoFamily(result.sheaf);
+    const source = result.sheaf.sourceObject || {};
+    const sequence = result.sheaf.construction?.type === 'ses-term' ? sesSequenceForTermSheaf(result.sheaf) : null;
+    return [
+      result.geometry.varietyId || '',
+      result.sheaf.sourceObject?.id || result.sheaf.baseVarietyId || '',
+      selectedFamily,
+      geometrySignature(result.geometry),
+      JSON.stringify({
+        type: result.sheaf.type || '',
+        basis: result.sheaf.basis || '',
+        rank: result.sheaf.rankPlain || '',
+        label: result.sheaf.labelLatex || '',
+        construction: source.construction || result.sheaf.construction || null,
+        sequence: sequence ? {
+          id: sequence.id,
+          sheafIds: sequence.sheafIds || [],
+          mapIds: sequence.mapIds || [],
+          terms: sesTermSheaves(sequence).map(classStepSheafObjectSignature)
+        } : null
+      }),
+      homologyRulesSignature(result.geometry.homology || null),
+      homologyRulesSignature(result.sheaf.sourceObject?.homology || null)
+    ].join('::');
+  }
+
+  function classStepSheafObjectSignature(sheaf) {
+    if (!sheaf) return null;
+    return {
+      id: sheaf.id || '',
+      type: sheaf.type || '',
+      basis: sheaf.basis || '',
+      rank: sheaf.rank || sheaf.rankPlain || '',
+      name: sheaf.name || sheaf.labelLatex || '',
+      baseVarietyId: sheaf.baseVarietyId || '',
+      construction: sheaf.construction || null,
+      homology: homologyRulesSignature(sheaf.homology || null)
+    };
+  }
+
+  function currentClassStepTargetFromControls(result = state.lastResult) {
+    const d = result?.geometry?.dim ?? MAX_DIMENSION;
+    const target = normalizeClassStepTargetValue(refs.classStepFamily?.value || classStepAutoFamily(result?.sheaf));
+    const family = classStepFamilyForTarget(result?.sheaf, target);
+    const termOnly = !!refs.classStepTermOnly?.checked;
+    const index = termOnly
+      ? normalizedInt(refs.classStepTermIndex?.value, 0, d, 1)
+      : null;
+    if (refs.classStepFamily) refs.classStepFamily.value = target;
+    if (termOnly && refs.classStepTermIndex) refs.classStepTermIndex.value = String(index);
+    return { family, target, index };
+  }
+
+  function normalizeClassStepTargetValue(value) {
+    return ['chern', 'character', 'todd', 'segre', 'sqrtTodd'].includes(value) ? value : 'chern';
+  }
+
+  function classStepFamilyForTarget(sheaf, target) {
+    if (target === 'character') return 'character';
+    if (target === 'chern') return classStepSheafRequiresCharacterFamily(sheaf) ? 'character' : 'chern';
+    return classStepAutoFamily(sheaf);
+  }
+
+  function classStepLabelLatex(session) {
+    const suffix = session.index == null ? '' : `_{${session.index}}`;
+    const symbol = classStepTargetSymbolLatex(session.target || session.family);
+    return `${symbol}${suffix}(${session.bundleLabelLatex || 'F'})`;
+  }
+
+  function classStepLabelPlain(session) {
+    const suffix = session.index == null ? '' : `_${session.index}`;
+    const symbol = classStepTargetSymbolPlain(session.target || session.family);
+    return `${symbol}${suffix}(${session.bundleLabelPlain || 'F'})`;
+  }
+
+  function classStepTargetSymbolLatex(target) {
+    if (target === 'character') return '\\operatorname{ch}';
+    if (target === 'todd') return '\\operatorname{td}';
+    if (target === 'segre') return 's';
+    if (target === 'sqrtTodd') return '\\sqrt{\\operatorname{td}}';
+    return 'c';
+  }
+
+  function classStepTargetSymbolPlain(target) {
+    if (target === 'character') return 'ch';
+    if (target === 'todd') return 'td';
+    if (target === 'segre') return 's';
+    if (target === 'sqrtTodd') return 'sqrt td';
+    return 'c';
+  }
+
+  function classStepDisplayPoly(session) {
+    if (!session) return Poly.zero();
+    const override = classStepDisplayOverridePoly(session);
+    if (override) return override;
+    const target = session.target || session.family;
+    if (target === session.family) {
+      if (session.index === 0) return session.family === 'chern' ? Poly.one() : componentOrZero(session.components, 0);
+      if (session.index != null) return componentOrZero(session.components, session.index);
+      const constant = session.family === 'chern' ? Poly.one() : componentOrZero(session.components, 0);
+      return totalFromComponents(session.components, session.dimension, constant);
+    }
+    return classStepDerivedDisplayPoly(session, target);
+  }
+
+  function classStepDerivedDisplayPoly(session, target) {
+    if (session.index === 0) {
+      if (target === 'character') return session.family === 'character' ? componentOrZero(session.components, 0) : (session.rankComponent || Poly.zero());
+      return Poly.one();
+    }
+    const bundle = bundleFromClassStepSession(session);
+    if (!bundle) return Poly.zero();
+    const d = session.dimension;
+    if (target === 'chern') return session.index != null ? componentOrZero(bundle.cComps, session.index) : bundle.cTotal;
+    if (target === 'character') {
+      if (session.index != null) return componentOrZero(bundle.chComps, session.index);
+      const rank = session.family === 'character' ? componentOrZero(session.components, 0) : (session.rankComponent || Poly.zero());
+      return totalFromComponents(bundle.chComps, d, rank);
+    }
+    const total = target === 'todd'
+      ? bundle.todd
+      : (target === 'segre' ? bundle.segre : bundle.sqrtTodd);
+    return session.index != null ? homogeneousPart(total, session.index) : total;
+  }
+
+  function syncClassStepControlsForSession(session) {
+    if (!session) return;
+    if (refs.classStepFamily) refs.classStepFamily.value = session.target || session.family;
+    if (refs.classStepTermOnly) refs.classStepTermOnly.checked = session.index != null;
+    if (refs.classStepTermIndex) {
+      refs.classStepTermIndex.max = String(Math.max(0, session.dimension || MAX_DIMENSION));
+      refs.classStepTermIndex.disabled = session.index == null;
+      refs.classStepTermIndex.value = String(session.index ?? 1);
+    }
+    syncClassStepLayout(session.layout || 'wide');
+  }
+
+  function syncClassStepLayout(layout = state.classStepSession?.layout || 'wide') {
+    const canUseWide = classStepCanUseWideLayout();
+    const next = layout === 'wide' && canUseWide ? 'wide' : 'side';
+    if (state.classStepSession) state.classStepSession.layout = next;
+    syncClassStepPlacement(next);
+    if (refs.classStepPanel) {
+      refs.classStepPanel.classList.toggle('is-wide', next === 'wide');
+      refs.classStepPanel.classList.toggle('is-side', next === 'side');
+    }
+    if (refs.classStepLayout) {
+      refs.classStepLayout.textContent = next === 'wide' ? 'wide' : 'side';
+      refs.classStepLayout.setAttribute('aria-pressed', next === 'wide' ? 'true' : 'false');
+      refs.classStepLayout.title = next === 'wide' ? 'Formula chart is wide; click for side layout.' : 'Formula chart is side-by-side; click for wide layout.';
+      refs.classStepLayout.disabled = !canUseWide;
+      refs.classStepLayout.hidden = !canUseWide;
+    }
+  }
+
+  function classStepCanUseWideLayout() {
+    return typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(min-width: 960px)').matches;
+  }
+
+  function classStepSideAnchor() {
+    if (!refs.classStepCard) return null;
+    if (!refs.classStepSideAnchor) {
+      const anchor = document.createComment('class-step-side-anchor');
+      refs.classStepSideAnchor = anchor;
+      refs.classStepCard.parentElement?.insertBefore(anchor, refs.classStepCard);
+    }
+    return refs.classStepSideAnchor;
+  }
+
+  function syncClassStepPlacement(layout = state.classStepSession?.layout || 'wide') {
+    const card = refs.classStepCard;
+    const wideHost = refs.classStepWideHost;
+    if (!card || !wideHost) return;
+    const sideAnchor = classStepSideAnchor();
+    const useWide = layout === 'wide' && classStepCanUseWideLayout();
+    if (useWide) {
+      if (card.parentElement !== wideHost) wideHost.appendChild(card);
+    } else if (sideAnchor?.parentElement && card.parentElement !== sideAnchor.parentElement) {
+      sideAnchor.parentElement.insertBefore(card, sideAnchor.nextSibling);
+    }
+    card.classList.toggle('wide', useWide);
+    wideHost.hidden = !useWide;
+  }
+
+  function toggleClassStepLayout() {
+    const session = state.classStepSession;
+    const next = session?.layout === 'side' ? 'wide' : 'side';
+    if (session) session.layout = next;
+    syncClassStepLayout(next);
+    typeset(refs.classStepPanel);
+  }
+
+  function startClassStepSessionFromControls(options = {}) {
+    const result = ensureClassStepResultContext();
+    if (!result?.bundle || !result?.geometry || !result?.sheaf) return null;
+    state.lastResult = result;
+    if (refs.classStepCard) {
+      refs.classStepCard.hidden = false;
+      refs.classStepCard.classList.remove('collapsed');
+    }
+    if (refs.classStepPanel) refs.classStepPanel.hidden = false;
+    if (!options.preserveControls) {
+      if (refs.classStepFamily) refs.classStepFamily.value = classStepAutoFamily(result.sheaf);
+      if (refs.classStepTermOnly) refs.classStepTermOnly.checked = false;
+      if (refs.classStepTermIndex) refs.classStepTermIndex.value = '1';
+    }
+    const target = currentClassStepTargetFromControls(result);
+    const session = createClassStepSession(result, target.family, target.index, target.target);
+    state.classStepSession = session;
+    syncClassStepControlsForSession(session);
+    syncClassStepPlacement(session.layout);
+    renderClassStepPanel();
+    renderClassChartWithStepSession(result);
+    typeset(refs.classStepPanel);
+    typeset(refs.classChart);
+    return session;
+  }
+
+  function ensureClassStepResultContext() {
+    if (state.lastResult?.bundle && state.lastResult?.geometry && state.lastResult?.sheaf) return state.lastResult;
+    const sheafObject = inputIsModifyMode() ? selectedSheaf() : activeSheaf();
+    const baseVariety = sheafObject ? baseVarietyForSheaf(sheafObject) : null;
+    const geometry = baseVariety ? geometryFromVariety(baseVariety) : null;
+    const sheaf = sheafObject && geometry ? sheafFromObject(sheafObject, geometry) : null;
+    if (!geometry || !sheaf) return null;
+    try {
+      return buildClassStepFallbackResult(geometry, sheaf);
+    } catch (error) {
+      if (!error?.symbolicBudgetExceeded) throw error;
+      recordSymbolicWarning(error.message || 'Characteristic class computation exceeded the symbolic work limit.');
+      return buildClassStepFallbackResult(geometry, sheaf, error);
+    }
+  }
+
+  function restartClassStepSessionFromControls() {
+    if (!state.lastResult?.bundle) return null;
+    return startClassStepSessionFromControls({ preserveControls: true });
+  }
+
+  function updateClassStepTermControls(options = {}) {
+    const session = state.classStepSession;
+    const result = state.lastResult;
+    if (!session || !result?.bundle) return;
+    const previousIndex = session.index;
+    const target = currentClassStepTargetFromControls(result);
+    if (target.family !== session.family || target.target !== (session.target || session.family)) {
+      restartClassStepSessionFromControls();
+      return;
+    }
+    if (previousIndex != null && target.index == null) {
+      restartClassStepSessionFromControls();
+      return;
+    }
+    session.index = target.index;
+    syncClassStepControlsForSession(session);
+    renderClassStepPanel();
+    renderClassChartWithStepSession(result);
+    typeset(refs.classStepPanel);
+    typeset(refs.classChart);
+  }
+
+  function createClassStepSession(result, family, index = null, target = null) {
+    const displayTarget = target
+      ? normalizeClassStepTargetValue(target)
+      : normalizeClassStepFamilyForSheaf(result?.sheaf, family);
+    family = target
+      ? classStepFamilyForTarget(result?.sheaf, displayTarget)
+      : displayTarget;
+    const d = result.geometry.dim;
+    const formal = buildClassStepFormalData(result.geometry, result.sheaf, family);
+    const sourceComps = formal.components;
+    const components = zeroComponentArray(d);
+    const rankComponent = rankAsDegreeZeroPoly(
+      { rankLatex: formal.rankLatex, rankPlain: formal.rankPlain },
+      `stepRank${result.sheaf?.sourceObject?.id || result.sheaf?.labelPlain || ''}`
+    );
+    components[0] = family === 'character' ? rankComponent : Poly.one();
+    for (let i = 1; i <= d; i += 1) components[i] = componentOrZero(sourceComps, i);
+    const session = {
+      active: true,
+      stopped: false,
+      family,
+      target: displayTarget,
+      index,
+      layout: 'wide',
+      checkSwitchingRules: false,
+      dimension: d,
+      geometry: result.geometry,
+      sheaf: result.sheaf,
+      bundleLabelLatex: formal.labelLatex,
+      bundleLabelPlain: formal.labelPlain,
+      rankLatex: formal.rankLatex,
+      rankPlain: formal.rankPlain,
+      rankComponent,
+      originalRankComponent: Poly.from(rankComponent),
+      originalComponents: components.map((poly) => Poly.from(poly)),
+      components,
+      displayOverrides: {},
+      sourceSignature: classStepSignature(result, family),
+      candidates: [],
+      message: ''
+    };
+    session.candidates = collectClassStepRuleCandidates(session);
+    rememberClassStepComponents(session);
+    return session;
+  }
+
+  function buildClassStepFormalData(geometry, sheaf, family) {
+    const formalSheaf = classStepFormalSheaf(sheaf, family);
+    const defs = sheafHomologyClassDefinitions(formalSheaf, geometry);
+    defs.forEach((def) => classStepDefineSheafClassVariable(def, sheaf, geometry, family));
+    const components = zeroComponentArray(geometry.dim);
+    defs.forEach((def) => {
+      if (def.degree >= 1 && def.degree <= geometry.dim) components[def.degree] = Poly.variable(def.id);
+    });
+    const rankDisplay = classStepFormalRankDisplay(sheaf);
+    return {
+      components,
+      labelLatex: sheaf.labelLatex,
+      labelPlain: sheaf.labelPlain,
+      rankLatex: rankDisplay.latex,
+      rankPlain: rankDisplay.plain,
+      formalSheaf
+    };
+  }
+
+  function classStepFormalRankDisplay(sheaf) {
+    const known = classStepKnownRankDisplay(sheaf);
+    if (known) return known;
+    const labelLatex = sheaf?.labelLatex || '\\mathcal{F}';
+    const labelPlain = sheaf?.labelPlain || latexToPlain(labelLatex) || 'F';
+    return {
+      latex: `r\\left(${labelLatex}\\right)`,
+      plain: `r(${labelPlain})`
+    };
+  }
+
+  function classStepKnownRankDisplay(sheaf) {
+    const plain = String(sheaf?.rankPlain || '').trim();
+    if (!plain) return null;
+    if (/^-?\d+$/.test(plain)) {
+      return {
+        latex: simplifyScalarExpressionLatex(plain),
+        plain: simplifyScalarExpressionPlain(plain)
+      };
+    }
+    const source = sheaf?.sourceObject?.id
+      ? { kind: 'sheaf', id: sheaf.sourceObject.id, field: 'rank' }
+      : null;
+    const poly = scalarExpressionPoly(plain, source);
+    if (!poly || poly.terms.size !== 1 || !poly.terms.has('')) return null;
+    return {
+      latex: formatPolyLatex(poly),
+      plain: formatPolyPlain(poly)
+    };
+  }
+
+  function classStepFormalSheaf(sheaf, family) {
+    return {
+      ...sheaf,
+      classStepFormal: true,
+      construction: null,
+      type: sheafHasLocallyFreeLabel(sheaf) ? 'locally-free' : 'abstract',
+      basis: family === 'character' ? 'character' : 'chern'
+    };
+  }
+
+  function classStepSessionMatchesResult(session = state.classStepSession, result = state.lastResult) {
+    return !!session
+      && !!result?.bundle
+      && session.sourceSignature === classStepSignature(result, session.family);
+  }
+
+  function invalidateClassStepSessionIfStale(result = state.lastResult) {
+    if (!state.classStepSession) return;
+    if (!classStepSessionMatchesResult(state.classStepSession, result)) {
+      state.classStepSession = null;
+      if (refs.classStepCard) refs.classStepCard.hidden = true;
+      if (refs.classStepPanel) refs.classStepPanel.hidden = true;
+      if (refs.classStepWideHost) refs.classStepWideHost.hidden = true;
+    }
+  }
+
+  function stopClassStepSession() {
+    const session = state.classStepSession;
+    if (!session) return;
+    session.active = false;
+    session.stopped = true;
+    session.message = 'Step result is kept for this characteristic chart.';
+    if (refs.classStepCard) refs.classStepCard.hidden = true;
+    if (refs.classStepPanel) refs.classStepPanel.hidden = true;
+    if (refs.classStepWideHost) refs.classStepWideHost.hidden = true;
+    const result = state.lastResult;
+    if (result?.bundle) renderClassChartWithStepSession(result);
+    refreshExport(state.exportScope || 'main');
+  }
+
+  function renderClassChartWithStepSession(result = state.lastResult) {
+    if (!result?.bundle || !classStepSessionMatchesResult(state.classStepSession, result)) {
+      renderClassChart(result);
+      return;
+    }
+    const rows = buildClassRowsFromStepSession(state.classStepSession, result.classDisplay || classDisplayOptions(result.geometry, result.sheaf));
+    result.classRows = rows.length ? rows : result.classRows;
+    renderClassChart(result);
+  }
+
+  function buildClassRowsFromStepSession(session, displayOptions) {
+    if (!session) return [];
+    if (session.active && !session.stopped) return classStepDisplayRows(session, displayOptions);
+    if (classStepDisplayOverridePoly(session)) return classStepDisplayRows(session, displayOptions);
+    const bundle = bundleFromClassStepSession(session);
+    if (!bundle) {
+      return classStepDisplayRows(session, displayOptions);
+    }
+    const rows = buildStandardClassRows(bundle, session.dimension, displayOptions);
+    if (['todd', 'segre', 'sqrtTodd'].includes(session.target) && session.index == null) {
+      const key = classStepTargetRowKey(session);
+      return rows.filter((row) => row.key === key);
+    }
+    if (session.index != null) {
+      const key = classStepTargetRowKey(session);
+      return rows.filter((row) => row.key === key);
+    }
+    return rows;
+  }
+
+  function classStepDisplayRows(session, displayOptions) {
+    const displayPoly = classStepDisplayPoly(session);
+    const display = formatClassPoly(displayPoly, displayOptions);
+    return [{
+      label: classStepLabelPlain(session),
+      labelLatex: classStepLabelLatex(session),
+      key: classStepTargetRowKey(session),
+      latex: display.latex,
+      plain: display.plain
+    }];
+  }
+
+  function classStepTargetRowKey(session) {
+    const target = session?.target || session?.family || 'chern';
+    if (session?.index != null) {
+      const prefix = target === 'chern'
+        ? 'chern'
+        : (target === 'character' ? 'character' : target);
+      return `${prefix}_${session.index}`;
+    }
+    if (target === 'chern') return 'step_chern';
+    if (target === 'character') return 'step_character';
+    return target;
+  }
+
+  function bundleFromClassStepSession(session) {
+    try {
+      const rankDisplay = classStepBundleRankDisplay(session);
+      return session.family === 'character'
+        ? buildBundleFromCh(session.components, rankDisplay.latex, rankDisplay.plain, session.bundleLabelLatex, session.bundleLabelPlain)
+        : buildBundleFromChern(session.components, rankDisplay.latex, rankDisplay.plain, session.bundleLabelLatex, session.bundleLabelPlain);
+    } catch (error) {
+      if (error?.symbolicBudgetExceeded) {
+        recordSymbolicWarning(`${error.message} Showing the stepped ${session.family === 'character' ? 'Chern character' : 'Chern class'} only.`);
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  function classStepBundleRankDisplay(session) {
+    const rank = session?.family === 'character'
+      ? componentOrZero(session.components, 0)
+      : session?.rankComponent;
+    if (!rank) {
+      return {
+        latex: session?.rankLatex || '0',
+        plain: session?.rankPlain || '0'
+      };
+    }
+    const display = formatClassPoly(rank, {
+      geometry: session.geometry,
+      homology: session.geometry?.homology || null,
+      homologyRulePasses: currentHomologyRulePasses()
+    });
+    return {
+      latex: display.latex || '0',
+      plain: display.plain || '0'
+    };
+  }
+
+  function renderClassStepPanel() {
+    const session = state.classStepSession;
+    if (!refs.classStepPanel || !session) return;
+    if (refs.classStepCard) {
+      refs.classStepCard.hidden = false;
+      refs.classStepCard.classList.remove('collapsed');
+    }
+    refs.classStepPanel.hidden = false;
+    syncClassStepControlsForSession(session);
+    const previousSelections = classStepCandidateSelectionMap(session.candidates);
+    try {
+      session.candidates = collectClassStepRuleCandidates(session);
+      restoreClassStepCandidateSelections(session.candidates, previousSelections);
+    } catch (error) {
+      if (!error?.symbolicBudgetExceeded) throw error;
+      session.candidates = [];
+      session.message = `${error.message} Cached rules were skipped for this step.`;
+      recordSymbolicWarning(session.message);
+    }
+    const displayPoly = classStepDisplayPoly(session);
+    if (refs.classStepFormula) {
+      const body = formatPolyLatex(displayPoly);
+      refs.classStepFormula.innerHTML = `\\(${classStepLabelLatex(session)}=${body}\\)`;
+    }
+    if (refs.classStepRules) {
+      refs.classStepRules.hidden = !session.candidates.length;
+      refs.classStepRules.innerHTML = session.candidates.length
+        ? session.candidates.map((candidate, index) => `
+          <div class="sheaf-step-rule-row">
+            <div class="sheaf-step-rule-label">
+              <span>\\(${classStepRuleDisplayLatex(candidate.rule)}\\)</span>
+              <span class="sheaf-step-rule-meta">${escapeHtml(candidate.sourceLabel || `rule ${index + 1}`)}</span>
+            </div>
+            <input type="checkbox" data-class-step-rule="${escapeHtml(candidate.id)}" aria-label="apply rule ${index + 1}"${candidate.selected === false ? '' : ' checked'}>
+          </div>
+        `).join('')
+        : '<div class="hint">No rules can be applied to this formula right now.</div>';
+    }
+    if (refs.classStepCheckSwitch) {
+      refs.classStepCheckSwitch.disabled = !!session.checkSwitchingRules;
+      refs.classStepCheckSwitch.textContent = session.checkSwitchingRules ? 'switching checked' : 'check rules for switching';
+    }
+    if (refs.classStepMessage) refs.classStepMessage.textContent = session.message || `${session.candidates.length} applicable rule${session.candidates.length === 1 ? '' : 's'}.`;
+    if (refs.classStepApply) refs.classStepApply.disabled = !session.candidates.length;
+  }
+
+  function classStepCandidateSelectionMap(candidates = []) {
+    const out = new Map();
+    for (const candidate of candidates || []) {
+      out.set(candidate.id, {
+        selected: candidate.selected !== false,
+        autoReason: candidate.classStepAutoSelectionReason || ''
+      });
+    }
+    return out;
+  }
+
+  function restoreClassStepCandidateSelections(candidates = [], selections = new Map()) {
+    for (const candidate of candidates || []) {
+      if (!selections.has(candidate.id)) continue;
+      const previous = selections.get(candidate.id);
+      if (previous && typeof previous === 'object') {
+        if (previous.autoReason && !candidate.classStepAutoSelectionReason) continue;
+        candidate.selected = previous.selected;
+      } else {
+        candidate.selected = previous;
+      }
+    }
+  }
+
+  function checkClassStepSwitchingRules() {
+    const session = state.classStepSession;
+    if (!session) return;
+    session.checkSwitchingRules = true;
+    session.message = 'Checked for Chern class/Chern character switching rules.';
+    renderClassStepPanel();
+    typeset(refs.classStepPanel);
+  }
+
+  function collectClassStepRuleCandidates(session) {
+    if (!session?.geometry) return [];
+    const baseRules = [
+      ...classStepBaseRules(session),
+      ...(session.checkSwitchingRules ? classStepSwitchingRules(session) : []),
+      ...(refs.classStepUseCache?.checked ? classStepCachedRules(session) : [])
+    ];
+    const pullbackWrappedRules = classStepPullbackWrappedRules(session, baseRules);
+    const rules = [
+      ...baseRules,
+      ...pullbackWrappedRules,
+      ...classStepMapWrappedRules(session, [...baseRules, ...pullbackWrappedRules])
+    ];
+    const seen = new Set();
+    const groups = new Map();
+    const candidates = [];
+    rules.map((rule, index) => ({ rule, index }))
+      .filter(({ rule }) => classStepRuleApplies(session, rule))
+      .forEach(({ rule, index }) => {
+        const groupKey = rule.classStepGroupKey || classStepImplicitGroupKey(rule);
+        if (groupKey) {
+          let group = groups.get(groupKey);
+          if (!group) {
+            group = { rule, rules: [], index, ruleKeys: new Set() };
+            groups.set(groupKey, group);
+            candidates.push(group);
+          }
+          const ruleKey = classStepRuleInstanceKey(rule);
+          if (!group.ruleKeys.has(ruleKey)) {
+            group.ruleKeys.add(ruleKey);
+            group.rules.push(rule);
+          }
+          return;
+        }
+        const lhsKey = monoKey(rule.lhs?.powers || {});
+        const key = rule.classStepAllowSameLhs ? `${lhsKey}:${classStepRuleDisplayKey(rule)}` : lhsKey;
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        candidates.push({ rule, rules: [rule], index });
+      });
+    rules.forEach((rule) => {
+      if (!rule?.classStepApplyWithGroup) return;
+      const groupKey = rule.classStepGroupKey || classStepImplicitGroupKey(rule);
+      if (!groupKey) return;
+      const group = groups.get(groupKey);
+      if (!group) return;
+      const ruleKey = classStepRuleInstanceKey(rule);
+      if (group.ruleKeys.has(ruleKey)) return;
+      group.ruleKeys.add(ruleKey);
+      group.rules.push(rule);
+    });
+    const out = candidates.map(({ rule, rules: candidateRules, index }) => ({
+        id: rule.id || `step-rule-${index}`,
+        rule,
+        rules: candidateRules?.length ? candidateRules : [rule],
+        sourceLabel: rule.stepSourceLabel || (rule.builtin ? 'built-in' : 'user'),
+        selected: rule.selected === false ? false : true
+      }));
+    applyClassStepCandidateDefaultSelection(out, session);
+    return out;
+  }
+
+  function applyClassStepCandidateDefaultSelection(candidates, session) {
+    const targetToddCandidates = candidates.filter((candidate) => classStepCandidateIsTargetTodd(candidate, session));
+    if (!targetToddCandidates.length) {
+      for (const candidate of candidates) delete candidate.classStepAutoSelectionReason;
+      return candidates;
+    }
+    const targetToddIds = new Set(targetToddCandidates.map((candidate) => candidate.id));
+    for (const candidate of candidates) {
+      if (targetToddIds.has(candidate.id)) {
+        candidate.selected = candidate.selected !== false;
+        delete candidate.classStepAutoSelectionReason;
+      } else {
+        candidate.selected = false;
+        candidate.classStepAutoSelectionReason = 'target-todd-first';
+      }
+    }
+    return candidates;
+  }
+
+  function classStepCandidateIsTargetTodd(candidate, session) {
+    if (!candidate || candidate.sourceLabel !== 'Todd') return false;
+    return classStepCandidateRules(candidate).some((rule) => classStepRuleIsTargetTodd(rule, session));
+  }
+
+  function classStepRuleIsTargetTodd(rule, session) {
+    if (!rule || rule.stepSourceLabel !== 'Todd') return false;
+    const targetGeometryId = session?.geometry?.varietyId || null;
+    return Object.keys(rule.lhs?.powers || {}).some((id) => {
+      const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+      return data?.classStepKind === 'formalTodd'
+        && (data.geometryId || null) === targetGeometryId;
+    });
+  }
+
+  function classStepRuleInstanceKey(rule) {
+    if (rule?.id) return `id:${rule.id}`;
+    const lhsKey = monoKey(rule?.lhs?.powers || {});
+    return `${lhsKey}:${classStepRuleDisplayKey(rule)}:${JSON.stringify(rule?.rhs || [])}`;
+  }
+
+  function classStepBaseRules(session) {
+    const geometry = session.geometry;
+    defineGlobalInvariantVariables();
+    defineHomologyVariables(geometry);
+    const defs = homologyClassDefinitions(geometry, { includeMapClasses: true });
+    const available = new Set(defs.flatMap((def) => [...homologyDefVariableIds(def, geometry)]));
+    const storedRules = geometry.homology?.rules || [];
+    const defaultRules = defaultMapHomologyRulesForGeometry(geometry)
+      .filter((rule) => !storedRules.some((stored) => homologyRuleHasSameLhs(stored, rule)));
+    const sheafDefs = classStepSheafDefs(session);
+    const sheafRules = classStepSheafRules(session);
+    const constructionRules = classStepConstructionRules(session);
+    const constructionDefs = classStepRuleVariableDefs(constructionRules, geometry);
+    const ruleDefs = [...defs, ...sheafDefs, ...constructionDefs];
+    const ruleVariables = new Set([
+      ...available,
+      ...sheafDefs.flatMap((def) => [...homologyDefVariableIds(def, geometry)]),
+      ...constructionRules.flatMap((rule) => homologyRuleVariableIds(rule))
+    ]);
+    return [...storedRules, ...defaultRules, ...sheafRules, ...constructionRules].filter((rule) => {
+      if (rule.enabled === false || rule.deleted) return false;
+      const ruleGeometry = rule.classStepRuleGeometry || geometry;
+      const ruleDefsForGeometry = ruleGeometry === geometry
+        ? ruleDefs
+        : [
+          ...homologyClassDefinitions(ruleGeometry, { includeMapClasses: true }),
+          ...sheafDefs,
+          ...constructionDefs
+        ];
+      const ruleVariablesForGeometry = ruleGeometry === geometry
+        ? ruleVariables
+        : new Set([
+          ...homologyClassDefinitions(ruleGeometry, { includeMapClasses: true }).flatMap((def) => [...homologyDefVariableIds(def, ruleGeometry)]),
+          ...ruleVariables
+        ]);
+      return homologyRulePreservesDegree(rule, ruleDefsForGeometry, { geometry: ruleGeometry })
+        && homologyRuleUsesAvailableVariables(rule, ruleVariablesForGeometry);
+    });
+  }
+
+  function classStepImplicitGroupKey(rule) {
+    const displayLatex = classStepDisplayedFormulaKey(rule);
+    return displayLatex ? `display-latex:${hashString(displayLatex)}` : '';
+  }
+
+  function classStepRuleDisplayKey(rule) {
+    if (rule?.classStepDisplayKey) return rule.classStepDisplayKey;
+    if (rule?.classStepDisplayLatex) return rule.classStepDisplayLatex;
+    return '';
+  }
+
+  function classStepDisplayedFormulaKey(rule) {
+    const displayKey = classStepRuleDisplayKey(rule);
+    const displayLatex = displayKey || classStepRuleDisplayLatex(rule);
+    return String(displayLatex || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function homologyRuleVariableIds(rule) {
+    return [rule?.lhs || {}, ...(rule?.rhs || [])]
+      .flatMap((term) => Object.keys(term.powers || {}));
+  }
+
+  function classStepRuleVariableDefs(rules, geometry) {
+    const existing = new Set(homologyClassDefinitions(geometry, { includeMapClasses: true })
+      .flatMap((def) => [...homologyDefVariableIds(def, geometry)]));
+    return [...new Set((rules || []).flatMap(homologyRuleVariableIds))]
+      .filter((id) => !existing.has(id))
+      .map((id) => {
+        const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+        if (!data || !Number.isFinite(data.degree)) return null;
+        return {
+          id,
+          variableId: id,
+          degree: data.degree,
+          cohomologyDegree: data.cohomologyDegree ?? Math.round(2 * data.degree),
+          symbolLatex: data.latex || id,
+          symbolPlain: data.plain || id
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function classStepConstructionRules(session) {
+    return [
+      ...classStepFormalFollowupRules(session),
+      ...classStepOwnConstructionRules(session),
+      ...classStepNestedConstructionRules(session)
+    ];
+  }
+
+  function classStepOwnConstructionRules(session) {
+    const construction = session?.sheaf?.construction || {};
+    if (construction.type === 'ses-term') return classStepSesRules(session);
+    if (construction.type === 'pushforward') return classStepPushforwardGrrRules(session, session.sheaf, session.geometry);
+    if (classStepHasBasicConstructionRule(construction.type)) {
+      return classStepBasicConstructionRules(session, session.sheaf, session.geometry, session.family);
+    }
+    return [];
+  }
+
+  function classStepHasBasicConstructionRule(type) {
+    return type === 'direct-sum'
+      || type === 'self-direct-sum'
+      || type === 'dual'
+      || type === 'tensor'
+      || type === 'pullback';
+  }
+
+  function classStepNestedConstructionRules(session) {
+    const ids = new Set(Array.from(classStepDisplayPoly(session).terms.keys())
+      .flatMap((key) => Object.keys(parseMonoKey(key))));
+    const rules = [];
+    for (const sheafObject of state.sheaves || []) {
+      const sheafGeometry = geometryByVarietyId(sheafObject.baseVarietyId) || session.geometry;
+      const sheaf = sheafFromObject(sheafObject, sheafGeometry);
+      if (!classStepSheafDefsForSheaf(sheaf, sheafGeometry, session.family).some((def) => ids.has(def.id))) continue;
+      if (sheafObject?.construction?.type === 'pushforward') {
+        rules.push(...classStepPushforwardGrrRules(session, sheaf, sheafGeometry));
+      } else if (classStepHasBasicConstructionRule(sheafObject?.construction?.type)) {
+        rules.push(...classStepBasicConstructionRules(session, sheaf, sheafGeometry, session.family));
+      }
+    }
+    return rules;
+  }
+
+  function classStepBasicConstructionRules(session, sheaf = session?.sheaf, geometry = session?.geometry, family = session?.family) {
+    const construction = sheaf?.construction || {};
+    if (!sheaf || !geometry || !construction.type) return [];
+    const d = geometry.dim;
+    const bundle = classStepBasicConstructionBundle(sheaf, geometry, family, d);
+    if (!bundle) return [];
+    const comps = family === 'character' ? bundle.chComps : bundle.cComps;
+    return classStepSheafDefsForSheaf(sheaf, geometry, family).map((def) => ({
+      id: `step-${construction.type}-${def.id}`,
+      builtin: true,
+      enabled: true,
+      stepSourceLabel: classStepConstructionSourceLabel(construction.type),
+      classStepGroupKey: `construction:${construction.type}:${sheaf?.sourceObject?.id || sheaf?.id || ''}:${family}`,
+      classStepDisplayKey: `construction:${construction.type}:${family}:${classStepConstructionDisplayLatex(sheaf, construction, family)}`,
+      classStepDisplayLatex: classStepConstructionDisplayLatex(sheaf, construction, family),
+      lhs: { powers: { [def.id]: 1 } },
+      rhs: serializeHomologyPoly(componentOrZero(comps, def.degree))
+    }));
+  }
+
+  function classStepBasicConstructionBundle(sheaf, geometry, family, d) {
+    const construction = sheaf?.construction || {};
+    if (construction.type === 'direct-sum' || construction.type === 'tensor') {
+      const [leftObject, rightObject] = (construction.sheafIds || []).map((id) => state.sheaves.find((item) => item.id === id));
+      if (!leftObject || !rightObject) return null;
+      const left = classStepFormalBundleForSheafObject(leftObject, geometry, d);
+      const right = classStepFormalBundleForSheafObject(rightObject, geometry, d);
+      return construction.type === 'direct-sum'
+        ? buildDirectSumBundle(d, sheaf, left, right)
+        : buildTensorBundle(d, sheaf, left, right);
+    }
+    if (construction.type === 'self-direct-sum') {
+      const parentObject = state.sheaves.find((item) => item.id === construction.sheafId);
+      if (!parentObject) return null;
+      return buildSelfDirectSumBundle(d, sheaf, classStepFormalBundleForSheafObject(parentObject, geometry, d), construction.multiplicity);
+    }
+    if (construction.type === 'dual') {
+      const parentObject = state.sheaves.find((item) => item.id === construction.sheafId);
+      if (!parentObject) return null;
+      return buildDualBundle(d, sheaf, classStepFormalBundleForSheafObject(parentObject, geometry, d));
+    }
+    if (construction.type === 'pullback') {
+      return classStepFormalPullbackBundle(sheaf, geometry, construction, d);
+    }
+    return null;
+  }
+
+  function classStepFormalBundleForSheafObject(sheafObject, geometry, d) {
+    const sheaf = sheafFromObject(sheafObject, geometry);
+    const chFormal = buildClassStepFormalData(geometry, sheaf, 'character');
+    return buildBundleFromCh(chFormal.components, chFormal.rankLatex, chFormal.rankPlain, chFormal.labelLatex, chFormal.labelPlain);
+  }
+
+  function classStepFormalPullbackBundle(sheaf, geometry, construction, d) {
+    const map = state.maps.find((item) => item.id === construction.mapId);
+    const sourceObject = state.sheaves.find((item) => item.id === construction.sheafId);
+    const codomain = state.varieties.find((item) => item.id === map?.codomainId);
+    if (!map || !sourceObject || !codomain) return null;
+    const codomainGeometry = geometryFromVariety(codomain);
+    const sourceSheaf = sheafFromObject(sourceObject, codomainGeometry);
+    const sourceFormal = buildClassStepFormalData(codomainGeometry, sourceSheaf, 'character');
+    const chComps = pullbackComponentArray(sourceFormal.components, d, map);
+    return buildBundleFromCh(chComps, sourceFormal.rankLatex, sourceFormal.rankPlain, sheaf.labelLatex, sheaf.labelPlain);
+  }
+
+  function classStepConstructionSourceLabel(type) {
+    if (type === 'direct-sum') return 'Direct sum';
+    if (type === 'self-direct-sum') return 'Direct sum';
+    if (type === 'dual') return 'Dual';
+    if (type === 'tensor') return 'Tensor product';
+    if (type === 'pullback') return 'Pullback';
+    return 'Construction';
+  }
+
+  function classStepConstructionDisplayLatex(sheaf, construction, family) {
+    const subject = sheaf?.labelLatex || '\\mathcal{F}';
+    const op = family === 'character' ? '\\operatorname{ch}' : 'c';
+    if (construction.type === 'direct-sum') {
+      const [left, right] = classStepConstructionTermLabels(construction.sheafIds);
+      return family === 'character'
+        ? `\\operatorname{ch}(${subject})=\\operatorname{ch}(${left})+\\operatorname{ch}(${right})`
+        : `c(${subject})=c(${left})c(${right})`;
+    }
+    if (construction.type === 'self-direct-sum') {
+      const [parent] = classStepConstructionTermLabels([construction.sheafId]);
+      const n = normalizeSelfSumMultiplicity(construction.multiplicity);
+      return family === 'character'
+        ? `\\operatorname{ch}(${subject})=${n}\\operatorname{ch}(${parent})`
+        : `c(${subject})=c(${parent})^{${n}}`;
+    }
+    if (construction.type === 'dual') {
+      const [parent] = classStepConstructionTermLabels([construction.sheafId]);
+      return family === 'character'
+        ? `\\operatorname{ch}_{i}(${subject})=(-1)^i\\operatorname{ch}_{i}(${parent})`
+        : `c(${subject})=c(${parent}^{\\vee})`;
+    }
+    if (construction.type === 'tensor') {
+      const [left, right] = classStepConstructionTermLabels(construction.sheafIds);
+      const operation = tensorOperationLatex(construction.derived !== false);
+      return family === 'character'
+        ? `\\operatorname{ch}(${left}${operation}${right})=\\operatorname{ch}(${left})\\operatorname{ch}(${right})`
+        : `c(${left}${operation}${right})=c\\left(\\operatorname{ch}(${left})\\operatorname{ch}(${right})\\right)`;
+    }
+    if (construction.type === 'pullback') {
+      const map = state.maps.find((item) => item.id === construction.mapId);
+      const [source] = classStepConstructionTermLabels([construction.sheafId]);
+      const pull = pullbackFunctorLatex(map, { derived: construction.derived === true || construction.exact !== true });
+      return family === 'character'
+        ? `\\operatorname{ch}(${pull}${source})=${mapPullbackOperatorLatex(map)}\\operatorname{ch}(${source})`
+        : `c(${pull}${source})=${mapPullbackOperatorLatex(map)}c(${source})`;
+    }
+    return `${op}(${subject})`;
+  }
+
+  function classStepConstructionTermLabels(ids = []) {
+    return (ids || []).map((id, index) => {
+      const sheafObject = state.sheaves.find((item) => item.id === id);
+      return sanitizeMathLabel(sheafObject?.name, index === 0 ? '\\mathcal{E}' : '\\mathcal{F}');
+    });
+  }
+
+  function classStepFormalFollowupRules(session) {
+    const ids = classStepVisibleAndMapSourceVariableIds(session);
+    const rules = [];
+    for (const id of ids) {
+      const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+      if (data?.classStepKind === 'formalTodd') {
+        const geometry = geometryByVarietyId(data.geometryId) || session.geometry;
+        rules.push(classStepToddRuleForVariable(id, geometry, data.classStepDegree));
+      }
+      const sourceDef = classStepSheafDefForVariable(id, data, session);
+      if (sourceDef) rules.push(...classStepRulesForSheafDef(sourceDef, session));
+    }
+    return rules.filter(Boolean);
+  }
+
+  function classStepVisibleVariableIds(session) {
+    return new Set(Array.from(classStepDisplayPoly(session).terms.keys())
+      .flatMap((key) => Object.keys(parseMonoKey(key))));
+  }
+
+  function classStepVisibleAndMapSourceVariableIds(session) {
+    const ids = classStepVisibleVariableIds(session);
+    for (const id of ids) {
+      const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+      if (data?.kind === 'mapHomology' && (data.sourceKey || data.sourceKey === '')) {
+        Object.keys(parseMonoKey(data.sourceKey)).forEach((sourceId) => ids.add(sourceId));
+      }
+    }
+    return ids;
+  }
+
+  function classStepToddRuleForVariable(id, geometry, degree) {
+    if (!geometry || !degree) return null;
+    const tangent = buildTangentClassBundle(geometry);
+    const rhs = homogeneousPart(tangent.todd, degree);
+    return {
+      id: `step-todd-${id}`,
+      builtin: true,
+      enabled: true,
+      stepSourceLabel: 'Todd',
+      classStepGroupKey: `Todd:${geometry.varietyId || homologyScopeId(geometry)}`,
+      classStepDisplayKey: `Todd:${geometry.varietyId || homologyScopeId(geometry)}`,
+      classStepDisplayLatex: `\\operatorname{td}(${geometry.labelLatex})`,
+      lhs: { powers: { [id]: 1 } },
+      rhs: serializeHomologyPoly(rhs)
+    };
+  }
+
+  function classStepSheafDefForVariable(id, data, session) {
+    for (const sheafObject of state.sheaves || []) {
+      const geometry = geometryByVarietyId(sheafObject.baseVarietyId) || session.geometry;
+      const sheaf = sheafFromObject(sheafObject, geometry);
+      for (const family of ['character', 'chern']) {
+        const def = classStepSheafDefsForSheaf(sheaf, geometry, family).find((entry) => entry.id === id);
+        if (def) return { def, sheaf, geometry, family, sheafObject };
+      }
+    }
+    if (data?.kind === 'sheafClass' && data.sheafObjectId) {
+      const sheafObject = state.sheaves.find((item) => item.id === data.sheafObjectId);
+      const geometry = geometryByVarietyId(data.geometryId) || session.geometry;
+      if (sheafObject && geometry) {
+        const sheaf = sheafFromObject(sheafObject, geometry);
+        const family = data.classStepFamily === 'character' ? 'character' : 'chern';
+        const def = classStepSheafDefsForSheaf(sheaf, geometry, family).find((entry) => entry.id === id);
+        if (def) return { def, sheaf, geometry, family, sheafObject };
+      }
+    }
+    return null;
+  }
+
+  function classStepRulesForSheafDef(source, session) {
+    const { def, sheaf, geometry, family } = source;
+    const rules = [];
+    if (classStepSheafHasTrivialPositiveClasses(sheaf)) {
+      rules.push({
+        id: `step-trivial-sheaf-${def.id}`,
+        builtin: true,
+        enabled: true,
+        stepSourceLabel: family === 'character' ? 'Chern character' : 'Chern class',
+        lhs: { powers: { [def.id]: 1 } },
+        rhs: []
+      });
+    }
+    const numericRank = numericRankFromPlain(sheaf?.rankPlain);
+    if (family === 'chern' && sheafHasLocallyFreeLabel(sheaf) && numericRank != null && def.degree > numericRank) {
+      rules.push({
+        id: `step-rank-vanishing-${def.id}`,
+        builtin: true,
+        enabled: true,
+        stepSourceLabel: 'Chern class',
+        classStepRuleGeometry: geometry,
+        classStepPayoffRule: true,
+        lhs: { powers: { [def.id]: 1 } },
+        rhs: []
+      });
+    }
+    const homology = sheaf?.sourceObject ? ensureSheafHomologySystem(sheaf.sourceObject, geometry) : null;
+    rules.push(...(homology?.rules || []).filter((rule) => (
+      rule.enabled !== false
+      && rule.lhs?.powers?.[def.id] === 1
+    )).map((rule) => ({
+      ...rule,
+      classStepRuleGeometry: geometry,
+      classStepPayoffRule: true
+    })));
+    rules.push(...classStepDefaultSheafRulesForDef(def, sheaf, geometry, family, session));
+    if (sheaf?.construction?.type === 'ses-term') {
+      rules.push(...classStepSesRules({
+        ...session,
+        sheaf,
+        geometry,
+        family,
+        dimension: geometry.dim
+      }).filter((rule) => rule.lhs?.powers?.[def.id] === 1));
+    }
+    if (sheaf?.construction?.type === 'pushforward') {
+      rules.push(...classStepPushforwardGrrRules({
+        ...session,
+        sheaf,
+        geometry,
+        family,
+        dimension: geometry.dim
+      }, sheaf, geometry).filter((rule) => rule.lhs?.powers?.[def.id] === 1));
+    }
+    if (classStepHasBasicConstructionRule(sheaf?.construction?.type)) {
+      rules.push(...classStepBasicConstructionRules({
+        ...session,
+        sheaf,
+        geometry,
+        family,
+        dimension: geometry.dim
+      }, sheaf, geometry, family).filter((rule) => rule.lhs?.powers?.[def.id] === 1));
+    }
+    return rules;
+  }
+
+  function classStepSwitchingRules(session) {
+    const rules = [];
+    const ids = classStepVisibleAndMapSourceVariableIds(session);
+    for (const id of ids) {
+      const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+      const source = classStepSheafDefForVariable(id, data, session);
+      if (!source || source.def.degree < 1) continue;
+      const rule = source.family === 'character'
+        ? classStepCharacterToChernRule(source, session)
+        : classStepChernToCharacterRule(source, session);
+      if (rule) rules.push(rule);
+    }
+    return rules.filter((rule) => classStepSwitchingRuleRevealsApplicableRule(rule, session));
+  }
+
+  function classStepCharacterToChernRule(source, session) {
+    const { def, sheaf, geometry } = source;
+    const chernFormal = buildClassStepFormalData(geometry, sheaf, 'chern');
+    const pComps = powerSumsFromChern(chernFormal.components, geometry.dim);
+    const rhs = componentOrZero(pComps, def.degree).scale(fraction(1, factorialBigInt(def.degree)));
+    if (rhs.isZero()) return null;
+    return classStepSwitchingRule(source, rhs, 'character-to-chern', classStepCharacterToChernDisplayLatex(sheaf));
+  }
+
+  function classStepChernToCharacterRule(source, session) {
+    const { def, sheaf, geometry } = source;
+    const characterFormal = buildClassStepFormalData(geometry, sheaf, 'character');
+    const pComps = zeroComponentArray(geometry.dim);
+    for (let i = 1; i <= geometry.dim; i += 1) {
+      pComps[i] = componentOrZero(characterFormal.components, i).scale(fraction(factorialBigInt(i)));
+    }
+    const cComps = chernFromPowerSums(pComps, geometry.dim);
+    const rhs = componentOrZero(cComps, def.degree);
+    if (rhs.isZero()) return null;
+    return classStepSwitchingRule(source, rhs, 'chern-to-character', classStepChernToCharacterDisplayLatex(sheaf));
+  }
+
+  function classStepSwitchingRule(source, rhs, direction, displayLatex) {
+    const { def, sheaf, family } = source;
+    return {
+      id: `step-switch-${direction}-${def.id}`,
+      builtin: true,
+      enabled: true,
+      stepSourceLabel: 'Switch c/ch',
+      classStepGroupKey: `switch:${direction}:${sheaf?.sourceObject?.id || sheaf?.id || ''}`,
+      classStepDisplayKey: `switch:${direction}:${sheaf?.sourceObject?.id || sheaf?.id || ''}`,
+      classStepDisplayLatex: displayLatex,
+      classStepSwitchingRule: true,
+      lhs: { powers: { [def.id]: 1 } },
+      rhs: serializeHomologyPoly(rhs),
+      selected: false,
+      classStepSwitchFromFamily: family
+    };
+  }
+
+  function classStepSwitchingRuleRevealsApplicableRule(rule, session) {
+    const visible = classStepDisplayPoly(session);
+    const beforeKeys = classStepNonSwitchCandidateKeys(session);
+    const variants = [
+      rule,
+      ...classStepMapWrappedRules(session, [rule])
+    ];
+    return variants.some((variant) => {
+      if (!classStepRuleAppliesToPoly(visible, variant)) return false;
+      if (variant !== rule && variant.id !== rule.id) return true;
+      const converted = applyOneHomologyRuleOnce(visible, variant, session.geometry?.dim ?? MAX_DIMENSION, {});
+      if (polyEquals(visible, converted)) return false;
+      const afterKeys = classStepNonSwitchCandidateKeys(classStepProbeSessionWithDisplayPoly(session, converted));
+      return [...afterKeys].some((key) => !beforeKeys.has(key));
+    });
+  }
+
+  function classStepProbeSessionWithDisplayPoly(session, displayPoly) {
+    const components = session.components.map((poly) => Poly.from(poly));
+    if (session.index != null) {
+      components[session.index] = displayPoly;
+    } else {
+      for (let degree = 1; degree <= session.dimension; degree += 1) {
+        components[degree] = homogeneousPart(displayPoly, degree);
+      }
+    }
+    return {
+      ...session,
+      checkSwitchingRules: false,
+      components,
+      candidates: []
+    };
+  }
+
+  function classStepNonSwitchCandidateKeys(session) {
+    return new Set(collectClassStepRuleCandidates({
+      ...session,
+      checkSwitchingRules: false,
+      candidates: []
+    }).filter((candidate) => classStepCandidateCountsAsSwitchingPayoff(candidate))
+      .flatMap((candidate) => classStepCandidateRules(candidate).map(classStepRuleInstanceKey)));
+  }
+
+  function classStepCandidateCountsAsSwitchingPayoff(candidate) {
+    const label = candidate?.sourceLabel || '';
+    if (label === 'Switch c/ch') return false;
+    if (classStepCandidateRules(candidate).some((rule) => rule?.classStepPayoffRule === true)) return true;
+    return label === 'user'
+      || label === 'built-in'
+      || label === 'Chern class'
+      || label === 'Chern character'
+      || label === 'cached'
+      || label === 'cached pushforward'
+      || label === 'cached pullback';
+  }
+
+  function classStepCharacterToChernDisplayLatex(sheaf) {
+    const subject = sheaf?.labelLatex || '\\mathcal{F}';
+    return `\\operatorname{ch}_{i}(${subject})=\\frac{1}{i!}p_i\\left(c_1(${subject}),\\ldots,c_i(${subject})\\right)`;
+  }
+
+  function classStepChernToCharacterDisplayLatex(sheaf) {
+    const subject = sheaf?.labelLatex || '\\mathcal{F}';
+    return `c_i(${subject})=e_i\\left(1!\\operatorname{ch}_1(${subject}),\\ldots,i!\\operatorname{ch}_i(${subject})\\right)`;
+  }
+
+  function classStepDefaultSheafRulesForDef(def, sheaf, geometry, family, session) {
+    if (!sheaf || sheafUsesFreeClassVariables(sheaf)) return [];
+    if (sheaf.construction) return [];
+    try {
+      const bundle = buildBundleForSheaf(geometry, sheaf, { geometry });
+      const rhs = family === 'character'
+        ? componentOrZero(bundle.chComps, def.degree)
+        : componentOrZero(bundle.cComps, def.degree);
+      const rule = {
+        id: `step-default-sheaf-${def.id}`,
+        builtin: true,
+        enabled: true,
+        stepSourceLabel: family === 'character' ? 'Chern character' : 'Chern class',
+        classStepPayoffRule: true,
+        lhs: { powers: { [def.id]: 1 } },
+        rhs: serializeHomologyPoly(rhs)
+      };
+      return sheafHomologyRuleIsTautologicalDefault(rule, def, sheaf, geometry) ? [] : [rule];
+    } catch (error) {
+      if (error?.symbolicBudgetExceeded) return [];
+      return [];
+    }
+  }
+
+  function classStepMapWrappedRules(session, rules) {
+    const ids = classStepVisibleVariableIds(session);
+    const out = [];
+    for (const id of ids) {
+      const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+      if (data?.kind !== 'mapHomology' || data.operation !== 'pushforward' || !(data.sourceKey || data.sourceKey === '')) continue;
+      const sourcePowers = parseMonoKey(data.sourceKey);
+      const sourcePoly = polyFromPowers(sourcePowers);
+      if (sourcePoly.isZero()) continue;
+      const map = state.maps.find((item) => sameMapId(item.id, data.mapId));
+      if (!map) continue;
+      for (const rule of rules || []) {
+        if (!classStepRuleAppliesToPoly(sourcePoly, rule)) continue;
+        const rhs = classStepTruncateProductBidegrees(applyClassStepRulesToPoly(sourcePoly, [classStepMaterializeRule(session, rule)], MAX_DIMENSION, {
+          oncePerRule: true,
+          onePass: true
+        }), geometryByVarietyId(map.domainId));
+        const wrapped = pushforwardPolynomialByDegree(
+          map,
+          rhs,
+          geometryByVarietyId(map.domainId)?.dim ?? session.dimension,
+          geometryByVarietyId(map.codomainId)?.dim ?? session.dimension,
+          { proper: false }
+        );
+        const displayKey = rule.classStepDisplayKey || classStepRuleDisplayKey(rule);
+        const sourceLabel = rule.stepSourceLabel || 'wrapped rule';
+        out.push({
+          ...rule,
+          id: `step-map-wrap-${id}-${rule.id || hashString(monoKey(rule.lhs?.powers || {}))}`,
+          classStepAllowSameLhs: true,
+          classStepDisplayKey: displayKey,
+          classStepGroupKey: rule.classStepGroupKey
+            ? `${rule.classStepGroupKey}:wrapped`
+            : (displayKey ? `wrapped-display:${sourceLabel}:${displayKey}` : `wrapped-rule:${sourceLabel}:${rule.id || hashString(JSON.stringify(rule.rhs || []))}`),
+          lhs: { powers: { [id]: 1 } },
+          rhs: serializeHomologyPoly(wrapped),
+          stepSourceLabel: sourceLabel,
+          classStepDisplayLatex: rule.classStepDisplayLatex || classStepRuleDisplayLatex(rule)
+        });
+      }
+    }
+    return out;
+  }
+
+  function classStepPullbackWrappedRules(session, rules) {
+    const ids = classStepVisibleAndMapSourceVariableIds(session);
+    const out = [];
+    for (const id of ids) {
+      const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+      if (data?.kind !== 'mapHomology' || data.operation !== 'pullback' || !(data.sourceKey || data.sourceKey === '')) continue;
+      const sourcePowers = parseMonoKey(data.sourceKey);
+      const sourcePoly = polyFromPowers(sourcePowers);
+      if (sourcePoly.isZero()) continue;
+      const map = state.maps.find((item) => sameMapId(item.id, data.mapId));
+      if (!map) continue;
+      const domainGeometry = geometryByVarietyId(map.domainId) || session.geometry;
+      const codomainGeometry = geometryByVarietyId(map.codomainId) || session.geometry;
+      for (const rule of rules || []) {
+        if (!classStepRuleAppliesToPoly(sourcePoly, rule)) continue;
+        const reducedSource = applyClassStepRulesToPoly(sourcePoly, [classStepMaterializeRule(session, rule)], codomainGeometry?.dim ?? MAX_DIMENSION, {
+          oncePerRule: true,
+          onePass: true
+        });
+        const pulled = classStepTruncateProductBidegrees(pullbackPolynomial(reducedSource, map), domainGeometry);
+        const displayLatex = classStepPullbackWrappedDisplayLatex(map, rule);
+        const displayKey = `pullback:${map.id || 'map'}:${displayLatex}`;
+        const sourceLabel = rule.stepSourceLabel || 'Pullback';
+        out.push({
+          ...rule,
+          id: `step-pullback-wrap-${id}-${rule.id || hashString(monoKey(rule.lhs?.powers || {}))}`,
+          classStepAllowSameLhs: true,
+          classStepDisplayKey: displayKey,
+          classStepGroupKey: rule.classStepGroupKey
+            ? `${rule.classStepGroupKey}:pullback:${map.id || 'map'}`
+            : `pullback-display:${sourceLabel}:${hashString(displayLatex)}`,
+          lhs: { powers: { [id]: 1 } },
+          rhs: serializeHomologyPoly(pulled),
+          stepSourceLabel: sourceLabel,
+          classStepDisplayLatex: displayLatex
+        });
+      }
+    }
+    return out;
+  }
+
+  function classStepPullbackWrappedDisplayLatex(map, rule) {
+    const pull = mapPullbackOperatorLatex(map);
+    const lhs = formatPolyLatex(polyFromPowers(rule?.lhs?.powers || {}));
+    const rhs = homologyRuleRhsLatex(rule);
+    return `${pull}\\left(${lhs}\\right)=${pull}\\left(${rhs}\\right)`;
+  }
+
+  function classStepPushforwardGrrRules(session, sheaf = session?.sheaf, geometry = session?.geometry) {
+    const construction = sheaf?.construction || {};
+    const map = state.maps.find((item) => item.id === construction.mapId);
+    const sourceSheaf = state.sheaves.find((item) => item.id === construction.sheafId);
+    const domain = state.varieties.find((item) => item.id === map?.domainId);
+    if (!map || !sourceSheaf || !domain) return [];
+    const domainGeometry = geometryFromVariety(domain);
+    const family = session.family === 'character' ? 'character' : 'chern';
+    const defs = classStepSheafDefsForSheaf(sheaf, geometry, family);
+    const rankKey = classStepGrrRankKey(session, sheaf, geometry, family);
+    const rankDef = rankKey
+      ? [{
+        id: `step-grr-rank-${map.id || 'map'}-${sheaf?.sourceObject?.id || sheaf?.id || 'sheaf'}`,
+        degree: 0,
+        lhsPowers: parseMonoKey(rankKey),
+        hiddenRankRule: true
+      }]
+      : [];
+    return [...rankDef, ...defs].map((def) => ({
+      id: `step-grr-${map.id || 'map'}-${def.id}`,
+      builtin: true,
+      enabled: true,
+      stepSourceLabel: 'GRR',
+      classStepGroupKey: `GRR:${map.id || 'map'}:${sheaf?.sourceObject?.id || sheaf?.baseVarietyId || ''}:${family}`,
+      classStepKind: 'pushforward-grr',
+      classStepFamily: family,
+      classStepTargetGeometry: geometry,
+      classStepDomainGeometry: domainGeometry,
+      classStepSourceSheafId: sourceSheaf.id,
+      classStepMapId: map.id,
+      classStepConstruction: construction,
+      classStepDegree: def.degree,
+      classStepRankRule: def.hiddenRankRule === true,
+      classStepApplyWithGroup: def.hiddenRankRule === true,
+      classStepDisplayLatex: classStepGrrDisplayLatex(map, domainGeometry, geometry, sourceSheaf, sheaf),
+      lhs: { powers: def.lhsPowers || { [def.id]: 1 } },
+      rhs: []
+    }));
+  }
+
+  function classStepGrrRankKey(session, sheaf, geometry, family) {
+    if (!(session?.sheaf === sheaf && geometry === session?.geometry)) return null;
+    const currentRank = family === 'character'
+      ? componentOrZero(session.components, 0)
+      : session.rankComponent;
+    const originalRank = session.originalRankComponent;
+    if (!currentRank || !originalRank) return null;
+    return Array.from(Poly.from(originalRank).terms.keys())
+      .find((key) => key && Poly.from(currentRank).terms.has(key)) || null;
+  }
+
+  function classStepPushforwardGrrComponents(targetGeometry, domainGeometry, sourceSheafObject, map, construction, options = {}) {
+    try {
+      defineBaseHomologyVariables(domainGeometry);
+      const sourceSheaf = sheafFromObject(sourceSheafObject, domainGeometry);
+      const sourceBundle = buildSourceSheafBundle(domainGeometry, sourceSheafObject);
+      const sourceTangent = buildTangentClassBundle(domainGeometry);
+      const sourceChTotal = bundleChernCharacterTotal(sourceBundle, domainGeometry.dim, 'pushSourceRank');
+      const grrSource = sourceChTotal.mul(sourceTangent.todd, domainGeometry.dim, options);
+      const pushedTotal = pushforwardPolynomialByDegree(map, grrSource, domainGeometry.dim, targetGeometry.dim, construction);
+      defineHomologyVariables(targetGeometry);
+      const targetTangent = buildTangentClassBundle(targetGeometry);
+      const targetChTotal = pushedTotal.mul(inverseUnit(targetTangent.todd, targetGeometry.dim), targetGeometry.dim, options);
+      const chComps = zeroComponentArray(targetGeometry.dim);
+      for (let i = 1; i <= targetGeometry.dim; i += 1) chComps[i] = homogeneousPart(targetChTotal, i);
+      return chComps;
+    } catch (error) {
+      if (error?.symbolicBudgetExceeded) throw error;
+      return null;
+    }
+  }
+
+  function classStepPushforwardFormalGrrComponents(targetGeometry, domainGeometry, sourceSheafObject, map, construction, options = {}) {
+    defineHomologyVariables(targetGeometry);
+    defineHomologyVariables(domainGeometry);
+    const sourceSheaf = sheafFromObject(sourceSheafObject, domainGeometry);
+    const sourceFormal = buildClassStepFormalData(domainGeometry, sourceSheaf, 'character');
+    const sourceRank = rankAsDegreeZeroPoly({
+      rankLatex: sourceFormal.rankLatex,
+      rankPlain: sourceFormal.rankPlain
+    }, `grrSourceRank${sourceSheafObject?.id || ''}`);
+    const sourceChTotal = sourceRank.add(positiveTotal(sourceFormal.components, domainGeometry.dim));
+    const sourceToddTotal = classStepFormalToddTotal(domainGeometry, domainGeometry.dim);
+    const grrSource = classStepTruncateProductBidegrees(
+      sourceChTotal.mul(sourceToddTotal, domainGeometry.dim, options),
+      domainGeometry
+    );
+    const pushedTotal = pushforwardPolynomialByDegree(map, grrSource, domainGeometry.dim, targetGeometry.dim, construction);
+    const targetToddTotal = classStepFormalToddTotal(targetGeometry, targetGeometry.dim);
+    const targetChTotal = classStepTruncateProductBidegrees(
+      pushedTotal.mul(inverseUnit(targetToddTotal, targetGeometry.dim), targetGeometry.dim, options),
+      targetGeometry
+    );
+    const chComps = zeroComponentArray(targetGeometry.dim);
+    chComps[0] = homogeneousPart(targetChTotal, 0);
+    for (let i = 1; i <= targetGeometry.dim; i += 1) chComps[i] = homogeneousPart(targetChTotal, i);
+    return chComps;
+  }
+
+  function classStepTruncateProductBidegrees(poly, geometry) {
+    return productGeometryContext(geometry)
+      ? truncateProductBidegreePolynomial(poly, geometry)
+      : Poly.from(poly);
+  }
+
+  function classStepFormalToddTotal(geometry, d) {
+    return totalFromComponents(classStepFormalToddComponents(geometry, d), d, Poly.one());
+  }
+
+  function classStepFormalToddComponents(geometry, d = geometry?.dim ?? MAX_DIMENSION) {
+    const comps = zeroComponentArray(d);
+    for (let i = 1; i <= d; i += 1) comps[i] = Poly.variable(classStepFormalToddVariableId(geometry, i));
+    return comps;
+  }
+
+  function classStepFormalToddVariableId(geometry, degree) {
+    const id = `class_step_td_${homologyScopeId(geometry)}_${degree}`;
+    defineVariable(id, degree, `\\operatorname{td}_{${degree}}(${geometry.labelLatex})`, {
+      kind: 'classStepTodd',
+      classStepKind: 'formalTodd',
+      classStepDegree: degree,
+      geometryId: geometry?.varietyId || null,
+      cohomologyDegree: 2 * degree,
+      plain: `td_${degree}(${geometry.labelPlain})`
+    });
+    return id;
+  }
+
+  function classStepGrrDisplayLatex(map, domainGeometry, targetGeometry, sourceSheafObject, targetSheaf) {
+    const sourceLatex = sanitizeMathLabel(sourceSheafObject?.name, '\\mathcal{F}^{\\bullet}');
+    const targetLatex = targetSheaf?.labelLatex || pushforwardFunctorLatex(map, { proper: true }) + sourceLatex;
+    const push = mapPushforwardOperatorLatex(map);
+    return `\\operatorname{ch}(${targetLatex})\\operatorname{td}(${targetGeometry.labelLatex})=${push}\\left(\\operatorname{ch}(${sourceLatex})\\operatorname{td}(${domainGeometry.labelLatex})\\right)`;
+  }
+
+  function classStepSesRules(session) {
+    const sequence = sesSequenceForTermSheaf(session.sheaf);
+    const terms = sesTermSheaves(sequence);
+    const missingIndex = terms.findIndex((term) => term?.id === session.sheaf?.sourceObject?.id);
+    if (missingIndex < 0) return [];
+    const d = session.dimension;
+    const components = terms.map((term, index) => (
+      index === missingIndex || !term ? null : classStepSesTermComponents(session, term)
+    ));
+    if (components.filter(Boolean).length !== 2) return [];
+    const rhsComps = session.family === 'character'
+      ? classStepSesMissingCharacterComponents(components, missingIndex, d)
+      : classStepSesMissingChernComponents(components, missingIndex, d);
+    return classStepSheafDefs(session).map((def) => ({
+      id: `step-ses-${sequence?.id || 'sequence'}-${def.id}`,
+      builtin: true,
+      enabled: true,
+      stepSourceLabel: 'SES',
+      classStepGroupKey: `SES:${sequence?.id || 'sequence'}:${session.family}`,
+      classStepDisplayLatex: classStepSesDisplayLatex(sequence, terms),
+      lhs: { powers: { [def.id]: 1 } },
+      rhs: serializeHomologyPoly(componentOrZero(rhsComps, def.degree))
+    }));
+  }
+
+  function classStepSesDisplayLatex(sequence, terms) {
+    const labels = (terms || []).map((term) => sanitizeMathLabel(term?.name, '\\mathcal{E}'));
+    return `0\\to ${labels[0] || '\\mathcal{E}'}\\to ${labels[1] || '\\mathcal{F}'}\\to ${labels[2] || '\\mathcal{G}'}\\to 0`;
+  }
+
+  function classStepSesTermComponents(session, termObject) {
+    const termSheaf = sheafFromObject(termObject, session.geometry);
+    if (classStepSheafHasTrivialPositiveClasses(termSheaf)) return zeroComponentArray(session.dimension);
+    return buildClassStepFormalData(session.geometry, termSheaf, session.family).components;
+  }
+
+  function classStepSheafHasTrivialPositiveClasses(sheaf) {
+    return sheaf?.type === 'structure'
+      || (sheaf?.construction?.type === 'trivial-bundle');
+  }
+
+  function classStepSesMissingCharacterComponents(components, missingIndex, d) {
+    const rhsComps = zeroComponentArray(d);
+    for (let i = 1; i <= d; i += 1) {
+      if (missingIndex === 0) rhsComps[i] = componentOrZero(components[1], i).sub(componentOrZero(components[2], i));
+      else if (missingIndex === 1) rhsComps[i] = componentOrZero(components[0], i).add(componentOrZero(components[2], i));
+      else rhsComps[i] = componentOrZero(components[1], i).sub(componentOrZero(components[0], i));
+    }
+    return rhsComps;
+  }
+
+  function classStepSesMissingChernComponents(components, missingIndex, d) {
+    const totals = components.map((comps) => (comps ? totalFromComponents(comps, d, Poly.one()) : null));
+    let total = Poly.one();
+    if (missingIndex === 0) total = totals[1].mul(inverseUnit(totals[2], d), d);
+    else if (missingIndex === 1) total = totals[0].mul(totals[2], d);
+    else total = totals[1].mul(inverseUnit(totals[0], d), d);
+    const rhsComps = zeroComponentArray(d);
+    for (let i = 1; i <= d; i += 1) rhsComps[i] = homogeneousPart(total, i);
+    return rhsComps;
+  }
+
+  function classStepSheafDefs(session) {
+    if (!session?.sheaf || !session?.geometry) return [];
+    const defs = classStepSheafDefsForSheaf(session.sheaf, session.geometry, session.family);
+    defs.forEach(defineSheafClassVariable);
+    return defs;
+  }
+
+  function classStepSheafDefsForSheaf(sheaf, geometry, family) {
+    if (!sheaf || !geometry) return [];
+    const defs = sheafHomologyClassDefinitions(classStepFormalSheaf(sheaf, family), geometry);
+    defs.forEach((def) => classStepDefineSheafClassVariable(def, sheaf, geometry, family));
+    return defs;
+  }
+
+  function classStepDefineSheafClassVariable(def, sheaf, geometry, family) {
+    defineSheafClassVariable(def);
+    const data = VARS.get(def.id) || {};
+    VARS.set(def.id, {
+      ...data,
+      kind: data.kind || 'sheafClass',
+      classStepKind: 'sheafClass',
+      classStepFamily: family === 'character' ? 'character' : 'chern',
+      classStepDegree: def.degree,
+      sheafObjectId: sheaf?.sourceObject?.id || sheaf?.id || def.sheafObject?.id || null,
+      geometryId: geometry?.varietyId || null
+    });
+    return def.id;
+  }
+
+  function classStepSheafRules(session) {
+    const rules = [];
+    const homology = session.sheaf?.sourceObject ? ensureSheafHomologySystem(session.sheaf.sourceObject, session.geometry) : null;
+    rules.push(...(homology?.rules || []).filter((rule) => rule.enabled !== false));
+    return rules;
+  }
+
+  function classStepCachedRules(session) {
+    const rules = [];
+    for (const [key, cache] of state.classStepCache.entries()) {
+      if (!cache || key === session.sourceSignature) continue;
+      if (cache.family !== session.family) continue;
+      restoreClassStepCacheVariables(cache);
+      const compatible = classStepCachedRulesForCompatibleGeometry(session, cache);
+      rules.push(...compatible);
+    }
+    return rules;
+  }
+
+  function restoreClassStepCacheVariables(cache) {
+    if (cache?.geometryId) {
+      const geometry = geometryByVarietyId(cache.geometryId);
+      if (geometry) defineHomologyVariables(geometry);
+    }
+    for (const id of classStepCacheVariableIds(cache)) {
+      restoreClassStepVariableById(id, cache);
+    }
+  }
+
+  function classStepCacheVariableIds(cache) {
+    const ids = new Set();
+    const addPoly = (poly) => {
+      for (const key of Poly.from(poly).terms.keys()) {
+        Object.keys(parseMonoKey(key)).forEach((id) => ids.add(id));
+      }
+    };
+    [...(cache?.components || []), ...(cache?.originalComponents || [])].forEach((poly) => {
+      if (poly) addPoly(poly);
+    });
+    return ids;
+  }
+
+  function restoreClassStepVariableById(id, cache) {
+    if (!id || VARS.has(id)) return;
+    if (ensureMapHomologyVariableFromId(id)) return;
+    const source = classStepSheafDefForVariable(id, null, {
+      geometry: geometryByVarietyId(cache?.geometryId) || state.lastResult?.geometry
+    });
+    if (source?.def) {
+      classStepDefineSheafClassVariable(source.def, source.sheaf, source.geometry, source.family);
+    }
+  }
+
+  function classStepCachedRulesForCompatibleGeometry(session, cache) {
+    const rules = [];
+    const d = session.dimension;
+    for (let i = 1; i <= Math.min(d, cache.components.length - 1); i += 1) {
+      const lhs = componentOrZero(cache.originalComponents || cache.components, i);
+      const rhs = componentOrZero(cache.components, i);
+      if (!lhs.isZero()) {
+        rules.push(classStepRuleFromPolys(`step-cache-${hashString(cache.signature)}-${i}`, lhs, rhs, 'cached'));
+      }
+      for (const map of state.maps || []) {
+        if (map.domainKind !== 'variety' || map.codomainKind !== 'variety') continue;
+        const sourceMatches = cache.geometryId && map.domainId === cache.geometryId && map.codomainId === session.geometry.varietyId;
+        const targetMatches = cache.geometryId && map.codomainId === cache.geometryId && map.domainId === session.geometry.varietyId;
+        if (sourceMatches) {
+          try {
+            const pushedLhs = pushforwardPolynomialByDegree(map, lhs, cache.dimension, d, { proper: false });
+            const pushedRhs = pushforwardPolynomialByDegree(map, rhs, cache.dimension, d, { proper: false });
+            if (!pushedLhs.isZero()) rules.push(classStepRuleFromPolys(`step-cache-push-${map.id}-${hashString(cache.signature)}-${i}`, pushedLhs, pushedRhs, 'cached pushforward'));
+          } catch (error) {
+            if (!error?.symbolicBudgetExceeded) throw error;
+          }
+        }
+        if (targetMatches) {
+          try {
+            const pulledLhs = pullbackPolynomial(lhs, map).truncate(d);
+            const pulledRhs = pullbackPolynomial(rhs, map).truncate(d);
+            if (!pulledLhs.isZero()) rules.push(classStepRuleFromPolys(`step-cache-pull-${map.id}-${hashString(cache.signature)}-${i}`, pulledLhs, pulledRhs, 'cached pullback'));
+          } catch (error) {
+            if (!error?.symbolicBudgetExceeded) throw error;
+          }
+        }
+      }
+    }
+    return rules.filter(Boolean);
+  }
+
+  function classStepRuleFromPolys(id, lhs, rhs, label) {
+    const lhsTerms = sortedTerms(lhs);
+    if (lhsTerms.length !== 1) return null;
+    const [lhsKey, lhsCoeff] = lhsTerms[0];
+    if (!lhsCoeff.isOne()) return null;
+    return {
+      id,
+      builtin: true,
+      enabled: true,
+      stepSourceLabel: label,
+      lhs: { powers: parseMonoKey(lhsKey) },
+      rhs: serializeHomologyPoly(rhs)
+    };
+  }
+
+  function classStepRuleApplies(session, rule) {
+    const lhs = rule?.lhs?.powers || {};
+    if (!Object.keys(lhs).length) return false;
+    return classStepRuleAppliesToPoly(classStepDisplayPoly(session), rule);
+  }
+
+  function classStepRuleAppliesToPoly(poly, rule) {
+    const lhs = rule?.lhs?.powers || {};
+    if (!Object.keys(lhs).length) return false;
+    return Poly.from(poly).terms.size > 0
+      && Array.from(Poly.from(poly).terms.keys()).some((key) => monomialFactorCount(parseMonoKey(key), lhs) > 0);
+  }
+
+  function applySelectedClassStepRules() {
+    const session = state.classStepSession;
+    if (!session) return;
+    const selected = (session.candidates || []).filter((candidate) => candidate.selected !== false);
+    if (!selected.length) {
+      session.message = 'Select at least one rule.';
+      renderClassStepPanel();
+      return;
+    }
+    const oncePerRule = refs.classStepOncePerRule?.checked !== false;
+    const onePass = !!refs.classStepOnePass?.checked;
+    const budget = createSymbolicBudget('step-by-step simplification', { maxMillis: 450 });
+    let changed = false;
+    try {
+      const targets = classStepRuleApplicationDegrees(session);
+      const rules = selected.flatMap((item) => classStepCandidateRules(item)
+        .map((rule) => classStepMaterializeRule(session, rule, { budget })));
+      for (const degree of targets) {
+        const before = componentOrZero(session.components, degree);
+        const after = applyClassStepRulesToPoly(before, rules, session.geometry?.dim ?? MAX_DIMENSION, {
+          oncePerRule,
+          onePass,
+          budget
+        });
+        if (!polyEquals(before, after)) changed = true;
+        session.components[degree] = after;
+      }
+      if (session.family === 'character') {
+        session.rankComponent = componentOrZero(session.components, 0);
+      } else if (session.rankComponent) {
+        const beforeRank = Poly.from(session.rankComponent);
+        const afterRank = applyClassStepRulesToPoly(beforeRank, rules, session.geometry?.dim ?? MAX_DIMENSION, {
+          oncePerRule,
+          onePass,
+          budget
+        });
+        if (!polyEquals(beforeRank, afterRank)) changed = true;
+        session.rankComponent = afterRank;
+      }
+      if (changed) {
+        classStepClearDisplayOverrides(session);
+      } else if (classStepUsesDerivedTarget(session)) {
+        const beforeDisplay = classStepDisplayPoly(session);
+        const afterDisplay = applyClassStepRulesToPoly(beforeDisplay, rules, session.geometry?.dim ?? MAX_DIMENSION, {
+          oncePerRule,
+          onePass,
+          budget
+        });
+        if (!polyEquals(beforeDisplay, afterDisplay)) {
+          changed = true;
+          classStepSetDisplayOverride(session, afterDisplay);
+        }
+      }
+      session.message = changed ? 'Applied selected rules.' : 'Selected rules made no change.';
+    } catch (error) {
+      if (!error?.symbolicBudgetExceeded) throw error;
+      session.message = `${error.message} Kept the last completed step.`;
+      recordSymbolicWarning(session.message);
+    }
+    rememberClassStepComponents(session);
+    renderClassStepPanel();
+    renderClassChartWithStepSession(state.lastResult);
+    refreshExport(state.exportScope || 'main');
+    typeset(refs.classStepPanel);
+    typeset(refs.classChart);
+  }
+
+  function classStepRuleApplicationDegrees(session) {
+    const d = session.dimension || MAX_DIMENSION;
+    const target = session.target || session.family;
+    if (session.index == null) {
+      return Array.from({ length: d + (session.family === 'character' ? 1 : 0) }, (_, idx) => (
+        session.family === 'character' ? idx : idx + 1
+      ));
+    }
+    if (target === session.family) return [session.index];
+    if (target === 'character' && session.index === 0) return [];
+    const limit = Math.max(1, Math.min(d, session.index));
+    return Array.from({ length: limit }, (_, index) => index + 1);
+  }
+
+  function classStepUsesDerivedTarget(session) {
+    const target = session?.target || session?.family;
+    return !!session && target !== session.family;
+  }
+
+  function classStepDisplayOverrideKey(session) {
+    if (!classStepUsesDerivedTarget(session)) return '';
+    return `${session.target || session.family}:${session.index == null ? 'total' : session.index}`;
+  }
+
+  function classStepDisplayOverridePoly(session) {
+    const key = classStepDisplayOverrideKey(session);
+    if (!key || !session?.displayOverrides || !session.displayOverrides[key]) return null;
+    return Poly.from(session.displayOverrides[key]);
+  }
+
+  function classStepSetDisplayOverride(session, poly) {
+    const key = classStepDisplayOverrideKey(session);
+    if (!key) return;
+    if (!session.displayOverrides) session.displayOverrides = {};
+    session.displayOverrides[key] = Poly.from(poly);
+  }
+
+  function classStepClearDisplayOverrides(session) {
+    if (session) session.displayOverrides = {};
+  }
+
+  function classStepRuleDisplayLatex(rule) {
+    if (rule?.classStepDisplayLatex) return rule.classStepDisplayLatex;
+    return `${formatPolyLatex(polyFromPowers(rule?.lhs?.powers || {}))}=${homologyRuleRhsLatex(rule)}`;
+  }
+
+  function classStepCandidateRules(candidate) {
+    return candidate?.rules?.length ? candidate.rules : [candidate?.rule].filter(Boolean);
+  }
+
+  function classStepMaterializeRule(session, rule, options = {}) {
+    if (rule?.classStepKind !== 'pushforward-grr') return rule;
+    const map = state.maps.find((item) => item.id === rule.classStepMapId);
+    const sourceSheafObject = state.sheaves.find((item) => item.id === rule.classStepSourceSheafId);
+    const targetGeometry = rule.classStepTargetGeometry || session.geometry;
+    const domainGeometry = rule.classStepDomainGeometry;
+    if (!map || !sourceSheafObject || !targetGeometry || !domainGeometry) return rule;
+    const rhsComps = classStepPushforwardFormalGrrComponents(targetGeometry, domainGeometry, sourceSheafObject, map, rule.classStepConstruction || {}, options);
+    const familyComps = rule.classStepFamily === 'chern' && rule.classStepDegree > 0
+      ? classStepChernComponentsFromCharacter(rhsComps, targetGeometry.dim)
+      : rhsComps;
+    return {
+      ...rule,
+      rhs: serializeHomologyPoly(componentOrZero(familyComps, rule.classStepDegree))
+    };
+  }
+
+  function classStepChernComponentsFromCharacter(chComps, d) {
+    const pComps = zeroComponentArray(d);
+    for (let i = 1; i <= d; i += 1) pComps[i] = componentOrZero(chComps, i).scale(fraction(factorialBigInt(i)));
+    return chernFromPowerSums(pComps, d);
+  }
+
+  function applyClassStepRulesToPoly(poly, rules, maxDegree, options = {}) {
+    let out = Poly.from(poly);
+    const limit = options.onePass ? 1 : MAX_HOMOLOGY_RULE_PASSES;
+    for (let pass = 0; pass < limit; pass += 1) {
+      const before = out;
+      for (const rule of rules) {
+        out = applyOneClassStepRule(out, rule, maxDegree, options);
+      }
+      if (polyEquals(before, out)) break;
+    }
+    return out.truncate(maxDegree);
+  }
+
+  function applyOneClassStepRule(poly, rule, maxDegree, options = {}) {
+    if (options.oncePerRule) return applyOneHomologyRuleOnce(poly, rule, maxDegree, options);
+    return applyOneHomologyRule(poly, rule, maxDegree, options);
+  }
+
+  function applyOneHomologyRuleOnce(poly, rule, maxDegree, options = {}) {
+    const lhsPowers = rule.lhs?.powers || {};
+    const rhs = homologyRuleRhsPoly(rule);
+    const rhsIsZero = rhs.isZero();
+    const terms = new Map();
+    let applied = false;
+    for (const [key, coeff] of Poly.from(poly).terms) {
+      chargeSymbolicWork(1 + rhs.terms.size, terms.size, 'homology rule application', options);
+      const powers = parseMonoKey(key);
+      const matchCount = monomialFactorCount(powers, lhsPowers);
+      const count = rhsIsZero
+        ? (matchCount > 0 ? 1 : 0)
+        : (!applied ? Math.min(1, matchCount) : 0);
+      const factorization = count > 0 ? removeMonomialFactor(powers, lhsPowers, count) : null;
+      const replacement = count > 0 && factorization
+        ? rhs.mul(factorization.remainder, maxDegree, options).scale(coeff.mul(factorization.sign))
+        : polyFromPowers(powers).scale(coeff);
+      if (count > 0 && !rhsIsZero) applied = true;
+      for (const [nextKey, nextCoeff] of replacement.terms) {
+        const next = (terms.get(nextKey) || Fraction.zero()).add(nextCoeff);
+        if (next.isZero()) terms.delete(nextKey);
+        else terms.set(nextKey, next);
+      }
+    }
+    return new Poly(terms).truncate(maxDegree);
+  }
+
+  function rememberClassStepComponents(session) {
+    if (!session?.sourceSignature) return;
+    const originalComponents = session.originalComponents
+      ? session.originalComponents.map((poly) => Poly.from(poly))
+      : session.components.map((poly) => Poly.from(poly));
+    state.classStepCache.set(session.sourceSignature, {
+      signature: session.sourceSignature,
+      family: session.family,
+      dimension: session.dimension,
+      geometryId: session.geometry?.varietyId || null,
+      components: session.components.map((poly) => Poly.from(poly)),
+      rankComponent: session.rankComponent ? Poly.from(session.rankComponent) : null,
+      originalComponents
+    });
   }
 
   function formatClassPoly(poly, options) {
@@ -19002,9 +20981,36 @@
     const powers = parseMonoKey(normalizedKey);
     const ids = Object.keys(powers);
     if (ids.length !== 1 || powers[ids[0]] !== 1) return null;
+    const otherFactorPullback = projectionOtherFactorPullbackPushforwardSourceKey(context, powers);
+    if (otherFactorPullback) return otherFactorPullback;
     const productBox = productBoxDataForVariable(ids[0]);
     if (!productBox || !projectionProductBoxHasPointFiber(context, productBox)) return null;
     return projectionPushforwardProductBoxRhs(context, productBox);
+  }
+
+  function projectionOtherFactorPullbackPushforwardSourceKey(context, powers) {
+    if (!context || !powers || !Object.keys(powers).length) return null;
+    const fiberPowers = {};
+    for (const [id, exp] of Object.entries(powers)) {
+      const exponent = Number(exp) || 0;
+      if (exponent <= 0) continue;
+      const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+      if (data?.kind !== 'mapHomology' || data.operation !== 'pullback') return null;
+      const sourceMap = state.maps.find((item) => sameMapId(item.id, data.mapId));
+      const sourceContext = projectionMapContext(sourceMap);
+      if (!sourceContext) return null;
+      if (sourceContext.productGeometry.varietyId !== context.productGeometry.varietyId) return null;
+      if (sourceContext.factorGeometry.varietyId !== context.otherGeometry.varietyId) return null;
+      const sourcePowers = sameMapPullbackSourcePowers(sourceMap, id);
+      if (!sourcePowers) return null;
+      for (const [sourceId, sourceExp] of Object.entries(sourcePowers)) {
+        const sourceExponent = Number(sourceExp) || 0;
+        if (sourceExponent <= 0) continue;
+        fiberPowers[sourceId] = (fiberPowers[sourceId] || 0) + sourceExponent * exponent;
+      }
+    }
+    const integral = integrateTopHomologyClass(polyFromPowers(fiberPowers), context.otherGeometry);
+    return integral == null ? null : Poly.one().scale(integral);
   }
 
   function projectionPushforwardProductBoxRhs(context, productBox) {
@@ -19750,7 +21756,9 @@
 
   function pullbackVariableId(map, id) {
     const data = VARS.get(id) || ensureMapHomologyVariableFromId(id) || { degree: 1, latex: id };
-    return defineMapHomologyVariable(map, 'pullback', id, data.degree, data.latex || id);
+    return defineMapHomologyVariable(map, 'pullback', id, data.degree, data.latex || id, {
+      ...(Number.isInteger(data.cohomologyDegree) ? { cohomologyDegree: data.cohomologyDegree } : {})
+    });
   }
 
   function pushforwardPolynomialByDegree(map, poly, sourceDim, targetDim, construction) {
@@ -19844,6 +21852,7 @@
     const remainingDegree = monoDegree(split.remainingKey);
     const remainingTargetDegree = remainingDegree + degreeShift;
     if (remainingTargetDegree < 0 || remainingTargetDegree > targetDim) return null;
+    if (!projectionSourceKeyCanSurvivePushforward(map, split.remainingKey, sourceDim, targetDim)) return Poly.zero();
     const automaticProjection = projectionAutomaticPushforwardSourceKey(map, split.remainingKey, sourceDim, targetDim);
     if (automaticProjection) return split.codomainFactor.mul(automaticProjection, targetDim).truncate(targetDim);
     const pushedId = pushforwardTermVariableId(map, split.remainingKey, remainingTargetDegree, construction);
@@ -20123,7 +22132,7 @@
     const poly = scalarExpressionPoly(plain || bundle.rankLatex || 'r');
     if (poly) return poly;
     const id = `rank${constructionSafeId(bundle.rankLatex || bundle.rankPlain || idSeed)}`;
-    defineVariable(id, 0, bundle.rankLatex || plain || 'r');
+    defineVariable(id, 0, bundle.rankLatex || plain || 'r', plain ? { plain } : {});
     return Poly.variable(id);
   }
 
@@ -21970,6 +23979,10 @@
     return Array.from(poly.terms.entries()).sort((a, b) => {
       const byDegree = monoDegree(a[0]) - monoDegree(b[0]);
       if (byDegree) return byDegree;
+      if (monoDegree(a[0]) === 0) {
+        if (!a[0] && b[0]) return 1;
+        if (a[0] && !b[0]) return -1;
+      }
       return a[0].localeCompare(b[0]);
     });
   }
@@ -22882,7 +24895,7 @@
     const labelLatex = sheafLabelLatex(sheaf);
     const labelPlain = sheafLabelPlain(sheaf);
     const numericRank = numericRankFromPlain(sheaf.rankPlain);
-    const maxIndex = sheafHasLocallyFreeLabel(sheaf) && numericRank != null
+    const maxIndex = sheaf.classStepFormal !== true && sheafHasLocallyFreeLabel(sheaf) && numericRank != null
       ? Math.min(geometry.dim, numericRank)
       : geometry.dim;
     const kind = basis === 'character' ? 'character' : 'chern';
@@ -23435,7 +25448,7 @@
     renderStatusForResult(result);
     setInlineMath(refs.ringSummary, geometry ? `A^*(${geometry.labelLatex})_{\\le ${geometry.dim}}` : '\\text{add a variety}');
     renderHomologyPanel(result);
-    renderClassChart(result);
+    renderClassChartWithStepSession(result);
     if (result.hodge) {
       refs.hodgeMessage.hidden = false;
       renderHodgeChart(result);
@@ -23492,7 +25505,8 @@
     try {
       result.classDisplay = classDisplayOptions(result.geometry, result.sheaf);
       result.classRows = buildClassRows(result.bundle, result.geometry.dim, result.classDisplay);
-      renderClassChart(result);
+      invalidateClassStepSessionIfStale(result);
+      renderClassChartWithStepSession(result);
       typeset(refs.classChart);
       refreshExport(state.exportScope || 'main');
       renderStatusForResult(result);
@@ -23508,6 +25522,7 @@
 
   function renderClassChart(result = state.lastResult) {
     if (!refs.classChart || !refs.classMessage) return;
+    syncClassStepAvailability(result);
     if (result?.classRows?.length) {
       if (refs.classActions) refs.classActions.hidden = false;
       syncClassDisplayControls(result);
@@ -23533,8 +25548,21 @@
     refs.classChart.innerHTML = '';
     refs.classMessage.className = 'hint';
     refs.classMessage.hidden = false;
-    refs.classMessage.textContent = classChartEmptyMessage();
+    refs.classMessage.textContent = result?.classComputationLimited
+      ? `${result.classComputationMessage || 'Characteristic class computation exceeded the symbolic work limit.'} Use step-by-step below to reduce the formula in smaller pieces.`
+      : classChartEmptyMessage();
     syncHeavyOperationControls(result);
+  }
+
+  function syncClassStepAvailability(result = state.lastResult) {
+    const selected = inputIsModifyMode() ? selectedSheaf() : activeSheaf();
+    const available = !!(result?.geometry && result?.sheaf) || !!(selected && baseVarietyForSheaf(selected));
+    if (refs.classStepEntry) refs.classStepEntry.hidden = !available;
+    if (!available) {
+      if (refs.classStepCard) refs.classStepCard.hidden = true;
+      if (refs.classStepPanel) refs.classStepPanel.hidden = true;
+    }
+    if (refs.stepClasses) refs.stepClasses.disabled = !available || !!state.recomputeBusy || !!state.classRefreshBusy;
   }
 
   function classChartEmptyMessage() {
@@ -26002,20 +28030,39 @@
   function openChartExport(scope) {
     refreshExport(scope);
     if (refs.exportCard) refs.exportCard.classList.remove('collapsed');
-    refs.status.textContent = scope === 'hodge' ? 'hodge numbers export ready' : 'characteristic classes export ready';
+    refs.status.textContent = scope === 'hodge'
+      ? 'hodge numbers export ready'
+      : (scope === 'step-classes' ? 'step-by-step characteristic class export ready' : 'characteristic classes export ready');
   }
 
   function exportResult(result, format, scope = 'main') {
     if (format === 'preset-json') return exportPresetState();
-    if (scope === 'classes') {
-      if (!result.classRows.length) return `No characteristic classes available. ${classChartEmptyMessage()}`;
-      return exportClassChart(result, format);
+    if (scope === 'classes' || scope === 'step-classes') {
+      const classRows = classRowsForExport(result, scope);
+      if (!classRows.length) return `No characteristic classes available. ${classChartEmptyMessage()}`;
+      return exportClassChart({
+        ...result,
+        classRows,
+        classStepExport: scope === 'step-classes' && classStepSessionMatchesResult(state.classStepSession, result)
+      }, format);
     }
     if (scope === 'hodge') {
       if (!result.hodge || !result.geometry) return `No Hodge numbers available. ${hodgeChartEmptyMessage()}`;
       return exportHodgeChart(result, format);
     }
     return exportMainCanvas(result, format);
+  }
+
+  function classRowsForExport(result, scope = 'classes') {
+    if (!result) return [];
+    if ((scope === 'classes' || scope === 'step-classes') && classStepSessionMatchesResult(state.classStepSession, result)) {
+      const rows = buildClassRowsFromStepSession(
+        state.classStepSession,
+        result.classDisplay || classDisplayOptions(result.geometry, result.sheaf)
+      );
+      if (rows.length) return rows;
+    }
+    return result.classRows || [];
   }
 
   function exportPresetState() {
@@ -26996,6 +29043,7 @@
       lines.push(`% X: ${result.geometry.labelPlain}`);
       lines.push(`% E: ${result.bundle.labelPlain}`);
       lines.push(`% display: ${classDisplayDescription(result)}`);
+      if (result.classStepExport) lines.push('% source: step-by-step characteristic class chart');
       lines.push(...exportHomologyNotes(result.geometry, format));
       result.classRows.forEach((row) => lines.push(`\\[${row.labelLatex} = ${row.latex}\\]`));
       return lines.join('\n');
@@ -27005,6 +29053,7 @@
       lines.push(`# X: ${result.geometry.labelPlain}`);
       lines.push(`# E: ${result.bundle.labelPlain}`);
       lines.push(`# display: ${classDisplayDescription(result)}`);
+      if (result.classStepExport) lines.push('# source: step-by-step characteristic class chart');
       lines.push(...exportHomologyNotes(result.geometry, format));
       result.classRows.forEach((row) => lines.push(`${row.key} = ${row.plain}`));
       return lines.join('\n');
@@ -27013,6 +29062,7 @@
     lines.push(`X: ${result.geometry.labelPlain}`);
     lines.push(`E: ${result.bundle.labelPlain}`);
     lines.push(`display: ${classDisplayDescription(result)}`);
+    if (result.classStepExport) lines.push('source: step-by-step characteristic class chart');
     lines.push(...exportHomologyNotes(result.geometry, format));
     result.classRows.forEach((row) => lines.push(`${row.label} = ${row.plain}`));
     return lines.join('\n');
