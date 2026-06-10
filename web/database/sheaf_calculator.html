@@ -2149,6 +2149,7 @@
             <select id="variety-type" class="sheaf-select">
               <option value="abstract" selected>Abstract variety</option>
               <option value="curve">Curve</option>
+              <option value="symmetric-product-curve">Sym^m(C)</option>
               <option value="abelian">Abelian variety</option>
               <option value="ppav-moduli">Moduli of ppav A_g</option>
               <option value="point">Point</option>
@@ -2170,6 +2171,19 @@
           <div class="sheaf-field-row" id="ppav-genus-row" hidden>
             <label class="input-label" for="ppav-genus">genus</label>
             <input type="number" id="ppav-genus" class="sheaf-input" min="1" max="5" value="2">
+          </div>
+          <div class="sheaf-field-row" id="symmetric-product-params-row" hidden>
+            <span class="input-label">parameters</span>
+            <div class="grassmannian-param-picker">
+              <label class="grassmannian-param" for="symmetric-product-m">
+                <span>m</span>
+                <input type="number" id="symmetric-product-m" class="sheaf-input" min="0" max="15" value="3">
+              </label>
+              <label class="grassmannian-param" for="symmetric-product-genus">
+                <span>g</span>
+                <input id="symmetric-product-genus" class="sheaf-input curve-genus-input" type="text" value="g" maxlength="12" spellcheck="false" autocomplete="off">
+              </label>
+            </div>
           </div>
           <div class="sheaf-field-row" id="grassmannian-params-row" hidden>
             <span class="input-label">parameters</span>
@@ -2443,7 +2457,7 @@
           <div class="sheaf-field-row" id="map-abel-jacobi-row" hidden>
             <span class="input-label">source</span>
             <div class="sheaf-map-formula-picker">
-              <button class="btn btn-ghost sheaf-map-slot-button" id="map-abel-jacobi-curve-button" type="button" data-map-pick="curve">curve</button>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="map-abel-jacobi-curve-button" type="button" data-map-pick="curve">source</button>
               <span class="sheaf-map-formula-mark">&rArr;</span>
               <span class="sheaf-map-formula-mark">Jac</span>
             </div>

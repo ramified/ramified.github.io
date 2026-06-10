@@ -82,6 +82,11 @@
   const HOMOLOGY_GRASSMANNIAN_RULE_PREFIX = 'grassmannian-';
   const HOMOLOGY_PPAV_LAMBDA_CLASS_PREFIX = 'ppav_lambda_';
   const HOMOLOGY_PPAV_RULE_PREFIX = 'ppav-tautological-';
+  const HOMOLOGY_SYMMETRIC_PRODUCT_ETA_CLASS = 'symmetric_product_eta';
+  const HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_CLASS_PREFIX = 'symmetric_product_sigma_';
+  const HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_SUM_CLASS = 'symmetric_product_sigma_sum';
+  const HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_POWER_PREFIX = 'symmetric_product_sigma_power_';
+  const HOMOLOGY_SYMMETRIC_PRODUCT_RULE_PREFIX = 'symmetric-product-curve-';
   const HOMOLOGY_TANGENT_CHERN_CLASS_PREFIX = 'tangent_chern_';
   const HOMOLOGY_EXCEPTIONAL_DIVISOR_CLASS = 'exceptional_divisor';
   const HOMOLOGY_BRANCH_DIVISOR_CLASS = 'branch_divisor';
@@ -203,6 +208,7 @@
   function init() {
     collectRefs();
     bindRuntimeErrorWarnings();
+    initCustomTooltips();
     initializeInputObjects();
     syncInputEditorVisibility();
     normalizeControlVisibility();
@@ -228,6 +234,72 @@
     });
   }
 
+  function initCustomTooltips() {
+    if (typeof document === 'undefined' || !document.body || document.body.dataset.customTooltipsReady === '1') return;
+    document.body.dataset.customTooltipsReady = '1';
+
+    const tip = document.createElement('div');
+    tip.className = 'custom-tooltip';
+    tip.setAttribute('role', 'tooltip');
+    document.body.appendChild(tip);
+
+    let activeEl = null;
+
+    const placeTooltip = (el) => {
+      const rect = el.getBoundingClientRect();
+      const margin = 10;
+      const gap = 8;
+      tip.style.left = '0px';
+      tip.style.top = '0px';
+      const tipRect = tip.getBoundingClientRect();
+      let left = rect.left + rect.width / 2 - tipRect.width / 2;
+      left = Math.max(margin, Math.min(left, window.innerWidth - tipRect.width - margin));
+      let top = rect.top - tipRect.height - gap;
+      if (top < margin) top = rect.bottom + gap;
+      top = Math.max(margin, Math.min(top, window.innerHeight - tipRect.height - margin));
+      tip.style.left = `${Math.round(left)}px`;
+      tip.style.top = `${Math.round(top)}px`;
+    };
+
+    const showTooltip = (el) => {
+      const text = el.getAttribute('data-tooltip');
+      if (!text) return;
+      activeEl = el;
+      tip.textContent = text;
+      tip.classList.add('visible');
+      placeTooltip(el);
+    };
+
+    const hideTooltip = (el) => {
+      if (el && activeEl && el !== activeEl) return;
+      tip.classList.remove('visible');
+      activeEl = null;
+    };
+
+    document.addEventListener('pointerenter', (event) => {
+      const el = event.target?.closest?.('[data-tooltip]');
+      if (el) showTooltip(el);
+    }, true);
+    document.addEventListener('pointerleave', (event) => {
+      const el = event.target?.closest?.('[data-tooltip]');
+      if (el) hideTooltip(el);
+    }, true);
+    document.addEventListener('focusin', (event) => {
+      const el = event.target?.closest?.('[data-tooltip]');
+      if (el) showTooltip(el);
+    });
+    document.addEventListener('focusout', (event) => {
+      const el = event.target?.closest?.('[data-tooltip]');
+      if (el) hideTooltip(el);
+    });
+    window.addEventListener('scroll', () => {
+      if (activeEl) placeTooltip(activeEl);
+    }, true);
+    window.addEventListener('resize', () => {
+      if (activeEl) placeTooltip(activeEl);
+    });
+  }
+
   function collectRefs() {
     refs.dim = $('variety-dim');
     refs.varietyType = $('variety-type');
@@ -235,6 +307,9 @@
     refs.curveGenus = $('curve-genus');
     refs.ppavGenusRow = $('ppav-genus-row');
     refs.ppavGenus = $('ppav-genus');
+    refs.symmetricProductParamsRow = $('symmetric-product-params-row');
+    refs.symmetricProductM = $('symmetric-product-m');
+    refs.symmetricProductGenus = $('symmetric-product-genus');
     refs.ciDegreesRow = $('ci-degrees-row');
     refs.ciDegrees = $('ci-degrees');
     refs.ciEquationCountRow = $('ci-equation-count-row');
@@ -571,6 +646,8 @@
       dim: '3',
       name: 'X',
       genus: 'g',
+      symmetricProductM: '3',
+      symmetricProductGenus: 'g',
       ppavGenus: '2',
       grassmannianR: '2',
       grassmannianN: '4',
@@ -1253,6 +1330,7 @@
     const active = inputIsModifyMode() ? activeVariety() : null;
     const defaultName = defaultVarietyNameLatex();
     const name = sanitizeMathLabel(refs.varietyName.value, defaultName);
+    const symmetricProduct = syncSymmetricProductControls();
     const grassmannian = syncGrassmannianControls();
     const ppav = syncPpavControls();
     if (refs.varietyType.value === 'grassmannian' && grassmannian.dim > MAX_DIMENSION) {
@@ -1263,6 +1341,8 @@
       dim: normalizedDraftDimension(),
       name,
       genus: sanitizeGenusInput(refs.curveGenus.value),
+      symmetricProductM: String(symmetricProduct.m),
+      symmetricProductGenus: symmetricProduct.genus,
       ppavGenus: String(ppav.genus),
       grassmannianR: String(grassmannian.r),
       grassmannianN: String(grassmannian.n),
@@ -1579,6 +1659,9 @@
       if ((variety.type || 'abstract') === 'curve') {
         addScalarReferenceRecord(records, variety, 'variety', 'genus', variety.genus);
       }
+      if ((variety.type || 'abstract') === 'symmetric-product-curve') {
+        addScalarReferenceRecord(records, variety, 'variety', 'symmetricProductGenus', variety.symmetricProductGenus || variety.genus);
+      }
       (variety.homology?.rules || []).forEach((rule) => {
         addHomologyCoefficientReferenceRecords(records, variety, 'variety', rule);
       });
@@ -1653,8 +1736,15 @@
     if (!before || before === next) return;
     const replace = (value) => String(value || '').replace(new RegExp(`\\b${escapeRegExp(before)}\\b`, 'g'), next);
     state.varieties.forEach((variety) => {
-      if ((variety.type || 'abstract') !== 'curve') return;
-      if (scalarSymbolsInText(variety.genus).includes(before)) variety.genus = replace(variety.genus);
+      const type = variety.type || 'abstract';
+      if (type === 'curve' && scalarSymbolsInText(variety.genus).includes(before)) {
+        variety.genus = replace(variety.genus);
+      }
+      if (type === 'symmetric-product-curve'
+        && scalarSymbolsInText(variety.symmetricProductGenus || variety.genus).includes(before)) {
+        variety.symmetricProductGenus = replace(variety.symmetricProductGenus || variety.genus);
+        variety.genus = variety.symmetricProductGenus;
+      }
     });
     state.varieties.forEach((variety) => {
       renameHomologyCoefficientReferences(variety.homology?.rules, before, replace);
@@ -1968,7 +2058,9 @@
   }
 
   function abelJacobiCurveGenus(geometry) {
-    const genus = numericalCurveGenus(geometry);
+    const genus = geometry?.type === 'symmetric-product-curve'
+      ? symmetricProductNumericGenus(geometry)
+      : numericalCurveGenus(geometry);
     return Number.isInteger(genus) && genus > 0 && genus < 10 ? genus : null;
   }
 
@@ -2249,6 +2341,8 @@
       refs.varietyType.value = 'product';
       refs.dim.value = '3';
       refs.curveGenus.value = 'g';
+      if (refs.symmetricProductM) refs.symmetricProductM.value = '3';
+      if (refs.symmetricProductGenus) refs.symmetricProductGenus.value = 'g';
       if (refs.ppavGenus) refs.ppavGenus.value = '2';
       refs.grassmannianR.value = '2';
       refs.grassmannianN.value = '4';
@@ -2322,6 +2416,8 @@
       refs.varietyType.value = 'abstract';
       refs.dim.value = '3';
       refs.curveGenus.value = 'g';
+      if (refs.symmetricProductM) refs.symmetricProductM.value = '3';
+      if (refs.symmetricProductGenus) refs.symmetricProductGenus.value = 'g';
       if (refs.ppavGenus) refs.ppavGenus.value = '2';
       refs.grassmannianR.value = '2';
       refs.grassmannianN.value = '4';
@@ -2733,6 +2829,8 @@
     refs.dim.value = variety.dim ?? '3';
     refs.varietyName.value = variety.name || defaultVarietyNameLatex();
     refs.curveGenus.value = variety.genus || 'g';
+    if (refs.symmetricProductM) refs.symmetricProductM.value = variety.symmetricProductM || variety.dim || '3';
+    if (refs.symmetricProductGenus) refs.symmetricProductGenus.value = variety.symmetricProductGenus || variety.genus || 'g';
     if (refs.ppavGenus) refs.ppavGenus.value = variety.ppavGenus || '2';
     refs.grassmannianR.value = variety.grassmannianR || '2';
     refs.grassmannianN.value = variety.grassmannianN || '4';
@@ -3029,7 +3127,12 @@
       ? (map.construction?.type === 'composition'
         ? { type: 'composition', mapIds: [...(map.construction.mapIds || []).slice(0, 2)] }
         : map.construction?.type === 'abel-jacobi'
-          ? { type: 'abel-jacobi', curveId: map.construction.curveId || map.domainId, jacobianId: map.codomainId }
+          ? {
+            type: 'abel-jacobi',
+            curveId: map.construction.sourceId || map.construction.curveId || map.domainId,
+            sourceId: map.construction.sourceId || map.construction.curveId || map.domainId,
+            jacobianId: map.codomainId
+          }
         : { type: 'ordinary', domainKind: map.domainKind, domainId: map.domainId, codomainKind: map.codomainKind, codomainId: map.codomainId })
       : null;
     state.mapPickTarget = refs.mapType?.value === 'composition' ? 'first' : (refs.mapType?.value === 'abel-jacobi' ? 'curve' : 'domain');
@@ -3795,6 +3898,7 @@
       map.construction = {
         type: 'abel-jacobi',
         curveId: data.curve.id,
+        sourceId: data.curve.id,
         jacobianId: data.jacobian.id,
         defaultName: data.defaultName,
         nameDirty: data.nameDirty
@@ -3878,7 +3982,7 @@
     const curve = mapDraftAbelJacobiCurve();
     if (!curve) return null;
     const activeConstruction = map?.construction?.type === 'abel-jacobi' ? map.construction : null;
-    let jacobian = activeConstruction?.curveId === curve.id
+    let jacobian = (activeConstruction?.sourceId || activeConstruction?.curveId) === curve.id
       ? state.varieties.find((item) => item.id === activeConstruction.jacobianId)
       : null;
     if (!jacobian) jacobian = createJacobianVariety(curve);
@@ -3981,6 +4085,7 @@
     }
     geometryFromVariety(active);
     if (active.type === 'curve') refs.dim.value = '1';
+    if (active.type === 'symmetric-product-curve') refs.dim.value = String(normalizedSymmetricProductParams(active).dim);
     state.activeSequenceId = null;
     state.activeVarietyId = active.id;
     state.activeSheafId = null;
@@ -4289,6 +4394,7 @@
       const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3);
       if (refs.varietyType.value === 'curve') refs.dim.value = '1';
       else if (refs.varietyType.value === 'point') refs.dim.value = '0';
+      else if (refs.varietyType.value === 'symmetric-product-curve') syncSymmetricProductControls();
       else if (refs.varietyType.value === 'grassmannian') syncGrassmannianControls();
       else if (refs.varietyType.value === 'ppav-moduli') syncPpavControls();
       else refs.dim.value = String(dim);
@@ -4307,9 +4413,11 @@
         ? '1'
         : (refs.varietyType.value === 'point'
             ? '0'
-            : (refs.varietyType.value === 'grassmannian'
-                ? String(syncGrassmannianControls().dim)
-                : (refs.varietyType.value === 'ppav-moduli' ? String(syncPpavControls().dim) : String(dim))));
+            : (refs.varietyType.value === 'symmetric-product-curve'
+                ? String(syncSymmetricProductControls().dim)
+                : (refs.varietyType.value === 'grassmannian'
+                    ? String(syncGrassmannianControls().dim)
+                    : (refs.varietyType.value === 'ppav-moduli' ? String(syncPpavControls().dim) : String(dim)))));
       if (refs.varietyType.value === 'complete-intersection') syncCompleteIntersectionControls();
       syncDefaultVarietyName();
       syncDefaultSheafName();
@@ -4792,6 +4900,33 @@
       refs.homologyTransposeExpressions.addEventListener('click', () => {
         state.homologyExpressionTransposed = !state.homologyExpressionTransposed;
         renderHomologyPanel(state.lastResult);
+      });
+    }
+    if (refs.symmetricProductM) {
+      refs.symmetricProductM.addEventListener('input', () => {
+        if (refs.varietyType?.value !== 'symmetric-product-curve') return;
+        syncSymmetricProductControls();
+        syncDefaultVarietyName();
+        syncDefaultSheafName();
+      });
+      refs.symmetricProductM.addEventListener('change', () => {
+        if (refs.varietyType?.value !== 'symmetric-product-curve') return;
+        syncSymmetricProductControls();
+        syncDefaultVarietyName();
+        syncDefaultSheafName();
+      });
+    }
+    if (refs.symmetricProductGenus) {
+      refs.symmetricProductGenus.addEventListener('input', () => {
+        if (refs.varietyType?.value !== 'symmetric-product-curve') return;
+        syncDefaultVarietyName();
+        syncDefaultSheafName();
+      });
+      refs.symmetricProductGenus.addEventListener('change', () => {
+        if (refs.varietyType?.value !== 'symmetric-product-curve') return;
+        refs.symmetricProductGenus.value = sanitizeGenusInput(refs.symmetricProductGenus.value);
+        syncDefaultVarietyName();
+        syncDefaultSheafName();
       });
     }
     if (refs.homologyJacobianBasisAction) {
@@ -7291,6 +7426,7 @@
       construction: {
         type: 'jacobian',
         curveId: curve.id,
+        sourceId: curve.id,
         defaultName,
         nameDirty: false
       }
@@ -8497,6 +8633,7 @@
         construction: {
           type: 'abel-jacobi',
           curveId: curve.id,
+          sourceId: curve.id,
           jacobianId: jacobian.id,
           defaultName,
           nameDirty: state.draftMapNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName)
@@ -9653,10 +9790,12 @@
   }
 
   function defaultJacobianNameFromCurve(curve) {
+    if ((curve?.type || 'abstract') === 'symmetric-product-curve') return '\\operatorname{Jac}(C)';
     return `\\operatorname{Jac}(${sanitizeMathLabel(curve?.name, 'C')})`;
   }
 
   function defaultAbelJacobiMapNameFromCurve(curve) {
+    if ((curve?.type || 'abstract') === 'symmetric-product-curve') return '\\operatorname{AJ}_{C^{(m)}}';
     return `\\operatorname{AJ}_{${sanitizeMathLabel(curve?.name, 'C')}}`;
   }
 
@@ -12005,7 +12144,7 @@
 
   function handleAbelJacobiMapPick(kind, id) {
     if (kind !== 'variety' || !allowableAbelJacobiCurvePick(id)) return;
-    state.mapDraft = { type: 'abel-jacobi', curveId: id };
+    state.mapDraft = { type: 'abel-jacobi', curveId: id, sourceId: id };
     setCanvasPickEnabled(false, { render: false });
     updateMapDraftControls();
     syncDefaultMapName();
@@ -12018,7 +12157,7 @@
   }
 
   function mapDraftAbelJacobiCurve() {
-    const id = state.mapDraft?.type === 'abel-jacobi' ? state.mapDraft.curveId : null;
+    const id = state.mapDraft?.type === 'abel-jacobi' ? (state.mapDraft.sourceId || state.mapDraft.curveId) : null;
     const variety = state.varieties.find((item) => item.id === id);
     return variety && abelJacobiCurveGenus(geometryFromVariety(variety)) != null ? variety : null;
   }
@@ -12067,7 +12206,7 @@
     const isMapSlot = target === 'first' || target === 'second';
     const isCurveSlot = target === 'curve';
     const endpointKind = sheafMapInputMode() ? 'sheaf' : 'variety';
-    const fallback = isMapSlot ? 'map' : (isCurveSlot ? 'curve' : endpointKind);
+    const fallback = isMapSlot ? 'map' : (isCurveSlot ? 'source' : endpointKind);
     const label = object ? objectPlainLabel(isMapSlot ? 'map' : endpointKind, object.id) : fallback;
     button.textContent = label;
     button.title = object ? `Replace ${label}` : `Pick a ${fallback} on the canvas`;
@@ -12104,8 +12243,8 @@
   }
 
   function abelJacobiMapPickHint() {
-    if (!abelJacobiCurveVarieties().length) return 'add a curve with positive numerical genus below 10 first';
-    if (!mapDraftAbelJacobiCurve()) return 'click the source curve';
+    if (!abelJacobiCurveVarieties().length) return 'add a curve or Sym^m(C) with positive numerical genus below 10 first';
+    if (!mapDraftAbelJacobiCurve()) return 'click the Abel-Jacobi source';
     return inputIsModifyMode() ? 'click update to update the Abel-Jacobi map' : 'click build to create the Jacobian and Abel-Jacobi map';
   }
 
@@ -12303,9 +12442,27 @@
 
   function normalizedDraftDimension() {
     if (refs.varietyType?.value === 'point') return '0';
+    if (refs.varietyType?.value === 'symmetric-product-curve') return String(syncSymmetricProductControls().m);
     if (refs.varietyType?.value === 'grassmannian') return String(syncGrassmannianControls().dim);
     if (refs.varietyType?.value === 'ppav-moduli') return String(syncPpavControls().dim);
     return String(normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 3));
+  }
+
+  function normalizedSymmetricProductParams(source = {}) {
+    const m = normalizedInt(source.m ?? source.symmetricProductM ?? refs.symmetricProductM?.value, 0, MAX_DIMENSION, 3);
+    const genus = sanitizeGenusInput(source.symmetricProductGenus ?? source.genus ?? refs.symmetricProductGenus?.value);
+    return { m, genus, dim: m };
+  }
+
+  function syncSymmetricProductControls() {
+    const params = normalizedSymmetricProductParams();
+    if (refs.symmetricProductM) {
+      refs.symmetricProductM.max = String(MAX_DIMENSION);
+      refs.symmetricProductM.value = String(params.m);
+    }
+    if (refs.symmetricProductGenus) refs.symmetricProductGenus.value = params.genus;
+    if (refs.dim && refs.varietyType?.value === 'symmetric-product-curve') refs.dim.value = String(params.dim);
+    return params;
   }
 
   function normalizedPpavParams(source = {}) {
@@ -12559,6 +12716,10 @@
     if (type === 'ppav-moduli') {
       const { genus } = syncPpavControls();
       return `\\mathcal{A}_{${genus}}`;
+    }
+    if (type === 'symmetric-product-curve') {
+      const { m } = syncSymmetricProductControls();
+      return `\\operatorname{Sym}^{${m}}(C)`;
     }
     if (type === 'curve') return curveDefaultName(refs.curveGenus.value);
     if (type === 'abelian') return 'A';
@@ -12831,7 +12992,7 @@
     }
     if (kind === 'variety' && construction.type === 'jacobian') {
       return {
-        parents: [parent('variety', construction.curveId, 'curve')].filter((item) => item.id),
+        parents: [parent('variety', construction.sourceId || construction.curveId, 'source')].filter((item) => item.id),
         subobjects: []
       };
     }
@@ -13011,7 +13172,7 @@
     if (kind === 'map' && construction.type === 'abel-jacobi') {
       return {
         parents: [
-          parent('variety', construction.curveId, 'curve'),
+          parent('variety', construction.sourceId || construction.curveId, 'source'),
           parent('variety', construction.jacobianId, 'jacobian')
         ].filter((item) => item.id),
         subobjects: [
@@ -13117,10 +13278,10 @@
   }
 
   function refreshJacobianVariety(variety, construction) {
-    const curve = state.varieties.find((item) => item.id === construction.curveId);
+    const curve = state.varieties.find((item) => item.id === (construction.sourceId || construction.curveId));
     if (!curve) return false;
     const curveGeometry = geometryFromVariety(curve);
-    const genus = numericalCurveGenus(curveGeometry);
+    const genus = abelJacobiCurveGenus(curveGeometry);
     if (genus == null) return false;
     const oldDefault = construction.defaultName || defaultJacobianNameFromCurve(curve);
     const nextDefault = defaultJacobianNameFromCurve(curve);
@@ -13148,6 +13309,14 @@
     }
     if (construction.defaultName !== nextDefault) {
       construction.defaultName = nextDefault;
+      changed = true;
+    }
+    if (construction.sourceId !== curve.id) {
+      construction.sourceId = curve.id;
+      changed = true;
+    }
+    if (construction.curveId !== curve.id) {
+      construction.curveId = curve.id;
       changed = true;
     }
     if (!variety.specialLabels?.includes('jacobian')) {
@@ -14423,7 +14592,7 @@
   }
 
   function refreshAbelJacobiMap(map, construction) {
-    const curve = state.varieties.find((item) => item.id === construction.curveId);
+    const curve = state.varieties.find((item) => item.id === (construction.sourceId || construction.curveId));
     const jacobian = state.varieties.find((item) => item.id === construction.jacobianId);
     if (!curve || !jacobian) return false;
     const genus = abelJacobiCurveGenus(geometryFromVariety(curve));
@@ -14454,6 +14623,14 @@
     }
     if (construction.defaultName !== nextDefault) {
       construction.defaultName = nextDefault;
+      changed = true;
+    }
+    if (construction.sourceId !== curve.id) {
+      construction.sourceId = curve.id;
+      changed = true;
+    }
+    if (construction.curveId !== curve.id) {
+      construction.curveId = curve.id;
       changed = true;
     }
     if (ensureAbelJacobiKnownHomologyRules(map)) changed = true;
@@ -14999,6 +15176,7 @@
     refreshSheafTypeFlags();
     const showCurve = draftVariety === 'curve';
     const showPoint = draftVariety === 'point';
+    const showSymmetricProduct = draftVariety === 'symmetric-product-curve';
     const showGrassmannian = draftVariety === 'grassmannian';
     const showPpavModuli = draftVariety === 'ppav-moduli';
     const showCi = draftVariety === 'complete-intersection';
@@ -15014,6 +15192,8 @@
     updateCombinedDraftControls();
     if (refs.dim) refs.dim.closest('.sheaf-field-row').hidden = productMode;
     if (refs.varietyName) refs.varietyName.closest('.sheaf-field-row').hidden = showProduct && productDraftFactors().length < 2;
+    if (refs.symmetricProductParamsRow) refs.symmetricProductParamsRow.hidden = !showSymmetricProduct;
+    if (showSymmetricProduct) syncSymmetricProductControls();
     if (refs.grassmannianParamsRow) refs.grassmannianParamsRow.hidden = !showGrassmannian;
     if (showGrassmannian) syncGrassmannianControls();
     if (refs.ppavGenusRow) refs.ppavGenusRow.hidden = !showPpavModuli;
@@ -15024,7 +15204,7 @@
     if (refs.ciEquationCountRow) refs.ciEquationCountRow.hidden = !showCi;
     if (refs.ciDegreeSliders) refs.ciDegreeSliders.hidden = !showCi || completeIntersectionDegrees().length === 0;
     refs.ciNote.hidden = !showCi;
-    if (refs.dim && (showGrassmannian || showPpavModuli)) refs.dim.readOnly = true;
+    if (refs.dim && (showSymmetricProduct || showGrassmannian || showPpavModuli)) refs.dim.readOnly = true;
     else if (refs.dim) refs.dim.readOnly = false;
     refs.twistRow.hidden = !draftingSheaf || draftSheaf !== 'twist';
     if (refs.sheafDivisorRow) refs.sheafDivisorRow.hidden = !draftingSheaf || draftSheaf !== 'divisor-line';
@@ -15263,6 +15443,32 @@
       };
       return attachHomologyToGeometry(variety, geometry);
     }
+    if (type === 'symmetric-product-curve') {
+      const { m, genus } = normalizedSymmetricProductParams(variety);
+      const labelLatex = sanitizeMathLabel(variety.name, `\\operatorname{Sym}^{${m}}(C)`);
+      Object.assign(variety, {
+        dim: String(m),
+        symmetricProductM: String(m),
+        symmetricProductGenus: genus,
+        genus,
+        name: labelLatex
+      });
+      const geometry = {
+        type,
+        dim: m,
+        genus,
+        symmetricProductM: m,
+        symmetricProductGenus: genus,
+        ambient: null,
+        degrees: [],
+        codim: null,
+        labelLatex,
+        labelPlain: latexToPlain(labelLatex),
+        ambientLatex: 'symmetric product of a curve',
+        ambientPlain: 'symmetric product of a curve'
+      };
+      return attachHomologyToGeometry(variety, geometry);
+    }
     if (type === 'abelian') {
       const dim = normalizedInt(variety.dim, 0, MAX_DIMENSION, 2);
       const labelLatex = sanitizeMathLabel(variety.name, 'A');
@@ -15274,9 +15480,9 @@
         ...(isPicard ? ['picard', 'theta-divisor'] : [])
       ];
       const jacobianCurve = isJacobian
-        ? state.varieties.find((item) => item.id === variety.construction?.curveId)
+        ? state.varieties.find((item) => item.id === (variety.construction?.sourceId || variety.construction?.curveId))
         : null;
-      const jacobianCurveGenus = jacobianCurve ? numericalCurveGenus(geometryFromVariety(jacobianCurve)) : dim;
+      const jacobianCurveGenus = jacobianCurve ? abelJacobiCurveGenus(geometryFromVariety(jacobianCurve)) : dim;
       const geometry = {
         type,
         dim,
@@ -15289,7 +15495,7 @@
         ambientPlain: 'abelian',
         ...(specialLabels.length ? { specialLabels } : {}),
         ...(isJacobian ? {
-          jacobianCurveId: jacobianCurve?.id || variety.construction?.curveId || null,
+          jacobianCurveId: jacobianCurve?.id || variety.construction?.sourceId || variety.construction?.curveId || null,
           jacobianCurveGenus
         } : {})
       };
@@ -15541,6 +15747,7 @@
         geometry
       ));
     }
+    defs.push(...symmetricProductCurveHomologyClassDefinitions(geometry, homology));
     defs.push(...grassmannianHomologyClassDefinitions(geometry, homology));
     defs.push(...ppavHomologyClassDefinitions(geometry, homology));
     if (varietyHasHyperplaneClass(geometry.type)) {
@@ -15647,6 +15854,113 @@
     def.symbolPlain = productBoxSymbolPlain(left.plain, right.plain);
     def.productBox = productBox;
     return def;
+  }
+
+  function symmetricProductCurveHomologyClassDefinitions(geometry, homology) {
+    const params = symmetricProductCurveParamsFromGeometry(geometry);
+    if (!params) return [];
+    if (params.m <= 0) return [];
+    const defs = [
+      homologyClassDefinition(
+        HOMOLOGY_SYMMETRIC_PRODUCT_ETA_CLASS,
+        1,
+        '\\eta',
+        'Macdonald divisor',
+        homology,
+        '\\eta',
+        geometry
+      )
+    ];
+    defs.push(homologyClassDefinition(
+      HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_SUM_CLASS,
+      1,
+      '\\Sigma',
+      'Macdonald aggregate',
+      homology,
+      '\\Sigma',
+      geometry
+    ));
+    const explicitGenus = symmetricProductExplicitSigmaGenus(geometry, params);
+    if (explicitGenus != null) {
+      for (let index = 1; index <= explicitGenus; index += 1) {
+        const symbol = symmetricProductSigmaClassSymbol(index);
+        defs.push(homologyClassDefinition(
+          symmetricProductSigmaClassId(index),
+          1,
+          symbol,
+          'Macdonald product',
+          homology,
+          symbol,
+          geometry
+        ));
+      }
+    }
+    return defs;
+  }
+
+  function symmetricProductCurveParamsFromGeometry(geometry) {
+    if (geometry?.type !== 'symmetric-product-curve') return null;
+    const m = normalizedInt(geometry.symmetricProductM ?? geometry.dim, 0, MAX_DIMENSION, 3);
+    const genus = sanitizeGenusInput(geometry.symmetricProductGenus ?? geometry.genus);
+    const numericGenus = symmetricProductNumericGenus(geometry);
+    return { m, genus, numericGenus };
+  }
+
+  function symmetricProductExplicitSigmaGenus(geometry, params = symmetricProductCurveParamsFromGeometry(geometry)) {
+    if (geometry?.homology?.symmetricProductMacdonaldBasisAdded !== true) return null;
+    const genus = params?.numericGenus;
+    if (!Number.isInteger(genus) || genus < 0 || genus > 12) return null;
+    return genus;
+  }
+
+  function symmetricProductNumericGenus(geometry) {
+    const genus = sanitizeGenusInput(geometry?.symmetricProductGenus ?? geometry?.genus);
+    if (/^\d+$/.test(genus)) return Number(genus);
+    const scalarValue = scalarExpressionIntegerValue(genus, { kind: 'variety', id: geometry?.varietyId || 'symmetric-product-curve', field: 'symmetricProductGenus' });
+    return scalarValue != null ? scalarValue : null;
+  }
+
+  function symmetricProductSigmaClassId(index) {
+    return `${HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_CLASS_PREFIX}${index}`;
+  }
+
+  function symmetricProductSigmaClassSymbol(index) {
+    return `\\sigma_{${index}}`;
+  }
+
+  function symmetricProductSigmaPowerClassId(degree) {
+    return `${HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_POWER_PREFIX}${degree}`;
+  }
+
+  function symmetricProductEtaClassPoly(geometry) {
+    const classId = HOMOLOGY_SYMMETRIC_PRODUCT_ETA_CLASS;
+    const id = homologyVariableId(classId, geometry);
+    const def = homologyClassDefById(geometry, classId);
+    const fallback = { id: classId, degree: 1, cohomologyDegree: 2, symbolLatex: '\\eta', symbolPlain: 'eta', kind: 'Macdonald divisor' };
+    defineVariable(id, 1, def?.symbolLatex || '\\eta', homologyDefinitionVariableMeta(def || fallback));
+    return Poly.variable(id);
+  }
+
+  function symmetricProductSigmaClassPoly(geometry, index) {
+    const classId = symmetricProductSigmaClassId(index);
+    const id = homologyVariableId(classId, geometry);
+    const def = homologyClassDefById(geometry, classId);
+    const symbol = symmetricProductSigmaClassSymbol(index);
+    const fallback = { id: classId, degree: 1, cohomologyDegree: 2, symbolLatex: symbol, symbolPlain: latexToPlain(symbol), kind: 'Macdonald product' };
+    defineVariable(id, 1, def?.symbolLatex || symbol, homologyDefinitionVariableMeta(def || fallback));
+    return Poly.variable(id);
+  }
+
+  function symmetricProductSigmaPowerPoly(geometry, degree) {
+    const classId = degree === 1
+      ? HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_SUM_CLASS
+      : symmetricProductSigmaPowerClassId(degree);
+    const id = homologyVariableId(classId, geometry);
+    const symbol = degree === 1 ? '\\Sigma' : `\\Sigma_{${degree}}`;
+    const def = homologyClassDefById(geometry, classId);
+    const fallback = { id: classId, degree, cohomologyDegree: 2 * degree, symbolLatex: symbol, symbolPlain: latexToPlain(symbol), kind: 'Macdonald aggregate' };
+    defineVariable(id, degree, def?.symbolLatex || symbol, homologyDefinitionVariableMeta(def || fallback));
+    return Poly.variable(id);
   }
 
   function grassmannianHomologyClassDefinitions(geometry, homology) {
@@ -16139,6 +16453,10 @@
       || String(id || '').startsWith(HOMOLOGY_GRASSMANNIAN_TAUTOLOGICAL_CLASS_PREFIX)
       || String(id || '').startsWith(HOMOLOGY_GRASSMANNIAN_YOUNG_CLASS_PREFIX)
       || String(id || '').startsWith(HOMOLOGY_PPAV_LAMBDA_CLASS_PREFIX)
+      || id === HOMOLOGY_SYMMETRIC_PRODUCT_ETA_CLASS
+      || id === HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_SUM_CLASS
+      || String(id || '').startsWith(HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_CLASS_PREFIX)
+      || String(id || '').startsWith(HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_POWER_PREFIX)
       || String(id || '').startsWith(HOMOLOGY_PRODUCT_BOX_CLASS_PREFIX);
   }
 
@@ -16185,6 +16503,17 @@
       && geometry.homology?.symplecticBasisConfirmed !== true);
   }
 
+  function symmetricProductMacdonaldBasisCanToggle(geometry, variety = null) {
+    const params = symmetricProductCurveParamsFromGeometry(geometry);
+    return !!(geometry?.type === 'symmetric-product-curve'
+      && params?.m > 0
+      && Number.isInteger(params.numericGenus)
+      && params.numericGenus > 0
+      && params.numericGenus <= 12
+      && (variety || geometry.varietyId)
+      && geometry.homology?.symmetricProductMacdonaldBasisAdded !== true);
+  }
+
   function jacobianSymplecticBasisCanToggle(geometry, variety = null) {
     return !!(geometry?.specialLabels?.includes('jacobian')
       && jacobianCurveGenus(geometry)
@@ -16203,7 +16532,9 @@
   }
 
   function symplecticBasisCanToggle(geometry, variety = null) {
-    return curveSymplecticBasisCanToggle(geometry, variety) || jacobianSymplecticBasisCanToggle(geometry, variety);
+    return curveSymplecticBasisCanToggle(geometry, variety)
+      || jacobianSymplecticBasisCanToggle(geometry, variety)
+      || symmetricProductMacdonaldBasisCanToggle(geometry, variety);
   }
 
   function symplecticBasisDisplayGeometry(geometry) {
@@ -16815,6 +17146,8 @@
   function standardHomologyRules(geometry, existingRules = new Map()) {
     return [
       standardPointHomologyUnitRule(geometry, existingRules.get(HOMOLOGY_POINT_UNIT_RULE_ID)),
+      standardSymmetricProductEtaTopRule(geometry, existingRules.get(`${HOMOLOGY_SYMMETRIC_PRODUCT_RULE_PREFIX}eta-top-point`)),
+      ...standardSymmetricProductMacdonaldRules(geometry, existingRules),
       ...standardGrassmannianRules(geometry, existingRules),
       ...standardPpavRules(geometry, existingRules),
       standardHomologyTopRule(geometry, existingRules.get(HOMOLOGY_TOP_RULE_ID)),
@@ -16838,6 +17171,7 @@
       || text.startsWith(HOMOLOGY_CURVE_SYMPLECTIC_RULE_PREFIX)
       || text.startsWith(HOMOLOGY_GRASSMANNIAN_RULE_PREFIX)
       || text.startsWith(HOMOLOGY_PPAV_RULE_PREFIX)
+      || text.startsWith(HOMOLOGY_SYMMETRIC_PRODUCT_RULE_PREFIX)
       || text.startsWith(HOMOLOGY_PRODUCT_BOX_RULE_PREFIX);
   }
 
@@ -16883,6 +17217,126 @@
       lhs: { powers: { [homologyVariableId(HOMOLOGY_POINT_CLASS, geometry)]: 1 } },
       rhs: [{ coefficient: '1', powers: {} }]
     };
+  }
+
+  function standardSymmetricProductEtaTopRule(geometry, existingRule = null) {
+    if (geometry?.type !== 'symmetric-product-curve' || !Number.isInteger(geometry.dim) || geometry.dim <= 0) return null;
+    if (symmetricProductNumericGenus(geometry) != null) return null;
+    return {
+      id: `${HOMOLOGY_SYMMETRIC_PRODUCT_RULE_PREFIX}eta-top-point`,
+      builtin: true,
+      enabled: existingRule ? existingRule.enabled !== false : true,
+      lhs: { powers: { [homologyVariableId(HOMOLOGY_SYMMETRIC_PRODUCT_ETA_CLASS, geometry)]: geometry.dim } },
+      rhs: [{
+        coefficient: '1',
+        powers: { [homologyVariableId(HOMOLOGY_POINT_CLASS, geometry)]: 1 }
+      }]
+    };
+  }
+
+  function standardSymmetricProductMacdonaldRules(geometry, existingRules = new Map()) {
+    const params = symmetricProductCurveParamsFromGeometry(geometry);
+    const genus = params?.numericGenus;
+    if (!params || !Number.isInteger(genus) || genus < 0 || params.m <= 0) return [];
+    const rules = [];
+    if (symmetricProductExplicitSigmaGenus(geometry, params) != null) {
+      const ruleId = `${HOMOLOGY_SYMMETRIC_PRODUCT_RULE_PREFIX}macdonald-aggregate-1`;
+      rules.push({
+        id: ruleId,
+        builtin: true,
+        enabled: existingRules.get(ruleId)?.enabled !== false,
+        lhs: { powers: { [homologyVariableId(HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_SUM_CLASS, geometry)]: 1 } },
+        rhs: symmetricProductElementarySigmaRuleRhs(geometry, genus, 1)
+      });
+    }
+    rules.push(...standardSymmetricProductTautologicalRules(geometry, params, genus, existingRules));
+    for (let index = 1; index <= genus; index += 1) {
+      const ruleId = `${HOMOLOGY_SYMMETRIC_PRODUCT_RULE_PREFIX}macdonald-product-square-${index}`;
+      rules.push({
+        id: ruleId,
+        builtin: true,
+        enabled: existingRules.get(ruleId)?.enabled !== false,
+        lhs: { powers: { [homologyVariableId(symmetricProductSigmaClassId(index), geometry)]: 2 } },
+        rhs: []
+      });
+    }
+    return rules;
+  }
+
+  function standardSymmetricProductTautologicalRules(geometry, params, genus, existingRules = new Map()) {
+    const rules = [];
+    const sigmaId = homologyVariableId(HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_SUM_CLASS, geometry);
+    const sigmaNilpotentId = `${HOMOLOGY_SYMMETRIC_PRODUCT_RULE_PREFIX}sigma-nilpotent`;
+    rules.push({
+      id: sigmaNilpotentId,
+      builtin: true,
+      enabled: existingRules.get(sigmaNilpotentId)?.enabled !== false,
+      lhs: { powers: { [sigmaId]: genus + 1 } },
+      rhs: []
+    });
+    for (let r = 0; r <= Math.min(genus, params.m); r += 1) {
+      for (let c = 1; r + c <= genus; c += 1) {
+        const q = params.m + 1 - r - 2 * c;
+        if (q < 0) continue;
+        const rule = symmetricProductTautologicalEtaReductionRule(geometry, params, genus, r, c, q, existingRules);
+        if (rule) rules.push(rule);
+      }
+    }
+    return rules;
+  }
+
+  function symmetricProductTautologicalEtaReductionRule(geometry, params, genus, r, c, q, existingRules = new Map()) {
+    const etaId = homologyVariableId(HOMOLOGY_SYMMETRIC_PRODUCT_ETA_CLASS, geometry);
+    const sigmaId = homologyVariableId(HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_SUM_CLASS, geometry);
+    const lhsEta = q + c;
+    const lhsSigma = r;
+    if (lhsEta <= 0) return null;
+    const lhsPowers = {};
+    if (lhsEta > 0) lhsPowers[etaId] = lhsEta;
+    if (lhsSigma > 0) lhsPowers[sigmaId] = lhsSigma;
+    const rhs = [];
+    for (let j = 1; j <= c; j += 1) {
+      const coeff = fraction(
+        BigInt(j % 2 === 0 ? -1 : 1) * binomialBigInt(genus - r - j, c - j),
+        factorialBigInt(j)
+      );
+      if (coeff.isZero()) continue;
+      const powers = {};
+      const etaPower = q + c - j;
+      const sigmaPower = r + j;
+      if (etaPower > 0) powers[etaId] = etaPower;
+      if (sigmaPower > 0) powers[sigmaId] = sigmaPower;
+      rhs.push({ coefficient: formatRuleCoefficientPlain(coeff), powers });
+    }
+    const ruleId = `${HOMOLOGY_SYMMETRIC_PRODUCT_RULE_PREFIX}tautological-eta-r${r}-c${c}-q${q}`;
+    return {
+      id: ruleId,
+      builtin: true,
+      enabled: existingRules.get(ruleId)?.enabled !== false,
+      lhs: { powers: lhsPowers },
+      rhs
+    };
+  }
+
+  function symmetricProductElementarySigmaRuleRhs(geometry, genus, degree) {
+    if (!Number.isInteger(genus) || !Number.isInteger(degree) || degree < 1 || degree > genus) return [];
+    const terms = [];
+    const choose = (start, chosen) => {
+      if (chosen.length === degree) {
+        const powers = {};
+        chosen.forEach((index) => {
+          powers[homologyVariableId(symmetricProductSigmaClassId(index), geometry)] = 1;
+        });
+        terms.push({ coefficient: '1', powers });
+        return;
+      }
+      const remaining = degree - chosen.length;
+      for (let index = start; index <= genus - remaining + 1; index += 1) {
+        choose(index + 1, chosen.concat(index));
+      }
+    };
+    choose(1, []);
+    return terms;
   }
 
   function standardBlowupExceptionalTopRule(geometry, existingRule = null) {
@@ -17637,6 +18091,25 @@
         ambientPlain: 'curve'
       };
     }
+    if (type === 'symmetric-product-curve') {
+      const { m, genus } = syncSymmetricProductControls();
+      const labelLatex = sanitizeMathLabel(refs.varietyName.value, `\\operatorname{Sym}^{${m}}(C)`);
+      refs.varietyName.value = labelLatex;
+      return {
+        type,
+        dim: m,
+        genus,
+        symmetricProductM: m,
+        symmetricProductGenus: genus,
+        ambient: null,
+        degrees: [],
+        codim: null,
+        labelLatex,
+        labelPlain: latexToPlain(labelLatex),
+        ambientLatex: 'symmetric product of a curve',
+        ambientPlain: 'symmetric product of a curve'
+      };
+    }
     if (type === 'abelian') {
       const dim = normalizedInt(refs.dim.value, 0, MAX_DIMENSION, 2);
       refs.dim.value = String(dim);
@@ -17864,6 +18337,7 @@
       return buildCurveLineBundle(geometry, sheaf, sheaf.type);
     }
     if (geometry.type === 'product') return buildProductGeometrySheaf(geometry, sheaf, options);
+    if (geometry.type === 'symmetric-product-curve') return buildSymmetricProductCurveSheafBundle(geometry, sheaf, options);
     if (geometry.type === 'ppav-moduli') return buildPpavModuliSheafBundle(geometry, sheaf, options);
     if (geometry.type === 'grassmannian') return buildGrassmannianSheafBundle(geometry, sheaf, options);
     if (geometry.type === 'abstract' || geometry.type === 'curve' || geometry.type === 'abelian' || geometry.type === 'point') return buildAbstractGeometrySheaf(geometry, sheaf, options);
@@ -20741,8 +21215,13 @@
   function defaultAbelJacobiPullbackRules(map, curveGeometry = geometryByVarietyId(map?.domainId)) {
     const context = abelJacobiMapContext(map);
     if (!context || context.curveGeometry.varietyId !== curveGeometry?.varietyId) return [];
-    const genus = jacobianCurveGenus(context.jacobianGeometry) || curveSmallNumericGenus(context.curveGeometry);
+    const genus = jacobianCurveGenus(context.jacobianGeometry)
+      || curveSmallNumericGenus(context.curveGeometry)
+      || symmetricProductNumericGenus(context.curveGeometry);
     if (!genus) return [];
+    if (context.sourceType === 'symmetric-product-curve') {
+      return defaultSymmetricProductAbelJacobiPullbackRules(map, context);
+    }
     const rules = context.jacobianGeometry.homology?.jacobianSymplecticBasisAdded === true
       && context.curveGeometry.homology?.symplecticBasisConfirmed === true
       ? defaultAbelJacobiSymplecticPullbackRules(map, context, genus)
@@ -20758,6 +21237,23 @@
       enabled: true,
       lhs: { powers: { [homologyDefVariableId(targetDef, context.curveGeometry)]: 1 } },
       rhs: [{ coefficient: String(genus), powers: { [homologyDefVariableId(pointDef, context.curveGeometry)]: 1 } }]
+    });
+    return rules;
+  }
+
+  function defaultSymmetricProductAbelJacobiPullbackRules(map, context) {
+    const rules = [];
+    const thetaDef = homologyClassDefById(context.jacobianGeometry, HOMOLOGY_THETA_CLASS);
+    const sigmaDef = homologyClassDefById(context.curveGeometry, HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_SUM_CLASS);
+    if (!thetaDef || !sigmaDef) return rules;
+    const targetDef = mapOperationHomologyClassDefinition(map, 'pullback', thetaDef, context.curveGeometry);
+    if (!targetDef) return rules;
+    rules.push({
+      id: `default-abel-jacobi-symmetric-theta-pullback-${map.id}`,
+      builtin: true,
+      enabled: true,
+      lhs: { powers: { [homologyDefVariableId(targetDef, context.curveGeometry)]: 1 } },
+      rhs: [{ coefficient: '1', powers: { [homologyDefVariableId(sigmaDef, context.curveGeometry)]: 1 } }]
     });
     return rules;
   }
@@ -20787,8 +21283,13 @@
   function defaultAbelJacobiPushforwardRules(map, jacobianGeometry = geometryByVarietyId(map?.codomainId)) {
     const context = abelJacobiMapContext(map);
     if (!context || context.jacobianGeometry.varietyId !== jacobianGeometry?.varietyId) return [];
-    const genus = jacobianCurveGenus(context.jacobianGeometry) || curveSmallNumericGenus(context.curveGeometry);
+    const genus = jacobianCurveGenus(context.jacobianGeometry)
+      || curveSmallNumericGenus(context.curveGeometry)
+      || symmetricProductNumericGenus(context.curveGeometry);
     if (!genus) return [];
+    if (context.sourceType === 'symmetric-product-curve') {
+      return defaultSymmetricProductAbelJacobiPushforwardRules(map, context, genus);
+    }
     const curveClass = abelJacobiCurveClassPoly(context.jacobianGeometry, genus);
     if (!curveClass) return [];
     const rules = [];
@@ -20810,6 +21311,111 @@
       });
     }
     return rules;
+  }
+
+  function defaultSymmetricProductAbelJacobiPushforwardRules(map, context, genus) {
+    const params = symmetricProductCurveParamsFromGeometry(context.curveGeometry);
+    if (!params || !Number.isInteger(params.m)) return [];
+    const rules = [];
+    defineBaseHomologyVariables(context.curveGeometry);
+    defineBaseHomologyVariables(context.jacobianGeometry);
+    const monomials = abelJacobiSymmetricProductPushforwardSourceMonomials(context.curveGeometry, params);
+    for (const mono of monomials) {
+      const targetDef = mapPushforwardMonomialClassDefinition(map, mono, context.curveGeometry, context.jacobianGeometry);
+      if (!targetDef) continue;
+      const rhs = defaultSymmetricProductAbelJacobiPushforwardRuleRhs(mono, context, params, genus);
+      if (!rhs) continue;
+      rules.push({
+        id: `default-abel-jacobi-symmetric-pushforward-${map.id}-${hashString(mono.key || 'unit')}`,
+        builtin: true,
+        enabled: true,
+        lhs: { powers: { [homologyDefVariableId(targetDef, context.jacobianGeometry)]: 1 } },
+        rhs: serializeHomologyPoly(rhs)
+      });
+    }
+    return rules;
+  }
+
+  function abelJacobiSymmetricProductPushforwardSourceMonomials(geometry, params) {
+    const monomials = [];
+    const unitDef = homologyClassDefById(geometry, HOMOLOGY_UNIT_CLASS);
+    if (unitDef) monomials.push(homologyMonomialFromDef(unitDef, geometry, ''));
+    const etaDef = homologyClassDefById(geometry, HOMOLOGY_SYMMETRIC_PRODUCT_ETA_CLASS);
+    const sigmaDef = homologyClassDefById(geometry, HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_SUM_CLASS);
+    if (etaDef) monomials.push(homologyMonomialFromDef(etaDef, geometry));
+    if (sigmaDef) monomials.push(homologyMonomialFromDef(sigmaDef, geometry));
+    if (etaDef || sigmaDef) {
+      const etaId = etaDef ? homologyDefVariableId(etaDef, geometry) : null;
+      const sigmaId = sigmaDef ? homologyDefVariableId(sigmaDef, geometry) : null;
+      for (let totalDegree = 2; totalDegree <= params.m; totalDegree += 1) {
+        for (let sigmaPower = 0; sigmaPower <= totalDegree; sigmaPower += 1) {
+          const etaPower = totalDegree - sigmaPower;
+          if (etaPower > 0 && !etaId) continue;
+          if (sigmaPower > 0 && !sigmaId) continue;
+          const powers = {};
+          if (etaPower > 0) powers[etaId] = etaPower;
+          if (sigmaPower > 0) powers[sigmaId] = sigmaPower;
+          monomials.push(homologyMonomialFromPowers(powers));
+        }
+      }
+    }
+    return monomials.filter(Boolean);
+  }
+
+  function homologyMonomialFromDef(def, geometry, sourceKey = null) {
+    if (!def) return null;
+    const variableId = homologyDefVariableId(def, geometry);
+    defineVariable(variableId, def.degree, def.symbolLatex, homologyDefinitionVariableMeta(def));
+    return {
+      key: sourceKey == null ? monoKey({ [variableId]: 1 }) : sourceKey,
+      degree: def.degree,
+      cohomologyDegree: def.cohomologyDegree,
+      latex: def.symbolLatex,
+      plain: def.symbolPlain
+    };
+  }
+
+  function homologyMonomialFromPowers(powers) {
+    const key = monoKey(powers || {});
+    if (!key) return null;
+    const degree = monoDegree(key);
+    return {
+      key,
+      degree,
+      cohomologyDegree: 2 * degree,
+      latex: monomialLatex(key),
+      plain: monomialPlain(key)
+    };
+  }
+
+  function defaultSymmetricProductAbelJacobiPushforwardRuleRhs(mono, context, params, genus) {
+    const sourcePowers = parseMonoKey(mono?.key || '');
+    if (!mono?.key) return symmetricProductAbelJacobiEtaPushforwardPoly(context, params.m, genus, 0);
+    const etaId = homologyVariableId(HOMOLOGY_SYMMETRIC_PRODUCT_ETA_CLASS, context.curveGeometry);
+    const sigmaId = homologyVariableId(HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_SUM_CLASS, context.curveGeometry);
+    let etaPower = 0;
+    let sigmaPower = 0;
+    for (const [id, exponent] of Object.entries(sourcePowers)) {
+      const power = Number(exponent) || 0;
+      if (power <= 0) continue;
+      if (id === etaId) etaPower += power;
+      else if (id === sigmaId) sigmaPower += power;
+      else {
+        const sourceDef = baseHomologyClassDefinitions(context.curveGeometry)
+          .find((def) => homologyDefVariableId(def, context.curveGeometry) === id);
+        const match = String(sourceDef?.id || '').match(new RegExp(`^${escapeRegExp(HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_POWER_PREFIX)}(\\d+)$`));
+        if (match) sigmaPower += Number(match[1]) * power;
+        else return null;
+      }
+    }
+    if (etaPower > params.m || etaPower + sigmaPower > params.m) return Poly.zero();
+    const etaFactor = symmetricProductAbelJacobiEtaPushforwardPoly(context, params.m, genus, etaPower);
+    if (!etaFactor) return null;
+    if (sigmaPower <= 0) return etaFactor;
+    const sigmaFactor = symmetricProductAbelJacobiSigmaCodomainPoly(context, genus, sigmaPower);
+    if (!sigmaFactor) return null;
+    return etaFactor.mul(sigmaFactor, context.jacobianGeometry.dim).truncate(context.jacobianGeometry.dim);
+    return null;
   }
 
   function defaultAbelJacobiPushforwardRuleRhs(map, mono, context, genus, curveClass) {
@@ -20870,6 +21476,40 @@
     return polyPower(Poly.variable(thetaId), genus - 1, jacobianGeometry.dim)
       .scale(fraction(1, factorialBigInt(genus - 1)))
       .truncate(jacobianGeometry.dim);
+  }
+
+  function symmetricProductAbelJacobiEtaPushforwardPoly(context, m, genus, etaPower) {
+    const r = etaPower + genus - m;
+    if (r < 0) return Poly.zero();
+    if (r > genus) return Poly.zero();
+    return symmetricProductAbelJacobiSegrePoly(context.jacobianGeometry, genus, r);
+  }
+
+  function symmetricProductAbelJacobiSigmaPushforwardPoly(context, m, genus, sigmaDegree) {
+    const base = symmetricProductAbelJacobiEtaPushforwardPoly(context, m, genus, 0);
+    if (!base) return null;
+    const factor = symmetricProductAbelJacobiSigmaCodomainPoly(context, genus, sigmaDegree);
+    if (!factor) return null;
+    return base.mul(factor, context.jacobianGeometry.dim).truncate(context.jacobianGeometry.dim);
+  }
+
+  function symmetricProductAbelJacobiSegrePoly(jacobianGeometry, genus, degree) {
+    if (degree === 0) return Poly.one();
+    const thetaDef = homologyClassDefById(jacobianGeometry, HOMOLOGY_THETA_CLASS);
+    if (!thetaDef) return null;
+    const theta = Poly.variable(homologyDefVariableId(thetaDef, jacobianGeometry));
+    return polyPower(theta, degree, jacobianGeometry.dim)
+      .scale(fraction(1, factorialBigInt(degree)))
+      .truncate(jacobianGeometry.dim);
+  }
+
+  function symmetricProductAbelJacobiSigmaCodomainPoly(context, genus, degree) {
+    const thetaDef = homologyClassDefById(context.jacobianGeometry, HOMOLOGY_THETA_CLASS);
+    if (!thetaDef) return null;
+    const theta = Poly.variable(homologyDefVariableId(thetaDef, context.jacobianGeometry));
+    return polyPower(theta, degree, context.jacobianGeometry.dim)
+      .scale(fraction(1, factorialBigInt(degree)))
+      .truncate(context.jacobianGeometry.dim);
   }
 
   function ensureAbelJacobiKnownHomologyRules(map) {
@@ -21087,13 +21727,22 @@
 
   function abelJacobiMapContext(map) {
     if (!map || map.construction?.type !== 'abel-jacobi' || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return null;
-    const curve = state.varieties.find((item) => item.id === (map.construction.curveId || map.domainId));
+    const curve = state.varieties.find((item) => item.id === (map.construction.sourceId || map.construction.curveId || map.domainId));
     const jacobian = state.varieties.find((item) => item.id === (map.construction.jacobianId || map.codomainId));
     if (!curve || !jacobian) return null;
     const curveGeometry = geometryFromVariety(curve);
     const jacobianGeometry = geometryFromVariety(jacobian);
-    if (!geometryHasNumericalCurveLabel(curveGeometry) || !geometryHasThetaClass(jacobianGeometry)) return null;
-    return { map, curve, jacobian, curveGeometry, jacobianGeometry };
+    if (abelJacobiCurveGenus(curveGeometry) == null || !geometryHasThetaClass(jacobianGeometry)) return null;
+    return {
+      map,
+      source: curve,
+      curve,
+      jacobian,
+      sourceGeometry: curveGeometry,
+      curveGeometry,
+      jacobianGeometry,
+      sourceType: curveGeometry.type === 'symmetric-product-curve' ? 'symmetric-product-curve' : 'curve'
+    };
   }
 
   function ramifiedCoverMapContext(map) {
@@ -21787,6 +22436,9 @@
     if (!projectionSourceKeyCanSurvivePushforward(map, sourceKey, sourceDim, targetDim)) return Poly.zero();
     const automaticProjection = projectionAutomaticPushforwardSourceKey(map, sourceKey, sourceDim, targetDim);
     if (automaticProjection) return automaticProjection;
+    const targetGeometry = geometryByVarietyId(map?.codomainId);
+    const abelJacobi = targetGeometry ? abelJacobiPushforwardSourceKey(map, sourceKey, targetGeometry) : null;
+    if (abelJacobi) return abelJacobi;
     const projected = projectionFormulaPushforwardSourceKey(map, sourceKey, sourceDim, targetDim, construction);
     if (projected) return projected;
     const ramified = ramifiedCoverPushforwardSourceKey(map, sourceKey, sourceDim, targetDim);
@@ -21862,8 +22514,18 @@
   function abelJacobiPushforwardSourceKey(map, sourceKey, targetGeometry, options = {}) {
     const context = options.context || abelJacobiMapContext(map);
     if (!context || context.jacobianGeometry.varietyId !== targetGeometry?.varietyId) return null;
-    const genus = options.genus || jacobianCurveGenus(context.jacobianGeometry) || curveSmallNumericGenus(context.curveGeometry);
+    const genus = options.genus || jacobianCurveGenus(context.jacobianGeometry) || curveSmallNumericGenus(context.curveGeometry) || symmetricProductNumericGenus(context.curveGeometry);
     if (!genus) return null;
+    if (context.sourceType === 'symmetric-product-curve') {
+      const params = symmetricProductCurveParamsFromGeometry(context.curveGeometry);
+      if (!params) return null;
+      return defaultSymmetricProductAbelJacobiPushforwardRuleRhs(
+        { key: sourceKey || '' },
+        context,
+        params,
+        genus
+      );
+    }
     const curveClass = options.curveClass || abelJacobiCurveClassPoly(context.jacobianGeometry, genus);
     if (!curveClass) return null;
     const sourcePowers = parseMonoKey(sourceKey);
@@ -22482,6 +23144,85 @@
     return buildBundleFromCh(chComps, tangent.rankLatex, tangent.rankPlain, `\\Omega^1_{${geometry.labelLatex}}`, `Omega^1_${geometry.labelPlain}`);
   }
 
+  function buildSymmetricProductCurveSheafBundle(geometry, sheaf, options = {}) {
+    const d = geometry.dim;
+    if (sheaf.type === 'tangent') {
+      return relabelBundle(buildSymmetricProductCurveTangentBundle(geometry), sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
+    }
+    if (sheaf.type === 'cotangent') {
+      const tangent = buildSymmetricProductCurveTangentBundle(geometry);
+      const chComps = tangent.chComps.map((comp, i) => (
+        i === 0 ? comp : comp.scale(fraction(i % 2 === 0 ? 1 : -1))
+      ));
+      return buildBundleFromCh(chComps, tangent.rankLatex, tangent.rankPlain, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
+    }
+    if (sheaf.type === 'canonical') {
+      const firstChern = componentOrZero(buildSymmetricProductCurveTangentBundle(geometry).cComps, 1).neg();
+      return buildLineFromFirstChern(firstChern, d, sheafLabelLatex(sheaf), sheafLabelPlain(sheaf));
+    }
+    return buildAbstractBundle(d, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
+  }
+
+  function buildSymmetricProductCurveTangentBundle(geometry) {
+    const d = geometry.dim;
+    if (d === 0) return buildTrivialBundle(0, 0, `\\mathcal{T}_{${geometry.labelLatex}}`, `T_${geometry.labelPlain}`);
+    const cComps = symmetricProductCurveTangentChernComponents(geometry);
+    return buildBundleFromChern(cComps, String(d), String(d), `\\mathcal{T}_{${geometry.labelLatex}}`, `T_${geometry.labelPlain}`);
+  }
+
+  function symmetricProductCurveTangentChernComponents(geometry) {
+    const params = symmetricProductCurveParamsFromGeometry(geometry);
+    const d = geometry.dim;
+    const cComps = zeroComponentArray(d);
+    cComps[0] = Poly.one();
+    if (!params) return cComps;
+    const eta = symmetricProductEtaClassPoly(geometry);
+    const etaPowers = [Poly.one()];
+    for (let degree = 1; degree <= d; degree += 1) etaPowers[degree] = etaPowers[degree - 1].mul(eta, d);
+    const genusVariable = symmetricProductGenusVariable(geometry);
+    const sigma = symmetricProductSigmaPowerPoly(geometry, 1);
+    const sigmaPowers = [Poly.one()];
+    for (let degree = 1; degree <= d; degree += 1) sigmaPowers[degree] = sigmaPowers[degree - 1].mul(sigma, d);
+    for (let degree = 1; degree <= d; degree += 1) {
+      let component = Poly.zero();
+      for (let aggregateDegree = 0; aggregateDegree <= degree; aggregateDegree += 1) {
+        const etaDegree = degree - aggregateDegree;
+        const binomTop = Poly.constant(params.m + 1 - aggregateDegree).sub(genusVariable);
+        const coefficient = binomialScalarPoly(binomTop, etaDegree, d)
+          .scale(fraction(
+            aggregateDegree % 2 === 0 ? 1 : -1,
+            factorialBigInt(aggregateDegree)
+          ));
+        const aggregate = sigmaPowers[aggregateDegree];
+        component = component.add(coefficient.mul(etaPowers[etaDegree], d).mul(aggregate, d));
+      }
+      cComps[degree] = component.truncate(d);
+    }
+    return cComps;
+  }
+
+  function binomialScalarPoly(top, choose, maxDegree) {
+    if (!Number.isInteger(choose) || choose < 0) return Poly.zero();
+    let out = Poly.one();
+    const topPoly = Poly.from(top);
+    for (let index = 0; index < choose; index += 1) {
+      out = out.mul(topPoly.sub(Poly.constant(index)), maxDegree);
+    }
+    return out.scale(fraction(1, factorialBigInt(choose))).truncate(maxDegree);
+  }
+
+  function symmetricProductGenusVariable(geometry) {
+    const genus = sanitizeGenusInput(geometry?.symmetricProductGenus ?? geometry?.genus);
+    if (/^\d+$/.test(genus)) {
+      defineVariable(`symmetricProductGenus_${homologyScopeId(geometry)}`, 0, genus);
+      return Poly.constant(fraction(Number(genus)));
+    }
+    const id = globalInvariantVariableId(genus);
+    registerGlobalInvariantVariable(genus, { kind: 'variety', id: geometry?.varietyId || 'symmetric-product-curve', field: 'symmetricProductGenus' });
+    defineVariable(id, 0, symbolToLatex(genus), { kind: 'globalInvariant' });
+    return Poly.variable(id);
+  }
+
   function buildBundleFromPowerSums(pComps, rankLatex, rankPlain, labelLatex, labelPlain) {
     const d = pComps.length - 1;
     return buildBundleFromCh(chComponentsFromPowerSums(pComps, d), rankLatex, rankPlain, labelLatex, labelPlain);
@@ -22822,6 +23563,9 @@
     if (geometry.type === 'abelian') {
       return buildAbelianHodgeNumbers(geometry);
     }
+    if (geometry.type === 'symmetric-product-curve') {
+      return buildSymmetricProductCurveHodgeNumbers(geometry);
+    }
     if (geometry.type === 'grassmannian') {
       return buildGrassmannianHodgeNumbers(geometry);
     }
@@ -22950,6 +23694,7 @@
     if (geometryIsPointBlowup(geometry)) return pointBlowupHodgeEntryAt(geometry, p, q);
     if (geometry.type === 'point') return numericHodgeEntry(p === 0 && q === 0 ? 1n : 0n);
     if (geometry.type === 'abelian') return numericHodgeEntry(binomialBigInt(d, p) * binomialBigInt(d, q));
+    if (geometry.type === 'symmetric-product-curve') return symmetricProductCurveHodgeEntryAt(geometry, p, q);
     if (geometry.type === 'grassmannian') {
       const params = grassmannianParamsFromGeometry(geometry);
       if (!params) return null;
@@ -23089,6 +23834,69 @@
       )),
       message: 'Abelian-variety Hodge numbers.'
     };
+  }
+
+  function buildSymmetricProductCurveHodgeNumbers(geometry) {
+    const d = geometry.dim;
+    return {
+      entries: Array.from({ length: d + 1 }, (_, p) => (
+        Array.from({ length: d + 1 }, (_, q) => symmetricProductCurveHodgeEntryAt(geometry, p, q))
+      )),
+      message: `Symmetric product of a curve: Macdonald Hodge numbers for m=${geometry.symmetricProductM}, genus ${genusPlain(geometry.symmetricProductGenus)}.`
+    };
+  }
+
+  function symmetricProductCurveHodgeEntryAt(geometry, p, q) {
+    const params = symmetricProductCurveParamsFromGeometry(geometry);
+    if (!params) return null;
+    const m = params.m;
+    if (p < 0 || q < 0 || p > m || q > m) return numericHodgeEntry(0n);
+    const low = Math.max(0, p + q - m);
+    const high = Math.min(p, q);
+    if (low > high) return numericHodgeEntry(0n);
+    if (params.numericGenus != null) {
+      let value = 0n;
+      for (let ell = low; ell <= high; ell += 1) {
+        value += binomialBigInt(params.numericGenus, p - ell) * binomialBigInt(params.numericGenus, q - ell);
+      }
+      return numericHodgeEntry(value);
+    }
+    const genus = genusLatex(params.genus);
+    const plainGenus = genusPlain(params.genus);
+    const terms = [];
+    const plainTerms = [];
+    for (let ell = low; ell <= high; ell += 1) {
+      const left = p - ell;
+      const right = q - ell;
+      terms.push(hodgeProductLatex([hodgeBinomialLatex(genus, left), hodgeBinomialLatex(genus, right)]));
+      plainTerms.push(hodgeProductPlain([hodgeBinomialPlain(plainGenus, left), hodgeBinomialPlain(plainGenus, right)]));
+    }
+    return {
+      latex: terms.join('+') || '0',
+      plain: plainTerms.join('+') || '0'
+    };
+  }
+
+  function hodgeBinomialLatex(top, bottom) {
+    if (bottom === 0) return '1';
+    if (bottom === 1) return String(top);
+    return `\\binom{${top}}{${bottom}}`;
+  }
+
+  function hodgeBinomialPlain(top, bottom) {
+    if (bottom === 0) return '1';
+    if (bottom === 1) return String(top);
+    return `binom(${top},${bottom})`;
+  }
+
+  function hodgeProductLatex(factors) {
+    const nontrivial = factors.filter((factor) => factor && factor !== '1');
+    return nontrivial.join('') || '1';
+  }
+
+  function hodgeProductPlain(factors) {
+    const nontrivial = factors.filter((factor) => factor && factor !== '1');
+    return nontrivial.join('*') || '1';
   }
 
   function buildGrassmannianHodgeNumbers(geometry) {
@@ -24123,6 +24931,10 @@
     const variety = state.varieties.find((item) => item.id === varietyId) || null;
     const geometry = variety ? geometryFromVariety(variety) : null;
     if (!variety || !geometry) return;
+    if (geometry.type === 'symmetric-product-curve') {
+      addSymmetricProductMacdonaldBasisFromPanel(varietyId);
+      return;
+    }
     if (geometry.specialLabels?.includes('jacobian')) {
       addJacobianSymplecticBasisFromPanel(varietyId);
       return;
@@ -24139,6 +24951,23 @@
     clearHomologyMonomialAssignmentForm();
     if (refs.homologyMessage) refs.homologyMessage.textContent = `Added the symplectic basis for ${nextGeometry.labelPlain}.`;
     recompute('add curve basis');
+  }
+
+  function addSymmetricProductMacdonaldBasisFromPanel(varietyId) {
+    const variety = state.varieties.find((item) => item.id === varietyId) || null;
+    const geometry = variety ? geometryFromVariety(variety) : null;
+    if (!variety || !geometry || !symmetricProductMacdonaldBasisCanToggle(geometry, variety)) return;
+    variety.homology = variety.homology && typeof variety.homology === 'object' ? variety.homology : {};
+    variety.homology.symmetricProductMacdonaldBasisAdded = true;
+    const nextGeometry = geometryFromVariety(variety);
+    const homology = ensureHomologySystem(variety, nextGeometry);
+    homology.symmetricProductMacdonaldBasisAdded = true;
+    state.maps
+      .filter((map) => map.construction?.type === 'abel-jacobi' && map.domainId === variety.id)
+      .forEach((map) => ensureAbelJacobiKnownHomologyRules(map));
+    clearHomologyMonomialAssignmentForm();
+    if (refs.homologyMessage) refs.homologyMessage.textContent = `Added the Macdonald products for ${nextGeometry.labelPlain}.`;
+    recompute('add Macdonald basis');
   }
 
   function addJacobianSymplecticBasisFromPanel(varietyId) {
@@ -24193,7 +25022,10 @@
   function abelJacobiHomologyMessage(context) {
     const aj = abelJacobiMapContext(context?.map);
     if (!aj) return '';
-    const genus = numericalCurveGenus(aj.curveGeometry);
+    if (aj.sourceType === 'symmetric-product-curve') {
+      return 'Abel-Jacobi defaults include pullback of Theta and pushforwards of 1, eta, and the Macdonald aggregates.';
+    }
+    const genus = abelJacobiCurveGenus(aj.curveGeometry);
     const hasSymplecticBasis = genus === 0 || !!aj.curve.homology?.symplecticBasisConfirmed;
     return hasSymplecticBasis
       ? 'Abel-Jacobi defaults include theta on the Jacobian and matching symplectic bases on the curve and its Jacobian.'
@@ -24362,6 +25194,9 @@
     const show = symplecticBasisCanToggle(geometry);
     refs.homologyJacobianBasisAction.hidden = !show;
     refs.homologyJacobianBasisAction.dataset.addJacobianBasis = show ? (geometry.varietyId || '') : '';
+    refs.homologyJacobianBasisAction.textContent = geometry?.type === 'symmetric-product-curve'
+      ? 'add products'
+      : 'add basis';
   }
 
   function updateHomologyExpressionTransposeButton() {
@@ -24500,12 +25335,32 @@
           ${def.kind === 'custom' ? `
             <button class="btn btn-ghost homology-rule-delete" type="button" data-homology-class-delete="${escapeHtml(def.id)}">delete</button>
           ` : `
-            <span class="homology-symbol-kind">${escapeHtml(def.kind)}</span>
+            ${homologySymbolKindHtml(def.kind)}
           `}
         </div>
         ${degreeDetailsControl}
       `;
     }).join('');
+  }
+
+  function homologySymbolKindHtml(kind) {
+    const text = String(kind || '');
+    const tooltip = homologySymbolKindTooltip(text);
+    if (!tooltip) return `<span class="homology-symbol-kind">${escapeHtml(text)}</span>`;
+    return `<span class="homology-symbol-kind tooltip-label" tabindex="0" data-tooltip="${escapeHtml(tooltip)}">${escapeHtml(text)}</span>`;
+  }
+
+  function homologySymbolKindTooltip(kind) {
+    if (kind === 'Macdonald divisor') {
+      return 'eta = [D_p], where D_p = {E in Sym^m(C) : p is in E}.';
+    }
+    if (kind === 'Macdonald product') {
+      return 'sigma_i = a_i b_i; a_i,b_i are pulled back from Jac(C) via AJ.';
+    }
+    if (kind === 'Macdonald aggregate') {
+      return 'Sigma = sum_i sigma_i = AJ^*Theta; Sigma_k is derived as Sigma^k/k!.';
+    }
+    return '';
   }
 
   function homologyRuleListTargetKey() {
@@ -28170,13 +29025,15 @@
     if (!item || typeof item !== 'object') return null;
     const id = sanitizePresetId(item.id);
     if (!id) return null;
-    const type = sanitizePresetEnum(item.type, ['abstract', 'projective', 'grassmannian', 'curve', 'abelian', 'ppav-moduli', 'point', 'complete-intersection'], 'abstract');
+    const type = sanitizePresetEnum(item.type, ['abstract', 'projective', 'grassmannian', 'curve', 'symmetric-product-curve', 'abelian', 'ppav-moduli', 'point', 'complete-intersection'], 'abstract');
     const variety = {
       id,
       type,
-      dim: sanitizeDimensionText(item.dim ?? '3'),
-      name: sanitizeMathLabel(item.name, type === 'projective' ? '\\mathbb{P}^3' : (type === 'ppav-moduli' ? '\\mathcal{A}_{2}' : 'X')),
+      dim: sanitizeDimensionText(item.dim ?? (type === 'symmetric-product-curve' ? item.symmetricProductM : '3')),
+      name: sanitizeMathLabel(item.name, type === 'projective' ? '\\mathbb{P}^3' : (type === 'ppav-moduli' ? '\\mathcal{A}_{2}' : (type === 'symmetric-product-curve' ? '\\operatorname{Sym}^{3}(C)' : 'X'))),
       genus: sanitizeGenusInput(item.genus),
+      symmetricProductM: String(normalizedInt(item.symmetricProductM ?? item.dim, 0, MAX_DIMENSION, 3)),
+      symmetricProductGenus: sanitizeGenusInput(item.symmetricProductGenus ?? item.genus),
       ppavGenus: String(normalizedInt(item.ppavGenus ?? item.genus, 1, MAX_PPAV_GENUS, 2)),
       ciDegrees: sanitizePresetString(item.ciDegrees, '', 80),
       nameDirty: item.nameDirty === true,
@@ -28268,7 +29125,8 @@
     if (ownerKind === 'variety' && type === 'product') {
       out.varietyIds = Array.isArray(construction.varietyIds) ? construction.varietyIds.map(sanitizePresetId).filter(Boolean).slice(0, 2) : [];
     } else if (ownerKind === 'variety' && type === 'jacobian') {
-      out.curveId = sanitizePresetId(construction.curveId);
+      out.curveId = sanitizePresetId(construction.curveId || construction.sourceId);
+      out.sourceId = sanitizePresetId(construction.sourceId || construction.curveId);
       out.nameDirty = construction.nameDirty === true;
     } else if (ownerKind === 'variety' && type === 'picard-variety') {
       out.curveId = sanitizePresetId(construction.curveId);
@@ -28393,7 +29251,8 @@
       out.factorIndex = normalizedInt(construction.factorIndex, 0, 1, 0);
       out.nameDirty = construction.nameDirty === true;
     } else if (ownerKind === 'map' && type === 'abel-jacobi') {
-      out.curveId = sanitizePresetId(construction.curveId);
+      out.curveId = sanitizePresetId(construction.curveId || construction.sourceId);
+      out.sourceId = sanitizePresetId(construction.sourceId || construction.curveId);
       out.jacobianId = sanitizePresetId(construction.jacobianId);
       out.nameDirty = construction.nameDirty === true;
     } else if (ownerKind === 'map' && type === 'short-exact-sequence-map') {
@@ -28763,6 +29622,7 @@
   function presetVariety(variety) {
     return pickSerializable(variety, [
       'id', 'type', 'dim', 'name', 'genus', 'ppavGenus', 'ciDegrees', 'ciAmbient',
+      'symmetricProductM', 'symmetricProductGenus',
       'grassmannianR', 'grassmannianN', 'grassmannianYoungBasis',
       'homology', 'construction', 'nameDirty', 'hiddenOnCanvas',
       'labelX', 'labelY', 'labelPositionDirty'
@@ -28906,6 +29766,10 @@
       `\\dim=${geometry.dim}`
     ];
     if (geometryHasNumericalCurveLabel(geometry)) parts.push(`g=${genusLatex(geometry.type === 'curve' ? geometry.genus : numericalCurveGenus(geometry))}`);
+    if (geometry.type === 'symmetric-product-curve') {
+      parts.push(`m=${geometry.symmetricProductM}`);
+      parts.push(`g=${genusLatex(geometry.symmetricProductGenus)}`);
+    }
     if (geometry.type === 'projective') parts.push(`\\text{ambient}=\\mathbb{P}^{${geometry.ambient}}`);
     if (geometry.type === 'grassmannian') parts.push(`(r,n)=(${geometry.grassmannianR},${geometry.grassmannianN})`);
     if (geometry.type === 'ppav-moduli') parts.push(`g=${geometry.ppavGenus}`);
@@ -28959,6 +29823,10 @@
       `dim ${geometry.dim}`
     ];
     if (geometryHasNumericalCurveLabel(geometry)) parts.push(`genus ${genusPlain(geometry.type === 'curve' ? geometry.genus : numericalCurveGenus(geometry))}`);
+    if (geometry.type === 'symmetric-product-curve') {
+      parts.push(`m ${geometry.symmetricProductM}`);
+      parts.push(`genus ${genusPlain(geometry.symmetricProductGenus)}`);
+    }
     if (geometry.type === 'projective') parts.push(`ambient P^${geometry.ambient}`);
     if (geometry.type === 'grassmannian') parts.push(`r ${geometry.grassmannianR}`, `n ${geometry.grassmannianN}`);
     if (geometry.type === 'ppav-moduli') parts.push(`genus ${geometry.ppavGenus}`);
@@ -29014,6 +29882,7 @@
     if (type === 'complete-intersection') return 'complete intersection';
     if (type === 'grassmannian') return 'Grassmannian';
     if (type === 'curve') return 'curve';
+    if (type === 'symmetric-product-curve') return 'symmetric product of a curve';
     if (type === 'abelian') return 'abelian variety';
     if (type === 'ppav-moduli') return 'moduli of ppav';
     if (type === 'point') return 'point';
