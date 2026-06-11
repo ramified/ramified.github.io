@@ -554,12 +554,19 @@ function setPartition() {
   }
 }
 
-function rowsFromDynkinLabels(labels) {
+function rowsFromDynkinLabels(labels, options = {}) {
+  const { trim = 'positive' } = options;
   const rows = Array(labels.length).fill(0);
   let running = 0;
   for (let i = labels.length - 1; i >= 0; i--) {
     running += labels[i];
     rows[i] = running;
+  }
+  if (trim === 'none') return rows;
+  if (trim === 'trailing-zero') {
+    const out = rows.slice();
+    while (out.length && out[out.length - 1] === 0) out.pop();
+    return out;
   }
   return rows.filter(x => x > 0);
 }
@@ -3040,9 +3047,11 @@ function weylOrbitSizeFast(C, dynkinLabels) {
 }
 // ── State ──
 const ORBIT_LIST_LIMIT = 5000n;
+const ORBIT_VIEW_MODES = ['paper', 'shifted', 'table'];
 let _lieOrbit = [];
 let _lieOrbitSize = 0n;
 let _orbitVisible = false;
+let _orbitViewMode = 'paper';
 let _lastOrbitKey = '';
 let _lastOrbitLabels = [];
 let _lastOrbitTypeStr = '';
@@ -3050,6 +3059,19 @@ let _lastOrbitRank = 0;
 let _cachedCartan = null;
 let _cachedCoroots = null;
 let _cachedTypeStr = '';
+function updateOrbitViewButtons() {
+  document.querySelectorAll('[data-orbit-view]').forEach(button => {
+    const active = button.dataset.orbitView === _orbitViewMode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+function setOrbitViewMode(mode) {
+  if (!ORBIT_VIEW_MODES.includes(mode)) mode = 'paper';
+  _orbitViewMode = mode;
+  updateOrbitViewButtons();
+  if (_orbitVisible) renderOrbitTableOrMessage();
+}
 function onTypeChange() {
   const type = document.getElementById('lie-type').value;
   const isClassical = ['A','B','C','D'].includes(type);
@@ -3093,6 +3115,7 @@ function currentTypeStr() {
 }
 function orbitListLimitText() { return ORBIT_LIST_LIMIT.toString(); }
 function renderOrbitTableOrMessage() {
+  updateOrbitViewButtons();
   const container = document.getElementById('lie-orbit-table');
   if (!_lastOrbitLabels.length) {
     container.innerHTML = '<span class="hint">Draw a Young diagram first.</span>';
@@ -3107,7 +3130,8 @@ function renderOrbitTableOrMessage() {
     _lieOrbit = weylOrbitDynkin(_cachedCartan, _lastOrbitLabels);
     _lieOrbit._key = _lastOrbitKey;
   }
-  buildOrbitTable(_lastOrbitRank);
+  if (_orbitViewMode === 'table') buildOrbitTable(_lastOrbitRank);
+  else buildOrbitDiagramList(_lastOrbitRank, _orbitViewMode);
   return true;
 }
 function toggleOrbitTable() {
@@ -3216,6 +3240,109 @@ function buildOrbitTable(n) {
   });
   html += '</tbody></table>';
   container.innerHTML = html;
+}
+
+function orbitVectorLabel(values, open = '(', close = ')') {
+  return open + values.join(', ') + close;
+}
+
+function generalizedOrbitDiagramSVG(rows, mode) {
+  const bs = 10;
+  const pad = 3;
+  const rowCount = Math.max(1, rows.length);
+  const minRow = Math.min(0, ...rows);
+  const maxRow = Math.max(0, ...rows);
+  let width;
+  let axisX;
+  let drawRow;
+
+  if (mode === 'shifted') {
+    const shift = -minRow;
+    const maxShifted = Math.max(1, shift, ...rows.map(v => v + shift));
+    width = maxShifted * bs + pad * 2;
+    axisX = pad + shift * bs;
+    drawRow = (value, r) => {
+      let svg = '';
+      const shifted = value + shift;
+      const y = pad + r * bs;
+      for (let c = 0; c < shifted; c++) {
+        const cls = c < shift ? 'orbit-box-shift' : 'orbit-box-positive';
+        svg += `<rect class="${cls}" x="${pad + c * bs}" y="${y}" width="${bs}" height="${bs}"/>`;
+      }
+      if (shifted === 0) {
+        svg += `<line class="orbit-empty-row" x1="${axisX - 3}" y1="${y + bs / 2}" x2="${axisX + 3}" y2="${y + bs / 2}"/>`;
+      }
+      return svg;
+    };
+  } else {
+    const negWidth = -minRow;
+    const totalCols = Math.max(1, negWidth + maxRow);
+    width = totalCols * bs + pad * 2;
+    axisX = pad + negWidth * bs;
+    drawRow = (value, r) => {
+      let svg = '';
+      const y = pad + r * bs;
+      if (value > 0) {
+        for (let c = 0; c < value; c++) {
+          svg += `<rect class="orbit-box-positive" x="${axisX + c * bs}" y="${y}" width="${bs}" height="${bs}"/>`;
+        }
+      } else if (value < 0) {
+        for (let c = 0; c < -value; c++) {
+          svg += `<rect class="orbit-box-negative" x="${axisX - (c + 1) * bs}" y="${y}" width="${bs}" height="${bs}"/>`;
+        }
+      } else {
+        svg += `<line class="orbit-empty-row" x1="${axisX - 3}" y1="${y + bs / 2}" x2="${axisX + 3}" y2="${y + bs / 2}"/>`;
+      }
+      return svg;
+    };
+  }
+
+  const height = rowCount * bs + pad * 2;
+  let svg = `<svg class="orbit-diagram-svg" xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="generalized Young diagram">`;
+  svg += `<line class="orbit-zero-axis" x1="${axisX}" y1="${pad}" x2="${axisX}" y2="${height - pad}"/>`;
+  rows.forEach((value, r) => { svg += drawRow(value, r); });
+  svg += '</svg>';
+  return svg;
+}
+
+function buildOrbitDiagramList(n, mode) {
+  const container = document.getElementById('lie-orbit-table');
+  if (!_lieOrbit.length) { container.innerHTML = ''; return; }
+  container.innerHTML = '';
+  const list = document.createElement('div');
+  list.className = 'orbit-diagram-list';
+  const fragment = document.createDocumentFragment();
+  _lieOrbit.forEach((w, idx) => {
+    const rows = rowsFromDynkinLabels(w, { trim: 'none' });
+    const item = document.createElement('div');
+    item.className = 'orbit-diagram-item';
+
+    const index = document.createElement('span');
+    index.className = 'orbit-diagram-index';
+    index.textContent = String(idx + 1);
+
+    const diagram = document.createElement('span');
+    diagram.className = 'orbit-diagram-art';
+    diagram.innerHTML = generalizedOrbitDiagramSVG(rows, mode);
+
+    const label = document.createElement('span');
+    label.className = 'orbit-diagram-label';
+    const rowLabel = document.createElement('span');
+    rowLabel.className = 'orbit-row-coords';
+    rowLabel.textContent = orbitVectorLabel(rows);
+    const dynLabel = document.createElement('span');
+    dynLabel.className = 'orbit-dyn-coords';
+    dynLabel.textContent = orbitVectorLabel(w, '[', ']');
+    label.appendChild(rowLabel);
+    label.appendChild(dynLabel);
+
+    item.appendChild(index);
+    item.appendChild(diagram);
+    item.appendChild(label);
+    fragment.appendChild(item);
+  });
+  list.appendChild(fragment);
+  container.appendChild(list);
 }
 
 

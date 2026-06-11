@@ -435,6 +435,121 @@
   }
   .btn-ghost:hover { background: var(--accent2); color: #fff; }
 
+  .orbit-view-row {
+    display: inline-flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .orbit-view-btn {
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg);
+    color: var(--muted);
+    padding: 4px 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+  .orbit-view-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  }
+
+  .orbit-diagram-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: min(360px, 50vh);
+    overflow: auto;
+    padding: 2px 4px 8px 0;
+    scrollbar-gutter: stable;
+    scrollbar-color: color-mix(in srgb, var(--accent) 68%, var(--surface)) var(--surface);
+    scrollbar-width: thin;
+  }
+  .orbit-diagram-list::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .orbit-diagram-list::-webkit-scrollbar-track {
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+  }
+  .orbit-diagram-list::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--accent) 68%, var(--surface));
+    border: 2px solid var(--surface);
+    border-radius: 999px;
+  }
+  .orbit-diagram-item {
+    display: grid;
+    grid-template-columns: 24px minmax(42px, 112px) minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    border-bottom: 1px dotted var(--border);
+  }
+  .orbit-diagram-item:last-child { border-bottom: none; }
+  .orbit-diagram-index {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--muted);
+    text-align: right;
+    white-space: nowrap;
+  }
+  .orbit-diagram-art {
+    display: inline-flex;
+    justify-content: center;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .orbit-diagram-svg {
+    display: block;
+    max-width: 112px;
+    height: auto;
+    overflow: visible;
+  }
+  .orbit-box-positive {
+    fill: color-mix(in srgb, var(--accent) 24%, var(--surface));
+    stroke: var(--accent);
+    stroke-width: 0.7;
+  }
+  .orbit-box-negative {
+    fill: color-mix(in srgb, var(--accent2) 30%, var(--surface));
+    stroke: var(--accent2);
+    stroke-width: 0.7;
+  }
+  .orbit-box-shift {
+    fill: color-mix(in srgb, var(--muted) 24%, var(--surface));
+    stroke: var(--muted);
+    stroke-width: 0.7;
+  }
+  .orbit-zero-axis {
+    stroke: var(--text);
+    stroke-width: 1.2;
+    stroke-dasharray: 2 2;
+    vector-effect: non-scaling-stroke;
+  }
+  .orbit-empty-row {
+    stroke: var(--border);
+    stroke-width: 1.1;
+    vector-effect: non-scaling-stroke;
+  }
+  .orbit-diagram-label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+  .orbit-row-coords { color: var(--text); }
+  .orbit-dyn-coords { color: var(--muted); }
+
   .hint {
     font-size: 0.78rem;
     color: var(--muted);

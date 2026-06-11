@@ -114,9 +114,14 @@
             <div class="stat-row"><span class="stat-label tooltip-label" tabindex="0" data-tooltip="Uses row vector λ = (a₁,...,aₙ) and Dynkin labels [a₁−a₂, ..., aₙ₋₁−aₙ, aₙ].">Dynkin labels</span><span class="stat-value" id="lie-dynkin">—</span></div>
             <div class="stat-row"><span class="stat-label">dim V<sup>&#955;</sup></span><span class="stat-value" id="lie-dim">—</span></div>
             <div class="stat-row"><span class="stat-label">|Weyl orbit|</span><span class="stat-value" id="lie-orbit-size">—</span></div>
-            <!-- Orbit table toggle -->
+            <!-- Orbit display controls -->
             <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn" onclick="toggleOrbitTable()" id="lie-orbit-btn">Show Weyl orbit</button>
+              <span class="orbit-view-row" aria-label="Weyl orbit views">
+                <button class="orbit-view-btn active" data-orbit-view="paper" onclick="setOrbitViewMode('paper')" type="button" aria-pressed="true">paper</button>
+                <button class="orbit-view-btn" data-orbit-view="shifted" onclick="setOrbitViewMode('shifted')" type="button" aria-pressed="false">shifted</button>
+                <button class="orbit-view-btn" data-orbit-view="table" onclick="setOrbitViewMode('table')" type="button" aria-pressed="false">table</button>
+              </span>
               <button class="btn" onclick="exportOrbit(event)" style="background:transparent;color:var(--accent);border-color:var(--accent);">Export orbit</button>
             </div>
             <div id="lie-orbit-table" style="display:none;margin-top:10px;overflow-x:auto;"></div>
