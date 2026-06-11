@@ -345,6 +345,7 @@
     refs.sheafBinaryPickNote = $('sheaf-binary-pick-note');
     refs.sheafSelfSumFormulaRow = $('sheaf-self-sum-formula-row');
     refs.sheafSelfSumParentButton = $('sheaf-self-sum-parent-button');
+    refs.sheafSelfSumSymbol = $('sheaf-self-sum-symbol');
     refs.sheafSelfSumCount = $('sheaf-self-sum-count');
     refs.sheafSelfSumPickNote = $('sheaf-self-sum-pick-note');
     refs.sheafDualFormulaRow = $('sheaf-dual-formula-row');
@@ -608,6 +609,7 @@
     refs.hodgeQueryRun = $('hodge-query-run');
     refs.hodgeQueryOutput = $('hodge-query-output');
     refs.hodgeChart = $('hodge-chart');
+    refs.hodgeChernNumbers = $('hodge-chern-numbers');
     refs.hodgeMessage = $('hodge-message');
     refs.exportHodge = $('export-hodge');
     refs.exportCard = $('export-card');
@@ -925,12 +927,12 @@
     sheaf.type = 'abstract';
     sheaf.name = data.name;
     sheaf.twist = '1';
-    sheaf.rank = selfSumRankPlaceholder(data.parent, data.multiplicity);
+    sheaf.rank = selfOperationRankPlaceholder(data.parent, data.multiplicity, data.operation);
     sheaf.baseVarietyId = data.baseVarietyId;
     sheaf.basis = 'chern';
     sheaf.nameDirty = data.nameDirty;
     sheaf.construction = {
-      type: 'self-direct-sum',
+      type: data.operation,
       sheafId: data.parent.id,
       multiplicity: data.multiplicity,
       defaultName: data.defaultName
@@ -1156,15 +1158,18 @@
   }
 
   function selfSumSheafConstructionData() {
-    if (refs.sheafType?.value !== 'self-direct-sum') return null;
+    const type = refs.sheafType?.value;
+    if (type !== 'self-direct-sum' && type !== 'self-tensor-product') return null;
     const parent = sheafSelfSumDraftSheaf();
     const multiplicity = currentSelfSumMultiplicity();
     if (!parent || !allowableSheafSelfSumPick(parent.id)) return null;
-    const defaultName = defaultSelfSumSheafNameFromObjects(parent, multiplicity);
+    const operation = type === 'self-tensor-product' ? 'self-tensor-product' : 'self-direct-sum';
+    const defaultName = defaultSelfOperationSheafNameFromObjects(parent, multiplicity, operation);
     const name = state.draftSheafNameDirty
       ? sanitizeMathLabel(refs.sheafName.value, defaultName)
       : defaultName;
     return {
+      operation,
       parent,
       multiplicity,
       baseVarietyId: parent.baseVarietyId,
@@ -1826,7 +1831,7 @@
         .map((id) => state.sheaves.find((item) => item.id === id))
         .every((item) => sheafHasLocallyFreeLabel(item));
     }
-    if (sheaf.construction.type === 'self-direct-sum') {
+    if (sheafSelfOperationType(sheaf.construction.type)) {
       return sheafHasLocallyFreeLabel(state.sheaves.find((item) => item.id === sheaf.construction.sheafId));
     }
     if (sheaf.construction.type === 'dual') {
@@ -2983,8 +2988,12 @@
     return type === 'direct-sum' || type === 'tensor' ? type : null;
   }
 
+  function sheafSelfOperationType(type) {
+    return type === 'self-direct-sum' || type === 'self-tensor-product' ? type : null;
+  }
+
   function sheafSelfSumConstructionType(sheaf) {
-    return sheaf?.construction?.type === 'self-direct-sum' ? 'self-direct-sum' : null;
+    return sheafSelfOperationType(sheaf?.construction?.type);
   }
 
   function sheafDualConstructionType(sheaf) {
@@ -3030,6 +3039,7 @@
 
   function loadSelfSumSheafIntoDraft(sheaf) {
     const construction = sheaf?.construction || {};
+    if (refs.sheafType && sheafSelfOperationType(construction.type)) refs.sheafType.value = construction.type;
     state.sheafSelfSumDraft = {
       sheafId: construction.sheafId || null
     };
@@ -4503,7 +4513,7 @@
       const type = refs.sheafType.value;
       if (type !== 'map-operation') clearSheafMapDraft();
       if (type !== 'direct-sum' && type !== 'tensor') clearSheafBinaryDraft();
-      if (type !== 'self-direct-sum') clearSheafSelfSumDraft();
+      if (type !== 'self-direct-sum' && type !== 'self-tensor-product') clearSheafSelfSumDraft();
       if (type !== 'dual') clearSheafDualDraft();
       if (type !== 'internal-hom') clearSheafInternalHomDraft();
       if (type !== 'ideal-sheaf') clearSheafIdealDraft();
@@ -4551,10 +4561,10 @@
         if (sheafBinaryConstructionType(sheaf)) loadBinarySheafIntoDraft(sheaf);
       } else if (type === 'direct-sum' || type === 'tensor') {
         state.sheafBinaryPickTarget = 'left';
-      } else if (type === 'self-direct-sum' && inputIsModifyMode()) {
+      } else if ((type === 'self-direct-sum' || type === 'self-tensor-product') && inputIsModifyMode()) {
         const sheaf = activeSheaf();
         if (sheafSelfSumConstructionType(sheaf)) loadSelfSumSheafIntoDraft(sheaf);
-      } else if (type === 'self-direct-sum') {
+      } else if (type === 'self-direct-sum' || type === 'self-tensor-product') {
         state.sheafSelfSumDraft = state.sheafSelfSumDraft || {};
       } else if (type === 'divisor-line') {
         state.sheafDivisorDraft = state.sheafDivisorDraft || { coefficients: {} };
@@ -7779,12 +7789,12 @@
       type: 'abstract',
       name: uniqueConstructedObjectName('sheaf', data.name),
       twist: '1',
-      rank: selfSumRankPlaceholder(data.parent, data.multiplicity),
+      rank: selfOperationRankPlaceholder(data.parent, data.multiplicity, data.operation),
       baseVarietyId: data.baseVarietyId,
       basis: 'chern',
       nameDirty: data.nameDirty,
       construction: {
-        type: 'self-direct-sum',
+        type: data.operation,
         sheafId: data.parent.id,
         multiplicity: data.multiplicity,
         defaultName: data.defaultName
@@ -9619,6 +9629,16 @@
     return `${sanitizeMathLabel(parent?.name, '\\mathcal{E}')}^{\\oplus ${normalizeSelfSumMultiplicity(multiplicity)}}`;
   }
 
+  function defaultSelfTensorSheafNameFromObjects(parent, multiplicity) {
+    return `${sanitizeMathLabel(parent?.name, '\\mathcal{E}')}^{\\otimes ${normalizeSelfSumMultiplicity(multiplicity)}}`;
+  }
+
+  function defaultSelfOperationSheafNameFromObjects(parent, multiplicity, operation) {
+    return operation === 'self-tensor-product'
+      ? defaultSelfTensorSheafNameFromObjects(parent, multiplicity)
+      : defaultSelfSumSheafNameFromObjects(parent, multiplicity);
+  }
+
   function defaultDualSheafNameFromObjects(parent) {
     if (parent?.type === 'structure') {
       const base = state.varieties.find((variety) => variety.id === parent.baseVarietyId);
@@ -9795,7 +9815,10 @@
   }
 
   function defaultAbelJacobiMapNameFromCurve(curve) {
-    if ((curve?.type || 'abstract') === 'symmetric-product-curve') return '\\operatorname{AJ}_{C^{(m)}}';
+    if ((curve?.type || 'abstract') === 'symmetric-product-curve') {
+      const { m } = normalizedSymmetricProductParams(curve);
+      return `\\operatorname{AJ}_{C^{(${m})}}`;
+    }
     return `\\operatorname{AJ}_{${sanitizeMathLabel(curve?.name, 'C')}}`;
   }
 
@@ -9836,6 +9859,19 @@
     const n = normalizeSelfSumMultiplicity(multiplicity);
     if (/^-?\d+$/.test(rank)) return String(Number(rank) * n);
     return 'r';
+  }
+
+  function selfTensorRankPlaceholder(parent, multiplicity) {
+    const rank = sanitizeRankInput(parent?.rank);
+    const n = normalizeSelfSumMultiplicity(multiplicity);
+    if (/^-?\d+$/.test(rank)) return bigintPow(BigInt(rank), n).toString();
+    return n === 1 ? rank : 'r';
+  }
+
+  function selfOperationRankPlaceholder(parent, multiplicity, operation) {
+    return operation === 'self-tensor-product'
+      ? selfTensorRankPlaceholder(parent, multiplicity)
+      : selfSumRankPlaceholder(parent, multiplicity);
   }
 
   function schurRankPlaceholder(parent, partition) {
@@ -11259,7 +11295,8 @@
 
   function sheafSelfSumInputMode() {
     const kind = inputIsModifyMode() ? modifyKind() : currentInputKind();
-    return kind === 'sheaf' && refs.sheafType?.value === 'self-direct-sum';
+    const type = refs.sheafType?.value;
+    return kind === 'sheaf' && (type === 'self-direct-sum' || type === 'self-tensor-product');
   }
 
   function sheafDualInputMode() {
@@ -11725,6 +11762,12 @@
     const show = sheafSelfSumInputMode();
     if (refs.sheafSelfSumFormulaRow) refs.sheafSelfSumFormulaRow.hidden = !show;
     if (refs.sheafSelfSumCount && options.normalizeCount) refs.sheafSelfSumCount.value = String(currentSelfSumMultiplicity());
+    if (refs.sheafSelfSumSymbol) {
+      refs.sheafSelfSumSymbol.textContent = refs.sheafType?.value === 'self-tensor-product' ? '^{\u2297' : '^{\u2295';
+    }
+    if (refs.sheafSelfSumCount) {
+      refs.sheafSelfSumCount.setAttribute('aria-label', refs.sheafType?.value === 'self-tensor-product' ? 'self tensor product exponent' : 'self direct sum multiplicity');
+    }
     updateSheafSelfSumSlotButton(refs.sheafSelfSumParentButton, sheafSelfSumDraftSheaf());
     syncPickFlowNote(refs.sheafSelfSumPickNote, 'sheaf-self-sum', show);
     syncGlobalPickButton();
@@ -11853,9 +11896,10 @@
   }
 
   function sheafSelfSumPickHint() {
+    const operationText = refs.sheafType?.value === 'self-tensor-product' ? 'self tensor product' : 'self direct sum';
     if (!sheafSelfSumPickableSheaves().length) return 'add a sheaf first';
     if (!sheafSelfSumDraftSheaf()) return 'click a sheaf on the canvas';
-    return inputIsModifyMode() ? 'click update to rebuild the self direct sum' : 'click add to create the self direct sum';
+    return inputIsModifyMode() ? `click update to rebuild the ${operationText}` : `click add to create the ${operationText}`;
   }
 
   function sheafDualPickHint() {
@@ -12449,7 +12493,7 @@
   }
 
   function normalizedSymmetricProductParams(source = {}) {
-    const m = normalizedInt(source.m ?? source.symmetricProductM ?? refs.symmetricProductM?.value, 0, MAX_DIMENSION, 3);
+    const m = normalizedInt(source.m ?? source.symmetricProductM ?? source.dim ?? refs.symmetricProductM?.value, 0, MAX_DIMENSION, 3);
     const genus = sanitizeGenusInput(source.symmetricProductGenus ?? source.genus ?? refs.symmetricProductGenus?.value);
     return { m, genus, dim: m };
   }
@@ -12741,7 +12785,7 @@
       const data = binarySheafConstructionData();
       if (data?.defaultName) return data.defaultName;
     }
-    if (refs.sheafType?.value === 'self-direct-sum') {
+    if (sheafSelfOperationType(refs.sheafType?.value)) {
       const data = selfSumSheafConstructionData();
       if (data?.defaultName) return data.defaultName;
     }
@@ -12879,9 +12923,9 @@
       const data = binarySheafConstructionData();
       refs.rank.value = data ? constructionRankPlaceholder(data.operation, data.left, data.right) : 'r';
     }
-    else if (refs.sheafType.value === 'self-direct-sum') {
+    else if (sheafSelfOperationType(refs.sheafType.value)) {
       const data = selfSumSheafConstructionData();
-      refs.rank.value = data ? selfSumRankPlaceholder(data.parent, data.multiplicity) : 'r';
+      refs.rank.value = data ? selfOperationRankPlaceholder(data.parent, data.multiplicity, data.operation) : 'r';
     }
     else if (refs.sheafType.value === 'dual') {
       const data = dualSheafConstructionData();
@@ -13049,9 +13093,9 @@
         subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'base')] : []
       };
     }
-    if (kind === 'sheaf' && construction.type === 'self-direct-sum') {
+    if (kind === 'sheaf' && sheafSelfOperationType(construction.type)) {
       return {
-        parents: [parent('sheaf', construction.sheafId, 'summand')].filter((item) => item.id),
+        parents: [parent('sheaf', construction.sheafId, construction.type === 'self-tensor-product' ? 'tensor-factor' : 'summand')].filter((item) => item.id),
         subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'base')] : []
       };
     }
@@ -13522,7 +13566,7 @@
     const construction = sheaf?.construction;
     if (!construction) return false;
     if (construction.type === 'direct-sum' || construction.type === 'tensor') return refreshBinaryConstructedSheaf(sheaf, construction);
-    if (construction.type === 'self-direct-sum') return refreshSelfSumConstructedSheaf(sheaf, construction);
+    if (sheafSelfOperationType(construction.type)) return refreshSelfSumConstructedSheaf(sheaf, construction);
     if (construction.type === 'dual') return refreshDualConstructedSheaf(sheaf, construction);
     if (construction.type === 'schur') return refreshSchurConstructedSheaf(sheaf, construction);
     if (construction.type === 'pullback' || construction.type === 'pushforward') return refreshMapConstructedSheaf(sheaf, construction);
@@ -13720,15 +13764,16 @@
   function refreshSelfSumConstructedSheaf(sheaf, construction) {
     const parent = state.sheaves.find((item) => item.id === construction.sheafId);
     if (!parent) return false;
+    const operation = sheafSelfOperationType(construction.type) || 'self-direct-sum';
     const multiplicity = normalizeSelfSumMultiplicity(construction.multiplicity);
-    const oldDefault = construction.defaultName || defaultSelfSumSheafNameFromObjects(parent, multiplicity);
-    const nextDefault = defaultSelfSumSheafNameFromObjects(parent, multiplicity);
+    const oldDefault = construction.defaultName || defaultSelfOperationSheafNameFromObjects(parent, multiplicity, operation);
+    const nextDefault = defaultSelfOperationSheafNameFromObjects(parent, multiplicity, operation);
     let changed = false;
     if (sheaf.baseVarietyId !== parent.baseVarietyId) {
       sheaf.baseVarietyId = parent.baseVarietyId;
       changed = true;
     }
-    const nextRank = selfSumRankPlaceholder(parent, multiplicity);
+    const nextRank = selfOperationRankPlaceholder(parent, multiplicity, operation);
     if (sheaf.rank !== nextRank) {
       sheaf.rank = nextRank;
       changed = true;
@@ -13740,6 +13785,10 @@
     }
     if (construction.multiplicity !== multiplicity) {
       construction.multiplicity = multiplicity;
+      changed = true;
+    }
+    if (construction.type !== operation) {
+      construction.type = operation;
       changed = true;
     }
     if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) === canonicalMathLabel(oldDefault) && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(nextDefault)) {
@@ -14764,6 +14813,10 @@
         refs.hodgeChart.hidden = true;
         refs.hodgeChart.innerHTML = '';
       }
+      if (refs.hodgeChernNumbers) {
+        refs.hodgeChernNumbers.hidden = true;
+        refs.hodgeChernNumbers.innerHTML = '';
+      }
       if (refs.hodgeMessage) {
         refs.hodgeMessage.textContent = 'No Hodge numbers available for the current input.';
         refs.hodgeMessage.hidden = false;
@@ -14984,7 +15037,7 @@
     let draftSheaf = refs.sheafType.value;
     const hasTwistBase = state.varieties.some((variety) => varietySupportsTwist(variety.type || 'abstract'));
     const hasUniversalBundleBase = state.varieties.some((variety) => varietySupportsUniversalBundle(variety.type || 'abstract'));
-    const sheafTypeHasParentRow = (type) => type === 'map-operation' || type === 'direct-sum' || type === 'self-direct-sum' || type === 'dual' || type === 'internal-hom' || type === 'ideal-sheaf' || type === 'normal-bundle' || type === 'relative-tangent' || type === 'relative-cotangent' || type === 'tensor' || type === 'schur';
+    const sheafTypeHasParentRow = (type) => type === 'map-operation' || type === 'direct-sum' || sheafSelfOperationType(type) || type === 'dual' || type === 'internal-hom' || type === 'ideal-sheaf' || type === 'normal-bundle' || type === 'relative-tangent' || type === 'relative-cotangent' || type === 'tensor' || type === 'schur';
     let sheafHasParentRow = false;
     let waitingForSheafBase = false;
     let editingSheafMapOperation = false;
@@ -15012,8 +15065,8 @@
       creatingSheafMapOperation = inputIsCreateMode() && draftingSheaf && draftSheaf === 'map-operation';
       editingSheafBinary = inputIsModifyMode() && draftingSheaf && (draftSheaf === 'direct-sum' || draftSheaf === 'tensor');
       creatingSheafBinary = inputIsCreateMode() && draftingSheaf && (draftSheaf === 'direct-sum' || draftSheaf === 'tensor');
-      editingSheafSelfSum = inputIsModifyMode() && draftingSheaf && draftSheaf === 'self-direct-sum';
-      creatingSheafSelfSum = inputIsCreateMode() && draftingSheaf && draftSheaf === 'self-direct-sum';
+      editingSheafSelfSum = inputIsModifyMode() && draftingSheaf && !!sheafSelfOperationType(draftSheaf);
+      creatingSheafSelfSum = inputIsCreateMode() && draftingSheaf && !!sheafSelfOperationType(draftSheaf);
       editingSheafDual = inputIsModifyMode() && draftingSheaf && draftSheaf === 'dual';
       creatingSheafDual = inputIsCreateMode() && draftingSheaf && draftSheaf === 'dual';
       editingSheafInternalHom = inputIsModifyMode() && draftingSheaf && draftSheaf === 'internal-hom';
@@ -15089,9 +15142,11 @@
       syncDefaultRank(true);
       syncDefaultSheafName();
     }
-    const selfSumOption = refs.sheafType?.querySelector?.('option[value="self-direct-sum"]');
-    if (selfSumOption) selfSumOption.disabled = !canSelfSumSheaf;
-    if (!canSelfSumSheaf && draftSheaf === 'self-direct-sum' && !editingSheafSelfSum) {
+    ['self-direct-sum', 'self-tensor-product'].forEach((type) => {
+      const option = refs.sheafType?.querySelector?.(`option[value="${type}"]`);
+      if (option) option.disabled = !canSelfSumSheaf;
+    });
+    if (!canSelfSumSheaf && sheafSelfOperationType(draftSheaf) && !editingSheafSelfSum) {
       refs.sheafType.value = 'abstract';
       draftSheaf = 'abstract';
       clearSheafSelfSumDraft();
@@ -19165,6 +19220,7 @@
   function classStepHasBasicConstructionRule(type) {
     return type === 'direct-sum'
       || type === 'self-direct-sum'
+      || type === 'self-tensor-product'
       || type === 'dual'
       || type === 'tensor'
       || type === 'pullback';
@@ -19218,10 +19274,13 @@
         ? buildDirectSumBundle(d, sheaf, left, right)
         : buildTensorBundle(d, sheaf, left, right);
     }
-    if (construction.type === 'self-direct-sum') {
+    if (sheafSelfOperationType(construction.type)) {
       const parentObject = state.sheaves.find((item) => item.id === construction.sheafId);
       if (!parentObject) return null;
-      return buildSelfDirectSumBundle(d, sheaf, classStepFormalBundleForSheafObject(parentObject, geometry, d), construction.multiplicity);
+      const parent = classStepFormalBundleForSheafObject(parentObject, geometry, d);
+      return construction.type === 'self-tensor-product'
+        ? buildSelfTensorBundle(d, sheaf, parent, construction.multiplicity)
+        : buildSelfDirectSumBundle(d, sheaf, parent, construction.multiplicity);
     }
     if (construction.type === 'dual') {
       const parentObject = state.sheaves.find((item) => item.id === construction.sheafId);
@@ -19255,6 +19314,7 @@
   function classStepConstructionSourceLabel(type) {
     if (type === 'direct-sum') return 'Direct sum';
     if (type === 'self-direct-sum') return 'Direct sum';
+    if (type === 'self-tensor-product') return 'Tensor product';
     if (type === 'dual') return 'Dual';
     if (type === 'tensor') return 'Tensor product';
     if (type === 'pullback') return 'Pullback';
@@ -19270,9 +19330,14 @@
         ? `\\operatorname{ch}(${subject})=\\operatorname{ch}(${left})+\\operatorname{ch}(${right})`
         : `c(${subject})=c(${left})c(${right})`;
     }
-    if (construction.type === 'self-direct-sum') {
+    if (sheafSelfOperationType(construction.type)) {
       const [parent] = classStepConstructionTermLabels([construction.sheafId]);
       const n = normalizeSelfSumMultiplicity(construction.multiplicity);
+      if (construction.type === 'self-tensor-product') {
+        return family === 'character'
+          ? `\\operatorname{ch}(${subject})=\\operatorname{ch}(${parent})^{${n}}`
+          : `c(${subject})=c\\left(\\operatorname{ch}(${parent})^{${n}}\\right)`;
+      }
       return family === 'character'
         ? `\\operatorname{ch}(${subject})=${n}\\operatorname{ch}(${parent})`
         : `c(${subject})=c(${parent})^{${n}}`;
@@ -22090,11 +22155,13 @@
         ? buildDirectSumBundle(geometry.dim, sheaf, left, right)
         : buildTensorBundle(geometry.dim, sheaf, left, right);
     }
-    if (construction.type === 'self-direct-sum') {
+    if (sheafSelfOperationType(construction.type)) {
       const parentObject = state.sheaves.find((item) => item.id === construction.sheafId);
       if (!parentObject) return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
       const parent = buildSourceSheafBundle(geometry, parentObject);
-      return buildSelfDirectSumBundle(geometry.dim, sheaf, parent, construction.multiplicity);
+      return construction.type === 'self-tensor-product'
+        ? buildSelfTensorBundle(geometry.dim, sheaf, parent, construction.multiplicity)
+        : buildSelfDirectSumBundle(geometry.dim, sheaf, parent, construction.multiplicity);
     }
     if (construction.type === 'dual') {
       const parentObject = state.sheaves.find((item) => item.id === construction.sheafId);
@@ -22727,6 +22794,16 @@
     return buildBundleFromCh(chComps, selfSumRankLatex(parent, n), selfSumRankPlain(parent, n), sheaf.labelLatex, sheaf.labelPlain);
   }
 
+  function buildSelfTensorBundle(d, sheaf, parent, multiplicity) {
+    const n = normalizeSelfSumMultiplicity(multiplicity);
+    const rank = rankAsDegreeZeroPoly(parent, `${constructionSafeId(sheaf.labelPlain)}SelfTensorRank`);
+    const totalCharacter = rank.add(positiveTotal(parent.chComps, d)).truncate(d);
+    const tensorCharacter = polyPower(totalCharacter, n, d);
+    const chComps = zeroComponentArray(d);
+    for (let i = 1; i <= d; i++) chComps[i] = homogeneousPart(tensorCharacter, i);
+    return buildBundleFromCh(chComps, selfTensorRankLatex(parent, n), selfTensorRankPlain(parent, n), sheaf.labelLatex, sheaf.labelPlain);
+  }
+
   function buildDualBundle(d, sheaf, parent) {
     const chComps = zeroComponentArray(d);
     for (let i = 1; i <= d; i += 1) {
@@ -22832,6 +22909,20 @@
     if (/^-?\d+$/.test(rank)) return String(Number(rank) * multiplicity);
     if (multiplicity === 1) return rank;
     return `${multiplicity}*(${rank})`;
+  }
+
+  function selfTensorRankLatex(parent, multiplicity) {
+    const rank = parent.rankLatex || parent.rankPlain || 'r';
+    if (/^-?\d+$/.test(parent.rankPlain || '')) return bigintPow(BigInt(parent.rankPlain), multiplicity).toString();
+    if (multiplicity === 1) return rank;
+    return `${rankLatexTerm(parent)}^{${multiplicity}}`;
+  }
+
+  function selfTensorRankPlain(parent, multiplicity) {
+    const rank = parent.rankPlain || 'r';
+    if (/^-?\d+$/.test(rank)) return bigintPow(BigInt(rank), multiplicity).toString();
+    if (multiplicity === 1) return rank;
+    return `(${rank})^${multiplicity}`;
   }
 
   function rankLatexTerm(bundle) {
@@ -26312,6 +26403,10 @@
       if (refs.hodgeQuery) refs.hodgeQuery.hidden = true;
       refs.hodgeChart.hidden = true;
       refs.hodgeChart.innerHTML = '';
+      if (refs.hodgeChernNumbers) {
+        refs.hodgeChernNumbers.hidden = true;
+        refs.hodgeChernNumbers.innerHTML = '';
+      }
       refs.hodgeMessage.hidden = false;
       refs.hodgeMessage.textContent = hodgeChartEmptyMessage();
     }
@@ -26588,6 +26683,7 @@
           ${connectorCells.join('')}${boardCells.join('')}
         </div>
       </div>`;
+    renderHodgeChernNumbers(result);
     refs.hodgeMessage.textContent = result.hodge.message;
   }
 
@@ -26601,6 +26697,10 @@
       refs.hodgeChart.hidden = true;
       refs.hodgeChart.innerHTML = '';
       refs.hodgeChart.setAttribute('aria-expanded', 'false');
+    }
+    if (refs.hodgeChernNumbers) {
+      refs.hodgeChernNumbers.hidden = true;
+      refs.hodgeChernNumbers.innerHTML = '';
     }
     if (refs.hodgeQuery) refs.hodgeQuery.hidden = !result.hodge.queryAvailable;
     if (refs.hodgeMessage) {
@@ -26747,6 +26847,99 @@
     return formatFractionLatex(total);
   }
 
+  function renderHodgeChernNumbers(result) {
+    if (!refs.hodgeChernNumbers) return;
+    const numbers = hodgeChernNumberDisplays(result);
+    if (!numbers.length) {
+      refs.hodgeChernNumbers.hidden = true;
+      refs.hodgeChernNumbers.innerHTML = '';
+      return;
+    }
+    refs.hodgeChernNumbers.hidden = false;
+    refs.hodgeChernNumbers.innerHTML = numbers.map((item) => `
+      <span class="hodge-chern-number">
+        <span>\\(${item.label}\\)</span>
+        <span>=</span>
+        <strong>\\(${item.value}\\)</strong>
+      </span>
+    `).join('');
+    typeset(refs.hodgeChernNumbers);
+  }
+
+  function hodgeChernNumberDisplays(result) {
+    const d = result?.geometry?.dim;
+    if (!Number.isInteger(d) || !hodgeEntriesHaveShape(result?.hodge?.entries, d)) return [];
+    const topChern = hodgeTopChernExpression(result.hodge.entries, d);
+    const out = [{ label: `c_{${d}}`, value: topChern }];
+    if (d <= 1) return out;
+    const mixed = hodgeC1CnMinus1Expression(result.hodge.entries, d);
+    if (mixed) out.push({ label: `c_1c_{${d - 1}}`, value: mixed });
+    return out;
+  }
+
+  function hodgeTopChernExpression(entries, d) {
+    const chiValues = hodgeChiNumericValues(entries, d);
+    if (chiValues) {
+      return formatFractionLatex(chiValues.reduce((sum, value, p) => (
+        sum.add(value.mul(fraction(p % 2 === 0 ? 1 : -1)))
+      ), Fraction.zero()));
+    }
+    return hodgeChiLinearExpression(d, (p) => fraction(p % 2 === 0 ? 1 : -1));
+  }
+
+  function hodgeEulerExpression(entries, d) {
+    const terms = [];
+    for (let p = 0; p <= d; p += 1) {
+      for (let q = 0; q <= d; q += 1) {
+        terms.push({ ...entries[p][q], coeff: fraction((p + q) % 2 === 0 ? 1 : -1) });
+      }
+    }
+    return formatHodgeExpressionLatex(terms);
+  }
+
+  function hodgeC1CnMinus1Expression(entries, d) {
+    if (d <= 0) return null;
+    const coefficient = (p) => {
+      const squareTerm = fraction(6 * (2 * p - d) * (2 * p - d), 4);
+      const coeff = squareTerm.sub(fraction(d, 2));
+      return coeff.mul(fraction(p % 2 === 0 ? 1 : -1));
+    };
+    const chiValues = hodgeChiNumericValues(entries, d);
+    if (chiValues) {
+      return formatFractionLatex(chiValues.reduce((sum, value, p) => (
+        sum.add(value.mul(coefficient(p)))
+      ), Fraction.zero()));
+    }
+    return hodgeChiLinearExpression(d, coefficient);
+  }
+
+  function hodgeChiNumericValues(entries, d) {
+    const values = [];
+    for (let p = 0; p <= d; p += 1) {
+      let total = Fraction.zero();
+      for (let q = 0; q <= d; q += 1) {
+        const value = parseSimpleLatexNumber(entries[p][q]?.latex);
+        if (value == null) return null;
+        total = total.add(value.mul(fraction(q % 2 === 0 ? 1 : -1)));
+      }
+      values[p] = total;
+    }
+    return values;
+  }
+
+  function hodgeChiLinearExpression(d, coefficientForP) {
+    const terms = [];
+    for (let p = 0; p <= d; p += 1) {
+      const coeff = coefficientForP(p);
+      if (!coeff.isZero()) terms.push({ latex: hodgeChiSymbolLatex(p), coeff });
+    }
+    return formatHodgeExpressionLatex(terms);
+  }
+
+  function hodgeChiSymbolLatex(p) {
+    return `\\chi(\\Omega_X^{${p}})`;
+  }
+
   function hodgeBettiExpressions(entries, d) {
     const out = [];
     for (let k = 0; k <= 2 * d; k++) {
@@ -26778,15 +26971,16 @@
     let numeric = Fraction.zero();
     const symbolic = new Map();
     for (const term of terms) {
-      const sign = term.sign < 0 ? -1 : 1;
+      const coeff = term.coeff ? Fraction.from(term.coeff) : fraction(term.sign < 0 ? -1 : 1);
+      if (coeff.isZero()) continue;
       const numericValue = parseSimpleLatexNumber(term.latex);
       if (numericValue) {
-        numeric = numeric.add(numericValue.mul(fraction(sign)));
+        numeric = numeric.add(numericValue.mul(coeff));
         continue;
       }
       if (!term.latex || term.latex === '0') continue;
       const current = symbolic.get(term.latex) || Fraction.zero();
-      symbolic.set(term.latex, current.add(fraction(sign)));
+      symbolic.set(term.latex, current.add(coeff));
     }
     const pieces = [];
     if (!numeric.isZero()) pieces.push({ coeff: numeric, body: '' });
@@ -29176,7 +29370,7 @@
         out.dualSheafId = sanitizePresetId(construction.dualSheafId);
         out.tensorDefaultName = sanitizeMathLabel(construction.tensorDefaultName, '');
       }
-    } else if (ownerKind === 'sheaf' && type === 'self-direct-sum') {
+    } else if (ownerKind === 'sheaf' && sheafSelfOperationType(type)) {
       out.sheafId = sanitizePresetId(construction.sheafId);
       out.multiplicity = normalizeSelfSumMultiplicity(construction.multiplicity);
     } else if (ownerKind === 'sheaf' && type === 'dual') {
@@ -29804,7 +29998,10 @@
     if (base) parts.push(`\\text{base}=${sanitizeMathLabel(base.name, 'X')}`);
     if (sheaf.type === 'twist') parts.push(`r=${normalizedInt(sheaf.twist, -24, 24, 1)}`);
     if (sheaf.type === 'divisor-line' && base) parts.push(`D=${divisorLatexFromCoefficients(sheaf.divisorCoefficients, geometryFromVariety(base), '0')}`);
-    if (sheaf.construction?.type === 'self-direct-sum') parts.push(`n=${normalizeSelfSumMultiplicity(sheaf.construction.multiplicity)}`);
+    if (sheafSelfOperationType(sheaf.construction?.type)) {
+      const label = sheaf.construction.type === 'self-tensor-product' ? '\\text{tensor exponent}' : 'n';
+      parts.push(`${label}=${normalizeSelfSumMultiplicity(sheaf.construction.multiplicity)}`);
+    }
     if (sheaf.construction?.type === 'schur') parts.push(`\\lambda=${schurPartitionLatex(sheaf.construction.partition)}`);
     parts.push(`\\text{basis}=\\text{${basisLabel(sheaf.basis)}}`);
     return parts.join(',\\ ');
@@ -29860,7 +30057,10 @@
     if (base) parts.push(`base ${latexToPlain(base.name)}`);
     if (sheaf.type === 'twist') parts.push(`twist ${normalizedInt(sheaf.twist, -24, 24, 1)}`);
     if (sheaf.type === 'divisor-line' && base) parts.push(`D ${divisorPlainFromCoefficients(sheaf.divisorCoefficients, geometryFromVariety(base), '0')}`);
-    if (sheaf.construction?.type === 'self-direct-sum') parts.push(`multiplicity ${normalizeSelfSumMultiplicity(sheaf.construction.multiplicity)}`);
+    if (sheafSelfOperationType(sheaf.construction?.type)) {
+      const label = sheaf.construction.type === 'self-tensor-product' ? 'tensor exponent' : 'multiplicity';
+      parts.push(`${label} ${normalizeSelfSumMultiplicity(sheaf.construction.multiplicity)}`);
+    }
     if (sheaf.construction?.type === 'schur') parts.push(`diagram ${formatSchurPartitionInput(sheaf.construction.partition)}`);
     parts.push(`basis ${basisLabel(sheaf.basis)}`);
     return parts.join('; ');
@@ -29899,6 +30099,7 @@
     if (type === 'divisor-line') return 'divisor line bundle';
     if (isUniversalBundleSheafType(type)) return 'universal bundle';
     if (type === 'self-direct-sum') return 'self direct sum';
+    if (type === 'self-tensor-product') return 'self tensor product';
     if (type === 'dual') return 'dual sheaf';
     if (type === 'internal-hom') return 'internal Hom';
     if (type === 'schur') return 'Schur functor';
@@ -29973,6 +30174,7 @@
       lines.push('% requires \\usepackage{tikz-cd}');
       lines.push(`% X: ${result.geometry.labelPlain}`);
       lines.push(exportHodgeTikzcd(result, state.hodgeExpanded));
+      lines.push(...exportHodgeChernNumberLines(result, 'latex'));
       return lines.join('\n');
     }
     if (format === 'sage') {
@@ -29980,12 +30182,14 @@
       lines.push(`# X: ${result.geometry.labelPlain}`);
       lines.push(...exportHodgeLines(result, 'plain'));
       if (state.hodgeExpanded) lines.push(...exportExpandedHodgeLines(result, 'plain'));
+      lines.push(...exportHodgeChernNumberLines(result, 'plain', '# '));
       return lines.join('\n');
     }
     lines.push('Sheaf Calculator: Hodge numbers');
     lines.push(`X: ${result.geometry.labelPlain}`);
     lines.push(...exportHodgeLines(result, 'plain'));
     if (state.hodgeExpanded) lines.push(...exportExpandedHodgeLines(result, 'plain'));
+    lines.push(...exportHodgeChernNumberLines(result, 'plain'));
     return lines.join('\n');
   }
 
@@ -30111,6 +30315,15 @@
       lines.push(format === 'latex' ? `% b_{${k}}: ${betti}` : `b_${k}: ${latexToPlain(betti)}`);
     });
     return lines;
+  }
+
+  function exportHodgeChernNumberLines(result, format, prefix = '') {
+    const numbers = hodgeChernNumberDisplays(result);
+    if (!numbers.length) return [];
+    if (format === 'latex') {
+      return ['', '% Hodge-derived Chern numbers', ...numbers.map((item) => `\\[${item.label}=${item.value}\\]`)];
+    }
+    return ['', `${prefix}Hodge-derived Chern numbers`, ...numbers.map((item) => `${prefix}${latexToPlain(item.label)} = ${latexToPlain(item.value)}`)];
   }
 
   function copyExport() {

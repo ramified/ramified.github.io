@@ -169,6 +169,7 @@
     .sheaf-chart-actions[hidden],
     .hodge-card-actions[hidden],
     .hodge-query[hidden],
+    .hodge-chern-numbers[hidden],
     .sheaf-class-scroll[hidden],
     .sheaf-cohomology-chart[hidden],
     .hodge-grid[hidden],
@@ -1812,6 +1813,35 @@
       font-size: 0.86rem;
     }
 
+    .hodge-chern-numbers {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px 14px;
+      align-items: center;
+      margin: 4px 8px 8px;
+      padding-top: 8px;
+      border-top: 1px dotted var(--border);
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .hodge-chern-number {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .hodge-chern-number strong {
+      color: var(--text);
+      font-weight: 650;
+    }
+
+    .hodge-chern-number mjx-container {
+      max-width: none;
+      overflow: visible;
+    }
+
     .sheaf-badge {
       display: inline-flex;
       align-items: center;
@@ -2250,6 +2280,7 @@
               <option value="universal-bundle" id="sheaf-universal-bundle-option">Universal bundle</option>
               <option value="direct-sum">Direct sum</option>
               <option value="self-direct-sum">Self direct sum</option>
+              <option value="self-tensor-product">Self tensor product</option>
               <option value="dual">Dual sheaf</option>
               <option value="internal-hom">Internal Hom</option>
               <option value="ideal-sheaf">Ideal sheaf</option>
@@ -2292,7 +2323,7 @@
             <span class="input-label">parent</span>
             <div class="sheaf-map-formula-picker">
               <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-self-sum-parent-button" type="button" data-sheaf-self-sum-pick="parent">sheaf</button>
-              <span class="sheaf-map-formula-mark">^{&oplus;</span>
+              <span class="sheaf-map-formula-mark" id="sheaf-self-sum-symbol">^{&oplus;</span>
               <input id="sheaf-self-sum-count" class="sheaf-input sheaf-self-sum-count" type="number" min="1" max="99" value="2" aria-label="self direct sum multiplicity">
               <span class="sheaf-map-formula-mark">}</span>
             </div>
@@ -2741,6 +2772,7 @@
           <span class="hodge-query-output" id="hodge-query-output"></span>
         </div>
         <div id="hodge-chart" class="hodge-grid" role="button" tabindex="0" aria-expanded="false"></div>
+        <div id="hodge-chern-numbers" class="hodge-chern-numbers" hidden></div>
         <div id="hodge-message" class="hint"></div>
       </div>
     </section>
