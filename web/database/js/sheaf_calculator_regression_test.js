@@ -15,6 +15,7 @@ function loadCalculator() {
     buildBundleForSheaf,
     buildCharacteristicClasses,
     buildHodgeNumbers,
+    buildPolyvectorParallelogram,
     buildSheafCohomology,
     hodgeEntryAt,
     applyHomologyRules,
@@ -36,17 +37,40 @@ function loadCalculator() {
     collectClassStepRuleCandidates,
     classStepMaterializeRule,
     renderClassStepPanel,
+    renderClassStepCalculationLatex,
+    classStepHistoryPlain,
+    toggleClassStepHistoryLine,
     stopClassStepSession,
     applySelectedClassStepRules,
+    undoLastClassStep,
     applyClassStepRulesToPoly,
     applyOneHomologyRuleOnce,
     buildClassRowsFromStepSession,
     rememberClassStepComponents,
     syncClassStepAvailability,
     toggleClassStepLayout,
+    renderClassFormulaBuilder,
+    renderHodgePolyvectorParallelogram,
+    renderBettiTableChart,
+    bettiTableAvailableForGeometry,
+    buildCompleteIntersectionBettiTable,
+    setClassFormulaBuilderVariety,
+    classFormulaHomologyTokenDefs,
+    classFormulaSheafTokenDefs,
+    classFormulaSheafTokenForSelection,
+    classFormulaMapTokenDefs,
+    classFormulaFunctorTemplateToken,
+    classFormulaOperatorToken,
+    validateClassFormulaBuilder,
+    checkClassFormulaBuilder,
+    startClassStepSessionFromFormulaBuilder,
+    createClassFormulaStepSession,
     polyFromPowers,
     pullbackPolynomial,
     pushforwardPolynomialByDegree,
+    mapPushforwardClassDefinitions,
+    mapPushforwardSourceKeyHasDirectAutomaticFormula,
+    directAutomaticPushforwardSourceKeyPolynomial,
     formatPolyPlain,
     mapHomologyClassDefinitions,
     homologyClassDefinitions,
@@ -75,7 +99,9 @@ function loadCalculator() {
     sheafHomologyRuleForDef,
     renderSheafHomologyLhs,
     renderSheafHomologySpecialAction,
+    ensureAbelJacobiKnownHomologyRules,
     HOMOLOGY_HYPERPLANE_CLASS,
+    HOMOLOGY_UNIT_CLASS,
     HOMOLOGY_POINT_CLASS,
     HOMOLOGY_BRANCH_DIVISOR_CLASS,
     HOMOLOGY_RAMIFICATION_DIVISOR_CLASS,
@@ -145,6 +171,30 @@ function chernPlain(rows) {
 
 function characterPlain(rows) {
   return rows.find((row) => row.key === 'character')?.plain || '';
+}
+
+function testStepBuilderMarkupIsBelowCanvasAndClassChartHasNoStepButton() {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'sheaf_calculator.html'), 'utf8');
+  assert(!html.includes('id="step-classes"'));
+  assert(!html.includes('id="class-step-entry"'));
+  const hostIndex = html.indexOf('<section id="class-step-wide-host">');
+  const asideIndex = html.indexOf('<aside class="side" id="cards">');
+  const classCardIndex = html.indexOf('<section class="card collapsed" id="class-card"');
+  const stepCardIndex = html.indexOf('id="class-step-card"');
+  assert(hostIndex > 0);
+  assert(stepCardIndex > hostIndex && stepCardIndex < asideIndex);
+  assert(classCardIndex > asideIndex);
+  assert(html.includes('class="card collapsed sheaf-step-card wide" id="class-step-card"'));
+  assert(html.includes('Step-by-Step Formula'));
+  assert(!html.includes('Step-by-Step Characteristic Class'));
+  assert(html.includes('id="class-formula-variety"'));
+  assert(html.includes('id="class-formula-compute"'));
+  assert(html.includes('id="class-formula-add-sheaf-class"'));
+  assert(html.includes('class="sheaf-step-token-button" id="class-formula-add-sheaf-class"'));
+  assert(html.includes('id="class-formula-class-family"'));
+  assert(html.includes('id="class-formula-class-degree"'));
+  assert(html.includes('id="class-formula-class-sheaf"'));
+  assert(!html.includes('id="class-formula-sheaf-buttons"'));
 }
 
 function testAbelianSpecialSheavesAreTrivial() {
@@ -1021,6 +1071,195 @@ function testTwelveDimensionalHodgeStillRendersFullTable() {
   assert.strictEqual(hodge.queryOnly, undefined);
   assert.strictEqual(hodge.entries.length, 13);
   assert.strictEqual(hodge.entries[12][12].plain, '1');
+}
+
+function testPolyvectorParallelogramForProjectiveSpace() {
+  const api = loadCalculator();
+  const geometry = api.geometryFromVariety({ id: 'P2', type: 'projective', dim: '2', name: '\\mathbb{P}^{2}' });
+  const hodge = api.buildHodgeNumbers(geometry);
+  const polyvector = api.buildPolyvectorParallelogram({ geometry, hodge });
+  assert(polyvector);
+  assert.strictEqual(polyvector.entries[0][0].plain, '1');
+  assert.strictEqual(polyvector.entries[0][1].plain, '8');
+  assert.strictEqual(polyvector.entries[0][2].plain, '10');
+  assert.strictEqual(polyvector.entries[1][1].plain, '0');
+}
+
+function testPolyvectorParallelogramForCurves() {
+  const api = loadCalculator();
+  const cases = [
+    ['P1', { id: 'P1', type: 'projective', dim: '1', name: '\\mathbb{P}^{1}' }, ['1', '3', '0', '0']],
+    ['E', { id: 'E', type: 'curve', genus: '1', name: 'E' }, ['1', '1', '1', '0']],
+    ['C2', { id: 'C2', type: 'curve', genus: '2', name: 'C' }, ['1', '0', '2', '3']]
+  ];
+  cases.forEach(([, variety, expected]) => {
+    const geometry = api.geometryFromVariety(variety);
+    const hodge = api.buildHodgeNumbers(geometry);
+    const polyvector = api.buildPolyvectorParallelogram({ geometry, hodge });
+    assert(polyvector, variety.id);
+    assert(polyvector.message.includes('Curve polyvectors'));
+    assert.deepStrictEqual([
+      polyvector.entries[0][0].plain,
+      polyvector.entries[0][1].plain,
+      polyvector.entries[1][0].plain,
+      polyvector.entries[1][1].plain
+    ], expected);
+  });
+}
+
+function testExpandedPolyvectorParallelogramShowsHochschildTotals() {
+  const api = loadCalculator();
+  const geometry = api.geometryFromVariety({ id: 'C2', type: 'curve', genus: '2', name: 'C' });
+  const hodge = api.buildHodgeNumbers(geometry);
+  api.state.hodgeExpanded = true;
+  api.refs.hodgePolyvector = { hidden: true, innerHTML: '' };
+  api.renderHodgePolyvectorParallelogram({ geometry, hodge });
+  assert.strictEqual(api.refs.hodgePolyvector.hidden, false);
+  assert(api.refs.hodgePolyvector.innerHTML.includes('hodge-polyvector-board is-expanded'));
+  assert(api.refs.hodgePolyvector.innerHTML.includes('title="chi(lambda^0 T_X)">\\(-1\\)'));
+  assert(api.refs.hodgePolyvector.innerHTML.includes('title="chi(lambda^1 T_X)">\\(-3\\)'));
+  assert(api.refs.hodgePolyvector.innerHTML.includes('title="HH^0">\\(1\\)'));
+  assert(api.refs.hodgePolyvector.innerHTML.includes('title="HH^1">\\(2\\)'));
+  assert(api.refs.hodgePolyvector.innerHTML.includes('title="HH^2">\\(3\\)'));
+  assert(!api.refs.hodgePolyvector.innerHTML.includes('\\mathrm{HH}^{0}=1'));
+  assert(!api.refs.hodgePolyvector.innerHTML.includes('\\chi(\\lambda^{0}\\mathcal{T}_X)=-1'));
+}
+
+function testPolyvectorParallelogramUsesHodgeCellSizeScale() {
+  const api = loadCalculator();
+  const geometry = api.geometryFromVariety({ id: 'C2', type: 'curve', genus: '2', name: 'C' });
+  const hodge = api.buildHodgeNumbers(geometry);
+  api.refs.hodgePolyvector = { hidden: true, innerHTML: '' };
+  api.state.hodgeCellSize = 20;
+  api.renderHodgePolyvectorParallelogram({ geometry, hodge });
+  assert(api.refs.hodgePolyvector.innerHTML.includes('style="--poly-cell:38px;--poly-scale:1;--poly-cols:2;"'));
+  api.state.hodgeCellSize = 30;
+  api.renderHodgePolyvectorParallelogram({ geometry, hodge });
+  assert(api.refs.hodgePolyvector.innerHTML.includes('style="--poly-cell:57px;--poly-scale:1.5;--poly-cols:2;"'));
+}
+
+function testExpandedPolyvectorParallelogramUsesSymbolsForSymbolicTotals() {
+  const api = loadCalculator();
+  const geometry = api.geometryFromVariety({ id: 'S', type: 'abstract', dim: '2', name: 'S' });
+  const hodge = api.buildHodgeNumbers(geometry);
+  api.state.hodgeExpanded = true;
+  api.refs.hodgePolyvector = { hidden: true, innerHTML: '' };
+  api.renderHodgePolyvectorParallelogram({ geometry, hodge });
+  assert(api.refs.hodgePolyvector.innerHTML.includes('\\chi(\\mathcal{T}_X^{\\wedge^{0}})'));
+  assert(api.refs.hodgePolyvector.innerHTML.includes('\\chi(\\mathcal{T}_X^{\\wedge^{1}})'));
+  assert(api.refs.hodgePolyvector.innerHTML.includes('\\mathrm{HH}^{0}'));
+  assert(api.refs.hodgePolyvector.innerHTML.includes('\\mathrm{HH}^{1}'));
+  assert(!api.refs.hodgePolyvector.innerHTML.includes('g^{0,0} - g^{1,0}'));
+}
+
+function testPolyvectorParallelogramForCalabiYauCompleteIntersectionUsesHodgeMirror() {
+  const api = loadCalculator();
+  const geometry = api.geometryFromVariety({
+    id: 'Q',
+    type: 'complete-intersection',
+    dim: '3',
+    ciDegrees: '5',
+    name: 'X'
+  });
+  const hodge = api.buildHodgeNumbers(geometry);
+  const polyvector = api.buildPolyvectorParallelogram({ geometry, hodge });
+  assert(polyvector);
+  assert(polyvector.message.includes('trivial canonical'));
+  assert.strictEqual(polyvector.entries[1][1].plain, hodge.entries[2][1].plain);
+  assert.strictEqual(polyvector.entries[1][2].plain, hodge.entries[1][1].plain);
+}
+
+function testCompleteIntersectionBettiTableUsesKoszulDegrees() {
+  const api = loadCalculator();
+  const geometry = api.geometryFromVariety({
+    id: 'X23',
+    type: 'complete-intersection',
+    dim: '2',
+    ciDegrees: '2,3',
+    name: 'X'
+  });
+  assert.strictEqual(api.bettiTableAvailableForGeometry(geometry), true);
+  const table = api.buildCompleteIntersectionBettiTable(geometry);
+  assert.deepStrictEqual(Array.from(table.columns), [0, 1, 2]);
+  assert.deepStrictEqual(Array.from(table.rows, (row) => row.shift), [0, 1, 2, 3]);
+  assert.deepStrictEqual(Array.from(table.rows, (row) => Array.from(row.values, String)), [
+    ['1', '0', '0'],
+    ['0', '1', '0'],
+    ['0', '1', '0'],
+    ['0', '0', '1']
+  ]);
+}
+
+function testBettiTableFillsMissingRowsForSparseCompleteIntersectionDegrees() {
+  const api = loadCalculator();
+  const geometry = api.geometryFromVariety({
+    id: 'X48',
+    type: 'complete-intersection',
+    dim: '2',
+    ciDegrees: '4,8',
+    name: 'X'
+  });
+  const table = api.buildCompleteIntersectionBettiTable(geometry);
+  assert.deepStrictEqual(Array.from(table.rows, (row) => row.shift), Array.from({ length: 11 }, (_, index) => index));
+  assert.deepStrictEqual(Array.from(table.rows[0].values, String), ['1', '0', '0']);
+  assert.deepStrictEqual(Array.from(table.rows[3].values, String), ['0', '1', '0']);
+  assert.deepStrictEqual(Array.from(table.rows[4].values, String), ['0', '0', '0']);
+  assert.deepStrictEqual(Array.from(table.rows[7].values, String), ['0', '1', '0']);
+  assert.deepStrictEqual(Array.from(table.rows[10].values, String), ['0', '0', '1']);
+}
+
+function testProjectiveSpaceBettiTableIsTrivialCoordinateRing() {
+  const api = loadCalculator();
+  const projective = api.geometryFromVariety({ id: 'P2', type: 'projective', dim: '2', name: '\\mathbb{P}^2' });
+  assert.strictEqual(api.bettiTableAvailableForGeometry(projective), true);
+  const table = api.buildCompleteIntersectionBettiTable(projective);
+  assert.deepStrictEqual(Array.from(table.columns), [0]);
+  assert.deepStrictEqual(Array.from(table.rows, (row) => row.shift), [0]);
+  assert.deepStrictEqual(Array.from(table.rows[0].values, String), ['1']);
+  assert(table.message.includes('beta_{0,0}=1'));
+}
+
+function testBettiTableRevealIsLazyAndExplainsSymbols() {
+  const api = loadCalculator();
+  const geometry = api.geometryFromVariety({
+    id: 'X23',
+    type: 'complete-intersection',
+    dim: '2',
+    ciDegrees: '2,3',
+    name: 'X'
+  });
+  api.refs.bettiTableChart = { hidden: true, innerHTML: '' };
+  api.refs.bettiTableMessage = { textContent: '' };
+  api.state.revealedCharts.betti = false;
+  api.renderBettiTableChart({ geometry });
+  assert.strictEqual(api.refs.bettiTableChart.hidden, true);
+  assert.strictEqual(api.refs.bettiTableChart.innerHTML, '');
+  api.state.revealedCharts.betti = true;
+  api.renderBettiTableChart({ geometry });
+  assert.strictEqual(api.refs.bettiTableChart.hidden, false);
+  assert(api.refs.bettiTableChart.innerHTML.includes('class="betti-table"'));
+  assert(api.refs.bettiTableChart.innerHTML.includes('\\beta_{i,j}=\\dim_k'));
+  assert(api.refs.bettiTableChart.innerHTML.includes('<th>\\(j-i\\backslash i\\)</th>'));
+  assert(api.refs.bettiTableMessage.textContent.includes('Koszul Betti table'));
+}
+
+function testBettiTableFallbackShowsSymbolicTemplateForUnsupportedVariety() {
+  const api = loadCalculator();
+  const geometry = api.geometryFromVariety({ id: 'A', type: 'abstract', dim: '3', name: 'X' });
+  assert.strictEqual(api.bettiTableAvailableForGeometry(geometry), false);
+  api.refs.bettiTableChart = { hidden: true, innerHTML: '' };
+  api.refs.bettiTableMessage = { textContent: '' };
+  api.state.revealedCharts.betti = true;
+  api.renderBettiTableChart({ geometry });
+  assert.strictEqual(api.refs.bettiTableChart.hidden, false);
+  assert(api.refs.bettiTableChart.innerHTML.includes('betti-table is-symbolic'));
+  assert(api.refs.bettiTableChart.innerHTML.includes('\\beta_{0,0}'));
+  assert(api.refs.bettiTableChart.innerHTML.includes('\\beta_{3,5}'));
+  assert(api.refs.bettiTableMessage.textContent.includes('not well-defined'));
+  api.state.inputMode = 'modify';
+  api.state.activeVarietyId = 'A';
+  api.state.varieties = [{ id: 'A', type: 'abstract', dim: '3', name: 'X' }];
+  assert.strictEqual(api.chartRevealAvailability({ geometry, hodge: { entries: [] } }).betti, true);
 }
 
 function testStraightMapIsDefaultNoControlCase() {
@@ -2523,12 +2762,45 @@ function testClassStepFormalRanksAreSheafSpecific() {
     const sheaf = api.sheafFromObject(sheafObject, geometry);
     return api.createClassStepSession(api.buildClassStepFallbackResult(geometry, sheaf, { message: 'test' }), 'character', 0);
   };
-  assert.strictEqual(api.formatPolyPlain(sessionFor(api.state.sheaves[0]).rankComponent), 'r(E)');
+  const eSession = sessionFor(api.state.sheaves[0]);
+  assert.strictEqual(api.formatPolyPlain(eSession.rankComponent), 'r(E)');
+  assert([...eSession.rankComponent.terms.keys()][0].startsWith('sheaf_E_ch0'));
+  assert.strictEqual(api.VARS.get('sheaf_E_ch0').classStepDisplayPlain, 'ch_0(E)');
   assert.strictEqual(api.formatPolyPlain(sessionFor(api.state.sheaves[1]).rankComponent), 'r(F)');
-  assert.strictEqual(api.formatPolyPlain(sessionFor(api.state.sheaves[2]).rankComponent), '2');
+  const gSession = sessionFor(api.state.sheaves[2]);
+  assert.strictEqual(api.formatPolyPlain(gSession.rankComponent), 'r(G)');
+  assert([...gSession.rankComponent.terms.keys()][0].startsWith('sheaf_G_ch0'));
+  const gRank = api.collectClassStepRuleCandidates(gSession).find((candidate) => candidate.sourceLabel === 'rank');
+  assert(gRank);
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(gRank.rule)), '2');
 
   api.state.globalInvariants = [{ id: 'auto-r', type: 'rational-number', name: 'r', hasValue: true, value: '5', replaceWithValue: true }];
-  assert.strictEqual(api.formatPolyPlain(sessionFor(api.state.sheaves[0]).rankComponent), '5');
+  const eKnownSession = sessionFor(api.state.sheaves[0]);
+  assert.strictEqual(api.formatPolyPlain(eKnownSession.rankComponent), 'r(E)');
+  assert([...eKnownSession.rankComponent.terms.keys()][0].startsWith('sheaf_E_ch0'));
+  const eKnownRank = api.collectClassStepRuleCandidates(eKnownSession).find((candidate) => candidate.sourceLabel === 'rank');
+  assert(eKnownRank);
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(eKnownRank.rule)), '5');
+}
+
+function testClassStepSesAppliesRankAsCharacterZero() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '1', name: 'X' }];
+  api.state.sheaves = [
+    { id: 'A', type: 'abstract', basis: 'character', rank: 'a', name: 'A', baseVarietyId: 'X' },
+    { id: 'B', type: 'abstract', basis: 'character', rank: 'b', name: 'B', baseVarietyId: 'X', construction: { type: 'ses-term', role: 'middle', sequenceId: 'S' } },
+    { id: 'C', type: 'abstract', basis: 'character', rank: 'c', name: 'C', baseVarietyId: 'X' }
+  ];
+  api.state.sequences = [{ id: 'S', type: 'short-exact-sequence', sheafIds: ['A', 'B', 'C'], mapIds: [], baseVarietyId: 'X' }];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const sheaf = api.sheafFromObject(api.state.sheaves[1], geometry);
+  const result = api.buildClassStepFallbackResult(geometry, sheaf, { message: 'test' });
+  const session = api.createClassStepSession(result, 'character', 0);
+  const ses = api.collectClassStepRuleCandidates(session).find((candidate) => candidate.sourceLabel === 'SES');
+  assert(ses, api.collectClassStepRuleCandidates(session).map((candidate) => candidate.sourceLabel).join(','));
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(ses.rule)), 'r(A) + r(C)');
+  session.components[0] = api.applyClassStepRulesToPoly(session.components[0], ses.rules, geometry.dim, { oncePerRule: true, onePass: true });
+  assert.strictEqual(api.formatPolyPlain(session.components[0]), 'r(A) + r(C)');
 }
 
 function testClassStepDerivedCharacteristicTargets() {
@@ -2550,6 +2822,54 @@ function testClassStepDerivedCharacteristicTargets() {
   const segreRows = api.buildClassRowsFromStepSession(segreSession, api.classDisplayOptions(geometry, sheaf));
   assert.strictEqual(segreRows.length, 1);
   assert.strictEqual(segreRows[0].key, 'segre');
+}
+
+function testClassStepToddRuleStopsAtChernClasses() {
+  const api = loadCalculator();
+  api.state.varieties = [{
+    id: 'X',
+    type: 'abstract',
+    dim: '2',
+    name: 'X',
+    homology: {
+      classes: { unit: { symbol: '1' } },
+      customClasses: [
+        { id: api.tangentChernHomologyClassId(1), symbol: 'K', degree: 1, cohomologyDegree: 2 },
+        { id: 'A', symbol: 'A', degree: 1, cohomologyDegree: 2 }
+      ],
+      rules: []
+    }
+  }];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const defs = api.homologyClassDefinitions(geometry);
+  const tangentId = api.homologyDefVariableId(defs.find((def) => def.id === api.tangentChernHomologyClassId(1)), geometry);
+  const aId = api.homologyDefVariableId(defs.find((def) => def.id === 'A'), geometry);
+  geometry.homology.rules = [{
+    id: 'tangent-to-a',
+    enabled: true,
+    lhs: { powers: { [tangentId]: 1 } },
+    rhs: [{ coefficient: '1', powers: { [aId]: 1 } }]
+  }];
+  const session = {
+    geometry,
+    family: 'chern',
+    target: 'todd',
+    dimension: 2,
+    index: 1,
+    components: [api.polyFromPowers({}), api.polyFromPowers({}), api.polyFromPowers({})],
+    rankComponent: api.polyFromPowers({}),
+    bundleLabelLatex: 'E',
+    bundleLabelPlain: 'E',
+    displayOverrides: {}
+  };
+  const tdId = 'class_step_td_v_X_1';
+  api.VARS.set(tdId, { degree: 1, latex: '\\operatorname{td}_{1}(X)', plain: 'td_1(X)', classStepKind: 'formalTodd', geometryId: 'X', classStepDegree: 1 });
+  session.components[1] = api.polyFromPowers({ [tdId]: 1 });
+  const todd = api.collectClassStepRuleCandidates(session).find((candidate) => candidate.sourceLabel === 'Todd');
+  assert(todd);
+  const rhs = api.formatPolyPlain(api.homologyRuleRhsPoly(todd.rule));
+  assert(rhs.includes('c_1(X)'), rhs);
+  assert(!rhs.includes('A'), rhs);
 }
 
 function testClassStepDerivedTargetAppliesVisibleHomologyRule() {
@@ -2597,6 +2917,332 @@ function testClassStepDerivedTargetAppliesVisibleHomologyRule() {
   assert(after.includes('[p]'), after);
   assert(!after.includes('Theta^2'), after);
   assert.strictEqual(session.message, 'Applied selected rules.');
+}
+
+function testClassFormulaBuilderTokenSourcesAndValidation() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    {
+      id: 'X',
+      type: 'abstract',
+      dim: '2',
+      name: 'X',
+      homology: {
+        customClasses: [{ id: 'A', symbol: 'A', degree: 1, cohomologyDegree: 2 }],
+        rules: []
+      }
+    },
+    {
+      id: 'Y',
+      type: 'projective',
+      dim: '2',
+      name: 'Y',
+      homology: { classes: { hyperplane: { symbol: 'H' }, point: { symbol: '[p]' } } }
+    }
+  ];
+  api.state.sheaves = [
+    { id: 'E', type: 'abstract', basis: 'chern', rank: '2', name: 'E', baseVarietyId: 'X' },
+    { id: 'F', type: 'abstract', basis: 'chern', rank: '2', name: 'F', baseVarietyId: 'Y' }
+  ];
+  api.state.maps = [{ id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' }];
+  const xGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  api.setClassFormulaBuilderVariety('X');
+  api.state.activeHomologyTarget = { kind: 'map', id: 'f' };
+  const homologyTokens = api.classFormulaHomologyTokenDefs(xGeometry);
+  const sheafTokens = api.classFormulaSheafTokenDefs(xGeometry);
+  const mapTokens = api.classFormulaMapTokenDefs(xGeometry);
+  assert(homologyTokens.some((token) => token.plain === 'A'));
+  assert(!homologyTokens.some((token) => token.atomKind === 'map-pullback' || token.plain.includes('f^*')), homologyTokens.map((token) => token.plain).join(', '));
+  assert(sheafTokens.some((token) => token.plain === 'c_1(E)'));
+  assert(!sheafTokens.some((token) => token.plain.includes('F')));
+  assert(mapTokens.some((token) => token.type === 'functor-template' && token.operation === 'pullback' && token.sourceGeometryId === 'Y'));
+
+  const selectedTotal = api.classFormulaSheafTokenForSelection(xGeometry, 'E', 'chern', '');
+  assert.strictEqual(selectedTotal.plain, 'c(E)');
+  const selectedDegree = api.classFormulaSheafTokenForSelection(xGeometry, 'E', 'chern', '1');
+  assert.strictEqual(selectedDegree.plain, 'c_1(E)');
+  const missingSheaf = api.classFormulaSheafTokenForSelection(xGeometry, 'F', 'chern', '1');
+  assert.strictEqual(missingSheaf, null);
+
+  const a = homologyTokens.find((token) => token.plain === 'A');
+  api.state.classFormulaBuilder.tokens = [a, api.classFormulaOperatorToken('times'), a];
+  const valid = api.validateClassFormulaBuilder();
+  assert.strictEqual(valid.ok, true, valid.message);
+  assert.strictEqual(api.formatPolyPlain(valid.poly), 'A^2');
+  api.state.classFormulaBuilder.tokens = [a, a];
+  const implicitProduct = api.validateClassFormulaBuilder();
+  assert.strictEqual(implicitProduct.ok, true, implicitProduct.message);
+  assert.strictEqual(api.formatPolyPlain(implicitProduct.poly), 'A^2');
+
+  const unresolved = sheafTokens.find((token) => token.plain === 'c_1(E)');
+  api.state.classFormulaBuilder.tokens = [unresolved];
+  const unresolvedValid = api.validateClassFormulaBuilder();
+  assert.strictEqual(unresolvedValid.ok, true, unresolvedValid.message);
+  assert(api.formatPolyPlain(unresolvedValid.poly).includes('c_1(E)'));
+
+  const yGeometry = api.geometryFromVariety(api.state.varieties[1]);
+  const yHyperplane = api.classFormulaHomologyTokenDefs(yGeometry).find((token) => token.plain === 'H');
+  const pullbackTemplate = mapTokens.find((token) => token.operation === 'pullback');
+  api.state.classFormulaBuilder.tokens = [{
+    ...pullbackTemplate,
+    type: 'functor-slot',
+    slotId: 'slot-test',
+    tokens: []
+  }];
+  const emptyFunctor = api.validateClassFormulaBuilder();
+  assert.strictEqual(emptyFunctor.ok, false);
+  assert(/empty/i.test(emptyFunctor.message), emptyFunctor.message);
+  api.state.classFormulaBuilder.tokens[0].tokens = [yHyperplane];
+  const pullbackValid = api.validateClassFormulaBuilder();
+  assert.strictEqual(pullbackValid.ok, true, pullbackValid.message);
+  assert(pullbackValid.plain.includes('f^*(H)'), pullbackValid.plain);
+  assert(api.formatPolyPlain(pullbackValid.poly).includes('f^*'), api.formatPolyPlain(pullbackValid.poly));
+}
+
+function testClassFormulaBuilderRejectsInvalidMapAndStartsStepSession() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    {
+      id: 'X',
+      type: 'abstract',
+      dim: '2',
+      name: 'X',
+      homology: {
+        customClasses: [
+          { id: 'A', symbol: 'A', degree: 1, cohomologyDegree: 2 },
+          { id: 'B', symbol: 'B', degree: 1, cohomologyDegree: 2 }
+        ],
+        rules: []
+      }
+    },
+    { id: 'Y', type: 'abstract', dim: '1', name: 'Y' }
+  ];
+  api.state.maps = [{ id: 'f', name: 'f', domainKind: 'variety', domainId: 'Y', codomainKind: 'variety', codomainId: 'X' }];
+  const xGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const defs = api.homologyClassDefinitions(xGeometry);
+  const aId = api.homologyDefVariableId(defs.find((def) => def.id === 'A'), xGeometry);
+  const bId = api.homologyDefVariableId(defs.find((def) => def.id === 'B'), xGeometry);
+  api.state.varieties[0].homology.rules = [{
+    id: 'A-to-B',
+    enabled: true,
+    lhs: { powers: { [aId]: 1 } },
+    rhs: [{ coefficient: '1', powers: { [bId]: 1 } }]
+  }];
+  api.setClassFormulaBuilderVariety('X');
+  const aToken = api.classFormulaHomologyTokenDefs(api.geometryFromVariety(api.state.varieties[0])).find((token) => token.plain === 'A');
+  api.state.classFormulaBuilder.tokens = [
+    {
+      type: 'functor',
+      operation: 'pullback',
+      mapId: 'f',
+      sourceGeometryId: 'Y',
+      targetGeometryId: 'Y',
+      latex: 'f^*',
+      plain: 'f^*'
+    },
+    { type: 'paren', value: '(', latex: '(', plain: '(' },
+    aToken,
+    { type: 'paren', value: ')', latex: ')', plain: ')' }
+  ];
+  const invalid = api.validateClassFormulaBuilder();
+  assert.strictEqual(invalid.ok, false);
+  assert(/target|different variety|source/i.test(invalid.message), invalid.message);
+
+  api.state.classFormulaBuilder.tokens = [aToken];
+  const check = api.checkClassFormulaBuilder();
+  assert.strictEqual(check.ok, true, check.message);
+  const session = api.startClassStepSessionFromFormulaBuilder();
+  assert(session.formulaSession);
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'A');
+  session.candidates = api.collectClassStepRuleCandidates(session).map((candidate) => ({
+    ...candidate,
+    selected: candidate.rule.id === 'A-to-B'
+  }));
+  assert(session.candidates.some((candidate) => candidate.selected));
+  api.applySelectedClassStepRules();
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'B');
+}
+
+function testClassFormulaBuilderRendersSelectedClassButtonAndEditableTokens() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '3', name: 'X' }];
+  api.state.sheaves = [{ id: 'E', type: 'abstract', basis: 'chern', rank: '2', name: 'E', baseVarietyId: 'X' }];
+  api.refs.classFormulaBuilder = {};
+  api.refs.classFormulaVariety = { innerHTML: '', disabled: true };
+  api.refs.classFormulaHomologyButtons = { classList: { toggle() {} }, textContent: '', innerHTML: '' };
+  api.refs.classFormulaAddSheafClass = { disabled: true, innerHTML: '', title: '' };
+  api.refs.classFormulaClassFamily = { innerHTML: '', disabled: true };
+  api.refs.classFormulaClassDegree = { innerHTML: '', disabled: true };
+  api.refs.classFormulaClassSheaf = { innerHTML: '', disabled: true };
+  api.refs.classFormulaMapButtons = { classList: { toggle() {} }, textContent: '', innerHTML: '' };
+  api.refs.classFormulaPreview = { innerHTML: '', classList: { toggle() {} }, setAttribute() {} };
+  api.refs.classFormulaMessage = { textContent: '' };
+  api.refs.classFormulaUndo = { disabled: true };
+  api.refs.classFormulaClear = { disabled: true };
+  api.refs.classFormulaCheck = { disabled: true };
+  api.refs.classFormulaCompute = { disabled: true };
+
+  api.setClassFormulaBuilderVariety('X');
+  api.state.classFormulaBuilder.classFamily = 'chern';
+  api.state.classFormulaBuilder.classDegree = '3';
+  api.state.classFormulaBuilder.classSheafId = 'E';
+  api.renderClassFormulaBuilder();
+  assert(api.refs.classFormulaAddSheafClass.innerHTML.includes('c_{3}(E)'), api.refs.classFormulaAddSheafClass.innerHTML);
+
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const token = api.classFormulaSheafTokenForSelection(geometry, 'E', 'chern', '3');
+  api.state.classFormulaBuilder.tokens = [token];
+  api.state.classFormulaBuilder.cursorIndex = 1;
+  api.renderClassFormulaBuilder();
+  assert(api.refs.classFormulaPreview.innerHTML.includes('formula-token-chip'), api.refs.classFormulaPreview.innerHTML);
+  assert(api.refs.classFormulaPreview.innerHTML.includes('formula-cursor is-active'), api.refs.classFormulaPreview.innerHTML);
+  api.checkClassFormulaBuilder();
+  assert(!api.refs.classFormulaPreview.innerHTML.includes('formula-token-chip'), api.refs.classFormulaPreview.innerHTML);
+  assert(api.refs.classFormulaPreview.innerHTML.includes('\\('), api.refs.classFormulaPreview.innerHTML);
+}
+
+function testClassStepFormulaHistoryAndUndoLastStep() {
+  const api = loadCalculator();
+  api.state.varieties = [{
+    id: 'X',
+    type: 'abstract',
+    dim: '2',
+    name: 'X',
+    homology: {
+      customClasses: [
+        { id: 'A', symbol: 'A', degree: 1, cohomologyDegree: 2 },
+        { id: 'B', symbol: 'B', degree: 1, cohomologyDegree: 2 }
+      ],
+      rules: []
+    }
+  }];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const defs = api.homologyClassDefinitions(geometry);
+  const aId = api.homologyDefVariableId(defs.find((def) => def.id === 'A'), geometry);
+  const bId = api.homologyDefVariableId(defs.find((def) => def.id === 'B'), geometry);
+  api.state.varieties[0].homology.rules = [{
+    id: 'A-to-B',
+    enabled: true,
+    lhs: { powers: { [aId]: 1 } },
+    rhs: [{ coefficient: '1', powers: { [bId]: 1 } }]
+  }];
+  api.refs.classStepPanel = { hidden: false, classList: { toggle() {} } };
+  api.refs.classStepCard = { hidden: false, classList: { remove() {} } };
+  api.refs.classStepFormula = { innerHTML: '' };
+  api.refs.classStepHistoryControls = { hidden: true, innerHTML: '' };
+  api.refs.classStepRules = { hidden: false, innerHTML: '' };
+  api.refs.classStepCheckSwitch = { disabled: false, textContent: '' };
+  api.refs.classStepMessage = { textContent: '' };
+  api.refs.classStepApply = { disabled: false };
+  api.refs.classStepUndo = { disabled: true };
+  api.refs.classStepUseCache = { checked: false };
+  api.refs.classStepOncePerRule = { checked: true };
+  api.refs.classStepOnePass = { checked: false };
+  api.setClassFormulaBuilderVariety('X');
+  const aToken = api.classFormulaHomologyTokenDefs(geometry).find((token) => token.plain === 'A');
+  api.state.classFormulaBuilder.tokens = [aToken];
+  const session = api.startClassStepSessionFromFormulaBuilder();
+  assert.strictEqual(session.stepHistory.length, 1);
+  session.candidates = api.collectClassStepRuleCandidates(session).map((candidate) => ({
+    ...candidate,
+    selected: candidate.rule.id === 'A-to-B'
+  }));
+  api.applySelectedClassStepRules();
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'B');
+  assert.strictEqual(session.stepHistory.length, 2);
+  assert(api.refs.classStepFormula.innerHTML.includes('\\begin{aligned}'), api.refs.classStepFormula.innerHTML);
+  assert(!api.refs.classStepFormula.innerHTML.includes('\\cong'), api.refs.classStepFormula.innerHTML);
+  assert(api.refs.classStepFormula.innerHTML.includes('=\\;& B'), api.refs.classStepFormula.innerHTML);
+  assert(api.refs.classStepHistoryControls.innerHTML.includes('hide line 2'), api.refs.classStepHistoryControls.innerHTML);
+  api.state.classStepSession = session;
+  api.toggleClassStepHistoryLine(0);
+  assert(session.stepHistory[0].hidden);
+  assert(api.renderClassStepCalculationLatex(session).includes('A:=\\;& \\cdots'));
+  assert(api.renderClassStepCalculationLatex(session).includes('B'));
+  assert(api.classStepHistoryPlain(session).includes('A := ...'));
+  api.toggleClassStepHistoryLine(0);
+  assert(!session.stepHistory[0].hidden);
+  assert.strictEqual(api.refs.classStepUndo.disabled, false);
+  api.undoLastClassStep();
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'A');
+  assert.strictEqual(session.stepHistory.length, 1);
+  assert.strictEqual(api.refs.classStepUndo.disabled, true);
+}
+
+function testClassStepSimplifyIsSelectableRule() {
+  const api = loadCalculator();
+  api.state.varieties = [{
+    id: 'X',
+    type: 'abstract',
+    dim: '2',
+    name: 'X',
+    homology: {
+      customClasses: [
+        { id: 'A', symbol: 'A', degree: 1, cohomologyDegree: 2 },
+        { id: 'B', symbol: 'B', degree: 1, cohomologyDegree: 2 },
+        { id: 'C', symbol: 'C', degree: 1, cohomologyDegree: 2 }
+      ],
+      rules: []
+    }
+  }];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const defs = api.homologyClassDefinitions(geometry);
+  const aId = api.homologyDefVariableId(defs.find((def) => def.id === 'A'), geometry);
+  const bId = api.homologyDefVariableId(defs.find((def) => def.id === 'B'), geometry);
+  const cId = api.homologyDefVariableId(defs.find((def) => def.id === 'C'), geometry);
+  api.state.varieties[0].homology.rules = [
+    {
+      id: 'A-to-B',
+      enabled: true,
+      lhs: { powers: { [aId]: 1 } },
+      rhs: [{ coefficient: '1', powers: { [bId]: 1 } }]
+    },
+    {
+      id: 'B-to-C',
+      enabled: true,
+      lhs: { powers: { [bId]: 1 } },
+      rhs: [{ coefficient: '1', powers: { [cId]: 1 } }]
+    }
+  ];
+  api.refs.classStepPanel = { hidden: false, classList: { toggle() {} } };
+  api.refs.classStepCard = { hidden: false, classList: { remove() {} } };
+  api.refs.classStepFormula = { innerHTML: '' };
+  api.refs.classStepHistoryControls = { hidden: true, innerHTML: '' };
+  api.refs.classStepRules = { hidden: false, innerHTML: '' };
+  api.refs.classStepCheckSwitch = { disabled: false, textContent: '' };
+  api.refs.classStepMessage = { textContent: '' };
+  api.refs.classStepApply = { disabled: false };
+  api.refs.classStepUndo = { disabled: true };
+  api.refs.classStepUseCache = { checked: false };
+  api.refs.classStepOncePerRule = { checked: true };
+  api.refs.classStepOnePass = { checked: false };
+  api.setClassFormulaBuilderVariety('X');
+  const aToken = api.classFormulaHomologyTokenDefs(geometry).find((token) => token.plain === 'A');
+  api.state.classFormulaBuilder.tokens = [aToken];
+  const session = api.startClassStepSessionFromFormulaBuilder();
+  assert(session.candidates.some((candidate) => candidate.sourceLabel === 'simplify' && candidate.selected !== false));
+  session.candidates = api.collectClassStepRuleCandidates(session).map((candidate) => ({
+    ...candidate,
+    selected: candidate.rule.id === 'A-to-B'
+  }));
+  api.applySelectedClassStepRules();
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'B');
+  api.undoLastClassStep();
+
+  session.candidates = api.collectClassStepRuleCandidates(session).map((candidate) => ({
+    ...candidate,
+    selected: candidate.rule.id === 'A-to-B' || candidate.sourceLabel === 'simplify'
+  }));
+  api.applySelectedClassStepRules();
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'C');
+  const historyLength = session.stepHistory.length;
+  session.candidates = api.collectClassStepRuleCandidates(session).map((candidate) => ({
+    ...candidate,
+    selected: candidate.sourceLabel === 'simplify'
+  }));
+  api.applySelectedClassStepRules();
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'C');
+  assert.strictEqual(session.stepHistory.length, historyLength);
 }
 
 function testClassStepCandidatesOnlyIncludeApplicableRules() {
@@ -2758,6 +3404,7 @@ function testSymmetricProductAggregateRulesUseAveragedCoefficients() {
 
 function testSymmetricProductAbelJacobiUsesProjectionFormulaForSigma() {
   const api = loadCalculator();
+  const staleUnitPushforwardId = 'map_pushforward_AJ_homology_v_X_unit';
   api.state.varieties = [
     {
       id: 'X',
@@ -2774,7 +3421,32 @@ function testSymmetricProductAbelJacobiUsesProjectionFormulaForSigma() {
       dim: '4',
       name: 'J',
       genus: '4',
-      homology: { classes: { theta: { symbol: '\\Theta' }, unit: { symbol: '1' }, point: { symbol: '[p]' } }, rules: [] },
+      homology: {
+        classes: { theta: { symbol: '\\Theta' }, unit: { symbol: '1' }, point: { symbol: '[p]' } },
+        customClasses: [{
+          id: staleUnitPushforwardId,
+          symbol: '[\\operatorname{Sym}^{2}(C)]',
+          degree: 2,
+          cohomologyDegree: 4,
+          special: 'map-homology',
+          variableId: staleUnitPushforwardId
+        }, {
+          id: 'pushforward_AJ_unit',
+          symbol: '[\\operatorname{Sym}^{2}(C)]',
+          degree: 2,
+          cohomologyDegree: 4,
+          special: 'map-homology',
+          variableId: 'map_pushforward_AJ_unit'
+        }],
+        rules: [{
+          id: 'default-abel-jacobi-symmetric-pushforward-AJ-unit-stale',
+          builtin: true,
+          automatic: 'abel-jacobi',
+          enabled: true,
+          lhs: { powers: { [staleUnitPushforwardId]: 1 } },
+          rhs: [{ coefficient: '1/2', powers: { homology_v_J_theta: 2 } }]
+        }]
+      },
       construction: { type: 'jacobian', curveId: 'X' }
     }
   ];
@@ -2793,6 +3465,25 @@ function testSymmetricProductAbelJacobiUsesProjectionFormulaForSigma() {
   const thetaDef = api.homologyClassDefinitions(jacobianGeometry).find((def) => def.id === 'theta');
   const sigmaId = api.homologyDefVariableId(sigmaDef, sourceGeometry);
   const thetaId = api.homologyDefVariableId(thetaDef, jacobianGeometry);
+  const unitPushforward = api.pushforwardPolynomialByDegree(
+    api.state.maps[0],
+    api.polyFromPowers({}),
+    sourceGeometry.dim,
+    jacobianGeometry.dim,
+    { proper: true }
+  );
+  assert.strictEqual(api.formatPolyPlain(unitPushforward), '1/2*Theta^2');
+  assert.strictEqual(api.mapPushforwardSourceKeyHasDirectAutomaticFormula(api.state.maps[0], '', sourceGeometry, jacobianGeometry), true);
+  assert(!api.mapPushforwardClassDefinitions(api.state.maps[0], sourceGeometry, jacobianGeometry)
+    .some((def) => def.id === staleUnitPushforwardId || def.variableId === staleUnitPushforwardId));
+  assert(api.ensureAbelJacobiKnownHomologyRules(api.state.maps[0]));
+  assert(!api.state.varieties[1].homology.customClasses.some((item) => (
+    item.id === staleUnitPushforwardId
+    || item.variableId === staleUnitPushforwardId
+    || item.variableId === 'map_pushforward_AJ_unit'
+    || item.symbol === '[\\operatorname{Sym}^{2}(C)]'
+  )));
+  assert(!api.state.varieties[1].homology.rules.some((rule) => rule.lhs?.powers?.[staleUnitPushforwardId] === 1));
   const pullbackRule = api.defaultMapHomologyRulesForGeometry(sourceGeometry)
     .find((rule) => rule.id === 'default-abel-jacobi-symmetric-theta-pullback-AJ');
   assert(pullbackRule);
@@ -3191,7 +3882,7 @@ function testClassStepPicardPoincarePushforwardToddStepMatchesNormalCharacter() 
   assert(!api.collectClassStepRuleCandidates(uiSession).some((candidate) => candidate.sourceLabel === 'GRR'));
   api.state.classStepSession = uiSession;
   const stepLatexExport = api.exportResult(result, 'latex', 'step-classes');
-  assert(stepLatexExport.includes('% source: step-by-step characteristic class chart'));
+  assert(stepLatexExport.includes('% source: step-by-step formula'));
   assert(stepLatexExport.includes('d - 2'));
   assert(stepLatexExport.includes('\\Theta'));
 
@@ -3315,7 +4006,7 @@ function testClassStepLayoutToggleDefaultsWideAndSwitchesSide() {
   api.state.classStepSession = { layout: 'wide' };
   api.toggleClassStepLayout();
   assert.strictEqual(api.state.classStepSession.layout, 'side');
-  assert.strictEqual(card.parentElement, sidebar);
+  assert.strictEqual(card.parentElement, wideHost);
   assert.strictEqual(classList.has('is-side'), true);
   assert.strictEqual(classList.has('is-wide'), false);
   assert.strictEqual(button.textContent, 'side');
@@ -3371,11 +4062,20 @@ function testClassStepSessionOpensSeparateCard() {
   const api = loadCalculator();
   const classList = new Set(['collapsed']);
   const card = {
-    hidden: true,
+    hidden: false,
+    parentElement: null,
     classList: {
       remove(name) {
         classList.delete(name);
+      },
+      toggle() {
       }
+    }
+  };
+  const host = {
+    hidden: false,
+    appendChild(child) {
+      child.parentElement = this;
     }
   };
   const panel = {
@@ -3383,6 +4083,7 @@ function testClassStepSessionOpensSeparateCard() {
     classList: { toggle() {} }
   };
   api.refs.classStepCard = card;
+  api.refs.classStepWideHost = host;
   api.refs.classStepPanel = panel;
   const geometry = api.geometryFromVariety({ id: 'X', type: 'abstract', dim: '1', name: 'X' });
   const sheaf = api.sheafFromObject({ id: 'E', type: 'abstract', basis: 'chern', rank: '1', name: 'E', baseVarietyId: 'X' }, geometry);
@@ -3402,7 +4103,8 @@ function testClassStepSessionOpensSeparateCard() {
   assert.strictEqual(panel.hidden, false);
   assert.strictEqual(classList.has('collapsed'), false);
   api.stopClassStepSession();
-  assert.strictEqual(card.hidden, true);
+  assert.strictEqual(card.hidden, false);
+  assert.strictEqual(panel.hidden, true);
 }
 
 function testClassStepRuleOnceAndOnePassSemantics() {
@@ -3540,20 +4242,27 @@ function testClassStepStopRowsUsePreservedComponents() {
   assert(rows.some((row) => row.key === 'character'));
 }
 
-function testClassStepEntryAvailableWhenRowsAreLimited() {
+function testClassFormulaBuilderAvailableWhenRowsAreLimited() {
   const api = loadCalculator();
   const geometry = api.geometryFromVariety({ id: 'X', type: 'abstract', dim: '2', name: 'X' });
   const sheafObject = { id: 'E', type: 'abstract', basis: 'chern', rank: '2', name: 'E', baseVarietyId: 'X' };
   const sheaf = api.sheafFromObject(sheafObject, geometry);
   const bundle = api.buildBundleForSheaf(geometry, sheaf, { geometry });
-  const entry = { hidden: true };
-  const button = { disabled: true };
   const panel = { hidden: false };
-  const card = { hidden: true };
-  api.refs.classStepEntry = entry;
-  api.refs.stepClasses = button;
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X' }];
+  api.refs.classFormulaBuilder = {};
+  api.refs.classFormulaVariety = { innerHTML: '', disabled: true };
+  api.refs.classFormulaHomologyButtons = { classList: { toggle() {} }, textContent: '', innerHTML: '' };
+  api.refs.classFormulaAddSheafClass = { disabled: true };
+  api.refs.classFormulaClassFamily = { innerHTML: '', disabled: true };
+  api.refs.classFormulaClassDegree = { innerHTML: '', disabled: true };
+  api.refs.classFormulaClassSheaf = { innerHTML: '', disabled: true };
+  api.refs.classFormulaMapButtons = { classList: { toggle() {} }, textContent: '', innerHTML: '' };
+  api.refs.classFormulaPreview = { innerHTML: '' };
+  api.refs.classFormulaMessage = { textContent: '' };
+  api.refs.classFormulaCheck = { disabled: true };
+  api.refs.classFormulaCompute = { disabled: true };
   api.refs.classStepPanel = panel;
-  api.refs.classStepCard = card;
   api.syncClassStepAvailability({
     geometry,
     sheaf,
@@ -3561,13 +4270,12 @@ function testClassStepEntryAvailableWhenRowsAreLimited() {
     classRows: [],
     classComputationLimited: true
   });
-  assert.strictEqual(entry.hidden, false);
-  assert.strictEqual(button.disabled, false);
   assert.strictEqual(panel.hidden, false);
-  assert.strictEqual(card.hidden, true);
+  assert.strictEqual(api.refs.classFormulaVariety.disabled, false);
+  assert(api.refs.classFormulaVariety.innerHTML.includes('X'));
 }
 
-function testClassStepEntryAvailableAfterErrorWithoutResult() {
+function testClassFormulaBuilderAvailableAfterErrorWithoutResult() {
   const api = loadCalculator();
   api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X' }];
   api.state.sheaves = [{ id: 'F', type: 'abstract', basis: 'chern', rank: '2', name: 'F', baseVarietyId: 'X' }];
@@ -3576,19 +4284,24 @@ function testClassStepEntryAvailableAfterErrorWithoutResult() {
   api.state.inputMode = 'modify';
   api.refs.inputMode = { value: 'modify' };
   api.refs.addObjectKind = { value: 'sheaf' };
-  const entry = { hidden: true };
-  const button = { disabled: true };
   const panel = { hidden: false };
-  const card = { hidden: true };
-  api.refs.classStepEntry = entry;
-  api.refs.stepClasses = button;
+  api.refs.classFormulaBuilder = {};
+  api.refs.classFormulaVariety = { innerHTML: '', disabled: true };
+  api.refs.classFormulaHomologyButtons = { classList: { toggle() {} }, textContent: '', innerHTML: '' };
+  api.refs.classFormulaAddSheafClass = { disabled: true };
+  api.refs.classFormulaClassFamily = { innerHTML: '', disabled: true };
+  api.refs.classFormulaClassDegree = { innerHTML: '', disabled: true };
+  api.refs.classFormulaClassSheaf = { innerHTML: '', disabled: true };
+  api.refs.classFormulaMapButtons = { classList: { toggle() {} }, textContent: '', innerHTML: '' };
+  api.refs.classFormulaPreview = { innerHTML: '' };
+  api.refs.classFormulaMessage = { textContent: '' };
+  api.refs.classFormulaCheck = { disabled: true };
+  api.refs.classFormulaCompute = { disabled: true };
   api.refs.classStepPanel = panel;
-  api.refs.classStepCard = card;
   api.syncClassStepAvailability(null);
-  assert.strictEqual(entry.hidden, false);
-  assert.strictEqual(button.disabled, false);
   assert.strictEqual(panel.hidden, false);
-  assert.strictEqual(card.hidden, true);
+  assert.strictEqual(api.refs.classFormulaVariety.disabled, false);
+  assert(api.refs.classFormulaVariety.innerHTML.includes('X'));
 }
 
 function testClassStepBudgetFailureKeepsLastFormula() {
@@ -4127,6 +4840,7 @@ function testSheafBinaryPickFlowRegistryCoversSheafCandidates() {
   assert(api.pickFlowHint(flow).includes('second sheaf'));
 }
 
+testStepBuilderMarkupIsBelowCanvasAndClassChartHasNoStepButton();
 testCurveToProjectivePullbackUsesCurvePoint();
 testCurveSymplecticBasisIsOptIn();
 testProjectivePullbackStillUsesTargetHyperplane();
@@ -4140,6 +4854,17 @@ testPpavModuliPresetRoundTrip();
 testHigherDimensionPpavUsesTrueDimensionAndQueryOnlyHodge();
 testLargeAbelianHodgeUsesSingleEntryQuery();
 testTwelveDimensionalHodgeStillRendersFullTable();
+testPolyvectorParallelogramForProjectiveSpace();
+testPolyvectorParallelogramForCurves();
+testExpandedPolyvectorParallelogramShowsHochschildTotals();
+testPolyvectorParallelogramUsesHodgeCellSizeScale();
+testExpandedPolyvectorParallelogramUsesSymbolsForSymbolicTotals();
+testPolyvectorParallelogramForCalabiYauCompleteIntersectionUsesHodgeMirror();
+testCompleteIntersectionBettiTableUsesKoszulDegrees();
+testBettiTableFillsMissingRowsForSparseCompleteIntersectionDegrees();
+testProjectiveSpaceBettiTableIsTrivialCoordinateRing();
+testBettiTableRevealIsLazyAndExplainsSymbols();
+testBettiTableFallbackShowsSymbolicTemplateForUnsupportedVariety();
 testAbelianSpecialSheavesAreTrivial();
 testSelfDirectSumScalesChernCharacter();
 testDivisorLineBundleUsesAssignedDivisorChernClass();
@@ -4203,8 +4928,15 @@ testHomologyRulePassesAreCapped();
 testSymbolicBudgetFallbackKeepsUnsimplifiedPolynomial();
 testClassStepAutoTargetSelection();
 testClassStepFormalRanksAreSheafSpecific();
+testClassStepSesAppliesRankAsCharacterZero();
 testClassStepDerivedCharacteristicTargets();
+testClassStepToddRuleStopsAtChernClasses();
 testClassStepDerivedTargetAppliesVisibleHomologyRule();
+testClassFormulaBuilderTokenSourcesAndValidation();
+testClassFormulaBuilderRejectsInvalidMapAndStartsStepSession();
+testClassFormulaBuilderRendersSelectedClassButtonAndEditableTokens();
+testClassStepFormulaHistoryAndUndoLastStep();
+testClassStepSimplifyIsSelectableRule();
 testClassStepCandidatesOnlyIncludeApplicableRules();
 testClassStepStartsFromFormalConstructedSheafClassAndOffersSesRule();
 testClassStepPushforwardOffersGrrRule();
@@ -4224,8 +4956,8 @@ testClassStepCachedRulesIncludeMapWrappedCandidates();
 testClassStepSwitchingRulesUnlockStoredOppositeBasisRule();
 testClassStepUseCacheRenderingSurvivesStaleVariableMetadata();
 testClassStepStopRowsUsePreservedComponents();
-testClassStepEntryAvailableWhenRowsAreLimited();
-testClassStepEntryAvailableAfterErrorWithoutResult();
+testClassFormulaBuilderAvailableWhenRowsAreLimited();
+testClassFormulaBuilderAvailableAfterErrorWithoutResult();
 testClassStepBudgetFailureKeepsLastFormula();
 testHomologyCoefficientEditorAcceptsSymbolicRationalPolynomials();
 testProductCustomClassBidegreeTruncatesImpossiblePowers();

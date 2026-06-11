@@ -3,6 +3,8 @@
 
   const MAX_DIMENSION = 15;
   const MAX_HODGE_GRID_DIMENSION = 12;
+  const DEFAULT_HODGE_CELL_SIZE = 20;
+  const DEFAULT_POLYVECTOR_CELL_SIZE = 38;
   const MAX_CI_EQUATIONS = 8;
   const MAX_AMBIENT = MAX_DIMENSION + MAX_CI_EQUATIONS;
   const MAX_CI_DEGREE = 99;
@@ -170,6 +172,7 @@
     hodgeCellSize: 20,
     revealedCharts: {
       hodge: false,
+      betti: false,
       classes: false,
       cohomology: false
     },
@@ -197,6 +200,20 @@
     simplificationCache: new Map(),
     classStepSession: null,
     classStepCache: new Map(),
+    classFormulaBuilder: {
+      varietyId: null,
+      tokens: [],
+      validatedFormula: null,
+      message: '',
+      mode: 'builder',
+      classFamily: 'chern',
+      classDegree: '',
+      classSheafId: null,
+      activeSlotId: null,
+      cursorIndex: 0,
+      insertMode: 'insert',
+      nextSlotId: 1
+    },
     currentSymbolicBudget: null,
     currentRecomputeBudget: null,
     symbolicWarnings: [],
@@ -500,6 +517,7 @@
     refs.modifyWarning = $('modify-warning');
     refs.inputRevealActions = $('input-reveal-actions');
     refs.toggleHodgeCard = $('toggle-hodge-card');
+    refs.toggleBettiCard = $('toggle-betti-card');
     refs.toggleClassCard = $('toggle-class-card');
     refs.toggleCohomologyCard = $('toggle-cohomology-card');
     refs.repeatNames = $('repeat-names');
@@ -532,22 +550,39 @@
     refs.classActions = $('class-actions');
     refs.classChart = $('class-chart');
     refs.classMessage = $('class-message');
-    refs.classStepEntry = $('class-step-entry');
-    refs.stepClasses = $('step-classes');
     refs.classStepWideHost = $('class-step-wide-host');
     refs.classStepCard = $('class-step-card');
+    refs.classFormulaBuilder = $('class-formula-builder');
+    refs.classFormulaVariety = $('class-formula-variety');
+    refs.classFormulaHomologyButtons = $('class-formula-homology-buttons');
+    refs.classFormulaSheafPicker = $('class-formula-sheaf-picker');
+    refs.classFormulaAddSheafClass = $('class-formula-add-sheaf-class');
+    refs.classFormulaClassFamily = $('class-formula-class-family');
+    refs.classFormulaClassDegree = $('class-formula-class-degree');
+    refs.classFormulaClassSheaf = $('class-formula-class-sheaf');
+    refs.classFormulaMapButtons = $('class-formula-map-buttons');
+    refs.classFormulaPreview = $('class-formula-preview');
+    refs.classFormulaMessage = $('class-formula-message');
+    refs.classFormulaUndo = $('class-formula-undo');
+    refs.classFormulaClear = $('class-formula-clear');
+    refs.classFormulaSlotDone = $('class-formula-slot-done');
+    refs.classFormulaCheck = $('class-formula-check');
+    refs.classFormulaCompute = $('class-formula-compute');
     refs.classStepPanel = $('class-step-panel');
+    refs.classStepTargetRow = $('class-step-target-row');
     refs.classStepFamily = $('class-step-family');
     refs.classStepTermOnly = $('class-step-term-only');
     refs.classStepTermIndex = $('class-step-term-index');
     refs.classStepLayout = $('class-step-layout');
     refs.classStepFormula = $('class-step-formula');
+    refs.classStepHistoryControls = $('class-step-history-controls');
     refs.classStepUseCache = $('class-step-use-cache');
     refs.classStepCheckSwitch = $('class-step-check-switch');
     refs.classStepOncePerRule = $('class-step-once-per-rule');
     refs.classStepOnePass = $('class-step-one-pass');
     refs.classStepRules = $('class-step-rules');
     refs.classStepApply = $('class-step-apply');
+    refs.classStepUndo = $('class-step-undo');
     refs.classStepRestart = $('class-step-restart');
     refs.classStepStop = $('class-step-stop');
     refs.classStepExport = $('class-step-export');
@@ -610,7 +645,11 @@
     refs.hodgeQueryOutput = $('hodge-query-output');
     refs.hodgeChart = $('hodge-chart');
     refs.hodgeChernNumbers = $('hodge-chern-numbers');
+    refs.hodgePolyvector = $('hodge-polyvector');
     refs.hodgeMessage = $('hodge-message');
+    refs.bettiCard = $('betti-card');
+    refs.bettiTableChart = $('betti-table-chart');
+    refs.bettiTableMessage = $('betti-table-message');
     refs.exportHodge = $('export-hodge');
     refs.exportCard = $('export-card');
     refs.exportFormat = $('export-format');
@@ -2270,8 +2309,10 @@
   function chartRevealAvailability(result = state.lastResult) {
     const modifying = inputIsModifyMode();
     const kind = modifying ? modifyKind() : null;
+    const betti = modifying && kind === 'variety' && !!result?.geometry;
     return {
       hodge: modifying && kind === 'variety' && !!result?.hodge,
+      betti,
       classes: modifying && kind === 'sheaf' && !!selectedSheaf(),
       cohomology: modifying && kind === 'sheaf' && !!result?.cohomology?.dimensions?.length
     };
@@ -2280,6 +2321,8 @@
   function setChartCardVisible(scope, visible) {
     const card = scope === 'hodge'
       ? refs.hodgeCard
+      : scope === 'betti'
+        ? refs.bettiCard
       : scope === 'classes'
         ? refs.classCard
         : refs.cohomologyCard;
@@ -2296,6 +2339,8 @@
     button.setAttribute('aria-pressed', revealed ? 'true' : 'false');
     const label = scope === 'hodge'
       ? 'Hodge numbers'
+      : scope === 'betti'
+        ? 'Betti table'
       : scope === 'classes'
         ? 'characteristic classes'
         : 'sheaf cohomology';
@@ -2308,13 +2353,15 @@
       if (!available[scope]) state.revealedCharts[scope] = false;
     });
     setChartCardVisible('hodge', available.hodge && state.revealedCharts.hodge);
+    setChartCardVisible('betti', available.betti && state.revealedCharts.betti);
     setChartCardVisible('classes', available.classes && state.revealedCharts.classes);
     setChartCardVisible('cohomology', available.cohomology && state.revealedCharts.cohomology);
     syncRevealButton(refs.toggleHodgeCard, 'hodge', available.hodge);
+    syncRevealButton(refs.toggleBettiCard, 'betti', available.betti);
     syncRevealButton(refs.toggleClassCard, 'classes', available.classes);
     syncRevealButton(refs.toggleCohomologyCard, 'cohomology', available.cohomology);
     if (refs.inputRevealActions) {
-      refs.inputRevealActions.hidden = !available.hodge && !available.classes && !available.cohomology;
+      refs.inputRevealActions.hidden = !available.hodge && !available.betti && !available.classes && !available.cohomology;
     }
   }
 
@@ -2324,6 +2371,7 @@
     if (!available[scope]) return;
     state.revealedCharts[scope] = !state.revealedCharts[scope];
     syncChartRevealControls();
+    if (scope === 'betti') renderBettiTableChart();
   }
 
   function syncRepetitionStyleLabels() {
@@ -5176,8 +5224,61 @@
     if (refs.exportClasses) {
       refs.exportClasses.addEventListener('click', () => openChartExport('classes'));
     }
-    if (refs.stepClasses) {
-      refs.stepClasses.addEventListener('click', () => startClassStepSessionFromControls());
+    if (refs.classFormulaVariety) {
+      refs.classFormulaVariety.addEventListener('change', () => setClassFormulaBuilderVariety(refs.classFormulaVariety.value));
+    }
+    if (refs.classFormulaClassFamily) {
+      refs.classFormulaClassFamily.addEventListener('change', () => setClassFormulaClassPickerValue('family', refs.classFormulaClassFamily.value));
+    }
+    if (refs.classFormulaClassDegree) {
+      refs.classFormulaClassDegree.addEventListener('change', () => setClassFormulaClassPickerValue('degree', refs.classFormulaClassDegree.value));
+    }
+    if (refs.classFormulaClassSheaf) {
+      refs.classFormulaClassSheaf.addEventListener('change', () => setClassFormulaClassPickerValue('sheaf', refs.classFormulaClassSheaf.value));
+    }
+    if (refs.classFormulaAddSheafClass) {
+      refs.classFormulaAddSheafClass.addEventListener('click', () => appendClassFormulaSelectedSheafClass());
+    }
+    if (refs.classFormulaBuilder) {
+      refs.classFormulaBuilder.addEventListener('click', (event) => {
+        const cursorTarget = event.target.closest('[data-class-formula-cursor]');
+        if (cursorTarget) {
+          setClassFormulaCursor(Number(cursorTarget.dataset.classFormulaCursor));
+          return;
+        }
+        const slotButton = event.target.closest('[data-class-formula-slot]');
+        if (slotButton) {
+          setClassFormulaActiveSlot(slotButton.dataset.classFormulaSlot);
+          return;
+        }
+        const tokenButton = event.target.closest('[data-class-formula-token]');
+        if (tokenButton) {
+          appendClassFormulaTokenFromButton(tokenButton);
+          return;
+        }
+        const opButton = event.target.closest('[data-class-formula-op]');
+        if (opButton) {
+          appendClassFormulaOperator(opButton.dataset.classFormulaOp);
+        }
+      });
+    }
+    if (refs.classFormulaPreview) {
+      refs.classFormulaPreview.addEventListener('keydown', (event) => handleClassFormulaEditorKeydown(event));
+    }
+    if (refs.classFormulaUndo) {
+      refs.classFormulaUndo.addEventListener('click', () => undoClassFormulaToken());
+    }
+    if (refs.classFormulaClear) {
+      refs.classFormulaClear.addEventListener('click', () => clearClassFormulaBuilder());
+    }
+    if (refs.classFormulaSlotDone) {
+      refs.classFormulaSlotDone.addEventListener('click', () => clearClassFormulaActiveSlot());
+    }
+    if (refs.classFormulaCheck) {
+      refs.classFormulaCheck.addEventListener('click', () => checkClassFormulaBuilder());
+    }
+    if (refs.classFormulaCompute) {
+      refs.classFormulaCompute.addEventListener('click', () => startClassStepSessionFromFormulaBuilder());
     }
     if (refs.classStepFamily) {
       refs.classStepFamily.addEventListener('change', () => restartClassStepSessionFromControls());
@@ -5205,11 +5306,24 @@
         if (candidate) candidate.selected = checkbox.checked;
       });
     }
+    if (refs.classStepHistoryControls) {
+      refs.classStepHistoryControls.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-class-step-history-toggle]');
+        if (!button) return;
+        toggleClassStepHistoryLine(Number(button.dataset.classStepHistoryToggle));
+      });
+    }
     if (refs.classStepApply) {
       refs.classStepApply.addEventListener('click', () => applySelectedClassStepRules());
     }
+    if (refs.classStepUndo) {
+      refs.classStepUndo.addEventListener('click', () => undoLastClassStep());
+    }
     if (refs.classStepRestart) {
-      refs.classStepRestart.addEventListener('click', () => restartClassStepSessionFromControls());
+      refs.classStepRestart.addEventListener('click', () => {
+        if (state.classStepSession?.formulaSession) startClassStepSessionFromFormulaBuilder({ useValidated: true });
+        else restartClassStepSessionFromControls();
+      });
     }
     if (refs.classStepStop) {
       refs.classStepStop.addEventListener('click', () => stopClassStepSession());
@@ -5231,6 +5345,9 @@
     }
     if (refs.toggleHodgeCard) {
       refs.toggleHodgeCard.addEventListener('click', () => toggleChartReveal('hodge'));
+    }
+    if (refs.toggleBettiCard) {
+      refs.toggleBettiCard.addEventListener('click', () => toggleChartReveal('betti'));
     }
     if (refs.toggleClassCard) {
       refs.toggleClassCard.addEventListener('click', () => toggleChartReveal('classes'));
@@ -14921,9 +15038,10 @@
       refs.resetSimplify.title = 'Return to the default simplification pass count.';
     }
     syncClassStepAvailability(result);
-    [refs.rootForm, refs.classTermOnly, refs.classTermIndex, refs.basis, refs.exportClasses, refs.stepClasses].forEach((control) => {
+    [refs.rootForm, refs.classTermOnly, refs.classTermIndex, refs.basis, refs.exportClasses, refs.classFormulaCheck, refs.classFormulaCompute].forEach((control) => {
       setControlBusyDisabled(control, busy);
     });
+    renderClassFormulaBuilder();
   }
 
   function setControlBusyDisabled(control, busy) {
@@ -16867,9 +16985,20 @@
     return homologyMonomialDefinitions(domainGeometry)
       .filter((mono) => projectionPushforwardSourceMonomialCanSurvive(map, mono, domainGeometry, codomainGeometry))
       .filter((mono) => !projectionSourceKeyHasAutomaticPushforward(map, mono.key || '', domainGeometry, codomainGeometry))
+      .filter((mono) => !mapPushforwardSourceKeyHasDirectAutomaticFormula(map, mono.key || '', domainGeometry, codomainGeometry))
       .map((mono) => mapPushforwardMonomialClassDefinition(map, mono, domainGeometry, codomainGeometry))
       .filter(Boolean)
       .filter((def) => !mapPushforwardDefUsesBlowdownProjectionFormula(map, def, domainGeometry, codomainGeometry));
+  }
+
+  function mapPushforwardSourceKeyHasDirectAutomaticFormula(map, sourceKey, domainGeometry, codomainGeometry) {
+    if (!map || !domainGeometry || !codomainGeometry) return false;
+    if (map.domainKind !== 'variety' || map.codomainKind !== 'variety') return false;
+    if (map.domainId !== domainGeometry.varietyId || map.codomainId !== codomainGeometry.varietyId) return false;
+    const targetDegree = monoDegree(sourceKey) + codomainGeometry.dim - domainGeometry.dim;
+    if (targetDegree < 0 || targetDegree > codomainGeometry.dim) return false;
+    if (map.construction?.type !== 'abel-jacobi') return false;
+    return !!abelJacobiPushforwardSourceKey(map, sourceKey, codomainGeometry);
   }
 
   function projectionPushforwardSourceMonomialCanSurvive(map, mono, domainGeometry, codomainGeometry) {
@@ -16965,6 +17094,7 @@
     if (targetDegree == null) return null;
     const targetCohomologyDegree = mapOperationTargetCohomologyDegree('pushforward', mono.cohomologyDegree, domainGeometry, codomainGeometry);
     if (targetCohomologyDegree == null) return null;
+    if (mapPushforwardSourceKeyHasDirectAutomaticFormula(map, mono.key || '', domainGeometry, codomainGeometry)) return null;
     const sourcePowers = parseMonoKey(mono.key);
     if (Object.keys(sourcePowers).length === 1) {
       const [sourceId, exponent] = Object.entries(sourcePowers)[0];
@@ -17142,11 +17272,13 @@
   }
 
   function ensureMapHomologyVariableFromId(id) {
-    if (!String(id || '').startsWith('map_') || VARS.has(id)) return VARS.get(id) || null;
+    if (!String(id || '').startsWith('map_')) return VARS.get(id) || null;
+    const existing = VARS.get(id);
+    if (existing?.kind === 'mapHomology') return existing;
     const parsed = parseMapHomologyVariableId(id);
-    if (!parsed) return null;
+    if (!parsed) return existing || null;
     const map = state.maps.find((item) => variableIdSafe(item.id) === parsed.mapKey || item.id === parsed.mapKey);
-    if (!map || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return null;
+    if (!map || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return existing || null;
     const sourceGeometry = parsed.operation === 'pullback'
       ? geometryByVarietyId(map.codomainId)
       : geometryByVarietyId(map.domainId);
@@ -17155,14 +17287,18 @@
       : geometryByVarietyId(map.codomainId);
     const sourceId = sourceGeometry ? canonicalHomologyVariableId(parsed.sourceId, sourceGeometry) : parsed.sourceId;
     const sourceData = sourceGeometry ? homologyVariableDataById(sourceGeometry, sourceId) || tangentChernVariableDataById(sourceGeometry, sourceId) : null;
-    if (!sourceData || !targetGeometry) return null;
+    if (!sourceData || !targetGeometry) return existing || null;
+    const sourceIsUnit = parsed.operation === 'pushforward'
+      && sourceGeometry
+      && (sourceId === homologyVariableId(HOMOLOGY_UNIT_CLASS, sourceGeometry) || legacyBaseHomologyClassId(sourceId) === HOMOLOGY_UNIT_CLASS);
+    const sourceKey = sourceIsUnit ? '' : monoKey({ [sourceId]: 1 });
     const variableId = defineMapHomologyVariable(map, parsed.operation, sourceId, parsed.operation === 'pullback'
       ? sourceData.degree
       : sourceData.degree + targetGeometry.dim - sourceGeometry.dim, sourceData.latex, {
         cohomologyDegree: parsed.operation === 'pullback'
           ? sourceData.cohomologyDegree
           : sourceData.cohomologyDegree + 2 * (targetGeometry.dim - sourceGeometry.dim),
-        sourceKey: monoKey({ [sourceId]: 1 })
+        sourceKey
     });
     return VARS.get(variableId) || VARS.get(id) || null;
   }
@@ -18512,12 +18648,14 @@
   }
 
   function classStepLabelLatex(session) {
+    if (session?.formulaSession) return session.formulaLatex || '\\Phi';
     const suffix = session.index == null ? '' : `_{${session.index}}`;
     const symbol = classStepTargetSymbolLatex(session.target || session.family);
     return `${symbol}${suffix}(${session.bundleLabelLatex || 'F'})`;
   }
 
   function classStepLabelPlain(session) {
+    if (session?.formulaSession) return session.formulaPlain || 'formula';
     const suffix = session.index == null ? '' : `_${session.index}`;
     const symbol = classStepTargetSymbolPlain(session.target || session.family);
     return `${symbol}${suffix}(${session.bundleLabelPlain || 'F'})`;
@@ -18543,6 +18681,7 @@
     if (!session) return Poly.zero();
     const override = classStepDisplayOverridePoly(session);
     if (override) return override;
+    if (session.formulaSession) return Poly.from(session.formulaPoly || componentOrZero(session.components, 0));
     const target = session.target || session.family;
     if (target === session.family) {
       if (session.index === 0) return session.family === 'chern' ? Poly.one() : componentOrZero(session.components, 0);
@@ -18575,6 +18714,7 @@
 
   function syncClassStepControlsForSession(session) {
     if (!session) return;
+    if (refs.classStepTargetRow) refs.classStepTargetRow.hidden = !!session.formulaSession;
     if (refs.classStepFamily) refs.classStepFamily.value = session.target || session.family;
     if (refs.classStepTermOnly) refs.classStepTermOnly.checked = session.index != null;
     if (refs.classStepTermIndex) {
@@ -18623,15 +18763,10 @@
     const card = refs.classStepCard;
     const wideHost = refs.classStepWideHost;
     if (!card || !wideHost) return;
-    const sideAnchor = classStepSideAnchor();
     const useWide = layout === 'wide' && classStepCanUseWideLayout();
-    if (useWide) {
-      if (card.parentElement !== wideHost) wideHost.appendChild(card);
-    } else if (sideAnchor?.parentElement && card.parentElement !== sideAnchor.parentElement) {
-      sideAnchor.parentElement.insertBefore(card, sideAnchor.nextSibling);
-    }
+    if (card.parentElement !== wideHost && typeof wideHost.appendChild === 'function') wideHost.appendChild(card);
     card.classList.toggle('wide', useWide);
-    wideHost.hidden = !useWide;
+    wideHost.hidden = false;
   }
 
   function toggleClassStepLayout() {
@@ -18640,6 +18775,1193 @@
     if (session) session.layout = next;
     syncClassStepLayout(next);
     typeset(refs.classStepPanel);
+  }
+
+  function ensureClassFormulaBuilderState() {
+    if (!state.classFormulaBuilder) {
+      state.classFormulaBuilder = {
+        varietyId: null,
+        tokens: [],
+        validatedFormula: null,
+        message: '',
+        mode: 'builder',
+        classFamily: 'chern',
+        classDegree: '',
+        classSheafId: null,
+        activeSlotId: null,
+        cursorIndex: 0,
+        insertMode: 'insert',
+        nextSlotId: 1
+      };
+    }
+    if (!Array.isArray(state.classFormulaBuilder.tokens)) state.classFormulaBuilder.tokens = [];
+    if (!state.classFormulaBuilder.mode) state.classFormulaBuilder.mode = 'builder';
+    if (!state.classFormulaBuilder.classFamily) state.classFormulaBuilder.classFamily = 'chern';
+    if (state.classFormulaBuilder.classDegree == null) state.classFormulaBuilder.classDegree = '';
+    if (!Number.isInteger(state.classFormulaBuilder.cursorIndex)) state.classFormulaBuilder.cursorIndex = state.classFormulaBuilder.tokens.length;
+    if (!['insert', 'append'].includes(state.classFormulaBuilder.insertMode)) state.classFormulaBuilder.insertMode = 'insert';
+    if (!Number.isFinite(state.classFormulaBuilder.nextSlotId)) state.classFormulaBuilder.nextSlotId = 1;
+    return state.classFormulaBuilder;
+  }
+
+  function classFormulaSelectedVariety() {
+    const builder = ensureClassFormulaBuilderState();
+    return state.varieties.find((item) => item.id === builder.varietyId)
+      || state.varieties[0]
+      || null;
+  }
+
+  function classFormulaSelectedGeometry() {
+    const variety = classFormulaSelectedVariety();
+    return variety ? geometryFromVariety(variety) : null;
+  }
+
+  function classFormulaActiveSlot(builder = ensureClassFormulaBuilderState()) {
+    if (!builder.activeSlotId) return null;
+    const slot = findClassFormulaSlotToken(builder.tokens, builder.activeSlotId);
+    if (!slot) builder.activeSlotId = null;
+    return slot;
+  }
+
+  function classFormulaEditingGeometry() {
+    const slot = classFormulaActiveSlot();
+    if (slot?.sourceGeometryId) return geometryByVarietyId(slot.sourceGeometryId);
+    return classFormulaSelectedGeometry();
+  }
+
+  function findClassFormulaSlotToken(tokens, slotId) {
+    if (!slotId) return null;
+    for (const token of tokens || []) {
+      if (!token) continue;
+      if (token.type === 'functor-slot' && token.slotId === slotId) return token;
+      if (token.type === 'functor-slot') {
+        const nested = findClassFormulaSlotToken(token.tokens, slotId);
+        if (nested) return nested;
+      }
+    }
+    return null;
+  }
+
+  function removeClassFormulaSlotToken(tokens, slotId) {
+    if (!Array.isArray(tokens) || !slotId) return false;
+    const index = tokens.findIndex((token) => token?.type === 'functor-slot' && token.slotId === slotId);
+    if (index >= 0) {
+      tokens.splice(index, 1);
+      return true;
+    }
+    return tokens.some((token) => token?.type === 'functor-slot' && removeClassFormulaSlotToken(token.tokens, slotId));
+  }
+
+  function classFormulaEditingTokens(builder = ensureClassFormulaBuilderState()) {
+    const slot = classFormulaActiveSlot(builder);
+    if (slot) {
+      if (!Array.isArray(slot.tokens)) slot.tokens = [];
+      return slot.tokens;
+    }
+    return builder.tokens;
+  }
+
+  function clampClassFormulaCursor(builder = ensureClassFormulaBuilderState()) {
+    const tokens = classFormulaEditingTokens(builder);
+    builder.cursorIndex = normalizedInt(builder.cursorIndex, 0, tokens.length, tokens.length);
+    return builder.cursorIndex;
+  }
+
+  function setClassFormulaCursor(index) {
+    const builder = ensureClassFormulaBuilderState();
+    const tokens = classFormulaEditingTokens(builder);
+    builder.cursorIndex = normalizedInt(index, 0, tokens.length, tokens.length);
+    builder.validatedFormula = null;
+    builder.mode = 'builder';
+    builder.message = '';
+    renderClassFormulaBuilder();
+  }
+
+  function moveClassFormulaCursor(delta) {
+    const builder = ensureClassFormulaBuilderState();
+    const current = clampClassFormulaCursor(builder);
+    setClassFormulaCursor(current + delta);
+  }
+
+  function setClassFormulaActiveSlot(slotId) {
+    const builder = ensureClassFormulaBuilderState();
+    const slot = findClassFormulaSlotToken(builder.tokens, slotId);
+    if (!slot) {
+      builder.activeSlotId = null;
+      builder.message = 'That functor slot is no longer available.';
+    } else {
+      builder.activeSlotId = slot.slotId;
+      builder.cursorIndex = Array.isArray(slot.tokens) ? slot.tokens.length : 0;
+      const geometry = slot.sourceGeometryId ? geometryByVarietyId(slot.sourceGeometryId) : null;
+      builder.message = geometry
+        ? `Fill this functor with classes on ${geometry.labelPlain || geometry.varietyId}.`
+        : 'Fill this functor argument.';
+    }
+    renderClassFormulaBuilder();
+  }
+
+  function clearClassFormulaActiveSlot() {
+    const builder = ensureClassFormulaBuilderState();
+    builder.activeSlotId = null;
+    builder.cursorIndex = builder.tokens.length;
+    builder.message = 'Returned to the outer formula.';
+    renderClassFormulaBuilder();
+  }
+
+  function setClassFormulaBuilderVariety(varietyId, options = {}) {
+    const builder = ensureClassFormulaBuilderState();
+    const next = state.varieties.some((item) => item.id === varietyId)
+      ? varietyId
+      : (state.varieties[0]?.id || null);
+    const changed = builder.varietyId !== next;
+    builder.varietyId = next;
+    if (changed && !options.preserveFormula) {
+      builder.tokens = [];
+      builder.validatedFormula = null;
+      builder.mode = 'builder';
+      builder.activeSlotId = null;
+      builder.cursorIndex = 0;
+      if (state.classStepSession?.formulaSession) stopClassStepSession({ keepCard: true, keepBuilder: true });
+    }
+    builder.message = next ? (changed ? 'Pick formula tokens for this variety.' : builder.message || '') : 'Add a variety before building a formula.';
+    renderClassFormulaBuilder();
+  }
+
+  function renderClassFormulaBuilder() {
+    if (!refs.classFormulaBuilder) return;
+    const builder = ensureClassFormulaBuilderState();
+    if (!builder.varietyId || !state.varieties.some((item) => item.id === builder.varietyId)) {
+      builder.varietyId = state.varieties[0]?.id || null;
+      builder.validatedFormula = null;
+    }
+    const geometry = classFormulaSelectedGeometry();
+    const editingGeometry = classFormulaEditingGeometry();
+    const activeSlot = classFormulaActiveSlot(builder);
+    clampClassFormulaCursor(builder);
+    if (refs.classFormulaVariety) {
+      refs.classFormulaVariety.innerHTML = state.varieties.length
+        ? state.varieties.map((variety) => `<option value="${escapeHtml(variety.id)}"${variety.id === builder.varietyId ? ' selected' : ''}>${escapeHtml(latexToPlain(variety.name || variety.labelLatex || variety.id))}</option>`).join('')
+        : '<option value="">add a variety first</option>';
+      refs.classFormulaVariety.disabled = !state.varieties.length;
+    }
+    renderClassFormulaTokenButtons(refs.classFormulaHomologyButtons, classFormulaHomologyTokenDefs(editingGeometry), !!editingGeometry);
+    renderClassFormulaClassPicker(editingGeometry, !!editingGeometry);
+    renderClassFormulaTokenButtons(refs.classFormulaMapButtons, classFormulaMapTokenDefs(editingGeometry), !!editingGeometry);
+    renderClassFormulaPreview();
+    const hasTokens = builder.tokens.length > 0;
+    const hasEditingTokens = classFormulaEditingTokens(builder).length > 0 || !!activeSlot;
+    const hasValid = !!builder.validatedFormula && builder.validatedFormula.signature === classFormulaBuilderSignature(builder);
+    if (refs.classFormulaUndo) refs.classFormulaUndo.disabled = !hasEditingTokens;
+    if (refs.classFormulaClear) refs.classFormulaClear.disabled = !hasTokens;
+    if (refs.classFormulaSlotDone) {
+      refs.classFormulaSlotDone.hidden = !activeSlot;
+      refs.classFormulaSlotDone.disabled = !activeSlot;
+    }
+    if (refs.classFormulaCheck) refs.classFormulaCheck.disabled = !geometry || !hasTokens;
+    if (refs.classFormulaCompute) refs.classFormulaCompute.disabled = !hasValid;
+    if (refs.classFormulaMessage) {
+      const slotMessage = activeSlot && editingGeometry
+        ? `Filling ${activeSlot.plain || 'functor'} with classes on ${editingGeometry.labelPlain || editingGeometry.varietyId}.`
+        : '';
+      refs.classFormulaMessage.textContent = builder.message || slotMessage || (geometry ? 'Build a formula with the rows above.' : 'Add a variety before building a formula.');
+    }
+  }
+
+  function renderClassFormulaTokenButtons(container, defs, enabled) {
+    if (!container) return;
+    const items = Array.isArray(defs) ? defs : [];
+    container.classList.toggle('is-empty', !items.length);
+    if (!items.length) {
+      container.textContent = enabled ? 'none available' : 'pick a variety first';
+      return;
+    }
+    container.innerHTML = items.map((def) => `
+      <button class="sheaf-step-token-button" type="button" data-class-formula-token="${escapeHtml(encodeClassFormulaToken(def))}" title="${escapeHtml(def.title || def.plain || def.latex)}" ${enabled ? '' : 'disabled'}>
+        \\(${def.latex}\\)
+      </button>
+    `).join('');
+    typeset(container);
+  }
+
+  function classFormulaClassFamiliesForGeometry(geometry) {
+    if (!geometry?.varietyId) return [];
+    const families = [
+      { value: 'chern', label: 'c', latex: 'c' },
+      { value: 'character', label: 'ch', latex: '\\operatorname{ch}' },
+      { value: 'todd', label: 'td', latex: '\\operatorname{td}' },
+      { value: 'segre', label: 's', latex: 's' },
+      { value: 'sqrtTodd', label: 'sqrt td', latex: '\\sqrt{\\operatorname{td}}' }
+    ];
+    return families;
+  }
+
+  function classFormulaSheafOptionsForGeometry(geometry) {
+    if (!geometry?.varietyId) return [];
+    return state.sheaves
+      .filter((sheaf) => sheaf.baseVarietyId === geometry.varietyId)
+      .map((sheafObject) => {
+        const sheaf = sheafFromObject(sheafObject, geometry);
+        return {
+          id: sheafObject.id,
+          labelLatex: sheaf.labelLatex,
+          labelPlain: sheaf.labelPlain
+        };
+      });
+  }
+
+  function renderClassFormulaClassPicker(geometry, enabled) {
+    const builder = ensureClassFormulaBuilderState();
+    const sheaves = classFormulaSheafOptionsForGeometry(geometry);
+    const families = classFormulaClassFamiliesForGeometry(geometry);
+    const hasSheaves = enabled && sheaves.length > 0;
+    if (!families.some((family) => family.value === builder.classFamily)) builder.classFamily = families[0]?.value || 'chern';
+    if (!sheaves.some((sheaf) => sheaf.id === builder.classSheafId)) builder.classSheafId = sheaves[0]?.id || null;
+    if (refs.classFormulaClassFamily) {
+      refs.classFormulaClassFamily.innerHTML = families.length
+        ? families.map((family) => `<option value="${escapeHtml(family.value)}"${family.value === builder.classFamily ? ' selected' : ''}>${escapeHtml(family.label)}</option>`).join('')
+        : '<option value="">class</option>';
+      refs.classFormulaClassFamily.disabled = !hasSheaves;
+    }
+    if (refs.classFormulaClassDegree) {
+      const maxDegree = Number.isInteger(geometry?.dim) ? geometry.dim : 0;
+      const degreeOptions = ['<option value="">all degrees</option>'];
+      for (let degree = 0; degree <= maxDegree; degree += 1) {
+        degreeOptions.push(`<option value="${degree}"${String(builder.classDegree) === String(degree) ? ' selected' : ''}>${degree}</option>`);
+      }
+      refs.classFormulaClassDegree.innerHTML = degreeOptions.join('');
+      refs.classFormulaClassDegree.disabled = !hasSheaves;
+    }
+    if (refs.classFormulaClassSheaf) {
+      refs.classFormulaClassSheaf.innerHTML = sheaves.length
+        ? sheaves.map((sheaf) => `<option value="${escapeHtml(sheaf.id)}"${sheaf.id === builder.classSheafId ? ' selected' : ''}>${escapeHtml(sheaf.labelPlain || sheaf.id)}</option>`).join('')
+        : '<option value="">no sheaves</option>';
+      refs.classFormulaClassSheaf.disabled = !hasSheaves;
+    }
+    if (refs.classFormulaAddSheafClass) {
+      refs.classFormulaAddSheafClass.disabled = !hasSheaves;
+      const selectedToken = hasSheaves
+        ? classFormulaSheafTokenForSelection(geometry, builder.classSheafId, builder.classFamily, builder.classDegree)
+        : null;
+      refs.classFormulaAddSheafClass.innerHTML = selectedToken?.latex
+        ? `\\(${selectedToken.latex}\\)`
+        : 'add class';
+      refs.classFormulaAddSheafClass.title = selectedToken?.plain || 'add class';
+      typeset(refs.classFormulaAddSheafClass);
+    }
+  }
+
+  function setClassFormulaClassPickerValue(kind, value) {
+    const builder = ensureClassFormulaBuilderState();
+    if (kind === 'family') builder.classFamily = value || 'chern';
+    if (kind === 'degree') builder.classDegree = value == null ? '' : String(value);
+    if (kind === 'sheaf') builder.classSheafId = value || null;
+    builder.message = '';
+    renderClassFormulaBuilder();
+  }
+
+  function appendClassFormulaSelectedSheafClass() {
+    const builder = ensureClassFormulaBuilderState();
+    const geometry = classFormulaEditingGeometry();
+    if (!geometry) {
+      builder.message = 'Pick a variety first.';
+      renderClassFormulaBuilder();
+      return;
+    }
+    const token = classFormulaSheafTokenForSelection(
+      geometry,
+      builder.classSheafId,
+      builder.classFamily,
+      builder.classDegree
+    );
+    if (!token) {
+      builder.message = 'That characteristic class is not available for this sheaf.';
+      renderClassFormulaBuilder();
+      return;
+    }
+    appendClassFormulaToken(token, 'Characteristic class added.');
+  }
+
+  function classFormulaHomologyTokenDefs(geometry) {
+    if (!geometry) return [];
+    defineBaseHomologyVariables(geometry);
+    return baseHomologyClassDefinitions(geometry)
+      .filter((def) => def.id !== HOMOLOGY_UNIT_CLASS)
+      .map((def) => {
+        const variableId = homologyDefVariableId(def, geometry);
+        defineVariable(variableId, def.degree, def.symbolLatex, homologyDefinitionVariableMeta(def));
+        return {
+          type: 'atom',
+          atomKind: 'homology',
+          geometryId: geometry.varietyId,
+          degree: def.degree,
+          variableId,
+          latex: def.symbolLatex,
+          plain: def.symbolPlain || latexToPlain(def.symbolLatex),
+          title: `${def.kind || 'homology class'} in ${geometry.labelPlain || geometry.labelLatex}`
+        };
+      });
+  }
+
+  function classFormulaSheafTokenDefs(geometry) {
+    if (!geometry?.varietyId) return [];
+    const sheaves = state.sheaves.filter((sheaf) => sheaf.baseVarietyId === geometry.varietyId);
+    const defs = [];
+    for (const sheafObject of sheaves) {
+      const sheaf = sheafFromObject(sheafObject, geometry);
+      for (const family of ['chern', 'character']) {
+        const formal = buildClassStepFormalData(geometry, sheaf, family);
+        const totalPoly = totalFromComponents(formal.components, geometry.dim, family === 'chern'
+          ? Poly.one()
+          : classStepRankPolyForFormalData(formal));
+        defs.push({
+          type: 'atom',
+          atomKind: 'sheaf-total',
+          geometryId: geometry.varietyId,
+          sheafId: sheafObject.id,
+          family,
+          polyData: serializeClassFormulaPoly(totalPoly),
+          latex: `${family === 'character' ? '\\operatorname{ch}' : 'c'}(${sheaf.labelLatex})`,
+          plain: `${family === 'character' ? 'ch' : 'c'}(${sheaf.labelPlain})`,
+          title: `${family === 'character' ? 'Chern character' : 'Chern class'} of ${sheaf.labelPlain}`
+        });
+        for (let degree = 1; degree <= geometry.dim; degree += 1) {
+          const poly = componentOrZero(formal.components, degree);
+          if (poly.isZero()) continue;
+          defs.push({
+            type: 'atom',
+            atomKind: 'sheaf-class',
+            geometryId: geometry.varietyId,
+            sheafId: sheafObject.id,
+            family,
+            degree,
+            polyData: serializeClassFormulaPoly(poly),
+            latex: `${family === 'character' ? `\\operatorname{ch}_{${degree}}` : `c_{${degree}}`}(${sheaf.labelLatex})`,
+            plain: `${family === 'character' ? `ch_${degree}` : `c_${degree}`}(${sheaf.labelPlain})`,
+            title: `${family === 'character' ? 'Chern character' : 'Chern class'} term`
+          });
+        }
+      }
+      const actualBundle = classFormulaBundleForSheaf(geometry, sheaf);
+      if (actualBundle) {
+        [
+          ['todd', actualBundle.todd, `\\operatorname{td}(${sheaf.labelLatex})`, `td(${sheaf.labelPlain})`],
+          ['segre', actualBundle.segre, `s(${sheaf.labelLatex})`, `s(${sheaf.labelPlain})`],
+          ['sqrtTodd', actualBundle.sqrtTodd, `\\sqrt{\\operatorname{td}}(${sheaf.labelLatex})`, `sqrt td(${sheaf.labelPlain})`]
+        ].forEach(([family, poly, latex, plain]) => {
+          defs.push({
+            type: 'atom',
+            atomKind: 'sheaf-derived',
+            geometryId: geometry.varietyId,
+            sheafId: sheafObject.id,
+            family,
+            polyData: serializeClassFormulaPoly(poly),
+            latex,
+            plain,
+            title: `${plain} of ${sheaf.labelPlain}`
+          });
+        });
+      }
+    }
+    return defs;
+  }
+
+  function classFormulaSheafTokenForSelection(geometry, sheafId, family = 'chern', degreeValue = '') {
+    if (!geometry?.varietyId || !sheafId) return null;
+    const sheafObject = state.sheaves.find((sheaf) => sheaf.id === sheafId && sheaf.baseVarietyId === geometry.varietyId);
+    if (!sheafObject) return null;
+    const sheaf = sheafFromObject(sheafObject, geometry);
+    const normalizedFamily = classFormulaNormalizeClassFamily(family);
+    const degreeText = String(degreeValue ?? '').trim();
+    const degree = degreeText === '' ? null : normalizedInt(degreeText, 0, geometry.dim, 0);
+    let poly = null;
+    let atomKind = 'sheaf-class';
+    let latexPrefix = 'c';
+    let plainPrefix = 'c';
+    if (normalizedFamily === 'chern' || normalizedFamily === 'character') {
+      const formal = buildClassStepFormalData(geometry, sheaf, normalizedFamily);
+      const constant = normalizedFamily === 'chern'
+        ? Poly.one()
+        : classStepRankPolyForFormalData(formal);
+      poly = degree == null
+        ? totalFromComponents(formal.components, geometry.dim, constant)
+        : (degree === 0 ? constant : componentOrZero(formal.components, degree));
+      latexPrefix = normalizedFamily === 'character' ? '\\operatorname{ch}' : 'c';
+      plainPrefix = normalizedFamily === 'character' ? 'ch' : 'c';
+      atomKind = degree == null ? 'sheaf-total' : 'sheaf-class';
+    } else {
+      const actualBundle = classFormulaBundleForSheaf(geometry, sheaf);
+      if (!actualBundle) return null;
+      const familyData = {
+        todd: { poly: actualBundle.todd, latex: '\\operatorname{td}', plain: 'td' },
+        segre: { poly: actualBundle.segre, latex: 's', plain: 's' },
+        sqrtTodd: { poly: actualBundle.sqrtTodd, latex: '\\sqrt{\\operatorname{td}}', plain: 'sqrt td' }
+      }[normalizedFamily];
+      if (!familyData) return null;
+      poly = degree == null ? familyData.poly : homogeneousPart(familyData.poly, degree);
+      latexPrefix = familyData.latex;
+      plainPrefix = familyData.plain;
+      atomKind = 'sheaf-derived';
+    }
+    if (!poly) return null;
+    const suffixLatex = degree == null ? '' : `_{${degree}}`;
+    const suffixPlain = degree == null ? '' : `_${degree}`;
+    return {
+      type: 'atom',
+      atomKind,
+      geometryId: geometry.varietyId,
+      sheafId: sheafObject.id,
+      family: normalizedFamily,
+      degree,
+      polyData: serializeClassFormulaPoly(poly),
+      latex: `${latexPrefix}${suffixLatex}(${sheaf.labelLatex})`,
+      plain: `${plainPrefix}${suffixPlain}(${sheaf.labelPlain})`,
+      title: `${plainPrefix}${suffixPlain || ''} of ${sheaf.labelPlain}`
+    };
+  }
+
+  function classFormulaNormalizeClassFamily(family) {
+    if (family === 'character' || family === 'ch') return 'character';
+    if (family === 'todd' || family === 'td') return 'todd';
+    if (family === 'segre' || family === 's') return 'segre';
+    if (family === 'sqrtTodd' || family === 'sqrt td') return 'sqrtTodd';
+    return 'chern';
+  }
+
+  function classFormulaBundleForSheaf(geometry, sheaf) {
+    try {
+      return buildBundleForSheaf(geometry, sheaf, { geometry });
+    } catch (error) {
+      if (!error?.symbolicBudgetExceeded) return null;
+      return null;
+    }
+  }
+
+  function classFormulaMapTokenDefs(geometry) {
+    if (!geometry?.varietyId) return [];
+    const defs = [];
+    for (const map of state.maps || []) {
+      if (map.domainKind !== 'variety' || map.codomainKind !== 'variety') continue;
+      if (map.domainId === geometry.varietyId) {
+        const sourceGeometry = geometryByVarietyId(map.codomainId);
+        if (sourceGeometry) {
+          defs.push(classFormulaFunctorTemplateToken(map, 'pullback', sourceGeometry, geometry));
+        }
+      }
+      if (map.codomainId === geometry.varietyId) {
+        const sourceGeometry = geometryByVarietyId(map.domainId);
+        if (sourceGeometry) {
+          defs.push(classFormulaFunctorTemplateToken(map, 'pushforward', sourceGeometry, geometry));
+        }
+      }
+    }
+    return defs.filter(Boolean);
+  }
+
+  function classFormulaFunctorTemplateToken(map, operation, sourceGeometry, targetGeometry) {
+    if (!map || !sourceGeometry || !targetGeometry) return null;
+    const operatorLatex = operation === 'pullback' ? mapPullbackOperatorLatex(map) : mapPushforwardOperatorLatex(map);
+    const operatorPlain = operation === 'pullback' ? `${latexToPlain(map.name || 'f')}^*` : `${latexToPlain(map.name || 'f')}_*`;
+    return {
+      type: 'functor-template',
+      operation,
+      mapId: map.id,
+      sourceGeometryId: sourceGeometry.varietyId,
+      targetGeometryId: targetGeometry.varietyId,
+      latex: `${operatorLatex}(\\square)`,
+      plain: `${operatorPlain}(class)`,
+      title: `${operation === 'pullback' ? 'Pullback' : 'Pushforward'} from ${sourceGeometry.labelPlain || sourceGeometry.varietyId}`
+    };
+  }
+
+  function classFormulaMapOperationToken(map, operation, sourceDef, sourceGeometry, targetGeometry) {
+    if (!map || !sourceDef || !sourceGeometry || !targetGeometry) return null;
+    const targetDegree = mapOperationTargetDegree(operation, sourceDef.degree, sourceGeometry, targetGeometry);
+    const targetCohomologyDegree = mapOperationTargetCohomologyDegree(operation, sourceDef.cohomologyDegree, sourceGeometry, targetGeometry);
+    if (targetDegree == null || targetCohomologyDegree == null) return null;
+    let targetDef;
+    if (operation === 'pushforward' && sourceDef.variableId?.startsWith('monomial_')) {
+      targetDef = mapPushforwardMonomialClassDefinition(map, {
+        key: sourceDef.sourceKey || '',
+        degree: sourceDef.degree,
+        cohomologyDegree: sourceDef.cohomologyDegree,
+        latex: sourceDef.symbolLatex,
+        plain: sourceDef.symbolPlain
+      }, sourceGeometry, targetGeometry);
+    } else {
+      targetDef = mapOperationHomologyClassDefinition(map, operation, sourceDef, targetGeometry);
+    }
+    if (!targetDef) return null;
+    const variableId = homologyDefVariableId(targetDef, targetGeometry);
+    const data = VARS.get(variableId) || ensureMapHomologyVariableFromId(variableId);
+    defineVariable(variableId, targetDef.degree, targetDef.symbolLatex, homologyDefinitionVariableMeta(targetDef));
+    return {
+      type: 'atom',
+      atomKind: `map-${operation}`,
+      geometryId: targetGeometry.varietyId,
+      mapId: map.id,
+      operation,
+      sourceGeometryId: sourceGeometry.varietyId,
+      degree: targetDef.degree,
+      variableId,
+      latex: data?.latex || targetDef.symbolLatex,
+      plain: data?.plain || targetDef.symbolPlain || latexToPlain(targetDef.symbolLatex),
+      title: `${operation === 'pullback' ? 'Pullback' : 'Pushforward'} along ${latexToPlain(map.name || map.id)}`
+    };
+  }
+
+  function encodeClassFormulaToken(token) {
+    return encodeURIComponent(JSON.stringify(token));
+  }
+
+  function decodeClassFormulaToken(text) {
+    try {
+      const token = JSON.parse(decodeURIComponent(String(text || '')));
+      return sanitizeClassFormulaToken(token);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function sanitizeClassFormulaToken(token) {
+    if (!token || typeof token !== 'object') return null;
+    if (token.type === 'atom') {
+      return {
+        type: 'atom',
+        atomKind: String(token.atomKind || 'atom'),
+        geometryId: token.geometryId || null,
+        sheafId: token.sheafId || null,
+        family: token.family || null,
+        degree: Number.isInteger(token.degree) ? token.degree : null,
+        variableId: token.variableId || null,
+        polyData: token.polyData || null,
+        latex: String(token.latex || 'x'),
+        plain: String(token.plain || latexToPlain(token.latex || 'x'))
+      };
+    }
+    if (token.type === 'functor') {
+      return {
+        type: 'functor',
+        operation: token.operation === 'pushforward' ? 'pushforward' : 'pullback',
+        mapId: token.mapId || null,
+        sourceGeometryId: token.sourceGeometryId || null,
+        targetGeometryId: token.targetGeometryId || null,
+        latex: String(token.latex || ''),
+        plain: String(token.plain || '')
+      };
+    }
+    if (token.type === 'functor-template' || token.type === 'functor-slot') {
+      return {
+        type: token.type,
+        slotId: token.slotId || null,
+        operation: token.operation === 'pushforward' ? 'pushforward' : 'pullback',
+        mapId: token.mapId || null,
+        sourceGeometryId: token.sourceGeometryId || null,
+        targetGeometryId: token.targetGeometryId || null,
+        tokens: Array.isArray(token.tokens)
+          ? token.tokens.map((item) => sanitizeClassFormulaToken(item)).filter(Boolean)
+          : [],
+        latex: String(token.latex || ''),
+        plain: String(token.plain || '')
+      };
+    }
+    if (token.type === 'operator' || token.type === 'paren') return token;
+    return null;
+  }
+
+  function appendClassFormulaTokenFromButton(button) {
+    const token = decodeClassFormulaToken(button?.dataset?.classFormulaToken);
+    if (!token) return;
+    appendClassFormulaToken(token, 'Token added.');
+  }
+
+  function appendClassFormulaToken(token, message = 'Token added.') {
+    const builder = ensureClassFormulaBuilderState();
+    let nextToken = token;
+    if (token.type === 'functor-template') {
+      const slotId = `slot${builder.nextSlotId++}`;
+      nextToken = {
+        ...token,
+        type: 'functor-slot',
+        slotId,
+        tokens: []
+      };
+    }
+    const tokens = classFormulaEditingTokens(builder);
+    const insertAt = builder.insertMode === 'append' ? tokens.length : clampClassFormulaCursor(builder);
+    tokens.splice(insertAt, 0, nextToken);
+    builder.cursorIndex = insertAt + 1;
+    if (nextToken.type === 'functor-slot') builder.activeSlotId = nextToken.slotId;
+    builder.validatedFormula = null;
+    builder.mode = 'builder';
+    builder.message = nextToken.type === 'functor-slot'
+      ? 'Fill the functor argument with classes from the indicated variety.'
+      : message;
+    renderClassFormulaBuilder();
+  }
+
+  function appendClassFormulaOperator(op) {
+    const token = classFormulaOperatorToken(op);
+    if (!token) return;
+    const builder = ensureClassFormulaBuilderState();
+    const tokens = classFormulaEditingTokens(builder);
+    const insertAt = builder.insertMode === 'append' ? tokens.length : clampClassFormulaCursor(builder);
+    tokens.splice(insertAt, 0, token);
+    builder.cursorIndex = insertAt + 1;
+    builder.validatedFormula = null;
+    builder.mode = 'builder';
+    builder.message = 'Operator added.';
+    renderClassFormulaBuilder();
+  }
+
+  function classFormulaOperatorToken(op) {
+    if (op === 'plus') return { type: 'operator', op: '+', latex: '+', plain: '+' };
+    if (op === 'minus') return { type: 'operator', op: '-', latex: '-', plain: '-' };
+    if (op === 'times') return { type: 'operator', op: '*', latex: '\\cdot', plain: '*' };
+    if (op === 'open') return { type: 'paren', value: '(', latex: '(', plain: '(' };
+    if (op === 'close') return { type: 'paren', value: ')', latex: ')', plain: ')' };
+    return null;
+  }
+
+  function wrapLastClassFormulaExpression(functorToken) {
+    const builder = ensureClassFormulaBuilderState();
+    const range = classFormulaLastExpressionRange(builder.tokens);
+    if (!range) return false;
+    const before = builder.tokens.slice(0, range.start);
+    const expression = builder.tokens.slice(range.start, range.end);
+    const after = builder.tokens.slice(range.end);
+    builder.tokens = [
+      ...before,
+      { ...functorToken, role: 'prefix' },
+      { type: 'paren', value: '(', latex: '(', plain: '(' },
+      ...expression,
+      { type: 'paren', value: ')', latex: ')', plain: ')' },
+      ...after
+    ];
+    builder.validatedFormula = null;
+    builder.mode = 'builder';
+    builder.message = 'Functor applied to the previous formula.';
+    renderClassFormulaBuilder();
+    return true;
+  }
+
+  function classFormulaLastExpressionRange(tokens) {
+    if (!tokens?.length) return null;
+    let end = tokens.length;
+    let i = end - 1;
+    if (tokens[i]?.type === 'operator') return null;
+    if (tokens[i]?.type === 'paren' && tokens[i].value === ')') {
+      let depth = 0;
+      for (; i >= 0; i -= 1) {
+        const token = tokens[i];
+        if (token.type === 'paren' && token.value === ')') depth += 1;
+        else if (token.type === 'paren' && token.value === '(') {
+          depth -= 1;
+          if (depth === 0) {
+            let start = i;
+            if (tokens[i - 1]?.type === 'functor') start = i - 1;
+            return { start, end };
+          }
+        }
+      }
+      return null;
+    }
+    if (tokens[i]?.type === 'atom') return { start: i, end };
+    return null;
+  }
+
+  function undoClassFormulaToken() {
+    const builder = ensureClassFormulaBuilderState();
+    const activeSlot = classFormulaActiveSlot(builder);
+    if (activeSlot && (!Array.isArray(activeSlot.tokens) || !activeSlot.tokens.length)) {
+      removeClassFormulaSlotToken(builder.tokens, activeSlot.slotId);
+      builder.activeSlotId = null;
+      builder.validatedFormula = null;
+      builder.mode = 'builder';
+      builder.message = 'Removed the empty functor.';
+      renderClassFormulaBuilder();
+      return;
+    }
+    const tokens = classFormulaEditingTokens(builder);
+    const cursor = clampClassFormulaCursor(builder);
+    if (!tokens.length || cursor <= 0) return;
+    tokens.splice(cursor - 1, 1);
+    builder.cursorIndex = cursor - 1;
+    builder.validatedFormula = null;
+    builder.mode = 'builder';
+    builder.message = 'Removed the last token.';
+    renderClassFormulaBuilder();
+  }
+
+  function clearClassFormulaBuilder() {
+    const builder = ensureClassFormulaBuilderState();
+    builder.tokens = [];
+    builder.validatedFormula = null;
+    builder.mode = 'builder';
+    builder.activeSlotId = null;
+    builder.cursorIndex = 0;
+    builder.message = 'Formula cleared.';
+    if (state.classStepSession?.formulaSession) stopClassStepSession({ keepCard: true, keepBuilder: true });
+    renderClassFormulaBuilder();
+  }
+
+  function handleClassFormulaEditorKeydown(event) {
+    const builder = ensureClassFormulaBuilderState();
+    const tokens = classFormulaEditingTokens(builder);
+    const cursor = clampClassFormulaCursor(builder);
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      moveClassFormulaCursor(-1);
+      return;
+    }
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      moveClassFormulaCursor(1);
+      return;
+    }
+    if (event.key === 'Home') {
+      event.preventDefault();
+      setClassFormulaCursor(0);
+      return;
+    }
+    if (event.key === 'End') {
+      event.preventDefault();
+      setClassFormulaCursor(tokens.length);
+      return;
+    }
+    if (event.key === 'Backspace') {
+      event.preventDefault();
+      undoClassFormulaToken();
+      return;
+    }
+    if (event.key === 'Delete') {
+      event.preventDefault();
+      if (cursor >= tokens.length) return;
+      tokens.splice(cursor, 1);
+      builder.validatedFormula = null;
+      builder.mode = 'builder';
+      builder.message = 'Removed the next token.';
+      renderClassFormulaBuilder();
+      return;
+    }
+    if (event.key === 'Insert') {
+      event.preventDefault();
+      builder.insertMode = builder.insertMode === 'append' ? 'insert' : 'append';
+      builder.message = builder.insertMode === 'append'
+        ? 'Insert mode: new tokens go to the end of this formula.'
+        : 'Insert mode: new tokens go at the cursor.';
+      if (builder.insertMode === 'append') builder.cursorIndex = tokens.length;
+      renderClassFormulaBuilder();
+    }
+  }
+
+  function renderClassFormulaPreview() {
+    if (!refs.classFormulaPreview) return;
+    const builder = ensureClassFormulaBuilderState();
+    refs.classFormulaPreview.tabIndex = 0;
+    refs.classFormulaPreview.setAttribute?.('role', 'textbox');
+    refs.classFormulaPreview.setAttribute?.('aria-label', 'Characteristic class formula editor');
+    const hasValid = !!builder.validatedFormula && builder.validatedFormula.signature === classFormulaBuilderSignature(builder);
+    const html = hasValid
+      ? `\\(${builder.validatedFormula.latex}\\)`
+      : classFormulaTokensEditorHtml(builder.tokens, builder);
+    refs.classFormulaPreview.classList?.toggle?.('is-checked', hasValid);
+    refs.classFormulaPreview.innerHTML = html || '<span class="hint">empty formula</span>';
+    typeset(refs.classFormulaPreview);
+  }
+
+  function classFormulaTokensLatex(tokens = []) {
+    return tokens.map((token) => {
+      if (!token) return '';
+      if (token.type === 'functor-slot') {
+        const inner = classFormulaTokensLatex(token.tokens || []);
+        const operatorLatex = token.operation === 'pushforward'
+          ? mapPushforwardOperatorLatex(state.maps.find((map) => sameMapId(map.id, token.mapId)))
+          : mapPullbackOperatorLatex(state.maps.find((map) => sameMapId(map.id, token.mapId)));
+        return `${operatorLatex}\\left(${inner || '\\square'}\\right)`;
+      }
+      return token.latex || '';
+    }).join(' ').trim();
+  }
+
+  function classFormulaTokensPlain(tokens = []) {
+    return tokens.map((token) => {
+      if (!token) return '';
+    if (token.type === 'functor-slot') {
+      const inner = classFormulaTokensPlain(token.tokens || []);
+      const map = state.maps.find((item) => sameMapId(item.id, token.mapId));
+      const operatorPlain = token.operation === 'pushforward' ? `${latexToPlain(map?.name || 'f')}_*` : `${latexToPlain(map?.name || 'f')}^*`;
+      return `${operatorPlain}(${inner || 'class'})`;
+    }
+      return token.plain || token.latex || '';
+    }).join(' ').trim();
+  }
+
+  function classFormulaTokensEditorHtml(tokens = [], builder = ensureClassFormulaBuilderState(), depth = 0) {
+    const editingTokens = classFormulaEditingTokens(builder);
+    const editingThisLevel = tokens === editingTokens;
+    const cursor = editingThisLevel ? clampClassFormulaCursor(builder) : -1;
+    const parts = [];
+    const items = tokens || [];
+    for (let index = 0; index <= items.length; index += 1) {
+      if (editingThisLevel) parts.push(classFormulaCursorHtml(index, cursor));
+      if (index < items.length) parts.push(classFormulaTokenEditorHtml(items[index], builder, depth, index, editingThisLevel));
+    }
+    return parts.join('').trim();
+  }
+
+  function classFormulaCursorHtml(index, cursor) {
+    const active = index === cursor ? ' is-active' : '';
+    return `<button class="formula-cursor${active}" type="button" data-class-formula-cursor="${index}" aria-label="insert position ${index}"></button>`;
+  }
+
+  function classFormulaTokenEditorHtml(token, builder = ensureClassFormulaBuilderState(), depth = 0, index = 0, editingThisLevel = false) {
+    if (!token) return '';
+    if (token.type !== 'functor-slot') {
+      const cursorAttr = editingThisLevel ? ` data-class-formula-cursor="${index + 1}"` : '';
+      return token.latex
+        ? `<button class="formula-token-chip" type="button"${cursorAttr} title="${escapeHtml(token.plain || token.latex)}">\\(${token.latex}\\)</button>`
+        : '';
+    }
+    const map = state.maps.find((item) => sameMapId(item.id, token.mapId));
+    const operatorLatex = token.operation === 'pushforward' ? mapPushforwardOperatorLatex(map) : mapPullbackOperatorLatex(map);
+    const innerHtml = token.tokens?.length
+      ? `<button class="sheaf-step-slot-argument${token.slotId === builder.activeSlotId ? ' is-active' : ''}" type="button" data-class-formula-slot="${escapeHtml(token.slotId || '')}">${classFormulaTokensEditorHtml(token.tokens, builder, depth + 1)}</button>`
+      : `<button class="sheaf-step-slot-button${token.slotId === builder.activeSlotId ? ' is-active' : ''}" type="button" data-class-formula-slot="${escapeHtml(token.slotId || '')}">class</button>`;
+    return `<span class="formula-preview-fragment">\\(${operatorLatex}(\\)</span>${innerHtml}<span class="formula-preview-fragment">\\()\\)</span>`;
+  }
+
+
+  function classFormulaBuilderSignature(builder = ensureClassFormulaBuilderState()) {
+    return `${builder.varietyId || ''}::${JSON.stringify(builder.tokens || [])}`;
+  }
+
+  function checkClassFormulaBuilder() {
+    const builder = ensureClassFormulaBuilderState();
+    const validation = validateClassFormulaBuilder();
+    builder.validatedFormula = validation.ok ? validation : null;
+    builder.message = validation.ok
+      ? 'Formula is allowed. Symbolic parts will remain if no rule reduces them.'
+      : validation.message;
+    renderClassFormulaBuilder();
+    return validation;
+  }
+
+  function validateClassFormulaBuilder() {
+    const builder = ensureClassFormulaBuilderState();
+    const geometry = classFormulaSelectedGeometry();
+    if (!geometry) return { ok: false, message: 'Pick a variety first.' };
+    if (!builder.tokens.length) return { ok: false, message: 'Add at least one formula token.' };
+    try {
+      const parsed = parseClassFormulaExpression(builder.tokens, geometry);
+      if (parsed.position !== builder.tokens.length) throw new Error('Unexpected extra formula tokens.');
+      return {
+        ok: true,
+        signature: classFormulaBuilderSignature(builder),
+        geometry,
+        poly: parsed.node.poly.truncate(geometry.dim),
+        latex: parsed.node.latex,
+        plain: parsed.node.plain,
+        degree: parsed.node.degree,
+        sourceGeometryId: parsed.node.sourceGeometryId || geometry.varietyId
+      };
+    } catch (error) {
+      return { ok: false, message: error?.message || 'Formula is not allowed.' };
+    }
+  }
+
+  function parseClassFormulaExpression(tokens, targetGeometry, position = 0, stopAtClose = false) {
+    let leftResult = parseClassFormulaProduct(tokens, targetGeometry, position, stopAtClose);
+    let left = leftResult.node;
+    position = leftResult.position;
+    while (position < tokens.length) {
+      const token = tokens[position];
+      if (token.type === 'paren' && token.value === ')') {
+        if (stopAtClose) break;
+        throw new Error('Unexpected closing parenthesis.');
+      }
+      if (token.type !== 'operator' || (token.op !== '+' && token.op !== '-')) break;
+      const rightResult = parseClassFormulaProduct(tokens, targetGeometry, position + 1, stopAtClose);
+      const right = rightResult.node;
+      ensureClassFormulaSameGeometry(left, right);
+      left = {
+        poly: token.op === '+' ? left.poly.add(right.poly) : left.poly.sub(right.poly),
+        degree: Math.max(left.degree ?? 0, right.degree ?? 0),
+        sourceGeometryId: left.sourceGeometryId,
+        latex: `${left.latex}${token.op === '+' ? '+' : '-'}${right.latex}`,
+        plain: `${left.plain}${token.op}${right.plain}`
+      };
+      position = rightResult.position;
+    }
+    return { node: left, position };
+  }
+
+  function parseClassFormulaProduct(tokens, targetGeometry, position, stopAtClose) {
+    let leftResult = parseClassFormulaFactor(tokens, targetGeometry, position, stopAtClose);
+    let left = leftResult.node;
+    position = leftResult.position;
+    while (position < tokens.length) {
+      const token = tokens[position];
+      if (token.type === 'paren' && token.value === ')') {
+        if (stopAtClose) break;
+        throw new Error('Unexpected closing parenthesis.');
+      }
+      const implicitProduct = classFormulaTokenStartsFactor(token);
+      const explicitProduct = token.type === 'operator' && token.op === '*';
+      if (!explicitProduct && !implicitProduct) break;
+      const rightResult = parseClassFormulaFactor(tokens, targetGeometry, explicitProduct ? position + 1 : position, stopAtClose);
+      const right = rightResult.node;
+      ensureClassFormulaSameGeometry(left, right);
+      const operatorLatex = explicitProduct ? token.latex : '\\cdot';
+      left = {
+        poly: left.poly.mul(right.poly, targetGeometry.dim),
+        degree: (left.degree ?? 0) + (right.degree ?? 0),
+        sourceGeometryId: left.sourceGeometryId,
+        latex: `${classFormulaWrapLatex(left)}${operatorLatex}${classFormulaWrapLatex(right)}`,
+        plain: `${classFormulaWrapPlain(left)}*${classFormulaWrapPlain(right)}`
+      };
+      position = rightResult.position;
+    }
+    return { node: left, position };
+  }
+
+  function classFormulaTokenStartsFactor(token) {
+    if (!token) return false;
+    if (token.type === 'atom' || token.type === 'functor' || token.type === 'functor-slot') return true;
+    return token.type === 'paren' && token.value === '(';
+  }
+
+  function parseClassFormulaFactor(tokens, targetGeometry, position, stopAtClose) {
+    if (position >= tokens.length) throw new Error('Formula ended too soon.');
+    const token = tokens[position];
+    if (token.type === 'operator') throw new Error('Expected a class, functor, or parenthesized formula.');
+    if (token.type === 'atom') return { node: classFormulaAtomNode(token, targetGeometry), position: position + 1 };
+    if (token.type === 'functor-slot') {
+      const sourceGeometry = geometryByVarietyId(token.sourceGeometryId);
+      const target = geometryByVarietyId(token.targetGeometryId);
+      if (!sourceGeometry || !target) throw new Error('Functor source or target variety is missing.');
+      if (target.varietyId !== targetGeometry.varietyId) throw new Error('Functor target does not match the selected variety.');
+      if (!Array.isArray(token.tokens) || !token.tokens.length) throw new Error('Functor argument cannot be empty.');
+      const inner = parseClassFormulaExpression(token.tokens, sourceGeometry, 0, false);
+      if (inner.position !== token.tokens.length) throw new Error('Unexpected extra formula tokens in the functor argument.');
+      const map = state.maps.find((item) => sameMapId(item.id, token.mapId));
+      if (!map) throw new Error('Functor map is missing.');
+      const node = classFormulaFunctorNode(token, map, sourceGeometry, target, inner.node);
+      return { node, position: position + 1 };
+    }
+    if (token.type === 'functor') {
+      const next = tokens[position + 1];
+      if (!next || next.type !== 'paren' || next.value !== '(') throw new Error('Functor needs a parenthesized formula.');
+      const sourceGeometry = geometryByVarietyId(token.sourceGeometryId);
+      const target = geometryByVarietyId(token.targetGeometryId);
+      if (!sourceGeometry || !target) throw new Error('Functor source or target variety is missing.');
+      if (target.varietyId !== targetGeometry.varietyId) throw new Error('Functor target does not match the selected variety.');
+      const inner = parseClassFormulaExpression(tokens, sourceGeometry, position + 2, true);
+      if (inner.position >= tokens.length || tokens[inner.position]?.type !== 'paren' || tokens[inner.position].value !== ')') {
+        throw new Error('Functor argument is missing a closing parenthesis.');
+      }
+      if (inner.position === position + 2) throw new Error('Functor argument cannot be empty.');
+      const map = state.maps.find((item) => sameMapId(item.id, token.mapId));
+      if (!map) throw new Error('Functor map is missing.');
+      const node = classFormulaFunctorNode(token, map, sourceGeometry, target, inner.node);
+      return { node, position: inner.position + 1 };
+    }
+    if (token.type === 'paren' && token.value === '(') {
+      const inner = parseClassFormulaExpression(tokens, targetGeometry, position + 1, true);
+      if (inner.position >= tokens.length || tokens[inner.position]?.type !== 'paren' || tokens[inner.position].value !== ')') {
+        throw new Error('Missing closing parenthesis.');
+      }
+      if (inner.position === position + 1) throw new Error('Parentheses cannot be empty.');
+      return {
+        node: {
+          ...inner.node,
+          latex: `\\left(${inner.node.latex}\\right)`,
+          plain: `(${inner.node.plain})`
+        },
+        position: inner.position + 1
+      };
+    }
+    if (token.type === 'paren' && token.value === ')') {
+      if (stopAtClose) throw new Error('Parentheses cannot be empty.');
+      throw new Error('Unexpected closing parenthesis.');
+    }
+    throw new Error('Unknown formula token.');
+  }
+
+  function classFormulaAtomNode(token, targetGeometry) {
+    if (token.geometryId && token.geometryId !== targetGeometry.varietyId) throw new Error('A class belongs to a different variety.');
+    let poly = token.polyData ? deserializeClassFormulaPoly(token.polyData) : null;
+    if (!poly && token.variableId) {
+      const data = homologyVariableDataById(targetGeometry, token.variableId) || tangentChernVariableDataById(targetGeometry, token.variableId);
+      if (!data) throw new Error('This homology class is not available on the selected variety.');
+      poly = Poly.variable(canonicalHomologyVariableId(token.variableId, targetGeometry));
+    }
+    if (!poly) throw new Error('Unable to read this formula token.');
+    return {
+      poly: poly.truncate(targetGeometry.dim),
+      degree: token.degree ?? classFormulaPolyMaxDegree(poly),
+      sourceGeometryId: targetGeometry.varietyId,
+      latex: token.latex,
+      plain: token.plain || latexToPlain(token.latex)
+    };
+  }
+
+  function classFormulaFunctorNode(token, map, sourceGeometry, targetGeometry, inner) {
+    if (inner.sourceGeometryId && inner.sourceGeometryId !== sourceGeometry.varietyId) throw new Error('Functor argument has the wrong source variety.');
+    let poly;
+    let degree = inner.degree ?? classFormulaPolyMaxDegree(inner.poly);
+    if (token.operation === 'pullback') {
+      if (map.domainId !== targetGeometry.varietyId || map.codomainId !== sourceGeometry.varietyId) throw new Error('Pullback source and target do not match this map.');
+      poly = pullbackPolynomial(inner.poly, map).truncate(targetGeometry.dim);
+    } else {
+      if (map.domainId !== sourceGeometry.varietyId || map.codomainId !== targetGeometry.varietyId) throw new Error('Pushforward source and target do not match this map.');
+      const range = classFormulaPolyDegreeRange(inner.poly);
+      const minShifted = range.min + targetGeometry.dim - sourceGeometry.dim;
+      const maxShifted = range.max + targetGeometry.dim - sourceGeometry.dim;
+      if (minShifted < 0 || maxShifted > targetGeometry.dim) throw new Error('Pushforward degree is outside the selected variety.');
+      poly = pushforwardPolynomialByDegree(map, inner.poly, sourceGeometry.dim, targetGeometry.dim, { proper: false }).truncate(targetGeometry.dim);
+      degree = maxShifted;
+    }
+    const operatorLatex = token.operation === 'pullback' ? mapPullbackOperatorLatex(map) : mapPushforwardOperatorLatex(map);
+    const operatorPlain = token.operation === 'pullback' ? `${latexToPlain(map.name || 'f')}^*` : `${latexToPlain(map.name || 'f')}_*`;
+    return {
+      poly,
+      degree,
+      sourceGeometryId: targetGeometry.varietyId,
+      latex: `${operatorLatex}\\left(${inner.latex}\\right)`,
+      plain: `${operatorPlain}(${inner.plain})`
+    };
+  }
+
+  function ensureClassFormulaSameGeometry(left, right) {
+    if (left.sourceGeometryId && right.sourceGeometryId && left.sourceGeometryId !== right.sourceGeometryId) {
+      throw new Error('Formula terms live on different varieties.');
+    }
+  }
+
+  function classFormulaWrapLatex(node) {
+    return /[+-]/.test(node?.latex || '') ? `\\left(${node.latex}\\right)` : (node?.latex || '0');
+  }
+
+  function classFormulaWrapPlain(node) {
+    return /[+-]/.test(node?.plain || '') ? `(${node.plain})` : (node?.plain || '0');
+  }
+
+  function classFormulaPolyMaxDegree(poly) {
+    let max = 0;
+    for (const key of Poly.from(poly).terms.keys()) max = Math.max(max, monoDegree(key));
+    return max;
+  }
+
+  function classFormulaPolyDegreeRange(poly) {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const key of Poly.from(poly).terms.keys()) {
+      const degree = monoDegree(key);
+      min = Math.min(min, degree);
+      max = Math.max(max, degree);
+    }
+    if (min === Infinity) return { min: 0, max: 0 };
+    return { min, max };
+  }
+
+  function serializeClassFormulaPoly(poly) {
+    return Array.from(Poly.from(poly).terms.entries()).map(([key, coeff]) => [key, coeff.toPlainAbs ? formatFractionPlain(coeff) : String(coeff)]);
+  }
+
+  function deserializeClassFormulaPoly(data) {
+    if (!Array.isArray(data)) return null;
+    const terms = new Map();
+    for (const item of data) {
+      if (!Array.isArray(item) || item.length < 2) continue;
+      const coeff = parseSimpleFractionPlain(item[1]);
+      if (!coeff || coeff.isZero()) continue;
+      terms.set(String(item[0] || ''), coeff);
+    }
+    return new Poly(terms);
+  }
+
+  function parseSimpleFractionPlain(value) {
+    const text = String(value ?? '').trim();
+    if (/^-?\d+$/.test(text)) return fraction(BigInt(text));
+    const match = text.match(/^(-?\d+)\/(\d+)$/);
+    if (match) return fraction(BigInt(match[1]), BigInt(match[2]));
+    return null;
+  }
+
+  function startClassStepSessionFromFormulaBuilder(options = {}) {
+    const builder = ensureClassFormulaBuilderState();
+    let validation = options.useValidated && builder.validatedFormula?.signature === classFormulaBuilderSignature(builder)
+      ? builder.validatedFormula
+      : validateClassFormulaBuilder();
+    if (!validation.ok) {
+      builder.validatedFormula = null;
+      builder.message = validation.message;
+      renderClassFormulaBuilder();
+      return null;
+    }
+    builder.validatedFormula = validation;
+    builder.mode = 'stepping';
+    builder.message = 'Step-by-step session started.';
+    const session = createClassFormulaStepSession(validation);
+    state.classStepSession = session;
+    if (refs.classStepCard) {
+      refs.classStepCard.hidden = false;
+      refs.classStepCard.classList.remove('collapsed');
+    }
+    if (refs.classStepPanel) refs.classStepPanel.hidden = false;
+    syncClassStepControlsForSession(session);
+    renderClassStepPanel();
+    renderClassChartWithStepSession(state.lastResult);
+    refreshExport(state.exportScope || 'main');
+    renderClassFormulaBuilder();
+    typeset(refs.classStepPanel);
+    typeset(refs.classFormulaBuilder);
+    return session;
+  }
+
+  function createClassFormulaStepSession(validation) {
+    const geometry = validation.geometry;
+    const d = geometry.dim;
+    const components = zeroComponentArray(d);
+    components[0] = validation.poly;
+    const session = {
+      active: true,
+      stopped: false,
+      formulaSession: true,
+      family: 'formula',
+      target: 'formula',
+      index: 0,
+      layout: 'wide',
+      checkSwitchingRules: false,
+      dimension: d,
+      geometry,
+      sheaf: null,
+      bundleLabelLatex: validation.latex,
+      bundleLabelPlain: validation.plain,
+      rankLatex: '0',
+      rankPlain: '0',
+      rankComponent: Poly.zero(),
+      originalRankComponent: Poly.zero(),
+      originalComponents: components.map((poly) => Poly.from(poly)),
+      components,
+      formulaPoly: validation.poly,
+      originalFormulaPoly: Poly.from(validation.poly),
+      formulaLatex: validation.latex,
+      formulaPlain: validation.plain,
+      displayOverrides: {},
+      sourceSignature: classFormulaStepSignature(validation),
+      stepHistory: [],
+      candidates: [],
+      message: ''
+    };
+    session.candidates = collectClassStepRuleCandidates(session);
+    rememberClassStepComponents(session);
+    recordClassStepHistory(session, 'start');
+    return session;
+  }
+
+  function classFormulaStepSignature(validation) {
+    return `formula::${validation.geometry?.varietyId || ''}::${validation.signature || ''}`;
   }
 
   function startClassStepSessionFromControls(options = {}) {
@@ -18722,10 +20044,7 @@
     const formal = buildClassStepFormalData(result.geometry, result.sheaf, family);
     const sourceComps = formal.components;
     const components = zeroComponentArray(d);
-    const rankComponent = rankAsDegreeZeroPoly(
-      { rankLatex: formal.rankLatex, rankPlain: formal.rankPlain },
-      `stepRank${result.sheaf?.sourceObject?.id || result.sheaf?.labelPlain || ''}`
-    );
+    const rankComponent = classStepRankPolyForFormalData(formal);
     components[0] = family === 'character' ? rankComponent : Poly.one();
     for (let i = 1; i <= d; i += 1) components[i] = componentOrZero(sourceComps, i);
     const session = {
@@ -18749,23 +20068,29 @@
       components,
       displayOverrides: {},
       sourceSignature: classStepSignature(result, family),
+      stepHistory: [],
       candidates: [],
       message: ''
     };
     session.candidates = collectClassStepRuleCandidates(session);
     rememberClassStepComponents(session);
+    recordClassStepHistory(session, 'start');
     return session;
   }
 
   function buildClassStepFormalData(geometry, sheaf, family) {
     const formalSheaf = classStepFormalSheaf(sheaf, family);
     const defs = sheafHomologyClassDefinitions(formalSheaf, geometry);
+    const rankDisplay = classStepFormalRankDisplay(sheaf);
+    if (family === 'character') defs.unshift(classStepFormalCharacterRankDef(sheaf, geometry, rankDisplay));
     defs.forEach((def) => classStepDefineSheafClassVariable(def, sheaf, geometry, family));
     const components = zeroComponentArray(geometry.dim);
     defs.forEach((def) => {
+      if (def.degree === 0 && family === 'character') {
+        components[0] = Poly.variable(def.id);
+      }
       if (def.degree >= 1 && def.degree <= geometry.dim) components[def.degree] = Poly.variable(def.id);
     });
-    const rankDisplay = classStepFormalRankDisplay(sheaf);
     return {
       components,
       labelLatex: sheaf.labelLatex,
@@ -18776,9 +20101,36 @@
     };
   }
 
+  function classStepFormalCharacterRankDef(sheaf, geometry, rankDisplay = classStepFormalRankDisplay(sheaf)) {
+    const prefix = defaultSheafVariablePrefix(classStepFormalSheaf(sheaf, 'character'));
+    const labelLatex = sheafLabelLatex(sheaf);
+    const labelPlain = sheafLabelPlain(sheaf);
+    return {
+      id: `${prefix}ch0`,
+      degree: 0,
+      cohomologyDegree: 0,
+      kind: 'character',
+      geometry: sheafHomologyGeometry(sheaf, geometry),
+      sourceGeometry: geometry,
+      sheafObject: sheaf.sourceObject || sheaf,
+      variableId: `${prefix}ch0`,
+      symbolLatex: rankDisplay.latex || `r\\left(${labelLatex}\\right)`,
+      symbolPlain: rankDisplay.plain || `r(${labelPlain})`,
+      classStepDisplayLatex: `\\operatorname{ch}_{0}(${labelLatex})`,
+      classStepDisplayPlain: `ch_0(${labelPlain})`
+    };
+  }
+
+  function classStepRankPolyForFormalData(formal) {
+    const rank = componentOrZero(formal?.components, 0);
+    if (!rank.isZero()) return rank;
+    return rankAsDegreeZeroPoly({
+      rankLatex: formal?.rankLatex,
+      rankPlain: formal?.rankPlain
+    }, 'stepRank');
+  }
+
   function classStepFormalRankDisplay(sheaf) {
-    const known = classStepKnownRankDisplay(sheaf);
-    if (known) return known;
     const labelLatex = sheaf?.labelLatex || '\\mathcal{F}';
     const labelPlain = sheaf?.labelPlain || latexToPlain(labelLatex) || 'F';
     return {
@@ -18818,6 +20170,16 @@
   }
 
   function classStepSessionMatchesResult(session = state.classStepSession, result = state.lastResult) {
+    if (session?.formulaSession) {
+      const builder = ensureClassFormulaBuilderState();
+      return !!session.geometry
+        && !!result?.geometry
+        && session.geometry.varietyId === builder.varietyId
+        && session.sourceSignature === classFormulaStepSignature({
+          geometry: session.geometry,
+          signature: classFormulaBuilderSignature(builder)
+        });
+    }
     return !!session
       && !!result?.bundle
       && session.sourceSignature === classStepSignature(result, session.family);
@@ -18827,27 +20189,37 @@
     if (!state.classStepSession) return;
     if (!classStepSessionMatchesResult(state.classStepSession, result)) {
       state.classStepSession = null;
-      if (refs.classStepCard) refs.classStepCard.hidden = true;
       if (refs.classStepPanel) refs.classStepPanel.hidden = true;
-      if (refs.classStepWideHost) refs.classStepWideHost.hidden = true;
+      if (state.classFormulaBuilder) {
+        state.classFormulaBuilder.mode = 'builder';
+        state.classFormulaBuilder.validatedFormula = null;
+      }
+      renderClassFormulaBuilder();
     }
   }
 
-  function stopClassStepSession() {
+  function stopClassStepSession(options = {}) {
     const session = state.classStepSession;
     if (!session) return;
     session.active = false;
     session.stopped = true;
-    session.message = 'Step result is kept for this characteristic chart.';
-    if (refs.classStepCard) refs.classStepCard.hidden = true;
+    session.message = 'Step result is kept for this formula chart.';
     if (refs.classStepPanel) refs.classStepPanel.hidden = true;
-    if (refs.classStepWideHost) refs.classStepWideHost.hidden = true;
+    if (!options.keepBuilder && state.classFormulaBuilder) state.classFormulaBuilder.mode = 'builder';
     const result = state.lastResult;
-    if (result?.bundle) renderClassChartWithStepSession(result);
+    if (result) renderClassChartWithStepSession(result);
+    renderClassFormulaBuilder();
     refreshExport(state.exportScope || 'main');
   }
 
   function renderClassChartWithStepSession(result = state.lastResult) {
+    if (state.classStepSession?.formulaSession) {
+      if (classStepSessionMatchesResult(state.classStepSession, result)) {
+        renderClassStepPanel();
+      }
+      renderClassChart(result);
+      return;
+    }
     if (!result?.bundle || !classStepSessionMatchesResult(state.classStepSession, result)) {
       renderClassChart(result);
       return;
@@ -18859,6 +20231,7 @@
 
   function buildClassRowsFromStepSession(session, displayOptions) {
     if (!session) return [];
+    if (session.formulaSession) return classStepDisplayRows(session, displayOptions);
     if (session.active && !session.stopped) return classStepDisplayRows(session, displayOptions);
     if (classStepDisplayOverridePoly(session)) return classStepDisplayRows(session, displayOptions);
     const bundle = bundleFromClassStepSession(session);
@@ -18938,6 +20311,110 @@
     };
   }
 
+  function classStepSnapshot(session) {
+    if (!session) return null;
+    return {
+      components: (session.components || []).map((poly) => Poly.from(poly)),
+      rankComponent: Poly.from(session.rankComponent || Poly.zero()),
+      formulaPoly: Poly.from(session.formulaPoly || classStepDisplayPoly(session)),
+      formulaLatex: session.formulaLatex || '',
+      formulaPlain: session.formulaPlain || '',
+      displayOverrides: { ...(session.displayOverrides || {}) }
+    };
+  }
+
+  function restoreClassStepSnapshot(session, snapshot) {
+    if (!session || !snapshot) return false;
+    session.components = (snapshot.components || []).map((poly) => Poly.from(poly));
+    session.rankComponent = Poly.from(snapshot.rankComponent || Poly.zero());
+    session.formulaPoly = Poly.from(snapshot.formulaPoly || classStepDisplayPoly(session));
+    session.formulaLatex = snapshot.formulaLatex || session.formulaLatex || '';
+    session.formulaPlain = snapshot.formulaPlain || session.formulaPlain || '';
+    session.displayOverrides = { ...(snapshot.displayOverrides || {}) };
+    return true;
+  }
+
+  function recordClassStepHistory(session, reason = '') {
+    if (!session) return;
+    if (!Array.isArray(session.stepHistory)) session.stepHistory = [];
+    const display = formatPolyLatex(classStepDisplayPoly(session));
+    const label = classStepLabelLatex(session);
+    const previous = session.stepHistory[session.stepHistory.length - 1];
+    if (previous && normalizeClassStepHistoryValue(previous.value) === normalizeClassStepHistoryValue(display)) {
+      previous.reason = reason || previous.reason;
+      previous.snapshot = classStepSnapshot(session);
+      return;
+    }
+    session.stepHistory.push({
+      label,
+      value: display,
+      reason,
+      snapshot: classStepSnapshot(session)
+    });
+  }
+
+  function normalizeClassStepHistoryValue(value) {
+    return String(value || '').replace(/\s+/g, '').replace(/\\,/g, '');
+  }
+
+  function renderClassStepCalculationLatex(session) {
+    if (!session) return '';
+    const label = classStepLabelLatex(session);
+    const current = formatPolyLatex(classStepDisplayPoly(session));
+    const history = classStepDisplayHistoryEntries(session);
+    const lines = history.length
+      ? history.map(({ item, index }, visibleIndex) => {
+        const value = classStepHistoryEntryValueLatex(item, current);
+        if (visibleIndex === 0 && index === 0) return `${label}:=\\;& ${value}`;
+        return `=\\;& ${value}`;
+      })
+      : [`${label}=\\;& ${current}`];
+    return `\\begin{aligned}${lines.join('\\\\')}\\end{aligned}`;
+  }
+
+  function visibleClassStepHistory(session) {
+    return (Array.isArray(session?.stepHistory) ? session.stepHistory : []).filter((item) => item?.hidden !== true);
+  }
+
+  function visibleClassStepHistoryEntries(session) {
+    return (Array.isArray(session?.stepHistory) ? session.stepHistory : [])
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => item?.hidden !== true);
+  }
+
+  function classStepDisplayHistoryEntries(session) {
+    const entries = Array.isArray(session?.stepHistory)
+      ? session.stepHistory.map((item, index) => ({ item, index }))
+      : [];
+    if (entries.some(({ item }) => item?.hidden !== true)) return entries;
+    return entries.slice(0, 1);
+  }
+
+  function classStepHistoryEntryValueLatex(item, fallback) {
+    return item?.hidden === true ? '\\cdots' : (item?.value || fallback);
+  }
+
+  function renderClassStepHistoryControls(session) {
+    const history = Array.isArray(session?.stepHistory) ? session.stepHistory : [];
+    if (!history.length) return '';
+    return history.map((item, index) => {
+      const label = index === 0 ? 'start' : `line ${index + 1}`;
+      const hidden = item?.hidden === true;
+      return `<button class="btn btn-ghost sheaf-chart-export sheaf-step-history-toggle${hidden ? ' is-muted' : ''}" type="button" data-class-step-history-toggle="${index}" aria-pressed="${hidden ? 'true' : 'false'}">${hidden ? `show ${label}` : `hide ${label}`}</button>`;
+    }).join('');
+  }
+
+  function toggleClassStepHistoryLine(index) {
+    const session = state.classStepSession;
+    if (!session || !Array.isArray(session.stepHistory)) return;
+    if (!Number.isInteger(index) || index < 0 || index >= session.stepHistory.length) return;
+    session.stepHistory[index].hidden = session.stepHistory[index].hidden !== true;
+    session.message = session.stepHistory[index].hidden ? 'Hidden that formula line from display and export.' : 'Restored that formula line.';
+    renderClassStepPanel();
+    refreshExport(state.exportScope || 'main');
+    typeset(refs.classStepPanel);
+  }
+
   function renderClassStepPanel() {
     const session = state.classStepSession;
     if (!refs.classStepPanel || !session) return;
@@ -18957,10 +20434,12 @@
       session.message = `${error.message} Cached rules were skipped for this step.`;
       recordSymbolicWarning(session.message);
     }
-    const displayPoly = classStepDisplayPoly(session);
     if (refs.classStepFormula) {
-      const body = formatPolyLatex(displayPoly);
-      refs.classStepFormula.innerHTML = `\\(${classStepLabelLatex(session)}=${body}\\)`;
+      refs.classStepFormula.innerHTML = `\\[${renderClassStepCalculationLatex(session)}\\]`;
+    }
+    if (refs.classStepHistoryControls) {
+      refs.classStepHistoryControls.innerHTML = renderClassStepHistoryControls(session);
+      refs.classStepHistoryControls.hidden = !Array.isArray(session.stepHistory) || session.stepHistory.length === 0;
     }
     if (refs.classStepRules) {
       refs.classStepRules.hidden = !session.candidates.length;
@@ -18982,6 +20461,7 @@
     }
     if (refs.classStepMessage) refs.classStepMessage.textContent = session.message || `${session.candidates.length} applicable rule${session.candidates.length === 1 ? '' : 's'}.`;
     if (refs.classStepApply) refs.classStepApply.disabled = !session.candidates.length;
+    if (refs.classStepUndo) refs.classStepUndo.disabled = !Array.isArray(session.stepHistory) || session.stepHistory.length <= 1;
   }
 
   function classStepCandidateSelectionMap(candidates = []) {
@@ -19075,8 +20555,33 @@
         sourceLabel: rule.stepSourceLabel || (rule.builtin ? 'built-in' : 'user'),
         selected: rule.selected === false ? false : true
       }));
+    if (classStepCanSimplify(session)) out.push(classStepSimplifyCandidate(out.length));
     applyClassStepCandidateDefaultSelection(out, session);
     return out;
+  }
+
+  function classStepCanSimplify(session) {
+    return !!session?.geometry && !classStepDisplayPoly(session).isZero();
+  }
+
+  function classStepSimplifyCandidate(index = 0) {
+    const rule = {
+      id: 'step-simplify',
+      builtin: true,
+      enabled: true,
+      stepSourceLabel: 'simplify',
+      classStepKind: 'simplify',
+      classStepDisplayLatex: '\\operatorname{simplify}',
+      lhs: { powers: { __class_step_simplify__: 1 } },
+      rhs: []
+    };
+    return {
+      id: rule.id || `step-rule-${index}`,
+      rule,
+      rules: [rule],
+      sourceLabel: 'simplify',
+      selected: true
+    };
   }
 
   function applyClassStepCandidateDefaultSelection(candidates, session) {
@@ -19090,6 +20595,9 @@
       if (targetToddIds.has(candidate.id)) {
         candidate.selected = candidate.selected !== false;
         delete candidate.classStepAutoSelectionReason;
+      } else if (classStepCandidateIsSimplify(candidate)) {
+        candidate.selected = false;
+        candidate.classStepAutoSelectionReason = 'target-todd-first';
       } else {
         candidate.selected = false;
         candidate.classStepAutoSelectionReason = 'target-todd-first';
@@ -19252,7 +20760,7 @@
     const bundle = classStepBasicConstructionBundle(sheaf, geometry, family, d);
     if (!bundle) return [];
     const comps = family === 'character' ? bundle.chComps : bundle.cComps;
-    return classStepSheafDefsForSheaf(sheaf, geometry, family).map((def) => ({
+    return classStepSheafDefsForSheaf(sheaf, geometry, family).filter((def) => def.degree > 0).map((def) => ({
       id: `step-${construction.type}-${def.id}`,
       builtin: true,
       enabled: true,
@@ -19298,7 +20806,9 @@
   function classStepFormalBundleForSheafObject(sheafObject, geometry, d) {
     const sheaf = sheafFromObject(sheafObject, geometry);
     const chFormal = buildClassStepFormalData(geometry, sheaf, 'character');
-    return buildBundleFromCh(chFormal.components, chFormal.rankLatex, chFormal.rankPlain, chFormal.labelLatex, chFormal.labelPlain);
+    const bundle = buildBundleFromCh(classStepPositiveComponents(chFormal.components), chFormal.rankLatex, chFormal.rankPlain, chFormal.labelLatex, chFormal.labelPlain);
+    bundle.rankPoly = classStepRankPolyForFormalData(chFormal);
+    return bundle;
   }
 
   function classStepFormalPullbackBundle(sheaf, geometry, construction, d) {
@@ -19309,8 +20819,16 @@
     const codomainGeometry = geometryFromVariety(codomain);
     const sourceSheaf = sheafFromObject(sourceObject, codomainGeometry);
     const sourceFormal = buildClassStepFormalData(codomainGeometry, sourceSheaf, 'character');
-    const chComps = pullbackComponentArray(sourceFormal.components, d, map);
-    return buildBundleFromCh(chComps, sourceFormal.rankLatex, sourceFormal.rankPlain, sheaf.labelLatex, sheaf.labelPlain);
+    const chComps = pullbackComponentArray(classStepPositiveComponents(sourceFormal.components), d, map);
+    const bundle = buildBundleFromCh(chComps, sourceFormal.rankLatex, sourceFormal.rankPlain, sheaf.labelLatex, sheaf.labelPlain);
+    bundle.rankPoly = classStepRankPolyForFormalData(sourceFormal);
+    return bundle;
+  }
+
+  function classStepPositiveComponents(comps) {
+    const out = (comps || []).map((poly) => Poly.from(poly || Poly.zero()));
+    if (out.length) out[0] = Poly.zero();
+    return out;
   }
 
   function classStepConstructionSourceLabel(type) {
@@ -19387,7 +20905,47 @@
       const sourceDef = classStepSheafDefForVariable(id, data, session);
       if (sourceDef) rules.push(...classStepRulesForSheafDef(sourceDef, session));
     }
+    rules.push(...classStepTangentChernRulesForVisibleVariables(session, ids));
     return rules.filter(Boolean);
+  }
+
+  function classStepTangentChernRulesForVisibleVariables(session, ids = classStepVisibleAndMapSourceVariableIds(session)) {
+    const rules = [];
+    const seen = new Set();
+    for (const id of ids) {
+      const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+      if (data?.kind !== 'tangentChern') continue;
+      const geometry = geometryByVarietyId(data.geometryId) || session.geometry;
+      const index = data.tangentChernIndex || tangentChernIndexFromRuleVariable(id, geometry);
+      const rule = classStepTangentChernRuleForVariable(id, geometry, index);
+      if (!rule || seen.has(rule.id)) continue;
+      seen.add(rule.id);
+      rules.push(rule);
+    }
+    return rules;
+  }
+
+  function classStepTangentChernRuleForVariable(id, geometry, index) {
+    if (!geometry || !index) return null;
+    let tangent;
+    try {
+      tangent = buildTangentClassBundle(geometry);
+    } catch (error) {
+      if (error?.symbolicBudgetExceeded) throw error;
+      return null;
+    }
+    const rhs = componentOrZero(tangent.cComps, index).truncate(geometry.dim);
+    if (polyEquals(rhs, Poly.variable(id))) return null;
+    return {
+      id: `step-tangent-chern-${id}`,
+      builtin: true,
+      enabled: true,
+      stepSourceLabel: 'Tangent class',
+      classStepDisplayLatex: `${tangentChernHomologyClassSymbol(geometry, index)}=c_{${index}}(\\mathcal{T}_{${geometry.labelLatex}})`,
+      classStepRuleGeometry: geometry,
+      lhs: { powers: { [id]: 1 } },
+      rhs: serializeHomologyPoly(rhs)
+    };
   }
 
   function classStepVisibleVariableIds(session) {
@@ -19408,7 +20966,7 @@
 
   function classStepToddRuleForVariable(id, geometry, degree) {
     if (!geometry || !degree) return null;
-    const tangent = buildTangentClassBundle(geometry);
+    const tangent = buildFormalTangentChernClassBundle(geometry);
     const rhs = homogeneousPart(tangent.todd, degree);
     return {
       id: `step-todd-${id}`,
@@ -19418,9 +20976,33 @@
       classStepGroupKey: `Todd:${geometry.varietyId || homologyScopeId(geometry)}`,
       classStepDisplayKey: `Todd:${geometry.varietyId || homologyScopeId(geometry)}`,
       classStepDisplayLatex: `\\operatorname{td}(${geometry.labelLatex})`,
+      classStepApplyAllOccurrences: true,
       lhs: { powers: { [id]: 1 } },
       rhs: serializeHomologyPoly(rhs)
     };
+  }
+
+  function buildFormalTangentChernClassBundle(geometry) {
+    const d = geometry?.dim || 0;
+    const cComps = zeroComponentArray(d);
+    for (let i = 1; i <= d; i += 1) {
+      const id = formalTangentChernVariableId(geometry, i);
+      cComps[i] = Poly.variable(id);
+    }
+    return buildBundleFromChern(cComps, String(d), String(d), `\\mathcal{T}_{${geometry.labelLatex}}`, `T_${geometry.labelPlain}`);
+  }
+
+  function formalTangentChernVariableId(geometry, index) {
+    const classId = tangentChernHomologyClassId(index);
+    const variableId = homologyVariableId(classId, geometry);
+    const label = tangentChernHomologyClassSymbol(geometry, index);
+    defineVariable(variableId, index, label, {
+      cohomologyDegree: 2 * index,
+      kind: 'tangentChern',
+      geometryId: geometry?.varietyId || null,
+      tangentChernIndex: index
+    });
+    return variableId;
   }
 
   function classStepSheafDefForVariable(id, data, session) {
@@ -19448,7 +21030,11 @@
   function classStepRulesForSheafDef(source, session) {
     const { def, sheaf, geometry, family } = source;
     const rules = [];
-    if (classStepSheafHasTrivialPositiveClasses(sheaf)) {
+    if (family === 'character' && def.degree === 0) {
+      const rankRule = classStepKnownRankRuleForDef(def, sheaf, geometry);
+      if (rankRule) rules.push(rankRule);
+    }
+    if (def.degree > 0 && classStepSheafHasTrivialPositiveClasses(sheaf)) {
       rules.push({
         id: `step-trivial-sheaf-${def.id}`,
         builtin: true,
@@ -19509,6 +21095,31 @@
       }, sheaf, geometry, family).filter((rule) => rule.lhs?.powers?.[def.id] === 1));
     }
     return rules;
+  }
+
+  function classStepKnownRankRuleForDef(def, sheaf, geometry) {
+    if (!def || def.degree !== 0) return null;
+    const rawRank = String(sheaf?.rankPlain || sheaf?.rankLatex || '').trim();
+    if (!rawRank) return null;
+    const source = sheaf?.sourceObject?.id
+      ? { kind: 'sheaf', id: sheaf.sourceObject.id, field: 'rank' }
+      : null;
+    const rhs = scalarExpressionPoly(rawRank, source);
+    if (!rhs) return null;
+    if (polyEquals(Poly.variable(def.id), rhs)) return null;
+    const label = sheafLabelLatex(sheaf);
+    const rhsLatex = formatPolyLatex(rhs);
+    return {
+      id: `step-rank-character-${def.id}`,
+      builtin: true,
+      enabled: true,
+      stepSourceLabel: 'rank',
+      classStepRuleGeometry: geometry,
+      classStepPayoffRule: true,
+      classStepDisplayLatex: `\\operatorname{ch}_{0}(${label})=${rhsLatex}`,
+      lhs: { powers: { [def.id]: 1 } },
+      rhs: serializeHomologyPoly(rhs)
+    };
   }
 
   function classStepSwitchingRules(session) {
@@ -19635,6 +21246,7 @@
   function classStepDefaultSheafRulesForDef(def, sheaf, geometry, family, session) {
     if (!sheaf || sheafUsesFreeClassVariables(sheaf)) return [];
     if (sheaf.construction) return [];
+    if (family === 'character' && def.degree === 0) return [];
     try {
       const bundle = buildBundleForSheaf(geometry, sheaf, { geometry });
       const rhs = family === 'character'
@@ -19780,7 +21392,7 @@
       classStepMapId: map.id,
       classStepConstruction: construction,
       classStepDegree: def.degree,
-      classStepRankRule: def.hiddenRankRule === true,
+      classStepRankRule: def.hiddenRankRule === true || (family === 'character' && def.degree === 0),
       classStepApplyWithGroup: def.hiddenRankRule === true,
       classStepDisplayLatex: classStepGrrDisplayLatex(map, domainGeometry, geometry, sourceSheaf, sheaf),
       lhs: { powers: def.lhsPowers || { [def.id]: 1 } },
@@ -19789,14 +21401,40 @@
   }
 
   function classStepGrrRankKey(session, sheaf, geometry, family) {
-    if (!(session?.sheaf === sheaf && geometry === session?.geometry)) return null;
-    const currentRank = family === 'character'
-      ? componentOrZero(session.components, 0)
-      : session.rankComponent;
-    const originalRank = session.originalRankComponent;
-    if (!currentRank || !originalRank) return null;
+    const currentRank = session?.sheaf === sheaf && geometry === session?.geometry
+      ? (family === 'character' ? componentOrZero(session.components, 0) : session.rankComponent)
+      : classStepVisibleRankPolyForSheaf(session, sheaf, geometry);
+    if (!currentRank) return null;
+    const originalRank = session?.sheaf === sheaf && geometry === session?.geometry
+      ? session.originalRankComponent
+      : classStepRankPolyForSheaf(sheaf);
+    if (!originalRank) return null;
     return Array.from(Poly.from(originalRank).terms.keys())
       .find((key) => key && Poly.from(currentRank).terms.has(key)) || null;
+  }
+
+  function classStepVisibleRankPolyForSheaf(session, sheaf, geometry) {
+    if (!session || !sheaf || !geometry) return null;
+    const visible = classStepDisplayPoly(session);
+    const rank = classStepRankPolyForSheaf(sheaf);
+    if (!rank) return null;
+    const keys = new Set(Poly.from(rank).terms.keys());
+    const terms = new Map();
+    for (const [key, coeff] of Poly.from(visible).terms) {
+      if (keys.has(key)) terms.set(key, coeff);
+    }
+    return terms.size ? new Poly(terms) : null;
+  }
+
+  function classStepRankPolyForSheaf(sheaf) {
+    if (!sheaf) return null;
+    const geometry = geometryByVarietyId(sheaf?.baseVarietyId || sheaf?.sourceObject?.baseVarietyId) || state.classStepSession?.geometry || state.lastResult?.geometry;
+    if (geometry) {
+      const formal = buildClassStepFormalData(geometry, sheaf, 'character');
+      return classStepRankPolyForFormalData(formal);
+    }
+    const rankDisplay = classStepFormalRankDisplay(sheaf);
+    return rankAsDegreeZeroPoly({ rankLatex: rankDisplay.latex, rankPlain: rankDisplay.plain }, `stepRank${sheaf?.sourceObject?.id || sheaf?.id || sheaf?.labelPlain || ''}`);
   }
 
   function classStepPushforwardGrrComponents(targetGeometry, domainGeometry, sourceSheafObject, map, construction, options = {}) {
@@ -19825,10 +21463,7 @@
     defineHomologyVariables(domainGeometry);
     const sourceSheaf = sheafFromObject(sourceSheafObject, domainGeometry);
     const sourceFormal = buildClassStepFormalData(domainGeometry, sourceSheaf, 'character');
-    const sourceRank = rankAsDegreeZeroPoly({
-      rankLatex: sourceFormal.rankLatex,
-      rankPlain: sourceFormal.rankPlain
-    }, `grrSourceRank${sourceSheafObject?.id || ''}`);
+    const sourceRank = classStepRankPolyForFormalData(sourceFormal);
     const sourceChTotal = sourceRank.add(positiveTotal(sourceFormal.components, domainGeometry.dim));
     const sourceToddTotal = classStepFormalToddTotal(domainGeometry, domainGeometry.dim);
     const grrSource = classStepTruncateProductBidegrees(
@@ -19915,8 +21550,12 @@
 
   function classStepSesTermComponents(session, termObject) {
     const termSheaf = sheafFromObject(termObject, session.geometry);
-    if (classStepSheafHasTrivialPositiveClasses(termSheaf)) return zeroComponentArray(session.dimension);
-    return buildClassStepFormalData(session.geometry, termSheaf, session.family).components;
+    const formal = buildClassStepFormalData(session.geometry, termSheaf, session.family);
+    const components = formal.components;
+    if (classStepSheafHasTrivialPositiveClasses(termSheaf)) {
+      for (let i = 1; i <= session.dimension; i += 1) components[i] = Poly.zero();
+    }
+    return components;
   }
 
   function classStepSheafHasTrivialPositiveClasses(sheaf) {
@@ -19926,7 +21565,7 @@
 
   function classStepSesMissingCharacterComponents(components, missingIndex, d) {
     const rhsComps = zeroComponentArray(d);
-    for (let i = 1; i <= d; i += 1) {
+    for (let i = 0; i <= d; i += 1) {
       if (missingIndex === 0) rhsComps[i] = componentOrZero(components[1], i).sub(componentOrZero(components[2], i));
       else if (missingIndex === 1) rhsComps[i] = componentOrZero(components[0], i).add(componentOrZero(components[2], i));
       else rhsComps[i] = componentOrZero(components[1], i).sub(componentOrZero(components[0], i));
@@ -19954,8 +21593,16 @@
 
   function classStepSheafDefsForSheaf(sheaf, geometry, family) {
     if (!sheaf || !geometry) return [];
-    const defs = sheafHomologyClassDefinitions(classStepFormalSheaf(sheaf, family), geometry);
+    const defs = family === 'character'
+      ? classStepFormalSheafDefs(sheaf, geometry, family)
+      : sheafHomologyClassDefinitions(classStepFormalSheaf(sheaf, family), geometry);
     defs.forEach((def) => classStepDefineSheafClassVariable(def, sheaf, geometry, family));
+    return defs;
+  }
+
+  function classStepFormalSheafDefs(sheaf, geometry, family) {
+    const defs = sheafHomologyClassDefinitions(classStepFormalSheaf(sheaf, family), geometry);
+    if (family === 'character') defs.unshift(classStepFormalCharacterRankDef(sheaf, geometry));
     return defs;
   }
 
@@ -19969,7 +21616,9 @@
       classStepFamily: family === 'character' ? 'character' : 'chern',
       classStepDegree: def.degree,
       sheafObjectId: sheaf?.sourceObject?.id || sheaf?.id || def.sheafObject?.id || null,
-      geometryId: geometry?.varietyId || null
+      geometryId: geometry?.varietyId || null,
+      ...(def.classStepDisplayLatex ? { classStepDisplayLatex: def.classStepDisplayLatex } : {}),
+      ...(def.classStepDisplayPlain ? { classStepDisplayPlain: def.classStepDisplayPlain } : {})
     });
     return def.id;
   }
@@ -20079,9 +21728,17 @@
   }
 
   function classStepRuleApplies(session, rule) {
+    if (classStepRuleIsSimplify(rule)) return classStepCanSimplify(session);
     const lhs = rule?.lhs?.powers || {};
     if (!Object.keys(lhs).length) return false;
-    return classStepRuleAppliesToPoly(classStepDisplayPoly(session), rule);
+    if (classStepRuleAppliesToPoly(classStepDisplayPoly(session), rule)) return true;
+    return classStepRuleAppliesToPoly(classStepAuxiliaryRulePoly(session, rule), rule);
+  }
+
+  function classStepAuxiliaryRulePoly(session, rule) {
+    if (!session || rule?.classStepRankRule !== true) return Poly.zero();
+    if (session.family === 'character') return componentOrZero(session.components, 0);
+    return Poly.from(session.rankComponent || Poly.zero());
   }
 
   function classStepRuleAppliesToPoly(poly, rule) {
@@ -20095,22 +21752,46 @@
     const session = state.classStepSession;
     if (!session) return;
     const selected = (session.candidates || []).filter((candidate) => candidate.selected !== false);
-    if (!selected.length) {
+    const simplifySelected = selected.some(classStepCandidateIsSimplify);
+    const substitutionCandidates = selected.filter((candidate) => !classStepCandidateIsSimplify(candidate));
+    if (!substitutionCandidates.length && !simplifySelected) {
       session.message = 'Select at least one rule.';
       renderClassStepPanel();
       return;
     }
     const oncePerRule = refs.classStepOncePerRule?.checked !== false;
     const onePass = !!refs.classStepOnePass?.checked;
-    const budget = createSymbolicBudget('step-by-step simplification', { maxMillis: 450 });
+    const budget = createSymbolicBudget('step-by-step formula', { maxMillis: 450 });
     let changed = false;
     try {
       const targets = classStepRuleApplicationDegrees(session);
-      const rules = selected.flatMap((item) => classStepCandidateRules(item)
+      const rules = substitutionCandidates.flatMap((item) => classStepCandidateRules(item)
         .map((rule) => classStepMaterializeRule(session, rule, { budget })));
+      if (session.formulaSession) {
+        const before = classStepDisplayPoly(session);
+        const after = applyClassStepRulesForStep(before, rules, session, {
+          simplify: simplifySelected,
+          oncePerRule,
+          onePass,
+          budget
+        });
+        if (!polyEquals(before, after)) changed = true;
+        session.formulaPoly = after;
+        session.components[0] = after;
+        session.message = changed ? 'Applied selected rules.' : 'Selected rules made no change.';
+        rememberClassStepComponents(session);
+        if (changed) recordClassStepHistory(session, 'apply');
+        renderClassStepPanel();
+        renderClassChartWithStepSession(state.lastResult);
+        refreshExport(state.exportScope || 'main');
+        typeset(refs.classStepPanel);
+        typeset(refs.classChart);
+        return;
+      }
       for (const degree of targets) {
         const before = componentOrZero(session.components, degree);
-        const after = applyClassStepRulesToPoly(before, rules, session.geometry?.dim ?? MAX_DIMENSION, {
+        const after = applyClassStepRulesForStep(before, rules, session, {
+          simplify: simplifySelected,
           oncePerRule,
           onePass,
           budget
@@ -20122,7 +21803,8 @@
         session.rankComponent = componentOrZero(session.components, 0);
       } else if (session.rankComponent) {
         const beforeRank = Poly.from(session.rankComponent);
-        const afterRank = applyClassStepRulesToPoly(beforeRank, rules, session.geometry?.dim ?? MAX_DIMENSION, {
+        const afterRank = applyClassStepRulesForStep(beforeRank, rules, session, {
+          simplify: simplifySelected,
           oncePerRule,
           onePass,
           budget
@@ -20134,7 +21816,8 @@
         classStepClearDisplayOverrides(session);
       } else if (classStepUsesDerivedTarget(session)) {
         const beforeDisplay = classStepDisplayPoly(session);
-        const afterDisplay = applyClassStepRulesToPoly(beforeDisplay, rules, session.geometry?.dim ?? MAX_DIMENSION, {
+        const afterDisplay = applyClassStepRulesForStep(beforeDisplay, rules, session, {
+          simplify: simplifySelected,
           oncePerRule,
           onePass,
           budget
@@ -20150,6 +21833,56 @@
       session.message = `${error.message} Kept the last completed step.`;
       recordSymbolicWarning(session.message);
     }
+    rememberClassStepComponents(session);
+    if (changed) recordClassStepHistory(session, 'apply');
+    renderClassStepPanel();
+    renderClassChartWithStepSession(state.lastResult);
+    refreshExport(state.exportScope || 'main');
+    typeset(refs.classStepPanel);
+    typeset(refs.classChart);
+  }
+
+  function classStepCandidateIsSimplify(candidate) {
+    return classStepCandidateRules(candidate).some(classStepRuleIsSimplify);
+  }
+
+  function classStepRuleIsSimplify(rule) {
+    return rule?.classStepKind === 'simplify' || rule?.id === 'step-simplify';
+  }
+
+  function applyClassStepRulesForStep(poly, rules, session, options = {}) {
+    const maxDegree = session.geometry?.dim ?? MAX_DIMENSION;
+    let out = Poly.from(poly);
+    const explicitRules = (rules || []).filter((rule) => !classStepRuleIsSimplify(rule));
+    if (explicitRules.length) {
+      out = applyClassStepRulesToPoly(out, explicitRules, maxDegree, {
+        ...options,
+        onePass: options.simplify ? options.onePass : true
+      });
+    }
+    if (options.simplify) {
+      out = applyClassStepSimplifyPoly(out, session, options);
+    }
+    return out.truncate(maxDegree);
+  }
+
+  function applyClassStepSimplifyPoly(poly, session, options = {}) {
+    return applyHomologyRules(poly, {
+      geometry: session.geometry,
+      homology: session.geometry?.homology || null,
+      homologyRulePasses: currentHomologyRulePasses(),
+      budget: symbolicBudgetFromOptions(options),
+      includeMapClasses: true
+    });
+  }
+
+  function undoLastClassStep() {
+    const session = state.classStepSession;
+    if (!session || !Array.isArray(session.stepHistory) || session.stepHistory.length <= 1) return;
+    session.stepHistory.pop();
+    const previous = session.stepHistory[session.stepHistory.length - 1];
+    if (!restoreClassStepSnapshot(session, previous?.snapshot)) return;
+    session.message = 'Cancelled the last step.';
     rememberClassStepComponents(session);
     renderClassStepPanel();
     renderClassChartWithStepSession(state.lastResult);
@@ -20245,7 +21978,7 @@
   }
 
   function applyOneClassStepRule(poly, rule, maxDegree, options = {}) {
-    if (options.oncePerRule) return applyOneHomologyRuleOnce(poly, rule, maxDegree, options);
+    if (options.oncePerRule && !rule?.classStepApplyAllOccurrences) return applyOneHomologyRuleOnce(poly, rule, maxDegree, options);
     return applyOneHomologyRule(poly, rule, maxDegree, options);
   }
 
@@ -21365,6 +23098,7 @@
     for (const mono of abelJacobiPushforwardSourceMonomials(context, genus, {
       includeSymplectic: context.curveGeometry.homology?.symplecticBasisConfirmed === true
     })) {
+      if (mapPushforwardSourceKeyHasDirectAutomaticFormula(map, mono.key || '', context.curveGeometry, context.jacobianGeometry)) continue;
       const targetDef = mapPushforwardMonomialClassDefinition(map, mono, context.curveGeometry, context.jacobianGeometry);
       if (!targetDef) continue;
       const rhs = defaultAbelJacobiPushforwardRuleRhs(map, mono, context, genus, curveClass);
@@ -21388,6 +23122,7 @@
     defineBaseHomologyVariables(context.jacobianGeometry);
     const monomials = abelJacobiSymmetricProductPushforwardSourceMonomials(context.curveGeometry, params);
     for (const mono of monomials) {
+      if (mapPushforwardSourceKeyHasDirectAutomaticFormula(map, mono.key || '', context.curveGeometry, context.jacobianGeometry)) continue;
       const targetDef = mapPushforwardMonomialClassDefinition(map, mono, context.curveGeometry, context.jacobianGeometry);
       if (!targetDef) continue;
       const rhs = defaultSymmetricProductAbelJacobiPushforwardRuleRhs(mono, context, params, genus);
@@ -21582,6 +23317,7 @@
     const context = abelJacobiMapContext(map);
     if (!context) return false;
     let changed = removeCompactAbelJacobiSymplecticRules(context);
+    if (removeRedundantAbelJacobiPushforwardRules(context)) changed = true;
     const rules = [
       ...defaultAbelJacobiPullbackRules(map, context.curveGeometry),
       ...defaultAbelJacobiPushforwardRules(map, context.jacobianGeometry)
@@ -21606,6 +23342,101 @@
       }
     });
     return changed;
+  }
+
+  function removeRedundantAbelJacobiPushforwardRules(context) {
+    const homology = context?.jacobian?.homology;
+    if (!homology || typeof homology !== 'object') return false;
+    let changed = false;
+    if (Array.isArray(homology.rules)) {
+      const before = homology.rules.length;
+      homology.rules = homology.rules.filter((rule) => !redundantAutomaticPushforwardRule(rule, context.map, context.curveGeometry, context.jacobianGeometry));
+      if (homology.rules.length !== before) changed = true;
+    }
+    if (Array.isArray(homology.customClasses)) {
+      const before = homology.customClasses.length;
+      homology.customClasses = homology.customClasses.filter((item) => !redundantAutomaticPushforwardCustomClass(item, context.map, context.curveGeometry, context.jacobianGeometry));
+      if (homology.customClasses.length !== before) changed = true;
+    }
+    return changed;
+  }
+
+  function redundantAutomaticPushforwardRule(rule, map, domainGeometry, codomainGeometry) {
+    const lhsIds = Object.keys(rule.lhs?.powers || {});
+    if (lhsIds.length !== 1 || rule.lhs.powers[lhsIds[0]] !== 1) return false;
+    return redundantAutomaticPushforwardVariable(lhsIds[0], map, domainGeometry, codomainGeometry, {
+      requireAutomatic: rule?.automatic === 'abel-jacobi'
+    });
+  }
+
+  function redundantAutomaticPushforwardCustomClass(item, map, domainGeometry, codomainGeometry) {
+    if (item?.special !== 'map-homology') return false;
+    if (redundantAutomaticPushforwardItemSourceKey(item, map, domainGeometry, codomainGeometry)) return true;
+    return redundantAutomaticPushforwardVariable(item.variableId, map, domainGeometry, codomainGeometry, {
+      requireAutomatic: false
+    });
+  }
+
+  function redundantAutomaticPushforwardItemSourceKey(item, map, domainGeometry, codomainGeometry) {
+    if (!item || !map || map.construction?.type !== 'abel-jacobi') return false;
+    if (redundantAutomaticPushforwardItemIsSourceFundamental(item, map, domainGeometry, codomainGeometry)) return true;
+    const parsed = parseMapHomologyClassId(item.id) || parseMapHomologyClassId(String(item.variableId || '').replace(/^map_/, ''));
+    if (parsed?.operation === 'pushforward' && sameMapId(parsed.mapId, map.id)) {
+      const sourceIsUnit = parsed.sourceClassId === HOMOLOGY_UNIT_CLASS
+        || parsed.sourceClassId === mapSourceUnitVariableId(map)
+        || legacyBaseHomologyClassId(parsed.sourceClassId) === HOMOLOGY_UNIT_CLASS
+        || parsed.sourceClassId === homologyVariableId(HOMOLOGY_UNIT_CLASS, domainGeometry);
+      if (sourceIsUnit && mapPushforwardSourceKeyHasDirectAutomaticFormula(map, '', domainGeometry, codomainGeometry)) return true;
+    }
+    if (Object.prototype.hasOwnProperty.call(item, 'sourceKey')) {
+      return mapPushforwardSourceKeyHasDirectAutomaticFormula(map, item.sourceKey || '', domainGeometry, codomainGeometry);
+    }
+    const symbol = canonicalMathLabel(item.symbol || item.symbolLatex || '');
+    const domainName = canonicalMathLabel(domainGeometry?.labelLatex || domainGeometry?.labelPlain || '');
+    return !!symbol
+      && !!domainName
+      && symbol === canonicalMathLabel(`[${domainGeometry.labelLatex || domainGeometry.labelPlain}]`)
+      && mapPushforwardSourceKeyHasDirectAutomaticFormula(map, '', domainGeometry, codomainGeometry);
+  }
+
+  function redundantAutomaticPushforwardItemIsSourceFundamental(item, map, domainGeometry, codomainGeometry) {
+    if (!mapPushforwardSourceKeyHasDirectAutomaticFormula(map, '', domainGeometry, codomainGeometry)) return false;
+    const variableId = String(item.variableId || item.id || '');
+    const variableData = VARS.get(variableId) || ensureMapHomologyVariableFromId(variableId);
+    if (variableData?.kind === 'mapHomology'
+      && variableData.operation === 'pushforward'
+      && sameMapId(variableData.mapId, map.id)
+      && (variableData.sourceKey || '') === '') return true;
+    const parsedVariable = parseMapHomologyVariableId(variableId);
+    if (parsedVariable?.operation === 'pushforward' && sameMapId(parsedVariable.mapKey, map.id)) {
+      const sourceId = canonicalHomologyVariableId(parsedVariable.sourceId, domainGeometry);
+      if (sourceId === homologyVariableId(HOMOLOGY_UNIT_CLASS, domainGeometry)
+        || legacyBaseHomologyClassId(parsedVariable.sourceId) === HOMOLOGY_UNIT_CLASS) return true;
+    }
+    const parsedClass = parseMapHomologyClassId(item.id) || parseMapHomologyClassId(String(item.variableId || '').replace(/^map_/, ''));
+    if (parsedClass?.operation === 'pushforward' && sameMapId(parsedClass.mapId, map.id)) {
+      const sourceId = canonicalHomologyVariableId(parsedClass.sourceClassId, domainGeometry);
+      if (sourceId === homologyVariableId(HOMOLOGY_UNIT_CLASS, domainGeometry)
+        || legacyBaseHomologyClassId(parsedClass.sourceClassId) === HOMOLOGY_UNIT_CLASS) return true;
+    }
+    if (Object.prototype.hasOwnProperty.call(item, 'sourceKey') && (item.sourceKey || '') === '') return true;
+    const symbol = canonicalMathLabel(item.symbol || item.symbolLatex || '');
+    if (!symbol) return false;
+    const domainLabels = [
+      domainGeometry?.labelLatex,
+      domainGeometry?.labelPlain,
+      latexToPlain(domainGeometry?.labelLatex || '')
+    ].filter(Boolean);
+    return domainLabels.some((label) => symbol === canonicalMathLabel(`[${label}]`));
+  }
+
+  function redundantAutomaticPushforwardVariable(variableId, map, domainGeometry, codomainGeometry, options = {}) {
+    if (!variableId) return false;
+    const existing = VARS.get(variableId);
+    const data = existing?.kind === 'mapHomology' ? existing : ensureMapHomologyVariableFromId(variableId);
+    if (data?.kind !== 'mapHomology' || data.operation !== 'pushforward' || !sameMapId(data.mapId, map?.id)) return false;
+    if (options.requireAutomatic && data.automatic && data.automatic !== 'abel-jacobi') return false;
+    return mapPushforwardSourceKeyHasDirectAutomaticFormula(map, data.sourceKey || '', domainGeometry, codomainGeometry);
   }
 
   function removeCompactAbelJacobiSymplecticRules(context) {
@@ -22501,18 +24332,25 @@
   }
 
   function pushforwardSourceKeyPolynomial(map, sourceKey, targetDegree, sourceDim, targetDim, construction) {
+    const automatic = directAutomaticPushforwardSourceKeyPolynomial(map, sourceKey, targetDegree, sourceDim, targetDim, construction);
+    if (automatic) return automatic;
+    if (!projectionSourceKeyCanSurvivePushforward(map, sourceKey, sourceDim, targetDim)) return Poly.zero();
+    const projected = projectionFormulaPushforwardSourceKey(map, sourceKey, sourceDim, targetDim, construction);
+    if (projected) return projected;
+    const id = pushforwardTermVariableId(map, sourceKey, targetDegree, construction);
+    return Poly.variable(id);
+  }
+
+  function directAutomaticPushforwardSourceKeyPolynomial(map, sourceKey, targetDegree, sourceDim, targetDim, construction = {}) {
     if (!projectionSourceKeyCanSurvivePushforward(map, sourceKey, sourceDim, targetDim)) return Poly.zero();
     const automaticProjection = projectionAutomaticPushforwardSourceKey(map, sourceKey, sourceDim, targetDim);
     if (automaticProjection) return automaticProjection;
     const targetGeometry = geometryByVarietyId(map?.codomainId);
     const abelJacobi = targetGeometry ? abelJacobiPushforwardSourceKey(map, sourceKey, targetGeometry) : null;
     if (abelJacobi) return abelJacobi;
-    const projected = projectionFormulaPushforwardSourceKey(map, sourceKey, sourceDim, targetDim, construction);
-    if (projected) return projected;
     const ramified = ramifiedCoverPushforwardSourceKey(map, sourceKey, sourceDim, targetDim);
     if (ramified) return ramified;
-    const id = pushforwardTermVariableId(map, sourceKey, targetDegree, construction);
-    return Poly.variable(id);
+    return null;
   }
 
   function ramifiedCoverPushforwardSourceKey(map, sourceKey, sourceDim, targetDim) {
@@ -22868,6 +24706,7 @@
   }
 
   function rankAsDegreeZeroPoly(bundle, idSeed) {
+    if (bundle?.rankPoly) return Poly.from(bundle.rankPoly);
     const plain = String(bundle.rankPlain || '').trim();
     const poly = scalarExpressionPoly(plain || bundle.rankLatex || 'r');
     if (poly) return poly;
@@ -25115,7 +26954,7 @@
     const aj = abelJacobiMapContext(context?.map);
     if (!aj) return '';
     if (aj.sourceType === 'symmetric-product-curve') {
-      return 'Abel-Jacobi defaults include pullback of Theta and pushforwards of 1, eta, and the Macdonald aggregates.';
+      return 'Abel-Jacobi defaults include pullback of Theta; known pushforwards are evaluated directly.';
     }
     const genus = abelJacobiCurveGenus(aj.curveGeometry);
     const hasSymplecticBasis = genus === 0 || !!aj.curve.homology?.symplecticBasisConfirmed;
@@ -25871,7 +27710,8 @@
 
   function defineSheafClassVariable(def) {
     defineVariable(def.id, def.degree, def.symbolLatex, {
-      cohomologyDegree: def.cohomologyDegree ?? Math.round(2 * def.degree)
+      cohomologyDegree: def.cohomologyDegree ?? Math.round(2 * def.degree),
+      ...(def.symbolPlain ? { plain: def.symbolPlain } : {})
     });
     return def.id;
   }
@@ -26395,7 +28235,9 @@
     renderStatusForResult(result);
     setInlineMath(refs.ringSummary, geometry ? `A^*(${geometry.labelLatex})_{\\le ${geometry.dim}}` : '\\text{add a variety}');
     renderHomologyPanel(result);
+    renderClassFormulaBuilder();
     renderClassChartWithStepSession(result);
+    renderBettiTableChart(result);
     if (result.hodge) {
       refs.hodgeMessage.hidden = false;
       renderHodgeChart(result);
@@ -26411,6 +28253,7 @@
       refs.hodgeMessage.hidden = false;
       refs.hodgeMessage.textContent = hodgeChartEmptyMessage();
     }
+    if (!result.geometry) renderBettiTableChart(result);
     renderSheafCohomologyChart(result);
     syncChartRevealControls(result);
     typeset(refs.classChart);
@@ -26500,20 +28343,28 @@
     refs.classMessage.className = 'hint';
     refs.classMessage.hidden = false;
     refs.classMessage.textContent = result?.classComputationLimited
-      ? `${result.classComputationMessage || 'Characteristic class computation exceeded the symbolic work limit.'} Use step-by-step below to reduce the formula in smaller pieces.`
+      ? `${result.classComputationMessage || 'Characteristic class computation exceeded the symbolic work limit.'} Use Step-by-Step Formula below to reduce the formula in smaller pieces.`
       : classChartEmptyMessage();
     syncHeavyOperationControls(result);
   }
 
   function syncClassStepAvailability(result = state.lastResult) {
-    const selected = inputIsModifyMode() ? selectedSheaf() : activeSheaf();
-    const available = !!(result?.geometry && result?.sheaf) || !!(selected && baseVarietyForSheaf(selected));
-    if (refs.classStepEntry) refs.classStepEntry.hidden = !available;
+    const available = state.varieties.length > 0 || !!result?.geometry;
     if (!available) {
-      if (refs.classStepCard) refs.classStepCard.hidden = true;
       if (refs.classStepPanel) refs.classStepPanel.hidden = true;
+      if (state.classFormulaBuilder) {
+        state.classFormulaBuilder.tokens = [];
+        state.classFormulaBuilder.validatedFormula = null;
+        state.classFormulaBuilder.varietyId = null;
+        state.classFormulaBuilder.mode = 'builder';
+        state.classFormulaBuilder.classFamily = 'chern';
+        state.classFormulaBuilder.classDegree = '';
+        state.classFormulaBuilder.classSheafId = null;
+        state.classFormulaBuilder.activeSlotId = null;
+        state.classFormulaBuilder.nextSlotId = 1;
+      }
     }
-    if (refs.stepClasses) refs.stepClasses.disabled = !available || !!state.recomputeBusy || !!state.classRefreshBusy;
+    renderClassFormulaBuilder();
   }
 
   function classChartEmptyMessage() {
@@ -26703,6 +28554,10 @@
       refs.hodgeChernNumbers.hidden = true;
       refs.hodgeChernNumbers.innerHTML = '';
     }
+    if (refs.hodgePolyvector) {
+      refs.hodgePolyvector.hidden = true;
+      refs.hodgePolyvector.innerHTML = '';
+    }
     if (refs.hodgeQuery) refs.hodgeQuery.hidden = !result.hodge.queryAvailable;
     if (refs.hodgeMessage) {
       refs.hodgeMessage.hidden = false;
@@ -26774,18 +28629,41 @@
   }
 
   function setHodgeCellSize(value) {
-    state.hodgeCellSize = normalizedInt(value, 15, 30, 20);
+    state.hodgeCellSize = normalizedInt(value, 15, 30, DEFAULT_HODGE_CELL_SIZE);
     syncHodgeCellSizeControl();
     const board = refs.hodgeChart?.querySelector('.hodge-board');
     if (board) {
       board.style.setProperty('--hodge-cell', `${state.hodgeCellSize}px`);
       board.style.setProperty('--hodge-row', `${state.hodgeCellSize}px`);
     }
+    const polyvectorBoard = refs.hodgePolyvector?.querySelector('.hodge-polyvector-board');
+    if (polyvectorBoard) {
+      applyHodgePolyvectorSize(polyvectorBoard);
+    }
   }
 
   function syncHodgeCellSizeControl() {
     if (refs.hodgeCellSize) refs.hodgeCellSize.value = String(state.hodgeCellSize);
     if (refs.hodgeCellSizeValue) refs.hodgeCellSizeValue.textContent = `${state.hodgeCellSize}px`;
+  }
+
+  function hodgePolyvectorCellSize() {
+    return Math.round(hodgePolyvectorScale() * DEFAULT_POLYVECTOR_CELL_SIZE);
+  }
+
+  function hodgePolyvectorScale() {
+    const size = normalizedInt(state.hodgeCellSize, 15, 30, DEFAULT_HODGE_CELL_SIZE);
+    return size / DEFAULT_HODGE_CELL_SIZE;
+  }
+
+  function applyHodgePolyvectorSize(board) {
+    if (!board) return;
+    board.style.setProperty('--poly-cell', `${hodgePolyvectorCellSize()}px`);
+    board.style.setProperty('--poly-scale', trimNumberForCss(hodgePolyvectorScale()));
+  }
+
+  function trimNumberForCss(value) {
+    return String(Number(Number(value || 0).toFixed(4)));
   }
 
   function syncHodgeWidePlacement() {
@@ -26848,12 +28726,116 @@
     return formatFractionLatex(total);
   }
 
+  function bettiTableAvailableForGeometry(geometry) {
+    return geometry?.type === 'projective' || geometry?.type === 'complete-intersection';
+  }
+
+  function buildCompleteIntersectionBettiTable(geometry) {
+    if (!bettiTableAvailableForGeometry(geometry)) return null;
+    const degrees = geometry.type === 'complete-intersection' ? (geometry.degrees || []) : [];
+    const codim = degrees.length;
+    const columns = Array.from({ length: codim + 1 }, (_, i) => i);
+    const rowsByShift = new Map();
+    rowsByShift.set(0, Array.from({ length: codim + 1 }, () => 0n));
+    rowsByShift.get(0)[0] = 1n;
+    const subsetCount = 1 << codim;
+    for (let mask = 1; mask < subsetCount; mask += 1) {
+      let homological = 0;
+      let internal = 0;
+      for (let index = 0; index < codim; index += 1) {
+        if (!(mask & (1 << index))) continue;
+        homological += 1;
+        internal += degrees[index];
+      }
+      const shift = internal - homological;
+      if (!rowsByShift.has(shift)) rowsByShift.set(shift, Array.from({ length: codim + 1 }, () => 0n));
+      rowsByShift.get(shift)[homological] += 1n;
+    }
+    const shifts = Array.from(rowsByShift.keys()).sort((left, right) => left - right);
+    const minShift = shifts[0] ?? 0;
+    const maxShift = shifts[shifts.length - 1] ?? 0;
+    const rows = [];
+    for (let shift = minShift; shift <= maxShift; shift += 1) {
+      rows.push({ shift, values: rowsByShift.get(shift) || Array.from({ length: codim + 1 }, () => 0n) });
+    }
+    const relation = codim === 0
+      ? `S(${geometry.ambientPlain || geometry.labelPlain})`
+      : `S/I_X,\\ I_X=(${degrees.map((degree) => `f_{${degree}}`).join(',')})`;
+    const message = codim === 0
+      ? `Projective space has coordinate ring S, so only beta_{0,0}=1.`
+      : `Koszul Betti table for the coordinate ring of ${geometry.labelPlain}.`;
+    return {
+      columns,
+      rows,
+      labelLatex: geometry.labelLatex,
+      labelPlain: geometry.labelPlain,
+      relation,
+      message
+    };
+  }
+
+  function renderBettiTableChart(result = state.lastResult) {
+    if (!refs.bettiTableChart || !refs.bettiTableMessage) return;
+    if (!result?.geometry || !state.revealedCharts?.betti) {
+      refs.bettiTableChart.hidden = true;
+      refs.bettiTableChart.innerHTML = '';
+      refs.bettiTableMessage.textContent = '';
+      return;
+    }
+    const table = buildCompleteIntersectionBettiTable(result.geometry);
+    const content = table ? bettiTableHtml(table) : symbolicBettiTableHtml();
+    refs.bettiTableChart.hidden = false;
+    refs.bettiTableChart.innerHTML = content.html;
+    refs.bettiTableMessage.textContent = table
+      ? table.message
+      : 'A concrete Betti table is not well-defined from this variety data alone; choose an embedding or resolution to compute numeric entries.';
+    typeset(refs.bettiTableChart);
+  }
+
+  function bettiTableHtml(table) {
+    const caption = `
+      <div class="betti-table-note">
+        \\(\\beta_{i,j}=\\dim_k\\operatorname{Tor}^{S}_{i}(${table.relation},k)_j\\).
+        Columns are homological degree \\(i\\); rows are twist \\(j-i\\).
+      </div>`;
+    const header = `<tr><th>\\(j-i\\backslash i\\)</th>${table.columns.map((column) => `<th>\\(${column}\\)</th>`).join('')}</tr>`;
+    const rows = table.rows.map((row) => {
+      const cells = row.values.map((value) => {
+        const text = value === 0n ? '0' : String(value);
+        const className = value === 0n ? ' class="is-zero"' : '';
+        return `<td${className}>\\(${text}\\)</td>`;
+      }).join('');
+      return `<tr><th>\\(${row.shift}\\)</th>${cells}</tr>`;
+    }).join('');
+    return { html: `${caption}<table class="betti-table"><tbody>${header}${rows}</tbody></table>` };
+  }
+
+  function symbolicBettiTableHtml() {
+    const columns = [0, 1, 2, 3];
+    const shifts = [0, 1, 2];
+    const caption = `
+      <div class="betti-table-note">
+        \\(\\beta_{i,j}=\\dim_k\\operatorname{Tor}^{S}_{i}(M,k)_j\\).
+        Columns are homological degree \\(i\\); rows are twist \\(j-i\\).
+      </div>`;
+    const header = `<tr><th>\\(j-i\\backslash i\\)</th>${columns.map((column) => `<th>\\(${column}\\)</th>`).join('')}</tr>`;
+    const rows = shifts.map((shift) => {
+      const cells = columns.map((i) => `<td>\\(\\beta_{${i},${i + shift}}\\)</td>`).join('');
+      return `<tr><th>\\(${shift}\\)</th>${cells}</tr>`;
+    }).join('');
+    return { html: `${caption}<table class="betti-table is-symbolic"><tbody>${header}${rows}</tbody></table>` };
+  }
+
   function renderHodgeChernNumbers(result) {
     if (!refs.hodgeChernNumbers) return;
     const numbers = hodgeChernNumberDisplays(result);
     if (!numbers.length) {
       refs.hodgeChernNumbers.hidden = true;
       refs.hodgeChernNumbers.innerHTML = '';
+      if (refs.hodgePolyvector) {
+        refs.hodgePolyvector.hidden = true;
+        refs.hodgePolyvector.innerHTML = '';
+      }
       return;
     }
     refs.hodgeChernNumbers.hidden = false;
@@ -26865,6 +28847,236 @@
       </span>
     `).join('');
     typeset(refs.hodgeChernNumbers);
+    renderHodgePolyvectorParallelogram(result);
+  }
+
+  function renderHodgePolyvectorParallelogram(result) {
+    if (!refs.hodgePolyvector) return;
+    const data = buildPolyvectorParallelogram(result);
+    if (!data) {
+      refs.hodgePolyvector.hidden = true;
+      refs.hodgePolyvector.innerHTML = '';
+      return;
+    }
+    const d = result.geometry.dim;
+    const cells = [];
+    const connectorCells = [];
+    const expanded = !!state.hodgeExpanded;
+    const hhCol = d + 3;
+    const rowOffset = expanded ? 1 : 0;
+    if (expanded) {
+      for (let q = 0; q <= d; q += 1) {
+        const chi = polyvectorColumnEulerCharacteristic(data.entries, q, d);
+        const display = polyvectorColumnIsNumeric(data.entries, q, d)
+          ? chi.latex
+          : `\\chi(\\mathcal{T}_X^{\\wedge^{${q}}})`;
+        cells.push(`<span class="hodge-polyvector-chi" style="grid-row:1;grid-column:${q + 1};" title="chi(lambda^${q} T_X)">\\(${display}\\)</span>`);
+      }
+    }
+    for (let total = 0; total <= 2 * d; total += 1) {
+      const startCol = total <= d ? 1 : total - d + 1;
+      let offset = 0;
+      const pMax = Math.min(total, d);
+      const pMin = Math.max(0, total - d);
+      for (let p = pMax; p >= pMin; p -= 1) {
+        const q = total - p;
+        const entry = data.entries[p]?.[q] || polyvectorSymbolEntry(p, q);
+        cells.push(`<span class="hodge-polyvector-cell" style="grid-row:${total + 1 + rowOffset};grid-column:${startCol + offset};" title="g^${p},${q}">\\(${entry.latex}\\)</span>`);
+        offset += 1;
+      }
+      if (expanded) {
+        const endCol = startCol + offset - 1;
+        if (hhCol - endCol > 1) {
+          connectorCells.push(`<span class="hodge-polyvector-line" style="grid-row:${total + 1 + rowOffset};grid-column:${endCol + 1}/${hhCol};"></span>`);
+        }
+        const totalEntry = polyvectorDiagonalTotal(data.entries, total, d);
+        const display = polyvectorDiagonalIsNumeric(data.entries, total, d)
+          ? totalEntry.latex
+          : `\\mathrm{HH}^{${total}}`;
+        cells.push(`<span class="hodge-polyvector-hh" style="grid-row:${total + 1 + rowOffset};grid-column:${hhCol};" title="HH^${total}">\\(${display}\\)</span>`);
+      }
+    }
+    const expandedClass = expanded ? ' is-expanded' : '';
+    refs.hodgePolyvector.hidden = false;
+    refs.hodgePolyvector.innerHTML = `
+      <div class="hodge-polyvector-title">polyvector parallelogram \\(g^{p,q}=\\dim H^p(X,\\wedge^qT_X)\\)</div>
+      <div class="hodge-polyvector-frame">
+        <div class="hodge-polyvector-board${expandedClass}" style="--poly-cell:${hodgePolyvectorCellSize()}px;--poly-scale:${trimNumberForCss(hodgePolyvectorScale())};--poly-cols:${d + 1};">
+          ${connectorCells.join('')}${cells.join('')}
+        </div>
+      </div>
+      <div class="hodge-polyvector-message">${escapeHtml(data.message || '')}</div>
+    `;
+    typeset(refs.hodgePolyvector);
+  }
+
+  function polyvectorDiagonalTotal(entries, total, d) {
+    const terms = [];
+    const pMin = Math.max(0, total - d);
+    const pMax = Math.min(total, d);
+    for (let p = pMin; p <= pMax; p += 1) {
+      const q = total - p;
+      terms.push(entries[p]?.[q] || numericHodgeEntry(0n));
+    }
+    return sumHodgeEntries(terms);
+  }
+
+  function polyvectorColumnEulerCharacteristic(entries, q, d) {
+    const terms = [];
+    for (let p = 0; p <= d; p += 1) {
+      const entry = entries[p]?.[q] || numericHodgeEntry(0n);
+      terms.push({
+        ...entry,
+        sign: p % 2 === 0 ? 1 : -1
+      });
+    }
+    return {
+      latex: formatHodgeExpressionLatex(terms),
+      plain: terms.map((term) => `${term.sign < 0 ? '-' : '+'}${term.plain || latexToPlain(term.latex || '0')}`).join('')
+    };
+  }
+
+  function polyvectorColumnIsNumeric(entries, q, d) {
+    for (let p = 0; p <= d; p += 1) {
+      const entry = entries[p]?.[q] || numericHodgeEntry(0n);
+      if (parseSimpleLatexNumber(entry.latex) == null) return false;
+    }
+    return true;
+  }
+
+  function polyvectorDiagonalIsNumeric(entries, total, d) {
+    const pMin = Math.max(0, total - d);
+    const pMax = Math.min(total, d);
+    for (let p = pMin; p <= pMax; p += 1) {
+      const q = total - p;
+      const entry = entries[p]?.[q] || numericHodgeEntry(0n);
+      if (parseSimpleLatexNumber(entry.latex) == null) return false;
+    }
+    return true;
+  }
+
+  function buildPolyvectorParallelogram(result) {
+    const geometry = result?.geometry;
+    const hodge = result?.hodge;
+    const d = geometry?.dim;
+    if (!Number.isInteger(d)) return null;
+    if (d === 1) {
+      const curve = buildCurvePolyvectorParallelogram(geometry);
+      if (curve) return curve;
+    }
+    if (geometry.type === 'projective' || (geometry.type === 'complete-intersection' && !geometry.degrees?.length)) {
+      return buildProjectivePolyvectorParallelogram(geometry);
+    }
+    if (hodgeEntriesHaveShape(hodge?.entries, d) && geometryHasTrivialCanonicalForPolyvector(geometry)) {
+      return {
+        entries: Array.from({ length: d + 1 }, (_, p) => (
+          Array.from({ length: d + 1 }, (_, q) => cloneHodgeEntry(hodge.entries[d - q][p]))
+        )),
+        message: 'Computed using the trivial canonical bundle identification wedge^q T_X = Omega_X^{n-q}.'
+      };
+    }
+    if (hodgeEntriesHaveShape(hodge?.entries, d) && geometry?.type === 'abstract') {
+      return buildSymbolicPolyvectorParallelogram(geometry, 'Symbolic polyvector fields; ordinary Hodge numbers do not determine these dimensions.');
+    }
+    if (geometry?.type === 'complete-intersection') {
+      return buildSymbolicPolyvectorParallelogram(
+        geometry,
+        'Symbolic for this non-Calabi-Yau complete intersection; the numeric computation needs twisted Hodge numbers.'
+      );
+    }
+    if (hodgeEntriesHaveShape(hodge?.entries, d)) {
+      return buildSymbolicPolyvectorParallelogram(geometry, 'Symbolic polyvector fields for this variety type.');
+    }
+    return null;
+  }
+
+  function buildProjectivePolyvectorParallelogram(geometry) {
+    const d = geometry.dim;
+    const entries = Array.from({ length: d + 1 }, () => Array.from({ length: d + 1 }, () => numericHodgeEntry(0n)));
+    entries[0][0] = numericHodgeEntry(1n);
+    for (let q = 1; q <= d; q += 1) {
+      const omegaDegree = d - q;
+      entries[0][q] = numericHodgeEntry(projectiveTwistedFormH0(d, omegaDegree, d + 1));
+    }
+    return {
+      entries,
+      message: `Projective-space polyvectors computed as H^0(P^n, Omega^{n-q}(n+1)).`
+    };
+  }
+
+  function buildCurvePolyvectorParallelogram(geometry) {
+    const genus = numericalCurveGenus(geometry);
+    if (genus == null) return buildSymbolicCurvePolyvectorParallelogram(geometry);
+    const h0T = genus === 0 ? 3n : (genus === 1 ? 1n : 0n);
+    const h1T = genus === 0 ? 0n : BigInt(3 * genus - 3);
+    return {
+      entries: [
+        [numericHodgeEntry(1n), numericHodgeEntry(h0T)],
+        [numericHodgeEntry(BigInt(genus)), numericHodgeEntry(h1T)]
+      ],
+      message: `Curve polyvectors from Riemann-Roch and Serre duality for genus ${genus}.`
+    };
+  }
+
+  function buildSymbolicCurvePolyvectorParallelogram(geometry) {
+    const genus = geometry?.type === 'curve' ? genusLatex(geometry.genus) : 'g';
+    const plainGenus = geometry?.type === 'curve' ? genusPlain(geometry.genus) : 'g';
+    return {
+      entries: [
+        [
+          { latex: '1', plain: '1' },
+          { latex: `h^0(T_${geometry.labelLatex || 'C'})`, plain: `h^0(T_${geometry.labelPlain || 'C'})` }
+        ],
+        [
+          { latex: genus, plain: plainGenus },
+          { latex: `3${genus}-3`, plain: `3*${plainGenus}-3` }
+        ]
+      ],
+      message: 'Curve polyvectors: h^1(T_C)=3g-3 for stable curves; h^0(T_C) depends on automorphisms when genus is symbolic.'
+    };
+  }
+
+  function projectiveTwistedFormH0(n, formDegree, twist) {
+    if (formDegree < 0 || formDegree > n || twist < 0) return 0n;
+    let total = 0n;
+    for (let i = 0; i <= formDegree; i += 1) {
+      const lineTwist = twist - formDegree + i;
+      if (lineTwist < 0) continue;
+      const term = binomialBigInt(n + 1, formDegree - i) * binomialBigInt(n + lineTwist, n);
+      total += i % 2 === 0 ? term : -term;
+    }
+    return total < 0n ? 0n : total;
+  }
+
+  function geometryHasTrivialCanonicalForPolyvector(geometry) {
+    if (!geometry) return false;
+    if (geometry.type === 'abelian') return true;
+    if (geometry.type === 'complete-intersection') return completeIntersectionCanonicalTwist(geometry) === 0;
+    return false;
+  }
+
+  function buildSymbolicPolyvectorParallelogram(geometry, message) {
+    const d = geometry.dim;
+    return {
+      entries: Array.from({ length: d + 1 }, (_, p) => (
+        Array.from({ length: d + 1 }, (_, q) => polyvectorSymbolEntry(p, q))
+      )),
+      message
+    };
+  }
+
+  function polyvectorSymbolEntry(p, q) {
+    return {
+      latex: `g^{${p},${q}}`,
+      plain: `g^${p},${q}`
+    };
+  }
+
+  function cloneHodgeEntry(entry) {
+    return {
+      latex: entry?.latex || '0',
+      plain: entry?.plain || latexToPlain(entry?.latex || '0')
+    };
   }
 
   function hodgeChernNumberDisplays(result) {
@@ -29082,7 +31294,7 @@
     if (refs.exportCard) refs.exportCard.classList.remove('collapsed');
     refs.status.textContent = scope === 'hodge'
       ? 'hodge numbers export ready'
-      : (scope === 'step-classes' ? 'step-by-step characteristic class export ready' : 'characteristic classes export ready');
+      : (scope === 'step-classes' ? 'step-by-step formula export ready' : 'characteristic classes export ready');
   }
 
   function exportResult(result, format, scope = 'main') {
@@ -29092,6 +31304,8 @@
       if (!classRows.length) return `No characteristic classes available. ${classChartEmptyMessage()}`;
       return exportClassChart({
         ...result,
+        geometry: result?.geometry || state.classStepSession?.geometry || null,
+        sheaf: result?.sheaf || null,
         classRows,
         classStepExport: scope === 'step-classes' && classStepSessionMatchesResult(state.classStepSession, result)
       }, format);
@@ -29104,11 +31318,11 @@
   }
 
   function classRowsForExport(result, scope = 'classes') {
-    if (!result) return [];
+    if (!result && !(scope === 'step-classes' && state.classStepSession?.formulaSession)) return [];
     if ((scope === 'classes' || scope === 'step-classes') && classStepSessionMatchesResult(state.classStepSession, result)) {
       const rows = buildClassRowsFromStepSession(
         state.classStepSession,
-        result.classDisplay || classDisplayOptions(result.geometry, result.sheaf)
+        result?.classDisplay || classDisplayOptions(state.classStepSession.geometry, result?.sheaf || null)
       );
       if (rows.length) return rows;
     }
@@ -29562,9 +31776,10 @@
     if (refs.classTermIndex) refs.classTermIndex.value = String(normalizedInt(options.classTermIndex, 0, MAX_DIMENSION, 1));
     state.hodgeExpanded = options.hodgeExpanded === true;
     state.hodgeWide = options.hodgeWide === true;
-    state.hodgeCellSize = normalizedInt(options.hodgeCellSize, 15, 30, 20);
+    state.hodgeCellSize = normalizedInt(options.hodgeCellSize, 15, 30, DEFAULT_HODGE_CELL_SIZE);
     state.revealedCharts = {
       hodge: options.revealedCharts?.hodge === true,
+      betti: options.revealedCharts?.betti === true,
       classes: options.revealedCharts?.classes === true,
       cohomology: options.revealedCharts?.cohomology === true
     };
@@ -30114,8 +32329,9 @@
       lines.push(`% X: ${result.geometry.labelPlain}`);
       lines.push(`% E: ${result.bundle.labelPlain}`);
       lines.push(`% display: ${classDisplayDescription(result)}`);
-      if (result.classStepExport) lines.push('% source: step-by-step characteristic class chart');
+      if (result.classStepExport) lines.push('% source: step-by-step formula');
       lines.push(...exportHomologyNotes(result.geometry, format));
+      if (result.classStepExport) lines.push(`\\[${renderClassStepCalculationLatex(state.classStepSession)}\\]`);
       result.classRows.forEach((row) => lines.push(`\\[${row.labelLatex} = ${row.latex}\\]`));
       return lines.join('\n');
     }
@@ -30124,8 +32340,9 @@
       lines.push(`# X: ${result.geometry.labelPlain}`);
       lines.push(`# E: ${result.bundle.labelPlain}`);
       lines.push(`# display: ${classDisplayDescription(result)}`);
-      if (result.classStepExport) lines.push('# source: step-by-step characteristic class chart');
+      if (result.classStepExport) lines.push('# source: step-by-step formula');
       lines.push(...exportHomologyNotes(result.geometry, format));
+      if (result.classStepExport) lines.push(`# formula: ${classStepHistoryPlain(state.classStepSession)}`);
       result.classRows.forEach((row) => lines.push(`${row.key} = ${row.plain}`));
       return lines.join('\n');
     }
@@ -30133,10 +32350,24 @@
     lines.push(`X: ${result.geometry.labelPlain}`);
     lines.push(`E: ${result.bundle.labelPlain}`);
     lines.push(`display: ${classDisplayDescription(result)}`);
-    if (result.classStepExport) lines.push('source: step-by-step characteristic class chart');
+    if (result.classStepExport) lines.push('source: step-by-step formula');
     lines.push(...exportHomologyNotes(result.geometry, format));
+    if (result.classStepExport) lines.push(`formula: ${classStepHistoryPlain(state.classStepSession)}`);
     result.classRows.forEach((row) => lines.push(`${row.label} = ${row.plain}`));
     return lines.join('\n');
+  }
+
+  function classStepHistoryPlain(session) {
+    if (!session) return '';
+    const label = classStepLabelPlain(session);
+    const current = formatPolyPlain(classStepDisplayPoly(session));
+    const history = classStepDisplayHistoryEntries(session);
+    if (!history.length) return `${label} = ${current}`;
+    return history.map(({ item, index }, visibleIndex) => {
+      const value = item?.hidden === true ? '...' : latexToPlain(item.value || current);
+      if (visibleIndex === 0 && index === 0) return `${label} := ${value}`;
+      return `= ${value}`;
+    }).join(' ');
   }
 
   function exportHomologyNotes(geometry, format) {
