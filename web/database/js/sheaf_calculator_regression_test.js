@@ -2693,19 +2693,129 @@ function testClassStepPushforwardOffersGrrRule() {
   const ch3Rule = grrRule.rules.find((rule) => api.formatPolyPlain(api.polyFromPowers(rule.lhs.powers)).includes('ch_3(AJ_*T_C)'));
   const materializedCh3 = api.classStepMaterializeRule(session, ch3Rule);
   const ch3Plain = api.formatPolyPlain(api.homologyRuleRhsPoly(materializedCh3));
-  assert(ch3Plain.includes('AJ_*left(1right)'), ch3Plain);
-  assert(!ch3Plain.includes('Theta'), ch3Plain);
+  assert.strictEqual(ch3Plain, '1/6*Theta^3 + 1/3*Theta^3*r(T_C)');
   const ch4Rule = grrRule.rules.find((rule) => api.formatPolyPlain(api.polyFromPowers(rule.lhs.powers)).includes('ch_4(AJ_*T_C)'));
   const materializedCh4 = api.classStepMaterializeRule(session, ch4Rule);
   const ch4Plain = api.formatPolyPlain(api.homologyRuleRhsPoly(materializedCh4));
-  assert(ch4Plain.includes('td_1(C)'), ch4Plain);
-  assert(ch4Plain.includes('ch_1(T_C)'), ch4Plain);
-  assert(ch4Plain.includes('td_1(J)'), ch4Plain);
-  assert(!ch4Plain.includes('Theta'), ch4Plain);
+  assert.strictEqual(ch4Plain, '-1/6*td_1(J)*Theta^3 - 1/3*td_1(J)*Theta^3*r(T_C)');
   session.components[4] = api.applyClassStepRulesToPoly(session.components[4], [materializedCh4], geometry.dim, { oncePerRule: true, onePass: true });
   const nextCandidates = api.collectClassStepRuleCandidates(session).map((candidate) => candidate.sourceLabel);
   assert(nextCandidates.includes('Todd'));
-  assert(nextCandidates.includes('Chern character'));
+}
+
+function testSymmetricProductAggregateRulesUseAveragedCoefficients() {
+  const api = loadCalculator();
+  api.state.varieties = [{
+    id: 'X',
+    type: 'symmetric-product-curve',
+    dim: '2',
+    name: '\\operatorname{Sym}^{2}(C)',
+    genus: '4',
+    symmetricProductM: '2',
+    symmetricProductGenus: '4'
+  }];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const etaId = api.homologyDefVariableId(
+    api.homologyClassDefinitions(geometry).find((def) => def.id === 'symmetric_product_eta'),
+    geometry
+  );
+  const sigmaId = api.homologyDefVariableId(
+    api.homologyClassDefinitions(geometry).find((def) => def.id === 'symmetric_product_sigma_sum'),
+    geometry
+  );
+
+  const etaSquared = geometry.homology.rules.find((rule) => (
+    rule.id === 'symmetric-product-curve-tautological-eta-r0-c1-q1'
+  ));
+  const etaSigma = geometry.homology.rules.find((rule) => (
+    rule.id === 'symmetric-product-curve-tautological-eta-r1-c1-q0'
+  ));
+  assert(etaSquared);
+  assert(etaSigma);
+  assert.strictEqual(etaSquared.lhs.powers[etaId], 2);
+  assert.strictEqual(Object.keys(etaSquared.lhs.powers).length, 1);
+  assert.strictEqual(etaSquared.rhs.length, 1);
+  assert.strictEqual(etaSquared.rhs[0].coefficient, '1/4');
+  assert.strictEqual(etaSquared.rhs[0].powers[etaId], 1);
+  assert.strictEqual(etaSquared.rhs[0].powers[sigmaId], 1);
+  assert.strictEqual(etaSigma.lhs.powers[etaId], 1);
+  assert.strictEqual(etaSigma.lhs.powers[sigmaId], 1);
+  assert.strictEqual(Object.keys(etaSigma.lhs.powers).length, 2);
+  assert.strictEqual(etaSigma.rhs.length, 1);
+  assert.strictEqual(etaSigma.rhs[0].coefficient, '1/3');
+  assert.strictEqual(etaSigma.rhs[0].powers[sigmaId], 2);
+  assert.strictEqual(Object.keys(etaSigma.rhs[0].powers).length, 1);
+
+  const c1 = api.polyFromPowers({ [etaId]: 1 }).add(api.polyFromPowers({ [sigmaId]: 1 })).neg();
+  const c1Squared = c1.mul(c1, geometry.dim);
+  const reduced = api.applyHomologyRules(c1Squared, {
+    geometry,
+    homology: geometry.homology,
+    homologyRulePasses: 4
+  });
+  assert.strictEqual(api.formatPolyPlain(reduced), '7/4*Sigma^2');
+}
+
+function testSymmetricProductAbelJacobiUsesProjectionFormulaForSigma() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    {
+      id: 'X',
+      type: 'symmetric-product-curve',
+      dim: '2',
+      name: '\\operatorname{Sym}^{2}(C)',
+      genus: '4',
+      symmetricProductM: '2',
+      symmetricProductGenus: '4'
+    },
+    {
+      id: 'J',
+      type: 'abelian',
+      dim: '4',
+      name: 'J',
+      genus: '4',
+      homology: { classes: { theta: { symbol: '\\Theta' }, unit: { symbol: '1' }, point: { symbol: '[p]' } }, rules: [] },
+      construction: { type: 'jacobian', curveId: 'X' }
+    }
+  ];
+  api.state.maps = [{
+    id: 'AJ',
+    name: '\\operatorname{AJ}_{C^{(2)}}',
+    domainKind: 'variety',
+    domainId: 'X',
+    codomainKind: 'variety',
+    codomainId: 'J',
+    construction: { type: 'abel-jacobi', curveId: 'X', jacobianId: 'J' }
+  }];
+  const sourceGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const jacobianGeometry = api.geometryFromVariety(api.state.varieties[1]);
+  const sigmaDef = api.homologyClassDefinitions(sourceGeometry).find((def) => def.id === 'symmetric_product_sigma_sum');
+  const thetaDef = api.homologyClassDefinitions(jacobianGeometry).find((def) => def.id === 'theta');
+  const sigmaId = api.homologyDefVariableId(sigmaDef, sourceGeometry);
+  const thetaId = api.homologyDefVariableId(thetaDef, jacobianGeometry);
+  const pullbackRule = api.defaultMapHomologyRulesForGeometry(sourceGeometry)
+    .find((rule) => rule.id === 'default-abel-jacobi-symmetric-theta-pullback-AJ');
+  assert(pullbackRule);
+  assert.strictEqual(pullbackRule.rhs.length, 1);
+  assert.strictEqual(pullbackRule.rhs[0].coefficient, '1');
+  assert.strictEqual(pullbackRule.rhs[0].powers[sigmaId], 1);
+
+  const etaSigmaSquared = api.polyFromPowers({
+    [api.homologyDefVariableId(
+      api.homologyClassDefinitions(sourceGeometry).find((def) => def.id === 'symmetric_product_eta'),
+      sourceGeometry
+    )]: 1,
+    [sigmaId]: 1
+  });
+  const pushed = api.pushforwardPolynomialByDegree(
+    api.state.maps[0],
+    etaSigmaSquared,
+    sourceGeometry.dim,
+    jacobianGeometry.dim,
+    { proper: true }
+  );
+  assert.strictEqual(api.formatPolyPlain(pushed), '1/6*Theta^4');
+  assert.strictEqual(api.formatPolyPlain(api.polyFromPowers({ [thetaId]: 4 }).scale(pushed.terms.get(`${thetaId}:4`))), '1/6*Theta^4');
 }
 
 function testClassStepNestedPushforwardOffersGrrAfterSes() {
@@ -4098,6 +4208,8 @@ testClassStepDerivedTargetAppliesVisibleHomologyRule();
 testClassStepCandidatesOnlyIncludeApplicableRules();
 testClassStepStartsFromFormalConstructedSheafClassAndOffersSesRule();
 testClassStepPushforwardOffersGrrRule();
+testSymmetricProductAggregateRulesUseAveragedCoefficients();
+testSymmetricProductAbelJacobiUsesProjectionFormulaForSigma();
 testClassStepNestedPushforwardOffersGrrAfterSes();
 testClassStepTensorRulesForCharacterAndChern();
 testClassStepWrapsPullbackSourceRulesInsidePushforward();

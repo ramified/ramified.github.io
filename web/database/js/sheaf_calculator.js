@@ -17350,10 +17350,12 @@
     if (lhsEta > 0) lhsPowers[etaId] = lhsEta;
     if (lhsSigma > 0) lhsPowers[sigmaId] = lhsSigma;
     const rhs = [];
+    const leadingCount = binomialBigInt(genus - r, c);
+    if (leadingCount === 0n) return null;
     for (let j = 1; j <= c; j += 1) {
       const coeff = fraction(
         BigInt(j % 2 === 0 ? -1 : 1) * binomialBigInt(genus - r - j, c - j),
-        factorialBigInt(j)
+        leadingCount * factorialBigInt(j)
       );
       if (coeff.isZero()) continue;
       const powers = {};
@@ -21573,7 +21575,6 @@
     if (!thetaDef) return null;
     const theta = Poly.variable(homologyDefVariableId(thetaDef, context.jacobianGeometry));
     return polyPower(theta, degree, context.jacobianGeometry.dim)
-      .scale(fraction(1, factorialBigInt(degree)))
       .truncate(context.jacobianGeometry.dim);
   }
 
