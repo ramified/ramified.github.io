@@ -4963,7 +4963,7 @@
     if (refs.symmetricProductM) {
       refs.symmetricProductM.addEventListener('input', () => {
         if (refs.varietyType?.value !== 'symmetric-product-curve') return;
-        syncSymmetricProductControls();
+        syncSymmetricProductControls({ commitValues: false });
         syncDefaultVarietyName();
         syncDefaultSheafName();
       });
@@ -12615,13 +12615,14 @@
     return { m, genus, dim: m };
   }
 
-  function syncSymmetricProductControls() {
+  function syncSymmetricProductControls(options = {}) {
+    const commitValues = options.commitValues !== false;
     const params = normalizedSymmetricProductParams();
     if (refs.symmetricProductM) {
       refs.symmetricProductM.max = String(MAX_DIMENSION);
-      refs.symmetricProductM.value = String(params.m);
+      if (commitValues) refs.symmetricProductM.value = String(params.m);
     }
-    if (refs.symmetricProductGenus) refs.symmetricProductGenus.value = params.genus;
+    if (refs.symmetricProductGenus && commitValues) refs.symmetricProductGenus.value = params.genus;
     if (refs.dim && refs.varietyType?.value === 'symmetric-product-curve') refs.dim.value = String(params.dim);
     return params;
   }
@@ -12879,7 +12880,7 @@
       return `\\mathcal{A}_{${genus}}`;
     }
     if (type === 'symmetric-product-curve') {
-      const { m } = syncSymmetricProductControls();
+      const { m } = syncSymmetricProductControls({ commitValues: false });
       return `\\operatorname{Sym}^{${m}}(C)`;
     }
     if (type === 'curve') return curveDefaultName(refs.curveGenus.value);
@@ -15366,7 +15367,7 @@
     if (refs.dim) refs.dim.closest('.sheaf-field-row').hidden = productMode;
     if (refs.varietyName) refs.varietyName.closest('.sheaf-field-row').hidden = showProduct && productDraftFactors().length < 2;
     if (refs.symmetricProductParamsRow) refs.symmetricProductParamsRow.hidden = !showSymmetricProduct;
-    if (showSymmetricProduct) syncSymmetricProductControls();
+    if (showSymmetricProduct) syncSymmetricProductControls({ commitValues: false });
     if (refs.grassmannianParamsRow) refs.grassmannianParamsRow.hidden = !showGrassmannian;
     if (showGrassmannian) syncGrassmannianControls();
     if (refs.ppavGenusRow) refs.ppavGenusRow.hidden = !showPpavModuli;

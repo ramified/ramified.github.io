@@ -141,7 +141,10 @@ function loadCalculator() {
     refreshConstructedObjects,
     buildPresetState,
     applyPresetState,
-    importPresetFromText
+    importPresetFromText,
+    syncSymmetricProductControls,
+    syncDefaultVarietyName,
+    defaultVarietyNameLatex
   };
 })();`);
   return vm.runInNewContext(source, {
@@ -195,6 +198,28 @@ function testStepBuilderMarkupIsBelowCanvasAndClassChartHasNoStepButton() {
   assert(html.includes('id="class-formula-class-degree"'));
   assert(html.includes('id="class-formula-class-sheaf"'));
   assert(!html.includes('id="class-formula-sheaf-buttons"'));
+}
+
+function testSymmetricProductGenusCanBeClearedWhileEditing() {
+  const api = loadCalculator();
+  const unchangedRows = { hidden: false };
+  Object.assign(api.refs, {
+    varietyType: { value: 'symmetric-product-curve' },
+    symmetricProductM: { value: '3', max: '' },
+    symmetricProductGenus: { value: '' },
+    dim: { value: '3' },
+    varietyName: { value: '', closest: () => unchangedRows },
+    repeatNames: { checked: false }
+  });
+
+  assert.strictEqual(api.defaultVarietyNameLatex(), '\\operatorname{Sym}^{3}(C)');
+  assert.strictEqual(api.refs.symmetricProductGenus.value, '');
+  api.syncSymmetricProductControls({ commitValues: false });
+  assert.strictEqual(api.refs.symmetricProductGenus.value, '');
+  api.syncDefaultVarietyName();
+  assert.strictEqual(api.refs.symmetricProductGenus.value, '');
+  api.syncSymmetricProductControls();
+  assert.strictEqual(api.refs.symmetricProductGenus.value, 'g');
 }
 
 function testAbelianSpecialSheavesAreTrivial() {
@@ -4940,6 +4965,7 @@ testClassStepSimplifyIsSelectableRule();
 testClassStepCandidatesOnlyIncludeApplicableRules();
 testClassStepStartsFromFormalConstructedSheafClassAndOffersSesRule();
 testClassStepPushforwardOffersGrrRule();
+testSymmetricProductGenusCanBeClearedWhileEditing();
 testSymmetricProductAggregateRulesUseAveragedCoefficients();
 testSymmetricProductAbelJacobiUsesProjectionFormulaForSigma();
 testClassStepNestedPushforwardOffersGrrAfterSes();
