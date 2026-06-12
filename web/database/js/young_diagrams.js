@@ -3008,6 +3008,1340 @@ function exportBranching(event) {
   revealExportCard(event);
 }
 
+// ---------------------------------------------
+//  HTW stable branching rules
+// ---------------------------------------------
+// These definitions intentionally come after the original two Littlewood-rule
+// implementation above, so they override that smaller UI with the full stable
+// Howe-Tan-Willenbring branching chart.
+const HTW_BRANCHING_PAIR_LIMIT = Math.max(BRANCHING_PAIR_LIMIT, 12000);
+let _branchingViewMode = 'paper';
+
+const BRANCHING_RULES = {
+  'diag-gl': {
+    label: 'GL(n) x GL(n) -> GL(n)',
+    sourceKind: 'gl',
+    sourceBKind: 'gl',
+    targetKinds: ['GL'],
+    needsSourceB: true,
+    formula: 'diag-gl',
+    hint: 'Diagonal restriction. Source A is the canvas; Source B is the text field.',
+  },
+  'diag-o': {
+    label: 'O(n) x O(n) -> O(n)',
+    sourceKind: 'ordinary',
+    sourceBKind: 'ordinary',
+    targetKinds: ['O'],
+    needsSourceB: true,
+    formula: 'diag-ordinary',
+    ordinaryGroup: 'O',
+    hint: 'Diagonal orthogonal rule using the Newell-Littlewood coefficient.',
+  },
+  'diag-sp': {
+    label: 'Sp(2n) x Sp(2n) -> Sp(2n)',
+    sourceKind: 'ordinary',
+    sourceBKind: 'ordinary',
+    targetKinds: ['Sp'],
+    needsSourceB: true,
+    formula: 'diag-ordinary',
+    ordinaryGroup: 'Sp',
+    hint: 'Diagonal symplectic rule using the Newell-Littlewood coefficient.',
+  },
+  'sum-gl': {
+    label: 'GL(n+m) -> GL(n) x GL(m)',
+    sourceKind: 'gl',
+    targetKinds: ['GL', 'GL'],
+    needsM: true,
+    formula: 'sum-gl',
+    hint: 'Direct-sum restriction. The result has one GL(n) factor and one GL(m) factor.',
+  },
+  'sum-o': {
+    label: 'O(n+m) -> O(n) x O(m)',
+    sourceKind: 'ordinary',
+    targetKinds: ['O', 'O'],
+    needsM: true,
+    formula: 'sum-ordinary',
+    ordinaryGroup: 'O',
+    evenColumns: false,
+    hint: 'Direct-sum orthogonal rule. The result has O(n) and O(m) factors.',
+  },
+  'sum-sp': {
+    label: 'Sp(2n+2m) -> Sp(2n) x Sp(2m)',
+    sourceKind: 'ordinary',
+    targetKinds: ['Sp', 'Sp'],
+    needsM: true,
+    formula: 'sum-ordinary',
+    ordinaryGroup: 'Sp',
+    evenColumns: true,
+    hint: 'Direct-sum symplectic rule. The result has Sp(2n) and Sp(2m) factors.',
+  },
+  'pol-o-gl': {
+    label: 'O(2n) -> GL(n)',
+    sourceKind: 'ordinary',
+    targetKinds: ['GL'],
+    formula: 'ordinary-to-gl',
+    evenColumns: true,
+    hint: 'Polarization rule. GL constituents are rational weights, shown as signed rows.',
+  },
+  'pol-sp-gl': {
+    label: 'Sp(2n) -> GL(n)',
+    sourceKind: 'ordinary',
+    targetKinds: ['GL'],
+    formula: 'ordinary-to-gl',
+    evenColumns: false,
+    hint: 'Polarization rule. GL constituents are rational weights, shown as signed rows.',
+  },
+  'gl-o': {
+    label: 'GL(n) -> O(n)',
+    sourceKind: 'gl',
+    targetKinds: ['O'],
+    formula: 'gl-to-ordinary',
+    ordinaryGroup: 'O',
+    evenColumns: false,
+    hint: 'Bilinear-form Littlewood rule. Rational GL source weights are allowed.',
+  },
+  'gl-sp': {
+    label: 'GL(2n) -> Sp(2n)',
+    sourceKind: 'gl',
+    targetKinds: ['Sp'],
+    formula: 'gl-to-ordinary',
+    ordinaryGroup: 'Sp',
+    evenColumns: true,
+    hint: 'Bilinear-form Littlewood rule. Rational GL source weights are allowed.',
+  },
+};
+
+function branchingRuleDef(rule) {
+  return BRANCHING_RULES[rule] || BRANCHING_RULES['gl-sp'];
+}
+
+function branchingRuleLabel(rule) {
+  return branchingRuleDef(rule).label;
+}
+
+function branchingLRSearchLimitMessage(candidatePairs, stats) {
+  return `Branching computation stopped after ${stats.steps.toLocaleString()} LR search steps while checking candidate ${candidatePairs}. The browser cap is ${stats.limit.toLocaleString()} LR search steps, chosen to keep the expected computation time under about 3 seconds.`;
+}
+
+function syncBranchingControls() {
+  const ruleSelect = document.getElementById('br-rule');
+  const def = branchingRuleDef(ruleSelect ? ruleSelect.value : 'gl-sp');
+  const sourceBWrap = document.getElementById('br-source-b-wrap');
+  const rankMWrap = document.getElementById('br-rank-m-wrap');
+  const rankMInput = document.getElementById('br-rank-m');
+  const viewWrap = document.getElementById('br-gl-view-wrap');
+  const hint = document.getElementById('br-rule-hint');
+  if (sourceBWrap) sourceBWrap.hidden = !def.needsSourceB;
+  if (rankMWrap) {
+    rankMWrap.hidden = !def.needsM;
+    rankMWrap.style.display = def.needsM ? 'inline-flex' : 'none';
+  }
+  if (!def.needsM && rankMInput) rankMInput.value = '';
+  if (viewWrap) viewWrap.hidden = !def.targetKinds.includes('GL');
+  if (hint) hint.textContent = def.hint || 'Stable branching formula.';
+  document.querySelectorAll('[data-branching-view]').forEach(button => {
+    const active = button.dataset.branchingView === _branchingViewMode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
+function onBranchingRuleChange() {
+  syncBranchingControls();
+  markBranchingStale();
+}
+
+function setBranchingViewMode(mode) {
+  _branchingViewMode = mode === 'shifted' ? 'shifted' : 'paper';
+  syncBranchingControls();
+  if (_lastBranching) renderBranchingResult(_lastBranching);
+}
+
+function rejectBranching(message) {
+  _lastBranching = null;
+  setCardStaleById('br-output', false);
+  const out = document.getElementById('br-output');
+  const warn = document.getElementById('br-warning');
+  if (warn) warn.textContent = message;
+  if (out) out.innerHTML = '<span class="hint" style="display:block;padding:8px;">No branching decomposition computed.</span>';
+  renderBranchingPreview();
+}
+
+function markBranchingStale() {
+  _lastBranching = null;
+  setCardStaleById('br-output', false);
+  const out = document.getElementById('br-output');
+  const warn = document.getElementById('br-warning');
+  if (warn) warn.textContent = '';
+  if (out) out.innerHTML = '<span class="hint">Click compute to update the branching decomposition.</span>';
+  syncBranchingControls();
+  renderBranchingPreview();
+}
+
+function trimTrailingZerosVector(rows) {
+  const out = rows.slice();
+  while (out.length && out[out.length - 1] === 0) out.pop();
+  return out;
+}
+
+function currentBranchingCanvasRows() {
+  return isGeneralizedCanvasActive() ? generalizedActiveRows().slice() : rowLengths();
+}
+
+function normalizeOrdinaryBranchingPartition(rows, label) {
+  const part = trimTrailingZerosVector(rows.map(x => Math.round(x || 0)));
+  if (part.some(x => x < 0)) throw new Error(`${label} must be an ordinary nonnegative partition for this rule.`);
+  for (let i = 0; i < part.length; i++) {
+    if (part[i] === 0) throw new Error(`${label} can only have trailing zero rows.`);
+    if (i > 0 && part[i] > part[i - 1]) throw new Error(`${label} rows must be non-increasing.`);
+  }
+  return part;
+}
+
+function rationalGLFromSignedRows(rows, label) {
+  const signedRows = trimTrailingZerosVector(rows.map(x => Math.round(x || 0)));
+  for (let i = 1; i < signedRows.length; i++) {
+    if (signedRows[i] > signedRows[i - 1]) {
+      throw new Error(`${label} must be a dominant signed row vector, e.g. 3,1,0,-2.`);
+    }
+  }
+  const plus = signedRows.filter(x => x > 0);
+  const minus = signedRows.filter(x => x < 0).reverse().map(x => -x);
+  return { plus: trimPart(plus), minus: trimPart(minus) };
+}
+
+function signedRowsFromRationalGL(gl) {
+  return (gl.plus || []).concat((gl.minus || []).slice().reverse().map(x => -x));
+}
+
+function signedRowsFromRationalGLWithRank(gl, rank = null) {
+  const stableRows = signedRowsFromRationalGL(gl);
+  if (rank == null) return stableRows;
+  const plus = gl.plus || [];
+  const minusNeg = (gl.minus || []).slice().reverse().map(x => -x);
+  const zeroCount = rank - plus.length - minusNeg.length;
+  if (zeroCount < 0) return stableRows;
+  return plus.concat(Array(zeroCount).fill(0), minusNeg);
+}
+
+function rationalGLSize(gl) {
+  return partitionSize(gl.plus || []) + partitionSize(gl.minus || []);
+}
+
+function rationalGLLength(gl) {
+  return (gl.plus || []).length + (gl.minus || []).length;
+}
+
+function tryFiniteGLRowsFromRational(gl, rank) {
+  if (rank == null) return null;
+  if (!Number.isInteger(rank) || rank < 1) return null;
+  if (rationalGLLength(gl) > rank) return null;
+  return signedRowsFromRationalGLWithRank(gl, rank);
+}
+
+function rationalGLFromFiniteRows(rows, label = 'GL weight') {
+  return rationalGLFromSignedRows(rows, label);
+}
+
+function finiteGLSourceRankForBranching(rule, ranks) {
+  if (!ranks) return null;
+  if (rule === 'sum-gl') {
+    return ranks.n != null && ranks.m != null ? ranks.n + ranks.m : null;
+  }
+  if (rule === 'gl-sp') return ranks.n == null ? null : 2 * ranks.n;
+  if (rule === 'diag-gl' || rule === 'gl-o') return ranks.n;
+  return null;
+}
+
+function branchingGLSourceLabel(gl, rank = null) {
+  const rows = rank == null
+    ? signedRowsFromRationalGL(gl)
+    : (tryFiniteGLRowsFromRational(gl, rank) || signedRowsFromRationalGL(gl));
+  return signedRowsLabel(rows);
+}
+
+function parseBranchingRowsInput(raw, label, kind) {
+  const allowNegative = kind === 'gl';
+  const values = parseIntegerList(raw, label, true, allowNegative);
+  return kind === 'gl'
+    ? rationalGLFromSignedRows(values, label)
+    : normalizeOrdinaryBranchingPartition(values, label);
+}
+
+function readBranchingRanks(def) {
+  const nInput = document.getElementById('br-rank-n');
+  const mInput = document.getElementById('br-rank-m');
+  const read = (input, label) => {
+    const raw = input ? input.value.trim() : '';
+    if (!raw) return null;
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value < 1) throw new Error(`${label} must be a positive integer, or blank.`);
+    return value;
+  };
+  return {
+    n: read(nInput, 'rank n'),
+    m: def.needsM ? read(mInput, 'rank m') : null,
+  };
+}
+
+function readBranchingInputs(def) {
+  const rowsA = currentBranchingCanvasRows();
+  const sourceA = def.sourceKind === 'gl'
+    ? rationalGLFromSignedRows(rowsA, 'Source A')
+    : normalizeOrdinaryBranchingPartition(rowsA, 'Source A');
+  const sources = { a: sourceA };
+  if (def.needsSourceB) {
+    const input = document.getElementById('br-source-b');
+    const raw = input ? input.value.trim() : '';
+    if (!raw) throw new Error('Enter Source B for this diagonal rule.');
+    sources.b = parseBranchingRowsInput(raw, 'Source B', def.sourceBKind);
+  }
+  return sources;
+}
+
+function branchingInputBoxSize(def, sources) {
+  const sizeOf = (kind, value) => kind === 'gl' ? rationalGLSize(value) : partitionSize(value);
+  let size = sizeOf(def.sourceKind, sources.a);
+  if (def.needsSourceB) size += sizeOf(def.sourceBKind, sources.b);
+  return size;
+}
+
+function createBranchingContext() {
+  return {
+    candidatePairs: 0,
+    lastCandidateLabel: 'candidate',
+    lrStats: { steps: 0, limit: BRANCHING_LR_SEARCH_STEP_LIMIT },
+    lrCache: new Map(),
+    tensorCache: new Map(),
+    partitionCache: new Map(),
+    evenCache: new Map(),
+    ordinaryModificationCache: new Map(),
+  };
+}
+
+function bumpBranchingCandidate(ctx, label = 'candidate') {
+  ctx.candidatePairs++;
+  ctx.lastCandidateLabel = label;
+  if (ctx.candidatePairs > HTW_BRANCHING_PAIR_LIMIT) {
+    const err = new Error('branching-candidates-too-large');
+    err.candidates = ctx.candidatePairs;
+    err.label = label;
+    throw err;
+  }
+}
+
+function partKey(part) {
+  return (part || []).join(',');
+}
+
+function lrCached(ctx, lam, mu, nu) {
+  const sizeLam = partitionSize(lam);
+  if (sizeLam !== partitionSize(mu) + partitionSize(nu)) return 0;
+  const key = `${partKey(lam)}|${partKey(mu)}|${partKey(nu)}`;
+  if (ctx.lrCache.has(key)) return ctx.lrCache.get(key);
+  const value = branchingLRCoeff(lam, mu, nu, ctx.lrStats);
+  ctx.lrCache.set(key, value);
+  return value;
+}
+
+function branchingLRCoeff(lam, mu, nu, stats = null) {
+  const szLam = partitionSize(lam);
+  const szMu = partitionSize(mu);
+  const szNu = partitionSize(nu);
+  if (szLam !== szMu + szNu) return 0;
+  for (let i = 0; i < Math.max(lam.length, mu.length); i++) {
+    if ((lam[i] || 0) < (mu[i] || 0)) return 0;
+  }
+  const cells = [];
+  for (let r = 0; r < lam.length; r++) {
+    const start = mu[r] || 0;
+    const end = lam[r] || 0;
+    for (let c = end - 1; c >= start; c--) cells.push([r, c]);
+  }
+  if (!cells.length) return szNu === 0 ? 1 : 0;
+  const numLetters = nu.length;
+  if (!numLetters) return 0;
+  const supply = nu.slice();
+  const counts = new Array(numLetters + 1).fill(0);
+  const filled = new Map();
+  let total = 0;
+  const cellKey = (r, c) => `${r},${c}`;
+  const hasSkewCell = (r, c) => r >= 0 && r < lam.length && c >= (mu[r] || 0) && c < (lam[r] || 0);
+
+  function ballotOkAfter(v) {
+    counts[v]++;
+    let ok = true;
+    for (let k = 1; k < numLetters; k++) {
+      if (counts[k] < counts[k + 1]) {
+        ok = false;
+        break;
+      }
+    }
+    counts[v]--;
+    return ok;
+  }
+
+  function bt(i) {
+    bumpBranchingLRSearch(stats);
+    if (i === cells.length) {
+      total++;
+      return;
+    }
+    const [r, c] = cells[i];
+    let lo = 1;
+    let hi = numLetters;
+    if (hasSkewCell(r, c + 1)) {
+      const right = filled.get(cellKey(r, c + 1));
+      if (right != null) hi = Math.min(hi, right);
+    }
+    if (hasSkewCell(r - 1, c)) {
+      const above = filled.get(cellKey(r - 1, c));
+      if (above != null) lo = Math.max(lo, above + 1);
+    }
+    for (let v = lo; v <= hi; v++) {
+      bumpBranchingLRSearch(stats);
+      if (!supply[v - 1]) continue;
+      if (!ballotOkAfter(v)) continue;
+      supply[v - 1]--;
+      counts[v]++;
+      filled.set(cellKey(r, c), v);
+      bt(i + 1);
+      filled.delete(cellKey(r, c));
+      counts[v]--;
+      supply[v - 1]++;
+    }
+  }
+
+  bt(0);
+  return total;
+}
+
+function partitionsCached(ctx, size) {
+  const key = String(size);
+  if (ctx.partitionCache.has(key)) return ctx.partitionCache.get(key);
+  const parts = partitionsOfSize(size, size, size);
+  ctx.partitionCache.set(key, parts);
+  return parts;
+}
+
+function evenBranchingParts(ctx, size, evenColumns = false) {
+  if (size % 2 !== 0) return [];
+  const key = `${size}|${evenColumns ? 'columns' : 'rows'}`;
+  if (ctx.evenCache.has(key)) return ctx.evenCache.get(key);
+  const rows = partitionsEvenParts(size, size);
+  const parts = evenColumns ? rows.map(conjugatePart) : rows;
+  ctx.evenCache.set(key, parts);
+  return parts;
+}
+
+function tensorProductExpansion(ctx, a, b) {
+  const key = `${partKey(a)}*${partKey(b)}`;
+  if (ctx.tensorCache.has(key)) return ctx.tensorCache.get(key);
+  const size = partitionSize(a) + partitionSize(b);
+  const out = [];
+  for (const lambda of partitionsCached(ctx, size)) {
+    bumpBranchingCandidate(ctx, 'tensor-product constituent');
+    const c = lrCached(ctx, lambda, a, b);
+    if (c) out.push({ part: lambda.slice(), mult: c });
+  }
+  ctx.tensorCache.set(key, out);
+  return out;
+}
+
+function factorKey(factor) {
+  if (factor.kind === 'GL') return `GL:${partKey(factor.plus)}|${partKey(factor.minus)}`;
+  return `${factor.kind}:${partKey(factor.part)}`;
+}
+
+function cloneFactor(factor) {
+  if (factor.kind === 'GL') {
+    return { kind: 'GL', plus: factor.plus.slice(), minus: factor.minus.slice() };
+  }
+  return { kind: factor.kind, part: factor.part.slice() };
+}
+
+function makeFactor(kind, data) {
+  if (kind === 'GL') {
+    return { kind, plus: trimPart(data.plus || []), minus: trimPart(data.minus || []) };
+  }
+  return { kind, part: trimPart(data || []) };
+}
+
+function addBranchingEntry(map, factors, mult) {
+  if (!mult) return;
+  const key = factors.map(factorKey).join('||');
+  if (!map.has(key)) map.set(key, { factors: factors.map(cloneFactor), mult: 0 });
+  map.get(key).mult += mult;
+}
+
+function addSingleBranchingEntry(map, kind, data, mult) {
+  addBranchingEntry(map, [makeFactor(kind, data)], mult);
+}
+
+function addProductBranchingEntry(map, kindA, dataA, kindB, dataB, mult) {
+  addBranchingEntry(map, [makeFactor(kindA, dataA), makeFactor(kindB, dataB)], mult);
+}
+
+function restrictionSideTerms(ctx, lambdaPart, evenColumns) {
+  const map = new Map();
+  const size = partitionSize(lambdaPart);
+  for (let evenSize = 0; evenSize <= size; evenSize += 2) {
+    for (const evenPart of evenBranchingParts(ctx, evenSize, evenColumns)) {
+      const alphaSize = size - evenSize;
+      for (const alpha of partitionsCached(ctx, alphaSize)) {
+        bumpBranchingCandidate(ctx, 'restriction side');
+        const c = lrCached(ctx, lambdaPart, alpha, evenPart);
+        if (!c) continue;
+        const key = partKey(alpha);
+        if (!map.has(key)) map.set(key, { part: alpha.slice(), mult: 0 });
+        map.get(key).mult += c;
+      }
+    }
+  }
+  return Array.from(map.values());
+}
+
+function computeGLToOrdinaryBranching(ctx, sourceGL, targetKind, evenColumns) {
+  const map = new Map();
+  const plusTerms = restrictionSideTerms(ctx, sourceGL.plus, evenColumns);
+  const minusTerms = restrictionSideTerms(ctx, sourceGL.minus, evenColumns);
+  for (const alpha of plusTerms) {
+    for (const beta of minusTerms) {
+      for (const target of tensorProductExpansion(ctx, alpha.part, beta.part)) {
+        addSingleBranchingEntry(map, targetKind, target.part, alpha.mult * beta.mult * target.mult);
+      }
+    }
+  }
+  return map;
+}
+
+function computeOrdinaryToGLBranching(ctx, lambda, evenColumns) {
+  const map = new Map();
+  const size = partitionSize(lambda);
+  for (let evenSize = 0; evenSize <= size; evenSize += 2) {
+    for (const evenPart of evenBranchingParts(ctx, evenSize, evenColumns)) {
+      const gammaSize = size - evenSize;
+      for (const gamma of partitionsCached(ctx, gammaSize)) {
+        bumpBranchingCandidate(ctx, 'ordinary-to-GL gamma');
+        const c = lrCached(ctx, lambda, gamma, evenPart);
+        if (!c) continue;
+        for (let plusSize = 0; plusSize <= gammaSize; plusSize++) {
+          const minusSize = gammaSize - plusSize;
+          for (const plus of partitionsCached(ctx, plusSize)) {
+            for (const minus of partitionsCached(ctx, minusSize)) {
+              bumpBranchingCandidate(ctx, 'ordinary-to-GL split');
+              const splitMult = lrCached(ctx, gamma, plus, minus);
+              if (splitMult) addSingleBranchingEntry(map, 'GL', { plus, minus }, c * splitMult);
+            }
+          }
+        }
+      }
+    }
+  }
+  return map;
+}
+
+function computeOrdinaryDirectSumBranching(ctx, lambda, targetKind, evenColumns) {
+  const map = new Map();
+  const size = partitionSize(lambda);
+  for (let evenSize = 0; evenSize <= size; evenSize += 2) {
+    for (const evenPart of evenBranchingParts(ctx, evenSize, evenColumns)) {
+      const gammaSize = size - evenSize;
+      for (const gamma of partitionsCached(ctx, gammaSize)) {
+        bumpBranchingCandidate(ctx, 'direct-sum gamma');
+        const c = lrCached(ctx, lambda, gamma, evenPart);
+        if (!c) continue;
+        for (let leftSize = 0; leftSize <= gammaSize; leftSize++) {
+          const rightSize = gammaSize - leftSize;
+          for (const left of partitionsCached(ctx, leftSize)) {
+            for (const right of partitionsCached(ctx, rightSize)) {
+              bumpBranchingCandidate(ctx, 'direct-sum split');
+              const splitMult = lrCached(ctx, gamma, left, right);
+              if (splitMult) addProductBranchingEntry(map, targetKind, left, targetKind, right, c * splitMult);
+            }
+          }
+        }
+      }
+    }
+  }
+  return map;
+}
+
+function computeOrdinaryDiagonalBranching(ctx, sourceA, sourceB, targetKind) {
+  const map = new Map();
+  const sizeA = partitionSize(sourceA);
+  const sizeB = partitionSize(sourceB);
+  for (let gammaSize = 0; gammaSize <= Math.min(sizeA, sizeB); gammaSize++) {
+    for (const gamma of partitionsCached(ctx, gammaSize)) {
+      const alphaSize = sizeA - gammaSize;
+      const betaSize = sizeB - gammaSize;
+      for (const alpha of partitionsCached(ctx, alphaSize)) {
+        bumpBranchingCandidate(ctx, 'diagonal ordinary alpha');
+        const cA = lrCached(ctx, sourceA, alpha, gamma);
+        if (!cA) continue;
+        for (const beta of partitionsCached(ctx, betaSize)) {
+          bumpBranchingCandidate(ctx, 'diagonal ordinary beta');
+          const cB = lrCached(ctx, sourceB, beta, gamma);
+          if (!cB) continue;
+          for (const lambda of tensorProductExpansion(ctx, alpha, beta)) {
+            addSingleBranchingEntry(map, targetKind, lambda.part, cA * cB * lambda.mult);
+          }
+        }
+      }
+    }
+  }
+  return map;
+}
+
+function glDiagonalBridgeTerms(ctx, leftPart, rightPart) {
+  const out = [];
+  const leftSize = partitionSize(leftPart);
+  const rightSize = partitionSize(rightPart);
+  for (let gammaSize = 0; gammaSize <= Math.min(leftSize, rightSize); gammaSize++) {
+    for (const gamma of partitionsCached(ctx, gammaSize)) {
+      const leftCompSize = leftSize - gammaSize;
+      const rightCompSize = rightSize - gammaSize;
+      for (const leftComp of partitionsCached(ctx, leftCompSize)) {
+        bumpBranchingCandidate(ctx, 'diagonal GL left bridge');
+        const cLeft = lrCached(ctx, leftPart, leftComp, gamma);
+        if (!cLeft) continue;
+        for (const rightComp of partitionsCached(ctx, rightCompSize)) {
+          bumpBranchingCandidate(ctx, 'diagonal GL right bridge');
+          const cRight = lrCached(ctx, rightPart, gamma, rightComp);
+          if (cRight) out.push({ leftComp: leftComp.slice(), rightComp: rightComp.slice(), mult: cLeft * cRight });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function computeGLDiagonalBranching(ctx, sourceA, sourceB) {
+  const map = new Map();
+  const first = glDiagonalBridgeTerms(ctx, sourceA.plus, sourceB.minus);
+  const second = glDiagonalBridgeTerms(ctx, sourceA.minus, sourceB.plus);
+  for (const a of first) {
+    for (const b of second) {
+      const baseMult = a.mult * b.mult;
+      for (const lambdaPlus of tensorProductExpansion(ctx, b.rightComp, a.leftComp)) {
+        for (const lambdaMinus of tensorProductExpansion(ctx, a.rightComp, b.leftComp)) {
+          addSingleBranchingEntry(
+            map,
+            'GL',
+            { plus: lambdaPlus.part, minus: lambdaMinus.part },
+            baseMult * lambdaPlus.mult * lambdaMinus.mult
+          );
+        }
+      }
+    }
+  }
+  return map;
+}
+
+function computeGLDirectSumBranching(ctx, sourceGL) {
+  const map = new Map();
+  const plusSize = partitionSize(sourceGL.plus);
+  const minusSize = partitionSize(sourceGL.minus);
+  for (let deltaSize = 0; deltaSize <= Math.min(plusSize, minusSize); deltaSize++) {
+    for (const delta of partitionsCached(ctx, deltaSize)) {
+      const gammaPlusSize = plusSize - deltaSize;
+      const gammaMinusSize = minusSize - deltaSize;
+      for (const gammaPlus of partitionsCached(ctx, gammaPlusSize)) {
+        bumpBranchingCandidate(ctx, 'direct-sum GL plus gamma');
+        const cPlus = lrCached(ctx, sourceGL.plus, gammaPlus, delta);
+        if (!cPlus) continue;
+        for (const gammaMinus of partitionsCached(ctx, gammaMinusSize)) {
+          bumpBranchingCandidate(ctx, 'direct-sum GL minus gamma');
+          const cMinus = lrCached(ctx, sourceGL.minus, gammaMinus, delta);
+          if (!cMinus) continue;
+          for (let leftPlusSize = 0; leftPlusSize <= gammaPlusSize; leftPlusSize++) {
+            const rightPlusSize = gammaPlusSize - leftPlusSize;
+            for (const leftPlus of partitionsCached(ctx, leftPlusSize)) {
+              for (const rightPlus of partitionsCached(ctx, rightPlusSize)) {
+                bumpBranchingCandidate(ctx, 'direct-sum GL plus split');
+                const splitPlus = lrCached(ctx, gammaPlus, leftPlus, rightPlus);
+                if (!splitPlus) continue;
+                for (let leftMinusSize = 0; leftMinusSize <= gammaMinusSize; leftMinusSize++) {
+                  const rightMinusSize = gammaMinusSize - leftMinusSize;
+                  for (const leftMinus of partitionsCached(ctx, leftMinusSize)) {
+                    for (const rightMinus of partitionsCached(ctx, rightMinusSize)) {
+                      bumpBranchingCandidate(ctx, 'direct-sum GL minus split');
+                      const splitMinus = lrCached(ctx, gammaMinus, leftMinus, rightMinus);
+                      if (!splitMinus) continue;
+                      addProductBranchingEntry(
+                        map,
+                        'GL',
+                        { plus: leftPlus, minus: leftMinus },
+                        'GL',
+                        { plus: rightPlus, minus: rightMinus },
+                        cPlus * cMinus * splitPlus * splitMinus
+                      );
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return map;
+}
+
+function finiteGLPolynomialPartFromRows(rows) {
+  const shift = rows.length ? rows[rows.length - 1] : 0;
+  const part = trimPart(rows.map(v => v - shift));
+  return { part, shift };
+}
+
+function finiteGLRowsFromPolynomialPart(part, rank, shift) {
+  return Array.from({ length: rank }, (_, i) => (part[i] || 0) + shift);
+}
+
+function computeFiniteGLDiagonalBranching(ctx, rowsA, rowsB, rank) {
+  const map = new Map();
+  const normA = finiteGLPolynomialPartFromRows(rowsA);
+  const normB = finiteGLPolynomialPartFromRows(rowsB);
+  const size = partitionSize(normA.part) + partitionSize(normB.part);
+  const targetShift = normA.shift + normB.shift;
+  for (const gamma of partitionsCached(ctx, size)) {
+    bumpBranchingCandidate(ctx, 'finite diagonal GL constituent');
+    if (gamma.length > rank) continue;
+    const c = lrCached(ctx, gamma, normA.part, normB.part);
+    if (!c) continue;
+    const rows = finiteGLRowsFromPolynomialPart(gamma, rank, targetShift);
+    addSingleBranchingEntry(map, 'GL', rationalGLFromFiniteRows(rows, 'finite GL target'), c);
+  }
+  return map;
+}
+
+function computeFiniteGLDirectSumBranching(ctx, sourceRows, rankN, rankM) {
+  const map = new Map();
+  const norm = finiteGLPolynomialPartFromRows(sourceRows);
+  const size = partitionSize(norm.part);
+  for (let leftSize = 0; leftSize <= size; leftSize++) {
+    const rightSize = size - leftSize;
+    for (const left of partitionsCached(ctx, leftSize)) {
+      if (left.length > rankN) continue;
+      for (const right of partitionsCached(ctx, rightSize)) {
+        bumpBranchingCandidate(ctx, 'finite direct-sum GL split');
+        if (right.length > rankM) continue;
+        const c = lrCached(ctx, norm.part, left, right);
+        if (!c) continue;
+        addProductBranchingEntry(
+          map,
+          'GL',
+          rationalGLFromFiniteRows(finiteGLRowsFromPolynomialPart(left, rankN, norm.shift), 'finite GL(n) target'),
+          'GL',
+          rationalGLFromFiniteRows(finiteGLRowsFromPolynomialPart(right, rankM, norm.shift), 'finite GL(m) target'),
+          c
+        );
+      }
+    }
+  }
+  return map;
+}
+
+function medianDeterminantShiftForStableRows(rows, positiveLimit, negativeLimit) {
+  if (!rows.length) return 0;
+  const rank = rows.length;
+  const loIndex = Math.min(rank - 1, Math.max(0, positiveLimit));
+  const hiIndex = Math.max(0, Math.min(rank - 1, rank - negativeLimit - 1));
+  const lo = rows[loIndex];
+  const hi = rows[hiIndex];
+  if (lo > hi) return null;
+  return Math.floor((lo + hi) / 2);
+}
+
+function orthogonalDeterminantAssociatePart(part, rank) {
+  const columns = conjugatePart(trimPart(part));
+  const firstColumn = columns[0] || 0;
+  const updatedColumns = [rank - firstColumn]
+    .concat(columns.slice(1))
+    .filter(x => x > 0)
+    .sort((a, b) => b - a);
+  return conjugatePart(updatedColumns);
+}
+
+function applyOrthogonalDeterminantTwistMap(map, rank) {
+  const out = new Map();
+  map.forEach(entry => {
+    const factors = entry.factors.map(factor => {
+      if (factor.kind !== 'O') return cloneFactor(factor);
+      return makeFactor('O', orthogonalDeterminantAssociatePart(factor.part, rank));
+    });
+    addBranchingEntry(out, factors, entry.mult);
+  });
+  return out;
+}
+
+function firstColumnHookBorderStripRemoval(part, stripLength) {
+  const lambda = trimPart(part);
+  if (!Number.isInteger(stripLength) || stripLength <= 0) return null;
+  for (let r = 0; r < lambda.length; r++) {
+    const hookLength = lambda[r] + (lambda.length - r - 1);
+    if (hookLength !== stripLength) continue;
+    const next = lambda.slice(0, r).concat(lambda.slice(r + 1).map(v => v - 1));
+    if (next.some(v => v < 0)) return null;
+    const result = trimPart(next);
+    if (!isNonIncreasingNonnegativeRows(result, false)) return null;
+    return { part: result, columns: lambda[r] };
+  }
+  return null;
+}
+
+function orthogonalColumnSum(part) {
+  const columns = conjugatePart(trimPart(part));
+  return (columns[0] || 0) + (columns[1] || 0);
+}
+
+function isFiniteOrthogonalPartition(part, dimension) {
+  return dimension == null || orthogonalColumnSum(part) <= dimension;
+}
+
+function isFiniteSymplecticPartition(part, rank) {
+  return rank == null || trimPart(part).length <= rank;
+}
+
+function finiteSymplecticModification(part, rank) {
+  const lambda = trimPart(part);
+  if (isFiniteSymplecticPartition(lambda, rank)) {
+    return { part: lambda, index: 0, stripCount: 0 };
+  }
+  const stripLength = 2 * (lambda.length - rank - 1);
+  const removed = firstColumnHookBorderStripRemoval(lambda, stripLength);
+  if (!removed) return null;
+  const next = finiteSymplecticModification(removed.part, rank);
+  if (!next) return null;
+  return {
+    part: next.part,
+    index: removed.columns + next.index,
+    stripCount: next.stripCount + 1,
+  };
+}
+
+function finiteOrthogonalModificationRaw(part, dimension) {
+  const lambda = trimPart(part);
+  if (isFiniteOrthogonalPartition(lambda, dimension)) {
+    return { part: lambda, index: 0, stripCount: 0 };
+  }
+  const stripLength = 2 * lambda.length - dimension;
+  const removed = firstColumnHookBorderStripRemoval(lambda, stripLength);
+  if (!removed) return null;
+  const next = finiteOrthogonalModificationRaw(removed.part, dimension);
+  if (!next) return null;
+  return {
+    part: next.part,
+    index: (removed.columns - 1) + next.index,
+    stripCount: next.stripCount + 1,
+  };
+}
+
+function finiteOrthogonalModification(part, dimension) {
+  const raw = finiteOrthogonalModificationRaw(part, dimension);
+  if (!raw) return null;
+  return {
+    part: raw.stripCount % 2
+      ? orthogonalDeterminantAssociatePart(raw.part, dimension)
+      : raw.part,
+    index: raw.index,
+    stripCount: raw.stripCount,
+  };
+}
+
+function finiteOrdinaryModification(ctx, kind, part, rank) {
+  if (rank == null) return { part: trimPart(part), index: 0, stripCount: 0 };
+  const key = `${kind}:${rank}:${partKey(part)}`;
+  if (ctx.ordinaryModificationCache.has(key)) return ctx.ordinaryModificationCache.get(key);
+  const result = kind === 'Sp'
+    ? finiteSymplecticModification(part, rank)
+    : finiteOrthogonalModification(part, rank);
+  ctx.ordinaryModificationCache.set(key, result);
+  return result;
+}
+
+function finiteOrdinaryTargetRank(rule, ranks, factor, factorIndex) {
+  if (!factor || !ranks) return null;
+  if (factor.kind === 'O') {
+    if (rule === 'gl-o' || rule === 'diag-o') return ranks.n;
+    if (rule === 'sum-o') return factorIndex === 0 ? ranks.n : ranks.m;
+  }
+  if (factor.kind === 'Sp') {
+    if (rule === 'gl-sp' || rule === 'diag-sp') return ranks.n;
+    if (rule === 'sum-sp') return factorIndex === 0 ? ranks.n : ranks.m;
+  }
+  return null;
+}
+
+function pruneZeroBranchingMap(map) {
+  let removed = 0;
+  map.forEach((entry, key) => {
+    if (entry.mult === 0) {
+      map.delete(key);
+      removed++;
+    }
+  });
+  return removed;
+}
+
+function applyFiniteOrdinaryTargetModification(ctx, map, rule, ranks) {
+  const out = new Map();
+  const stats = {
+    applied: false,
+    changed: 0,
+    dropped: 0,
+    signChanges: 0,
+    cancellations: 0,
+  };
+  map.forEach(entry => {
+    const factors = [];
+    let mult = entry.mult;
+    let drop = false;
+    entry.factors.forEach((factor, idx) => {
+      if (drop) return;
+      const rank = finiteOrdinaryTargetRank(rule, ranks, factor, idx);
+      if (rank == null || (factor.kind !== 'O' && factor.kind !== 'Sp')) {
+        factors.push(cloneFactor(factor));
+        return;
+      }
+      stats.applied = true;
+      const modified = finiteOrdinaryModification(ctx, factor.kind, factor.part, rank);
+      if (!modified) {
+        stats.dropped++;
+        drop = true;
+        return;
+      }
+      if (modified.index % 2) {
+        mult *= -1;
+        stats.signChanges++;
+      }
+      if (partKey(modified.part) !== partKey(factor.part)) stats.changed++;
+      factors.push(makeFactor(factor.kind, modified.part));
+    });
+    if (!drop) addBranchingEntry(out, factors, mult);
+  });
+  stats.cancellations = pruneZeroBranchingMap(out);
+  return { map: out, stats };
+}
+
+function validateFiniteOrdinarySourcePart(part, kind, rank, label) {
+  if (rank == null) return;
+  if (kind === 'Sp') {
+    const len = trimPart(part).length;
+    if (len > rank) {
+      throw new Error(`${label} is not a finite Sp(${2 * rank}) highest weight: length ${len} exceeds rank ${rank}.`);
+    }
+    return;
+  }
+  const columnSum = orthogonalColumnSum(part);
+  if (columnSum > rank) {
+    throw new Error(`${label} is not a finite O(${rank}) highest weight: the first two column lengths sum to ${columnSum}.`);
+  }
+}
+
+function validateFiniteOrdinarySources(rule, sources, ranks) {
+  if (rule === 'diag-o' && ranks.n != null) {
+    validateFiniteOrdinarySourcePart(sources.a, 'O', ranks.n, 'Source A');
+    validateFiniteOrdinarySourcePart(sources.b, 'O', ranks.n, 'Source B');
+  } else if (rule === 'diag-sp' && ranks.n != null) {
+    validateFiniteOrdinarySourcePart(sources.a, 'Sp', ranks.n, 'Source A');
+    validateFiniteOrdinarySourcePart(sources.b, 'Sp', ranks.n, 'Source B');
+  } else if (rule === 'sum-o' && ranks.n != null && ranks.m != null) {
+    validateFiniteOrdinarySourcePart(sources.a, 'O', ranks.n + ranks.m, 'Source A');
+  } else if (rule === 'sum-sp' && ranks.n != null && ranks.m != null) {
+    validateFiniteOrdinarySourcePart(sources.a, 'Sp', ranks.n + ranks.m, 'Source A');
+  }
+}
+
+function finiteReducedSourceBoxSize(rule, sources, ranks) {
+  if (rule === 'diag-gl' && ranks.n != null) {
+    const rowsA = tryFiniteGLRowsFromRational(sources.a, ranks.n);
+    const rowsB = tryFiniteGLRowsFromRational(sources.b, ranks.n);
+    if (rowsA && rowsB) {
+      return partitionSize(finiteGLPolynomialPartFromRows(rowsA).part) +
+        partitionSize(finiteGLPolynomialPartFromRows(rowsB).part);
+    }
+  }
+  if (rule === 'sum-gl' && ranks.n != null && ranks.m != null) {
+    const rows = tryFiniteGLRowsFromRational(sources.a, ranks.n + ranks.m);
+    if (rows) return partitionSize(finiteGLPolynomialPartFromRows(rows).part);
+  }
+  if ((rule === 'gl-o' || rule === 'gl-sp') && ranks.n != null) {
+    const sourceRank = finiteGLSourceRankForBranching(rule, ranks);
+    const rows = tryFiniteGLRowsFromRational(sources.a, sourceRank);
+    if (rows) {
+      const limit = rule === 'gl-sp' ? ranks.n : Math.floor(ranks.n / 2);
+      const shift = medianDeterminantShiftForStableRows(rows, limit, limit);
+      if (shift != null) {
+        return rationalGLSize(rationalGLFromFiniteRows(rows.map(v => v - shift), 'normalized GL source'));
+      }
+    }
+  }
+  return null;
+}
+
+function prepareFiniteRankBranchingReduction(rule, def, sources, ranks) {
+  if (rule === 'diag-gl' && ranks.n != null) {
+    const rowsA = tryFiniteGLRowsFromRational(sources.a, ranks.n);
+    const rowsB = tryFiniteGLRowsFromRational(sources.b, ranks.n);
+    if (rowsA && rowsB) {
+      return {
+        reduced: true,
+        sourceBoxes: finiteReducedSourceBoxSize(rule, sources, ranks),
+        compute: ctx => computeFiniteGLDiagonalBranching(ctx, rowsA, rowsB, ranks.n),
+      };
+    }
+  }
+
+  if (rule === 'sum-gl' && ranks.n != null && ranks.m != null) {
+    const sourceRank = ranks.n + ranks.m;
+    const rows = tryFiniteGLRowsFromRational(sources.a, sourceRank);
+    if (rows) {
+      return {
+        reduced: true,
+        sourceBoxes: finiteReducedSourceBoxSize(rule, sources, ranks),
+        compute: ctx => computeFiniteGLDirectSumBranching(ctx, rows, ranks.n, ranks.m),
+      };
+    }
+  }
+
+  if ((rule === 'gl-o' || rule === 'gl-sp') && ranks.n != null) {
+    const sourceRank = finiteGLSourceRankForBranching(rule, ranks);
+    const rows = tryFiniteGLRowsFromRational(sources.a, sourceRank);
+    if (rows) {
+      const limit = rule === 'gl-sp' ? ranks.n : Math.floor(ranks.n / 2);
+      const shift = medianDeterminantShiftForStableRows(rows, limit, limit);
+      if (shift != null) {
+        const normalized = rationalGLFromFiniteRows(rows.map(v => v - shift), 'normalized GL source');
+        return {
+          reduced: true,
+          sources: { ...sources, a: normalized },
+          sourceBoxes: rationalGLSize(normalized),
+          compute: ctx => {
+            return computeGLToOrdinaryBranching(ctx, normalized, def.ordinaryGroup, def.evenColumns);
+          },
+          postTwist: rule === 'gl-o' && Math.abs(shift) % 2 === 1
+            ? map => applyOrthogonalDeterminantTwistMap(map, ranks.n)
+            : null,
+        };
+      }
+    }
+  }
+
+  return {
+    reduced: false,
+    sources,
+    sourceBoxes: branchingInputBoxSize(def, sources),
+    compute: ctx => computeBranchingMap(rule, def, ctx, sources),
+  };
+}
+
+function applyPostBranchingFiniteOperations(ctx, map, rule, ranks, reduction = null) {
+  let current = map;
+  const ordinary = applyFiniteOrdinaryTargetModification(ctx, current, rule, ranks);
+  current = ordinary.map;
+  if (reduction && typeof reduction.postTwist === 'function') {
+    current = reduction.postTwist(current);
+    ordinary.stats.cancellations += pruneZeroBranchingMap(current);
+  }
+  return { map: current, ordinaryModification: ordinary.stats };
+}
+
+function branchingFactorRows(factor) {
+  return factor.kind === 'GL' ? signedRowsFromRationalGL(factor) : factor.part;
+}
+
+function compareBranchingFactor(a, b) {
+  if (!a && b) return 1;
+  if (a && !b) return -1;
+  if (!a && !b) return 0;
+  const aRows = branchingFactorRows(a);
+  const bRows = branchingFactorRows(b);
+  for (let i = 0; i < Math.max(aRows.length, bRows.length); i++) {
+    const diff = (bRows[i] || 0) - (aRows[i] || 0);
+    if (diff) return diff;
+  }
+  return a.kind.localeCompare(b.kind);
+}
+
+function branchingEntriesFromMap(map) {
+  return Array.from(map.values()).sort((a, b) => {
+    for (let i = 0; i < Math.max(a.factors.length, b.factors.length); i++) {
+      const cmp = compareBranchingFactor(a.factors[i], b.factors[i]);
+      if (cmp) return cmp;
+    }
+    return 0;
+  });
+}
+
+function branchingStableRangeWarning(rule, def, sources, ranks, entries, reduction = null) {
+  const notes = [];
+  const n = ranks.n;
+  const m = ranks.m;
+  const ordinaryModified = !!(reduction && reduction.ordinaryModification && reduction.ordinaryModification.applied);
+  const lenA = def.sourceKind === 'gl' ? rationalGLLength(sources.a) : sources.a.length;
+  const lenB = def.needsSourceB
+    ? (def.sourceBKind === 'gl' ? rationalGLLength(sources.b) : sources.b.length)
+    : 0;
+  if (n != null) {
+    if (rule === 'diag-gl' && lenA + lenB > n && !(reduction && reduction.reduced)) notes.push(`stable range asks length(A)+length(B) <= n = ${n}`);
+    if (rule === 'diag-o' && lenA + lenB > Math.floor(n / 2) && !ordinaryModified) notes.push(`stable range asks l(A)+l(B) <= floor(n/2) = ${Math.floor(n / 2)}`);
+    if (rule === 'diag-sp' && lenA + lenB > n && !ordinaryModified) notes.push(`stable range asks l(A)+l(B) <= n = ${n}`);
+    if ((rule === 'pol-o-gl' || rule === 'pol-sp-gl') && lenA > Math.floor(n / 2)) notes.push(`stable range asks l(lambda) <= floor(n/2) = ${Math.floor(n / 2)}`);
+    if (rule === 'gl-o' && Math.max(sources.a.plus.length, sources.a.minus.length) > Math.floor(n / 2) && !(reduction && reduction.reduced)) notes.push(`stable range asks l(lambda+), l(lambda-) <= floor(n/2) = ${Math.floor(n / 2)}`);
+    if (rule === 'gl-sp' && Math.max(sources.a.plus.length, sources.a.minus.length) > n && !(reduction && reduction.reduced)) notes.push(`stable range asks l(lambda+), l(lambda-) <= n = ${n}`);
+  }
+  if (n != null && m != null) {
+    const minRank = Math.min(n, m);
+    if (rule === 'sum-gl' && lenA > minRank && !(reduction && reduction.reduced)) notes.push(`stable range asks GL rational length <= min(n,m) = ${minRank}`);
+    if (rule === 'sum-o' && lenA > Math.floor(minRank / 2) && !ordinaryModified) notes.push(`stable range asks l(lambda) <= floor(min(n,m)/2) = ${Math.floor(minRank / 2)}`);
+    if (rule === 'sum-sp' && lenA > minRank && !ordinaryModified) notes.push(`stable range asks l(lambda) <= min(n,m) = ${minRank}`);
+  }
+  const glRanks = rule === 'sum-gl' && n != null && m != null ? [n, m] : (n != null ? [n] : []);
+  if (glRanks.length) {
+    let outside = 0;
+    entries.forEach(entry => {
+      entry.factors.forEach((factor, idx) => {
+        if (factor.kind !== 'GL') return;
+        const rank = glRanks[Math.min(idx, glRanks.length - 1)];
+        if (branchingFactorDisplayRows(factor, { rule, ranks }, idx).length > rank) outside++;
+      });
+    });
+    if (outside) notes.push(`${outside} displayed GL constituent(s) exceed the supplied finite rank`);
+  }
+  return notes.length ? `Stable range warning: ${notes.join('; ')}. Stable formula still shown.` : '';
+}
+
+function branchingFiniteModificationNote(stats) {
+  if (!stats || !stats.applied) return '';
+  const parts = ['Finite O/Sp modification applied'];
+  if (stats.changed) parts.push(`${stats.changed} target factor${stats.changed === 1 ? '' : 's'} modified`);
+  if (stats.dropped) parts.push(`${stats.dropped} unstable term${stats.dropped === 1 ? '' : 's'} vanished`);
+  if (stats.cancellations) parts.push(`${stats.cancellations} cancellation${stats.cancellations === 1 ? '' : 's'}`);
+  return parts.join('; ') + '.';
+}
+
+function branchingFactorLabel(factor) {
+  if (factor.kind === 'GL') return signedRowsLabel(signedRowsFromRationalGLWithRank(factor));
+  return partitionLabel(factor.part);
+}
+
+function branchingGLFactorRank(result, factorIndex = 0) {
+  if (!result || !result.ranks) return null;
+  if (result.rule === 'sum-gl') return factorIndex === 0 ? result.ranks.n : result.ranks.m;
+  return result.ranks.n;
+}
+
+function branchingFactorDisplayRows(factor, result = null, factorIndex = 0) {
+  if (factor.kind !== 'GL') return factor.part;
+  return signedRowsFromRationalGLWithRank(factor, branchingGLFactorRank(result, factorIndex));
+}
+
+function branchingFactorDisplayLabel(factor, result = null, factorIndex = 0) {
+  if (factor.kind === 'GL') return signedRowsLabel(branchingFactorDisplayRows(factor, result, factorIndex));
+  return partitionLabel(factor.part);
+}
+
+function branchingSourceSummaryForRule(rule, def, sources, ranks) {
+  const sourceRank = finiteGLSourceRankForBranching(rule, ranks);
+  const a = def.sourceKind === 'gl'
+    ? `A=${branchingGLSourceLabel(sources.a, sourceRank)}`
+    : `A=${partitionLabel(sources.a)}`;
+  if (!def.needsSourceB) return a;
+  const b = def.sourceBKind === 'gl'
+    ? `B=${branchingGLSourceLabel(sources.b, sourceRank)}`
+    : `B=${partitionLabel(sources.b)}`;
+  return `${a}, ${b}`;
+}
+
+function branchingSourceSummary(def, sources) {
+  return branchingSourceSummaryForRule('', def, sources, {});
+}
+
+function branchingEntryLabel(entry) {
+  return entry.factors.map(factor => `${branchingFactorLabel(factor)}_${factor.kind}`).join(' x ');
+}
+
+function branchingEntryDisplayLabel(entry, result) {
+  return entry.factors.map((factor, idx) => `${branchingFactorDisplayLabel(factor, result, idx)}_${factor.kind}`).join(' x ');
+}
+
+function branchingFactorDiagramHTML(factor, result = null, factorIndex = 0) {
+  if (factor.kind === 'GL') {
+    const rows = branchingFactorDisplayRows(factor, result, factorIndex);
+    if (branchingGLFactorRank(result, factorIndex) != null) {
+      return generalizedOrbitDiagramSVG(rows, _branchingViewMode);
+    }
+    if (rows.some(x => x < 0)) return generalizedOrbitDiagramSVG(rows, _branchingViewMode);
+    return miniDiagramDecomp(trimPart(rows.filter(x => x > 0)), 150);
+  }
+  return miniDiagramDecomp(factor.part, factor.kind === 'Sp' ? 200 : 30);
+}
+
+function renderBranchingResult(result) {
+  const out = document.getElementById('br-output');
+  const warn = document.getElementById('br-warning');
+  if (!out || !warn) return;
+  out.innerHTML = '';
+  warn.textContent = result.warning || '';
+  const formulaDiv = document.createElement('div');
+  formulaDiv.style.cssText = 'font-size:0.82rem;line-height:1.7;word-break:break-word;padding:6px 0 4px;border-bottom:1px dotted var(--border);';
+  const rhs = result.entries.length
+    ? result.entries.map(entry => `${entry.mult === 1 ? '' : entry.mult + '*'}${escapeHtml(branchingEntryDisplayLabel(entry, result))}`).join(' + ')
+    : '0';
+  formulaDiv.innerHTML = `<strong>${escapeHtml(result.ruleLabel)}</strong><br>${escapeHtml(result.sourceSummary)} -> ${rhs}`;
+  out.appendChild(formulaDiv);
+
+  const meta = document.createElement('div');
+  meta.className = 'hint';
+  meta.style.cssText = 'padding:4px 0 6px;border-bottom:1px dotted var(--border);';
+  meta.textContent = `Checked ${result.candidatePairs.toLocaleString()} branching candidates; LR search steps ${result.lrSearchSteps.toLocaleString()} / ${result.lrSearchStepLimit.toLocaleString()}.`;
+  if (result.finiteModificationNote) meta.textContent += ` ${result.finiteModificationNote}`;
+  out.appendChild(meta);
+
+  if (!result.entries.length) {
+    const empty = document.createElement('span');
+    empty.className = 'hint';
+    empty.textContent = 'No constituents found (empty decomposition).';
+    out.appendChild(empty);
+    return;
+  }
+
+  for (const entry of result.entries) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px dotted var(--border);min-width:max-content;';
+    const multSpan = document.createElement('span');
+    multSpan.style.cssText = 'font-family:"JetBrains Mono",monospace;font-size:0.78rem;color:var(--accent);min-width:28px;text-align:right;flex-shrink:0;';
+    multSpan.textContent = `x${entry.mult}`;
+    const diagrams = document.createElement('span');
+    diagrams.style.cssText = 'display:inline-flex;align-items:center;gap:6px;flex-shrink:0;';
+    entry.factors.forEach((factor, idx) => {
+      if (idx) {
+        const times = document.createElement('span');
+        times.style.cssText = 'font-family:"JetBrains Mono",monospace;color:var(--muted);font-size:0.72rem;';
+        times.textContent = 'x';
+        diagrams.appendChild(times);
+      }
+      const art = document.createElement('span');
+      art.style.cssText = 'display:inline-flex;align-items:center;';
+      art.innerHTML = branchingFactorDiagramHTML(factor, result, idx);
+      diagrams.appendChild(art);
+    });
+    const label = document.createElement('span');
+    label.style.cssText = 'font-family:"JetBrains Mono",monospace;font-size:0.72rem;color:var(--muted);overflow-wrap:anywhere;';
+    label.textContent = branchingEntryDisplayLabel(entry, result);
+    row.appendChild(multSpan);
+    row.appendChild(diagrams);
+    row.appendChild(label);
+    out.appendChild(row);
+  }
+}
+
+function computeBranchingMap(rule, def, ctx, sources) {
+  if (def.formula === 'gl-to-ordinary') return computeGLToOrdinaryBranching(ctx, sources.a, def.ordinaryGroup, def.evenColumns);
+  if (def.formula === 'ordinary-to-gl') return computeOrdinaryToGLBranching(ctx, sources.a, def.evenColumns);
+  if (def.formula === 'sum-ordinary') return computeOrdinaryDirectSumBranching(ctx, sources.a, def.ordinaryGroup, def.evenColumns);
+  if (def.formula === 'diag-ordinary') return computeOrdinaryDiagonalBranching(ctx, sources.a, sources.b, def.ordinaryGroup);
+  if (def.formula === 'sum-gl') return computeGLDirectSumBranching(ctx, sources.a);
+  if (def.formula === 'diag-gl') return computeGLDiagonalBranching(ctx, sources.a, sources.b);
+  throw new Error(`Unknown branching rule: ${rule}`);
+}
+
+function computeBranching() {
+  if (!isCardExpandedById('br-output')) return;
+  syncBranchingControls();
+  const ruleSelect = document.getElementById('br-rule');
+  const rule = ruleSelect ? ruleSelect.value : 'gl-sp';
+  const def = branchingRuleDef(rule);
+  const out = document.getElementById('br-output');
+  const warn = document.getElementById('br-warning');
+  _lastBranching = null;
+  if (out) out.innerHTML = '';
+  if (warn) warn.textContent = '';
+  renderBranchingPreview();
+  try {
+    const sources = readBranchingInputs(def);
+    const ranks = readBranchingRanks(def);
+    validateFiniteOrdinarySources(rule, sources, ranks);
+    const reduction = prepareFiniteRankBranchingReduction(rule, def, sources, ranks);
+    const sourceBoxes = reduction.sourceBoxes;
+    if (sourceBoxes > BRANCHING_BOX_LIMIT) {
+      rejectBranching(`Too large for browser branching computation: source size = ${sourceBoxes}. Please use at most ${BRANCHING_BOX_LIMIT} total source boxes.`);
+      return;
+    }
+    const ctx = createBranchingContext();
+    const stableMap = reduction.compute(ctx);
+    const post = applyPostBranchingFiniteOperations(ctx, stableMap, rule, ranks, reduction);
+    const finalReduction = { ...reduction, ordinaryModification: post.ordinaryModification };
+    const entries = branchingEntriesFromMap(post.map);
+    const warning = branchingStableRangeWarning(rule, def, sources, ranks, entries, finalReduction);
+    const result = {
+      rule,
+      ruleLabel: def.label,
+      sourceSummary: branchingSourceSummaryForRule(rule, def, sources, ranks),
+      sources,
+      ranks,
+      entries,
+      warning,
+      finiteModificationNote: branchingFiniteModificationNote(post.ordinaryModification),
+      finiteOrdinaryModification: post.ordinaryModification.applied,
+      finiteOrdinaryModificationStats: post.ordinaryModification,
+      finiteReduction: reduction.reduced,
+      candidatePairs: ctx.candidatePairs,
+      lrSearchSteps: ctx.lrStats.steps,
+      lrSearchStepLimit: ctx.lrStats.limit,
+    };
+    _lastBranching = result;
+    setCardStaleById('br-output', false);
+    renderBranchingResult(result);
+  } catch (err) {
+    if (err && err.message === 'branching-lr-search-too-large') {
+      rejectBranching(branchingLRSearchLimitMessage(0, err));
+      return;
+    }
+    if (err && err.message === 'branching-candidates-too-large') {
+      rejectBranching(`Too many branching candidates (${err.candidates}+). The browser cap is ${HTW_BRANCHING_PAIR_LIMIT}; stopped while checking ${err.label}. LR search steps so far are still below ${BRANCHING_LR_SEARCH_STEP_LIMIT.toLocaleString()}.`);
+      return;
+    }
+    rejectBranching((err && err.message) || String(err));
+  }
+}
+
+function exportBranching(event) {
+  const result = _lastBranching;
+  if (!result) {
+    const warn = document.getElementById('br-warning');
+    if (warn) warn.textContent = 'Click compute before exporting the branching decomposition.';
+    return;
+  }
+  const exportOut = document.getElementById('export-out');
+  if (!exportOut) return;
+  let txt = `# Branching rule decomposition\n`;
+  txt += `# rule id: ${result.rule}\n`;
+  txt += `# rule: ${result.ruleLabel}\n`;
+  txt += `# sources: ${result.sourceSummary}\n`;
+  txt += `# rank n: ${result.ranks.n == null ? 'stable' : result.ranks.n}\n`;
+  if (branchingRuleDef(result.rule).needsM) txt += `# rank m: ${result.ranks.m == null ? 'stable' : result.ranks.m}\n`;
+  txt += `# candidates checked: ${result.candidatePairs}\n`;
+  txt += `# LR search steps: ${result.lrSearchSteps} / ${result.lrSearchStepLimit}\n`;
+  if (result.finiteOrdinaryModification) txt += `# finite O/Sp modification: applied\n`;
+  if (result.finiteModificationNote) txt += `# finite O/Sp modification note: ${result.finiteModificationNote}\n`;
+  if (result.warning) txt += `# warning: ${result.warning}\n`;
+  txt += `# formula: ${result.sourceSummary} -> `;
+  txt += result.entries.length
+    ? result.entries.map(entry => `${entry.mult === 1 ? '' : entry.mult + '*'}${branchingEntryDisplayLabel(entry, result)}`).join(' + ')
+    : '0';
+  txt += `\n# columns: multiplicity, target, factor_1_kind, factor_1_rows, factor_2_kind, factor_2_rows\n`;
+  for (const entry of result.entries) {
+    const factorCells = entry.factors.map((factor, idx) => `${factor.kind}\t${branchingFactorDisplayLabel(factor, result, idx)}`);
+    while (factorCells.length < 2) factorCells.push('\t');
+    txt += `${entry.mult}\t${branchingEntryDisplayLabel(entry, result)}\t${factorCells.join('\t')}\n`;
+  }
+  exportOut.value = txt.trimEnd();
+  revealExportCard(event);
+}
+
 (function () {
   let dragSrc = null;
   let dragHandle = null;
@@ -4894,6 +6228,7 @@ function initYoungDiagramPage() {
   resetExportToDefaultCitation();
   scheduleCanvasResizePasses();
   updateGeneralizedCanvasControls();
+  syncBranchingControls();
   onTypeChange();   // initialise lie algebra card UI state without computing collapsed data
 }
 

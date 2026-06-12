@@ -165,17 +165,53 @@
           <div class="card-body">
             <div class="branching-rule-row" style="display:flex;align-items:center;gap:8px;">
               <label class="stat-label" style="white-space:nowrap;flex-shrink:0;">Rule:</label>
-              <select id="br-rule" onchange="markBranchingStale()" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'EB Garamond',serif;font-size:0.9rem;color:var(--text);">
-                <option value="gl-sp">GL(2n) &#8594; Sp(2n)  (Littlewood)</option>
-                <option value="gl-o">GL(n) &#8594; O(n)  (Littlewood)</option>
+              <select id="br-rule" onchange="onBranchingRuleChange()" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'EB Garamond',serif;font-size:0.9rem;color:var(--text);">
+                <optgroup label="Diagonal">
+                  <option value="diag-gl">GL(n) x GL(n) &#8594; GL(n)</option>
+                  <option value="diag-o">O(n) x O(n) &#8594; O(n)</option>
+                  <option value="diag-sp">Sp(2n) x Sp(2n) &#8594; Sp(2n)</option>
+                </optgroup>
+                <optgroup label="Direct sum">
+                  <option value="sum-gl">GL(n+m) &#8594; GL(n) x GL(m)</option>
+                  <option value="sum-o">O(n+m) &#8594; O(n) x O(m)</option>
+                  <option value="sum-sp">Sp(2n+2m) &#8594; Sp(2n) x Sp(2m)</option>
+                </optgroup>
+                <optgroup label="Polarization">
+                  <option value="pol-o-gl">O(2n) &#8594; GL(n)</option>
+                  <option value="pol-sp-gl">Sp(2n) &#8594; GL(n)</option>
+                </optgroup>
+                <optgroup label="Bilinear form">
+                  <option value="gl-o">GL(n) &#8594; O(n)  (Littlewood)</option>
+                  <option value="gl-sp">GL(2n) &#8594; Sp(2n)  (Littlewood)</option>
+                </optgroup>
               </select>
+            </div>
+            <div id="br-source-b-wrap" class="branching-rule-row" hidden>
+              <label class="stat-label" for="br-source-b" style="white-space:nowrap;display:block;margin-bottom:4px;">Source B:</label>
+              <input type="text" id="br-source-b" placeholder="e.g. 1 or 2,1 or 2,-1" oninput="markBranchingStale()" style="width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:var(--text);">
+            </div>
+            <div id="br-ranks-wrap" class="branching-rule-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <label class="stat-label" style="white-space:nowrap;">rank n:</label>
+              <input type="number" id="br-rank-n" min="1" step="1" placeholder="stable" oninput="markBranchingStale()" style="width:74px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:var(--text);text-align:center;">
+              <span id="br-rank-m-wrap" style="display:inline-flex;align-items:center;gap:6px;">
+                <label class="stat-label" style="white-space:nowrap;">rank m:</label>
+                <input type="number" id="br-rank-m" min="1" step="1" placeholder="stable" oninput="markBranchingStale()" style="width:74px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:var(--text);text-align:center;">
+              </span>
+              <span class="hint" style="margin:0;">blank = stable formula only</span>
+            </div>
+            <div id="br-gl-view-wrap" class="branching-rule-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span class="stat-label" style="white-space:nowrap;">GL view:</span>
+              <span class="orbit-view-row" aria-label="Branching generalized GL output views">
+                <button class="orbit-view-btn active" data-branching-view="paper" onclick="setBranchingViewMode('paper')" type="button" aria-pressed="true">paper</button>
+                <button class="orbit-view-btn" data-branching-view="shifted" onclick="setBranchingViewMode('shifted')" type="button" aria-pressed="false">shifted</button>
+              </span>
             </div>
             <div class="action-row branching-action-row">
               <button class="btn" onclick="computeBranching()">compute</button>
               <button class="btn" onclick="exportBranching(event)" style="background:transparent;color:var(--accent);border-color:var(--accent);">export</button>
             </div>
-            <div class="hint" style="margin:4px 0 8px;">
-              Decomposes V<sup>&#955;</sup><sub>GL</sub> restricted to the subgroup. Stable when &#8467;(&#955;) &#8804; n.
+            <div class="hint" id="br-rule-hint" style="margin:4px 0 8px;">
+              Stable branching formula. Draw source A on the canvas, then compute.
             </div>
             <div id="br-warning" class="err" style="margin-bottom:6px;"></div>
             <div id="br-output" class="decomp-scroll branching-scroll"><span class="hint">Draw a Young diagram, then compute.</span></div>
