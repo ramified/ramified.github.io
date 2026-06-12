@@ -114,14 +114,26 @@
                          font-family:'JetBrains Mono',monospace;font-size:0.82rem;
                          background:var(--bg);color:var(--text);text-align:center;">
               </span>
+              <label class="lie-gl-toggle" id="lie-gl-wrap" hidden title="For generalized Type A_n weights, use gl_{n+1}: the Weyl group permutes the n+1 matrix-coordinate weights.">
+                <input type="checkbox" id="lie-gl-toggle" onchange="onAlgebraChange()"> <span id="lie-gl-label">gl<sub>n+1</sub></span>
+              </label>
+              <label class="lie-gl-toggle tooltip-label" id="lie-conformal-wrap" hidden data-tooltip="">
+                <input type="checkbox" id="lie-conformal-toggle" onchange="onAlgebraChange()"> <span id="lie-conformal-label">csp</span>
+              </label>
               <span id="lie-algebra-desc" style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:var(--muted);"></span>
             </div>
             <div id="lie-warning" class="err" style="margin-bottom:4px;"></div>
             <!-- Stats -->
-            <div class="stat-row"><span class="stat-label">Weight &#955;</span><span class="stat-value" id="lie-weight">—</span></div>
-            <div class="stat-row"><span class="stat-label tooltip-label" tabindex="0" data-tooltip="Uses row vector λ = (a₁,...,aₙ) and Dynkin labels [a₁−a₂, ..., aₙ₋₁−aₙ, aₙ].">Dynkin labels</span><span class="stat-value" id="lie-dynkin">—</span></div>
+            <div class="stat-row"><span class="stat-label tooltip-label" id="lie-weight-label" tabindex="0" data-tooltip="Displays the row vector λ = (a₁,...,aₙ) used by the diagram convention.">Weight &#955;</span><span class="stat-value" id="lie-weight">—</span></div>
+            <div class="stat-row"><span class="stat-label tooltip-label" id="lie-dynkin-label" tabindex="0" data-tooltip="Uses row vector λ = (a₁,...,aₙ) and Dynkin labels [a₁−a₂, ..., aₙ₋₁−aₙ, aₙ].">Dynkin labels</span><span class="stat-value" id="lie-dynkin">—</span></div>
             <div class="stat-row"><span class="stat-label">dim V<sup>&#955;</sup></span><span class="stat-value" id="lie-dim">—</span></div>
             <div class="stat-row"><span class="stat-label">|Weyl orbit|</span><span class="stat-value" id="lie-orbit-size">—</span></div>
+            <div class="dominant-rep" id="lie-dominant-rep" hidden>
+              <span class="dominant-rep-label">Dominant representative</span>
+              <span class="dominant-rep-diagram" id="lie-dominant-diagram"></span>
+              <span class="dominant-rep-text" id="lie-dominant-text"></span>
+              <button class="btn dominant-rep-btn" id="lie-dominant-canvas-btn" onclick="showDominantRepresentativeOnCanvas()" type="button">Show on canvas</button>
+            </div>
             <!-- Orbit display controls -->
             <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn" onclick="toggleOrbitTable()" id="lie-orbit-btn">Show Weyl orbit</button>

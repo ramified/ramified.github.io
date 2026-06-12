@@ -28869,7 +28869,7 @@
         const chi = polyvectorColumnEulerCharacteristic(data.entries, q, d);
         const display = polyvectorColumnIsNumeric(data.entries, q, d)
           ? chi.latex
-          : `\\chi(\\mathcal{T}_X^{\\wedge^{${q}}})`;
+          : polyvectorColumnChiSymbol(q, d, result.geometry.labelLatex || 'X');
         cells.push(`<span class="hodge-polyvector-chi" style="grid-row:1;grid-column:${q + 1};" title="chi(lambda^${q} T_X)">\\(${display}\\)</span>`);
       }
     }
@@ -28908,6 +28908,13 @@
       <div class="hodge-polyvector-message">${escapeHtml(data.message || '')}</div>
     `;
     typeset(refs.hodgePolyvector);
+  }
+
+  function polyvectorColumnChiSymbol(q, d, variety = 'X') {
+    if (q === 0) return `\\chi(\\mathcal{O}_{${variety}})`;
+    if (q === d) return `\\chi(\\omega_{${variety}}^{\\vee})`;
+    if (q === 1) return `\\chi(\\mathcal{T}_{${variety}})`;
+    return `\\chi(\\mathcal{T}_{${variety}}^{\\wedge ${q}})`;
   }
 
   function polyvectorDiagonalTotal(entries, total, d) {
