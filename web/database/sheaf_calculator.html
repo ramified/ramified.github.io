@@ -728,6 +728,44 @@
       line-height: 1;
     }
 
+    .identify-name-tools,
+    .identify-class-review {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .identify-name-tools .sheaf-input {
+      min-width: 92px;
+      flex: 1 1 120px;
+    }
+
+    .identify-class-review {
+      flex-direction: column;
+      align-items: stretch;
+      color: var(--muted);
+      font-size: 0.72rem;
+    }
+
+    .identify-class-review label {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .identify-class-review .sheaf-input {
+      width: 82px;
+      padding: 3px 6px;
+      font-size: 0.7rem;
+    }
+
+    .identify-class-review.is-warning {
+      color: var(--danger);
+    }
+
     .sheaf-map-slot-button[aria-pressed="true"] {
       color: var(--bg);
       border-color: var(--accent);
@@ -2517,8 +2555,51 @@
               <option value="ramified-cover">Ramified cover</option>
               <option value="grassmannian-map">Map to Grassmannian</option>
               <option value="picard-canonical">Canonical line bundle of Pic^d(C)</option>
+              <option value="identify">Identify</option>
             </select>
           </div>
+          <div class="sheaf-field-row" id="identify-kind-row" hidden>
+            <label class="input-label" for="identify-kind">objects</label>
+            <select id="identify-kind" class="sheaf-select">
+              <option value="variety" selected>Varieties</option>
+              <option value="sheaf">Sheaves</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row" id="identify-parents-row" hidden>
+            <span class="input-label">parents</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="identify-left-button" type="button" data-identify-pick="left">first</button>
+              <span class="sheaf-map-formula-mark">=</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="identify-right-button" type="button" data-identify-pick="right">second</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="identify-main-row" hidden>
+            <span class="input-label">main</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="identify-main-left" type="button" data-identify-main="left">first</button>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="identify-main-right" type="button" data-identify-main="right">second</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="identify-name-row" hidden>
+            <label class="input-label" for="identify-name">name</label>
+            <div class="identify-name-tools">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="identify-name-left" type="button" data-identify-name="left">first</button>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="identify-name-right" type="button" data-identify-name="right">second</button>
+              <input id="identify-name" class="sheaf-input" type="text" value="" maxlength="48" spellcheck="false" autocomplete="off">
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="identify-auto-row" hidden>
+            <span class="input-label">classes</span>
+            <label class="opt-row">
+              <input id="identify-auto-classes" type="checkbox" checked>
+              automatically identify classes with same display style
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="identify-class-row" hidden>
+            <span class="input-label">review</span>
+            <div class="identify-class-review" id="identify-class-review"></div>
+          </div>
+          <div class="sheaf-note" id="identify-pick-note" hidden>pick two compatible objects</div>
           <div class="sheaf-field-row" id="ses-parents-row" hidden>
             <span class="input-label">parents</span>
             <div class="sheaf-map-formula-picker combined-sequence-picker">

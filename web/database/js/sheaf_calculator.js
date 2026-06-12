@@ -140,6 +140,8 @@
     grassmannianMapDraft: null,
     grassmannianMapPickTarget: 'bundle',
     picardCanonicalDraft: null,
+    identifyDraft: null,
+    identifyPickTarget: 'left',
     mapDraft: null,
     mapPickTarget: 'domain',
     mapDrag: null,
@@ -451,6 +453,23 @@
     refs.globalInvariantUsage = $('global-invariant-usage');
     refs.combinedEditor = $('combined-editor');
     refs.combinedType = $('combined-type');
+    refs.identifyKindRow = $('identify-kind-row');
+    refs.identifyKind = $('identify-kind');
+    refs.identifyParentsRow = $('identify-parents-row');
+    refs.identifyLeftButton = $('identify-left-button');
+    refs.identifyRightButton = $('identify-right-button');
+    refs.identifyMainRow = $('identify-main-row');
+    refs.identifyMainLeft = $('identify-main-left');
+    refs.identifyMainRight = $('identify-main-right');
+    refs.identifyNameRow = $('identify-name-row');
+    refs.identifyNameLeft = $('identify-name-left');
+    refs.identifyNameRight = $('identify-name-right');
+    refs.identifyName = $('identify-name');
+    refs.identifyAutoRow = $('identify-auto-row');
+    refs.identifyAutoClasses = $('identify-auto-classes');
+    refs.identifyClassRow = $('identify-class-row');
+    refs.identifyClassReview = $('identify-class-review');
+    refs.identifyPickNote = $('identify-pick-note');
     refs.sesParentsRow = $('ses-parents-row');
     refs.sesLeftButton = $('ses-left-button');
     refs.sesFirstMapButton = $('ses-first-map-button');
@@ -2048,6 +2067,7 @@
     const hasAbelJacobiCurve = abelJacobiCurveVarieties().length > 0;
     const hasPicardCanonicalCurve = picardCanonicalCurveVarieties().length > 0;
     const hasSheaf = state.sheaves.length > 0;
+    const hasIdentifyPair = identifyPickableObjects('variety').length >= 2 || identifyPickableObjects('sheaf').length >= 2;
     ['sheaf', 'map', 'combined'].forEach((kind) => {
       const option = refs.addObjectKind?.querySelector?.(`option[value="${kind}"]`);
       if (option) option.disabled = !hasBaseVariety;
@@ -2063,6 +2083,8 @@
     const tautologicalSesTypeOption = refs.combinedType?.querySelector?.('option[value="grassmannian-tautological-ses"]');
     const hasTautologicalSesBase = state.varieties.some((variety) => varietySupportsTautologicalSequence(variety.type || 'abstract'));
     if (tautologicalSesTypeOption) tautologicalSesTypeOption.disabled = !hasTautologicalSesBase;
+    const identifyTypeOption = refs.combinedType?.querySelector?.('option[value="identify"]');
+    if (identifyTypeOption) identifyTypeOption.disabled = !hasIdentifyPair;
     if (combinedCreateMode() && refs.combinedType?.value === 'abel-jacobi' && !hasAbelJacobiCurve) {
       refs.combinedType.value = 'product';
     }
@@ -2077,6 +2099,10 @@
     if (combinedCreateMode() && refs.combinedType?.value === 'grassmannian-tautological-ses' && !hasTautologicalSesBase) {
       refs.combinedType.value = 'product';
       clearTautologicalSesDraft();
+    }
+    if (combinedCreateMode() && refs.combinedType?.value === 'identify' && !hasIdentifyPair) {
+      refs.combinedType.value = 'product';
+      clearIdentifyDraft();
     }
     if (refs.addObjectKind && !createKindIsAvailable(refs.addObjectKind.value)) {
       refs.addObjectKind.value = 'variety';
@@ -2286,7 +2312,7 @@
     const showingMap = !showingNumber && (modifying ? !!state.activeMapId : refs.addObjectKind?.value === 'map');
     const showingCombinedAbelJacobi = !showingNumber && !modifying && combinedAbelJacobiCreateMode();
     const showingMapEditor = showingMap || showingCombinedAbelJacobi;
-    const showingCombinedStructure = !showingNumber && (showingSequence || (!modifying && (combinedSesCreateMode() || combinedBlowupCreateMode() || combinedRamifiedCoverCreateMode() || combinedGrassmannianTautologicalSesCreateMode() || combinedGrassmannianMapCreateMode() || combinedPicardCanonicalCreateMode())));
+    const showingCombinedStructure = !showingNumber && (showingSequence || (!modifying && (combinedSesCreateMode() || combinedBlowupCreateMode() || combinedRamifiedCoverCreateMode() || combinedGrassmannianTautologicalSesCreateMode() || combinedGrassmannianMapCreateMode() || combinedPicardCanonicalCreateMode() || combinedIdentifyCreateMode())));
     const showingSheaf = !showingNumber && !showingMapEditor && !showingCombinedStructure && (modifying ? !!state.activeSheafId : refs.addObjectKind?.value === 'sheaf');
     const waitingForSheafBase = inputIsCreateMode() && showingSheaf && !state.draftSheafBaseVarietyId;
     if (refs.addObjectKind) refs.addObjectKind.hidden = modifying;
@@ -2441,6 +2467,9 @@
       clearPicardCanonicalDraft();
       if (refs.picardCanonicalDegree) refs.picardCanonicalDegree.value = 'd';
       activatePicardCanonicalPick({ render: false });
+    } else if (combinedIdentifyCreateMode()) {
+      clearIdentifyDraft();
+      activateIdentifyPick('left', { render: false });
     } else if (kind === 'sheaf') {
       refs.sheafType.value = 'abstract';
       refs.twist.value = '1';
@@ -3249,6 +3278,7 @@
     if (value === 'number') return 'number';
     if (!state.varieties.length && (value === 'sheaf' || value === 'map' || value === 'combined')) return 'variety';
     if (value === 'map' || combinedAbelJacobiCreateMode()) return 'map';
+    if (combinedIdentifyCreateMode()) return identifyDraftKind() === 'sheaf' ? 'sheaf' : 'variety';
     if (combinedSesCreateMode() || combinedGrassmannianTautologicalSesCreateMode() || combinedGrassmannianMapCreateMode() || combinedPicardCanonicalCreateMode()) return 'sheaf';
     return value === 'sheaf' ? 'sheaf' : 'variety';
   }
@@ -3287,6 +3317,10 @@
 
   function combinedPicardCanonicalCreateMode() {
     return combinedCreateMode() && refs.combinedType?.value === 'picard-canonical';
+  }
+
+  function combinedIdentifyCreateMode() {
+    return combinedCreateMode() && refs.combinedType?.value === 'identify';
   }
 
   function activeSesEditMode() {
@@ -3869,6 +3903,7 @@
     if (combinedRamifiedCoverCreateMode()) return createRamifiedCoverFromDraft();
     if (combinedGrassmannianMapCreateMode()) return createGrassmannianMapFromDraft();
     if (combinedPicardCanonicalCreateMode()) return createPicardCanonicalFromDraft();
+    if (combinedIdentifyCreateMode()) return createIdentifyFromDraft();
     if (kind === 'map') return createMapFromDraft();
     if (kind === 'sheaf') {
       return addSheafFromDraft();
@@ -3905,6 +3940,321 @@
     state.draftVarietyNameDirty = false;
     refs.varietyName.value = defaultCreateVarietyNameLatex();
     return created;
+  }
+
+  function createIdentifyFromDraft() {
+    const data = identifyConstructionData();
+    if (!data) return null;
+    applyIdentifyClassRenames(data);
+    mergeHomologyDataForIdentification(data);
+    data.main.name = sanitizeMathLabel(data.name, data.main.name || (data.kind === 'sheaf' ? '\\mathcal{E}' : 'X'));
+    data.main.nameDirty = true;
+    const rewritten = rewriteObjectReferences(data.kind, data.secondary.id, data.main.id);
+    removeIdentifiedSecondaryObject(data.kind, data.secondary.id);
+    collapseInvalidRewrittenObjects(rewritten);
+    refreshConstructedObjects();
+    clearIdentifyDraft();
+    setCanvasPickEnabled(false, { render: false });
+    clearActiveGlobalInvariant();
+    state.activeSequenceId = null;
+    state.activeMapId = null;
+    if (data.kind === 'sheaf') {
+      state.activeSheafId = data.main.id;
+      state.activeVarietyId = data.main.baseVarietyId || defaultBaseVarietyId();
+    } else {
+      state.activeVarietyId = data.main.id;
+      state.activeSheafId = null;
+    }
+    syncSheafBaseOptions(true);
+    return data.main;
+  }
+
+  function removeIdentifiedSecondaryObject(kind, id) {
+    if (kind === 'sheaf') {
+      const removed = state.sheaves.find((sheaf) => sheaf.id === id);
+      cleanupInternalHomScaffolding(removed);
+      state.sheaves = state.sheaves.filter((sheaf) => sheaf.id !== id);
+      return;
+    }
+    state.varieties = state.varieties.filter((variety) => variety.id !== id);
+  }
+
+  function rewriteObjectReferences(kind, fromId, toId) {
+    const changedMapIds = new Set();
+    const rewriteId = (value, referenceKind = kind) => referenceKind === kind && value === fromId ? toId : value;
+    state.sheaves.forEach((sheaf) => {
+      if (kind === 'variety' && sheaf.baseVarietyId === fromId) sheaf.baseVarietyId = toId;
+      rewriteConstructionReferences(sheaf.construction, kind, fromId, toId);
+      rewriteHomologyRuleIds(sheaf.homology?.rules, new Map([[fromId, toId]]));
+    });
+    state.maps.forEach((map) => {
+      const before = `${map.domainKind}:${map.domainId}->${map.codomainKind}:${map.codomainId}:${JSON.stringify(map.construction || {})}`;
+      map.domainId = rewriteId(map.domainId, map.domainKind);
+      map.codomainId = rewriteId(map.codomainId, map.codomainKind);
+      rewriteConstructionReferences(map.construction, kind, fromId, toId);
+      if (map.curve) rewriteConstructionReferences(map.curve, kind, fromId, toId);
+      const after = `${map.domainKind}:${map.domainId}->${map.codomainKind}:${map.codomainId}:${JSON.stringify(map.construction || {})}`;
+      if (before !== after) changedMapIds.add(map.id);
+    });
+    (state.sequences || []).forEach((sequence) => {
+      if (kind === 'variety' && sequence.baseVarietyId === fromId) sequence.baseVarietyId = toId;
+      if (kind === 'sheaf') sequence.sheafIds = (sequence.sheafIds || []).map((id) => id === fromId ? toId : id);
+      rewriteConstructionReferences(sequence.tail, kind, fromId, toId);
+    });
+    state.varieties.forEach((variety) => {
+      rewriteConstructionReferences(variety.construction, kind, fromId, toId);
+      rewriteHomologyRuleIds(variety.homology?.rules, new Map([[fromId, toId]]));
+    });
+    state.hiddenObjects = (state.hiddenObjects || [])
+      .map((item) => item?.kind === kind && item.id === fromId ? { ...item, id: toId } : item)
+      .filter((item, index, all) => item && all.findIndex((other) => other.kind === item.kind && other.id === item.id) === index);
+    if (state.activeVarietyId === fromId && kind === 'variety') state.activeVarietyId = toId;
+    if (state.activeSheafId === fromId && kind === 'sheaf') state.activeSheafId = toId;
+    return { changedMapIds };
+  }
+
+  function rewriteConstructionReferences(value, kind, fromId, toId) {
+    if (!value || typeof value !== 'object') return;
+    const keyMatchesKind = (key) => {
+      const lower = String(key || '').toLowerCase();
+      return kind === 'variety'
+        ? lower.includes('variety') || lower.includes('base') || lower.includes('curve') || lower.includes('jacobian') || lower.includes('cover') || lower.includes('product') || lower.includes('point') || lower.includes('target') || lower.includes('source')
+        : lower.includes('sheaf') || lower.includes('bundle') || lower.includes('cotangent') || lower.includes('tangent') || lower.includes('object');
+    };
+    Object.keys(value).forEach((key) => {
+      const item = value[key];
+      if (typeof item === 'string') {
+        if (item === fromId && keyMatchesKind(key)) value[key] = toId;
+        return;
+      }
+      if (Array.isArray(item)) {
+        value[key] = item.map((entry) => entry === fromId && keyMatchesKind(key) ? toId : entry);
+        value[key].forEach((entry) => rewriteConstructionReferences(entry, kind, fromId, toId));
+        return;
+      }
+      rewriteConstructionReferences(item, kind, fromId, toId);
+    });
+  }
+
+  function collapseInvalidRewrittenObjects(rewritten = {}) {
+    const changedMapIds = rewritten.changedMapIds || new Set();
+    const beforeMapIds = new Set(state.maps.map((map) => map.id));
+    state.maps = state.maps.filter((map) => (
+      !changedMapIds.has(map.id)
+      || (map.domainKind === map.codomainKind
+      && map.domainId
+      && map.codomainId
+      && map.domainId !== map.codomainId)
+    ));
+    const seenMapKeys = new Set();
+    const duplicateMapIds = new Set();
+    state.maps.forEach((map) => {
+      const key = [
+        map.domainKind,
+        map.domainId,
+        map.codomainKind,
+        map.codomainId,
+        map.construction?.type || '',
+        map.construction?.position ?? '',
+        map.construction?.factorIndex ?? ''
+      ].join('|');
+      if (seenMapKeys.has(key) && changedMapIds.has(map.id)) duplicateMapIds.add(map.id);
+      else seenMapKeys.add(key);
+    });
+    if (duplicateMapIds.size) state.maps = state.maps.filter((map) => !duplicateMapIds.has(map.id));
+    const removedMapIds = new Set([...beforeMapIds].filter((id) => !state.maps.some((map) => map.id === id)));
+    if (removedMapIds.size) removeSequencesTouchingMaps(removedMapIds);
+    const seenSequences = new Set();
+    state.sequences = (state.sequences || []).filter((sequence) => {
+      const sheafIds = sequence.sheafIds || [];
+      if (new Set(sheafIds).size !== sheafIds.length) return false;
+      const mapIds = sequence.mapIds || [];
+      if (mapIds.some((id) => removedMapIds.has(id))) return false;
+      const key = `${sequence.type}:${sheafIds.join(',')}:${mapIds.join(',')}`;
+      if (seenSequences.has(key)) return false;
+      seenSequences.add(key);
+      return true;
+    });
+    state.sequences.forEach(attachShortExactSequenceMemberships);
+  }
+
+  function mergeHomologyDataForIdentification(data) {
+    if (data.kind === 'sheaf') {
+      mergeSheafHomologyForIdentification(data);
+      return;
+    }
+    mergeVarietyHomologyForIdentification(data);
+  }
+
+  function applyIdentifyClassRenames(data) {
+    const renames = ensureIdentifyDraft().classRenames || {};
+    Object.entries(renames).forEach(([key, symbol]) => {
+      const [objectId, classId] = String(key || '').split(':');
+      if (!objectId || !classId) return;
+      const object = data.kind === 'sheaf'
+        ? state.sheaves.find((sheaf) => sheaf.id === objectId)
+        : state.varieties.find((variety) => variety.id === objectId);
+      if (!object) return;
+      const clean = sanitizeHomologySymbol(symbol, '');
+      if (!clean) return;
+      if (data.kind === 'sheaf') {
+        const labelMatch = clean.match(/\((.*)\)\s*$/);
+        if (labelMatch?.[1]) {
+          object.name = sanitizeMathLabel(labelMatch[1], object.name || '\\mathcal{E}');
+          object.nameDirty = true;
+        }
+        return;
+      }
+      const geometry = geometryFromVariety(object);
+      const homology = ensureHomologySystem(object, geometry);
+      homology.classes[classId] = { ...(homology.classes[classId] || {}), symbol: clean };
+      const custom = homology.customClasses?.find((item) => item.id === classId);
+      if (custom) custom.symbol = clean;
+    });
+  }
+
+  function mergeVarietyHomologyForIdentification(data) {
+    const mainGeometry = geometryFromVariety(data.main);
+    const secondaryGeometry = geometryFromVariety(data.secondary);
+    const mainHomology = ensureHomologySystem(data.main, mainGeometry);
+    const secondaryHomology = ensureHomologySystem(data.secondary, secondaryGeometry);
+    const idMap = identifyHomologyIdMap(data, mainGeometry, secondaryGeometry);
+    copySecondaryCustomClasses(mainHomology, secondaryHomology, mainGeometry, secondaryGeometry, idMap);
+    copySecondaryHomologyRules(mainHomology, secondaryHomology, idMap);
+    ensureHomologySystem(data.main, geometryFromVariety(data.main));
+  }
+
+  function mergeSheafHomologyForIdentification(data) {
+    const base = state.varieties.find((variety) => variety.id === data.main.baseVarietyId) || null;
+    const geometry = base ? geometryFromVariety(base) : null;
+    if (!geometry) return;
+    const mainHomology = ensureSheafHomologySystem(data.main, geometry);
+    const secondaryHomology = ensureSheafHomologySystem(data.secondary, geometry);
+    const idMap = identifyHomologyIdMap(data, geometry, geometry);
+    copySecondaryHomologyRules(mainHomology, secondaryHomology, idMap);
+  }
+
+  function identifyHomologyIdMap(data, mainGeometry, secondaryGeometry) {
+    const idMap = new Map();
+    const draft = ensureIdentifyDraft();
+    const confirmed = draft.classMatches || {};
+    data.classCandidates.forEach((candidate) => {
+      if (draft.autoClassMatches === false && confirmed[candidate.key] !== true) return;
+      const mainId = identifyRuleVariableId(candidate.mainDef, mainGeometry, data.kind);
+      const secondaryId = identifyRuleVariableId(candidate.secondaryDef, secondaryGeometry, data.kind);
+      if (mainId && secondaryId) idMap.set(secondaryId, mainId);
+    });
+    return idMap;
+  }
+
+  function identifyRuleVariableId(def, geometry, kind) {
+    return kind === 'sheaf' ? def?.id : homologyDefVariableId(def, geometry);
+  }
+
+  function copySecondaryCustomClasses(mainHomology, secondaryHomology, mainGeometry, secondaryGeometry, idMap) {
+    const existingStyle = new Set(homologyClassDefinitions(mainGeometry, { includeMapClasses: false }).map((def) => identifyClassStyleKey(def)));
+    const existingIds = new Set([
+      ...Object.keys(mainHomology.classes || {}),
+      ...(mainHomology.customClasses || []).map((item) => item.id)
+    ]);
+    (secondaryHomology.customClasses || []).forEach((custom) => {
+      const secondaryVarId = custom.variableId || homologyVariableId(custom.id, secondaryGeometry);
+      if (idMap.has(secondaryVarId) || idMap.has(custom.id)) return;
+      if (existingStyle.has(identifyCustomClassStyleKey(custom))) return;
+      const copy = cloneSerializableValue(custom);
+      copy.id = uniqueMergedHomologyClassId(copy.id, existingIds);
+      if (copy.variableId) copy.variableId = uniqueMergedHomologyClassId(copy.variableId, existingIds);
+      existingIds.add(copy.id);
+      existingStyle.add(identifyCustomClassStyleKey(copy));
+      mainHomology.customClasses.push(copy);
+      mainHomology.classes[copy.id] = {
+        ...(mainHomology.classes[copy.id] || {}),
+        ...(secondaryHomology.classes?.[custom.id] || {}),
+        symbol: sanitizeHomologySymbol(copy.symbol, copy.id)
+      };
+      idMap.set(custom.variableId || custom.id, copy.variableId || copy.id);
+      idMap.set(homologyVariableId(custom.id, secondaryGeometry), homologyVariableId(copy.id, mainGeometry));
+    });
+  }
+
+  function identifyCustomClassStyleKey(item) {
+    return `${homologyClassCohomologyDegree(item)}:${canonicalMathLabel(item?.symbol || '')}`;
+  }
+
+  function uniqueMergedHomologyClassId(baseId, used) {
+    const raw = sanitizeHomologyVariableId(baseId) || nextInputId('C');
+    if (!used.has(raw)) return raw;
+    let index = 2;
+    while (used.has(`${raw}_${index}`)) index += 1;
+    return `${raw}_${index}`;
+  }
+
+  function copySecondaryHomologyRules(mainHomology, secondaryHomology, idMap) {
+    mainHomology.rules = Array.isArray(mainHomology.rules) ? mainHomology.rules : [];
+    const existing = new Set(mainHomology.rules.map((rule) => JSON.stringify({ lhs: rule.lhs, rhs: rule.rhs })));
+    (secondaryHomology.rules || []).forEach((rule) => {
+      if (rule.builtin || rule.deleted) return;
+      const copy = remapHomologyRule(rule, idMap);
+      if (!copy) return;
+      copy.id = uniqueMergedRuleId(copy.id, mainHomology.rules);
+      const key = JSON.stringify({ lhs: copy.lhs, rhs: copy.rhs });
+      if (existing.has(key)) return;
+      existing.add(key);
+      mainHomology.rules.push(copy);
+    });
+  }
+
+  function uniqueMergedRuleId(baseId, rules) {
+    const used = new Set((rules || []).map((rule) => rule.id));
+    const raw = String(baseId || nextInputId('R'));
+    if (!used.has(raw)) return raw;
+    let index = 2;
+    while (used.has(`${raw}_${index}`)) index += 1;
+    return `${raw}_${index}`;
+  }
+
+  function remapHomologyRule(rule, idMap) {
+    const remapPowers = (powers) => {
+      const out = {};
+      for (const [id, exponent] of Object.entries(powers || {})) {
+        const nextId = idMap.get(id);
+        if (!nextId) return null;
+        out[nextId] = (out[nextId] || 0) + exponent;
+      }
+      return out;
+    };
+    const lhs = remapPowers(rule.lhs?.powers || rule.lhsPowers);
+    if (!lhs) return null;
+    const rhs = [];
+    for (const term of rule.rhs || rule.rhsTerms || []) {
+      const powers = remapPowers(term.powers || {});
+      if (!powers) return null;
+      rhs.push({ coefficient: term.coefficient || '1', powers });
+    }
+    return {
+      id: rule.id,
+      builtin: false,
+      enabled: rule.enabled !== false,
+      lhs: { powers: lhs },
+      rhs
+    };
+  }
+
+  function rewriteHomologyRuleIds(rules, idMap) {
+    if (!Array.isArray(rules) || !idMap?.size) return;
+    rules.forEach((rule) => {
+      const rewritePowers = (powers) => {
+        if (!powers || typeof powers !== 'object') return;
+        Object.keys(powers).forEach((id) => {
+          const nextId = idMap.get(id);
+          if (!nextId || nextId === id) return;
+          powers[nextId] = (powers[nextId] || 0) + powers[id];
+          delete powers[id];
+        });
+      };
+      rewritePowers(rule.lhs?.powers || rule.lhsPowers);
+      (rule.rhs || rule.rhsTerms || []).forEach((term) => rewritePowers(term.powers));
+    });
   }
 
   function createMapFromDraft() {
@@ -4213,6 +4563,7 @@
       clearTautologicalSesDraft();
       clearGrassmannianMapDraft();
       clearPicardCanonicalDraft();
+      clearIdentifyDraft();
       clearMapDraft();
       clearSheafBinaryDraft();
       clearSheafSelfSumDraft();
@@ -4248,6 +4599,7 @@
       else if (combinedGrassmannianTautologicalSesCreateMode()) activateTautologicalSesPick({ render: false });
       else if (combinedGrassmannianMapCreateMode()) activateGrassmannianMapPick({ render: false });
       else if (combinedPicardCanonicalCreateMode()) activatePicardCanonicalPick({ render: false });
+      else if (combinedIdentifyCreateMode()) activateIdentifyPick(state.identifyPickTarget || 'left', { render: false });
       else activateFirstCreateBlankPick({ render: false });
       recompute();
     });
@@ -4262,6 +4614,7 @@
         clearTautologicalSesDraft();
         clearGrassmannianMapDraft();
         clearPicardCanonicalDraft();
+        clearIdentifyDraft();
         clearMapDraft();
         setCanvasPickEnabled(false, { render: false });
         if (combinedProductCreateMode()) refs.varietyType.value = 'product';
@@ -4279,6 +4632,7 @@
         else if (combinedGrassmannianTautologicalSesCreateMode()) activateTautologicalSesPick({ render: false });
         else if (combinedGrassmannianMapCreateMode()) activateGrassmannianMapPick({ render: false });
         else if (combinedPicardCanonicalCreateMode()) activatePicardCanonicalPick({ render: false });
+        else if (combinedIdentifyCreateMode()) activateIdentifyPick(state.identifyPickTarget || 'left', { render: false });
         else activateFirstCreateBlankPick({ render: false });
         recompute();
       });
@@ -4330,6 +4684,77 @@
     if (refs.picardCanonicalCurveButton) {
       refs.picardCanonicalCurveButton.addEventListener('click', () => {
         activatePicardCanonicalPick();
+      });
+    }
+    if (refs.identifyKind) {
+      refs.identifyKind.addEventListener('change', () => {
+        const kind = identifyDraftKind();
+        state.identifyDraft = createIdentifyDraft({ kind });
+        state.identifyPickTarget = 'left';
+        updateIdentifyDraftControls();
+        normalizeControlVisibility();
+        activateIdentifyPick('left', { render: false });
+        recompute();
+      });
+    }
+    [refs.identifyLeftButton, refs.identifyRightButton].forEach((button) => {
+      if (!button) return;
+      button.addEventListener('click', () => {
+        activateIdentifyPick(button.dataset.identifyPick || 'left');
+      });
+    });
+    [refs.identifyMainLeft, refs.identifyMainRight].forEach((button) => {
+      if (!button) return;
+      button.addEventListener('click', () => {
+        setIdentifyMainSlot(button.dataset.identifyMain || 'left');
+      });
+    });
+    [refs.identifyNameLeft, refs.identifyNameRight].forEach((button) => {
+      if (!button) return;
+      button.addEventListener('click', () => {
+        setIdentifyNameSlot(button.dataset.identifyName || 'left');
+      });
+    });
+    if (refs.identifyName) {
+      refs.identifyName.addEventListener('input', () => {
+        const draft = ensureIdentifyDraft();
+        draft.nameMode = 'custom';
+        draft.name = refs.identifyName.value;
+        updateIdentifyDraftControls({ preserveNameInput: true });
+        normalizeControlVisibility();
+      });
+      refs.identifyName.addEventListener('change', () => {
+        const data = identifyConstructionData({ ignoreClassGate: true });
+        refs.identifyName.value = sanitizeMathLabel(refs.identifyName.value, data?.main?.name || 'X');
+        const draft = ensureIdentifyDraft();
+        draft.nameMode = 'custom';
+        draft.name = refs.identifyName.value;
+        updateIdentifyDraftControls({ preserveNameInput: true });
+        normalizeControlVisibility();
+      });
+    }
+    if (refs.identifyAutoClasses) {
+      refs.identifyAutoClasses.addEventListener('change', () => {
+        const draft = ensureIdentifyDraft();
+        draft.autoClassMatches = refs.identifyAutoClasses.checked;
+        updateIdentifyDraftControls();
+        normalizeControlVisibility();
+      });
+    }
+    if (refs.identifyClassReview) {
+      refs.identifyClassReview.addEventListener('change', (event) => {
+        const renameInput = event.target?.closest?.('[data-identify-class-rename]');
+        if (renameInput) {
+          setIdentifyClassRename(renameInput.dataset.identifyClassRename, renameInput.value);
+          return;
+        }
+        const input = event.target?.closest?.('[data-identify-class-match]');
+        if (!input) return;
+        const draft = ensureIdentifyDraft();
+        draft.classMatches = draft.classMatches && typeof draft.classMatches === 'object' ? draft.classMatches : {};
+        draft.classMatches[input.dataset.identifyClassMatch] = !!input.checked;
+        updateIdentifyDraftControls();
+        normalizeControlVisibility();
       });
     }
     if (refs.picardCanonicalDegree) {
@@ -10247,6 +10672,15 @@
     updatePicardCanonicalDraftControls();
   }
 
+  function clearIdentifyDraft() {
+    const kind = identifyDraftKind();
+    state.identifyDraft = null;
+    state.identifyPickTarget = 'left';
+    if (refs.identifyKind) refs.identifyKind.value = kind;
+    if (refs.identifyAutoClasses) refs.identifyAutoClasses.checked = true;
+    updateIdentifyDraftControls();
+  }
+
   function clearSheafMapDraft() {
     state.sheafMapDraft = null;
     state.sheafMapPickTarget = 'map';
@@ -10311,6 +10745,28 @@
   }
 
   const PICK_FLOW_REGISTRY = [{
+    id: 'identify',
+    slots: ['left', 'right'],
+    active: () => combinedIdentifyCreateMode(),
+    allowedObjectKinds: () => [identifyDraftKind()],
+    available: () => identifyPickableObjects().length > 0,
+    candidate: (kind, id) => kind === identifyDraftKind() && allowableIdentifyPick(id),
+    paintCandidate: (kind, id) => {
+      const ids = identifyDraftIds();
+      return kind === identifyDraftKind() && ids.leftId !== id && ids.rightId !== id && allowableIdentifyPick(id);
+    },
+    selectedState: (kind, id) => {
+      if (kind !== identifyDraftKind()) return null;
+      const ids = identifyDraftIds();
+      if (ids.leftId === id) return 'domain';
+      if (ids.rightId === id) return 'codomain';
+      return null;
+    },
+    complete: () => !!identifyConstructionData(),
+    hint: () => identifyPickHint(),
+    nextSlot: () => state.identifyPickTarget || 'left',
+    handle: (kind, id) => handleIdentifyPick(kind, id)
+  }, {
     id: 'short-exact-sequence',
     slots: ['sheaf-a', 'map-ab', 'sheaf-b', 'map-bc', 'sheaf-c'],
     active: () => combinedSesCreateMode(),
@@ -10647,12 +11103,367 @@
   }];
 
   function updateCombinedDraftControls() {
+    updateIdentifyDraftControls();
     updateSesDraftControls();
     updateBlowupDraftControls();
     updateRamifiedCoverDraftControls();
     updateTautologicalSesDraftControls();
     updateGrassmannianMapDraftControls();
     updatePicardCanonicalDraftControls();
+  }
+
+  function identifyDraftKind() {
+    const value = refs.identifyKind?.value || state.identifyDraft?.kind;
+    return value === 'sheaf' ? 'sheaf' : 'variety';
+  }
+
+  function createIdentifyDraft(options = {}) {
+    return {
+      kind: options.kind === 'sheaf' ? 'sheaf' : 'variety',
+      objectIds: Array.isArray(options.objectIds) ? options.objectIds.slice(0, 2) : [],
+      mainId: options.mainId || null,
+      nameMode: options.nameMode || 'main',
+      name: options.name || '',
+      autoClassMatches: options.autoClassMatches !== false,
+      classMatches: options.classMatches && typeof options.classMatches === 'object' ? { ...options.classMatches } : {},
+      classRenames: options.classRenames && typeof options.classRenames === 'object' ? { ...options.classRenames } : {}
+    };
+  }
+
+  function ensureIdentifyDraft() {
+    const kind = identifyDraftKind();
+    if (!state.identifyDraft || state.identifyDraft.kind !== kind) {
+      state.identifyDraft = createIdentifyDraft({ kind });
+    }
+    return state.identifyDraft;
+  }
+
+  function identifyDraftIds() {
+    const draft = ensureIdentifyDraft();
+    const ids = Array.isArray(draft.objectIds) ? draft.objectIds : [];
+    return { leftId: ids[0] || null, rightId: ids[1] || null };
+  }
+
+  function identifyObjectById(id, kind = identifyDraftKind()) {
+    const collection = kind === 'sheaf' ? state.sheaves : state.varieties;
+    return collection.find((item) => item.id === id) || null;
+  }
+
+  function identifyDraftObject(slot) {
+    const ids = identifyDraftIds();
+    return identifyObjectById(slot === 'right' ? ids.rightId : ids.leftId);
+  }
+
+  function identifyObjectDimension(object, kind = identifyDraftKind()) {
+    if (!object) return null;
+    if (kind === 'sheaf') {
+      const base = state.varieties.find((variety) => variety.id === object.baseVarietyId) || null;
+      return base ? geometryFromVariety(base).dim : null;
+    }
+    return geometryFromVariety(object).dim;
+  }
+
+  function identifyPairCompatible(left, right, kind = identifyDraftKind()) {
+    if (!left || !right || left.id === right.id) return false;
+    if (kind === 'sheaf') return !!left.baseVarietyId && left.baseVarietyId === right.baseVarietyId;
+    return identifyObjectDimension(left, kind) === identifyObjectDimension(right, kind);
+  }
+
+  function identifyPickableObjects(kind = identifyDraftKind()) {
+    const collection = (kind === 'sheaf' ? state.sheaves : state.varieties).filter((item) => !item.hiddenOnCanvas);
+    return collection.filter((item) => collection.some((other) => identifyPairCompatible(item, other, kind)));
+  }
+
+  function allowableIdentifyPick(id) {
+    const kind = identifyDraftKind();
+    const candidate = identifyObjectById(id, kind);
+    if (!candidate || candidate.hiddenOnCanvas) return false;
+    const ids = identifyDraftIds();
+    const otherId = state.identifyPickTarget === 'right' ? ids.leftId : ids.rightId;
+    if (!otherId) return identifyPickableObjects(kind).some((item) => item.id === id);
+    const other = identifyObjectById(otherId, kind);
+    return identifyPairCompatible(candidate, other, kind);
+  }
+
+  function activateIdentifyPick(target = 'left', options = {}) {
+    if (!combinedIdentifyCreateMode()) return false;
+    state.identifyPickTarget = target === 'right' ? 'right' : 'left';
+    ensureIdentifyDraft();
+    setCanvasPickEnabled(true, { render: false });
+    updateIdentifyDraftControls();
+    syncGlobalPickButton();
+    if (options.render !== false) renderCanvas(state.lastResult);
+    return state.canvasPickEnabled;
+  }
+
+  function handleIdentifyPick(kind, id) {
+    if (kind !== identifyDraftKind() || !allowableIdentifyPick(id)) return;
+    const draft = ensureIdentifyDraft();
+    const ids = identifyDraftIds();
+    const nextIds = [ids.leftId, ids.rightId];
+    const index = state.identifyPickTarget === 'right' ? 1 : 0;
+    nextIds[index] = id;
+    if (nextIds[0] && nextIds[0] === nextIds[1]) nextIds[index ? 0 : 1] = null;
+    draft.objectIds = nextIds;
+    if (!draft.mainId || !nextIds.includes(draft.mainId)) draft.mainId = nextIds[0] || nextIds[1] || null;
+    if (!draft.nameMode || draft.nameMode === 'main') draft.nameMode = 'main';
+    state.identifyPickTarget = nextIds[0] && !nextIds[1] ? 'right' : 'left';
+    updateIdentifyDraftControls();
+    recompute();
+  }
+
+  function setIdentifyMainSlot(slot) {
+    const draft = ensureIdentifyDraft();
+    const object = identifyDraftObject(slot);
+    if (!object) return;
+    draft.mainId = object.id;
+    if (draft.nameMode === 'main') draft.name = '';
+    updateIdentifyDraftControls();
+    normalizeControlVisibility();
+  }
+
+  function setIdentifyNameSlot(slot) {
+    const draft = ensureIdentifyDraft();
+    const object = identifyDraftObject(slot);
+    if (!object) return;
+    draft.nameMode = slot === 'right' ? 'right' : 'left';
+    draft.name = object.name || '';
+    updateIdentifyDraftControls();
+    normalizeControlVisibility();
+  }
+
+  function identifyMainObject() {
+    const draft = ensureIdentifyDraft();
+    const ids = identifyDraftIds();
+    const mainId = [draft.mainId, ids.leftId, ids.rightId].find((id) => identifyObjectById(id));
+    if (draft.mainId !== mainId) draft.mainId = mainId || null;
+    return identifyObjectById(mainId);
+  }
+
+  function identifySecondaryObject() {
+    const main = identifyMainObject();
+    const ids = identifyDraftIds();
+    const secondaryId = [ids.leftId, ids.rightId].find((id) => id && id !== main?.id);
+    return identifyObjectById(secondaryId);
+  }
+
+  function identifyDisplayNameForSlot(slot) {
+    const object = identifyDraftObject(slot);
+    const fallback = identifyDraftKind() === 'sheaf' ? '\\mathcal{E}' : 'X';
+    return object ? sanitizeMathLabel(object.name, fallback) : '';
+  }
+
+  function identifyNameValue(options = {}) {
+    const draft = ensureIdentifyDraft();
+    const main = identifyMainObject();
+    const fallback = main?.name || (identifyDraftKind() === 'sheaf' ? '\\mathcal{E}' : 'X');
+    if (draft.nameMode === 'left') return sanitizeMathLabel(identifyDisplayNameForSlot('left'), fallback);
+    if (draft.nameMode === 'right') return sanitizeMathLabel(identifyDisplayNameForSlot('right'), fallback);
+    if (draft.nameMode === 'custom') return sanitizeMathLabel(draft.name || refs.identifyName?.value, fallback);
+    return sanitizeMathLabel(main?.name, fallback);
+  }
+
+  function updateIdentifyDraftControls(options = {}) {
+    const show = combinedIdentifyCreateMode();
+    if (refs.identifyKindRow) refs.identifyKindRow.hidden = !show;
+    if (refs.identifyParentsRow) refs.identifyParentsRow.hidden = !show;
+    if (refs.identifyMainRow) refs.identifyMainRow.hidden = !show;
+    if (refs.identifyNameRow) refs.identifyNameRow.hidden = !show;
+    if (refs.identifyAutoRow) refs.identifyAutoRow.hidden = !show;
+    if (refs.identifyClassRow) refs.identifyClassRow.hidden = !show;
+    syncPickFlowNote(refs.identifyPickNote, 'identify', show);
+    if (!show) return;
+    const draft = ensureIdentifyDraft();
+    if (refs.identifyKind) refs.identifyKind.value = draft.kind;
+    if (refs.identifyAutoClasses) refs.identifyAutoClasses.checked = draft.autoClassMatches !== false;
+    updateIdentifyObjectButton(refs.identifyLeftButton, identifyDraftObject('left'), 'first', state.identifyPickTarget === 'left');
+    updateIdentifyObjectButton(refs.identifyRightButton, identifyDraftObject('right'), 'second', state.identifyPickTarget === 'right');
+    updateIdentifyMainButtons();
+    updateIdentifyNameControls(options);
+    renderIdentifyClassReview();
+    syncGlobalPickButton();
+  }
+
+  function updateIdentifyObjectButton(button, object, fallback, picking) {
+    if (!button) return;
+    const defaultLabel = identifyDraftKind() === 'sheaf' ? '\\mathcal{E}' : 'X';
+    const label = object ? latexToPlain(sanitizeMathLabel(object.name, defaultLabel)) : fallback;
+    button.textContent = label;
+    button.title = object ? `Replace ${label}` : `Pick the ${fallback} ${identifyDraftKind()}`;
+    button.setAttribute('aria-pressed', picking && state.canvasPickEnabled ? 'true' : 'false');
+  }
+
+  function updateIdentifyMainButtons() {
+    const main = identifyMainObject();
+    [
+      [refs.identifyMainLeft, 'left'],
+      [refs.identifyMainRight, 'right'],
+      [refs.identifyNameLeft, 'left'],
+      [refs.identifyNameRight, 'right']
+    ].forEach(([button, slot]) => {
+      if (!button) return;
+      const object = identifyDraftObject(slot);
+      const label = object ? latexToPlain(identifyDisplayNameForSlot(slot)) : slot;
+      button.textContent = label || slot;
+      button.disabled = !object;
+      const isMainButton = button === refs.identifyMainLeft || button === refs.identifyMainRight;
+      button.setAttribute('aria-pressed', isMainButton && object?.id === main?.id ? 'true' : 'false');
+    });
+  }
+
+  function updateIdentifyNameControls(options = {}) {
+    if (!refs.identifyName) return;
+    const value = identifyNameValue();
+    if (!options.preserveNameInput) refs.identifyName.value = value;
+    refs.identifyName.disabled = !identifyMainObject();
+  }
+
+  function identifyClassCandidates() {
+    const kind = identifyDraftKind();
+    const main = identifyMainObject();
+    const secondary = identifySecondaryObject();
+    if (!main || !secondary) return [];
+    const mainDefs = identifyClassDefinitions(main, kind);
+    const secondaryDefs = identifyClassDefinitions(secondary, kind);
+    const mainByStyle = new Map();
+    mainDefs.forEach((def) => {
+      const key = identifyClassStyleKey(def);
+      if (!key || mainByStyle.has(key)) return;
+      mainByStyle.set(key, def);
+    });
+    return secondaryDefs.map((def) => {
+      const mainDef = mainByStyle.get(identifyClassStyleKey(def));
+      return mainDef ? { mainDef, secondaryDef: def, key: `${secondary.id}:${def.id}->${main.id}:${mainDef.id}` } : null;
+    }).filter(Boolean);
+  }
+
+  function identifyClassDefinitions(object, kind) {
+    if (!object) return [];
+    if (kind === 'sheaf') {
+      const base = state.varieties.find((variety) => variety.id === object.baseVarietyId) || null;
+      const geometry = base ? geometryFromVariety(base) : null;
+      return geometry ? sheafHomologyClassDefinitions(sheafFromObject(object, geometry), geometry).map((def) => ({ ...def, identifyObjectId: object.id })) : [];
+    }
+    return homologyClassDefinitions(geometryFromVariety(object), { includeMapClasses: false }).map((def) => ({ ...def, identifyObjectId: object.id }));
+  }
+
+  function identifyClassStyleKey(def) {
+    const symbol = canonicalMathLabel(identifyClassDisplaySymbol(def) || '');
+    const degree = Number.isInteger(def?.cohomologyDegree) ? def.cohomologyDegree : Math.round(2 * (def?.degree || 0));
+    return symbol ? `${degree}:${symbol}` : '';
+  }
+
+  function identifyClassDisplaySymbol(def) {
+    const draft = state.identifyDraft || {};
+    const objectId = def?.identifyObjectId || def?.sheafObject?.id || def?.sourceObject?.id || def?.geometry?.varietyId || '';
+    const overrideKey = objectId && def?.id ? `${objectId}:${def.id}` : '';
+    return (overrideKey && draft.classRenames?.[overrideKey])
+      || def?.symbolLatex
+      || def?.symbolPlain
+      || '';
+  }
+
+  function identifyClassRenameKey(def) {
+    const objectId = def?.identifyObjectId || def?.sheafObject?.id || def?.sourceObject?.id || def?.geometry?.varietyId || '';
+    return objectId && def?.id ? `${objectId}:${def.id}` : '';
+  }
+
+  function setIdentifyClassRename(key, value) {
+    if (!key) return;
+    const draft = ensureIdentifyDraft();
+    draft.classRenames = draft.classRenames && typeof draft.classRenames === 'object' ? draft.classRenames : {};
+    const symbol = sanitizeHomologySymbol(value, '');
+    if (symbol) draft.classRenames[key] = symbol;
+    else delete draft.classRenames[key];
+    updateIdentifyDraftControls();
+    normalizeControlVisibility();
+  }
+
+  function identifyUnconfirmedClassCandidates() {
+    const draft = ensureIdentifyDraft();
+    if (draft.autoClassMatches !== false) return [];
+    const confirmed = draft.classMatches || {};
+    return identifyClassCandidates().filter((candidate) => confirmed[candidate.key] !== true);
+  }
+
+  function renderIdentifyClassReview() {
+    if (!refs.identifyClassReview) return;
+    const draft = ensureIdentifyDraft();
+    const candidates = identifyClassCandidates();
+    refs.identifyClassReview.classList.toggle('is-warning', !!identifyUnconfirmedClassCandidates().length);
+    if (!identifyMainObject() || !identifySecondaryObject()) {
+      refs.identifyClassReview.textContent = 'pick two objects to review class labels';
+      return;
+    }
+    if (!candidates.length) {
+      refs.identifyClassReview.textContent = 'no same-display class labels found';
+      return;
+    }
+    if (draft.autoClassMatches !== false) {
+      refs.identifyClassReview.textContent = `${candidates.length} same-display class label${candidates.length === 1 ? '' : 's'} will be identified`;
+      return;
+    }
+    refs.identifyClassReview.innerHTML = candidates.map((candidate) => {
+      const checked = draft.classMatches?.[candidate.key] === true ? ' checked' : '';
+      const main = escapeHtml(latexToPlain(identifyClassDisplaySymbol(candidate.mainDef)));
+      const secondary = escapeHtml(latexToPlain(identifyClassDisplaySymbol(candidate.secondaryDef)));
+      const mainRenameKey = identifyClassRenameKey(candidate.mainDef);
+      const secondaryRenameKey = identifyClassRenameKey(candidate.secondaryDef);
+      return `
+        <label>
+          <input type="checkbox" data-identify-class-match="${escapeHtml(candidate.key)}"${checked}>
+          identify ${secondary} with ${main} in H^${escapeHtml(candidate.mainDef.cohomologyDegree)}
+        </label>
+        <label>
+          rename ${secondary}
+          <input class="sheaf-input" type="text" value="${escapeHtml(identifyClassDisplaySymbol(candidate.secondaryDef))}" data-identify-class-rename="${escapeHtml(secondaryRenameKey)}" spellcheck="false" autocomplete="off">
+        </label>
+        <label>
+          rename ${main}
+          <input class="sheaf-input" type="text" value="${escapeHtml(identifyClassDisplaySymbol(candidate.mainDef))}" data-identify-class-rename="${escapeHtml(mainRenameKey)}" spellcheck="false" autocomplete="off">
+        </label>
+      `;
+    }).join('');
+  }
+
+  function identifyConstructionData(options = {}) {
+    if (!combinedIdentifyCreateMode()) return null;
+    const kind = identifyDraftKind();
+    const ids = identifyDraftIds();
+    const left = identifyObjectById(ids.leftId, kind);
+    const right = identifyObjectById(ids.rightId, kind);
+    if (!identifyPairCompatible(left, right, kind)) return null;
+    const main = identifyMainObject();
+    const secondary = identifySecondaryObject();
+    if (!main || !secondary || main.id === secondary.id) return null;
+    if (!options.ignoreClassGate && identifyUnconfirmedClassCandidates().length) return null;
+    return {
+      kind,
+      left,
+      right,
+      main,
+      secondary,
+      name: identifyNameValue(),
+      classCandidates: identifyClassCandidates()
+    };
+  }
+
+  function identifyPickHint() {
+    const kind = identifyDraftKind();
+    if (!identifyPickableObjects(kind).length) {
+      return kind === 'sheaf'
+        ? 'add two sheaves on the same base first'
+        : 'add two varieties with the same dimension first';
+    }
+    const left = identifyDraftObject('left');
+    const right = identifyDraftObject('right');
+    if (!left) return `click the first ${kind}`;
+    if (!right) return `click the second ${kind}`;
+    if (!identifyPairCompatible(left, right, kind)) {
+      return kind === 'sheaf' ? 'choose sheaves on the same base variety' : 'choose varieties with the same dimension';
+    }
+    if (identifyUnconfirmedClassCandidates().length) return 'confirm same-display class labels or rename one of them';
+    return 'click build to identify the two objects';
   }
 
   function activateProductFactorPick(index = 0, options = {}) {
@@ -15144,7 +15955,8 @@
     const draftingCombinedTautologicalSes = combinedGrassmannianTautologicalSesCreateMode();
     const draftingCombinedGrassmannianMap = combinedGrassmannianMapCreateMode();
     const draftingCombinedPicardCanonical = combinedPicardCanonicalCreateMode();
-    const draftingCombinedStructure = draftingCombinedSes || draftingCombinedBlowup || draftingCombinedRamifiedCover || draftingCombinedTautologicalSes || draftingCombinedGrassmannianMap || draftingCombinedPicardCanonical;
+    const draftingCombinedIdentify = combinedIdentifyCreateMode();
+    const draftingCombinedStructure = draftingCombinedSes || draftingCombinedBlowup || draftingCombinedRamifiedCover || draftingCombinedTautologicalSes || draftingCombinedGrassmannianMap || draftingCombinedPicardCanonical || draftingCombinedIdentify;
     const draftingSheaf = !draftingNumber && !draftingMap && !draftingCombinedStructure && (inputIsModifyMode() ? editingSheaf : refs.addObjectKind?.value === 'sheaf');
     const draftingVariety = !draftingNumber && !draftingMap && !draftingSheaf;
     syncProductVarietyOption();
@@ -15440,8 +16252,9 @@
       const grassmannianMapParams = draftingCombinedGrassmannianMap ? syncGrassmannianMapControls() : null;
       const grassmannianMapReady = !draftingCombinedGrassmannianMap || pickFlowReady('grassmannian-map');
       const picardCanonicalReady = !draftingCombinedPicardCanonical || pickFlowReady('picard-canonical');
+      const identifyReady = !draftingCombinedIdentify || !!identifyConstructionData();
       const numberReady = !draftingNumber || globalInvariantNameIsValid(refs.globalInvariantName?.value);
-      refs.addObject.disabled = (draftingMap && !mapReady) || !ramifiedCoverMapReady || (productNeedsFactors && !productReady) || !grassmannianReady || !sesReady || !sesEditReady || !blowupReady || !ramifiedCoverReady || !tautologicalSesReady || !grassmannianMapReady || !picardCanonicalReady || !numberReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSelfSum || editingSheafSelfSum) && !sheafSelfSumReady) || ((creatingSheafDual || editingSheafDual) && !sheafDualReady) || ((creatingSheafInternalHom || editingSheafInternalHom) && !sheafInternalHomReady) || ((creatingSheafIdeal || editingSheafIdeal) && !sheafIdealReady) || ((creatingSheafNormal || editingSheafNormal) && !sheafNormalReady) || ((creatingSheafRelative || editingSheafRelative) && !sheafRelativeReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
+      refs.addObject.disabled = (draftingMap && !mapReady) || !ramifiedCoverMapReady || (productNeedsFactors && !productReady) || !grassmannianReady || !sesReady || !sesEditReady || !blowupReady || !ramifiedCoverReady || !tautologicalSesReady || !grassmannianMapReady || !picardCanonicalReady || !identifyReady || !numberReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSelfSum || editingSheafSelfSum) && !sheafSelfSumReady) || ((creatingSheafDual || editingSheafDual) && !sheafDualReady) || ((creatingSheafInternalHom || editingSheafInternalHom) && !sheafInternalHomReady) || ((creatingSheafIdeal || editingSheafIdeal) && !sheafIdealReady) || ((creatingSheafNormal || editingSheafNormal) && !sheafNormalReady) || ((creatingSheafRelative || editingSheafRelative) && !sheafRelativeReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
       refs.addObject.textContent = inputIsModifyMode() ? 'update' : (combinedCreateMode() ? 'build' : 'add');
       let addTitle = '';
       if (creatingMap) {
@@ -15462,6 +16275,8 @@
         addTitle = pickFlowHint(pickFlowById('grassmannian-map'));
       } else if (draftingCombinedPicardCanonical) {
         addTitle = pickFlowHint(pickFlowById('picard-canonical'));
+      } else if (draftingCombinedIdentify) {
+        addTitle = pickFlowHint(pickFlowById('identify'));
       } else if (!grassmannianReady) {
         addTitle = `Grassmannian dimension ${grassmannianParams.dim} exceeds the calculator limit ${MAX_DIMENSION}`;
       } else if (productNeedsFactors) {
@@ -31737,6 +32552,8 @@
     state.tautologicalSesDraft = null;
     state.grassmannianMapDraft = null;
     state.picardCanonicalDraft = null;
+    state.identifyDraft = null;
+    state.identifyPickTarget = 'left';
     state.mapDraft = null;
     state.sheafBinaryDraft = null;
     state.sheafSelfSumDraft = null;
