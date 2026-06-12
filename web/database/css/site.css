@@ -107,6 +107,52 @@
     white-space: nowrap;
   }
   #shape-badge { color: var(--text); }
+  .generalized-canvas-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+    color: var(--muted);
+  }
+  .generalized-canvas-inline[hidden] {
+    display: none;
+  }
+  .generalized-canvas-badge {
+    font-size: 0.68rem;
+    color: var(--accent2);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+  .canvas-view-row {
+    display: inline-flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .canvas-view-btn {
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg);
+    color: var(--muted);
+    padding: 2px 7px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+  .canvas-view-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  }
+  .canvas-view-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+    color: var(--muted);
+    border-color: var(--border);
+    background: var(--surface);
+  }
   .canvas-size-inline {
     display: inline-flex;
     align-items: center;

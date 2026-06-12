@@ -20,6 +20,14 @@
     <header class="panel-title">
       <span class="panel-title-text">Young Diagram</span>
       <div class="canvas-toolbar" aria-label="Canvas diagram controls">
+        <span class="generalized-canvas-inline" id="generalized-canvas-controls" hidden>
+          <span class="generalized-canvas-badge">generalized</span>
+          <span class="canvas-view-row" aria-label="Generalized diagram views">
+            <button class="canvas-view-btn active" data-canvas-view="paper" onclick="setGeneralizedCanvasMode('paper')" type="button" aria-pressed="true">paper</button>
+            <button class="canvas-view-btn" data-canvas-view="shifted" onclick="setGeneralizedCanvasMode('shifted')" type="button" aria-pressed="false">shifted</button>
+            <button class="canvas-view-btn" id="young-boundary-edit-btn" onclick="enterYoungBoundaryEditIfPossible()" type="button" disabled title="Available when shifted rows are non-increasing">Young boundary edit</button>
+          </span>
+        </span>
         <span class="shape-indicator" title="Shape λ"><span id="shape-badge">( )</span></span>
         <span class="canvas-size-inline" aria-label="Canvas size, rows by columns">
           <label title="Canvas rows">
@@ -227,7 +235,7 @@
                 <input type="text" id="partition-input" placeholder="e.g. 4,3,1" oninput="clearErr()">
                 <button class="btn" onclick="setPartition()">Draw</button>
               </div>
-              <div class="hint">Enter row lengths separated by commas, non-increasing.</div>
+              <div class="hint">Enter row lengths in any order. Non-partition, zero, or negative rows open generalized view.</div>
             </div>
             <div class="input-method">
               <label class="input-label" for="dynkin-input">Dynkin labels</label>

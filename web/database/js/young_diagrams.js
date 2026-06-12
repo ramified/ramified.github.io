@@ -25,6 +25,8 @@ function factorial(n) {
 // ─────────────────────────────────────────────
 const MAX_GRID_COLS = 25;
 const MAX_GRID_ROWS = 15;
+const GENERALIZED_BOARD_ROWS = 6;
+const GENERALIZED_MAX_SIDE_COLS = 25;
 // Must match the CSS layout breakpoint where .layout changes from two columns to one.
 const SMALL_SCREEN_QUERY = '(max-width: 780px)';
 const layoutBreakpointMedia = typeof window.matchMedia === 'function'
@@ -49,6 +51,12 @@ let gridSizeWasCustomized = false;
 let blocks = [];   // blocks[r][c] ∈ {0,1}
 let hooks  = [];
 let n = 0;
+let generalizedCanvasRows = null;
+let generalizedCanvasMode = 'paper';
+let generalizedCanvasMetrics = null;
+let generalizedCanvasActiveRows = 0;
+let generalizedCanvasEditMode = 'row';
+let generalizedCanvasSideCols = GENERALIZED_BOARD_ROWS;
 
 function makeEmptyBlocks(rows = gridRows, cols = gridCols) {
   return Array.from({ length: rows }, () => Array(cols).fill(0));
@@ -61,6 +69,232 @@ function resetBlocks() {
 }
 
 resetBlocks();
+
+function isGeneralizedCanvasActive() {
+  return Array.isArray(generalizedCanvasRows);
+}
+
+function isGeneralizedRows(rows) {
+  return rows.some(v => v <= 0);
+}
+
+function signedRowsLabel(rows) {
+  return rows && rows.length ? '(' + rows.join(', ') + ')' : '( )';
+}
+
+function generalizedBoardRows() {
+  return Math.max(1, Math.min(MAX_GRID_ROWS, generalizedCanvasRows ? generalizedCanvasRows.length : GENERALIZED_BOARD_ROWS));
+}
+
+function generalizedSideCols() {
+  return Math.max(1, Math.min(GENERALIZED_MAX_SIDE_COLS, generalizedCanvasSideCols || GENERALIZED_BOARD_ROWS));
+}
+
+function inferGeneralizedSideCols(rows) {
+  const requiredCols = rows.reduce((max, value) => Math.max(max, Math.abs(Math.round(value || 0))), 0);
+  return Math.max(GENERALIZED_BOARD_ROWS, Math.min(GENERALIZED_MAX_SIDE_COLS, requiredCols));
+}
+
+function clampGeneralizedRowValue(value) {
+  const sideCols = generalizedSideCols();
+  return Math.max(-sideCols, Math.min(sideCols, Math.round(value || 0)));
+}
+
+function normalizeGeneralizedRows(rows, rowCount = generalizedBoardRows()) {
+  const count = Math.max(1, Math.min(MAX_GRID_ROWS, rowCount || rows.length || GENERALIZED_BOARD_ROWS));
+  const out = Array.from({ length: count }, (_, i) => clampGeneralizedRowValue(rows[i] || 0));
+  return out;
+}
+
+function generalizedActiveRows(rows = generalizedCanvasRows) {
+  if (!rows) return [];
+  return rows.slice(0, Math.max(0, generalizedCanvasActiveRows || rows.length));
+}
+
+function generalizedShiftAmount(rows = generalizedCanvasRows) {
+  const activeRows = generalizedActiveRows(rows);
+  return activeRows.length ? -Math.min(0, ...activeRows) : 0;
+}
+
+function isNonIncreasingNonnegativeRows(rows, requirePositive = false) {
+  if (!rows.length) return !requirePositive;
+  if (rows.some(v => v < 0)) return false;
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i] > rows[i - 1]) return false;
+  }
+  return !requirePositive || rows.some(v => v > 0);
+}
+
+function isOrdinaryYoungDiagramRows(rows) {
+  return isNonIncreasingNonnegativeRows(rows, true);
+}
+
+function generalizedPaperRowsAreNonIncreasing() {
+  if (!generalizedCanvasRows || !generalizedCanvasRows.length) return false;
+  for (let i = 1; i < generalizedCanvasRows.length; i++) {
+    if (generalizedCanvasRows[i] > generalizedCanvasRows[i - 1]) return false;
+  }
+  return true;
+}
+
+function generalizedBoundaryEditAvailable() {
+  return isGeneralizedCanvasActive() && generalizedPaperRowsAreNonIncreasing();
+}
+
+function syncGeneralizedCanvasInputs() {
+  const partitionInput = document.getElementById('partition-input');
+  if (partitionInput) partitionInput.value = generalizedCanvasRows.join(',');
+  const dynkinInput = document.getElementById('dynkin-input');
+  if (dynkinInput) dynkinInput.value = generalizedCanvasRows.map((x, i) => x - (generalizedCanvasRows[i + 1] || 0)).join(',');
+}
+
+function commitGeneralizedCanvasRows(rows) {
+  generalizedCanvasRows = normalizeGeneralizedRows(rows, generalizedBoardRows());
+  generalizedCanvasActiveRows = generalizedCanvasRows.length;
+  syncGeneralizedCanvasInputs();
+  diagramChanged();
+}
+
+function setGeneralizedCanvasRows(rows, mode = generalizedCanvasMode) {
+  generalizedCanvasSideCols = inferGeneralizedSideCols(rows);
+  generalizedCanvasRows = normalizeGeneralizedRows(rows, Math.max(1, Math.min(MAX_GRID_ROWS, rows.length || 1)));
+  generalizedCanvasActiveRows = generalizedCanvasRows.length;
+  generalizedCanvasMode = mode === 'shifted' ? 'shifted' : 'paper';
+  generalizedCanvasEditMode = 'row';
+  resetBlocks();
+  clearErr();
+  syncGeneralizedCanvasInputs();
+  diagramChanged();
+}
+
+function clearGeneralizedCanvasRows() {
+  generalizedCanvasRows = null;
+  generalizedCanvasMetrics = null;
+  generalizedCanvasActiveRows = 0;
+  generalizedCanvasEditMode = 'row';
+  generalizedCanvasSideCols = GENERALIZED_BOARD_ROWS;
+  updateGeneralizedCanvasControls();
+}
+
+function updateGeneralizedCanvasControls() {
+  const controls = document.getElementById('generalized-canvas-controls');
+  if (controls) controls.hidden = !isGeneralizedCanvasActive();
+  document.querySelectorAll('[data-canvas-view]').forEach(button => {
+    const active = button.dataset.canvasView === generalizedCanvasMode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  const boundaryEditBtn = document.getElementById('young-boundary-edit-btn');
+  if (boundaryEditBtn) {
+    const enabled = generalizedBoundaryEditAvailable();
+    if (!enabled && generalizedCanvasEditMode === 'boundary') generalizedCanvasEditMode = 'row';
+    const activeBoundaryEdit = enabled && generalizedCanvasEditMode === 'boundary';
+    boundaryEditBtn.disabled = !enabled;
+    boundaryEditBtn.classList.toggle('active', activeBoundaryEdit);
+    boundaryEditBtn.setAttribute('aria-pressed', activeBoundaryEdit ? 'true' : 'false');
+    boundaryEditBtn.textContent = activeBoundaryEdit ? 'single row edit' : 'Young boundary edit';
+    boundaryEditBtn.title = enabled
+      ? 'Toggle between single row edit and Young boundary edit.'
+      : 'Available when paper rows are non-increasing.';
+  }
+}
+
+function setGeneralizedCanvasMode(mode) {
+  if (mode !== 'shifted') mode = 'paper';
+  generalizedCanvasMode = mode;
+  updateGeneralizedCanvasControls();
+  if (isGeneralizedCanvasActive()) redraw();
+}
+
+function enterYoungBoundaryEditIfPossible() {
+  if (!isGeneralizedCanvasActive()) return;
+  if (!generalizedBoundaryEditAvailable()) return;
+  generalizedCanvasEditMode = generalizedCanvasEditMode === 'boundary' ? 'row' : 'boundary';
+  updateGeneralizedCanvasControls();
+  redraw();
+}
+
+function setGeneralizedCanvasRowValue(row, value) {
+  if (!isGeneralizedCanvasActive() || row < 0 || row >= generalizedBoardRows()) return;
+  generalizedCanvasActiveRows = Math.max(generalizedCanvasActiveRows, row + 1);
+  generalizedCanvasRows[row] = clampGeneralizedRowValue(value);
+  syncGeneralizedCanvasInputs();
+  diagramChanged();
+}
+
+function handleGeneralizedBoundaryClick(row, col, leftCols) {
+  if (!generalizedBoundaryEditAvailable()) return false;
+  const target = paperCellValueFromCol(col, leftCols);
+  const inside = paperRowContainsCell(generalizedCanvasRows[row] || 0, target);
+  const nextRows = generalizedCanvasRows.slice();
+  const nextBoundary = inside ? paperValueExcludingCell(target) : target;
+
+  if (target > 0) {
+    if (inside) {
+      for (let r = row; r < nextRows.length; r++) nextRows[r] = Math.min(nextRows[r], nextBoundary);
+    } else {
+      for (let r = 0; r <= row; r++) nextRows[r] = Math.max(nextRows[r], target);
+    }
+  } else {
+    if (inside) {
+      for (let r = 0; r <= row; r++) nextRows[r] = Math.max(nextRows[r], nextBoundary);
+    } else {
+      for (let r = row; r < nextRows.length; r++) nextRows[r] = Math.min(nextRows[r], target);
+    }
+  }
+
+  for (let r = 1; r < nextRows.length; r++) {
+    if (nextRows[r] > nextRows[r - 1]) nextRows[r] = nextRows[r - 1];
+  }
+  commitGeneralizedCanvasRows(nextRows);
+  return true;
+}
+
+function paperCellValueFromCol(col, leftCols) {
+  return col < leftCols ? -(leftCols - col) : col - leftCols + 1;
+}
+
+function paperRowContainsCell(value, target) {
+  return target < 0 ? value <= target : value >= target;
+}
+
+function paperValueExcludingCell(target) {
+  return target < 0 ? target + 1 : target - 1;
+}
+
+function nextPaperRowValueFromClick(currentValue, col, leftCols) {
+  const target = paperCellValueFromCol(col, leftCols);
+  const contained = paperRowContainsCell(currentValue, target);
+  return contained ? paperValueExcludingCell(target) : target;
+}
+
+function handleGeneralizedShiftedRowClick(row, col, leftCols) {
+  const currentValue = generalizedCanvasRows[row] || 0;
+  const value = nextPaperRowValueFromClick(currentValue, col, leftCols);
+  setGeneralizedCanvasRowValue(row, value);
+  return true;
+}
+
+function handleGeneralizedCanvasClick(mx, my) {
+  if (!generalizedCanvasMetrics) return false;
+  const { left, top, cell, rowCount, totalCols, leftCols } = generalizedCanvasMetrics;
+  const col = Math.floor((mx - left) / cell);
+  const row = Math.floor((my - top) / cell);
+  if (row < 0 || row >= rowCount || col < 0 || col >= totalCols) return false;
+
+  if (generalizedCanvasEditMode === 'boundary' && generalizedBoundaryEditAvailable()) {
+    return handleGeneralizedBoundaryClick(row, col, leftCols);
+  }
+
+  const currentValue = generalizedCanvasRows[row] || 0;
+  if (generalizedCanvasMode === 'shifted') {
+    return handleGeneralizedShiftedRowClick(row, col, leftCols);
+  }
+
+  const value = nextPaperRowValueFromClick(currentValue, col, leftCols);
+  setGeneralizedCanvasRowValue(row, value);
+  return true;
+}
 
 const DEFAULT_EXPORT_CITATION = `@misc{young_diagram_calculator,
   title        = {Young Diagram Calculator},
@@ -197,8 +431,104 @@ const showCoords  = () => {
   return !!(el && el.checked);
 };
 
+function drawGeneralizedCanvas() {
+  const rows = generalizedCanvasRows || [];
+  const mobileCanvas = typeof window.matchMedia === 'function' && window.matchMedia(SMALL_SCREEN_QUERY).matches;
+  generalizedCanvasMetrics = null;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#fffdf8';
+  ctx.fillRect(0, 0, W, H);
+
+  const rowCount = generalizedBoardRows();
+  const positiveColor = 'hsla(210,40%,68%,0.62)';
+  const positiveStroke = 'rgba(30,24,18,0.82)';
+  const negativeColor = 'hsla(8,55%,62%,0.66)';
+  const negativeStroke = 'rgba(139,58,42,0.9)';
+  const shiftColor = 'rgba(122,111,101,0.20)';
+  const shiftStroke = 'rgba(122,111,101,0.72)';
+
+  const leftCols = generalizedSideCols();
+  const rightCols = generalizedSideCols();
+  const totalCols = leftCols + rightCols;
+  const shift = generalizedShiftAmount(rows);
+  const shiftedRows = rows.map(v => v + shift);
+  const pad = Math.max(10, Math.min(28, W * 0.04));
+  const cell = Math.max(4, Math.min((W - pad * 2) / totalCols, (H - pad * 2) / rowCount));
+  const diagramW = totalCols * cell;
+  const diagramH = rowCount * cell;
+  const left = (W - diagramW) / 2;
+  const top = (H - diagramH) / 2;
+  const axisX = left + leftCols * cell;
+  generalizedCanvasMetrics = { left, top, cell, rowCount, totalCols, leftCols, rightCols };
+
+  ctx.strokeStyle = mobileCanvas ? 'rgba(125,112,100,0.5)' : 'rgba(180,170,158,0.32)';
+  ctx.lineWidth = 0.8;
+  for (let c = 0; c <= totalCols; c++) {
+    const x = left + c * cell;
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, top + diagramH); ctx.stroke();
+  }
+  for (let r = 0; r <= rowCount; r++) {
+    const y = top + r * cell;
+    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(left + diagramW, y); ctx.stroke();
+  }
+
+  function drawCell(col, row, fill, stroke) {
+    const x = left + col * cell;
+    const y = top + row * cell;
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.rect(x + 0.6, y + 0.6, cell - 1.2, cell - 1.2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  rows.forEach((value, r) => {
+    if (generalizedCanvasMode === 'shifted') {
+      const shifted = shiftedRows[r];
+      const cappedShifted = Math.max(0, Math.min(totalCols, shifted));
+      for (let c = 0; c < cappedShifted; c++) {
+        const isShift = c < shift;
+        const col = isShift ? leftCols - shift + c : leftCols + c - shift;
+        if (col >= 0 && col < totalCols) {
+          drawCell(col, r, isShift ? shiftColor : positiveColor, isShift ? shiftStroke : positiveStroke);
+        }
+      }
+    } else if (value > 0) {
+      for (let c = 0; c < value; c++) drawCell(leftCols + c, r, positiveColor, positiveStroke);
+    } else if (value < 0) {
+      for (let c = 0; c < -value; c++) drawCell(leftCols - c - 1, r, negativeColor, negativeStroke);
+    }
+
+    if (value === 0 || (generalizedCanvasMode === 'shifted' && shiftedRows[r] === 0)) {
+      const y = top + r * cell + cell / 2;
+      ctx.strokeStyle = 'rgba(122,111,101,0.62)';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath(); ctx.moveTo(axisX - Math.min(8, cell * 0.35), y); ctx.lineTo(axisX + Math.min(8, cell * 0.35), y); ctx.stroke();
+    }
+  });
+
+  ctx.strokeStyle = 'rgba(30,24,18,0.78)';
+  ctx.lineWidth = mobileCanvas ? 2 : 1.6;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(axisX, top); ctx.lineTo(axisX, top + diagramH); ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.strokeStyle = mobileCanvas ? 'rgba(30,24,18,0.82)' : 'rgba(30,24,18,0.7)';
+  ctx.lineWidth = mobileCanvas ? 2 : 1.8;
+  ctx.strokeRect(0.9, 0.9, W - 1.8, H - 1.8);
+  updateShapeBadge();
+  updateGeneralizedCanvasControls();
+}
+
 function redraw() {
   if (!ctx) return;
+  if (isGeneralizedCanvasActive()) {
+    drawGeneralizedCanvas();
+    return;
+  }
+  updateGeneralizedCanvasControls();
   computeHooks();
   ctx.clearRect(0, 0, W, H);
   const mobileCanvas = typeof window.matchMedia === 'function' && window.matchMedia(SMALL_SCREEN_QUERY).matches;
@@ -270,6 +600,10 @@ function isCardExpandedById(id) {
 }
 
 function updateShapeBadge() {
+  if (isGeneralizedCanvasActive()) {
+    document.getElementById('shape-badge').textContent = signedRowsLabel(generalizedCanvasRows);
+    return;
+  }
   const rows = rowLengths();
   document.getElementById('shape-badge').textContent = rows.length ? '(' + rows.join(', ') + ')' : '( )';
 }
@@ -347,6 +681,7 @@ function setGridSize(cols, rows, clearDiagram = true, markCustomized = false) {
   syncGridSizeInputs();
 
   if (clearDiagram && changed) {
+    clearGeneralizedCanvasRows();
     clearAllSilent();
     resetCalculatedOutputsForEmptyDiagram();
   }
@@ -393,9 +728,15 @@ let applyingYoungUrlState = false;
 function updateYoungUrlState() {
   if (applyingYoungUrlState || !window.history || !window.URLSearchParams) return;
   const params = new URLSearchParams(window.location.search);
-  const rows = rowLengths();
-  if (rows.length) params.set('lambda', rows.join(','));
-  else params.delete('lambda');
+  if (isGeneralizedCanvasActive()) {
+    params.set('lambda', generalizedCanvasRows.join(','));
+    params.set('generalized', generalizedCanvasMode);
+  } else {
+    const rows = rowLengths();
+    if (rows.length) params.set('lambda', rows.join(','));
+    else params.delete('lambda');
+    params.delete('generalized');
+  }
   params.set('rows', String(gridRows));
   params.set('cols', String(gridCols));
   const typeEl = document.getElementById('lie-type');
@@ -423,10 +764,16 @@ function applyYoungUrlState() {
     if (type && document.getElementById('lie-type')) document.getElementById('lie-type').value = type;
     if (rank && document.getElementById('lie-rank')) document.getElementById('lie-rank').value = rank;
     if (lambdaText) {
-      const parts = parseIntegerList(lambdaText, 'Partition rows');
-      clearAllSilent();
-      for (let r = 0; r < parts.length && r < gridRows; r++) {
-        for (let c = 0; c < Math.min(parts[r], gridCols); c++) blocks[r][c] = 1;
+      const parts = parseIntegerList(lambdaText, 'Partition rows', false, true);
+      const generalizedMode = params.get('generalized') === 'shifted' ? 'shifted' : 'paper';
+      if (isGeneralizedRows(parts) || !isOrdinaryYoungDiagramRows(parts)) {
+        setGeneralizedCanvasRows(parts, generalizedMode);
+      } else {
+        clearGeneralizedCanvasRows();
+        clearAllSilent();
+        for (let r = 0; r < parts.length && r < gridRows; r++) {
+          for (let c = 0; c < Math.min(parts[r], gridCols); c++) blocks[r][c] = 1;
+        }
       }
     }
   } catch (_) {
@@ -441,6 +788,17 @@ function applyYoungUrlState() {
 // ─────────────────────────────────────────────
 function calc() {
   if (!isCardExpandedById('out-size')) return;
+  if (isGeneralizedCanvasActive()) {
+    const shapeStr = signedRowsLabel(generalizedCanvasRows);
+    document.getElementById('out-size').textContent  = generalizedCanvasRows.reduce((s, v) => s + Math.abs(v), 0);
+    document.getElementById('out-shape').textContent = shapeStr;
+    document.getElementById('out-conj').textContent  = '—';
+    document.getElementById('out-hprod').textContent = '—';
+    document.getElementById('out-nstand').textContent = '—';
+    document.getElementById('out-sstand').textContent = '—';
+    document.getElementById('shape-badge').textContent = shapeStr;
+    return;
+  }
   const rows = rowLengths();
   const cols = colLengths();
 
@@ -474,12 +832,19 @@ function calc() {
 // ─────────────────────────────────────────────
 //  Mouse interaction
 // ─────────────────────────────────────────────
+// Young boundary edit: clicking a box includes or excludes the rectangle
+// needed to keep the ordinary Young diagram boundary valid.
 canvasEl.addEventListener('click', function(e) {
   const rect = canvasEl.getBoundingClientRect();
   const scaleX = W / rect.width;
   const scaleY = H / rect.height;
   const mx = (e.clientX - rect.left) * scaleX;
   const my = (e.clientY - rect.top)  * scaleY;
+
+  if (isGeneralizedCanvasActive()) {
+    handleGeneralizedCanvasClick(mx, my);
+    return;
+  }
 
   if (mx < 0 || mx >= W || my < 0 || my >= H) return;
 
@@ -505,16 +870,18 @@ canvasEl.addEventListener('click', function(e) {
 // ─────────────────────────────────────────────
 
 function clearAll() {
+  clearGeneralizedCanvasRows();
   clearAllSilent();
   diagramChanged();
 }
 
-function parseIntegerList(raw, label, allowZero = false) {
+function parseIntegerList(raw, label, allowZero = false, allowNegative = false) {
   const tokens = String(raw || '').split(/[\s,;]+/).filter(Boolean);
-  if (!tokens.length) throw new Error(`Enter at least one ${allowZero ? 'nonnegative' : 'positive'} integer.`);
+  const descriptor = allowNegative ? 'integer' : (allowZero ? 'nonnegative' : 'positive');
+  if (!tokens.length) throw new Error(`Enter at least one ${descriptor} integer.`);
   const values = tokens.map(t => Number(t));
-  if (values.some(x => !Number.isInteger(x) || x < (allowZero ? 0 : 1))) {
-    throw new Error(`${label} must be ${allowZero ? 'nonnegative' : 'positive'} integers.`);
+  if (values.some(x => !Number.isInteger(x) || (!allowNegative && x < (allowZero ? 0 : 1)))) {
+    throw new Error(`${label} must be ${descriptor} integers.`);
   }
   return values;
 }
@@ -522,6 +889,7 @@ function parseIntegerList(raw, label, allowZero = false) {
 function drawPartitionRows(parts) {
   if (!parts.length) {
     clearErr();
+    clearGeneralizedCanvasRows();
     clearAllSilent();
     diagramChanged();
     return;
@@ -534,6 +902,7 @@ function drawPartitionRows(parts) {
     throw new Error(`Max ${gridCols} columns and ${gridRows} rows for the current canvas.`);
   }
 
+  clearGeneralizedCanvasRows();
   clearErr();
   clearAllSilent();
   for (let r = 0; r < parts.length; r++)
@@ -545,7 +914,13 @@ function drawPartitionRows(parts) {
 function setPartition() {
   try {
     const raw = document.getElementById('partition-input').value.trim();
-    const parts = parseIntegerList(raw, 'Partition rows');
+    const parts = parseIntegerList(raw, 'Partition rows', false, true);
+    if (isGeneralizedRows(parts) || !isOrdinaryYoungDiagramRows(parts)) {
+      const dynkinInput = document.getElementById('dynkin-input');
+      if (dynkinInput) dynkinInput.value = parts.map((x, i) => x - (parts[i + 1] || 0)).join(',');
+      setGeneralizedCanvasRows(parts);
+      return;
+    }
     drawPartitionRows(parts);
     const dynkinInput = document.getElementById('dynkin-input');
     if (dynkinInput) dynkinInput.value = parts.map((x, i) => x - (parts[i + 1] || 0)).join(',');
@@ -574,7 +949,15 @@ function rowsFromDynkinLabels(labels, options = {}) {
 function setDynkinLabels() {
   try {
     const raw = document.getElementById('dynkin-input').value.trim();
-    const labels = parseIntegerList(raw, 'Dynkin labels', true);
+    const labels = parseIntegerList(raw, 'Dynkin labels', true, true);
+    const fullRows = rowsFromDynkinLabels(labels, { trim: 'none' });
+    const signedRows = rowsFromDynkinLabels(labels, { trim: 'trailing-zero' });
+    if (isGeneralizedRows(signedRows) || !isOrdinaryYoungDiagramRows(signedRows)) {
+      const partitionInput = document.getElementById('partition-input');
+      if (partitionInput) partitionInput.value = fullRows.join(',');
+      setGeneralizedCanvasRows(fullRows);
+      return;
+    }
     const rows = rowsFromDynkinLabels(labels);
     const partitionInput = document.getElementById('partition-input');
     if (partitionInput) partitionInput.value = rows.join(',');
@@ -3989,6 +4372,7 @@ function initYoungDiagramPage() {
   initSymfunVariableControls();
   resetExportToDefaultCitation();
   scheduleCanvasResizePasses();
+  updateGeneralizedCanvasControls();
   onTypeChange();   // initialise lie algebra card UI state without computing collapsed data
 }
 
