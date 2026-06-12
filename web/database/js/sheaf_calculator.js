@@ -1862,6 +1862,7 @@
       const scalarValue = scalarExpressionIntegerValue(genus, { kind: 'variety', id: geometry.varietyId || 'curve', field: 'genus' });
       return scalarValue != null ? scalarValue : null;
     }
+    if (geometry.type === 'symmetric-product-curve') return symmetricProductNumericGenus(geometry);
     if (geometry.type === 'projective' && geometry.ambient === 1) return 0;
     if (geometry.type === 'complete-intersection') return completeIntersectionCurveGenus(geometry);
     return null;
@@ -29790,6 +29791,15 @@
     if (geometry.type === 'projective' || (geometry.type === 'complete-intersection' && !geometry.degrees?.length)) {
       return buildProjectivePolyvectorParallelogram(geometry);
     }
+    if (geometry.type === 'abelian') {
+      return buildAbelianPolyvectorParallelogram(geometry);
+    }
+    if (geometry.type === 'symmetric-product-curve') {
+      return buildSymmetricProductCurvePolyvectorParallelogram(geometry);
+    }
+    if (geometry.type === 'product' && Array.isArray(geometry.productFactors) && geometry.productFactors.length === 2) {
+      return buildProductPolyvectorParallelogram(geometry);
+    }
     if (hodgeEntriesHaveShape(hodge?.entries, d) && geometryHasTrivialCanonicalForPolyvector(geometry)) {
       return {
         entries: Array.from({ length: d + 1 }, (_, p) => (
@@ -29827,6 +29837,82 @@
     };
   }
 
+  function buildAbelianPolyvectorParallelogram(geometry) {
+    const d = geometry.dim;
+    return {
+      entries: Array.from({ length: d + 1 }, (_, p) => (
+        Array.from({ length: d + 1 }, (_, q) => numericHodgeEntry(binomialBigInt(d, p) * binomialBigInt(d, q)))
+      )),
+      message: 'Abelian-variety polyvectors computed from the trivial tangent bundle.'
+    };
+  }
+
+  function buildSymmetricProductCurvePolyvectorParallelogram(geometry) {
+    const params = symmetricProductCurveParamsFromGeometry(geometry);
+    if (!params) {
+      return buildSymbolicPolyvectorParallelogram(
+        geometry,
+        'Symmetric-product curve polyvectors are symbolic without valid curve parameters.'
+      );
+    }
+    if (params.m === 0) {
+      return {
+        entries: [[numericHodgeEntry(1n)]],
+        message: 'Sym^0(C) is a point.'
+      };
+    }
+    if (params.m === 1) return buildCurvePolyvectorParallelogram(geometry);
+    if (params.numericGenus === 0) {
+      const projective = buildProjectivePolyvectorParallelogram({ ...geometry, type: 'projective', dim: params.m, ambient: params.m });
+      return {
+        ...projective,
+        message: `Sym^${params.m}(P^1) polyvectors computed using Sym^${params.m}(P^1)=P^${params.m}.`
+      };
+    }
+    return buildSymbolicPolyvectorParallelogram(
+      geometry,
+      'General Sym^k(C) polyvector cohomology is not implemented without a reference-backed formula.'
+    );
+  }
+
+  function buildProductPolyvectorParallelogram(geometry) {
+    const [leftGeometry, rightGeometry] = geometry.productFactors;
+    const left = buildPolyvectorParallelogram({ geometry: leftGeometry, hodge: buildHodgeNumbers(leftGeometry) });
+    const right = buildPolyvectorParallelogram({ geometry: rightGeometry, hodge: buildHodgeNumbers(rightGeometry) });
+    const leftDim = leftGeometry?.dim;
+    const rightDim = rightGeometry?.dim;
+    if (!polyvectorTableCanConvolve(left, leftDim) || !polyvectorTableCanConvolve(right, rightDim)) {
+      return buildSymbolicPolyvectorParallelogram(
+        geometry,
+        'Product polyvectors stay symbolic until both factor polyvector parallelograms are known.'
+      );
+    }
+    const d = geometry.dim;
+    const entries = Array.from({ length: d + 1 }, (_, p) => (
+      Array.from({ length: d + 1 }, (_, q) => {
+        const terms = [];
+        for (let i = 0; i <= leftDim; i += 1) {
+          const j = p - i;
+          if (j < 0 || j > rightDim) continue;
+          for (let a = 0; a <= leftDim; a += 1) {
+            const b = q - a;
+            if (b < 0 || b > rightDim) continue;
+            terms.push(multiplyHodgeEntries(left.entries[i][a], right.entries[j][b]));
+          }
+        }
+        return terms.length ? sumHodgeEntries(terms) : numericHodgeEntry(0n);
+      })
+    ));
+    return {
+      entries,
+      message: `Product polyvectors computed by the Kunneth formula from ${leftGeometry.labelPlain || 'the left factor'} and ${rightGeometry.labelPlain || 'the right factor'}.`
+    };
+  }
+
+  function polyvectorTableCanConvolve(data, dim) {
+    return !!data && data.symbolic !== true && hodgeEntriesHaveShape(data.entries, dim);
+  }
+
   function buildCurvePolyvectorParallelogram(geometry) {
     const genus = numericalCurveGenus(geometry);
     if (genus == null) return buildSymbolicCurvePolyvectorParallelogram(geometry);
@@ -29842,8 +29928,9 @@
   }
 
   function buildSymbolicCurvePolyvectorParallelogram(geometry) {
-    const genus = geometry?.type === 'curve' ? genusLatex(geometry.genus) : 'g';
-    const plainGenus = geometry?.type === 'curve' ? genusPlain(geometry.genus) : 'g';
+    const hasCurveGenus = geometry?.type === 'curve' || geometry?.type === 'symmetric-product-curve';
+    const genus = hasCurveGenus ? genusLatex(geometry.symmetricProductGenus ?? geometry.genus) : 'g';
+    const plainGenus = hasCurveGenus ? genusPlain(geometry.symmetricProductGenus ?? geometry.genus) : 'g';
     return {
       entries: [
         [
@@ -29855,7 +29942,8 @@
           { latex: `3${genus}-3`, plain: `3*${plainGenus}-3` }
         ]
       ],
-      message: 'Curve polyvectors: h^1(T_C)=3g-3 for stable curves; h^0(T_C) depends on automorphisms when genus is symbolic.'
+      message: 'Curve polyvectors: h^1(T_C)=3g-3 for stable curves; h^0(T_C) depends on automorphisms when genus is symbolic.',
+      symbolic: true
     };
   }
 
@@ -29884,7 +29972,8 @@
       entries: Array.from({ length: d + 1 }, (_, p) => (
         Array.from({ length: d + 1 }, (_, q) => polyvectorSymbolEntry(p, q))
       )),
-      message
+      message,
+      symbolic: true
     };
   }
 

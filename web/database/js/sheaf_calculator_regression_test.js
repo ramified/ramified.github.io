@@ -1110,6 +1110,18 @@ function testPolyvectorParallelogramForProjectiveSpace() {
   assert.strictEqual(polyvector.entries[1][1].plain, '0');
 }
 
+function testPolyvectorParallelogramForAbelianVariety() {
+  const api = loadCalculator();
+  const geometry = api.geometryFromVariety({ id: 'A3', type: 'abelian', dim: '3', name: 'A' });
+  const hodge = api.buildHodgeNumbers(geometry);
+  const polyvector = api.buildPolyvectorParallelogram({ geometry, hodge });
+  assert(polyvector);
+  assert(polyvector.message.includes('trivial tangent bundle'));
+  assert.strictEqual(polyvector.entries[0][0].plain, '1');
+  assert.strictEqual(polyvector.entries[1][2].plain, '9');
+  assert.strictEqual(polyvector.entries[3][3].plain, '1');
+}
+
 function testPolyvectorParallelogramForCurves() {
   const api = loadCalculator();
   const cases = [
@@ -1130,6 +1142,75 @@ function testPolyvectorParallelogramForCurves() {
       polyvector.entries[1][1].plain
     ], expected);
   });
+}
+
+function testPolyvectorParallelogramForProductOfKnownFactors() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'L', type: 'projective', dim: '1', name: '\\mathbb{P}^{1}' },
+    { id: 'R', type: 'projective', dim: '1', name: '\\mathbb{P}^{1}' },
+    { id: 'Q', type: 'abstract', dim: '2', name: 'Q', construction: { type: 'product', varietyIds: ['L', 'R'] } }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[2]);
+  const hodge = api.buildHodgeNumbers(geometry);
+  const polyvector = api.buildPolyvectorParallelogram({ geometry, hodge });
+  assert(polyvector);
+  assert(polyvector.message.includes('Kunneth'));
+  assert.strictEqual(polyvector.entries[0][0].plain, '1');
+  assert.strictEqual(polyvector.entries[0][1].plain, '6');
+  assert.strictEqual(polyvector.entries[0][2].plain, '9');
+  assert.strictEqual(polyvector.entries[1][1].plain, '0');
+}
+
+function testPolyvectorParallelogramForProductWithAbelianFactor() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'C', type: 'curve', genus: '2', name: 'C' },
+    { id: 'A', type: 'abelian', dim: '2', name: 'A' },
+    { id: 'CA', type: 'abstract', dim: '3', name: 'C\\times A', construction: { type: 'product', varietyIds: ['C', 'A'] } }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[2]);
+  const hodge = api.buildHodgeNumbers(geometry);
+  const polyvector = api.buildPolyvectorParallelogram({ geometry, hodge });
+  assert(polyvector);
+  assert.strictEqual(polyvector.entries[0][1].plain, '2');
+  assert.strictEqual(polyvector.entries[1][1].plain, '11');
+  assert.strictEqual(polyvector.entries[2][3].plain, '6');
+}
+
+function testPolyvectorParallelogramForProductWithUnknownFactorIsSymbolic() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'S', type: 'abstract', dim: '2', name: 'S' },
+    { id: 'A', type: 'abelian', dim: '1', name: 'A' },
+    { id: 'SA', type: 'abstract', dim: '3', name: 'S\\times A', construction: { type: 'product', varietyIds: ['S', 'A'] } }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[2]);
+  const hodge = api.buildHodgeNumbers(geometry);
+  const polyvector = api.buildPolyvectorParallelogram({ geometry, hodge });
+  assert(polyvector);
+  assert(polyvector.message.includes('both factor polyvector parallelograms are known'));
+  assert.strictEqual(polyvector.entries[1][2].plain, 'g^1,2');
+}
+
+function testPolyvectorParallelogramForSymmetricProductCurveSpecialCases() {
+  const api = loadCalculator();
+  const symCurve = api.geometryFromVariety({ id: 'S1', type: 'symmetric-product-curve', dim: '1', symmetricProductM: '1', symmetricProductGenus: '2', name: '\\operatorname{Sym}^{1}(C)' });
+  const symCurvePolyvector = api.buildPolyvectorParallelogram({ geometry: symCurve, hodge: api.buildHodgeNumbers(symCurve) });
+  assert(symCurvePolyvector.message.includes('Curve polyvectors'));
+  assert.strictEqual(symCurvePolyvector.entries[0][1].plain, '0');
+  assert.strictEqual(symCurvePolyvector.entries[1][1].plain, '3');
+
+  const rationalSym = api.geometryFromVariety({ id: 'S3', type: 'symmetric-product-curve', dim: '3', symmetricProductM: '3', symmetricProductGenus: '0', name: '\\operatorname{Sym}^{3}(\\mathbb{P}^{1})' });
+  const rationalPolyvector = api.buildPolyvectorParallelogram({ geometry: rationalSym, hodge: api.buildHodgeNumbers(rationalSym) });
+  assert(rationalPolyvector.message.includes('P^3'));
+  assert.strictEqual(rationalPolyvector.entries[0][1].plain, '15');
+  assert.strictEqual(rationalPolyvector.entries[0][3].plain, '35');
+
+  const generalSym = api.geometryFromVariety({ id: 'S2', type: 'symmetric-product-curve', dim: '2', symmetricProductM: '2', symmetricProductGenus: 'g', name: '\\operatorname{Sym}^{2}(C)' });
+  const generalPolyvector = api.buildPolyvectorParallelogram({ geometry: generalSym, hodge: api.buildHodgeNumbers(generalSym) });
+  assert(generalPolyvector.message.includes('not implemented without a reference-backed formula'));
+  assert.strictEqual(generalPolyvector.entries[1][1].plain, 'g^1,1');
 }
 
 function testExpandedPolyvectorParallelogramShowsHochschildTotals() {
@@ -1170,8 +1251,8 @@ function testExpandedPolyvectorParallelogramUsesSymbolsForSymbolicTotals() {
   api.state.hodgeExpanded = true;
   api.refs.hodgePolyvector = { hidden: true, innerHTML: '' };
   api.renderHodgePolyvectorParallelogram({ geometry, hodge });
-  assert(api.refs.hodgePolyvector.innerHTML.includes('\\chi(\\mathcal{T}_X^{\\wedge^{0}})'));
-  assert(api.refs.hodgePolyvector.innerHTML.includes('\\chi(\\mathcal{T}_X^{\\wedge^{1}})'));
+  assert(api.refs.hodgePolyvector.innerHTML.includes('\\chi(\\mathcal{O}_{S})'));
+  assert(api.refs.hodgePolyvector.innerHTML.includes('\\chi(\\mathcal{T}_{S})'));
   assert(api.refs.hodgePolyvector.innerHTML.includes('\\mathrm{HH}^{0}'));
   assert(api.refs.hodgePolyvector.innerHTML.includes('\\mathrm{HH}^{1}'));
   assert(!api.refs.hodgePolyvector.innerHTML.includes('g^{0,0} - g^{1,0}'));
@@ -4880,7 +4961,12 @@ testHigherDimensionPpavUsesTrueDimensionAndQueryOnlyHodge();
 testLargeAbelianHodgeUsesSingleEntryQuery();
 testTwelveDimensionalHodgeStillRendersFullTable();
 testPolyvectorParallelogramForProjectiveSpace();
+testPolyvectorParallelogramForAbelianVariety();
 testPolyvectorParallelogramForCurves();
+testPolyvectorParallelogramForProductOfKnownFactors();
+testPolyvectorParallelogramForProductWithAbelianFactor();
+testPolyvectorParallelogramForProductWithUnknownFactorIsSymbolic();
+testPolyvectorParallelogramForSymmetricProductCurveSpecialCases();
 testExpandedPolyvectorParallelogramShowsHochschildTotals();
 testPolyvectorParallelogramUsesHodgeCellSizeScale();
 testExpandedPolyvectorParallelogramUsesSymbolsForSymbolicTotals();
