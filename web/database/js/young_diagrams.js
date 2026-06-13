@@ -4941,6 +4941,80 @@ function signedPermutationOrbitRows(rows, rank, typeStr) {
   });
   return Array.from(orbit.values()).sort(compareVectorsDesc);
 }
+function vectorAdd(a, b) {
+  return a.map((x, i) => x + (b[i] || 0));
+}
+function vectorSub(a, b) {
+  return a.map((x, i) => x - (b[i] || 0));
+}
+function rhoRowsForType(typeStr, mode) {
+  const rank = rankOf(typeStr);
+  if (mode === 'gl') {
+    const count = glCoordinateCount(typeStr);
+    return Array.from({length:count}, (_, i) => count - 1 - i);
+  }
+  const type = typeStr.includes(':') ? typeStr.split(':')[0] : typeStr;
+  const rows = [];
+  for (let i = 0; i < rank; i++) {
+    if (type === 'B') rows.push(rank - i - 0.5);
+    else if (type === 'C') rows.push(rank - i);
+    else if (type === 'D') rows.push(rank - i - 1);
+    else rows.push(rank - i);
+  }
+  if (mode === 'conformal') rows.push(0);
+  return rows;
+}
+function dotActionRowsOrbit(rows, typeStr, mode) {
+  if (mode !== 'gl' && mode !== 'conformal') return [];
+  const rho = rhoRowsForType(typeStr, mode);
+  const shifted = vectorAdd(rows, rho);
+  const shiftedOrbit = mode === 'gl'
+    ? glOrbitRows(shifted, shifted.length)
+    : signedPermutationOrbitRows(shifted, rankOf(typeStr), typeStr);
+  return shiftedOrbit.map(entry => vectorSub(entry, rho)).sort(compareVectorsDesc);
+}
+function dotActionDominantRows(rows, typeStr, mode) {
+  if (mode !== 'gl' && mode !== 'conformal') {
+    const C = cartanMatrix(typeStr);
+    const rhoLabels = Array(rankOf(typeStr)).fill(1);
+    const shiftedLabels = vectorAdd(toDynkinLabels(typeStr, rows), rhoLabels);
+    const dominantShiftedLabels = dominantRepresentativeDyn(C, shiftedLabels);
+    return dominantShiftedLabels
+      ? rowsFromDynkinLabels(vectorSub(dominantShiftedLabels, rhoLabels), { trim: 'none' })
+      : [];
+  }
+  const rho = rhoRowsForType(typeStr, mode);
+  const shifted = vectorAdd(rows, rho);
+  const dominantShifted = mode === 'gl'
+    ? glDominantRows(shifted, shifted.length)
+    : conformalDominantRows(shifted, rankOf(typeStr), typeStr);
+  return vectorSub(dominantShifted, rho);
+}
+function semisimpleRowsFromDynkinForCoordinateMode(typeStr, labels, mode, central = 0) {
+  if (mode === 'gl') {
+    const rows = rowsFromDynkinLabels(labels, { trim: 'none' });
+    rows.push(0);
+    return rows;
+  }
+  if (mode === 'conformal') {
+    const type = typeStr.includes(':') ? typeStr.split(':')[0] : typeStr;
+    const rank = rankOf(typeStr);
+    const rows = Array(rank).fill(0);
+    if (type === 'B') {
+      rows[rank - 1] = (labels[rank - 1] || 0) / 2;
+      for (let i = rank - 2; i >= 0; i--) rows[i] = rows[i + 1] + (labels[i] || 0);
+    } else if (type === 'C') {
+      rows[rank - 1] = labels[rank - 1] || 0;
+      for (let i = rank - 2; i >= 0; i--) rows[i] = rows[i + 1] + (labels[i] || 0);
+    } else if (type === 'D') {
+      rows[rank - 1] = ((labels[rank - 1] || 0) - (labels[rank - 2] || 0)) / 2;
+      rows[rank - 2] = ((labels[rank - 2] || 0) + (labels[rank - 1] || 0)) / 2;
+      for (let i = rank - 3; i >= 0; i--) rows[i] = rows[i + 1] + (labels[i] || 0);
+    }
+    return rows.concat([central]);
+  }
+  return rowsFromDynkinLabels(labels, { trim: 'trailing-zero' });
+}
 function glCoordinateCount(typeStr) {
   return rankOf(typeStr) + 1;
 }
@@ -5064,9 +5138,13 @@ function setDominantRepresentativePreview(rows, options = {}) {
   if (text) text.textContent = canShow ? vectorText(signedRows) : '( )';
   const label = box.querySelector('.dominant-rep-label');
   if (label) {
+    const prefix = options.dotAction ? 'Dot-dominant representative' : 'Dominant representative';
     label.textContent = options.glRows
       ? `${currentGlLabelText(currentTypeStr())} dominant representative`
-      : (options.conformalRows ? `${currentConformalLabelText(currentTypeStr())} dominant representative` : 'Dominant representative');
+      : (options.conformalRows ? `${currentConformalLabelText(currentTypeStr())} dominant representative` : prefix);
+    if (options.dotAction && (options.glRows || options.conformalRows)) {
+      label.textContent = label.textContent.replace('dominant representative', 'dot-dominant representative');
+    }
   }
   if (button) {
     button.disabled = !canShow;
@@ -5137,6 +5215,64 @@ function weylOrbitDynkin(C, dynkinLabels) {
   return [...orbit.values()].sort((a,b) => {
     for(let i=0;i<a.length;i++){if(a[i]!==b[i])return b[i]-a[i];} return 0;
   });
+}
+function dotActionOrbitDynkin(C, dynkinLabels) {
+  const rho = Array(C.length).fill(1);
+  return weylOrbitDynkin(C, vectorAdd(dynkinLabels, rho))
+    .map(labels => vectorSub(labels, rho))
+    .sort((a,b) => {
+      for(let i=0;i<a.length;i++){if(a[i]!==b[i])return b[i]-a[i];} return 0;
+    });
+}
+function positiveCorootPairings(dynkinLabels, coroots) {
+  return coroots.map(coroot => coroot.reduce((s, coeff, i) => s + coeff * (dynkinLabels[i] || 0), 0));
+}
+function dotActionDominantDynkin(C, dynkinLabels) {
+  const rho = Array(C.length).fill(1);
+  const shifted = vectorAdd(dynkinLabels, rho);
+  const dominantShifted = dominantRepresentativeDyn(C, shifted);
+  return dominantShifted ? vectorSub(dominantShifted, rho) : null;
+}
+function dotActionOrbitSize(C, dynkinLabels) {
+  const rho = Array(C.length).fill(1);
+  const shifted = vectorAdd(dynkinLabels, rho);
+  const dominantShifted = dominantRepresentativeDyn(C, shifted);
+  if (!dominantShifted) return weylGroupOrderFromCartan(C);
+  return weylOrbitSizeFast(C, dominantShifted);
+}
+function bwbResultFromDynkin(typeStr, C, coroots, dynkinLabels) {
+  const rho = Array(C.length).fill(1);
+  const eta = vectorAdd(dynkinLabels, rho);
+  const pairings = positiveCorootPairings(eta, coroots);
+  const singularIndex = pairings.findIndex(value => Math.abs(value) < 1e-9);
+  if (singularIndex >= 0) {
+    return {
+      typeStr,
+      inputLabels: dynkinLabels.slice(),
+      eta,
+      singular: true,
+      singularCoroot: coroots[singularIndex].slice(),
+      degree: null,
+      muLabels: null,
+      muRows: [],
+      dimension: '0',
+    };
+  }
+  const dominantShifted = dominantRepresentativeDyn(C, eta);
+  if (!dominantShifted) throw new Error('Could not find the dot-dominant representative.');
+  const muLabels = vectorSub(dominantShifted, rho);
+  const degree = pairings.filter(value => value < 0).length;
+  return {
+    typeStr,
+    inputLabels: dynkinLabels.slice(),
+    eta,
+    singular: false,
+    singularCoroot: null,
+    degree,
+    muLabels,
+    muRows: rowsFromDynkinLabels(muLabels, { trim: 'trailing-zero' }),
+    dimension: weylDimGeneral(coroots, muLabels).toString(),
+  };
 }
 function factorialBI(n) {
   let r = 1n;
@@ -5304,9 +5440,11 @@ let _lastOrbitKey = '';
 let _lastOrbitLabels = [];
 let _lastOrbitRows = [];
 let _lastOrbitMode = 'dynkin';
+let _lastOrbitAction = 'usual';
 let _lastOrbitTypeStr = '';
 let _lastOrbitRank = 0;
 let _lastDominantRows = [];
+let _lastBwb = null;
 let _cachedCartan = null;
 let _cachedCoroots = null;
 let _cachedTypeStr = '';
@@ -5322,6 +5460,58 @@ function setOrbitViewMode(mode) {
   _orbitViewMode = mode;
   updateOrbitViewButtons();
   if (_orbitVisible) renderOrbitTableOrMessage();
+}
+function lieUsesDotAction() {
+  const toggle = document.getElementById('lie-dot-action-toggle');
+  return !!(toggle && toggle.checked);
+}
+function onLieDotActionChange() {
+  _lieOrbit = [];
+  _lastOrbitKey = '';
+  markBorelWeilBottStale();
+  computeWeyl();
+}
+function markBorelWeilBottStale() {
+  _lastBwb = null;
+  const warn = document.getElementById('lie-bwb-warning');
+  const summary = document.getElementById('lie-bwb-summary');
+  const out = document.getElementById('lie-bwb-output');
+  if (warn) warn.textContent = '';
+  if (summary) summary.textContent = 'Click compute to update Borel-Weil-Bott.';
+  if (out) out.innerHTML = '<span class="hint">No Borel-Weil-Bott result computed yet.</span>';
+}
+
+let lieBwbMathTypesetQueued = false;
+function bwbDimensionLatex(degree, dimension) {
+  return `\\dim H^{${String(degree)}}(G/B,\\mathcal{L}_{\\lambda})=${String(dimension)}`;
+}
+function bwbZeroAllLatex() {
+  return '\\dim H^q(G/B,\\mathcal{L}_{\\lambda})=0\\text{ for all }q';
+}
+function typesetLieBwbMath(attempt = 0) {
+  if (lieBwbMathTypesetQueued || !window.MathJax) return;
+  const targets = [
+    document.getElementById('lie-bwb-summary'),
+    document.getElementById('lie-bwb-output')
+  ].filter(Boolean);
+  if (!targets.length) return;
+  lieBwbMathTypesetQueued = true;
+  const run = () => {
+    if (!window.MathJax?.typesetPromise) {
+      lieBwbMathTypesetQueued = false;
+      if (attempt < 20) window.setTimeout(() => typesetLieBwbMath(attempt + 1), 100);
+      return;
+    }
+    if (window.MathJax.typesetClear) window.MathJax.typesetClear(targets);
+    window.MathJax.typesetPromise(targets).catch(() => {}).finally(() => {
+      lieBwbMathTypesetQueued = false;
+    });
+  };
+  if (window.MathJax.startup?.promise) {
+    window.MathJax.startup.promise.then(run).catch(() => { lieBwbMathTypesetQueued = false; });
+  } else {
+    window.setTimeout(run, 0);
+  }
 }
 function updateLieGlToggleVisibility() {
   const wrap = document.getElementById('lie-gl-wrap');
@@ -5367,6 +5557,7 @@ function updateLieGlToggleVisibility() {
   }
 }
 function onTypeChange() {
+  markBorelWeilBottStale();
   const type = document.getElementById('lie-type').value;
   const isClassical = ['A','B','C','D'].includes(type);
   const rankWrap = document.getElementById('lie-rank-wrap');
@@ -5422,12 +5613,20 @@ function renderOrbitTableOrMessage() {
     return false;
   }
   if (_lastOrbitKey && (!_lieOrbit.length || _lieOrbit._key !== _lastOrbitKey)) {
-    if (_lastOrbitMode === 'gl') {
-      _lieOrbit = glOrbitRows(_lastOrbitRows, _lastOrbitRows.length);
-    } else if (_lastOrbitMode === 'conformal') {
-      _lieOrbit = signedPermutationOrbitRows(_lastOrbitRows, _lastOrbitRank, _lastOrbitTypeStr);
+    if (_lastOrbitAction === 'dot') {
+      if (_lastOrbitMode === 'gl' || _lastOrbitMode === 'conformal') {
+        _lieOrbit = dotActionRowsOrbit(_lastOrbitRows, _lastOrbitTypeStr, _lastOrbitMode);
+      } else {
+        _lieOrbit = dotActionOrbitDynkin(_cachedCartan, _lastOrbitLabels);
+      }
     } else {
-      _lieOrbit = weylOrbitDynkin(_cachedCartan, _lastOrbitLabels);
+      if (_lastOrbitMode === 'gl') {
+        _lieOrbit = glOrbitRows(_lastOrbitRows, _lastOrbitRows.length);
+      } else if (_lastOrbitMode === 'conformal') {
+        _lieOrbit = signedPermutationOrbitRows(_lastOrbitRows, _lastOrbitRank, _lastOrbitTypeStr);
+      } else {
+        _lieOrbit = weylOrbitDynkin(_cachedCartan, _lastOrbitLabels);
+      }
     }
     _lieOrbit._key = _lastOrbitKey;
   }
@@ -5448,10 +5647,10 @@ function exportOrbit(event) {
   if (!_lastOrbitLabels.length) return;
   const exportOut = document.getElementById('export-out');
   if (_lieOrbitSize > ORBIT_LIST_LIMIT) {
-    exportOut.value = `# Weyl orbit  type=${_lastOrbitTypeStr}  rank=${_lastOrbitRank}  coordinates=${_lastOrbitMode}\n# Orbit size: ${_lieOrbitSize.toString()}\n# Full export disabled above ${orbitListLimitText()} weights to keep the page responsive.`;
+    exportOut.value = `# Weyl orbit  type=${_lastOrbitTypeStr}  rank=${_lastOrbitRank}  coordinates=${_lastOrbitMode}  action=${_lastOrbitAction}\n# Orbit size: ${_lieOrbitSize.toString()}\n# Full export disabled above ${orbitListLimitText()} weights to keep the page responsive.`;
   } else {
     renderOrbitTableOrMessage();
-    let out = `# Weyl orbit  type=${_lastOrbitTypeStr}  rank=${_lastOrbitRank}  coordinates=${_lastOrbitMode}\n`;
+    let out = `# Weyl orbit  type=${_lastOrbitTypeStr}  rank=${_lastOrbitRank}  coordinates=${_lastOrbitMode}  action=${_lastOrbitAction}\n`;
     out += _lieOrbit.map(w => '(' + w.join(', ') + ')').join('\n');
     exportOut.value = out;
   }
@@ -5473,6 +5672,7 @@ function computeWeyl() {
   }
   const useGlRows = lieUsesGlRows(typeStr);
   const useConformalRows = lieUsesConformalRows(typeStr);
+  const useDotAction = lieUsesDotAction();
   setLieWeightLabelHints(typeStr, { glRows: useGlRows, conformalRows: useConformalRows });
   if (!rows.length) {
     ['lie-weight','lie-dynkin','lie-dim','lie-orbit-size'].forEach(id =>
@@ -5484,6 +5684,7 @@ function computeWeyl() {
     _lastOrbitLabels = [];
     _lastOrbitRows = [];
     _lastOrbitMode = 'dynkin';
+    _lastOrbitAction = useDotAction ? 'dot' : 'usual';
     _lastOrbitTypeStr = '';
     _lastOrbitRank = 0;
     return;
@@ -5520,20 +5721,30 @@ function computeWeyl() {
     warnings.push('Using the unique dominant Weyl representative for dim and orbit size.');
   }
   const labelsForDim = dominantSemisimpleLabels;
+  const orbitSeedLabels = useDotAction ? vectorAdd(labels, Array(n).fill(1)) : labelsForDim;
+  const orbitMode = useGlRows ? 'gl' : (useConformalRows ? 'conformal' : 'dynkin');
+  const dotSingular = useDotAction && positiveCorootPairings(orbitSeedLabels, _cachedCoroots).some(value => Math.abs(value) < 1e-9);
+  const dominantPreviewRows = useDotAction
+    ? (dotSingular ? [] : dotActionDominantRows(weightData.rawRows, typeStr, orbitMode))
+    : dominantRows;
+  if (useDotAction && !dominantPreviewRows.length) {
+    warnings.push('Dot action weight is singular; no regular dot-dominant representative.');
+  }
   // Compute dimension
   let dim;
   try { dim = weylDimGeneral(_cachedCoroots, labelsForDim); }
   catch(e) { warn.textContent = '⚠ Dim error: ' + e.message; return; }
   // Compute orbit size without enumerating the orbit.
-  try { _lieOrbitSize = weylOrbitSizeFast(_cachedCartan, labelsForDim); }
+  try { _lieOrbitSize = useDotAction ? dotActionOrbitSize(_cachedCartan, labels) : weylOrbitSizeFast(_cachedCartan, orbitSeedLabels); }
   catch(e) { warn.textContent = '⚠ Orbit-size error: ' + e.message; return; }
 
-  _lastOrbitLabels = labelsForDim.slice();
+  _lastOrbitLabels = (useDotAction ? labels : labelsForDim).slice();
   _lastOrbitRows = weightData.rawRows.slice();
-  _lastOrbitMode = useGlRows ? 'gl' : (useConformalRows ? 'conformal' : 'dynkin');
+  _lastOrbitMode = orbitMode;
+  _lastOrbitAction = useDotAction ? 'dot' : 'usual';
   _lastOrbitTypeStr = typeStr;
   _lastOrbitRank = n;
-  _lastOrbitKey = `${typeStr}|${_lastOrbitMode}|${_lastOrbitRows.join(',')}|${labelsForDim.join(',')}`;
+  _lastOrbitKey = `${typeStr}|${_lastOrbitMode}|${_lastOrbitAction}|${_lastOrbitRows.join(',')}|${_lastOrbitLabels.join(',')}`;
   if (!_lieOrbit._key || _lieOrbit._key !== _lastOrbitKey) _lieOrbit = [];
 
   // Format weight display in the coordinate system selected by the Lie controls.
@@ -5548,7 +5759,7 @@ function computeWeyl() {
   document.getElementById('lie-dynkin').textContent      = dynkinStr;
   document.getElementById('lie-dim').textContent         = dim.toString();
   document.getElementById('lie-orbit-size').textContent  = _lieOrbitSize.toString();
-  setDominantRepresentativePreview(dominantRows, { glRows: useGlRows, conformalRows: useConformalRows });
+  setDominantRepresentativePreview(dominantPreviewRows, { glRows: useGlRows, conformalRows: useConformalRows, dotAction: useDotAction });
   warn.textContent = warnings.join(' ');
 
   if (_orbitVisible) renderOrbitTableOrMessage();
@@ -5598,6 +5809,121 @@ function buildOrbitTable() {
 
 function orbitVectorLabel(values, open = '(', close = ')') {
   return open + values.join(', ') + close;
+}
+
+function bwbConventionWarning() {
+  return 'Convention: this app displays the nonzero cohomology as V^mu, so dominant lambda gives H^0(G/B, L_lambda) = V^lambda. Some references use the opposite Borel or inverse character for the line bundle; in that convention the displayed representation may be dualized or sign-shifted.';
+}
+
+function buildBwbCurrentResult() {
+  const rows = currentLieWeightRows();
+  if (!rows.length) throw new Error('Draw a weight first.');
+  const typeStr = currentTypeStr();
+  const C = cartanMatrix(typeStr);
+  const coroots = positiveCoroots(C);
+  const useGlRows = lieUsesGlRows(typeStr);
+  const useConformalRows = lieUsesConformalRows(typeStr);
+  const weightData = lieWeightData(typeStr, C, rows, { glRows: useGlRows, conformalRows: useConformalRows });
+  const labels = weightData.rawLabels.slice(0, rankOf(typeStr));
+  const result = bwbResultFromDynkin(typeStr, C, coroots, labels);
+  result.coordinateMode = useGlRows ? 'gl' : (useConformalRows ? 'conformal' : 'dynkin');
+  result.inputRows = weightData.rawRows.slice();
+  result.conventionWarning = bwbConventionWarning();
+  if (result.muLabels) {
+    if (result.coordinateMode === 'gl') {
+      const shifted = vectorAdd(weightData.rawRows, rhoRowsForType(typeStr, 'gl'));
+      const dominantShifted = glDominantRows(shifted, shifted.length);
+      result.muRows = vectorSub(dominantShifted, rhoRowsForType(typeStr, 'gl'));
+    } else if (result.coordinateMode === 'conformal') {
+      const shifted = vectorAdd(weightData.rawRows, rhoRowsForType(typeStr, 'conformal'));
+      const dominantShifted = conformalDominantRows(shifted, rankOf(typeStr), typeStr);
+      result.muRows = vectorSub(dominantShifted, rhoRowsForType(typeStr, 'conformal'));
+    } else {
+      result.muRows = rowsFromDynkinLabels(result.muLabels, { trim: 'trailing-zero' });
+    }
+  }
+  return result;
+}
+
+function renderBorelWeilBottResult(result) {
+  const warn = document.getElementById('lie-bwb-warning');
+  const summary = document.getElementById('lie-bwb-summary');
+  const out = document.getElementById('lie-bwb-output');
+  if (!warn || !summary || !out) return;
+  warn.textContent = result.conventionWarning || '';
+  out.innerHTML = '';
+  if (result.singular) {
+    summary.innerHTML = `Singular: \\(${bwbZeroAllLatex()}\\).`;
+    out.innerHTML = `<span class="hint" style="display:block;padding:8px;">\\(\\lambda+\\rho\\) lies on a Weyl wall; \\(${bwbZeroAllLatex()}\\).</span>`;
+    typesetLieBwbMath();
+    return;
+  }
+  const rowsText = result.muRows && result.muRows.length ? vectorText(result.muRows) : '( )';
+  const labelsText = vectorText(result.muLabels, '[', ']');
+  summary.innerHTML = `\\(${bwbDimensionLatex(result.degree, result.dimension)}\\); all other cohomology vanishes.`;
+  const row = document.createElement('div');
+  row.className = 'decomp-row';
+  const degree = document.createElement('span');
+  degree.className = 'decomp-mult';
+  degree.textContent = `H^${result.degree}`;
+  const diagram = document.createElement('span');
+  diagram.className = 'decomp-diagram';
+  const part = dominantRowsToPartition(result.muRows || []);
+  diagram.innerHTML = part.length ? miniDiagramDecomp(part, 200) : generalizedOrbitDiagramSVG(result.muRows || [], 'paper');
+  const label = document.createElement('span');
+  label.className = 'decomp-label';
+  label.innerHTML = `\\(${bwbDimensionLatex(result.degree, result.dimension)}\\)<br><span class="decomp-dyn">highest weight ${escapeHtml(rowsText)}; Dynkin ${escapeHtml(labelsText)}</span>`;
+  row.appendChild(degree);
+  row.appendChild(diagram);
+  row.appendChild(label);
+  out.appendChild(row);
+  typesetLieBwbMath();
+}
+
+function computeBorelWeilBott() {
+  const warn = document.getElementById('lie-bwb-warning');
+  const summary = document.getElementById('lie-bwb-summary');
+  const out = document.getElementById('lie-bwb-output');
+  if (warn) warn.textContent = '';
+  try {
+    const result = buildBwbCurrentResult();
+    _lastBwb = result;
+    renderBorelWeilBottResult(result);
+  } catch (err) {
+    _lastBwb = null;
+    if (warn) warn.textContent = (err && err.message) || String(err);
+    if (summary) summary.textContent = 'Unable to compute Borel-Weil-Bott.';
+    if (out) out.innerHTML = '<span class="hint" style="display:block;padding:8px;">No Borel-Weil-Bott result computed.</span>';
+  }
+}
+
+function exportBorelWeilBott(event) {
+  if (!_lastBwb) computeBorelWeilBott();
+  const result = _lastBwb;
+  if (!result) return;
+  const exportOut = document.getElementById('export-out');
+  if (!exportOut) return;
+  let txt = `# Borel-Weil-Bott cohomology of L_lambda on G/B\n`;
+  txt += `# type: ${result.typeStr}\n`;
+  txt += `# coordinates: ${result.coordinateMode}\n`;
+  txt += `# lambda rows: ${vectorText(result.inputRows || [])}\n`;
+  txt += `# lambda Dynkin: ${vectorText(result.inputLabels || [], '[', ']')}\n`;
+  if (result.singular) {
+    txt += `# singular: yes\n`;
+    txt += `# result: all cohomology groups vanish\n`;
+    if (result.singularCoroot) txt += `# singular positive coroot: ${vectorText(result.singularCoroot, '[', ']')}\n`;
+  } else {
+    txt += `# singular: no\n`;
+    txt += `# nonzero degree: ${result.degree}\n`;
+    txt += `# highest weight rows: ${vectorText(result.muRows || [])}\n`;
+    txt += `# highest weight Dynkin: ${vectorText(result.muLabels || [], '[', ']')}\n`;
+    txt += `# dimension: ${result.dimension}\n`;
+    txt += `# representation convention: H^${result.degree} carries V^${vectorText(result.muRows || [])} under this app's convention\n`;
+    txt += `dim H^${result.degree}(G/B, L_lambda) = ${result.dimension}\n`;
+  }
+  txt += `# convention warning: ${result.conventionWarning}\n`;
+  exportOut.value = txt.trimEnd();
+  revealExportCard(event);
 }
 
 function generalizedOrbitDiagramSVG(rows, mode) {

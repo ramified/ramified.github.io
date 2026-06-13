@@ -137,6 +137,9 @@
             <!-- Orbit display controls -->
             <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn" onclick="toggleOrbitTable()" id="lie-orbit-btn">Show Weyl orbit</button>
+              <label class="lie-gl-toggle tooltip-label" id="lie-dot-action-wrap" data-tooltip="Use w dot lambda = w(lambda + rho) - rho for the Weyl orbit and dominant representative.">
+                <input type="checkbox" id="lie-dot-action-toggle" onchange="onLieDotActionChange()"> dot action
+              </label>
               <span class="orbit-view-row" aria-label="Weyl orbit views">
                 <button class="orbit-view-btn active" data-orbit-view="paper" onclick="setOrbitViewMode('paper')" type="button" aria-pressed="true">paper</button>
                 <button class="orbit-view-btn" data-orbit-view="shifted" onclick="setOrbitViewMode('shifted')" type="button" aria-pressed="false">shifted</button>
@@ -155,6 +158,17 @@
               <div id="lie-ws-warning" class="err" style="margin-bottom:4px;"></div>
               <div id="lie-ws-summary" class="hint">Draw a Young diagram, then compute.</div>
               <div id="lie-ws-output" class="decomp-scroll"><span class="hint">No decomposition computed yet.</span></div>
+            </div>
+
+            <div class="lie-subsection" aria-label="Borel-Weil-Bott controls">
+              <div class="lie-subsection-title tooltip-label" tabindex="0" data-tooltip="Computes the cohomology of L_lambda on G/B using the dot action w(lambda+rho)-rho.">Borel-Weil-Bott</div>
+              <div class="action-row">
+                <button class="btn" onclick="computeBorelWeilBott()">compute</button>
+                <button class="btn" onclick="exportBorelWeilBott(event)" style="background:transparent;color:var(--accent);border-color:var(--accent);">export</button>
+              </div>
+              <div id="lie-bwb-warning" class="err" style="margin-bottom:4px;"></div>
+              <div id="lie-bwb-summary" class="hint">Draw a weight, then compute.</div>
+              <div id="lie-bwb-output" class="decomp-scroll lie-bwb-output"><span class="hint">No Borel-Weil-Bott result computed yet.</span></div>
             </div>
           </div>
         </div>
@@ -327,6 +341,19 @@
   With help from <a href="https://claude.ai/share/98270095-0477-4096-8018-b1f670224a79" target="_blank">Claude</a> and <a href="https://chatgpt.com/share/69fa2f46-4b6c-838f-8394-009912e2682f" target="_blank">ChatGPT</a>, this archive adds additional functions. I’m grateful for how these tools helped produce such a polished webpage, and I may add more functions as needed.
 </footer>
 
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]']],
+      processEscapes: true
+    },
+    options: {
+      skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+    }
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <!-- p5.js and BigInteger inline-free: we implement bigint ourselves -->
 <script src="js/young_diagrams.js"></script>
 </body>

@@ -775,6 +775,10 @@
     overflow-x: auto;
     padding-right: 10px;
   }
+  .lie-bwb-output {
+    min-height: 72px;
+    max-height: 180px;
+  }
   .branching-rule-row {
     margin-bottom: 12px;
   }
