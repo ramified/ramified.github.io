@@ -271,9 +271,13 @@
 
 .index-footer {
   color: var(--muted);
-  text-align: center;
   font-size: 0.9rem;
   margin: 24px 0 38px;
+  text-align: center;
+}
+
+.index-footer a {
+  color: var(--accent);
 }
 
 @media (max-width: 720px) {

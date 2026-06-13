@@ -122,22 +122,6 @@
         <a class="applet-link" href="dynkin_diagram_calculator.html">Open calculator</a>
       </div>
     </article>
-
-    <article class="applet-card">
-      <div class="demo-strip" aria-label="Place ramification demonstrations">
-        <figure class="demo-frame">
-          <object data="gif/place_ramification_calculator_gif_1.gif" type="image/gif" aria-label="Place Ramification Calculator demonstration">
-            <span>Add gif/place_ramification_calculator_gif_1.gif</span>
-          </object>
-        </figure>
-      </div>
-      <div class="applet-body">
-        <p class="applet-kind">Number Theory</p>
-        <h3>Place Ramification Calculator</h3>
-        <p>Explore how rational primes split or ramify in selected number-field examples.</p>
-        <a class="applet-link" href="place_ramification_calculator.html">Open calculator</a>
-      </div>
-    </article>
   </section>
 
   <section class="index-section reference-section" aria-labelledby="references-title">
@@ -217,10 +201,35 @@
     </div>
   </section>
 
+  <section class="index-section prototype-section" aria-labelledby="prototype-title">
+    <div class="section-heading split-heading">
+      <div>
+        <p class="index-kicker">Prototypes</p>
+        <h2 id="prototype-title">Prototype Websites</h2>
+      </div>
+      <p>
+        Early versions kept for future development. These pages may be incomplete,
+        rough, or missing demonstration media.
+      </p>
+    </div>
+
+    <div class="applet-grid compact-grid prototype-grid" aria-label="Prototype websites">
+      <article class="applet-card compact-card">
+        <div class="applet-body">
+          <p class="applet-kind">Number Theory</p>
+          <h3>Place Ramification Calculator</h3>
+          <p>Explore how rational primes split or ramify in selected number-field examples.</p>
+          <a class="applet-link" href="place_ramification_calculator.html">Open prototype</a>
+        </div>
+      </article>
+    </div>
+  </section>
+
 </main>
 
 <footer class="index-footer">
   Browser-side mathematical applets collected in one directory.
+  <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
 </footer>
 
 <script>
@@ -329,7 +338,7 @@
   };
 
   const arrangeAllMasonryGrids = () => {
-    document.querySelectorAll('.applet-grid').forEach(arrangeMasonryGrid);
+    document.querySelectorAll('.applet-grid:not(.prototype-grid)').forEach(arrangeMasonryGrid);
   };
 
   document.querySelectorAll('.demo-frame object[data]').forEach((object) => {
