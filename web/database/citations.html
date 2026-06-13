@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bibliography</title>
+  <link rel="stylesheet" href="css/site.css">
+  <link rel="stylesheet" href="css/index.css">
+</head>
+<body class="index-page bibliography-page">
+
+<header class="index-header">
+  <h1>Bibliography</h1>
+  <span><a href="index.html">calculator index</a> &middot; sources</span>
+</header>
+
+<main class="index-shell">
+  <section class="index-intro" aria-labelledby="bibliography-title">
+    <div>
+      <p class="index-kicker">Sources</p>
+      <h2 id="bibliography-title">Mathematical Sources</h2>
+    </div>
+    <p>
+      Article-level sources and software references used while building the Pure Math Toolkit.
+      These notes record where each source influenced implementation, both for proper credit
+      and for future debugging.
+      This is a partial bibliography: some references may be missing, and AI-assisted code
+      may reflect algorithms or conventions learned from sources that were not explicitly named.
+    </p>
+  </section>
+
+  <section class="index-section bibliography-section" aria-labelledby="references-title">
+    <div class="section-heading">
+      <h2 id="references-title">References</h2>
+    </div>
+
+    <ol class="bibliography-entries">
+      <li class="bibliography-entry">
+        <p class="bibliography-citation">
+          Vincent Delecroix, Johannes Schmitt, and Jason van Zelm.
+          <em>admcycles -- a Sage package for calculations in the tautological ring of the moduli space of stable curves</em>.
+          J. Softw. Algebra Geom. 11 (2021), 89--112.
+          DOI: <a href="https://doi.org/10.2140/jsag.2021.11.89" target="_blank" rel="noopener">10.2140/jsag.2021.11.89</a>.
+          <a href="https://arxiv.org/abs/2002.01709" target="_blank" rel="noopener">arXiv:2002.01709</a>.
+        </p>
+        <p class="bibliography-note">
+          Used for computing divisors of the dual graph in the Mosaic Calculator.
+        </p>
+        <button class="bibtex-copy" type="button" data-bibtex-id="bibtex-admcycles">Copy BibTeX</button>
+        <script type="application/x-bibtex" id="bibtex-admcycles">@article{zbMATH07525541,
+ author = {Delecroix, Vincent and Schmitt, Johannes and van Zelm, Jason},
+ title = {admcycles -- a {Sage} package for calculations in the tautological ring of the moduli space of stable curves},
+ fjournal = {The Journal of Software for Algebra and Geometry},
+ journal = {J. Softw. Algebra Geom.},
+ issn = {1948-7916},
+ volume = {11},
+ pages = {89--112},
+ year = {2021},
+ language = {English},
+ doi = {10.2140/jsag.2021.11.89},
+ keywords = {14H10,14-04},
+ zbMATH = {7525541},
+ Zbl = {1485.14046}
+}</script>
+      </li>
+
+      <li class="bibliography-entry">
+        <p class="bibliography-citation">
+          Roger Howe, Eng-Chye Tan, and Jeb F. Willenbring.
+          <em>Stable branching rules for classical symmetric pairs</em>.
+          Trans. Am. Math. Soc. 357 (2005), no. 4, 1601--1626.
+          DOI: <a href="https://doi.org/10.1090/S0002-9947-04-03722-5" target="_blank" rel="noopener">10.1090/S0002-9947-04-03722-5</a>.
+          <a href="https://arxiv.org/abs/math/0311159" target="_blank" rel="noopener">arXiv:math/0311159</a>.
+        </p>
+        <p class="bibliography-note">
+          Stable branching formulas and Littlewood-Richardson coefficient conventions
+          currently realized in the Young Diagram Calculator.
+        </p>
+        <button class="bibtex-copy" type="button" data-bibtex-id="bibtex-branching">Copy BibTeX</button>
+        <script type="application/x-bibtex" id="bibtex-branching">@article{zbMATH02125290,
+ author = {Howe, Roger and Tan, Eng-Chye and Willenbring, Jeb F.},
+ title = {Stable branching rules for classical symmetric pairs},
+ fjournal = {Transactions of the American Mathematical Society},
+ journal = {Trans. Am. Math. Soc.},
+ issn = {0002-9947},
+ volume = {357},
+ number = {4},
+ pages = {1601--1626},
+ year = {2005},
+ language = {English},
+ doi = {10.1090/S0002-9947-04-03722-5},
+ keywords = {22E46},
+ zbMATH = {2125290},
+ Zbl = {1069.22006}
+}</script>
+      </li>
+
+      <li class="bibliography-entry">
+        <p class="bibliography-citation">
+          I. G. Macdonald.
+          <em>Symmetric products of an algebraic curve</em>.
+          Topology 1 (1962), 319--343.
+          DOI: <a href="https://doi.org/10.1016/0040-9383(62)90019-8" target="_blank" rel="noopener">10.1016/0040-9383(62)90019-8</a>.
+        </p>
+        <p class="bibliography-note">
+          Used for the Sym^m(C) variety type in the Sheaf Calculator, including Hodge numbers
+          and tangent/cotangent Chern-class formulas.
+        </p>
+        <button class="bibtex-copy" type="button" data-bibtex-id="bibtex-macdonald-symmetric-products">Copy BibTeX</button>
+        <script type="application/x-bibtex" id="bibtex-macdonald-symmetric-products">@article{zbMATH03196715,
+ author = {Macdonald, I. G.},
+ title = {Symmetric products of an algebraic curve},
+ fjournal = {Topology},
+ journal = {Topology},
+ issn = {0040-9383},
+ volume = {1},
+ pages = {319--343},
+ year = {1962},
+ language = {English},
+ doi = {10.1016/0040-9383(62)90019-8},
+ zbMATH = {3196715},
+ Zbl = {0121.38003}
+}</script>
+      </li>
+    </ol>
+  </section>
+</main>
+
+<footer class="index-footer">
+  <a href="index.html">Back to calculator index</a>
+</footer>
+
+<script>
+(() => {
+  const copyBibtex = async (button) => {
+    const bibtex = document.getElementById(button.dataset.bibtexId)?.textContent.trim();
+
+    if (!bibtex) {
+      return;
+    }
+
+    const originalText = button.textContent;
+
+    try {
+      await navigator.clipboard.writeText(bibtex);
+      button.textContent = 'Copied';
+    } catch (error) {
+      button.textContent = 'Copy failed';
+    }
+
+    window.setTimeout(() => {
+      button.textContent = originalText;
+    }, 1600);
+  };
+
+  document.querySelectorAll('.bibtex-copy').forEach((button) => {
+    button.addEventListener('click', () => copyBibtex(button));
+  });
+})();
+</script>
+</body>
+</html>
