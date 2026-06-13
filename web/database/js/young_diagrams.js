@@ -1332,10 +1332,10 @@ function miniDiagram(mu, hue) {
   const bs = 14;
   const W = mu[0] * bs;
   const H = mu.length * bs;
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="display:inline-block;vertical-align:middle;">`;
+  let svg = `<svg class="orbit-diagram-svg" xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="display:inline-block;vertical-align:middle;">`;
   for (let r = 0; r < mu.length; r++) {
     for (let c = 0; c < mu[r]; c++) {
-      svg += `<rect x="${c*bs}" y="${r*bs}" width="${bs}" height="${bs}" fill="hsl(${hue},40%,70%)" stroke="hsl(${hue},30%,35%)" stroke-width="0.7"/>`;
+      svg += `<rect class="orbit-box-positive" x="${c*bs}" y="${r*bs}" width="${bs}" height="${bs}" fill="hsl(${hue},40%,70%)" stroke="hsl(${hue},30%,35%)" stroke-width="0.7"/>`;
     }
   }
   svg += '</svg>';
@@ -1367,10 +1367,10 @@ function miniDiagramDecomp(mu, hue = 200) {
   const bs = Math.max(7, Math.min(14, Math.floor(maxWidth / Math.max(mu[0], 1))));
   const W = mu[0] * bs;
   const H = mu.length * bs;
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:inline-block;vertical-align:middle;">`;
+  let svg = `<svg class="orbit-diagram-svg" xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:inline-block;vertical-align:middle;">`;
   for (let r = 0; r < mu.length; r++) {
     for (let c = 0; c < mu[r]; c++) {
-      svg += `<rect x="${c*bs}" y="${r*bs}" width="${bs}" height="${bs}" fill="hsl(${hue},40%,70%)" stroke="hsl(${hue},30%,35%)" stroke-width="0.7"/>`;
+      svg += `<rect class="orbit-box-positive" x="${c*bs}" y="${r*bs}" width="${bs}" height="${bs}" fill="hsl(${hue},40%,70%)" stroke="hsl(${hue},30%,35%)" stroke-width="0.7"/>`;
     }
   }
   svg += '</svg>';
@@ -3109,6 +3109,28 @@ const BRANCHING_RULES = {
     evenColumns: true,
     hint: 'Bilinear-form Littlewood rule. Rational GL source weights are allowed.',
   },
+  'gl-o-gl': {
+    label: 'GL(2n) -> O(2n) -> GL(n)',
+    sourceKind: 'gl',
+    targetKinds: ['GL'],
+    formula: 'gl-ordinary-gl',
+    ordinaryGroup: 'O',
+    restrictionEvenColumns: false,
+    polarizationEvenColumns: true,
+    finiteReductionRule: 'gl-o',
+    hint: 'Composed rule: first restrict GL(2n) to O(2n), then polarize to GL(n).',
+  },
+  'gl-sp-gl': {
+    label: 'GL(2n) -> Sp(2n) -> GL(n)',
+    sourceKind: 'gl',
+    targetKinds: ['GL'],
+    formula: 'gl-ordinary-gl',
+    ordinaryGroup: 'Sp',
+    restrictionEvenColumns: true,
+    polarizationEvenColumns: false,
+    finiteReductionRule: 'gl-sp',
+    hint: 'Composed rule: first restrict GL(2n) to Sp(2n), then polarize to GL(n).',
+  },
 };
 
 function branchingRuleDef(rule) {
@@ -3248,7 +3270,7 @@ function finiteGLSourceRankForBranching(rule, ranks) {
   if (rule === 'sum-gl') {
     return ranks.n != null && ranks.m != null ? ranks.n + ranks.m : null;
   }
-  if (rule === 'gl-sp') return ranks.n == null ? null : 2 * ranks.n;
+  if (rule === 'gl-sp' || rule === 'gl-o-gl' || rule === 'gl-sp-gl') return ranks.n == null ? null : 2 * ranks.n;
   if (rule === 'diag-gl' || rule === 'gl-o') return ranks.n;
   return null;
 }
@@ -3316,6 +3338,16 @@ function createBranchingContext() {
     partitionCache: new Map(),
     evenCache: new Map(),
     ordinaryModificationCache: new Map(),
+  };
+}
+
+function createBranchingOrdinaryModificationStats() {
+  return {
+    applied: false,
+    changed: 0,
+    dropped: 0,
+    signChanges: 0,
+    cancellations: 0,
   };
 }
 
@@ -3538,6 +3570,54 @@ function computeOrdinaryToGLBranching(ctx, lambda, evenColumns) {
       }
     }
   }
+  return map;
+}
+
+function finiteComposedIntermediateRanks(rule, def, ranks) {
+  if (!ranks || ranks.n == null) return null;
+  if (def.ordinaryGroup === 'O') {
+    const sourceRank = finiteGLSourceRankForBranching(rule, ranks);
+    return sourceRank == null ? null : { n: sourceRank };
+  }
+  return { n: ranks.n };
+}
+
+function applyComposedIntermediateFiniteOperations(ctx, map, rule, def, ranks, determinantShift = 0) {
+  const stageRule = finiteOrdinaryStageRuleForBranching(rule, def);
+  const stageRanks = finiteComposedIntermediateRanks(rule, def, ranks);
+  if (!stageRule || !stageRanks) return { map, stats: null };
+  const ordinary = applyFiniteOrdinaryTargetModification(ctx, map, stageRule, stageRanks);
+  let current = ordinary.map;
+  if (stageRule === 'gl-o' && Math.abs(determinantShift) % 2 === 1) {
+    current = applyOrthogonalDeterminantTwistMap(current, stageRanks.n);
+    ordinary.stats.cancellations += pruneZeroBranchingMap(current);
+  }
+  return { map: current, stats: ordinary.stats };
+}
+
+function computeGLOrdinaryGLBranching(ctx, sourceGL, def, options = {}) {
+  const map = new Map();
+  const rawIntermediates = computeGLToOrdinaryBranching(ctx, sourceGL, def.ordinaryGroup, def.restrictionEvenColumns);
+  const intermediatePost = applyComposedIntermediateFiniteOperations(
+    ctx,
+    rawIntermediates,
+    options.rule,
+    def,
+    options.ranks,
+    options.determinantShift || 0
+  );
+  if (options.intermediateStats && intermediatePost.stats) {
+    Object.assign(options.intermediateStats, intermediatePost.stats);
+  }
+  const intermediates = intermediatePost.map;
+  intermediates.forEach(entry => {
+    const factor = entry.factors[0];
+    if (!factor || factor.kind !== def.ordinaryGroup) return;
+    const finals = computeOrdinaryToGLBranching(ctx, factor.part, def.polarizationEvenColumns);
+    finals.forEach(finalEntry => {
+      addBranchingEntry(map, finalEntry.factors, entry.mult * finalEntry.mult);
+    });
+  });
   return map;
 }
 
@@ -3874,6 +3954,18 @@ function finiteOrdinaryTargetRank(rule, ranks, factor, factorIndex) {
   return null;
 }
 
+function finiteOrdinaryStageRuleForBranching(rule, def) {
+  return def && def.formula === 'gl-ordinary-gl' ? def.finiteReductionRule : rule;
+}
+
+function finiteOrdinaryStageStableLimit(rule, def, ranks) {
+  const stageRule = finiteOrdinaryStageRuleForBranching(rule, def);
+  if (!ranks || ranks.n == null) return null;
+  if (stageRule === 'gl-sp') return ranks.n;
+  if (stageRule === 'gl-o') return def && def.formula === 'gl-ordinary-gl' ? ranks.n : Math.floor(ranks.n / 2);
+  return null;
+}
+
 function pruneZeroBranchingMap(map) {
   let removed = 0;
   map.forEach((entry, key) => {
@@ -3887,13 +3979,7 @@ function pruneZeroBranchingMap(map) {
 
 function applyFiniteOrdinaryTargetModification(ctx, map, rule, ranks) {
   const out = new Map();
-  const stats = {
-    applied: false,
-    changed: 0,
-    dropped: 0,
-    signChanges: 0,
-    cancellations: 0,
-  };
+  const stats = createBranchingOrdinaryModificationStats();
   map.forEach(entry => {
     const factors = [];
     let mult = entry.mult;
@@ -3967,11 +4053,12 @@ function finiteReducedSourceBoxSize(rule, sources, ranks) {
     const rows = tryFiniteGLRowsFromRational(sources.a, ranks.n + ranks.m);
     if (rows) return partitionSize(finiteGLPolynomialPartFromRows(rows).part);
   }
-  if ((rule === 'gl-o' || rule === 'gl-sp') && ranks.n != null) {
+  const ordinaryStageRule = finiteOrdinaryStageRuleForBranching(rule, branchingRuleDef(rule));
+  if ((ordinaryStageRule === 'gl-o' || ordinaryStageRule === 'gl-sp') && ranks.n != null) {
     const sourceRank = finiteGLSourceRankForBranching(rule, ranks);
     const rows = tryFiniteGLRowsFromRational(sources.a, sourceRank);
     if (rows) {
-      const limit = rule === 'gl-sp' ? ranks.n : Math.floor(ranks.n / 2);
+      const limit = finiteOrdinaryStageStableLimit(rule, branchingRuleDef(rule), ranks);
       const shift = medianDeterminantShiftForStableRows(rows, limit, limit);
       if (shift != null) {
         return rationalGLSize(rationalGLFromFiniteRows(rows.map(v => v - shift), 'normalized GL source'));
@@ -4006,22 +4093,33 @@ function prepareFiniteRankBranchingReduction(rule, def, sources, ranks) {
     }
   }
 
-  if ((rule === 'gl-o' || rule === 'gl-sp') && ranks.n != null) {
+  const ordinaryStageRule = finiteOrdinaryStageRuleForBranching(rule, def);
+  if ((ordinaryStageRule === 'gl-o' || ordinaryStageRule === 'gl-sp') && ranks.n != null) {
     const sourceRank = finiteGLSourceRankForBranching(rule, ranks);
     const rows = tryFiniteGLRowsFromRational(sources.a, sourceRank);
     if (rows) {
-      const limit = rule === 'gl-sp' ? ranks.n : Math.floor(ranks.n / 2);
+      const limit = finiteOrdinaryStageStableLimit(rule, def, ranks);
       const shift = medianDeterminantShiftForStableRows(rows, limit, limit);
       if (shift != null) {
         const normalized = rationalGLFromFiniteRows(rows.map(v => v - shift), 'normalized GL source');
+        const intermediateOrdinaryModification = createBranchingOrdinaryModificationStats();
         return {
           reduced: true,
           sources: { ...sources, a: normalized },
           sourceBoxes: rationalGLSize(normalized),
+          intermediateOrdinaryModification,
           compute: ctx => {
+            if (def.formula === 'gl-ordinary-gl') {
+              return computeGLOrdinaryGLBranching(ctx, normalized, def, {
+                rule,
+                ranks,
+                determinantShift: shift,
+                intermediateStats: intermediateOrdinaryModification,
+              });
+            }
             return computeGLToOrdinaryBranching(ctx, normalized, def.ordinaryGroup, def.evenColumns);
           },
-          postTwist: rule === 'gl-o' && Math.abs(shift) % 2 === 1
+          postTwist: ordinaryStageRule === 'gl-o' && def.formula !== 'gl-ordinary-gl' && Math.abs(shift) % 2 === 1
             ? map => applyOrthogonalDeterminantTwistMap(map, ranks.n)
             : null,
         };
@@ -4029,11 +4127,24 @@ function prepareFiniteRankBranchingReduction(rule, def, sources, ranks) {
     }
   }
 
+  const intermediateOrdinaryModification = def.formula === 'gl-ordinary-gl'
+    ? createBranchingOrdinaryModificationStats()
+    : null;
   return {
     reduced: false,
     sources,
     sourceBoxes: branchingInputBoxSize(def, sources),
-    compute: ctx => computeBranchingMap(rule, def, ctx, sources),
+    intermediateOrdinaryModification,
+    compute: ctx => {
+      if (def.formula === 'gl-ordinary-gl') {
+        return computeGLOrdinaryGLBranching(ctx, sources.a, def, {
+          rule,
+          ranks,
+          intermediateStats: intermediateOrdinaryModification,
+        });
+      }
+      return computeBranchingMap(rule, def, ctx, sources);
+    },
   };
 }
 
@@ -4041,6 +4152,14 @@ function applyPostBranchingFiniteOperations(ctx, map, rule, ranks, reduction = n
   let current = map;
   const ordinary = applyFiniteOrdinaryTargetModification(ctx, current, rule, ranks);
   current = ordinary.map;
+  if (reduction && reduction.intermediateOrdinaryModification && reduction.intermediateOrdinaryModification.applied) {
+    const intermediate = reduction.intermediateOrdinaryModification;
+    ordinary.stats.applied = true;
+    ordinary.stats.changed += intermediate.changed;
+    ordinary.stats.dropped += intermediate.dropped;
+    ordinary.stats.signChanges += intermediate.signChanges;
+    ordinary.stats.cancellations += intermediate.cancellations;
+  }
   if (reduction && typeof reduction.postTwist === 'function') {
     current = reduction.postTwist(current);
     ordinary.stats.cancellations += pruneZeroBranchingMap(current);
@@ -4091,6 +4210,7 @@ function branchingStableRangeWarning(rule, def, sources, ranks, entries, reducti
     if ((rule === 'pol-o-gl' || rule === 'pol-sp-gl') && lenA > Math.floor(n / 2)) notes.push(`stable range asks l(lambda) <= floor(n/2) = ${Math.floor(n / 2)}`);
     if (rule === 'gl-o' && Math.max(sources.a.plus.length, sources.a.minus.length) > Math.floor(n / 2) && !(reduction && reduction.reduced)) notes.push(`stable range asks l(lambda+), l(lambda-) <= floor(n/2) = ${Math.floor(n / 2)}`);
     if (rule === 'gl-sp' && Math.max(sources.a.plus.length, sources.a.minus.length) > n && !(reduction && reduction.reduced)) notes.push(`stable range asks l(lambda+), l(lambda-) <= n = ${n}`);
+    if ((rule === 'gl-o-gl' || rule === 'gl-sp-gl') && Math.max(sources.a.plus.length, sources.a.minus.length) > n && !(reduction && reduction.reduced)) notes.push(`stable range asks l(lambda+), l(lambda-) <= n = ${n}`);
   }
   if (n != null && m != null) {
     const minRank = Math.min(n, m);
@@ -4241,6 +4361,7 @@ function renderBranchingResult(result) {
 function computeBranchingMap(rule, def, ctx, sources) {
   if (def.formula === 'gl-to-ordinary') return computeGLToOrdinaryBranching(ctx, sources.a, def.ordinaryGroup, def.evenColumns);
   if (def.formula === 'ordinary-to-gl') return computeOrdinaryToGLBranching(ctx, sources.a, def.evenColumns);
+  if (def.formula === 'gl-ordinary-gl') return computeGLOrdinaryGLBranching(ctx, sources.a, def);
   if (def.formula === 'sum-ordinary') return computeOrdinaryDirectSumBranching(ctx, sources.a, def.ordinaryGroup, def.evenColumns);
   if (def.formula === 'diag-ordinary') return computeOrdinaryDiagonalBranching(ctx, sources.a, sources.b, def.ordinaryGroup);
   if (def.formula === 'sum-gl') return computeGLDirectSumBranching(ctx, sources.a);
