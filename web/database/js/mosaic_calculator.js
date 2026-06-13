@@ -8711,9 +8711,240 @@
 
   function formatDualGraphDegenerationMultiplicity(degeneration) {
     if (!degeneration || !degeneration.graphData) return '';
-    const edgeCounts = miniDualGraphMultiplicities(degeneration.graphData);
-    const repeated = Array.from(edgeCounts.values()).filter((count) => count > 1).sort((left, right) => right - left);
-    return repeated.length ? `mult ${repeated.join(',')}` : 'mult 1';
+    const value = Number.isFinite(Number(degeneration.multiplicity))
+      ? Number(degeneration.multiplicity)
+      : dualGraphDegenerationMultiplicity(degeneration);
+    return `mult ${value}`;
+  }
+
+  function dualGraphDegenerationMultiplicity(degeneration) {
+    const graphData = degeneration && degeneration.graphData;
+    if (!graphData || !Array.isArray(graphData.edges) || !graphData.edges.length) return 1;
+    if (degeneration.sourceGraphData) {
+      const structures = stableGraphContractionStructureCount(graphData, degeneration.sourceGraphData);
+      if (structures > 0) return structures;
+    }
+    const edgeIndex = dualGraphDegenerationNewEdgeIndex(degeneration);
+    if (edgeIndex < 0 || edgeIndex >= graphData.edges.length) return 1;
+    return stableGraphEdgeEndpointMultiplicity(graphData, edgeIndex);
+  }
+
+  function dualGraphDegenerationNewEdgeIndex(degeneration) {
+    const edges = degeneration && degeneration.emphasis && degeneration.emphasis.edges;
+    if (Array.isArray(edges) && Number.isInteger(Number(edges[0]))) return Number(edges[0]);
+    const graphData = degeneration && degeneration.graphData;
+    return graphData && Array.isArray(graphData.edges) ? graphData.edges.length - 1 : -1;
+  }
+
+  function stableGraphEdgeEndpointMultiplicity(graphData, edgeIndex) {
+    const edge = graphData.edges[edgeIndex];
+    if (!edge) return 1;
+    const key = stableEdgeMultiplicityKey(edge);
+    return graphData.edges.reduce((total, item) => (
+      total + (stableEdgeMultiplicityKey(item) === key ? 1 : 0)
+    ), 0);
+  }
+
+  function stableGraphContractionStructureCount(specialGraph, sourceGraph) {
+    if (!specialGraph || !sourceGraph || !Array.isArray(specialGraph.edges)) return 0;
+    let total = 0;
+    specialGraph.edges.forEach((edge, edgeIndex) => {
+      const contracted = contractStableGraphEdge(specialGraph, edgeIndex);
+      if (contracted) total += stableGraphIsomorphismCount(sourceGraph, contracted);
+    });
+    return total;
+  }
+
+  function contractStableGraphEdge(graphData, edgeIndex) {
+    const edge = graphData && graphData.edges && graphData.edges[edgeIndex];
+    if (!edge) return null;
+    if (edge.from === edge.to) {
+      return {
+        vertices: graphData.vertices.map((vertex) => ({
+          ...vertex,
+          genus: vertex.index === edge.from ? stableGraphVertexGenus(vertex) + 1 : stableGraphVertexGenus(vertex)
+        })),
+        edges: graphData.edges
+          .filter((_, index) => index !== edgeIndex)
+          .map((item) => ({ ...item })),
+        legs: graphData.legs.map((leg) => ({ ...leg }))
+      };
+    }
+
+    const keep = edge.from;
+    const drop = edge.to;
+    const dropVertex = graphData.vertices.find((vertex) => vertex.index === drop);
+    const dropGenus = dropVertex ? stableGraphVertexGenus(dropVertex) : 0;
+    const moveVertex = (vertexIndex) => vertexIndex === drop ? keep : vertexIndex;
+    return {
+      vertices: graphData.vertices
+        .filter((vertex) => vertex.index !== drop)
+        .map((vertex) => ({
+          ...vertex,
+          genus: vertex.index === keep ? stableGraphVertexGenus(vertex) + dropGenus : stableGraphVertexGenus(vertex)
+        })),
+      edges: graphData.edges
+        .filter((_, index) => index !== edgeIndex)
+        .map((item) => ({
+          ...item,
+          from: moveVertex(item.from),
+          to: moveVertex(item.to)
+        })),
+      legs: graphData.legs.map((leg) => ({
+        ...leg,
+        vertex: moveVertex(leg.vertex)
+      }))
+    };
+  }
+
+  function stableGraphIsomorphismCount(sourceGraph, targetGraph) {
+    if (!stableGraphSameSize(sourceGraph, targetGraph)) return 0;
+    const sourceVertices = sourceGraph.vertices || [];
+    const targetVertices = targetGraph.vertices || [];
+    const sourceLegs = stableGraphExternalLegsByVertex(sourceGraph);
+    const targetLegs = stableGraphExternalLegsByVertex(targetGraph);
+    const candidates = new Map();
+
+    sourceVertices.forEach((sourceVertex) => {
+      const sourceSignature = stableGraphVertexSignature(sourceVertex, sourceLegs);
+      let options = targetVertices
+        .filter((targetVertex) => stableGraphVertexSignature(targetVertex, targetLegs) === sourceSignature)
+        .map((targetVertex) => targetVertex.index);
+      candidates.set(sourceVertex.index, options);
+    });
+    if (Array.from(candidates.values()).some((list) => !list.length)) return 0;
+
+    const targetEdgeCounts = stableGraphVertexPairCounts(targetGraph);
+    const order = sourceVertices
+      .map((vertex) => vertex.index)
+      .sort((left, right) => {
+        const diff = (candidates.get(left) || []).length - (candidates.get(right) || []).length;
+        return diff || String(left).localeCompare(String(right));
+      });
+    const assigned = new Map();
+    const usedTargets = new Set();
+
+    const search = (position) => {
+      if (position >= order.length) {
+        return stableGraphEdgeMappingMultiplicity(sourceGraph, targetGraph, assigned);
+      }
+      let total = 0;
+      const sourceIndex = order[position];
+      for (const targetIndex of candidates.get(sourceIndex) || []) {
+        if (usedTargets.has(targetIndex)) continue;
+        assigned.set(sourceIndex, targetIndex);
+        usedTargets.add(targetIndex);
+        if (stableGraphPartialEdgeMappingFeasible(sourceGraph, assigned, targetEdgeCounts)) {
+          total += search(position + 1);
+        }
+        assigned.delete(sourceIndex);
+        usedTargets.delete(targetIndex);
+      }
+      return total;
+    };
+
+    return search(0);
+  }
+
+  function stableGraphSameSize(left, right) {
+    return !!(left && right)
+      && (left.vertices || []).length === (right.vertices || []).length
+      && (left.edges || []).length === (right.edges || []).length
+      && (left.legs || []).length === (right.legs || []).length;
+  }
+
+  function stableGraphExternalLegsByVertex(graphData) {
+    const byVertex = new Map((graphData.vertices || []).map((vertex) => [vertex.index, []]));
+    (graphData.legs || []).forEach((leg, legIndex) => {
+      if (!byVertex.has(leg.vertex)) byVertex.set(leg.vertex, []);
+      byVertex.get(leg.vertex).push(stableGraphExternalLegIdentity(leg, legIndex));
+    });
+    byVertex.forEach((legs) => legs.sort());
+    return byVertex;
+  }
+
+  function stableGraphExternalLegIdentity(leg, legIndex) {
+    const halfEdge = leg && leg.halfEdge;
+    if (halfEdge !== null && halfEdge !== undefined && Number.isInteger(Number(halfEdge))) {
+      return `h${Number(halfEdge)}`;
+    }
+    const key = leg && leg.key ? String(leg.key) : '';
+    if (key) return `k${key}`;
+    const label = leg && leg.label ? String(leg.label) : '';
+    if (label) return `label:${label}`;
+    return `leg${legIndex}`;
+  }
+
+  function stableGraphVertexSignature(vertex, externalLegsByVertex) {
+    const legs = externalLegsByVertex.get(vertex.index) || [];
+    return `g${stableGraphVertexGenus(vertex)}|legs:${legs.join(',')}`;
+  }
+
+  function stableGraphVertexGenus(vertex) {
+    return Number.isInteger(Number(vertex && vertex.genus)) ? Number(vertex.genus) : 0;
+  }
+
+  function stableGraphVertexPairCounts(graphData) {
+    const counts = new Map();
+    (graphData.edges || []).forEach((edge) => {
+      const key = stableGraphVertexPairKey(edge.from, edge.to);
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return counts;
+  }
+
+  function stableGraphVertexPairKey(left, right) {
+    const values = [String(left), String(right)].sort();
+    return `${values[0]}:${values[1]}`;
+  }
+
+  function stableGraphPartialEdgeMappingFeasible(sourceGraph, vertexMap, targetEdgeCounts) {
+    const mappedCounts = new Map();
+    for (const edge of sourceGraph.edges || []) {
+      if (!vertexMap.has(edge.from) || !vertexMap.has(edge.to)) continue;
+      const key = stableGraphVertexPairKey(vertexMap.get(edge.from), vertexMap.get(edge.to));
+      const nextCount = (mappedCounts.get(key) || 0) + 1;
+      if (nextCount > (targetEdgeCounts.get(key) || 0)) return false;
+      mappedCounts.set(key, nextCount);
+    }
+    return true;
+  }
+
+  function stableGraphEdgeMappingMultiplicity(sourceGraph, targetGraph, vertexMap) {
+    const targetCounts = stableGraphVertexPairCounts(targetGraph);
+    const sourceGroups = stableGraphEdgeGroups(sourceGraph);
+    let total = 1;
+
+    for (const group of sourceGroups.values()) {
+      const targetKey = stableGraphVertexPairKey(vertexMap.get(group.left), vertexMap.get(group.right));
+      const targetCount = targetCounts.get(targetKey) || 0;
+      if (targetCount !== group.count) return 0;
+      total *= factorialNumber(group.count);
+      if (group.left === group.right) total *= 2 ** group.count;
+    }
+    return total;
+  }
+
+  function stableGraphEdgeGroups(graphData) {
+    const groups = new Map();
+    (graphData.edges || []).forEach((edge) => {
+      const key = stableGraphVertexPairKey(edge.from, edge.to);
+      if (!groups.has(key)) {
+        groups.set(key, {
+          left: edge.from,
+          right: edge.to,
+          count: 0
+        });
+      }
+      groups.get(key).count += 1;
+    });
+    return groups;
+  }
+
+  function factorialNumber(value) {
+    let result = 1;
+    for (let factor = 2; factor <= value; factor += 1) result *= factor;
+    return result;
   }
 
   function scheduleDualGraphDegenerationForce(index, hover = false) {
@@ -9059,7 +9290,6 @@
     const ctx = canvas.getContext('2d');
     const emphasis = miniDegenerationEmphasis(degeneration);
     const emphasisStyle = emphasis.style;
-    const multiplicities = miniDualGraphMultiplicities(graphData);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#fffdf8';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -9073,7 +9303,6 @@
       ctx.lineWidth = 2.1;
       drawLayoutEdgePath(ctx, layout, edge, edgeIndex);
     });
-    drawMiniDualGraphMultiplicityBadges(ctx, graphData, layout, multiplicities, emphasis);
     graphData.legs.forEach((leg, legIndex) => {
       const legNode = layout.nodeMap.get(`l${legIndex}`);
       const vertexNode = layout.nodeMap.get(`v${leg.vertex}`);
@@ -9098,70 +9327,10 @@
     ctx.restore();
   }
 
-  function miniDualGraphMultiplicities(graphData) {
-    const counts = new Map();
-    graphData.edges.forEach((edge) => {
-      const key = stableEdgeMultiplicityKey(edge);
-      counts.set(key, (counts.get(key) || 0) + 1);
-    });
-    return counts;
-  }
-
   function stableEdgeMultiplicityKey(edge) {
     return edge.from === edge.to
       ? `loop:${edge.from}`
       : (edge.from < edge.to ? `${edge.from}:${edge.to}` : `${edge.to}:${edge.from}`);
-  }
-
-  function drawMiniDualGraphMultiplicityBadges(ctx, graphData, layout, multiplicities, emphasis) {
-    const drawn = new Set();
-    graphData.edges.forEach((edge, edgeIndex) => {
-      const key = stableEdgeMultiplicityKey(edge);
-      const count = multiplicities.get(key) || 0;
-      if (count <= 1 || drawn.has(key)) return;
-      drawn.add(key);
-      const point = miniEdgeMultiplicityPoint(layout, edge, edgeIndex);
-      if (!point) return;
-      const highlighted = emphasis.edges.has(edgeIndex);
-      drawMiniMultiplicityBadge(ctx, point.x, point.y, count, highlighted, emphasis.style);
-    });
-  }
-
-  function miniEdgeMultiplicityPoint(layout, edge, edgeIndex) {
-    const fromNode = layout.nodeMap.get(`v${edge.from}`);
-    const toNode = layout.nodeMap.get(`v${edge.to}`);
-    if (!fromNode || !toNode) return null;
-    if (edge.from === edge.to) {
-      const node1 = layout.nodeMap.get(`e${edgeIndex}_1`);
-      return node1 ? { x: node1.x, y: node1.y } : { x: fromNode.x + 12, y: fromNode.y - 12 };
-    }
-    const edgeNode = layout.nodeMap.get(`e${edgeIndex}`);
-    if (edgeNode) return { x: edgeNode.x, y: edgeNode.y };
-    return {
-      x: (fromNode.x + toNode.x) / 2,
-      y: (fromNode.y + toNode.y) / 2
-    };
-  }
-
-  function drawMiniMultiplicityBadge(ctx, x, y, value, highlighted, emphasisStyle = 'orange') {
-    const text = String(value);
-    const emphasisColors = highlighted ? dualGraphEmphasisBadgeColors(emphasisStyle) : null;
-    ctx.save();
-    ctx.font = '700 10px "JetBrains Mono", monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const metrics = ctx.measureText(text);
-    const width = Math.max(15, metrics.width + 8);
-    const height = 14;
-    roundedRectPath(ctx, x - width / 2, y - height / 2, width, height, 4);
-    ctx.fillStyle = emphasisColors ? emphasisColors.fill : '#eff6ff';
-    ctx.fill();
-    ctx.strokeStyle = emphasisColors ? emphasisColors.stroke : '#2563eb';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.fillStyle = emphasisColors ? emphasisColors.text : '#1e3a8a';
-    ctx.fillText(text, x, y + 0.2);
-    ctx.restore();
   }
 
   function miniDegenerationEmphasis(degeneration) {
@@ -9226,12 +9395,6 @@
       : { fill: '#f59e0b', stroke: '#92400e', text: '#3b2503' };
   }
 
-  function dualGraphEmphasisBadgeColors(style) {
-    return normalizeDualGraphDegenerationEmphasisStyle(style) === 'black'
-      ? { fill: '#f3f4f6', stroke: '#111827', text: '#111827' }
-      : { fill: '#ffedd5', stroke: '#b45309', text: '#7c2d12' };
-  }
-
   function enumerateDualGraphDivisorDegenerations(graphData) {
     const base = normalizedStableGraphFromDualGraph(graphData);
     const degenerations = [];
@@ -9239,10 +9402,10 @@
 
     base.vertices.forEach((vertex) => {
       if (vertex.genus > 0) {
-        addDualGraphDegeneration(degenerations, seen, createNonseparatingDegeneration(base, vertex));
+        addDualGraphDegeneration(degenerations, seen, createNonseparatingDegeneration(base, vertex), base);
       }
       separatingVertexDegenerations(base, vertex).forEach((degeneration) => {
-        addDualGraphDegeneration(degenerations, seen, degeneration);
+        addDualGraphDegeneration(degenerations, seen, degeneration, base);
       });
     });
 
@@ -9253,12 +9416,14 @@
     return stableGraphCanonicalKey(normalizedStableGraphFromDualGraph(graphData));
   }
 
-  function addDualGraphDegeneration(target, seen, degeneration) {
+  function addDualGraphDegeneration(target, seen, degeneration, sourceGraphData = null) {
     if (!degeneration) return;
     const key = stableGraphCanonicalKey(degeneration.graphData);
     if (seen.has(key)) return;
     seen.add(key);
     degeneration.id = `deg${target.length}`;
+    degeneration.sourceGraphData = sourceGraphData ? cloneStableGraph(sourceGraphData) : null;
+    degeneration.multiplicity = dualGraphDegenerationMultiplicity(degeneration);
     target.push(degeneration);
   }
 
