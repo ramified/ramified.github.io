@@ -1186,7 +1186,8 @@
 
     .sheaf-step-panel[hidden],
     .sheaf-step-row[hidden],
-    .sheaf-step-rules[hidden] {
+    .sheaf-step-rules[hidden],
+    .sheaf-step-saved-rules[hidden] {
       display: none;
     }
 
@@ -1285,6 +1286,34 @@
       color: var(--muted);
       font-size: 0.82rem;
       margin-left: 6px;
+    }
+
+    .sheaf-step-saved-rules {
+      border-top: 1px dotted var(--border);
+      padding-top: 8px;
+      margin: 8px 0;
+    }
+
+    .sheaf-step-saved-rule-title {
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .sheaf-step-saved-rule-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 4px 0;
+      font-size: 0.88rem;
+    }
+
+    .sheaf-step-saved-rule-row span {
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
 
     @media (max-width: 820px) {
@@ -2452,11 +2481,13 @@
             </div>
             <div class="sheaf-step-controls">
               <button class="btn btn-ghost sheaf-chart-export" id="class-step-apply" type="button">apply rules</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-save-rule" type="button">save formula as rule</button>
               <button class="btn btn-ghost sheaf-chart-export" id="class-step-undo" type="button">cancel last step</button>
               <button class="btn btn-ghost sheaf-chart-export" id="class-step-restart" type="button">restart</button>
               <button class="btn btn-ghost sheaf-chart-export" id="class-step-export" type="button">export</button>
               <button class="btn btn-ghost sheaf-chart-export" id="class-step-stop" type="button">stop</button>
             </div>
+            <div class="sheaf-step-saved-rules" id="class-step-saved-rules" hidden></div>
             <div class="hint" id="class-step-message"></div>
           </div>
         </div>
@@ -2538,6 +2569,13 @@
             <label class="opt-row">
               <input type="checkbox" id="global-invariant-replace">
               use integer in formulas
+            </label>
+          </div>
+          <div class="sheaf-field-row">
+            <span class="input-label">positive</span>
+            <label class="opt-row">
+              <input type="checkbox" id="global-invariant-positive" checked>
+              assume positive
             </label>
           </div>
           <div class="global-invariant-usage" id="global-invariant-usage"></div>
@@ -2887,11 +2925,11 @@
             <div class="sheaf-map-formula-picker">
               <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-self-sum-parent-button" type="button" data-sheaf-self-sum-pick="parent">sheaf</button>
               <span class="sheaf-map-formula-mark" id="sheaf-self-sum-symbol">^{&oplus;</span>
-              <input id="sheaf-self-sum-count" class="sheaf-input sheaf-self-sum-count" type="number" min="1" max="99" value="2" aria-label="self direct sum multiplicity">
+              <input id="sheaf-self-sum-count" class="sheaf-input sheaf-self-sum-count" type="text" value="2" maxlength="80" spellcheck="false" autocomplete="off" aria-label="self direct sum multiplicity">
               <span class="sheaf-map-formula-mark">}</span>
             </div>
           </div>
-          <div class="sheaf-note" id="sheaf-self-sum-pick-note" hidden>pick a sheaf and a positive integer</div>
+          <div class="sheaf-note" id="sheaf-self-sum-pick-note" hidden>pick a sheaf and a scalar expression</div>
           <div class="sheaf-field-row" id="sheaf-dual-formula-row" hidden>
             <span class="input-label">parent</span>
             <div class="sheaf-map-formula-picker">
@@ -3021,7 +3059,7 @@
           </div>
           <div class="sheaf-field-row" id="rank-row">
             <label class="input-label" for="rank-symbol">rank</label>
-            <input id="rank-symbol" class="sheaf-input" type="text" value="r" maxlength="16" spellcheck="false" autocomplete="off">
+            <input id="rank-symbol" class="sheaf-input" type="text" value="" maxlength="80" spellcheck="false" autocomplete="off">
           </div>
         </div>
 

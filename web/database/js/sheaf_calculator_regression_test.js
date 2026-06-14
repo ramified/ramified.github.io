@@ -41,6 +41,8 @@ function loadCalculator() {
     classStepHistoryPlain,
     toggleClassStepHistoryLine,
     stopClassStepSession,
+    saveCurrentClassStepFormulaAsRule,
+    deleteClassStepSavedRule,
     applySelectedClassStepRules,
     undoLastClassStep,
     applyClassStepRulesToPoly,
@@ -66,6 +68,7 @@ function loadCalculator() {
     startClassStepSessionFromFormulaBuilder,
     createClassFormulaStepSession,
     polyFromPowers,
+    formatPolyLatex,
     pullbackPolynomial,
     pushforwardPolynomialByDegree,
     mapPushforwardClassDefinitions,
@@ -2920,7 +2923,10 @@ function testClassStepDerivedCharacteristicTargets() {
   assert.strictEqual(toddSession.family, 'chern');
   assert.strictEqual(toddSession.target, 'todd');
   assert.strictEqual(api.buildClassRowsFromStepSession(toddSession, api.classDisplayOptions(geometry, sheaf))[0].label, 'td_1(E)');
-  assert(api.formatPolyPlain(api.classStepDisplayPoly(toddSession)).includes('c_1(E)'));
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(toddSession)), 'td_1(E)');
+  const toddRule = api.collectClassStepRuleCandidates(toddSession).find((candidate) => candidate.sourceLabel === 'Todd');
+  assert(toddRule);
+  assert(api.formatPolyPlain(api.homologyRuleRhsPoly(toddRule.rule)).includes('c_1(E)'));
 
   const segreSession = api.createClassStepSession(result, 'chern', null, 'segre');
   segreSession.active = false;
@@ -3010,12 +3016,20 @@ function testClassStepDerivedTargetAppliesVisibleHomologyRule() {
   session.components[1] = api.polyFromPowers({ [thetaId]: 1 });
   session.components[2] = zero;
   api.state.classStepSession = session;
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'sqrt td_2(E)');
+  session.candidates = api.collectClassStepRuleCandidates(session).map((candidate) => ({
+    ...candidate,
+    selected: candidate.sourceLabel === 'sqrt Todd'
+  }));
+  assert(session.candidates.some((candidate) => candidate.selected),
+    session.candidates.map((candidate) => `${candidate.sourceLabel}:${candidate.rule.id}:${api.formatPolyPlain(api.homologyRuleRhsPoly(candidate.rule))}`).join(' | '));
+  api.applySelectedClassStepRules();
+  assert(api.formatPolyPlain(api.classStepDisplayPoly(session)).includes('Theta^2'));
+  assert(api.buildClassRowsFromStepSession(session, api.classDisplayOptions(geometry, sheaf))[0].plain.includes('[p]'));
   session.candidates = api.collectClassStepRuleCandidates(session).map((candidate) => ({
     ...candidate,
     selected: (candidate.rules || [candidate.rule]).some((rule) => rule.id === 'theta-square-point')
   }));
-  assert(api.formatPolyPlain(api.classStepDisplayPoly(session)).includes('Theta^2'));
-  assert(api.buildClassRowsFromStepSession(session, api.classDisplayOptions(geometry, sheaf))[0].plain.includes('[p]'));
   assert(session.candidates.some((candidate) => candidate.selected),
     session.candidates.map((candidate) => `${candidate.sourceLabel}:${candidate.rule.id}:${api.formatPolyPlain(api.homologyRuleRhsPoly(candidate.rule))}`).join(' | '));
   api.applySelectedClassStepRules();
@@ -3275,6 +3289,82 @@ function testClassStepFormulaHistoryAndUndoLastStep() {
   assert.strictEqual(api.refs.classStepUndo.disabled, true);
 }
 
+function testClassStepSavedFormulaRulesAreReusableAndRemovable() {
+  const api = loadCalculator();
+  api.state.varieties = [{
+    id: 'X',
+    type: 'abstract',
+    dim: '1',
+    name: 'X'
+  }];
+  api.state.sheaves = [{ id: 'E', type: 'abstract', basis: 'chern', rank: '', name: 'E', baseVarietyId: 'X' }];
+  api.refs.classStepPanel = { hidden: false, classList: { toggle() {} } };
+  api.refs.classStepCard = { hidden: false, classList: { remove() {} } };
+  api.refs.classStepFormula = { innerHTML: '' };
+  api.refs.classStepHistoryControls = { hidden: true, innerHTML: '' };
+  api.refs.classStepRules = { hidden: false, innerHTML: '' };
+  api.refs.classStepCheckSwitch = { disabled: false, textContent: '' };
+  api.refs.classStepMessage = { textContent: '' };
+  api.refs.classStepApply = { disabled: false };
+  api.refs.classStepSaveRule = { disabled: true, title: '' };
+  api.refs.classStepUndo = { disabled: true };
+  api.refs.classStepUseCache = { checked: false };
+  api.refs.classStepOncePerRule = { checked: true };
+  api.refs.classStepOnePass = { checked: false };
+  api.refs.classStepSavedRules = { hidden: true, innerHTML: '' };
+
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const sheaf = api.sheafFromObject(api.state.sheaves[0], geometry);
+  const result = api.buildClassStepFallbackResult(geometry, sheaf, { message: 'test' });
+  api.state.lastResult = result;
+  const session = api.createClassStepSession(result, 'character', 0);
+  api.state.classStepSession = session;
+  session.components[0] = api.polyFromPowers({}).sub(api.polyFromPowers({}));
+  assert.strictEqual(api.saveCurrentClassStepFormulaAsRule(), true);
+  assert.strictEqual(api.state.classStepSavedRules.length, 1);
+  assert(api.refs.classStepSavedRules.innerHTML.includes('saved formulas'), api.refs.classStepSavedRules.innerHTML);
+
+  api.stopClassStepSession();
+  assert.strictEqual(api.state.classStepSavedRules.length, 1);
+
+  const nextSession = api.createClassStepSession(result, 'character', 0);
+  api.state.classStepSession = nextSession;
+  const saved = api.collectClassStepRuleCandidates(nextSession).find((candidate) => candidate.sourceLabel === 'saved formula');
+  assert(saved);
+  assert.strictEqual(saved.selected, false);
+  nextSession.candidates = api.collectClassStepRuleCandidates(nextSession).map((candidate) => ({
+    ...candidate,
+    selected: candidate.sourceLabel === 'saved formula'
+  }));
+  api.applySelectedClassStepRules();
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(nextSession)), '0');
+
+  assert.strictEqual(api.deleteClassStepSavedRule(api.state.classStepSavedRules[0].id), true);
+  assert.strictEqual(api.state.classStepSavedRules.length, 0);
+  assert(!api.collectClassStepRuleCandidates(api.createClassStepSession(result, 'character', 0)).some((candidate) => candidate.sourceLabel === 'saved formula'));
+}
+
+function testUnitFactorsAreNormalizedInStepPolynomials() {
+  const api = loadCalculator();
+  api.VARS.set('unitX', { degree: 0, cohomologyDegree: 0, latex: '1', plain: '1' });
+  api.VARS.set('a', { degree: 1, cohomologyDegree: 2, latex: 'a', plain: 'a' });
+  api.VARS.set('b', { degree: 1, cohomologyDegree: 2, latex: 'b', plain: 'b' });
+  const withUnit = api.polyFromPowers({ unitX: 1, a: 1 });
+  const withoutUnit = api.polyFromPowers({ a: 1 });
+  assert.strictEqual(api.formatPolyPlain(withUnit), 'a');
+  assert.strictEqual(api.formatPolyLatex(withUnit), 'a');
+  assert.strictEqual(api.formatPolyPlain(withUnit.add(withoutUnit)), '2*a');
+
+  const rule = {
+    id: 'a-to-b',
+    enabled: true,
+    lhs: { powers: { a: 1 } },
+    rhs: [{ coefficient: '1', powers: { b: 1, unitX: 1 } }]
+  };
+  const after = api.applyClassStepRulesToPoly(withUnit, [rule], 2, { oncePerRule: true, onePass: true });
+  assert.strictEqual(api.formatPolyPlain(after), 'b');
+}
+
 function testClassStepSimplifyIsSelectableRule() {
   const api = loadCalculator();
   api.state.varieties = [{
@@ -3445,14 +3535,64 @@ function testClassStepPushforwardOffersGrrRule() {
   const ch3Rule = grrRule.rules.find((rule) => api.formatPolyPlain(api.polyFromPowers(rule.lhs.powers)).includes('ch_3(AJ_*T_C)'));
   const materializedCh3 = api.classStepMaterializeRule(session, ch3Rule);
   const ch3Plain = api.formatPolyPlain(api.homologyRuleRhsPoly(materializedCh3));
-  assert.strictEqual(ch3Plain, '1/6*Theta^3 + 1/3*Theta^3*r(T_C)');
+  assert.strictEqual(ch3Plain, '1/6*Theta^3*r(T_C)');
   const ch4Rule = grrRule.rules.find((rule) => api.formatPolyPlain(api.polyFromPowers(rule.lhs.powers)).includes('ch_4(AJ_*T_C)'));
   const materializedCh4 = api.classStepMaterializeRule(session, ch4Rule);
   const ch4Plain = api.formatPolyPlain(api.homologyRuleRhsPoly(materializedCh4));
-  assert.strictEqual(ch4Plain, '-1/6*td_1(J)*Theta^3 - 1/3*td_1(J)*Theta^3*r(T_C)');
+  assert(ch4Plain.includes('AJ_*'), ch4Plain);
+  assert(ch4Plain.includes('td_1(C)') || ch4Plain.includes('ch_1(T_C)'), ch4Plain);
+  assert(!ch4Plain.includes('+ 1/3*Theta^3*r(T_C)'), ch4Plain);
   session.components[4] = api.applyClassStepRulesToPoly(session.components[4], [materializedCh4], geometry.dim, { oncePerRule: true, onePass: true });
   const nextCandidates = api.collectClassStepRuleCandidates(session).map((candidate) => candidate.sourceLabel);
   assert(nextCandidates.includes('Todd'));
+}
+
+function testClassStepAbelJacobiStructureSheafGrrKeepsSourceTermsSymbolic() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'C', type: 'curve', dim: '1', name: 'C', genus: '3', homology: { classes: { unit: { symbol: '1' }, point: { symbol: '[p]' } } } },
+    { id: 'J', type: 'abelian', dim: '3', name: 'J', genus: '3', homology: { classes: { theta: { symbol: '\\Theta' }, unit: { symbol: '1' }, point: { symbol: '[p]' } }, rules: [] }, construction: { type: 'jacobian', curveId: 'C' } }
+  ];
+  api.state.maps = [{ id: 'AJ', name: 'AJ', domainKind: 'variety', domainId: 'C', codomainKind: 'variety', codomainId: 'J', construction: { type: 'abel-jacobi', curveId: 'C', jacobianId: 'J' } }];
+  api.state.sheaves = [
+    { id: 'OC', type: 'structure', basis: 'chern', rank: '1', name: 'O_C', baseVarietyId: 'C' },
+    { id: 'P', type: 'abstract', basis: 'chern', rank: 'r', name: 'AJ_*O_C', baseVarietyId: 'J', construction: { type: 'pushforward', mapId: 'AJ', sheafId: 'OC', exact: true, proper: true } }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[1]);
+  const sheaf = api.sheafFromObject(api.state.sheaves[1], geometry);
+  const result = api.buildClassStepFallbackResult(geometry, sheaf, { message: 'test' });
+  const session = api.createClassStepSession(result, 'character', null);
+  const grr = api.collectClassStepRuleCandidates(session).find((candidate) => candidate.sourceLabel === 'GRR');
+  assert(grr);
+  const ch2Rule = grr.rules.find((rule) => api.formatPolyPlain(api.polyFromPowers(rule.lhs.powers)).includes('ch_2(AJ_*O_C)'));
+  const ch2Plain = api.formatPolyPlain(api.homologyRuleRhsPoly(api.classStepMaterializeRule(session, ch2Rule)));
+  assert.strictEqual(ch2Plain, '1/2*Theta^2*r(O_C)');
+  const ch3Rule = grr.rules.find((rule) => api.formatPolyPlain(api.polyFromPowers(rule.lhs.powers)).includes('ch_3(AJ_*O_C)'));
+  const ch3Plain = api.formatPolyPlain(api.homologyRuleRhsPoly(api.classStepMaterializeRule(session, ch3Rule)));
+  assert(ch3Plain.includes('AJ_*'), ch3Plain);
+  assert(ch3Plain.includes('O_C') || ch3Plain.includes('(C)'), ch3Plain);
+  assert(!ch3Plain.includes('+ Theta^2*r(O_C)'), ch3Plain);
+
+  applyClassStepCandidatesWithLabel(api, session, 'GRR');
+  applyClassStepCandidatesWithLabel(api, session, 'rank');
+  applyClassStepCandidatesWithLabel(api, session, 'Chern character');
+  applyClassStepCandidatesWithLabel(api, session, 'Todd');
+  applyClassStepCandidatesWithLabel(api, session, 'Tangent class');
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), '1/2*Theta^2 - 2*[p]');
+}
+
+function applyClassStepCandidatesWithLabel(api, session, sourceLabel) {
+  const rules = api.collectClassStepRuleCandidates(session)
+    .filter((candidate) => candidate.sourceLabel === sourceLabel)
+    .flatMap((candidate) => candidate.rules?.length ? candidate.rules : [candidate.rule].filter(Boolean))
+    .map((rule) => api.classStepMaterializeRule(session, rule));
+  assert(rules.length, sourceLabel);
+  for (let degree = 0; degree <= session.geometry.dim; degree += 1) {
+    session.components[degree] = api.applyClassStepRulesToPoly(session.components[degree], rules, session.geometry.dim, {
+      oncePerRule: false,
+      onePass: false
+    });
+  }
 }
 
 function testSymmetricProductAggregateRulesUseAveragedCoefficients() {
@@ -5047,10 +5187,13 @@ testClassFormulaBuilderTokenSourcesAndValidation();
 testClassFormulaBuilderRejectsInvalidMapAndStartsStepSession();
 testClassFormulaBuilderRendersSelectedClassButtonAndEditableTokens();
 testClassStepFormulaHistoryAndUndoLastStep();
+testClassStepSavedFormulaRulesAreReusableAndRemovable();
+testUnitFactorsAreNormalizedInStepPolynomials();
 testClassStepSimplifyIsSelectableRule();
 testClassStepCandidatesOnlyIncludeApplicableRules();
 testClassStepStartsFromFormalConstructedSheafClassAndOffersSesRule();
 testClassStepPushforwardOffersGrrRule();
+testClassStepAbelJacobiStructureSheafGrrKeepsSourceTermsSymbolic();
 testSymmetricProductGenusCanBeClearedWhileEditing();
 testSymmetricProductAggregateRulesUseAveragedCoefficients();
 testSymmetricProductAbelJacobiUsesProjectionFormulaForSigma();

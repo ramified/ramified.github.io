@@ -202,6 +202,7 @@
     simplificationCache: new Map(),
     classStepSession: null,
     classStepCache: new Map(),
+    classStepSavedRules: [],
     classFormulaBuilder: {
       varietyId: null,
       tokens: [],
@@ -450,6 +451,7 @@
     refs.globalInvariantValueRow = $('global-invariant-value-row');
     refs.globalInvariantValue = $('global-invariant-value');
     refs.globalInvariantReplace = $('global-invariant-replace');
+    refs.globalInvariantPositive = $('global-invariant-positive');
     refs.globalInvariantUsage = $('global-invariant-usage');
     refs.combinedEditor = $('combined-editor');
     refs.combinedType = $('combined-type');
@@ -601,10 +603,12 @@
     refs.classStepOnePass = $('class-step-one-pass');
     refs.classStepRules = $('class-step-rules');
     refs.classStepApply = $('class-step-apply');
+    refs.classStepSaveRule = $('class-step-save-rule');
     refs.classStepUndo = $('class-step-undo');
     refs.classStepRestart = $('class-step-restart');
     refs.classStepStop = $('class-step-stop');
     refs.classStepExport = $('class-step-export');
+    refs.classStepSavedRules = $('class-step-saved-rules');
     refs.classStepMessage = $('class-step-message');
     refs.furtherSimplify = $('further-simplify');
     refs.resetSimplify = $('reset-simplify');
@@ -723,7 +727,7 @@
       type: 'abstract',
       name: '\\mathcal{E}',
       twist: '1',
-      rank: 'r',
+      rank: '',
       baseVarietyId: baseVariety?.id || null,
       basis: 'chern',
       nameDirty: false
@@ -765,7 +769,8 @@
       name,
       value,
       hasValue: !!options.hasValue,
-      replaceWithValue: !!options.replaceWithValue
+      replaceWithValue: !!options.replaceWithValue,
+      positive: options.positive !== false
     };
   }
 
@@ -1139,7 +1144,7 @@
     sheaf.type = 'abstract';
     sheaf.name = data.name;
     sheaf.twist = '1';
-    sheaf.rank = isPullback ? sanitizeRankInput(data.sheaf.rank) : 'r';
+    sheaf.rank = isPullback ? sanitizeRankInput(data.sheaf.rank) : '';
     sheaf.baseVarietyId = isPullback ? data.map.domainId : data.map.codomainId;
     sheaf.basis = 'chern';
     sheaf.nameDirty = data.nameDirty;
@@ -1421,11 +1426,12 @@
     const name = sanitizeMathLabel(refs.sheafName.value, defaultName);
     const type = canonicalSheafType(refs.sheafType.value);
     const geometry = baseVariety ? geometryFromVariety(baseVariety) : null;
+    const rank = defaultRankForSheafType(type, geometry, refs.rank.value);
     return {
       type,
       name,
       twist: refs.twist.value,
-      rank: type === 'structure' || type === 'divisor-line' ? '1' : refs.rank.value,
+      rank,
       baseVarietyId: baseVariety?.id || null,
       basis: normalizeBasisValue(refs.basis.value),
       ...(type === 'divisor-line' ? { divisorCoefficients: sanitizeDivisorCoefficients(currentSheafDivisorCoefficients(), geometry) } : {}),
@@ -1592,7 +1598,8 @@
         name: symbol,
         hasValue: false,
         value: '0',
-        replaceWithValue: false
+        replaceWithValue: false,
+        positive: true
       });
       invariant.auto = true;
       state.globalInvariants.push(invariant);
@@ -1621,7 +1628,11 @@
     if (!invariant) return null;
     const id = globalInvariantVariableId(invariant);
     const latex = symbolToLatex(invariant.name);
-    defineVariable(id, 0, latex, { kind: 'globalInvariant', globalInvariantId: invariant.id });
+    defineVariable(id, 0, latex, {
+      kind: 'globalInvariant',
+      globalInvariantId: invariant.id,
+      positive: invariant.positive !== false
+    });
     return { invariant, id };
   }
 
@@ -1630,7 +1641,8 @@
       const id = globalInvariantVariableId(invariant);
       defineVariable(id, 0, globalInvariantLatex(invariant), {
         kind: 'globalInvariant',
-        globalInvariantId: invariant.id
+        globalInvariantId: invariant.id,
+        positive: invariant.positive !== false
       });
     });
   }
@@ -1663,6 +1675,15 @@
     return invariant?.hasValue ? sanitizeIntegerString(invariant.value, '0') : '';
   }
 
+  function globalInvariantById(id) {
+    return (state.globalInvariants || []).find((item) => item.id === id) || null;
+  }
+
+  function globalInvariantForVariableId(id) {
+    const data = VARS.get(id);
+    return data?.kind === 'globalInvariant' ? globalInvariantById(data.globalInvariantId) : null;
+  }
+
   function scalarExpressionPoly(text, source = null) {
     const raw = String(text || '').replace(/\s+/g, '');
     if (!raw) return Poly.zero();
@@ -1690,11 +1711,13 @@
   }
 
   function simplifyScalarExpressionPlain(text, source = null) {
+    if (!String(text ?? '').trim()) return '';
     const poly = scalarExpressionPoly(text, source);
     return poly ? formatPolyPlain(poly) : sanitizeGlobalInvariantName(text, 'r');
   }
 
   function simplifyScalarExpressionLatex(text, source = null) {
+    if (!String(text ?? '').trim()) return '';
     const poly = scalarExpressionPoly(text, source);
     return poly ? formatPolyLatex(poly) : symbolToLatex(sanitizeGlobalInvariantName(text, 'r'));
   }
@@ -1731,6 +1754,10 @@
     });
     state.sheaves.forEach((sheaf) => {
       addScalarReferenceRecord(records, sheaf, 'sheaf', 'rank', sheaf.rank);
+      if (sheafSelfOperationType(sheaf.construction?.type)) {
+        const field = sheaf.construction.type === 'self-tensor-product' ? 'tensor exponent' : 'multiplicity';
+        addScalarReferenceRecord(records, sheaf, 'sheaf', field, sheaf.construction.multiplicity);
+      }
       if (sheaf.construction?.type === 'picard-poincare-line-bundle') {
         addScalarReferenceRecord(records, sheaf, 'sheaf', 'degree', sheaf.construction.degreeSymbol);
       }
@@ -2416,6 +2443,7 @@
       if (refs.globalInvariantModeSymbolic) refs.globalInvariantModeSymbolic.checked = true;
       if (refs.globalInvariantModeInteger) refs.globalInvariantModeInteger.checked = false;
       if (refs.globalInvariantReplace) refs.globalInvariantReplace.checked = false;
+      if (refs.globalInvariantPositive) refs.globalInvariantPositive.checked = true;
       syncGlobalInvariantDraftControls();
     } else if (combinedProductCreateMode()) {
       refs.varietyType.value = 'product';
@@ -2474,7 +2502,7 @@
     } else if (kind === 'sheaf') {
       refs.sheafType.value = 'abstract';
       refs.twist.value = '1';
-      refs.rank.value = 'r';
+      refs.rank.value = '';
       refs.basis.value = 'chern';
       state.draftSheafBaseVarietyId = null;
       clearSheafBinaryDraft();
@@ -2943,7 +2971,7 @@
     refs.sheafType.value = mapConstruction ? 'map-operation' : (relativeConstruction || normalConstruction || idealConstruction || schurConstruction || internalHomConstruction || dualConstruction || selfSumConstruction || binaryConstruction || canonicalType);
     refs.sheafName.value = sheaf.name || defaultSheafNameLatex();
     refs.twist.value = sheaf.twist ?? '1';
-    refs.rank.value = sheaf.rank || 'r';
+    refs.rank.value = sheaf.rank || '';
     refs.basis.value = normalizeBasisValue(sheaf.basis);
     state.sheafDivisorDraft = canonicalType === 'divisor-line'
       ? { coefficients: divisorCoefficientsFromSheaf(sheaf, sheaf.baseVarietyId ? geometryFromVariety(baseVarietyForSheaf(sheaf)) : null) }
@@ -3121,7 +3149,7 @@
     state.sheafSelfSumDraft = {
       sheafId: construction.sheafId || null
     };
-    if (refs.sheafSelfSumCount) refs.sheafSelfSumCount.value = String(normalizeSelfSumMultiplicity(construction.multiplicity));
+    if (refs.sheafSelfSumCount) refs.sheafSelfSumCount.value = selfOperationMultiplicityPlain(construction.multiplicity);
     updateSheafSelfSumDraftControls();
   }
 
@@ -3202,6 +3230,7 @@
     if (refs.globalInvariantModeSymbolic) refs.globalInvariantModeSymbolic.checked = !hasValue;
     if (refs.globalInvariantModeInteger) refs.globalInvariantModeInteger.checked = hasValue;
     if (refs.globalInvariantReplace) refs.globalInvariantReplace.checked = hasValue && invariant.replaceWithValue === true;
+    if (refs.globalInvariantPositive) refs.globalInvariantPositive.checked = invariant.positive !== false;
     syncGlobalInvariantDraftControls();
     updateInputEditorTitles();
   }
@@ -3845,7 +3874,8 @@
       name,
       value,
       hasValue,
-      replaceWithValue: hasValue && !!refs.globalInvariantReplace?.checked
+      replaceWithValue: hasValue && !!refs.globalInvariantReplace?.checked,
+      positive: refs.globalInvariantPositive?.checked !== false
     };
   }
 
@@ -5272,7 +5302,7 @@
         normalizeControlVisibility();
       });
       refs.sheafSelfSumCount.addEventListener('change', () => {
-        refs.sheafSelfSumCount.value = String(currentSelfSumMultiplicity());
+        refs.sheafSelfSumCount.value = currentSelfSumMultiplicity();
         updateSheafSelfSumDraftControls({ normalizeCount: true });
         syncDefaultRank(true);
         syncDefaultSheafName();
@@ -5472,6 +5502,7 @@
     }
     if (refs.globalInvariantModeSymbolic) refs.globalInvariantModeSymbolic.addEventListener('change', syncGlobalInvariantDraftControls);
     if (refs.globalInvariantModeInteger) refs.globalInvariantModeInteger.addEventListener('change', syncGlobalInvariantDraftControls);
+    if (refs.globalInvariantPositive) refs.globalInvariantPositive.addEventListener('change', syncGlobalInvariantDraftControls);
     if (refs.globalInvariantValue) {
       refs.globalInvariantValue.addEventListener('change', () => {
         refs.globalInvariantValue.value = sanitizeIntegerString(refs.globalInvariantValue.value, '0');
@@ -5732,6 +5763,13 @@
         if (candidate) candidate.selected = checkbox.checked;
       });
     }
+    if (refs.classStepSavedRules) {
+      refs.classStepSavedRules.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-class-step-delete-saved]');
+        if (!button) return;
+        deleteClassStepSavedRule(button.dataset.classStepDeleteSaved);
+      });
+    }
     if (refs.classStepHistoryControls) {
       refs.classStepHistoryControls.addEventListener('click', (event) => {
         const button = event.target.closest('[data-class-step-history-toggle]');
@@ -5741,6 +5779,9 @@
     }
     if (refs.classStepApply) {
       refs.classStepApply.addEventListener('click', () => applySelectedClassStepRules());
+    }
+    if (refs.classStepSaveRule) {
+      refs.classStepSaveRule.addEventListener('click', () => saveCurrentClassStepFormulaAsRule());
     }
     if (refs.classStepUndo) {
       refs.classStepUndo.addEventListener('click', () => undoLastClassStep());
@@ -8508,7 +8549,7 @@
       type: 'abstract',
       name: replacing ? data.name : uniqueConstructedObjectName('sheaf', data.name),
       twist: '1',
-      rank: 'r',
+      rank: '',
       baseVarietyId: data.codomain.id,
       basis: 'chern',
       nameDirty: data.nameDirty,
@@ -8770,7 +8811,8 @@
     const ramifiedCoverTangent = ramifiedCoverTangentSheafForVariety(variety);
     if (ramifiedCoverTangent) return ramifiedCoverTangent;
     const geometry = geometryFromVariety(variety);
-    const defaultName = defaultSheafNameFor('tangent', '1', 'r', geometry.labelLatex, geometry);
+    const tangentRank = defaultRankForSheafType('tangent', geometry, '');
+    const defaultName = defaultSheafNameFor('tangent', tangentRank, 'r', geometry.labelLatex, geometry);
     const existing = state.sheaves.find((sheaf) => (
       sheaf.baseVarietyId === variety.id
       && sheaf.type === 'tangent'
@@ -8778,7 +8820,7 @@
     ));
     if (existing) {
       existing.twist = '1';
-      existing.rank = 'r';
+      existing.rank = tangentRank;
       existing.basis = 'chern';
       if (!existing.nameDirty) existing.name = defaultName;
       sheafFromObject(existing, geometry);
@@ -8789,7 +8831,7 @@
       type: 'tangent',
       name: defaultName,
       twist: '1',
-      rank: 'r',
+      rank: tangentRank,
       baseVarietyId: variety.id,
       basis: 'chern',
       nameDirty: false,
@@ -8810,7 +8852,7 @@
     ));
     if (existing) {
       existing.baseVarietyId = data.domain.id;
-      existing.rank = targetTangent.rank || 'r';
+      existing.rank = sanitizeRankInput(targetTangent.rank);
       existing.basis = 'chern';
       existing.construction.exact = true;
       existing.construction.derived = false;
@@ -8824,7 +8866,7 @@
       type: 'abstract',
       name: defaultName,
       twist: '1',
-      rank: targetTangent.rank || 'r',
+      rank: sanitizeRankInput(targetTangent.rank),
       baseVarietyId: data.domain.id,
       basis: 'chern',
       nameDirty: false,
@@ -8849,7 +8891,8 @@
     const ramifiedCoverCotangent = ramifiedCoverCotangentSheafForVariety(variety);
     if (ramifiedCoverCotangent) return ramifiedCoverCotangent;
     const geometry = geometryFromVariety(variety);
-    const defaultName = defaultSheafNameFor('cotangent', '1', 'r', geometry.labelLatex, geometry);
+    const cotangentRank = defaultRankForSheafType('cotangent', geometry, '');
+    const defaultName = defaultSheafNameFor('cotangent', cotangentRank, 'r', geometry.labelLatex, geometry);
     const existing = state.sheaves.find((sheaf) => (
       sheaf.baseVarietyId === variety.id
       && sheaf.type === 'cotangent'
@@ -8857,7 +8900,7 @@
     ));
     if (existing) {
       existing.twist = '1';
-      existing.rank = 'r';
+      existing.rank = cotangentRank;
       existing.basis = 'chern';
       if (!existing.nameDirty) existing.name = defaultName;
       sheafFromObject(existing, geometry);
@@ -8868,7 +8911,7 @@
       type: 'cotangent',
       name: defaultName,
       twist: '1',
-      rank: 'r',
+      rank: cotangentRank,
       baseVarietyId: variety.id,
       basis: 'chern',
       nameDirty: false,
@@ -8928,7 +8971,7 @@
     ));
     if (existing) {
       existing.baseVarietyId = data.domain.id;
-      existing.rank = targetSheaf.rank || 'r';
+      existing.rank = sanitizeRankInput(targetSheaf.rank);
       existing.basis = 'chern';
       existing.construction.exact = true;
       existing.construction.derived = false;
@@ -8942,7 +8985,7 @@
       type: 'abstract',
       name: defaultName,
       twist: '1',
-      rank: targetSheaf.rank || 'r',
+      rank: sanitizeRankInput(targetSheaf.rank),
       baseVarietyId: data.domain.id,
       basis: 'chern',
       nameDirty: false,
@@ -9008,7 +9051,7 @@
     ));
     if (existing) {
       existing.baseVarietyId = data.codomain.id;
-      existing.rank = 'r';
+      existing.rank = '';
       existing.basis = 'chern';
       existing.construction.exact = true;
       existing.construction.defaultName = defaultName;
@@ -9021,7 +9064,7 @@
       type: 'abstract',
       name: defaultName,
       twist: '1',
-      rank: 'r',
+      rank: '',
       baseVarietyId: data.codomain.id,
       basis: 'chern',
       nameDirty: false,
@@ -9457,7 +9500,7 @@
     if (missingIndex === 0 && numeric[1] != null && numeric[2] != null) return String(Math.max(0, numeric[1] - numeric[2]));
     if (missingIndex === 1 && numeric[0] != null && numeric[2] != null) return String(numeric[0] + numeric[2]);
     if (missingIndex === 2 && numeric[1] != null && numeric[0] != null) return String(Math.max(0, numeric[1] - numeric[0]));
-    return 'r';
+    return '';
   }
 
   function sesRankPlaceholderFromTerms(terms, missingIndex) {
@@ -9466,7 +9509,7 @@
     if (missingIndex === 0 && numeric[1] != null && numeric[2] != null) return String(numeric[1] - numeric[2]);
     if (missingIndex === 1 && numeric[0] != null && numeric[2] != null) return String(numeric[0] + numeric[2]);
     if (missingIndex === 2 && numeric[1] != null && numeric[0] != null) return String(numeric[1] - numeric[0]);
-    return 'r';
+    return '';
   }
 
   function tautologicalSesDraftBase() {
@@ -10113,7 +10156,7 @@
       type: 'abstract',
       name: uniqueConstructedObjectName('sheaf', data.name),
       twist: '1',
-      rank: isPullback ? data.sheaf.rank : 'r',
+      rank: isPullback ? sanitizeRankInput(data.sheaf.rank) : '',
       baseVarietyId: isPullback ? data.map.domainId : data.map.codomainId,
       basis: 'chern',
       nameDirty: data.nameDirty,
@@ -10169,11 +10212,11 @@
   }
 
   function defaultSelfSumSheafNameFromObjects(parent, multiplicity) {
-    return `${sanitizeMathLabel(parent?.name, '\\mathcal{E}')}^{\\oplus ${normalizeSelfSumMultiplicity(multiplicity)}}`;
+    return `${sanitizeMathLabel(parent?.name, '\\mathcal{E}')}^{\\oplus ${selfOperationMultiplicityLatex(multiplicity)}}`;
   }
 
   function defaultSelfTensorSheafNameFromObjects(parent, multiplicity) {
-    return `${sanitizeMathLabel(parent?.name, '\\mathcal{E}')}^{\\otimes ${normalizeSelfSumMultiplicity(multiplicity)}}`;
+    return `${sanitizeMathLabel(parent?.name, '\\mathcal{E}')}^{\\otimes ${selfOperationMultiplicityLatex(multiplicity)}}`;
   }
 
   function defaultSelfOperationSheafNameFromObjects(parent, multiplicity, operation) {
@@ -10307,6 +10350,10 @@
     return derived ? '\\otimes^{\\mathbf{L}}' : '\\otimes';
   }
 
+  function binaryOperationSubjectLatex(left, operationLatex, right) {
+    return `${left}\\,${operationLatex}\\,${right}`;
+  }
+
   function defaultComposedMapName(firstId, secondId) {
     const first = state.maps.find((item) => item.id === firstId);
     const second = state.maps.find((item) => item.id === secondId);
@@ -10394,21 +10441,26 @@
         ? String(Number(leftRank) + Number(rightRank))
         : String(Number(leftRank) * Number(rightRank));
     }
-    return 'r';
+    return '';
   }
 
   function selfSumRankPlaceholder(parent, multiplicity) {
     const rank = sanitizeRankInput(parent?.rank);
-    const n = normalizeSelfSumMultiplicity(multiplicity);
-    if (/^-?\d+$/.test(rank)) return String(Number(rank) * n);
-    return 'r';
+    if (!rank) return '';
+    const n = selfOperationMultiplicityPoly(multiplicity, { kind: 'sheaf', id: parent?.id || 'self-operation', field: 'multiplicity' });
+    const rankPoly = scalarExpressionPoly(rank, { kind: 'sheaf', id: parent?.id || 'rank', field: 'rank' });
+    if (!rankPoly) return '';
+    return formatRuleCoefficientPlain(rankPoly.mul(n, MAX_DIMENSION));
   }
 
   function selfTensorRankPlaceholder(parent, multiplicity) {
     const rank = sanitizeRankInput(parent?.rank);
-    const n = normalizeSelfSumMultiplicity(multiplicity);
-    if (/^-?\d+$/.test(rank)) return bigintPow(BigInt(rank), n).toString();
-    return n === 1 ? rank : 'r';
+    if (!rank) return '';
+    if (rank === '1') return '1';
+    const n = selfOperationMultiplicityInteger(multiplicity);
+    if (/^-?\d+$/.test(rank) && n != null) return bigintPow(BigInt(rank), n).toString();
+    if (rank === '0' && scalarExponentKnownPositive(selfOperationMultiplicityPoly(multiplicity, { kind: 'sheaf', id: parent?.id || 'self-operation', field: 'multiplicity' }))) return '0';
+    return n === 1 ? rank : '';
   }
 
   function selfOperationRankPlaceholder(parent, multiplicity, operation) {
@@ -10422,7 +10474,7 @@
     const numericRank = numericRankFromPlain(rank);
     const normalizedPartition = normalizeSchurPartition(partition);
     if (numericRank != null && normalizedPartition && normalizedPartition.length <= numericRank) return String(schurRepresentationRank(normalizedPartition, numericRank));
-    return rank || 'r';
+    return rank;
   }
 
   function uniqueConstructedObjectName(kind, proposedName) {
@@ -12308,13 +12360,17 @@
   function sheafMapDraftBase() {
     if (!sheafMapOperationInputMode()) return null;
     const map = sheafMapDraftMap();
-    const operation = sheafMapOperationForMapAndBase(map, state.draftSheafBaseVarietyId || activeEditingSheaf()?.baseVarietyId || null);
+    const sourceSheaf = sheafMapDraftSheaf();
+    if (inputIsCreateMode() && !sourceSheaf) return null;
+    const operation = sourceSheaf
+      ? sheafMapOperationFor(map)
+      : sheafMapOperationForMapAndBase(map, activeEditingSheaf()?.baseVarietyId || null);
     if (map && operation) {
       const baseId = operation === 'pullback' ? map.domainId : map.codomainId;
       const base = state.varieties.find((item) => item.id === baseId) || null;
       if (base) return base;
     }
-    const selectedId = state.draftSheafBaseVarietyId || activeEditingSheaf()?.baseVarietyId || null;
+    const selectedId = inputIsModifyMode() ? (activeEditingSheaf()?.baseVarietyId || null) : null;
     return state.varieties.find((item) => item.id === selectedId) || null;
   }
 
@@ -12331,6 +12387,7 @@
       if (canPushforward) return 'pushforward';
     }
     const baseId = state.draftSheafBaseVarietyId || activeEditingSheaf()?.baseVarietyId || null;
+    if (inputIsCreateMode()) return null;
     if (map && activeEditingSheaf()?.construction?.type === 'pullback' && map.domainKind === 'variety') {
       return sheafMapOperationForMapAndBase(map, map.domainId);
     }
@@ -12690,7 +12747,7 @@
   function updateSheafSelfSumDraftControls(options = {}) {
     const show = sheafSelfSumInputMode();
     if (refs.sheafSelfSumFormulaRow) refs.sheafSelfSumFormulaRow.hidden = !show;
-    if (refs.sheafSelfSumCount && options.normalizeCount) refs.sheafSelfSumCount.value = String(currentSelfSumMultiplicity());
+    if (refs.sheafSelfSumCount && options.normalizeCount) refs.sheafSelfSumCount.value = currentSelfSumMultiplicity();
     if (refs.sheafSelfSumSymbol) {
       refs.sheafSelfSumSymbol.textContent = refs.sheafType?.value === 'self-tensor-product' ? '^{\u2297' : '^{\u2295';
     }
@@ -12936,6 +12993,10 @@
 
   function syncSheafMapDraftBaseFromOperation() {
     const map = sheafMapDraftMap();
+    if (inputIsCreateMode() && !sheafMapDraftSheaf()) {
+      state.draftSheafBaseVarietyId = null;
+      return null;
+    }
     const operation = sheafMapOperationFor(map);
     if (!map || !operation) return null;
     const baseId = operation === 'pullback' ? map.domainId : map.codomainId;
@@ -13017,13 +13078,18 @@
   }
 
   function sheafMapPickHint(base = sheafMapDraftBase(), map = sheafMapDraftMap()) {
-    if (!base) return 'pick a base variety first';
     if (!state.maps.some((item) => allowableSheafMapOperationMap(item.id))) return inputIsModifyMode() ? 'add a compatible map and source sheaf' : 'add a map touching the base variety';
     if (state.sheafMapPickTarget === 'map') return map ? 'click a map to replace the parent map' : 'click a map whose domain or codomain is the base variety';
     if (!map) return 'click the map button first';
     const sourceBaseId = sheafMapOperationSourceBaseId(map);
-    if (!state.sheaves.some((sheaf) => sheaf.baseVarietyId === sourceBaseId && !(inputIsModifyMode() && sheaf.id === state.activeSheafId))) return 'add a sheaf on the source side of the operation';
-    if (state.sheafMapPickTarget === 'sheaf') return 'click a sheaf on the source side of the operation';
+    const hasSourceSheaf = sourceBaseId
+      ? state.sheaves.some((sheaf) => sheaf.baseVarietyId === sourceBaseId && !(inputIsModifyMode() && sheaf.id === state.activeSheafId))
+      : state.sheaves.some((sheaf) => (
+        (sheaf.baseVarietyId === map.domainId || sheaf.baseVarietyId === map.codomainId)
+        && !(inputIsModifyMode() && sheaf.id === state.activeSheafId)
+      ));
+    if (!hasSourceSheaf) return sourceBaseId ? 'add a sheaf on the source side of the operation' : 'add a sheaf on either side of the map';
+    if (state.sheafMapPickTarget === 'sheaf') return sourceBaseId ? 'click a sheaf on the source side of the operation' : 'click a sheaf on either side of the map';
     if (!sheafMapDraftSheaf()) return 'click the sheaf button first';
     return inputIsModifyMode() ? 'click update to rebuild the sheaf' : 'click add to create the sheaf';
   }
@@ -13798,6 +13864,15 @@
     return '\\mathcal{E}';
   }
 
+  function defaultRankForSheafType(type, geometry = null, currentValue = '') {
+    const canonical = canonicalSheafType(type);
+    if (canonical === 'locally-free') return sanitizeRankInput(currentValue) || '1';
+    if (canonical === 'structure' || canonical === 'divisor-line' || canonical === 'twist' || canonical === 'canonical') return '1';
+    if (canonical === 'tangent' || canonical === 'cotangent') return geometry && Number.isInteger(geometry.dim) ? String(geometry.dim) : sanitizeRankInput(currentValue);
+    if (isUniversalBundleSheafType(canonical)) return universalBundleRankPlain(geometry);
+    return sanitizeRankInput(currentValue);
+  }
+
   function defaultMapNameLatex() {
     if (refs.mapType?.value === 'composition') {
       const data = mapCompositionConstructionData();
@@ -13843,40 +13918,46 @@
 
   function syncDefaultRank(force = false) {
     if (!refs.rank || !force) return;
-    if (refs.sheafType.value === 'locally-free' || refs.sheafType.value === 'structure' || refs.sheafType.value === 'divisor-line') refs.rank.value = '1';
-    else if (refs.sheafType.value === 'abstract') refs.rank.value = 'r';
+    const type = refs.sheafType.value;
+    const geometry = draftBaseVariety() ? geometryFromVariety(draftBaseVariety()) : null;
+    if (type === 'locally-free' || type === 'structure' || type === 'divisor-line' || type === 'twist' || type === 'canonical') {
+      refs.rank.value = defaultRankForSheafType(type, geometry, refs.rank.value);
+    }
+    else if (type === 'tangent' || type === 'cotangent') {
+      refs.rank.value = defaultRankForSheafType(type, geometry, refs.rank.value);
+    }
+    else if (refs.sheafType.value === 'abstract') refs.rank.value = '';
     else if (isUniversalBundleSheafType(refs.sheafType.value)) {
-      const geometry = draftBaseVariety() ? geometryFromVariety(draftBaseVariety()) : null;
       refs.rank.value = universalBundleRankPlain(geometry);
     }
     else if (refs.sheafType.value === 'direct-sum' || refs.sheafType.value === 'tensor') {
       const data = binarySheafConstructionData();
-      refs.rank.value = data ? constructionRankPlaceholder(data.operation, data.left, data.right) : 'r';
+      refs.rank.value = data ? constructionRankPlaceholder(data.operation, data.left, data.right) : '';
     }
     else if (sheafSelfOperationType(refs.sheafType.value)) {
       const data = selfSumSheafConstructionData();
-      refs.rank.value = data ? selfOperationRankPlaceholder(data.parent, data.multiplicity, data.operation) : 'r';
+      refs.rank.value = data ? selfOperationRankPlaceholder(data.parent, data.multiplicity, data.operation) : '';
     }
     else if (refs.sheafType.value === 'dual') {
       const data = dualSheafConstructionData();
       const parent = data?.parent || sheafDualDraftSheaf();
-      refs.rank.value = parent ? sanitizeRankInput(parent.rank) : 'r';
+      refs.rank.value = parent ? sanitizeRankInput(parent.rank) : '';
     }
     else if (refs.sheafType.value === 'internal-hom') {
       const data = internalHomSheafConstructionData();
       const source = data?.source || sheafInternalHomDraftSheaf('source');
       const target = data?.target || sheafInternalHomDraftSheaf('target');
-      refs.rank.value = source && target ? constructionRankPlaceholder('tensor-sheaf', source, target) : 'r';
+      refs.rank.value = source && target ? constructionRankPlaceholder('tensor-sheaf', source, target) : '';
     }
     else if (refs.sheafType.value === 'ideal-sheaf') {
-      refs.rank.value = 'r';
+      refs.rank.value = '';
     }
     else if (refs.sheafType.value === 'normal-bundle') {
       const data = normalBundleConstructionData();
       const map = sheafNormalDraftMap();
       const domain = data?.domain || state.varieties.find((variety) => variety.id === map?.domainId);
       const codomain = data?.codomain || state.varieties.find((variety) => variety.id === map?.codomainId);
-      refs.rank.value = domain && codomain ? normalBundleRankPlaceholder(domain, codomain) : 'r';
+      refs.rank.value = domain && codomain ? normalBundleRankPlaceholder(domain, codomain) : '';
     }
     else if (refs.sheafType.value === 'relative-tangent' || refs.sheafType.value === 'relative-cotangent') {
       const data = relativeSheafConstructionData();
@@ -13884,15 +13965,15 @@
       const domain = data?.domain || state.varieties.find((variety) => variety.id === map?.domainId);
       const codomain = data?.codomain || state.varieties.find((variety) => variety.id === map?.codomainId);
       const type = refs.sheafType.value === 'relative-cotangent' ? 'cotangent' : 'tangent';
-      refs.rank.value = domain && codomain ? relativeSheafRankPlaceholder(domain, codomain, type) : 'r';
+      refs.rank.value = domain && codomain ? relativeSheafRankPlaceholder(domain, codomain, type) : '';
     }
     else if (refs.sheafType.value === 'schur') {
       const data = schurSheafConstructionData();
-      refs.rank.value = data ? schurRankPlaceholder(data.parent, data.partition) : 'r';
+      refs.rank.value = data ? schurRankPlaceholder(data.parent, data.partition) : '';
     }
     else if (refs.sheafType.value === 'map-operation') {
       const data = mapOperationSheafConstructionData();
-      refs.rank.value = data?.operation === 'pullback-sheaf' ? sanitizeRankInput(data.sheaf.rank) : 'r';
+      refs.rank.value = data?.operation === 'pullback-sheaf' ? sanitizeRankInput(data.sheaf.rank) : '';
     }
   }
 
@@ -14816,7 +14897,7 @@
       sheaf.baseVarietyId = nextBase;
       changed = true;
     }
-    const nextRank = isPullback ? sanitizeRankInput(sourceSheaf.rank) : 'r';
+    const nextRank = isPullback ? sanitizeRankInput(sourceSheaf.rank) : '';
     if (sheaf.rank !== nextRank) {
       sheaf.rank = nextRank;
       changed = true;
@@ -17815,7 +17896,8 @@
     const targetDegree = monoDegree(sourceKey) + codomainGeometry.dim - domainGeometry.dim;
     if (targetDegree < 0 || targetDegree > codomainGeometry.dim) return false;
     if (map.construction?.type !== 'abel-jacobi') return false;
-    return !!abelJacobiPushforwardSourceKey(map, sourceKey, codomainGeometry);
+    const automatic = abelJacobiPushforwardSourceKey(map, sourceKey, codomainGeometry);
+    return !!automatic && automaticPushforwardMatchesTargetDegree(automatic, targetDegree);
   }
 
   function projectionPushforwardSourceMonomialCanSurvive(map, mono, domainGeometry, codomainGeometry) {
@@ -18684,7 +18766,7 @@
   }
 
   function serializeHomologyPoly(poly) {
-    return sortedTerms(poly).map(([key, coeff]) => ({
+    return sortedTerms(stripUnitPowersFromPoly(poly)).map(([key, coeff]) => ({
       coefficient: formatRuleCoefficientPlain(coeff),
       powers: parseMonoKey(key)
     }));
@@ -19195,7 +19277,7 @@
     const twist = normalizedInt(refs.twist.value, -24, 24, 1);
     let basis = normalizeBasisValue(refs.basis.value);
     if (basis === 'roots' && type !== 'abstract' && !sheafHasLocallyFreeLabel({ type })) basis = 'chern';
-    const rankPlain = type === 'structure' || type === 'divisor-line' ? '1' : sanitizeRankInput(refs.rank.value);
+    const rankPlain = defaultRankForSheafType(type, draftBaseVariety() ? geometryFromVariety(draftBaseVariety()) : null, refs.rank.value);
     refs.rank.value = rankPlain;
     const labelLatex = sanitizeMathLabel(refs.sheafName.value, defaultSheafNameLatex());
     refs.sheafName.value = labelLatex;
@@ -19356,7 +19438,7 @@
 
   function classDisplayOptions(geometry, sheaf) {
     const supportsRoots = sheafSupportsChernRoots(sheaf);
-    const expression = supportsRoots && sheaf.basis === 'roots' ? 'roots' : 'standard';
+    const expression = supportsRoots && sheaf?.basis === 'roots' ? 'roots' : 'standard';
     const rootForm = refs.rootForm?.value === 'expanded' ? 'expanded' : 'product';
     const termMode = refs.classTermOnly?.checked ? 'term' : 'total';
     const termIndex = termMode === 'term'
@@ -19513,6 +19595,15 @@
     if (session.index === 0) {
       if (target === 'character') return session.family === 'character' ? componentOrZero(session.components, 0) : (session.rankComponent || Poly.zero());
       return Poly.one();
+    }
+    if (classStepTargetUsesFormalDerivedVariables(target)) {
+      const d = session.dimension;
+      if (!session.sheaf) {
+        if (session.index != null) return componentOrZero(session.components, session.index);
+        return totalFromComponents(session.components, d, Poly.one());
+      }
+      const comps = classStepFormalSheafDerivedComponents(session.sheaf, session.geometry, target, d);
+      return session.index != null ? componentOrZero(comps, session.index) : totalFromComponents(comps, d, Poly.one());
     }
     const bundle = bundleFromClassStepSession(session);
     if (!bundle) return Poly.zero();
@@ -19961,9 +20052,9 @@
       const actualBundle = classFormulaBundleForSheaf(geometry, sheaf);
       if (actualBundle) {
         [
-          ['todd', actualBundle.todd, `\\operatorname{td}(${sheaf.labelLatex})`, `td(${sheaf.labelPlain})`],
-          ['segre', actualBundle.segre, `s(${sheaf.labelLatex})`, `s(${sheaf.labelPlain})`],
-          ['sqrtTodd', actualBundle.sqrtTodd, `\\sqrt{\\operatorname{td}}(${sheaf.labelLatex})`, `sqrt td(${sheaf.labelPlain})`]
+          ['todd', classStepFormalSheafDerivedTotal(sheaf, geometry, 'todd', geometry.dim), `\\operatorname{td}(${sheaf.labelLatex})`, `td(${sheaf.labelPlain})`],
+          ['segre', classStepFormalSheafDerivedTotal(sheaf, geometry, 'segre', geometry.dim), `s(${sheaf.labelLatex})`, `s(${sheaf.labelPlain})`],
+          ['sqrtTodd', classStepFormalSheafDerivedTotal(sheaf, geometry, 'sqrtTodd', geometry.dim), `\\sqrt{\\operatorname{td}}(${sheaf.labelLatex})`, `sqrt td(${sheaf.labelPlain})`]
         ].forEach(([family, poly, latex, plain]) => {
           defs.push({
             type: 'atom',
@@ -20009,12 +20100,14 @@
       const actualBundle = classFormulaBundleForSheaf(geometry, sheaf);
       if (!actualBundle) return null;
       const familyData = {
-        todd: { poly: actualBundle.todd, latex: '\\operatorname{td}', plain: 'td' },
-        segre: { poly: actualBundle.segre, latex: 's', plain: 's' },
-        sqrtTodd: { poly: actualBundle.sqrtTodd, latex: '\\sqrt{\\operatorname{td}}', plain: 'sqrt td' }
+        todd: { poly: classStepFormalSheafDerivedTotal(sheaf, geometry, 'todd', geometry.dim), latex: '\\operatorname{td}', plain: 'td' },
+        segre: { poly: classStepFormalSheafDerivedTotal(sheaf, geometry, 'segre', geometry.dim), latex: 's', plain: 's' },
+        sqrtTodd: { poly: classStepFormalSheafDerivedTotal(sheaf, geometry, 'sqrtTodd', geometry.dim), latex: '\\sqrt{\\operatorname{td}}', plain: 'sqrt td' }
       }[normalizedFamily];
       if (!familyData) return null;
-      poly = degree == null ? familyData.poly : homogeneousPart(familyData.poly, degree);
+      poly = degree == null
+        ? familyData.poly
+        : (classStepTargetUsesFormalDerivedVariables(normalizedFamily) && degree === 0 ? Poly.one() : homogeneousPart(familyData.poly, degree));
       latexPrefix = familyData.latex;
       plainPrefix = familyData.plain;
       atomKind = 'sheaf-derived';
@@ -20931,8 +21024,8 @@
       sourceGeometry: geometry,
       sheafObject: sheaf.sourceObject || sheaf,
       variableId: `${prefix}ch0`,
-      symbolLatex: rankDisplay.latex || `r\\left(${labelLatex}\\right)`,
-      symbolPlain: rankDisplay.plain || `r(${labelPlain})`,
+      symbolLatex: rankDisplay.latex || `\\operatorname{ch}_{0}(${labelLatex})`,
+      symbolPlain: rankDisplay.plain || `ch_0(${labelPlain})`,
       classStepDisplayLatex: `\\operatorname{ch}_{0}(${labelLatex})`,
       classStepDisplayPlain: `ch_0(${labelPlain})`
     };
@@ -20948,31 +21041,17 @@
   }
 
   function classStepFormalRankDisplay(sheaf) {
-    const labelLatex = sheaf?.labelLatex || '\\mathcal{F}';
-    const labelPlain = sheaf?.labelPlain || latexToPlain(labelLatex) || 'F';
-    return {
-      latex: `r\\left(${labelLatex}\\right)`,
-      plain: `r(${labelPlain})`
-    };
+    return classStepKnownRankDisplay(sheaf) || { latex: '', plain: '' };
   }
 
   function classStepKnownRankDisplay(sheaf) {
     const plain = String(sheaf?.rankPlain || '').trim();
     if (!plain) return null;
-    if (/^-?\d+$/.test(plain)) {
-      return {
-        latex: simplifyScalarExpressionLatex(plain),
-        plain: simplifyScalarExpressionPlain(plain)
-      };
-    }
-    const source = sheaf?.sourceObject?.id
-      ? { kind: 'sheaf', id: sheaf.sourceObject.id, field: 'rank' }
-      : null;
-    const poly = scalarExpressionPoly(plain, source);
-    if (!poly || poly.terms.size !== 1 || !poly.terms.has('')) return null;
+    const labelLatex = sheafLabelLatex(sheaf);
+    const labelPlain = sheafLabelPlain(sheaf);
     return {
-      latex: formatPolyLatex(poly),
-      plain: formatPolyPlain(poly)
+      latex: `r(${labelLatex})`,
+      plain: `r(${labelPlain})`
     };
   }
 
@@ -21272,6 +21351,15 @@
         `).join('')
         : '<div class="hint">No rules can be applied to this formula right now.</div>';
     }
+    const saveState = classStepSaveRuleState(session);
+    if (refs.classStepSaveRule) {
+      refs.classStepSaveRule.disabled = !saveState.ok;
+      refs.classStepSaveRule.title = saveState.message || '';
+    }
+    if (refs.classStepSavedRules) {
+      refs.classStepSavedRules.innerHTML = renderClassStepSavedRules();
+      refs.classStepSavedRules.hidden = !(state.classStepSavedRules || []).length;
+    }
     if (refs.classStepCheckSwitch) {
       refs.classStepCheckSwitch.disabled = !!session.checkSwitchingRules;
       refs.classStepCheckSwitch.textContent = session.checkSwitchingRules ? 'switching checked' : 'check rules for switching';
@@ -21286,7 +21374,8 @@
     for (const candidate of candidates || []) {
       out.set(candidate.id, {
         selected: candidate.selected !== false,
-        autoReason: candidate.classStepAutoSelectionReason || ''
+        autoReason: candidate.classStepAutoSelectionReason || '',
+        manualAssumption: candidate.manualAssumption === true
       });
     }
     return out;
@@ -21297,7 +21386,7 @@
       if (!selections.has(candidate.id)) continue;
       const previous = selections.get(candidate.id);
       if (previous && typeof previous === 'object') {
-        if (previous.autoReason && !candidate.classStepAutoSelectionReason) continue;
+        if (previous.autoReason && !candidate.classStepAutoSelectionReason && !previous.manualAssumption) continue;
         candidate.selected = previous.selected;
       } else {
         candidate.selected = previous;
@@ -21319,31 +21408,39 @@
     const baseRules = [
       ...classStepBaseRules(session),
       ...(session.checkSwitchingRules ? classStepSwitchingRules(session) : []),
-      ...(refs.classStepUseCache?.checked ? classStepCachedRules(session) : [])
+      ...(refs.classStepUseCache?.checked ? classStepCachedRules(session) : []),
+      ...classStepSavedRules(session)
     ];
     const pullbackWrappedRules = classStepPullbackWrappedRules(session, baseRules);
     const rules = [
       ...baseRules,
       ...pullbackWrappedRules,
-      ...classStepMapWrappedRules(session, [...baseRules, ...pullbackWrappedRules])
+      ...classStepMapWrappedRules(session, [...baseRules, ...pullbackWrappedRules]),
+      ...classStepZeroPowerAssumptionRules(session)
     ];
     const seen = new Set();
+    const seenRewrites = new Set();
     const groups = new Map();
     const candidates = [];
     rules.map((rule, index) => ({ rule, index }))
       .filter(({ rule }) => classStepRuleApplies(session, rule))
       .forEach(({ rule, index }) => {
+        const rewriteKey = classStepRuleRewriteKey(rule);
+        if (rewriteKey && seenRewrites.has(rewriteKey)) return;
+        if (rewriteKey) seenRewrites.add(rewriteKey);
         const groupKey = rule.classStepGroupKey || classStepImplicitGroupKey(rule);
         if (groupKey) {
           let group = groups.get(groupKey);
           if (!group) {
-            group = { rule, rules: [], index, ruleKeys: new Set() };
+            group = { rule, rules: [], index, ruleKeys: new Set(), semanticRuleKeys: new Set() };
             groups.set(groupKey, group);
             candidates.push(group);
           }
           const ruleKey = classStepRuleInstanceKey(rule);
-          if (!group.ruleKeys.has(ruleKey)) {
+          const semanticRuleKey = classStepRuleSemanticKey(rule);
+          if (!group.ruleKeys.has(ruleKey) && !group.semanticRuleKeys.has(semanticRuleKey)) {
             group.ruleKeys.add(ruleKey);
+            group.semanticRuleKeys.add(semanticRuleKey);
             group.rules.push(rule);
           }
           return;
@@ -21361,8 +21458,10 @@
       const group = groups.get(groupKey);
       if (!group) return;
       const ruleKey = classStepRuleInstanceKey(rule);
-      if (group.ruleKeys.has(ruleKey)) return;
+      const semanticRuleKey = classStepRuleSemanticKey(rule);
+      if (group.ruleKeys.has(ruleKey) || group.semanticRuleKeys?.has(semanticRuleKey)) return;
       group.ruleKeys.add(ruleKey);
+      if (group.semanticRuleKeys) group.semanticRuleKeys.add(semanticRuleKey);
       group.rules.push(rule);
     });
     const out = candidates.map(({ rule, rules: candidateRules, index }) => ({
@@ -21370,7 +21469,8 @@
         rule,
         rules: candidateRules?.length ? candidateRules : [rule],
         sourceLabel: rule.stepSourceLabel || (rule.builtin ? 'built-in' : 'user'),
-        selected: rule.selected === false ? false : true
+        selected: rule.selected === false ? false : true,
+        ...(rule.assumption || rule.classStepSavedRule ? { manualAssumption: true } : {})
       }));
     if (classStepCanSimplify(session)) out.push(classStepSimplifyCandidate(out.length));
     applyClassStepCandidateDefaultSelection(out, session);
@@ -21379,6 +21479,41 @@
 
   function classStepCanSimplify(session) {
     return !!session?.geometry && !classStepDisplayPoly(session).isZero();
+  }
+
+  function classStepZeroPowerAssumptionRules(session) {
+    const rules = [];
+    const seen = new Set();
+    const addFromPoly = (poly) => {
+      for (const key of Poly.from(poly).terms.keys()) {
+        for (const id of Object.keys(parseMonoKey(key))) {
+          if (seen.has(id)) continue;
+          const data = VARS.get(id);
+          if (data?.zeroPowerCandidate !== true) continue;
+          seen.add(id);
+          const exponentLatex = data.exponentLatex || '?';
+          const exponentPlain = data.exponentPlain || latexToPlain(exponentLatex);
+          rules.push({
+            id: `step-zero-power-${id}`,
+            builtin: true,
+            enabled: true,
+            selected: false,
+            stepSourceLabel: 'assumption',
+            classStepAllowSameLhs: true,
+            classStepDisplayLatex: `\\text{assume }${exponentLatex}>0:\\ ${data.latex}=0`,
+            lhs: { powers: { [id]: 1 } },
+            rhs: [],
+            assumption: { kind: 'positive-exponent', exponentPlain }
+          });
+        }
+      }
+    };
+    addFromPoly(classStepDisplayPoly(session));
+    if (!session?.formulaSession) {
+      classStepRuleApplicationDegrees(session).forEach((degree) => addFromPoly(componentOrZero(session.components, degree)));
+      if (session.rankComponent) addFromPoly(session.rankComponent);
+    }
+    return rules;
   }
 
   function classStepSimplifyCandidate(index = 0) {
@@ -21402,30 +21537,52 @@
   }
 
   function applyClassStepCandidateDefaultSelection(candidates, session) {
-    const targetToddCandidates = candidates.filter((candidate) => classStepCandidateIsTargetTodd(candidate, session));
-    if (!targetToddCandidates.length) {
+    const targetDerivedCandidates = candidates.filter((candidate) => classStepCandidateIsTargetDerivedFirst(candidate, session));
+    if (!targetDerivedCandidates.length) {
       for (const candidate of candidates) delete candidate.classStepAutoSelectionReason;
       return candidates;
     }
-    const targetToddIds = new Set(targetToddCandidates.map((candidate) => candidate.id));
+    const targetDerivedIds = new Set(targetDerivedCandidates.map((candidate) => candidate.id));
     for (const candidate of candidates) {
-      if (targetToddIds.has(candidate.id)) {
+      if (candidate.manualAssumption) {
+        candidate.selected = candidate.selected === true;
+        delete candidate.classStepAutoSelectionReason;
+        continue;
+      }
+      if (targetDerivedIds.has(candidate.id)) {
         candidate.selected = candidate.selected !== false;
         delete candidate.classStepAutoSelectionReason;
       } else if (classStepCandidateIsSimplify(candidate)) {
         candidate.selected = false;
-        candidate.classStepAutoSelectionReason = 'target-todd-first';
+        candidate.classStepAutoSelectionReason = 'target-derived-first';
       } else {
         candidate.selected = false;
-        candidate.classStepAutoSelectionReason = 'target-todd-first';
+        candidate.classStepAutoSelectionReason = 'target-derived-first';
       }
     }
     return candidates;
   }
 
+  function classStepCandidateIsTargetDerivedFirst(candidate, session) {
+    return classStepCandidateIsTargetTodd(candidate, session)
+      || classStepCandidateIsTargetSheafDerived(candidate, session);
+  }
+
   function classStepCandidateIsTargetTodd(candidate, session) {
     if (!candidate || candidate.sourceLabel !== 'Todd') return false;
     return classStepCandidateRules(candidate).some((rule) => classStepRuleIsTargetTodd(rule, session));
+  }
+
+  function classStepCandidateIsTargetSheafDerived(candidate, session) {
+    const target = session?.target || session?.family;
+    if (!classStepTargetUsesFormalDerivedVariables(target)) return false;
+    if (!candidate || candidate.sourceLabel !== classStepDerivedSourceLabel(target)) return false;
+    return classStepCandidateRules(candidate).some((rule) => Object.keys(rule?.lhs?.powers || {}).some((id) => {
+      const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+      return data?.classStepKind === 'formalSheafDerived'
+        && data.classStepDerivedTarget === target
+        && (data.geometryId || null) === (session?.geometry?.varietyId || null);
+    }));
   }
 
   function classStepRuleIsTargetTodd(rule, session) {
@@ -21442,6 +21599,18 @@
     if (rule?.id) return `id:${rule.id}`;
     const lhsKey = monoKey(rule?.lhs?.powers || {});
     return `${lhsKey}:${classStepRuleDisplayKey(rule)}:${JSON.stringify(rule?.rhs || [])}`;
+  }
+
+  function classStepRuleSemanticKey(rule) {
+    const lhsKey = monoKey(rule?.lhs?.powers || {});
+    const rhsKey = JSON.stringify(rule?.rhs || []);
+    return `${lhsKey}:${classStepRuleDisplayKey(rule)}:${rhsKey}`;
+  }
+
+  function classStepRuleRewriteKey(rule) {
+    const lhsKey = monoKey(rule?.lhs?.powers || {});
+    if (!lhsKey) return '';
+    return `${lhsKey}:${JSON.stringify(rule?.rhs || [])}`;
   }
 
   function classStepBaseRules(session) {
@@ -21577,17 +21746,22 @@
     const bundle = classStepBasicConstructionBundle(sheaf, geometry, family, d);
     if (!bundle) return [];
     const comps = family === 'character' ? bundle.chComps : bundle.cComps;
-    return classStepSheafDefsForSheaf(sheaf, geometry, family).filter((def) => def.degree > 0).map((def) => ({
-      id: `step-${construction.type}-${def.id}`,
-      builtin: true,
-      enabled: true,
-      stepSourceLabel: classStepConstructionSourceLabel(construction.type),
-      classStepGroupKey: `construction:${construction.type}:${sheaf?.sourceObject?.id || sheaf?.id || ''}:${family}`,
-      classStepDisplayKey: `construction:${construction.type}:${family}:${classStepConstructionDisplayLatex(sheaf, construction, family)}`,
-      classStepDisplayLatex: classStepConstructionDisplayLatex(sheaf, construction, family),
-      lhs: { powers: { [def.id]: 1 } },
-      rhs: serializeHomologyPoly(componentOrZero(comps, def.degree))
-    }));
+    return classStepSheafDefsForSheaf(sheaf, geometry, family).filter((def) => def.degree > 0).map((def) => {
+      const displayLatex = classStepConstructionRuleDisplayLatex(sheaf, construction, family, def.degree);
+      const sheafKey = sheaf?.sourceObject?.id || sheaf?.id || '';
+      const degreeKey = construction.type === 'pullback' ? `:${def.degree}` : '';
+      return {
+        id: `step-${construction.type}-${def.id}`,
+        builtin: true,
+        enabled: true,
+        stepSourceLabel: classStepConstructionSourceLabel(construction.type),
+        classStepGroupKey: `construction:${construction.type}:${sheafKey}:${family}${degreeKey}`,
+        classStepDisplayKey: `construction:${construction.type}:${family}:${displayLatex}`,
+        classStepDisplayLatex: displayLatex,
+        lhs: { powers: { [def.id]: 1 } },
+        rhs: serializeHomologyPoly(componentOrZero(comps, def.degree))
+      };
+    });
   }
 
   function classStepBasicConstructionBundle(sheaf, geometry, family, d) {
@@ -21615,7 +21789,7 @@
       return buildDualBundle(d, sheaf, classStepFormalBundleForSheafObject(parentObject, geometry, d));
     }
     if (construction.type === 'pullback') {
-      return classStepFormalPullbackBundle(sheaf, geometry, construction, d);
+      return classStepFormalPullbackBundle(sheaf, geometry, construction, d, family);
     }
     return null;
   }
@@ -21628,7 +21802,7 @@
     return bundle;
   }
 
-  function classStepFormalPullbackBundle(sheaf, geometry, construction, d) {
+  function classStepFormalPullbackBundle(sheaf, geometry, construction, d, family = 'character') {
     const map = state.maps.find((item) => item.id === construction.mapId);
     const sourceObject = state.sheaves.find((item) => item.id === construction.sheafId);
     const codomain = state.varieties.find((item) => item.id === map?.codomainId);
@@ -21636,10 +21810,21 @@
     const codomainGeometry = geometryFromVariety(codomain);
     const sourceSheaf = sheafFromObject(sourceObject, codomainGeometry);
     const sourceFormal = buildClassStepFormalData(codomainGeometry, sourceSheaf, 'character');
-    const chComps = pullbackComponentArray(classStepPositiveComponents(sourceFormal.components), d, map);
-    const bundle = buildBundleFromCh(chComps, sourceFormal.rankLatex, sourceFormal.rankPlain, sheaf.labelLatex, sheaf.labelPlain);
+    let bundle;
+    if (sessionFamilyIsChernLike(family)) {
+      const sourceChern = buildClassStepFormalData(codomainGeometry, sourceSheaf, 'chern');
+      const cComps = pullbackComponentArray(classStepPositiveComponents(sourceChern.components), d, map);
+      bundle = buildBundleFromChern(cComps, sourceFormal.rankLatex, sourceFormal.rankPlain, sheaf.labelLatex, sheaf.labelPlain);
+    } else {
+      const chComps = pullbackComponentArray(classStepPositiveComponents(sourceFormal.components), d, map);
+      bundle = buildBundleFromCh(chComps, sourceFormal.rankLatex, sourceFormal.rankPlain, sheaf.labelLatex, sheaf.labelPlain);
+    }
     bundle.rankPoly = classStepRankPolyForFormalData(sourceFormal);
     return bundle;
+  }
+
+  function sessionFamilyIsChernLike(family) {
+    return family !== 'character';
   }
 
   function classStepPositiveComponents(comps) {
@@ -21658,6 +21843,19 @@
     return 'Construction';
   }
 
+  function classStepConstructionRuleDisplayLatex(sheaf, construction, family, degree = null) {
+    if (construction?.type === 'pullback' && Number.isInteger(degree) && degree > 0) {
+      const map = state.maps.find((item) => item.id === construction.mapId);
+      const [source] = classStepConstructionTermLabels([construction.sheafId]);
+      const subject = sheaf?.labelLatex || pullbackFunctorLatex(map, { derived: construction.derived === true || construction.exact !== true }) + source;
+      const pull = mapPullbackOperatorLatex(map);
+      return family === 'character'
+        ? `\\operatorname{ch}_{${degree}}(${subject})=${pull}\\operatorname{ch}_{${degree}}(${source})`
+        : `c_{${degree}}(${subject})=${pull}c_{${degree}}(${source})`;
+    }
+    return classStepConstructionDisplayLatex(sheaf, construction, family);
+  }
+
   function classStepConstructionDisplayLatex(sheaf, construction, family) {
     const subject = sheaf?.labelLatex || '\\mathcal{F}';
     const op = family === 'character' ? '\\operatorname{ch}' : 'c';
@@ -21669,11 +21867,11 @@
     }
     if (sheafSelfOperationType(construction.type)) {
       const [parent] = classStepConstructionTermLabels([construction.sheafId]);
-      const n = normalizeSelfSumMultiplicity(construction.multiplicity);
+      const n = selfOperationMultiplicityLatex(construction.multiplicity);
       if (construction.type === 'self-tensor-product') {
         return family === 'character'
           ? `\\operatorname{ch}(${subject})=\\operatorname{ch}(${parent})^{${n}}`
-          : `c(${subject})=c\\left(\\operatorname{ch}(${parent})^{${n}}\\right)`;
+          : `c(${subject})\\text{ from }\\operatorname{ch}(${subject})=\\operatorname{ch}(${parent})^{${n}}`;
       }
       return family === 'character'
         ? `\\operatorname{ch}(${subject})=${n}\\operatorname{ch}(${parent})`
@@ -21688,9 +21886,10 @@
     if (construction.type === 'tensor') {
       const [left, right] = classStepConstructionTermLabels(construction.sheafIds);
       const operation = tensorOperationLatex(construction.derived !== false);
+      const tensorSubject = binaryOperationSubjectLatex(left, operation, right);
       return family === 'character'
-        ? `\\operatorname{ch}(${left}${operation}${right})=\\operatorname{ch}(${left})\\operatorname{ch}(${right})`
-        : `c(${left}${operation}${right})=c\\left(\\operatorname{ch}(${left})\\operatorname{ch}(${right})\\right)`;
+        ? `\\operatorname{ch}(${tensorSubject})=\\operatorname{ch}(${left})\\operatorname{ch}(${right})`
+        : `c(${tensorSubject})\\text{ from }\\operatorname{ch}(${tensorSubject})=\\operatorname{ch}(${left})\\operatorname{ch}(${right})`;
     }
     if (construction.type === 'pullback') {
       const map = state.maps.find((item) => item.id === construction.mapId);
@@ -21719,11 +21918,81 @@
         const geometry = geometryByVarietyId(data.geometryId) || session.geometry;
         rules.push(classStepToddRuleForVariable(id, geometry, data.classStepDegree));
       }
+      if (data?.classStepKind === 'formalSheafDerived') {
+        const rule = classStepSheafDerivedRuleForVariable(id, data, session);
+        if (rule) rules.push(rule);
+      }
       const sourceDef = classStepSheafDefForVariable(id, data, session);
       if (sourceDef) rules.push(...classStepRulesForSheafDef(sourceDef, session));
     }
     rules.push(...classStepTangentChernRulesForVisibleVariables(session, ids));
+    rules.push(...classStepPullbackCommutationRules(session, ids));
     return rules.filter(Boolean);
+  }
+
+  function classStepPullbackCommutationRules(session, ids = classStepVisibleAndMapSourceVariableIds(session)) {
+    const rules = [];
+    const seen = new Set();
+    for (const id of ids) {
+      const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+      if (data?.kind !== 'mapHomology' || data.operation !== 'pullback' || !data.sourceKey) continue;
+      const sourceIds = Object.keys(parseMonoKey(data.sourceKey));
+      if (sourceIds.length !== 1 || parseMonoKey(data.sourceKey)[sourceIds[0]] !== 1) continue;
+      const sourceData = VARS.get(sourceIds[0]) || ensureMapHomologyVariableFromId(sourceIds[0]);
+      const source = classStepSheafDefForVariable(sourceIds[0], sourceData, session);
+      if (!source || source.def.degree < 1) continue;
+      for (const target of classStepPullbackCommutationTargets(data.mapId, source, session)) {
+        const key = `${id}:${target.def.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const rule = classStepPullbackCommutationRule(id, data, source, target);
+        if (rule) rules.push(rule);
+      }
+    }
+    return rules;
+  }
+
+  function classStepPullbackCommutationTargets(mapId, source, session) {
+    const targets = [];
+    for (const sheafObject of state.sheaves || []) {
+      const construction = sheafObject?.construction || {};
+      if (construction.type !== 'pullback' || !sameMapId(construction.mapId, mapId)) continue;
+      if (construction.sheafId !== (source.sheafObject?.id || source.sheaf?.sourceObject?.id)) continue;
+      const geometry = geometryByVarietyId(sheafObject.baseVarietyId) || session.geometry;
+      if (!geometry) continue;
+      const sheaf = sheafFromObject(sheafObject, geometry);
+      const def = classStepSheafDefsForSheaf(sheaf, geometry, source.family).find((entry) => entry.degree === source.def.degree);
+      if (def) targets.push({ def, sheaf, geometry, sheafObject });
+    }
+    return targets;
+  }
+
+  function classStepPullbackCommutationRule(mapVariableId, mapData, source, target) {
+    const map = state.maps.find((item) => sameMapId(item.id, mapData.mapId));
+    if (!map) return null;
+    const family = source.family === 'character' ? 'character' : 'chern';
+    const sourceLabel = sheafLabelLatex(source.sheaf);
+    const targetLabel = sheafLabelLatex(target.sheaf);
+    const pull = mapPullbackOperatorLatex(map);
+    const sourceClassLatex = family === 'character'
+      ? `\\operatorname{ch}_{${source.def.degree}}(${sourceLabel})`
+      : `c_{${source.def.degree}}(${sourceLabel})`;
+    const targetClassLatex = family === 'character'
+      ? `\\operatorname{ch}_{${target.def.degree}}(${targetLabel})`
+      : `c_{${target.def.degree}}(${targetLabel})`;
+    return {
+      id: `step-pullback-commute-${mapVariableId}-${target.def.id}`,
+      builtin: true,
+      enabled: true,
+      stepSourceLabel: 'Pullback',
+      classStepKind: 'pullback-commutation',
+      classStepGroupKey: `pullback-commute:${map.id || mapData.mapId}:${source.sheafObject?.id || source.sheaf?.sourceObject?.id || ''}:${family}`,
+      classStepDisplayKey: `pullback-commute:${map.id || mapData.mapId}:${family}:${source.def.degree}`,
+      classStepDisplayLatex: `${targetClassLatex}=${pull}\\left(${sourceClassLatex}\\right)`,
+      classStepPayoffRule: true,
+      lhs: { powers: { [target.def.id]: 1 } },
+      rhs: [{ coefficient: '1', powers: { [mapVariableId]: 1 } }]
+    };
   }
 
   function classStepTangentChernRulesForVisibleVariables(session, ids = classStepVisibleAndMapSourceVariableIds(session)) {
@@ -21797,6 +22066,55 @@
       lhs: { powers: { [id]: 1 } },
       rhs: serializeHomologyPoly(rhs)
     };
+  }
+
+  function classStepSheafDerivedRuleForVariable(id, data, session) {
+    const degree = data?.classStepDegree;
+    const target = normalizeClassStepTargetValue(data?.classStepDerivedTarget);
+    if (!session?.geometry || !degree) return null;
+    const sheafObject = state.sheaves.find((item) => item.id === data.sheafObjectId);
+    const geometry = geometryByVarietyId(data.geometryId) || session.geometry;
+    const sheaf = sheafObject
+      ? sheafFromObject(sheafObject, geometry)
+      : (session.sheaf || null);
+    if (!sheaf) return null;
+    const bundle = classStepCurrentDerivedRuleBundle(session, sheaf, geometry)
+      || classStepFormalDerivedRuleBundle(sheaf, geometry);
+    const total = classStepDerivedBundlePoly(bundle, target);
+    const rhs = homogeneousPart(total, degree);
+    if (polyEquals(rhs, Poly.variable(id))) return null;
+    return {
+      id: `step-sheaf-${target}-${id}`,
+      builtin: true,
+      enabled: true,
+      stepSourceLabel: classStepDerivedSourceLabel(target),
+      classStepGroupKey: `${target}:sheaf:${sheaf?.sourceObject?.id || sheaf?.id || data.sheafObjectId || ''}`,
+      classStepDisplayKey: `${target}:sheaf:${sheaf?.sourceObject?.id || sheaf?.id || data.sheafObjectId || ''}`,
+      classStepDisplayLatex: `${classStepTargetSymbolLatex(target)}(${sheaf.labelLatex})`,
+      classStepApplyAllOccurrences: true,
+      lhs: { powers: { [id]: 1 } },
+      rhs: serializeHomologyPoly(rhs)
+    };
+  }
+
+  function classStepCurrentDerivedRuleBundle(session, sheaf, geometry) {
+    if (!session?.sheaf || !sheaf || !geometry) return null;
+    const sessionSheafId = session.sheaf?.sourceObject?.id || session.sheaf?.id || null;
+    const targetSheafId = sheaf?.sourceObject?.id || sheaf?.id || null;
+    if (!sessionSheafId || !targetSheafId || sessionSheafId !== targetSheafId) return null;
+    if ((session.geometry?.varietyId || null) !== (geometry.varietyId || null)) return null;
+    return bundleFromClassStepSession(session);
+  }
+
+  function classStepFormalDerivedRuleBundle(sheaf, geometry) {
+    const chernFormal = buildClassStepFormalData(geometry, sheaf, 'chern');
+    return buildBundleFromChern(
+      classStepPositiveComponents(chernFormal.components),
+      chernFormal.rankLatex,
+      chernFormal.rankPlain,
+      sheaf.labelLatex,
+      sheaf.labelPlain
+    );
   }
 
   function buildFormalTangentChernClassBundle(geometry) {
@@ -21951,7 +22269,7 @@
         : classStepChernToCharacterRule(source, session);
       if (rule) rules.push(rule);
     }
-    return rules.filter((rule) => classStepSwitchingRuleRevealsApplicableRule(rule, session));
+    return rules.filter((rule) => classStepSwitchingRuleApplies(rule, session));
   }
 
   function classStepCharacterToChernRule(source, session) {
@@ -22009,6 +22327,15 @@
       const afterKeys = classStepNonSwitchCandidateKeys(classStepProbeSessionWithDisplayPoly(session, converted));
       return [...afterKeys].some((key) => !beforeKeys.has(key));
     });
+  }
+
+  function classStepSwitchingRuleApplies(rule, session) {
+    const visible = classStepDisplayPoly(session);
+    if (!classStepRuleAppliesToPoly(visible, rule)) {
+      return classStepMapWrappedRules(session, [rule]).some((variant) => classStepRuleAppliesToPoly(visible, variant));
+    }
+    const converted = applyOneHomologyRuleOnce(visible, rule, session.geometry?.dim ?? MAX_DIMENSION, {});
+    return !polyEquals(visible, converted);
   }
 
   function classStepProbeSessionWithDisplayPoly(session, displayPoly) {
@@ -22143,6 +22470,7 @@
       const domainGeometry = geometryByVarietyId(map.domainId) || session.geometry;
       const codomainGeometry = geometryByVarietyId(map.codomainId) || session.geometry;
       for (const rule of rules || []) {
+        if (rule?.classStepKind === 'pullback-commutation') continue;
         if (!classStepRuleAppliesToPoly(sourcePoly, rule)) continue;
         const reducedSource = applyClassStepRulesToPoly(sourcePoly, [classStepMaterializeRule(session, rule)], codomainGeometry?.dim ?? MAX_DIMENSION, {
           oncePerRule: true,
@@ -22328,6 +22656,62 @@
     return id;
   }
 
+  function classStepTargetUsesFormalDerivedVariables(target) {
+    return target === 'todd' || target === 'segre' || target === 'sqrtTodd';
+  }
+
+  function classStepDerivedSourceLabel(target) {
+    if (target === 'todd') return 'Todd';
+    if (target === 'segre') return 'Segre';
+    if (target === 'sqrtTodd') return 'sqrt Todd';
+    return 'Derived class';
+  }
+
+  function classStepDerivedBundlePoly(bundle, target) {
+    if (target === 'todd') return bundle.todd;
+    if (target === 'segre') return bundle.segre;
+    if (target === 'sqrtTodd') return bundle.sqrtTodd;
+    return Poly.zero();
+  }
+
+  function classStepFormalSheafDerivedComponents(sheaf, geometry, target, d = geometry?.dim ?? MAX_DIMENSION) {
+    const comps = zeroComponentArray(d);
+    for (let i = 1; i <= d; i += 1) comps[i] = Poly.variable(classStepFormalSheafDerivedVariableId(sheaf, geometry, target, i));
+    return comps;
+  }
+
+  function classStepFormalSheafDerivedTotal(sheaf, geometry, target, d = geometry?.dim ?? MAX_DIMENSION) {
+    return totalFromComponents(classStepFormalSheafDerivedComponents(sheaf, geometry, target, d), d, Poly.one());
+  }
+
+  function classStepFormalSheafDerivedVariableId(sheaf, geometry, target, degree) {
+    const prefix = defaultSheafVariablePrefix(sheaf);
+    const safeTarget = target === 'sqrtTodd' ? 'sqrtTd' : target;
+    const id = `${prefix}${safeTarget}${degree}`;
+    const labelLatex = sheafLabelLatex(sheaf);
+    const labelPlain = sheafLabelPlain(sheaf);
+    const symbolLatex = classStepDerivedVariableLatex(target, degree, labelLatex);
+    const symbolPlain = `${classStepTargetSymbolPlain(target)}_${degree}(${labelPlain})`;
+    defineVariable(id, degree, symbolLatex, {
+      kind: 'sheafDerived',
+      classStepKind: 'formalSheafDerived',
+      classStepFamily: target,
+      classStepDerivedTarget: target,
+      classStepDegree: degree,
+      sheafObjectId: sheaf?.sourceObject?.id || sheaf?.id || null,
+      geometryId: geometry?.varietyId || null,
+      cohomologyDegree: 2 * degree,
+      plain: symbolPlain
+    });
+    return id;
+  }
+
+  function classStepDerivedVariableLatex(target, degree, labelLatex) {
+    if (target === 'segre') return `s_{${degree}}(${labelLatex})`;
+    if (target === 'sqrtTodd') return `\\left(\\sqrt{\\operatorname{td}}\\right)_{${degree}}(${labelLatex})`;
+    return `\\operatorname{td}_{${degree}}(${labelLatex})`;
+  }
+
   function classStepGrrDisplayLatex(map, domainGeometry, targetGeometry, sourceSheafObject, targetSheaf) {
     const sourceLatex = sanitizeMathLabel(sourceSheafObject?.name, '\\mathcal{F}^{\\bullet}');
     const targetLatex = targetSheaf?.labelLatex || pushforwardFunctorLatex(map, { proper: true }) + sourceLatex;
@@ -22447,6 +22831,263 @@
     return rules;
   }
 
+  function saveCurrentClassStepFormulaAsRule() {
+    const session = state.classStepSession;
+    if (!session) return false;
+    const stateInfo = classStepSaveRuleState(session);
+    if (!stateInfo.ok || !stateInfo.entries?.length) {
+      session.message = stateInfo.message || 'This formula cannot be saved as a rule.';
+      renderClassStepPanel();
+      return false;
+    }
+    let added = 0;
+    let updated = 0;
+    for (const entry of stateInfo.entries) {
+      const existingIndex = (state.classStepSavedRules || []).findIndex((item) => classStepSavedRuleSameRewrite(item, entry));
+      if (existingIndex >= 0) {
+        state.classStepSavedRules[existingIndex] = entry;
+        updated += 1;
+      } else {
+        state.classStepSavedRules.push(entry);
+        added += 1;
+      }
+    }
+    const count = added + updated;
+    session.message = count === 1
+      ? (updated ? 'Updated the saved formula rule.' : 'Saved this formula as a rule.')
+      : `Saved ${count} formula rules.`;
+    renderClassStepPanel();
+    refreshExport(state.exportScope || 'main');
+    typeset(refs.classStepPanel);
+    return true;
+  }
+
+  function classStepSaveRuleState(session) {
+    const entries = classStepSavedRuleEntriesFromSession(session);
+    if (!entries.length) {
+      return {
+        ok: false,
+        message: 'Only formulas with a single monomial left side can be saved as rewrite rules.'
+      };
+    }
+    const validEntries = entries.filter((entry) => {
+      const rule = classStepRuleFromSavedEntry(entry);
+      if (!rule) return false;
+      return !polyEquals(polyFromPowers(rule.lhs?.powers || {}), homologyRuleRhsPoly(rule));
+    });
+    if (!validEntries.length) {
+      return { ok: false, message: 'The current formula is unchanged.' };
+    }
+    return { ok: true, message: '', entries: validEntries };
+  }
+
+  function classStepSavedRuleEntriesFromSession(session) {
+    if (!session?.geometry) return [];
+    if (session.formulaSession) {
+      return [classStepSavedRuleEntryFromPolys(
+        session,
+        Poly.from(session.originalFormulaPoly || componentOrZero(session.originalComponents, 0)),
+        Poly.from(session.formulaPoly || classStepDisplayPoly(session)),
+        0,
+        classStepLabelLatex(session),
+        classStepLabelPlain(session)
+      )].filter(Boolean);
+    }
+    if (classStepUsesDerivedTarget(session)) {
+      return [classStepSavedRuleEntryFromPolys(
+        session,
+        classStepOriginalDisplayPoly(session),
+        classStepDisplayPoly(session),
+        session.index ?? null,
+        classStepLabelLatex(session),
+        classStepLabelPlain(session)
+      )].filter(Boolean);
+    }
+    const entries = [];
+    const degrees = classStepRuleApplicationDegrees(session);
+    for (const degree of degrees) {
+      const lhs = componentOrZero(session.originalComponents, degree);
+      const rhs = componentOrZero(session.components, degree);
+      const entry = classStepSavedRuleEntryFromPolys(
+        session,
+        lhs,
+        rhs,
+        degree,
+        classStepComponentRuleLabelLatex(session, degree),
+        classStepComponentRuleLabelPlain(session, degree)
+      );
+      if (entry) entries.push(entry);
+    }
+    if (session.rankComponent) {
+      const entry = classStepSavedRuleEntryFromPolys(
+        session,
+        Poly.from(session.originalRankComponent || Poly.zero()),
+        Poly.from(session.rankComponent || Poly.zero()),
+        0,
+        '\\operatorname{ch}_{0}',
+        'ch_0'
+      );
+      if (entry) entries.push(entry);
+    }
+    return entries;
+  }
+
+  function classStepOriginalDisplayPoly(session) {
+    if (!session) return Poly.zero();
+    if (session.formulaSession) return Poly.from(session.originalFormulaPoly || componentOrZero(session.originalComponents, 0));
+    if (classStepUsesDerivedTarget(session)) {
+      return classStepDerivedDisplayPoly({
+        ...session,
+        components: session.originalComponents || session.components,
+        rankComponent: session.originalRankComponent || session.rankComponent,
+        displayOverrides: {}
+      }, session.target || session.family);
+    }
+    if (session.index === 0) return session.family === 'chern' ? Poly.one() : componentOrZero(session.originalComponents, 0);
+    if (session.index != null) return componentOrZero(session.originalComponents, session.index);
+    const constant = session.family === 'chern' ? Poly.one() : componentOrZero(session.originalComponents, 0);
+    return totalFromComponents(session.originalComponents || session.components, session.dimension, constant);
+  }
+
+  function classStepComponentRuleLabelLatex(session, degree) {
+    const target = session?.family || 'chern';
+    const symbol = target === 'character' ? '\\operatorname{ch}' : 'c';
+    return `${symbol}_{${degree}}(${session?.bundleLabelLatex || 'F'})`;
+  }
+
+  function classStepComponentRuleLabelPlain(session, degree) {
+    const target = session?.family || 'chern';
+    const symbol = target === 'character' ? 'ch' : 'c';
+    return `${symbol}_${degree}(${session?.bundleLabelPlain || 'F'})`;
+  }
+
+  function classStepSavedRuleEntryFromPolys(session, lhs, rhs, degree, labelLatex, labelPlain) {
+    lhs = stripUnitPowersFromPoly(lhs);
+    rhs = stripUnitPowersFromPoly(rhs);
+    if (lhs.isZero() || polyEquals(lhs, rhs)) return null;
+    const lhsTerms = sortedTerms(lhs);
+    if (lhsTerms.length !== 1) return null;
+    const [lhsKey, lhsCoeff] = lhsTerms[0];
+    if (!lhsCoeff.isOne() || !lhsKey) return null;
+    const rule = {
+      lhs: { powers: parseMonoKey(lhsKey) },
+      rhs: serializeHomologyPoly(rhs)
+    };
+    const id = `step-saved-${hashString(`${session.geometry.varietyId}:${session.family}:${degree}:${lhsKey}:${JSON.stringify(rule.rhs)}`)}`;
+    const lhsLatex = formatPolyLatex(lhs);
+    const rhsLatex = formatPolyLatex(rhs);
+    const lhsPlain = formatPolyPlain(lhs);
+    const rhsPlain = formatPolyPlain(rhs);
+    return {
+      id,
+      family: session.family || 'formula',
+      target: session.target || session.family || 'formula',
+      degree,
+      dimension: session.dimension,
+      geometryId: session.geometry?.varietyId || null,
+      labelLatex,
+      labelPlain,
+      lhs: rule.lhs,
+      rhs: rule.rhs,
+      lhsLatex,
+      rhsLatex,
+      lhsPlain,
+      rhsPlain,
+      displayLatex: `${lhsLatex}=${rhsLatex}`,
+      displayPlain: `${lhsPlain}=${rhsPlain}`,
+      variableIds: [...new Set(homologyRuleVariableIds(rule))]
+    };
+  }
+
+  function classStepSavedRuleSameRewrite(left, right) {
+    return !!left && !!right
+      && left.geometryId === right.geometryId
+      && left.family === right.family
+      && monoKey(left.lhs?.powers || {}) === monoKey(right.lhs?.powers || {})
+      && JSON.stringify(left.rhs || []) === JSON.stringify(right.rhs || []);
+  }
+
+  function deleteClassStepSavedRule(id) {
+    const before = (state.classStepSavedRules || []).length;
+    state.classStepSavedRules = (state.classStepSavedRules || []).filter((rule) => rule.id !== id);
+    if (before === state.classStepSavedRules.length) return false;
+    if (state.classStepSession) state.classStepSession.message = 'Deleted the saved formula rule.';
+    renderClassStepPanel();
+    refreshExport(state.exportScope || 'main');
+    typeset(refs.classStepPanel);
+    return true;
+  }
+
+  function renderClassStepSavedRules() {
+    const saved = state.classStepSavedRules || [];
+    if (!saved.length) return '';
+    const rows = saved.map((rule) => `
+      <div class="sheaf-step-saved-rule-row">
+        <span>\\(${rule.displayLatex || classStepRuleDisplayLatex(classStepRuleFromSavedEntry(rule))}\\)</span>
+        <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-step-delete-saved="${escapeHtml(rule.id)}">delete</button>
+      </div>
+    `).join('');
+    return `<div class="sheaf-step-saved-rule-title">saved formulas</div>${rows}`;
+  }
+
+  function classStepSavedRules(session) {
+    if (!session?.geometry) return [];
+    return (state.classStepSavedRules || [])
+      .map((entry) => classStepSavedEntryRuleForSession(entry, session))
+      .filter(Boolean);
+  }
+
+  function classStepSavedEntryRuleForSession(entry, session) {
+    if (!classStepSavedEntryCompatible(entry, session)) return null;
+    restoreClassStepSavedRuleVariables(entry, session);
+    const rule = classStepRuleFromSavedEntry(entry);
+    if (!rule) return null;
+    const defs = [
+      ...homologyClassDefinitions(session.geometry, { includeMapClasses: true }),
+      ...classStepSheafDefs(session),
+      ...classStepRuleVariableDefs([rule], session.geometry)
+    ];
+    const available = new Set([
+      ...defs.flatMap((def) => [...homologyDefVariableIds(def, session.geometry)]),
+      ...homologyRuleVariableIds(rule)
+    ]);
+    return homologyRulePreservesDegree(rule, defs, { geometry: session.geometry })
+      && homologyRuleUsesAvailableVariables(rule, available)
+      ? rule
+      : null;
+  }
+
+  function classStepSavedEntryCompatible(entry, session) {
+    if (!entry || !session?.geometry) return false;
+    if (entry.geometryId && entry.geometryId !== session.geometry.varietyId) return false;
+    if (Number.isInteger(entry.dimension) && Number.isInteger(session.dimension) && entry.dimension > session.dimension) return false;
+    return true;
+  }
+
+  function classStepRuleFromSavedEntry(entry) {
+    if (!entry?.lhs?.powers) return null;
+    return {
+      id: entry.id,
+      builtin: true,
+      enabled: true,
+      selected: false,
+      stepSourceLabel: 'saved formula',
+      classStepSavedRule: true,
+      classStepDisplayKey: `saved:${entry.id}`,
+      classStepDisplayLatex: entry.displayLatex,
+      lhs: { powers: parseMonoKey(monoKey(entry.lhs.powers || {})) },
+      rhs: entry.rhs || []
+    };
+  }
+
+  function restoreClassStepSavedRuleVariables(entry, session) {
+    if (entry?.geometryId) {
+      const geometry = geometryByVarietyId(entry.geometryId);
+      if (geometry) defineHomologyVariables(geometry);
+    }
+    for (const id of entry?.variableIds || []) restoreClassStepVariableById(id, { geometryId: entry.geometryId || session.geometry?.varietyId || null });
+  }
+
   function classStepCachedRules(session) {
     const rules = [];
     for (const [key, cache] of state.classStepCache.entries()) {
@@ -22534,14 +23175,25 @@
     if (lhsTerms.length !== 1) return null;
     const [lhsKey, lhsCoeff] = lhsTerms[0];
     if (!lhsCoeff.isOne()) return null;
+    const isCached = String(label || '').startsWith('cached');
     return {
       id,
       builtin: true,
       enabled: true,
       stepSourceLabel: label,
+      ...(isCached ? {
+        classStepDisplayKey: `${label}:${id}`,
+        classStepDisplayLatex: classStepCachedRuleDisplayLatex(label)
+      } : {}),
       lhs: { powers: parseMonoKey(lhsKey) },
       rhs: serializeHomologyPoly(rhs)
     };
+  }
+
+  function classStepCachedRuleDisplayLatex(label) {
+    if (label === 'cached pushforward') return '\\text{cached pushforward formula}';
+    if (label === 'cached pullback') return '\\text{cached pullback formula}';
+    return '\\text{cached formula}';
   }
 
   function classStepRuleApplies(session, rule) {
@@ -22549,6 +23201,7 @@
     const lhs = rule?.lhs?.powers || {};
     if (!Object.keys(lhs).length) return false;
     if (classStepRuleAppliesToPoly(classStepDisplayPoly(session), rule)) return true;
+    if (classStepRuleAppliesToSteppedComponents(session, rule)) return true;
     return classStepRuleAppliesToPoly(classStepAuxiliaryRulePoly(session, rule), rule);
   }
 
@@ -22556,6 +23209,12 @@
     if (!session || rule?.classStepRankRule !== true) return Poly.zero();
     if (session.family === 'character') return componentOrZero(session.components, 0);
     return Poly.from(session.rankComponent || Poly.zero());
+  }
+
+  function classStepRuleAppliesToSteppedComponents(session, rule) {
+    if (!session || session.formulaSession) return false;
+    const degrees = classStepRuleApplicationDegrees(session);
+    return degrees.some((degree) => classStepRuleAppliesToPoly(componentOrZero(session.components, degree), rule));
   }
 
   function classStepRuleAppliesToPoly(poly, rule) {
@@ -22669,7 +23328,7 @@
 
   function applyClassStepRulesForStep(poly, rules, session, options = {}) {
     const maxDegree = session.geometry?.dim ?? MAX_DIMENSION;
-    let out = Poly.from(poly);
+    let out = stripUnitPowersFromPoly(poly);
     const explicitRules = (rules || []).filter((rule) => !classStepRuleIsSimplify(rule));
     if (explicitRules.length) {
       out = applyClassStepRulesToPoly(out, explicitRules, maxDegree, {
@@ -22680,7 +23339,7 @@
     if (options.simplify) {
       out = applyClassStepSimplifyPoly(out, session, options);
     }
-    return out.truncate(maxDegree);
+    return stripUnitPowersFromPoly(out).truncate(maxDegree);
   }
 
   function applyClassStepSimplifyPoly(poly, session, options = {}) {
@@ -22782,16 +23441,16 @@
   }
 
   function applyClassStepRulesToPoly(poly, rules, maxDegree, options = {}) {
-    let out = Poly.from(poly);
+    let out = stripUnitPowersFromPoly(poly);
     const limit = options.onePass ? 1 : MAX_HOMOLOGY_RULE_PASSES;
     for (let pass = 0; pass < limit; pass += 1) {
       const before = out;
       for (const rule of rules) {
-        out = applyOneClassStepRule(out, rule, maxDegree, options);
+        out = stripUnitPowersFromPoly(applyOneClassStepRule(out, rule, maxDegree, options));
       }
       if (polyEquals(before, out)) break;
     }
-    return out.truncate(maxDegree);
+    return stripUnitPowersFromPoly(out).truncate(maxDegree);
   }
 
   function applyOneClassStepRule(poly, rule, maxDegree, options = {}) {
@@ -22874,13 +23533,39 @@
     return formatRankPlusClassPoly(rank, rank, poly, options).plain;
   }
 
+  function rankDisplayFromBundle(bundle, options = {}) {
+    if (bundle?.rankLatex || bundle?.rankPlain) {
+      return {
+        latex: bundle.rankLatex || bundle.rankPlain,
+        plain: bundle.rankPlain || latexToPlain(bundle.rankLatex)
+      };
+    }
+    if (bundle?.rankPoly && !Poly.from(bundle.rankPoly).isZero()) {
+      const simplified = applyHomologyRulesCached(bundle.rankPoly, options);
+      if (!simplified.isZero()) {
+        return {
+          latex: formatPolyLatex(simplified),
+          plain: formatPolyPlain(simplified)
+        };
+      }
+    }
+    return {
+      latex: `\\operatorname{ch}_{0}(${bundle?.labelLatex || '\\mathcal{F}'})`,
+      plain: `ch_0(${bundle?.labelPlain || 'F'})`
+    };
+  }
+
   function classPolyRow(label, labelLatex, key, poly, options) {
     const display = formatClassPoly(poly, options);
     return { label, labelLatex, key, latex: display.latex, plain: display.plain };
   }
 
   function rankPlusClassPolyRow(label, labelLatex, key, rankLatex, rankPlain, poly, options) {
-    const display = formatRankPlusClassPoly(rankLatex, rankPlain, poly, options);
+    const subjectLatex = String(labelLatex || '').match(/\((.*)\)$/)?.[1] || '\\mathcal{F}';
+    const subjectPlain = String(label || '').replace(/^ch\((.*)\)$/, '$1') || 'F';
+    const fallbackLatex = rankLatex || `\\operatorname{ch}_{0}(${subjectLatex})`;
+    const fallbackPlain = rankPlain || `ch_0(${subjectPlain})`;
+    const display = formatRankPlusClassPoly(fallbackLatex, fallbackPlain, poly, options);
     return { label, labelLatex, key, latex: display.latex, plain: display.plain };
   }
 
@@ -22893,21 +23578,23 @@
     if (options.termMode === 'term') {
       const i = options.termIndex;
       const suffix = `_{${i}}`;
+      const rankDisplay = rankDisplayFromBundle(bundle, options);
       return [
         shouldDisplayChernTerm(bundle, i)
           ? classPolyRow(`c_${i}(${bundle.labelPlain})`, `c${suffix}(${bundle.labelLatex})`, `chern_${i}`, i === 0 ? Poly.one() : componentOrZero(bundle.cComps, i), options)
           : null,
         i === 0
-          ? { label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `character_${i}`, latex: bundle.rankLatex || '0', plain: bundle.rankPlain || '0' }
+          ? { label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `character_${i}`, latex: rankDisplay.latex, plain: rankDisplay.plain }
           : classPolyRow(`ch_${i}(${bundle.labelPlain})`, `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, `character_${i}`, componentOrZero(bundle.chComps, i), options),
         classPolyRow(`td_${i}(${bundle.labelPlain})`, `\\operatorname{td}${suffix}(${bundle.labelLatex})`, `todd_${i}`, homogeneousPart(bundle.todd, i), options),
         classPolyRow(`s_${i}(${bundle.labelPlain})`, `s${suffix}(${bundle.labelLatex})`, `segre_${i}`, homogeneousPart(bundle.segre, i), options),
         classPolyRow(`sqrt td_${i}(${bundle.labelPlain})`, `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, `sqrtTodd_${i}`, homogeneousPart(bundle.sqrtTodd, i), options)
       ].filter(Boolean);
     }
+    const rankDisplay = rankDisplayFromBundle(bundle, options);
     return [
       classPolyRow(`c(${bundle.labelPlain})`, `c(${bundle.labelLatex})`, 'chern', bundle.cTotal, options),
-      rankPlusClassPolyRow(`ch(${bundle.labelPlain})`, `\\operatorname{ch}(${bundle.labelLatex})`, 'character', bundle.rankLatex, bundle.rankPlain, positiveTotal(bundle.chComps, d), options),
+      rankPlusClassPolyRow(`ch(${bundle.labelPlain})`, `\\operatorname{ch}(${bundle.labelLatex})`, 'character', rankDisplay.latex, rankDisplay.plain, positiveTotal(bundle.chComps, d), options),
       classPolyRow(`td(${bundle.labelPlain})`, `\\operatorname{td}(${bundle.labelLatex})`, 'todd', bundle.todd, options),
       classPolyRow(`s(${bundle.labelPlain})`, `s(${bundle.labelLatex})`, 'segre', bundle.segre, options),
       classPolyRow(`sqrt td(${bundle.labelPlain})`, `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, 'sqrtTodd', bundle.sqrtTodd, options)
@@ -22915,8 +23602,8 @@
   }
 
   function buildProductRootClassRows(bundle, options) {
-    const rankLatex = bundle.rankLatex || 'r';
-    const rankPlain = bundle.rankPlain || 'r';
+    const rankLatex = bundle.rankLatex || `\\operatorname{ch}_{0}(${bundle.labelLatex})`;
+    const rankPlain = bundle.rankPlain || `ch_0(${bundle.labelPlain})`;
     const explicitRank = explicitRootRankFromPlain(rankPlain);
     const total = explicitRank == null
       ? indexedRootTotals(rankLatex, rankPlain)
@@ -23428,8 +24115,8 @@
   }
 
   function polyEquals(a, b) {
-    a = Poly.from(a);
-    b = Poly.from(b);
+    a = stripUnitPowersFromPoly(a);
+    b = stripUnitPowersFromPoly(b);
     if (a.terms.size !== b.terms.size) return false;
     for (const [key, coeff] of a.terms) {
       const other = b.terms.get(key);
@@ -23439,7 +24126,7 @@
   }
 
   function polySignature(poly) {
-    return sortedTerms(Poly.from(poly))
+    return sortedTerms(stripUnitPowersFromPoly(poly))
       .map(([key, coeff]) => `${key}:${coeff.num}/${coeff.den}`)
       .join(';');
   }
@@ -25016,11 +25703,11 @@
   }
 
   function sesRankLatexFromBundles(bundles, missingIndex, fallback) {
-    return sesRankDisplayFromBundles(bundles, missingIndex, 'rankLatex', fallback || 'r');
+    return sesRankDisplayFromBundles(bundles, missingIndex, 'rankLatex', fallback || '');
   }
 
   function sesRankPlainFromBundles(bundles, missingIndex, fallback) {
-    return sesRankDisplayFromBundles(bundles, missingIndex, 'rankPlain', fallback || 'r');
+    return sesRankDisplayFromBundles(bundles, missingIndex, 'rankPlain', fallback || '');
   }
 
   function sesRankDisplayFromBundles(bundles, missingIndex, key, fallback) {
@@ -25038,14 +25725,15 @@
     return latex ? simplifyScalarExpressionLatex(text) : simplifyScalarExpressionPlain(text);
   }
 
-  function rankDifferenceDisplay(left, right, latex = true, fallback = 'r') {
+  function rankDifferenceDisplay(left, right, latex = true, fallback = '') {
     if (!left || !right) return fallback;
     const text = `${left}-${right}`;
     return latex ? simplifyScalarExpressionLatex(text) : simplifyScalarExpressionPlain(text);
   }
 
   function rankDisplayTerm(value, latex = true) {
-    const rank = String(value || 'r');
+    const rank = String(value || '');
+    if (!rank) return '';
     if (!latex) return `(${rank})`;
     return /^[A-Za-z0-9_{}\\^]+$/.test(rank) ? rank : `\\left(${rank}\\right)`;
   }
@@ -25121,9 +25809,18 @@
 
   function pullbackVariableId(map, id) {
     const data = VARS.get(id) || ensureMapHomologyVariableFromId(id) || { degree: 1, latex: id };
+    if (pullbackVariableShouldRemainScalar(data)) return id;
     return defineMapHomologyVariable(map, 'pullback', id, data.degree, data.latex || id, {
       ...(Number.isInteger(data.cohomologyDegree) ? { cohomologyDegree: data.cohomologyDegree } : {})
     });
+  }
+
+  function pullbackVariableShouldRemainScalar(data) {
+    if (!data) return false;
+    if (data.kind === 'mapHomology') return false;
+    const degree = Number(data.degree);
+    const cohomologyDegree = Number(data.cohomologyDegree);
+    return degree === 0 || cohomologyDegree === 0 || data.kind === 'scalarCoefficient' || data.kind === 'globalInvariant';
   }
 
   function pushforwardPolynomialByDegree(map, poly, sourceDim, targetDim, construction) {
@@ -25161,13 +25858,19 @@
   function directAutomaticPushforwardSourceKeyPolynomial(map, sourceKey, targetDegree, sourceDim, targetDim, construction = {}) {
     if (!projectionSourceKeyCanSurvivePushforward(map, sourceKey, sourceDim, targetDim)) return Poly.zero();
     const automaticProjection = projectionAutomaticPushforwardSourceKey(map, sourceKey, sourceDim, targetDim);
-    if (automaticProjection) return automaticProjection;
+    if (automaticProjection) return automaticPushforwardMatchesTargetDegree(automaticProjection, targetDegree) ? automaticProjection : null;
     const targetGeometry = geometryByVarietyId(map?.codomainId);
     const abelJacobi = targetGeometry ? abelJacobiPushforwardSourceKey(map, sourceKey, targetGeometry) : null;
-    if (abelJacobi) return abelJacobi;
+    if (abelJacobi) return automaticPushforwardMatchesTargetDegree(abelJacobi, targetDegree) ? abelJacobi : null;
     const ramified = ramifiedCoverPushforwardSourceKey(map, sourceKey, sourceDim, targetDim);
-    if (ramified) return ramified;
+    if (ramified) return automaticPushforwardMatchesTargetDegree(ramified, targetDegree) ? ramified : null;
     return null;
+  }
+
+  function automaticPushforwardMatchesTargetDegree(poly, targetDegree) {
+    poly = Poly.from(poly);
+    if (poly.isZero() || !Number.isFinite(targetDegree)) return true;
+    return Array.from(poly.terms.keys()).every((key) => monoDegree(key) === targetDegree);
   }
 
   function ramifiedCoverPushforwardSourceKey(map, sourceKey, sourceDim, targetDim) {
@@ -25279,13 +25982,19 @@
         for (const [sourceId, sourceExp] of Object.entries(pullbackSourcePowers)) {
           if (sourceExp <= 0) continue;
           const sourceData = homologyVariableDataById(context.jacobianGeometry, sourceId);
-          if (!sourceData || sourceData.degree <= 0) continue;
+          if (!sourceData) return null;
+          if (sourceData.degree <= 0) {
+            const unitId = homologyVariableId(HOMOLOGY_UNIT_CLASS, context.jacobianGeometry);
+            if (sourceId === unitId || legacyBaseHomologyClassId(sourceId) === HOMOLOGY_UNIT_CLASS) continue;
+            return null;
+          }
           codomainPowers[sourceId] = (codomainPowers[sourceId] || 0) + sourceExp * exponent;
         }
         continue;
       }
       const def = curveDefs.get(id);
-      if (!def || def.id === HOMOLOGY_UNIT_CLASS) continue;
+      if (!def) return null;
+      if (def.id === HOMOLOGY_UNIT_CLASS) continue;
       if (isCurveSymplecticClassId(def.id)) {
         const targetId = homologyVariableId(def.id, context.jacobianGeometry);
         codomainPowers[targetId] = (codomainPowers[targetId] || 0) + exponent;
@@ -25387,7 +26096,10 @@
     const ids = Object.keys(powers);
     if (ids.length === 1 && powers[ids[0]] === 1) {
       const data = VARS.get(ids[0]) || ensureMapHomologyVariableFromId(ids[0]) || { latex: ids[0] };
-      return defineMapHomologyVariable(map, 'pushforward', ids[0], targetDegree, data.latex || ids[0], { sourceKey });
+      return defineMapHomologyVariable(map, 'pushforward', ids[0], targetDegree, data.latex || ids[0], {
+        sourceKey,
+        ...(Number.isInteger(construction?.cohomologyDegree) ? { cohomologyDegree: construction.cohomologyDegree } : {})
+      });
     }
     const id = `${mapHomologyVariableId(map, 'pushforward', 'term')}_${hashString(sourceKey)}`;
     const operator = pushforwardClassOperatorLatex(map, construction);
@@ -25438,26 +26150,123 @@
     for (let i = 1; i <= d; i++) {
       chComps[i] = componentOrZero(left.chComps, i).add(componentOrZero(right.chComps, i));
     }
-    return buildBundleFromCh(chComps, rankSumLatex(left, right), rankSumPlain(left, right), sheaf.labelLatex, sheaf.labelPlain);
+    const bundle = buildBundleFromCh(chComps, rankSumLatex(left, right), rankSumPlain(left, right), sheaf.labelLatex, sheaf.labelPlain);
+    bundle.rankPoly = rankAsDegreeZeroPoly(left, `${constructionSafeId(sheaf.labelPlain)}Left`)
+      .add(rankAsDegreeZeroPoly(right, `${constructionSafeId(sheaf.labelPlain)}Right`));
+    return bundle;
   }
 
   function buildSelfDirectSumBundle(d, sheaf, parent, multiplicity) {
-    const n = normalizeSelfSumMultiplicity(multiplicity);
+    const n = selfOperationMultiplicityPoly(multiplicity, { kind: 'sheaf', id: sheaf?.sourceObject?.id || sheaf?.id || 'self-direct-sum', field: 'multiplicity' });
     const chComps = zeroComponentArray(d);
     for (let i = 1; i <= d; i++) {
-      chComps[i] = componentOrZero(parent.chComps, i).scale(fraction(n));
+      chComps[i] = componentOrZero(parent.chComps, i).mul(n, d);
     }
-    return buildBundleFromCh(chComps, selfSumRankLatex(parent, n), selfSumRankPlain(parent, n), sheaf.labelLatex, sheaf.labelPlain);
+    const bundle = buildBundleFromCh(chComps, selfSumRankLatex(parent, multiplicity), selfSumRankPlain(parent, multiplicity), sheaf.labelLatex, sheaf.labelPlain);
+    bundle.rankPoly = rankAsDegreeZeroPoly(parent, `${constructionSafeId(sheaf.labelPlain)}SelfSumRank`).mul(n, d);
+    return bundle;
   }
 
   function buildSelfTensorBundle(d, sheaf, parent, multiplicity) {
-    const n = normalizeSelfSumMultiplicity(multiplicity);
+    const n = selfOperationMultiplicityInteger(multiplicity);
     const rank = rankAsDegreeZeroPoly(parent, `${constructionSafeId(sheaf.labelPlain)}SelfTensorRank`);
     const totalCharacter = rank.add(positiveTotal(parent.chComps, d)).truncate(d);
-    const tensorCharacter = polyPower(totalCharacter, n, d);
+    const tensorCharacter = n == null
+      ? formalSymbolicTensorPower(totalCharacter, rank, selfOperationMultiplicityPoly(multiplicity, { kind: 'sheaf', id: sheaf?.sourceObject?.id || sheaf?.id || 'self-tensor-product', field: 'multiplicity' }), parent, d)
+      : polyPower(totalCharacter, n, d);
     const chComps = zeroComponentArray(d);
     for (let i = 1; i <= d; i++) chComps[i] = homogeneousPart(tensorCharacter, i);
-    return buildBundleFromCh(chComps, selfTensorRankLatex(parent, n), selfTensorRankPlain(parent, n), sheaf.labelLatex, sheaf.labelPlain);
+    const bundle = buildBundleFromCh(chComps, selfTensorRankLatex(parent, multiplicity), selfTensorRankPlain(parent, multiplicity), sheaf.labelLatex, sheaf.labelPlain);
+    const rankPoly = homogeneousPart(tensorCharacter, 0);
+    if (!rankPoly.isZero()) bundle.rankPoly = rankPoly;
+    return bundle;
+  }
+
+  function formalSymbolicTensorPower(totalCharacter, rankPoly, exponentPoly, parent, d) {
+    const positive = Poly.from(totalCharacter).sub(rankPoly).truncate(d);
+    const rankConstant = scalarPolyAsFraction(rankPoly);
+    if (rankConstant?.isOne()) {
+      let out = Poly.one();
+      for (let k = 1; k <= d; k += 1) {
+        const coeff = binomialScalarPoly(exponentPoly, k, d);
+        if (coeff.isZero()) continue;
+        out = out.add(coeff.mul(polyPower(positive, k, d), d));
+      }
+      return out.truncate(d);
+    }
+    let out = formalRankPowerScalar(rankPoly, exponentPoly, 0, parent).truncate(d);
+    for (let k = 1; k <= d; k += 1) {
+      const positivePower = polyPower(positive, k, d);
+      if (positivePower.isZero()) continue;
+      const coeff = binomialScalarPoly(exponentPoly, k, d);
+      if (coeff.isZero()) continue;
+      const rankFactor = formalRankPowerScalar(rankPoly, exponentPoly, k, parent);
+      out = out.add(coeff.mul(rankFactor, d).mul(positivePower, d));
+    }
+    return out.truncate(d);
+  }
+
+  function formalRankPowerScalar(rankPoly, exponentPoly, shift, parent) {
+    const adjusted = Poly.from(exponentPoly).sub(Poly.constant(shift));
+    const adjustedConstant = scalarPolyAsFraction(adjusted);
+    if (adjustedConstant?.isZero()) return Poly.one();
+    const rankConstant = scalarPolyAsFraction(rankPoly);
+    if (rankConstant) {
+      if (rankConstant.isOne()) return Poly.one();
+      if (rankConstant.isZero() && scalarExponentKnownPositive(adjusted)) return Poly.zero();
+      if (adjustedConstant && adjustedConstant.den === 1n && adjustedConstant.num >= 0n) {
+        const exponent = Number(adjustedConstant.num);
+        return Poly.constant(fraction(bigintPow(rankConstant.num, exponent), bigintPow(rankConstant.den, exponent)));
+      }
+    }
+    const rankLatex = formatPolyLatex(rankPoly);
+    const rankPlain = formatPolyPlain(rankPoly);
+    const exponentLatex = formatPolyLatex(adjusted);
+    const exponentPlain = formatPolyPlain(adjusted);
+    const id = `formal_rank_power_${hashString(`${parent?.labelPlain || parent?.labelLatex || 'F'}:${rankPlain}:${exponentPlain}`)}`;
+    const zeroBase = rankConstant?.isZero() === true;
+    defineVariable(id, 0, `\\left(${rankLatex}\\right)^{${exponentLatex}}`, {
+      kind: 'scalarCoefficient',
+      plain: `(${rankPlain})^(${exponentPlain})`,
+      ...(zeroBase ? {
+        zeroPowerCandidate: true,
+        exponentLatex,
+        exponentPlain
+      } : {})
+    });
+    return Poly.variable(id);
+  }
+
+  function scalarExponentKnownPositive(poly) {
+    poly = Poly.from(poly);
+    const constant = scalarPolyAsFraction(poly);
+    if (constant) return constant.sign() > 0;
+    let hasPositiveTerm = false;
+    for (const [key, coeff] of poly.terms) {
+      if (coeff.sign() < 0) return false;
+      if (key === '') {
+        if (coeff.sign() > 0) hasPositiveTerm = true;
+        continue;
+      }
+      if (!scalarMonomialKnownPositive(key)) return false;
+      hasPositiveTerm = true;
+    }
+    return hasPositiveTerm;
+  }
+
+  function scalarMonomialKnownPositive(key) {
+    const powers = parseMonoKey(key);
+    const ids = Object.keys(powers);
+    if (!ids.length) return false;
+    return ids.every((id) => {
+      const exponent = Number(powers[id]) || 0;
+      if (exponent <= 0) return false;
+      const data = VARS.get(id);
+      if (data?.kind === 'globalInvariant') {
+        return globalInvariantById(data.globalInvariantId)?.positive !== false;
+      }
+      return data?.degree === 0 && data.positive === true;
+    });
   }
 
   function buildDualBundle(d, sheaf, parent) {
@@ -25466,7 +26275,9 @@
       const sign = i % 2 === 0 ? 1 : -1;
       chComps[i] = componentOrZero(parent.chComps, i).scale(fraction(sign));
     }
-    return buildBundleFromCh(chComps, parent.rankLatex, parent.rankPlain, sheaf.labelLatex, sheaf.labelPlain);
+    const bundle = buildBundleFromCh(chComps, parent.rankLatex, parent.rankPlain, sheaf.labelLatex, sheaf.labelPlain);
+    bundle.rankPoly = rankAsDegreeZeroPoly(parent, `${constructionSafeId(sheaf.labelPlain)}DualRank`);
+    return bundle;
   }
 
   function buildTensorBundle(d, sheaf, left, right) {
@@ -25481,7 +26292,9 @@
       }
       chComps[i] = term;
     }
-    return buildBundleFromCh(chComps, rankProductLatex(left, right), rankProductPlain(left, right), sheaf.labelLatex, sheaf.labelPlain);
+    const bundle = buildBundleFromCh(chComps, rankProductLatex(left, right), rankProductPlain(left, right), sheaf.labelLatex, sheaf.labelPlain);
+    bundle.rankPoly = leftRank.mul(rightRank, d);
+    return bundle;
   }
 
   function buildSchurBundle(d, sheaf, parent, partition) {
@@ -25525,18 +26338,21 @@
   function rankAsDegreeZeroPoly(bundle, idSeed) {
     if (bundle?.rankPoly) return Poly.from(bundle.rankPoly);
     const plain = String(bundle.rankPlain || '').trim();
-    const poly = scalarExpressionPoly(plain || bundle.rankLatex || 'r');
+    const poly = plain || bundle.rankLatex ? scalarExpressionPoly(plain || bundle.rankLatex) : null;
     if (poly) return poly;
     const id = `rank${constructionSafeId(bundle.rankLatex || bundle.rankPlain || idSeed)}`;
-    defineVariable(id, 0, bundle.rankLatex || plain || 'r', plain ? { plain } : {});
+    const label = bundle.rankLatex || plain || `\\operatorname{ch}_{0}(${bundle.labelLatex || idSeed || '\\mathcal{F}'})`;
+    defineVariable(id, 0, label, plain ? { plain } : { plain: bundle.rankPlain || `ch_0(${bundle.labelPlain || idSeed || 'F'})` });
     return Poly.variable(id);
   }
 
   function rankSumLatex(left, right) {
+    if (!left.rankPlain || !right.rankPlain) return '';
     return simplifyScalarExpressionLatex(`${left.rankPlain || '0'}+${right.rankPlain || '0'}`);
   }
 
   function rankSumPlain(left, right) {
+    if (!left.rankPlain || !right.rankPlain) return '';
     return simplifyScalarExpressionPlain(`${left.rankPlain || '0'}+${right.rankPlain || '0'}`);
   }
 
@@ -25544,6 +26360,7 @@
     if (/^-?\d+$/.test(left.rankPlain || '') && /^-?\d+$/.test(right.rankPlain || '')) {
       return String(Number(left.rankPlain) * Number(right.rankPlain));
     }
+    if (!left.rankPlain || !right.rankPlain) return '';
     return `${rankLatexTerm(left)}${rankLatexTerm(right)}`;
   }
 
@@ -25551,39 +26368,52 @@
     if (/^-?\d+$/.test(left.rankPlain || '') && /^-?\d+$/.test(right.rankPlain || '')) {
       return String(Number(left.rankPlain) * Number(right.rankPlain));
     }
-    return `(${left.rankPlain || 'r'})*(${right.rankPlain || 's'})`;
+    if (!left.rankPlain || !right.rankPlain) return '';
+    return `(${left.rankPlain})*(${right.rankPlain})`;
   }
 
   function selfSumRankLatex(parent, multiplicity) {
-    const rank = parent.rankLatex || parent.rankPlain || 'r';
-    if (/^-?\d+$/.test(parent.rankPlain || '')) return String(Number(parent.rankPlain) * multiplicity);
-    if (multiplicity === 1) return rank;
-    return `${multiplicity}${rankLatexTerm(parent)}`;
+    const rank = parent.rankLatex || parent.rankPlain || '';
+    if (!rank) return '';
+    const n = selfOperationMultiplicityPoly(multiplicity);
+    const rankPoly = scalarExpressionPoly(parent.rankPlain || parent.rankLatex || '');
+    if (rankPoly) return formatPolyLatex(rankPoly.mul(n, MAX_DIMENSION));
+    return `${selfOperationMultiplicityLatex(multiplicity)}${rankLatexTerm(parent)}`;
   }
 
   function selfSumRankPlain(parent, multiplicity) {
-    const rank = parent.rankPlain || 'r';
-    if (/^-?\d+$/.test(rank)) return String(Number(rank) * multiplicity);
-    if (multiplicity === 1) return rank;
-    return `${multiplicity}*(${rank})`;
+    const rank = parent.rankPlain || '';
+    if (!rank) return '';
+    const n = selfOperationMultiplicityPoly(multiplicity);
+    const rankPoly = scalarExpressionPoly(rank);
+    if (rankPoly) return formatPolyPlain(rankPoly.mul(n, MAX_DIMENSION));
+    return `${selfOperationMultiplicityPlain(multiplicity)}*(${rank})`;
   }
 
   function selfTensorRankLatex(parent, multiplicity) {
-    const rank = parent.rankLatex || parent.rankPlain || 'r';
-    if (/^-?\d+$/.test(parent.rankPlain || '')) return bigintPow(BigInt(parent.rankPlain), multiplicity).toString();
-    if (multiplicity === 1) return rank;
-    return `${rankLatexTerm(parent)}^{${multiplicity}}`;
+    const rank = parent.rankLatex || parent.rankPlain || '';
+    if (!rank) return '';
+    const n = selfOperationMultiplicityInteger(multiplicity);
+    if (parent.rankPlain === '1' || rank === '1') return '1';
+    if (/^-?\d+$/.test(parent.rankPlain || '') && n != null) return bigintPow(BigInt(parent.rankPlain), n).toString();
+    if (parent.rankPlain === '0' && scalarExponentKnownPositive(selfOperationMultiplicityPoly(multiplicity))) return '0';
+    if (n === 1) return rank;
+    return `${rankLatexTerm(parent)}^{${selfOperationMultiplicityLatex(multiplicity)}}`;
   }
 
   function selfTensorRankPlain(parent, multiplicity) {
-    const rank = parent.rankPlain || 'r';
-    if (/^-?\d+$/.test(rank)) return bigintPow(BigInt(rank), multiplicity).toString();
-    if (multiplicity === 1) return rank;
-    return `(${rank})^${multiplicity}`;
+    const rank = parent.rankPlain || '';
+    if (!rank) return '';
+    const n = selfOperationMultiplicityInteger(multiplicity);
+    if (rank === '1') return '1';
+    if (/^-?\d+$/.test(rank) && n != null) return bigintPow(BigInt(rank), n).toString();
+    if (rank === '0' && scalarExponentKnownPositive(selfOperationMultiplicityPoly(multiplicity))) return '0';
+    if (n === 1) return rank;
+    return `(${rank})^(${selfOperationMultiplicityPlain(multiplicity)})`;
   }
 
   function rankLatexTerm(bundle) {
-    const rank = bundle.rankLatex || bundle.rankPlain || 'r';
+    const rank = bundle.rankLatex || bundle.rankPlain || '';
     return /^[A-Za-z0-9_{}\\^]+$/.test(rank) ? rank : `\\left(${rank}\\right)`;
   }
 
@@ -27457,9 +28287,43 @@
     });
   }
 
+  function isUnitVariable(id, data = VARS.get(id)) {
+    if (!id) return false;
+    if (!data && /^homology_[^|:]+_unit$/.test(String(id))) return true;
+    if (!data) return false;
+    const latex = canonicalMathLabel(data.latex || '');
+    const plain = canonicalMathLabel(data.plain || '');
+    return Number(data.degree || 0) === 0
+      && Number(data.cohomologyDegree || 0) === 0
+      && (latex === '1' || plain === '1');
+  }
+
+  function stripUnitPowers(powers) {
+    const out = {};
+    for (const [id, exp] of Object.entries(powers || {})) {
+      if (isUnitVariable(id)) continue;
+      const exponent = Number(exp) || 0;
+      if (exponent > 0) out[id] = (out[id] || 0) + exponent;
+    }
+    return out;
+  }
+
+  function stripUnitPowersFromPoly(poly) {
+    poly = Poly.from(poly);
+    if (poly.isZero()) return poly;
+    const terms = new Map();
+    for (const [key, coeff] of poly.terms) {
+      const nextKey = monoKey(stripUnitPowers(parseMonoKey(key)));
+      const next = (terms.get(nextKey) || Fraction.zero()).add(coeff);
+      if (next.isZero()) terms.delete(nextKey);
+      else terms.set(nextKey, next);
+    }
+    return new Poly(terms);
+  }
+
   function monoKey(powers) {
     return Object.entries(powers)
-      .filter(([, exp]) => exp > 0)
+      .filter(([id, exp]) => exp > 0 && !isUnitVariable(id))
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([id, exp]) => `${id}:${exp}`)
       .join('|');
@@ -27515,7 +28379,7 @@
 
   function monomialLatex(key) {
     if (!key) return '';
-    return Object.entries(parseMonoKey(key)).map(([id, exp]) => {
+    return Object.entries(stripUnitPowers(parseMonoKey(key))).map(([id, exp]) => {
       const data = VARS.get(id);
       const base = data ? data.latex : id;
       return exp === 1 ? base : `{${base}}^{${exp}}`;
@@ -27524,7 +28388,7 @@
 
   function monomialPlain(key) {
     if (!key) return '';
-    return Object.entries(parseMonoKey(key)).map(([id, exp]) => {
+    return Object.entries(stripUnitPowers(parseMonoKey(key))).map(([id, exp]) => {
       const data = VARS.get(id);
       const base = data ? data.plain : id;
       return exp === 1 ? base : `${base}^${exp}`;
@@ -27544,7 +28408,7 @@
   }
 
   function formatPolyLatex(poly) {
-    poly = Poly.from(poly);
+    poly = stripUnitPowersFromPoly(poly);
     if (poly.isZero()) return '0';
     let out = '';
     sortedTerms(poly).forEach(([key, coeff], index) => {
@@ -27571,7 +28435,7 @@
   }
 
   function formatPolyPlain(poly) {
-    poly = Poly.from(poly);
+    poly = stripUnitPowersFromPoly(poly);
     if (poly.isZero()) return '0';
     let out = '';
     sortedTerms(poly).forEach(([key, coeff], index) => {
@@ -29030,7 +29894,12 @@
 
   function visibleGlobalInvariants() {
     refreshGlobalInvariantReferences();
-    return (state.globalInvariants || []).filter((invariant) => !invariant.auto || globalInvariantReferences(invariant).length || invariant.hasValue);
+    return (state.globalInvariants || []).filter((invariant) => (
+      !invariant.auto
+      || globalInvariantReferences(invariant).length
+      || invariant.hasValue
+      || invariant.positive === false
+    ));
   }
 
   function renderGlobalInvariantChips(invariants) {
@@ -29038,7 +29907,8 @@
       const active = invariant.id === state.activeGlobalInvariantId ? ' is-active' : '';
       const replaced = invariant.hasValue && invariant.replaceWithValue ? ' is-replaced' : '';
       const chipValue = globalInvariantChipValue(invariant);
-      const label = `${symbolToLatex(invariant.name)}${chipValue ? `\\mapsto ${chipValue}` : ''}`;
+      const positive = invariant.positive === false ? '' : `\\in\\mathbb{Q}_{>0}`;
+      const label = `${symbolToLatex(invariant.name)}${positive}${chipValue ? `\\mapsto ${chipValue}` : ''}`;
       return `<button class="global-invariant-chip${active}${replaced}" type="button" data-global-invariant-id="${escapeHtml(invariant.id)}" title="${escapeHtml(formatGlobalInvariantReferences(invariant))}">\\(${label}\\)</button>`;
     }).join('')}</span>`;
   }
@@ -32193,7 +33063,7 @@
   function refreshExport(scope = state.exportScope || 'main') {
     if (!refs.exportOut) return;
     state.exportScope = scope || 'main';
-    if (!state.lastResult) {
+    if (!state.lastResult && !(state.exportScope === 'step-classes' && state.classStepSession)) {
       refs.exportOut.value = '';
       return;
     }
@@ -32212,14 +33082,20 @@
   function exportResult(result, format, scope = 'main') {
     if (format === 'preset-json') return exportPresetState();
     if (scope === 'classes' || scope === 'step-classes') {
+      const stepExportSession = scope === 'step-classes' ? state.classStepSession : null;
       const classRows = classRowsForExport(result, scope);
-      if (!classRows.length) return `No characteristic classes available. ${classChartEmptyMessage()}`;
+      if (!classRows.length) {
+        return scope === 'step-classes'
+          ? 'No step-by-step formula available. Start or resume a step-by-step formula first.'
+          : `No characteristic classes available. ${classChartEmptyMessage()}`;
+      }
       return exportClassChart({
         ...result,
-        geometry: result?.geometry || state.classStepSession?.geometry || null,
-        sheaf: result?.sheaf || null,
+        geometry: result?.geometry || stepExportSession?.geometry || null,
+        sheaf: result?.sheaf || stepExportSession?.sheaf || null,
+        bundle: result?.bundle || classStepExportBundleFallback(stepExportSession),
         classRows,
-        classStepExport: scope === 'step-classes' && classStepSessionMatchesResult(state.classStepSession, result)
+        classStepExport: scope === 'step-classes' && !!stepExportSession
       }, format);
     }
     if (scope === 'hodge') {
@@ -32230,15 +33106,31 @@
   }
 
   function classRowsForExport(result, scope = 'classes') {
-    if (!result && !(scope === 'step-classes' && state.classStepSession?.formulaSession)) return [];
-    if ((scope === 'classes' || scope === 'step-classes') && classStepSessionMatchesResult(state.classStepSession, result)) {
+    if (scope === 'step-classes' && state.classStepSession) {
+      const session = state.classStepSession;
+      const rows = buildClassRowsFromStepSession(
+        session,
+        result?.classDisplay || classDisplayOptions(session.geometry, result?.sheaf || session.sheaf || null)
+      );
+      if (rows.length) return rows;
+    }
+    if (!result) return [];
+    if (scope === 'classes' && classStepSessionMatchesResult(state.classStepSession, result)) {
       const rows = buildClassRowsFromStepSession(
         state.classStepSession,
-        result?.classDisplay || classDisplayOptions(state.classStepSession.geometry, result?.sheaf || null)
+        result.classDisplay || classDisplayOptions(state.classStepSession.geometry, result.sheaf || null)
       );
       if (rows.length) return rows;
     }
     return result.classRows || [];
+  }
+
+  function classStepExportBundleFallback(session) {
+    if (!session) return null;
+    return {
+      labelLatex: session.bundleLabelLatex || session.formulaLatex || classStepLabelLatex(session),
+      labelPlain: session.bundleLabelPlain || session.formulaPlain || classStepLabelPlain(session)
+    };
   }
 
   function exportPresetState() {
@@ -32327,6 +33219,7 @@
       value: sanitizeIntegerString(item.value, '0'),
       hasValue: item.hasValue === true,
       replaceWithValue: item.replaceWithValue === true,
+      positive: item.positive !== false,
       auto: item.auto === true,
       unused: item.unused === true
     };
@@ -32939,7 +33832,7 @@
   function presetGlobalInvariant(invariant) {
     return pickSerializable(invariant, [
       'id', 'type', 'name', 'value', 'hasValue', 'replaceWithValue',
-      'auto', 'unused', 'sources'
+      'positive', 'auto', 'unused', 'sources'
     ]);
   }
 
@@ -33130,7 +34023,7 @@
     if (sheaf.type === 'divisor-line' && base) parts.push(`D=${divisorLatexFromCoefficients(sheaf.divisorCoefficients, geometryFromVariety(base), '0')}`);
     if (sheafSelfOperationType(sheaf.construction?.type)) {
       const label = sheaf.construction.type === 'self-tensor-product' ? '\\text{tensor exponent}' : 'n';
-      parts.push(`${label}=${normalizeSelfSumMultiplicity(sheaf.construction.multiplicity)}`);
+      parts.push(`${label}=${selfOperationMultiplicityLatex(sheaf.construction.multiplicity)}`);
     }
     if (sheaf.construction?.type === 'schur') parts.push(`\\lambda=${schurPartitionLatex(sheaf.construction.partition)}`);
     parts.push(`\\text{basis}=\\text{${basisLabel(sheaf.basis)}}`);
@@ -33189,7 +34082,7 @@
     if (sheaf.type === 'divisor-line' && base) parts.push(`D ${divisorPlainFromCoefficients(sheaf.divisorCoefficients, geometryFromVariety(base), '0')}`);
     if (sheafSelfOperationType(sheaf.construction?.type)) {
       const label = sheaf.construction.type === 'self-tensor-product' ? 'tensor exponent' : 'multiplicity';
-      parts.push(`${label} ${normalizeSelfSumMultiplicity(sheaf.construction.multiplicity)}`);
+      parts.push(`${label} ${selfOperationMultiplicityPlain(sheaf.construction.multiplicity)}`);
     }
     if (sheaf.construction?.type === 'schur') parts.push(`diagram ${formatSchurPartitionInput(sheaf.construction.partition)}`);
     parts.push(`basis ${basisLabel(sheaf.basis)}`);
@@ -33700,16 +34593,57 @@
   }
 
   function normalizeSelfSumMultiplicity(value) {
-    return normalizedInt(value, 1, MAX_SELF_DIRECT_SUM_MULTIPLICITY, 2);
+    const raw = String(value ?? '').trim();
+    if (!raw) return '2';
+    try {
+      const coefficient = parseSymbolicRuleCoefficient(raw);
+      if (ruleCoefficientIsZero(coefficient)) return '2';
+      return formatRuleCoefficientPlain(coefficient);
+    } catch (error) {
+      return '2';
+    }
+  }
+
+  function selfOperationMultiplicityPoly(value, source = null) {
+    const normalized = normalizeSelfSumMultiplicity(value);
+    try {
+      return Poly.from(parseRuleCoefficientExpression(normalized, source || { kind: 'number', id: 'self-operation', field: 'multiplicity' }));
+    } catch (error) {
+      return Poly.constant(2);
+    }
+  }
+
+  function selfOperationMultiplicityInteger(value) {
+    const poly = selfOperationMultiplicityPoly(value);
+    const constant = scalarPolyAsFraction(poly);
+    if (!constant || constant.den !== 1n) return null;
+    const number = Number(constant.num);
+    return Number.isSafeInteger(number) && number >= 1 ? number : null;
+  }
+
+  function selfOperationMultiplicityLatex(value) {
+    return formatRuleCoefficientLatex(selfOperationMultiplicityPoly(value));
+  }
+
+  function selfOperationMultiplicityPlain(value) {
+    return formatRuleCoefficientPlain(selfOperationMultiplicityPoly(value));
   }
 
   function sanitizeRankInput(value) {
     const raw = String(value || '').trim();
+    if (!raw) return '';
     if (/^-?\d+$/.test(raw)) return raw;
-    const simplified = simplifyScalarExpressionPlain(raw);
+    try {
+      const simplified = formatRuleCoefficientPlain(parseRuleCoefficientExpression(raw, { kind: 'number', id: 'rank', field: 'rank' }));
+      if (simplified) return simplified;
+    } catch (error) {
+      // Fall through to the historical simple-symbol sanitizer.
+    }
+    const simplePoly = scalarExpressionPoly(raw);
+    const simplified = simplePoly ? formatPolyPlain(simplePoly) : '';
     if (simplified && /^[A-Za-z0-9_+\-\s]+$/.test(simplified)) return simplified.replace(/\s+/g, '');
     if (/^[A-Za-z][A-Za-z0-9_]{0,15}$/.test(raw)) return raw;
-    return 'r';
+    return '';
   }
 
   function numericRankFromPlain(value) {
@@ -33941,8 +34875,10 @@
   function schurRankContext(partition, rankLatex, rankPlain, parentName) {
     const numeric = explicitRootRankFromPlain(rankPlain);
     if (numeric != null) return { numeric, poly: Poly.constant(BigInt(numeric)) };
-    const id = `rankSchurParent${hashString(`${parentName}:${formatSchurPartitionInput(partition)}:${rankPlain || rankLatex || 'r'}`)}`;
-    defineVariable(id, 0, rankLatex || symbolToLatex(rankPlain || 'r'));
+    const fallbackLatex = `\\operatorname{ch}_{0}(${symbolToLatex(parentName || 'F')})`;
+    const fallbackPlain = `ch_0(${parentName || 'F'})`;
+    const id = `rankSchurParent${hashString(`${parentName}:${formatSchurPartitionInput(partition)}:${rankPlain || rankLatex || fallbackPlain}`)}`;
+    defineVariable(id, 0, rankLatex || symbolToLatex(rankPlain) || fallbackLatex, { plain: rankPlain || fallbackPlain });
     return { numeric: null, poly: Poly.variable(id) };
   }
 
