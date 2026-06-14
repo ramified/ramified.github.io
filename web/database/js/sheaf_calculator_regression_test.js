@@ -4758,6 +4758,85 @@ function testStepProjectionPushforwardUsesExistingProductBidegreeOnly() {
   assert.strictEqual(plain, '1');
 }
 
+function testStepSimplifyProjectionPushforwardChecksFiberBidegree() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'X', type: 'projective', dim: '1', name: 'X' },
+    { id: 'Y', type: 'projective', dim: '1', name: 'Y' },
+    {
+      id: 'XY',
+      type: 'abstract',
+      dim: '2',
+      name: 'X\\times Y',
+      construction: { type: 'product', varietyIds: ['X', 'Y'], defaultName: 'X\\times Y' },
+      homology: { rules: [] }
+    }
+  ];
+  api.state.maps = [{
+    id: 'p1',
+    name: 'p_1',
+    domainKind: 'variety',
+    domainId: 'XY',
+    codomainKind: 'variety',
+    codomainId: 'X',
+    construction: { type: 'projection', productId: 'XY', factorIndex: 0 }
+  }];
+  const productGeometry = api.geometryFromVariety(api.state.varieties[2]);
+  const targetGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const sourceDefs = api.homologyClassDefinitions(productGeometry);
+  const xGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const yGeometry = api.geometryFromVariety(api.state.varieties[1]);
+  const xPointId = api.homologyVariableId(api.HOMOLOGY_POINT_CLASS, xGeometry);
+  const yPointId = api.homologyVariableId(api.HOMOLOGY_POINT_CLASS, yGeometry);
+  const leftOnly = sourceDefs.find((def) => def.productBox?.leftKey === `${xPointId}:1` && def.productBox?.rightKey === '');
+  const rightOnly = sourceDefs.find((def) => def.productBox?.leftKey === '' && def.productBox?.rightKey === `${yPointId}:1`);
+  assert(leftOnly);
+  assert(rightOnly);
+
+  const pointId = api.homologyVariableId(api.HOMOLOGY_POINT_CLASS, targetGeometry);
+  const options = {
+    geometry: targetGeometry,
+    homology: {
+      rules: [{
+        id: 'target-point-identity',
+        enabled: true,
+        lhs: { powers: { [pointId]: 1 } },
+        rhs: [{ coefficient: '1', powers: { [pointId]: 1 } }]
+      }]
+    },
+    includeMapClasses: true
+  };
+  const leftOnlyPushforwardId = 'map_pushforward_p1_left_only_for_simplify_test';
+  api.VARS.set(leftOnlyPushforwardId, {
+    degree: 0,
+    cohomologyDegree: 0,
+    latex: 'p_{1*}([p]\\boxtimes 1)',
+    plain: 'p1_*([p]boxtimes 1)',
+    kind: 'mapHomology',
+    mapId: 'p1',
+    operation: 'pushforward',
+    sourceId: 'left_only_for_simplify_test',
+    sourceKey: `${api.homologyDefVariableId(leftOnly, productGeometry)}:1`
+  });
+  const rightOnlyPushforwardId = 'map_pushforward_p1_right_only_for_simplify_test';
+  api.VARS.set(rightOnlyPushforwardId, {
+    degree: 0,
+    cohomologyDegree: 0,
+    latex: 'p_{1*}(1\\boxtimes [p])',
+    plain: 'p1_*(1boxtimes [p])',
+    kind: 'mapHomology',
+    mapId: 'p1',
+    operation: 'pushforward',
+    sourceId: 'right_only_for_simplify_test',
+    sourceKey: `${api.homologyDefVariableId(rightOnly, productGeometry)}:1`
+  });
+
+  const vanished = api.applyHomologyRules(api.polyFromPowers({ [leftOnlyPushforwardId]: 1 }), options);
+  assert.strictEqual(api.formatPolyPlain(vanished), '0');
+  const integrated = api.applyHomologyRules(api.polyFromPowers({ [rightOnlyPushforwardId]: 1 }), options);
+  assert.strictEqual(api.formatPolyPlain(integrated), '1');
+}
+
 function testProjectionPullbackCarriesProductBidegreeForPushforwardVanishing() {
   const api = loadCalculator();
   api.state.varieties = [
@@ -5218,6 +5297,7 @@ testHomologyCoefficientEditorAcceptsSymbolicRationalPolynomials();
 testProductCustomClassBidegreeTruncatesImpossiblePowers();
 testProjectionPushforwardUsesFiberTopBidegree();
 testStepProjectionPushforwardUsesExistingProductBidegreeOnly();
+testStepSimplifyProjectionPushforwardChecksFiberBidegree();
 testProjectionPullbackCarriesProductBidegreeForPushforwardVanishing();
 testProductBoxMultiplicationUsesKoszulSign();
 testPicardPoincareGammaDefaultsToProductBidegree();

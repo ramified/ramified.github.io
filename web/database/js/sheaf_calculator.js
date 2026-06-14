@@ -24182,8 +24182,24 @@
     defineHomologyVariables(sourceGeometry);
     if (data.operation === 'pushforward') {
       defineHomologyVariables(targetGeometry);
-      const abelJacobiKnown = abelJacobiPushforwardSourceKey(map, data.sourceKey, targetGeometry);
-      if (abelJacobiKnown) return abelJacobiKnown.truncate(targetGeometry.dim);
+      if (!projectionSourceKeyCanSurvivePushforward(map, data.sourceKey, sourceGeometry.dim, targetGeometry.dim)) return Poly.zero();
+      const targetDegree = Number.isFinite(data.degree)
+        ? data.degree
+        : monoDegree(data.sourceKey) + targetGeometry.dim - sourceGeometry.dim;
+      if (Number.isFinite(targetDegree)) {
+        const automatic = directAutomaticPushforwardSourceKeyPolynomial(
+          map,
+          data.sourceKey,
+          targetDegree,
+          sourceGeometry.dim,
+          targetGeometry.dim,
+          {
+            proper: false,
+            ...(Number.isInteger(data.cohomologyDegree) ? { cohomologyDegree: data.cohomologyDegree } : {})
+          }
+        );
+        if (automatic) return automatic.truncate(targetGeometry.dim);
+      }
       const projected = projectionFormulaPushforwardSourceKey(map, data.sourceKey, sourceGeometry.dim, targetGeometry.dim, { proper: false });
       if (projected) return projected.truncate(targetGeometry.dim);
     }
