@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Theorem Graph Calculator</title>
+  <link rel="stylesheet" href="css/site.css">
+  <style>
+    .theorem-layout {
+      max-width: 1260px;
+      grid-template-columns: minmax(0, 1fr) 390px;
+    }
+
+    .theorem-stage {
+      padding: 16px;
+      min-width: 0;
+    }
+
+    .theorem-canvas-wrap {
+      position: relative;
+      min-height: 420px;
+    }
+
+    #theorem-graph-canvas {
+      width: 100% !important;
+      height: min(62vh, 620px) !important;
+      min-height: 420px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: #fffdf8;
+      cursor: default;
+      touch-action: none;
+    }
+
+    .theorem-node-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .theorem-node-label {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      max-width: min(220px, 42%);
+      min-width: 34px;
+      min-height: 28px;
+      padding: 3px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: rgba(255, 253, 248, 0.94);
+      color: var(--text);
+      box-shadow: 0 1px 5px rgba(0, 0, 0, 0.08);
+      cursor: grab;
+      font: inherit;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+      pointer-events: auto;
+      text-align: center;
+      touch-action: none;
+    }
+
+    .theorem-node-label:hover,
+    .theorem-node-label:focus-visible {
+      border-color: var(--accent);
+      outline: none;
+    }
+
+    .theorem-node-label.is-selected {
+      border-color: var(--accent2);
+      color: var(--accent2);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent2) 16%, transparent);
+    }
+
+    .theorem-node-label.is-source {
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+    }
+
+    .theorem-node-label mjx-container {
+      margin: 0 !important;
+      overflow: visible;
+    }
+
+    .theorem-corner-actions {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: inline-flex;
+      gap: 7px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      pointer-events: none;
+    }
+
+    .theorem-corner-actions .btn {
+      pointer-events: auto;
+      background: rgba(255, 253, 248, 0.86);
+      backdrop-filter: blur(2px);
+    }
+
+    .theorem-underbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 16px 12px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.72rem;
+      overflow-wrap: anywhere;
+    }
+
+    .theorem-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 21px;
+      padding: 1px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0;
+      text-transform: none;
+      white-space: nowrap;
+    }
+
+    .theorem-badge.is-active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+    }
+
+    .theorem-toolbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .theorem-field-row {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      margin-top: 9px;
+      min-width: 0;
+    }
+
+    .theorem-field-row .input-label {
+      margin: 6px 0 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .theorem-select,
+    .theorem-input,
+    .theorem-textarea {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.76rem;
+    }
+
+    .theorem-select {
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.94rem;
+    }
+
+    .theorem-textarea {
+      min-height: 66px;
+      max-height: 180px;
+      resize: vertical;
+      line-height: 1.35;
+    }
+
+    .theorem-select:focus,
+    .theorem-input:focus,
+    .theorem-textarea:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .theorem-input[disabled],
+    .theorem-select[disabled],
+    .theorem-textarea[disabled] {
+      opacity: 0.58;
+      cursor: not-allowed;
+    }
+
+    .theorem-card-note {
+      color: var(--muted);
+      font-size: 0.86rem;
+      font-style: italic;
+      margin-top: 8px;
+    }
+
+    .theorem-graph-actions,
+    .theorem-export-actions,
+    .theorem-reference-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .theorem-inline-controls {
+      display: grid;
+      gap: 8px;
+    }
+
+    .theorem-reference-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+      max-height: 250px;
+      overflow: auto;
+      padding-right: 3px;
+    }
+
+    .theorem-reference-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 8px;
+      align-items: start;
+      border-top: 1px dotted var(--border);
+      padding-top: 8px;
+      min-width: 0;
+    }
+
+    .theorem-reference-item:first-child {
+      border-top: none;
+      padding-top: 0;
+    }
+
+    .theorem-reference-key {
+      color: var(--accent);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.75rem;
+      overflow-wrap: anywhere;
+    }
+
+    .theorem-reference-title {
+      color: var(--text);
+      font-size: 0.9rem;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .theorem-reference-meta {
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }
+
+    .theorem-reference-cite {
+      color: var(--accent2);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.68rem;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }
+
+    .theorem-reference-link {
+      display: inline-block;
+      color: var(--accent);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.68rem;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }
+
+    .theorem-reference-select-row {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.7rem;
+    }
+
+    .theorem-reference-select-row input,
+    .theorem-reference-checkbox {
+      width: 15px;
+      height: 15px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .theorem-reference-edit-form {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .theorem-reference-edit-form[hidden] {
+      display: none !important;
+    }
+
+    .theorem-detail-actions {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .theorem-color-row {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+    }
+
+    .theorem-color-input {
+      width: 42px;
+      height: 28px;
+      padding: 2px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      cursor: pointer;
+    }
+
+    .theorem-color-swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .theorem-color-swatch {
+      width: 22px;
+      height: 22px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--swatch-color);
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .theorem-color-swatch:hover,
+    .theorem-color-swatch:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .theorem-small-button {
+      padding: 3px 8px;
+      font-size: 0.68rem;
+      white-space: nowrap;
+    }
+
+    .theorem-import-input,
+    #theorem-export-out {
+      width: 100%;
+      min-height: 82px;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.72rem;
+      line-height: 1.35;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      padding: 6px 8px;
+      resize: vertical;
+    }
+
+    #theorem-export-out {
+      min-height: 120px;
+      margin-top: 8px;
+    }
+
+    .theorem-empty {
+      color: var(--muted);
+      font-size: 0.86rem;
+      font-style: italic;
+    }
+
+    .theorem-danger {
+      color: var(--accent2);
+    }
+
+    @media (max-width: 780px) {
+      .theorem-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .theorem-stage {
+        padding: 12px;
+      }
+
+      .theorem-canvas-wrap {
+        min-height: 360px;
+      }
+
+      #theorem-graph-canvas {
+        min-height: 360px;
+        height: 58vh !important;
+      }
+
+      .theorem-underbar {
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .theorem-field-row {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+
+      .theorem-field-row .input-label {
+        margin-top: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Theorem Graph Calculator</h1>
+  <span><a href="young_diagrams.html">Young Diagram Calculator</a> &middot; <a href="double_young_diagram.html">Young Diagram^2 Calculator</a> &middot; <a href="mosaic_calculator.html">Mosaic Calculator</a> &middot; <a href="matrix_calculator.html">Matrix Calculator</a> &middot; <a href="sheaf_calculator.html">Sheaf Calculator</a></span>
+</header>
+
+<main class="layout theorem-layout">
+  <section class="canvas-panel">
+    <header class="panel-title">
+      <span class="panel-title-text">Dependency Graph</span>
+      <div class="canvas-toolbar" aria-label="Theorem graph controls">
+        <span class="theorem-badge" id="graph-count-badge">0 nodes, 0 arrows</span>
+        <span class="theorem-badge" id="connect-badge">select</span>
+      </div>
+    </header>
+
+    <div class="theorem-stage">
+      <div class="theorem-canvas-wrap">
+        <canvas id="theorem-graph-canvas" width="960" height="560" aria-label="Theorem dependency graph"></canvas>
+        <div class="theorem-node-layer" id="theorem-node-layer" aria-label="Theorem graph nodes"></div>
+        <div class="theorem-corner-actions">
+          <button class="btn btn-ghost theorem-small-button" id="clear-graph" type="button">clear</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="theorem-underbar">
+      <span id="theorem-status">ready</span>
+      <span id="theorem-summary">explicit export/import only</span>
+    </div>
+  </section>
+
+  <aside class="side" id="cards">
+    <section class="card" id="node-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Node / Arrow</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="theorem-card-note" id="node-empty-note">Click a node or arrow to edit its details.</div>
+        <div id="node-editor">
+          <div class="theorem-field-row">
+            <label class="input-label" for="node-type">type</label>
+            <select id="node-type" class="theorem-select">
+              <option value="theorem">Theorem</option>
+              <option value="lemma">Lemma</option>
+              <option value="proposition">Proposition</option>
+              <option value="corollary">Corollary</option>
+              <option value="conjecture">Conjecture</option>
+              <option value="definition">Definition</option>
+              <option value="example">Example</option>
+            </select>
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="node-label">label</label>
+            <input id="node-label" class="theorem-input" type="text" maxlength="80" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="node-setting">setting</label>
+            <textarea id="node-setting" class="theorem-textarea" spellcheck="true"></textarea>
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="node-condition">condition</label>
+            <textarea id="node-condition" class="theorem-textarea" spellcheck="true"></textarea>
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="node-result">result</label>
+            <textarea id="node-result" class="theorem-textarea" spellcheck="true"></textarea>
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="node-color">color</label>
+            <div class="theorem-color-row">
+              <input id="node-color" class="theorem-color-input" type="color" value="#3d6b4f" aria-label="Node color">
+              <div class="theorem-color-swatches" aria-label="Node color swatches">
+                <button class="theorem-color-swatch" type="button" data-color-target="node-color" data-color-value="#1a1612" style="--swatch-color: #1a1612" aria-label="black"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="node-color" data-color-value="#3d6b4f" style="--swatch-color: #3d6b4f" aria-label="green"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="node-color" data-color-value="#2f5f9f" style="--swatch-color: #2f5f9f" aria-label="blue"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="node-color" data-color-value="#8b3a2a" style="--swatch-color: #8b3a2a" aria-label="red"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="node-color" data-color-value="#7a4d9b" style="--swatch-color: #7a4d9b" aria-label="purple"></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="arrow-editor" hidden>
+          <div class="theorem-field-row">
+            <label class="input-label" for="arrow-source">parent A</label>
+            <select id="arrow-source" class="theorem-select"></select>
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="arrow-target">parent B</label>
+            <select id="arrow-target" class="theorem-select"></select>
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="arrow-label">label</label>
+            <input id="arrow-label" class="theorem-input" type="text" maxlength="48" spellcheck="false" autocomplete="off" placeholder="optional label">
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="arrow-curve">curve</label>
+            <input id="arrow-curve" class="theorem-input" type="number" min="-160" max="160" step="5" value="0">
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="arrow-label-offset">label offset</label>
+            <input id="arrow-label-offset" class="theorem-input" type="number" min="-120" max="120" step="5" value="0">
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="arrow-color">color</label>
+            <div class="theorem-color-row">
+              <input id="arrow-color" class="theorem-color-input" type="color" value="#5f574e" aria-label="Arrow color">
+              <div class="theorem-color-swatches" aria-label="Arrow color swatches">
+                <button class="theorem-color-swatch" type="button" data-color-target="arrow-color" data-color-value="#1a1612" style="--swatch-color: #1a1612" aria-label="black"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="arrow-color" data-color-value="#3d6b4f" style="--swatch-color: #3d6b4f" aria-label="green"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="arrow-color" data-color-value="#2f5f9f" style="--swatch-color: #2f5f9f" aria-label="blue"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="arrow-color" data-color-value="#8b3a2a" style="--swatch-color: #8b3a2a" aria-label="red"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="arrow-color" data-color-value="#7a4d9b" style="--swatch-color: #7a4d9b" aria-label="purple"></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="theorem-detail-actions">
+          <button class="btn" id="detail-update" type="button" disabled>update</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="graph-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Graph</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="theorem-inline-controls">
+          <div class="theorem-field-row">
+            <label class="input-label" for="new-node-type">new</label>
+            <select id="new-node-type" class="theorem-select">
+              <option value="theorem">Theorem</option>
+              <option value="lemma" selected>Lemma</option>
+              <option value="proposition">Proposition</option>
+              <option value="corollary">Corollary</option>
+              <option value="conjecture">Conjecture</option>
+              <option value="definition">Definition</option>
+              <option value="example">Example</option>
+            </select>
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="new-node-label">label</label>
+            <input id="new-node-label" class="theorem-input" type="text" maxlength="80" spellcheck="false" autocomplete="off" placeholder="e.g. Lemma 2.1">
+          </div>
+        </div>
+        <div class="theorem-graph-actions">
+          <button class="btn" id="add-node" type="button">add node</button>
+          <button class="btn btn-ghost" id="connect-mode" type="button" aria-pressed="false">connect</button>
+          <button class="btn btn-ghost" id="delete-selected" type="button">delete selected</button>
+        </div>
+        <div class="theorem-graph-actions">
+          <button class="btn" id="toggle-layout" type="button">run layout</button>
+          <button class="btn btn-ghost" id="reset-layout" type="button">reset layout</button>
+        </div>
+        <div class="hint" id="graph-help">Connect mode: click the source node, then the target node.</div>
+      </div>
+    </section>
+
+    <section class="card" id="reference-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">References</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <label class="input-label" for="bibtex-input">BibTeX</label>
+        <textarea id="bibtex-input" class="theorem-import-input" spellcheck="false" autocomplete="off" placeholder="@article{key, title={...}, author={...}, year={...}}"></textarea>
+        <div class="theorem-field-row">
+          <label class="input-label" for="link-reference-url">link</label>
+          <input id="link-reference-url" class="theorem-input" type="url" spellcheck="false" autocomplete="off" placeholder="https://mathoverflow.net/questions/...">
+        </div>
+        <div class="theorem-field-row">
+          <label class="input-label" for="link-reference-key">key</label>
+          <input id="link-reference-key" class="theorem-input" type="text" spellcheck="false" autocomplete="off" placeholder="optional">
+        </div>
+        <div class="theorem-field-row">
+          <label class="input-label" for="link-reference-title">title</label>
+          <input id="link-reference-title" class="theorem-input" type="text" spellcheck="true" autocomplete="off" placeholder="optional">
+        </div>
+        <div class="theorem-field-row">
+          <label class="input-label" for="link-reference-source">source</label>
+          <select id="link-reference-source" class="theorem-select">
+            <option value="auto" selected>Auto</option>
+            <option value="web">Web</option>
+            <option value="mathoverflow">MathOverflow</option>
+            <option value="math-stackexchange">Math StackExchange</option>
+            <option value="stacks-project">Stacks Project</option>
+          </select>
+        </div>
+        <div class="theorem-reference-actions">
+          <button class="btn" id="add-reference" type="button">add BibTeX</button>
+          <button class="btn" id="add-link-reference" type="button">add link</button>
+          <button class="btn btn-ghost" id="clear-bibtex" type="button">clear inputs</button>
+          <button class="btn btn-ghost" id="delete-selected-references" type="button">delete selected</button>
+        </div>
+        <div class="theorem-reference-edit-form" id="reference-edit-form" hidden>
+          <div class="theorem-field-row">
+            <label class="input-label" for="reference-edit-key">key</label>
+            <input id="reference-edit-key" class="theorem-input" type="text" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="reference-edit-cite">cite as</label>
+            <input id="reference-edit-cite" class="theorem-input" type="text" spellcheck="false" autocomplete="off" placeholder="\cite{key}">
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="reference-edit-title">title</label>
+            <input id="reference-edit-title" class="theorem-input" type="text" spellcheck="true" autocomplete="off">
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="reference-edit-author">author</label>
+            <input id="reference-edit-author" class="theorem-input" type="text" spellcheck="true" autocomplete="off">
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="reference-edit-year">year</label>
+            <input id="reference-edit-year" class="theorem-input" type="text" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="reference-edit-url">link</label>
+            <input id="reference-edit-url" class="theorem-input" type="url" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="reference-edit-source">source</label>
+            <select id="reference-edit-source" class="theorem-select">
+              <option value="bibtex">BibTeX</option>
+              <option value="web">Web</option>
+              <option value="mathoverflow">MathOverflow</option>
+              <option value="math-stackexchange">Math StackExchange</option>
+              <option value="stacks-project">Stacks Project</option>
+            </select>
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="reference-edit-raw">raw</label>
+            <textarea id="reference-edit-raw" class="theorem-textarea" spellcheck="false" autocomplete="off"></textarea>
+          </div>
+          <div class="theorem-reference-actions">
+            <button class="btn" id="reference-edit-save" type="button">save edit</button>
+            <button class="btn btn-ghost" id="reference-edit-cancel" type="button">cancel</button>
+          </div>
+        </div>
+        <div class="hint" id="reference-message">BibTeX is parsed lightly; raw entries are preserved.</div>
+        <label class="theorem-reference-select-row" for="reference-select-all">
+          <span>all references</span>
+          <input type="checkbox" id="reference-select-all" aria-label="Select all references">
+        </label>
+        <div class="theorem-reference-list" id="reference-list"></div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="export-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <label class="input-label" for="theorem-export-out">compact JSON</label>
+        <textarea id="theorem-export-out" readonly spellcheck="false"></textarea>
+        <div class="theorem-export-actions">
+          <button class="btn" id="refresh-export" type="button">refresh</button>
+          <button class="btn btn-ghost" id="copy-export" type="button">copy</button>
+        </div>
+        <label class="input-label" for="theorem-import-input" style="margin-top: 12px;">import JSON</label>
+        <textarea id="theorem-import-input" class="theorem-import-input" spellcheck="false" autocomplete="off" placeholder="Paste exported JSON"></textarea>
+        <div class="theorem-export-actions">
+          <button class="btn" id="load-import" type="button">load</button>
+          <button class="btn btn-ghost" id="clear-import" type="button">clear import</button>
+        </div>
+        <div class="hint" id="export-message">Export includes nodes, arrows, references, and positions.</div>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<footer>
+  Browser-side theorem dependency graph prototype styled with the shared Young diagram UI.
+</footer>
+
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]']],
+      processEscapes: true
+    },
+    options: {
+      skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+    }
+  };
+  window.addEventListener('load', () => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js';
+    script.async = true;
+    document.head.appendChild(script);
+  }, { once: true });
+</script>
+<script src="js/theorem_graph_calculator.js"></script>
+</body>
+</html>
