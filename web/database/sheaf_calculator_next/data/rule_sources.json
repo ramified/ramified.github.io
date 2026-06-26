@@ -1,0 +1,159 @@
+{
+  "source": "js/sheaf_calculator.js",
+  "last_verified": "2026-06-23",
+  "rule_shape": {
+    "id": "stable or generated identifier",
+    "builtin": "true for generated/default rules",
+    "enabled": "false suppresses a rule",
+    "deleted": "used for suppressed standard rules",
+    "lhs": "monomial in powers form",
+    "rhs": "array of coefficient/powers terms"
+  },
+  "validation": [
+    "homologyRulePreservesDegree",
+    "homologyRuleUsesAvailableVariables",
+    "validateHomologyRuleInput"
+  ],
+  "sources": [
+    {
+      "id": "standard_geometry_rules",
+      "label": "Standard variety homology rules",
+      "collector": "standardHomologyRules",
+      "dependsOn": ["active geometry", "stored homology rules for enabled/deleted overrides"],
+      "families": [
+        "point-class-unit",
+        "top-hyperplane-point",
+        "top-theta-point",
+        "blowup-exceptional-top",
+        "curve-symplectic-*",
+        "jacobian-theta-symplectic",
+        "jacobian-symplectic-point",
+        "product-box-*",
+        "grassmannian-*",
+        "ppav-tautological-*",
+        "symmetric-product-curve-*"
+      ]
+    },
+    {
+      "id": "default_map_rules",
+      "label": "Default map pullback/pushforward rules",
+      "collector": "defaultMapHomologyRulesForGeometry",
+      "dependsOn": ["active geometry", "all maps in state.maps", "suppressed stored rules"],
+      "families": [
+        "default-pullback-unit",
+        "default-point-pushforward",
+        "default-point-source-pushforward",
+        "default-point-target-pushforward",
+        "default-blowdown-unit-pushforward",
+        "default-ramified-cover-unit-pushforward",
+        "default-blowdown-pullback",
+        "default-projection-pullback",
+        "default-projection-pushforward",
+        "default-picard-projection-pushforward",
+        "default-abel-jacobi-pullback",
+        "default-abel-jacobi-pushforward",
+        "default-symmetric-product-abel-jacobi-*"
+      ]
+    },
+    {
+      "id": "typed_user_homology_rules",
+      "label": "Rules typed in the add-rule equation input",
+      "collector": "addHomologyRuleFromControls",
+      "dependsOn": ["active homology target", "parsed equation", "degree preservation"],
+      "families": ["custom monomial rewrite rules"]
+    },
+    {
+      "id": "map_relation_rules",
+      "label": "Map relation editor rules",
+      "collector": "setMapHomologyRuleFromInput / setMapHomologyRuleFromCoefficientEditor",
+      "dependsOn": ["active map target", "selected map homology variable", "formula or coefficient editor"],
+      "families": ["stored map pullback/pushforward RHS rules"]
+    },
+    {
+      "id": "sheaf_relation_rules",
+      "label": "Sheaf class relation editor rules",
+      "collector": "setSheafHomologyRuleFromInput / setSheafHomologyRuleFromCoefficientEditor",
+      "dependsOn": ["active sheaf target", "free sheaf class variables", "formula or coefficient editor"],
+      "families": ["stored Chern/character class RHS rules"]
+    },
+    {
+      "id": "default_sheaf_rules",
+      "label": "Default rules derived from computed sheaf bundles",
+      "collector": "defaultSheafHomologyRulesFromBundle",
+      "dependsOn": ["sheaf", "geometry", "computed bundle", "basis"],
+      "families": ["default-sheaf-rule-*"]
+    },
+    {
+      "id": "promoted_sheaf_classes",
+      "label": "Sheaf/tangent Chern classes promoted into base homology",
+      "collector": "addSheafChernClassToBaseHomology / addTangentChernClassToBaseHomology",
+      "dependsOn": ["active sheaf context", "computed sheaf class rule", "promotion prompt"],
+      "families": ["promoted sheaf Chern classes", "promoted tangent Chern classes"]
+    },
+    {
+      "id": "construction_side_effect_rules",
+      "label": "Rules/classes added by constructors",
+      "collector": "constructor helper functions",
+      "dependsOn": ["specific construction data"],
+      "families": [
+        "cyclic ramified-cover rules",
+        "cyclic root class rules",
+        "projective branch degree rules",
+        "projective root hyperplane rules",
+        "ideal sheaf rules",
+        "Grassmannian map source Chern rules",
+        "Picard/Poincare first Chern rules"
+      ]
+    },
+    {
+      "id": "class_step_rules",
+      "label": "Step-by-step formula rewrite candidates",
+      "collector": "collectClassStepRuleCandidates",
+      "dependsOn": ["class step session", "geometry", "visible formula", "cache/saved/switching options"],
+      "families": [
+        "base homology rules",
+        "default map rules",
+        "sheaf rules",
+        "construction rules",
+        "formal follow-up rules",
+        "Pullback",
+        "Tangent class",
+        "Todd",
+        "Chern character",
+        "Chern class",
+        "rank",
+        "Switch c/ch",
+        "GRR",
+        "SES",
+        "map-wrapped rules",
+        "pullback-wrapped rules",
+        "cached formula",
+        "cached pushforward formula",
+        "cached pullback formula",
+        "saved formula",
+        "assumption",
+        "simplify"
+      ]
+    }
+  ],
+  "application": {
+    "general": [
+      "applyHomologyRules",
+      "applyHomologyRulesBudgeted",
+      "applyHomologyRuleSweep",
+      "applyOneHomologyRule"
+    ],
+    "class_step": [
+      "applySelectedClassStepRules",
+      "classStepMaterializeRule",
+      "applyClassStepRulesForStep",
+      "applyClassStepRulesToPoly",
+      "applyOneClassStepRule"
+    ],
+    "limits": {
+      "defaultPasses": "DEFAULT_HOMOLOGY_RULE_PASSES",
+      "maxPasses": "MAX_HOMOLOGY_RULE_PASSES",
+      "symbolicBudget": "SYMBOLIC_WORK_BUDGET"
+    }
+  }
+}

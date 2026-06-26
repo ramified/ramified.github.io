@@ -20,6 +20,7 @@
   const HOMOLOGY_RULE_COLLAPSE_THRESHOLD = 10;
   const RECOMPUTE_DELAY_MS = 16;
   const CLASS_REFRESH_DELAY_MS = 16;
+  const MAIN_RESULT_CACHE_LIMIT = 24;
   const SYMBOLIC_WORK_BUDGET = {
     maxTerms: 6000,
     maxOps: 90000,
@@ -101,6 +102,60 @@
   const HOMOLOGY_POINT_UNIT_RULE_ID = 'point-class-unit';
   const MAX_PRODUCT_BOX_CLASSES = 600;
   const POINT_VARIETY_NAMES = ['\\{*\\}', 'pt', 'p', '\\{p\\}'];
+  const TYPE_HIERARCHY = Object.freeze([
+    typeNode('abstract variety', [
+      typeNode('point'),
+      typeNode('curve'),
+      typeNode('symmetric product of a curve'),
+      typeNode('projective space'),
+      typeNode('complete intersection'),
+      typeNode('Grassmannian'),
+      typeNode('abelian variety'),
+      typeNode('moduli of ppav'),
+      typeNode('product variety'),
+      typeNode('blow-up')
+    ]),
+    typeNode('abstract sheaf', [
+      typeNode('structure sheaf'),
+      typeNode('locally free sheaf / vector bundle'),
+      typeNode('tangent sheaf'),
+      typeNode('cotangent sheaf'),
+      typeNode('canonical sheaf'),
+      typeNode('Serre twisting sheaf'),
+      typeNode('divisor sheaf'),
+      typeNode('dual bundle'),
+      typeNode('direct sum sheaf'),
+      typeNode('tensor product sheaf'),
+      typeNode('pullback sheaf'),
+      typeNode('pushforward sheaf')
+    ]),
+    typeNode('abstract map', [
+      typeNode('variety map', [
+        typeNode('product projection'),
+        typeNode('variety map composition'),
+        typeNode('Abel-Jacobi map'),
+        typeNode('ramified cover map'),
+        typeNode('Grassmannian map')
+      ]),
+      typeNode('sheaf map', [
+        typeNode('sheaf map composition')
+      ])
+    ])
+  ]);
+  const TYPE_CLOSURE_NOTES = Object.freeze([
+    'The visible hierarchy lists constructor/UI types, not every mathematical category.',
+    'Projective, smooth, coherent, locally free, proper, and exact are traits or derived properties unless they need special form fields.',
+    'The generic abstract variety remains available because future inputs may not be smooth projective.',
+    'Product variety stays visible because it has factor data, projection maps, and bidegree-aware homology classes.'
+  ]);
+  const TYPE_TRAIT_RULES = Object.freeze([
+    'product(projective variety, projective variety) => projective variety',
+    'directSum(locally free sheaf, locally free sheaf) => locally free sheaf',
+    'tensor(locally free sheaf, locally free sheaf) => locally free sheaf',
+    'dual(locally free sheaf) => locally free sheaf',
+    'structure/canonical/Serre twisting/divisor sheaf => locally free sheaf when defined',
+    'locally free sheaf => coherent sheaf'
+  ]);
   const VARS = new Map();
   const refs = {};
   const hodgeACoeffCache = new Map();
@@ -200,9 +255,13 @@
     classRefreshBusy: false,
     pendingClassRefreshReason: '',
     simplificationCache: new Map(),
+    mainResultCacheEnabled: false,
+    mainResultCache: new Map(),
+    mainResultCacheLastHit: false,
     classStepSession: null,
     classStepCache: new Map(),
     classStepSavedRules: [],
+    classFormulaEditorOpen: false,
     classFormulaBuilder: {
       varietyId: null,
       tokens: [],
@@ -215,7 +274,8 @@
       activeSlotId: null,
       cursorIndex: 0,
       insertMode: 'insert',
-      nextSlotId: 1
+      nextSlotId: 1,
+      editingSavedFormulaId: null
     },
     currentSymbolicBudget: null,
     currentRecomputeBudget: null,
@@ -236,6 +296,8 @@
     bindControls();
     bindCards();
     syncHodgeWidePlacement();
+    renderClassStepSavedFormulaList();
+    renderClassFormulaBuilder();
     recompute('initial render');
     window.addEventListener('resize', debounce(() => {
       renderCanvas(state.lastResult);
@@ -542,6 +604,8 @@
     refs.toggleClassCard = $('toggle-class-card');
     refs.toggleCohomologyCard = $('toggle-cohomology-card');
     refs.repeatNames = $('repeat-names');
+    refs.mainResultCache = $('main-result-cache');
+    refs.mainResultCacheLabel = $('main-result-cache-label');
     refs.repeatStyle = $('repeat-style');
     refs.addObject = $('add-object');
     refs.deleteObject = $('delete-object');
@@ -558,6 +622,9 @@
     refs.classTermRow = $('class-term-row');
     refs.classTermOnly = $('class-term-only');
     refs.classTermIndex = $('class-term-index');
+    refs.classBracketDisplay = $('class-bracket-display');
+    refs.classFamilyRow = $('class-family-row');
+    refs.classFamilyToggles = Array.from(document.querySelectorAll('[data-class-family-toggle]'));
     refs.rankRow = $('rank-row');
     refs.rank = $('rank-symbol');
     refs.canvas = $('sheaf-canvas');
@@ -573,6 +640,17 @@
     refs.classMessage = $('class-message');
     refs.classStepWideHost = $('class-step-wide-host');
     refs.classStepCard = $('class-step-card');
+    refs.classStepSelectAllSaved = $('class-step-select-all-saved');
+    refs.classStepAddFormula = $('class-step-add-formula');
+    refs.classStepImportPreset = $('class-step-import-preset');
+    refs.classStepImportPanel = $('class-step-import-panel');
+    refs.classStepImportInput = $('class-step-import-input');
+    refs.classStepImportApply = $('class-step-import-apply');
+    refs.classStepImportCancel = $('class-step-import-cancel');
+    refs.classStepImportMessage = $('class-step-import-message');
+    refs.classStepExportSaved = $('class-step-export-saved');
+    refs.classStepDeleteSaved = $('class-step-delete-saved');
+    refs.classStepSavedRules = $('class-step-saved-rules');
     refs.classFormulaBuilder = $('class-formula-builder');
     refs.classFormulaVariety = $('class-formula-variety');
     refs.classFormulaHomologyButtons = $('class-formula-homology-buttons');
@@ -589,6 +667,7 @@
     refs.classFormulaSlotDone = $('class-formula-slot-done');
     refs.classFormulaCheck = $('class-formula-check');
     refs.classFormulaCompute = $('class-formula-compute');
+    refs.classFormulaClose = $('class-formula-close');
     refs.classStepPanel = $('class-step-panel');
     refs.classStepTargetRow = $('class-step-target-row');
     refs.classStepFamily = $('class-step-family');
@@ -602,13 +681,13 @@
     refs.classStepOncePerRule = $('class-step-once-per-rule');
     refs.classStepOnePass = $('class-step-one-pass');
     refs.classStepRules = $('class-step-rules');
+    refs.classStepAddSelectedRules = $('class-step-add-selected-rules');
     refs.classStepApply = $('class-step-apply');
     refs.classStepSaveRule = $('class-step-save-rule');
     refs.classStepUndo = $('class-step-undo');
     refs.classStepRestart = $('class-step-restart');
     refs.classStepStop = $('class-step-stop');
     refs.classStepExport = $('class-step-export');
-    refs.classStepSavedRules = $('class-step-saved-rules');
     refs.classStepMessage = $('class-step-message');
     refs.furtherSimplify = $('further-simplify');
     refs.resetSimplify = $('reset-simplify');
@@ -683,6 +762,10 @@
 
   function $(id) {
     return document.getElementById(id);
+  }
+
+  function typeNode(name, children = []) {
+    return Object.freeze({ name, children: Object.freeze(children) });
   }
 
   function initializeInputObjects() {
@@ -2004,8 +2087,10 @@
     if (expandedOption) expandedOption.disabled = !canExpandRoots;
     if (!canExpandRoots && refs.rootForm?.value === 'expanded') refs.rootForm.value = 'product';
     if (refs.classTermRow) refs.classTermRow.hidden = !hasClasses;
+    if (refs.classFamilyRow) refs.classFamilyRow.hidden = !hasClasses;
     const termOnly = !!refs.classTermOnly?.checked;
-    if (refs.classTermIndex) refs.classTermIndex.disabled = !hasClasses || !termOnly;
+    const bracketDisplay = !!refs.classBracketDisplay?.checked;
+    if (refs.classTermIndex) refs.classTermIndex.disabled = !hasClasses || !termOnly || bracketDisplay;
     if (refs.classTermIndex) {
       refs.classTermIndex.max = String(Math.max(0, classDim));
     }
@@ -4583,6 +4668,20 @@
         syncDefaultMapName();
       });
     }
+    if (refs.mainResultCache) {
+      refs.mainResultCache.addEventListener('change', () => {
+        state.mainResultCacheEnabled = !!refs.mainResultCache.checked;
+        state.mainResultCacheLastHit = false;
+        syncMainResultCacheControl();
+        if (refs.status) {
+          const cacheText = state.mainResultCacheEnabled
+            ? `calculation cache on (${state.mainResultCache.size} stored)`
+            : 'calculation cache off';
+          refs.status.textContent = cacheText;
+        }
+      });
+    }
+    syncMainResultCacheControl();
     refs.addObjectKind.addEventListener('change', () => {
       syncInputAvailabilityControls();
       state.activeSequenceId = null;
@@ -4866,6 +4965,27 @@
           importPresetFromText(refs.importPresetInput?.value || '');
         } catch (error) {
           showPresetImportMessage(error?.message || 'Unable to import preset.', true);
+          reportInputActionError(error);
+        }
+      });
+    }
+    if (refs.classStepImportPreset) {
+      refs.classStepImportPreset.addEventListener('click', () => {
+        setClassStepImportPanelVisible(!!refs.classStepImportPanel?.hidden);
+      });
+    }
+    if (refs.classStepImportCancel) {
+      refs.classStepImportCancel.addEventListener('click', () => {
+        if (refs.classStepImportInput) refs.classStepImportInput.value = '';
+        setClassStepImportPanelVisible(false);
+      });
+    }
+    if (refs.classStepImportApply) {
+      refs.classStepImportApply.addEventListener('click', () => {
+        try {
+          importPresetFromText(refs.classStepImportInput?.value || '', { source: 'class-step' });
+        } catch (error) {
+          showClassStepImportMessage(error?.message || 'Unable to import preset.', true);
           reportInputActionError(error);
         }
       });
@@ -5375,6 +5495,14 @@
     }
     if (refs.classTermOnly) {
       refs.classTermOnly.addEventListener('change', () => {
+        if (refs.classTermOnly.checked && refs.classBracketDisplay) refs.classBracketDisplay.checked = false;
+        syncClassDisplayControls();
+        refreshClassDisplayOnly('class display');
+      });
+    }
+    if (refs.classBracketDisplay) {
+      refs.classBracketDisplay.addEventListener('change', () => {
+        if (refs.classBracketDisplay.checked && refs.classTermOnly) refs.classTermOnly.checked = false;
         syncClassDisplayControls();
         refreshClassDisplayOnly('class display');
       });
@@ -5387,6 +5515,12 @@
         refreshClassDisplayOnly('class display');
       });
     }
+    (refs.classFamilyToggles || []).forEach((checkbox) => {
+      checkbox.addEventListener('change', () => {
+        syncClassDisplayControls();
+        refreshClassDisplayOnly('class display');
+      });
+    });
     if (refs.homologyHyperplaneSymbol) {
       refs.homologyHyperplaneSymbol.addEventListener('change', () => {
         updateHomologySymbol(HOMOLOGY_HYPERPLANE_CLASS, refs.homologyHyperplaneSymbol.value);
@@ -5700,23 +5834,29 @@
       refs.classFormulaBuilder.addEventListener('click', (event) => {
         const cursorTarget = event.target.closest('[data-class-formula-cursor]');
         if (cursorTarget) {
+          event.preventDefault();
           setClassFormulaCursor(Number(cursorTarget.dataset.classFormulaCursor));
           return;
         }
         const slotButton = event.target.closest('[data-class-formula-slot]');
         if (slotButton) {
+          event.preventDefault();
           setClassFormulaActiveSlot(slotButton.dataset.classFormulaSlot);
           return;
         }
         const tokenButton = event.target.closest('[data-class-formula-token]');
         if (tokenButton) {
+          event.preventDefault();
           appendClassFormulaTokenFromButton(tokenButton);
           return;
         }
         const opButton = event.target.closest('[data-class-formula-op]');
         if (opButton) {
+          event.preventDefault();
           appendClassFormulaOperator(opButton.dataset.classFormulaOp);
+          return;
         }
+        if (refs.classFormulaPreview?.contains(event.target)) focusClassFormulaPreview();
       });
     }
     if (refs.classFormulaPreview) {
@@ -5737,6 +5877,18 @@
     if (refs.classFormulaCompute) {
       refs.classFormulaCompute.addEventListener('click', () => startClassStepSessionFromFormulaBuilder());
     }
+    if (refs.classFormulaClose) {
+      refs.classFormulaClose.addEventListener('click', () => closeClassFormulaEditor());
+    }
+    if (refs.classStepAddFormula) {
+      refs.classStepAddFormula.addEventListener('click', () => openClassFormulaEditor({ reset: true }));
+    }
+    if (refs.classStepExportSaved) {
+      refs.classStepExportSaved.addEventListener('click', () => openChartExport('saved-step-formulas'));
+    }
+    if (refs.classStepDeleteSaved) {
+      refs.classStepDeleteSaved.addEventListener('click', () => deleteSelectedClassStepSavedRules());
+    }
     if (refs.classStepFamily) {
       refs.classStepFamily.addEventListener('change', () => restartClassStepSessionFromControls());
     }
@@ -5750,24 +5902,38 @@
       refs.classStepLayout.addEventListener('click', () => toggleClassStepLayout());
     }
     if (refs.classStepUseCache) {
-      refs.classStepUseCache.addEventListener('change', () => renderClassStepPanel());
+      refs.classStepUseCache.addEventListener('change', () => refreshClassStepRuleCandidatesOnly());
     }
     if (refs.classStepCheckSwitch) {
       refs.classStepCheckSwitch.addEventListener('click', () => checkClassStepSwitchingRules());
     }
     if (refs.classStepRules) {
       refs.classStepRules.addEventListener('change', (event) => {
+        const masterCheckbox = event.target.closest('[data-class-step-select-all-rules]');
+        if (masterCheckbox) {
+          toggleClassStepRuleSelectionFromMaster();
+          return;
+        }
         const checkbox = event.target.closest('[data-class-step-rule]');
         if (!checkbox || !state.classStepSession) return;
         const candidate = state.classStepSession.candidates.find((item) => item.id === checkbox.dataset.classStepRule);
         if (candidate) candidate.selected = checkbox.checked;
+        updateClassStepRuleSelectionControls();
       });
     }
     if (refs.classStepSavedRules) {
       refs.classStepSavedRules.addEventListener('click', (event) => {
-        const button = event.target.closest('[data-class-step-delete-saved]');
-        if (!button) return;
-        deleteClassStepSavedRule(button.dataset.classStepDeleteSaved);
+        const editButton = event.target.closest('[data-class-step-edit-saved]');
+        if (editButton) editClassStepSavedFormula(editButton.dataset.classStepEditSaved);
+      });
+      refs.classStepSavedRules.addEventListener('change', (event) => {
+        const masterCheckbox = event.target.closest('[data-class-step-select-all-saved]');
+        if (masterCheckbox) {
+          toggleClassStepSavedSelectionFromMaster();
+          return;
+        }
+        const checkbox = event.target.closest('[data-class-step-select-saved]');
+        if (checkbox) setClassStepSavedFormulaSelected(checkbox.dataset.classStepSelectSaved, checkbox.checked);
       });
     }
     if (refs.classStepHistoryControls) {
@@ -5777,18 +5943,21 @@
         toggleClassStepHistoryLine(Number(button.dataset.classStepHistoryToggle));
       });
     }
+    if (refs.classStepAddSelectedRules) {
+      refs.classStepAddSelectedRules.addEventListener('click', () => saveSelectedClassStepRulesToLibrary());
+    }
     if (refs.classStepApply) {
       refs.classStepApply.addEventListener('click', () => applySelectedClassStepRules());
     }
     if (refs.classStepSaveRule) {
-      refs.classStepSaveRule.addEventListener('click', () => saveCurrentClassStepFormulaAsRule());
+      refs.classStepSaveRule.addEventListener('click', () => closeClassStepEditor());
     }
     if (refs.classStepUndo) {
       refs.classStepUndo.addEventListener('click', () => undoLastClassStep());
     }
     if (refs.classStepRestart) {
       refs.classStepRestart.addEventListener('click', () => {
-        if (state.classStepSession?.formulaSession) startClassStepSessionFromFormulaBuilder({ useValidated: true });
+        if (state.classStepSession?.formulaSession) restartClassFormulaStepSession();
         else restartClassStepSessionFromControls();
       });
     }
@@ -5862,7 +6031,10 @@
     }
     refs.refreshExport.addEventListener('click', () => refreshExport('main'));
     refs.copyExport.addEventListener('click', copyExport);
-    refs.exportFormat.addEventListener('change', () => refreshExport());
+    refs.exportFormat.addEventListener('change', () => {
+      refreshExport();
+      updateClassStepSavedFormulaActions();
+    });
     refs.hodgeExpanded.addEventListener('change', () => {
       state.hodgeExpanded = refs.hodgeExpanded.checked;
       if (state.lastResult?.hodge && !hodgeIsQueryOnly(state.lastResult.hodge, state.lastResult.geometry)) {
@@ -8254,7 +8426,9 @@
     }
     return {
       id: `sheaf-rule-${c1Id}`,
-      builtin: false,
+      builtin: true,
+      automatic: 'picard-poincare',
+      stepSourceLabel: 'Picard-Poincare',
       preserveUnknownVariables: true,
       enabled: true,
       lhs: { powers: { [c1Id]: 1 } },
@@ -11126,8 +11300,9 @@
     slots: ['map', 'sheaf'],
     active: () => sheafMapOperationInputMode(),
     allowedObjectKinds: () => state.sheafMapPickTarget === 'sheaf' ? ['sheaf'] : ['map'],
-    available: () => state.maps.some((map) => allowableSheafMapOperationMap(map.id))
-      || state.sheaves.some((sheaf) => allowableSheafMapOperationSheaf(sheaf.id)),
+    available: () => state.sheafMapPickTarget === 'sheaf'
+      ? state.sheaves.some((sheaf) => allowableSheafMapOperationSheaf(sheaf.id))
+      : state.maps.some((map) => allowableSheafMapOperationMap(map.id)),
     candidate: (kind, id) => (
       (kind === 'map' && state.sheafMapPickTarget === 'map' && allowableSheafMapOperationMap(id))
       || (kind === 'sheaf' && state.sheafMapPickTarget === 'sheaf' && allowableSheafMapOperationSheaf(id))
@@ -12378,13 +12553,7 @@
     if (!map || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return null;
     const sourceSheaf = sheafMapDraftSheaf();
     if (sourceSheaf) {
-      const canPullback = sourceSheaf.baseVarietyId === map.codomainId;
-      const canPushforward = sourceSheaf.baseVarietyId === map.domainId;
-      if (canPullback && canPushforward) {
-        return refs.sheafMapOperation?.value === 'pushforward' ? 'pushforward' : 'pullback';
-      }
-      if (canPullback) return 'pullback';
-      if (canPushforward) return 'pushforward';
+      return sheafMapOperationForMapAndSheaf(map, sourceSheaf);
     }
     const baseId = state.draftSheafBaseVarietyId || activeEditingSheaf()?.baseVarietyId || null;
     if (inputIsCreateMode()) return null;
@@ -12395,6 +12564,18 @@
       return sheafMapOperationForMapAndBase(map, map.codomainId);
     }
     return sheafMapOperationForMapAndBase(map, baseId);
+  }
+
+  function sheafMapOperationForMapAndSheaf(map, sheaf) {
+    if (!map || !sheaf || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return null;
+    const canPullback = sheaf.baseVarietyId === map.codomainId;
+    const canPushforward = sheaf.baseVarietyId === map.domainId;
+    if (canPullback && canPushforward) {
+      return refs.sheafMapOperation?.value === 'pushforward' ? 'pushforward' : 'pullback';
+    }
+    if (canPullback) return 'pullback';
+    if (canPushforward) return 'pushforward';
+    return null;
   }
 
   function sheafMapOperationForMapAndBase(map, baseId) {
@@ -12962,6 +13143,8 @@
   function allowableSheafMapOperationMap(mapId) {
     const map = state.maps.find((item) => item.id === mapId);
     if (!map || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return false;
+    const sourceSheaf = sheafMapDraftSheaf();
+    if (sourceSheaf) return !!sheafMapOperationForMapAndSheaf(map, sourceSheaf);
     if (inputIsModifyMode() || !sheafMapDraftBase()) {
       return state.sheaves.some((sheaf) => (
         sheaf.id !== state.activeSheafId
@@ -12977,18 +13160,17 @@
   }
 
   function allowableSheafMapOperationSheaf(sheafId) {
+    const sheaf = state.sheaves.find((item) => item.id === sheafId);
+    if (!sheaf || (inputIsModifyMode() && sheaf.id === state.activeSheafId)) return false;
     const map = sheafMapDraftMap();
-    const operation = sheafMapOperationFor(map);
-    const sourceBaseId = sheafMapOperationSourceBaseId(map, operation);
-    return state.sheaves.some((sheaf) => (
-      sheaf.id === sheafId
-      && !(inputIsModifyMode() && sheaf.id === state.activeSheafId)
-      && (
-        sourceBaseId
-          ? sheaf.baseVarietyId === sourceBaseId
-          : !!map && (sheaf.baseVarietyId === map.domainId || sheaf.baseVarietyId === map.codomainId)
-      )
-    ));
+    if (!map) {
+      return state.maps.some((item) => (
+        item.domainKind === 'variety'
+        && item.codomainKind === 'variety'
+        && !!sheafMapOperationForMapAndSheaf(item, sheaf)
+      ));
+    }
+    return !!sheafMapOperationForMapAndSheaf(map, sheaf);
   }
 
   function syncSheafMapDraftBaseFromOperation() {
@@ -13013,9 +13195,14 @@
     if (state.sheafMapPickTarget === 'map' && kind === 'map' && allowableSheafMapOperationMap(id)) {
       const changingMap = state.sheafMapDraft?.mapId !== id;
       if (changingMap && refs.sheafMapOperation) refs.sheafMapOperation.value = 'auto';
-      state.sheafMapDraft = { mapId: id, sheafId: null };
+      const sourceSheaf = sheafMapDraftSheaf();
+      const keepSheafId = sourceSheaf && sheafMapOperationForMapAndSheaf(state.maps.find((item) => item.id === id), sourceSheaf)
+        ? sourceSheaf.id
+        : null;
+      state.sheafMapDraft = { mapId: id, sheafId: keepSheafId };
       syncSheafMapDraftBaseFromOperation();
-      state.sheafMapPickTarget = 'sheaf';
+      if (keepSheafId) setCanvasPickEnabled(false, { render: false });
+      else state.sheafMapPickTarget = 'sheaf';
       updateSheafMapDraftControls();
       syncDefaultRank(true);
       syncDefaultSheafName();
@@ -13025,7 +13212,8 @@
     if (state.sheafMapPickTarget === 'sheaf' && kind === 'sheaf' && allowableSheafMapOperationSheaf(id)) {
       state.sheafMapDraft = { ...(state.sheafMapDraft || {}), sheafId: id };
       syncSheafMapDraftBaseFromOperation();
-      setCanvasPickEnabled(false, { render: false });
+      if (state.sheafMapDraft.mapId) setCanvasPickEnabled(false, { render: false });
+      else state.sheafMapPickTarget = 'map';
       updateSheafMapDraftControls();
       syncDefaultRank(true);
       syncDefaultSheafName();
@@ -13078,9 +13266,13 @@
   }
 
   function sheafMapPickHint(base = sheafMapDraftBase(), map = sheafMapDraftMap()) {
+    const sourceSheaf = sheafMapDraftSheaf();
     if (!state.maps.some((item) => allowableSheafMapOperationMap(item.id))) return inputIsModifyMode() ? 'add a compatible map and source sheaf' : 'add a map touching the base variety';
-    if (state.sheafMapPickTarget === 'map') return map ? 'click a map to replace the parent map' : 'click a map whose domain or codomain is the base variety';
-    if (!map) return 'click the map button first';
+    if (state.sheafMapPickTarget === 'map') {
+      if (sourceSheaf && !map) return 'click a map whose domain or codomain is the source sheaf base';
+      return map ? 'click a map to replace the parent map' : 'click a map whose domain or codomain is the base variety';
+    }
+    if (!map) return sourceSheaf ? 'click the map button next' : 'click a source sheaf, or choose the map first';
     const sourceBaseId = sheafMapOperationSourceBaseId(map);
     const hasSourceSheaf = sourceBaseId
       ? state.sheaves.some((sheaf) => sheaf.baseVarietyId === sourceBaseId && !(inputIsModifyMode() && sheaf.id === state.activeSheafId))
@@ -15759,6 +15951,10 @@
     state.pendingRecomputeReason = reason;
     if (state.recomputeTimer) clearTimeout(state.recomputeTimer);
     clearPendingClassRefresh();
+    if (mainResultCacheLikelyAvailable()) {
+      state.recomputeTimer = null;
+      return runRecompute(jobId, reason);
+    }
     setRecomputeBusy(true, reason);
     state.recomputeTimer = setTimeout(() => {
       if (jobId !== state.recomputeJobId) return;
@@ -15766,6 +15962,275 @@
       runRecompute(jobId, state.pendingRecomputeReason || reason);
     }, delay);
     return null;
+  }
+
+  function mainResultCacheIsEnabled() {
+    return state.mainResultCacheEnabled === true && refs.mainResultCache?.checked === true;
+  }
+
+  function mainResultCacheKeyForActive(activeKind, activeId, geometryId) {
+    if (!activeKind || !activeId || !geometryId) return '';
+    const signature = stableJson({
+      active: {
+        kind: activeKind,
+        id: activeId,
+        geometryId,
+        inputMode: state.inputMode
+      },
+      objects: mainResultObjectSignature()
+    });
+    return `main:${hashString(signature)}:${signature.length}:${signature}`;
+  }
+
+  function currentMainResultCacheKeyFromState() {
+    if (!inputIsModifyMode()) return '';
+    const chosenSheaf = selectedSheaf();
+    const chosenVariety = !chosenSheaf && modifyKind() === 'variety' ? selectedVariety() : null;
+    const baseVariety = chosenSheaf ? baseVarietyForSheaf(chosenSheaf) : chosenVariety;
+    if (!baseVariety?.id) return '';
+    return mainResultCacheKeyForActive(
+      chosenSheaf ? 'sheaf' : 'variety',
+      chosenSheaf?.id || baseVariety.id,
+      baseVariety.id
+    );
+  }
+
+  function mainResultCacheLikelyAvailable() {
+    if (!mainResultCacheIsEnabled()) return false;
+    const key = currentMainResultCacheKeyFromState();
+    return !!(key && state.mainResultCache.has(key));
+  }
+
+  function mainResultCacheKey(geometry, sheaf) {
+    if (!geometry) return '';
+    const activeKind = sheaf ? 'sheaf' : 'variety';
+    const activeId = sheaf?.sourceObject?.id || geometry.varietyId || '';
+    return mainResultCacheKeyForActive(activeKind, activeId, geometry.varietyId || '');
+  }
+
+  function mainResultObjectSignature() {
+    const byId = (a, b) => String(a.id || '').localeCompare(String(b.id || ''));
+    return {
+      numbers: (state.globalInvariants || []).map((item) => compactSerializable({
+        id: item.id,
+        value: item.value,
+        hasValue: item.hasValue,
+        replaceWithValue: item.replaceWithValue,
+        positive: item.positive
+      })).sort(byId),
+      varieties: (state.varieties || []).map((item) => compactSerializable({
+        id: item.id,
+        type: item.type,
+        dim: item.dim,
+        genus: item.genus,
+        ppavGenus: item.ppavGenus,
+        ciDegrees: item.ciDegrees,
+        ciAmbient: item.ciAmbient,
+        symmetricProductM: item.symmetricProductM,
+        symmetricProductGenus: item.symmetricProductGenus,
+        grassmannianR: item.grassmannianR,
+        grassmannianN: item.grassmannianN,
+        grassmannianYoungBasis: item.grassmannianYoungBasis,
+        construction: mainResultConstructionSignature(item.construction),
+        homology: mainResultHomologySignature(item.homology)
+      })).sort(byId),
+      sheaves: (state.sheaves || []).map((item) => compactSerializable({
+        id: item.id,
+        type: item.type,
+        twist: item.twist,
+        rank: item.rank,
+        basis: item.basis,
+        baseVarietyId: item.baseVarietyId,
+        divisorCoefficients: item.divisorCoefficients,
+        construction: mainResultConstructionSignature(item.construction),
+        homology: mainResultHomologySignature(item.homology)
+      })).sort(byId),
+      maps: (state.maps || []).map((item) => compactSerializable({
+        id: item.id,
+        domainKind: item.domainKind,
+        domainId: item.domainId,
+        codomainKind: item.codomainKind,
+        codomainId: item.codomainId,
+        construction: mainResultConstructionSignature(item.construction)
+      })).sort(byId),
+      sequences: (state.sequences || []).map((item) => compactSerializable({
+        id: item.id,
+        type: item.type,
+        baseVarietyId: item.baseVarietyId,
+        sheafIds: item.sheafIds,
+        mapIds: item.mapIds
+      })).sort(byId)
+    };
+  }
+
+  function mainResultConstructionSignature(construction) {
+    if (!construction || typeof construction !== 'object') return null;
+    const copy = { ...construction };
+    delete copy.defaultName;
+    delete copy.nameDirty;
+    return copy;
+  }
+
+  function mainResultHomologySignature(homology) {
+    if (!homology || typeof homology !== 'object') return null;
+    return compactSerializable({
+      classes: Object.entries(homology.classes || {})
+        .map(([id, value]) => ({ id, ...value }))
+        .sort((a, b) => String(a.id || '').localeCompare(String(b.id || ''))),
+      customClasses: (homology.customClasses || []).map((item) => ({ ...item }))
+        .sort((a, b) => String(a.id || '').localeCompare(String(b.id || ''))),
+      rules: (homology.rules || []).map((rule) => compactSerializable({
+        id: rule.id,
+        builtin: rule.builtin,
+        automatic: rule.automatic,
+        enabled: rule.enabled !== false,
+        deleted: rule.deleted,
+        lhs: rule.lhs,
+        rhs: rule.rhs,
+        preserveUnknownVariables: rule.preserveUnknownVariables
+      })).sort((a, b) => String(a.id || '').localeCompare(String(b.id || '')))
+    });
+  }
+
+  function stableJson(value) {
+    if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+    if (value && typeof value === 'object') {
+      return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+    }
+    return JSON.stringify(value);
+  }
+
+  function cachedMainResult(key) {
+    if (!mainResultCacheIsEnabled() || !key) return null;
+    const entry = state.mainResultCache.get(key);
+    if (!entry?.result) return null;
+    state.mainResultCache.delete(key);
+    state.mainResultCache.set(key, entry);
+    syncMainResultCacheControl();
+    return entry.result;
+  }
+
+  function rememberMainResult(key, result) {
+    if (!mainResultCacheIsEnabled() || !key || !result?.geometry) return;
+    state.mainResultCache.delete(key);
+    state.mainResultCache.set(key, {
+      result,
+      label: mainResultCacheEntryLabel(result),
+      storedAt: Date.now()
+    });
+    while (state.mainResultCache.size > MAIN_RESULT_CACHE_LIMIT) {
+      const oldest = state.mainResultCache.keys().next().value;
+      if (!oldest) break;
+      state.mainResultCache.delete(oldest);
+    }
+    syncMainResultCacheControl();
+  }
+
+  function refreshMainResultCacheEntryLabel(key, result) {
+    if (!key || !result?.geometry) return;
+    const entry = state.mainResultCache.get(key);
+    if (!entry) return;
+    entry.label = mainResultCacheEntryLabel(result);
+    syncMainResultCacheControl();
+  }
+
+  function mainResultCacheEntryLabel(result) {
+    const geometryLabel = result?.geometry?.labelPlain || result?.geometry?.labelLatex || result?.geometry?.varietyId || 'variety';
+    const sheafLabel = result?.bundle?.labelPlain || result?.sheaf?.labelPlain || result?.sheaf?.labelLatex || '';
+    return sheafLabel ? `${sheafLabel} on ${geometryLabel}` : geometryLabel;
+  }
+
+  function mainResultCacheTitle() {
+    const stored = Array.from(state.mainResultCache.values())
+      .map((entry) => entry?.label || mainResultCacheEntryLabel(entry?.result))
+      .filter(Boolean);
+    if (!state.mainResultCacheEnabled) {
+      return stored.length
+        ? `Cache calculations is off. ${stored.length} stored result${stored.length === 1 ? '' : 's'} will be reused if turned on.`
+        : 'Cache calculations is off. Turn it on to reuse computed varieties and sheaves.';
+    }
+    if (!stored.length) return 'Cache calculations is on. No cached main calculations yet.';
+    return [
+      `Cache calculations is on. ${stored.length} cached main calculation${stored.length === 1 ? '' : 's'}:`,
+      ...stored.slice(-MAIN_RESULT_CACHE_LIMIT).map((label) => `- ${label}`)
+    ].join('\n');
+  }
+
+  function syncMainResultCacheControl() {
+    const title = mainResultCacheTitle();
+    if (refs.mainResultCacheLabel) refs.mainResultCacheLabel.title = title;
+    if (refs.status) refs.status.title = title;
+    if (refs.mainResultCache) {
+      refs.mainResultCache.title = title;
+      refs.mainResultCache.setAttribute('aria-label', title.split('\n')[0] || 'cache calculations');
+    }
+  }
+
+  function prepareCachedMainResult(result, geometry = result?.geometry, sheaf = result?.sheaf || null) {
+    if (!result?.geometry) return result;
+    const labelsChanged = mainResultLabelsChanged(result, geometry, sheaf);
+    const prepared = {
+      ...result,
+      geometry: geometry || result.geometry,
+      sheaf: sheaf || null
+    };
+    if (labelsChanged && prepared.hodge) {
+      prepared.hodge = buildHodgeNumbers(prepared.geometry);
+    }
+    if (labelsChanged && prepared.cohomology) {
+      prepared.cohomology = buildSheafCohomology(prepared.geometry, prepared.sheaf, prepared.hodge);
+    }
+    if (prepared.bundle && prepared.sheaf) {
+      prepared.bundle = relabelBundle(prepared.bundle, prepared.sheaf.labelLatex, prepared.sheaf.labelPlain);
+    }
+    defineHomologyVariables(prepared.geometry);
+    if (prepared.sheaf) {
+      sheafHomologyClassDefinitions(prepared.sheaf, prepared.geometry).forEach(defineSheafClassVariable);
+    }
+    restoreMainResultVariables(prepared);
+    if (prepared.bundle) {
+      prepared.classDisplay = classDisplayOptions(prepared.geometry, prepared.sheaf);
+      prepared.classRows = buildClassRows(prepared.bundle, prepared.geometry.dim, prepared.classDisplay);
+    }
+    return prepared;
+  }
+
+  function mainResultLabelsChanged(result, geometry, sheaf) {
+    return (geometry && result.geometry && (
+      geometry.labelLatex !== result.geometry.labelLatex
+      || geometry.labelPlain !== result.geometry.labelPlain
+    )) || (sheaf && result.sheaf && (
+      sheaf.labelLatex !== result.sheaf.labelLatex
+      || sheaf.labelPlain !== result.sheaf.labelPlain
+    ));
+  }
+
+  function restoreMainResultVariables(result) {
+    const addPoly = (poly) => {
+      for (const key of Poly.from(poly).terms.keys()) {
+        Object.keys(parseMonoKey(key)).forEach((id) => {
+          if (!VARS.has(id)) ensureMapHomologyVariableFromId(id);
+        });
+      }
+    };
+    const bundle = result?.bundle;
+    if (!bundle) return;
+    ['cComps', 'chComps', 'pComps'].forEach((key) => {
+      (bundle[key] || []).forEach((poly) => addPoly(poly));
+    });
+    if (bundle.cTotal) addPoly(bundle.cTotal);
+    const display = result?.classDisplay || (result?.geometry && result?.sheaf ? classDisplayOptions(result.geometry, result.sheaf) : null);
+    if (classFamilyEnabled(display, 'segre') && bundle.segre) addPoly(bundle.segre);
+    if (classFamilyEnabled(display, 'todd') && bundle.todd) addPoly(bundle.todd);
+    if (classFamilyEnabled(display, 'sqrtTodd') && bundle.sqrtTodd) addPoly(bundle.sqrtTodd);
+    if (classFamilyEnabled(display, 'mukai') && result?.geometry) {
+      const mukai = mukaiVectorPoly(bundle, result.geometry.dim, display);
+      if (mukai) addPoly(mukai);
+    }
+    if (classFamilyEnabled(display, 'kappa') && result?.geometry) {
+      const kappa = kappaClassResult(bundle, result.geometry.dim, display);
+      if (kappa.poly) addPoly(kappa.poly);
+    }
   }
 
   function runRecompute(jobId, reason = 'update') {
@@ -15777,7 +16242,6 @@
     state.currentRecomputeBudget = budget;
     state.currentSymbolicBudget = budget;
     clearPendingClassRefresh();
-    setRecomputeBusy(true, reason);
     try {
       refreshConstructedObjects();
       normalizeActiveHomologyTarget();
@@ -15789,13 +16253,23 @@
       const baseVariety = chosenSheaf ? baseVarietyForSheaf(chosenSheaf) : chosenVariety;
       const geometry = baseVariety ? geometryFromVariety(baseVariety) : null;
       const sheaf = chosenSheaf && geometry ? sheafFromObject(chosenSheaf, geometry) : null;
+      const cacheKey = mainResultCacheKey(geometry, sheaf);
       let result;
-      try {
-        result = buildResult(geometry, sheaf);
-      } catch (error) {
-        if (!error?.symbolicBudgetExceeded || !geometry || !sheaf) throw error;
-        recordSymbolicWarning(error.message || 'Characteristic class computation exceeded the symbolic work limit.');
-        result = buildClassStepFallbackResult(geometry, sheaf, error);
+      const cached = cachedMainResult(cacheKey);
+      state.mainResultCacheLastHit = !!cached;
+      if (cached) {
+        result = prepareCachedMainResult(cached, geometry, sheaf);
+        refreshMainResultCacheEntryLabel(cacheKey, result);
+      } else {
+        setRecomputeBusy(true, reason);
+        try {
+          result = buildResult(geometry, sheaf);
+        } catch (error) {
+          if (!error?.symbolicBudgetExceeded || !geometry || !sheaf) throw error;
+          recordSymbolicWarning(error.message || 'Characteristic class computation exceeded the symbolic work limit.');
+          result = buildClassStepFallbackResult(geometry, sheaf, error);
+        }
+        rememberMainResult(cacheKey, result);
       }
       state.lastResult = result;
       invalidateClassStepSessionIfStale(result);
@@ -15910,7 +16384,10 @@
 
   function renderStatusForResult(result = state.lastResult) {
     const basis = basisStatusLabel(result?.sheaf?.basis);
-    renderStatusLine(result?.bundle ? `${basis} basis` : '');
+    const extras = [];
+    if (result?.bundle) extras.push(`${basis} basis`);
+    if (state.mainResultCacheLastHit) extras.push('cached');
+    renderStatusLine(extras.join(' · '));
   }
 
   function syncHeavyOperationControls(result = state.lastResult) {
@@ -15932,7 +16409,7 @@
       refs.resetSimplify.title = 'Return to the default simplification pass count.';
     }
     syncClassStepAvailability(result);
-    [refs.rootForm, refs.classTermOnly, refs.classTermIndex, refs.basis, refs.exportClasses, refs.classFormulaCheck, refs.classFormulaCompute].forEach((control) => {
+    [refs.rootForm, refs.classTermOnly, refs.classBracketDisplay, refs.classTermIndex, refs.basis, refs.exportClasses, refs.classFormulaCheck, refs.classFormulaCompute].forEach((control) => {
       setControlBusyDisabled(control, busy);
     });
     renderClassFormulaBuilder();
@@ -16729,12 +17206,16 @@
     if (lhsIds.length !== 1 || !sheafDefs.some((def) => def.id === lhsIds[0]) || lhsPowers[lhsIds[0]] !== 1) return null;
     const normalized = {
       id: rule.id || nextInputId('R'),
-      builtin: false,
+      builtin: rule.builtin === true,
       enabled: rule.enabled !== false,
       lhs: { powers: lhsPowers },
       rhs: rhsTerms
     };
     if (rule.preserveUnknownVariables) normalized.preserveUnknownVariables = true;
+    if (rule.automatic) normalized.automatic = rule.automatic;
+    if (rule.stepSourceLabel) normalized.stepSourceLabel = rule.stepSourceLabel;
+    if (rule.classStepDisplayKey) normalized.classStepDisplayKey = rule.classStepDisplayKey;
+    if (rule.classStepDisplayLatex) normalized.classStepDisplayLatex = rule.classStepDisplayLatex;
     if (rule.preserveUnknownVariables && !homologyRuleUsesAvailableVariables(normalized, variableIds, { resolveMapVariables: false })) return normalized;
     return homologyRulePreservesDegree(normalized, defs, {
       geometry: ruleGeometry,
@@ -18912,6 +19393,11 @@
     return out;
   }
 
+  function monomialPolyFromPowers(powers) {
+    const key = monoKey(powers || {});
+    return key ? new Poly(new Map([[key, Fraction.one()]])) : Poly.one();
+  }
+
   function homologyRuleLhsLatex(rule, geometry) {
     defineHomologyVariables(geometry);
     return monomialLatex(monoKey(rule.lhs?.powers || {})) || '1';
@@ -19333,7 +19819,7 @@
     const rules = (options.homology?.rules || []).filter((rule) => rule.enabled !== false);
     const basis = normalizeBasisValue(options.sheaf?.basis);
     for (const def of defs) {
-      const rule = mapHomologyRuleForVariable(rules, def.id);
+      const rule = mapHomologyRuleForVariable(rules, def.id, { includeBuiltin: true });
       if (!rule) continue;
       const rhs = homologyRuleRhsPoly(rule).truncate(d);
       if (basis === 'character') bundle.chComps[def.degree] = rhs;
@@ -19440,7 +19926,7 @@
     const supportsRoots = sheafSupportsChernRoots(sheaf);
     const expression = supportsRoots && sheaf?.basis === 'roots' ? 'roots' : 'standard';
     const rootForm = refs.rootForm?.value === 'expanded' ? 'expanded' : 'product';
-    const termMode = refs.classTermOnly?.checked ? 'term' : 'total';
+    const termMode = refs.classBracketDisplay?.checked ? 'bracket' : (refs.classTermOnly?.checked ? 'term' : 'total');
     const termIndex = termMode === 'term'
       ? normalizedInt(refs.classTermIndex?.value, 0, geometry.dim, 1)
       : null;
@@ -19452,11 +19938,50 @@
       termIndex,
       geometry,
       homology: geometry.homology || null,
+      classFamilies: selectedCharacteristicClassFamilies(),
       homologyRulePasses: currentHomologyRulePasses()
     };
   }
 
+  function selectedCharacteristicClassFamilies() {
+    const toggles = refs.classFamilyToggles || [];
+    if (!toggles.length) return defaultCharacteristicClassFamilies();
+    return toggles
+      .filter((checkbox) => checkbox.checked)
+      .map((checkbox) => checkbox.dataset.classFamilyToggle)
+      .filter((family) => characteristicClassFamilies().includes(family));
+  }
+
+  function defaultCharacteristicClassFamilies() {
+    return ['chern', 'character', 'todd'];
+  }
+
+  function characteristicClassFamilies() {
+    return ['chern', 'character', 'todd', 'segre', 'sqrtTodd', 'mukai', 'kappa'];
+  }
+
+  function sanitizeCharacteristicClassFamilies(value, fallback = defaultCharacteristicClassFamilies()) {
+    if (!Array.isArray(value)) return [...fallback];
+    const allowed = characteristicClassFamilies();
+    const seen = new Set();
+    const out = [];
+    value.forEach((family) => {
+      if (!allowed.includes(family) || seen.has(family)) return;
+      seen.add(family);
+      out.push(family);
+    });
+    return out;
+  }
+
+  function classFamilyEnabled(options, family) {
+    const families = Array.isArray(options?.classFamilies)
+      ? options.classFamilies
+      : defaultCharacteristicClassFamilies();
+    return families.includes(family);
+  }
+
   function buildClassRows(bundle, d, options) {
+    if (options.termMode === 'bracket') return buildBracketClassRows(bundle, d, options);
     if (options.expression === 'roots') {
       if (options.rootForm === 'expanded' && rootExpansionRankFromPlain(bundle.rankPlain, d) != null) {
         return buildExpandedRootClassRows(bundle, d, options);
@@ -19464,6 +19989,74 @@
       return buildProductRootClassRows(bundle, options);
     }
     return buildStandardClassRows(bundle, d, options);
+  }
+
+  function buildBracketClassRows(bundle, d, options) {
+    const familyOrder = characteristicClassFamilies().filter((family) => classFamilyEnabled(options, family));
+    if (!familyOrder.length) return [];
+    const groups = new Map(familyOrder.map((family) => [family, {
+      family,
+      components: Array.from({ length: d + 1 }, () => null),
+      undefined: false
+    }]));
+    for (let i = 0; i <= d; i += 1) {
+      const termRows = buildClassRows(bundle, d, { ...options, termMode: 'term', termIndex: i });
+      termRows.forEach((row) => {
+        const family = classFamilyFromTermRowKey(row.key);
+        const group = groups.get(family);
+        if (!group) return;
+        if (row.plain === 'undefined') group.undefined = true;
+        group.components[i] = row;
+      });
+    }
+    return familyOrder
+      .map((family) => classBracketRow(classBracketFamilyMeta(family, bundle, options), groups.get(family), d))
+      .filter(Boolean);
+  }
+
+  function classFamilyFromTermRowKey(key) {
+    const match = String(key || '').match(/^(?:root_)?(.+)_(\d+)$/);
+    return match ? match[1] : null;
+  }
+
+  function classBracketFamilyMeta(family, bundle, options = {}) {
+    const keyPrefix = options.expression === 'roots' ? 'root_bracket' : 'bracket';
+    const labelPlain = bundle.labelPlain;
+    const labelLatex = bundle.labelLatex;
+    const meta = {
+      chern: { plain: `c_*(${labelPlain})`, latex: `c_{\\bullet}(${labelLatex})` },
+      character: { plain: `ch_*(${labelPlain})`, latex: `\\operatorname{ch}_{\\bullet}(${labelLatex})` },
+      todd: { plain: `td_*(${labelPlain})`, latex: `\\operatorname{td}_{\\bullet}(${labelLatex})` },
+      segre: { plain: `s_*(${labelPlain})`, latex: `s_{\\bullet}(${labelLatex})` },
+      sqrtTodd: { plain: `sqrt td_*(${labelPlain})`, latex: `\\left(\\sqrt{\\operatorname{td}}\\right)_{\\bullet}(${labelLatex})` },
+      mukai: { plain: `v_*(${labelPlain})`, latex: `v_{\\bullet}(${labelLatex})` },
+      kappa: { plain: `kappa_*(${labelPlain})`, latex: `\\kappa_{\\bullet}(${labelLatex})` }
+    }[family] || { plain: `${family}_*(${labelPlain})`, latex: `${family}_{\\bullet}(${labelLatex})` };
+    return {
+      family,
+      key: `${keyPrefix}_${family}`,
+      label: meta.plain,
+      labelLatex: meta.latex
+    };
+  }
+
+  function classBracketRow(meta, group, d) {
+    if (!meta || !group) return null;
+    if (group.undefined) {
+      return { label: meta.label, labelLatex: meta.labelLatex, key: meta.key, latex: '\\text{undefined}', plain: 'undefined' };
+    }
+    const components = [];
+    for (let i = 0; i <= d; i += 1) {
+      const row = group.components[i];
+      components.push(row ? { latex: row.latex, plain: row.plain } : { latex: '0', plain: '0' });
+    }
+    return {
+      label: meta.label,
+      labelLatex: meta.labelLatex,
+      key: meta.key,
+      latex: `\\left(${components.map((item) => item.latex).join(', ')}\\right)`,
+      plain: `(${components.map((item) => item.plain).join(', ')})`
+    };
   }
 
   function classStepAutoFamily(sheaf = state.lastResult?.sheaf || activeSheaf()) {
@@ -19576,6 +20169,75 @@
     return 'c';
   }
 
+  function classStepTotalClassFamilyKey(family) {
+    const normalized = classFormulaNormalizeClassFamily(family);
+    if (normalized === 'character') return 'ch';
+    if (normalized === 'todd') return 'td';
+    if (normalized === 'segre') return 's';
+    if (normalized === 'sqrtTodd') return 'sqrtTd';
+    return 'c';
+  }
+
+  function classStepTotalClassVariableId(sheaf, geometry, family) {
+    const prefix = defaultSheafVariablePrefix(sheaf);
+    const scope = variableIdSafe(geometry?.varietyId || homologyScopeId(geometry) || 'base');
+    return `${prefix}${classStepTotalClassFamilyKey(family)}Total_${scope}`;
+  }
+
+  function classStepTotalClassVariablePoly(sheaf, geometry, family) {
+    return Poly.variable(classStepDefineTotalClassVariable(sheaf, geometry, family));
+  }
+
+  function classStepDefineTotalClassVariable(sheaf, geometry, family) {
+    const normalized = classFormulaNormalizeClassFamily(family);
+    const id = classStepTotalClassVariableId(sheaf, geometry, normalized);
+    const labelLatex = sheafLabelLatex(sheaf);
+    const labelPlain = sheafLabelPlain(sheaf);
+    const symbolLatex = `${classStepTargetSymbolLatex(normalized)}(${labelLatex})`;
+    const symbolPlain = `${classStepTargetSymbolPlain(normalized)}(${labelPlain})`;
+    defineVariable(id, 0, symbolLatex, {
+      cohomologyDegree: 0,
+      plain: symbolPlain,
+      kind: 'classStepTotalClass',
+      classStepKind: 'totalClass',
+      classStepFamily: normalized,
+      sheafObjectId: sheaf?.sourceObject?.id || sheaf?.id || null,
+      geometryId: geometry?.varietyId || null,
+      mixedDegree: true
+    });
+    return id;
+  }
+
+  function classStepTotalClassExpansionPoly(sheaf, geometry, family) {
+    const normalized = classFormulaNormalizeClassFamily(family);
+    if (!sheaf || !geometry) return Poly.zero();
+    if (normalized === 'chern' || normalized === 'character') {
+      const formal = buildClassStepFormalData(geometry, sheaf, normalized);
+      const constant = normalized === 'chern'
+        ? Poly.one()
+        : classStepRankPolyForFormalData(formal);
+      return totalFromComponents(formal.components, geometry.dim, constant);
+    }
+    if (normalized === 'sqrtTodd') {
+      return classStepFormalSqrtToddFromToddTotal(sheaf, geometry, geometry.dim);
+    }
+    if (classStepTargetUsesFormalDerivedVariables(normalized)) {
+      return classStepFormalSheafDerivedTotal(sheaf, geometry, normalized, geometry.dim);
+    }
+    return Poly.zero();
+  }
+
+  function classStepFormalSqrtToddFromToddTotal(sheaf, geometry, d = geometry?.dim ?? MAX_DIMENSION) {
+    const toddTotal = classStepFormalSheafDerivedTotal(sheaf, geometry, 'todd', d);
+    return sqrtUnit(toddTotal, d);
+  }
+
+  function classStepTotalClassExpansionDisplayLatex(sheaf, geometry, family, rhs) {
+    const normalized = classFormulaNormalizeClassFamily(family);
+    const labelLatex = sheafLabelLatex(sheaf);
+    return `${classStepTargetSymbolLatex(normalized)}(${labelLatex})=${formatPolyLatex(rhs)}`;
+  }
+
   function classStepDisplayPoly(session) {
     if (!session) return Poly.zero();
     const override = classStepDisplayOverridePoly(session);
@@ -19589,6 +20251,20 @@
       return totalFromComponents(session.components, session.dimension, constant);
     }
     return classStepDerivedDisplayPoly(session, target);
+  }
+
+  function classStepSetInitialTotalDisplayOverride(session) {
+    const poly = classStepInitialTotalDisplayPoly(session);
+    if (poly) classStepSetDisplayOverride(session, poly);
+  }
+
+  function classStepInitialTotalDisplayPoly(session) {
+    if (!session || session.formulaSession || session.index != null || !session.sheaf || !session.geometry) return null;
+    const target = normalizeClassStepTargetValue(session.target || session.family);
+    if (target === 'chern' || target === 'character' || classStepTargetUsesFormalDerivedVariables(target)) {
+      return classStepTotalClassVariablePoly(session.sheaf, session.geometry, target);
+    }
+    return null;
   }
 
   function classStepDerivedDisplayPoly(session, target) {
@@ -19709,7 +20385,76 @@
     if (!Number.isInteger(state.classFormulaBuilder.cursorIndex)) state.classFormulaBuilder.cursorIndex = state.classFormulaBuilder.tokens.length;
     if (!['insert', 'append'].includes(state.classFormulaBuilder.insertMode)) state.classFormulaBuilder.insertMode = 'insert';
     if (!Number.isFinite(state.classFormulaBuilder.nextSlotId)) state.classFormulaBuilder.nextSlotId = 1;
+    if (!('editingSavedFormulaId' in state.classFormulaBuilder)) state.classFormulaBuilder.editingSavedFormulaId = null;
     return state.classFormulaBuilder;
+  }
+
+  function openClassFormulaEditor(options = {}) {
+    const builder = ensureClassFormulaBuilderState();
+    if (options.reset) {
+      if (!saveOpenClassFormulaEditorBeforeSwitch()) {
+        renderClassFormulaBuilder({ focusPreview: true });
+        return false;
+      }
+      builder.tokens = [];
+      builder.validatedFormula = null;
+      builder.mode = 'builder';
+      builder.activeSlotId = null;
+      builder.cursorIndex = 0;
+      builder.nextSlotId = 1;
+      builder.editingSavedFormulaId = null;
+      builder.message = 'Build a formula with the rows below.';
+    }
+    state.classFormulaEditorOpen = true;
+    if (refs.classStepCard) {
+      refs.classStepCard.hidden = false;
+      refs.classStepCard.classList.remove('collapsed');
+    }
+    renderClassFormulaBuilder({ focusPreview: true });
+    typeset(refs.classFormulaBuilder);
+    return true;
+  }
+
+  function saveOpenClassFormulaEditorBeforeSwitch() {
+    const builder = ensureClassFormulaBuilderState();
+    if (state.classFormulaEditorOpen !== true || !builder.tokens.length) return true;
+    return saveClassFormulaBuilderFormula({ renderBuilder: false });
+  }
+
+  function closeClassFormulaEditor() {
+    const builder = ensureClassFormulaBuilderState();
+    if (builder.tokens.length) {
+      const saved = saveClassFormulaBuilderFormula({ renderBuilder: false });
+      if (!saved) {
+        renderClassFormulaBuilder({ focusPreview: true });
+        return;
+      }
+    }
+    builder.activeSlotId = null;
+    builder.message = '';
+    state.classFormulaEditorOpen = false;
+    renderClassFormulaBuilder();
+  }
+
+  function cloneClassFormulaTokens(tokens = []) {
+    return (Array.isArray(tokens) ? tokens : [])
+      .map((token) => sanitizeClassFormulaToken(token))
+      .filter(Boolean);
+  }
+
+  function classFormulaNextSlotId(tokens = []) {
+    let max = 0;
+    const visit = (items) => {
+      for (const token of items || []) {
+        if (token?.slotId) {
+          const match = String(token.slotId).match(/^slot(\d+)$/);
+          if (match) max = Math.max(max, Number(match[1]));
+        }
+        if (token?.type === 'functor-slot') visit(token.tokens || []);
+      }
+    };
+    visit(tokens);
+    return max + 1;
   }
 
   function classFormulaSelectedVariety() {
@@ -19782,7 +20527,7 @@
     builder.validatedFormula = null;
     builder.mode = 'builder';
     builder.message = '';
-    renderClassFormulaBuilder();
+    renderClassFormulaBuilder({ focusPreview: true });
   }
 
   function moveClassFormulaCursor(delta) {
@@ -19805,7 +20550,7 @@
         ? `Fill this functor with classes on ${geometry.labelPlain || geometry.varietyId}.`
         : 'Fill this functor argument.';
     }
-    renderClassFormulaBuilder();
+    renderClassFormulaBuilder({ focusPreview: true });
   }
 
   function clearClassFormulaActiveSlot() {
@@ -19813,7 +20558,7 @@
     builder.activeSlotId = null;
     builder.cursorIndex = builder.tokens.length;
     builder.message = 'Returned to the outer formula.';
-    renderClassFormulaBuilder();
+    renderClassFormulaBuilder({ focusPreview: true });
   }
 
   function setClassFormulaBuilderVariety(varietyId, options = {}) {
@@ -19829,15 +20574,33 @@
       builder.mode = 'builder';
       builder.activeSlotId = null;
       builder.cursorIndex = 0;
-      if (state.classStepSession?.formulaSession) stopClassStepSession({ keepCard: true, keepBuilder: true });
     }
     builder.message = next ? (changed ? 'Pick formula tokens for this variety.' : builder.message || '') : 'Add a variety before building a formula.';
     renderClassFormulaBuilder();
   }
 
-  function renderClassFormulaBuilder() {
+  function focusClassFormulaPreview() {
+    const preview = refs.classFormulaPreview;
+    if (!preview || typeof preview.focus !== 'function') return;
+    const focusNow = () => {
+      try {
+        preview.focus({ preventScroll: true });
+      } catch (_) {
+        preview.focus();
+      }
+    };
+    if (typeof setTimeout === 'function') setTimeout(focusNow, 0);
+    else focusNow();
+  }
+
+  function renderClassFormulaBuilder(options = {}) {
     if (!refs.classFormulaBuilder) return;
     const builder = ensureClassFormulaBuilderState();
+    if (state.classFormulaEditorOpen !== true) {
+      refs.classFormulaBuilder.hidden = true;
+      return;
+    }
+    refs.classFormulaBuilder.hidden = false;
     if (!builder.varietyId || !state.varieties.some((item) => item.id === builder.varietyId)) {
       builder.varietyId = state.varieties[0]?.id || null;
       builder.validatedFormula = null;
@@ -19865,7 +20628,13 @@
       refs.classFormulaSlotDone.hidden = !activeSlot;
       refs.classFormulaSlotDone.disabled = !activeSlot;
     }
-    if (refs.classFormulaCheck) refs.classFormulaCheck.disabled = !geometry || !hasTokens;
+    if (refs.classFormulaCheck) {
+      refs.classFormulaCheck.disabled = !geometry || !hasTokens;
+      refs.classFormulaCheck.textContent = hasValid ? 'edit formula' : 'check formula';
+      refs.classFormulaCheck.title = hasValid
+        ? 'Return to the editable token formula.'
+        : 'Check whether this formula is allowed.';
+    }
     if (refs.classFormulaCompute) refs.classFormulaCompute.disabled = !hasValid;
     if (refs.classFormulaMessage) {
       const slotMessage = activeSlot && editingGeometry
@@ -19873,6 +20642,7 @@
         : '';
       refs.classFormulaMessage.textContent = builder.message || slotMessage || (geometry ? 'Build a formula with the rows above.' : 'Add a variety before building a formula.');
     }
+    if (options.focusPreview) focusClassFormulaPreview();
   }
 
   function renderClassFormulaTokenButtons(container, defs, enabled) {
@@ -20018,9 +20788,7 @@
       const sheaf = sheafFromObject(sheafObject, geometry);
       for (const family of ['chern', 'character']) {
         const formal = buildClassStepFormalData(geometry, sheaf, family);
-        const totalPoly = totalFromComponents(formal.components, geometry.dim, family === 'chern'
-          ? Poly.one()
-          : classStepRankPolyForFormalData(formal));
+        const totalPoly = classStepTotalClassVariablePoly(sheaf, geometry, family);
         defs.push({
           type: 'atom',
           atomKind: 'sheaf-total',
@@ -20052,17 +20820,17 @@
       const actualBundle = classFormulaBundleForSheaf(geometry, sheaf);
       if (actualBundle) {
         [
-          ['todd', classStepFormalSheafDerivedTotal(sheaf, geometry, 'todd', geometry.dim), `\\operatorname{td}(${sheaf.labelLatex})`, `td(${sheaf.labelPlain})`],
-          ['segre', classStepFormalSheafDerivedTotal(sheaf, geometry, 'segre', geometry.dim), `s(${sheaf.labelLatex})`, `s(${sheaf.labelPlain})`],
-          ['sqrtTodd', classStepFormalSheafDerivedTotal(sheaf, geometry, 'sqrtTodd', geometry.dim), `\\sqrt{\\operatorname{td}}(${sheaf.labelLatex})`, `sqrt td(${sheaf.labelPlain})`]
-        ].forEach(([family, poly, latex, plain]) => {
+          ['todd', `\\operatorname{td}(${sheaf.labelLatex})`, `td(${sheaf.labelPlain})`],
+          ['segre', `s(${sheaf.labelLatex})`, `s(${sheaf.labelPlain})`],
+          ['sqrtTodd', `\\sqrt{\\operatorname{td}}(${sheaf.labelLatex})`, `sqrt td(${sheaf.labelPlain})`]
+        ].forEach(([family, latex, plain]) => {
           defs.push({
             type: 'atom',
             atomKind: 'sheaf-derived',
             geometryId: geometry.varietyId,
             sheafId: sheafObject.id,
             family,
-            polyData: serializeClassFormulaPoly(poly),
+            polyData: serializeClassFormulaPoly(classStepTotalClassVariablePoly(sheaf, geometry, family)),
             latex,
             plain,
             title: `${plain} of ${sheaf.labelPlain}`
@@ -20091,7 +20859,7 @@
         ? Poly.one()
         : classStepRankPolyForFormalData(formal);
       poly = degree == null
-        ? totalFromComponents(formal.components, geometry.dim, constant)
+        ? classStepTotalClassVariablePoly(sheaf, geometry, normalizedFamily)
         : (degree === 0 ? constant : componentOrZero(formal.components, degree));
       latexPrefix = normalizedFamily === 'character' ? '\\operatorname{ch}' : 'c';
       plainPrefix = normalizedFamily === 'character' ? 'ch' : 'c';
@@ -20106,7 +20874,7 @@
       }[normalizedFamily];
       if (!familyData) return null;
       poly = degree == null
-        ? familyData.poly
+        ? classStepTotalClassVariablePoly(sheaf, geometry, normalizedFamily)
         : (classStepTargetUsesFormalDerivedVariables(normalizedFamily) && degree === 0 ? Poly.one() : homogeneousPart(familyData.poly, degree));
       latexPrefix = familyData.latex;
       plainPrefix = familyData.plain;
@@ -20306,7 +21074,7 @@
     builder.message = nextToken.type === 'functor-slot'
       ? 'Fill the functor argument with classes from the indicated variety.'
       : message;
-    renderClassFormulaBuilder();
+    renderClassFormulaBuilder({ focusPreview: true });
   }
 
   function appendClassFormulaOperator(op) {
@@ -20320,13 +21088,15 @@
     builder.validatedFormula = null;
     builder.mode = 'builder';
     builder.message = 'Operator added.';
-    renderClassFormulaBuilder();
+    renderClassFormulaBuilder({ focusPreview: true });
   }
 
   function classFormulaOperatorToken(op) {
     if (op === 'plus') return { type: 'operator', op: '+', latex: '+', plain: '+' };
     if (op === 'minus') return { type: 'operator', op: '-', latex: '-', plain: '-' };
     if (op === 'times') return { type: 'operator', op: '*', latex: '\\cdot', plain: '*' };
+    if (op === 'divide') return { type: 'operator', op: '/', latex: '/', plain: '/' };
+    if (op === 'power') return { type: 'operator', op: '^', latex: '^', plain: '^' };
     if (op === 'open') return { type: 'paren', value: '(', latex: '(', plain: '(' };
     if (op === 'close') return { type: 'paren', value: ')', latex: ')', plain: ')' };
     return null;
@@ -20350,7 +21120,7 @@
     builder.validatedFormula = null;
     builder.mode = 'builder';
     builder.message = 'Functor applied to the previous formula.';
-    renderClassFormulaBuilder();
+    renderClassFormulaBuilder({ focusPreview: true });
     return true;
   }
 
@@ -20388,7 +21158,7 @@
       builder.validatedFormula = null;
       builder.mode = 'builder';
       builder.message = 'Removed the empty functor.';
-      renderClassFormulaBuilder();
+      renderClassFormulaBuilder({ focusPreview: true });
       return;
     }
     const tokens = classFormulaEditingTokens(builder);
@@ -20399,7 +21169,7 @@
     builder.validatedFormula = null;
     builder.mode = 'builder';
     builder.message = 'Removed the last token.';
-    renderClassFormulaBuilder();
+    renderClassFormulaBuilder({ focusPreview: true });
   }
 
   function clearClassFormulaBuilder() {
@@ -20409,15 +21179,21 @@
     builder.mode = 'builder';
     builder.activeSlotId = null;
     builder.cursorIndex = 0;
+    builder.nextSlotId = 1;
     builder.message = 'Formula cleared.';
-    if (state.classStepSession?.formulaSession) stopClassStepSession({ keepCard: true, keepBuilder: true });
-    renderClassFormulaBuilder();
+    renderClassFormulaBuilder({ focusPreview: true });
   }
 
   function handleClassFormulaEditorKeydown(event) {
     const builder = ensureClassFormulaBuilderState();
     const tokens = classFormulaEditingTokens(builder);
     const cursor = clampClassFormulaCursor(builder);
+    const keyboardOperator = classFormulaKeyboardOperator(event);
+    if (keyboardOperator) {
+      event.preventDefault();
+      appendClassFormulaOperator(keyboardOperator);
+      return;
+    }
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
       moveClassFormulaCursor(-1);
@@ -20450,7 +21226,7 @@
       builder.validatedFormula = null;
       builder.mode = 'builder';
       builder.message = 'Removed the next token.';
-      renderClassFormulaBuilder();
+      renderClassFormulaBuilder({ focusPreview: true });
       return;
     }
     if (event.key === 'Insert') {
@@ -20460,8 +21236,21 @@
         ? 'Insert mode: new tokens go to the end of this formula.'
         : 'Insert mode: new tokens go at the cursor.';
       if (builder.insertMode === 'append') builder.cursorIndex = tokens.length;
-      renderClassFormulaBuilder();
+      renderClassFormulaBuilder({ focusPreview: true });
     }
+  }
+
+  function classFormulaKeyboardOperator(event) {
+    if (event.ctrlKey || event.metaKey || event.altKey) return '';
+    const key = event.key;
+    if (key === '(') return 'open';
+    if (key === ')') return 'close';
+    if (key === '+') return 'plus';
+    if (key === '-') return 'minus';
+    if (key === '*') return 'times';
+    if (key === '/') return 'divide';
+    if (key === '^') return 'power';
+    return '';
   }
 
   function renderClassFormulaPreview() {
@@ -20547,6 +21336,10 @@
 
   function checkClassFormulaBuilder() {
     const builder = ensureClassFormulaBuilderState();
+    if (builder.validatedFormula?.signature === classFormulaBuilderSignature(builder)) {
+      editClassFormulaBuilder();
+      return { ok: true, editing: true };
+    }
     const validation = validateClassFormulaBuilder();
     builder.validatedFormula = validation.ok ? validation : null;
     builder.message = validation.ok
@@ -20554,6 +21347,14 @@
       : validation.message;
     renderClassFormulaBuilder();
     return validation;
+  }
+
+  function editClassFormulaBuilder() {
+    const builder = ensureClassFormulaBuilderState();
+    builder.validatedFormula = null;
+    builder.mode = 'builder';
+    builder.message = 'Formula returned to edit mode.';
+    renderClassFormulaBuilder({ focusPreview: true });
   }
 
   function validateClassFormulaBuilder() {
@@ -20606,7 +21407,7 @@
   }
 
   function parseClassFormulaProduct(tokens, targetGeometry, position, stopAtClose) {
-    let leftResult = parseClassFormulaFactor(tokens, targetGeometry, position, stopAtClose);
+    let leftResult = parseClassFormulaPower(tokens, targetGeometry, position, stopAtClose);
     let left = leftResult.node;
     position = leftResult.position;
     while (position < tokens.length) {
@@ -20616,22 +21417,68 @@
         throw new Error('Unexpected closing parenthesis.');
       }
       const implicitProduct = classFormulaTokenStartsFactor(token);
-      const explicitProduct = token.type === 'operator' && token.op === '*';
+      const explicitProduct = token.type === 'operator' && (token.op === '*' || token.op === '/');
       if (!explicitProduct && !implicitProduct) break;
-      const rightResult = parseClassFormulaFactor(tokens, targetGeometry, explicitProduct ? position + 1 : position, stopAtClose);
+      const rightResult = parseClassFormulaPower(tokens, targetGeometry, explicitProduct ? position + 1 : position, stopAtClose);
       const right = rightResult.node;
       ensureClassFormulaSameGeometry(left, right);
-      const operatorLatex = explicitProduct ? token.latex : '\\cdot';
-      left = {
-        poly: left.poly.mul(right.poly, targetGeometry.dim),
-        degree: (left.degree ?? 0) + (right.degree ?? 0),
-        sourceGeometryId: left.sourceGeometryId,
-        latex: `${classFormulaWrapLatex(left)}${operatorLatex}${classFormulaWrapLatex(right)}`,
-        plain: `${classFormulaWrapPlain(left)}*${classFormulaWrapPlain(right)}`
-      };
+      if (token.op === '/') {
+        const denominator = scalarPolyAsFraction(right.poly);
+        if (!denominator) throw new Error('Division is only allowed by a scalar constant.');
+        if (denominator.isZero()) throw new Error('Division by zero.');
+        left = {
+          poly: left.poly.scale(Fraction.one().div(denominator)),
+          degree: left.degree ?? 0,
+          sourceGeometryId: left.sourceGeometryId,
+          latex: `\\frac{${left.latex}}{${right.latex}}`,
+          plain: `${classFormulaWrapPlain(left)}/${classFormulaWrapPlain(right)}`
+        };
+      } else {
+        left = {
+          poly: left.poly.mul(right.poly, targetGeometry.dim),
+          degree: (left.degree ?? 0) + (right.degree ?? 0),
+          sourceGeometryId: left.sourceGeometryId,
+          latex: `${classFormulaWrapLatex(left)}\\,\\cdot\\,${classFormulaWrapLatex(right)}`,
+          plain: `${classFormulaWrapPlain(left)}*${classFormulaWrapPlain(right)}`
+        };
+      }
       position = rightResult.position;
     }
     return { node: left, position };
+  }
+
+  function parseClassFormulaPower(tokens, targetGeometry, position, stopAtClose) {
+    let baseResult = parseClassFormulaFactor(tokens, targetGeometry, position, stopAtClose);
+    let base = baseResult.node;
+    position = baseResult.position;
+    while (position < tokens.length) {
+      const token = tokens[position];
+      if (token.type !== 'operator' || token.op !== '^') break;
+      const exponentResult = parseClassFormulaFactor(tokens, targetGeometry, position + 1, stopAtClose);
+      const exponent = exponentResult.node;
+      ensureClassFormulaSameGeometry(base, exponent);
+      const n = classFormulaIntegerExponent(exponent);
+      base = {
+        poly: polyPower(base.poly, n, targetGeometry.dim),
+        degree: (base.degree ?? 0) * n,
+        sourceGeometryId: base.sourceGeometryId,
+        latex: `${classFormulaWrapLatex(base)}^{${exponent.latex}}`,
+        plain: `${classFormulaWrapPlain(base)}^${classFormulaWrapPlain(exponent)}`
+      };
+      position = exponentResult.position;
+    }
+    return { node: base, position };
+  }
+
+  function classFormulaIntegerExponent(node) {
+    const scalar = scalarPolyAsFraction(node?.poly);
+    if (!scalar || scalar.den !== 1n || scalar.num < 0n) {
+      throw new Error('Powers need a nonnegative integer exponent.');
+    }
+    if (scalar.num > BigInt(MAX_DIMENSION)) {
+      throw new Error(`Powers are limited to exponent ${MAX_DIMENSION}.`);
+    }
+    return Number(scalar.num);
   }
 
   function classFormulaTokenStartsFactor(token) {
@@ -20699,7 +21546,8 @@
 
   function classFormulaAtomNode(token, targetGeometry) {
     if (token.geometryId && token.geometryId !== targetGeometry.varietyId) throw new Error('A class belongs to a different variety.');
-    let poly = token.polyData ? deserializeClassFormulaPoly(token.polyData) : null;
+    let poly = classFormulaTotalClassPolyForToken(token, targetGeometry)
+      || (token.polyData ? deserializeClassFormulaPoly(token.polyData) : null);
     if (!poly && token.variableId) {
       const data = homologyVariableDataById(targetGeometry, token.variableId) || tangentChernVariableDataById(targetGeometry, token.variableId);
       if (!data) throw new Error('This homology class is not available on the selected variety.');
@@ -20713,6 +21561,17 @@
       latex: token.latex,
       plain: token.plain || latexToPlain(token.latex)
     };
+  }
+
+  function classFormulaTotalClassPolyForToken(token, targetGeometry) {
+    if (!token || token.type !== 'atom' || token.degree != null) return null;
+    if (!['sheaf-total', 'sheaf-derived'].includes(token.atomKind)) return null;
+    const geometry = geometryByVarietyId(token.geometryId) || targetGeometry;
+    if (!geometry || geometry.varietyId !== targetGeometry?.varietyId) return null;
+    const sheafObject = state.sheaves.find((sheaf) => sheaf.id === token.sheafId && sheaf.baseVarietyId === geometry.varietyId);
+    if (!sheafObject) return null;
+    const sheaf = sheafFromObject(sheafObject, geometry);
+    return classStepTotalClassVariablePoly(sheaf, geometry, token.family);
   }
 
   function classFormulaFunctorNode(token, map, sourceGeometry, targetGeometry, inner) {
@@ -20814,6 +21673,8 @@
     builder.message = 'Step-by-step session started.';
     const session = createClassFormulaStepSession(validation);
     state.classStepSession = session;
+    state.classFormulaEditorOpen = false;
+    builder.editingSavedFormulaId = null;
     if (refs.classStepCard) {
       refs.classStepCard.hidden = false;
       refs.classStepCard.classList.remove('collapsed');
@@ -20821,7 +21682,6 @@
     if (refs.classStepPanel) refs.classStepPanel.hidden = false;
     syncClassStepControlsForSession(session);
     renderClassStepPanel();
-    renderClassChartWithStepSession(state.lastResult);
     refreshExport(state.exportScope || 'main');
     renderClassFormulaBuilder();
     typeset(refs.classStepPanel);
@@ -20858,6 +21718,7 @@
       originalFormulaPoly: Poly.from(validation.poly),
       formulaLatex: validation.latex,
       formulaPlain: validation.plain,
+      formulaTokens: cloneClassFormulaTokens(ensureClassFormulaBuilderState().tokens),
       displayOverrides: {},
       sourceSignature: classFormulaStepSignature(validation),
       stepHistory: [],
@@ -20894,9 +21755,7 @@
     syncClassStepControlsForSession(session);
     syncClassStepPlacement(session.layout);
     renderClassStepPanel();
-    renderClassChartWithStepSession(result);
     typeset(refs.classStepPanel);
-    typeset(refs.classChart);
     return session;
   }
 
@@ -20921,6 +21780,28 @@
     return startClassStepSessionFromControls({ preserveControls: true });
   }
 
+  function restartClassFormulaStepSession() {
+    const session = state.classStepSession;
+    if (!session?.formulaSession) return null;
+    const components = (session.originalComponents || session.components || []).map((poly) => Poly.from(poly));
+    session.active = true;
+    session.stopped = false;
+    session.components = components;
+    session.formulaPoly = Poly.from(session.originalFormulaPoly || componentOrZero(components, 0));
+    session.rankComponent = Poly.zero();
+    session.displayOverrides = {};
+    session.stepHistory = [];
+    session.message = 'Step formula restarted.';
+    session.candidates = collectClassStepRuleCandidates(session);
+    rememberClassStepComponents(session);
+    recordClassStepHistory(session, 'restart');
+    if (refs.classStepPanel) refs.classStepPanel.hidden = false;
+    renderClassStepPanel();
+    refreshExport(state.exportScope || 'main');
+    typeset(refs.classStepPanel);
+    return session;
+  }
+
   function updateClassStepTermControls(options = {}) {
     const session = state.classStepSession;
     const result = state.lastResult;
@@ -20938,9 +21819,7 @@
     session.index = target.index;
     syncClassStepControlsForSession(session);
     renderClassStepPanel();
-    renderClassChartWithStepSession(result);
     typeset(refs.classStepPanel);
-    typeset(refs.classChart);
   }
 
   function createClassStepSession(result, family, index = null, target = null) {
@@ -20968,6 +21847,7 @@
       dimension: d,
       geometry: result.geometry,
       sheaf: result.sheaf,
+      computedBundle: result.bundle && !result.bundle.classStepPlaceholder ? result.bundle : null,
       bundleLabelLatex: formal.labelLatex,
       bundleLabelPlain: formal.labelPlain,
       rankLatex: formal.rankLatex,
@@ -20982,6 +21862,7 @@
       candidates: [],
       message: ''
     };
+    classStepSetInitialTotalDisplayOverride(session);
     session.candidates = collectClassStepRuleCandidates(session);
     rememberClassStepComponents(session);
     recordClassStepHistory(session, 'start');
@@ -21067,14 +21948,8 @@
 
   function classStepSessionMatchesResult(session = state.classStepSession, result = state.lastResult) {
     if (session?.formulaSession) {
-      const builder = ensureClassFormulaBuilderState();
       return !!session.geometry
-        && !!result?.geometry
-        && session.geometry.varietyId === builder.varietyId
-        && session.sourceSignature === classFormulaStepSignature({
-          geometry: session.geometry,
-          signature: classFormulaBuilderSignature(builder)
-        });
+        && state.varieties.some((variety) => variety.id === session.geometry.varietyId);
     }
     return !!session
       && !!result?.bundle
@@ -21102,27 +21977,24 @@
     session.message = 'Step result is kept for this formula chart.';
     if (refs.classStepPanel) refs.classStepPanel.hidden = true;
     if (!options.keepBuilder && state.classFormulaBuilder) state.classFormulaBuilder.mode = 'builder';
-    const result = state.lastResult;
-    if (result) renderClassChartWithStepSession(result);
     renderClassFormulaBuilder();
     refreshExport(state.exportScope || 'main');
   }
 
-  function renderClassChartWithStepSession(result = state.lastResult) {
-    if (state.classStepSession?.formulaSession) {
-      if (classStepSessionMatchesResult(state.classStepSession, result)) {
-        renderClassStepPanel();
-      }
-      renderClassChart(result);
-      return;
+  function closeClassStepEditor(options = {}) {
+    const session = state.classStepSession;
+    if (!session) return false;
+    const saveState = classStepSaveRuleState(session);
+    if (saveState.ok && saveState.entries?.length) {
+      const { updated, count } = upsertClassStepSavedEntries(saveState.entries);
+      session.message = count === 1
+        ? (updated ? 'Updated the saved formula/rule.' : 'Saved this formula/rule.')
+        : `Saved ${count} formulas/rules.`;
+      renderClassStepSavedFormulaList();
+      typeset(refs.classStepSavedRules);
     }
-    if (!result?.bundle || !classStepSessionMatchesResult(state.classStepSession, result)) {
-      renderClassChart(result);
-      return;
-    }
-    const rows = buildClassRowsFromStepSession(state.classStepSession, result.classDisplay || classDisplayOptions(result.geometry, result.sheaf));
-    result.classRows = rows.length ? rows : result.classRows;
-    renderClassChart(result);
+    stopClassStepSession({ keepBuilder: options.keepBuilder });
+    return true;
   }
 
   function buildClassRowsFromStepSession(session, displayOptions) {
@@ -21235,18 +22107,52 @@
     if (!Array.isArray(session.stepHistory)) session.stepHistory = [];
     const display = formatPolyLatex(classStepDisplayPoly(session));
     const label = classStepLabelLatex(session);
+    const startPlaceholder = classStepHistoryNeedsStartPlaceholder(session, display, label, reason);
     const previous = session.stepHistory[session.stepHistory.length - 1];
     if (previous && normalizeClassStepHistoryValue(previous.value) === normalizeClassStepHistoryValue(display)) {
       previous.reason = reason || previous.reason;
       previous.snapshot = classStepSnapshot(session);
+      if (startPlaceholder) {
+        previous.hidden = true;
+        previous.startPlaceholder = true;
+      }
       return;
     }
     session.stepHistory.push({
       label,
       value: display,
       reason,
+      ...(startPlaceholder ? { hidden: true, startPlaceholder: true } : {}),
       snapshot: classStepSnapshot(session)
     });
+  }
+
+  function classStepHistoryNeedsStartPlaceholder(session, display, label, reason) {
+    if (reason !== 'start') return false;
+    if (normalizeClassStepHistoryValue(display) !== normalizeClassStepHistoryValue(label)) return false;
+    return classStepPolyReferencesTotalClass(classStepDisplayPoly(session));
+  }
+
+  function classStepPolyReferencesTotalClass(poly) {
+    for (const key of Poly.from(poly).terms.keys()) {
+      for (const id of Object.keys(parseMonoKey(key))) {
+        if (classStepVariableReferencesTotalClass(id)) return true;
+      }
+    }
+    return false;
+  }
+
+  function classStepVariableReferencesTotalClass(id, seen = new Set()) {
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+    if (data?.kind === 'classStepTotalClass') return true;
+    if (data?.kind === 'mapHomology' && (data.sourceKey || data.sourceKey === '')) {
+      return Object.keys(parseMonoKey(data.sourceKey)).some((sourceId) => (
+        classStepVariableReferencesTotalClass(sourceId, seen)
+      ));
+    }
+    return false;
   }
 
   function normalizeClassStepHistoryValue(value) {
@@ -21258,14 +22164,32 @@
     const label = classStepLabelLatex(session);
     const current = formatPolyLatex(classStepDisplayPoly(session));
     const history = classStepDisplayHistoryEntries(session);
-    const lines = history.length
-      ? history.map(({ item, index }, visibleIndex) => {
+    let lines;
+    const fillIndex = classStepPlaceholderFillHistoryIndex(history);
+    if (fillIndex > 0) {
+      lines = [
+        `${label}=\\;& ${classStepHistoryEntryValueLatex(history[fillIndex].item, current)}`,
+        ...history.slice(fillIndex + 1).map(({ item }) => `=\\;& ${classStepHistoryEntryValueLatex(item, current)}`)
+      ];
+    } else {
+      lines = history.length
+        ? history.map(({ item, index }, visibleIndex) => {
         const value = classStepHistoryEntryValueLatex(item, current);
-        if (visibleIndex === 0 && index === 0) return `${label}:=\\;& ${value}`;
+        if (visibleIndex === 0 && index === 0) {
+          const operator = item?.startPlaceholder && item?.hidden === true ? '=\\;&' : ':=\\;&';
+          return `${label}${operator} ${value}`;
+        }
         return `=\\;& ${value}`;
       })
-      : [`${label}=\\;& ${current}`];
-    return `\\begin{aligned}${lines.join('\\\\')}\\end{aligned}`;
+        : [`${label}=\\;& ${current}`];
+    }
+    return `\\begin{aligned}{}${lines.join('\\\\')}\\end{aligned}`;
+  }
+
+  function classStepPlaceholderFillHistoryIndex(history = []) {
+    const first = history[0];
+    if (!first || first.index !== 0 || first.item?.startPlaceholder !== true || first.item?.hidden !== true) return -1;
+    return history.findIndex(({ item }, index) => index > 0 && item?.hidden !== true);
   }
 
   function visibleClassStepHistory(session) {
@@ -21320,6 +22244,27 @@
     }
     refs.classStepPanel.hidden = false;
     syncClassStepControlsForSession(session);
+    refreshClassStepCandidates(session);
+    if (refs.classStepFormula) {
+      refs.classStepFormula.innerHTML = `\\[${renderClassStepCalculationLatex(session)}\\]`;
+    }
+    if (refs.classStepHistoryControls) {
+      refs.classStepHistoryControls.innerHTML = renderClassStepHistoryControls(session);
+      refs.classStepHistoryControls.hidden = !Array.isArray(session.stepHistory) || session.stepHistory.length === 0;
+    }
+    renderClassStepRuleControls(session);
+  }
+
+  function refreshClassStepRuleCandidatesOnly() {
+    const session = state.classStepSession;
+    if (!session) return;
+    refreshClassStepCandidates(session);
+    renderClassStepRuleControls(session);
+    typeset(refs.classStepRules);
+    typeset(refs.classStepSavedRules);
+  }
+
+  function refreshClassStepCandidates(session) {
     const previousSelections = classStepCandidateSelectionMap(session.candidates);
     try {
       session.candidates = collectClassStepRuleCandidates(session);
@@ -21330,43 +22275,95 @@
       session.message = `${error.message} Cached rules were skipped for this step.`;
       recordSymbolicWarning(session.message);
     }
-    if (refs.classStepFormula) {
-      refs.classStepFormula.innerHTML = `\\[${renderClassStepCalculationLatex(session)}\\]`;
-    }
-    if (refs.classStepHistoryControls) {
-      refs.classStepHistoryControls.innerHTML = renderClassStepHistoryControls(session);
-      refs.classStepHistoryControls.hidden = !Array.isArray(session.stepHistory) || session.stepHistory.length === 0;
-    }
+  }
+
+  function renderClassStepRuleControls(session) {
     if (refs.classStepRules) {
       refs.classStepRules.hidden = !session.candidates.length;
       refs.classStepRules.innerHTML = session.candidates.length
-        ? session.candidates.map((candidate, index) => `
-          <div class="sheaf-step-rule-row">
-            <div class="sheaf-step-rule-label">
-              <span>\\(${classStepRuleDisplayLatex(candidate.rule)}\\)</span>
-              <span class="sheaf-step-rule-meta">${escapeHtml(candidate.sourceLabel || `rule ${index + 1}`)}</span>
-            </div>
-            <input type="checkbox" data-class-step-rule="${escapeHtml(candidate.id)}" aria-label="apply rule ${index + 1}"${candidate.selected === false ? '' : ' checked'}>
+        ? `
+          <div class="sheaf-step-rule-row sheaf-step-select-all-row">
+            <div class="sheaf-step-rule-label"></div>
+            <input type="checkbox" id="class-step-select-all-rules" data-class-step-select-all-rules aria-label="select all rules">
           </div>
-        `).join('')
+          ${session.candidates.map((candidate, index) => `
+            <div class="sheaf-step-rule-row">
+              <div class="sheaf-step-rule-label">
+                <span>\\(${classStepRuleDisplayLatex(candidate.rule)}\\)</span>
+                <span class="sheaf-step-rule-meta">${escapeHtml(candidate.sourceLabel || `rule ${index + 1}`)}</span>
+              </div>
+              <input type="checkbox" data-class-step-rule="${escapeHtml(candidate.id)}" aria-label="apply rule ${index + 1}"${candidate.selected === false ? '' : ' checked'}>
+            </div>
+          `).join('')}
+        `
         : '<div class="hint">No rules can be applied to this formula right now.</div>';
+      updateClassStepRuleSelectionControls(session);
     }
     const saveState = classStepSaveRuleState(session);
     if (refs.classStepSaveRule) {
-      refs.classStepSaveRule.disabled = !saveState.ok;
-      refs.classStepSaveRule.title = saveState.message || '';
+      refs.classStepSaveRule.disabled = false;
+      refs.classStepSaveRule.title = saveState.ok
+        ? 'Save this formula/rule and close the editor.'
+        : 'Close the editor.';
     }
-    if (refs.classStepSavedRules) {
-      refs.classStepSavedRules.innerHTML = renderClassStepSavedRules();
-      refs.classStepSavedRules.hidden = !(state.classStepSavedRules || []).length;
-    }
+    renderClassStepSavedFormulaList();
     if (refs.classStepCheckSwitch) {
-      refs.classStepCheckSwitch.disabled = !!session.checkSwitchingRules;
-      refs.classStepCheckSwitch.textContent = session.checkSwitchingRules ? 'switching checked' : 'check rules for switching';
+      refs.classStepCheckSwitch.disabled = true;
+      refs.classStepCheckSwitch.textContent = 'switching automatic';
     }
     if (refs.classStepMessage) refs.classStepMessage.textContent = session.message || `${session.candidates.length} applicable rule${session.candidates.length === 1 ? '' : 's'}.`;
     if (refs.classStepApply) refs.classStepApply.disabled = !session.candidates.length;
+    if (refs.classStepAddSelectedRules) {
+      const selectedRules = selectedClassStepRuleCandidates(session).filter((candidate) => !classStepCandidateIsSimplify(candidate));
+      refs.classStepAddSelectedRules.disabled = !selectedRules.length;
+      refs.classStepAddSelectedRules.title = selectedRules.length
+        ? `Add ${selectedRules.length} selected rule${selectedRules.length === 1 ? '' : 's'} to saved formulas/rules.`
+        : 'Select at least one non-simplify rule.';
+    }
     if (refs.classStepUndo) refs.classStepUndo.disabled = !Array.isArray(session.stepHistory) || session.stepHistory.length <= 1;
+  }
+
+  function selectedClassStepRuleCandidates(session = state.classStepSession) {
+    return (session?.candidates || []).filter((candidate) => candidate.selected !== false);
+  }
+
+  function updateClassStepRuleSelectionControls(session = state.classStepSession) {
+    const candidates = session?.candidates || [];
+    const selected = selectedClassStepRuleCandidates(session);
+    const masterCheckbox = document.getElementById('class-step-select-all-rules');
+    if (masterCheckbox) {
+      masterCheckbox.disabled = !candidates.length;
+      masterCheckbox.checked = !!candidates.length && selected.length === candidates.length;
+      masterCheckbox.indeterminate = selected.length > 0 && selected.length < candidates.length;
+      masterCheckbox.title = !candidates.length
+        ? 'No applicable rules.'
+        : (selected.length === candidates.length ? 'Uncheck all rules.' : 'Check all rules.');
+    }
+    if (refs.classStepAddSelectedRules) {
+      const selectedRules = selected.filter((candidate) => !classStepCandidateIsSimplify(candidate));
+      refs.classStepAddSelectedRules.disabled = !selectedRules.length;
+      refs.classStepAddSelectedRules.title = selectedRules.length
+        ? `Add ${selectedRules.length} selected rule${selectedRules.length === 1 ? '' : 's'} to saved formulas/rules.`
+        : 'Select at least one non-simplify rule.';
+    }
+  }
+
+  function toggleClassStepRuleSelectionFromMaster(session = state.classStepSession) {
+    const candidates = session?.candidates || [];
+    if (!candidates.length) {
+      updateClassStepRuleSelectionControls(session);
+      return false;
+    }
+    const selected = selectedClassStepRuleCandidates(session);
+    const nextSelected = selected.length !== candidates.length;
+    candidates.forEach((candidate) => { candidate.selected = nextSelected; });
+    if (refs.classStepRules) {
+      refs.classStepRules.querySelectorAll('[data-class-step-rule]').forEach((checkbox) => {
+        checkbox.checked = nextSelected;
+      });
+    }
+    updateClassStepRuleSelectionControls(session);
+    return true;
   }
 
   function classStepCandidateSelectionMap(candidates = []) {
@@ -21407,15 +22404,18 @@
     if (!session?.geometry) return [];
     const baseRules = [
       ...classStepBaseRules(session),
-      ...(session.checkSwitchingRules ? classStepSwitchingRules(session) : []),
+      ...(session.skipSwitchingRules ? [] : classStepSwitchingRules(session)),
       ...(refs.classStepUseCache?.checked ? classStepCachedRules(session) : []),
       ...classStepSavedRules(session)
     ];
-    const pullbackWrappedRules = classStepPullbackWrappedRules(session, baseRules);
+    const totalExpansionRules = classStepTotalClassExpansionRules(session);
+    const wrappableRules = [...baseRules, ...totalExpansionRules];
+    const pullbackWrappedRules = classStepPullbackWrappedRules(session, wrappableRules);
     const rules = [
       ...baseRules,
+      ...totalExpansionRules,
       ...pullbackWrappedRules,
-      ...classStepMapWrappedRules(session, [...baseRules, ...pullbackWrappedRules]),
+      ...classStepMapWrappedRules(session, [...wrappableRules, ...pullbackWrappedRules]),
       ...classStepZeroPowerAssumptionRules(session)
     ];
     const seen = new Set();
@@ -21468,7 +22468,7 @@
         id: rule.id || `step-rule-${index}`,
         rule,
         rules: candidateRules?.length ? candidateRules : [rule],
-        sourceLabel: rule.stepSourceLabel || (rule.builtin ? 'built-in' : 'user'),
+        sourceLabel: classStepRuleSourceLabel(rule),
         selected: rule.selected === false ? false : true,
         ...(rule.assumption || rule.classStepSavedRule ? { manualAssumption: true } : {})
       }));
@@ -21479,6 +22479,60 @@
 
   function classStepCanSimplify(session) {
     return !!session?.geometry && !classStepDisplayPoly(session).isZero();
+  }
+
+  function classStepTotalClassExpansionRules(session) {
+    if (!session?.geometry) return [];
+    const rules = [];
+    const seen = new Set();
+    const addFromId = (id) => {
+      if (seen.has(id)) return;
+      const data = VARS.get(id);
+      if (data?.kind !== 'classStepTotalClass') return;
+      seen.add(id);
+      const sheafObject = state.sheaves.find((item) => item.id === data.sheafObjectId);
+      const geometry = geometryByVarietyId(data.geometryId) || session.geometry;
+      if (!sheafObject || !geometry) return;
+      const sheaf = sheafFromObject(sheafObject, geometry);
+      const family = classFormulaNormalizeClassFamily(data.classStepFamily || 'chern');
+      const rhs = classStepTotalClassExpansionPoly(sheaf, geometry, family).truncate(geometry.dim);
+      if (polyEquals(Poly.variable(id), rhs)) return;
+      const sheafKey = sheaf?.sourceObject?.id || sheaf?.id || sheafLabelPlain(sheaf);
+      rules.push({
+        id: `step-expand-total-${variableIdSafe(id)}`,
+        builtin: true,
+        enabled: true,
+        selected: true,
+        stepSourceLabel: 'Expand total class',
+        classStepKind: 'total-class-expansion',
+        classStepDisplayRule: true,
+        classStepApplyAllOccurrences: true,
+        classStepPayoffRule: true,
+        classStepAllowSameLhs: true,
+        classStepRuleGeometry: geometry,
+        classStepDisplayKey: `total-class-expansion:${family}:${geometry.varietyId || homologyScopeId(geometry)}:${sheafKey}`,
+        classStepDisplayLatex: classStepTotalClassExpansionDisplayLatex(sheaf, geometry, family, rhs),
+        lhs: { powers: { [id]: 1 } },
+        rhs: serializeHomologyPoly(rhs)
+      });
+    };
+    const addFromPoly = (poly) => {
+      for (const key of Poly.from(poly).terms.keys()) {
+        for (const id of Object.keys(parseMonoKey(key))) {
+          addFromId(id);
+          const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+          if (data?.kind === 'mapHomology' && (data.sourceKey || data.sourceKey === '')) {
+            Object.keys(parseMonoKey(data.sourceKey)).forEach(addFromId);
+          }
+        }
+      }
+    };
+    addFromPoly(classStepDisplayPoly(session));
+    if (!session.formulaSession && classStepDisplayOverridePoly(session)) {
+      classStepRuleApplicationDegrees(session).forEach((degree) => addFromPoly(componentOrZero(session.components, degree)));
+      if (session.rankComponent) addFromPoly(session.rankComponent);
+    }
+    return rules;
   }
 
   function classStepZeroPowerAssumptionRules(session) {
@@ -21537,6 +22591,7 @@
   }
 
   function applyClassStepCandidateDefaultSelection(candidates, session) {
+    if (applyClassStepComputedChartDefaultSelection(candidates)) return candidates;
     const targetDerivedCandidates = candidates.filter((candidate) => classStepCandidateIsTargetDerivedFirst(candidate, session));
     if (!targetDerivedCandidates.length) {
       for (const candidate of candidates) delete candidate.classStepAutoSelectionReason;
@@ -21561,6 +22616,82 @@
       }
     }
     return candidates;
+  }
+
+  function applyClassStepComputedChartDefaultSelection(candidates) {
+    const chartLhsKeys = new Set();
+    for (const candidate of candidates || []) {
+      if (!classStepCandidateIsComputedChart(candidate)) continue;
+      classStepCandidateLhsKeys(candidate).forEach((key) => chartLhsKeys.add(key));
+    }
+    const chartEquivalentLhsKeys = new Set();
+    for (const candidate of candidates || []) {
+      for (const rule of classStepRawCandidateRules(candidate)) {
+        if (!rule?.classStepComputedChartEquivalent) continue;
+        const lhsKey = monoKey(rule.lhs?.powers || {});
+        if (lhsKey) chartEquivalentLhsKeys.add(lhsKey);
+      }
+    }
+    if (!chartLhsKeys.size && !chartEquivalentLhsKeys.size) return false;
+    const protectedLhsKeys = new Set([...chartLhsKeys, ...chartEquivalentLhsKeys]);
+    for (const candidate of candidates || []) {
+      delete candidate.activeRules;
+      if (classStepCandidateIsComputedChart(candidate)) {
+        candidate.selected = candidate.selected !== false;
+        delete candidate.classStepAutoSelectionReason;
+        continue;
+      }
+      const rawRules = classStepRawCandidateRules(candidate);
+      const chartEquivalentRules = rawRules.filter((rule) => {
+        if (!rule?.classStepComputedChartEquivalent) return false;
+        const lhsKey = monoKey(rule.lhs?.powers || {});
+        return lhsKey && !chartLhsKeys.has(lhsKey);
+      });
+      if (chartEquivalentRules.length && !candidate.manualAssumption) {
+        candidate.activeRules = chartEquivalentRules;
+        candidate.rule = chartEquivalentRules[0];
+        candidate.selected = candidate.selected !== false;
+        candidate.classStepAutoSelectionReason = 'computed-chart-equivalent';
+        continue;
+      }
+      const overlapsChartRule = rawRules
+        .map((rule) => monoKey(rule?.lhs?.powers || {}))
+        .some((key) => key && protectedLhsKeys.has(key));
+      if (overlapsChartRule && !candidate.manualAssumption) {
+        candidate.selected = false;
+        candidate.classStepAutoSelectionReason = 'computed-chart-first';
+      } else {
+        delete candidate.classStepAutoSelectionReason;
+      }
+    }
+    return true;
+  }
+
+  function classStepCandidateIsComputedChart(candidate) {
+    return classStepCandidateRules(candidate).some((rule) => rule?.classStepComputedChartRule === true);
+  }
+
+  function classStepCandidateLhsKeys(candidate) {
+    return classStepCandidateRules(candidate)
+      .map((rule) => monoKey(rule?.lhs?.powers || {}))
+      .filter(Boolean);
+  }
+
+  function classStepRuleSourceLabel(rule) {
+    if (rule?.stepSourceLabel) return rule.stepSourceLabel;
+    if (rule?.classStepSavedRule) return 'saved formula';
+    if (rule?.assumption) return 'assumption';
+    if (rule?.automatic) return classStepAutomaticRuleLabel(rule.automatic);
+    if (rule?.builtin) return 'built-in';
+    return 'user';
+  }
+
+  function classStepAutomaticRuleLabel(value) {
+    if (value === 'picard-poincare') return 'Picard-Poincare';
+    if (value === 'ramified-cover') return 'Ramified cover';
+    if (value === 'abel-jacobi') return 'Abel-Jacobi';
+    if (value === 'product-box') return 'Product';
+    return 'automatic';
   }
 
   function classStepCandidateIsTargetDerivedFirst(candidate, session) {
@@ -21603,14 +22734,22 @@
 
   function classStepRuleSemanticKey(rule) {
     const lhsKey = monoKey(rule?.lhs?.powers || {});
-    const rhsKey = JSON.stringify(rule?.rhs || []);
+    const rhsKey = classStepRuleRhsKey(rule);
     return `${lhsKey}:${classStepRuleDisplayKey(rule)}:${rhsKey}`;
   }
 
   function classStepRuleRewriteKey(rule) {
     const lhsKey = monoKey(rule?.lhs?.powers || {});
     if (!lhsKey) return '';
-    return `${lhsKey}:${JSON.stringify(rule?.rhs || [])}`;
+    return `${lhsKey}:${classStepRuleRhsKey(rule)}`;
+  }
+
+  function classStepRuleRhsKey(rule) {
+    try {
+      return JSON.stringify(serializeHomologyPoly(homologyRuleRhsPoly(rule)));
+    } catch (_) {
+      return JSON.stringify(rule?.rhs || []);
+    }
   }
 
   function classStepBaseRules(session) {
@@ -21921,6 +23060,7 @@
       if (data?.classStepKind === 'formalSheafDerived') {
         const rule = classStepSheafDerivedRuleForVariable(id, data, session);
         if (rule) rules.push(rule);
+        classStepAppendComputedChartRule(rules, classStepComputedDerivedChartRuleForVariable(id, data, session));
       }
       const sourceDef = classStepSheafDefForVariable(id, data, session);
       if (sourceDef) rules.push(...classStepRulesForSheafDef(sourceDef, session));
@@ -22078,9 +23218,13 @@
       ? sheafFromObject(sheafObject, geometry)
       : (session.sheaf || null);
     if (!sheaf) return null;
-    const bundle = classStepCurrentDerivedRuleBundle(session, sheaf, geometry)
-      || classStepFormalDerivedRuleBundle(sheaf, geometry);
-    const total = classStepDerivedBundlePoly(bundle, target);
+    const total = target === 'sqrtTodd'
+      ? classStepFormalSqrtToddFromToddTotal(sheaf, geometry, geometry.dim)
+      : classStepDerivedBundlePoly(
+        classStepCurrentDerivedRuleBundle(session, sheaf, geometry)
+          || classStepFormalDerivedRuleBundle(sheaf, geometry),
+        target
+      );
     const rhs = homogeneousPart(total, degree);
     if (polyEquals(rhs, Poly.variable(id))) return null;
     return {
@@ -22107,14 +23251,28 @@
   }
 
   function classStepFormalDerivedRuleBundle(sheaf, geometry) {
+    if (classStepSheafRequiresCharacterFamily(sheaf)) {
+      const characterFormal = buildClassStepFormalData(geometry, sheaf, 'character');
+      const bundle = buildBundleFromCh(
+        classStepPositiveComponents(characterFormal.components),
+        characterFormal.rankLatex,
+        characterFormal.rankPlain,
+        sheaf.labelLatex,
+        sheaf.labelPlain
+      );
+      bundle.rankPoly = classStepRankPolyForFormalData(characterFormal);
+      return bundle;
+    }
     const chernFormal = buildClassStepFormalData(geometry, sheaf, 'chern');
-    return buildBundleFromChern(
+    const bundle = buildBundleFromChern(
       classStepPositiveComponents(chernFormal.components),
       chernFormal.rankLatex,
       chernFormal.rankPlain,
       sheaf.labelLatex,
       sheaf.labelPlain
     );
+    bundle.rankPoly = classStepRankPolyForFormalData(chernFormal);
+    return bundle;
   }
 
   function buildFormalTangentChernClassBundle(geometry) {
@@ -22196,11 +23354,7 @@
     rules.push(...(homology?.rules || []).filter((rule) => (
       rule.enabled !== false
       && rule.lhs?.powers?.[def.id] === 1
-    )).map((rule) => ({
-      ...rule,
-      classStepRuleGeometry: geometry,
-      classStepPayoffRule: true
-    })));
+    )).map((rule) => classStepStoredSheafRule(rule, source, session)));
     rules.push(...classStepDefaultSheafRulesForDef(def, sheaf, geometry, family, session));
     if (sheaf?.construction?.type === 'ses-term') {
       rules.push(...classStepSesRules({
@@ -22229,7 +23383,33 @@
         dimension: geometry.dim
       }, sheaf, geometry, family).filter((rule) => rule.lhs?.powers?.[def.id] === 1));
     }
+    classStepAppendComputedChartRule(rules, classStepComputedChartRuleForDef(source, session));
     return rules;
+  }
+
+  function classStepStoredSheafRule(rule, source, session) {
+    const out = {
+      ...rule,
+      classStepRuleGeometry: source?.geometry || session?.geometry,
+      classStepPayoffRule: true
+    };
+    if (!out.stepSourceLabel && classStepRuleLooksLikePicardPoincare(out, source)) {
+      out.stepSourceLabel = 'Picard-Poincare';
+      out.automatic = out.automatic || 'picard-poincare';
+      out.builtin = true;
+    }
+    return out;
+  }
+
+  function classStepRuleLooksLikePicardPoincare(rule, source) {
+    const sheaf = source?.sheaf;
+    const def = source?.def;
+    if (sheaf?.construction?.type !== 'picard-poincare-line-bundle') return false;
+    if (!def || source.family !== 'chern' || def.degree !== 1) return false;
+    const lhs = rule?.lhs?.powers || {};
+    return Object.keys(lhs).length === 1
+      && lhs[def.id] === 1
+      && String(rule?.id || '') === `sheaf-rule-${def.id}`;
   }
 
   function classStepKnownRankRuleForDef(def, sheaf, geometry) {
@@ -22350,6 +23530,7 @@
     return {
       ...session,
       checkSwitchingRules: false,
+      skipSwitchingRules: true,
       components,
       candidates: []
     };
@@ -22359,6 +23540,7 @@
     return new Set(collectClassStepRuleCandidates({
       ...session,
       checkSwitchingRules: false,
+      skipSwitchingRules: true,
       candidates: []
     }).filter((candidate) => classStepCandidateCountsAsSwitchingPayoff(candidate))
       .flatMap((candidate) => classStepCandidateRules(candidate).map(classStepRuleInstanceKey)));
@@ -22372,6 +23554,11 @@
       || label === 'built-in'
       || label === 'Chern class'
       || label === 'Chern character'
+      || label === 'Picard-Poincare'
+      || label === 'Ramified cover'
+      || label === 'Abel-Jacobi'
+      || label === 'Product'
+      || label === 'automatic'
       || label === 'cached'
       || label === 'cached pushforward'
       || label === 'cached pullback';
@@ -22410,6 +23597,148 @@
       if (error?.symbolicBudgetExceeded) return [];
       return [];
     }
+  }
+
+  function classStepAppendComputedChartRule(rules, rule) {
+    if (!rule) return;
+    const rewriteKey = classStepRuleRewriteKey(rule);
+    const lhsKey = monoKey(rule.lhs?.powers || {});
+    const sameLhsRules = lhsKey
+      ? rules.filter((existing) => monoKey(existing?.lhs?.powers || {}) === lhsKey)
+      : [];
+    const sameRewriteRules = rewriteKey
+      ? rules.filter((existing) => classStepRuleRewriteKey(existing) === rewriteKey)
+      : [];
+    if (sameRewriteRules.length) {
+      sameRewriteRules.forEach((existing) => {
+        existing.classStepComputedChartEquivalent = true;
+      });
+      return;
+    }
+    if (lhsKey) {
+      sameLhsRules.forEach((existing) => { existing.selected = false; });
+    }
+    rules.push(rule);
+  }
+
+  function classStepComputedChartRuleForDef(source, session) {
+    if (!classStepComputedChartRulesEnabled()) return null;
+    const { def, sheaf, geometry, family } = source || {};
+    if (!def || !sheaf || !geometry || !family) return null;
+    const bundle = classStepComputedBundleForSheaf(session, sheaf, geometry);
+    const rhs = classStepComputedBundleComponent(bundle, def, family, geometry);
+    const sheafKey = sheaf?.sourceObject?.id || sheaf?.id || sheafLabelPlain(sheaf);
+    return classStepComputedChartRule({
+      id: `step-computed-chart-${family}-${variableIdSafe(def.id)}`,
+      lhsId: def.id,
+      rhs,
+      geometry,
+      displayKey: `computed-chart:${family}:${geometry.varietyId || homologyScopeId(geometry)}:${sheafKey}:${def.id}`,
+      sourceLabel: 'computed chart'
+    });
+  }
+
+  function classStepComputedDerivedChartRuleForVariable(id, data, session) {
+    if (!classStepComputedChartRulesEnabled()) return null;
+    const degree = data?.classStepDegree;
+    const target = normalizeClassStepTargetValue(data?.classStepDerivedTarget);
+    if (!id || !session?.geometry || !degree || !classStepTargetUsesFormalDerivedVariables(target)) return null;
+    const sheafObject = state.sheaves.find((item) => item.id === data.sheafObjectId);
+    const geometry = geometryByVarietyId(data.geometryId) || session.geometry;
+    const sheaf = sheafObject
+      ? sheafFromObject(sheafObject, geometry)
+      : (session.sheaf || null);
+    if (!sheaf || !geometry) return null;
+    const bundle = classStepComputedBundleForSheaf(session, sheaf, geometry);
+    const total = bundle ? classStepDerivedBundlePoly(bundle, target) : null;
+    if (!(total instanceof Poly)) return null;
+    const rhs = homogeneousPart(total, degree).truncate(geometry.dim);
+    const sheafKey = sheaf?.sourceObject?.id || sheaf?.id || sheafLabelPlain(sheaf);
+    return classStepComputedChartRule({
+      id: `step-computed-chart-${target}-${variableIdSafe(id)}`,
+      lhsId: id,
+      rhs,
+      geometry,
+      displayKey: `computed-chart:${target}:${geometry.varietyId || homologyScopeId(geometry)}:${sheafKey}:${id}`,
+      sourceLabel: classStepDerivedSourceLabel(target)
+    });
+  }
+
+  function classStepComputedChartRulesEnabled() {
+    return refs.classStepUseCache?.checked === true;
+  }
+
+  function classStepComputedChartRule({ id, lhsId, rhs, geometry, displayKey, sourceLabel }) {
+    if (!lhsId || rhs == null) return null;
+    const maxDegree = geometry?.dim ?? MAX_DIMENSION;
+    const rhsPoly = Poly.from(rhs).truncate(maxDegree);
+    const lhs = { powers: { [lhsId]: 1 } };
+    if (polyEquals(polyFromPowers(lhs.powers), rhsPoly)) return null;
+    return {
+      id,
+      builtin: true,
+      enabled: true,
+      selected: true,
+      stepSourceLabel: sourceLabel || 'computed chart',
+      classStepComputedChartRule: true,
+      classStepAllowSameLhs: true,
+      classStepPayoffRule: true,
+      classStepRuleGeometry: geometry,
+      classStepDisplayKey: displayKey || `computed-chart:${id}`,
+      lhs,
+      rhs: serializeHomologyPoly(rhsPoly)
+    };
+  }
+
+  function classStepComputedBundleComponent(bundle, def, family, geometry) {
+    if (!bundle || !def || !geometry) return null;
+    if (family === 'character') {
+      if (def.degree === 0) return rankAsDegreeZeroPoly(bundle, def.id).truncate(geometry.dim);
+      return componentOrZero(bundle.chComps, def.degree).truncate(geometry.dim);
+    }
+    if (def.degree === 0) return null;
+    return componentOrZero(bundle.cComps, def.degree).truncate(geometry.dim);
+  }
+
+  function classStepComputedBundleForSheaf(session, sheaf, geometry) {
+    if (!sheaf || !geometry) return null;
+    if (classStepSessionComputedBundleMatches(session, sheaf, geometry)) return session.computedBundle;
+    try {
+      const bundle = buildBundleForSheaf(geometry, sheaf, { geometry });
+      bundle.defaultSheafHomologyRules = defaultSheafHomologyRulesFromBundle(sheaf, geometry, bundle);
+      return applyStoredSheafHomologyRulesToSourceBundle(bundle, geometry, sheaf);
+    } catch (error) {
+      if (error?.symbolicBudgetExceeded) return null;
+      return null;
+    }
+  }
+
+  function classStepSessionComputedBundleMatches(session, sheaf, geometry) {
+    if (!session?.computedBundle || session.computedBundle.classStepPlaceholder) return false;
+    return classStepSameSheafObject(session.sheaf, sheaf)
+      && classStepSameGeometryObject(session.geometry, geometry);
+  }
+
+  function classStepSameSheafObject(left, right) {
+    if (!left || !right) return false;
+    const leftId = left?.sourceObject?.id || left?.id || null;
+    const rightId = right?.sourceObject?.id || right?.id || null;
+    if (leftId || rightId) return !!leftId && leftId === rightId;
+    if (left === right) return true;
+    return left.type === right.type
+      && (left.labelPlain || left.labelLatex) === (right.labelPlain || right.labelLatex)
+      && (left.rankPlain || left.rankLatex || '') === (right.rankPlain || right.rankLatex || '');
+  }
+
+  function classStepSameGeometryObject(left, right) {
+    if (!left || !right) return false;
+    const leftId = left.varietyId || null;
+    const rightId = right.varietyId || null;
+    if (leftId || rightId) return !!leftId && leftId === rightId;
+    if (left === right) return true;
+    return left.type === right.type
+      && left.dim === right.dim
+      && (left.labelPlain || left.labelLatex) === (right.labelPlain || right.labelLatex);
   }
 
   function classStepMapWrappedRules(session, rules) {
@@ -22827,8 +24156,23 @@
   function classStepSheafRules(session) {
     const rules = [];
     const homology = session.sheaf?.sourceObject ? ensureSheafHomologySystem(session.sheaf.sourceObject, session.geometry) : null;
-    rules.push(...(homology?.rules || []).filter((rule) => rule.enabled !== false));
+    rules.push(...(homology?.rules || [])
+      .filter((rule) => rule.enabled !== false)
+      .map((rule) => classStepStoredSheafRule(rule, classStepStoredSheafRuleSource(rule, session), session)));
     return rules;
+  }
+
+  function classStepStoredSheafRuleSource(rule, session) {
+    if (!session?.sheaf || !session?.geometry) return null;
+    const lhsIds = Object.keys(rule?.lhs?.powers || {});
+    if (lhsIds.length !== 1) return null;
+    const id = lhsIds[0];
+    for (const family of ['chern', 'character']) {
+      const def = classStepSheafDefsForSheaf(session.sheaf, session.geometry, family)
+        .find((entry) => entry.id === id);
+      if (def) return { def, sheaf: session.sheaf, geometry: session.geometry, family, sheafObject: session.sheaf.sourceObject || null };
+    }
+    return null;
   }
 
   function saveCurrentClassStepFormulaAsRule() {
@@ -22840,26 +24184,76 @@
       renderClassStepPanel();
       return false;
     }
-    let added = 0;
-    let updated = 0;
-    for (const entry of stateInfo.entries) {
-      const existingIndex = (state.classStepSavedRules || []).findIndex((item) => classStepSavedRuleSameRewrite(item, entry));
-      if (existingIndex >= 0) {
-        state.classStepSavedRules[existingIndex] = entry;
-        updated += 1;
-      } else {
-        state.classStepSavedRules.push(entry);
-        added += 1;
-      }
-    }
-    const count = added + updated;
+    const { added, updated, count } = upsertClassStepSavedEntries(stateInfo.entries);
     session.message = count === 1
-      ? (updated ? 'Updated the saved formula rule.' : 'Saved this formula as a rule.')
-      : `Saved ${count} formula rules.`;
+      ? (updated ? 'Updated the saved formula/rule.' : 'Saved this formula/rule.')
+      : `Saved ${count} formulas/rules.`;
     renderClassStepPanel();
+    renderClassStepSavedFormulaList();
     refreshExport(state.exportScope || 'main');
     typeset(refs.classStepPanel);
+    typeset(refs.classStepSavedRules);
     return true;
+  }
+
+  function saveSelectedClassStepRulesToLibrary() {
+    const session = state.classStepSession;
+    if (!session) return false;
+    const entries = classStepSavedRuleEntriesFromSelectedCandidates(session);
+    if (!entries.length) {
+      session.message = 'Select at least one rule that can be saved.';
+      renderClassStepPanel();
+      return false;
+    }
+    const { updated, count } = upsertClassStepSavedEntries(entries);
+    session.message = count === 1
+      ? (updated ? 'Updated the saved rule.' : 'Added the selected rule to saved formulas/rules.')
+      : `Added ${count} selected rules to saved formulas/rules.`;
+    renderClassStepPanel();
+    renderClassStepSavedFormulaList();
+    refreshExport(state.exportScope || 'main');
+    typeset(refs.classStepPanel);
+    typeset(refs.classStepSavedRules);
+    return true;
+  }
+
+  function classStepSavedRuleEntriesFromSelectedCandidates(session) {
+    if (!session?.geometry) return [];
+    const budget = createSymbolicBudget('saving selected step rules', { maxMillis: 450 });
+    const entries = [];
+    for (const candidate of selectedClassStepRuleCandidates(session)) {
+      if (classStepCandidateIsSimplify(candidate)) continue;
+      for (const rawRule of classStepCandidateRules(candidate)) {
+        const rule = classStepMaterializeRule(session, rawRule, { budget });
+        const entry = classStepSavedRuleEntryFromRule(session, rule, candidate);
+        if (entry) entries.push(entry);
+      }
+    }
+    return entries;
+  }
+
+  function classStepSavedRuleEntryFromRule(session, rule, candidate = null) {
+    if (!rule?.lhs?.powers || !Array.isArray(rule.rhs)) return null;
+    const lhs = polyFromPowers(rule.lhs.powers);
+    const rhs = homologyRuleRhsPoly(rule).truncate(session.geometry?.dim ?? MAX_DIMENSION);
+    if (lhs.isZero()) return null;
+    const entry = classStepSavedRuleEntryFromPolys(
+      session,
+      lhs,
+      rhs,
+      null,
+      formatPolyLatex(lhs),
+      formatPolyPlain(lhs)
+    );
+    if (!entry) return null;
+    entry.sourceLabel = candidate?.sourceLabel || classStepRuleSourceLabel(rule);
+    entry.displayLatex = classStepRuleDisplayLatex(rule);
+    entry.displayPlain = `${formatPolyPlain(lhs)}=${formatPolyPlain(rhs)}`;
+    entry.variableIds = [...new Set([
+      ...(entry.variableIds || []),
+      ...homologyRuleVariableIds(rule)
+    ])];
+    return entry;
   }
 
   function classStepSaveRuleState(session) {
@@ -22867,18 +24261,10 @@
     if (!entries.length) {
       return {
         ok: false,
-        message: 'Only formulas with a single monomial left side can be saved as rewrite rules.'
+        message: 'There is no changed formula to save from this step.'
       };
     }
-    const validEntries = entries.filter((entry) => {
-      const rule = classStepRuleFromSavedEntry(entry);
-      if (!rule) return false;
-      return !polyEquals(polyFromPowers(rule.lhs?.powers || {}), homologyRuleRhsPoly(rule));
-    });
-    if (!validEntries.length) {
-      return { ok: false, message: 'The current formula is unchanged.' };
-    }
-    return { ok: true, message: '', entries: validEntries };
+    return { ok: true, message: '', entries };
   }
 
   function classStepSavedRuleEntriesFromSession(session) {
@@ -22893,7 +24279,7 @@
         classStepLabelPlain(session)
       )].filter(Boolean);
     }
-    if (classStepUsesDerivedTarget(session)) {
+    if (classStepUsesDerivedTarget(session) || classStepDisplayOverridePoly(session)) {
       return [classStepSavedRuleEntryFromPolys(
         session,
         classStepOriginalDisplayPoly(session),
@@ -22935,6 +24321,8 @@
   function classStepOriginalDisplayPoly(session) {
     if (!session) return Poly.zero();
     if (session.formulaSession) return Poly.from(session.originalFormulaPoly || componentOrZero(session.originalComponents, 0));
+    const initialTotal = classStepInitialTotalDisplayPoly(session);
+    if (initialTotal) return initialTotal;
     if (classStepUsesDerivedTarget(session)) {
       return classStepDerivedDisplayPoly({
         ...session,
@@ -22964,22 +24352,15 @@
   function classStepSavedRuleEntryFromPolys(session, lhs, rhs, degree, labelLatex, labelPlain) {
     lhs = stripUnitPowersFromPoly(lhs);
     rhs = stripUnitPowersFromPoly(rhs);
-    if (lhs.isZero() || polyEquals(lhs, rhs)) return null;
+    const changed = !polyEquals(lhs, rhs);
     const lhsTerms = sortedTerms(lhs);
-    if (lhsTerms.length !== 1) return null;
-    const [lhsKey, lhsCoeff] = lhsTerms[0];
-    if (!lhsCoeff.isOne() || !lhsKey) return null;
-    const rule = {
-      lhs: { powers: parseMonoKey(lhsKey) },
-      rhs: serializeHomologyPoly(rhs)
-    };
-    const id = `step-saved-${hashString(`${session.geometry.varietyId}:${session.family}:${degree}:${lhsKey}:${JSON.stringify(rule.rhs)}`)}`;
     const lhsLatex = formatPolyLatex(lhs);
     const rhsLatex = formatPolyLatex(rhs);
     const lhsPlain = formatPolyPlain(lhs);
     const rhsPlain = formatPolyPlain(rhs);
-    return {
-      id,
+    const displayLhsLatex = labelLatex || lhsLatex;
+    const displayLhsPlain = labelPlain || lhsPlain;
+    const baseEntry = {
       family: session.family || 'formula',
       target: session.target || session.family || 'formula',
       degree,
@@ -22987,15 +24368,46 @@
       geometryId: session.geometry?.varietyId || null,
       labelLatex,
       labelPlain,
-      lhs: rule.lhs,
-      rhs: rule.rhs,
       lhsLatex,
       rhsLatex,
       lhsPlain,
       rhsPlain,
-      displayLatex: `${lhsLatex}=${rhsLatex}`,
-      displayPlain: `${lhsPlain}=${rhsPlain}`,
-      variableIds: [...new Set(homologyRuleVariableIds(rule))]
+      displayLatex: `${displayLhsLatex}=${rhsLatex}`,
+      displayPlain: `${displayLhsPlain}=${rhsPlain}`,
+      formulaTokens: cloneClassFormulaTokens(session.formulaTokens || []),
+      formulaSignature: session.sourceSignature || '',
+      selected: true
+    };
+    const [lhsKey, lhsCoeff] = lhsTerms[0] || ['', Fraction.zero()];
+    if (changed && lhsTerms.length === 1 && lhsCoeff.isOne() && lhsKey) {
+      const rule = {
+        lhs: { powers: parseMonoKey(lhsKey) },
+        rhs: serializeHomologyPoly(rhs)
+      };
+      const id = `step-saved-${hashString(`${session.geometry.varietyId}:${session.family}:${degree}:${lhsKey}:${JSON.stringify(rule.rhs)}`)}`;
+      return {
+        ...baseEntry,
+        id,
+        kind: 'rewrite',
+        lhs: rule.lhs,
+        rhs: rule.rhs,
+        variableIds: [...new Set(homologyRuleVariableIds(rule))]
+      };
+    }
+    if (!session.formulaSession && !changed) return null;
+    const id = `step-formula-${hashString([
+      session.geometry?.varietyId || '',
+      session.family || 'formula',
+      degree ?? '',
+      displayLhsPlain,
+      rhsPlain,
+      session.sourceSignature || ''
+    ].join('::'))}`;
+    return {
+      ...baseEntry,
+      id,
+      kind: 'formula',
+      variableIds: [...new Set([...polyVariableIds(lhs), ...polyVariableIds(rhs)])]
     };
   }
 
@@ -23007,32 +24419,304 @@
       && JSON.stringify(left.rhs || []) === JSON.stringify(right.rhs || []);
   }
 
+  function classStepSavedEntrySame(left, right) {
+    if (!left || !right) return false;
+    if (left.id && right.id && left.id === right.id) return true;
+    const leftKind = left.kind || (left.lhs?.powers ? 'rewrite' : 'formula');
+    const rightKind = right.kind || (right.lhs?.powers ? 'rewrite' : 'formula');
+    if (leftKind === 'rewrite' && rightKind === 'rewrite') return classStepSavedRuleSameRewrite(left, right);
+    if (leftKind !== rightKind) return false;
+    if ((left.geometryId || '') !== (right.geometryId || '')) return false;
+    if (left.formulaSignature && right.formulaSignature && left.formulaSignature === right.formulaSignature) return true;
+    return (left.displayPlain || '') === (right.displayPlain || '');
+  }
+
+  function polyVariableIds(poly) {
+    const ids = new Set();
+    for (const key of Poly.from(poly).terms.keys()) {
+      Object.keys(parseMonoKey(key)).forEach((id) => ids.add(id));
+    }
+    return [...ids];
+  }
+
+  function upsertClassStepSavedEntries(entries, options = {}) {
+    if (!Array.isArray(state.classStepSavedRules)) state.classStepSavedRules = [];
+    const savedEntries = [];
+    let added = 0;
+    let updated = 0;
+    for (const rawEntry of entries || []) {
+      if (!rawEntry) continue;
+      const entry = {
+        ...rawEntry,
+        kind: rawEntry.kind === 'rewrite' ? 'rewrite' : 'formula',
+        selected: rawEntry.selected !== false
+      };
+      let existingIndex = -1;
+      if (options.replaceId && entries.length === 1) {
+        existingIndex = state.classStepSavedRules.findIndex((item) => item.id === options.replaceId);
+      }
+      if (existingIndex < 0) {
+        existingIndex = state.classStepSavedRules.findIndex((item) => classStepSavedEntrySame(item, entry));
+      }
+      if (existingIndex >= 0) {
+        const previous = state.classStepSavedRules[existingIndex] || {};
+        const next = {
+          ...entry,
+          id: previous.id || entry.id,
+          selected: previous.selected !== false
+        };
+        state.classStepSavedRules[existingIndex] = next;
+        savedEntries.push(next);
+        updated += 1;
+      } else {
+        state.classStepSavedRules.push(entry);
+        savedEntries.push(entry);
+        added += 1;
+      }
+    }
+    return { added, updated, count: added + updated, entries: savedEntries };
+  }
+
+  function saveClassFormulaBuilderFormula(options = {}) {
+    const builder = ensureClassFormulaBuilderState();
+    const validation = builder.validatedFormula?.signature === classFormulaBuilderSignature(builder)
+      ? builder.validatedFormula
+      : validateClassFormulaBuilder();
+    if (!validation.ok) {
+      builder.validatedFormula = null;
+      builder.message = validation.message || 'Formula is not allowed.';
+      if (options.renderBuilder !== false) renderClassFormulaBuilder({ focusPreview: true });
+      return false;
+    }
+    builder.validatedFormula = validation;
+    const entry = classStepSavedFormulaEntryFromBuilder(validation, builder);
+    if (!entry) {
+      builder.message = 'This formula cannot be saved.';
+      if (options.renderBuilder !== false) renderClassFormulaBuilder({ focusPreview: true });
+      return false;
+    }
+    const result = upsertClassStepSavedEntries([entry], { replaceId: builder.editingSavedFormulaId });
+    const saved = result.entries[0];
+    builder.editingSavedFormulaId = saved?.id || null;
+    builder.message = result.updated ? 'Updated the saved formula.' : 'Saved the formula.';
+    renderClassStepSavedFormulaList();
+    if (options.renderBuilder !== false) renderClassFormulaBuilder({ focusPreview: true });
+    refreshExport(state.exportScope || 'main');
+    typeset(refs.classStepSavedRules);
+    return true;
+  }
+
+  function classStepSavedFormulaEntryFromBuilder(validation, builder = ensureClassFormulaBuilderState()) {
+    if (!validation?.ok || !validation.geometry) return null;
+    const session = {
+      formulaSession: true,
+      family: 'formula',
+      target: 'formula',
+      dimension: validation.geometry.dim,
+      geometry: validation.geometry,
+      formulaLatex: validation.latex,
+      formulaPlain: validation.plain,
+      formulaTokens: cloneClassFormulaTokens(builder.tokens),
+      sourceSignature: classFormulaStepSignature(validation)
+    };
+    return classStepSavedRuleEntryFromPolys(
+      session,
+      validation.poly,
+      validation.poly,
+      0,
+      validation.latex,
+      validation.plain
+    );
+  }
+
   function deleteClassStepSavedRule(id) {
     const before = (state.classStepSavedRules || []).length;
     state.classStepSavedRules = (state.classStepSavedRules || []).filter((rule) => rule.id !== id);
     if (before === state.classStepSavedRules.length) return false;
-    if (state.classStepSession) state.classStepSession.message = 'Deleted the saved formula rule.';
+    if (state.classStepSession) state.classStepSession.message = 'Deleted the saved formula/rule.';
     renderClassStepPanel();
+    renderClassStepSavedFormulaList();
     refreshExport(state.exportScope || 'main');
     typeset(refs.classStepPanel);
+    typeset(refs.classStepSavedRules);
+    return true;
+  }
+
+  function setClassStepSavedFormulaSelected(id, selected) {
+    const entry = (state.classStepSavedRules || []).find((item) => item.id === id);
+    if (!entry) return false;
+    entry.selected = !!selected;
+    updateClassStepSavedFormulaActions();
+    if (state.exportScope === 'saved-step-formulas') refreshExport('saved-step-formulas');
+    if (state.classStepSession) refreshClassStepRuleCandidatesOnly();
+    return true;
+  }
+
+  function toggleClassStepSavedSelectionFromMaster(event) {
+    const saved = state.classStepSavedRules || [];
+    if (!saved.length) {
+      updateClassStepSavedFormulaActions();
+      return false;
+    }
+    const selected = selectedClassStepSavedEntries();
+    const nextSelected = selected.length !== saved.length;
+    saved.forEach((entry) => { entry.selected = nextSelected; });
+    renderClassStepSavedFormulaList();
+    if (state.exportScope === 'saved-step-formulas') refreshExport('saved-step-formulas');
+    if (state.classStepSession) refreshClassStepRuleCandidatesOnly();
+    return true;
+  }
+
+  function deleteSelectedClassStepSavedRules() {
+    const saved = state.classStepSavedRules || [];
+    const selectedIds = new Set(selectedClassStepSavedEntries().map((entry) => entry.id));
+    if (!selectedIds.size) {
+      updateClassStepSavedFormulaActions();
+      return false;
+    }
+    state.classStepSavedRules = saved.filter((entry) => !selectedIds.has(entry.id));
+    const builder = ensureClassFormulaBuilderState();
+    if (builder.editingSavedFormulaId && selectedIds.has(builder.editingSavedFormulaId)) builder.editingSavedFormulaId = null;
+    if (state.classStepSession) state.classStepSession.message = `Deleted ${selectedIds.size} saved formula/rule${selectedIds.size === 1 ? '' : 's'}.`;
+    renderClassStepPanel();
+    renderClassStepSavedFormulaList();
+    refreshExport(state.exportScope || 'main');
+    typeset(refs.classStepPanel);
+    typeset(refs.classStepSavedRules);
+    return true;
+  }
+
+  function editClassStepSavedFormula(id) {
+    let entry = (state.classStepSavedRules || []).find((item) => item.id === id);
+    if (!entry) return false;
+    if (!saveOpenClassFormulaEditorBeforeSwitch()) {
+      renderClassFormulaBuilder({ focusPreview: true });
+      return false;
+    }
+    if (state.classStepSession?.active && !state.classStepSession.stopped) {
+      closeClassStepEditor({ keepBuilder: true });
+    }
+    entry = (state.classStepSavedRules || []).find((item) => item.id === id);
+    if (!entry) return false;
+    if (!Array.isArray(entry.formulaTokens) || !entry.formulaTokens.length) {
+      if (refs.status) refs.status.textContent = 'Only formulas made in the formula builder can be edited here.';
+      return false;
+    }
+    const builder = ensureClassFormulaBuilderState();
+    builder.varietyId = entry.geometryId && state.varieties.some((item) => item.id === entry.geometryId)
+      ? entry.geometryId
+      : (state.varieties[0]?.id || null);
+    builder.tokens = cloneClassFormulaTokens(entry.formulaTokens);
+    builder.validatedFormula = null;
+    builder.mode = 'builder';
+    builder.activeSlotId = null;
+    builder.cursorIndex = builder.tokens.length;
+    builder.nextSlotId = classFormulaNextSlotId(builder.tokens);
+    builder.editingSavedFormulaId = entry.id;
+    builder.message = 'Saved formula loaded for editing.';
+    state.classFormulaEditorOpen = true;
+    if (refs.classStepCard) {
+      refs.classStepCard.hidden = false;
+      refs.classStepCard.classList.remove('collapsed');
+    }
+    renderClassFormulaBuilder({ focusPreview: true });
+    typeset(refs.classFormulaBuilder);
     return true;
   }
 
   function renderClassStepSavedRules() {
     const saved = state.classStepSavedRules || [];
-    if (!saved.length) return '';
-    const rows = saved.map((rule) => `
-      <div class="sheaf-step-saved-rule-row">
-        <span>\\(${rule.displayLatex || classStepRuleDisplayLatex(classStepRuleFromSavedEntry(rule))}\\)</span>
-        <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-step-delete-saved="${escapeHtml(rule.id)}">delete</button>
+    if (!saved.length) {
+      return '<div class="hint">No saved formulas yet. Use add formula, or save the result of a step-by-step calculation.</div>';
+    }
+    const rows = saved.map((rule) => {
+      const kind = rule.kind || (rule.lhs?.powers ? 'rewrite' : 'formula');
+      return `
+        <div class="sheaf-step-saved-rule-row">
+          <input type="checkbox" data-class-step-select-saved="${escapeHtml(rule.id)}" aria-label="choose saved formula" ${rule.selected === false ? '' : 'checked'}>
+          <span class="sheaf-step-saved-rule-formula" title="${escapeHtml(classStepSavedEntryDisplayPlain(rule))}">\\(${classStepSavedEntryDisplayLatex(rule)}\\)</span>
+          <span class="sheaf-step-saved-rule-kind">${escapeHtml(kind === 'rewrite' ? 'rule' : 'formula')}</span>
+          ${Array.isArray(rule.formulaTokens) && rule.formulaTokens.length
+            ? `<button class="btn btn-ghost sheaf-chart-export" type="button" data-class-step-edit-saved="${escapeHtml(rule.id)}">edit</button>`
+            : '<span></span>'}
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="sheaf-step-saved-rule-title">saved formulas/rules</div>
+      <div class="sheaf-step-saved-rule-row sheaf-step-select-all-row">
+        <input type="checkbox" id="class-step-select-all-saved" data-class-step-select-all-saved aria-label="select all saved formulas and rules">
+        <span></span>
+        <span></span>
+        <span></span>
       </div>
-    `).join('');
-    return `<div class="sheaf-step-saved-rule-title">saved formulas</div>${rows}`;
+      ${rows}
+    `;
+  }
+
+  function classStepSavedEntryDisplayLatex(entry) {
+    if (!entry) return '0';
+    if (entry.displayLatex) return entry.displayLatex;
+    const rule = classStepRuleFromSavedEntry(entry);
+    if (rule) return classStepRuleDisplayLatex(rule);
+    const lhs = entry.labelLatex || entry.lhsLatex || '\\Phi';
+    const rhs = entry.rhsLatex || '0';
+    return `${lhs}=${rhs}`;
+  }
+
+  function classStepSavedEntryDisplayPlain(entry) {
+    if (!entry) return '0';
+    if (entry.displayPlain) return entry.displayPlain;
+    const lhs = entry.labelPlain || entry.lhsPlain || 'formula';
+    const rhs = entry.rhsPlain || '0';
+    return `${lhs}=${rhs}`;
+  }
+
+  function renderClassStepSavedFormulaList() {
+    if (!refs.classStepSavedRules) return;
+    refs.classStepSavedRules.innerHTML = renderClassStepSavedRules();
+    refs.classStepSavedRules.hidden = false;
+    updateClassStepSavedFormulaActions();
+    typeset(refs.classStepSavedRules);
+  }
+
+  function updateClassStepSavedFormulaActions() {
+    const saved = state.classStepSavedRules || [];
+    const selected = selectedClassStepSavedEntries();
+    const masterCheckbox = document.getElementById('class-step-select-all-saved');
+    if (masterCheckbox) {
+      masterCheckbox.disabled = !saved.length;
+      masterCheckbox.checked = !!saved.length && selected.length === saved.length;
+      masterCheckbox.indeterminate = selected.length > 0 && selected.length < saved.length;
+      masterCheckbox.title = !saved.length
+        ? 'No saved formulas/rules.'
+        : (selected.length === saved.length ? 'Uncheck all saved formulas/rules.' : 'Check all saved formulas/rules.');
+    }
+    if (refs.classStepExportSaved) {
+      const presetJson = refs.exportFormat?.value === 'preset-json';
+      refs.classStepExportSaved.disabled = !presetJson && !selected.length;
+      refs.classStepExportSaved.title = presetJson
+        ? 'Export the full calculator state as Preset JSON.'
+        : (selected.length
+          ? `Export ${selected.length} selected item${selected.length === 1 ? '' : 's'}.`
+          : 'Select at least one saved formula/rule.');
+    }
+    if (refs.classStepDeleteSaved) {
+      refs.classStepDeleteSaved.disabled = !selected.length;
+      refs.classStepDeleteSaved.title = selected.length
+        ? `Delete ${selected.length} selected item${selected.length === 1 ? '' : 's'}.`
+        : 'Select at least one saved formula/rule.';
+    }
+  }
+
+  function selectedClassStepSavedEntries() {
+    return (state.classStepSavedRules || []).filter((entry) => entry.selected !== false);
   }
 
   function classStepSavedRules(session) {
     if (!session?.geometry) return [];
     return (state.classStepSavedRules || [])
+      .filter((entry) => entry.selected !== false)
       .map((entry) => classStepSavedEntryRuleForSession(entry, session))
       .filter(Boolean);
   }
@@ -23065,7 +24749,8 @@
   }
 
   function classStepRuleFromSavedEntry(entry) {
-    if (!entry?.lhs?.powers) return null;
+    const kind = entry?.kind || (entry?.lhs?.powers ? 'rewrite' : 'formula');
+    if (kind !== 'rewrite' || !entry?.lhs?.powers) return null;
     return {
       id: entry.id,
       builtin: true,
@@ -23258,10 +24943,8 @@
         rememberClassStepComponents(session);
         if (changed) recordClassStepHistory(session, 'apply');
         renderClassStepPanel();
-        renderClassChartWithStepSession(state.lastResult);
         refreshExport(state.exportScope || 'main');
         typeset(refs.classStepPanel);
-        typeset(refs.classChart);
         return;
       }
       for (const degree of targets) {
@@ -23290,7 +24973,7 @@
       }
       if (changed) {
         classStepClearDisplayOverrides(session);
-      } else if (classStepUsesDerivedTarget(session)) {
+      } else if (classStepUsesDerivedTarget(session) || rules.some((rule) => rule?.classStepDisplayRule === true) || classStepDisplayOverridePoly(session)) {
         const beforeDisplay = classStepDisplayPoly(session);
         const afterDisplay = applyClassStepRulesForStep(beforeDisplay, rules, session, {
           simplify: simplifySelected,
@@ -23312,10 +24995,8 @@
     rememberClassStepComponents(session);
     if (changed) recordClassStepHistory(session, 'apply');
     renderClassStepPanel();
-    renderClassChartWithStepSession(state.lastResult);
     refreshExport(state.exportScope || 'main');
     typeset(refs.classStepPanel);
-    typeset(refs.classChart);
   }
 
   function classStepCandidateIsSimplify(candidate) {
@@ -23361,10 +25042,8 @@
     session.message = 'Cancelled the last step.';
     rememberClassStepComponents(session);
     renderClassStepPanel();
-    renderClassChartWithStepSession(state.lastResult);
     refreshExport(state.exportScope || 'main');
     typeset(refs.classStepPanel);
-    typeset(refs.classChart);
   }
 
   function classStepRuleApplicationDegrees(session) {
@@ -23387,7 +25066,7 @@
   }
 
   function classStepDisplayOverrideKey(session) {
-    if (!classStepUsesDerivedTarget(session)) return '';
+    if (!session) return '';
     return `${session.target || session.family}:${session.index == null ? 'total' : session.index}`;
   }
 
@@ -23413,8 +25092,12 @@
     return `${formatPolyLatex(polyFromPowers(rule?.lhs?.powers || {}))}=${homologyRuleRhsLatex(rule)}`;
   }
 
-  function classStepCandidateRules(candidate) {
+  function classStepRawCandidateRules(candidate) {
     return candidate?.rules?.length ? candidate.rules : [candidate?.rule].filter(Boolean);
+  }
+
+  function classStepCandidateRules(candidate) {
+    return candidate?.activeRules?.length ? candidate.activeRules : classStepRawCandidateRules(candidate);
   }
 
   function classStepMaterializeRule(session, rule, options = {}) {
@@ -23474,7 +25157,7 @@
       const factorization = count > 0 ? removeMonomialFactor(powers, lhsPowers, count) : null;
       const replacement = count > 0 && factorization
         ? rhs.mul(factorization.remainder, maxDegree, options).scale(coeff.mul(factorization.sign))
-        : polyFromPowers(powers).scale(coeff);
+        : monomialPolyFromPowers(powers).scale(coeff);
       if (count > 0 && !rhsIsZero) applied = true;
       for (const [nextKey, nextCoeff] of replacement.terms) {
         const next = (terms.get(nextKey) || Fraction.zero()).add(nextCoeff);
@@ -23575,30 +25258,80 @@
   }
 
   function buildStandardClassRows(bundle, d, options) {
+    const rows = [];
     if (options.termMode === 'term') {
       const i = options.termIndex;
       const suffix = `_{${i}}`;
       const rankDisplay = rankDisplayFromBundle(bundle, options);
-      return [
-        shouldDisplayChernTerm(bundle, i)
-          ? classPolyRow(`c_${i}(${bundle.labelPlain})`, `c${suffix}(${bundle.labelLatex})`, `chern_${i}`, i === 0 ? Poly.one() : componentOrZero(bundle.cComps, i), options)
-          : null,
-        i === 0
+      if (classFamilyEnabled(options, 'chern') && shouldDisplayChernTerm(bundle, i)) {
+        rows.push(classPolyRow(`c_${i}(${bundle.labelPlain})`, `c${suffix}(${bundle.labelLatex})`, `chern_${i}`, i === 0 ? Poly.one() : componentOrZero(bundle.cComps, i), options));
+      }
+      if (classFamilyEnabled(options, 'character')) {
+        rows.push(i === 0
           ? { label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `character_${i}`, latex: rankDisplay.latex, plain: rankDisplay.plain }
-          : classPolyRow(`ch_${i}(${bundle.labelPlain})`, `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, `character_${i}`, componentOrZero(bundle.chComps, i), options),
-        classPolyRow(`td_${i}(${bundle.labelPlain})`, `\\operatorname{td}${suffix}(${bundle.labelLatex})`, `todd_${i}`, homogeneousPart(bundle.todd, i), options),
-        classPolyRow(`s_${i}(${bundle.labelPlain})`, `s${suffix}(${bundle.labelLatex})`, `segre_${i}`, homogeneousPart(bundle.segre, i), options),
-        classPolyRow(`sqrt td_${i}(${bundle.labelPlain})`, `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, `sqrtTodd_${i}`, homogeneousPart(bundle.sqrtTodd, i), options)
-      ].filter(Boolean);
+          : classPolyRow(`ch_${i}(${bundle.labelPlain})`, `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, `character_${i}`, componentOrZero(bundle.chComps, i), options));
+      }
+      if (classFamilyEnabled(options, 'todd')) rows.push(classPolyRow(`td_${i}(${bundle.labelPlain})`, `\\operatorname{td}${suffix}(${bundle.labelLatex})`, `todd_${i}`, homogeneousPart(bundle.todd, i), options));
+      if (classFamilyEnabled(options, 'segre')) rows.push(classPolyRow(`s_${i}(${bundle.labelPlain})`, `s${suffix}(${bundle.labelLatex})`, `segre_${i}`, homogeneousPart(bundle.segre, i), options));
+      if (classFamilyEnabled(options, 'sqrtTodd')) rows.push(classPolyRow(`sqrt td_${i}(${bundle.labelPlain})`, `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, `sqrtTodd_${i}`, homogeneousPart(bundle.sqrtTodd, i), options));
+      if (classFamilyEnabled(options, 'mukai')) {
+        const mukai = mukaiVectorPoly(bundle, d, options);
+        if (mukai) rows.push(classPolyRow(`v_${i}(${bundle.labelPlain})`, `v_{${i}}(${bundle.labelLatex})`, `mukai_${i}`, homogeneousPart(mukai, i), options));
+      }
+      if (classFamilyEnabled(options, 'kappa')) {
+        const row = kappaClassDisplayRow(`kappa_${i}(${bundle.labelPlain})`, `\\kappa_{${i}}(${bundle.labelLatex})`, `kappa_${i}`, bundle, d, options, i);
+        if (row) rows.push(row);
+      }
+      return rows;
     }
     const rankDisplay = rankDisplayFromBundle(bundle, options);
-    return [
-      classPolyRow(`c(${bundle.labelPlain})`, `c(${bundle.labelLatex})`, 'chern', bundle.cTotal, options),
-      rankPlusClassPolyRow(`ch(${bundle.labelPlain})`, `\\operatorname{ch}(${bundle.labelLatex})`, 'character', rankDisplay.latex, rankDisplay.plain, positiveTotal(bundle.chComps, d), options),
-      classPolyRow(`td(${bundle.labelPlain})`, `\\operatorname{td}(${bundle.labelLatex})`, 'todd', bundle.todd, options),
-      classPolyRow(`s(${bundle.labelPlain})`, `s(${bundle.labelLatex})`, 'segre', bundle.segre, options),
-      classPolyRow(`sqrt td(${bundle.labelPlain})`, `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, 'sqrtTodd', bundle.sqrtTodd, options)
-    ];
+    if (classFamilyEnabled(options, 'chern')) rows.push(classPolyRow(`c(${bundle.labelPlain})`, `c(${bundle.labelLatex})`, 'chern', bundle.cTotal, options));
+    if (classFamilyEnabled(options, 'character')) rows.push(rankPlusClassPolyRow(`ch(${bundle.labelPlain})`, `\\operatorname{ch}(${bundle.labelLatex})`, 'character', rankDisplay.latex, rankDisplay.plain, positiveTotal(bundle.chComps, d), options));
+    if (classFamilyEnabled(options, 'todd')) rows.push(classPolyRow(`td(${bundle.labelPlain})`, `\\operatorname{td}(${bundle.labelLatex})`, 'todd', bundle.todd, options));
+    if (classFamilyEnabled(options, 'segre')) rows.push(classPolyRow(`s(${bundle.labelPlain})`, `s(${bundle.labelLatex})`, 'segre', bundle.segre, options));
+    if (classFamilyEnabled(options, 'sqrtTodd')) rows.push(classPolyRow(`sqrt td(${bundle.labelPlain})`, `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, 'sqrtTodd', bundle.sqrtTodd, options));
+    if (classFamilyEnabled(options, 'mukai')) {
+      const mukai = mukaiVectorPoly(bundle, d, options);
+      if (mukai) rows.push(classPolyRow(`v(${bundle.labelPlain})`, `v(${bundle.labelLatex})`, 'mukai', mukai, options));
+    }
+    if (classFamilyEnabled(options, 'kappa')) {
+      const row = kappaClassDisplayRow(`kappa(${bundle.labelPlain})`, `\\kappa(${bundle.labelLatex})`, 'kappa', bundle, d, options);
+      if (row) rows.push(row);
+    }
+    return rows;
+  }
+
+  function mukaiVectorPoly(bundle, d, options = {}) {
+    if (!options.geometry) return null;
+    const tangent = buildTangentClassBundle(options.geometry);
+    return bundleChernCharacterTotal(bundle, d, `${constructionSafeId(bundle.labelPlain || 'E')}MukaiRank`)
+      .mul(tangent.sqrtTodd, d);
+  }
+
+  function kappaClassDisplayRow(label, labelLatex, key, bundle, d, options, degree = null) {
+    const result = kappaClassResult(bundle, d, options);
+    if (result.undefined) return { label, labelLatex, key, latex: '\\text{undefined}', plain: 'undefined' };
+    if (!result.poly) return null;
+    const poly = Number.isInteger(degree) ? homogeneousPart(result.poly, degree) : result.poly;
+    return classPolyRow(label, labelLatex, key, poly, options);
+  }
+
+  function kappaClassResult(bundle, d, options = {}) {
+    const rank = rankAsDegreeZeroPoly(bundle, `${constructionSafeId(bundle.labelPlain || 'E')}KappaRank`);
+    if (rank.isZero()) return { undefined: true, poly: null };
+    if (!scalarPolyAsFraction(rank)) {
+      recordSymbolicWarning(`kappa(${bundle.labelPlain || 'E'}) assumes ${formatPolyPlain(rank)} != 0.`);
+    }
+    const rankInverse = reciprocalRuleCoefficientFactor(rank);
+    const exponent = componentOrZero(bundle.cComps, 1).mul(rankInverse, d).scale(fraction(-1));
+    const poly = bundleChernCharacterTotal(bundle, d, `${constructionSafeId(bundle.labelPlain || 'E')}KappaChRank`)
+      .mul(expPoly(exponent, d), d);
+    return { undefined: false, poly };
+  }
+
+  function kappaClassPoly(bundle, d, options = {}) {
+    const result = kappaClassResult(bundle, d, options);
+    return result.undefined ? null : result.poly;
   }
 
   function buildProductRootClassRows(bundle, options) {
@@ -23618,23 +25351,37 @@
         segre: coefficientLatexPlain(total.segre, i),
         sqrtTodd: coefficientLatexPlain(total.sqrtTodd, i)
       };
-      return [
-        shouldDisplayChernTerm(bundle, i)
-          ? { label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `root_chern_${i}`, latex: term.chern.latex, plain: term.chern.plain }
-          : null,
-        { label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `root_character_${i}`, latex: term.character.latex, plain: term.character.plain },
-        { label: `td_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}${suffix}(${bundle.labelLatex})`, key: `root_todd_${i}`, latex: term.todd.latex, plain: term.todd.plain },
-        { label: `s_${i}(${bundle.labelPlain})`, labelLatex: `s${suffix}(${bundle.labelLatex})`, key: `root_segre_${i}`, latex: term.segre.latex, plain: term.segre.plain },
-        { label: `sqrt td_${i}(${bundle.labelPlain})`, labelLatex: `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, key: `root_sqrtTodd_${i}`, latex: term.sqrtTodd.latex, plain: term.sqrtTodd.plain }
-      ].filter(Boolean);
+      const rows = [];
+      if (classFamilyEnabled(options, 'chern') && shouldDisplayChernTerm(bundle, i)) rows.push({ label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `root_chern_${i}`, latex: term.chern.latex, plain: term.chern.plain });
+      if (classFamilyEnabled(options, 'character')) rows.push({ label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `root_character_${i}`, latex: term.character.latex, plain: term.character.plain });
+      if (classFamilyEnabled(options, 'todd')) rows.push({ label: `td_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}${suffix}(${bundle.labelLatex})`, key: `root_todd_${i}`, latex: term.todd.latex, plain: term.todd.plain });
+      if (classFamilyEnabled(options, 'segre')) rows.push({ label: `s_${i}(${bundle.labelPlain})`, labelLatex: `s${suffix}(${bundle.labelLatex})`, key: `root_segre_${i}`, latex: term.segre.latex, plain: term.segre.plain });
+      if (classFamilyEnabled(options, 'sqrtTodd')) rows.push({ label: `sqrt td_${i}(${bundle.labelPlain})`, labelLatex: `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, key: `root_sqrtTodd_${i}`, latex: term.sqrtTodd.latex, plain: term.sqrtTodd.plain });
+      if (classFamilyEnabled(options, 'mukai')) {
+        const mukai = mukaiVectorPoly(bundle, options.geometry?.dim ?? MAX_DIMENSION, options);
+        if (mukai) rows.push(classPolyRow(`v_${i}(${bundle.labelPlain})`, `v_{${i}}(${bundle.labelLatex})`, `root_mukai_${i}`, homogeneousPart(mukai, i), options));
+      }
+      if (classFamilyEnabled(options, 'kappa')) {
+        const row = kappaClassDisplayRow(`kappa_${i}(${bundle.labelPlain})`, `\\kappa_{${i}}(${bundle.labelLatex})`, `root_kappa_${i}`, bundle, options.geometry?.dim ?? MAX_DIMENSION, options, i);
+        if (row) rows.push(row);
+      }
+      return rows;
     }
-    return [
-      { label: `c(${bundle.labelPlain})`, labelLatex: `c(${bundle.labelLatex})`, key: 'root_chern', latex: total.chern.latex, plain: total.chern.plain },
-      { label: `ch(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}(${bundle.labelLatex})`, key: 'root_character', latex: total.character.latex, plain: total.character.plain },
-      { label: `td(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}(${bundle.labelLatex})`, key: 'root_todd', latex: total.todd.latex, plain: total.todd.plain },
-      { label: `s(${bundle.labelPlain})`, labelLatex: `s(${bundle.labelLatex})`, key: 'root_segre', latex: total.segre.latex, plain: total.segre.plain },
-      { label: `sqrt td(${bundle.labelPlain})`, labelLatex: `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, key: 'root_sqrtTodd', latex: total.sqrtTodd.latex, plain: total.sqrtTodd.plain }
-    ];
+    const rows = [];
+    if (classFamilyEnabled(options, 'chern')) rows.push({ label: `c(${bundle.labelPlain})`, labelLatex: `c(${bundle.labelLatex})`, key: 'root_chern', latex: total.chern.latex, plain: total.chern.plain });
+    if (classFamilyEnabled(options, 'character')) rows.push({ label: `ch(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}(${bundle.labelLatex})`, key: 'root_character', latex: total.character.latex, plain: total.character.plain });
+    if (classFamilyEnabled(options, 'todd')) rows.push({ label: `td(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}(${bundle.labelLatex})`, key: 'root_todd', latex: total.todd.latex, plain: total.todd.plain });
+    if (classFamilyEnabled(options, 'segre')) rows.push({ label: `s(${bundle.labelPlain})`, labelLatex: `s(${bundle.labelLatex})`, key: 'root_segre', latex: total.segre.latex, plain: total.segre.plain });
+    if (classFamilyEnabled(options, 'sqrtTodd')) rows.push({ label: `sqrt td(${bundle.labelPlain})`, labelLatex: `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, key: 'root_sqrtTodd', latex: total.sqrtTodd.latex, plain: total.sqrtTodd.plain });
+    if (classFamilyEnabled(options, 'mukai')) {
+      const mukai = mukaiVectorPoly(bundle, options.geometry?.dim ?? MAX_DIMENSION, options);
+      if (mukai) rows.push(classPolyRow(`v(${bundle.labelPlain})`, `v(${bundle.labelLatex})`, 'root_mukai', mukai, options));
+    }
+    if (classFamilyEnabled(options, 'kappa')) {
+      const row = kappaClassDisplayRow(`kappa(${bundle.labelPlain})`, `\\kappa(${bundle.labelLatex})`, 'root_kappa', bundle, options.geometry?.dim ?? MAX_DIMENSION, options);
+      if (row) rows.push(row);
+    }
+    return rows;
   }
 
   function indexedRootTotals(rankLatex, rankPlain) {
@@ -23745,23 +25492,37 @@
     if (options.termMode === 'term') {
       const i = options.termIndex;
       const suffix = `_{${i}}`;
-      return [
-        shouldDisplayChernTerm(bundle, i)
-          ? { label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `root_chern_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.chern, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.chern, i)) }
-          : null,
-        { label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `root_character_${i}`, latex: i === 0 ? String(rank) : formatPolyLatex(homogeneousPart(rootDisplay.character, i)), plain: i === 0 ? String(rank) : formatPolyPlain(homogeneousPart(rootDisplay.character, i)) },
-        { label: `td_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}${suffix}(${bundle.labelLatex})`, key: `root_todd_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.todd, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.todd, i)) },
-        { label: `s_${i}(${bundle.labelPlain})`, labelLatex: `s${suffix}(${bundle.labelLatex})`, key: `root_segre_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.segre, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.segre, i)) },
-        { label: `sqrt td_${i}(${bundle.labelPlain})`, labelLatex: `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, key: `root_sqrtTodd_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.sqrtTodd, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.sqrtTodd, i)) }
-      ].filter(Boolean);
+      const rows = [];
+      if (classFamilyEnabled(options, 'chern') && shouldDisplayChernTerm(bundle, i)) rows.push({ label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `root_chern_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.chern, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.chern, i)) });
+      if (classFamilyEnabled(options, 'character')) rows.push({ label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `root_character_${i}`, latex: i === 0 ? String(rank) : formatPolyLatex(homogeneousPart(rootDisplay.character, i)), plain: i === 0 ? String(rank) : formatPolyPlain(homogeneousPart(rootDisplay.character, i)) });
+      if (classFamilyEnabled(options, 'todd')) rows.push({ label: `td_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}${suffix}(${bundle.labelLatex})`, key: `root_todd_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.todd, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.todd, i)) });
+      if (classFamilyEnabled(options, 'segre')) rows.push({ label: `s_${i}(${bundle.labelPlain})`, labelLatex: `s${suffix}(${bundle.labelLatex})`, key: `root_segre_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.segre, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.segre, i)) });
+      if (classFamilyEnabled(options, 'sqrtTodd')) rows.push({ label: `sqrt td_${i}(${bundle.labelPlain})`, labelLatex: `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, key: `root_sqrtTodd_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.sqrtTodd, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.sqrtTodd, i)) });
+      if (classFamilyEnabled(options, 'mukai')) {
+        const mukai = mukaiVectorPoly(bundle, d, options);
+        if (mukai) rows.push(classPolyRow(`v_${i}(${bundle.labelPlain})`, `v_{${i}}(${bundle.labelLatex})`, `root_mukai_${i}`, homogeneousPart(mukai, i), options));
+      }
+      if (classFamilyEnabled(options, 'kappa')) {
+        const row = kappaClassDisplayRow(`kappa_${i}(${bundle.labelPlain})`, `\\kappa_{${i}}(${bundle.labelLatex})`, `root_kappa_${i}`, bundle, d, options, i);
+        if (row) rows.push(row);
+      }
+      return rows;
     }
-    return [
-      { label: `c(${bundle.labelPlain})`, labelLatex: `c(${bundle.labelLatex})`, key: 'root_chern', latex: formatPolyLatex(rootDisplay.chern), plain: formatPolyPlain(rootDisplay.chern) },
-      { label: `ch(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}(${bundle.labelLatex})`, key: 'root_character', latex: formatRankPlusPolyLatex(String(rank), rootDisplay.character), plain: formatRankPlusPolyPlain(String(rank), rootDisplay.character) },
-      { label: `td(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}(${bundle.labelLatex})`, key: 'root_todd', latex: formatPolyLatex(rootDisplay.todd), plain: formatPolyPlain(rootDisplay.todd) },
-      { label: `s(${bundle.labelPlain})`, labelLatex: `s(${bundle.labelLatex})`, key: 'root_segre', latex: formatPolyLatex(rootDisplay.segre), plain: formatPolyPlain(rootDisplay.segre) },
-      { label: `sqrt td(${bundle.labelPlain})`, labelLatex: `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, key: 'root_sqrtTodd', latex: formatPolyLatex(rootDisplay.sqrtTodd), plain: formatPolyPlain(rootDisplay.sqrtTodd) }
-    ];
+    const rows = [];
+    if (classFamilyEnabled(options, 'chern')) rows.push({ label: `c(${bundle.labelPlain})`, labelLatex: `c(${bundle.labelLatex})`, key: 'root_chern', latex: formatPolyLatex(rootDisplay.chern), plain: formatPolyPlain(rootDisplay.chern) });
+    if (classFamilyEnabled(options, 'character')) rows.push({ label: `ch(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}(${bundle.labelLatex})`, key: 'root_character', latex: formatRankPlusPolyLatex(String(rank), rootDisplay.character), plain: formatRankPlusPolyPlain(String(rank), rootDisplay.character) });
+    if (classFamilyEnabled(options, 'todd')) rows.push({ label: `td(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}(${bundle.labelLatex})`, key: 'root_todd', latex: formatPolyLatex(rootDisplay.todd), plain: formatPolyPlain(rootDisplay.todd) });
+    if (classFamilyEnabled(options, 'segre')) rows.push({ label: `s(${bundle.labelPlain})`, labelLatex: `s(${bundle.labelLatex})`, key: 'root_segre', latex: formatPolyLatex(rootDisplay.segre), plain: formatPolyPlain(rootDisplay.segre) });
+    if (classFamilyEnabled(options, 'sqrtTodd')) rows.push({ label: `sqrt td(${bundle.labelPlain})`, labelLatex: `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, key: 'root_sqrtTodd', latex: formatPolyLatex(rootDisplay.sqrtTodd), plain: formatPolyPlain(rootDisplay.sqrtTodd) });
+    if (classFamilyEnabled(options, 'mukai')) {
+      const mukai = mukaiVectorPoly(bundle, d, options);
+      if (mukai) rows.push(classPolyRow(`v(${bundle.labelPlain})`, `v(${bundle.labelLatex})`, 'root_mukai', mukai, options));
+    }
+    if (classFamilyEnabled(options, 'kappa')) {
+      const row = kappaClassDisplayRow(`kappa(${bundle.labelPlain})`, `\\kappa(${bundle.labelLatex})`, 'root_kappa', bundle, d, options);
+      if (row) rows.push(row);
+    }
+    return rows;
   }
 
   function buildExpandedRootPolynomials(rank, d) {
@@ -23846,17 +25607,21 @@
   function rootDisplayHasLargeExpansion(display, options) {
     if (options.termMode === 'term') {
       const i = options.termIndex;
-      const polys = [
-        homogeneousPart(display.chern, i),
-        i === 0 ? Poly.one() : homogeneousPart(display.character, i),
-        homogeneousPart(display.todd, i),
-        homogeneousPart(display.segre, i),
-        homogeneousPart(display.sqrtTodd, i)
-      ];
+      const polys = [];
+      if (classFamilyEnabled(options, 'chern')) polys.push(homogeneousPart(display.chern, i));
+      if (classFamilyEnabled(options, 'character')) polys.push(i === 0 ? Poly.one() : homogeneousPart(display.character, i));
+      if (classFamilyEnabled(options, 'todd')) polys.push(homogeneousPart(display.todd, i));
+      if (classFamilyEnabled(options, 'segre')) polys.push(homogeneousPart(display.segre, i));
+      if (classFamilyEnabled(options, 'sqrtTodd')) polys.push(homogeneousPart(display.sqrtTodd, i));
       return polys.some((poly) => poly.terms.size > MAX_ROOT_EXPANSION_MONOMIALS);
     }
-    return [display.chern, display.character, display.todd, display.segre, display.sqrtTodd]
-      .some((poly) => poly.terms.size > MAX_ROOT_EXPANSION_MONOMIALS);
+    const polys = [];
+    if (classFamilyEnabled(options, 'chern')) polys.push(display.chern);
+    if (classFamilyEnabled(options, 'character')) polys.push(display.character);
+    if (classFamilyEnabled(options, 'todd')) polys.push(display.todd);
+    if (classFamilyEnabled(options, 'segre')) polys.push(display.segre);
+    if (classFamilyEnabled(options, 'sqrtTodd')) polys.push(display.sqrtTodd);
+    return polys.some((poly) => poly.terms.size > MAX_ROOT_EXPANSION_MONOMIALS);
   }
 
   function homogeneousPart(poly, degree) {
@@ -24023,7 +25788,7 @@
     for (const [key, coeff] of Poly.from(poly).terms) {
       chargeSymbolicWork(1, terms.size, 'product-box simplification', options);
       const replacement = simplifyProductBoxMonomial(parseMonoKey(key), geometry, options);
-      const expanded = (replacement || polyFromPowers(parseMonoKey(key))).scale(coeff);
+      const expanded = (replacement || monomialPolyFromPowers(parseMonoKey(key))).scale(coeff);
       for (const [nextKey, nextCoeff] of expanded.terms) {
         const next = (terms.get(nextKey) || Fraction.zero()).add(nextCoeff);
         if (next.isZero()) terms.delete(nextKey);
@@ -24046,7 +25811,12 @@
     const boxPowers = {};
     for (const [id, exp] of Object.entries(powers || {})) {
       const exponent = Number(exp) || 0;
-      if (exponent <= 0) continue;
+      if (exponent < 0) {
+        const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+        if (data && data.degree === 0) residualPowers[id] = (residualPowers[id] || 0) + exponent;
+        continue;
+      }
+      if (exponent === 0) continue;
       const box = productBoxDataForVariable(id);
       if (!box) {
         residualPowers[id] = (residualPowers[id] || 0) + exponent;
@@ -24088,7 +25858,7 @@
         out = out.add(boxPoly.scale(leftCoeff.mul(rightCoeff).mul(boxSign)));
       }
     }
-    const residual = polyFromPowers(residualPowers);
+    const residual = monomialPolyFromPowers(residualPowers);
     return out.mul(residual, maxDegree, childOptions).truncate(maxDegree);
   }
 
@@ -24151,8 +25921,12 @@
       let replacement = Poly.one();
       for (const [id, exp] of Object.entries(parseMonoKey(key))) {
         chargeSymbolicWork(1, terms.size, 'nested map expansion', options);
+        const exponent = Number(exp) || 0;
         const factor = expandOneMapHomologyVariable(id, options);
-        replacement = replacement.mul(polyPower(factor, exp, maxDegree, options), maxDegree, options);
+        const powered = exponent < 0
+          ? coefficientIntegerPower(factor, exponent)
+          : polyPower(factor, exponent, maxDegree, options);
+        replacement = replacement.mul(powered, maxDegree, options);
       }
       replacement = replacement.scale(coeff);
       for (const [nextKey, nextCoeff] of replacement.terms) {
@@ -24236,7 +26010,7 @@
       const factorization = count > 0 ? removeMonomialFactor(powers, lhsPowers, count) : null;
       const replacement = count > 0 && factorization
         ? polyPower(rhs, count, maxDegree, options).mul(factorization.remainder, maxDegree, options).scale(coeff.mul(factorization.sign))
-        : polyFromPowers(powers).scale(coeff);
+        : monomialPolyFromPowers(powers).scale(coeff);
       for (const [nextKey, nextCoeff] of replacement.terms) {
         const next = (terms.get(nextKey) || Fraction.zero()).add(nextCoeff);
         if (next.isZero()) terms.delete(nextKey);
@@ -25401,7 +27175,7 @@
     const factorization = gradedMonomialFactorization(powers, factorPowers, count);
     if (!factorization) return null;
     return {
-      remainder: polyFromPowers(factorization.remainderPowers),
+      remainder: monomialPolyFromPowers(factorization.remainderPowers),
       sign: factorization.sign
     };
   }
@@ -25834,6 +27608,7 @@
   function pullbackVariableShouldRemainScalar(data) {
     if (!data) return false;
     if (data.kind === 'mapHomology') return false;
+    if (data.kind === 'classStepTotalClass' || data.mixedDegree === true) return false;
     const degree = Number(data.degree);
     const cohomologyDegree = Number(data.cohomologyDegree);
     return degree === 0 || cohomologyDegree === 0 || data.kind === 'scalarCoefficient' || data.kind === 'globalInvariant';
@@ -25852,7 +27627,7 @@
       const targetDegree = sourceDegree + degreeShift;
       if (targetDegree < 0 || targetDegree > targetDim) continue;
       const split = splitScalarAndPositivePowers(parseMonoKey(key));
-      const scalar = polyFromPowers(split.scalarPowers);
+      const scalar = monomialPolyFromPowers(split.scalarPowers);
       const sourceKey = monoKey(split.positivePowers);
       const pushed = pushforwardSourceKeyPolynomial(map, sourceKey, targetDegree, sourceDim, targetDim, construction);
       if (pushed.isZero()) continue;
@@ -26230,9 +28005,11 @@
     if (rankConstant) {
       if (rankConstant.isOne()) return Poly.one();
       if (rankConstant.isZero() && scalarExponentKnownPositive(adjusted)) return Poly.zero();
-      if (adjustedConstant && adjustedConstant.den === 1n && adjustedConstant.num >= 0n) {
-        const exponent = Number(adjustedConstant.num);
-        return Poly.constant(fraction(bigintPow(rankConstant.num, exponent), bigintPow(rankConstant.den, exponent)));
+    }
+    if (adjustedConstant && adjustedConstant.den === 1n) {
+      const exponent = Number(adjustedConstant.num);
+      if (Number.isInteger(exponent) && Math.abs(exponent) <= MAX_DIMENSION && !(rankConstant?.isZero() && exponent < 0)) {
+        return coefficientIntegerPower(rankPoly, exponent);
       }
     }
     const rankLatex = formatPolyLatex(rankPoly);
@@ -26356,9 +28133,13 @@
     const plain = String(bundle.rankPlain || '').trim();
     const poly = plain || bundle.rankLatex ? scalarExpressionPoly(plain || bundle.rankLatex) : null;
     if (poly) return poly;
-    const id = `rank${constructionSafeId(bundle.rankLatex || bundle.rankPlain || idSeed)}`;
-    const label = bundle.rankLatex || plain || `\\operatorname{ch}_{0}(${bundle.labelLatex || idSeed || '\\mathcal{F}'})`;
-    defineVariable(id, 0, label, plain ? { plain } : { plain: bundle.rankPlain || `ch_0(${bundle.labelPlain || idSeed || 'F'})` });
+    const fallbackLabelLatex = bundle.labelLatex || idSeed || '\\mathcal{F}';
+    const fallbackLabelPlain = bundle.labelPlain || idSeed || 'F';
+    const rankPlain = plain || bundle.rankPlain || `ch_0(${fallbackLabelPlain})`;
+    const rankLatex = bundle.rankLatex || `\\operatorname{ch}_{0}(${fallbackLabelLatex})`;
+    const identitySeed = bundle.rankLatex || bundle.rankPlain || bundle.labelPlain || bundle.labelLatex || idSeed;
+    const id = `rank${constructionSafeId(identitySeed || 'F')}`;
+    defineVariable(id, 0, rankLatex, { plain: rankPlain });
     return Poly.variable(id);
   }
 
@@ -26663,7 +28444,7 @@
         ? productBoxPolyForKeys(productGeometry, factorKey, '')
         : productBoxPolyForKeys(productGeometry, '', factorKey);
       if (pulled.isZero() && factorKey) return null;
-      const scalar = polyFromPowers(split.scalarPowers);
+      const scalar = monomialPolyFromPowers(split.scalarPowers);
       out = out.add(pulled.mul(scalar, productGeometry.dim).scale(coeff));
     }
     return truncateProductBidegreePolynomial(out, productGeometry).truncate(productGeometry.dim);
@@ -26674,8 +28455,12 @@
     const positivePowers = {};
     for (const [id, exp] of Object.entries(powers || {})) {
       const exponent = Number(exp) || 0;
-      if (exponent <= 0) continue;
       const degree = VARS.get(id)?.degree;
+      if (exponent < 0) {
+        if (degree === 0) scalarPowers[id] = (scalarPowers[id] || 0) + exponent;
+        continue;
+      }
+      if (exponent === 0) continue;
       if (degree === 0) scalarPowers[id] = (scalarPowers[id] || 0) + exponent;
       else positivePowers[id] = (positivePowers[id] || 0) + exponent;
     }
@@ -26689,10 +28474,20 @@
     bundle.chComps = truncateArray(bundle.chComps);
     bundle.pComps = truncateArray(bundle.pComps);
     bundle.cTotal = truncateProductBidegreePolynomial(bundle.cTotal, geometry).truncate(geometry.dim);
-    bundle.segre = truncateProductBidegreePolynomial(bundle.segre, geometry).truncate(geometry.dim);
-    bundle.todd = truncateProductBidegreePolynomial(bundle.todd, geometry).truncate(geometry.dim);
-    bundle.sqrtTodd = truncateProductBidegreePolynomial(bundle.sqrtTodd, geometry).truncate(geometry.dim);
+    ['segre', 'todd', 'sqrtTodd'].forEach((key) => truncateProductBundleDerivedPoly(bundle, key, geometry));
     return bundle;
+  }
+
+  function truncateProductBundleDerivedPoly(bundle, key, geometry) {
+    const descriptor = Object.getOwnPropertyDescriptor(bundle, key);
+    if (descriptor?.get) {
+      const originalGetter = descriptor.get.bind(bundle);
+      defineLazyBundlePoly(bundle, key, () => truncateProductBidegreePolynomial(originalGetter(), geometry).truncate(geometry.dim));
+      return;
+    }
+    if (Object.prototype.hasOwnProperty.call(bundle, key)) {
+      bundle[key] = truncateProductBidegreePolynomial(bundle[key], geometry).truncate(geometry.dim);
+    }
   }
 
   function buildPpavModuliSheafBundle(geometry, sheaf, options = {}) {
@@ -27020,23 +28815,40 @@
   function finishBundle(cComps, chComps, pComps, rankLatex, rankPlain, labelLatex, labelPlain) {
     const d = cComps.length - 1;
     const cTotal = totalFromComponents(cComps, d, Poly.one());
-    const segre = inverseUnit(cTotal, d);
-    const logTodd = toddLogFromPowerSums(pComps, d);
-    const todd = expPoly(logTodd, d);
-    const sqrtTodd = expPoly(logTodd.scale(fraction(1, 2)), d);
-    return {
+    const bundle = {
       cComps,
       chComps,
       pComps,
       cTotal,
-      segre,
-      todd,
-      sqrtTodd,
       rankLatex,
       rankPlain,
       labelLatex,
       labelPlain
     };
+    defineLazyBundlePoly(bundle, 'segre', () => inverseUnit(cTotal, d));
+    defineLazyBundlePoly(bundle, 'todd', () => expPoly(toddLogFromPowerSums(pComps, d), d));
+    defineLazyBundlePoly(bundle, 'sqrtTodd', () => expPoly(toddLogFromPowerSums(pComps, d).scale(fraction(1, 2)), d));
+    return bundle;
+  }
+
+  function defineLazyBundlePoly(bundle, key, factory) {
+    let computed = false;
+    let value = null;
+    Object.defineProperty(bundle, key, {
+      enumerable: true,
+      configurable: true,
+      get() {
+        if (!computed) {
+          value = factory();
+          computed = true;
+        }
+        return value;
+      },
+      set(next) {
+        value = Poly.from(next || Poly.zero());
+        computed = true;
+      }
+    });
   }
 
   function chComponentsFromLineTerms(geometry, terms, d) {
@@ -27118,6 +28930,23 @@
       total = total.add(term);
     }
     return total.truncate(d);
+  }
+
+  function logUnit(poly, d) {
+    const u = Poly.from(poly).sub(Poly.one()).truncate(d);
+    let total = Poly.zero();
+    let term = Poly.one();
+    for (let i = 1; i <= d; i++) {
+      term = term.mul(u, d);
+      if (term.isZero()) break;
+      const sign = i % 2 === 1 ? 1 : -1;
+      total = total.add(term.scale(fraction(sign, i)));
+    }
+    return total.truncate(d);
+  }
+
+  function sqrtUnit(poly, d) {
+    return expPoly(logUnit(poly, d).scale(fraction(1, 2)), d);
   }
 
   function expPoly(poly, d) {
@@ -27880,14 +29709,6 @@
         message: 'Cotangent-sheaf cohomology uses dim H^i(X, Omega_X^1)=h^{1,i}.'
       };
     }
-    if (sheaf.type === 'abstract' && (canonicalMathLabel(sheaf.labelLatex) === canonicalMathLabel(`\\mathcal{O}_{${geometry.labelLatex}}`) || canonicalMathLabel(sheaf.labelLatex) === canonicalMathLabel('\\mathcal{O}_X'))) {
-      return {
-        kind: embeddedGeometrySupportsLineCohomology(geometry) ? 'line' : 'structure',
-        twist: 0,
-        subjectLatex: sheafLabelLatex(sheaf),
-        subjectPlain: sheafLabelPlain(sheaf)
-      };
-    }
     return {
       kind: 'unsupported',
       subjectLatex: sheafLabelLatex(sheaf),
@@ -28319,7 +30140,7 @@
     for (const [id, exp] of Object.entries(powers || {})) {
       if (isUnitVariable(id)) continue;
       const exponent = Number(exp) || 0;
-      if (exponent > 0) out[id] = (out[id] || 0) + exponent;
+      if (exponent !== 0) out[id] = (out[id] || 0) + exponent;
     }
     return out;
   }
@@ -28339,30 +30160,44 @@
 
   function monoKey(powers) {
     return Object.entries(powers)
-      .filter(([id, exp]) => exp > 0 && !isUnitVariable(id))
+      .filter(([id, exp]) => monomialExponentCanPersist(id, exp) && !isUnitVariable(id))
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([id, exp]) => `${id}:${exp}`)
       .join('|');
   }
 
+  function monomialExponentCanPersist(id, exp) {
+    const exponent = Number(exp) || 0;
+    if (exponent > 0) return true;
+    if (exponent === 0) return false;
+    const data = VARS.get(id);
+    return !!data && Number(data.degree || 0) === 0;
+  }
+
   function multiplyMonomialPowers(left, right) {
-    const leftEntries = Object.entries(left || {}).filter(([, exp]) => exp > 0).sort(([a], [b]) => a.localeCompare(b));
-    const rightEntries = Object.entries(right || {}).filter(([, exp]) => exp > 0).sort(([a], [b]) => a.localeCompare(b));
+    const leftEntries = Object.entries(left || {})
+      .map(([id, exp]) => [id, Number(exp) || 0])
+      .filter(([id, exp]) => monomialExponentCanPersist(id, exp))
+      .sort(([a], [b]) => a.localeCompare(b));
+    const rightEntries = Object.entries(right || {})
+      .map(([id, exp]) => [id, Number(exp) || 0])
+      .filter(([id, exp]) => monomialExponentCanPersist(id, exp))
+      .sort(([a], [b]) => a.localeCompare(b));
     const powers = {};
     for (const [id, exp] of leftEntries) {
-      if (homologyClassIsOdd(VARS.get(id)) && exp > 1) return null;
+      if (exp > 0 && homologyClassIsOdd(VARS.get(id)) && exp > 1) return null;
       powers[id] = (powers[id] || 0) + exp;
     }
     for (const [id, exp] of rightEntries) {
       const data = VARS.get(id);
-      if (homologyClassIsOdd(data) && ((powers[id] || 0) > 0 || exp > 1)) return null;
+      if (exp > 0 && homologyClassIsOdd(data) && ((powers[id] || 0) > 0 || exp > 1)) return null;
       powers[id] = (powers[id] || 0) + exp;
     }
     let swaps = 0;
     for (const [leftId, leftExp] of leftEntries) {
-      if (!homologyClassIsOdd(VARS.get(leftId))) continue;
+      if (leftExp <= 0 || !homologyClassIsOdd(VARS.get(leftId))) continue;
       for (const [rightId, rightExp] of rightEntries) {
-        if (leftId <= rightId || !homologyClassIsOdd(VARS.get(rightId))) continue;
+        if (rightExp <= 0 || leftId <= rightId || !homologyClassIsOdd(VARS.get(rightId))) continue;
         swaps += leftExp * rightExp;
       }
     }
@@ -29897,6 +31732,7 @@
 
   function renderStatusLine(extra = '') {
     if (!refs.status) return;
+    syncMainResultCacheControl();
     const countText = [
       `${state.varieties.length} variet${state.varieties.length === 1 ? 'y' : 'ies'}`,
       `${state.sheaves.length} ${state.sheaves.length === 1 ? 'sheaf' : 'sheaves'}`,
@@ -29939,7 +31775,7 @@
     setInlineMath(refs.ringSummary, geometry ? `A^*(${geometry.labelLatex})_{\\le ${geometry.dim}}` : '\\text{add a variety}');
     renderHomologyPanel(result);
     renderClassFormulaBuilder();
-    renderClassChartWithStepSession(result);
+    renderClassChart(result);
     renderBettiTableChart(result);
     if (result.hodge) {
       refs.hodgeMessage.hidden = false;
@@ -30003,7 +31839,7 @@
       result.classDisplay = classDisplayOptions(result.geometry, result.sheaf);
       result.classRows = buildClassRows(result.bundle, result.geometry.dim, result.classDisplay);
       invalidateClassStepSessionIfStale(result);
-      renderClassChartWithStepSession(result);
+      renderClassChart(result);
       typeset(refs.classChart);
       refreshExport(state.exportScope || 'main');
       renderStatusForResult(result);
@@ -30037,10 +31873,22 @@
       refs.classMessage.textContent = warning;
       return;
     }
+    if (result?.bundle && result?.geometry) {
+      if (refs.classActions) refs.classActions.hidden = false;
+      syncClassDisplayControls(result);
+      syncHeavyOperationControls(result);
+      refs.classChart.hidden = true;
+      refs.classChart.innerHTML = '';
+      refs.classMessage.className = 'hint';
+      refs.classMessage.hidden = false;
+      refs.classMessage.textContent = 'Choose a characteristic class family to display.';
+      return;
+    }
     if (refs.classActions) refs.classActions.hidden = true;
     refs.basisRow.hidden = true;
     if (refs.rootFormRow) refs.rootFormRow.hidden = true;
     if (refs.classTermRow) refs.classTermRow.hidden = true;
+    if (refs.classFamilyRow) refs.classFamilyRow.hidden = true;
     refs.classChart.hidden = true;
     refs.classChart.innerHTML = '';
     refs.classMessage.className = 'hint';
@@ -33079,11 +34927,15 @@
   function refreshExport(scope = state.exportScope || 'main') {
     if (!refs.exportOut) return;
     state.exportScope = scope || 'main';
-    if (!state.lastResult && !(state.exportScope === 'step-classes' && state.classStepSession)) {
+    const format = refs.exportFormat.value;
+    if (format === 'preset-json') {
+      refs.exportOut.value = exportPresetState();
+      return;
+    }
+    if (!state.lastResult && !(state.exportScope === 'step-classes' && state.classStepSession) && state.exportScope !== 'saved-step-formulas') {
       refs.exportOut.value = '';
       return;
     }
-    const format = refs.exportFormat.value;
     refs.exportOut.value = exportResult(state.lastResult, format, state.exportScope);
   }
 
@@ -33092,11 +34944,14 @@
     if (refs.exportCard) refs.exportCard.classList.remove('collapsed');
     refs.status.textContent = scope === 'hodge'
       ? 'hodge numbers export ready'
-      : (scope === 'step-classes' ? 'step-by-step formula export ready' : 'characteristic classes export ready');
+      : (scope === 'step-classes'
+        ? 'step-by-step formula export ready'
+        : (scope === 'saved-step-formulas' ? 'saved formulas export ready' : 'characteristic classes export ready'));
   }
 
   function exportResult(result, format, scope = 'main') {
     if (format === 'preset-json') return exportPresetState();
+    if (scope === 'saved-step-formulas') return exportClassStepSavedFormulas(format);
     if (scope === 'classes' || scope === 'step-classes') {
       const stepExportSession = scope === 'step-classes' ? state.classStepSession : null;
       const classRows = classRowsForExport(result, scope);
@@ -33119,6 +34974,37 @@
       return exportHodgeChart(result, format);
     }
     return exportMainCanvas(result, format);
+  }
+
+  function exportClassStepSavedFormulas(format = 'latex') {
+    const entries = selectedClassStepSavedEntries();
+    if (!entries.length) return 'No saved formulas selected.';
+    if (format === 'preset-json') {
+      return JSON.stringify({
+        schema: 'sheaf-calculator-saved-step-formulas',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        formulas: entries.map((entry) => ({
+          kind: entry.kind || (entry.lhs?.powers ? 'rewrite' : 'formula'),
+          geometryId: entry.geometryId || null,
+          family: entry.family || 'formula',
+          target: entry.target || entry.family || 'formula',
+          degree: entry.degree ?? null,
+          displayLatex: classStepSavedEntryDisplayLatex(entry),
+          displayPlain: classStepSavedEntryDisplayPlain(entry),
+          lhs: entry.lhs || null,
+          rhs: entry.rhs || null,
+          formulaTokens: entry.formulaTokens || []
+        }))
+      }, null, 2);
+    }
+    if (format === 'plain') {
+      return entries.map((entry, index) => `${index + 1}. ${classStepSavedEntryDisplayPlain(entry)}`).join('\n');
+    }
+    if (format === 'sage') {
+      return entries.map((entry, index) => `# ${index + 1}. ${classStepSavedEntryDisplayPlain(entry)}`).join('\n');
+    }
+    return entries.map((entry) => `\\[${classStepSavedEntryDisplayLatex(entry)}\\]`).join('\n\n');
   }
 
   function classRowsForExport(result, scope = 'classes') {
@@ -33150,7 +35036,7 @@
   }
 
   function exportPresetState() {
-    return JSON.stringify(buildPresetState());
+    return JSON.stringify(buildPresetState(), null, 2);
   }
 
   function setPresetImportPanelVisible(visible) {
@@ -33161,13 +35047,27 @@
     if (visible) refs.importPresetInput?.focus?.();
   }
 
+  function setClassStepImportPanelVisible(visible) {
+    if (!refs.classStepImportPanel) return;
+    refs.classStepImportPanel.hidden = !visible;
+    if (refs.classStepImportPreset) refs.classStepImportPreset.setAttribute('aria-expanded', visible ? 'true' : 'false');
+    showClassStepImportMessage('', false);
+    if (visible) refs.classStepImportInput?.focus?.();
+  }
+
   function showPresetImportMessage(message, isError = false) {
     if (!refs.importPresetMessage) return;
     refs.importPresetMessage.textContent = message || '';
     refs.importPresetMessage.classList.toggle('is-error', !!isError);
   }
 
-  function importPresetFromText(text) {
+  function showClassStepImportMessage(message, isError = false) {
+    if (!refs.classStepImportMessage) return;
+    refs.classStepImportMessage.textContent = message || '';
+    refs.classStepImportMessage.classList.toggle('is-error', !!isError);
+  }
+
+  function importPresetFromText(text, options = {}) {
     const raw = String(text || '').trim();
     if (!raw) throw new Error('Paste Preset JSON before loading.');
     let preset;
@@ -33176,11 +35076,22 @@
     } catch (_) {
       throw new Error('Preset JSON is not valid JSON.');
     }
-    applyPresetState(preset);
-    showPresetImportMessage('loaded', false);
+    if (preset?.schema === 'sheaf-calculator-saved-step-formulas') {
+      importSavedStepFormulasPreset(preset);
+    } else {
+      applyPresetState(preset);
+    }
+    const fromStep = options.source === 'class-step';
+    if (fromStep) showClassStepImportMessage('loaded', false);
+    else showPresetImportMessage('loaded', false);
     if (refs.status) refs.status.textContent = 'preset imported';
-    if (refs.importPresetInput) refs.importPresetInput.value = '';
-    setPresetImportPanelVisible(false);
+    if (fromStep) {
+      if (refs.classStepImportInput) refs.classStepImportInput.value = '';
+      setClassStepImportPanelVisible(false);
+    } else {
+      if (refs.importPresetInput) refs.importPresetInput.value = '';
+      setPresetImportPanelVisible(false);
+    }
     return true;
   }
 
@@ -33191,6 +35102,7 @@
     applyPresetOptions(normalized.options || {});
     activatePresetSelection(normalized.active || {});
     completePresetImport();
+    restorePresetStepState(normalized.step || {});
     return normalized;
   }
 
@@ -33206,6 +35118,7 @@
       active: sanitizePresetActive(preset.active),
       options: sanitizePresetOptions(preset.options),
       hidden: sanitizePresetHiddenRefs(preset.hidden),
+      step: sanitizePresetStepState(preset.step),
       nextObjectIndex: normalizedInt(preset.nextObjectIndex, 1, 1000000, 1),
       objects: {
         numbers: sanitizePresetObjects(objects.numbers, sanitizePresetGlobalInvariant),
@@ -33563,6 +35476,22 @@
     state.sheafRelativeDraft = null;
     state.sheafSchurDraft = null;
     state.sheafMapDraft = null;
+    state.classStepSession = null;
+    state.classStepCache = new Map();
+    state.classStepSavedRules = [];
+    state.classFormulaEditorOpen = false;
+    if (state.classFormulaBuilder) {
+      state.classFormulaBuilder.tokens = [];
+      state.classFormulaBuilder.validatedFormula = null;
+      state.classFormulaBuilder.varietyId = null;
+      state.classFormulaBuilder.mode = 'builder';
+      state.classFormulaBuilder.classFamily = 'chern';
+      state.classFormulaBuilder.classDegree = '';
+      state.classFormulaBuilder.classSheafId = null;
+      state.classFormulaBuilder.activeSlotId = null;
+      state.classFormulaBuilder.nextSlotId = 1;
+      state.classFormulaBuilder.editingSavedFormulaId = null;
+    }
     setCanvasPickEnabled(false, { render: false });
   }
 
@@ -33593,10 +35522,20 @@
   function applyPresetOptions(options) {
     if (refs.repeatNames) refs.repeatNames.checked = options.repeatNames === true;
     if (refs.repeatStyle) refs.repeatStyle.value = sanitizePresetEnum(options.repeatStyle, ['letters', 'prime', 'paren', 'subscript'], 'letters');
+    state.mainResultCacheEnabled = options.calculationCache === true;
+    if (refs.mainResultCache) refs.mainResultCache.checked = state.mainResultCacheEnabled;
+    syncMainResultCacheControl();
     if (refs.basis) refs.basis.value = normalizeBasisValue(options.classBasis);
     if (refs.rootForm) refs.rootForm.value = sanitizePresetEnum(options.rootForm, ['product', 'expanded'], 'product');
     if (refs.classTermOnly) refs.classTermOnly.checked = options.classTermOnly === true;
+    if (refs.classBracketDisplay) refs.classBracketDisplay.checked = options.classBracketDisplay === true;
+    if (refs.classBracketDisplay?.checked && refs.classTermOnly) refs.classTermOnly.checked = false;
     if (refs.classTermIndex) refs.classTermIndex.value = String(normalizedInt(options.classTermIndex, 0, MAX_DIMENSION, 1));
+    const classFamilies = sanitizeCharacteristicClassFamilies(options.classFamilies);
+    (refs.classFamilyToggles || []).forEach((checkbox) => {
+      const family = checkbox.dataset.classFamilyToggle;
+      checkbox.checked = classFamilies.includes(family);
+    });
     state.hodgeExpanded = options.hodgeExpanded === true;
     state.hodgeWide = options.hodgeWide === true;
     state.hodgeCellSize = normalizedInt(options.hodgeCellSize, 15, 30, DEFAULT_HODGE_CELL_SIZE);
@@ -33610,7 +35549,7 @@
     const homologyInputMode = options.homologyMapInputMode === 'expression' ? 'formula' : options.homologyMapInputMode;
     state.homologyMapInputMode = sanitizePresetEnum(homologyInputMode, ['coefficients', 'formula'], 'coefficients');
     state.homologyExpressionTransposed = options.homologyExpressionTransposed === true;
-    state.exportScope = sanitizePresetEnum(options.exportScope, ['main', 'classes', 'hodge'], 'main');
+    state.exportScope = sanitizePresetEnum(options.exportScope, ['main', 'classes', 'hodge', 'step-classes', 'saved-step-formulas'], 'main');
     if (refs.hodgeExpanded) refs.hodgeExpanded.checked = !!state.hodgeExpanded;
     if (refs.hodgeCellSize) refs.hodgeCellSize.value = String(state.hodgeCellSize);
     if (refs.hodgeCellSizeValue) refs.hodgeCellSizeValue.textContent = `${state.hodgeCellSize}px`;
@@ -33725,6 +35664,252 @@
     }).filter(Boolean);
   }
 
+  function sanitizePresetStepState(step) {
+    const source = step && typeof step === 'object' && !Array.isArray(step) ? step : {};
+    return {
+      savedRules: sanitizePresetClassStepSavedEntries(source.savedRules || source.formulas),
+      formulaEditorOpen: source.formulaEditorOpen === true,
+      formulaBuilder: sanitizePresetClassFormulaBuilder(source.formulaBuilder),
+      activeSession: sanitizePresetClassStepSession(source.activeSession || source.session),
+      cache: sanitizePresetClassStepCache(source.cache),
+      controls: {
+        cacheDisabled: source.controls?.cacheDisabled === true,
+        oncePerRule: source.controls?.oncePerRule === true,
+        onePass: source.controls?.onePass === true
+      }
+    };
+  }
+
+  function sanitizePresetClassFormulaBuilder(builder) {
+    if (!builder || typeof builder !== 'object' || Array.isArray(builder)) return null;
+    const tokens = cloneClassFormulaTokens(builder.tokens || []);
+    return compactSerializable({
+      varietyId: sanitizePresetId(builder.varietyId),
+      tokens,
+      mode: sanitizePresetEnum(builder.mode, ['builder', 'stepping'], 'builder'),
+      classFamily: classFormulaNormalizeClassFamily(builder.classFamily || 'chern'),
+      classDegree: sanitizePresetString(builder.classDegree, '', 16),
+      classSheafId: sanitizePresetId(builder.classSheafId),
+      cursorIndex: normalizedInt(builder.cursorIndex, 0, Math.max(0, tokens.length), tokens.length),
+      insertMode: sanitizePresetEnum(builder.insertMode, ['insert', 'append'], 'insert'),
+      nextSlotId: normalizedInt(builder.nextSlotId, 1, 1000000, classFormulaNextSlotId(tokens)),
+      activeSlotId: sanitizePresetString(builder.activeSlotId, '', 40),
+      editingSavedFormulaId: sanitizePresetId(builder.editingSavedFormulaId),
+      message: sanitizePresetString(builder.message, '', 400)
+    });
+  }
+
+  function sanitizePresetClassStepSavedEntries(items) {
+    if (!Array.isArray(items)) return [];
+    return items.map(sanitizePresetClassStepSavedEntry).filter(Boolean);
+  }
+
+  function sanitizePresetClassStepSavedEntry(item) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const kind = sanitizePresetEnum(item.kind || (item.lhs?.powers ? 'rewrite' : 'formula'), ['rewrite', 'formula'], 'formula');
+    const lhs = sanitizePresetRuleLhs(item.lhs);
+    const rhs = sanitizePresetRuleTerms(item.rhs);
+    if (kind === 'rewrite' && (!lhs || !rhs)) return null;
+    const entry = compactSerializable({
+      id: sanitizePresetId(item.id) || `step-import-${hashString(stableJson(item))}`,
+      kind,
+      family: sanitizePresetEnum(item.family, ['chern', 'character', 'todd', 'segre', 'sqrtTodd', 'formula'], 'formula'),
+      target: sanitizePresetEnum(item.target || item.family, ['chern', 'character', 'todd', 'segre', 'sqrtTodd', 'formula'], 'formula'),
+      degree: item.degree == null ? null : normalizedInt(item.degree, 0, MAX_DIMENSION, 0),
+      dimension: item.dimension == null ? null : normalizedInt(item.dimension, 0, MAX_DIMENSION, MAX_DIMENSION),
+      geometryId: sanitizePresetId(item.geometryId),
+      labelLatex: sanitizePresetString(item.labelLatex, '', 5000),
+      labelPlain: sanitizePresetString(item.labelPlain, '', 5000),
+      lhsLatex: sanitizePresetString(item.lhsLatex, '', 5000),
+      rhsLatex: sanitizePresetString(item.rhsLatex, '', 5000),
+      lhsPlain: sanitizePresetString(item.lhsPlain, '', 5000),
+      rhsPlain: sanitizePresetString(item.rhsPlain, '', 5000),
+      displayLatex: sanitizePresetString(item.displayLatex, '', 8000),
+      displayPlain: sanitizePresetString(item.displayPlain, '', 8000),
+      formulaTokens: cloneClassFormulaTokens(item.formulaTokens || []),
+      formulaSignature: sanitizePresetString(item.formulaSignature, '', 2000),
+      lhs,
+      rhs,
+      variableIds: sanitizePresetVariableIds(item.variableIds),
+      sourceLabel: sanitizePresetString(item.sourceLabel, '', 120),
+      unselected: item.unselected === true || item.selected === false
+    });
+    if (entry.unselected) entry.selected = false;
+    if (!entry.variableIds?.length && entry.kind === 'rewrite') {
+      entry.variableIds = [...new Set(homologyRuleVariableIds(entry))];
+    }
+    return entry;
+  }
+
+  function sanitizePresetClassStepSession(session) {
+    if (!session || typeof session !== 'object' || Array.isArray(session)) return null;
+    const dimension = normalizedInt(session.dimension, 0, MAX_DIMENSION, MAX_DIMENSION);
+    const formulaSession = session.formulaSession === true;
+    const familyFallback = formulaSession ? 'formula' : 'chern';
+    const family = sanitizePresetEnum(session.family, ['chern', 'character', 'formula'], familyFallback);
+    return compactSerializable({
+      formulaSession,
+      stopped: session.stopped === true,
+      family,
+      target: sanitizePresetEnum(session.target || session.family, ['chern', 'character', 'todd', 'segre', 'sqrtTodd', 'formula'], family),
+      index: session.index == null ? null : normalizedInt(session.index, 0, dimension, 0),
+      layout: sanitizePresetEnum(session.layout, ['wide', 'side'], 'wide'),
+      checkSwitchingRules: session.checkSwitchingRules === true,
+      dimension,
+      geometryId: sanitizePresetId(session.geometryId),
+      sheafId: sanitizePresetId(session.sheafId),
+      bundleLabelLatex: sanitizePresetString(session.bundleLabelLatex, '', 5000),
+      bundleLabelPlain: sanitizePresetString(session.bundleLabelPlain, '', 5000),
+      rankLatex: sanitizePresetString(session.rankLatex, '', 500),
+      rankPlain: sanitizePresetString(session.rankPlain, '', 500),
+      rankComponent: sanitizePresetPolyData(session.rankComponent),
+      originalRankComponent: sanitizePresetPolyData(session.originalRankComponent),
+      components: sanitizePresetPolyArray(session.components),
+      originalComponents: sanitizePresetPolyArray(session.originalComponents),
+      formulaPoly: sanitizePresetPolyData(session.formulaPoly),
+      originalFormulaPoly: sanitizePresetPolyData(session.originalFormulaPoly),
+      formulaLatex: sanitizePresetString(session.formulaLatex, '', 8000),
+      formulaPlain: sanitizePresetString(session.formulaPlain, '', 8000),
+      formulaTokens: cloneClassFormulaTokens(session.formulaTokens || []),
+      displayOverrides: sanitizePresetPolyMap(session.displayOverrides),
+      sourceSignature: sanitizePresetString(session.sourceSignature, '', 5000),
+      stepHistory: sanitizePresetClassStepHistory(session.stepHistory),
+      message: sanitizePresetString(session.message, '', 400)
+    });
+  }
+
+  function sanitizePresetClassStepHistory(items) {
+    if (!Array.isArray(items)) return [];
+    return items.map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+      return compactSerializable({
+        label: sanitizePresetString(item.label, '', 8000),
+        value: sanitizePresetString(item.value, '', 8000),
+        reason: sanitizePresetString(item.reason, '', 120),
+        hidden: item.hidden === true,
+        startPlaceholder: item.startPlaceholder === true,
+        snapshot: sanitizePresetClassStepSnapshot(item.snapshot)
+      });
+    }).filter(Boolean);
+  }
+
+  function sanitizePresetClassStepSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null;
+    return compactSerializable({
+      components: sanitizePresetPolyArray(snapshot.components),
+      rankComponent: sanitizePresetPolyData(snapshot.rankComponent),
+      formulaPoly: sanitizePresetPolyData(snapshot.formulaPoly),
+      formulaLatex: sanitizePresetString(snapshot.formulaLatex, '', 8000),
+      formulaPlain: sanitizePresetString(snapshot.formulaPlain, '', 8000),
+      displayOverrides: sanitizePresetPolyMap(snapshot.displayOverrides)
+    });
+  }
+
+  function sanitizePresetClassStepCache(items) {
+    if (!Array.isArray(items)) return [];
+    return items.map((cache) => {
+      if (!cache || typeof cache !== 'object' || Array.isArray(cache)) return null;
+      return compactSerializable({
+        signature: sanitizePresetString(cache.signature, '', 5000),
+        family: sanitizePresetEnum(cache.family, ['chern', 'character', 'formula'], 'chern'),
+        dimension: normalizedInt(cache.dimension, 0, MAX_DIMENSION, MAX_DIMENSION),
+        geometryId: sanitizePresetId(cache.geometryId),
+        components: sanitizePresetPolyArray(cache.components),
+        rankComponent: sanitizePresetPolyData(cache.rankComponent),
+        originalComponents: sanitizePresetPolyArray(cache.originalComponents)
+      });
+    }).filter((cache) => cache?.signature);
+  }
+
+  function sanitizePresetRuleLhs(lhs) {
+    const powers = sanitizePresetRulePowers(lhs?.powers || lhs);
+    return powers ? { powers } : null;
+  }
+
+  function sanitizePresetRuleTerms(terms) {
+    if (!Array.isArray(terms)) return null;
+    const out = [];
+    for (const term of terms) {
+      if (!term || typeof term !== 'object' || Array.isArray(term)) return null;
+      const powers = sanitizePresetRulePowers(term.powers || {}) || {};
+      let coefficient = sanitizePresetString(term.coefficient, '1', 500);
+      try {
+        coefficient = formatRuleCoefficientPlain(parseSymbolicRuleCoefficient(coefficient || '1'));
+      } catch (_) {
+        return null;
+      }
+      if (ruleCoefficientIsZero(parseSymbolicRuleCoefficient(coefficient))) continue;
+      out.push({ coefficient, powers });
+    }
+    return out;
+  }
+
+  function sanitizePresetRulePowers(powers) {
+    if (!powers || typeof powers !== 'object' || Array.isArray(powers)) return null;
+    const out = {};
+    for (const [rawId, rawExp] of Object.entries(powers)) {
+      const id = sanitizeClassStepVariableId(rawId);
+      const exp = normalizedInt(rawExp, 0, MAX_DIMENSION, 0);
+      if (id && exp > 0) out[id] = (out[id] || 0) + exp;
+    }
+    return Object.keys(out).length ? out : null;
+  }
+
+  function sanitizePresetVariableIds(ids) {
+    if (!Array.isArray(ids)) return [];
+    return [...new Set(ids.map(sanitizeClassStepVariableId).filter(Boolean))];
+  }
+
+  function sanitizeClassStepVariableId(value) {
+    const text = String(value ?? '').trim();
+    if (!text || text.length > 220) return null;
+    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(text) ? text : null;
+  }
+
+  function sanitizePresetPolyArray(items) {
+    return Array.isArray(items) ? items.map(sanitizePresetPolyData) : [];
+  }
+
+  function sanitizePresetPolyMap(map) {
+    if (!map || typeof map !== 'object' || Array.isArray(map)) return {};
+    const out = {};
+    Object.entries(map).forEach(([key, value]) => {
+      const safeKey = sanitizePresetString(key, '', 120).replace(/[^A-Za-z0-9_:-]/g, '');
+      if (!safeKey) return;
+      out[safeKey] = sanitizePresetPolyData(value);
+    });
+    return out;
+  }
+
+  function sanitizePresetPolyData(data) {
+    if (!Array.isArray(data)) return [];
+    const out = [];
+    for (const item of data) {
+      if (!Array.isArray(item) || item.length < 2) continue;
+      const key = sanitizePresetMonoKey(item[0]);
+      if (key == null) continue;
+      const coeff = parseSimpleFractionPlain(item[1]);
+      if (!coeff || coeff.isZero()) continue;
+      out.push([key, formatFractionPlain(coeff)]);
+    }
+    return out;
+  }
+
+  function sanitizePresetMonoKey(key) {
+    const text = String(key ?? '');
+    if (!text) return '';
+    const powers = {};
+    for (const part of text.split('|')) {
+      const bits = part.split(':');
+      if (bits.length !== 2) return null;
+      const id = sanitizeClassStepVariableId(bits[0]);
+      const exp = normalizedInt(bits[1], 0, MAX_DIMENSION, 0);
+      if (!id || exp <= 0) return null;
+      powers[id] = (powers[id] || 0) + exp;
+    }
+    return monoKey(powers);
+  }
+
   function applyPresetHiddenRefs(hiddenRefs) {
     const keys = new Set((hiddenRefs || []).map((item) => `${item.kind}:${item.id}`));
     state.varieties.forEach((item) => { item.hiddenOnCanvas = keys.has(`variety:${item.id}`); });
@@ -33735,6 +35920,290 @@
       sequence.tail.hiddenOnCanvas = keys.has(`sequence-tail:${sequence.id}`);
     });
     state.hiddenObjects = hiddenObjectRefs();
+  }
+
+  function importSavedStepFormulasPreset(preset) {
+    if (Number(preset?.version || 0) !== 1) throw new Error(`Saved formula version ${preset?.version || '?'} is not supported.`);
+    const entries = sanitizePresetClassStepSavedEntries(preset.formulas || preset.savedRules);
+    if (!entries.length) throw new Error('No saved formulas/rules were found in this JSON.');
+    upsertClassStepSavedEntries(entries);
+    renderClassStepSavedFormulaList();
+    if (state.classStepSession) refreshClassStepRuleCandidatesOnly();
+    refreshExport(state.exportScope || 'main');
+    typeset(refs.classStepSavedRules);
+  }
+
+  function restorePresetStepState(step) {
+    const source = step && typeof step === 'object' ? step : {};
+    state.classStepSavedRules = (source.savedRules || []).map((entry) => {
+      const next = { ...entry };
+      if (next.unselected) next.selected = false;
+      else next.selected = next.selected !== false;
+      return next;
+    });
+    restorePresetClassStepCache(source.cache || []);
+    restorePresetClassFormulaBuilder(source.formulaBuilder || null, source.formulaEditorOpen === true);
+    restorePresetStepControls(source.controls || {});
+    state.classStepSession = restorePresetClassStepSession(source.activeSession || null);
+    renderClassStepSavedFormulaList();
+    renderClassFormulaBuilder();
+    if (state.classStepSession) {
+      if (refs.classStepCard) {
+        refs.classStepCard.hidden = false;
+        refs.classStepCard.classList.remove('collapsed');
+      }
+      if (refs.classStepPanel) refs.classStepPanel.hidden = false;
+      syncClassStepControlsForSession(state.classStepSession);
+      syncClassStepPlacement(state.classStepSession.layout || 'wide');
+      renderClassStepPanel();
+      typeset(refs.classStepPanel);
+    } else if (refs.classStepPanel) {
+      refs.classStepPanel.hidden = true;
+    }
+    typeset(refs.classStepSavedRules);
+    typeset(refs.classFormulaBuilder);
+    refreshExport(state.exportScope || 'main');
+  }
+
+  function restorePresetStepControls(controls) {
+    if (refs.classStepUseCache) refs.classStepUseCache.checked = controls.cacheDisabled !== true;
+    if (refs.classStepOncePerRule) refs.classStepOncePerRule.checked = controls.oncePerRule === true;
+    if (refs.classStepOnePass) refs.classStepOnePass.checked = controls.onePass === true;
+  }
+
+  function restorePresetClassFormulaBuilder(builder, editorOpen = false) {
+    const target = ensureClassFormulaBuilderState();
+    if (!builder) {
+      target.tokens = [];
+      target.validatedFormula = null;
+      target.varietyId = state.varieties[0]?.id || null;
+      target.mode = 'builder';
+      target.classFamily = 'chern';
+      target.classDegree = '';
+      target.classSheafId = null;
+      target.activeSlotId = null;
+      target.cursorIndex = 0;
+      target.nextSlotId = 1;
+      target.editingSavedFormulaId = null;
+      target.message = '';
+      state.classFormulaEditorOpen = false;
+      return;
+    }
+    target.varietyId = builder.varietyId && state.varieties.some((item) => item.id === builder.varietyId)
+      ? builder.varietyId
+      : (state.varieties[0]?.id || null);
+    target.tokens = cloneClassFormulaTokens(builder.tokens || []);
+    target.validatedFormula = null;
+    target.mode = builder.mode || 'builder';
+    target.classFamily = classFormulaNormalizeClassFamily(builder.classFamily || 'chern');
+    target.classDegree = builder.classDegree ?? '';
+    target.classSheafId = builder.classSheafId || null;
+    target.cursorIndex = normalizedInt(builder.cursorIndex, 0, target.tokens.length, target.tokens.length);
+    target.insertMode = builder.insertMode || 'insert';
+    target.nextSlotId = normalizedInt(builder.nextSlotId, 1, 1000000, classFormulaNextSlotId(target.tokens));
+    target.activeSlotId = builder.activeSlotId || null;
+    target.editingSavedFormulaId = builder.editingSavedFormulaId || null;
+    target.message = builder.message || '';
+    state.classFormulaEditorOpen = editorOpen === true;
+  }
+
+  function restorePresetClassStepCache(items) {
+    state.classStepCache = new Map();
+    for (const cache of items || []) {
+      if (!cache?.signature) continue;
+      state.classStepCache.set(cache.signature, {
+        signature: cache.signature,
+        family: cache.family || 'chern',
+        dimension: cache.dimension ?? MAX_DIMENSION,
+        geometryId: cache.geometryId || null,
+        components: deserializePresetPolyArray(cache.components || []),
+        rankComponent: deserializePresetPoly(cache.rankComponent, null),
+        originalComponents: deserializePresetPolyArray(cache.originalComponents || [])
+      });
+    }
+  }
+
+  function restorePresetClassStepSession(data) {
+    if (!data?.geometryId) return null;
+    const geometry = geometryByVarietyId(data.geometryId);
+    if (!geometry) return null;
+    let session = data.formulaSession
+      ? restorePresetFormulaStepSession(data, geometry)
+      : restorePresetSheafStepSession(data, geometry);
+    if (!session) return null;
+    applyPresetClassStepSessionData(session, data);
+    restoreClassStepVariablesForImportedSession(session);
+    try {
+      session.candidates = collectClassStepRuleCandidates(session);
+    } catch (error) {
+      if (!error?.symbolicBudgetExceeded) throw error;
+      session.candidates = [];
+      session.message = `${error.message} Imported without rule candidates.`;
+    }
+    rememberClassStepComponents(session);
+    return session;
+  }
+
+  function restorePresetSheafStepSession(data, geometry) {
+    const sheafObject = state.sheaves.find((item) => item.id === data.sheafId);
+    if (!sheafObject) return null;
+    const sheaf = sheafFromObject(sheafObject, geometry);
+    let result;
+    try {
+      result = buildClassStepFallbackResult(geometry, sheaf);
+    } catch (error) {
+      if (!error?.symbolicBudgetExceeded) throw error;
+      result = buildClassStepFallbackResult(geometry, sheaf, error);
+    }
+    return createClassStepSession(result, data.family || 'chern', data.index ?? null, data.target || data.family || null);
+  }
+
+  function restorePresetFormulaStepSession(data, geometry) {
+    defineHomologyVariables(geometry);
+    const d = geometry.dim;
+    const components = normalizedPresetPolyArray(data.components, d + 1);
+    const formulaPoly = deserializePresetPoly(data.formulaPoly, componentOrZero(components, 0));
+    if (!Array.isArray(data.components) || !data.components.length) components[0] = formulaPoly;
+    return {
+      active: true,
+      stopped: data.stopped === true,
+      formulaSession: true,
+      family: 'formula',
+      target: 'formula',
+      index: 0,
+      layout: data.layout || 'wide',
+      checkSwitchingRules: data.checkSwitchingRules === true,
+      dimension: d,
+      geometry,
+      sheaf: null,
+      bundleLabelLatex: data.bundleLabelLatex || data.formulaLatex || '\\Phi',
+      bundleLabelPlain: data.bundleLabelPlain || data.formulaPlain || 'formula',
+      rankLatex: '0',
+      rankPlain: '0',
+      rankComponent: Poly.zero(),
+      originalRankComponent: Poly.zero(),
+      originalComponents: normalizedPresetPolyArray(data.originalComponents, d + 1),
+      components,
+      formulaPoly,
+      originalFormulaPoly: deserializePresetPoly(data.originalFormulaPoly, formulaPoly),
+      formulaLatex: data.formulaLatex || data.bundleLabelLatex || '',
+      formulaPlain: data.formulaPlain || data.bundleLabelPlain || '',
+      formulaTokens: cloneClassFormulaTokens(data.formulaTokens || []),
+      displayOverrides: deserializePresetPolyMap(data.displayOverrides || {}),
+      sourceSignature: data.sourceSignature || `formula::${geometry.varietyId || ''}::imported`,
+      stepHistory: [],
+      candidates: [],
+      message: data.message || ''
+    };
+  }
+
+  function applyPresetClassStepSessionData(session, data) {
+    const d = session.dimension || data.dimension || MAX_DIMENSION;
+    session.active = true;
+    session.stopped = data.stopped === true;
+    session.layout = data.layout || session.layout || 'wide';
+    session.checkSwitchingRules = data.checkSwitchingRules === true;
+    session.family = data.family || session.family;
+    session.target = data.target || session.target || session.family;
+    session.index = data.index ?? session.index ?? null;
+    session.bundleLabelLatex = data.bundleLabelLatex || session.bundleLabelLatex || data.formulaLatex || '';
+    session.bundleLabelPlain = data.bundleLabelPlain || session.bundleLabelPlain || data.formulaPlain || '';
+    session.rankLatex = data.rankLatex || session.rankLatex || '';
+    session.rankPlain = data.rankPlain || session.rankPlain || '';
+    session.components = normalizedPresetPolyArray(data.components, d + 1, session.components);
+    session.originalComponents = normalizedPresetPolyArray(data.originalComponents, d + 1, session.originalComponents || session.components);
+    session.rankComponent = deserializePresetPoly(data.rankComponent, session.rankComponent || Poly.zero());
+    session.originalRankComponent = deserializePresetPoly(data.originalRankComponent, session.originalRankComponent || session.rankComponent || Poly.zero());
+    session.formulaPoly = deserializePresetPoly(data.formulaPoly, session.formulaPoly || classStepDisplayPoly(session));
+    session.originalFormulaPoly = deserializePresetPoly(data.originalFormulaPoly, session.originalFormulaPoly || session.formulaPoly);
+    session.formulaLatex = data.formulaLatex || session.formulaLatex || '';
+    session.formulaPlain = data.formulaPlain || session.formulaPlain || '';
+    session.formulaTokens = cloneClassFormulaTokens(data.formulaTokens || session.formulaTokens || []);
+    session.displayOverrides = deserializePresetPolyMap(data.displayOverrides || {});
+    session.sourceSignature = data.sourceSignature || session.sourceSignature || '';
+    session.stepHistory = deserializePresetClassStepHistory(data.stepHistory || []);
+    if (!session.stepHistory.length) recordClassStepHistory(session, 'start');
+    session.message = data.message || session.message || '';
+  }
+
+  function restoreClassStepVariablesForImportedSession(session) {
+    const ids = new Set();
+    const addPoly = (poly) => {
+      for (const key of Poly.from(poly || Poly.zero()).terms.keys()) {
+        Object.keys(parseMonoKey(key)).forEach((id) => ids.add(id));
+      }
+    };
+    [...(session.components || []), ...(session.originalComponents || [])].forEach(addPoly);
+    addPoly(session.rankComponent);
+    addPoly(session.originalRankComponent);
+    addPoly(session.formulaPoly);
+    addPoly(session.originalFormulaPoly);
+    Object.values(session.displayOverrides || {}).forEach(addPoly);
+    for (const item of session.stepHistory || []) {
+      const snapshot = item?.snapshot || {};
+      [...(snapshot.components || [])].forEach(addPoly);
+      addPoly(snapshot.rankComponent);
+      addPoly(snapshot.formulaPoly);
+      Object.values(snapshot.displayOverrides || {}).forEach(addPoly);
+    }
+    for (const entry of state.classStepSavedRules || []) {
+      (entry.variableIds || []).forEach((id) => ids.add(id));
+    }
+    ids.forEach((id) => restoreClassStepVariableById(id, { geometryId: session.geometry?.varietyId || null }));
+  }
+
+  function deserializePresetClassStepHistory(items) {
+    if (!Array.isArray(items)) return [];
+    return items.map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      return {
+        label: item.label || '',
+        value: item.value || '',
+        reason: item.reason || '',
+        ...(item.hidden === true ? { hidden: true } : {}),
+        ...(item.startPlaceholder === true ? { startPlaceholder: true } : {}),
+        snapshot: deserializePresetClassStepSnapshot(item.snapshot)
+      };
+    }).filter(Boolean);
+  }
+
+  function deserializePresetClassStepSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return null;
+    return {
+      components: deserializePresetPolyArray(snapshot.components || []),
+      rankComponent: deserializePresetPoly(snapshot.rankComponent, Poly.zero()),
+      formulaPoly: deserializePresetPoly(snapshot.formulaPoly, Poly.zero()),
+      formulaLatex: snapshot.formulaLatex || '',
+      formulaPlain: snapshot.formulaPlain || '',
+      displayOverrides: deserializePresetPolyMap(snapshot.displayOverrides || {})
+    };
+  }
+
+  function normalizedPresetPolyArray(items, length, fallback = []) {
+    const out = deserializePresetPolyArray(items);
+    const fallbackItems = Array.isArray(fallback) ? fallback : [];
+    const targetLength = Math.max(length || 0, out.length, fallbackItems.length);
+    for (let i = 0; i < targetLength; i += 1) {
+      if (!out[i]) out[i] = fallbackItems[i] ? Poly.from(fallbackItems[i]) : Poly.zero();
+    }
+    return out;
+  }
+
+  function deserializePresetPolyArray(items) {
+    return Array.isArray(items) ? items.map((item) => deserializePresetPoly(item, Poly.zero())) : [];
+  }
+
+  function deserializePresetPolyMap(map) {
+    const out = {};
+    Object.entries(map || {}).forEach(([key, value]) => {
+      out[key] = deserializePresetPoly(value, Poly.zero());
+    });
+    return out;
+  }
+
+  function deserializePresetPoly(data, fallback = Poly.zero()) {
+    const poly = deserializeClassFormulaPoly(data);
+    return poly || (fallback == null ? null : Poly.from(fallback));
   }
 
   function sanitizePresetId(value) {
@@ -33811,10 +36280,13 @@
       options: {
         repeatNames: !!refs.repeatNames?.checked,
         repeatStyle: refs.repeatStyle?.value || 'letters',
+        calculationCache: !!state.mainResultCacheEnabled,
         classBasis: refs.basis?.value || 'chern',
         rootForm: refs.rootForm?.value || 'product',
         classTermOnly: !!refs.classTermOnly?.checked,
+        classBracketDisplay: !!refs.classBracketDisplay?.checked,
         classTermIndex: normalizedInt(refs.classTermIndex?.value, 0, MAX_DIMENSION, 1),
+        classFamilies: selectedCharacteristicClassFamilies(),
         hodgeExpanded: !!state.hodgeExpanded,
         hodgeWide: !!state.hodgeWide,
         hodgeCellSize: state.hodgeCellSize,
@@ -33831,6 +36303,7 @@
         maps: state.maps.map(presetMap),
         sequences: (state.sequences || []).map(presetSequence)
       },
+      step: presetClassStepState(),
       hidden: hiddenObjectRefs(),
       nextObjectIndex: state.nextObjectId
     });
@@ -33884,6 +36357,157 @@
       'id', 'type', 'sheafIds', 'mapIds', 'baseVarietyId',
       'tail', 'modified'
     ]);
+  }
+
+  function presetClassStepState() {
+    const builder = state.classFormulaBuilder || {};
+    const builderState = presetClassFormulaBuilder(builder);
+    return compactSerializable({
+      savedRules: (state.classStepSavedRules || []).map(presetClassStepSavedEntry),
+      formulaEditorOpen: state.classFormulaEditorOpen === true,
+      formulaBuilder: builderState,
+      activeSession: presetClassStepSession(state.classStepSession),
+      cache: presetClassStepCache(),
+      controls: {
+        cacheDisabled: refs.classStepUseCache?.checked === false,
+        oncePerRule: refs.classStepOncePerRule?.checked === true,
+        onePass: refs.classStepOnePass?.checked === true
+      }
+    });
+  }
+
+  function presetClassFormulaBuilder(builder = state.classFormulaBuilder || {}) {
+    const hasContent = state.classFormulaEditorOpen === true
+      || (Array.isArray(builder.tokens) && builder.tokens.length > 0)
+      || !!builder.varietyId
+      || !!builder.editingSavedFormulaId;
+    if (!hasContent) return null;
+    return compactSerializable({
+      varietyId: builder.varietyId || null,
+      tokens: cloneClassFormulaTokens(builder.tokens || []),
+      mode: builder.mode || 'builder',
+      classFamily: builder.classFamily || 'chern',
+      classDegree: builder.classDegree ?? '',
+      classSheafId: builder.classSheafId || null,
+      cursorIndex: Number.isInteger(builder.cursorIndex) ? builder.cursorIndex : 0,
+      insertMode: builder.insertMode || 'insert',
+      nextSlotId: Number.isInteger(builder.nextSlotId) ? builder.nextSlotId : classFormulaNextSlotId(builder.tokens || []),
+      activeSlotId: builder.activeSlotId || null,
+      editingSavedFormulaId: builder.editingSavedFormulaId || null,
+      message: builder.message || ''
+    });
+  }
+
+  function presetClassStepSavedEntry(entry) {
+    return compactSerializable({
+      id: entry.id || null,
+      kind: entry.kind || (entry.lhs?.powers ? 'rewrite' : 'formula'),
+      family: entry.family || 'formula',
+      target: entry.target || entry.family || 'formula',
+      degree: entry.degree ?? null,
+      dimension: entry.dimension ?? null,
+      geometryId: entry.geometryId || null,
+      labelLatex: entry.labelLatex || '',
+      labelPlain: entry.labelPlain || '',
+      lhsLatex: entry.lhsLatex || '',
+      rhsLatex: entry.rhsLatex || '',
+      lhsPlain: entry.lhsPlain || '',
+      rhsPlain: entry.rhsPlain || '',
+      displayLatex: classStepSavedEntryDisplayLatex(entry),
+      displayPlain: classStepSavedEntryDisplayPlain(entry),
+      formulaTokens: cloneClassFormulaTokens(entry.formulaTokens || []),
+      formulaSignature: entry.formulaSignature || '',
+      lhs: entry.lhs || null,
+      rhs: entry.rhs || null,
+      variableIds: entry.variableIds || [],
+      sourceLabel: entry.sourceLabel || '',
+      unselected: entry.selected === false
+    });
+  }
+
+  function presetClassStepSession(session) {
+    if (!session?.geometry) return null;
+    return compactSerializable({
+      formulaSession: session.formulaSession === true,
+      stopped: session.stopped === true,
+      family: session.family || 'chern',
+      target: session.target || session.family || 'chern',
+      index: session.index ?? null,
+      layout: session.layout || 'wide',
+      checkSwitchingRules: session.checkSwitchingRules === true,
+      dimension: session.dimension,
+      geometryId: session.geometry?.varietyId || null,
+      sheafId: session.sheaf?.sourceObject?.id || session.sheaf?.id || null,
+      bundleLabelLatex: session.bundleLabelLatex || '',
+      bundleLabelPlain: session.bundleLabelPlain || '',
+      rankLatex: session.rankLatex || '',
+      rankPlain: session.rankPlain || '',
+      rankComponent: serializeClassStepPoly(session.rankComponent || Poly.zero()),
+      originalRankComponent: serializeClassStepPoly(session.originalRankComponent || Poly.zero()),
+      components: serializeClassStepPolyArray(session.components || []),
+      originalComponents: serializeClassStepPolyArray(session.originalComponents || []),
+      formulaPoly: serializeClassStepPoly(session.formulaPoly || Poly.zero()),
+      originalFormulaPoly: serializeClassStepPoly(session.originalFormulaPoly || Poly.zero()),
+      formulaLatex: session.formulaLatex || '',
+      formulaPlain: session.formulaPlain || '',
+      formulaTokens: cloneClassFormulaTokens(session.formulaTokens || []),
+      displayOverrides: serializeClassStepPolyMap(session.displayOverrides || {}),
+      sourceSignature: session.sourceSignature || '',
+      stepHistory: (session.stepHistory || []).map(presetClassStepHistoryItem),
+      message: session.message || ''
+    });
+  }
+
+  function presetClassStepHistoryItem(item) {
+    return compactSerializable({
+      label: item?.label || '',
+      value: item?.value || '',
+      reason: item?.reason || '',
+      hidden: item?.hidden === true,
+      startPlaceholder: item?.startPlaceholder === true,
+      snapshot: presetClassStepSnapshot(item?.snapshot)
+    });
+  }
+
+  function presetClassStepSnapshot(snapshot) {
+    if (!snapshot) return null;
+    return compactSerializable({
+      components: serializeClassStepPolyArray(snapshot.components || []),
+      rankComponent: serializeClassStepPoly(snapshot.rankComponent || Poly.zero()),
+      formulaPoly: serializeClassStepPoly(snapshot.formulaPoly || Poly.zero()),
+      formulaLatex: snapshot.formulaLatex || '',
+      formulaPlain: snapshot.formulaPlain || '',
+      displayOverrides: serializeClassStepPolyMap(snapshot.displayOverrides || {})
+    });
+  }
+
+  function presetClassStepCache() {
+    if (!(state.classStepCache instanceof Map) || !state.classStepCache.size) return [];
+    return Array.from(state.classStepCache.values()).map((cache) => compactSerializable({
+      signature: cache.signature || '',
+      family: cache.family || 'chern',
+      dimension: cache.dimension ?? null,
+      geometryId: cache.geometryId || null,
+      components: serializeClassStepPolyArray(cache.components || []),
+      rankComponent: cache.rankComponent ? serializeClassStepPoly(cache.rankComponent) : null,
+      originalComponents: serializeClassStepPolyArray(cache.originalComponents || [])
+    }));
+  }
+
+  function serializeClassStepPoly(poly) {
+    return serializeClassFormulaPoly(poly || Poly.zero());
+  }
+
+  function serializeClassStepPolyArray(items) {
+    return (items || []).map((poly) => serializeClassStepPoly(poly || Poly.zero()));
+  }
+
+  function serializeClassStepPolyMap(map) {
+    const out = {};
+    Object.entries(map || {}).forEach(([key, poly]) => {
+      out[key] = serializeClassStepPoly(poly || Poly.zero());
+    });
+    return out;
   }
 
   function pickSerializable(source, keys) {
@@ -34130,13 +36754,15 @@
 
   function sheafTypeLabel(type) {
     if (type === 'structure') return 'structure sheaf';
-    if (type === 'locally-free') return 'locally free';
+    if (type === 'locally-free') return 'locally free sheaf';
     if (type === 'tangent') return 'tangent sheaf';
     if (type === 'cotangent') return 'cotangent sheaf';
-    if (type === 'canonical') return 'canonical sheaf';
-    if (type === 'twist') return 'twist';
+    if (type === 'canonical') return 'canonical line bundle';
+    if (type === 'twist') return 'twist line bundle';
     if (type === 'divisor-line') return 'divisor line bundle';
     if (isUniversalBundleSheafType(type)) return 'universal bundle';
+    if (type === 'direct-sum') return 'direct sum sheaf';
+    if (type === 'tensor') return 'tensor product sheaf';
     if (type === 'self-direct-sum') return 'self direct sum';
     if (type === 'self-tensor-product') return 'self tensor product';
     if (type === 'dual') return 'dual sheaf';
@@ -34186,9 +36812,21 @@
     const current = formatPolyPlain(classStepDisplayPoly(session));
     const history = classStepDisplayHistoryEntries(session);
     if (!history.length) return `${label} = ${current}`;
+    const fillIndex = classStepPlaceholderFillHistoryIndex(history);
+    if (fillIndex > 0) {
+      const firstValue = latexToPlain(history[fillIndex].item?.value || current);
+      const rest = history.slice(fillIndex + 1).map(({ item }) => {
+        const value = item?.hidden === true ? '...' : latexToPlain(item.value || current);
+        return `= ${value}`;
+      });
+      return [`${label} = ${firstValue}`, ...rest].join(' ');
+    }
     return history.map(({ item, index }, visibleIndex) => {
       const value = item?.hidden === true ? '...' : latexToPlain(item.value || current);
-      if (visibleIndex === 0 && index === 0) return `${label} := ${value}`;
+      if (visibleIndex === 0 && index === 0) {
+        const operator = item?.startPlaceholder && item?.hidden === true ? '=' : ':=';
+        return `${label} ${operator} ${value}`;
+      }
       return `= ${value}`;
     }).join(' ');
   }
@@ -34215,7 +36853,9 @@
 
   function classDisplayDescription(result) {
     const expression = result.classRows.some((row) => row.key.startsWith('root_')) ? 'Chern roots' : 'class variables';
-    const term = result.classDisplay?.termMode === 'term' ? `i=${result.classDisplay.termIndex}` : 'total';
+    const term = result.classDisplay?.termMode === 'bracket'
+      ? 'bracket'
+      : (result.classDisplay?.termMode === 'term' ? `i=${result.classDisplay.termIndex}` : 'total');
     const form = expression === 'Chern roots' ? `, ${result.classDisplay?.rootForm === 'expanded' ? 'expanded polynomial' : 'product'}` : '';
     const passes = result.classDisplay?.homologyRulePasses || DEFAULT_HOMOLOGY_RULE_PASSES;
     return `${expression}${form}, ${term}, ${passes} homology rule pass${passes === 1 ? '' : 'es'}`;
@@ -35126,15 +37766,23 @@
         }
         if (text[index] === '^') {
           index += 1;
-          const exponentMatch = text.slice(index).match(/^(?:\{(\d+)\}|(\d+))/);
-          if (!exponentMatch) throw new Error('Coefficient exponent must be a nonnegative integer.');
+          const exponentMatch = text.slice(index).match(/^(?:\{(-?\d+)\}|(-?\d+))/);
+          if (!exponentMatch) throw new Error('Coefficient exponent must be an integer.');
           index += exponentMatch[0].length;
-          base = polyPower(base, normalizedInt(exponentMatch[1] || exponentMatch[2], 0, MAX_DIMENSION, 1), MAX_DIMENSION);
+          const exponent = Number(exponentMatch[1] || exponentMatch[2]);
+          if (!Number.isInteger(exponent) || Math.abs(exponent) > MAX_DIMENSION) throw new Error(`Coefficient powers are limited to exponent ${MAX_DIMENSION}.`);
+          base = coefficientIntegerPower(base, exponent);
         }
         return sign < 0 ? base.neg() : base;
       }
     };
     return parser;
+  }
+
+  function coefficientIntegerPower(poly, exponent) {
+    if (exponent >= 0) return polyPower(poly, exponent, MAX_DIMENSION);
+    const inverse = reciprocalRuleCoefficientFactor(poly);
+    return polyPower(inverse, -exponent, MAX_DIMENSION);
   }
 
   function coefficientFactorCanStart(char) {
@@ -35193,6 +37841,8 @@
       return Poly.constant(Fraction.one().div(constant));
     }
     if (poly.isZero()) throw new Error('Rule coefficient has zero denominator.');
+    const monomialInverse = reciprocalScalarMonomialFactor(poly);
+    if (monomialInverse) return monomialInverse;
     const plain = formatRuleCoefficientPlain(poly);
     const latex = formatRuleCoefficientLatex(poly);
     const id = `scalar_inverse_${hashString(plain)}`;
@@ -35201,6 +37851,22 @@
       plain: `1/(${plain})`
     });
     return Poly.variable(id);
+  }
+
+  function reciprocalScalarMonomialFactor(poly) {
+    poly = Poly.from(poly);
+    if (poly.terms.size !== 1) return null;
+    const [entry] = poly.terms.entries();
+    const [key, coeff] = entry;
+    if (!key || coeff.isZero()) return null;
+    const powers = parseMonoKey(key);
+    const inversePowers = {};
+    for (const [id, exp] of Object.entries(powers)) {
+      const data = VARS.get(id);
+      if (!data || Number(data.degree || 0) !== 0) return null;
+      inversePowers[id] = -exp;
+    }
+    return monomialPolyFromPowers(inversePowers).scale(Fraction.one().div(coeff));
   }
 
   function ruleCoefficientIsZero(value) {

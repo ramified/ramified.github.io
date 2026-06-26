@@ -1,0 +1,217 @@
+{
+  "source": "js/sheaf_calculator.js:PICK_FLOW_REGISTRY",
+  "last_verified": "2026-06-23",
+  "notes": "Every current pick-flow id found in the registry is represented here. Predicates are descriptive, not executable.",
+  "flows": [
+    {
+      "id": "identify",
+      "slots": ["left", "right"],
+      "activeWhen": "combinedIdentifyCreateMode()",
+      "allowedObjectKinds": ["dynamic: identifyDraftKind()"],
+      "candidateRule": "kind matches identifyDraftKind() and allowableIdentifyPick(id)",
+      "completeWhen": "identifyConstructionData() returns data",
+      "hintFunction": "identifyPickHint",
+      "handler": "handleIdentifyPick"
+    },
+    {
+      "id": "short-exact-sequence",
+      "slots": ["sheaf-a", "map-ab", "sheaf-b", "map-bc", "sheaf-c"],
+      "activeWhen": "combinedSesCreateMode()",
+      "allowedObjectKinds": ["dynamic: map slots accept map, sheaf slots accept sheaf"],
+      "candidateRule": "allowableSesSheafPick, allowableSesMapPick, or allowableSesFixedMapPick depending on slot and edit mode",
+      "completeWhen": "shortExactSequenceData() returns data",
+      "hintFunction": "sesPickHint",
+      "handler": "handleSesPick"
+    },
+    {
+      "id": "blowup",
+      "slots": ["base", "point"],
+      "activeWhen": "combinedBlowupCreateMode()",
+      "allowedObjectKinds": ["variety"],
+      "candidateRule": "allowableBlowupPick(id, state.blowupPickTarget)",
+      "completeWhen": "blowupConstructionData() returns data",
+      "hintFunction": "blowupPickHint",
+      "handler": "handleBlowupPick"
+    },
+    {
+      "id": "ramified-cover",
+      "slots": ["base"],
+      "activeWhen": "combinedRamifiedCoverCreateMode()",
+      "allowedObjectKinds": ["variety"],
+      "candidateRule": "allowableRamifiedCoverBasePick(id)",
+      "completeWhen": "ramifiedCoverConstructionData() returns data",
+      "hintFunction": "ramifiedCoverPickHint",
+      "handler": "handleRamifiedCoverPick"
+    },
+    {
+      "id": "tautological-ses",
+      "slots": ["base"],
+      "activeWhen": "combinedGrassmannianTautologicalSesCreateMode()",
+      "allowedObjectKinds": ["variety"],
+      "candidateRule": "allowableTautologicalSesBasePick(id)",
+      "completeWhen": "tautologicalSesConstructionData() returns data",
+      "hintFunction": "tautologicalSesPickHint",
+      "handler": "handleTautologicalSesPick"
+    },
+    {
+      "id": "grassmannian-map",
+      "slots": ["bundle"],
+      "activeWhen": "combinedGrassmannianMapCreateMode()",
+      "allowedObjectKinds": ["sheaf"],
+      "candidateRule": "allowableGrassmannianMapSheafPick(id)",
+      "completeWhen": "grassmannianMapConstructionData() returns data",
+      "hintFunction": "grassmannianMapPickHint",
+      "handler": "handleGrassmannianMapPick"
+    },
+    {
+      "id": "picard-canonical",
+      "slots": ["curve"],
+      "activeWhen": "combinedPicardCanonicalCreateMode()",
+      "allowedObjectKinds": ["variety"],
+      "candidateRule": "allowablePicardCanonicalCurvePick(id)",
+      "completeWhen": "picardCanonicalConstructionData() returns data",
+      "hintFunction": "picardCanonicalPickHint",
+      "handler": "handlePicardCanonicalPick"
+    },
+    {
+      "id": "product",
+      "slots": ["factor-a", "factor-b"],
+      "activeWhen": "productVarietyInputMode()",
+      "allowedObjectKinds": ["variety"],
+      "candidateRule": "productCanPickVariety(id), excluding already selected factor ids for highlight",
+      "completeWhen": "productDraftFactors().length === 2",
+      "hintFunction": "productPickHint",
+      "handler": "handleProductPick"
+    },
+    {
+      "id": "map-composition",
+      "slots": ["first", "second"],
+      "activeWhen": "mapCompositionInputMode()",
+      "allowedObjectKinds": ["map"],
+      "candidateRule": "allowableMapCompositionPick(id)",
+      "completeWhen": "mapCompositionConstructionData() returns data",
+      "hintFunction": "mapCompositionPickHint",
+      "handler": "handleMapPick"
+    },
+    {
+      "id": "abel-jacobi-map",
+      "slots": ["curve"],
+      "activeWhen": "abelJacobiMapInputMode()",
+      "allowedObjectKinds": ["variety"],
+      "candidateRule": "allowableAbelJacobiCurvePick(id)",
+      "completeWhen": "mapDraftAbelJacobiCurve() returns a curve",
+      "hintFunction": "abelJacobiMapPickHint",
+      "handler": "handleMapPick"
+    },
+    {
+      "id": "ordinary-map",
+      "slots": ["domain", "codomain"],
+      "activeWhen": "ordinaryMapInputMode()",
+      "allowedObjectKinds": ["dynamic: sheaf when sheafMapInputMode(), otherwise variety"],
+      "candidateRule": "visible canvas object of the endpoint kind, excluding already selected endpoint ids for highlight",
+      "completeWhen": "ordinaryMapDraftData() returns data",
+      "hintFunction": "ordinaryMapPickHint",
+      "handler": "handleMapPick"
+    },
+    {
+      "id": "sheaf-binary",
+      "slots": ["left", "right"],
+      "activeWhen": "sheafBinaryInputMode()",
+      "allowedObjectKinds": ["sheaf"],
+      "candidateRule": "allowableSheafBinaryPick(id), excluding already selected ids for highlight",
+      "completeWhen": "binarySheafConstructionData() returns data",
+      "hintFunction": "sheafBinaryPickHint",
+      "handler": "handleSheafBinaryPick"
+    },
+    {
+      "id": "sheaf-self-sum",
+      "slots": ["parent"],
+      "activeWhen": "sheafSelfSumInputMode()",
+      "allowedObjectKinds": ["sheaf"],
+      "candidateRule": "allowableSheafSelfSumPick(id)",
+      "completeWhen": "selfSumSheafConstructionData() returns data",
+      "hintFunction": "sheafSelfSumPickHint",
+      "handler": "handleSheafSelfSumPick"
+    },
+    {
+      "id": "sheaf-dual",
+      "slots": ["parent"],
+      "activeWhen": "sheafDualInputMode()",
+      "allowedObjectKinds": ["sheaf"],
+      "candidateRule": "allowableSheafDualPick(id)",
+      "completeWhen": "dualSheafConstructionData() returns data",
+      "hintFunction": "sheafDualPickHint",
+      "handler": "handleSheafDualPick"
+    },
+    {
+      "id": "sheaf-internal-hom",
+      "slots": ["source", "target"],
+      "activeWhen": "sheafInternalHomInputMode()",
+      "allowedObjectKinds": ["sheaf"],
+      "candidateRule": "allowableSheafInternalHomPick(id), excluding already selected ids for highlight",
+      "completeWhen": "internalHomSheafConstructionData() returns data",
+      "hintFunction": "sheafInternalHomPickHint",
+      "handler": "handleSheafInternalHomPick"
+    },
+    {
+      "id": "sheaf-ideal",
+      "slots": ["map"],
+      "activeWhen": "sheafIdealInputMode()",
+      "allowedObjectKinds": ["map"],
+      "candidateRule": "allowableSheafIdealMapPick(id)",
+      "completeWhen": "idealSheafConstructionData() returns data",
+      "hintFunction": "sheafIdealPickHint",
+      "handler": "handleSheafIdealPick"
+    },
+    {
+      "id": "sheaf-normal",
+      "slots": ["map"],
+      "activeWhen": "sheafNormalInputMode()",
+      "allowedObjectKinds": ["map"],
+      "candidateRule": "allowableSheafNormalMapPick(id)",
+      "completeWhen": "normalBundleConstructionData() returns data",
+      "hintFunction": "sheafNormalPickHint",
+      "handler": "handleSheafNormalPick"
+    },
+    {
+      "id": "sheaf-relative",
+      "slots": ["map"],
+      "activeWhen": "sheafRelativeInputMode()",
+      "allowedObjectKinds": ["map"],
+      "candidateRule": "allowableSheafRelativeMapPick(id)",
+      "completeWhen": "relativeSheafConstructionData() returns data",
+      "hintFunction": "sheafRelativePickHint",
+      "handler": "handleSheafRelativePick"
+    },
+    {
+      "id": "sheaf-schur",
+      "slots": ["parent"],
+      "activeWhen": "sheafSchurInputMode()",
+      "allowedObjectKinds": ["sheaf"],
+      "candidateRule": "allowableSheafSchurPick(id)",
+      "completeWhen": "schurSheafConstructionData() returns data",
+      "hintFunction": "sheafSchurPickHint",
+      "handler": "handleSheafSchurPick"
+    },
+    {
+      "id": "sheaf-map-operation",
+      "slots": ["map", "sheaf"],
+      "activeWhen": "sheafMapOperationInputMode()",
+      "allowedObjectKinds": ["dynamic: map or sheaf from state.sheafMapPickTarget"],
+      "candidateRule": "allowableSheafMapOperationMap(id) or allowableSheafMapOperationSheaf(id) depending on active slot",
+      "completeWhen": "mapOperationSheafConstructionData() returns data",
+      "hintFunction": "sheafMapPickHint",
+      "handler": "handleSheafMapOperationPick"
+    },
+    {
+      "id": "sheaf-base",
+      "slots": ["base"],
+      "activeWhen": "sheafBasePickInputMode()",
+      "allowedObjectKinds": ["variety"],
+      "candidateRule": "allowableSheafBase(id)",
+      "completeWhen": "state.draftSheafBaseVarietyId is set",
+      "hintFunction": "inline: pick base variety or add a variety first",
+      "handler": "chooseSheafBaseFromCanvas"
+    }
+  ]
+}

@@ -1,0 +1,210 @@
+{
+  "source": "js/sheaf_calculator.js",
+  "last_verified": "2026-06-23",
+  "notes": "Gate descriptions are intended to become executable gate definitions in the rebuild.",
+  "gates": [
+    {
+      "id": "input_mode_modify",
+      "sourceFunctions": ["syncInputAvailabilityControls", "canvasHasObjects"],
+      "visibleWhen": "input mode select exists",
+      "enabledWhen": "canvasHasObjects()",
+      "failureReason": "Add an object before switching to Modify."
+    },
+    {
+      "id": "create_kind_number",
+      "sourceFunctions": ["syncInputAvailabilityControls", "createKindIsAvailable"],
+      "visibleWhen": "create mode",
+      "enabledWhen": "always",
+      "failureReason": ""
+    },
+    {
+      "id": "create_kind_sheaf_map_combined",
+      "sourceFunctions": ["syncInputAvailabilityControls", "createKindIsAvailable"],
+      "visibleWhen": "create mode",
+      "enabledWhen": "state.varieties.length > 0",
+      "failureReason": "Add a variety first."
+    },
+    {
+      "id": "combined_abel_jacobi",
+      "sourceFunctions": ["syncInputAvailabilityControls", "abelJacobiCurveVarieties"],
+      "visibleWhen": "create kind is combined",
+      "enabledWhen": "abelJacobiCurveVarieties().length > 0",
+      "failureReason": "Add a positive-genus curve or compatible symmetric product first."
+    },
+    {
+      "id": "combined_picard_canonical",
+      "sourceFunctions": ["syncInputAvailabilityControls", "picardCanonicalCurveVarieties"],
+      "visibleWhen": "create kind is combined",
+      "enabledWhen": "picardCanonicalCurveVarieties().length > 0",
+      "failureReason": "Add a compatible curve first."
+    },
+    {
+      "id": "combined_short_exact_sequence",
+      "sourceFunctions": ["syncInputAvailabilityControls", "activeSesEditMode"],
+      "visibleWhen": "create kind is combined or editing a sequence",
+      "enabledWhen": "state.sheaves.length > 0 || activeSesEditMode()",
+      "failureReason": "Add compatible sheaves first."
+    },
+    {
+      "id": "combined_tautological_ses",
+      "sourceFunctions": ["syncInputAvailabilityControls", "varietySupportsTautologicalSequence"],
+      "visibleWhen": "create kind is combined",
+      "enabledWhen": "some variety supports tautological sequence",
+      "failureReason": "Add a Grassmannian-like base first."
+    },
+    {
+      "id": "combined_identify",
+      "sourceFunctions": ["syncInputAvailabilityControls", "identifyPickableObjects"],
+      "visibleWhen": "create kind is combined",
+      "enabledWhen": "at least two compatible varieties or at least two compatible sheaves exist",
+      "failureReason": "Add two compatible objects first."
+    },
+    {
+      "id": "sheaf_option_twist",
+      "sourceFunctions": ["normalizeControlVisibility", "varietySupportsTwist"],
+      "visibleWhen": "editing or creating a sheaf",
+      "enabledWhen": "draft base or some available base supports twist",
+      "failureReason": "No twist-supporting base variety is available."
+    },
+    {
+      "id": "sheaf_option_divisor_line",
+      "sourceFunctions": ["normalizeControlVisibility", "divisorHomologyClassDefinitions"],
+      "visibleWhen": "editing or creating a sheaf",
+      "enabledWhen": "base geometry has divisor homology class definitions",
+      "failureReason": "No divisor classes are available on the selected base."
+    },
+    {
+      "id": "sheaf_option_map_operation",
+      "sourceFunctions": ["normalizeControlVisibility"],
+      "visibleWhen": "editing or creating a sheaf",
+      "enabledWhen": "there is a variety-to-variety map and an eligible sheaf",
+      "failureReason": "Add an eligible map and sheaf first."
+    },
+    {
+      "id": "sheaf_option_binary",
+      "sourceFunctions": ["normalizeControlVisibility"],
+      "visibleWhen": "editing or creating a sheaf",
+      "enabledWhen": "there is an eligible existing sheaf, excluding active sheaf while editing",
+      "failureReason": "Add another compatible sheaf first."
+    },
+    {
+      "id": "sheaf_option_dual_internal_hom_schur",
+      "sourceFunctions": ["normalizeControlVisibility", "sheafHasLocallyFreeLabel"],
+      "visibleWhen": "editing or creating a sheaf",
+      "enabledWhen": "eligible parent/source/target sheaves exist",
+      "failureReason": "Add eligible sheaves first."
+    },
+    {
+      "id": "sheaf_option_ideal_normal_relative",
+      "sourceFunctions": ["normalizeControlVisibility", "allowableSheafIdealMapPick", "allowableSheafNormalMapPick", "allowableSheafRelativeMapPick"],
+      "visibleWhen": "editing or creating a sheaf",
+      "enabledWhen": "an eligible map exists",
+      "failureReason": "Add an eligible map first."
+    },
+    {
+      "id": "map_type_sheaf",
+      "sourceFunctions": ["syncMapTypeOptions"],
+      "visibleWhen": "map editor is active",
+      "enabledWhen": "state.sheaves.length > 0",
+      "failureReason": "Add a sheaf first."
+    },
+    {
+      "id": "map_type_abel_jacobi",
+      "sourceFunctions": ["syncMapTypeOptions", "abelJacobiCurveVarieties"],
+      "visibleWhen": "combined Abel-Jacobi creation or editing existing Abel-Jacobi map",
+      "enabledWhen": "a compatible Abel-Jacobi source exists",
+      "failureReason": "Add a compatible curve first."
+    },
+    {
+      "id": "add_update_build",
+      "sourceFunctions": ["normalizeControlVisibility", "pickFlowReady", "pickFlowComplete"],
+      "visibleWhen": "input editor is available",
+      "enabledWhen": "all active draft validation gates pass",
+      "failureReason": "Use the active gate reason, usually a pick-flow hint or validation message."
+    },
+    {
+      "id": "delete_object",
+      "sourceFunctions": ["updateDeleteObjectButton", "activeObjectForKind"],
+      "visibleWhen": "modify mode and an object kind can be modified",
+      "enabledWhen": "activeObjectForKind(currentInputKind()) exists",
+      "failureReason": "No selected object to delete."
+    },
+    {
+      "id": "canvas_pick_cancel",
+      "sourceFunctions": ["syncGlobalPickButton", "canvasPickAvailable"],
+      "visibleWhen": "state.canvasPickEnabled",
+      "enabledWhen": "an active pick flow is available",
+      "failureReason": "No active canvas pick flow."
+    },
+    {
+      "id": "chart_reveal_hodge",
+      "sourceFunctions": ["chartRevealAvailability", "syncChartRevealControls"],
+      "visibleWhen": "modify mode, kind is variety, result.hodge exists",
+      "enabledWhen": "same as visibleWhen",
+      "failureReason": "Select a variety with Hodge data in Modify mode."
+    },
+    {
+      "id": "chart_reveal_betti",
+      "sourceFunctions": ["chartRevealAvailability", "syncChartRevealControls"],
+      "visibleWhen": "modify mode, kind is variety, result.geometry exists",
+      "enabledWhen": "same as visibleWhen",
+      "failureReason": "Select a variety in Modify mode."
+    },
+    {
+      "id": "chart_reveal_classes",
+      "sourceFunctions": ["chartRevealAvailability", "syncChartRevealControls"],
+      "visibleWhen": "modify mode, kind is sheaf, selectedSheaf() exists",
+      "enabledWhen": "same as visibleWhen",
+      "failureReason": "Select a sheaf in Modify mode."
+    },
+    {
+      "id": "chart_reveal_cohomology",
+      "sourceFunctions": ["chartRevealAvailability", "syncChartRevealControls"],
+      "visibleWhen": "modify mode, kind is sheaf, result.cohomology.dimensions has entries",
+      "enabledWhen": "same as visibleWhen",
+      "failureReason": "Select a sheaf with computable cohomology."
+    },
+    {
+      "id": "further_simplify",
+      "sourceFunctions": ["syncHeavyOperationControls"],
+      "visibleWhen": "class actions are visible",
+      "enabledWhen": "not recompute/class-refresh busy, classRows exist, pass count below MAX_HOMOLOGY_RULE_PASSES",
+      "failureReason": "No class rows, computation is busy, or simplification pass limit reached."
+    },
+    {
+      "id": "reset_simplify",
+      "sourceFunctions": ["syncHeavyOperationControls"],
+      "visibleWhen": "homologyRulePasses > DEFAULT_HOMOLOGY_RULE_PASSES",
+      "enabledWhen": "not recompute/class-refresh busy",
+      "failureReason": "No extra simplification passes to reset, or computation is busy."
+    },
+    {
+      "id": "class_formula_compute",
+      "sourceFunctions": ["renderClassFormulaBuilder", "syncClassStepAvailability"],
+      "visibleWhen": "at least one variety or computed geometry exists",
+      "enabledWhen": "formula builder has a validated supported formula",
+      "failureReason": "Check a valid formula first."
+    },
+    {
+      "id": "class_step_apply",
+      "sourceFunctions": ["collectClassStepRuleCandidates", "syncClassStepControlsForSession"],
+      "visibleWhen": "class step session exists",
+      "enabledWhen": "at least one selected candidate rule applies",
+      "failureReason": "No selected applicable rule."
+    },
+    {
+      "id": "class_step_save_rule",
+      "sourceFunctions": ["classStepSaveRuleState", "syncClassStepControlsForSession"],
+      "visibleWhen": "class step session exists",
+      "enabledWhen": "current formula can be saved as a single-monomial rewrite rule",
+      "failureReason": "This formula cannot be saved as a rewrite rule."
+    },
+    {
+      "id": "export_controls",
+      "sourceFunctions": ["refreshExport", "openChartExport", "exportResult"],
+      "visibleWhen": "corresponding chart/action panel is visible",
+      "enabledWhen": "a result or preset export scope exists and heavy computation is not forcing disablement",
+      "failureReason": "Nothing available to export."
+    }
+  ]
+}
