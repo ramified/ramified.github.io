@@ -2,6 +2,9 @@
   'use strict';
 
   const SCHEMA_VERSION = 1;
+  const DEFAULT_GRAPH_TITLE = 'Dependency Graph';
+  const PRESET_FOLDER_URL = 'theorem_graph_presets/';
+  const PRESET_REGISTRY_URL = 'theorem_graph_presets/presets.js';
   const NODE_TYPES = {
     theorem: { label: 'Theorem', fill: '#f8f1e5', stroke: '#3d6b4f', band: '#3d6b4f' },
     lemma: { label: 'Lemma', fill: '#f4f7ed', stroke: '#6b7f3d', band: '#6b7f3d' },
@@ -28,6 +31,9 @@
   const KNOWN_REFERENCE_KEYS = new Set(['key', 'author', 'title', 'year', 'citeText', 'url', 'source', 'rawBibtex']);
 
   const state = {
+    graphTitle: DEFAULT_GRAPH_TITLE,
+    presets: [],
+    presetScriptNonce: '',
     nodes: [],
     arrows: [],
     references: [],
@@ -59,6 +65,7 @@
     cacheRefs();
     bindEvents();
     seedExample();
+    loadPresetRegistry();
     resizeCanvas();
     renderAll();
 
@@ -86,6 +93,7 @@
     refs.summary = $('theorem-summary');
     refs.graphCountBadge = $('graph-count-badge');
     refs.connectBadge = $('connect-badge');
+    refs.graphTitle = $('graph-title');
     refs.clearGraph = $('clear-graph');
     refs.nodeEmptyNote = $('node-empty-note');
     refs.nodeEditor = $('node-editor');
@@ -138,6 +146,9 @@
     refs.refreshExport = $('refresh-export');
     refs.copyExport = $('copy-export');
     refs.importInput = $('theorem-import-input');
+    refs.presetSelect = $('preset-select');
+    refs.loadPreset = $('load-preset');
+    refs.refreshPresets = $('refresh-presets');
     refs.loadImport = $('load-import');
     refs.clearImport = $('clear-import');
     refs.exportMessage = $('export-message');
@@ -193,6 +204,20 @@
       setExportMessage('Export refreshed.');
     });
     if (refs.copyExport) refs.copyExport.addEventListener('click', copyExport);
+    if (refs.graphTitle) {
+      refs.graphTitle.addEventListener('input', () => {
+        state.graphTitle = cleanString(refs.graphTitle.value).replace(/\s+/g, ' ');
+        refreshExport();
+      });
+      refs.graphTitle.addEventListener('blur', () => {
+        state.graphTitle = cleanGraphTitle(refs.graphTitle.value);
+        refs.graphTitle.value = state.graphTitle;
+        refreshExport();
+      });
+    }
+    if (refs.presetSelect) refs.presetSelect.addEventListener('change', syncControls);
+    if (refs.loadPreset) refs.loadPreset.addEventListener('click', loadSelectedPreset);
+    if (refs.refreshPresets) refs.refreshPresets.addEventListener('click', refreshPresetRegistry);
     if (refs.loadImport) refs.loadImport.addEventListener('click', loadImport);
     if (refs.clearImport) refs.clearImport.addEventListener('click', () => {
       refs.importInput.value = '';
@@ -1627,13 +1652,27 @@
 
   function refreshExport() {
     if (!refs.exportOut) return;
-    refs.exportOut.value = JSON.stringify(buildExport(), null, 2);
+    refs.exportOut.value = buildPresetFileExport();
     syncControls();
+  }
+
+  function buildPresetFileExport() {
+    const preset = buildExport();
+    const key = presetKeyFromTitle(preset.title);
+    const file = `${key}.preset.js`;
+    return [
+      `// Save this file as theorem_graph_presets/${file}`,
+      '// Add this entry to theorem_graph_presets/presets.js:',
+      `// { label: ${JSON.stringify(preset.title)}, key: ${JSON.stringify(key)}, file: ${JSON.stringify(file)} }`,
+      'window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};',
+      `window.THEOREM_GRAPH_PRESET_DATA.${key} = ${JSON.stringify(preset, null, 2)};`
+    ].join('\n');
   }
 
   function buildExport() {
     return {
       schemaVersion: SCHEMA_VERSION,
+      title: cleanGraphTitle(state.graphTitle),
       nodes: state.nodes.map((node) => ({
         ...node.extra,
         id: node.id,
@@ -1717,28 +1756,170 @@
     }
 
     try {
-      const next = normalizeImport(data);
-      stopLayout();
-      state.nodes = next.nodes;
-      state.arrows = next.arrows;
-      state.references = next.references;
-      state.selectedReferenceKeys = next.selectedReferenceKeys;
-      state.editingReferenceKey = null;
-      if (refs.referenceEditForm) refs.referenceEditForm.hidden = true;
-      state.selectedNodeId = next.selectedNodeId;
-      state.selectedArrowId = null;
-      state.connectMode = false;
-      state.connectSourceId = null;
-      state.viewExtra = next.viewExtra;
-      state.nodeSerial = nextSerial(state.nodes.map((node) => node.id), 'n');
-      state.arrowSerial = nextSerial(state.arrows.map((arrow) => arrow.id), 'a');
-      clampAllNodes();
-      setExportMessage(`Loaded ${state.nodes.length} nodes and ${state.arrows.length} arrows.`);
-      setStatus('Imported graph.');
-      renderAll();
+      applyImportData(data, 'import JSON');
     } catch (error) {
       setExportMessage(error.message, true);
     }
+  }
+
+  function applyImportData(data, sourceLabel = 'graph') {
+    const next = normalizeImport(data);
+    stopLayout();
+    state.graphTitle = next.title;
+    state.nodes = next.nodes;
+    state.arrows = next.arrows;
+    state.references = next.references;
+    state.selectedReferenceKeys = next.selectedReferenceKeys;
+    state.editingReferenceKey = null;
+    if (refs.referenceEditForm) refs.referenceEditForm.hidden = true;
+    state.selectedNodeId = next.selectedNodeId;
+    state.selectedArrowId = null;
+    state.connectMode = false;
+    state.connectSourceId = null;
+    state.viewExtra = next.viewExtra;
+    state.nodeSerial = nextSerial(state.nodes.map((node) => node.id), 'n');
+    state.arrowSerial = nextSerial(state.arrows.map((arrow) => arrow.id), 'a');
+    clampAllNodes();
+    setExportMessage(`Loaded ${state.nodes.length} nodes and ${state.arrows.length} arrows from ${sourceLabel}.`);
+    setStatus('Imported graph.');
+    renderAll();
+  }
+
+  function loadPresetRegistry() {
+    if (!refs.presetSelect) return;
+    const registryPresets = normalizePresetRegistry(window.THEOREM_GRAPH_PRESETS);
+    state.presets = registryPresets;
+    setPresetOptions(registryPresets, registryPresets.length ? 'Choose a preset' : 'No presets found');
+    setExportMessage(
+      registryPresets.length
+        ? `Loaded ${registryPresets.length} preset${registryPresets.length === 1 ? '' : 's'} from presets.js.`
+        : 'No presets are registered in theorem_graph_presets/presets.js.',
+      !registryPresets.length
+    );
+    syncControls();
+  }
+
+  function refreshPresetRegistry() {
+    state.presetScriptNonce = String(Date.now());
+    window.THEOREM_GRAPH_PRESET_DATA = {};
+    const oldScript = document.getElementById('theorem-preset-registry');
+    const nextScript = document.createElement('script');
+    nextScript.id = 'theorem-preset-registry';
+    nextScript.src = `${PRESET_REGISTRY_URL}?t=${state.presetScriptNonce}`;
+    nextScript.onload = () => {
+      if (oldScript && oldScript.parentNode) oldScript.parentNode.removeChild(oldScript);
+      loadPresetRegistry();
+    };
+    nextScript.onerror = () => {
+      setExportMessage('Could not reload theorem_graph_presets/presets.js.', true);
+      syncControls();
+    };
+    document.head.appendChild(nextScript);
+  }
+
+  function normalizePresetRegistry(registry) {
+    const rawPresets = Array.isArray(registry) ? registry : [];
+    return rawPresets
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+        const label = cleanString(entry.label || entry.title || entry.name) || 'Preset';
+        if (entry.data && typeof entry.data === 'object' && !Array.isArray(entry.data)) {
+          return { label, data: entry.data };
+        }
+        const json = cleanString(entry.json);
+        if (json) return { label, json };
+        const file = cleanPresetFile(entry.file);
+        if (file) {
+          const key = cleanString(entry.key || entry.id) || presetKeyFromFile(file);
+          return { label, file, key };
+        }
+        return null;
+      })
+      .filter(Boolean);
+  }
+
+  function cleanPresetFile(file) {
+    const value = cleanString(file).replace(/\\/g, '/');
+    if (!value || /^(?:[a-z]+:)?\/\//i.test(value) || value.startsWith('/') || value.includes('..')) return '';
+    return value.replace(/^\.?\//, '');
+  }
+
+  function presetKeyFromFile(file) {
+    return cleanString(file)
+      .replace(/^.*\//, '')
+      .replace(/\.preset\.js$/i, '')
+      .replace(/\.js$/i, '')
+      .replace(/[^A-Za-z0-9_$]/g, '_') || 'preset';
+  }
+
+  function presetKeyFromTitle(title) {
+    const key = cleanGraphTitle(title)
+      .toLowerCase()
+      .replace(/[^a-z0-9_$]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return /^[a-z_$]/.test(key) ? key : `preset_${key || 'graph'}`;
+  }
+
+  function setPresetOptions(presets, placeholder) {
+    if (!refs.presetSelect) return;
+    refs.presetSelect.innerHTML = '';
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = placeholder;
+    refs.presetSelect.appendChild(empty);
+    presets.forEach((preset, index) => {
+      const option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = preset.label;
+      refs.presetSelect.appendChild(option);
+    });
+  }
+
+  async function loadSelectedPreset() {
+    if (!refs.presetSelect) return;
+    const preset = state.presets[Number(refs.presetSelect.value)];
+    if (!preset) {
+      setExportMessage('Choose a preset before applying.', true);
+      return;
+    }
+    try {
+      const data = await readPresetData(preset);
+      if (refs.importInput) refs.importInput.value = JSON.stringify(data, null, 2);
+      applyImportData(data, preset.label);
+    } catch (error) {
+      setExportMessage(`Preset load failed: ${error.message}`, true);
+    }
+  }
+
+  async function readPresetData(preset) {
+    if (preset.data) return preset.data;
+    if (preset.json) return JSON.parse(preset.json);
+    if (preset.file) return loadPresetScriptData(preset);
+    throw new Error('Preset entry must provide data, json, or file in presets.js.');
+  }
+
+  function loadPresetScriptData(preset) {
+    const key = cleanString(preset.key);
+    if (!key) return Promise.reject(new Error('Preset file entry needs a key.'));
+    if (window.THEOREM_GRAPH_PRESET_DATA && window.THEOREM_GRAPH_PRESET_DATA[key]) {
+      return Promise.resolve(window.THEOREM_GRAPH_PRESET_DATA[key]);
+    }
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      const query = state.presetScriptNonce ? `?t=${encodeURIComponent(state.presetScriptNonce)}` : '';
+      script.src = `${PRESET_FOLDER_URL}${presetUrlPath(preset.file)}${query}`;
+      script.onload = () => {
+        const data = window.THEOREM_GRAPH_PRESET_DATA && window.THEOREM_GRAPH_PRESET_DATA[key];
+        if (data) resolve(data);
+        else reject(new Error(`Preset file loaded, but did not register key "${key}".`));
+      };
+      script.onerror = () => reject(new Error(`Could not load ${preset.file}.`));
+      document.head.appendChild(script);
+    });
+  }
+
+  function presetUrlPath(file) {
+    return cleanString(file).split('/').map(encodeURIComponent).join('/');
   }
 
   function normalizeImport(data) {
@@ -1803,6 +1984,7 @@
     delete viewExtra.selectedReferenceKeys;
     delete viewExtra.layoutRunning;
     return {
+      title: cleanGraphTitle(data.title || view.title),
       nodes,
       arrows,
       references,
@@ -1837,6 +2019,8 @@
     if (refs.graphCountBadge) {
       refs.graphCountBadge.textContent = `${state.nodes.length} node${state.nodes.length === 1 ? '' : 's'}, ${state.arrows.length} arrow${state.arrows.length === 1 ? '' : 's'}`;
     }
+    if (refs.graphTitle && refs.graphTitle.value !== state.graphTitle) refs.graphTitle.value = state.graphTitle;
+    if (refs.loadPreset) refs.loadPreset.disabled = !(state.presets.length && refs.presetSelect && refs.presetSelect.value);
     if (refs.connectBadge) {
       refs.connectBadge.textContent = state.connectMode
         ? (state.connectSourceId ? 'choose target' : 'choose source')
@@ -2017,6 +2201,10 @@
 
   function cleanString(value) {
     return value == null ? '' : String(value).trim();
+  }
+
+  function cleanGraphTitle(value) {
+    return cleanString(value).replace(/\s+/g, ' ') || DEFAULT_GRAPH_TITLE;
   }
 
   function plainLabel(value) {

@@ -142,6 +142,26 @@
       min-width: 0;
     }
 
+    .theorem-title-input {
+      min-width: 160px;
+      flex: 1 1 220px;
+      border: 1px solid transparent;
+      border-radius: 3px;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+      padding: 2px 4px;
+    }
+
+    .theorem-title-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      background: var(--bg);
+    }
+
     .theorem-field-row {
       display: grid;
       grid-template-columns: 92px minmax(0, 1fr);
@@ -207,6 +227,7 @@
 
     .theorem-graph-actions,
     .theorem-export-actions,
+    .theorem-preset-actions,
     .theorem-reference-actions {
       display: flex;
       align-items: center;
@@ -443,7 +464,7 @@
 <main class="layout theorem-layout">
   <section class="canvas-panel">
     <header class="panel-title">
-      <span class="panel-title-text">Dependency Graph</span>
+      <input id="graph-title" class="theorem-title-input" type="text" maxlength="120" spellcheck="true" autocomplete="off" value="Dependency Graph" aria-label="Graph title">
       <div class="canvas-toolbar" aria-label="Theorem graph controls">
         <span class="theorem-badge" id="graph-count-badge">0 nodes, 0 arrows</span>
         <span class="theorem-badge" id="connect-badge">select</span>
@@ -678,13 +699,23 @@
     <section class="card collapsed" id="export-card">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
-        <label class="input-label" for="theorem-export-out">compact JSON</label>
+        <label class="input-label" for="theorem-export-out">preset file</label>
         <textarea id="theorem-export-out" readonly spellcheck="false"></textarea>
         <div class="theorem-export-actions">
           <button class="btn" id="refresh-export" type="button">refresh</button>
           <button class="btn btn-ghost" id="copy-export" type="button">copy</button>
         </div>
         <label class="input-label" for="theorem-import-input" style="margin-top: 12px;">import JSON</label>
+        <div class="theorem-field-row">
+          <label class="input-label" for="preset-select">preset</label>
+          <select id="preset-select" class="theorem-select">
+            <option value="">Loading presets...</option>
+          </select>
+        </div>
+        <div class="theorem-preset-actions">
+          <button class="btn" id="load-preset" type="button">apply preset</button>
+          <button class="btn btn-ghost" id="refresh-presets" type="button">refresh presets</button>
+        </div>
         <textarea id="theorem-import-input" class="theorem-import-input" spellcheck="false" autocomplete="off" placeholder="Paste exported JSON"></textarea>
         <div class="theorem-export-actions">
           <button class="btn" id="load-import" type="button">load</button>
@@ -718,6 +749,7 @@
     document.head.appendChild(script);
   }, { once: true });
 </script>
+<script id="theorem-preset-registry" src="theorem_graph_presets/presets.js"></script>
 <script src="js/theorem_graph_calculator.js"></script>
 </body>
 </html>
