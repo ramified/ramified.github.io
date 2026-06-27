@@ -287,6 +287,7 @@
 
   function init() {
     collectRefs();
+    syncMainColumnPlacement();
     bindRuntimeErrorWarnings();
     initCustomTooltips();
     initializeInputObjects();
@@ -301,8 +302,15 @@
     recompute('initial render');
     window.addEventListener('resize', debounce(() => {
       renderCanvas(state.lastResult);
+      syncMainColumnPlacement();
       syncHodgeWidePlacement();
     }, 80));
+  }
+
+  function syncMainColumnPlacement() {
+    const mainColumn = document.querySelector('.sheaf-main-column');
+    if (!mainColumn || !refs.classStepWideHost) return;
+    if (refs.classStepWideHost.parentElement !== mainColumn) mainColumn.appendChild(refs.classStepWideHost);
   }
 
   function bindRuntimeErrorWarnings() {
@@ -19275,7 +19283,6 @@
     const homologyPowers = {};
     for (const [id, exp] of Object.entries(term?.powers || {})) {
       const exponent = Number(exp) || 0;
-      if (exponent <= 0) continue;
       const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
       const target = data && data.degree === 0 ? scalarPowers : homologyPowers;
       target[id] = (target[id] || 0) + exponent;
@@ -19383,10 +19390,15 @@
     const clean = {};
     for (const [id, exp] of Object.entries(powers || {})) {
       const exponent = Number(exp) || 0;
-      if (exponent > 0) clean[id] = exponent;
+      if (monomialExponentCanPersist(id, exponent)) clean[id] = exponent;
     }
     let out = Poly.one();
     for (const [id, exp] of Object.entries(clean)) {
+      if (exp < 0) {
+        out = out.mul(monomialPolyFromPowers({ [id]: exp }), MAX_DIMENSION);
+        if (out.isZero()) return out;
+        continue;
+      }
       out = out.mul(polyPower(Poly.variable(id), exp, MAX_DIMENSION), MAX_DIMENSION);
       if (out.isZero()) return out;
     }
@@ -20130,7 +20142,7 @@
   }
 
   function normalizeClassStepTargetValue(value) {
-    return ['chern', 'character', 'todd', 'segre', 'sqrtTodd'].includes(value) ? value : 'chern';
+    return ['chern', 'character', 'todd', 'segre', 'sqrtTodd', 'mukai', 'kappa'].includes(value) ? value : 'chern';
   }
 
   function classStepFamilyForTarget(sheaf, target) {
@@ -20158,6 +20170,8 @@
     if (target === 'todd') return '\\operatorname{td}';
     if (target === 'segre') return 's';
     if (target === 'sqrtTodd') return '\\sqrt{\\operatorname{td}}';
+    if (target === 'mukai') return 'v';
+    if (target === 'kappa') return '\\kappa';
     return 'c';
   }
 
@@ -20166,6 +20180,8 @@
     if (target === 'todd') return 'td';
     if (target === 'segre') return 's';
     if (target === 'sqrtTodd') return 'sqrt td';
+    if (target === 'mukai') return 'v';
+    if (target === 'kappa') return 'kappa';
     return 'c';
   }
 
@@ -20175,6 +20191,8 @@
     if (normalized === 'todd') return 'td';
     if (normalized === 'segre') return 's';
     if (normalized === 'sqrtTodd') return 'sqrtTd';
+    if (normalized === 'mukai') return 'v';
+    if (normalized === 'kappa') return 'kappa';
     return 'c';
   }
 
@@ -20221,8 +20239,11 @@
     if (normalized === 'sqrtTodd') {
       return classStepFormalSqrtToddFromToddTotal(sheaf, geometry, geometry.dim);
     }
+    if (normalized === 'mukai' || normalized === 'kappa') {
+      return classStepDerivedDefinitionTotal(sheaf, geometry, normalized, geometry.dim);
+    }
     if (classStepTargetUsesFormalDerivedVariables(normalized)) {
-      return classStepFormalSheafDerivedTotal(sheaf, geometry, normalized, geometry.dim);
+      return classStepFormalSheafDerivedTotal(sheaf, geometry, normalized, geometry.dim, classStepDerivedConstantPoly(sheaf, geometry, normalized));
     }
     return Poly.zero();
   }
@@ -20230,6 +20251,63 @@
   function classStepFormalSqrtToddFromToddTotal(sheaf, geometry, d = geometry?.dim ?? MAX_DIMENSION) {
     const toddTotal = classStepFormalSheafDerivedTotal(sheaf, geometry, 'todd', d);
     return sqrtUnit(toddTotal, d);
+  }
+
+  function classStepDerivedDefinitionTotal(sheaf, geometry, target, d = geometry?.dim ?? MAX_DIMENSION) {
+    if (target === 'mukai') return classStepFormalMukaiDefinitionTotal(sheaf, geometry, d);
+    if (target === 'kappa') return classStepFormalKappaDefinitionTotal(sheaf, geometry, d);
+    return classStepFormalSheafDerivedTotal(sheaf, geometry, target, d, classStepDerivedConstantPoly(sheaf, geometry, target));
+  }
+
+  function classStepFormalMukaiDefinitionTotal(sheaf, geometry, d = geometry?.dim ?? MAX_DIMENSION) {
+    return classStepTotalClassVariablePoly(sheaf, geometry, 'character')
+      .mul(classStepBaseSqrtToddTotalVariablePoly(geometry), d);
+  }
+
+  function classStepFormalMukaiExpandedTotal(sheaf, geometry, d = geometry?.dim ?? MAX_DIMENSION) {
+    return classStepFormalCharacterTotal(sheaf, geometry, d)
+      .mul(classStepFormalBaseSqrtToddTotal(geometry, d), d);
+  }
+
+  function classStepFormalKappaDefinitionTotal(sheaf, geometry, d = geometry?.dim ?? MAX_DIMENSION) {
+    const chTotal = classStepFormalCharacterTotal(sheaf, geometry, d);
+    const rank = classStepDerivedConstantPoly(sheaf, geometry, 'kappa');
+    const ch1 = componentOrZero(buildClassStepFormalData(geometry, sheaf, 'character').components, 1);
+    const exponent = ch1.mul(reciprocalRuleCoefficientFactor(rank), d).scale(fraction(-1));
+    return chTotal.mul(expPoly(exponent, d), d);
+  }
+
+  function classStepFormalCharacterTotal(sheaf, geometry, d = geometry?.dim ?? MAX_DIMENSION) {
+    const formal = buildClassStepFormalData(geometry, sheaf, 'character');
+    return totalFromComponents(formal.components, d, classStepRankPolyForFormalData(formal));
+  }
+
+  function classStepFormalBaseSqrtToddTotal(geometry, d = geometry?.dim ?? MAX_DIMENSION) {
+    return sqrtUnit(classStepFormalToddTotal(geometry, d), d);
+  }
+
+  function classStepBaseSqrtToddTotalVariablePoly(geometry) {
+    return Poly.variable(classStepDefineBaseSqrtToddTotalVariable(geometry));
+  }
+
+  function classStepBaseSqrtToddTotalVariableId(geometry) {
+    return `class_step_sqrtTdTotal_${variableIdSafe(geometry?.varietyId || homologyScopeId(geometry) || 'base')}`;
+  }
+
+  function classStepDefineBaseSqrtToddTotalVariable(geometry) {
+    const id = classStepBaseSqrtToddTotalVariableId(geometry);
+    const labelLatex = geometry?.labelLatex || 'X';
+    const labelPlain = geometry?.labelPlain || 'X';
+    defineVariable(id, 0, `\\sqrt{\\operatorname{td}(${labelLatex})}`, {
+      cohomologyDegree: 0,
+      plain: `sqrt td(${labelPlain})`,
+      kind: 'classStepBaseTotalClass',
+      classStepKind: 'baseSqrtToddTotal',
+      classStepFamily: 'sqrtToddBase',
+      geometryId: geometry?.varietyId || null,
+      mixedDegree: true
+    });
+    return id;
   }
 
   function classStepTotalClassExpansionDisplayLatex(sheaf, geometry, family, rhs) {
@@ -20267,6 +20345,20 @@
     return null;
   }
 
+  function classStepCurrentTotalDisplayPoly(session) {
+    if (!session || session.formulaSession || session.index != null) return null;
+    const target = session.target || session.family;
+    if (target !== session.family) return classStepDerivedDisplayPoly({ ...session, displayOverrides: {} }, target);
+    const constant = session.family === 'chern' ? Poly.one() : componentOrZero(session.components, 0);
+    return totalFromComponents(session.components, session.dimension, constant);
+  }
+
+  function classStepSyncCurrentTotalDisplay(session) {
+    const poly = classStepCurrentTotalDisplayPoly(session);
+    if (poly) classStepSetDisplayOverride(session, poly);
+    return poly;
+  }
+
   function classStepDerivedDisplayPoly(session, target) {
     if (session.index === 0) {
       if (target === 'character') return session.family === 'character' ? componentOrZero(session.components, 0) : (session.rankComponent || Poly.zero());
@@ -20279,7 +20371,8 @@
         return totalFromComponents(session.components, d, Poly.one());
       }
       const comps = classStepFormalSheafDerivedComponents(session.sheaf, session.geometry, target, d);
-      return session.index != null ? componentOrZero(comps, session.index) : totalFromComponents(comps, d, Poly.one());
+      const constant = classStepDerivedConstantPoly(session.sheaf, session.geometry, target);
+      return session.index != null ? (session.index === 0 ? constant : componentOrZero(comps, session.index)) : totalFromComponents(comps, d, constant);
     }
     const bundle = bundleFromClassStepSession(session);
     if (!bundle) return Poly.zero();
@@ -20290,9 +20383,7 @@
       const rank = session.family === 'character' ? componentOrZero(session.components, 0) : (session.rankComponent || Poly.zero());
       return totalFromComponents(bundle.chComps, d, rank);
     }
-    const total = target === 'todd'
-      ? bundle.todd
-      : (target === 'segre' ? bundle.segre : bundle.sqrtTodd);
+    const total = classStepDerivedBundlePoly(bundle, target, session.geometry, session.dimension);
     return session.index != null ? homogeneousPart(total, session.index) : total;
   }
 
@@ -20668,7 +20759,9 @@
       { value: 'character', label: 'ch', latex: '\\operatorname{ch}' },
       { value: 'todd', label: 'td', latex: '\\operatorname{td}' },
       { value: 'segre', label: 's', latex: 's' },
-      { value: 'sqrtTodd', label: 'sqrt td', latex: '\\sqrt{\\operatorname{td}}' }
+      { value: 'sqrtTodd', label: 'sqrt td', latex: '\\sqrt{\\operatorname{td}}' },
+      { value: 'mukai', label: 'v', latex: 'v' },
+      { value: 'kappa', label: 'kappa', latex: '\\kappa' }
     ];
     return families;
   }
@@ -20822,7 +20915,9 @@
         [
           ['todd', `\\operatorname{td}(${sheaf.labelLatex})`, `td(${sheaf.labelPlain})`],
           ['segre', `s(${sheaf.labelLatex})`, `s(${sheaf.labelPlain})`],
-          ['sqrtTodd', `\\sqrt{\\operatorname{td}}(${sheaf.labelLatex})`, `sqrt td(${sheaf.labelPlain})`]
+          ['sqrtTodd', `\\sqrt{\\operatorname{td}}(${sheaf.labelLatex})`, `sqrt td(${sheaf.labelPlain})`],
+          ['mukai', `v(${sheaf.labelLatex})`, `v(${sheaf.labelPlain})`],
+          ['kappa', `\\kappa(${sheaf.labelLatex})`, `kappa(${sheaf.labelPlain})`]
         ].forEach(([family, latex, plain]) => {
           defs.push({
             type: 'atom',
@@ -20870,12 +20965,14 @@
       const familyData = {
         todd: { poly: classStepFormalSheafDerivedTotal(sheaf, geometry, 'todd', geometry.dim), latex: '\\operatorname{td}', plain: 'td' },
         segre: { poly: classStepFormalSheafDerivedTotal(sheaf, geometry, 'segre', geometry.dim), latex: 's', plain: 's' },
-        sqrtTodd: { poly: classStepFormalSheafDerivedTotal(sheaf, geometry, 'sqrtTodd', geometry.dim), latex: '\\sqrt{\\operatorname{td}}', plain: 'sqrt td' }
+        sqrtTodd: { poly: classStepFormalSheafDerivedTotal(sheaf, geometry, 'sqrtTodd', geometry.dim), latex: '\\sqrt{\\operatorname{td}}', plain: 'sqrt td' },
+        mukai: { poly: classStepFormalSheafDerivedTotal(sheaf, geometry, 'mukai', geometry.dim, classStepDerivedConstantPoly(sheaf, geometry, 'mukai')), latex: 'v', plain: 'v' },
+        kappa: { poly: classStepFormalSheafDerivedTotal(sheaf, geometry, 'kappa', geometry.dim, classStepDerivedConstantPoly(sheaf, geometry, 'kappa')), latex: '\\kappa', plain: 'kappa' }
       }[normalizedFamily];
       if (!familyData) return null;
       poly = degree == null
         ? classStepTotalClassVariablePoly(sheaf, geometry, normalizedFamily)
-        : (classStepTargetUsesFormalDerivedVariables(normalizedFamily) && degree === 0 ? Poly.one() : homogeneousPart(familyData.poly, degree));
+        : (classStepTargetUsesFormalDerivedVariables(normalizedFamily) && degree === 0 ? classStepDerivedConstantPoly(sheaf, geometry, normalizedFamily) : homogeneousPart(familyData.poly, degree));
       latexPrefix = familyData.latex;
       plainPrefix = familyData.plain;
       atomKind = 'sheaf-derived';
@@ -20902,6 +20999,8 @@
     if (family === 'todd' || family === 'td') return 'todd';
     if (family === 'segre' || family === 's') return 'segre';
     if (family === 'sqrtTodd' || family === 'sqrt td') return 'sqrtTodd';
+    if (family === 'mukai' || family === 'v') return 'mukai';
+    if (family === 'kappa') return 'kappa';
     return 'chern';
   }
 
@@ -22001,13 +22100,15 @@
     if (!session) return [];
     if (session.formulaSession) return classStepDisplayRows(session, displayOptions);
     if (session.active && !session.stopped) return classStepDisplayRows(session, displayOptions);
-    if (classStepDisplayOverridePoly(session)) return classStepDisplayRows(session, displayOptions);
+    if ((session.active || classStepTargetUsesFormalDerivedVariables(session.target))
+      && classStepDisplayOverridePoly(session)
+      && displayOptions?.termMode !== 'term') return classStepDisplayRows(session, displayOptions);
     const bundle = bundleFromClassStepSession(session);
     if (!bundle) {
       return classStepDisplayRows(session, displayOptions);
     }
     const rows = buildStandardClassRows(bundle, session.dimension, displayOptions);
-    if (['todd', 'segre', 'sqrtTodd'].includes(session.target) && session.index == null) {
+    if (classStepTargetUsesFormalDerivedVariables(session.target) && session.index == null) {
       const key = classStepTargetRowKey(session);
       return rows.filter((row) => row.key === key);
     }
@@ -22146,7 +22247,7 @@
     if (!id || seen.has(id)) return false;
     seen.add(id);
     const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
-    if (data?.kind === 'classStepTotalClass') return true;
+    if (data?.kind === 'classStepTotalClass' || data?.classStepKind === 'baseSqrtToddTotal') return true;
     if (data?.kind === 'mapHomology' && (data.sourceKey || data.sourceKey === '')) {
       return Object.keys(parseMonoKey(data.sourceKey)).some((sourceId) => (
         classStepVariableReferencesTotalClass(sourceId, seen)
@@ -22409,11 +22510,11 @@
       ...classStepSavedRules(session)
     ];
     const totalExpansionRules = classStepTotalClassExpansionRules(session);
-    const wrappableRules = [...baseRules, ...totalExpansionRules];
+    const wrappableRules = [...totalExpansionRules, ...baseRules];
     const pullbackWrappedRules = classStepPullbackWrappedRules(session, wrappableRules);
     const rules = [
-      ...baseRules,
       ...totalExpansionRules,
+      ...baseRules,
       ...pullbackWrappedRules,
       ...classStepMapWrappedRules(session, [...wrappableRules, ...pullbackWrappedRules]),
       ...classStepZeroPowerAssumptionRules(session)
@@ -22495,6 +22596,11 @@
       if (!sheafObject || !geometry) return;
       const sheaf = sheafFromObject(sheafObject, geometry);
       const family = classFormulaNormalizeClassFamily(data.classStepFamily || 'chern');
+      const grrRule = classStepTotalCharacterGrrRuleForVariable(id, sheaf, geometry, family);
+      if (grrRule) {
+        rules.push(grrRule);
+        return;
+      }
       const rhs = classStepTotalClassExpansionPoly(sheaf, geometry, family).truncate(geometry.dim);
       if (polyEquals(Poly.variable(id), rhs)) return;
       const sheafKey = sheaf?.sourceObject?.id || sheaf?.id || sheafLabelPlain(sheaf);
@@ -22516,10 +22622,72 @@
         rhs: serializeHomologyPoly(rhs)
       });
     };
+    const addBaseSqrtToddFromId = (id) => {
+      if (seen.has(id)) return;
+      const data = VARS.get(id);
+      if (data?.classStepKind !== 'baseSqrtToddTotal') return;
+      seen.add(id);
+      const geometry = geometryByVarietyId(data.geometryId) || session.geometry;
+      if (!geometry) return;
+      const rhs = classStepFormalBaseSqrtToddTotal(geometry, geometry.dim).truncate(geometry.dim);
+      if (polyEquals(Poly.variable(id), rhs)) return;
+      rules.push({
+        id: `step-expand-base-sqrt-td-${variableIdSafe(id)}`,
+        builtin: true,
+        enabled: true,
+        selected: true,
+        stepSourceLabel: 'Expand total class',
+        classStepKind: 'total-class-expansion',
+        classStepDisplayRule: true,
+        classStepApplyAllOccurrences: true,
+        classStepPayoffRule: true,
+        classStepAllowSameLhs: true,
+        classStepRuleGeometry: geometry,
+        classStepDisplayKey: `total-class-expansion:sqrtToddBase:${geometry.varietyId || homologyScopeId(geometry)}`,
+        classStepDisplayLatex: `\\sqrt{\\operatorname{td}(${geometry.labelLatex})}=${formatPolyLatex(rhs)}`,
+        lhs: { powers: { [id]: 1 } },
+        rhs: serializeHomologyPoly(rhs)
+      });
+    };
+    const addDerivedTermExpressionFromId = (id) => {
+      if (seen.has(id)) return;
+      const data = VARS.get(id);
+      if (data?.classStepKind !== 'derivedTermExpression') return;
+      seen.add(id);
+      const sheafObject = state.sheaves.find((item) => item.id === data.sheafObjectId);
+      const geometry = geometryByVarietyId(data.geometryId) || session.geometry;
+      if (!sheafObject || !geometry) return;
+      const sheaf = sheafFromObject(sheafObject, geometry);
+      const target = normalizeClassStepTargetValue(data.classStepDerivedTarget);
+      const total = target === 'mukai'
+        ? classStepFormalMukaiExpandedTotal(sheaf, geometry, geometry.dim)
+        : classStepDerivedDefinitionTotal(sheaf, geometry, target, geometry.dim);
+      const rhs = homogeneousPart(total, data.classStepDegree).truncate(geometry.dim);
+      if (polyEquals(Poly.variable(id), rhs)) return;
+      rules.push({
+        id: `step-expand-derived-term-${variableIdSafe(id)}`,
+        builtin: true,
+        enabled: true,
+        selected: true,
+        stepSourceLabel: classStepDerivedSourceLabel(target),
+        classStepKind: 'derived-term-expansion',
+        classStepDisplayRule: true,
+        classStepApplyAllOccurrences: true,
+        classStepPayoffRule: true,
+        classStepAllowSameLhs: true,
+        classStepRuleGeometry: geometry,
+        classStepDisplayKey: `derived-term-expansion:${target}:${geometry.varietyId || homologyScopeId(geometry)}:${sheafObject.id}:${data.classStepDegree}`,
+        classStepDisplayLatex: `${classStepDerivedTermExpressionLatex(sheaf, geometry, target, data.classStepDegree)}=${formatPolyLatex(rhs)}`,
+        lhs: { powers: { [id]: 1 } },
+        rhs: serializeHomologyPoly(rhs)
+      });
+    };
     const addFromPoly = (poly) => {
       for (const key of Poly.from(poly).terms.keys()) {
         for (const id of Object.keys(parseMonoKey(key))) {
           addFromId(id);
+          addBaseSqrtToddFromId(id);
+          addDerivedTermExpressionFromId(id);
           const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
           if (data?.kind === 'mapHomology' && (data.sourceKey || data.sourceKey === '')) {
             Object.keys(parseMonoKey(data.sourceKey)).forEach(addFromId);
@@ -22533,6 +22701,40 @@
       if (session.rankComponent) addFromPoly(session.rankComponent);
     }
     return rules;
+  }
+
+  function classStepTotalCharacterGrrRuleForVariable(id, sheaf, geometry, family) {
+    const construction = sheaf?.construction || {};
+    if (family !== 'character' || construction.type !== 'pushforward') return null;
+    const map = state.maps.find((item) => item.id === construction.mapId);
+    const sourceSheaf = state.sheaves.find((item) => item.id === construction.sheafId);
+    const domain = state.varieties.find((item) => item.id === map?.domainId);
+    if (!map || !sourceSheaf || !domain || !geometry) return null;
+    const domainGeometry = geometryFromVariety(domain);
+    return {
+      id: `step-grr-total-${map.id || 'map'}-${variableIdSafe(id)}`,
+      builtin: true,
+      enabled: true,
+      selected: true,
+      stepSourceLabel: 'GRR',
+      classStepKind: 'pushforward-grr-total',
+      classStepFamily: 'character',
+      classStepTargetGeometry: geometry,
+      classStepDomainGeometry: domainGeometry,
+      classStepSourceSheafId: sourceSheaf.id,
+      classStepMapId: map.id,
+      classStepConstruction: construction,
+      classStepDisplayRule: true,
+      classStepApplyAllOccurrences: true,
+      classStepAllowSameLhs: true,
+      classStepPayoffRule: true,
+      classStepApplyWithGroup: true,
+      classStepGroupKey: `GRR:${map.id || 'map'}:${sheaf?.sourceObject?.id || sheaf?.baseVarietyId || ''}:character`,
+      classStepDisplayKey: `GRR:${map.id || 'map'}:${sheaf?.sourceObject?.id || sheaf?.baseVarietyId || ''}:character:total`,
+      classStepDisplayLatex: classStepGrrDisplayLatex(map, domainGeometry, geometry, sourceSheaf, sheaf),
+      lhs: { powers: { [id]: 1 } },
+      rhs: []
+    };
   }
 
   function classStepZeroPowerAssumptionRules(session) {
@@ -23179,8 +23381,33 @@
       .flatMap((key) => Object.keys(parseMonoKey(key))));
   }
 
-  function classStepVisibleAndMapSourceVariableIds(session) {
+  function classStepCandidateVariableIds(session) {
     const ids = classStepVisibleVariableIds(session);
+    if (!session || session.formulaSession) return ids;
+    const addFromPoly = (poly) => {
+      for (const key of Poly.from(poly || Poly.zero()).terms.keys()) {
+        Object.keys(parseMonoKey(key)).forEach((id) => ids.add(id));
+      }
+    };
+    classStepRuleApplicationDegrees(session).forEach((degree) => {
+      addFromPoly(componentOrZero(session.components, degree));
+    });
+    if (session.rankComponent) addFromPoly(session.rankComponent);
+    return ids;
+  }
+
+  function classStepCandidateRulePoly(session) {
+    let poly = classStepDisplayPoly(session);
+    if (!session || session.formulaSession) return poly;
+    classStepRuleApplicationDegrees(session).forEach((degree) => {
+      poly = poly.add(componentOrZero(session.components, degree));
+    });
+    if (session.rankComponent) poly = poly.add(session.rankComponent);
+    return poly;
+  }
+
+  function classStepVisibleAndMapSourceVariableIds(session) {
+    const ids = classStepCandidateVariableIds(session);
     for (const id of ids) {
       const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
       if (data?.kind === 'mapHomology' && (data.sourceKey || data.sourceKey === '')) {
@@ -23218,13 +23445,31 @@
       ? sheafFromObject(sheafObject, geometry)
       : (session.sheaf || null);
     if (!sheaf) return null;
-    const total = target === 'sqrtTodd'
-      ? classStepFormalSqrtToddFromToddTotal(sheaf, geometry, geometry.dim)
+    if (target === 'mukai') {
+      const rhs = classStepDerivedTermExpressionVariablePoly(sheaf, geometry, target, degree);
+      return {
+        id: `step-sheaf-${target}-${id}`,
+        builtin: true,
+        enabled: true,
+        stepSourceLabel: classStepDerivedSourceLabel(target),
+        classStepGroupKey: `${target}:sheaf:${sheaf?.sourceObject?.id || sheaf?.id || data.sheafObjectId || ''}`,
+        classStepDisplayKey: `${target}:sheaf:${sheaf?.sourceObject?.id || sheaf?.id || data.sheafObjectId || ''}`,
+        classStepDisplayLatex: `${classStepTargetSymbolLatex(target)}(${sheaf.labelLatex})=\\operatorname{ch}(${sheaf.labelLatex})\\sqrt{\\operatorname{td}(${geometry.labelLatex})}`,
+        classStepApplyAllOccurrences: true,
+        lhs: { powers: { [id]: 1 } },
+        rhs: serializeHomologyPoly(rhs)
+      };
+    }
+    const total = target === 'mukai' || target === 'kappa'
+      ? classStepDerivedDefinitionTotal(sheaf, geometry, target, geometry.dim)
       : classStepDerivedBundlePoly(
         classStepCurrentDerivedRuleBundle(session, sheaf, geometry)
           || classStepFormalDerivedRuleBundle(sheaf, geometry),
-        target
+        target,
+        geometry,
+        geometry.dim
       );
+    if (!(total instanceof Poly)) return null;
     const rhs = homogeneousPart(total, degree);
     if (polyEquals(rhs, Poly.variable(id))) return null;
     return {
@@ -23239,6 +23484,48 @@
       lhs: { powers: { [id]: 1 } },
       rhs: serializeHomologyPoly(rhs)
     };
+  }
+
+  function classStepDerivedTermExpressionVariablePoly(sheaf, geometry, target, degree) {
+    return Poly.variable(classStepDefineDerivedTermExpressionVariable(sheaf, geometry, target, degree));
+  }
+
+  function classStepDerivedTermExpressionVariableId(sheaf, geometry, target, degree) {
+    const prefix = defaultSheafVariablePrefix(sheaf);
+    const safeTarget = target === 'sqrtTodd' ? 'sqrtTd' : target;
+    const scope = variableIdSafe(geometry?.varietyId || homologyScopeId(geometry) || 'base');
+    return `${prefix}${safeTarget}DefinitionTerm${degree}_${scope}`;
+  }
+
+  function classStepDefineDerivedTermExpressionVariable(sheaf, geometry, target, degree) {
+    const id = classStepDerivedTermExpressionVariableId(sheaf, geometry, target, degree);
+    defineVariable(id, degree, classStepDerivedTermExpressionLatex(sheaf, geometry, target, degree), {
+      cohomologyDegree: 2 * degree,
+      plain: classStepDerivedTermExpressionPlain(sheaf, geometry, target, degree),
+      kind: 'classStepDerivedTermExpression',
+      classStepKind: 'derivedTermExpression',
+      classStepDerivedTarget: target,
+      classStepDegree: degree,
+      sheafObjectId: sheaf?.sourceObject?.id || sheaf?.id || null,
+      geometryId: geometry?.varietyId || null
+    });
+    return id;
+  }
+
+  function classStepDerivedTermExpressionLatex(sheaf, geometry, target, degree) {
+    const labelLatex = sheafLabelLatex(sheaf);
+    if (target === 'mukai') {
+      return `\\left(\\operatorname{ch}(${labelLatex})\\sqrt{\\operatorname{td}(${geometry.labelLatex})}\\right)_{${degree}}`;
+    }
+    return `${classStepTargetSymbolLatex(target)}_{${degree}}(${labelLatex})`;
+  }
+
+  function classStepDerivedTermExpressionPlain(sheaf, geometry, target, degree) {
+    const labelPlain = sheafLabelPlain(sheaf);
+    if (target === 'mukai') {
+      return `(ch(${labelPlain})*sqrt td(${geometry.labelPlain}))_${degree}`;
+    }
+    return `${classStepTargetSymbolPlain(target)}_${degree}(${labelPlain})`;
   }
 
   function classStepCurrentDerivedRuleBundle(session, sheaf, geometry) {
@@ -23439,7 +23726,9 @@
 
   function classStepSwitchingRules(session) {
     const rules = [];
-    const ids = classStepVisibleAndMapSourceVariableIds(session);
+    const ids = session?.checkSwitchingRules === true
+      ? classStepVisibleAndMapSourceVariableIds(session)
+      : classStepVisibleAndMapSourceVariableIds({ ...session, components: [], rankComponent: null });
     for (const id of ids) {
       const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
       const source = classStepSheafDefForVariable(id, data, session);
@@ -23511,11 +23800,20 @@
 
   function classStepSwitchingRuleApplies(rule, session) {
     const visible = classStepDisplayPoly(session);
-    if (!classStepRuleAppliesToPoly(visible, rule)) {
-      return classStepMapWrappedRules(session, [rule]).some((variant) => classStepRuleAppliesToPoly(visible, variant));
+    if (classStepRuleAppliesToPoly(visible, rule)) {
+      const converted = applyOneHomologyRuleOnce(visible, rule, session.geometry?.dim ?? MAX_DIMENSION, {});
+      return !polyEquals(visible, converted);
     }
-    const converted = applyOneHomologyRuleOnce(visible, rule, session.geometry?.dim ?? MAX_DIMENSION, {});
-    return !polyEquals(visible, converted);
+    if (classStepMapWrappedRules(session, [rule]).some((variant) => classStepRuleAppliesToPoly(visible, variant))) {
+      return true;
+    }
+    if (session?.checkSwitchingRules !== true) return false;
+    const candidatePoly = classStepCandidateRulePoly(session);
+    if (!classStepRuleAppliesToPoly(candidatePoly, rule)) {
+      return classStepMapWrappedRules(session, [rule]).some((variant) => classStepRuleAppliesToPoly(candidatePoly, variant));
+    }
+    const converted = applyOneHomologyRuleOnce(candidatePoly, rule, session.geometry?.dim ?? MAX_DIMENSION, {});
+    return !polyEquals(candidatePoly, converted);
   }
 
   function classStepProbeSessionWithDisplayPoly(session, displayPoly) {
@@ -23650,7 +23948,7 @@
       : (session.sheaf || null);
     if (!sheaf || !geometry) return null;
     const bundle = classStepComputedBundleForSheaf(session, sheaf, geometry);
-    const total = bundle ? classStepDerivedBundlePoly(bundle, target) : null;
+    const total = bundle ? classStepDerivedBundlePoly(bundle, target, geometry, geometry.dim) : null;
     if (!(total instanceof Poly)) return null;
     const rhs = homogeneousPart(total, degree).truncate(geometry.dim);
     const sheafKey = sheaf?.sourceObject?.id || sheaf?.id || sheafLabelPlain(sheaf);
@@ -23742,7 +24040,7 @@
   }
 
   function classStepMapWrappedRules(session, rules) {
-    const ids = classStepVisibleVariableIds(session);
+    const ids = classStepCandidateVariableIds(session);
     const out = [];
     for (const id of ids) {
       const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
@@ -23986,21 +24284,30 @@
   }
 
   function classStepTargetUsesFormalDerivedVariables(target) {
-    return target === 'todd' || target === 'segre' || target === 'sqrtTodd';
+    return target === 'todd' || target === 'segre' || target === 'sqrtTodd' || target === 'mukai' || target === 'kappa';
   }
 
   function classStepDerivedSourceLabel(target) {
     if (target === 'todd') return 'Todd';
     if (target === 'segre') return 'Segre';
     if (target === 'sqrtTodd') return 'sqrt Todd';
+    if (target === 'mukai') return 'Mukai vector';
+    if (target === 'kappa') return 'Kappa';
     return 'Derived class';
   }
 
-  function classStepDerivedBundlePoly(bundle, target) {
+  function classStepDerivedBundlePoly(bundle, target, geometry = null, d = geometry?.dim ?? bundle?.dimension ?? MAX_DIMENSION) {
     if (target === 'todd') return bundle.todd;
     if (target === 'segre') return bundle.segre;
     if (target === 'sqrtTodd') return bundle.sqrtTodd;
+    if (target === 'mukai') return mukaiVectorPoly(bundle, d, { geometry });
+    if (target === 'kappa') return kappaClassPoly(bundle, d, { geometry });
     return Poly.zero();
+  }
+
+  function classStepDerivedConstantPoly(sheaf, geometry, target) {
+    if (target === 'mukai' || target === 'kappa') return classStepRankPolyForFormalData(buildClassStepFormalData(geometry, sheaf, 'character'));
+    return Poly.one();
   }
 
   function classStepFormalSheafDerivedComponents(sheaf, geometry, target, d = geometry?.dim ?? MAX_DIMENSION) {
@@ -24009,8 +24316,8 @@
     return comps;
   }
 
-  function classStepFormalSheafDerivedTotal(sheaf, geometry, target, d = geometry?.dim ?? MAX_DIMENSION) {
-    return totalFromComponents(classStepFormalSheafDerivedComponents(sheaf, geometry, target, d), d, Poly.one());
+  function classStepFormalSheafDerivedTotal(sheaf, geometry, target, d = geometry?.dim ?? MAX_DIMENSION, constant = Poly.one()) {
+    return totalFromComponents(classStepFormalSheafDerivedComponents(sheaf, geometry, target, d), d, constant);
   }
 
   function classStepFormalSheafDerivedVariableId(sheaf, geometry, target, degree) {
@@ -24038,6 +24345,8 @@
   function classStepDerivedVariableLatex(target, degree, labelLatex) {
     if (target === 'segre') return `s_{${degree}}(${labelLatex})`;
     if (target === 'sqrtTodd') return `\\left(\\sqrt{\\operatorname{td}}\\right)_{${degree}}(${labelLatex})`;
+    if (target === 'mukai') return `v_{${degree}}(${labelLatex})`;
+    if (target === 'kappa') return `\\kappa_{${degree}}(${labelLatex})`;
     return `\\operatorname{td}_{${degree}}(${labelLatex})`;
   }
 
@@ -24971,11 +25280,16 @@
         if (!polyEquals(beforeRank, afterRank)) changed = true;
         session.rankComponent = afterRank;
       }
-      if (changed) {
-        classStepClearDisplayOverrides(session);
-      } else if (classStepUsesDerivedTarget(session) || rules.some((rule) => rule?.classStepDisplayRule === true) || classStepDisplayOverridePoly(session)) {
+      const shouldUpdateDisplay = classStepUsesDerivedTarget(session)
+        || (changed && session.index == null && !session.formulaSession)
+        || rules.some((rule) => rule?.classStepDisplayRule === true)
+        || classStepDisplayOverridePoly(session);
+      if (shouldUpdateDisplay) {
         const beforeDisplay = classStepDisplayPoly(session);
-        const afterDisplay = applyClassStepRulesForStep(beforeDisplay, rules, session, {
+        const currentTotalDisplay = changed && session.index == null && !session.formulaSession
+          ? classStepSyncCurrentTotalDisplay(session)
+          : null;
+        const afterDisplay = currentTotalDisplay || applyClassStepRulesForStep(beforeDisplay, rules, session, {
           simplify: simplifySelected,
           oncePerRule,
           onePass,
@@ -24985,6 +25299,8 @@
           changed = true;
           classStepSetDisplayOverride(session, afterDisplay);
         }
+      } else if (changed) {
+        classStepClearDisplayOverrides(session);
       }
       session.message = changed ? 'Applied selected rules.' : 'Selected rules made no change.';
     } catch (error) {
@@ -25101,13 +25417,20 @@
   }
 
   function classStepMaterializeRule(session, rule, options = {}) {
-    if (rule?.classStepKind !== 'pushforward-grr') return rule;
+    if (rule?.classStepKind !== 'pushforward-grr' && rule?.classStepKind !== 'pushforward-grr-total') return rule;
     const map = state.maps.find((item) => item.id === rule.classStepMapId);
     const sourceSheafObject = state.sheaves.find((item) => item.id === rule.classStepSourceSheafId);
     const targetGeometry = rule.classStepTargetGeometry || session.geometry;
     const domainGeometry = rule.classStepDomainGeometry;
     if (!map || !sourceSheafObject || !targetGeometry || !domainGeometry) return rule;
     const rhsComps = classStepPushforwardFormalGrrComponents(targetGeometry, domainGeometry, sourceSheafObject, map, rule.classStepConstruction || {}, options);
+    if (rule.classStepKind === 'pushforward-grr-total') {
+      const rhs = totalFromComponents(rhsComps, targetGeometry.dim, componentOrZero(rhsComps, 0));
+      return {
+        ...rule,
+        rhs: serializeHomologyPoly(rhs)
+      };
+    }
     const familyComps = rule.classStepFamily === 'chern' && rule.classStepDegree > 0
       ? classStepChernComponentsFromCharacter(rhsComps, targetGeometry.dim)
       : rhsComps;
@@ -25323,7 +25646,7 @@
       recordSymbolicWarning(`kappa(${bundle.labelPlain || 'E'}) assumes ${formatPolyPlain(rank)} != 0.`);
     }
     const rankInverse = reciprocalRuleCoefficientFactor(rank);
-    const exponent = componentOrZero(bundle.cComps, 1).mul(rankInverse, d).scale(fraction(-1));
+    const exponent = componentOrZero(bundle.chComps, 1).mul(rankInverse, d).scale(fraction(-1));
     const poly = bundleChernCharacterTotal(bundle, d, `${constructionSafeId(bundle.labelPlain || 'E')}KappaChRank`)
       .mul(expPoly(exponent, d), d);
     return { undefined: false, poly };
@@ -25358,12 +25681,12 @@
       if (classFamilyEnabled(options, 'segre')) rows.push({ label: `s_${i}(${bundle.labelPlain})`, labelLatex: `s${suffix}(${bundle.labelLatex})`, key: `root_segre_${i}`, latex: term.segre.latex, plain: term.segre.plain });
       if (classFamilyEnabled(options, 'sqrtTodd')) rows.push({ label: `sqrt td_${i}(${bundle.labelPlain})`, labelLatex: `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, key: `root_sqrtTodd_${i}`, latex: term.sqrtTodd.latex, plain: term.sqrtTodd.plain });
       if (classFamilyEnabled(options, 'mukai')) {
-        const mukai = mukaiVectorPoly(bundle, options.geometry?.dim ?? MAX_DIMENSION, options);
-        if (mukai) rows.push(classPolyRow(`v_${i}(${bundle.labelPlain})`, `v_{${i}}(${bundle.labelLatex})`, `root_mukai_${i}`, homogeneousPart(mukai, i), options));
+        const termDisplay = rootMukaiTermDisplay(i, total);
+        rows.push({ label: `v_${i}(${bundle.labelPlain})`, labelLatex: `v_{${i}}(${bundle.labelLatex})`, key: `root_mukai_${i}`, latex: termDisplay.latex, plain: termDisplay.plain });
       }
       if (classFamilyEnabled(options, 'kappa')) {
-        const row = kappaClassDisplayRow(`kappa_${i}(${bundle.labelPlain})`, `\\kappa_{${i}}(${bundle.labelLatex})`, `root_kappa_${i}`, bundle, options.geometry?.dim ?? MAX_DIMENSION, options, i);
-        if (row) rows.push(row);
+        const termDisplay = rootKappaTermDisplay(i, total, rankLatex, rankPlain);
+        rows.push({ label: `kappa_${i}(${bundle.labelPlain})`, labelLatex: `\\kappa_{${i}}(${bundle.labelLatex})`, key: `root_kappa_${i}`, latex: termDisplay.latex, plain: termDisplay.plain });
       }
       return rows;
     }
@@ -25374,12 +25697,12 @@
     if (classFamilyEnabled(options, 'segre')) rows.push({ label: `s(${bundle.labelPlain})`, labelLatex: `s(${bundle.labelLatex})`, key: 'root_segre', latex: total.segre.latex, plain: total.segre.plain });
     if (classFamilyEnabled(options, 'sqrtTodd')) rows.push({ label: `sqrt td(${bundle.labelPlain})`, labelLatex: `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, key: 'root_sqrtTodd', latex: total.sqrtTodd.latex, plain: total.sqrtTodd.plain });
     if (classFamilyEnabled(options, 'mukai')) {
-      const mukai = mukaiVectorPoly(bundle, options.geometry?.dim ?? MAX_DIMENSION, options);
-      if (mukai) rows.push(classPolyRow(`v(${bundle.labelPlain})`, `v(${bundle.labelLatex})`, 'root_mukai', mukai, options));
+      const display = rootMukaiTotalDisplay(total);
+      rows.push({ label: `v(${bundle.labelPlain})`, labelLatex: `v(${bundle.labelLatex})`, key: 'root_mukai', latex: display.latex, plain: display.plain });
     }
     if (classFamilyEnabled(options, 'kappa')) {
-      const row = kappaClassDisplayRow(`kappa(${bundle.labelPlain})`, `\\kappa(${bundle.labelLatex})`, 'root_kappa', bundle, options.geometry?.dim ?? MAX_DIMENSION, options);
-      if (row) rows.push(row);
+      const display = rootKappaTotalDisplay(total, rankLatex, rankPlain);
+      rows.push({ label: `kappa(${bundle.labelPlain})`, labelLatex: `\\kappa(${bundle.labelLatex})`, key: 'root_kappa', latex: display.latex, plain: display.plain });
     }
     return rows;
   }
@@ -25454,6 +25777,50 @@
     };
   }
 
+  function rootMukaiTotalDisplay(total) {
+    return multiplyDisplayTerms(total.character, total.sqrtTodd);
+  }
+
+  function rootMukaiTermDisplay(degree, total) {
+    if (degree === 0) return { latex: `\\left[${rootMukaiTotalDisplay(total).latex}\\right]_{0}`, plain: `degree_0(${rootMukaiTotalDisplay(total).plain})` };
+    return coefficientLatexPlain(rootMukaiTotalDisplay(total), degree);
+  }
+
+  function rootKappaTotalDisplay(total, rankLatex, rankPlain) {
+    const expDisplay = rootKappaExponentialDisplay(rankLatex, rankPlain);
+    return multiplyDisplayTerms(total.character, expDisplay);
+  }
+
+  function rootKappaTermDisplay(degree, total, rankLatex, rankPlain) {
+    return coefficientLatexPlain(rootKappaTotalDisplay(total, rankLatex, rankPlain), degree);
+  }
+
+  function rootKappaExponentialDisplay(rankLatex, rankPlain) {
+    return {
+      latex: `\\exp\\left(-\\frac{1}{${rankLatex}}\\sum_{j=1}^{${rankLatex}}\\alpha_j\\right)`,
+      plain: `exp(-1/${rankPlain}*sum_{j=1}^${rankPlain} alpha_j)`
+    };
+  }
+
+  function multiplyDisplayTerms(left, right) {
+    if (!left || !right) return left || right || { latex: '0', plain: '0' };
+    if (left.latex === '0' || right.latex === '0') return { latex: '0', plain: '0' };
+    if (left.latex === '1') return right;
+    if (right.latex === '1') return left;
+    return {
+      latex: `${displayTermFactorLatex(left.latex)}${displayTermFactorLatex(right.latex)}`,
+      plain: `${displayTermFactorPlain(left.plain)}*${displayTermFactorPlain(right.plain)}`
+    };
+  }
+
+  function displayTermFactorLatex(value) {
+    return /[+\-]/.test(String(value).replace(/^\-/, '')) ? `\\left(${value}\\right)` : value;
+  }
+
+  function displayTermFactorPlain(value) {
+    return /[+\-]/.test(String(value).replace(/^\-/, '')) ? `(${value})` : value;
+  }
+
   function explicitRootCharacterTerm(degree, rank) {
     const denom = factorialBigInt(degree).toString();
     const terms = Array.from({ length: rank }, (_, index) => {
@@ -25499,12 +25866,10 @@
       if (classFamilyEnabled(options, 'segre')) rows.push({ label: `s_${i}(${bundle.labelPlain})`, labelLatex: `s${suffix}(${bundle.labelLatex})`, key: `root_segre_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.segre, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.segre, i)) });
       if (classFamilyEnabled(options, 'sqrtTodd')) rows.push({ label: `sqrt td_${i}(${bundle.labelPlain})`, labelLatex: `\\left(\\sqrt{\\operatorname{td}}\\right)${suffix}(${bundle.labelLatex})`, key: `root_sqrtTodd_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.sqrtTodd, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.sqrtTodd, i)) });
       if (classFamilyEnabled(options, 'mukai')) {
-        const mukai = mukaiVectorPoly(bundle, d, options);
-        if (mukai) rows.push(classPolyRow(`v_${i}(${bundle.labelPlain})`, `v_{${i}}(${bundle.labelLatex})`, `root_mukai_${i}`, homogeneousPart(mukai, i), options));
+        rows.push({ label: `v_${i}(${bundle.labelPlain})`, labelLatex: `v_{${i}}(${bundle.labelLatex})`, key: `root_mukai_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.mukai, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.mukai, i)) });
       }
       if (classFamilyEnabled(options, 'kappa')) {
-        const row = kappaClassDisplayRow(`kappa_${i}(${bundle.labelPlain})`, `\\kappa_{${i}}(${bundle.labelLatex})`, `root_kappa_${i}`, bundle, d, options, i);
-        if (row) rows.push(row);
+        rows.push({ label: `kappa_${i}(${bundle.labelPlain})`, labelLatex: `\\kappa_{${i}}(${bundle.labelLatex})`, key: `root_kappa_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.kappa, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.kappa, i)) });
       }
       return rows;
     }
@@ -25515,12 +25880,10 @@
     if (classFamilyEnabled(options, 'segre')) rows.push({ label: `s(${bundle.labelPlain})`, labelLatex: `s(${bundle.labelLatex})`, key: 'root_segre', latex: formatPolyLatex(rootDisplay.segre), plain: formatPolyPlain(rootDisplay.segre) });
     if (classFamilyEnabled(options, 'sqrtTodd')) rows.push({ label: `sqrt td(${bundle.labelPlain})`, labelLatex: `\\sqrt{\\operatorname{td}(${bundle.labelLatex})}`, key: 'root_sqrtTodd', latex: formatPolyLatex(rootDisplay.sqrtTodd), plain: formatPolyPlain(rootDisplay.sqrtTodd) });
     if (classFamilyEnabled(options, 'mukai')) {
-      const mukai = mukaiVectorPoly(bundle, d, options);
-      if (mukai) rows.push(classPolyRow(`v(${bundle.labelPlain})`, `v(${bundle.labelLatex})`, 'root_mukai', mukai, options));
+      rows.push({ label: `v(${bundle.labelPlain})`, labelLatex: `v(${bundle.labelLatex})`, key: 'root_mukai', latex: formatPolyLatex(rootDisplay.mukai), plain: formatPolyPlain(rootDisplay.mukai) });
     }
     if (classFamilyEnabled(options, 'kappa')) {
-      const row = kappaClassDisplayRow(`kappa(${bundle.labelPlain})`, `\\kappa(${bundle.labelLatex})`, 'root_kappa', bundle, d, options);
-      if (row) rows.push(row);
+      rows.push({ label: `kappa(${bundle.labelPlain})`, labelLatex: `\\kappa(${bundle.labelLatex})`, key: 'root_kappa', latex: formatPolyLatex(rootDisplay.kappa), plain: formatPolyPlain(rootDisplay.kappa) });
     }
     return rows;
   }
@@ -25528,12 +25891,19 @@
   function buildExpandedRootPolynomials(rank, d) {
     const roots = chernRootVariables(rank);
     const pComps = powerSumsFromRoots(roots, d);
+    const ch = chComponentsFromPowerSums(pComps, d);
+    const character = positiveTotal(ch, d);
+    const sqrtTodd = multiplyRootSeries(roots, sqrtToddFactorCoefficients(d), d);
+    const rootSum = roots.reduce((sum, root) => sum.add(root), Poly.zero());
+    const kappaExp = expPoly(rootSum.scale(fraction(-1, rank)), d);
     return {
       chern: multiplyRootFactors(roots.map((root) => Poly.one().add(root)), d),
-      character: positiveTotal(chComponentsFromPowerSums(pComps, d), d),
+      character,
       todd: multiplyRootSeries(roots, toddFactorCoefficients(d), d),
       segre: multiplyRootSeries(roots, segreFactorCoefficients(d), d),
-      sqrtTodd: multiplyRootSeries(roots, sqrtToddFactorCoefficients(d), d)
+      sqrtTodd,
+      mukai: Poly.constant(rank).add(character).mul(sqrtTodd, d),
+      kappa: Poly.constant(rank).add(character).mul(kappaExp, d)
     };
   }
 
@@ -25613,6 +25983,8 @@
       if (classFamilyEnabled(options, 'todd')) polys.push(homogeneousPart(display.todd, i));
       if (classFamilyEnabled(options, 'segre')) polys.push(homogeneousPart(display.segre, i));
       if (classFamilyEnabled(options, 'sqrtTodd')) polys.push(homogeneousPart(display.sqrtTodd, i));
+      if (classFamilyEnabled(options, 'mukai')) polys.push(homogeneousPart(display.mukai, i));
+      if (classFamilyEnabled(options, 'kappa')) polys.push(homogeneousPart(display.kappa, i));
       return polys.some((poly) => poly.terms.size > MAX_ROOT_EXPANSION_MONOMIALS);
     }
     const polys = [];
@@ -25621,6 +25993,8 @@
     if (classFamilyEnabled(options, 'todd')) polys.push(display.todd);
     if (classFamilyEnabled(options, 'segre')) polys.push(display.segre);
     if (classFamilyEnabled(options, 'sqrtTodd')) polys.push(display.sqrtTodd);
+    if (classFamilyEnabled(options, 'mukai')) polys.push(display.mukai);
+    if (classFamilyEnabled(options, 'kappa')) polys.push(display.kappa);
     return polys.some((poly) => poly.terms.size > MAX_ROOT_EXPANSION_MONOMIALS);
   }
 
@@ -31253,8 +31627,19 @@
     const storedRule = storedSheafHomologyRuleForDef(def);
     if (storedRule) return storedRule;
     const defaultRule = mapHomologyRuleForVariable(defaultRules, def.id, { includeBuiltin: true });
-    if (defaultRule) return defaultRule;
+    if (defaultRule && !sheafHomologyDefaultRuleLooksStale(def, defaultRule)) return defaultRule;
+    if (defaultRule?.builtin && def?.sourceGeometry) {
+      const sheaf = sheafFromObject(def.sheafObject || {}, def.sourceGeometry);
+      const bundle = sheaf ? buildBundleForSheaf(def.sourceGeometry, sheaf, { geometry: def.sourceGeometry }) : null;
+      const fallback = bundle ? mapHomologyRuleForVariable(defaultSheafHomologyRulesFromBundle(sheaf, def.sourceGeometry, bundle), def.id, { includeBuiltin: true }) : null;
+      if (fallback && !sheafHomologyDefaultRuleLooksStale(def, fallback)) return fallback;
+    }
     return null;
+  }
+
+  function sheafHomologyDefaultRuleLooksStale(def, rule) {
+    if (!rule?.builtin || !Array.isArray(rule.rhs) || rule.rhs.length) return false;
+    return !!def?.sourceGeometry && !!def?.sheafObject?.construction;
   }
 
   function storedSheafHomologyRuleForDef(def) {
@@ -35713,8 +36098,8 @@
     const entry = compactSerializable({
       id: sanitizePresetId(item.id) || `step-import-${hashString(stableJson(item))}`,
       kind,
-      family: sanitizePresetEnum(item.family, ['chern', 'character', 'todd', 'segre', 'sqrtTodd', 'formula'], 'formula'),
-      target: sanitizePresetEnum(item.target || item.family, ['chern', 'character', 'todd', 'segre', 'sqrtTodd', 'formula'], 'formula'),
+      family: sanitizePresetEnum(item.family, ['chern', 'character', 'todd', 'segre', 'sqrtTodd', 'mukai', 'kappa', 'formula'], 'formula'),
+      target: sanitizePresetEnum(item.target || item.family, ['chern', 'character', 'todd', 'segre', 'sqrtTodd', 'mukai', 'kappa', 'formula'], 'formula'),
       degree: item.degree == null ? null : normalizedInt(item.degree, 0, MAX_DIMENSION, 0),
       dimension: item.dimension == null ? null : normalizedInt(item.dimension, 0, MAX_DIMENSION, MAX_DIMENSION),
       geometryId: sanitizePresetId(item.geometryId),
@@ -35751,7 +36136,7 @@
       formulaSession,
       stopped: session.stopped === true,
       family,
-      target: sanitizePresetEnum(session.target || session.family, ['chern', 'character', 'todd', 'segre', 'sqrtTodd', 'formula'], family),
+      target: sanitizePresetEnum(session.target || session.family, ['chern', 'character', 'todd', 'segre', 'sqrtTodd', 'mukai', 'kappa', 'formula'], family),
       index: session.index == null ? null : normalizedInt(session.index, 0, dimension, 0),
       layout: sanitizePresetEnum(session.layout, ['wide', 'side'], 'wide'),
       checkSwitchingRules: session.checkSwitchingRules === true,
@@ -37900,8 +38285,41 @@
   function formatRuleCoefficientPlain(value) {
     if (value instanceof Fraction) return formatFractionPlain(value);
     value = Poly.from(value);
-    const body = formatPolyPlain(value);
+    const body = formatRuleCoefficientPolyPlain(value);
     return value.terms.size > 1 ? `(${body})` : body;
+  }
+
+  function formatRuleCoefficientPolyPlain(poly) {
+    poly = stripUnitPowersFromPoly(poly);
+    if (poly.isZero()) return '0';
+    let out = '';
+    sortedTerms(poly).forEach(([key, coeff], index) => {
+      const sign = coeff.sign();
+      const body = formatRuleCoefficientTermPlain(key, coeff.abs());
+      if (index === 0) out += sign < 0 ? `-${body}` : body;
+      else out += sign < 0 ? ` - ${body}` : ` + ${body}`;
+    });
+    return out;
+  }
+
+  function formatRuleCoefficientTermPlain(key, absCoeff) {
+    const powers = stripUnitPowers(parseMonoKey(key));
+    const numeratorPowers = {};
+    const denominatorPowers = {};
+    for (const [id, exp] of Object.entries(powers)) {
+      if (exp > 0) numeratorPowers[id] = exp;
+      else if (exp < 0) denominatorPowers[id] = -exp;
+    }
+    const denominatorMono = monomialPlain(monoKey(denominatorPowers));
+    if (!denominatorMono) return formatTermPlain(key, absCoeff);
+    const numeratorMono = monomialPlain(monoKey(numeratorPowers));
+    const numeratorParts = [];
+    if (absCoeff.num !== 1n || !numeratorMono) numeratorParts.push(absCoeff.num.toString());
+    if (numeratorMono) numeratorParts.push(numeratorMono);
+    const denominatorParts = [];
+    if (absCoeff.den !== 1n) denominatorParts.push(absCoeff.den.toString());
+    denominatorParts.push(denominatorMono);
+    return `${numeratorParts.join('*') || '1'}/(${denominatorParts.join('*')})`;
   }
 
   function sheafLabelLatex(sheaf) {

@@ -34,6 +34,7 @@ function loadCalculator() {
     buildClassStepFallbackResult,
     createClassStepSession,
     classStepDisplayPoly,
+    classStepSyncCurrentTotalDisplay,
     collectClassStepRuleCandidates,
     classStepMaterializeRule,
     renderClassStepPanel,
@@ -60,6 +61,7 @@ function loadCalculator() {
     classFormulaHomologyTokenDefs,
     classFormulaSheafTokenDefs,
     classFormulaSheafTokenForSelection,
+    classFormulaClassFamiliesForGeometry,
     classFormulaMapTokenDefs,
     classFormulaFunctorTemplateToken,
     classFormulaOperatorToken,
@@ -483,6 +485,51 @@ function testDualSheafNameMergesExistingExponent() {
   const sheaf = api.sheafFromObject(dual, geometry);
   const result = api.buildCharacteristicClasses(geometry, sheaf);
   assert.strictEqual(result.bundle.labelLatex, '\\mathcal{E}^{1,\\vee}');
+}
+
+function testMukaiAndKappaRespectClassBasis() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X' }];
+  api.refs.classFamilyToggles = [
+    { checked: true, dataset: { classFamilyToggle: 'mukai' } },
+    { checked: true, dataset: { classFamilyToggle: 'kappa' } }
+  ];
+  api.refs.classTermOnly = { checked: false };
+  api.refs.classBracketDisplay = { checked: false };
+  api.refs.classTermIndex = { value: '1' };
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const rowsForBasis = (basis, rootForm = 'expanded') => {
+    api.refs.rootForm = { value: rootForm };
+    const sheaf = api.sheafFromObject({ id: `E_${basis}`, type: 'abstract', basis, rank: '2', name: 'E', baseVarietyId: 'X' }, geometry);
+    return api.buildCharacteristicClasses(geometry, sheaf).classRows;
+  };
+  const chernRows = rowsForBasis('chern');
+  const chernKappa = chernRows.find((row) => row.key === 'kappa')?.plain || '';
+  const chernMukai = chernRows.find((row) => row.key === 'mukai')?.plain || '';
+  assert(chernKappa.includes('c_1(E)'), chernKappa);
+  assert(chernKappa.includes('c_2(E)'), chernKappa);
+  assert(!chernKappa.includes('ch_1(E)'), chernKappa);
+  assert(chernMukai.includes('c_1(E)'), chernMukai);
+  assert(!chernMukai.includes('ch_1(E)'), chernMukai);
+
+  const characterRows = rowsForBasis('character');
+  const characterKappa = characterRows.find((row) => row.key === 'kappa')?.plain || '';
+  const characterMukai = characterRows.find((row) => row.key === 'mukai')?.plain || '';
+  assert(characterKappa.includes('ch_1(E)'), characterKappa);
+  assert(characterKappa.includes('ch_2(E)'), characterKappa);
+  assert(!characterKappa.includes('c_1(E)'), characterKappa);
+  assert(characterMukai.includes('ch_1(E)'), characterMukai);
+  assert(!characterMukai.includes('c_1(E)'), characterMukai);
+
+  const rootRows = rowsForBasis('roots', 'expanded');
+  const rootKappa = rootRows.find((row) => row.key === 'root_kappa')?.plain || '';
+  const rootMukai = rootRows.find((row) => row.key === 'root_mukai')?.plain || '';
+  assert(rootKappa.includes('alpha_1'), rootKappa);
+  assert(!rootKappa.includes('c_1(E)'), rootKappa);
+  assert(!rootKappa.includes('ch_1(E)'), rootKappa);
+  assert(rootMukai.includes('alpha_1'), rootMukai);
+  assert(!rootMukai.includes('c_1(E)'), rootMukai);
+  assert(!rootMukai.includes('ch_1(E)'), rootMukai);
 }
 
 function testDualSheafSimplifiesLineAndStructureSheaves() {
@@ -2934,6 +2981,45 @@ function testClassStepDerivedCharacteristicTargets() {
   const segreRows = api.buildClassRowsFromStepSession(segreSession, api.classDisplayOptions(geometry, sheaf));
   assert.strictEqual(segreRows.length, 1);
   assert.strictEqual(segreRows[0].key, 'segre');
+
+  const mukaiSession = api.createClassStepSession(result, 'chern', 1, 'mukai');
+  assert.strictEqual(mukaiSession.family, 'chern');
+  assert.strictEqual(mukaiSession.target, 'mukai');
+  assert.strictEqual(api.buildClassRowsFromStepSession(mukaiSession, api.classDisplayOptions(geometry, sheaf))[0].label, 'v_1(E)');
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(mukaiSession)), 'v_1(E)');
+  const mukaiRule = api.collectClassStepRuleCandidates(mukaiSession).find((candidate) => candidate.sourceLabel === 'Mukai vector');
+  assert(mukaiRule);
+  const mukaiPlain = api.formatPolyPlain(api.homologyRuleRhsPoly(mukaiRule.rule));
+  assert.strictEqual(mukaiPlain, '(ch(E)*sqrt td(X))_1');
+  mukaiSession.displayOverrides = { 'mukai:1': api.homologyRuleRhsPoly(mukaiRule.rule) };
+  const mukaiExpandRule = api.collectClassStepRuleCandidates(mukaiSession).find((candidate) => candidate.sourceLabel === 'Mukai vector');
+  assert(mukaiExpandRule);
+  const mukaiExpandedPlain = api.formatPolyPlain(api.homologyRuleRhsPoly(api.classStepMaterializeRule(mukaiSession, mukaiExpandRule.rule)));
+  assert(mukaiExpandedPlain.includes('ch_1(E)'), mukaiExpandedPlain);
+  assert(mukaiExpandedPlain.includes('td_1(X)') || mukaiExpandedPlain.includes('r(E)'), mukaiExpandedPlain);
+
+  const kappaSession = api.createClassStepSession(result, 'chern', 2, 'kappa');
+  assert.strictEqual(kappaSession.family, 'chern');
+  assert.strictEqual(kappaSession.target, 'kappa');
+  assert.strictEqual(api.buildClassRowsFromStepSession(kappaSession, api.classDisplayOptions(geometry, sheaf))[0].label, 'kappa_2(E)');
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(kappaSession)), 'kappa_2(E)');
+  const kappaRule = api.collectClassStepRuleCandidates(kappaSession).find((candidate) => candidate.sourceLabel === 'Kappa');
+  assert(kappaRule);
+  const kappaPlain = api.formatPolyPlain(api.homologyRuleRhsPoly(kappaRule.rule));
+  assert(kappaPlain.includes('ch_2(E)'), kappaPlain);
+  assert(kappaPlain.includes('ch_1(E)'), kappaPlain);
+  assert(!kappaPlain.includes('c_1(E)'), kappaPlain);
+
+  api.state.sheaves[0].rank = 'r';
+  const symbolicSheaf = api.sheafFromObject(api.state.sheaves[0], geometry);
+  const symbolicResult = api.buildClassStepFallbackResult(geometry, symbolicSheaf, { message: 'test' });
+  const symbolicKappaSession = api.createClassStepSession(symbolicResult, 'chern', 2, 'kappa');
+  const symbolicKappaRule = api.collectClassStepRuleCandidates(symbolicKappaSession).find((candidate) => candidate.sourceLabel === 'Kappa');
+  assert(symbolicKappaRule);
+  const symbolicKappaPlain = api.formatPolyPlain(api.homologyRuleRhsPoly(symbolicKappaRule.rule));
+  assert(symbolicKappaPlain.includes('r(E)^-1') || symbolicKappaPlain.includes('1/(r(E))'), symbolicKappaPlain);
+  assert(symbolicKappaPlain.includes('ch_1(E)^2'), symbolicKappaPlain);
+  assert(!symbolicKappaPlain.includes('c_1(E)'), symbolicKappaPlain);
 }
 
 function testClassStepToddRuleStopsAtChernClasses() {
@@ -3074,13 +3160,24 @@ function testClassFormulaBuilderTokenSourcesAndValidation() {
   assert(homologyTokens.some((token) => token.plain === 'A'));
   assert(!homologyTokens.some((token) => token.atomKind === 'map-pullback' || token.plain.includes('f^*')), homologyTokens.map((token) => token.plain).join(', '));
   assert(sheafTokens.some((token) => token.plain === 'c_1(E)'));
+  assert(sheafTokens.some((token) => token.plain === 'v(E)'));
+  assert(sheafTokens.some((token) => token.plain === 'kappa(E)'));
   assert(!sheafTokens.some((token) => token.plain.includes('F')));
   assert(mapTokens.some((token) => token.type === 'functor-template' && token.operation === 'pullback' && token.sourceGeometryId === 'Y'));
+  const classFamilies = api.classFormulaClassFamiliesForGeometry(xGeometry).map((family) => family.value);
+  assert(classFamilies.includes('mukai'));
+  assert(classFamilies.includes('kappa'));
 
   const selectedTotal = api.classFormulaSheafTokenForSelection(xGeometry, 'E', 'chern', '');
   assert.strictEqual(selectedTotal.plain, 'c(E)');
   const selectedDegree = api.classFormulaSheafTokenForSelection(xGeometry, 'E', 'chern', '1');
   assert.strictEqual(selectedDegree.plain, 'c_1(E)');
+  const selectedMukai = api.classFormulaSheafTokenForSelection(xGeometry, 'E', 'mukai', '1');
+  assert.strictEqual(selectedMukai.plain, 'v_1(E)');
+  api.state.classFormulaBuilder.tokens = [selectedMukai];
+  const mukaiValid = api.validateClassFormulaBuilder();
+  assert.strictEqual(mukaiValid.ok, true, mukaiValid.message);
+  assert.strictEqual(api.formatPolyPlain(mukaiValid.poly), 'v_1(E)');
   const missingSheaf = api.classFormulaSheafTokenForSelection(xGeometry, 'F', 'chern', '1');
   assert.strictEqual(missingSheaf, null);
 
@@ -3202,6 +3299,7 @@ function testClassFormulaBuilderRendersSelectedClassButtonAndEditableTokens() {
   api.refs.classFormulaCheck = { disabled: true };
   api.refs.classFormulaCompute = { disabled: true };
 
+  api.state.classFormulaEditorOpen = true;
   api.setClassFormulaBuilderVariety('X');
   api.state.classFormulaBuilder.classFamily = 'chern';
   api.state.classFormulaBuilder.classDegree = '3';
@@ -3547,6 +3645,38 @@ function testClassStepPushforwardOffersGrrRule() {
   assert(nextCandidates.includes('Todd'));
 }
 
+function testClassStepTotalCharacterGrrAppliesToVisibleTotal() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'C', type: 'curve', dim: '1', name: 'C', genus: '3', homology: { classes: { unit: { symbol: '1' }, point: { symbol: '[p]' } } } },
+    { id: 'J', type: 'abelian', dim: '3', name: 'J', genus: '3', homology: { classes: { theta: { symbol: '\\Theta' }, unit: { symbol: '1' }, point: { symbol: '[p]' } }, rules: [] }, construction: { type: 'jacobian', curveId: 'C' } }
+  ];
+  api.state.maps = [{ id: 'AJ', name: 'AJ', domainKind: 'variety', domainId: 'C', codomainKind: 'variety', codomainId: 'J', construction: { type: 'abel-jacobi', curveId: 'C', jacobianId: 'J' } }];
+  api.state.sheaves = [
+    { id: 'OC', type: 'structure', basis: 'chern', rank: '1', name: 'O_C', baseVarietyId: 'C' },
+    { id: 'P', type: 'abstract', basis: 'chern', rank: 'r', name: 'AJ_*O_C', baseVarietyId: 'J', construction: { type: 'pushforward', mapId: 'AJ', sheafId: 'OC', exact: true, proper: true } }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[1]);
+  const sheaf = api.sheafFromObject(api.state.sheaves[1], geometry);
+  const result = api.buildClassStepFallbackResult(geometry, sheaf, { message: 'test' });
+  const session = api.createClassStepSession(result, 'character', null);
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'ch(AJ_*O_C)');
+  const grr = api.collectClassStepRuleCandidates(session).find((candidate) => candidate.sourceLabel === 'GRR');
+  assert(grr);
+  assert.strictEqual(grr.rule.classStepKind, 'pushforward-grr-total');
+  assert.strictEqual(api.formatPolyPlain(api.polyFromPowers(grr.rule.lhs.powers)), 'ch(AJ_*O_C)');
+  assert(grr.rules.some((rule) => rule.classStepKind === 'pushforward-grr'));
+  const materializedTotal = api.classStepMaterializeRule(session, grr.rule);
+  const directAfter = api.applyClassStepRulesToPoly(api.classStepDisplayPoly(session), [materializedTotal], geometry.dim, {
+    oncePerRule: true,
+    onePass: true
+  });
+  const directPlain = api.formatPolyPlain(directAfter);
+  assert.notStrictEqual(directPlain, 'ch(AJ_*O_C)');
+  assert(directPlain.includes('ch_1(O_C)'), directPlain);
+  assert(directPlain.includes('td_1(J)') || directPlain.includes('td_1(C)'), directPlain);
+}
+
 function testClassStepAbelJacobiStructureSheafGrrKeepsSourceTermsSymbolic() {
   const api = loadCalculator();
   api.state.varieties = [
@@ -3578,6 +3708,7 @@ function testClassStepAbelJacobiStructureSheafGrrKeepsSourceTermsSymbolic() {
   applyClassStepCandidatesWithLabel(api, session, 'Chern character');
   applyClassStepCandidatesWithLabel(api, session, 'Todd');
   applyClassStepCandidatesWithLabel(api, session, 'Tangent class');
+  api.classStepSyncCurrentTotalDisplay(session);
   assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), '1/2*Theta^2 - 2*[p]');
 }
 
@@ -4083,6 +4214,7 @@ function testClassStepPicardPoincarePushforwardToddStepMatchesNormalCharacter() 
   assert.strictEqual(api.formatPolyPlain(session.components[2]), '0');
   assert.strictEqual(api.formatPolyPlain(session.components[3]), '0');
   assert.notStrictEqual(api.formatPolyPlain(session.components[1]), '0');
+  api.classStepSyncCurrentTotalDisplay(session);
   assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'd - 2 - Theta');
 
   const uiSession = api.createClassStepSession(result, 'chern', null);
@@ -4124,6 +4256,7 @@ function testClassStepPicardPoincarePushforwardToddStepMatchesNormalCharacter() 
       if (candidate.sourceLabel === 'GRR') candidate.selected = false;
     }));
   }
+  api.classStepSyncCurrentTotalDisplay(uiSession);
   assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(uiSession)), 'd - 2 - Theta');
   assert(!api.collectClassStepRuleCandidates(uiSession).some((candidate) => candidate.sourceLabel === 'GRR'));
   api.state.classStepSession = uiSession;
@@ -4509,6 +4642,7 @@ function testClassFormulaBuilderAvailableWhenRowsAreLimited() {
   api.refs.classFormulaCheck = { disabled: true };
   api.refs.classFormulaCompute = { disabled: true };
   api.refs.classStepPanel = panel;
+  api.state.classFormulaEditorOpen = true;
   api.syncClassStepAvailability({
     geometry,
     sheaf,
@@ -4544,6 +4678,7 @@ function testClassFormulaBuilderAvailableAfterErrorWithoutResult() {
   api.refs.classFormulaCheck = { disabled: true };
   api.refs.classFormulaCompute = { disabled: true };
   api.refs.classStepPanel = panel;
+  api.state.classFormulaEditorOpen = true;
   api.syncClassStepAvailability(null);
   assert.strictEqual(panel.hidden, false);
   assert.strictEqual(api.refs.classFormulaVariety.disabled, false);
@@ -5203,6 +5338,7 @@ testPresetStateIncludesRecoverableConstructionData();
 testPresetImportRestoresRecoverableState();
 testDualSheafUsesAlternatingChernClasses();
 testDualSheafNameMergesExistingExponent();
+testMukaiAndKappaRespectClassBasis();
 testDualSheafSimplifiesLineAndStructureSheaves();
 testInternalHomCreatesHiddenDualTensor();
 testExactInternalHomUsesOrdinaryHomName();
@@ -5272,6 +5408,7 @@ testClassStepSimplifyIsSelectableRule();
 testClassStepCandidatesOnlyIncludeApplicableRules();
 testClassStepStartsFromFormalConstructedSheafClassAndOffersSesRule();
 testClassStepPushforwardOffersGrrRule();
+testClassStepTotalCharacterGrrAppliesToVisibleTotal();
 testClassStepAbelJacobiStructureSheafGrrKeepsSourceTermsSymbolic();
 testSymmetricProductGenusCanBeClearedWhileEditing();
 testSymmetricProductAggregateRulesUseAveragedCoefficients();

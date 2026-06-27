@@ -9,6 +9,18 @@
     .sheaf-layout {
       max-width: 1240px;
       grid-template-columns: minmax(0, 1fr) 380px;
+      align-items: start;
+    }
+
+    .sheaf-main-column {
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+      align-content: start;
+    }
+
+    .sheaf-main-column > #class-step-wide-host {
+      grid-column: auto;
     }
 
     .sheaf-workspace {
@@ -2410,6 +2422,7 @@
     @media (max-width: 860px) {
       .sheaf-layout {
         grid-template-columns: 1fr;
+        align-items: stretch;
       }
 
       #class-step-wide-host {
@@ -2472,35 +2485,149 @@
 </header>
 
 <main class="layout sheaf-layout">
-  <section class="canvas-panel">
-    <header class="panel-title">
-      <span class="panel-title-text">Variety and Sheaf</span>
-      <div class="canvas-toolbar" aria-label="Sheaf calculator controls">
-        <span class="sheaf-badge" id="object-badge">\(X,\mathcal{E}\)</span>
-        <label class="opt-row sheaf-cache-toggle" id="main-result-cache-label" for="main-result-cache" title="Cache calculations is off.">
-          <input type="checkbox" id="main-result-cache">
-          cache calculations
-        </label>
-      </div>
-    </header>
+  <div class="sheaf-main-column">
+    <section class="canvas-panel">
+      <header class="panel-title">
+        <span class="panel-title-text">Variety and Sheaf</span>
+        <div class="canvas-toolbar" aria-label="Sheaf calculator controls">
+          <span class="sheaf-badge" id="object-badge">\(X,\mathcal{E}\)</span>
+          <label class="opt-row sheaf-cache-toggle" id="main-result-cache-label" for="main-result-cache" title="Cache calculations is off.">
+            <input type="checkbox" id="main-result-cache">
+            cache calculations
+          </label>
+        </div>
+      </header>
 
-    <div class="sheaf-workspace">
-      <div class="sheaf-stage">
-        <canvas id="sheaf-canvas" width="880" height="280" aria-label="Sheaf calculator overview"></canvas>
-        <div id="sheaf-canvas-labels" class="sheaf-canvas-labels" aria-label="Added varieties and sheaves"></div>
-        <div class="canvas-corner-actions">
-          <button class="btn btn-ghost canvas-clear-button" id="clear-canvas" type="button">clear</button>
-          <button class="btn btn-ghost canvas-show-button" id="show-canvas" type="button">show</button>
+      <div class="sheaf-workspace">
+        <div class="sheaf-stage">
+          <canvas id="sheaf-canvas" width="880" height="280" aria-label="Sheaf calculator overview"></canvas>
+          <div id="sheaf-canvas-labels" class="sheaf-canvas-labels" aria-label="Added varieties and sheaves"></div>
+          <div class="canvas-corner-actions">
+            <button class="btn btn-ghost canvas-clear-button" id="clear-canvas" type="button">clear</button>
+            <button class="btn btn-ghost canvas-show-button" id="show-canvas" type="button">show</button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="sheaf-underbar">
-      <span id="sheaf-status">ready</span>
-        <span id="ring-summary">\(A^*(X)_{\le 3}\)</span>
-    </div>
-    <section id="hodge-wide-host" hidden></section>
-  </section>
+      <div class="sheaf-underbar">
+        <span id="sheaf-status">ready</span>
+          <span id="ring-summary">\(A^*(X)_{\le 3}\)</span>
+      </div>
+      <section id="hodge-wide-host" hidden></section>
+    </section>
+
+    <section id="class-step-wide-host">
+      <section class="card collapsed sheaf-step-card wide" id="class-step-card">
+        <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Step-by-Step Formula</span><em class="toggle-icon">&#9662;</em></div>
+        <div class="card-body">
+          <div class="sheaf-step-library-controls">
+            <button class="btn btn-ghost sheaf-chart-export" id="class-step-add-formula" type="button">add formula</button>
+            <button class="btn btn-ghost sheaf-chart-export" id="class-step-import-preset" type="button" aria-expanded="false">import</button>
+            <button class="btn btn-ghost sheaf-chart-export" id="class-step-export-saved" type="button">export</button>
+            <button class="btn btn-ghost sheaf-chart-export" id="class-step-delete-saved" type="button">delete</button>
+          </div>
+          <div class="sheaf-import-panel" id="class-step-import-panel" hidden>
+            <textarea id="class-step-import-input" class="sheaf-import-input" spellcheck="false" autocomplete="off" placeholder="Paste Preset JSON"></textarea>
+            <div class="sheaf-import-actions">
+              <span class="sheaf-import-message" id="class-step-import-message"></span>
+              <button class="btn btn-ghost sheaf-object-button" id="class-step-import-cancel" type="button">cancel</button>
+              <button class="btn btn-ghost sheaf-object-button" id="class-step-import-apply" type="button">load</button>
+            </div>
+          </div>
+          <div class="sheaf-step-saved-rules" id="class-step-saved-rules"></div>
+          <div class="sheaf-formula-builder" id="class-formula-builder" hidden>
+            <div class="sheaf-step-builder-row">
+              <label class="input-label" for="class-formula-variety">variety</label>
+              <select id="class-formula-variety" class="sheaf-select"></select>
+            </div>
+            <div class="sheaf-step-token-row" id="class-formula-homology-row">
+              <span class="input-label">homology</span>
+              <div class="sheaf-step-token-list" id="class-formula-homology-buttons"></div>
+            </div>
+            <div class="sheaf-step-token-row" id="class-formula-sheaf-row">
+              <span class="input-label">sheaves</span>
+              <div class="sheaf-step-class-picker" id="class-formula-sheaf-picker">
+                <button class="sheaf-step-token-button" id="class-formula-add-sheaf-class" type="button">add class</button>
+                <select id="class-formula-class-family" class="sheaf-select" aria-label="Characteristic class family"></select>
+                <select id="class-formula-class-degree" class="sheaf-select" aria-label="Characteristic class degree"></select>
+                <select id="class-formula-class-sheaf" class="sheaf-select" aria-label="Characteristic class sheaf"></select>
+              </div>
+            </div>
+            <div class="sheaf-step-token-row" id="class-formula-map-row">
+              <span class="input-label">functors</span>
+              <div class="sheaf-step-token-list" id="class-formula-map-buttons"></div>
+            </div>
+            <div class="sheaf-step-builder-controls">
+              <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-formula-op="plus">+</button>
+              <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-formula-op="minus">-</button>
+              <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-formula-op="times">&times;</button>
+              <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-formula-op="open">(</button>
+              <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-formula-op="close">)</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-formula-undo" type="button">undo</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-formula-clear" type="button">clear</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-formula-slot-done" type="button" hidden>done</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-formula-check" type="button">check formula</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-formula-compute" type="button" disabled>compute step-by-step</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-formula-close" type="button">close editor</button>
+            </div>
+            <div class="sheaf-step-formula sheaf-step-formula-preview" id="class-formula-preview"></div>
+            <div class="hint" id="class-formula-message"></div>
+          </div>
+          <div class="sheaf-step-panel" id="class-step-panel" hidden>
+            <div class="sheaf-step-row" id="class-step-target-row" hidden>
+              <span class="input-label">target</span>
+              <select id="class-step-family" class="sheaf-select">
+                <option value="chern">c(F)</option>
+                <option value="character">ch(F)</option>
+                <option value="todd">td(F)</option>
+                <option value="segre">s(F)</option>
+                <option value="sqrtTodd">sqrt td(F)</option>
+                <option value="mukai">v(F)</option>
+                <option value="kappa">&kappa;(F)</option>
+              </select>
+              <label class="opt-row">
+                <input type="checkbox" id="class-step-term-only">
+                term
+              </label>
+              <input id="class-step-term-index" class="sheaf-input" type="number" min="0" max="15" value="1" aria-label="step term index" disabled>
+              <button class="btn btn-ghost sheaf-chart-export sheaf-step-layout-toggle" id="class-step-layout" type="button" aria-pressed="true">wide</button>
+            </div>
+            <div class="sheaf-step-work">
+              <div>
+                <div class="sheaf-step-history-controls" id="class-step-history-controls" hidden></div>
+                <div class="sheaf-step-formula" id="class-step-formula"></div>
+              </div>
+              <div class="sheaf-step-rules" id="class-step-rules"></div>
+            </div>
+            <div class="sheaf-step-options">
+              <label class="opt-row">
+                <input type="checkbox" id="class-step-use-cache" checked>
+                include cached rules
+              </label>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-check-switch" type="button">check rules for switching</button>
+              <label class="opt-row">
+                <input type="checkbox" id="class-step-once-per-rule">
+                each rule only apply once
+              </label>
+              <label class="opt-row">
+                <input type="checkbox" id="class-step-one-pass">
+                apply rule 1...n once and stop
+              </label>
+            </div>
+            <div class="sheaf-step-controls">
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-add-selected-rules" type="button">add selected rules</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-apply" type="button">apply rules</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-save-rule" type="button">close editor</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-undo" type="button">cancel last step</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-restart" type="button">restart</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-export" type="button">export</button>
+            </div>
+            <div class="hint" id="class-step-message"></div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </div>
 
   <aside class="side" id="cards">
     <section class="card" id="input-card">
@@ -3375,115 +3502,6 @@
       </div>
     </section>
   </aside>
-  <section id="class-step-wide-host">
-    <section class="card collapsed sheaf-step-card wide" id="class-step-card">
-      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Step-by-Step Formula</span><em class="toggle-icon">&#9662;</em></div>
-      <div class="card-body">
-        <div class="sheaf-step-library-controls">
-          <button class="btn btn-ghost sheaf-chart-export" id="class-step-add-formula" type="button">add formula</button>
-          <button class="btn btn-ghost sheaf-chart-export" id="class-step-import-preset" type="button" aria-expanded="false">import</button>
-          <button class="btn btn-ghost sheaf-chart-export" id="class-step-export-saved" type="button">export</button>
-          <button class="btn btn-ghost sheaf-chart-export" id="class-step-delete-saved" type="button">delete</button>
-        </div>
-        <div class="sheaf-import-panel" id="class-step-import-panel" hidden>
-          <textarea id="class-step-import-input" class="sheaf-import-input" spellcheck="false" autocomplete="off" placeholder="Paste Preset JSON"></textarea>
-          <div class="sheaf-import-actions">
-            <span class="sheaf-import-message" id="class-step-import-message"></span>
-            <button class="btn btn-ghost sheaf-object-button" id="class-step-import-cancel" type="button">cancel</button>
-            <button class="btn btn-ghost sheaf-object-button" id="class-step-import-apply" type="button">load</button>
-          </div>
-        </div>
-        <div class="sheaf-step-saved-rules" id="class-step-saved-rules"></div>
-        <div class="sheaf-formula-builder" id="class-formula-builder" hidden>
-          <div class="sheaf-step-builder-row">
-            <label class="input-label" for="class-formula-variety">variety</label>
-            <select id="class-formula-variety" class="sheaf-select"></select>
-          </div>
-          <div class="sheaf-step-token-row" id="class-formula-homology-row">
-            <span class="input-label">homology</span>
-            <div class="sheaf-step-token-list" id="class-formula-homology-buttons"></div>
-          </div>
-          <div class="sheaf-step-token-row" id="class-formula-sheaf-row">
-            <span class="input-label">sheaves</span>
-            <div class="sheaf-step-class-picker" id="class-formula-sheaf-picker">
-              <button class="sheaf-step-token-button" id="class-formula-add-sheaf-class" type="button">add class</button>
-              <select id="class-formula-class-family" class="sheaf-select" aria-label="Characteristic class family"></select>
-              <select id="class-formula-class-degree" class="sheaf-select" aria-label="Characteristic class degree"></select>
-              <select id="class-formula-class-sheaf" class="sheaf-select" aria-label="Characteristic class sheaf"></select>
-            </div>
-          </div>
-          <div class="sheaf-step-token-row" id="class-formula-map-row">
-            <span class="input-label">functors</span>
-            <div class="sheaf-step-token-list" id="class-formula-map-buttons"></div>
-          </div>
-          <div class="sheaf-step-builder-controls">
-            <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-formula-op="plus">+</button>
-            <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-formula-op="minus">-</button>
-            <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-formula-op="times">&times;</button>
-            <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-formula-op="open">(</button>
-            <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-formula-op="close">)</button>
-            <button class="btn btn-ghost sheaf-chart-export" id="class-formula-undo" type="button">undo</button>
-            <button class="btn btn-ghost sheaf-chart-export" id="class-formula-clear" type="button">clear</button>
-            <button class="btn btn-ghost sheaf-chart-export" id="class-formula-slot-done" type="button" hidden>done</button>
-            <button class="btn btn-ghost sheaf-chart-export" id="class-formula-check" type="button">check formula</button>
-            <button class="btn btn-ghost sheaf-chart-export" id="class-formula-compute" type="button" disabled>compute step-by-step</button>
-            <button class="btn btn-ghost sheaf-chart-export" id="class-formula-close" type="button">close editor</button>
-          </div>
-          <div class="sheaf-step-formula sheaf-step-formula-preview" id="class-formula-preview"></div>
-          <div class="hint" id="class-formula-message"></div>
-        </div>
-        <div class="sheaf-step-panel" id="class-step-panel" hidden>
-          <div class="sheaf-step-row" id="class-step-target-row" hidden>
-            <span class="input-label">target</span>
-            <select id="class-step-family" class="sheaf-select">
-              <option value="chern">c(F)</option>
-              <option value="character">ch(F)</option>
-              <option value="todd">td(F)</option>
-              <option value="segre">s(F)</option>
-              <option value="sqrtTodd">sqrt td(F)</option>
-            </select>
-            <label class="opt-row">
-              <input type="checkbox" id="class-step-term-only">
-              term
-            </label>
-            <input id="class-step-term-index" class="sheaf-input" type="number" min="0" max="15" value="1" aria-label="step term index" disabled>
-            <button class="btn btn-ghost sheaf-chart-export sheaf-step-layout-toggle" id="class-step-layout" type="button" aria-pressed="true">wide</button>
-          </div>
-          <div class="sheaf-step-work">
-            <div>
-              <div class="sheaf-step-history-controls" id="class-step-history-controls" hidden></div>
-              <div class="sheaf-step-formula" id="class-step-formula"></div>
-            </div>
-            <div class="sheaf-step-rules" id="class-step-rules"></div>
-          </div>
-          <div class="sheaf-step-options">
-            <label class="opt-row">
-              <input type="checkbox" id="class-step-use-cache" checked>
-              include cached rules
-            </label>
-            <button class="btn btn-ghost sheaf-chart-export" id="class-step-check-switch" type="button">check rules for switching</button>
-            <label class="opt-row">
-              <input type="checkbox" id="class-step-once-per-rule">
-              each rule only apply once
-            </label>
-            <label class="opt-row">
-              <input type="checkbox" id="class-step-one-pass">
-              apply rule 1...n once and stop
-            </label>
-          </div>
-          <div class="sheaf-step-controls">
-            <button class="btn btn-ghost sheaf-chart-export" id="class-step-add-selected-rules" type="button">add selected rules</button>
-            <button class="btn btn-ghost sheaf-chart-export" id="class-step-apply" type="button">apply rules</button>
-            <button class="btn btn-ghost sheaf-chart-export" id="class-step-save-rule" type="button">close editor</button>
-            <button class="btn btn-ghost sheaf-chart-export" id="class-step-undo" type="button">cancel last step</button>
-            <button class="btn btn-ghost sheaf-chart-export" id="class-step-restart" type="button">restart</button>
-            <button class="btn btn-ghost sheaf-chart-export" id="class-step-export" type="button">export</button>
-          </div>
-          <div class="hint" id="class-step-message"></div>
-        </div>
-      </div>
-    </section>
-  </section>
 </main>
 
 <footer>
