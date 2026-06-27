@@ -152,7 +152,7 @@
       font: inherit;
       font-weight: 700;
       letter-spacing: 0;
-      text-transform: uppercase;
+      text-transform: none;
       padding: 2px 4px;
     }
 
@@ -202,6 +202,35 @@
       max-height: 180px;
       resize: vertical;
       line-height: 1.35;
+    }
+
+    .theorem-latex-preview {
+      width: 100%;
+      min-width: 0;
+      min-height: 66px;
+      padding: 7px 9px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      cursor: text;
+      font: inherit;
+      font-size: 0.94rem;
+      line-height: 1.35;
+      text-align: left;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .theorem-latex-preview:hover,
+    .theorem-latex-preview:focus-visible {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .theorem-latex-preview mjx-container {
+      margin: 0 !important;
+      overflow: visible;
     }
 
     .theorem-select:focus,
@@ -344,11 +373,109 @@
       border-top: 1px dotted var(--border);
     }
 
+    .theorem-arrow-style-row {
+      align-items: start;
+    }
+
+    .theorem-arrow-parts {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .theorem-arrow-picker {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 4px;
+      min-width: 0;
+      padding: 5px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: color-mix(in srgb, var(--surface) 64%, var(--bg));
+    }
+
+    .theorem-arrow-picker::before {
+      content: attr(data-label);
+      grid-column: 1 / -1;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.62rem;
+      letter-spacing: 0;
+      text-transform: lowercase;
+    }
+
+    .theorem-arrow-part-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-width: 0;
+      height: 30px;
+      padding: 2px;
+      border: 1px solid transparent;
+      border-radius: 3px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .theorem-arrow-part-button:hover,
+    .theorem-arrow-part-button:focus-visible {
+      outline: none;
+      border-color: var(--accent);
+      background: var(--bg);
+      color: var(--accent);
+    }
+
+    .theorem-arrow-part-button.is-selected {
+      border-color: var(--accent2);
+      background: color-mix(in srgb, var(--accent2) 10%, var(--bg));
+      color: var(--accent2);
+    }
+
+    .theorem-arrow-part-button[disabled] {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .theorem-arrow-part-button svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
     .theorem-color-row {
       display: grid;
       grid-template-columns: 42px minmax(0, 1fr);
       gap: 8px;
       align-items: center;
+    }
+
+    .theorem-range-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 48px;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .theorem-range-input {
+      width: 100%;
+      min-width: 0;
+      accent-color: var(--accent2);
+    }
+
+    .theorem-range-value {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.72rem;
+      text-align: right;
+    }
+
+    .theorem-range-input[disabled] {
+      opacity: 0.58;
+      cursor: not-allowed;
     }
 
     .theorem-color-input {
@@ -451,6 +578,10 @@
       .theorem-field-row .input-label {
         margin-top: 0;
       }
+
+      .theorem-arrow-parts {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -512,14 +643,17 @@
           <div class="theorem-field-row">
             <label class="input-label" for="node-setting">setting</label>
             <textarea id="node-setting" class="theorem-textarea" spellcheck="true"></textarea>
+            <button id="node-setting-preview" class="theorem-latex-preview" type="button" hidden></button>
           </div>
           <div class="theorem-field-row">
             <label class="input-label" for="node-condition">condition</label>
             <textarea id="node-condition" class="theorem-textarea" spellcheck="true"></textarea>
+            <button id="node-condition-preview" class="theorem-latex-preview" type="button" hidden></button>
           </div>
           <div class="theorem-field-row">
             <label class="input-label" for="node-result">result</label>
             <textarea id="node-result" class="theorem-textarea" spellcheck="true"></textarea>
+            <button id="node-result-preview" class="theorem-latex-preview" type="button" hidden></button>
           </div>
           <div class="theorem-field-row">
             <label class="input-label" for="node-color">color</label>
@@ -547,6 +681,28 @@
           <div class="theorem-field-row">
             <label class="input-label" for="arrow-label">label</label>
             <input id="arrow-label" class="theorem-input" type="text" maxlength="48" spellcheck="false" autocomplete="off" placeholder="optional label">
+          </div>
+          <div class="theorem-field-row theorem-arrow-style-row">
+            <span class="input-label">type</span>
+            <div class="theorem-arrow-parts" aria-label="Arrow type">
+              <div class="theorem-arrow-picker" id="arrow-tail-picker" data-arrow-part="tail" role="group" aria-label="Arrow tail"></div>
+              <div class="theorem-arrow-picker" id="arrow-body-picker" data-arrow-part="body" role="group" aria-label="Arrow body"></div>
+              <div class="theorem-arrow-picker" id="arrow-head-picker" data-arrow-part="head" role="group" aria-label="Arrow head"></div>
+            </div>
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="arrow-level">level</label>
+            <div class="theorem-range-row">
+              <input id="arrow-level" class="theorem-range-input" type="range" min="1" max="4" step="1" value="1" aria-label="Arrow level">
+              <output id="arrow-level-value" class="theorem-range-value" for="arrow-level">1</output>
+            </div>
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="arrow-endpoint-scale">end size</label>
+            <div class="theorem-range-row">
+              <input id="arrow-endpoint-scale" class="theorem-range-input" type="range" min="0.80" max="2.00" step="0.05" value="1.00" aria-label="Arrow tail and head size">
+              <output id="arrow-endpoint-scale-value" class="theorem-range-value" for="arrow-endpoint-scale">1.00x</output>
+            </div>
           </div>
           <div class="theorem-field-row">
             <label class="input-label" for="arrow-curve">curve</label>
@@ -705,7 +861,7 @@
           <button class="btn" id="refresh-export" type="button">refresh</button>
           <button class="btn btn-ghost" id="copy-export" type="button">copy</button>
         </div>
-        <label class="input-label" for="theorem-import-input" style="margin-top: 12px;">import JSON</label>
+        <label class="input-label" for="theorem-import-input" style="margin-top: 12px;">import preset / JSON</label>
         <div class="theorem-field-row">
           <label class="input-label" for="preset-select">preset</label>
           <select id="preset-select" class="theorem-select">
@@ -716,7 +872,7 @@
           <button class="btn" id="load-preset" type="button">apply preset</button>
           <button class="btn btn-ghost" id="refresh-presets" type="button">refresh presets</button>
         </div>
-        <textarea id="theorem-import-input" class="theorem-import-input" spellcheck="false" autocomplete="off" placeholder="Paste exported JSON"></textarea>
+        <textarea id="theorem-import-input" class="theorem-import-input" spellcheck="false" autocomplete="off" placeholder="Paste exported preset file or JSON"></textarea>
         <div class="theorem-export-actions">
           <button class="btn" id="load-import" type="button">load</button>
           <button class="btn btn-ghost" id="clear-import" type="button">clear import</button>
@@ -734,8 +890,8 @@
 <script>
   window.MathJax = {
     tex: {
-      inlineMath: [['\\(', '\\)']],
-      displayMath: [['\\[', '\\]']],
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']],
       processEscapes: true
     },
     options: {

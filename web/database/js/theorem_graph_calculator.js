@@ -27,8 +27,81 @@
     'x',
     'y'
   ]);
-  const KNOWN_ARROW_KEYS = new Set(['id', 'sourceId', 'targetId', 'label', 'curve', 'labelOffset', 'color']);
+  const KNOWN_ARROW_KEYS = new Set(['id', 'sourceId', 'targetId', 'label', 'style', 'body', 'head', 'tail', 'level', 'endpointScale', 'curve', 'labelOffset', 'color']);
   const KNOWN_REFERENCE_KEYS = new Set(['key', 'author', 'title', 'year', 'citeText', 'url', 'source', 'rawBibtex']);
+  const ARROW_BODIES = [
+    { id: 'none', label: 'none' },
+    { id: 'solid', label: 'solid' },
+    { id: 'dashed', label: 'dashed' },
+    { id: 'dotted', label: 'dotted' },
+    { id: 'wavy', label: 'wavy' }
+  ];
+  const ARROW_HEADS = [
+    { id: 'arrow', label: 'arrow' },
+    { id: 'none', label: 'none' },
+    { id: 'twohead', label: 'two-head' },
+    { id: 'bar', label: 'bar' },
+    { id: 'harpoon-up', label: 'harpoon up' },
+    { id: 'harpoon-down', label: 'harpoon down' }
+  ];
+  const ARROW_TAILS = [
+    { id: 'none', label: 'none' },
+    { id: 'arrow', label: 'arrow' },
+    { id: 'bar', label: 'bar' },
+    { id: 'hook', label: 'hook' },
+    { id: 'harpoon-up', label: 'harpoon up' },
+    { id: 'harpoon-down', label: 'harpoon down' }
+  ];
+  const ARROW_BODY_IDS = new Set(ARROW_BODIES.map((item) => item.id));
+  const ARROW_HEAD_IDS = new Set(ARROW_HEADS.map((item) => item.id));
+  const ARROW_TAIL_IDS = new Set(ARROW_TAILS.map((item) => item.id));
+  const ARROW_RENDER_METRICS = {
+    headSize: 8,
+    headSpacing: 2,
+    barSize: 6.5,
+    hookBack: 9,
+    hookShoulder: 4.6,
+    hookTip: 5.8,
+    bodyLineGap: 5.2,
+    waveAmplitude: 2.6,
+    waveLength: 14
+  };
+  const ARROW_LEVEL_MIN = 1;
+  const ARROW_LEVEL_MAX = 4;
+  const ARROW_LEVEL_DEFAULT = 1;
+  const ARROW_ENDPOINT_SCALE_DEFAULT = 1;
+  const ARROW_ENDPOINT_SCALE_MIN = 0.8;
+  const ARROW_ENDPOINT_SCALE_MAX = 2;
+  const ARROW_STYLES = [
+    { id: 'arrow', label: 'solid arrow', body: 'solid', head: 'arrow', tail: 'none' },
+    { id: 'plain', label: 'plain line', body: 'solid', head: 'none', tail: 'none' },
+    { id: 'dashed', label: 'dashed arrow', body: 'dashed', head: 'arrow', tail: 'none' },
+    { id: 'dotted', label: 'dotted arrow', body: 'dotted', head: 'arrow', tail: 'none' },
+    { id: 'wavy', label: 'wavy arrow', body: 'wavy', head: 'arrow', tail: 'none' },
+    { id: 'double', label: 'double arrow', body: 'solid', head: 'arrow', tail: 'none', level: 2, migratedLevel: 2 },
+    { id: 'double-dashed', label: 'double dashed arrow', body: 'dashed', head: 'arrow', tail: 'none', level: 2, migratedLevel: 2 },
+    { id: 'triple', label: 'triple arrow', body: 'solid', head: 'arrow', tail: 'none', level: 3, migratedLevel: 3 },
+    { id: 'twohead', label: 'two-headed arrow', body: 'solid', head: 'twohead', tail: 'none' },
+    { id: 'hook', label: 'hook arrow', body: 'solid', head: 'arrow', tail: 'hook' },
+    { id: 'dashed-hook', label: 'dashed hook arrow', body: 'dashed', head: 'arrow', tail: 'hook' },
+    { id: 'mapsto', label: 'mapsto arrow', body: 'solid', head: 'arrow', tail: 'bar' },
+    { id: 'bar', label: 'barred arrow', body: 'solid', head: 'bar', tail: 'none' },
+    { id: 'bar-both', label: 'barred line', body: 'solid', head: 'bar', tail: 'bar' },
+    { id: 'two-way', label: 'two-way arrow', body: 'solid', head: 'arrow', tail: 'arrow' },
+    { id: 'dashed-two-way', label: 'dashed two-way arrow', body: 'dashed', head: 'arrow', tail: 'arrow' },
+    { id: 'harpoon-up', label: 'harpoon up', body: 'solid', head: 'harpoon-up', tail: 'none' },
+    { id: 'harpoon-down', label: 'harpoon down', body: 'solid', head: 'harpoon-down', tail: 'none' },
+    { id: 'leftharpoon-up', label: 'left harpoon up', body: 'solid', head: 'none', tail: 'harpoon-up' },
+    { id: 'leftharpoon-down', label: 'left harpoon down', body: 'solid', head: 'none', tail: 'harpoon-down' },
+    { id: 'wavy-line', label: 'wavy line', body: 'wavy', head: 'none', tail: 'none' },
+    { id: 'dotted-line', label: 'dotted line', body: 'dotted', head: 'none', tail: 'none' }
+  ];
+  const ARROW_STYLE_MAP = new Map(ARROW_STYLES.map((style) => [style.id, style]));
+  const NODE_DETAIL_LATEX_FIELDS = [
+    { key: 'setting', inputRef: 'nodeSetting', previewRef: 'nodeSettingPreview' },
+    { key: 'condition', inputRef: 'nodeCondition', previewRef: 'nodeConditionPreview' },
+    { key: 'result', inputRef: 'nodeResult', previewRef: 'nodeResultPreview' }
+  ];
 
   const state = {
     graphTitle: DEFAULT_GRAPH_TITLE,
@@ -54,7 +127,8 @@
     viewExtra: {},
     mathTypesetTimer: null,
     mathTypesetAttempts: 0,
-    detailPreview: null
+    detailPreview: null,
+    activeLatexDetailField: null
   };
 
   const refs = {};
@@ -63,6 +137,7 @@
 
   function init() {
     cacheRefs();
+    populateArrowPartPickers();
     bindEvents();
     seedExample();
     loadPresetRegistry();
@@ -102,11 +177,21 @@
     refs.nodeSetting = $('node-setting');
     refs.nodeCondition = $('node-condition');
     refs.nodeResult = $('node-result');
+    refs.nodeSettingPreview = $('node-setting-preview');
+    refs.nodeConditionPreview = $('node-condition-preview');
+    refs.nodeResultPreview = $('node-result-preview');
     refs.nodeColor = $('node-color');
     refs.arrowEditor = $('arrow-editor');
     refs.arrowSource = $('arrow-source');
     refs.arrowTarget = $('arrow-target');
     refs.arrowLabel = $('arrow-label');
+    refs.arrowBodyPicker = $('arrow-body-picker');
+    refs.arrowHeadPicker = $('arrow-head-picker');
+    refs.arrowTailPicker = $('arrow-tail-picker');
+    refs.arrowLevel = $('arrow-level');
+    refs.arrowLevelValue = $('arrow-level-value');
+    refs.arrowEndpointScale = $('arrow-endpoint-scale');
+    refs.arrowEndpointScaleValue = $('arrow-endpoint-scale-value');
     refs.arrowCurve = $('arrow-curve');
     refs.arrowLabelOffset = $('arrow-label-offset');
     refs.arrowColor = $('arrow-color');
@@ -225,8 +310,11 @@
     });
 
     if (refs.detailUpdate) refs.detailUpdate.addEventListener('click', applyDetailUpdate);
+    bindLatexDetailPreviewEvents();
     [
       refs.nodeColor,
+      refs.arrowLevel,
+      refs.arrowEndpointScale,
       refs.arrowCurve,
       refs.arrowLabelOffset,
       refs.arrowColor
@@ -242,6 +330,194 @@
         input.value = normalizeColor(button.dataset.colorValue, input.value);
         input.dispatchEvent(new Event('input', { bubbles: true }));
       });
+    });
+  }
+
+  function populateArrowPartPickers() {
+    populateArrowPartPicker(refs.arrowTailPicker, 'tail', ARROW_TAILS);
+    populateArrowPartPicker(refs.arrowBodyPicker, 'body', ARROW_BODIES);
+    populateArrowPartPicker(refs.arrowHeadPicker, 'head', ARROW_HEADS);
+  }
+
+  function populateArrowPartPicker(picker, part, options) {
+    if (!picker) return;
+    picker.replaceChildren();
+    picker.dataset.label = part;
+    options.forEach((option) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'theorem-arrow-part-button';
+      button.dataset.arrowPart = part;
+      button.dataset.arrowValue = option.id;
+      button.title = option.label;
+      button.setAttribute('aria-label', `${part}: ${option.label}`);
+      button.innerHTML = arrowPartIconSvg(part, option.id);
+      button.addEventListener('click', () => {
+        setArrowPartValue(part, option.id);
+        previewDetailStyle();
+      });
+      picker.appendChild(button);
+    });
+  }
+
+  function setArrowPartValue(part, value) {
+    const picker = arrowPartPicker(part);
+    if (!picker) return;
+    const normalized = normalizeArrowPart(part, value);
+    picker.dataset.value = normalized;
+    syncArrowPartPickerButtons(part, normalized, false);
+  }
+
+  function getArrowPartValue(part, fallback) {
+    const picker = arrowPartPicker(part);
+    return normalizeArrowPart(part, picker ? picker.dataset.value : fallback, fallback);
+  }
+
+  function setArrowLevelControl(value, disabled = false) {
+    const level = normalizeArrowLevel(value);
+    if (refs.arrowLevel) {
+      refs.arrowLevel.value = String(level);
+      refs.arrowLevel.disabled = !!disabled;
+    }
+    syncArrowLevelValue(level);
+  }
+
+  function getArrowLevelValue(fallback = ARROW_LEVEL_DEFAULT) {
+    return normalizeArrowLevel(refs.arrowLevel ? refs.arrowLevel.value : fallback);
+  }
+
+  function syncArrowLevelValue(value) {
+    if (!refs.arrowLevelValue) return;
+    refs.arrowLevelValue.textContent = String(normalizeArrowLevel(value));
+  }
+
+  function setArrowEndpointScaleControl(value, disabled = false) {
+    const scale = normalizeArrowEndpointScale(value);
+    if (refs.arrowEndpointScale) {
+      refs.arrowEndpointScale.value = scale.toFixed(2);
+      refs.arrowEndpointScale.disabled = !!disabled;
+    }
+    syncArrowEndpointScaleValue(scale);
+  }
+
+  function getArrowEndpointScaleValue(fallback = ARROW_ENDPOINT_SCALE_DEFAULT) {
+    return normalizeArrowEndpointScale(refs.arrowEndpointScale ? refs.arrowEndpointScale.value : fallback);
+  }
+
+  function syncArrowEndpointScaleValue(value) {
+    if (!refs.arrowEndpointScaleValue) return;
+    refs.arrowEndpointScaleValue.textContent = `${normalizeArrowEndpointScale(value).toFixed(2)}x`;
+  }
+
+  function syncArrowPartPickers(arrow, disabled = false) {
+    const style = arrowStyleFromArrow(arrow || {});
+    setArrowPartPickerValue('body', style.body, disabled);
+    setArrowPartPickerValue('head', style.head, disabled);
+    setArrowPartPickerValue('tail', style.tail, disabled);
+  }
+
+  function setArrowPartPickerValue(part, value, disabled) {
+    const picker = arrowPartPicker(part);
+    if (!picker) return;
+    const normalized = normalizeArrowPart(part, value);
+    picker.dataset.value = normalized;
+    syncArrowPartPickerButtons(part, normalized, disabled);
+  }
+
+  function syncArrowPartPickerButtons(part, value, disabled) {
+    const picker = arrowPartPicker(part);
+    if (!picker) return;
+    picker.querySelectorAll('.theorem-arrow-part-button').forEach((button) => {
+      const selected = button.dataset.arrowValue === value;
+      button.classList.toggle('is-selected', selected);
+      button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      button.disabled = !!disabled;
+    });
+  }
+
+  function arrowPartPicker(part) {
+    if (part === 'body') return refs.arrowBodyPicker;
+    if (part === 'head') return refs.arrowHeadPicker;
+    if (part === 'tail') return refs.arrowTailPicker;
+    return null;
+  }
+
+  function arrowPartIconSvg(part, value) {
+    if (part === 'head') {
+      return `<svg viewBox="0 0 64 24" aria-hidden="true" focusable="false"><path d="M12 12 H52" fill="none" stroke="currentColor" stroke-width="2"/>${arrowPartEndpointSvg(value, 52, 'head')}</svg>`;
+    }
+    if (part === 'tail') {
+      return `<svg viewBox="0 0 64 24" aria-hidden="true" focusable="false"><path d="M12 12 H52" fill="none" stroke="currentColor" stroke-width="2"/>${arrowPartEndpointSvg(value, 12, 'tail')}</svg>`;
+    }
+    return `<svg viewBox="0 0 64 24" aria-hidden="true" focusable="false">${arrowPartBodySvg(value)}</svg>`;
+  }
+
+  function arrowPartBodySvg(body) {
+    const normalized = normalizeArrowPart('body', body);
+    if (normalized === 'none') {
+      return '';
+    }
+    if (normalized === 'wavy') {
+      return '<path d="M12 12 C 16 5, 20 19, 24 12 S 32 5, 36 12 S 44 19, 48 12 S 56 5, 60 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
+    }
+    const dash = normalized === 'dashed' ? ' stroke-dasharray="7 5"' : (normalized === 'dotted' ? ' stroke-dasharray="1 5" stroke-linecap="round"' : '');
+    return `<path d="M12 12 H52" fill="none" stroke="currentColor" stroke-width="2"${dash}/>`;
+  }
+
+  function arrowPartEndpointSvg(kind, x, side) {
+    const direction = side === 'head' ? 1 : -1;
+    if (!kind || kind === 'none') return '';
+    if (kind === 'arrow') {
+      return side === 'head'
+        ? '<path d="M44 6 C47 9, 49 11, 52 12 C49 13, 47 15, 44 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+        : '<path d="M20 6 C17 9, 15 11, 12 12 C15 13, 17 15, 20 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+    }
+    if (kind === 'twohead') {
+      return '<path d="M44 6 C47 9, 49 11, 52 12 C49 13, 47 15, 44 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M37 6.5 C40 9.4, 42 11, 45 12 C42 13, 40 14.6, 37 17.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+    }
+    if (kind === 'bar') {
+      return `<path d="M${x} 5 V19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>`;
+    }
+    if (kind === 'hook') {
+      const d = direction < 0 ? 'M12 4 C4 4, 4 12, 12 12' : 'M52 20 C60 20, 60 12, 52 12';
+      return `<path d="${d}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>`;
+    }
+    if (kind === 'harpoon-up') {
+      return side === 'head'
+        ? '<path d="M44 6 C47 9, 49 11, 52 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+        : '<path d="M20 6 C17 9, 15 11, 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+    }
+    if (kind === 'harpoon-down') {
+      return side === 'head'
+        ? '<path d="M44 18 C47 15, 49 13, 52 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+        : '<path d="M20 18 C17 15, 15 13, 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+    }
+    return '';
+  }
+
+  function bindLatexDetailPreviewEvents() {
+    NODE_DETAIL_LATEX_FIELDS.forEach(({ key, inputRef, previewRef }) => {
+      const input = refs[inputRef];
+      const preview = refs[previewRef];
+      if (preview) {
+        preview.addEventListener('click', () => {
+          showLatexDetailEditor(key);
+        });
+      }
+      if (input) {
+        input.addEventListener('focus', () => {
+          state.activeLatexDetailField = key;
+          syncLatexDetailFields();
+        });
+        input.addEventListener('blur', () => {
+          window.setTimeout(() => {
+            if (state.activeLatexDetailField === key && document.activeElement !== input) {
+              state.activeLatexDetailField = null;
+              syncLatexDetailFields();
+            }
+          }, 0);
+        });
+      }
     });
   }
 
@@ -324,12 +600,19 @@
 
   function makeArrow(source = {}) {
     const extra = collectExtra(source, KNOWN_ARROW_KEYS);
+    const parts = arrowPartsFromSource(source);
+    const hasExplicitLevel = Object.prototype.hasOwnProperty.call(source, 'level');
     return {
       extra,
       id: cleanId(source.id) || nextArrowId(),
       sourceId: cleanId(source.sourceId),
       targetId: cleanId(source.targetId),
       label: cleanString(source.label),
+      body: parts.body,
+      head: parts.head,
+      tail: parts.tail,
+      level: normalizeArrowLevel(parts.migratedLevel || (hasExplicitLevel ? source.level : parts.level)),
+      endpointScale: normalizeArrowEndpointScale(source.endpointScale),
       curve: clamp(finiteNumber(source.curve, 0), -160, 160),
       labelOffset: clamp(finiteNumber(source.labelOffset, 0), -120, 120),
       color: normalizeColor(source.color, '#5f574e')
@@ -438,21 +721,267 @@
       const preview = selected ? currentArrowPreview(arrow) : arrow;
       const model = arrowCurve(source, target, offset + finiteNumber(preview.curve, 0));
       const color = normalizeColor(preview.color, '#5f574e');
+      const style = arrowStyleFromArrow(preview);
       ctx.save();
       ctx.strokeStyle = color;
       ctx.fillStyle = color;
       ctx.lineWidth = selected ? 2.6 : 1.6;
       ctx.shadowColor = selected ? 'rgba(139, 58, 42, 0.22)' : 'transparent';
       ctx.shadowBlur = selected ? 5 : 0;
-      ctx.setLineDash(selected ? [] : [0]);
-      ctx.beginPath();
-      ctx.moveTo(model.start.x, model.start.y);
-      ctx.quadraticCurveTo(model.control.x, model.control.y, model.end.x, model.end.y);
-      ctx.stroke();
-      drawArrowHead(ctx, model.headBase, model.end);
+      const level = normalizeArrowLevel(preview.level);
+      const metrics = arrowLevelMetrics(level, preview.endpointScale, selected, style.body);
+      drawArrowBody(ctx, model, style, metrics);
+      drawArrowEndpoint(ctx, style.tail, model.start, quadraticTangentAngle(model.start, model.control, model.end, 0) + Math.PI, metrics, 'tail');
+      drawArrowEndpoint(ctx, style.head, model.end, quadraticTangentAngle(model.start, model.control, model.end, 1), metrics, 'head');
       if (arrow.label) drawArrowLabel(ctx, arrow.label, model, preview.labelOffset);
       ctx.restore();
     });
+  }
+
+  function drawArrowBody(ctx, model, style, metrics) {
+    if (!model) return;
+    const body = style.body || 'solid';
+    if (body === 'none') {
+      ctx.setLineDash([]);
+      return;
+    }
+    ctx.lineWidth = metrics.bodyLineWidth;
+    const offsets = metrics.offsets;
+    if (body === 'wavy') {
+      ctx.setLineDash([]);
+      ctx.lineCap = 'round';
+      offsets.forEach((offset) => {
+        const strand = arrowBodyStrandModel(model, style, metrics, offset);
+        if (strand) drawWavyQuadratic(ctx, strand);
+      });
+      ctx.setLineDash([]);
+      return;
+    }
+    setArrowLineDash(ctx, body);
+    offsets.forEach((offset) => {
+      const strand = arrowBodyStrandModel(model, style, metrics, offset);
+      if (strand) drawQuadraticPath(ctx, strand);
+    });
+    ctx.setLineDash([]);
+  }
+
+  function arrowLevelMetrics(level, endpointScale = ARROW_ENDPOINT_SCALE_DEFAULT, selected = false, body = 'solid') {
+    const offsets = arrowLevelOffsets(level);
+    const bodyLineWidth = selected ? 2.4 : 1.6;
+    const bodySpan = offsets.length > 1 ? offsets[offsets.length - 1] - offsets[0] : 0;
+    const wavePadding = body === 'wavy' ? ARROW_RENDER_METRICS.waveAmplitude * 2 : 0;
+    const bodyWidth = bodyLineWidth + bodySpan + wavePadding;
+    const outerOffset = offsets.reduce((max, offset) => Math.max(max, Math.abs(offset)), 0);
+    const scale = normalizeArrowEndpointScale(endpointScale);
+    const levelExtra = Math.max(0, offsets.length - 1);
+    const headLength = (ARROW_RENDER_METRICS.headSize + levelExtra * 2) * scale;
+    const headHeight = Math.max(
+      ARROW_RENDER_METRICS.headSize * 1.2,
+      bodyWidth + ARROW_RENDER_METRICS.bodyLineGap * 2
+    ) * scale;
+    const barHalfSize = Math.max(
+      ARROW_RENDER_METRICS.barSize,
+      bodyWidth / 2 + ARROW_RENDER_METRICS.bodyLineGap * 0.9
+    ) * scale;
+    return {
+      offsets,
+      bodyLineWidth,
+      bodyWidth,
+      endpointScale: scale,
+      headLength,
+      headHeight,
+      secondHeadLength: headLength * 0.88,
+      secondHeadHeight: headHeight * 0.88,
+      secondHeadOffset: headLength * 0.72 + ARROW_RENDER_METRICS.headSpacing * scale,
+      barHalfSize,
+      harpoonOffset: outerOffset,
+      hookBack: ARROW_RENDER_METRICS.hookBack * scale,
+      hookShoulder: ARROW_RENDER_METRICS.hookShoulder * scale,
+      hookTip: ARROW_RENDER_METRICS.hookTip * scale
+    };
+  }
+
+  function arrowBodyStrandModel(model, style, metrics, offset) {
+    const strand = offset ? offsetQuadraticModel(model, offset) : model;
+    const startInset = arrowEndpointBodyInset(style.tail, metrics, offset);
+    const endInset = arrowEndpointBodyInset(style.head, metrics, offset);
+    if (startInset <= 0 && endInset <= 0) return strand;
+    return trimQuadraticModel(strand, startInset, endInset);
+  }
+
+  function arrowEndpointBodyInset(kind, metrics, offset = 0) {
+    if (!kind || kind === 'none') return 0;
+    if (kind === 'arrow') return arrowHeadStrandInset(metrics.headLength, metrics.headHeight, offset);
+    if (kind === 'twohead') return arrowHeadStrandInset(metrics.headLength, metrics.headHeight, offset);
+    if (kind === 'bar' || kind === 'hook' || kind === 'harpoon-up' || kind === 'harpoon-down') return 0;
+    return 0;
+  }
+
+  function arrowHeadStrandInset(length, height, offset) {
+    const halfHeight = Math.max(1, height / 2);
+    const ratio = clamp(Math.abs(offset) / halfHeight, 0, 1);
+    return length * ratio * 0.92;
+  }
+
+  function trimQuadraticModel(model, startInset, endInset) {
+    const samples = quadraticLengthSamples(model, 64);
+    const totalLength = samples[samples.length - 1].length;
+    if (!Number.isFinite(totalLength) || totalLength <= 0) return model;
+    let startTrim = Math.max(0, finiteNumber(startInset, 0));
+    let endTrim = Math.max(0, finiteNumber(endInset, 0));
+    const minVisible = Math.min(12, totalLength * 0.35);
+    const maxTrim = Math.max(0, totalLength - minVisible);
+    if (startTrim + endTrim > maxTrim) {
+      const scale = maxTrim / (startTrim + endTrim || 1);
+      startTrim *= scale;
+      endTrim *= scale;
+    }
+    const t0 = quadraticTAtLength(samples, startTrim);
+    const t1 = quadraticTAtLength(samples, totalLength - endTrim);
+    if (t1 <= t0) return null;
+    return quadraticSubcurve(model, t0, t1);
+  }
+
+  function quadraticLengthSamples(model, steps) {
+    const samples = [{ t: 0, length: 0 }];
+    let previous = model.start;
+    let length = 0;
+    for (let index = 1; index <= steps; index += 1) {
+      const t = index / steps;
+      const point = quadraticPoint(model.start, model.control, model.end, t);
+      length += Math.hypot(point.x - previous.x, point.y - previous.y);
+      samples.push({ t, length });
+      previous = point;
+    }
+    return samples;
+  }
+
+  function quadraticTAtLength(samples, targetLength) {
+    const totalLength = samples[samples.length - 1].length;
+    if (targetLength <= 0) return 0;
+    if (targetLength >= totalLength) return 1;
+    for (let index = 1; index < samples.length; index += 1) {
+      const previous = samples[index - 1];
+      const next = samples[index];
+      if (targetLength <= next.length) {
+        const span = next.length - previous.length || 1;
+        const ratio = (targetLength - previous.length) / span;
+        return previous.t + (next.t - previous.t) * ratio;
+      }
+    }
+    return 1;
+  }
+
+  function quadraticSubcurve(model, t0, t1) {
+    if (t0 <= 0 && t1 >= 1) return model;
+    const first = splitQuadratic(model.start, model.control, model.end, t1).left;
+    if (t0 <= 0) return first;
+    return splitQuadratic(first.start, first.control, first.end, t0 / t1).right;
+  }
+
+  function splitQuadratic(start, control, end, t) {
+    const startControl = lerpPoint(start, control, t);
+    const controlEnd = lerpPoint(control, end, t);
+    const mid = lerpPoint(startControl, controlEnd, t);
+    return {
+      left: { start, control: startControl, end: mid },
+      right: { start: mid, control: controlEnd, end }
+    };
+  }
+
+  function lerpPoint(start, end, t) {
+    return {
+      x: start.x + (end.x - start.x) * t,
+      y: start.y + (end.y - start.y) * t
+    };
+  }
+
+  function arrowLevelOffsets(level) {
+    const count = normalizeArrowLevel(level);
+    const center = (count - 1) / 2;
+    return Array.from({ length: count }, (_, index) => (index - center) * ARROW_RENDER_METRICS.bodyLineGap);
+  }
+
+  function setArrowLineDash(ctx, body) {
+    if (body === 'dashed') {
+      ctx.setLineDash([8, 6]);
+    } else if (body === 'dotted') {
+      ctx.setLineDash([1.4, 5.2]);
+      ctx.lineCap = 'round';
+    } else {
+      ctx.setLineDash([]);
+      ctx.lineCap = 'butt';
+    }
+  }
+
+  function drawQuadraticPath(ctx, model) {
+    ctx.beginPath();
+    ctx.moveTo(model.start.x, model.start.y);
+    ctx.quadraticCurveTo(model.control.x, model.control.y, model.end.x, model.end.y);
+    ctx.stroke();
+  }
+
+  function drawOffsetQuadratic(ctx, model, offset) {
+    drawQuadraticPath(ctx, offsetQuadraticModel(model, offset));
+  }
+
+  function offsetQuadraticModel(model, offset) {
+    const startNormal = quadraticNormal(model.start, model.control, model.end, 0);
+    const controlNormal = quadraticNormal(model.start, model.control, model.end, 0.5);
+    const endNormal = quadraticNormal(model.start, model.control, model.end, 1);
+    return {
+      start: offsetPoint(model.start, startNormal, offset),
+      control: offsetPoint(model.control, controlNormal, offset),
+      end: offsetPoint(model.end, endNormal, offset)
+    };
+  }
+
+  function drawWavyQuadratic(ctx, model) {
+    const steps = 72;
+    const amplitude = ARROW_RENDER_METRICS.waveAmplitude;
+    const wavelength = ARROW_RENDER_METRICS.waveLength;
+    let distance = 0;
+    let previous = quadraticPoint(model.start, model.control, model.end, 0);
+    ctx.beginPath();
+    for (let index = 0; index <= steps; index += 1) {
+      const t = index / steps;
+      const point = quadraticPoint(model.start, model.control, model.end, t);
+      if (index) distance += Math.hypot(point.x - previous.x, point.y - previous.y);
+      const normal = quadraticNormal(model.start, model.control, model.end, t);
+      const wave = Math.sin((distance / wavelength) * Math.PI * 2) * amplitude;
+      const drawn = offsetPoint(point, normal, wave);
+      if (index === 0) ctx.moveTo(drawn.x, drawn.y);
+      else ctx.lineTo(drawn.x, drawn.y);
+      previous = point;
+    }
+    ctx.stroke();
+  }
+
+  function drawArrowEndpoint(ctx, kind, point, angle, metrics, placement = 'head') {
+    if (!kind || kind === 'none') return;
+    if (kind === 'arrow') {
+      drawArrowHeadAt(ctx, point, angle, metrics.headLength, metrics.headHeight);
+      return;
+    }
+    if (kind === 'twohead') {
+      drawArrowHeadAt(ctx, point, angle, metrics.headLength, metrics.headHeight);
+      drawArrowHeadAt(ctx, {
+        x: point.x - Math.cos(angle) * metrics.secondHeadOffset,
+        y: point.y - Math.sin(angle) * metrics.secondHeadOffset
+      }, angle, metrics.secondHeadLength, metrics.secondHeadHeight);
+      return;
+    }
+    if (kind === 'bar') {
+      drawArrowBarAt(ctx, point, angle, metrics);
+      return;
+    }
+    if (kind === 'hook') {
+      drawArrowHookAt(ctx, point, angle, metrics, placement);
+      return;
+    }
+    if (kind === 'harpoon-up' || kind === 'harpoon-down') {
+      drawHarpoonAt(ctx, point, angle, kind === 'harpoon-up' ? -1 : 1, metrics, placement);
+    }
   }
 
   function drawArrowLabel(ctx, label, model, labelOffset) {
@@ -479,15 +1008,100 @@
     ctx.restore();
   }
 
-  function drawArrowHead(ctx, from, to) {
-    const angle = Math.atan2(to.y - from.y, to.x - from.x);
-    const size = 10;
+  function drawArrowHeadBranchPath(ctx, tip, angle, length, height, side) {
+    const ux = Math.cos(angle);
+    const uy = Math.sin(angle);
+    const px = -uy;
+    const py = ux;
+    const halfHeight = height / 2;
+    const base = {
+      x: tip.x - ux * length,
+      y: tip.y - uy * length
+    };
+    ctx.moveTo(base.x + px * halfHeight * side, base.y + py * halfHeight * side);
+    ctx.bezierCurveTo(
+      base.x + ux * length * 0.24 + px * halfHeight * 0.7 * side,
+      base.y + uy * length * 0.24 + py * halfHeight * 0.7 * side,
+      tip.x - ux * length * 0.32 + px * halfHeight * 0.12 * side,
+      tip.y - uy * length * 0.32 + py * halfHeight * 0.12 * side,
+      tip.x,
+      tip.y
+    );
+  }
+
+  function drawArrowHeadAt(ctx, tip, angle, length, height) {
+    ctx.save();
+    ctx.lineWidth = Math.max(1.7, ctx.lineWidth);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.beginPath();
-    ctx.moveTo(to.x, to.y);
-    ctx.lineTo(to.x - Math.cos(angle - Math.PI / 6) * size, to.y - Math.sin(angle - Math.PI / 6) * size);
-    ctx.lineTo(to.x - Math.cos(angle + Math.PI / 6) * size, to.y - Math.sin(angle + Math.PI / 6) * size);
-    ctx.closePath();
-    ctx.fill();
+    drawArrowHeadBranchPath(ctx, tip, angle, length, height, 1);
+    drawArrowHeadBranchPath(ctx, tip, angle, length, height, -1);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawHarpoonAt(ctx, tip, angle, side, metrics, placement = 'head') {
+    const px = -Math.sin(angle);
+    const py = Math.cos(angle);
+    const strandSign = placement === 'tail' ? -1 : 1;
+    const point = {
+      x: tip.x + px * side * metrics.harpoonOffset * strandSign,
+      y: tip.y + py * side * metrics.harpoonOffset * strandSign
+    };
+    const branchSide = side * strandSign;
+    ctx.save();
+    ctx.lineWidth = Math.max(1.7, metrics.bodyLineWidth);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    drawArrowHeadBranchPath(ctx, point, angle, metrics.headLength, metrics.headHeight, branchSide);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawArrowBarAt(ctx, point, angle, metrics) {
+    const px = -Math.sin(angle);
+    const py = Math.cos(angle);
+    const size = metrics.barHalfSize;
+    ctx.save();
+    ctx.lineWidth = Math.max(1.7, metrics.bodyLineWidth);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(point.x + px * size, point.y + py * size);
+    ctx.lineTo(point.x - px * size, point.y - py * size);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawArrowHookAt(ctx, point, angle, metrics, placement = 'head') {
+    const px = -Math.sin(angle);
+    const py = Math.cos(angle);
+    const radius = Math.max(metrics.bodyLineWidth * 2.2, metrics.hookBack * 0.52);
+    const side = 1;
+    const strandSign = placement === 'tail' ? -1 : 1;
+    ctx.save();
+    ctx.lineWidth = Math.max(1.7, metrics.bodyLineWidth);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    metrics.offsets.forEach((offset) => {
+      const strand = {
+        x: point.x + px * offset * strandSign,
+        y: point.y + py * offset * strandSign
+      };
+      const normalX = px * side;
+      const normalY = py * side;
+      const center = {
+        x: strand.x + normalX * radius,
+        y: strand.y + normalY * radius
+      };
+      const startAngle = Math.atan2(strand.y - center.y, strand.x - center.x);
+      ctx.moveTo(strand.x, strand.y);
+      ctx.arc(center.x, center.y, radius, startAngle, startAngle + side * Math.PI, side < 0);
+    });
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawConnectPreview(ctx) {
@@ -607,6 +1221,7 @@
     state.mathTypesetTimer = window.setTimeout(() => {
       state.mathTypesetTimer = null;
       typesetNodeLabels();
+      typesetLatexDetailPreviews();
     }, 250);
   }
 
@@ -652,6 +1267,19 @@
     return {
       x: -dy / length,
       y: dx / length
+    };
+  }
+
+  function quadraticTangentAngle(start, control, end, t) {
+    const dx = 2 * (1 - t) * (control.x - start.x) + 2 * t * (end.x - control.x);
+    const dy = 2 * (1 - t) * (control.y - start.y) + 2 * t * (end.y - control.y);
+    return Math.atan2(dy, dx);
+  }
+
+  function offsetPoint(point, normal, offset) {
+    return {
+      x: point.x + normal.x * offset,
+      y: point.y + normal.y * offset
     };
   }
 
@@ -930,18 +1558,21 @@
     state.selectedNodeId = id;
     state.selectedArrowId = null;
     state.detailPreview = null;
+    state.activeLatexDetailField = null;
   }
 
   function selectArrow(id) {
     state.selectedArrowId = id;
     state.selectedNodeId = null;
     state.detailPreview = null;
+    state.activeLatexDetailField = null;
   }
 
   function clearSelection() {
     state.selectedNodeId = null;
     state.selectedArrowId = null;
     state.detailPreview = null;
+    state.activeLatexDetailField = null;
   }
 
   function deleteSelected() {
@@ -988,6 +1619,7 @@
     if (refs.referenceEditForm) refs.referenceEditForm.hidden = true;
     state.selectedNodeId = null;
     state.selectedArrowId = null;
+    state.activeLatexDetailField = null;
     state.connectSourceId = null;
     state.connectMode = false;
     state.viewExtra = {};
@@ -1145,6 +1777,8 @@
       refs.arrowSource,
       refs.arrowTarget,
       refs.arrowLabel,
+      refs.arrowLevel,
+      refs.arrowEndpointScale,
       refs.arrowCurve,
       refs.arrowLabelOffset,
       refs.arrowColor
@@ -1161,9 +1795,13 @@
       if (refs.nodeColor) refs.nodeColor.value = '#3d6b4f';
       populateArrowParentSelects(arrow);
       if (refs.arrowLabel) refs.arrowLabel.value = arrow ? (arrow.label || '') : '';
+      syncArrowPartPickers(arrow || null, !arrow);
+      setArrowLevelControl(arrow ? arrow.level : ARROW_LEVEL_DEFAULT, !arrow);
+      setArrowEndpointScaleControl(arrow ? arrow.endpointScale : ARROW_ENDPOINT_SCALE_DEFAULT, !arrow);
       if (refs.arrowCurve) refs.arrowCurve.value = arrow ? String(roundNumber(arrow.curve || 0)) : '0';
       if (refs.arrowLabelOffset) refs.arrowLabelOffset.value = arrow ? String(roundNumber(arrow.labelOffset || 0)) : '0';
       if (refs.arrowColor) refs.arrowColor.value = arrow ? normalizeColor(arrow.color, '#5f574e') : '#5f574e';
+      syncLatexDetailFields();
       return;
     }
     refs.nodeType.value = node.type;
@@ -1174,9 +1812,73 @@
     if (refs.nodeColor) refs.nodeColor.value = normalizeColor(node.color, NODE_TYPES[node.type].stroke);
     populateArrowParentSelects(null);
     if (refs.arrowLabel) refs.arrowLabel.value = '';
+    syncArrowPartPickers(null, true);
+    setArrowLevelControl(ARROW_LEVEL_DEFAULT, true);
+    setArrowEndpointScaleControl(ARROW_ENDPOINT_SCALE_DEFAULT, true);
     if (refs.arrowCurve) refs.arrowCurve.value = '0';
     if (refs.arrowLabelOffset) refs.arrowLabelOffset.value = '0';
     if (refs.arrowColor) refs.arrowColor.value = '#5f574e';
+    syncLatexDetailFields();
+  }
+
+  function showLatexDetailEditor(key) {
+    const field = NODE_DETAIL_LATEX_FIELDS.find((item) => item.key === key);
+    if (!field) return;
+    const input = refs[field.inputRef];
+    if (!input) return;
+    state.activeLatexDetailField = key;
+    syncLatexDetailFields();
+    input.hidden = false;
+    input.focus();
+    if (typeof input.setSelectionRange === 'function') {
+      const end = input.value.length;
+      input.setSelectionRange(end, end);
+    }
+  }
+
+  function syncLatexDetailFields() {
+    const node = findNode(state.selectedNodeId);
+    NODE_DETAIL_LATEX_FIELDS.forEach(({ key, inputRef, previewRef }) => {
+      const input = refs[inputRef];
+      const preview = refs[previewRef];
+      if (!input || !preview) return;
+      const value = input.value;
+      const showPreview = !!node && state.activeLatexDetailField !== key && hasDollarMath(value);
+      input.hidden = showPreview;
+      preview.hidden = !showPreview;
+      preview.disabled = !node;
+      preview.setAttribute('aria-label', `Edit ${key}`);
+      if (showPreview) {
+        if (preview.dataset.sourceText !== value) {
+          if (window.MathJax && typeof window.MathJax.typesetClear === 'function') {
+            window.MathJax.typesetClear([preview]);
+          }
+          preview.textContent = value;
+          preview.dataset.sourceText = value;
+          preview.dataset.needsTypeset = 'true';
+        }
+      } else {
+        delete preview.dataset.needsTypeset;
+        delete preview.dataset.sourceText;
+      }
+    });
+    typesetLatexDetailPreviews();
+  }
+
+  function typesetLatexDetailPreviews() {
+    const pending = NODE_DETAIL_LATEX_FIELDS
+      .map(({ previewRef }) => refs[previewRef])
+      .filter((preview) => preview && !preview.hidden && preview.dataset.needsTypeset === 'true');
+    if (!pending.length) return;
+    if (!window.MathJax || typeof window.MathJax.typesetPromise !== 'function') {
+      scheduleMathTypesetRetry();
+      return;
+    }
+    state.mathTypesetAttempts = 0;
+    pending.forEach((element) => {
+      delete element.dataset.needsTypeset;
+    });
+    window.MathJax.typesetPromise(pending).catch(() => {});
   }
 
   function populateArrowParentSelects(arrow) {
@@ -1212,10 +1914,17 @@
       state.detailPreview = {
         kind: 'arrow',
         id: arrow.id,
+        body: getArrowPartValue('body', arrow.body),
+        head: getArrowPartValue('head', arrow.head),
+        tail: getArrowPartValue('tail', arrow.tail),
+        level: getArrowLevelValue(arrow.level),
+        endpointScale: getArrowEndpointScaleValue(arrow.endpointScale),
         curve: clamp(finiteNumber(refs.arrowCurve ? refs.arrowCurve.value : arrow.curve, arrow.curve), -160, 160),
         labelOffset: clamp(finiteNumber(refs.arrowLabelOffset ? refs.arrowLabelOffset.value : arrow.labelOffset, arrow.labelOffset), -120, 120),
         color: normalizeColor(refs.arrowColor ? refs.arrowColor.value : arrow.color, arrow.color)
       };
+      syncArrowLevelValue(state.detailPreview.level);
+      syncArrowEndpointScaleValue(state.detailPreview.endpointScale);
       renderCanvas();
       setStatus('Previewing arrow style. Press update to save.');
     }
@@ -1232,6 +1941,11 @@
     if (state.detailPreview?.kind !== 'arrow' || state.detailPreview.id !== arrow.id) return arrow;
     return {
       ...arrow,
+      body: state.detailPreview.body,
+      head: state.detailPreview.head,
+      tail: state.detailPreview.tail,
+      level: state.detailPreview.level,
+      endpointScale: state.detailPreview.endpointScale,
       curve: state.detailPreview.curve,
       labelOffset: state.detailPreview.labelOffset,
       color: state.detailPreview.color
@@ -1250,6 +1964,7 @@
       node.result = cleanString(refs.nodeResult.value);
       node.color = normalizeColor(refs.nodeColor ? refs.nodeColor.value : node.color, NODE_TYPES[type].stroke);
       state.detailPreview = null;
+      state.activeLatexDetailField = null;
       setStatus(`Updated ${node.label}.`);
       renderAll();
       return;
@@ -1268,6 +1983,11 @@
       arrow.sourceId = sourceId;
       arrow.targetId = targetId;
       arrow.label = cleanString(refs.arrowLabel.value);
+      arrow.body = getArrowPartValue('body', arrow.body);
+      arrow.head = getArrowPartValue('head', arrow.head);
+      arrow.tail = getArrowPartValue('tail', arrow.tail);
+      arrow.level = getArrowLevelValue(arrow.level);
+      arrow.endpointScale = getArrowEndpointScaleValue(arrow.endpointScale);
       arrow.curve = clamp(finiteNumber(refs.arrowCurve ? refs.arrowCurve.value : arrow.curve, arrow.curve), -160, 160);
       arrow.labelOffset = clamp(finiteNumber(refs.arrowLabelOffset ? refs.arrowLabelOffset.value : arrow.labelOffset, arrow.labelOffset), -120, 120);
       arrow.color = normalizeColor(refs.arrowColor ? refs.arrowColor.value : arrow.color, '#5f574e');
@@ -1692,6 +2412,11 @@
         sourceId: arrow.sourceId,
         targetId: arrow.targetId,
         label: arrow.label,
+        body: arrow.body,
+        head: arrow.head,
+        tail: arrow.tail,
+        level: normalizeArrowLevel(arrow.level),
+        endpointScale: roundScale(arrow.endpointScale),
         curve: roundNumber(arrow.curve || 0),
         labelOffset: roundNumber(arrow.labelOffset || 0),
         color: arrow.color
@@ -1744,22 +2469,77 @@
   function loadImport() {
     const raw = refs.importInput.value.trim();
     if (!raw) {
-      setExportMessage('Paste exported JSON before loading.', true);
+      setExportMessage('Paste exported JSON or a preset file before loading.', true);
       return;
     }
     let data;
     try {
-      data = JSON.parse(raw);
+      data = parseImportText(raw);
     } catch (error) {
-      setExportMessage(`Invalid JSON: ${error.message}`, true);
+      setExportMessage(error.message, true);
       return;
     }
 
     try {
-      applyImportData(data, 'import JSON');
+      applyImportData(data, 'import');
     } catch (error) {
       setExportMessage(error.message, true);
     }
+  }
+
+  function parseImportText(raw) {
+    try {
+      return JSON.parse(raw);
+    } catch (jsonError) {
+      const presetData = parsePresetFileText(raw);
+      if (presetData) return presetData;
+      throw new Error(`Invalid import: expected JSON or an exported preset file. JSON parser said: ${jsonError.message}`);
+    }
+  }
+
+  function parsePresetFileText(raw) {
+    const targetPattern = /window\s*\.\s*THEOREM_GRAPH_PRESET_DATA\s*(?:\.\s*[A-Za-z_$][\w$]*|\[\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')\s*\])\s*=/g;
+    let match;
+    let lastError = null;
+    while ((match = targetPattern.exec(raw))) {
+      const objectStart = raw.indexOf('{', match.index + match[0].length);
+      const objectEnd = findJsonObjectEnd(raw, objectStart);
+      if (objectEnd < 0) continue;
+      try {
+        return JSON.parse(raw.slice(objectStart, objectEnd + 1));
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (lastError) {
+      throw new Error(`Invalid preset file: ${lastError.message}`);
+    }
+    return null;
+  }
+
+  function findJsonObjectEnd(text, start) {
+    if (start < 0 || text[start] !== '{') return -1;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let index = start; index < text.length; index += 1) {
+      const char = text[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === '\\') escaped = true;
+        else if (char === '"') inString = false;
+        continue;
+      }
+      if (char === '"') {
+        inString = true;
+      } else if (char === '{') {
+        depth += 1;
+      } else if (char === '}') {
+        depth -= 1;
+        if (depth === 0) return index;
+      }
+    }
+    return -1;
   }
 
   function applyImportData(data, sourceLabel = 'graph') {
@@ -1774,6 +2554,7 @@
     if (refs.referenceEditForm) refs.referenceEditForm.hidden = true;
     state.selectedNodeId = next.selectedNodeId;
     state.selectedArrowId = null;
+    state.activeLatexDetailField = null;
     state.connectMode = false;
     state.connectSourceId = null;
     state.viewExtra = next.viewExtra;
@@ -1983,8 +2764,11 @@
     delete viewExtra.selectedId;
     delete viewExtra.selectedReferenceKeys;
     delete viewExtra.layoutRunning;
+    const titleSource = Object.prototype.hasOwnProperty.call(data, 'title')
+      ? data.title
+      : (Object.prototype.hasOwnProperty.call(view, 'title') ? view.title : DEFAULT_GRAPH_TITLE);
     return {
-      title: cleanGraphTitle(data.title || view.title),
+      title: cleanGraphTitle(titleSource),
       nodes,
       arrows,
       references,
@@ -2036,7 +2820,7 @@
     if (refs.deleteSelectedReferences) refs.deleteSelectedReferences.disabled = state.selectedReferenceKeys.size === 0;
     if (refs.graphHelp) {
       refs.graphHelp.textContent = selectedArrow
-        ? 'Selected arrow: edit parents, curve, label, offset, and color in the Node / Arrow card.'
+        ? 'Selected arrow: edit parents, type, curve, label, offset, and color in the Node / Arrow card.'
         : 'Connect mode: click the source node, then the target node.';
     }
     if (refs.summary) {
@@ -2080,6 +2864,64 @@
 
   function normalizeType(type) {
     return NODE_TYPE_KEYS.includes(type) ? type : 'theorem';
+  }
+
+  function arrowPartsFromSource(source = {}) {
+    if (
+      Object.prototype.hasOwnProperty.call(source, 'body')
+      || Object.prototype.hasOwnProperty.call(source, 'head')
+      || Object.prototype.hasOwnProperty.call(source, 'tail')
+    ) {
+      const body = normalizeArrowBodySpec(source.body);
+      return {
+        body: body.body,
+        head: normalizeArrowPart('head', source.head),
+        tail: normalizeArrowPart('tail', source.tail),
+        migratedLevel: body.level
+      };
+    }
+    return arrowStyleDefinition(source.style);
+  }
+
+  function arrowStyleFromArrow(arrow = {}) {
+    return {
+      body: normalizeArrowPart('body', arrow.body),
+      head: normalizeArrowPart('head', arrow.head),
+      tail: normalizeArrowPart('tail', arrow.tail)
+    };
+  }
+
+  function normalizeArrowPart(part, value, fallback) {
+    const id = cleanString(value);
+    if (part === 'body') return ARROW_BODY_IDS.has(id) ? id : normalizeArrowPart('body', fallback || 'solid');
+    if (part === 'head') return ARROW_HEAD_IDS.has(id) ? id : normalizeArrowPart('head', fallback || 'arrow');
+    if (part === 'tail') return ARROW_TAIL_IDS.has(id) ? id : normalizeArrowPart('tail', fallback || 'none');
+    return '';
+  }
+
+  function normalizeArrowBodySpec(value) {
+    const id = cleanString(value);
+    if (id === 'double') return { body: 'solid', level: 2 };
+    if (id === 'double-dashed') return { body: 'dashed', level: 2 };
+    if (id === 'triple') return { body: 'solid', level: 3 };
+    return { body: normalizeArrowPart('body', id), level: null };
+  }
+
+  function normalizeArrowLevel(value) {
+    return Math.round(clamp(finiteNumber(value, ARROW_LEVEL_DEFAULT), ARROW_LEVEL_MIN, ARROW_LEVEL_MAX));
+  }
+
+  function normalizeArrowEndpointScale(value) {
+    return clamp(finiteNumber(value, ARROW_ENDPOINT_SCALE_DEFAULT), ARROW_ENDPOINT_SCALE_MIN, ARROW_ENDPOINT_SCALE_MAX);
+  }
+
+  function normalizeArrowStyle(style) {
+    const id = cleanString(style);
+    return ARROW_STYLE_MAP.has(id) ? id : 'arrow';
+  }
+
+  function arrowStyleDefinition(style) {
+    return ARROW_STYLE_MAP.get(normalizeArrowStyle(style)) || ARROW_STYLES[0];
   }
 
   function normalizeCitationKeys(value) {
@@ -2204,7 +3046,27 @@
   }
 
   function cleanGraphTitle(value) {
-    return cleanString(value).replace(/\s+/g, ' ') || DEFAULT_GRAPH_TITLE;
+    return cleanString(value).replace(/\s+/g, ' ');
+  }
+
+  function hasDollarMath(value) {
+    const text = cleanString(value);
+    if (!text) return false;
+    let opening = false;
+    for (let index = 0; index < text.length; index += 1) {
+      if (text[index] !== '$' || isEscaped(text, index)) continue;
+      if (opening) return true;
+      opening = true;
+    }
+    return false;
+  }
+
+  function isEscaped(text, index) {
+    let slashCount = 0;
+    for (let cursor = index - 1; cursor >= 0 && text[cursor] === '\\'; cursor -= 1) {
+      slashCount += 1;
+    }
+    return slashCount % 2 === 1;
   }
 
   function plainLabel(value) {
@@ -2235,6 +3097,10 @@
 
   function roundNumber(value) {
     return Math.round(value * 10) / 10;
+  }
+
+  function roundScale(value) {
+    return Math.round(normalizeArrowEndpointScale(value) * 100) / 100;
   }
 
   function truncateText(value, limit) {
