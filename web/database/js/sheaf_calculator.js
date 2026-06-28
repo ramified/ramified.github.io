@@ -94,6 +94,7 @@
   const HOMOLOGY_EXCEPTIONAL_DIVISOR_CLASS = 'exceptional_divisor';
   const HOMOLOGY_BRANCH_DIVISOR_CLASS = 'branch_divisor';
   const HOMOLOGY_RAMIFICATION_DIVISOR_CLASS = 'ramification_divisor';
+  const HOMOLOGY_RAMIFIED_COVER_HYPERPLANE_CLASS = 'ramified_cover_hyperplane';
   const HOMOLOGY_CYCLIC_ROOT_CLASS = 'cyclic_root';
   const HOMOLOGY_BLOWUP_EXCEPTIONAL_RULE_ID = 'blowup-exceptional-top';
   const HOMOLOGY_BLOWUP_POINT_PULLBACK_RULE_ID = 'blowup-point-pullback';
@@ -6729,6 +6730,7 @@
       if (removeRamifiedCoverCustomClass(base, HOMOLOGY_BRANCH_DIVISOR_CLASS)) removed = true;
       if (removeRamifiedCoverCustomClass(base, HOMOLOGY_CYCLIC_ROOT_CLASS)) removed = true;
       if (removeRamifiedCoverCustomClass(cover, HOMOLOGY_RAMIFICATION_DIVISOR_CLASS)) removed = true;
+      if (removeRamifiedCoverHyperplaneData(cover, map)) removed = true;
       if (removeCyclicRamifiedCoverRule(cover, map)) removed = true;
       if (removeCyclicRootBranchRule(base, cover, map)) removed = true;
       if (removeProjectiveBranchDegreeRule(base, cover)) removed = true;
@@ -6739,6 +6741,11 @@
     let changed = false;
     if (addRamifiedCoverCustomClass(base, baseGeometry, HOMOLOGY_BRANCH_DIVISOR_CLASS, branchSymbol, 'ramified-cover')) changed = true;
     if (addRamifiedCoverCustomClass(cover, coverGeometry, HOMOLOGY_RAMIFICATION_DIVISOR_CLASS, ramificationSymbol, 'ramified-cover')) changed = true;
+    if (embeddedRamifiedCoverHyperplaneSupported(baseGeometry, coverGeometry)) {
+      if (addRamifiedCoverHyperplaneClassAndRules(base, baseGeometry, cover, coverGeometry, map, degree)) changed = true;
+    } else if (removeRamifiedCoverHyperplaneData(cover, map)) {
+      changed = true;
+    }
     if (projectiveRamifiedCoverBranchDegree(baseGeometry, cover) != null) {
       if (addProjectiveBranchDegreeRule(base, baseGeometry, cover)) changed = true;
     } else if (removeProjectiveBranchDegreeRule(base, cover)) {
@@ -7643,6 +7650,123 @@
     if (existing.symbol !== symbol || existing.deleted) changed = true;
     homology.classes[classId] = { ...existing, symbol };
     delete homology.classes[classId].deleted;
+    return changed;
+  }
+
+  function embeddedRamifiedCoverHyperplaneSupported(baseGeometry, coverGeometry) {
+    return !!baseGeometry
+      && !!coverGeometry
+      && Number.isInteger(baseGeometry.dim)
+      && Number.isInteger(coverGeometry.dim)
+      && baseGeometry.dim > 0
+      && coverGeometry.dim === baseGeometry.dim
+      && varietyHasHyperplaneClass(baseGeometry.type);
+  }
+
+  function addRamifiedCoverHyperplaneClassAndRules(base, baseGeometry, cover, coverGeometry, map, degree) {
+    if (!map || !embeddedRamifiedCoverHyperplaneSupported(baseGeometry, coverGeometry)) return false;
+    let changed = false;
+    if (addRamifiedCoverCustomClass(cover, coverGeometry, HOMOLOGY_RAMIFIED_COVER_HYPERPLANE_CLASS, '\\widetilde{H}', 'ramified-cover')) changed = true;
+    if (addRamifiedCoverHyperplanePullbackRule(baseGeometry, cover, coverGeometry, map)) changed = true;
+    if (addRamifiedCoverHyperplaneTopRule(baseGeometry, cover, coverGeometry, degree)) changed = true;
+    if (smoothCyclicRamifiedCoverHyperplaneCoefficient(cover, degree) != null) {
+      if (addRamifiedCoverRamificationHyperplaneRule(cover, coverGeometry, degree)) changed = true;
+    } else if (removeStoredHomologyRuleById(cover, `default-ramified-cover-ramification-hyperplane-${cover.id}`)) {
+      changed = true;
+    }
+    return changed;
+  }
+
+  function addRamifiedCoverHyperplanePullbackRule(baseGeometry, cover, coverGeometry, map) {
+    const hyperplaneDef = homologyClassDefById(baseGeometry, HOMOLOGY_HYPERPLANE_CLASS);
+    const coverHyperplaneDef = homologyClassDefById(coverGeometry, HOMOLOGY_RAMIFIED_COVER_HYPERPLANE_CLASS);
+    const pullbackDef = mapOperationHomologyClassDefinition(map, 'pullback', hyperplaneDef, coverGeometry);
+    if (!hyperplaneDef || !coverHyperplaneDef || !pullbackDef) return false;
+    const pullbackId = homologyDefVariableId(pullbackDef, coverGeometry);
+    const coverHyperplaneId = homologyDefVariableId(coverHyperplaneDef, coverGeometry);
+    return upsertAutomaticRamifiedCoverHomologyRule(cover, coverGeometry, {
+      id: `default-ramified-cover-hyperplane-pullback-${map.id}`,
+      builtin: true,
+      automatic: 'ramified-cover',
+      enabled: true,
+      lhs: { powers: { [pullbackId]: 1 } },
+      rhs: [{ coefficient: '1', powers: { [coverHyperplaneId]: 1 } }]
+    }, pullbackId);
+  }
+
+  function addRamifiedCoverRamificationHyperplaneRule(cover, coverGeometry, degree) {
+    const coefficient = smoothCyclicRamifiedCoverHyperplaneCoefficient(cover, degree);
+    if (coefficient == null) return false;
+    const ramificationDef = homologyClassDefById(coverGeometry, HOMOLOGY_RAMIFICATION_DIVISOR_CLASS);
+    const coverHyperplaneDef = homologyClassDefById(coverGeometry, HOMOLOGY_RAMIFIED_COVER_HYPERPLANE_CLASS);
+    if (!ramificationDef || !coverHyperplaneDef) return false;
+    const ramificationId = homologyDefVariableId(ramificationDef, coverGeometry);
+    const coverHyperplaneId = homologyDefVariableId(coverHyperplaneDef, coverGeometry);
+    return upsertAutomaticRamifiedCoverHomologyRule(cover, coverGeometry, {
+      id: `default-ramified-cover-ramification-hyperplane-${cover.id}`,
+      builtin: true,
+      automatic: 'ramified-cover',
+      enabled: true,
+      lhs: { powers: { [ramificationId]: 1 } },
+      rhs: [{ coefficient: String(coefficient), powers: { [coverHyperplaneId]: 1 } }]
+    }, ramificationId);
+  }
+
+  function addRamifiedCoverHyperplaneTopRule(baseGeometry, cover, coverGeometry, degree) {
+    if (!Number.isInteger(coverGeometry?.dim) || coverGeometry.dim <= 0) return false;
+    const coverHyperplaneDef = homologyClassDefById(coverGeometry, HOMOLOGY_RAMIFIED_COVER_HYPERPLANE_CLASS);
+    const pointDef = homologyClassDefById(coverGeometry, HOMOLOGY_POINT_CLASS);
+    if (!coverHyperplaneDef || !pointDef) return false;
+    const coverHyperplaneId = homologyDefVariableId(coverHyperplaneDef, coverGeometry);
+    const pointId = homologyDefVariableId(pointDef, coverGeometry);
+    const coefficient = ramifiedCoverHyperplaneTopCoefficient(baseGeometry, degree);
+    return upsertAutomaticRamifiedCoverHomologyRule(cover, coverGeometry, {
+      id: `default-ramified-cover-hyperplane-top-${cover.id}`,
+      builtin: true,
+      automatic: 'ramified-cover',
+      enabled: true,
+      lhs: { powers: { [coverHyperplaneId]: coverGeometry.dim } },
+      rhs: [{ coefficient: coefficient.toString(), powers: { [pointId]: 1 } }]
+    }, coverHyperplaneId);
+  }
+
+  function upsertAutomaticRamifiedCoverHomologyRule(variety, geometry, rule, primaryVariableId) {
+    const homology = ensureHomologySystem(variety, geometry);
+    if (automaticHomologyRuleIsSuppressed(homology, rule)) return false;
+    const existing = homology.rules.find((item) => item.id === rule.id);
+    if (existing && JSON.stringify(existing) === JSON.stringify(rule)) return false;
+    homology.rules = withoutHomologyRuleForVariable(homology.rules, primaryVariableId, { includeBuiltin: true })
+      .filter((item) => item.id !== rule.id);
+    homology.rules.push(rule);
+    return true;
+  }
+
+  function smoothCyclicRamifiedCoverHyperplaneCoefficient(cover, degree) {
+    const construction = cover?.construction;
+    if (!construction || construction.coverMode !== 'cyclic' || construction.smoothCyclic !== true) return null;
+    const branchDegree = ramifiedCoverBranchDegreeFromConstruction(construction);
+    const coverDegree = normalizeRamifiedCoverDegree(degree ?? construction.degree);
+    const rootTwist = ramifiedCoverRootTwistFromBranchDegree(branchDegree, coverDegree);
+    return rootTwist == null ? null : rootTwist;
+  }
+
+  function ramifiedCoverHyperplaneTopCoefficient(baseGeometry, degree) {
+    const coverDegree = BigInt(normalizeRamifiedCoverDegree(degree));
+    const baseDegree = (baseGeometry?.degrees || []).reduce((product, item) => product * BigInt(item), 1n);
+    return coverDegree * baseDegree;
+  }
+
+  function removeRamifiedCoverHyperplaneData(cover, map = null) {
+    let changed = false;
+    if (removeRamifiedCoverCustomClass(cover, HOMOLOGY_RAMIFIED_COVER_HYPERPLANE_CLASS)) changed = true;
+    if (map && removeStoredHomologyRuleById(cover, `default-ramified-cover-hyperplane-pullback-${map.id}`)) changed = true;
+    if (!map && cover?.homology?.rules) {
+      const before = cover.homology.rules.length;
+      cover.homology.rules = cover.homology.rules.filter((rule) => !String(rule.id || '').startsWith('default-ramified-cover-hyperplane-pullback-'));
+      if (cover.homology.rules.length !== before) changed = true;
+    }
+    if (cover && removeStoredHomologyRuleById(cover, `default-ramified-cover-ramification-hyperplane-${cover.id}`)) changed = true;
+    if (cover && removeStoredHomologyRuleById(cover, `default-ramified-cover-hyperplane-top-${cover.id}`)) changed = true;
     return changed;
   }
 
@@ -19906,9 +20030,224 @@
     return sheaf.type === 'abstract' || sheaf.type === 'locally-free';
   }
 
+  function sheafIdentificationRuleForSheaf(geometry, sheaf, options = {}) {
+    if (!geometry || !sheaf || sheaf.construction || options.skipSheafIdentification === true) return null;
+    const type = canonicalSheafType(sheaf.type);
+    const labelLatex = sheafLabelLatex(sheaf);
+    const labelPlain = sheafLabelPlain(sheaf);
+    if (geometry.type === 'abelian' || geometry.type === 'point') {
+      if (type === 'tangent') {
+        return {
+          id: `identify-${geometry.type}-tangent-${geometry.varietyId || homologyScopeId(geometry)}`,
+          source: type,
+          target: { kind: 'trivial', rank: geometry.dim },
+          message: `Tangent sheaf identified with O_X^{oplus ${geometry.dim}} on this ${geometry.type === 'point' ? 'point' : 'abelian variety'}.`
+        };
+      }
+      if (type === 'cotangent') {
+        return {
+          id: `identify-${geometry.type}-cotangent-${geometry.varietyId || homologyScopeId(geometry)}`,
+          source: type,
+          target: { kind: 'trivial', rank: geometry.dim },
+          message: `Cotangent sheaf identified with O_X^{oplus ${geometry.dim}} on this ${geometry.type === 'point' ? 'point' : 'abelian variety'}.`
+        };
+      }
+      if (type === 'canonical') {
+        return {
+          id: `identify-${geometry.type}-canonical-${geometry.varietyId || homologyScopeId(geometry)}`,
+          source: type,
+          target: { kind: 'structure' },
+          message: `Canonical sheaf identified with O_X on this ${geometry.type === 'point' ? 'point' : 'abelian variety'}.`
+        };
+      }
+    }
+    if (geometry.type === 'projective' && geometry.dim === 1) {
+      if (type === 'canonical') {
+        return {
+          id: `identify-p1-canonical-${geometry.varietyId || homologyScopeId(geometry)}`,
+          source: type,
+          target: { kind: 'twist', twist: -2 },
+          message: 'Canonical sheaf on P^1 identified with O_{P^1}(-2).'
+        };
+      }
+      if (type === 'tangent') {
+        return {
+          id: `identify-p1-tangent-${geometry.varietyId || homologyScopeId(geometry)}`,
+          source: type,
+          target: { kind: 'twist', twist: 2 },
+          message: 'Tangent sheaf on P^1 identified with O_{P^1}(2).'
+        };
+      }
+    }
+    if (type === 'canonical' && embeddedGeometrySupportsLineCohomology(geometry)) {
+      const twist = completeIntersectionCanonicalTwist(geometry);
+      return {
+        id: `identify-embedded-canonical-${geometry.varietyId || homologyScopeId(geometry)}`,
+        source: type,
+        target: { kind: 'twist', twist },
+        message: `Canonical sheaf identified with O_X(${twist}) by adjunction.`
+      };
+    }
+    if (isUniversalBundleSheafType(type) && varietyHasHyperplaneClass(geometry.type)) {
+      return {
+        id: `identify-projective-universal-${geometry.varietyId || homologyScopeId(geometry)}`,
+        source: type,
+        target: { kind: 'twist', twist: -1 },
+        message: 'Universal bundle identified with O_X(-1).'
+      };
+    }
+    if (geometry.type === 'grassmannian') {
+      if (isUniversalBundleSheafType(type)) {
+        return {
+          id: `identify-grassmannian-universal-${geometry.varietyId || homologyScopeId(geometry)}`,
+          source: type,
+          target: { kind: 'grassmannian-sub' },
+          message: 'Universal bundle on the Grassmannian identified with the tautological subbundle S.'
+        };
+      }
+      if (type === 'tangent') {
+        return {
+          id: `identify-grassmannian-tangent-${geometry.varietyId || homologyScopeId(geometry)}`,
+          source: type,
+          target: { kind: 'grassmannian-tangent' },
+          message: 'Tangent sheaf on the Grassmannian identified with S^* tensor Q.'
+        };
+      }
+      if (type === 'cotangent') {
+        return {
+          id: `identify-grassmannian-cotangent-${geometry.varietyId || homologyScopeId(geometry)}`,
+          source: type,
+          target: { kind: 'grassmannian-cotangent' },
+          message: 'Cotangent sheaf on the Grassmannian identified with S tensor Q^*.'
+        };
+      }
+      if (type === 'canonical') {
+        return {
+          id: `identify-grassmannian-canonical-${geometry.varietyId || homologyScopeId(geometry)}`,
+          source: type,
+          target: { kind: 'grassmannian-plucker', twist: -geometry.grassmannianN },
+          message: `Canonical sheaf on the Grassmannian identified with O_Gr(${-geometry.grassmannianN}).`
+        };
+      }
+    }
+    if (geometryHasNumericalCurveLabel(geometry)) {
+      if (type === 'cotangent') {
+        return {
+          id: `identify-curve-cotangent-${geometry.varietyId || homologyScopeId(geometry)}`,
+          source: type,
+          target: { kind: 'curve-line', lineType: 'canonical' },
+          message: 'Cotangent sheaf on a smooth curve identified with the canonical line bundle.'
+        };
+      }
+      if (type === 'tangent') {
+        return {
+          id: `identify-curve-tangent-${geometry.varietyId || homologyScopeId(geometry)}`,
+          source: type,
+          target: { kind: 'curve-line', lineType: 'tangent' },
+          message: 'Tangent sheaf on a smooth curve identified with omega_C^{-1}.'
+        };
+      }
+      if (type === 'canonical') {
+        return {
+          id: `identify-curve-canonical-${geometry.varietyId || homologyScopeId(geometry)}`,
+          source: type,
+          target: { kind: 'curve-line', lineType: 'canonical' },
+          message: 'Canonical sheaf on a smooth curve represented as a line bundle of degree 2g-2.'
+        };
+      }
+    }
+    if (geometry.type === 'product') {
+      if (type === 'tangent' || type === 'cotangent') {
+        return {
+          id: `identify-product-${type}-${geometry.varietyId || homologyScopeId(geometry)}`,
+          source: type,
+          target: { kind: 'product-direct-sum', factorType: type },
+          message: `${type === 'tangent' ? 'Tangent' : 'Cotangent'} sheaf on a product identified with the direct sum of factor pullbacks.`
+        };
+      }
+      if (type === 'canonical') {
+        return {
+          id: `identify-product-canonical-${geometry.varietyId || homologyScopeId(geometry)}`,
+          source: type,
+          target: { kind: 'product-canonical' },
+          message: 'Canonical sheaf on a product identified with the tensor product of factor canonical pullbacks.'
+        };
+      }
+    }
+    if (type === 'structure') {
+      return {
+        id: `identify-structure-${geometry.varietyId || homologyScopeId(geometry)}`,
+        source: type,
+        target: { kind: 'structure' },
+        message: 'Structure sheaf computed as O_X.'
+      };
+    }
+    if (type === 'twist' && normalizedInt(sheaf.twist, -24, 24, 0) === 0) {
+      return {
+        id: `identify-zero-twist-${geometry.varietyId || homologyScopeId(geometry)}`,
+        source: type,
+        target: { kind: 'structure' },
+        message: 'O_X(0) identified with O_X.'
+      };
+    }
+    return null;
+  }
+
+  function buildSheafIdentificationBundle(geometry, sheaf, rule, options = {}) {
+    if (!rule?.target) return null;
+    const target = rule.target;
+    const labelLatex = sheafLabelLatex(sheaf);
+    const labelPlain = sheafLabelPlain(sheaf);
+    if (target.kind === 'trivial') {
+      return buildTrivialBundle(geometry.dim, target.rank, labelLatex, labelPlain);
+    }
+    if (target.kind === 'structure') {
+      return buildTrivialBundle(geometry.dim, 1, labelLatex, labelPlain);
+    }
+    if (target.kind === 'twist') {
+      if (!varietySupportsTwist(geometry.type)) return null;
+      if (geometry.type === 'grassmannian') {
+        return buildGrassmannianPluckerLineBundle(geometry, target.twist, geometry.dim, labelLatex, labelPlain);
+      }
+      return buildLineFromHyperplane(geometry, target.twist, geometry.dim, labelLatex, labelPlain);
+    }
+    if (target.kind === 'grassmannian-sub') {
+      return relabelBundle(buildGrassmannianSubBundle(geometry), labelLatex, labelPlain);
+    }
+    if (target.kind === 'grassmannian-tangent') {
+      return relabelBundle(buildGrassmannianTangentBundle(geometry, sheaf), labelLatex, labelPlain);
+    }
+    if (target.kind === 'grassmannian-cotangent') {
+      const tangent = buildGrassmannianTangentBundle(geometry, sheaf);
+      const chComps = tangent.chComps.map((comp, i) => (
+        i === 0 ? comp : comp.scale(fraction(i % 2 === 0 ? 1 : -1))
+      ));
+      return buildBundleFromCh(chComps, tangent.rankLatex, tangent.rankPlain, labelLatex, labelPlain);
+    }
+    if (target.kind === 'grassmannian-plucker') {
+      return buildGrassmannianPluckerLineBundle(geometry, target.twist, geometry.dim, labelLatex, labelPlain);
+    }
+    if (target.kind === 'curve-line') {
+      return buildCurveLineBundle(geometry, { ...sheaf, labelLatex, labelPlain }, target.lineType);
+    }
+    if (target.kind === 'product-direct-sum') {
+      return buildProductGeometrySheaf(geometry, sheaf, { ...options, skipSheafIdentification: true });
+    }
+    if (target.kind === 'product-canonical') {
+      return buildProductGeometrySheaf(geometry, sheaf, { ...options, skipSheafIdentification: true });
+    }
+    return null;
+  }
+
   function buildBundleForSheaf(geometry, sheaf, options = {}) {
     const d = geometry.dim;
     if (sheaf.construction) return buildConstructedSheafBundle(geometry, sheaf, options);
+    const identification = sheafIdentificationRuleForSheaf(geometry, sheaf, options);
+    const identifiedBundle = buildSheafIdentificationBundle(geometry, sheaf, identification, options);
+    if (identifiedBundle) {
+      identifiedBundle.sheafIdentificationRule = identification;
+      return identifiedBundle;
+    }
     if (sheaf.type === 'structure') return buildTrivialBundle(d, 1, sheaf.labelLatex, sheaf.labelPlain);
     if (sheaf.type === 'divisor-line') {
       return buildLineFromFirstChern(divisorPolynomialFromCoefficients(sheaf.divisorCoefficients, geometry), d, sheaf.labelLatex, sheaf.labelPlain);
@@ -22601,6 +22940,8 @@
         rules.push(grrRule);
         return;
       }
+      const identificationRule = classStepTotalSheafIdentificationRuleForVariable(id, sheaf, geometry, family);
+      if (identificationRule) rules.push(identificationRule);
       const rhs = classStepTotalClassExpansionPoly(sheaf, geometry, family).truncate(geometry.dim);
       if (polyEquals(Poly.variable(id), rhs)) return;
       const sheafKey = sheaf?.sourceObject?.id || sheaf?.id || sheafLabelPlain(sheaf);
@@ -22649,6 +22990,34 @@
         rhs: serializeHomologyPoly(rhs)
       });
     };
+    const addIdentifiedSheafTotalFromId = (id) => {
+      if (seen.has(id)) return;
+      const data = VARS.get(id)
+        || restoreClassStepIdentifiedSheafVariableById(id, { geometryId: session.geometry?.varietyId || null });
+      if (data?.classStepKind !== 'identifiedSheafTotalClass') return;
+      const family = classFormulaNormalizeClassFamily(data.classStepFamily || 'chern');
+      const rhs = classStepIdentifiedSheafTotalExpansionPoly(id, data, session);
+      if (!(rhs instanceof Poly) || polyEquals(Poly.variable(id), rhs)) return;
+      seen.add(id);
+      rules.push({
+        id: `step-expand-identified-total-${variableIdSafe(id)}`,
+        builtin: true,
+        enabled: true,
+        selected: true,
+        stepSourceLabel: 'Expand total class',
+        classStepKind: 'total-class-expansion',
+        classStepDisplayRule: true,
+        classStepApplyAllOccurrences: true,
+        classStepPayoffRule: true,
+        classStepAllowSameLhs: true,
+        classStepAllowMixedDegree: true,
+        classStepRuleGeometry: geometryByVarietyId(data.geometryId) || session.geometry,
+        classStepDisplayKey: `total-class-expansion:identified:${family}:${id}`,
+        classStepDisplayLatex: `${data.latex || monomialLatex(monoKey({ [id]: 1 }))}=${formatPolyLatex(rhs)}`,
+        lhs: { powers: { [id]: 1 } },
+        rhs: serializeHomologyPoly(rhs)
+      });
+    };
     const addDerivedTermExpressionFromId = (id) => {
       if (seen.has(id)) return;
       const data = VARS.get(id);
@@ -22687,6 +23056,7 @@
         for (const id of Object.keys(parseMonoKey(key))) {
           addFromId(id);
           addBaseSqrtToddFromId(id);
+          addIdentifiedSheafTotalFromId(id);
           addDerivedTermExpressionFromId(id);
           const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
           if (data?.kind === 'mapHomology' && (data.sourceKey || data.sourceKey === '')) {
@@ -22989,7 +23359,9 @@
           ...homologyClassDefinitions(ruleGeometry, { includeMapClasses: true }).flatMap((def) => [...homologyDefVariableIds(def, ruleGeometry)]),
           ...ruleVariables
         ]);
-      return homologyRulePreservesDegree(rule, ruleDefsForGeometry, { geometry: ruleGeometry })
+      const preservesDegree = rule.classStepAllowMixedDegree === true
+        || homologyRulePreservesDegree(rule, ruleDefsForGeometry, { geometry: ruleGeometry });
+      return preservesDegree
         && homologyRuleUsesAvailableVariables(rule, ruleVariablesForGeometry);
     });
   }
@@ -23022,7 +23394,9 @@
     return [...new Set((rules || []).flatMap(homologyRuleVariableIds))]
       .filter((id) => !existing.has(id))
       .map((id) => {
-        const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+        const data = VARS.get(id)
+          || ensureMapHomologyVariableFromId(id)
+          || restoreClassStepIdentifiedSheafVariableById(id, { geometryId: geometry?.varietyId || null });
         if (!data || !Number.isFinite(data.degree)) return null;
         return {
           id,
@@ -23254,7 +23628,9 @@
     const ids = classStepVisibleAndMapSourceVariableIds(session);
     const rules = [];
     for (const id of ids) {
-      const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+      const data = VARS.get(id)
+        || ensureMapHomologyVariableFromId(id)
+        || restoreClassStepIdentifiedSheafVariableById(id, { geometryId: session.geometry?.varietyId || null });
       if (data?.classStepKind === 'formalTodd') {
         const geometry = geometryByVarietyId(data.geometryId) || session.geometry;
         rules.push(classStepToddRuleForVariable(id, geometry, data.classStepDegree));
@@ -23266,6 +23642,8 @@
       }
       const sourceDef = classStepSheafDefForVariable(id, data, session);
       if (sourceDef) rules.push(...classStepRulesForSheafDef(sourceDef, session));
+      const identifiedRule = classStepIdentifiedSheafFollowupRule(id, data, session);
+      if (identifiedRule) rules.push(identifiedRule);
     }
     rules.push(...classStepTangentChernRulesForVisibleVariables(session, ids));
     rules.push(...classStepPullbackCommutationRules(session, ids));
@@ -23486,6 +23864,136 @@
     };
   }
 
+  function classStepIdentifiedSheafFollowupRule(id, data, session) {
+    if (!id || !data || !session?.geometry) return null;
+    const kind = data.classStepKind;
+    if (kind !== 'identifiedSheafClass' && kind !== 'identifiedSheafTotalClass') return null;
+    if (kind === 'identifiedSheafTotalClass') return null;
+    const sourceObject = state.sheaves.find((item) => item.id === data.sourceSheafObjectId);
+    const geometry = geometryByVarietyId(data.geometryId) || session.geometry;
+    if (!sourceObject || !geometry) return null;
+    const sheaf = sheafFromObject(sourceObject, geometry);
+    const identification = sheafIdentificationRuleForSheaf(geometry, sheaf);
+    if (!identification?.target) return null;
+    const bundle = buildSheafIdentificationBundle(geometry, sheaf, identification, { geometry });
+    if (!bundle) return null;
+    const family = classFormulaNormalizeClassFamily(data.classStepFamily || 'chern');
+    let rhs = null;
+    let sourceLabel = family === 'character' ? 'Chern character' : 'Chern class';
+    if (classStepTargetUsesFormalDerivedVariables(family)) {
+      rhs = classStepIdentifiedSheafDerivedComponentPoly(sheaf, geometry, identification, family, data.classStepDegree);
+      sourceLabel = classStepDerivedSourceLabel(family);
+    } else {
+      rhs = classStepComputedBundleComponent(bundle, { degree: data.classStepDegree }, family, geometry);
+    }
+    if (!(rhs instanceof Poly)) return null;
+    const rhsPoly = rhs.truncate(geometry.dim);
+    const lhs = { powers: { [id]: 1 } };
+    if (polyEquals(polyFromPowers(lhs.powers), rhsPoly)) return null;
+    return {
+      id: `step-identified-sheaf-compute-${variableIdSafe(id)}`,
+      builtin: true,
+      enabled: true,
+      selected: true,
+      stepSourceLabel: sourceLabel,
+      classStepKind: 'identified-sheaf-compute',
+      classStepApplyAllOccurrences: true,
+      classStepAllowSameLhs: true,
+      classStepPayoffRule: true,
+      classStepRuleGeometry: geometry,
+      classStepDisplayKey: `identified-sheaf-compute:${id}`,
+      classStepDisplayLatex: `${data.latex || monomialLatex(monoKey(lhs.powers))}=${formatPolyLatex(rhsPoly)}`,
+      lhs,
+      rhs: serializeHomologyPoly(rhsPoly)
+    };
+  }
+
+  function classStepIdentifiedSheafTotalExpansionPoly(id, data, session) {
+    if (!id || data?.classStepKind !== 'identifiedSheafTotalClass') return null;
+    const sourceObject = state.sheaves.find((item) => item.id === data.sourceSheafObjectId);
+    const geometry = geometryByVarietyId(data.geometryId) || session?.geometry;
+    if (!sourceObject || !geometry) return null;
+    const sheaf = sheafFromObject(sourceObject, geometry);
+    const identification = sheafIdentificationRuleForSheaf(geometry, sheaf);
+    if (!identification?.target) return null;
+    const family = classFormulaNormalizeClassFamily(data.classStepFamily || 'chern');
+    const comps = zeroComponentArray(geometry.dim);
+    for (let degree = 1; degree <= geometry.dim; degree += 1) {
+      comps[degree] = classStepIdentifiedSheafVariablePoly(sheaf, geometry, family, degree, identification);
+    }
+    const constant = classStepIdentifiedSheafTotalExpansionConstant(sheaf, geometry, family, identification);
+    return totalFromComponents(comps, geometry.dim, constant);
+  }
+
+  function classStepIdentifiedSheafTotalExpansionConstant(sheaf, geometry, family, identification) {
+    const normalized = classFormulaNormalizeClassFamily(family);
+    if (normalized === 'character' || normalized === 'mukai' || normalized === 'kappa') {
+      return classStepIdentifiedSheafRankPoly(sheaf, geometry, identification);
+    }
+    return Poly.one();
+  }
+
+  function classStepIdentifiedSheafRankPoly(sheaf, geometry, identification) {
+    const bundle = buildSheafIdentificationBundle(geometry, sheaf, identification, { geometry });
+    if (!bundle) return Poly.zero();
+    return rankAsDegreeZeroPoly(bundle, `identified${variableIdSafe(sheaf?.sourceObject?.id || sheaf?.id || 'rank')}Rank`);
+  }
+
+  function classStepIdentifiedSheafDerivedComponentPoly(sheaf, geometry, identification, family, degree) {
+    if (!Number.isInteger(degree) || degree < 0) return null;
+    const bundle = classStepIdentifiedSheafFormalBundle(sheaf, geometry, identification);
+    if (!bundle) return null;
+    const target = classFormulaNormalizeClassFamily(family);
+    if (target === 'mukai') {
+      return classStepDerivedTermExpressionVariablePoly(sheaf, geometry, target, degree);
+    }
+    const total = target === 'kappa'
+      ? classStepIdentifiedSheafKappaDefinitionTotal(sheaf, geometry, identification, geometry.dim)
+      : classStepDerivedBundlePoly(bundle, target, geometry, geometry.dim);
+    return total instanceof Poly ? homogeneousPart(total, degree) : null;
+  }
+
+  function classStepIdentifiedSheafFormalBundle(sheaf, geometry, identification) {
+    if (!sheaf || !geometry || !identification?.target) return null;
+    const cComps = zeroComponentArray(geometry.dim);
+    for (let degree = 1; degree <= geometry.dim; degree += 1) {
+      cComps[degree] = classStepIdentifiedSheafVariablePoly(sheaf, geometry, 'chern', degree, identification);
+    }
+    const rank = classStepIdentifiedSheafRankDisplay(sheaf, geometry, identification);
+    return buildBundleFromChern(
+      cComps,
+      rank.latex,
+      rank.plain,
+      classStepIdentifiedSheafTargetLatex(sheaf, geometry, identification),
+      classStepIdentifiedSheafTargetPlain(sheaf, geometry, identification)
+    );
+  }
+
+  function classStepIdentifiedSheafRankDisplay(sheaf, geometry, identification) {
+    const bundle = buildSheafIdentificationBundle(geometry, sheaf, identification, { geometry });
+    if (bundle?.rankLatex || bundle?.rankPlain) {
+      return {
+        latex: bundle.rankLatex || bundle.rankPlain || '',
+        plain: bundle.rankPlain || latexToPlain(bundle.rankLatex || '')
+      };
+    }
+    return { latex: '', plain: '' };
+  }
+
+  function classStepIdentifiedSheafKappaDefinitionTotal(sheaf, geometry, identification, d = geometry?.dim ?? MAX_DIMENSION) {
+    const chTotal = totalFromComponents(
+      Array.from({ length: d + 1 }, (_, degree) => (
+        degree === 0 ? Poly.zero() : classStepIdentifiedSheafVariablePoly(sheaf, geometry, 'character', degree, identification)
+      )),
+      d,
+      classStepIdentifiedSheafRankPoly(sheaf, geometry, identification)
+    );
+    const rank = classStepIdentifiedSheafRankPoly(sheaf, geometry, identification);
+    const ch1 = classStepIdentifiedSheafVariablePoly(sheaf, geometry, 'character', 1, identification);
+    const exponent = ch1.mul(reciprocalRuleCoefficientFactor(rank), d).scale(fraction(-1));
+    return chTotal.mul(expPoly(exponent, d), d);
+  }
+
   function classStepDerivedTermExpressionVariablePoly(sheaf, geometry, target, degree) {
     return Poly.variable(classStepDefineDerivedTermExpressionVariable(sheaf, geometry, target, degree));
   }
@@ -23643,6 +24151,8 @@
       && rule.lhs?.powers?.[def.id] === 1
     )).map((rule) => classStepStoredSheafRule(rule, source, session)));
     rules.push(...classStepDefaultSheafRulesForDef(def, sheaf, geometry, family, session));
+    const identificationRule = classStepSheafIdentificationRuleForSource(source, session);
+    if (identificationRule) rules.push(identificationRule);
     if (sheaf?.construction?.type === 'ses-term') {
       rules.push(...classStepSesRules({
         ...session,
@@ -23672,6 +24182,153 @@
     }
     classStepAppendComputedChartRule(rules, classStepComputedChartRuleForDef(source, session));
     return rules;
+  }
+
+  function classStepSheafIdentificationRuleForSource(source, session) {
+    const { def, sheaf, geometry, family } = source || {};
+    if (!def || !sheaf || !geometry || !family) return null;
+    const identification = sheafIdentificationRuleForSheaf(geometry, sheaf);
+    if (!identification?.target) return null;
+    return classStepSheafIdentificationRuleForDef(def, family, { ...session, sheaf, geometry }, identification);
+  }
+
+  function classStepTotalSheafIdentificationRuleForVariable(id, sheaf, geometry, family) {
+    if (!id || !sheaf || !geometry) return null;
+    const normalized = classFormulaNormalizeClassFamily(family);
+    const identification = sheafIdentificationRuleForSheaf(geometry, sheaf);
+    if (!identification?.target) return null;
+    const rhsPoly = classStepIdentifiedSheafTotalVariablePoly(sheaf, geometry, normalized, identification);
+    const lhs = { powers: { [id]: 1 } };
+    if (polyEquals(polyFromPowers(lhs.powers), rhsPoly)) return null;
+    const sheafKey = sheaf?.sourceObject?.id || sheaf?.id || sheafLabelPlain(sheaf);
+    return {
+      id: `step-sheaf-identification-total-${normalized}-${variableIdSafe(id)}`,
+      builtin: true,
+      enabled: true,
+      selected: true,
+      stepSourceLabel: 'Identification',
+      classStepKind: 'sheaf-identification-total',
+      classStepDisplayRule: true,
+      classStepApplyAllOccurrences: true,
+      classStepAllowSameLhs: true,
+      classStepPayoffRule: true,
+      classStepRuleGeometry: geometry,
+      classStepGroupKey: `Identification:${geometry.varietyId || homologyScopeId(geometry)}:${sheafKey}:${normalized}:total`,
+      classStepDisplayKey: `Identification:${identification.id}:${normalized}:total`,
+      classStepDisplayLatex: classStepSheafIdentificationDisplayLatex(sheaf, geometry, identification),
+      lhs,
+      rhs: serializeHomologyPoly(rhsPoly)
+    };
+  }
+
+  function classStepSheafIdentificationDisplayLatex(sheaf, geometry, identification) {
+    return `${sheafLabelLatex(sheaf)}=${classStepIdentifiedSheafTargetLatex(sheaf, geometry, identification)}`;
+  }
+
+  function classStepIdentifiedSheafTargetLatex(sheaf, geometry, identification) {
+    const target = identification?.target || {};
+    const base = geometry?.labelLatex || 'X';
+    if (target.kind === 'trivial') return `\\mathcal{O}_{${base}}^{\\oplus ${target.rank}}`;
+    if (target.kind === 'structure') return `\\mathcal{O}_{${base}}`;
+    if (target.kind === 'twist') return `\\mathcal{O}_{${base}}(${target.twist})`;
+    if (target.kind === 'grassmannian-sub') return 'S';
+    if (target.kind === 'grassmannian-tangent') return 'S^{\\vee}\\otimes Q';
+    if (target.kind === 'grassmannian-cotangent') return 'S\\otimes Q^{\\vee}';
+    if (target.kind === 'grassmannian-plucker') return `\\mathcal{O}_{${base}}(${target.twist})`;
+    if (target.kind === 'curve-line' && target.lineType === 'tangent') return `\\omega_{${base}}^{-1}`;
+    if (target.kind === 'curve-line') return `\\omega_{${base}}`;
+    if (target.kind === 'product-direct-sum') {
+      const context = productGeometryContext(geometry);
+      const [left, right] = context?.leftGeometry && context?.rightGeometry ? [context.leftGeometry, context.rightGeometry] : [{ labelLatex: 'X' }, { labelLatex: 'Y' }];
+      const symbol = target.factorType === 'cotangent' ? '\\Omega^1' : '\\mathcal{T}';
+      return `p_1^*${symbol}_{${left.labelLatex}}\\oplus p_2^*${symbol}_{${right.labelLatex}}`;
+    }
+    if (target.kind === 'product-canonical') {
+      const context = productGeometryContext(geometry);
+      const [left, right] = context?.leftGeometry && context?.rightGeometry ? [context.leftGeometry, context.rightGeometry] : [{ labelLatex: 'X' }, { labelLatex: 'Y' }];
+      return `p_1^*\\omega_{${left.labelLatex}}\\otimes p_2^*\\omega_{${right.labelLatex}}`;
+    }
+    return sheafLabelLatex(sheaf);
+  }
+
+  function classStepIdentifiedSheafTargetPlain(sheaf, geometry, identification) {
+    const target = identification?.target || {};
+    const base = geometry?.labelPlain || latexToPlain(geometry?.labelLatex || 'X');
+    if (target.kind === 'trivial') return `O_${base}^{oplus ${target.rank}}`;
+    if (target.kind === 'structure') return `O_${base}`;
+    if (target.kind === 'twist') return `O_${base}(${target.twist})`;
+    if (target.kind === 'grassmannian-sub') return 'S';
+    if (target.kind === 'grassmannian-tangent') return 'S^* tensor Q';
+    if (target.kind === 'grassmannian-cotangent') return 'S tensor Q^*';
+    if (target.kind === 'grassmannian-plucker') return `O_${base}(${target.twist})`;
+    if (target.kind === 'curve-line' && target.lineType === 'tangent') return `omega_${base}^(-1)`;
+    if (target.kind === 'curve-line') return `omega_${base}`;
+    if (target.kind === 'product-direct-sum') return target.factorType === 'cotangent'
+      ? 'p_1^*Omega^1_left direct-sum p_2^*Omega^1_right'
+      : 'p_1^*T_left direct-sum p_2^*T_right';
+    if (target.kind === 'product-canonical') return 'p_1^*omega_left tensor p_2^*omega_right';
+    return sheafLabelPlain(sheaf);
+  }
+
+  function classStepIdentifiedSheafVariableId(sheaf, geometry, family, degree, identification) {
+    const sourceKey = sheaf?.sourceObject?.id || sheaf?.id || defaultSheafVariablePrefix(sheaf);
+    const scope = variableIdSafe(geometry?.varietyId || homologyScopeId(geometry) || 'base');
+    const targetKey = variableIdSafe(identification?.target?.kind || 'identified');
+    const normalized = classFormulaNormalizeClassFamily(family);
+    const degreeKey = degree == null ? 'total' : String(degree);
+    return `identified_${variableIdSafe(sourceKey)}_${targetKey}_${classStepTotalClassFamilyKey(normalized)}_${degreeKey}_${scope}`;
+  }
+
+  function classStepIdentifiedSheafTotalVariablePoly(sheaf, geometry, family, identification) {
+    const normalized = classFormulaNormalizeClassFamily(family);
+    const id = classStepIdentifiedSheafVariableId(sheaf, geometry, normalized, null, identification);
+    const targetLatex = classStepIdentifiedSheafTargetLatex(sheaf, geometry, identification);
+    const targetPlain = classStepIdentifiedSheafTargetPlain(sheaf, geometry, identification);
+    const symbolLatex = `${classStepTargetSymbolLatex(normalized)}(${targetLatex})`;
+    const symbolPlain = `${classStepTargetSymbolPlain(normalized)}(${targetPlain})`;
+    defineVariable(id, 0, symbolLatex, {
+      cohomologyDegree: 0,
+      plain: symbolPlain,
+      kind: 'identifiedSheafTotalClass',
+      classStepKind: 'identifiedSheafTotalClass',
+      classStepFamily: normalized,
+      sourceSheafObjectId: sheaf?.sourceObject?.id || sheaf?.id || null,
+      geometryId: geometry?.varietyId || null,
+      identificationTarget: identification?.target || null,
+      mixedDegree: true
+    });
+    return Poly.variable(id);
+  }
+
+  function classStepIdentifiedSheafVariablePoly(sheaf, geometry, family, degree, identification) {
+    const normalized = classFormulaNormalizeClassFamily(family);
+    const id = classStepIdentifiedSheafVariableId(sheaf, geometry, normalized, degree, identification);
+    const targetLatex = classStepIdentifiedSheafTargetLatex(sheaf, geometry, identification);
+    const targetPlain = classStepIdentifiedSheafTargetPlain(sheaf, geometry, identification);
+    let symbolLatex;
+    let symbolPlain;
+    if (normalized === 'character') {
+      symbolLatex = `\\operatorname{ch}_{${degree}}(${targetLatex})`;
+      symbolPlain = `ch_${degree}(${targetPlain})`;
+    } else if (normalized === 'chern') {
+      symbolLatex = `c_{${degree}}(${targetLatex})`;
+      symbolPlain = `c_${degree}(${targetPlain})`;
+    } else {
+      symbolLatex = classStepDerivedVariableLatex(normalized, degree, targetLatex);
+      symbolPlain = `${classStepTargetSymbolPlain(normalized)}_${degree}(${targetPlain})`;
+    }
+    defineVariable(id, degree, symbolLatex, {
+      cohomologyDegree: 2 * degree,
+      plain: symbolPlain,
+      kind: 'identifiedSheafClass',
+      classStepKind: 'identifiedSheafClass',
+      classStepFamily: normalized,
+      classStepDegree: degree,
+      sourceSheafObjectId: sheaf?.sourceObject?.id || sheaf?.id || null,
+      geometryId: geometry?.varietyId || null,
+      identificationTarget: identification?.target || null
+    });
+    return Poly.variable(id);
   }
 
   function classStepStoredSheafRule(rule, source, session) {
@@ -24468,7 +25125,47 @@
     rules.push(...(homology?.rules || [])
       .filter((rule) => rule.enabled !== false)
       .map((rule) => classStepStoredSheafRule(rule, classStepStoredSheafRuleSource(rule, session), session)));
+    rules.push(...classStepSheafIdentificationRules(session));
     return rules;
+  }
+
+  function classStepSheafIdentificationRules(session) {
+    if (!session?.sheaf || !session?.geometry) return [];
+    const identification = sheafIdentificationRuleForSheaf(session.geometry, session.sheaf);
+    if (!identification?.target) return [];
+    const out = [];
+    ['chern', 'character'].forEach((family) => {
+      const defs = classStepSheafDefsForSheaf(session.sheaf, session.geometry, family);
+      defs.forEach((def) => {
+        const rule = classStepSheafIdentificationRuleForDef(def, family, session, identification);
+        if (rule) out.push(rule);
+      });
+    });
+    return out;
+  }
+
+  function classStepSheafIdentificationRuleForDef(def, family, session, identification) {
+    if (!def || !session?.geometry || !session?.sheaf || !identification?.target) return null;
+    const rhsPoly = classStepIdentifiedSheafVariablePoly(session.sheaf, session.geometry, family, def.degree, identification);
+    const lhs = { powers: { [def.id]: 1 } };
+    if (polyEquals(polyFromPowers(lhs.powers), rhsPoly)) return null;
+    const sheafKey = session.sheaf?.sourceObject?.id || session.sheaf?.id || sheafLabelPlain(session.sheaf);
+    return {
+      id: `step-sheaf-identification-${family}-${variableIdSafe(def.id)}`,
+      builtin: true,
+      enabled: true,
+      selected: true,
+      stepSourceLabel: 'Identification',
+      classStepKind: 'sheaf-identification',
+      classStepApplyAllOccurrences: true,
+      classStepAllowSameLhs: true,
+      classStepPayoffRule: true,
+      classStepGroupKey: `Identification:${session.geometry.varietyId || homologyScopeId(session.geometry)}:${sheafKey}:${family}`,
+      classStepDisplayKey: `Identification:${identification.id}:${family}:${def.degree}`,
+      classStepDisplayLatex: classStepSheafIdentificationDisplayLatex(session.sheaf, session.geometry, identification),
+      lhs,
+      rhs: serializeHomologyPoly(rhsPoly)
+    };
   }
 
   function classStepStoredSheafRuleSource(rule, session) {
@@ -25120,12 +25817,39 @@
   function restoreClassStepVariableById(id, cache) {
     if (!id || VARS.has(id)) return;
     if (ensureMapHomologyVariableFromId(id)) return;
+    if (restoreClassStepIdentifiedSheafVariableById(id, cache)) return;
     const source = classStepSheafDefForVariable(id, null, {
       geometry: geometryByVarietyId(cache?.geometryId) || state.lastResult?.geometry
     });
     if (source?.def) {
       classStepDefineSheafClassVariable(source.def, source.sheaf, source.geometry, source.family);
     }
+  }
+
+  function restoreClassStepIdentifiedSheafVariableById(id, cache = {}) {
+    if (!String(id || '').startsWith('identified_')) return null;
+    const families = characteristicClassFamilies();
+    for (const sheafObject of state.sheaves || []) {
+      const geometry = geometryByVarietyId(sheafObject.baseVarietyId)
+        || geometryByVarietyId(cache?.geometryId)
+        || state.lastResult?.geometry;
+      if (!geometry) continue;
+      const sheaf = sheafFromObject(sheafObject, geometry);
+      const identification = sheafIdentificationRuleForSheaf(geometry, sheaf);
+      if (!identification?.target) continue;
+      for (const family of families) {
+        if (classStepIdentifiedSheafVariableId(sheaf, geometry, family, null, identification) === id) {
+          classStepIdentifiedSheafTotalVariablePoly(sheaf, geometry, family, identification);
+          return VARS.get(id) || null;
+        }
+        for (let degree = 0; degree <= geometry.dim; degree += 1) {
+          if (classStepIdentifiedSheafVariableId(sheaf, geometry, family, degree, identification) !== id) continue;
+          classStepIdentifiedSheafVariablePoly(sheaf, geometry, family, degree, identification);
+          return VARS.get(id) || null;
+        }
+      }
+    }
+    return null;
   }
 
   function classStepCachedRulesForCompatibleGeometry(session, cache) {
@@ -29966,6 +30690,22 @@
   function buildSheafCohomology(geometry, sheaf, hodge = null) {
     if (!geometry) return null;
     const target = cohomologyTargetForSheaf(geometry, sheaf);
+    if (target.kind === 'direct-sum') {
+      const summand = cohomologyTargetForSheaf(geometry, null);
+      const summandCohomology = buildSheafCohomologyForTarget(geometry, summand, null, hodge);
+      if (summandCohomology?.dimensions) {
+        return {
+          subjectLatex: target.subjectLatex,
+          subjectPlain: target.subjectPlain,
+          dimensions: scaleCohomologyDimensions(summandCohomology.dimensions, target.multiplicity),
+          message: target.message || summandCohomology.message
+        };
+      }
+    }
+    return buildSheafCohomologyForTarget(geometry, target, sheaf, hodge);
+  }
+
+  function buildSheafCohomologyForTarget(geometry, target, sheaf = null, hodge = null) {
     if (target.kind === 'line') {
       const dimensions = lineBundleCohomologyDimensions(geometry, target.twist);
       if (dimensions) {
@@ -30045,6 +30785,56 @@
           : 'Twist sheaf cohomology needs a projective-space or complete-intersection embedding.'
       };
     }
+    const identification = sheafIdentificationRuleForSheaf(geometry, sheaf);
+    if (identification?.target) {
+      const target = identification.target;
+      if (target.kind === 'trivial') {
+        return {
+          kind: 'direct-sum',
+          multiplicity: target.rank,
+          subjectLatex: sheafLabelLatex(sheaf),
+          subjectPlain: sheafLabelPlain(sheaf),
+          message: identification.message
+        };
+      }
+      if (target.kind === 'structure') {
+        return {
+          kind: embeddedGeometrySupportsLineCohomology(geometry) ? 'line' : 'structure',
+          twist: 0,
+          subjectLatex: sheafLabelLatex(sheaf),
+          subjectPlain: sheafLabelPlain(sheaf),
+          message: identification.message
+        };
+      }
+      if (target.kind === 'twist') {
+        return {
+          kind: embeddedGeometrySupportsLineCohomology(geometry) ? 'line' : 'unsupported',
+          twist: normalizedInt(target.twist, -24, 24, 0),
+          subjectLatex: sheafLabelLatex(sheaf),
+          subjectPlain: sheafLabelPlain(sheaf),
+          message: embeddedGeometrySupportsLineCohomology(geometry)
+            ? identification.message
+            : `${identification.message} Cohomology of this twist needs a projective-space or complete-intersection embedding.`
+        };
+      }
+      if (target.kind === 'grassmannian-sub') {
+        return {
+          kind: 'acyclic',
+          subjectLatex: sheafLabelLatex(sheaf),
+          subjectPlain: sheafLabelPlain(sheaf),
+          message: 'Universal subbundle cohomology on the Grassmannian: all H^i vanish.'
+        };
+      }
+      if (target.kind === 'curve-line' && target.lineType === 'canonical') {
+        return {
+          kind: 'hodge-row',
+          hodgeP: 1,
+          subjectLatex: sheafLabelLatex(sheaf),
+          subjectPlain: sheafLabelPlain(sheaf),
+          message: identification.message
+        };
+      }
+    }
     if (isUniversalBundleSheafType(sheaf.type) && varietyHasHyperplaneClass(geometry?.type || 'abstract')) {
       return {
         kind: embeddedGeometrySupportsLineCohomology(geometry) ? 'line' : 'unsupported',
@@ -30089,6 +30879,30 @@
       subjectPlain: sheafLabelPlain(sheaf),
       message: `Cohomology of ${sheafTypeLabel(sheaf.type)} is not determined by the current input.`
     };
+  }
+
+  function scaleCohomologyDimensions(dimensions, multiplicity) {
+    const factor = fraction(multiplicity);
+    return (dimensions || []).map((entry) => {
+      const value = parseSimpleLatexNumber(entry?.latex || entry?.plain || '0');
+      if (value) {
+        const scaled = value.mul(factor);
+        return {
+          latex: formatFractionLatex(scaled),
+          plain: formatFractionPlain(scaled)
+        };
+      }
+      const latex = entry?.latex || '0';
+      const plain = entry?.plain || latexToPlain(latex);
+      if (factor.isZero()) return { latex: '0', plain: '0' };
+      if (factor.isOne()) return { latex, plain };
+      const factorLatex = formatFractionLatex(factor);
+      const factorPlain = formatFractionPlain(factor);
+      return {
+        latex: `${factorLatex}${hodgeFactorLatex(latex)}`,
+        plain: `${factorPlain}*${hodgeFactorPlain(plain)}`
+      };
+    });
   }
 
   function embeddedGeometrySupportsLineCohomology(geometry) {

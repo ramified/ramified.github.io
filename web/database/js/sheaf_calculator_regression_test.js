@@ -12,6 +12,7 @@ function loadCalculator() {
     VARS,
     geometryFromVariety,
     sheafFromObject,
+    sheafIdentificationRuleForSheaf,
     buildBundleForSheaf,
     buildCharacteristicClasses,
     buildHodgeNumbers,
@@ -110,6 +111,7 @@ function loadCalculator() {
     HOMOLOGY_POINT_CLASS,
     HOMOLOGY_BRANCH_DIVISOR_CLASS,
     HOMOLOGY_RAMIFICATION_DIVISOR_CLASS,
+    HOMOLOGY_RAMIFIED_COVER_HYPERPLANE_CLASS,
     HOMOLOGY_CYCLIC_ROOT_CLASS,
     standardMapCurve,
     isStraightMapCurve,
@@ -252,6 +254,228 @@ function testAbelianSpecialSheavesAreTrivial() {
   });
   assert.strictEqual(chernPlain(canonicalRows), '1');
   assert.strictEqual(characterPlain(canonicalRows), '1');
+}
+
+function testSheafIdentificationRulesForDirectCases() {
+  const api = loadCalculator();
+
+  const abelianGeometry = api.geometryFromVariety({ id: 'A3', type: 'abelian', dim: '3', name: 'A' });
+  const tangent = api.sheafFromObject({ id: 'TA', type: 'tangent', basis: 'chern', rank: '3', name: 'T_A', baseVarietyId: 'A3' }, abelianGeometry);
+  const tangentRule = api.sheafIdentificationRuleForSheaf(abelianGeometry, tangent);
+  assert.strictEqual(tangentRule.target.kind, 'trivial');
+  assert.strictEqual(tangentRule.target.rank, 3);
+  const tangentCohomology = api.buildSheafCohomology(abelianGeometry, tangent, api.buildHodgeNumbers(abelianGeometry));
+  assert.strictEqual(tangentCohomology.dimensions[0].plain, '3');
+  assert.strictEqual(tangentCohomology.dimensions[1].plain, '9');
+  assert(tangentCohomology.message.includes('identified'));
+
+  const canonical = api.sheafFromObject({ id: 'KA', type: 'canonical', basis: 'chern', rank: '1', name: 'K_A', baseVarietyId: 'A3' }, abelianGeometry);
+  const canonicalRule = api.sheafIdentificationRuleForSheaf(abelianGeometry, canonical);
+  assert.strictEqual(canonicalRule.target.kind, 'structure');
+
+  const p1Geometry = api.geometryFromVariety({ id: 'P1', type: 'projective', dim: '1', name: '\\mathbb{P}^{1}' });
+  const p1Canonical = api.sheafFromObject({ id: 'KP1', type: 'canonical', basis: 'chern', rank: '1', name: 'K_{P^1}', baseVarietyId: 'P1' }, p1Geometry);
+  const p1CanonicalRule = api.sheafIdentificationRuleForSheaf(p1Geometry, p1Canonical);
+  assert.strictEqual(p1CanonicalRule.target.kind, 'twist');
+  assert.strictEqual(p1CanonicalRule.target.twist, -2);
+  assert(p1CanonicalRule.message.includes('P^1'));
+
+  const p1Tangent = api.sheafFromObject({ id: 'TP1', type: 'tangent', basis: 'chern', rank: '1', name: 'T_{P^1}', baseVarietyId: 'P1' }, p1Geometry);
+  const p1TangentRule = api.sheafIdentificationRuleForSheaf(p1Geometry, p1Tangent);
+  assert.strictEqual(p1TangentRule.target.kind, 'twist');
+  assert.strictEqual(p1TangentRule.target.twist, 2);
+  const p1TangentRows = api.buildCharacteristicClasses(p1Geometry, p1Tangent).classRows;
+  assert.strictEqual(chernPlain(p1TangentRows), '1 + 2*[p]');
+
+  const ciGeometry = api.geometryFromVariety({ id: 'X23', type: 'complete-intersection', dim: '2', ciDegrees: '2,3', name: 'X_{2,3}' });
+  const ciCanonical = api.sheafFromObject({ id: 'KX', type: 'canonical', basis: 'chern', rank: '1', name: 'K_X', baseVarietyId: 'X23' }, ciGeometry);
+  const ciRule = api.sheafIdentificationRuleForSheaf(ciGeometry, ciCanonical);
+  assert.strictEqual(ciRule.target.kind, 'twist');
+  assert.strictEqual(ciRule.target.twist, 0);
+
+  const grassmannianGeometry = api.geometryFromVariety({ id: 'G', type: 'grassmannian', grassmannianR: '2', grassmannianN: '5', name: '\\operatorname{Gr}(2,5)' });
+  const grassmannianCanonical = api.sheafFromObject({ id: 'KG', type: 'canonical', basis: 'chern', rank: '1', name: 'K_G', baseVarietyId: 'G' }, grassmannianGeometry);
+  const grassmannianRule = api.sheafIdentificationRuleForSheaf(grassmannianGeometry, grassmannianCanonical);
+  assert.strictEqual(grassmannianRule.target.kind, 'grassmannian-plucker');
+  assert.strictEqual(grassmannianRule.target.twist, -5);
+}
+
+function testClassStepOffersSheafIdentificationRules() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'A2', type: 'abelian', dim: '2', name: 'A' }];
+  api.state.sheaves = [
+    { id: 'TA', type: 'tangent', basis: 'chern', rank: '2', name: 'T_A', baseVarietyId: 'A2' }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const sheaf = api.sheafFromObject(api.state.sheaves[0], geometry);
+  const result = api.buildClassStepFallbackResult(geometry, sheaf, { message: 'test' });
+  const session = api.createClassStepSession(result, 'character', 0);
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'r(T_A)');
+  const identification = api.collectClassStepRuleCandidates(session)
+    .find((candidate) => candidate.sourceLabel === 'Identification');
+  assert(identification);
+  const rankRule = identification.rules.find((rule) => api.formatPolyPlain(api.polyFromPowers(rule.lhs.powers)) === 'r(T_A)');
+  assert(rankRule);
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(rankRule)), 'ch_0(O_A^{oplus 2})');
+  session.candidates = [identification];
+  api.state.classStepSession = session;
+  api.applySelectedClassStepRules();
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'ch_0(O_A^{oplus 2})');
+  const followup = api.collectClassStepRuleCandidates(session)
+    .find((candidate) => candidate.sourceLabel === 'Chern character');
+  assert(followup);
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(followup.rule)), '2');
+}
+
+function testFormulaStepOffersSheafIdentificationRules() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'A3', type: 'abelian', dim: '3', name: 'A' }];
+  api.state.sheaves = [
+    { id: 'Omega', type: 'cotangent', basis: 'chern', rank: '3', name: '\\Omega^1_{A}', baseVarietyId: 'A3' }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  api.setClassFormulaBuilderVariety('A3');
+  const token = api.classFormulaSheafTokenForSelection(geometry, 'Omega', 'chern', '');
+  assert(token);
+  api.state.classFormulaBuilder.tokens = [token];
+  const session = api.startClassStepSessionFromFormulaBuilder();
+  assert(session);
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'c(Omega^1_A)');
+  const identification = api.collectClassStepRuleCandidates(session)
+    .find((candidate) => candidate.sourceLabel === 'Identification');
+  assert(identification, session.candidates.map((candidate) => candidate.sourceLabel).join(', '));
+  const totalRule = identification.rules.find((rule) => api.formatPolyPlain(api.polyFromPowers(rule.lhs.powers)) === 'c(Omega^1_A)');
+  assert(totalRule);
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(totalRule)), 'c(O_A^{oplus 3})');
+  session.candidates = [identification];
+  api.state.classStepSession = session;
+  api.applySelectedClassStepRules();
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'c(O_A^{oplus 3})');
+  const expansion = api.collectClassStepRuleCandidates(session)
+    .find((candidate) => candidate.sourceLabel === 'Expand total class');
+  assert(expansion);
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(expansion.rule)), '1 + c_1(O_A^{oplus 3}) + c_2(O_A^{oplus 3}) + c_3(O_A^{oplus 3})');
+}
+
+function testFormulaStepComputesIdentifiedCompleteIntersectionCanonicalTwist() {
+  const api = loadCalculator();
+  api.state.varieties = [{
+    id: 'X5',
+    type: 'complete-intersection',
+    dim: '3',
+    name: 'X',
+    ciDegrees: '6, 4',
+    ciAmbient: '5',
+    homology: {
+      classes: {
+        unit: { symbol: '1' },
+        hyperplane: { symbol: 'H' },
+        point: { symbol: '[p]' }
+      },
+      rules: [{
+        id: 'top-hyperplane-point',
+        builtin: true,
+        enabled: true,
+        lhs: { powers: { homology_v_X5_H: 3 } },
+        rhs: [{ coefficient: '24', powers: { homology_v_X5_point: 1 } }]
+      }]
+    }
+  }];
+  api.state.sheaves = [
+    { id: 'KX', type: 'canonical', basis: 'chern', rank: '1', name: 'K_{X}', baseVarietyId: 'X5' }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  api.setClassFormulaBuilderVariety('X5');
+  const token = api.classFormulaSheafTokenForSelection(geometry, 'KX', 'chern', '');
+  assert(token);
+  api.state.classFormulaBuilder.tokens = [token];
+  const session = api.startClassStepSessionFromFormulaBuilder();
+  assert(session);
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'c(K_X)');
+
+  const identification = api.collectClassStepRuleCandidates(session)
+    .find((candidate) => candidate.sourceLabel === 'Identification');
+  assert(identification);
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(identification.rule)), 'c(O_X in P^5(4))');
+  session.candidates = [identification];
+  api.state.classStepSession = session;
+  api.applySelectedClassStepRules();
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'c(O_X in P^5(4))');
+
+  const identifiedId = Array.from(api.VARS.keys()).find((id) => id.startsWith('identified_KX_twist_c_total_X5'));
+  assert(identifiedId);
+  api.VARS.delete(identifiedId);
+  const expansion = api.collectClassStepRuleCandidates(session)
+    .find((candidate) => candidate.sourceLabel === 'Expand total class');
+  assert(expansion, session.candidates.map((candidate) => candidate.sourceLabel).join(', '));
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(expansion.rule)), '1 + c_1(O_X in P^5(4)) + c_2(O_X in P^5(4)) + c_3(O_X in P^5(4))');
+  session.candidates = [expansion];
+  api.applySelectedClassStepRules();
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), '1 + c_1(O_X in P^5(4)) + c_2(O_X in P^5(4)) + c_3(O_X in P^5(4))');
+
+  const chernRules = api.collectClassStepRuleCandidates(session)
+    .find((candidate) => candidate.sourceLabel === 'Chern class');
+  assert(chernRules);
+  assert(chernRules.rules.some((rule) => api.formatPolyPlain(api.homologyRuleRhsPoly(rule)) === '4*H'));
+  assert(chernRules.rules.some((rule) => api.formatPolyPlain(api.homologyRuleRhsPoly(rule)) === '0'));
+}
+
+function testFormulaStepToddOfIdentifiedSheafUsesNormalExpansion() {
+  const api = loadCalculator();
+  api.state.varieties = [{
+    id: 'X3',
+    type: 'complete-intersection',
+    dim: '3',
+    name: 'X',
+    ciDegrees: '3, 2, 3',
+    ciAmbient: '6',
+    homology: {
+      classes: {
+        unit: { symbol: '1' },
+        hyperplane: { symbol: 'H' },
+        point: { symbol: '[p]' }
+      },
+      rules: [{
+        id: 'top-hyperplane-point',
+        builtin: true,
+        enabled: true,
+        lhs: { powers: { homology_v_X3_H: 3 } },
+        rhs: [{ coefficient: '18', powers: { homology_v_X3_point: 1 } }]
+      }]
+    }
+  }];
+  api.state.sheaves = [
+    { id: 'KX', type: 'canonical', basis: 'chern', rank: '1', name: 'K_{X}', baseVarietyId: 'X3' }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  api.setClassFormulaBuilderVariety('X3');
+  const token = api.classFormulaSheafTokenForSelection(geometry, 'KX', 'todd', '');
+  assert(token);
+  api.state.classFormulaBuilder.tokens = [token];
+  const session = api.startClassStepSessionFromFormulaBuilder();
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'td(K_X)');
+
+  const identification = api.collectClassStepRuleCandidates(session)
+    .find((candidate) => candidate.sourceLabel === 'Identification');
+  assert(identification);
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(identification.rule)), 'td(O_X in P^6(1))');
+  session.candidates = [identification];
+  api.state.classStepSession = session;
+  api.applySelectedClassStepRules();
+  assert.strictEqual(api.formatPolyPlain(api.classStepDisplayPoly(session)), 'td(O_X in P^6(1))');
+
+  const afterIdentification = api.collectClassStepRuleCandidates(session);
+  assert(!afterIdentification.some((candidate) => candidate.sourceLabel === 'Identified sheaf'));
+  const expansion = afterIdentification.find((candidate) => candidate.sourceLabel === 'Expand total class');
+  assert(expansion);
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(expansion.rule)), '1 + td_1(O_X in P^6(1)) + td_2(O_X in P^6(1)) + td_3(O_X in P^6(1))');
+  session.candidates = [expansion];
+  api.applySelectedClassStepRules();
+
+  const toddRules = api.collectClassStepRuleCandidates(session)
+    .find((candidate) => candidate.sourceLabel === 'Todd');
+  assert(toddRules);
+  assert(toddRules.rules.some((rule) => api.formatPolyPlain(api.homologyRuleRhsPoly(rule)) === '1/2*c_1(O_X in P^6(1))'));
 }
 
 function testSelfDirectSumScalesChernCharacter() {
@@ -2014,6 +2238,107 @@ function testGeneralRamifiedCoverDoesNotAddRamificationPushforwardRule() {
     {}
   );
   assert.notStrictEqual(api.formatPolyPlain(pushed), 'B');
+}
+
+function testSmoothCyclicProjectiveRamifiedCoverAddsTildeHyperplaneRules() {
+  const api = loadCalculator();
+  const base = { id: 'P3', type: 'projective', dim: '3', name: '\\mathbb{P}^{3}', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 2,
+    coverMode: 'cyclic',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    smoothCyclic: true,
+    branchDegree: 4,
+    defaultName: '\\widetilde{\\mathbb{P}^{3}}',
+    name: 'Y'
+  });
+
+  const map = api.state.maps[0];
+  const coverGeometry = api.geometryFromVariety(cover);
+  const tilde = api.homologyClassDefinitions(coverGeometry).find((def) => def.id === api.HOMOLOGY_RAMIFIED_COVER_HYPERPLANE_CLASS);
+  const ramification = api.homologyClassDefinitions(coverGeometry).find((def) => def.id === api.HOMOLOGY_RAMIFICATION_DIVISOR_CLASS);
+  assert(tilde);
+  assert.strictEqual(tilde.symbolLatex, '\\widetilde{H}');
+  assert.strictEqual(tilde.cohomologyDegree, 2);
+
+  const pullbackRule = coverGeometry.homology.rules.find((item) => item.id === `default-ramified-cover-hyperplane-pullback-${map.id}`);
+  const ramificationRule = coverGeometry.homology.rules.find((item) => item.id === `default-ramified-cover-ramification-hyperplane-${cover.id}`);
+  const topRule = coverGeometry.homology.rules.find((item) => item.id === `default-ramified-cover-hyperplane-top-${cover.id}`);
+  assert(pullbackRule);
+  assert(ramificationRule);
+  assert(topRule);
+  assert.strictEqual(ramificationRule.rhs[0].coefficient, '2');
+  assert.strictEqual(topRule.rhs[0].coefficient, '2');
+
+  const pullbackId = Object.keys(pullbackRule.lhs.powers)[0];
+  const ramificationId = api.homologyDefVariableId(ramification, coverGeometry);
+  const tildeId = api.homologyDefVariableId(tilde, coverGeometry);
+  assert.strictEqual(api.formatPolyPlain(api.applyHomologyRules(api.polyFromPowers({ [pullbackId]: 1 }), {
+    geometry: coverGeometry,
+    homology: coverGeometry.homology
+  })), 'widetildeH');
+  assert.strictEqual(api.formatPolyPlain(api.applyHomologyRules(api.polyFromPowers({ [ramificationId]: 1 }), {
+    geometry: coverGeometry,
+    homology: coverGeometry.homology
+  })), '2*widetildeH');
+  assert.strictEqual(api.formatPolyPlain(api.applyHomologyRules(api.polyFromPowers({ [tildeId]: 3 }), {
+    geometry: coverGeometry,
+    homology: coverGeometry.homology
+  })), '2*[p]');
+}
+
+function testCompleteIntersectionRamifiedCoverTildeHyperplaneTopUsesBaseDegree() {
+  const api = loadCalculator();
+  const base = { id: 'X23', type: 'complete-intersection', dim: '2', ciDegrees: '2,3', name: 'X_{2,3}', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 2,
+    coverMode: 'cyclic',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    smoothCyclic: true,
+    branchDegree: 4,
+    defaultName: '\\widetilde{X}_{2,3}',
+    name: 'Y'
+  });
+
+  const coverGeometry = api.geometryFromVariety(cover);
+  const tilde = api.homologyClassDefinitions(coverGeometry).find((def) => def.id === api.HOMOLOGY_RAMIFIED_COVER_HYPERPLANE_CLASS);
+  const topRule = coverGeometry.homology.rules.find((item) => item.id === `default-ramified-cover-hyperplane-top-${cover.id}`);
+  assert(tilde);
+  assert(topRule);
+  assert.strictEqual(topRule.rhs[0].coefficient, '12');
+  assert.strictEqual(api.formatPolyPlain(api.applyHomologyRules(api.polyFromPowers({ [api.homologyDefVariableId(tilde, coverGeometry)]: 2 }), {
+    geometry: coverGeometry,
+    homology: coverGeometry.homology
+  })), '12*[p]');
+}
+
+function testGeneralProjectiveRamifiedCoverAddsTildeHyperplaneButNoRamificationRule() {
+  const api = loadCalculator();
+  const base = { id: 'P2', type: 'projective', dim: '2', name: '\\mathbb{P}^{2}', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 3,
+    coverMode: 'general',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    defaultName: '\\widetilde{\\mathbb{P}^{2}}',
+    name: 'Y'
+  });
+
+  const coverGeometry = api.geometryFromVariety(cover);
+  assert(api.homologyClassDefinitions(coverGeometry).some((def) => def.id === api.HOMOLOGY_RAMIFIED_COVER_HYPERPLANE_CLASS));
+  assert(coverGeometry.homology.rules.some((item) => item.id === `default-ramified-cover-hyperplane-top-${cover.id}`));
+  assert(!coverGeometry.homology.rules.some((item) => item.id === `default-ramified-cover-ramification-hyperplane-${cover.id}`));
 }
 
 function testSmoothCyclicRamifiedCoverAddsRootClassAndHodgeNumbers() {
@@ -5331,6 +5656,9 @@ testProjectiveSpaceBettiTableIsTrivialCoordinateRing();
 testBettiTableRevealIsLazyAndExplainsSymbols();
 testBettiTableFallbackShowsSymbolicTemplateForUnsupportedVariety();
 testAbelianSpecialSheavesAreTrivial();
+testSheafIdentificationRulesForDirectCases();
+testClassStepOffersSheafIdentificationRules();
+testFormulaStepOffersSheafIdentificationRules();
 testSelfDirectSumScalesChernCharacter();
 testDivisorLineBundleUsesAssignedDivisorChernClass();
 testDivisorLineBundlePresetRoundTrip();
@@ -5369,6 +5697,9 @@ testRamifiedCoverConstructionCreatesCoverMapAndHomology();
 testCyclicRamifiedCoverAddsBranchRamificationRule();
 testCyclicRamifiedCoverAddsRamificationPushforwardRules();
 testGeneralRamifiedCoverDoesNotAddRamificationPushforwardRule();
+testSmoothCyclicProjectiveRamifiedCoverAddsTildeHyperplaneRules();
+testCompleteIntersectionRamifiedCoverTildeHyperplaneTopUsesBaseDegree();
+testGeneralProjectiveRamifiedCoverAddsTildeHyperplaneButNoRamificationRule();
 testSmoothCyclicRamifiedCoverAddsRootClassAndHodgeNumbers();
 testTangentHomologyPromotionUsesVarietyDisplay();
 testRamifiedCoverTangentPromotionCopiesComputedRuleToVariety();
