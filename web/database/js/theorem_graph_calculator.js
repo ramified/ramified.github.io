@@ -24,6 +24,7 @@
     'result',
     'citationKeys',
     'color',
+    'fillColor',
     'x',
     'y'
   ]);
@@ -72,6 +73,12 @@
   const ARROW_ENDPOINT_SCALE_DEFAULT = 1;
   const ARROW_ENDPOINT_SCALE_MIN = 0.8;
   const ARROW_ENDPOINT_SCALE_MAX = 2;
+  const ARROW_BOUNDARY_GAP_DEFAULT = 10;
+  const ARROW_BOUNDARY_GAP_MIN = 0;
+  const ARROW_BOUNDARY_GAP_MAX = 48;
+  const NODE_FILL_SATURATION_DEFAULT = 210;
+  const NODE_FILL_SATURATION_MIN = 0;
+  const NODE_FILL_SATURATION_MAX = 300;
   const ARROW_STYLES = [
     { id: 'arrow', label: 'solid arrow', body: 'solid', head: 'arrow', tail: 'none' },
     { id: 'plain', label: 'plain line', body: 'solid', head: 'none', tail: 'none' },
@@ -128,7 +135,9 @@
     mathTypesetTimer: null,
     mathTypesetAttempts: 0,
     detailPreview: null,
-    activeLatexDetailField: null
+    activeLatexDetailField: null,
+    arrowBoundaryGap: ARROW_BOUNDARY_GAP_DEFAULT,
+    nodeFillSaturation: NODE_FILL_SATURATION_DEFAULT
   };
 
   const refs = {};
@@ -181,6 +190,7 @@
     refs.nodeConditionPreview = $('node-condition-preview');
     refs.nodeResultPreview = $('node-result-preview');
     refs.nodeColor = $('node-color');
+    refs.nodeFillColor = $('node-fill-color');
     refs.arrowEditor = $('arrow-editor');
     refs.arrowSource = $('arrow-source');
     refs.arrowTarget = $('arrow-target');
@@ -203,6 +213,10 @@
     refs.deleteSelected = $('delete-selected');
     refs.toggleLayout = $('toggle-layout');
     refs.resetLayout = $('reset-layout');
+    refs.arrowBoundaryGap = $('arrow-boundary-gap');
+    refs.arrowBoundaryGapValue = $('arrow-boundary-gap-value');
+    refs.nodeFillSaturation = $('node-fill-saturation');
+    refs.nodeFillSaturationValue = $('node-fill-saturation-value');
     refs.graphHelp = $('graph-help');
     refs.bibtexInput = $('bibtex-input');
     refs.addReference = $('add-reference');
@@ -268,6 +282,11 @@
     if (refs.deleteSelected) refs.deleteSelected.addEventListener('click', deleteSelected);
     if (refs.toggleLayout) refs.toggleLayout.addEventListener('click', toggleLayout);
     if (refs.resetLayout) refs.resetLayout.addEventListener('click', resetLayout);
+    [refs.arrowBoundaryGap, refs.nodeFillSaturation].forEach((control) => {
+      if (!control) return;
+      control.addEventListener('input', updateDebugRenderSettings);
+      control.addEventListener('change', updateDebugRenderSettings);
+    });
     if (refs.addReference) refs.addReference.addEventListener('click', addReferencesFromInput);
     if (refs.addLinkReference) refs.addLinkReference.addEventListener('click', addLinkReferenceFromControls);
     if (refs.clearBibtex) refs.clearBibtex.addEventListener('click', () => {
@@ -313,6 +332,7 @@
     bindLatexDetailPreviewEvents();
     [
       refs.nodeColor,
+      refs.nodeFillColor,
       refs.arrowLevel,
       refs.arrowEndpointScale,
       refs.arrowCurve,
@@ -579,17 +599,19 @@
 
   function makeNode(source = {}) {
     const id = cleanId(source.id) || nextNodeId();
+    const type = normalizeType(source.type);
     const extra = collectExtra(source, KNOWN_NODE_KEYS);
     return {
       extra,
       id,
-      type: normalizeType(source.type),
-      label: cleanString(source.label) || NODE_TYPES[normalizeType(source.type)].label,
+      type,
+      label: cleanString(source.label) || NODE_TYPES[type].label,
       setting: cleanString(source.setting),
       condition: cleanString(source.condition),
       result: cleanString(source.result),
       citationKeys: normalizeCitationKeys(source.citationKeys),
-      color: normalizeColor(source.color, NODE_TYPES[normalizeType(source.type)].stroke),
+      color: normalizeColor(source.color, NODE_TYPES[type].stroke),
+      fillColor: normalizeNodeFillColor(source.fillColor || source.fill, NODE_TYPES[type].fill),
       x: finiteNumber(source.x, state.canvasWidth / 2),
       y: finiteNumber(source.y, state.canvasHeight / 2),
       vx: 0,
@@ -681,17 +703,16 @@
     syncControls();
     refreshExport();
     renderCanvas();
-    renderNodeLayer();
   }
 
   function renderCanvas() {
     if (!refs.canvas) return;
+    renderNodeLayer();
     const ctx = refs.canvas.getContext('2d');
     ctx.clearRect(0, 0, state.canvasWidth, state.canvasHeight);
     drawEmptyState(ctx);
     drawArrows(ctx);
     drawConnectPreview(ctx);
-    renderNodeLayer();
   }
 
   function drawEmptyState(ctx) {
@@ -1143,8 +1164,11 @@
       element.style.left = `${node.x}px`;
       element.style.top = `${node.y}px`;
       const color = currentNodeColor(node);
+      const fillColor = currentNodeFillColor(node);
       element.style.borderColor = color;
       element.style.color = color;
+      element.style.setProperty('--node-fill', fillColor);
+      element.style.backgroundColor = fillColor;
       const sourceLabel = node.label || node.id;
       element.setAttribute('aria-label', `${(NODE_TYPES[node.type] || NODE_TYPES.theorem).label}: ${plainLabel(sourceLabel)}`);
       if (element.dataset.sourceLabel !== sourceLabel) {
@@ -1179,6 +1203,73 @@
       y: node.y - height / 2,
       width,
       height
+    };
+  }
+
+  function pointInBox(point, box) {
+    return !!point && !!box
+      && point.x >= box.x
+      && point.x <= box.x + box.width
+      && point.y >= box.y
+      && point.y <= box.y + box.height;
+  }
+
+  function quadraticBoxBoundaryT(model, box, fromEnd = false) {
+    const steps = 96;
+    if (!box) return fromEnd ? 1 : 0;
+    if (fromEnd) {
+      if (!pointInBox(model.end, box)) return 1;
+      let insideT = 1;
+      for (let i = steps - 1; i >= 0; i -= 1) {
+        const outsideT = i / steps;
+        const point = quadraticPoint(model.start, model.control, model.end, outsideT);
+        if (!pointInBox(point, box)) {
+          return refineQuadraticBoundaryT(model, box, insideT, outsideT);
+        }
+        insideT = outsideT;
+      }
+      return 1;
+    }
+
+    if (!pointInBox(model.start, box)) return 0;
+    let insideT = 0;
+    for (let i = 1; i <= steps; i += 1) {
+      const outsideT = i / steps;
+      const point = quadraticPoint(model.start, model.control, model.end, outsideT);
+      if (!pointInBox(point, box)) {
+        return refineQuadraticBoundaryT(model, box, insideT, outsideT);
+      }
+      insideT = outsideT;
+    }
+    return 0;
+  }
+
+  function refineQuadraticBoundaryT(model, box, insideT, outsideT) {
+    let inner = insideT;
+    let outer = outsideT;
+    for (let i = 0; i < 18; i += 1) {
+      const mid = (inner + outer) / 2;
+      const point = quadraticPoint(model.start, model.control, model.end, mid);
+      if (pointInBox(point, box)) inner = mid;
+      else outer = mid;
+    }
+    return (inner + outer) / 2;
+  }
+
+  function directNodeBoundaryPoint(node, other, box) {
+    const width = box && box.width ? box.width : 92;
+    const height = box && box.height ? box.height : 34;
+    const dx = other.x - node.x;
+    const dy = other.y - node.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const ux = dx / length;
+    const uy = dy / length;
+    const xLimit = Math.abs(ux) > 0.0001 ? width / 2 / Math.abs(ux) : Infinity;
+    const yLimit = Math.abs(uy) > 0.0001 ? height / 2 / Math.abs(uy) : Infinity;
+    const distance = Math.min(xLimit, yLimit);
+    return {
+      x: node.x + ux * distance,
+      y: node.y + uy * distance
     };
   }
 
@@ -1233,23 +1324,42 @@
     const uy = dy / length;
     const px = -uy;
     const py = ux;
-    const sourceRadius = 48;
-    const targetRadius = 50;
-    const start = {
-      x: source.x + ux * sourceRadius,
-      y: source.y + uy * sourceRadius
-    };
-    const end = {
-      x: target.x - ux * targetRadius,
-      y: target.y - uy * targetRadius
-    };
     const curve = finiteNumber(offset, 0);
-    const control = {
-      x: (start.x + end.x) / 2 + px * curve,
-      y: (start.y + end.y) / 2 + py * curve
+    const fullModel = {
+      start: { x: source.x, y: source.y },
+      control: {
+        x: (source.x + target.x) / 2 + px * curve,
+        y: (source.y + target.y) / 2 + py * curve
+      },
+      end: { x: target.x, y: target.y }
     };
-    const headBase = quadraticPoint(start, control, end, 0.92);
-    return { start, control, end, headBase };
+    const sourceBox = nodeBox(null, source);
+    const targetBox = nodeBox(null, target);
+    const startT = quadraticBoxBoundaryT(fullModel, sourceBox, false);
+    const endT = quadraticBoxBoundaryT(fullModel, targetBox, true);
+    const gap = normalizeArrowBoundaryGap(state.arrowBoundaryGap);
+    if (endT - startT > 0.01) {
+      const visible = quadraticSubcurve(fullModel, startT, endT);
+      return arrowModelWithHeadBase(trimQuadraticModel(visible, gap, gap) || visible);
+    }
+    const start = directNodeBoundaryPoint(source, target, sourceBox);
+    const end = directNodeBoundaryPoint(target, source, targetBox);
+    const fallbackModel = {
+      start,
+      control: {
+        x: (start.x + end.x) / 2 + px * curve,
+        y: (start.y + end.y) / 2 + py * curve
+      },
+      end
+    };
+    return arrowModelWithHeadBase(trimQuadraticModel(fallbackModel, gap, gap) || fallbackModel);
+  }
+
+  function arrowModelWithHeadBase(model) {
+    return {
+      ...model,
+      headBase: quadraticPoint(model.start, model.control, model.end, 0.92)
+    };
   }
 
   function quadraticPoint(start, control, end, t) {
@@ -1659,6 +1769,23 @@
     syncControls();
   }
 
+  function updateDebugRenderSettings() {
+    state.arrowBoundaryGap = normalizeArrowBoundaryGap(refs.arrowBoundaryGap ? refs.arrowBoundaryGap.value : state.arrowBoundaryGap);
+    state.nodeFillSaturation = normalizeNodeFillSaturation(refs.nodeFillSaturation ? refs.nodeFillSaturation.value : state.nodeFillSaturation);
+    syncDebugControlValues();
+    renderCanvas();
+    setStatus(`Debug view: arrow gap ${state.arrowBoundaryGap}px, fill saturation ${state.nodeFillSaturation}%.`);
+  }
+
+  function syncDebugControlValues() {
+    state.arrowBoundaryGap = normalizeArrowBoundaryGap(state.arrowBoundaryGap);
+    state.nodeFillSaturation = normalizeNodeFillSaturation(state.nodeFillSaturation);
+    if (refs.arrowBoundaryGap) refs.arrowBoundaryGap.value = String(state.arrowBoundaryGap);
+    if (refs.arrowBoundaryGapValue) refs.arrowBoundaryGapValue.textContent = `${state.arrowBoundaryGap}px`;
+    if (refs.nodeFillSaturation) refs.nodeFillSaturation.value = String(state.nodeFillSaturation);
+    if (refs.nodeFillSaturationValue) refs.nodeFillSaturationValue.textContent = `${state.nodeFillSaturation}%`;
+  }
+
   function startLayout() {
     if (state.nodes.length < 2) {
       setStatus('Add at least two nodes for layout.');
@@ -1769,7 +1896,8 @@
       refs.nodeSetting,
       refs.nodeCondition,
       refs.nodeResult,
-      refs.nodeColor
+      refs.nodeColor,
+      refs.nodeFillColor
     ].forEach((control) => {
       if (control) control.disabled = disabled;
     });
@@ -1793,6 +1921,7 @@
       refs.nodeCondition.value = '';
       refs.nodeResult.value = '';
       if (refs.nodeColor) refs.nodeColor.value = '#3d6b4f';
+      if (refs.nodeFillColor) refs.nodeFillColor.value = '#f8f1e5';
       populateArrowParentSelects(arrow);
       if (refs.arrowLabel) refs.arrowLabel.value = arrow ? (arrow.label || '') : '';
       syncArrowPartPickers(arrow || null, !arrow);
@@ -1810,6 +1939,7 @@
     refs.nodeCondition.value = node.condition;
     refs.nodeResult.value = node.result;
     if (refs.nodeColor) refs.nodeColor.value = normalizeColor(node.color, NODE_TYPES[node.type].stroke);
+    if (refs.nodeFillColor) refs.nodeFillColor.value = normalizeNodeFillColor(node.fillColor, NODE_TYPES[node.type].fill);
     populateArrowParentSelects(null);
     if (refs.arrowLabel) refs.arrowLabel.value = '';
     syncArrowPartPickers(null, true);
@@ -1904,10 +2034,11 @@
       state.detailPreview = {
         kind: 'node',
         id: node.id,
-        color: normalizeColor(refs.nodeColor ? refs.nodeColor.value : node.color, node.color)
+        color: normalizeColor(refs.nodeColor ? refs.nodeColor.value : node.color, node.color),
+        fillColor: normalizeNodeFillColor(refs.nodeFillColor ? refs.nodeFillColor.value : node.fillColor, node.fillColor)
       };
       renderCanvas();
-      setStatus('Previewing node color. Press update to save.');
+      setStatus('Previewing node colors. Press update to save.');
       return;
     }
     if (arrow) {
@@ -1937,6 +2068,17 @@
     return normalizeColor(node.color, (NODE_TYPES[node.type] || NODE_TYPES.theorem).stroke);
   }
 
+  function currentNodeFillColor(node) {
+    const type = NODE_TYPES[node.type] || NODE_TYPES.theorem;
+    let fillColor;
+    if (state.detailPreview?.kind === 'node' && state.detailPreview.id === node.id) {
+      fillColor = normalizeNodeFillColor(state.detailPreview.fillColor, node.fillColor || type.fill);
+    } else {
+      fillColor = normalizeNodeFillColor(node.fillColor, type.fill);
+    }
+    return applyNodeFillSaturation(fillColor);
+  }
+
   function currentArrowPreview(arrow) {
     if (state.detailPreview?.kind !== 'arrow' || state.detailPreview.id !== arrow.id) return arrow;
     return {
@@ -1963,6 +2105,7 @@
       node.condition = cleanString(refs.nodeCondition.value);
       node.result = cleanString(refs.nodeResult.value);
       node.color = normalizeColor(refs.nodeColor ? refs.nodeColor.value : node.color, NODE_TYPES[type].stroke);
+      node.fillColor = normalizeNodeFillColor(refs.nodeFillColor ? refs.nodeFillColor.value : node.fillColor, NODE_TYPES[type].fill);
       state.detailPreview = null;
       state.activeLatexDetailField = null;
       setStatus(`Updated ${node.label}.`);
@@ -2403,6 +2546,7 @@
         result: node.result,
         citationKeys: [...node.citationKeys],
         color: node.color,
+        fillColor: normalizeNodeFillColor(node.fillColor, (NODE_TYPES[node.type] || NODE_TYPES.theorem).fill),
         x: roundNumber(node.x),
         y: roundNumber(node.y)
       })),
@@ -2804,6 +2948,7 @@
       refs.graphCountBadge.textContent = `${state.nodes.length} node${state.nodes.length === 1 ? '' : 's'}, ${state.arrows.length} arrow${state.arrows.length === 1 ? '' : 's'}`;
     }
     if (refs.graphTitle && refs.graphTitle.value !== state.graphTitle) refs.graphTitle.value = state.graphTitle;
+    syncDebugControlValues();
     if (refs.loadPreset) refs.loadPreset.disabled = !(state.presets.length && refs.presetSelect && refs.presetSelect.value);
     if (refs.connectBadge) {
       refs.connectBadge.textContent = state.connectMode
@@ -3089,6 +3234,61 @@
   function normalizeColor(value, fallback) {
     const color = cleanString(value);
     return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : fallback;
+  }
+
+  function normalizeNodeFillColor(value, fallback) {
+    const color = normalizeColor(value, fallback);
+    const rgb = hexToRgb(color);
+    if (!rgb) return color;
+    const lightness = perceivedLightness(rgb);
+    const targetLightness = 0.86;
+    if (lightness >= targetLightness) return color;
+    const mix = clamp((targetLightness - lightness) / (1 - lightness || 1), 0, 1);
+    return rgbToHex({
+      r: rgb.r + (255 - rgb.r) * mix,
+      g: rgb.g + (255 - rgb.g) * mix,
+      b: rgb.b + (255 - rgb.b) * mix
+    });
+  }
+
+  function applyNodeFillSaturation(color) {
+    const rgb = hexToRgb(color);
+    if (!rgb) return color;
+    const factor = normalizeNodeFillSaturation(state.nodeFillSaturation) / 100;
+    if (Math.abs(factor - 1) < 0.001) return color;
+    const gray = perceivedLightness(rgb) * 255;
+    return rgbToHex({
+      r: gray + (rgb.r - gray) * factor,
+      g: gray + (rgb.g - gray) * factor,
+      b: gray + (rgb.b - gray) * factor
+    });
+  }
+
+  function normalizeArrowBoundaryGap(value) {
+    return clamp(Math.round(finiteNumber(value, ARROW_BOUNDARY_GAP_DEFAULT)), ARROW_BOUNDARY_GAP_MIN, ARROW_BOUNDARY_GAP_MAX);
+  }
+
+  function normalizeNodeFillSaturation(value) {
+    return clamp(Math.round(finiteNumber(value, NODE_FILL_SATURATION_DEFAULT) / 10) * 10, NODE_FILL_SATURATION_MIN, NODE_FILL_SATURATION_MAX);
+  }
+
+  function hexToRgb(color) {
+    const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(cleanString(color));
+    if (!match) return null;
+    return {
+      r: parseInt(match[1], 16),
+      g: parseInt(match[2], 16),
+      b: parseInt(match[3], 16)
+    };
+  }
+
+  function perceivedLightness(rgb) {
+    return (rgb.r * 0.299 + rgb.g * 0.587 + rgb.b * 0.114) / 255;
+  }
+
+  function rgbToHex(rgb) {
+    const channel = (value) => clamp(Math.round(value), 0, 255).toString(16).padStart(2, '0');
+    return `#${channel(rgb.r)}${channel(rgb.g)}${channel(rgb.b)}`;
   }
 
   function clamp(value, min, max) {

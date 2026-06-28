@@ -48,7 +48,7 @@
       padding: 3px 8px;
       border: 1px solid var(--border);
       border-radius: 3px;
-      background: rgba(255, 253, 248, 0.94);
+      background: var(--node-fill, rgba(255, 253, 248, 0.94));
       color: var(--text);
       box-shadow: 0 1px 5px rgba(0, 0, 0, 0.08);
       cursor: grab;
@@ -668,6 +668,21 @@
               </div>
             </div>
           </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="node-fill-color">node fill</label>
+            <div class="theorem-color-row">
+              <input id="node-fill-color" class="theorem-color-input" type="color" value="#f8f1e5" aria-label="Node fill color">
+              <div class="theorem-color-swatches" aria-label="Node fill color swatches">
+                <button class="theorem-color-swatch" type="button" data-color-target="node-fill-color" data-color-value="#fffdf8" style="--swatch-color: #fffdf8" aria-label="warm white"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="node-fill-color" data-color-value="#f8f1e5" style="--swatch-color: #f8f1e5" aria-label="cream"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="node-fill-color" data-color-value="#f4f7ed" style="--swatch-color: #f4f7ed" aria-label="pale green"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="node-fill-color" data-color-value="#eef7f4" style="--swatch-color: #eef7f4" aria-label="pale teal"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="node-fill-color" data-color-value="#eef4fb" style="--swatch-color: #eef4fb" aria-label="pale blue"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="node-fill-color" data-color-value="#f4f1f8" style="--swatch-color: #f4f1f8" aria-label="pale purple"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="node-fill-color" data-color-value="#fbefee" style="--swatch-color: #fbefee" aria-label="pale red"></button>
+              </div>
+            </div>
+          </div>
         </div>
         <div id="arrow-editor" hidden>
           <div class="theorem-field-row">
@@ -761,6 +776,20 @@
         <div class="theorem-graph-actions">
           <button class="btn" id="toggle-layout" type="button">run layout</button>
           <button class="btn btn-ghost" id="reset-layout" type="button">reset layout</button>
+        </div>
+        <div class="theorem-field-row">
+          <label class="input-label" for="arrow-boundary-gap">arrow gap</label>
+          <div class="theorem-range-row">
+            <input id="arrow-boundary-gap" class="theorem-range-input" type="range" min="0" max="48" step="1" value="10" aria-label="Global arrow gap from node boundary">
+            <output id="arrow-boundary-gap-value" class="theorem-range-value" for="arrow-boundary-gap">10px</output>
+          </div>
+        </div>
+        <div class="theorem-field-row">
+          <label class="input-label" for="node-fill-saturation">fill sat</label>
+          <div class="theorem-range-row">
+            <input id="node-fill-saturation" class="theorem-range-input" type="range" min="0" max="300" step="10" value="210" aria-label="Global node fill saturation">
+            <output id="node-fill-saturation-value" class="theorem-range-value" for="node-fill-saturation">210%</output>
+          </div>
         </div>
         <div class="hint" id="graph-help">Connect mode: click the source node, then the target node.</div>
       </div>
