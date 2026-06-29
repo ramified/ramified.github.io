@@ -17,8 +17,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 456.6,
-      "y": 280.6
+      "x": 413.9,
+      "y": 204.6
     },
     {
       "id": "n6",
@@ -59,8 +59,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 228.5,
-      "y": 232
+      "x": 212.5,
+      "y": 128.7
     },
     {
       "id": "n13",
@@ -131,6 +131,34 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "fillColor": "#eef4fb",
       "x": 296.8,
       "y": 374
+    },
+    {
+      "id": "n18",
+      "type": "example",
+      "label": "game of 2048",
+      "setting": "I would like the game simulate the game of 2048, each round 2 numbers are randomly generated (90% it is 2, 9% it is 4, 0.9% it is 8, 0.07 it is 16, 0.03% it is 32). User can choose one direction to slide.",
+      "condition": "The difference of this game is that, it uses the glued boundary mode in mosaic_calculator.html, so the numbers can slide over the glued boundary and continue moving. This makes the logic for move and merge more complicated.",
+      "result": "My current thought is that, the code will record how many times a number cross the glued boundary in a round, denoted by $k_i$. If the number is >10, then the number will explode to avoid infinite loops. You can also imagine that crossing the glued boundary has a small interval time passing, so they are moved in the order of this number $k_i$. If both numbers are the same and they are going to collide in one block from the different position, they will also explode.",
+      "proofSketch": "The explode range will depend on the smaller number, if it is >64, than all numbers in tiles near the explode tile will be removed; otherwise, only the number in the explode tile will be removed.",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 176,
+      "y": 231.5
+    },
+    {
+      "id": "n19",
+      "type": "example",
+      "label": "presets of glued boundary",
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 393.9,
+      "y": 265.5
     }
   ],
   "arrows": [
@@ -238,6 +266,21 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "curve": 0,
       "labelOffset": 0,
       "color": "#5f574e"
+    },
+    {
+      "id": "a13",
+      "sourceId": "n19",
+      "targetId": "n18",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 2,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
     }
   ],
   "references": [
@@ -263,7 +306,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
     }
   ],
   "view": {
-    "selectedId": "n12",
+    "selectedId": "n18",
     "selectedReferenceKeys": [],
     "layoutRunning": false
   }
