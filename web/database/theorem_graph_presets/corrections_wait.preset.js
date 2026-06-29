@@ -1,10 +1,10 @@
 // Save this file as theorem_graph_presets/corrections_wait.preset.js
 // Add this entry to theorem_graph_presets/presets.js:
-// { label: "corrections_wait", key: "corrections_wait", file: "corrections_wait.preset.js" }
+// { label: "Corrections wait", key: "corrections_wait", file: "corrections_wait.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
   "schemaVersion": 1,
-  "title": "corrections_wait",
+  "title": "Corrections wait",
   "nodes": [
     {
       "id": "n4",
@@ -27,9 +27,9 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "condition": "ilde{H}^3=2;...",
       "result": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 524.3,
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 525,
       "y": 281.3
     },
     {
@@ -40,8 +40,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "condition": "",
       "result": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
       "x": 228.3,
       "y": 164.4
     },
@@ -67,7 +67,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "label": "",
       "body": "solid",
       "head": "arrow",
-      "tail": "none",
+      "tail": "hook",
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
@@ -81,7 +81,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "label": "",
       "body": "solid",
       "head": "arrow",
-      "tail": "none",
+      "tail": "hook",
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
@@ -95,7 +95,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "label": "",
       "body": "solid",
       "head": "arrow",
-      "tail": "none",
+      "tail": "hook",
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
@@ -126,7 +126,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
     }
   ],
   "view": {
-    "selectedId": "n6",
+    "selectedId": "",
     "selectedReferenceKeys": [],
     "layoutRunning": false
   }

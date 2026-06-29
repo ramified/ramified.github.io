@@ -96,6 +96,7 @@
   const HOMOLOGY_RAMIFICATION_DIVISOR_CLASS = 'ramification_divisor';
   const HOMOLOGY_RAMIFIED_COVER_HYPERPLANE_CLASS = 'ramified_cover_hyperplane';
   const HOMOLOGY_CYCLIC_ROOT_CLASS = 'cyclic_root';
+  const RELATIVE_DIFFERENTIAL_EASY_LABEL = 'relative-differential-easy';
   const HOMOLOGY_BLOWUP_EXCEPTIONAL_RULE_ID = 'blowup-exceptional-top';
   const HOMOLOGY_BLOWUP_POINT_PULLBACK_RULE_ID = 'blowup-point-pullback';
   const HOMOLOGY_TOP_RULE_ID = 'top-hyperplane-point';
@@ -935,8 +936,37 @@
     const sheaf = createSheafFromDraft(baseVariety);
     if (!sheaf) return null;
     addSheafObject(sheaf);
+    ensureAbsoluteDifferentialSesForCreatedSheaf(sheaf, baseVariety);
     prepareNextDraftName('sheaf', sheaf.name);
     return sheaf;
+  }
+
+  function ensureAbsoluteDifferentialSesForCreatedSheaf(sheaf, baseVariety = baseVarietyForSheaf(sheaf)) {
+    if (!sheaf || !baseVariety || !varietyHasRelativeDifferentialEasyLabel(baseVariety)) return false;
+    const type = canonicalSheafType(sheaf.type);
+    if (type !== 'tangent' && type !== 'cotangent') return false;
+    const map = ramifiedCoverMapForCover(baseVariety);
+    const base = ramifiedCoverBaseVariety(baseVariety);
+    if (!base || !map) return false;
+    let changed = false;
+    if (type === 'cotangent') {
+      if (setRamifiedCoverCotangentRoleSuppressed(baseVariety, 'cotangent', false)) changed = true;
+      if (ensureRamifiedCoverCotangentSes(base, baseVariety, map, { requireAbsolute: true })) changed = true;
+    } else {
+      if (setRamifiedCoverTangentRoleSuppressed(baseVariety, 'tangent', false)) changed = true;
+      if (ensureRamifiedCoverTangentSes(base, baseVariety, map, { requireAbsolute: true })) changed = true;
+    }
+    if (changed) {
+      syncObjectLineage(sheaf, 'sheaf');
+      state.hiddenObjects = hiddenObjectRefs();
+      refreshConstructedObjects();
+    }
+    return changed;
+  }
+
+  function ramifiedCoverBaseVariety(cover) {
+    if (!cover?.construction || cover.construction.type !== 'ramified-cover') return null;
+    return state.varieties.find((item) => item.id === cover.construction.baseId) || null;
   }
 
   function addBinarySheafFromDraft() {
@@ -2440,7 +2470,11 @@
     if (refs.addObjectKind) refs.addObjectKind.hidden = modifying;
     if (refs.combinedEditor) refs.combinedEditor.hidden = !showingSequence && (modifying || !combinedCreateMode());
     if (refs.inputOptions) refs.inputOptions.hidden = modifying;
-    if (refs.modifyWarning) refs.modifyWarning.hidden = !modifying || hasModifyTarget;
+    if (refs.modifyWarning) {
+      const warningText = modifying ? currentModifyWarningText(hasModifyTarget) : '';
+      refs.modifyWarning.hidden = !warningText;
+      refs.modifyWarning.textContent = warningText || '';
+    }
     if (refs.globalInvariantEditor) refs.globalInvariantEditor.hidden = !showingNumber || (modifying && !hasModifyTarget);
     refs.varietyEditor.hidden = showingNumber || (modifying ? (showingSequence || showingSheaf || showingMapEditor || !hasModifyTarget) : (showingSheaf || showingMapEditor || showingCombinedStructure));
     refs.sheafEditor.hidden = showingNumber || (modifying ? (showingSequence || !showingSheaf || !hasModifyTarget) : !showingSheaf);
@@ -2452,6 +2486,88 @@
     updateInputEditorTitles();
     updateDeleteObjectButton();
     syncChartRevealControls(state.lastResult);
+  }
+
+  function currentModifyWarningText(hasModifyTarget = !!activeObjectForModifyMode()) {
+    if (!hasModifyTarget) return 'select a label to modify';
+    return currentRelativeDifferentialBoundaryWarningText();
+  }
+
+  function currentRelativeDifferentialBoundaryWarningText() {
+    if (!inputIsModifyMode()) return '';
+    if (modifyKind() === 'variety') {
+      return relativeDifferentialVarietyModifyWarning(selectedVariety());
+    }
+    if (modifyKind() === 'map') {
+      return relativeDifferentialMapModifyWarning(selectedMap());
+    }
+    if (modifyKind() === 'sheaf') {
+      const sheaf = selectedSheaf();
+      return relativeDifferentialSheafModifyWarning(sheaf, baseVarietyForSheaf(sheaf), draftBaseVariety());
+    }
+    return '';
+  }
+
+  function relativeDifferentialBoundaryWarningText(fromEasy, toEasy, subject = 'object') {
+    if (fromEasy === toEasy) return '';
+    return fromEasy
+      ? `This update changes a ${subject} whose relative tangent/cotangent calculation is easier into one using the standard absolute-differential calculation. Existing relative-differential shortcuts may be rebuilt.`
+      : `This update changes a ${subject} using the standard absolute-differential calculation into one whose relative tangent/cotangent calculation is easier. Absolute tangent/cotangent sheaves may be rebuilt from hidden SES data.`;
+  }
+
+  function relativeDifferentialVarietyModifyWarning(variety) {
+    if (!variety) return '';
+    const currentEasy = varietyHasRelativeDifferentialEasyLabel(variety);
+    const nextEasy = varietyDraftHasRelativeDifferentialEasyLabel(variety);
+    return relativeDifferentialBoundaryWarningText(currentEasy, nextEasy, 'variety');
+  }
+
+  function varietyDraftHasRelativeDifferentialEasyLabel(variety) {
+    if (!variety?.construction || variety.construction.type !== 'ramified-cover') return false;
+    const map = ramifiedCoverMapForCover(variety);
+    const base = ramifiedCoverBaseVariety(variety);
+    if (!map || !base) return false;
+    return ramifiedCoverRelativeDifferentialIsEasyWithData(variety, base, map, map.construction);
+  }
+
+  function relativeDifferentialMapModifyWarning(map) {
+    if (!map?.construction || map.construction.type !== 'ramified-cover-map') return '';
+    const cover = state.varieties.find((item) => item.id === (map.construction.coverId || map.domainId));
+    const base = state.varieties.find((item) => item.id === (map.construction.baseId || map.codomainId));
+    if (!cover || !base) return '';
+    const currentEasy = varietyHasRelativeDifferentialEasyLabel(cover);
+    const nextEasy = ramifiedCoverRelativeDifferentialIsEasyWithData(cover, base, map, ramifiedCoverMapControlData(map) || map.construction);
+    return relativeDifferentialBoundaryWarningText(currentEasy, nextEasy, 'ramified cover map');
+  }
+
+  function relativeDifferentialSheafModifyWarning(sheaf, currentBase, nextBase) {
+    if (!sheaf || !currentBase || !nextBase || currentBase.id === nextBase.id) return '';
+    const type = canonicalSheafType(refs.sheafType?.value || sheaf.type);
+    if (type !== 'tangent' && type !== 'cotangent') return '';
+    return relativeDifferentialBoundaryWarningText(
+      varietyHasRelativeDifferentialEasyLabel(currentBase),
+      varietyHasRelativeDifferentialEasyLabel(nextBase),
+      `${type} sheaf base`
+    );
+  }
+
+  function ramifiedCoverRelativeDifferentialIsEasyWithData(cover, base, map, data = null) {
+    if (!cover?.construction || cover.construction.type !== 'ramified-cover' || !base || !map) return false;
+    const construction = data || map.construction || {};
+    const degree = normalizeRamifiedCoverDegree(construction.degree ?? cover.construction.degree);
+    const coverMode = construction.coverMode === 'cyclic' ? 'cyclic' : 'general';
+    const smooth = normalizeRamifiedCoverSmoothCyclicConstruction({
+      ...construction,
+      degree,
+      coverMode,
+      smoothCyclic: construction.smoothCyclic === true
+    });
+    if (coverMode !== 'cyclic' || degree <= 1 || smooth.smoothCyclic !== true) return false;
+    const coverGeometry = geometryFromVariety(cover);
+    const baseGeometry = geometryFromVariety(base);
+    if (coverGeometry.dim <= 0 || baseGeometry.dim <= 0 || coverGeometry.dim !== baseGeometry.dim) return false;
+    if (!homologyClassDefById(coverGeometry, HOMOLOGY_RAMIFICATION_DIVISOR_CLASS)) return false;
+    return true;
   }
 
   function chartRevealAvailability(result = state.lastResult) {
@@ -3214,7 +3330,7 @@
 
   function sheafRelativeConstructionType(sheaf) {
     if (sheaf?.construction?.type !== 'ses-term' || !sheaf.construction.relativeSheafMapId) return null;
-    if (sheaf.construction.ramifiedCoverRelative === true || sheaf.construction.ramifiedCoverTangentQuotient === true) return null;
+    if ((sheaf.construction.ramifiedCoverRelative === true || sheaf.construction.ramifiedCoverTangentQuotient === true) && sheaf.hiddenOnCanvas) return null;
     return sheaf.construction.relativeSheafType === 'cotangent' ? 'relative-cotangent' : 'relative-tangent';
   }
 
@@ -3687,6 +3803,56 @@
   function ramifiedCoverCotangentRoleIsSuppressed(cover, role) {
     if (!cover?.construction || cover.construction.type !== 'ramified-cover') return false;
     return ramifiedCoverCotangentSuppressedRoles(cover).includes(role);
+  }
+
+  function varietyHasRelativeDifferentialEasyLabel(varietyOrGeometry) {
+    return Array.isArray(varietyOrGeometry?.specialLabels)
+      && varietyOrGeometry.specialLabels.includes(RELATIVE_DIFFERENTIAL_EASY_LABEL);
+  }
+
+  function ramifiedCoverRelativeDifferentialIsEasy(cover, map = null) {
+    if (!cover?.construction || cover.construction.type !== 'ramified-cover') return false;
+    return !!smoothCyclicRamifiedCoverContextFromMap(map || ramifiedCoverMapForCover(cover));
+  }
+
+  function ramifiedCoverGeometryRelativeDifferentialLabels(variety) {
+    if (!variety?.construction || variety.construction.type !== 'ramified-cover') return [];
+    const labels = ['ramified-cover'];
+    const degree = normalizeRamifiedCoverDegree(variety.construction.degree);
+    const dim = normalizedInt(variety.dim, 0, MAX_DIMENSION, 3);
+    const smooth = normalizeRamifiedCoverSmoothCyclicConstruction(variety.construction);
+    if (dim > 0 && degree > 1 && variety.construction.coverMode === 'cyclic' && smooth.smoothCyclic === true) {
+      labels.push(RELATIVE_DIFFERENTIAL_EASY_LABEL);
+    }
+    return labels;
+  }
+
+  function syncRelativeDifferentialEasyLabelForVariety(variety, map = null) {
+    if (!variety) return false;
+    const labels = new Set(variety.specialLabels || []);
+    const shouldHaveLabel = ramifiedCoverRelativeDifferentialIsEasy(variety, map);
+    const hadLabel = labels.has(RELATIVE_DIFFERENTIAL_EASY_LABEL);
+    if (shouldHaveLabel) labels.add(RELATIVE_DIFFERENTIAL_EASY_LABEL);
+    else labels.delete(RELATIVE_DIFFERENTIAL_EASY_LABEL);
+    if (hadLabel === labels.has(RELATIVE_DIFFERENTIAL_EASY_LABEL)) return false;
+    variety.specialLabels = [...labels];
+    return true;
+  }
+
+  function ensureRamifiedCoverRelativeDifferentialData(base, cover, map = null) {
+    const construction = cover?.construction;
+    if (!construction || construction.type !== 'ramified-cover') return false;
+    const context = smoothCyclicRamifiedCoverContextFromMap(map || ramifiedCoverMapForCover(cover));
+    if (!context || context.cover.id !== cover.id || context.base.id !== base?.id) {
+      let removed = false;
+      if (syncRelativeDifferentialEasyLabelForVariety(cover, map)) removed = true;
+      if (removeRamifiedCoverCotangentScaffolding(construction)) removed = true;
+      if (removeRamifiedCoverTangentScaffolding(construction)) removed = true;
+      return removed;
+    }
+    let changed = false;
+    if (syncRelativeDifferentialEasyLabelForVariety(cover, map)) changed = true;
+    return changed;
   }
 
   function ramifiedCoverCotangentSuppressedRoles(cover) {
@@ -4596,6 +4762,7 @@
         avoidCanvasLabelOverlap(active);
       }
       sheafFromObject(active, geometryFromVariety(baseVariety));
+      ensureAbsoluteDifferentialSesForCreatedSheaf(active, baseVariety);
       state.activeSequenceId = null;
       state.activeSheafId = active.id;
       state.activeVarietyId = active.baseVarietyId || defaultBaseVarietyId();
@@ -6831,7 +6998,7 @@
     return changed;
   }
 
-  function ensureRamifiedCoverCotangentSes(base, cover, map = null) {
+  function ensureRamifiedCoverCotangentSes(base, cover, map = null, options = {}) {
     const context = smoothCyclicRamifiedCoverContextFromMap(map || ramifiedCoverMapForCover(cover));
     const construction = cover?.construction;
     if (!construction || construction.type !== 'ramified-cover') return false;
@@ -6867,6 +7034,12 @@
     if (construction.relativeCotangentSheafId !== relative.id) {
       construction.relativeCotangentSheafId = relative.id;
       changed = true;
+    }
+    if (options.requireAbsolute !== true) {
+      if (removeRamifiedCoverCotangentSequence(construction)) changed = true;
+      if (syncObjectLineage(relative, 'sheaf')) changed = true;
+      state.hiddenObjects = hiddenObjectRefs();
+      return changed;
     }
     if (suppressCotangent) {
       if (removeRamifiedCoverCotangentSequence(construction)) changed = true;
@@ -7230,7 +7403,7 @@
     return changed;
   }
 
-  function ensureRamifiedCoverTangentSes(base, cover, map = null) {
+  function ensureRamifiedCoverTangentSes(base, cover, map = null, options = {}) {
     const context = smoothCyclicRamifiedCoverContextFromMap(map || ramifiedCoverMapForCover(cover));
     const construction = cover?.construction;
     if (!construction || construction.type !== 'ramified-cover') return false;
@@ -7254,6 +7427,12 @@
     if (construction.tangentSheafId !== tangent.id) {
       construction.tangentSheafId = tangent.id;
       changed = true;
+    }
+    if (options.requireAbsolute !== true) {
+      if (removeRamifiedCoverTangentSequence(construction)) changed = true;
+      if (syncObjectLineage(tangent, 'sheaf')) changed = true;
+      state.hiddenObjects = hiddenObjectRefs();
+      return changed;
     }
     if (suppressPulledTarget) {
       if (removeRamifiedCoverTangentSequence(construction)) changed = true;
@@ -8982,6 +9161,8 @@
     if (!data?.map || !data.domain || !data.codomain) return null;
     const replacing = options.replaceSheaf || null;
     if (replacing) cleanupRelativeSheafScaffolding(replacing);
+    const special = createRelativeDifferentialEasySheafConstruction(data, options);
+    if (special) return special;
     const isCotangent = data.type === 'cotangent';
     const sourceSheaf = isCotangent
       ? ensureCotangentSheafForVariety(data.domain)
@@ -9059,6 +9240,87 @@
       });
       if (sequence.tail) sequence.tail.hiddenOnCanvas = true;
       syncObjectLineage(relative, 'sheaf');
+    }
+    state.activeSequenceId = null;
+    state.activeSheafId = relative.id;
+    state.activeVarietyId = data.domain.id;
+    state.activeMapId = null;
+    state.hiddenObjects = hiddenObjectRefs();
+    refreshConstructedObjects();
+    return relative;
+  }
+
+  function createRelativeDifferentialEasySheafConstruction(data, options = {}) {
+    if (!data?.map || !data.domain || !data.codomain || !varietyHasRelativeDifferentialEasyLabel(data.domain)) return null;
+    const context = smoothCyclicRamifiedCoverContextFromMap(data.map);
+    if (!context || context.cover.id !== data.domain.id || context.base.id !== data.codomain.id) return null;
+    const replacing = options.replaceSheaf || null;
+    const relative = replacing || { id: nextInputId('E') };
+    const oldBaseId = relative.baseVarietyId;
+    const isCotangent = data.type === 'cotangent';
+    if (isCotangent) {
+      Object.assign(relative, {
+        type: 'abstract',
+        name: replacing ? data.name : uniqueConstructedObjectName('sheaf', data.name),
+        twist: '1',
+        rank: relativeSheafRankPlaceholder(data.domain, data.codomain, data.type),
+        baseVarietyId: data.domain.id,
+        basis: 'chern',
+        nameDirty: data.nameDirty,
+        hiddenOnCanvas: false,
+        construction: {
+          type: 'ses-term',
+          role: 'quotient',
+          sourceSheafIds: [],
+          relativeSheafMapId: data.map.id,
+          relativeSheafType: 'cotangent',
+          ramifiedCoverRelative: true,
+          ramifiedCoverMapId: data.map.id,
+          ramifiedCoverId: data.domain.id,
+          ramifiedBaseId: data.codomain.id,
+          coverDegree: context.degree,
+          pulledTargetDifferentialSheafId: null,
+          smoothSubmersionConfirmed: false,
+          defaultName: data.defaultName
+        }
+      });
+      context.cover.construction.relativeCotangentSheafId = relative.id;
+    } else {
+      Object.assign(relative, {
+        type: 'abstract',
+        name: replacing ? data.name : uniqueConstructedObjectName('sheaf', data.name),
+        twist: '1',
+        rank: relativeSheafRankPlaceholder(data.domain, data.codomain, data.type),
+        baseVarietyId: data.domain.id,
+        basis: 'chern',
+        nameDirty: data.nameDirty,
+        hiddenOnCanvas: false,
+        construction: {
+          type: 'ses-term',
+          role: 'quotient',
+          sourceSheafIds: [],
+          relativeSheafMapId: data.map.id,
+          relativeSheafType: 'tangent',
+          ramifiedCoverTangentQuotient: true,
+          ramifiedCoverMapId: data.map.id,
+          ramifiedCoverId: data.domain.id,
+          ramifiedBaseId: data.codomain.id,
+          coverDegree: context.degree,
+          sourceTangentSheafId: null,
+          pulledTargetTangentSheafId: null,
+          defaultName: data.defaultName
+        }
+      });
+      context.cover.construction.relativeTangentSheafId = relative.id;
+    }
+    syncObjectLineage(relative, 'sheaf');
+    if (!replacing) {
+      positionSheafNearBase(relative, data.domain);
+      avoidCanvasLabelOverlap(relative);
+      addSheafObject(relative, { activate: false });
+    } else if (oldBaseId !== relative.baseVarietyId) {
+      positionSheafNearBase(relative, data.domain);
+      avoidCanvasLabelOverlap(relative);
     }
     state.activeSequenceId = null;
     state.activeSheafId = relative.id;
@@ -10150,8 +10412,7 @@
     }
     ensureRamifiedCoverHomologyClasses(data.base, cover, map);
     ensureRamifiedCoverRootLineBundle(data.base, cover, map);
-    ensureRamifiedCoverCotangentSes(data.base, cover, map);
-    ensureRamifiedCoverTangentSes(data.base, cover, map);
+    ensureRamifiedCoverRelativeDifferentialData(data.base, cover, map);
     state.activeMapId = map?.id || null;
     state.activeHomologyTarget = map ? { kind: 'map', id: map.id } : { kind: 'variety', id: cover.id };
     return cover;
@@ -11750,20 +12011,26 @@
     if (!refs.identifyClassReview) return;
     const draft = ensureIdentifyDraft();
     const candidates = identifyClassCandidates();
-    refs.identifyClassReview.classList.toggle('is-warning', !!identifyUnconfirmedClassCandidates().length);
+    const boundaryWarning = identifyRelativeDifferentialBoundaryWarningText();
+    refs.identifyClassReview.classList.toggle('is-warning', !!boundaryWarning || !!identifyUnconfirmedClassCandidates().length);
     if (!identifyMainObject() || !identifySecondaryObject()) {
       refs.identifyClassReview.textContent = 'pick two objects to review class labels';
       return;
     }
     if (!candidates.length) {
-      refs.identifyClassReview.textContent = 'no same-display class labels found';
+      refs.identifyClassReview.textContent = boundaryWarning
+        ? `${boundaryWarning} no same-display class labels found`
+        : 'no same-display class labels found';
       return;
     }
     if (draft.autoClassMatches !== false) {
-      refs.identifyClassReview.textContent = `${candidates.length} same-display class label${candidates.length === 1 ? '' : 's'} will be identified`;
+      const classText = `${candidates.length} same-display class label${candidates.length === 1 ? '' : 's'} will be identified`;
+      refs.identifyClassReview.textContent = boundaryWarning ? `${boundaryWarning} ${classText}` : classText;
       return;
     }
-    refs.identifyClassReview.innerHTML = candidates.map((candidate) => {
+    refs.identifyClassReview.innerHTML = [
+      boundaryWarning ? `<div>${escapeHtml(boundaryWarning)}</div>` : '',
+      ...candidates.map((candidate) => {
       const checked = draft.classMatches?.[candidate.key] === true ? ' checked' : '';
       const main = escapeHtml(latexToPlain(identifyClassDisplaySymbol(candidate.mainDef)));
       const secondary = escapeHtml(latexToPlain(identifyClassDisplaySymbol(candidate.secondaryDef)));
@@ -11783,7 +12050,19 @@
           <input class="sheaf-input" type="text" value="${escapeHtml(identifyClassDisplaySymbol(candidate.mainDef))}" data-identify-class-rename="${escapeHtml(mainRenameKey)}" spellcheck="false" autocomplete="off">
         </label>
       `;
-    }).join('');
+      })
+    ].join('');
+  }
+
+  function identifyRelativeDifferentialBoundaryWarningText() {
+    if (!combinedIdentifyCreateMode() || identifyDraftKind() !== 'variety') return '';
+    const main = identifyMainObject();
+    const secondary = identifySecondaryObject();
+    if (!main || !secondary || !identifyPairCompatible(main, secondary, 'variety')) return '';
+    const mainEasy = varietyHasRelativeDifferentialEasyLabel(main);
+    const secondaryEasy = varietyHasRelativeDifferentialEasyLabel(secondary);
+    if (mainEasy === secondaryEasy) return '';
+    return 'These varieties use different relative tangent/cotangent calculation labels. Identifying them may rebuild relative-differential shortcuts or hidden SES data.';
   }
 
   function identifyConstructionData(options = {}) {
@@ -14842,8 +15121,7 @@
     }
     if (ensureRamifiedCoverHomologyClasses(base, variety, map)) changed = true;
     if (ensureRamifiedCoverRootLineBundle(base, variety, map)) changed = true;
-    if (ensureRamifiedCoverCotangentSes(base, variety, map)) changed = true;
-    if (ensureRamifiedCoverTangentSes(base, variety, map)) changed = true;
+    if (ensureRamifiedCoverRelativeDifferentialData(base, variety, map)) changed = true;
     if (syncObjectLineage(variety, 'variety')) changed = true;
     return changed;
   }
@@ -15921,8 +16199,7 @@
     }
     if (ensureRamifiedCoverHomologyClasses(base, cover, map)) changed = true;
     if (ensureRamifiedCoverRootLineBundle(base, cover, map)) changed = true;
-    if (ensureRamifiedCoverCotangentSes(base, cover, map)) changed = true;
-    if (ensureRamifiedCoverTangentSes(base, cover, map)) changed = true;
+    if (ensureRamifiedCoverRelativeDifferentialData(base, cover, map)) changed = true;
     if (syncObjectLineage(map, 'map')) changed = true;
     return changed;
   }
@@ -17239,7 +17516,7 @@
         blowupPointLabel: blowupCenterLabel(blowupConstruction.pointLabel)
       } : {}),
       ...(ramifiedCoverConstruction ? {
-        specialLabels: ['ramified-cover'],
+        specialLabels: ramifiedCoverGeometryRelativeDifferentialLabels(variety),
         ramifiedCoverBaseId: ramifiedCoverConstruction.baseId || null,
         ramifiedCoverMapId: ramifiedCoverConstruction.mapId || null,
         ramifiedCoverDegree: normalizeRamifiedCoverDegree(ramifiedCoverConstruction.degree),
@@ -28362,6 +28639,10 @@
         ? buildRamifiedCoverTangentBundle(geometry, sheaf)
         : null;
       if (ramifiedTangent) return ramifiedTangent;
+      const ramifiedCotangent = construction.ramifiedCoverCotangent === true
+        ? buildRamifiedCoverCotangentBundle(geometry, sheaf)
+        : null;
+      if (ramifiedCotangent) return ramifiedCotangent;
       const ramifiedRelative = buildRamifiedCoverRelativeCotangentBundle(geometry, sheaf, construction);
       if (ramifiedRelative) return ramifiedRelative;
       const ramifiedTangentQuotient = buildRamifiedCoverTangentQuotientBundle(geometry, sheaf, construction);

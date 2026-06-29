@@ -130,6 +130,9 @@ function loadCalculator() {
     sequenceTailPointCount,
     createBlowupPointConstruction,
     createRamifiedCoverConstruction,
+    createDefaultSheaf,
+    addSheafObject,
+    ensureAbsoluteDifferentialSesForCreatedSheaf,
     createGrassmannianMapConstruction,
     createPicardCanonicalConstruction,
     createDualSheafConstruction,
@@ -2400,6 +2403,103 @@ function testSmoothCyclicRamifiedCoverAddsRootClassAndHodgeNumbers() {
   assert.strictEqual(branchEightHodge.entries[2][1].plain, '149');
 }
 
+function testSmoothCyclicRamifiedCoverRelativeDifferentialsStayLazyUntilAbsoluteSheaf() {
+  const api = loadCalculator();
+  const base = { id: 'P2', type: 'projective', dim: '2', name: '\\mathbb{P}^{2}', labelX: 0.4, labelY: 0.7 };
+  api.state.varieties = [base];
+
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 2,
+    coverMode: 'cyclic',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    smoothCyclic: true,
+    branchDegree: 4,
+    defaultName: '\\widetilde{\\mathbb{P}^{2}}',
+    name: 'Y'
+  });
+  const map = api.state.maps.find((item) => item.construction?.type === 'ramified-cover-map');
+  const coverGeometry = api.geometryFromVariety(cover);
+  assert(coverGeometry.specialLabels.includes('relative-differential-easy'));
+  assert(cover.specialLabels.includes('relative-differential-easy'));
+  assert.strictEqual(api.state.sheaves.some((item) => item.construction?.ramifiedCoverCotangent === true), false);
+  assert.strictEqual(api.state.sheaves.some((item) => item.construction?.ramifiedCoverTangent === true), false);
+
+  const relativeCotangent = api.createRelativeSheafConstruction({
+    type: 'cotangent',
+    map,
+    domain: cover,
+    codomain: base,
+    baseVarietyId: cover.id,
+    defaultName: '\\Omega^1_{Y/P}',
+    name: '\\Omega^1_{Y/P}',
+    nameDirty: false
+  });
+  assert(relativeCotangent);
+  assert.strictEqual(relativeCotangent.hiddenOnCanvas, false);
+  assert.strictEqual(relativeCotangent.construction.ramifiedCoverRelative, true);
+  assert.strictEqual(relativeCotangent.construction.sourceSheafIds.length, 0);
+  assert.strictEqual(relativeCotangent.construction.pulledTargetDifferentialSheafId, null);
+  assert.strictEqual(api.state.sequences.length, 0);
+  assert.strictEqual(api.state.sheaves.some((item) => item.construction?.type === 'pullback'), false);
+  assert.strictEqual(api.state.sheaves.some((item) => item.construction?.ramifiedCoverCotangent === true), false);
+
+  const cotangent = {
+    id: 'OmegaY',
+    type: 'cotangent',
+    name: '\\Omega^1_Y',
+    twist: '1',
+    rank: '2',
+    baseVarietyId: cover.id,
+    basis: 'chern',
+    nameDirty: true
+  };
+  api.addSheafObject(cotangent, { activate: false });
+  api.ensureAbsoluteDifferentialSesForCreatedSheaf(cotangent, cover);
+  assert.strictEqual(cotangent.construction?.ramifiedCoverCotangent, true);
+  assert.strictEqual(cover.construction.cotangentSheafId, cotangent.id);
+  assert.strictEqual(cover.construction.relativeCotangentSheafId, relativeCotangent.id);
+  assert(api.state.sheaves.some((item) => item.construction?.type === 'pullback'
+    && item.construction.mapId === map.id
+    && item.baseVarietyId === cover.id));
+  assert(api.state.sequences.some((sequence) => (sequence.sheafIds || []).includes(cotangent.id)));
+
+  const relativeTangent = api.createRelativeSheafConstruction({
+    type: 'tangent',
+    map,
+    domain: cover,
+    codomain: base,
+    baseVarietyId: cover.id,
+    defaultName: '\\mathcal{T}_{Y/P}',
+    name: '\\mathcal{T}_{Y/P}',
+    nameDirty: false
+  });
+  assert(relativeTangent);
+  assert.strictEqual(relativeTangent.hiddenOnCanvas, false);
+  assert.strictEqual(relativeTangent.construction.ramifiedCoverTangentQuotient, true);
+  assert.strictEqual(relativeTangent.construction.sourceSheafIds.length, 0);
+  assert.strictEqual(relativeTangent.construction.sourceTangentSheafId, null);
+  assert.strictEqual(relativeTangent.construction.pulledTargetTangentSheafId, null);
+
+  const tangent = {
+    id: 'TY',
+    type: 'tangent',
+    name: '\\mathcal{T}_Y',
+    twist: '1',
+    rank: '2',
+    baseVarietyId: cover.id,
+    basis: 'chern',
+    nameDirty: false
+  };
+  api.addSheafObject(tangent, { activate: false });
+  api.ensureAbsoluteDifferentialSesForCreatedSheaf(tangent, cover);
+  assert.strictEqual(tangent.construction?.ramifiedCoverTangent, true);
+  assert.strictEqual(cover.construction.tangentSheafId, tangent.id);
+  assert.strictEqual(cover.construction.relativeTangentSheafId, relativeTangent.id);
+  assert(api.state.sequences.some((sequence) => (sequence.sheafIds || []).includes(tangent.id)));
+}
+
 function testTangentHomologyPromotionUsesVarietyDisplay() {
   const api = loadCalculator();
   const variety = { id: 'X', type: 'abstract', dim: '2', name: 'X' };
@@ -2442,8 +2542,19 @@ function testRamifiedCoverTangentPromotionCopiesComputedRuleToVariety() {
     defaultName: 'Y',
     name: 'Y'
   });
-  const tangent = api.state.sheaves.find((item) => item.construction?.ramifiedCoverTangent === true);
-  assert(tangent);
+  const tangent = {
+    id: 'TY',
+    type: 'tangent',
+    name: '\\mathcal{T}_{Y}',
+    twist: '1',
+    rank: '2',
+    baseVarietyId: cover.id,
+    basis: 'chern',
+    nameDirty: true
+  };
+  api.addSheafObject(tangent, { activate: false });
+  api.ensureAbsoluteDifferentialSesForCreatedSheaf(tangent, cover);
+  assert.strictEqual(tangent.construction?.ramifiedCoverTangent, true);
   api.state.activeHomologyTarget = { kind: 'sheaf', id: tangent.id };
   let coverGeometry = api.geometryFromVariety(cover);
   const sheaf = api.sheafFromObject(tangent, coverGeometry);
@@ -2459,7 +2570,7 @@ function testRamifiedCoverTangentPromotionCopiesComputedRuleToVariety() {
   const tangentClassId = api.tangentChernHomologyClassId(1);
   const tangentClass = cover.homology.customClasses.find((item) => item.id === tangentClassId);
   assert(tangentClass);
-  assert.strictEqual(tangentClass.symbol, 'c_{1}(Y)');
+  assert.strictEqual(tangentClass.symbol, 'c_{1}(\\widetilde{X})');
   assert.strictEqual(api.sheafChernClassUsesBaseHomology(def, {
     ...context,
     geometry: coverGeometry,
@@ -5710,6 +5821,7 @@ testRamifiedCoverMapConstructionUpdatesCoverData();
 testRamifiedCoverMapGeneralModeSuppressesSmoothCyclicData();
 testRamifiedCoverRefreshPreservesConstructionAfterDimensionEdit();
 testSmoothCyclicCurveRamifiedCoverUsesRiemannHurwitz();
+testSmoothCyclicRamifiedCoverRelativeDifferentialsStayLazyUntilAbsoluteSheaf();
 testGrassmannianMapConstructionCreatesTargetAndMap();
 testGrassmannianMapGenericallyGeneratedOnlyIsRational();
 testRankOneGrassmannianMapUsesProjectiveSpaceAndTwists();
