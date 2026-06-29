@@ -13,6 +13,7 @@
   const MAX_EXPLICIT_ROOT_FACTORS = 64;
   const MAX_SCHUR_PARTITION_SIZE = 12;
   const MAX_SELF_DIRECT_SUM_MULTIPLICITY = 99;
+  const MAX_TENSOR_PARENTS = 6;
   const MAX_GRASSMANNIAN_N = MAX_DIMENSION + 1;
   const MAX_PPAV_GENUS = maxPpavGenusForDimension(MAX_DIMENSION);
   const DEFAULT_HOMOLOGY_RULE_PASSES = 1;
@@ -434,6 +435,12 @@
     refs.sheafBinaryRightButton = $('sheaf-binary-right-button');
     refs.sheafBinaryExactRow = $('sheaf-binary-exact-row');
     refs.sheafBinaryExact = $('sheaf-binary-exact');
+    refs.sheafTensorStrengthenRow = $('sheaf-tensor-strengthen-row');
+    refs.sheafTensorStrengthen = $('sheaf-tensor-strengthen');
+    refs.sheafTensorParentCountRow = $('sheaf-tensor-parent-count-row');
+    refs.sheafTensorParentCount = $('sheaf-tensor-parent-count');
+    refs.sheafTensorParentsRow = $('sheaf-tensor-parents-row');
+    refs.sheafTensorParentList = $('sheaf-tensor-parent-list');
     refs.sheafBinaryPickNote = $('sheaf-binary-pick-note');
     refs.sheafSelfSumFormulaRow = $('sheaf-self-sum-formula-row');
     refs.sheafSelfSumParentButton = $('sheaf-self-sum-parent-button');
@@ -1078,17 +1085,19 @@
     sheaf.type = 'abstract';
     sheaf.name = data.name;
     sheaf.twist = '1';
-    sheaf.rank = constructionRankPlaceholder(data.operation, data.left, data.right);
+    sheaf.rank = binaryConstructionRankPlaceholder(data);
     sheaf.baseVarietyId = data.baseVarietyId;
     sheaf.basis = 'chern';
     sheaf.nameDirty = data.nameDirty;
     sheaf.construction = {
       type: isTensor ? 'tensor' : 'direct-sum',
-      sheafIds: [data.left.id, data.right.id],
+      sheafIds: binaryConstructionSheafIds(data),
       derived: isTensor ? !!data.derived : false,
       exact: isTensor ? !!data.exact : true,
       defaultName: data.defaultName
     };
+    const exponents = binaryConstructionTensorExponents(data);
+    if (exponents) sheaf.construction.exponents = exponents;
     const baseVariety = baseVarietyForSheaf(sheaf);
     if (oldBaseId !== sheaf.baseVarietyId) {
       positionSheafNearBase(sheaf, baseVariety);
@@ -1482,17 +1491,46 @@
   function binarySheafConstructionData() {
     const operation = refs.sheafType?.value === 'tensor' ? 'tensor-sheaf' : refs.sheafType?.value === 'direct-sum' ? 'direct-sum-sheaf' : null;
     if (!operation) return null;
+    const exact = operation === 'tensor-sheaf' && !!refs.sheafBinaryExact?.checked;
+    const operationLatex = operation === 'direct-sum-sheaf' ? '\\oplus' : tensorOperationLatex(!exact);
+    if (operation === 'tensor-sheaf' && sheafTensorStrengthened()) {
+      const parentCount = currentSheafTensorParentCount();
+      const parents = sheafTensorDraftSheaves();
+      const baseVariety = parentCount === 0 ? draftBaseVariety() : null;
+      if (parentCount === 0 && !baseVariety) return null;
+      if (parentCount > 0 && (parents.length !== parentCount || parents.some((parent) => !parent?.baseVarietyId))) return null;
+      const baseVarietyId = parentCount === 0 ? baseVariety.id : parents[0].baseVarietyId;
+      if (parents.some((parent) => parent.baseVarietyId !== baseVarietyId)) return null;
+      const exponents = sheafTensorDraftExponents(parentCount);
+      const defaultName = defaultTensorSheafNameFromObjects(parents, exponents, operationLatex, baseVariety);
+      const name = state.draftSheafNameDirty
+        ? sanitizeMathLabel(refs.sheafName.value, defaultName)
+        : defaultName;
+      return {
+        operation,
+        parents,
+        exponents,
+        left: parents[0] || null,
+        right: parents[1] || null,
+        exact,
+        derived: !exact,
+        strengthened: true,
+        baseVarietyId,
+        defaultName,
+        name,
+        nameDirty: state.draftSheafNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName)
+      };
+    }
     const left = sheafBinaryDraftSheaf('left');
     const right = sheafBinaryDraftSheaf('right');
     if (!left || !right || !left.baseVarietyId || left.baseVarietyId !== right.baseVarietyId) return null;
-    const exact = operation === 'tensor-sheaf' && !!refs.sheafBinaryExact?.checked;
-    const operationLatex = operation === 'direct-sum-sheaf' ? '\\oplus' : tensorOperationLatex(!exact);
     const defaultName = defaultBinarySheafNameFromObjects(left, right, operationLatex);
     const name = state.draftSheafNameDirty
       ? sanitizeMathLabel(refs.sheafName.value, defaultName)
       : defaultName;
     return {
       operation,
+      parents: [left, right],
       left,
       right,
       exact,
@@ -3345,11 +3383,21 @@
 
   function loadBinarySheafIntoDraft(sheaf) {
     const construction = sheaf?.construction || {};
+    const sheafIds = [...(construction.sheafIds || []).slice(0, MAX_TENSOR_PARENTS)];
+    const strengthened = construction.type === 'tensor'
+      && (Array.isArray(construction.exponents) || sheafIds.length !== 2);
     state.sheafBinaryDraft = {
-      sheafIds: [...(construction.sheafIds || []).slice(0, 2)]
+      sheafIds,
+      ...(strengthened ? { exponents: normalizedTensorExponents(construction.exponents, sheafIds.length) } : {})
     };
     state.sheafBinaryPickTarget = 'left';
     if (refs.sheafBinaryExact) refs.sheafBinaryExact.checked = !!construction.exact;
+    if (refs.sheafTensorStrengthen) refs.sheafTensorStrengthen.checked = strengthened;
+    if (refs.sheafTensorParentCount) {
+      refs.sheafTensorParentCount.value = strengthened ? String(Math.min(MAX_TENSOR_PARENTS, sheafIds.length)) : '3';
+      if (strengthened) refs.sheafTensorParentCount.dataset.userTouched = 'true';
+      else delete refs.sheafTensorParentCount.dataset.userTouched;
+    }
     updateSheafBinaryDraftControls();
   }
 
@@ -5469,7 +5517,8 @@
         state.activeVarietyId = refs.sheafBaseVariety.value;
         state.draftSheafBaseVarietyId = refs.sheafBaseVariety.value;
         clearSheafMapDraft();
-        clearSheafBinaryDraft();
+        if (sheafTensorZeroParentInputMode()) updateSheafBinaryDraftControls();
+        else clearSheafBinaryDraft();
         clearSheafSelfSumDraft();
         clearSheafDualDraft();
         clearSheafInternalHomDraft();
@@ -5526,6 +5575,54 @@
         setSheafBinaryPickTarget(button.dataset.sheafBinaryPick || 'left');
       });
     });
+    if (refs.sheafTensorStrengthen) {
+      refs.sheafTensorStrengthen.addEventListener('change', () => {
+        syncSheafTensorDraftFromControls();
+        updateSheafBinaryDraftControls();
+        syncDefaultRank(true);
+        syncDefaultSheafName();
+        normalizeControlVisibility();
+        recompute();
+      });
+    }
+    if (refs.sheafTensorParentCount) {
+      refs.sheafTensorParentCount.addEventListener('change', () => {
+        refs.sheafTensorParentCount.dataset.userTouched = 'true';
+        refs.sheafTensorParentCount.value = String(currentSheafTensorParentCount());
+        syncSheafTensorDraftFromControls();
+        if (sheafTensorZeroParentInputMode()) setCanvasPickEnabled(false, { render: false });
+        updateSheafBinaryDraftControls();
+        syncDefaultRank(true);
+        syncDefaultSheafName();
+        normalizeControlVisibility();
+        recompute();
+      });
+    }
+    if (refs.sheafTensorParentList) {
+      refs.sheafTensorParentList.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-sheaf-tensor-parent-index]');
+        if (!button) return;
+        setSheafBinaryPickTarget(button.dataset.sheafTensorParentIndex || '0');
+      });
+      refs.sheafTensorParentList.addEventListener('input', (event) => {
+        const input = event.target.closest('[data-sheaf-tensor-exponent]');
+        if (!input) return;
+        setSheafTensorDraftExponent(input.dataset.sheafTensorExponent, input.value);
+        syncDefaultRank(true);
+        syncDefaultSheafName();
+        normalizeControlVisibility();
+      });
+      refs.sheafTensorParentList.addEventListener('change', (event) => {
+        const input = event.target.closest('[data-sheaf-tensor-exponent]');
+        if (!input) return;
+        input.value = setSheafTensorDraftExponent(input.dataset.sheafTensorExponent, input.value, { normalize: true });
+        updateSheafBinaryDraftControls();
+        syncDefaultRank(true);
+        syncDefaultSheafName();
+        normalizeControlVisibility();
+        recompute();
+      });
+    }
     if (refs.sheafSelfSumParentButton) {
       refs.sheafSelfSumParentButton.addEventListener('click', () => {
         setSheafSelfSumPickTarget();
@@ -8829,23 +8926,26 @@
   }
 
   function createBinarySheafConstruction(data) {
+    const isTensor = data.operation === 'tensor-sheaf';
     const sheaf = {
       id: nextInputId('E'),
       type: 'abstract',
       name: uniqueConstructedObjectName('sheaf', data.name),
       twist: '1',
-      rank: constructionRankPlaceholder(data.operation, data.left, data.right),
+      rank: binaryConstructionRankPlaceholder(data),
       baseVarietyId: data.baseVarietyId,
       basis: 'chern',
       nameDirty: data.nameDirty,
       construction: {
-        type: data.operation === 'direct-sum-sheaf' ? 'direct-sum' : 'tensor',
-        sheafIds: [data.left.id, data.right.id],
-        derived: data.operation === 'tensor-sheaf' ? !!data.derived : false,
-        exact: data.operation === 'tensor-sheaf' ? !!data.exact : true,
+        type: isTensor ? 'tensor' : 'direct-sum',
+        sheafIds: binaryConstructionSheafIds(data),
+        derived: isTensor ? !!data.derived : false,
+        exact: isTensor ? !!data.exact : true,
         defaultName: data.defaultName
       }
     };
+    const exponents = binaryConstructionTensorExponents(data);
+    if (exponents) sheaf.construction.exponents = exponents;
     syncObjectLineage(sheaf, 'sheaf');
     positionSheafNearBase(sheaf, baseVarietyForSheaf(sheaf));
     avoidCanvasLabelOverlap(sheaf);
@@ -10778,6 +10878,22 @@
     return `${sanitizeMathLabel(left?.name, '\\mathcal{E}')} ${operationLatex} ${sanitizeMathLabel(right?.name, '\\mathcal{F}')}`;
   }
 
+  function defaultTensorSheafNameFromObjects(parents = [], exponents = [], operationLatex = '\\otimes', baseVariety = null) {
+    if (!parents.length) {
+      const base = baseVariety || draftBaseVariety() || activeVariety();
+      const geometry = base ? geometryFromVariety(base) : null;
+      return defaultSheafNameFor('structure', '1', 1, geometry?.labelLatex || sanitizeMathLabel(base?.name, 'X'), geometry);
+    }
+    return parents.map((parent, index) => tensorFactorNameLatex(parent, exponents[index] ?? '1', index)).join(` ${operationLatex} `);
+  }
+
+  function tensorFactorNameLatex(parent, exponent, index = 0) {
+    const label = sanitizeMathLabel(parent?.name, SHEAF_LETTER_NAMES[index] || '\\mathcal{E}');
+    if (tensorExponentIsOne(exponent)) return label;
+    const base = sheafNameNeedsDualParens(label) ? wrapSheafNameForDual(label) : label;
+    return `${base}^{\\otimes ${tensorExponentLatex(exponent)}}`;
+  }
+
   function defaultSelfSumSheafNameFromObjects(parent, multiplicity) {
     return `${sanitizeMathLabel(parent?.name, '\\mathcal{E}')}^{\\oplus ${selfOperationMultiplicityLatex(multiplicity)}}`;
   }
@@ -11011,6 +11127,36 @@
     return '';
   }
 
+  function binaryConstructionSheafIds(data) {
+    return (data?.parents || [data?.left, data?.right]).filter(Boolean).map((parent) => parent.id);
+  }
+
+  function binaryConstructionTensorExponents(data) {
+    if (data?.operation !== 'tensor-sheaf' || !Array.isArray(data.exponents)) return null;
+    return data.exponents.map(normalizeTensorExponent).slice(0, MAX_TENSOR_PARENTS);
+  }
+
+  function binaryConstructionRankPlaceholder(data) {
+    if (!data) return '';
+    if (data.operation === 'direct-sum-sheaf') return constructionRankPlaceholder(data.operation, data.left, data.right);
+    return tensorConstructionRankPlaceholder(data.parents || [], data.exponents || []);
+  }
+
+  function tensorConstructionRankPlaceholder(parents, exponents = []) {
+    if (!Array.isArray(parents) || parents.length === 0) return '1';
+    let product = 1n;
+    for (let index = 0; index < parents.length; index += 1) {
+      const rank = sanitizeRankInput(parents[index]?.rank);
+      if (!rank) return '';
+      if (rank === '1') continue;
+      const exponent = tensorExponentInteger(exponents[index] ?? '1');
+      if (rank === '0' && scalarExponentKnownPositive(tensorExponentPoly(exponents[index] ?? '1'))) return '0';
+      if (!/^-?\d+$/.test(rank) || exponent == null || exponent < 0) return exponent === 1 ? rank : '';
+      product *= bigintPow(BigInt(rank), exponent);
+    }
+    return product.toString();
+  }
+
   function selfSumRankPlaceholder(parent, multiplicity) {
     const rank = sanitizeRankInput(parent?.rank);
     if (!rank) return '';
@@ -11094,7 +11240,7 @@
     if (combinedGrassmannianMapCreateMode()) return activateGrassmannianMapPick(options);
     if (combinedPicardCanonicalCreateMode()) return activatePicardCanonicalPick(options);
     if (kind === 'sheaf') {
-      if (sheafBinaryInputMode()) {
+      if (sheafBinaryInputMode() && !sheafTensorZeroParentInputMode()) {
         state.sheafBinaryPickTarget = sheafBinaryDraftSheaf('left') ? 'right' : 'left';
       } else if (sheafSelfSumInputMode()) {
         state.sheafSelfSumDraft = state.sheafSelfSumDraft || {};
@@ -11310,10 +11456,17 @@
     updateSheafMapDraftControls();
   }
 
-  function clearSheafBinaryDraft() {
+  function clearSheafBinaryDraft(options = {}) {
     state.sheafBinaryDraft = null;
     state.sheafBinaryPickTarget = 'left';
     if (refs.sheafBinaryExact) refs.sheafBinaryExact.checked = false;
+    if (options.resetTensorControls !== false) {
+      if (refs.sheafTensorStrengthen) refs.sheafTensorStrengthen.checked = false;
+      if (refs.sheafTensorParentCount) {
+        refs.sheafTensorParentCount.value = '3';
+        delete refs.sheafTensorParentCount.dataset.userTouched;
+      }
+    }
     updateSheafBinaryDraftControls();
   }
 
@@ -11575,19 +11728,20 @@
   }, {
     id: 'sheaf-binary',
     slots: ['left', 'right'],
-    active: () => sheafBinaryInputMode(),
+    active: () => sheafBinaryInputMode() && !sheafTensorZeroParentInputMode(),
     allowedObjectKinds: () => ['sheaf'],
     available: () => sheafBinaryPickableSheaves().length > 0,
     candidate: (kind, id) => kind === 'sheaf' && allowableSheafBinaryPick(id),
     paintCandidate: (kind, id) => {
       const ids = sheafBinaryDraftIds();
-      return kind === 'sheaf' && ids[0] !== id && ids[1] !== id && allowableSheafBinaryPick(id);
+      return kind === 'sheaf' && !ids.includes(id) && allowableSheafBinaryPick(id);
     },
     selectedState: (kind, id) => {
       if (kind !== 'sheaf') return null;
       const ids = sheafBinaryDraftIds();
-      if (ids[0] === id) return 'domain';
-      if (ids[1] === id) return 'codomain';
+      const index = ids.findIndex((item) => item === id);
+      if (index === 0) return 'domain';
+      if (index > 0) return 'codomain';
       return null;
     },
     complete: () => !!binarySheafConstructionData(),
@@ -12903,7 +13057,7 @@
       && !combinedSesCreateMode()
       && !combinedGrassmannianMapCreateMode()
       && !sheafMapOperationInputMode()
-      && !sheafBinaryInputMode()
+      && (!sheafBinaryInputMode() || sheafTensorZeroParentInputMode())
       && !sheafSelfSumInputMode()
       && !sheafDualInputMode()
       && !sheafInternalHomInputMode()
@@ -13023,8 +13177,14 @@
 
   function sheafBinaryDraftSheaf(slot) {
     const ids = sheafBinaryDraftIds();
-    const id = slot === 'right' ? ids[1] : ids[0];
+    const id = ids[sheafBinarySlotIndex(slot)];
     return state.sheaves.find((sheaf) => sheaf.id === id) || null;
+  }
+
+  function sheafTensorDraftSheaves() {
+    return sheafBinaryDraftIds()
+      .map((id) => state.sheaves.find((sheaf) => sheaf.id === id) || null)
+      .filter(Boolean);
   }
 
   function sheafSelfSumDraftSheaf() {
@@ -13064,7 +13224,77 @@
 
   function sheafBinaryDraftIds() {
     const ids = state.sheafBinaryDraft?.sheafIds || [];
-    return [ids[0] || null, ids[1] || null];
+    const count = sheafTensorStrengthened() ? currentSheafTensorParentCount() : 2;
+    return Array.from({ length: count }, (_, index) => ids[index] || null);
+  }
+
+  function sheafTensorStrengthened() {
+    return refs.sheafType?.value === 'tensor' && !!refs.sheafTensorStrengthen?.checked;
+  }
+
+  function currentSheafTensorParentCount() {
+    if (!sheafTensorStrengthened()) return 2;
+    return normalizedInt(refs.sheafTensorParentCount?.value, 0, MAX_TENSOR_PARENTS, 3);
+  }
+
+  function sheafTensorZeroParentInputMode() {
+    return refs.sheafType?.value === 'tensor' && sheafTensorStrengthened() && currentSheafTensorParentCount() === 0;
+  }
+
+  function sheafBinarySlotIndex(target = state.sheafBinaryPickTarget) {
+    if (sheafTensorStrengthened()) {
+      const max = Math.max(0, currentSheafTensorParentCount() - 1);
+      return normalizedInt(target, 0, max, 0);
+    }
+    return target === 'right' ? 1 : 0;
+  }
+
+  function sheafBinarySlotTarget(index) {
+    if (sheafTensorStrengthened()) return String(normalizedInt(index, 0, Math.max(0, currentSheafTensorParentCount() - 1), 0));
+    return index === 1 ? 'right' : 'left';
+  }
+
+  function sheafTensorDraftExponents(count = currentSheafTensorParentCount()) {
+    const exponents = state.sheafBinaryDraft?.exponents || [];
+    return Array.from({ length: count }, (_, index) => normalizeTensorExponent(exponents[index] ?? '1'));
+  }
+
+  function ensureSheafTensorDraftShape() {
+    if (!sheafTensorStrengthened()) return;
+    const count = currentSheafTensorParentCount();
+    const ids = sheafBinaryDraftIds().slice(0, count);
+    const exponents = sheafTensorDraftExponents(count);
+    state.sheafBinaryDraft = { sheafIds: ids, exponents };
+    if (count > 0 && sheafBinarySlotIndex() >= count) state.sheafBinaryPickTarget = sheafBinarySlotTarget(count - 1);
+  }
+
+  function syncSheafTensorDraftFromControls() {
+    if (!sheafTensorStrengthened()) {
+      const ids = (state.sheafBinaryDraft?.sheafIds || []).slice(0, 2);
+      state.sheafBinaryDraft = ids.some(Boolean) ? { sheafIds: [ids[0] || null, ids[1] || null] } : null;
+      state.sheafBinaryPickTarget = ids[0] && !ids[1] ? 'right' : 'left';
+      return;
+    }
+    const existingIds = state.sheafBinaryDraft?.sheafIds || [];
+    const selectedCount = existingIds.filter(Boolean).length;
+    if (refs.sheafTensorParentCount && selectedCount > 0 && !refs.sheafTensorParentCount.dataset.userTouched) {
+      refs.sheafTensorParentCount.value = String(Math.min(MAX_TENSOR_PARENTS, selectedCount));
+    }
+    ensureSheafTensorDraftShape();
+    const ids = sheafBinaryDraftIds();
+    const firstEmpty = ids.findIndex((id) => !id);
+    if (ids.length > 0) state.sheafBinaryPickTarget = sheafBinarySlotTarget(firstEmpty >= 0 ? firstEmpty : 0);
+  }
+
+  function setSheafTensorDraftExponent(index, value, options = {}) {
+    const count = currentSheafTensorParentCount();
+    const normalizedIndex = normalizedInt(index, 0, Math.max(0, count - 1), 0);
+    const ids = sheafBinaryDraftIds();
+    const exponents = sheafTensorDraftExponents(count);
+    const next = options.normalize ? normalizeTensorExponent(value) : String(value ?? '').trim();
+    exponents[normalizedIndex] = next || '1';
+    state.sheafBinaryDraft = { sheafIds: ids, exponents };
+    return normalizeTensorExponent(exponents[normalizedIndex]);
   }
 
   function sheafInternalHomDraftIds() {
@@ -13073,7 +13303,7 @@
   }
 
   function setSheafBinaryPickTarget(target = 'left') {
-    state.sheafBinaryPickTarget = target === 'right' ? 'right' : 'left';
+    state.sheafBinaryPickTarget = sheafBinarySlotTarget(sheafBinarySlotIndex(target));
     setCanvasPickEnabled(true, { render: false });
     updateSheafBinaryDraftControls();
     syncGlobalPickButton();
@@ -13146,6 +13376,15 @@
   function allowableSheafBinaryPick(sheafId, target = state.sheafBinaryPickTarget) {
     const sheaf = state.sheaves.find((item) => item.id === sheafId);
     if (!sheaf || (inputIsModifyMode() && sheaf.id === state.activeSheafId)) return false;
+    if (sheafTensorStrengthened()) {
+      if (currentSheafTensorParentCount() <= 0) return false;
+      const targetIndex = sheafBinarySlotIndex(target);
+      return sheafBinaryDraftIds().every((id, index) => {
+        if (!id || index === targetIndex) return true;
+        const other = state.sheaves.find((item) => item.id === id);
+        return !other || sheaf.baseVarietyId === other.baseVarietyId;
+      });
+    }
     const other = sheafBinaryDraftSheaf(target === 'right' ? 'left' : 'right');
     return !other || sheaf.baseVarietyId === other.baseVarietyId;
   }
@@ -13311,12 +13550,26 @@
   function handleSheafBinaryPick(kind, id) {
     if (kind !== 'sheaf' || !allowableSheafBinaryPick(id)) return;
     const ids = sheafBinaryDraftIds();
-    const index = state.sheafBinaryPickTarget === 'right' ? 1 : 0;
+    const index = sheafBinarySlotIndex();
     ids[index] = id;
-    if (ids[0] && ids[1] && !allowableSheafBinaryPick(ids[1], 'right')) ids[1] = null;
-    state.sheafBinaryDraft = { sheafIds: ids };
-    if (state.sheafBinaryPickTarget === 'left' && !ids[1]) state.sheafBinaryPickTarget = 'right';
-    if (ids[0] && ids[1]) setCanvasPickEnabled(false, { render: false });
+    if (sheafTensorStrengthened()) {
+      const picked = state.sheaves.find((item) => item.id === id);
+      ids.forEach((otherId, otherIndex) => {
+        if (!otherId || otherIndex === index) return;
+        const other = state.sheaves.find((item) => item.id === otherId);
+        if (other && picked && other.baseVarietyId !== picked.baseVarietyId) ids[otherIndex] = null;
+      });
+      state.sheafBinaryDraft = { sheafIds: ids, exponents: sheafTensorDraftExponents(ids.length) };
+      const nextEmpty = ids.findIndex((item, itemIndex) => itemIndex > index && !item);
+      const fallbackEmpty = ids.findIndex((item) => !item);
+      const nextIndex = nextEmpty >= 0 ? nextEmpty : fallbackEmpty;
+      if (nextIndex >= 0) state.sheafBinaryPickTarget = sheafBinarySlotTarget(nextIndex);
+    } else {
+      if (ids[0] && ids[1] && !allowableSheafBinaryPick(ids[1], 'right')) ids[1] = null;
+      state.sheafBinaryDraft = { sheafIds: ids };
+      if (state.sheafBinaryPickTarget === 'left' && !ids[1]) state.sheafBinaryPickTarget = 'right';
+    }
+    if (ids.length > 0 && ids.every(Boolean)) setCanvasPickEnabled(false, { render: false });
     updateSheafBinaryDraftControls();
     syncDefaultRank(true);
     syncDefaultSheafName();
@@ -13325,12 +13578,19 @@
 
   function updateSheafBinaryDraftControls() {
     const show = sheafBinaryInputMode();
-    if (refs.sheafBinaryFormulaRow) refs.sheafBinaryFormulaRow.hidden = !show;
+    const tensor = refs.sheafType?.value === 'tensor';
+    const strengthened = show && sheafTensorStrengthened();
+    if (strengthened) ensureSheafTensorDraftShape();
+    if (refs.sheafBinaryFormulaRow) refs.sheafBinaryFormulaRow.hidden = !show || strengthened;
     if (refs.sheafBinaryExactRow) refs.sheafBinaryExactRow.hidden = !show || refs.sheafType?.value !== 'tensor';
     if (refs.sheafBinaryExact && refs.sheafType?.value !== 'tensor') refs.sheafBinaryExact.checked = false;
+    if (refs.sheafTensorStrengthenRow) refs.sheafTensorStrengthenRow.hidden = !show || !tensor;
+    if (refs.sheafTensorParentCountRow) refs.sheafTensorParentCountRow.hidden = !strengthened;
+    if (refs.sheafTensorParentsRow) refs.sheafTensorParentsRow.hidden = !strengthened || currentSheafTensorParentCount() === 0;
     if (refs.sheafBinarySymbol) refs.sheafBinarySymbol.textContent = refs.sheafType?.value === 'tensor' ? String.fromCharCode(0x2297) : String.fromCharCode(0x2295);
     updateSheafBinarySlotButton(refs.sheafBinaryLeftButton, sheafBinaryDraftSheaf('left'), 'left');
     updateSheafBinarySlotButton(refs.sheafBinaryRightButton, sheafBinaryDraftSheaf('right'), 'right');
+    updateSheafTensorParentList();
     syncPickFlowNote(refs.sheafBinaryPickNote, 'sheaf-binary', show);
     syncGlobalPickButton();
     if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
@@ -13414,6 +13674,31 @@
     button.title = sheaf ? `Replace ${label}` : `Pick ${fallback} on the canvas`;
   }
 
+  function updateSheafTensorParentList() {
+    if (!refs.sheafTensorParentList) return;
+    if (!sheafTensorStrengthened() || currentSheafTensorParentCount() === 0) {
+      refs.sheafTensorParentList.innerHTML = '';
+      return;
+    }
+    const ids = sheafBinaryDraftIds();
+    const exponents = sheafTensorDraftExponents(ids.length);
+    refs.sheafTensorParentList.innerHTML = ids.map((id, index) => {
+      const sheaf = state.sheaves.find((item) => item.id === id) || null;
+      const fallback = `sheaf${index + 1}`;
+      const label = sheaf ? latexToPlain(sanitizeMathLabel(sheaf.name, SHEAF_LETTER_NAMES[index] || '\\mathcal{E}')) : fallback;
+      const pressed = state.canvasPickEnabled && sheafBinaryInputMode() && sheafTensorStrengthened() && sheafBinarySlotIndex() === index ? 'true' : 'false';
+      const title = sheaf ? `Replace ${label}` : `Pick ${fallback} on the canvas`;
+      return `
+        <div class="sheaf-tensor-parent-row">
+          <button class="btn btn-ghost sheaf-map-slot-button" type="button" data-sheaf-tensor-parent-index="${index}" aria-pressed="${pressed}" title="${escapeHtml(title)}">${escapeHtml(label)}</button>
+          <span class="sheaf-map-formula-mark">^{\u2297</span>
+          <input class="sheaf-input sheaf-tensor-exponent" type="text" value="${escapeHtml(exponents[index])}" maxlength="80" spellcheck="false" autocomplete="off" aria-label="tensor exponent ${index + 1}" data-sheaf-tensor-exponent="${index}">
+          <span class="sheaf-map-formula-mark">}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
   function updateSheafSelfSumSlotButton(button, sheaf) {
     if (!button) return;
     button.setAttribute('aria-pressed', state.canvasPickEnabled && sheafSelfSumInputMode() ? 'true' : 'false');
@@ -13464,7 +13749,18 @@
   }
 
   function sheafBinaryPickHint() {
+    if (sheafTensorZeroParentInputMode()) return state.draftSheafBaseVarietyId ? 'click add to create the tensor unit' : 'pick a base variety for the tensor unit';
     if (!sheafBinaryPickableSheaves().length) return 'add compatible sheaves on the same base';
+    if (sheafTensorStrengthened()) {
+      const count = currentSheafTensorParentCount();
+      const ids = sheafBinaryDraftIds();
+      const firstMissing = ids.findIndex((id) => !id);
+      if (firstMissing >= 0) {
+        if (firstMissing > 0 && !state.sheaves.some((sheaf) => allowableSheafBinaryPick(sheaf.id, String(firstMissing)))) return 'add a sheaf on the same base';
+        return `click parent ${firstMissing + 1} on the canvas`;
+      }
+      return inputIsModifyMode() ? 'click update to rebuild the tensor product' : 'click add to create the tensor product';
+    }
     const left = sheafBinaryDraftSheaf('left');
     const right = sheafBinaryDraftSheaf('right');
     if (!left) return 'click the first sheaf on the canvas';
@@ -14535,7 +14831,7 @@
     }
     else if (refs.sheafType.value === 'direct-sum' || refs.sheafType.value === 'tensor') {
       const data = binarySheafConstructionData();
-      refs.rank.value = data ? constructionRankPlaceholder(data.operation, data.left, data.right) : '';
+      refs.rank.value = data ? binaryConstructionRankPlaceholder(data) : '';
     }
     else if (sheafSelfOperationType(refs.sheafType.value)) {
       const data = selfSumSheafConstructionData();
@@ -14703,7 +14999,11 @@
         };
       }
       return {
-        parents: (construction.sheafIds || []).map((id, index) => parent('sheaf', id, index === 0 ? 'left-summand' : 'right-summand')),
+        parents: (construction.sheafIds || []).map((id, index) => parent(
+          'sheaf',
+          id,
+          construction.type === 'tensor' ? `tensor-factor-${index + 1}` : (index === 0 ? 'left-summand' : 'right-summand')
+        )),
         subobjects: object.baseVarietyId ? [parent('variety', object.baseVarietyId, 'base')] : []
       };
     }
@@ -15293,19 +15593,36 @@
 
   function refreshBinaryConstructedSheaf(sheaf, construction) {
     if (construction.internalHom === true) return refreshInternalHomSheaf(sheaf, construction);
-    const [left, right] = (construction.sheafIds || []).map((id) => state.sheaves.find((item) => item.id === id));
-    if (!left || !right) return false;
+    const parents = (construction.sheafIds || []).map((id) => state.sheaves.find((item) => item.id === id)).filter(Boolean);
+    if (construction.type === 'direct-sum' && parents.length < 2) return false;
+    if (construction.type === 'tensor' && parents.length !== (construction.sheafIds || []).length) return false;
+    const [left, right] = parents;
     const opLatex = construction.type === 'direct-sum' ? '\\oplus' : tensorOperationLatex(construction.derived !== false);
-    const oldDefault = construction.defaultName || defaultBinarySheafNameFromObjects(left, right, opLatex);
-    const nextDefault = defaultBinarySheafNameFromObjects(left, right, opLatex);
+    const baseVariety = construction.type === 'tensor' && parents.length === 0
+      ? state.varieties.find((item) => item.id === sheaf.baseVarietyId)
+      : null;
+    const exponents = normalizedTensorExponents(construction.exponents, parents.length);
+    const oldDefault = construction.defaultName || (construction.type === 'tensor'
+      ? defaultTensorSheafNameFromObjects(parents, exponents, opLatex, baseVariety)
+      : defaultBinarySheafNameFromObjects(left, right, opLatex));
+    const nextDefault = construction.type === 'tensor'
+      ? defaultTensorSheafNameFromObjects(parents, exponents, opLatex, baseVariety)
+      : defaultBinarySheafNameFromObjects(left, right, opLatex);
     let changed = false;
-    if (sheaf.baseVarietyId !== left.baseVarietyId) {
-      sheaf.baseVarietyId = left.baseVarietyId;
+    const nextBaseVarietyId = parents[0]?.baseVarietyId || sheaf.baseVarietyId;
+    if (sheaf.baseVarietyId !== nextBaseVarietyId) {
+      sheaf.baseVarietyId = nextBaseVarietyId;
       changed = true;
     }
-    const nextRank = constructionRankPlaceholder(construction.type === 'direct-sum' ? 'direct-sum-sheaf' : 'tensor-sheaf', left, right);
+    const nextRank = construction.type === 'direct-sum'
+      ? constructionRankPlaceholder('direct-sum-sheaf', left, right)
+      : tensorConstructionRankPlaceholder(parents, exponents);
     if (sheaf.rank !== nextRank) {
       sheaf.rank = nextRank;
+      changed = true;
+    }
+    if (construction.type === 'tensor' && JSON.stringify(construction.exponents || []) !== JSON.stringify(exponents) && Array.isArray(construction.exponents)) {
+      construction.exponents = exponents;
       changed = true;
     }
     if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(nextDefault)) {
@@ -17183,7 +17500,8 @@
     refs.basisRow.hidden = !needsBasisInput;
     syncClassDisplayControls();
     refs.rankRow.hidden = !draftingSheaf || (draftSheaf !== 'abstract' && draftSheaf !== 'locally-free');
-    refs.sheafBaseRow.hidden = !draftingSheaf || sheafHasParentRow || !hasVariety;
+    const showTensorUnitBase = draftingSheaf && draftSheaf === 'tensor' && sheafTensorZeroParentInputMode();
+    refs.sheafBaseRow.hidden = !draftingSheaf || (sheafHasParentRow && !showTensorUnitBase) || !hasVariety;
     updateSheafBaseButton();
     if (refs.addObject) {
       const editingSequence = activeSesEditMode();
@@ -23759,13 +24077,20 @@
   function classStepBasicConstructionBundle(sheaf, geometry, family, d) {
     const construction = sheaf?.construction || {};
     if (construction.type === 'direct-sum' || construction.type === 'tensor') {
-      const [leftObject, rightObject] = (construction.sheafIds || []).map((id) => state.sheaves.find((item) => item.id === id));
-      if (!leftObject || !rightObject) return null;
-      const left = classStepFormalBundleForSheafObject(leftObject, geometry, d);
-      const right = classStepFormalBundleForSheafObject(rightObject, geometry, d);
-      return construction.type === 'direct-sum'
-        ? buildDirectSumBundle(d, sheaf, left, right)
-        : buildTensorBundle(d, sheaf, left, right);
+      const parentObjects = (construction.sheafIds || []).map((id) => state.sheaves.find((item) => item.id === id));
+      if (construction.type === 'direct-sum') {
+        const [leftObject, rightObject] = parentObjects;
+        if (!leftObject || !rightObject) return null;
+        return buildDirectSumBundle(
+          d,
+          sheaf,
+          classStepFormalBundleForSheafObject(leftObject, geometry, d),
+          classStepFormalBundleForSheafObject(rightObject, geometry, d)
+        );
+      }
+      if (parentObjects.some((item) => !item)) return null;
+      const parents = parentObjects.map((item) => classStepFormalBundleForSheafObject(item, geometry, d));
+      return buildTensorConstructionBundle(d, sheaf, parents, construction.exponents);
     }
     if (sheafSelfOperationType(construction.type)) {
       const parentObject = state.sheaves.find((item) => item.id === construction.sheafId);
@@ -23876,12 +24201,10 @@
         : `c(${subject})=c(${parent}^{\\vee})`;
     }
     if (construction.type === 'tensor') {
-      const [left, right] = classStepConstructionTermLabels(construction.sheafIds);
-      const operation = tensorOperationLatex(construction.derived !== false);
-      const tensorSubject = binaryOperationSubjectLatex(left, operation, right);
+      const characterProduct = classStepTensorCharacterDisplayLatex(construction);
       return family === 'character'
-        ? `\\operatorname{ch}(${tensorSubject})=\\operatorname{ch}(${left})\\operatorname{ch}(${right})`
-        : `c(${tensorSubject})\\text{ from }\\operatorname{ch}(${tensorSubject})=\\operatorname{ch}(${left})\\operatorname{ch}(${right})`;
+        ? `\\operatorname{ch}(${subject})=${characterProduct}`
+        : `c(${subject})\\text{ from }\\operatorname{ch}(${subject})=${characterProduct}`;
     }
     if (construction.type === 'pullback') {
       const map = state.maps.find((item) => item.id === construction.mapId);
@@ -23897,8 +24220,23 @@
   function classStepConstructionTermLabels(ids = []) {
     return (ids || []).map((id, index) => {
       const sheafObject = state.sheaves.find((item) => item.id === id);
-      return sanitizeMathLabel(sheafObject?.name, index === 0 ? '\\mathcal{E}' : '\\mathcal{F}');
+      return sanitizeMathLabel(sheafObject?.name, SHEAF_LETTER_NAMES[index] || '\\mathcal{F}');
     });
+  }
+
+  function classStepTensorCharacterDisplayLatex(construction) {
+    const labels = classStepConstructionTermLabels(construction?.sheafIds);
+    if (!labels.length) return '1';
+    const exponents = normalizedTensorExponents(construction?.exponents, labels.length);
+    const factors = labels.map((label, index) => {
+      const exponent = exponents[index] ?? '1';
+      if (tensorExponentIsZero(exponent)) return '1';
+      const character = `\\operatorname{ch}(${label})`;
+      return tensorExponentIsOne(exponent)
+        ? character
+        : `${character}^{${tensorExponentLatex(exponent)}}`;
+    }).filter((factor) => factor !== '1');
+    return factors.length ? factors.join('\\,') : '1';
   }
 
   function classStepFormalFollowupRules(session) {
@@ -28652,13 +28990,20 @@
       return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
     }
     if (construction.type === 'direct-sum' || construction.type === 'tensor') {
-      const [leftObject, rightObject] = (construction.sheafIds || []).map((id) => state.sheaves.find((item) => item.id === id));
-      if (!leftObject || !rightObject) return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
-      const left = buildSourceSheafBundle(geometry, leftObject);
-      const right = buildSourceSheafBundle(geometry, rightObject);
-      return construction.type === 'direct-sum'
-        ? buildDirectSumBundle(geometry.dim, sheaf, left, right)
-        : buildTensorBundle(geometry.dim, sheaf, left, right);
+      const parentObjects = (construction.sheafIds || []).map((id) => state.sheaves.find((item) => item.id === id));
+      if (construction.type === 'direct-sum') {
+        const [leftObject, rightObject] = parentObjects;
+        if (!leftObject || !rightObject) return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
+        return buildDirectSumBundle(
+          geometry.dim,
+          sheaf,
+          buildSourceSheafBundle(geometry, leftObject),
+          buildSourceSheafBundle(geometry, rightObject)
+        );
+      }
+      if (parentObjects.some((item) => !item)) return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
+      const parents = parentObjects.map((item) => buildSourceSheafBundle(geometry, item));
+      return buildTensorConstructionBundle(geometry.dim, sheaf, parents, construction.exponents);
     }
     if (sheafSelfOperationType(construction.type)) {
       const parentObject = state.sheaves.find((item) => item.id === construction.sheafId);
@@ -29469,6 +29814,47 @@
     return bundle;
   }
 
+  function buildTensorConstructionBundle(d, sheaf, parents, exponents = []) {
+    const factors = Array.isArray(parents) ? parents.filter(Boolean) : [];
+    if (!factors.length) {
+      const bundle = buildTrivialBundle(d, 1, sheaf.labelLatex, sheaf.labelPlain);
+      bundle.rankPoly = Poly.one();
+      return bundle;
+    }
+    const normalizedExponents = normalizedTensorExponents(exponents, factors.length);
+    if (factors.length === 2 && normalizedExponents.every((exponent) => tensorExponentIsOne(exponent))) {
+      return buildTensorBundle(d, sheaf, factors[0], factors[1]);
+    }
+    let tensorCharacter = Poly.one();
+    factors.forEach((factor, index) => {
+      tensorCharacter = tensorCharacter.mul(tensorFactorTotalCharacterPower(factor, normalizedExponents[index], d, {
+        kind: 'sheaf',
+        id: sheaf?.sourceObject?.id || sheaf?.id || 'tensor-product',
+        field: `exponent-${index + 1}`
+      }), d);
+    });
+    const chComps = zeroComponentArray(d);
+    for (let i = 1; i <= d; i += 1) chComps[i] = homogeneousPart(tensorCharacter, i);
+    const bundle = buildBundleFromCh(
+      chComps,
+      tensorRankLatex(factors, normalizedExponents),
+      tensorRankPlain(factors, normalizedExponents),
+      sheaf.labelLatex,
+      sheaf.labelPlain
+    );
+    const rankPoly = homogeneousPart(tensorCharacter, 0);
+    if (!rankPoly.isZero()) bundle.rankPoly = rankPoly;
+    return bundle;
+  }
+
+  function tensorFactorTotalCharacterPower(parent, exponent, d, source) {
+    const rank = rankAsDegreeZeroPoly(parent, `${constructionSafeId(parent?.labelPlain || parent?.labelLatex || 'TensorFactor')}Rank`);
+    const totalCharacter = rank.add(positiveTotal(parent.chComps, d)).truncate(d);
+    const integerExponent = tensorExponentInteger(exponent);
+    if (integerExponent != null && integerExponent >= 0) return polyPower(totalCharacter, integerExponent, d);
+    return formalSymbolicTensorPower(totalCharacter, rank, tensorExponentPoly(exponent, source), parent, d);
+  }
+
   function buildSchurBundle(d, sheaf, parent, partition) {
     const rank = explicitRootRankFromPlain(parent.rankPlain);
     const parentName = parent.labelPlain || parent.labelLatex || 'E';
@@ -29586,6 +29972,55 @@
     if (rank === '0' && scalarExponentKnownPositive(selfOperationMultiplicityPoly(multiplicity))) return '0';
     if (n === 1) return rank;
     return `(${rank})^(${selfOperationMultiplicityPlain(multiplicity)})`;
+  }
+
+  function tensorRankLatex(parents, exponents = []) {
+    if (!parents.length) return '1';
+    const pieces = [];
+    for (let index = 0; index < parents.length; index += 1) {
+      const piece = tensorRankFactorLatex(parents[index], exponents[index] ?? '1');
+      if (!piece) return '';
+      if (piece === '0') return '0';
+      if (piece !== '1') pieces.push(piece);
+    }
+    return pieces.length ? pieces.join('') : '1';
+  }
+
+  function tensorRankPlain(parents, exponents = []) {
+    if (!parents.length) return '1';
+    const pieces = [];
+    for (let index = 0; index < parents.length; index += 1) {
+      const piece = tensorRankFactorPlain(parents[index], exponents[index] ?? '1');
+      if (!piece) return '';
+      if (piece === '0') return '0';
+      if (piece !== '1') pieces.push(piece);
+    }
+    return pieces.length ? pieces.join('*') : '1';
+  }
+
+  function tensorRankFactorLatex(parent, exponent) {
+    const rank = parent?.rankLatex || parent?.rankPlain || '';
+    const rankPlain = parent?.rankPlain || '';
+    if (tensorExponentIsZero(exponent)) return '1';
+    if (!rank) return '';
+    if (rankPlain === '1' || rank === '1') return '1';
+    const integerExponent = tensorExponentInteger(exponent);
+    if (/^-?\d+$/.test(rankPlain) && integerExponent != null && integerExponent >= 0) return bigintPow(BigInt(rankPlain), integerExponent).toString();
+    if (rankPlain === '0' && scalarExponentKnownPositive(tensorExponentPoly(exponent))) return '0';
+    if (tensorExponentIsOne(exponent)) return rank;
+    return `${rankLatexTerm(parent)}^{${tensorExponentLatex(exponent)}}`;
+  }
+
+  function tensorRankFactorPlain(parent, exponent) {
+    const rank = parent?.rankPlain || '';
+    if (tensorExponentIsZero(exponent)) return '1';
+    if (!rank) return '';
+    if (rank === '1') return '1';
+    const integerExponent = tensorExponentInteger(exponent);
+    if (/^-?\d+$/.test(rank) && integerExponent != null && integerExponent >= 0) return bigintPow(BigInt(rank), integerExponent).toString();
+    if (rank === '0' && scalarExponentKnownPositive(tensorExponentPoly(exponent))) return '0';
+    if (tensorExponentIsOne(exponent)) return rank;
+    return `(${rank})^(${tensorExponentPlain(exponent)})`;
   }
 
   function rankLatexTerm(bundle) {
@@ -36789,7 +37224,8 @@
       out.baseId = sanitizePresetId(construction.baseId);
       out.projectiveModel = construction.projectiveModel === true;
     } else if (ownerKind === 'sheaf' && (type === 'direct-sum' || type === 'tensor')) {
-      out.sheafIds = Array.isArray(construction.sheafIds) ? construction.sheafIds.map(sanitizePresetId).filter(Boolean).slice(0, 2) : [];
+      const parentLimit = type === 'tensor' && construction.internalHom !== true ? MAX_TENSOR_PARENTS : 2;
+      out.sheafIds = Array.isArray(construction.sheafIds) ? construction.sheafIds.map(sanitizePresetId).filter(Boolean).slice(0, parentLimit) : [];
       out.derived = construction.derived === true;
       out.exact = construction.exact === true;
       if (type === 'tensor' && construction.internalHom === true) {
@@ -36798,6 +37234,8 @@
         out.targetSheafId = sanitizePresetId(construction.targetSheafId);
         out.dualSheafId = sanitizePresetId(construction.dualSheafId);
         out.tensorDefaultName = sanitizeMathLabel(construction.tensorDefaultName, '');
+      } else if (type === 'tensor' && Array.isArray(construction.exponents)) {
+        out.exponents = normalizedTensorExponents(construction.exponents, out.sheafIds.length);
       }
     } else if (ownerKind === 'sheaf' && sheafSelfOperationType(type)) {
       out.sheafId = sanitizePresetId(construction.sheafId);
@@ -38763,6 +39201,60 @@
 
   function selfOperationMultiplicityPlain(value) {
     return formatRuleCoefficientPlain(selfOperationMultiplicityPoly(value));
+  }
+
+  function normalizeTensorExponent(value) {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '1';
+    try {
+      return formatRuleCoefficientPlain(parseSymbolicRuleCoefficient(raw));
+    } catch (error) {
+      return '1';
+    }
+  }
+
+  function normalizedTensorExponents(values, count) {
+    const source = Array.isArray(values) ? values : [];
+    const rawCount = Number(count);
+    const length = Number.isFinite(rawCount)
+      ? Math.max(0, Math.min(MAX_TENSOR_PARENTS, Math.floor(rawCount)))
+      : Math.max(0, Math.min(MAX_TENSOR_PARENTS, source.length));
+    return Array.from({ length }, (_, index) => normalizeTensorExponent(source[index] ?? '1'));
+  }
+
+  function tensorExponentPoly(value, source = null) {
+    const normalized = normalizeTensorExponent(value);
+    try {
+      return Poly.from(parseRuleCoefficientExpression(normalized, source || { kind: 'number', id: 'tensor-exponent', field: 'exponent' }));
+    } catch (error) {
+      return Poly.one();
+    }
+  }
+
+  function tensorExponentInteger(value) {
+    const poly = tensorExponentPoly(value);
+    if (poly.isZero()) return 0;
+    const constant = scalarPolyAsFraction(poly);
+    if (!constant || constant.den !== 1n) return null;
+    const number = Number(constant.num);
+    return Number.isSafeInteger(number) ? number : null;
+  }
+
+  function tensorExponentLatex(value) {
+    return formatRuleCoefficientLatex(tensorExponentPoly(value));
+  }
+
+  function tensorExponentPlain(value) {
+    return formatRuleCoefficientPlain(tensorExponentPoly(value));
+  }
+
+  function tensorExponentIsOne(value) {
+    const constant = scalarPolyAsFraction(tensorExponentPoly(value));
+    return !!constant && constant.isOne();
+  }
+
+  function tensorExponentIsZero(value) {
+    return tensorExponentPoly(value).isZero();
   }
 
   function sanitizeRankInput(value) {

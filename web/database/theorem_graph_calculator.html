@@ -202,6 +202,7 @@
       max-height: 180px;
       resize: vertical;
       line-height: 1.35;
+      overflow-y: hidden;
     }
 
     .theorem-latex-preview {
@@ -256,13 +257,66 @@
 
     .theorem-graph-actions,
     .theorem-export-actions,
-    .theorem-preset-actions,
     .theorem-reference-actions {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
       gap: 8px;
       margin-top: 10px;
+    }
+
+    .theorem-import-mode {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-top: 8px;
+      padding: 3px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+    }
+
+    .theorem-import-option {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      cursor: pointer;
+    }
+
+    .theorem-import-option input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .theorem-import-option span {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 3px 10px;
+      border-radius: 2px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .theorem-import-option input:checked + span {
+      background: color-mix(in srgb, var(--accent) 13%, var(--surface));
+      color: var(--accent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, var(--border));
+    }
+
+    .theorem-import-option input:focus-visible + span {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .theorem-field-row[hidden],
+    .theorem-json-import[hidden] {
+      display: none !important;
     }
 
     .theorem-inline-controls {
@@ -656,6 +710,11 @@
             <button id="node-result-preview" class="theorem-latex-preview" type="button" hidden></button>
           </div>
           <div class="theorem-field-row">
+            <label class="input-label" for="node-proof-sketch">proof sketch</label>
+            <textarea id="node-proof-sketch" class="theorem-textarea" spellcheck="true"></textarea>
+            <button id="node-proof-sketch-preview" class="theorem-latex-preview" type="button" hidden></button>
+          </div>
+          <div class="theorem-field-row">
             <label class="input-label" for="node-color">color</label>
             <div class="theorem-color-row">
               <input id="node-color" class="theorem-color-input" type="color" value="#3d6b4f" aria-label="Node color">
@@ -696,6 +755,10 @@
           <div class="theorem-field-row">
             <label class="input-label" for="arrow-label">label</label>
             <input id="arrow-label" class="theorem-input" type="text" maxlength="48" spellcheck="false" autocomplete="off" placeholder="optional label">
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="arrow-remark">remark</label>
+            <textarea id="arrow-remark" class="theorem-textarea" spellcheck="true"></textarea>
           </div>
           <div class="theorem-field-row theorem-arrow-style-row">
             <span class="input-label">type</span>
@@ -743,6 +806,7 @@
         </div>
         <div class="theorem-detail-actions">
           <button class="btn" id="detail-update" type="button" disabled>update</button>
+          <button class="btn btn-ghost" id="detail-cancel" type="button" disabled>cancel</button>
         </div>
       </div>
     </section>
@@ -802,7 +866,7 @@
         <textarea id="bibtex-input" class="theorem-import-input" spellcheck="false" autocomplete="off" placeholder="@article{key, title={...}, author={...}, year={...}}"></textarea>
         <div class="theorem-field-row">
           <label class="input-label" for="link-reference-url">link</label>
-          <input id="link-reference-url" class="theorem-input" type="url" spellcheck="false" autocomplete="off" placeholder="https://mathoverflow.net/questions/...">
+          <input id="link-reference-url" class="theorem-input" type="url" spellcheck="false" autocomplete="off" placeholder="optional URL">
         </div>
         <div class="theorem-field-row">
           <label class="input-label" for="link-reference-key">key</label>
@@ -810,7 +874,7 @@
         </div>
         <div class="theorem-field-row">
           <label class="input-label" for="link-reference-title">title</label>
-          <input id="link-reference-title" class="theorem-input" type="text" spellcheck="true" autocomplete="off" placeholder="optional">
+          <input id="link-reference-title" class="theorem-input" type="text" spellcheck="true" autocomplete="off" placeholder="source title">
         </div>
         <div class="theorem-field-row">
           <label class="input-label" for="link-reference-source">source</label>
@@ -824,7 +888,7 @@
         </div>
         <div class="theorem-reference-actions">
           <button class="btn" id="add-reference" type="button">add BibTeX</button>
-          <button class="btn" id="add-link-reference" type="button">add link</button>
+          <button class="btn" id="add-link-reference" type="button">add source</button>
           <button class="btn btn-ghost" id="clear-bibtex" type="button">clear inputs</button>
           <button class="btn btn-ghost" id="delete-selected-references" type="button">delete selected</button>
         </div>
@@ -890,21 +954,31 @@
           <button class="btn" id="refresh-export" type="button">refresh</button>
           <button class="btn btn-ghost" id="copy-export" type="button">copy</button>
         </div>
-        <label class="input-label" for="theorem-import-input" style="margin-top: 12px;">import preset / JSON</label>
-        <div class="theorem-field-row">
+        <label class="input-label" style="margin-top: 12px;">import chart</label>
+        <div class="theorem-import-mode" role="radiogroup" aria-label="Import source">
+          <label class="theorem-import-option">
+            <input type="radio" name="import-mode" id="import-mode-preset" value="preset" checked>
+            <span>preset</span>
+          </label>
+          <label class="theorem-import-option">
+            <input type="radio" name="import-mode" id="import-mode-json" value="json">
+            <span>JSON text</span>
+          </label>
+        </div>
+        <div class="theorem-field-row" id="preset-import-row">
           <label class="input-label" for="preset-select">preset</label>
           <select id="preset-select" class="theorem-select">
             <option value="">Loading presets...</option>
           </select>
         </div>
-        <div class="theorem-preset-actions">
-          <button class="btn" id="load-preset" type="button">apply preset</button>
-          <button class="btn btn-ghost" id="refresh-presets" type="button">refresh presets</button>
+        <div class="theorem-json-import" id="json-import-panel" hidden>
+          <textarea id="theorem-import-input" class="theorem-import-input" spellcheck="false" autocomplete="off" placeholder="Paste exported JSON or preset-file text"></textarea>
+          <div class="theorem-export-actions">
+            <button class="btn btn-ghost" id="clear-import" type="button">clear text</button>
+          </div>
         </div>
-        <textarea id="theorem-import-input" class="theorem-import-input" spellcheck="false" autocomplete="off" placeholder="Paste exported preset file or JSON"></textarea>
         <div class="theorem-export-actions">
           <button class="btn" id="load-import" type="button">load</button>
-          <button class="btn btn-ghost" id="clear-import" type="button">clear import</button>
         </div>
         <div class="hint" id="export-message">Export includes nodes, arrows, references, and positions.</div>
       </div>

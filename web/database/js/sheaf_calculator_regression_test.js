@@ -4386,6 +4386,47 @@ function testClassStepTensorRulesForCharacterAndChern() {
   assert(cPlain.includes('ch_1(F)'));
 }
 
+function testStrengthenedTensorUsesMultipleParentsAndExponents() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X' }];
+  api.state.sheaves = [
+    { id: 'L', type: 'abstract', basis: 'chern', rank: '1', name: 'L', baseVarietyId: 'X' },
+    { id: 'M', type: 'abstract', basis: 'chern', rank: '1', name: 'M', baseVarietyId: 'X' },
+    { id: 'N', type: 'abstract', basis: 'chern', rank: '1', name: 'N', baseVarietyId: 'X' },
+    { id: 'T', type: 'abstract', basis: 'chern', rank: '1', name: 'T', baseVarietyId: 'X', construction: { type: 'tensor', sheafIds: ['L', 'M', 'N'], exponents: ['2', '1/2', '0'], exact: true } },
+    { id: 'U', type: 'abstract', basis: 'chern', rank: '1', name: 'U', baseVarietyId: 'X', construction: { type: 'tensor', sheafIds: [], exponents: [], exact: true } }
+  ];
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const tensorSheaf = api.sheafFromObject(api.state.sheaves[3], geometry);
+  const tensorRows = api.buildCharacteristicClasses(geometry, tensorSheaf).classRows;
+  const tensorCharacter = tensorRows.find((row) => row.key === 'character').plain;
+  const tensorChern = tensorRows.find((row) => row.key === 'chern').plain;
+  assert(tensorCharacter.includes('2*c_1(L)'), tensorCharacter);
+  assert(tensorCharacter.includes('1/2*c_1(M)'), tensorCharacter);
+  assert(!tensorCharacter.includes('N'), tensorCharacter);
+  assert(tensorChern.includes('2*c_1(L)'), tensorChern);
+  assert(tensorChern.includes('1/2*c_1(M)'), tensorChern);
+  assert(!tensorChern.includes('N'), tensorChern);
+
+  const result = api.buildClassStepFallbackResult(geometry, tensorSheaf, { message: 'test' });
+  const session = api.createClassStepSession(result, 'character', 1);
+  const tensorRule = api.collectClassStepRuleCandidates(session).find((candidate) => candidate.sourceLabel === 'Tensor product');
+  assert(tensorRule);
+  assert(tensorRule.rule.classStepDisplayLatex.includes('\\operatorname{ch}(L)^{2}'), tensorRule.rule.classStepDisplayLatex);
+  assert(tensorRule.rule.classStepDisplayLatex.includes('\\operatorname{ch}(M)^{\\frac{1}{2}}'), tensorRule.rule.classStepDisplayLatex);
+  assert(!tensorRule.rule.classStepDisplayLatex.includes('\\operatorname{ch}(N)'), tensorRule.rule.classStepDisplayLatex);
+
+  const unitSheaf = api.sheafFromObject(api.state.sheaves[4], geometry);
+  const unitRows = api.buildCharacteristicClasses(geometry, unitSheaf).classRows;
+  assert.strictEqual(unitRows.find((row) => row.key === 'character').plain, '1');
+  assert.strictEqual(unitRows.find((row) => row.key === 'chern').plain, '1');
+  const unitResult = api.buildClassStepFallbackResult(geometry, unitSheaf, { message: 'test' });
+  const unitSession = api.createClassStepSession(unitResult, 'character', 1);
+  const unitRule = api.collectClassStepRuleCandidates(unitSession).find((candidate) => candidate.sourceLabel === 'Tensor product');
+  assert(unitRule);
+  assert.strictEqual(unitRule.rule.classStepDisplayLatex, '\\operatorname{ch}(U)=1');
+}
+
 function testClassStepWrapsPullbackSourceRulesInsidePushforward() {
   const api = loadCalculator();
   api.state.varieties = [
@@ -5858,6 +5899,7 @@ testSymmetricProductAggregateRulesUseAveragedCoefficients();
 testSymmetricProductAbelJacobiUsesProjectionFormulaForSigma();
 testClassStepNestedPushforwardOffersGrrAfterSes();
 testClassStepTensorRulesForCharacterAndChern();
+testStrengthenedTensorUsesMultipleParentsAndExponents();
 testClassStepWrapsPullbackSourceRulesInsidePushforward();
 testClassStepPicardPushforwardGroupsToddAndFindsTensor();
 testClassStepPicardPoincarePushforwardToddStepMatchesNormalCharacter();

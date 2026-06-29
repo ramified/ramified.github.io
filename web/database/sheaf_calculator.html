@@ -814,6 +814,30 @@
       text-align: center;
     }
 
+    .sheaf-tensor-parent-list {
+      display: grid;
+      gap: 6px;
+      width: min(100%, 360px);
+    }
+
+    .sheaf-tensor-parent-row {
+      display: grid;
+      grid-template-columns: minmax(88px, 1fr) auto 74px auto;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .sheaf-tensor-parent-row .sheaf-map-slot-button {
+      min-width: 0;
+    }
+
+    .sheaf-tensor-exponent {
+      width: 74px;
+      padding: 4px 6px;
+      text-align: center;
+    }
+
     .sheaf-base-pick-button[aria-pressed="true"] {
       color: var(--bg);
       border-color: var(--accent);
@@ -3052,6 +3076,29 @@
               <input id="sheaf-binary-exact" type="checkbox">
               <span>ordinary tensor</span>
             </label>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-tensor-strengthen-row" hidden>
+            <span class="input-label">strengthen</span>
+            <label class="opt-row">
+              <input id="sheaf-tensor-strengthen" type="checkbox">
+              <span>advanced tensor</span>
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-tensor-parent-count-row" hidden>
+            <label class="input-label" for="sheaf-tensor-parent-count">parents</label>
+            <select id="sheaf-tensor-parent-count" class="sheaf-select">
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3" selected>3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-tensor-parents-row" hidden>
+            <span class="input-label">factors</span>
+            <div class="sheaf-tensor-parent-list" id="sheaf-tensor-parent-list"></div>
           </div>
           <div class="sheaf-note" id="sheaf-binary-pick-note" hidden>pick two sheaves on the same base</div>
           <div class="sheaf-field-row" id="sheaf-self-sum-formula-row" hidden>

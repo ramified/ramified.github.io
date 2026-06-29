@@ -4,7 +4,6 @@
   const SCHEMA_VERSION = 1;
   const DEFAULT_GRAPH_TITLE = 'Dependency Graph';
   const PRESET_FOLDER_URL = 'theorem_graph_presets/';
-  const PRESET_REGISTRY_URL = 'theorem_graph_presets/presets.js';
   const NODE_TYPES = {
     theorem: { label: 'Theorem', fill: '#f8f1e5', stroke: '#3d6b4f', band: '#3d6b4f' },
     lemma: { label: 'Lemma', fill: '#f4f7ed', stroke: '#6b7f3d', band: '#6b7f3d' },
@@ -22,13 +21,14 @@
     'setting',
     'condition',
     'result',
+    'proofSketch',
     'citationKeys',
     'color',
     'fillColor',
     'x',
     'y'
   ]);
-  const KNOWN_ARROW_KEYS = new Set(['id', 'sourceId', 'targetId', 'label', 'style', 'body', 'head', 'tail', 'level', 'endpointScale', 'curve', 'labelOffset', 'color']);
+  const KNOWN_ARROW_KEYS = new Set(['id', 'sourceId', 'targetId', 'label', 'remark', 'style', 'body', 'head', 'tail', 'level', 'endpointScale', 'curve', 'labelOffset', 'color']);
   const KNOWN_REFERENCE_KEYS = new Set(['key', 'author', 'title', 'year', 'citeText', 'url', 'source', 'rawBibtex']);
   const ARROW_BODIES = [
     { id: 'none', label: 'none' },
@@ -107,11 +107,14 @@
   const NODE_DETAIL_LATEX_FIELDS = [
     { key: 'setting', inputRef: 'nodeSetting', previewRef: 'nodeSettingPreview' },
     { key: 'condition', inputRef: 'nodeCondition', previewRef: 'nodeConditionPreview' },
-    { key: 'result', inputRef: 'nodeResult', previewRef: 'nodeResultPreview' }
+    { key: 'result', inputRef: 'nodeResult', previewRef: 'nodeResultPreview' },
+    { key: 'proofSketch', inputRef: 'nodeProofSketch', previewRef: 'nodeProofSketchPreview' }
   ];
+  const TEXTAREA_AUTO_MAX_HEIGHT = 180;
 
   const state = {
     graphTitle: DEFAULT_GRAPH_TITLE,
+    importMode: 'preset',
     presets: [],
     presetScriptNonce: '',
     nodes: [],
@@ -135,6 +138,7 @@
     mathTypesetTimer: null,
     mathTypesetAttempts: 0,
     detailPreview: null,
+    detailEditBaseline: null,
     activeLatexDetailField: null,
     arrowBoundaryGap: ARROW_BOUNDARY_GAP_DEFAULT,
     nodeFillSaturation: NODE_FILL_SATURATION_DEFAULT
@@ -186,15 +190,18 @@
     refs.nodeSetting = $('node-setting');
     refs.nodeCondition = $('node-condition');
     refs.nodeResult = $('node-result');
+    refs.nodeProofSketch = $('node-proof-sketch');
     refs.nodeSettingPreview = $('node-setting-preview');
     refs.nodeConditionPreview = $('node-condition-preview');
     refs.nodeResultPreview = $('node-result-preview');
+    refs.nodeProofSketchPreview = $('node-proof-sketch-preview');
     refs.nodeColor = $('node-color');
     refs.nodeFillColor = $('node-fill-color');
     refs.arrowEditor = $('arrow-editor');
     refs.arrowSource = $('arrow-source');
     refs.arrowTarget = $('arrow-target');
     refs.arrowLabel = $('arrow-label');
+    refs.arrowRemark = $('arrow-remark');
     refs.arrowBodyPicker = $('arrow-body-picker');
     refs.arrowHeadPicker = $('arrow-head-picker');
     refs.arrowTailPicker = $('arrow-tail-picker');
@@ -206,6 +213,7 @@
     refs.arrowLabelOffset = $('arrow-label-offset');
     refs.arrowColor = $('arrow-color');
     refs.detailUpdate = $('detail-update');
+    refs.detailCancel = $('detail-cancel');
     refs.newNodeType = $('new-node-type');
     refs.newNodeLabel = $('new-node-label');
     refs.addNode = $('add-node');
@@ -245,9 +253,11 @@
     refs.refreshExport = $('refresh-export');
     refs.copyExport = $('copy-export');
     refs.importInput = $('theorem-import-input');
+    refs.importModePreset = $('import-mode-preset');
+    refs.importModeJson = $('import-mode-json');
+    refs.presetImportRow = $('preset-import-row');
+    refs.jsonImportPanel = $('json-import-panel');
     refs.presetSelect = $('preset-select');
-    refs.loadPreset = $('load-preset');
-    refs.refreshPresets = $('refresh-presets');
     refs.loadImport = $('load-import');
     refs.clearImport = $('clear-import');
     refs.exportMessage = $('export-message');
@@ -310,7 +320,7 @@
     if (refs.copyExport) refs.copyExport.addEventListener('click', copyExport);
     if (refs.graphTitle) {
       refs.graphTitle.addEventListener('input', () => {
-        state.graphTitle = cleanString(refs.graphTitle.value).replace(/\s+/g, ' ');
+        state.graphTitle = refs.graphTitle.value;
         refreshExport();
       });
       refs.graphTitle.addEventListener('blur', () => {
@@ -319,20 +329,32 @@
         refreshExport();
       });
     }
+    if (refs.importModePreset) refs.importModePreset.addEventListener('change', () => setImportMode('preset'));
+    if (refs.importModeJson) refs.importModeJson.addEventListener('change', () => setImportMode('json'));
     if (refs.presetSelect) refs.presetSelect.addEventListener('change', syncControls);
-    if (refs.loadPreset) refs.loadPreset.addEventListener('click', loadSelectedPreset);
-    if (refs.refreshPresets) refs.refreshPresets.addEventListener('click', refreshPresetRegistry);
     if (refs.loadImport) refs.loadImport.addEventListener('click', loadImport);
     if (refs.clearImport) refs.clearImport.addEventListener('click', () => {
       refs.importInput.value = '';
       setExportMessage('Import input cleared.');
     });
 
-    if (refs.detailUpdate) refs.detailUpdate.addEventListener('click', applyDetailUpdate);
+    if (refs.detailUpdate) refs.detailUpdate.addEventListener('click', () => applyDetailUpdate({ manual: true }));
+    if (refs.detailCancel) refs.detailCancel.addEventListener('click', cancelDetailEdit);
     bindLatexDetailPreviewEvents();
+    bindAutoResizeTextareas();
     [
+      refs.nodeType,
+      refs.nodeLabel,
+      refs.nodeSetting,
+      refs.nodeCondition,
+      refs.nodeResult,
+      refs.nodeProofSketch,
       refs.nodeColor,
       refs.nodeFillColor,
+      refs.arrowSource,
+      refs.arrowTarget,
+      refs.arrowLabel,
+      refs.arrowRemark,
       refs.arrowLevel,
       refs.arrowEndpointScale,
       refs.arrowCurve,
@@ -340,8 +362,8 @@
       refs.arrowColor
     ].forEach((control) => {
       if (!control) return;
-      control.addEventListener('input', previewDetailStyle);
-      control.addEventListener('change', previewDetailStyle);
+      control.addEventListener('input', autoApplyDetailUpdate);
+      control.addEventListener('change', autoApplyDetailUpdate);
     });
     document.querySelectorAll('[data-color-target]').forEach((button) => {
       button.addEventListener('click', () => {
@@ -374,7 +396,7 @@
       button.innerHTML = arrowPartIconSvg(part, option.id);
       button.addEventListener('click', () => {
         setArrowPartValue(part, option.id);
-        previewDetailStyle();
+        autoApplyDetailUpdate();
       });
       picker.appendChild(button);
     });
@@ -515,6 +537,31 @@
     return '';
   }
 
+  function bindAutoResizeTextareas() {
+    document.querySelectorAll('textarea.theorem-textarea').forEach((textarea) => {
+      autoResizeTextarea(textarea);
+      textarea.addEventListener('input', () => autoResizeTextarea(textarea));
+    });
+  }
+
+  function autoResizeTextarea(textarea) {
+    if (!textarea || textarea.tagName !== 'TEXTAREA' || textarea.hidden) return;
+    textarea.style.height = 'auto';
+    const nextHeight = Math.min(textarea.scrollHeight, TEXTAREA_AUTO_MAX_HEIGHT);
+    textarea.style.height = `${Math.max(66, nextHeight)}px`;
+    textarea.style.overflowY = textarea.scrollHeight > TEXTAREA_AUTO_MAX_HEIGHT ? 'auto' : 'hidden';
+  }
+
+  function autoResizeDetailTextareas() {
+    [
+      refs.nodeSetting,
+      refs.nodeCondition,
+      refs.nodeResult,
+      refs.nodeProofSketch,
+      refs.arrowRemark
+    ].forEach(autoResizeTextarea);
+  }
+
   function bindLatexDetailPreviewEvents() {
     NODE_DETAIL_LATEX_FIELDS.forEach(({ key, inputRef, previewRef }) => {
       const input = refs[inputRef];
@@ -550,6 +597,7 @@
         setting: 'A compact workspace of mathematical statements.',
         condition: 'References and hypotheses are recorded with each node.',
         result: 'A local statement can support a later theorem.',
+        proofSketch: 'Record a short proof strategy, reductions, or the key cited step here.',
         citationKeys: ['hartshorne1977'],
         x: 210,
         y: 180
@@ -561,6 +609,7 @@
         setting: 'The same setting as Lemma 1.',
         condition: 'Assume the lemma and the recorded compatibility condition.',
         result: 'The main result follows as a dependency node.',
+        proofSketch: 'Apply Lemma 1, then track the remaining compatibility condition.',
         citationKeys: ['hartshorne1977'],
         x: 500,
         y: 270
@@ -572,14 +621,15 @@
         setting: 'A neighboring problem suggested by Theorem A.',
         condition: 'The expected extension is not yet proved.',
         result: 'A possible future arrow can be added when proved.',
+        proofSketch: '',
         citationKeys: [],
         x: 735,
         y: 160
       })
     ];
     state.arrows = [
-      makeArrow({ id: 'a1', sourceId: 'n1', targetId: 'n2', label: 'uses' }),
-      makeArrow({ id: 'a2', sourceId: 'n2', targetId: 'n3', label: 'suggests' })
+      makeArrow({ id: 'a1', sourceId: 'n1', targetId: 'n2', label: 'uses', remark: 'The compatibility hypothesis is carried along this dependency.' }),
+      makeArrow({ id: 'a2', sourceId: 'n2', targetId: 'n3', label: 'suggests', remark: '' })
     ];
     state.references = [
       makeReference({
@@ -609,6 +659,7 @@
       setting: cleanString(source.setting),
       condition: cleanString(source.condition),
       result: cleanString(source.result),
+      proofSketch: cleanString(source.proofSketch),
       citationKeys: normalizeCitationKeys(source.citationKeys),
       color: normalizeColor(source.color, NODE_TYPES[type].stroke),
       fillColor: normalizeNodeFillColor(source.fillColor || source.fill, NODE_TYPES[type].fill),
@@ -630,6 +681,7 @@
       sourceId: cleanId(source.sourceId),
       targetId: cleanId(source.targetId),
       label: cleanString(source.label),
+      remark: cleanString(source.remark),
       body: parts.body,
       head: parts.head,
       tail: parts.tail,
@@ -643,16 +695,20 @@
 
   function makeReference(source = {}) {
     const extra = collectExtra(source, KNOWN_REFERENCE_KEYS);
+    const key = cleanString(source.key);
+    const rawBibtex = cleanString(source.rawBibtex);
+    const url = normalizeUrl(source.url);
+    const sourceType = normalizeReferenceSource(source.source, url ? inferReferenceSource(url) : 'bibtex');
     return {
       extra,
-      key: cleanString(source.key),
+      key,
       author: cleanString(source.author),
       title: cleanString(source.title),
       year: cleanString(source.year),
-      citeText: cleanString(source.citeText) || defaultCiteText(cleanString(source.key)),
-      url: normalizeUrl(source.url),
-      source: normalizeReferenceSource(source.source, source.url ? inferReferenceSource(source.url) : 'bibtex'),
-      rawBibtex: cleanString(source.rawBibtex)
+      citeText: cleanString(source.citeText) || referenceDefaultCiteText({ key, source: sourceType, rawBibtex }),
+      url,
+      source: sourceType,
+      rawBibtex
     };
   }
 
@@ -1669,6 +1725,7 @@
     state.selectedArrowId = null;
     state.detailPreview = null;
     state.activeLatexDetailField = null;
+    resetDetailEditBaseline();
   }
 
   function selectArrow(id) {
@@ -1676,12 +1733,14 @@
     state.selectedNodeId = null;
     state.detailPreview = null;
     state.activeLatexDetailField = null;
+    resetDetailEditBaseline();
   }
 
   function clearSelection() {
     state.selectedNodeId = null;
     state.selectedArrowId = null;
     state.detailPreview = null;
+    state.detailEditBaseline = null;
     state.activeLatexDetailField = null;
   }
 
@@ -1729,6 +1788,7 @@
     if (refs.referenceEditForm) refs.referenceEditForm.hidden = true;
     state.selectedNodeId = null;
     state.selectedArrowId = null;
+    state.detailEditBaseline = null;
     state.activeLatexDetailField = null;
     state.connectSourceId = null;
     state.connectMode = false;
@@ -1896,6 +1956,7 @@
       refs.nodeSetting,
       refs.nodeCondition,
       refs.nodeResult,
+      refs.nodeProofSketch,
       refs.nodeColor,
       refs.nodeFillColor
     ].forEach((control) => {
@@ -1905,6 +1966,7 @@
       refs.arrowSource,
       refs.arrowTarget,
       refs.arrowLabel,
+      refs.arrowRemark,
       refs.arrowLevel,
       refs.arrowEndpointScale,
       refs.arrowCurve,
@@ -1914,22 +1976,26 @@
       if (control) control.disabled = !arrow;
     });
     if (refs.detailUpdate) refs.detailUpdate.disabled = !(node || arrow);
+    if (refs.detailCancel) refs.detailCancel.disabled = !(node || arrow);
     if (!node) {
       refs.nodeType.value = 'theorem';
       refs.nodeLabel.value = '';
       refs.nodeSetting.value = '';
       refs.nodeCondition.value = '';
       refs.nodeResult.value = '';
+      refs.nodeProofSketch.value = '';
       if (refs.nodeColor) refs.nodeColor.value = '#3d6b4f';
       if (refs.nodeFillColor) refs.nodeFillColor.value = '#f8f1e5';
       populateArrowParentSelects(arrow);
       if (refs.arrowLabel) refs.arrowLabel.value = arrow ? (arrow.label || '') : '';
+      if (refs.arrowRemark) refs.arrowRemark.value = arrow ? (arrow.remark || '') : '';
       syncArrowPartPickers(arrow || null, !arrow);
       setArrowLevelControl(arrow ? arrow.level : ARROW_LEVEL_DEFAULT, !arrow);
       setArrowEndpointScaleControl(arrow ? arrow.endpointScale : ARROW_ENDPOINT_SCALE_DEFAULT, !arrow);
       if (refs.arrowCurve) refs.arrowCurve.value = arrow ? String(roundNumber(arrow.curve || 0)) : '0';
       if (refs.arrowLabelOffset) refs.arrowLabelOffset.value = arrow ? String(roundNumber(arrow.labelOffset || 0)) : '0';
       if (refs.arrowColor) refs.arrowColor.value = arrow ? normalizeColor(arrow.color, '#5f574e') : '#5f574e';
+      autoResizeDetailTextareas();
       syncLatexDetailFields();
       return;
     }
@@ -1938,16 +2004,19 @@
     refs.nodeSetting.value = node.setting;
     refs.nodeCondition.value = node.condition;
     refs.nodeResult.value = node.result;
+    refs.nodeProofSketch.value = node.proofSketch;
     if (refs.nodeColor) refs.nodeColor.value = normalizeColor(node.color, NODE_TYPES[node.type].stroke);
     if (refs.nodeFillColor) refs.nodeFillColor.value = normalizeNodeFillColor(node.fillColor, NODE_TYPES[node.type].fill);
     populateArrowParentSelects(null);
     if (refs.arrowLabel) refs.arrowLabel.value = '';
+    if (refs.arrowRemark) refs.arrowRemark.value = '';
     syncArrowPartPickers(null, true);
     setArrowLevelControl(ARROW_LEVEL_DEFAULT, true);
     setArrowEndpointScaleControl(ARROW_ENDPOINT_SCALE_DEFAULT, true);
     if (refs.arrowCurve) refs.arrowCurve.value = '0';
     if (refs.arrowLabelOffset) refs.arrowLabelOffset.value = '0';
     if (refs.arrowColor) refs.arrowColor.value = '#5f574e';
+    autoResizeDetailTextareas();
     syncLatexDetailFields();
   }
 
@@ -1959,6 +2028,7 @@
     state.activeLatexDetailField = key;
     syncLatexDetailFields();
     input.hidden = false;
+    autoResizeTextarea(input);
     input.focus();
     if (typeof input.setSelectionRange === 'function') {
       const end = input.value.length;
@@ -2027,40 +2097,6 @@
     if (refs.arrowTarget) refs.arrowTarget.value = arrow.targetId;
   }
 
-  function previewDetailStyle() {
-    const node = findNode(state.selectedNodeId);
-    const arrow = findArrow(state.selectedArrowId);
-    if (node) {
-      state.detailPreview = {
-        kind: 'node',
-        id: node.id,
-        color: normalizeColor(refs.nodeColor ? refs.nodeColor.value : node.color, node.color),
-        fillColor: normalizeNodeFillColor(refs.nodeFillColor ? refs.nodeFillColor.value : node.fillColor, node.fillColor)
-      };
-      renderCanvas();
-      setStatus('Previewing node colors. Press update to save.');
-      return;
-    }
-    if (arrow) {
-      state.detailPreview = {
-        kind: 'arrow',
-        id: arrow.id,
-        body: getArrowPartValue('body', arrow.body),
-        head: getArrowPartValue('head', arrow.head),
-        tail: getArrowPartValue('tail', arrow.tail),
-        level: getArrowLevelValue(arrow.level),
-        endpointScale: getArrowEndpointScaleValue(arrow.endpointScale),
-        curve: clamp(finiteNumber(refs.arrowCurve ? refs.arrowCurve.value : arrow.curve, arrow.curve), -160, 160),
-        labelOffset: clamp(finiteNumber(refs.arrowLabelOffset ? refs.arrowLabelOffset.value : arrow.labelOffset, arrow.labelOffset), -120, 120),
-        color: normalizeColor(refs.arrowColor ? refs.arrowColor.value : arrow.color, arrow.color)
-      };
-      syncArrowLevelValue(state.detailPreview.level);
-      syncArrowEndpointScaleValue(state.detailPreview.endpointScale);
-      renderCanvas();
-      setStatus('Previewing arrow style. Press update to save.');
-    }
-  }
-
   function currentNodeColor(node) {
     if (state.detailPreview?.kind === 'node' && state.detailPreview.id === node.id) {
       return normalizeColor(state.detailPreview.color, node.color);
@@ -2094,52 +2130,203 @@
     };
   }
 
-  function applyDetailUpdate() {
+  function autoApplyDetailUpdate(event) {
+    autoResizeTextarea(event?.target);
+    applyDetailUpdate({ manual: false });
+  }
+
+  function applyDetailUpdate({ manual = true } = {}) {
     const node = findNode(state.selectedNodeId);
     const arrow = findArrow(state.selectedArrowId);
     if (node) {
-      const type = normalizeType(refs.nodeType.value);
-      node.type = type;
-      node.label = cleanString(refs.nodeLabel.value) || node.id;
-      node.setting = cleanString(refs.nodeSetting.value);
-      node.condition = cleanString(refs.nodeCondition.value);
-      node.result = cleanString(refs.nodeResult.value);
-      node.color = normalizeColor(refs.nodeColor ? refs.nodeColor.value : node.color, NODE_TYPES[type].stroke);
-      node.fillColor = normalizeNodeFillColor(refs.nodeFillColor ? refs.nodeFillColor.value : node.fillColor, NODE_TYPES[type].fill);
+      applyNodeDetailFromControls(node);
       state.detailPreview = null;
-      state.activeLatexDetailField = null;
-      setStatus(`Updated ${node.label}.`);
-      renderAll();
-      return;
+      if (manual) {
+        state.activeLatexDetailField = null;
+        resetDetailEditBaseline();
+        setStatus(`Updated ${node.label}.`);
+        renderAll();
+      } else {
+        syncLatexDetailFields();
+        renderCanvas();
+        refreshExport();
+      }
+      return true;
     }
     if (arrow) {
-      const sourceId = cleanId(refs.arrowSource ? refs.arrowSource.value : arrow.sourceId);
-      const targetId = cleanId(refs.arrowTarget ? refs.arrowTarget.value : arrow.targetId);
-      if (!findNode(sourceId) || !findNode(targetId)) {
+      const result = applyArrowDetailFromControls(arrow);
+      if (!result.ok) {
         setStatus('Choose existing parent nodes for the arrow.');
-        return;
+        if (result.reason === 'same-node') setStatus('Choose two different parent nodes for the arrow.');
+        return false;
       }
-      if (sourceId === targetId) {
-        setStatus('Choose two different parent nodes for the arrow.');
-        return;
-      }
-      arrow.sourceId = sourceId;
-      arrow.targetId = targetId;
-      arrow.label = cleanString(refs.arrowLabel.value);
-      arrow.body = getArrowPartValue('body', arrow.body);
-      arrow.head = getArrowPartValue('head', arrow.head);
-      arrow.tail = getArrowPartValue('tail', arrow.tail);
-      arrow.level = getArrowLevelValue(arrow.level);
-      arrow.endpointScale = getArrowEndpointScaleValue(arrow.endpointScale);
-      arrow.curve = clamp(finiteNumber(refs.arrowCurve ? refs.arrowCurve.value : arrow.curve, arrow.curve), -160, 160);
-      arrow.labelOffset = clamp(finiteNumber(refs.arrowLabelOffset ? refs.arrowLabelOffset.value : arrow.labelOffset, arrow.labelOffset), -120, 120);
-      arrow.color = normalizeColor(refs.arrowColor ? refs.arrowColor.value : arrow.color, '#5f574e');
       state.detailPreview = null;
-      setStatus(arrow.label ? `Updated arrow ${arrow.label}.` : 'Updated arrow.');
+      if (manual) {
+        resetDetailEditBaseline();
+        setStatus(arrow.label ? `Updated arrow ${arrow.label}.` : 'Updated arrow.');
+        renderAll();
+      } else {
+        renderCanvas();
+        refreshExport();
+      }
+      return true;
+    }
+    setStatus('Click a node or arrow before updating.');
+    return false;
+  }
+
+  function applyNodeDetailFromControls(node) {
+    const type = normalizeType(refs.nodeType ? refs.nodeType.value : node.type);
+    node.type = type;
+    node.label = cleanString(refs.nodeLabel ? refs.nodeLabel.value : node.label) || node.id;
+    node.setting = cleanString(refs.nodeSetting ? refs.nodeSetting.value : node.setting);
+    node.condition = cleanString(refs.nodeCondition ? refs.nodeCondition.value : node.condition);
+    node.result = cleanString(refs.nodeResult ? refs.nodeResult.value : node.result);
+    node.proofSketch = cleanString(refs.nodeProofSketch ? refs.nodeProofSketch.value : node.proofSketch);
+    node.color = normalizeColor(refs.nodeColor ? refs.nodeColor.value : node.color, NODE_TYPES[type].stroke);
+    node.fillColor = normalizeNodeFillColor(refs.nodeFillColor ? refs.nodeFillColor.value : node.fillColor, NODE_TYPES[type].fill);
+  }
+
+  function applyArrowDetailFromControls(arrow) {
+    const sourceId = cleanId(refs.arrowSource ? refs.arrowSource.value : arrow.sourceId);
+    const targetId = cleanId(refs.arrowTarget ? refs.arrowTarget.value : arrow.targetId);
+    if (!findNode(sourceId) || !findNode(targetId)) return { ok: false, reason: 'missing-node' };
+    if (sourceId === targetId) return { ok: false, reason: 'same-node' };
+    arrow.sourceId = sourceId;
+    arrow.targetId = targetId;
+    arrow.label = cleanString(refs.arrowLabel ? refs.arrowLabel.value : arrow.label);
+    arrow.remark = cleanString(refs.arrowRemark ? refs.arrowRemark.value : arrow.remark);
+    arrow.body = getArrowPartValue('body', arrow.body);
+    arrow.head = getArrowPartValue('head', arrow.head);
+    arrow.tail = getArrowPartValue('tail', arrow.tail);
+    arrow.level = getArrowLevelValue(arrow.level);
+    arrow.endpointScale = getArrowEndpointScaleValue(arrow.endpointScale);
+    arrow.curve = clamp(finiteNumber(refs.arrowCurve ? refs.arrowCurve.value : arrow.curve, arrow.curve), -160, 160);
+    arrow.labelOffset = clamp(finiteNumber(refs.arrowLabelOffset ? refs.arrowLabelOffset.value : arrow.labelOffset, arrow.labelOffset), -120, 120);
+    arrow.color = normalizeColor(refs.arrowColor ? refs.arrowColor.value : arrow.color, '#5f574e');
+    syncArrowLevelValue(arrow.level);
+    syncArrowEndpointScaleValue(arrow.endpointScale);
+    return { ok: true };
+  }
+
+  function cancelDetailEdit() {
+    const baseline = state.detailEditBaseline;
+    if (!baseline) {
+      setStatus('No detail changes to cancel.');
+      return;
+    }
+    if (baseline.kind === 'node') {
+      const node = findNode(baseline.id);
+      if (!node) {
+        clearSelection();
+        setStatus('Selected node is no longer available.');
+        renderAll();
+        return;
+      }
+      restoreNodeDetailSnapshot(node, baseline.values);
+      state.detailPreview = null;
+      state.activeLatexDetailField = null;
+      resetDetailEditBaseline();
+      setStatus(`Cancelled edits to ${node.label}.`);
       renderAll();
       return;
     }
-    setStatus('Click a node or arrow before updating.');
+    if (baseline.kind === 'arrow') {
+      const arrow = findArrow(baseline.id);
+      if (!arrow) {
+        clearSelection();
+        setStatus('Selected arrow is no longer available.');
+        renderAll();
+        return;
+      }
+      restoreArrowDetailSnapshot(arrow, baseline.values);
+      state.detailPreview = null;
+      resetDetailEditBaseline();
+      setStatus(arrow.label ? `Cancelled edits to arrow ${arrow.label}.` : 'Cancelled edits to arrow.');
+      renderAll();
+    }
+  }
+
+  function resetDetailEditBaseline() {
+    const node = findNode(state.selectedNodeId);
+    if (node) {
+      state.detailEditBaseline = {
+        kind: 'node',
+        id: node.id,
+        values: nodeDetailSnapshot(node)
+      };
+      return;
+    }
+    const arrow = findArrow(state.selectedArrowId);
+    if (arrow) {
+      state.detailEditBaseline = {
+        kind: 'arrow',
+        id: arrow.id,
+        values: arrowDetailSnapshot(arrow)
+      };
+      return;
+    }
+    state.detailEditBaseline = null;
+  }
+
+  function nodeDetailSnapshot(node) {
+    return {
+      type: node.type,
+      label: node.label,
+      setting: node.setting,
+      condition: node.condition,
+      result: node.result,
+      proofSketch: node.proofSketch,
+      color: node.color,
+      fillColor: node.fillColor
+    };
+  }
+
+  function arrowDetailSnapshot(arrow) {
+    return {
+      sourceId: arrow.sourceId,
+      targetId: arrow.targetId,
+      label: arrow.label,
+      remark: arrow.remark,
+      body: arrow.body,
+      head: arrow.head,
+      tail: arrow.tail,
+      level: arrow.level,
+      endpointScale: arrow.endpointScale,
+      curve: arrow.curve,
+      labelOffset: arrow.labelOffset,
+      color: arrow.color
+    };
+  }
+
+  function restoreNodeDetailSnapshot(node, values) {
+    Object.assign(node, {
+      type: normalizeType(values.type),
+      label: cleanString(values.label) || node.id,
+      setting: cleanString(values.setting),
+      condition: cleanString(values.condition),
+      result: cleanString(values.result),
+      proofSketch: cleanString(values.proofSketch),
+      color: normalizeColor(values.color, NODE_TYPES[normalizeType(values.type)].stroke),
+      fillColor: normalizeNodeFillColor(values.fillColor, NODE_TYPES[normalizeType(values.type)].fill)
+    });
+  }
+
+  function restoreArrowDetailSnapshot(arrow, values) {
+    Object.assign(arrow, {
+      sourceId: cleanId(values.sourceId),
+      targetId: cleanId(values.targetId),
+      label: cleanString(values.label),
+      remark: cleanString(values.remark),
+      body: normalizeArrowPart('body', values.body),
+      head: normalizeArrowPart('head', values.head),
+      tail: normalizeArrowPart('tail', values.tail),
+      level: normalizeArrowLevel(values.level),
+      endpointScale: normalizeArrowEndpointScale(values.endpointScale),
+      curve: clamp(finiteNumber(values.curve, 0), -160, 160),
+      labelOffset: clamp(finiteNumber(values.labelOffset, 0), -120, 120),
+      color: normalizeColor(values.color, '#5f574e')
+    });
   }
 
   function renderReferences() {
@@ -2166,10 +2353,14 @@
       const meta = document.createElement('div');
       meta.className = 'theorem-reference-meta';
       meta.textContent = referenceMeta(reference);
-      const cite = document.createElement('div');
-      cite.className = 'theorem-reference-cite';
-      cite.textContent = reference.citeText || defaultCiteText(reference.key);
-      body.append(key, title, meta, cite);
+      body.append(key, title, meta);
+      const citeText = referenceDisplayCiteText(reference);
+      if (citeText) {
+        const cite = document.createElement('div');
+        cite.className = 'theorem-reference-cite';
+        cite.textContent = citeText;
+        body.appendChild(cite);
+      }
       if (reference.url) {
         const link = document.createElement('a');
         link.className = 'theorem-reference-link';
@@ -2209,7 +2400,7 @@
     state.editingReferenceKey = key;
     refs.referenceEditForm.hidden = false;
     refs.referenceEditKey.value = reference.key;
-    refs.referenceEditCite.value = reference.citeText || defaultCiteText(reference.key);
+    refs.referenceEditCite.value = referenceDisplayCiteText(reference);
     refs.referenceEditTitle.value = reference.title;
     refs.referenceEditAuthor.value = reference.author;
     refs.referenceEditYear.value = reference.year;
@@ -2242,13 +2433,13 @@
       return;
     }
     original.key = nextKey;
-    original.citeText = cleanString(refs.referenceEditCite.value) || defaultCiteText(nextKey);
     original.title = cleanString(refs.referenceEditTitle.value);
     original.author = cleanString(refs.referenceEditAuthor.value);
     original.year = cleanString(refs.referenceEditYear.value);
     original.url = normalizeUrl(refs.referenceEditUrl ? refs.referenceEditUrl.value : original.url);
     original.source = normalizeReferenceSource(refs.referenceEditSource ? refs.referenceEditSource.value : original.source, original.url ? inferReferenceSource(original.url) : 'bibtex');
     original.rawBibtex = cleanString(refs.referenceEditRaw.value);
+    original.citeText = cleanString(refs.referenceEditCite.value) || referenceDefaultCiteText(original);
     if (state.selectedReferenceKeys.has(state.editingReferenceKey)) {
       state.selectedReferenceKeys.delete(state.editingReferenceKey);
       state.selectedReferenceKeys.add(nextKey);
@@ -2296,7 +2487,7 @@
 
   function objectUsesReference(source, key, citeText, keyPattern) {
     if (Array.isArray(source.citationKeys) && key && source.citationKeys.includes(key)) return true;
-    const fields = ['label', 'setting', 'condition', 'result'];
+    const fields = ['label', 'setting', 'condition', 'result', 'proofSketch', 'remark'];
     return fields.some((field) => textUsesReference(source[field], key, citeText, keyPattern));
   }
 
@@ -2368,15 +2559,21 @@
   }
 
   function addLinkReferenceFromControls() {
-    const url = normalizeUrl(refs.linkReferenceUrl ? refs.linkReferenceUrl.value : '');
-    if (!url) {
-      setReferenceMessage('Enter a valid link before adding.', true);
+    const rawUrl = cleanString(refs.linkReferenceUrl ? refs.linkReferenceUrl.value : '');
+    const url = normalizeUrl(rawUrl);
+    const titleInput = cleanString(refs.linkReferenceTitle ? refs.linkReferenceTitle.value : '');
+    if (rawUrl && !url) {
+      setReferenceMessage('Enter a valid link or leave it blank.', true);
+      return;
+    }
+    if (!url && !titleInput) {
+      setReferenceMessage('Enter a title or link before adding.', true);
       return;
     }
     const inferredSource = refs.linkReferenceSource && refs.linkReferenceSource.value !== 'auto'
       ? refs.linkReferenceSource.value
-      : inferReferenceSource(url);
-    const title = cleanString(refs.linkReferenceTitle ? refs.linkReferenceTitle.value : '') || defaultLinkTitle(url, inferredSource);
+      : (url ? inferReferenceSource(url) : 'web');
+    const title = titleInput || defaultLinkTitle(url, inferredSource);
     const key = cleanString(refs.linkReferenceKey ? refs.linkReferenceKey.value : '') || nextReferenceKey(inferredSource);
     if (state.references.some((reference) => reference.key === key)) {
       setReferenceMessage(`Reference [${key}] already exists.`, true);
@@ -2386,8 +2583,7 @@
       key,
       title,
       source: inferredSource,
-      url,
-      citeText: defaultCiteText(key)
+      url
     }));
     if (refs.linkReferenceUrl) refs.linkReferenceUrl.value = '';
     if (refs.linkReferenceKey) refs.linkReferenceKey.value = '';
@@ -2544,6 +2740,7 @@
         setting: node.setting,
         condition: node.condition,
         result: node.result,
+        proofSketch: node.proofSketch,
         citationKeys: [...node.citationKeys],
         color: node.color,
         fillColor: normalizeNodeFillColor(node.fillColor, (NODE_TYPES[node.type] || NODE_TYPES.theorem).fill),
@@ -2556,6 +2753,7 @@
         sourceId: arrow.sourceId,
         targetId: arrow.targetId,
         label: arrow.label,
+        remark: arrow.remark,
         body: arrow.body,
         head: arrow.head,
         tail: arrow.tail,
@@ -2571,7 +2769,7 @@
         author: reference.author,
         title: reference.title,
         year: reference.year,
-        citeText: reference.citeText || defaultCiteText(reference.key),
+        citeText: referenceExportCiteText(reference),
         url: reference.url,
         source: reference.source,
         rawBibtex: reference.rawBibtex
@@ -2610,10 +2808,28 @@
     }
   }
 
-  function loadImport() {
+  function setImportMode(mode) {
+    state.importMode = mode === 'json' ? 'json' : 'preset';
+    syncControls();
+  }
+
+  function currentImportMode() {
+    if (refs.importModeJson && refs.importModeJson.checked) return 'json';
+    return state.importMode === 'json' ? 'json' : 'preset';
+  }
+
+  async function loadImport() {
+    if (currentImportMode() === 'preset') {
+      await loadSelectedPreset();
+      return;
+    }
+    loadJsonImport();
+  }
+
+  function loadJsonImport() {
     const raw = refs.importInput.value.trim();
     if (!raw) {
-      setExportMessage('Paste exported JSON or a preset file before loading.', true);
+      setExportMessage('Paste JSON text before loading.', true);
       return;
     }
     let data;
@@ -2625,7 +2841,7 @@
     }
 
     try {
-      applyImportData(data, 'import');
+      applyImportData(data, 'JSON text');
     } catch (error) {
       setExportMessage(error.message, true);
     }
@@ -2699,6 +2915,7 @@
     state.selectedNodeId = next.selectedNodeId;
     state.selectedArrowId = null;
     state.activeLatexDetailField = null;
+    resetDetailEditBaseline();
     state.connectMode = false;
     state.connectSourceId = null;
     state.viewExtra = next.viewExtra;
@@ -2722,24 +2939,6 @@
       !registryPresets.length
     );
     syncControls();
-  }
-
-  function refreshPresetRegistry() {
-    state.presetScriptNonce = String(Date.now());
-    window.THEOREM_GRAPH_PRESET_DATA = {};
-    const oldScript = document.getElementById('theorem-preset-registry');
-    const nextScript = document.createElement('script');
-    nextScript.id = 'theorem-preset-registry';
-    nextScript.src = `${PRESET_REGISTRY_URL}?t=${state.presetScriptNonce}`;
-    nextScript.onload = () => {
-      if (oldScript && oldScript.parentNode) oldScript.parentNode.removeChild(oldScript);
-      loadPresetRegistry();
-    };
-    nextScript.onerror = () => {
-      setExportMessage('Could not reload theorem_graph_presets/presets.js.', true);
-      syncControls();
-    };
-    document.head.appendChild(nextScript);
   }
 
   function normalizePresetRegistry(registry) {
@@ -2809,7 +3008,6 @@
     }
     try {
       const data = await readPresetData(preset);
-      if (refs.importInput) refs.importInput.value = JSON.stringify(data, null, 2);
       applyImportData(data, preset.label);
     } catch (error) {
       setExportMessage(`Preset load failed: ${error.message}`, true);
@@ -2941,6 +3139,24 @@
     return serial;
   }
 
+  function syncImportModeControls() {
+    const mode = state.importMode === 'json' ? 'json' : 'preset';
+    state.importMode = mode;
+    const jsonMode = mode === 'json';
+    if (refs.importModePreset) refs.importModePreset.checked = !jsonMode;
+    if (refs.importModeJson) refs.importModeJson.checked = jsonMode;
+    if (refs.presetImportRow) refs.presetImportRow.hidden = jsonMode;
+    if (refs.jsonImportPanel) refs.jsonImportPanel.hidden = !jsonMode;
+    if (refs.presetSelect) refs.presetSelect.disabled = jsonMode;
+    if (refs.importInput) refs.importInput.disabled = !jsonMode;
+    if (refs.clearImport) refs.clearImport.disabled = !jsonMode;
+    if (refs.loadImport) {
+      refs.loadImport.disabled = jsonMode
+        ? false
+        : !(state.presets.length && refs.presetSelect && refs.presetSelect.value);
+    }
+  }
+
   function syncControls() {
     const selectedNode = findNode(state.selectedNodeId);
     const selectedArrow = findArrow(state.selectedArrowId);
@@ -2949,7 +3165,7 @@
     }
     if (refs.graphTitle && refs.graphTitle.value !== state.graphTitle) refs.graphTitle.value = state.graphTitle;
     syncDebugControlValues();
-    if (refs.loadPreset) refs.loadPreset.disabled = !(state.presets.length && refs.presetSelect && refs.presetSelect.value);
+    syncImportModeControls();
     if (refs.connectBadge) {
       refs.connectBadge.textContent = state.connectMode
         ? (state.connectSourceId ? 'choose target' : 'choose source')
@@ -3082,9 +3298,33 @@
     return [source, details].filter(Boolean).join(' - ') || 'metadata not parsed';
   }
 
+  function referenceDisplayCiteText(reference) {
+    const citeText = cleanString(reference.citeText);
+    if (!citeText) return referenceDefaultCiteText(reference);
+    if (!referenceIsBibtexLike(reference) && citeText === defaultCiteText(reference.key)) return '';
+    return citeText;
+  }
+
+  function referenceExportCiteText(reference) {
+    const citeText = cleanString(reference.citeText);
+    if (!referenceIsBibtexLike(reference) && citeText === defaultCiteText(reference.key)) return '';
+    return citeText || referenceDefaultCiteText(reference);
+  }
+
+  function referenceDefaultCiteText(reference) {
+    return referenceIsBibtexLike(reference) ? defaultCiteText(reference.key) : '';
+  }
+
+  function referenceIsBibtexLike(reference) {
+    return normalizeReferenceSource(reference.source, '') === 'bibtex' || !!cleanString(reference.rawBibtex);
+  }
+
   function referenceLinkLabel(reference) {
-    const source = referenceSourceLabel(reference.source);
-    return source ? `open ${source}` : 'open link';
+    const source = normalizeReferenceSource(reference.source, '');
+    if (source === 'mathoverflow' || source === 'math-stackexchange' || source === 'stacks-project') {
+      return `open ${referenceSourceLabel(source)}`;
+    }
+    return 'open link';
   }
 
   function referenceSourceLabel(source) {
