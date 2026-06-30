@@ -17,8 +17,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 413.9,
-      "y": 204.6
+      "x": 369.2,
+      "y": 235.6
     },
     {
       "id": "n6",
@@ -31,8 +31,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 323.1,
-      "y": 107.9
+      "x": 424.3,
+      "y": 46
     },
     {
       "id": "n11",
@@ -45,8 +45,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 513.3,
-      "y": 93
+      "x": 553.4,
+      "y": 88.5
     },
     {
       "id": "n12",
@@ -59,8 +59,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 212.5,
-      "y": 128.7
+      "x": 126.2,
+      "y": 224
     },
     {
       "id": "n13",
@@ -73,8 +73,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 350.3,
-      "y": 320.3
+      "x": 422.8,
+      "y": 385.5
     },
     {
       "id": "n14",
@@ -87,8 +87,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 621.8,
-      "y": 336.7
+      "x": 504.7,
+      "y": 574
     },
     {
       "id": "n15",
@@ -100,9 +100,9 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "proofSketch": "",
       "citationKeys": [],
       "color": "#2f5f9f",
-      "fillColor": "#eef7f4",
-      "x": 474,
-      "y": 374
+      "fillColor": "#eef4fb",
+      "x": 628.4,
+      "y": 469.8
     },
     {
       "id": "n16",
@@ -115,8 +115,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 155.4,
-      "y": 374
+      "x": 234.6,
+      "y": 507.1
     },
     {
       "id": "n17",
@@ -129,8 +129,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 296.8,
-      "y": 374
+      "x": 347.5,
+      "y": 574
     },
     {
       "id": "n18",
@@ -143,8 +143,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 176,
-      "y": 231.5
+      "x": 94.2,
+      "y": 467.3
     },
     {
       "id": "n19",
@@ -157,8 +157,92 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 393.9,
-      "y": 265.5
+      "x": 202.8,
+      "y": 309.3
+    },
+    {
+      "id": "n20",
+      "type": "example",
+      "label": "SES",
+      "setting": "if user chooses three sheaves by themselves, there will be an extra choice asking user which one is more difficult to realize",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 574.8,
+      "y": 210.9
+    },
+    {
+      "id": "n21",
+      "type": "example",
+      "label": "Mosaic calculator",
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 306,
+      "y": 357.7
+    },
+    {
+      "id": "n22",
+      "type": "example",
+      "label": "Seifert surface",
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 536.2,
+      "y": 350.9
+    },
+    {
+      "id": "n23",
+      "type": "example",
+      "label": "vanishing of some terms",
+      "setting": "{\n  \"schema\": \"sheaf-calculator-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-06-30T15:51:58.674Z\",\n  \"active\": {\n    \"mode\": \"modify\",\n    \"kind\": \"sheaf\",\n    \"varietyId\": \"X1\",\n    \"sheafId\": \"E8\"\n  },\n  \"options\": {\n    \"repeatNames\": true,\n    \"repeatStyle\": \"letters\",\n    \"classBasis\": \"chern\",\n    \"rootForm\": \"product\",\n    \"classTermOnly\": true,\n    \"classTermIndex\": 2,\n    \"classFamilies\": [\n      \"chern\",\n      \"character\",\n      \"todd\"\n    ],\n    \"hodgeCellSize\": 20,\n    \"revealedCharts\": {\n      \"classes\": true\n    },\n    \"homologyRulePasses\": 2,\n    \"homologyMapInputMode\": \"coefficients\",\n    \"homologyExpressionTransposed\": true,\n    \"exportScope\": \"main\"\n  },\n  \"objects\": {\n    \"varieties\": [\n      {\n        \"id\": \"X1\",\n        \"type\": \"complete-intersection\",\n        \"dim\": \"2\",\n        \"name\": \"X_{4}\",\n        \"genus\": \"g\",\n        \"ppavGenus\": \"2\",\n        \"ciDegrees\": \"4\",\n        \"ciAmbient\": \"3\",\n        \"symmetricProductM\": \"3\",\n        \"symmetricProductGenus\": \"g\",\n        \"grassmannianR\": \"2\",\n        \"grassmannianN\": \"4\",\n        \"homology\": {\n          \"classes\": {\n            \"unit\": {\n              \"symbol\": \"1\"\n            },\n            \"point\": {\n              \"symbol\": \"[p]\"\n            },\n            \"hyperplane\": {\n              \"symbol\": \"H\"\n            }\n          },\n          \"rules\": [\n            {\n              \"id\": \"top-hyperplane-point\",\n              \"builtin\": true,\n              \"enabled\": true,\n              \"lhs\": {\n                \"powers\": {\n                  \"homology_v_X1_H\": 2\n                }\n              },\n              \"rhs\": [\n                {\n                  \"coefficient\": \"4\",\n                  \"powers\": {\n                    \"homology_v_X1_point\": 1\n                  }\n                }\n              ]\n            },\n            {\n              \"id\": \"map-rule-pullback_M4_hyperplane\",\n              \"enabled\": true,\n              \"lhs\": {\n                \"powers\": {\n                  \"map_pullback_M4_homology_v_X3_H\": 1\n                }\n              },\n              \"rhs\": [\n                {\n                  \"coefficient\": \"1\",\n                  \"powers\": {\n                    \"homology_v_X1_H\": 1\n                  }\n                }\n              ]\n            }\n          ]\n        },\n        \"labelX\": 0.22032305743243244,\n        \"labelY\": 0.6007114955357142,\n        \"labelPositionDirty\": true\n      },\n      {\n        \"id\": \"X3\",\n        \"type\": \"projective\",\n        \"dim\": \"3\",\n        \"name\": \"\\\\mathbb{P}^{3}\",\n        \"genus\": \"g\",\n        \"ppavGenus\": \"2\",\n        \"ciDegrees\": \"\",\n        \"ciAmbient\": \"3\",\n        \"symmetricProductM\": \"3\",\n        \"symmetricProductGenus\": \"g\",\n        \"grassmannianR\": \"2\",\n        \"grassmannianN\": \"4\",\n        \"homology\": {\n          \"classes\": {\n            \"unit\": {\n              \"symbol\": \"1\"\n            },\n            \"hyperplane\": {\n              \"symbol\": \"H\"\n            },\n            \"point\": {\n              \"symbol\": \"[p]\"\n            }\n          },\n          \"rules\": [\n            {\n              \"id\": \"top-hyperplane-point\",\n              \"builtin\": true,\n              \"enabled\": true,\n              \"lhs\": {\n                \"powers\": {\n                  \"homology_v_X3_H\": 3\n                }\n              },\n              \"rhs\": [\n                {\n                  \"coefficient\": \"1\",\n                  \"powers\": {\n                    \"homology_v_X3_point\": 1\n                  }\n                }\n              ]\n            }\n          ]\n        },\n        \"labelX\": 0.36864864864864866,\n        \"labelY\": 0.6\n      }\n    ],\n    \"sheaves\": [\n      {\n        \"id\": \"E5\",\n        \"type\": \"tangent\",\n        \"name\": \"\\\\mathcal{T}_{X_{4}}\",\n        \"twist\": \"1\",\n        \"rank\": \"2\",\n        \"baseVarietyId\": \"X1\",\n        \"basis\": \"chern\",\n        \"hiddenOnCanvas\": true,\n        \"labelX\": 0.08,\n        \"labelY\": 0.1957114955357142\n      },\n      {\n        \"id\": \"E6\",\n        \"type\": \"tangent\",\n        \"name\": \"\\\\mathcal{T}_{\\\\mathbb{P}^{3}}\",\n        \"twist\": \"1\",\n        \"rank\": \"3\",\n        \"baseVarietyId\": \"X3\",\n        \"basis\": \"chern\",\n        \"hiddenOnCanvas\": true,\n        \"labelX\": 0.3986486486486487,\n        \"labelY\": 0.39999999999999997\n      },\n      {\n        \"id\": \"E7\",\n        \"type\": \"abstract\",\n        \"name\": \"f^{*}\\\\mathcal{T}_{\\\\mathbb{P}^{3}}\",\n        \"twist\": \"1\",\n        \"rank\": \"3\",\n        \"baseVarietyId\": \"X1\",\n        \"basis\": \"chern\",\n        \"construction\": {\n          \"type\": \"pullback\",\n          \"mapId\": \"M4\",\n          \"sheafId\": \"E6\",\n          \"exact\": true,\n          \"defaultName\": \"f^{*}\\\\mathcal{T}_{\\\\mathbb{P}^{3}}\"\n        },\n        \"hiddenOnCanvas\": true,\n        \"labelX\": 0.22032305743243244,\n        \"labelY\": 0.1957114955357142\n      },\n      {\n        \"id\": \"E8\",\n        \"type\": \"abstract\",\n        \"name\": \"\\\\mathcal{N}_{X_{4}/\\\\mathbb{P}^{3}}\",\n        \"twist\": \"1\",\n        \"rank\": \"1\",\n        \"baseVarietyId\": \"X1\",\n        \"basis\": \"chern\",\n        \"construction\": {\n          \"type\": \"ses-term\",\n          \"role\": \"quotient\",\n          \"sourceSheafIds\": [\n            \"E5\",\n            \"E7\"\n          ],\n          \"normalBundleMapId\": \"M4\",\n          \"sourceTangentSheafId\": \"E5\",\n          \"targetTangentSheafId\": \"E6\",\n          \"pulledTargetTangentSheafId\": \"E7\",\n          \"cleanEmbeddingConfirmed\": true,\n          \"defaultName\": \"\\\\mathcal{N}_{X_{4}/\\\\mathbb{P}^{3}}\",\n          \"sequenceId\": \"S9\",\n          \"inclusionMapId\": \"M10\",\n          \"quotientMapId\": \"M11\"\n        },\n        \"labelX\": 0.2095069679054054,\n        \"labelY\": 0.4076590401785714,\n        \"labelPositionDirty\": true\n      },\n      {\n        \"id\": \"E12\",\n        \"type\": \"twist\",\n        \"name\": \"\\\\mathcal{O}_{\\\\mathbb{P}^{3}}(2)\",\n        \"twist\": \"2\",\n        \"rank\": \"1\",\n        \"baseVarietyId\": \"X3\",\n        \"basis\": \"chern\",\n        \"labelX\": 0.5056756756756757,\n        \"labelY\": 0.39999999999999997\n      },\n      {\n        \"id\": \"E13\",\n        \"type\": \"abstract\",\n        \"name\": \"f^{*}\\\\mathcal{O}_{\\\\mathbb{P}^{3}}(2)\",\n        \"twist\": \"1\",\n        \"rank\": \"1\",\n        \"baseVarietyId\": \"X1\",\n        \"basis\": \"chern\",\n        \"construction\": {\n          \"type\": \"pullback\",\n          \"mapId\": \"M4\",\n          \"sheafId\": \"E12\",\n          \"exact\": true,\n          \"defaultName\": \"f^{*}\\\\mathcal{O}_{\\\\mathbb{P}^{3}}(2)\"\n        },\n        \"labelX\": 0.29510135135135135,\n        \"labelY\": 0.3755440848214286,\n        \"labelPositionDirty\": true\n      }\n    ],\n    \"maps\": [\n      {\n        \"id\": \"M4\",\n        \"name\": \"f\",\n        \"domainKind\": \"variety\",\n        \"domainId\": \"X1\",\n        \"codomainKind\": \"variety\",\n        \"codomainId\": \"X3\",\n        \"curve\": {\n          \"type\": \"straight\"\n        },\n        \"defaultBendPx\": 0,\n        \"labelOffset\": -18,\n        \"labelT\": 0.5\n      },\n      {\n        \"id\": \"M10\",\n        \"name\": \"\\\\iota\",\n        \"domainKind\": \"sheaf\",\n        \"domainId\": \"E5\",\n        \"codomainKind\": \"sheaf\",\n        \"codomainId\": \"E7\",\n        \"construction\": {\n          \"type\": \"short-exact-sequence-map\",\n          \"sequenceId\": \"S9\",\n          \"position\": 0,\n          \"defaultName\": \"\\\\iota\",\n          \"sheafIds\": [\n            \"E5\",\n            \"E7\",\n            \"E8\"\n          ]\n        },\n        \"hiddenOnCanvas\": true,\n        \"labelOffset\": -16,\n        \"labelT\": 0.5\n      },\n      {\n        \"id\": \"M11\",\n        \"name\": \"\\\\pi\",\n        \"domainKind\": \"sheaf\",\n        \"domainId\": \"E7\",\n        \"codomainKind\": \"sheaf\",\n        \"codomainId\": \"E8\",\n        \"construction\": {\n          \"type\": \"short-exact-sequence-map\",\n          \"sequenceId\": \"S9\",\n          \"position\": 1,\n          \"defaultName\": \"\\\\pi\",\n          \"sheafIds\": [\n            \"E5\",\n            \"E7\",\n            \"E8\"\n          ]\n        },\n        \"hiddenOnCanvas\": true,\n        \"labelOffset\": -16,\n        \"labelT\": 0.5\n      }\n    ],\n    \"sequences\": [\n      {\n        \"id\": \"S9\",\n        \"type\": \"short-exact-sequence\",\n        \"sheafIds\": [\n          \"E5\",\n          \"E7\",\n          \"E8\"\n        ],\n        \"mapIds\": [\n          \"M10\",\n          \"M11\"\n        ],\n        \"baseVarietyId\": \"X1\",\n        \"tail\": {\n          \"pointCount\": 0,\n          \"hiddenOnCanvas\": true\n        }\n      }\n    ]\n  },\n  \"hidden\": [\n    {\n      \"kind\": \"sheaf\",\n      \"id\": \"E5\"\n    },\n    {\n      \"kind\": \"sheaf\",\n      \"id\": \"E6\"\n    },\n    {\n      \"kind\": \"sheaf\",\n      \"id\": \"E7\"\n    },\n    {\n      \"kind\": \"map\",\n      \"id\": \"M10\"\n    },\n    {\n      \"kind\": \"map\",\n      \"id\": \"M11\"\n    },\n    {\n      \"kind\": \"sequence-tail\",\n      \"id\": \"S9\"\n    }\n  ],\n  \"nextObjectIndex\": 14\n}",
+      "condition": "In characteristic class chart, when user set \"terms\" to check the i-th term only, some columns are missing when they are 0. It should show 0 rather than missing.",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 188.1,
+      "y": 116.5
+    },
+    {
+      "id": "n24",
+      "type": "example",
+      "label": "identify",
+      "setting": "The user can not pick the sheaf/varieties or cancel the status. There is a bug.",
+      "condition": "I would also like user being able to set sheaf identification only as a rule.",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 286.9,
+      "y": 46
+    },
+    {
+      "id": "n25",
+      "type": "example",
+      "label": "hypersurface",
+      "setting": "add the normal sheaf identification rule for the hypersurface.",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 694.4,
+      "y": 270.3
     }
   ],
   "arrows": [
@@ -281,6 +365,96 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "curve": 0,
       "labelOffset": 0,
       "color": "#5f574e"
+    },
+    {
+      "id": "a14",
+      "sourceId": "n20",
+      "targetId": "n4",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "hook",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a15",
+      "sourceId": "n18",
+      "targetId": "n21",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a16",
+      "sourceId": "n22",
+      "targetId": "n21",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a17",
+      "sourceId": "n23",
+      "targetId": "n4",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "hook",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a18",
+      "sourceId": "n24",
+      "targetId": "n4",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "hook",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a20",
+      "sourceId": "n11",
+      "targetId": "n25",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
     }
   ],
   "references": [
@@ -303,11 +477,32 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "url": "https://claude.ai/share/142d0460-e54e-4671-9d5e-ac10c469a87b",
       "source": "web",
       "rawBibtex": ""
+    },
+    {
+      "key": "Seif",
+      "author": "",
+      "title": "Seifert surface",
+      "year": "",
+      "citeText": "",
+      "url": "https://chatgpt.com/share/6a43e149-99ac-83eb-9da5-90b552a3c5c8",
+      "source": "web",
+      "rawBibtex": ""
+    },
+    {
+      "key": "normal bundle",
+      "author": "",
+      "title": "normal bundle of hypersurface",
+      "year": "",
+      "citeText": "",
+      "url": "https://chatgpt.com/share/6a43e9be-c214-83eb-95ad-5540eb27b907",
+      "source": "web",
+      "rawBibtex": ""
     }
   ],
   "view": {
-    "selectedId": "n18",
+    "selectedId": "n12",
     "selectedReferenceKeys": [],
     "layoutRunning": false
   }
 };
+

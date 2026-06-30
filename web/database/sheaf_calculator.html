@@ -2776,6 +2776,13 @@
               <button class="btn btn-ghost sheaf-map-slot-button" id="identify-main-right" type="button" data-identify-main="right">second</button>
             </div>
           </div>
+          <div class="sheaf-field-row" id="identify-rule-row" hidden>
+            <span class="input-label">mode</span>
+            <label class="opt-row">
+              <input id="identify-rule-only" type="checkbox">
+              rule only (keep sheaves)
+            </label>
+          </div>
           <div class="sheaf-field-row" id="identify-name-row" hidden>
             <label class="input-label" for="identify-name">name</label>
             <div class="identify-name-tools">
@@ -3062,6 +3069,18 @@
               <button class="btn btn-ghost sheaf-map-slot-button sheaf-base-pick-button" id="sheaf-base-button" type="button">variety</button>
             </div>
           </div>
+          <div class="sheaf-field-row" id="sheaf-differential-strengthen-row" hidden>
+            <span class="input-label">strengthen</span>
+            <label class="opt-row">
+              <input id="sheaf-differential-strengthen" type="checkbox">
+              <span>exterior power</span>
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-differential-degree-row" hidden>
+            <label class="input-label" for="sheaf-differential-degree">degree</label>
+            <select id="sheaf-differential-degree" class="sheaf-select"></select>
+          </div>
+          <div class="sheaf-note" id="sheaf-differential-note" hidden></div>
           <div class="sheaf-field-row" id="sheaf-binary-formula-row" hidden>
             <span class="input-label">parents</span>
             <div class="sheaf-map-formula-picker">

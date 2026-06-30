@@ -136,10 +136,14 @@ function loadCalculator() {
     createGrassmannianMapConstruction,
     createPicardCanonicalConstruction,
     createDualSheafConstruction,
+    createDifferentialWedgeSheafConstruction,
+    createIdentifyFromDraft,
+    activateIdentifyPick,
     createInternalHomSheafConstruction,
     createIdealSheafConstruction,
     createNormalBundleConstruction,
     createRelativeSheafConstruction,
+    setCanvasPickEnabled,
     activePickFlow,
     canvasPickAvailable,
     pickFlowHint,
@@ -149,6 +153,7 @@ function loadCalculator() {
     syncPickFlowNote,
     handleActivePickFlow,
     refreshConstructedObjects,
+    sheafDifferentialWedgeConstructionType,
     buildPresetState,
     applyPresetState,
     importPresetFromText,
@@ -184,6 +189,12 @@ function chernPlain(rows) {
 
 function characterPlain(rows) {
   return rows.find((row) => row.key === 'character')?.plain || '';
+}
+
+function cohomologyPlain(api, geometry, sheaf) {
+  const cohomology = api.buildSheafCohomology(geometry, sheaf, api.buildHodgeNumbers(geometry));
+  assert(cohomology?.dimensions, cohomology?.message || 'missing cohomology dimensions');
+  return Array.from(cohomology.dimensions, (entry) => entry.plain);
 }
 
 function testStepBuilderMarkupIsBelowCanvasAndClassChartHasNoStepButton() {
@@ -4427,6 +4438,118 @@ function testStrengthenedTensorUsesMultipleParentsAndExponents() {
   assert.strictEqual(unitRule.rule.classStepDisplayLatex, '\\operatorname{ch}(U)=1');
 }
 
+function exteriorPowerData(api, base, sourceType, degree, kind, rank, defaultName) {
+  const geometry = api.geometryFromVariety(base);
+  return {
+    sourceType,
+    degree,
+    kind,
+    baseVariety: base,
+    baseVarietyId: base.id,
+    geometry,
+    partition: Array.from({ length: degree }, () => 1),
+    rank,
+    defaultName,
+    name: defaultName,
+    nameDirty: false
+  };
+}
+
+function testStrengthenedDifferentialExteriorPowerConstructions() {
+  const api = loadCalculator();
+  const p3 = { id: 'P3', type: 'projective', dim: '3', name: '\\mathbb{P}^{3}' };
+  api.state.varieties = [p3];
+
+  const degreeZero = api.createDifferentialWedgeSheafConstruction(exteriorPowerData(api, p3, 'cotangent', 0, 'structure', '1', '\\mathcal{O}_{\\mathbb{P}^{3}}'));
+  assert.strictEqual(degreeZero.type, 'structure');
+  assert.strictEqual(degreeZero.construction, undefined);
+
+  const degreeOne = api.createDifferentialWedgeSheafConstruction(exteriorPowerData(api, p3, 'tangent', 1, 'standard', '3', '\\mathcal{T}_{\\mathbb{P}^{3}}'));
+  assert.strictEqual(degreeOne.type, 'tangent');
+  assert.strictEqual(degreeOne.construction, undefined);
+
+  const topCotangent = api.createDifferentialWedgeSheafConstruction(exteriorPowerData(api, p3, 'cotangent', 3, 'canonical', '1', 'K_{\\mathbb{P}^{3}}'));
+  assert.strictEqual(topCotangent.type, 'canonical');
+  assert.strictEqual(topCotangent.construction, undefined);
+
+  const topTangent = api.createDifferentialWedgeSheafConstruction(exteriorPowerData(api, p3, 'tangent', 3, 'anticanonical', '1', 'K_{\\mathbb{P}^{3}}^{\\vee}'));
+  assert.strictEqual(topTangent.type, 'abstract');
+  assert.strictEqual(topTangent.construction.type, 'dual');
+  assert.strictEqual(topTangent.construction.differentialWedge, true);
+  assert.strictEqual(topTangent.construction.differentialType, 'tangent');
+  assert.strictEqual(topTangent.construction.wedgeDegree, 3);
+  assert(api.state.sheaves.some((sheaf) => sheaf.id === topTangent.construction.sheafId && sheaf.type === 'canonical'));
+
+  const middleCotangent = api.createDifferentialWedgeSheafConstruction(exteriorPowerData(api, p3, 'cotangent', 2, 'schur', '3', '\\Omega^{2}_{\\mathbb{P}^{3}}'));
+  assert.strictEqual(middleCotangent.type, 'abstract');
+  assert.strictEqual(middleCotangent.rank, '3');
+  assert.strictEqual(middleCotangent.construction.type, 'schur');
+  assert.deepStrictEqual(Array.from(middleCotangent.construction.partition), [1, 1]);
+  assert.strictEqual(middleCotangent.construction.differentialWedge, true);
+  assert.strictEqual(middleCotangent.construction.differentialType, 'cotangent');
+  assert.strictEqual(middleCotangent.construction.wedgeDegree, 2);
+  assert.strictEqual(api.sheafDifferentialWedgeConstructionType(middleCotangent), 'cotangent');
+  assert(api.state.sheaves.some((sheaf) => sheaf.type === 'cotangent' && sheaf.hiddenOnCanvas));
+
+  const presetText = JSON.stringify(api.buildPresetState());
+  const restored = loadCalculator();
+  restored.importPresetFromText(presetText);
+  const restoredMiddle = restored.state.sheaves.find((sheaf) => sheaf.name === '\\Omega^{2}_{\\mathbb{P}^{3}}');
+  assert(restoredMiddle);
+  assert.strictEqual(restored.sheafDifferentialWedgeConstructionType(restoredMiddle), 'cotangent');
+  assert.strictEqual(restoredMiddle.construction.wedgeDegree, 2);
+  assert.deepStrictEqual(Array.from(restoredMiddle.construction.partition), [1, 1]);
+  const restoredTopTangent = restored.state.sheaves.find((sheaf) => sheaf.name === 'K_{\\mathbb{P}^{3}}^{\\vee}');
+  assert(restoredTopTangent);
+  assert.strictEqual(restored.sheafDifferentialWedgeConstructionType(restoredTopTangent), 'tangent');
+  assert.strictEqual(restoredTopTangent.construction.wedgeDegree, 3);
+}
+
+function testStrengthenedDifferentialExteriorPowerCohomologyOnProjectiveSpace() {
+  const api = loadCalculator();
+  const p2 = api.geometryFromVariety({ id: 'P2', type: 'projective', dim: '2', name: '\\mathbb{P}^{2}' });
+  const p3 = api.geometryFromVariety({ id: 'P3', type: 'projective', dim: '3', name: '\\mathbb{P}^{3}' });
+
+  assert.deepStrictEqual(cohomologyPlain(api, p2, { id: 'O', type: 'structure', name: '\\mathcal{O}_{\\mathbb{P}^{2}}', rank: '1', basis: 'chern' }), ['1', '0', '0']);
+  assert.deepStrictEqual(cohomologyPlain(api, p2, { id: 'Omega1', type: 'cotangent', name: '\\Omega^1_{\\mathbb{P}^{2}}', rank: '2', basis: 'chern' }), ['0', '1', '0']);
+  assert.deepStrictEqual(cohomologyPlain(api, p2, { id: 'TP2', type: 'tangent', name: '\\mathcal{T}_{\\mathbb{P}^{2}}', rank: '2', basis: 'chern' }), ['8', '0', '0']);
+  assert.deepStrictEqual(cohomologyPlain(api, p2, { id: 'KP2', type: 'canonical', name: 'K_{\\mathbb{P}^{2}}', rank: '1', basis: 'chern' }), ['0', '0', '1']);
+  assert.deepStrictEqual(cohomologyPlain(api, p2, {
+    id: 'AntiP2',
+    type: 'abstract',
+    name: 'K_{\\mathbb{P}^{2}}^{\\vee}',
+    rank: '1',
+    basis: 'chern',
+    construction: { type: 'dual', sheafId: 'KP2', differentialWedge: true, differentialType: 'tangent', wedgeDegree: 2 }
+  }), ['10', '0', '0']);
+
+  assert.deepStrictEqual(cohomologyPlain(api, p3, {
+    id: 'Omega2',
+    type: 'abstract',
+    name: '\\Omega^{2}_{\\mathbb{P}^{3}}',
+    rank: '3',
+    basis: 'chern',
+    construction: { type: 'schur', sheafId: 'Omega1', partition: [1, 1], differentialWedge: true, differentialType: 'cotangent', wedgeDegree: 2 }
+  }), ['0', '0', '1', '0']);
+  assert.deepStrictEqual(cohomologyPlain(api, p3, {
+    id: 'Lambda2T',
+    type: 'abstract',
+    name: '\\bigwedge^{2}\\mathcal{T}_{\\mathbb{P}^{3}}',
+    rank: '3',
+    basis: 'chern',
+    construction: { type: 'schur', sheafId: 'TP3', partition: [1, 1], differentialWedge: true, differentialType: 'tangent', wedgeDegree: 2 }
+  }), ['45', '0', '0', '0']);
+  assert.deepStrictEqual(cohomologyPlain(api, p3, { id: 'KP3', type: 'canonical', name: 'K_{\\mathbb{P}^{3}}', rank: '1', basis: 'chern' }), ['0', '0', '0', '1']);
+  assert.deepStrictEqual(cohomologyPlain(api, p3, {
+    id: 'AntiP3',
+    type: 'abstract',
+    name: 'K_{\\mathbb{P}^{3}}^{\\vee}',
+    rank: '1',
+    basis: 'chern',
+    construction: { type: 'dual', sheafId: 'KP3', differentialWedge: true, differentialType: 'tangent', wedgeDegree: 3 }
+  }), ['35', '0', '0', '0']);
+}
+
 function testClassStepWrapsPullbackSourceRulesInsidePushforward() {
   const api = loadCalculator();
   api.state.varieties = [
@@ -5698,6 +5821,28 @@ function testPicardPushforwardDoesNotInventHyperplaneClass() {
   assert.deepStrictEqual(hyperplaneVariables, []);
 }
 
+function testClassTermModeShowsZeroChernTermsAboveRank() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X' }];
+  api.refs.classTermOnly = { checked: true };
+  api.refs.classBracketDisplay = { checked: false };
+  api.refs.classTermIndex = { value: '2' };
+  api.refs.classFamilyToggles = [{ checked: true, dataset: { classFamilyToggle: 'chern' } }];
+  api.refs.rootForm = { value: 'product' };
+
+  const line = { id: 'L', type: 'locally-free', basis: 'chern', rank: '1', name: 'L', baseVarietyId: 'X' };
+  const rows = characteristicRows(api, line);
+  assert.strictEqual(rows.find((row) => row.key === 'chern_2')?.plain, '0');
+
+  const rootLine = { ...line, id: 'R', basis: 'roots', name: 'R' };
+  const productRootRows = characteristicRows(api, rootLine);
+  assert.strictEqual(productRootRows.find((row) => row.key === 'root_chern_2')?.plain, '0');
+
+  api.refs.rootForm.value = 'expanded';
+  const expandedRootRows = characteristicRows(api, rootLine);
+  assert.strictEqual(expandedRootRows.find((row) => row.key === 'root_chern_2')?.plain, '0');
+}
+
 function testClassDisplayUsesCappedPasses() {
   const api = loadCalculator();
   api.state.homologyRulePasses = 999;
@@ -5775,6 +5920,111 @@ function testSheafBinaryPickFlowRegistryCoversSheafCandidates() {
   assert.strictEqual(api.pickFlowCandidate('sheaf', 'F'), true);
   assert.strictEqual(api.pickFlowComplete(flow), false);
   assert(api.pickFlowHint(flow).includes('second sheaf'));
+}
+
+function identifyTestSelect(value = 'variety') {
+  return {
+    value,
+    options: [
+      { value: 'variety', disabled: false },
+      { value: 'sheaf', disabled: false }
+    ]
+  };
+}
+
+function identifyTestPickButton() {
+  return {
+    hidden: true,
+    disabled: false,
+    textContent: '',
+    title: '',
+    setAttribute(name, value) { this[name] = value; }
+  };
+}
+
+function installIdentifyTestRefs(api, kind = 'variety') {
+  api.refs.addObjectKind = { value: 'combined' };
+  api.refs.combinedType = { value: 'identify' };
+  api.refs.identifyKind = identifyTestSelect(kind);
+  api.refs.identifyRuleOnly = { checked: false };
+  api.refs.identifyAutoClasses = { checked: true };
+  api.refs.inputPickMode = identifyTestPickButton();
+}
+
+function testIdentifyPickFlowChoosesAvailableKindAndStopsAfterPair() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '1', name: 'X' }];
+  api.state.sheaves = [
+    { id: 'E', type: 'abstract', basis: 'chern', rank: '1', name: 'E', baseVarietyId: 'X' },
+    { id: 'F', type: 'abstract', basis: 'chern', rank: '1', name: 'F', baseVarietyId: 'X' }
+  ];
+  installIdentifyTestRefs(api, 'variety');
+
+  assert.strictEqual(api.activateIdentifyPick('left', { render: false }), true);
+  assert.strictEqual(api.refs.identifyKind.value, 'sheaf');
+  assert.strictEqual(api.activePickFlow().id, 'identify');
+  assert.strictEqual(api.canvasPickAvailable(), true);
+  assert.strictEqual(api.pickFlowCandidate('sheaf', 'E'), true);
+
+  api.handleActivePickFlow('sheaf', 'E');
+  assert.strictEqual(api.state.canvasPickEnabled, true);
+  assert.strictEqual(api.pickFlowHint().includes('second sheaf'), true);
+
+  api.handleActivePickFlow('sheaf', 'F');
+  assert.strictEqual(api.state.identifyDraft.objectIds.join(','), 'E,F');
+  assert.strictEqual(api.state.canvasPickEnabled, false);
+
+  assert.strictEqual(api.activateIdentifyPick('left', { render: false }), true);
+  api.setCanvasPickEnabled(false, { render: false });
+  assert.strictEqual(api.state.canvasPickEnabled, false);
+}
+
+function testRuleOnlySheafIdentificationPersistsAfterSheafDeletion() {
+  const api = loadCalculator();
+  api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X' }];
+  api.state.sheaves = [
+    { id: 'E', type: 'abstract', basis: 'chern', rank: '2', name: 'E', baseVarietyId: 'X' },
+    { id: 'F', type: 'abstract', basis: 'chern', rank: '2', name: 'F', baseVarietyId: 'X' }
+  ];
+  installIdentifyTestRefs(api, 'sheaf');
+  api.refs.identifyRuleOnly.checked = true;
+  api.state.identifyDraft = {
+    kind: 'sheaf',
+    objectIds: ['E', 'F'],
+    mainId: 'F',
+    nameMode: 'main',
+    name: '',
+    ruleOnly: true,
+    autoClassMatches: true,
+    classMatches: {},
+    classRenames: {}
+  };
+
+  const kept = api.createIdentifyFromDraft();
+  assert.strictEqual(kept.id, 'F');
+  assert.strictEqual(api.state.sheaves.map((sheaf) => sheaf.id).join(','), 'E,F');
+  const c1Rule = api.state.classStepSavedRules.find((entry) => entry.sourceLabel === 'Identification' && entry.lhs?.powers?.sheaf_E_c1 === 1);
+  assert(c1Rule, api.state.classStepSavedRules.map((entry) => entry.displayPlain).join('; '));
+  assert.strictEqual(c1Rule.rhs[0].powers.sheaf_F_c1, 1);
+  assert(c1Rule.variables?.sheaf_E_c1);
+  assert(c1Rule.variables?.sheaf_F_c1);
+
+  api.state.sheaves = api.state.sheaves.filter((sheaf) => sheaf.id !== 'E');
+  const geometry = api.geometryFromVariety(api.state.varieties[0]);
+  const targetSheaf = api.sheafFromObject(api.state.sheaves[0], geometry);
+  const bundle = api.buildBundleForSheaf(geometry, targetSheaf, { geometry });
+  const session = api.createClassStepSession({ geometry, sheaf: targetSheaf, bundle }, 'chern', 1);
+  session.components[1] = api.polyFromPowers({ sheaf_E_c1: 1 });
+  session.originalComponents[1] = api.polyFromPowers({ sheaf_E_c1: 1 });
+  const candidate = api.collectClassStepRuleCandidates(session)
+    .find((item) => item.sourceLabel === 'Identification' && item.rule.lhs?.powers?.sheaf_E_c1 === 1);
+  assert(candidate, api.collectClassStepRuleCandidates(session).map((item) => item.sourceLabel).join(','));
+  const rhs = api.formatPolyPlain(api.homologyRuleRhsPoly(api.classStepMaterializeRule(session, candidate.rule)));
+  assert.strictEqual(rhs, 'c_1(F)');
+
+  const preset = api.buildPresetState();
+  const savedPresetRule = preset.step.savedRules.find((entry) => entry.id === c1Rule.id);
+  assert(savedPresetRule.variables?.sheaf_E_c1);
 }
 
 testStepBuilderMarkupIsBelowCanvasAndClassChartHasNoStepButton();
@@ -5900,6 +6150,8 @@ testSymmetricProductAbelJacobiUsesProjectionFormulaForSigma();
 testClassStepNestedPushforwardOffersGrrAfterSes();
 testClassStepTensorRulesForCharacterAndChern();
 testStrengthenedTensorUsesMultipleParentsAndExponents();
+testStrengthenedDifferentialExteriorPowerConstructions();
+testStrengthenedDifferentialExteriorPowerCohomologyOnProjectiveSpace();
 testClassStepWrapsPullbackSourceRulesInsidePushforward();
 testClassStepPicardPushforwardGroupsToddAndFindsTensor();
 testClassStepPicardPoincarePushforwardToddStepMatchesNormalCharacter();
@@ -5926,9 +6178,12 @@ testPicardPoincareGammaDefaultsToProductBidegree();
 testPicardPoincareSheafKeepsClassRevealAvailableBeforeResult();
 testPicardPoincareLargeGenusThetaAndProjectionRules();
 testPicardPushforwardDoesNotInventHyperplaneClass();
+testClassTermModeShowsZeroChernTermsAboveRank();
 testClassDisplayUsesCappedPasses();
 testProductPickFlowRegistryCoversCandidatesAndSelection();
 testMapCompositionPickFlowRegistryCoversMapCandidates();
 testSheafBinaryPickFlowRegistryCoversSheafCandidates();
+testIdentifyPickFlowChoosesAvailableKindAndStopsAfterPair();
+testRuleOnlySheafIdentificationPersistsAfterSheafDeletion();
 
 console.log('sheaf calculator regression tests passed');

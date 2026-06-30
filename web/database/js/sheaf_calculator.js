@@ -429,6 +429,11 @@
     refs.sheafBaseRow = $('sheaf-base-row');
     refs.sheafBaseVariety = $('sheaf-base-variety');
     refs.sheafBaseButton = $('sheaf-base-button');
+    refs.sheafDifferentialStrengthenRow = $('sheaf-differential-strengthen-row');
+    refs.sheafDifferentialStrengthen = $('sheaf-differential-strengthen');
+    refs.sheafDifferentialDegreeRow = $('sheaf-differential-degree-row');
+    refs.sheafDifferentialDegree = $('sheaf-differential-degree');
+    refs.sheafDifferentialNote = $('sheaf-differential-note');
     refs.sheafBinaryFormulaRow = $('sheaf-binary-formula-row');
     refs.sheafBinaryLeftButton = $('sheaf-binary-left-button');
     refs.sheafBinarySymbol = $('sheaf-binary-symbol');
@@ -542,6 +547,8 @@
     refs.identifyMainRow = $('identify-main-row');
     refs.identifyMainLeft = $('identify-main-left');
     refs.identifyMainRight = $('identify-main-right');
+    refs.identifyRuleRow = $('identify-rule-row');
+    refs.identifyRuleOnly = $('identify-rule-only');
     refs.identifyNameRow = $('identify-name-row');
     refs.identifyNameLeft = $('identify-name-left');
     refs.identifyNameRight = $('identify-name-right');
@@ -934,6 +941,9 @@
     if (sheafRelativeInputMode() && inputIsCreateMode()) {
       return addRelativeSheafFromDraft();
     }
+    if (sheafDifferentialStrengthened() && inputIsCreateMode()) {
+      return addDifferentialWedgeSheafFromDraft();
+    }
     if (sheafSchurInputMode() && inputIsCreateMode()) {
       return addSchurSheafFromDraft();
     }
@@ -1048,6 +1058,16 @@
     const sheaf = createRelativeSheafConstruction(data);
     if (!sheaf) return null;
     clearSheafRelativeDraft();
+    state.draftSheafNameDirty = false;
+    refs.sheafName.value = defaultCreateSheafNameLatex();
+    return sheaf;
+  }
+
+  function addDifferentialWedgeSheafFromDraft() {
+    const data = differentialWedgeConstructionData();
+    if (!data) return null;
+    const sheaf = createDifferentialWedgeSheafConstruction(data);
+    if (!sheaf) return null;
     state.draftSheafNameDirty = false;
     refs.sheafName.value = defaultCreateSheafNameLatex();
     return sheaf;
@@ -1221,6 +1241,15 @@
     if (!relative) return null;
     refs.basis.value = normalizeBasisValue(relative.basis);
     return relative;
+  }
+
+  function updateDifferentialWedgeSheafFromDraft(sheaf) {
+    const data = differentialWedgeConstructionData();
+    if (!sheaf || !data) return null;
+    const differential = createDifferentialWedgeSheafConstruction(data, { replaceSheaf: sheaf });
+    if (!differential) return null;
+    refs.basis.value = normalizeBasisValue(differential.basis);
+    return differential;
   }
 
   function updateSchurSheafFromDraft(sheaf) {
@@ -3213,10 +3242,11 @@
     const idealConstruction = sheafIdealConstructionType(sheaf);
     const normalConstruction = sheafNormalConstructionType(sheaf);
     const relativeConstruction = sheafRelativeConstructionType(sheaf);
+    const differentialWedgeConstruction = sheafDifferentialWedgeConstructionType(sheaf);
     const schurConstruction = sheafSchurConstructionType(sheaf);
     const canonicalType = canonicalSheafType(sheaf.type);
     sheaf.type = canonicalType;
-    refs.sheafType.value = mapConstruction ? 'map-operation' : (relativeConstruction || normalConstruction || idealConstruction || schurConstruction || internalHomConstruction || dualConstruction || selfSumConstruction || binaryConstruction || canonicalType);
+    refs.sheafType.value = mapConstruction ? 'map-operation' : (relativeConstruction || normalConstruction || idealConstruction || differentialWedgeConstruction || schurConstruction || internalHomConstruction || dualConstruction || selfSumConstruction || binaryConstruction || canonicalType);
     refs.sheafName.value = sheaf.name || defaultSheafNameLatex();
     refs.twist.value = sheaf.twist ?? '1';
     refs.rank.value = sheaf.rank || '';
@@ -3240,6 +3270,7 @@
       clearSheafIdealDraft();
       clearSheafNormalDraft();
       clearSheafRelativeDraft();
+      clearSheafDifferentialDraft();
       clearSheafSchurDraft();
       loadMapOperationSheafIntoDraft(sheaf);
     } else if (idealConstruction) {
@@ -3250,6 +3281,7 @@
       clearSheafInternalHomDraft();
       clearSheafNormalDraft();
       clearSheafRelativeDraft();
+      clearSheafDifferentialDraft();
       clearSheafSchurDraft();
       loadIdealSheafIntoDraft(sheaf);
     } else if (normalConstruction) {
@@ -3260,6 +3292,7 @@
       clearSheafInternalHomDraft();
       clearSheafIdealDraft();
       clearSheafRelativeDraft();
+      clearSheafDifferentialDraft();
       clearSheafSchurDraft();
       loadNormalBundleIntoDraft(sheaf);
     } else if (relativeConstruction) {
@@ -3270,8 +3303,20 @@
       clearSheafInternalHomDraft();
       clearSheafIdealDraft();
       clearSheafNormalDraft();
+      clearSheafDifferentialDraft();
       clearSheafSchurDraft();
       loadRelativeSheafIntoDraft(sheaf);
+    } else if (differentialWedgeConstruction) {
+      clearSheafMapDraft();
+      clearSheafBinaryDraft();
+      clearSheafSelfSumDraft();
+      clearSheafIdealDraft();
+      clearSheafNormalDraft();
+      clearSheafRelativeDraft();
+      clearSheafDualDraft();
+      clearSheafInternalHomDraft();
+      clearSheafSchurDraft();
+      loadDifferentialWedgeIntoDraft(sheaf);
     } else if (schurConstruction) {
       clearSheafMapDraft();
       clearSheafBinaryDraft();
@@ -3279,6 +3324,7 @@
       clearSheafIdealDraft();
       clearSheafNormalDraft();
       clearSheafRelativeDraft();
+      clearSheafDifferentialDraft();
       clearSheafDualDraft();
       clearSheafInternalHomDraft();
       loadSchurSheafIntoDraft(sheaf);
@@ -3290,6 +3336,7 @@
       clearSheafIdealDraft();
       clearSheafNormalDraft();
       clearSheafRelativeDraft();
+      clearSheafDifferentialDraft();
       clearSheafSchurDraft();
       loadInternalHomSheafIntoDraft(sheaf);
     } else if (dualConstruction) {
@@ -3300,6 +3347,7 @@
       clearSheafIdealDraft();
       clearSheafNormalDraft();
       clearSheafRelativeDraft();
+      clearSheafDifferentialDraft();
       clearSheafSchurDraft();
       loadDualSheafIntoDraft(sheaf);
     } else if (selfSumConstruction) {
@@ -3308,6 +3356,7 @@
       clearSheafIdealDraft();
       clearSheafNormalDraft();
       clearSheafRelativeDraft();
+      clearSheafDifferentialDraft();
       clearSheafDualDraft();
       clearSheafInternalHomDraft();
       clearSheafSchurDraft();
@@ -3318,6 +3367,7 @@
       clearSheafIdealDraft();
       clearSheafNormalDraft();
       clearSheafRelativeDraft();
+      clearSheafDifferentialDraft();
       clearSheafDualDraft();
       clearSheafInternalHomDraft();
       clearSheafSchurDraft();
@@ -3329,6 +3379,7 @@
       clearSheafIdealDraft();
       clearSheafNormalDraft();
       clearSheafRelativeDraft();
+      clearSheafDifferentialDraft();
       clearSheafDualDraft();
       clearSheafInternalHomDraft();
       clearSheafSchurDraft();
@@ -3351,7 +3402,7 @@
   }
 
   function sheafDualConstructionType(sheaf) {
-    return sheaf?.construction?.type === 'dual' ? 'dual' : null;
+    return sheaf?.construction?.type === 'dual' && !markedDifferentialWedgeConstruction(sheaf.construction) ? 'dual' : null;
   }
 
   function sheafInternalHomConstructionType(sheaf) {
@@ -3373,7 +3424,7 @@
   }
 
   function sheafSchurConstructionType(sheaf) {
-    return sheaf?.construction?.type === 'schur' ? 'schur' : null;
+    return sheaf?.construction?.type === 'schur' && !markedDifferentialWedgeConstruction(sheaf.construction) ? 'schur' : null;
   }
 
   function sheafMapConstructionType(sheaf) {
@@ -4284,6 +4335,19 @@
   function createIdentifyFromDraft() {
     const data = identifyConstructionData();
     if (!data) return null;
+    if (data.kind === 'sheaf' && data.ruleOnly) {
+      createSheafIdentificationRuleOnly(data);
+      refreshConstructedObjects();
+      clearIdentifyDraft();
+      setCanvasPickEnabled(false, { render: false });
+      clearActiveGlobalInvariant();
+      state.activeSequenceId = null;
+      state.activeMapId = null;
+      state.activeSheafId = data.main.id;
+      state.activeVarietyId = data.main.baseVarietyId || defaultBaseVarietyId();
+      syncSheafBaseOptions(true);
+      return data.main;
+    }
     applyIdentifyClassRenames(data);
     mergeHomologyDataForIdentification(data);
     data.main.name = sanitizeMathLabel(data.name, data.main.name || (data.kind === 'sheaf' ? '\\mathcal{E}' : 'X'));
@@ -4306,6 +4370,78 @@
     }
     syncSheafBaseOptions(true);
     return data.main;
+  }
+
+  function createSheafIdentificationRuleOnly(data) {
+    const entries = sheafIdentificationSavedRuleEntries(data);
+    if (!entries.length) return { added: 0, updated: 0, count: 0, entries: [] };
+    const result = upsertClassStepSavedEntries(entries);
+    renderClassStepSavedFormulaList();
+    if (state.classStepSession) refreshClassStepRuleCandidatesOnly();
+    refreshExport(state.exportScope || 'main');
+    typeset(refs.classStepSavedRules);
+    return result;
+  }
+
+  function sheafIdentificationSavedRuleEntries(data) {
+    if (!data?.main || !data?.secondary) return [];
+    const base = state.varieties.find((item) => item.id === data.main.baseVarietyId) || null;
+    const geometry = base ? geometryFromVariety(base) : null;
+    if (!geometry || data.secondary.baseVarietyId !== data.main.baseVarietyId) return [];
+    const sourceSheaf = sheafFromObject(data.secondary, geometry);
+    const targetSheaf = sheafFromObject(data.main, geometry);
+    const entries = [];
+    ['chern', 'character'].forEach((family) => {
+      const sourceDefs = classStepSheafDefsForSheaf(sourceSheaf, geometry, family);
+      const targetByDegree = new Map(classStepSheafDefsForSheaf(targetSheaf, geometry, family)
+        .map((def) => [def.degree, def]));
+      sourceDefs.forEach((sourceDef) => {
+        const targetDef = targetByDegree.get(sourceDef.degree);
+        if (!targetDef || sourceDef.id === targetDef.id) return;
+        entries.push(sheafIdentificationSavedRuleEntry(data, geometry, family, sourceDef, targetDef));
+      });
+    });
+    return entries.filter(Boolean);
+  }
+
+  function sheafIdentificationSavedRuleEntry(data, geometry, family, sourceDef, targetDef) {
+    const lhs = { powers: { [sourceDef.id]: 1 } };
+    const rhs = [{ coefficient: '1', powers: { [targetDef.id]: 1 } }];
+    const variableIds = [...new Set([sourceDef.id, targetDef.id])];
+    const id = `step-identify-sheaf-${hashString([
+      geometry.varietyId || homologyScopeId(geometry),
+      data.secondary.id,
+      data.main.id,
+      family,
+      sourceDef.degree,
+      sourceDef.id,
+      targetDef.id
+    ].join('::'))}`;
+    return {
+      id,
+      kind: 'rewrite',
+      family,
+      target: family,
+      degree: sourceDef.degree,
+      dimension: geometry.dim,
+      geometryId: geometry.varietyId || null,
+      labelLatex: sourceDef.symbolLatex || '',
+      labelPlain: sourceDef.symbolPlain || '',
+      lhsLatex: sourceDef.symbolLatex || '',
+      rhsLatex: targetDef.symbolLatex || '',
+      lhsPlain: sourceDef.symbolPlain || '',
+      rhsPlain: targetDef.symbolPlain || '',
+      displayLatex: `${sourceDef.symbolLatex || sourceDef.id}=${targetDef.symbolLatex || targetDef.id}`,
+      displayPlain: `${sourceDef.symbolPlain || sourceDef.id}=${targetDef.symbolPlain || targetDef.id}`,
+      formulaTokens: [],
+      formulaSignature: `identify:${data.secondary.id}->${data.main.id}`,
+      lhs,
+      rhs,
+      variableIds,
+      variables: classStepVariableSnapshots(variableIds),
+      sourceLabel: 'Identification',
+      selected: true
+    };
   }
 
   function removeIdentifiedSecondaryObject(kind, id) {
@@ -4799,12 +4935,15 @@
       if (sheafIdealInputMode()) return updateIdealSheafFromDraft(active);
       if (sheafNormalInputMode()) return updateNormalBundleFromDraft(active);
       if (sheafRelativeInputMode()) return updateRelativeSheafFromDraft(active);
+      if (sheafDifferentialStrengthened()) return updateDifferentialWedgeSheafFromDraft(active);
       if (sheafSchurInputMode()) return updateSchurSheafFromDraft(active);
       if (refs.sheafType?.value === 'map-operation') return updateMapOperationSheafFromDraft(active);
       const oldBaseId = active.baseVarietyId;
       const baseVariety = draftBaseVariety();
       if (!baseVariety) return null;
       Object.assign(active, readSheafDraft(baseVariety));
+      delete active.construction;
+      if (active.type !== 'divisor-line') delete active.divisorCoefficients;
       if (oldBaseId !== active.baseVarietyId) {
         positionSheafNearBase(active, baseVariety);
         avoidCanvasLabelOverlap(active);
@@ -5042,8 +5181,11 @@
     }
     if (refs.identifyKind) {
       refs.identifyKind.addEventListener('change', () => {
-        const kind = identifyDraftKind();
-        state.identifyDraft = createIdentifyDraft({ kind });
+        const kind = refs.identifyKind.value === 'sheaf' ? 'sheaf' : 'variety';
+        state.identifyDraft = createIdentifyDraft({
+          kind,
+          ruleOnly: kind === 'sheaf' && refs.identifyRuleOnly?.checked === true
+        });
         state.identifyPickTarget = 'left';
         updateIdentifyDraftControls();
         normalizeControlVisibility();
@@ -5069,6 +5211,14 @@
         setIdentifyNameSlot(button.dataset.identifyName || 'left');
       });
     });
+    if (refs.identifyRuleOnly) {
+      refs.identifyRuleOnly.addEventListener('change', () => {
+        const draft = ensureIdentifyDraft();
+        draft.ruleOnly = identifyDraftKind() === 'sheaf' && refs.identifyRuleOnly.checked === true;
+        updateIdentifyDraftControls();
+        normalizeControlVisibility();
+      });
+    }
     if (refs.identifyName) {
       refs.identifyName.addEventListener('input', () => {
         const draft = ensureIdentifyDraft();
@@ -5368,6 +5518,7 @@
       if (type !== 'normal-bundle') clearSheafNormalDraft();
       if (type !== 'relative-tangent' && type !== 'relative-cotangent') clearSheafRelativeDraft();
       if (type !== 'schur') clearSheafSchurDraft();
+      if (type !== 'tangent' && type !== 'cotangent') clearSheafDifferentialDraft({ resetDegree: true });
       if (type !== 'divisor-line') state.sheafDivisorDraft = null;
       if (type === 'map-operation' && inputIsModifyMode()) {
         const sheaf = activeSheaf();
@@ -5416,6 +5567,12 @@
         state.sheafSelfSumDraft = state.sheafSelfSumDraft || {};
       } else if (type === 'divisor-line') {
         state.sheafDivisorDraft = state.sheafDivisorDraft || { coefficients: {} };
+      } else if ((type === 'tangent' || type === 'cotangent') && inputIsModifyMode()) {
+        const sheaf = activeSheaf();
+        if (sheafDifferentialWedgeConstructionType(sheaf) === type) loadDifferentialWedgeIntoDraft(sheaf);
+        else updateSheafDifferentialDraftControls();
+      } else if (type === 'tangent' || type === 'cotangent') {
+        updateSheafDifferentialDraftControls();
       }
       syncDefaultRank(true);
       updateSheafDivisorControls();
@@ -5528,6 +5685,7 @@
         state.sheafDivisorDraft = refs.sheafType?.value === 'divisor-line' ? { coefficients: {} } : null;
           updateSheafBaseButton();
         }
+        updateSheafDifferentialDraftControls({ resetDegree: true });
         syncDefaultRank(true);
         updateSheafDivisorControls();
         syncDefaultSheafName();
@@ -5575,6 +5733,26 @@
         setSheafBinaryPickTarget(button.dataset.sheafBinaryPick || 'left');
       });
     });
+    if (refs.sheafDifferentialStrengthen) {
+      refs.sheafDifferentialStrengthen.addEventListener('change', () => {
+        syncDifferentialWedgeDegreeOptions();
+        updateSheafDifferentialDraftControls();
+        syncDefaultRank(true);
+        syncDefaultSheafName();
+        normalizeControlVisibility();
+        recompute();
+      });
+    }
+    if (refs.sheafDifferentialDegree) {
+      refs.sheafDifferentialDegree.addEventListener('change', () => {
+        syncDifferentialWedgeDegreeOptions();
+        updateSheafDifferentialDraftControls();
+        syncDefaultRank(true);
+        syncDefaultSheafName();
+        normalizeControlVisibility();
+        recompute();
+      });
+    }
     if (refs.sheafTensorStrengthen) {
       refs.sheafTensorStrengthen.addEventListener('change', () => {
         syncSheafTensorDraftFromControls();
@@ -9591,6 +9769,40 @@
     return addSheafObject(sheaf, { activate: false });
   }
 
+  function ensureCanonicalSheafForVariety(variety) {
+    if (!variety) return null;
+    const geometry = geometryFromVariety(variety);
+    const defaultName = defaultSheafNameFor('canonical', '1', 1, geometry.labelLatex, geometry);
+    const existing = state.sheaves.find((sheaf) => (
+      sheaf.baseVarietyId === variety.id
+      && sheaf.type === 'canonical'
+      && !sheaf.construction
+    ));
+    if (existing) {
+      existing.twist = '1';
+      existing.rank = '1';
+      existing.basis = 'chern';
+      if (!existing.nameDirty) existing.name = defaultName;
+      sheafFromObject(existing, geometry);
+      return existing;
+    }
+    const sheaf = {
+      id: nextInputId('E'),
+      type: 'canonical',
+      name: defaultName,
+      twist: '1',
+      rank: '1',
+      baseVarietyId: variety.id,
+      basis: 'chern',
+      nameDirty: false,
+      hiddenOnCanvas: true
+    };
+    positionSheafNearBase(sheaf, variety);
+    avoidCanvasLabelOverlap(sheaf);
+    sheafFromObject(sheaf, geometry);
+    return addSheafObject(sheaf, { activate: false });
+  }
+
   function ramifiedCoverCotangentSheafForVariety(variety) {
     if (!variety?.construction || variety.construction.type !== 'ramified-cover') return null;
     const map = ramifiedCoverMapForCover(variety);
@@ -9856,6 +10068,111 @@
     positionSheafNearBase(sheaf, baseVarietyForSheaf(sheaf));
     avoidCanvasLabelOverlap(sheaf);
     return addSheafObject(sheaf);
+  }
+
+  function createDifferentialWedgeSheafConstruction(data, options = {}) {
+    const replaceSheaf = options.replaceSheaf || null;
+    const id = replaceSheaf?.id || nextInputId('E');
+    const oldBaseId = replaceSheaf?.baseVarietyId || null;
+    const next = differentialWedgeSheafObject(data, id, { uniqueName: !replaceSheaf });
+    if (!next) return null;
+    const sheaf = replaceSheaf || {};
+    delete sheaf.construction;
+    delete sheaf.divisorCoefficients;
+    if (next.hiddenOnCanvas !== true) delete sheaf.hiddenOnCanvas;
+    Object.assign(sheaf, next);
+    const baseVariety = data.baseVariety || baseVarietyForSheaf(sheaf);
+    if (!replaceSheaf || oldBaseId !== sheaf.baseVarietyId) {
+      positionSheafNearBase(sheaf, baseVariety);
+      avoidCanvasLabelOverlap(sheaf);
+    }
+    if (baseVariety) sheafFromObject(sheaf, geometryFromVariety(baseVariety));
+    if (!replaceSheaf) addSheafObject(sheaf);
+    if (sheaf.type === 'tangent' || sheaf.type === 'cotangent') ensureAbsoluteDifferentialSesForCreatedSheaf(sheaf, baseVariety);
+    state.activeSequenceId = null;
+    state.activeSheafId = sheaf.id;
+    state.activeVarietyId = sheaf.baseVarietyId || defaultBaseVarietyId();
+    state.activeMapId = null;
+    syncObjectLineage(sheaf, 'sheaf');
+    state.hiddenObjects = hiddenObjectRefs();
+    refreshConstructedObjects();
+    return sheaf;
+  }
+
+  function differentialWedgeSheafObject(data, id, options = {}) {
+    if (!data?.baseVariety || !data.geometry) return null;
+    const name = options.uniqueName
+      ? (data.kind === 'schur' || data.kind === 'anticanonical'
+          ? uniqueConstructedObjectName('sheaf', data.name)
+          : uniqueObjectName('sheaf', data.name))
+      : data.name;
+    const common = {
+      id,
+      name,
+      twist: '1',
+      baseVarietyId: data.baseVarietyId,
+      basis: 'chern',
+      nameDirty: data.nameDirty || canonicalMathLabel(name) !== canonicalMathLabel(data.defaultName)
+    };
+    if (data.kind === 'structure') {
+      return {
+        ...common,
+        type: 'structure',
+        rank: '1'
+      };
+    }
+    if (data.kind === 'standard') {
+      return {
+        ...common,
+        type: data.sourceType,
+        rank: defaultRankForSheafType(data.sourceType, data.geometry, '')
+      };
+    }
+    if (data.kind === 'canonical') {
+      return {
+        ...common,
+        type: 'canonical',
+        rank: '1'
+      };
+    }
+    if (data.kind === 'anticanonical') {
+      const canonical = ensureCanonicalSheafForVariety(data.baseVariety);
+      if (!canonical) return null;
+      return {
+        ...common,
+        type: 'abstract',
+        rank: '1',
+        construction: {
+          type: 'dual',
+          sheafId: canonical.id,
+          defaultName: data.defaultName,
+          differentialWedge: true,
+          differentialType: 'tangent',
+          wedgeDegree: data.degree
+        }
+      };
+    }
+    if (data.kind === 'schur') {
+      const parent = data.sourceType === 'cotangent'
+        ? ensureCotangentSheafForVariety(data.baseVariety)
+        : ensureTangentSheafForVariety(data.baseVariety);
+      if (!parent) return null;
+      return {
+        ...common,
+        type: 'abstract',
+        rank: data.rank,
+        construction: {
+          type: 'schur',
+          sheafId: parent.id,
+          partition: data.partition,
+          defaultName: data.defaultName,
+          differentialWedge: true,
+          differentialType: data.sourceType,
+          wedgeDegree: data.degree
+        }
+      };
+    }
+    return null;
   }
 
   function createComposedMap(data) {
@@ -11439,10 +11756,11 @@
   }
 
   function clearIdentifyDraft() {
-    const kind = identifyDraftKind();
+    const kind = defaultIdentifyKind(identifyDraftKind());
     state.identifyDraft = null;
     state.identifyPickTarget = 'left';
     if (refs.identifyKind) refs.identifyKind.value = kind;
+    if (refs.identifyRuleOnly) refs.identifyRuleOnly.checked = false;
     if (refs.identifyAutoClasses) refs.identifyAutoClasses.checked = true;
     updateIdentifyDraftControls();
   }
@@ -11522,7 +11840,7 @@
     slots: ['left', 'right'],
     active: () => combinedIdentifyCreateMode(),
     allowedObjectKinds: () => [identifyDraftKind()],
-    available: () => identifyPickableObjects().length > 0,
+    available: () => identifyKindHasPickablePair(identifyDraftKind()),
     candidate: (kind, id) => kind === identifyDraftKind() && allowableIdentifyPick(id),
     paintCandidate: (kind, id) => {
       const ids = identifyDraftIds();
@@ -11892,6 +12210,38 @@
     return value === 'sheaf' ? 'sheaf' : 'variety';
   }
 
+  function identifyKindHasPickablePair(kind) {
+    return identifyPickableObjects(kind === 'sheaf' ? 'sheaf' : 'variety').length >= 2;
+  }
+
+  function defaultIdentifyKind(preferred = null) {
+    const normalized = preferred === 'sheaf' ? 'sheaf' : (preferred === 'variety' ? 'variety' : null);
+    if (normalized && identifyKindHasPickablePair(normalized)) return normalized;
+    if (identifyKindHasPickablePair('variety')) return 'variety';
+    if (identifyKindHasPickablePair('sheaf')) return 'sheaf';
+    return normalized || 'variety';
+  }
+
+  function syncIdentifyKindOptions() {
+    if (!refs.identifyKind) return identifyDraftKind();
+    const varietyAvailable = identifyKindHasPickablePair('variety');
+    const sheafAvailable = identifyKindHasPickablePair('sheaf');
+    Array.from(refs.identifyKind.options || []).forEach((option) => {
+      if (option.value === 'variety') option.disabled = !varietyAvailable;
+      if (option.value === 'sheaf') option.disabled = !sheafAvailable;
+    });
+    const next = defaultIdentifyKind(refs.identifyKind.value);
+    if (refs.identifyKind.value !== next) {
+      refs.identifyKind.value = next;
+      state.identifyDraft = createIdentifyDraft({
+        kind: next,
+        ruleOnly: next === 'sheaf' && state.identifyDraft?.ruleOnly === true
+      });
+      state.identifyPickTarget = 'left';
+    }
+    return next;
+  }
+
   function createIdentifyDraft(options = {}) {
     return {
       kind: options.kind === 'sheaf' ? 'sheaf' : 'variety',
@@ -11899,6 +12249,7 @@
       mainId: options.mainId || null,
       nameMode: options.nameMode || 'main',
       name: options.name || '',
+      ruleOnly: options.kind === 'sheaf' && options.ruleOnly === true,
       autoClassMatches: options.autoClassMatches !== false,
       classMatches: options.classMatches && typeof options.classMatches === 'object' ? { ...options.classMatches } : {},
       classRenames: options.classRenames && typeof options.classRenames === 'object' ? { ...options.classRenames } : {}
@@ -11908,7 +12259,10 @@
   function ensureIdentifyDraft() {
     const kind = identifyDraftKind();
     if (!state.identifyDraft || state.identifyDraft.kind !== kind) {
-      state.identifyDraft = createIdentifyDraft({ kind });
+      state.identifyDraft = createIdentifyDraft({
+        kind,
+        ruleOnly: kind === 'sheaf' && refs.identifyRuleOnly?.checked === true
+      });
     }
     return state.identifyDraft;
   }
@@ -11962,6 +12316,7 @@
 
   function activateIdentifyPick(target = 'left', options = {}) {
     if (!combinedIdentifyCreateMode()) return false;
+    syncIdentifyKindOptions();
     state.identifyPickTarget = target === 'right' ? 'right' : 'left';
     ensureIdentifyDraft();
     setCanvasPickEnabled(true, { render: false });
@@ -11983,6 +12338,7 @@
     if (!draft.mainId || !nextIds.includes(draft.mainId)) draft.mainId = nextIds[0] || nextIds[1] || null;
     if (!draft.nameMode || draft.nameMode === 'main') draft.nameMode = 'main';
     state.identifyPickTarget = nextIds[0] && !nextIds[1] ? 'right' : 'left';
+    if (nextIds[0] && nextIds[1]) setCanvasPickEnabled(false, { render: false });
     updateIdentifyDraftControls();
     recompute();
   }
@@ -12043,19 +12399,29 @@
     if (refs.identifyKindRow) refs.identifyKindRow.hidden = !show;
     if (refs.identifyParentsRow) refs.identifyParentsRow.hidden = !show;
     if (refs.identifyMainRow) refs.identifyMainRow.hidden = !show;
+    if (refs.identifyRuleRow) refs.identifyRuleRow.hidden = true;
     if (refs.identifyNameRow) refs.identifyNameRow.hidden = !show;
     if (refs.identifyAutoRow) refs.identifyAutoRow.hidden = !show;
     if (refs.identifyClassRow) refs.identifyClassRow.hidden = !show;
     syncPickFlowNote(refs.identifyPickNote, 'identify', show);
     if (!show) return;
+    syncIdentifyKindOptions();
     const draft = ensureIdentifyDraft();
+    const ruleOnly = draft.kind === 'sheaf' && draft.ruleOnly === true;
     if (refs.identifyKind) refs.identifyKind.value = draft.kind;
+    if (refs.identifyRuleRow) refs.identifyRuleRow.hidden = draft.kind !== 'sheaf';
+    if (refs.identifyRuleOnly) refs.identifyRuleOnly.checked = ruleOnly;
+    if (refs.identifyNameRow) refs.identifyNameRow.hidden = ruleOnly;
+    if (refs.identifyAutoRow) refs.identifyAutoRow.hidden = ruleOnly;
+    if (refs.identifyClassRow) refs.identifyClassRow.hidden = ruleOnly;
     if (refs.identifyAutoClasses) refs.identifyAutoClasses.checked = draft.autoClassMatches !== false;
     updateIdentifyObjectButton(refs.identifyLeftButton, identifyDraftObject('left'), 'first', state.identifyPickTarget === 'left');
     updateIdentifyObjectButton(refs.identifyRightButton, identifyDraftObject('right'), 'second', state.identifyPickTarget === 'right');
     updateIdentifyMainButtons();
-    updateIdentifyNameControls(options);
-    renderIdentifyClassReview();
+    if (!ruleOnly) {
+      updateIdentifyNameControls(options);
+      renderIdentifyClassReview();
+    }
     syncGlobalPickButton();
   }
 
@@ -12222,6 +12588,7 @@
   function identifyConstructionData(options = {}) {
     if (!combinedIdentifyCreateMode()) return null;
     const kind = identifyDraftKind();
+    const draft = ensureIdentifyDraft();
     const ids = identifyDraftIds();
     const left = identifyObjectById(ids.leftId, kind);
     const right = identifyObjectById(ids.rightId, kind);
@@ -12229,15 +12596,17 @@
     const main = identifyMainObject();
     const secondary = identifySecondaryObject();
     if (!main || !secondary || main.id === secondary.id) return null;
-    if (!options.ignoreClassGate && identifyUnconfirmedClassCandidates().length) return null;
+    const ruleOnly = kind === 'sheaf' && draft.ruleOnly === true;
+    if (!ruleOnly && !options.ignoreClassGate && identifyUnconfirmedClassCandidates().length) return null;
     return {
       kind,
       left,
       right,
       main,
       secondary,
-      name: identifyNameValue(),
-      classCandidates: identifyClassCandidates()
+      name: ruleOnly ? sanitizeMathLabel(main.name, '\\mathcal{E}') : identifyNameValue(),
+      classCandidates: ruleOnly ? [] : identifyClassCandidates(),
+      ruleOnly
     };
   }
 
@@ -12255,6 +12624,7 @@
     if (!identifyPairCompatible(left, right, kind)) {
       return kind === 'sheaf' ? 'choose sheaves on the same base variety' : 'choose varieties with the same dimension';
     }
+    if (kind === 'sheaf' && ensureIdentifyDraft().ruleOnly === true) return 'click build to save the sheaf identification rule';
     if (identifyUnconfirmedClassCandidates().length) return 'confirm same-display class labels or rename one of them';
     return 'click build to identify the two objects';
   }
@@ -13232,6 +13602,157 @@
     return refs.sheafType?.value === 'tensor' && !!refs.sheafTensorStrengthen?.checked;
   }
 
+  function differentialSheafInputMode() {
+    const type = refs.sheafType?.value;
+    return type === 'tangent' || type === 'cotangent' ? type : null;
+  }
+
+  function sheafDifferentialStrengthened() {
+    return !!differentialSheafInputMode() && !!refs.sheafDifferentialStrengthen?.checked;
+  }
+
+  function differentialWedgeGeometry(baseVariety = draftBaseVariety()) {
+    return baseVariety ? geometryFromVariety(baseVariety) : null;
+  }
+
+  function differentialWedgeMaxDegree(geometry = differentialWedgeGeometry()) {
+    if (!Number.isInteger(geometry?.dim)) return 0;
+    return normalizedInt(geometry.dim, 0, MAX_DIMENSION, 0);
+  }
+
+  function defaultDifferentialWedgeDegree(geometry = differentialWedgeGeometry()) {
+    return differentialWedgeMaxDegree(geometry) > 0 ? 1 : 0;
+  }
+
+  function syncDifferentialWedgeDegreeOptions(options = {}) {
+    if (!refs.sheafDifferentialDegree) return 0;
+    const geometry = differentialWedgeGeometry();
+    const max = differentialWedgeMaxDegree(geometry);
+    const expected = Array.from({ length: max + 1 }, (_, degree) => String(degree));
+    const actual = Array.from(refs.sheafDifferentialDegree.options || []).map((option) => option.value);
+    const previous = String(refs.sheafDifferentialDegree.value ?? '').trim();
+    let rebuilt = false;
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      refs.sheafDifferentialDegree.innerHTML = expected.map((degree) => `<option value="${degree}">${degree}</option>`).join('');
+      rebuilt = true;
+    }
+    const fallback = defaultDifferentialWedgeDegree(geometry);
+    const raw = options.reset || (rebuilt && !expected.includes(previous)) ? '' : previous;
+    const degree = /^\d+$/.test(raw) ? normalizedInt(raw, 0, max, fallback) : fallback;
+    refs.sheafDifferentialDegree.value = String(degree);
+    return degree;
+  }
+
+  function currentDifferentialWedgeDegree() {
+    const geometry = differentialWedgeGeometry();
+    const max = differentialWedgeMaxDegree(geometry);
+    const fallback = defaultDifferentialWedgeDegree(geometry);
+    return normalizedInt(refs.sheafDifferentialDegree?.value, 0, max, fallback);
+  }
+
+  function differentialExteriorPartition(degree) {
+    const count = normalizedInt(degree, 0, MAX_DIMENSION, 0);
+    return Array.from({ length: count }, () => 1);
+  }
+
+  function differentialWedgeKind(type, degree, geometry) {
+    const dim = differentialWedgeMaxDegree(geometry);
+    const i = normalizedInt(degree, 0, dim, defaultDifferentialWedgeDegree(geometry));
+    if (i === 0) return 'structure';
+    if (i === 1) return 'standard';
+    if (type === 'cotangent' && i === dim) return 'canonical';
+    if (type === 'tangent' && i === dim) return 'anticanonical';
+    return 'schur';
+  }
+
+  function defaultDifferentialWedgeName(type, degree, geometry = differentialWedgeGeometry()) {
+    const label = geometry?.labelLatex || sanitizeMathLabel(draftBaseVariety()?.name, 'X');
+    const kind = differentialWedgeKind(type, degree, geometry);
+    if (kind === 'structure') return defaultSheafNameFor('structure', '1', 1, label, geometry);
+    if (kind === 'standard') return defaultSheafNameFor(type, defaultRankForSheafType(type, geometry, ''), 1, label, geometry);
+    if (kind === 'canonical') return defaultSheafNameFor('canonical', '1', 1, label, geometry);
+    if (kind === 'anticanonical') return `K_{${label}}^{\\vee}`;
+    if (type === 'cotangent') return `\\Omega^{${degree}}_{${label}}`;
+    return `\\bigwedge^{${degree}}\\mathcal{T}_{${label}}`;
+  }
+
+  function differentialWedgeRankPlain(type, degree, geometry = differentialWedgeGeometry()) {
+    const dim = differentialWedgeMaxDegree(geometry);
+    const i = normalizedInt(degree, 0, dim, defaultDifferentialWedgeDegree(geometry));
+    return String(binomialBigInt(dim, i));
+  }
+
+  function differentialWedgeHint(type, degree, geometry = differentialWedgeGeometry()) {
+    const label = geometry?.labelPlain || latexToPlain(geometry?.labelLatex || 'X');
+    const dim = differentialWedgeMaxDegree(geometry);
+    const kind = differentialWedgeKind(type, degree, geometry);
+    if (kind === 'structure') return `Degree 0 is O_${label}; using the structure sheaf.`;
+    if (kind === 'standard') return `Degree 1 is the ordinary ${type === 'cotangent' ? 'cotangent' : 'tangent'} sheaf.`;
+    if (kind === 'canonical') return `Top cotangent power is K_${label}.`;
+    if (kind === 'anticanonical') return `Top tangent power is K_${label}^vee.`;
+    return 'Middle exterior powers are stored as marked exterior Schur functors.';
+  }
+
+  function differentialWedgeConstructionData(baseVariety = draftBaseVariety()) {
+    const sourceType = differentialSheafInputMode();
+    if (!sourceType || !sheafDifferentialStrengthened() || !baseVariety) return null;
+    const geometry = differentialWedgeGeometry(baseVariety);
+    const max = differentialWedgeMaxDegree(geometry);
+    const degree = normalizedInt(refs.sheafDifferentialDegree?.value, 0, max, defaultDifferentialWedgeDegree(geometry));
+    const kind = differentialWedgeKind(sourceType, degree, geometry);
+    const defaultName = defaultDifferentialWedgeName(sourceType, degree, geometry);
+    const name = state.draftSheafNameDirty
+      ? sanitizeMathLabel(refs.sheafName.value, defaultName)
+      : defaultName;
+    return {
+      sourceType,
+      degree,
+      kind,
+      baseVariety,
+      baseVarietyId: baseVariety.id,
+      geometry,
+      partition: differentialExteriorPartition(degree),
+      rank: differentialWedgeRankPlain(sourceType, degree, geometry),
+      defaultName,
+      name,
+      nameDirty: state.draftSheafNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName)
+    };
+  }
+
+  function markedDifferentialWedgeConstruction(construction) {
+    return construction?.differentialWedge === true
+      && (construction.differentialType === 'tangent' || construction.differentialType === 'cotangent');
+  }
+
+  function sheafDifferentialWedgeConstructionType(sheaf) {
+    return markedDifferentialWedgeConstruction(sheaf?.construction) ? sheaf.construction.differentialType : null;
+  }
+
+  function differentialWedgeDegreeFromConstruction(construction, geometry = null) {
+    const max = differentialWedgeMaxDegree(geometry);
+    return normalizedInt(construction?.wedgeDegree, 0, max, defaultDifferentialWedgeDegree(geometry));
+  }
+
+  function clearSheafDifferentialDraft(options = {}) {
+    if (refs.sheafDifferentialStrengthen) refs.sheafDifferentialStrengthen.checked = false;
+    if (options.resetDegree) syncDifferentialWedgeDegreeOptions({ reset: true });
+    updateSheafDifferentialDraftControls();
+  }
+
+  function loadDifferentialWedgeIntoDraft(sheaf) {
+    const construction = sheaf?.construction || {};
+    const type = sheafDifferentialWedgeConstructionType(sheaf);
+    const base = baseVarietyForSheaf(sheaf);
+    const geometry = differentialWedgeGeometry(base);
+    if (refs.sheafType && type) refs.sheafType.value = type;
+    if (refs.sheafDifferentialStrengthen) refs.sheafDifferentialStrengthen.checked = true;
+    syncDifferentialWedgeDegreeOptions();
+    if (refs.sheafDifferentialDegree) {
+      refs.sheafDifferentialDegree.value = String(differentialWedgeDegreeFromConstruction(construction, geometry));
+    }
+    updateSheafDifferentialDraftControls();
+  }
+
   function currentSheafTensorParentCount() {
     if (!sheafTensorStrengthened()) return 2;
     return normalizedInt(refs.sheafTensorParentCount?.value, 0, MAX_TENSOR_PARENTS, 3);
@@ -13574,6 +14095,28 @@
     syncDefaultRank(true);
     syncDefaultSheafName();
     recompute();
+  }
+
+  function updateSheafDifferentialDraftControls(options = {}) {
+    const mode = differentialSheafInputMode();
+    const show = !!mode;
+    if (refs.sheafDifferentialStrengthenRow) refs.sheafDifferentialStrengthenRow.hidden = !show;
+    if (!show) {
+      if (refs.sheafDifferentialStrengthen) refs.sheafDifferentialStrengthen.checked = false;
+      if (refs.sheafDifferentialDegreeRow) refs.sheafDifferentialDegreeRow.hidden = true;
+      if (refs.sheafDifferentialNote) refs.sheafDifferentialNote.hidden = true;
+      return;
+    }
+    const strengthened = sheafDifferentialStrengthened();
+    const degree = syncDifferentialWedgeDegreeOptions({ reset: options.resetDegree });
+    if (refs.sheafDifferentialDegreeRow) refs.sheafDifferentialDegreeRow.hidden = !strengthened;
+    if (refs.sheafDifferentialNote) {
+      refs.sheafDifferentialNote.textContent = strengthened
+        ? differentialWedgeHint(mode, degree, differentialWedgeGeometry())
+        : '';
+      refs.sheafDifferentialNote.hidden = !strengthened;
+    }
+    if (strengthened && !state.draftSheafNameDirty) syncDefaultSheafName();
   }
 
   function updateSheafBinaryDraftControls() {
@@ -14723,6 +15266,10 @@
       const data = mapOperationSheafConstructionData();
       if (data?.defaultName) return data.defaultName;
     }
+    if (sheafDifferentialStrengthened()) {
+      const data = differentialWedgeConstructionData(baseVarietyOverride || draftBaseVariety() || activeVariety());
+      if (data?.defaultName) return data.defaultName;
+    }
     if (refs.sheafType?.value === 'divisor-line') {
       return defaultDivisorLineSheafName(baseVarietyOverride || draftBaseVariety() || activeVariety());
     }
@@ -14823,7 +15370,9 @@
       refs.rank.value = defaultRankForSheafType(type, geometry, refs.rank.value);
     }
     else if (type === 'tangent' || type === 'cotangent') {
-      refs.rank.value = defaultRankForSheafType(type, geometry, refs.rank.value);
+      refs.rank.value = sheafDifferentialStrengthened()
+        ? differentialWedgeRankPlain(type, currentDifferentialWedgeDegree(), geometry)
+        : defaultRankForSheafType(type, geometry, refs.rank.value);
     }
     else if (refs.sheafType.value === 'abstract') refs.rank.value = '';
     else if (isUniversalBundleSheafType(refs.sheafType.value)) {
@@ -15736,14 +16285,24 @@
   function refreshDualConstructedSheaf(sheaf, construction) {
     const parent = state.sheaves.find((item) => item.id === construction.sheafId);
     if (!parent) return false;
-    const oldDefault = construction.defaultName || defaultDualSheafNameFromObjects(parent);
-    const nextDefault = defaultDualSheafNameFromObjects(parent);
+    const markedDifferential = markedDifferentialWedgeConstruction(construction);
+    const base = baseVarietyForSheaf(parent);
+    const geometry = base ? geometryFromVariety(base) : null;
+    const degree = markedDifferential ? differentialWedgeDegreeFromConstruction(construction, geometry) : null;
+    const oldDefault = construction.defaultName || (markedDifferential
+      ? defaultDifferentialWedgeName(construction.differentialType, degree, geometry)
+      : defaultDualSheafNameFromObjects(parent));
+    const nextDefault = markedDifferential
+      ? defaultDifferentialWedgeName(construction.differentialType, degree, geometry)
+      : defaultDualSheafNameFromObjects(parent);
     let changed = false;
     if (sheaf.baseVarietyId !== parent.baseVarietyId) {
       sheaf.baseVarietyId = parent.baseVarietyId;
       changed = true;
     }
-    const nextRank = sanitizeRankInput(parent.rank);
+    const nextRank = markedDifferential
+      ? differentialWedgeRankPlain(construction.differentialType, degree, geometry)
+      : sanitizeRankInput(parent.rank);
     if (sheaf.rank !== nextRank) {
       sheaf.rank = nextRank;
       changed = true;
@@ -15761,6 +16320,10 @@
       construction.defaultName = nextDefault;
       changed = true;
     }
+    if (markedDifferential && construction.wedgeDegree !== degree) {
+      construction.wedgeDegree = degree;
+      changed = true;
+    }
     if (syncObjectLineage(sheaf, 'sheaf')) changed = true;
     return changed;
   }
@@ -15768,15 +16331,27 @@
   function refreshSchurConstructedSheaf(sheaf, construction) {
     const parent = state.sheaves.find((item) => item.id === construction.sheafId);
     if (!parent) return false;
-    const partition = normalizeSchurPartition(construction.partition) || [1];
-    const oldDefault = construction.defaultName || defaultSchurSheafNameFromObjects(parent, partition);
-    const nextDefault = defaultSchurSheafNameFromObjects(parent, partition);
+    const markedDifferential = markedDifferentialWedgeConstruction(construction);
+    const base = baseVarietyForSheaf(parent);
+    const geometry = base ? geometryFromVariety(base) : null;
+    const degree = markedDifferential ? differentialWedgeDegreeFromConstruction(construction, geometry) : null;
+    const partition = markedDifferential
+      ? differentialExteriorPartition(degree)
+      : (normalizeSchurPartition(construction.partition) || [1]);
+    const oldDefault = construction.defaultName || (markedDifferential
+      ? defaultDifferentialWedgeName(construction.differentialType, degree, geometry)
+      : defaultSchurSheafNameFromObjects(parent, partition));
+    const nextDefault = markedDifferential
+      ? defaultDifferentialWedgeName(construction.differentialType, degree, geometry)
+      : defaultSchurSheafNameFromObjects(parent, partition);
     let changed = false;
     if (sheaf.baseVarietyId !== parent.baseVarietyId) {
       sheaf.baseVarietyId = parent.baseVarietyId;
       changed = true;
     }
-    const nextRank = schurRankPlaceholder(parent, partition);
+    const nextRank = markedDifferential
+      ? differentialWedgeRankPlain(construction.differentialType, degree, geometry)
+      : schurRankPlaceholder(parent, partition);
     if (sheaf.rank !== nextRank) {
       sheaf.rank = nextRank;
       changed = true;
@@ -15796,6 +16371,14 @@
     }
     if (construction.defaultName !== nextDefault) {
       construction.defaultName = nextDefault;
+      changed = true;
+    }
+    if (markedDifferential && construction.wedgeDegree !== degree) {
+      construction.wedgeDegree = degree;
+      changed = true;
+    }
+    if (markedDifferential && construction.differentialWedge !== true) {
+      construction.differentialWedge = true;
       changed = true;
     }
     if (syncObjectLineage(sheaf, 'sheaf')) changed = true;
@@ -17480,6 +18063,7 @@
     refs.twistRow.hidden = !draftingSheaf || draftSheaf !== 'twist';
     if (refs.sheafDivisorRow) refs.sheafDivisorRow.hidden = !draftingSheaf || draftSheaf !== 'divisor-line';
     if (draftingSheaf && draftSheaf === 'divisor-line') updateSheafDivisorControls();
+    updateSheafDifferentialDraftControls();
     updateSheafBinaryDraftControls();
     updateSheafSelfSumDraftControls();
     updateSheafDualDraftControls();
@@ -25874,6 +26458,7 @@
       ...(entry.variableIds || []),
       ...homologyRuleVariableIds(rule)
     ])];
+    entry.variables = classStepVariableSnapshots(entry.variableIds);
     return entry;
   }
 
@@ -26058,6 +26643,36 @@
       Object.keys(parseMonoKey(key)).forEach((id) => ids.add(id));
     }
     return [...ids];
+  }
+
+  function classStepVariableSnapshots(ids) {
+    const out = {};
+    [...new Set(ids || [])].forEach((id) => {
+      const safeId = sanitizeClassStepVariableId(id);
+      const data = safeId ? VARS.get(safeId) : null;
+      if (!data || !Number.isFinite(data.degree)) return;
+      out[safeId] = compactSerializable({
+        degree: data.degree,
+        cohomologyDegree: Number.isInteger(data.cohomologyDegree) ? data.cohomologyDegree : Math.round(2 * data.degree),
+        latex: data.latex || safeId,
+        plain: data.plain || latexToPlain(data.latex || safeId)
+      });
+    });
+    return out;
+  }
+
+  function restoreClassStepVariableSnapshots(entry) {
+    const snapshots = entry?.variables && typeof entry.variables === 'object' ? entry.variables : {};
+    Object.entries(snapshots).forEach(([id, raw]) => {
+      const safeId = sanitizeClassStepVariableId(id);
+      if (!safeId || !raw || typeof raw !== 'object' || VARS.has(safeId)) return;
+      const degree = Number(raw.degree);
+      if (!Number.isFinite(degree)) return;
+      const cohomologyDegree = Number.isInteger(raw.cohomologyDegree) ? raw.cohomologyDegree : Math.round(2 * degree);
+      const latex = String(raw.latex || safeId);
+      const plain = String(raw.plain || latexToPlain(latex));
+      defineVariable(safeId, degree, latex, { cohomologyDegree, plain });
+    });
   }
 
   function upsertClassStepSavedEntries(entries, options = {}) {
@@ -26377,7 +26992,7 @@
       builtin: true,
       enabled: true,
       selected: false,
-      stepSourceLabel: 'saved formula',
+      stepSourceLabel: entry.sourceLabel || 'saved formula',
       classStepSavedRule: true,
       classStepDisplayKey: `saved:${entry.id}`,
       classStepDisplayLatex: entry.displayLatex,
@@ -26387,6 +27002,7 @@
   }
 
   function restoreClassStepSavedRuleVariables(entry, session) {
+    restoreClassStepVariableSnapshots(entry);
     if (entry?.geometryId) {
       const geometry = geometryByVarietyId(entry.geometryId);
       if (geometry) defineHomologyVariables(geometry);
@@ -26919,14 +27535,27 @@
     return !Number.isInteger(rank) || index <= rank;
   }
 
+  function chernTermPolyForDisplay(bundle, index) {
+    if (index === 0) return Poly.one();
+    return shouldDisplayChernTerm(bundle, index)
+      ? componentOrZero(bundle.cComps, index)
+      : Poly.zero();
+  }
+
+  function chernTermDisplayForRoot(bundle, index, display) {
+    return shouldDisplayChernTerm(bundle, index)
+      ? display
+      : { latex: '0', plain: '0' };
+  }
+
   function buildStandardClassRows(bundle, d, options) {
     const rows = [];
     if (options.termMode === 'term') {
       const i = options.termIndex;
       const suffix = `_{${i}}`;
       const rankDisplay = rankDisplayFromBundle(bundle, options);
-      if (classFamilyEnabled(options, 'chern') && shouldDisplayChernTerm(bundle, i)) {
-        rows.push(classPolyRow(`c_${i}(${bundle.labelPlain})`, `c${suffix}(${bundle.labelLatex})`, `chern_${i}`, i === 0 ? Poly.one() : componentOrZero(bundle.cComps, i), options));
+      if (classFamilyEnabled(options, 'chern')) {
+        rows.push(classPolyRow(`c_${i}(${bundle.labelPlain})`, `c${suffix}(${bundle.labelLatex})`, `chern_${i}`, chernTermPolyForDisplay(bundle, i), options));
       }
       if (classFamilyEnabled(options, 'character')) {
         rows.push(i === 0
@@ -27014,7 +27643,10 @@
         sqrtTodd: coefficientLatexPlain(total.sqrtTodd, i)
       };
       const rows = [];
-      if (classFamilyEnabled(options, 'chern') && shouldDisplayChernTerm(bundle, i)) rows.push({ label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `root_chern_${i}`, latex: term.chern.latex, plain: term.chern.plain });
+      if (classFamilyEnabled(options, 'chern')) {
+        const chernTerm = chernTermDisplayForRoot(bundle, i, term.chern);
+        rows.push({ label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `root_chern_${i}`, latex: chernTerm.latex, plain: chernTerm.plain });
+      }
       if (classFamilyEnabled(options, 'character')) rows.push({ label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `root_character_${i}`, latex: term.character.latex, plain: term.character.plain });
       if (classFamilyEnabled(options, 'todd')) rows.push({ label: `td_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}${suffix}(${bundle.labelLatex})`, key: `root_todd_${i}`, latex: term.todd.latex, plain: term.todd.plain });
       if (classFamilyEnabled(options, 'segre')) rows.push({ label: `s_${i}(${bundle.labelPlain})`, labelLatex: `s${suffix}(${bundle.labelLatex})`, key: `root_segre_${i}`, latex: term.segre.latex, plain: term.segre.plain });
@@ -27199,7 +27831,7 @@
       const i = options.termIndex;
       const suffix = `_{${i}}`;
       const rows = [];
-      if (classFamilyEnabled(options, 'chern') && shouldDisplayChernTerm(bundle, i)) rows.push({ label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `root_chern_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.chern, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.chern, i)) });
+      if (classFamilyEnabled(options, 'chern')) rows.push({ label: `c_${i}(${bundle.labelPlain})`, labelLatex: `c${suffix}(${bundle.labelLatex})`, key: `root_chern_${i}`, latex: formatPolyLatex(shouldDisplayChernTerm(bundle, i) ? homogeneousPart(rootDisplay.chern, i) : Poly.zero()), plain: formatPolyPlain(shouldDisplayChernTerm(bundle, i) ? homogeneousPart(rootDisplay.chern, i) : Poly.zero()) });
       if (classFamilyEnabled(options, 'character')) rows.push({ label: `ch_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{ch}${suffix}(${bundle.labelLatex})`, key: `root_character_${i}`, latex: i === 0 ? String(rank) : formatPolyLatex(homogeneousPart(rootDisplay.character, i)), plain: i === 0 ? String(rank) : formatPolyPlain(homogeneousPart(rootDisplay.character, i)) });
       if (classFamilyEnabled(options, 'todd')) rows.push({ label: `td_${i}(${bundle.labelPlain})`, labelLatex: `\\operatorname{td}${suffix}(${bundle.labelLatex})`, key: `root_todd_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.todd, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.todd, i)) });
       if (classFamilyEnabled(options, 'segre')) rows.push({ label: `s_${i}(${bundle.labelPlain})`, labelLatex: `s${suffix}(${bundle.labelLatex})`, key: `root_segre_${i}`, latex: formatPolyLatex(homogeneousPart(rootDisplay.segre, i)), plain: formatPolyPlain(homogeneousPart(rootDisplay.segre, i)) });
@@ -31455,6 +32087,18 @@
         };
       }
     }
+    if (target.kind === 'polyvector-column') {
+      const polyvectors = buildPolyvectorParallelogram({ geometry, hodge: hodge || buildHodgeNumbers(geometry) });
+      const dimensions = polyvectorColumnSheafCohomologyDimensions(geometry, polyvectors, target.wedgeDegree);
+      if (dimensions) {
+        return {
+          subjectLatex: target.subjectLatex,
+          subjectPlain: target.subjectPlain,
+          dimensions,
+          message: target.message || polyvectors.message || `Cohomology dimensions read from the polyvector column ${target.wedgeDegree}.`
+        };
+      }
+    }
     if (target.kind === 'acyclic') {
       return {
         subjectLatex: target.subjectLatex,
@@ -31499,6 +32143,56 @@
         message: embeddedGeometrySupportsLineCohomology(geometry)
           ? ''
           : 'Twist sheaf cohomology needs a projective-space or complete-intersection embedding.'
+      };
+    }
+    const markedDifferential = sheafDifferentialWedgeConstructionType(sheaf);
+    if (markedDifferential) {
+      const degree = differentialWedgeDegreeFromConstruction(sheaf.construction, geometry);
+      const kind = differentialWedgeKind(markedDifferential, degree, geometry);
+      if (kind === 'structure') {
+        return {
+          kind: embeddedGeometrySupportsLineCohomology(geometry) ? 'line' : 'structure',
+          twist: 0,
+          subjectLatex: sheafLabelLatex(sheaf),
+          subjectPlain: sheafLabelPlain(sheaf),
+          message: 'Degree-0 exterior power identified with the structure sheaf.'
+        };
+      }
+      if (markedDifferential === 'cotangent') {
+        if (kind === 'canonical' && embeddedGeometrySupportsLineCohomology(geometry)) {
+          const twist = completeIntersectionCanonicalTwist(geometry);
+          return {
+            kind: 'line',
+            twist,
+            subjectLatex: sheafLabelLatex(sheaf),
+            subjectPlain: sheafLabelPlain(sheaf),
+            message: `Top cotangent power identified with K_X=O_X(${twist}) by adjunction.`
+          };
+        }
+        return {
+          kind: 'hodge-row',
+          hodgeP: degree,
+          subjectLatex: sheafLabelLatex(sheaf),
+          subjectPlain: sheafLabelPlain(sheaf),
+          message: `Cotangent exterior-power cohomology uses dim H^q(X, Omega_X^${degree})=h^{${degree},q}.`
+        };
+      }
+      if (kind === 'anticanonical' && embeddedGeometrySupportsLineCohomology(geometry)) {
+        const twist = -completeIntersectionCanonicalTwist(geometry);
+        return {
+          kind: 'line',
+          twist,
+          subjectLatex: sheafLabelLatex(sheaf),
+          subjectPlain: sheafLabelPlain(sheaf),
+          message: `Top tangent power identified with K_X^vee=O_X(${twist}).`
+        };
+      }
+      return {
+        kind: 'polyvector-column',
+        wedgeDegree: degree,
+        subjectLatex: sheafLabelLatex(sheaf),
+        subjectPlain: sheafLabelPlain(sheaf),
+        message: `Tangent exterior-power cohomology uses the polyvector column ${degree}.`
       };
     }
     const identification = sheafIdentificationRuleForSheaf(geometry, sheaf);
@@ -31570,14 +32264,17 @@
         message: 'Universal subbundle cohomology on the Grassmannian: all H^i vanish.'
       };
     }
-    if (sheaf.type === 'canonical' && embeddedGeometrySupportsLineCohomology(geometry)) {
-      const twist = completeIntersectionCanonicalTwist(geometry);
+    if (sheaf.type === 'canonical') {
+      const twist = embeddedGeometrySupportsLineCohomology(geometry) ? completeIntersectionCanonicalTwist(geometry) : null;
       return {
-        kind: 'line',
+        kind: embeddedGeometrySupportsLineCohomology(geometry) ? 'line' : 'hodge-row',
         twist,
+        hodgeP: geometry.dim,
         subjectLatex: sheafLabelLatex(sheaf),
         subjectPlain: sheafLabelPlain(sheaf),
-        message: `Canonical sheaf identified with O_X(${twist}) by adjunction.`
+        message: embeddedGeometrySupportsLineCohomology(geometry)
+          ? `Canonical sheaf identified with O_X(${twist}) by adjunction.`
+          : 'Canonical-sheaf cohomology uses dim H^q(X,K_X)=h^{n,q}.'
       };
     }
     if (sheaf.type === 'cotangent') {
@@ -31587,6 +32284,25 @@
         subjectLatex: sheafLabelLatex(sheaf),
         subjectPlain: sheafLabelPlain(sheaf),
         message: 'Cotangent-sheaf cohomology uses dim H^i(X, Omega_X^1)=h^{1,i}.'
+      };
+    }
+    if (sheaf.type === 'tangent') {
+      if (geometry.dim === 1 && embeddedGeometrySupportsLineCohomology(geometry)) {
+        const twist = -completeIntersectionCanonicalTwist(geometry);
+        return {
+          kind: 'line',
+          twist,
+          subjectLatex: sheafLabelLatex(sheaf),
+          subjectPlain: sheafLabelPlain(sheaf),
+          message: `Tangent line on a curve identified with K_X^vee=O_X(${twist}).`
+        };
+      }
+      return {
+        kind: 'polyvector-column',
+        wedgeDegree: 1,
+        subjectLatex: sheafLabelLatex(sheaf),
+        subjectPlain: sheafLabelPlain(sheaf),
+        message: 'Tangent-sheaf cohomology uses the polyvector column 1.'
       };
     }
     return {
@@ -31708,6 +32424,12 @@
       });
     }
     return dimensions;
+  }
+
+  function polyvectorColumnSheafCohomologyDimensions(geometry, polyvectors, wedgeDegree) {
+    const degree = normalizedInt(wedgeDegree, 0, geometry?.dim || 0, 0);
+    if (!hodgeEntriesHaveShape(polyvectors?.entries, geometry.dim)) return null;
+    return Array.from({ length: geometry.dim + 1 }, (_, q) => cloneHodgeEntry(polyvectors.entries[q]?.[degree] || numericHodgeEntry(0n)));
   }
 
   function zeroSheafCohomologyDimensions(geometry) {
@@ -37244,9 +37966,19 @@
       out.sheafId = sanitizePresetId(construction.sheafId);
       out.internalHomDual = construction.internalHomDual === true;
       out.grassmannianMapScaffold = construction.grassmannianMapScaffold === true;
+      if (markedDifferentialWedgeConstruction(construction)) {
+        out.differentialWedge = true;
+        out.differentialType = sanitizePresetEnum(construction.differentialType, ['tangent', 'cotangent'], 'tangent');
+        out.wedgeDegree = normalizedInt(construction.wedgeDegree, 0, MAX_DIMENSION, 1);
+      }
     } else if (ownerKind === 'sheaf' && type === 'schur') {
       out.sheafId = sanitizePresetId(construction.sheafId);
       out.partition = normalizeSchurPartition(construction.partition) || [1];
+      if (markedDifferentialWedgeConstruction(construction)) {
+        out.differentialWedge = true;
+        out.differentialType = sanitizePresetEnum(construction.differentialType, ['tangent', 'cotangent'], 'cotangent');
+        out.wedgeDegree = normalizedInt(construction.wedgeDegree, 0, MAX_DIMENSION, out.partition.length || 1);
+      }
     } else if (ownerKind === 'sheaf' && (type === 'pullback' || type === 'pushforward')) {
       out.mapId = sanitizePresetId(construction.mapId);
       out.sheafId = sanitizePresetId(construction.sheafId);
@@ -37649,6 +38381,7 @@
       lhs,
       rhs,
       variableIds: sanitizePresetVariableIds(item.variableIds),
+      variables: sanitizePresetClassStepVariableSnapshots(item.variables),
       sourceLabel: sanitizePresetString(item.sourceLabel, '', 120),
       unselected: item.unselected === true || item.selected === false
     });
@@ -37776,6 +38509,26 @@
   function sanitizePresetVariableIds(ids) {
     if (!Array.isArray(ids)) return [];
     return [...new Set(ids.map(sanitizeClassStepVariableId).filter(Boolean))];
+  }
+
+  function sanitizePresetClassStepVariableSnapshots(items) {
+    if (!items || typeof items !== 'object' || Array.isArray(items)) return {};
+    const out = {};
+    Object.entries(items).forEach(([rawId, raw]) => {
+      const id = sanitizeClassStepVariableId(rawId);
+      if (!id || !raw || typeof raw !== 'object' || Array.isArray(raw)) return;
+      const degree = Number(raw.degree);
+      if (!Number.isFinite(degree) || degree < 0 || degree > MAX_DIMENSION) return;
+      out[id] = compactSerializable({
+        degree,
+        cohomologyDegree: Number.isInteger(raw.cohomologyDegree)
+          ? normalizedInt(raw.cohomologyDegree, 0, 2 * MAX_DIMENSION, Math.round(2 * degree))
+          : Math.round(2 * degree),
+        latex: sanitizePresetString(raw.latex, id, 5000),
+        plain: sanitizePresetString(raw.plain, id, 5000)
+      });
+    });
+    return out;
   }
 
   function sanitizeClassStepVariableId(value) {
@@ -38065,6 +38818,7 @@
       Object.values(snapshot.displayOverrides || {}).forEach(addPoly);
     }
     for (const entry of state.classStepSavedRules || []) {
+      restoreClassStepVariableSnapshots(entry);
       (entry.variableIds || []).forEach((id) => ids.add(id));
     }
     ids.forEach((id) => restoreClassStepVariableById(id, { geometryId: session.geometry?.varietyId || null }));
@@ -38338,6 +39092,7 @@
       lhs: entry.lhs || null,
       rhs: entry.rhs || null,
       variableIds: entry.variableIds || [],
+      variables: entry.variables || {},
       sourceLabel: entry.sourceLabel || '',
       unselected: entry.selected === false
     });

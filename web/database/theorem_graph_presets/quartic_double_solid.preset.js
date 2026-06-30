@@ -13,13 +13,14 @@ window.THEOREM_GRAPH_PRESET_DATA.quartic_double_solid = {
       "setting": "Picco Botta proves the Abel–Jacobi isomorphism for the surface of k-dimensional quadrics on the general complete intersection of three quadrics in \\mathbb{P}^{2k+4}. For k=0, this concerns lines; for k=1, this concerns conics on a complete intersection of three quadrics in \\mathbb{P}^6, matching the case X \\subset \\mathbb{P}^6.",
       "condition": "",
       "result": "\\cite{zbMATH04091651}",
+      "proofSketch": "",
       "citationKeys": [
         "zbMATH04091651"
       ],
       "color": "#7a4d9b",
       "fillColor": "#f4f1f8",
-      "x": 463.5,
-      "y": 296
+      "x": 536.1,
+      "y": 203.8
     },
     {
       "id": "n4",
@@ -28,11 +29,12 @@ window.THEOREM_GRAPH_PRESET_DATA.quartic_double_solid = {
       "setting": "",
       "condition": "",
       "result": "",
+      "proofSketch": "",
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fbefee",
-      "x": 367.2,
-      "y": 159.9
+      "x": 318,
+      "y": 116
     },
     {
       "id": "n5",
@@ -41,24 +43,54 @@ window.THEOREM_GRAPH_PRESET_DATA.quartic_double_solid = {
       "setting": "",
       "condition": "",
       "result": "",
+      "proofSketch": "",
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fbefee",
-      "x": 237,
-      "y": 327.6
+      "x": 212.7,
+      "y": 310
     },
     {
       "id": "n6",
       "type": "example",
-      "label": "surface F",
+      "label": "smoothness of F",
       "setting": "",
       "condition": "",
       "result": "\\cite[3]{Wel81}",
+      "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a4d9b",
-      "fillColor": "#f4f1f8",
-      "x": 388.6,
-      "y": 443.5
+      "color": "#8b3a2a",
+      "fillColor": "#fbefee",
+      "x": 307.1,
+      "y": 498.2
+    },
+    {
+      "id": "n7",
+      "type": "example",
+      "label": "basic infos",
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#3d6b4f",
+      "fillColor": "#eef7f4",
+      "x": 363.7,
+      "y": 307.5
+    },
+    {
+      "id": "n8",
+      "type": "example",
+      "label": "curves in F",
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 522.3,
+      "y": 432.5
     }
   ],
   "arrows": [
@@ -67,6 +99,67 @@ window.THEOREM_GRAPH_PRESET_DATA.quartic_double_solid = {
       "sourceId": "n5",
       "targetId": "n4",
       "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a4",
+      "sourceId": "n6",
+      "targetId": "n7",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a5",
+      "sourceId": "n7",
+      "targetId": "n2",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a6",
+      "sourceId": "n8",
+      "targetId": "n7",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a7",
+      "sourceId": "n4",
+      "targetId": "n7",
+      "label": "",
+      "remark": "",
       "body": "solid",
       "head": "arrow",
       "tail": "none",
@@ -100,9 +193,11 @@ window.THEOREM_GRAPH_PRESET_DATA.quartic_double_solid = {
     }
   ],
   "view": {
-    "selectedId": "n6",
+    "selectedId": "n2",
     "selectedReferenceKeys": [],
     "layoutRunning": false
   }
 };
+
+
 
