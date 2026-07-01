@@ -369,6 +369,67 @@
       font-size: 0.72rem;
     }
 
+    .mosaic-color-row {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .mosaic-color-input {
+      width: 42px;
+      height: 28px;
+      padding: 2px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      cursor: pointer;
+    }
+
+    .mosaic-color-input[disabled] {
+      opacity: 0.58;
+      cursor: not-allowed;
+    }
+
+    .mosaic-color-swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .mosaic-color-swatch {
+      width: 22px;
+      height: 22px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--swatch-color);
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .mosaic-color-swatch:hover,
+    .mosaic-color-swatch:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .mosaic-boundary-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 8px;
+    }
+
+    .mosaic-boundary-chip {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--boundary-color);
+    }
+
     .mosaic-chip {
       display: inline-flex;
       align-items: center;
@@ -1309,6 +1370,48 @@
       </div>
     </section>
 
+    <section class="card collapsed" id="seifert-surface-card" hidden>
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Seifert Surface</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="dual-graph-control-row">
+          <label class="opt-row" id="show-seifert-background-row"><input type="checkbox" id="show-seifert-background"> Show knots / vertices</label>
+        </div>
+        <div class="mosaic-inline-row" id="seifert-surface-color-row">
+          <span class="input-label">Color</span>
+          <div class="mosaic-color-row">
+            <input id="seifert-surface-color" class="mosaic-color-input" type="color" value="#d8b071" aria-label="Seifert surface color">
+            <div class="mosaic-color-swatches" aria-label="Seifert surface color swatches">
+              <button class="mosaic-color-swatch" type="button" data-color-target="seifert-surface-color" data-color-value="#d8b071" style="--swatch-color: #d8b071" aria-label="warm brown"></button>
+              <button class="mosaic-color-swatch" type="button" data-color-target="seifert-surface-color" data-color-value="#c7875c" style="--swatch-color: #c7875c" aria-label="sienna"></button>
+              <button class="mosaic-color-swatch" type="button" data-color-target="seifert-surface-color" data-color-value="#a9b96a" style="--swatch-color: #a9b96a" aria-label="olive"></button>
+              <button class="mosaic-color-swatch" type="button" data-color-target="seifert-surface-color" data-color-value="#70b39f" style="--swatch-color: #70b39f" aria-label="teal"></button>
+              <button class="mosaic-color-swatch" type="button" data-color-target="seifert-surface-color" data-color-value="#7fa6d3" style="--swatch-color: #7fa6d3" aria-label="blue"></button>
+              <button class="mosaic-color-swatch" type="button" data-color-target="seifert-surface-color" data-color-value="#aa8ac5" style="--swatch-color: #aa8ac5" aria-label="purple"></button>
+              <button class="mosaic-color-swatch" type="button" data-color-target="seifert-surface-color" data-color-value="#d28484" style="--swatch-color: #d28484" aria-label="red"></button>
+              <button class="mosaic-color-swatch" type="button" data-color-target="seifert-surface-color" data-color-value="#c4a45c" style="--swatch-color: #c4a45c" aria-label="ochre"></button>
+            </div>
+          </div>
+        </div>
+        <div class="mosaic-inline-row" id="seifert-band-width-row">
+          <span class="input-label">Band width</span>
+          <span class="background-slider-controls">
+            <input type="range" id="seifert-band-width" min="0.24" max="0.78" step="0.02" value="0.42">
+            <output id="seifert-band-width-value">0.42</output>
+          </span>
+        </div>
+        <div class="dual-graph-control-row">
+          <label class="opt-row" id="color-seifert-boundaries-row"><input type="checkbox" id="color-seifert-boundaries"> Color boundary components</label>
+        </div>
+        <div class="stat-row"><span class="stat-label">Pieces</span><span class="stat-value" id="seifert-piece-count">-</span></div>
+        <div class="stat-row"><span class="stat-label">Components</span><span class="stat-value" id="seifert-component-count">-</span></div>
+        <div class="stat-row"><span class="stat-label">Connected</span><span class="stat-value" id="seifert-connected">-</span></div>
+        <div class="stat-row"><span class="stat-label">Boundary</span><span class="stat-value" id="seifert-boundary-count">-</span></div>
+        <div class="stat-row"><span class="stat-label">Open ends</span><span class="stat-value" id="seifert-open-ends">-</span></div>
+        <div class="stat-row"><span class="stat-label">(g, chi)</span><span class="stat-value" id="seifert-genus-euler">-</span></div>
+        <div class="mosaic-boundary-chips" id="seifert-boundary-colors" hidden></div>
+      </div>
+    </section>
+
     <div id="dual-graph-degenerations-side-host">
       <section class="card" id="dual-graph-degenerations-card">
         <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Boundary Divisors</span><em class="toggle-icon">&#9662;</em></div>
@@ -1357,6 +1460,10 @@
           <label class="opt-row"><input type="checkbox" id="color-components" checked> Color components</label>
           <label class="opt-row"><input type="checkbox" id="display-pick"> Pick</label>
           <label class="opt-row" id="show-cusps-row" hidden><input type="checkbox" id="show-cusps"> cusps</label>
+        </div>
+        <div class="mosaic-inline-row" id="show-seifert-surface-row" hidden>
+          <span class="input-label">Seifert</span>
+          <button class="btn btn-ghost" id="show-seifert-surface" type="button" aria-pressed="false">Open surface</button>
         </div>
         <div class="mosaic-inline-row" id="wrapped-view-row" hidden>
           <span class="input-label">Wrapped view</span>
@@ -1411,6 +1518,6 @@
 <script src="js/mosaic_knot_data.js"></script>
 <script src="js/mosaic_link_data.js"></script>
 <script src="js/mosaic_knot_engine.js"></script>
-<script src="js/mosaic_calculator.js"></script>
+<script src="js/mosaic_calculator.js?v=seifert-surface-invariants"></script>
 </body>
 </html>

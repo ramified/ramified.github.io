@@ -6003,11 +6003,15 @@ function testRuleOnlySheafIdentificationPersistsAfterSheafDeletion() {
   const kept = api.createIdentifyFromDraft();
   assert.strictEqual(kept.id, 'F');
   assert.strictEqual(api.state.sheaves.map((sheaf) => sheaf.id).join(','), 'E,F');
-  const c1Rule = api.state.classStepSavedRules.find((entry) => entry.sourceLabel === 'Identification' && entry.lhs?.powers?.sheaf_E_c1 === 1);
-  assert(c1Rule, api.state.classStepSavedRules.map((entry) => entry.displayPlain).join('; '));
-  assert.strictEqual(c1Rule.rhs[0].powers.sheaf_F_c1, 1);
-  assert(c1Rule.variables?.sheaf_E_c1);
-  assert(c1Rule.variables?.sheaf_F_c1);
+  assert.strictEqual(api.state.classStepSavedRules.length, 1);
+  const identificationEntry = api.state.classStepSavedRules[0];
+  assert.strictEqual(identificationEntry.kind, 'sheaf-identification');
+  assert.strictEqual(identificationEntry.sourceSheafId, 'E');
+  assert.strictEqual(identificationEntry.targetSheafId, 'F');
+  assert(identificationEntry.variables?.sheaf_E_c1);
+  assert(identificationEntry.variables?.sheaf_F_c1);
+  const sourceToddTotalId = identificationEntry.variableIds.find((id) => id === 'sheaf_E_tdTotal_X');
+  assert(sourceToddTotalId, identificationEntry.variableIds.join(','));
 
   api.state.sheaves = api.state.sheaves.filter((sheaf) => sheaf.id !== 'E');
   const geometry = api.geometryFromVariety(api.state.varieties[0]);
@@ -6022,8 +6026,24 @@ function testRuleOnlySheafIdentificationPersistsAfterSheafDeletion() {
   const rhs = api.formatPolyPlain(api.homologyRuleRhsPoly(api.classStepMaterializeRule(session, candidate.rule)));
   assert.strictEqual(rhs, 'c_1(F)');
 
+  const formulaSession = api.createClassFormulaStepSession({
+    ok: true,
+    geometry,
+    poly: api.polyFromPowers({ [sourceToddTotalId]: 1 }),
+    latex: '\\operatorname{td}(E)',
+    plain: 'td(E)',
+    signature: 'test-identification-todd'
+  });
+  const toddCandidate = api.collectClassStepRuleCandidates(formulaSession)
+    .find((item) => item.sourceLabel === 'Identification' && item.rules.some((rule) => rule.lhs?.powers?.[sourceToddTotalId] === 1));
+  assert(toddCandidate, api.collectClassStepRuleCandidates(formulaSession).map((item) => item.sourceLabel).join(','));
+  const toddRule = toddCandidate.rules.find((rule) => rule.lhs?.powers?.[sourceToddTotalId] === 1);
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(toddRule)), 'td(F)');
+
   const preset = api.buildPresetState();
-  const savedPresetRule = preset.step.savedRules.find((entry) => entry.id === c1Rule.id);
+  const savedPresetRule = preset.step.savedRules.find((entry) => entry.id === identificationEntry.id);
+  assert.strictEqual(savedPresetRule.kind, 'sheaf-identification');
+  assert(savedPresetRule.sourceSheaf);
   assert(savedPresetRule.variables?.sheaf_E_c1);
 }
 

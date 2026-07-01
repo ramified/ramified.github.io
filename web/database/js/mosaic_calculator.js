@@ -56,6 +56,11 @@
   };
   const COMPONENT_COLOR_PALETTE = ['#b23a48', '#1f7a8c', '#6a4c93', '#c47f17'];
   const GLUED_BOUNDARY_COLORS = ['#1f7a8c', '#b23a48', '#6a4c93', '#c47f17', '#2f855a', '#8a4f7d'];
+  const DEFAULT_SEIFERT_BAND_WIDTH = 0.42;
+  const MIN_SEIFERT_BAND_WIDTH = 0.24;
+  const MAX_SEIFERT_BAND_WIDTH = 0.78;
+  const DEFAULT_SEIFERT_SURFACE_COLOR = '#d8b071';
+  const SEIFERT_BOUNDARY_COLOR_PALETTE = ['#8b5a2b', '#2f7d5c', '#2f6f9f', '#8a5aa6', '#b65f5f', '#7c8b32', '#b17234', '#26807b'];
   const DEFAULT_BACKGROUND_CUSP_MARKER_SCALE = 0.7;
   const DEFAULT_BACKGROUND_BILLIARD_SPEED = 0.2;
   const DEFAULT_BACKGROUND_BILLIARD_TRAIL_LENGTH = 200;
@@ -300,6 +305,11 @@
     colorComponents: true,
     displayPick: false,
     showCusps: false,
+    showSeifertSurface: false,
+    showSeifertBackground: false,
+    colorSeifertBoundaries: false,
+    seifertBandWidth: DEFAULT_SEIFERT_BAND_WIDTH,
+    seifertSurfaceColor: DEFAULT_SEIFERT_SURFACE_COLOR,
     componentColors: [],
     drawStyle: 'shade',
     drawAction: 'edge',
@@ -504,6 +514,27 @@
     refs.displayPick = document.getElementById('display-pick');
     refs.showCuspsRow = document.getElementById('show-cusps-row');
     refs.showCusps = document.getElementById('show-cusps');
+    refs.showSeifertSurfaceRow = document.getElementById('show-seifert-surface-row');
+    refs.showSeifertSurface = document.getElementById('show-seifert-surface');
+    refs.showSeifertBackgroundRow = document.getElementById('show-seifert-background-row');
+    refs.showSeifertBackground = document.getElementById('show-seifert-background');
+    refs.colorSeifertBoundariesRow = document.getElementById('color-seifert-boundaries-row');
+    refs.colorSeifertBoundaries = document.getElementById('color-seifert-boundaries');
+    refs.seifertSurfaceColorRow = document.getElementById('seifert-surface-color-row');
+    refs.seifertSurfaceColor = document.getElementById('seifert-surface-color');
+    refs.seifertBandWidthRow = document.getElementById('seifert-band-width-row');
+    refs.seifertBandWidth = document.getElementById('seifert-band-width');
+    refs.seifertBandWidthValue = document.getElementById('seifert-band-width-value');
+    refs.seifertSurfaceCard = document.getElementById('seifert-surface-card');
+    refs.seifertStats = {
+      pieces: document.getElementById('seifert-piece-count'),
+      components: document.getElementById('seifert-component-count'),
+      connected: document.getElementById('seifert-connected'),
+      boundary: document.getElementById('seifert-boundary-count'),
+      openEnds: document.getElementById('seifert-open-ends'),
+      genusEuler: document.getElementById('seifert-genus-euler'),
+      boundaryColors: document.getElementById('seifert-boundary-colors')
+    };
     refs.wrappedViewRow = document.getElementById('wrapped-view-row');
     refs.wrappedViewMode = document.getElementById('wrapped-view-mode');
     refs.wanderOpenRow = document.getElementById('wander-open-row');
@@ -824,6 +855,54 @@
         refreshExport();
       });
     }
+    if (refs.showSeifertSurface) {
+      refs.showSeifertSurface.addEventListener('click', () => {
+        state.showSeifertSurface = !state.showSeifertSurface;
+        syncSeifertSurfaceControls();
+        updateReport(false);
+      });
+    }
+    if (refs.showSeifertBackground) {
+      refs.showSeifertBackground.addEventListener('change', () => {
+        state.showSeifertBackground = refs.showSeifertBackground.checked;
+        syncSeifertSurfaceControls();
+        updateReport(false);
+      });
+    }
+    if (refs.colorSeifertBoundaries) {
+      refs.colorSeifertBoundaries.addEventListener('change', () => {
+        state.colorSeifertBoundaries = refs.colorSeifertBoundaries.checked;
+        syncSeifertSurfaceControls();
+        updateReport(false);
+      });
+    }
+    if (refs.seifertSurfaceColor) {
+      refs.seifertSurfaceColor.addEventListener('input', () => {
+        state.seifertSurfaceColor = normalizeSeifertSurfaceColor(refs.seifertSurfaceColor.value);
+        syncSeifertSurfaceControls();
+        updateReport(false);
+      });
+      refs.seifertSurfaceColor.addEventListener('change', () => {
+        state.seifertSurfaceColor = normalizeSeifertSurfaceColor(refs.seifertSurfaceColor.value);
+        syncSeifertSurfaceControls();
+        updateReport(false);
+      });
+    }
+    if (refs.seifertBandWidth) {
+      refs.seifertBandWidth.addEventListener('input', () => {
+        state.seifertBandWidth = normalizeSeifertBandWidth(refs.seifertBandWidth.value);
+        syncSeifertSurfaceControls();
+        updateReport(false);
+      });
+    }
+    document.querySelectorAll('[data-color-target]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const input = document.getElementById(button.dataset.colorTarget || '');
+        if (!input) return;
+        input.value = normalizeSeifertSurfaceColor(button.dataset.colorValue, input.value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    });
     refs.wrappedViewMode.addEventListener('change', () => {
       state.wrappedViewMode = refs.wrappedViewMode.value === 'single' ? 'single' : 'periodic';
       normalizeViewOffset();
@@ -2763,6 +2842,11 @@
     state.colorComponents = !(payload.display && payload.display.colorComponents === false);
     state.displayPick = !!(payload.display && payload.display.pick);
     state.showCusps = !!(payload.display && payload.display.cusps);
+    state.showSeifertSurface = !!(payload.display && payload.display.showSeifertSurface);
+    state.showSeifertBackground = !!(payload.display && payload.display.showSeifertBackground);
+    state.colorSeifertBoundaries = !!(payload.display && payload.display.colorSeifertBoundaries);
+    state.seifertBandWidth = normalizeSeifertBandWidth(payload.display && payload.display.seifertBandWidth);
+    state.seifertSurfaceColor = normalizeSeifertSurfaceColor(payload.display && payload.display.seifertSurfaceColor);
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
     state.componentColors = [];
@@ -2810,6 +2894,7 @@
     refs.colorComponents.checked = state.colorComponents;
     refs.displayPick.checked = state.displayPick;
     if (refs.showCusps) refs.showCusps.checked = state.showCusps;
+    syncSeifertSurfaceControls();
     refs.drawAction.value = state.drawAction;
     refs.knotCodeKind.value = state.knotCodeKind;
     refs.drawStyle.value = state.drawStyle;
@@ -7594,6 +7679,7 @@
 
     updatePickControls();
     updateDisplayControls();
+    updateSeifertSurfaceChart(report);
     if (!isDualGraph()) updateKnotCard(report);
     else updateDualGraphCard(report);
     refreshExport();
@@ -13389,7 +13475,7 @@
       offsets.forEach((offset) => {
         drawBoardCopy(ctx, report, palette, offset, pickedLift);
       });
-      if (graphData && graphData.isValid) drawHalfEdgeDecorationLabels(ctx, graphData, palette);
+      if (shouldDrawSeifertBackground() && graphData && graphData.isValid) drawHalfEdgeDecorationLabels(ctx, graphData, palette);
       drawDrawDebugOverlay(ctx, palette, report);
       drawPickHoverOverlay(ctx, palette, report);
       ctx.restore();
@@ -13400,7 +13486,7 @@
     }
 
     drawBoardCopy(ctx, report, palette, { x: 0, y: 0, copyCol: 0, copyRow: 0 }, null);
-    if (graphData && graphData.isValid) drawHalfEdgeDecorationLabels(ctx, graphData, palette);
+    if (shouldDrawSeifertBackground() && graphData && graphData.isValid) drawHalfEdgeDecorationLabels(ctx, graphData, palette);
     drawDrawDebugOverlay(ctx, palette, report);
     drawBackgroundHoverOverlay(ctx, palette);
     drawBackgroundCuspOverlay(ctx, palette, report);
@@ -13417,6 +13503,7 @@
     for (let index = 0; index < state.tiles.length; index += 1) {
       drawTile(ctx, index, report, palette, offset, pickedLift);
     }
+    drawSeifertBoundaryComponents(ctx);
     drawBackgroundBoundaries(ctx);
     ctx.restore();
   }
@@ -15630,7 +15717,12 @@
       return;
     }
 
-    if (isDualGraph() && isVertexTileValue(displayTile)) {
+    if (shouldDrawSeifertSurfaceTile(displayTile)) {
+      drawSeifertSurfaceTile(ctx, cell, displayTile, radius);
+    }
+
+    const drawTileLinework = shouldDrawSeifertBackground();
+    if (drawTileLinework && isDualGraph() && isVertexTileValue(displayTile)) {
       drawGraphTile(ctx, cell, displayTile, palette, null, spokeComponents, {
         tileIndex: index,
         copy: offset,
@@ -15639,7 +15731,7 @@
       if (!isDragTarget && !isDragSource) {
         drawVertexDecoration(ctx, cell, vertexDecorationValue(index), palette, radius);
       }
-    } else {
+    } else if (drawTileLinework) {
       drawPipe(ctx, cell, displayTile, palette, null, arcComponents, {
         tileIndex: index,
         copy: offset,
@@ -15647,7 +15739,7 @@
       });
     }
 
-    if (state.showErrors && !isDragTarget) drawOpenEndMarks(ctx, index, cell, mask, palette);
+    if (drawTileLinework && state.showErrors && !isDragTarget) drawOpenEndMarks(ctx, index, cell, mask, palette);
     if (state.showCoords) drawCellLabel(ctx, cell, palette);
   }
 
@@ -15688,6 +15780,866 @@
     ctx.fillStyle = '#ffffff';
     ctx.fillText(text, x, y + fontSize * 0.03);
     ctx.restore();
+  }
+
+  function shouldDrawSeifertSurfaceTile(tile) {
+    return !!(
+      isDualGraph()
+      && state.showSeifertSurface
+      && !isTileEmpty(tile)
+      && (isVertexTileValue(tile) || normalizeTile(tile).length)
+    );
+  }
+
+  function shouldDrawSeifertBackground() {
+    return !(isDualGraph() && state.showSeifertSurface && !state.showSeifertBackground);
+  }
+
+  function drawSeifertSurfaceTile(ctx, cell, tile, radius) {
+    if (isVertexTileValue(tile)) drawSeifertSurfaceDisk(ctx, cell, tile, radius);
+    else drawSeifertSurfaceBands(ctx, cell, tile, radius);
+  }
+
+  function seifertBandPixelWidth(radius) {
+    return Math.max(6, radius * normalizeSeifertBandWidth(state.seifertBandWidth));
+  }
+
+  function seifertSurfaceOutlineWidth(radius) {
+    return Math.max(0.65, radius * 0.016);
+  }
+
+  function seifertSurfaceFillColor() {
+    return normalizeSeifertSurfaceColor(state.seifertSurfaceColor);
+  }
+
+  function seifertSurfaceStrokeColor(alpha = 0.62) {
+    return colorWithAlpha(darkenHexColor(seifertSurfaceFillColor(), 0.58), alpha);
+  }
+
+  function drawSeifertSurfaceBands(ctx, cell, tile, radius) {
+    const arcs = normalizeTile(tile);
+    if (!arcs.length) return;
+    const bandWidth = seifertBandPixelWidth(radius);
+    const outlineWidth = seifertSurfaceOutlineWidth(radius);
+
+    ctx.save();
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'round';
+    arcs.forEach((pair) => {
+      const path = getArcPath(cell, pair, radius);
+      if (path) drawSeifertSurfaceBandRibbon(ctx, path, bandWidth, outlineWidth);
+    });
+    ctx.restore();
+  }
+
+  function drawSeifertSurfaceDisk(ctx, cell, tile, radius) {
+    const dirs = normalizeVertexTile(tile);
+    const points = seifertSurfaceBoundaryPoints(cell, dirs, radius);
+    if (points.length < 2) {
+      drawSeifertSurfaceCore(ctx, cell, radius, seifertDiskFallbackRadius(radius));
+      return;
+    }
+    drawSeifertSurfaceArcDisk(ctx, cell, points, radius);
+  }
+
+  function seifertSurfaceBoundaryPoints(cell, dirs, radius) {
+    if (!dirs.length) return [];
+    const bandWidth = seifertBandPixelWidth(radius);
+    const edgeDistance = edgeConnectionDistance(radius);
+    const sideHalf = seifertSurfaceSideHalfLength(radius);
+    const halfWidth = clamp(bandWidth * 0.5, radius * 0.05, sideHalf * 0.9);
+    const lattice = getLattice();
+    const points = [];
+    dirs.forEach((dir) => {
+      const normalized = normalizeDir(dir, lattice.sides);
+      const angle = lattice.angles[normalized];
+      const center = edgePoint(cell.x, cell.y, normalized, edgeDistance);
+      const tangent = { x: -Math.sin(angle), y: Math.cos(angle) };
+      [-1, 1].forEach((side) => {
+        const x = center.x + tangent.x * halfWidth * side;
+        const y = center.y + tangent.y * halfWidth * side;
+        points.push({
+          x,
+          y,
+          dir: normalized,
+          edgeCenter: center,
+          edgeTangent: tangent,
+          angle: moduloAngle(Math.atan2(y - cell.y, x - cell.x))
+        });
+      });
+    });
+    return points.sort((left, right) => left.angle - right.angle);
+  }
+
+  function seifertSurfaceSideHalfLength(radius) {
+    const lattice = getLattice();
+    const points = tilePoints(0, 0, radius, lattice);
+    if (lattice.shape === 'square') return radius;
+    return Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y) * 0.5;
+  }
+
+  function drawSeifertSurfaceArcDisk(ctx, cell, points, radius) {
+    const segments = points.map((current, index) => ({
+      current,
+      next: points[(index + 1) % points.length],
+      segment: seifertSurfaceBoundarySegment(cell, current, points[(index + 1) % points.length])
+    }));
+    ctx.save();
+    ctx.fillStyle = seifertSurfaceFillColor();
+    ctx.strokeStyle = seifertSurfaceStrokeColor();
+    ctx.lineWidth = seifertSurfaceOutlineWidth(radius);
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    segments.forEach(({ current, next, segment }) => appendSeifertSurfaceBoundarySegment(ctx, current, next, segment));
+    ctx.closePath();
+    ctx.fill();
+    segments.forEach(({ current, next, segment }) => {
+      if (segment.edgeCoincident) return;
+      ctx.beginPath();
+      ctx.moveTo(current.x, current.y);
+      appendSeifertSurfaceBoundarySegment(ctx, current, next, segment);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  function seifertSurfaceBoundarySegment(cell, current, next) {
+    if (current.dir === next.dir) {
+      return { type: 'line', edgeCoincident: true };
+    }
+    const guide = seifertSurfaceBoundaryGuidePoint(cell, current, next);
+    const circle = seifertSurfacePerpendicularCircle(current, next, guide);
+    return circle || { type: 'line', edgeCoincident: false };
+  }
+
+  function appendSeifertSurfaceBoundarySegment(ctx, current, next, segment) {
+    if (!segment || segment.type === 'line') {
+      ctx.lineTo(next.x, next.y);
+      return;
+    }
+    appendSeifertSurfaceArcSegment(ctx, current, next, segment);
+  }
+
+  function appendSeifertSurfaceArcSegment(ctx, current, next, circle) {
+    const startAngle = Math.atan2(current.y - circle.center.y, current.x - circle.center.x);
+    const endAngle = Math.atan2(next.y - circle.center.y, next.x - circle.center.x);
+    const guideAngle = Math.atan2(circle.guide.y - circle.center.y, circle.guide.x - circle.center.x);
+    const ccwHasGuide = angleOnCircularSweep(startAngle, endAngle, guideAngle, false);
+    const cwHasGuide = angleOnCircularSweep(startAngle, endAngle, guideAngle, true);
+    const anticlockwise = cwHasGuide && !ccwHasGuide;
+    ctx.arc(circle.center.x, circle.center.y, circle.radius, startAngle, endAngle, anticlockwise);
+  }
+
+  function seifertSurfacePerpendicularCircle(current, next, guide) {
+    const tangentA = current.edgeTangent || edgeTangentFromDir(current.dir);
+    const tangentB = next.edgeTangent || edgeTangentFromDir(next.dir);
+
+    const center = lineIntersection(current, tangentA, next, tangentB);
+    if (!center) return null;
+    const radiusA = Math.hypot(current.x - center.x, current.y - center.y);
+    const radiusB = Math.hypot(next.x - center.x, next.y - center.y);
+    const tolerance = Math.max(0.5, geometry.radius * 0.015);
+    if (
+      Number.isFinite(radiusA)
+      && Number.isFinite(radiusB)
+      && radiusA >= 0.001
+      && Math.abs(radiusA - radiusB) <= tolerance
+      && radiusA <= geometry.radius * 16
+    ) {
+      return { type: 'arc', center, radius: (radiusA + radiusB) * 0.5, guide };
+    }
+    return null;
+  }
+
+  function edgeTangentFromDir(dir) {
+    const angle = getLattice().angles[normalizeDir(dir, getLattice().sides)];
+    return { x: -Math.sin(angle), y: Math.cos(angle) };
+  }
+
+  function seifertSurfaceBoundaryGuidePoint(cell, current, next) {
+    const gap = moduloAngle(next.angle - current.angle);
+    const lattice = getLattice();
+    const mouthGap = Math.PI / lattice.sides;
+    if (current.dir === next.dir && gap <= mouthGap) return current.edgeCenter;
+    return { x: cell.x, y: cell.y };
+  }
+
+  function angleOnCircularSweep(startAngle, endAngle, testAngle, anticlockwise) {
+    const sweep = anticlockwise
+      ? moduloAngle(startAngle - endAngle)
+      : moduloAngle(endAngle - startAngle);
+    const offset = anticlockwise
+      ? moduloAngle(startAngle - testAngle)
+      : moduloAngle(testAngle - startAngle);
+    return offset <= sweep + 0.0001;
+  }
+
+  function drawSeifertSurfaceBandRibbon(ctx, path, bandWidth, outlineWidth) {
+    if (path.type === 'line') {
+      drawSeifertSurfaceLineRibbon(ctx, path, bandWidth, outlineWidth);
+    } else if (path.type === 'arc') {
+      drawSeifertSurfaceCircularRibbon(ctx, path, bandWidth, outlineWidth);
+    } else {
+      drawSeifertSurfaceQuadraticRibbon(ctx, path, bandWidth, outlineWidth);
+    }
+  }
+
+  function drawSeifertSurfaceLineRibbon(ctx, path, bandWidth, outlineWidth) {
+    const halfWidth = bandWidth / 2;
+    const tangent = normalizeVector(path.end.x - path.start.x, path.end.y - path.start.y, 1, 0);
+    const normal = { x: -tangent.y, y: tangent.x };
+    const startLeft = offsetPoint(path.start, normal, halfWidth);
+    const endLeft = offsetPoint(path.end, normal, halfWidth);
+    const endRight = offsetPoint(path.end, normal, -halfWidth);
+    const startRight = offsetPoint(path.start, normal, -halfWidth);
+
+    ctx.beginPath();
+    ctx.moveTo(startLeft.x, startLeft.y);
+    ctx.lineTo(endLeft.x, endLeft.y);
+    ctx.lineTo(endRight.x, endRight.y);
+    ctx.lineTo(startRight.x, startRight.y);
+    ctx.closePath();
+    ctx.fillStyle = seifertSurfaceFillColor();
+    ctx.fill();
+    ctx.strokeStyle = seifertSurfaceStrokeColor();
+    ctx.lineWidth = outlineWidth;
+    ctx.beginPath();
+    ctx.moveTo(startLeft.x, startLeft.y);
+    ctx.lineTo(endLeft.x, endLeft.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(startRight.x, startRight.y);
+    ctx.lineTo(endRight.x, endRight.y);
+    ctx.stroke();
+  }
+
+  function drawSeifertSurfaceCircularRibbon(ctx, path, bandWidth, outlineWidth) {
+    const halfWidth = bandWidth / 2;
+    const innerRadius = Math.max(0.5, path.arcRadius - halfWidth);
+    const outerRadius = path.arcRadius + halfWidth;
+
+    ctx.beginPath();
+    ctx.arc(path.center.x, path.center.y, outerRadius, path.startAngle, path.endAngle, path.anticlockwise);
+    ctx.arc(path.center.x, path.center.y, innerRadius, path.endAngle, path.startAngle, !path.anticlockwise);
+    ctx.closePath();
+    ctx.fillStyle = seifertSurfaceFillColor();
+    ctx.fill();
+    ctx.strokeStyle = seifertSurfaceStrokeColor();
+    ctx.lineWidth = outlineWidth;
+    ctx.beginPath();
+    ctx.arc(path.center.x, path.center.y, outerRadius, path.startAngle, path.endAngle, path.anticlockwise);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(path.center.x, path.center.y, innerRadius, path.startAngle, path.endAngle, path.anticlockwise);
+    ctx.stroke();
+  }
+
+  function drawSeifertSurfaceQuadraticRibbon(ctx, path, bandWidth, outlineWidth) {
+    const samples = sampleQuadraticRibbon(path, bandWidth / 2, 18);
+    if (!samples.left.length || !samples.right.length) return;
+    ctx.beginPath();
+    samples.left.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    for (let index = samples.right.length - 1; index >= 0; index -= 1) {
+      const point = samples.right[index];
+      ctx.lineTo(point.x, point.y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = seifertSurfaceFillColor();
+    ctx.fill();
+    ctx.strokeStyle = seifertSurfaceStrokeColor();
+    ctx.lineWidth = outlineWidth;
+    strokeSeifertSurfacePolyline(ctx, samples.left);
+    strokeSeifertSurfacePolyline(ctx, samples.right);
+  }
+
+  function strokeSeifertSurfacePolyline(ctx, points) {
+    if (!points.length) return;
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.stroke();
+  }
+
+  function sampleQuadraticRibbon(path, halfWidth, steps) {
+    const left = [];
+    const right = [];
+    const count = Math.max(2, Math.round(steps));
+    for (let index = 0; index <= count; index += 1) {
+      const t = index / count;
+      const point = quadraticPoint(path.start, path.control, path.end, t);
+      const tangent = quadraticTangent(path.start, path.control, path.end, t);
+      const normal = normalizeVector(-tangent.y, tangent.x, 0, 1);
+      left.push(offsetPoint(point, normal, halfWidth));
+      right.push(offsetPoint(point, normal, -halfWidth));
+    }
+    return { left, right };
+  }
+
+  function quadraticPoint(start, control, end, t) {
+    const u = 1 - t;
+    return {
+      x: (u * u * start.x) + (2 * u * t * control.x) + (t * t * end.x),
+      y: (u * u * start.y) + (2 * u * t * control.y) + (t * t * end.y)
+    };
+  }
+
+  function quadraticTangent(start, control, end, t) {
+    return {
+      x: (2 * (1 - t) * (control.x - start.x)) + (2 * t * (end.x - control.x)),
+      y: (2 * (1 - t) * (control.y - start.y)) + (2 * t * (end.y - control.y))
+    };
+  }
+
+  function offsetPoint(point, normal, distance) {
+    return {
+      x: point.x + normal.x * distance,
+      y: point.y + normal.y * distance
+    };
+  }
+
+  function seifertDiskFallbackRadius(radius) {
+    return clamp(seifertBandPixelWidth(radius) * 0.82, radius * 0.18, radius * 0.55);
+  }
+
+  function drawSeifertSurfaceCore(ctx, cell, radius, coreRadius) {
+    ctx.save();
+    ctx.fillStyle = seifertSurfaceFillColor();
+    ctx.strokeStyle = seifertSurfaceStrokeColor();
+    ctx.lineWidth = seifertSurfaceOutlineWidth(radius);
+    ctx.beginPath();
+    ctx.arc(cell.x, cell.y, coreRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function analyzeSeifertSurface() {
+    const lattice = getLattice();
+    const radius = geometry && geometry.radius ? geometry.radius : 24;
+    const pieces = [];
+    const mouths = [];
+    const mouthByPort = new Map();
+    const surfaceParent = [];
+    const surfaceRank = [];
+    const boundaryParent = [];
+    const boundaryRank = [];
+    const boundaryEdges = [];
+    const gluePairs = [];
+    let disks = 0;
+    let bands = 0;
+
+    const addSurfacePiece = (kind, index, data = {}) => {
+      const id = pieces.length;
+      pieces.push({ id, kind, index, mouths: [], ...data });
+      surfaceParent[id] = id;
+      surfaceRank[id] = 0;
+      if (kind === 'disk') disks += 1;
+      if (kind === 'band') bands += 1;
+      return pieces[id];
+    };
+
+    const addBoundaryNode = (pieceId, point = null) => {
+      const id = boundaryParent.length;
+      boundaryParent[id] = id;
+      boundaryRank[id] = 0;
+      return { id, pieceId, point };
+    };
+
+    const addMouth = (piece, dir) => {
+      const normalized = normalizeDir(dir, lattice.sides);
+      const negative = seifertMouthEndpointPoint(piece.index, normalized, -1, radius);
+      const positive = seifertMouthEndpointPoint(piece.index, normalized, 1, radius);
+      const mouth = {
+        id: mouths.length,
+        pieceId: piece.id,
+        index: piece.index,
+        dir: normalized,
+        glued: false,
+        partner: null,
+        nodes: {
+          '-1': addBoundaryNode(piece.id, negative).id,
+          '1': addBoundaryNode(piece.id, positive).id
+        },
+        points: {
+          '-1': negative,
+          '1': positive
+        }
+      };
+      mouths.push(mouth);
+      piece.mouths.push(mouth);
+      const key = seifertPortKey(mouth.index, mouth.dir);
+      if (!mouthByPort.has(key)) mouthByPort.set(key, []);
+      mouthByPort.get(key).push(mouth);
+      return mouth;
+    };
+
+    const addBoundaryEdge = (left, right, pieceId, geometry = null) => {
+      boundaryEdges.push({ left, right, pieceId, geometry });
+      union(boundaryParent, boundaryRank, left, right);
+    };
+
+    for (let index = 0; index < state.tiles.length; index += 1) {
+      if (!tileExists(index) || isTileEmpty(state.tiles[index])) continue;
+      const tile = state.tiles[index];
+      if (isVertexTileValue(tile)) {
+        const piece = addSurfacePiece('disk', index, {
+          dirs: normalizeVertexTile(tile)
+        });
+        piece.dirs.forEach((dir) => addMouth(piece, dir));
+        continue;
+      }
+      normalizeTile(tile).forEach((pair, pairIndex) => {
+        const cell = geometry && geometry.cells ? geometry.cells[index] : null;
+        const piece = addSurfacePiece('band', index, {
+          pair,
+          pairIndex,
+          path: cell ? getArcPath(cell, pair, radius) : null
+        });
+        addMouth(piece, pair[0]);
+        addMouth(piece, pair[1]);
+      });
+    }
+
+    mouths.forEach((mouth) => {
+      if (mouth.glued) return;
+      const next = connectedSurfaceNeighbor(mouth.index, mouth.dir, lattice);
+      if (!next) return;
+      const candidates = mouthByPort.get(seifertPortKey(next.index, next.dir)) || [];
+      const partner = candidates.find((candidate) => candidate.id !== mouth.id && !candidate.glued);
+      if (!partner) return;
+      mouth.glued = true;
+      partner.glued = true;
+      mouth.partner = partner.id;
+      partner.partner = mouth.id;
+      gluePairs.push({ left: mouth.pieceId, right: partner.pieceId });
+      union(surfaceParent, surfaceRank, mouth.pieceId, partner.pieceId);
+      seifertGlueBoundaryMouths(mouth, partner, boundaryParent, boundaryRank);
+    });
+
+    pieces.forEach((piece) => {
+      if (piece.kind === 'disk') {
+        addSeifertDiskBoundaryEdges(piece, addBoundaryNode, addBoundaryEdge, radius);
+      } else {
+        addSeifertBandBoundaryEdges(piece, addBoundaryEdge, radius);
+      }
+    });
+
+    const componentStats = new Map();
+    pieces.forEach((piece) => {
+      const root = find(surfaceParent, piece.id);
+      if (!componentStats.has(root)) {
+        componentStats.set(root, {
+          root,
+          pieces: 0,
+          disks: 0,
+          bands: 0,
+          glues: 0,
+          openEnds: 0,
+          boundaryComponents: 0,
+          eulerCharacteristic: 0,
+          genus: null
+        });
+      }
+      const stats = componentStats.get(root);
+      stats.pieces += 1;
+      if (piece.kind === 'disk') stats.disks += 1;
+      if (piece.kind === 'band') stats.bands += 1;
+    });
+
+    gluePairs.forEach((pair) => {
+      const root = find(surfaceParent, pair.left);
+      const stats = componentStats.get(root);
+      if (stats) stats.glues += 1;
+    });
+
+    mouths.forEach((mouth) => {
+      if (mouth.glued) return;
+      const root = find(surfaceParent, mouth.pieceId);
+      const stats = componentStats.get(root);
+      if (stats) stats.openEnds += 1;
+    });
+
+    const boundaryRootToSurfaceRoot = new Map();
+    const boundaryRootToIndex = new Map();
+    boundaryEdges.forEach((edge) => {
+      const boundaryRoot = find(boundaryParent, edge.left);
+      if (!boundaryRootToIndex.has(boundaryRoot)) boundaryRootToIndex.set(boundaryRoot, boundaryRootToIndex.size);
+      if (!boundaryRootToSurfaceRoot.has(boundaryRoot)) {
+        boundaryRootToSurfaceRoot.set(boundaryRoot, find(surfaceParent, edge.pieceId));
+      }
+    });
+    boundaryRootToSurfaceRoot.forEach((surfaceRoot) => {
+      const stats = componentStats.get(surfaceRoot);
+      if (stats) stats.boundaryComponents += 1;
+    });
+
+    const components = Array.from(componentStats.values()).map((stats) => {
+      stats.eulerCharacteristic = stats.pieces - stats.glues;
+      stats.genus = numericTopologyInvariant((2 - stats.boundaryComponents - stats.eulerCharacteristic) / 2);
+      return stats;
+    });
+
+    const eulerCharacteristic = components.reduce((total, item) => total + item.eulerCharacteristic, 0);
+    const genus = components.length
+      ? numericTopologyInvariant(components.reduce((total, item) => total + (Number(item.genus) || 0), 0))
+      : null;
+    const boundaryComponents = components.reduce((total, item) => total + item.boundaryComponents, 0);
+    const openEnds = components.reduce((total, item) => total + item.openEnds, 0);
+
+    return {
+      active: pieces.length,
+      disks,
+      bands,
+      gluedMouths: gluePairs.length,
+      openEnds,
+      components: components.length,
+      connected: pieces.length > 0 && components.length === 1,
+      boundaryComponents,
+      eulerCharacteristic,
+      genus,
+      orientable: true,
+      componentGenus: components.map((item) => item.genus),
+      componentStats: components,
+      boundaryColors: Array.from({ length: boundaryComponents }, (_, index) => seifertBoundaryColor(index)),
+      boundarySegments: boundaryEdges
+        .filter((edge) => edge.geometry)
+        .map((edge) => ({
+          ...edge.geometry,
+          boundary: boundaryRootToIndex.get(find(boundaryParent, edge.left)) || 0
+        })),
+      status: pieces.length === 0 ? 'empty' : (openEnds ? 'open' : 'closed')
+    };
+  }
+
+  function addSeifertDiskBoundaryEdges(piece, addBoundaryNode, addBoundaryEdge, radius) {
+    if (!piece.mouths.length) {
+      const node = addBoundaryNode(piece.id, null).id;
+      addBoundaryEdge(node, node, piece.id, seifertIsolatedDiskBoundaryGeometry(piece, radius));
+      return;
+    }
+    const lattice = getLattice();
+    const mouthGap = Math.PI / lattice.sides;
+    const points = [];
+    piece.mouths.forEach((mouth) => {
+      [-1, 1].forEach((side) => {
+        const point = mouth.points[String(side)] || seifertMouthEndpointPoint(piece.index, mouth.dir, side, radius);
+        const coordinate = point || { x: 0, y: 0 };
+        points.push({
+          ...coordinate,
+          dir: mouth.dir,
+          side,
+          mouth,
+          node: mouth.nodes[String(side)],
+          angle: seifertBoundaryPointAngle(piece.index, point)
+        });
+      });
+    });
+    points.sort((left, right) => left.angle - right.angle);
+    points.forEach((current, index) => {
+      const next = points[(index + 1) % points.length];
+      const gap = moduloAngle(next.angle - current.angle);
+      const mouthInterval = current.mouth === next.mouth && gap <= mouthGap + 0.0001;
+      if (!mouthInterval || !current.mouth.glued) {
+        addBoundaryEdge(
+          current.node,
+          next.node,
+          piece.id,
+          mouthInterval ? null : seifertDiskBoundaryGeometry(piece, current, next)
+        );
+      }
+    });
+  }
+
+  function addSeifertBandBoundaryEdges(piece, addBoundaryEdge, radius) {
+    if (piece.mouths.length < 2) return;
+    const left = piece.mouths[0];
+    const right = piece.mouths[1];
+    const sidePairs = seifertBandBoundarySidePairs(piece, left, right, radius);
+    sidePairs.forEach((pair) => {
+      addBoundaryEdge(
+        left.nodes[String(pair.leftSide)],
+        right.nodes[String(pair.rightSide)],
+        piece.id,
+        seifertBandSideGeometry(piece.path, pair.pathSide, radius)
+      );
+    });
+    piece.mouths.forEach((mouth) => {
+      if (!mouth.glued) addBoundaryEdge(mouth.nodes['-1'], mouth.nodes['1'], piece.id);
+    });
+  }
+
+  function seifertBandBoundarySidePairs(piece, left, right, radius) {
+    const path = piece.path;
+    if (!path) return [
+      { leftSide: -1, rightSide: -1, pathSide: -1 },
+      { leftSide: 1, rightSide: 1, pathSide: 1 }
+    ];
+    const halfWidth = seifertMouthHalfWidth(radius);
+    const startNormal = seifertPathNormal(path, false);
+    const endNormal = seifertPathNormal(path, true);
+    return [-1, 1].map((side) => ({
+      leftSide: seifertNearestMouthSide(left, offsetPoint(path.start, startNormal, halfWidth * side)),
+      rightSide: seifertNearestMouthSide(right, offsetPoint(path.end, endNormal, halfWidth * side)),
+      pathSide: side
+    }));
+  }
+
+  function seifertPathNormal(path, atEnd) {
+    let tangent = { x: 1, y: 0 };
+    if (path.type === 'line') {
+      tangent = normalizeVector(path.end.x - path.start.x, path.end.y - path.start.y, 1, 0);
+    } else if (path.type === 'arc') {
+      const angle = atEnd ? path.endAngle : path.startAngle;
+      tangent = path.anticlockwise
+        ? { x: Math.sin(angle), y: -Math.cos(angle) }
+        : { x: -Math.sin(angle), y: Math.cos(angle) };
+    } else {
+      tangent = atEnd
+        ? normalizeVector(path.end.x - path.control.x, path.end.y - path.control.y, 1, 0)
+        : normalizeVector(path.control.x - path.start.x, path.control.y - path.start.y, 1, 0);
+    }
+    return normalizeVector(-tangent.y, tangent.x, 0, 1);
+  }
+
+  function seifertIsolatedDiskBoundaryGeometry(piece, radius) {
+    const cell = geometry && geometry.cells ? geometry.cells[piece.index] : null;
+    if (!cell) return null;
+    return {
+      type: 'circle',
+      x: cell.x,
+      y: cell.y,
+      radius: seifertDiskFallbackRadius(radius)
+    };
+  }
+
+  function seifertDiskBoundaryGeometry(piece, current, next) {
+    const cell = geometry && geometry.cells ? geometry.cells[piece.index] : null;
+    if (!cell) return null;
+    const segment = seifertSurfaceBoundarySegment(cell, current, next);
+    if (segment && segment.type === 'arc') {
+      const startAngle = Math.atan2(current.y - segment.center.y, current.x - segment.center.x);
+      const endAngle = Math.atan2(next.y - segment.center.y, next.x - segment.center.x);
+      const guideAngle = Math.atan2(segment.guide.y - segment.center.y, segment.guide.x - segment.center.x);
+      const ccwHasGuide = angleOnCircularSweep(startAngle, endAngle, guideAngle, false);
+      const cwHasGuide = angleOnCircularSweep(startAngle, endAngle, guideAngle, true);
+      return {
+        type: 'arc',
+        center: segment.center,
+        radius: segment.radius,
+        startAngle,
+        endAngle,
+        anticlockwise: cwHasGuide && !ccwHasGuide
+      };
+    }
+    return {
+      type: 'line',
+      start: { x: current.x, y: current.y },
+      end: { x: next.x, y: next.y }
+    };
+  }
+
+  function seifertBandSideGeometry(path, side, radius) {
+    if (!path) return null;
+    return {
+      type: 'polyline',
+      points: sampleSeifertPathSide(path, seifertMouthHalfWidth(radius) * side, 24)
+    };
+  }
+
+  function sampleSeifertPathSide(path, offset, steps) {
+    const points = [];
+    const count = Math.max(2, Math.round(steps));
+    for (let index = 0; index <= count; index += 1) {
+      const t = index / count;
+      const point = seifertPathPoint(path, t);
+      const tangent = seifertPathTangent(path, t);
+      const normal = normalizeVector(-tangent.y, tangent.x, 0, 1);
+      points.push(offsetPoint(point, normal, offset));
+    }
+    return points;
+  }
+
+  function seifertPathPoint(path, t) {
+    if (path.type === 'line') {
+      return {
+        x: path.start.x + (path.end.x - path.start.x) * t,
+        y: path.start.y + (path.end.y - path.start.y) * t
+      };
+    }
+    if (path.type === 'arc') {
+      const sweep = path.anticlockwise
+        ? -moduloAngle(path.startAngle - path.endAngle)
+        : moduloAngle(path.endAngle - path.startAngle);
+      const angle = path.startAngle + sweep * t;
+      return {
+        x: path.center.x + Math.cos(angle) * path.arcRadius,
+        y: path.center.y + Math.sin(angle) * path.arcRadius
+      };
+    }
+    return quadraticPoint(path.start, path.control, path.end, t);
+  }
+
+  function seifertPathTangent(path, t) {
+    if (path.type === 'line') return normalizeVector(path.end.x - path.start.x, path.end.y - path.start.y, 1, 0);
+    if (path.type === 'arc') {
+      const sweep = path.anticlockwise
+        ? -moduloAngle(path.startAngle - path.endAngle)
+        : moduloAngle(path.endAngle - path.startAngle);
+      const angle = path.startAngle + sweep * t;
+      return path.anticlockwise
+        ? { x: Math.sin(angle), y: -Math.cos(angle) }
+        : { x: -Math.sin(angle), y: Math.cos(angle) };
+    }
+    return quadraticTangent(path.start, path.control, path.end, t);
+  }
+
+  function seifertGlueBoundaryMouths(left, right, boundaryParent, boundaryRank) {
+    const used = new Set();
+    [-1, 1].forEach((side) => {
+      const match = seifertNearestMouthSide(right, left.points[String(side)], used);
+      used.add(match);
+      union(boundaryParent, boundaryRank, left.nodes[String(side)], right.nodes[String(match)]);
+    });
+  }
+
+  function seifertNearestMouthSide(mouth, point, used = null) {
+    let best = null;
+    [-1, 1].forEach((side) => {
+      if (used && used.has(side)) return;
+      const endpoint = mouth.points[String(side)];
+      const distance = endpoint && point ? Math.hypot(endpoint.x - point.x, endpoint.y - point.y) : Math.abs(side);
+      if (!best || distance < best.distance) best = { side, distance };
+    });
+    return best ? best.side : 1;
+  }
+
+  function seifertMouthEndpointPoint(index, dir, side, radius) {
+    const cell = geometry && geometry.cells ? geometry.cells[index] : null;
+    if (!cell) return null;
+    const normalized = normalizeDir(dir, getLattice().sides);
+    const angle = getLattice().angles[normalized];
+    const center = edgePoint(cell.x, cell.y, normalized, edgeConnectionDistance(radius));
+    const tangent = { x: -Math.sin(angle), y: Math.cos(angle) };
+    const halfWidth = seifertMouthHalfWidth(radius);
+    return {
+      x: center.x + tangent.x * halfWidth * side,
+      y: center.y + tangent.y * halfWidth * side
+    };
+  }
+
+  function seifertMouthHalfWidth(radius) {
+    const sideHalf = seifertSurfaceSideHalfLength(radius);
+    return clamp(seifertBandPixelWidth(radius) * 0.5, radius * 0.05, sideHalf * 0.9);
+  }
+
+  function seifertBoundaryPointAngle(index, point) {
+    const cell = geometry && geometry.cells ? geometry.cells[index] : null;
+    if (!cell || !point) return 0;
+    return moduloAngle(Math.atan2(point.y - cell.y, point.x - cell.x));
+  }
+
+  function seifertPortKey(index, dir) {
+    return `${index}:${normalizeDir(dir, getLattice().sides)}`;
+  }
+
+  function seifertBoundaryColor(index) {
+    return SEIFERT_BOUNDARY_COLOR_PALETTE[modulo(index, SEIFERT_BOUNDARY_COLOR_PALETTE.length)];
+  }
+
+  function updateSeifertSurfaceChart() {
+    if (!refs.seifertStats) return;
+    const visible = isDualGraph() && !!state.showSeifertSurface;
+    const analysis = visible ? analyzeSeifertSurface() : null;
+    const stats = refs.seifertStats;
+    if (!analysis || !analysis.active) {
+      if (stats.pieces) stats.pieces.textContent = '-';
+      if (stats.components) stats.components.textContent = '-';
+      if (stats.connected) {
+        stats.connected.textContent = '-';
+        stats.connected.classList.remove('mosaic-status-good', 'mosaic-status-bad');
+      }
+      if (stats.boundary) stats.boundary.textContent = '-';
+      if (stats.openEnds) {
+        stats.openEnds.textContent = '-';
+        stats.openEnds.classList.remove('mosaic-status-good', 'mosaic-status-bad');
+      }
+      if (stats.genusEuler) stats.genusEuler.textContent = '-';
+      if (stats.boundaryColors) {
+        stats.boundaryColors.hidden = true;
+        stats.boundaryColors.innerHTML = '';
+      }
+      return;
+    }
+    if (stats.pieces) stats.pieces.textContent = `${analysis.disks} disk${analysis.disks === 1 ? '' : 's'}, ${analysis.bands} band${analysis.bands === 1 ? '' : 's'}`;
+    if (stats.components) stats.components.textContent = String(analysis.components);
+    if (stats.connected) {
+      stats.connected.textContent = analysis.connected ? 'yes' : 'no';
+      stats.connected.classList.toggle('mosaic-status-good', !!analysis.connected);
+      stats.connected.classList.toggle('mosaic-status-bad', !analysis.connected);
+    }
+    if (stats.boundary) stats.boundary.textContent = String(analysis.boundaryComponents);
+    if (stats.openEnds) {
+      stats.openEnds.textContent = String(analysis.openEnds);
+      stats.openEnds.classList.toggle('mosaic-status-good', analysis.openEnds === 0);
+      stats.openEnds.classList.toggle('mosaic-status-bad', analysis.openEnds > 0);
+    }
+    if (stats.genusEuler) stats.genusEuler.textContent = `(${formatSeifertGenus(analysis)}, ${formatTopologyNumber(analysis.eulerCharacteristic)})`;
+    if (stats.boundaryColors) {
+      stats.boundaryColors.hidden = !(state.colorSeifertBoundaries && analysis.boundaryComponents > 1);
+      stats.boundaryColors.innerHTML = state.colorSeifertBoundaries
+        ? analysis.boundaryColors.map((color, index) => `<span class="mosaic-boundary-chip" style="--boundary-color: ${escapeHtmlAttribute(color)}" title="boundary ${index + 1}"></span>`).join('')
+        : '';
+    }
+  }
+
+  function formatSeifertGenus(analysis) {
+    if (!analysis || analysis.genus == null) return '?';
+    if (analysis.componentGenus && analysis.componentGenus.length > 1) {
+      return `${formatTopologyNumber(analysis.genus)} total`;
+    }
+    return formatTopologyNumber(analysis.genus);
+  }
+
+  function drawSeifertBoundaryComponents(ctx) {
+    if (!(isDualGraph() && state.showSeifertSurface && state.colorSeifertBoundaries)) return;
+    const analysis = analyzeSeifertSurface();
+    if (!analysis.boundarySegments || !analysis.boundarySegments.length) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(seifertSurfaceOutlineWidth(geometry.radius) * 1.6, 1.25);
+    analysis.boundarySegments.forEach((segment) => {
+      ctx.strokeStyle = seifertBoundaryColor(segment.boundary || 0);
+      drawSeifertBoundarySegment(ctx, segment);
+    });
+    ctx.restore();
+  }
+
+  function drawSeifertBoundarySegment(ctx, segment) {
+    if (!segment) return;
+    ctx.beginPath();
+    if (segment.type === 'circle') {
+      ctx.arc(segment.x, segment.y, segment.radius, 0, Math.PI * 2);
+    } else if (segment.type === 'arc') {
+      ctx.arc(segment.center.x, segment.center.y, segment.radius, segment.startAngle, segment.endAngle, segment.anticlockwise);
+    } else if (segment.type === 'polyline') {
+      if (!segment.points || !segment.points.length) return;
+      segment.points.forEach((point, index) => {
+        if (index === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+    } else if (segment.type === 'line') {
+      ctx.moveTo(segment.start.x, segment.start.y);
+      ctx.lineTo(segment.end.x, segment.end.y);
+    } else {
+      return;
+    }
+    ctx.stroke();
   }
 
   function drawPipe(ctx, cell, tile, palette, radiusOverride = null, arcComponents = null, drawMeta = null) {
@@ -16457,6 +17409,7 @@
     const report = analyze();
     const lattice = getLattice();
     const backgroundBilliard = backgroundBilliardForExport();
+    const seifertSurface = isDualGraph() ? seifertSurfaceForExport(analyzeSeifertSurface()) : null;
     const payload = {
       name: 'Mosaic Calculator',
       lattice: state.lattice,
@@ -16487,6 +17440,11 @@
         colorComponents: state.colorComponents,
         pick: state.displayPick,
         cusps: state.showCusps,
+        showSeifertSurface: !!state.showSeifertSurface,
+        showSeifertBackground: !!state.showSeifertBackground,
+        colorSeifertBoundaries: !!state.colorSeifertBoundaries,
+        seifertBandWidth: normalizeSeifertBandWidth(state.seifertBandWidth),
+        seifertSurfaceColor: normalizeSeifertSurfaceColor(state.seifertSurfaceColor),
         drawAction: state.drawAction,
         knotCodeKind: state.knotCodeKind,
         drawStyle: state.drawStyle,
@@ -16519,9 +17477,28 @@
           decoration: isDualGraph() && isVertexTileValue(tile) ? vertexDecorationValue(index) : 0
         };
       }),
-      dualGraph: isDualGraph() ? buildDualGraphExport(report, lattice) : null
+      dualGraph: isDualGraph() ? buildDualGraphExport(report, lattice) : null,
+      seifertSurface
     };
     refs.exportOut.value = JSON.stringify(payload, null, 2);
+  }
+
+  function seifertSurfaceForExport(analysis) {
+    if (!analysis) return null;
+    return {
+      status: analysis.status,
+      disks: analysis.disks,
+      bands: analysis.bands,
+      gluedMouths: analysis.gluedMouths,
+      openEnds: analysis.openEnds,
+      components: analysis.components,
+      connected: analysis.connected,
+      boundaryComponents: analysis.boundaryComponents,
+      orientable: analysis.orientable,
+      genus: analysis.genus,
+      componentGenus: analysis.componentGenus,
+      eulerCharacteristic: analysis.eulerCharacteristic
+    };
   }
 
   function removedTilesForExport() {
@@ -16683,6 +17660,7 @@
     refs.colorComponents.checked = state.colorComponents;
     refs.displayPick.checked = state.displayPick;
     if (refs.showCusps) refs.showCusps.checked = state.showCusps;
+    syncSeifertSurfaceControls();
     syncDualGraphInvariantVisibility();
     if (refs.showDualGraphCanvas) refs.showDualGraphCanvas.checked = state.showDualGraphCanvas;
     if (refs.showRiemannSurfaceCanvas) refs.showRiemannSurfaceCanvas.checked = state.showRiemannSurfaceCanvas;
@@ -17234,7 +18212,48 @@
     syncBackgroundModeControls();
   }
 
+  function syncSeifertSurfaceControls() {
+    const dualMode = isDualGraph();
+    const width = normalizeSeifertBandWidth(state.seifertBandWidth);
+    const color = normalizeSeifertSurfaceColor(state.seifertSurfaceColor);
+    state.seifertBandWidth = width;
+    state.seifertSurfaceColor = color;
+    if (refs.showSeifertSurfaceRow) refs.showSeifertSurfaceRow.hidden = !dualMode;
+    if (refs.showSeifertSurface) {
+      refs.showSeifertSurface.disabled = !dualMode;
+      refs.showSeifertSurface.textContent = state.showSeifertSurface ? 'Close surface' : 'Open surface';
+      refs.showSeifertSurface.setAttribute('aria-pressed', state.showSeifertSurface ? 'true' : 'false');
+    }
+    const chartVisible = dualMode && !!state.showSeifertSurface;
+    if (refs.seifertSurfaceCard) {
+      refs.seifertSurfaceCard.hidden = !chartVisible;
+      if (chartVisible) refs.seifertSurfaceCard.classList.remove('collapsed');
+    }
+    if (refs.showSeifertBackgroundRow) refs.showSeifertBackgroundRow.hidden = !chartVisible;
+    if (refs.showSeifertBackground) {
+      refs.showSeifertBackground.disabled = !chartVisible;
+      refs.showSeifertBackground.checked = !!state.showSeifertBackground;
+    }
+    if (refs.colorSeifertBoundariesRow) refs.colorSeifertBoundariesRow.hidden = !chartVisible;
+    if (refs.colorSeifertBoundaries) {
+      refs.colorSeifertBoundaries.disabled = !chartVisible;
+      refs.colorSeifertBoundaries.checked = !!state.colorSeifertBoundaries;
+    }
+    if (refs.seifertSurfaceColorRow) refs.seifertSurfaceColorRow.hidden = !chartVisible;
+    if (refs.seifertSurfaceColor) {
+      refs.seifertSurfaceColor.disabled = !chartVisible;
+      refs.seifertSurfaceColor.value = color;
+    }
+    if (refs.seifertBandWidthRow) refs.seifertBandWidthRow.hidden = !chartVisible;
+    if (refs.seifertBandWidth) {
+      refs.seifertBandWidth.disabled = !chartVisible;
+      refs.seifertBandWidth.value = width.toFixed(2);
+    }
+    if (refs.seifertBandWidthValue) refs.seifertBandWidthValue.textContent = width.toFixed(2);
+  }
+
   function updateDisplayControls() {
+    syncSeifertSurfaceControls();
     if (refs.wrappedViewRow) {
       refs.wrappedViewRow.hidden = !state.wrapped;
       refs.wrappedViewMode.disabled = !state.wrapped;
@@ -17598,6 +18617,52 @@
     ) return hasGluedBoundaryPairs() ? 'reverse-glue' : 'tile';
     if (action === 'billiard' || action === 'billiards') return 'billiard';
     return 'tile';
+  }
+
+  function normalizeSeifertBandWidth(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return DEFAULT_SEIFERT_BAND_WIDTH;
+    return clamp(number, MIN_SEIFERT_BAND_WIDTH, MAX_SEIFERT_BAND_WIDTH);
+  }
+
+  function normalizeSeifertSurfaceColor(value, fallback = DEFAULT_SEIFERT_SURFACE_COLOR) {
+    return normalizeHexColor(value, fallback);
+  }
+
+  function normalizeHexColor(value, fallback) {
+    const color = String(value || '').trim();
+    return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : fallback;
+  }
+
+  function colorWithAlpha(color, alpha) {
+    const rgb = hexToRgb(color);
+    if (!rgb) return color;
+    return `rgba(${rgb.r},${rgb.g},${rgb.b},${clamp(alpha, 0, 1)})`;
+  }
+
+  function darkenHexColor(color, factor) {
+    const rgb = hexToRgb(color);
+    if (!rgb) return color;
+    const amount = clamp(factor, 0, 1);
+    return rgbToHex(
+      Math.round(rgb.r * amount),
+      Math.round(rgb.g * amount),
+      Math.round(rgb.b * amount)
+    );
+  }
+
+  function hexToRgb(color) {
+    const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(color || '').trim());
+    if (!match) return null;
+    return {
+      r: parseInt(match[1], 16),
+      g: parseInt(match[2], 16),
+      b: parseInt(match[3], 16)
+    };
+  }
+
+  function rgbToHex(r, g, b) {
+    return `#${[r, g, b].map((channel) => Math.round(clamp(channel, 0, 255)).toString(16).padStart(2, '0')).join('')}`;
   }
 
   function normalizeBackgroundCuspMarkerScale(value) {

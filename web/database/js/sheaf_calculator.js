@@ -4390,58 +4390,79 @@
     if (!geometry || data.secondary.baseVarietyId !== data.main.baseVarietyId) return [];
     const sourceSheaf = sheafFromObject(data.secondary, geometry);
     const targetSheaf = sheafFromObject(data.main, geometry);
-    const entries = [];
-    ['chern', 'character'].forEach((family) => {
-      const sourceDefs = classStepSheafDefsForSheaf(sourceSheaf, geometry, family);
-      const targetByDegree = new Map(classStepSheafDefsForSheaf(targetSheaf, geometry, family)
-        .map((def) => [def.degree, def]));
-      sourceDefs.forEach((sourceDef) => {
-        const targetDef = targetByDegree.get(sourceDef.degree);
-        if (!targetDef || sourceDef.id === targetDef.id) return;
-        entries.push(sheafIdentificationSavedRuleEntry(data, geometry, family, sourceDef, targetDef));
-      });
-    });
-    return entries.filter(Boolean);
+    return [sheafIdentificationSavedRuleEntry(data, geometry, sourceSheaf, targetSheaf)].filter(Boolean);
   }
 
-  function sheafIdentificationSavedRuleEntry(data, geometry, family, sourceDef, targetDef) {
-    const lhs = { powers: { [sourceDef.id]: 1 } };
-    const rhs = [{ coefficient: '1', powers: { [targetDef.id]: 1 } }];
-    const variableIds = [...new Set([sourceDef.id, targetDef.id])];
+  function sheafIdentificationSavedRuleEntry(data, geometry, sourceSheaf, targetSheaf) {
+    if (!data?.main?.id || !data?.secondary?.id || !geometry || !sourceSheaf || !targetSheaf) return null;
+    const sourceLatex = sheafLabelLatex(sourceSheaf);
+    const targetLatex = sheafLabelLatex(targetSheaf);
+    const sourcePlain = sheafLabelPlain(sourceSheaf);
+    const targetPlain = sheafLabelPlain(targetSheaf);
+    const variableIds = sheafIdentificationSavedVariableIds(sourceSheaf, targetSheaf, geometry);
     const id = `step-identify-sheaf-${hashString([
       geometry.varietyId || homologyScopeId(geometry),
       data.secondary.id,
-      data.main.id,
-      family,
-      sourceDef.degree,
-      sourceDef.id,
-      targetDef.id
+      data.main.id
     ].join('::'))}`;
     return {
       id,
-      kind: 'rewrite',
-      family,
-      target: family,
-      degree: sourceDef.degree,
+      kind: 'sheaf-identification',
+      family: 'formula',
+      target: 'formula',
+      degree: null,
       dimension: geometry.dim,
       geometryId: geometry.varietyId || null,
-      labelLatex: sourceDef.symbolLatex || '',
-      labelPlain: sourceDef.symbolPlain || '',
-      lhsLatex: sourceDef.symbolLatex || '',
-      rhsLatex: targetDef.symbolLatex || '',
-      lhsPlain: sourceDef.symbolPlain || '',
-      rhsPlain: targetDef.symbolPlain || '',
-      displayLatex: `${sourceDef.symbolLatex || sourceDef.id}=${targetDef.symbolLatex || targetDef.id}`,
-      displayPlain: `${sourceDef.symbolPlain || sourceDef.id}=${targetDef.symbolPlain || targetDef.id}`,
+      sourceSheafId: data.secondary.id,
+      targetSheafId: data.main.id,
+      sourceSheaf: sheafIdentificationSavedSheafSnapshot(data.secondary),
+      targetSheaf: sheafIdentificationSavedSheafSnapshot(data.main),
+      labelLatex: sourceLatex,
+      labelPlain: sourcePlain,
+      lhsLatex: sourceLatex,
+      rhsLatex: targetLatex,
+      lhsPlain: sourcePlain,
+      rhsPlain: targetPlain,
+      displayLatex: `${sourceLatex}=${targetLatex}`,
+      displayPlain: `${sourcePlain}=${targetPlain}`,
       formulaTokens: [],
-      formulaSignature: `identify:${data.secondary.id}->${data.main.id}`,
-      lhs,
-      rhs,
+      formulaSignature: `identify-sheaf:${data.secondary.id}->${data.main.id}`,
       variableIds,
       variables: classStepVariableSnapshots(variableIds),
       sourceLabel: 'Identification',
       selected: true
     };
+  }
+
+  function sheafIdentificationSavedSheafSnapshot(sheaf) {
+    return pickSerializable(sheaf, [
+      'id', 'type', 'name', 'twist', 'rank', 'baseVarietyId', 'basis',
+      'divisorCoefficients', 'homology', 'construction', 'nameDirty'
+    ]);
+  }
+
+  function sheafIdentificationSavedVariableIds(sourceSheaf, targetSheaf, geometry) {
+    const ids = new Set();
+    const addPolyIds = (poly) => {
+      for (const key of Poly.from(poly || Poly.zero()).terms.keys()) {
+        Object.keys(parseMonoKey(key)).forEach((id) => ids.add(id));
+      }
+    };
+    const addSheafFamily = (sheaf, family) => {
+      addPolyIds(classStepTotalClassVariablePoly(sheaf, geometry, family));
+      if (family === 'chern' || family === 'character') {
+        classStepSheafDefsForSheaf(sheaf, geometry, family).forEach((def) => ids.add(def.id));
+        return;
+      }
+      for (let degree = 1; degree <= geometry.dim; degree += 1) {
+        ids.add(classStepFormalSheafDerivedVariableId(sheaf, geometry, family, degree));
+      }
+    };
+    characteristicClassFamilies().forEach((family) => {
+      addSheafFamily(sourceSheaf, family);
+      addSheafFamily(targetSheaf, family);
+    });
+    return [...ids];
   }
 
   function removeIdentifiedSecondaryObject(kind, id) {
@@ -26625,14 +26646,24 @@
       && JSON.stringify(left.rhs || []) === JSON.stringify(right.rhs || []);
   }
 
+  function classStepSavedEntryKind(entry) {
+    if (entry?.kind === 'sheaf-identification') return 'sheaf-identification';
+    if (entry?.kind === 'rewrite' || entry?.lhs?.powers) return 'rewrite';
+    return 'formula';
+  }
+
   function classStepSavedEntrySame(left, right) {
     if (!left || !right) return false;
     if (left.id && right.id && left.id === right.id) return true;
-    const leftKind = left.kind || (left.lhs?.powers ? 'rewrite' : 'formula');
-    const rightKind = right.kind || (right.lhs?.powers ? 'rewrite' : 'formula');
+    const leftKind = classStepSavedEntryKind(left);
+    const rightKind = classStepSavedEntryKind(right);
     if (leftKind === 'rewrite' && rightKind === 'rewrite') return classStepSavedRuleSameRewrite(left, right);
     if (leftKind !== rightKind) return false;
     if ((left.geometryId || '') !== (right.geometryId || '')) return false;
+    if (leftKind === 'sheaf-identification') {
+      return (left.sourceSheafId || left.sourceSheaf?.id || '') === (right.sourceSheafId || right.sourceSheaf?.id || '')
+        && (left.targetSheafId || left.targetSheaf?.id || '') === (right.targetSheafId || right.targetSheaf?.id || '');
+    }
     if (left.formulaSignature && right.formulaSignature && left.formulaSignature === right.formulaSignature) return true;
     return (left.displayPlain || '') === (right.displayPlain || '');
   }
@@ -26684,7 +26715,7 @@
       if (!rawEntry) continue;
       const entry = {
         ...rawEntry,
-        kind: rawEntry.kind === 'rewrite' ? 'rewrite' : 'formula',
+        kind: classStepSavedEntryKind(rawEntry),
         selected: rawEntry.selected !== false
       };
       let existingIndex = -1;
@@ -26866,12 +26897,15 @@
       return '<div class="hint">No saved formulas yet. Use add formula, or save the result of a step-by-step calculation.</div>';
     }
     const rows = saved.map((rule) => {
-      const kind = rule.kind || (rule.lhs?.powers ? 'rewrite' : 'formula');
+      const kind = classStepSavedEntryKind(rule);
+      const kindLabel = kind === 'sheaf-identification'
+        ? 'identification'
+        : (kind === 'rewrite' ? 'rule' : 'formula');
       return `
         <div class="sheaf-step-saved-rule-row">
           <input type="checkbox" data-class-step-select-saved="${escapeHtml(rule.id)}" aria-label="choose saved formula" ${rule.selected === false ? '' : 'checked'}>
           <span class="sheaf-step-saved-rule-formula" title="${escapeHtml(classStepSavedEntryDisplayPlain(rule))}">\\(${classStepSavedEntryDisplayLatex(rule)}\\)</span>
-          <span class="sheaf-step-saved-rule-kind">${escapeHtml(kind === 'rewrite' ? 'rule' : 'formula')}</span>
+          <span class="sheaf-step-saved-rule-kind">${escapeHtml(kindLabel)}</span>
           ${Array.isArray(rule.formulaTokens) && rule.formulaTokens.length
             ? `<button class="btn btn-ghost sheaf-chart-export" type="button" data-class-step-edit-saved="${escapeHtml(rule.id)}">edit</button>`
             : '<span></span>'}
@@ -26953,15 +26987,23 @@
     if (!session?.geometry) return [];
     return (state.classStepSavedRules || [])
       .filter((entry) => entry.selected !== false)
-      .map((entry) => classStepSavedEntryRuleForSession(entry, session))
-      .filter(Boolean);
+      .flatMap((entry) => classStepSavedEntryRulesForSession(entry, session));
   }
 
-  function classStepSavedEntryRuleForSession(entry, session) {
-    if (!classStepSavedEntryCompatible(entry, session)) return null;
+  function classStepSavedEntryRulesForSession(entry, session) {
+    if (!classStepSavedEntryCompatible(entry, session)) return [];
+    if (classStepSavedEntryKind(entry) === 'sheaf-identification') {
+      return classStepSavedSheafIdentificationRules(entry, session)
+        .filter((rule) => classStepSavedRuleUsableForSession(rule, session));
+    }
     restoreClassStepSavedRuleVariables(entry, session);
     const rule = classStepRuleFromSavedEntry(entry);
-    if (!rule) return null;
+    if (!rule) return [];
+    return classStepSavedRuleUsableForSession(rule, session) ? [rule] : [];
+  }
+
+  function classStepSavedRuleUsableForSession(rule, session) {
+    if (!rule || !session?.geometry) return false;
     const defs = [
       ...homologyClassDefinitions(session.geometry, { includeMapClasses: true }),
       ...classStepSheafDefs(session),
@@ -26971,10 +27013,127 @@
       ...defs.flatMap((def) => [...homologyDefVariableIds(def, session.geometry)]),
       ...homologyRuleVariableIds(rule)
     ]);
-    return homologyRulePreservesDegree(rule, defs, { geometry: session.geometry })
-      && homologyRuleUsesAvailableVariables(rule, available)
-      ? rule
-      : null;
+    const preservesDegree = rule.classStepAllowMixedDegree === true
+      || homologyRulePreservesDegree(rule, defs, { geometry: rule.classStepRuleGeometry || session.geometry });
+    return preservesDegree && homologyRuleUsesAvailableVariables(rule, available);
+  }
+
+  function classStepSavedSheafIdentificationRules(entry, session) {
+    const context = classStepSavedSheafIdentificationContext(entry, session);
+    if (!context) return [];
+    const rules = [];
+    characteristicClassFamilies().forEach((family) => {
+      const totalRule = classStepSavedSheafIdentificationTotalRule(entry, context, family);
+      if (totalRule) rules.push(totalRule);
+      rules.push(...classStepSavedSheafIdentificationTermRules(entry, context, family));
+    });
+    restoreClassStepSavedRuleVariables(entry, session);
+    return rules;
+  }
+
+  function classStepSavedSheafIdentificationContext(entry, session) {
+    if (!entry || !session?.geometry) return null;
+    const geometry = geometryByVarietyId(entry.geometryId) || session.geometry;
+    if (!geometry) return null;
+    const sourceObject = classStepSavedSheafIdentificationObject(entry, 'source', geometry);
+    const targetObject = classStepSavedSheafIdentificationObject(entry, 'target', geometry);
+    if (!sourceObject || !targetObject) return null;
+    if (sourceObject.baseVarietyId && geometry.varietyId && sourceObject.baseVarietyId !== geometry.varietyId) return null;
+    if (targetObject.baseVarietyId && geometry.varietyId && targetObject.baseVarietyId !== geometry.varietyId) return null;
+    const sourceSheaf = sheafFromObject(sourceObject, geometry);
+    const targetSheaf = sheafFromObject(targetObject, geometry);
+    const sourceLatex = sheafLabelLatex(sourceSheaf);
+    const targetLatex = sheafLabelLatex(targetSheaf);
+    const sourcePlain = sheafLabelPlain(sourceSheaf);
+    const targetPlain = sheafLabelPlain(targetSheaf);
+    return {
+      geometry,
+      sourceSheaf,
+      targetSheaf,
+      displayLatex: entry.displayLatex || `${sourceLatex}=${targetLatex}`,
+      displayPlain: entry.displayPlain || `${sourcePlain}=${targetPlain}`,
+      groupKey: `saved-identification:${entry.id || hashString(`${sourceObject.id}:${targetObject.id}:${geometry.varietyId || ''}`)}`
+    };
+  }
+
+  function classStepSavedSheafIdentificationObject(entry, role, geometry) {
+    const id = entry?.[`${role}SheafId`];
+    const existing = id ? state.sheaves.find((sheaf) => sheaf.id === id) : null;
+    if (existing) return existing;
+    const snapshot = entry?.[`${role}Sheaf`];
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null;
+    const copy = cloneSerializableValue(snapshot);
+    if (!copy.id && id) copy.id = id;
+    if (!copy.baseVarietyId && geometry?.varietyId) copy.baseVarietyId = geometry.varietyId;
+    return copy.id ? copy : null;
+  }
+
+  function classStepSavedSheafIdentificationTotalRule(entry, context, family) {
+    const normalized = classFormulaNormalizeClassFamily(family);
+    const { sourceSheaf, targetSheaf, geometry } = context;
+    const lhsPoly = classStepTotalClassVariablePoly(sourceSheaf, geometry, normalized);
+    const rhsPoly = classStepTotalClassVariablePoly(targetSheaf, geometry, normalized);
+    return classStepSavedSheafIdentificationRule(entry, context, normalized, null, lhsPoly, rhsPoly, {
+      classStepDisplayRule: true,
+      classStepAllowMixedDegree: true
+    });
+  }
+
+  function classStepSavedSheafIdentificationTermRules(entry, context, family) {
+    const normalized = classFormulaNormalizeClassFamily(family);
+    const { sourceSheaf, targetSheaf, geometry } = context;
+    if (normalized === 'chern' || normalized === 'character') {
+      const targetByDegree = new Map(classStepSheafDefsForSheaf(targetSheaf, geometry, normalized)
+        .map((def) => [def.degree, def]));
+      return classStepSheafDefsForSheaf(sourceSheaf, geometry, normalized).map((sourceDef) => {
+        const targetDef = targetByDegree.get(sourceDef.degree);
+        if (!targetDef) return null;
+        return classStepSavedSheafIdentificationRule(
+          entry,
+          context,
+          normalized,
+          sourceDef.degree,
+          Poly.variable(sourceDef.id),
+          Poly.variable(targetDef.id)
+        );
+      }).filter(Boolean);
+    }
+    const rules = [];
+    for (let degree = 1; degree <= geometry.dim; degree += 1) {
+      const lhs = Poly.variable(classStepFormalSheafDerivedVariableId(sourceSheaf, geometry, normalized, degree));
+      const rhs = Poly.variable(classStepFormalSheafDerivedVariableId(targetSheaf, geometry, normalized, degree));
+      const rule = classStepSavedSheafIdentificationRule(entry, context, normalized, degree, lhs, rhs);
+      if (rule) rules.push(rule);
+    }
+    return rules;
+  }
+
+  function classStepSavedSheafIdentificationRule(entry, context, family, degree, lhsPoly, rhsPoly, extra = {}) {
+    const lhs = Poly.from(lhsPoly || Poly.zero());
+    const rhs = Poly.from(rhsPoly || Poly.zero()).truncate(context.geometry.dim);
+    if (lhs.isZero() || polyEquals(lhs, rhs)) return null;
+    const lhsTerms = sortedTerms(lhs);
+    if (lhsTerms.length !== 1 || !lhsTerms[0][1].isOne()) return null;
+    const degreeKey = degree == null ? 'total' : String(degree);
+    return {
+      id: `step-saved-sheaf-identification-${variableIdSafe(entry.id || 'entry')}-${family}-${degreeKey}`,
+      builtin: true,
+      enabled: true,
+      selected: true,
+      stepSourceLabel: entry.sourceLabel || 'Identification',
+      classStepSavedRule: true,
+      classStepKind: 'saved-sheaf-identification',
+      classStepApplyAllOccurrences: true,
+      classStepAllowSameLhs: true,
+      classStepPayoffRule: true,
+      classStepRuleGeometry: context.geometry,
+      classStepGroupKey: context.groupKey,
+      classStepDisplayKey: context.groupKey,
+      classStepDisplayLatex: context.displayLatex,
+      lhs: { powers: parseMonoKey(lhsTerms[0][0]) },
+      rhs: serializeHomologyPoly(rhs),
+      ...extra
+    };
   }
 
   function classStepSavedEntryCompatible(entry, session) {
@@ -26985,7 +27144,7 @@
   }
 
   function classStepRuleFromSavedEntry(entry) {
-    const kind = entry?.kind || (entry?.lhs?.powers ? 'rewrite' : 'formula');
+    const kind = classStepSavedEntryKind(entry);
     if (kind !== 'rewrite' || !entry?.lhs?.powers) return null;
     return {
       id: entry.id,
@@ -38356,10 +38515,15 @@
 
   function sanitizePresetClassStepSavedEntry(item) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
-    const kind = sanitizePresetEnum(item.kind || (item.lhs?.powers ? 'rewrite' : 'formula'), ['rewrite', 'formula'], 'formula');
+    const kind = sanitizePresetEnum(item.kind || (item.lhs?.powers ? 'rewrite' : 'formula'), ['rewrite', 'formula', 'sheaf-identification'], 'formula');
     const lhs = sanitizePresetRuleLhs(item.lhs);
     const rhs = sanitizePresetRuleTerms(item.rhs);
     if (kind === 'rewrite' && (!lhs || !rhs)) return null;
+    const sourceSheaf = sanitizePresetSheafSnapshot(item.sourceSheaf || item.sourceSheafSnapshot);
+    const targetSheaf = sanitizePresetSheafSnapshot(item.targetSheaf || item.targetSheafSnapshot);
+    const sourceSheafId = sanitizePresetId(item.sourceSheafId) || sourceSheaf?.id || null;
+    const targetSheafId = sanitizePresetId(item.targetSheafId) || targetSheaf?.id || null;
+    if (kind === 'sheaf-identification' && (!sourceSheafId || !targetSheafId)) return null;
     const entry = compactSerializable({
       id: sanitizePresetId(item.id) || `step-import-${hashString(stableJson(item))}`,
       kind,
@@ -38368,6 +38532,10 @@
       degree: item.degree == null ? null : normalizedInt(item.degree, 0, MAX_DIMENSION, 0),
       dimension: item.dimension == null ? null : normalizedInt(item.dimension, 0, MAX_DIMENSION, MAX_DIMENSION),
       geometryId: sanitizePresetId(item.geometryId),
+      sourceSheafId,
+      targetSheafId,
+      sourceSheaf,
+      targetSheaf,
       labelLatex: sanitizePresetString(item.labelLatex, '', 5000),
       labelPlain: sanitizePresetString(item.labelPlain, '', 5000),
       lhsLatex: sanitizePresetString(item.lhsLatex, '', 5000),
@@ -38390,6 +38558,11 @@
       entry.variableIds = [...new Set(homologyRuleVariableIds(entry))];
     }
     return entry;
+  }
+
+  function sanitizePresetSheafSnapshot(item) {
+    const sheaf = sanitizePresetSheaf(item);
+    return sheaf ? sheafIdentificationSavedSheafSnapshot(sheaf) : null;
   }
 
   function sanitizePresetClassStepSession(session) {
@@ -39073,12 +39246,16 @@
   function presetClassStepSavedEntry(entry) {
     return compactSerializable({
       id: entry.id || null,
-      kind: entry.kind || (entry.lhs?.powers ? 'rewrite' : 'formula'),
+      kind: classStepSavedEntryKind(entry),
       family: entry.family || 'formula',
       target: entry.target || entry.family || 'formula',
       degree: entry.degree ?? null,
       dimension: entry.dimension ?? null,
       geometryId: entry.geometryId || null,
+      sourceSheafId: entry.sourceSheafId || null,
+      targetSheafId: entry.targetSheafId || null,
+      sourceSheaf: entry.sourceSheaf || null,
+      targetSheaf: entry.targetSheaf || null,
       labelLatex: entry.labelLatex || '',
       labelPlain: entry.labelPlain || '',
       lhsLatex: entry.lhsLatex || '',
