@@ -255,6 +255,87 @@
       white-space: nowrap;
     }
 
+    .mosaic-debug-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .mosaic-debug-actions .btn {
+      width: 100%;
+    }
+
+    .mosaic-debug-step-row {
+      align-items: center;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(100px, max-content);
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .mosaic-debug-step-row .btn {
+      width: 100%;
+    }
+
+    .mosaic-debug-panel {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .mosaic-debug-panel[hidden] {
+      display: none !important;
+    }
+
+    .mosaic-debug-export {
+      min-height: 128px;
+      line-height: 1.35;
+      resize: vertical;
+    }
+
+    .hex-move-pad {
+      --hex-move-size: 46px;
+      --hex-move-gap: 6px;
+      --hex-row-offset: 26px;
+      --hex-pad-width: 150px;
+      display: grid;
+      grid-template-columns: repeat(3, var(--hex-move-size));
+      gap: var(--hex-move-gap);
+      width: var(--hex-pad-width);
+      max-width: 100%;
+    }
+
+    .hex-move-pad[hidden] {
+      display: none !important;
+    }
+
+    .hex-move-pad [data-move-dir="NW"] { grid-column: 1; grid-row: 1; }
+    .hex-move-pad [data-move-dir="NE"] { grid-column: 2; grid-row: 1; }
+    .hex-move-pad [data-move-dir="W"] { grid-column: 1; grid-row: 2; }
+    .hex-move-pad [data-move-dir="E"] { grid-column: 3; grid-row: 2; }
+    .hex-move-pad [data-move-dir="SW"] { grid-column: 1; grid-row: 3; }
+    .hex-move-pad [data-move-dir="SE"] { grid-column: 2; grid-row: 3; }
+
+    .hex-move-pad [data-move-dir="NW"],
+    .hex-move-pad [data-move-dir="NE"],
+    .hex-move-pad [data-move-dir="SW"],
+    .hex-move-pad [data-move-dir="SE"] {
+      left: var(--hex-row-offset);
+      position: relative;
+    }
+
+    .btn.debug-active {
+      border-color: var(--accent2);
+      background: var(--accent2);
+    }
+
+    .btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.48;
+      transform: none;
+    }
+
     .input-mode-panel[hidden],
     .mosaic-inline-row[hidden],
     .mosaic-view-row[hidden] {
@@ -984,11 +1065,19 @@
           <span class="input-label">Preset</span>
           <select id="surface-preset-select" aria-label="Surface preset">
             <option value="classic-4x4">4*4 classic</option>
+            <option value="genus-2">genus 2</option>
+            <option value="random-glue-4x4">random glue 4*4</option>
             <option value="half-glued">half-glued</option>
             <option value="torus" selected>torus</option>
             <option value="klein-bottle">Klein bottle</option>
             <option value="ramified-cover">ramified cover</option>
+            <option value="hex-classic-4x4">hex classic 4*4</option>
           </select>
+        </div>
+        <button class="btn btn-ghost mosaic-import-button" id="import-preset-toggle" type="button" aria-expanded="false">import preset</button>
+        <div class="mosaic-debug-panel" id="import-preset-tools" hidden>
+          <textarea class="mosaic-editor-input mosaic-import-input" id="import-preset-input" spellcheck="false" autocomplete="off" placeholder="{ ... }" aria-label="Imported background preset"></textarea>
+          <button class="btn mosaic-import-button" id="apply-import-preset" type="button">generate</button>
         </div>
         <div class="mosaic-inline-row">
           <span class="input-label">Box UI</span>
@@ -1001,16 +1090,52 @@
         <div class="mosaic-inline-row">
           <span class="input-label">Speed</span>
           <span class="background-slider-controls">
-            <input type="range" id="animation-speed" min="80" max="900" step="20" value="260">
-            <output id="animation-speed-value">260 ms</output>
+            <input type="range" id="animation-speed" min="40" max="400" step="20" value="80">
+            <output id="animation-speed-value">80 ms</output>
           </span>
         </div>
-        <label class="opt-row"><input type="checkbox" id="step-mode"> step-by-step</label>
         <button class="btn mosaic-import-button" id="begin-game" type="button">begin the game</button>
-        <button class="btn" id="next-step" type="button" disabled>next step</button>
+        <div class="mosaic-debug-actions">
+          <button class="btn" id="debug-toggle" type="button" aria-pressed="false">debug</button>
+          <button class="btn" id="undo-step" type="button" disabled>undo</button>
+        </div>
+        <div class="mosaic-debug-panel" id="debug-tools" hidden>
+          <div class="mosaic-debug-step-row">
+            <label class="opt-row"><input type="checkbox" id="step-mode"> step-by-step</label>
+            <button class="btn" id="next-step" type="button" disabled>next step</button>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Tile value</span>
+            <select class="mosaic-editor-input" id="debug-tile-value" aria-label="Debug tile value">
+              <option value="">empty</option>
+              <option value="2">2</option>
+              <option value="4">4</option>
+              <option value="8">8</option>
+              <option value="16">16</option>
+              <option value="32">32</option>
+              <option value="64">64</option>
+              <option value="128">128</option>
+              <option value="256">256</option>
+              <option value="512">512</option>
+              <option value="1024">1024</option>
+              <option value="2048">2048</option>
+              <option value="4096">4096</option>
+              <option value="8192">8192</option>
+              <option value="16384">16384</option>
+              <option value="32768">32768</option>
+              <option value="65536">65536</option>
+              <option value="131072">131072</option>
+              <option value="262144">262144</option>
+              <option value="524288">524288</option>
+              <option value="1048576">1048576</option>
+            </select>
+          </div>
+          <button class="btn mosaic-import-button" id="export-state" type="button">export status</button>
+          <textarea class="mosaic-editor-input mosaic-debug-export" id="debug-export-output" readonly aria-label="Current game status export"></textarea>
+        </div>
         <div class="mosaic-inline-row">
           <span class="input-label">Move</span>
-          <table aria-label="Directional controls">
+          <table data-move-lattice="square" aria-label="Square directional controls">
             <tbody>
               <tr>
                 <td></td>
@@ -1029,6 +1154,14 @@
               </tr>
             </tbody>
           </table>
+          <div class="hex-move-pad" data-move-lattice="hexagonal" hidden aria-label="Hexagonal directional controls">
+            <button class="btn" type="button" data-move-dir="NW" aria-label="Move northwest" title="Move northwest (W)">&#x2196;</button>
+            <button class="btn" type="button" data-move-dir="NE" aria-label="Move northeast" title="Move northeast (E)">&#x2197;</button>
+            <button class="btn" type="button" data-move-dir="W" aria-label="Move west" title="Move west (A)">&#x2190;</button>
+            <button class="btn" type="button" data-move-dir="E" aria-label="Move east" title="Move east (D)">&#x2192;</button>
+            <button class="btn" type="button" data-move-dir="SW" aria-label="Move southwest" title="Move southwest (Z)">&#x2199;</button>
+            <button class="btn" type="button" data-move-dir="SE" aria-label="Move southeast" title="Move southeast (X)">&#x2198;</button>
+          </div>
         </div>
       </div>
     </section>

@@ -1,3 +1,5 @@
+
+
 // Save this file as theorem_graph_presets/quartic_double_solid.preset.js
 // Add this entry to theorem_graph_presets/presets.js:
 // { label: "Quartic double solid", key: "quartic_double_solid", file: "quartic_double_solid.preset.js" }
@@ -19,8 +21,8 @@ window.THEOREM_GRAPH_PRESET_DATA.quartic_double_solid = {
       ],
       "color": "#7a4d9b",
       "fillColor": "#f4f1f8",
-      "x": 536.1,
-      "y": 203.8
+      "x": 548.4,
+      "y": 186.3
     },
     {
       "id": "n4",
@@ -33,8 +35,8 @@ window.THEOREM_GRAPH_PRESET_DATA.quartic_double_solid = {
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fbefee",
-      "x": 318,
-      "y": 116
+      "x": 181.9,
+      "y": 256.4
     },
     {
       "id": "n5",
@@ -47,8 +49,8 @@ window.THEOREM_GRAPH_PRESET_DATA.quartic_double_solid = {
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fbefee",
-      "x": 212.7,
-      "y": 310
+      "x": 246.5,
+      "y": 463
     },
     {
       "id": "n6",
@@ -61,8 +63,8 @@ window.THEOREM_GRAPH_PRESET_DATA.quartic_double_solid = {
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fbefee",
-      "x": 307.1,
-      "y": 498.2
+      "x": 333,
+      "y": 333.9
     },
     {
       "id": "n7",
@@ -75,8 +77,8 @@ window.THEOREM_GRAPH_PRESET_DATA.quartic_double_solid = {
       "citationKeys": [],
       "color": "#3d6b4f",
       "fillColor": "#eef7f4",
-      "x": 363.7,
-      "y": 307.5
+      "x": 346.4,
+      "y": 122.8
     },
     {
       "id": "n8",
@@ -84,13 +86,27 @@ window.THEOREM_GRAPH_PRESET_DATA.quartic_double_solid = {
       "label": "curves in F",
       "setting": "",
       "condition": "",
-      "result": "",
+      "result": "generic smoothness of these curves",
       "proofSketch": "",
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 522.3,
-      "y": 432.5
+      "x": 480.9,
+      "y": 304
+    },
+    {
+      "id": "n9",
+      "type": "lemma",
+      "label": "non-empty for hyperflexes",
+      "setting": "“Cayley–Salmon flecnode theorem”; you’ll find it under flecnode polynomial, flecnodal divisor, or Monge–Cayley–Salmon theorem.\n\nThe clean modern reference for the version I used is:\n\nThomas Bauer and Sławomir Rams, “Counting lines on projective surfaces,” Manuscripta Math. 2020.",
+      "condition": "",
+      "result": "",
+      "proofSketch": "\\cite{bauer2020countinglinesprojectivesurfaces}",
+      "citationKeys": [],
+      "color": "#3d6b4f",
+      "fillColor": "#eef7f4",
+      "x": 437.6,
+      "y": 503.7
     }
   ],
   "arrows": [
@@ -168,6 +184,21 @@ window.THEOREM_GRAPH_PRESET_DATA.quartic_double_solid = {
       "curve": 0,
       "labelOffset": 0,
       "color": "#5f574e"
+    },
+    {
+      "id": "a8",
+      "sourceId": "n9",
+      "targetId": "n8",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
     }
   ],
   "references": [
@@ -190,14 +221,22 @@ window.THEOREM_GRAPH_PRESET_DATA.quartic_double_solid = {
       "url": "https://eudml.org/doc/153159",
       "source": "web",
       "rawBibtex": "@article{zbMATH04091651,\n author = {Picco Botta, Luciana},\n title = {On the intersection of three quadrics},\n fjournal = {Journal f{\\\"u}r die Reine und Angewandte Mathematik},\n journal = {J. Reine Angew. Math.},\n issn = {0075-4102},\n volume = {399},\n pages = {188--207},\n year = {1989},\n language = {English},\n doi = {10.1515/crll.1989.399.188},\n keywords = {14J25,14C17,11E16},\n url = {https://eudml.org/doc/153159},\n zbMATH = {4091651},\n Zbl = {0667.14019}\n}"
+    },
+    {
+      "key": "bauer2020",
+      "author": "Thomas Bauer and Slawomir Rams",
+      "title": "Counting lines on projective surfaces",
+      "year": "2020",
+      "citeText": "\\cite{bauer2020countinglinesprojectivesurfaces}",
+      "url": "https://arxiv.org/abs/1902.05133",
+      "source": "web",
+      "rawBibtex": "@misc{bauer2020countinglinesprojectivesurfaces,\n      title={Counting lines on projective surfaces}, \n      author={Thomas Bauer and Slawomir Rams},\n      year={2020},\n      eprint={1902.05133},\n      archivePrefix={arXiv},\n      primaryClass={math.AG},\n      url={https://arxiv.org/abs/1902.05133}, \n}"
     }
   ],
   "view": {
-    "selectedId": "n2",
+    "selectedId": "n8",
     "selectedReferenceKeys": [],
     "layoutRunning": false
   }
 };
-
-
 

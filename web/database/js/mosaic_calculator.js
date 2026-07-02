@@ -827,6 +827,7 @@
       : null;
     refs.backgroundPresetSelect = document.getElementById('background-preset-select');
     refs.loadBackgroundPreset = document.getElementById('load-background-preset');
+    refs.exportBackgroundPreset = document.getElementById('export-background-preset');
     refs.backgroundAction = document.getElementById('background-action');
     refs.backgroundOccupiedOption = refs.backgroundAction
       ? refs.backgroundAction.querySelector('option[value="occupied"]')
@@ -1075,6 +1076,9 @@
     }
     if (refs.loadBackgroundPreset) {
       refs.loadBackgroundPreset.addEventListener('click', loadSelectedBackgroundPreset);
+    }
+    if (refs.exportBackgroundPreset) {
+      refs.exportBackgroundPreset.addEventListener('click', exportBackgroundPreset);
     }
     if (refs.backgroundMultiEdges) {
       refs.backgroundMultiEdges.addEventListener('change', () => {
@@ -2494,6 +2498,48 @@
       refs.statusLine.textContent = error.message || 'could not load background preset';
       refs.statusLine.classList.add('mosaic-status-bad');
     }
+  }
+
+  function exportBackgroundPreset() {
+    if (!refs.exportOut) return;
+    const payload = buildBackgroundPresetExport();
+    refs.exportOut.value = JSON.stringify(payload, null, 2);
+    if (refs.exportCard) refs.exportCard.classList.remove('collapsed');
+    refs.exportOut.focus();
+    refs.exportOut.select();
+    if (refs.statusLine) {
+      refs.statusLine.textContent = `background preset exported (${payload.preset.rows}x${payload.preset.cols})`;
+      refs.statusLine.classList.remove('mosaic-status-bad');
+    }
+  }
+
+  function buildBackgroundPresetExport() {
+    const report = analyze();
+    const background = backgroundSpaceForExport(report);
+    const selected = BACKGROUND_SPACE_PRESETS.find((entry) => refs.backgroundPresetSelect && entry.id === refs.backgroundPresetSelect.value);
+    const surface = background && background.surfaceType
+      ? background.surfaceType
+      : `${state.lattice} background`;
+    const label = `${state.rows}x${state.cols} ${surface}`;
+    return {
+      schema: 'ramified-minigame-background-preset',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      source: 'mosaic-calculator',
+      sourcePresetId: selected && selected.id ? selected.id : '',
+      preset: {
+        id: 'mosaic-background',
+        label,
+        lattice: state.lattice,
+        rows: state.rows,
+        cols: state.cols,
+        surface,
+        removedTiles: removedTilesForExport(),
+        cutEdges: cutEdgesForExport(),
+        gluedEdges: gluedEdgesForExport()
+      },
+      backgroundSpace: background
+    };
   }
 
   function knotPresetPayloadForCurrentLattice(preset) {

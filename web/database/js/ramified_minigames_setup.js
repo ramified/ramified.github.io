@@ -2,24 +2,70 @@
   'use strict';
 
   const DIRS = { E: 0, S: 1, W: 2, N: 3 };
-  const DIR_FROM_NAME = { E: DIRS.E, S: DIRS.S, W: DIRS.W, N: DIRS.N };
-  const DIR_FROM_KEY = {
-    ArrowRight: DIRS.E,
-    ArrowDown: DIRS.S,
-    ArrowLeft: DIRS.W,
-    ArrowUp: DIRS.N
+  const HEX_DIRS = { E: 0, SE: 1, SW: 2, W: 3, NW: 4, NE: 5 };
+  const LATTICES = {
+    square: {
+      id: 'square',
+      label: 'square',
+      shape: 'square',
+      dirNames: ['E', 'S', 'W', 'N'],
+      dirLabels: ['right', 'down', 'left', 'up'],
+      opposite: [DIRS.W, DIRS.N, DIRS.E, DIRS.S],
+      angles: [0, 90, 180, 270].map(toRadians),
+      sides: 4
+    },
+    hexagonal: {
+      id: 'hexagonal',
+      label: 'hexagonal',
+      shape: 'hex',
+      dirNames: ['E', 'SE', 'SW', 'W', 'NW', 'NE'],
+      dirLabels: ['east', 'southeast', 'southwest', 'west', 'northwest', 'northeast'],
+      opposite: [HEX_DIRS.W, HEX_DIRS.NW, HEX_DIRS.NE, HEX_DIRS.E, HEX_DIRS.SE, HEX_DIRS.SW],
+      angles: [0, 60, 120, 180, 240, 300].map(toRadians),
+      vertexAngles: [30, 90, 150, 210, 270, 330].map(toRadians),
+      sides: 6
+    }
+  };
+  const KEY_DIRS = {
+    square: {
+      ArrowRight: DIRS.E,
+      ArrowDown: DIRS.S,
+      ArrowLeft: DIRS.W,
+      ArrowUp: DIRS.N
+    },
+    hexagonal: {
+      ArrowRight: HEX_DIRS.E,
+      ArrowDown: HEX_DIRS.SE,
+      ArrowLeft: HEX_DIRS.W,
+      ArrowUp: HEX_DIRS.NW,
+      KeyW: HEX_DIRS.NW,
+      KeyE: HEX_DIRS.NE,
+      KeyA: HEX_DIRS.W,
+      KeyD: HEX_DIRS.E,
+      KeyZ: HEX_DIRS.SW,
+      KeyX: HEX_DIRS.SE
+    }
   };
   const OFFSETS = [[0, 1], [1, 0], [0, -1], [-1, 0]];
-  const OPPOSITE = [DIRS.W, DIRS.N, DIRS.E, DIRS.S];
+  const HEX_AXIAL_DELTAS = [
+    [1, 0],
+    [0, 1],
+    [-1, 1],
+    [-1, 0],
+    [0, -1],
+    [1, -1]
+  ];
   const GLUE_COLORS = ['#1f7a8c', '#b23a48', '#6a4c93', '#c47f17', '#2f855a', '#8a4f7d'];
   const MAX_COMPLETED_GLUINGS = 3;
   const PUSH_CHAIN_LIMIT = 50;
   const EVENT_GUARD = 900;
+  const UNDO_LIMIT = 100;
 
   const PRESETS = [
     {
       id: 'classic-4x4',
       label: '4*4 classic',
+      lattice: 'square',
       rows: 4,
       cols: 4,
       surface: 'square grid',
@@ -28,8 +74,41 @@
       gluedEdges: []
     },
     {
+      id: 'genus-2',
+      label: 'genus 2',
+      lattice: 'square',
+      rows: 4,
+      cols: 4,
+      surface: 'M_2',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [
+        { group: 0, first: { row: 4, col: 4, dir: DIRS.E }, second: { row: 1, col: 3, dir: DIRS.N } },
+        { group: 0, first: { row: 3, col: 4, dir: DIRS.E }, second: { row: 1, col: 4, dir: DIRS.N } },
+        { group: 2, first: { row: 1, col: 2, dir: DIRS.N }, second: { row: 4, col: 1, dir: DIRS.W } },
+        { group: 2, first: { row: 1, col: 1, dir: DIRS.N }, second: { row: 3, col: 1, dir: DIRS.W } },
+        { group: 3, first: { row: 4, col: 1, dir: DIRS.S }, second: { row: 2, col: 1, dir: DIRS.W } },
+        { group: 3, first: { row: 4, col: 2, dir: DIRS.S }, second: { row: 1, col: 1, dir: DIRS.W } },
+        { group: 4, first: { row: 2, col: 4, dir: DIRS.E }, second: { row: 4, col: 4, dir: DIRS.S } },
+        { group: 4, first: { row: 1, col: 4, dir: DIRS.E }, second: { row: 4, col: 3, dir: DIRS.S } }
+      ]
+    },
+    {
+      id: 'random-glue-4x4',
+      label: 'random glue 4*4',
+      lattice: 'square',
+      rows: 4,
+      cols: 4,
+      surface: 'random boundary glue',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [],
+      randomGlue: true
+    },
+    {
       id: 'half-glued',
       label: 'half-glued',
+      lattice: 'square',
       rows: 4,
       cols: 4,
       surface: 'half-glued',
@@ -45,6 +124,7 @@
     {
       id: 'torus',
       label: 'torus',
+      lattice: 'square',
       rows: 4,
       cols: 4,
       surface: 'M_1',
@@ -64,6 +144,7 @@
     {
       id: 'klein-bottle',
       label: 'Klein bottle',
+      lattice: 'square',
       rows: 4,
       cols: 4,
       surface: 'N_2',
@@ -83,6 +164,7 @@
     {
       id: 'ramified-cover',
       label: 'ramified cover',
+      lattice: 'square',
       rows: 4,
       cols: 9,
       surface: 'ramified cover',
@@ -104,8 +186,23 @@
         { group: 1, first: { row: 3, col: 3, dir: DIRS.N }, second: { row: 2, col: 8, dir: DIRS.S } },
         { group: 1, first: { row: 3, col: 4, dir: DIRS.N }, second: { row: 2, col: 9, dir: DIRS.S } }
       ]
+    },
+    {
+      id: 'hex-classic-4x4',
+      label: 'hex classic 4*4',
+      lattice: 'hexagonal',
+      rows: 4,
+      cols: 4,
+      surface: 'hexagonal grid',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: []
     }
   ];
+
+  const IMPORTED_PRESET_ID = 'imported-preset';
+  const MIN_IMPORTED_BOARD = 1;
+  const MAX_IMPORTED_BOARD = 12;
 
   const refs = {};
   let game = null;
@@ -115,18 +212,32 @@
   let eventIndex = 0;
   let stepPaused = false;
   let animationFrameId = null;
+  let debugMode = false;
+  let undoStack = [];
+  let importedPreset = null;
 
   function init() {
     refs.canvas = document.getElementById('mosaic-canvas');
     refs.ctx = refs.canvas ? refs.canvas.getContext('2d') : null;
     refs.select = document.getElementById('surface-preset-select');
+    refs.importToggle = document.getElementById('import-preset-toggle');
+    refs.importTools = document.getElementById('import-preset-tools');
+    refs.importInput = document.getElementById('import-preset-input');
+    refs.applyImportPreset = document.getElementById('apply-import-preset');
     refs.boxStyle = document.getElementById('number-box-style');
     refs.begin = document.getElementById('begin-game');
     refs.speed = document.getElementById('animation-speed');
     refs.speedValue = document.getElementById('animation-speed-value');
     refs.stepMode = document.getElementById('step-mode');
     refs.nextStep = document.getElementById('next-step');
+    refs.debugToggle = document.getElementById('debug-toggle');
+    refs.debugTools = document.getElementById('debug-tools');
+    refs.debugTileValue = document.getElementById('debug-tile-value');
+    refs.undo = document.getElementById('undo-step');
+    refs.exportState = document.getElementById('export-state');
+    refs.debugExport = document.getElementById('debug-export-output');
     refs.moveButtons = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-move-dir]')) : [];
+    refs.moveGroups = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-move-lattice]')) : [];
     refs.statusBadge = document.getElementById('status-badge');
     refs.statusLine = document.getElementById('status-line');
     refs.infoLine = document.getElementById('info-line');
@@ -138,11 +249,17 @@
     if (!refs.canvas || !refs.ctx || !refs.select) return;
 
     refs.select.addEventListener('change', resetToPreview);
+    if (refs.importToggle) refs.importToggle.addEventListener('click', toggleImportTools);
+    if (refs.applyImportPreset) refs.applyImportPreset.addEventListener('click', importPresetFromUi);
     if (refs.boxStyle) refs.boxStyle.addEventListener('change', render);
     if (refs.begin) refs.begin.addEventListener('click', beginGameFromUi);
     if (refs.speed) refs.speed.addEventListener('input', syncSpeedOutput);
     if (refs.stepMode) refs.stepMode.addEventListener('change', syncControls);
     if (refs.nextStep) refs.nextStep.addEventListener('click', playNextStep);
+    if (refs.debugToggle) refs.debugToggle.addEventListener('click', toggleDebugMode);
+    if (refs.undo) refs.undo.addEventListener('click', undoPreviousStep);
+    if (refs.exportState) refs.exportState.addEventListener('click', exportDebugState);
+    if (refs.canvas) refs.canvas.addEventListener('click', handleCanvasClick);
     refs.moveButtons.forEach((button) => {
       button.addEventListener('click', () => handleDirectionalButton(button));
     });
@@ -150,13 +267,16 @@
     window.addEventListener('resize', render);
 
     syncSpeedOutput();
+    syncDebugModeUi();
     resetToPreview();
   }
 
   function resetToPreview() {
     stopPlayback();
-    game = createGameState(selectedPreset());
+    game = createGameState(selectedPreset(), { glueRng: Math.random });
     game.phase = 'setup';
+    clearUndoHistory();
+    clearDebugExport();
     currentAnimation = null;
     eventQueue = [];
     eventIndex = 0;
@@ -168,7 +288,9 @@
 
   function beginGameFromUi() {
     stopPlayback();
-    game = beginGame(selectedPreset(), { rng: Math.random });
+    game = beginGame(selectedPreset(), { rng: Math.random, glueRng: Math.random });
+    clearUndoHistory();
+    clearDebugExport();
     currentAnimation = null;
     eventQueue = [];
     eventIndex = 0;
@@ -180,16 +302,54 @@
     if (refs.canvas) refs.canvas.focus();
   }
 
+  function toggleImportTools() {
+    if (!refs.importTools) return;
+    refs.importTools.hidden = !refs.importTools.hidden;
+    if (refs.importToggle) refs.importToggle.setAttribute('aria-expanded', refs.importTools.hidden ? 'false' : 'true');
+    if (!refs.importTools.hidden && refs.importInput) refs.importInput.focus();
+  }
+
+  function importPresetFromUi() {
+    if (!refs.importInput) return;
+    try {
+      importedPreset = presetFromImportText(refs.importInput.value);
+      ensureImportedPresetOption(importedPreset);
+      if (refs.select) refs.select.value = importedPreset.id;
+      resetToPreview();
+      syncStatus('preset imported', previewInfo(game.preset), 'setup');
+      if (refs.importTools) refs.importTools.hidden = true;
+      if (refs.importToggle) refs.importToggle.setAttribute('aria-expanded', 'false');
+    } catch (error) {
+      syncStatus('import failed', error && error.message ? error.message : 'invalid preset JSON', 'error');
+    }
+  }
+
+  function ensureImportedPresetOption(preset) {
+    if (!refs.select || !preset) return;
+    const options = refs.select.options ? Array.from(refs.select.options) : [];
+    let option = options.find((item) => item.value === IMPORTED_PRESET_ID);
+    if (!option && typeof document !== 'undefined' && document.createElement && refs.select.appendChild) {
+      option = document.createElement('option');
+      option.value = IMPORTED_PRESET_ID;
+      refs.select.appendChild(option);
+    }
+    if (option) option.textContent = preset.label || 'imported preset';
+  }
+
   function handleKeydown(event) {
-    const dir = DIR_FROM_KEY[event.key];
+    const dir = game ? dirFromKey(event.code || event.key, game.preset) : null;
     if (!Number.isInteger(dir)) return;
+    if (event.repeat) {
+      event.preventDefault();
+      return;
+    }
     if (!canAcceptMove()) return;
     event.preventDefault();
     playRound(dir);
   }
 
   function handleDirectionalButton(button) {
-    const dir = DIR_FROM_NAME[button.getAttribute('data-move-dir')];
+    const dir = game ? dirFromName(button.getAttribute('data-move-dir'), game.preset) : null;
     if (!Number.isInteger(dir) || !canAcceptMove()) return;
     playRound(dir);
     if (refs.canvas) refs.canvas.focus();
@@ -207,6 +367,18 @@
   function playRound(dir) {
     const result = simulateRound(game, dir, { rng: Math.random, spawn: true });
     if (!result.changed) {
+      if (result.events && result.events.length) {
+        eventQueue = result.events;
+        eventIndex = 0;
+        const step = isStepMode();
+        stepPaused = step;
+        game.phase = step ? 'paused' : 'animating';
+        syncStatus(`collision: ${dirLabel(dir, game.preset)}`, `${eventQueue.length} event${eventQueue.length === 1 ? '' : 's'}`, step ? 'step' : 'moving');
+        syncControls();
+        if (step) render();
+        else playNextEvent();
+        return;
+      }
       if (result.debugMessages && result.debugMessages.length) {
         game.debugMessage = result.debugMessages[0];
         syncStatus('push-chain debug', result.debugMessages[0], 'debug');
@@ -224,13 +396,14 @@
       render();
       return;
     }
+    pushUndoSnapshot(`round ${game.round + 1}: ${dirLabel(dir, game.preset)}`);
     game.round += 1;
     eventQueue = result.events;
     eventIndex = 0;
     const step = isStepMode();
     stepPaused = step;
     game.phase = step ? 'paused' : 'animating';
-    syncStatus(`round ${game.round}: ${dirLabel(dir)}`, `${eventQueue.length} event${eventQueue.length === 1 ? '' : 's'}`, step ? 'step' : 'moving');
+    syncStatus(`round ${game.round}: ${dirLabel(dir, game.preset)}`, `${eventQueue.length} event${eventQueue.length === 1 ? '' : 's'}`, step ? 'step' : 'moving');
     syncControls();
     if (step) {
       render();
@@ -241,6 +414,7 @@
 
   function playNextStep() {
     if (!eventQueue.length || currentAnimation) return;
+    pushUndoSnapshot(`event ${Math.min(eventIndex + 1, eventQueue.length)}/${eventQueue.length}`);
     stepPaused = false;
     playNextEvent();
   }
@@ -324,6 +498,253 @@
     stepPaused = false;
   }
 
+  function toggleDebugMode() {
+    debugMode = !debugMode;
+    syncDebugModeUi();
+    syncControls();
+    if (debugMode) {
+      syncStatus('debug mode', 'click a tile to assign the tile value', 'debug');
+      if (refs.canvas) refs.canvas.focus();
+    } else {
+      syncStatusForCurrentGame();
+    }
+  }
+
+  function syncDebugModeUi() {
+    if (refs.debugToggle) {
+      refs.debugToggle.classList.toggle('debug-active', debugMode);
+      refs.debugToggle.setAttribute('aria-pressed', debugMode ? 'true' : 'false');
+    }
+    if (refs.debugTools) refs.debugTools.hidden = !debugMode;
+    if (refs.debugTileValue) refs.debugTileValue.disabled = !debugMode;
+  }
+
+  function handleCanvasClick(event) {
+    if (!debugMode || !game) return;
+    if (currentAnimation) {
+      syncStatus('debug waits', 'finish the active animation or undo first', 'debug');
+      return;
+    }
+    const target = tileFromCanvasEvent(event);
+    if (!target) return;
+    if (game.removed.has(target.index)) {
+      syncStatus('debug tile blocked', `${target.label} is removed`, 'debug');
+      return;
+    }
+    const value = normalizedDebugTileValue();
+    if (value === false) {
+      syncStatus('debug value rejected', 'choose a power of two from 2 upward', 'debug');
+      return;
+    }
+    stopPlayback();
+    game.phase = 'ready';
+    const existing = boxAt(game, target.index);
+    if (value == null) {
+      if (!existing) {
+        syncStatus(`debug: ${target.label} already empty`, `${game.boxes.length} active box${game.boxes.length === 1 ? '' : 'es'}`, 'debug');
+        return;
+      }
+      pushUndoSnapshot(`debug empty ${target.label}`);
+      removeBox(game, existing.id);
+      game.debugMessage = `debug: ${target.label} = empty`;
+      syncStatus(`debug: ${target.label} = empty`, `${game.boxes.length} active box${game.boxes.length === 1 ? '' : 'es'}`, 'debug');
+    } else if (existing) {
+      pushUndoSnapshot(`debug set ${target.label}`);
+      existing.value = value;
+    } else {
+      pushUndoSnapshot(`debug set ${target.label}`);
+      const box = { id: game.nextBoxId, index: target.index, value };
+      game.nextBoxId += 1;
+      game.boxes.push(box);
+    }
+    if (value != null) {
+      game.debugMessage = `debug: ${target.label} = ${value}`;
+      syncStatus(`debug: ${target.label} = ${value}`, `${game.boxes.length} active box${game.boxes.length === 1 ? '' : 'es'}`, 'debug');
+    }
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+  }
+
+  function tileFromCanvasEvent(event) {
+    if (!refs.canvas || !geometry || !geometry.cells || !geometry.cells.length) return null;
+    const rect = refs.canvas.getBoundingClientRect ? refs.canvas.getBoundingClientRect() : null;
+    const width = rect && rect.width ? rect.width : geometry.width;
+    const height = rect && rect.height ? rect.height : geometry.height;
+    const left = rect ? rect.left : 0;
+    const top = rect ? rect.top : 0;
+    const x = ((event.clientX || 0) - left) * (geometry.width / Math.max(1, width));
+    const y = ((event.clientY || 0) - top) * (geometry.height / Math.max(1, height));
+    const radius = geometry.radius * 0.96;
+    for (let index = 0; index < geometry.cells.length; index += 1) {
+      const cell = geometry.cells[index];
+      if (!cell) continue;
+      if (pointInPolygon({ x, y }, tilePoints(cell.x, cell.y, radius, geometry.lattice))) {
+        return {
+          index,
+          row: cell.row,
+          col: cell.col,
+          label: `r${cell.row} c${cell.col}`
+        };
+      }
+    }
+    return null;
+  }
+
+  function normalizedDebugTileValue() {
+    const rawValue = refs.debugTileValue ? refs.debugTileValue.value : '2';
+    if (rawValue === '') return null;
+    const raw = Number(rawValue);
+    if (!Number.isSafeInteger(raw) || raw < 2 || !isPowerOfTwo(raw)) return false;
+    return raw;
+  }
+
+  function isPowerOfTwo(value) {
+    return Number.isSafeInteger(value) && value > 0 && Math.log2(value) % 1 === 0;
+  }
+
+  function pushUndoSnapshot(label) {
+    if (!game) return;
+    undoStack.push({
+      label: label || 'step',
+      game: cloneGameState(game),
+      eventQueue: clonePlain(eventQueue),
+      eventIndex,
+      stepPaused,
+      status: statusSnapshot()
+    });
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    syncControls();
+  }
+
+  function undoPreviousStep() {
+    const snapshot = undoStack.pop();
+    if (!snapshot) {
+      syncControls();
+      return;
+    }
+    stopPlayback();
+    game = cloneGameState(snapshot.game);
+    eventQueue = clonePlain(snapshot.eventQueue || []);
+    eventIndex = Math.max(0, Math.min(Number(snapshot.eventIndex) || 0, eventQueue.length));
+    stepPaused = !!snapshot.stepPaused && eventQueue.length > 0 && eventIndex < eventQueue.length;
+    currentAnimation = null;
+    if (refs.select && game.preset && game.preset.id) refs.select.value = game.preset.id;
+    syncStatus('undo complete', `restored before ${snapshot.label || 'previous step'}`, phaseBadge(game.phase));
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+    if (refs.canvas) refs.canvas.focus();
+  }
+
+  function clearUndoHistory() {
+    undoStack = [];
+    syncControls();
+  }
+
+  function statusSnapshot() {
+    return {
+      badge: refs.statusBadge ? refs.statusBadge.textContent : '',
+      status: refs.statusLine ? refs.statusLine.textContent : '',
+      info: refs.infoLine ? refs.infoLine.textContent : ''
+    };
+  }
+
+  function clonePlain(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function exportDebugState() {
+    if (!game || !refs.debugExport) return;
+    refs.debugExport.value = JSON.stringify(debugExportPayload(), null, 2);
+    syncStatus('status exported', `${game.boxes.length} box${game.boxes.length === 1 ? '' : 'es'}, ${game.removed.size} removed`, debugMode ? 'debug' : phaseBadge(game.phase));
+    refs.debugExport.focus();
+    refs.debugExport.select();
+  }
+
+  function refreshDebugExportIfNeeded() {
+    if (!refs.debugExport || !refs.debugExport.value) return;
+    refs.debugExport.value = JSON.stringify(debugExportPayload(), null, 2);
+  }
+
+  function clearDebugExport() {
+    if (refs.debugExport) refs.debugExport.value = '';
+  }
+
+  function debugExportPayload() {
+    const preset = game.preset;
+    return {
+      exportedAt: new Date().toISOString(),
+      preset: {
+        id: preset.id,
+        label: preset.label,
+        lattice: preset.lattice || 'square',
+        rows: preset.rows,
+        cols: preset.cols,
+        surface: preset.surface
+      },
+      phase: game.phase,
+      debugMode,
+      status: statusSnapshot(),
+      round: game.round || 0,
+      score: game.score || 0,
+      highest: highestValue(game),
+      existingTiles: existingTileCount(game),
+      nextBoxId: game.nextBoxId,
+      boxes: game.boxes
+        .map((box) => boxExport(box, preset.cols))
+        .sort((a, b) => a.index - b.index || a.id - b.id),
+      removed: Array.from(game.removed)
+        .sort((a, b) => a - b)
+        .map((index) => ({ index, ...rowCol(index, preset.cols) })),
+      queue: {
+        eventIndex,
+        eventCount: eventQueue.length,
+        stepPaused,
+        currentAnimation: currentAnimation ? {
+          kind: currentAnimation.event ? currentAnimation.event.kind : '',
+          progress: currentAnimation.progress || 0
+        } : null,
+        events: clonePlain(eventQueue)
+      }
+    };
+  }
+
+  function boxExport(box, cols) {
+    return {
+      id: box.id,
+      index: box.index,
+      ...rowCol(box.index, cols),
+      value: box.value
+    };
+  }
+
+  function syncStatusForCurrentGame() {
+    if (!game) return;
+    if (game.phase === 'setup') {
+      syncStatus(`${game.preset.label} preview`, previewInfo(game.preset), 'setup');
+      return;
+    }
+    if (game.phase === 'gameover') {
+      syncStatus('game over', 'no empty tile and no changing move', 'over');
+      return;
+    }
+    if (eventQueue.length) {
+      syncStatus(`round ${game.round}: ${game.phase === 'paused' ? 'paused' : 'moving'}`, `${eventIndex}/${eventQueue.length} events`, phaseBadge(game.phase));
+      return;
+    }
+    syncStatus(`round ${game.round}`, 'use arrow keys to slide', phaseBadge(game.phase));
+  }
+
+  function phaseBadge(phase) {
+    if (phase === 'setup') return 'setup';
+    if (phase === 'animating') return 'moving';
+    if (phase === 'paused') return 'step';
+    if (phase === 'gameover') return 'over';
+    if (phase === 'ready') return 'ready';
+    return phase || '';
+  }
+
   function render() {
     if (!refs.canvas || !refs.ctx) return;
     const preset = game ? game.preset : selectedPreset();
@@ -332,43 +753,22 @@
     const widthAvailable = Math.max(280, Math.floor(wrap ? wrap.clientWidth : refs.canvas.clientWidth || 720));
     const margin = widthAvailable < 430 ? 18 : 28;
     const dpr = Math.min(Math.max((typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1, 1), 2.5);
-    const size = Math.min(Math.max((widthAvailable - margin * 2) / preset.cols, 24), 58);
-    const radius = size / 2;
-    const logicalWidth = Math.ceil((preset.cols * size) + margin * 2);
-    const logicalHeight = Math.ceil((preset.rows * size) + margin * 2);
+    geometry = buildGeometry(preset, widthAvailable, margin, dpr);
+    const logicalWidth = geometry.width;
+    const logicalHeight = geometry.height;
     refs.canvas.width = Math.max(1, Math.ceil(logicalWidth * dpr));
     refs.canvas.height = Math.max(1, Math.ceil(logicalHeight * dpr));
     refs.canvas.style.aspectRatio = `${logicalWidth} / ${logicalHeight}`;
     refs.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    geometry = {
-      width: logicalWidth,
-      height: logicalHeight,
-      margin,
-      radius,
-      size,
-      rows: preset.rows,
-      cols: preset.cols,
-      cells: []
-    };
 
     const ctx = refs.ctx;
     ctx.clearRect(0, 0, logicalWidth, logicalHeight);
     ctx.fillStyle = '#fffdf8';
     ctx.fillRect(0, 0, logicalWidth, logicalHeight);
 
-    for (let row = 1; row <= preset.rows; row += 1) {
-      for (let col = 1; col <= preset.cols; col += 1) {
-        const index = indexOf(row, col, preset.cols);
-        geometry.cells[index] = {
-          row,
-          col,
-          x: margin + radius + ((col - 1) * size),
-          y: margin + radius + ((row - 1) * size)
-        };
-        drawTile(ctx, geometry, row, col, removed.has(index));
-      }
-    }
+    geometry.cells.forEach((cell, index) => {
+      if (cell) drawTile(ctx, geometry, cell.row, cell.col, removed.has(index));
+    });
 
     drawBackgroundBoundaries(ctx, geometry, preset, removed);
     drawGlueEdges(ctx, geometry, preset);
@@ -378,9 +778,69 @@
     syncStats();
   }
 
+  function buildGeometry(preset, widthAvailable, margin, dpr) {
+    const lattice = latticeForPreset(preset);
+    const cells = [];
+    if (lattice.shape === 'hex') {
+      const hexWidthFactor = Math.sqrt(3) * (preset.cols + 0.5);
+      const radius = Math.min(Math.max((widthAvailable - margin * 2) / hexWidthFactor, 16), 48);
+      const hexWidth = Math.sqrt(3) * radius;
+      for (let row = 1; row <= preset.rows; row += 1) {
+        for (let col = 1; col <= preset.cols; col += 1) {
+          const rowZero = row - 1;
+          const colZero = col - 1;
+          const axial = offsetToAxial(rowZero, colZero);
+          cells[indexOf(row, col, preset.cols)] = {
+            row,
+            col,
+            q: axial.q,
+            r: axial.r,
+            x: margin + (hexWidth / 2) + (hexWidth * (axial.q + (axial.r / 2))),
+            y: margin + radius + (rowZero * 1.5 * radius)
+          };
+        }
+      }
+      return {
+        width: Math.ceil(hexWidth * (preset.cols + 0.5) + margin * 2),
+        height: Math.ceil((2 * radius) + ((preset.rows - 1) * 1.5 * radius) + margin * 2),
+        margin,
+        radius,
+        size: hexWidth,
+        rows: preset.rows,
+        cols: preset.cols,
+        lattice,
+        cells
+      };
+    }
+
+    const size = Math.min(Math.max((widthAvailable - margin * 2) / preset.cols, 24), 58);
+    const radius = size / 2;
+    for (let row = 1; row <= preset.rows; row += 1) {
+      for (let col = 1; col <= preset.cols; col += 1) {
+        cells[indexOf(row, col, preset.cols)] = {
+          row,
+          col,
+          x: margin + radius + ((col - 1) * size),
+          y: margin + radius + ((row - 1) * size)
+        };
+      }
+    }
+    return {
+      width: Math.ceil((preset.cols * size) + margin * 2),
+      height: Math.ceil((preset.rows * size) + margin * 2),
+      margin,
+      radius,
+      size,
+      rows: preset.rows,
+      cols: preset.cols,
+      lattice,
+      cells
+    };
+  }
+
   function drawTile(ctx, geom, row, col, removed) {
     const cell = geom.cells[indexOf(row, col, geom.cols)];
-    const points = squarePoints(cell.x, cell.y, geom.radius * 0.96);
+    const points = tilePoints(cell.x, cell.y, geom.radius * 0.96, geom.lattice);
     ctx.beginPath();
     points.forEach((point, pointIndex) => {
       if (pointIndex === 0) ctx.moveTo(point.x, point.y);
@@ -416,7 +876,7 @@
       for (let col = 1; col <= preset.cols; col += 1) {
         const index = indexOf(row, col, preset.cols);
         if (removed.has(index)) continue;
-        for (let dir = 0; dir < 4; dir += 1) {
+        for (const dir of directionsForPreset(preset)) {
           if (glued.has(boundaryEdgeKey({ row, col, dir }, preset.cols))) continue;
           const next = neighbor(row, col, dir, preset);
           const boundary = !next
@@ -472,8 +932,13 @@
         const to = geom.cells[move.to];
         if (!from || !to) return;
         if (move.glued) drawGluedMove(ctx, geom, move, progress);
-        else drawBoxAtPoint(ctx, lerpPoint(from, to, progress), geom.radius, move.value, 1);
+        else drawBoxAtPoint(ctx, lerpPoint(from, to, progress), geom.radius, move.value, 1, geom.lattice);
       });
+      if (event.explosions) event.explosions.forEach((explosion) => drawExplosionEvent(ctx, geom, explosion, progress));
+      return;
+    }
+    if (event.kind === 'bounceGroup') {
+      event.moves.forEach((move) => drawBounceMove(ctx, geom, move, progress));
       return;
     }
     if (event.kind === 'move') {
@@ -481,7 +946,7 @@
       const to = geom.cells[event.to];
       if (!from || !to) return;
       if (event.glued) drawGluedMove(ctx, geom, event, progress);
-      else drawBoxAtPoint(ctx, lerpPoint(from, to, progress), geom.radius, event.value, 1);
+      else drawBoxAtPoint(ctx, lerpPoint(from, to, progress), geom.radius, event.value, 1, geom.lattice);
       return;
     }
     if (event.kind === 'merge') {
@@ -496,7 +961,7 @@
         const to = geom.cells[move.to];
         if (!from || !to) return;
         if (move.glued) drawGluedMove(ctx, geom, move, progress);
-        else drawBoxAtPoint(ctx, lerpPoint(from, to, progress), geom.radius, move.value, 1);
+        else drawBoxAtPoint(ctx, lerpPoint(from, to, progress), geom.radius, move.value, 1, geom.lattice);
       });
       if (progress > 0.68) {
         const pulse = 1 + Math.sin((progress - 0.68) / 0.32 * Math.PI) * 0.18;
@@ -505,7 +970,7 @@
       return;
     }
     if (event.kind === 'explode') {
-      drawExplosionFlash(ctx, geom, event.center, progress, event.value);
+      drawExplosionEvent(ctx, geom, event, progress);
       return;
     }
     if (event.kind === 'removeTile') {
@@ -527,31 +992,51 @@
     const event = currentAnimation.event;
     if (event.kind === 'move') hidden.add(event.boxId);
     if (event.kind === 'moveGroup') event.moves.forEach((move) => hidden.add(move.boxId));
+    if (event.kind === 'moveGroup' && event.explosions) {
+      event.explosions.forEach((explosion) => hideExplosionBoxes(hidden, explosion));
+    }
+    if (event.kind === 'bounceGroup') event.moves.forEach((move) => hidden.add(move.boxId));
     if (event.kind === 'merge') event.removeBoxIds.forEach((id) => hidden.add(id));
     if (event.kind === 'merge' && !event.targetBoxId) hidden.add(event.boxId);
+    if (event.kind === 'explode') hideExplosionBoxes(hidden, event);
+    if (event.kind === 'removeTile' && event.removeBoxIds) event.removeBoxIds.forEach((id) => hidden.add(id));
+    if (event.kind === 'clearNumbers' && event.removeBoxIds) event.removeBoxIds.forEach((id) => hidden.add(id));
     if (event.kind === 'spawn') hidden.add(event.boxId);
     return hidden;
+  }
+
+  function hideExplosionBoxes(hidden, event) {
+    if (event.removeBoxIds) event.removeBoxIds.forEach((id) => hidden.add(id));
+    if (event.moves) event.moves.forEach((move) => hidden.add(move.boxId));
   }
 
   function drawBoxAtIndex(ctx, geom, index, value, scale) {
     const cell = geom.cells[index];
     if (!cell) return;
-    drawBoxAtPoint(ctx, cell, geom.radius, value, scale);
+    drawBoxAtPoint(ctx, cell, geom.radius, value, scale, geom.lattice);
   }
 
-  function drawBoxAtPoint(ctx, point, radius, value, scale) {
+  function drawBoxAtPoint(ctx, point, radius, value, scale, lattice = LATTICES.square) {
     const style = refs.boxStyle ? refs.boxStyle.value : 'paper';
-    if (style === 'ink') drawInkBox(ctx, point, radius, value, scale);
-    else if (style === 'color') drawColorBox(ctx, point, radius, value, scale);
-    else drawPaperBox(ctx, point, radius, value, scale);
+    if (style === 'ink') drawInkBox(ctx, point, radius, value, scale, lattice);
+    else if (style === 'color') drawColorBox(ctx, point, radius, value, scale, lattice);
+    else drawPaperBox(ctx, point, radius, value, scale, lattice);
+  }
+
+  function drawExplosionEvent(ctx, geom, event, progress) {
+    if (event.moves && event.moves.length) drawExplosionImpact(ctx, geom, event, progress);
+    const flashProgress = event.moves && event.moves.length
+      ? Math.max(0, (progress - 0.42) / 0.58)
+      : progress;
+    drawExplosionFlash(ctx, geom, event.center, flashProgress, event.value);
   }
 
   function drawGluedMove(ctx, geom, move, progress) {
     const from = geom.cells[move.from];
     const to = geom.cells[move.to];
     if (!from || !to || !move.edge) return;
-    const outgoing = dirVector(move.edge.dir, geom.size);
-    const incoming = dirVector(move.dir, geom.size);
+    const outgoing = dirVector(move.edge.dir, geom.size, geom.lattice);
+    const incoming = dirVector(move.dir, geom.size, geom.lattice);
     const exitPoint = {
       x: from.x + outgoing.x * progress,
       y: from.y + outgoing.y * progress
@@ -565,17 +1050,71 @@
     drawGlueFlash(ctx, geom, move, progress);
   }
 
+  function drawBounceMove(ctx, geom, move, progress) {
+    const from = geom.cells[move.from];
+    const to = geom.cells[move.to];
+    if (!from || !to) return;
+    const impact = Math.sin(progress * Math.PI) * 0.46;
+    if (move.glued && move.edge) {
+      const outgoing = dirVector(move.edge.dir, geom.size, geom.lattice);
+      const point = {
+        x: from.x + outgoing.x * impact,
+        y: from.y + outgoing.y * impact
+      };
+      drawBoxClippedToTile(ctx, geom, move.from, point, move.value);
+      drawGlueFlash(ctx, geom, move, progress);
+      return;
+    }
+    drawBoxAtPoint(ctx, lerpPoint(from, to, impact), geom.radius, move.value, 1, geom.lattice);
+  }
+
+  function drawExplosionImpact(ctx, geom, event, progress) {
+    const travel = Math.min(1, progress / 0.5);
+    const squeeze = progress <= 0.42 ? 0 : Math.sin(Math.min(1, (progress - 0.42) / 0.34) * Math.PI);
+    const fade = progress <= 0.78 ? 1 : Math.max(0, 1 - ((progress - 0.78) / 0.22));
+    event.moves.forEach((move) => drawExplosionMove(ctx, geom, move, travel, squeeze, fade));
+  }
+
+  function drawExplosionMove(ctx, geom, move, travel, squeeze, alpha) {
+    const from = geom.cells[move.from];
+    const to = geom.cells[move.to];
+    if (!from || !to) return;
+    if (move.glued && move.edge && travel < 1) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      drawGluedMove(ctx, geom, move, travel);
+      ctx.restore();
+      return;
+    }
+    const point = move.glued ? to : lerpPoint(from, to, travel);
+    drawSqueezedBoxAtPoint(ctx, point, geom.radius, move.value, squeeze, move.dir, geom.lattice, alpha);
+  }
+
+  function drawSqueezedBoxAtPoint(ctx, point, radius, value, squeeze, dir, lattice = LATTICES.square, alpha = 1) {
+    const angle = (lattice.angles && lattice.angles[modulo(dir, lattice.sides)]) || 0;
+    const compression = 1 - squeeze * 0.48;
+    const expansion = 1 + squeeze * 0.16;
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(point.x, point.y);
+    ctx.rotate(angle);
+    ctx.scale(compression, expansion);
+    ctx.rotate(-angle);
+    drawBoxAtPoint(ctx, { x: 0, y: 0 }, radius, value, 1, lattice);
+    ctx.restore();
+  }
+
   function drawBoxClippedToTile(ctx, geom, index, point, value) {
     const cell = geom.cells[index];
     if (!cell) return;
     ctx.save();
-    clipToTile(ctx, cell, geom.radius * 0.96);
-    drawBoxAtPoint(ctx, point, geom.radius, value, 1);
+    clipToTile(ctx, geom, cell, geom.radius * 0.96);
+    drawBoxAtPoint(ctx, point, geom.radius, value, 1, geom.lattice);
     ctx.restore();
   }
 
-  function clipToTile(ctx, cell, radius) {
-    const points = squarePoints(cell.x, cell.y, radius);
+  function clipToTile(ctx, geom, cell, radius) {
+    const points = tilePoints(cell.x, cell.y, radius, geom.lattice);
     ctx.beginPath();
     points.forEach((point, pointIndex) => {
       if (pointIndex === 0) ctx.moveTo(point.x, point.y);
@@ -585,10 +1124,8 @@
     ctx.clip();
   }
 
-  function drawPaperBox(ctx, point, radius, value, scale = 1) {
+  function drawPaperBox(ctx, point, radius, value, scale = 1, lattice = LATTICES.square) {
     const side = radius * 1.24 * scale;
-    const x = point.x - side / 2;
-    const y = point.y - side / 2;
     ctx.save();
     ctx.fillStyle = '#efe4cb';
     ctx.strokeStyle = '#8b3a2a';
@@ -596,47 +1133,85 @@
     ctx.shadowColor = 'rgba(45,34,22,0.18)';
     ctx.shadowBlur = radius * 0.1;
     ctx.shadowOffsetY = radius * 0.05;
-    ctx.fillRect(x, y, side, side);
+    boxPath(ctx, point, side, lattice);
+    ctx.fill();
     ctx.shadowColor = 'transparent';
-    ctx.strokeRect(x, y, side, side);
-    drawBoxText(ctx, point, radius, value, '#2f2118', scale);
+    ctx.stroke();
+    drawBoxText(ctx, point, radius, value, '#2f2118', scale, side * 0.82);
     ctx.restore();
   }
 
-  function drawInkBox(ctx, point, radius, value, scale = 1) {
+  function drawInkBox(ctx, point, radius, value, scale = 1, lattice = LATTICES.square) {
     const side = radius * 1.18 * scale;
-    const x = point.x - side / 2;
-    const y = point.y - side / 2;
     ctx.save();
     ctx.fillStyle = 'rgba(255,253,248,0.88)';
     ctx.strokeStyle = '#111111';
     ctx.lineWidth = Math.max(1.8, radius * 0.06);
-    ctx.fillRect(x, y, side, side);
-    ctx.strokeRect(x, y, side, side);
-    drawBoxText(ctx, point, radius, value, '#111111', scale);
+    boxPath(ctx, point, side, lattice);
+    ctx.fill();
+    ctx.stroke();
+    drawBoxText(ctx, point, radius, value, '#111111', scale, side * 0.82);
     ctx.restore();
   }
 
-  function drawColorBox(ctx, point, radius, value, scale = 1) {
+  function drawColorBox(ctx, point, radius, value, scale = 1, lattice = LATTICES.square) {
     const side = radius * 1.26 * scale;
-    const x = point.x - side / 2;
-    const y = point.y - side / 2;
     ctx.save();
     ctx.fillStyle = valueColor(value);
     ctx.strokeStyle = value <= 2 ? '#8b6f3e' : '#8b3a2a';
     ctx.lineWidth = Math.max(1.2, radius * 0.045);
-    ctx.fillRect(x, y, side, side);
-    ctx.strokeRect(x, y, side, side);
-    drawBoxText(ctx, point, radius, value, value >= 8 ? '#fffdf8' : '#2f2118', scale);
+    boxPath(ctx, point, side, lattice);
+    ctx.fill();
+    ctx.stroke();
+    drawBoxText(ctx, point, radius, value, value >= 8 ? '#fffdf8' : '#2f2118', scale, side * 0.82);
     ctx.restore();
   }
 
-  function drawBoxText(ctx, point, radius, value, color, scale = 1) {
+  function boxPath(ctx, point, side, lattice) {
+    if (lattice && lattice.shape === 'hex') {
+      const radius = side / Math.sqrt(3);
+      const points = hexPoints(point.x, point.y, radius, lattice);
+      ctx.beginPath();
+      points.forEach((corner, index) => {
+        if (index === 0) ctx.moveTo(corner.x, corner.y);
+        else ctx.lineTo(corner.x, corner.y);
+      });
+      ctx.closePath();
+      return;
+    }
+    const x = point.x - side / 2;
+    const y = point.y - side / 2;
+    ctx.beginPath();
+    ctx.rect(x, y, side, side);
+  }
+
+  function drawBoxText(ctx, point, radius, value, color, scale = 1, maxWidth = radius * 1.02 * scale) {
+    const text = String(value);
+    const maxFontSize = Math.max(12, Math.round(radius * 0.72 * Math.min(1, scale)));
+    const minFontSize = Math.max(7, Math.round(radius * 0.26));
+    const fontSize = fittedBoxTextSize(ctx, text, maxFontSize, minFontSize, maxWidth);
     ctx.fillStyle = color;
-    ctx.font = `700 ${Math.max(12, Math.round(radius * 0.72 * Math.min(1, scale)))}px "JetBrains Mono", monospace`;
+    ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(value), point.x, point.y + radius * 0.02);
+    ctx.fillText(text, point.x, point.y + radius * 0.02, maxWidth);
+  }
+
+  function fittedBoxTextSize(ctx, text, maxFontSize, minFontSize, maxWidth) {
+    for (let fontSize = maxFontSize; fontSize > minFontSize; fontSize -= 1) {
+      ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
+      const measured = measureTextWidth(ctx, text, fontSize);
+      if (measured <= maxWidth) return fontSize;
+    }
+    return minFontSize;
+  }
+
+  function measureTextWidth(ctx, text, fontSize) {
+    if (ctx.measureText) {
+      const metrics = ctx.measureText(text);
+      if (metrics && Number.isFinite(metrics.width)) return metrics.width;
+    }
+    return text.length * fontSize * 0.62;
   }
 
   function drawGlueFlash(ctx, geom, event, progress) {
@@ -725,8 +1300,8 @@
     ctx.closePath();
   }
 
-  function createGameState(presetOrId) {
-    const preset = resolvePreset(presetOrId);
+  function createGameState(presetOrId, options = {}) {
+    const preset = materializePreset(resolvePreset(presetOrId), options);
     return {
       preset,
       phase: 'setup',
@@ -739,7 +1314,7 @@
   }
 
   function beginGame(presetOrId, options = {}) {
-    const state = createGameState(presetOrId);
+    const state = createGameState(presetOrId, { glueRng: options.glueRng });
     const rng = options.rng || Math.random;
     spawnNumbers(state, 2, rng, spawnInitialValue, []);
     state.phase = 'ready';
@@ -800,7 +1375,10 @@
 
       const results = resolveBatch(state, proposals, active, mergeLocked, debugMessages);
       const moves = [];
+      const bounces = [];
       const pushMerges = [];
+      const explosions = [];
+      const explodedBoxIds = new Set();
       results.forEach((result) => {
         const actor = result.actor;
         if (result.kind === 'stop') {
@@ -822,6 +1400,11 @@
           changed = true;
           return;
         }
+        if (result.kind === 'bounce') {
+          bounces.push(...result.moves);
+          result.actors.forEach((bounceActor) => active.delete(bounceActor.id));
+          return;
+        }
         if (result.kind === 'push') {
           moves.push(...result.moves);
           changed = true;
@@ -839,14 +1422,28 @@
           return;
         }
         if (result.kind === 'explode') {
-          addExplosionEvents(state, events, result.center, result.value, result.removeBoxIds);
-          result.removeBoxIds.forEach((id) => active.delete(id));
+          explosions.push(result);
+          result.removeBoxIds.forEach((id) => {
+            active.delete(id);
+            explodedBoxIds.add(id);
+          });
           changed = true;
         }
       });
       const moveEvents = [];
+      const bounceEvents = bounces.map(animationMoveFromResult);
+      if (bounceEvents.length) events.push({ kind: 'bounceGroup', moves: bounceEvents });
+      const explosionAnimations = explosions
+        .filter((explosion) => explosion.moves && explosion.moves.length)
+        .map((explosion) => explosionAnimationEvent(
+          explosion.center,
+          explosion.value,
+          explosion.removeBoxIds,
+          explosion.moves
+        ));
       moves.forEach((result) => {
         const boxId = result.boxId || (result.actor && result.actor.id);
+        if (explodedBoxIds.has(boxId)) return;
         const box = findBox(state, boxId);
         if (!box || state.removed.has(result.transition.index)) {
           if (result.actor) active.delete(result.actor.id);
@@ -878,8 +1475,15 @@
           if (result.transition.kind === 'glued') activeActor.k += 1;
         }
       });
-      if (moveEvents.length) events.push({ kind: 'moveGroup', moves: moveEvents });
+      if (moveEvents.length || explosionAnimations.length) {
+        events.push({ kind: 'moveGroup', moves: moveEvents, explosions: explosionAnimations });
+      }
       pushMerges.forEach((merge) => addPushedMergeEvent(state, events, merge, mergeLocked, active));
+      explosions.forEach((explosion) => {
+        addExplosionEvents(state, events, explosion.center, explosion.value, explosion.removeBoxIds, explosion.moves, {
+          animate: !(explosion.moves && explosion.moves.length)
+        });
+      });
       if (moveEvents.length || pushMerges.length) {
         active.forEach((actor) => {
           actor.waiting = false;
@@ -930,14 +1534,45 @@
     }
 
     const results = [];
+    const swapCollisions = reciprocalSwapCollisions(proposals);
+    const collisionActorIds = new Set();
+    swapCollisions.forEach((pair) => {
+      pair.forEach((proposal) => collisionActorIds.add(proposal.actor.id));
+      results.push({
+        kind: 'bounce',
+        actor: pair[0].actor,
+        actors: pair.map((proposal) => proposal.actor),
+        moves: pair.map((proposal) => moveResultFromActor(proposal.actor, proposal.transition))
+      });
+    });
+    const occupiedCollisions = occupiedTargetCollisions(state, proposals, byActor, collisionActorIds);
+    occupiedCollisions.forEach((collision) => {
+      collision.proposals.forEach((proposal) => collisionActorIds.add(proposal.actor.id));
+      results.push({
+        kind: 'bounce',
+        actor: collision.proposals[0].actor,
+        actors: collision.proposals.map((proposal) => proposal.actor),
+        moves: collision.proposals.map((proposal) => moveResultFromActor(proposal.actor, proposal.transition))
+      });
+    });
     const groups = groupByTarget(proposals);
     groups.forEach((group) => {
+      if (group.some((proposal) => collisionActorIds.has(proposal.actor.id))) return;
       const target = group[0].target;
       const resident = boxAt(state, target);
       const residentProposal = resident ? byActor.get(resident.id) : null;
       const residentVacates = !!(residentProposal && batchIds.has(resident.id) && willVacate.get(resident.id));
       const includeResident = !!(resident && !residentVacates);
       if (group.length > 1) {
+        if (includeResident) {
+          results.push({
+            kind: 'bounce',
+            actor: group[0].actor,
+            actors: group.map((proposal) => proposal.actor),
+            moves: group.map((proposal) => moveResultFromActor(proposal.actor, proposal.transition))
+          });
+          return;
+        }
         if (!includeResident && group.length === 2 && group[0].actor.value === group[1].actor.value) {
           results.push({
             kind: 'merge',
@@ -961,7 +1596,8 @@
             actor: proposal.actor,
             center: target,
             value: Math.min(...participants),
-            removeBoxIds
+            removeBoxIds,
+            moves: group.map((item) => moveResultFromActor(item.actor, item.transition))
           });
         });
         return;
@@ -1040,6 +1676,50 @@
     });
   }
 
+  function reciprocalSwapCollisions(proposals) {
+    const byActorStart = new Map();
+    const targetCounts = new Map();
+    proposals.forEach((proposal) => {
+      byActorStart.set(proposal.actor.index, proposal);
+      targetCounts.set(proposal.target, (targetCounts.get(proposal.target) || 0) + 1);
+    });
+    const collisions = [];
+    const seenActors = new Set();
+    proposals.forEach((proposal) => {
+      if (seenActors.has(proposal.actor.id)) return;
+      if (targetCounts.get(proposal.target) !== 1) return;
+      const other = byActorStart.get(proposal.target);
+      if (!other || other.actor.id === proposal.actor.id) return;
+      if (targetCounts.get(other.target) !== 1) return;
+      if (other.target !== proposal.actor.index) return;
+      seenActors.add(proposal.actor.id);
+      seenActors.add(other.actor.id);
+      collisions.push([proposal, other]);
+    });
+    return collisions;
+  }
+
+  function occupiedTargetCollisions(state, proposals, byActor, excludedActorIds = new Set()) {
+    const collisions = [];
+    const seenActors = new Set();
+    groupByTarget(proposals).forEach((group) => {
+      if (group.length < 2) return;
+      const blocksImpossibleMerge = group.length === 2 && group[0].actor.value === group[1].actor.value;
+      if (!blocksImpossibleMerge) return;
+      if (group.some((proposal) => excludedActorIds.has(proposal.actor.id))) return;
+      const target = group[0].target;
+      const resident = boxAt(state, target);
+      if (!resident) return;
+      const residentProposal = byActor.get(resident.id);
+      if (!residentProposal || excludedActorIds.has(resident.id)) return;
+      const collisionProposals = group.concat(residentProposal);
+      if (collisionProposals.some((proposal) => seenActors.has(proposal.actor.id))) return;
+      collisionProposals.forEach((proposal) => seenActors.add(proposal.actor.id));
+      collisions.push({ target, resident, proposals: collisionProposals });
+    });
+    return collisions;
+  }
+
   function detectPushChain(state, proposal, firstBox, firstDir, context) {
     const moves = [];
     const seen = new Set();
@@ -1050,6 +1730,7 @@
         const message = `push-chain debug: exceeded ${PUSH_CHAIN_LIMIT} states from box ${proposal.actor.id}`;
         return { kind: 'debug', message };
       }
+      if (context.mergeLocked.has(currentBox.id)) return { kind: 'blocked' };
       const stateKey = `${currentBox.id}:${expectedDir}`;
       if (seen.has(stateKey)) return { kind: 'blocked' };
       seen.add(stateKey);
@@ -1140,6 +1821,17 @@
     };
   }
 
+  function explosionAnimationEvent(center, value, removeBoxIds, moves = []) {
+    return {
+      kind: 'explode',
+      center,
+      value,
+      large: value > 64,
+      removeBoxIds: Array.from(new Set(removeBoxIds)),
+      moves: moves.map(animationMoveFromResult)
+    };
+  }
+
   function addMergeEvent(state, events, result, mergeLocked, active) {
     const keeperId = result.targetBoxId || result.movingActors[0].id;
     const removeBoxIds = result.targetBoxId
@@ -1200,14 +1892,12 @@
     active.delete(merge.targetBoxId);
   }
 
-  function addExplosionEvents(state, events, center, value, removeBoxIds) {
+  function addExplosionEvents(state, events, center, value, removeBoxIds, moves = [], options = {}) {
     const centerIds = new Set(removeBoxIds);
-    const centerBox = boxAt(state, center);
-    if (centerBox) centerIds.add(centerBox.id);
     const large = value > 64;
     const clearIndices = large ? blastNeighborIndices(state, center) : [];
     const clearBoxIds = boxesAtIndices(state, clearIndices).map((box) => box.id);
-    events.push({ kind: 'explode', center, value, large });
+    if (options.animate !== false) events.push(explosionAnimationEvent(center, value, Array.from(centerIds), moves));
     events.push({ kind: 'removeTile', index: center, removeBoxIds: Array.from(centerIds), value });
     if (clearIndices.length) {
       events.push({
@@ -1224,6 +1914,9 @@
     if (!targetState) return;
     if (event.kind === 'moveGroup') {
       event.moves.forEach((move) => applyEvent(targetState, move));
+      return;
+    }
+    if (event.kind === 'bounceGroup') {
       return;
     }
     if (event.kind === 'move') {
@@ -1302,7 +1995,7 @@
     return {
       kind: 'glued',
       index: partner.index,
-      dir: OPPOSITE[partner.dir],
+      dir: oppositeDir(preset, partner.dir),
       edge: {
         index,
         dir,
@@ -1335,7 +2028,7 @@
 
   function blastNeighborIndices(state, center) {
     const out = new Set();
-    for (let dir = 0; dir < 4; dir += 1) {
+    for (const dir of directionsForPreset(state.preset)) {
       const next = surfaceSuccessor(state, center, dir);
       if (next && next.index !== center && !state.removed.has(next.index)) out.add(next.index);
     }
@@ -1344,7 +2037,7 @@
 
   function isGameOver(state) {
     if (!state || emptyExistingIndices(state).length) return false;
-    return [DIRS.E, DIRS.S, DIRS.W, DIRS.N].every((dir) => !simulateRound(state, dir, { spawn: false }).changed);
+    return directionsForPreset(state.preset).every((dir) => !simulateRound(state, dir, { spawn: false }).changed);
   }
 
   function cloneGameState(source) {
@@ -1355,7 +2048,8 @@
       boxes: source.boxes.map((box) => ({ id: box.id, index: box.index, value: box.value })),
       nextBoxId: source.nextBoxId,
       score: source.score,
-      round: source.round
+      round: source.round,
+      debugMessage: source.debugMessage || ''
     };
   }
 
@@ -1397,12 +2091,350 @@
   }
 
   function selectedPreset() {
+    if (refs.select && refs.select.value === IMPORTED_PRESET_ID && importedPreset) return importedPreset;
     return resolvePreset(refs.select ? refs.select.value : 'torus');
+  }
+
+  function presetFromImportText(text) {
+    const raw = String(text || '').trim();
+    if (!raw) throw new Error('paste a preset JSON object');
+    let payload;
+    try {
+      payload = JSON.parse(raw);
+    } catch (error) {
+      throw new Error('preset JSON could not be parsed');
+    }
+    return presetFromImportPayload(payload);
+  }
+
+  function presetFromImportPayload(payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new Error('preset must be a JSON object');
+    }
+    const source = payload.preset && typeof payload.preset === 'object' ? payload.preset : payload;
+    const lattice = normalizeImportedLattice(firstPresentValue(source, ['lattice']) || firstPresentValue(payload, ['lattice']));
+    const rows = normalizeImportedBoardSize(firstPresentValue(source, ['rows']) || firstPresentValue(payload, ['rows']), 'rows');
+    const cols = normalizeImportedBoardSize(firstPresentValue(source, ['cols']) || firstPresentValue(payload, ['cols']), 'cols');
+    const shell = { lattice, rows, cols, removedTiles: [], cutEdges: [], gluedEdges: [] };
+    const removedTiles = normalizeImportedRemovedTiles(importedArrayValues(payload, source, ['removedTiles', 'backgroundRemovedTiles']), rows, cols);
+    shell.removedTiles = removedTiles;
+    const cutEdges = normalizeImportedCutEdges(importedArrayValues(payload, source, ['cutEdges', 'backgroundCutEdges', 'boundaries']), shell);
+    shell.cutEdges = cutEdges;
+    const gluedEdges = normalizeImportedGluedEdges(importedArrayValues(payload, source, ['gluedEdges', 'backgroundGluedEdges', 'gluedBoundaries']), shell);
+    const backgroundSpace = payload.backgroundSpace && typeof payload.backgroundSpace === 'object' ? payload.backgroundSpace : {};
+    const label = sanitizeImportedText(
+      firstPresentValue(source, ['label', 'name'])
+        || firstPresentValue(payload, ['label', 'name'])
+        || 'imported preset',
+      'imported preset'
+    );
+    const surface = sanitizeImportedText(
+      firstPresentValue(source, ['surface'])
+        || firstPresentValue(payload, ['surface'])
+        || backgroundSpace.surfaceType
+        || `${latticeForPreset(shell).label} background`,
+      `${latticeForPreset(shell).label} background`
+    );
+    return {
+      id: IMPORTED_PRESET_ID,
+      sourceId: sanitizeImportedText(firstPresentValue(source, ['id']) || firstPresentValue(payload, ['id']) || '', ''),
+      label,
+      lattice,
+      rows,
+      cols,
+      surface,
+      removedTiles,
+      cutEdges,
+      gluedEdges
+    };
+  }
+
+  function normalizeImportedLattice(value) {
+    const key = String(value || '').trim().toLowerCase();
+    if (key === 'hex' || key === 'hexagon' || key === 'hexagonal') return 'hexagonal';
+    if (key === 'square' || key === 'grid') return 'square';
+    if (LATTICES[key]) return key;
+    throw new Error('imported lattice must be square or hexagonal');
+  }
+
+  function normalizeImportedBoardSize(value, label) {
+    const number = Number(value);
+    if (!Number.isInteger(number) || number < MIN_IMPORTED_BOARD || number > MAX_IMPORTED_BOARD) {
+      throw new Error(`imported ${label} must be between ${MIN_IMPORTED_BOARD} and ${MAX_IMPORTED_BOARD}`);
+    }
+    return number;
+  }
+
+  function importedArrayValues(payload, source, keys) {
+    const results = [];
+    const backgroundSpace = payload.backgroundSpace && typeof payload.backgroundSpace === 'object'
+      ? payload.backgroundSpace
+      : null;
+    [source, payload, backgroundSpace].filter(Boolean).forEach((container) => {
+      keys.forEach((key) => {
+        if (Array.isArray(container[key])) results.push(...container[key]);
+      });
+    });
+    return results;
+  }
+
+  function normalizeImportedRemovedTiles(entries, rows, cols) {
+    const seen = new Set();
+    const tiles = [];
+    entries.forEach((entry) => {
+      const tile = normalizeImportedTileRef(entry, rows, cols);
+      if (!tile) return;
+      const key = indexOf(tile.row, tile.col, cols);
+      if (seen.has(key)) return;
+      seen.add(key);
+      tiles.push(tile);
+    });
+    return tiles.sort((a, b) => indexOf(a.row, a.col, cols) - indexOf(b.row, b.col, cols));
+  }
+
+  function normalizeImportedCutEdges(entries, preset) {
+    const seen = new Set();
+    const cuts = [];
+    entries.forEach((entry) => {
+      const cut = normalizeImportedCutEdge(entry, preset);
+      if (!cut) return;
+      const key = cutKey(indexOf(cut.left.row, cut.left.col, preset.cols), indexOf(cut.right.row, cut.right.col, preset.cols));
+      if (seen.has(key)) return;
+      seen.add(key);
+      cuts.push(cut);
+    });
+    return cuts;
+  }
+
+  function normalizeImportedCutEdge(entry, preset) {
+    let leftValue = null;
+    let rightValue = null;
+    if (Array.isArray(entry) && entry.length >= 2) {
+      [leftValue, rightValue] = entry;
+    } else if (entry && typeof entry === 'object') {
+      leftValue = firstPresentValue(entry, ['left', 'a', 'from', 'first']);
+      rightValue = firstPresentValue(entry, ['right', 'b', 'to', 'second']);
+    }
+    const left = normalizeImportedTileRef(leftValue, preset.rows, preset.cols);
+    const right = normalizeImportedTileRef(rightValue, preset.rows, preset.cols);
+    if (!left || !right) return null;
+    if (indexOf(left.row, left.col, preset.cols) === indexOf(right.row, right.col, preset.cols)) return null;
+    if (!areDirectNeighborTiles(left, right, preset)) return null;
+    return { left, right };
+  }
+
+  function normalizeImportedGluedEdges(entries, preset) {
+    const seen = new Set();
+    const glued = [];
+    entries.forEach((entry) => {
+      const pair = normalizeImportedGluePair(entry, preset);
+      if (!pair) return;
+      const first = boundaryEdgeKey(pair.first, preset.cols);
+      const second = boundaryEdgeKey(pair.second, preset.cols);
+      const key = first < second ? `${first}|${second}` : `${second}|${first}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      glued.push(pair);
+    });
+    return glued;
+  }
+
+  function normalizeImportedGluePair(entry, preset) {
+    let firstValue = null;
+    let secondValue = null;
+    if (Array.isArray(entry) && entry.length >= 2) {
+      [firstValue, secondValue] = entry;
+    } else if (entry && typeof entry === 'object') {
+      firstValue = firstPresentValue(entry, ['first', 'left', 'a', 'from']);
+      secondValue = firstPresentValue(entry, ['second', 'right', 'b', 'to']);
+    }
+    const first = normalizeImportedBoundaryEdge(firstValue, preset);
+    const second = normalizeImportedBoundaryEdge(secondValue, preset);
+    if (!first || !second) return null;
+    const orientation = entry && typeof entry === 'object' ? String(entry.orientation || '').toLowerCase() : '';
+    return {
+      group: normalizeImportedGroup(entry && entry.group),
+      reversed: !!(entry && entry.reversed) || orientation === 'reversed',
+      firstArrowReversed: entry && Object.prototype.hasOwnProperty.call(entry, 'firstArrowReversed')
+        ? !!entry.firstArrowReversed
+        : !!(entry && entry.reversed),
+      secondArrowReversed: entry && Object.prototype.hasOwnProperty.call(entry, 'secondArrowReversed')
+        ? !!entry.secondArrowReversed
+        : true,
+      first,
+      second
+    };
+  }
+
+  function normalizeImportedBoundaryEdge(value, preset) {
+    if (!value || typeof value !== 'object') return null;
+    const tile = normalizeImportedTileRef(value, preset.rows, preset.cols);
+    if (!tile) return null;
+    const dirValue = value.dir != null ? value.dir : value.edge;
+    const dir = normalizeImportedDir(dirValue, preset);
+    if (!Number.isInteger(dir)) return null;
+    return { row: tile.row, col: tile.col, dir };
+  }
+
+  function normalizeImportedTileRef(value, rows, cols) {
+    if (Number.isInteger(Number(value))) return tileRefFromIndex(Number(value), rows, cols);
+    if (!value || typeof value !== 'object') return null;
+    const row = Number(value.row);
+    const col = Number(value.col);
+    if (Number.isInteger(row) && Number.isInteger(col) && row >= 1 && row <= rows && col >= 1 && col <= cols) {
+      return { row, col };
+    }
+    if (Number.isInteger(Number(value.index))) return tileRefFromIndex(Number(value.index), rows, cols);
+    return null;
+  }
+
+  function tileRefFromIndex(index, rows, cols) {
+    if (!Number.isInteger(index) || index < 0 || index >= rows * cols) return null;
+    return rowCol(index, cols);
+  }
+
+  function normalizeImportedDir(value, preset) {
+    const lattice = latticeForPreset(preset);
+    if (typeof value === 'string') {
+      const normalized = value.trim().toUpperCase();
+      const named = lattice.dirNames.findIndex((name) => name === normalized);
+      if (named >= 0) return named;
+      if (!/^-?\d+$/.test(normalized)) return null;
+    }
+    const number = Number(value);
+    if (!Number.isFinite(number)) return null;
+    return modulo(Math.trunc(number), lattice.sides);
+  }
+
+  function normalizeImportedGroup(value) {
+    const number = Number(value);
+    return Number.isInteger(number) && number >= 0 ? number : null;
+  }
+
+  function areDirectNeighborTiles(left, right, preset) {
+    return directionsForPreset(preset).some((dir) => {
+      const next = neighbor(left.row, left.col, dir, preset);
+      return next && next.row === right.row && next.col === right.col;
+    });
+  }
+
+  function firstPresentValue(source, keys) {
+    if (!source || typeof source !== 'object') return undefined;
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(source, key)) return source[key];
+    }
+    return undefined;
+  }
+
+  function sanitizeImportedText(value, fallback) {
+    const text = String(value || '').trim();
+    return text ? text.slice(0, 80) : fallback;
+  }
+
+  function latticeForPreset(preset) {
+    return LATTICES[(preset && preset.lattice) || 'square'] || LATTICES.square;
+  }
+
+  function directionsForPreset(preset) {
+    const lattice = latticeForPreset(preset);
+    return Array.from({ length: lattice.sides }, (_, index) => index);
+  }
+
+  function dirFromName(name, preset) {
+    const lattice = latticeForPreset(preset);
+    const normalized = String(name || '').toUpperCase();
+    const index = lattice.dirNames.findIndex((dirName) => dirName === normalized);
+    return index >= 0 ? index : null;
+  }
+
+  function dirFromKey(key, preset) {
+    const lattice = latticeForPreset(preset);
+    const keyMap = KEY_DIRS[lattice.id] || KEY_DIRS.square;
+    if (Object.prototype.hasOwnProperty.call(keyMap, key)) return keyMap[key];
+    const rawKey = String(key || '');
+    const letterCode = rawKey.length === 1 ? `Key${rawKey.toUpperCase()}` : rawKey;
+    return Object.prototype.hasOwnProperty.call(keyMap, letterCode) ? keyMap[letterCode] : null;
+  }
+
+  function oppositeDir(preset, dir) {
+    const lattice = latticeForPreset(preset);
+    return lattice.opposite[modulo(dir, lattice.sides)];
   }
 
   function resolvePreset(presetOrId) {
     if (presetOrId && typeof presetOrId === 'object') return presetOrId;
     return PRESETS.find((preset) => preset.id === presetOrId) || PRESETS[0];
+  }
+
+  function materializePreset(source, options = {}) {
+    const preset = clonePreset(source);
+    if (preset.randomGlue) {
+      preset.gluedEdges = generateRandomBoundaryGlue(preset, options.glueRng || Math.random);
+    }
+    return preset;
+  }
+
+  function clonePreset(source) {
+    return {
+      ...source,
+      lattice: source.lattice || 'square',
+      removedTiles: (source.removedTiles || []).map((tile) => ({ ...tile })),
+      cutEdges: (source.cutEdges || []).map((edge) => ({
+        left: { ...edge.left },
+        right: { ...edge.right }
+      })),
+      gluedEdges: (source.gluedEdges || []).map(cloneGluePair)
+    };
+  }
+
+  function cloneGluePair(pair) {
+    return {
+      ...pair,
+      first: { ...pair.first },
+      second: { ...pair.second }
+    };
+  }
+
+  function generateRandomBoundaryGlue(preset, rng) {
+    const edges = realBoundaryEdges(preset);
+    shuffleInPlace(edges, rng || Math.random);
+    const gluedEdges = [];
+    for (let index = 0; index + 1 < edges.length; index += 2) {
+      gluedEdges.push({
+        group: Math.floor(index / 2),
+        first: edges[index],
+        second: edges[index + 1]
+      });
+    }
+    return gluedEdges;
+  }
+
+  function realBoundaryEdges(preset) {
+    const removed = initialRemovedSet(preset);
+    const edges = [];
+    for (let row = 1; row <= preset.rows; row += 1) {
+      for (let col = 1; col <= preset.cols; col += 1) {
+        const index = indexOf(row, col, preset.cols);
+        if (removed.has(index)) continue;
+        for (const dir of directionsForPreset(preset)) {
+          const next = neighbor(row, col, dir, preset);
+          if (!next || removed.has(indexOf(next.row, next.col, preset.cols))) {
+            edges.push({ row, col, dir });
+          }
+        }
+      }
+    }
+    return edges;
+  }
+
+  function shuffleInPlace(items, rng) {
+    for (let index = items.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor((rng ? rng() : Math.random()) * (index + 1));
+      const temp = items[index];
+      items[index] = items[swapIndex];
+      items[swapIndex] = temp;
+    }
+    return items;
   }
 
   function initialRemovedSet(preset) {
@@ -1425,7 +2457,7 @@
       for (let col = 1; col <= preset.cols; col += 1) {
         const index = indexOf(row, col, preset.cols);
         if (removed.has(index)) continue;
-        for (let dir = 0; dir < 4; dir += 1) {
+        for (const dir of directionsForPreset(preset)) {
           if (glued.has(boundaryEdgeKey({ row, col, dir }, preset.cols))) continue;
           const next = neighbor(row, col, dir, preset);
           const boundary = !next
@@ -1456,10 +2488,20 @@
 
   function syncControls() {
     if (refs.nextStep) refs.nextStep.disabled = !(isStepMode() && stepPaused && eventQueue.length && !currentAnimation);
+    if (refs.undo) refs.undo.disabled = !undoStack.length;
+    if (refs.exportState) refs.exportState.disabled = !game;
+    syncDebugModeUi();
+    const activeLattice = latticeForPreset(game ? game.preset : selectedPreset()).id;
+    if (refs.moveGroups) {
+      refs.moveGroups.forEach((group) => {
+        group.hidden = group.getAttribute('data-move-lattice') !== activeLattice;
+      });
+    }
     if (refs.moveButtons) {
       const disabled = !canAcceptMove();
       refs.moveButtons.forEach((button) => {
-        button.disabled = disabled;
+        const dir = game ? dirFromName(button.getAttribute('data-move-dir'), game.preset) : null;
+        button.disabled = disabled || !Number.isInteger(dir);
       });
     }
   }
@@ -1471,6 +2513,7 @@
 
   function eventDuration(event) {
     const base = refs.speed ? Number(refs.speed.value) || 260 : 260;
+    if (event.kind === 'bounceGroup') return Math.max(100, base * 0.9);
     if (event.kind === 'explode') return Math.max(120, base * 0.85);
     if (event.kind === 'removeTile' || event.kind === 'clearNumbers') return Math.max(90, base * 0.55);
     if (event.kind === 'spawn') return Math.max(100, base * 0.72);
@@ -1478,7 +2521,7 @@
   }
 
   function isStepMode() {
-    return !!(refs.stepMode && refs.stepMode.checked);
+    return debugMode && !!(refs.stepMode && refs.stepMode.checked);
   }
 
   function highestValue(state) {
@@ -1489,11 +2532,9 @@
     return (state.preset.rows * state.preset.cols) - state.removed.size;
   }
 
-  function dirLabel(dir) {
-    if (dir === DIRS.E) return 'right';
-    if (dir === DIRS.S) return 'down';
-    if (dir === DIRS.W) return 'left';
-    return 'up';
+  function dirLabel(dir, preset) {
+    const lattice = latticeForPreset(preset);
+    return lattice.dirLabels[dir] || lattice.dirNames[dir] || String(dir);
   }
 
   function valueColor(value) {
@@ -1508,7 +2549,14 @@
 
   function edgeSegment(geom, row, col, dir) {
     const cell = geom.cells[indexOf(row, col, geom.cols)];
-    const points = squarePoints(cell.x, cell.y, geom.radius * 0.96);
+    const lattice = geom.lattice || LATTICES.square;
+    const points = tilePoints(cell.x, cell.y, geom.radius * 0.96, lattice);
+    if (lattice.shape === 'hex') {
+      return {
+        start: points[modulo(dir - 1, lattice.sides)],
+        end: points[modulo(dir, lattice.sides)]
+      };
+    }
     return {
       start: points[(dir + 1) % 4],
       end: points[(dir + 2) % 4]
@@ -1530,11 +2578,45 @@
     ];
   }
 
+  function hexPoints(x, y, radius, lattice) {
+    return lattice.vertexAngles.map((angle) => ({
+      x: x + Math.cos(angle) * radius,
+      y: y + Math.sin(angle) * radius
+    }));
+  }
+
+  function tilePoints(x, y, radius, lattice) {
+    return lattice && lattice.shape === 'hex'
+      ? hexPoints(x, y, radius, lattice)
+      : squarePoints(x, y, radius);
+  }
+
   function neighbor(row, col, dir, preset) {
+    const lattice = latticeForPreset(preset);
+    if (lattice.shape === 'hex') return hexNeighbor(row, col, dir, preset.rows, preset.cols);
     const nextRow = row + OFFSETS[dir][0];
     const nextCol = col + OFFSETS[dir][1];
     if (nextRow < 1 || nextRow > preset.rows || nextCol < 1 || nextCol > preset.cols) return null;
     return { row: nextRow, col: nextCol };
+  }
+
+  function hexNeighbor(row, col, dir, rows, cols) {
+    const axial = offsetToAxial(row - 1, col - 1);
+    const delta = HEX_AXIAL_DELTAS[dir];
+    if (!delta) return null;
+    const nextQ = axial.q + delta[0];
+    const nextR = axial.r + delta[1];
+    const nextRow = nextR;
+    const nextCol = nextQ + Math.floor(nextR / 2);
+    if (nextRow < 0 || nextRow >= rows || nextCol < 0 || nextCol >= cols) return null;
+    return { row: nextRow + 1, col: nextCol + 1 };
+  }
+
+  function offsetToAxial(row, col) {
+    return {
+      q: col - Math.floor(row / 2),
+      r: row
+    };
   }
 
   function normalizeBoundaryEdge(edge, cols) {
@@ -1641,15 +2723,36 @@
     };
   }
 
-  function dirVector(dir, length) {
+  function dirVector(dir, length, lattice = LATTICES.square) {
+    const angle = lattice.angles[modulo(dir, lattice.sides)] || 0;
     return {
-      x: OFFSETS[dir][1] * length,
-      y: OFFSETS[dir][0] * length
+      x: Math.cos(angle) * length,
+      y: Math.sin(angle) * length
     };
   }
 
   function easeInOut(t) {
     return t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
+  }
+
+  function pointInPolygon(point, polygon) {
+    let inside = false;
+    for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
+      const a = polygon[index];
+      const b = polygon[previous];
+      const crosses = ((a.y > point.y) !== (b.y > point.y))
+        && (point.x < ((b.x - a.x) * (point.y - a.y)) / ((b.y - a.y) || 1e-9) + a.x);
+      if (crosses) inside = !inside;
+    }
+    return inside;
+  }
+
+  function modulo(value, size) {
+    return ((value % size) + size) % size;
+  }
+
+  function toRadians(degrees) {
+    return degrees * Math.PI / 180;
   }
 
   function now() {
@@ -1689,16 +2792,24 @@
 
   const api = {
     DIRS,
+    HEX_DIRS,
+    LATTICES,
     PRESETS,
     beginGame,
     blastNeighborIndices,
     cloneGameState,
+    countUnmatchedBoundaries,
     createGameState,
     createRng,
     directNeighborIndex,
+    dirFromKey,
+    directionsForPreset,
     emptyExistingIndices,
     indexOf,
     isGameOver,
+    latticeForPreset,
+    presetFromImportPayload,
+    presetFromImportText,
     rowCol,
     simulateRound,
     spawnInitialValue,
