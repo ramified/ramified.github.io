@@ -255,6 +255,366 @@
     { id: 'random-stable-curve', label: 'Random stable curve' },
     { id: 'moduli', label: 'M_g,n stable graph' }
   ];
+  const BACKGROUND_SPACE_PRESETS = [
+    {
+      id: 'classic-4x4',
+      label: '4*4 classic',
+      payload: {
+        name: '4*4 classic background preset',
+        lattice: 'square',
+        diagramType: 'link',
+        boundary: 'glued',
+        wrappedViewMode: 'periodic',
+        inputMode: 'background',
+        backgroundAction: 'tile',
+        backgroundMultiEdges: true,
+        rows: 4,
+        cols: 4,
+        removedTiles: [],
+        cutEdges: [],
+        gluedEdges: [],
+        tiles: Array(16).fill(null)
+      }
+    },
+    {
+      id: 'half-glued',
+      label: 'half-glued',
+      payload: {
+        name: 'half-glued background preset',
+        lattice: 'square',
+        diagramType: 'link',
+        boundary: 'glued',
+        wrappedViewMode: 'periodic',
+        inputMode: 'background',
+        backgroundAction: 'billiard',
+        backgroundMultiEdges: true,
+        backgroundChainLength: 2,
+        backgroundChainReversed: true,
+        backgroundCuspMarkerScale: 0.7,
+        backgroundBilliardSpeed: 0.2,
+        backgroundBilliardTrailLength: 200,
+        backgroundBilliardArrowLength: 20,
+        backgroundBilliardHitMarkers: 'boundary',
+        rows: 4,
+        cols: 4,
+        removedTiles: [],
+        cutEdges: [],
+        gluedEdges: [
+          {
+            group: 0,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 1, col: 1, dir: 3, edge: 'N' },
+            second: { row: 4, col: 3, dir: 1, edge: 'S' }
+          },
+          {
+            group: 0,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 1, col: 2, dir: 3, edge: 'N' },
+            second: { row: 4, col: 4, dir: 1, edge: 'S' }
+          },
+          {
+            group: 1,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 4, col: 1, dir: 2, edge: 'W' },
+            second: { row: 1, col: 4, dir: 0, edge: 'E' }
+          },
+          {
+            group: 1,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 3, col: 1, dir: 2, edge: 'W' },
+            second: { row: 2, col: 4, dir: 0, edge: 'E' }
+          }
+        ],
+        tiles: Array(16).fill(null)
+      }
+    },
+    {
+      id: 'torus',
+      label: 'torus',
+      payload: {
+        name: 'torus background preset',
+        lattice: 'square',
+        diagramType: 'link',
+        boundary: 'glued',
+        wrappedViewMode: 'periodic',
+        inputMode: 'background',
+        backgroundAction: 'billiard',
+        backgroundMultiEdges: true,
+        backgroundChainLength: 4,
+        backgroundChainReversed: true,
+        backgroundCuspMarkerScale: 0.7,
+        backgroundBilliardSpeed: 0.2,
+        backgroundBilliardTrailLength: 170,
+        backgroundBilliardArrowLength: 20,
+        backgroundBilliardHitMarkers: 'boundary',
+        rows: 4,
+        cols: 4,
+        removedTiles: [],
+        cutEdges: [],
+        gluedEdges: [
+          {
+            group: 3,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 4, col: 4, dir: 0, edge: 'E' },
+            second: { row: 4, col: 1, dir: 2, edge: 'W' }
+          },
+          {
+            group: 3,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 3, col: 4, dir: 0, edge: 'E' },
+            second: { row: 3, col: 1, dir: 2, edge: 'W' }
+          },
+          {
+            group: 3,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 2, col: 4, dir: 0, edge: 'E' },
+            second: { row: 2, col: 1, dir: 2, edge: 'W' }
+          },
+          {
+            group: 3,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 1, col: 4, dir: 0, edge: 'E' },
+            second: { row: 1, col: 1, dir: 2, edge: 'W' }
+          },
+          {
+            group: 4,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 1, col: 3, dir: 3, edge: 'N' },
+            second: { row: 4, col: 3, dir: 1, edge: 'S' }
+          },
+          {
+            group: 4,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 1, col: 2, dir: 3, edge: 'N' },
+            second: { row: 4, col: 2, dir: 1, edge: 'S' }
+          },
+          {
+            group: 4,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 1, col: 1, dir: 3, edge: 'N' },
+            second: { row: 4, col: 1, dir: 1, edge: 'S' }
+          },
+          {
+            group: 4,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 1, col: 4, dir: 3, edge: 'N' },
+            second: { row: 4, col: 4, dir: 1, edge: 'S' }
+          }
+        ],
+        tiles: Array(16).fill(null)
+      }
+    },
+    {
+      id: 'klein-bottle',
+      label: 'Klein bottle',
+      payload: {
+        name: 'Klein bottle background preset',
+        lattice: 'square',
+        diagramType: 'link',
+        boundary: 'glued',
+        wrappedViewMode: 'periodic',
+        inputMode: 'background',
+        backgroundAction: 'billiard',
+        backgroundMultiEdges: true,
+        backgroundChainLength: 4,
+        backgroundChainReversed: true,
+        backgroundCuspMarkerScale: 0.7,
+        backgroundBilliardSpeed: 0.2,
+        backgroundBilliardTrailLength: 170,
+        backgroundBilliardArrowLength: 20,
+        backgroundBilliardHitMarkers: 'boundary',
+        rows: 4,
+        cols: 4,
+        removedTiles: [],
+        cutEdges: [],
+        gluedEdges: [
+          {
+            group: 3,
+            orientation: 'reversed',
+            reversed: true,
+            firstArrowReversed: true,
+            secondArrowReversed: true,
+            first: { row: 1, col: 4, dir: 0, edge: 'E' },
+            second: { row: 4, col: 1, dir: 2, edge: 'W' }
+          },
+          {
+            group: 3,
+            orientation: 'reversed',
+            reversed: true,
+            firstArrowReversed: true,
+            secondArrowReversed: true,
+            first: { row: 2, col: 4, dir: 0, edge: 'E' },
+            second: { row: 3, col: 1, dir: 2, edge: 'W' }
+          },
+          {
+            group: 3,
+            orientation: 'reversed',
+            reversed: true,
+            firstArrowReversed: true,
+            secondArrowReversed: true,
+            first: { row: 3, col: 4, dir: 0, edge: 'E' },
+            second: { row: 2, col: 1, dir: 2, edge: 'W' }
+          },
+          {
+            group: 3,
+            orientation: 'reversed',
+            reversed: true,
+            firstArrowReversed: true,
+            secondArrowReversed: true,
+            first: { row: 4, col: 4, dir: 0, edge: 'E' },
+            second: { row: 1, col: 1, dir: 2, edge: 'W' }
+          },
+          {
+            group: 4,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 1, col: 3, dir: 3, edge: 'N' },
+            second: { row: 4, col: 3, dir: 1, edge: 'S' }
+          },
+          {
+            group: 4,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 1, col: 2, dir: 3, edge: 'N' },
+            second: { row: 4, col: 2, dir: 1, edge: 'S' }
+          },
+          {
+            group: 4,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 1, col: 1, dir: 3, edge: 'N' },
+            second: { row: 4, col: 1, dir: 1, edge: 'S' }
+          },
+          {
+            group: 4,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 1, col: 4, dir: 3, edge: 'N' },
+            second: { row: 4, col: 4, dir: 1, edge: 'S' }
+          }
+        ],
+        tiles: Array(16).fill(null)
+      }
+    },
+    {
+      id: 'ramified-cover',
+      label: 'ramified cover',
+      payload: {
+        name: 'ramified cover background preset',
+        lattice: 'square',
+        diagramType: 'link',
+        boundary: 'glued',
+        wrappedViewMode: 'periodic',
+        inputMode: 'background',
+        backgroundAction: 'billiard',
+        backgroundMultiEdges: true,
+        backgroundChainLength: 2,
+        backgroundChainReversed: false,
+        backgroundCuspMarkerScale: 0.7,
+        backgroundBilliardSpeed: 0.2,
+        backgroundBilliardTrailLength: 170,
+        backgroundBilliardArrowLength: 20,
+        backgroundBilliardHitMarkers: 'boundary',
+        rows: 4,
+        cols: 9,
+        removedTiles: [
+          { row: 1, col: 5 },
+          { row: 2, col: 5 },
+          { row: 3, col: 5 },
+          { row: 4, col: 5 }
+        ],
+        cutEdges: [
+          { left: { row: 2, col: 3 }, right: { row: 3, col: 3 } },
+          { left: { row: 2, col: 4 }, right: { row: 3, col: 4 } },
+          { left: { row: 2, col: 8 }, right: { row: 3, col: 8 } },
+          { left: { row: 2, col: 9 }, right: { row: 3, col: 9 } }
+        ],
+        gluedEdges: [
+          {
+            group: 0,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 2, col: 3, dir: 1, edge: 'S' },
+            second: { row: 3, col: 9, dir: 3, edge: 'N' }
+          },
+          {
+            group: 0,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 2, col: 4, dir: 1, edge: 'S' },
+            second: { row: 3, col: 8, dir: 3, edge: 'N' }
+          },
+          {
+            group: 1,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 3, col: 3, dir: 3, edge: 'N' },
+            second: { row: 2, col: 8, dir: 1, edge: 'S' }
+          },
+          {
+            group: 1,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 3, col: 4, dir: 3, edge: 'N' },
+            second: { row: 2, col: 9, dir: 1, edge: 'S' }
+          }
+        ],
+        tiles: Array(36).fill(null)
+      }
+    }
+  ];
   const COMPACT_DUAL_GRAPH_LAYOUT_SCALE = 0.5;
   const MINI_SPECTRAL_LAYOUT_SCALE = 2;
   const MINI_FORCE_EDGE_LENGTH = 12;
@@ -465,6 +825,8 @@
     refs.inputBackgroundOption = refs.inputMode
       ? refs.inputMode.querySelector('option[value="background"]')
       : null;
+    refs.backgroundPresetSelect = document.getElementById('background-preset-select');
+    refs.loadBackgroundPreset = document.getElementById('load-background-preset');
     refs.backgroundAction = document.getElementById('background-action');
     refs.backgroundOccupiedOption = refs.backgroundAction
       ? refs.backgroundAction.querySelector('option[value="occupied"]')
@@ -710,6 +1072,9 @@
         syncMainCanvasCursor();
         updateReport(false);
       });
+    }
+    if (refs.loadBackgroundPreset) {
+      refs.loadBackgroundPreset.addEventListener('click', loadSelectedBackgroundPreset);
     }
     if (refs.backgroundMultiEdges) {
       refs.backgroundMultiEdges.addEventListener('change', () => {
@@ -2109,10 +2474,50 @@
     }
   }
 
+  function loadSelectedBackgroundPreset() {
+    if (!refs.backgroundPresetSelect) return;
+    const preset = BACKGROUND_SPACE_PRESETS.find((entry) => entry.id === refs.backgroundPresetSelect.value)
+      || BACKGROUND_SPACE_PRESETS[0];
+    if (!preset) return;
+
+    try {
+      const payload = JSON.parse(JSON.stringify(preset.payload || {}));
+      payload.boundary = 'glued';
+      payload.inputMode = 'background';
+      applyImportedMosaic(payload);
+      if (refs.backgroundPresetSelect) refs.backgroundPresetSelect.value = preset.id;
+      const background = analyzeBackgroundSpace();
+      const surfaceText = background && background.surfaceType ? ` (${background.surfaceType})` : '';
+      refs.statusLine.textContent = `${preset.label} preset loaded${surfaceText}`;
+      refs.statusLine.classList.remove('mosaic-status-good', 'mosaic-status-bad');
+    } catch (error) {
+      refs.statusLine.textContent = error.message || 'could not load background preset';
+      refs.statusLine.classList.add('mosaic-status-bad');
+    }
+  }
+
   function knotPresetPayloadForCurrentLattice(preset) {
     if (!preset) return {};
     if (state.lattice === 'square' && preset.squarePayload) return preset.squarePayload;
     return preset.payload || preset.squarePayload || {};
+  }
+
+  function syncBackgroundPresetControls() {
+    if (!refs.backgroundPresetSelect) return;
+    const previous = refs.backgroundPresetSelect.value;
+    refs.backgroundPresetSelect.textContent = '';
+    BACKGROUND_SPACE_PRESETS.forEach((preset) => {
+      const option = document.createElement('option');
+      option.value = preset.id;
+      option.textContent = preset.label;
+      refs.backgroundPresetSelect.appendChild(option);
+    });
+    const hasPrevious = BACKGROUND_SPACE_PRESETS.some((preset) => preset.id === previous);
+    refs.backgroundPresetSelect.value = hasPrevious
+      ? previous
+      : (BACKGROUND_SPACE_PRESETS[0] ? BACKGROUND_SPACE_PRESETS[0].id : '');
+    refs.backgroundPresetSelect.disabled = !BACKGROUND_SPACE_PRESETS.length;
+    if (refs.loadBackgroundPreset) refs.loadBackgroundPreset.disabled = !BACKGROUND_SPACE_PRESETS.length;
   }
 
   function syncImportPresetControls() {
@@ -15879,6 +16284,10 @@
   }
 
   function drawSeifertSurfaceArcDisk(ctx, cell, points, radius) {
+    if (points.length === 2 && points[0].dir === points[1].dir) {
+      drawSeifertSurfaceSingleMouthDisk(ctx, cell, points[0], points[1], radius);
+      return;
+    }
     const segments = points.map((current, index) => ({
       current,
       next: points[(index + 1) % points.length],
@@ -15900,6 +16309,27 @@
       appendSeifertSurfaceBoundarySegment(ctx, current, next, segment);
       ctx.stroke();
     });
+    ctx.restore();
+  }
+
+  function drawSeifertSurfaceSingleMouthDisk(ctx, cell, current, next, radius) {
+    const segment = seifertSameEdgeSemicircle(cell, current, next);
+    if (!segment) {
+      drawSeifertSurfaceCore(ctx, cell, radius, seifertDiskFallbackRadius(radius));
+      return;
+    }
+    ctx.save();
+    ctx.fillStyle = seifertSurfaceFillColor();
+    ctx.strokeStyle = seifertSurfaceStrokeColor();
+    ctx.lineWidth = seifertSurfaceOutlineWidth(radius);
+    ctx.beginPath();
+    ctx.moveTo(current.x, current.y);
+    ctx.arc(segment.center.x, segment.center.y, segment.radius, segment.startAngle, segment.endAngle, segment.anticlockwise);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(segment.center.x, segment.center.y, segment.radius, segment.startAngle, segment.endAngle, segment.anticlockwise);
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -16099,6 +16529,28 @@
     return {
       x: point.x + normal.x * distance,
       y: point.y + normal.y * distance
+    };
+  }
+
+  function seifertSameEdgeSemicircle(cell, current, next) {
+    const center = {
+      x: (current.x + next.x) / 2,
+      y: (current.y + next.y) / 2
+    };
+    const radius = Math.hypot(current.x - next.x, current.y - next.y) / 2;
+    if (!Number.isFinite(radius) || radius < 0.001) return null;
+    const startAngle = Math.atan2(current.y - center.y, current.x - center.x);
+    const endAngle = Math.atan2(next.y - center.y, next.x - center.x);
+    const guideAngle = Math.atan2(cell.y - center.y, cell.x - center.x);
+    const ccwHasGuide = angleOnCircularSweep(startAngle, endAngle, guideAngle, false);
+    const cwHasGuide = angleOnCircularSweep(startAngle, endAngle, guideAngle, true);
+    return {
+      type: 'arc',
+      center,
+      radius,
+      startAngle,
+      endAngle,
+      anticlockwise: cwHasGuide && !ccwHasGuide
     };
   }
 
@@ -16420,6 +16872,7 @@
   function seifertDiskBoundaryGeometry(piece, current, next) {
     const cell = geometry && geometry.cells ? geometry.cells[piece.index] : null;
     if (!cell) return null;
+    if (current.dir === next.dir) return seifertSameEdgeSemicircle(cell, current, next);
     const segment = seifertSurfaceBoundarySegment(cell, current, next);
     if (segment && segment.type === 'arc') {
       const startAngle = Math.atan2(current.y - segment.center.y, current.x - segment.center.x);
@@ -17674,6 +18127,7 @@
     syncDualGraphCanvasVisibility();
     syncRiemannNodeControls();
     refs.wrappedViewMode.value = state.wrappedViewMode;
+    syncBackgroundPresetControls();
     syncImportPresetControls();
     updateInputModePanels();
     updateDrawModeControls();

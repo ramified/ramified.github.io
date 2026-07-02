@@ -17,8 +17,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 369.2,
-      "y": 235.6
+      "x": 362.4,
+      "y": 225.1
     },
     {
       "id": "n6",
@@ -31,7 +31,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 424.3,
+      "x": 413.2,
       "y": 46
     },
     {
@@ -45,8 +45,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 553.4,
-      "y": 88.5
+      "x": 513.2,
+      "y": 46
     },
     {
       "id": "n12",
@@ -57,10 +57,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 126.2,
-      "y": 224
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 114.7,
+      "y": 160
     },
     {
       "id": "n13",
@@ -73,8 +73,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 422.8,
-      "y": 385.5
+      "x": 436,
+      "y": 374
     },
     {
       "id": "n14",
@@ -87,8 +87,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 504.7,
-      "y": 574
+      "x": 638.4,
+      "y": 374
     },
     {
       "id": "n15",
@@ -101,8 +101,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 628.4,
-      "y": 469.8
+      "x": 644.4,
+      "y": 257.9
     },
     {
       "id": "n16",
@@ -115,8 +115,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 234.6,
-      "y": 507.1
+      "x": 170.3,
+      "y": 374
     },
     {
       "id": "n17",
@@ -129,8 +129,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 347.5,
-      "y": 574
+      "x": 271.1,
+      "y": 374
     },
     {
       "id": "n18",
@@ -143,8 +143,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 94.2,
-      "y": 467.3
+      "x": 50.1,
+      "y": 284.5
     },
     {
       "id": "n19",
@@ -157,8 +157,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 202.8,
-      "y": 309.3
+      "x": 241.8,
+      "y": 156
     },
     {
       "id": "n20",
@@ -169,10 +169,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 574.8,
-      "y": 210.9
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 565.8,
+      "y": 149.6
     },
     {
       "id": "n21",
@@ -185,8 +185,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 306,
-      "y": 357.7
+      "x": 267.4,
+      "y": 273.4
     },
     {
       "id": "n22",
@@ -197,10 +197,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 536.2,
-      "y": 350.9
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 495,
+      "y": 279.4
     },
     {
       "id": "n23",
@@ -211,10 +211,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 188.1,
-      "y": 116.5
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 179.3,
+      "y": 46
     },
     {
       "id": "n24",
@@ -225,9 +225,9 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 286.9,
+      "color": "#2f5f9f",
+      "fillColor": "#eef7f4",
+      "x": 302.6,
       "y": 46
     },
     {
@@ -241,8 +241,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 694.4,
-      "y": 270.3
+      "x": 707,
+      "y": 81.4
     }
   ],
   "arrows": [
@@ -500,9 +500,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
     }
   ],
   "view": {
-    "selectedId": "n12",
+    "selectedId": "n19",
     "selectedReferenceKeys": [],
     "layoutRunning": false
   }
 };
-

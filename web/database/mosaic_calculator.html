@@ -320,6 +320,20 @@
       border-color: var(--accent);
     }
 
+    .background-preset-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) max-content;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .background-preset-controls .btn {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+      white-space: nowrap;
+    }
+
     .stat-action-value {
       display: inline-flex;
       align-items: center;
@@ -1163,6 +1177,13 @@
         </div>
         <div class="input-mode-panel" data-input-panel="background">
           <div class="mosaic-inline-row">
+            <span class="input-label">Preset</span>
+            <span class="background-preset-controls">
+              <select id="background-preset-select" aria-label="Background space preset"></select>
+              <button class="btn btn-ghost" id="load-background-preset" type="button">load</button>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
             <span class="input-label">Click action</span>
             <select id="background-action">
               <option value="occupied" hidden disabled>Occupied</option>
@@ -1518,6 +1539,6 @@
 <script src="js/mosaic_knot_data.js"></script>
 <script src="js/mosaic_link_data.js"></script>
 <script src="js/mosaic_knot_engine.js"></script>
-<script src="js/mosaic_calculator.js?v=seifert-surface-invariants"></script>
+<script src="js/mosaic_calculator.js?v=seifert-single-spoke"></script>
 </body>
 </html>
