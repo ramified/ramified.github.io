@@ -17,8 +17,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 362.4,
-      "y": 225.1
+      "x": 360,
+      "y": 225.9
     },
     {
       "id": "n6",
@@ -31,7 +31,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 413.2,
+      "x": 405.9,
       "y": 46
     },
     {
@@ -45,7 +45,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 513.2,
+      "x": 512,
       "y": 46
     },
     {
@@ -59,8 +59,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 114.7,
-      "y": 160
+      "x": 115.9,
+      "y": 164.9
     },
     {
       "id": "n13",
@@ -73,8 +73,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 436,
-      "y": 374
+      "x": 477.6,
+      "y": 191.1
     },
     {
       "id": "n14",
@@ -87,7 +87,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 638.4,
+      "x": 579.5,
       "y": 374
     },
     {
@@ -101,8 +101,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 644.4,
-      "y": 257.9
+      "x": 681.6,
+      "y": 292.1
     },
     {
       "id": "n16",
@@ -115,7 +115,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 170.3,
+      "x": 330.5,
       "y": 374
     },
     {
@@ -129,7 +129,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 271.1,
+      "x": 450.9,
       "y": 374
     },
     {
@@ -141,10 +141,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "My current thought is that, the code will record how many times a number cross the glued boundary in a round, denoted by $k_i$. If the number is >10, then the number will explode to avoid infinite loops. You can also imagine that crossing the glued boundary has a small interval time passing, so they are moved in the order of this number $k_i$. If both numbers are the same and they are going to collide in one block from the different position, they will also explode.",
       "proofSketch": "The explode range will depend on the smaller number, if it is >64, than all numbers in tiles near the explode tile will be removed; otherwise, only the number in the explode tile will be removed.",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 50.1,
-      "y": 284.5
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 46,
+      "y": 275.8
     },
     {
       "id": "n19",
@@ -155,10 +155,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 241.8,
-      "y": 156
+      "color": "#2f5f9f",
+      "fillColor": "#eef7f4",
+      "x": 239.9,
+      "y": 162.4
     },
     {
       "id": "n20",
@@ -171,8 +171,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 565.8,
-      "y": 149.6
+      "x": 586.1,
+      "y": 152.7
     },
     {
       "id": "n21",
@@ -185,8 +185,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 267.4,
-      "y": 273.4
+      "x": 267.8,
+      "y": 286.6
     },
     {
       "id": "n22",
@@ -199,8 +199,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 495,
-      "y": 279.4
+      "x": 120.3,
+      "y": 374
     },
     {
       "id": "n23",
@@ -213,7 +213,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 179.3,
+      "x": 172.3,
       "y": 46
     },
     {
@@ -227,7 +227,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef7f4",
-      "x": 302.6,
+      "x": 292.8,
       "y": 46
     },
     {
@@ -242,7 +242,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
       "x": 707,
-      "y": 81.4
+      "y": 96.2
     }
   ],
   "arrows": [
@@ -500,7 +500,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
     }
   ],
   "view": {
-    "selectedId": "n19",
+    "selectedId": "n20",
     "selectedReferenceKeys": [],
     "layoutRunning": false
   }

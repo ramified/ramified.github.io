@@ -998,7 +998,49 @@
             <option value="color">value color</option>
           </select>
         </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Speed</span>
+          <span class="background-slider-controls">
+            <input type="range" id="animation-speed" min="80" max="900" step="20" value="260">
+            <output id="animation-speed-value">260 ms</output>
+          </span>
+        </div>
+        <label class="opt-row"><input type="checkbox" id="step-mode"> step-by-step</label>
         <button class="btn mosaic-import-button" id="begin-game" type="button">begin the game</button>
+        <button class="btn" id="next-step" type="button" disabled>next step</button>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Move</span>
+          <table aria-label="Directional controls">
+            <tbody>
+              <tr>
+                <td></td>
+                <td><button class="btn" type="button" data-move-dir="N" aria-label="Move up">&uarr;</button></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td><button class="btn" type="button" data-move-dir="W" aria-label="Move left">&larr;</button></td>
+                <td></td>
+                <td><button class="btn" type="button" data-move-dir="E" aria-label="Move right">&rarr;</button></td>
+              </tr>
+              <tr>
+                <td></td>
+                <td><button class="btn" type="button" data-move-dir="S" aria-label="Move down">&darr;</button></td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><span class="card-head-label">Game Stats</span></div>
+      <div class="card-body">
+        <div class="stat-row"><span class="stat-label">Score</span><span class="stat-value" id="score-value">0</span></div>
+        <div class="stat-row"><span class="stat-label">Highest tile</span><span class="stat-value" id="highest-tile-value">0</span></div>
+        <div class="stat-row"><span class="stat-label">Existing tiles</span><span class="stat-value" id="existing-tile-value">0</span></div>
+        <div class="stat-row"><span class="stat-label">Removed tiles</span><span class="stat-value" id="removed-tile-value">0</span></div>
+        <div class="stat-row"><span class="stat-label">Round</span><span class="stat-value" id="round-value">0</span></div>
       </div>
     </section>
   </aside>
