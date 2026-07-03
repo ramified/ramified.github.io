@@ -61,6 +61,141 @@
   const EVENT_GUARD = 900;
   const UNDO_LIMIT = 100;
 
+  function gluePair(group, first, second, options = {}) {
+    const pair = { group, first, second };
+    if (options.reversed) pair.reversed = true;
+    if (Object.prototype.hasOwnProperty.call(options, 'firstArrowReversed')) {
+      pair.firstArrowReversed = !!options.firstArrowReversed;
+    }
+    if (Object.prototype.hasOwnProperty.call(options, 'secondArrowReversed')) {
+      pair.secondArrowReversed = !!options.secondArrowReversed;
+    }
+    return pair;
+  }
+
+  function createRubiksCubePreset(size, id, label) {
+    const rows = size * 3;
+    const cols = size * 4;
+    const removedTiles = [];
+    for (let row = 1; row <= rows; row += 1) {
+      for (let col = 1; col <= cols; col += 1) {
+        const middleBand = row > size && row <= size * 2;
+        const centerColumnBand = col > size && col <= size * 2;
+        if (!middleBand && !centerColumnBand) removedTiles.push({ row, col });
+      }
+    }
+
+    const exportedGroups = size === 2
+      ? { outer: 6, leftTop: 9, topRight: 13, topMiddle: 10, bottomLeft: 15, bottomRight: 12, bottomFar: 14 }
+      : { outer: 0, leftTop: 1, topRight: 2, topMiddle: 3, bottomLeft: 4, bottomRight: 5, bottomFar: 6 };
+    const gluedEdges = [];
+    const add = (group, first, second) => gluedEdges.push(gluePair(group, first, second));
+
+    const addOuter = () => {
+      for (let row = size + 1; row <= size * 2; row += 1) {
+        add(exportedGroups.outer, { row, col: 1, dir: DIRS.W }, { row, col: cols, dir: DIRS.E });
+      }
+    };
+    const addLeftTop = () => {
+      for (let offset = 0; offset < size; offset += 1) {
+        add(
+          exportedGroups.leftTop,
+          { row: size + 1, col: size - offset, dir: DIRS.N },
+          { row: size - offset, col: size + 1, dir: DIRS.W }
+        );
+      }
+    };
+    const addTopRight = () => {
+      for (let offset = 0; offset < size; offset += 1) {
+        add(
+          exportedGroups.topRight,
+          { row: 1, col: size * 2 - offset, dir: DIRS.N },
+          { row: size + 1, col: size * 3 + 1 + offset, dir: DIRS.N }
+        );
+      }
+    };
+    const addTopMiddle = () => {
+      for (let offset = 0; offset < size; offset += 1) {
+        add(
+          exportedGroups.topMiddle,
+          { row: size - offset, col: size * 2, dir: DIRS.E },
+          { row: size + 1, col: size * 2 + 1 + offset, dir: DIRS.N }
+        );
+      }
+    };
+    const addBottomLeft = () => {
+      for (let offset = 0; offset < size; offset += 1) {
+        if (size === 2) {
+          add(
+            exportedGroups.bottomLeft,
+            { row: size * 2 + 1 + offset, col: size + 1, dir: DIRS.W },
+            { row: size * 2, col: size - offset, dir: DIRS.S }
+          );
+        } else {
+          add(
+            exportedGroups.bottomLeft,
+            { row: size * 2, col: 1 + offset, dir: DIRS.S },
+            { row: rows - offset, col: size + 1, dir: DIRS.W }
+          );
+        }
+      }
+    };
+    const addBottomRight = () => {
+      for (let offset = 0; offset < size; offset += 1) {
+        add(
+          exportedGroups.bottomRight,
+          { row: size * 2, col: size * 2 + 1 + offset, dir: DIRS.S },
+          { row: size * 2 + 1 + offset, col: size * 2, dir: DIRS.E }
+        );
+      }
+    };
+    const addBottomFar = () => {
+      for (let offset = 0; offset < size; offset += 1) {
+        if (size === 2) {
+          add(
+            exportedGroups.bottomFar,
+            { row: size * 2, col: cols - offset, dir: DIRS.S },
+            { row: rows, col: size + 1 + offset, dir: DIRS.S }
+          );
+        } else {
+          add(
+            exportedGroups.bottomFar,
+            { row: rows, col: size + 1 + offset, dir: DIRS.S },
+            { row: size * 2, col: cols - offset, dir: DIRS.S }
+          );
+        }
+      }
+    };
+
+    addOuter();
+    addLeftTop();
+    if (size === 2) {
+      addTopMiddle();
+      addBottomRight();
+      addTopRight();
+      addBottomFar();
+      addBottomLeft();
+    } else {
+      addTopRight();
+      addTopMiddle();
+      addBottomLeft();
+      addBottomRight();
+      addBottomFar();
+    }
+
+    return {
+      id,
+      label,
+      lattice: 'square',
+      rows,
+      cols,
+      surface: 'M_0,8',
+      removedTiles,
+      cutEdges: [],
+      gluedEdges
+    };
+  }
+
   const PRESETS = [
     {
       id: 'classic-4x4',
@@ -187,6 +322,46 @@
         { group: 1, first: { row: 3, col: 4, dir: DIRS.N }, second: { row: 2, col: 9, dir: DIRS.S } }
       ]
     },
+    createRubiksCubePreset(2, 'rubiks-cube-2x2x2', "Rubik's Cube 2*2*2"),
+    createRubiksCubePreset(3, 'rubiks-cube-3x3x3', "Rubik's Cube 3*3*3"),
+    {
+      id: 'usual-strip',
+      label: 'usual strip',
+      lattice: 'hexagonal',
+      rows: 4,
+      cols: 5,
+      surface: 'Sigma_0,2',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [
+        gluePair(0, { row: 1, col: 1, dir: HEX_DIRS.W }, { row: 1, col: 5, dir: HEX_DIRS.E }),
+        gluePair(0, { row: 1, col: 1, dir: HEX_DIRS.SW }, { row: 2, col: 5, dir: HEX_DIRS.NE }),
+        gluePair(0, { row: 2, col: 1, dir: HEX_DIRS.W }, { row: 2, col: 5, dir: HEX_DIRS.E }),
+        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.NW }, { row: 2, col: 5, dir: HEX_DIRS.SE }),
+        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.W }, { row: 3, col: 5, dir: HEX_DIRS.E }),
+        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.SW }, { row: 4, col: 5, dir: HEX_DIRS.NE }),
+        gluePair(0, { row: 4, col: 1, dir: HEX_DIRS.W }, { row: 4, col: 5, dir: HEX_DIRS.E })
+      ]
+    },
+    {
+      id: 'mobius-strip',
+      label: 'M\u00f6bius strip',
+      lattice: 'hexagonal',
+      rows: 4,
+      cols: 5,
+      surface: 'N_0,2^6',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [
+        gluePair(0, { row: 1, col: 1, dir: HEX_DIRS.W }, { row: 4, col: 5, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 1, col: 1, dir: HEX_DIRS.SW }, { row: 4, col: 5, dir: HEX_DIRS.NE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 2, col: 1, dir: HEX_DIRS.W }, { row: 3, col: 5, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.NW }, { row: 2, col: 5, dir: HEX_DIRS.SE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.W }, { row: 2, col: 5, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.SW }, { row: 2, col: 5, dir: HEX_DIRS.NE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 4, col: 1, dir: HEX_DIRS.W }, { row: 1, col: 5, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false })
+      ]
+    },
     {
       id: 'hex-classic-4x4',
       label: 'hex classic 4*4',
@@ -201,6 +376,7 @@
   ];
 
   const IMPORTED_PRESET_ID = 'imported-preset';
+  const IMPORT_PRESET_CHOICE_ID = 'import-preset';
   const MIN_IMPORTED_BOARD = 1;
   const MAX_IMPORTED_BOARD = 12;
 
@@ -228,6 +404,7 @@
     refs.importInput = document.getElementById('import-preset-input');
     refs.applyImportPreset = document.getElementById('apply-import-preset');
     refs.boxStyle = document.getElementById('number-box-style');
+    refs.highlightNewBoxes = document.getElementById('highlight-new-boxes');
     refs.begin = document.getElementById('begin-game');
     refs.speed = document.getElementById('animation-speed');
     refs.speedValue = document.getElementById('animation-speed-value');
@@ -252,10 +429,11 @@
     refs.round = document.getElementById('round-value');
     if (!refs.canvas || !refs.ctx || !refs.select) return;
 
-    refs.select.addEventListener('change', resetToPreview);
+    refs.select.addEventListener('change', handlePresetSelectChange);
     if (refs.importToggle) refs.importToggle.addEventListener('click', toggleImportTools);
     if (refs.applyImportPreset) refs.applyImportPreset.addEventListener('click', importPresetFromUi);
     if (refs.boxStyle) refs.boxStyle.addEventListener('change', render);
+    if (refs.highlightNewBoxes) refs.highlightNewBoxes.addEventListener('change', render);
     if (refs.begin) refs.begin.addEventListener('click', beginGameFromUi);
     if (refs.speed) refs.speed.addEventListener('input', syncSpeedOutput);
     if (refs.stepMode) refs.stepMode.addEventListener('change', syncControls);
@@ -294,6 +472,12 @@
   }
 
   function beginGameFromUi() {
+    if (refs.select && refs.select.value === IMPORT_PRESET_CHOICE_ID && !importedPreset) {
+      setImportToolsVisible(true);
+      syncStatus('import preset', 'paste a background preset JSON and generate', 'setup');
+      syncControls();
+      return;
+    }
     stopPlayback();
     game = beginGame(selectedPreset(), { rng: Math.random, glueRng: Math.random });
     clearUndoHistory();
@@ -311,11 +495,29 @@
     if (refs.canvas) refs.canvas.focus();
   }
 
-  function toggleImportTools() {
+  function handlePresetSelectChange() {
+    if (refs.select && refs.select.value === IMPORT_PRESET_CHOICE_ID) {
+      stopPlayback();
+      setImportToolsVisible(true);
+      clearDebugExport();
+      syncStatus('import preset', 'paste a background preset JSON and generate', 'setup');
+      syncControls();
+      return;
+    }
+    setImportToolsVisible(false);
+    resetToPreview();
+  }
+
+  function setImportToolsVisible(force) {
     if (!refs.importTools) return;
-    refs.importTools.hidden = !refs.importTools.hidden;
+    const shouldShow = force === undefined ? refs.importTools.hidden : !!force;
+    refs.importTools.hidden = !shouldShow;
     if (refs.importToggle) refs.importToggle.setAttribute('aria-expanded', refs.importTools.hidden ? 'false' : 'true');
     if (!refs.importTools.hidden && refs.importInput) refs.importInput.focus();
+  }
+
+  function toggleImportTools() {
+    setImportToolsVisible();
   }
 
   function importPresetFromUi() {
@@ -326,8 +528,7 @@
       if (refs.select) refs.select.value = importedPreset.id;
       resetToPreview();
       syncStatus('preset imported', previewInfo(game.preset), 'setup');
-      if (refs.importTools) refs.importTools.hidden = true;
-      if (refs.importToggle) refs.importToggle.setAttribute('aria-expanded', 'false');
+      setImportToolsVisible(false);
     } catch (error) {
       syncStatus('import failed', error && error.message ? error.message : 'invalid preset JSON', 'error');
     }
@@ -434,6 +635,7 @@
     }
     clearNoMoveTrial();
     game.ending = '';
+    game.newBoxIds = new Set();
     pushUndoSnapshot(`round ${game.round + 1}: ${dirLabel(dir, game.preset)}`);
     game.round += 1;
     eventQueue = result.events;
@@ -527,7 +729,7 @@
     } else {
       game.phase = 'ready';
       game.ending = '';
-      syncStatus(`round ${game.round} complete`, 'use arrow keys to slide', 'ready');
+      syncReadyStatus(`round ${game.round} complete`);
     }
     syncControls();
     render();
@@ -782,6 +984,7 @@
       highest: highestValue(game),
       existingTiles: existingTileCount(game),
       nextBoxId: game.nextBoxId,
+      newBoxIds: Array.from(game.newBoxIds || []).sort((a, b) => a - b),
       boxes: game.boxes
         .map((box) => boxExport(box, preset.cols))
         .sort((a, b) => a.index - b.index || a.id - b.id),
@@ -833,11 +1036,13 @@
       normalizeNonnegativeInteger(payload.nextBoxId, 1),
       boxes.reduce((max, box) => Math.max(max, box.id + 1), 1)
     );
+    const newBoxIds = normalizeStatusNewBoxIds(payload.newBoxIds, boxes);
     const state = {
       preset,
       phase: normalizeStatusPhase(payload.phase),
       removed,
       boxes,
+      newBoxIds,
       nextBoxId,
       score: normalizeNonnegativeInteger(payload.score, 0),
       round: normalizeNonnegativeInteger(payload.round, 0),
@@ -918,6 +1123,17 @@
     });
   }
 
+  function normalizeStatusNewBoxIds(entries, boxes) {
+    if (!Array.isArray(entries)) return new Set();
+    const validIds = new Set(boxes.map((box) => box.id));
+    const ids = new Set();
+    entries.forEach((entry) => {
+      const id = Number(entry);
+      if (Number.isInteger(id) && validIds.has(id)) ids.add(id);
+    });
+    return ids;
+  }
+
   function normalizeStatusPhase(value) {
     return ['setup', 'ready', 'paused', 'animating', 'gameover'].includes(value) ? value : 'ready';
   }
@@ -952,7 +1168,16 @@
       syncStatus(`round ${game.round}: ${game.phase === 'paused' ? 'paused' : 'moving'}`, `${eventIndex}/${eventQueue.length} events`, phaseBadge(game.phase));
       return;
     }
-    syncStatus(`round ${game.round}`, 'use arrow keys to slide', phaseBadge(game.phase));
+    syncReadyStatus(`round ${game.round}`);
+  }
+
+  function syncReadyStatus(statusText) {
+    if (isExplosionModeActive(game)) {
+      const labels = explosionModeDirections(game).map((dir) => dirLabel(dir, game.preset)).join(', ');
+      syncStatus('explosion mode', `cycle move available: ${labels}`, 'ready');
+      return;
+    }
+    syncStatus(statusText || `round ${game.round}`, 'use arrow keys to slide', phaseBadge(game.phase));
   }
 
   function phaseBadge(phase) {
@@ -982,11 +1207,12 @@
 
     const ctx = refs.ctx;
     ctx.clearRect(0, 0, logicalWidth, logicalHeight);
-    ctx.fillStyle = '#fffdf8';
+    const explosionMode = isExplosionModeActive(game);
+    ctx.fillStyle = explosionMode ? '#fff0ee' : '#fffdf8';
     ctx.fillRect(0, 0, logicalWidth, logicalHeight);
 
     geometry.cells.forEach((cell, index) => {
-      if (cell) drawTile(ctx, geometry, cell.row, cell.col, removed.has(index));
+      if (cell) drawTile(ctx, geometry, cell.row, cell.col, removed.has(index), explosionMode);
     });
 
     drawBackgroundBoundaries(ctx, geometry, preset, removed);
@@ -1057,7 +1283,7 @@
     };
   }
 
-  function drawTile(ctx, geom, row, col, removed) {
+  function drawTile(ctx, geom, row, col, removed, explosionMode = false) {
     const cell = geom.cells[indexOf(row, col, geom.cols)];
     const points = tilePoints(cell.x, cell.y, geom.radius * 0.96, geom.lattice);
     ctx.beginPath();
@@ -1066,8 +1292,8 @@
       else ctx.lineTo(point.x, point.y);
     });
     ctx.closePath();
-    ctx.fillStyle = removed ? '#e9e0d0' : '#fbf5e8';
-    ctx.strokeStyle = '#d8c9ac';
+    ctx.fillStyle = removed ? '#e9e0d0' : (explosionMode ? '#ffe4de' : '#fbf5e8');
+    ctx.strokeStyle = explosionMode && !removed ? '#e5b2a8' : '#d8c9ac';
     ctx.lineWidth = 1;
     ctx.fill();
     ctx.stroke();
@@ -1137,7 +1363,9 @@
     const hidden = hiddenBoxIdsForAnimation();
     boxes.forEach((box) => {
       if (hidden.has(box.id)) return;
-      drawBoxAtIndex(ctx, geom, box.index, box.value, 1);
+      drawBoxAtIndex(ctx, geom, box.index, box.value, 1, {
+        highlight: shouldHighlightBox(box)
+      });
     });
   }
 
@@ -1202,7 +1430,9 @@
       return;
     }
     if (event.kind === 'spawn') {
-      drawBoxAtIndex(ctx, geom, event.index, event.value, Math.max(0.12, progress));
+      drawBoxAtIndex(ctx, geom, event.index, event.value, Math.max(0.12, progress), {
+        highlight: shouldHighlightNewBoxes()
+      });
     }
   }
 
@@ -1231,17 +1461,30 @@
     if (event.moves) event.moves.forEach((move) => hidden.add(move.boxId));
   }
 
-  function drawBoxAtIndex(ctx, geom, index, value, scale) {
+  function drawBoxAtIndex(ctx, geom, index, value, scale, options = {}) {
     const cell = geom.cells[index];
     if (!cell) return;
-    drawBoxAtPoint(ctx, cell, geom.radius, value, scale, geom.lattice);
+    drawBoxAtPoint(ctx, cell, geom.radius, value, scale, geom.lattice, options);
   }
 
-  function drawBoxAtPoint(ctx, point, radius, value, scale, lattice = LATTICES.square) {
+  function drawBoxAtPoint(ctx, point, radius, value, scale, lattice = LATTICES.square, options = {}) {
     const style = refs.boxStyle ? refs.boxStyle.value : 'paper';
+    if (options.highlight) drawBoxHighlight(ctx, point, radius, scale, lattice);
     if (style === 'ink') drawInkBox(ctx, point, radius, value, scale, lattice);
     else if (style === 'color') drawColorBox(ctx, point, radius, value, scale, lattice);
     else drawPaperBox(ctx, point, radius, value, scale, lattice);
+  }
+
+  function drawBoxHighlight(ctx, point, radius, scale = 1, lattice = LATTICES.square) {
+    const side = radius * 1.42 * scale;
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,229,112,0.72)';
+    ctx.strokeStyle = 'rgba(196,127,23,0.46)';
+    ctx.lineWidth = Math.max(1.2, radius * 0.04);
+    boxPath(ctx, point, side, lattice);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawExplosionEvent(ctx, geom, event, progress) {
@@ -1528,6 +1771,7 @@
       phase: 'setup',
       removed: initialRemovedSet(preset),
       boxes: [],
+      newBoxIds: new Set(),
       nextBoxId: 1,
       score: 0,
       round: 0,
@@ -1547,10 +1791,15 @@
     const rng = options.rng || Math.random;
     const shouldSpawn = options.spawn !== false;
     const state = cloneGameState(sourceState);
+    state.newBoxIds = new Set();
     const events = [];
     const debugMessages = [];
     const mergeLocked = new Set();
     const stackedBoxIds = stackedBoxIdSet(state);
+    const explosionBlastRadius = explosionModeDirections(sourceState).length ? 2 : 0;
+    const explosionEventOptions = (extra = {}) => (
+      explosionBlastRadius > 0 ? { ...extra, blastRadius: explosionBlastRadius } : extra
+    );
     const active = new Map(state.boxes
       .filter((box) => !stackedBoxIds.has(box.id))
       .map((box) => [box.id, {
@@ -1567,7 +1816,7 @@
       guard += 1;
       if (guard > EVENT_GUARD) {
         active.forEach((actor) => {
-          addExplosionEvents(state, events, actor.index, actor.value, [actor.id]);
+          addExplosionEvents(state, events, actor.index, actor.value, [actor.id], [], explosionEventOptions());
           active.delete(actor.id);
           changed = true;
         });
@@ -1589,7 +1838,7 @@
           return;
         }
         if (transition.kind === 'glued' && actor.k >= MAX_COMPLETED_GLUINGS) {
-          addExplosionEvents(state, events, actor.index, actor.value, [actor.id]);
+          addExplosionEvents(state, events, actor.index, actor.value, [actor.id], [], explosionEventOptions());
           active.delete(actor.id);
           changed = true;
           return;
@@ -1686,6 +1935,12 @@
         return { result, boxId, box, from, value, skipped: false };
       });
       const blockedMoveIds = blockedMovesByBouncingResidents(state, moveEntries, bouncingBoxIds);
+      extendBlockedMovesByOccupiedTargets(
+        state,
+        moveEntries,
+        blockedMoveIds,
+        new Set(pushMerges.map((merge) => merge.movingBoxId))
+      );
       moveEntries.forEach((entry) => {
         if (entry.skipped) {
           if (entry.deleteActor && entry.result.actor) active.delete(entry.result.actor.id);
@@ -1737,9 +1992,9 @@
       }
       pushMerges.forEach((merge) => addPushedMergeEvent(state, events, merge, mergeLocked, active));
       explosions.forEach((explosion) => {
-        addExplosionEvents(state, events, explosion.center, explosion.value, explosion.removeBoxIds, explosion.moves, {
-          animate: !(explosion.moves && explosion.moves.length)
-        });
+        addExplosionEvents(state, events, explosion.center, explosion.value, explosion.removeBoxIds, explosion.moves, explosionEventOptions({
+          animate: !(explosion.moves && explosion.moves.length),
+        }));
       });
       if (moveEvents.length || pushMerges.length) {
         active.forEach((actor) => {
@@ -2021,6 +2276,29 @@
     return blocked;
   }
 
+  function extendBlockedMovesByOccupiedTargets(state, moveEntries, blocked, extraMovingAwayIds = new Set()) {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const movingAway = new Set();
+      extraMovingAwayIds.forEach((id) => movingAway.add(id));
+      moveEntries.forEach((entry) => {
+        if (entry.skipped || blocked.has(entry.boxId)) return;
+        movingAway.add(entry.boxId);
+      });
+      moveEntries.forEach((entry) => {
+        if (entry.skipped || blocked.has(entry.boxId)) return;
+        const target = entry.result.transition.index;
+        const residents = boxesAtIndex(state, target)
+          .filter((resident) => resident.id !== entry.boxId);
+        if (!residents.some((resident) => !movingAway.has(resident.id))) return;
+        blocked.add(entry.boxId);
+        changed = true;
+      });
+    }
+    return blocked;
+  }
+
   function residentSwapCollisions(state, proposals, byActor, excludedActorIds = new Set()) {
     const collisions = [];
     const seenActors = new Set();
@@ -2216,7 +2494,8 @@
   function addExplosionEvents(state, events, center, value, removeBoxIds, moves = [], options = {}) {
     const centerIds = new Set(removeBoxIds);
     const large = value > 64;
-    const clearIndices = large ? blastNeighborIndices(state, center) : [];
+    const blastRadius = Math.max(0, normalizeNonnegativeInteger(options.blastRadius, large ? 1 : 0));
+    const clearIndices = blastRadius > 0 ? blastIndicesWithinDistance(state, center, blastRadius) : [];
     const clearBoxIds = boxesAtIndices(state, clearIndices).map((box) => box.id);
     if (options.animate !== false) events.push(explosionAnimationEvent(center, value, Array.from(centerIds), moves));
     events.push({ kind: 'removeTile', index: center, removeBoxIds: Array.from(centerIds), value });
@@ -2234,13 +2513,15 @@
   function applyEvent(targetState, event) {
     if (!targetState) return;
     if (event.kind === 'moveGroup') {
-      event.moves.forEach((move) => applyEvent(targetState, move));
+      applyMoveGroupEvent(targetState, event.moves || []);
       return;
     }
     if (event.kind === 'bounceGroup') {
       return;
     }
     if (event.kind === 'move') {
+      if (targetState.removed.has(event.to)) return;
+      if (boxesAtIndex(targetState, event.to).some((box) => box.id !== event.boxId)) return;
       const box = findBox(targetState, event.boxId);
       if (box) box.index = event.to;
       return;
@@ -2275,11 +2556,45 @@
         targetState.boxes.push({ id: event.boxId, index: event.index, value: event.value });
         targetState.nextBoxId = Math.max(targetState.nextBoxId, event.boxId + 1);
       }
+      if (!targetState.newBoxIds) targetState.newBoxIds = new Set();
+      targetState.newBoxIds.add(event.boxId);
     }
+  }
+
+  function applyMoveGroupEvent(targetState, moves) {
+    const blocked = new Set();
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const movingAway = new Set();
+      moves.forEach((move) => {
+        if (blocked.has(move.boxId)) return;
+        if (!findBox(targetState, move.boxId) || targetState.removed.has(move.to)) return;
+        movingAway.add(move.boxId);
+      });
+      moves.forEach((move) => {
+        if (blocked.has(move.boxId)) return;
+        if (!findBox(targetState, move.boxId) || targetState.removed.has(move.to)) {
+          blocked.add(move.boxId);
+          changed = true;
+          return;
+        }
+        const residents = boxesAtIndex(targetState, move.to).filter((box) => box.id !== move.boxId);
+        if (!residents.some((resident) => !movingAway.has(resident.id))) return;
+        blocked.add(move.boxId);
+        changed = true;
+      });
+    }
+    moves.forEach((move) => {
+      if (blocked.has(move.boxId)) return;
+      const box = findBox(targetState, move.boxId);
+      if (box) box.index = move.to;
+    });
   }
 
   function spawnNumbers(state, requestedCount, rng, valuePicker, events) {
     let spawned = 0;
+    state.newBoxIds = new Set();
     while (spawned < requestedCount) {
       const empty = emptyExistingIndices(state);
       if (!empty.length) break;
@@ -2288,6 +2603,7 @@
       const box = { id: state.nextBoxId, index, value };
       state.nextBoxId += 1;
       state.boxes.push(box);
+      state.newBoxIds.add(box.id);
       if (events) events.push({ kind: 'spawn', boxId: box.id, index, value });
       spawned += 1;
     }
@@ -2348,16 +2664,98 @@
   }
 
   function blastNeighborIndices(state, center) {
+    return blastIndicesWithinDistance(state, center, 1);
+  }
+
+  function blastIndicesWithinDistance(state, center, maxDistance) {
     const out = new Set();
-    for (const dir of directionsForPreset(state.preset)) {
-      const next = surfaceSuccessor(state, center, dir);
-      if (next && next.index !== center && !state.removed.has(next.index)) out.add(next.index);
+    const seen = new Set([center]);
+    let frontier = [{ index: center, distance: 0 }];
+    while (frontier.length) {
+      const nextFrontier = [];
+      frontier.forEach((item) => {
+        if (item.distance >= maxDistance) return;
+        for (const dir of directionsForPreset(state.preset)) {
+          const next = surfaceSuccessor(state, item.index, dir);
+          if (!next || next.index === center || state.removed.has(next.index) || seen.has(next.index)) continue;
+          seen.add(next.index);
+          out.add(next.index);
+          nextFrontier.push({ index: next.index, distance: item.distance + 1 });
+        }
+      });
+      frontier = nextFrontier;
     }
     return Array.from(out);
   }
 
+  function fullBoardWithoutAdjacentMerge(state) {
+    if (!state || emptyExistingIndices(state).length) return false;
+    return !hasAdjacentEqualBoxes(state);
+  }
+
+  function hasAdjacentEqualBoxes(state) {
+    const seen = new Set();
+    for (const box of state.boxes) {
+      for (const dir of directionsForPreset(state.preset)) {
+        const next = surfaceSuccessor(state, box.index, dir);
+        if (!next) continue;
+        const other = boxAt(state, next.index);
+        if (!other || other.id === box.id) continue;
+        const key = box.index < next.index ? `${box.index}:${next.index}` : `${next.index}:${box.index}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (other.value === box.value) return true;
+      }
+    }
+    return false;
+  }
+
+  function explosionModeDirections(state) {
+    if (!fullBoardWithoutAdjacentMerge(state)) return [];
+    return directionsForPreset(state.preset).filter((dir) => explosionModeCycleIndices(state, dir).length > 0);
+  }
+
+  function isExplosionModeActive(state) {
+    return !!(state && state.phase !== 'gameover' && explosionModeDirections(state).length);
+  }
+
+  function explosionModeCycleIndices(state, dir) {
+    const occupied = new Set(state.boxes.map((box) => box.index));
+    const globalSeen = new Set();
+    const cycleIndices = new Set();
+    state.boxes.forEach((box) => {
+      const startKey = `${box.index}:${dir}`;
+      if (globalSeen.has(startKey)) return;
+      const localSeen = new Map();
+      const path = [];
+      let index = box.index;
+      let direction = dir;
+      let guard = 0;
+      while (Number.isInteger(index) && occupied.has(index) && guard <= state.boxes.length * directionsForPreset(state.preset).length + 1) {
+        const key = `${index}:${direction}`;
+        if (localSeen.has(key)) {
+          const cycle = path.slice(localSeen.get(key));
+          const indices = Array.from(new Set(cycle.map((step) => step.index)));
+          if (indices.length >= 2) indices.forEach((item) => cycleIndices.add(item));
+          break;
+        }
+        if (globalSeen.has(key)) break;
+        localSeen.set(key, path.length);
+        path.push({ index, dir: direction });
+        const next = surfaceSuccessor(state, index, direction);
+        if (!next || !occupied.has(next.index)) break;
+        index = next.index;
+        direction = next.dir;
+        guard += 1;
+      }
+      path.forEach((step) => globalSeen.add(`${step.index}:${step.dir}`));
+    });
+    return Array.from(cycleIndices).sort((a, b) => a - b);
+  }
+
   function isGameOver(state) {
     if (!state || emptyExistingIndices(state).length) return false;
+    if (explosionModeDirections(state).length) return false;
     return directionsForPreset(state.preset).every((dir) => !simulateRound(state, dir, { spawn: false }).changed);
   }
 
@@ -2384,6 +2782,7 @@
       phase: source.phase,
       removed: new Set(source.removed),
       boxes: source.boxes.map((box) => ({ id: box.id, index: box.index, value: box.value })),
+      newBoxIds: new Set(source.newBoxIds || []),
       nextBoxId: source.nextBoxId,
       score: source.score,
       round: source.round,
@@ -2468,10 +2867,13 @@
 
   function removeBox(state, id) {
     state.boxes = state.boxes.filter((box) => box.id !== id);
+    if (state.newBoxIds) state.newBoxIds.delete(id);
   }
 
   function removeBoxesAtIndex(state, index) {
+    const removedIds = state.boxes.filter((box) => box.index === index).map((box) => box.id);
     state.boxes = state.boxes.filter((box) => box.index !== index);
+    if (state.newBoxIds) removedIds.forEach((id) => state.newBoxIds.delete(id));
   }
 
   function groupByTarget(proposals) {
@@ -2486,6 +2888,7 @@
 
   function selectedPreset() {
     if (refs.select && refs.select.value === IMPORTED_PRESET_ID && importedPreset) return importedPreset;
+    if (refs.select && refs.select.value === IMPORT_PRESET_CHOICE_ID && importedPreset) return importedPreset;
     return resolvePreset(refs.select ? refs.select.value : 'torus');
   }
 
@@ -2908,6 +3311,14 @@
     refs.speedValue.textContent = `${refs.speed.value} ms`;
   }
 
+  function shouldHighlightNewBoxes() {
+    return !refs.highlightNewBoxes || !!refs.highlightNewBoxes.checked;
+  }
+
+  function shouldHighlightBox(box) {
+    return !!(box && game && game.newBoxIds && game.newBoxIds.has(box.id) && shouldHighlightNewBoxes());
+  }
+
   function eventDuration(event) {
     const base = refs.speed ? Number(refs.speed.value) || 260 : 260;
     if (event.kind === 'bounceGroup') return Math.max(100, base * 0.9);
@@ -3180,6 +3591,7 @@
       boxes: state.boxes
         .map((box) => ({ id: box.id, index: box.index, value: box.value }))
         .sort((a, b) => a.index - b.index || a.id - b.id),
+      newBoxIds: Array.from(state.newBoxIds || []).sort((a, b) => a - b),
       removed: Array.from(state.removed).sort((a, b) => a - b),
       score: state.score,
       round: state.round,
@@ -3202,8 +3614,11 @@
     dirFromKey,
     directionsForPreset,
     emptyExistingIndices,
+    explosionModeDirections,
+    fullBoardWithoutAdjacentMerge,
     indexOf,
     isGameOver,
+    isExplosionModeActive,
     latticeForPreset,
     presetFromImportPayload,
     presetFromImportText,

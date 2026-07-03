@@ -1071,10 +1071,14 @@
             <option value="torus" selected>torus</option>
             <option value="klein-bottle">Klein bottle</option>
             <option value="ramified-cover">ramified cover</option>
+            <option value="rubiks-cube-2x2x2">Rubik's Cube 2*2*2</option>
+            <option value="rubiks-cube-3x3x3">Rubik's Cube 3*3*3</option>
+            <option value="usual-strip">usual strip</option>
+            <option value="mobius-strip">M&ouml;bius strip</option>
             <option value="hex-classic-4x4">hex classic 4*4</option>
+            <option value="import-preset">import</option>
           </select>
         </div>
-        <button class="btn btn-ghost mosaic-import-button" id="import-preset-toggle" type="button" aria-expanded="false">import preset</button>
         <div class="mosaic-debug-panel" id="import-preset-tools" hidden>
           <textarea class="mosaic-editor-input mosaic-import-input" id="import-preset-input" spellcheck="false" autocomplete="off" placeholder="{ ... }" aria-label="Imported background preset"></textarea>
           <button class="btn mosaic-import-button" id="apply-import-preset" type="button">generate</button>
@@ -1086,6 +1090,10 @@
             <option value="ink">ink outline</option>
             <option value="color">value color</option>
           </select>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">New boxes</span>
+          <label class="opt-row"><input type="checkbox" id="highlight-new-boxes" checked> highlight</label>
         </div>
         <div class="mosaic-inline-row">
           <span class="input-label">Speed</span>

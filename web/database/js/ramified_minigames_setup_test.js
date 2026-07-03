@@ -17,6 +17,23 @@ function valuesAt(state, cols = state.preset.cols) {
     .sort();
 }
 
+function stackedTileSummaries(state) {
+  const groups = new Map();
+  state.boxes.forEach((item) => {
+    const boxes = groups.get(item.index) || [];
+    boxes.push(`${item.id}:${item.value}`);
+    groups.set(item.index, boxes);
+  });
+  return Array.from(groups.entries())
+    .filter((entry) => entry[1].length > 1)
+    .map((entry) => `${entry[0]}=${entry[1].join('/')}`)
+    .sort();
+}
+
+function gluedEdgeSignature(edge) {
+  return `${edge.group}:${edge.first.row},${edge.first.col},${edge.first.dir}>${edge.second.row},${edge.second.col},${edge.second.dir}`;
+}
+
 function stateWithBoxes(presetId, boxes) {
   const state = game.createGameState(presetId);
   state.boxes = boxes;
@@ -30,6 +47,7 @@ function testInitialSpawnWeights() {
   assert.strictEqual(state.boxes.length, 2);
   assert.deepStrictEqual(state.boxes.map((item) => item.value), [4, 4]);
   assert.ok(state.boxes.every((item) => item.value <= 4));
+  assert.deepStrictEqual(game.stateSummary(state).newBoxIds, [1, 2]);
 }
 
 function testRoundSpawnWeights() {
@@ -452,7 +470,78 @@ function testBounceOnlyDirectionsDoNotPreventGameOver() {
   const results = Object.values(game.DIRS).map((dir) => game.simulateRound(state, dir, { spawn: false }));
   assert.ok(results.every((result) => result.changed === false));
   assert.ok(results.some((result) => result.events.some((event) => event.kind === 'bounceGroup')));
+  assert.strictEqual(game.fullBoardWithoutAdjacentMerge(state), true);
+  assert.deepStrictEqual(game.explosionModeDirections(state), []);
   assert.strictEqual(game.isGameOver(state), true);
+}
+
+function testExplosionModeForFullCycleBoard() {
+  const state = game.createGameState('torus');
+  let id = 1;
+  for (let row = 1; row <= 4; row += 1) {
+    for (let col = 1; col <= 4; col += 1) {
+      state.boxes.push({
+        id,
+        index: game.indexOf(row, col, 4),
+        value: (row + col) % 2 ? 2 : 4
+      });
+      id += 1;
+    }
+  }
+  state.nextBoxId = 17;
+  assert.strictEqual(game.fullBoardWithoutAdjacentMerge(state), true);
+  assert.deepStrictEqual(game.explosionModeDirections(state), [game.DIRS.E, game.DIRS.S, game.DIRS.W, game.DIRS.N]);
+  assert.strictEqual(game.isExplosionModeActive(state), true);
+  assert.strictEqual(game.isGameOver(state), false);
+
+  const result = game.simulateRound(state, game.DIRS.E, { spawn: false });
+  assert.strictEqual(result.changed, true);
+  assert.ok(result.events.some((event) => event.kind === 'moveGroup'));
+  assert.ok(result.events.some((event) => event.kind === 'explode' && event.value <= 4));
+  assert.ok(result.events.some((event) => event.kind === 'removeTile'));
+  const clearEvents = result.events.filter((event) => event.kind === 'clearNumbers');
+  assert.ok(clearEvents.length);
+  assert.ok(clearEvents.some((event) => event.removeBoxIds.length > 0));
+  assert.strictEqual(result.state.boxes.length, 0);
+  assert.ok(result.state.removed.size > 0);
+  assert.strictEqual(game.isExplosionModeActive(result.state), false);
+}
+
+function testDownMoveAfterExplosionDoesNotStack() {
+  const state = game.createGameState('torus');
+  state.phase = 'ready';
+  state.round = 1;
+  state.boxes = [
+    box(1, 1, 1, 2),
+    box(2, 1, 2, 4),
+    box(3, 1, 3, 8),
+    box(4, 1, 4, 16),
+    box(8, 2, 1, 256),
+    box(7, 2, 2, 128),
+    box(6, 2, 3, 64),
+    box(5, 2, 4, 32),
+    box(9, 3, 4, 512),
+    box(13, 4, 1, 2),
+    box(12, 4, 2, 2),
+    box(11, 4, 3, 2),
+    box(10, 4, 4, 2)
+  ];
+  state.nextBoxId = 14;
+
+  const result = game.simulateRound(state, game.DIRS.S, { spawn: false });
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(Array.from(result.state.removed).sort((a, b) => a - b), [
+    game.indexOf(4, 1, 4),
+    game.indexOf(4, 2, 4),
+    game.indexOf(4, 3, 4),
+    game.indexOf(4, 4, 4)
+  ]);
+  assert.deepStrictEqual(stackedTileSummaries(result.state), []);
+  assert.ok(result.events.some((event) => (
+    event.kind === 'moveGroup'
+      && (event.bounces || []).some((move) => move.boxId === 5 && move.from === game.indexOf(2, 4, 4) && move.to === game.indexOf(3, 4, 4))
+  )));
+  assert.ok(!result.state.boxes.some((item) => result.state.removed.has(item.index)));
 }
 
 function testBlockedResidentWithSuccessorPreventsGroupExplosion() {
@@ -782,6 +871,91 @@ function testHexClassicSuccessors() {
   });
 }
 
+function testExtraBackgroundPresets() {
+  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  [
+    ['rubiks-cube-2x2x2', "Rubik's Cube 2*2*2"],
+    ['rubiks-cube-3x3x3', "Rubik's Cube 3*3*3"],
+    ['usual-strip', 'usual strip'],
+    ['mobius-strip', 'M&ouml;bius strip']
+  ].forEach(([id, label]) => {
+    assert.ok(html.includes(`<option value="${id}">${label}</option>`));
+    assert.ok(game.PRESETS.find((preset) => preset.id === id));
+  });
+
+  const rubiks2 = game.createGameState('rubiks-cube-2x2x2');
+  assert.strictEqual(rubiks2.preset.rows, 6);
+  assert.strictEqual(rubiks2.preset.cols, 8);
+  assert.strictEqual(rubiks2.preset.surface, 'M_0,8');
+  assert.strictEqual(rubiks2.preset.removedTiles.length, 24);
+  assert.strictEqual(rubiks2.preset.gluedEdges.length, 14);
+  assert.deepStrictEqual(rubiks2.preset.gluedEdges.map(gluedEdgeSignature), [
+    '6:3,1,2>3,8,0',
+    '6:4,1,2>4,8,0',
+    '9:3,2,3>2,3,2',
+    '9:3,1,3>1,3,2',
+    '10:2,4,0>3,5,3',
+    '10:1,4,0>3,6,3',
+    '12:4,5,1>5,4,0',
+    '12:4,6,1>6,4,0',
+    '13:1,4,3>3,7,3',
+    '13:1,3,3>3,8,3',
+    '14:4,8,1>6,3,1',
+    '14:4,7,1>6,4,1',
+    '15:5,3,2>4,2,1',
+    '15:6,3,2>4,1,1'
+  ]);
+  assert.strictEqual(game.emptyExistingIndices(rubiks2).length, 24);
+  assert.strictEqual(game.countUnmatchedBoundaries(rubiks2.preset, rubiks2.removed), 0);
+
+  const rubiks3 = game.createGameState('rubiks-cube-3x3x3');
+  assert.strictEqual(rubiks3.preset.rows, 9);
+  assert.strictEqual(rubiks3.preset.cols, 12);
+  assert.strictEqual(rubiks3.preset.surface, 'M_0,8');
+  assert.strictEqual(rubiks3.preset.removedTiles.length, 54);
+  assert.strictEqual(rubiks3.preset.gluedEdges.length, 21);
+  assert.deepStrictEqual(rubiks3.preset.gluedEdges.map(gluedEdgeSignature), [
+    '0:4,1,2>4,12,0',
+    '0:5,1,2>5,12,0',
+    '0:6,1,2>6,12,0',
+    '1:4,3,3>3,4,2',
+    '1:4,2,3>2,4,2',
+    '1:4,1,3>1,4,2',
+    '2:1,6,3>4,10,3',
+    '2:1,5,3>4,11,3',
+    '2:1,4,3>4,12,3',
+    '3:3,6,0>4,7,3',
+    '3:2,6,0>4,8,3',
+    '3:1,6,0>4,9,3',
+    '4:6,1,1>9,4,2',
+    '4:6,2,1>8,4,2',
+    '4:6,3,1>7,4,2',
+    '5:6,7,1>7,6,0',
+    '5:6,8,1>8,6,0',
+    '5:6,9,1>9,6,0',
+    '6:9,4,1>6,12,1',
+    '6:9,5,1>6,11,1',
+    '6:9,6,1>6,10,1'
+  ]);
+  assert.strictEqual(game.emptyExistingIndices(rubiks3).length, 54);
+  assert.strictEqual(game.countUnmatchedBoundaries(rubiks3.preset, rubiks3.removed), 0);
+
+  const usual = game.createGameState('usual-strip');
+  assert.strictEqual(usual.preset.lattice, 'hexagonal');
+  assert.strictEqual(usual.preset.rows, 4);
+  assert.strictEqual(usual.preset.cols, 5);
+  assert.strictEqual(usual.preset.gluedEdges.length, 7);
+  assert.strictEqual(game.countUnmatchedBoundaries(usual.preset, usual.removed), 20);
+
+  const mobius = game.createGameState('mobius-strip');
+  assert.strictEqual(mobius.preset.lattice, 'hexagonal');
+  assert.strictEqual(mobius.preset.surface, 'N_0,2^6');
+  assert.strictEqual(mobius.preset.gluedEdges.length, 7);
+  assert.ok(mobius.preset.gluedEdges.every((pair) => pair.reversed));
+  assert.ok(mobius.preset.gluedEdges.every((pair) => pair.secondArrowReversed === false));
+  assert.strictEqual(game.countUnmatchedBoundaries(mobius.preset, mobius.removed), 20);
+}
+
 function testHexKeyboardMapping() {
   const preset = game.createGameState('hex-classic-4x4').preset;
   assert.strictEqual(game.dirFromKey('KeyW', preset), game.HEX_DIRS.NW);
@@ -812,7 +986,8 @@ function testHexMovePadUsesArrowGlyphs() {
 function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   const minigameHtml = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
   const mosaicHtml = fs.readFileSync(require.resolve('../mosaic_calculator.html'), 'utf8');
-  assert.ok(minigameHtml.includes('id="import-preset-toggle"'));
+  assert.ok(!minigameHtml.includes('id="import-preset-toggle"'));
+  assert.ok(minigameHtml.includes('<option value="import-preset">import</option>'));
   assert.ok(minigameHtml.includes('id="import-preset-input"'));
   assert.ok(minigameHtml.includes('id="apply-import-preset"'));
   assert.ok(minigameHtml.includes('id="import-state"'));
@@ -820,6 +995,8 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameHtml.includes('<div class="mosaic-debug-step-row">'));
   assert.ok(minigameHtml.includes('<option value="">empty</option>'));
   assert.ok(mosaicHtml.includes('id="export-background-preset"'));
+  assert.ok(mosaicHtml.includes('id="export-background-preset" type="button">export</button>'));
+  assert.ok(!mosaicHtml.includes('export background'));
 }
 
 function testPresetFromMosaicBackgroundExport() {
@@ -886,6 +1063,7 @@ function testSpeedControlDefaults() {
   const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
   assert.ok(html.includes('id="animation-speed" min="40" max="400" step="20" value="80"'));
   assert.ok(html.includes('<output id="animation-speed-value">80 ms</output>'));
+  assert.ok(html.includes('id="highlight-new-boxes" checked'));
 }
 
 function testStationaryDifferentBlocks() {
@@ -982,6 +1160,7 @@ function testSpawnAfterValidRound() {
   const spawnEvents = result.events.filter((event) => event.kind === 'spawn');
   assert.strictEqual(spawnEvents.length, 2);
   assert.deepStrictEqual(spawnEvents.map((event) => event.value), [32, 16]);
+  assert.deepStrictEqual(game.stateSummary(result.state).newBoxIds, spawnEvents.map((event) => event.boxId).sort((a, b) => a - b));
 }
 
 function makeElement(id, extra = {}) {
@@ -1062,11 +1241,11 @@ function testHeadlessDomStepControls() {
   [
     canvas,
     makeElement('surface-preset-select', { value: 'torus' }),
-    makeElement('import-preset-toggle'),
     makeElement('import-preset-tools', { hidden: true }),
     makeElement('import-preset-input'),
     makeElement('apply-import-preset'),
     makeElement('number-box-style', { value: 'paper' }),
+    makeElement('highlight-new-boxes', { checked: true }),
     makeElement('begin-game'),
     makeElement('animation-speed', { value: '80' }),
     makeElement('animation-speed-value'),
@@ -1182,7 +1361,8 @@ function testHeadlessDomStepControls() {
   assert.strictEqual(moveButtons.every((button) => button.disabled), true);
   assert.strictEqual(elements.get('animation-speed-value').textContent, '80 ms');
 
-  elements.get('import-preset-toggle').listeners.click();
+  elements.get('surface-preset-select').value = 'import-preset';
+  elements.get('surface-preset-select').listeners.change();
   assert.strictEqual(elements.get('import-preset-tools').hidden, false);
   elements.get('import-preset-input').value = JSON.stringify({
     schema: 'ramified-minigame-background-preset',
@@ -1286,6 +1466,8 @@ function run() {
   testMoveIntoBouncingResidentDoesNotStack();
   testMoveIntoLaterBouncingResidentDoesNotStack();
   testBounceOnlyDirectionsDoNotPreventGameOver();
+  testExplosionModeForFullCycleBoard();
+  testDownMoveAfterExplosionDoesNotStack();
   testBlockedResidentWithSuccessorPreventsGroupExplosion();
   testMoveEventsAreGroupedByTick();
   testBouncesAndMovesShareTickAnimation();
@@ -1302,6 +1484,7 @@ function run() {
   testRandomGluePresetIsDeterministicWithGlueRng();
   testHexClassicPreset();
   testHexClassicSuccessors();
+  testExtraBackgroundPresets();
   testHexKeyboardMapping();
   testHexMovePadUsesArrowGlyphs();
   testMosaicBackgroundExportAndMinigameImportControlsExist();

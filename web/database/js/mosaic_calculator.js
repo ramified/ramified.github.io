@@ -255,6 +255,217 @@
     { id: 'random-stable-curve', label: 'Random stable curve' },
     { id: 'moduli', label: 'M_g,n stable graph' }
   ];
+
+  function backgroundTiles(rows, cols) {
+    return Array(Math.max(0, rows * cols)).fill(null);
+  }
+
+  function backgroundGluedEdge(latticeId, group, first, second, options = {}) {
+    const lattice = LATTICES[latticeId] || LATTICES.square;
+    const reversed = !!options.reversed;
+    return {
+      group,
+      orientation: reversed ? 'reversed' : 'opposite',
+      reversed,
+      firstArrowReversed: Object.prototype.hasOwnProperty.call(options, 'firstArrowReversed')
+        ? !!options.firstArrowReversed
+        : false,
+      secondArrowReversed: Object.prototype.hasOwnProperty.call(options, 'secondArrowReversed')
+        ? !!options.secondArrowReversed
+        : !reversed,
+      first: { ...first, edge: lattice.dirNames[first.dir] },
+      second: { ...second, edge: lattice.dirNames[second.dir] }
+    };
+  }
+
+  function backgroundPresetPayload({
+    name,
+    lattice = 'square',
+    rows,
+    cols,
+    backgroundAction = 'billiard',
+    backgroundChainLength = 1,
+    backgroundChainReversed = true,
+    backgroundCuspMarkerScale = DEFAULT_BACKGROUND_CUSP_MARKER_SCALE,
+    backgroundBilliardTrailLength = DEFAULT_BACKGROUND_BILLIARD_TRAIL_LENGTH,
+    removedTiles = [],
+    cutEdges = [],
+    gluedEdges = []
+  }) {
+    return {
+      name,
+      lattice,
+      diagramType: 'link',
+      boundary: 'glued',
+      wrappedViewMode: 'periodic',
+      inputMode: 'background',
+      backgroundAction,
+      backgroundMultiEdges: true,
+      backgroundChainLength,
+      backgroundChainReversed,
+      backgroundCuspMarkerScale,
+      backgroundBilliardSpeed: DEFAULT_BACKGROUND_BILLIARD_SPEED,
+      backgroundBilliardTrailLength,
+      backgroundBilliardArrowLength: DEFAULT_BACKGROUND_BILLIARD_ARROW_LENGTH,
+      backgroundBilliardHitMarkers: DEFAULT_BACKGROUND_BILLIARD_HIT_MARKERS,
+      rows,
+      cols,
+      removedTiles,
+      cutEdges,
+      gluedEdges,
+      tiles: backgroundTiles(rows, cols)
+    };
+  }
+
+  function createRandomBackgroundGluedEdges(rows, cols) {
+    const boundary = [];
+    for (let col = 1; col <= cols; col += 1) {
+      boundary.push({ row: 1, col, dir: 3 });
+      boundary.push({ row: rows, col, dir: 1 });
+    }
+    for (let row = 1; row <= rows; row += 1) {
+      boundary.push({ row, col: 1, dir: 2 });
+      boundary.push({ row, col: cols, dir: 0 });
+    }
+    const shuffled = boundary.slice();
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+    }
+    const pairs = [];
+    for (let index = 0; index + 1 < shuffled.length; index += 2) {
+      pairs.push(backgroundGluedEdge('square', Math.floor(index / 2), shuffled[index], shuffled[index + 1]));
+    }
+    return pairs;
+  }
+
+  function createRubiksCubeBackgroundPreset(size, id, label) {
+    const rows = size * 3;
+    const cols = size * 4;
+    const removedTiles = [];
+    for (let row = 1; row <= rows; row += 1) {
+      for (let col = 1; col <= cols; col += 1) {
+        const middleBand = row > size && row <= size * 2;
+        const centerColumnBand = col > size && col <= size * 2;
+        if (!middleBand && !centerColumnBand) removedTiles.push({ row, col });
+      }
+    }
+
+    const groups = size === 2
+      ? { outer: 6, leftTop: 9, topRight: 13, topMiddle: 10, bottomLeft: 15, bottomRight: 12, bottomFar: 14 }
+      : { outer: 0, leftTop: 1, topRight: 2, topMiddle: 3, bottomLeft: 4, bottomRight: 5, bottomFar: 6 };
+    const gluedEdges = [];
+    const add = (group, first, second) => {
+      gluedEdges.push(backgroundGluedEdge('square', group, first, second));
+    };
+
+    const addOuter = () => {
+      for (let row = size + 1; row <= size * 2; row += 1) {
+        add(groups.outer, { row, col: 1, dir: 2 }, { row, col: cols, dir: 0 });
+      }
+    };
+    const addLeftTop = () => {
+      for (let offset = 0; offset < size; offset += 1) {
+        add(
+          groups.leftTop,
+          { row: size + 1, col: size - offset, dir: 3 },
+          { row: size - offset, col: size + 1, dir: 2 }
+        );
+      }
+    };
+    const addTopRight = () => {
+      for (let offset = 0; offset < size; offset += 1) {
+        add(
+          groups.topRight,
+          { row: 1, col: size * 2 - offset, dir: 3 },
+          { row: size + 1, col: size * 3 + 1 + offset, dir: 3 }
+        );
+      }
+    };
+    const addTopMiddle = () => {
+      for (let offset = 0; offset < size; offset += 1) {
+        add(
+          groups.topMiddle,
+          { row: size - offset, col: size * 2, dir: 0 },
+          { row: size + 1, col: size * 2 + 1 + offset, dir: 3 }
+        );
+      }
+    };
+    const addBottomLeft = () => {
+      for (let offset = 0; offset < size; offset += 1) {
+        if (size === 2) {
+          add(
+            groups.bottomLeft,
+            { row: size * 2 + 1 + offset, col: size + 1, dir: 2 },
+            { row: size * 2, col: size - offset, dir: 1 }
+          );
+        } else {
+          add(
+            groups.bottomLeft,
+            { row: size * 2, col: 1 + offset, dir: 1 },
+            { row: rows - offset, col: size + 1, dir: 2 }
+          );
+        }
+      }
+    };
+    const addBottomRight = () => {
+      for (let offset = 0; offset < size; offset += 1) {
+        add(
+          groups.bottomRight,
+          { row: size * 2, col: size * 2 + 1 + offset, dir: 1 },
+          { row: size * 2 + 1 + offset, col: size * 2, dir: 0 }
+        );
+      }
+    };
+    const addBottomFar = () => {
+      for (let offset = 0; offset < size; offset += 1) {
+        if (size === 2) {
+          add(
+            groups.bottomFar,
+            { row: size * 2, col: cols - offset, dir: 1 },
+            { row: rows, col: size + 1 + offset, dir: 1 }
+          );
+        } else {
+          add(
+            groups.bottomFar,
+            { row: rows, col: size + 1 + offset, dir: 1 },
+            { row: size * 2, col: cols - offset, dir: 1 }
+          );
+        }
+      }
+    };
+
+    addOuter();
+    addLeftTop();
+    if (size === 2) {
+      addTopMiddle();
+      addBottomRight();
+      addTopRight();
+      addBottomFar();
+      addBottomLeft();
+    } else {
+      addTopRight();
+      addTopMiddle();
+      addBottomLeft();
+      addBottomRight();
+      addBottomFar();
+    }
+
+    return {
+      id,
+      label,
+      payload: backgroundPresetPayload({
+        name: `${label} background preset`,
+        rows,
+        cols,
+        backgroundChainLength: size === 2 ? 2 : 3,
+        backgroundBilliardTrailLength: size === 2 ? 180 : 400,
+        removedTiles,
+        gluedEdges
+      })
+    };
+  }
+
   const BACKGROUND_SPACE_PRESETS = [
     {
       id: 'classic-4x4',
@@ -275,6 +486,39 @@
         gluedEdges: [],
         tiles: Array(16).fill(null)
       }
+    },
+    {
+      id: 'genus-2',
+      label: 'genus 2',
+      payload: backgroundPresetPayload({
+        name: 'genus 2 background preset',
+        rows: 4,
+        cols: 4,
+        backgroundChainLength: 2,
+        backgroundBilliardTrailLength: 170,
+        gluedEdges: [
+          backgroundGluedEdge('square', 0, { row: 4, col: 4, dir: 0 }, { row: 1, col: 3, dir: 3 }),
+          backgroundGluedEdge('square', 0, { row: 3, col: 4, dir: 0 }, { row: 1, col: 4, dir: 3 }),
+          backgroundGluedEdge('square', 2, { row: 1, col: 2, dir: 3 }, { row: 4, col: 1, dir: 2 }),
+          backgroundGluedEdge('square', 2, { row: 1, col: 1, dir: 3 }, { row: 3, col: 1, dir: 2 }),
+          backgroundGluedEdge('square', 3, { row: 4, col: 1, dir: 1 }, { row: 2, col: 1, dir: 2 }),
+          backgroundGluedEdge('square', 3, { row: 4, col: 2, dir: 1 }, { row: 1, col: 1, dir: 2 }),
+          backgroundGluedEdge('square', 4, { row: 2, col: 4, dir: 0 }, { row: 4, col: 4, dir: 1 }),
+          backgroundGluedEdge('square', 4, { row: 1, col: 4, dir: 0 }, { row: 4, col: 3, dir: 1 })
+        ]
+      })
+    },
+    {
+      id: 'random-glue-4x4',
+      label: 'random glue 4*4',
+      randomGlue: true,
+      payload: backgroundPresetPayload({
+        name: 'random glue 4*4 background preset',
+        rows: 4,
+        cols: 4,
+        backgroundChainLength: 4,
+        backgroundBilliardTrailLength: 170
+      })
     },
     {
       id: 'half-glued',
@@ -613,6 +857,65 @@
         ],
         tiles: Array(36).fill(null)
       }
+    },
+    createRubiksCubeBackgroundPreset(2, 'rubiks-cube-2x2x2', "Rubik's Cube 2*2*2"),
+    createRubiksCubeBackgroundPreset(3, 'rubiks-cube-3x3x3', "Rubik's Cube 3*3*3"),
+    {
+      id: 'usual-strip',
+      label: 'usual strip',
+      payload: backgroundPresetPayload({
+        name: 'usual strip background preset',
+        lattice: 'hexagonal',
+        rows: 4,
+        cols: 5,
+        backgroundChainLength: 7,
+        backgroundCuspMarkerScale: 0.35,
+        backgroundBilliardTrailLength: 180,
+        gluedEdges: [
+          backgroundGluedEdge('hexagonal', 0, { row: 1, col: 1, dir: 3 }, { row: 1, col: 5, dir: 0 }),
+          backgroundGluedEdge('hexagonal', 0, { row: 1, col: 1, dir: 2 }, { row: 2, col: 5, dir: 5 }),
+          backgroundGluedEdge('hexagonal', 0, { row: 2, col: 1, dir: 3 }, { row: 2, col: 5, dir: 0 }),
+          backgroundGluedEdge('hexagonal', 0, { row: 3, col: 1, dir: 4 }, { row: 2, col: 5, dir: 1 }),
+          backgroundGluedEdge('hexagonal', 0, { row: 3, col: 1, dir: 3 }, { row: 3, col: 5, dir: 0 }),
+          backgroundGluedEdge('hexagonal', 0, { row: 3, col: 1, dir: 2 }, { row: 4, col: 5, dir: 5 }),
+          backgroundGluedEdge('hexagonal', 0, { row: 4, col: 1, dir: 3 }, { row: 4, col: 5, dir: 0 })
+        ]
+      })
+    },
+    {
+      id: 'mobius-strip',
+      label: 'M\u00f6bius strip',
+      payload: backgroundPresetPayload({
+        name: 'M\u00f6bius strip background preset',
+        lattice: 'hexagonal',
+        rows: 4,
+        cols: 5,
+        backgroundChainLength: 7,
+        backgroundCuspMarkerScale: 0.35,
+        backgroundBilliardTrailLength: 180,
+        gluedEdges: [
+          backgroundGluedEdge('hexagonal', 0, { row: 1, col: 1, dir: 3 }, { row: 4, col: 5, dir: 0 }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+          backgroundGluedEdge('hexagonal', 0, { row: 1, col: 1, dir: 2 }, { row: 4, col: 5, dir: 5 }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+          backgroundGluedEdge('hexagonal', 0, { row: 2, col: 1, dir: 3 }, { row: 3, col: 5, dir: 0 }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+          backgroundGluedEdge('hexagonal', 0, { row: 3, col: 1, dir: 4 }, { row: 2, col: 5, dir: 1 }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+          backgroundGluedEdge('hexagonal', 0, { row: 3, col: 1, dir: 3 }, { row: 2, col: 5, dir: 0 }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+          backgroundGluedEdge('hexagonal', 0, { row: 3, col: 1, dir: 2 }, { row: 2, col: 5, dir: 5 }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+          backgroundGluedEdge('hexagonal', 0, { row: 4, col: 1, dir: 3 }, { row: 1, col: 5, dir: 0 }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false })
+        ]
+      })
+    },
+    {
+      id: 'hex-classic-4x4',
+      label: 'hex classic 4*4',
+      payload: backgroundPresetPayload({
+        name: 'hex classic 4*4 background preset',
+        lattice: 'hexagonal',
+        rows: 4,
+        cols: 4,
+        backgroundAction: 'tile',
+        backgroundChainLength: 1,
+        backgroundBilliardTrailLength: 180
+      })
     }
   ];
   const COMPACT_DUAL_GRAPH_LAYOUT_SCALE = 0.5;
@@ -2486,6 +2789,9 @@
 
     try {
       const payload = JSON.parse(JSON.stringify(preset.payload || {}));
+      if (preset.randomGlue) {
+        payload.gluedEdges = createRandomBackgroundGluedEdges(payload.rows || 4, payload.cols || 4);
+      }
       payload.boundary = 'glued';
       payload.inputMode = 'background';
       applyImportedMosaic(payload);
