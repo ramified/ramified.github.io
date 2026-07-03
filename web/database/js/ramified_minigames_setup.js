@@ -215,6 +215,9 @@
   let debugMode = false;
   let undoStack = [];
   let importedPreset = null;
+  let noMoveDirs = new Set();
+  let eventQueueChangedBoard = false;
+  let pendingBonusGameOver = false;
 
   function init() {
     refs.canvas = document.getElementById('mosaic-canvas');
@@ -235,6 +238,7 @@
     refs.debugTileValue = document.getElementById('debug-tile-value');
     refs.undo = document.getElementById('undo-step');
     refs.exportState = document.getElementById('export-state');
+    refs.importState = document.getElementById('import-state');
     refs.debugExport = document.getElementById('debug-export-output');
     refs.moveButtons = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-move-dir]')) : [];
     refs.moveGroups = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-move-lattice]')) : [];
@@ -259,6 +263,7 @@
     if (refs.debugToggle) refs.debugToggle.addEventListener('click', toggleDebugMode);
     if (refs.undo) refs.undo.addEventListener('click', undoPreviousStep);
     if (refs.exportState) refs.exportState.addEventListener('click', exportDebugState);
+    if (refs.importState) refs.importState.addEventListener('click', importDebugState);
     if (refs.canvas) refs.canvas.addEventListener('click', handleCanvasClick);
     refs.moveButtons.forEach((button) => {
       button.addEventListener('click', () => handleDirectionalButton(button));
@@ -281,6 +286,8 @@
     eventQueue = [];
     eventIndex = 0;
     stepPaused = false;
+    clearNoMoveTrial();
+    eventQueueChangedBoard = false;
     render();
     syncStatus(`${game.preset.label} preview`, previewInfo(game.preset), 'setup');
     syncControls();
@@ -295,6 +302,8 @@
     eventQueue = [];
     eventIndex = 0;
     stepPaused = false;
+    clearNoMoveTrial();
+    eventQueueChangedBoard = false;
     game.phase = 'ready';
     render();
     syncStatus(`${game.preset.label} game seed`, 'use arrow keys to slide', 'ready');
@@ -364,16 +373,44 @@
       && !eventQueue.length;
   }
 
+  function clearNoMoveTrial() {
+    noMoveDirs = new Set();
+    pendingBonusGameOver = false;
+  }
+
+  function recordNoMoveDirection(dir) {
+    noMoveDirs.add(dir);
+    return noMoveDirs.size >= directionsForPreset(game.preset).length;
+  }
+
+  function noMoveTrialText(state) {
+    const total = directionsForPreset(state.preset).length;
+    return `${noMoveDirs.size}/${total} directions unchanged`;
+  }
+
+  function finishGameAs(ending) {
+    game.phase = 'gameover';
+    game.ending = ending || 'standard';
+    if (game.ending === 'bonus') {
+      syncStatus('bonus ending', `all ${directionsForPreset(game.preset).length} directions unchanged`, 'over');
+    } else {
+      syncStatus('game over', 'no empty tile and no changing move', 'over');
+    }
+  }
+
   function playRound(dir) {
     const result = simulateRound(game, dir, { rng: Math.random, spawn: true });
     if (!result.changed) {
+      const triedAllDirections = recordNoMoveDirection(dir);
       if (result.events && result.events.length) {
         eventQueue = result.events;
         eventIndex = 0;
+        eventQueueChangedBoard = false;
+        pendingBonusGameOver = triedAllDirections;
         const step = isStepMode();
         stepPaused = step;
         game.phase = step ? 'paused' : 'animating';
-        syncStatus(`collision: ${dirLabel(dir, game.preset)}`, `${eventQueue.length} event${eventQueue.length === 1 ? '' : 's'}`, step ? 'step' : 'moving');
+        syncStatus(`collision: ${dirLabel(dir, game.preset)}`, noMoveTrialText(game), step ? 'step' : 'moving');
         syncControls();
         if (step) render();
         else playNextEvent();
@@ -385,21 +422,23 @@
         render();
         return;
       }
-      if (isGameOver(game)) {
-        game.phase = 'gameover';
-        syncStatus('game over', 'no empty tile and no changing move', 'over');
+      if (triedAllDirections) {
+        finishGameAs('bonus');
         syncControls();
         render();
         return;
       }
-      syncStatus('no move', 'board unchanged', game.phase === 'gameover' ? 'over' : 'ready');
+      syncStatus('no move', noMoveTrialText(game), game.phase === 'gameover' ? 'over' : 'ready');
       render();
       return;
     }
+    clearNoMoveTrial();
+    game.ending = '';
     pushUndoSnapshot(`round ${game.round + 1}: ${dirLabel(dir, game.preset)}`);
     game.round += 1;
     eventQueue = result.events;
     eventIndex = 0;
+    eventQueueChangedBoard = true;
     const step = isStepMode();
     stepPaused = step;
     game.phase = step ? 'paused' : 'animating';
@@ -478,11 +517,16 @@
     eventIndex = 0;
     stepPaused = false;
     currentAnimation = null;
-    if (isGameOver(game)) {
-      game.phase = 'gameover';
-      syncStatus('game over', 'no empty tile and no changing move', 'over');
+    const changedBoard = eventQueueChangedBoard;
+    eventQueueChangedBoard = false;
+    if (pendingBonusGameOver) {
+      pendingBonusGameOver = false;
+      finishGameAs('bonus');
+    } else if (changedBoard && isGameOver(game)) {
+      finishGameAs('standard');
     } else {
       game.phase = 'ready';
+      game.ending = '';
       syncStatus(`round ${game.round} complete`, 'use arrow keys to slide', 'ready');
     }
     syncControls();
@@ -496,6 +540,8 @@
     eventQueue = [];
     eventIndex = 0;
     stepPaused = false;
+    eventQueueChangedBoard = false;
+    pendingBonusGameOver = false;
   }
 
   function toggleDebugMode() {
@@ -538,19 +584,23 @@
     }
     stopPlayback();
     game.phase = 'ready';
-    const existing = boxAt(game, target.index);
+    game.ending = '';
+    clearNoMoveTrial();
+    const existingBoxes = boxesAtIndex(game, target.index);
+    const existing = existingBoxes[0] || null;
     if (value == null) {
       if (!existing) {
         syncStatus(`debug: ${target.label} already empty`, `${game.boxes.length} active box${game.boxes.length === 1 ? '' : 'es'}`, 'debug');
         return;
       }
       pushUndoSnapshot(`debug empty ${target.label}`);
-      removeBox(game, existing.id);
+      removeBoxesAtIndex(game, target.index);
       game.debugMessage = `debug: ${target.label} = empty`;
       syncStatus(`debug: ${target.label} = empty`, `${game.boxes.length} active box${game.boxes.length === 1 ? '' : 'es'}`, 'debug');
     } else if (existing) {
       pushUndoSnapshot(`debug set ${target.label}`);
-      existing.value = value;
+      removeBoxesAtIndex(game, target.index);
+      game.boxes.push({ id: existing.id, index: target.index, value });
     } else {
       pushUndoSnapshot(`debug set ${target.label}`);
       const box = { id: game.nextBoxId, index: target.index, value };
@@ -629,6 +679,8 @@
     eventIndex = Math.max(0, Math.min(Number(snapshot.eventIndex) || 0, eventQueue.length));
     stepPaused = !!snapshot.stepPaused && eventQueue.length > 0 && eventIndex < eventQueue.length;
     currentAnimation = null;
+    clearNoMoveTrial();
+    eventQueueChangedBoard = !!eventQueue.length;
     if (refs.select && game.preset && game.preset.id) refs.select.value = game.preset.id;
     syncStatus('undo complete', `restored before ${snapshot.label || 'previous step'}`, phaseBadge(game.phase));
     render();
@@ -662,6 +714,37 @@
     refs.debugExport.select();
   }
 
+  function importDebugState() {
+    if (!debugMode || !refs.debugExport) {
+      syncStatus('status import unavailable', 'turn on debug mode first', 'debug');
+      return;
+    }
+    try {
+      const imported = gameStateFromDebugImportText(refs.debugExport.value);
+      if (game) pushUndoSnapshot('status import');
+      stopPlayback();
+      importedPreset = imported.state.preset;
+      ensureImportedPresetOption(importedPreset);
+      if (refs.select) refs.select.value = importedPreset.id;
+      game = imported.state;
+      eventQueue = imported.eventQueue;
+      eventIndex = imported.eventIndex;
+      stepPaused = imported.stepPaused;
+      currentAnimation = null;
+      clearNoMoveTrial();
+      eventQueueChangedBoard = false;
+      game.phase = stepPaused ? 'paused' : (eventQueue.length ? 'ready' : imported.phase);
+      if (game.phase !== 'gameover') game.ending = '';
+      render();
+      syncStatus('status imported', `${game.boxes.length} box${game.boxes.length === 1 ? '' : 'es'}, ${game.removed.size} removed`, 'debug');
+      syncControls();
+      refreshDebugExportIfNeeded();
+      if (refs.canvas) refs.canvas.focus();
+    } catch (error) {
+      syncStatus('status import failed', error && error.message ? error.message : 'invalid status JSON', 'error');
+    }
+  }
+
   function refreshDebugExportIfNeeded() {
     if (!refs.debugExport || !refs.debugExport.value) return;
     refs.debugExport.value = JSON.stringify(debugExportPayload(), null, 2);
@@ -681,11 +764,19 @@
         lattice: preset.lattice || 'square',
         rows: preset.rows,
         cols: preset.cols,
-        surface: preset.surface
+        surface: preset.surface,
+        removedTiles: (preset.removedTiles || []).map((tile) => ({ ...tile })),
+        cutEdges: (preset.cutEdges || []).map((edge) => ({
+          left: { ...edge.left },
+          right: { ...edge.right }
+        })),
+        gluedEdges: (preset.gluedEdges || []).map(cloneGluePair)
       },
       phase: game.phase,
+      ending: game.ending || '',
       debugMode,
       status: statusSnapshot(),
+      warnings: gameWarnings(game),
       round: game.round || 0,
       score: game.score || 0,
       highest: highestValue(game),
@@ -719,6 +810,133 @@
     };
   }
 
+  function gameStateFromDebugImportText(text) {
+    const raw = String(text || '').trim();
+    if (!raw) throw new Error('paste a status JSON object');
+    let payload;
+    try {
+      payload = JSON.parse(raw);
+    } catch (error) {
+      throw new Error('status JSON could not be parsed');
+    }
+    return gameStateFromDebugImportPayload(payload);
+  }
+
+  function gameStateFromDebugImportPayload(payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new Error('status must be a JSON object');
+    }
+    const preset = presetFromStatusPayload(payload);
+    const removed = normalizeStatusRemovedSet(payload, preset);
+    const boxes = normalizeStatusBoxes(payload.boxes, preset, removed);
+    const nextBoxId = Math.max(
+      normalizeNonnegativeInteger(payload.nextBoxId, 1),
+      boxes.reduce((max, box) => Math.max(max, box.id + 1), 1)
+    );
+    const state = {
+      preset,
+      phase: normalizeStatusPhase(payload.phase),
+      removed,
+      boxes,
+      nextBoxId,
+      score: normalizeNonnegativeInteger(payload.score, 0),
+      round: normalizeNonnegativeInteger(payload.round, 0),
+      ending: normalizeStatusEnding(payload.ending, payload.phase),
+      debugMessage: ''
+    };
+    const queue = payload.queue && typeof payload.queue === 'object' ? payload.queue : {};
+    const eventQueueImport = Array.isArray(queue.events) ? clonePlain(queue.events) : [];
+    const importedEventIndex = Math.max(0, Math.min(normalizeNonnegativeInteger(queue.eventIndex, 0), eventQueueImport.length));
+    return {
+      state,
+      phase: state.phase,
+      eventQueue: eventQueueImport,
+      eventIndex: importedEventIndex,
+      stepPaused: !!queue.stepPaused && eventQueueImport.length > 0 && importedEventIndex < eventQueueImport.length
+    };
+  }
+
+  function presetFromStatusPayload(payload) {
+    const source = payload.preset && typeof payload.preset === 'object' ? payload.preset : {};
+    const sourceId = sanitizeImportedText(source.id || '', '');
+    const base = sourceId ? PRESETS.find((preset) => preset.id === sourceId) : null;
+    const lattice = normalizeImportedLattice(source.lattice || (base && base.lattice) || 'square');
+    const rows = normalizeImportedBoardSize(source.rows || (base && base.rows), 'rows');
+    const cols = normalizeImportedBoardSize(source.cols || (base && base.cols), 'cols');
+    const shell = { lattice, rows, cols, removedTiles: [], cutEdges: [], gluedEdges: [] };
+    const removedTiles = normalizeImportedRemovedTiles(
+      Array.isArray(source.removedTiles) ? source.removedTiles : ((base && base.removedTiles) || []),
+      rows,
+      cols
+    );
+    shell.removedTiles = removedTiles;
+    const cutEdges = normalizeImportedCutEdges(
+      Array.isArray(source.cutEdges) ? source.cutEdges : ((base && base.cutEdges) || []),
+      shell
+    );
+    shell.cutEdges = cutEdges;
+    const gluedEdges = normalizeImportedGluedEdges(
+      Array.isArray(source.gluedEdges) ? source.gluedEdges : ((base && !base.randomGlue && base.gluedEdges) || []),
+      shell
+    );
+    return {
+      id: IMPORTED_PRESET_ID,
+      sourceId,
+      label: sanitizeImportedText(source.label || (base && base.label) || 'imported status', 'imported status'),
+      lattice,
+      rows,
+      cols,
+      surface: sanitizeImportedText(source.surface || (base && base.surface) || `${latticeForPreset(shell).label} status`, `${latticeForPreset(shell).label} status`),
+      removedTiles,
+      cutEdges,
+      gluedEdges
+    };
+  }
+
+  function normalizeStatusRemovedSet(payload, preset) {
+    const entries = Array.isArray(payload.removed)
+      ? payload.removed
+      : (Array.isArray(preset.removedTiles) ? preset.removedTiles : []);
+    return new Set(normalizeImportedRemovedTiles(entries, preset.rows, preset.cols)
+      .map((tile) => indexOf(tile.row, tile.col, preset.cols)));
+  }
+
+  function normalizeStatusBoxes(entries, preset, removed) {
+    if (!Array.isArray(entries)) throw new Error('status boxes must be an array');
+    const usedIds = new Set();
+    return entries.map((entry, index) => {
+      const tile = normalizeImportedTileRef(entry, preset.rows, preset.cols);
+      if (!tile) throw new Error(`status box ${index + 1} has an invalid tile`);
+      const tileIndex = indexOf(tile.row, tile.col, preset.cols);
+      if (removed.has(tileIndex)) throw new Error(`status box ${index + 1} is on a removed tile`);
+      const value = Number(entry && entry.value);
+      if (!isPowerOfTwo(value) || value < 2) throw new Error(`status box ${index + 1} value must be 2, 4, 8, ...`);
+      const id = normalizePositiveInteger(entry && entry.id, index + 1);
+      if (usedIds.has(id)) throw new Error(`status box id ${id} is duplicated`);
+      usedIds.add(id);
+      return { id, index: tileIndex, value };
+    });
+  }
+
+  function normalizeStatusPhase(value) {
+    return ['setup', 'ready', 'paused', 'animating', 'gameover'].includes(value) ? value : 'ready';
+  }
+
+  function normalizeStatusEnding(value, phase) {
+    if (phase !== 'gameover') return '';
+    return value === 'bonus' ? 'bonus' : 'standard';
+  }
+
+  function normalizePositiveInteger(value, fallback) {
+    const number = Number(value);
+    return Number.isInteger(number) && number > 0 ? number : fallback;
+  }
+
+  function normalizeNonnegativeInteger(value, fallback) {
+    const number = Number(value);
+    return Number.isInteger(number) && number >= 0 ? number : fallback;
+  }
+
   function syncStatusForCurrentGame() {
     if (!game) return;
     if (game.phase === 'setup') {
@@ -726,7 +944,8 @@
       return;
     }
     if (game.phase === 'gameover') {
-      syncStatus('game over', 'no empty tile and no changing move', 'over');
+      if (game.ending === 'bonus') syncStatus('bonus ending', `all ${directionsForPreset(game.preset).length} directions unchanged`, 'over');
+      else syncStatus('game over', 'no empty tile and no changing move', 'over');
       return;
     }
     if (eventQueue.length) {
@@ -934,6 +1153,7 @@
         if (move.glued) drawGluedMove(ctx, geom, move, progress);
         else drawBoxAtPoint(ctx, lerpPoint(from, to, progress), geom.radius, move.value, 1, geom.lattice);
       });
+      if (event.bounces) event.bounces.forEach((move) => drawBounceMove(ctx, geom, move, progress));
       if (event.explosions) event.explosions.forEach((explosion) => drawExplosionEvent(ctx, geom, explosion, progress));
       return;
     }
@@ -992,6 +1212,7 @@
     const event = currentAnimation.event;
     if (event.kind === 'move') hidden.add(event.boxId);
     if (event.kind === 'moveGroup') event.moves.forEach((move) => hidden.add(move.boxId));
+    if (event.kind === 'moveGroup' && event.bounces) event.bounces.forEach((move) => hidden.add(move.boxId));
     if (event.kind === 'moveGroup' && event.explosions) {
       event.explosions.forEach((explosion) => hideExplosionBoxes(hidden, explosion));
     }
@@ -1278,7 +1499,7 @@
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#111111';
     ctx.font = `700 ${Math.max(20, Math.round(geom.radius * 0.72))}px "JetBrains Mono", monospace`;
-    ctx.fillText('game over', geom.width / 2, y + height * 0.36);
+    ctx.fillText(state.ending === 'bonus' ? 'bonus ending' : 'game over', geom.width / 2, y + height * 0.36);
     ctx.fillStyle = '#6c6257';
     ctx.font = `${Math.max(12, Math.round(geom.radius * 0.34))}px "JetBrains Mono", monospace`;
     ctx.fillText(`score ${state.score || 0}   highest ${highestValue(state)}`, geom.width / 2, y + height * 0.66);
@@ -1309,7 +1530,8 @@
       boxes: [],
       nextBoxId: 1,
       score: 0,
-      round: 0
+      round: 0,
+      ending: ''
     };
   }
 
@@ -1328,13 +1550,16 @@
     const events = [];
     const debugMessages = [];
     const mergeLocked = new Set();
-    const active = new Map(state.boxes.map((box) => [box.id, {
-      id: box.id,
-      index: box.index,
-      value: box.value,
-      dir,
-      k: 0
-    }]));
+    const stackedBoxIds = stackedBoxIdSet(state);
+    const active = new Map(state.boxes
+      .filter((box) => !stackedBoxIds.has(box.id))
+      .map((box) => [box.id, {
+        id: box.id,
+        index: box.index,
+        value: box.value,
+        dir,
+        k: 0
+      }]));
     let changed = false;
     let guard = 0;
 
@@ -1403,6 +1628,10 @@
         if (result.kind === 'bounce') {
           bounces.push(...result.moves);
           result.actors.forEach((bounceActor) => active.delete(bounceActor.id));
+          result.moves.forEach((move) => {
+            const moveBoxId = move.boxId || (move.actor && move.actor.id);
+            if (moveBoxId) active.delete(moveBoxId);
+          });
           return;
         }
         if (result.kind === 'push') {
@@ -1431,8 +1660,8 @@
         }
       });
       const moveEvents = [];
+      const bouncingBoxIds = new Set(bounces.map((result) => result.boxId || (result.actor && result.actor.id)));
       const bounceEvents = bounces.map(animationMoveFromResult);
-      if (bounceEvents.length) events.push({ kind: 'bounceGroup', moves: bounceEvents });
       const explosionAnimations = explosions
         .filter((explosion) => explosion.moves && explosion.moves.length)
         .map((explosion) => explosionAnimationEvent(
@@ -1441,13 +1670,12 @@
           explosion.removeBoxIds,
           explosion.moves
         ));
-      moves.forEach((result) => {
+      const moveEntries = moves.map((result) => {
         const boxId = result.boxId || (result.actor && result.actor.id);
-        if (explodedBoxIds.has(boxId)) return;
+        if (explodedBoxIds.has(boxId)) return { result, boxId, skipped: true };
         const box = findBox(state, boxId);
         if (!box || state.removed.has(result.transition.index)) {
-          if (result.actor) active.delete(result.actor.id);
-          return;
+          return { result, boxId, box, skipped: true, deleteActor: !!result.actor };
         }
         const from = Number.isInteger(result.from)
           ? result.from
@@ -1455,6 +1683,28 @@
         const value = Number.isFinite(result.value)
           ? result.value
           : (result.actor ? result.actor.value : box.value);
+        return { result, boxId, box, from, value, skipped: false };
+      });
+      const blockedMoveIds = blockedMovesByBouncingResidents(state, moveEntries, bouncingBoxIds);
+      moveEntries.forEach((entry) => {
+        if (entry.skipped) {
+          if (entry.deleteActor && entry.result.actor) active.delete(entry.result.actor.id);
+          return;
+        }
+        const { result, boxId, box, from, value } = entry;
+        if (blockedMoveIds.has(boxId)) {
+          bounceEvents.push(animationMoveFromResult({
+            ...result,
+            boxId,
+            value,
+            from,
+            transition: result.transition
+          }));
+          if (result.actor) active.delete(result.actor.id);
+          const activeActor = active.get(boxId);
+          if (activeActor) active.delete(boxId);
+          return;
+        }
         const event = {
           kind: 'move',
           boxId,
@@ -1476,7 +1726,14 @@
         }
       });
       if (moveEvents.length || explosionAnimations.length) {
-        events.push({ kind: 'moveGroup', moves: moveEvents, explosions: explosionAnimations });
+        events.push({
+          kind: 'moveGroup',
+          moves: moveEvents,
+          bounces: bounceEvents,
+          explosions: explosionAnimations
+        });
+      } else if (bounceEvents.length) {
+        events.push({ kind: 'bounceGroup', moves: bounceEvents });
       }
       pushMerges.forEach((merge) => addPushedMergeEvent(state, events, merge, mergeLocked, active));
       explosions.forEach((explosion) => {
@@ -1491,6 +1748,7 @@
       }
     }
 
+    changed = gameStateChanged(sourceState, state);
     if (changed && shouldSpawn) {
       spawnNumbers(state, 2, rng, spawnRoundValue, events);
     }
@@ -1511,8 +1769,10 @@
       groups.forEach((group) => {
         const target = group[0].target;
         const resident = boxAt(state, target);
+        const targetStacked = boxesAtIndex(state, target).length > 1;
         const residentProposal = resident ? byActor.get(resident.id) : null;
-        const residentVacates = !!(residentProposal && batchIds.has(resident.id) && willVacate.get(resident.id));
+        const residentVacates = !targetStacked
+          && !!(residentProposal && batchIds.has(resident.id) && willVacate.get(resident.id));
         const includeResident = !!(resident && !residentVacates);
         if (group.length > 1) {
           group.forEach((proposal) => nextWillVacate.set(proposal.actor.id, true));
@@ -1545,8 +1805,8 @@
         moves: pair.map((proposal) => moveResultFromActor(proposal.actor, proposal.transition))
       });
     });
-    const occupiedCollisions = occupiedTargetCollisions(state, proposals, byActor, collisionActorIds);
-    occupiedCollisions.forEach((collision) => {
+    const residentSwaps = residentSwapCollisions(state, proposals, byActor, collisionActorIds);
+    residentSwaps.forEach((collision) => {
       collision.proposals.forEach((proposal) => collisionActorIds.add(proposal.actor.id));
       results.push({
         kind: 'bounce',
@@ -1560,17 +1820,46 @@
       if (group.some((proposal) => collisionActorIds.has(proposal.actor.id))) return;
       const target = group[0].target;
       const resident = boxAt(state, target);
+      const targetStacked = boxesAtIndex(state, target).length > 1;
       const residentProposal = resident ? byActor.get(resident.id) : null;
-      const residentVacates = !!(residentProposal && batchIds.has(resident.id) && willVacate.get(resident.id));
+      const residentVacates = !targetStacked
+        && !!(residentProposal && batchIds.has(resident.id) && willVacate.get(resident.id));
       const includeResident = !!(resident && !residentVacates);
       if (group.length > 1) {
         if (includeResident) {
-          results.push({
-            kind: 'bounce',
-            actor: group[0].actor,
-            actors: group.map((proposal) => proposal.actor),
-            moves: group.map((proposal) => moveResultFromActor(proposal.actor, proposal.transition))
-          });
+          if (targetStacked) {
+            results.push({
+              kind: 'bounce',
+              actor: group[0].actor,
+              actors: group.map((proposal) => proposal.actor),
+              moves: group.map((proposal) => moveResultFromActor(proposal.actor, proposal.transition))
+            });
+            return;
+          }
+          const mergeProposal = mergeLocked.has(resident.id)
+            ? null
+            : group.find((proposal) => proposal.actor.value === resident.value);
+          if (mergeProposal) {
+            results.push({
+              kind: 'merge',
+              actor: mergeProposal.actor,
+              movingActors: [mergeProposal.actor],
+              moves: [moveResultFromActor(mergeProposal.actor, mergeProposal.transition)],
+              target,
+              value: mergeProposal.actor.value,
+              newValue: mergeProposal.actor.value * 2,
+              targetBoxId: resident.id
+            });
+          }
+          const bounceGroup = mergeProposal ? group.filter((proposal) => proposal !== mergeProposal) : group;
+          if (bounceGroup.length) {
+            results.push({
+              kind: 'bounce',
+              actor: bounceGroup[0].actor,
+              actors: bounceGroup.map((proposal) => proposal.actor),
+              moves: bounceGroup.map((proposal) => moveResultFromActor(proposal.actor, proposal.transition))
+            });
+          }
           return;
         }
         if (!includeResident && group.length === 2 && group[0].actor.value === group[1].actor.value) {
@@ -1605,6 +1894,15 @@
 
       const proposal = group[0];
       if (includeResident) {
+        if (targetStacked) {
+          results.push({
+            kind: 'bounce',
+            actor: proposal.actor,
+            actors: [proposal.actor],
+            moves: [moveResultFromActor(proposal.actor, proposal.transition)]
+          });
+          return;
+        }
         if (boxIsStillMoving(resident, byActor, willVacate, active)) {
           results.push({ kind: 'wait', actor: proposal.actor });
           return;
@@ -1699,19 +1997,42 @@
     return collisions;
   }
 
-  function occupiedTargetCollisions(state, proposals, byActor, excludedActorIds = new Set()) {
+  function moveTargetsBouncingResident(state, result, boxId, bouncingBoxIds) {
+    if (!bouncingBoxIds.size) return false;
+    return boxesAtIndex(state, result.transition.index).some((resident) => (
+      resident.id !== boxId && bouncingBoxIds.has(resident.id)
+    ));
+  }
+
+  function blockedMovesByBouncingResidents(state, moveEntries, initialBouncingBoxIds) {
+    const blocked = new Set();
+    const bouncing = new Set(initialBouncingBoxIds);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      moveEntries.forEach((entry) => {
+        if (entry.skipped || blocked.has(entry.boxId) || bouncing.has(entry.boxId)) return;
+        if (!moveTargetsBouncingResident(state, entry.result, entry.boxId, bouncing)) return;
+        blocked.add(entry.boxId);
+        bouncing.add(entry.boxId);
+        changed = true;
+      });
+    }
+    return blocked;
+  }
+
+  function residentSwapCollisions(state, proposals, byActor, excludedActorIds = new Set()) {
     const collisions = [];
     const seenActors = new Set();
     groupByTarget(proposals).forEach((group) => {
       if (group.length < 2) return;
-      const blocksImpossibleMerge = group.length === 2 && group[0].actor.value === group[1].actor.value;
-      if (!blocksImpossibleMerge) return;
       if (group.some((proposal) => excludedActorIds.has(proposal.actor.id))) return;
       const target = group[0].target;
       const resident = boxAt(state, target);
       if (!resident) return;
       const residentProposal = byActor.get(resident.id);
       if (!residentProposal || excludedActorIds.has(resident.id)) return;
+      if (!group.some((proposal) => residentProposal.target === proposal.actor.index)) return;
       const collisionProposals = group.concat(residentProposal);
       if (collisionProposals.some((proposal) => seenActors.has(proposal.actor.id))) return;
       collisionProposals.forEach((proposal) => seenActors.add(proposal.actor.id));
@@ -2040,6 +2361,23 @@
     return directionsForPreset(state.preset).every((dir) => !simulateRound(state, dir, { spawn: false }).changed);
   }
 
+  function gameStateChanged(before, after) {
+    if ((before.score || 0) !== (after.score || 0)) return true;
+    if ((before.nextBoxId || 0) !== (after.nextBoxId || 0)) return true;
+    if (before.removed.size !== after.removed.size) return true;
+    for (const index of before.removed) {
+      if (!after.removed.has(index)) return true;
+    }
+    if (before.boxes.length !== after.boxes.length) return true;
+    const beforeBoxes = before.boxes
+      .map((box) => `${box.id}:${box.index}:${box.value}`)
+      .sort();
+    const afterBoxes = after.boxes
+      .map((box) => `${box.id}:${box.index}:${box.value}`)
+      .sort();
+    return beforeBoxes.some((entry, index) => entry !== afterBoxes[index]);
+  }
+
   function cloneGameState(source) {
     return {
       preset: source.preset,
@@ -2049,6 +2387,7 @@
       nextBoxId: source.nextBoxId,
       score: source.score,
       round: source.round,
+      ending: source.ending || '',
       debugMessage: source.debugMessage || ''
     };
   }
@@ -2068,6 +2407,57 @@
     return state.boxes.filter((box) => targets.has(box.index));
   }
 
+  function boxesAtIndex(state, index) {
+    return state.boxes.filter((box) => box.index === index);
+  }
+
+  function stackedBoxIdSet(state) {
+    const counts = new Map();
+    state.boxes.forEach((box) => {
+      counts.set(box.index, (counts.get(box.index) || 0) + 1);
+    });
+    const stacked = new Set();
+    state.boxes.forEach((box) => {
+      if ((counts.get(box.index) || 0) > 1) stacked.add(box.id);
+    });
+    return stacked;
+  }
+
+  function stackedTileDetails(state) {
+    if (!state || !state.boxes) return [];
+    const groups = new Map();
+    state.boxes.forEach((box) => {
+      const group = groups.get(box.index) || [];
+      group.push(box);
+      groups.set(box.index, group);
+    });
+    return Array.from(groups.entries())
+      .filter((entry) => entry[1].length > 1)
+      .map(([index, boxes]) => ({
+        index,
+        ...rowCol(index, state.preset.cols),
+        boxIds: boxes.map((box) => box.id),
+        values: boxes.map((box) => box.value)
+      }))
+      .sort((a, b) => a.index - b.index);
+  }
+
+  function stackWarningText(state) {
+    const stacks = stackedTileDetails(state);
+    if (!stacks.length) return '';
+    const count = stacks.reduce((sum, stack) => sum + stack.boxIds.length, 0);
+    const tiles = stacks.slice(0, 3).map((stack) => `r${stack.row} c${stack.col}`).join(', ');
+    return `warning: ${count} stacked boxes on ${stacks.length} tile${stacks.length === 1 ? '' : 's'} (${tiles}${stacks.length > 3 ? ', ...' : ''})`;
+  }
+
+  function gameWarnings(state) {
+    const stackWarning = stackWarningText(state);
+    const stacks = stackedTileDetails(state);
+    return stackWarning
+      ? [{ kind: 'stacked-boxes', message: stackWarning, tiles: stacks }]
+      : [];
+  }
+
   function findBox(state, id) {
     return state.boxes.find((box) => box.id === id) || null;
   }
@@ -2078,6 +2468,10 @@
 
   function removeBox(state, id) {
     state.boxes = state.boxes.filter((box) => box.id !== id);
+  }
+
+  function removeBoxesAtIndex(state, index) {
+    state.boxes = state.boxes.filter((box) => box.index !== index);
   }
 
   function groupByTarget(proposals) {
@@ -2471,9 +2865,11 @@
   }
 
   function syncStatus(status, info, badge) {
+    const warning = stackWarningText(game);
+    const infoText = warning ? `${info || ''}${info ? ' | ' : ''}${warning}` : (info || '');
     if (refs.statusBadge) refs.statusBadge.textContent = badge || '';
     if (refs.statusLine) refs.statusLine.textContent = status || '';
-    if (refs.infoLine) refs.infoLine.textContent = info || '';
+    if (refs.infoLine) refs.infoLine.textContent = infoText;
     syncStats();
   }
 
@@ -2490,6 +2886,7 @@
     if (refs.nextStep) refs.nextStep.disabled = !(isStepMode() && stepPaused && eventQueue.length && !currentAnimation);
     if (refs.undo) refs.undo.disabled = !undoStack.length;
     if (refs.exportState) refs.exportState.disabled = !game;
+    if (refs.importState) refs.importState.disabled = !debugMode;
     syncDebugModeUi();
     const activeLattice = latticeForPreset(game ? game.preset : selectedPreset()).id;
     if (refs.moveGroups) {

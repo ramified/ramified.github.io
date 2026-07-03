@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const SCHEMA_VERSION = 1;
+  const SCHEMA_VERSION = 2;
   const DEFAULT_GRAPH_TITLE = 'Dependency Graph';
   const PRESET_FOLDER_URL = 'theorem_graph_presets/';
   const NODE_TYPES = {
@@ -11,9 +11,17 @@
     corollary: { label: 'Corollary', fill: '#eef7f4', stroke: '#46786e', band: '#46786e' },
     conjecture: { label: 'Conjecture', fill: '#fbefee', stroke: '#8b3a2a', band: '#8b3a2a' },
     definition: { label: 'Definition', fill: '#f4f1f8', stroke: '#66527c', band: '#66527c' },
-    example: { label: 'Example', fill: '#f7f5f1', stroke: '#7a6f65', band: '#7a6f65' }
+    example: { label: 'Example', fill: '#f7f5f1', stroke: '#7a6f65', band: '#7a6f65' },
+    misc: { label: 'Misc', fill: '#f1f5f7', stroke: '#4d6f7d', band: '#4d6f7d' }
   };
   const NODE_TYPE_KEYS = Object.keys(NODE_TYPES);
+  const LEGACY_NODE_DETAIL_FIELDS = [
+    { key: 'setting', label: 'setting' },
+    { key: 'condition', label: 'condition' },
+    { key: 'result', label: 'result' },
+    { key: 'proofSketch', label: 'proof sketch' }
+  ];
+  const MISC_DETAIL_TYPES = new Set(['textbox', 'list', 'enumeration']);
   const KNOWN_NODE_KEYS = new Set([
     'id',
     'type',
@@ -22,6 +30,7 @@
     'condition',
     'result',
     'proofSketch',
+    'details',
     'citationKeys',
     'color',
     'fillColor',
@@ -187,6 +196,7 @@
     refs.nodeEditor = $('node-editor');
     refs.nodeType = $('node-type');
     refs.nodeLabel = $('node-label');
+    refs.nodeFixedDetailRows = Array.from(document.querySelectorAll('[data-node-fixed-detail]'));
     refs.nodeSetting = $('node-setting');
     refs.nodeCondition = $('node-condition');
     refs.nodeResult = $('node-result');
@@ -195,6 +205,11 @@
     refs.nodeConditionPreview = $('node-condition-preview');
     refs.nodeResultPreview = $('node-result-preview');
     refs.nodeProofSketchPreview = $('node-proof-sketch-preview');
+    refs.nodeMiscEditor = $('node-misc-editor');
+    refs.nodeMiscDetailName = $('node-misc-detail-name');
+    refs.nodeMiscDetailType = $('node-misc-detail-type');
+    refs.nodeMiscDetailList = $('node-misc-detail-list');
+    refs.addNodeMiscDetail = $('add-node-misc-detail');
     refs.nodeColor = $('node-color');
     refs.nodeFillColor = $('node-fill-color');
     refs.arrowEditor = $('arrow-editor');
@@ -288,6 +303,7 @@
 
     if (refs.clearGraph) refs.clearGraph.addEventListener('click', clearGraphWithConfirm);
     if (refs.addNode) refs.addNode.addEventListener('click', addNodeFromControls);
+    if (refs.addNodeMiscDetail) refs.addNodeMiscDetail.addEventListener('click', addMiscDetailFromControls);
     if (refs.connectMode) refs.connectMode.addEventListener('click', toggleConnectMode);
     if (refs.deleteSelected) refs.deleteSelected.addEventListener('click', deleteSelected);
     if (refs.toggleLayout) refs.toggleLayout.addEventListener('click', toggleLayout);
@@ -553,13 +569,15 @@
   }
 
   function autoResizeDetailTextareas() {
-    [
+    const textareas = [
       refs.nodeSetting,
       refs.nodeCondition,
       refs.nodeResult,
       refs.nodeProofSketch,
+      ...(refs.nodeMiscDetailList ? refs.nodeMiscDetailList.querySelectorAll('textarea.theorem-textarea') : []),
       refs.arrowRemark
-    ].forEach(autoResizeTextarea);
+    ];
+    textareas.forEach(autoResizeTextarea);
   }
 
   function bindLatexDetailPreviewEvents() {
@@ -660,6 +678,7 @@
       condition: cleanString(source.condition),
       result: cleanString(source.result),
       proofSketch: cleanString(source.proofSketch),
+      details: normalizeMiscDetails(source, type),
       citationKeys: normalizeCitationKeys(source.citationKeys),
       color: normalizeColor(source.color, NODE_TYPES[type].stroke),
       fillColor: normalizeNodeFillColor(source.fillColor || source.fill, NODE_TYPES[type].fill),
@@ -719,6 +738,95 @@
       if (!knownKeys.has(key)) extra[key] = source[key];
     });
     return extra;
+  }
+
+  function normalizeMiscDetails(source = {}, type = 'theorem') {
+    if (normalizeType(type) !== 'misc') return [];
+    const rawDetails = Array.isArray(source.details) ? source.details : [];
+    if (rawDetails.length) {
+      const used = new Set();
+      const details = rawDetails.map((entry, index) => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+        const label = cleanDetailLabel(entry.label || entry.name || entry.title) || `detail ${index + 1}`;
+        const id = uniqueDetailId(cleanDetailId(entry.id || label), used);
+        const text = cleanString(
+          Object.prototype.hasOwnProperty.call(entry, 'text') ? entry.text
+            : Object.prototype.hasOwnProperty.call(entry, 'value') ? entry.value
+              : entry.content
+        );
+        return {
+          id,
+          label,
+          type: normalizeMiscDetailType(entry.type || entry.mode || entry.kind),
+          text
+        };
+      }).filter(Boolean);
+      if (details.length) return details;
+    }
+    return legacyFieldsToMiscDetails(source);
+  }
+
+  function legacyFieldsToMiscDetails(source = {}) {
+    const used = new Set();
+    return LEGACY_NODE_DETAIL_FIELDS.map(({ key, label }) => {
+      const text = cleanString(source[key]);
+      if (!text) return null;
+      return {
+        id: uniqueDetailId(label, used),
+        label,
+        type: 'textbox',
+        text
+      };
+    }).filter(Boolean);
+  }
+
+  function normalizeMiscDetailType(type) {
+    const value = cleanString(type).toLowerCase();
+    if (value === 'numbered' || value === 'ordered' || value === 'enum') return 'enumeration';
+    if (value === 'bullet' || value === 'bullets' || value === 'unordered') return 'list';
+    if (value === 'text' || value === 'textarea') return 'textbox';
+    return MISC_DETAIL_TYPES.has(value) ? value : 'textbox';
+  }
+
+  function cleanDetailLabel(value) {
+    return cleanString(value).replace(/\s+/g, ' ').slice(0, 48);
+  }
+
+  function cleanDetailId(value) {
+    return cleanString(value)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 48);
+  }
+
+  function miscDetailFieldKey(detailId) {
+    return `misc:${cleanDetailId(detailId)}`;
+  }
+
+  function uniqueDetailId(base, used) {
+    const root = cleanDetailId(base) || 'detail';
+    let id = root;
+    let index = 2;
+    while (used.has(id)) {
+      id = `${root}-${index}`;
+      index += 1;
+    }
+    used.add(id);
+    return id;
+  }
+
+  function cloneMiscDetails(details) {
+    return (Array.isArray(details) ? details : []).map((detail) => ({
+      id: cleanDetailId(detail.id),
+      label: cleanDetailLabel(detail.label),
+      type: normalizeMiscDetailType(detail.type || detail.mode),
+      text: cleanString(detail.text)
+    }));
+  }
+
+  function cleanMiscDetailsForExport(details) {
+    return cloneMiscDetails(details).filter((detail) => detail.label || detail.text);
   }
 
   function nextNodeId() {
@@ -1695,6 +1803,58 @@
     renderAll();
   }
 
+  function addMiscDetailFromControls() {
+    const node = findNode(state.selectedNodeId);
+    if (!node || node.type !== 'misc') {
+      setStatus('Choose a Misc node before adding an extra field.');
+      return;
+    }
+    applyNodeDetailFromControls(node);
+    const label = cleanDetailLabel(refs.nodeMiscDetailName ? refs.nodeMiscDetailName.value : '');
+    if (!label) {
+      setStatus('Name the extra field before adding it.');
+      if (refs.nodeMiscDetailName) refs.nodeMiscDetailName.focus();
+      return;
+    }
+    const id = uniqueDetailId(label, new Set(node.details.map((detail) => detail.id)));
+    node.details.push({
+      id,
+      label,
+      type: normalizeMiscDetailType(refs.nodeMiscDetailType ? refs.nodeMiscDetailType.value : 'textbox'),
+      text: ''
+    });
+    if (refs.nodeMiscDetailName) refs.nodeMiscDetailName.value = '';
+    if (refs.nodeMiscDetailType) refs.nodeMiscDetailType.value = 'textbox';
+    state.activeLatexDetailField = miscDetailFieldKey(id);
+    setStatus(`Added ${label} to ${node.label}.`);
+    renderAll();
+    focusMiscDetailText(id);
+  }
+
+  function removeMiscDetailFromControls(detailId) {
+    const node = findNode(state.selectedNodeId);
+    if (!node || node.type !== 'misc') {
+      setStatus('Choose a Misc node before removing an extra field.');
+      return;
+    }
+    applyNodeDetailFromControls(node);
+    const before = node.details.length;
+    node.details = node.details.filter((detail) => detail.id !== detailId);
+    if (node.details.length === before) return;
+    if (state.activeLatexDetailField === miscDetailFieldKey(detailId)) state.activeLatexDetailField = null;
+    setStatus(`Removed extra field from ${node.label}.`);
+    renderAll();
+  }
+
+  function focusMiscDetailText(detailId) {
+    if (!refs.nodeMiscDetailList) return;
+    const row = refs.nodeMiscDetailList.querySelector(`[data-misc-detail-id="${cssEscape(detailId)}"]`);
+    const textarea = row ? row.querySelector('[data-detail-role="text"]') : null;
+    if (!textarea) return;
+    textarea.focus();
+    autoResizeTextarea(textarea);
+  }
+
   function addNode(source) {
     const node = makeNode(source);
     state.nodes.push(node);
@@ -1947,20 +2107,36 @@
     const node = findNode(state.selectedNodeId);
     const arrow = findArrow(state.selectedArrowId);
     const disabled = !node;
+    const isMisc = !!node && node.type === 'misc';
     refs.nodeEmptyNote.hidden = !!(node || arrow);
     refs.nodeEditor.hidden = !node;
     if (refs.arrowEditor) refs.arrowEditor.hidden = !arrow;
+    refs.nodeFixedDetailRows.forEach((row) => {
+      row.hidden = isMisc;
+    });
+    if (refs.nodeMiscEditor) refs.nodeMiscEditor.hidden = !isMisc;
     [
       refs.nodeType,
       refs.nodeLabel,
-      refs.nodeSetting,
-      refs.nodeCondition,
-      refs.nodeResult,
-      refs.nodeProofSketch,
       refs.nodeColor,
       refs.nodeFillColor
     ].forEach((control) => {
       if (control) control.disabled = disabled;
+    });
+    [
+      refs.nodeSetting,
+      refs.nodeCondition,
+      refs.nodeResult,
+      refs.nodeProofSketch
+    ].forEach((control) => {
+      if (control) control.disabled = disabled || isMisc;
+    });
+    [
+      refs.nodeMiscDetailName,
+      refs.nodeMiscDetailType,
+      refs.addNodeMiscDetail
+    ].forEach((control) => {
+      if (control) control.disabled = disabled || !isMisc;
     });
     [
       refs.arrowSource,
@@ -1978,12 +2154,13 @@
     if (refs.detailUpdate) refs.detailUpdate.disabled = !(node || arrow);
     if (refs.detailCancel) refs.detailCancel.disabled = !(node || arrow);
     if (!node) {
-      refs.nodeType.value = 'theorem';
-      refs.nodeLabel.value = '';
+      if (refs.nodeType) refs.nodeType.value = 'theorem';
+      if (refs.nodeLabel) refs.nodeLabel.value = '';
       refs.nodeSetting.value = '';
       refs.nodeCondition.value = '';
       refs.nodeResult.value = '';
       refs.nodeProofSketch.value = '';
+      renderMiscDetailFields(null);
       if (refs.nodeColor) refs.nodeColor.value = '#3d6b4f';
       if (refs.nodeFillColor) refs.nodeFillColor.value = '#f8f1e5';
       populateArrowParentSelects(arrow);
@@ -1999,12 +2176,13 @@
       syncLatexDetailFields();
       return;
     }
-    refs.nodeType.value = node.type;
-    refs.nodeLabel.value = node.label;
+    if (refs.nodeType) refs.nodeType.value = node.type;
+    if (refs.nodeLabel) refs.nodeLabel.value = node.label;
     refs.nodeSetting.value = node.setting;
     refs.nodeCondition.value = node.condition;
     refs.nodeResult.value = node.result;
     refs.nodeProofSketch.value = node.proofSketch;
+    renderMiscDetailFields(isMisc ? node : null);
     if (refs.nodeColor) refs.nodeColor.value = normalizeColor(node.color, NODE_TYPES[node.type].stroke);
     if (refs.nodeFillColor) refs.nodeFillColor.value = normalizeNodeFillColor(node.fillColor, NODE_TYPES[node.type].fill);
     populateArrowParentSelects(null);
@@ -2020,10 +2198,82 @@
     syncLatexDetailFields();
   }
 
+  function renderMiscDetailFields(node) {
+    if (!refs.nodeMiscDetailList) return;
+    refs.nodeMiscDetailList.replaceChildren();
+    if (!node) return;
+    if (!Array.isArray(node.details)) node.details = [];
+    node.details.forEach((detail) => {
+      refs.nodeMiscDetailList.appendChild(createMiscDetailRow(detail));
+    });
+    autoResizeDetailTextareas();
+    syncLatexDetailFields();
+  }
+
+  function createMiscDetailRow(detail) {
+    const row = document.createElement('div');
+    row.className = 'theorem-field-row';
+    row.dataset.miscDetailId = detail.id;
+
+    const label = document.createElement('span');
+    label.className = 'input-label';
+    label.textContent = detail.label;
+
+    const body = document.createElement('div');
+    body.className = 'theorem-misc-detail-body';
+
+    const textarea = document.createElement('textarea');
+    textarea.className = 'theorem-textarea';
+    textarea.spellcheck = true;
+    textarea.value = detail.text;
+    textarea.dataset.detailRole = 'text';
+    textarea.addEventListener('input', autoApplyDetailUpdate);
+    textarea.addEventListener('change', autoApplyDetailUpdate);
+    textarea.addEventListener('focus', () => {
+      state.activeLatexDetailField = miscDetailFieldKey(detail.id);
+      syncLatexDetailFields();
+    });
+    textarea.addEventListener('blur', () => {
+      window.setTimeout(() => {
+        if (state.activeLatexDetailField === miscDetailFieldKey(detail.id) && document.activeElement !== textarea) {
+          state.activeLatexDetailField = null;
+          syncLatexDetailFields();
+        }
+      }, 0);
+    });
+
+    const preview = document.createElement('button');
+    preview.type = 'button';
+    preview.className = 'theorem-latex-preview';
+    preview.dataset.detailPreview = 'true';
+    preview.hidden = true;
+    preview.addEventListener('click', () => {
+      showLatexDetailEditor(miscDetailFieldKey(detail.id));
+    });
+
+    const actions = document.createElement('div');
+    actions.className = 'theorem-misc-detail-actions';
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn btn-ghost theorem-small-button';
+    remove.textContent = 'remove';
+    remove.addEventListener('click', () => removeMiscDetailFromControls(detail.id));
+    actions.appendChild(remove);
+
+    body.append(textarea, preview, actions);
+    row.append(label, body);
+    return row;
+  }
+
   function showLatexDetailEditor(key) {
+    let input = null;
     const field = NODE_DETAIL_LATEX_FIELDS.find((item) => item.key === key);
-    if (!field) return;
-    const input = refs[field.inputRef];
+    if (field) {
+      input = refs[field.inputRef];
+    } else if (key.startsWith('misc:') && refs.nodeMiscDetailList) {
+      const row = refs.nodeMiscDetailList.querySelector(`[data-misc-detail-id="${cssEscape(key.slice(5))}"]`);
+      input = row ? row.querySelector('[data-detail-role="text"]') : null;
+    }
     if (!input) return;
     state.activeLatexDetailField = key;
     syncLatexDetailFields();
@@ -2043,10 +2293,10 @@
       const preview = refs[previewRef];
       if (!input || !preview) return;
       const value = input.value;
-      const showPreview = !!node && state.activeLatexDetailField !== key && hasDollarMath(value);
+      const showPreview = !!node && node.type !== 'misc' && state.activeLatexDetailField !== key && hasDollarMath(value);
       input.hidden = showPreview;
       preview.hidden = !showPreview;
-      preview.disabled = !node;
+      preview.disabled = !node || node.type === 'misc';
       preview.setAttribute('aria-label', `Edit ${key}`);
       if (showPreview) {
         if (preview.dataset.sourceText !== value) {
@@ -2062,13 +2312,71 @@
         delete preview.dataset.sourceText;
       }
     });
+
+    const rows = refs.nodeMiscDetailList ? refs.nodeMiscDetailList.querySelectorAll('[data-misc-detail-id]') : [];
+    rows.forEach((row) => {
+      const detailId = row.dataset.miscDetailId || '';
+      const key = miscDetailFieldKey(detailId);
+      const input = row.querySelector('[data-detail-role="text"]');
+      const preview = row.querySelector('[data-detail-preview]');
+      if (!input || !preview) return;
+      const value = input.value;
+      const detail = node && Array.isArray(node.details) ? node.details.find((item) => item.id === detailId) : null;
+      const type = normalizeMiscDetailType(detail ? detail.type : 'textbox');
+      const showPreview = !!node && node.type === 'misc' && state.activeLatexDetailField !== key && !!cleanString(value) && (type !== 'textbox' || hasDollarMath(value));
+      input.hidden = showPreview;
+      preview.hidden = !showPreview;
+      preview.disabled = !node || node.type !== 'misc';
+      preview.setAttribute('aria-label', `Edit ${detail ? detail.label : 'detail'}`);
+      if (showPreview) {
+        if (preview.dataset.sourceText !== value || preview.dataset.detailType !== type) {
+          if (window.MathJax && typeof window.MathJax.typesetClear === 'function') {
+            window.MathJax.typesetClear([preview]);
+          }
+          renderDetailPreviewContent(preview, value, type);
+          preview.dataset.sourceText = value;
+          preview.dataset.detailType = type;
+          preview.dataset.needsTypeset = 'true';
+        }
+      } else {
+        delete preview.dataset.needsTypeset;
+        delete preview.dataset.sourceText;
+        delete preview.dataset.detailType;
+      }
+    });
     typesetLatexDetailPreviews();
   }
 
+  function renderDetailPreviewContent(preview, value, type) {
+    preview.replaceChildren();
+    if (type === 'list' || type === 'enumeration') {
+      const list = document.createElement(type === 'list' ? 'ul' : 'ol');
+      detailListItems(value).forEach((item) => {
+        const li = document.createElement('li');
+        li.textContent = item;
+        list.appendChild(li);
+      });
+      preview.appendChild(list);
+      return;
+    }
+    preview.textContent = value;
+  }
+
+  function detailListItems(value) {
+    return cleanString(value)
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)/, '').trim())
+      .filter(Boolean);
+  }
+
   function typesetLatexDetailPreviews() {
-    const pending = NODE_DETAIL_LATEX_FIELDS
+    const fixedPending = NODE_DETAIL_LATEX_FIELDS
       .map(({ previewRef }) => refs[previewRef])
       .filter((preview) => preview && !preview.hidden && preview.dataset.needsTypeset === 'true');
+    const miscPending = refs.nodeMiscDetailList
+      ? Array.from(refs.nodeMiscDetailList.querySelectorAll('[data-detail-preview][data-needs-typeset="true"]'))
+      : [];
+    const pending = fixedPending.concat(miscPending);
     if (!pending.length) return;
     if (!window.MathJax || typeof window.MathJax.typesetPromise !== 'function') {
       scheduleMathTypesetRetry();
@@ -2132,7 +2440,11 @@
 
   function autoApplyDetailUpdate(event) {
     autoResizeTextarea(event?.target);
-    applyDetailUpdate({ manual: false });
+    const updated = applyDetailUpdate({ manual: false });
+    if (updated && event?.target === refs.nodeType) {
+      syncEditor();
+      syncControls();
+    }
   }
 
   function applyDetailUpdate({ manual = true } = {}) {
@@ -2176,15 +2488,45 @@
   }
 
   function applyNodeDetailFromControls(node) {
+    const previousType = node.type;
     const type = normalizeType(refs.nodeType ? refs.nodeType.value : node.type);
+    const fixedValues = {
+      setting: cleanString(refs.nodeSetting ? refs.nodeSetting.value : node.setting),
+      condition: cleanString(refs.nodeCondition ? refs.nodeCondition.value : node.condition),
+      result: cleanString(refs.nodeResult ? refs.nodeResult.value : node.result),
+      proofSketch: cleanString(refs.nodeProofSketch ? refs.nodeProofSketch.value : node.proofSketch)
+    };
     node.type = type;
     node.label = cleanString(refs.nodeLabel ? refs.nodeLabel.value : node.label) || node.id;
-    node.setting = cleanString(refs.nodeSetting ? refs.nodeSetting.value : node.setting);
-    node.condition = cleanString(refs.nodeCondition ? refs.nodeCondition.value : node.condition);
-    node.result = cleanString(refs.nodeResult ? refs.nodeResult.value : node.result);
-    node.proofSketch = cleanString(refs.nodeProofSketch ? refs.nodeProofSketch.value : node.proofSketch);
+    if (type === 'misc') {
+      node.setting = '';
+      node.condition = '';
+      node.result = '';
+      node.proofSketch = '';
+      node.details = previousType === 'misc'
+        ? collectMiscDetailsFromControls(node.details)
+        : legacyFieldsToMiscDetails(fixedValues);
+    } else {
+      Object.assign(node, fixedValues);
+      node.details = [];
+    }
     node.color = normalizeColor(refs.nodeColor ? refs.nodeColor.value : node.color, NODE_TYPES[type].stroke);
     node.fillColor = normalizeNodeFillColor(refs.nodeFillColor ? refs.nodeFillColor.value : node.fillColor, NODE_TYPES[type].fill);
+  }
+
+  function collectMiscDetailsFromControls(fallback = []) {
+    if (!refs.nodeMiscDetailList) return cloneMiscDetails(fallback);
+    const fallbackById = new Map(cloneMiscDetails(fallback).map((detail) => [detail.id, detail]));
+    const rows = Array.from(refs.nodeMiscDetailList.querySelectorAll('[data-misc-detail-id]'));
+    return rows.map((row, index) => {
+      const id = cleanDetailId(row.dataset.miscDetailId) || `detail-${index + 1}`;
+      const fallbackDetail = fallbackById.get(id) || { id, label: `detail ${index + 1}`, type: 'textbox', text: '' };
+      const text = row.querySelector('[data-detail-role="text"]');
+      return {
+        ...fallbackDetail,
+        text: cleanString(text ? text.value : '')
+      };
+    });
   }
 
   function applyArrowDetailFromControls(arrow) {
@@ -2277,6 +2619,7 @@
       condition: node.condition,
       result: node.result,
       proofSketch: node.proofSketch,
+      details: cloneMiscDetails(node.details),
       color: node.color,
       fillColor: node.fillColor
     };
@@ -2307,6 +2650,7 @@
       condition: cleanString(values.condition),
       result: cleanString(values.result),
       proofSketch: cleanString(values.proofSketch),
+      details: normalizeMiscDetails(values, normalizeType(values.type)),
       color: normalizeColor(values.color, NODE_TYPES[normalizeType(values.type)].stroke),
       fillColor: normalizeNodeFillColor(values.fillColor, NODE_TYPES[normalizeType(values.type)].fill)
     });
@@ -2737,6 +3081,7 @@
         id: node.id,
         type: node.type,
         label: node.label,
+        ...(node.type === 'misc' ? { details: cleanMiscDetailsForExport(node.details) } : {}),
         setting: node.setting,
         condition: node.condition,
         result: node.result,

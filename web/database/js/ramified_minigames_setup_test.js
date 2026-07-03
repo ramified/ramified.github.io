@@ -203,21 +203,256 @@ function testVacatingResidentSurvivesIncomingExplosion() {
 }
 
 function testBlockedResidentPreventsGroupExplosion() {
-  const state = stateWithBoxes('classic-4x4', [
+  const preset = {
+    id: 'blocked-resident-mixed',
+    label: 'blocked-resident-mixed',
+    lattice: 'square',
+    rows: 4,
+    cols: 4,
+    surface: 'blocked resident mixed',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [
+      {
+        first: { row: 2, col: 4, dir: game.DIRS.E },
+        second: { row: 1, col: 4, dir: game.DIRS.N }
+      }
+    ]
+  };
+  const state = stateWithBoxes(preset, [
     box(1, 1, 3, 4),
-    box(2, 1, 3, 2),
+    box(2, 2, 4, 2),
     box(3, 1, 4, 4)
   ]);
-  const result = game.simulateRound(state, game.DIRS.E, { spawn: true, rng: () => 0 });
-  assert.strictEqual(result.changed, false);
-  assert.deepStrictEqual(valuesAt(result.state), ['1,3:2', '1,3:4', '1,4:4']);
-  assert.strictEqual(result.events.length, 1);
-  assert.strictEqual(result.events[0].kind, 'bounceGroup');
-  assert.deepStrictEqual(result.events[0].moves.map((move) => move.boxId).sort((a, b) => a - b), [1, 2]);
-  assert.ok(result.events[0].moves.every((move) => move.to === game.indexOf(1, 4, 4)));
+  const result = game.simulateRound(state, game.DIRS.E, { spawn: false });
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(valuesAt(result.state), ['1,4:8', '2,4:2']);
+  const merge = result.events.find((event) => event.kind === 'merge');
+  assert.ok(merge);
+  assert.strictEqual(merge.boxId, 3);
+  assert.deepStrictEqual(merge.removeBoxIds, [1]);
+  assert.strictEqual(merge.newValue, 8);
+  const bounce = result.events.find((event) => event.kind === 'bounceGroup');
+  assert.ok(bounce);
+  assert.deepStrictEqual(bounce.moves.map((move) => move.boxId), [2]);
+  assert.ok(bounce.moves.every((move) => move.to === game.indexOf(1, 4, 4)));
+  assert.ok(bounce.moves[0].glued);
   assert.ok(!result.events.some((event) => event.kind === 'explode'));
   assert.ok(!result.events.some((event) => event.kind === 'removeTile'));
   assert.ok(!result.events.some((event) => event.kind === 'spawn'));
+}
+
+function testSameValueGroupMergesThroughVacatingResident() {
+  const preset = {
+    id: 'vacating-resident-merge',
+    label: 'vacating-resident-merge',
+    lattice: 'square',
+    rows: 3,
+    cols: 3,
+    surface: 'vacating resident merge',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [
+      {
+        first: { row: 3, col: 3, dir: game.DIRS.E },
+        second: { row: 2, col: 2, dir: game.DIRS.W }
+      }
+    ]
+  };
+  const state = stateWithBoxes(preset, [
+    box(1, 2, 1, 4, 3),
+    box(2, 2, 2, 2, 3),
+    box(3, 3, 3, 4, 3)
+  ]);
+  const result = game.simulateRound(state, game.DIRS.E, { spawn: false });
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(valuesAt(result.state, 3), ['2,2:8', '2,3:2']);
+  const merge = result.events.find((event) => event.kind === 'merge');
+  assert.ok(merge);
+  assert.strictEqual(merge.targetBoxId, null);
+  assert.deepStrictEqual(merge.moves.map((move) => move.boxId).sort((a, b) => a - b), [1, 3]);
+  assert.ok(!result.events.some((event) => event.kind === 'bounceGroup'));
+  assert.ok(!result.events.some((event) => event.kind === 'explode'));
+}
+
+function testStackedTileDoesNotExposeHiddenMerge() {
+  const preset = {
+    id: 'stacked-hidden-merge',
+    label: 'stacked-hidden-merge',
+    lattice: 'square',
+    rows: 4,
+    cols: 4,
+    surface: 'stacked hidden merge',
+    removedTiles: [{ row: 4, col: 1 }],
+    cutEdges: [],
+    gluedEdges: []
+  };
+  const state = stateWithBoxes(preset, [
+    box(71, 1, 1, 2),
+    box(41, 2, 1, 16),
+    box(43, 2, 1, 8),
+    box(55, 2, 1, 4),
+    box(70, 2, 1, 2),
+    box(67, 3, 1, 8)
+  ]);
+  const result = game.simulateRound(state, game.DIRS.S, { spawn: true, rng: () => 0 });
+  assert.strictEqual(result.changed, false);
+  assert.deepStrictEqual(valuesAt(result.state), ['1,1:2', '2,1:16', '2,1:2', '2,1:4', '2,1:8', '3,1:8']);
+  assert.ok(!result.events.some((event) => event.kind === 'merge'));
+  assert.ok(!result.events.some((event) => event.kind === 'spawn'));
+  assert.ok(result.events.every((event) => event.kind === 'bounceGroup'));
+}
+
+function testMoveIntoBouncingResidentDoesNotStack() {
+  const preset = {
+    id: 'bouncing-resident-target',
+    label: 'bouncing-resident-target',
+    lattice: 'square',
+    rows: 4,
+    cols: 4,
+    surface: 'bouncing resident target',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [
+      { group: 0, first: { row: 4, col: 4, dir: game.DIRS.S }, second: { row: 1, col: 1, dir: game.DIRS.N } },
+      { group: 1, first: { row: 4, col: 2, dir: game.DIRS.S }, second: { row: 2, col: 4, dir: game.DIRS.E } },
+      { group: 2, first: { row: 1, col: 2, dir: game.DIRS.N }, second: { row: 4, col: 3, dir: game.DIRS.S } },
+      { group: 3, first: { row: 1, col: 4, dir: game.DIRS.N }, second: { row: 1, col: 1, dir: game.DIRS.W } },
+      { group: 4, first: { row: 3, col: 1, dir: game.DIRS.W }, second: { row: 1, col: 4, dir: game.DIRS.E } },
+      { group: 5, first: { row: 4, col: 4, dir: game.DIRS.E }, second: { row: 1, col: 3, dir: game.DIRS.N } },
+      { group: 6, first: { row: 3, col: 4, dir: game.DIRS.E }, second: { row: 4, col: 1, dir: game.DIRS.S } },
+      { group: 7, first: { row: 4, col: 1, dir: game.DIRS.W }, second: { row: 2, col: 1, dir: game.DIRS.W } }
+    ]
+  };
+  const state = stateWithBoxes(preset, [
+    box(8, 1, 2, 2),
+    box(20, 1, 3, 2),
+    box(6, 2, 2, 4),
+    box(16, 2, 4, 4),
+    box(13, 3, 2, 2),
+    box(18, 3, 3, 2),
+    box(14, 4, 1, 4),
+    box(10, 4, 3, 4),
+    box(19, 4, 4, 2)
+  ]);
+  state.removed = new Set([
+    game.indexOf(1, 4, 4),
+    game.indexOf(2, 1, 4),
+    game.indexOf(3, 4, 4),
+    game.indexOf(4, 2, 4)
+  ]);
+  const result = game.simulateRound(state, game.DIRS.E, { spawn: false });
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(valuesAt(result.state), ['1,3:4', '2,4:8', '3,3:4', '4,1:4', '4,3:4', '4,4:2']);
+  const indices = result.state.boxes.map((item) => item.index);
+  assert.strictEqual(indices.length, new Set(indices).size);
+  const mixedGroup = result.events.find((event) => event.kind === 'moveGroup' && event.bounces.some((move) => move.boxId === 10));
+  assert.ok(mixedGroup);
+  const blockedMove = mixedGroup.bounces.find((move) => move.boxId === 10);
+  assert.strictEqual(blockedMove.from, game.indexOf(4, 3, 4));
+  assert.strictEqual(blockedMove.to, game.indexOf(4, 4, 4));
+  assert.strictEqual(blockedMove.value, 4);
+}
+
+function testMoveIntoLaterBouncingResidentDoesNotStack() {
+  const preset = {
+    id: 'later-bouncing-resident-target',
+    label: 'later-bouncing-resident-target',
+    lattice: 'square',
+    rows: 4,
+    cols: 4,
+    surface: 'later bouncing resident target',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [
+      { group: 0, first: { row: 4, col: 4, dir: game.DIRS.S }, second: { row: 1, col: 1, dir: game.DIRS.N } },
+      { group: 1, first: { row: 4, col: 2, dir: game.DIRS.S }, second: { row: 2, col: 4, dir: game.DIRS.E } },
+      { group: 2, first: { row: 1, col: 2, dir: game.DIRS.N }, second: { row: 4, col: 3, dir: game.DIRS.S } },
+      { group: 3, first: { row: 1, col: 4, dir: game.DIRS.N }, second: { row: 1, col: 1, dir: game.DIRS.W } },
+      { group: 4, first: { row: 3, col: 1, dir: game.DIRS.W }, second: { row: 1, col: 4, dir: game.DIRS.E } },
+      { group: 5, first: { row: 4, col: 4, dir: game.DIRS.E }, second: { row: 1, col: 3, dir: game.DIRS.N } },
+      { group: 6, first: { row: 3, col: 4, dir: game.DIRS.E }, second: { row: 4, col: 1, dir: game.DIRS.S } },
+      { group: 7, first: { row: 4, col: 1, dir: game.DIRS.W }, second: { row: 2, col: 1, dir: game.DIRS.W } }
+    ]
+  };
+  const state = stateWithBoxes(preset, [
+    box(33, 1, 1, 8),
+    box(32, 1, 2, 2),
+    box(28, 1, 3, 4),
+    box(34, 2, 2, 2),
+    box(26, 2, 3, 16),
+    box(27, 2, 4, 2),
+    box(14, 3, 1, 4),
+    box(31, 3, 2, 2),
+    box(18, 3, 3, 16),
+    box(30, 4, 1, 2),
+    box(24, 4, 4, 8)
+  ]);
+  state.removed = new Set([
+    game.indexOf(1, 4, 4),
+    game.indexOf(2, 1, 4),
+    game.indexOf(3, 4, 4),
+    game.indexOf(4, 2, 4)
+  ]);
+  const result = game.simulateRound(state, game.DIRS.N, { spawn: false });
+  assert.strictEqual(result.changed, true);
+  const indices = result.state.boxes.map((item) => item.index);
+  assert.strictEqual(indices.length, new Set(indices).size);
+  const mixedGroup = result.events.find((event) => event.kind === 'moveGroup' && event.bounces.some((move) => move.boxId === 18));
+  assert.ok(mixedGroup);
+  const blockedMove = mixedGroup.bounces.find((move) => move.boxId === 18);
+  assert.strictEqual(blockedMove.from, game.indexOf(3, 3, 4));
+  assert.strictEqual(blockedMove.to, game.indexOf(2, 3, 4));
+  assert.strictEqual(blockedMove.value, 16);
+}
+
+function testBounceOnlyDirectionsDoNotPreventGameOver() {
+  const preset = {
+    id: 'bounce-only-terminal',
+    label: 'bounce-only-terminal',
+    lattice: 'square',
+    rows: 4,
+    cols: 4,
+    surface: 'bounce only terminal',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [
+      { group: 0, first: { row: 4, col: 4, dir: game.DIRS.S }, second: { row: 1, col: 1, dir: game.DIRS.N } },
+      { group: 1, first: { row: 4, col: 2, dir: game.DIRS.S }, second: { row: 2, col: 4, dir: game.DIRS.E } },
+      { group: 2, first: { row: 1, col: 2, dir: game.DIRS.N }, second: { row: 4, col: 3, dir: game.DIRS.S } },
+      { group: 3, first: { row: 1, col: 4, dir: game.DIRS.N }, second: { row: 1, col: 1, dir: game.DIRS.W } },
+      { group: 4, first: { row: 3, col: 1, dir: game.DIRS.W }, second: { row: 1, col: 4, dir: game.DIRS.E } },
+      { group: 5, first: { row: 4, col: 4, dir: game.DIRS.E }, second: { row: 1, col: 3, dir: game.DIRS.N } },
+      { group: 6, first: { row: 3, col: 4, dir: game.DIRS.E }, second: { row: 4, col: 1, dir: game.DIRS.S } },
+      { group: 7, first: { row: 4, col: 1, dir: game.DIRS.W }, second: { row: 2, col: 1, dir: game.DIRS.W } }
+    ]
+  };
+  const state = stateWithBoxes(preset, [
+    box(49, 1, 1, 2),
+    box(24, 1, 2, 16),
+    box(54, 1, 3, 4),
+    box(55, 2, 2, 2),
+    box(45, 2, 3, 8),
+    box(52, 2, 4, 4),
+    box(56, 3, 1, 8),
+    box(36, 3, 2, 32),
+    box(50, 3, 3, 4),
+    box(57, 4, 1, 2),
+    box(53, 4, 3, 2),
+    box(26, 4, 4, 32)
+  ]);
+  state.score = 312;
+  state.nextBoxId = 58;
+  state.removed = new Set([
+    game.indexOf(1, 4, 4),
+    game.indexOf(2, 1, 4),
+    game.indexOf(3, 4, 4),
+    game.indexOf(4, 2, 4)
+  ]);
+  const results = Object.values(game.DIRS).map((dir) => game.simulateRound(state, dir, { spawn: false }));
+  assert.ok(results.every((result) => result.changed === false));
+  assert.ok(results.some((result) => result.events.some((event) => event.kind === 'bounceGroup')));
+  assert.strictEqual(game.isGameOver(state), true);
 }
 
 function testBlockedResidentWithSuccessorPreventsGroupExplosion() {
@@ -270,6 +505,38 @@ function testMoveEventsAreGroupedByTick() {
     assert.ok(Number.isInteger(move.to));
     assert.ok(Number.isFinite(move.value));
   });
+}
+
+function testBouncesAndMovesShareTickAnimation() {
+  const preset = {
+    id: 'mixed-bounce-move-tick',
+    label: 'mixed-bounce-move-tick',
+    lattice: 'square',
+    rows: 4,
+    cols: 4,
+    surface: 'mixed bounce move tick',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [
+      {
+        first: { row: 4, col: 1, dir: game.DIRS.S },
+        second: { row: 4, col: 3, dir: game.DIRS.S }
+      }
+    ]
+  };
+  const state = stateWithBoxes(preset, [
+    box(16, 4, 1, 2),
+    box(25, 4, 3, 2),
+    box(27, 3, 3, 2),
+    box(22, 2, 2, 16)
+  ]);
+  const result = game.simulateRound(state, game.DIRS.S, { spawn: false });
+  assert.strictEqual(result.changed, true);
+  assert.strictEqual(result.events[0].kind, 'moveGroup');
+  assert.deepStrictEqual(result.events[0].moves.map((move) => move.boxId), [22]);
+  assert.deepStrictEqual(result.events[0].bounces.map((move) => move.boxId).sort((a, b) => a - b), [16, 25, 27]);
+  assert.ok(result.events[0].bounces.some((move) => move.boxId === 16 && move.glued));
+  assert.ok(!result.events[0].explosions.length);
 }
 
 function testGluedBoxRejoinsNextMovementStep() {
@@ -548,6 +815,8 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameHtml.includes('id="import-preset-toggle"'));
   assert.ok(minigameHtml.includes('id="import-preset-input"'));
   assert.ok(minigameHtml.includes('id="apply-import-preset"'));
+  assert.ok(minigameHtml.includes('id="import-state"'));
+  assert.ok(!minigameHtml.includes('id="debug-export-output" readonly'));
   assert.ok(minigameHtml.includes('<div class="mosaic-debug-step-row">'));
   assert.ok(minigameHtml.includes('<option value="">empty</option>'));
   assert.ok(mosaicHtml.includes('id="export-background-preset"'));
@@ -808,6 +1077,7 @@ function testHeadlessDomStepControls() {
     makeElement('debug-tile-value', { value: '128' }),
     makeElement('undo-step'),
     makeElement('export-state'),
+    makeElement('import-state'),
     makeElement('debug-export-output'),
     makeElement('status-badge'),
     makeElement('status-line'),
@@ -866,6 +1136,7 @@ function testHeadlessDomStepControls() {
   elements.get('debug-toggle').listeners.click();
   assert.strictEqual(elements.get('debug-tools').hidden, false);
   assert.strictEqual(elements.get('debug-toggle').attributes['aria-pressed'], 'true');
+  assert.strictEqual(elements.get('import-state').disabled, false);
 
   elements.get('debug-tile-value').value = '1';
   canvas.listeners.click({ clientX: 57, clientY: 57 });
@@ -931,6 +1202,72 @@ function testHeadlessDomStepControls() {
   assert.strictEqual(elements.get('status-line').textContent, 'preset imported');
   assert.strictEqual(elements.get('existing-tile-value').textContent, '3');
   assert.strictEqual(elements.get('import-preset-tools').hidden, true);
+
+  elements.get('debug-export-output').value = JSON.stringify({
+    preset: {
+      label: 'status import',
+      lattice: 'square',
+      rows: 2,
+      cols: 2,
+      surface: 'debug status'
+    },
+    phase: 'ready',
+    round: 7,
+    score: 12,
+    nextBoxId: 5,
+    boxes: [
+      { id: 1, row: 1, col: 1, value: 2 },
+      { id: 2, row: 1, col: 1, value: 4 },
+      { id: 3, row: 1, col: 2, value: 8 }
+    ],
+    removed: [{ row: 2, col: 2 }],
+    queue: { eventIndex: 0, stepPaused: false, events: [] }
+  });
+  elements.get('import-state').listeners.click();
+  assert.strictEqual(elements.get('status-line').textContent, 'status imported');
+  assert.ok(elements.get('info-line').textContent.includes('warning: 2 stacked boxes'));
+  assert.strictEqual(elements.get('round-value').textContent, '7');
+  assert.strictEqual(elements.get('score-value').textContent, '12');
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.warnings[0].kind, 'stacked-boxes');
+  assert.strictEqual(exported.boxes.length, 3);
+
+  elements.get('debug-export-output').value = JSON.stringify({
+    preset: {
+      label: 'bonus ending import',
+      lattice: 'square',
+      rows: 4,
+      cols: 4,
+      surface: 'full blocked grid'
+    },
+    phase: 'ready',
+    round: 11,
+    score: 20,
+    nextBoxId: 17,
+    boxes: Array.from({ length: 16 }, (_, index) => {
+      const row = Math.floor(index / 4) + 1;
+      const col = (index % 4) + 1;
+      return { id: index + 1, row, col, value: (row + col) % 2 ? 2 : 4 };
+    }),
+    removed: [],
+    queue: { eventIndex: 0, stepPaused: false, events: [] }
+  });
+  elements.get('import-state').listeners.click();
+  ['N', 'W', 'E'].forEach((dir, index) => {
+    moveButtons.find((button) => button.getAttribute('data-move-dir') === dir).listeners.click();
+    assert.strictEqual(elements.get('status-line').textContent, 'no move');
+    assert.strictEqual(elements.get('info-line').textContent, `${index + 1}/4 directions unchanged`);
+  });
+  moveButtons.find((button) => button.getAttribute('data-move-dir') === 'S').listeners.click();
+  assert.strictEqual(elements.get('status-line').textContent, 'bonus ending');
+  assert.strictEqual(elements.get('info-line').textContent, 'all 4 directions unchanged');
+  assert.strictEqual(elements.get('status-badge').textContent, 'over');
+  assert.ok(moveButtons.every((button) => button.disabled));
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.phase, 'gameover');
+  assert.strictEqual(exported.ending, 'bonus');
 }
 
 function run() {
@@ -944,8 +1281,14 @@ function run() {
   testOccupiedMovingResidentBlocksGroupMerge();
   testVacatingResidentSurvivesIncomingExplosion();
   testBlockedResidentPreventsGroupExplosion();
+  testSameValueGroupMergesThroughVacatingResident();
+  testStackedTileDoesNotExposeHiddenMerge();
+  testMoveIntoBouncingResidentDoesNotStack();
+  testMoveIntoLaterBouncingResidentDoesNotStack();
+  testBounceOnlyDirectionsDoNotPreventGameOver();
   testBlockedResidentWithSuccessorPreventsGroupExplosion();
   testMoveEventsAreGroupedByTick();
+  testBouncesAndMovesShareTickAnimation();
   testGluedBoxRejoinsNextMovementStep();
   testGluedMergeCarriesPortalAnimationMove();
   testStoppedBlockerCanBePushedAfterGlue();

@@ -3,7 +3,7 @@
 // { label: "Corrections wait", key: "corrections_wait", file: "corrections_wait.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "title": "Corrections wait",
   "nodes": [
     {
@@ -17,8 +17,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 583.4,
-      "y": 434.9
+      "x": 574.3,
+      "y": 374
     },
     {
       "id": "n11",
@@ -31,8 +31,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 574,
-      "y": 232.5
+      "x": 593.7,
+      "y": 153.8
     },
     {
       "id": "n13",
@@ -45,8 +45,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 252,
-      "y": 504.2
+      "x": 301,
+      "y": 374
     },
     {
       "id": "n21",
@@ -57,10 +57,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 407.6,
-      "y": 311.6
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 375.4,
+      "y": 218
     },
     {
       "id": "n25",
@@ -73,22 +73,30 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 438.5,
-      "y": 85.7
+      "x": 421.3,
+      "y": 46
     },
     {
       "id": "n28",
-      "type": "lemma",
+      "type": "misc",
       "label": "add default color",
-      "setting": "set the braun color as default color (make a list of the current default colors, I felt like fore different type the default color is different)",
-      "condition": "add a new type called \"misc\", and it is no longer setting/condition/result/proof sketch, but user can add any name for the extra textboxes they would like to add. User can also add a list",
+      "details": [
+        {
+          "id": "setting",
+          "label": "setting",
+          "type": "textbox",
+          "text": "set the braun color as default color (make a list of the current default colors, I felt like fore different type the default color is different)"
+        }
+      ],
+      "setting": "",
+      "condition": "",
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fffdf8",
-      "x": 447.6,
-      "y": 470.2
+      "x": 483.1,
+      "y": 293.8
     },
     {
       "id": "n29",
@@ -99,10 +107,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#8b3a2a",
-      "fillColor": "#fffdf8",
-      "x": 203,
-      "y": 227.9
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 170.5,
+      "y": 156.3
     },
     {
       "id": "n30",
@@ -113,10 +121,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 200.1,
-      "y": 368
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 176.1,
+      "y": 310.8
     },
     {
       "id": "n32",
@@ -127,10 +135,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "I need to use this to fix the bug of moving continuously",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 301.7,
-      "y": 128
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 266.9,
+      "y": 46
     }
   ],
   "arrows": [
@@ -238,7 +246,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
     }
   ],
   "view": {
-    "selectedId": "n11",
+    "selectedId": "n28",
     "selectedReferenceKeys": [],
     "layoutRunning": false
   }

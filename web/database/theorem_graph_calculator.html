@@ -234,6 +234,12 @@
       overflow: visible;
     }
 
+    .theorem-latex-preview ul,
+    .theorem-latex-preview ol {
+      margin: 0;
+      padding-left: 1.35rem;
+    }
+
     .theorem-select:focus,
     .theorem-input:focus,
     .theorem-textarea:focus {
@@ -322,6 +328,30 @@
     .theorem-inline-controls {
       display: grid;
       gap: 8px;
+    }
+
+    .theorem-misc-add-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 126px auto;
+      gap: 6px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .theorem-misc-detail-list {
+      display: grid;
+      gap: 0;
+    }
+
+    .theorem-misc-detail-body {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .theorem-misc-detail-actions {
+      display: flex;
+      justify-content: flex-end;
     }
 
     .theorem-reference-list {
@@ -636,6 +666,10 @@
       .theorem-arrow-parts {
         grid-template-columns: 1fr;
       }
+
+      .theorem-misc-add-controls {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -688,31 +722,47 @@
               <option value="conjecture">Conjecture</option>
               <option value="definition">Definition</option>
               <option value="example">Example</option>
+              <option value="misc">Misc</option>
             </select>
           </div>
           <div class="theorem-field-row">
             <label class="input-label" for="node-label">label</label>
             <input id="node-label" class="theorem-input" type="text" maxlength="80" spellcheck="false" autocomplete="off">
           </div>
-          <div class="theorem-field-row">
+          <div class="theorem-field-row" data-node-fixed-detail>
             <label class="input-label" for="node-setting">setting</label>
             <textarea id="node-setting" class="theorem-textarea" spellcheck="true"></textarea>
             <button id="node-setting-preview" class="theorem-latex-preview" type="button" hidden></button>
           </div>
-          <div class="theorem-field-row">
+          <div class="theorem-field-row" data-node-fixed-detail>
             <label class="input-label" for="node-condition">condition</label>
             <textarea id="node-condition" class="theorem-textarea" spellcheck="true"></textarea>
             <button id="node-condition-preview" class="theorem-latex-preview" type="button" hidden></button>
           </div>
-          <div class="theorem-field-row">
+          <div class="theorem-field-row" data-node-fixed-detail>
             <label class="input-label" for="node-result">result</label>
             <textarea id="node-result" class="theorem-textarea" spellcheck="true"></textarea>
             <button id="node-result-preview" class="theorem-latex-preview" type="button" hidden></button>
           </div>
-          <div class="theorem-field-row">
+          <div class="theorem-field-row" data-node-fixed-detail>
             <label class="input-label" for="node-proof-sketch">proof sketch</label>
             <textarea id="node-proof-sketch" class="theorem-textarea" spellcheck="true"></textarea>
             <button id="node-proof-sketch-preview" class="theorem-latex-preview" type="button" hidden></button>
+          </div>
+          <div id="node-misc-editor" hidden>
+            <div class="theorem-field-row">
+              <label class="input-label" for="node-misc-detail-name">extra</label>
+              <div class="theorem-misc-add-controls">
+                <input id="node-misc-detail-name" class="theorem-input" type="text" maxlength="48" spellcheck="true" autocomplete="off" placeholder="name">
+                <select id="node-misc-detail-type" class="theorem-select" aria-label="Extra textbox type">
+                  <option value="textbox">Textbox</option>
+                  <option value="list">List</option>
+                  <option value="enumeration">Enumeration</option>
+                </select>
+                <button class="btn btn-ghost theorem-small-button" id="add-node-misc-detail" type="button">add</button>
+              </div>
+            </div>
+            <div id="node-misc-detail-list" class="theorem-misc-detail-list"></div>
           </div>
           <div class="theorem-field-row">
             <label class="input-label" for="node-color">color</label>
@@ -825,6 +875,7 @@
               <option value="conjecture">Conjecture</option>
               <option value="definition">Definition</option>
               <option value="example">Example</option>
+              <option value="misc">Misc</option>
             </select>
           </div>
           <div class="theorem-field-row">

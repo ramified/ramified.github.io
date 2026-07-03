@@ -29,6 +29,12 @@ Each tick has these phases:
 
 Animation events are deliberately separated from state mutation so debug mode, undo, and step-by-step mode can show the transition.
 
+When one tick contains ordinary moves and bounces, those animations should be bundled into the same visual step. A reciprocal-swap bounce should not consume a whole step before unrelated boxes move; all boxes in the tick have already decided their next local action.
+
+The physical state should have at most one number box on each tile. If a debug or historical bug leaves multiple boxes stacked on one tile, that tile is treated as a hard invalid stack: the stacked boxes do not move independently, incoming boxes bounce, and debug editing the tile replaces or clears the whole stack.
+
+A box that is classified as bouncing remains a blocker for the rest of the tick. Other boxes may not move into its starting tile during that same tick, because the bounce animation returns it to that tile. This has to be resolved as a fixed point before committing any movement: if a newly bouncing box blocks another mover, that other mover also bounces.
+
 ## Current Interactions
 
 ### Stop
@@ -62,36 +68,41 @@ The visual model should feel like boxes are solid objects. Collision detection s
 This means:
 
 1. Detect reciprocal swaps first. If two boxes target each other's current tiles in the same tick, they bounce instead of crossing through each other.
-2. Detect incompatible moving-box collisions before occupied-target merge handling. If two different-valued moving boxes target the same tile, they collide and explode; a third box that is vacating that tile in the same tick should be allowed to finish its move.
-3. Before an occupied-target explosion, check whether the resident blocker can actually vacate during this tick. If it cannot vacate, either because it has no successor or because its successor is blocked by another hard box, the incoming boxes are blocked by that resident and should bounce rather than explode.
-4. Detect occupied-target conflicts before same-value group merges. If two equal boxes target a tile that contains a third box that is moving away in the same tick, the equal boxes should not merge through that third box. The collision at the still-occupied tile wins.
-5. Only allow a merge into a tile when the target is physically empty for that tick, or the merge is with a stationary resident box already on that tile.
+2. If two or more moving boxes target the same tile with no resident, they either merge when the values match or explode when the values are incompatible.
+3. If the target has a resident that cannot actually vacate during this tick, the resident is a hard blocker. Incoming boxes matching the resident may merge with it; nonmatching incoming boxes bounce.
+4. If the target has a resident that is leaving by reciprocal swap with one of the incoming boxes, the resident and all incoming boxes bounce.
+5. If the target has a resident that vacates without a reciprocal swap, resolve the incoming same-target group as though the tile is becoming available: same values merge, incompatible values explode.
+6. Single-box moves then follow the usual merge, push, move, or stop rules.
 
 This is game-operator precedence, not JavaScript operator precedence. The important order is:
 
 1. reciprocal swap bounce;
 2. incompatible same-target moving collision/explosion;
-3. hard-blocked occupied target bounce;
-4. impossible same-value merge into a vacating occupied tile;
+3. hard-blocked occupied target merge-or-bounce;
+4. resident reciprocal-swap group bounce;
 5. legal merge;
 6. ordinary move or stop.
 
 Explosion removal should be applied after same-tick vacating moves. Otherwise, the explosion sees the old resident box still sitting on the center tile and can incorrectly delete it.
 
-## Bug To Fix
+## Bug Cases
 
-In the current resolver, a resident box that is also moving can be treated as having already vacated its tile. Then two equal boxes can merge into that resident's current tile during the same tick. Visually, this looks like the merge passes through the resident box, which breaks the physical-world interpretation.
+The resolver has to distinguish several visually similar occupied-target cases.
 
-For the given test case, clicking `up` creates a target tile occupied by a moving resident. Collision should be resolved before the equal-value merge. The correct physical behavior is a bounce or block-style collision animation, with the boxes remaining in their original tiles unless a later tick makes the target truly available.
+If a resident box is also moving, two equal boxes may merge through the resident only when the resident is vacating without a reciprocal swap. If the resident is swapping with one of the incoming boxes, the swap collision wins and the whole group bounces.
+
+If a resident box cannot move away, it is a hard blocker. For example, if `2` and `4` target a tile containing a blocked `4`, the incoming `4` merges with the resident `4`, while the incoming `2` bounces.
 
 ## Implementation Direction
 
-The resolver should add a collision pass before merge creation:
+The resolver should classify multi-box target groups with an explicit condition grammar:
 
-- keep the existing reciprocal-swap bounce;
-- add an occupied-target collision for same-value two-box merge attempts when the target has any resident box, even if that resident has a proposal to move away;
-- emit `bounceGroup` for the incoming proposals and the moving resident proposal;
-- stop all actors participating in that occupied-target collision for this round, so the resident cannot move into an incoming box's original tile while the incoming boxes bounce.
+- keep the existing direct reciprocal-swap bounce;
+- for multi-box groups, check whether the target has a resident;
+- without a resident, merge equal pairs or explode incompatible groups;
+- with a hard-blocking resident, merge one matching incoming box into the resident and bounce the nonmatching incoming boxes;
+- with a reciprocal-swapping resident, bounce the resident and the whole incoming group;
+- with a freely vacating resident, merge or explode the incoming group as if the tile is available;
 - defer explosion tile removal until after same-tick vacating movements are committed, and remove only the declared collision participants rather than every box currently at the explosion center.
 
 This preserves the useful 2048 merge rule while preventing physically impossible merges through an occupied tile.

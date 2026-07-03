@@ -1130,8 +1130,11 @@
               <option value="1048576">1048576</option>
             </select>
           </div>
-          <button class="btn mosaic-import-button" id="export-state" type="button">export status</button>
-          <textarea class="mosaic-editor-input mosaic-debug-export" id="debug-export-output" readonly aria-label="Current game status export"></textarea>
+          <div class="mosaic-debug-actions">
+            <button class="btn mosaic-import-button" id="export-state" type="button">export status</button>
+            <button class="btn mosaic-import-button" id="import-state" type="button">import status</button>
+          </div>
+          <textarea class="mosaic-editor-input mosaic-debug-export" id="debug-export-output" spellcheck="false" autocomplete="off" aria-label="Current game status import or export"></textarea>
         </div>
         <div class="mosaic-inline-row">
           <span class="input-label">Move</span>
