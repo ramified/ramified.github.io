@@ -1,18 +1,20 @@
 (() => {
   'use strict';
 
-  const SCHEMA_VERSION = 2;
+  const SCHEMA_VERSION = 3;
   const DEFAULT_GRAPH_TITLE = 'Dependency Graph';
   const PRESET_FOLDER_URL = 'theorem_graph_presets/';
+  const DEFAULT_NODE_STROKE = '#7a6f65';
+  const DEFAULT_NODE_FILL = '#f7f5f1';
   const NODE_TYPES = {
-    theorem: { label: 'Theorem', fill: '#f8f1e5', stroke: '#3d6b4f', band: '#3d6b4f' },
-    lemma: { label: 'Lemma', fill: '#f4f7ed', stroke: '#6b7f3d', band: '#6b7f3d' },
-    proposition: { label: 'Proposition', fill: '#fff7e8', stroke: '#8a6330', band: '#8a6330' },
-    corollary: { label: 'Corollary', fill: '#eef7f4', stroke: '#46786e', band: '#46786e' },
-    conjecture: { label: 'Conjecture', fill: '#fbefee', stroke: '#8b3a2a', band: '#8b3a2a' },
-    definition: { label: 'Definition', fill: '#f4f1f8', stroke: '#66527c', band: '#66527c' },
-    example: { label: 'Example', fill: '#f7f5f1', stroke: '#7a6f65', band: '#7a6f65' },
-    misc: { label: 'Misc', fill: '#f1f5f7', stroke: '#4d6f7d', band: '#4d6f7d' }
+    theorem: { label: 'Theorem', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
+    lemma: { label: 'Lemma', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
+    proposition: { label: 'Proposition', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
+    corollary: { label: 'Corollary', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
+    conjecture: { label: 'Conjecture', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
+    definition: { label: 'Definition', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
+    example: { label: 'Example', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
+    misc: { label: 'Misc', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE }
   };
   const NODE_TYPE_KEYS = Object.keys(NODE_TYPES);
   const LEGACY_NODE_DETAIL_FIELDS = [
@@ -38,7 +40,7 @@
     'y'
   ]);
   const KNOWN_ARROW_KEYS = new Set(['id', 'sourceId', 'targetId', 'label', 'remark', 'style', 'body', 'head', 'tail', 'level', 'endpointScale', 'curve', 'labelOffset', 'color']);
-  const KNOWN_REFERENCE_KEYS = new Set(['key', 'author', 'title', 'year', 'citeText', 'url', 'source', 'rawBibtex']);
+  const KNOWN_REFERENCE_KEYS = new Set(['key', 'author', 'title', 'year', 'citeText', 'url', 'source', 'rawBibtex', 'links']);
   const ARROW_BODIES = [
     { id: 'none', label: 'none' },
     { id: 'solid', label: 'solid' },
@@ -246,7 +248,6 @@
     refs.linkReferenceUrl = $('link-reference-url');
     refs.linkReferenceKey = $('link-reference-key');
     refs.linkReferenceTitle = $('link-reference-title');
-    refs.linkReferenceSource = $('link-reference-source');
     refs.addLinkReference = $('add-link-reference');
     refs.clearBibtex = $('clear-bibtex');
     refs.deleteSelectedReferences = $('delete-selected-references');
@@ -258,8 +259,10 @@
     refs.referenceEditTitle = $('reference-edit-title');
     refs.referenceEditAuthor = $('reference-edit-author');
     refs.referenceEditYear = $('reference-edit-year');
-    refs.referenceEditUrl = $('reference-edit-url');
-    refs.referenceEditSource = $('reference-edit-source');
+    refs.referenceEditLinks = $('reference-edit-links');
+    refs.referenceEditLinkLabel = $('reference-edit-link-label');
+    refs.referenceEditLinkUrl = $('reference-edit-link-url');
+    refs.referenceEditAddLink = $('reference-edit-add-link');
     refs.referenceEditRaw = $('reference-edit-raw');
     refs.referenceEditSave = $('reference-edit-save');
     refs.referenceEditCancel = $('reference-edit-cancel');
@@ -317,16 +320,23 @@
     if (refs.addLinkReference) refs.addLinkReference.addEventListener('click', addLinkReferenceFromControls);
     if (refs.clearBibtex) refs.clearBibtex.addEventListener('click', () => {
       refs.bibtexInput.value = '';
-      if (refs.linkReferenceUrl) refs.linkReferenceUrl.value = '';
-      if (refs.linkReferenceKey) refs.linkReferenceKey.value = '';
-      if (refs.linkReferenceTitle) refs.linkReferenceTitle.value = '';
-      if (refs.linkReferenceSource) refs.linkReferenceSource.value = 'auto';
+      clearLinkReferenceControls();
       setReferenceMessage('Reference inputs cleared.');
     });
     if (refs.deleteSelectedReferences) refs.deleteSelectedReferences.addEventListener('click', deleteSelectedReferences);
     if (refs.referenceSelectAll) {
       refs.referenceSelectAll.addEventListener('change', toggleReferenceSelectionFromMaster);
     }
+    if (refs.referenceEditAddLink) refs.referenceEditAddLink.addEventListener('click', addReferenceEditLinkFromDraft);
+    [refs.referenceEditLinkLabel, refs.referenceEditLinkUrl].forEach((control) => {
+      if (!control) return;
+      control.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          addReferenceEditLinkFromDraft();
+        }
+      });
+    });
     if (refs.referenceEditSave) refs.referenceEditSave.addEventListener('click', saveReferenceEdit);
     if (refs.referenceEditCancel) refs.referenceEditCancel.addEventListener('click', closeReferenceEdit);
     if (refs.refreshExport) refs.refreshExport.addEventListener('click', () => {
@@ -716,8 +726,16 @@
     const extra = collectExtra(source, KNOWN_REFERENCE_KEYS);
     const key = cleanString(source.key);
     const rawBibtex = cleanString(source.rawBibtex);
-    const url = normalizeUrl(source.url);
-    const sourceType = normalizeReferenceSource(source.source, url ? inferReferenceSource(url) : 'bibtex');
+    const fallbackUrl = normalizeUrl(source.url);
+    const fallbackSource = normalizeReferenceSource(source.source, fallbackUrl ? inferReferenceSource(fallbackUrl) : 'bibtex');
+    const links = normalizeReferenceLinks(source.links, {
+      url: fallbackUrl,
+      source: fallbackSource
+    });
+    const primaryLink = links[0] || null;
+    const sourceType = primaryLink
+      ? normalizeReferenceSource(primaryLink.source, inferReferenceSource(primaryLink.url))
+      : fallbackSource;
     return {
       extra,
       key,
@@ -725,9 +743,40 @@
       title: cleanString(source.title),
       year: cleanString(source.year),
       citeText: cleanString(source.citeText) || referenceDefaultCiteText({ key, source: sourceType, rawBibtex }),
-      url,
+      url: primaryLink ? primaryLink.url : '',
       source: sourceType,
-      rawBibtex
+      rawBibtex,
+      links
+    };
+  }
+
+  function normalizeReferenceLinks(links, fallback = {}) {
+    const normalized = [];
+    if (Array.isArray(links)) {
+      links.forEach((entry) => {
+        const link = normalizeReferenceLink(entry);
+        if (link) normalized.push(link);
+      });
+    }
+    const fallbackUrl = normalizeUrl(fallback.url);
+    if (!normalized.length && fallbackUrl) {
+      normalized.push({
+        url: fallbackUrl,
+        source: normalizeReferenceSource(fallback.source, inferReferenceSource(fallbackUrl)),
+        label: ''
+      });
+    }
+    return normalized;
+  }
+
+  function normalizeReferenceLink(entry) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+    const url = normalizeUrl(entry.url || entry.href);
+    if (!url) return null;
+    return {
+      url,
+      source: normalizeReferenceSource(entry.source, inferReferenceSource(url)),
+      label: cleanString(entry.label)
     };
   }
 
@@ -2161,8 +2210,8 @@
       refs.nodeResult.value = '';
       refs.nodeProofSketch.value = '';
       renderMiscDetailFields(null);
-      if (refs.nodeColor) refs.nodeColor.value = '#3d6b4f';
-      if (refs.nodeFillColor) refs.nodeFillColor.value = '#f8f1e5';
+      if (refs.nodeColor) refs.nodeColor.value = DEFAULT_NODE_STROKE;
+      if (refs.nodeFillColor) refs.nodeFillColor.value = DEFAULT_NODE_FILL;
       populateArrowParentSelects(arrow);
       if (refs.arrowLabel) refs.arrowLabel.value = arrow ? (arrow.label || '') : '';
       if (refs.arrowRemark) refs.arrowRemark.value = arrow ? (arrow.remark || '') : '';
@@ -2705,14 +2754,20 @@
         cite.textContent = citeText;
         body.appendChild(cite);
       }
-      if (reference.url) {
-        const link = document.createElement('a');
-        link.className = 'theorem-reference-link';
-        link.href = reference.url;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.textContent = referenceLinkLabel(reference);
-        body.appendChild(link);
+      const links = referenceLinks(reference);
+      if (links.length) {
+        const linkList = document.createElement('div');
+        linkList.className = 'theorem-reference-link-list';
+        links.forEach((entry, index) => {
+          const link = document.createElement('a');
+          link.className = 'theorem-reference-link';
+          link.href = entry.url;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = referenceLinkLabel(reference, entry, index);
+          linkList.appendChild(link);
+        });
+        body.appendChild(linkList);
       }
 
       const button = document.createElement('button');
@@ -2748,10 +2803,141 @@
     refs.referenceEditTitle.value = reference.title;
     refs.referenceEditAuthor.value = reference.author;
     refs.referenceEditYear.value = reference.year;
-    if (refs.referenceEditUrl) refs.referenceEditUrl.value = reference.url || '';
-    if (refs.referenceEditSource) refs.referenceEditSource.value = normalizeReferenceSource(reference.source, reference.url ? inferReferenceSource(reference.url) : 'bibtex');
+    renderReferenceEditLinks(referenceLinks(reference));
     refs.referenceEditRaw.value = reference.rawBibtex;
     setReferenceMessage(`Editing [${reference.key}].`);
+  }
+
+  function renderReferenceEditLinks(links) {
+    if (!refs.referenceEditLinks) return;
+    refs.referenceEditLinks.replaceChildren();
+    links.forEach((link) => {
+      addReferenceEditLinkRow(link);
+    });
+    clearReferenceEditLinkDraft();
+  }
+
+  function addReferenceEditLinkFromDraft() {
+    const rawUrl = cleanString(refs.referenceEditLinkUrl ? refs.referenceEditLinkUrl.value : '');
+    const label = cleanString(refs.referenceEditLinkLabel ? refs.referenceEditLinkLabel.value : '');
+    if (!rawUrl) {
+      setReferenceMessage('Enter a link before adding.', true);
+      return;
+    }
+    const url = normalizeUrl(rawUrl);
+    if (!url) {
+      setReferenceMessage('Enter a valid link before adding.', true);
+      return;
+    }
+    addReferenceEditLinkRow({
+      url,
+      label,
+      source: inferReferenceSource(url)
+    });
+    clearReferenceEditLinkDraft();
+    setReferenceMessage('Link added to the edit form.');
+  }
+
+  function clearReferenceEditLinkDraft() {
+    if (refs.referenceEditLinkLabel) refs.referenceEditLinkLabel.value = '';
+    if (refs.referenceEditLinkUrl) refs.referenceEditLinkUrl.value = '';
+  }
+
+  function addReferenceEditLinkRow(link = {}) {
+    if (!refs.referenceEditLinks) return;
+    const row = document.createElement('div');
+    row.className = 'theorem-reference-link-row';
+
+    const label = createReferenceLinkLabelControl(link.label);
+
+    const url = document.createElement('input');
+    url.className = 'theorem-input';
+    url.type = 'url';
+    url.spellcheck = false;
+    url.autocomplete = 'off';
+    url.placeholder = 'https://example.com';
+    url.value = cleanString(link.url);
+    url.dataset.referenceLinkUrl = 'true';
+
+    const remove = document.createElement('button');
+    remove.className = 'btn btn-ghost theorem-small-button';
+    remove.type = 'button';
+    remove.textContent = 'delete';
+    remove.addEventListener('click', () => {
+      row.remove();
+    });
+
+    row.append(label, url, remove);
+    refs.referenceEditLinks.appendChild(row);
+  }
+
+  function createReferenceLinkLabelControl(labelText) {
+    const label = document.createElement('span');
+    label.className = 'theorem-reference-link-label-text';
+    label.tabIndex = 0;
+    label.dataset.referenceLinkLabel = 'true';
+    setReferenceLinkLabelText(label, labelText);
+    const beginEdit = () => {
+      if (label.contentEditable === 'true') return;
+      label.dataset.previousLabel = linkLabelValue(label);
+      label.contentEditable = 'true';
+      if (label.classList.contains('is-empty')) {
+        label.textContent = '';
+        label.classList.remove('is-empty');
+      }
+      label.focus();
+    };
+    label.addEventListener('click', beginEdit);
+    label.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        label.blur();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        setReferenceLinkLabelText(label, label.dataset.previousLabel || '');
+        label.blur();
+      }
+    });
+    label.addEventListener('blur', () => {
+      setReferenceLinkLabelText(label, label.textContent);
+      label.contentEditable = 'false';
+    });
+    return label;
+  }
+
+  function setReferenceLinkLabelText(label, value) {
+    const text = cleanString(value);
+    label.textContent = text || 'label';
+    label.classList.toggle('is-empty', !text);
+  }
+
+  function linkLabelValue(label) {
+    if (!label || label.classList.contains('is-empty')) return '';
+    return cleanString(label.textContent);
+  }
+
+  function collectReferenceEditLinks() {
+    if (!refs.referenceEditLinks) return { links: [], invalid: false };
+    const links = [];
+    let invalid = false;
+    const rows = Array.from(refs.referenceEditLinks.querySelectorAll('.theorem-reference-link-row'));
+    rows.forEach((row) => {
+      const urlInput = row.querySelector('[data-reference-link-url]');
+      const labelInput = row.querySelector('[data-reference-link-label]');
+      const rawUrl = cleanString(urlInput ? urlInput.value : '');
+      if (!rawUrl) return;
+      const url = normalizeUrl(rawUrl);
+      if (!url) {
+        invalid = true;
+        return;
+      }
+      links.push({
+        url,
+        source: inferReferenceSource(url),
+        label: linkLabelValue(labelInput)
+      });
+    });
+    return { links, invalid };
   }
 
   function closeReferenceEdit() {
@@ -2776,13 +2962,21 @@
       setReferenceMessage(`Reference [${nextKey}] already exists.`, true);
       return;
     }
+    const linkResult = collectReferenceEditLinks();
+    if (linkResult.invalid) {
+      setReferenceMessage('Enter valid links or remove invalid link rows.', true);
+      return;
+    }
+    const rawBibtex = cleanString(refs.referenceEditRaw.value);
+    const primaryLink = linkResult.links[0] || null;
     original.key = nextKey;
     original.title = cleanString(refs.referenceEditTitle.value);
     original.author = cleanString(refs.referenceEditAuthor.value);
     original.year = cleanString(refs.referenceEditYear.value);
-    original.url = normalizeUrl(refs.referenceEditUrl ? refs.referenceEditUrl.value : original.url);
-    original.source = normalizeReferenceSource(refs.referenceEditSource ? refs.referenceEditSource.value : original.source, original.url ? inferReferenceSource(original.url) : 'bibtex');
-    original.rawBibtex = cleanString(refs.referenceEditRaw.value);
+    original.rawBibtex = rawBibtex;
+    original.links = linkResult.links;
+    original.url = primaryLink ? primaryLink.url : '';
+    original.source = primaryLink ? primaryLink.source : (rawBibtex ? 'bibtex' : normalizeReferenceSource(original.source, 'web'));
     original.citeText = cleanString(refs.referenceEditCite.value) || referenceDefaultCiteText(original);
     if (state.selectedReferenceKeys.has(state.editingReferenceKey)) {
       state.selectedReferenceKeys.delete(state.editingReferenceKey);
@@ -2874,16 +3068,26 @@
       setReferenceMessage('Paste BibTeX before adding.', true);
       return;
     }
+    const overrides = referenceInputOverrides();
+    if (overrides.invalidUrl) {
+      setReferenceMessage('Enter a valid link or leave it blank.', true);
+      return;
+    }
     const parsed = parseBibtex(raw);
     if (!parsed.length) {
       setReferenceMessage('No BibTeX entries found.', true);
       return;
     }
+    if (overrides.hasValues && parsed.length !== 1) {
+      setReferenceMessage('Use link/key/title overrides with exactly one BibTeX entry.', true);
+      return;
+    }
     let added = 0;
     let replaced = 0;
     parsed.forEach((entry) => {
-      if (!entry.key) return;
-      const next = makeReference(entry);
+      const merged = overrides.hasValues ? applyReferenceInputOverrides(entry, overrides) : entry;
+      if (!merged.key) return;
+      const next = makeReference(merged);
       const index = state.references.findIndex((reference) => reference.key === next.key);
       if (index >= 0) {
         state.references[index] = next;
@@ -2898,8 +3102,46 @@
       return;
     }
     refs.bibtexInput.value = '';
+    if (overrides.hasValues) clearLinkReferenceControls();
     setReferenceMessage(`${added} added, ${replaced} replaced.`);
     renderAll();
+  }
+
+  function referenceInputOverrides() {
+    const rawUrl = cleanString(refs.linkReferenceUrl ? refs.linkReferenceUrl.value : '');
+    const url = rawUrl ? normalizeUrl(rawUrl) : '';
+    const key = cleanString(refs.linkReferenceKey ? refs.linkReferenceKey.value : '');
+    const title = cleanString(refs.linkReferenceTitle ? refs.linkReferenceTitle.value : '');
+    return {
+      hasValues: !!(rawUrl || key || title),
+      invalidUrl: !!(rawUrl && !url),
+      key,
+      title,
+      url,
+      source: url ? inferReferenceSource(url) : ''
+    };
+  }
+
+  function applyReferenceInputOverrides(entry, overrides) {
+    const next = { ...entry };
+    if (overrides.key) {
+      next.key = overrides.key;
+      next.citeText = defaultCiteText(overrides.key);
+    }
+    if (overrides.title) next.title = overrides.title;
+    if (overrides.url) {
+      const source = overrides.source || inferReferenceSource(overrides.url);
+      next.url = overrides.url;
+      next.source = source;
+      next.links = [{ url: overrides.url, source, label: '' }];
+    }
+    return next;
+  }
+
+  function clearLinkReferenceControls() {
+    if (refs.linkReferenceUrl) refs.linkReferenceUrl.value = '';
+    if (refs.linkReferenceKey) refs.linkReferenceKey.value = '';
+    if (refs.linkReferenceTitle) refs.linkReferenceTitle.value = '';
   }
 
   function addLinkReferenceFromControls() {
@@ -2914,9 +3156,7 @@
       setReferenceMessage('Enter a title or link before adding.', true);
       return;
     }
-    const inferredSource = refs.linkReferenceSource && refs.linkReferenceSource.value !== 'auto'
-      ? refs.linkReferenceSource.value
-      : (url ? inferReferenceSource(url) : 'web');
+    const inferredSource = url ? inferReferenceSource(url) : 'web';
     const title = titleInput || defaultLinkTitle(url, inferredSource);
     const key = cleanString(refs.linkReferenceKey ? refs.linkReferenceKey.value : '') || nextReferenceKey(inferredSource);
     if (state.references.some((reference) => reference.key === key)) {
@@ -2927,12 +3167,10 @@
       key,
       title,
       source: inferredSource,
-      url
+      url,
+      links: url ? [{ url, source: inferredSource, label: '' }] : []
     }));
-    if (refs.linkReferenceUrl) refs.linkReferenceUrl.value = '';
-    if (refs.linkReferenceKey) refs.linkReferenceKey.value = '';
-    if (refs.linkReferenceTitle) refs.linkReferenceTitle.value = '';
-    if (refs.linkReferenceSource) refs.linkReferenceSource.value = 'auto';
+    clearLinkReferenceControls();
     setReferenceMessage(`Added [${key}].`);
     renderAll();
   }
@@ -2969,7 +3207,8 @@
           url: fields.url || '',
           source: fields.url ? inferReferenceSource(fields.url) : 'bibtex',
           citeText: defaultCiteText(key),
-          rawBibtex: rawEntry
+          rawBibtex: rawEntry,
+          links: fields.url ? [{ url: fields.url, source: inferReferenceSource(fields.url), label: '' }] : []
         });
       }
       index = cursor;
@@ -3117,7 +3356,8 @@
         citeText: referenceExportCiteText(reference),
         url: reference.url,
         source: reference.source,
-        rawBibtex: reference.rawBibtex
+        rawBibtex: reference.rawBibtex,
+        links: referenceExportLinks(reference)
       })),
       view: {
         ...state.viewExtra,
@@ -3638,9 +3878,13 @@
   }
 
   function referenceMeta(reference) {
-    const source = referenceSourceLabel(reference.source);
+    const source = referenceIsBibtexLike(reference)
+      ? 'BibTeX'
+      : (referenceLinks(reference).length ? 'Link' : referenceSourceLabel(reference.source));
+    const linkCount = referenceLinks(reference).length;
+    const linkMeta = linkCount > 1 ? `${linkCount} links` : '';
     const details = [reference.author, reference.year].filter(Boolean).join(' - ');
-    return [source, details].filter(Boolean).join(' - ') || 'metadata not parsed';
+    return [source, linkMeta, details].filter(Boolean).join(' - ') || 'metadata not parsed';
   }
 
   function referenceDisplayCiteText(reference) {
@@ -3664,12 +3908,26 @@
     return normalizeReferenceSource(reference.source, '') === 'bibtex' || !!cleanString(reference.rawBibtex);
   }
 
-  function referenceLinkLabel(reference) {
-    const source = normalizeReferenceSource(reference.source, '');
-    if (source === 'mathoverflow' || source === 'math-stackexchange' || source === 'stacks-project') {
-      return `open ${referenceSourceLabel(source)}`;
-    }
-    return 'open link';
+  function referenceLinks(reference) {
+    return normalizeReferenceLinks(reference.links, {
+      url: reference.url,
+      source: reference.source
+    });
+  }
+
+  function referenceExportLinks(reference) {
+    return referenceLinks(reference).map((link) => ({
+      url: link.url,
+      source: link.source,
+      label: link.label
+    }));
+  }
+
+  function referenceLinkLabel(reference, link, index = 0) {
+    const customLabel = cleanString(link && link.label);
+    if (customLabel) return customLabel;
+    const suffix = index > 0 ? ` ${index + 1}` : '';
+    return `open link${suffix}`;
   }
 
   function referenceSourceLabel(source) {

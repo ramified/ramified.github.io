@@ -416,6 +416,13 @@
       overflow-wrap: anywhere;
     }
 
+    .theorem-reference-link-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 10px;
+      margin-top: 2px;
+    }
+
     .theorem-reference-select-row {
       display: flex;
       justify-content: flex-end;
@@ -445,6 +452,42 @@
 
     .theorem-reference-edit-form[hidden] {
       display: none !important;
+    }
+
+    .theorem-reference-link-editor,
+    .theorem-reference-link-rows {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .theorem-reference-link-add-row,
+    .theorem-reference-link-row {
+      display: grid;
+      grid-template-columns: minmax(56px, 0.35fr) minmax(0, 1fr) auto;
+      gap: 6px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .theorem-reference-link-label-input {
+      min-width: 0;
+    }
+
+    .theorem-reference-link-label-text {
+      color: var(--accent2);
+      cursor: text;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.68rem;
+      line-height: 1.2;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      padding: 5px 0;
+    }
+
+    .theorem-reference-link-label-text.is-empty {
+      color: var(--muted);
+      font-style: italic;
     }
 
     .theorem-detail-actions {
@@ -767,10 +810,12 @@
           <div class="theorem-field-row">
             <label class="input-label" for="node-color">color</label>
             <div class="theorem-color-row">
-              <input id="node-color" class="theorem-color-input" type="color" value="#3d6b4f" aria-label="Node color">
+              <input id="node-color" class="theorem-color-input" type="color" value="#7a6f65" aria-label="Node color">
               <div class="theorem-color-swatches" aria-label="Node color swatches">
+                <button class="theorem-color-swatch" type="button" data-color-target="node-color" data-color-value="#7a6f65" style="--swatch-color: #7a6f65" aria-label="default"></button>
                 <button class="theorem-color-swatch" type="button" data-color-target="node-color" data-color-value="#1a1612" style="--swatch-color: #1a1612" aria-label="black"></button>
-                <button class="theorem-color-swatch" type="button" data-color-target="node-color" data-color-value="#3d6b4f" style="--swatch-color: #3d6b4f" aria-label="green"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="node-color" data-color-value="#6b7f3d" style="--swatch-color: #6b7f3d" aria-label="olive"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="node-color" data-color-value="#46786e" style="--swatch-color: #46786e" aria-label="teal"></button>
                 <button class="theorem-color-swatch" type="button" data-color-target="node-color" data-color-value="#2f5f9f" style="--swatch-color: #2f5f9f" aria-label="blue"></button>
                 <button class="theorem-color-swatch" type="button" data-color-target="node-color" data-color-value="#8b3a2a" style="--swatch-color: #8b3a2a" aria-label="red"></button>
                 <button class="theorem-color-swatch" type="button" data-color-target="node-color" data-color-value="#7a4d9b" style="--swatch-color: #7a4d9b" aria-label="purple"></button>
@@ -780,15 +825,15 @@
           <div class="theorem-field-row">
             <label class="input-label" for="node-fill-color">node fill</label>
             <div class="theorem-color-row">
-              <input id="node-fill-color" class="theorem-color-input" type="color" value="#f8f1e5" aria-label="Node fill color">
+              <input id="node-fill-color" class="theorem-color-input" type="color" value="#f7f5f1" aria-label="Node fill color">
               <div class="theorem-color-swatches" aria-label="Node fill color swatches">
+                <button class="theorem-color-swatch" type="button" data-color-target="node-fill-color" data-color-value="#f7f5f1" style="--swatch-color: #f7f5f1" aria-label="default fill"></button>
                 <button class="theorem-color-swatch" type="button" data-color-target="node-fill-color" data-color-value="#fffdf8" style="--swatch-color: #fffdf8" aria-label="warm white"></button>
-                <button class="theorem-color-swatch" type="button" data-color-target="node-fill-color" data-color-value="#f8f1e5" style="--swatch-color: #f8f1e5" aria-label="cream"></button>
                 <button class="theorem-color-swatch" type="button" data-color-target="node-fill-color" data-color-value="#f4f7ed" style="--swatch-color: #f4f7ed" aria-label="pale green"></button>
                 <button class="theorem-color-swatch" type="button" data-color-target="node-fill-color" data-color-value="#eef7f4" style="--swatch-color: #eef7f4" aria-label="pale teal"></button>
                 <button class="theorem-color-swatch" type="button" data-color-target="node-fill-color" data-color-value="#eef4fb" style="--swatch-color: #eef4fb" aria-label="pale blue"></button>
-                <button class="theorem-color-swatch" type="button" data-color-target="node-fill-color" data-color-value="#f4f1f8" style="--swatch-color: #f4f1f8" aria-label="pale purple"></button>
                 <button class="theorem-color-swatch" type="button" data-color-target="node-fill-color" data-color-value="#fbefee" style="--swatch-color: #fbefee" aria-label="pale red"></button>
+                <button class="theorem-color-swatch" type="button" data-color-target="node-fill-color" data-color-value="#f4f1f8" style="--swatch-color: #f4f1f8" aria-label="pale purple"></button>
               </div>
             </div>
           </div>
@@ -927,16 +972,6 @@
           <label class="input-label" for="link-reference-title">title</label>
           <input id="link-reference-title" class="theorem-input" type="text" spellcheck="true" autocomplete="off" placeholder="source title">
         </div>
-        <div class="theorem-field-row">
-          <label class="input-label" for="link-reference-source">source</label>
-          <select id="link-reference-source" class="theorem-select">
-            <option value="auto" selected>Auto</option>
-            <option value="web">Web</option>
-            <option value="mathoverflow">MathOverflow</option>
-            <option value="math-stackexchange">Math StackExchange</option>
-            <option value="stacks-project">Stacks Project</option>
-          </select>
-        </div>
         <div class="theorem-reference-actions">
           <button class="btn" id="add-reference" type="button">add BibTeX</button>
           <button class="btn" id="add-link-reference" type="button">add source</button>
@@ -965,18 +1000,15 @@
             <input id="reference-edit-year" class="theorem-input" type="text" spellcheck="false" autocomplete="off">
           </div>
           <div class="theorem-field-row">
-            <label class="input-label" for="reference-edit-url">link</label>
-            <input id="reference-edit-url" class="theorem-input" type="url" spellcheck="false" autocomplete="off">
-          </div>
-          <div class="theorem-field-row">
-            <label class="input-label" for="reference-edit-source">source</label>
-            <select id="reference-edit-source" class="theorem-select">
-              <option value="bibtex">BibTeX</option>
-              <option value="web">Web</option>
-              <option value="mathoverflow">MathOverflow</option>
-              <option value="math-stackexchange">Math StackExchange</option>
-              <option value="stacks-project">Stacks Project</option>
-            </select>
+            <span class="input-label">links</span>
+            <div class="theorem-reference-link-editor">
+              <div class="theorem-reference-link-add-row">
+                <input id="reference-edit-link-label" class="theorem-input theorem-reference-link-label-input" type="text" spellcheck="true" autocomplete="off" placeholder="label">
+                <input id="reference-edit-link-url" class="theorem-input" type="url" spellcheck="false" autocomplete="off" placeholder="https://example.com">
+                <button class="btn btn-ghost theorem-small-button" id="reference-edit-add-link" type="button">add</button>
+              </div>
+              <div class="theorem-reference-link-rows" id="reference-edit-links"></div>
+            </div>
           </div>
           <div class="theorem-field-row">
             <label class="input-label" for="reference-edit-raw">raw</label>

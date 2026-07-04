@@ -3594,16 +3594,29 @@
     }
     state.knotCodeKind = normalizeKnotCodeKind(payload.knotCodeKind || (payload.display && payload.display.knotCodeKind));
     state.drawLayer = normalizeDrawLayer(payload.drawLayer);
+    const display = payload.display && typeof payload.display === 'object' ? payload.display : {};
+    const hasDisplayValue = (key) => Object.prototype.hasOwnProperty.call(display, key);
     state.showErrors = !(payload.display && payload.display.showOpenEnds === false);
     state.showCoords = !!(payload.display && payload.display.showCoords);
     state.colorComponents = !(payload.display && payload.display.colorComponents === false);
     state.displayPick = !!(payload.display && payload.display.pick);
     state.showCusps = !!(payload.display && payload.display.cusps);
-    state.showSeifertSurface = !!(payload.display && payload.display.showSeifertSurface);
-    state.showSeifertBackground = !!(payload.display && payload.display.showSeifertBackground);
-    state.colorSeifertBoundaries = !!(payload.display && payload.display.colorSeifertBoundaries);
-    state.seifertBandWidth = normalizeSeifertBandWidth(payload.display && payload.display.seifertBandWidth);
-    state.seifertSurfaceColor = normalizeSeifertSurfaceColor(payload.display && payload.display.seifertSurfaceColor);
+    state.showSeifertSurface = hasDisplayValue('showSeifertSurface')
+      ? !!display.showSeifertSurface
+      : !!state.showSeifertSurface;
+    state.showSeifertBackground = hasDisplayValue('showSeifertBackground')
+      ? !!display.showSeifertBackground
+      : !!state.showSeifertBackground;
+    state.colorSeifertBoundaries = hasDisplayValue('colorSeifertBoundaries')
+      ? !!display.colorSeifertBoundaries
+      : !!state.colorSeifertBoundaries;
+    state.seifertBandWidth = normalizeSeifertBandWidth(
+      hasDisplayValue('seifertBandWidth') ? display.seifertBandWidth : state.seifertBandWidth
+    );
+    state.seifertSurfaceColor = normalizeSeifertSurfaceColor(
+      hasDisplayValue('seifertSurfaceColor') ? display.seifertSurfaceColor : state.seifertSurfaceColor,
+      state.seifertSurfaceColor
+    );
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
     state.componentColors = [];
@@ -16541,7 +16554,7 @@
 
   function shouldDrawSeifertSurfaceTile(tile) {
     return !!(
-      isDualGraph()
+      canShowSeifertSurface()
       && state.showSeifertSurface
       && !isTileEmpty(tile)
       && (isVertexTileValue(tile) || normalizeTile(tile).length)
@@ -16549,7 +16562,7 @@
   }
 
   function shouldDrawSeifertBackground() {
-    return !(isDualGraph() && state.showSeifertSurface && !state.showSeifertBackground);
+    return !(canShowSeifertSurface() && state.showSeifertSurface && !state.showSeifertBackground);
   }
 
   function drawSeifertSurfaceTile(ctx, cell, tile, radius) {
@@ -17358,7 +17371,7 @@
 
   function updateSeifertSurfaceChart() {
     if (!refs.seifertStats) return;
-    const visible = isDualGraph() && !!state.showSeifertSurface;
+    const visible = canShowSeifertSurface() && !!state.showSeifertSurface;
     const analysis = visible ? analyzeSeifertSurface() : null;
     const stats = refs.seifertStats;
     if (!analysis || !analysis.active) {
@@ -17411,7 +17424,7 @@
   }
 
   function drawSeifertBoundaryComponents(ctx) {
-    if (!(isDualGraph() && state.showSeifertSurface && state.colorSeifertBoundaries)) return;
+    if (!(canShowSeifertSurface() && state.showSeifertSurface && state.colorSeifertBoundaries)) return;
     const analysis = analyzeSeifertSurface();
     if (!analysis.boundarySegments || !analysis.boundarySegments.length) return;
     ctx.save();
@@ -18214,7 +18227,7 @@
     const report = analyze();
     const lattice = getLattice();
     const backgroundBilliard = backgroundBilliardForExport();
-    const seifertSurface = isDualGraph() ? seifertSurfaceForExport(analyzeSeifertSurface()) : null;
+    const seifertSurface = canShowSeifertSurface() ? seifertSurfaceForExport(analyzeSeifertSurface()) : null;
     const payload = {
       name: 'Mosaic Calculator',
       lattice: state.lattice,
@@ -19019,18 +19032,18 @@
   }
 
   function syncSeifertSurfaceControls() {
-    const dualMode = isDualGraph();
+    const surfaceAvailable = canShowSeifertSurface();
     const width = normalizeSeifertBandWidth(state.seifertBandWidth);
     const color = normalizeSeifertSurfaceColor(state.seifertSurfaceColor);
     state.seifertBandWidth = width;
     state.seifertSurfaceColor = color;
-    if (refs.showSeifertSurfaceRow) refs.showSeifertSurfaceRow.hidden = !dualMode;
+    if (refs.showSeifertSurfaceRow) refs.showSeifertSurfaceRow.hidden = !surfaceAvailable;
     if (refs.showSeifertSurface) {
-      refs.showSeifertSurface.disabled = !dualMode;
+      refs.showSeifertSurface.disabled = !surfaceAvailable;
       refs.showSeifertSurface.textContent = state.showSeifertSurface ? 'Close surface' : 'Open surface';
       refs.showSeifertSurface.setAttribute('aria-pressed', state.showSeifertSurface ? 'true' : 'false');
     }
-    const chartVisible = dualMode && !!state.showSeifertSurface;
+    const chartVisible = surfaceAvailable && !!state.showSeifertSurface;
     if (refs.seifertSurfaceCard) {
       refs.seifertSurfaceCard.hidden = !chartVisible;
       if (chartVisible) refs.seifertSurfaceCard.classList.remove('collapsed');
@@ -19386,6 +19399,10 @@
 
   function isDualGraph() {
     return state.diagramType === 'dual';
+  }
+
+  function canShowSeifertSurface() {
+    return state.diagramType === 'link' || state.diagramType === 'dual';
   }
 
   function isTilingMode() {

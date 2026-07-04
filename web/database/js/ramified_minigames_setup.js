@@ -670,11 +670,13 @@
     if (event.kind === 'debug') {
       if (game) game.debugMessage = event.message;
       syncStatus('push-chain debug', event.message, 'debug');
-      render();
       if (isStepMode()) {
         stepPaused = eventIndex < eventQueue.length;
-        syncControls();
-        return;
+        if (stepPaused) {
+          syncControls();
+          render();
+          return;
+        }
       }
       playNextEvent();
       return;
@@ -701,16 +703,17 @@
     const event = currentAnimation.event;
     if (event.kind !== 'spawn') applyEvent(game, event);
     currentAnimation = null;
-    render();
     if (isStepMode()) {
       stepPaused = eventIndex < eventQueue.length;
       if (stepPaused) {
         game.phase = 'paused';
         syncStatus(`round ${game.round}: paused`, `${eventIndex}/${eventQueue.length} events`, 'step');
         syncControls();
+        render();
         return;
       }
     }
+    render();
     playNextEvent();
   }
 
@@ -1219,6 +1222,7 @@
     drawGlueEdges(ctx, geometry, preset);
     drawNumberBoxes(ctx, geometry, game ? game.boxes : []);
     drawAnimationOverlays(ctx, geometry);
+    drawDebugDirectionIndicators(ctx, geometry);
     if (game && game.phase === 'gameover') drawGameOverPopup(ctx, geometry, game);
     syncStats();
   }
@@ -1382,6 +1386,8 @@
         else drawBoxAtPoint(ctx, lerpPoint(from, to, progress), geom.radius, move.value, 1, geom.lattice);
       });
       if (event.bounces) event.bounces.forEach((move) => drawBounceMove(ctx, geom, move, progress));
+      if (event.merges) event.merges.forEach((merge) => drawMergeAnimation(ctx, geom, merge, progress));
+      if (event.postMerges) event.postMerges.forEach((merge) => drawMergeAnimation(ctx, geom, merge, progress));
       if (event.explosions) event.explosions.forEach((explosion) => drawExplosionEvent(ctx, geom, explosion, progress));
       return;
     }
@@ -1398,23 +1404,7 @@
       return;
     }
     if (event.kind === 'merge') {
-      const moves = event.moves || event.from.map((fromIndex) => ({
-        from: fromIndex,
-        to: event.to,
-        value: event.value,
-        glued: false
-      }));
-      moves.forEach((move) => {
-        const from = geom.cells[move.from];
-        const to = geom.cells[move.to];
-        if (!from || !to) return;
-        if (move.glued) drawGluedMove(ctx, geom, move, progress);
-        else drawBoxAtPoint(ctx, lerpPoint(from, to, progress), geom.radius, move.value, 1, geom.lattice);
-      });
-      if (progress > 0.68) {
-        const pulse = 1 + Math.sin((progress - 0.68) / 0.32 * Math.PI) * 0.18;
-        drawBoxAtIndex(ctx, geom, event.to, event.newValue, pulse);
-      }
+      drawMergeAnimation(ctx, geom, event, progress);
       return;
     }
     if (event.kind === 'explode') {
@@ -1436,6 +1426,195 @@
     }
   }
 
+  function drawMergeAnimation(ctx, geom, event, progress) {
+    const moves = event.moves || event.from.map((fromIndex) => ({
+      from: fromIndex,
+      to: event.to,
+      value: event.value,
+      glued: false
+    }));
+    moves.forEach((move) => {
+      const from = geom.cells[move.from];
+      const to = geom.cells[move.to];
+      if (!from || !to) return;
+      if (move.glued) drawGluedMove(ctx, geom, move, progress);
+      else drawBoxAtPoint(ctx, lerpPoint(from, to, progress), geom.radius, move.value, 1, geom.lattice);
+    });
+    if (progress > 0.68) {
+      const pulse = 1 + Math.sin((progress - 0.68) / 0.32 * Math.PI) * 0.18;
+      drawBoxAtIndex(ctx, geom, event.to, event.newValue, pulse);
+    }
+  }
+
+  function drawDebugDirectionIndicators(ctx, geom) {
+    if (!debugMode || !game) return;
+    const event = debugDirectionEvent();
+    if (!event) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (event.kind === 'moveGroup') {
+      drawDebugMoveArrows(ctx, geom, event.moves || [], 'move');
+      drawDebugMoveArrows(ctx, geom, event.bounces || [], 'bounce');
+      (event.merges || []).forEach((merge) => drawDebugMoveArrows(ctx, geom, merge.moves || [], 'merge'));
+      (event.postMerges || []).forEach((merge) => drawDebugMoveArrows(ctx, geom, merge.moves || [], 'merge'));
+      (event.explosions || []).forEach((explosion) => drawDebugExplosionArrows(ctx, geom, explosion));
+    } else if (event.kind === 'bounceGroup') {
+      drawDebugMoveArrows(ctx, geom, event.moves || [], 'bounce');
+    } else if (event.kind === 'move') {
+      drawDebugMoveArrows(ctx, geom, [event], 'move');
+    } else if (event.kind === 'merge') {
+      drawDebugMoveArrows(ctx, geom, event.moves || [], 'merge');
+    } else if (event.kind === 'explode') {
+      drawDebugExplosionArrows(ctx, geom, event);
+    } else if (event.kind === 'removeTile') {
+      drawDebugTileTarget(ctx, geom, event.index, debugIndicatorColor('explode'));
+    } else if (event.kind === 'clearNumbers') {
+      (event.indices || []).forEach((index) => drawDebugTileTarget(ctx, geom, index, debugIndicatorColor('clear')));
+    }
+    ctx.restore();
+  }
+
+  function debugDirectionEvent() {
+    if (currentAnimation && currentAnimation.event) return currentAnimation.event;
+    if (stepPaused && eventQueue.length && eventIndex < eventQueue.length) return eventQueue[eventIndex];
+    return null;
+  }
+
+  function drawDebugMoveArrows(ctx, geom, moves, status) {
+    moves.forEach((move) => drawDebugMoveArrow(ctx, geom, move, status));
+  }
+
+  function drawDebugExplosionArrows(ctx, geom, event) {
+    drawDebugMoveArrows(ctx, geom, event.moves || [], 'explode');
+    drawDebugTileTarget(ctx, geom, event.center, debugIndicatorColor('explode'));
+  }
+
+  function drawDebugMoveArrow(ctx, geom, move, status) {
+    if (!move || !Number.isInteger(move.from)) return;
+    const from = geom.cells[move.from];
+    if (!from) return;
+    const color = debugIndicatorColor(status);
+    if (move.glued && move.edge) {
+      drawDebugCellArrow(ctx, geom, move.from, move.edge.dir, color, status);
+      if (Number.isInteger(move.to) && Number.isInteger(move.dir)) {
+        drawDebugCellArrow(ctx, geom, move.to, move.dir, color, status, { alpha: 0.72, scale: 0.78 });
+      }
+      return;
+    }
+    const dir = Number.isInteger(move.dir) ? move.dir : debugDirectionBetweenCells(geom, move.from, move.to);
+    if (!Number.isInteger(dir)) return;
+    drawDebugCellArrow(ctx, geom, move.from, dir, color, status);
+  }
+
+  function drawDebugCellArrow(ctx, geom, index, dir, color, status, options = {}) {
+    const cell = geom.cells[index];
+    if (!cell || !Number.isInteger(dir)) return;
+    const scale = Number.isFinite(options.scale) ? options.scale : 1;
+    const alpha = Number.isFinite(options.alpha) ? options.alpha : 1;
+    const length = geom.radius * (status === 'bounce' ? 0.72 : 0.82) * scale;
+    const startOffset = geom.radius * 0.14 * scale;
+    const vector = dirVector(dir, 1, geom.lattice);
+    const start = {
+      x: cell.x + vector.x * startOffset,
+      y: cell.y + vector.y * startOffset
+    };
+    const end = {
+      x: cell.x + vector.x * length,
+      y: cell.y + vector.y * length
+    };
+    drawDebugArrowLine(ctx, start, end, color, geom, alpha);
+    if (status === 'bounce') {
+      const returnEnd = {
+        x: cell.x + vector.x * geom.radius * 0.24 * scale,
+        y: cell.y + vector.y * geom.radius * 0.24 * scale
+      };
+      drawDebugArrowLine(ctx, end, returnEnd, color, geom, alpha * 0.76, true);
+    }
+  }
+
+  function drawDebugArrowLine(ctx, start, end, color, geom, alpha = 1, dashed = false) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 0.01) return;
+    const ux = dx / length;
+    const uy = dy / length;
+    const size = Math.max(5, geom.radius * 0.18);
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = Math.max(2, geom.radius * 0.07);
+    if (dashed && ctx.setLineDash) ctx.setLineDash([size * 0.65, size * 0.45]);
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+    if (ctx.setLineDash) ctx.setLineDash([]);
+    const base = {
+      x: end.x - ux * size,
+      y: end.y - uy * size
+    };
+    const normal = { x: -uy, y: ux };
+    ctx.beginPath();
+    ctx.moveTo(end.x, end.y);
+    ctx.lineTo(base.x + normal.x * size * 0.48, base.y + normal.y * size * 0.48);
+    ctx.lineTo(base.x - normal.x * size * 0.48, base.y - normal.y * size * 0.48);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawDebugTileTarget(ctx, geom, index, color) {
+    const cell = geom.cells[index];
+    if (!cell) return;
+    const radius = geom.radius * 0.42;
+    ctx.save();
+    ctx.globalAlpha *= currentAnimation ? 0.78 : 0.62;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(2, geom.radius * 0.07);
+    ctx.beginPath();
+    ctx.arc(cell.x, cell.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    directionsForPreset(game.preset).forEach((dir) => {
+      const vector = dirVector(dir, 1, geom.lattice);
+      drawDebugArrowLine(ctx, {
+        x: cell.x + vector.x * radius * 1.9,
+        y: cell.y + vector.y * radius * 1.9
+      }, {
+        x: cell.x + vector.x * radius * 1.08,
+        y: cell.y + vector.y * radius * 1.08
+      }, color, geom, 0.48, false);
+    });
+    ctx.restore();
+  }
+
+  function debugDirectionBetweenCells(geom, fromIndex, toIndex) {
+    const from = geom.cells[fromIndex];
+    const to = geom.cells[toIndex];
+    if (!from || !to) return null;
+    const angle = Math.atan2(to.y - from.y, to.x - from.x);
+    let bestDir = null;
+    let bestDistance = Infinity;
+    geom.lattice.angles.forEach((candidateAngle, dir) => {
+      const distance = Math.abs(Math.atan2(Math.sin(angle - candidateAngle), Math.cos(angle - candidateAngle)));
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestDir = dir;
+      }
+    });
+    return bestDir;
+  }
+
+  function debugIndicatorColor(status) {
+    if (status === 'bounce') return '#c47f17';
+    if (status === 'merge') return '#6a4c93';
+    if (status === 'explode') return '#b23a48';
+    if (status === 'clear') return '#8a4f7d';
+    return '#1f7a8c';
+  }
+
   function hiddenBoxIdsForAnimation() {
     const hidden = new Set();
     if (!currentAnimation) return hidden;
@@ -1443,12 +1622,13 @@
     if (event.kind === 'move') hidden.add(event.boxId);
     if (event.kind === 'moveGroup') event.moves.forEach((move) => hidden.add(move.boxId));
     if (event.kind === 'moveGroup' && event.bounces) event.bounces.forEach((move) => hidden.add(move.boxId));
+    if (event.kind === 'moveGroup' && event.merges) event.merges.forEach((merge) => hideMergeBoxes(hidden, merge));
+    if (event.kind === 'moveGroup' && event.postMerges) event.postMerges.forEach((merge) => hideMergeBoxes(hidden, merge));
     if (event.kind === 'moveGroup' && event.explosions) {
       event.explosions.forEach((explosion) => hideExplosionBoxes(hidden, explosion));
     }
     if (event.kind === 'bounceGroup') event.moves.forEach((move) => hidden.add(move.boxId));
-    if (event.kind === 'merge') event.removeBoxIds.forEach((id) => hidden.add(id));
-    if (event.kind === 'merge' && !event.targetBoxId) hidden.add(event.boxId);
+    if (event.kind === 'merge') hideMergeBoxes(hidden, event);
     if (event.kind === 'explode') hideExplosionBoxes(hidden, event);
     if (event.kind === 'removeTile' && event.removeBoxIds) event.removeBoxIds.forEach((id) => hidden.add(id));
     if (event.kind === 'clearNumbers' && event.removeBoxIds) event.removeBoxIds.forEach((id) => hidden.add(id));
@@ -1459,6 +1639,11 @@
   function hideExplosionBoxes(hidden, event) {
     if (event.removeBoxIds) event.removeBoxIds.forEach((id) => hidden.add(id));
     if (event.moves) event.moves.forEach((move) => hidden.add(move.boxId));
+  }
+
+  function hideMergeBoxes(hidden, event) {
+    if (event.removeBoxIds) event.removeBoxIds.forEach((id) => hidden.add(id));
+    if (!event.targetBoxId) hidden.add(event.boxId);
   }
 
   function drawBoxAtIndex(ctx, geom, index, value, scale, options = {}) {
@@ -1850,6 +2035,7 @@
       const results = resolveBatch(state, proposals, active, mergeLocked, debugMessages);
       const moves = [];
       const bounces = [];
+      const mergeEvents = [];
       const pushMerges = [];
       const explosions = [];
       const explodedBoxIds = new Set();
@@ -1895,7 +2081,7 @@
           return;
         }
         if (result.kind === 'merge') {
-          addMergeEvent(state, events, result, mergeLocked, active);
+          addMergeEvent(state, mergeEvents, result, mergeLocked, active);
           changed = true;
           return;
         }
@@ -1939,7 +2125,7 @@
         state,
         moveEntries,
         blockedMoveIds,
-        new Set(pushMerges.map((merge) => merge.movingBoxId))
+        extraMovingAwayBoxIds(pushMerges, explosions)
       );
       moveEntries.forEach((entry) => {
         if (entry.skipped) {
@@ -1980,17 +2166,27 @@
           if (result.transition.kind === 'glued') activeActor.k += 1;
         }
       });
-      if (moveEvents.length || explosionAnimations.length) {
+      const pushedMergeEvents = [];
+      pushMerges.forEach((merge) => addPushedMergeEvent(state, pushedMergeEvents, merge, mergeLocked, active));
+      const hasMergeAnimations = mergeEvents.length || pushedMergeEvents.length;
+      const hasNonMergeGroupAnimation = moveEvents.length || bounceEvents.length || explosionAnimations.length;
+      const shouldBundleTick = moveEvents.length
+        || explosionAnimations.length
+        || (hasMergeAnimations && hasNonMergeGroupAnimation);
+      if (shouldBundleTick) {
         events.push({
           kind: 'moveGroup',
           moves: moveEvents,
           bounces: bounceEvents,
+          merges: mergeEvents,
+          postMerges: pushedMergeEvents,
           explosions: explosionAnimations
         });
       } else if (bounceEvents.length) {
         events.push({ kind: 'bounceGroup', moves: bounceEvents });
+      } else if (mergeEvents.length || pushedMergeEvents.length) {
+        events.push(...mergeEvents, ...pushedMergeEvents);
       }
-      pushMerges.forEach((merge) => addPushedMergeEvent(state, events, merge, mergeLocked, active));
       explosions.forEach((explosion) => {
         addExplosionEvents(state, events, explosion.center, explosion.value, explosion.removeBoxIds, explosion.moves, explosionEventOptions({
           animate: !(explosion.moves && explosion.moves.length),
@@ -2259,6 +2455,17 @@
     ));
   }
 
+  function extraMovingAwayBoxIds(pushMerges, explosions) {
+    const ids = new Set(pushMerges.map((merge) => merge.movingBoxId));
+    explosions.forEach((explosion) => {
+      (explosion.moves || []).forEach((move) => {
+        const boxId = move.boxId || (move.actor && move.actor.id);
+        if (boxId != null) ids.add(boxId);
+      });
+    });
+    return ids;
+  }
+
   function blockedMovesByBouncingResidents(state, moveEntries, initialBouncingBoxIds) {
     const blocked = new Set();
     const bouncing = new Set(initialBouncingBoxIds);
@@ -2513,7 +2720,9 @@
   function applyEvent(targetState, event) {
     if (!targetState) return;
     if (event.kind === 'moveGroup') {
-      applyMoveGroupEvent(targetState, event.moves || []);
+      (event.merges || []).forEach((merge) => applyMergeEvent(targetState, merge));
+      applyMoveGroupEvent(targetState, event.moves || [], event);
+      (event.postMerges || []).forEach((merge) => applyMergeEvent(targetState, merge));
       return;
     }
     if (event.kind === 'bounceGroup') {
@@ -2527,15 +2736,7 @@
       return;
     }
     if (event.kind === 'merge') {
-      event.removeBoxIds.forEach((id) => removeBox(targetState, id));
-      let box = findBox(targetState, event.boxId);
-      if (!box) {
-        box = { id: event.boxId, index: event.to, value: event.newValue };
-        targetState.boxes.push(box);
-      }
-      box.index = event.to;
-      box.value = event.newValue;
-      targetState.score += event.newValue;
+      applyMergeEvent(targetState, event);
       return;
     }
     if (event.kind === 'removeTile') {
@@ -2561,12 +2762,28 @@
     }
   }
 
-  function applyMoveGroupEvent(targetState, moves) {
+  function applyMergeEvent(targetState, event) {
+    event.removeBoxIds.forEach((id) => removeBox(targetState, id));
+    let box = findBox(targetState, event.boxId);
+    if (!box) {
+      box = { id: event.boxId, index: event.to, value: event.newValue };
+      targetState.boxes.push(box);
+    }
+    box.index = event.to;
+    box.value = event.newValue;
+    targetState.score += event.newValue;
+  }
+
+  function applyMoveGroupEvent(targetState, moves, event = {}) {
+    const extraMovingAway = moveGroupExtraMovingAwayBoxIds(event);
     const blocked = new Set();
     let changed = true;
     while (changed) {
       changed = false;
       const movingAway = new Set();
+      extraMovingAway.forEach((id) => {
+        if (findBox(targetState, id)) movingAway.add(id);
+      });
       moves.forEach((move) => {
         if (blocked.has(move.boxId)) return;
         if (!findBox(targetState, move.boxId) || targetState.removed.has(move.to)) return;
@@ -2590,6 +2807,22 @@
       const box = findBox(targetState, move.boxId);
       if (box) box.index = move.to;
     });
+  }
+
+  function moveGroupExtraMovingAwayBoxIds(event) {
+    const ids = new Set();
+    (event.explosions || []).forEach((explosion) => {
+      (explosion.moves || []).forEach((move) => {
+        if (move.boxId != null) ids.add(move.boxId);
+      });
+    });
+    (event.postMerges || []).forEach((merge) => {
+      (merge.moves || []).forEach((move) => {
+        if (move.boxId != null) ids.add(move.boxId);
+      });
+      (merge.removeBoxIds || []).forEach((id) => ids.add(id));
+    });
+    return ids;
   }
 
   function spawnNumbers(state, requestedCount, rng, valuePicker, events) {

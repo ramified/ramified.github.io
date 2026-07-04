@@ -30,6 +30,22 @@ function stackedTileSummaries(state) {
     .sort();
 }
 
+function allMergeEvents(events) {
+  return events.flatMap((event) => {
+    if (event.kind === 'merge') return [event];
+    if (event.kind !== 'moveGroup') return [];
+    return (event.merges || []).concat(event.postMerges || []);
+  });
+}
+
+function allBounceMoves(events) {
+  return events.flatMap((event) => {
+    if (event.kind === 'bounceGroup') return event.moves || [];
+    if (event.kind === 'moveGroup') return event.bounces || [];
+    return [];
+  });
+}
+
 function gluedEdgeSignature(edge) {
   return `${edge.group}:${edge.first.row},${edge.first.col},${edge.first.dir}>${edge.second.row},${edge.second.col},${edge.second.dir}`;
 }
@@ -108,7 +124,7 @@ function testNewlyMergedTileBlocksLaterPush() {
   assert.strictEqual(result.changed, true);
   assert.deepStrictEqual(valuesAt(result.state), ['4,2:4', '4,3:4', '4,4:4']);
   assert.strictEqual(result.state.score, 4);
-  assert.ok(!result.events.some((event) => event.kind === 'merge' && event.newValue === 8));
+  assert.ok(!allMergeEvents(result.events).some((event) => event.newValue === 8));
 }
 
 function testFaceToFaceSwapBouncesWithoutMoving() {
@@ -173,7 +189,7 @@ function testOccupiedMovingResidentBlocksGroupMerge() {
   assert.strictEqual(result.events.length, 1);
   assert.strictEqual(result.events[0].kind, 'bounceGroup');
   assert.deepStrictEqual(result.events[0].moves.map((move) => move.boxId).sort(), [1, 2, 3]);
-  assert.ok(!result.events.some((event) => event.kind === 'merge'));
+  assert.strictEqual(allMergeEvents(result.events).length, 0);
   assert.ok(!result.events.some((event) => event.kind === 'spawn'));
 }
 
@@ -217,7 +233,7 @@ function testVacatingResidentSurvivesIncomingExplosion() {
   const explosionRemoval = result.events.find((event) => event.kind === 'removeTile' && event.index === game.indexOf(2, 1, 4));
   assert.ok(explosionRemoval);
   assert.deepStrictEqual(explosionRemoval.removeBoxIds.sort((a, b) => a - b), [16, 22]);
-  assert.ok(!result.events.some((event) => event.kind === 'bounceGroup'));
+  assert.strictEqual(allBounceMoves(result.events).length, 0);
 }
 
 function testBlockedResidentPreventsGroupExplosion() {
@@ -245,16 +261,15 @@ function testBlockedResidentPreventsGroupExplosion() {
   const result = game.simulateRound(state, game.DIRS.E, { spawn: false });
   assert.strictEqual(result.changed, true);
   assert.deepStrictEqual(valuesAt(result.state), ['1,4:8', '2,4:2']);
-  const merge = result.events.find((event) => event.kind === 'merge');
+  const merge = allMergeEvents(result.events)[0];
   assert.ok(merge);
   assert.strictEqual(merge.boxId, 3);
   assert.deepStrictEqual(merge.removeBoxIds, [1]);
   assert.strictEqual(merge.newValue, 8);
-  const bounce = result.events.find((event) => event.kind === 'bounceGroup');
-  assert.ok(bounce);
-  assert.deepStrictEqual(bounce.moves.map((move) => move.boxId), [2]);
-  assert.ok(bounce.moves.every((move) => move.to === game.indexOf(1, 4, 4)));
-  assert.ok(bounce.moves[0].glued);
+  const bounceMoves = allBounceMoves(result.events);
+  assert.deepStrictEqual(bounceMoves.map((move) => move.boxId), [2]);
+  assert.ok(bounceMoves.every((move) => move.to === game.indexOf(1, 4, 4)));
+  assert.ok(bounceMoves[0].glued);
   assert.ok(!result.events.some((event) => event.kind === 'explode'));
   assert.ok(!result.events.some((event) => event.kind === 'removeTile'));
   assert.ok(!result.events.some((event) => event.kind === 'spawn'));
@@ -285,11 +300,11 @@ function testSameValueGroupMergesThroughVacatingResident() {
   const result = game.simulateRound(state, game.DIRS.E, { spawn: false });
   assert.strictEqual(result.changed, true);
   assert.deepStrictEqual(valuesAt(result.state, 3), ['2,2:8', '2,3:2']);
-  const merge = result.events.find((event) => event.kind === 'merge');
+  const merge = allMergeEvents(result.events)[0];
   assert.ok(merge);
   assert.strictEqual(merge.targetBoxId, null);
   assert.deepStrictEqual(merge.moves.map((move) => move.boxId).sort((a, b) => a - b), [1, 3]);
-  assert.ok(!result.events.some((event) => event.kind === 'bounceGroup'));
+  assert.strictEqual(allBounceMoves(result.events).length, 0);
   assert.ok(!result.events.some((event) => event.kind === 'explode'));
 }
 
@@ -316,7 +331,7 @@ function testStackedTileDoesNotExposeHiddenMerge() {
   const result = game.simulateRound(state, game.DIRS.S, { spawn: true, rng: () => 0 });
   assert.strictEqual(result.changed, false);
   assert.deepStrictEqual(valuesAt(result.state), ['1,1:2', '2,1:16', '2,1:2', '2,1:4', '2,1:8', '3,1:8']);
-  assert.ok(!result.events.some((event) => event.kind === 'merge'));
+  assert.strictEqual(allMergeEvents(result.events).length, 0);
   assert.ok(!result.events.some((event) => event.kind === 'spawn'));
   assert.ok(result.events.every((event) => event.kind === 'bounceGroup'));
 }
@@ -579,6 +594,58 @@ function testBlockedResidentWithSuccessorPreventsGroupExplosion() {
   assert.ok(!result.events.some((event) => event.kind === 'spawn'));
 }
 
+function testExplosionMoverVacatesSourceForBounceResolution() {
+  const preset = {
+    id: 'explosion-vacates-source',
+    label: 'explosion-vacates-source',
+    lattice: 'square',
+    rows: 2,
+    cols: 4,
+    surface: 'explosion vacates source',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [
+      {
+        group: 0,
+        first: { row: 1, col: 4, dir: game.DIRS.E },
+        second: { row: 1, col: 1, dir: game.DIRS.W }
+      },
+      {
+        group: 1,
+        first: { row: 2, col: 4, dir: game.DIRS.E },
+        second: { row: 1, col: 2, dir: game.DIRS.W }
+      }
+    ]
+  };
+  const state = stateWithBoxes(preset, [
+    box(1, 1, 1, 2),
+    box(2, 1, 2, 2),
+    box(3, 1, 3, 4),
+    box(4, 1, 4, 4),
+    box(5, 2, 4, 8)
+  ]);
+  const result = game.simulateRound(state, game.DIRS.E, { spawn: false });
+  const removedBoxes = result.state.boxes.filter((item) => result.state.removed.has(item.index));
+  assert.deepStrictEqual(removedBoxes, []);
+  assert.ok(result.state.removed.has(game.indexOf(1, 2, 4)));
+  assert.ok(!result.state.boxes.some((item) => item.id === 1 || item.id === 5));
+  assert.deepStrictEqual(valuesAt(result.state), ['1,1:8', '1,4:2']);
+}
+
+function testMergeAndMoveShareAnimationStep() {
+  const state = stateWithBoxes('classic-4x4', [
+    box(1, 1, 3, 2),
+    box(2, 1, 4, 2),
+    box(3, 2, 1, 4)
+  ]);
+  const result = game.simulateRound(state, game.DIRS.E, { spawn: false });
+  assert.strictEqual(result.events[0].kind, 'moveGroup');
+  assert.deepStrictEqual(result.events[0].moves.map((move) => move.boxId), [3]);
+  assert.deepStrictEqual(result.events[0].merges.map((event) => event.boxId), [2]);
+  assert.deepStrictEqual(valuesAt(result.state), ['1,4:4', '2,4:4']);
+  assert.strictEqual(result.state.score, 4);
+}
+
 function testMoveEventsAreGroupedByTick() {
   const state = stateWithBoxes('classic-4x4', [
     box(1, 1, 1, 2),
@@ -669,7 +736,7 @@ function testGluedMergeCarriesPortalAnimationMove() {
   ];
   state.nextBoxId = 3;
   const result = game.simulateRound(state, game.DIRS.E, { spawn: false });
-  const merge = result.events.find((event) => event.kind === 'merge');
+  const merge = allMergeEvents(result.events)[0];
   assert.ok(merge);
   assert.strictEqual(merge.newValue, 4);
   assert.strictEqual(merge.moves.length, 1);
@@ -726,7 +793,7 @@ function testPushedBlockCanMerge() {
   assert.strictEqual(result.changed, true);
   assert.deepStrictEqual(valuesAt(result.state), ['1,2:2', '2,2:8']);
   assert.strictEqual(result.state.score, 8);
-  assert.ok(result.events.some((event) => event.kind === 'merge' && event.newValue === 8));
+  assert.ok(allMergeEvents(result.events).some((event) => event.newValue === 8));
 }
 
 function testPushChainLimitDebug() {
@@ -1064,6 +1131,19 @@ function testSpeedControlDefaults() {
   assert.ok(html.includes('id="animation-speed" min="40" max="400" step="20" value="80"'));
   assert.ok(html.includes('<output id="animation-speed-value">80 ms</output>'));
   assert.ok(html.includes('id="highlight-new-boxes" checked'));
+}
+
+function testStepPauseRendersAfterSelectingNextEvent() {
+  const source = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
+  const finishIndex = source.indexOf('function tickAnimation()');
+  const finishEnd = source.indexOf('function finishEventQueue()', finishIndex);
+  const body = source.slice(finishIndex, finishEnd);
+  const clearIndex = body.indexOf('currentAnimation = null;');
+  const pauseIndex = body.indexOf('stepPaused = eventIndex < eventQueue.length;', clearIndex);
+  const renderIndex = body.indexOf('render();', pauseIndex);
+  assert.ok(clearIndex >= 0);
+  assert.ok(pauseIndex > clearIndex);
+  assert.ok(renderIndex > pauseIndex);
 }
 
 function testStationaryDifferentBlocks() {
@@ -1469,6 +1549,8 @@ function run() {
   testExplosionModeForFullCycleBoard();
   testDownMoveAfterExplosionDoesNotStack();
   testBlockedResidentWithSuccessorPreventsGroupExplosion();
+  testExplosionMoverVacatesSourceForBounceResolution();
+  testMergeAndMoveShareAnimationStep();
   testMoveEventsAreGroupedByTick();
   testBouncesAndMovesShareTickAnimation();
   testGluedBoxRejoinsNextMovementStep();
@@ -1491,6 +1573,7 @@ function run() {
   testPresetFromMosaicBackgroundExport();
   testPresetFromFullMosaicCalculatorExport();
   testSpeedControlDefaults();
+  testStepPauseRendersAfterSelectingNextEvent();
   testStationaryDifferentBlocks();
   testSimultaneousDifferentExplosion();
   testLargeExplosionClearsSurfaceNeighbors();

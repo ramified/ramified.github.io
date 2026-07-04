@@ -27,8 +27,8 @@ window.THEOREM_GRAPH_PRESET_DATA.francesco_denisi = {
       "condition": "",
       "result": "",
       "citationKeys": [],
-      "color": "#7a4d9b",
-      "fillColor": "#f4f1f8",
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
       "x": 333.1,
       "y": 190.4
     },
