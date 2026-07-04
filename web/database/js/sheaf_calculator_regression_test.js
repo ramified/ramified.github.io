@@ -134,6 +134,10 @@ function loadCalculator() {
     addSheafObject,
     ensureAbsoluteDifferentialSesForCreatedSheaf,
     createGrassmannianMapConstruction,
+    recommendationItemsForSource,
+    createRecommendationConstructions,
+    recommendationConstructionData,
+    completeIntersectionEmbeddingMapContext,
     createPicardCanonicalConstruction,
     createDualSheafConstruction,
     createDifferentialWedgeSheafConstruction,
@@ -219,6 +223,13 @@ function testStepBuilderMarkupIsBelowCanvasAndClassChartHasNoStepButton() {
   assert(html.includes('id="class-formula-class-degree"'));
   assert(html.includes('id="class-formula-class-sheaf"'));
   assert(!html.includes('id="class-formula-sheaf-buttons"'));
+  assert(html.includes('<option value="recommendations" disabled>Recommended constructions</option>'));
+  assert(html.includes('id="recommendation-editor"'));
+  const combinedSelectStart = html.indexOf('<select id="combined-type"');
+  const combinedSelectEnd = html.indexOf('</select>', combinedSelectStart);
+  assert(combinedSelectStart > 0 && combinedSelectEnd > combinedSelectStart);
+  const combinedSelectHtml = html.slice(combinedSelectStart, combinedSelectEnd);
+  assert(!combinedSelectHtml.includes('value="recommendations"'));
 }
 
 function testSymmetricProductGenusCanBeClearedWhileEditing() {
@@ -2952,6 +2963,128 @@ function testRankOneGrassmannianMapUsesProjectiveSpaceAndTwists() {
   assert(rule);
   assert.strictEqual(rule.rhs[0].coefficient, '1');
   assert(Object.keys(rule.rhs[0].powers || {})[0].endsWith('_H'));
+}
+
+function testCurveRecommendationsCreateAjAndPicardCanonicalIdempotently() {
+  const api = loadCalculator();
+  const curve = { id: 'C', type: 'curve', dim: '1', genus: '3', name: 'C', labelX: 0.35, labelY: 0.65 };
+  api.state.varieties = [curve];
+
+  const items = api.recommendationItemsForSource({ kind: 'variety', object: curve });
+  assert.strictEqual(items.map((item) => item.id).join(','), 'abel-jacobi-jacobian,picard-canonical');
+  api.state.recommendationDraft = { sourceKind: 'variety', sourceId: 'C', selectedIds: { 'abel-jacobi-jacobian': true, 'picard-canonical': true } };
+  const data = api.recommendationConstructionData();
+  assert(data);
+  api.createRecommendationConstructions(data);
+
+  assert.strictEqual(api.state.varieties.filter((item) => item.construction?.type === 'jacobian').length, 1);
+  assert.strictEqual(api.state.maps.filter((item) => item.construction?.type === 'abel-jacobi').length, 1);
+  assert.strictEqual(api.state.varieties.filter((item) => item.construction?.type === 'picard-variety').length, 1);
+  assert.strictEqual(api.state.varieties.filter((item) => item.construction?.type === 'product').length, 1);
+  assert.strictEqual(api.state.maps.filter((item) => item.construction?.type === 'projection').length, 2);
+  const poincare = api.state.sheaves.find((item) => item.construction?.type === 'picard-poincare-line-bundle');
+  assert(poincare);
+  assert.notStrictEqual(poincare.hiddenOnCanvas, true);
+  assert.strictEqual(poincare.construction.curveId, 'C');
+  assert.strictEqual(poincare.construction.degreeSymbol, 'd');
+  assert.strictEqual(api.state.sheaves.filter((item) => item.baseVarietyId === 'C' && item.type === 'canonical').length, 0);
+
+  const realized = api.recommendationItemsForSource({ kind: 'variety', object: curve });
+  assert(realized.every((item) => item.realized));
+  api.createRecommendationConstructions({ source: { kind: 'variety', object: curve }, items: realized });
+  assert.strictEqual(api.state.varieties.filter((item) => item.construction?.type === 'jacobian').length, 1);
+  assert.strictEqual(api.state.maps.filter((item) => item.construction?.type === 'abel-jacobi').length, 1);
+  assert.strictEqual(api.state.varieties.filter((item) => item.construction?.type === 'picard-variety').length, 1);
+  assert.strictEqual(api.state.varieties.filter((item) => item.construction?.type === 'product').length, 1);
+  assert.strictEqual(api.state.maps.filter((item) => item.construction?.type === 'projection').length, 2);
+  assert.strictEqual(api.state.sheaves.filter((item) => item.construction?.type === 'picard-poincare-line-bundle').length, 1);
+  assert.strictEqual(api.state.sheaves.filter((item) => item.baseVarietyId === 'C' && item.type === 'canonical').length, 0);
+}
+
+function testSymmetricProductRecommendationsCreateAjOnly() {
+  const api = loadCalculator();
+  const sym = {
+    id: 'S',
+    type: 'symmetric-product-curve',
+    dim: '2',
+    symmetricProductM: '2',
+    symmetricProductGenus: '4',
+    name: '\\operatorname{Sym}^{2}(C)',
+    labelX: 0.35,
+    labelY: 0.65
+  };
+  api.state.varieties = [sym];
+
+  const items = api.recommendationItemsForSource({ kind: 'variety', object: sym });
+  assert.strictEqual(items.map((item) => item.id).join(','), 'abel-jacobi-jacobian');
+  api.createRecommendationConstructions({ source: { kind: 'variety', object: sym }, items });
+
+  const jacobian = api.state.varieties.find((item) => item.construction?.type === 'jacobian');
+  const map = api.state.maps.find((item) => item.construction?.type === 'abel-jacobi');
+  assert(jacobian);
+  assert.strictEqual(jacobian.dim, '4');
+  assert(map);
+  assert.strictEqual(map.domainId, 'S');
+  assert.strictEqual(api.state.sheaves.filter((item) => item.construction?.type === 'picard-poincare-line-bundle').length, 0);
+  assert.strictEqual(api.state.sheaves.filter((item) => item.baseVarietyId === 'S' && item.type === 'canonical').length, 0);
+}
+
+function testCompleteIntersectionRecommendationCreatesEmbeddingAndRules() {
+  const api = loadCalculator();
+  const ci = { id: 'X', type: 'complete-intersection', dim: '2', ciDegrees: '2,3', name: 'X', labelX: 0.35, labelY: 0.65 };
+  api.state.varieties = [ci];
+
+  const items = api.recommendationItemsForSource({ kind: 'variety', object: ci });
+  assert.strictEqual(items.map((item) => item.id).join(','), 'complete-intersection-embedding');
+  const map = api.createRecommendationConstructions({ source: { kind: 'variety', object: ci }, items });
+  assert(map);
+  assert.strictEqual(map.construction.type, 'complete-intersection-embedding');
+
+  const ambient = api.state.varieties.find((item) => item.construction?.type === 'complete-intersection-ambient');
+  assert(ambient);
+  assert.strictEqual(ambient.type, 'projective');
+  assert.strictEqual(ambient.dim, '4');
+  assert.strictEqual(map.domainId, 'X');
+  assert.strictEqual(map.codomainId, ambient.id);
+  assert(api.completeIntersectionEmbeddingMapContext(map));
+
+  const sourceGeometry = api.geometryFromVariety(ci);
+  const ambientGeometry = api.geometryFromVariety(ambient);
+  const sourceRules = api.defaultMapHomologyRulesForGeometry(sourceGeometry);
+  const pullbackRule = sourceRules.find((rule) => rule.id === `default-complete-intersection-embedding-hyperplane-pullback-${map.id}`);
+  assert(pullbackRule);
+  const pullbackId = Object.keys(pullbackRule.lhs.powers)[0];
+  assert.strictEqual(
+    api.formatPolyPlain(api.applyHomologyRules(api.polyFromPowers({ [pullbackId]: 1 }), { geometry: sourceGeometry, homology: sourceGeometry.homology })),
+    'H'
+  );
+
+  const ambientRules = api.defaultMapHomologyRulesForGeometry(ambientGeometry);
+  const pushforwardRule = ambientRules.find((rule) => rule.id === `default-complete-intersection-embedding-hyperplane-pushforward-${map.id}-1`);
+  assert(pushforwardRule);
+  const pushforwardId = Object.keys(pushforwardRule.lhs.powers)[0];
+  assert.strictEqual(
+    api.formatPolyPlain(api.applyHomologyRules(api.polyFromPowers({ [pushforwardId]: 1 }), { geometry: ambientGeometry, homology: ambientGeometry.homology })),
+    '6*H^3'
+  );
+
+  const sourceH = api.homologyVariableId(api.HOMOLOGY_HYPERPLANE_CLASS, sourceGeometry);
+  const directPushforward = api.pushforwardPolynomialByDegree(map, api.polyFromPowers({ [sourceH]: 1 }), sourceGeometry.dim, ambientGeometry.dim, { proper: false });
+  assert.strictEqual(api.formatPolyPlain(directPushforward), '6*H^3');
+
+  api.createRecommendationConstructions({ source: { kind: 'variety', object: ci }, items: api.recommendationItemsForSource({ kind: 'variety', object: ci }) });
+  assert.strictEqual(api.state.varieties.filter((item) => item.construction?.type === 'complete-intersection-ambient').length, 1);
+  assert.strictEqual(api.state.maps.filter((item) => item.construction?.type === 'complete-intersection-embedding').length, 1);
+}
+
+function testCompleteIntersectionRecommendationUnavailableForProjectiveOrTooLargeAmbient() {
+  const api = loadCalculator();
+  const projectiveAsCi = { id: 'P', type: 'complete-intersection', dim: '3', ciDegrees: '', name: '\\mathbb{P}^{3}' };
+  const tooLarge = { id: 'Y', type: 'complete-intersection', dim: '15', ciDegrees: '2', name: 'Y' };
+  api.state.varieties = [projectiveAsCi, tooLarge];
+
+  assert.strictEqual(api.recommendationItemsForSource({ kind: 'variety', object: projectiveAsCi }).map((item) => item.id).join(','), '');
+  assert.strictEqual(api.recommendationItemsForSource({ kind: 'variety', object: tooLarge }).map((item) => item.id).join(','), '');
 }
 
 function testIdealSheafConstructionCreatesHiddenSesAndImageClass() {
@@ -6136,6 +6269,10 @@ testSmoothCyclicRamifiedCoverRelativeDifferentialsStayLazyUntilAbsoluteSheaf();
 testGrassmannianMapConstructionCreatesTargetAndMap();
 testGrassmannianMapGenericallyGeneratedOnlyIsRational();
 testRankOneGrassmannianMapUsesProjectiveSpaceAndTwists();
+testCurveRecommendationsCreateAjAndPicardCanonicalIdempotently();
+testSymmetricProductRecommendationsCreateAjOnly();
+testCompleteIntersectionRecommendationCreatesEmbeddingAndRules();
+testCompleteIntersectionRecommendationUnavailableForProjectiveOrTooLargeAmbient();
 testIdealSheafConstructionCreatesHiddenSesAndImageClass();
 testNormalBundleConstructionCreatesHiddenTangentSes();
 testRelativeTangentConstructionCreatesHiddenTangentSes();

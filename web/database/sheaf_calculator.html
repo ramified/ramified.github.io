@@ -2668,6 +2668,7 @@
               <option value="sheaf" disabled>Sheaf</option>
               <option value="map" disabled>Map</option>
               <option value="combined" disabled>Combined</option>
+              <option value="recommendations" disabled>Recommended constructions</option>
               <option value="number">Rational number</option>
             </select>
             <button class="btn btn-ghost sheaf-object-button" id="add-object" type="button">add</button>
@@ -2936,6 +2937,21 @@
             <input id="picard-canonical-degree" class="sheaf-input" type="text" value="d" maxlength="16" spellcheck="false" autocomplete="off">
           </div>
           <div class="sheaf-note" id="picard-canonical-pick-note" hidden>pick a curve</div>
+        </div>
+
+        <div class="sheaf-input-editor" id="recommendation-editor" hidden>
+          <div class="sheaf-editor-title">Recommended constructions</div>
+          <div class="sheaf-field-row" id="recommendation-source-row" hidden>
+            <span class="input-label">source</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="recommendation-source-button" type="button">object</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="recommendation-list-row" hidden>
+            <span class="input-label">choices</span>
+            <div class="sheaf-map-formula-picker" id="recommendation-list"></div>
+          </div>
+          <div class="sheaf-note" id="recommendation-pick-note" hidden>pick an object</div>
         </div>
 
         <div id="variety-editor" class="sheaf-input-editor">

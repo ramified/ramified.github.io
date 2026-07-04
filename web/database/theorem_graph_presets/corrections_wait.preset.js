@@ -3,7 +3,7 @@
 // { label: "Corrections wait", key: "corrections_wait", file: "corrections_wait.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "title": "Corrections wait",
   "nodes": [
     {
@@ -15,10 +15,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 476.1,
-      "y": 360.3
+      "color": "#8b3a2a",
+      "fillColor": "#fffdf8",
+      "x": 489.3,
+      "y": 227.3
     },
     {
       "id": "n11",
@@ -31,8 +31,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 535,
-      "y": 148
+      "x": 536.2,
+      "y": 75.5
     },
     {
       "id": "n13",
@@ -45,8 +45,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 373.1,
-      "y": 494.7
+      "x": 359.4,
+      "y": 371.3
     },
     {
       "id": "n21",
@@ -59,8 +59,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 179.6,
-      "y": 212.5
+      "x": 163.9,
+      "y": 120.8
     },
     {
       "id": "n25",
@@ -71,10 +71,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 328.2,
-      "y": 96.5
+      "color": "#8b3a2a",
+      "fillColor": "#fffdf8",
+      "x": 321,
+      "y": 46
     },
     {
       "id": "n28",
@@ -93,10 +93,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#8b3a2a",
-      "fillColor": "#fffdf8",
-      "x": 388.8,
-      "y": 257.6
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 395,
+      "y": 152.7
     },
     {
       "id": "n33",
@@ -127,10 +127,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#8b3a2a",
-      "fillColor": "#fffdf8",
-      "x": 181.9,
-      "y": 441.7
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 114.2,
+      "y": 246.7
     },
     {
       "id": "n34",
@@ -155,10 +155,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#8b3a2a",
-      "fillColor": "#fffdf8",
-      "x": 262,
-      "y": 324.4
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 223.3,
+      "y": 228.8
     },
     {
       "id": "n35",
@@ -170,10 +170,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#8b3a2a",
-      "fillColor": "#fffdf8",
-      "x": 621.5,
-      "y": 323.5
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 654.1,
+      "y": 208.4
     },
     {
       "id": "n36",
@@ -192,10 +192,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#8b3a2a",
-      "fillColor": "#fffdf8",
-      "x": 529.8,
-      "y": 522.7
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 534.8,
+      "y": 374
     }
   ],
   "arrows": [
@@ -299,14 +299,19 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citeText": "",
       "url": "https://chatgpt.com/share/6a43e9be-c214-83eb-95ad-5540eb27b907",
       "source": "web",
-      "rawBibtex": ""
+      "rawBibtex": "",
+      "links": [
+        {
+          "url": "https://chatgpt.com/share/6a43e9be-c214-83eb-95ad-5540eb27b907",
+          "source": "web",
+          "label": ""
+        }
+      ]
     }
   ],
   "view": {
-    "selectedId": "n36",
+    "selectedId": "n21",
     "selectedReferenceKeys": [],
     "layoutRunning": false
   }
-
-
 };

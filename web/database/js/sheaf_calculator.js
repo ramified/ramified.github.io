@@ -161,6 +161,8 @@
   ]);
   const VARS = new Map();
   const refs = {};
+  let resolvingActiveHomologyMapContext = false;
+  const ensuringHomologyVarietyIds = new Set();
   const hodgeACoeffCache = new Map();
   const completeSymmetricCache = new Map();
   const schurPowerPolynomialCache = new Map();
@@ -198,6 +200,7 @@
     grassmannianMapDraft: null,
     grassmannianMapPickTarget: 'bundle',
     picardCanonicalDraft: null,
+    recommendationDraft: null,
     identifyDraft: null,
     identifyPickTarget: 'left',
     mapDraft: null,
@@ -620,6 +623,12 @@
     refs.picardCanonicalDegreeRow = $('picard-canonical-degree-row');
     refs.picardCanonicalDegree = $('picard-canonical-degree');
     refs.picardCanonicalPickNote = $('picard-canonical-pick-note');
+    refs.recommendationEditor = $('recommendation-editor');
+    refs.recommendationSourceRow = $('recommendation-source-row');
+    refs.recommendationSourceButton = $('recommendation-source-button');
+    refs.recommendationListRow = $('recommendation-list-row');
+    refs.recommendationList = $('recommendation-list');
+    refs.recommendationPickNote = $('recommendation-pick-note');
     refs.inputOptions = $('input-options');
     refs.modifyWarning = $('modify-warning');
     refs.inputRevealActions = $('input-reveal-actions');
@@ -2287,10 +2296,13 @@
     const hasPicardCanonicalCurve = picardCanonicalCurveVarieties().length > 0;
     const hasSheaf = state.sheaves.length > 0;
     const hasIdentifyPair = identifyPickableObjects('variety').length >= 2 || identifyPickableObjects('sheaf').length >= 2;
+    const hasRecommendationSource = recommendationPickableObjects().length > 0;
     ['sheaf', 'map', 'combined'].forEach((kind) => {
       const option = refs.addObjectKind?.querySelector?.(`option[value="${kind}"]`);
       if (option) option.disabled = !hasBaseVariety;
     });
+    const recommendationOption = refs.addObjectKind?.querySelector?.('option[value="recommendations"]');
+    if (recommendationOption) recommendationOption.disabled = !hasRecommendationSource;
     const numberOption = refs.addObjectKind?.querySelector?.('option[value="number"]');
     if (numberOption) numberOption.disabled = false;
     const abelJacobiTypeOption = refs.combinedType?.querySelector?.('option[value="abel-jacobi"]');
@@ -2327,6 +2339,7 @@
       refs.addObjectKind.value = 'variety';
     }
     if (refs.combinedEditor) refs.combinedEditor.hidden = inputIsModifyMode() || !combinedCreateMode();
+    if (refs.recommendationEditor) refs.recommendationEditor.hidden = inputIsModifyMode() || !recommendationsCreateMode();
     updateCombinedDraftControls();
     const modifyOption = refs.inputMode?.querySelector?.('option[value="modify"]');
     if (modifyOption) modifyOption.disabled = !hasCanvasObjects;
@@ -2339,6 +2352,7 @@
   function createKindIsAvailable(kind) {
     if (kind === 'number') return true;
     if (kind === 'sheaf' || kind === 'map' || kind === 'combined') return state.varieties.length > 0;
+    if (kind === 'recommendations') return recommendationPickableObjects().length > 0;
     return true;
   }
 
@@ -2531,11 +2545,13 @@
     const showingMap = !showingNumber && (modifying ? !!state.activeMapId : refs.addObjectKind?.value === 'map');
     const showingCombinedAbelJacobi = !showingNumber && !modifying && combinedAbelJacobiCreateMode();
     const showingMapEditor = showingMap || showingCombinedAbelJacobi;
+    const showingRecommendations = !showingNumber && !modifying && recommendationsCreateMode();
     const showingCombinedStructure = !showingNumber && (showingSequence || (!modifying && (combinedSesCreateMode() || combinedBlowupCreateMode() || combinedRamifiedCoverCreateMode() || combinedGrassmannianTautologicalSesCreateMode() || combinedGrassmannianMapCreateMode() || combinedPicardCanonicalCreateMode() || combinedIdentifyCreateMode())));
     const showingSheaf = !showingNumber && !showingMapEditor && !showingCombinedStructure && (modifying ? !!state.activeSheafId : refs.addObjectKind?.value === 'sheaf');
     const waitingForSheafBase = inputIsCreateMode() && showingSheaf && !state.draftSheafBaseVarietyId;
     if (refs.addObjectKind) refs.addObjectKind.hidden = modifying;
     if (refs.combinedEditor) refs.combinedEditor.hidden = !showingSequence && (modifying || !combinedCreateMode());
+    if (refs.recommendationEditor) refs.recommendationEditor.hidden = !showingRecommendations;
     if (refs.inputOptions) refs.inputOptions.hidden = modifying;
     if (refs.modifyWarning) {
       const warningText = modifying ? currentModifyWarningText(hasModifyTarget) : '';
@@ -2543,7 +2559,7 @@
       refs.modifyWarning.textContent = warningText || '';
     }
     if (refs.globalInvariantEditor) refs.globalInvariantEditor.hidden = !showingNumber || (modifying && !hasModifyTarget);
-    refs.varietyEditor.hidden = showingNumber || (modifying ? (showingSequence || showingSheaf || showingMapEditor || !hasModifyTarget) : (showingSheaf || showingMapEditor || showingCombinedStructure));
+    refs.varietyEditor.hidden = showingNumber || (modifying ? (showingSequence || showingSheaf || showingMapEditor || !hasModifyTarget) : (showingSheaf || showingMapEditor || showingCombinedStructure || showingRecommendations));
     refs.sheafEditor.hidden = showingNumber || (modifying ? (showingSequence || !showingSheaf || !hasModifyTarget) : !showingSheaf);
     if (refs.mapEditor) refs.mapEditor.hidden = showingNumber || (modifying ? (showingSequence || !showingMap || !hasModifyTarget) : !showingMapEditor);
     syncGlobalInvariantDraftControls();
@@ -2773,6 +2789,9 @@
       clearPicardCanonicalDraft();
       if (refs.picardCanonicalDegree) refs.picardCanonicalDegree.value = 'd';
       activatePicardCanonicalPick({ render: false });
+    } else if (combinedRecommendationsCreateMode()) {
+      clearRecommendationDraft();
+      activateRecommendationPick({ render: false });
     } else if (combinedIdentifyCreateMode()) {
       clearIdentifyDraft();
       activateIdentifyPick('left', { render: false });
@@ -3618,6 +3637,7 @@
     if (!state.varieties.length && (value === 'sheaf' || value === 'map' || value === 'combined')) return 'variety';
     if (value === 'map' || combinedAbelJacobiCreateMode()) return 'map';
     if (combinedIdentifyCreateMode()) return identifyDraftKind() === 'sheaf' ? 'sheaf' : 'variety';
+    if (combinedRecommendationsCreateMode()) return 'variety';
     if (combinedSesCreateMode() || combinedGrassmannianTautologicalSesCreateMode() || combinedGrassmannianMapCreateMode() || combinedPicardCanonicalCreateMode()) return 'sheaf';
     return value === 'sheaf' ? 'sheaf' : 'variety';
   }
@@ -3656,6 +3676,14 @@
 
   function combinedPicardCanonicalCreateMode() {
     return combinedCreateMode() && refs.combinedType?.value === 'picard-canonical';
+  }
+
+  function recommendationsCreateMode() {
+    return inputIsCreateMode() && refs.addObjectKind?.value === 'recommendations';
+  }
+
+  function combinedRecommendationsCreateMode() {
+    return recommendationsCreateMode();
   }
 
   function combinedIdentifyCreateMode() {
@@ -4293,6 +4321,7 @@
     if (combinedRamifiedCoverCreateMode()) return createRamifiedCoverFromDraft();
     if (combinedGrassmannianMapCreateMode()) return createGrassmannianMapFromDraft();
     if (combinedPicardCanonicalCreateMode()) return createPicardCanonicalFromDraft();
+    if (combinedRecommendationsCreateMode()) return createRecommendationsFromDraft();
     if (combinedIdentifyCreateMode()) return createIdentifyFromDraft();
     if (kind === 'map') return createMapFromDraft();
     if (kind === 'sheaf') {
@@ -5077,6 +5106,7 @@
       clearTautologicalSesDraft();
       clearGrassmannianMapDraft();
       clearPicardCanonicalDraft();
+      clearRecommendationDraft();
       clearIdentifyDraft();
       clearMapDraft();
       clearSheafBinaryDraft();
@@ -5106,6 +5136,7 @@
       typeset(refs.sheafEditor);
       typeset(refs.mapEditor);
       typeset(refs.combinedEditor);
+      typeset(refs.recommendationEditor);
       if (combinedProductCreateMode()) activateProductFactorPick(0, { render: false });
       else if (combinedSesCreateMode()) activateSesPick(state.sesPickTarget || 'sheaf-a', { render: false });
       else if (combinedBlowupCreateMode()) activateBlowupPick(state.blowupPickTarget || 'base', { render: false });
@@ -5113,6 +5144,7 @@
       else if (combinedGrassmannianTautologicalSesCreateMode()) activateTautologicalSesPick({ render: false });
       else if (combinedGrassmannianMapCreateMode()) activateGrassmannianMapPick({ render: false });
       else if (combinedPicardCanonicalCreateMode()) activatePicardCanonicalPick({ render: false });
+      else if (combinedRecommendationsCreateMode()) activateRecommendationPick({ render: false });
       else if (combinedIdentifyCreateMode()) activateIdentifyPick(state.identifyPickTarget || 'left', { render: false });
       else activateFirstCreateBlankPick({ render: false });
       recompute();
@@ -5128,6 +5160,7 @@
         clearTautologicalSesDraft();
         clearGrassmannianMapDraft();
         clearPicardCanonicalDraft();
+        clearRecommendationDraft();
         clearIdentifyDraft();
         clearMapDraft();
         setCanvasPickEnabled(false, { render: false });
@@ -5139,6 +5172,7 @@
         typeset(refs.varietyEditor);
         typeset(refs.mapEditor);
         typeset(refs.combinedEditor);
+        typeset(refs.recommendationEditor);
         if (combinedProductCreateMode()) activateProductFactorPick(0, { render: false });
         else if (combinedSesCreateMode()) activateSesPick(state.sesPickTarget || 'sheaf-a', { render: false });
         else if (combinedBlowupCreateMode()) activateBlowupPick(state.blowupPickTarget || 'base', { render: false });
@@ -5146,6 +5180,7 @@
         else if (combinedGrassmannianTautologicalSesCreateMode()) activateTautologicalSesPick({ render: false });
         else if (combinedGrassmannianMapCreateMode()) activateGrassmannianMapPick({ render: false });
         else if (combinedPicardCanonicalCreateMode()) activatePicardCanonicalPick({ render: false });
+        else if (combinedRecommendationsCreateMode()) activateRecommendationPick({ render: false });
         else if (combinedIdentifyCreateMode()) activateIdentifyPick(state.identifyPickTarget || 'left', { render: false });
         else activateFirstCreateBlankPick({ render: false });
         recompute();
@@ -5198,6 +5233,20 @@
     if (refs.picardCanonicalCurveButton) {
       refs.picardCanonicalCurveButton.addEventListener('click', () => {
         activatePicardCanonicalPick();
+      });
+    }
+    if (refs.recommendationSourceButton) {
+      refs.recommendationSourceButton.addEventListener('click', () => {
+        activateRecommendationPick();
+      });
+    }
+    if (refs.recommendationList) {
+      refs.recommendationList.addEventListener('change', (event) => {
+        const checkbox = event.target?.closest?.('[data-recommendation-id]');
+        if (!checkbox) return;
+        setRecommendationSelected(checkbox.dataset.recommendationId, !!checkbox.checked);
+        updateRecommendationDraftControls();
+        normalizeControlVisibility();
       });
     }
     if (refs.identifyKind) {
@@ -6630,6 +6679,7 @@
   }
 
   function activeHomologyMapContext() {
+    if (resolvingActiveHomologyMapContext) return null;
     const target = activeHomologyTarget();
     if (target?.kind !== 'map') return null;
     const map = state.maps.find((item) => item.id === target.id) || null;
@@ -6637,13 +6687,18 @@
     const domain = state.varieties.find((item) => item.id === map.domainId);
     const codomain = state.varieties.find((item) => item.id === map.codomainId);
     if (!domain || !codomain) return null;
-    const domainGeometry = geometryFromVariety(domain);
-    const codomainGeometry = geometryFromVariety(codomain);
-    return {
-      map,
-      domain: { variety: domain, geometry: domainGeometry },
-      codomain: { variety: codomain, geometry: codomainGeometry }
-    };
+    resolvingActiveHomologyMapContext = true;
+    try {
+      const domainGeometry = geometryFromVariety(domain);
+      const codomainGeometry = geometryFromVariety(codomain);
+      return {
+        map,
+        domain: { variety: domain, geometry: domainGeometry },
+        codomain: { variety: codomain, geometry: codomainGeometry }
+      };
+    } finally {
+      resolvingActiveHomologyMapContext = false;
+    }
   }
 
   function activeHomologyVariety() {
@@ -10333,6 +10388,15 @@
     return created;
   }
 
+  function createRecommendationsFromDraft() {
+    const data = recommendationConstructionData();
+    if (!data) return null;
+    const created = createRecommendationConstructions(data);
+    if (!created) return null;
+    clearRecommendationDraft();
+    return created;
+  }
+
   function buildShortExactSequence(data) {
     const sheaves = [data.sheafA, data.sheafB, data.sheafC];
     const missingIndex = sheaves.findIndex((sheaf) => !sheaf);
@@ -11577,6 +11641,7 @@
     if (combinedGrassmannianTautologicalSesCreateMode()) return activateTautologicalSesPick(options);
     if (combinedGrassmannianMapCreateMode()) return activateGrassmannianMapPick(options);
     if (combinedPicardCanonicalCreateMode()) return activatePicardCanonicalPick(options);
+    if (combinedRecommendationsCreateMode()) return activateRecommendationPick(options);
     if (kind === 'sheaf') {
       if (sheafBinaryInputMode() && !sheafTensorZeroParentInputMode()) {
         state.sheafBinaryPickTarget = sheafBinaryDraftSheaf('left') ? 'right' : 'left';
@@ -11774,6 +11839,11 @@
   function clearPicardCanonicalDraft() {
     state.picardCanonicalDraft = null;
     updatePicardCanonicalDraftControls();
+  }
+
+  function clearRecommendationDraft() {
+    state.recommendationDraft = null;
+    updateRecommendationDraftControls();
   }
 
   function clearIdentifyDraft() {
@@ -11976,6 +12046,21 @@
     hint: () => picardCanonicalPickHint(),
     nextSlot: () => 'curve',
     handle: (kind, id) => handlePicardCanonicalPick(kind, id)
+  }, {
+    id: 'recommendations',
+    slots: ['source'],
+    active: () => combinedRecommendationsCreateMode(),
+    allowedObjectKinds: () => ['variety', 'sheaf', 'map'],
+    available: () => recommendationPickableObjects().length > 0,
+    candidate: (kind, id) => allowableRecommendationSourcePick(kind, id),
+    selectedState: (kind, id) => {
+      const source = recommendationDraftSource();
+      return source?.kind === kind && source.object?.id === id ? 'active' : null;
+    },
+    complete: () => !!recommendationConstructionData(),
+    hint: () => recommendationPickHint(),
+    nextSlot: () => 'source',
+    handle: (kind, id) => handleRecommendationPick(kind, id)
   }, {
     id: 'product',
     slots: ['factor-a', 'factor-b'],
@@ -12224,6 +12309,7 @@
     updateTautologicalSesDraftControls();
     updateGrassmannianMapDraftControls();
     updatePicardCanonicalDraftControls();
+    updateRecommendationDraftControls();
   }
 
   function identifyDraftKind() {
@@ -13344,6 +13430,530 @@
     if (genus == null) return 'choose a curve with genus resolving to an integer';
     if (genus + 1 > MAX_DIMENSION) return `dimension ${genus + 1} exceeds the calculator limit ${MAX_DIMENSION}`;
     return 'click build to add Pic^d(C), C x Pic^d(C), projections, and the Poincare line bundle';
+  }
+
+  function recommendationPickableObjects() {
+    return [
+      ...visibleCanvasVarieties().map((object) => ({ kind: 'variety', object })),
+      ...visibleCanvasSheaves().map((object) => ({ kind: 'sheaf', object })),
+      ...visibleCanvasMaps().map((object) => ({ kind: 'map', object }))
+    ];
+  }
+
+  function recommendationSourceObject(kind, id) {
+    const collection = kind === 'sheaf' ? state.sheaves : (kind === 'map' ? state.maps : state.varieties);
+    return collection.find((item) => item.id === id) || null;
+  }
+
+  function recommendationDraftSource() {
+    const draft = state.recommendationDraft || {};
+    const kind = draft.sourceKind === 'sheaf' || draft.sourceKind === 'map' ? draft.sourceKind : 'variety';
+    const object = recommendationSourceObject(kind, draft.sourceId);
+    return object && !object.hiddenOnCanvas ? { kind, object } : null;
+  }
+
+  function allowableRecommendationSourcePick(kind, id) {
+    if (kind !== 'variety' && kind !== 'sheaf' && kind !== 'map') return false;
+    const object = recommendationSourceObject(kind, id);
+    return !!object && !object.hiddenOnCanvas;
+  }
+
+  function activateRecommendationPick(options = {}) {
+    if (!combinedRecommendationsCreateMode()) return false;
+    setCanvasPickEnabled(true, { render: false });
+    updateRecommendationDraftControls();
+    syncGlobalPickButton();
+    if (options.render !== false) renderCanvas(state.lastResult);
+    return state.canvasPickEnabled;
+  }
+
+  function handleRecommendationPick(kind, id) {
+    if (!allowableRecommendationSourcePick(kind, id)) return;
+    const source = { kind, object: recommendationSourceObject(kind, id) };
+    const selectedIds = {};
+    recommendationItemsForSource(source).forEach((item) => {
+      if (!item.realized) selectedIds[item.id] = true;
+    });
+    state.recommendationDraft = { sourceKind: kind, sourceId: id, selectedIds };
+    setCanvasPickEnabled(false, { render: false });
+    updateRecommendationDraftControls();
+    recompute();
+  }
+
+  function setRecommendationSelected(id, checked) {
+    const itemId = String(id || '');
+    if (!itemId) return;
+    const draft = state.recommendationDraft || {};
+    const selectedIds = { ...(draft.selectedIds || {}) };
+    if (checked) selectedIds[itemId] = true;
+    else delete selectedIds[itemId];
+    state.recommendationDraft = { ...draft, selectedIds };
+  }
+
+  function updateRecommendationDraftControls() {
+    const show = combinedRecommendationsCreateMode();
+    if (refs.recommendationSourceRow) refs.recommendationSourceRow.hidden = !show;
+    if (refs.recommendationListRow) refs.recommendationListRow.hidden = !show;
+    syncPickFlowNote(refs.recommendationPickNote, 'recommendations', show);
+    const source = recommendationDraftSource();
+    if (refs.recommendationSourceButton) {
+      const label = source ? recommendationSourceLabel(source) : 'object';
+      refs.recommendationSourceButton.textContent = label;
+      refs.recommendationSourceButton.title = source ? `Replace ${label}` : 'Pick a source object on the canvas';
+      refs.recommendationSourceButton.setAttribute('aria-pressed', state.canvasPickEnabled && show ? 'true' : 'false');
+    }
+    if (!refs.recommendationList) return;
+    if (!show) {
+      refs.recommendationList.innerHTML = '';
+      return;
+    }
+    const items = recommendationItemsForSource(source);
+    if (!source) {
+      refs.recommendationList.innerHTML = '<span class="hint">Pick a source object.</span>';
+      return;
+    }
+    if (!items.length) {
+      refs.recommendationList.innerHTML = '<span class="hint">No recommendations for this source yet.</span>';
+      return;
+    }
+    const selected = state.recommendationDraft?.selectedIds || {};
+    refs.recommendationList.innerHTML = items.map((item) => {
+      const checked = selected[item.id] ? ' checked' : '';
+      const realized = item.realized ? ' <span class="hint">(already exists)</span>' : '';
+      return `<label class="opt-row" title="${escapeHtml(item.description)}"><input type="checkbox" data-recommendation-id="${escapeHtml(item.id)}"${checked}> ${escapeHtml(item.label)}${realized}</label>`;
+    }).join('');
+  }
+
+  function recommendationSourceLabel(source) {
+    if (!source?.object) return 'object';
+    const fallback = source.kind === 'map' ? 'f' : (source.kind === 'sheaf' ? '\\mathcal{E}' : 'X');
+    return latexToPlain(sanitizeMathLabel(source.object.name, fallback));
+  }
+
+  function recommendationItemsForSource(source = recommendationDraftSource()) {
+    if (!source?.object || source.kind !== 'variety') return [];
+    const variety = source.object;
+    const geometry = geometryFromVariety(variety);
+    const items = [];
+    if (abelJacobiCurveGenus(geometry) != null) {
+      items.push({
+        id: 'abel-jacobi-jacobian',
+        label: 'Abel-Jacobi + Jacobian',
+        description: 'Create or reuse the Jacobian and Abel-Jacobi map for the selected source.',
+        realized: !!abelJacobiMapForCurve(variety)
+      });
+    }
+    const picardGenus = picardCanonicalCurveGenus(geometry);
+    if (picardGenus != null && geometry.dim + picardGenus <= MAX_DIMENSION) {
+      items.push({
+        id: 'picard-canonical',
+        label: 'Canonical line bundle on Pic^d(C)',
+        description: 'Create or reuse Pic^d(C), C x Pic^d(C), projections, and the Poincare line bundle.',
+        realized: !!picardPoincareSheafForCurve(variety, recommendationPicardDegreeSymbol())
+      });
+    }
+    if (completeIntersectionEmbeddingRecommendationAvailable(geometry)) {
+      items.push({
+        id: 'complete-intersection-embedding',
+        label: `Natural embedding in P^${geometry.ambient}`,
+        description: 'Create or reuse the ambient projective space and natural embedding map.',
+        realized: !!completeIntersectionEmbeddingMapForVariety(variety)
+      });
+    }
+    return items;
+  }
+
+  function completeIntersectionEmbeddingRecommendationAvailable(geometry) {
+    return geometry?.type === 'complete-intersection'
+      && Array.isArray(geometry.degrees)
+      && geometry.degrees.length > 0
+      && Number.isInteger(geometry.ambient)
+      && geometry.ambient >= 0
+      && geometry.ambient <= MAX_DIMENSION;
+  }
+
+  function recommendationConstructionData() {
+    const source = recommendationDraftSource();
+    if (!source) return null;
+    const items = recommendationItemsForSource(source);
+    const selectedIds = state.recommendationDraft?.selectedIds || {};
+    const selectedItems = items.filter((item) => selectedIds[item.id]);
+    return selectedItems.length ? { source, items: selectedItems } : null;
+  }
+
+  function recommendationPickHint() {
+    if (!recommendationPickableObjects().length) return 'add an object first';
+    const source = recommendationDraftSource();
+    if (!source) return 'click a source object on the canvas';
+    const items = recommendationItemsForSource(source);
+    if (!items.length) return 'no recommendations for this source yet';
+    if (!recommendationConstructionData()) return 'check at least one recommendation';
+    return 'click build to create the checked recommendations';
+  }
+
+  function createRecommendationConstructions(data) {
+    if (!data?.source?.object || !Array.isArray(data.items)) return null;
+    const created = [];
+    data.items.forEach((item) => {
+      let object = null;
+      if (item.id === 'abel-jacobi-jacobian' && data.source.kind === 'variety') object = ensureAbelJacobiMapForCurve(data.source.object);
+      else if (item.id === 'picard-canonical' && data.source.kind === 'variety') object = ensurePicardCanonicalRecommendationForCurve(data.source.object);
+      else if (item.id === 'complete-intersection-embedding' && data.source.kind === 'variety') object = ensureCompleteIntersectionEmbedding(data.source.object);
+      if (object) created.push(object);
+    });
+    const last = created[created.length - 1] || null;
+    if (!last) return null;
+    const kind = objectKindForItem(last);
+    revealObjectOnCanvas(last);
+    if (kind === 'variety') {
+      state.activeSequenceId = null;
+      state.activeVarietyId = last.id;
+      state.activeSheafId = null;
+      state.activeMapId = null;
+      state.activeHomologyTarget = { kind: 'variety', id: last.id };
+    } else if (kind === 'sheaf') {
+      state.activeSequenceId = null;
+      state.activeSheafId = last.id;
+      state.activeVarietyId = last.baseVarietyId || state.activeVarietyId;
+      state.activeMapId = null;
+      state.activeHomologyTarget = { kind: 'sheaf', id: last.id };
+    } else if (kind === 'map') {
+      state.activeSequenceId = null;
+      state.activeMapId = last.id;
+      state.activeSheafId = null;
+      state.activeVarietyId = last.domainKind === 'variety' ? last.domainId : state.activeVarietyId;
+      state.activeHomologyTarget = { kind: 'map', id: last.id };
+    }
+    state.hiddenObjects = hiddenObjectRefs();
+    refreshConstructedObjects();
+    return last;
+  }
+
+  function revealObjectOnCanvas(object) {
+    if (!object) return null;
+    if (object.hiddenOnCanvas) object.hiddenOnCanvas = false;
+    return object;
+  }
+
+  function recommendationPicardDegreeSymbol() {
+    return 'd';
+  }
+
+  function recommendationPicardDegreeValue() {
+    return '';
+  }
+
+  function picardVarietyForCurve(curve, degreeSymbol = recommendationPicardDegreeSymbol()) {
+    const symbol = sanitizeGlobalInvariantName(degreeSymbol, 'd');
+    return state.varieties.find((variety) => (
+      variety.construction?.type === 'picard-variety'
+      && variety.construction.curveId === curve?.id
+      && sanitizeGlobalInvariantName(variety.construction.degreeSymbol, 'd') === symbol
+    )) || null;
+  }
+
+  function ensurePicardVarietyForCurve(curve, degreeSymbol = recommendationPicardDegreeSymbol()) {
+    const existing = picardVarietyForCurve(curve, degreeSymbol);
+    if (existing) {
+      revealObjectOnCanvas(existing);
+      ensureThetaClass(existing);
+      refreshPicardVariety(existing, existing.construction || {});
+      return existing;
+    }
+    return createPicardVariety(curve, degreeSymbol);
+  }
+
+  function curvePicardProductForCurve(curve, picard) {
+    return state.varieties.find((variety) => (
+      variety.construction?.type === 'product'
+      && variety.construction.varietyIds?.[0] === curve?.id
+      && variety.construction.varietyIds?.[1] === picard?.id
+    )) || null;
+  }
+
+  function ensureCurvePicardProduct(curve, picard) {
+    const curveGeometry = geometryFromVariety(curve);
+    const picardGeometry = geometryFromVariety(picard);
+    const existing = curvePicardProductForCurve(curve, picard);
+    if (existing) {
+      revealObjectOnCanvas(existing);
+      refreshConstructedVariety(existing);
+      return existing;
+    }
+    return createProductVariety({
+      left: curve,
+      right: picard,
+      dim: curveGeometry.dim + picardGeometry.dim,
+      defaultName: defaultCurvePicardProductName(curve, picard),
+      name: defaultCurvePicardProductName(curve, picard),
+      nameDirty: false
+    });
+  }
+
+  function ensureProductProjectionForFactor(product, factor, factorIndex, defaultName = null) {
+    let projection = projectionMapForProduct(product, factorIndex);
+    if (projection) {
+      revealObjectOnCanvas(projection);
+      refreshProjectionMap(projection, projection.construction || {});
+    } else {
+      projection = createProjectionMapForProduct(product, factor, factorIndex);
+    }
+    if (projection && defaultName) setProjectionDefaultName(projection, defaultName);
+    return projection;
+  }
+
+  function picardPoincareSheafForCurve(curve, degreeSymbol = recommendationPicardDegreeSymbol()) {
+    const symbol = sanitizeGlobalInvariantName(degreeSymbol, 'd');
+    return state.sheaves.find((sheaf) => (
+      sheaf.construction?.type === 'picard-poincare-line-bundle'
+      && sheaf.construction.curveId === curve?.id
+      && sanitizeGlobalInvariantName(sheaf.construction.degreeSymbol, 'd') === symbol
+    )) || null;
+  }
+
+  function revealPicardCanonicalConstruction(sheaf) {
+    const construction = sheaf?.construction || {};
+    const picard = state.varieties.find((item) => item.id === construction.picardId);
+    const product = state.varieties.find((item) => item.id === construction.productId || item.id === sheaf?.baseVarietyId);
+    const projectionCurve = state.maps.find((item) => item.id === construction.curveProjectionId);
+    const projectionPicard = state.maps.find((item) => item.id === construction.picardProjectionId);
+    [picard, product, projectionCurve, projectionPicard, sheaf].forEach(revealObjectOnCanvas);
+  }
+
+  function ensurePicardCanonicalRecommendationForCurve(curve) {
+    const geometry = geometryFromVariety(curve);
+    const genus = picardCanonicalCurveGenus(geometry);
+    if (genus == null || geometry.dim + genus > MAX_DIMENSION) return null;
+    const degreeSymbol = recommendationPicardDegreeSymbol();
+    const degreeValue = recommendationPicardDegreeValue();
+    const picard = ensurePicardVarietyForCurve(curve, degreeSymbol);
+    if (!picard) return null;
+    const product = ensureCurvePicardProduct(curve, picard);
+    if (!product) return null;
+    const projectionCurve = ensureProductProjectionForFactor(product, curve, 0, defaultPicardCurveProjectionName());
+    const projectionPicard = ensureProductProjectionForFactor(product, picard, 1, defaultPicardProjectionName(picard));
+    const existing = picardPoincareSheafForCurve(curve, degreeSymbol);
+    if (existing) {
+      existing.construction = {
+        ...(existing.construction || {}),
+        type: 'picard-poincare-line-bundle',
+        curveId: curve.id,
+        picardId: picard.id,
+        productId: product.id,
+        curveProjectionId: projectionCurve?.id || null,
+        picardProjectionId: projectionPicard?.id || null,
+        degreeSymbol,
+        degreeValue,
+        defaultName: defaultPicardPoincareSheafName(degreeSymbol)
+      };
+      revealPicardCanonicalConstruction(existing);
+      refreshPicardPoincareSheaf(existing, existing.construction);
+      return existing;
+    }
+    const sheaf = createPicardPoincareSheaf({ curve, genus, degreeSymbol, degreeValue }, product, picard, projectionCurve, projectionPicard);
+    revealPicardCanonicalConstruction(sheaf);
+    return sheaf;
+  }
+
+  function canonicalSheafForVariety(variety) {
+    return state.sheaves.find((sheaf) => (
+      sheaf.baseVarietyId === variety?.id
+      && sheaf.type === 'canonical'
+      && !sheaf.construction
+    )) || null;
+  }
+
+  function ensureVisibleCanonicalSheafForVariety(variety) {
+    const sheaf = ensureCanonicalSheafForVariety(variety);
+    if (!sheaf) return null;
+    revealObjectOnCanvas(sheaf);
+    positionSheafNearBase(sheaf, variety);
+    avoidCanvasLabelOverlap(sheaf);
+    return sheaf;
+  }
+
+  function jacobianVarietyForCurve(curve) {
+    return state.varieties.find((variety) => (
+      variety.construction?.type === 'jacobian'
+      && (variety.construction.sourceId || variety.construction.curveId) === curve?.id
+    )) || null;
+  }
+
+  function ensureJacobianVarietyForCurve(curve) {
+    const existing = jacobianVarietyForCurve(curve);
+    if (existing) {
+      revealObjectOnCanvas(existing);
+      ensureThetaClass(existing);
+      refreshJacobianVariety(existing, existing.construction || {});
+      return existing;
+    }
+    return createJacobianVariety(curve);
+  }
+
+  function abelJacobiMapForCurve(curve) {
+    return state.maps.find((map) => (
+      map.construction?.type === 'abel-jacobi'
+      && (map.construction.sourceId || map.construction.curveId || map.domainId) === curve?.id
+    )) || null;
+  }
+
+  function ensureAbelJacobiMapForCurve(curve) {
+    const jacobian = ensureJacobianVarietyForCurve(curve);
+    if (!curve || !jacobian) return null;
+    const existing = abelJacobiMapForCurve(curve);
+    if (existing) {
+      revealObjectOnCanvas(existing);
+      existing.codomainKind = 'variety';
+      existing.codomainId = jacobian.id;
+      existing.domainKind = 'variety';
+      existing.domainId = curve.id;
+      existing.construction = {
+        ...(existing.construction || {}),
+        type: 'abel-jacobi',
+        curveId: curve.id,
+        sourceId: curve.id,
+        jacobianId: jacobian.id,
+        defaultName: existing.construction?.defaultName || defaultAbelJacobiMapNameFromCurve(curve),
+        nameDirty: existing.nameDirty === true || existing.construction?.nameDirty === true
+      };
+      refreshAbelJacobiMap(existing, existing.construction);
+      return existing;
+    }
+    const defaultName = defaultAbelJacobiMapNameFromCurve(curve);
+    const map = createMapObject(
+      { kind: 'variety', id: curve.id },
+      { kind: 'variety', id: jacobian.id },
+      {
+        name: uniqueConstructedObjectName('map', defaultName),
+        activate: false,
+        syncDraft: false,
+        construction: {
+          type: 'abel-jacobi',
+          curveId: curve.id,
+          sourceId: curve.id,
+          jacobianId: jacobian.id,
+          defaultName,
+          nameDirty: false
+        }
+      }
+    );
+    if (!map) return null;
+    map.nameDirty = false;
+    syncObjectLineage(map, 'map');
+    ensureAbelJacobiKnownHomologyRules(map);
+    return map;
+  }
+
+  function completeIntersectionAmbientForVariety(variety) {
+    return state.varieties.find((candidate) => (
+      candidate.construction?.type === 'complete-intersection-ambient'
+      && candidate.construction.sourceId === variety?.id
+    )) || null;
+  }
+
+  function completeIntersectionEmbeddingMapForVariety(variety) {
+    return state.maps.find((map) => (
+      map.construction?.type === 'complete-intersection-embedding'
+      && (map.construction.sourceId || map.domainId) === variety?.id
+    )) || null;
+  }
+
+  function defaultCompleteIntersectionAmbientName(geometry) {
+    const ambient = Number.isInteger(geometry?.ambient) ? geometry.ambient : 0;
+    return `\\mathbb{P}^{${ambient}}`;
+  }
+
+  function defaultCompleteIntersectionEmbeddingMapName(variety) {
+    const label = sanitizeMathLabel(variety?.name, 'X');
+    return `\\iota_{${label}}`;
+  }
+
+  function ensureCompleteIntersectionAmbient(variety) {
+    const geometry = geometryFromVariety(variety);
+    if (!completeIntersectionEmbeddingRecommendationAvailable(geometry)) return null;
+    const defaultName = defaultCompleteIntersectionAmbientName(geometry);
+    const existing = completeIntersectionAmbientForVariety(variety);
+    if (existing) {
+      revealObjectOnCanvas(existing);
+      existing.type = 'projective';
+      existing.dim = String(geometry.ambient);
+      existing.ciDegrees = '';
+      if (!existing.nameDirty) existing.name = defaultName;
+      existing.construction = {
+        ...(existing.construction || {}),
+        type: 'complete-intersection-ambient',
+        sourceId: variety.id,
+        defaultName,
+        nameDirty: existing.nameDirty === true
+      };
+      syncObjectLineage(existing, 'variety');
+      return existing;
+    }
+    const ambient = {
+      id: nextInputId('X'),
+      type: 'projective',
+      dim: String(geometry.ambient),
+      name: uniqueConstructedObjectName('variety', defaultName),
+      genus: 'g',
+      ciDegrees: '',
+      nameDirty: false,
+      construction: {
+        type: 'complete-intersection-ambient',
+        sourceId: variety.id,
+        defaultName,
+        nameDirty: false
+      }
+    };
+    syncObjectLineage(ambient, 'variety');
+    positionConstructedObjectNear(ambient, [variety]);
+    state.varieties.push(ambient);
+    return ambient;
+  }
+
+  function ensureCompleteIntersectionEmbedding(variety) {
+    const geometry = geometryFromVariety(variety);
+    if (!completeIntersectionEmbeddingRecommendationAvailable(geometry)) return null;
+    const ambient = ensureCompleteIntersectionAmbient(variety);
+    if (!ambient) return null;
+    const existing = completeIntersectionEmbeddingMapForVariety(variety);
+    const defaultName = defaultCompleteIntersectionEmbeddingMapName(variety);
+    if (existing) {
+      revealObjectOnCanvas(existing);
+      existing.domainKind = 'variety';
+      existing.domainId = variety.id;
+      existing.codomainKind = 'variety';
+      existing.codomainId = ambient.id;
+      existing.construction = {
+        ...(existing.construction || {}),
+        type: 'complete-intersection-embedding',
+        sourceId: variety.id,
+        ambientId: ambient.id,
+        defaultName,
+        nameDirty: existing.nameDirty === true || existing.construction?.nameDirty === true
+      };
+      refreshCompleteIntersectionEmbeddingMap(existing, existing.construction);
+      return existing;
+    }
+    const map = createMapObject(
+      { kind: 'variety', id: variety.id },
+      { kind: 'variety', id: ambient.id },
+      {
+        name: uniqueConstructedObjectName('map', defaultName),
+        activate: false,
+        syncDraft: false,
+        construction: {
+          type: 'complete-intersection-embedding',
+          sourceId: variety.id,
+          ambientId: ambient.id,
+          defaultName,
+          nameDirty: false
+        }
+      }
+    );
+    if (!map) return null;
+    map.nameDirty = false;
+    syncObjectLineage(map, 'map');
+    return map;
   }
 
   function updateCombinedVarietySlotButton(button, variety, fallback, picking) {
@@ -15526,6 +16136,12 @@
         subobjects: []
       };
     }
+    if (kind === 'variety' && construction.type === 'complete-intersection-ambient') {
+      return {
+        parents: [parent('variety', construction.sourceId, 'complete-intersection')].filter((item) => item.id),
+        subobjects: []
+      };
+    }
     if (kind === 'variety' && construction.type === 'blow-up-point') {
       return {
         parents: [
@@ -15709,6 +16325,18 @@
         ].filter(Boolean)
       };
     }
+    if (kind === 'map' && construction.type === 'complete-intersection-embedding') {
+      return {
+        parents: [
+          parent('variety', construction.sourceId, 'complete-intersection'),
+          parent('variety', construction.ambientId, 'ambient')
+        ].filter((item) => item.id),
+        subobjects: [
+          object.domainId ? parent(object.domainKind, object.domainId, 'domain') : null,
+          object.codomainId ? parent(object.codomainKind, object.codomainId, 'codomain') : null
+        ].filter(Boolean)
+      };
+    }
     if (kind === 'map' && construction.type === 'short-exact-sequence-map') {
       return {
         parents: (construction.sheafIds || []).map((id, index) => parent('sheaf', id, ['left-term', 'middle-term', 'right-term'][index] || 'term')),
@@ -15774,6 +16402,7 @@
     if (construction?.type === 'blow-up-point') return refreshBlowupVariety(variety, construction);
     if (construction?.type === 'ramified-cover') return refreshRamifiedCoverVariety(variety, construction);
     if (construction?.type === 'grassmannian-target') return refreshGrassmannianTargetVariety(variety, construction);
+    if (construction?.type === 'complete-intersection-ambient') return refreshCompleteIntersectionAmbientVariety(variety, construction);
     if (construction?.type !== 'product') return false;
     const [left, right] = (construction.varietyIds || []).map((id) => state.varieties.find((item) => item.id === id));
     if (!left || !right) return false;
@@ -16039,6 +16668,42 @@
     }
     if (construction.projectiveModel !== projectiveModel) {
       construction.projectiveModel = projectiveModel;
+      changed = true;
+    }
+    if (syncObjectLineage(variety, 'variety')) changed = true;
+    return changed;
+  }
+
+  function refreshCompleteIntersectionAmbientVariety(variety, construction) {
+    const source = state.varieties.find((item) => item.id === construction.sourceId);
+    if (!source) return false;
+    const sourceGeometry = geometryFromVariety(source);
+    if (!completeIntersectionEmbeddingRecommendationAvailable(sourceGeometry)) return false;
+    const nextDefault = defaultCompleteIntersectionAmbientName(sourceGeometry);
+    let changed = false;
+    if (variety.type !== 'projective') {
+      variety.type = 'projective';
+      changed = true;
+    }
+    if (variety.dim !== String(sourceGeometry.ambient)) {
+      variety.dim = String(sourceGeometry.ambient);
+      changed = true;
+    }
+    if (variety.ciDegrees !== '') {
+      variety.ciDegrees = '';
+      changed = true;
+    }
+    const nameDirty = variety.nameDirty || construction.nameDirty;
+    if (!nameDirty && canonicalMathLabel(variety.name) !== canonicalMathLabel(nextDefault)) {
+      variety.name = nextDefault;
+      changed = true;
+    }
+    if (construction.defaultName !== nextDefault) {
+      construction.defaultName = nextDefault;
+      changed = true;
+    }
+    if (construction.nameDirty !== !!nameDirty) {
+      construction.nameDirty = !!nameDirty;
       changed = true;
     }
     if (syncObjectLineage(variety, 'variety')) changed = true;
@@ -16959,6 +17624,7 @@
     if (construction?.type === 'blow-down') return refreshBlowdownMap(map, construction);
     if (construction?.type === 'ramified-cover-map') return refreshRamifiedCoverMap(map, construction);
     if (construction?.type === 'grassmannian-map') return refreshGrassmannianMap(map, construction);
+    if (construction?.type === 'complete-intersection-embedding') return refreshCompleteIntersectionEmbeddingMap(map, construction);
     if (construction?.type !== 'composition') return false;
     const [first, second] = (construction.mapIds || []).map((id) => state.maps.find((item) => item.id === id));
     if (!first || !second) return false;
@@ -17167,6 +17833,48 @@
     }
     if (construction.basePointFree !== true && construction.basePointFree !== false) {
       construction.basePointFree = false;
+      changed = true;
+    }
+    if (syncObjectLineage(map, 'map')) changed = true;
+    return changed;
+  }
+
+  function refreshCompleteIntersectionEmbeddingMap(map, construction) {
+    const source = state.varieties.find((item) => item.id === (construction.sourceId || map.domainId));
+    const ambient = state.varieties.find((item) => item.id === (construction.ambientId || map.codomainId));
+    if (!source || !ambient) return false;
+    const sourceGeometry = geometryFromVariety(source);
+    const ambientGeometry = geometryFromVariety(ambient);
+    if (!completeIntersectionEmbeddingRecommendationAvailable(sourceGeometry) || ambientGeometry.type !== 'projective') return false;
+    let changed = false;
+    if (map.domainKind !== 'variety' || map.domainId !== source.id || map.codomainKind !== 'variety' || map.codomainId !== ambient.id) {
+      map.domainKind = 'variety';
+      map.domainId = source.id;
+      map.codomainKind = 'variety';
+      map.codomainId = ambient.id;
+      map.curve = null;
+      changed = true;
+    }
+    if (construction.sourceId !== source.id) {
+      construction.sourceId = source.id;
+      changed = true;
+    }
+    if (construction.ambientId !== ambient.id) {
+      construction.ambientId = ambient.id;
+      changed = true;
+    }
+    const nextDefault = defaultCompleteIntersectionEmbeddingMapName(source);
+    const nameDirty = map.nameDirty || construction.nameDirty;
+    if (!nameDirty && canonicalMathLabel(map.name) !== canonicalMathLabel(nextDefault)) {
+      map.name = nextDefault;
+      changed = true;
+    }
+    if (construction.defaultName !== nextDefault) {
+      construction.defaultName = nextDefault;
+      changed = true;
+    }
+    if (construction.nameDirty !== !!nameDirty) {
+      construction.nameDirty = !!nameDirty;
       changed = true;
     }
     if (syncObjectLineage(map, 'map')) changed = true;
@@ -17844,10 +18552,12 @@
     const draftingCombinedTautologicalSes = combinedGrassmannianTautologicalSesCreateMode();
     const draftingCombinedGrassmannianMap = combinedGrassmannianMapCreateMode();
     const draftingCombinedPicardCanonical = combinedPicardCanonicalCreateMode();
+    const draftingRecommendations = recommendationsCreateMode();
     const draftingCombinedIdentify = combinedIdentifyCreateMode();
     const draftingCombinedStructure = draftingCombinedSes || draftingCombinedBlowup || draftingCombinedRamifiedCover || draftingCombinedTautologicalSes || draftingCombinedGrassmannianMap || draftingCombinedPicardCanonical || draftingCombinedIdentify;
-    const draftingSheaf = !draftingNumber && !draftingMap && !draftingCombinedStructure && (inputIsModifyMode() ? editingSheaf : refs.addObjectKind?.value === 'sheaf');
-    const draftingVariety = !draftingNumber && !draftingMap && !draftingSheaf;
+    const draftingStructuredCreate = draftingCombinedStructure || draftingRecommendations;
+    const draftingSheaf = !draftingNumber && !draftingMap && !draftingStructuredCreate && (inputIsModifyMode() ? editingSheaf : refs.addObjectKind?.value === 'sheaf');
+    const draftingVariety = !draftingNumber && !draftingMap && !draftingSheaf && !draftingRecommendations;
     syncProductVarietyOption();
     const draftVariety = refs.varietyType.value;
     const activeVarietyType = activeVariety()?.type || 'abstract';
@@ -18143,10 +18853,11 @@
       const grassmannianMapParams = draftingCombinedGrassmannianMap ? syncGrassmannianMapControls() : null;
       const grassmannianMapReady = !draftingCombinedGrassmannianMap || pickFlowReady('grassmannian-map');
       const picardCanonicalReady = !draftingCombinedPicardCanonical || pickFlowReady('picard-canonical');
+      const recommendationReady = !draftingRecommendations || !!recommendationConstructionData();
       const identifyReady = !draftingCombinedIdentify || !!identifyConstructionData();
       const numberReady = !draftingNumber || globalInvariantNameIsValid(refs.globalInvariantName?.value);
-      refs.addObject.disabled = (draftingMap && !mapReady) || !ramifiedCoverMapReady || (productNeedsFactors && !productReady) || !grassmannianReady || !sesReady || !sesEditReady || !blowupReady || !ramifiedCoverReady || !tautologicalSesReady || !grassmannianMapReady || !picardCanonicalReady || !identifyReady || !numberReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSelfSum || editingSheafSelfSum) && !sheafSelfSumReady) || ((creatingSheafDual || editingSheafDual) && !sheafDualReady) || ((creatingSheafInternalHom || editingSheafInternalHom) && !sheafInternalHomReady) || ((creatingSheafIdeal || editingSheafIdeal) && !sheafIdealReady) || ((creatingSheafNormal || editingSheafNormal) && !sheafNormalReady) || ((creatingSheafRelative || editingSheafRelative) && !sheafRelativeReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
-      refs.addObject.textContent = inputIsModifyMode() ? 'update' : (combinedCreateMode() ? 'build' : 'add');
+      refs.addObject.disabled = (draftingMap && !mapReady) || !ramifiedCoverMapReady || (productNeedsFactors && !productReady) || !grassmannianReady || !sesReady || !sesEditReady || !blowupReady || !ramifiedCoverReady || !tautologicalSesReady || !grassmannianMapReady || !picardCanonicalReady || !recommendationReady || !identifyReady || !numberReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSelfSum || editingSheafSelfSum) && !sheafSelfSumReady) || ((creatingSheafDual || editingSheafDual) && !sheafDualReady) || ((creatingSheafInternalHom || editingSheafInternalHom) && !sheafInternalHomReady) || ((creatingSheafIdeal || editingSheafIdeal) && !sheafIdealReady) || ((creatingSheafNormal || editingSheafNormal) && !sheafNormalReady) || ((creatingSheafRelative || editingSheafRelative) && !sheafRelativeReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
+      refs.addObject.textContent = inputIsModifyMode() ? 'update' : ((combinedCreateMode() || draftingRecommendations) ? 'build' : 'add');
       let addTitle = '';
       if (creatingMap) {
         addTitle = pickFlowHint(activePickFlow());
@@ -18166,6 +18877,8 @@
         addTitle = pickFlowHint(pickFlowById('grassmannian-map'));
       } else if (draftingCombinedPicardCanonical) {
         addTitle = pickFlowHint(pickFlowById('picard-canonical'));
+      } else if (draftingRecommendations) {
+        addTitle = recommendationPickHint();
       } else if (draftingCombinedIdentify) {
         addTitle = pickFlowHint(pickFlowById('identify'));
       } else if (!grassmannianReady) {
@@ -18478,36 +19191,43 @@
     const homology = variety.homology && typeof variety.homology === 'object' ? variety.homology : {};
     homology.classes = homology.classes && typeof homology.classes === 'object' ? homology.classes : {};
     homology.customClasses = Array.isArray(homology.customClasses) ? homology.customClasses : [];
-    homology.customClasses = homology.customClasses.map((item) => normalizeCustomHomologyClass(item, geometry)).filter(Boolean);
     homology.rules = Array.isArray(homology.rules) ? homology.rules : [];
+    const varietyId = variety?.id || '';
+    if (varietyId && ensuringHomologyVarietyIds.has(varietyId)) return homology;
+    if (varietyId) ensuringHomologyVarietyIds.add(varietyId);
+    try {
+      homology.customClasses = homology.customClasses.map((item) => normalizeCustomHomologyClass(item, geometry)).filter(Boolean);
 
-    const classDefs = baseHomologyClassDefinitions({ ...geometry, homology });
-    classDefs.forEach((def) => {
-      const existing = homology.classes[def.id] && typeof homology.classes[def.id] === 'object'
-        ? homology.classes[def.id]
-        : {};
-      existing.symbol = sanitizeHomologySymbol(existing.symbol, def.defaultSymbol);
-      homology.classes[def.id] = existing;
-    });
+      const classDefs = baseHomologyClassDefinitions({ ...geometry, homology });
+      classDefs.forEach((def) => {
+        const existing = homology.classes[def.id] && typeof homology.classes[def.id] === 'object'
+          ? homology.classes[def.id]
+          : {};
+        existing.symbol = sanitizeHomologySymbol(existing.symbol, def.defaultSymbol);
+        homology.classes[def.id] = existing;
+      });
 
-    const existingStandardRules = new Map(homology.rules
-      .filter((rule) => isStandardHomologyRuleId(rule.id) && !rule.deleted)
-      .map((rule) => [rule.id, rule]));
-    const deletedStandardRules = homology.rules.filter((rule) => isStandardHomologyRuleId(rule.id) && rule.deleted);
-    const deletedStandardRuleIds = new Set(deletedStandardRules.map((rule) => rule.id));
-    const customRules = homology.rules.filter((rule) => !isStandardHomologyRuleId(rule.id));
-    const normalizationGeometry = { ...geometry, homology };
-    const standardRules = standardHomologyRules(normalizationGeometry, existingStandardRules);
-    homology.rules = [
-      ...standardRules.filter((rule) => !deletedStandardRuleIds.has(rule.id)),
-      ...deletedStandardRules,
-      ...customRules.map((rule) => normalizeHomologyRule(rule, normalizationGeometry, {
-        includeMapClasses: false,
-        preserveUnknownVariables: true
-      })).filter(Boolean)
-    ];
-    variety.homology = homology;
-    return homology;
+      const existingStandardRules = new Map(homology.rules
+        .filter((rule) => isStandardHomologyRuleId(rule.id) && !rule.deleted)
+        .map((rule) => [rule.id, rule]));
+      const deletedStandardRules = homology.rules.filter((rule) => isStandardHomologyRuleId(rule.id) && rule.deleted);
+      const deletedStandardRuleIds = new Set(deletedStandardRules.map((rule) => rule.id));
+      const customRules = homology.rules.filter((rule) => !isStandardHomologyRuleId(rule.id));
+      const normalizationGeometry = { ...geometry, homology };
+      const standardRules = standardHomologyRules(normalizationGeometry, existingStandardRules);
+      homology.rules = [
+        ...standardRules.filter((rule) => !deletedStandardRuleIds.has(rule.id)),
+        ...deletedStandardRules,
+        ...customRules.map((rule) => normalizeHomologyRule(rule, normalizationGeometry, {
+          includeMapClasses: false,
+          preserveUnknownVariables: true
+        })).filter(Boolean)
+      ];
+      variety.homology = homology;
+      return homology;
+    } finally {
+      if (varietyId) ensuringHomologyVarietyIds.delete(varietyId);
+    }
   }
 
   function ensureSheafHomologySystem(sheaf, geometry) {
@@ -19494,6 +20214,10 @@
 
   function homologyClassDefById(geometry, classId) {
     return homologyClassDefinitions(geometry).find((def) => def.id === classId) || null;
+  }
+
+  function baseHomologyClassDefById(geometry, classId) {
+    return baseHomologyClassDefinitions(geometry).find((def) => def.id === classId) || null;
   }
 
   function tangentChernHomologyClassId(index) {
@@ -28535,6 +29259,9 @@
     const projectionPullbackRules = state.maps
       .filter((map) => map.domainKind === 'variety' && map.codomainKind === 'variety' && map.domainId === geometry.varietyId)
       .flatMap((map) => defaultProjectionPullbackRules(map, geometry));
+    const completeIntersectionEmbeddingPullbackRules = state.maps
+      .filter((map) => map.domainKind === 'variety' && map.codomainKind === 'variety' && map.domainId === geometry.varietyId)
+      .flatMap((map) => defaultCompleteIntersectionEmbeddingPullbackRules(map, geometry));
     const pointPushforwardRules = state.maps
       .filter((map) => map.domainKind === 'variety' && map.codomainKind === 'variety' && map.codomainId === geometry.varietyId)
       .flatMap((map) => defaultPointPushforwardRules(map, geometry));
@@ -28553,16 +29280,21 @@
     const ramifiedCoverPushforwardRules = state.maps
       .filter((map) => map.domainKind === 'variety' && map.codomainKind === 'variety' && map.codomainId === geometry.varietyId)
       .flatMap((map) => defaultRamifiedCoverPushforwardRules(map, geometry));
+    const completeIntersectionEmbeddingPushforwardRules = state.maps
+      .filter((map) => map.domainKind === 'variety' && map.codomainKind === 'variety' && map.codomainId === geometry.varietyId)
+      .flatMap((map) => defaultCompleteIntersectionEmbeddingPushforwardRules(map, geometry));
     const rules = uniqueHomologyRulesByLhs([
       ...pullbackRules,
       ...blowdownPullbackRules,
       ...projectionPullbackRules,
+      ...completeIntersectionEmbeddingPullbackRules,
       ...pointPushforwardRules,
       ...projectionPushforwardRules,
       ...blowdownPushforwardRules,
       ...abelJacobiPullbackRules,
       ...abelJacobiPushforwardRules,
-      ...ramifiedCoverPushforwardRules
+      ...ramifiedCoverPushforwardRules,
+      ...completeIntersectionEmbeddingPushforwardRules
     ].filter(Boolean));
     if (options.includeSuppressed) return rules;
     const suppressed = new Set((geometry.homology?.rules || [])
@@ -28584,6 +29316,57 @@
       lhs: { powers: { [variableId]: 1 } },
       rhs: [{ coefficient: '1', powers: {} }]
     };
+  }
+
+  function defaultCompleteIntersectionEmbeddingPullbackRules(map, sourceGeometry = geometryByVarietyId(map?.domainId)) {
+    const context = completeIntersectionEmbeddingMapContext(map);
+    if (!context || context.sourceGeometry.varietyId !== sourceGeometry?.varietyId) return [];
+    const ambientHyperplane = homologyClassDefById(context.ambientGeometry, HOMOLOGY_HYPERPLANE_CLASS);
+    const pullbackDef = mapOperationHomologyClassDefinition(map, 'pullback', ambientHyperplane, context.sourceGeometry);
+    const sourceHyperplane = homologyClassDefById(context.sourceGeometry, HOMOLOGY_HYPERPLANE_CLASS);
+    if (!pullbackDef || !sourceHyperplane) return [];
+    return [{
+      id: `default-complete-intersection-embedding-hyperplane-pullback-${map.id}`,
+      builtin: true,
+      enabled: true,
+      lhs: { powers: { [homologyDefVariableId(pullbackDef, context.sourceGeometry)]: 1 } },
+      rhs: [{ coefficient: '1', powers: { [homologyDefVariableId(sourceHyperplane, context.sourceGeometry)]: 1 } }]
+    }];
+  }
+
+  function defaultCompleteIntersectionEmbeddingPushforwardRules(map, ambientGeometry = geometryByVarietyId(map?.codomainId)) {
+    const context = completeIntersectionEmbeddingMapContext(map);
+    if (!context || context.ambientGeometry.varietyId !== ambientGeometry?.varietyId) return [];
+    const rules = [];
+    const sourceHyperplaneId = homologyVariableId(HOMOLOGY_HYPERPLANE_CLASS, context.sourceGeometry);
+    const sourceHyperplane = homologyClassDefById(context.sourceGeometry, HOMOLOGY_HYPERPLANE_CLASS);
+    const ambientHyperplaneId = homologyVariableId(HOMOLOGY_HYPERPLANE_CLASS, context.ambientGeometry);
+    const ambientHyperplane = homologyClassDefById(context.ambientGeometry, HOMOLOGY_HYPERPLANE_CLASS);
+    if (!sourceHyperplane || !ambientHyperplane) return [];
+    defineVariable(sourceHyperplaneId, sourceHyperplane.degree, sourceHyperplane.symbolLatex, homologyDefinitionVariableMeta(sourceHyperplane));
+    defineVariable(ambientHyperplaneId, ambientHyperplane.degree, ambientHyperplane.symbolLatex, homologyDefinitionVariableMeta(ambientHyperplane));
+    const degree = context.degreeProduct.toString();
+    for (let power = 0; power <= context.sourceGeometry.dim; power += 1) {
+      const sourceKey = power > 0 ? monoKey({ [sourceHyperplaneId]: power }) : '';
+      const targetDef = mapPushforwardMonomialClassDefinition(map, {
+        key: sourceKey,
+        degree: power,
+        cohomologyDegree: 2 * power,
+        latex: power === 0 ? '1' : (power === 1 ? sourceHyperplane.symbolLatex : `${sourceHyperplane.symbolLatex}^{${power}}`),
+        plain: power === 0 ? '1' : (power === 1 ? sourceHyperplane.symbolPlain : `${sourceHyperplane.symbolPlain}^${power}`)
+      }, context.sourceGeometry, context.ambientGeometry);
+      if (!targetDef) continue;
+      const targetPower = context.codim + power;
+      const rhsPowers = targetPower > 0 ? { [ambientHyperplaneId]: targetPower } : {};
+      rules.push({
+        id: `default-complete-intersection-embedding-hyperplane-pushforward-${map.id}-${power}`,
+        builtin: true,
+        enabled: true,
+        lhs: { powers: { [homologyDefVariableId(targetDef, context.ambientGeometry)]: 1 } },
+        rhs: [{ coefficient: degree, powers: rhsPowers }]
+      });
+    }
+    return rules;
   }
 
   function defaultPointPushforwardRules(map, targetGeometry = geometryByVarietyId(map?.codomainId)) {
@@ -28824,8 +29607,8 @@
       && context.curveGeometry.homology?.symplecticBasisConfirmed === true
       ? defaultAbelJacobiSymplecticPullbackRules(map, context, genus)
       : [];
-    const thetaDef = homologyClassDefById(context.jacobianGeometry, HOMOLOGY_THETA_CLASS);
-    const pointDef = homologyClassDefById(context.curveGeometry, HOMOLOGY_POINT_CLASS);
+    const thetaDef = baseHomologyClassDefById(context.jacobianGeometry, HOMOLOGY_THETA_CLASS);
+    const pointDef = baseHomologyClassDefById(context.curveGeometry, HOMOLOGY_POINT_CLASS);
     if (!thetaDef || !pointDef) return rules;
     const targetDef = mapOperationHomologyClassDefinition(map, 'pullback', thetaDef, context.curveGeometry);
     if (!targetDef) return rules;
@@ -28841,8 +29624,8 @@
 
   function defaultSymmetricProductAbelJacobiPullbackRules(map, context) {
     const rules = [];
-    const thetaDef = homologyClassDefById(context.jacobianGeometry, HOMOLOGY_THETA_CLASS);
-    const sigmaDef = homologyClassDefById(context.curveGeometry, HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_SUM_CLASS);
+    const thetaDef = baseHomologyClassDefById(context.jacobianGeometry, HOMOLOGY_THETA_CLASS);
+    const sigmaDef = baseHomologyClassDefById(context.curveGeometry, HOMOLOGY_SYMMETRIC_PRODUCT_SIGMA_SUM_CLASS);
     if (!thetaDef || !sigmaDef) return rules;
     const targetDef = mapOperationHomologyClassDefinition(map, 'pullback', thetaDef, context.curveGeometry);
     if (!targetDef) return rules;
@@ -29070,7 +29853,7 @@
   }
 
   function abelJacobiCurveClassPoly(jacobianGeometry, genus) {
-    const thetaDef = homologyClassDefById(jacobianGeometry, HOMOLOGY_THETA_CLASS);
+    const thetaDef = baseHomologyClassDefById(jacobianGeometry, HOMOLOGY_THETA_CLASS);
     if (!thetaDef) return null;
     const thetaId = homologyDefVariableId(thetaDef, jacobianGeometry);
     return polyPower(Poly.variable(thetaId), genus - 1, jacobianGeometry.dim)
@@ -29095,7 +29878,7 @@
 
   function symmetricProductAbelJacobiSegrePoly(jacobianGeometry, genus, degree) {
     if (degree === 0) return Poly.one();
-    const thetaDef = homologyClassDefById(jacobianGeometry, HOMOLOGY_THETA_CLASS);
+    const thetaDef = baseHomologyClassDefById(jacobianGeometry, HOMOLOGY_THETA_CLASS);
     if (!thetaDef) return null;
     const theta = Poly.variable(homologyDefVariableId(thetaDef, jacobianGeometry));
     return polyPower(theta, degree, jacobianGeometry.dim)
@@ -29104,7 +29887,7 @@
   }
 
   function symmetricProductAbelJacobiSigmaCodomainPoly(context, genus, degree) {
-    const thetaDef = homologyClassDefById(context.jacobianGeometry, HOMOLOGY_THETA_CLASS);
+    const thetaDef = baseHomologyClassDefById(context.jacobianGeometry, HOMOLOGY_THETA_CLASS);
     if (!thetaDef) return null;
     const theta = Poly.variable(homologyDefVariableId(thetaDef, context.jacobianGeometry));
     return polyPower(theta, degree, context.jacobianGeometry.dim)
@@ -29418,6 +30201,21 @@
       factorIndex,
       productContext
     };
+  }
+
+  function completeIntersectionEmbeddingMapContext(map) {
+    if (!map || map.construction?.type !== 'complete-intersection-embedding' || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return null;
+    const source = state.varieties.find((item) => item.id === (map.construction.sourceId || map.domainId));
+    const ambient = state.varieties.find((item) => item.id === (map.construction.ambientId || map.codomainId));
+    if (!source || !ambient) return null;
+    const sourceGeometry = geometryFromVariety(source);
+    const ambientGeometry = geometryFromVariety(ambient);
+    if (!completeIntersectionEmbeddingRecommendationAvailable(sourceGeometry)) return null;
+    if (ambientGeometry.type !== 'projective' || ambientGeometry.dim !== sourceGeometry.ambient) return null;
+    const codim = sourceGeometry.ambient - sourceGeometry.dim;
+    if (!Number.isInteger(codim) || codim < 0 || codim !== sourceGeometry.codim) return null;
+    const degreeProduct = completeIntersectionDegreeProduct(sourceGeometry.degrees || []);
+    return { map, source, ambient, sourceGeometry, ambientGeometry, codim, degreeProduct };
   }
 
   function abelJacobiMapContext(map) {
@@ -30168,6 +30966,8 @@
     const targetGeometry = geometryByVarietyId(map?.codomainId);
     const abelJacobi = targetGeometry ? abelJacobiPushforwardSourceKey(map, sourceKey, targetGeometry) : null;
     if (abelJacobi) return automaticPushforwardMatchesTargetDegree(abelJacobi, targetDegree) ? abelJacobi : null;
+    const completeIntersection = completeIntersectionEmbeddingPushforwardSourceKey(map, sourceKey, sourceDim, targetDim);
+    if (completeIntersection) return automaticPushforwardMatchesTargetDegree(completeIntersection, targetDegree) ? completeIntersection : null;
     const ramified = ramifiedCoverPushforwardSourceKey(map, sourceKey, sourceDim, targetDim);
     if (ramified) return automaticPushforwardMatchesTargetDegree(ramified, targetDegree) ? ramified : null;
     return null;
@@ -30191,6 +30991,24 @@
       if (polyEquals(source, pulled)) return polyFromPowers(parseMonoKey(mono.key || '')).scale(fraction(context.degree));
     }
     return null;
+  }
+
+  function completeIntersectionEmbeddingPushforwardSourceKey(map, sourceKey, sourceDim, targetDim) {
+    const context = completeIntersectionEmbeddingMapContext(map);
+    if (!context || context.sourceGeometry.dim !== sourceDim || context.ambientGeometry.dim !== targetDim) return null;
+    const powers = parseMonoKey(sourceKey || '');
+    const sourceIds = Object.keys(powers);
+    const sourceHyperplaneId = homologyVariableId(HOMOLOGY_HYPERPLANE_CLASS, context.sourceGeometry);
+    let sourcePower = 0;
+    if (sourceIds.length) {
+      if (sourceIds.length !== 1 || sourceIds[0] !== sourceHyperplaneId) return null;
+      sourcePower = powers[sourceHyperplaneId] || 0;
+    }
+    if (!Number.isInteger(sourcePower) || sourcePower < 0 || sourcePower > context.sourceGeometry.dim) return null;
+    const targetPower = context.codim + sourcePower;
+    const ambientHyperplaneId = homologyVariableId(HOMOLOGY_HYPERPLANE_CLASS, context.ambientGeometry);
+    const rhs = targetPower > 0 ? polyPower(Poly.variable(ambientHyperplaneId), targetPower, context.ambientGeometry.dim) : Poly.one();
+    return rhs.scale(fraction(context.degreeProduct));
   }
 
   function ramifiedCoverBranchPushforwardSourceKey(map, sourceKey, context) {
@@ -38104,6 +38922,9 @@
       out.sheafId = sanitizePresetId(construction.sheafId);
       out.baseId = sanitizePresetId(construction.baseId);
       out.projectiveModel = construction.projectiveModel === true;
+    } else if (ownerKind === 'variety' && type === 'complete-intersection-ambient') {
+      out.sourceId = sanitizePresetId(construction.sourceId);
+      out.nameDirty = construction.nameDirty === true;
     } else if (ownerKind === 'sheaf' && (type === 'direct-sum' || type === 'tensor')) {
       const parentLimit = type === 'tensor' && construction.internalHom !== true ? MAX_TENSOR_PARENTS : 2;
       out.sheafIds = Array.isArray(construction.sheafIds) ? construction.sheafIds.map(sanitizePresetId).filter(Boolean).slice(0, parentLimit) : [];
@@ -38244,6 +39065,10 @@
       out.basePointFree = construction.basePointFree === true;
       out.projectiveModel = construction.projectiveModel === true;
       out.nameDirty = construction.nameDirty === true;
+    } else if (ownerKind === 'map' && type === 'complete-intersection-embedding') {
+      out.sourceId = sanitizePresetId(construction.sourceId);
+      out.ambientId = sanitizePresetId(construction.ambientId);
+      out.nameDirty = construction.nameDirty === true;
     } else {
       return null;
     }
@@ -38272,6 +39097,7 @@
     state.tautologicalSesDraft = null;
     state.grassmannianMapDraft = null;
     state.picardCanonicalDraft = null;
+    state.recommendationDraft = null;
     state.identifyDraft = null;
     state.identifyPickTarget = 'left';
     state.mapDraft = null;
