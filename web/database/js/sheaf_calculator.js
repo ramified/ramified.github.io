@@ -7308,13 +7308,14 @@
       addSheafObject(sheaf, { activate: false });
     }
     let changed = false;
+    const visibleRootLineBundle = sheaf.hiddenOnCanvas === false || sheaf.construction?.visibleOnCanvas === true;
     const nextFields = {
       type: ramifiedCoverRootLineBundleSheafType(baseGeometry),
       twist: String(smooth.rootTwist),
       rank: '1',
       baseVarietyId: base.id,
       basis: 'chern',
-      hiddenOnCanvas: true
+      hiddenOnCanvas: !visibleRootLineBundle
     };
     Object.entries(nextFields).forEach(([key, value]) => {
       if (sheaf[key] !== value) {
@@ -13531,7 +13532,9 @@
   }
 
   function recommendationItemsForSource(source = recommendationDraftSource()) {
-    if (!source?.object || source.kind !== 'variety') return [];
+    if (!source?.object) return [];
+    if (source.kind === 'map') return ramifiedCoverRecommendationItemsForMap(source.object);
+    if (source.kind !== 'variety') return [];
     const variety = source.object;
     const geometry = geometryFromVariety(variety);
     const items = [];
@@ -13558,6 +13561,27 @@
         label: `Natural embedding in P^${geometry.ambient}`,
         description: 'Create or reuse the ambient projective space and natural embedding map.',
         realized: !!completeIntersectionEmbeddingMapForVariety(variety)
+      });
+    }
+    return items;
+  }
+
+  function ramifiedCoverRecommendationItemsForMap(map) {
+    const context = ramifiedCoverRecommendationContext(map);
+    if (!context) return [];
+    const items = [{
+      id: 'ramification-divisor-inclusion',
+      label: 'Ramification divisor inclusion',
+      description: 'Create or reuse the ramification divisor R and inclusion R -> X~.',
+      realized: !!ramificationInclusionMapForCoverMap(context.map)
+    }];
+    if (context.smooth?.smoothCyclic === true && context.smooth.rootTwist != null) {
+      const root = ramifiedCoverRootLineBundleForMap(context.map);
+      items.push({
+        id: 'ramified-cover-root-line-bundle',
+        label: 'Defining line bundle L',
+        description: 'Reveal or reuse the line bundle L defining the smooth cyclic cover.',
+        realized: !!root && root.hiddenOnCanvas !== true
       });
     }
     return items;
@@ -13599,6 +13623,8 @@
       if (item.id === 'abel-jacobi-jacobian' && data.source.kind === 'variety') object = ensureAbelJacobiMapForCurve(data.source.object);
       else if (item.id === 'picard-canonical' && data.source.kind === 'variety') object = ensurePicardCanonicalRecommendationForCurve(data.source.object);
       else if (item.id === 'complete-intersection-embedding' && data.source.kind === 'variety') object = ensureCompleteIntersectionEmbedding(data.source.object);
+      else if (item.id === 'ramification-divisor-inclusion' && data.source.kind === 'map') object = ensureRamificationDivisorInclusion(data.source.object);
+      else if (item.id === 'ramified-cover-root-line-bundle' && data.source.kind === 'map') object = ensureVisibleRamifiedCoverRootLineBundle(data.source.object);
       if (object) created.push(object);
     });
     const last = created[created.length - 1] || null;
@@ -13633,6 +13659,175 @@
     if (!object) return null;
     if (object.hiddenOnCanvas) object.hiddenOnCanvas = false;
     return object;
+  }
+
+  function ramifiedCoverRecommendationContext(map) {
+    const context = ramifiedCoverMapContext(map);
+    if (!context || context.degree <= 1 || context.coverGeometry.dim <= 0 || context.baseGeometry.dim <= 0) return null;
+    const coverConstruction = context.cover.construction?.type === 'ramified-cover' ? context.cover.construction : {};
+    const mapConstruction = map?.construction || {};
+    const smooth = normalizeRamifiedCoverSmoothCyclicConstruction({
+      ...coverConstruction,
+      ...mapConstruction,
+      degree: context.degree,
+      coverMode: mapConstruction.coverMode || coverConstruction.coverMode
+    });
+    return {
+      ...context,
+      branchSymbol: sanitizeHomologySymbol(mapConstruction.branchSymbol ?? coverConstruction.branchSymbol, 'B'),
+      ramificationSymbol: sanitizeHomologySymbol(mapConstruction.ramificationSymbol ?? coverConstruction.ramificationSymbol, 'R'),
+      smooth
+    };
+  }
+
+  function ramificationDivisorForCoverMap(map) {
+    const coverId = map?.construction?.coverId || map?.domainId;
+    return state.varieties.find((variety) => (
+      variety.construction?.type === 'ramified-cover-ramification-divisor'
+      && (variety.construction.coverMapId === map?.id || variety.construction.coverId === coverId)
+    )) || null;
+  }
+
+  function ramificationInclusionMapForCoverMap(map) {
+    const coverId = map?.construction?.coverId || map?.domainId;
+    return state.maps.find((candidate) => (
+      candidate.construction?.type === 'ramified-cover-ramification-inclusion'
+      && (candidate.construction.coverMapId === map?.id || candidate.construction.coverId === coverId)
+    )) || null;
+  }
+
+  function defaultRamificationDivisorName(context) {
+    return sanitizeHomologySymbol(context?.ramificationSymbol, 'R');
+  }
+
+  function defaultRamificationInclusionName(context) {
+    const label = sanitizeMathLabel(defaultRamificationDivisorName(context), 'R');
+    return `\\iota_{${label}}`;
+  }
+
+  function ensureRamificationDivisorForMap(map) {
+    const context = ramifiedCoverRecommendationContext(map);
+    if (!context) return null;
+    const defaultName = defaultRamificationDivisorName(context);
+    const existing = ramificationDivisorForCoverMap(context.map);
+    if (existing) {
+      revealObjectOnCanvas(existing);
+      existing.type = 'abstract';
+      existing.dim = String(Math.max(0, context.coverGeometry.dim - 1));
+      existing.genus = context.cover.genus || 'g';
+      if (!existing.nameDirty) existing.name = defaultName;
+      existing.construction = {
+        ...(existing.construction || {}),
+        type: 'ramified-cover-ramification-divisor',
+        coverId: context.cover.id,
+        baseId: context.base.id,
+        coverMapId: context.map.id,
+        ramificationSymbol: context.ramificationSymbol,
+        defaultName,
+        nameDirty: existing.nameDirty === true || existing.construction?.nameDirty === true
+      };
+      syncObjectLineage(existing, 'variety');
+      return existing;
+    }
+    const divisor = {
+      id: nextInputId('X'),
+      type: 'abstract',
+      dim: String(Math.max(0, context.coverGeometry.dim - 1)),
+      name: uniqueConstructedObjectName('variety', defaultName),
+      genus: context.cover.genus || 'g',
+      ciDegrees: '',
+      nameDirty: false,
+      construction: {
+        type: 'ramified-cover-ramification-divisor',
+        coverId: context.cover.id,
+        baseId: context.base.id,
+        coverMapId: context.map.id,
+        ramificationSymbol: context.ramificationSymbol,
+        defaultName,
+        nameDirty: false
+      }
+    };
+    syncObjectLineage(divisor, 'variety');
+    positionConstructedObjectNear(divisor, [context.cover]);
+    state.varieties.push(divisor);
+    return divisor;
+  }
+
+  function ensureRamificationDivisorInclusion(map) {
+    const context = ramifiedCoverRecommendationContext(map);
+    if (!context) return null;
+    const divisor = ensureRamificationDivisorForMap(context.map);
+    if (!divisor) return null;
+    const defaultName = defaultRamificationInclusionName(context);
+    const existing = ramificationInclusionMapForCoverMap(context.map);
+    if (existing) {
+      revealObjectOnCanvas(existing);
+      existing.domainKind = 'variety';
+      existing.domainId = divisor.id;
+      existing.codomainKind = 'variety';
+      existing.codomainId = context.cover.id;
+      existing.construction = {
+        ...(existing.construction || {}),
+        type: 'ramified-cover-ramification-inclusion',
+        ramificationDivisorId: divisor.id,
+        coverId: context.cover.id,
+        baseId: context.base.id,
+        coverMapId: context.map.id,
+        ramificationSymbol: context.ramificationSymbol,
+        defaultName,
+        nameDirty: existing.nameDirty === true || existing.construction?.nameDirty === true
+      };
+      refreshRamificationInclusionMap(existing, existing.construction);
+      return existing;
+    }
+    const inclusion = createMapObject(
+      { kind: 'variety', id: divisor.id },
+      { kind: 'variety', id: context.cover.id },
+      {
+        name: uniqueConstructedObjectName('map', defaultName),
+        activate: false,
+        syncDraft: false,
+        construction: {
+          type: 'ramified-cover-ramification-inclusion',
+          ramificationDivisorId: divisor.id,
+          coverId: context.cover.id,
+          baseId: context.base.id,
+          coverMapId: context.map.id,
+          ramificationSymbol: context.ramificationSymbol,
+          defaultName,
+          nameDirty: false
+        }
+      }
+    );
+    if (!inclusion) return null;
+    inclusion.nameDirty = false;
+    syncObjectLineage(inclusion, 'map');
+    return inclusion;
+  }
+
+  function ramifiedCoverRootLineBundleForMap(map) {
+    const context = smoothCyclicRamifiedCoverContextFromMap(map);
+    if (!context) return null;
+    return state.sheaves.find((sheaf) => (
+      sheaf.construction?.type === 'ramified-cover-root'
+      && (sheaf.id === context.cover.construction?.rootSheafId || sheaf.construction.coverId === context.cover.id || sheaf.construction.mapId === context.map.id)
+    )) || null;
+  }
+
+  function ensureVisibleRamifiedCoverRootLineBundle(map) {
+    const context = smoothCyclicRamifiedCoverContextFromMap(map);
+    if (!context) return null;
+    ensureRamifiedCoverRootLineBundle(context.base, context.cover, context.map);
+    const sheaf = ramifiedCoverRootLineBundleForMap(context.map);
+    if (!sheaf) return null;
+    sheaf.construction = {
+      ...(sheaf.construction || {}),
+      type: 'ramified-cover-root',
+      visibleOnCanvas: true
+    };
+    revealObjectOnCanvas(sheaf);
+    refreshRamifiedCoverRootSheaf(sheaf, sheaf.construction);
+    return sheaf;
   }
 
   function recommendationPicardDegreeSymbol() {
@@ -16325,6 +16520,15 @@
         ].filter(Boolean)
       };
     }
+    if (kind === 'variety' && construction.type === 'ramified-cover-ramification-divisor') {
+      return {
+        parents: [
+          parent('variety', construction.coverId, 'cover'),
+          parent('map', construction.coverMapId, 'covering-map')
+        ].filter((item) => item.id),
+        subobjects: []
+      };
+    }
     if (kind === 'map' && construction.type === 'complete-intersection-embedding') {
       return {
         parents: [
@@ -16371,6 +16575,19 @@
         ].filter(Boolean)
       };
     }
+    if (kind === 'map' && construction.type === 'ramified-cover-ramification-inclusion') {
+      return {
+        parents: [
+          parent('variety', construction.ramificationDivisorId, 'ramification-divisor'),
+          parent('variety', construction.coverId, 'cover'),
+          parent('map', construction.coverMapId, 'covering-map')
+        ].filter((item) => item.id),
+        subobjects: [
+          object.domainId ? parent(object.domainKind, object.domainId, 'domain') : null,
+          object.codomainId ? parent(object.codomainKind, object.codomainId, 'codomain') : null
+        ].filter(Boolean)
+      };
+    }
     if (kind === 'map' && construction.type === 'grassmannian-map') {
       return {
         parents: [
@@ -16401,6 +16618,7 @@
     if (construction?.type === 'picard-variety') return refreshPicardVariety(variety, construction);
     if (construction?.type === 'blow-up-point') return refreshBlowupVariety(variety, construction);
     if (construction?.type === 'ramified-cover') return refreshRamifiedCoverVariety(variety, construction);
+    if (construction?.type === 'ramified-cover-ramification-divisor') return refreshRamificationDivisorVariety(variety, construction);
     if (construction?.type === 'grassmannian-target') return refreshGrassmannianTargetVariety(variety, construction);
     if (construction?.type === 'complete-intersection-ambient') return refreshCompleteIntersectionAmbientVariety(variety, construction);
     if (construction?.type !== 'product') return false;
@@ -16625,6 +16843,48 @@
     return changed;
   }
 
+  function refreshRamificationDivisorVariety(variety, construction) {
+    const coverMap = state.maps.find((item) => item.id === construction.coverMapId)
+      || state.maps.find((item) => item.construction?.type === 'ramified-cover-map' && (item.construction.coverId === construction.coverId || item.domainId === construction.coverId));
+    const context = ramifiedCoverRecommendationContext(coverMap);
+    if (!context) return false;
+    const defaultName = defaultRamificationDivisorName(context);
+    let changed = false;
+    const nextFields = {
+      type: 'abstract',
+      dim: String(Math.max(0, context.coverGeometry.dim - 1)),
+      genus: context.cover.genus || 'g',
+      ciDegrees: ''
+    };
+    Object.entries(nextFields).forEach(([key, value]) => {
+      if (variety[key] !== value) {
+        variety[key] = value;
+        changed = true;
+      }
+    });
+    const nameDirty = variety.nameDirty || construction.nameDirty;
+    if (!nameDirty && canonicalMathLabel(variety.name) !== canonicalMathLabel(defaultName)) {
+      variety.name = defaultName;
+      changed = true;
+    }
+    const nextConstruction = {
+      ...construction,
+      type: 'ramified-cover-ramification-divisor',
+      coverId: context.cover.id,
+      baseId: context.base.id,
+      coverMapId: context.map.id,
+      ramificationSymbol: context.ramificationSymbol,
+      defaultName,
+      nameDirty: !!nameDirty
+    };
+    if (JSON.stringify(construction) !== JSON.stringify(nextConstruction)) {
+      variety.construction = nextConstruction;
+      changed = true;
+    }
+    if (syncObjectLineage(variety, 'variety')) changed = true;
+    return changed;
+  }
+
   function refreshGrassmannianTargetVariety(variety, construction) {
     const bundle = state.sheaves.find((item) => item.id === construction.sheafId);
     if (!bundle) return false;
@@ -16785,13 +17045,14 @@
     const baseGeometry = geometryFromVariety(base);
     const defaultName = defaultRamifiedCoverRootLineBundleName(base, smooth.rootTwist);
     let changed = false;
+    const visibleRootLineBundle = sheaf.hiddenOnCanvas === false || construction.visibleOnCanvas === true;
     const nextFields = {
       type: ramifiedCoverRootLineBundleSheafType(baseGeometry),
       twist: String(smooth.rootTwist),
       rank: '1',
       baseVarietyId: base.id,
       basis: 'chern',
-      hiddenOnCanvas: true
+      hiddenOnCanvas: !visibleRootLineBundle
     };
     Object.entries(nextFields).forEach(([key, value]) => {
       if (sheaf[key] !== value) {
@@ -17623,6 +17884,7 @@
     if (construction?.type === 'short-exact-sequence-map') return refreshSesMap(map, construction);
     if (construction?.type === 'blow-down') return refreshBlowdownMap(map, construction);
     if (construction?.type === 'ramified-cover-map') return refreshRamifiedCoverMap(map, construction);
+    if (construction?.type === 'ramified-cover-ramification-inclusion') return refreshRamificationInclusionMap(map, construction);
     if (construction?.type === 'grassmannian-map') return refreshGrassmannianMap(map, construction);
     if (construction?.type === 'complete-intersection-embedding') return refreshCompleteIntersectionEmbeddingMap(map, construction);
     if (construction?.type !== 'composition') return false;
@@ -17787,6 +18049,48 @@
     if (ensureRamifiedCoverHomologyClasses(base, cover, map)) changed = true;
     if (ensureRamifiedCoverRootLineBundle(base, cover, map)) changed = true;
     if (ensureRamifiedCoverRelativeDifferentialData(base, cover, map)) changed = true;
+    if (syncObjectLineage(map, 'map')) changed = true;
+    return changed;
+  }
+
+  function refreshRamificationInclusionMap(map, construction) {
+    const coverMap = state.maps.find((item) => item.id === construction.coverMapId)
+      || state.maps.find((item) => item.construction?.type === 'ramified-cover-map' && (item.construction.coverId === construction.coverId || item.domainId === construction.coverId));
+    const context = ramifiedCoverRecommendationContext(coverMap);
+    if (!context) return false;
+    const divisor = state.varieties.find((item) => item.id === construction.ramificationDivisorId)
+      || ramificationDivisorForCoverMap(context.map);
+    if (!divisor) return false;
+    const defaultName = defaultRamificationInclusionName(context);
+    let changed = false;
+    if (map.domainKind !== 'variety' || map.domainId !== divisor.id || map.codomainKind !== 'variety' || map.codomainId !== context.cover.id) {
+      map.domainKind = 'variety';
+      map.domainId = divisor.id;
+      map.codomainKind = 'variety';
+      map.codomainId = context.cover.id;
+      map.curve = null;
+      changed = true;
+    }
+    const nameDirty = map.nameDirty || construction.nameDirty;
+    if (!nameDirty && canonicalMathLabel(map.name) !== canonicalMathLabel(defaultName)) {
+      map.name = defaultName;
+      changed = true;
+    }
+    const nextConstruction = {
+      ...construction,
+      type: 'ramified-cover-ramification-inclusion',
+      ramificationDivisorId: divisor.id,
+      coverId: context.cover.id,
+      baseId: context.base.id,
+      coverMapId: context.map.id,
+      ramificationSymbol: context.ramificationSymbol,
+      defaultName,
+      nameDirty: !!nameDirty
+    };
+    if (JSON.stringify(construction) !== JSON.stringify(nextConstruction)) {
+      map.construction = nextConstruction;
+      changed = true;
+    }
     if (syncObjectLineage(map, 'map')) changed = true;
     return changed;
   }
@@ -29280,6 +29584,9 @@
     const ramifiedCoverPushforwardRules = state.maps
       .filter((map) => map.domainKind === 'variety' && map.codomainKind === 'variety' && map.codomainId === geometry.varietyId)
       .flatMap((map) => defaultRamifiedCoverPushforwardRules(map, geometry));
+    const ramificationInclusionPushforwardRules = state.maps
+      .filter((map) => map.domainKind === 'variety' && map.codomainKind === 'variety' && map.codomainId === geometry.varietyId)
+      .flatMap((map) => defaultRamificationInclusionPushforwardRules(map, geometry));
     const completeIntersectionEmbeddingPushforwardRules = state.maps
       .filter((map) => map.domainKind === 'variety' && map.codomainKind === 'variety' && map.codomainId === geometry.varietyId)
       .flatMap((map) => defaultCompleteIntersectionEmbeddingPushforwardRules(map, geometry));
@@ -29294,6 +29601,7 @@
       ...abelJacobiPullbackRules,
       ...abelJacobiPushforwardRules,
       ...ramifiedCoverPushforwardRules,
+      ...ramificationInclusionPushforwardRules,
       ...completeIntersectionEmbeddingPushforwardRules
     ].filter(Boolean));
     if (options.includeSuppressed) return rules;
@@ -29473,6 +29781,35 @@
       });
     }
     return rules;
+  }
+
+  function ramificationInclusionMapContext(map) {
+    if (!map || map.construction?.type !== 'ramified-cover-ramification-inclusion' || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return null;
+    const divisor = state.varieties.find((item) => item.id === (map.construction.ramificationDivisorId || map.domainId));
+    const cover = state.varieties.find((item) => item.id === (map.construction.coverId || map.codomainId));
+    const coverMap = state.maps.find((item) => item.id === map.construction.coverMapId)
+      || state.maps.find((item) => item.construction?.type === 'ramified-cover-map' && (item.construction.coverId === cover?.id || item.domainId === cover?.id));
+    const context = ramifiedCoverRecommendationContext(coverMap);
+    if (!divisor || !cover || !context || context.cover.id !== cover.id) return null;
+    const divisorGeometry = geometryFromVariety(divisor);
+    if (divisorGeometry.dim !== Math.max(0, context.coverGeometry.dim - 1)) return null;
+    return { map, divisor, cover, coverMap: context.map, divisorGeometry, coverGeometry: context.coverGeometry, ramifiedCover: context };
+  }
+
+  function defaultRamificationInclusionPushforwardRules(map, coverGeometry = geometryByVarietyId(map?.codomainId)) {
+    const context = ramificationInclusionMapContext(map);
+    if (!context || context.coverGeometry.varietyId !== coverGeometry?.varietyId) return [];
+    const unitDef = homologyClassDefById(context.divisorGeometry, HOMOLOGY_UNIT_CLASS);
+    const targetDef = mapOperationHomologyClassDefinition(map, 'pushforward', unitDef, context.coverGeometry);
+    const ramificationDef = homologyClassDefById(context.coverGeometry, HOMOLOGY_RAMIFICATION_DIVISOR_CLASS);
+    if (!targetDef || !ramificationDef) return [];
+    return [{
+      id: `default-ramification-inclusion-unit-pushforward-${map.id}`,
+      builtin: true,
+      enabled: true,
+      lhs: { powers: { [homologyDefVariableId(targetDef, context.coverGeometry)]: 1 } },
+      rhs: [{ coefficient: '1', powers: { [homologyDefVariableId(ramificationDef, context.coverGeometry)]: 1 } }]
+    }];
   }
 
   function defaultBlowdownPullbackRules(map, blowupGeometry = geometryByVarietyId(map?.domainId)) {
@@ -38918,6 +39255,12 @@
       out.smoothCyclic = smoothCyclic.smoothCyclic;
       out.branchDegree = smoothCyclic.branchDegree;
       out.rootTwist = smoothCyclic.rootTwist;
+    } else if (ownerKind === 'variety' && type === 'ramified-cover-ramification-divisor') {
+      out.coverId = sanitizePresetId(construction.coverId);
+      out.baseId = sanitizePresetId(construction.baseId);
+      out.coverMapId = sanitizePresetId(construction.coverMapId);
+      out.ramificationSymbol = sanitizeHomologySymbol(construction.ramificationSymbol, 'R');
+      out.nameDirty = construction.nameDirty === true;
     } else if (ownerKind === 'variety' && type === 'grassmannian-target') {
       out.sheafId = sanitizePresetId(construction.sheafId);
       out.baseId = sanitizePresetId(construction.baseId);
@@ -39007,6 +39350,7 @@
       out.degree = parseRamifiedCoverRootTwist(construction.degree) || normalizeRamifiedCoverDegree(construction.degree);
       out.coverDegree = normalizeRamifiedCoverDegree(construction.coverDegree);
       out.branchDegree = parseRamifiedCoverBranchDegree(construction.branchDegree);
+      out.visibleOnCanvas = construction.visibleOnCanvas === true;
     } else if (ownerKind === 'sheaf' && type === 'picard-poincare-line-bundle') {
       out.curveId = sanitizePresetId(construction.curveId);
       out.picardId = sanitizePresetId(construction.picardId);
@@ -39055,6 +39399,13 @@
       out.smoothCyclic = smoothCyclic.smoothCyclic;
       out.branchDegree = smoothCyclic.branchDegree;
       out.rootTwist = smoothCyclic.rootTwist;
+      out.nameDirty = construction.nameDirty === true;
+    } else if (ownerKind === 'map' && type === 'ramified-cover-ramification-inclusion') {
+      out.ramificationDivisorId = sanitizePresetId(construction.ramificationDivisorId);
+      out.coverId = sanitizePresetId(construction.coverId);
+      out.baseId = sanitizePresetId(construction.baseId);
+      out.coverMapId = sanitizePresetId(construction.coverMapId);
+      out.ramificationSymbol = sanitizeHomologySymbol(construction.ramificationSymbol, 'R');
       out.nameDirty = construction.nameDirty === true;
     } else if (ownerKind === 'map' && type === 'grassmannian-map') {
       out.sheafId = sanitizePresetId(construction.sheafId);

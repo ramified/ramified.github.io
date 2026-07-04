@@ -3087,6 +3087,121 @@ function testCompleteIntersectionRecommendationUnavailableForProjectiveOrTooLarg
   assert.strictEqual(api.recommendationItemsForSource({ kind: 'variety', object: tooLarge }).map((item) => item.id).join(','), '');
 }
 
+function testRamifiedCoverMapRecommendationsCreateRamificationAndRevealRootLine() {
+  const api = loadCalculator();
+  const base = { id: 'P3', type: 'projective', dim: '3', name: '\\mathbb{P}^{3}', labelX: 0.35, labelY: 0.65 };
+  api.state.varieties = [base];
+  const cover = api.createRamifiedCoverConstruction({
+    base,
+    degree: 2,
+    coverMode: 'cyclic',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    smoothCyclic: true,
+    branchDegree: 4,
+    rootTwist: 2,
+    defaultName: '\\widetilde{\\mathbb{P}^{3}}',
+    name: '\\widetilde{\\mathbb{P}^{3}}'
+  });
+  const coverMap = api.state.maps.find((item) => item.construction?.type === 'ramified-cover-map');
+  const root = api.state.sheaves.find((item) => item.construction?.type === 'ramified-cover-root');
+  assert(cover);
+  assert(coverMap);
+  assert(root);
+  assert.strictEqual(root.hiddenOnCanvas, true);
+
+  const items = api.recommendationItemsForSource({ kind: 'map', object: coverMap });
+  assert.strictEqual(items.map((item) => item.id).join(','), 'ramification-divisor-inclusion,ramified-cover-root-line-bundle');
+  assert.strictEqual(items.find((item) => item.id === 'ramified-cover-root-line-bundle').realized, false);
+  api.createRecommendationConstructions({ source: { kind: 'map', object: coverMap }, items });
+
+  const divisor = api.state.varieties.find((item) => item.construction?.type === 'ramified-cover-ramification-divisor');
+  const inclusion = api.state.maps.find((item) => item.construction?.type === 'ramified-cover-ramification-inclusion');
+  const visibleRoot = api.state.sheaves.find((item) => item.construction?.type === 'ramified-cover-root');
+  assert(divisor);
+  assert.strictEqual(divisor.name, 'R');
+  assert.strictEqual(divisor.dim, '2');
+  assert(inclusion);
+  assert.strictEqual(inclusion.domainId, divisor.id);
+  assert.strictEqual(inclusion.codomainId, cover.id);
+  assert(visibleRoot);
+  assert.strictEqual(visibleRoot.hiddenOnCanvas, false);
+  assert.strictEqual(visibleRoot.construction.visibleOnCanvas, true);
+
+  const coverGeometry = api.geometryFromVariety(cover);
+  const rule = api.defaultMapHomologyRulesForGeometry(coverGeometry)
+    .find((item) => item.id === `default-ramification-inclusion-unit-pushforward-${inclusion.id}`);
+  assert(rule);
+  const lhsId = Object.keys(rule.lhs.powers)[0];
+  assert.strictEqual(
+    api.formatPolyPlain(api.applyHomologyRules(api.polyFromPowers({ [lhsId]: 1 }), { geometry: coverGeometry, homology: coverGeometry.homology })),
+    'R'
+  );
+
+  const realized = api.recommendationItemsForSource({ kind: 'map', object: coverMap });
+  assert(realized.every((item) => item.realized));
+  api.createRecommendationConstructions({ source: { kind: 'map', object: coverMap }, items: realized });
+  assert.strictEqual(api.state.varieties.filter((item) => item.construction?.type === 'ramified-cover-ramification-divisor').length, 1);
+  assert.strictEqual(api.state.maps.filter((item) => item.construction?.type === 'ramified-cover-ramification-inclusion').length, 1);
+  assert.strictEqual(api.state.sheaves.filter((item) => item.construction?.type === 'ramified-cover-root').length, 1);
+}
+
+function testRamifiedCoverMapRecommendationEligibilityEdges() {
+  const generalApi = loadCalculator();
+  const base = { id: 'X', type: 'abstract', dim: '2', name: 'X' };
+  generalApi.state.varieties = [base];
+  generalApi.createRamifiedCoverConstruction({
+    base,
+    degree: 3,
+    coverMode: 'general',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    smoothCyclic: false,
+    defaultName: '\\widetilde{X}',
+    name: '\\widetilde{X}'
+  });
+  const generalMap = generalApi.state.maps.find((item) => item.construction?.type === 'ramified-cover-map');
+  assert.strictEqual(
+    generalApi.recommendationItemsForSource({ kind: 'map', object: generalMap }).map((item) => item.id).join(','),
+    'ramification-divisor-inclusion'
+  );
+
+  const nonsmoothApi = loadCalculator();
+  const nonsmoothBase = { id: 'Y', type: 'abstract', dim: '2', name: 'Y' };
+  nonsmoothApi.state.varieties = [nonsmoothBase];
+  nonsmoothApi.createRamifiedCoverConstruction({
+    base: nonsmoothBase,
+    degree: 2,
+    coverMode: 'cyclic',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    smoothCyclic: false,
+    defaultName: '\\widetilde{Y}',
+    name: '\\widetilde{Y}'
+  });
+  const nonsmoothMap = nonsmoothApi.state.maps.find((item) => item.construction?.type === 'ramified-cover-map');
+  assert.strictEqual(
+    nonsmoothApi.recommendationItemsForSource({ kind: 'map', object: nonsmoothMap }).map((item) => item.id).join(','),
+    'ramification-divisor-inclusion'
+  );
+
+  const degreeOneApi = loadCalculator();
+  const degreeOneBase = { id: 'Z', type: 'abstract', dim: '2', name: 'Z' };
+  degreeOneApi.state.varieties = [degreeOneBase];
+  degreeOneApi.createRamifiedCoverConstruction({
+    base: degreeOneBase,
+    degree: 1,
+    coverMode: 'cyclic',
+    branchSymbol: 'B',
+    ramificationSymbol: 'R',
+    smoothCyclic: false,
+    defaultName: '\\widetilde{Z}',
+    name: '\\widetilde{Z}'
+  });
+  const degreeOneMap = degreeOneApi.state.maps.find((item) => item.construction?.type === 'ramified-cover-map');
+  assert.strictEqual(degreeOneApi.recommendationItemsForSource({ kind: 'map', object: degreeOneMap }).map((item) => item.id).join(','), '');
+}
+
 function testIdealSheafConstructionCreatesHiddenSesAndImageClass() {
   const api = loadCalculator();
   const source = { id: 'X', type: 'abstract', dim: '1', name: 'X', labelX: 0.35, labelY: 0.65 };
@@ -6273,6 +6388,8 @@ testCurveRecommendationsCreateAjAndPicardCanonicalIdempotently();
 testSymmetricProductRecommendationsCreateAjOnly();
 testCompleteIntersectionRecommendationCreatesEmbeddingAndRules();
 testCompleteIntersectionRecommendationUnavailableForProjectiveOrTooLargeAmbient();
+testRamifiedCoverMapRecommendationsCreateRamificationAndRevealRootLine();
+testRamifiedCoverMapRecommendationEligibilityEdges();
 testIdealSheafConstructionCreatesHiddenSesAndImageClass();
 testNormalBundleConstructionCreatesHiddenTangentSes();
 testRelativeTangentConstructionCreatesHiddenTangentSes();
