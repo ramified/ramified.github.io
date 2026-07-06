@@ -3035,7 +3035,7 @@ const BRANCHING_RULES = {
     needsSourceB: true,
     formula: 'diag-ordinary',
     ordinaryGroup: 'O',
-    hint: 'Diagonal orthogonal rule using the Newell-Littlewood coefficient.',
+    hint: 'Diagonal orthogonal rule. With rank n supplied, unstable O(n) target terms are reduced by the O(N) modification rule.',
   },
   'diag-sp': {
     label: 'Sp(2n) x Sp(2n) -> Sp(2n)',
@@ -3045,7 +3045,7 @@ const BRANCHING_RULES = {
     needsSourceB: true,
     formula: 'diag-ordinary',
     ordinaryGroup: 'Sp',
-    hint: 'Diagonal symplectic rule using the Newell-Littlewood coefficient.',
+    hint: 'Diagonal symplectic rule. With rank n supplied, unstable Sp(2n) target terms are reduced by the Sp modification rule.',
   },
   'sum-gl': {
     label: 'GL(n+m) -> GL(n) x GL(m)',
@@ -3063,7 +3063,7 @@ const BRANCHING_RULES = {
     formula: 'sum-ordinary',
     ordinaryGroup: 'O',
     evenColumns: false,
-    hint: 'Direct-sum orthogonal rule. The result has O(n) and O(m) factors.',
+    hint: 'Direct-sum orthogonal rule. With ranks supplied, unstable O target terms are reduced by the O(N) modification rule.',
   },
   'sum-sp': {
     label: 'Sp(2n+2m) -> Sp(2n) x Sp(2m)',
@@ -3073,7 +3073,7 @@ const BRANCHING_RULES = {
     formula: 'sum-ordinary',
     ordinaryGroup: 'Sp',
     evenColumns: true,
-    hint: 'Direct-sum symplectic rule. The result has Sp(2n) and Sp(2m) factors.',
+    hint: 'Direct-sum symplectic rule. With ranks supplied, unstable Sp target terms are reduced by the Sp modification rule.',
   },
   'pol-o-gl': {
     label: 'O(2n) -> GL(n)',
@@ -3081,7 +3081,7 @@ const BRANCHING_RULES = {
     targetKinds: ['GL'],
     formula: 'ordinary-to-gl',
     evenColumns: true,
-    hint: 'Polarization rule. GL constituents are rational weights, shown as signed rows.',
+    hint: 'Polarization rule. With rank n supplied, unstable rational GL targets are straightened to finite GL(n) terms.',
   },
   'pol-sp-gl': {
     label: 'Sp(2n) -> GL(n)',
@@ -3089,7 +3089,7 @@ const BRANCHING_RULES = {
     targetKinds: ['GL'],
     formula: 'ordinary-to-gl',
     evenColumns: false,
-    hint: 'Polarization rule. GL constituents are rational weights, shown as signed rows.',
+    hint: 'Polarization rule. With rank n supplied, unstable rational GL targets are straightened to finite GL(n) terms.',
   },
   'gl-o': {
     label: 'GL(n) -> O(n)',
@@ -3098,7 +3098,7 @@ const BRANCHING_RULES = {
     formula: 'gl-to-ordinary',
     ordinaryGroup: 'O',
     evenColumns: false,
-    hint: 'Bilinear-form Littlewood rule. Rational GL source weights are allowed.',
+    hint: 'Bilinear-form Littlewood rule. With rank n supplied, unstable O(n) terms are reduced by the O(N) modification rule.',
   },
   'gl-sp': {
     label: 'GL(2n) -> Sp(2n)',
@@ -3107,7 +3107,7 @@ const BRANCHING_RULES = {
     formula: 'gl-to-ordinary',
     ordinaryGroup: 'Sp',
     evenColumns: true,
-    hint: 'Bilinear-form Littlewood rule. Rational GL source weights are allowed.',
+    hint: 'Bilinear-form Littlewood rule. With rank n supplied, unstable Sp(2n) terms are reduced by the Sp modification rule.',
   },
   'gl-o-gl': {
     label: 'GL(2n) -> O(2n) -> GL(n)',
@@ -3118,7 +3118,7 @@ const BRANCHING_RULES = {
     restrictionEvenColumns: false,
     polarizationEvenColumns: true,
     finiteReductionRule: 'gl-o',
-    hint: 'Composed rule: first restrict GL(2n) to O(2n), then polarize to GL(n).',
+    hint: 'Composed rule: restrict to O(2n), reduce finite O terms, then straighten finite GL(n) targets.',
   },
   'gl-sp-gl': {
     label: 'GL(2n) -> Sp(2n) -> GL(n)',
@@ -3129,7 +3129,7 @@ const BRANCHING_RULES = {
     restrictionEvenColumns: true,
     polarizationEvenColumns: false,
     finiteReductionRule: 'gl-sp',
-    hint: 'Composed rule: first restrict GL(2n) to Sp(2n), then polarize to GL(n).',
+    hint: 'Composed rule: restrict to Sp(2n), reduce finite Sp terms, then straighten finite GL(n) targets.',
   },
 };
 
@@ -3344,10 +3344,25 @@ function createBranchingContext() {
 function createBranchingOrdinaryModificationStats() {
   return {
     applied: false,
+    checked: 0,
+    unstable: 0,
     changed: 0,
     dropped: 0,
     signChanges: 0,
     cancellations: 0,
+  };
+}
+
+function createBranchingGLModificationStats() {
+  return {
+    applied: false,
+    checked: 0,
+    unstable: 0,
+    changed: 0,
+    dropped: 0,
+    signChanges: 0,
+    cancellations: 0,
+    skipped: 0,
   };
 }
 
@@ -3823,6 +3838,216 @@ function computeFiniteGLDirectSumBranching(ctx, sourceRows, rankN, rankM) {
   return map;
 }
 
+const FINITE_GL_STRAIGHTEN_MAX_RANK = 4;
+const FINITE_GL_STRAIGHTEN_MAX_DET = 9;
+const FINITE_GL_STRAIGHTEN_MAX_TERMS = 8000;
+
+function finiteGLTargetRank(rule, ranks, factorIndex = 0) {
+  if (!ranks) return null;
+  if (rule === 'sum-gl') return factorIndex === 0 ? ranks.n : ranks.m;
+  if (rule === 'diag-gl' || rule === 'pol-o-gl' || rule === 'pol-sp-gl' ||
+      rule === 'gl-o-gl' || rule === 'gl-sp-gl') {
+    return ranks.n;
+  }
+  return null;
+}
+
+function finiteGLPolyKey(exponents) {
+  return exponents.join(',');
+}
+
+function finiteGLPolyOne(rank) {
+  return new Map([[finiteGLPolyKey(Array(rank).fill(0)), 1]]);
+}
+
+function finiteGLPolyAddScaled(out, poly, scale) {
+  if (!scale) return out;
+  poly.forEach((value, key) => {
+    const next = (out.get(key) || 0) + scale * value;
+    if (next) out.set(key, next);
+    else out.delete(key);
+  });
+  if (out.size > FINITE_GL_STRAIGHTEN_MAX_TERMS) {
+    const err = new Error('finite-gl-straightening-too-large');
+    throw err;
+  }
+  return out;
+}
+
+function finiteGLPolyMul(a, b, rank) {
+  const out = new Map();
+  a.forEach((valueA, keyA) => {
+    const expA = keyA.split(',').map(Number);
+    b.forEach((valueB, keyB) => {
+      const expB = keyB.split(',').map(Number);
+      const exp = Array.from({ length: rank }, (_, i) => expA[i] + expB[i]);
+      const key = finiteGLPolyKey(exp);
+      const next = (out.get(key) || 0) + valueA * valueB;
+      if (next) out.set(key, next);
+      else out.delete(key);
+    });
+  });
+  if (out.size > FINITE_GL_STRAIGHTEN_MAX_TERMS) {
+    const err = new Error('finite-gl-straightening-too-large');
+    throw err;
+  }
+  return out;
+}
+
+function finiteGLCompleteSymmetricPoly(rank, degree, inverse, cache) {
+  if (degree < 0) return new Map();
+  const key = `${rank}:${degree}:${inverse ? 'inv' : 'std'}`;
+  if (cache.has(key)) return cache.get(key);
+  const out = new Map();
+  const build = (pos, remaining, exponents) => {
+    if (pos === rank - 1) {
+      exponents[pos] = inverse ? -remaining : remaining;
+      out.set(finiteGLPolyKey(exponents), (out.get(finiteGLPolyKey(exponents)) || 0) + 1);
+      return;
+    }
+    for (let value = 0; value <= remaining; value++) {
+      exponents[pos] = inverse ? -value : value;
+      build(pos + 1, remaining - value, exponents);
+    }
+  };
+  build(0, degree, Array(rank).fill(0));
+  cache.set(key, out);
+  return out;
+}
+
+function finiteGLUniversalCharacterPoly(gl, rank) {
+  const plus = gl.plus || [];
+  const minus = gl.minus || [];
+  const rows = plus.length + minus.length;
+  if (!rows) return finiteGLPolyOne(rank);
+  if (rank > FINITE_GL_STRAIGHTEN_MAX_RANK || rows > FINITE_GL_STRAIGHTEN_MAX_DET) {
+    const err = new Error('finite-gl-straightening-too-large');
+    throw err;
+  }
+  const hCache = new Map();
+  const matrix = [];
+  for (let i = 1; i <= rows; i++) {
+    const row = [];
+    for (let j = 1; j <= rows; j++) {
+      if (i <= minus.length) {
+        const degree = minus[minus.length - i] + i - j;
+        row.push(finiteGLCompleteSymmetricPoly(rank, degree, true, hCache));
+      } else {
+        const degree = plus[i - minus.length - 1] - i + j;
+        row.push(finiteGLCompleteSymmetricPoly(rank, degree, false, hCache));
+      }
+    }
+    matrix.push(row);
+  }
+  const detCache = new Map();
+  const detFrom = (rowIndex, usedMask) => {
+    if (rowIndex === rows) return finiteGLPolyOne(rank);
+    const key = `${rowIndex}:${usedMask}`;
+    if (detCache.has(key)) return detCache.get(key);
+    const out = new Map();
+    for (let col = 0; col < rows; col++) {
+      if (usedMask & (1 << col)) continue;
+      let inversions = 0;
+      for (let right = col + 1; right < rows; right++) {
+        if (usedMask & (1 << right)) inversions++;
+      }
+      const sign = inversions % 2 ? -1 : 1;
+      finiteGLPolyAddScaled(
+        out,
+        finiteGLPolyMul(matrix[rowIndex][col], detFrom(rowIndex + 1, usedMask | (1 << col)), rank),
+        sign
+      );
+    }
+    detCache.set(key, out);
+    return out;
+  };
+  return detFrom(0, 0);
+}
+
+function compareFiniteGLExponentKeys(aKey, bKey) {
+  const a = aKey.split(',').map(Number);
+  const b = bKey.split(',').map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const diff = (b[i] || 0) - (a[i] || 0);
+    if (diff) return diff;
+  }
+  return 0;
+}
+
+function finiteGLStraightenFactor(gl, rank) {
+  if (rank == null || rationalGLLength(gl) <= rank) {
+    return { factor: makeFactor('GL', gl), sign: 1, changed: false, dropped: false, skipped: false };
+  }
+  try {
+    const poly = finiteGLUniversalCharacterPoly(gl, rank);
+    if (!poly.size) return { factor: null, sign: 1, changed: true, dropped: true, skipped: false };
+    const highestKey = Array.from(poly.keys()).sort(compareFiniteGLExponentKeys)[0];
+    const coefficient = poly.get(highestKey) || 0;
+    if (!coefficient || Math.abs(coefficient) !== 1) {
+      return { factor: makeFactor('GL', gl), sign: 1, changed: false, dropped: false, skipped: true };
+    }
+    const rows = highestKey.split(',').map(Number);
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i] > rows[i - 1]) {
+        return { factor: makeFactor('GL', gl), sign: 1, changed: false, dropped: false, skipped: true };
+      }
+    }
+    const factor = makeFactor('GL', rationalGLFromFiniteRows(rows, 'finite GL target'));
+    const changed = factorKey(factor) !== factorKey(makeFactor('GL', gl));
+    return { factor, sign: coefficient, changed, dropped: false, skipped: false };
+  } catch (err) {
+    if (err && err.message === 'finite-gl-straightening-too-large') {
+      return { factor: makeFactor('GL', gl), sign: 1, changed: false, dropped: false, skipped: true };
+    }
+    throw err;
+  }
+}
+
+function applyFiniteGLTargetModification(map, rule, ranks) {
+  const out = new Map();
+  const stats = createBranchingGLModificationStats();
+  map.forEach(entry => {
+    const factors = [];
+    let mult = entry.mult;
+    let drop = false;
+    entry.factors.forEach((factor, idx) => {
+      if (drop) return;
+      if (factor.kind !== 'GL') {
+        factors.push(cloneFactor(factor));
+        return;
+      }
+      const rank = finiteGLTargetRank(rule, ranks, idx);
+      if (rank == null) {
+        factors.push(cloneFactor(factor));
+        return;
+      }
+      stats.applied = true;
+      stats.checked++;
+      if (rationalGLLength(factor) > rank) stats.unstable++;
+      const modified = finiteGLStraightenFactor(factor, rank);
+      if (modified.skipped) {
+        stats.skipped++;
+        factors.push(cloneFactor(factor));
+        return;
+      }
+      if (modified.dropped) {
+        stats.dropped++;
+        drop = true;
+        return;
+      }
+      if (modified.sign < 0) {
+        mult *= -1;
+        stats.signChanges++;
+      }
+      if (modified.changed) stats.changed++;
+      factors.push(modified.factor);
+    });
+    if (!drop) addBranchingEntry(out, factors, mult);
+  });
+  stats.cancellations = pruneZeroBranchingMap(out);
+  return { map: out, stats };
+}
+
 function medianDeterminantShiftForStableRows(rows, positiveLimit, negativeLimit) {
   if (!rows.length) return 0;
   const rank = rows.length;
@@ -3991,7 +4216,12 @@ function applyFiniteOrdinaryTargetModification(ctx, map, rule, ranks) {
         factors.push(cloneFactor(factor));
         return;
       }
+      const finiteBefore = factor.kind === 'Sp'
+        ? isFiniteSymplecticPartition(factor.part, rank)
+        : isFiniteOrthogonalPartition(factor.part, rank);
       stats.applied = true;
+      stats.checked++;
+      if (!finiteBefore) stats.unstable++;
       const modified = finiteOrdinaryModification(ctx, factor.kind, factor.part, rank);
       if (!modified) {
         stats.dropped++;
@@ -4155,6 +4385,8 @@ function applyPostBranchingFiniteOperations(ctx, map, rule, ranks, reduction = n
   if (reduction && reduction.intermediateOrdinaryModification && reduction.intermediateOrdinaryModification.applied) {
     const intermediate = reduction.intermediateOrdinaryModification;
     ordinary.stats.applied = true;
+    ordinary.stats.checked += intermediate.checked;
+    ordinary.stats.unstable += intermediate.unstable;
     ordinary.stats.changed += intermediate.changed;
     ordinary.stats.dropped += intermediate.dropped;
     ordinary.stats.signChanges += intermediate.signChanges;
@@ -4164,7 +4396,9 @@ function applyPostBranchingFiniteOperations(ctx, map, rule, ranks, reduction = n
     current = reduction.postTwist(current);
     ordinary.stats.cancellations += pruneZeroBranchingMap(current);
   }
-  return { map: current, ordinaryModification: ordinary.stats };
+  const gl = applyFiniteGLTargetModification(current, rule, ranks);
+  current = gl.map;
+  return { map: current, ordinaryModification: ordinary.stats, glModification: gl.stats };
 }
 
 function branchingFactorRows(factor) {
@@ -4198,16 +4432,17 @@ function branchingStableRangeWarning(rule, def, sources, ranks, entries, reducti
   const notes = [];
   const n = ranks.n;
   const m = ranks.m;
-  const ordinaryModified = !!(reduction && reduction.ordinaryModification && reduction.ordinaryModification.applied);
+  const ordinaryReduced = !!(reduction && reduction.ordinaryModification && reduction.ordinaryModification.checked);
+  const glReduced = !!(reduction && reduction.glModification && reduction.glModification.checked && !reduction.glModification.skipped);
   const lenA = def.sourceKind === 'gl' ? rationalGLLength(sources.a) : sources.a.length;
   const lenB = def.needsSourceB
     ? (def.sourceBKind === 'gl' ? rationalGLLength(sources.b) : sources.b.length)
     : 0;
   if (n != null) {
     if (rule === 'diag-gl' && lenA + lenB > n && !(reduction && reduction.reduced)) notes.push(`stable range asks length(A)+length(B) <= n = ${n}`);
-    if (rule === 'diag-o' && lenA + lenB > Math.floor(n / 2) && !ordinaryModified) notes.push(`stable range asks l(A)+l(B) <= floor(n/2) = ${Math.floor(n / 2)}`);
-    if (rule === 'diag-sp' && lenA + lenB > n && !ordinaryModified) notes.push(`stable range asks l(A)+l(B) <= n = ${n}`);
-    if ((rule === 'pol-o-gl' || rule === 'pol-sp-gl') && lenA > Math.floor(n / 2)) notes.push(`stable range asks l(lambda) <= floor(n/2) = ${Math.floor(n / 2)}`);
+    if (rule === 'diag-o' && lenA + lenB > Math.floor(n / 2) && !ordinaryReduced) notes.push(`stable range asks l(A)+l(B) <= floor(n/2) = ${Math.floor(n / 2)}`);
+    if (rule === 'diag-sp' && lenA + lenB > n && !ordinaryReduced) notes.push(`stable range asks l(A)+l(B) <= n = ${n}`);
+    if ((rule === 'pol-o-gl' || rule === 'pol-sp-gl') && lenA > Math.floor(n / 2) && !glReduced) notes.push(`stable range asks l(lambda) <= floor(n/2) = ${Math.floor(n / 2)}`);
     if (rule === 'gl-o' && Math.max(sources.a.plus.length, sources.a.minus.length) > Math.floor(n / 2) && !(reduction && reduction.reduced)) notes.push(`stable range asks l(lambda+), l(lambda-) <= floor(n/2) = ${Math.floor(n / 2)}`);
     if (rule === 'gl-sp' && Math.max(sources.a.plus.length, sources.a.minus.length) > n && !(reduction && reduction.reduced)) notes.push(`stable range asks l(lambda+), l(lambda-) <= n = ${n}`);
     if ((rule === 'gl-o-gl' || rule === 'gl-sp-gl') && Math.max(sources.a.plus.length, sources.a.minus.length) > n && !(reduction && reduction.reduced)) notes.push(`stable range asks l(lambda+), l(lambda-) <= n = ${n}`);
@@ -4215,8 +4450,8 @@ function branchingStableRangeWarning(rule, def, sources, ranks, entries, reducti
   if (n != null && m != null) {
     const minRank = Math.min(n, m);
     if (rule === 'sum-gl' && lenA > minRank && !(reduction && reduction.reduced)) notes.push(`stable range asks GL rational length <= min(n,m) = ${minRank}`);
-    if (rule === 'sum-o' && lenA > Math.floor(minRank / 2) && !ordinaryModified) notes.push(`stable range asks l(lambda) <= floor(min(n,m)/2) = ${Math.floor(minRank / 2)}`);
-    if (rule === 'sum-sp' && lenA > minRank && !ordinaryModified) notes.push(`stable range asks l(lambda) <= min(n,m) = ${minRank}`);
+    if (rule === 'sum-o' && lenA > Math.floor(minRank / 2) && !ordinaryReduced) notes.push(`stable range asks l(lambda) <= floor(min(n,m)/2) = ${Math.floor(minRank / 2)}`);
+    if (rule === 'sum-sp' && lenA > minRank && !ordinaryReduced) notes.push(`stable range asks l(lambda) <= min(n,m) = ${minRank}`);
   }
   const glRanks = rule === 'sum-gl' && n != null && m != null ? [n, m] : (n != null ? [n] : []);
   if (glRanks.length) {
@@ -4228,18 +4463,37 @@ function branchingStableRangeWarning(rule, def, sources, ranks, entries, reducti
         if (branchingFactorDisplayRows(factor, { rule, ranks }, idx).length > rank) outside++;
       });
     });
-    if (outside) notes.push(`${outside} displayed GL constituent(s) exceed the supplied finite rank`);
+    if (outside) notes.push(`${outside} displayed GL constituent(s) exceed the supplied finite rank${reduction && reduction.glModification && reduction.glModification.skipped ? ' after a skipped finite GL straightening case' : ''}`);
   }
-  return notes.length ? `Stable range warning: ${notes.join('; ')}. Stable formula still shown.` : '';
+  return notes.length ? `Stable range warning: ${notes.join('; ')}. Stable formula shown for terms without a finite reduction pass.` : '';
 }
 
-function branchingFiniteModificationNote(stats) {
-  if (!stats || !stats.applied) return '';
-  const parts = ['Finite O/Sp modification applied'];
-  if (stats.changed) parts.push(`${stats.changed} target factor${stats.changed === 1 ? '' : 's'} modified`);
-  if (stats.dropped) parts.push(`${stats.dropped} unstable term${stats.dropped === 1 ? '' : 's'} vanished`);
-  if (stats.cancellations) parts.push(`${stats.cancellations} cancellation${stats.cancellations === 1 ? '' : 's'}`);
-  return parts.join('; ') + '.';
+function branchingFiniteModificationNote(ordinaryStats, glStats = null) {
+  const notes = [];
+  const ordinary = ordinaryStats;
+  if (ordinary && ordinary.checked) {
+    const parts = ordinary.unstable
+      ? [`Finite O/Sp reduction applied to ${ordinary.unstable} unstable target factor${ordinary.unstable === 1 ? '' : 's'}`]
+      : ['Finite O/Sp reduction checked'];
+    if (ordinary.changed) parts.push(`${ordinary.changed} target factor${ordinary.changed === 1 ? '' : 's'} modified`);
+    if (ordinary.dropped) parts.push(`${ordinary.dropped} unstable term${ordinary.dropped === 1 ? '' : 's'} vanished`);
+    if (ordinary.signChanges) parts.push(`${ordinary.signChanges} sign change${ordinary.signChanges === 1 ? '' : 's'}`);
+    if (ordinary.cancellations) parts.push(`${ordinary.cancellations} cancellation${ordinary.cancellations === 1 ? '' : 's'}`);
+    notes.push(parts.join('; ') + '.');
+  }
+  const gl = glStats;
+  if (gl && gl.checked) {
+    const parts = gl.unstable
+      ? [`Finite GL straightening applied to ${gl.unstable} unstable rational target factor${gl.unstable === 1 ? '' : 's'}`]
+      : ['Finite GL straightening checked'];
+    if (gl.changed) parts.push(`${gl.changed} target factor${gl.changed === 1 ? '' : 's'} straightened`);
+    if (gl.dropped) parts.push(`${gl.dropped} unstable term${gl.dropped === 1 ? '' : 's'} vanished`);
+    if (gl.signChanges) parts.push(`${gl.signChanges} sign change${gl.signChanges === 1 ? '' : 's'}`);
+    if (gl.cancellations) parts.push(`${gl.cancellations} cancellation${gl.cancellations === 1 ? '' : 's'}`);
+    if (gl.skipped) parts.push(`${gl.skipped} large case${gl.skipped === 1 ? '' : 's'} left stable`);
+    notes.push(parts.join('; ') + '.');
+  }
+  return notes.join(' ');
 }
 
 function branchingFactorLabel(factor) {
@@ -4394,7 +4648,7 @@ function computeBranching() {
     const ctx = createBranchingContext();
     const stableMap = reduction.compute(ctx);
     const post = applyPostBranchingFiniteOperations(ctx, stableMap, rule, ranks, reduction);
-    const finalReduction = { ...reduction, ordinaryModification: post.ordinaryModification };
+    const finalReduction = { ...reduction, ordinaryModification: post.ordinaryModification, glModification: post.glModification };
     const entries = branchingEntriesFromMap(post.map);
     const warning = branchingStableRangeWarning(rule, def, sources, ranks, entries, finalReduction);
     const result = {
@@ -4405,9 +4659,11 @@ function computeBranching() {
       ranks,
       entries,
       warning,
-      finiteModificationNote: branchingFiniteModificationNote(post.ordinaryModification),
+      finiteModificationNote: branchingFiniteModificationNote(post.ordinaryModification, post.glModification),
       finiteOrdinaryModification: post.ordinaryModification.applied,
       finiteOrdinaryModificationStats: post.ordinaryModification,
+      finiteGLModification: post.glModification.applied,
+      finiteGLModificationStats: post.glModification,
       finiteReduction: reduction.reduced,
       candidatePairs: ctx.candidatePairs,
       lrSearchSteps: ctx.lrStats.steps,
@@ -4447,7 +4703,8 @@ function exportBranching(event) {
   txt += `# candidates checked: ${result.candidatePairs}\n`;
   txt += `# LR search steps: ${result.lrSearchSteps} / ${result.lrSearchStepLimit}\n`;
   if (result.finiteOrdinaryModification) txt += `# finite O/Sp modification: applied\n`;
-  if (result.finiteModificationNote) txt += `# finite O/Sp modification note: ${result.finiteModificationNote}\n`;
+  if (result.finiteGLModification) txt += `# finite GL straightening: applied\n`;
+  if (result.finiteModificationNote) txt += `# finite reduction note: ${result.finiteModificationNote}\n`;
   if (result.warning) txt += `# warning: ${result.warning}\n`;
   txt += `# formula: ${result.sourceSummary} -> `;
   txt += result.entries.length

@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const SCHEMA_VERSION = 3;
+  const SCHEMA_VERSION = 4;
   const DEFAULT_GRAPH_TITLE = 'Dependency Graph';
   const PRESET_FOLDER_URL = 'theorem_graph_presets/';
   const DEFAULT_NODE_STROKE = '#7a6f65';
@@ -23,7 +23,7 @@
     { key: 'result', label: 'result' },
     { key: 'proofSketch', label: 'proof sketch' }
   ];
-  const MISC_DETAIL_TYPES = new Set(['textbox', 'list', 'enumeration']);
+  const MISC_DETAIL_TYPES = new Set(['textbox', 'list', 'enumeration', 'checkbox']);
   const KNOWN_NODE_KEYS = new Set([
     'id',
     'type',
@@ -833,6 +833,7 @@
     const value = cleanString(type).toLowerCase();
     if (value === 'numbered' || value === 'ordered' || value === 'enum') return 'enumeration';
     if (value === 'bullet' || value === 'bullets' || value === 'unordered') return 'list';
+    if (value === 'task' || value === 'tasks' || value === 'checklist' || value === 'checkboxes' || value === 'todo') return 'checkbox';
     if (value === 'text' || value === 'textarea') return 'textbox';
     return MISC_DETAIL_TYPES.has(value) ? value : 'textbox';
   }
@@ -2264,9 +2265,53 @@
     row.className = 'theorem-field-row';
     row.dataset.miscDetailId = detail.id;
 
+    const labelSlot = document.createElement('div');
+    labelSlot.className = 'theorem-misc-detail-label-slot';
+
     const label = document.createElement('span');
-    label.className = 'input-label';
+    label.className = 'input-label theorem-misc-detail-name';
+    label.tabIndex = 0;
+    label.setAttribute('role', 'button');
     label.textContent = detail.label;
+    label.title = 'Rename extra';
+    label.addEventListener('click', () => showMiscDetailLabelEditor(detail.id));
+    label.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      showMiscDetailLabelEditor(detail.id);
+    });
+
+    const labelInput = document.createElement('input');
+    labelInput.className = 'theorem-input theorem-misc-detail-name-input';
+    labelInput.type = 'text';
+    labelInput.maxLength = 48;
+    labelInput.spellcheck = true;
+    labelInput.autocomplete = 'off';
+    labelInput.value = detail.label;
+    labelInput.dataset.detailRole = 'label';
+    labelInput.hidden = true;
+    labelInput.addEventListener('input', () => updateMiscDetailLabelDraft(detail.id));
+    labelInput.addEventListener('blur', () => commitMiscDetailLabelEdit(detail.id));
+    labelInput.addEventListener('focusout', () => commitMiscDetailLabelEdit(detail.id));
+    labelInput.addEventListener('change', () => commitMiscDetailLabelEdit(detail.id));
+    labelInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        labelInput.blur();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelMiscDetailLabelEdit(detail.id);
+      }
+    });
+    labelInput.addEventListener('keyup', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        commitMiscDetailLabelEdit(detail.id);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelMiscDetailLabelEdit(detail.id);
+      }
+    });
 
     const body = document.createElement('div');
     body.className = 'theorem-misc-detail-body';
@@ -2291,27 +2336,99 @@
       }, 0);
     });
 
-    const preview = document.createElement('button');
-    preview.type = 'button';
-    preview.className = 'theorem-latex-preview';
+    const preview = document.createElement('div');
+    preview.className = 'theorem-misc-preview';
+    preview.setAttribute('role', 'group');
+    preview.tabIndex = 0;
     preview.dataset.detailPreview = 'true';
     preview.hidden = true;
-    preview.addEventListener('click', () => {
+    preview.addEventListener('click', (event) => {
+      if (event.target && typeof event.target.closest === 'function' && event.target.closest('input[type="checkbox"]')) return;
+      showLatexDetailEditor(miscDetailFieldKey(detail.id));
+    });
+    preview.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      if (event.target && typeof event.target.closest === 'function' && event.target.closest('input[type="checkbox"]')) return;
+      event.preventDefault();
       showLatexDetailEditor(miscDetailFieldKey(detail.id));
     });
 
-    const actions = document.createElement('div');
-    actions.className = 'theorem-misc-detail-actions';
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.className = 'btn btn-ghost theorem-small-button';
-    remove.textContent = 'remove';
-    remove.addEventListener('click', () => removeMiscDetailFromControls(detail.id));
-    actions.appendChild(remove);
-
-    body.append(textarea, preview, actions);
-    row.append(label, body);
+    labelSlot.append(label, labelInput);
+    body.append(textarea, preview);
+    row.append(labelSlot, body);
     return row;
+  }
+
+  function showMiscDetailLabelEditor(detailId) {
+    if (!refs.nodeMiscDetailList) return;
+    const row = refs.nodeMiscDetailList.querySelector(`[data-misc-detail-id="${cssEscape(detailId)}"]`);
+    if (!row) return;
+    const label = row.querySelector('.theorem-misc-detail-name');
+    const input = row.querySelector('[data-detail-role="label"]');
+    if (!label || !input) return;
+    input.dataset.originalLabel = cleanDetailLabel(input.value || label.textContent);
+    label.hidden = true;
+    input.hidden = false;
+    input.focus();
+    if (typeof input.select === 'function') input.select();
+  }
+
+  function updateMiscDetailLabelDraft(detailId) {
+    if (!refs.nodeMiscDetailList) return;
+    const row = refs.nodeMiscDetailList.querySelector(`[data-misc-detail-id="${cssEscape(detailId)}"]`);
+    if (!row) return;
+    const label = row.querySelector('.theorem-misc-detail-name');
+    const input = row.querySelector('[data-detail-role="label"]');
+    if (!label || !input) return;
+    const next = cleanDetailLabel(input.value);
+    if (!next) return;
+    label.textContent = next;
+    autoApplyDetailUpdate({ target: input });
+  }
+
+  function commitMiscDetailLabelEdit(detailId) {
+    if (!refs.nodeMiscDetailList) return;
+    const row = refs.nodeMiscDetailList.querySelector(`[data-misc-detail-id="${cssEscape(detailId)}"]`);
+    if (!row) return;
+    const label = row.querySelector('.theorem-misc-detail-name');
+    const input = row.querySelector('[data-detail-role="label"]');
+    if (!label || !input || input.hidden) return;
+    const previous = cleanDetailLabel(input.dataset.originalLabel || label.textContent) || 'extra';
+    const next = cleanDetailLabel(input.value);
+    if (!next) {
+      const remove = window.confirm(`Remove extra field "${previous}"?`);
+      if (remove) {
+        removeMiscDetailFromControls(detailId);
+        return;
+      }
+      input.value = previous;
+      hideMiscDetailLabelEditor(label, input, previous);
+      autoApplyDetailUpdate({ target: input });
+      return;
+    }
+    input.value = next;
+    hideMiscDetailLabelEditor(label, input, next);
+    autoApplyDetailUpdate({ target: input });
+  }
+
+  function cancelMiscDetailLabelEdit(detailId) {
+    if (!refs.nodeMiscDetailList) return;
+    const row = refs.nodeMiscDetailList.querySelector(`[data-misc-detail-id="${cssEscape(detailId)}"]`);
+    if (!row) return;
+    const label = row.querySelector('.theorem-misc-detail-name');
+    const input = row.querySelector('[data-detail-role="label"]');
+    if (!label || !input) return;
+    const previous = cleanDetailLabel(input.dataset.originalLabel || label.textContent) || 'extra';
+    input.value = previous;
+    hideMiscDetailLabelEditor(label, input, previous);
+    autoApplyDetailUpdate({ target: input });
+  }
+
+  function hideMiscDetailLabelEditor(label, input, value) {
+    label.textContent = value;
+    label.hidden = false;
+    input.hidden = true;
+    delete input.dataset.originalLabel;
   }
 
   function showLatexDetailEditor(key) {
@@ -2375,8 +2492,8 @@
       const showPreview = !!node && node.type === 'misc' && state.activeLatexDetailField !== key && !!cleanString(value) && (type !== 'textbox' || hasDollarMath(value));
       input.hidden = showPreview;
       preview.hidden = !showPreview;
-      preview.disabled = !node || node.type !== 'misc';
-      preview.setAttribute('aria-label', `Edit ${detail ? detail.label : 'detail'}`);
+      preview.setAttribute('aria-disabled', (!node || node.type !== 'misc') ? 'true' : 'false');
+      preview.setAttribute('aria-label', `Preview ${detail ? detail.label : 'detail'}`);
       if (showPreview) {
         if (preview.dataset.sourceText !== value || preview.dataset.detailType !== type) {
           if (window.MathJax && typeof window.MathJax.typesetClear === 'function') {
@@ -2408,6 +2525,10 @@
       preview.appendChild(list);
       return;
     }
+    if (type === 'checkbox') {
+      renderCheckboxDetailPreview(preview, value);
+      return;
+    }
     preview.textContent = value;
   }
 
@@ -2416,6 +2537,78 @@
       .split(/\r?\n/)
       .map((line) => line.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)/, '').trim())
       .filter(Boolean);
+  }
+
+  function renderCheckboxDetailPreview(preview, value) {
+    const list = document.createElement('div');
+    list.className = 'theorem-misc-task-list';
+    detailCheckboxItems(value).forEach((item, index) => {
+      const task = document.createElement('div');
+      task.className = 'theorem-misc-task';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = item.checked;
+      checkbox.addEventListener('change', () => {
+        updateCheckboxDetailItem(preview, index, checkbox.checked);
+      });
+
+      const text = document.createElement('span');
+      text.className = 'theorem-misc-task-text';
+      text.textContent = item.text;
+
+      task.append(checkbox, text);
+      list.appendChild(task);
+    });
+    preview.appendChild(list);
+  }
+
+  function updateCheckboxDetailItem(preview, index, checked) {
+    const row = preview.closest('[data-misc-detail-id]');
+    const textarea = row ? row.querySelector('[data-detail-role="text"]') : null;
+    if (!textarea) return;
+    const items = detailCheckboxItems(textarea.value);
+    if (!items[index]) return;
+    items[index] = { ...items[index], checked };
+    textarea.value = checkboxItemsToText(items);
+    autoApplyDetailUpdate({ target: textarea });
+  }
+
+  function detailCheckboxItems(value) {
+    return cleanString(value)
+      .split(/\r?\n/)
+      .map(parseCheckboxDetailLine)
+      .filter((item) => item && cleanString(item.text));
+  }
+
+  function parseCheckboxDetailLine(line) {
+    const trimmed = cleanString(line);
+    if (!trimmed) return null;
+    const marked = trimmed.match(/^[-*]\s+\[([ xX])\]\s*(.*)$/);
+    if (marked) {
+      return {
+        checked: marked[1].toLowerCase() === 'x',
+        text: cleanString(marked[2])
+      };
+    }
+    const bareMarked = trimmed.match(/^\[([ xX])\]\s*(.*)$/);
+    if (bareMarked) {
+      return {
+        checked: bareMarked[1].toLowerCase() === 'x',
+        text: cleanString(bareMarked[2])
+      };
+    }
+    return {
+      checked: false,
+      text: trimmed.replace(/^[-*]\s+/, '').trim()
+    };
+  }
+
+  function checkboxItemsToText(items) {
+    return items
+      .filter((item) => item && cleanString(item.text))
+      .map((item) => `- [${item.checked ? 'x' : ' '}] ${cleanString(item.text)}`)
+      .join('\n');
   }
 
   function typesetLatexDetailPreviews() {
@@ -2570,9 +2763,11 @@
     return rows.map((row, index) => {
       const id = cleanDetailId(row.dataset.miscDetailId) || `detail-${index + 1}`;
       const fallbackDetail = fallbackById.get(id) || { id, label: `detail ${index + 1}`, type: 'textbox', text: '' };
+      const label = row.querySelector('[data-detail-role="label"]');
       const text = row.querySelector('[data-detail-role="text"]');
       return {
         ...fallbackDetail,
+        label: cleanDetailLabel(label ? label.value : fallbackDetail.label) || fallbackDetail.label,
         text: cleanString(text ? text.value : '')
       };
     });

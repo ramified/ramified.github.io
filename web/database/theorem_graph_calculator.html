@@ -205,7 +205,8 @@
       overflow-y: hidden;
     }
 
-    .theorem-latex-preview {
+    .theorem-latex-preview,
+    .theorem-misc-preview {
       width: 100%;
       min-width: 0;
       min-height: 66px;
@@ -224,20 +225,71 @@
     }
 
     .theorem-latex-preview:hover,
-    .theorem-latex-preview:focus-visible {
+    .theorem-latex-preview:focus-visible,
+    .theorem-misc-preview:hover,
+    .theorem-misc-preview:focus-within {
       outline: 2px solid var(--accent);
       border-color: var(--accent);
     }
 
-    .theorem-latex-preview mjx-container {
+    .theorem-latex-preview mjx-container,
+    .theorem-misc-preview mjx-container {
       margin: 0 !important;
       overflow: visible;
     }
 
     .theorem-latex-preview ul,
-    .theorem-latex-preview ol {
-      margin: 0;
+    .theorem-latex-preview ol,
+    .theorem-misc-preview ul,
+    .theorem-misc-preview ol {
+      margin: 0 0 0 0.25rem;
       padding-left: 1.35rem;
+      text-align: left;
+      list-style-position: outside;
+    }
+
+    .theorem-latex-preview ul,
+    .theorem-misc-preview ul {
+      list-style-type: disc;
+    }
+
+    .theorem-latex-preview ol,
+    .theorem-misc-preview ol {
+      list-style-type: decimal;
+    }
+
+    .theorem-misc-task-list {
+      display: grid;
+      gap: 4px;
+      margin: 0;
+      text-align: left;
+    }
+
+    .theorem-misc-task {
+      display: grid;
+      grid-template-columns: 16px minmax(0, 1fr);
+      gap: 7px;
+      align-items: start;
+      min-width: 0;
+      cursor: text;
+    }
+
+    .theorem-misc-task input {
+      width: 15px;
+      height: 15px;
+      margin: 2px 0 0;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .theorem-misc-task-text {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .theorem-misc-task input:checked + .theorem-misc-task-text {
+      color: var(--muted);
+      text-decoration: line-through;
     }
 
     .theorem-select:focus,
@@ -349,9 +401,45 @@
       min-width: 0;
     }
 
-    .theorem-misc-detail-actions {
-      display: flex;
-      justify-content: flex-end;
+    .theorem-misc-detail-label-slot {
+      min-width: 0;
+    }
+
+    .theorem-misc-detail-name {
+      width: 100%;
+      min-width: 0;
+      margin: 6px 0 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      cursor: text;
+      font: inherit;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.02em;
+      line-height: 1.2;
+      overflow: visible;
+      overflow-wrap: anywhere;
+      text-align: left;
+      text-overflow: clip;
+      text-transform: lowercase;
+      white-space: normal;
+    }
+
+    .theorem-misc-detail-name:hover,
+    .theorem-misc-detail-name:focus-visible {
+      color: var(--accent);
+      outline: none;
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 2px;
+    }
+
+    .theorem-misc-detail-name-input {
+      margin-top: 0;
+      padding: 4px 6px;
+      font-size: 0.72rem;
     }
 
     .theorem-reference-list {
@@ -797,10 +885,11 @@
               <label class="input-label" for="node-misc-detail-name">extra</label>
               <div class="theorem-misc-add-controls">
                 <input id="node-misc-detail-name" class="theorem-input" type="text" maxlength="48" spellcheck="true" autocomplete="off" placeholder="name">
-                <select id="node-misc-detail-type" class="theorem-select" aria-label="Extra textbox type">
+                <select id="node-misc-detail-type" class="theorem-select" aria-label="Extra detail type">
                   <option value="textbox">Textbox</option>
                   <option value="list">List</option>
                   <option value="enumeration">Enumeration</option>
+                  <option value="checkbox">Checkbox</option>
                 </select>
                 <button class="btn btn-ghost theorem-small-button" id="add-node-misc-detail" type="button">add</button>
               </div>
