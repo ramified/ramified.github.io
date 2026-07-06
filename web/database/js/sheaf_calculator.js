@@ -6356,7 +6356,9 @@
         const cursorTarget = event.target.closest('[data-class-formula-cursor]');
         if (cursorTarget) {
           event.preventDefault();
-          setClassFormulaCursor(Number(cursorTarget.dataset.classFormulaCursor));
+          setClassFormulaCursor(Number(cursorTarget.dataset.classFormulaCursor), {
+            slotId: cursorTarget.dataset.classFormulaCursorSlot || null
+          });
           return;
         }
         const slotButton = event.target.closest('[data-class-formula-slot]');
@@ -15223,7 +15225,7 @@
     if (sourceSheaf) return !!sheafMapOperationForMapAndSheaf(map, sourceSheaf);
     if (inputIsModifyMode() || !sheafMapDraftBase()) {
       return state.sheaves.some((sheaf) => (
-        sheaf.id !== state.activeSheafId
+        (!inputIsModifyMode() || sheaf.id !== state.activeSheafId)
         && (
           (sheaf.baseVarietyId === map.codomainId && sheafMapOperationForMapAndBase(map, map.domainId) === 'pullback')
           || (sheaf.baseVarietyId === map.domainId && sheafMapOperationForMapAndBase(map, map.codomainId) === 'pushforward')
@@ -21027,17 +21029,21 @@
       : geometryByVarietyId(map.codomainId);
     const sourceId = sourceGeometry ? canonicalHomologyVariableId(parsed.sourceId, sourceGeometry) : parsed.sourceId;
     const sourceData = sourceGeometry ? homologyVariableDataById(sourceGeometry, sourceId) || tangentChernVariableDataById(sourceGeometry, sourceId) : null;
-    if (!sourceData || !targetGeometry) return existing || null;
+    const nestedSourceData = !sourceData && String(sourceId || '').startsWith('map_')
+      ? ensureMapHomologyVariableFromId(sourceId)
+      : null;
+    const resolvedSourceData = sourceData || nestedSourceData;
+    if (!resolvedSourceData || !targetGeometry) return existing || null;
     const sourceIsUnit = parsed.operation === 'pushforward'
       && sourceGeometry
       && (sourceId === homologyVariableId(HOMOLOGY_UNIT_CLASS, sourceGeometry) || legacyBaseHomologyClassId(sourceId) === HOMOLOGY_UNIT_CLASS);
     const sourceKey = sourceIsUnit ? '' : monoKey({ [sourceId]: 1 });
     const variableId = defineMapHomologyVariable(map, parsed.operation, sourceId, parsed.operation === 'pullback'
-      ? sourceData.degree
-      : sourceData.degree + targetGeometry.dim - sourceGeometry.dim, sourceData.latex, {
+      ? resolvedSourceData.degree
+      : resolvedSourceData.degree + targetGeometry.dim - sourceGeometry.dim, resolvedSourceData.latex, {
         cohomologyDegree: parsed.operation === 'pullback'
-          ? sourceData.cohomologyDegree
-          : sourceData.cohomologyDegree + 2 * (targetGeometry.dim - sourceGeometry.dim),
+          ? resolvedSourceData.cohomologyDegree
+          : resolvedSourceData.cohomologyDegree + 2 * (targetGeometry.dim - sourceGeometry.dim),
         sourceKey
     });
     return VARS.get(variableId) || VARS.get(id) || null;
@@ -23178,8 +23184,12 @@
     return builder.cursorIndex;
   }
 
-  function setClassFormulaCursor(index) {
+  function setClassFormulaCursor(index, options = {}) {
     const builder = ensureClassFormulaBuilderState();
+    if (Object.prototype.hasOwnProperty.call(options, 'slotId')) {
+      const slotId = options.slotId || null;
+      builder.activeSlotId = slotId && findClassFormulaSlotToken(builder.tokens, slotId) ? slotId : null;
+    }
     const tokens = classFormulaEditingTokens(builder);
     builder.cursorIndex = normalizedInt(index, 0, tokens.length, tokens.length);
     builder.validatedFormula = null;
@@ -23268,10 +23278,14 @@
     const activeSlot = classFormulaActiveSlot(builder);
     clampClassFormulaCursor(builder);
     if (refs.classFormulaVariety) {
+      const displayVarietyId = activeSlot && editingGeometry?.varietyId ? editingGeometry.varietyId : builder.varietyId;
       refs.classFormulaVariety.innerHTML = state.varieties.length
-        ? state.varieties.map((variety) => `<option value="${escapeHtml(variety.id)}"${variety.id === builder.varietyId ? ' selected' : ''}>${escapeHtml(latexToPlain(variety.name || variety.labelLatex || variety.id))}</option>`).join('')
+        ? state.varieties.map((variety) => `<option value="${escapeHtml(variety.id)}"${variety.id === displayVarietyId ? ' selected' : ''}>${escapeHtml(latexToPlain(variety.name || variety.labelLatex || variety.id))}</option>`).join('')
         : '<option value="">add a variety first</option>';
-      refs.classFormulaVariety.disabled = !state.varieties.length;
+      refs.classFormulaVariety.disabled = !state.varieties.length || !!activeSlot;
+      refs.classFormulaVariety.title = activeSlot && editingGeometry
+        ? `Filling a functor argument on ${editingGeometry.labelPlain || editingGeometry.varietyId}`
+        : '';
     }
     renderClassFormulaTokenButtons(refs.classFormulaHomologyButtons, classFormulaHomologyTokenDefs(editingGeometry), !!editingGeometry);
     renderClassFormulaClassPicker(editingGeometry, !!editingGeometry);
@@ -23961,28 +23975,33 @@
     }).join(' ').trim();
   }
 
-  function classFormulaTokensEditorHtml(tokens = [], builder = ensureClassFormulaBuilderState(), depth = 0) {
+  function classFormulaTokensEditorHtml(tokens = [], builder = ensureClassFormulaBuilderState(), depth = 0, ownerSlotId = null) {
     const editingTokens = classFormulaEditingTokens(builder);
     const editingThisLevel = tokens === editingTokens;
     const cursor = editingThisLevel ? clampClassFormulaCursor(builder) : -1;
+    const showCursors = editingThisLevel || (!ownerSlotId && !!builder.activeSlotId);
     const parts = [];
     const items = tokens || [];
     for (let index = 0; index <= items.length; index += 1) {
-      if (editingThisLevel) parts.push(classFormulaCursorHtml(index, cursor));
-      if (index < items.length) parts.push(classFormulaTokenEditorHtml(items[index], builder, depth, index, editingThisLevel));
+      if (showCursors) parts.push(classFormulaCursorHtml(index, cursor, ownerSlotId));
+      if (index < items.length) parts.push(classFormulaTokenEditorHtml(items[index], builder, depth, index, editingThisLevel, ownerSlotId));
     }
     return parts.join('').trim();
   }
 
-  function classFormulaCursorHtml(index, cursor) {
+  function classFormulaCursorHtml(index, cursor, ownerSlotId = null) {
     const active = index === cursor ? ' is-active' : '';
-    return `<button class="formula-cursor${active}" type="button" data-class-formula-cursor="${index}" aria-label="insert position ${index}"></button>`;
+    return `<button class="formula-cursor${active}" type="button" data-class-formula-cursor="${index}" data-class-formula-cursor-slot="${escapeHtml(ownerSlotId || '')}" aria-label="insert position ${index}"></button>`;
   }
 
-  function classFormulaTokenEditorHtml(token, builder = ensureClassFormulaBuilderState(), depth = 0, index = 0, editingThisLevel = false) {
+  function classFormulaCursorAttr(index, ownerSlotId = null) {
+    return ` data-class-formula-cursor="${index}" data-class-formula-cursor-slot="${escapeHtml(ownerSlotId || '')}"`;
+  }
+
+  function classFormulaTokenEditorHtml(token, builder = ensureClassFormulaBuilderState(), depth = 0, index = 0, editingThisLevel = false, ownerSlotId = null) {
     if (!token) return '';
     if (token.type !== 'functor-slot') {
-      const cursorAttr = editingThisLevel ? ` data-class-formula-cursor="${index + 1}"` : '';
+      const cursorAttr = editingThisLevel ? classFormulaCursorAttr(index + 1, ownerSlotId) : '';
       return token.latex
         ? `<button class="formula-token-chip" type="button"${cursorAttr} title="${escapeHtml(token.plain || token.latex)}">\\(${token.latex}\\)</button>`
         : '';
@@ -23990,9 +24009,11 @@
     const map = state.maps.find((item) => sameMapId(item.id, token.mapId));
     const operatorLatex = token.operation === 'pushforward' ? mapPushforwardOperatorLatex(map) : mapPullbackOperatorLatex(map);
     const innerHtml = token.tokens?.length
-      ? `<button class="sheaf-step-slot-argument${token.slotId === builder.activeSlotId ? ' is-active' : ''}" type="button" data-class-formula-slot="${escapeHtml(token.slotId || '')}">${classFormulaTokensEditorHtml(token.tokens, builder, depth + 1)}</button>`
+      ? `<button class="sheaf-step-slot-argument${token.slotId === builder.activeSlotId ? ' is-active' : ''}" type="button" data-class-formula-slot="${escapeHtml(token.slotId || '')}">${classFormulaTokensEditorHtml(token.tokens, builder, depth + 1, token.slotId || null)}</button>`
       : `<button class="sheaf-step-slot-button${token.slotId === builder.activeSlotId ? ' is-active' : ''}" type="button" data-class-formula-slot="${escapeHtml(token.slotId || '')}">class</button>`;
-    return `<span class="formula-preview-fragment">\\(${operatorLatex}(\\)</span>${innerHtml}<span class="formula-preview-fragment">\\()\\)</span>`;
+    const beforeAttr = classFormulaCursorAttr(index, ownerSlotId);
+    const afterAttr = classFormulaCursorAttr(index + 1, ownerSlotId);
+    return `<span class="formula-preview-fragment"${beforeAttr}>\\(${operatorLatex}(\\)</span>${innerHtml}<span class="formula-preview-fragment"${afterAttr}>\\()\\)</span>`;
   }
 
 
@@ -25552,15 +25573,47 @@
     }
   }
 
+  function classStepRelevantRuleGeometries(session) {
+    const out = [];
+    const seen = new Set();
+    const add = (geometry) => {
+      if (!geometry?.varietyId || seen.has(geometry.varietyId)) return;
+      seen.add(geometry.varietyId);
+      out.push(geometry);
+    };
+    add(session?.geometry);
+    for (const id of classStepVisibleAndMapSourceVariableIds(session)) {
+      const data = VARS.get(id) || ensureMapHomologyVariableFromId(id);
+      if (data?.geometryId) add(geometryByVarietyId(data.geometryId));
+      if (data?.kind !== 'mapHomology') continue;
+      const map = state.maps.find((item) => sameMapId(item.id, data.mapId));
+      if (!map || map.domainKind !== 'variety' || map.codomainKind !== 'variety') continue;
+      add(geometryByVarietyId(data.operation === 'pullback' ? map.domainId : map.codomainId));
+    }
+    return out;
+  }
+
+  function classStepRuleWithGeometry(rule, geometry) {
+    if (!rule || !geometry) return rule;
+    return rule.classStepRuleGeometry ? rule : { ...rule, classStepRuleGeometry: geometry };
+  }
+
   function classStepBaseRules(session) {
     const geometry = session.geometry;
     defineGlobalInvariantVariables();
-    defineHomologyVariables(geometry);
+    const ruleGeometries = classStepRelevantRuleGeometries(session);
+    ruleGeometries.forEach(defineHomologyVariables);
     const defs = homologyClassDefinitions(geometry, { includeMapClasses: true });
     const available = new Set(defs.flatMap((def) => [...homologyDefVariableIds(def, geometry)]));
-    const storedRules = geometry.homology?.rules || [];
-    const defaultRules = defaultMapHomologyRulesForGeometry(geometry)
-      .filter((rule) => !storedRules.some((stored) => homologyRuleHasSameLhs(stored, rule)));
+    const storedRules = ruleGeometries.flatMap((ruleGeometry) => (
+      (ruleGeometry.homology?.rules || []).map((rule) => classStepRuleWithGeometry(rule, ruleGeometry))
+    ));
+    const defaultRules = ruleGeometries.flatMap((ruleGeometry) => {
+      const stored = ruleGeometry.homology?.rules || [];
+      return defaultMapHomologyRulesForGeometry(ruleGeometry)
+        .filter((rule) => !stored.some((storedRule) => homologyRuleHasSameLhs(storedRule, rule)))
+        .map((rule) => classStepRuleWithGeometry(rule, ruleGeometry));
+    });
     const sheafDefs = classStepSheafDefs(session);
     const sheafRules = classStepSheafRules(session);
     const constructionRules = classStepConstructionRules(session);
@@ -25689,10 +25742,16 @@
     const bundle = classStepBasicConstructionBundle(sheaf, geometry, family, d);
     if (!bundle) return [];
     const comps = family === 'character' ? bundle.chComps : bundle.cComps;
-    return classStepSheafDefsForSheaf(sheaf, geometry, family).filter((def) => def.degree > 0).map((def) => {
+    return classStepSheafDefsForSheaf(sheaf, geometry, family).filter((def) => (
+      def.degree > 0
+      || (construction.type === 'pullback' && family === 'character' && def.degree === 0)
+    )).map((def) => {
       const displayLatex = classStepConstructionRuleDisplayLatex(sheaf, construction, family, def.degree);
       const sheafKey = sheaf?.sourceObject?.id || sheaf?.id || '';
       const degreeKey = construction.type === 'pullback' ? `:${def.degree}` : '';
+      const rhs = def.degree === 0 && family === 'character'
+        ? Poly.from(bundle.rankPoly || componentOrZero(comps, 0))
+        : componentOrZero(comps, def.degree);
       return {
         id: `step-${construction.type}-${def.id}`,
         builtin: true,
@@ -25702,7 +25761,7 @@
         classStepDisplayKey: `construction:${construction.type}:${family}:${displayLatex}`,
         classStepDisplayLatex: displayLatex,
         lhs: { powers: { [def.id]: 1 } },
-        rhs: serializeHomologyPoly(componentOrZero(comps, def.degree))
+        rhs: serializeHomologyPoly(rhs)
       };
     });
   }
@@ -25794,7 +25853,7 @@
   }
 
   function classStepConstructionRuleDisplayLatex(sheaf, construction, family, degree = null) {
-    if (construction?.type === 'pullback' && Number.isInteger(degree) && degree > 0) {
+    if (construction?.type === 'pullback' && Number.isInteger(degree) && degree >= 0) {
       const map = state.maps.find((item) => item.id === construction.mapId);
       const [source] = classStepConstructionTermLabels([construction.sheafId]);
       const subject = sheaf?.labelLatex || pullbackFunctorLatex(map, { derived: construction.derived === true || construction.exact !== true }) + source;
@@ -26969,7 +27028,7 @@
           { proper: false }
         );
         const displayKey = rule.classStepDisplayKey || classStepRuleDisplayKey(rule);
-        const sourceLabel = rule.stepSourceLabel || 'wrapped rule';
+        const sourceLabel = classStepRuleSourceLabel(rule);
         out.push({
           ...rule,
           id: `step-map-wrap-${id}-${rule.id || hashString(monoKey(rule.lhs?.powers || {}))}`,
@@ -27009,16 +27068,16 @@
           onePass: true
         });
         const pulled = classStepTruncateProductBidegrees(pullbackPolynomial(reducedSource, map), domainGeometry);
-        const displayLatex = classStepPullbackWrappedDisplayLatex(map, rule);
-        const displayKey = `pullback:${map.id || 'map'}:${displayLatex}`;
-        const sourceLabel = rule.stepSourceLabel || 'Pullback';
+        const displayLatex = classStepPullbackWrappedDisplayLatex(rule);
+        const displayKey = rule.classStepDisplayKey || classStepRuleDisplayKey(rule);
+        const sourceLabel = classStepRuleSourceLabel(rule);
         out.push({
           ...rule,
           id: `step-pullback-wrap-${id}-${rule.id || hashString(monoKey(rule.lhs?.powers || {}))}`,
           classStepAllowSameLhs: true,
           classStepDisplayKey: displayKey,
           classStepGroupKey: rule.classStepGroupKey
-            ? `${rule.classStepGroupKey}:pullback:${map.id || 'map'}`
+            ? rule.classStepGroupKey
             : `pullback-display:${sourceLabel}:${hashString(displayLatex)}`,
           lhs: { powers: { [id]: 1 } },
           rhs: serializeHomologyPoly(pulled),
@@ -27030,11 +27089,8 @@
     return out;
   }
 
-  function classStepPullbackWrappedDisplayLatex(map, rule) {
-    const pull = mapPullbackOperatorLatex(map);
-    const lhs = formatPolyLatex(polyFromPowers(rule?.lhs?.powers || {}));
-    const rhs = homologyRuleRhsLatex(rule);
-    return `${pull}\\left(${lhs}\\right)=${pull}\\left(${rhs}\\right)`;
+  function classStepPullbackWrappedDisplayLatex(rule) {
+    return rule?.classStepDisplayLatex || classStepRuleDisplayLatex(rule);
   }
 
   function classStepPushforwardGrrRules(session, sheaf = session?.sheaf, geometry = session?.geometry) {
@@ -28273,7 +28329,8 @@
   function classStepCachedRulesForCompatibleGeometry(session, cache) {
     const rules = [];
     const d = session.dimension;
-    for (let i = 1; i <= Math.min(d, cache.components.length - 1); i += 1) {
+    const firstComponent = cache.family === 'formula' || session.formulaSession ? 0 : 1;
+    for (let i = firstComponent; i <= Math.min(d, cache.components.length - 1); i += 1) {
       const lhs = componentOrZero(cache.originalComponents || cache.components, i);
       const rhs = componentOrZero(cache.components, i);
       if (!lhs.isZero()) {

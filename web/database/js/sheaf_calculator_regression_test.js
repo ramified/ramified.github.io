@@ -59,6 +59,7 @@ function loadCalculator() {
     bettiTableAvailableForGeometry,
     buildCompleteIntersectionBettiTable,
     setClassFormulaBuilderVariety,
+    setClassFormulaCursor,
     classFormulaHomologyTokenDefs,
     classFormulaSheafTokenDefs,
     classFormulaSheafTokenForSelection,
@@ -4014,6 +4015,70 @@ function testClassFormulaBuilderRendersSelectedClassButtonAndEditableTokens() {
   assert(api.refs.classFormulaPreview.innerHTML.includes('\\('), api.refs.classFormulaPreview.innerHTML);
 }
 
+function testClassFormulaBuilderActiveFunctorSlotShowsSourceGeometryControls() {
+  const api = loadCalculator();
+  const pointHomology = { classes: { unit: { symbol: '1' }, point: { symbol: '[p]' } } };
+  api.state.varieties = [
+    { id: 'Y', type: 'abstract', dim: '3', name: 'Y', homology: pointHomology },
+    { id: 'Z', type: 'abstract', dim: '3', name: 'Z', homology: pointHomology }
+  ];
+  api.state.maps = [
+    { id: 'g', name: 'g', domainKind: 'variety', domainId: 'Y', codomainKind: 'variety', codomainId: 'Z' }
+  ];
+  api.refs.classFormulaBuilder = {};
+  api.refs.classFormulaVariety = { innerHTML: '', disabled: true, title: '' };
+  api.refs.classFormulaHomologyButtons = { classList: { toggle() {} }, textContent: '', innerHTML: '' };
+  api.refs.classFormulaAddSheafClass = { disabled: true, innerHTML: '', title: '' };
+  api.refs.classFormulaClassFamily = { innerHTML: '', disabled: true };
+  api.refs.classFormulaClassDegree = { innerHTML: '', disabled: true };
+  api.refs.classFormulaClassSheaf = { innerHTML: '', disabled: true };
+  api.refs.classFormulaMapButtons = { classList: { toggle() {} }, textContent: '', innerHTML: '' };
+  api.refs.classFormulaPreview = { innerHTML: '', classList: { toggle() {} }, setAttribute() {} };
+  api.refs.classFormulaMessage = { textContent: '' };
+  api.refs.classFormulaUndo = { disabled: true };
+  api.refs.classFormulaClear = { disabled: true };
+  api.refs.classFormulaSlotDone = { hidden: true, disabled: true };
+  api.refs.classFormulaCheck = { disabled: true, title: '', textContent: '' };
+  api.refs.classFormulaCompute = { disabled: true };
+
+  api.state.classFormulaEditorOpen = true;
+  api.state.classFormulaBuilder = {
+    varietyId: 'Z',
+    tokens: [{
+      type: 'functor-slot',
+      slotId: 'slot1',
+      operation: 'pushforward',
+      mapId: 'g',
+      sourceGeometryId: 'Y',
+      targetGeometryId: 'Z',
+      tokens: [],
+      latex: 'g_{*}(\\square)',
+      plain: 'g_*(class)'
+    }],
+    activeSlotId: 'slot1',
+    cursorIndex: 0,
+    mode: 'builder',
+    classFamily: 'chern',
+    classDegree: '',
+    classSheafId: null,
+    insertMode: 'insert',
+    nextSlotId: 2
+  };
+  api.renderClassFormulaBuilder();
+  assert(/value="Y" selected/.test(api.refs.classFormulaVariety.innerHTML), api.refs.classFormulaVariety.innerHTML);
+  assert.strictEqual(api.refs.classFormulaVariety.disabled, true);
+  assert(api.refs.classFormulaVariety.title.includes('Y'), api.refs.classFormulaVariety.title);
+  assert(api.refs.classFormulaHomologyButtons.innerHTML.includes('[p]'), api.refs.classFormulaHomologyButtons.innerHTML);
+  assert(api.refs.classFormulaHomologyButtons.innerHTML.includes('point in Y'), api.refs.classFormulaHomologyButtons.innerHTML);
+  assert(api.refs.classFormulaPreview.innerHTML.includes('data-class-formula-cursor-slot=""'), api.refs.classFormulaPreview.innerHTML);
+
+  api.setClassFormulaCursor(1, { slotId: null });
+  assert.strictEqual(api.state.classFormulaBuilder.activeSlotId, null);
+  assert(/value="Z" selected/.test(api.refs.classFormulaVariety.innerHTML), api.refs.classFormulaVariety.innerHTML);
+  assert.strictEqual(api.refs.classFormulaVariety.disabled, false);
+  assert(api.refs.classFormulaHomologyButtons.innerHTML.includes('point in Z'), api.refs.classFormulaHomologyButtons.innerHTML);
+}
+
 function testClassStepFormulaHistoryAndUndoLastStep() {
   const api = loadCalculator();
   api.state.varieties = [{
@@ -4612,6 +4677,69 @@ function testClassStepNestedPushforwardOffersGrrAfterSes() {
   assert.strictEqual(grrPlain, '0');
 }
 
+function testClassStepPullbackCh0AndWrappedGrrUseOriginalDisplay() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'C', type: 'curve', dim: '1', name: 'C', genus: '3', homology: { classes: { unit: { symbol: '1' }, point: { symbol: '[p]' } } } },
+    { id: 'Y', type: 'abstract', dim: '1', name: 'Y', homology: { classes: { unit: { symbol: '1' }, point: { symbol: '[p]' } } } }
+  ];
+  api.state.maps = [
+    { id: 'f', name: 'f', domainKind: 'variety', domainId: 'C', codomainKind: 'variety', codomainId: 'Y' }
+  ];
+  api.state.sheaves = [
+    { id: 'L', type: 'locally-free', name: '\\mathcal{L}', rank: '1', baseVarietyId: 'C', basis: 'chern' },
+    { id: 'P', type: 'abstract', name: '\\mathbf{R}f_{*}\\mathcal{L}', rank: '', baseVarietyId: 'Y', basis: 'chern', construction: { type: 'pushforward', mapId: 'f', sheafId: 'L', exact: true, proper: true } },
+    { id: 'LP', type: 'abstract', name: '\\mathbf{L}f^{*}\\mathbf{R}f_{*}\\mathcal{L}', rank: '', baseVarietyId: 'C', basis: 'chern', construction: { type: 'pullback', mapId: 'f', sheafId: 'P', derived: true } }
+  ];
+  const curveGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const targetGeometry = api.geometryFromVariety(api.state.varieties[1]);
+  const pushedSheaf = api.sheafFromObject(api.state.sheaves[1], targetGeometry);
+  api.createClassStepSession(api.buildClassStepFallbackResult(targetGeometry, pushedSheaf, { message: 'test' }), 'character', null);
+  const pulledSheaf = api.sheafFromObject(api.state.sheaves[2], curveGeometry);
+  api.createClassStepSession(api.buildClassStepFallbackResult(curveGeometry, pulledSheaf, { message: 'test' }), 'character', null);
+
+  const pulledCh1 = api.pullbackPolynomial(api.polyFromPowers({ sheaf_P_ch1: 1 }), api.state.maps[0]);
+  const pulledCh1Id = Array.from(pulledCh1.terms.keys())[0].split(':')[0];
+  const session = api.createClassFormulaStepSession({
+    ok: true,
+    geometry: curveGeometry,
+    poly: api.polyFromPowers({ sheaf_LP_ch0: 1, [pulledCh1Id]: 1 }),
+    latex: '\\operatorname{ch}(\\mathbf{L}f^{*}\\mathbf{R}f_{*}\\mathcal{L})',
+    plain: 'ch(Lf^*Rf_*L)',
+    signature: 'pullback-grr-display'
+  });
+
+  const ch0Pullback = session.candidates.find((candidate) => candidate.sourceLabel === 'Pullback'
+    && candidate.rules.some((rule) => rule.lhs?.powers?.sheaf_LP_ch0 === 1));
+  assert(ch0Pullback, session.candidates.map((candidate) => `${candidate.sourceLabel}:${candidate.rule.classStepDisplayLatex || ''}`).join(' | '));
+  assert(ch0Pullback.rule.classStepDisplayLatex.includes('\\operatorname{ch}_{0}'), ch0Pullback.rule.classStepDisplayLatex);
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(ch0Pullback.rule)), 'ch_0(mathbfRf_*L)');
+
+  const wrappedGrr = session.candidates.find((candidate) => candidate.sourceLabel === 'GRR'
+    && candidate.rules.some((rule) => rule.lhs?.powers?.[pulledCh1Id] === 1));
+  assert(wrappedGrr, session.candidates.map((candidate) => `${candidate.sourceLabel}:${candidate.rule.classStepDisplayLatex || ''}`).join(' | '));
+  assert(!wrappedGrr.rule.classStepDisplayLatex.includes('\\left(0\\right)'), wrappedGrr.rule.classStepDisplayLatex);
+  assert(!wrappedGrr.rule.classStepDisplayLatex.endsWith('=0'), wrappedGrr.rule.classStepDisplayLatex);
+  assert(wrappedGrr.rule.classStepDisplayLatex.includes('\\operatorname{td}'), wrappedGrr.rule.classStepDisplayLatex);
+  assert(wrappedGrr.rule.classStepDisplayLatex.includes('\\operatorname{ch}(\\mathbf{R}f_{*}\\mathcal{L})'), wrappedGrr.rule.classStepDisplayLatex);
+  assert(!wrappedGrr.rule.classStepDisplayLatex.includes('f^{*}\\left'), wrappedGrr.rule.classStepDisplayLatex);
+  assert(!wrappedGrr.rule.classStepDisplayLatex.includes('\\operatorname{ch}_{1}'), wrappedGrr.rule.classStepDisplayLatex);
+  assert(api.formatPolyPlain(api.homologyRuleRhsPoly(wrappedGrr.rule)).length > 0);
+
+  session.formulaPoly = api.applyClassStepRulesToPoly(session.formulaPoly, ch0Pullback.rules, curveGeometry.dim, {
+    oncePerRule: true,
+    onePass: true
+  });
+  session.components[0] = session.formulaPoly;
+  const afterCh0Candidates = api.collectClassStepRuleCandidates(session);
+  const grrCandidates = afterCh0Candidates.filter((candidate) => candidate.sourceLabel === 'GRR');
+  assert.strictEqual(grrCandidates.length, 1, grrCandidates.map((candidate) => candidate.rule.classStepDisplayLatex || '').join(' | '));
+  const grr = grrCandidates[0];
+  assert(grr.rules.some((rule) => rule.lhs?.powers?.sheaf_P_ch0 === 1));
+  assert(grr.rules.some((rule) => rule.lhs?.powers?.[pulledCh1Id] === 1));
+  assert(!grr.rule.classStepDisplayLatex.includes('f^{*}\\left'), grr.rule.classStepDisplayLatex);
+}
+
 function testClassStepTensorRulesForCharacterAndChern() {
   const api = loadCalculator();
   api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X' }];
@@ -4848,10 +4976,10 @@ function testClassStepWrapsPullbackSourceRulesInsidePushforward() {
   const session = api.createClassStepSession(result, 'character', 0);
   session.components[0] = api.polyFromPowers({ [pushedId]: 1 });
   const candidates = api.collectClassStepRuleCandidates(session);
-  const wrapped = candidates.find((candidate) => candidate.sourceLabel === 'Pullback'
-    && candidate.rule.classStepDisplayLatex.includes('\\pi_C')
+  const wrapped = candidates.find((candidate) => candidate.sourceLabel === 'user'
     && candidate.rules.some((rule) => api.formatPolyPlain(api.homologyRuleRhsPoly(rule)) === '4'));
   assert(wrapped, candidates.map((candidate) => `${candidate.sourceLabel}:${candidate.rule.classStepDisplayLatex}`).join(' | '));
+  assert(!wrapped.rule.classStepDisplayLatex.includes('\\pi_C'), wrapped.rule.classStepDisplayLatex);
   session.components[0] = api.applyClassStepRulesToPoly(session.components[0], wrapped.rules, picGeometry.dim, {
     oncePerRule: true,
     onePass: true
@@ -5390,6 +5518,90 @@ function testClassStepCachedRulesIncludeMapWrappedCandidates() {
   targetSession.components[1] = pushedFormal;
   const candidates = api.collectClassStepRuleCandidates(targetSession);
   assert(candidates.some((candidate) => candidate.sourceLabel === 'cached pushforward'));
+}
+
+function testClassStepNestedPushforwardUsesSourceGeometryPointRule() {
+  const api = loadCalculator();
+  const pointHomology = { classes: { unit: { symbol: '1' }, point: { symbol: '[p]' } } };
+  api.state.varieties = [
+    { id: 'X', type: 'abstract', dim: '3', name: 'X', homology: pointHomology },
+    { id: 'Y', type: 'abstract', dim: '3', name: 'Y', homology: pointHomology },
+    { id: 'Z', type: 'abstract', dim: '3', name: 'Z', homology: pointHomology }
+  ];
+  api.state.maps = [
+    { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' },
+    { id: 'g', name: 'g', domainKind: 'variety', domainId: 'Y', codomainKind: 'variety', codomainId: 'Z' }
+  ];
+  const xGeometry = api.geometryFromVariety(api.state.varieties[0]);
+  const yGeometry = api.geometryFromVariety(api.state.varieties[1]);
+  const zGeometry = api.geometryFromVariety(api.state.varieties[2]);
+  const pointId = (geometry) => {
+    const def = api.homologyClassDefinitions(geometry).find((item) => item.id === api.HOMOLOGY_POINT_CLASS);
+    return api.homologyDefVariableId(def, geometry);
+  };
+  const variableIdFromPoly = (poly) => Array.from(poly.terms.keys())[0].split(':')[0];
+  const xPointId = pointId(xGeometry);
+  const yPointId = pointId(yGeometry);
+  const zPointId = pointId(zGeometry);
+  const inner = api.pushforwardPolynomialByDegree(api.state.maps[0], api.polyFromPowers({ [xPointId]: 1 }), 3, 3, { proper: false });
+  const outer = api.pushforwardPolynomialByDegree(api.state.maps[1], inner, 3, 3, { proper: false });
+  const gPoint = api.pushforwardPolynomialByDegree(api.state.maps[1], api.polyFromPowers({ [yPointId]: 1 }), 3, 3, { proper: false });
+  const outerId = variableIdFromPoly(outer);
+  const gPointId = variableIdFromPoly(gPoint);
+
+  const innerSession = api.createClassFormulaStepSession({
+    ok: true,
+    geometry: yGeometry,
+    poly: inner,
+    latex: 'f_{*}([p])',
+    plain: 'f_*([p])',
+    signature: 'inner'
+  });
+  innerSession.components[0] = api.polyFromPowers({ [yPointId]: 1 });
+  api.rememberClassStepComponents(innerSession);
+
+  api.refs.classStepUseCache = { checked: true };
+  const cachedSession = api.createClassFormulaStepSession({
+    ok: true,
+    geometry: zGeometry,
+    poly: outer,
+    latex: 'g_{*}(f_{*}([p]))',
+    plain: 'g_*(f_*([p]))',
+    signature: 'outer-cache'
+  });
+  assert(cachedSession.candidates.some((candidate) => (
+    candidate.sourceLabel === 'cached pushforward'
+    && candidate.rules.some((rule) => rule.lhs?.powers?.[outerId] === 1
+      && rule.rhs?.some((term) => term.powers?.[gPointId] === 1))
+  )));
+
+  api.refs.classStepUseCache = { checked: false };
+  const session = api.createClassFormulaStepSession({
+    ok: true,
+    geometry: zGeometry,
+    poly: outer,
+    latex: 'g_{*}(f_{*}([p]))',
+    plain: 'g_*(f_*([p]))',
+    signature: 'outer-built-in'
+  });
+  const wrappedInner = session.candidates.find((candidate) => candidate.rules.some((rule) => (
+    rule.lhs?.powers?.[outerId] === 1
+    && rule.rhs?.some((term) => term.powers?.[gPointId] === 1)
+  )));
+  assert(wrappedInner, session.candidates.map((candidate) => candidate.sourceLabel).join(','));
+  assert.strictEqual(wrappedInner.sourceLabel, 'built-in');
+  session.formulaPoly = api.applyClassStepRulesToPoly(session.formulaPoly, [wrappedInner.rule], zGeometry.dim, { oncePerRule: true, onePass: true });
+  session.components[0] = session.formulaPoly;
+  assert.strictEqual(api.formatPolyPlain(session.formulaPoly), api.formatPolyPlain(gPoint));
+
+  const pointRule = api.collectClassStepRuleCandidates(session).find((candidate) => candidate.rules.some((rule) => (
+    rule.lhs?.powers?.[gPointId] === 1
+    && rule.rhs?.some((term) => term.powers?.[zPointId] === 1)
+  )));
+  assert(pointRule, api.collectClassStepRuleCandidates(session).map((candidate) => candidate.sourceLabel).join(','));
+  session.formulaPoly = api.applyClassStepRulesToPoly(session.formulaPoly, [pointRule.rule], zGeometry.dim, { oncePerRule: true, onePass: true });
+  session.components[0] = session.formulaPoly;
+  assert.strictEqual(api.formatPolyPlain(session.formulaPoly), '[p]');
 }
 
 function testClassStepSwitchingRulesUnlockStoredOppositeBasisRule() {
@@ -6170,6 +6382,36 @@ function testSheafBinaryPickFlowRegistryCoversSheafCandidates() {
   assert(api.pickFlowHint(flow).includes('second sheaf'));
 }
 
+function testSheafMapOperationPickFlowAllowsActiveSourceSheafInCreateMode() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    { id: 'C', type: 'curve', dim: '1', name: 'C' },
+    { id: 'X', type: 'abstract', dim: '1', name: 'X' }
+  ];
+  api.state.sheaves = [
+    { id: 'E', type: 'abstract', basis: 'chern', rank: '', name: '\\mathcal{E}', baseVarietyId: 'C' }
+  ];
+  api.state.maps = [
+    { id: 'f', domainKind: 'variety', domainId: 'C', codomainKind: 'variety', codomainId: 'X', name: 'f' }
+  ];
+  api.state.activeSheafId = 'E';
+  api.refs.addObjectKind = { value: 'sheaf' };
+  api.refs.sheafType = { value: 'map-operation' };
+  api.refs.inputPickMode = { hidden: true, disabled: false, setAttribute(name, value) { this[name] = value; } };
+
+  const flow = api.activePickFlow();
+  assert.strictEqual(flow.id, 'sheaf-map-operation');
+  assert.strictEqual(api.canvasPickAvailable(), true);
+  assert.strictEqual(api.pickFlowCandidate('map', 'f'), true);
+  api.setCanvasPickEnabled(true, { render: false });
+  assert.strictEqual(api.state.canvasPickEnabled, true);
+
+  api.state.inputMode = 'modify';
+  api.state.canvasPickEnabled = false;
+  assert.strictEqual(api.canvasPickAvailable(), false);
+  assert.strictEqual(api.pickFlowCandidate('map', 'f'), false);
+}
+
 function identifyTestSelect(value = 'variety') {
   return {
     value,
@@ -6409,6 +6651,7 @@ testClassStepDerivedTargetAppliesVisibleHomologyRule();
 testClassFormulaBuilderTokenSourcesAndValidation();
 testClassFormulaBuilderRejectsInvalidMapAndStartsStepSession();
 testClassFormulaBuilderRendersSelectedClassButtonAndEditableTokens();
+testClassFormulaBuilderActiveFunctorSlotShowsSourceGeometryControls();
 testClassStepFormulaHistoryAndUndoLastStep();
 testClassStepSavedFormulaRulesAreReusableAndRemovable();
 testUnitFactorsAreNormalizedInStepPolynomials();
@@ -6422,6 +6665,7 @@ testSymmetricProductGenusCanBeClearedWhileEditing();
 testSymmetricProductAggregateRulesUseAveragedCoefficients();
 testSymmetricProductAbelJacobiUsesProjectionFormulaForSigma();
 testClassStepNestedPushforwardOffersGrrAfterSes();
+testClassStepPullbackCh0AndWrappedGrrUseOriginalDisplay();
 testClassStepTensorRulesForCharacterAndChern();
 testStrengthenedTensorUsesMultipleParentsAndExponents();
 testStrengthenedDifferentialExteriorPowerConstructions();
@@ -6435,6 +6679,7 @@ testClassStepPhoneForcesSideLayout();
 testClassStepSessionOpensSeparateCard();
 testClassStepRuleOnceAndOnePassSemantics();
 testClassStepCachedRulesIncludeMapWrappedCandidates();
+testClassStepNestedPushforwardUsesSourceGeometryPointRule();
 testClassStepSwitchingRulesUnlockStoredOppositeBasisRule();
 testClassStepUseCacheRenderingSurvivesStaleVariableMetadata();
 testClassStepStopRowsUsePreservedComponents();
@@ -6457,6 +6702,7 @@ testClassDisplayUsesCappedPasses();
 testProductPickFlowRegistryCoversCandidatesAndSelection();
 testMapCompositionPickFlowRegistryCoversMapCandidates();
 testSheafBinaryPickFlowRegistryCoversSheafCandidates();
+testSheafMapOperationPickFlowAllowsActiveSourceSheafInCreateMode();
 testIdentifyPickFlowChoosesAvailableKindAndStopsAfterPair();
 testRuleOnlySheafIdentificationPersistsAfterSheafDeletion();
 
