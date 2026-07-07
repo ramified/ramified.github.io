@@ -2822,6 +2822,15 @@
             </div>
           </div>
           <div class="sheaf-note" id="ses-pick-note" hidden>pick two sheaves on the same base</div>
+          <div class="sheaf-field-row" id="ses-computed-row" hidden>
+            <label class="input-label" for="ses-computed-index">compute</label>
+            <select id="ses-computed-index">
+              <option value="0">A from B and C</option>
+              <option value="1">B from A and C</option>
+              <option value="2">C from A and B</option>
+            </select>
+          </div>
+          <div class="sheaf-note" id="ses-computed-warning" hidden>This SES has no assigned computed sheaf; legacy step rules are still available.</div>
           <div class="sheaf-field-row map-curve-row" id="ses-tail-row" hidden>
             <label class="input-label" for="ses-tail-point-count">+1 tail</label>
             <div class="sequence-tail-tools">

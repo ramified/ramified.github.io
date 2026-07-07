@@ -568,6 +568,9 @@
     refs.sesSecondMapButton = $('ses-second-map-button');
     refs.sesRightButton = $('ses-right-button');
     refs.sesPickNote = $('ses-pick-note');
+    refs.sesComputedRow = $('ses-computed-row');
+    refs.sesComputedIndex = $('ses-computed-index');
+    refs.sesComputedWarning = $('ses-computed-warning');
     refs.sesTailRow = $('ses-tail-row');
     refs.sesTailPointCount = $('ses-tail-point-count');
     refs.sesTailPointCountValue = $('ses-tail-point-count-value');
@@ -866,12 +869,14 @@
   }
 
   function createDefaultSequence(options = {}) {
+    const computedIndex = normalizeSesComputedIndex(options.computedIndex);
     return {
       id: options.id || nextInputId('S'),
       type: options.type || 'short-exact-sequence',
       sheafIds: Array.isArray(options.sheafIds) ? options.sheafIds.slice(0, 3) : [],
       mapIds: Array.isArray(options.mapIds) ? options.mapIds.slice(0, 2) : [],
       baseVarietyId: options.baseVarietyId || null,
+      ...(computedIndex == null ? {} : { computedIndex }),
       tail: normalizeSequenceTailCurve(options.tail)
     };
   }
@@ -3604,6 +3609,7 @@
       sheafCId: sheafIds[2] || null,
       mapABId: mapIds[0] || null,
       mapBCId: mapIds[1] || null,
+      computedIndex: normalizeSesComputedIndex(sequence.computedIndex),
       tailPointCount: sequenceTailPointCount(sequence.tail)
     });
     state.sesPickTarget = 'sheaf-a';
@@ -5701,6 +5707,11 @@
       });
       syncSequenceTailControls();
     }
+    if (refs.sesComputedIndex) {
+      refs.sesComputedIndex.addEventListener('change', () => {
+        setActiveSesComputedIndex(refs.sesComputedIndex.value);
+      });
+    }
     if (refs.mapPointCount) {
       refs.mapPointCount.addEventListener('input', () => {
         const map = selectedMap();
@@ -7638,7 +7649,8 @@
         sheafC: relative,
         baseVarietyId: cover.id,
         autoMapABName: '\\iota',
-        autoMapBCName: '\\pi'
+        autoMapBCName: '\\pi',
+        computedIndex: 1
       });
       state.activeSequenceId = previousActive.sequenceId;
       state.activeSheafId = previousActive.sheafId;
@@ -7648,6 +7660,7 @@
       created = true;
     }
     let changed = created;
+    if (setMissingSequenceComputedIndex(sequence, 1)) changed = true;
     if (JSON.stringify(sequence.sheafIds || []) !== JSON.stringify(nextSheafIds)) {
       detachShortExactSequenceMemberships(sequence.id);
       sequence.sheafIds = nextSheafIds;
@@ -8015,7 +8028,8 @@
         sheafC: quotient,
         baseVarietyId: cover.id,
         autoMapABName: 'd\\pi',
-        autoMapBCName: '\\rho'
+        autoMapBCName: '\\rho',
+        computedIndex: 2
       });
       state.activeSequenceId = previousActive.sequenceId;
       state.activeSheafId = previousActive.sheafId;
@@ -8025,6 +8039,7 @@
       created = true;
     }
     let changed = created;
+    if (setMissingSequenceComputedIndex(sequence, 2)) changed = true;
     if (JSON.stringify(sequence.sheafIds || []) !== JSON.stringify(nextSheafIds)) {
       detachShortExactSequenceMemberships(sequence.id);
       sequence.sheafIds = nextSheafIds;
@@ -9422,7 +9437,8 @@
       sheafC: pushedStructure,
       baseVarietyId: data.codomain.id,
       autoMapABName: '\\iota',
-      autoMapBCName: '\\pi'
+      autoMapBCName: '\\pi',
+      computedIndex: 0
     });
     if (sequence) {
       ideal.construction.sequenceId = sequence.id;
@@ -9492,7 +9508,8 @@
       sheafC: normal,
       baseVarietyId: data.domain.id,
       autoMapABName: '\\iota',
-      autoMapBCName: '\\pi'
+      autoMapBCName: '\\pi',
+      computedIndex: 2
     });
     if (sequence) {
       normal.construction.sequenceId = sequence.id;
@@ -9577,7 +9594,8 @@
         sheafC: relative,
         baseVarietyId: data.domain.id,
         autoMapABName: '\\iota',
-        autoMapBCName: '\\pi'
+        autoMapBCName: '\\pi',
+        computedIndex: 2
       })
       : createShortExactSequenceFromObjects({
         sheafA: relative,
@@ -9585,7 +9603,8 @@
         sheafC: pulledTargetSheaf,
         baseVarietyId: data.domain.id,
         autoMapABName: '\\iota',
-        autoMapBCName: '\\pi'
+        autoMapBCName: '\\pi',
+        computedIndex: 0
       });
     if (sequence) {
       relative.construction.sequenceId = sequence.id;
@@ -10334,10 +10353,13 @@
     sequence.sheafIds = sheafIds;
     sequence.mapIds = mapIds;
     sequence.baseVarietyId = data.baseVarietyId;
+    sequence.computedIndex = normalizeSesComputedIndex(data.computedIndex) ?? 1;
+    sequence.modified = true;
     attachShortExactSequenceMap(data.mapAB, sequence, 0);
     attachShortExactSequenceMap(data.mapBC, sequence, 1);
     attachShortExactSequenceMemberships(sequence);
-    state.activeSheafId = data.sheafB.id;
+    const activeTerm = [data.sheafA, data.sheafB, data.sheafC][normalizeSesComputedIndex(sequence.computedIndex) ?? 1] || data.sheafB;
+    state.activeSheafId = activeTerm.id;
     state.activeVarietyId = data.baseVarietyId;
     state.activeMapId = null;
     setCanvasPickEnabled(false, { render: false });
@@ -10416,6 +10438,7 @@
       ...data,
       autoMapABName,
       autoMapBCName,
+      computedIndex: missingIndex,
       sheafA: sheaves[0],
       sheafB: sheaves[1],
       sheafC: sheaves[2]
@@ -10466,13 +10489,15 @@
       sheafIds: [sheafA.id, sheafB.id, sheafC.id],
       mapIds: [mapAB.id, mapBC.id],
       baseVarietyId: sheafA.baseVarietyId,
+      computedIndex: normalizeSesComputedIndex(data.computedIndex) ?? 1,
       tail: { pointCount: sequenceTailPointCount(state.sesDraft) }
     });
     attachShortExactSequenceMap(mapAB, sequence, 0);
     attachShortExactSequenceMap(mapBC, sequence, 1);
     state.sequences.push(sequence);
     attachShortExactSequenceMemberships(sequence);
-    state.activeSheafId = sheafB.id;
+    const activeTerm = [sheafA, sheafB, sheafC][normalizeSesComputedIndex(sequence.computedIndex) ?? 1] || sheafB;
+    state.activeSheafId = activeTerm.id;
     state.activeVarietyId = sheafB.baseVarietyId;
     state.activeMapId = null;
     return sequence;
@@ -10666,7 +10691,8 @@
       sheafC: quotient,
       baseVarietyId: data.base.id,
       autoMapABName: '\\iota',
-      autoMapBCName: '\\pi'
+      autoMapBCName: '\\pi',
+      computedIndex: 2
     });
   }
 
@@ -12832,6 +12858,7 @@
 
   function sesDraftIds() {
     const draft = state.sesDraft || {};
+    const sequence = activeSesDraftSequence();
     return {
       sequenceId: draft.sequenceId || null,
       sheafAId: draft.sheafAId || null,
@@ -12839,8 +12866,54 @@
       sheafCId: draft.sheafCId || null,
       mapABId: draft.mapABId || null,
       mapBCId: draft.mapBCId || null,
+      computedIndex: normalizeSesComputedIndex(draft.computedIndex ?? sequence?.computedIndex),
       tailPointCount: sequenceTailPointCount(draft)
     };
+  }
+
+  function normalizeSesComputedIndex(value) {
+    if (value == null || value === '') return null;
+    const index = Number(value);
+    return Number.isInteger(index) && index >= 0 && index <= 2 ? index : null;
+  }
+
+  function sesComputedIndexFromDraft(draft = sesDraftIds()) {
+    const sheafIds = [draft.sheafAId, draft.sheafBId, draft.sheafCId];
+    const selectedCount = sheafIds.filter(Boolean).length;
+    const missingIndex = sheafIds.findIndex((id) => !id);
+    if (selectedCount === 2 && missingIndex >= 0) return missingIndex;
+    const index = normalizeSesComputedIndex(draft.computedIndex);
+    return index == null ? 1 : index;
+  }
+
+  function sesComputedIndexIsMissing(sequence) {
+    return !!sequence && normalizeSesComputedIndex(sequence.computedIndex) == null;
+  }
+
+  function setSequenceComputedIndex(sequence, index) {
+    const normalized = normalizeSesComputedIndex(index);
+    if (!sequence || normalized == null) return false;
+    if (sequence.computedIndex === normalized) return false;
+    sequence.computedIndex = normalized;
+    return true;
+  }
+
+  function setMissingSequenceComputedIndex(sequence, index) {
+    if (!sesComputedIndexIsMissing(sequence)) return false;
+    return setSequenceComputedIndex(sequence, index);
+  }
+
+  function setActiveSesComputedIndex(value) {
+    const index = normalizeSesComputedIndex(value);
+    if (index == null) return;
+    const sequence = activeSesDraftSequence();
+    const nextDraft = { ...sesDraftIds(), computedIndex: index };
+    if (sequence) {
+      if (setSequenceComputedIndex(sequence, index)) sequence.modified = true;
+    }
+    setSesDraft(nextDraft);
+    updateSesDraftControls();
+    recompute();
   }
 
   function sesDraftSheaf(slot) {
@@ -13044,6 +13117,7 @@
     const show = combinedSesCreateMode();
     if (refs.sesParentsRow) refs.sesParentsRow.hidden = !show;
     syncSequenceTailControls(activeSesDraftSequence());
+    updateSesComputedControls();
     syncPickFlowNote(refs.sesPickNote, 'short-exact-sequence', show);
     updateSesSlotButton(refs.sesLeftButton, sesDraftSheaf('sheaf-a'), 'sheaf-a');
     updateSesSlotButton(refs.sesFirstMapButton, sesDraftMap('map-ab'), 'map-ab');
@@ -13051,6 +13125,27 @@
     updateSesSlotButton(refs.sesSecondMapButton, sesDraftMap('map-bc'), 'map-bc');
     updateSesSlotButton(refs.sesRightButton, sesDraftSheaf('sheaf-c'), 'sheaf-c');
     syncGlobalPickButton();
+  }
+
+  function updateSesComputedControls() {
+    const show = combinedSesCreateMode();
+    if (refs.sesComputedRow) refs.sesComputedRow.hidden = !show;
+    const draft = sesDraftIds();
+    const computedIndex = sesComputedIndexFromDraft(draft);
+    const selectedCount = [draft.sheafAId, draft.sheafBId, draft.sheafCId].filter(Boolean).length;
+    const forcedMissing = selectedCount === 2;
+    if (refs.sesComputedIndex) {
+      refs.sesComputedIndex.value = String(computedIndex);
+      refs.sesComputedIndex.disabled = !show || forcedMissing;
+      refs.sesComputedIndex.title = forcedMissing
+        ? 'With one SES slot blank, the blank sheaf is the computed term.'
+        : 'Choose which SES sheaf is computed from the other two.';
+    }
+    const sequence = activeSesDraftSequence();
+    if (refs.sesComputedWarning) {
+      refs.sesComputedWarning.hidden = !show || !sesComputedIndexIsMissing(sequence);
+      refs.sesComputedWarning.textContent = 'This SES has no assigned computed sheaf; choose A, B, or C to avoid legacy SES behavior.';
+    }
   }
 
   function updateSesSlotButton(button, object, target) {
@@ -13068,6 +13163,9 @@
 
   function sesPickHint() {
     const data = shortExactSequenceData();
+    if (activeSesEditMode() && sesComputedIndexIsMissing(activeSesDraftSequence())) {
+      return 'this SES has no assigned computed sheaf; choose A, B, or C';
+    }
     if (activeSesEditMode()) {
       if (data) return 'click update to modify this short exact sequence with the existing sheaves/maps';
       return 'choose compatible existing sheaves and sequence maps';
@@ -13105,7 +13203,8 @@
       sheafC: sheaves[2],
       mapAB: state.maps.find((map) => map.id === draft.mapABId) || null,
       mapBC: state.maps.find((map) => map.id === draft.mapBCId) || null,
-      baseVarietyId: baseId
+      baseVarietyId: baseId,
+      computedIndex: sesComputedIndexFromDraft(draft)
     };
   }
 
@@ -17627,7 +17726,8 @@
         sheafC: normal,
         baseVarietyId: normal.baseVarietyId,
         autoMapABName: '\\iota',
-        autoMapBCName: '\\pi'
+        autoMapBCName: '\\pi',
+        computedIndex: 2
       });
       state.activeSequenceId = previousActive.sequenceId;
       state.activeSheafId = previousActive.sheafId;
@@ -17641,6 +17741,7 @@
     }
     const nextSheafIds = [sourceTangent.id, pulledTargetTangent.id, normal.id];
     let changed = false;
+    if (setMissingSequenceComputedIndex(sequence, 2)) changed = true;
     if (JSON.stringify(sequence.sheafIds || []) !== JSON.stringify(nextSheafIds)) {
       detachShortExactSequenceMemberships(sequence.id);
       sequence.sheafIds = nextSheafIds;
@@ -17818,7 +17919,8 @@
           sheafC: relative,
           baseVarietyId: relative.baseVarietyId,
           autoMapABName: '\\iota',
-          autoMapBCName: '\\pi'
+          autoMapBCName: '\\pi',
+          computedIndex: 2
         })
         : createShortExactSequenceFromObjects({
           sheafA: relative,
@@ -17826,7 +17928,8 @@
           sheafC: pulledTargetSheaf,
           baseVarietyId: relative.baseVarietyId,
           autoMapABName: '\\iota',
-          autoMapBCName: '\\pi'
+          autoMapBCName: '\\pi',
+          computedIndex: 0
         });
       state.activeSequenceId = previousActive.sequenceId;
       state.activeSheafId = previousActive.sheafId;
@@ -17842,6 +17945,7 @@
       ? [pulledTargetSheaf.id, sourceSheaf.id, relative.id]
       : [relative.id, sourceSheaf.id, pulledTargetSheaf.id];
     let changed = false;
+    if (setMissingSequenceComputedIndex(sequence, type === 'cotangent' ? 2 : 0)) changed = true;
     if (JSON.stringify(sequence.sheafIds || []) !== JSON.stringify(nextSheafIds)) {
       detachShortExactSequenceMemberships(sequence.id);
       sequence.sheafIds = nextSheafIds;
@@ -25000,7 +25104,11 @@
       refs.classStepCheckSwitch.disabled = true;
       refs.classStepCheckSwitch.textContent = 'switching automatic';
     }
-    if (refs.classStepMessage) refs.classStepMessage.textContent = session.message || `${session.candidates.length} applicable rule${session.candidates.length === 1 ? '' : 's'}.`;
+    if (refs.classStepMessage) {
+      const warning = classStepSesComputedIndexWarning(session);
+      const message = session.message || `${session.candidates.length} applicable rule${session.candidates.length === 1 ? '' : 's'}.`;
+      refs.classStepMessage.textContent = warning ? `${warning} ${message}` : message;
+    }
     if (refs.classStepApply) refs.classStepApply.disabled = !session.candidates.length;
     if (refs.classStepAddSelectedRules) {
       const selectedRules = selectedClassStepRuleCandidates(session).filter((candidate) => !classStepCandidateIsSimplify(candidate));
@@ -25010,6 +25118,12 @@
         : 'Select at least one non-simplify rule.';
     }
     if (refs.classStepUndo) refs.classStepUndo.disabled = !Array.isArray(session.stepHistory) || session.stepHistory.length <= 1;
+  }
+
+  function classStepSesComputedIndexWarning(session) {
+    const sequence = sesSequenceForTermSheaf(session?.sheaf);
+    if (!sesComputedIndexIsMissing(sequence)) return '';
+    return 'Warning: this SES has no assigned computed sheaf, so legacy SES rules are being used.';
   }
 
   function selectedClassStepRuleCandidates(session = state.classStepSession) {
@@ -27323,6 +27437,7 @@
     const terms = sesTermSheaves(sequence);
     const missingIndex = terms.findIndex((term) => term?.id === session.sheaf?.sourceObject?.id);
     if (missingIndex < 0) return [];
+    if (!sesSequenceAllowsComputedIndex(sequence, missingIndex)) return [];
     const d = session.dimension;
     const components = terms.map((term, index) => (
       index === missingIndex || !term ? null : classStepSesTermComponents(session, term)
@@ -27431,6 +27546,11 @@
       .map((rule) => classStepStoredSheafRule(rule, classStepStoredSheafRuleSource(rule, session), session)));
     rules.push(...classStepSheafIdentificationRules(session));
     return rules;
+  }
+
+  function sesSequenceAllowsComputedIndex(sequence, termIndex) {
+    const computedIndex = normalizeSesComputedIndex(sequence?.computedIndex);
+    return computedIndex == null || computedIndex === termIndex;
   }
 
   function classStepSheafIdentificationRules(session) {
@@ -31067,6 +31187,7 @@
     const terms = sesTermSheaves(sequence);
     const missingIndex = terms.findIndex((term) => term?.id === sheaf.sourceObject?.id);
     if (missingIndex < 0) return null;
+    if (!sesSequenceAllowsComputedIndex(sequence, missingIndex)) return null;
     const bundles = terms.map((term, index) => (
       index === missingIndex || !term ? null : buildSourceSheafBundle(geometry, term)
     ));
@@ -36659,7 +36780,7 @@
     const genus = numericalCurveGenus(geometry);
     if (genus == null) return buildSymbolicCurvePolyvectorParallelogram(geometry);
     const h0T = genus === 0 ? 3n : (genus === 1 ? 1n : 0n);
-    const h1T = genus === 0 ? 0n : BigInt(3 * genus - 3);
+    const h1T = genus === 0 ? 0n : (genus === 1 ? 1n : BigInt(3 * genus - 3));
     return {
       entries: [
         [numericHodgeEntry(1n), numericHodgeEntry(h0T)],
@@ -36673,18 +36794,28 @@
     const hasCurveGenus = geometry?.type === 'curve' || geometry?.type === 'symmetric-product-curve';
     const genus = hasCurveGenus ? genusLatex(geometry.symmetricProductGenus ?? geometry.genus) : 'g';
     const plainGenus = hasCurveGenus ? genusPlain(geometry.symmetricProductGenus ?? geometry.genus) : 'g';
+    const curveLatex = geometry.labelLatex || 'C';
+    const curvePlain = geometry.labelPlain || 'C';
+    const h0T = {
+      latex: `\\begin{cases}3,&${genus}=0\\\\1,&${genus}=1\\\\0,&${genus}\\ge 2\\end{cases}`,
+      plain: `piecewise h^0(T_${curvePlain}): 3 if ${plainGenus}=0; 1 if ${plainGenus}=1; 0 if ${plainGenus}>=2`
+    };
+    const h1T = {
+      latex: `\\begin{cases}0,&${genus}=0\\\\1,&${genus}=1\\\\3${genus}-3,&${genus}\\ge 2\\end{cases}`,
+      plain: `piecewise h^1(T_${curvePlain}): 0 if ${plainGenus}=0; 1 if ${plainGenus}=1; 3*${plainGenus}-3 if ${plainGenus}>=2`
+    };
     return {
       entries: [
         [
           { latex: '1', plain: '1' },
-          { latex: `h^0(T_${geometry.labelLatex || 'C'})`, plain: `h^0(T_${geometry.labelPlain || 'C'})` }
+          h0T
         ],
         [
           { latex: genus, plain: plainGenus },
-          { latex: `3${genus}-3`, plain: `3*${plainGenus}-3` }
+          h1T
         ]
       ],
-      message: 'Curve polyvectors: h^1(T_C)=3g-3 for stable curves; h^0(T_C) depends on automorphisms when genus is symbolic.',
+      message: `Curve polyvectors use the genus-piecewise dimensions of H^0(T_${curveLatex}) and H^1(T_${curveLatex}).`,
       symbolic: true
     };
   }
@@ -39264,6 +39395,7 @@
       sheafIds: Array.isArray(item.sheafIds) ? item.sheafIds.map(sanitizePresetId).filter(Boolean).slice(0, 3) : [],
       mapIds: Array.isArray(item.mapIds) ? item.mapIds.map(sanitizePresetId).filter(Boolean).slice(0, 2) : [],
       baseVarietyId: sanitizePresetId(item.baseVarietyId),
+      computedIndex: normalizeSesComputedIndex(item.computedIndex),
       tail: normalizeSequenceTailCurve(item.tail) || normalizeSequenceTailCurve({ pointCount: DEFAULT_SEQUENCE_TAIL_POINT_COUNT }),
       modified: item.modified === true
     };
@@ -39553,8 +39685,33 @@
       (sequence.sheafIds || []).every((id) => currentSheafIds.has(id))
       && (sequence.mapIds || []).every((id) => currentMapIds.has(id))
     ));
+    state.sequences.forEach((sequence) => {
+      const inferred = inferSequenceComputedIndex(sequence);
+      if (inferred != null) sequence.computedIndex = inferred;
+    });
     state.sequences.forEach(attachShortExactSequenceMemberships);
     [...state.varieties, ...state.sheaves, ...state.maps].forEach((object) => syncObjectLineage(object));
+  }
+
+  function inferSequenceComputedIndex(sequence) {
+    const direct = normalizeSesComputedIndex(sequence?.computedIndex);
+    if (direct != null) return direct;
+    const terms = sesTermSheaves(sequence);
+    const markedIndex = terms.findIndex((term) => term?.construction?.idealSheafMapId);
+    if (markedIndex >= 0) return markedIndex;
+    const normalIndex = terms.findIndex((term) => term?.construction?.normalBundleMapId);
+    if (normalIndex >= 0) return normalIndex;
+    const ramifiedCotangentIndex = terms.findIndex((term) => term?.construction?.ramifiedCoverCotangent === true);
+    if (ramifiedCotangentIndex >= 0) return ramifiedCotangentIndex;
+    const ramifiedTangentIndex = terms.findIndex((term) => term?.construction?.ramifiedCoverTangentQuotient === true);
+    if (ramifiedTangentIndex >= 0) return ramifiedTangentIndex;
+    const relativeIndex = terms.findIndex((term) => term?.construction?.relativeSheafMapId && term.construction.ramifiedCoverRelative !== true);
+    if (relativeIndex >= 0) return relativeIndex;
+    const constructed = terms
+      .map((term, index) => ({ term, index }))
+      .filter(({ term }) => term?.construction?.type === 'ses-term'
+        && (!term.construction.sequenceId || term.construction.sequenceId === sequence?.id));
+    return constructed.length === 1 ? constructed[0].index : null;
   }
 
   function endpointSetForKind(kind, varietyIds, sheafIds) {
@@ -40434,7 +40591,7 @@
   function presetSequence(sequence) {
     return pickSerializable(sequence, [
       'id', 'type', 'sheafIds', 'mapIds', 'baseVarietyId',
-      'tail', 'modified'
+      'computedIndex', 'tail', 'modified'
     ]);
   }
 

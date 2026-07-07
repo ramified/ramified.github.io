@@ -1426,7 +1426,7 @@ function testPolyvectorParallelogramForCurves() {
   const api = loadCalculator();
   const cases = [
     ['P1', { id: 'P1', type: 'projective', dim: '1', name: '\\mathbb{P}^{1}' }, ['1', '3', '0', '0']],
-    ['E', { id: 'E', type: 'curve', genus: '1', name: 'E' }, ['1', '1', '1', '0']],
+    ['E', { id: 'E', type: 'curve', genus: '1', name: 'E' }, ['1', '1', '1', '1']],
     ['C2', { id: 'C2', type: 'curve', genus: '2', name: 'C' }, ['1', '0', '2', '3']]
   ];
   cases.forEach(([, variety, expected]) => {
@@ -1442,6 +1442,20 @@ function testPolyvectorParallelogramForCurves() {
       polyvector.entries[1][1].plain
     ], expected);
   });
+}
+
+function testSymbolicCurvePolyvectorParallelogramIsPiecewise() {
+  const api = loadCalculator();
+  const geometry = api.geometryFromVariety({ id: 'C', type: 'curve', genus: 'g', name: 'C' });
+  const hodge = api.buildHodgeNumbers(geometry);
+  const polyvector = api.buildPolyvectorParallelogram({ geometry, hodge });
+  assert(polyvector);
+  assert(polyvector.symbolic);
+  assert(polyvector.message.includes('genus-piecewise'), polyvector.message);
+  assert(polyvector.entries[0][1].latex.includes('\\begin{cases}'), polyvector.entries[0][1].latex);
+  assert(polyvector.entries[0][1].plain.includes('1 if g=1'), polyvector.entries[0][1].plain);
+  assert(polyvector.entries[1][1].plain.includes('1 if g=1'), polyvector.entries[1][1].plain);
+  assert(polyvector.entries[1][1].plain.includes('3*g-3 if g>=2'), polyvector.entries[1][1].plain);
 }
 
 function testPolyvectorParallelogramForProductOfKnownFactors() {
@@ -2487,6 +2501,7 @@ function testSmoothCyclicRamifiedCoverRelativeDifferentialsStayLazyUntilAbsolute
     && item.construction.mapId === map.id
     && item.baseVarietyId === cover.id));
   assert(api.state.sequences.some((sequence) => (sequence.sheafIds || []).includes(cotangent.id)));
+  assert.strictEqual(api.state.sequences.find((sequence) => (sequence.sheafIds || []).includes(cotangent.id)).computedIndex, 1);
 
   const relativeTangent = api.createRelativeSheafConstruction({
     type: 'tangent',
@@ -2521,6 +2536,7 @@ function testSmoothCyclicRamifiedCoverRelativeDifferentialsStayLazyUntilAbsolute
   assert.strictEqual(cover.construction.tangentSheafId, tangent.id);
   assert.strictEqual(cover.construction.relativeTangentSheafId, relativeTangent.id);
   assert(api.state.sequences.some((sequence) => (sequence.sheafIds || []).includes(tangent.id)));
+  assert.strictEqual(api.state.sequences.find((sequence) => (sequence.sheafIds || []).includes(tangent.id)).computedIndex, 2);
 }
 
 function testTangentHomologyPromotionUsesVarietyDisplay() {
@@ -3228,6 +3244,7 @@ function testIdealSheafConstructionCreatesHiddenSesAndImageClass() {
   assert.strictEqual(ideal.construction.idealSheafMapId, 'f');
   assert.strictEqual(api.state.sequences.length, 1);
   assert.strictEqual(api.state.sequences[0].sheafIds[0], ideal.id);
+  assert.strictEqual(api.state.sequences[0].computedIndex, 0);
   assert.strictEqual(api.state.maps.filter((item) => item.domainKind === 'sheaf').length, 2);
   assert(api.state.sheaves.find((item) => item.baseVarietyId === 'X' && item.type === 'structure')?.hiddenOnCanvas);
   assert(api.state.sheaves.find((item) => item.baseVarietyId === 'Y' && item.type === 'structure')?.hiddenOnCanvas);
@@ -3293,6 +3310,7 @@ function testNormalBundleConstructionCreatesHiddenTangentSes() {
   assert.strictEqual(api.state.sequences.length, 1);
   const sequence = api.state.sequences[0];
   assert.strictEqual(sequence.sheafIds.join(','), [sourceTangent.id, pulledTargetTangent.id, normal.id].join(','));
+  assert.strictEqual(sequence.computedIndex, 2);
   assert.strictEqual(sequence.baseVarietyId, 'X');
   assert.strictEqual(sequence.tail.hiddenOnCanvas, true);
   assert.strictEqual(api.state.maps.filter((item) => item.domainKind === 'sheaf').length, 2);
@@ -3351,6 +3369,7 @@ function testRelativeTangentConstructionCreatesHiddenTangentSes() {
   assert.strictEqual(api.state.sequences.length, 1);
   const sequence = api.state.sequences[0];
   assert.strictEqual(sequence.sheafIds.join(','), [relative.id, sourceTangent.id, pulledTargetTangent.id].join(','));
+  assert.strictEqual(sequence.computedIndex, 0);
   assert.strictEqual(sequence.baseVarietyId, 'X');
   assert.strictEqual(sequence.tail.hiddenOnCanvas, true);
   sequence.mapIds.forEach((mapId) => {
@@ -3408,6 +3427,7 @@ function testRelativeCotangentConstructionCreatesHiddenCotangentSes() {
   assert.strictEqual(api.state.sequences.length, 1);
   const sequence = api.state.sequences[0];
   assert.strictEqual(sequence.sheafIds.join(','), [pulledTargetCotangent.id, sourceCotangent.id, relative.id].join(','));
+  assert.strictEqual(sequence.computedIndex, 2);
   assert.strictEqual(sequence.baseVarietyId, 'X');
   assert.strictEqual(sequence.tail.hiddenOnCanvas, true);
   sequence.mapIds.forEach((mapId) => {
@@ -3415,6 +3435,104 @@ function testRelativeCotangentConstructionCreatesHiddenCotangentSes() {
     assert.strictEqual(sequenceMap.hiddenOnCanvas, true);
   });
   assert.strictEqual(api.state.activeSheafId, relative.id);
+}
+
+function testGenericSesStoresComputedIndex() {
+  const api = loadCalculator();
+  const variety = { id: 'X', type: 'abstract', dim: '1', name: 'X' };
+  const A = { id: 'A', type: 'abstract', basis: 'chern', rank: '1', name: 'A', baseVarietyId: 'X' };
+  const B = { id: 'B', type: 'abstract', basis: 'chern', rank: '2', name: 'B', baseVarietyId: 'X' };
+  const C = { id: 'C', type: 'abstract', basis: 'chern', rank: '1', name: 'C', baseVarietyId: 'X' };
+  api.state.varieties = [variety];
+  api.state.sheaves = [A, B, C];
+  const complete = api.buildShortExactSequence({ sheafA: A, sheafB: B, sheafC: C, baseVarietyId: 'X', computedIndex: 2 });
+  assert(complete);
+  assert.strictEqual(complete.computedIndex, 2);
+
+  const missingApi = loadCalculator();
+  const left = { id: 'L', type: 'abstract', basis: 'chern', rank: '1', name: 'L', baseVarietyId: 'X' };
+  const right = { id: 'R', type: 'abstract', basis: 'chern', rank: '1', name: 'R', baseVarietyId: 'X' };
+  missingApi.state.varieties = [variety];
+  missingApi.state.sheaves = [left, right];
+  const withMissingMiddle = missingApi.buildShortExactSequence({ sheafA: left, sheafC: right, baseVarietyId: 'X' });
+  assert(withMissingMiddle);
+  assert.strictEqual(withMissingMiddle.computedIndex, 1);
+  assert.strictEqual(missingApi.state.sheaves.length, 3);
+}
+
+function testOldPresetInfersSesComputedIndex() {
+  const api = loadCalculator();
+  const preset = {
+    schema: 'sheaf-calculator-preset',
+    version: 1,
+    objects: {
+      numbers: [],
+      varieties: [{ id: 'X', type: 'abstract', dim: '1', name: 'X' }],
+      sheaves: [
+        { id: 'A', type: 'abstract', basis: 'chern', rank: '1', name: 'A', baseVarietyId: 'X' },
+        { id: 'B', type: 'abstract', basis: 'chern', rank: '2', name: 'B', baseVarietyId: 'X', construction: { type: 'ses-term', role: 'extension', sourceSheafIds: ['A', 'C'] } },
+        { id: 'C', type: 'abstract', basis: 'chern', rank: '1', name: 'C', baseVarietyId: 'X' }
+      ],
+      maps: [],
+      sequences: [{ id: 'S', type: 'short-exact-sequence', sheafIds: ['A', 'B', 'C'], mapIds: [], baseVarietyId: 'X' }]
+    },
+    nextObjectIndex: 1
+  };
+  api.importPresetFromText(JSON.stringify(preset));
+  assert.strictEqual(api.state.sequences[0].computedIndex, 1);
+  const exported = api.buildPresetState();
+  assert.strictEqual(exported.objects.sequences[0].computedIndex, 1);
+}
+
+function testSesComputedIndexRestrictsStepRulesAndLegacyWarns() {
+  const api = loadCalculator();
+  const variety = { id: 'X', type: 'abstract', dim: '1', name: 'X' };
+  const sheaves = [
+    { id: 'A', type: 'abstract', basis: 'chern', rank: '1', name: 'A', baseVarietyId: 'X' },
+    { id: 'B', type: 'abstract', basis: 'chern', rank: '2', name: 'B', baseVarietyId: 'X', construction: { type: 'ses-term', role: 'extension', sourceSheafIds: ['A', 'C'] } },
+    { id: 'C', type: 'abstract', basis: 'chern', rank: '1', name: 'C', baseVarietyId: 'X', construction: { type: 'ses-term', role: 'quotient', sourceSheafIds: ['A', 'B'] } }
+  ];
+  api.state.varieties = [variety];
+  api.state.sheaves = sheaves;
+  api.state.sequences = [{ id: 'S', type: 'short-exact-sequence', sheafIds: ['A', 'B', 'C'], mapIds: [], baseVarietyId: 'X', computedIndex: 2 }];
+  const geometry = api.geometryFromVariety(variety);
+  const cSession = api.createClassStepSession(api.buildClassStepFallbackResult(geometry, api.sheafFromObject(sheaves[2], geometry), { message: 'test' }), 'character', 0);
+  assert(api.collectClassStepRuleCandidates(cSession).some((candidate) => candidate.sourceLabel === 'SES'));
+  const bSession = api.createClassStepSession(api.buildClassStepFallbackResult(geometry, api.sheafFromObject(sheaves[1], geometry), { message: 'test' }), 'character', 0);
+  assert(!api.collectClassStepRuleCandidates(bSession).some((candidate) => candidate.sourceLabel === 'SES'));
+
+  const legacyApi = loadCalculator();
+  legacyApi.state.varieties = [variety];
+  legacyApi.state.sheaves = [
+    { id: 'A', type: 'abstract', basis: 'chern', rank: '1', name: 'A', baseVarietyId: 'X', construction: { type: 'ses-term', role: 'subobject', sourceSheafIds: ['B', 'C'] } },
+    sheaves[1],
+    sheaves[2]
+  ];
+  legacyApi.state.sequences = [{ id: 'S', type: 'short-exact-sequence', sheafIds: ['A', 'B', 'C'], mapIds: [], baseVarietyId: 'X' }];
+  const legacyGeometry = legacyApi.geometryFromVariety(variety);
+  const legacySession = legacyApi.createClassStepSession(legacyApi.buildClassStepFallbackResult(legacyGeometry, legacyApi.sheafFromObject(sheaves[0], legacyGeometry), { message: '' }), 'character', 0);
+  assert(legacyApi.collectClassStepRuleCandidates(legacySession).some((candidate) => candidate.sourceLabel === 'SES'));
+  legacyApi.refs.classStepPanel = { hidden: false, classList: { toggle() {} } };
+  legacyApi.refs.classStepCard = { hidden: false, classList: { remove() {} } };
+  legacyApi.refs.classStepFamily = { value: '' };
+  legacyApi.refs.classStepTermOnly = { checked: false };
+  legacyApi.refs.classStepTermIndex = { max: '', disabled: false, value: '' };
+  legacyApi.refs.classStepFormula = { innerHTML: '' };
+  legacyApi.refs.classStepHistoryControls = { hidden: true, innerHTML: '' };
+  legacyApi.refs.classStepRules = { hidden: false, innerHTML: '' };
+  legacyApi.refs.classStepCheckSwitch = { disabled: false, textContent: '' };
+  legacyApi.refs.classStepMessage = { textContent: '' };
+  legacyApi.refs.classStepApply = { disabled: false };
+  legacyApi.refs.classStepAddSelectedRules = { disabled: false, title: '' };
+  legacyApi.refs.classStepUndo = { disabled: true };
+  legacyApi.refs.classStepSavedRules = { innerHTML: '' };
+  legacyApi.refs.classStepSaveRule = { disabled: false, title: '' };
+  legacyApi.refs.classStepUseCache = { checked: false };
+  legacyApi.refs.classStepOncePerRule = { checked: true };
+  legacyApi.refs.classStepOnePass = { checked: true };
+  legacyApi.state.classStepSession = legacySession;
+  legacyApi.renderClassStepPanel();
+  assert(legacyApi.refs.classStepMessage.textContent.includes('no assigned computed sheaf'), legacyApi.refs.classStepMessage.textContent);
 }
 
 function testPresetImportPreservesRelativeSheafMarker() {
@@ -6554,6 +6672,7 @@ testTwelveDimensionalHodgeStillRendersFullTable();
 testPolyvectorParallelogramForProjectiveSpace();
 testPolyvectorParallelogramForAbelianVariety();
 testPolyvectorParallelogramForCurves();
+testSymbolicCurvePolyvectorParallelogramIsPiecewise();
 testPolyvectorParallelogramForProductOfKnownFactors();
 testPolyvectorParallelogramForProductWithAbelianFactor();
 testPolyvectorParallelogramForProductWithUnknownFactorIsSymbolic();
@@ -6598,6 +6717,9 @@ testShortExactSequenceTailCanMoveEndpointAndHandles();
 testShortExactSequenceTailPointCountKeepsFreeEndpoint();
 testShortExactSequenceStraightTailUsesZeroPoints();
 testShortExactSequenceTailHideAndShowRestoresGeometry();
+testGenericSesStoresComputedIndex();
+testOldPresetInfersSesComputedIndex();
+testSesComputedIndexRestrictsStepRulesAndLegacyWarns();
 testBlowupPointConstructionCreatesVarietyAndMap();
 testBlowupPointConstructionDefaultsCenterAndExceptionalClass();
 testBlowupMapDefaultsAreGeneratedAndDeletable();
