@@ -147,6 +147,7 @@ function loadCalculator() {
     createInternalHomSheafConstruction,
     createIdealSheafConstruction,
     createNormalBundleConstruction,
+    createConormalBundleConstruction,
     createRelativeSheafConstruction,
     setCanvasPickEnabled,
     activePickFlow,
@@ -3219,6 +3220,147 @@ function testRamifiedCoverMapRecommendationEligibilityEdges() {
   assert.strictEqual(degreeOneApi.recommendationItemsForSource({ kind: 'map', object: degreeOneMap }).map((item) => item.id).join(','), '');
 }
 
+function testHypersurfaceMapRecommendationsCreateLineIdentifiedSheaves() {
+  const api = loadCalculator();
+  const source = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.35, labelY: 0.65 };
+  const target = { id: 'Y', type: 'projective', dim: '3', name: 'Y', labelX: 0.62, labelY: 0.65 };
+  const map = { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' };
+  api.state.varieties = [source, target];
+  api.state.maps = [map];
+
+  const items = api.recommendationItemsForSource({ kind: 'map', object: map });
+  assert.strictEqual(items.map((item) => item.id).join(','), 'hypersurface-ideal-sheaf,hypersurface-normal-bundle,hypersurface-conormal-bundle');
+  api.state.recommendationDraft = {
+    sourceKind: 'map',
+    sourceId: 'f',
+    selectedIds: {
+      'hypersurface-ideal-sheaf': true,
+      'hypersurface-normal-bundle': true,
+      'hypersurface-conormal-bundle': true
+    },
+    hypersurface: {
+      divisorCoefficients: { [api.HOMOLOGY_HYPERPLANE_CLASS]: '2' },
+      cartierConfirmed: true,
+      smoothConfirmed: true
+    }
+  };
+  const data = api.recommendationConstructionData();
+  assert(data);
+  api.createRecommendationConstructions(data);
+
+  assert.strictEqual(map.construction.type, 'hypersurface-embedding');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(map.construction.hypersurfaceDivisorCoefficients)), { hyperplane: '2' });
+  assert.strictEqual(map.construction.hypersurfaceCartierConfirmed, true);
+  assert.strictEqual(map.construction.hypersurfaceSmoothConfirmed, true);
+
+  const ideal = api.state.sheaves.find((item) => item.construction?.idealSheafMapId === 'f');
+  const normal = api.state.sheaves.find((item) => item.construction?.normalBundleMapId === 'f');
+  const conormal = api.state.sheaves.find((item) => item.construction?.conormalBundleMapId === 'f');
+  assert(ideal);
+  assert(normal);
+  assert(conormal);
+  assert.strictEqual(api.state.sequences.find((item) => item.id === conormal.construction.sequenceId).computedIndex, 0);
+
+  const idealLine = api.state.sheaves.find((item) => item.id === ideal.construction.hypersurfaceLineSheafId);
+  const normalLine = api.state.sheaves.find((item) => item.id === normal.construction.hypersurfaceLineSheafId);
+  const conormalLine = api.state.sheaves.find((item) => item.id === conormal.construction.hypersurfaceLineSheafId);
+  assert.strictEqual(idealLine.type, 'divisor-line');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(idealLine.divisorCoefficients)), { hyperplane: '-2' });
+  assert.strictEqual(normalLine.construction.type, 'pullback');
+  assert.strictEqual(conormalLine.construction.type, 'pullback');
+
+  assert.strictEqual(characterPlain(characteristicRows(api, ideal)), characterPlain(characteristicRows(api, idealLine)));
+  assert.strictEqual(characterPlain(characteristicRows(api, normal)), characterPlain(characteristicRows(api, normalLine)));
+  assert.strictEqual(characterPlain(characteristicRows(api, conormal)), characterPlain(characteristicRows(api, conormalLine)));
+
+  const targetGeometry = api.geometryFromVariety(target);
+  const unitRule = target.homology.rules.find((rule) => rule.id === 'map-rule-map_pushforward_f_homology_v_X_unit');
+  assert(unitRule);
+  const pushUnitId = Object.keys(unitRule.lhs.powers)[0];
+  assert.strictEqual(
+    api.formatPolyPlain(api.applyHomologyRules(api.polyFromPowers({ [pushUnitId]: 1 }), { geometry: targetGeometry, homology: targetGeometry.homology })),
+    '2*H'
+  );
+
+  const sourceGeometry = api.geometryFromVariety(source);
+  const conormalSheaf = api.sheafFromObject(conormal, sourceGeometry);
+  const session = api.createClassStepSession(api.buildClassStepFallbackResult(sourceGeometry, conormalSheaf, { message: 'test' }), 'character', null);
+  const candidates = api.collectClassStepRuleCandidates(session);
+  assert(candidates.some((candidate) => candidate.sourceLabel === 'Identification'));
+  assert(candidates.some((candidate) => candidate.sourceLabel === 'SES'));
+
+  api.createRecommendationConstructions(api.recommendationConstructionData());
+  assert.strictEqual(api.state.sheaves.filter((item) => item.construction?.idealSheafMapId === 'f').length, 1);
+  assert.strictEqual(api.state.sheaves.filter((item) => item.construction?.normalBundleMapId === 'f').length, 1);
+  assert.strictEqual(api.state.sheaves.filter((item) => item.construction?.conormalBundleMapId === 'f').length, 1);
+}
+
+function testHypersurfaceRecommendationsRequireCodimensionOneButNotConditions() {
+  const api = loadCalculator();
+  const source = { id: 'X', type: 'abstract', dim: '2', name: 'X' };
+  const target = { id: 'Y', type: 'projective', dim: '4', name: 'Y' };
+  const map = { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' };
+  api.state.varieties = [source, target];
+  api.state.maps = [map];
+  assert.strictEqual(api.recommendationItemsForSource({ kind: 'map', object: map }).map((item) => item.id).join(','), '');
+
+  target.dim = '3';
+  api.state.recommendationDraft = {
+    sourceKind: 'map',
+    sourceId: 'f',
+    selectedIds: { 'hypersurface-normal-bundle': true },
+    hypersurface: { divisorCoefficients: { [api.HOMOLOGY_HYPERPLANE_CLASS]: '1' }, cartierConfirmed: false, smoothConfirmed: false }
+  };
+  assert(api.recommendationConstructionData());
+  api.createRecommendationConstructions(api.recommendationConstructionData());
+  const normal = api.state.sheaves.find((item) => item.construction?.normalBundleMapId === 'f');
+  assert(normal);
+  assert.strictEqual(normal.construction.cleanEmbeddingConfirmed, false);
+  assert.strictEqual(normal.construction.hypersurfaceLineSheafId, null);
+
+  api.state.recommendationDraft = {
+    sourceKind: 'map',
+    sourceId: 'f',
+    selectedId: 'hypersurface-ideal-sheaf',
+    hypersurface: { divisorCoefficients: { [api.HOMOLOGY_HYPERPLANE_CLASS]: '1' }, cartierConfirmed: false, smoothConfirmed: true }
+  };
+  assert(api.recommendationConstructionData());
+  api.createRecommendationConstructions(api.recommendationConstructionData());
+  const ideal = api.state.sheaves.find((item) => item.construction?.idealSheafMapId === 'f');
+  assert(ideal);
+  assert.strictEqual(ideal.construction.hypersurfaceLineSheafId, null);
+}
+
+function testHypersurfaceRecommendationsAllowGeneratedImageDivisor() {
+  const api = loadCalculator();
+  const source = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.35, labelY: 0.65 };
+  const target = { id: 'Y', type: 'abstract', dim: '3', name: 'Y', labelX: 0.62, labelY: 0.65 };
+  const map = { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' };
+  api.state.varieties = [source, target];
+  api.state.maps = [map];
+
+  api.state.recommendationDraft = {
+    sourceKind: 'map',
+    sourceId: 'f',
+    selectedId: 'hypersurface-conormal-bundle',
+    hypersurface: { divisorCoefficients: {}, cartierConfirmed: true, smoothConfirmed: false }
+  };
+  const data = api.recommendationConstructionData();
+  assert(data);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(data.hypersurface.divisorCoefficients)), {});
+  api.createRecommendationConstructions(data);
+
+  const conormal = api.state.sheaves.find((item) => item.construction?.conormalBundleMapId === 'f');
+  assert(conormal);
+  const conormalLine = api.state.sheaves.find((item) => item.id === conormal.construction.hypersurfaceLineSheafId);
+  assert(conormalLine);
+  assert.strictEqual(conormalLine.construction.type, 'pullback');
+  const targetLine = api.state.sheaves.find((item) => item.id === conormalLine.construction.sheafId);
+  assert(targetLine);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(targetLine.divisorCoefficients)), { ideal_f_image: '-1' });
+  assert(target.homology.customClasses.some((item) => item.id === 'ideal_f_image' && item.symbol === '[X]'));
+}
+
 function testIdealSheafConstructionCreatesHiddenSesAndImageClass() {
   const api = loadCalculator();
   const source = { id: 'X', type: 'abstract', dim: '1', name: 'X', labelX: 0.35, labelY: 0.65 };
@@ -3319,6 +3461,118 @@ function testNormalBundleConstructionCreatesHiddenTangentSes() {
     assert.strictEqual(sequenceMap.hiddenOnCanvas, true);
   });
   assert.strictEqual(api.state.activeSheafId, normal.id);
+}
+
+function testConormalBundleConstructionCreatesHiddenCotangentSes() {
+  const api = loadCalculator();
+  const source = { id: 'X', type: 'abstract', dim: '3', name: 'X', labelX: 0.3, labelY: 0.65 };
+  const target = { id: 'Y', type: 'abstract', dim: '5', name: 'Y', labelX: 0.6, labelY: 0.65 };
+  const map = { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' };
+  api.state.varieties = [source, target];
+  api.state.maps = [map];
+
+  const conormal = api.createConormalBundleConstruction({
+    map,
+    domain: source,
+    codomain: target,
+    baseVarietyId: 'X',
+    defaultName: 'I_X/I_X^{2}',
+    name: 'I_X/I_X^{2}',
+    nameDirty: false
+  });
+
+  assert(conormal);
+  assert.strictEqual(conormal.baseVarietyId, 'X');
+  assert.strictEqual(conormal.rank, '2');
+  assert.strictEqual(conormal.construction.type, 'ses-term');
+  assert.strictEqual(conormal.construction.role, 'subobject');
+  assert.strictEqual(conormal.construction.conormalBundleMapId, 'f');
+  assert.strictEqual(conormal.construction.regularEmbeddingConfirmed, true);
+
+  const sourceCotangent = api.state.sheaves.find((item) => item.id === conormal.construction.sourceCotangentSheafId);
+  const targetCotangent = api.state.sheaves.find((item) => item.id === conormal.construction.targetCotangentSheafId);
+  const pulledTargetCotangent = api.state.sheaves.find((item) => item.id === conormal.construction.pulledTargetCotangentSheafId);
+  assert.strictEqual(sourceCotangent?.type, 'cotangent');
+  assert.strictEqual(sourceCotangent.baseVarietyId, 'X');
+  assert.strictEqual(sourceCotangent.hiddenOnCanvas, true);
+  assert.strictEqual(targetCotangent?.type, 'cotangent');
+  assert.strictEqual(targetCotangent.baseVarietyId, 'Y');
+  assert.strictEqual(targetCotangent.hiddenOnCanvas, true);
+  assert.strictEqual(pulledTargetCotangent?.construction?.type, 'pullback');
+  assert.strictEqual(pulledTargetCotangent.construction.mapId, 'f');
+  assert.strictEqual(pulledTargetCotangent.construction.sheafId, targetCotangent.id);
+  assert.strictEqual(pulledTargetCotangent.construction.exact, true);
+  assert.strictEqual(pulledTargetCotangent.construction.derived, false);
+  assert.strictEqual(pulledTargetCotangent.hiddenOnCanvas, true);
+  assert.strictEqual(conormal.construction.sourceSheafIds.join(','), [pulledTargetCotangent.id, sourceCotangent.id].join(','));
+
+  assert.strictEqual(api.state.sequences.length, 1);
+  const sequence = api.state.sequences[0];
+  assert.strictEqual(sequence.sheafIds.join(','), [conormal.id, pulledTargetCotangent.id, sourceCotangent.id].join(','));
+  assert.strictEqual(sequence.computedIndex, 0);
+  assert.strictEqual(sequence.baseVarietyId, 'X');
+  assert.strictEqual(sequence.tail.hiddenOnCanvas, true);
+  sequence.mapIds.forEach((mapId) => {
+    const sequenceMap = api.state.maps.find((item) => item.id === mapId);
+    assert.strictEqual(sequenceMap.hiddenOnCanvas, true);
+  });
+  assert.strictEqual(api.state.activeSheafId, conormal.id);
+}
+
+function testSesConstructorsReuseVisibleSpecialSheaves() {
+  const api = loadCalculator();
+  const source = { id: 'X', type: 'abstract', dim: '2', name: 'X', labelX: 0.3, labelY: 0.65 };
+  const target = { id: 'Y', type: 'abstract', dim: '3', name: 'Y', labelX: 0.6, labelY: 0.65 };
+  const map = { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' };
+  api.state.varieties = [source, target];
+  api.state.maps = [map];
+  api.state.sheaves = [
+    { id: 'OX', type: 'structure', basis: 'chern', rank: '1', name: 'O_X', baseVarietyId: 'X', hiddenOnCanvas: false },
+    { id: 'OY', type: 'structure', basis: 'chern', rank: '1', name: 'O_Y', baseVarietyId: 'Y', hiddenOnCanvas: false },
+    { id: 'TX', type: 'tangent', basis: 'chern', rank: '2', name: 'T_X', baseVarietyId: 'X', hiddenOnCanvas: false },
+    { id: 'TY', type: 'tangent', basis: 'chern', rank: '3', name: 'T_Y', baseVarietyId: 'Y', hiddenOnCanvas: false },
+    { id: 'OmegaX', type: 'cotangent', basis: 'chern', rank: '2', name: 'Omega_X', baseVarietyId: 'X', hiddenOnCanvas: false },
+    { id: 'OmegaY', type: 'cotangent', basis: 'chern', rank: '3', name: 'Omega_Y', baseVarietyId: 'Y', hiddenOnCanvas: false }
+  ];
+
+  const ideal = api.createIdealSheafConstruction({
+    map,
+    domain: source,
+    codomain: target,
+    baseVarietyId: 'Y',
+    defaultName: 'I_X',
+    name: 'I_X',
+    nameDirty: false
+  });
+  assert.strictEqual(ideal.construction.structureSheafId, 'OX');
+  assert.strictEqual(ideal.construction.targetStructureSheafId, 'OY');
+
+  const normal = api.createNormalBundleConstruction({
+    map,
+    domain: source,
+    codomain: target,
+    baseVarietyId: 'X',
+    defaultName: 'N',
+    name: 'N',
+    nameDirty: false
+  });
+  assert.strictEqual(normal.construction.sourceTangentSheafId, 'TX');
+  assert.strictEqual(normal.construction.targetTangentSheafId, 'TY');
+
+  const conormal = api.createConormalBundleConstruction({
+    map,
+    domain: source,
+    codomain: target,
+    baseVarietyId: 'X',
+    defaultName: 'I/I^2',
+    name: 'I/I^2',
+    nameDirty: false
+  });
+  assert.strictEqual(conormal.construction.sourceCotangentSheafId, 'OmegaX');
+  assert.strictEqual(conormal.construction.targetCotangentSheafId, 'OmegaY');
+  assert.strictEqual(api.state.sheaves.filter((item) => item.type === 'structure' && item.baseVarietyId === 'X').length, 1);
+  assert.strictEqual(api.state.sheaves.filter((item) => item.type === 'tangent' && item.baseVarietyId === 'X').length, 1);
+  assert.strictEqual(api.state.sheaves.filter((item) => item.type === 'cotangent' && item.baseVarietyId === 'X').length, 1);
 }
 
 function testRelativeTangentConstructionCreatesHiddenTangentSes() {
@@ -3484,6 +3738,35 @@ function testOldPresetInfersSesComputedIndex() {
   assert.strictEqual(exported.objects.sequences[0].computedIndex, 1);
 }
 
+function testSesComputedIndexOffersRulesForAssignedExistingTerm() {
+  const api = loadCalculator();
+  const variety = { id: 'X', type: 'abstract', dim: '1', name: 'X' };
+  const sheaves = [
+    { id: 'A', type: 'abstract', basis: 'chern', rank: 'a', name: 'A', baseVarietyId: 'X' },
+    { id: 'B', type: 'abstract', basis: 'chern', rank: 'b', name: 'B', baseVarietyId: 'X' },
+    { id: 'C', type: 'abstract', basis: 'chern', rank: 'c', name: 'C', baseVarietyId: 'X' }
+  ];
+  api.state.varieties = [variety];
+  api.state.sheaves = sheaves;
+  api.state.sequences = [{ id: 'S', type: 'short-exact-sequence', sheafIds: ['A', 'B', 'C'], mapIds: [], baseVarietyId: 'X', computedIndex: 0 }];
+  const geometry = api.geometryFromVariety(variety);
+  const aSession = api.createClassStepSession(api.buildClassStepFallbackResult(geometry, api.sheafFromObject(sheaves[0], geometry), { message: 'test' }), 'character', 0);
+  const aSes = api.collectClassStepRuleCandidates(aSession).find((candidate) => candidate.sourceLabel === 'SES');
+  assert(aSes);
+  assert.strictEqual(api.formatPolyPlain(api.homologyRuleRhsPoly(aSes.rule)), 'r(B) - r(C)');
+
+  const bSession = api.createClassStepSession(api.buildClassStepFallbackResult(geometry, api.sheafFromObject(sheaves[1], geometry), { message: 'test' }), 'character', 0);
+  assert(!api.collectClassStepRuleCandidates(bSession).some((candidate) => candidate.sourceLabel === 'SES'));
+
+  const legacyApi = loadCalculator();
+  legacyApi.state.varieties = [variety];
+  legacyApi.state.sheaves = sheaves.map((sheaf) => ({ ...sheaf }));
+  legacyApi.state.sequences = [{ id: 'S', type: 'short-exact-sequence', sheafIds: ['A', 'B', 'C'], mapIds: [], baseVarietyId: 'X' }];
+  const legacyGeometry = legacyApi.geometryFromVariety(variety);
+  const legacySession = legacyApi.createClassStepSession(legacyApi.buildClassStepFallbackResult(legacyGeometry, legacyApi.sheafFromObject(legacyApi.state.sheaves[0], legacyGeometry), { message: 'test' }), 'character', 0);
+  assert(!legacyApi.collectClassStepRuleCandidates(legacySession).some((candidate) => candidate.sourceLabel === 'SES'));
+}
+
 function testSesComputedIndexRestrictsStepRulesAndLegacyWarns() {
   const api = loadCalculator();
   const variety = { id: 'X', type: 'abstract', dim: '1', name: 'X' };
@@ -3637,6 +3920,37 @@ function testPresetImportPreservesNormalBundleMarker() {
   assert.strictEqual(restoredNormal.construction.cleanEmbeddingConfirmed, true);
   assert.strictEqual(restoredNormal.rank, '2');
   assert.strictEqual(restored.state.activeSheafId, restoredNormal.id);
+}
+
+function testPresetImportPreservesConormalBundleMarker() {
+  const api = loadCalculator();
+  const source = { id: 'X', type: 'abstract', dim: '3', name: 'X', labelX: 0.3, labelY: 0.65 };
+  const target = { id: 'Y', type: 'abstract', dim: '5', name: 'Y', labelX: 0.6, labelY: 0.65 };
+  const map = { id: 'f', name: 'f', domainKind: 'variety', domainId: 'X', codomainKind: 'variety', codomainId: 'Y' };
+  api.state.varieties = [source, target];
+  api.state.maps = [map];
+  const conormal = api.createConormalBundleConstruction({
+    map,
+    domain: source,
+    codomain: target,
+    baseVarietyId: 'X',
+    defaultName: 'I_X/I_X^{2}',
+    name: 'I_X/I_X^{2}',
+    nameDirty: false
+  });
+  api.state.activeSheafId = conormal.id;
+  api.state.activeVarietyId = 'X';
+  const presetText = JSON.stringify(api.buildPresetState());
+
+  const restored = loadCalculator();
+  restored.importPresetFromText(presetText);
+  const restoredConormal = restored.state.sheaves.find((sheaf) => sheaf.construction?.conormalBundleMapId === 'f');
+  assert(restoredConormal);
+  assert.strictEqual(restoredConormal.construction.conormalBundleMapId, 'f');
+  assert.strictEqual(restoredConormal.construction.regularEmbeddingConfirmed, true);
+  assert.strictEqual(restoredConormal.rank, '2');
+  assert.strictEqual(restored.state.sequences.find((sequence) => sequence.sheafIds.includes(restoredConormal.id)).computedIndex, 0);
+  assert.strictEqual(restored.state.activeSheafId, restoredConormal.id);
 }
 
 function testPresetImportPreservesIdealSheafMarker() {
@@ -6719,6 +7033,7 @@ testShortExactSequenceStraightTailUsesZeroPoints();
 testShortExactSequenceTailHideAndShowRestoresGeometry();
 testGenericSesStoresComputedIndex();
 testOldPresetInfersSesComputedIndex();
+testSesComputedIndexOffersRulesForAssignedExistingTerm();
 testSesComputedIndexRestrictsStepRulesAndLegacyWarns();
 testBlowupPointConstructionCreatesVarietyAndMap();
 testBlowupPointConstructionDefaultsCenterAndExceptionalClass();
@@ -6754,12 +7069,18 @@ testCompleteIntersectionRecommendationCreatesEmbeddingAndRules();
 testCompleteIntersectionRecommendationUnavailableForProjectiveOrTooLargeAmbient();
 testRamifiedCoverMapRecommendationsCreateRamificationAndRevealRootLine();
 testRamifiedCoverMapRecommendationEligibilityEdges();
+testHypersurfaceMapRecommendationsCreateLineIdentifiedSheaves();
+testHypersurfaceRecommendationsRequireCodimensionOneButNotConditions();
+testHypersurfaceRecommendationsAllowGeneratedImageDivisor();
 testIdealSheafConstructionCreatesHiddenSesAndImageClass();
 testNormalBundleConstructionCreatesHiddenTangentSes();
+testConormalBundleConstructionCreatesHiddenCotangentSes();
+testSesConstructorsReuseVisibleSpecialSheaves();
 testRelativeTangentConstructionCreatesHiddenTangentSes();
 testRelativeCotangentConstructionCreatesHiddenCotangentSes();
 testPresetImportPreservesNormalBundleMarker();
 testPresetImportPreservesRelativeSheafMarker();
+testPresetImportPreservesConormalBundleMarker();
 testNormalBundleShowKeepsRevealedScaffoldingStable();
 testPresetImportPreservesIdealSheafMarker();
 testHomologyRulePassesAreCapped();

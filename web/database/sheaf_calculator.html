@@ -2824,7 +2824,7 @@
           <div class="sheaf-note" id="ses-pick-note" hidden>pick two sheaves on the same base</div>
           <div class="sheaf-field-row" id="ses-computed-row" hidden>
             <label class="input-label" for="ses-computed-index">compute</label>
-            <select id="ses-computed-index">
+            <select id="ses-computed-index" class="sheaf-select">
               <option value="0">A from B and C</option>
               <option value="1">B from A and C</option>
               <option value="2">C from A and B</option>
@@ -2957,8 +2957,21 @@
             </div>
           </div>
           <div class="sheaf-field-row" id="recommendation-list-row" hidden>
-            <span class="input-label">choices</span>
-            <div class="sheaf-map-formula-picker" id="recommendation-list"></div>
+            <label class="input-label" for="recommendation-list">choice</label>
+            <select id="recommendation-list" class="sheaf-select"></select>
+          </div>
+          <div class="sheaf-field-row" id="recommendation-hypersurface-divisor-row" hidden>
+            <span class="input-label">D=[X]</span>
+            <div class="homology-coefficient-editor" id="recommendation-hypersurface-divisor-coefficients"></div>
+          </div>
+          <div class="sheaf-field-row" id="recommendation-hypersurface-confirm-row" hidden>
+            <span class="input-label">identify</span>
+            <div class="identify-name-tools">
+              <label class="opt-row sheaf-warning-check" id="recommendation-hypersurface-cartier-option">
+                <input id="recommendation-hypersurface-cartier-confirm" type="checkbox">
+                <span id="recommendation-hypersurface-cartier-label">use hypersurface line-bundle identification</span>
+              </label>
+            </div>
           </div>
           <div class="sheaf-note" id="recommendation-pick-note" hidden>pick an object</div>
         </div>
@@ -3076,6 +3089,7 @@
               <option value="internal-hom">Internal Hom</option>
               <option value="ideal-sheaf">Ideal sheaf</option>
               <option value="normal-bundle">Normal bundle</option>
+              <option value="conormal-bundle">Conormal bundle</option>
               <option value="relative-tangent">Relative tangent</option>
               <option value="relative-cotangent">Relative cotangent</option>
               <option value="tensor">Tensor product</option>
@@ -3213,6 +3227,22 @@
             </label>
           </div>
           <div class="sheaf-note" id="sheaf-normal-pick-note" hidden>pick a closed embedding map X -> Y</div>
+          <div class="sheaf-field-row" id="sheaf-conormal-formula-row" hidden>
+            <span class="input-label">map</span>
+            <div class="sheaf-map-formula-picker">
+              <span class="sheaf-map-formula-mark">I/I^2_{</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-conormal-map-button" type="button">map</button>
+              <span class="sheaf-map-formula-mark">}</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-conormal-confirm-row" hidden>
+            <span class="input-label">warning</span>
+            <label class="opt-row sheaf-warning-check">
+              <input id="sheaf-conormal-confirm" type="checkbox">
+              <span>f is a regular/lci closed embedding, and X,Y are smooth</span>
+            </label>
+          </div>
+          <div class="sheaf-note" id="sheaf-conormal-pick-note" hidden>pick a closed embedding map X -> Y</div>
           <div class="sheaf-field-row" id="sheaf-relative-formula-row" hidden>
             <span class="input-label">map</span>
             <div class="sheaf-map-formula-picker">

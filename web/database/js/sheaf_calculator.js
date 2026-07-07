@@ -217,6 +217,7 @@
     sheafSchurDraft: null,
     sheafIdealDraft: null,
     sheafNormalDraft: null,
+    sheafConormalDraft: null,
     sheafRelativeDraft: null,
     sheafMapDraft: null,
     sheafDivisorDraft: null,
@@ -475,6 +476,11 @@
     refs.sheafNormalConfirmRow = $('sheaf-normal-confirm-row');
     refs.sheafNormalConfirm = $('sheaf-normal-confirm');
     refs.sheafNormalPickNote = $('sheaf-normal-pick-note');
+    refs.sheafConormalFormulaRow = $('sheaf-conormal-formula-row');
+    refs.sheafConormalMapButton = $('sheaf-conormal-map-button');
+    refs.sheafConormalConfirmRow = $('sheaf-conormal-confirm-row');
+    refs.sheafConormalConfirm = $('sheaf-conormal-confirm');
+    refs.sheafConormalPickNote = $('sheaf-conormal-pick-note');
     refs.sheafRelativeFormulaRow = $('sheaf-relative-formula-row');
     refs.sheafRelativeSymbol = $('sheaf-relative-symbol');
     refs.sheafRelativeMapButton = $('sheaf-relative-map-button');
@@ -631,6 +637,15 @@
     refs.recommendationSourceButton = $('recommendation-source-button');
     refs.recommendationListRow = $('recommendation-list-row');
     refs.recommendationList = $('recommendation-list');
+    refs.recommendationHypersurfaceDivisorRow = $('recommendation-hypersurface-divisor-row');
+    refs.recommendationHypersurfaceDivisorCoefficients = $('recommendation-hypersurface-divisor-coefficients');
+    refs.recommendationHypersurfaceConfirmRow = $('recommendation-hypersurface-confirm-row');
+    refs.recommendationHypersurfaceCartierOption = $('recommendation-hypersurface-cartier-option');
+    refs.recommendationHypersurfaceCartierConfirm = $('recommendation-hypersurface-cartier-confirm');
+    refs.recommendationHypersurfaceCartierLabel = $('recommendation-hypersurface-cartier-label');
+    refs.recommendationHypersurfaceSmoothOption = $('recommendation-hypersurface-smooth-option');
+    refs.recommendationHypersurfaceSmoothConfirm = $('recommendation-hypersurface-smooth-confirm');
+    refs.recommendationHypersurfaceSmoothLabel = $('recommendation-hypersurface-smooth-label');
     refs.recommendationPickNote = $('recommendation-pick-note');
     refs.inputOptions = $('input-options');
     refs.modifyWarning = $('modify-warning');
@@ -952,6 +967,9 @@
     if (sheafNormalInputMode() && inputIsCreateMode()) {
       return addNormalBundleFromDraft();
     }
+    if (sheafConormalInputMode() && inputIsCreateMode()) {
+      return addConormalBundleFromDraft();
+    }
     if (sheafRelativeInputMode() && inputIsCreateMode()) {
       return addRelativeSheafFromDraft();
     }
@@ -1072,6 +1090,17 @@
     const sheaf = createRelativeSheafConstruction(data);
     if (!sheaf) return null;
     clearSheafRelativeDraft();
+    state.draftSheafNameDirty = false;
+    refs.sheafName.value = defaultCreateSheafNameLatex();
+    return sheaf;
+  }
+
+  function addConormalBundleFromDraft() {
+    const data = conormalBundleConstructionData();
+    if (!data) return null;
+    const sheaf = createConormalBundleConstruction(data);
+    if (!sheaf) return null;
+    clearSheafConormalDraft();
     state.draftSheafNameDirty = false;
     refs.sheafName.value = defaultCreateSheafNameLatex();
     return sheaf;
@@ -1246,6 +1275,15 @@
     if (!normal) return null;
     refs.basis.value = normalizeBasisValue(normal.basis);
     return normal;
+  }
+
+  function updateConormalBundleFromDraft(sheaf) {
+    const data = conormalBundleConstructionData();
+    if (!sheaf || !data) return null;
+    const conormal = createConormalBundleConstruction(data, { replaceSheaf: sheaf });
+    if (!conormal) return null;
+    refs.basis.value = normalizeBasisValue(conormal.basis);
+    return conormal;
   }
 
   function updateRelativeSheafFromDraft(sheaf) {
@@ -1465,7 +1503,7 @@
   function idealSheafConstructionData() {
     if (refs.sheafType?.value !== 'ideal-sheaf') return null;
     const map = sheafIdealDraftMap();
-    if (!map || !allowableSheafIdealMapPick(map.id) || !refs.sheafIdealConfirm?.checked) return null;
+    if (!map || !allowableSheafIdealMapPick(map.id)) return null;
     const domain = state.varieties.find((variety) => variety.id === map.domainId);
     const codomain = state.varieties.find((variety) => variety.id === map.codomainId);
     if (!domain || !codomain) return null;
@@ -1487,7 +1525,7 @@
   function normalBundleConstructionData() {
     if (refs.sheafType?.value !== 'normal-bundle') return null;
     const map = sheafNormalDraftMap();
-    if (!map || !allowableSheafNormalMapPick(map.id) || !refs.sheafNormalConfirm?.checked) return null;
+    if (!map || !allowableSheafNormalMapPick(map.id)) return null;
     const domain = state.varieties.find((variety) => variety.id === map.domainId);
     const codomain = state.varieties.find((variety) => variety.id === map.codomainId);
     if (!domain || !codomain) return null;
@@ -1502,7 +1540,31 @@
       baseVarietyId: domain.id,
       defaultName,
       name,
-      nameDirty: state.draftSheafNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName)
+      nameDirty: state.draftSheafNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName),
+      cleanEmbeddingConfirmed: refs.sheafNormalConfirm?.checked === true
+    };
+  }
+
+  function conormalBundleConstructionData() {
+    if (refs.sheafType?.value !== 'conormal-bundle') return null;
+    const map = sheafConormalDraftMap();
+    if (!map || !allowableSheafConormalMapPick(map.id)) return null;
+    const domain = state.varieties.find((variety) => variety.id === map.domainId);
+    const codomain = state.varieties.find((variety) => variety.id === map.codomainId);
+    if (!domain || !codomain) return null;
+    const defaultName = defaultConormalBundleNameFromObjects(map);
+    const name = state.draftSheafNameDirty
+      ? sanitizeMathLabel(refs.sheafName.value, defaultName)
+      : defaultName;
+    return {
+      map,
+      domain,
+      codomain,
+      baseVarietyId: domain.id,
+      defaultName,
+      name,
+      nameDirty: state.draftSheafNameDirty || canonicalMathLabel(name) !== canonicalMathLabel(defaultName),
+      regularEmbeddingConfirmed: refs.sheafConormalConfirm?.checked === true
     };
   }
 
@@ -3265,12 +3327,13 @@
     const internalHomConstruction = sheafInternalHomConstructionType(sheaf);
     const idealConstruction = sheafIdealConstructionType(sheaf);
     const normalConstruction = sheafNormalConstructionType(sheaf);
+    const conormalConstruction = sheafConormalConstructionType(sheaf);
     const relativeConstruction = sheafRelativeConstructionType(sheaf);
     const differentialWedgeConstruction = sheafDifferentialWedgeConstructionType(sheaf);
     const schurConstruction = sheafSchurConstructionType(sheaf);
     const canonicalType = canonicalSheafType(sheaf.type);
     sheaf.type = canonicalType;
-    refs.sheafType.value = mapConstruction ? 'map-operation' : (relativeConstruction || normalConstruction || idealConstruction || differentialWedgeConstruction || schurConstruction || internalHomConstruction || dualConstruction || selfSumConstruction || binaryConstruction || canonicalType);
+    refs.sheafType.value = mapConstruction ? 'map-operation' : (relativeConstruction || conormalConstruction || normalConstruction || idealConstruction || differentialWedgeConstruction || schurConstruction || internalHomConstruction || dualConstruction || selfSumConstruction || binaryConstruction || canonicalType);
     refs.sheafName.value = sheaf.name || defaultSheafNameLatex();
     refs.twist.value = sheaf.twist ?? '1';
     refs.rank.value = sheaf.rank || '';
@@ -3293,6 +3356,7 @@
       clearSheafInternalHomDraft();
       clearSheafIdealDraft();
       clearSheafNormalDraft();
+      clearSheafConormalDraft();
       clearSheafRelativeDraft();
       clearSheafDifferentialDraft();
       clearSheafSchurDraft();
@@ -3304,6 +3368,7 @@
       clearSheafDualDraft();
       clearSheafInternalHomDraft();
       clearSheafNormalDraft();
+      clearSheafConormalDraft();
       clearSheafRelativeDraft();
       clearSheafDifferentialDraft();
       clearSheafSchurDraft();
@@ -3315,10 +3380,23 @@
       clearSheafDualDraft();
       clearSheafInternalHomDraft();
       clearSheafIdealDraft();
+      clearSheafConormalDraft();
       clearSheafRelativeDraft();
       clearSheafDifferentialDraft();
       clearSheafSchurDraft();
       loadNormalBundleIntoDraft(sheaf);
+    } else if (conormalConstruction) {
+      clearSheafMapDraft();
+      clearSheafBinaryDraft();
+      clearSheafSelfSumDraft();
+      clearSheafDualDraft();
+      clearSheafInternalHomDraft();
+      clearSheafIdealDraft();
+      clearSheafNormalDraft();
+      clearSheafRelativeDraft();
+      clearSheafDifferentialDraft();
+      clearSheafSchurDraft();
+      loadConormalBundleIntoDraft(sheaf);
     } else if (relativeConstruction) {
       clearSheafMapDraft();
       clearSheafBinaryDraft();
@@ -3327,6 +3405,7 @@
       clearSheafInternalHomDraft();
       clearSheafIdealDraft();
       clearSheafNormalDraft();
+      clearSheafConormalDraft();
       clearSheafDifferentialDraft();
       clearSheafSchurDraft();
       loadRelativeSheafIntoDraft(sheaf);
@@ -3336,6 +3415,7 @@
       clearSheafSelfSumDraft();
       clearSheafIdealDraft();
       clearSheafNormalDraft();
+      clearSheafConormalDraft();
       clearSheafRelativeDraft();
       clearSheafDualDraft();
       clearSheafInternalHomDraft();
@@ -3347,6 +3427,7 @@
       clearSheafSelfSumDraft();
       clearSheafIdealDraft();
       clearSheafNormalDraft();
+      clearSheafConormalDraft();
       clearSheafRelativeDraft();
       clearSheafDifferentialDraft();
       clearSheafDualDraft();
@@ -3359,6 +3440,7 @@
       clearSheafDualDraft();
       clearSheafIdealDraft();
       clearSheafNormalDraft();
+      clearSheafConormalDraft();
       clearSheafRelativeDraft();
       clearSheafDifferentialDraft();
       clearSheafSchurDraft();
@@ -3370,6 +3452,7 @@
       clearSheafInternalHomDraft();
       clearSheafIdealDraft();
       clearSheafNormalDraft();
+      clearSheafConormalDraft();
       clearSheafRelativeDraft();
       clearSheafDifferentialDraft();
       clearSheafSchurDraft();
@@ -3379,6 +3462,7 @@
       clearSheafBinaryDraft();
       clearSheafIdealDraft();
       clearSheafNormalDraft();
+      clearSheafConormalDraft();
       clearSheafRelativeDraft();
       clearSheafDifferentialDraft();
       clearSheafDualDraft();
@@ -3390,6 +3474,7 @@
       clearSheafSelfSumDraft();
       clearSheafIdealDraft();
       clearSheafNormalDraft();
+      clearSheafConormalDraft();
       clearSheafRelativeDraft();
       clearSheafDifferentialDraft();
       clearSheafDualDraft();
@@ -3402,6 +3487,7 @@
       clearSheafSelfSumDraft();
       clearSheafIdealDraft();
       clearSheafNormalDraft();
+      clearSheafConormalDraft();
       clearSheafRelativeDraft();
       clearSheafDifferentialDraft();
       clearSheafDualDraft();
@@ -3439,6 +3525,10 @@
 
   function sheafNormalConstructionType(sheaf) {
     return sheaf?.construction?.type === 'ses-term' && sheaf.construction.normalBundleMapId ? 'normal-bundle' : null;
+  }
+
+  function sheafConormalConstructionType(sheaf) {
+    return sheaf?.construction?.type === 'ses-term' && sheaf.construction.conormalBundleMapId ? 'conormal-bundle' : null;
   }
 
   function sheafRelativeConstructionType(sheaf) {
@@ -3520,6 +3610,15 @@
     };
     if (refs.sheafNormalConfirm) refs.sheafNormalConfirm.checked = construction.cleanEmbeddingConfirmed !== false;
     updateSheafNormalDraftControls();
+  }
+
+  function loadConormalBundleIntoDraft(sheaf) {
+    const construction = sheaf?.construction || {};
+    state.sheafConormalDraft = {
+      mapId: construction.conormalBundleMapId || null
+    };
+    if (refs.sheafConormalConfirm) refs.sheafConormalConfirm.checked = construction.regularEmbeddingConfirmed !== false;
+    updateSheafConormalDraftControls();
   }
 
   function loadRelativeSheafIntoDraft(sheaf) {
@@ -4990,6 +5089,7 @@
       if (sheafInternalHomInputMode()) return updateInternalHomSheafFromDraft(active);
       if (sheafIdealInputMode()) return updateIdealSheafFromDraft(active);
       if (sheafNormalInputMode()) return updateNormalBundleFromDraft(active);
+      if (sheafConormalInputMode()) return updateConormalBundleFromDraft(active);
       if (sheafRelativeInputMode()) return updateRelativeSheafFromDraft(active);
       if (sheafDifferentialStrengthened()) return updateDifferentialWedgeSheafFromDraft(active);
       if (sheafSchurInputMode()) return updateSchurSheafFromDraft(active);
@@ -5248,13 +5348,34 @@
     }
     if (refs.recommendationList) {
       refs.recommendationList.addEventListener('change', (event) => {
-        const checkbox = event.target?.closest?.('[data-recommendation-id]');
-        if (!checkbox) return;
-        setRecommendationSelected(checkbox.dataset.recommendationId, !!checkbox.checked);
+        const select = event.target?.closest?.('#recommendation-list');
+        if (!select) return;
+        setRecommendationChoice(select.value);
         updateRecommendationDraftControls();
         normalizeControlVisibility();
       });
     }
+    if (refs.recommendationHypersurfaceDivisorCoefficients) {
+      refs.recommendationHypersurfaceDivisorCoefficients.addEventListener('input', (event) => {
+        if (!event.target?.closest?.('[data-recommendation-hypersurface-divisor-coeff]')) return;
+        updateRecommendationHypersurfaceDraftFromControls();
+        normalizeControlVisibility();
+      });
+      refs.recommendationHypersurfaceDivisorCoefficients.addEventListener('change', (event) => {
+        if (!event.target?.closest?.('[data-recommendation-hypersurface-divisor-coeff]')) return;
+        updateRecommendationHypersurfaceDraftFromControls();
+        updateRecommendationDraftControls();
+        normalizeControlVisibility();
+      });
+    }
+    [refs.recommendationHypersurfaceCartierConfirm, refs.recommendationHypersurfaceSmoothConfirm].forEach((control) => {
+      if (!control) return;
+      control.addEventListener('change', () => {
+        updateRecommendationHypersurfaceDraftFromControls();
+        updateRecommendationDraftControls();
+        normalizeControlVisibility();
+      });
+    });
     if (refs.identifyKind) {
       refs.identifyKind.addEventListener('change', () => {
         const kind = refs.identifyKind.value === 'sheaf' ? 'sheaf' : 'variety';
@@ -5592,6 +5713,7 @@
       if (type !== 'internal-hom') clearSheafInternalHomDraft();
       if (type !== 'ideal-sheaf') clearSheafIdealDraft();
       if (type !== 'normal-bundle') clearSheafNormalDraft();
+      if (type !== 'conormal-bundle') clearSheafConormalDraft();
       if (type !== 'relative-tangent' && type !== 'relative-cotangent') clearSheafRelativeDraft();
       if (type !== 'schur') clearSheafSchurDraft();
       if (type !== 'tangent' && type !== 'cotangent') clearSheafDifferentialDraft({ resetDegree: true });
@@ -5611,6 +5733,11 @@
         if (sheafNormalConstructionType(sheaf)) loadNormalBundleIntoDraft(sheaf);
       } else if (type === 'normal-bundle') {
         state.sheafNormalDraft = state.sheafNormalDraft || {};
+      } else if (type === 'conormal-bundle' && inputIsModifyMode()) {
+        const sheaf = activeSheaf();
+        if (sheafConormalConstructionType(sheaf)) loadConormalBundleIntoDraft(sheaf);
+      } else if (type === 'conormal-bundle') {
+        state.sheafConormalDraft = state.sheafConormalDraft || {};
       } else if ((type === 'relative-tangent' || type === 'relative-cotangent') && inputIsModifyMode()) {
         const sheaf = activeSheaf();
         if (sheafRelativeConstructionType(sheaf)) loadRelativeSheafIntoDraft(sheaf);
@@ -5917,6 +6044,11 @@
         setSheafNormalPickTarget();
       });
     }
+    if (refs.sheafConormalMapButton) {
+      refs.sheafConormalMapButton.addEventListener('click', () => {
+        setSheafConormalPickTarget();
+      });
+    }
     if (refs.sheafRelativeMapButton) {
       refs.sheafRelativeMapButton.addEventListener('click', () => {
         setSheafRelativePickTarget();
@@ -5933,6 +6065,14 @@
     if (refs.sheafNormalConfirm) {
       refs.sheafNormalConfirm.addEventListener('change', () => {
         updateSheafNormalDraftControls();
+        syncDefaultRank(true);
+        syncDefaultSheafName();
+        normalizeControlVisibility();
+      });
+    }
+    if (refs.sheafConormalConfirm) {
+      refs.sheafConormalConfirm.addEventListener('change', () => {
+        updateSheafConormalDraftControls();
         syncDefaultRank(true);
         syncDefaultSheafName();
         normalizeControlVisibility();
@@ -9489,7 +9629,7 @@
         sourceTangentSheafId: sourceTangent.id,
         targetTangentSheafId: targetTangent.id,
         pulledTargetTangentSheafId: pulledTargetTangent.id,
-        cleanEmbeddingConfirmed: true,
+        cleanEmbeddingConfirmed: data.cleanEmbeddingConfirmed !== false,
         defaultName: data.defaultName
       }
     });
@@ -9529,6 +9669,77 @@
     state.hiddenObjects = hiddenObjectRefs();
     refreshConstructedObjects();
     return normal;
+  }
+
+  function createConormalBundleConstruction(data, options = {}) {
+    if (!data?.map || !data.domain || !data.codomain) return null;
+    const replacing = options.replaceSheaf || null;
+    if (replacing) cleanupConormalBundleScaffolding(replacing);
+    const sourceCotangent = ensureCotangentSheafForVariety(data.domain);
+    const targetCotangent = ensureCotangentSheafForVariety(data.codomain);
+    if (!sourceCotangent || !targetCotangent) return null;
+    const pulledTargetCotangent = ensureConormalBundlePulledTargetCotangent(data, targetCotangent);
+    if (!pulledTargetCotangent) return null;
+    const conormal = replacing || { id: nextInputId('E') };
+    const oldBaseId = conormal.baseVarietyId;
+    const codim = normalBundleRankPlaceholder(data.domain, data.codomain);
+    Object.assign(conormal, {
+      type: 'abstract',
+      name: replacing ? data.name : uniqueConstructedObjectName('sheaf', data.name),
+      twist: '1',
+      rank: codim,
+      baseVarietyId: data.domain.id,
+      basis: 'chern',
+      nameDirty: data.nameDirty,
+      hiddenOnCanvas: false,
+      construction: {
+        type: 'ses-term',
+        role: 'subobject',
+        sourceSheafIds: [pulledTargetCotangent.id, sourceCotangent.id],
+        conormalBundleMapId: data.map.id,
+        sourceCotangentSheafId: sourceCotangent.id,
+        targetCotangentSheafId: targetCotangent.id,
+        pulledTargetCotangentSheafId: pulledTargetCotangent.id,
+        regularEmbeddingConfirmed: data.regularEmbeddingConfirmed !== false,
+        defaultName: data.defaultName
+      }
+    });
+    syncObjectLineage(conormal, 'sheaf');
+    if (!replacing) {
+      positionSheafNearBase(conormal, data.domain);
+      avoidCanvasLabelOverlap(conormal);
+      addSheafObject(conormal, { activate: false });
+    } else if (oldBaseId !== conormal.baseVarietyId) {
+      positionSheafNearBase(conormal, data.domain);
+      avoidCanvasLabelOverlap(conormal);
+    }
+    const sequence = createShortExactSequenceFromObjects({
+      sheafA: conormal,
+      sheafB: pulledTargetCotangent,
+      sheafC: sourceCotangent,
+      baseVarietyId: data.domain.id,
+      autoMapABName: '\\iota',
+      autoMapBCName: '\\pi',
+      computedIndex: 0
+    });
+    if (sequence) {
+      conormal.construction.sequenceId = sequence.id;
+      conormal.construction.inclusionMapId = sequence.mapIds?.[0] || null;
+      conormal.construction.quotientMapId = sequence.mapIds?.[1] || null;
+      (sequence.mapIds || []).forEach((mapId) => {
+        const map = state.maps.find((item) => item.id === mapId);
+        if (map) map.hiddenOnCanvas = true;
+      });
+      if (sequence.tail) sequence.tail.hiddenOnCanvas = true;
+      syncObjectLineage(conormal, 'sheaf');
+    }
+    state.activeSequenceId = null;
+    state.activeSheafId = conormal.id;
+    state.activeVarietyId = data.domain.id;
+    state.activeMapId = null;
+    state.hiddenObjects = hiddenObjectRefs();
+    refreshConstructedObjects();
+    return conormal;
   }
 
   function createRelativeSheafConstruction(data, options = {}) {
@@ -9732,6 +9943,10 @@
     cleanupSesScaffoldingForSheaf(sheaf, sheaf?.construction);
   }
 
+  function cleanupConormalBundleScaffolding(sheaf) {
+    cleanupSesScaffoldingForSheaf(sheaf, sheaf?.construction);
+  }
+
   function cleanupRelativeSheafScaffolding(sheaf) {
     cleanupSesScaffoldingForSheaf(sheaf, sheaf?.construction);
   }
@@ -9750,6 +9965,16 @@
     state.sheaves = state.sheaves.filter((item) => item.id !== dualId);
   }
 
+  function preferredOrdinarySpecialSheafForVariety(variety, type) {
+    if (!variety || !type) return null;
+    const candidates = state.sheaves.filter((sheaf) => (
+      sheaf.baseVarietyId === variety.id
+      && sheaf.type === type
+      && !sheaf.construction
+    ));
+    return candidates.find((sheaf) => sheaf.hiddenOnCanvas !== true) || candidates[0] || null;
+  }
+
   function ensureTangentSheafForVariety(variety) {
     if (!variety) return null;
     const ramifiedCoverTangent = ramifiedCoverTangentSheafForVariety(variety);
@@ -9757,11 +9982,7 @@
     const geometry = geometryFromVariety(variety);
     const tangentRank = defaultRankForSheafType('tangent', geometry, '');
     const defaultName = defaultSheafNameFor('tangent', tangentRank, 'r', geometry.labelLatex, geometry);
-    const existing = state.sheaves.find((sheaf) => (
-      sheaf.baseVarietyId === variety.id
-      && sheaf.type === 'tangent'
-      && !sheaf.construction
-    ));
+    const existing = preferredOrdinarySpecialSheafForVariety(variety, 'tangent');
     if (existing) {
       existing.twist = '1';
       existing.rank = tangentRank;
@@ -9830,6 +10051,49 @@
     return addSheafObject(sheaf, { activate: false });
   }
 
+  function ensureConormalBundlePulledTargetCotangent(data, targetCotangent) {
+    const defaultName = defaultPullbackSheafNameFromObjects(data.map, targetCotangent, { derived: false });
+    const existing = state.sheaves.find((sheaf) => (
+      sheaf.construction?.type === 'pullback'
+      && sheaf.construction.mapId === data.map.id
+      && sheaf.construction.sheafId === targetCotangent.id
+    ));
+    if (existing) {
+      existing.baseVarietyId = data.domain.id;
+      existing.rank = sanitizeRankInput(targetCotangent.rank);
+      existing.basis = 'chern';
+      existing.construction.exact = true;
+      existing.construction.derived = false;
+      existing.construction.defaultName = defaultName;
+      if (!existing.nameDirty) existing.name = defaultName;
+      syncObjectLineage(existing, 'sheaf');
+      return existing;
+    }
+    const sheaf = {
+      id: nextInputId('E'),
+      type: 'abstract',
+      name: defaultName,
+      twist: '1',
+      rank: sanitizeRankInput(targetCotangent.rank),
+      baseVarietyId: data.domain.id,
+      basis: 'chern',
+      nameDirty: false,
+      hiddenOnCanvas: true,
+      construction: {
+        type: 'pullback',
+        mapId: data.map.id,
+        sheafId: targetCotangent.id,
+        exact: true,
+        derived: false,
+        defaultName
+      }
+    };
+    syncObjectLineage(sheaf, 'sheaf');
+    positionSheafNearBase(sheaf, data.domain);
+    avoidCanvasLabelOverlap(sheaf);
+    return addSheafObject(sheaf, { activate: false });
+  }
+
   function ensureCotangentSheafForVariety(variety) {
     if (!variety) return null;
     const ramifiedCoverCotangent = ramifiedCoverCotangentSheafForVariety(variety);
@@ -9837,11 +10101,7 @@
     const geometry = geometryFromVariety(variety);
     const cotangentRank = defaultRankForSheafType('cotangent', geometry, '');
     const defaultName = defaultSheafNameFor('cotangent', cotangentRank, 'r', geometry.labelLatex, geometry);
-    const existing = state.sheaves.find((sheaf) => (
-      sheaf.baseVarietyId === variety.id
-      && sheaf.type === 'cotangent'
-      && !sheaf.construction
-    ));
+    const existing = preferredOrdinarySpecialSheafForVariety(variety, 'cotangent');
     if (existing) {
       existing.twist = '1';
       existing.rank = cotangentRank;
@@ -9987,12 +10247,7 @@
     if (!variety) return null;
     const geometry = geometryFromVariety(variety);
     const defaultName = defaultSheafNameFor('structure', '1', 1, geometry.labelLatex, geometry);
-    const existing = state.sheaves.find((sheaf) => (
-      sheaf.baseVarietyId === variety.id
-      && sheaf.type === 'structure'
-      && !sheaf.construction
-      && sheaf.hiddenOnCanvas
-    ));
+    const existing = preferredOrdinarySpecialSheafForVariety(variety, 'structure');
     if (existing) {
       existing.rank = '1';
       existing.twist = '1';
@@ -10083,6 +10338,8 @@
     ];
     targetGeometry = geometryFromVariety(data.codomain);
     const targetClassId = homologyVariableId(classId, targetGeometry);
+    const divisorPoly = divisorPolynomialFromCoefficients(data.hypersurfaceDivisorCoefficients || {}, targetGeometry);
+    const divisorRuleRhs = divisorPoly.isZero() ? null : serializeHomologyPoly(divisorPoly);
     const unitPushforwardId = defineMapHomologyVariable(data.map, 'pushforward', mapSourceUnitVariableId(data.map), codim, '1', {
       cohomologyDegree: 2 * codim,
       sourceKey: ''
@@ -10092,9 +10349,18 @@
       id: idealSheafUnitRuleId(data.map),
       enabled: true,
       lhs: { powers: { [unitPushforwardId]: 1 } },
-      rhs: [{ coefficient: '1', powers: { [targetClassId]: 1 } }]
+      rhs: divisorRuleRhs || [{ coefficient: '1', powers: { [targetClassId]: 1 } }]
     }, targetGeometry, { includeMapClasses: true, preserveUnknownVariables: true });
     if (unitRule) rules.push(unitRule);
+    if (divisorRuleRhs) {
+      const divisorRule = normalizeHomologyRule({
+        id: idealSheafDivisorRuleId(data.map),
+        enabled: true,
+        lhs: { powers: { [targetClassId]: 1 } },
+        rhs: divisorRuleRhs
+      }, targetGeometry, { includeMapClasses: true, preserveUnknownVariables: true });
+      if (divisorRule) rules.push(divisorRule);
+    }
     const pointRule = idealSheafPointPushforwardRule(data.map, sourceGeometry, targetGeometry);
     if (pointRule) rules.push(pointRule);
     data.codomain.homology.rules = rules;
@@ -10118,8 +10384,12 @@
     return `map-rule-pushforward_${variableIdSafe(map?.id || 'map')}_point`;
   }
 
+  function idealSheafDivisorRuleId(map) {
+    return `map-rule-hypersurface-divisor-${variableIdSafe(map?.id || 'map')}`;
+  }
+
   function idealSheafRuleIds(map) {
-    return [idealSheafUnitRuleId(map), idealSheafPointRuleId(map)];
+    return [idealSheafUnitRuleId(map), idealSheafPointRuleId(map), idealSheafDivisorRuleId(map)];
   }
 
   function idealSheafPointPushforwardRule(map, sourceGeometry, targetGeometry) {
@@ -11426,6 +11696,12 @@
     return `\\mathcal{N}_{${source}/${target}}`;
   }
 
+  function defaultConormalBundleNameFromObjects(map) {
+    const domain = state.varieties.find((variety) => variety.id === map?.domainId);
+    const source = sanitizeMathLabel(domain?.name, 'X');
+    return `I_{${source}}/I_{${source}}^{2}`;
+  }
+
   function defaultRelativeSheafNameFromObjects(map, type = 'tangent') {
     const domain = state.varieties.find((variety) => variety.id === map?.domainId);
     const codomain = state.varieties.find((variety) => variety.id === map?.codomainId);
@@ -11684,6 +11960,8 @@
         state.sheafIdealDraft = state.sheafIdealDraft || {};
       } else if (sheafNormalInputMode()) {
         state.sheafNormalDraft = state.sheafNormalDraft || {};
+      } else if (sheafConormalInputMode()) {
+        state.sheafConormalDraft = state.sheafConormalDraft || {};
       } else if (sheafRelativeInputMode()) {
         state.sheafRelativeDraft = state.sheafRelativeDraft || {};
       } else if (sheafSchurInputMode()) {
@@ -11936,6 +12214,12 @@
     state.sheafNormalDraft = null;
     if (refs.sheafNormalConfirm) refs.sheafNormalConfirm.checked = false;
     updateSheafNormalDraftControls();
+  }
+
+  function clearSheafConormalDraft() {
+    state.sheafConormalDraft = null;
+    if (refs.sheafConormalConfirm) refs.sheafConormalConfirm.checked = false;
+    updateSheafConormalDraftControls();
   }
 
   function clearSheafRelativeDraft() {
@@ -12271,6 +12555,18 @@
     hint: () => sheafNormalPickHint(),
     nextSlot: () => 'map',
     handle: (kind, id) => handleSheafNormalPick(kind, id)
+  }, {
+    id: 'sheaf-conormal',
+    slots: ['map'],
+    active: () => sheafConormalInputMode(),
+    allowedObjectKinds: () => ['map'],
+    available: () => sheafConormalPickableMaps().length > 0,
+    candidate: (kind, id) => kind === 'map' && allowableSheafConormalMapPick(id),
+    selectedState: (kind, id) => kind === 'map' && sheafConormalDraftMap()?.id === id ? 'active' : null,
+    complete: () => !!conormalBundleConstructionData(),
+    hint: () => sheafConormalPickHint(),
+    nextSlot: () => 'map',
+    handle: (kind, id) => handleSheafConormalPick(kind, id)
   }, {
     id: 'sheaf-relative',
     slots: ['map'],
@@ -13572,24 +13868,56 @@
   function handleRecommendationPick(kind, id) {
     if (!allowableRecommendationSourcePick(kind, id)) return;
     const source = { kind, object: recommendationSourceObject(kind, id) };
-    const selectedIds = {};
-    recommendationItemsForSource(source).forEach((item) => {
-      if (!item.realized) selectedIds[item.id] = true;
-    });
-    state.recommendationDraft = { sourceKind: kind, sourceId: id, selectedIds };
+    const items = recommendationItemsForSource(source);
+    const selectedId = defaultRecommendationChoiceId(items);
+    const hypersurface = kind === 'map' ? initialHypersurfaceRecommendationDraft(source.object) : null;
+    state.recommendationDraft = {
+      sourceKind: kind,
+      sourceId: id,
+      selectedId,
+      ...(hypersurface ? { hypersurface } : {})
+    };
     setCanvasPickEnabled(false, { render: false });
     updateRecommendationDraftControls();
     recompute();
   }
 
-  function setRecommendationSelected(id, checked) {
+  function defaultRecommendationChoiceId(items) {
+    if (!Array.isArray(items) || !items.length) return '';
+    return (items.find((item) => !item.realized) || items[0])?.id || '';
+  }
+
+  function recommendationSelectedId(items = recommendationItemsForSource(), draft = state.recommendationDraft) {
+    if (!Array.isArray(items) || !items.length) return '';
+    const selectedId = String(draft?.selectedId || '');
+    if (selectedId && items.some((item) => item.id === selectedId)) return selectedId;
+    const legacySelectedIds = draft?.selectedIds || {};
+    const legacyItem = items.find((item) => legacySelectedIds[item.id]);
+    if (legacyItem) return legacyItem.id;
+    return defaultRecommendationChoiceId(items);
+  }
+
+  function selectedRecommendationItems(items = recommendationItemsForSource(), draft = state.recommendationDraft) {
+    if (!Array.isArray(items) || !items.length) return [];
+    const selectedId = String(draft?.selectedId || '');
+    if (selectedId) return items.filter((item) => item.id === selectedId);
+    const legacySelectedIds = draft?.selectedIds || {};
+    const legacyItems = items.filter((item) => legacySelectedIds[item.id]);
+    if (legacyItems.length) return legacyItems;
+    const fallbackId = defaultRecommendationChoiceId(items);
+    return fallbackId ? items.filter((item) => item.id === fallbackId) : [];
+  }
+
+  function setRecommendationChoice(id) {
     const itemId = String(id || '');
     if (!itemId) return;
     const draft = state.recommendationDraft || {};
-    const selectedIds = { ...(draft.selectedIds || {}) };
-    if (checked) selectedIds[itemId] = true;
-    else delete selectedIds[itemId];
-    state.recommendationDraft = { ...draft, selectedIds };
+    const { selectedIds: _selectedIds, ...rest } = draft;
+    state.recommendationDraft = { ...rest, selectedId: itemId };
+  }
+
+  function setRecommendationSelected(id, checked) {
+    if (checked) setRecommendationChoice(id);
   }
 
   function updateRecommendationDraftControls() {
@@ -13604,25 +13932,30 @@
       refs.recommendationSourceButton.title = source ? `Replace ${label}` : 'Pick a source object on the canvas';
       refs.recommendationSourceButton.setAttribute('aria-pressed', state.canvasPickEnabled && show ? 'true' : 'false');
     }
+    updateRecommendationHypersurfaceControls(show, source);
     if (!refs.recommendationList) return;
     if (!show) {
+      refs.recommendationList.disabled = true;
       refs.recommendationList.innerHTML = '';
       return;
     }
     const items = recommendationItemsForSource(source);
     if (!source) {
-      refs.recommendationList.innerHTML = '<span class="hint">Pick a source object.</span>';
+      refs.recommendationList.disabled = true;
+      refs.recommendationList.innerHTML = '<option value="">Pick a source object</option>';
       return;
     }
     if (!items.length) {
-      refs.recommendationList.innerHTML = '<span class="hint">No recommendations for this source yet.</span>';
+      refs.recommendationList.disabled = true;
+      refs.recommendationList.innerHTML = '<option value="">No recommendations for this source</option>';
       return;
     }
-    const selected = state.recommendationDraft?.selectedIds || {};
+    const selectedId = recommendationSelectedId(items);
+    refs.recommendationList.disabled = false;
     refs.recommendationList.innerHTML = items.map((item) => {
-      const checked = selected[item.id] ? ' checked' : '';
-      const realized = item.realized ? ' <span class="hint">(already exists)</span>' : '';
-      return `<label class="opt-row" title="${escapeHtml(item.description)}"><input type="checkbox" data-recommendation-id="${escapeHtml(item.id)}"${checked}> ${escapeHtml(item.label)}${realized}</label>`;
+      const selected = item.id === selectedId ? ' selected' : '';
+      const realized = item.realized ? ' (already exists)' : '';
+      return `<option value="${escapeHtml(item.id)}"${selected} title="${escapeHtml(item.description)}">${escapeHtml(item.label + realized)}</option>`;
     }).join('');
   }
 
@@ -13634,7 +13967,10 @@
 
   function recommendationItemsForSource(source = recommendationDraftSource()) {
     if (!source?.object) return [];
-    if (source.kind === 'map') return ramifiedCoverRecommendationItemsForMap(source.object);
+    if (source.kind === 'map') return [
+      ...ramifiedCoverRecommendationItemsForMap(source.object),
+      ...hypersurfaceRecommendationItemsForMap(source.object)
+    ];
     if (source.kind !== 'variety') return [];
     const variety = source.object;
     const geometry = geometryFromVariety(variety);
@@ -13688,6 +14024,218 @@
     return items;
   }
 
+  function hypersurfaceRecommendationItemsForMap(map) {
+    const context = hypersurfaceRecommendationContext(map);
+    if (!context) return [];
+    return [{
+      id: 'hypersurface-ideal-sheaf',
+      label: 'Ideal sheaf I_X = O_Y(-D)',
+      description: 'Create or reuse the ideal sheaf of the Cartier hypersurface and link it to O_Y(-D).',
+      realized: !!hypersurfaceIdealSheafForMap(map)
+    }, {
+      id: 'hypersurface-normal-bundle',
+      label: 'Normal bundle N = f^*O_Y(D)',
+      description: 'Create or reuse the normal bundle of the smooth hypersurface and link it to f^*O_Y(D).',
+      realized: !!hypersurfaceNormalSheafForMap(map)
+    }, {
+      id: 'hypersurface-conormal-bundle',
+      label: 'Conormal bundle I/I^2 = f^*O_Y(-D)',
+      description: 'Create or reuse the conormal SES and link I/I^2 to f^*O_Y(-D).',
+      realized: !!hypersurfaceConormalSheafForMap(map)
+    }];
+  }
+
+  function hypersurfaceRecommendationContext(map) {
+    if (!map || map.hiddenOnCanvas || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return null;
+    const domain = state.varieties.find((variety) => variety.id === map.domainId);
+    const codomain = state.varieties.find((variety) => variety.id === map.codomainId);
+    if (!domain || !codomain || domain.id === codomain.id) return null;
+    const sourceGeometry = geometryFromVariety(domain);
+    const targetGeometry = geometryFromVariety(codomain);
+    if (!Number.isInteger(sourceGeometry?.dim) || !Number.isInteger(targetGeometry?.dim)) return null;
+    if (targetGeometry.dim !== sourceGeometry.dim + 1) return null;
+    const divisorDefs = divisorHomologyClassDefinitions(targetGeometry)
+      .filter((def) => def.id !== idealSheafImageClassId(map));
+    return { map, domain, codomain, sourceGeometry, targetGeometry, divisorDefs };
+  }
+
+  function hypersurfaceRecommendationItemSelected(id, draft = state.recommendationDraft) {
+    const source = recommendationDraftSource();
+    const items = recommendationItemsForSource(source);
+    return selectedRecommendationItems(items, draft).some((item) => item.id === id);
+  }
+
+  function recommendationSelectionHasHypersurfaceItem(draft = state.recommendationDraft) {
+    return hypersurfaceRecommendationItemSelected('hypersurface-ideal-sheaf', draft)
+      || hypersurfaceRecommendationItemSelected('hypersurface-normal-bundle', draft)
+      || hypersurfaceRecommendationItemSelected('hypersurface-conormal-bundle', draft);
+  }
+
+  function hypersurfaceRecommendationRequiredCondition(itemId) {
+    if (itemId === 'hypersurface-normal-bundle') return 'smooth';
+    if (itemId === 'hypersurface-ideal-sheaf' || itemId === 'hypersurface-conormal-bundle') return 'cartier';
+    return '';
+  }
+
+  function hypersurfaceRecommendationRequiresCartier(selectedItems) {
+    return (selectedItems || []).some((item) => hypersurfaceRecommendationRequiredCondition(item.id) === 'cartier');
+  }
+
+  function hypersurfaceRecommendationRequiresSmooth(selectedItems) {
+    return (selectedItems || []).some((item) => hypersurfaceRecommendationRequiredCondition(item.id) === 'smooth');
+  }
+
+  function initialHypersurfaceRecommendationDraft(map) {
+    const context = hypersurfaceRecommendationContext(map);
+    if (!context) return null;
+    const construction = map?.construction || {};
+    return {
+      divisorCoefficients: sanitizeDivisorCoefficients(
+        construction.hypersurfaceDivisorCoefficients || defaultHypersurfaceDivisorCoefficients(context),
+        context.targetGeometry
+      ),
+      cartierConfirmed: construction.hypersurfaceCartierConfirmed === true,
+      smoothConfirmed: construction.hypersurfaceSmoothConfirmed === true
+    };
+  }
+
+  function defaultHypersurfaceDivisorCoefficients(context) {
+    const targetGeometry = context?.targetGeometry;
+    const fromMap = sanitizeDivisorCoefficients(context?.map?.construction?.hypersurfaceDivisorCoefficients || {}, targetGeometry);
+    if (Object.keys(fromMap).length) return fromMap;
+    const ci = completeIntersectionEmbeddingMapContext(context?.map);
+    if (ci?.codim === 1 && Array.isArray(ci.sourceGeometry?.degrees) && ci.sourceGeometry.degrees.length === 1) {
+      const degree = normalizedInt(ci.sourceGeometry.degrees[0], 1, MAX_CI_DEGREE, 1);
+      if (homologyClassDefById(targetGeometry, HOMOLOGY_HYPERPLANE_CLASS)) {
+        return { [HOMOLOGY_HYPERPLANE_CLASS]: String(degree) };
+      }
+    }
+    return {};
+  }
+
+  function recommendationHypersurfaceDraft(context = hypersurfaceRecommendationContext(recommendationDraftSource()?.object)) {
+    if (!context) return null;
+    const draft = state.recommendationDraft?.hypersurface || {};
+    const coefficients = sanitizeDivisorCoefficients(
+      draft.divisorCoefficients || defaultHypersurfaceDivisorCoefficients(context),
+      context.targetGeometry
+    );
+    return {
+      divisorCoefficients: coefficients,
+      cartierConfirmed: draft.cartierConfirmed === true,
+      smoothConfirmed: draft.smoothConfirmed === true
+    };
+  }
+
+  function updateRecommendationHypersurfaceControls(show, source) {
+    const context = show && source?.kind === 'map' ? hypersurfaceRecommendationContext(source.object) : null;
+    const items = context ? recommendationItemsForSource(source) : [];
+    const selectedItems = selectedRecommendationItems(items);
+    const selectedId = selectedItems[0]?.id || '';
+    const visible = !!context && selectedItems.some((item) => item.id.startsWith('hypersurface-'));
+    const conditionKind = hypersurfaceRecommendationRequiredCondition(selectedId);
+    const showCondition = visible && !!conditionKind;
+    if (refs.recommendationHypersurfaceDivisorRow) refs.recommendationHypersurfaceDivisorRow.hidden = !visible;
+    if (refs.recommendationHypersurfaceConfirmRow) refs.recommendationHypersurfaceConfirmRow.hidden = !showCondition;
+    if (refs.recommendationHypersurfaceCartierOption) refs.recommendationHypersurfaceCartierOption.hidden = !showCondition;
+    if (refs.recommendationHypersurfaceSmoothOption) refs.recommendationHypersurfaceSmoothOption.hidden = true;
+    if (refs.recommendationHypersurfaceCartierLabel) {
+      refs.recommendationHypersurfaceCartierLabel.textContent = selectedId === 'hypersurface-normal-bundle'
+        ? 'use N = f^*O_Y(D) identification when the smooth embedding hypothesis holds'
+        : (selectedId === 'hypersurface-conormal-bundle'
+          ? 'use I/I^2 = f^*O_Y(-D) identification when the regular/lci hypothesis holds'
+          : 'use I_X = O_Y(-D) identification when the Cartier hypothesis holds');
+    }
+    if (!visible) {
+      if (refs.recommendationHypersurfaceDivisorCoefficients) refs.recommendationHypersurfaceDivisorCoefficients.innerHTML = '';
+      if (refs.recommendationHypersurfaceCartierConfirm) refs.recommendationHypersurfaceCartierConfirm.checked = false;
+      if (refs.recommendationHypersurfaceSmoothConfirm) refs.recommendationHypersurfaceSmoothConfirm.checked = false;
+      return;
+    }
+    const draft = recommendationHypersurfaceDraft(context);
+    if (refs.recommendationHypersurfaceCartierConfirm) {
+      refs.recommendationHypersurfaceCartierConfirm.checked = conditionKind === 'smooth'
+        ? draft.smoothConfirmed
+        : draft.cartierConfirmed;
+    }
+    if (refs.recommendationHypersurfaceSmoothConfirm) refs.recommendationHypersurfaceSmoothConfirm.checked = draft.smoothConfirmed;
+    if (refs.recommendationHypersurfaceDivisorCoefficients) {
+      refs.recommendationHypersurfaceDivisorCoefficients.innerHTML = context.divisorDefs.length
+        ? context.divisorDefs.map((def, index) => `
+            ${index ? '<span class="homology-coefficient-plus">+</span>' : ''}
+            <label class="homology-coefficient-term">
+              <input class="sheaf-input homology-coefficient-input" type="text" value="${escapeHtml(draft.divisorCoefficients[def.id] || '')}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Coefficient of ${escapeHtml(def.symbolPlain)} in D" data-recommendation-hypersurface-divisor-coeff data-recommendation-hypersurface-divisor-class="${escapeHtml(def.id)}">
+              <span>\\(${def.symbolLatex}\\)</span>
+            </label>
+          `).join('')
+        : '<span class="homology-coefficient-empty">no existing H^2 classes; [X] will be generated</span>';
+      typeset(refs.recommendationHypersurfaceDivisorCoefficients);
+    }
+  }
+
+  function currentRecommendationHypersurfaceDivisorCoefficients(context = hypersurfaceRecommendationContext(recommendationDraftSource()?.object)) {
+    if (!context) return {};
+    const coefficients = {};
+    let inputCount = 0;
+    if (refs.recommendationHypersurfaceDivisorCoefficients) {
+      for (const input of refs.recommendationHypersurfaceDivisorCoefficients.querySelectorAll('[data-recommendation-hypersurface-divisor-coeff]')) {
+        inputCount += 1;
+        const classId = input.dataset.recommendationHypersurfaceDivisorClass || '';
+        try {
+          const coeff = parseRuleCoefficient(input.value || '0');
+          if (!coeff.isZero()) coefficients[classId] = formatFractionPlain(coeff);
+        } catch (_) {
+          coefficients[classId] = input.value || '';
+        }
+      }
+    }
+    if (!inputCount) return recommendationHypersurfaceDraft(context)?.divisorCoefficients || {};
+    return sanitizeDivisorCoefficients(coefficients, context.targetGeometry);
+  }
+
+  function updateRecommendationHypersurfaceDraftFromControls() {
+    const source = recommendationDraftSource();
+    const context = source?.kind === 'map' ? hypersurfaceRecommendationContext(source.object) : null;
+    if (!context) return;
+    const draft = state.recommendationDraft || {};
+    const items = recommendationItemsForSource(source);
+    const selectedId = selectedRecommendationItems(items, draft)[0]?.id || '';
+    const conditionKind = hypersurfaceRecommendationRequiredCondition(selectedId);
+    const current = recommendationHypersurfaceDraft(context) || {};
+    const checked = refs.recommendationHypersurfaceCartierConfirm?.checked === true;
+    const cartierConfirmed = conditionKind === 'cartier' ? checked : current.cartierConfirmed === true;
+    const smoothConfirmed = conditionKind === 'smooth' ? checked : current.smoothConfirmed === true;
+    state.recommendationDraft = {
+      ...draft,
+      hypersurface: {
+        divisorCoefficients: currentRecommendationHypersurfaceDivisorCoefficients(context),
+        cartierConfirmed,
+        smoothConfirmed
+      }
+    };
+  }
+
+  function hypersurfaceRecommendationDataForMap(map) {
+    const context = hypersurfaceRecommendationContext(map);
+    if (!context) return null;
+    const draft = recommendationHypersurfaceDraft(context);
+    const divisorCoefficients = sanitizeDivisorCoefficients(draft?.divisorCoefficients || {}, context.targetGeometry);
+    return {
+      ...context,
+      divisorCoefficients,
+      cartierConfirmed: draft.cartierConfirmed === true,
+      smoothConfirmed: draft.smoothConfirmed === true
+    };
+  }
+
+  function selectedHypersurfaceRecommendationsAreReady(source, selectedItems) {
+    const selectedIds = new Set((selectedItems || []).map((item) => item.id));
+    if (![...selectedIds].some((id) => id.startsWith('hypersurface-'))) return true;
+    if (source?.kind !== 'map') return false;
+    const data = hypersurfaceRecommendationDataForMap(source.object);
+    return !!data;
+  }
+
   function completeIntersectionEmbeddingRecommendationAvailable(geometry) {
     return geometry?.type === 'complete-intersection'
       && Array.isArray(geometry.degrees)
@@ -13701,9 +14249,11 @@
     const source = recommendationDraftSource();
     if (!source) return null;
     const items = recommendationItemsForSource(source);
-    const selectedIds = state.recommendationDraft?.selectedIds || {};
-    const selectedItems = items.filter((item) => selectedIds[item.id]);
-    return selectedItems.length ? { source, items: selectedItems } : null;
+    const selectedItems = selectedRecommendationItems(items);
+    if (!selectedItems.length) return null;
+    if (!selectedHypersurfaceRecommendationsAreReady(source, selectedItems)) return null;
+    const hypersurface = source.kind === 'map' ? hypersurfaceRecommendationDataForMap(source.object) : null;
+    return { source, items: selectedItems, ...(hypersurface ? { hypersurface } : {}) };
   }
 
   function recommendationPickHint() {
@@ -13712,8 +14262,14 @@
     if (!source) return 'click a source object on the canvas';
     const items = recommendationItemsForSource(source);
     if (!items.length) return 'no recommendations for this source yet';
-    if (!recommendationConstructionData()) return 'check at least one recommendation';
-    return 'click build to create the checked recommendations';
+    const selectedItems = selectedRecommendationItems(items);
+    if (!selectedItems.length) return 'choose a recommendation';
+    if (selectedItems.some((item) => item.id.startsWith('hypersurface-'))) {
+      const data = source.kind === 'map' ? hypersurfaceRecommendationDataForMap(source.object) : null;
+      if (!data) return 'choose a codimension-one map';
+    }
+    if (!recommendationConstructionData()) return 'choose a recommendation';
+    return 'click build to create the selected recommendation';
   }
 
   function createRecommendationConstructions(data) {
@@ -13726,6 +14282,9 @@
       else if (item.id === 'complete-intersection-embedding' && data.source.kind === 'variety') object = ensureCompleteIntersectionEmbedding(data.source.object);
       else if (item.id === 'ramification-divisor-inclusion' && data.source.kind === 'map') object = ensureRamificationDivisorInclusion(data.source.object);
       else if (item.id === 'ramified-cover-root-line-bundle' && data.source.kind === 'map') object = ensureVisibleRamifiedCoverRootLineBundle(data.source.object);
+      else if (item.id === 'hypersurface-ideal-sheaf' && data.source.kind === 'map') object = ensureHypersurfaceIdealSheaf(data.source.object, data.hypersurface);
+      else if (item.id === 'hypersurface-normal-bundle' && data.source.kind === 'map') object = ensureHypersurfaceNormalBundle(data.source.object, data.hypersurface);
+      else if (item.id === 'hypersurface-conormal-bundle' && data.source.kind === 'map') object = ensureHypersurfaceConormalBundle(data.source.object, data.hypersurface);
       if (object) created.push(object);
     });
     const last = created[created.length - 1] || null;
@@ -13760,6 +14319,220 @@
     if (!object) return null;
     if (object.hiddenOnCanvas) object.hiddenOnCanvas = false;
     return object;
+  }
+
+  function hypersurfaceIdealSheafForMap(map) {
+    return state.sheaves.find((sheaf) => sheaf.construction?.idealSheafMapId === map?.id) || null;
+  }
+
+  function hypersurfaceNormalSheafForMap(map) {
+    return state.sheaves.find((sheaf) => sheaf.construction?.normalBundleMapId === map?.id) || null;
+  }
+
+  function hypersurfaceConormalSheafForMap(map) {
+    return state.sheaves.find((sheaf) => sheaf.construction?.conormalBundleMapId === map?.id) || null;
+  }
+
+  function storeHypersurfaceDataOnMap(data) {
+    if (!data?.map) return false;
+    const map = data.map;
+    const existing = map.construction || {};
+    const type = existing.type || 'hypersurface-embedding';
+    const divisorCoefficients = sanitizeDivisorCoefficients(data.divisorCoefficients, data.targetGeometry);
+    map.construction = {
+      ...existing,
+      type,
+      sourceId: existing.sourceId || map.domainId,
+      targetId: existing.targetId || existing.ambientId || map.codomainId,
+      hypersurfaceDivisorCoefficients: divisorCoefficients,
+      hypersurfaceCartierConfirmed: data.cartierConfirmed === true,
+      hypersurfaceSmoothConfirmed: data.smoothConfirmed === true,
+      defaultName: existing.defaultName || map.name || 'f'
+    };
+    ensureIdealSheafHomologyRules({
+      ...data,
+      hypersurfaceDivisorCoefficients: divisorCoefficients
+    });
+    data.targetGeometry = geometryFromVariety(data.codomain);
+    syncObjectLineage(map, 'map');
+    return true;
+  }
+
+  function signedDivisorCoefficients(coefficients, sign, geometry) {
+    const out = {};
+    Object.entries(sanitizeDivisorCoefficients(coefficients, geometry)).forEach(([id, rawCoeff]) => {
+      const coeff = parseRuleCoefficient(rawCoeff).mul(fraction(sign < 0 ? -1 : 1));
+      if (!coeff.isZero()) out[id] = formatFractionPlain(coeff);
+    });
+    return out;
+  }
+
+  function divisorCoefficientKey(coefficients, geometry) {
+    return JSON.stringify(Object.entries(sanitizeDivisorCoefficients(coefficients, geometry)).sort(([a], [b]) => a.localeCompare(b)));
+  }
+
+  function hypersurfaceLineDivisorCoefficients(data, sign) {
+    const geometry = geometryFromVariety(data?.codomain) || data?.targetGeometry;
+    const explicit = signedDivisorCoefficients(data?.divisorCoefficients || {}, sign, geometry);
+    if (Object.keys(explicit).length) return explicit;
+    const classId = idealSheafImageClassId(data?.map);
+    if (!classId || !homologyClassDefById(geometry, classId)) return {};
+    return { [classId]: sign < 0 ? '-1' : '1' };
+  }
+
+  function defaultHypersurfaceLineName(data, sign, base = data?.codomain) {
+    const geometry = base?.id === data?.codomain?.id ? (geometryFromVariety(data.codomain) || data.targetGeometry) : geometryFromVariety(base);
+    const divisor = divisorLatexFromCoefficients(hypersurfaceLineDivisorCoefficients(data, sign), geometry, sign < 0 ? '-D' : 'D');
+    return `\\mathcal{O}_{${geometry?.labelLatex || sanitizeMathLabel(base?.name, 'Y')}}(${divisor})`;
+  }
+
+  function ensureHypersurfaceTargetLineSheaf(data, sign) {
+    if (!data?.codomain || !data.targetGeometry) return null;
+    const geometry = geometryFromVariety(data.codomain) || data.targetGeometry;
+    data.targetGeometry = geometry;
+    const coefficients = hypersurfaceLineDivisorCoefficients(data, sign);
+    const key = divisorCoefficientKey(coefficients, geometry);
+    const existing = state.sheaves.find((sheaf) => (
+      sheaf.type === 'divisor-line'
+      && sheaf.baseVarietyId === data.codomain.id
+      && divisorCoefficientKey(sheaf.divisorCoefficients || {}, geometry) === key
+    ));
+    const defaultName = defaultHypersurfaceLineName(data, sign, data.codomain);
+    if (existing) {
+      existing.rank = '1';
+      existing.twist = '1';
+      existing.basis = 'chern';
+      existing.divisorCoefficients = coefficients;
+      if (!existing.nameDirty) existing.name = defaultName;
+      syncObjectLineage(existing, 'sheaf');
+      return existing;
+    }
+    const sheaf = {
+      id: nextInputId('E'),
+      type: 'divisor-line',
+      name: defaultName,
+      twist: '1',
+      rank: '1',
+      baseVarietyId: data.codomain.id,
+      basis: 'chern',
+      nameDirty: false,
+      hiddenOnCanvas: true,
+      divisorCoefficients: coefficients
+    };
+    positionSheafNearBase(sheaf, data.codomain);
+    avoidCanvasLabelOverlap(sheaf);
+    sheafFromObject(sheaf, data.targetGeometry);
+    return addSheafObject(sheaf, { activate: false });
+  }
+
+  function ensureHypersurfacePulledLineSheaf(data, targetLine, sign) {
+    if (!data?.map || !data.domain || !targetLine) return null;
+    const defaultName = `${pullbackFunctorLatex(data.map, { derived: false })}${sanitizeMathLabel(targetLine.name, defaultHypersurfaceLineName(data, sign, data.codomain))}`;
+    const existing = state.sheaves.find((sheaf) => (
+      sheaf.construction?.type === 'pullback'
+      && sheaf.construction.mapId === data.map.id
+      && sheaf.construction.sheafId === targetLine.id
+    ));
+    if (existing) {
+      existing.baseVarietyId = data.domain.id;
+      existing.rank = '1';
+      existing.basis = 'chern';
+      existing.construction.exact = true;
+      existing.construction.derived = false;
+      existing.construction.defaultName = defaultName;
+      if (!existing.nameDirty) existing.name = defaultName;
+      if (existing.hiddenOnCanvas !== false) existing.hiddenOnCanvas = true;
+      syncObjectLineage(existing, 'sheaf');
+      return existing;
+    }
+    const sheaf = {
+      id: nextInputId('E'),
+      type: 'abstract',
+      name: defaultName,
+      twist: '1',
+      rank: '1',
+      baseVarietyId: data.domain.id,
+      basis: 'chern',
+      nameDirty: false,
+      hiddenOnCanvas: true,
+      construction: {
+        type: 'pullback',
+        mapId: data.map.id,
+        sheafId: targetLine.id,
+        exact: true,
+        derived: false,
+        defaultName
+      }
+    };
+    syncObjectLineage(sheaf, 'sheaf');
+    positionSheafNearBase(sheaf, data.domain);
+    avoidCanvasLabelOverlap(sheaf);
+    return addSheafObject(sheaf, { activate: false });
+  }
+
+  function ensureHypersurfaceIdealSheaf(map, hypersurface = null) {
+    const data = hypersurface || hypersurfaceRecommendationDataForMap(map);
+    if (!data) return null;
+    storeHypersurfaceDataOnMap(data);
+    const line = data.cartierConfirmed ? ensureHypersurfaceTargetLineSheaf(data, -1) : null;
+    const existing = hypersurfaceIdealSheafForMap(data.map);
+    const defaultName = defaultIdealSheafNameFromObjects(data.map);
+    const ideal = createIdealSheafConstruction({
+      ...data,
+      defaultName,
+      name: existing?.nameDirty ? existing.name : defaultName,
+      nameDirty: existing?.nameDirty === true,
+      hypersurfaceDivisorCoefficients: data.divisorCoefficients
+    }, existing ? { replaceSheaf: existing } : {});
+    if (!ideal) return null;
+    ideal.construction.hypersurfaceLineSheafId = line?.id || null;
+    ideal.construction.hypersurfaceDivisorMapId = data.map.id;
+    syncObjectLineage(ideal, 'sheaf');
+    return ideal;
+  }
+
+  function ensureHypersurfaceNormalBundle(map, hypersurface = null) {
+    const data = hypersurface || hypersurfaceRecommendationDataForMap(map);
+    if (!data) return null;
+    storeHypersurfaceDataOnMap(data);
+    const targetLine = data.smoothConfirmed ? ensureHypersurfaceTargetLineSheaf(data, 1) : null;
+    const pulledLine = data.smoothConfirmed ? ensureHypersurfacePulledLineSheaf(data, targetLine, 1) : null;
+    const existing = hypersurfaceNormalSheafForMap(data.map);
+    const defaultName = defaultNormalBundleNameFromObjects(data.map);
+    const normal = createNormalBundleConstruction({
+      ...data,
+      defaultName,
+      name: existing?.nameDirty ? existing.name : defaultName,
+      nameDirty: existing?.nameDirty === true,
+      cleanEmbeddingConfirmed: data.smoothConfirmed === true
+    }, existing ? { replaceSheaf: existing } : {});
+    if (!normal) return null;
+    normal.construction.hypersurfaceLineSheafId = pulledLine?.id || null;
+    normal.construction.hypersurfaceDivisorMapId = data.map.id;
+    syncObjectLineage(normal, 'sheaf');
+    return normal;
+  }
+
+  function ensureHypersurfaceConormalBundle(map, hypersurface = null) {
+    const data = hypersurface || hypersurfaceRecommendationDataForMap(map);
+    if (!data) return null;
+    storeHypersurfaceDataOnMap(data);
+    const targetLine = data.cartierConfirmed ? ensureHypersurfaceTargetLineSheaf(data, -1) : null;
+    const pulledLine = data.cartierConfirmed ? ensureHypersurfacePulledLineSheaf(data, targetLine, -1) : null;
+    const existing = hypersurfaceConormalSheafForMap(data.map);
+    const defaultName = defaultConormalBundleNameFromObjects(data.map);
+    const conormal = createConormalBundleConstruction({
+      ...data,
+      defaultName,
+      name: existing?.nameDirty ? existing.name : defaultName,
+      nameDirty: existing?.nameDirty === true,
+      regularEmbeddingConfirmed: data.cartierConfirmed === true
+    }, existing ? { replaceSheaf: existing } : {});
+    if (!conormal) return null;
+    conormal.construction.hypersurfaceLineSheafId = pulledLine?.id || null;
+    conormal.construction.hypersurfaceDivisorMapId = data.map.id;
+    syncObjectLineage(conormal, 'sheaf');
+    return conormal;
   }
 
   function ramifiedCoverRecommendationContext(map) {
@@ -14337,6 +15110,11 @@
     return kind === 'sheaf' && refs.sheafType?.value === 'normal-bundle';
   }
 
+  function sheafConormalInputMode() {
+    const kind = inputIsModifyMode() ? modifyKind() : currentInputKind();
+    return kind === 'sheaf' && refs.sheafType?.value === 'conormal-bundle';
+  }
+
   function sheafRelativeInputMode() {
     const kind = inputIsModifyMode() ? modifyKind() : currentInputKind();
     const type = refs.sheafType?.value;
@@ -14360,6 +15138,7 @@
       && !sheafInternalHomInputMode()
       && !sheafIdealInputMode()
       && !sheafNormalInputMode()
+      && !sheafConormalInputMode()
       && !sheafRelativeInputMode()
       && !sheafSchurInputMode()
       && state.varieties.length > 0;
@@ -14507,6 +15286,11 @@
 
   function sheafNormalDraftMap() {
     const id = state.sheafNormalDraft?.mapId;
+    return state.maps.find((map) => map.id === id) || null;
+  }
+
+  function sheafConormalDraftMap() {
+    const id = state.sheafConormalDraft?.mapId;
     return state.maps.find((map) => map.id === id) || null;
   }
 
@@ -14799,6 +15583,14 @@
     renderCanvas(state.lastResult);
   }
 
+  function setSheafConormalPickTarget() {
+    state.sheafConormalDraft = state.sheafConormalDraft || {};
+    setCanvasPickEnabled(true, { render: false });
+    updateSheafConormalDraftControls();
+    syncGlobalPickButton();
+    renderCanvas(state.lastResult);
+  }
+
   function setSheafRelativePickTarget() {
     state.sheafRelativeDraft = state.sheafRelativeDraft || {};
     setCanvasPickEnabled(true, { render: false });
@@ -14892,6 +15684,14 @@
     return allowableSheafIdealMapPick(mapId);
   }
 
+  function sheafConormalPickableMaps() {
+    return state.maps.filter((map) => allowableSheafConormalMapPick(map.id));
+  }
+
+  function allowableSheafConormalMapPick(mapId) {
+    return allowableSheafIdealMapPick(mapId);
+  }
+
   function sheafRelativePickableMaps() {
     return state.maps.filter((map) => allowableSheafRelativeMapPick(map.id));
   }
@@ -14980,6 +15780,16 @@
     state.sheafNormalDraft = { mapId: id };
     setCanvasPickEnabled(false, { render: false });
     updateSheafNormalDraftControls();
+    syncDefaultRank(true);
+    syncDefaultSheafName();
+    recompute();
+  }
+
+  function handleSheafConormalPick(kind, id) {
+    if (kind !== 'map' || !allowableSheafConormalMapPick(id)) return;
+    state.sheafConormalDraft = { mapId: id };
+    setCanvasPickEnabled(false, { render: false });
+    updateSheafConormalDraftControls();
     syncDefaultRank(true);
     syncDefaultSheafName();
     recompute();
@@ -15123,6 +15933,16 @@
     if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
   }
 
+  function updateSheafConormalDraftControls() {
+    const show = sheafConormalInputMode();
+    if (refs.sheafConormalFormulaRow) refs.sheafConormalFormulaRow.hidden = !show;
+    if (refs.sheafConormalConfirmRow) refs.sheafConormalConfirmRow.hidden = !show;
+    updateSheafConormalMapButton(refs.sheafConormalMapButton, sheafConormalDraftMap());
+    syncPickFlowNote(refs.sheafConormalPickNote, 'sheaf-conormal', show);
+    syncGlobalPickButton();
+    if (show && !state.draftSheafNameDirty) syncDefaultSheafName();
+  }
+
   function updateSheafRelativeDraftControls() {
     const show = sheafRelativeInputMode();
     const isCotangent = refs.sheafType?.value === 'relative-cotangent';
@@ -15210,6 +16030,14 @@
     button.title = map ? `Replace ${label}` : 'Pick a closed embedding map on the canvas';
   }
 
+  function updateSheafConormalMapButton(button, map) {
+    if (!button) return;
+    button.setAttribute('aria-pressed', state.canvasPickEnabled && sheafConormalInputMode() ? 'true' : 'false');
+    const label = map ? latexToPlain(sanitizeMathLabel(map.name, 'f')) : 'map';
+    button.textContent = map ? label : 'pick map';
+    button.title = map ? `Replace ${label}` : 'Pick a closed embedding map on the canvas';
+  }
+
   function updateSheafRelativeMapButton(button, map) {
     if (!button) return;
     button.setAttribute('aria-pressed', state.canvasPickEnabled && sheafRelativeInputMode() ? 'true' : 'false');
@@ -15265,15 +16093,22 @@
   function sheafIdealPickHint() {
     if (!sheafIdealPickableMaps().length) return 'add a non-loop variety map X -> Y first';
     if (!sheafIdealDraftMap()) return 'click the embedding map X -> Y';
-    if (!refs.sheafIdealConfirm?.checked) return 'verify: f is an embedding, and not an iso';
+    if (!refs.sheafIdealConfirm?.checked) return 'click add to create the formal ideal sheaf, or verify the embedding hypothesis first';
     return inputIsModifyMode() ? 'click update to rebuild the ideal sheaf' : 'click add to create the ideal sheaf';
   }
 
   function sheafNormalPickHint() {
     if (!sheafNormalPickableMaps().length) return 'add a non-loop variety map X -> Y first';
     if (!sheafNormalDraftMap()) return 'click the closed embedding map X -> Y';
-    if (!refs.sheafNormalConfirm?.checked) return 'verify: f is a regular/lci closed embedding and X,Y are smooth';
+    if (!refs.sheafNormalConfirm?.checked) return 'click add to create the formal normal bundle, or verify the smooth embedding hypothesis first';
     return inputIsModifyMode() ? 'click update to rebuild the normal bundle' : 'click add to create the normal bundle';
+  }
+
+  function sheafConormalPickHint() {
+    if (!sheafConormalPickableMaps().length) return 'add a non-loop variety map X -> Y first';
+    if (!sheafConormalDraftMap()) return 'click the closed embedding map X -> Y';
+    if (!refs.sheafConormalConfirm?.checked) return 'click add to create the formal conormal bundle, or verify the regular/lci hypothesis first';
+    return inputIsModifyMode() ? 'click update to rebuild the conormal bundle' : 'click add to create the conormal bundle';
   }
 
   function sheafRelativePickHint() {
@@ -16179,6 +17014,12 @@
       const map = sheafNormalDraftMap();
       if (map) return defaultNormalBundleNameFromObjects(map);
     }
+    if (refs.sheafType?.value === 'conormal-bundle') {
+      const data = conormalBundleConstructionData();
+      if (data?.defaultName) return data.defaultName;
+      const map = sheafConormalDraftMap();
+      if (map) return defaultConormalBundleNameFromObjects(map);
+    }
     if (refs.sheafType?.value === 'relative-tangent' || refs.sheafType?.value === 'relative-cotangent') {
       const data = relativeSheafConstructionData();
       if (data?.defaultName) return data.defaultName;
@@ -16330,6 +17171,13 @@
     else if (refs.sheafType.value === 'normal-bundle') {
       const data = normalBundleConstructionData();
       const map = sheafNormalDraftMap();
+      const domain = data?.domain || state.varieties.find((variety) => variety.id === map?.domainId);
+      const codomain = data?.codomain || state.varieties.find((variety) => variety.id === map?.codomainId);
+      refs.rank.value = domain && codomain ? normalBundleRankPlaceholder(domain, codomain) : '';
+    }
+    else if (refs.sheafType.value === 'conormal-bundle') {
+      const data = conormalBundleConstructionData();
+      const map = sheafConormalDraftMap();
       const domain = data?.domain || state.varieties.find((variety) => variety.id === map?.domainId);
       const codomain = data?.codomain || state.varieties.find((variety) => variety.id === map?.codomainId);
       refs.rank.value = domain && codomain ? normalBundleRankPlaceholder(domain, codomain) : '';
@@ -16635,6 +17483,18 @@
         parents: [
           parent('variety', construction.sourceId, 'complete-intersection'),
           parent('variety', construction.ambientId, 'ambient')
+        ].filter((item) => item.id),
+        subobjects: [
+          object.domainId ? parent(object.domainKind, object.domainId, 'domain') : null,
+          object.codomainId ? parent(object.codomainKind, object.codomainId, 'codomain') : null
+        ].filter(Boolean)
+      };
+    }
+    if (kind === 'map' && construction.type === 'hypersurface-embedding') {
+      return {
+        parents: [
+          parent('variety', construction.sourceId || object.domainId, 'hypersurface'),
+          parent('variety', construction.targetId || object.codomainId, 'ambient')
         ].filter((item) => item.id),
         subobjects: [
           object.domainId ? parent(object.domainKind, object.domainId, 'domain') : null,
@@ -17469,6 +18329,7 @@
     if (construction.ramifiedCoverTangent === true) return refreshRamifiedCoverTangentSheaf(sheaf, construction);
     if (construction.ramifiedCoverTangentQuotient === true) return refreshRamifiedCoverTangentQuotientSheaf(sheaf, construction);
     if (construction.normalBundleMapId) return refreshNormalBundleSheaf(sheaf, construction);
+    if (construction.conormalBundleMapId) return refreshConormalBundleSheaf(sheaf, construction);
     if (construction.relativeSheafMapId) return refreshRelativeSheaf(sheaf, construction);
     return refreshGenericSesTermSheaf(sheaf, construction);
   }
@@ -17779,6 +18640,132 @@
     return changed;
   }
 
+  function refreshConormalBundleSheaf(sheaf, construction) {
+    const map = state.maps.find((item) => item.id === construction.conormalBundleMapId);
+    if (!map || map.domainKind !== 'variety' || map.codomainKind !== 'variety') return refreshGenericSesTermSheaf(sheaf, construction);
+    const domain = state.varieties.find((variety) => variety.id === map.domainId);
+    const codomain = state.varieties.find((variety) => variety.id === map.codomainId);
+    if (!domain || !codomain) return refreshGenericSesTermSheaf(sheaf, construction);
+    const sourceCotangent = ensureCotangentSheafForVariety(domain);
+    const targetCotangent = ensureCotangentSheafForVariety(codomain);
+    const pulledTargetCotangent = targetCotangent ? ensureConormalBundlePulledTargetCotangent({ map, domain, codomain }, targetCotangent) : null;
+    const nextDefault = defaultConormalBundleNameFromObjects(map);
+    let changed = false;
+    if (sourceCotangent && pulledTargetCotangent) {
+      const nextSources = [pulledTargetCotangent.id, sourceCotangent.id];
+      if (JSON.stringify(construction.sourceSheafIds || []) !== JSON.stringify(nextSources)) {
+        construction.sourceSheafIds = nextSources;
+        changed = true;
+      }
+      if (construction.sourceCotangentSheafId !== sourceCotangent.id) {
+        construction.sourceCotangentSheafId = sourceCotangent.id;
+        changed = true;
+      }
+      if (construction.targetCotangentSheafId !== targetCotangent.id) {
+        construction.targetCotangentSheafId = targetCotangent.id;
+        changed = true;
+      }
+      if (construction.pulledTargetCotangentSheafId !== pulledTargetCotangent.id) {
+        construction.pulledTargetCotangentSheafId = pulledTargetCotangent.id;
+        changed = true;
+      }
+      if (syncConormalBundleSequence(sheaf, construction, sourceCotangent, pulledTargetCotangent)) changed = true;
+    }
+    if (sheaf.baseVarietyId !== domain.id) {
+      sheaf.baseVarietyId = domain.id;
+      changed = true;
+    }
+    const nextRank = normalBundleRankPlaceholder(domain, codomain);
+    if (sheaf.rank !== nextRank) {
+      sheaf.rank = nextRank;
+      changed = true;
+    }
+    if (sheaf.basis !== 'chern') {
+      sheaf.basis = 'chern';
+      changed = true;
+    }
+    if (construction.defaultName !== nextDefault) {
+      construction.defaultName = nextDefault;
+      changed = true;
+    }
+    if (!sheaf.nameDirty && canonicalMathLabel(sheaf.name) !== canonicalMathLabel(nextDefault)) {
+      sheaf.name = nextDefault;
+      changed = true;
+    }
+    if (syncObjectLineage(sheaf, 'sheaf')) changed = true;
+    return changed;
+  }
+
+  function syncConormalBundleSequence(conormal, construction, sourceCotangent, pulledTargetCotangent) {
+    if (!conormal || !sourceCotangent || !pulledTargetCotangent) return false;
+    let sequence = construction.sequenceId ? state.sequences.find((item) => item.id === construction.sequenceId) : null;
+    let created = false;
+    if (!sequence) {
+      const previousActive = {
+        sequenceId: state.activeSequenceId,
+        sheafId: state.activeSheafId,
+        varietyId: state.activeVarietyId,
+        mapId: state.activeMapId
+      };
+      sequence = createShortExactSequenceFromObjects({
+        sheafA: conormal,
+        sheafB: pulledTargetCotangent,
+        sheafC: sourceCotangent,
+        baseVarietyId: conormal.baseVarietyId,
+        autoMapABName: '\\iota',
+        autoMapBCName: '\\pi',
+        computedIndex: 0
+      });
+      state.activeSequenceId = previousActive.sequenceId;
+      state.activeSheafId = previousActive.sheafId;
+      state.activeVarietyId = previousActive.varietyId;
+      state.activeMapId = previousActive.mapId;
+      if (!sequence) return false;
+      created = true;
+      construction.sequenceId = sequence.id;
+      construction.inclusionMapId = sequence.mapIds?.[0] || null;
+      construction.quotientMapId = sequence.mapIds?.[1] || null;
+    }
+    const nextSheafIds = [conormal.id, pulledTargetCotangent.id, sourceCotangent.id];
+    let changed = false;
+    if (setMissingSequenceComputedIndex(sequence, 0)) changed = true;
+    if (JSON.stringify(sequence.sheafIds || []) !== JSON.stringify(nextSheafIds)) {
+      detachShortExactSequenceMemberships(sequence.id);
+      sequence.sheafIds = nextSheafIds;
+      attachShortExactSequenceMemberships(sequence);
+      changed = true;
+    }
+    if (sequence.baseVarietyId !== conormal.baseVarietyId) {
+      sequence.baseVarietyId = conormal.baseVarietyId;
+      changed = true;
+    }
+    if (created && !sequence.tail?.hiddenOnCanvas) {
+      sequence.tail = { ...normalizeSequenceTailCurve(sequence.tail), hiddenOnCanvas: true };
+      changed = true;
+    }
+    (sequence.mapIds || []).forEach((mapId) => {
+      const sequenceMap = state.maps.find((item) => item.id === mapId);
+      if (!sequenceMap) return;
+      if (created && sequenceMap.hiddenOnCanvas !== true) {
+        sequenceMap.hiddenOnCanvas = true;
+        changed = true;
+      }
+      const nextConstruction = {
+        ...(sequenceMap.construction || {}),
+        type: 'short-exact-sequence-map',
+        sequenceId: sequence.id,
+        position: sequence.mapIds.indexOf(mapId),
+        sheafIds: nextSheafIds,
+        defaultName: sequenceMap.construction?.defaultName || sequenceMap.name
+      };
+      if (JSON.stringify(sequenceMap.construction || {}) !== JSON.stringify(nextConstruction)) {
+        sequenceMap.construction = nextConstruction;
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
   function refreshRelativeSheaf(sheaf, construction) {
     if (construction.ramifiedCoverRelative === true) return refreshRamifiedCoverRelativeCotangentSheaf(sheaf, construction);
     const map = state.maps.find((item) => item.id === construction.relativeSheafMapId);
@@ -17993,6 +18980,7 @@
     if (construction?.type === 'ramified-cover-ramification-inclusion') return refreshRamificationInclusionMap(map, construction);
     if (construction?.type === 'grassmannian-map') return refreshGrassmannianMap(map, construction);
     if (construction?.type === 'complete-intersection-embedding') return refreshCompleteIntersectionEmbeddingMap(map, construction);
+    if (construction?.type === 'hypersurface-embedding') return refreshHypersurfaceEmbeddingMap(map, construction);
     if (construction?.type !== 'composition') return false;
     const [first, second] = (construction.mapIds || []).map((id) => state.maps.find((item) => item.id === id));
     if (!first || !second) return false;
@@ -18025,6 +19013,20 @@
       changed = true;
     }
     if (ensureAbelJacobiKnownHomologyRules(map)) changed = true;
+    if (syncObjectLineage(map, 'map')) changed = true;
+    return changed;
+  }
+
+  function refreshHypersurfaceEmbeddingMap(map, construction) {
+    let changed = false;
+    if (construction.sourceId !== map.domainId) {
+      construction.sourceId = map.domainId;
+      changed = true;
+    }
+    if (construction.targetId !== map.codomainId) {
+      construction.targetId = map.codomainId;
+      changed = true;
+    }
     if (syncObjectLineage(map, 'map')) changed = true;
     return changed;
   }
@@ -18977,7 +19979,7 @@
     let draftSheaf = refs.sheafType.value;
     const hasTwistBase = state.varieties.some((variety) => varietySupportsTwist(variety.type || 'abstract'));
     const hasUniversalBundleBase = state.varieties.some((variety) => varietySupportsUniversalBundle(variety.type || 'abstract'));
-    const sheafTypeHasParentRow = (type) => type === 'map-operation' || type === 'direct-sum' || sheafSelfOperationType(type) || type === 'dual' || type === 'internal-hom' || type === 'ideal-sheaf' || type === 'normal-bundle' || type === 'relative-tangent' || type === 'relative-cotangent' || type === 'tensor' || type === 'schur';
+    const sheafTypeHasParentRow = (type) => type === 'map-operation' || type === 'direct-sum' || sheafSelfOperationType(type) || type === 'dual' || type === 'internal-hom' || type === 'ideal-sheaf' || type === 'normal-bundle' || type === 'conormal-bundle' || type === 'relative-tangent' || type === 'relative-cotangent' || type === 'tensor' || type === 'schur';
     let sheafHasParentRow = false;
     let waitingForSheafBase = false;
     let editingSheafMapOperation = false;
@@ -18994,6 +19996,8 @@
     let creatingSheafIdeal = false;
     let editingSheafNormal = false;
     let creatingSheafNormal = false;
+    let editingSheafConormal = false;
+    let creatingSheafConormal = false;
     let editingSheafRelative = false;
     let creatingSheafRelative = false;
     let editingSheafSchur = false;
@@ -19015,6 +20019,8 @@
       creatingSheafIdeal = inputIsCreateMode() && draftingSheaf && draftSheaf === 'ideal-sheaf';
       editingSheafNormal = inputIsModifyMode() && draftingSheaf && draftSheaf === 'normal-bundle';
       creatingSheafNormal = inputIsCreateMode() && draftingSheaf && draftSheaf === 'normal-bundle';
+      editingSheafConormal = inputIsModifyMode() && draftingSheaf && draftSheaf === 'conormal-bundle';
+      creatingSheafConormal = inputIsCreateMode() && draftingSheaf && draftSheaf === 'conormal-bundle';
       editingSheafRelative = inputIsModifyMode() && draftingSheaf && (draftSheaf === 'relative-tangent' || draftSheaf === 'relative-cotangent');
       creatingSheafRelative = inputIsCreateMode() && draftingSheaf && (draftSheaf === 'relative-tangent' || draftSheaf === 'relative-cotangent');
       editingSheafSchur = inputIsModifyMode() && draftingSheaf && draftSheaf === 'schur';
@@ -19045,6 +20051,7 @@
     )) || editingSheafInternalHom;
     const canIdealSheaf = state.maps.some((map) => allowableSheafIdealMapPick(map.id)) || editingSheafIdeal;
     const canNormalBundle = state.maps.some((map) => allowableSheafNormalMapPick(map.id)) || editingSheafNormal;
+    const canConormalBundle = state.maps.some((map) => allowableSheafConormalMapPick(map.id)) || editingSheafConormal;
     const canRelativeSheaf = state.maps.some((map) => allowableSheafRelativeMapPick(map.id)) || editingSheafRelative;
     const canSchurSheaf = state.sheaves.some((sheaf) => (
       (!editingSheafSchur || sheaf.id !== state.activeSheafId) && sheafHasLocallyFreeLabel(sheaf)
@@ -19126,6 +20133,15 @@
       refs.sheafType.value = 'abstract';
       draftSheaf = 'abstract';
       clearSheafNormalDraft();
+      syncDefaultRank(true);
+      syncDefaultSheafName();
+    }
+    const conormalOption = refs.sheafType?.querySelector?.('option[value="conormal-bundle"]');
+    if (conormalOption) conormalOption.disabled = !canConormalBundle;
+    if (!canConormalBundle && draftSheaf === 'conormal-bundle' && !editingSheafConormal) {
+      refs.sheafType.value = 'abstract';
+      draftSheaf = 'abstract';
+      clearSheafConormalDraft();
       syncDefaultRank(true);
       syncDefaultSheafName();
     }
@@ -19211,6 +20227,7 @@
     updateSheafInternalHomDraftControls();
     updateSheafIdealDraftControls();
     updateSheafNormalDraftControls();
+    updateSheafConormalDraftControls();
     updateSheafRelativeDraftControls();
     updateSheafSchurDraftControls();
     updateSheafMapDraftControls();
@@ -19230,7 +20247,7 @@
     updateSheafBaseButton();
     if (refs.addObject) {
       const editingSequence = activeSesEditMode();
-      const canAddSheaf = !draftingSheaf || creatingSheafMapOperation || creatingSheafBinary || creatingSheafSelfSum || creatingSheafDual || creatingSheafInternalHom || creatingSheafIdeal || creatingSheafNormal || creatingSheafRelative || creatingSheafSchur || !!draftBase;
+      const canAddSheaf = !draftingSheaf || creatingSheafMapOperation || creatingSheafBinary || creatingSheafSelfSum || creatingSheafDual || creatingSheafInternalHom || creatingSheafIdeal || creatingSheafNormal || creatingSheafConormal || creatingSheafRelative || creatingSheafSchur || !!draftBase;
       const hasEditableObject = !inputIsModifyMode() || editingSequence || !!activeObjectForKind(currentInputKind());
       const creatingMap = draftingMap && inputIsCreateMode();
       const editingRamifiedCoverMap = inputIsModifyMode() && selectedMap()?.construction?.type === 'ramified-cover-map';
@@ -19246,9 +20263,10 @@
       const sheafInternalHomReady = !(creatingSheafInternalHom || editingSheafInternalHom) || pickFlowReady('sheaf-internal-hom');
       const sheafIdealReady = !(creatingSheafIdeal || editingSheafIdeal) || pickFlowReady('sheaf-ideal');
       const sheafNormalReady = !(creatingSheafNormal || editingSheafNormal) || pickFlowReady('sheaf-normal');
+      const sheafConormalReady = !(creatingSheafConormal || editingSheafConormal) || pickFlowReady('sheaf-conormal');
       const sheafRelativeReady = !(creatingSheafRelative || editingSheafRelative) || pickFlowReady('sheaf-relative');
       const sheafSchurReady = !(creatingSheafSchur || editingSheafSchur) || pickFlowReady('sheaf-schur');
-      const creatingParentSheaf = creatingSheafMapOperation || creatingSheafBinary || creatingSheafSelfSum || creatingSheafDual || creatingSheafInternalHom || creatingSheafIdeal || creatingSheafNormal || creatingSheafRelative || creatingSheafSchur;
+      const creatingParentSheaf = creatingSheafMapOperation || creatingSheafBinary || creatingSheafSelfSum || creatingSheafDual || creatingSheafInternalHom || creatingSheafIdeal || creatingSheafNormal || creatingSheafConormal || creatingSheafRelative || creatingSheafSchur;
       const productFactors = productDraftFactors();
       const productDim = productFactors.length === 2 ? productDimensionFromFactors(productFactors[0], productFactors[1]) : 0;
       const productNeedsFactors = creatingProduct || updatingProduct;
@@ -19266,7 +20284,7 @@
       const recommendationReady = !draftingRecommendations || !!recommendationConstructionData();
       const identifyReady = !draftingCombinedIdentify || !!identifyConstructionData();
       const numberReady = !draftingNumber || globalInvariantNameIsValid(refs.globalInvariantName?.value);
-      refs.addObject.disabled = (draftingMap && !mapReady) || !ramifiedCoverMapReady || (productNeedsFactors && !productReady) || !grassmannianReady || !sesReady || !sesEditReady || !blowupReady || !ramifiedCoverReady || !tautologicalSesReady || !grassmannianMapReady || !picardCanonicalReady || !recommendationReady || !identifyReady || !numberReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSelfSum || editingSheafSelfSum) && !sheafSelfSumReady) || ((creatingSheafDual || editingSheafDual) && !sheafDualReady) || ((creatingSheafInternalHom || editingSheafInternalHom) && !sheafInternalHomReady) || ((creatingSheafIdeal || editingSheafIdeal) && !sheafIdealReady) || ((creatingSheafNormal || editingSheafNormal) && !sheafNormalReady) || ((creatingSheafRelative || editingSheafRelative) && !sheafRelativeReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
+      refs.addObject.disabled = (draftingMap && !mapReady) || !ramifiedCoverMapReady || (productNeedsFactors && !productReady) || !grassmannianReady || !sesReady || !sesEditReady || !blowupReady || !ramifiedCoverReady || !tautologicalSesReady || !grassmannianMapReady || !picardCanonicalReady || !recommendationReady || !identifyReady || !numberReady || ((creatingSheafMapOperation || editingSheafMapOperation) && !sheafMapReady) || ((creatingSheafBinary || editingSheafBinary) && !sheafBinaryReady) || ((creatingSheafSelfSum || editingSheafSelfSum) && !sheafSelfSumReady) || ((creatingSheafDual || editingSheafDual) && !sheafDualReady) || ((creatingSheafInternalHom || editingSheafInternalHom) && !sheafInternalHomReady) || ((creatingSheafIdeal || editingSheafIdeal) && !sheafIdealReady) || ((creatingSheafNormal || editingSheafNormal) && !sheafNormalReady) || ((creatingSheafConormal || editingSheafConormal) && !sheafConormalReady) || ((creatingSheafRelative || editingSheafRelative) && !sheafRelativeReady) || ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) || (creatingSheaf && !creatingParentSheaf && waitingForSheafBase) || (creatingSheaf && !creatingParentSheaf && !hasVariety) || (!canAddSheaf && draftingSheaf && !creatingSheaf) || !hasEditableObject;
       refs.addObject.textContent = inputIsModifyMode() ? 'update' : ((combinedCreateMode() || draftingRecommendations) ? 'build' : 'add');
       let addTitle = '';
       if (creatingMap) {
@@ -19311,6 +20329,8 @@
         addTitle = pickFlowHint(pickFlowById('sheaf-ideal'));
       } else if ((creatingSheafNormal || editingSheafNormal) && !sheafNormalReady) {
         addTitle = pickFlowHint(pickFlowById('sheaf-normal'));
+      } else if ((creatingSheafConormal || editingSheafConormal) && !sheafConormalReady) {
+        addTitle = pickFlowHint(pickFlowById('sheaf-conormal'));
       } else if ((creatingSheafRelative || editingSheafRelative) && !sheafRelativeReady) {
         addTitle = pickFlowHint(pickFlowById('sheaf-relative'));
       } else if ((creatingSheafSchur || editingSheafSchur) && !sheafSchurReady) {
@@ -25815,12 +26835,24 @@
 
   function classStepOwnConstructionRules(session) {
     const construction = session?.sheaf?.construction || {};
-    if (construction.type === 'ses-term') return classStepSesRules(session);
-    if (construction.type === 'pushforward') return classStepPushforwardGrrRules(session, session.sheaf, session.geometry);
-    if (classStepHasBasicConstructionRule(construction.type)) {
-      return classStepBasicConstructionRules(session, session.sheaf, session.geometry, session.family);
+    const rules = [];
+    if (classStepSheafHasSesRules(session?.sheaf)) rules.push(...classStepSesRules(session));
+    if (construction.type === 'pushforward') {
+      rules.push(...classStepPushforwardGrrRules(session, session.sheaf, session.geometry));
+      return rules;
     }
-    return [];
+    if (classStepHasBasicConstructionRule(construction.type)) {
+      rules.push(...classStepBasicConstructionRules(session, session.sheaf, session.geometry, session.family));
+    }
+    return rules;
+  }
+
+  function classStepSheafHasSesRules(sheaf) {
+    const sequence = sesSequenceForTermSheaf(sheaf);
+    if (!sequence) return false;
+    if (normalizeSesComputedIndex(sequence.computedIndex) != null) return true;
+    const construction = sheaf?.construction || sheaf?.sourceObject?.construction || {};
+    return construction.type === 'ses-term';
   }
 
   function classStepHasBasicConstructionRule(type) {
@@ -26574,7 +27606,7 @@
     rules.push(...classStepDefaultSheafRulesForDef(def, sheaf, geometry, family, session));
     const identificationRule = classStepSheafIdentificationRuleForSource(source, session);
     if (identificationRule) rules.push(identificationRule);
-    if (sheaf?.construction?.type === 'ses-term') {
+    if (classStepSheafHasSesRules(sheaf)) {
       rules.push(...classStepSesRules({
         ...session,
         sheaf,
@@ -26608,6 +27640,8 @@
   function classStepSheafIdentificationRuleForSource(source, session) {
     const { def, sheaf, geometry, family } = source || {};
     if (!def || !sheaf || !geometry || !family) return null;
+    const hypersurface = classStepHypersurfaceLineIdentificationForSheaf(geometry, sheaf);
+    if (hypersurface) return classStepHypersurfaceLineIdentificationRuleForDef(def, family, { ...session, sheaf, geometry }, hypersurface);
     const identification = sheafIdentificationRuleForSheaf(geometry, sheaf);
     if (!identification?.target) return null;
     return classStepSheafIdentificationRuleForDef(def, family, { ...session, sheaf, geometry }, identification);
@@ -27435,7 +28469,8 @@
   function classStepSesRules(session) {
     const sequence = sesSequenceForTermSheaf(session.sheaf);
     const terms = sesTermSheaves(sequence);
-    const missingIndex = terms.findIndex((term) => term?.id === session.sheaf?.sourceObject?.id);
+    const sheafObjectId = session.sheaf?.sourceObject?.id || session.sheaf?.id || null;
+    const missingIndex = terms.findIndex((term) => term?.id === sheafObjectId);
     if (missingIndex < 0) return [];
     if (!sesSequenceAllowsComputedIndex(sequence, missingIndex)) return [];
     const d = session.dimension;
@@ -27555,6 +28590,18 @@
 
   function classStepSheafIdentificationRules(session) {
     if (!session?.sheaf || !session?.geometry) return [];
+    const hypersurface = classStepHypersurfaceLineIdentificationForSheaf(session.geometry, session.sheaf);
+    if (hypersurface) {
+      const out = [];
+      ['chern', 'character'].forEach((family) => {
+        const defs = classStepSheafDefsForSheaf(session.sheaf, session.geometry, family);
+        defs.forEach((def) => {
+          const rule = classStepHypersurfaceLineIdentificationRuleForDef(def, family, session, hypersurface);
+          if (rule) out.push(rule);
+        });
+      });
+      return out;
+    }
     const identification = sheafIdentificationRuleForSheaf(session.geometry, session.sheaf);
     if (!identification?.target) return [];
     const out = [];
@@ -27587,6 +28634,55 @@
       classStepGroupKey: `Identification:${session.geometry.varietyId || homologyScopeId(session.geometry)}:${sheafKey}:${family}`,
       classStepDisplayKey: `Identification:${identification.id}:${family}:${def.degree}`,
       classStepDisplayLatex: classStepSheafIdentificationDisplayLatex(session.sheaf, session.geometry, identification),
+      lhs,
+      rhs: serializeHomologyPoly(rhsPoly)
+    };
+  }
+
+  function classStepHypersurfaceLineIdentificationForSheaf(geometry, sheaf) {
+    const construction = sheaf?.sourceObject?.construction || sheaf?.construction || {};
+    const lineObject = state.sheaves.find((item) => item.id === construction.hypersurfaceLineSheafId);
+    if (!lineObject || lineObject.baseVarietyId !== geometry?.varietyId) return null;
+    const lineSheaf = sheafFromObject(lineObject, geometry);
+    const lineBundle = buildSourceSheafBundle(geometry, lineObject);
+    return {
+      id: `identify-hypersurface-line-${variableIdSafe(sheaf?.sourceObject?.id || sheaf?.id || 'sheaf')}`,
+      lineObject,
+      lineSheaf,
+      lineBundle,
+      targetLatex: sheafLabelLatex(lineSheaf),
+      targetPlain: sheafLabelPlain(lineSheaf)
+    };
+  }
+
+  function classStepHypersurfaceLineIdentificationRuleForDef(def, family, session, identification) {
+    if (!def || !session?.geometry || !session?.sheaf || !identification?.lineBundle) return null;
+    const d = session.geometry.dim;
+    let rhsPoly;
+    if (family === 'character') {
+      rhsPoly = def.degree === 0
+        ? rankAsDegreeZeroPoly(identification.lineBundle, identification.targetPlain || 'line')
+        : componentOrZero(identification.lineBundle.chComps, def.degree);
+    } else {
+      rhsPoly = def.degree === 0 ? Poly.one() : componentOrZero(identification.lineBundle.cComps, def.degree);
+    }
+    rhsPoly = Poly.from(rhsPoly).truncate(d);
+    const lhs = { powers: { [def.id]: 1 } };
+    if (polyEquals(polyFromPowers(lhs.powers), rhsPoly)) return null;
+    const sheafKey = session.sheaf?.sourceObject?.id || session.sheaf?.id || sheafLabelPlain(session.sheaf);
+    return {
+      id: `step-hypersurface-line-identification-${family}-${variableIdSafe(def.id)}`,
+      builtin: true,
+      enabled: true,
+      selected: true,
+      stepSourceLabel: 'Identification',
+      classStepKind: 'hypersurface-line-identification',
+      classStepApplyAllOccurrences: true,
+      classStepAllowSameLhs: true,
+      classStepPayoffRule: true,
+      classStepGroupKey: `Identification:${session.geometry.varietyId || homologyScopeId(session.geometry)}:${sheafKey}:${family}:hypersurface-line`,
+      classStepDisplayKey: `Identification:${identification.id}:${family}:${def.degree}`,
+      classStepDisplayLatex: `${sheafLabelLatex(session.sheaf)}=${identification.targetLatex}`,
       lhs,
       rhs: serializeHomologyPoly(rhsPoly)
     };
@@ -31076,6 +32172,8 @@
       return buildLocallyFreeBundle(geometry.dim, sheaf, { ...options, chernSubjectLatex: sheaf.labelLatex, characterSubjectLatex: sheaf.labelLatex });
     }
     if (construction.type === 'ses-term') {
+      const hypersurfaceLine = buildHypersurfaceLineIdentificationBundle(geometry, sheaf, construction);
+      if (hypersurfaceLine) return hypersurfaceLine;
       const ramifiedTangent = construction.ramifiedCoverTangent === true
         ? buildRamifiedCoverTangentBundle(geometry, sheaf)
         : null;
@@ -31145,6 +32243,13 @@
       });
     }
     return buildAbstractBundle(geometry.dim, sheaf, sheaf.labelLatex, sheaf.labelPlain, sheaf.rankLatex, sheaf.rankPlain, options);
+  }
+
+  function buildHypersurfaceLineIdentificationBundle(geometry, sheaf, construction) {
+    const lineObject = state.sheaves.find((item) => item.id === construction?.hypersurfaceLineSheafId);
+    if (!lineObject || lineObject.baseVarietyId !== geometry?.varietyId) return null;
+    const bundle = buildSourceSheafBundle(geometry, lineObject);
+    return buildBundleFromCh(bundle.chComps, bundle.rankLatex, bundle.rankPlain, sheaf.labelLatex, sheaf.labelPlain);
   }
 
   function buildPicardPoincareLineBundle(geometry, sheaf, options = {}) {
@@ -39511,6 +40616,13 @@
       out.targetTangentSheafId = sanitizePresetId(construction.targetTangentSheafId);
       out.pulledTargetTangentSheafId = sanitizePresetId(construction.pulledTargetTangentSheafId);
       out.cleanEmbeddingConfirmed = construction.cleanEmbeddingConfirmed === true;
+      out.conormalBundleMapId = sanitizePresetId(construction.conormalBundleMapId);
+      out.sourceCotangentSheafId = sanitizePresetId(construction.sourceCotangentSheafId);
+      out.targetCotangentSheafId = sanitizePresetId(construction.targetCotangentSheafId);
+      out.pulledTargetCotangentSheafId = sanitizePresetId(construction.pulledTargetCotangentSheafId);
+      out.regularEmbeddingConfirmed = construction.regularEmbeddingConfirmed === true;
+      out.hypersurfaceLineSheafId = sanitizePresetId(construction.hypersurfaceLineSheafId);
+      out.hypersurfaceDivisorMapId = sanitizePresetId(construction.hypersurfaceDivisorMapId);
       out.relativeSheafMapId = sanitizePresetId(construction.relativeSheafMapId);
       out.relativeSheafType = sanitizePresetEnum(construction.relativeSheafType, ['tangent', 'cotangent'], 'tangent');
       out.sourceDifferentialSheafId = sanitizePresetId(construction.sourceDifferentialSheafId);
@@ -39605,12 +40717,22 @@
       out.basePointFree = construction.basePointFree === true;
       out.projectiveModel = construction.projectiveModel === true;
       out.nameDirty = construction.nameDirty === true;
+    } else if (ownerKind === 'map' && type === 'hypersurface-embedding') {
+      out.sourceId = sanitizePresetId(construction.sourceId);
+      out.targetId = sanitizePresetId(construction.targetId);
+      out.nameDirty = construction.nameDirty === true;
     } else if (ownerKind === 'map' && type === 'complete-intersection-embedding') {
       out.sourceId = sanitizePresetId(construction.sourceId);
       out.ambientId = sanitizePresetId(construction.ambientId);
       out.nameDirty = construction.nameDirty === true;
     } else {
       return null;
+    }
+    if (ownerKind === 'map') {
+      const hypersurfaceCoefficients = sanitizeDivisorCoefficients(construction.hypersurfaceDivisorCoefficients || {});
+      if (Object.keys(hypersurfaceCoefficients).length) out.hypersurfaceDivisorCoefficients = hypersurfaceCoefficients;
+      if (construction.hypersurfaceCartierConfirmed === true) out.hypersurfaceCartierConfirmed = true;
+      if (construction.hypersurfaceSmoothConfirmed === true) out.hypersurfaceSmoothConfirmed = true;
     }
     if (construction.defaultName != null) out.defaultName = sanitizeMathLabel(construction.defaultName, '');
     return compactSerializable(out);
@@ -39648,6 +40770,7 @@
     state.sheafInternalHomPickTarget = 'source';
     state.sheafIdealDraft = null;
     state.sheafNormalDraft = null;
+    state.sheafConormalDraft = null;
     state.sheafRelativeDraft = null;
     state.sheafSchurDraft = null;
     state.sheafMapDraft = null;
@@ -39701,6 +40824,8 @@
     if (markedIndex >= 0) return markedIndex;
     const normalIndex = terms.findIndex((term) => term?.construction?.normalBundleMapId);
     if (normalIndex >= 0) return normalIndex;
+    const conormalIndex = terms.findIndex((term) => term?.construction?.conormalBundleMapId);
+    if (conormalIndex >= 0) return conormalIndex;
     const ramifiedCotangentIndex = terms.findIndex((term) => term?.construction?.ramifiedCoverCotangent === true);
     if (ramifiedCotangentIndex >= 0) return ramifiedCotangentIndex;
     const ramifiedTangentIndex = terms.findIndex((term) => term?.construction?.ramifiedCoverTangentQuotient === true);
