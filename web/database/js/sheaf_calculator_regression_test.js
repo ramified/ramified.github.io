@@ -38,6 +38,8 @@ function loadCalculator() {
     classStepSyncCurrentTotalDisplay,
     collectClassStepRuleCandidates,
     classStepMaterializeRule,
+    classStepRuleDisplayLatex,
+    classStepSavedEntryDisplayLatex,
     renderClassStepPanel,
     renderClassStepCalculationLatex,
     classStepHistoryPlain,
@@ -75,6 +77,8 @@ function loadCalculator() {
     formatPolyLatex,
     pullbackPolynomial,
     pushforwardPolynomialByDegree,
+    mapPullbackOperatorLatex,
+    mapPushforwardOperatorLatex,
     mapPushforwardClassDefinitions,
     mapPushforwardSourceKeyHasDirectAutomaticFormula,
     directAutomaticPushforwardSourceKeyPolynomial,
@@ -6036,6 +6040,102 @@ function testClassStepNestedPushforwardUsesSourceGeometryPointRule() {
   assert.strictEqual(api.formatPolyPlain(session.formulaPoly), '[p]');
 }
 
+function testClassStepSavedRuleDisplayHydratesGeneratedMapIds() {
+  const api = loadCalculator();
+  api.state.varieties = [
+    {
+      id: 'X1',
+      type: 'curve',
+      dim: '1',
+      name: 'C',
+      genus: 'g',
+      homology: { classes: { unit: { symbol: '1' }, point: { symbol: '[p]' } } }
+    },
+    {
+      id: 'X3',
+      type: 'abstract',
+      dim: '2',
+      name: 'X',
+      homology: { classes: { unit: { symbol: '1' }, point: { symbol: '[p]' } } }
+    },
+    {
+      id: 'X7',
+      type: 'point',
+      dim: '0',
+      name: '\\{*\\}',
+      homology: { classes: { unit: { symbol: '1' }, point: { symbol: '[p]' } } }
+    }
+  ];
+  api.state.maps = [
+    { id: 'M4', name: 'f', domainKind: 'variety', domainId: 'X1', codomainKind: 'variety', codomainId: 'X3' },
+    { id: 'M8', name: 'g', domainKind: 'variety', domainId: 'X1', codomainKind: 'variety', codomainId: 'X7' }
+  ];
+  api.state.sheaves = [
+    { id: 'E5', type: 'canonical', name: 'K_{X}', twist: '1', rank: '1', baseVarietyId: 'X3', basis: 'chern' },
+    {
+      id: 'E6',
+      type: 'abstract',
+      name: 'f^{*}K_{X}',
+      rank: '1',
+      baseVarietyId: 'X1',
+      basis: 'chern',
+      construction: { type: 'pullback', mapId: 'M4', sheafId: 'E5', exact: true }
+    },
+    {
+      id: 'E9',
+      type: 'abstract',
+      name: 'g_{*}f^{*}K_{X}',
+      baseVarietyId: 'X7',
+      basis: 'chern',
+      construction: { type: 'pushforward', mapId: 'M8', sheafId: 'E6', exact: true, proper: true }
+    }
+  ];
+  const nestedMapId = 'map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1';
+  const savedRule = {
+    id: 'step-saved-stale-display',
+    kind: 'rewrite',
+    family: 'formula',
+    target: 'formula',
+    degree: 0,
+    dimension: 0,
+    geometryId: 'X7',
+    labelLatex: '\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})',
+    labelPlain: 'ch_0(g_*f^*K_X)',
+    lhsLatex: 'sheaf_E9_ch0',
+    rhsLatex: `-g + 1 - ${nestedMapId}`,
+    lhsPlain: 'sheaf_E9_ch0',
+    rhsPlain: `-g + 1 - ${nestedMapId}`,
+    displayLatex: `\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})=-g + 1 - ${nestedMapId}`,
+    displayPlain: `ch_0(g_*f^*K_X)=-g + 1 - ${nestedMapId}`,
+    lhs: { powers: { sheaf_E9_ch0: 1 } },
+    rhs: [
+      { coefficient: '-1', powers: { curveGenus: 1 } },
+      { coefficient: '1' },
+      { coefficient: '-1', powers: { [nestedMapId]: 1 } }
+    ],
+    variableIds: ['sheaf_E9_ch0', 'curveGenus', nestedMapId]
+  };
+  const display = api.classStepSavedEntryDisplayLatex(savedRule);
+  assert(!display.includes(nestedMapId), display);
+  assert(!display.includes('map_pushforward'), display);
+  assert(display.includes('g_{*}\\left(f^{*}\\left(c_{1}(X)\\right)\\right)'), display);
+
+  const ruleDisplay = api.classStepRuleDisplayLatex({
+    classStepDisplayLatex: display,
+    lhs: savedRule.lhs,
+    rhs: savedRule.rhs
+  });
+  assert(!ruleDisplay.includes('map_pushforward'), ruleDisplay);
+}
+
+function testMapPushforwardOperatorWrapsSubscriptedMapNames() {
+  const api = loadCalculator();
+  assert.strictEqual(api.mapPushforwardOperatorLatex({ name: 'f_1' }), '{f_1}_{*}');
+  assert.strictEqual(api.mapPushforwardOperatorLatex({ name: '\\pi_{C}' }), '{\\pi_{C}}_{*}');
+  assert.strictEqual(api.mapPullbackOperatorLatex({ name: 'f^{\\prime}' }), '{f^{\\prime}}^{*}');
+  assert.strictEqual(api.mapPullbackOperatorLatex({ name: 'f_1' }), 'f_1^{*}');
+}
+
 function testClassStepSwitchingRulesUnlockStoredOppositeBasisRule() {
   const api = loadCalculator();
   api.state.varieties = [{ id: 'X', type: 'abstract', dim: '2', name: 'X' }];
@@ -7123,6 +7223,8 @@ testClassStepSessionOpensSeparateCard();
 testClassStepRuleOnceAndOnePassSemantics();
 testClassStepCachedRulesIncludeMapWrappedCandidates();
 testClassStepNestedPushforwardUsesSourceGeometryPointRule();
+testClassStepSavedRuleDisplayHydratesGeneratedMapIds();
+testMapPushforwardOperatorWrapsSubscriptedMapNames();
 testClassStepSwitchingRulesUnlockStoredOppositeBasisRule();
 testClassStepUseCacheRenderingSurvivesStaleVariableMetadata();
 testClassStepStopRowsUsePreservedComponents();

@@ -1,10 +1,10 @@
-// Save this file as theorem_graph_presets/corrections_wait.preset.js
+// Save this file as theorem_graph_presets/maintenance_tracker.preset.js
 // Add this entry to theorem_graph_presets/presets.js:
-// { label: "Corrections wait", key: "corrections_wait", file: "corrections_wait.preset.js" }
+// { label: "Maintenance Tracker", key: "maintenance_tracker", file: "maintenance_tracker.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
-window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
+window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
   "schemaVersion": 4,
-  "title": "Corrections wait",
+  "title": "Maintenance Tracker",
   "nodes": [
     {
       "id": "n4",
@@ -43,10 +43,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 396.4,
-      "y": 293.3
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 309.7,
+      "y": 393.3
     },
     {
       "id": "n25",
@@ -57,8 +57,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
       "x": 360.5,
       "y": 46
     },
@@ -68,9 +68,9 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "label": "complex calculator",
       "details": [
         {
-          "id": "tasks",
-          "label": "tasks",
-          "type": "list",
+          "id": "goal",
+          "label": "goal",
+          "type": "checkbox",
           "text": "add complex, allowing user to truncate to shorter complex\nSES is a special complex\nSES induces LES\nfiltration and quotient\nit induces spectral sequencez\ntriangle can change to a SES if user claim sp\ntriangle can shift itself"
         }
       ],
@@ -93,7 +93,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
           "id": "bugs",
           "label": "bugs",
           "type": "list",
-          "text": "add a warning when user try to delete the page: do you save?\ndefault preset(shown on the internet when I open the page) should be Corrections wait(do you have better name for that? This records the website maintenance I have fixed/still remains to be fixed)"
+          "text": "add a warning when user try to delete the page: do you save?\ndefault preset(shown on the internet when I open the page) should be Maintenance Tracker(this records the website maintenance I have fixed/still remains to be fixed)"
         }
       ],
       "setting": "",
@@ -101,10 +101,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 143.4,
-      "y": 374
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 138.7,
+      "y": 314
     },
     {
       "id": "n39",
@@ -114,8 +114,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
         {
           "id": "goal",
           "label": "goal",
-          "type": "list",
-          "text": "Similar to Sheaf Calculator, I need to make a calculator with category and functors\nThe main terms are \"Ob(C)\" and morphisms, user can assign a typical symbol for objects in this category\nUser can pick opposite category, and set functors to be covariant/contravariant\nAdd natural transformation\nAdd a large presets of categories and functors"
+          "type": "checkbox",
+          "text": "- [x] Similar to Sheaf Calculator, I need to make a calculator with category and functors\n- [x] The main terms are \"Ob(C)\" and morphisms, user can assign a typical symbol for objects in this category\n- [x] User can pick opposite category, and set functors to be covariant/contravariant\n- [ ] Add natural transformation\n- [ ] Add a large presets of categories and functors"
         }
       ],
       "setting": "",
@@ -125,8 +125,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 473.2,
-      "y": 344.6
+      "x": 495.2,
+      "y": 335.9
     },
     {
       "id": "n40",
@@ -145,10 +145,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 598.7,
-      "y": 374
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 306.7,
+      "y": 258
     },
     {
       "id": "n41",
@@ -184,10 +184,10 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
           "text": "SES can assign the sheaf whose homology classes are computed by other two"
         },
         {
-          "id": "new-rules",
-          "label": "new rules",
-          "type": "list",
-          "text": "For hypersurface\nideal sheaf can be written as O_X(-D)\nnormal sheaf/conormal sheaf"
+          "id": "rules",
+          "label": "rules",
+          "type": "checkbox",
+          "text": "- [x] For hypersurface\n- [x] ideal sheaf can be written as O_X(-D)\n- [x] normal sheaf/conormal sheaf"
         }
       ],
       "setting": "",
@@ -195,8 +195,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
       "x": 134.4,
       "y": 192.4
     },
@@ -261,8 +261,8 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
       "x": 202.7,
       "y": 136.4
     }
@@ -331,7 +331,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
     {
       "id": "a30",
       "sourceId": "n40",
-      "targetId": "n13",
+      "targetId": "n4",
       "label": "",
       "remark": "",
       "body": "solid",
@@ -341,7 +341,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
       "endpointScale": 1,
       "curve": 0,
       "labelOffset": 0,
-      "color": "#5f574e"
+      "color": "#1a1612"
     },
     {
       "id": "a32",
@@ -486,7 +486,7 @@ window.THEOREM_GRAPH_PRESET_DATA.corrections_wait = {
     }
   ],
   "view": {
-    "selectedId": "",
+    "selectedId": "n37",
     "selectedReferenceKeys": [],
     "layoutRunning": false
   }

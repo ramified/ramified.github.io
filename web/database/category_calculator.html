@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Category Calculator</title>
+  <link rel="stylesheet" href="css/site.css">
+  <style>
+    .category-layout {
+      max-width: 1240px;
+      grid-template-columns: minmax(0, 1fr) 380px;
+      align-items: start;
+    }
+
+    .category-main-column {
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+      align-content: start;
+    }
+
+    .category-workspace {
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .category-stage {
+      position: relative;
+      min-height: 280px;
+    }
+
+    #category-canvas {
+      width: 100% !important;
+      height: 280px !important;
+      min-height: 248px;
+      display: block;
+      background: #fffdf8;
+      cursor: default;
+      touch-action: none;
+    }
+
+    .category-label-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .category-node-label,
+    .category-functor-label {
+      appearance: none;
+      position: absolute;
+      transform: translate(-50%, -50%);
+      margin: 0;
+      border: 1px solid transparent;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.68);
+      color: var(--text);
+      font: inherit;
+      line-height: 1.28;
+      overflow-wrap: anywhere;
+      pointer-events: auto;
+      text-align: center;
+      touch-action: none;
+    }
+
+    .category-node-label {
+      min-width: 46px;
+      min-height: 32px;
+      max-width: 260px;
+      padding: 2px 8px;
+      cursor: grab;
+      font-size: 1rem;
+      user-select: none;
+    }
+
+    .category-node-label:active {
+      cursor: grabbing;
+    }
+
+    .category-functor-label {
+      min-width: 28px;
+      padding: 2px 7px;
+      cursor: pointer;
+      color: var(--accent2);
+      font-size: 0.84rem;
+      background: rgba(255, 247, 243, 0.9);
+    }
+
+    .category-node-label:hover,
+    .category-node-label:focus-visible,
+    .category-functor-label:hover,
+    .category-functor-label:focus-visible {
+      border-color: var(--accent);
+      outline: none;
+    }
+
+    .category-node-label.is-selected,
+    .category-functor-label.is-selected {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+      background: rgba(255, 255, 255, 0.86);
+    }
+
+    .category-node-label.is-pick-candidate {
+      border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+      box-shadow: 0 0 0 2px rgba(61, 107, 79, 0.13);
+      background: rgba(247, 244, 239, 0.92);
+    }
+
+    .category-node-label.is-functor-domain {
+      border-color: #8b3a2a;
+      box-shadow: 0 0 0 2px rgba(139, 58, 42, 0.16);
+      background: rgba(255, 247, 243, 0.95);
+    }
+
+    .category-node-label.is-functor-codomain {
+      border-color: color-mix(in srgb, var(--accent2) 72%, var(--border));
+      box-shadow: 0 0 0 2px rgba(91, 85, 132, 0.14);
+      background: rgba(247, 246, 252, 0.95);
+    }
+
+    .category-node-label mjx-container,
+    .category-functor-label mjx-container {
+      margin: 0 !important;
+      overflow: visible;
+    }
+
+    .category-corner-actions {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: inline-flex;
+      gap: 7px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      pointer-events: none;
+      z-index: 3;
+    }
+
+    .category-corner-actions .btn {
+      pointer-events: auto;
+      background: rgba(255, 253, 248, 0.86);
+      backdrop-filter: blur(2px);
+    }
+
+    .category-underbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 16px 12px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.72rem;
+      overflow-wrap: anywhere;
+    }
+
+    .category-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 21px;
+      padding: 1px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text);
+      background: var(--bg);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0;
+      text-transform: none;
+      white-space: nowrap;
+    }
+
+    .category-input-toolbar {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding-bottom: 9px;
+      border-bottom: 1px dotted var(--border);
+    }
+
+    .category-input-add,
+    .category-actions,
+    .category-export-actions,
+    .category-import-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .category-input-add .category-select {
+      flex: 1 1 130px;
+    }
+
+    .category-input-add .category-mode-select {
+      flex: 0 0 112px;
+    }
+
+    .category-map-formula-picker {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+
+    .category-map-slot-button,
+    .category-pick-reset {
+      padding: 4px 8px;
+      font-size: 0.72rem;
+      letter-spacing: 0;
+      text-transform: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 112px;
+    }
+
+    .category-map-slot-button[aria-pressed="true"] {
+      color: var(--bg);
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .category-map-formula-mark {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.78rem;
+      line-height: 1;
+    }
+
+    .category-pick-status {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.72rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .category-pick-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+
+    .category-field-row {
+      display: grid;
+      grid-template-columns: 118px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+      min-width: 0;
+    }
+
+    .category-field-row[hidden],
+    .category-editor[hidden],
+    .category-empty-note[hidden] {
+      display: none !important;
+    }
+
+    .category-field-row .input-label {
+      margin: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .category-select,
+    .category-input,
+    .category-textarea {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.76rem;
+    }
+
+    .category-select {
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.9rem;
+    }
+
+    .category-textarea {
+      min-height: 64px;
+      max-height: 150px;
+      resize: vertical;
+      line-height: 1.35;
+    }
+
+    .category-select:focus,
+    .category-input:focus,
+    .category-textarea:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .category-small-button {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+    }
+
+    .category-small-button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .category-note,
+    .category-message {
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+
+    .category-message.is-error {
+      color: var(--accent2);
+    }
+
+    #category-export-out,
+    #category-import-input {
+      width: 100%;
+      min-height: 140px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      padding: 8px;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.72rem;
+      line-height: 1.35;
+    }
+
+    #category-import-input {
+      min-height: 86px;
+      margin-top: 8px;
+    }
+
+    .category-import-mode {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dotted var(--border);
+    }
+
+    @media (max-width: 780px) {
+      .category-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .category-workspace {
+        padding: 12px;
+      }
+
+      .category-stage,
+      #category-canvas {
+        min-height: 300px;
+      }
+
+      #category-canvas {
+        height: 330px !important;
+      }
+
+      .category-underbar {
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .category-field-row {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Category Calculator</h1>
+  <span><a href="young_diagrams.html">Young Diagram Calculator</a> &middot; <a href="double_young_diagram.html">Young Diagram^2 Calculator</a> &middot; <a href="mosaic_calculator.html">Mosaic Calculator</a> &middot; <a href="matrix_calculator.html">Matrix Calculator</a> &middot; <a href="sheaf_calculator.html">Sheaf Calculator</a></span>
+</header>
+
+<main class="layout category-layout">
+  <div class="category-main-column">
+    <section class="canvas-panel">
+      <header class="panel-title">
+        <span class="panel-title-text">Category and Functor</span>
+        <div class="canvas-toolbar" aria-label="Category calculator controls">
+          <span class="category-badge" id="category-count-badge">0 categories, 0 functors</span>
+          <span class="category-badge" id="category-mode-badge">create category</span>
+        </div>
+      </header>
+
+      <div class="category-workspace">
+        <div class="category-stage">
+          <canvas id="category-canvas" width="880" height="420" aria-label="Category calculator overview"></canvas>
+          <div id="category-label-layer" class="category-label-layer" aria-label="Added categories and functors"></div>
+          <div class="category-corner-actions">
+            <button class="btn btn-ghost category-small-button" id="clear-category-canvas" type="button">clear</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="category-underbar">
+        <span id="category-status">ready</span>
+        <span id="category-summary">explicit export/import only</span>
+      </div>
+    </section>
+  </div>
+
+  <aside class="side" id="cards">
+    <section class="card" id="input-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="category-input-toolbar">
+          <div class="category-input-add">
+            <select id="category-input-mode" class="category-select category-mode-select" aria-label="Input mode">
+              <option value="create" selected>Create</option>
+              <option value="modify" disabled>Modify</option>
+            </select>
+            <select id="category-object-kind" class="category-select" aria-label="Object type to add">
+              <option value="category" selected>Category</option>
+              <option value="functor" disabled>Functor</option>
+            </select>
+            <button class="btn btn-ghost category-small-button" id="category-apply-object" type="button">add</button>
+            <button class="btn btn-ghost category-small-button" id="category-delete-object" type="button" disabled>delete</button>
+          </div>
+          <div class="category-note" id="category-input-note">Add two categories to enable functors.</div>
+        </div>
+
+        <div class="category-editor" id="category-editor">
+          <div class="category-field-row">
+            <label class="input-label" for="category-label">category</label>
+            <input id="category-label" class="category-input" type="text" value="\mathcal{C}" maxlength="80" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="category-field-row">
+            <label class="input-label" for="category-object-symbol">object</label>
+            <input id="category-object-symbol" class="category-input" type="text" value="X" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="category-field-row">
+            <label class="input-label" for="category-morphism-template">morphisms</label>
+            <textarea id="category-morphism-template" class="category-textarea" spellcheck="false" autocomplete="off">\operatorname{Mor}_{{category}}({source},{target})</textarea>
+          </div>
+          <div class="category-field-row">
+            <span class="input-label">opposite</span>
+            <label class="opt-row">
+              <input id="category-opposite" type="checkbox">
+              use opposite category
+            </label>
+          </div>
+        </div>
+
+        <div class="category-editor" id="functor-editor" hidden>
+          <div class="category-field-row">
+            <label class="input-label" for="functor-label">functor</label>
+            <input id="functor-label" class="category-input" type="text" value="F" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="category-field-row">
+            <span class="input-label">parents</span>
+            <div class="category-map-formula-picker">
+              <button class="btn btn-ghost category-map-slot-button" id="functor-domain-button" type="button" data-functor-pick="domain">category</button>
+              <span class="category-map-formula-mark">&rArr;</span>
+              <button class="btn btn-ghost category-map-slot-button" id="functor-codomain-button" type="button" data-functor-pick="codomain">category</button>
+              <input id="functor-domain" type="hidden" value="">
+              <input id="functor-codomain" type="hidden" value="">
+            </div>
+          </div>
+          <div class="category-field-row">
+            <label class="input-label" for="functor-variance">variance</label>
+            <select id="functor-variance" class="category-select">
+              <option value="covariant" selected>Covariant</option>
+              <option value="contravariant">Contravariant</option>
+            </select>
+          </div>
+          <div class="category-pick-status" id="functor-pick-status">pick a domain</div>
+          <div class="category-pick-actions">
+            <button class="btn btn-ghost category-pick-reset" id="reset-functor-pick" type="button">reset</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="export-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="category-field-row">
+          <label class="input-label" for="category-export-format">format</label>
+          <select id="category-export-format" class="category-select">
+            <option value="latex" selected>LaTeX</option>
+            <option value="plain">Plain text</option>
+            <option value="json">JSON preset</option>
+          </select>
+        </div>
+        <textarea id="category-export-out" readonly spellcheck="false"></textarea>
+        <div class="category-export-actions">
+          <button class="btn" id="refresh-category-export" type="button">refresh</button>
+          <button class="btn btn-ghost" id="copy-category-export" type="button">copy</button>
+        </div>
+        <div class="category-import-mode">
+          <label class="input-label" for="category-import-input">import JSON</label>
+          <textarea id="category-import-input" spellcheck="false" autocomplete="off" placeholder="Paste exported JSON"></textarea>
+          <div class="category-import-actions">
+            <button class="btn btn-ghost category-small-button" id="load-category-import" type="button">load</button>
+            <button class="btn btn-ghost category-small-button" id="clear-category-import" type="button">clear</button>
+          </div>
+          <div class="category-message" id="category-export-message"></div>
+        </div>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<footer>
+  Browser-side category and functor prototype styled with the shared calculator UI.
+</footer>
+
+<script src="js/category_calculator.js"></script>
+</body>
+</html>

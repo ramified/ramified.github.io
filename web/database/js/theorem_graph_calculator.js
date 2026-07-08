@@ -4,6 +4,7 @@
   const SCHEMA_VERSION = 4;
   const DEFAULT_GRAPH_TITLE = 'Dependency Graph';
   const PRESET_FOLDER_URL = 'theorem_graph_presets/';
+  const DEFAULT_PRESET_KEY = 'corrections_wait';
   const DEFAULT_NODE_STROKE = '#7a6f65';
   const DEFAULT_NODE_FILL = '#f7f5f1';
   const NODE_TYPES = {
@@ -152,7 +153,8 @@
     detailEditBaseline: null,
     activeLatexDetailField: null,
     arrowBoundaryGap: ARROW_BOUNDARY_GAP_DEFAULT,
-    nodeFillSaturation: NODE_FILL_SATURATION_DEFAULT
+    nodeFillSaturation: NODE_FILL_SATURATION_DEFAULT,
+    cleanExportSignature: ''
   };
 
   const refs = {};
@@ -163,10 +165,10 @@
     cacheRefs();
     populateArrowPartPickers();
     bindEvents();
-    seedExample();
-    loadPresetRegistry();
     resizeCanvas();
+    loadPresetRegistry();
     renderAll();
+    loadDefaultPreset();
 
     if (window.ResizeObserver && refs.canvas) {
       const observer = new ResizeObserver(() => {
@@ -366,6 +368,7 @@
 
     if (refs.detailUpdate) refs.detailUpdate.addEventListener('click', () => applyDetailUpdate({ manual: true }));
     if (refs.detailCancel) refs.detailCancel.addEventListener('click', cancelDetailEdit);
+    window.addEventListener('beforeunload', handleBeforeUnload);
     bindLatexDetailPreviewEvents();
     bindAutoResizeTextareas();
     [
@@ -3493,6 +3496,32 @@
     syncControls();
   }
 
+  function markCurrentExportClean() {
+    state.cleanExportSignature = graphContentSignature();
+  }
+
+  function hasUnsavedCorrections() {
+    return !!state.cleanExportSignature && graphContentSignature() !== state.cleanExportSignature;
+  }
+
+  function graphContentSignature() {
+    const snapshot = buildExport();
+    if (snapshot.view && typeof snapshot.view === 'object') {
+      delete snapshot.view.selectedId;
+      delete snapshot.view.selectedReferenceKeys;
+      delete snapshot.view.layoutRunning;
+      if (!Object.keys(snapshot.view).length) delete snapshot.view;
+    }
+    return JSON.stringify(snapshot);
+  }
+
+  function handleBeforeUnload(event) {
+    if (!hasUnsavedCorrections()) return undefined;
+    event.preventDefault();
+    event.returnValue = '';
+    return '';
+  }
+
   function buildPresetFileExport() {
     const preset = buildExport();
     const key = presetKeyFromTitle(preset.title);
@@ -3705,6 +3734,7 @@
     setExportMessage(`Loaded ${state.nodes.length} nodes and ${state.arrows.length} arrows from ${sourceLabel}.`);
     setStatus('Imported graph.');
     renderAll();
+    markCurrentExportClean();
   }
 
   function loadPresetRegistry() {
@@ -3712,6 +3742,7 @@
     const registryPresets = normalizePresetRegistry(window.THEOREM_GRAPH_PRESETS);
     state.presets = registryPresets;
     setPresetOptions(registryPresets, registryPresets.length ? 'Choose a preset' : 'No presets found');
+    selectDefaultPresetOption();
     setExportMessage(
       registryPresets.length
         ? `Loaded ${registryPresets.length} preset${registryPresets.length === 1 ? '' : 's'} from presets.js.`
@@ -3719,6 +3750,12 @@
       !registryPresets.length
     );
     syncControls();
+  }
+
+  function selectDefaultPresetOption() {
+    if (!refs.presetSelect) return;
+    const index = state.presets.findIndex((preset) => preset.key === DEFAULT_PRESET_KEY);
+    if (index >= 0) refs.presetSelect.value = String(index);
   }
 
   function normalizePresetRegistry(registry) {
@@ -3792,6 +3829,31 @@
     } catch (error) {
       setExportMessage(`Preset load failed: ${error.message}`, true);
     }
+  }
+
+  async function loadDefaultPreset() {
+    const index = state.presets.findIndex((preset) => preset.key === DEFAULT_PRESET_KEY);
+    if (index < 0) {
+      loadSeedExampleFallback('Default preset not found; loaded the starter example.', true);
+      return;
+    }
+    if (refs.presetSelect) refs.presetSelect.value = String(index);
+    const preset = state.presets[index];
+    try {
+      const data = await readPresetData(preset);
+      applyImportData(data, preset.label);
+      setExportMessage(`Default preset "${preset.label}" loaded.`);
+    } catch (error) {
+      loadSeedExampleFallback(`Default preset failed: ${error.message}. Loaded the starter example.`, true);
+    }
+  }
+
+  function loadSeedExampleFallback(message, error = false) {
+    seedExample();
+    renderAll();
+    markCurrentExportClean();
+    setExportMessage(message, error);
+    setStatus('Loaded starter example.');
   }
 
   async function readPresetData(preset) {

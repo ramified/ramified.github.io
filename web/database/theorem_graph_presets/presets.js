@@ -5,7 +5,7 @@ window.THEOREM_GRAPH_PRESETS = [
   file: 'starter_dependency_graph.preset.js'
 },
 {
-  label: 'Corrections Wait',
+  label: 'Maintenance Tracker',
   key: 'corrections_wait',
   file: 'corrections_wait.preset.js'
 },

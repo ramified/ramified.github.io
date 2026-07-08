@@ -11804,12 +11804,43 @@
 
   function mapPullbackOperatorLatex(map) {
     const mapName = sanitizeMathLabel(map?.name, 'f');
-    return `${mapName}^{*}`;
+    return `${latexBaseForAddedScript(mapName, '^')}^{*}`;
   }
 
   function mapPushforwardOperatorLatex(map, lower = '*') {
     const mapName = sanitizeMathLabel(map?.name, 'f');
-    return `${mapName}_{${lower}}`;
+    return `${latexBaseForAddedScript(mapName, '_')}_{${lower}}`;
+  }
+
+  function latexBaseForAddedScript(latex, script) {
+    const source = String(latex || '');
+    if (!source) return '';
+    const hasConflictingScript = script === '_'
+      ? latexHasTopLevelScript(source, '_')
+      : latexHasTopLevelScript(source, '^');
+    return hasConflictingScript ? `{${source}}` : source;
+  }
+
+  function latexHasTopLevelScript(latex, script) {
+    let depth = 0;
+    const source = String(latex || '');
+    for (let index = 0; index < source.length; index += 1) {
+      const char = source[index];
+      if (char === '\\') {
+        index += 1;
+        continue;
+      }
+      if (char === '{' || char === '(' || char === '[') {
+        depth += 1;
+        continue;
+      }
+      if (char === '}' || char === ')' || char === ']') {
+        depth = Math.max(0, depth - 1);
+        continue;
+      }
+      if (char === script && depth === 0) return true;
+    }
+    return false;
   }
 
   function pullbackFunctorLatex(map, options = {}) {
@@ -29226,12 +29257,43 @@
 
   function classStepSavedEntryDisplayLatex(entry) {
     if (!entry) return '0';
-    if (entry.displayLatex) return entry.displayLatex;
-    const rule = classStepRuleFromSavedEntry(entry);
-    if (rule) return classStepRuleDisplayLatex(rule);
+    const restoredDisplay = classStepResolvedSavedDisplayLatex(entry);
+    if (restoredDisplay) return restoredDisplay;
+    const derivedDisplay = classStepSavedEntryDerivedDisplayLatex(entry);
+    if (derivedDisplay) return derivedDisplay;
     const lhs = entry.labelLatex || entry.lhsLatex || '\\Phi';
     const rhs = entry.rhsLatex || '0';
     return `${lhs}=${rhs}`;
+  }
+
+  function classStepResolvedSavedDisplayLatex(entry) {
+    if (!entry?.displayLatex) return '';
+    restoreClassStepSavedEntryDisplayVariables(entry);
+    const display = resolveGeneratedVariableIdsInLatex(entry.displayLatex, { geometryId: entry.geometryId || null });
+    return display || entry.displayLatex;
+  }
+
+  function classStepSavedEntryDerivedDisplayLatex(entry) {
+    if (classStepSavedEntryKind(entry) !== 'rewrite' || !entry?.lhs?.powers || !Array.isArray(entry.rhs)) return '';
+    restoreClassStepSavedEntryDisplayVariables(entry);
+    const lhs = entry.labelLatex || formatPolyLatex(polyFromPowers(entry.lhs.powers));
+    const rule = {
+      lhs: { powers: parseMonoKey(monoKey(entry.lhs.powers || {})) },
+      rhs: entry.rhs || []
+    };
+    return `${lhs}=${homologyRuleRhsLatex(rule)}`;
+  }
+
+  function restoreClassStepSavedEntryDisplayVariables(entry, context = {}) {
+    restoreClassStepVariableSnapshots(entry);
+    const geometryId = entry?.geometryId || context.geometryId || null;
+    const geometry = geometryId ? geometryByVarietyId(geometryId) : null;
+    if (geometry) defineHomologyVariables(geometry);
+    const ids = new Set([
+      ...(entry?.variableIds || []),
+      ...homologyRuleVariableIds(entry || {})
+    ]);
+    ids.forEach((id) => restoreClassStepVariableById(id, { geometryId }));
   }
 
   function classStepSavedEntryDisplayPlain(entry) {
@@ -29446,6 +29508,10 @@
   function classStepRuleFromSavedEntry(entry) {
     const kind = classStepSavedEntryKind(entry);
     if (kind !== 'rewrite' || !entry?.lhs?.powers) return null;
+    const displayLatex = classStepResolvedSavedDisplayLatex(entry)
+      || classStepSavedEntryDerivedDisplayLatex(entry)
+      || entry.displayLatex
+      || '';
     return {
       id: entry.id,
       builtin: true,
@@ -29454,7 +29520,7 @@
       stepSourceLabel: entry.sourceLabel || 'saved formula',
       classStepSavedRule: true,
       classStepDisplayKey: `saved:${entry.id}`,
-      classStepDisplayLatex: entry.displayLatex,
+      classStepDisplayLatex: displayLatex,
       lhs: { powers: parseMonoKey(monoKey(entry.lhs.powers || {})) },
       rhs: entry.rhs || []
     };
@@ -35455,9 +35521,57 @@
     if (!key) return '';
     return Object.entries(stripUnitPowers(parseMonoKey(key))).map(([id, exp]) => {
       const data = VARS.get(id);
-      const base = data ? data.latex : id;
+      const base = data ? data.latex : fallbackVariableIdLatex(id);
       return exp === 1 ? base : `{${base}}^{${exp}}`;
     }).join('\\,');
+  }
+
+  function generatedVariableIdPattern() {
+    return /\b(?:map_(?:pullback|pushforward)|sheaf_[A-Za-z0-9]|homology_[A-Za-z0-9]|chern_v_|class_step_|identified_|global_|scalar_|formal_)[A-Za-z0-9_]*/g;
+  }
+
+  function resolveGeneratedVariableIdsInLatex(latex, context = {}) {
+    const source = String(latex || '');
+    if (!source) return '';
+    return source.replace(generatedVariableIdPattern(), (id) => {
+      const data = resolveGeneratedVariableDataForDisplay(id, context);
+      return data?.latex || fallbackVariableIdLatex(id);
+    });
+  }
+
+  function resolveGeneratedVariableDataForDisplay(id, context = {}) {
+    const safeId = sanitizeClassStepVariableId(id);
+    if (!safeId) return null;
+    let data = VARS.get(safeId) || null;
+    if (data) return data;
+    data = ensureMapHomologyVariableFromId(safeId);
+    if (data) return data;
+    const geometryId = context.geometryId || null;
+    if (geometryId) {
+      const geometry = geometryByVarietyId(geometryId);
+      if (geometry) defineHomologyVariables(geometry);
+    }
+    restoreClassStepVariableById(safeId, { geometryId });
+    return VARS.get(safeId) || null;
+  }
+
+  function fallbackVariableIdLatex(id) {
+    return `\\text{${escapeLatexText(id)}}`;
+  }
+
+  function escapeLatexText(value) {
+    return String(value ?? '').replace(/[\\{}_$%&#^~]/g, (char) => ({
+      '\\': '\\textbackslash{}',
+      '{': '\\{',
+      '}': '\\}',
+      '_': '\\_',
+      '$': '\\$',
+      '%': '\\%',
+      '&': '\\&',
+      '#': '\\#',
+      '^': '\\^{}',
+      '~': '\\~{}'
+    })[char] || char);
   }
 
   function monomialPlain(key) {
