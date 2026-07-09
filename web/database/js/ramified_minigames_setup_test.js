@@ -17,6 +17,24 @@ function valuesAt(state, cols = state.preset.cols) {
     .sort();
 }
 
+function stonesAt(state, cols = state.preset.cols) {
+  return state.stones
+    .map((item) => {
+      const pos = game.rowCol(item.index, cols);
+      return `${pos.row},${pos.col}:${item.color}`;
+    })
+    .sort();
+}
+
+function tokensAt(state, cols = state.preset.cols) {
+  return state.tokens
+    .map((item) => {
+      const pos = game.rowCol(item.index, cols);
+      return `${pos.row},${pos.col}:${item.color}`;
+    })
+    .sort();
+}
+
 function stackedTileSummaries(state) {
   const groups = new Map();
   state.boxes.forEach((item) => {
@@ -48,6 +66,41 @@ function allBounceMoves(events) {
 
 function gluedEdgeSignature(edge) {
   return `${edge.group}:${edge.first.row},${edge.first.col},${edge.first.dir}>${edge.second.row},${edge.second.col},${edge.second.dir}`;
+}
+
+function assertLineMatchesEitherDirection(actual, expected) {
+  assert.ok(Array.isArray(actual));
+  const reversed = expected.slice().reverse();
+  assert.ok(
+    actual.length === expected.length
+      && (actual.every((value, index) => value === expected[index])
+        || actual.every((value, index) => value === reversed[index])),
+    `expected ${actual.join(',')} to match ${expected.join(',')} in either direction`
+  );
+}
+
+function squareTestGeometry(rows, cols, size = 10) {
+  const cells = [];
+  for (let row = 1; row <= rows; row += 1) {
+    for (let col = 1; col <= cols; col += 1) {
+      cells[game.indexOf(row, col, cols)] = {
+        row,
+        col,
+        x: ((col - 0.5) * size),
+        y: ((row - 0.5) * size)
+      };
+    }
+  }
+  return {
+    rows,
+    cols,
+    width: cols * size,
+    height: rows * size,
+    radius: size / 2,
+    size,
+    lattice: game.LATTICES.square,
+    cells
+  };
 }
 
 function stateWithBoxes(presetId, boxes) {
@@ -852,10 +905,31 @@ function testKleinAndRamifiedSuccessors() {
   assert.strictEqual(kleinStep.dir, game.DIRS.E);
 
   const ramified = game.createGameState('ramified-cover');
-  const ramifiedStep = game.surfaceSuccessor(ramified, game.indexOf(2, 3, 9), game.DIRS.S);
+  const ramifiedStep = game.surfaceSuccessor(ramified, game.indexOf(2, 8, 9), game.DIRS.S);
   assert.strictEqual(ramifiedStep.kind, 'glued');
-  assert.strictEqual(ramifiedStep.index, game.indexOf(3, 9, 9));
+  assert.strictEqual(ramifiedStep.index, game.indexOf(3, 3, 9));
   assert.strictEqual(ramifiedStep.dir, game.DIRS.S);
+
+  const ramifiedReturnStep = game.surfaceSuccessor(ramified, game.indexOf(2, 3, 9), game.DIRS.S);
+  assert.strictEqual(ramifiedReturnStep.kind, 'glued');
+  assert.strictEqual(ramifiedReturnStep.index, game.indexOf(3, 8, 9));
+  assert.strictEqual(ramifiedReturnStep.dir, game.DIRS.S);
+}
+
+function testGlueHoverFindsMultiEdgeGroup() {
+  const state = game.createGameState('ramified-cover');
+  const geom = squareTestGeometry(4, 9);
+  const hover = game.hoveredGlueBoundaryAtPoint(state.preset, geom, { x: 75, y: 19.8 }, { threshold: 1 });
+  assert.ok(hover);
+  assert.strictEqual(hover.group, 0);
+  assert.strictEqual(hover.edgeKey, `${game.indexOf(2, 8, 9)}:${game.DIRS.S}`);
+  assert.deepStrictEqual(Array.from(game.hoveredGlueEdgeKeys(state.preset, hover)).sort(), [
+    `${game.indexOf(2, 8, 9)}:${game.DIRS.S}`,
+    `${game.indexOf(2, 9, 9)}:${game.DIRS.S}`,
+    `${game.indexOf(3, 3, 9)}:${game.DIRS.N}`,
+    `${game.indexOf(3, 4, 9)}:${game.DIRS.N}`
+  ].sort());
+  assert.strictEqual(game.hoveredGlueBoundaryAtPoint(state.preset, geom, { x: 5, y: 5 }, { threshold: 1 }), null);
 }
 
 function testGenus2PresetFromExport() {
@@ -911,6 +985,21 @@ function testRandomGluePresetIsDeterministicWithGlueRng() {
   assert.strictEqual(game.PRESETS.find((preset) => preset.id === 'random-glue-4x4').gluedEdges.length, 0);
 }
 
+function testGomokuRandomGluePresetSize() {
+  const state = game.createGomokuState('gomoku-random-glue', {
+    boardSize: 9,
+    glueRng: game.createRng([0.8, 0.1, 0.6, 0.3, 0.95, 0.2])
+  });
+  assert.strictEqual(state.preset.rows, 9);
+  assert.strictEqual(state.preset.cols, 9);
+  assert.strictEqual(state.preset.label, 'random glue 9*9');
+  assert.strictEqual(state.preset.gluedEdges.length, 18);
+  assert.deepStrictEqual(gluedBoundaryKeys(state.preset), squareBoundaryKeys(9, 9));
+  const base = game.PRESETS.find((preset) => preset.id === 'gomoku-random-glue');
+  assert.strictEqual(base.rows, 15);
+  assert.strictEqual(base.gluedEdges.length, 0);
+}
+
 function testHexClassicPreset() {
   const state = game.createGameState('hex-classic-4x4');
   assert.strictEqual(state.preset.lattice, 'hexagonal');
@@ -938,11 +1027,569 @@ function testHexClassicSuccessors() {
   });
 }
 
+function playGomokuMoves(state, moves) {
+  return moves.reduce((current, move) => {
+    const [row, col] = move;
+    const result = game.placeGomokuStone(current, game.indexOf(row, col, current.preset.cols));
+    assert.strictEqual(result.changed, true, result.message || `move ${row},${col} should be valid`);
+    return result.state;
+  }, state);
+}
+
+function testGomokuAlternatingPlacement() {
+  let state = game.beginGomokuGame('classic-4x4');
+  let result = game.placeGomokuStone(state, game.indexOf(1, 1, 4));
+  assert.strictEqual(result.changed, true);
+  assert.strictEqual(result.stone.color, 'black');
+  assert.strictEqual(result.state.turn, 'white');
+  assert.strictEqual(result.state.round, 1);
+  result = game.placeGomokuStone(result.state, game.indexOf(1, 2, 4));
+  assert.strictEqual(result.changed, true);
+  assert.strictEqual(result.stone.color, 'white');
+  assert.strictEqual(result.state.turn, 'black');
+  assert.deepStrictEqual(stonesAt(result.state), ['1,1:black', '1,2:white']);
+}
+
+function testGomokuRejectsOccupiedAndRemovedTiles() {
+  const preset = {
+    id: 'gomoku-removed',
+    label: 'gomoku removed',
+    lattice: 'square',
+    rows: 2,
+    cols: 2,
+    surface: 'test',
+    removedTiles: [{ row: 1, col: 1 }],
+    cutEdges: [],
+    gluedEdges: []
+  };
+  let state = game.beginGomokuGame(preset);
+  let result = game.placeGomokuStone(state, game.indexOf(1, 1, 2));
+  assert.strictEqual(result.changed, false);
+  assert.strictEqual(result.message, 'tile is removed');
+  result = game.placeGomokuStone(state, game.indexOf(1, 2, 2));
+  assert.strictEqual(result.changed, true);
+  state = result.state;
+  result = game.placeGomokuStone(state, game.indexOf(1, 2, 2));
+  assert.strictEqual(result.changed, false);
+  assert.strictEqual(result.message, 'tile already has a stone');
+  assert.deepStrictEqual(stonesAt(state), ['1,2:black']);
+}
+
+function testGomokuSquareHorizontalWin() {
+  const preset = {
+    id: 'gomoku-square-win',
+    label: 'gomoku square win',
+    lattice: 'square',
+    rows: 2,
+    cols: 5,
+    surface: 'test',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: []
+  };
+  const state = playGomokuMoves(game.beginGomokuGame(preset), [
+    [1, 1], [2, 1],
+    [1, 2], [2, 2],
+    [1, 3], [2, 3],
+    [1, 4], [2, 4],
+    [1, 5]
+  ]);
+  assert.strictEqual(state.phase, 'gameover');
+  assert.strictEqual(state.winner, 'black');
+  assert.deepStrictEqual(state.winningLine, [0, 1, 2, 3, 4]);
+}
+
+function testGomokuHexAxisWin() {
+  const preset = {
+    id: 'gomoku-hex-win',
+    label: 'gomoku hex win',
+    lattice: 'hexagonal',
+    rows: 5,
+    cols: 5,
+    surface: 'test',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: []
+  };
+  const state = playGomokuMoves(game.beginGomokuGame(preset), [
+    [3, 1], [1, 1],
+    [3, 2], [1, 2],
+    [3, 3], [1, 3],
+    [3, 4], [1, 4],
+    [3, 5]
+  ]);
+  assert.strictEqual(state.phase, 'gameover');
+  assert.strictEqual(state.winner, 'black');
+  assert.deepStrictEqual(state.winningLine, [
+    game.indexOf(3, 1, 5),
+    game.indexOf(3, 2, 5),
+    game.indexOf(3, 3, 5),
+    game.indexOf(3, 4, 5),
+    game.indexOf(3, 5, 5)
+  ]);
+}
+
+function testGomokuSquareDiagonalWin() {
+  const preset = {
+    id: 'gomoku-square-diagonal-win',
+    label: 'gomoku square diagonal win',
+    lattice: 'square',
+    rows: 5,
+    cols: 5,
+    surface: 'test',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: []
+  };
+  const state = playGomokuMoves(game.beginGomokuGame(preset), [
+    [5, 1], [1, 1],
+    [4, 2], [1, 2],
+    [3, 3], [1, 3],
+    [2, 4], [2, 1],
+    [1, 5]
+  ]);
+  assert.strictEqual(state.phase, 'gameover');
+  assert.strictEqual(state.winner, 'black');
+  assert.deepStrictEqual(state.winningLine, [
+    game.indexOf(5, 1, 5),
+    game.indexOf(4, 2, 5),
+    game.indexOf(3, 3, 5),
+    game.indexOf(2, 4, 5),
+    game.indexOf(1, 5, 5)
+  ]);
+}
+
+function testGomokuDiagonalChecksAlternateStepOrders() {
+  const preset = {
+    id: 'gomoku-diagonal-branch-win',
+    label: 'gomoku diagonal branch win',
+    lattice: 'square',
+    rows: 5,
+    cols: 5,
+    surface: 'test',
+    removedTiles: [],
+    cutEdges: [{ left: { row: 2, col: 4 }, right: { row: 2, col: 5 } }],
+    gluedEdges: []
+  };
+  const state = playGomokuMoves(game.beginGomokuGame(preset), [
+    [5, 1], [1, 1],
+    [4, 2], [1, 2],
+    [3, 3], [1, 3],
+    [2, 4], [2, 1],
+    [1, 5]
+  ]);
+  assert.strictEqual(state.phase, 'gameover');
+  assert.strictEqual(state.winner, 'black');
+  assert.deepStrictEqual(state.winningLine, [
+    game.indexOf(5, 1, 5),
+    game.indexOf(4, 2, 5),
+    game.indexOf(3, 3, 5),
+    game.indexOf(2, 4, 5),
+    game.indexOf(1, 5, 5)
+  ]);
+}
+
+function testGomokuDiagonalTransportsAfterRotatingGlue() {
+  const preset = {
+    id: 'gomoku-diagonal-transport-rotation',
+    label: 'gomoku diagonal transport rotation',
+    lattice: 'square',
+    rows: 7,
+    cols: 5,
+    surface: 'test',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [
+      { group: 0, first: { row: 1, col: 3, dir: game.DIRS.N }, second: { row: 3, col: 5, dir: game.DIRS.E } }
+    ]
+  };
+  const state = game.createGomokuState(preset);
+  const line = [
+    game.indexOf(1, 3, 5),
+    game.indexOf(4, 5, 5),
+    game.indexOf(5, 4, 5),
+    game.indexOf(6, 3, 5),
+    game.indexOf(7, 2, 5)
+  ];
+  state.stones = line.map((index, offset) => ({ id: offset + 1, index, color: 'black' }));
+  const win = game.findGomokuWin(state, line[0], 'black');
+  assert.ok(win);
+  assertLineMatchesEitherDirection(win.line, line);
+
+  const route = game.placementLineTransitionRoute(state, line[0], line[1]);
+  assert.ok(route);
+  assert.deepStrictEqual(route.directions, [game.DIRS.N, game.DIRS.S]);
+  assert.strictEqual(route.transitions[0].glued, true);
+}
+
+function testGomokuDiagonalTransportsAfterReflectingGlue() {
+  const preset = {
+    id: 'gomoku-diagonal-transport-reflection',
+    label: 'gomoku diagonal transport reflection',
+    lattice: 'square',
+    rows: 5,
+    cols: 5,
+    surface: 'test',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [
+      { group: 0, reversed: true, first: { row: 5, col: 5, dir: game.DIRS.E }, second: { row: 5, col: 1, dir: game.DIRS.W } }
+    ]
+  };
+  const state = game.createGomokuState(preset);
+  const line = [
+    game.indexOf(5, 5, 5),
+    game.indexOf(4, 1, 5),
+    game.indexOf(3, 2, 5),
+    game.indexOf(2, 3, 5),
+    game.indexOf(1, 4, 5)
+  ];
+  state.stones = line.map((index, offset) => ({ id: offset + 1, index, color: 'black' }));
+  const win = game.findGomokuWin(state, line[0], 'black');
+  assert.ok(win);
+  assertLineMatchesEitherDirection(win.line, line);
+
+  const route = game.placementLineTransitionRoute(state, line[0], line[1]);
+  assert.ok(route);
+  assert.deepStrictEqual(route.directions, [game.DIRS.E, game.DIRS.N]);
+  assert.strictEqual(route.transitions[0].glued, true);
+  assert.strictEqual(route.transitions[0].edge.reversed, true);
+}
+
+function testGomokuGluedEdgeWin() {
+  const preset = {
+    id: 'gomoku-glued-win',
+    label: 'gomoku glued win',
+    lattice: 'square',
+    rows: 2,
+    cols: 5,
+    surface: 'test',
+    removedTiles: [],
+    cutEdges: [{ left: { row: 1, col: 3 }, right: { row: 1, col: 4 } }],
+    gluedEdges: [
+      { group: 0, first: { row: 1, col: 3, dir: game.DIRS.E }, second: { row: 1, col: 4, dir: game.DIRS.W } }
+    ]
+  };
+  const state = playGomokuMoves(game.beginGomokuGame(preset), [
+    [1, 1], [2, 1],
+    [1, 2], [2, 2],
+    [1, 3], [2, 3],
+    [1, 4], [2, 4],
+    [1, 5]
+  ]);
+  assert.strictEqual(state.phase, 'gameover');
+  assert.strictEqual(state.winner, 'black');
+  assert.deepStrictEqual(state.winningLine, [0, 1, 2, 3, 4]);
+  const route = game.placementLineTransitionRoute(state, game.indexOf(1, 3, 5), game.indexOf(1, 4, 5));
+  assert.ok(route);
+  assert.strictEqual(route.transitions.length, 1);
+  assert.strictEqual(route.transitions[0].glued, true);
+  assert.deepStrictEqual(
+    route.transitions.map((transition) => [transition.from, transition.to, transition.edge && transition.edge.dir]),
+    [[game.indexOf(1, 3, 5), game.indexOf(1, 4, 5), game.DIRS.E]]
+  );
+}
+
+function testDiagonalGluedLineUsesBoundaryCorner() {
+  const preset = {
+    id: 'gomoku-diagonal-glued-render',
+    label: 'gomoku diagonal glued render',
+    lattice: 'square',
+    rows: 2,
+    cols: 2,
+    surface: 'test',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [
+      { group: 0, first: { row: 1, col: 1, dir: game.DIRS.N }, second: { row: 2, col: 1, dir: game.DIRS.S } }
+    ]
+  };
+  const state = game.createGomokuState(preset);
+  state.winningLine = [game.indexOf(1, 1, 2), game.indexOf(2, 2, 2)];
+  const geom = {
+    cols: 2,
+    radius: 5,
+    size: 10,
+    lattice: game.LATTICES.square,
+    cells: [
+      { row: 1, col: 1, x: 0, y: 0 },
+      { row: 1, col: 2, x: 10, y: 0 },
+      { row: 2, col: 1, x: 0, y: 10 },
+      { row: 2, col: 2, x: 10, y: 10 }
+    ]
+  };
+  const route = game.placementLineTransitionRoute(state, game.indexOf(1, 1, 2), game.indexOf(2, 2, 2));
+  assert.ok(route);
+  assert.strictEqual(route.kind, 'diagonal');
+  assert.strictEqual(route.transitions[0].glued, true);
+  const segments = game.placementLineRenderSegments(
+    state,
+    geom,
+    game.indexOf(1, 1, 2),
+    game.indexOf(2, 2, 2)
+  );
+  assert.strictEqual(segments.length, 2);
+  assert.ok(segments[0].end.x > 4.7);
+  assert.ok(segments[0].end.y < -4.7);
+  assert.notStrictEqual(segments[0].end.x, 0);
+}
+
+function testDiagonalGluedLineUsesCornerSharedWithPreviousTile() {
+  const preset = {
+    id: 'gomoku-diagonal-glued-second-step-render',
+    label: 'gomoku diagonal glued second step render',
+    lattice: 'square',
+    rows: 2,
+    cols: 2,
+    surface: 'test',
+    removedTiles: [],
+    cutEdges: [
+      { left: { row: 1, col: 1 }, right: { row: 2, col: 1 } },
+      { left: { row: 1, col: 2 }, right: { row: 2, col: 2 } }
+    ],
+    gluedEdges: [
+      { group: 0, first: { row: 1, col: 2, dir: game.DIRS.N }, second: { row: 2, col: 2, dir: game.DIRS.S } }
+    ]
+  };
+  const state = game.createGomokuState(preset);
+  const geom = {
+    cols: 2,
+    radius: 5,
+    size: 10,
+    lattice: game.LATTICES.square,
+    cells: [
+      { row: 1, col: 1, x: 0, y: 0 },
+      { row: 1, col: 2, x: 10, y: 0 },
+      { row: 2, col: 1, x: 0, y: 10 },
+      { row: 2, col: 2, x: 10, y: 10 }
+    ]
+  };
+  const from = game.indexOf(1, 1, 2);
+  const to = game.indexOf(2, 2, 2);
+  const route = game.placementLineTransitionRoute(state, from, to);
+  assert.ok(route);
+  assert.deepStrictEqual(route.directions, [game.DIRS.E, game.DIRS.N]);
+  assert.strictEqual(route.transitions[1].glued, true);
+  const segments = game.placementLineRenderSegments(state, geom, from, to);
+  assert.strictEqual(segments.length, 2);
+  assert.ok(segments[0].end.x > 4.7 && segments[0].end.x < 5.7);
+  assert.ok(segments[0].end.y < -4.7);
+  assert.ok(segments[1].start.x > 4.7 && segments[1].start.x < 5.7);
+  assert.ok(segments[1].start.y > 14.7);
+}
+
+function testGomokuCyclicReuseWin() {
+  const state = game.createGomokuState('torus');
+  state.phase = 'ready';
+  state.stones = [1, 2, 3, 4].map((col, index) => ({
+    id: index + 1,
+    index: game.indexOf(1, col, 4),
+    color: 'black'
+  }));
+  state.nextStoneId = 5;
+  state.round = 4;
+  const win = game.findGomokuWin(state, game.indexOf(1, 1, 4), 'black');
+  assert.ok(win);
+  assert.strictEqual(win.color, 'black');
+  assert.deepStrictEqual(win.line, [
+    game.indexOf(1, 1, 4),
+    game.indexOf(1, 2, 4),
+    game.indexOf(1, 3, 4),
+    game.indexOf(1, 4, 4),
+    game.indexOf(1, 1, 4)
+  ]);
+}
+
+function connectFourPreset() {
+  return {
+    id: 'connect-four-test',
+    label: 'connect four test',
+    lattice: 'square',
+    rows: 6,
+    cols: 7,
+    surface: 'test',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: []
+  };
+}
+
+function connectFourTopHoles(count = 7, cols = 7) {
+  return Array.from({ length: count }, (_, index) => game.indexOf(1, index + 1, cols));
+}
+
+function testConnectFourDropStopsAtBoundaryAndBlocker() {
+  let state = game.beginConnectFourGame(connectFourPreset(), {
+    fallDir: game.DIRS.S,
+    holes: [game.indexOf(1, 1, 7)]
+  });
+  let result = game.placeConnectFourToken(state, game.indexOf(1, 1, 7));
+  assert.strictEqual(result.changed, true);
+  assert.strictEqual(result.token.color, 'red');
+  assert.strictEqual(result.token.index, game.indexOf(6, 1, 7));
+  assert.deepStrictEqual(result.drop.path, [
+    game.indexOf(1, 1, 7),
+    game.indexOf(2, 1, 7),
+    game.indexOf(3, 1, 7),
+    game.indexOf(4, 1, 7),
+    game.indexOf(5, 1, 7),
+    game.indexOf(6, 1, 7)
+  ]);
+  state = result.state;
+  result = game.placeConnectFourToken(state, game.indexOf(1, 1, 7));
+  assert.strictEqual(result.changed, true);
+  assert.strictEqual(result.token.color, 'yellow');
+  assert.strictEqual(result.token.index, game.indexOf(5, 1, 7));
+  assert.deepStrictEqual(tokensAt(result.state), ['5,1:yellow', '6,1:red']);
+}
+
+function testConnectFourCycleWarning() {
+  const state = game.beginConnectFourGame('torus', {
+    fallDir: game.DIRS.E,
+    holes: [game.indexOf(1, 1, 4)]
+  });
+  const result = game.placeConnectFourToken(state, game.indexOf(1, 1, 4));
+  assert.strictEqual(result.changed, false);
+  assert.strictEqual(result.cycle, true);
+  assert.strictEqual(result.message, 'drop route cycles before stopping');
+  assert.deepStrictEqual(result.cycleHoles, [game.indexOf(1, 1, 4)]);
+  assert.strictEqual(state.tokens.length, 0);
+}
+
+function testConnectFourDropCarriesGluedRoute() {
+  const state = game.beginConnectFourGame('torus', {
+    fallDir: game.DIRS.E,
+    holes: [game.indexOf(1, 4, 4)]
+  });
+  state.tokens = [
+    { id: 1, index: game.indexOf(1, 2, 4), color: 'yellow' }
+  ];
+  state.nextTokenId = 2;
+  state.turn = 'red';
+  const result = game.placeConnectFourToken(state, game.indexOf(1, 4, 4));
+  assert.strictEqual(result.changed, true);
+  assert.strictEqual(result.token.index, game.indexOf(1, 1, 4));
+  assert.strictEqual(result.drop.blockedBy, game.indexOf(1, 2, 4));
+  assert.deepStrictEqual(result.drop.path, [
+    game.indexOf(1, 4, 4),
+    game.indexOf(1, 1, 4)
+  ]);
+  assert.strictEqual(result.drop.transitions.length, 1);
+  assert.strictEqual(result.drop.transitions[0].glued, true);
+  assert.strictEqual(result.drop.transitions[0].edge.dir, game.DIRS.E);
+}
+
+function testConnectFourEndsWhenInputHolesFilled() {
+  const preset = {
+    id: 'connect-four-one-hole-test',
+    label: 'connect four one hole test',
+    lattice: 'square',
+    rows: 1,
+    cols: 1,
+    surface: 'test',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: []
+  };
+  const state = game.beginConnectFourGame(preset, {
+    fallDir: game.DIRS.S,
+    holes: [0]
+  });
+  const result = game.placeConnectFourToken(state, 0);
+  assert.strictEqual(result.changed, true);
+  assert.strictEqual(result.state.phase, 'gameover');
+  assert.strictEqual(result.state.ending, 'draw');
+  assert.strictEqual(result.state.winner, '');
+  assert.deepStrictEqual(game.connectFourOpenHoleIndices(result.state), []);
+}
+
+function testConnectFourHorizontalWin() {
+  let state = game.beginConnectFourGame(connectFourPreset(), {
+    fallDir: game.DIRS.S,
+    holes: connectFourTopHoles(4)
+  });
+  [
+    [1, 1], [1, 1],
+    [1, 2], [1, 2],
+    [1, 3], [1, 3],
+    [1, 4]
+  ].forEach(([row, col]) => {
+    const result = game.placeConnectFourToken(state, game.indexOf(row, col, 7));
+    assert.strictEqual(result.changed, true, result.message || `drop ${row},${col}`);
+    state = result.state;
+  });
+  assert.strictEqual(state.phase, 'gameover');
+  assert.strictEqual(state.winner, 'red');
+  assert.deepStrictEqual(state.winningLine, [
+    game.indexOf(6, 1, 7),
+    game.indexOf(6, 2, 7),
+    game.indexOf(6, 3, 7),
+    game.indexOf(6, 4, 7)
+  ]);
+}
+
+function testConnectFourDiagonalWinDetection() {
+  const state = game.createConnectFourState(connectFourPreset(), { fallDir: game.DIRS.S });
+  state.phase = 'ready';
+  state.tokens = [
+    { id: 1, index: game.indexOf(6, 1, 7), color: 'red' },
+    { id: 2, index: game.indexOf(5, 2, 7), color: 'red' },
+    { id: 3, index: game.indexOf(4, 3, 7), color: 'red' },
+    { id: 4, index: game.indexOf(3, 4, 7), color: 'red' }
+  ];
+  state.nextTokenId = 5;
+  const win = game.findConnectFourWin(state, game.indexOf(3, 4, 7), 'red');
+  assert.ok(win);
+  assert.strictEqual(win.color, 'red');
+  assert.deepStrictEqual(win.line, [
+    game.indexOf(6, 1, 7),
+    game.indexOf(5, 2, 7),
+    game.indexOf(4, 3, 7),
+    game.indexOf(3, 4, 7)
+  ]);
+}
+
+function testConnectFourDiagonalTransportsAfterReflectingGlue() {
+  const preset = {
+    id: 'connect-four-diagonal-transport-reflection',
+    label: 'connect four diagonal transport reflection',
+    lattice: 'square',
+    rows: 5,
+    cols: 5,
+    surface: 'test',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [
+      { group: 0, reversed: true, first: { row: 5, col: 5, dir: game.DIRS.E }, second: { row: 5, col: 1, dir: game.DIRS.W } }
+    ]
+  };
+  const state = game.createConnectFourState(preset, { fallDir: game.DIRS.S });
+  state.phase = 'ready';
+  state.tokens = [
+    { id: 1, index: game.indexOf(5, 5, 5), color: 'red' },
+    { id: 2, index: game.indexOf(4, 1, 5), color: 'red' },
+    { id: 3, index: game.indexOf(3, 2, 5), color: 'red' },
+    { id: 4, index: game.indexOf(2, 3, 5), color: 'red' }
+  ];
+  state.nextTokenId = 5;
+  const win = game.findConnectFourWin(state, game.indexOf(5, 5, 5), 'red');
+  assert.ok(win);
+  assertLineMatchesEitherDirection(win.line, [
+    game.indexOf(5, 5, 5),
+    game.indexOf(4, 1, 5),
+    game.indexOf(3, 2, 5),
+    game.indexOf(2, 3, 5)
+  ]);
+}
+
 function testExtraBackgroundPresets() {
   const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
   [
+    ['twisted-torus', 'twisted torus'],
+    ['gomoku-random-glue', 'random glue n*n'],
     ['rubiks-cube-2x2x2', "Rubik's Cube 2*2*2"],
     ['rubiks-cube-3x3x3', "Rubik's Cube 3*3*3"],
+    ['connect-four-6x7', 'Connect Four 6*7'],
     ['usual-strip', 'usual strip'],
     ['mobius-strip', 'M&ouml;bius strip']
   ].forEach(([id, label]) => {
@@ -1021,6 +1668,15 @@ function testExtraBackgroundPresets() {
   assert.ok(mobius.preset.gluedEdges.every((pair) => pair.reversed));
   assert.ok(mobius.preset.gluedEdges.every((pair) => pair.secondArrowReversed === false));
   assert.strictEqual(game.countUnmatchedBoundaries(mobius.preset, mobius.removed), 20);
+
+  const twisted = game.createGameState('twisted-torus');
+  assert.strictEqual(twisted.preset.rows, 4);
+  assert.strictEqual(twisted.preset.cols, 4);
+  assert.strictEqual(twisted.preset.surface, 'M_2,1');
+  assert.strictEqual(twisted.preset.gluedEdges.length, 8);
+  const twistedStep = game.surfaceSuccessor(twisted, game.indexOf(1, 1, 4), game.DIRS.N);
+  assert.strictEqual(twistedStep.kind, 'glued');
+  assert.strictEqual(twistedStep.index, game.indexOf(4, 2, 4));
 }
 
 function testHexKeyboardMapping() {
@@ -1054,12 +1710,27 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   const minigameHtml = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
   const mosaicHtml = fs.readFileSync(require.resolve('../mosaic_calculator.html'), 'utf8');
   assert.ok(!minigameHtml.includes('id="import-preset-toggle"'));
+  assert.ok(minigameHtml.includes('id="game-mode-select"'));
+  assert.ok(minigameHtml.includes('<option value="2048" selected>2048</option>'));
+  assert.ok(minigameHtml.includes('<option value="gomoku">Gomoku</option>'));
+  assert.ok(minigameHtml.includes('<option value="connect-four">Connect Four</option>'));
+  assert.ok(minigameHtml.includes('<optgroup label="2048">'));
+  assert.ok(minigameHtml.includes('<optgroup label="Gomoku">'));
+  assert.ok(minigameHtml.includes('<optgroup label="Connect Four">'));
+  assert.ok(minigameHtml.includes('id="gomoku-size-row" data-mode-control="gomoku"'));
+  assert.ok(minigameHtml.includes('id="gomoku-board-size"'));
+  assert.ok(minigameHtml.includes('id="gomoku-display-row" data-mode-control="gomoku"'));
+  assert.ok(minigameHtml.includes('id="gomoku-display-style"'));
+  assert.ok(minigameHtml.includes('<option value="vertex">vertex E/S/W/N</option>'));
+  assert.ok(minigameHtml.includes('id="connect-four-fall-row" data-mode-control="connect-four"'));
+  assert.ok(minigameHtml.includes('id="connect-four-fall-dir"'));
+  assert.ok(minigameHtml.includes('id="game-setup-alert"'));
   assert.ok(minigameHtml.includes('<option value="import-preset">import</option>'));
   assert.ok(minigameHtml.includes('id="import-preset-input"'));
   assert.ok(minigameHtml.includes('id="apply-import-preset"'));
   assert.ok(minigameHtml.includes('id="import-state"'));
   assert.ok(!minigameHtml.includes('id="debug-export-output" readonly'));
-  assert.ok(minigameHtml.includes('<div class="mosaic-debug-step-row">'));
+  assert.ok(minigameHtml.includes('id="step-mode-row" data-mode-control="2048"'));
   assert.ok(minigameHtml.includes('<option value="">empty</option>'));
   assert.ok(mosaicHtml.includes('id="export-background-preset"'));
   assert.ok(mosaicHtml.includes('id="export-background-preset" type="button">export</button>'));
@@ -1309,6 +1980,21 @@ function testHeadlessDomStepControls() {
   });
   const wrap = makeElement('canvas-wrap', { clientWidth: 720 });
   const moveButtons = [makeMoveButton('N'), makeMoveButton('W'), makeMoveButton('E'), makeMoveButton('S')];
+  const mode2048Controls = [
+    makeElement('box-ui-row', { attributes: { 'data-mode-control': '2048' } }),
+    makeElement('new-boxes-row', { attributes: { 'data-mode-control': '2048' } }),
+    makeElement('speed-row', { attributes: { 'data-mode-control': '2048' } }),
+    makeElement('step-mode-row', { attributes: { 'data-mode-control': '2048' } }),
+    makeElement('debug-tile-row', { attributes: { 'data-mode-control': '2048' } }),
+    makeElement('move-row', { attributes: { 'data-mode-control': '2048' } })
+  ];
+  const modeGomokuControls = [
+    makeElement('gomoku-size-row', { hidden: true, attributes: { 'data-mode-control': 'gomoku' } }),
+    makeElement('gomoku-display-row', { hidden: true, attributes: { 'data-mode-control': 'gomoku' } })
+  ];
+  const modeConnectFourControls = [
+    makeElement('connect-four-fall-row', { hidden: true, attributes: { 'data-mode-control': 'connect-four' } })
+  ];
   const canvas = makeElement('mosaic-canvas', {
     parentElement: wrap,
     getContext() {
@@ -1320,13 +2006,21 @@ function testHeadlessDomStepControls() {
   });
   [
     canvas,
+    makeElement('game-mode-select', { value: '2048' }),
     makeElement('surface-preset-select', { value: 'torus' }),
     makeElement('import-preset-tools', { hidden: true }),
     makeElement('import-preset-input'),
     makeElement('apply-import-preset'),
+    makeElement('gomoku-board-size', { value: '15' }),
+    makeElement('gomoku-display-style', { value: 'center' }),
+    makeElement('connect-four-fall-dir', {
+      value: 'S',
+      options: ['S', 'E', 'W', 'N', 'SE', 'SW', 'NW', 'NE'].map((value) => ({ value, textContent: '', hidden: false, disabled: false }))
+    }),
     makeElement('number-box-style', { value: 'paper' }),
     makeElement('highlight-new-boxes', { checked: true }),
     makeElement('begin-game'),
+    makeElement('game-setup-alert', { hidden: true }),
     makeElement('animation-speed', { value: '80' }),
     makeElement('animation-speed-value'),
     makeElement('step-mode', { checked: true }),
@@ -1341,6 +2035,11 @@ function testHeadlessDomStepControls() {
     makeElement('status-badge'),
     makeElement('status-line'),
     makeElement('info-line'),
+    makeElement('score-label'),
+    makeElement('highest-tile-label'),
+    makeElement('existing-tile-label'),
+    makeElement('removed-tile-label'),
+    makeElement('round-label'),
     makeElement('score-value'),
     makeElement('highest-tile-value'),
     makeElement('existing-tile-value'),
@@ -1348,6 +2047,9 @@ function testHeadlessDomStepControls() {
     makeElement('round-value')
   ].forEach((element) => elements.set(element.id, element));
   moveButtons.forEach((button) => elements.set(button.id, button));
+  mode2048Controls.forEach((control) => elements.set(control.id, control));
+  modeGomokuControls.forEach((control) => elements.set(control.id, control));
+  modeConnectFourControls.forEach((control) => elements.set(control.id, control));
 
   const documentListeners = {};
   const windowListeners = {};
@@ -1368,7 +2070,11 @@ function testHeadlessDomStepControls() {
         if (type === 'DOMContentLoaded') handler();
       },
       querySelectorAll(selector) {
-        return selector === '[data-move-dir]' ? moveButtons : [];
+        if (selector === '[data-move-dir]') return moveButtons;
+        if (selector === '[data-mode-control="2048"]') return mode2048Controls;
+        if (selector === '[data-mode-control="gomoku"]') return modeGomokuControls;
+        if (selector === '[data-mode-control="connect-four"]') return modeConnectFourControls;
+        return [];
       }
     },
     window: {
@@ -1387,10 +2093,19 @@ function testHeadlessDomStepControls() {
   context.Math.random = () => (randoms.length ? randoms.shift() : 0.1);
   vm.runInNewContext(source, context);
 
+  assert.strictEqual(typeof canvas.listeners.mousemove, 'function');
+  assert.strictEqual(typeof canvas.listeners.mouseleave, 'function');
+  canvas.listeners.mousemove({ clientX: 57, clientY: 29 });
+  assert.strictEqual(canvas.style.cursor, 'help');
+  canvas.listeners.mouseleave();
+  assert.strictEqual(canvas.style.cursor, '');
+
   elements.get('begin-game').listeners.click();
   assert.strictEqual(elements.get('status-badge').textContent, 'ready');
   assert.strictEqual(elements.get('highest-tile-value').textContent, '2');
   assert.strictEqual(moveButtons.some((button) => button.disabled), false);
+  assert.strictEqual(elements.get('move-row').hidden, false);
+  assert.strictEqual(elements.get('box-ui-row').hidden, false);
 
   elements.get('debug-toggle').listeners.click();
   assert.strictEqual(elements.get('debug-tools').hidden, false);
@@ -1411,7 +2126,7 @@ function testHeadlessDomStepControls() {
   assert.strictEqual(elements.get('undo-step').disabled, false);
 
   elements.get('debug-tile-value').value = '';
-  canvas.listeners.click({ clientX: 57, clientY: 57 });
+  canvas.listeners.click({ clientX: 36, clientY: 41 });
   exported = JSON.parse(elements.get('debug-export-output').value);
   assert.strictEqual(elements.get('status-line').textContent, 'debug: r1 c1 = empty');
   assert.strictEqual(exported.boxes.some((item) => item.row === 1 && item.col === 1), false);
@@ -1528,6 +2243,152 @@ function testHeadlessDomStepControls() {
   exported = JSON.parse(elements.get('debug-export-output').value);
   assert.strictEqual(exported.phase, 'gameover');
   assert.strictEqual(exported.ending, 'bonus');
+
+  elements.get('game-mode-select').value = 'gomoku';
+  elements.get('game-mode-select').listeners.change();
+  assert.strictEqual(elements.get('status-badge').textContent, 'setup');
+  assert.strictEqual(elements.get('surface-preset-select').value, 'gomoku-random-glue');
+  assert.strictEqual(elements.get('move-row').hidden, true);
+  assert.strictEqual(elements.get('box-ui-row').hidden, true);
+  assert.strictEqual(elements.get('gomoku-size-row').hidden, false);
+  assert.strictEqual(elements.get('gomoku-board-size').value, '15');
+  assert.strictEqual(elements.get('gomoku-display-row').hidden, false);
+  assert.strictEqual(elements.get('step-mode-row').hidden, true);
+  assert.strictEqual(elements.get('debug-tile-row').hidden, true);
+  assert.strictEqual(elements.get('debug-tile-value').disabled, true);
+  elements.get('gomoku-display-style').value = 'vertex';
+  elements.get('gomoku-display-style').listeners.change();
+  elements.get('begin-game').listeners.click();
+  assert.strictEqual(elements.get('status-badge').textContent, 'ready');
+  assert.strictEqual(elements.get('score-label').textContent, 'Turn');
+  assert.strictEqual(elements.get('score-value').textContent, 'black');
+  canvas.listeners.click({ clientX: 57, clientY: 57 });
+  assert.strictEqual(elements.get('score-value').textContent, 'white');
+  assert.strictEqual(elements.get('highest-tile-label').textContent, 'Black stones');
+  assert.strictEqual(elements.get('highest-tile-value').textContent, '1');
+  assert.strictEqual(elements.get('existing-tile-value').textContent, '0');
+  assert.strictEqual(elements.get('round-value').textContent, '1');
+  assert.strictEqual(elements.get('undo-step').disabled, false);
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.gameMode, 'gomoku');
+  assert.deepStrictEqual(exported.stones.map((stone) => stone.color), ['black']);
+  assert.strictEqual(exported.turn, 'white');
+  const gomokuExport = exported;
+  elements.get('undo-step').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.gameMode, 'gomoku');
+  assert.strictEqual(exported.stones.length, 0);
+  assert.strictEqual(elements.get('score-value').textContent, 'black');
+  assert.strictEqual(elements.get('round-value').textContent, '0');
+  elements.get('debug-export-output').value = JSON.stringify(gomokuExport);
+  elements.get('import-state').listeners.click();
+  assert.strictEqual(elements.get('status-line').textContent, 'status imported');
+  assert.strictEqual(elements.get('highest-tile-value').textContent, '1');
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.gameMode, 'gomoku');
+  assert.strictEqual(exported.stones.length, 1);
+
+  const clickCell = (row, col) => {
+    canvas.listeners.click({
+      clientX: 57 + ((col - 1) * 58),
+      clientY: 57 + ((row - 1) * 58)
+    });
+  };
+  elements.get('surface-preset-select').value = 'torus';
+  elements.get('surface-preset-select').listeners.change();
+  elements.get('begin-game').listeners.click();
+  clickCell(1, 1);
+  clickCell(2, 1);
+  clickCell(1, 2);
+  clickCell(2, 2);
+  clickCell(1, 3);
+  clickCell(2, 3);
+  clickCell(1, 4);
+  assert.strictEqual(elements.get('status-line').textContent, 'black wins');
+  assert.strictEqual(elements.get('status-badge').textContent, 'over');
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.resultDismissed, false);
+  assert.strictEqual(exported.stones.length, 7);
+  canvas.listeners.click({ clientX: 57, clientY: 57 });
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.resultDismissed, true);
+  assert.strictEqual(exported.stones.length, 7);
+
+  elements.get('game-mode-select').value = 'connect-four';
+  elements.get('game-mode-select').listeners.change();
+  assert.strictEqual(elements.get('status-badge').textContent, 'setup');
+  assert.strictEqual(elements.get('surface-preset-select').value, 'connect-four-6x7');
+  assert.strictEqual(elements.get('connect-four-fall-row').hidden, false);
+  assert.strictEqual(elements.get('gomoku-size-row').hidden, true);
+  assert.strictEqual(elements.get('gomoku-display-row').hidden, true);
+  assert.strictEqual(elements.get('move-row').hidden, true);
+  elements.get('surface-preset-select').value = 'connect-four-6x7';
+  elements.get('surface-preset-select').listeners.change();
+  elements.get('connect-four-fall-dir').value = 'S';
+  elements.get('connect-four-fall-dir').listeners.change();
+  elements.get('begin-game').listeners.click();
+  assert.strictEqual(elements.get('status-line').textContent, 'add holes');
+  assert.strictEqual(elements.get('info-line').textContent, 'click tiles to add input holes before beginning');
+  assert.strictEqual(elements.get('game-setup-alert').hidden, false);
+  assert.strictEqual(elements.get('game-setup-alert').textContent, 'click tiles to add input holes before beginning');
+  assert.strictEqual(elements.get('begin-game').textContent, 'begin the game');
+  canvas.listeners.click({ clientX: 36, clientY: 41 });
+  assert.strictEqual(elements.get('status-line').textContent, 'hole added');
+  assert.ok(elements.get('info-line').textContent.includes('1 input hole'));
+  assert.strictEqual(elements.get('game-setup-alert').hidden, true);
+  elements.get('begin-game').listeners.click();
+  assert.strictEqual(elements.get('status-badge').textContent, 'ready');
+  assert.strictEqual(elements.get('begin-game').textContent, 'stop the game');
+  assert.strictEqual(elements.get('score-label').textContent, 'Turn');
+  assert.strictEqual(elements.get('score-value').textContent, 'red');
+  assert.strictEqual(elements.get('connect-four-fall-dir').disabled, true);
+  canvas.listeners.click({ clientX: 36, clientY: 41 });
+  assert.strictEqual(elements.get('status-line').textContent, 'Connect Four drop 1');
+  assert.strictEqual(elements.get('game-setup-alert').hidden, true);
+  assert.strictEqual(elements.get('score-value').textContent, 'yellow');
+  assert.strictEqual(elements.get('highest-tile-label').textContent, 'Red tokens');
+  assert.strictEqual(elements.get('highest-tile-value').textContent, '1');
+  assert.strictEqual(elements.get('existing-tile-value').textContent, '0');
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.gameMode, 'connect-four');
+  assert.strictEqual(exported.tokens.length, 1);
+  assert.strictEqual(exported.holes.length, 1);
+  assert.strictEqual(exported.tokens[0].row, 6);
+  assert.strictEqual(exported.tokens[0].col, 1);
+  assert.strictEqual(exported.fallDirName, 'S');
+  elements.get('begin-game').listeners.click();
+  assert.strictEqual(elements.get('begin-game').textContent, 'begin the game');
+  assert.strictEqual(elements.get('status-badge').textContent, 'setup');
+
+  elements.get('surface-preset-select').value = 'torus';
+  elements.get('surface-preset-select').listeners.change();
+  elements.get('connect-four-fall-dir').value = 'E';
+  elements.get('connect-four-fall-dir').listeners.change();
+  canvas.listeners.click({ clientX: 57, clientY: 57 });
+  elements.get('begin-game').listeners.click();
+  canvas.listeners.click({ clientX: 57, clientY: 57 });
+  assert.strictEqual(elements.get('status-line').textContent, 'Connect Four drop rejected');
+  assert.strictEqual(elements.get('info-line').textContent, 'drop route cycles before stopping');
+  assert.strictEqual(elements.get('game-setup-alert').hidden, false);
+  assert.strictEqual(elements.get('game-setup-alert').textContent, 'Connect Four drop rejected: drop route cycles before stopping');
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.deepStrictEqual(exported.cycleHoles.map((hole) => [hole.row, hole.col]), [[1, 1]]);
+  elements.get('begin-game').listeners.click();
+  assert.strictEqual(elements.get('status-badge').textContent, 'setup');
+  assert.strictEqual(elements.get('game-setup-alert').hidden, true);
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.deepStrictEqual(exported.cycleHoles.map((hole) => [hole.row, hole.col]), [[1, 1]]);
+  canvas.listeners.click({ clientX: 57, clientY: 57 });
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.deepStrictEqual(exported.cycleHoles, []);
 }
 
 function run() {
@@ -1561,11 +2422,32 @@ function run() {
   testPushLoopBreaksWhenItReturnsToActorDirection();
   testTorusGlueLoopExplosion();
   testKleinAndRamifiedSuccessors();
+  testGlueHoverFindsMultiEdgeGroup();
   testGenus2PresetFromExport();
   testRandomGluePresetCoversBoundary();
   testRandomGluePresetIsDeterministicWithGlueRng();
+  testGomokuRandomGluePresetSize();
   testHexClassicPreset();
   testHexClassicSuccessors();
+  testGomokuAlternatingPlacement();
+  testGomokuRejectsOccupiedAndRemovedTiles();
+  testGomokuSquareHorizontalWin();
+  testGomokuHexAxisWin();
+  testGomokuSquareDiagonalWin();
+  testGomokuDiagonalChecksAlternateStepOrders();
+  testGomokuDiagonalTransportsAfterRotatingGlue();
+  testGomokuDiagonalTransportsAfterReflectingGlue();
+  testGomokuGluedEdgeWin();
+  testDiagonalGluedLineUsesBoundaryCorner();
+  testDiagonalGluedLineUsesCornerSharedWithPreviousTile();
+  testGomokuCyclicReuseWin();
+  testConnectFourDropStopsAtBoundaryAndBlocker();
+  testConnectFourCycleWarning();
+  testConnectFourDropCarriesGluedRoute();
+  testConnectFourEndsWhenInputHolesFilled();
+  testConnectFourHorizontalWin();
+  testConnectFourDiagonalWinDetection();
+  testConnectFourDiagonalTransportsAfterReflectingGlue();
   testExtraBackgroundPresets();
   testHexKeyboardMapping();
   testHexMovePadUsesArrowGlyphs();

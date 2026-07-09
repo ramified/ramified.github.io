@@ -6,8 +6,8 @@ window.THEOREM_GRAPH_PRESETS = [
 },
 {
   label: 'Maintenance Tracker',
-  key: 'corrections_wait',
-  file: 'corrections_wait.preset.js'
+  key: 'maintenance_tracker',
+  file: 'maintenance_tracker.preset.js'
 },
 { label: "Quartic double solid", key: "quartic_double_solid", file: "quartic_double_solid.preset.js" },
 { 

@@ -797,7 +797,7 @@
         backgroundAction: 'billiard',
         backgroundMultiEdges: true,
         backgroundChainLength: 2,
-        backgroundChainReversed: false,
+        backgroundChainReversed: true,
         backgroundCuspMarkerScale: 0.7,
         backgroundBilliardSpeed: 0.2,
         backgroundBilliardTrailLength: 170,
@@ -824,8 +824,8 @@
             reversed: false,
             firstArrowReversed: false,
             secondArrowReversed: true,
-            first: { row: 2, col: 3, dir: 1, edge: 'S' },
-            second: { row: 3, col: 9, dir: 3, edge: 'N' }
+            first: { row: 2, col: 8, dir: 1, edge: 'S' },
+            second: { row: 3, col: 3, dir: 3, edge: 'N' }
           },
           {
             group: 0,
@@ -833,7 +833,16 @@
             reversed: false,
             firstArrowReversed: false,
             secondArrowReversed: true,
-            first: { row: 2, col: 4, dir: 1, edge: 'S' },
+            first: { row: 2, col: 9, dir: 1, edge: 'S' },
+            second: { row: 3, col: 4, dir: 3, edge: 'N' }
+          },
+          {
+            group: 1,
+            orientation: 'opposite',
+            reversed: false,
+            firstArrowReversed: false,
+            secondArrowReversed: true,
+            first: { row: 2, col: 3, dir: 1, edge: 'S' },
             second: { row: 3, col: 8, dir: 3, edge: 'N' }
           },
           {
@@ -842,17 +851,8 @@
             reversed: false,
             firstArrowReversed: false,
             secondArrowReversed: true,
-            first: { row: 3, col: 3, dir: 3, edge: 'N' },
-            second: { row: 2, col: 8, dir: 1, edge: 'S' }
-          },
-          {
-            group: 1,
-            orientation: 'opposite',
-            reversed: false,
-            firstArrowReversed: false,
-            secondArrowReversed: true,
-            first: { row: 3, col: 4, dir: 3, edge: 'N' },
-            second: { row: 2, col: 9, dir: 1, edge: 'S' }
+            first: { row: 2, col: 4, dir: 1, edge: 'S' },
+            second: { row: 3, col: 9, dir: 3, edge: 'N' }
           }
         ],
         tiles: Array(36).fill(null)

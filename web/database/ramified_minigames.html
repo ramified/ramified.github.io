@@ -136,6 +136,19 @@
       margin-top: 8px;
     }
 
+    .game-setup-alert {
+      margin-top: 7px;
+      color: #b42318;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .game-setup-alert[hidden] {
+      display: none !important;
+    }
+
     .mosaic-import-presets {
       margin-top: 4px;
     }
@@ -337,6 +350,7 @@
     }
 
     .input-mode-panel[hidden],
+    .mosaic-debug-step-row[hidden],
     .mosaic-inline-row[hidden],
     .mosaic-view-row[hidden] {
       display: none !important;
@@ -359,7 +373,8 @@
       border-color: var(--accent);
     }
 
-    .mosaic-inline-row select {
+    .mosaic-inline-row select,
+    .mosaic-inline-row input[type=number] {
       width: 100%;
       min-width: 0;
       padding: 5px 8px;
@@ -371,7 +386,8 @@
       font-size: 0.9rem;
     }
 
-    .mosaic-inline-row select:focus {
+    .mosaic-inline-row select:focus,
+    .mosaic-inline-row input[type=number]:focus {
       outline: 2px solid var(--accent);
       border-color: var(--accent);
     }
@@ -1062,28 +1078,71 @@
       <div class="card-head"><span class="card-head-label">Game Setup</span></div>
       <div class="card-body">
         <div class="mosaic-inline-row">
+          <span class="input-label">Game</span>
+          <select id="game-mode-select" aria-label="Game">
+            <option value="2048" selected>2048</option>
+            <option value="gomoku">Gomoku</option>
+            <option value="connect-four">Connect Four</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row">
           <span class="input-label">Preset</span>
           <select id="surface-preset-select" aria-label="Surface preset">
-            <option value="classic-4x4">4*4 classic</option>
-            <option value="genus-2">genus 2</option>
-            <option value="random-glue-4x4">random glue 4*4</option>
-            <option value="half-glued">half-glued</option>
-            <option value="torus" selected>torus</option>
-            <option value="klein-bottle">Klein bottle</option>
-            <option value="ramified-cover">ramified cover</option>
-            <option value="rubiks-cube-2x2x2">Rubik's Cube 2*2*2</option>
-            <option value="rubiks-cube-3x3x3">Rubik's Cube 3*3*3</option>
-            <option value="usual-strip">usual strip</option>
-            <option value="mobius-strip">M&ouml;bius strip</option>
-            <option value="hex-classic-4x4">hex classic 4*4</option>
-            <option value="import-preset">import</option>
+            <optgroup label="2048">
+              <option value="classic-4x4" selected>4*4 classic</option>
+              <option value="twisted-torus">twisted torus</option>
+              <option value="genus-2">genus 2</option>
+              <option value="random-glue-4x4">random glue 4*4</option>
+              <option value="half-glued">half-glued</option>
+              <option value="torus">torus</option>
+              <option value="klein-bottle">Klein bottle</option>
+              <option value="ramified-cover">ramified cover</option>
+              <option value="rubiks-cube-2x2x2">Rubik's Cube 2*2*2</option>
+              <option value="rubiks-cube-3x3x3">Rubik's Cube 3*3*3</option>
+              <option value="usual-strip">usual strip</option>
+              <option value="mobius-strip">M&ouml;bius strip</option>
+              <option value="hex-classic-4x4">hex classic 4*4</option>
+            </optgroup>
+            <optgroup label="Gomoku">
+              <option value="gomoku-random-glue">random glue n*n</option>
+            </optgroup>
+            <optgroup label="Connect Four">
+              <option value="connect-four-6x7">Connect Four 6*7</option>
+            </optgroup>
+            <optgroup label="Custom">
+              <option value="import-preset">import</option>
+            </optgroup>
           </select>
         </div>
         <div class="mosaic-debug-panel" id="import-preset-tools" hidden>
           <textarea class="mosaic-editor-input mosaic-import-input" id="import-preset-input" spellcheck="false" autocomplete="off" placeholder="{ ... }" aria-label="Imported background preset"></textarea>
           <button class="btn mosaic-import-button" id="apply-import-preset" type="button">generate</button>
         </div>
-        <div class="mosaic-inline-row">
+        <div class="mosaic-inline-row" id="gomoku-display-row" data-mode-control="gomoku" hidden>
+          <span class="input-label">Display</span>
+          <select id="gomoku-display-style" aria-label="Gomoku display">
+            <option value="center" selected>tile centers</option>
+            <option value="vertex">vertex E/S/W/N</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="gomoku-size-row" data-mode-control="gomoku" hidden>
+          <span class="input-label">Board n</span>
+          <input id="gomoku-board-size" type="number" min="5" max="25" step="1" value="15" aria-label="Gomoku random glue board size">
+        </div>
+        <div class="mosaic-inline-row" id="connect-four-fall-row" data-mode-control="connect-four" hidden>
+          <span class="input-label">Fall</span>
+          <select id="connect-four-fall-dir" aria-label="Connect Four fall direction">
+            <option value="S" selected>down</option>
+            <option value="E">right</option>
+            <option value="W">left</option>
+            <option value="N">up</option>
+            <option value="SE">southeast</option>
+            <option value="SW">southwest</option>
+            <option value="NW">northwest</option>
+            <option value="NE">northeast</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="box-ui-row" data-mode-control="2048">
           <span class="input-label">Box UI</span>
           <select id="number-box-style" aria-label="Number box style">
             <option value="paper" selected>paper square</option>
@@ -1091,11 +1150,11 @@
             <option value="color">value color</option>
           </select>
         </div>
-        <div class="mosaic-inline-row">
+        <div class="mosaic-inline-row" id="new-boxes-row" data-mode-control="2048">
           <span class="input-label">New boxes</span>
           <label class="opt-row"><input type="checkbox" id="highlight-new-boxes" checked> highlight</label>
         </div>
-        <div class="mosaic-inline-row">
+        <div class="mosaic-inline-row" id="speed-row" data-mode-control="2048">
           <span class="input-label">Speed</span>
           <span class="background-slider-controls">
             <input type="range" id="animation-speed" min="40" max="400" step="20" value="80">
@@ -1103,16 +1162,17 @@
           </span>
         </div>
         <button class="btn mosaic-import-button" id="begin-game" type="button">begin the game</button>
+        <div class="game-setup-alert" id="game-setup-alert" role="status" aria-live="polite" hidden></div>
         <div class="mosaic-debug-actions">
           <button class="btn" id="debug-toggle" type="button" aria-pressed="false">debug</button>
           <button class="btn" id="undo-step" type="button" disabled>undo</button>
         </div>
         <div class="mosaic-debug-panel" id="debug-tools" hidden>
-          <div class="mosaic-debug-step-row">
+          <div class="mosaic-debug-step-row" id="step-mode-row" data-mode-control="2048">
             <label class="opt-row"><input type="checkbox" id="step-mode"> step-by-step</label>
             <button class="btn" id="next-step" type="button" disabled>next step</button>
           </div>
-          <div class="mosaic-inline-row">
+          <div class="mosaic-inline-row" id="debug-tile-row" data-mode-control="2048">
             <span class="input-label">Tile value</span>
             <select class="mosaic-editor-input" id="debug-tile-value" aria-label="Debug tile value">
               <option value="">empty</option>
@@ -1144,7 +1204,7 @@
           </div>
           <textarea class="mosaic-editor-input mosaic-debug-export" id="debug-export-output" spellcheck="false" autocomplete="off" aria-label="Current game status import or export"></textarea>
         </div>
-        <div class="mosaic-inline-row">
+        <div class="mosaic-inline-row" id="move-row" data-mode-control="2048">
           <span class="input-label">Move</span>
           <table data-move-lattice="square" aria-label="Square directional controls">
             <tbody>
@@ -1180,11 +1240,11 @@
     <section class="card">
       <div class="card-head"><span class="card-head-label">Game Stats</span></div>
       <div class="card-body">
-        <div class="stat-row"><span class="stat-label">Score</span><span class="stat-value" id="score-value">0</span></div>
-        <div class="stat-row"><span class="stat-label">Highest tile</span><span class="stat-value" id="highest-tile-value">0</span></div>
-        <div class="stat-row"><span class="stat-label">Existing tiles</span><span class="stat-value" id="existing-tile-value">0</span></div>
-        <div class="stat-row"><span class="stat-label">Removed tiles</span><span class="stat-value" id="removed-tile-value">0</span></div>
-        <div class="stat-row"><span class="stat-label">Round</span><span class="stat-value" id="round-value">0</span></div>
+        <div class="stat-row"><span class="stat-label" id="score-label">Score</span><span class="stat-value" id="score-value">0</span></div>
+        <div class="stat-row"><span class="stat-label" id="highest-tile-label">Highest tile</span><span class="stat-value" id="highest-tile-value">0</span></div>
+        <div class="stat-row"><span class="stat-label" id="existing-tile-label">Existing tiles</span><span class="stat-value" id="existing-tile-value">0</span></div>
+        <div class="stat-row"><span class="stat-label" id="removed-tile-label">Removed tiles</span><span class="stat-value" id="removed-tile-value">0</span></div>
+        <div class="stat-row"><span class="stat-label" id="round-label">Round</span><span class="stat-value" id="round-value">0</span></div>
       </div>
     </section>
   </aside>

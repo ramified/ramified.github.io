@@ -4,7 +4,7 @@
   const SCHEMA_VERSION = 4;
   const DEFAULT_GRAPH_TITLE = 'Dependency Graph';
   const PRESET_FOLDER_URL = 'theorem_graph_presets/';
-  const DEFAULT_PRESET_KEY = 'corrections_wait';
+  const DEFAULT_PRESET_KEY = 'maintenance_tracker';
   const DEFAULT_NODE_STROKE = '#7a6f65';
   const DEFAULT_NODE_FILL = '#f7f5f1';
   const NODE_TYPES = {
@@ -167,7 +167,6 @@
     bindEvents();
     resizeCanvas();
     loadPresetRegistry();
-    renderAll();
     loadDefaultPreset();
 
     if (window.ResizeObserver && refs.canvas) {
