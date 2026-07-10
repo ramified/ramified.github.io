@@ -18,25 +18,70 @@
 
     .theorem-canvas-wrap {
       position: relative;
-      min-height: 420px;
+      min-height: 300px;
     }
 
     #theorem-graph-canvas {
       width: 100% !important;
-      height: min(62vh, 620px) !important;
-      min-height: 420px;
+      height: var(--theorem-canvas-height, min(62vh, 620px)) !important;
+      min-height: 300px;
       border: 1px solid var(--border);
       border-radius: 3px;
       background: #fffdf8;
       cursor: default;
+      display: block;
       touch-action: none;
     }
 
-    .theorem-node-layer {
+    .theorem-node-layer,
+    .theorem-arrow-label-layer {
       position: absolute;
       inset: 0;
       pointer-events: none;
+    }
+
+    .theorem-node-layer {
+      z-index: 3;
+    }
+
+    .theorem-arrow-label-layer {
       z-index: 2;
+    }
+
+    .theorem-arrow-label {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      max-width: min(240px, 46%);
+      min-height: 18px;
+      padding: 0 3px;
+      border: 0;
+      background: transparent;
+      color: var(--arrow-label-color, #5f574e);
+      cursor: grab;
+      font: 12px 'JetBrains Mono', Consolas, monospace;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+      pointer-events: auto;
+      text-align: center;
+      touch-action: none;
+      user-select: none;
+      white-space: normal;
+    }
+
+    .theorem-arrow-label:hover,
+    .theorem-arrow-label:focus-visible,
+    .theorem-arrow-label.is-selected {
+      color: var(--accent2);
+      outline: none;
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 2px;
+    }
+
+    .theorem-arrow-label mjx-container {
+      margin: 0 !important;
+      overflow: visible;
+      pointer-events: none;
     }
 
     .theorem-node-label {
@@ -100,6 +145,40 @@
       backdrop-filter: blur(2px);
     }
 
+    .theorem-canvas-resize-handle {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 0;
+      height: 14px;
+      z-index: 6;
+      cursor: ns-resize;
+      touch-action: none;
+    }
+
+    .theorem-canvas-resize-handle::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 4px;
+      width: 76px;
+      height: 4px;
+      transform: translateX(-50%);
+      border-top: 1px solid color-mix(in srgb, var(--muted) 45%, transparent);
+      border-bottom: 1px solid color-mix(in srgb, var(--muted) 45%, transparent);
+      opacity: 0.75;
+    }
+
+    .theorem-canvas-resize-handle:hover::before,
+    .theorem-canvas-resize-handle:focus-visible::before {
+      border-color: var(--accent);
+      opacity: 1;
+    }
+
+    .theorem-canvas-resize-handle:focus-visible {
+      outline: none;
+    }
+
     .theorem-underbar {
       display: flex;
       justify-content: space-between;
@@ -140,6 +219,80 @@
       gap: 7px;
       flex-wrap: wrap;
       min-width: 0;
+    }
+
+    .theorem-main-canvas-heading {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1 1 360px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .theorem-main-canvas-label {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.74rem;
+      letter-spacing: 0.02em;
+      text-transform: lowercase;
+      white-space: nowrap;
+    }
+
+    .theorem-icon-button {
+      width: 28px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .theorem-icon-button:hover,
+    .theorem-icon-button:focus-visible {
+      border-color: var(--accent);
+      color: var(--accent);
+      outline: none;
+    }
+
+    .theorem-icon-button.is-locked {
+      border-color: var(--accent2);
+      color: var(--accent2);
+      background: color-mix(in srgb, var(--accent2) 9%, var(--bg));
+    }
+
+    .theorem-lock-icon {
+      position: relative;
+      width: 14px;
+      height: 11px;
+      border: 2px solid currentColor;
+      border-radius: 2px;
+      box-sizing: border-box;
+      margin-top: 5px;
+    }
+
+    .theorem-lock-icon::before {
+      content: "";
+      position: absolute;
+      left: 2px;
+      top: -10px;
+      width: 6px;
+      height: 8px;
+      border: 2px solid currentColor;
+      border-bottom: 0;
+      border-radius: 7px 7px 0 0;
+    }
+
+    .theorem-icon-button:not(.is-locked) .theorem-lock-icon::before {
+      left: 5px;
+      transform: rotate(28deg);
+      transform-origin: left bottom;
     }
 
     .theorem-title-input {
@@ -436,6 +589,10 @@
       text-underline-offset: 2px;
     }
 
+    .theorem-field-row.is-editing-label .theorem-misc-detail-name {
+      display: none !important;
+    }
+
     .theorem-misc-detail-name-input {
       margin-top: 0;
       padding: 4px 6px;
@@ -693,6 +850,53 @@
       cursor: not-allowed;
     }
 
+    .theorem-segmented {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    .theorem-segmented button {
+      min-width: 0;
+      min-height: 28px;
+      padding: 3px 5px;
+      border: 0;
+      border-right: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font: inherit;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0;
+    }
+
+    .theorem-segmented button:last-child {
+      border-right: 0;
+    }
+
+    .theorem-segmented button:hover,
+    .theorem-segmented button:focus-visible {
+      background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+      color: var(--accent);
+      outline: none;
+    }
+
+    .theorem-segmented button.is-selected {
+      background: color-mix(in srgb, var(--accent2) 10%, var(--bg));
+      color: var(--accent2);
+    }
+
+    .theorem-segmented button[disabled] {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
     .theorem-color-input {
       width: 42px;
       height: 28px;
@@ -772,12 +976,12 @@
       }
 
       .theorem-canvas-wrap {
-        min-height: 360px;
+        min-height: 260px;
       }
 
       #theorem-graph-canvas {
-        min-height: 360px;
-        height: 58vh !important;
+        min-height: 260px;
+        height: var(--theorem-canvas-height, 58vh) !important;
       }
 
       .theorem-underbar {
@@ -814,20 +1018,27 @@
 <main class="layout theorem-layout">
   <section class="canvas-panel">
     <header class="panel-title">
-      <input id="graph-title" class="theorem-title-input" type="text" maxlength="120" spellcheck="true" autocomplete="off" value="Maintenance Tracker" aria-label="Graph title">
+      <div class="theorem-main-canvas-heading">
+        <input id="graph-title" class="theorem-title-input" type="text" maxlength="120" spellcheck="true" autocomplete="off" value="Maintenance Tracker" aria-label="Graph title">
+      </div>
       <div class="canvas-toolbar" aria-label="Theorem graph controls">
         <span class="theorem-badge" id="graph-count-badge">0 nodes, 0 arrows</span>
         <span class="theorem-badge" id="connect-badge">select</span>
+        <button class="theorem-icon-button" id="canvas-ratio-lock" type="button" aria-label="Lock canvas ratio" aria-pressed="false" title="Lock canvas ratio">
+          <span class="theorem-lock-icon" aria-hidden="true"></span>
+        </button>
       </div>
     </header>
 
     <div class="theorem-stage">
       <div class="theorem-canvas-wrap">
         <canvas id="theorem-graph-canvas" width="960" height="560" aria-label="Theorem dependency graph"></canvas>
+        <div class="theorem-arrow-label-layer" id="theorem-arrow-label-layer" aria-label="Theorem graph arrow labels"></div>
         <div class="theorem-node-layer" id="theorem-node-layer" aria-label="Theorem graph nodes"></div>
         <div class="theorem-corner-actions">
           <button class="btn btn-ghost theorem-small-button" id="clear-graph" type="button">clear</button>
         </div>
+        <div class="theorem-canvas-resize-handle" id="canvas-resize-handle" role="separator" aria-orientation="horizontal" aria-label="Resize main canvas" tabindex="0"></div>
       </div>
     </div>
 
@@ -973,6 +1184,22 @@
           <div class="theorem-field-row">
             <label class="input-label" for="arrow-label-offset">label offset</label>
             <input id="arrow-label-offset" class="theorem-input" type="number" min="-120" max="120" step="5" value="0">
+          </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="arrow-label-position">label pos</label>
+            <div class="theorem-range-row">
+              <input id="arrow-label-position" class="theorem-range-input" type="range" min="0" max="1" step="0.1" value="0.5" aria-label="Arrow label position">
+              <output id="arrow-label-position-value" class="theorem-range-value" for="arrow-label-position">50%</output>
+            </div>
+          </div>
+          <div class="theorem-field-row">
+            <span class="input-label">label align</span>
+            <div class="theorem-segmented" id="arrow-label-align" role="group" aria-label="Arrow label alignment">
+              <button type="button" data-arrow-label-align="left" title="Left align">left</button>
+              <button type="button" data-arrow-label-align="center-clear" title="Center align, clear of the arrow">clear</button>
+              <button type="button" data-arrow-label-align="center-over" title="Center align over the arrow">over</button>
+              <button type="button" data-arrow-label-align="right" title="Right align">right</button>
+            </div>
           </div>
           <div class="theorem-field-row">
             <label class="input-label" for="arrow-color">color</label>

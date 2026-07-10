@@ -3,7 +3,7 @@
 // { label: "Maintenance Tracker", key: "maintenance_tracker", file: "maintenance_tracker.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "title": "Maintenance Tracker",
   "nodes": [
     {
@@ -17,7 +17,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fffdf8",
-      "x": 533.3,
+      "x": 524.5,
       "y": 46
     },
     {
@@ -39,7 +39,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 269.6,
+      "x": 283.5,
       "y": 46
     },
     {
@@ -61,8 +61,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 380.6,
-      "y": 124
+      "x": 355.9,
+      "y": 116.3
     },
     {
       "id": "n46",
@@ -89,8 +89,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 266.7,
-      "y": 374
+      "x": 292.8,
+      "y": 402.8
     },
     {
       "id": "n47",
@@ -111,8 +111,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 636,
-      "y": 351.3
+      "x": 667.9,
+      "y": 399.1
     },
     {
       "id": "n48",
@@ -126,8 +126,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 523,
-      "y": 374
+      "x": 508.3,
+      "y": 404.5
     },
     {
       "id": "n49",
@@ -139,10 +139,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 252.3,
-      "y": 195.9
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 257,
+      "y": 204.3
     },
     {
       "id": "n50",
@@ -161,10 +161,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 132.3,
-      "y": 374
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 140,
+      "y": 375.5
     },
     {
       "id": "n51",
@@ -185,23 +185,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 363.8,
-      "y": 238.6
-    },
-    {
-      "id": "n52",
-      "type": "misc",
-      "label": "Reversi",
-      "details": [],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 361.9,
-      "y": 374
+      "x": 358.7,
+      "y": 282
     },
     {
       "id": "n53",
@@ -246,8 +231,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 686.8,
-      "y": 212.2
+      "x": 682,
+      "y": 229.8
     },
     {
       "id": "n54",
@@ -292,8 +277,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 462.3,
-      "y": 168.9
+      "x": 467.2,
+      "y": 188.4
     },
     {
       "id": "n55",
@@ -314,8 +299,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 587.2,
-      "y": 150.1
+      "x": 629,
+      "y": 119.1
     },
     {
       "id": "n56",
@@ -334,10 +319,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 56.1,
-      "y": 226
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 60.4,
+      "y": 225
     },
     {
       "id": "n57",
@@ -348,7 +333,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goal",
           "label": "goal",
           "type": "checkbox",
-          "text": "main canvas should be allowed to drag longer. User can also lock the ratio, so that the length and width ration is fixed, while the relative position and bigness of the buttons are also fixed."
+          "text": "- [x] main canvas should be allowed to drag longer. User can also lock the ratio, so that the length and width ration is fixed, while the relative position and bigness of the buttons are also fixed."
         }
       ],
       "setting": "",
@@ -356,9 +341,9 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 114.8,
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 122.7,
       "y": 46
     }
   ],
@@ -375,7 +360,9 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
       "color": "#5f574e"
     },
     {
@@ -390,14 +377,16 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
       "color": "#5f574e"
     },
     {
       "id": "a39",
       "sourceId": "n46",
       "targetId": "n48",
-      "label": "23",
+      "label": "test",
       "remark": "",
       "body": "solid",
       "head": "arrow",
@@ -405,7 +394,9 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
       "color": "#5f574e"
     },
     {
@@ -420,7 +411,9 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
       "color": "#5f574e"
     },
     {
@@ -435,22 +428,9 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 0,
-      "color": "#5f574e"
-    },
-    {
-      "id": "a42",
-      "sourceId": "n52",
-      "targetId": "n48",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
       "color": "#5f574e"
     },
     {
@@ -465,7 +445,9 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
       "color": "#5f574e"
     },
     {
@@ -480,7 +462,9 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
       "color": "#5f574e"
     },
     {
@@ -495,7 +479,9 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
       "color": "#5f574e"
     },
     {
@@ -510,7 +496,9 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
       "color": "#5f574e"
     },
     {
@@ -525,14 +513,76 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
       "color": "#5f574e"
     }
   ],
   "references": [],
   "view": {
-    "selectedId": "n39",
+    "selectedId": "n55",
     "selectedReferenceKeys": [],
-    "layoutRunning": false
+    "layoutRunning": false,
+    "canvasRatioLocked": true,
+    "canvasAspectRatio": 1.6124,
+    "relativeNodePositions": {
+      "n4": {
+        "x": 0.6965,
+        "y": 0.0985
+      },
+      "n37": {
+        "x": 0.3765,
+        "y": 0.0985
+      },
+      "n39": {
+        "x": 0.4726,
+        "y": 0.249
+      },
+      "n46": {
+        "x": 0.3889,
+        "y": 0.8625
+      },
+      "n47": {
+        "x": 0.887,
+        "y": 0.8545
+      },
+      "n48": {
+        "x": 0.675,
+        "y": 0.8661
+      },
+      "n49": {
+        "x": 0.3413,
+        "y": 0.4374
+      },
+      "n50": {
+        "x": 0.1859,
+        "y": 0.804
+      },
+      "n51": {
+        "x": 0.4763,
+        "y": 0.6039
+      },
+      "n53": {
+        "x": 0.9057,
+        "y": 0.4922
+      },
+      "n54": {
+        "x": 0.6205,
+        "y": 0.4035
+      },
+      "n55": {
+        "x": 0.8353,
+        "y": 0.255
+      },
+      "n56": {
+        "x": 0.0803,
+        "y": 0.4817
+      },
+      "n57": {
+        "x": 0.1629,
+        "y": 0.0985
+      }
+    }
   }
 };

@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const SCHEMA_VERSION = 4;
+  const SCHEMA_VERSION = 5;
   const DEFAULT_GRAPH_TITLE = 'Dependency Graph';
   const PRESET_FOLDER_URL = 'theorem_graph_presets/';
   const DEFAULT_PRESET_KEY = 'maintenance_tracker';
@@ -40,7 +40,7 @@
     'x',
     'y'
   ]);
-  const KNOWN_ARROW_KEYS = new Set(['id', 'sourceId', 'targetId', 'label', 'remark', 'style', 'body', 'head', 'tail', 'level', 'endpointScale', 'curve', 'labelOffset', 'color']);
+  const KNOWN_ARROW_KEYS = new Set(['id', 'sourceId', 'targetId', 'label', 'remark', 'style', 'body', 'head', 'tail', 'level', 'endpointScale', 'curve', 'labelOffset', 'labelPosition', 'labelAlign', 'color']);
   const KNOWN_REFERENCE_KEYS = new Set(['key', 'author', 'title', 'year', 'citeText', 'url', 'source', 'rawBibtex', 'links']);
   const ARROW_BODIES = [
     { id: 'none', label: 'none' },
@@ -85,12 +85,18 @@
   const ARROW_ENDPOINT_SCALE_DEFAULT = 1;
   const ARROW_ENDPOINT_SCALE_MIN = 0.8;
   const ARROW_ENDPOINT_SCALE_MAX = 2;
+  const ARROW_LABEL_POSITION_DEFAULT = 0.5;
+  const ARROW_LABEL_ALIGN_DEFAULT = 'left';
+  const ARROW_LABEL_ALIGNS = new Set(['left', 'center-clear', 'center-over', 'right']);
   const ARROW_BOUNDARY_GAP_DEFAULT = 10;
   const ARROW_BOUNDARY_GAP_MIN = 0;
   const ARROW_BOUNDARY_GAP_MAX = 48;
   const NODE_FILL_SATURATION_DEFAULT = 210;
   const NODE_FILL_SATURATION_MIN = 0;
   const NODE_FILL_SATURATION_MAX = 300;
+  const CANVAS_MIN_HEIGHT = 260;
+  const CANVAS_MAX_HEIGHT = 1400;
+  const CANVAS_DEFAULT_ASPECT_RATIO = 960 / 560;
   const ARROW_STYLES = [
     { id: 'arrow', label: 'solid arrow', body: 'solid', head: 'arrow', tail: 'none' },
     { id: 'plain', label: 'plain line', body: 'solid', head: 'none', tail: 'none' },
@@ -143,6 +149,9 @@
     canvasWidth: 960,
     canvasHeight: 560,
     drag: null,
+    canvasResize: null,
+    canvasRatioLocked: false,
+    canvasAspectRatio: CANVAS_DEFAULT_ASPECT_RATIO,
     hoveredNodeId: null,
     nodeSerial: 1,
     arrowSerial: 1,
@@ -165,12 +174,14 @@
     cacheRefs();
     populateArrowPartPickers();
     bindEvents();
+    syncCanvasRatioLockControl();
     resizeCanvas();
     loadPresetRegistry();
     loadDefaultPreset();
 
     if (window.ResizeObserver && refs.canvas) {
       const observer = new ResizeObserver(() => {
+        syncLockedCanvasHeight();
         resizeCanvas();
         clampAllNodes();
         renderCanvas();
@@ -178,6 +189,7 @@
       observer.observe(refs.canvas);
     } else {
       window.addEventListener('resize', () => {
+        syncLockedCanvasHeight();
         resizeCanvas();
         clampAllNodes();
         renderCanvas();
@@ -188,6 +200,10 @@
   function cacheRefs() {
     const $ = (id) => document.getElementById(id);
     refs.canvas = $('theorem-graph-canvas');
+    refs.canvasWrap = refs.canvas ? refs.canvas.closest('.theorem-canvas-wrap') : null;
+    refs.canvasRatioLock = $('canvas-ratio-lock');
+    refs.canvasResizeHandle = $('canvas-resize-handle');
+    refs.arrowLabelLayer = $('theorem-arrow-label-layer');
     refs.nodeLayer = $('theorem-node-layer');
     refs.status = $('theorem-status');
     refs.summary = $('theorem-summary');
@@ -229,6 +245,9 @@
     refs.arrowEndpointScaleValue = $('arrow-endpoint-scale-value');
     refs.arrowCurve = $('arrow-curve');
     refs.arrowLabelOffset = $('arrow-label-offset');
+    refs.arrowLabelPosition = $('arrow-label-position');
+    refs.arrowLabelPositionValue = $('arrow-label-position-value');
+    refs.arrowLabelAlign = $('arrow-label-align');
     refs.arrowColor = $('arrow-color');
     refs.detailUpdate = $('detail-update');
     refs.detailCancel = $('detail-cancel');
@@ -296,6 +315,21 @@
       refs.nodeLayer.addEventListener('pointerup', handleCanvasPointerUp);
       refs.nodeLayer.addEventListener('pointercancel', handleCanvasPointerUp);
       refs.nodeLayer.addEventListener('dblclick', handleNodeLayerDoubleClick);
+    }
+    if (refs.arrowLabelLayer) {
+      refs.arrowLabelLayer.addEventListener('pointerdown', handleArrowLabelLayerPointerDown);
+      refs.arrowLabelLayer.addEventListener('pointermove', handleCanvasPointerMove);
+      refs.arrowLabelLayer.addEventListener('pointerup', handleCanvasPointerUp);
+      refs.arrowLabelLayer.addEventListener('pointercancel', handleCanvasPointerUp);
+      refs.arrowLabelLayer.addEventListener('dblclick', handleNodeLayerDoubleClick);
+    }
+    if (refs.canvasRatioLock) refs.canvasRatioLock.addEventListener('click', toggleCanvasRatioLock);
+    if (refs.canvasResizeHandle) {
+      refs.canvasResizeHandle.addEventListener('pointerdown', handleCanvasResizePointerDown);
+      refs.canvasResizeHandle.addEventListener('pointermove', handleCanvasResizePointerMove);
+      refs.canvasResizeHandle.addEventListener('pointerup', handleCanvasResizePointerUp);
+      refs.canvasResizeHandle.addEventListener('pointercancel', handleCanvasResizePointerUp);
+      refs.canvasResizeHandle.addEventListener('keydown', handleCanvasResizeKeyDown);
     }
 
     document.querySelectorAll('.card-head').forEach((head) => {
@@ -387,12 +421,23 @@
       refs.arrowEndpointScale,
       refs.arrowCurve,
       refs.arrowLabelOffset,
+      refs.arrowLabelPosition,
       refs.arrowColor
     ].forEach((control) => {
       if (!control) return;
       control.addEventListener('input', autoApplyDetailUpdate);
       control.addEventListener('change', autoApplyDetailUpdate);
     });
+    if (refs.arrowLabelAlign) {
+      refs.arrowLabelAlign.querySelectorAll('[data-arrow-label-align]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const align = normalizeArrowLabelAlign(button.dataset.arrowLabelAlign);
+          setArrowLabelAlignControl(align, false);
+          if (refs.arrowLabelOffset) refs.arrowLabelOffset.value = String(defaultArrowLabelOffset(align));
+          autoApplyDetailUpdate();
+        });
+      });
+    }
     document.querySelectorAll('[data-color-target]').forEach((button) => {
       button.addEventListener('click', () => {
         const input = document.getElementById(button.dataset.colorTarget || '');
@@ -477,6 +522,40 @@
   function syncArrowEndpointScaleValue(value) {
     if (!refs.arrowEndpointScaleValue) return;
     refs.arrowEndpointScaleValue.textContent = `${normalizeArrowEndpointScale(value).toFixed(2)}x`;
+  }
+
+  function setArrowLabelPositionControl(value, disabled = false) {
+    const position = normalizeArrowLabelPosition(value);
+    if (refs.arrowLabelPosition) {
+      refs.arrowLabelPosition.value = position.toFixed(2);
+      refs.arrowLabelPosition.disabled = !!disabled;
+    }
+    syncArrowLabelPositionValue(position);
+  }
+
+  function getArrowLabelPositionValue(fallback = ARROW_LABEL_POSITION_DEFAULT) {
+    return normalizeArrowLabelPosition(refs.arrowLabelPosition ? refs.arrowLabelPosition.value : fallback);
+  }
+
+  function syncArrowLabelPositionValue(value) {
+    if (!refs.arrowLabelPositionValue) return;
+    refs.arrowLabelPositionValue.textContent = `${Math.round(normalizeArrowLabelPosition(value) * 100)}%`;
+  }
+
+  function setArrowLabelAlignControl(value, disabled = false) {
+    const align = normalizeArrowLabelAlign(value);
+    if (!refs.arrowLabelAlign) return;
+    refs.arrowLabelAlign.dataset.value = align;
+    refs.arrowLabelAlign.querySelectorAll('[data-arrow-label-align]').forEach((button) => {
+      const selected = button.dataset.arrowLabelAlign === align;
+      button.classList.toggle('is-selected', selected);
+      button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      button.disabled = !!disabled;
+    });
+  }
+
+  function getArrowLabelAlignValue(fallback = ARROW_LABEL_ALIGN_DEFAULT) {
+    return normalizeArrowLabelAlign(refs.arrowLabelAlign ? refs.arrowLabelAlign.dataset.value : fallback);
   }
 
   function syncArrowPartPickers(arrow, disabled = false) {
@@ -706,6 +785,11 @@
     const extra = collectExtra(source, KNOWN_ARROW_KEYS);
     const parts = arrowPartsFromSource(source);
     const hasExplicitLevel = Object.prototype.hasOwnProperty.call(source, 'level');
+    const hasExplicitLabelAlign = Object.prototype.hasOwnProperty.call(source, 'labelAlign');
+    const hasExplicitLabelOffset = Object.prototype.hasOwnProperty.call(source, 'labelOffset');
+    const labelAlign = normalizeArrowLabelAlign(source.labelAlign);
+    const legacyDefaultOffset = !hasExplicitLabelAlign && finiteNumber(source.labelOffset, 0) === 0;
+    const labelOffset = hasExplicitLabelOffset && !legacyDefaultOffset ? source.labelOffset : defaultArrowLabelOffset(labelAlign);
     return {
       extra,
       id: cleanId(source.id) || nextArrowId(),
@@ -719,7 +803,9 @@
       level: normalizeArrowLevel(parts.migratedLevel || (hasExplicitLevel ? source.level : parts.level)),
       endpointScale: normalizeArrowEndpointScale(source.endpointScale),
       curve: clamp(finiteNumber(source.curve, 0), -160, 160),
-      labelOffset: clamp(finiteNumber(source.labelOffset, 0), -120, 120),
+      labelOffset: arrowLabelAlignLocksOffset(labelAlign) ? 0 : clamp(finiteNumber(labelOffset, defaultArrowLabelOffset(labelAlign)), -120, 120),
+      labelPosition: normalizeArrowLabelPosition(source.labelPosition),
+      labelAlign,
       color: normalizeColor(source.color, '#5f574e')
     };
   }
@@ -903,14 +989,134 @@
     if (!refs.canvas) return;
     const rect = refs.canvas.getBoundingClientRect();
     const width = Math.max(320, Math.round(rect.width || refs.canvas.clientWidth || 960));
-    const height = Math.max(320, Math.round(rect.height || refs.canvas.clientHeight || 560));
+    const height = Math.max(CANVAS_MIN_HEIGHT, Math.round(rect.height || refs.canvas.clientHeight || 560));
     const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
+    const previousWidth = state.canvasWidth;
+    const previousHeight = state.canvasHeight;
+    if (
+      state.canvasRatioLocked
+      && state.nodes.length
+      && previousWidth > 0
+      && previousHeight > 0
+      && (Math.abs(width - previousWidth) > 0 || Math.abs(height - previousHeight) > 0)
+    ) {
+      const xScale = width / previousWidth;
+      const yScale = height / previousHeight;
+      state.nodes.forEach((node) => {
+        node.x *= xScale;
+        node.y *= yScale;
+      });
+    }
     state.canvasWidth = width;
     state.canvasHeight = height;
     refs.canvas.width = Math.round(width * dpr);
     refs.canvas.height = Math.round(height * dpr);
     const ctx = refs.canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function toggleCanvasRatioLock() {
+    if (!refs.canvas) return;
+    resizeCanvas();
+    state.canvasRatioLocked = !state.canvasRatioLocked;
+    state.canvasAspectRatio = currentCanvasAspectRatio();
+    if (state.canvasRatioLocked) {
+      applyCanvasHeight(state.canvasHeight);
+      setStatus('Canvas ratio locked.');
+    } else {
+      setStatus('Canvas ratio unlocked.');
+    }
+    syncCanvasRatioLockControl();
+    refreshExport();
+    renderCanvas();
+  }
+
+  function syncCanvasRatioLockControl() {
+    if (!refs.canvasRatioLock) return;
+    const locked = !!state.canvasRatioLocked;
+    refs.canvasRatioLock.classList.toggle('is-locked', locked);
+    refs.canvasRatioLock.setAttribute('aria-pressed', locked ? 'true' : 'false');
+    refs.canvasRatioLock.setAttribute('aria-label', locked ? 'Unlock canvas ratio' : 'Lock canvas ratio');
+    refs.canvasRatioLock.title = locked ? 'Unlock canvas ratio' : 'Lock canvas ratio';
+  }
+
+  function currentCanvasAspectRatio() {
+    const width = Math.max(1, finiteNumber(state.canvasWidth, refs.canvas?.getBoundingClientRect().width || 960));
+    const height = Math.max(1, finiteNumber(state.canvasHeight, refs.canvas?.getBoundingClientRect().height || 560));
+    return normalizeCanvasAspectRatio(width / height);
+  }
+
+  function syncLockedCanvasHeight() {
+    if (!state.canvasRatioLocked || !refs.canvas) return;
+    const width = Math.max(320, Math.round(refs.canvas.getBoundingClientRect().width || refs.canvas.clientWidth || state.canvasWidth || 960));
+    const height = clamp(Math.round(width / normalizeCanvasAspectRatio(state.canvasAspectRatio)), CANVAS_MIN_HEIGHT, CANVAS_MAX_HEIGHT);
+    applyCanvasHeight(height);
+  }
+
+  function applyCanvasHeight(height) {
+    if (!refs.canvasWrap) return;
+    const nextHeight = clamp(Math.round(finiteNumber(height, state.canvasHeight || 560)), CANVAS_MIN_HEIGHT, CANVAS_MAX_HEIGHT);
+    refs.canvasWrap.style.setProperty('--theorem-canvas-height', `${nextHeight}px`);
+  }
+
+  function clearCanvasHeight() {
+    if (!refs.canvasWrap) return;
+    refs.canvasWrap.style.removeProperty('--theorem-canvas-height');
+  }
+
+  function handleCanvasResizePointerDown(event) {
+    if (!refs.canvas || !refs.canvasResizeHandle) return;
+    event.preventDefault();
+    resizeCanvas();
+    state.canvasResize = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startHeight: state.canvasHeight
+    };
+    try {
+      refs.canvasResizeHandle.setPointerCapture(event.pointerId);
+    } catch (_) {}
+  }
+
+  function handleCanvasResizePointerMove(event) {
+    if (!state.canvasResize || state.canvasResize.pointerId !== event.pointerId) return;
+    const delta = event.clientY - state.canvasResize.startY;
+    resizeCanvasToHeight(state.canvasResize.startHeight + delta, { fromHandle: true });
+  }
+
+  function handleCanvasResizePointerUp(event) {
+    if (!state.canvasResize) return;
+    if (refs.canvasResizeHandle && event && event.pointerId != null) {
+      try {
+        refs.canvasResizeHandle.releasePointerCapture(event.pointerId);
+      } catch (_) {}
+    }
+    state.canvasResize = null;
+  }
+
+  function handleCanvasResizeKeyDown(event) {
+    if (!refs.canvas) return;
+    const step = event.shiftKey ? 60 : 20;
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      resizeCanvasToHeight(state.canvasHeight - step, { fromKeyboard: true });
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      resizeCanvasToHeight(state.canvasHeight + step, { fromKeyboard: true });
+    }
+  }
+
+  function resizeCanvasToHeight(height) {
+    const nextHeight = clamp(Math.round(finiteNumber(height, state.canvasHeight || 560)), CANVAS_MIN_HEIGHT, CANVAS_MAX_HEIGHT);
+    applyCanvasHeight(nextHeight);
+    if (state.canvasRatioLocked && refs.canvas) {
+      const width = Math.max(320, Math.round(refs.canvas.getBoundingClientRect().width || state.canvasWidth || 960));
+      state.canvasAspectRatio = normalizeCanvasAspectRatio(width / nextHeight);
+    }
+    resizeCanvas();
+    clampAllNodes();
+    refreshExport();
+    renderCanvas();
   }
 
   function renderAll() {
@@ -924,6 +1130,7 @@
   function renderCanvas() {
     if (!refs.canvas) return;
     renderNodeLayer();
+    renderArrowLabelLayer();
     const ctx = refs.canvas.getContext('2d');
     ctx.clearRect(0, 0, state.canvasWidth, state.canvasHeight);
     drawEmptyState(ctx);
@@ -970,7 +1177,9 @@
       drawArrowBody(ctx, model, style, metrics);
       drawArrowEndpoint(ctx, style.tail, model.start, quadraticTangentAngle(model.start, model.control, model.end, 0) + Math.PI, metrics, 'tail');
       drawArrowEndpoint(ctx, style.head, model.end, quadraticTangentAngle(model.start, model.control, model.end, 1), metrics, 'head');
-      if (arrow.label) drawArrowLabel(ctx, arrow.label, model, preview.labelOffset);
+      if (arrow.label) {
+        drawArrowLabelVacancy(ctx, preview, model);
+      }
       ctx.restore();
     });
   }
@@ -1221,28 +1430,87 @@
     }
   }
 
-  function drawArrowLabel(ctx, label, model, labelOffset) {
-    const text = truncateText(label, 28);
-    const point = quadraticPoint(model.start, model.control, model.end, 0.5);
-    const normal = quadraticNormal(model.start, model.control, model.end, 0.5);
-    const offset = finiteNumber(labelOffset, 0);
-    point.x += normal.x * offset;
-    point.y += normal.y * offset;
+  function drawArrowLabelVacancy(ctx, arrow, model) {
+    if (normalizeArrowLabelAlign(arrow.labelAlign) !== 'center-clear') return;
+    const geometry = arrowLabelGeometry(ctx, arrow, model);
+    if (!geometry) return;
+    const bounds = arrowLabelElementBounds(arrow.id, geometry);
+    const pad = 2;
     ctx.save();
-    ctx.font = '12px "JetBrains Mono", Consolas, monospace';
-    const metrics = ctx.measureText(text);
-    const width = metrics.width + 10;
-    const height = 20;
-    ctx.fillStyle = 'rgba(255, 253, 248, 0.88)';
-    ctx.strokeStyle = '#d8d0c4';
-    roundRect(ctx, point.x - width / 2, point.y - height / 2, width, height, 3);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = '#7a6f65';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, point.x, point.y + 0.5);
+    ctx.shadowBlur = 0;
+    ctx.clearRect(bounds.x - pad, bounds.y - pad, bounds.width + pad * 2, bounds.height + pad * 2);
     ctx.restore();
+  }
+
+  function arrowLabelElementBounds(arrowId, fallback) {
+    const element = refs.arrowLabelLayer ? refs.arrowLabelLayer.querySelector(`[data-arrow-id="${cssEscape(arrowId)}"]`) : null;
+    const rect = element ? element.getBoundingClientRect() : null;
+    const layerRect = refs.arrowLabelLayer ? refs.arrowLabelLayer.getBoundingClientRect() : null;
+    if (rect && layerRect && rect.width && rect.height) {
+      return {
+        x: rect.left - layerRect.left,
+        y: rect.top - layerRect.top,
+        width: rect.width,
+        height: rect.height
+      };
+    }
+    return fallback.bounds;
+  }
+
+  function arrowLabelGeometry(ctx, arrow, model) {
+    if (!arrow || !model || !arrow.label) return null;
+    const text = truncateText(arrow.label, 28);
+    if (!text) return null;
+    ctx.save();
+    ctx.font = arrowLabelFont();
+    const metrics = ctx.measureText(text);
+    ctx.restore();
+    const width = Math.max(1, metrics.width);
+    const height = 16;
+    const align = normalizeArrowLabelAlign(arrow.labelAlign);
+    const t = normalizeArrowLabelPosition(arrow.labelPosition);
+    const point = quadraticPoint(model.start, model.control, model.end, t);
+    const normal = quadraticNormal(model.start, model.control, model.end, t);
+    const offset = -finiteNumber(arrow.labelOffset, 0);
+    const anchor = {
+      x: point.x + normal.x * offset,
+      y: point.y + normal.y * offset
+    };
+    const textAlign = arrowLabelCanvasTextAlign(align);
+    const rectX = anchor.x - width / 2;
+    return {
+      text,
+      width,
+      height,
+      anchor,
+      textAlign,
+      bounds: {
+        x: rectX - 4,
+        y: anchor.y - height / 2 - 3,
+        width: width + 8,
+        height: height + 6
+      }
+    };
+  }
+
+  function arrowLabelFont() {
+    return '12px "JetBrains Mono", Consolas, monospace';
+  }
+
+  function arrowLabelCanvasTextAlign(align) {
+    return 'center';
+  }
+
+  function defaultArrowLabelOffset(align) {
+    const normalized = normalizeArrowLabelAlign(align);
+    if (normalized === 'left') return 15;
+    if (normalized === 'right') return -15;
+    return 0;
+  }
+
+  function arrowLabelAlignLocksOffset(align) {
+    const normalized = normalizeArrowLabelAlign(align);
+    return normalized === 'center-over' || normalized === 'center-clear';
   }
 
   function drawArrowHeadBranchPath(ctx, tip, angle, length, height, side) {
@@ -1400,6 +1668,45 @@
     typesetNodeLabels();
   }
 
+  function renderArrowLabelLayer() {
+    if (!refs.arrowLabelLayer || !refs.canvas) return;
+    const existing = new Map(Array.from(refs.arrowLabelLayer.querySelectorAll('[data-arrow-id]')).map((element) => [element.dataset.arrowId, element]));
+    const rendered = [];
+    const ctx = refs.canvas.getContext('2d');
+    const groups = parallelArrowGroups();
+    state.arrows.forEach((arrow) => {
+      if (!arrow.label) return;
+      const model = arrowModelForPointer(arrow, groups);
+      if (!model) return;
+      const preview = state.selectedArrowId === arrow.id ? currentArrowPreview(arrow) : arrow;
+      const geometry = arrowLabelGeometry(ctx, preview, model);
+      if (!geometry) return;
+      let element = existing.get(arrow.id);
+      if (!element) {
+        element = document.createElement('button');
+        element.type = 'button';
+        element.className = 'theorem-arrow-label';
+        element.dataset.arrowId = arrow.id;
+        refs.arrowLabelLayer.appendChild(element);
+      }
+      element.classList.toggle('is-selected', state.selectedArrowId === arrow.id);
+      element.style.left = `${geometry.anchor.x}px`;
+      element.style.top = `${geometry.anchor.y}px`;
+      element.style.setProperty('--arrow-label-color', normalizeColor(preview.color, '#5f574e'));
+      element.setAttribute('aria-label', `Arrow label: ${plainLabel(arrow.label)}`);
+      if (element.dataset.sourceLabel !== arrow.label) {
+        element.textContent = arrow.label;
+        element.dataset.sourceLabel = arrow.label;
+        element.dataset.needsTypeset = 'true';
+      }
+      rendered.push(arrow.id);
+    });
+    existing.forEach((element, id) => {
+      if (!rendered.includes(id)) element.remove();
+    });
+    typesetNodeLabels();
+  }
+
   function nodeBox(_ctx, node) {
     const element = refs.nodeLayer ? refs.nodeLayer.querySelector(`[data-node-id="${cssEscape(node.id)}"]`) : null;
     const rect = element ? element.getBoundingClientRect() : null;
@@ -1505,8 +1812,10 @@
   }
 
   function typesetNodeLabels() {
-    if (!refs.nodeLayer) return;
-    const pending = Array.from(refs.nodeLayer.querySelectorAll('[data-needs-typeset="true"]'));
+    const pending = [
+      ...(refs.nodeLayer ? Array.from(refs.nodeLayer.querySelectorAll('[data-needs-typeset="true"]')) : []),
+      ...(refs.arrowLabelLayer ? Array.from(refs.arrowLabelLayer.querySelectorAll('[data-needs-typeset="true"]')) : [])
+    ];
     if (!pending.length) return;
     if (!window.MathJax || typeof window.MathJax.typesetPromise !== 'function') {
       scheduleMathTypesetRetry();
@@ -1634,11 +1943,26 @@
     if (node) {
       selectNode(node.id);
       state.drag = {
+        kind: 'node',
         nodeId: node.id,
         offsetX: node.x - point.x,
         offsetY: node.y - point.y
       };
       node.fixed = true;
+      try {
+        refs.canvas.setPointerCapture(event.pointerId);
+      } catch (_) {}
+      renderAll();
+      return;
+    }
+
+    const labelHit = hitArrowLabel(point);
+    if (labelHit) {
+      selectArrow(labelHit.arrow.id);
+      state.drag = {
+        kind: 'arrow-label',
+        arrowId: labelHit.arrow.id
+      };
       try {
         refs.canvas.setPointerCapture(event.pointerId);
       } catch (_) {}
@@ -1668,6 +1992,7 @@
     const point = eventPoint(event);
     selectNode(node.id);
     state.drag = {
+      kind: 'node',
       nodeId: node.id,
       offsetX: node.x - point.x,
       offsetY: node.y - point.y
@@ -1679,29 +2004,56 @@
     renderAll();
   }
 
+  function handleArrowLabelLayerPointerDown(event) {
+    const target = event.target.closest('[data-arrow-id]');
+    if (!target) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const arrow = findArrow(target.dataset.arrowId);
+    if (!arrow) return;
+    selectArrow(arrow.id);
+    state.drag = {
+      kind: 'arrow-label',
+      arrowId: arrow.id
+    };
+    try {
+      target.setPointerCapture(event.pointerId);
+    } catch (_) {}
+    renderAll();
+  }
+
   function handleCanvasPointerMove(event) {
     const point = eventPoint(event);
     if (state.drag) {
-      const node = findNode(state.drag.nodeId);
-      if (node) {
-        const margin = 90;
-        node.x = clamp(point.x + state.drag.offsetX, -margin, state.canvasWidth + margin);
-        node.y = clamp(point.y + state.drag.offsetY, -margin, state.canvasHeight + margin);
-        node.vx = 0;
-        node.vy = 0;
-        refreshExport();
-        renderCanvas();
+      if (state.drag.kind === 'arrow-label') {
+        updateDraggedArrowLabel(point);
+      } else {
+        const node = findNode(state.drag.nodeId);
+        if (node) {
+          const margin = 90;
+          node.x = clamp(point.x + state.drag.offsetX, -margin, state.canvasWidth + margin);
+          node.y = clamp(point.y + state.drag.offsetY, -margin, state.canvasHeight + margin);
+          node.vx = 0;
+          node.vy = 0;
+          refreshExport();
+          renderCanvas();
+        }
       }
       return;
     }
 
     const node = hitNode(point);
     state.hoveredNodeId = node ? node.id : null;
-    if (refs.canvas) refs.canvas.style.cursor = node ? (state.connectMode ? 'crosshair' : 'grab') : 'default';
+    const labelHit = node ? null : hitArrowLabel(point);
+    if (refs.canvas) {
+      refs.canvas.style.cursor = node
+        ? (state.connectMode ? 'crosshair' : 'grab')
+        : (labelHit ? 'grab' : 'default');
+    }
   }
 
   function handleCanvasPointerUp(event) {
-    if (state.drag) {
+    if (state.drag && state.drag.kind !== 'arrow-label') {
       const node = findNode(state.drag.nodeId);
       if (node) {
         node.fixed = false;
@@ -1789,6 +2141,73 @@
       if (distanceToQuadratic(point, model.start, model.control, model.end) < 9) return arrow;
     }
     return null;
+  }
+
+  function hitArrowLabel(point) {
+    if (!refs.canvas) return null;
+    const ctx = refs.canvas.getContext('2d');
+    const groups = parallelArrowGroups();
+    for (let i = state.arrows.length - 1; i >= 0; i -= 1) {
+      const arrow = state.arrows[i];
+      if (!arrow.label) continue;
+      const model = arrowModelForPointer(arrow, groups);
+      if (!model) continue;
+      const preview = state.selectedArrowId === arrow.id ? currentArrowPreview(arrow) : arrow;
+      const geometry = arrowLabelGeometry(ctx, preview, model);
+      if (!geometry) continue;
+      const bounds = arrowLabelElementBounds(arrow.id, geometry);
+      if (
+        point.x >= bounds.x
+        && point.x <= bounds.x + bounds.width
+        && point.y >= bounds.y
+        && point.y <= bounds.y + bounds.height
+      ) {
+        return { arrow, geometry, model };
+      }
+    }
+    return null;
+  }
+
+  function arrowModelForPointer(arrow, groups = parallelArrowGroups()) {
+    const source = findNode(arrow.sourceId);
+    const target = findNode(arrow.targetId);
+    if (!source || !target) return null;
+    const siblings = groups.get(arrowGroupKey(arrow)) || [];
+    const siblingIndex = siblings.findIndex((item) => item.id === arrow.id);
+    const offset = (siblingIndex - (siblings.length - 1) / 2) * 26;
+    const preview = state.selectedArrowId === arrow.id ? currentArrowPreview(arrow) : arrow;
+    return arrowCurve(source, target, offset + finiteNumber(preview.curve, 0));
+  }
+
+  function updateDraggedArrowLabel(point) {
+    const arrow = findArrow(state.drag.arrowId);
+    if (!arrow || !refs.canvas) return;
+    const model = arrowModelForPointer(arrow);
+    if (!model) return;
+    const closest = closestPointOnQuadratic(point, model);
+    const normal = quadraticNormal(model.start, model.control, model.end, closest.t);
+    const align = normalizeArrowLabelAlign(arrow.labelAlign);
+    const dx = point.x - closest.point.x;
+    const dy = point.y - closest.point.y;
+    arrow.labelPosition = normalizeArrowLabelPosition(closest.t);
+    arrow.labelOffset = arrowLabelAlignLocksOffset(align)
+      ? 0
+      : clamp(-(dx * normal.x + dy * normal.y), -120, 120);
+    setArrowLabelPositionControl(arrow.labelPosition, false);
+    if (refs.arrowLabelOffset) refs.arrowLabelOffset.value = String(roundNumber(arrow.labelOffset));
+    refreshExport();
+    renderCanvas();
+  }
+
+  function closestPointOnQuadratic(point, model) {
+    let best = { t: 0, point: model.start, distance: Infinity };
+    for (let i = 0; i <= 80; i += 1) {
+      const t = i / 80;
+      const sample = quadraticPoint(model.start, model.control, model.end, t);
+      const distance = Math.hypot(point.x - sample.x, point.y - sample.y);
+      if (distance < best.distance) best = { t, point: sample, distance };
+    }
+    return best;
   }
 
   function distanceToQuadratic(point, start, control, end) {
@@ -2199,10 +2618,12 @@
       refs.arrowEndpointScale,
       refs.arrowCurve,
       refs.arrowLabelOffset,
+      refs.arrowLabelPosition,
       refs.arrowColor
     ].forEach((control) => {
       if (control) control.disabled = !arrow;
     });
+    setArrowLabelAlignControl(arrow ? arrow.labelAlign : ARROW_LABEL_ALIGN_DEFAULT, !arrow);
     if (refs.detailUpdate) refs.detailUpdate.disabled = !(node || arrow);
     if (refs.detailCancel) refs.detailCancel.disabled = !(node || arrow);
     if (!node) {
@@ -2222,7 +2643,9 @@
       setArrowLevelControl(arrow ? arrow.level : ARROW_LEVEL_DEFAULT, !arrow);
       setArrowEndpointScaleControl(arrow ? arrow.endpointScale : ARROW_ENDPOINT_SCALE_DEFAULT, !arrow);
       if (refs.arrowCurve) refs.arrowCurve.value = arrow ? String(roundNumber(arrow.curve || 0)) : '0';
-      if (refs.arrowLabelOffset) refs.arrowLabelOffset.value = arrow ? String(roundNumber(arrow.labelOffset || 0)) : '0';
+      if (refs.arrowLabelOffset) refs.arrowLabelOffset.value = arrow ? String(roundNumber(arrowLabelAlignLocksOffset(arrow.labelAlign) ? 0 : (arrow.labelOffset || 0))) : '0';
+      setArrowLabelPositionControl(arrow ? arrow.labelPosition : ARROW_LABEL_POSITION_DEFAULT, !arrow);
+      setArrowLabelAlignControl(arrow ? arrow.labelAlign : ARROW_LABEL_ALIGN_DEFAULT, !arrow);
       if (refs.arrowColor) refs.arrowColor.value = arrow ? normalizeColor(arrow.color, '#5f574e') : '#5f574e';
       autoResizeDetailTextareas();
       syncLatexDetailFields();
@@ -2245,6 +2668,8 @@
     setArrowEndpointScaleControl(ARROW_ENDPOINT_SCALE_DEFAULT, true);
     if (refs.arrowCurve) refs.arrowCurve.value = '0';
     if (refs.arrowLabelOffset) refs.arrowLabelOffset.value = '0';
+    setArrowLabelPositionControl(ARROW_LABEL_POSITION_DEFAULT, true);
+    setArrowLabelAlignControl(ARROW_LABEL_ALIGN_DEFAULT, true);
     if (refs.arrowColor) refs.arrowColor.value = '#5f574e';
     autoResizeDetailTextareas();
     syncLatexDetailFields();
@@ -2369,7 +2794,10 @@
     const input = row.querySelector('[data-detail-role="label"]');
     if (!label || !input) return;
     input.dataset.originalLabel = cleanDetailLabel(input.value || label.textContent);
+    row.classList.add('is-editing-label');
     label.hidden = true;
+    label.style.display = 'none';
+    label.setAttribute('aria-hidden', 'true');
     input.hidden = false;
     input.focus();
     if (typeof input.select === 'function') input.select();
@@ -2384,7 +2812,6 @@
     if (!label || !input) return;
     const next = cleanDetailLabel(input.value);
     if (!next) return;
-    label.textContent = next;
     autoApplyDetailUpdate({ target: input });
   }
 
@@ -2427,7 +2854,11 @@
   }
 
   function hideMiscDetailLabelEditor(label, input, value) {
+    const row = input.closest('[data-misc-detail-id]');
+    if (row) row.classList.remove('is-editing-label');
     label.textContent = value;
+    label.style.display = '';
+    label.removeAttribute('aria-hidden');
     label.hidden = false;
     input.hidden = true;
     delete input.dataset.originalLabel;
@@ -2678,6 +3109,8 @@
       endpointScale: state.detailPreview.endpointScale,
       curve: state.detailPreview.curve,
       labelOffset: state.detailPreview.labelOffset,
+      labelPosition: state.detailPreview.labelPosition,
+      labelAlign: state.detailPreview.labelAlign,
       color: state.detailPreview.color
     };
   }
@@ -2790,10 +3223,17 @@
     arrow.level = getArrowLevelValue(arrow.level);
     arrow.endpointScale = getArrowEndpointScaleValue(arrow.endpointScale);
     arrow.curve = clamp(finiteNumber(refs.arrowCurve ? refs.arrowCurve.value : arrow.curve, arrow.curve), -160, 160);
-    arrow.labelOffset = clamp(finiteNumber(refs.arrowLabelOffset ? refs.arrowLabelOffset.value : arrow.labelOffset, arrow.labelOffset), -120, 120);
+    arrow.labelPosition = getArrowLabelPositionValue(arrow.labelPosition);
+    arrow.labelAlign = getArrowLabelAlignValue(arrow.labelAlign);
+    arrow.labelOffset = arrowLabelAlignLocksOffset(arrow.labelAlign)
+      ? 0
+      : clamp(finiteNumber(refs.arrowLabelOffset ? refs.arrowLabelOffset.value : arrow.labelOffset, arrow.labelOffset), -120, 120);
     arrow.color = normalizeColor(refs.arrowColor ? refs.arrowColor.value : arrow.color, '#5f574e');
     syncArrowLevelValue(arrow.level);
     syncArrowEndpointScaleValue(arrow.endpointScale);
+    syncArrowLabelPositionValue(arrow.labelPosition);
+    setArrowLabelAlignControl(arrow.labelAlign, false);
+    if (refs.arrowLabelOffset) refs.arrowLabelOffset.value = String(roundNumber(arrow.labelOffset || 0));
     return { ok: true };
   }
 
@@ -2884,6 +3324,8 @@
       endpointScale: arrow.endpointScale,
       curve: arrow.curve,
       labelOffset: arrow.labelOffset,
+      labelPosition: arrow.labelPosition,
+      labelAlign: arrow.labelAlign,
       color: arrow.color
     };
   }
@@ -2903,6 +3345,7 @@
   }
 
   function restoreArrowDetailSnapshot(arrow, values) {
+    const labelAlign = normalizeArrowLabelAlign(values.labelAlign);
     Object.assign(arrow, {
       sourceId: cleanId(values.sourceId),
       targetId: cleanId(values.targetId),
@@ -2914,7 +3357,9 @@
       level: normalizeArrowLevel(values.level),
       endpointScale: normalizeArrowEndpointScale(values.endpointScale),
       curve: clamp(finiteNumber(values.curve, 0), -160, 160),
-      labelOffset: clamp(finiteNumber(values.labelOffset, 0), -120, 120),
+      labelOffset: arrowLabelAlignLocksOffset(labelAlign) ? 0 : clamp(finiteNumber(values.labelOffset, 0), -120, 120),
+      labelPosition: normalizeArrowLabelPosition(values.labelPosition),
+      labelAlign,
       color: normalizeColor(values.color, '#5f574e')
     });
   }
@@ -3568,6 +4013,8 @@
         endpointScale: roundScale(arrow.endpointScale),
         curve: roundNumber(arrow.curve || 0),
         labelOffset: roundNumber(arrow.labelOffset || 0),
+        labelPosition: roundRatio(arrow.labelPosition),
+        labelAlign: normalizeArrowLabelAlign(arrow.labelAlign),
         color: arrow.color
       })),
       references: state.references.map((reference) => ({
@@ -3588,9 +4035,26 @@
         selectedReferenceKeys: state.references
           .filter((reference) => state.selectedReferenceKeys.has(reference.key))
           .map((reference) => reference.key),
-        layoutRunning: false
+        layoutRunning: false,
+        ...(state.canvasRatioLocked ? {
+          canvasRatioLocked: true,
+          canvasAspectRatio: roundRatio(normalizeCanvasAspectRatio(state.canvasAspectRatio)),
+          relativeNodePositions: relativeNodePositionsForExport()
+        } : {})
       }
     };
+  }
+
+  function relativeNodePositionsForExport() {
+    const width = Math.max(1, finiteNumber(state.canvasWidth, 960));
+    const height = Math.max(1, finiteNumber(state.canvasHeight, 560));
+    return Object.fromEntries(state.nodes.map((node) => [
+      node.id,
+      {
+        x: roundRatio(node.x / width),
+        y: roundRatio(node.y / height)
+      }
+    ]));
   }
 
   function copyExport() {
@@ -3710,9 +4174,44 @@
     return -1;
   }
 
+  function readImportView(data) {
+    return data && data.view && typeof data.view === 'object' && !Array.isArray(data.view)
+      ? data.view
+      : {};
+  }
+
+  function normalizeCanvasView(view) {
+    const locked = view && view.canvasRatioLocked === true;
+    const aspect = normalizeCanvasAspectRatio(view ? view.canvasAspectRatio : null, currentCanvasAspectRatio());
+    return {
+      locked,
+      aspect,
+      relativeNodePositions: normalizeRelativeNodePositions(view ? view.relativeNodePositions : null)
+    };
+  }
+
+  function applyImportedCanvasView(canvasView) {
+    state.canvasRatioLocked = !!canvasView.locked;
+    state.canvasAspectRatio = normalizeCanvasAspectRatio(canvasView.aspect);
+    if (state.canvasRatioLocked) {
+      syncLockedCanvasHeight();
+      resizeCanvas();
+    } else {
+      clearCanvasHeight();
+      resizeCanvas();
+      state.canvasAspectRatio = currentCanvasAspectRatio();
+    }
+    syncCanvasRatioLockControl();
+  }
+
   function applyImportData(data, sourceLabel = 'graph') {
-    const next = normalizeImport(data);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error('Import must be a JSON object.');
+    }
     stopLayout();
+    const canvasView = normalizeCanvasView(readImportView(data));
+    applyImportedCanvasView(canvasView);
+    const next = normalizeImport(data, canvasView);
     state.graphTitle = next.title;
     state.nodes = next.nodes;
     state.arrows = next.arrows;
@@ -3886,7 +4385,7 @@
     return cleanString(file).split('/').map(encodeURIComponent).join('/');
   }
 
-  function normalizeImport(data) {
+  function normalizeImport(data, canvasView = normalizeCanvasView(readImportView(data))) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       throw new Error('Import must be a JSON object.');
     }
@@ -3902,11 +4401,12 @@
       if (!entry || typeof entry !== 'object') return;
       const id = cleanId(entry.id);
       if (!id || ids.has(id)) return;
+      const relative = canvasView.locked ? canvasView.relativeNodePositions.get(id) : null;
       const node = makeNode({
         ...entry,
         label: cleanString(entry.label) || `Node ${index + 1}`,
-        x: Number.isFinite(Number(entry.x)) ? Number(entry.x) : state.canvasWidth / 2,
-        y: Number.isFinite(Number(entry.y)) ? Number(entry.y) : state.canvasHeight / 2
+        x: relative ? relative.x * state.canvasWidth : (Number.isFinite(Number(entry.x)) ? Number(entry.x) : state.canvasWidth / 2),
+        y: relative ? relative.y * state.canvasHeight : (Number.isFinite(Number(entry.y)) ? Number(entry.y) : state.canvasHeight / 2)
       });
       nodes.push(node);
       ids.add(id);
@@ -3947,6 +4447,9 @@
     delete viewExtra.selectedId;
     delete viewExtra.selectedReferenceKeys;
     delete viewExtra.layoutRunning;
+    delete viewExtra.canvasRatioLocked;
+    delete viewExtra.canvasAspectRatio;
+    delete viewExtra.relativeNodePositions;
     const titleSource = Object.prototype.hasOwnProperty.call(data, 'title')
       ? data.title
       : (Object.prototype.hasOwnProperty.call(view, 'title') ? view.title : DEFAULT_GRAPH_TITLE);
@@ -4005,6 +4508,7 @@
       refs.graphCountBadge.textContent = `${state.nodes.length} node${state.nodes.length === 1 ? '' : 's'}, ${state.arrows.length} arrow${state.arrows.length === 1 ? '' : 's'}`;
     }
     if (refs.graphTitle && refs.graphTitle.value !== state.graphTitle) refs.graphTitle.value = state.graphTitle;
+    syncCanvasRatioLockControl();
     syncDebugControlValues();
     syncImportModeControls();
     if (refs.connectBadge) {
@@ -4115,6 +4619,33 @@
 
   function normalizeArrowEndpointScale(value) {
     return clamp(finiteNumber(value, ARROW_ENDPOINT_SCALE_DEFAULT), ARROW_ENDPOINT_SCALE_MIN, ARROW_ENDPOINT_SCALE_MAX);
+  }
+
+  function normalizeArrowLabelPosition(value) {
+    return clamp(finiteNumber(value, ARROW_LABEL_POSITION_DEFAULT), 0, 1);
+  }
+
+  function normalizeArrowLabelAlign(value) {
+    const align = cleanString(value);
+    return ARROW_LABEL_ALIGNS.has(align) ? align : ARROW_LABEL_ALIGN_DEFAULT;
+  }
+
+  function normalizeCanvasAspectRatio(value, fallback = CANVAS_DEFAULT_ASPECT_RATIO) {
+    return clamp(finiteNumber(value, fallback), 0.25, 4);
+  }
+
+  function normalizeRelativeNodePositions(value) {
+    const positions = new Map();
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return positions;
+    Object.entries(value).forEach(([rawId, rawPosition]) => {
+      const id = cleanId(rawId);
+      if (!id || !rawPosition || typeof rawPosition !== 'object' || Array.isArray(rawPosition)) return;
+      const x = Number(rawPosition.x);
+      const y = Number(rawPosition.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      positions.set(id, { x, y });
+    });
+    return positions;
   }
 
   function normalizeArrowStyle(style) {
@@ -4396,6 +4927,10 @@
 
   function roundNumber(value) {
     return Math.round(value * 10) / 10;
+  }
+
+  function roundRatio(value) {
+    return Math.round(finiteNumber(value, 0) * 10000) / 10000;
   }
 
   function roundScale(value) {
