@@ -1590,12 +1590,62 @@ function testExtraBackgroundPresets() {
     ['rubiks-cube-2x2x2', "Rubik's Cube 2*2*2"],
     ['rubiks-cube-3x3x3', "Rubik's Cube 3*3*3"],
     ['connect-four-6x7', 'Connect Four 6*7'],
+    ['connect-four-high-hit', 'high hit (6x7 Sigma_1,1)'],
+    ['connect-four-high-hit-2', 'high hit2 (6x7 Sigma_0,3)'],
+    ['connect-four-all-horizontal', 'all horizontal (6x7 Sigma_1,5)'],
+    ['connect-four-top-fight', 'top fight (6x7 Sigma_1,1)'],
+    ['connect-four-exchange', 'exchange (6x7 Sigma_1.5,1^1)'],
+    ['connect-four-across', 'across (6x7 Sigma_1,1^1)'],
+    ['connect-four-usual-strip', 'usual strip (6x7 Sigma_0,2)'],
+    ['connect-four-mobius-strip', 'M&ouml;bius strip (6x7 N_1,1)'],
+    ['connect-four-hex-usual-strip', 'hex usual strip (6x7 Sigma_0,2)'],
+    ['connect-four-hex-bad-mobius-strip', 'hex bad M&ouml;bius strip (6x7 N_0,2^10)'],
+    ['connect-four-hex-good-mobius-strip', 'hex good M&ouml;bius strip (7x7 N_0,2)'],
     ['usual-strip', 'usual strip'],
     ['mobius-strip', 'M&ouml;bius strip']
   ].forEach(([id, label]) => {
     assert.ok(html.includes(`<option value="${id}">${label}</option>`));
     assert.ok(game.PRESETS.find((preset) => preset.id === id));
   });
+
+  const exchangePreset = game.createConnectFourState('connect-four-exchange').preset;
+  assert.strictEqual(exchangePreset.cutEdges.length, 4);
+  assert.strictEqual(exchangePreset.gluedEdges.length, 4);
+  assert.strictEqual(exchangePreset.surface, 'Sigma_1.5,1^1');
+
+  const across = game.createConnectFourState('connect-four-across');
+  assert.ok(across.removed.has(game.indexOf(4, 4, 7)));
+  assert.strictEqual(across.preset.gluedEdges.length, 2);
+
+  const hexGood = game.createConnectFourState('connect-four-hex-good-mobius-strip');
+  assert.strictEqual(hexGood.preset.lattice, 'hexagonal');
+  assert.strictEqual(hexGood.preset.rows, 7);
+  assert.strictEqual(hexGood.preset.cols, 7);
+  assert.strictEqual(hexGood.preset.gluedEdges.length, 13);
+
+  [
+    'connect-four-6x7',
+    'connect-four-high-hit',
+    'connect-four-high-hit-2',
+    'connect-four-all-horizontal',
+    'connect-four-top-fight',
+    'connect-four-exchange',
+    'connect-four-across',
+    'connect-four-usual-strip',
+    'connect-four-mobius-strip',
+    'connect-four-hex-usual-strip',
+    'connect-four-hex-bad-mobius-strip',
+    'connect-four-hex-good-mobius-strip'
+  ].forEach((id) => {
+    const state = game.createConnectFourState(id);
+    assert.deepStrictEqual(Array.from(state.holes).sort((a, b) => a - b), connectFourTopHoles(state.preset.cols, state.preset.cols));
+    assert.deepStrictEqual(
+      state.preset.connectFourHoles.map((tile) => game.indexOf(tile.row, tile.col, state.preset.cols)),
+      connectFourTopHoles(state.preset.cols, state.preset.cols)
+    );
+  });
+  assert.deepStrictEqual(Array.from(game.createConnectFourState('connect-four-6x7', { holes: [] }).holes), []);
+  assert.deepStrictEqual(Array.from(game.beginConnectFourGame('connect-four-6x7').holes).sort((a, b) => a - b), connectFourTopHoles());
 
   const rubiks2 = game.createGameState('rubiks-cube-2x2x2');
   assert.strictEqual(rubiks2.preset.rows, 6);
@@ -1677,6 +1727,15 @@ function testExtraBackgroundPresets() {
   const twistedStep = game.surfaceSuccessor(twisted, game.indexOf(1, 1, 4), game.DIRS.N);
   assert.strictEqual(twistedStep.kind, 'glued');
   assert.strictEqual(twistedStep.index, game.indexOf(4, 2, 4));
+
+  const halfGlued = game.createGameState('half-glued');
+  assert.strictEqual(halfGlued.preset.surface, 'Sigma_1,1');
+  assert.deepStrictEqual(halfGlued.preset.gluedEdges.map(gluedEdgeSignature), [
+    '0:1,1,3>4,3,1',
+    '0:1,2,3>4,4,1',
+    '1:3,1,2>1,4,0',
+    '1:4,1,2>2,4,0'
+  ]);
 }
 
 function testHexKeyboardMapping() {
@@ -2331,17 +2390,8 @@ function testHeadlessDomStepControls() {
   elements.get('connect-four-fall-dir').value = 'S';
   elements.get('connect-four-fall-dir').listeners.change();
   elements.get('begin-game').listeners.click();
-  assert.strictEqual(elements.get('status-line').textContent, 'add holes');
-  assert.strictEqual(elements.get('info-line').textContent, 'click tiles to add input holes before beginning');
-  assert.strictEqual(elements.get('game-setup-alert').hidden, false);
-  assert.strictEqual(elements.get('game-setup-alert').textContent, 'click tiles to add input holes before beginning');
-  assert.strictEqual(elements.get('begin-game').textContent, 'begin the game');
-  canvas.listeners.click({ clientX: 36, clientY: 41 });
-  assert.strictEqual(elements.get('status-line').textContent, 'hole added');
-  assert.ok(elements.get('info-line').textContent.includes('1 input hole'));
-  assert.strictEqual(elements.get('game-setup-alert').hidden, true);
-  elements.get('begin-game').listeners.click();
   assert.strictEqual(elements.get('status-badge').textContent, 'ready');
+  assert.strictEqual(elements.get('game-setup-alert').hidden, true);
   assert.strictEqual(elements.get('begin-game').textContent, 'stop the game');
   assert.strictEqual(elements.get('score-label').textContent, 'Turn');
   assert.strictEqual(elements.get('score-value').textContent, 'red');
@@ -2357,7 +2407,8 @@ function testHeadlessDomStepControls() {
   exported = JSON.parse(elements.get('debug-export-output').value);
   assert.strictEqual(exported.gameMode, 'connect-four');
   assert.strictEqual(exported.tokens.length, 1);
-  assert.strictEqual(exported.holes.length, 1);
+  assert.strictEqual(exported.holes.length, 7);
+  assert.strictEqual(exported.preset.connectFourHoles.length, 7);
   assert.strictEqual(exported.tokens[0].row, 6);
   assert.strictEqual(exported.tokens[0].col, 1);
   assert.strictEqual(exported.fallDirName, 'S');

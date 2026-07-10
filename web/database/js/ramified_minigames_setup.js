@@ -85,6 +85,10 @@
     return pair;
   }
 
+  function connectFourTopRowHoles(cols) {
+    return Array.from({ length: cols }, (_, index) => ({ row: 1, col: index + 1 }));
+  }
+
   function createRubiksCubePreset(size, id, label) {
     const rows = size * 3;
     const cols = size * 4;
@@ -208,6 +212,228 @@
     };
   }
 
+  const CONNECT_FOUR_SURFACE_PRESETS = [
+    {
+      id: 'connect-four-high-hit',
+      label: 'high hit (6x7 Sigma_1,1)',
+      lattice: 'square',
+      rows: 6,
+      cols: 7,
+      connectFourHoles: connectFourTopRowHoles(7),
+      surface: 'Sigma_1,1',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [
+        gluePair(0, { row: 6, col: 1, dir: DIRS.S }, { row: 3, col: 7, dir: DIRS.E }),
+        gluePair(1, { row: 4, col: 1, dir: DIRS.W }, { row: 6, col: 7, dir: DIRS.S })
+      ]
+    },
+    {
+      id: 'connect-four-high-hit-2',
+      label: 'high hit2 (6x7 Sigma_0,3)',
+      lattice: 'square',
+      rows: 6,
+      cols: 7,
+      connectFourHoles: connectFourTopRowHoles(7),
+      surface: 'Sigma_0,3',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [
+        gluePair(0, { row: 6, col: 7, dir: DIRS.S }, { row: 3, col: 7, dir: DIRS.E }),
+        gluePair(1, { row: 4, col: 1, dir: DIRS.W }, { row: 6, col: 1, dir: DIRS.S })
+      ]
+    },
+    {
+      id: 'connect-four-all-horizontal',
+      label: 'all horizontal (6x7 Sigma_1,5)',
+      lattice: 'square',
+      rows: 6,
+      cols: 7,
+      connectFourHoles: connectFourTopRowHoles(7),
+      surface: 'Sigma_1,5',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [
+        gluePair(0, { row: 6, col: 5, dir: DIRS.S }, { row: 6, col: 1, dir: DIRS.W }),
+        gluePair(1, { row: 5, col: 7, dir: DIRS.E }, { row: 6, col: 3, dir: DIRS.S }),
+        gluePair(2, { row: 6, col: 6, dir: DIRS.S }, { row: 4, col: 1, dir: DIRS.W }),
+        gluePair(3, { row: 3, col: 7, dir: DIRS.E }, { row: 6, col: 2, dir: DIRS.S }),
+        gluePair(4, { row: 6, col: 7, dir: DIRS.S }, { row: 2, col: 1, dir: DIRS.W }),
+        gluePair(5, { row: 1, col: 7, dir: DIRS.E }, { row: 6, col: 1, dir: DIRS.S })
+      ]
+    },
+    {
+      id: 'connect-four-top-fight',
+      label: 'top fight (6x7 Sigma_1,1)',
+      lattice: 'square',
+      rows: 6,
+      cols: 7,
+      connectFourHoles: connectFourTopRowHoles(7),
+      surface: 'Sigma_1,1',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [
+        gluePair(0, { row: 6, col: 3, dir: DIRS.S }, { row: 6, col: 7, dir: DIRS.E }),
+        gluePair(1, { row: 6, col: 1, dir: DIRS.W }, { row: 6, col: 5, dir: DIRS.S }),
+        gluePair(2, { row: 6, col: 2, dir: DIRS.S }, { row: 5, col: 7, dir: DIRS.E }),
+        gluePair(3, { row: 5, col: 1, dir: DIRS.W }, { row: 6, col: 6, dir: DIRS.S }),
+        gluePair(4, { row: 4, col: 1, dir: DIRS.W }, { row: 6, col: 7, dir: DIRS.S }),
+        gluePair(5, { row: 6, col: 1, dir: DIRS.S }, { row: 4, col: 7, dir: DIRS.E })
+      ]
+    },
+    {
+      id: 'connect-four-exchange',
+      label: 'exchange (6x7 Sigma_1.5,1^1)',
+      lattice: 'square',
+      rows: 6,
+      cols: 7,
+      connectFourHoles: connectFourTopRowHoles(7),
+      surface: 'Sigma_1.5,1^1',
+      removedTiles: [],
+      cutEdges: [
+        { left: { row: 3, col: 1 }, right: { row: 4, col: 1 } },
+        { left: { row: 3, col: 2 }, right: { row: 4, col: 2 } },
+        { left: { row: 3, col: 6 }, right: { row: 4, col: 6 } },
+        { left: { row: 3, col: 7 }, right: { row: 4, col: 7 } }
+      ],
+      gluedEdges: [
+        gluePair(0, { row: 3, col: 7, dir: DIRS.S }, { row: 4, col: 2, dir: DIRS.N }),
+        gluePair(0, { row: 3, col: 6, dir: DIRS.S }, { row: 4, col: 1, dir: DIRS.N }),
+        gluePair(1, { row: 4, col: 6, dir: DIRS.N }, { row: 3, col: 1, dir: DIRS.S }),
+        gluePair(1, { row: 4, col: 7, dir: DIRS.N }, { row: 3, col: 2, dir: DIRS.S })
+      ]
+    },
+    {
+      id: 'connect-four-across',
+      label: 'across (6x7 Sigma_1,1^1)',
+      lattice: 'square',
+      rows: 6,
+      cols: 7,
+      connectFourHoles: connectFourTopRowHoles(7),
+      surface: 'Sigma_1,1^1',
+      removedTiles: [
+        { row: 4, col: 4 }
+      ],
+      cutEdges: [],
+      gluedEdges: [
+        gluePair(0, { row: 3, col: 4, dir: DIRS.S }, { row: 5, col: 4, dir: DIRS.N }),
+        gluePair(1, { row: 4, col: 5, dir: DIRS.W }, { row: 4, col: 3, dir: DIRS.E })
+      ]
+    },
+    {
+      id: 'connect-four-usual-strip',
+      label: 'usual strip (6x7 Sigma_0,2)',
+      lattice: 'square',
+      rows: 6,
+      cols: 7,
+      connectFourHoles: connectFourTopRowHoles(7),
+      surface: 'Sigma_0,2',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [
+        gluePair(0, { row: 1, col: 7, dir: DIRS.E }, { row: 1, col: 1, dir: DIRS.W }),
+        gluePair(0, { row: 2, col: 7, dir: DIRS.E }, { row: 2, col: 1, dir: DIRS.W }),
+        gluePair(0, { row: 3, col: 7, dir: DIRS.E }, { row: 3, col: 1, dir: DIRS.W }),
+        gluePair(0, { row: 4, col: 7, dir: DIRS.E }, { row: 4, col: 1, dir: DIRS.W }),
+        gluePair(0, { row: 5, col: 7, dir: DIRS.E }, { row: 5, col: 1, dir: DIRS.W }),
+        gluePair(0, { row: 6, col: 7, dir: DIRS.E }, { row: 6, col: 1, dir: DIRS.W })
+      ]
+    },
+    {
+      id: 'connect-four-mobius-strip',
+      label: 'M\u00f6bius strip (6x7 N_1,1)',
+      lattice: 'square',
+      rows: 6,
+      cols: 7,
+      connectFourHoles: connectFourTopRowHoles(7),
+      surface: 'N_1,1',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [
+        gluePair(0, { row: 6, col: 7, dir: DIRS.E }, { row: 1, col: 1, dir: DIRS.W }, { reversed: true }),
+        gluePair(0, { row: 5, col: 7, dir: DIRS.E }, { row: 2, col: 1, dir: DIRS.W }, { reversed: true }),
+        gluePair(0, { row: 4, col: 7, dir: DIRS.E }, { row: 3, col: 1, dir: DIRS.W }, { reversed: true }),
+        gluePair(0, { row: 3, col: 7, dir: DIRS.E }, { row: 4, col: 1, dir: DIRS.W }, { reversed: true }),
+        gluePair(0, { row: 2, col: 7, dir: DIRS.E }, { row: 5, col: 1, dir: DIRS.W }, { reversed: true }),
+        gluePair(0, { row: 1, col: 7, dir: DIRS.E }, { row: 6, col: 1, dir: DIRS.W }, { reversed: true })
+      ]
+    },
+    {
+      id: 'connect-four-hex-usual-strip',
+      label: 'hex usual strip (6x7 Sigma_0,2)',
+      lattice: 'hexagonal',
+      rows: 6,
+      cols: 7,
+      connectFourHoles: connectFourTopRowHoles(7),
+      surface: 'Sigma_0,2',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [
+        gluePair(0, { row: 1, col: 7, dir: HEX_DIRS.E }, { row: 1, col: 1, dir: HEX_DIRS.W }),
+        gluePair(0, { row: 2, col: 7, dir: HEX_DIRS.NE }, { row: 1, col: 1, dir: HEX_DIRS.SW }),
+        gluePair(0, { row: 2, col: 7, dir: HEX_DIRS.E }, { row: 2, col: 1, dir: HEX_DIRS.W }),
+        gluePair(0, { row: 2, col: 7, dir: HEX_DIRS.SE }, { row: 3, col: 1, dir: HEX_DIRS.NW }),
+        gluePair(0, { row: 3, col: 7, dir: HEX_DIRS.E }, { row: 3, col: 1, dir: HEX_DIRS.W }),
+        gluePair(0, { row: 4, col: 7, dir: HEX_DIRS.NE }, { row: 3, col: 1, dir: HEX_DIRS.SW }),
+        gluePair(0, { row: 4, col: 7, dir: HEX_DIRS.E }, { row: 4, col: 1, dir: HEX_DIRS.W }),
+        gluePair(0, { row: 4, col: 7, dir: HEX_DIRS.SE }, { row: 5, col: 1, dir: HEX_DIRS.NW }),
+        gluePair(0, { row: 5, col: 7, dir: HEX_DIRS.E }, { row: 5, col: 1, dir: HEX_DIRS.W }),
+        gluePair(0, { row: 6, col: 7, dir: HEX_DIRS.NE }, { row: 5, col: 1, dir: HEX_DIRS.SW }),
+        gluePair(0, { row: 6, col: 7, dir: HEX_DIRS.E }, { row: 6, col: 1, dir: HEX_DIRS.W })
+      ]
+    },
+    {
+      id: 'connect-four-hex-bad-mobius-strip',
+      label: 'hex bad M\u00f6bius strip (6x7 N_0,2^10)',
+      lattice: 'hexagonal',
+      rows: 6,
+      cols: 7,
+      connectFourHoles: connectFourTopRowHoles(7),
+      surface: 'N_0,2^10',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [
+        gluePair(0, { row: 6, col: 7, dir: HEX_DIRS.E }, { row: 1, col: 1, dir: HEX_DIRS.W }, { reversed: true }),
+        gluePair(0, { row: 6, col: 7, dir: HEX_DIRS.NE }, { row: 1, col: 1, dir: HEX_DIRS.SW }, { reversed: true }),
+        gluePair(0, { row: 5, col: 7, dir: HEX_DIRS.E }, { row: 2, col: 1, dir: HEX_DIRS.W }, { reversed: true }),
+        gluePair(0, { row: 4, col: 7, dir: HEX_DIRS.SE }, { row: 3, col: 1, dir: HEX_DIRS.NW }, { reversed: true }),
+        gluePair(0, { row: 4, col: 7, dir: HEX_DIRS.E }, { row: 3, col: 1, dir: HEX_DIRS.W }, { reversed: true }),
+        gluePair(0, { row: 4, col: 7, dir: HEX_DIRS.NE }, { row: 3, col: 1, dir: HEX_DIRS.SW }, { reversed: true }),
+        gluePair(0, { row: 3, col: 7, dir: HEX_DIRS.E }, { row: 4, col: 1, dir: HEX_DIRS.W }, { reversed: true }),
+        gluePair(0, { row: 2, col: 7, dir: HEX_DIRS.SE }, { row: 5, col: 1, dir: HEX_DIRS.NW }, { reversed: true }),
+        gluePair(0, { row: 2, col: 7, dir: HEX_DIRS.E }, { row: 5, col: 1, dir: HEX_DIRS.W }, { reversed: true }),
+        gluePair(0, { row: 2, col: 7, dir: HEX_DIRS.NE }, { row: 5, col: 1, dir: HEX_DIRS.SW }, { reversed: true }),
+        gluePair(0, { row: 1, col: 7, dir: HEX_DIRS.E }, { row: 6, col: 1, dir: HEX_DIRS.W }, { reversed: true })
+      ]
+    },
+    {
+      id: 'connect-four-hex-good-mobius-strip',
+      label: 'hex good M\u00f6bius strip (7x7 N_0,2)',
+      lattice: 'hexagonal',
+      rows: 7,
+      cols: 7,
+      connectFourHoles: connectFourTopRowHoles(7),
+      surface: 'N_0,2',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [
+        gluePair(0, { row: 7, col: 1, dir: HEX_DIRS.W }, { row: 1, col: 7, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 7, col: 1, dir: HEX_DIRS.NW }, { row: 2, col: 7, dir: HEX_DIRS.NE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 6, col: 1, dir: HEX_DIRS.W }, { row: 2, col: 7, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 5, col: 1, dir: HEX_DIRS.SW }, { row: 2, col: 7, dir: HEX_DIRS.SE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 5, col: 1, dir: HEX_DIRS.W }, { row: 3, col: 7, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 5, col: 1, dir: HEX_DIRS.NW }, { row: 4, col: 7, dir: HEX_DIRS.NE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 4, col: 1, dir: HEX_DIRS.W }, { row: 4, col: 7, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.SW }, { row: 4, col: 7, dir: HEX_DIRS.SE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.W }, { row: 5, col: 7, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.NW }, { row: 6, col: 7, dir: HEX_DIRS.NE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 2, col: 1, dir: HEX_DIRS.W }, { row: 6, col: 7, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 1, col: 1, dir: HEX_DIRS.SW }, { row: 6, col: 7, dir: HEX_DIRS.SE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
+        gluePair(0, { row: 1, col: 1, dir: HEX_DIRS.W }, { row: 7, col: 7, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false })
+      ]
+    }
+  ];
+
   const PRESETS = [
     {
       id: 'classic-4x4',
@@ -259,11 +485,13 @@
       lattice: 'square',
       rows: 6,
       cols: 7,
+      connectFourHoles: connectFourTopRowHoles(7),
       surface: 'six-row seven-column grid',
       removedTiles: [],
       cutEdges: [],
       gluedEdges: []
     },
+    ...CONNECT_FOUR_SURFACE_PRESETS,
     {
       id: 'genus-2',
       label: 'genus 2',
@@ -302,14 +530,14 @@
       lattice: 'square',
       rows: 4,
       cols: 4,
-      surface: 'half-glued',
+      surface: 'Sigma_1,1',
       removedTiles: [],
       cutEdges: [],
       gluedEdges: [
         { group: 0, first: { row: 1, col: 1, dir: DIRS.N }, second: { row: 4, col: 3, dir: DIRS.S } },
         { group: 0, first: { row: 1, col: 2, dir: DIRS.N }, second: { row: 4, col: 4, dir: DIRS.S } },
-        { group: 1, first: { row: 4, col: 1, dir: DIRS.W }, second: { row: 1, col: 4, dir: DIRS.E } },
-        { group: 1, first: { row: 3, col: 1, dir: DIRS.W }, second: { row: 2, col: 4, dir: DIRS.E } }
+        { group: 1, first: { row: 3, col: 1, dir: DIRS.W }, second: { row: 1, col: 4, dir: DIRS.E } },
+        { group: 1, first: { row: 4, col: 1, dir: DIRS.W }, second: { row: 2, col: 4, dir: DIRS.E } }
       ]
     },
     {
@@ -1333,23 +1561,27 @@
 
   function debugExportPayload() {
     const preset = game.preset;
+    const presetPayload = {
+      id: preset.id,
+      label: preset.label,
+      lattice: preset.lattice || 'square',
+      rows: preset.rows,
+      cols: preset.cols,
+      surface: preset.surface,
+      removedTiles: (preset.removedTiles || []).map((tile) => ({ ...tile })),
+      cutEdges: (preset.cutEdges || []).map((edge) => ({
+        left: { ...edge.left },
+        right: { ...edge.right }
+      })),
+      gluedEdges: (preset.gluedEdges || []).map(cloneGluePair)
+    };
+    if (Array.isArray(preset.connectFourHoles)) {
+      presetPayload.connectFourHoles = preset.connectFourHoles.map((tile) => ({ ...tile }));
+    }
     const base = {
       exportedAt: new Date().toISOString(),
       gameMode: game.gameMode || GAME_MODES.NUMBER_2048,
-      preset: {
-        id: preset.id,
-        label: preset.label,
-        lattice: preset.lattice || 'square',
-        rows: preset.rows,
-        cols: preset.cols,
-        surface: preset.surface,
-        removedTiles: (preset.removedTiles || []).map((tile) => ({ ...tile })),
-        cutEdges: (preset.cutEdges || []).map((edge) => ({
-          left: { ...edge.left },
-          right: { ...edge.right }
-        })),
-        gluedEdges: (preset.gluedEdges || []).map(cloneGluePair)
-      },
+      preset: presetPayload,
       phase: game.phase,
       ending: game.ending || '',
       debugMode,
@@ -1530,7 +1762,11 @@
       );
       const phase = normalizeStatusPhase(payload.phase);
       const winner = normalizeConnectFourWinner(payload.winner);
-      const holes = normalizeConnectFourHoleSet(payload.holes, preset, removed);
+      const holes = normalizeConnectFourHoleSet(
+        Object.prototype.hasOwnProperty.call(payload, 'holes') ? payload.holes : preset.connectFourHoles,
+        preset,
+        removed
+      );
       const cycleHoles = normalizeConnectFourHoleSet(payload.cycleHoles, preset, removed);
       const state = {
         gameMode: GAME_MODES.CONNECT_FOUR,
@@ -1607,6 +1843,12 @@
       cols
     );
     shell.removedTiles = removedTiles;
+    const removedTileSet = new Set(removedTiles.map((tile) => indexOf(tile.row, tile.col, cols)));
+    const connectFourHoles = normalizeImportedRemovedTiles(
+      Array.isArray(source.connectFourHoles) ? source.connectFourHoles : ((base && base.connectFourHoles) || []),
+      rows,
+      cols
+    ).filter((tile) => !removedTileSet.has(indexOf(tile.row, tile.col, cols)));
     const cutEdges = normalizeImportedCutEdges(
       Array.isArray(source.cutEdges) ? source.cutEdges : ((base && base.cutEdges) || []),
       shell
@@ -1625,6 +1867,7 @@
       cols,
       surface: sanitizeImportedText(source.surface || (base && base.surface) || `${latticeForPreset(shell).label} status`, `${latticeForPreset(shell).label} status`),
       removedTiles,
+      connectFourHoles,
       cutEdges,
       gluedEdges
     };
@@ -3190,7 +3433,10 @@
       ? modulo(options.fallDir, latticeForPreset(preset).sides)
       : selectedConnectFourFallDir(preset);
     const removed = initialRemovedSet(preset);
-    const holes = normalizeConnectFourHoleSet(options.holes, preset, removed);
+    const holeEntries = Object.prototype.hasOwnProperty.call(options, 'holes') && options.holes != null
+      ? options.holes
+      : preset.connectFourHoles;
+    const holes = normalizeConnectFourHoleSet(holeEntries, preset, removed);
     const cycleHoles = normalizeConnectFourHoleSet(options.cycleHoles, preset, removed);
     return {
       gameMode: GAME_MODES.CONNECT_FOUR,
@@ -5028,6 +5274,12 @@
     const shell = { lattice, rows, cols, removedTiles: [], cutEdges: [], gluedEdges: [] };
     const removedTiles = normalizeImportedRemovedTiles(importedArrayValues(payload, source, ['removedTiles', 'backgroundRemovedTiles']), rows, cols);
     shell.removedTiles = removedTiles;
+    const removedSet = new Set(removedTiles.map((tile) => indexOf(tile.row, tile.col, cols)));
+    const connectFourHoles = normalizeImportedRemovedTiles(
+      importedArrayValues(payload, source, ['connectFourHoles', 'holes', 'inputHoles']),
+      rows,
+      cols
+    ).filter((tile) => !removedSet.has(indexOf(tile.row, tile.col, cols)));
     const cutEdges = normalizeImportedCutEdges(importedArrayValues(payload, source, ['cutEdges', 'backgroundCutEdges', 'boundaries']), shell);
     shell.cutEdges = cutEdges;
     const gluedEdges = normalizeImportedGluedEdges(importedArrayValues(payload, source, ['gluedEdges', 'backgroundGluedEdges', 'gluedBoundaries']), shell);
@@ -5054,6 +5306,7 @@
       cols,
       surface,
       removedTiles,
+      connectFourHoles,
       cutEdges,
       gluedEdges
     };
@@ -5309,6 +5562,7 @@
         left: { ...edge.left },
         right: { ...edge.right }
       })),
+      connectFourHoles: (source.connectFourHoles || []).map((tile) => ({ ...tile })),
       gluedEdges: (source.gluedEdges || []).map(cloneGluePair)
     };
   }

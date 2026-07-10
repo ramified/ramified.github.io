@@ -17,49 +17,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fffdf8",
-      "x": 379.7,
-      "y": 155.8
-    },
-    {
-      "id": "n11",
-      "type": "example",
-      "label": "hidden sheaves",
-      "setting": "Sometimes relative tangent/cotangent sheaves are easier than the other ones; then there is no need to construct hidden sheaves.",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 551.6,
-      "y": 46
-    },
-    {
-      "id": "n13",
-      "type": "example",
-      "label": "Theorem Graph Calculator",
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 309.7,
-      "y": 393.3
-    },
-    {
-      "id": "n25",
-      "type": "example",
-      "label": "hypersurface",
-      "setting": "add the normal sheaf identification rule for the hypersurface.",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 360.5,
+      "x": 533.3,
       "y": 46
     },
     {
@@ -81,30 +39,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 164.9,
+      "x": 269.6,
       "y": 46
-    },
-    {
-      "id": "n38",
-      "type": "misc",
-      "label": "tiny fixes",
-      "details": [
-        {
-          "id": "bugs",
-          "label": "bugs",
-          "type": "list",
-          "text": "add a warning when user try to delete the page: do you save?\ndefault preset(shown on the internet when I open the page) should be Maintenance Tracker(this records the website maintenance I have fixed/still remains to be fixed)"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 138.7,
-      "y": 314
     },
     {
       "id": "n39",
@@ -125,69 +61,47 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 495.2,
-      "y": 335.9
+      "x": 380.6,
+      "y": 124
     },
     {
-      "id": "n40",
+      "id": "n46",
       "type": "misc",
-      "label": "double scripts",
+      "label": "wrong glue",
       "details": [
         {
-          "id": "code",
-          "label": "code",
+          "id": "preset",
+          "label": "preset",
           "type": "textbox",
-          "text": "{\n  \"schema\": \"sheaf-calculator-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-06T12:45:48.269Z\",\n  \"active\": {\n    \"mode\": \"modify\",\n    \"kind\": \"sheaf\",\n    \"varietyId\": \"X7\",\n    \"sheafId\": \"E12\"\n  },\n  \"options\": {\n    \"repeatNames\": true,\n    \"repeatStyle\": \"letters\",\n    \"classBasis\": \"chern\",\n    \"rootForm\": \"product\",\n    \"classTermIndex\": 1,\n    \"classFamilies\": [\n      \"chern\",\n      \"character\"\n    ],\n    \"hodgeCellSize\": 20,\n    \"homologyRulePasses\": 1,\n    \"homologyMapInputMode\": \"coefficients\",\n    \"homologyExpressionTransposed\": true,\n    \"exportScope\": \"saved-step-formulas\"\n  },\n  \"objects\": {\n    \"numbers\": [\n      {\n        \"id\": \"auto-g\",\n        \"type\": \"rational-number\",\n        \"name\": \"g\",\n        \"value\": \"0\",\n        \"positive\": true,\n        \"auto\": true,\n        \"sources\": [\n          {\n            \"kind\": \"variety\",\n            \"id\": \"X1\",\n            \"field\": \"genus\"\n          },\n          {\n            \"kind\": \"variety\",\n            \"id\": \"curve\",\n            \"field\": \"genus\"\n          }\n        ]\n      }\n    ],\n    \"varieties\": [\n      {\n        \"id\": \"X1\",\n        \"type\": \"curve\",\n        \"dim\": \"1\",\n        \"name\": \"C\",\n        \"genus\": \"g\",\n        \"ppavGenus\": \"2\",\n        \"ciDegrees\": \"\",\n        \"ciAmbient\": \"1\",\n        \"symmetricProductM\": \"3\",\n        \"symmetricProductGenus\": \"g\",\n        \"grassmannianR\": \"2\",\n        \"grassmannianN\": \"4\",\n        \"homology\": {\n          \"classes\": {\n            \"unit\": {\n              \"symbol\": \"1\"\n            },\n            \"point\": {\n              \"symbol\": \"[p]\"\n            }\n          }\n        },\n        \"labelX\": 0.22,\n        \"labelY\": 0.6\n      },\n      {\n        \"id\": \"X3\",\n        \"type\": \"abstract\",\n        \"dim\": \"2\",\n        \"name\": \"X\",\n        \"genus\": \"g\",\n        \"ppavGenus\": \"2\",\n        \"ciDegrees\": \"\",\n        \"ciAmbient\": \"2\",\n        \"symmetricProductM\": \"3\",\n        \"symmetricProductGenus\": \"g\",\n        \"grassmannianR\": \"2\",\n        \"grassmannianN\": \"4\",\n        \"homology\": {\n          \"classes\": {\n            \"unit\": {\n              \"symbol\": \"1\"\n            },\n            \"point\": {\n              \"symbol\": \"[p]\"\n            }\n          }\n        },\n        \"labelX\": 0.36864864864864866,\n        \"labelY\": 0.6\n      },\n      {\n        \"id\": \"X7\",\n        \"type\": \"point\",\n        \"dim\": \"0\",\n        \"name\": \"\\\\{*\\\\}\",\n        \"genus\": \"g\",\n        \"ppavGenus\": \"2\",\n        \"ciDegrees\": \"\",\n        \"ciAmbient\": \"0\",\n        \"symmetricProductM\": \"3\",\n        \"symmetricProductGenus\": \"g\",\n        \"grassmannianR\": \"2\",\n        \"grassmannianN\": \"4\",\n        \"homology\": {\n          \"classes\": {\n            \"unit\": {\n              \"symbol\": \"1\"\n            },\n            \"point\": {\n              \"symbol\": \"[p]\"\n            }\n          },\n          \"rules\": [\n            {\n              \"id\": \"point-class-unit\",\n              \"builtin\": true,\n              \"enabled\": true,\n              \"lhs\": {\n                \"powers\": {\n                  \"homology_v_X7_point\": 1\n                }\n              },\n              \"rhs\": [\n                {\n                  \"coefficient\": \"1\"\n                }\n              ]\n            }\n          ]\n        },\n        \"labelX\": 0.47394953547297297,\n        \"labelY\": 0.9091517857142857,\n        \"labelPositionDirty\": true\n      }\n    ],\n    \"sheaves\": [\n      {\n        \"id\": \"E5\",\n        \"type\": \"canonical\",\n        \"name\": \"K_{X}\",\n        \"twist\": \"1\",\n        \"rank\": \"1\",\n        \"baseVarietyId\": \"X3\",\n        \"basis\": \"chern\",\n        \"labelX\": 0.3986486486486487,\n        \"labelY\": 0.39999999999999997\n      },\n      {\n        \"id\": \"E6\",\n        \"type\": \"abstract\",\n        \"name\": \"f^{*}K_{X}\",\n        \"twist\": \"1\",\n        \"rank\": \"1\",\n        \"baseVarietyId\": \"X1\",\n        \"basis\": \"chern\",\n        \"construction\": {\n          \"type\": \"pullback\",\n          \"mapId\": \"M4\",\n          \"sheafId\": \"E5\",\n          \"exact\": true,\n          \"defaultName\": \"f^{*}K_{X}\"\n        },\n        \"labelX\": 0.25,\n        \"labelY\": 0.39999999999999997\n      },\n      {\n        \"id\": \"E9\",\n        \"type\": \"abstract\",\n        \"name\": \"g_{*}f^{*}K_{X}\",\n        \"twist\": \"1\",\n        \"rank\": \"\",\n        \"baseVarietyId\": \"X7\",\n        \"basis\": \"chern\",\n        \"construction\": {\n          \"type\": \"pushforward\",\n          \"mapId\": \"M8\",\n          \"sheafId\": \"E6\",\n          \"exact\": true,\n          \"proper\": true,\n          \"defaultName\": \"g_{*}f^{*}K_{X}\"\n        },\n        \"labelX\": 0.26402027027027025,\n        \"labelY\": 0.8957589285714286,\n        \"labelPositionDirty\": true\n      },\n      {\n        \"id\": \"E11\",\n        \"type\": \"abstract\",\n        \"name\": \"f_{*}f^{*}K_{X}\",\n        \"twist\": \"1\",\n        \"rank\": \"\",\n        \"baseVarietyId\": \"X3\",\n        \"basis\": \"chern\",\n        \"construction\": {\n          \"type\": \"pushforward\",\n          \"mapId\": \"M4\",\n          \"sheafId\": \"E6\",\n          \"exact\": true,\n          \"proper\": true,\n          \"defaultName\": \"f_{*}f^{*}K_{X}\"\n        },\n        \"labelX\": 0.5056756756756757,\n        \"labelY\": 0.39999999999999997\n      },\n      {\n        \"id\": \"E12\",\n        \"type\": \"abstract\",\n        \"name\": \"E\",\n        \"twist\": \"1\",\n        \"rank\": \"\",\n        \"baseVarietyId\": \"X7\",\n        \"basis\": \"chern\",\n        \"construction\": {\n          \"type\": \"pushforward\",\n          \"mapId\": \"M10\",\n          \"sheafId\": \"E11\",\n          \"exact\": true,\n          \"proper\": true,\n          \"defaultName\": \"h_{*}f_{*}f^{*}K_{X}\"\n        },\n        \"nameDirty\": true,\n        \"labelX\": 0.5039495354729729,\n        \"labelY\": 0.7091517857142857\n      }\n    ],\n    \"maps\": [\n      {\n        \"id\": \"M4\",\n        \"name\": \"f\",\n        \"domainKind\": \"variety\",\n        \"domainId\": \"X1\",\n        \"codomainKind\": \"variety\",\n        \"codomainId\": \"X3\",\n        \"curve\": {\n          \"type\": \"straight\"\n        },\n        \"modified\": true,\n        \"defaultBendPx\": 0,\n        \"labelOffset\": -17.546875,\n        \"labelT\": 0.4583333333333334\n      },\n      {\n        \"id\": \"M8\",\n        \"name\": \"g\",\n        \"domainKind\": \"variety\",\n        \"domainId\": \"X1\",\n        \"codomainKind\": \"variety\",\n        \"codomainId\": \"X7\",\n        \"curve\": {\n          \"type\": \"straight\"\n        },\n        \"nameDirty\": true,\n        \"modified\": true,\n        \"defaultBendPx\": 0,\n        \"labelOffset\": 17.781136711537293,\n        \"labelT\": 0.14583333333333315\n      },\n      {\n        \"id\": \"M10\",\n        \"name\": \"h\",\n        \"domainKind\": \"variety\",\n        \"domainId\": \"X3\",\n        \"codomainKind\": \"variety\",\n        \"codomainId\": \"X7\",\n        \"curve\": {\n          \"type\": \"straight\"\n        },\n        \"nameDirty\": true,\n        \"defaultBendPx\": 0,\n        \"labelOffset\": -18,\n        \"labelT\": 0.5\n      }\n    ]\n  },\n  \"step\": {\n    \"savedRules\": [\n      {\n        \"id\": \"step-saved-rt0kug\",\n        \"kind\": \"rewrite\",\n        \"family\": \"formula\",\n        \"target\": \"formula\",\n        \"degree\": 0,\n        \"dimension\": 0,\n        \"geometryId\": \"X7\",\n        \"labelLatex\": \"\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\",\n        \"labelPlain\": \"ch_0(g_*f^*K_X)\",\n        \"lhsLatex\": \"sheaf_E9_ch0\",\n        \"rhsLatex\": \"-g + 1 - map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1\",\n        \"lhsPlain\": \"sheaf_E9_ch0\",\n        \"rhsPlain\": \"-g + 1 - map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1\",\n        \"displayLatex\": \"\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})=-g + 1 - map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1\",\n        \"displayPlain\": \"ch_0(g_*f^*K_X)=-g + 1 - map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1\",\n        \"formulaTokens\": [\n          {\n            \"type\": \"atom\",\n            \"atomKind\": \"sheaf-class\",\n            \"geometryId\": \"X7\",\n            \"sheafId\": \"E9\",\n            \"family\": \"character\",\n            \"degree\": 0,\n            \"polyData\": [\n              [\n                \"sheaf_E9_ch0:1\",\n                \"1\"\n              ]\n            ],\n            \"latex\": \"\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\",\n            \"plain\": \"ch_0(g_*f^*K_X)\"\n          }\n        ],\n        \"formulaSignature\": \"formula::X7::X7::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X7\\\",\\\"sheafId\\\":\\\"E9\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"polyData\\\":[[\\\"sheaf_E9_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\\\",\\\"plain\\\":\\\"ch_0(g_*f^*K_X)\\\",\\\"title\\\":\\\"ch_0 of g_*f^*K_X\\\"}]\",\n        \"lhs\": {\n          \"powers\": {\n            \"sheaf_E9_ch0\": 1\n          }\n        },\n        \"rhs\": [\n          {\n            \"coefficient\": \"-1\",\n            \"powers\": {\n              \"curveGenus\": 1\n            }\n          },\n          {\n            \"coefficient\": \"1\"\n          },\n          {\n            \"coefficient\": \"-1\",\n            \"powers\": {\n              \"map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1\": 1\n            }\n          }\n        ],\n        \"variableIds\": [\n          \"sheaf_E9_ch0\",\n          \"curveGenus\",\n          \"map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1\"\n        ],\n        \"sourceLabel\": \"\"\n      }\n    ],\n    \"formulaEditorOpen\": true,\n    \"formulaBuilder\": {\n      \"varietyId\": \"X7\",\n      \"tokens\": [\n        {\n          \"type\": \"atom\",\n          \"atomKind\": \"sheaf-class\",\n          \"geometryId\": \"X7\",\n          \"sheafId\": \"E9\",\n          \"family\": \"character\",\n          \"degree\": 0,\n          \"polyData\": [\n            [\n              \"sheaf_E9_ch0:1\",\n              \"1\"\n            ]\n          ],\n          \"latex\": \"\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\",\n          \"plain\": \"ch_0(g_*f^*K_X)\"\n        }\n      ],\n      \"mode\": \"builder\",\n      \"classFamily\": \"character\",\n      \"classDegree\": \"0\",\n      \"classSheafId\": \"E9\",\n      \"cursorIndex\": 1,\n      \"insertMode\": \"insert\",\n      \"nextSlotId\": 1,\n      \"editingSavedFormulaId\": \"step-saved-rt0kug\",\n      \"message\": \"Saved formula loaded for editing.\"\n    },\n    \"activeSession\": {\n      \"formulaSession\": true,\n      \"stopped\": true,\n      \"family\": \"formula\",\n      \"target\": \"formula\",\n      \"index\": 0,\n      \"layout\": \"wide\",\n      \"dimension\": 0,\n      \"geometryId\": \"X7\",\n      \"bundleLabelLatex\": \"\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\",\n      \"bundleLabelPlain\": \"ch_0(g_*f^*K_X)\",\n      \"rankLatex\": \"0\",\n      \"rankPlain\": \"0\",\n      \"components\": [\n        [\n          [\n            \"curveGenus:1\",\n            \"-1\"\n          ],\n          [\n            \"\",\n            \"1\"\n          ],\n          [\n            \"map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1:1\",\n            \"-1\"\n          ]\n        ]\n      ],\n      \"originalComponents\": [\n        [\n          [\n            \"sheaf_E9_ch0:1\",\n            \"1\"\n          ]\n        ]\n      ],\n      \"formulaPoly\": [\n        [\n          \"curveGenus:1\",\n          \"-1\"\n        ],\n        [\n          \"\",\n          \"1\"\n        ],\n        [\n          \"map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1:1\",\n          \"-1\"\n        ]\n      ],\n      \"originalFormulaPoly\": [\n        [\n          \"sheaf_E9_ch0:1\",\n          \"1\"\n        ]\n      ],\n      \"formulaLatex\": \"\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\",\n      \"formulaPlain\": \"ch_0(g_*f^*K_X)\",\n      \"formulaTokens\": [\n        {\n          \"type\": \"atom\",\n          \"atomKind\": \"sheaf-class\",\n          \"geometryId\": \"X7\",\n          \"sheafId\": \"E9\",\n          \"family\": \"character\",\n          \"degree\": 0,\n          \"polyData\": [\n            [\n              \"sheaf_E9_ch0:1\",\n              \"1\"\n            ]\n          ],\n          \"latex\": \"\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\",\n          \"plain\": \"ch_0(g_*f^*K_X)\"\n        }\n      ],\n      \"sourceSignature\": \"formula::X7::X7::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X7\\\",\\\"sheafId\\\":\\\"E9\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"polyData\\\":[[\\\"sheaf_E9_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\\\",\\\"plain\\\":\\\"ch_0(g_*f^*K_X)\\\",\\\"title\\\":\\\"ch_0 of g_*f^*K_X\\\"}]\",\n      \"stepHistory\": [\n        {\n          \"label\": \"\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\",\n          \"value\": \"\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\",\n          \"reason\": \"start\",\n          \"snapshot\": {\n            \"components\": [\n              [\n                [\n                  \"sheaf_E9_ch0:1\",\n                  \"1\"\n                ]\n              ]\n            ],\n            \"formulaPoly\": [\n              [\n                \"sheaf_E9_ch0:1\",\n                \"1\"\n              ]\n            ],\n            \"formulaLatex\": \"\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\",\n            \"formulaPlain\": \"ch_0(g_*f^*K_X)\"\n          }\n        },\n        {\n          \"label\": \"\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\",\n          \"value\": \"g_{*}\\\\left(\\\\operatorname{td}_{1}(C)\\\\right)\\\\,r(f^{*}K_{X}) + g_{*}\\\\left(\\\\operatorname{ch}_{1}(f^{*}K_{X})\\\\right)\",\n          \"reason\": \"apply\",\n          \"snapshot\": {\n            \"components\": [\n              [\n                [\n                  \"map_pushforward_M8_class_step_td_v_X1_1:1|sheaf_E6_ch0:1\",\n                  \"1\"\n                ],\n                [\n                  \"map_pushforward_M8_sheaf_E6_ch1:1\",\n                  \"1\"\n                ]\n              ]\n            ],\n            \"formulaPoly\": [\n              [\n                \"map_pushforward_M8_class_step_td_v_X1_1:1|sheaf_E6_ch0:1\",\n                \"1\"\n              ],\n              [\n                \"map_pushforward_M8_sheaf_E6_ch1:1\",\n                \"1\"\n              ]\n            ],\n            \"formulaLatex\": \"\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\",\n            \"formulaPlain\": \"ch_0(g_*f^*K_X)\"\n          }\n        },\n        {\n          \"label\": \"\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\",\n          \"value\": \"\\\\frac{1}{2}\\\\,g_{*}\\\\left(c_{1}(C)\\\\right) - g_{*}\\\\left(f^{*}\\\\left(c_{1}(X)\\\\right)\\\\right)\",\n          \"reason\": \"apply\",\n          \"snapshot\": {\n            \"components\": [\n              [\n                [\n                  \"map_pushforward_M8_homology_v_X1_tangent_chern_1:1\",\n                  \"1/2\"\n                ],\n                [\n                  \"map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1:1\",\n                  \"-1\"\n                ]\n              ]\n            ],\n            \"formulaPoly\": [\n              [\n                \"map_pushforward_M8_homology_v_X1_tangent_chern_1:1\",\n                \"1/2\"\n              ],\n              [\n                \"map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1:1\",\n                \"-1\"\n              ]\n            ],\n            \"formulaLatex\": \"\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\",\n            \"formulaPlain\": \"ch_0(g_*f^*K_X)\"\n          }\n        },\n        {\n          \"label\": \"\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\",\n          \"value\": \"-g - g_{*}\\\\left(f^{*}\\\\left(c_{1}(X)\\\\right)\\\\right) + 1\",\n          \"reason\": \"apply\",\n          \"snapshot\": {\n            \"components\": [\n              [\n                [\n                  \"curveGenus:1\",\n                  \"-1\"\n                ],\n                [\n                  \"\",\n                  \"1\"\n                ],\n                [\n                  \"map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1:1\",\n                  \"-1\"\n                ]\n              ]\n            ],\n            \"formulaPoly\": [\n              [\n                \"curveGenus:1\",\n                \"-1\"\n              ],\n              [\n                \"\",\n                \"1\"\n              ],\n              [\n                \"map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1:1\",\n                \"-1\"\n              ]\n            ],\n            \"formulaLatex\": \"\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\",\n            \"formulaPlain\": \"ch_0(g_*f^*K_X)\"\n          }\n        }\n      ],\n      \"message\": \"Step result is kept for this formula chart.\"\n    },\n    \"cache\": [\n      {\n        \"signature\": \"formula::X1::X1::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X1\\\",\\\"sheafId\\\":\\\"E6\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"polyData\\\":[[\\\"sheaf_E6_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(f^{*}K_{X})\\\",\\\"plain\\\":\\\"ch_0(f^*K_X)\\\",\\\"title\\\":\\\"ch_0 of f^*K_X\\\"}]\",\n        \"family\": \"formula\",\n        \"dimension\": 1,\n        \"geometryId\": \"X1\",\n        \"components\": [\n          [\n            [\n              \"sheaf_E6_ch0:1\",\n              \"1\"\n            ]\n          ],\n          []\n        ],\n        \"originalComponents\": [\n          [\n            [\n              \"sheaf_E6_ch0:1\",\n              \"1\"\n            ]\n          ],\n          []\n        ]\n      },\n      {\n        \"signature\": \"formula::X7::X7::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X7\\\",\\\"sheafId\\\":\\\"E9\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"polyData\\\":[[\\\"sheaf_E9_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\\\",\\\"plain\\\":\\\"ch_0(g_*f^*K_X)\\\",\\\"title\\\":\\\"ch_0 of g_*f^*K_X\\\"}]\",\n        \"family\": \"formula\",\n        \"dimension\": 0,\n        \"geometryId\": \"X7\",\n        \"components\": [\n          [\n            [\n              \"curveGenus:1\",\n              \"-1\"\n            ],\n            [\n              \"\",\n              \"1\"\n            ],\n            [\n              \"map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1:1\",\n              \"-1\"\n            ]\n          ]\n        ],\n        \"originalComponents\": [\n          [\n            [\n              \"sheaf_E9_ch0:1\",\n              \"1\"\n            ]\n          ]\n        ]\n      }\n    ]\n  },\n  \"nextObjectIndex\": 13\n}"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 306.7,
-      "y": 258
-    },
-    {
-      "id": "n41",
-      "type": "misc",
-      "label": "no rule for f_*([p])=[p]",
-      "details": [
-        {
-          "id": "code",
-          "label": "code",
-          "type": "textbox",
-          "text": "{\n  \"schema\": \"sheaf-calculator-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-06T12:48:28.497Z\",\n  \"active\": {\n    \"mode\": \"modify\",\n    \"kind\": \"map\",\n    \"varietyId\": \"X7\",\n    \"mapId\": \"M4\"\n  },\n  \"options\": {\n    \"repeatNames\": true,\n    \"repeatStyle\": \"letters\",\n    \"classBasis\": \"chern\",\n    \"rootForm\": \"product\",\n    \"classTermIndex\": 1,\n    \"classFamilies\": [\n      \"chern\",\n      \"character\"\n    ],\n    \"hodgeCellSize\": 20,\n    \"homologyRulePasses\": 1,\n    \"homologyMapInputMode\": \"coefficients\",\n    \"homologyExpressionTransposed\": true,\n    \"exportScope\": \"saved-step-formulas\"\n  },\n  \"objects\": {\n    \"numbers\": [\n      {\n        \"id\": \"auto-g\",\n        \"type\": \"rational-number\",\n        \"name\": \"g\",\n        \"value\": \"0\",\n        \"positive\": true,\n        \"auto\": true,\n        \"sources\": [\n          {\n            \"kind\": \"variety\",\n            \"id\": \"X1\",\n            \"field\": \"genus\"\n          },\n          {\n            \"kind\": \"variety\",\n            \"id\": \"curve\",\n            \"field\": \"genus\"\n          }\n        ]\n      }\n    ],\n    \"varieties\": [\n      {\n        \"id\": \"X1\",\n        \"type\": \"curve\",\n        \"dim\": \"1\",\n        \"name\": \"C\",\n        \"genus\": \"g\",\n        \"ppavGenus\": \"2\",\n        \"ciDegrees\": \"\",\n        \"ciAmbient\": \"1\",\n        \"symmetricProductM\": \"3\",\n        \"symmetricProductGenus\": \"g\",\n        \"grassmannianR\": \"2\",\n        \"grassmannianN\": \"4\",\n        \"homology\": {\n          \"classes\": {\n            \"unit\": {\n              \"symbol\": \"1\"\n            },\n            \"point\": {\n              \"symbol\": \"[p]\"\n            }\n          }\n        },\n        \"labelX\": 0.22,\n        \"labelY\": 0.6\n      },\n      {\n        \"id\": \"X3\",\n        \"type\": \"abstract\",\n        \"dim\": \"2\",\n        \"name\": \"X\",\n        \"genus\": \"g\",\n        \"ppavGenus\": \"2\",\n        \"ciDegrees\": \"\",\n        \"ciAmbient\": \"2\",\n        \"symmetricProductM\": \"3\",\n        \"symmetricProductGenus\": \"g\",\n        \"grassmannianR\": \"2\",\n        \"grassmannianN\": \"4\",\n        \"homology\": {\n          \"classes\": {\n            \"unit\": {\n              \"symbol\": \"1\"\n            },\n            \"point\": {\n              \"symbol\": \"[p]\"\n            }\n          }\n        },\n        \"labelX\": 0.36864864864864866,\n        \"labelY\": 0.6\n      },\n      {\n        \"id\": \"X7\",\n        \"type\": \"point\",\n        \"dim\": \"0\",\n        \"name\": \"\\\\{*\\\\}\",\n        \"genus\": \"g\",\n        \"ppavGenus\": \"2\",\n        \"ciDegrees\": \"\",\n        \"ciAmbient\": \"0\",\n        \"symmetricProductM\": \"3\",\n        \"symmetricProductGenus\": \"g\",\n        \"grassmannianR\": \"2\",\n        \"grassmannianN\": \"4\",\n        \"homology\": {\n          \"classes\": {\n            \"unit\": {\n              \"symbol\": \"1\"\n            },\n            \"point\": {\n              \"symbol\": \"[p]\"\n            }\n          },\n          \"rules\": [\n            {\n              \"id\": \"point-class-unit\",\n              \"builtin\": true,\n              \"enabled\": true,\n              \"lhs\": {\n                \"powers\": {\n                  \"homology_v_X7_point\": 1\n                }\n              },\n              \"rhs\": [\n                {\n                  \"coefficient\": \"1\"\n                }\n              ]\n            }\n          ]\n        },\n        \"labelX\": 0.47394953547297297,\n        \"labelY\": 0.9091517857142857,\n        \"labelPositionDirty\": true\n      }\n    ],\n    \"sheaves\": [\n      {\n        \"id\": \"E5\",\n        \"type\": \"canonical\",\n        \"name\": \"K_{X}\",\n        \"twist\": \"1\",\n        \"rank\": \"1\",\n        \"baseVarietyId\": \"X3\",\n        \"basis\": \"chern\",\n        \"labelX\": 0.3986486486486487,\n        \"labelY\": 0.39999999999999997\n      },\n      {\n        \"id\": \"E6\",\n        \"type\": \"abstract\",\n        \"name\": \"f^{*}K_{X}\",\n        \"twist\": \"1\",\n        \"rank\": \"1\",\n        \"baseVarietyId\": \"X1\",\n        \"basis\": \"chern\",\n        \"construction\": {\n          \"type\": \"pullback\",\n          \"mapId\": \"M4\",\n          \"sheafId\": \"E5\",\n          \"exact\": true,\n          \"defaultName\": \"f^{*}K_{X}\"\n        },\n        \"labelX\": 0.25,\n        \"labelY\": 0.39999999999999997\n      },\n      {\n        \"id\": \"E9\",\n        \"type\": \"abstract\",\n        \"name\": \"g_{*}f^{*}K_{X}\",\n        \"twist\": \"1\",\n        \"rank\": \"\",\n        \"baseVarietyId\": \"X7\",\n        \"basis\": \"chern\",\n        \"construction\": {\n          \"type\": \"pushforward\",\n          \"mapId\": \"M8\",\n          \"sheafId\": \"E6\",\n          \"exact\": true,\n          \"proper\": true,\n          \"defaultName\": \"g_{*}f^{*}K_{X}\"\n        },\n        \"labelX\": 0.26402027027027025,\n        \"labelY\": 0.8957589285714286,\n        \"labelPositionDirty\": true\n      },\n      {\n        \"id\": \"E11\",\n        \"type\": \"abstract\",\n        \"name\": \"f_{*}f^{*}K_{X}\",\n        \"twist\": \"1\",\n        \"rank\": \"\",\n        \"baseVarietyId\": \"X3\",\n        \"basis\": \"chern\",\n        \"construction\": {\n          \"type\": \"pushforward\",\n          \"mapId\": \"M4\",\n          \"sheafId\": \"E6\",\n          \"exact\": true,\n          \"proper\": true,\n          \"defaultName\": \"f_{*}f^{*}K_{X}\"\n        },\n        \"labelX\": 0.5056756756756757,\n        \"labelY\": 0.39999999999999997\n      },\n      {\n        \"id\": \"E12\",\n        \"type\": \"abstract\",\n        \"name\": \"E\",\n        \"twist\": \"1\",\n        \"rank\": \"\",\n        \"baseVarietyId\": \"X7\",\n        \"basis\": \"chern\",\n        \"construction\": {\n          \"type\": \"pushforward\",\n          \"mapId\": \"M10\",\n          \"sheafId\": \"E11\",\n          \"exact\": true,\n          \"proper\": true,\n          \"defaultName\": \"h_{*}f_{*}f^{*}K_{X}\"\n        },\n        \"nameDirty\": true,\n        \"labelX\": 0.5039495354729729,\n        \"labelY\": 0.7091517857142857\n      }\n    ],\n    \"maps\": [\n      {\n        \"id\": \"M4\",\n        \"name\": \"f\",\n        \"domainKind\": \"variety\",\n        \"domainId\": \"X1\",\n        \"codomainKind\": \"variety\",\n        \"codomainId\": \"X3\",\n        \"curve\": {\n          \"type\": \"straight\"\n        },\n        \"modified\": true,\n        \"defaultBendPx\": 0,\n        \"labelOffset\": -17.61328125,\n        \"labelT\": 0.4583333333333334\n      },\n      {\n        \"id\": \"M8\",\n        \"name\": \"g\",\n        \"domainKind\": \"variety\",\n        \"domainId\": \"X1\",\n        \"codomainKind\": \"variety\",\n        \"codomainId\": \"X7\",\n        \"curve\": {\n          \"type\": \"straight\"\n        },\n        \"nameDirty\": true,\n        \"modified\": true,\n        \"defaultBendPx\": 0,\n        \"labelOffset\": 17.781136711537293,\n        \"labelT\": 0.14583333333333315\n      },\n      {\n        \"id\": \"M10\",\n        \"name\": \"h\",\n        \"domainKind\": \"variety\",\n        \"domainId\": \"X3\",\n        \"codomainKind\": \"variety\",\n        \"codomainId\": \"X7\",\n        \"curve\": {\n          \"type\": \"straight\"\n        },\n        \"nameDirty\": true,\n        \"defaultBendPx\": 0,\n        \"labelOffset\": -18,\n        \"labelT\": 0.5\n      }\n    ]\n  },\n  \"step\": {\n    \"formulaBuilder\": {\n      \"varietyId\": \"X7\",\n      \"tokens\": [\n        {\n          \"type\": \"atom\",\n          \"atomKind\": \"sheaf-class\",\n          \"geometryId\": \"X7\",\n          \"sheafId\": \"E12\",\n          \"family\": \"character\",\n          \"degree\": 0,\n          \"polyData\": [\n            [\n              \"sheaf_E12_ch0:1\",\n              \"1\"\n            ]\n          ],\n          \"latex\": \"\\\\operatorname{ch}_{0}(E)\",\n          \"plain\": \"ch_0(E)\"\n        }\n      ],\n      \"mode\": \"stepping\",\n      \"classFamily\": \"character\",\n      \"classDegree\": \"0\",\n      \"classSheafId\": \"E12\",\n      \"cursorIndex\": 1,\n      \"insertMode\": \"insert\",\n      \"nextSlotId\": 1,\n      \"message\": \"Step-by-step session started.\"\n    },\n    \"activeSession\": {\n      \"formulaSession\": true,\n      \"family\": \"formula\",\n      \"target\": \"formula\",\n      \"index\": 0,\n      \"layout\": \"wide\",\n      \"dimension\": 0,\n      \"geometryId\": \"X7\",\n      \"bundleLabelLatex\": \"\\\\operatorname{ch}_{0}(E)\",\n      \"bundleLabelPlain\": \"ch_0(E)\",\n      \"rankLatex\": \"0\",\n      \"rankPlain\": \"0\",\n      \"components\": [\n        [\n          [\n            \"rankghleftfleftprightrighthleftfleftprightrighthleftc1Xfleft1rightright:1\",\n            \"1\"\n          ]\n        ]\n      ],\n      \"originalComponents\": [\n        [\n          [\n            \"sheaf_E12_ch0:1\",\n            \"1\"\n          ]\n        ]\n      ],\n      \"formulaPoly\": [\n        [\n          \"rankghleftfleftprightrighthleftfleftprightrighthleftc1Xfleft1rightright:1\",\n          \"1\"\n        ]\n      ],\n      \"originalFormulaPoly\": [\n        [\n          \"sheaf_E12_ch0:1\",\n          \"1\"\n        ]\n      ],\n      \"formulaLatex\": \"\\\\operatorname{ch}_{0}(E)\",\n      \"formulaPlain\": \"ch_0(E)\",\n      \"formulaTokens\": [\n        {\n          \"type\": \"atom\",\n          \"atomKind\": \"sheaf-class\",\n          \"geometryId\": \"X7\",\n          \"sheafId\": \"E12\",\n          \"family\": \"character\",\n          \"degree\": 0,\n          \"polyData\": [\n            [\n              \"sheaf_E12_ch0:1\",\n              \"1\"\n            ]\n          ],\n          \"latex\": \"\\\\operatorname{ch}_{0}(E)\",\n          \"plain\": \"ch_0(E)\"\n        }\n      ],\n      \"sourceSignature\": \"formula::X7::X7::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X7\\\",\\\"sheafId\\\":\\\"E12\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"polyData\\\":[[\\\"sheaf_E12_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(E)\\\",\\\"plain\\\":\\\"ch_0(E)\\\",\\\"title\\\":\\\"ch_0 of E\\\"}]\",\n      \"stepHistory\": [\n        {\n          \"label\": \"\\\\operatorname{ch}_{0}(E)\",\n          \"value\": \"\\\\operatorname{ch}_{0}(E)\",\n          \"reason\": \"start\",\n          \"snapshot\": {\n            \"components\": [\n              [\n                [\n                  \"sheaf_E12_ch0:1\",\n                  \"1\"\n                ]\n              ]\n            ],\n            \"formulaPoly\": [\n              [\n                \"sheaf_E12_ch0:1\",\n                \"1\"\n              ]\n            ],\n            \"formulaLatex\": \"\\\\operatorname{ch}_{0}(E)\",\n            \"formulaPlain\": \"ch_0(E)\"\n          }\n        },\n        {\n          \"label\": \"\\\\operatorname{ch}_{0}(E)\",\n          \"value\": \"-g\\\\,h_{*}\\\\left(f_{*}\\\\left([p]\\\\right)\\\\right) + h_{*}\\\\left(f_{*}\\\\left([p]\\\\right)\\\\right) - h_{*}\\\\left(c_{1}(X)\\\\,f_{*}\\\\left(1\\\\right)\\\\right)\",\n          \"reason\": \"apply\",\n          \"snapshot\": {\n            \"components\": [\n              [\n                [\n                  \"rankghleftfleftprightrighthleftfleftprightrighthleftc1Xfleft1rightright:1\",\n                  \"1\"\n                ]\n              ]\n            ],\n            \"formulaPoly\": [\n              [\n                \"rankghleftfleftprightrighthleftfleftprightrighthleftc1Xfleft1rightright:1\",\n                \"1\"\n              ]\n            ],\n            \"formulaLatex\": \"\\\\operatorname{ch}_{0}(E)\",\n            \"formulaPlain\": \"ch_0(E)\"\n          }\n        }\n      ],\n      \"message\": \"Selected rules made no change.\"\n    },\n    \"cache\": [\n      {\n        \"signature\": \"formula::X1::X1::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X1\\\",\\\"sheafId\\\":\\\"E6\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"polyData\\\":[[\\\"sheaf_E6_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(f^{*}K_{X})\\\",\\\"plain\\\":\\\"ch_0(f^*K_X)\\\",\\\"title\\\":\\\"ch_0 of f^*K_X\\\"}]\",\n        \"family\": \"formula\",\n        \"dimension\": 1,\n        \"geometryId\": \"X1\",\n        \"components\": [\n          [\n            [\n              \"sheaf_E6_ch0:1\",\n              \"1\"\n            ]\n          ],\n          []\n        ],\n        \"originalComponents\": [\n          [\n            [\n              \"sheaf_E6_ch0:1\",\n              \"1\"\n            ]\n          ],\n          []\n        ]\n      },\n      {\n        \"signature\": \"formula::X7::X7::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X7\\\",\\\"sheafId\\\":\\\"E9\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"polyData\\\":[[\\\"sheaf_E9_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\\\",\\\"plain\\\":\\\"ch_0(g_*f^*K_X)\\\",\\\"title\\\":\\\"ch_0 of g_*f^*K_X\\\"}]\",\n        \"family\": \"formula\",\n        \"dimension\": 0,\n        \"geometryId\": \"X7\",\n        \"components\": [\n          [\n            [\n              \"curveGenus:1\",\n              \"-1\"\n            ],\n            [\n              \"\",\n              \"1\"\n            ],\n            [\n              \"map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1:1\",\n              \"-1\"\n            ]\n          ]\n        ],\n        \"originalComponents\": [\n          [\n            [\n              \"sheaf_E9_ch0:1\",\n              \"1\"\n            ]\n          ]\n        ]\n      },\n      {\n        \"signature\": \"formula::X7::X7::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X7\\\",\\\"sheafId\\\":\\\"E9\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"variableId\\\":null,\\\"polyData\\\":[[\\\"sheaf_E9_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\\\",\\\"plain\\\":\\\"ch_0(g_*f^*K_X)\\\"}]\",\n        \"family\": \"formula\",\n        \"dimension\": 0,\n        \"geometryId\": \"X7\",\n        \"components\": [\n          [\n            [\n              \"sheaf_E9_ch0:1\",\n              \"1\"\n            ]\n          ]\n        ],\n        \"originalComponents\": [\n          [\n            [\n              \"sheaf_E9_ch0:1\",\n              \"1\"\n            ]\n          ]\n        ]\n      },\n      {\n        \"signature\": \"formula::X7::X7::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X7\\\",\\\"sheafId\\\":\\\"E12\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"polyData\\\":[[\\\"sheaf_E12_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(E)\\\",\\\"plain\\\":\\\"ch_0(E)\\\",\\\"title\\\":\\\"ch_0 of E\\\"}]\",\n        \"family\": \"formula\",\n        \"dimension\": 0,\n        \"geometryId\": \"X7\",\n        \"components\": [\n          [\n            [\n              \"rankghleftfleftprightrighthleftfleftprightrighthleftc1Xfleft1rightright:1\",\n              \"1\"\n            ]\n          ]\n        ],\n        \"originalComponents\": [\n          [\n            [\n              \"sheaf_E12_ch0:1\",\n              \"1\"\n            ]\n          ]\n        ]\n      }\n    ]\n  },\n  \"nextObjectIndex\": 13\n}"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 571.3,
-      "y": 240
-    },
-    {
-      "id": "n42",
-      "type": "misc",
-      "label": "SES",
-      "details": [
-        {
-          "id": "priority",
-          "label": "priority",
-          "type": "textbox",
-          "text": "SES can assign the sheaf whose homology classes are computed by other two"
+          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T10:46:51.997Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"half-glued\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"4x4 Sigma_1,1\",\n    \"lattice\": \"square\",\n    \"rows\": 4,\n    \"cols\": 4,\n    \"surface\": \"Sigma_1,1\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 3,\n          \"edge\": \"N\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 3,\n          \"index\": 14,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 2,\n          \"index\": 1,\n          \"dir\": 3,\n          \"edge\": \"N\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 4,\n          \"index\": 15,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 1,\n        \"color\": \"#b23a48\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 8,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 1,\n          \"col\": 4,\n          \"index\": 3,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 1,\n        \"color\": \"#b23a48\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 12,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 4,\n          \"index\": 7,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 16,\n    \"existing\": 16,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 4,\n    \"unmatchedBoundaries\": 8,\n    \"boundaryComponents\": 1,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": 1,\n    \"nonorientableGenus\": null,\n    \"orientable\": true,\n    \"surfaceType\": \"Sigma_1,1\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"T_1 with 1 hole, 0 cusps\\\">&Sigma;<sub>1,1</sub></span>\",\n    \"surfaceTypeTooltip\": \"T_1 with 1 hole, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": -1,\n    \"action\": \"billiard\",\n    \"multiEdges\": true,\n    \"chainLength\": 2,\n    \"chainReversed\": true,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
         },
         {
-          "id": "rules",
-          "label": "rules",
+          "id": "type",
+          "label": "type",
+          "type": "textbox",
+          "text": "half-glued"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 266.7,
+      "y": 374
+    },
+    {
+      "id": "n47",
+      "type": "misc",
+      "label": "hyperlink",
+      "details": [
+        {
+          "id": "goal",
+          "label": "goal",
           "type": "checkbox",
-          "text": "- [x] For hypersurface\n- [x] ideal sheaf can be written as O_X(-D)\n- [x] normal sheaf/conormal sheaf"
+          "text": "Except the following cases, all calculators only link to the main calculator:\nYoung Diagram Calculator with Young Diagram^2 Calculator are linked to each other\nMosaic Calculator and Ramified Minigames\nSheaf Calculator and Category Calculator"
         }
       ],
       "setting": "",
@@ -197,63 +111,132 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 134.4,
-      "y": 192.4
+      "x": 636,
+      "y": 351.3
     },
     {
-      "id": "n43",
+      "id": "n48",
       "type": "misc",
-      "label": "no add/identification",
-      "details": [
-        {
-          "id": "code",
-          "label": "code",
-          "type": "textbox",
-          "text": "{\n  \"schema\": \"sheaf-calculator-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-06T13:25:36.796Z\",\n  \"active\": {\n    \"mode\": \"create\",\n    \"kind\": \"sheaf\",\n    \"varietyId\": \"X13\",\n    \"sheafId\": \"E16\"\n  },\n  \"options\": {\n    \"repeatNames\": true,\n    \"repeatStyle\": \"letters\",\n    \"classBasis\": \"chern\",\n    \"rootForm\": \"product\",\n    \"classTermIndex\": 1,\n    \"classFamilies\": [\n      \"chern\",\n      \"character\"\n    ],\n    \"hodgeCellSize\": 20,\n    \"homologyRulePasses\": 1,\n    \"homologyMapInputMode\": \"coefficients\",\n    \"homologyExpressionTransposed\": true,\n    \"exportScope\": \"main\"\n  },\n  \"objects\": {\n    \"varieties\": [\n      {\n        \"id\": \"X13\",\n        \"type\": \"curve\",\n        \"dim\": \"1\",\n        \"name\": \"C\",\n        \"genus\": \"0\",\n        \"ppavGenus\": \"2\",\n        \"ciDegrees\": \"\",\n        \"ciAmbient\": \"1\",\n        \"symmetricProductM\": \"3\",\n        \"symmetricProductGenus\": \"g\",\n        \"grassmannianR\": \"2\",\n        \"grassmannianN\": \"4\",\n        \"homology\": {\n          \"classes\": {\n            \"unit\": {\n              \"symbol\": \"1\"\n            },\n            \"point\": {\n              \"symbol\": \"[p]\"\n            }\n          }\n        },\n        \"labelX\": 0.21920924831081082,\n        \"labelY\": 0.5991629464285714,\n        \"labelPositionDirty\": true\n      },\n      {\n        \"id\": \"X14\",\n        \"type\": \"abstract\",\n        \"dim\": \"3\",\n        \"name\": \"Y\",\n        \"genus\": \"g\",\n        \"ppavGenus\": \"2\",\n        \"ciDegrees\": \"\",\n        \"ciAmbient\": \"3\",\n        \"symmetricProductM\": \"3\",\n        \"symmetricProductGenus\": \"g\",\n        \"grassmannianR\": \"2\",\n        \"grassmannianN\": \"4\",\n        \"homology\": {\n          \"classes\": {\n            \"unit\": {\n              \"symbol\": \"1\"\n            },\n            \"point\": {\n              \"symbol\": \"[p]\"\n            }\n          }\n        },\n        \"nameDirty\": true,\n        \"labelX\": 0.36864864864864866,\n        \"labelY\": 0.6\n      }\n    ],\n    \"sheaves\": [\n      {\n        \"id\": \"E16\",\n        \"type\": \"structure\",\n        \"name\": \"\\\\mathcal{O}_{C}\",\n        \"twist\": \"1\",\n        \"rank\": \"1\",\n        \"baseVarietyId\": \"X13\",\n        \"basis\": \"chern\",\n        \"labelX\": 0.24920924831081082,\n        \"labelY\": 0.39916294642857136\n      }\n    ],\n    \"maps\": [\n      {\n        \"id\": \"M15\",\n        \"name\": \"f\",\n        \"domainKind\": \"variety\",\n        \"domainId\": \"X13\",\n        \"codomainKind\": \"variety\",\n        \"codomainId\": \"X14\",\n        \"curve\": {\n          \"type\": \"straight\"\n        },\n        \"defaultBendPx\": 0,\n        \"labelOffset\": -18,\n        \"labelT\": 0.5\n      }\n    ]\n  },\n  \"step\": {\n    \"cache\": [\n      {\n        \"signature\": \"formula::X1::X1::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X1\\\",\\\"sheafId\\\":\\\"E6\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"polyData\\\":[[\\\"sheaf_E6_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(f^{*}K_{X})\\\",\\\"plain\\\":\\\"ch_0(f^*K_X)\\\",\\\"title\\\":\\\"ch_0 of f^*K_X\\\"}]\",\n        \"family\": \"formula\",\n        \"dimension\": 1,\n        \"geometryId\": \"X1\",\n        \"components\": [\n          [\n            [\n              \"sheaf_E6_ch0:1\",\n              \"1\"\n            ]\n          ],\n          []\n        ],\n        \"originalComponents\": [\n          [\n            [\n              \"sheaf_E6_ch0:1\",\n              \"1\"\n            ]\n          ],\n          []\n        ]\n      },\n      {\n        \"signature\": \"formula::X7::X7::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X7\\\",\\\"sheafId\\\":\\\"E9\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"polyData\\\":[[\\\"sheaf_E9_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\\\",\\\"plain\\\":\\\"ch_0(g_*f^*K_X)\\\",\\\"title\\\":\\\"ch_0 of g_*f^*K_X\\\"}]\",\n        \"family\": \"formula\",\n        \"dimension\": 0,\n        \"geometryId\": \"X7\",\n        \"components\": [\n          [\n            [\n              \"curveGenus:1\",\n              \"-1\"\n            ],\n            [\n              \"\",\n              \"1\"\n            ],\n            [\n              \"map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1:1\",\n              \"-1\"\n            ]\n          ]\n        ],\n        \"originalComponents\": [\n          [\n            [\n              \"sheaf_E9_ch0:1\",\n              \"1\"\n            ]\n          ]\n        ]\n      },\n      {\n        \"signature\": \"formula::X7::X7::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X7\\\",\\\"sheafId\\\":\\\"E9\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"variableId\\\":null,\\\"polyData\\\":[[\\\"sheaf_E9_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\\\",\\\"plain\\\":\\\"ch_0(g_*f^*K_X)\\\"}]\",\n        \"family\": \"formula\",\n        \"dimension\": 0,\n        \"geometryId\": \"X7\",\n        \"components\": [\n          [\n            [\n              \"sheaf_E9_ch0:1\",\n              \"1\"\n            ]\n          ]\n        ],\n        \"originalComponents\": [\n          [\n            [\n              \"sheaf_E9_ch0:1\",\n              \"1\"\n            ]\n          ]\n        ]\n      },\n      {\n        \"signature\": \"formula::X7::X7::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X7\\\",\\\"sheafId\\\":\\\"E12\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"polyData\\\":[[\\\"sheaf_E12_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(E)\\\",\\\"plain\\\":\\\"ch_0(E)\\\",\\\"title\\\":\\\"ch_0 of E\\\"}]\",\n        \"family\": \"formula\",\n        \"dimension\": 0,\n        \"geometryId\": \"X7\",\n        \"components\": [\n          [\n            [\n              \"rankghleftfleftprightrighthleftfleftprightrighthleftc1Xfleft1rightright:1\",\n              \"1\"\n            ]\n          ]\n        ],\n        \"originalComponents\": [\n          [\n            [\n              \"sheaf_E12_ch0:1\",\n              \"1\"\n            ]\n          ]\n        ]\n      }\n    ]\n  },\n  \"nextObjectIndex\": 17\n}"
-        }
-      ],
+      "label": "minigame",
+      "details": [],
       "setting": "",
       "condition": "",
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 622,
-      "y": 130.8
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 523,
+      "y": 374
     },
     {
-      "id": "n44",
+      "id": "n49",
       "type": "misc",
-      "label": "bug",
-      "details": [
-        {
-          "id": "code",
-          "label": "code",
-          "type": "textbox",
-          "text": "{\n  \"schema\": \"sheaf-calculator-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-06T13:29:16.786Z\",\n  \"active\": {\n    \"mode\": \"modify\",\n    \"kind\": \"sheaf\",\n    \"varietyId\": \"X13\",\n    \"sheafId\": \"E18\"\n  },\n  \"options\": {\n    \"repeatNames\": true,\n    \"repeatStyle\": \"letters\",\n    \"classBasis\": \"chern\",\n    \"rootForm\": \"product\",\n    \"classTermIndex\": 1,\n    \"classFamilies\": [\n      \"chern\",\n      \"character\"\n    ],\n    \"hodgeCellSize\": 20,\n    \"revealedCharts\": {\n      \"classes\": true\n    },\n    \"homologyRulePasses\": 1,\n    \"homologyMapInputMode\": \"coefficients\",\n    \"homologyExpressionTransposed\": true,\n    \"exportScope\": \"saved-step-formulas\"\n  },\n  \"objects\": {\n    \"varieties\": [\n      {\n        \"id\": \"X13\",\n        \"type\": \"curve\",\n        \"dim\": \"1\",\n        \"name\": \"C\",\n        \"genus\": \"0\",\n        \"ppavGenus\": \"2\",\n        \"ciDegrees\": \"\",\n        \"ciAmbient\": \"1\",\n        \"symmetricProductM\": \"3\",\n        \"symmetricProductGenus\": \"g\",\n        \"grassmannianR\": \"2\",\n        \"grassmannianN\": \"4\",\n        \"homology\": {\n          \"classes\": {\n            \"unit\": {\n              \"symbol\": \"1\"\n            },\n            \"point\": {\n              \"symbol\": \"[p]\"\n            }\n          }\n        },\n        \"labelX\": 0.21920924831081082,\n        \"labelY\": 0.5991629464285714,\n        \"labelPositionDirty\": true\n      },\n      {\n        \"id\": \"X14\",\n        \"type\": \"abstract\",\n        \"dim\": \"3\",\n        \"name\": \"Y\",\n        \"genus\": \"g\",\n        \"ppavGenus\": \"2\",\n        \"ciDegrees\": \"\",\n        \"ciAmbient\": \"3\",\n        \"symmetricProductM\": \"3\",\n        \"symmetricProductGenus\": \"g\",\n        \"grassmannianR\": \"2\",\n        \"grassmannianN\": \"4\",\n        \"homology\": {\n          \"classes\": {\n            \"unit\": {\n              \"symbol\": \"1\"\n            },\n            \"point\": {\n              \"symbol\": \"[p]\"\n            }\n          }\n        },\n        \"nameDirty\": true,\n        \"labelX\": 0.36864864864864866,\n        \"labelY\": 0.6\n      }\n    ],\n    \"sheaves\": [\n      {\n        \"id\": \"E16\",\n        \"type\": \"structure\",\n        \"name\": \"\\\\mathcal{O}_{C}\",\n        \"twist\": \"1\",\n        \"rank\": \"1\",\n        \"baseVarietyId\": \"X13\",\n        \"basis\": \"chern\",\n        \"labelX\": 0.24920924831081082,\n        \"labelY\": 0.39916294642857136\n      },\n      {\n        \"id\": \"E17\",\n        \"type\": \"abstract\",\n        \"name\": \"f_{*}\\\\mathcal{O}_{C}\",\n        \"twist\": \"1\",\n        \"rank\": \"\",\n        \"baseVarietyId\": \"X14\",\n        \"basis\": \"chern\",\n        \"construction\": {\n          \"type\": \"pushforward\",\n          \"mapId\": \"M15\",\n          \"sheafId\": \"E16\",\n          \"exact\": true,\n          \"proper\": true,\n          \"defaultName\": \"f_{*}\\\\mathcal{O}_{C}\"\n        },\n        \"labelX\": 0.3986486486486487,\n        \"labelY\": 0.39999999999999997\n      },\n      {\n        \"id\": \"E18\",\n        \"type\": \"abstract\",\n        \"name\": \"\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C}\",\n        \"twist\": \"1\",\n        \"rank\": \"\",\n        \"baseVarietyId\": \"X13\",\n        \"basis\": \"chern\",\n        \"construction\": {\n          \"type\": \"pullback\",\n          \"mapId\": \"M15\",\n          \"sheafId\": \"E17\",\n          \"derived\": true,\n          \"defaultName\": \"\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C}\"\n        },\n        \"labelX\": 0.1269161739864865,\n        \"labelY\": 0.36830357142857145,\n        \"labelPositionDirty\": true\n      }\n    ],\n    \"maps\": [\n      {\n        \"id\": \"M15\",\n        \"name\": \"f\",\n        \"domainKind\": \"variety\",\n        \"domainId\": \"X13\",\n        \"codomainKind\": \"variety\",\n        \"codomainId\": \"X14\",\n        \"curve\": {\n          \"type\": \"straight\"\n        },\n        \"defaultBendPx\": 0,\n        \"labelOffset\": -18,\n        \"labelT\": 0.5\n      }\n    ]\n  },\n  \"step\": {\n    \"formulaBuilder\": {\n      \"varietyId\": \"X13\",\n      \"tokens\": [\n        {\n          \"type\": \"atom\",\n          \"atomKind\": \"sheaf-total\",\n          \"geometryId\": \"X13\",\n          \"sheafId\": \"E18\",\n          \"family\": \"character\",\n          \"polyData\": [\n            [\n              \"sheaf_E18_chTotal_X13:1\",\n              \"1\"\n            ]\n          ],\n          \"latex\": \"\\\\operatorname{ch}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C})\",\n          \"plain\": \"ch(mathbfLf^*f_*O_C)\"\n        }\n      ],\n      \"mode\": \"stepping\",\n      \"classFamily\": \"character\",\n      \"classDegree\": \"\",\n      \"classSheafId\": \"E18\",\n      \"cursorIndex\": 1,\n      \"insertMode\": \"insert\",\n      \"nextSlotId\": 1,\n      \"message\": \"Step-by-step session started.\"\n    },\n    \"activeSession\": {\n      \"formulaSession\": true,\n      \"family\": \"formula\",\n      \"target\": \"formula\",\n      \"index\": 0,\n      \"layout\": \"wide\",\n      \"dimension\": 1,\n      \"geometryId\": \"X13\",\n      \"bundleLabelLatex\": \"\\\\operatorname{ch}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C})\",\n      \"bundleLabelPlain\": \"ch(mathbfLf^*f_*O_C)\",\n      \"rankLatex\": \"0\",\n      \"rankPlain\": \"0\",\n      \"components\": [\n        [\n          [\n            \"sheaf_E18_ch0:1\",\n            \"1\"\n          ]\n        ],\n        []\n      ],\n      \"originalComponents\": [\n        [\n          [\n            \"sheaf_E18_chTotal_X13:1\",\n            \"1\"\n          ]\n        ],\n        []\n      ],\n      \"formulaPoly\": [\n        [\n          \"sheaf_E18_ch0:1\",\n          \"1\"\n        ]\n      ],\n      \"originalFormulaPoly\": [\n        [\n          \"sheaf_E18_chTotal_X13:1\",\n          \"1\"\n        ]\n      ],\n      \"formulaLatex\": \"\\\\operatorname{ch}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C})\",\n      \"formulaPlain\": \"ch(mathbfLf^*f_*O_C)\",\n      \"formulaTokens\": [\n        {\n          \"type\": \"atom\",\n          \"atomKind\": \"sheaf-total\",\n          \"geometryId\": \"X13\",\n          \"sheafId\": \"E18\",\n          \"family\": \"character\",\n          \"polyData\": [\n            [\n              \"sheaf_E18_chTotal_X13:1\",\n              \"1\"\n            ]\n          ],\n          \"latex\": \"\\\\operatorname{ch}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C})\",\n          \"plain\": \"ch(mathbfLf^*f_*O_C)\"\n        }\n      ],\n      \"sourceSignature\": \"formula::X13::X13::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-total\\\",\\\"geometryId\\\":\\\"X13\\\",\\\"sheafId\\\":\\\"E18\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":null,\\\"polyData\\\":[[\\\"sheaf_E18_chTotal_X13:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}(\\\\\\\\mathbf{L}f^{*}f_{*}\\\\\\\\mathcal{O}_{C})\\\",\\\"plain\\\":\\\"ch(mathbfLf^*f_*O_C)\\\",\\\"title\\\":\\\"ch of mathbfLf^*f_*O_C\\\"}]\",\n      \"stepHistory\": [\n        {\n          \"label\": \"\\\\operatorname{ch}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C})\",\n          \"value\": \"\\\\operatorname{ch}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C})\",\n          \"reason\": \"start\",\n          \"hidden\": true,\n          \"startPlaceholder\": true,\n          \"snapshot\": {\n            \"components\": [\n              [\n                [\n                  \"sheaf_E18_chTotal_X13:1\",\n                  \"1\"\n                ]\n              ],\n              []\n            ],\n            \"formulaPoly\": [\n              [\n                \"sheaf_E18_chTotal_X13:1\",\n                \"1\"\n              ]\n            ],\n            \"formulaLatex\": \"\\\\operatorname{ch}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C})\",\n            \"formulaPlain\": \"ch(mathbfLf^*f_*O_C)\"\n          }\n        },\n        {\n          \"label\": \"\\\\operatorname{ch}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C})\",\n          \"value\": \"\\\\operatorname{ch}_{0}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C}) + \\\\operatorname{ch}_{1}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C})\",\n          \"reason\": \"apply\",\n          \"snapshot\": {\n            \"components\": [\n              [\n                [\n                  \"sheaf_E18_ch0:1\",\n                  \"1\"\n                ],\n                [\n                  \"sheaf_E18_ch1:1\",\n                  \"1\"\n                ]\n              ],\n              []\n            ],\n            \"formulaPoly\": [\n              [\n                \"sheaf_E18_ch0:1\",\n                \"1\"\n              ],\n              [\n                \"sheaf_E18_ch1:1\",\n                \"1\"\n              ]\n            ],\n            \"formulaLatex\": \"\\\\operatorname{ch}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C})\",\n            \"formulaPlain\": \"ch(mathbfLf^*f_*O_C)\"\n          }\n        },\n        {\n          \"label\": \"\\\\operatorname{ch}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C})\",\n          \"value\": \"\\\\operatorname{ch}_{0}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C}) + f^{*}\\\\left(\\\\operatorname{ch}_{1}(f_{*}\\\\mathcal{O}_{C})\\\\right)\",\n          \"reason\": \"apply\",\n          \"snapshot\": {\n            \"components\": [\n              [\n                [\n                  \"sheaf_E18_ch0:1\",\n                  \"1\"\n                ],\n                [\n                  \"map_pullback_M15_sheaf_E17_ch1:1\",\n                  \"1\"\n                ]\n              ],\n              []\n            ],\n            \"formulaPoly\": [\n              [\n                \"sheaf_E18_ch0:1\",\n                \"1\"\n              ],\n              [\n                \"map_pullback_M15_sheaf_E17_ch1:1\",\n                \"1\"\n              ]\n            ],\n            \"formulaLatex\": \"\\\\operatorname{ch}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C})\",\n            \"formulaPlain\": \"ch(mathbfLf^*f_*O_C)\"\n          }\n        },\n        {\n          \"label\": \"\\\\operatorname{ch}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C})\",\n          \"value\": \"\\\\operatorname{ch}_{0}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C})\",\n          \"reason\": \"apply\",\n          \"snapshot\": {\n            \"components\": [\n              [\n                [\n                  \"sheaf_E18_ch0:1\",\n                  \"1\"\n                ]\n              ],\n              []\n            ],\n            \"formulaPoly\": [\n              [\n                \"sheaf_E18_ch0:1\",\n                \"1\"\n              ]\n            ],\n            \"formulaLatex\": \"\\\\operatorname{ch}(\\\\mathbf{L}f^{*}f_{*}\\\\mathcal{O}_{C})\",\n            \"formulaPlain\": \"ch(mathbfLf^*f_*O_C)\"\n          }\n        }\n      ],\n      \"message\": \"Selected rules made no change.\"\n    },\n    \"cache\": [\n      {\n        \"signature\": \"formula::X1::X1::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X1\\\",\\\"sheafId\\\":\\\"E6\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"polyData\\\":[[\\\"sheaf_E6_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(f^{*}K_{X})\\\",\\\"plain\\\":\\\"ch_0(f^*K_X)\\\",\\\"title\\\":\\\"ch_0 of f^*K_X\\\"}]\",\n        \"family\": \"formula\",\n        \"dimension\": 1,\n        \"geometryId\": \"X1\",\n        \"components\": [\n          [\n            [\n              \"sheaf_E6_ch0:1\",\n              \"1\"\n            ]\n          ],\n          []\n        ],\n        \"originalComponents\": [\n          [\n            [\n              \"sheaf_E6_ch0:1\",\n              \"1\"\n            ]\n          ],\n          []\n        ]\n      },\n      {\n        \"signature\": \"formula::X7::X7::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X7\\\",\\\"sheafId\\\":\\\"E9\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"polyData\\\":[[\\\"sheaf_E9_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\\\",\\\"plain\\\":\\\"ch_0(g_*f^*K_X)\\\",\\\"title\\\":\\\"ch_0 of g_*f^*K_X\\\"}]\",\n        \"family\": \"formula\",\n        \"dimension\": 0,\n        \"geometryId\": \"X7\",\n        \"components\": [\n          [\n            [\n              \"curveGenus:1\",\n              \"-1\"\n            ],\n            [\n              \"\",\n              \"1\"\n            ],\n            [\n              \"map_pushforward_M8_map_pullback_M4_chern_v_X3_tangent_1:1\",\n              \"-1\"\n            ]\n          ]\n        ],\n        \"originalComponents\": [\n          [\n            [\n              \"sheaf_E9_ch0:1\",\n              \"1\"\n            ]\n          ]\n        ]\n      },\n      {\n        \"signature\": \"formula::X7::X7::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X7\\\",\\\"sheafId\\\":\\\"E9\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"variableId\\\":null,\\\"polyData\\\":[[\\\"sheaf_E9_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(g_{*}f^{*}K_{X})\\\",\\\"plain\\\":\\\"ch_0(g_*f^*K_X)\\\"}]\",\n        \"family\": \"formula\",\n        \"dimension\": 0,\n        \"geometryId\": \"X7\",\n        \"components\": [\n          [\n            [\n              \"sheaf_E9_ch0:1\",\n              \"1\"\n            ]\n          ]\n        ],\n        \"originalComponents\": [\n          [\n            [\n              \"sheaf_E9_ch0:1\",\n              \"1\"\n            ]\n          ]\n        ]\n      },\n      {\n        \"signature\": \"formula::X7::X7::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-class\\\",\\\"geometryId\\\":\\\"X7\\\",\\\"sheafId\\\":\\\"E12\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":0,\\\"polyData\\\":[[\\\"sheaf_E12_ch0:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}_{0}(E)\\\",\\\"plain\\\":\\\"ch_0(E)\\\",\\\"title\\\":\\\"ch_0 of E\\\"}]\",\n        \"family\": \"formula\",\n        \"dimension\": 0,\n        \"geometryId\": \"X7\",\n        \"components\": [\n          [\n            [\n              \"rankghleftfleftprightrighthleftfleftprightrighthleftc1Xfleft1rightright:1\",\n              \"1\"\n            ]\n          ]\n        ],\n        \"originalComponents\": [\n          [\n            [\n              \"sheaf_E12_ch0:1\",\n              \"1\"\n            ]\n          ]\n        ]\n      },\n      {\n        \"signature\": \"formula::X13::X13::[{\\\"type\\\":\\\"atom\\\",\\\"atomKind\\\":\\\"sheaf-total\\\",\\\"geometryId\\\":\\\"X13\\\",\\\"sheafId\\\":\\\"E18\\\",\\\"family\\\":\\\"character\\\",\\\"degree\\\":null,\\\"polyData\\\":[[\\\"sheaf_E18_chTotal_X13:1\\\",\\\"1\\\"]],\\\"latex\\\":\\\"\\\\\\\\operatorname{ch}(\\\\\\\\mathbf{L}f^{*}f_{*}\\\\\\\\mathcal{O}_{C})\\\",\\\"plain\\\":\\\"ch(mathbfLf^*f_*O_C)\\\",\\\"title\\\":\\\"ch of mathbfLf^*f_*O_C\\\"}]\",\n        \"family\": \"formula\",\n        \"dimension\": 1,\n        \"geometryId\": \"X13\",\n        \"components\": [\n          [\n            [\n              \"sheaf_E18_ch0:1\",\n              \"1\"\n            ]\n          ],\n          []\n        ],\n        \"originalComponents\": [\n          [\n            [\n              \"sheaf_E18_chTotal_X13:1\",\n              \"1\"\n            ]\n          ],\n          []\n        ]\n      }\n    ],\n    \"controls\": {\n      \"cacheDisabled\": true\n    }\n  },\n  \"nextObjectIndex\": 19\n}"
-        }
-      ],
+      "label": "Theorem Graph Calculator",
+      "details": [],
       "setting": "",
       "condition": "",
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 162.8,
-      "y": 256.3
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 252.3,
+      "y": 195.9
     },
     {
-      "id": "n45",
+      "id": "n50",
       "type": "misc",
-      "label": "genus 1 error",
+      "label": "label",
       "details": [
         {
-          "id": "email",
-          "label": "email",
+          "id": "goal",
+          "label": "goal",
+          "type": "checkbox",
+          "text": "label of the arrow should have no background rectangle\nLike the https://q.uiver.app/, user can determine the position of the label, and left align/centre align(clear)/centre align(over)/right align"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 132.3,
+      "y": 374
+    },
+    {
+      "id": "n51",
+      "type": "misc",
+      "label": "better display",
+      "details": [
+        {
+          "id": "goal",
+          "label": "goal",
+          "type": "checkbox",
+          "text": "when the five/four in a line, the reused piece will have several yellow highlights indicating how many times the piece is used, and if a line is used more than once it will also be bolded\nThe display row should also work for \"Connect Four\", while both have default choice display \"vertex E/S/W/N\". Maybe the \"vertex E/S/W/N\" can be called \"gridded board\" and the \"tile centers\" can be called \"tile board\"?"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 363.8,
+      "y": 238.6
+    },
+    {
+      "id": "n52",
+      "type": "misc",
+      "label": "Reversi",
+      "details": [],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 361.9,
+      "y": 374
+    },
+    {
+      "id": "n53",
+      "type": "misc",
+      "label": "presets",
+      "details": [
+        {
+          "id": "high-hit",
+          "label": "high hit2",
           "type": "textbox",
-          "text": "Dear [Author Name],\n\nI hope you are doing well.\n\nI was looking at the calculator pages on your site, especially the step-by-step output in the Sheaf Calculator. I think I found a small mathematical issue in the curve polyvector/Hodge-number calculation.\n\nIn `sheaf_calculator.js`, the function `buildCurvePolyvectorParallelogram(geometry)` appears to set\n\n```js\nconst h0T = genus === 0 ? 3n : (genus === 1 ? 1n : 0n);\nconst h1T = genus === 0 ? 0n : BigInt(3 * genus - 3);\n```\n\nThis gives `h¹(T_C)=0` when `g=1`. But for a smooth genus-1 curve, the tangent bundle is trivial, `T_C ≅ O_C`, so we should have\n\n```text\nh⁰(T_C)=1,  h¹(T_C)=1.\n```\n\nEquivalently, Riemann–Roch gives `χ(T_C)=3−3g=0` for `g=1`; since `h⁰(T_C)=1`, it follows that `h¹(T_C)=1`.\n\nSo I think the line for `h1T` should special-case genus 1, for example:\n\n```js\nconst h1T = genus === 0 ? 0n : (genus === 1 ? 1n : BigInt(3 * genus - 3));\n```\n\nI also noticed that the symbolic version seems to display `h¹(T_C)=3g−3`. That formula is correct for smooth curves of genus `g ≥ 2`, but it should probably be made piecewise or explicitly restricted, since it gives the wrong value for `g=0` and `g=1`.\n\nA possible piecewise display would be:\n\n```text\ng = 0: h⁰(T_C)=3, h¹(T_C)=0\ng = 1: h⁰(T_C)=1, h¹(T_C)=1\ng ≥ 2: h⁰(T_C)=0, h¹(T_C)=3g−3\n```\n\nThank you very much for making these tools available. I hope this report is helpful.\n\nBest regards,\n[Your Name]"
+          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T11:33:57.168Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 Sigma_0,3\",\n    \"lattice\": \"square\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"Sigma_0,3\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 1,\n        \"color\": \"#b23a48\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 2,\n    \"unmatchedBoundaries\": 22,\n    \"boundaryComponents\": 3,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": 0,\n    \"nonorientableGenus\": null,\n    \"orientable\": true,\n    \"surfaceType\": \"Sigma_0,3\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"S^2 with 3 holes, 0 cusps\\\">&Sigma;<sub>0,3</sub></span>\",\n    \"surfaceTypeTooltip\": \"S^2 with 3 holes, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": -1,\n    \"action\": \"glue-boundary\",\n    \"multiEdges\": false,\n    \"chainLength\": 1,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
+        },
+        {
+          "id": "high-hit-2",
+          "label": "high hit",
+          "type": "textbox",
+          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T11:38:32.288Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 Sigma_1,1\",\n    \"lattice\": \"square\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"Sigma_1,1\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 1,\n        \"color\": \"#b23a48\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 2,\n    \"unmatchedBoundaries\": 22,\n    \"boundaryComponents\": 1,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": 1,\n    \"nonorientableGenus\": null,\n    \"orientable\": true,\n    \"surfaceType\": \"Sigma_1,1\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"T_1 with 1 hole, 0 cusps\\\">&Sigma;<sub>1,1</sub></span>\",\n    \"surfaceTypeTooltip\": \"T_1 with 1 hole, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": -1,\n    \"action\": \"glue-boundary\",\n    \"multiEdges\": false,\n    \"chainLength\": 1,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
+        },
+        {
+          "id": "all-horizontal",
+          "label": "all horizontal",
+          "type": "textbox",
+          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T11:46:55.845Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 Sigma_1,5\",\n    \"lattice\": \"square\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"Sigma_1,5\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 5,\n          \"index\": 39,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 1,\n        \"color\": \"#b23a48\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 7,\n          \"index\": 34,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 3,\n          \"index\": 37,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 2,\n        \"color\": \"#6a4c93\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 6,\n          \"index\": 40,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 3,\n        \"color\": \"#c47f17\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 2,\n          \"index\": 36,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      },\n      {\n        \"id\": 5,\n        \"group\": 4,\n        \"color\": \"#2f855a\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 1,\n          \"index\": 7,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 6,\n        \"group\": 5,\n        \"color\": \"#8a4f7d\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 7,\n          \"index\": 6,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 6,\n    \"unmatchedBoundaries\": 14,\n    \"boundaryComponents\": 5,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": 1,\n    \"nonorientableGenus\": null,\n    \"orientable\": true,\n    \"surfaceType\": \"Sigma_1,5\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"T_1 with 5 holes, 0 cusps\\\">&Sigma;<sub>1,5</sub></span>\",\n    \"surfaceTypeTooltip\": \"T_1 with 5 holes, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": -5,\n    \"action\": \"glue-boundary\",\n    \"multiEdges\": false,\n    \"chainLength\": 1,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
+        },
+        {
+          "id": "top-fight",
+          "label": "top fight",
+          "type": "textbox",
+          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T11:44:19.664Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 Sigma_1,1\",\n    \"lattice\": \"square\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"Sigma_1,1\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 3,\n          \"index\": 37,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 1,\n        \"color\": \"#b23a48\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 5,\n          \"index\": 39,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 2,\n        \"color\": \"#6a4c93\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 2,\n          \"index\": 36,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 7,\n          \"index\": 34,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 3,\n        \"color\": \"#c47f17\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 6,\n          \"index\": 40,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      },\n      {\n        \"id\": 5,\n        \"group\": 4,\n        \"color\": \"#2f855a\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      },\n      {\n        \"id\": 6,\n        \"group\": 5,\n        \"color\": \"#8a4f7d\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 6,\n    \"unmatchedBoundaries\": 14,\n    \"boundaryComponents\": 1,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": 1,\n    \"nonorientableGenus\": null,\n    \"orientable\": true,\n    \"surfaceType\": \"Sigma_1,1\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"T_1 with 1 hole, 0 cusps\\\">&Sigma;<sub>1,1</sub></span>\",\n    \"surfaceTypeTooltip\": \"T_1 with 1 hole, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": -1,\n    \"action\": \"glue-boundary\",\n    \"multiEdges\": false,\n    \"chainLength\": 1,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
+        },
+        {
+          "id": "exchange",
+          "label": "exchange",
+          "type": "textbox",
+          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T11:50:12.337Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 Sigma_1.5,1^1\",\n    \"lattice\": \"square\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"Sigma_1.5,1^1\",\n    \"removedTiles\": [],\n    \"cutEdges\": [\n      {\n        \"left\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14\n        },\n        \"right\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21\n        }\n      },\n      {\n        \"left\": {\n          \"row\": 3,\n          \"col\": 2,\n          \"index\": 15\n        },\n        \"right\": {\n          \"row\": 4,\n          \"col\": 2,\n          \"index\": 22\n        }\n      },\n      {\n        \"left\": {\n          \"row\": 3,\n          \"col\": 6,\n          \"index\": 19\n        },\n        \"right\": {\n          \"row\": 4,\n          \"col\": 6,\n          \"index\": 26\n        }\n      },\n      {\n        \"left\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20\n        },\n        \"right\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27\n        }\n      }\n    ],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 2,\n          \"index\": 22,\n          \"dir\": 3,\n          \"edge\": \"N\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 6,\n          \"index\": 19,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 3,\n          \"edge\": \"N\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 1,\n        \"color\": \"#b23a48\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 6,\n          \"index\": 26,\n          \"dir\": 3,\n          \"edge\": \"N\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 1,\n        \"color\": \"#b23a48\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 3,\n          \"edge\": \"N\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 2,\n          \"index\": 15,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 4,\n    \"gluedEdges\": 4,\n    \"unmatchedBoundaries\": 26,\n    \"boundaryComponents\": 1,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": 1.5,\n    \"nonorientableGenus\": null,\n    \"orientable\": true,\n    \"surfaceType\": \"Sigma_1.5,1^1\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"T_1.5 with 1 hole, 1 cusp\\\">&Sigma;<sub>1.5,1</sub><sup>1</sup></span>\",\n    \"surfaceTypeTooltip\": \"T_1.5 with 1 hole, 1 cusp\",\n    \"cusps\": 1,\n    \"eulerCharacteristic\": -2,\n    \"action\": \"billiard\",\n    \"multiEdges\": true,\n    \"chainLength\": 2,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
         }
       ],
       "setting": "",
@@ -263,41 +246,123 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 202.7,
-      "y": 136.4
+      "x": 686.8,
+      "y": 212.2
+    },
+    {
+      "id": "n54",
+      "type": "misc",
+      "label": "strip presets",
+      "details": [
+        {
+          "id": "usual-strip",
+          "label": "usual strip",
+          "type": "textbox",
+          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T11:59:52.881Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 Sigma_0,2\",\n    \"lattice\": \"square\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"Sigma_0,2\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 7,\n          \"index\": 6,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 1,\n          \"index\": 7,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 5,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 7,\n          \"index\": 34,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 6,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 6,\n    \"unmatchedBoundaries\": 14,\n    \"boundaryComponents\": 2,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": 0,\n    \"nonorientableGenus\": null,\n    \"orientable\": true,\n    \"surfaceType\": \"Sigma_0,2\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"S^2 with 2 holes, 0 cusps\\\">&Sigma;<sub>0,2</sub></span>\",\n    \"surfaceTypeTooltip\": \"S^2 with 2 holes, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": 0,\n    \"action\": \"billiard\",\n    \"multiEdges\": true,\n    \"chainLength\": 6,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
+        },
+        {
+          "id": "m-bius-strip",
+          "label": "Möbius strip",
+          "type": "textbox",
+          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T12:16:09.129Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 N_1,1\",\n    \"lattice\": \"square\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"N_1,1\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 7,\n          \"index\": 34,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 1,\n          \"index\": 7,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 5,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 6,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 7,\n          \"index\": 6,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 6,\n    \"unmatchedBoundaries\": 14,\n    \"boundaryComponents\": 1,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": null,\n    \"nonorientableGenus\": 1,\n    \"orientable\": false,\n    \"surfaceType\": \"N_1,1\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"P_1 with 1 hole, 0 cusps\\\">N<sub>1,1</sub></span>\",\n    \"surfaceTypeTooltip\": \"P_1 with 1 hole, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": 0,\n    \"action\": \"reverse-glue\",\n    \"multiEdges\": true,\n    \"chainLength\": 6,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
+        },
+        {
+          "id": "hex-usual-strip",
+          "label": "hex usual strip",
+          "type": "textbox",
+          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T12:06:46.678Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 Sigma_0,2\",\n    \"lattice\": \"hexagonal\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"Sigma_0,2\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 7,\n          \"index\": 6,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        },\n        \"second\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 1,\n          \"index\": 7,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 1,\n          \"edge\": \"SE\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 4,\n          \"edge\": \"NW\"\n        }\n      },\n      {\n        \"id\": 5,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 6,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        }\n      },\n      {\n        \"id\": 7,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 8,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 1,\n          \"edge\": \"SE\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 4,\n          \"edge\": \"NW\"\n        }\n      },\n      {\n        \"id\": 9,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 7,\n          \"index\": 34,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 10,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        }\n      },\n      {\n        \"id\": 11,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 11,\n    \"unmatchedBoundaries\": 28,\n    \"boundaryComponents\": 2,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": 0,\n    \"nonorientableGenus\": null,\n    \"orientable\": true,\n    \"surfaceType\": \"Sigma_0,2\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"S^2 with 2 holes, 0 cusps\\\">&Sigma;<sub>0,2</sub></span>\",\n    \"surfaceTypeTooltip\": \"S^2 with 2 holes, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": 0,\n    \"action\": \"billiard\",\n    \"multiEdges\": true,\n    \"chainLength\": 11,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
+        },
+        {
+          "id": "hex-bad-m-bius-strip",
+          "label": "hex bad Möbius strip",
+          "type": "textbox",
+          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T12:12:16.541Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 N_0,2^10\",\n    \"lattice\": \"hexagonal\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"N_0,2^10\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        },\n        \"second\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 7,\n          \"index\": 34,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 1,\n          \"index\": 7,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 1,\n          \"edge\": \"SE\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 4,\n          \"edge\": \"NW\"\n        }\n      },\n      {\n        \"id\": 5,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 6,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        }\n      },\n      {\n        \"id\": 7,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 8,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 1,\n          \"edge\": \"SE\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 4,\n          \"edge\": \"NW\"\n        }\n      },\n      {\n        \"id\": 9,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 10,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        }\n      },\n      {\n        \"id\": 11,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 7,\n          \"index\": 6,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 11,\n    \"unmatchedBoundaries\": 28,\n    \"boundaryComponents\": 2,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": null,\n    \"nonorientableGenus\": 0,\n    \"orientable\": false,\n    \"surfaceType\": \"N_0,2^10\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"P_0 with 2 holes, 10 cusps\\\">N<sub>0,2</sub><sup>10</sup></span>\",\n    \"surfaceTypeTooltip\": \"P_0 with 2 holes, 10 cusps\",\n    \"cusps\": 10,\n    \"eulerCharacteristic\": 0,\n    \"action\": \"tile\",\n    \"multiEdges\": true,\n    \"chainLength\": 11,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
+        },
+        {
+          "id": "hex-good-m-bius-strip",
+          "label": "hex good Möbius strip",
+          "type": "textbox",
+          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T12:15:11.455Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"7x7 N_0,2\",\n    \"lattice\": \"hexagonal\",\n    \"rows\": 7,\n    \"cols\": 7,\n    \"surface\": \"N_0,2\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 7,\n          \"col\": 1,\n          \"index\": 42,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 1,\n          \"col\": 7,\n          \"index\": 6,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 7,\n          \"col\": 1,\n          \"index\": 42,\n          \"dir\": 4,\n          \"edge\": \"NW\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 1,\n          \"edge\": \"SE\"\n        }\n      },\n      {\n        \"id\": 5,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 6,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 4,\n          \"edge\": \"NW\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        }\n      },\n      {\n        \"id\": 7,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 8,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 1,\n          \"edge\": \"SE\"\n        }\n      },\n      {\n        \"id\": 9,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 7,\n          \"index\": 34,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 10,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 4,\n          \"edge\": \"NW\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        }\n      },\n      {\n        \"id\": 11,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 1,\n          \"index\": 7,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 12,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 1,\n          \"edge\": \"SE\"\n        }\n      },\n      {\n        \"id\": 13,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 7,\n          \"col\": 7,\n          \"index\": 48,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 49,\n    \"existing\": 49,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 13,\n    \"unmatchedBoundaries\": 28,\n    \"boundaryComponents\": 2,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": null,\n    \"nonorientableGenus\": 0,\n    \"orientable\": false,\n    \"surfaceType\": \"N_0,2\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"P_0 with 2 holes, 0 cusps\\\">N<sub>0,2</sub></span>\",\n    \"surfaceTypeTooltip\": \"P_0 with 2 holes, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": 0,\n    \"action\": \"reverse-glue\",\n    \"multiEdges\": true,\n    \"chainLength\": 13,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 462.3,
+      "y": 168.9
+    },
+    {
+      "id": "n55",
+      "type": "misc",
+      "label": "Mosaic Calculator",
+      "details": [
+        {
+          "id": "improve",
+          "label": "improve",
+          "type": "textbox",
+          "text": "allow more rows and more columns"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 587.2,
+      "y": 150.1
+    },
+    {
+      "id": "n56",
+      "type": "misc",
+      "label": "misc node",
+      "details": [
+        {
+          "id": "bug",
+          "label": "bug",
+          "type": "textbox",
+          "text": "When user try to change the name of the extra, the name should only appear in the textbox, not appear twice"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 56.1,
+      "y": 226
+    },
+    {
+      "id": "n57",
+      "type": "misc",
+      "label": "main canvas",
+      "details": [
+        {
+          "id": "goal",
+          "label": "goal",
+          "type": "checkbox",
+          "text": "main canvas should be allowed to drag longer. User can also lock the ratio, so that the length and width ration is fixed, while the relative position and bigness of the buttons are also fixed."
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 114.8,
+      "y": 46
     }
   ],
   "arrows": [
-    {
-      "id": "a7",
-      "sourceId": "n11",
-      "targetId": "n4",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "color": "#5f574e"
-    },
-    {
-      "id": "a20",
-      "sourceId": "n11",
-      "targetId": "n25",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "color": "#5f574e"
-    },
     {
       "id": "a28",
       "sourceId": "n37",
@@ -307,111 +372,6 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "body": "solid",
       "head": "arrow",
       "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "color": "#5f574e"
-    },
-    {
-      "id": "a29",
-      "sourceId": "n38",
-      "targetId": "n13",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "color": "#5f574e"
-    },
-    {
-      "id": "a30",
-      "sourceId": "n40",
-      "targetId": "n4",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "color": "#1a1612"
-    },
-    {
-      "id": "a32",
-      "sourceId": "n42",
-      "targetId": "n4",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "color": "#5f574e"
-    },
-    {
-      "id": "a33",
-      "sourceId": "n25",
-      "targetId": "n37",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "twohead",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "color": "#5f574e"
-    },
-    {
-      "id": "a34",
-      "sourceId": "n41",
-      "targetId": "n4",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "color": "#5f574e"
-    },
-    {
-      "id": "a35",
-      "sourceId": "n43",
-      "targetId": "n4",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "color": "#5f574e"
-    },
-    {
-      "id": "a36",
-      "sourceId": "n44",
-      "targetId": "n4",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
@@ -434,14 +394,134 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "color": "#5f574e"
     },
     {
-      "id": "a38",
-      "sourceId": "n45",
-      "targetId": "n4",
+      "id": "a39",
+      "sourceId": "n46",
+      "targetId": "n48",
+      "label": "23",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "hook",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a40",
+      "sourceId": "n50",
+      "targetId": "n49",
       "label": "",
       "remark": "",
       "body": "solid",
       "head": "arrow",
-      "tail": "none",
+      "tail": "hook",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a41",
+      "sourceId": "n51",
+      "targetId": "n48",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "hook",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a42",
+      "sourceId": "n52",
+      "targetId": "n48",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "hook",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a43",
+      "sourceId": "n53",
+      "targetId": "n48",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "hook",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a44",
+      "sourceId": "n54",
+      "targetId": "n53",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "arrow",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a45",
+      "sourceId": "n54",
+      "targetId": "n48",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "hook",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a46",
+      "sourceId": "n56",
+      "targetId": "n49",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "hook",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 0,
+      "color": "#5f574e"
+    },
+    {
+      "id": "a47",
+      "sourceId": "n57",
+      "targetId": "n49",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "hook",
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
@@ -449,44 +529,9 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "color": "#5f574e"
     }
   ],
-  "references": [
-    {
-      "key": "normal bundle",
-      "author": "",
-      "title": "normal bundle of hypersurface",
-      "year": "",
-      "citeText": "",
-      "url": "https://chatgpt.com/share/6a43e9be-c214-83eb-95ad-5540eb27b907",
-      "source": "web",
-      "rawBibtex": "",
-      "links": [
-        {
-          "url": "https://chatgpt.com/share/6a43e9be-c214-83eb-95ad-5540eb27b907",
-          "source": "web",
-          "label": ""
-        }
-      ]
-    },
-    {
-      "key": "typo search",
-      "author": "",
-      "title": "typo search",
-      "year": "",
-      "citeText": "",
-      "url": "https://chatgpt.com/c/6a4bbb56-dd44-83eb-8b91-677b4c609d52",
-      "source": "web",
-      "rawBibtex": "",
-      "links": [
-        {
-          "url": "https://chatgpt.com/c/6a4bbb56-dd44-83eb-8b91-677b4c609d52",
-          "source": "web",
-          "label": ""
-        }
-      ]
-    }
-  ],
+  "references": [],
   "view": {
-    "selectedId": "n37",
+    "selectedId": "n39",
     "selectedReferenceKeys": [],
     "layoutRunning": false
   }

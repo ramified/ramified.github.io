@@ -10,6 +10,7 @@ window.THEOREM_GRAPH_PRESETS = [
   file: 'maintenance_tracker.preset.js'
 },
 { label: "Quartic double solid", key: "quartic_double_solid", file: "quartic_double_solid.preset.js" },
+{ label: "renting list", key: "renting_list", file: "renting_list.preset.js" },
 { 
   label: "Francesco Denisi",
   key: "francesco_denisi",

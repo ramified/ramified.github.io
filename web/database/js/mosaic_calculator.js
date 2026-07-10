@@ -568,7 +568,7 @@
             reversed: false,
             firstArrowReversed: false,
             secondArrowReversed: true,
-            first: { row: 4, col: 1, dir: 2, edge: 'W' },
+            first: { row: 3, col: 1, dir: 2, edge: 'W' },
             second: { row: 1, col: 4, dir: 0, edge: 'E' }
           },
           {
@@ -577,7 +577,7 @@
             reversed: false,
             firstArrowReversed: false,
             secondArrowReversed: true,
-            first: { row: 3, col: 1, dir: 2, edge: 'W' },
+            first: { row: 4, col: 1, dir: 2, edge: 'W' },
             second: { row: 2, col: 4, dir: 0, edge: 'E' }
           }
         ],
