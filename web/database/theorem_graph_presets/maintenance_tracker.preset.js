@@ -29,7 +29,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goal",
           "label": "goal",
           "type": "checkbox",
-          "text": "add complex, allowing user to truncate to shorter complex\nSES is a special complex\nSES induces LES\nfiltration and quotient\nit induces spectral sequencez\ntriangle can change to a SES if user claim sp\ntriangle can shift itself"
+          "text": "- [x] add complex,\n- [ ] allowing user to truncate to shorter complex\n- [ ] SES is a special complex\n- [ ] SES induces LES\n- [x] filtration and quotient\n- [ ] it induces spectral sequence\n- [ ] triangle can change to a SES if user claim sp\n- [ ] triangle can shift itself"
         }
       ],
       "setting": "",
@@ -124,8 +124,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
       "x": 508.3,
       "y": 404.5
     },
@@ -183,8 +183,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
       "x": 358.7,
       "y": 282
     },
@@ -232,7 +232,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
       "x": 682,
-      "y": 229.8
+      "y": 229.9
     },
     {
       "id": "n54",
@@ -297,8 +297,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
       "x": 629,
       "y": 119.1
     },
@@ -321,7 +321,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 60.4,
+      "x": 60.5,
       "y": 225
     },
     {
@@ -521,7 +521,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
   ],
   "references": [],
   "view": {
-    "selectedId": "n55",
+    "selectedId": "n48",
     "selectedReferenceKeys": [],
     "layoutRunning": false,
     "canvasRatioLocked": true,

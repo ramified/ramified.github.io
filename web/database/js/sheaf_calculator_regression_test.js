@@ -3,8 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-function loadCalculator() {
-  let source = fs.readFileSync(path.join(__dirname, 'sheaf_calculator.js'), 'utf8');
+function loadCalculator(scriptName = 'sheaf_calculator.js', extraReturns = '') {
+  let source = fs.readFileSync(path.join(__dirname, scriptName), 'utf8');
   source = source.replace(/\}\)\(\);\s*$/, `return {
     state,
     refs,
@@ -169,7 +169,7 @@ function loadCalculator() {
     importPresetFromText,
     syncSymmetricProductControls,
     syncDefaultVarietyName,
-    defaultVarietyNameLatex
+    defaultVarietyNameLatex${extraReturns}
   };
 })();`);
   return vm.runInNewContext(source, {
@@ -185,6 +185,24 @@ function loadCalculator() {
     setTimeout,
     clearTimeout
   });
+}
+
+function loadComplexCalculator() {
+  return loadCalculator('sheaf_complex_calculator.js', `,
+    normalizeComplexChartEntry,
+    complexChartEntryDisplayLatex,
+    complexChartEntryDisplayHtml,
+    complexChartEntryDisplayPlain,
+    complexChartEntryDisplayTikzcd,
+    addComplexChartPreset,
+    upsertComplexChartEntries,
+    selectedComplexChartEntries,
+    setComplexChartEntrySelected,
+    toggleComplexChartSelectionFromMaster,
+    deleteSelectedComplexChartEntries,
+    exportComplexChartEntries,
+    importComplexChartFromText
+  `);
 }
 
 function characteristicRows(api, targetSheaf) {
@@ -236,6 +254,188 @@ function testStepBuilderMarkupIsBelowCanvasAndClassChartHasNoStepButton() {
   assert(combinedSelectStart > 0 && combinedSelectEnd > combinedSelectStart);
   const combinedSelectHtml = html.slice(combinedSelectStart, combinedSelectEnd);
   assert(!combinedSelectHtml.includes('value="recommendations"'));
+}
+
+function testSheafComplexCalculatorPageAndPrototypeLink() {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'sheaf_complex_calculator.html'), 'utf8');
+  const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  assert(html.includes('<title>Sheaf Complex Calculator</title>'));
+  assert(html.includes('<h1>Sheaf Complex Calculator</h1>'));
+  assert(html.includes('id="sheaf-complex-card"'));
+  assert(html.includes('id="complex-chart-add"'));
+  assert(html.includes('id="complex-chart-add-mode"'));
+  assert(html.includes('value="manual">manual input</option>'));
+  assert(html.includes('value="preset">presets</option>'));
+  assert(html.includes('value="import">import</option>'));
+  assert(html.includes('id="complex-chart-preset"'));
+  assert(!html.includes('id="complex-chart-add-complex"'));
+  assert(!html.includes('id="complex-chart-add-filtration"'));
+  assert(html.includes('id="complex-chart-saved"'));
+  assert(html.includes('<script src="js/sheaf_complex_calculator.js?v=complex-chart-14"></script>'));
+  assert(html.includes('<option value="tikzcd">TikZ-cd</option>'));
+  assert(html.includes('.card.collapsed .card-body'));
+  assert(html.includes('pointer-events: none;'));
+  assert(html.includes('#sheaf-complex-wide-host'));
+  assert(html.includes('.sheaf-complex-card .card-head,'));
+  assert(html.includes('cursor: pointer;'));
+  assert(html.includes('.sheaf-filtration-long-subset'));
+  const stepCardIndex = html.indexOf('id="class-step-card"');
+  const complexCardIndex = html.indexOf('id="sheaf-complex-card"');
+  const asideIndex = html.indexOf('<aside class="side" id="cards">');
+  assert(stepCardIndex > 0);
+  assert(complexCardIndex > stepCardIndex && complexCardIndex < asideIndex);
+  assert(index.includes('Sheaf Complex Calculator'));
+  assert(index.includes('href="sheaf_complex_calculator.html"'));
+  const js = fs.readFileSync(path.join(__dirname, 'sheaf_complex_calculator.js'), 'utf8');
+  assert(!js.includes('function bindComplexChartDelegates'));
+  assert(js.includes("refs.complexChartAdd.addEventListener('click'"));
+}
+
+function testComplexChartLengthDefaultsAndDisplays() {
+  const api = loadComplexCalculator();
+  const complex = api.normalizeComplexChartEntry({
+    kind: 'chain-complex',
+    length: 4,
+    objects: ['A', '', 'C', 'D'],
+    maps: ['u', '', 'w']
+  }, { requireId: false });
+  assert.strictEqual(complex.objects.length, 4);
+  assert.strictEqual(complex.maps.length, 3);
+  assert.deepStrictEqual(Array.from(complex.objects), ['A', '', 'C', 'D']);
+  assert.deepStrictEqual(Array.from(complex.maps), ['u', '', 'w']);
+  assert.strictEqual(api.complexChartEntryDisplayLatex(complex), 'A \\xrightarrow{u}  \\xrightarrow{} C \\xrightarrow{w} D');
+
+  const filtration = api.normalizeComplexChartEntry({
+    kind: 'filtration',
+    length: 3,
+    objects: ['', 'E_1', ''],
+    quotients: ['', 'Q']
+  }, { requireId: false });
+  assert.strictEqual(filtration.objects.length, 3);
+  assert.strictEqual(filtration.quotients.length, 2);
+  assert.deepStrictEqual(Array.from(filtration.objects), ['', 'E_1', '']);
+  assert.deepStrictEqual(Array.from(filtration.quotients), ['', 'Q']);
+  assert.strictEqual(api.complexChartEntryDisplayLatex(filtration), ' \\mathrel{\\overset{}{\\subset}} E_1 \\mathrel{\\overset{Q}{\\subset}} ');
+
+  const longFiltration = api.normalizeComplexChartEntry({
+    kind: 'filtration',
+    length: 2,
+    objects: ['F_0', 'F_1'],
+    quotients: ['\\operatorname{VeryLongQuotientObject}']
+  }, { requireId: false });
+  assert.strictEqual(
+    api.complexChartEntryDisplayLatex(longFiltration),
+    'F_0 \\mathrel{\\overset{\\operatorname{VeryLongQuotientObject}}{\\subset}} F_1'
+  );
+  assert(api.complexChartEntryDisplayHtml(longFiltration).includes('sheaf-filtration-long-subset'));
+  assert(api.complexChartEntryDisplayHtml(longFiltration).includes('sheaf-filtration-quotient-sizer'));
+  assert(api.complexChartEntryDisplayHtml(longFiltration).includes('\\(\\operatorname{VeryLongQuotientObject}\\)'));
+}
+
+function testComplexChartTikzcdExport() {
+  const api = loadComplexCalculator();
+  const complex = api.normalizeComplexChartEntry({
+    kind: 'chain-complex',
+    length: 3,
+    objects: ['C_0', 'C_1', 'C_2'],
+    maps: ['d_0', 'd_1']
+  }, { requireId: false });
+  const complexTikz = api.complexChartEntryDisplayTikzcd(complex);
+  assert(complexTikz.includes('\\begin{tikzcd}[ampersand replacement=\\&]'));
+  assert(complexTikz.includes('{C_0} \\& {C_1} \\& {C_2}'));
+  assert(complexTikz.includes('\\arrow["{d_0}", from=1-1, to=1-2]'));
+  assert(complexTikz.includes('\\arrow["{d_1}", from=1-2, to=1-3]'));
+
+  const unlabeled = api.normalizeComplexChartEntry({
+    kind: 'chain-complex',
+    length: 3,
+    objects: ['0', 'A', 'B'],
+    maps: ['', 'f']
+  }, { requireId: false });
+  const unlabeledTikz = api.complexChartEntryDisplayTikzcd(unlabeled);
+  assert(unlabeledTikz.includes('\\arrow[from=1-1, to=1-2]'));
+  assert(unlabeledTikz.includes('\\arrow["{f}", from=1-2, to=1-3]'));
+
+  api.upsertComplexChartEntries([
+    { id: 'tikz_complex', kind: 'chain-complex', length: 3, objects: ['C_0', 'C_1', 'C_2'], maps: ['d_0', 'd_1'] },
+    { id: 'tikz_filtration', kind: 'filtration', length: 3, objects: ['F_0', 'F_1', 'F_2'], quotients: ['Q_1', '\\operatorname{LongQuotient}'] }
+  ]);
+  const exported = api.exportComplexChartEntries('tikzcd');
+  assert(exported.includes('% Requires \\usepackage{tikz-cd}'));
+  assert(exported.includes('\\providecommand{\\LongSubset}'));
+  assert(exported.includes('\\arrow["{\\overset{Q_1}{\\LongSubset['));
+  assert(exported.includes('}"{description}, draw=none, from=1-1, to=1-2]'));
+  assert(exported.includes('\\arrow["{\\overset{\\operatorname{LongQuotient}}{\\LongSubset['));
+  assert(exported.includes('draw=none, from=1-2, to=1-3]'));
+
+  const presetApi = loadComplexCalculator();
+  assert.strictEqual(presetApi.addComplexChartPreset('ses-cyclic'), true);
+  const preset = presetApi.state.complexChart.entries[0];
+  assert.deepStrictEqual(Array.from(preset.objects), ['0', '\\mathbb{Z}', '\\mathbb{Z}', '\\mathbb{Z}/n\\mathbb{Z}', '0']);
+  assert.deepStrictEqual(Array.from(preset.maps), ['', '\\times n', '', '']);
+  const presetTikz = presetApi.exportComplexChartEntries('tikzcd');
+  assert(presetTikz.includes('\\arrow[from=1-1, to=1-2]'));
+  assert(presetTikz.includes('\\arrow["{\\times n}", from=1-2, to=1-3]'));
+  assert(!presetTikz.includes('d_{0}'));
+  assert(!presetTikz.includes('d_{3}'));
+}
+
+function testComplexChartSelectionEditDeleteModel() {
+  const api = loadComplexCalculator();
+  api.upsertComplexChartEntries([
+    { id: 'complex_one', kind: 'chain-complex', length: 2, objects: ['A', 'B'], maps: ['f'] },
+    { id: 'filtration_one', kind: 'filtration', length: 2, objects: ['F_0', 'F_1'], quotients: ['G_1'] }
+  ]);
+  assert.strictEqual(api.state.complexChart.entries.length, 2);
+  assert.strictEqual(api.selectedComplexChartEntries().length, 2);
+  api.setComplexChartEntrySelected('complex_one', false);
+  assert.strictEqual(api.selectedComplexChartEntries().length, 1);
+  api.toggleComplexChartSelectionFromMaster();
+  assert.strictEqual(api.selectedComplexChartEntries().length, 2);
+  api.toggleComplexChartSelectionFromMaster();
+  assert.strictEqual(api.selectedComplexChartEntries().length, 0);
+  api.setComplexChartEntrySelected('filtration_one', true);
+  api.deleteSelectedComplexChartEntries();
+  assert.strictEqual(api.state.complexChart.entries.length, 1);
+  assert.strictEqual(api.state.complexChart.entries[0].id, 'complex_one');
+}
+
+function testComplexChartSeparateJsonImportExport() {
+  const api = loadComplexCalculator();
+  api.upsertComplexChartEntries([
+    { id: 'complex_json', kind: 'chain-complex', length: 3, objects: ['A', 'B', 'C'], maps: ['f', 'g'] }
+  ]);
+  const json = api.exportComplexChartEntries('preset-json');
+  const parsed = JSON.parse(json);
+  assert.strictEqual(parsed.schema, 'sheaf-complex-calculator-complex-chart');
+  assert.strictEqual(parsed.version, 1);
+  assert.strictEqual(parsed.entries.length, 1);
+  const restored = loadComplexCalculator();
+  restored.importComplexChartFromText(json);
+  assert.strictEqual(restored.state.complexChart.entries.length, 1);
+  assert.strictEqual(restored.state.complexChart.entries[0].id, 'complex_json');
+  assert.strictEqual(restored.complexChartEntryDisplayLatex(restored.state.complexChart.entries[0]), 'A \\xrightarrow{f} B \\xrightarrow{g} C');
+}
+
+function testComplexChartFullPresetRoundTripAndOldSchemaImport() {
+  const api = loadComplexCalculator();
+  api.upsertComplexChartEntries([
+    { id: 'full_preset_complex', kind: 'chain-complex', length: 2, objects: ['K^0', 'K^1'], maps: ['d^0'] },
+    { id: 'full_preset_filtration', kind: 'filtration', length: 2, objects: ['F_0', 'F_1'], quotients: ['Q_1'], selected: false }
+  ]);
+  api.state.exportScope = 'complex-chart';
+  const preset = api.buildPresetState();
+  assert.strictEqual(preset.schema, 'sheaf-complex-calculator-preset');
+  assert.strictEqual(preset.options.exportScope, 'complex-chart');
+  assert.strictEqual(preset.complexChart.entries.length, 2);
+  const restored = loadComplexCalculator();
+  restored.applyPresetState(preset);
+  assert.strictEqual(restored.state.complexChart.entries.length, 2);
+  assert.strictEqual(restored.state.complexChart.entries[1].selected, false);
+
+  const oldSchemaRestored = loadComplexCalculator();
+  oldSchemaRestored.applyPresetState({ ...preset, schema: 'sheaf-calculator-preset' });
+  assert.strictEqual(oldSchemaRestored.state.complexChart.entries.length, 2);
 }
 
 function testSymmetricProductGenusCanBeClearedWhileEditing() {
@@ -7070,6 +7270,12 @@ function testRuleOnlySheafIdentificationPersistsAfterSheafDeletion() {
 }
 
 testStepBuilderMarkupIsBelowCanvasAndClassChartHasNoStepButton();
+testSheafComplexCalculatorPageAndPrototypeLink();
+testComplexChartLengthDefaultsAndDisplays();
+testComplexChartTikzcdExport();
+testComplexChartSelectionEditDeleteModel();
+testComplexChartSeparateJsonImportExport();
+testComplexChartFullPresetRoundTripAndOldSchemaImport();
 testCurveToProjectivePullbackUsesCurvePoint();
 testCurveSymplecticBasisIsOptIn();
 testProjectivePullbackStillUsesTargetHyperplane();

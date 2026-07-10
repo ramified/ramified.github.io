@@ -1,0 +1,3906 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sheaf Complex Calculator</title>
+  <link rel="stylesheet" href="css/site.css">
+  <style>
+    .sheaf-layout {
+      max-width: 1240px;
+      grid-template-columns: minmax(0, 1fr) 380px;
+      align-items: start;
+    }
+
+    .sheaf-main-column {
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+      align-content: start;
+    }
+
+    .sheaf-main-column > #class-step-wide-host {
+      grid-column: auto;
+    }
+
+    .sheaf-workspace {
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .sheaf-object-button {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+    }
+
+    .sheaf-input-toolbar {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding-bottom: 9px;
+      border-bottom: 1px dotted var(--border);
+    }
+
+    .sheaf-input-editor[hidden] {
+      display: none !important;
+    }
+
+    .map-input-editor[hidden] {
+      display: none !important;
+    }
+
+    .sheaf-input-add {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .sheaf-input-add .sheaf-select {
+      flex: 1 1 150px;
+    }
+
+    .sheaf-input-add .sheaf-select[hidden] {
+      display: none !important;
+    }
+
+    .sheaf-input-add .sheaf-mode-select {
+      flex: 0 0 112px;
+    }
+
+    .canvas-toolbar .sheaf-cache-toggle {
+      margin: 0;
+      padding: 2px 0;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0;
+      text-transform: none;
+      white-space: nowrap;
+    }
+
+    .sheaf-modify-warning {
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-style: italic;
+    }
+
+    .sheaf-modify-warning[hidden] {
+      display: none !important;
+    }
+
+    .sheaf-input-options {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(150px, 1.25fr);
+      gap: 8px;
+      align-items: center;
+    }
+
+    .sheaf-input-options[hidden] {
+      display: none !important;
+    }
+
+    .sheaf-import-panel[hidden] {
+      display: none !important;
+    }
+
+    .card[hidden],
+    .sheaf-input-reveal-actions[hidden] {
+      display: none !important;
+    }
+
+    .sheaf-input-options .opt-row {
+      margin: 0;
+      min-width: 0;
+      white-space: nowrap;
+    }
+
+    .sheaf-import-panel {
+      display: grid;
+      gap: 7px;
+      padding-top: 9px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .sheaf-import-input {
+      width: 100%;
+      min-height: 58px;
+      max-height: 150px;
+      resize: vertical;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.35;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      padding: 6px 8px;
+    }
+
+    .sheaf-import-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 7px;
+      flex-wrap: wrap;
+    }
+
+    .sheaf-import-message {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      line-height: 1.35;
+      min-height: 1em;
+      overflow-wrap: anywhere;
+    }
+
+    .sheaf-import-message.is-error {
+      color: var(--accent2);
+    }
+
+    .sheaf-warning-check {
+      color: var(--accent2);
+    }
+
+    .sheaf-editor-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .sheaf-editor-title mjx-container {
+      font-size: 1em !important;
+    }
+
+    .sheaf-field-row {
+      display: grid;
+      grid-template-columns: 118px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+      min-width: 0;
+    }
+
+    .sheaf-field-row[hidden],
+    .sheaf-inline-row[hidden],
+    .map-curve-row[hidden],
+    .sheaf-chart-actions[hidden],
+    .hodge-card-actions[hidden],
+    .hodge-query[hidden],
+    .hodge-chern-numbers[hidden],
+    .betti-table-chart[hidden],
+    .sheaf-class-scroll[hidden],
+    .sheaf-cohomology-chart[hidden],
+    .hodge-grid[hidden],
+    .ci-degree-sliders[hidden],
+    .sheaf-note[hidden] {
+      display: none !important;
+    }
+
+    .sheaf-field-row .input-label {
+      margin: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sheaf-select,
+    .sheaf-input {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+    }
+
+    .sheaf-select {
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+
+    .sheaf-input[type=number] {
+      text-align: center;
+    }
+
+    .sheaf-select:focus,
+    .sheaf-input:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .sheaf-object-button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .sheaf-object-button[aria-pressed="true"] {
+      color: var(--bg);
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .sheaf-note {
+      margin-top: 8px;
+      padding-top: 7px;
+      border-top: 1px dotted var(--border);
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+
+    .sheaf-stage {
+      position: relative;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #fffdf8;
+      min-height: 248px;
+      overflow: hidden;
+    }
+
+  .canvas-corner-actions {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      z-index: 2;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+  }
+
+  .canvas-clear-button,
+  .canvas-show-button {
+      padding: 4px 10px;
+      font-size: 0.74rem;
+    background: rgba(255,253,248,0.88);
+  }
+
+  .canvas-show-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .map-curve-control {
+    display: inline-grid;
+    grid-template-columns: auto minmax(64px, 1fr) 48px;
+    gap: 7px;
+    align-items: center;
+    color: inherit;
+    font-size: 0.76rem;
+  }
+
+  .map-curve-control {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .map-curve-control input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+
+  .map-curve-control output {
+    font-family: inherit;
+    font-size: 0.76rem;
+    text-align: right;
+  }
+
+  .map-curve-row {
+    align-items: center;
+  }
+
+  .map-curve-tools {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .map-curve-reset {
+    padding: 4px 9px;
+    font-size: 0.72rem;
+  }
+
+  .sequence-tail-tools {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .sheaf-map-control {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    transform: translate(-50%, -50%);
+    border: 2px solid #8b3a2a;
+    border-radius: 50%;
+    background: #fffdf8;
+    box-shadow: 0 1px 5px rgba(40, 34, 20, 0.18);
+    pointer-events: auto;
+    cursor: grab;
+    touch-action: none;
+    z-index: 2;
+  }
+
+  .sheaf-map-control::before {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
+
+  .sheaf-map-control.is-anchor {
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    background: #fff7f3;
+  }
+
+  .sheaf-map-control.is-endpoint {
+    opacity: 0.72;
+    cursor: default;
+  }
+
+  .sheaf-map-control:disabled {
+    pointer-events: none;
+  }
+
+  .sheaf-map-control:hover,
+  .sheaf-map-control:focus-visible,
+  .sheaf-map-control.is-dragging {
+    outline: none;
+    background: #fff7f3;
+    box-shadow: 0 0 0 3px rgba(139,58,42,0.18);
+  }
+
+  #sheaf-canvas {
+      width: 100% !important;
+      height: 280px !important;
+      min-height: 248px;
+      display: block;
+      cursor: default;
+    }
+
+    .sheaf-canvas-labels {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      color: var(--text);
+    }
+
+    .sheaf-canvas-label {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      max-width: 260px;
+      text-align: center;
+      line-height: 1.28;
+      color: var(--text);
+      font-size: 1rem;
+      overflow-wrap: anywhere;
+      pointer-events: auto;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+      padding: 2px 8px;
+      border: 1px solid transparent;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.68);
+      will-change: left, top;
+    }
+
+    .sheaf-canvas-label.is-active {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+      background: rgba(255,255,255,0.86);
+    }
+
+    .sheaf-canvas-label.is-sheaf {
+      color: var(--accent2);
+    }
+
+    .sheaf-canvas-label.is-variety {
+      color: var(--accent);
+    }
+
+  .sheaf-canvas-label.is-map {
+    color: #8b3a2a;
+    font-size: 0.84rem;
+    background: rgba(255,247,243,0.9);
+    cursor: pointer;
+  }
+
+    .sheaf-canvas-label.is-pick-candidate,
+    .sheaf-canvas-label.is-map-codomain-candidate {
+      border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+      box-shadow: 0 0 0 2px rgba(61,107,79,0.13);
+      background: rgba(247,244,239,0.92);
+    }
+
+    .sheaf-canvas-label.is-map-domain {
+      border-color: #8b3a2a;
+      box-shadow: 0 0 0 2px rgba(139,58,42,0.16);
+      background: rgba(255,247,243,0.95);
+    }
+
+    .sheaf-canvas-label.is-map-codomain {
+      border-color: color-mix(in srgb, var(--accent2) 72%, var(--border));
+      box-shadow: 0 0 0 2px rgba(91,85,132,0.14);
+      background: rgba(247,246,252,0.95);
+    }
+
+    .sheaf-canvas-label mjx-container {
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    .sheaf-canvas-label.is-dragging {
+      cursor: grabbing;
+      z-index: 3;
+      box-shadow: 0 4px 12px rgba(40, 34, 20, 0.14);
+    }
+
+    .sheaf-underbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+
+    .sheaf-underbar span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .sheaf-class-scroll {
+      max-height: min(620px, 72vh);
+      overflow: auto;
+      padding: 0 10px 8px 0;
+      scrollbar-gutter: stable;
+      scrollbar-color: color-mix(in srgb, var(--accent) 68%, var(--surface)) var(--surface);
+      scrollbar-width: thin;
+    }
+
+    .sheaf-class-scroll::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+
+    .sheaf-class-scroll::-webkit-scrollbar-track {
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+    }
+
+    .sheaf-class-scroll::-webkit-scrollbar-thumb {
+      background: color-mix(in srgb, var(--accent) 68%, var(--surface));
+      border: 2px solid var(--surface);
+      border-radius: 999px;
+    }
+
+    .sheaf-formula-row {
+      display: grid;
+      grid-template-columns: 74px minmax(0, 1fr);
+      column-gap: 10px;
+      padding: 7px 0;
+      border-bottom: 1px dotted var(--border);
+      align-items: start;
+    }
+
+    .sheaf-formula-row:last-child {
+      border-bottom: none;
+    }
+
+    .sheaf-formula-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      white-space: nowrap;
+      padding-top: 2px;
+    }
+
+    .sheaf-formula-value {
+      min-width: 0;
+      color: var(--text);
+      font-size: 0.88rem;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }
+
+    .sheaf-formula-value mjx-container {
+      overflow-x: auto;
+      overflow-y: hidden;
+      max-width: 100%;
+      padding-bottom: 2px;
+    }
+
+    .sheaf-inline-row {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .sheaf-inline-row .input-label {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .sheaf-term-only-control {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      color: var(--text);
+      font-size: 0.88rem;
+    }
+
+    .sheaf-term-only-control .sheaf-input {
+      width: 58px;
+      flex: 0 0 58px;
+      text-align: center;
+    }
+
+    .sheaf-term-only-control .sheaf-input:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .sheaf-term-only-control span {
+      white-space: nowrap;
+    }
+
+    .sheaf-term-only-control .opt-row {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .sheaf-lower-label {
+      text-transform: none !important;
+      letter-spacing: 0;
+    }
+
+    .ci-equation-count-control {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 44px;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .sheaf-base-picker {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .sheaf-base-pick-button,
+    .map-pick-reset {
+      padding: 4px 10px;
+      font-size: 0.74rem;
+    }
+
+    .product-factor-picker {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: 6px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .product-factor-button {
+      padding: 4px 8px;
+      font-size: 0.72rem;
+      letter-spacing: 0;
+      text-transform: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .product-factor-button[aria-pressed="true"] {
+      color: var(--bg);
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .point-name-preset-picker {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .point-name-preset-button {
+      padding: 4px 6px;
+      font-size: 0.72rem;
+      letter-spacing: 0;
+      text-transform: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .grassmannian-param-picker {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .grassmannian-param {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 5px;
+      align-items: center;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+    }
+
+    .grassmannian-param .sheaf-input {
+      width: 100%;
+      min-width: 0;
+      padding: 4px 6px;
+      text-align: center;
+    }
+
+    .product-factor-times {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+    }
+
+    .sheaf-map-formula-picker {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+
+    .combined-sequence-picker {
+      display: grid;
+      grid-template-columns: minmax(54px, max-content) minmax(84px, 96px) minmax(54px, max-content);
+      column-gap: 6px;
+      row-gap: 6px;
+      align-items: end;
+      justify-content: start;
+      width: 100%;
+    }
+
+    .combined-sequence-arrow {
+      display: grid;
+      grid-template-rows: 15px 17px;
+      justify-items: center;
+      align-items: end;
+      min-width: 84px;
+      width: 100%;
+    }
+
+    .combined-sequence-arrow-line {
+      display: block;
+      width: 100%;
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1;
+      text-align: center;
+      white-space: nowrap;
+      transform: translateY(1px);
+    }
+
+    .combined-sequence-spacer {
+      min-height: 1px;
+    }
+
+    .combined-sequence-map-button {
+      max-width: 58px;
+      padding: 2px 5px;
+      font-size: 0.64rem;
+      line-height: 1.05;
+    }
+
+    .sheaf-map-slot-button {
+      padding: 4px 8px;
+      font-size: 0.72rem;
+      letter-spacing: 0;
+      text-transform: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 112px;
+    }
+
+    .sheaf-map-slot-button.combined-sequence-map-button {
+      max-width: 44px;
+      min-height: 17px;
+      padding: 1px 4px;
+      font-size: 0.56rem;
+      line-height: 1;
+    }
+
+    .identify-name-tools,
+    .identify-class-review {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .identify-name-tools .sheaf-input {
+      min-width: 92px;
+      flex: 1 1 120px;
+    }
+
+    .identify-class-review {
+      flex-direction: column;
+      align-items: stretch;
+      color: var(--muted);
+      font-size: 0.72rem;
+    }
+
+    .identify-class-review label {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .identify-class-review .sheaf-input {
+      width: 82px;
+      padding: 3px 6px;
+      font-size: 0.7rem;
+    }
+
+    .identify-class-review.is-warning {
+      color: var(--danger);
+    }
+
+    .sheaf-map-slot-button[aria-pressed="true"] {
+      color: var(--bg);
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .sheaf-map-formula-mark {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      line-height: 1;
+    }
+
+    .sheaf-self-sum-count {
+      width: 58px;
+      flex: 0 0 58px;
+      padding: 4px 6px;
+      text-align: center;
+    }
+
+    .sheaf-tensor-parent-list {
+      display: grid;
+      gap: 6px;
+      width: min(100%, 360px);
+    }
+
+    .sheaf-tensor-parent-row {
+      display: grid;
+      grid-template-columns: minmax(88px, 1fr) auto 74px auto;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .sheaf-tensor-parent-row .sheaf-map-slot-button {
+      min-width: 0;
+    }
+
+    .sheaf-tensor-exponent {
+      width: 74px;
+      padding: 4px 6px;
+      text-align: center;
+    }
+
+    .sheaf-base-pick-button[aria-pressed="true"] {
+      color: var(--bg);
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .sheaf-input-reveal-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .sheaf-input-reveal-button {
+      padding: 4px 10px;
+      font-size: 0.72rem;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+
+    .sheaf-input-reveal-button[hidden] {
+      display: none !important;
+    }
+
+    .sheaf-input-reveal-button[aria-pressed="true"] {
+      color: var(--bg);
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .map-pick-status {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .global-invariant-editor .sheaf-field-row {
+      grid-template-columns: 80px minmax(0, 1fr);
+    }
+
+    .global-invariant-mode {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .global-invariant-usage {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .global-invariant-usage.is-warning {
+      color: var(--accent2);
+    }
+
+    .global-invariant-list {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    .global-invariant-chip {
+      display: inline-flex;
+      align-items: center;
+      max-width: 190px;
+      min-height: 22px;
+      padding: 2px 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--surface) 72%, transparent);
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .global-invariant-chip.is-active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .global-invariant-chip.is-replaced {
+      color: var(--muted);
+      text-decoration: line-through;
+    }
+
+    .map-pick-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+
+    .ci-equation-count-control input[type=range],
+    .ci-degree-slider-row input[type=range] {
+      width: 100%;
+      min-width: 0;
+      accent-color: var(--accent);
+    }
+
+    .ci-equation-count-control output,
+    .ci-degree-slider-row output {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      color: var(--text);
+      text-align: right;
+    }
+
+    .ci-degree-sliders {
+      display: grid;
+      gap: 7px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .ci-degree-slider-row {
+      display: grid;
+      grid-template-columns: 64px minmax(0, 1fr) 44px;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .ci-degree-slider-row span {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      white-space: nowrap;
+    }
+
+    .curve-genus-input {
+      text-align: center;
+    }
+
+    .sheaf-export-actions {
+      margin-top: 8px;
+    }
+
+    .sheaf-chart-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-bottom: 8px;
+      padding-bottom: 7px;
+      border-bottom: 1px dotted var(--border);
+    }
+
+    .sheaf-chart-export {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+    }
+
+    .sheaf-step-card .card-body {
+      overflow: visible;
+    }
+
+    .card.collapsed .card-body {
+      pointer-events: none;
+    }
+
+    #class-step-wide-host {
+      grid-column: 1 / 2;
+      min-width: 0;
+    }
+
+    #class-step-wide-host[hidden] {
+      display: none !important;
+    }
+
+    #class-step-card.wide {
+      margin-top: 0;
+    }
+
+    .sheaf-formula-builder {
+      display: grid;
+      gap: 9px;
+      min-width: 0;
+      border-top: 1px dotted var(--border);
+      margin-top: 8px;
+      padding-top: 10px;
+    }
+
+    .sheaf-formula-builder[hidden] {
+      display: none;
+    }
+
+    .sheaf-step-library-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .sheaf-step-builder-row,
+    .sheaf-step-token-row {
+      display: grid;
+      grid-template-columns: 88px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      min-width: 0;
+    }
+
+    .sheaf-step-builder-row .input-label,
+    .sheaf-step-token-row .input-label {
+      margin-top: 5px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      white-space: nowrap;
+    }
+
+    .sheaf-step-token-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-width: 0;
+      max-height: 96px;
+      overflow: auto;
+      padding-right: 4px;
+      scrollbar-gutter: stable;
+      scrollbar-color: color-mix(in srgb, var(--accent) 58%, var(--surface)) var(--surface);
+      scrollbar-width: thin;
+    }
+
+    .sheaf-step-token-list.is-empty {
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
+
+    .sheaf-step-class-picker {
+      display: grid;
+      grid-template-columns: auto minmax(96px, 0.8fr) minmax(96px, 0.6fr) minmax(140px, 1.3fr);
+      gap: 7px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .sheaf-step-class-picker .sheaf-select {
+      min-width: 0;
+      width: 100%;
+    }
+
+    .sheaf-class-family-picker {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .sheaf-class-family-picker .opt-row {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .sheaf-step-token-button {
+      max-width: 100%;
+      padding: 3px 8px;
+      border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+      line-height: 1.35;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .sheaf-step-token-button:hover,
+    .sheaf-step-token-button:focus-visible {
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+      outline: none;
+    }
+
+    .sheaf-step-token-button:disabled,
+    .sheaf-step-builder-controls button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .sheaf-step-builder-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      justify-content: flex-end;
+      padding-top: 8px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .sheaf-step-formula-preview {
+      min-height: 36px;
+      padding: 8px;
+      border: 1px dotted var(--border);
+      border-radius: 4px;
+      background: rgba(255,255,255,0.35);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 3px;
+      white-space: normal;
+      cursor: text;
+    }
+
+    .sheaf-step-formula-preview:focus,
+    .sheaf-step-formula-preview:focus-within {
+      border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+      outline: none;
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
+    }
+
+    .sheaf-step-formula-preview.is-checked {
+      display: block;
+      white-space: nowrap;
+      overflow-x: auto;
+    }
+
+    .sheaf-step-formula-preview .formula-preview-fragment {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+      margin-right: 4px;
+      vertical-align: baseline;
+    }
+
+    .formula-token-chip {
+      max-width: 100%;
+      padding: 2px 7px;
+      border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--surface) 86%, var(--bg));
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+      line-height: 1.35;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .formula-token-chip:hover,
+    .formula-token-chip:focus-visible {
+      border-color: var(--accent);
+      outline: none;
+    }
+
+    .formula-cursor {
+      width: 8px;
+      min-width: 8px;
+      height: 24px;
+      padding: 0;
+      border: 0;
+      border-radius: 2px;
+      background: transparent;
+      cursor: text;
+    }
+
+    .formula-cursor.is-active {
+      width: 2px;
+      min-width: 2px;
+      background: var(--accent);
+      animation: formula-caret-blink 1.1s steps(1) infinite;
+    }
+
+    @keyframes formula-caret-blink {
+      50% { opacity: 0.25; }
+    }
+
+    .sheaf-step-slot-button {
+      padding: 2px 7px;
+      border: 1px dashed color-mix(in srgb, var(--accent) 62%, var(--border));
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+      color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      line-height: 1.35;
+      cursor: pointer;
+      vertical-align: baseline;
+    }
+
+    .sheaf-step-slot-button.is-active {
+      border-style: solid;
+      background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+      color: var(--text);
+    }
+
+    .sheaf-step-slot-argument {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 3px;
+      max-width: 100%;
+      padding: 1px 3px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      vertical-align: baseline;
+    }
+
+    .sheaf-step-slot-argument:hover,
+    .sheaf-step-slot-argument.is-active {
+      border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+      background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+    }
+
+    .sheaf-step-panel {
+      border: 1px dotted var(--border);
+      background: color-mix(in srgb, var(--surface) 84%, var(--bg));
+      border-radius: 6px;
+      padding: 10px;
+      margin: 8px 0 10px;
+    }
+
+    .sheaf-step-panel.is-wide {
+      width: 100%;
+    }
+
+    .sheaf-step-panel[hidden],
+    .sheaf-step-row[hidden],
+    .sheaf-step-rules[hidden],
+    .sheaf-step-saved-rules[hidden] {
+      display: none;
+    }
+
+    .sheaf-step-row,
+    .sheaf-step-options,
+    .sheaf-step-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .sheaf-step-row:last-child,
+    .sheaf-step-options:last-child,
+    .sheaf-step-controls:last-child {
+      margin-bottom: 0;
+    }
+
+    .sheaf-step-layout-toggle {
+      margin-left: auto;
+    }
+
+    .sheaf-step-work {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.9fr);
+      gap: 12px;
+      align-items: start;
+      border-top: 1px dotted var(--border);
+      border-bottom: 1px dotted var(--border);
+      padding: 8px 0;
+      margin: 8px 0;
+    }
+
+    .sheaf-step-panel:not(.is-side) .sheaf-step-work {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .sheaf-step-panel:not(.is-side) .sheaf-step-rules {
+      border-top: 1px dotted var(--border);
+      padding-top: 8px;
+    }
+
+    .sheaf-step-formula {
+      min-width: 0;
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 6px 0 10px;
+      white-space: nowrap;
+      scrollbar-gutter: stable;
+      scrollbar-color: color-mix(in srgb, var(--accent) 58%, var(--surface)) var(--surface);
+      scrollbar-width: thin;
+    }
+
+    .sheaf-step-formula mjx-container {
+      min-width: max-content;
+      max-width: none !important;
+    }
+
+    .sheaf-step-rule-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      border-top: 1px dotted var(--border);
+      padding: 6px 0;
+      font-size: 0.92rem;
+    }
+
+    .sheaf-step-rule-row:first-child {
+      border-top: 0;
+    }
+
+    .sheaf-step-select-all-row + .sheaf-step-rule-row {
+      border-top: 0;
+    }
+
+    .sheaf-step-history-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 0 0 8px;
+    }
+
+    .sheaf-step-history-controls[hidden] {
+      display: none;
+    }
+
+    .sheaf-step-history-toggle.is-muted {
+      opacity: 0.62;
+    }
+
+    .sheaf-step-rule-label {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .sheaf-step-rule-meta {
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-left: 6px;
+    }
+
+    .sheaf-step-saved-rules {
+      margin: 8px 0;
+    }
+
+    .sheaf-step-saved-rule-title {
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .sheaf-step-select-all-row {
+      margin: 2px 0 6px;
+    }
+
+    .sheaf-step-rule-row.sheaf-step-select-all-row {
+      margin: 0;
+    }
+
+    .sheaf-step-select-all-row input[type="checkbox"] {
+      justify-self: center;
+    }
+
+    .sheaf-step-saved-rule-row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
+      gap: 8px;
+      align-items: center;
+      padding: 4px 0;
+      font-size: 0.88rem;
+      min-width: 0;
+    }
+
+    .sheaf-step-saved-rule-row.sheaf-step-select-all-row {
+      margin: 2px 0 6px;
+    }
+
+    .sheaf-step-saved-rule-row span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .sheaf-step-saved-rule-formula {
+      display: block;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sheaf-step-saved-rule-formula mjx-container {
+      max-width: 100% !important;
+      overflow: hidden;
+      vertical-align: middle;
+    }
+
+    .sheaf-step-saved-rule-kind {
+      color: var(--muted);
+      font-size: 0.76rem;
+      white-space: nowrap;
+    }
+
+    .sheaf-step-saved-rule-row .sheaf-chart-export {
+      padding-inline: 8px;
+    }
+
+    #sheaf-complex-wide-host {
+      grid-column: 1 / 2;
+      min-width: 0;
+    }
+
+    #sheaf-complex-wide-host[hidden] {
+      display: none !important;
+    }
+
+    #sheaf-complex-card.wide {
+      margin-top: 0;
+    }
+
+    .sheaf-complex-card .card-head,
+    .sheaf-complex-card .card-head-label,
+    .sheaf-complex-card .toggle-icon {
+      cursor: pointer;
+    }
+
+    .sheaf-complex-card .drag-handle {
+      cursor: grab;
+    }
+
+    .sheaf-complex-card .drag-handle:active {
+      cursor: grabbing;
+    }
+
+    .sheaf-complex-card .card-body {
+      display: grid;
+      gap: 10px;
+    }
+
+    .sheaf-complex-toolbar,
+    .sheaf-complex-editor-controls,
+    .sheaf-complex-import-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .sheaf-complex-add-panel,
+    .sheaf-complex-editor {
+      display: grid;
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .sheaf-complex-add-panel[hidden],
+    .sheaf-complex-add-mode-panel[hidden],
+    .sheaf-complex-editor[hidden],
+    .sheaf-complex-import-panel[hidden] {
+      display: none !important;
+    }
+
+    .sheaf-complex-add-mode-panel {
+      display: grid;
+      gap: 8px;
+    }
+
+    .sheaf-complex-editor-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 8px;
+    }
+
+    .sheaf-complex-field {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .sheaf-complex-field .input-label {
+      margin: 0;
+    }
+
+    .sheaf-complex-display {
+      padding: 8px 10px;
+      border: 1px dotted var(--border);
+      border-radius: 8px;
+      overflow-x: auto;
+      line-height: 1.8;
+    }
+
+    .sheaf-complex-display mjx-container {
+      max-width: 100% !important;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+
+    .sheaf-filtration-display {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35em;
+      max-width: 100%;
+      min-width: 0;
+      white-space: nowrap;
+    }
+
+    .sheaf-filtration-object {
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .sheaf-filtration-relation {
+      position: relative;
+      display: inline-block;
+      min-width: 2.2em;
+      height: 0.7em;
+      line-height: 1;
+      margin: 0 0.08em;
+      overflow: visible;
+      vertical-align: middle;
+    }
+
+    .sheaf-filtration-quotient {
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 0.12em);
+      transform: translateX(-50%);
+      font-size: 0.82em;
+      padding: 0 0.2em;
+      max-width: 100%;
+      line-height: 1.05;
+      white-space: nowrap;
+    }
+
+    .sheaf-filtration-quotient-sizer {
+      display: block;
+      height: 0;
+      overflow: hidden;
+      visibility: hidden;
+      font-size: 0.82em;
+      padding: 0 0.2em;
+      white-space: nowrap;
+    }
+
+    .sheaf-filtration-relation-body {
+      display: block;
+      width: 100%;
+      min-width: 2.2em;
+      height: 0.7em;
+      color: currentColor;
+    }
+
+    .sheaf-filtration-long-subset {
+      --subset-stroke: 1.5px;
+      display: block;
+      position: relative;
+      width: 100%;
+      min-width: 2.2em;
+      height: 0.58em;
+      border-top: var(--subset-stroke) solid currentColor;
+      border-bottom: var(--subset-stroke) solid currentColor;
+      border-left: var(--subset-stroke) solid currentColor;
+      border-right: 0;
+      border-radius: 0.42em 0 0 0.42em / 50% 0 0 50%;
+      transform: translateY(0.03em);
+    }
+
+    .sheaf-complex-import-panel {
+      display: grid;
+      gap: 8px;
+    }
+
+    .sheaf-complex-import-input {
+      min-height: 90px;
+      resize: vertical;
+    }
+
+    .sheaf-complex-import-message {
+      color: var(--muted);
+      min-height: 1.2em;
+    }
+
+    .sheaf-complex-import-message.is-error {
+      color: var(--danger);
+    }
+
+    @media (max-width: 820px) {
+      .sheaf-step-builder-row,
+      .sheaf-step-token-row {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .sheaf-step-builder-row .input-label,
+      .sheaf-step-token-row .input-label {
+        margin-top: 0;
+      }
+
+      .sheaf-step-class-picker {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      }
+
+      .sheaf-step-panel.is-wide {
+        width: auto;
+      }
+
+      .sheaf-step-work {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .sheaf-step-layout-toggle {
+        margin-left: 0;
+      }
+    }
+
+    .sheaf-cohomology-chart {
+      max-width: 100%;
+      overflow: auto;
+      padding: 0 0 8px;
+      scrollbar-gutter: stable;
+      scrollbar-color: color-mix(in srgb, var(--accent) 68%, var(--surface)) var(--surface);
+      scrollbar-width: thin;
+    }
+
+    .cohomology-table {
+      width: max-content;
+      min-width: 100%;
+      border-collapse: collapse;
+      color: var(--text);
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+
+    .cohomology-table th,
+    .cohomology-table td {
+      border-bottom: 1px dotted var(--border);
+      padding: 7px 10px;
+      text-align: center;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    .cohomology-table th:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      min-width: 76px;
+      color: var(--muted);
+      background: var(--surface);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      text-align: left;
+    }
+
+    .cohomology-table tr:last-child th,
+    .cohomology-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .cohomology-dim-toggle {
+      margin: 0;
+      padding: 0;
+      white-space: nowrap;
+    }
+
+    .homology-active {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.45;
+      margin-bottom: 8px;
+      overflow-wrap: anywhere;
+    }
+
+    .homology-active[hidden],
+    .homology-map-tools[hidden],
+    .homology-symbol-list[hidden],
+    .homology-rule-list[hidden],
+    .homology-add-class[hidden],
+    .homology-add-rule[hidden] {
+      display: none !important;
+    }
+
+    .homology-symbol-list,
+    .homology-rule-list {
+      display: grid;
+      gap: 6px;
+      margin-top: 10px;
+      padding-top: 9px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .homology-rule-disclosure {
+      min-width: 0;
+    }
+
+    .homology-rule-disclosure summary {
+      display: list-item;
+      min-width: 0;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .homology-rule-disclosure summary:hover,
+    .homology-rule-disclosure summary:focus-visible {
+      color: var(--accent);
+      outline: none;
+    }
+
+    .homology-rule-scroll {
+      display: grid;
+      gap: 6px;
+      max-height: 320px;
+      margin-top: 7px;
+      padding-right: 6px;
+      overflow-y: auto;
+      scrollbar-gutter: stable;
+      scrollbar-color: color-mix(in srgb, var(--accent) 58%, var(--surface)) var(--surface);
+      scrollbar-width: thin;
+    }
+
+    .homology-symbol-row,
+    .homology-rule-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+      color: var(--text);
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    .homology-rule-row.is-map-relation {
+      grid-template-columns: minmax(96px, max-content) minmax(0, 1fr) auto;
+    }
+
+    .homology-rule-separator {
+      height: 0;
+      border-top: 1px solid var(--border);
+      margin: 3px 0;
+    }
+
+    .homology-map-assign-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      width: 18px;
+    }
+
+    .homology-map-assign-toggle input {
+      flex: 0 0 auto;
+      margin: 0;
+    }
+
+    .homology-symbol-row span,
+    .homology-symbol-name,
+    .homology-rule-row span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .homology-symbol-name {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      cursor: text;
+    }
+
+    .homology-symbol-name:hover,
+    .homology-symbol-name:focus {
+      color: var(--accent);
+      outline: none;
+    }
+
+    .sheaf-chern-class-name,
+    .homology-promotion-name {
+      cursor: pointer;
+    }
+
+    .homology-symbol-edit {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 7px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .homology-promotion-prompt {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 7px 10px;
+      align-items: center;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--surface);
+      box-shadow: 0 4px 12px rgba(40, 34, 20, 0.14);
+      color: var(--text);
+      font-size: 0.8rem;
+      line-height: 1.35;
+    }
+
+    .homology-promotion-prompt > span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .homology-promotion-skip {
+      grid-column: 1 / -1;
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.76rem;
+    }
+
+    .homology-promotion-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 7px;
+      grid-column: 1 / -1;
+    }
+
+    .homology-map-rule-input {
+      font-size: 0.74rem;
+    }
+
+    .homology-map-tools {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+      padding-top: 9px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .homology-tool-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .homology-tool-actions {
+      display: inline-flex;
+      justify-content: flex-end;
+      gap: 6px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .homology-map-mode-row {
+      justify-content: space-between;
+      margin: 0;
+      padding: 0;
+    }
+
+    .homology-map-mode-select {
+      max-width: 190px;
+      font-size: 0.74rem;
+    }
+
+    .homology-expression-panel {
+      min-width: 0;
+      color: var(--text);
+      font-size: 0.78rem;
+    }
+
+    .homology-expression-panel summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      list-style-position: outside;
+      padding: 2px 0;
+    }
+
+    .homology-expression-chart {
+      max-height: 240px;
+      overflow: auto;
+      margin-top: 8px;
+      scrollbar-gutter: stable;
+      scrollbar-color: color-mix(in srgb, var(--accent) 68%, var(--surface)) var(--surface);
+      scrollbar-width: thin;
+    }
+
+    .homology-expression-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 7px;
+    }
+
+    .homology-symbol-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin: 6px 0 8px;
+    }
+
+    .homology-expression-table {
+      width: max-content;
+      min-width: 100%;
+      border-collapse: collapse;
+      font-size: 0.76rem;
+      line-height: 1.45;
+    }
+
+    .homology-expression-table th,
+    .homology-expression-table td {
+      border-bottom: 1px dotted var(--border);
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+      white-space: nowrap;
+    }
+
+    .homology-expression-table th:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      color: var(--muted);
+      background: var(--surface);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .homology-expression-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 8px;
+      min-width: 0;
+      white-space: normal;
+    }
+
+    .homology-expression-list span {
+      white-space: nowrap;
+    }
+
+    .homology-expression-token {
+      border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+      color: var(--text);
+      padding: 2px 6px;
+      font: inherit;
+      line-height: 1.35;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .homology-expression-token:hover,
+    .homology-expression-token:focus-visible {
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+      outline: none;
+    }
+
+    .homology-assignment-form {
+      display: flex;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .homology-assignment-form[hidden] {
+      display: none !important;
+    }
+
+    .homology-assignment-lhs {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      overflow-wrap: anywhere;
+    }
+
+    .homology-assignment-form > .homology-map-rule-input,
+    .homology-assignment-coefficients {
+      flex: 1 1 260px;
+      min-width: 0;
+    }
+
+    .homology-assignment-coefficients[hidden] {
+      display: none !important;
+    }
+
+    .homology-assignment-actions {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      justify-content: flex-end;
+      flex: 0 0 auto;
+      margin-left: auto;
+    }
+
+    .homology-update-button,
+    .homology-transpose-button {
+      padding: 4px 9px;
+      font-size: 0.7rem;
+      align-self: start;
+      white-space: normal;
+    }
+
+    .homology-coefficient-editor {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 5px 6px;
+      min-width: 0;
+    }
+
+    .homology-coefficient-term {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+      white-space: nowrap;
+    }
+
+    .homology-coefficient-input {
+      width: 58px;
+      min-width: 48px;
+      padding: 4px 6px;
+      text-align: center;
+      font-size: 0.74rem;
+    }
+
+    .homology-coefficient-plus,
+    .homology-coefficient-empty {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+    }
+
+    .sheaf-divisor-coefficients .homology-coefficient-term span {
+      font-size: 0.72rem;
+      line-height: 1.35;
+    }
+
+    .homology-custom-class-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .homology-symbol-edit-details {
+      display: grid;
+      grid-template-columns: minmax(0, 76px);
+      gap: 7px;
+      align-items: center;
+      justify-items: start;
+      min-width: 0;
+      padding-left: 9px;
+      border-left: 1px dotted var(--border);
+    }
+
+    .homology-symbol-edit-details.has-product-degree-mode {
+      grid-template-columns: 82px auto;
+    }
+
+    .homology-product-bidegree {
+      display: inline-grid;
+      grid-template-columns: repeat(2, minmax(0, 52px));
+      gap: 5px;
+      align-items: center;
+    }
+
+    .homology-product-bidegree[hidden] {
+      display: none;
+    }
+
+    .homology-product-bidegree .sheaf-input {
+      min-width: 0;
+      text-align: center;
+    }
+
+    .homology-degree-mode {
+      width: 82px;
+      min-width: 0;
+    }
+
+    .homology-total-degree-input {
+      width: 76px;
+    }
+
+    .homology-symbol-kind {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      white-space: nowrap;
+    }
+
+    .homology-standard-delete {
+      padding: 2px 6px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--panel);
+      cursor: pointer;
+    }
+
+    .homology-standard-delete:hover,
+    .homology-standard-delete:focus {
+      border-color: var(--danger);
+      color: var(--danger);
+      outline: none;
+    }
+
+    .homology-rule-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      margin: 0;
+    }
+
+    .homology-rule-toggle input {
+      flex: 0 0 auto;
+    }
+
+    .homology-rule-delete {
+      padding: 3px 8px;
+      font-size: 0.7rem;
+    }
+
+    .homology-add-class {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 82px auto auto;
+      gap: 7px;
+      align-items: center;
+      margin-top: 10px;
+      padding-top: 9px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .homology-add-rule {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 7px;
+      align-items: center;
+      margin-top: 10px;
+      padding-top: 9px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .homology-add-rule .sheaf-input,
+    .homology-add-class .sheaf-input,
+    .homology-add-class .sheaf-select,
+    .homology-add-rule .sheaf-select {
+      font-size: 0.74rem;
+    }
+
+    .homology-message {
+      margin-top: 8px;
+    }
+
+    .hodge-grid {
+      display: block;
+      max-height: min(520px, 62vh);
+      overflow: auto;
+      padding: 4px 8px 10px;
+      cursor: pointer;
+      scrollbar-gutter: stable;
+      scrollbar-color: color-mix(in srgb, var(--accent) 68%, var(--surface)) var(--surface);
+      scrollbar-width: thin;
+    }
+
+    .hodge-expanded-toggle {
+      margin: 0;
+      padding: 0;
+    }
+
+    .hodge-grid:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+
+    .hodge-frame {
+      width: max-content;
+      margin-inline: auto;
+    }
+
+    .hodge-board {
+      --hodge-cell: 20px;
+      --hodge-row: var(--hodge-cell);
+      --hodge-total-cols: var(--hodge-cols);
+      display: grid;
+      grid-template-columns: repeat(var(--hodge-cols), var(--hodge-cell));
+      grid-template-rows: repeat(var(--hodge-rows), var(--hodge-row));
+      align-items: center;
+      justify-items: center;
+      min-width: max-content;
+    }
+
+    .hodge-board.is-expanded {
+      grid-template-columns: repeat(var(--hodge-total-cols), var(--hodge-cell)) 18px max-content;
+    }
+
+    #hodge-wide-host {
+      padding: 0 16px 16px;
+    }
+
+    #hodge-wide-host[hidden] {
+      display: none !important;
+    }
+
+    #hodge-card.wide {
+      margin-top: 16px;
+    }
+
+    #hodge-card.wide .hodge-grid {
+      max-height: min(70vh, 720px);
+      padding-right: 8px;
+    }
+
+    .hodge-card-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+      padding-bottom: 7px;
+      border-bottom: 1px dotted var(--border);
+    }
+
+    .hodge-cell-size-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      white-space: nowrap;
+    }
+
+    .hodge-cell-size-control input[type=range] {
+      width: 84px;
+      accent-color: var(--accent);
+    }
+
+    .hodge-cell-size-control output {
+      min-width: 42px;
+      color: var(--text);
+      text-align: right;
+    }
+
+    .hodge-wide-toggle {
+      display: none;
+      padding: 4px 10px;
+      font-size: 0.76rem;
+    }
+
+    .hodge-export-button {
+      margin-left: auto;
+    }
+
+    @media (min-width: 960px) {
+      .hodge-wide-toggle {
+        display: inline-flex;
+      }
+    }
+
+    .hodge-cell {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      min-height: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text);
+      font-size: 0.9rem;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .hodge-cell mjx-container {
+      max-width: none;
+      overflow: visible;
+    }
+
+    .hodge-betti {
+      position: relative;
+      z-index: 1;
+      justify-self: start;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    .hodge-betti.is-number,
+    .hodge-euler.is-number {
+      justify-self: stretch;
+      text-align: right;
+    }
+
+    .hodge-euler {
+      position: relative;
+      z-index: 1;
+      justify-self: start;
+      color: var(--accent2);
+      font-size: 0.9rem;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    .hodge-chi {
+      position: relative;
+      z-index: 1;
+      justify-self: center;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    .hodge-betti-line {
+      align-self: center;
+      justify-self: stretch;
+      border-top: 1px dotted color-mix(in srgb, var(--muted) 72%, transparent);
+      height: 0;
+      min-width: 0;
+      margin-inline: calc(var(--hodge-cell) * 0.24);
+      pointer-events: none;
+      position: relative;
+      z-index: 0;
+    }
+
+    .hodge-diagonal-guides {
+      align-self: stretch;
+      justify-self: stretch;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      position: relative;
+      z-index: 0;
+      overflow: visible;
+    }
+
+    .hodge-diagonal-guides line {
+      stroke: color-mix(in srgb, var(--muted) 72%, transparent);
+      stroke-width: 0.055;
+      stroke-linecap: round;
+      stroke-dasharray: 0.08 0.18;
+    }
+
+    .hodge-query {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 6px 0 10px;
+      padding: 8px 0;
+      border-bottom: 1px dotted var(--border);
+    }
+
+    .hodge-query-index {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+    }
+
+    .hodge-query-index input {
+      width: 52px;
+      font-size: 0.74rem;
+    }
+
+    .hodge-query-output {
+      min-height: 22px;
+      color: var(--text);
+      font-size: 0.86rem;
+    }
+
+    .hodge-chern-numbers {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px 14px;
+      align-items: center;
+      margin: 4px 8px 8px;
+      padding-top: 8px;
+      border-top: 1px dotted var(--border);
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .hodge-chern-number {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .hodge-chern-number strong {
+      color: var(--text);
+      font-weight: 650;
+    }
+
+    .hodge-chern-number mjx-container {
+      max-width: none;
+      overflow: visible;
+    }
+
+    .hodge-polyvector {
+      display: block;
+      margin: 4px 8px 8px;
+      padding-top: 8px;
+      border-top: 1px dotted var(--border);
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .hodge-polyvector-title {
+      margin-bottom: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .hodge-polyvector-frame {
+      max-width: 100%;
+      overflow: auto;
+      padding-bottom: 4px;
+      scrollbar-gutter: stable;
+      scrollbar-color: color-mix(in srgb, var(--accent) 68%, var(--surface)) var(--surface);
+      scrollbar-width: thin;
+    }
+
+    .hodge-polyvector-board {
+      --poly-cell: 38px;
+      --poly-scale: 1;
+      --poly-row: calc(24px * var(--poly-scale));
+      --poly-row-gap: calc(3px * var(--poly-scale));
+      --poly-col-gap: calc(7px * var(--poly-scale));
+      display: grid;
+      gap: var(--poly-row-gap) var(--poly-col-gap);
+      grid-template-columns: repeat(var(--poly-cols), var(--poly-cell));
+      grid-auto-rows: var(--poly-row);
+      align-items: center;
+      justify-content: center;
+      min-width: max-content;
+      width: max-content;
+      margin-inline: auto;
+    }
+
+    .hodge-polyvector-board.is-expanded {
+      grid-template-columns: repeat(var(--poly-cols), var(--poly-cell)) calc(18px * var(--poly-scale)) max-content;
+    }
+
+    .hodge-polyvector-cell {
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text);
+      font-size: 0.86rem;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .hodge-polyvector-cell mjx-container {
+      max-width: none;
+      overflow: visible;
+    }
+
+    .hodge-polyvector-hh {
+      justify-self: start;
+      color: var(--accent2);
+      font-size: 0.86rem;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    .hodge-polyvector-chi {
+      justify-self: center;
+      align-self: end;
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    .hodge-polyvector-line {
+      align-self: center;
+      justify-self: stretch;
+      border-top: 1px dotted color-mix(in srgb, var(--muted) 72%, transparent);
+      height: 0;
+      min-width: 0;
+      margin-inline: calc(var(--poly-cell) * 0.24);
+      pointer-events: none;
+    }
+
+    .hodge-polyvector-message {
+      margin-top: 6px;
+      line-height: 1.45;
+    }
+
+    .betti-table-chart {
+      max-width: 100%;
+      overflow: auto;
+      scrollbar-gutter: stable;
+      scrollbar-color: color-mix(in srgb, var(--accent) 68%, var(--surface)) var(--surface);
+      scrollbar-width: thin;
+    }
+
+    .betti-table {
+      width: max-content;
+      min-width: 100%;
+      border-collapse: collapse;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+    }
+
+    .betti-table-note {
+      margin-bottom: 6px;
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 0.76rem;
+    }
+
+    .betti-table th,
+    .betti-table td {
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--border);
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .betti-table th:first-child,
+    .betti-table td:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      color: var(--muted);
+      background: var(--surface);
+      text-align: right;
+    }
+
+    .betti-table td.is-zero {
+      color: color-mix(in srgb, var(--muted) 55%, transparent);
+    }
+
+    .betti-table td:not(.is-zero) {
+      color: var(--accent2);
+      font-weight: 650;
+    }
+
+    .betti-table.is-symbolic td {
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .betti-table-message {
+      margin-top: 6px;
+      line-height: 1.45;
+      font-size: 0.76rem;
+    }
+
+    .sheaf-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 21px;
+      padding: 1px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text);
+      background: rgba(255,255,255,0.55);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 860px) {
+      .sheaf-layout {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+      }
+
+      #class-step-wide-host {
+        grid-column: 1 / -1;
+      }
+
+      .sheaf-field-row,
+      .sheaf-inline-row {
+        grid-template-columns: 96px minmax(0, 1fr);
+      }
+
+      .homology-add-rule,
+      .homology-add-class {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .homology-assignment-form > .homology-map-rule-input,
+      .homology-assignment-coefficients,
+      .homology-assignment-actions {
+        flex-basis: 100%;
+      }
+
+      .homology-assignment-actions {
+        justify-content: flex-end;
+      }
+
+      .homology-rule-row.is-map-relation {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .homology-add-rule .homology-add-button,
+      .homology-add-class .homology-add-button {
+        grid-column: 1 / -1;
+      }
+
+      .homology-tool-row {
+        align-items: stretch;
+      }
+
+      .homology-tool-actions {
+        width: 100%;
+      }
+
+      .homology-update-button,
+      .homology-transpose-button {
+        justify-self: end;
+      }
+
+      #sheaf-canvas {
+        height: 330px !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Sheaf Complex Calculator</h1>
+  <span><a href="index.html">Pure Math Toolkit</a> &middot; <a href="category_calculator.html">Category Calculator</a></span>
+</header>
+
+<main class="layout sheaf-layout">
+  <div class="sheaf-main-column">
+    <section class="canvas-panel">
+      <header class="panel-title">
+        <span class="panel-title-text">Variety and Sheaf</span>
+        <div class="canvas-toolbar" aria-label="Sheaf calculator controls">
+          <span class="sheaf-badge" id="object-badge">\(X,\mathcal{E}\)</span>
+          <label class="opt-row sheaf-cache-toggle" id="main-result-cache-label" for="main-result-cache" title="Cache calculations is off.">
+            <input type="checkbox" id="main-result-cache">
+            cache calculations
+          </label>
+        </div>
+      </header>
+
+      <div class="sheaf-workspace">
+        <div class="sheaf-stage">
+          <canvas id="sheaf-canvas" width="880" height="280" aria-label="Sheaf calculator overview"></canvas>
+          <div id="sheaf-canvas-labels" class="sheaf-canvas-labels" aria-label="Added varieties and sheaves"></div>
+          <div class="canvas-corner-actions">
+            <button class="btn btn-ghost canvas-clear-button" id="clear-canvas" type="button">clear</button>
+            <button class="btn btn-ghost canvas-show-button" id="show-canvas" type="button">show</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sheaf-underbar">
+        <span id="sheaf-status">ready</span>
+          <span id="ring-summary">\(A^*(X)_{\le 3}\)</span>
+      </div>
+      <section id="hodge-wide-host" hidden></section>
+    </section>
+
+    <section id="class-step-wide-host">
+      <section class="card collapsed sheaf-step-card wide" id="class-step-card">
+        <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Step-by-Step Formula</span><em class="toggle-icon">&#9662;</em></div>
+        <div class="card-body">
+          <div class="sheaf-step-library-controls">
+            <button class="btn btn-ghost sheaf-chart-export" id="class-step-add-formula" type="button">add formula</button>
+            <button class="btn btn-ghost sheaf-chart-export" id="class-step-import-preset" type="button" aria-expanded="false">import</button>
+            <button class="btn btn-ghost sheaf-chart-export" id="class-step-export-saved" type="button">export</button>
+            <button class="btn btn-ghost sheaf-chart-export" id="class-step-delete-saved" type="button">delete</button>
+          </div>
+          <div class="sheaf-import-panel" id="class-step-import-panel" hidden>
+            <textarea id="class-step-import-input" class="sheaf-import-input" spellcheck="false" autocomplete="off" placeholder="Paste Preset JSON"></textarea>
+            <div class="sheaf-import-actions">
+              <span class="sheaf-import-message" id="class-step-import-message"></span>
+              <button class="btn btn-ghost sheaf-object-button" id="class-step-import-cancel" type="button">cancel</button>
+              <button class="btn btn-ghost sheaf-object-button" id="class-step-import-apply" type="button">load</button>
+            </div>
+          </div>
+          <div class="sheaf-step-saved-rules" id="class-step-saved-rules"></div>
+          <div class="sheaf-formula-builder" id="class-formula-builder" hidden>
+            <div class="sheaf-step-builder-row">
+              <label class="input-label" for="class-formula-variety">variety</label>
+              <select id="class-formula-variety" class="sheaf-select"></select>
+            </div>
+            <div class="sheaf-step-token-row" id="class-formula-homology-row">
+              <span class="input-label">homology</span>
+              <div class="sheaf-step-token-list" id="class-formula-homology-buttons"></div>
+            </div>
+            <div class="sheaf-step-token-row" id="class-formula-sheaf-row">
+              <span class="input-label">sheaves</span>
+              <div class="sheaf-step-class-picker" id="class-formula-sheaf-picker">
+                <button class="sheaf-step-token-button" id="class-formula-add-sheaf-class" type="button">add class</button>
+                <select id="class-formula-class-family" class="sheaf-select" aria-label="Characteristic class family"></select>
+                <select id="class-formula-class-degree" class="sheaf-select" aria-label="Characteristic class degree"></select>
+                <select id="class-formula-class-sheaf" class="sheaf-select" aria-label="Characteristic class sheaf"></select>
+              </div>
+            </div>
+            <div class="sheaf-step-token-row" id="class-formula-map-row">
+              <span class="input-label">functors</span>
+              <div class="sheaf-step-token-list" id="class-formula-map-buttons"></div>
+            </div>
+            <div class="sheaf-step-builder-controls">
+              <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-formula-op="plus">+</button>
+              <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-formula-op="minus">-</button>
+              <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-formula-op="times">&times;</button>
+              <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-formula-op="open">(</button>
+              <button class="btn btn-ghost sheaf-chart-export" type="button" data-class-formula-op="close">)</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-formula-undo" type="button">undo</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-formula-clear" type="button">clear</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-formula-slot-done" type="button" hidden>done</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-formula-check" type="button">check formula</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-formula-compute" type="button" disabled>compute step-by-step</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-formula-close" type="button">close editor</button>
+            </div>
+            <div class="sheaf-step-formula sheaf-step-formula-preview" id="class-formula-preview"></div>
+            <div class="hint" id="class-formula-message"></div>
+          </div>
+          <div class="sheaf-step-panel" id="class-step-panel" hidden>
+            <div class="sheaf-step-row" id="class-step-target-row" hidden>
+              <span class="input-label">target</span>
+              <select id="class-step-family" class="sheaf-select">
+                <option value="chern">c(F)</option>
+                <option value="character">ch(F)</option>
+                <option value="todd">td(F)</option>
+                <option value="segre">s(F)</option>
+                <option value="sqrtTodd">sqrt td(F)</option>
+                <option value="mukai">v(F)</option>
+                <option value="kappa">&kappa;(F)</option>
+              </select>
+              <label class="opt-row">
+                <input type="checkbox" id="class-step-term-only">
+                term
+              </label>
+              <input id="class-step-term-index" class="sheaf-input" type="number" min="0" max="15" value="1" aria-label="step term index" disabled>
+              <button class="btn btn-ghost sheaf-chart-export sheaf-step-layout-toggle" id="class-step-layout" type="button" aria-pressed="true">wide</button>
+            </div>
+            <div class="sheaf-step-work">
+              <div>
+                <div class="sheaf-step-history-controls" id="class-step-history-controls" hidden></div>
+                <div class="sheaf-step-formula" id="class-step-formula"></div>
+              </div>
+              <div class="sheaf-step-rules" id="class-step-rules"></div>
+            </div>
+            <div class="sheaf-step-options">
+              <label class="opt-row">
+                <input type="checkbox" id="class-step-use-cache" checked>
+                include cached rules
+              </label>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-check-switch" type="button">check rules for switching</button>
+              <label class="opt-row">
+                <input type="checkbox" id="class-step-once-per-rule">
+                each rule only apply once
+              </label>
+              <label class="opt-row">
+                <input type="checkbox" id="class-step-one-pass">
+                apply rule 1...n once and stop
+              </label>
+            </div>
+            <div class="sheaf-step-controls">
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-add-selected-rules" type="button">add selected rules</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-apply" type="button">apply rules</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-save-rule" type="button">close editor</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-undo" type="button">cancel last step</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-restart" type="button">restart</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-export" type="button">export</button>
+            </div>
+            <div class="hint" id="class-step-message"></div>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section id="sheaf-complex-wide-host">
+      <section class="card collapsed sheaf-complex-card wide" id="sheaf-complex-card">
+        <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Complexes and Filtrations</span><em class="toggle-icon">&#9662;</em></div>
+        <div class="card-body">
+          <div class="sheaf-complex-toolbar">
+            <button class="btn btn-ghost sheaf-chart-export" id="complex-chart-add" type="button" aria-expanded="false">add</button>
+            <button class="btn btn-ghost sheaf-chart-export" id="complex-chart-export" type="button">export</button>
+            <button class="btn btn-ghost sheaf-chart-export" id="complex-chart-delete" type="button">delete</button>
+          </div>
+          <div class="sheaf-complex-add-panel" id="complex-chart-add-panel" hidden>
+            <div class="sheaf-complex-editor-controls">
+              <label class="input-label" for="complex-chart-add-mode">add by</label>
+              <select id="complex-chart-add-mode" class="sheaf-select">
+                <option value="manual">manual input</option>
+                <option value="preset">presets</option>
+                <option value="import">import</option>
+              </select>
+              <button class="btn btn-ghost sheaf-object-button" id="complex-chart-add-close" type="button">close</button>
+            </div>
+            <div class="sheaf-complex-add-mode-panel" id="complex-chart-manual-panel">
+              <div class="sheaf-complex-editor-controls">
+                <label class="input-label" for="complex-chart-manual-kind">type</label>
+                <select id="complex-chart-manual-kind" class="sheaf-select">
+                  <option value="chain-complex">chain complex</option>
+                  <option value="filtration">filtration</option>
+                </select>
+                <button class="btn btn-ghost sheaf-object-button" id="complex-chart-manual-create" type="button">create</button>
+              </div>
+            </div>
+            <div class="sheaf-complex-add-mode-panel" id="complex-chart-preset-panel" hidden>
+              <div class="sheaf-complex-editor-controls">
+                <label class="input-label" for="complex-chart-preset">preset</label>
+                <select id="complex-chart-preset" class="sheaf-select">
+                  <option value="ses-cyclic">SES: 0 -> Z -> Z -> Z/nZ -> 0</option>
+                  <option value="ses-sheaves">SES: 0 -> F -> G -> H -> 0</option>
+                  <option value="ses-exponential">SES: exponential sequence</option>
+                </select>
+                <button class="btn btn-ghost sheaf-object-button" id="complex-chart-preset-load" type="button">add preset</button>
+              </div>
+            </div>
+            <div class="sheaf-complex-add-mode-panel sheaf-complex-import-panel" id="complex-chart-import-panel" hidden>
+              <textarea id="complex-chart-import-input" class="sheaf-import-input sheaf-complex-import-input" spellcheck="false" autocomplete="off" placeholder="Paste Complex Chart JSON"></textarea>
+              <div class="sheaf-complex-import-actions">
+                <span class="sheaf-complex-import-message" id="complex-chart-import-message"></span>
+                <button class="btn btn-ghost sheaf-object-button" id="complex-chart-import-cancel" type="button">cancel</button>
+                <button class="btn btn-ghost sheaf-object-button" id="complex-chart-import-apply" type="button">load</button>
+              </div>
+            </div>
+          </div>
+          <div class="sheaf-step-saved-rules" id="complex-chart-saved"></div>
+          <div class="sheaf-complex-editor" id="complex-chart-editor" hidden>
+            <div class="sheaf-complex-editor-controls">
+              <label class="input-label" for="complex-chart-kind">type</label>
+              <select id="complex-chart-kind" class="sheaf-select">
+                <option value="chain-complex">chain complex</option>
+                <option value="filtration">filtration</option>
+              </select>
+              <label class="input-label" for="complex-chart-length">length</label>
+              <input id="complex-chart-length" class="sheaf-input" type="number" min="1" max="20" value="3">
+            </div>
+            <div class="sheaf-complex-editor-grid" id="complex-chart-fields"></div>
+            <div class="sheaf-complex-display" id="complex-chart-preview"></div>
+            <div class="sheaf-complex-editor-controls">
+              <button class="btn btn-ghost sheaf-chart-export" id="complex-chart-save" type="button">save</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="complex-chart-cancel" type="button">cancel</button>
+            </div>
+            <div class="hint" id="complex-chart-message"></div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <aside class="side" id="cards">
+    <section class="card" id="input-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="sheaf-input-toolbar">
+          <div class="sheaf-input-add">
+            <select id="input-mode" class="sheaf-select sheaf-mode-select" aria-label="Input mode">
+              <option value="create" selected>Create</option>
+              <option value="modify" disabled>Modify</option>
+            </select>
+            <select id="add-object-kind" class="sheaf-select" aria-label="Object type to add">
+              <option value="variety">Variety</option>
+              <option value="sheaf" disabled>Sheaf</option>
+              <option value="map" disabled>Map</option>
+              <option value="combined" disabled>Combined</option>
+              <option value="recommendations" disabled>Recommended constructions</option>
+              <option value="number">Rational number</option>
+            </select>
+            <button class="btn btn-ghost sheaf-object-button" id="add-object" type="button">add</button>
+            <button class="btn btn-ghost sheaf-object-button" id="delete-object" type="button">delete</button>
+            <button class="btn btn-ghost sheaf-object-button" id="input-pick-mode" type="button" aria-pressed="false" hidden>cancel</button>
+            <button class="btn btn-ghost sheaf-object-button" id="import-preset-toggle" type="button" aria-expanded="false">import</button>
+          </div>
+          <div class="sheaf-input-options" id="input-options">
+            <label class="opt-row" for="repeat-names">
+              <input type="checkbox" id="repeat-names" checked>
+              repetition
+            </label>
+            <select id="repeat-style" class="sheaf-select" aria-label="Repetition style">
+              <option value="letters" selected>X,Y,Z,W...</option>
+              <option value="prime">X,X',X''...</option>
+              <option value="paren">X,X^{(1)},X^{(2)}...</option>
+              <option value="subscript">X,X_{1},X_{2}...</option>
+            </select>
+          </div>
+          <div class="sheaf-import-panel" id="import-preset-panel" hidden>
+            <textarea id="import-preset-input" class="sheaf-import-input" spellcheck="false" autocomplete="off" placeholder="Paste Preset JSON"></textarea>
+            <div class="sheaf-import-actions">
+              <span class="sheaf-import-message" id="import-preset-message"></span>
+              <button class="btn btn-ghost sheaf-object-button" id="import-preset-cancel" type="button">cancel</button>
+              <button class="btn btn-ghost sheaf-object-button" id="import-preset-apply" type="button">load</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sheaf-modify-warning" id="modify-warning" hidden>select a label to modify</div>
+
+        <div class="sheaf-input-editor global-invariant-editor" id="global-invariant-editor" hidden>
+          <div class="sheaf-editor-title" id="global-invariant-editor-title">New rational number</div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="global-invariant-name">name</label>
+            <input id="global-invariant-name" class="sheaf-input" type="text" value="a" maxlength="24" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row">
+            <span class="input-label">value</span>
+            <div class="global-invariant-mode">
+              <label class="opt-row">
+                <input type="radio" name="global-invariant-mode" id="global-invariant-mode-symbolic" value="symbolic" checked>
+                symbolic
+              </label>
+              <label class="opt-row">
+                <input type="radio" name="global-invariant-mode" id="global-invariant-mode-integer" value="integer">
+                integer
+              </label>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="global-invariant-value-row" hidden>
+            <label class="input-label" for="global-invariant-value">integer</label>
+            <input id="global-invariant-value" class="sheaf-input" type="number" step="1" value="0">
+          </div>
+          <div class="sheaf-field-row">
+            <span class="input-label">replace</span>
+            <label class="opt-row">
+              <input type="checkbox" id="global-invariant-replace">
+              use integer in formulas
+            </label>
+          </div>
+          <div class="sheaf-field-row">
+            <span class="input-label">positive</span>
+            <label class="opt-row">
+              <input type="checkbox" id="global-invariant-positive" checked>
+              assume positive
+            </label>
+          </div>
+          <div class="global-invariant-usage" id="global-invariant-usage"></div>
+        </div>
+
+        <div class="sheaf-input-editor" id="combined-editor" hidden>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="combined-type">Type</label>
+            <select id="combined-type" class="sheaf-select">
+              <option value="product" selected>Product + projections</option>
+              <option value="abel-jacobi">Abel-Jacobi + Jacobian</option>
+              <option value="short-exact-sequence">Short exact sequence / triangle</option>
+              <option value="grassmannian-tautological-ses">Tautological SES</option>
+              <option value="blow-up-point">Blow-up of a point</option>
+              <option value="ramified-cover">Ramified cover</option>
+              <option value="grassmannian-map">Map to Grassmannian</option>
+              <option value="picard-canonical">Canonical line bundle of Pic^d(C)</option>
+              <option value="identify">Identify</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row" id="identify-kind-row" hidden>
+            <label class="input-label" for="identify-kind">objects</label>
+            <select id="identify-kind" class="sheaf-select">
+              <option value="variety" selected>Varieties</option>
+              <option value="sheaf">Sheaves</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row" id="identify-parents-row" hidden>
+            <span class="input-label">parents</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="identify-left-button" type="button" data-identify-pick="left">first</button>
+              <span class="sheaf-map-formula-mark">=</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="identify-right-button" type="button" data-identify-pick="right">second</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="identify-main-row" hidden>
+            <span class="input-label">main</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="identify-main-left" type="button" data-identify-main="left">first</button>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="identify-main-right" type="button" data-identify-main="right">second</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="identify-rule-row" hidden>
+            <span class="input-label">mode</span>
+            <label class="opt-row">
+              <input id="identify-rule-only" type="checkbox">
+              rule only (keep sheaves)
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="identify-name-row" hidden>
+            <label class="input-label" for="identify-name">name</label>
+            <div class="identify-name-tools">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="identify-name-left" type="button" data-identify-name="left">first</button>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="identify-name-right" type="button" data-identify-name="right">second</button>
+              <input id="identify-name" class="sheaf-input" type="text" value="" maxlength="48" spellcheck="false" autocomplete="off">
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="identify-auto-row" hidden>
+            <span class="input-label">classes</span>
+            <label class="opt-row">
+              <input id="identify-auto-classes" type="checkbox" checked>
+              automatically identify classes with same display style
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="identify-class-row" hidden>
+            <span class="input-label">review</span>
+            <div class="identify-class-review" id="identify-class-review"></div>
+          </div>
+          <div class="sheaf-note" id="identify-pick-note" hidden>pick two compatible objects</div>
+          <div class="sheaf-field-row" id="ses-parents-row" hidden>
+            <span class="input-label">parents</span>
+            <div class="sheaf-map-formula-picker combined-sequence-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="ses-left-button" type="button" data-ses-pick="sheaf-a">sheaf</button>
+              <span class="combined-sequence-arrow">
+                <button class="btn btn-ghost sheaf-map-slot-button combined-sequence-map-button" id="ses-first-map-button" type="button" data-ses-pick="map-ab">map</button>
+                <span class="combined-sequence-arrow-line" aria-hidden="true">\( \rightarrow \)</span>
+              </span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="ses-middle-button" type="button" data-ses-pick="sheaf-b">sheaf</button>
+              <span class="combined-sequence-spacer" aria-hidden="true"></span>
+              <span class="combined-sequence-arrow">
+                <button class="btn btn-ghost sheaf-map-slot-button combined-sequence-map-button" id="ses-second-map-button" type="button" data-ses-pick="map-bc">map</button>
+                <span class="combined-sequence-arrow-line" aria-hidden="true">\( \rightarrow \)</span>
+              </span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="ses-right-button" type="button" data-ses-pick="sheaf-c">sheaf</button>
+            </div>
+          </div>
+          <div class="sheaf-note" id="ses-pick-note" hidden>pick two sheaves on the same base</div>
+          <div class="sheaf-field-row" id="ses-computed-row" hidden>
+            <label class="input-label" for="ses-computed-index">compute</label>
+            <select id="ses-computed-index" class="sheaf-select">
+              <option value="0">A from B and C</option>
+              <option value="1">B from A and C</option>
+              <option value="2">C from A and B</option>
+            </select>
+          </div>
+          <div class="sheaf-note" id="ses-computed-warning" hidden>This SES has no assigned computed sheaf; legacy step rules are still available.</div>
+          <div class="sheaf-field-row map-curve-row" id="ses-tail-row" hidden>
+            <label class="input-label" for="ses-tail-point-count">+1 tail</label>
+            <div class="sequence-tail-tools">
+              <label class="map-curve-control" for="ses-tail-point-count">
+                <span>points</span>
+                <input id="ses-tail-point-count" type="range" min="0" max="4" step="1" value="0">
+                <output id="ses-tail-point-count-value" for="ses-tail-point-count">0</output>
+              </label>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="blowup-parents-row" hidden>
+            <span class="input-label">parents</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="blowup-base-button" type="button" data-blowup-pick="base">variety</button>
+              <span class="sheaf-map-formula-mark">&larr;</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="blowup-point-button" type="button" data-blowup-pick="point">point</button>
+            </div>
+          </div>
+          <div class="sheaf-note" id="blowup-pick-note" hidden>pick a variety and a point</div>
+          <div class="sheaf-field-row" id="ramified-cover-base-row" hidden>
+            <span class="input-label">base</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="ramified-cover-base-button" type="button">variety</button>
+              <span class="sheaf-map-formula-mark">&larr;</span>
+              <span class="sheaf-map-formula-mark" id="ramified-cover-preview">Y</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="ramified-cover-degree-row" hidden>
+            <label class="input-label" for="ramified-cover-degree">degree</label>
+            <input id="ramified-cover-degree" class="sheaf-input" type="number" min="1" max="99" step="1" value="2">
+          </div>
+          <div class="sheaf-field-row" id="ramified-cover-mode-row" hidden>
+            <label class="input-label" for="ramified-cover-mode">mode</label>
+            <select id="ramified-cover-mode" class="sheaf-select">
+              <option value="cyclic" selected>Cyclic</option>
+              <option value="general">General finite</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row" id="ramified-cover-branch-row" hidden>
+            <label class="input-label" for="ramified-cover-branch-symbol">branch</label>
+            <input id="ramified-cover-branch-symbol" class="sheaf-input" type="text" value="B" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row" id="ramified-cover-ramification-row" hidden>
+            <label class="input-label" for="ramified-cover-ramification-symbol">ramification</label>
+            <input id="ramified-cover-ramification-symbol" class="sheaf-input" type="text" value="R" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row" id="ramified-cover-smooth-row" hidden>
+            <span class="input-label">smooth</span>
+            <label class="opt-row sheaf-warning-check">
+              <input id="ramified-cover-smooth-confirm" type="checkbox">
+              smooth base and smooth branch divisor
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="ramified-cover-root-row" hidden>
+            <label class="input-label" for="ramified-cover-branch-degree">branch degree</label>
+            <input id="ramified-cover-branch-degree" class="sheaf-input" type="number" min="1" max="99" step="1" value="4">
+          </div>
+          <div class="sheaf-note" id="ramified-cover-pick-note" hidden>pick a base variety</div>
+          <div class="sheaf-field-row" id="tautological-ses-base-row" hidden>
+            <span class="input-label">base</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="tautological-ses-base-button" type="button">variety</button>
+              <span class="sheaf-map-formula-mark">0→S→Oᴺ→Q→0</span>
+            </div>
+          </div>
+          <div class="sheaf-note" id="tautological-ses-pick-note" hidden>pick a projective space or Grassmannian</div>
+          <div class="sheaf-field-row" id="grassmannian-map-parent-row" hidden>
+            <span class="input-label">parent</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="grassmannian-map-bundle-button" type="button" data-grassmannian-map-pick="bundle">bundle</button>
+              <span class="sheaf-map-formula-mark">&rArr;</span>
+              <span class="sheaf-map-formula-mark" id="grassmannian-map-target-preview">Gr(2,4)</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="grassmannian-map-params-row" hidden>
+            <span class="input-label">target</span>
+            <div class="grassmannian-param-picker">
+              <label class="grassmannian-param" for="grassmannian-map-r">
+                <span>r</span>
+                <input type="number" id="grassmannian-map-r" class="sheaf-input" min="1" max="8" value="2">
+              </label>
+              <label class="grassmannian-param" for="grassmannian-map-n">
+                <span>n</span>
+                <input type="number" id="grassmannian-map-n" class="sheaf-input" min="2" max="9" value="4">
+              </label>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="grassmannian-map-generically-generated-row" hidden>
+            <span class="input-label">base locus</span>
+            <label class="opt-row">
+              <input id="grassmannian-map-generically-generated" type="checkbox">
+              not all of X
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="grassmannian-map-base-point-free-row" hidden>
+            <span class="input-label">morphism</span>
+            <label class="opt-row sheaf-warning-check">
+              <input id="grassmannian-map-base-point-free" type="checkbox">
+              base locus is empty
+            </label>
+          </div>
+          <div class="sheaf-note" id="grassmannian-map-pick-note" hidden>pick a locally free sheaf</div>
+          <div class="sheaf-field-row" id="picard-canonical-curve-row" hidden>
+            <span class="input-label">curve</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="picard-canonical-curve-button" type="button">curve</button>
+              <span class="sheaf-map-formula-mark">&rArr;</span>
+              <span class="sheaf-map-formula-mark" id="picard-canonical-preview">Pic^d(C)</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="picard-canonical-degree-row" hidden>
+            <label class="input-label" for="picard-canonical-degree">d</label>
+            <input id="picard-canonical-degree" class="sheaf-input" type="text" value="d" maxlength="16" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-note" id="picard-canonical-pick-note" hidden>pick a curve</div>
+        </div>
+
+        <div class="sheaf-input-editor" id="recommendation-editor" hidden>
+          <div class="sheaf-editor-title">Recommended constructions</div>
+          <div class="sheaf-field-row" id="recommendation-source-row" hidden>
+            <span class="input-label">source</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="recommendation-source-button" type="button">object</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="recommendation-list-row" hidden>
+            <label class="input-label" for="recommendation-list">choice</label>
+            <select id="recommendation-list" class="sheaf-select"></select>
+          </div>
+          <div class="sheaf-field-row" id="recommendation-hypersurface-divisor-row" hidden>
+            <span class="input-label">D=[X]</span>
+            <div class="homology-coefficient-editor" id="recommendation-hypersurface-divisor-coefficients"></div>
+          </div>
+          <div class="sheaf-field-row" id="recommendation-hypersurface-confirm-row" hidden>
+            <span class="input-label">identify</span>
+            <div class="identify-name-tools">
+              <label class="opt-row sheaf-warning-check" id="recommendation-hypersurface-cartier-option">
+                <input id="recommendation-hypersurface-cartier-confirm" type="checkbox">
+                <span id="recommendation-hypersurface-cartier-label">use hypersurface line-bundle identification</span>
+              </label>
+            </div>
+          </div>
+          <div class="sheaf-note" id="recommendation-pick-note" hidden>pick an object</div>
+        </div>
+
+        <div id="variety-editor" class="sheaf-input-editor">
+          <div class="sheaf-editor-title" id="variety-editor-title">New variety</div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="variety-type">Type</label>
+            <select id="variety-type" class="sheaf-select">
+              <option value="abstract" selected>Abstract variety</option>
+              <option value="curve">Curve</option>
+              <option value="symmetric-product-curve">Sym^m(C)</option>
+              <option value="abelian">Abelian variety</option>
+              <option value="ppav-moduli">Moduli of ppav A_g</option>
+              <option value="point">Point</option>
+              <option value="projective">Projective space ℙⁿ</option>
+              <option value="grassmannian">Grassmannian Gr(r,n)</option>
+              <option value="complete-intersection">Complete intersection in ℙⁿ</option>
+              <option value="product">Product of varieties</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row" id="product-factors-row" hidden>
+            <span class="input-label">factors</span>
+            <div class="product-factor-picker">
+              <button class="btn btn-ghost product-factor-button" id="product-factor-a" type="button" data-product-factor-index="0">varietyA</button>
+              <span class="product-factor-times">×</span>
+              <button class="btn btn-ghost product-factor-button" id="product-factor-b" type="button" data-product-factor-index="1">varietyB</button>
+            </div>
+          </div>
+          <div class="sheaf-note" id="product-pick-note" hidden>click two varieties on the canvas</div>
+          <div class="sheaf-field-row" id="ppav-genus-row" hidden>
+            <label class="input-label" for="ppav-genus">genus</label>
+            <input type="number" id="ppav-genus" class="sheaf-input" min="1" max="5" value="2">
+          </div>
+          <div class="sheaf-field-row" id="symmetric-product-params-row" hidden>
+            <span class="input-label">parameters</span>
+            <div class="grassmannian-param-picker">
+              <label class="grassmannian-param" for="symmetric-product-m">
+                <span>m</span>
+                <input type="number" id="symmetric-product-m" class="sheaf-input" min="0" max="15" value="3">
+              </label>
+              <label class="grassmannian-param" for="symmetric-product-genus">
+                <span>g</span>
+                <input id="symmetric-product-genus" class="sheaf-input curve-genus-input" type="text" value="g" maxlength="12" spellcheck="false" autocomplete="off">
+              </label>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="grassmannian-params-row" hidden>
+            <span class="input-label">parameters</span>
+            <div class="grassmannian-param-picker">
+              <label class="grassmannian-param" for="grassmannian-r">
+                <span>r</span>
+                <input type="number" id="grassmannian-r" class="sheaf-input" min="1" max="8" value="2">
+              </label>
+              <label class="grassmannian-param" for="grassmannian-n">
+                <span>n</span>
+                <input type="number" id="grassmannian-n" class="sheaf-input" min="2" max="9" value="4">
+              </label>
+            </div>
+          </div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="variety-dim">dimension</label>
+            <input type="number" id="variety-dim" class="sheaf-input" min="0" max="15" value="3">
+          </div>
+          <div class="sheaf-field-row" id="point-name-preset-row" hidden>
+            <span class="input-label">preset</span>
+            <div class="point-name-preset-picker">
+              <button class="btn btn-ghost point-name-preset-button" type="button" data-point-variety-name="\{*\}">\(\{*\}\)</button>
+              <button class="btn btn-ghost point-name-preset-button" type="button" data-point-variety-name="pt">\(pt\)</button>
+              <button class="btn btn-ghost point-name-preset-button" type="button" data-point-variety-name="p">\(p\)</button>
+              <button class="btn btn-ghost point-name-preset-button" type="button" data-point-variety-name="\{p\}">\(\{p\}\)</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="variety-name">name</label>
+            <input id="variety-name" class="sheaf-input" type="text" value="X" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row" id="curve-genus-row" hidden>
+            <label class="input-label" for="curve-genus">genus</label>
+            <input id="curve-genus" class="sheaf-input curve-genus-input" type="text" value="g" maxlength="12" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row" id="ci-degrees-row" hidden>
+            <label class="input-label" for="ci-degrees">degrees</label>
+            <input id="ci-degrees" class="sheaf-input" type="text" value="" spellcheck="false" autocomplete="off" placeholder="2, 3">
+          </div>
+          <div class="sheaf-field-row" id="ci-equation-count-row" hidden>
+            <label class="input-label" for="ci-equation-count">equations</label>
+            <div class="ci-equation-count-control">
+              <input id="ci-equation-count" type="range" min="0" max="8" step="1" value="0">
+              <output id="ci-equation-count-value" for="ci-equation-count">0</output>
+            </div>
+          </div>
+          <div class="ci-degree-sliders" id="ci-degree-sliders" hidden></div>
+          <div class="sheaf-note" id="ci-note" hidden>\(\mathbb{P}^n\) is represented by the complete intersection with no equations.</div>
+        </div>
+
+        <div id="sheaf-editor" class="sheaf-input-editor" hidden>
+          <div class="sheaf-editor-title" id="sheaf-editor-title">New sheaf</div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="sheaf-type">Type</label>
+            <select id="sheaf-type" class="sheaf-select">
+              <option value="abstract" selected>Abstract sheaf</option>
+              <option value="locally-free">Locally free sheaf</option>
+              <option value="structure">Structure sheaf</option>
+              <option value="tangent">Tangent sheaf Tₓ</option>
+              <option value="cotangent">Cotangent sheaf Ω¹ₓ</option>
+              <option value="canonical">Canonical sheaf Kₓ</option>
+              <option value="twist" id="sheaf-twist-option">Oₓ(r)</option>
+              <option value="divisor-line">O_X(D)</option>
+              <option value="universal-bundle" id="sheaf-universal-bundle-option">Universal bundle</option>
+              <option value="direct-sum">Direct sum</option>
+              <option value="self-direct-sum">Self direct sum</option>
+              <option value="self-tensor-product">Self tensor product</option>
+              <option value="dual">Dual sheaf</option>
+              <option value="internal-hom">Internal Hom</option>
+              <option value="ideal-sheaf">Ideal sheaf</option>
+              <option value="normal-bundle">Normal bundle</option>
+              <option value="conormal-bundle">Conormal bundle</option>
+              <option value="relative-tangent">Relative tangent</option>
+              <option value="relative-cotangent">Relative cotangent</option>
+              <option value="tensor">Tensor product</option>
+              <option value="schur">Schur functor</option>
+              <option value="map-operation">Pullback / pushforward</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="sheaf-name">name</label>
+            <input id="sheaf-name" class="sheaf-input" type="text" value="\mathcal{E}" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row" id="sheaf-base-row" hidden>
+            <label class="input-label" for="sheaf-base-button">base variety</label>
+            <div class="sheaf-base-picker">
+              <select id="sheaf-base-variety" class="sheaf-select" hidden></select>
+              <button class="btn btn-ghost sheaf-map-slot-button sheaf-base-pick-button" id="sheaf-base-button" type="button">variety</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-differential-strengthen-row" hidden>
+            <span class="input-label">strengthen</span>
+            <label class="opt-row">
+              <input id="sheaf-differential-strengthen" type="checkbox">
+              <span>exterior power</span>
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-differential-degree-row" hidden>
+            <label class="input-label" for="sheaf-differential-degree">degree</label>
+            <select id="sheaf-differential-degree" class="sheaf-select"></select>
+          </div>
+          <div class="sheaf-note" id="sheaf-differential-note" hidden></div>
+          <div class="sheaf-field-row" id="sheaf-binary-formula-row" hidden>
+            <span class="input-label">parents</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-binary-left-button" type="button" data-sheaf-binary-pick="left">sheaf</button>
+              <span class="sheaf-map-formula-mark" id="sheaf-binary-symbol">&oplus;</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-binary-right-button" type="button" data-sheaf-binary-pick="right">sheaf</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-binary-exact-row" hidden>
+            <span class="input-label">exact</span>
+            <label class="opt-row">
+              <input id="sheaf-binary-exact" type="checkbox">
+              <span>ordinary tensor</span>
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-tensor-strengthen-row" hidden>
+            <span class="input-label">strengthen</span>
+            <label class="opt-row">
+              <input id="sheaf-tensor-strengthen" type="checkbox">
+              <span>advanced tensor</span>
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-tensor-parent-count-row" hidden>
+            <label class="input-label" for="sheaf-tensor-parent-count">parents</label>
+            <select id="sheaf-tensor-parent-count" class="sheaf-select">
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3" selected>3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-tensor-parents-row" hidden>
+            <span class="input-label">factors</span>
+            <div class="sheaf-tensor-parent-list" id="sheaf-tensor-parent-list"></div>
+          </div>
+          <div class="sheaf-note" id="sheaf-binary-pick-note" hidden>pick two sheaves on the same base</div>
+          <div class="sheaf-field-row" id="sheaf-self-sum-formula-row" hidden>
+            <span class="input-label">parent</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-self-sum-parent-button" type="button" data-sheaf-self-sum-pick="parent">sheaf</button>
+              <span class="sheaf-map-formula-mark" id="sheaf-self-sum-symbol">^{&oplus;</span>
+              <input id="sheaf-self-sum-count" class="sheaf-input sheaf-self-sum-count" type="text" value="2" maxlength="80" spellcheck="false" autocomplete="off" aria-label="self direct sum multiplicity">
+              <span class="sheaf-map-formula-mark">}</span>
+            </div>
+          </div>
+          <div class="sheaf-note" id="sheaf-self-sum-pick-note" hidden>pick a sheaf and a scalar expression</div>
+          <div class="sheaf-field-row" id="sheaf-dual-formula-row" hidden>
+            <span class="input-label">parent</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-dual-parent-button" type="button" data-sheaf-dual-pick="parent">sheaf</button>
+              <span class="sheaf-map-formula-mark">^{\vee}</span>
+            </div>
+          </div>
+          <div class="sheaf-note" id="sheaf-dual-pick-note" hidden>pick a sheaf on the canvas</div>
+          <div class="sheaf-field-row" id="sheaf-internal-hom-formula-row" hidden>
+            <span class="input-label">parents</span>
+            <div class="sheaf-map-formula-picker">
+              <span class="sheaf-map-formula-mark" id="sheaf-internal-hom-symbol">RHom(</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-internal-hom-source-button" type="button" data-sheaf-internal-hom-pick="source">sheaf</button>
+              <span class="sheaf-map-formula-mark">,</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-internal-hom-target-button" type="button" data-sheaf-internal-hom-pick="target">sheaf</button>
+              <span class="sheaf-map-formula-mark">)</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-internal-hom-exact-row" hidden>
+            <span class="input-label">exact</span>
+            <label class="opt-row">
+              <input id="sheaf-internal-hom-exact" type="checkbox">
+              <span>ordinary Hom</span>
+            </label>
+          </div>
+          <div class="sheaf-note" id="sheaf-internal-hom-pick-note" hidden>pick two sheaves on the same base</div>
+          <div class="sheaf-field-row" id="sheaf-ideal-formula-row" hidden>
+            <span class="input-label">map</span>
+            <div class="sheaf-map-formula-picker">
+              <span class="sheaf-map-formula-mark">I_{</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-ideal-map-button" type="button">map</button>
+              <span class="sheaf-map-formula-mark">}</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-ideal-confirm-row" hidden>
+            <span class="input-label">warning</span>
+            <label class="opt-row sheaf-warning-check">
+              <input id="sheaf-ideal-confirm" type="checkbox">
+              <span>f is an embedding, and not an iso</span>
+            </label>
+          </div>
+          <div class="sheaf-note" id="sheaf-ideal-pick-note" hidden>pick an embedding map X -> Y</div>
+          <div class="sheaf-field-row" id="sheaf-normal-formula-row" hidden>
+            <span class="input-label">map</span>
+            <div class="sheaf-map-formula-picker">
+              <span class="sheaf-map-formula-mark">N_{</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-normal-map-button" type="button">map</button>
+              <span class="sheaf-map-formula-mark">}</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-normal-confirm-row" hidden>
+            <span class="input-label">warning</span>
+            <label class="opt-row sheaf-warning-check">
+              <input id="sheaf-normal-confirm" type="checkbox">
+              <span>f is a regular/lci closed embedding, and X,Y are smooth</span>
+            </label>
+          </div>
+          <div class="sheaf-note" id="sheaf-normal-pick-note" hidden>pick a closed embedding map X -> Y</div>
+          <div class="sheaf-field-row" id="sheaf-conormal-formula-row" hidden>
+            <span class="input-label">map</span>
+            <div class="sheaf-map-formula-picker">
+              <span class="sheaf-map-formula-mark">I/I^2_{</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-conormal-map-button" type="button">map</button>
+              <span class="sheaf-map-formula-mark">}</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-conormal-confirm-row" hidden>
+            <span class="input-label">warning</span>
+            <label class="opt-row sheaf-warning-check">
+              <input id="sheaf-conormal-confirm" type="checkbox">
+              <span>f is a regular/lci closed embedding, and X,Y are smooth</span>
+            </label>
+          </div>
+          <div class="sheaf-note" id="sheaf-conormal-pick-note" hidden>pick a closed embedding map X -> Y</div>
+          <div class="sheaf-field-row" id="sheaf-relative-formula-row" hidden>
+            <span class="input-label">map</span>
+            <div class="sheaf-map-formula-picker">
+              <span class="sheaf-map-formula-mark" id="sheaf-relative-symbol">T_{</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-relative-map-button" type="button">map</button>
+              <span class="sheaf-map-formula-mark">}</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-relative-confirm-row" hidden>
+            <span class="input-label">warning</span>
+            <label class="opt-row sheaf-warning-check">
+              <input id="sheaf-relative-confirm" type="checkbox">
+              <span>f is smooth/submersive, and X,Y are smooth</span>
+            </label>
+          </div>
+          <div class="sheaf-note" id="sheaf-relative-pick-note" hidden>pick a smooth map X -> Y</div>
+          <div class="sheaf-field-row" id="sheaf-schur-formula-row" hidden>
+            <span class="input-label">parent</span>
+            <div class="sheaf-map-formula-picker">
+              <span class="sheaf-map-formula-mark">\(S\)</span>
+              <span class="sheaf-map-formula-mark" id="sheaf-schur-diagram-preview">\(_{(2,1)}\)</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-schur-parent-button" type="button" data-sheaf-schur-pick="parent">bundle</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-schur-partition-row" hidden>
+            <label class="input-label" for="sheaf-schur-partition">diagram</label>
+            <input id="sheaf-schur-partition" class="sheaf-input" type="text" value="2,1" maxlength="48" spellcheck="false" autocomplete="off" placeholder="2, 1">
+          </div>
+          <div class="sheaf-note" id="sheaf-schur-pick-note" hidden>pick a locally free sheaf on the canvas</div>
+          <div class="sheaf-field-row" id="sheaf-map-operation-row" hidden>
+            <label class="input-label" for="sheaf-map-operation">operation</label>
+            <select id="sheaf-map-operation" class="sheaf-select">
+              <option value="auto" selected>auto</option>
+              <option value="pullback">pullback</option>
+              <option value="pushforward">pushforward</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-map-formula-row" hidden>
+            <span class="input-label">parents</span>
+            <div class="sheaf-map-formula-picker">
+              <span class="sheaf-map-formula-mark" id="sheaf-map-prefix">R</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-map-map-button" type="button" data-sheaf-map-pick="map">map</button>
+              <span class="sheaf-map-formula-mark" id="sheaf-map-script">_!</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-map-sheaf-button" type="button" data-sheaf-map-pick="sheaf">sheaf</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-map-exact-row" hidden>
+            <span class="input-label">exact</span>
+            <label class="opt-row">
+              <input id="sheaf-map-exact" type="checkbox">
+              <span>ordinary functor</span>
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="sheaf-map-proper-row" hidden>
+            <span class="input-label">proper</span>
+            <label class="opt-row">
+              <input id="sheaf-map-proper" type="checkbox">
+              <span>use f_*</span>
+            </label>
+          </div>
+          <div class="sheaf-note" id="sheaf-map-pick-note" hidden>pick a map and a sheaf on the canvas</div>
+          <div class="sheaf-field-row" id="twist-row" hidden>
+            <label class="input-label sheaf-lower-label" for="twist-r">r</label>
+            <input id="twist-r" class="sheaf-input" type="number" min="-24" max="24" value="1">
+          </div>
+          <div class="sheaf-field-row" id="sheaf-divisor-row" hidden>
+            <span class="input-label">D</span>
+            <div class="homology-coefficient-editor sheaf-divisor-coefficients" id="sheaf-divisor-coefficients"></div>
+          </div>
+          <div class="sheaf-field-row" id="rank-row">
+            <label class="input-label" for="rank-symbol">rank</label>
+            <input id="rank-symbol" class="sheaf-input" type="text" value="" maxlength="80" spellcheck="false" autocomplete="off">
+          </div>
+        </div>
+
+        <div id="map-editor" class="sheaf-input-editor map-input-editor" hidden>
+          <div class="sheaf-editor-title" id="map-editor-title">New map</div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="map-type">Type</label>
+            <select id="map-type" class="sheaf-select">
+              <option value="ordinary" selected>Map of varieties</option>
+              <option value="sheaf">Map of sheaves</option>
+              <option value="abel-jacobi" id="map-abel-jacobi-option">Abel-Jacobi map</option>
+              <option value="composition">Composition of maps</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row">
+            <label class="input-label" for="map-name">name</label>
+            <input id="map-name" class="sheaf-input" type="text" value="f" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row" id="map-endpoints-row">
+            <span class="input-label">parents</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="map-domain-button" type="button" data-map-pick="domain">variety</button>
+              <span class="sheaf-map-formula-mark">&rArr;</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="map-codomain-button" type="button" data-map-pick="codomain">variety</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="map-abel-jacobi-row" hidden>
+            <span class="input-label">source</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="map-abel-jacobi-curve-button" type="button" data-map-pick="curve">source</button>
+              <span class="sheaf-map-formula-mark">&rArr;</span>
+              <span class="sheaf-map-formula-mark">Jac</span>
+            </div>
+          </div>
+          <div class="sheaf-field-row" id="map-composition-row" hidden>
+            <span class="input-label">parents</span>
+            <div class="sheaf-map-formula-picker">
+              <button class="btn btn-ghost sheaf-map-slot-button" id="map-second-button" type="button" data-map-pick="second">map</button>
+              <span class="sheaf-map-formula-mark">&compfn;</span>
+              <button class="btn btn-ghost sheaf-map-slot-button" id="map-first-button" type="button" data-map-pick="first">map</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row map-curve-row" id="map-curve-row" hidden>
+            <label class="input-label" for="map-point-count">curve</label>
+            <div class="map-curve-tools">
+              <label class="map-curve-control" for="map-point-count">
+                <span>points</span>
+                <input id="map-point-count" type="range" min="0" max="4" step="1" value="0">
+                <output id="map-point-count-value" for="map-point-count">0</output>
+              </label>
+              <button class="btn btn-ghost map-curve-reset" id="standard-map-curve" type="button" title="Reset the arrow shape for the current point count">reset</button>
+            </div>
+          </div>
+          <div class="sheaf-field-row map-curve-row" id="map-label-offset-row" hidden>
+            <label class="input-label" for="map-label-offset">label</label>
+            <label class="map-curve-control" for="map-label-offset">
+              <span>offset</span>
+              <input id="map-label-offset" type="range" min="-25" max="25" step="1" value="-18">
+              <output id="map-label-offset-value" for="map-label-offset">-18px</output>
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="map-ramified-cover-degree-row" hidden>
+            <label class="input-label" for="map-ramified-cover-degree">degree</label>
+            <input id="map-ramified-cover-degree" class="sheaf-input" type="number" min="1" max="99" step="1" value="2">
+          </div>
+          <div class="sheaf-field-row" id="map-ramified-cover-mode-row" hidden>
+            <label class="input-label" for="map-ramified-cover-mode">mode</label>
+            <select id="map-ramified-cover-mode" class="sheaf-select">
+              <option value="cyclic">Cyclic</option>
+              <option value="general">General finite</option>
+            </select>
+          </div>
+          <div class="sheaf-field-row" id="map-ramified-cover-branch-row" hidden>
+            <label class="input-label" for="map-ramified-cover-branch-symbol">branch</label>
+            <input id="map-ramified-cover-branch-symbol" class="sheaf-input" type="text" value="B" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row" id="map-ramified-cover-ramification-row" hidden>
+            <label class="input-label" for="map-ramified-cover-ramification-symbol">ramification</label>
+            <input id="map-ramified-cover-ramification-symbol" class="sheaf-input" type="text" value="R" maxlength="48" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="sheaf-field-row" id="map-ramified-cover-smooth-row" hidden>
+            <span class="input-label">smooth</span>
+            <label class="opt-row sheaf-warning-check">
+              <input id="map-ramified-cover-smooth-confirm" type="checkbox">
+              smooth base and smooth branch divisor
+            </label>
+          </div>
+          <div class="sheaf-field-row" id="map-ramified-cover-branch-degree-row" hidden>
+            <label class="input-label" for="map-ramified-cover-branch-degree">branch degree</label>
+            <input id="map-ramified-cover-branch-degree" class="sheaf-input" type="number" min="1" max="99" step="1" value="4">
+          </div>
+          <div class="map-pick-status" id="map-pick-status">pick a domain</div>
+          <div class="map-pick-actions">
+            <button class="btn btn-ghost map-pick-reset" id="reset-map-pick" type="button">reset</button>
+          </div>
+        </div>
+
+        <div class="sheaf-input-reveal-actions" id="input-reveal-actions" hidden>
+          <button class="btn btn-ghost sheaf-input-reveal-button" id="toggle-hodge-card" type="button" aria-pressed="false" hidden>show Hodge numbers</button>
+          <button class="btn btn-ghost sheaf-input-reveal-button" id="toggle-betti-card" type="button" aria-pressed="false" hidden>show Betti table</button>
+          <button class="btn btn-ghost sheaf-input-reveal-button" id="toggle-class-card" type="button" aria-pressed="false" hidden>show characteristic classes</button>
+          <button class="btn btn-ghost sheaf-input-reveal-button" id="toggle-cohomology-card" type="button" aria-pressed="false" hidden>show sheaf cohomology</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="class-card" hidden>
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Characteristic Classes</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="sheaf-chart-actions" id="class-actions">
+          <button class="btn btn-ghost sheaf-chart-export" id="further-simplify" type="button">further simplify</button>
+          <button class="btn btn-ghost sheaf-chart-export" id="reset-simplify" type="button" hidden>reset simplify</button>
+          <button class="btn btn-ghost sheaf-chart-export" id="export-classes" type="button">export</button>
+        </div>
+        <div class="sheaf-inline-row" id="basis-row">
+          <span class="input-label">basis</span>
+          <select id="abstract-basis" class="sheaf-select">
+            <option value="chern" selected>Chern classes</option>
+            <option value="character">Chern character</option>
+            <option value="roots">Chern roots</option>
+          </select>
+        </div>
+        <div class="sheaf-inline-row" id="root-form-row" hidden>
+          <span class="input-label">root form</span>
+          <select id="root-form" class="sheaf-select">
+            <option value="product" selected>Product</option>
+            <option value="expanded">Expanded polynomial</option>
+          </select>
+        </div>
+        <div class="sheaf-inline-row" id="class-term-row">
+          <span class="input-label">terms</span>
+          <div class="sheaf-term-only-control">
+            <input id="class-term-index" class="sheaf-input" type="number" min="0" max="15" value="1" aria-label="term index" disabled>
+            <span>th term only</span>
+            <input type="checkbox" id="class-term-only" aria-label="only compute selected term">
+            <label class="opt-row"><input type="checkbox" id="class-bracket-display" aria-label="display all terms in brackets"> bracket display</label>
+          </div>
+        </div>
+        <div class="sheaf-inline-row" id="class-family-row">
+          <span class="input-label">classes</span>
+          <div class="sheaf-class-family-picker">
+            <label class="opt-row"><input type="checkbox" data-class-family-toggle="chern" checked> c</label>
+            <label class="opt-row"><input type="checkbox" data-class-family-toggle="character" checked> ch</label>
+            <label class="opt-row"><input type="checkbox" data-class-family-toggle="todd" checked> td</label>
+            <label class="opt-row"><input type="checkbox" data-class-family-toggle="segre"> s</label>
+            <label class="opt-row"><input type="checkbox" data-class-family-toggle="sqrtTodd"> sqrt td</label>
+            <label class="opt-row"><input type="checkbox" data-class-family-toggle="mukai"> v</label>
+            <label class="opt-row"><input type="checkbox" data-class-family-toggle="kappa"> &kappa;</label>
+          </div>
+        </div>
+        <div id="class-chart" class="sheaf-class-scroll"></div>
+        <div id="class-message" class="err"></div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="cohomology-card" hidden>
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Sheaf Cohomology</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="sheaf-chart-actions" id="cohomology-actions">
+          <label class="opt-row cohomology-dim-toggle">
+            <input type="checkbox" id="cohomology-dim-only">
+            Dimensions only
+          </label>
+        </div>
+        <div id="cohomology-chart" class="sheaf-cohomology-chart"></div>
+        <div id="cohomology-message" class="hint"></div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="homology-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Homology Classes</span><em class="toggle-icon">&#9662;</em></div>
+        <div class="card-body">
+        <div class="homology-active" id="homology-active"></div>
+        <div class="sheaf-field-row" id="homology-grassmannian-basis-row" hidden>
+          <span class="input-label">basis</span>
+          <label class="opt-row">
+            <input type="checkbox" id="homology-grassmannian-young-basis">
+            Young diagrams
+          </label>
+        </div>
+        <div class="homology-map-tools" id="homology-map-tools" hidden>
+          <div class="homology-tool-row">
+            <label class="opt-row homology-map-mode-row" for="homology-map-input-mode">
+              <span>input</span>
+              <select id="homology-map-input-mode" class="sheaf-select homology-map-mode-select">
+                <option value="formula">formulas</option>
+                <option value="coefficients" selected>only provide coefficients</option>
+              </select>
+            </label>
+            <div class="homology-tool-actions">
+              <button class="btn btn-ghost homology-update-button" id="homology-update-all" type="button">update</button>
+            </div>
+          </div>
+          <details class="homology-expression-panel" id="homology-expression-panel">
+            <summary>available class expressions</summary>
+            <div class="homology-expression-chart" id="homology-expression-chart"></div>
+            <div class="homology-assignment-form" id="homology-assignment-form" hidden>
+              <span class="homology-assignment-lhs" id="homology-assignment-lhs"></span>
+              <input id="homology-assignment-rhs" class="sheaf-input homology-map-rule-input" type="text" value="" maxlength="120" spellcheck="false" autocomplete="off" aria-label="Assigned linear combination" placeholder="0">
+              <div class="homology-coefficient-editor homology-assignment-coefficients" id="homology-assignment-coefficients" hidden></div>
+              <div class="homology-assignment-actions">
+                <button class="btn btn-ghost homology-rule-delete" id="homology-assignment-save" type="button">assign</button>
+                <button class="btn btn-ghost homology-rule-delete" id="homology-assignment-cancel" type="button">cancel</button>
+              </div>
+            </div>
+            <div class="homology-expression-actions">
+              <button class="btn btn-ghost homology-transpose-button" id="homology-transpose-expressions" type="button" aria-pressed="true">vertical</button>
+            </div>
+          </details>
+        </div>
+        <div class="sheaf-field-row" id="homology-hyperplane-row" hidden>
+          <label class="input-label" for="homology-hyperplane-symbol">hyperplane</label>
+          <input id="homology-hyperplane-symbol" class="sheaf-input" type="text" value="H" maxlength="48" spellcheck="false" autocomplete="off">
+        </div>
+        <div class="sheaf-field-row" id="homology-point-row" hidden>
+          <label class="input-label" for="homology-point-symbol">point</label>
+          <input id="homology-point-symbol" class="sheaf-input" type="text" value="[p]" maxlength="48" spellcheck="false" autocomplete="off">
+        </div>
+        <div class="homology-symbol-list" id="homology-symbols"></div>
+        <div class="homology-symbol-actions">
+          <button class="btn btn-ghost homology-transpose-button" id="homology-jacobian-basis-action" type="button" hidden>add basis</button>
+        </div>
+        <div class="homology-rule-list" id="homology-rules"></div>
+        <div class="homology-add-class" id="homology-add-class">
+          <input id="homology-class-symbol" class="sheaf-input" type="text" value="" maxlength="48" spellcheck="false" autocomplete="off" aria-label="Homology class symbol" placeholder="A">
+          <select id="homology-class-degree-mode" class="sheaf-select homology-degree-mode" aria-label="Homology class degree mode" hidden>
+            <option value="bidegree">bidegree</option>
+            <option value="total">total</option>
+          </select>
+          <input id="homology-class-degree" class="sheaf-input" type="number" value="2" min="0" max="30" step="1" aria-label="Homology class degree">
+          <div class="homology-product-bidegree" id="homology-class-bidegree" hidden>
+            <input id="homology-class-bidegree-left" class="sheaf-input" type="number" value="" min="0" max="30" step="1" aria-label="Left product bidegree">
+            <input id="homology-class-bidegree-right" class="sheaf-input" type="number" value="" min="0" max="30" step="1" aria-label="Right product bidegree">
+          </div>
+          <button class="btn btn-ghost sheaf-object-button homology-add-button" id="homology-add-class-button" type="button">add class</button>
+        </div>
+        <div class="homology-add-rule" id="homology-add-rule">
+          <input id="homology-rule-equation" class="sheaf-input" type="text" value="" maxlength="120" spellcheck="false" autocomplete="off" aria-label="Rule equation">
+          <button class="btn btn-ghost sheaf-object-button homology-add-button" id="homology-add-rule-button" type="button">add rule</button>
+        </div>
+        <div id="homology-message" class="hint homology-message"></div>
+      </div>
+    </section>
+
+    <span id="hodge-side-anchor" hidden></span>
+    <section class="card collapsed" id="hodge-card" hidden>
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Hodge Numbers</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="hodge-card-actions" id="hodge-actions">
+          <label class="opt-row hodge-expanded-toggle">
+            <input type="checkbox" id="hodge-expanded">
+            Expanded view
+          </label>
+          <label class="hodge-cell-size-control" for="hodge-cell-size">
+            <span>cell</span>
+            <input type="range" id="hodge-cell-size" min="15" max="30" step="1" value="20">
+            <output id="hodge-cell-size-value" for="hodge-cell-size">20px</output>
+          </label>
+          <button class="btn btn-ghost hodge-wide-toggle" id="toggle-hodge-wide" type="button" aria-pressed="false">wide</button>
+          <button class="btn btn-ghost sheaf-chart-export hodge-export-button" id="export-hodge" type="button">export</button>
+        </div>
+        <div class="hodge-query" id="hodge-query" hidden>
+          <label class="hodge-query-index" for="hodge-query-p">
+            <span>p</span>
+            <input type="number" id="hodge-query-p" class="sheaf-input" min="0" max="15" value="0">
+          </label>
+          <label class="hodge-query-index" for="hodge-query-q">
+            <span>q</span>
+            <input type="number" id="hodge-query-q" class="sheaf-input" min="0" max="15" value="0">
+          </label>
+          <button class="btn btn-ghost" id="hodge-query-run" type="button">compute</button>
+          <span class="hodge-query-output" id="hodge-query-output"></span>
+        </div>
+        <div id="hodge-chart" class="hodge-grid" role="button" tabindex="0" aria-expanded="false"></div>
+        <div id="hodge-chern-numbers" class="hodge-chern-numbers" hidden></div>
+        <div id="hodge-polyvector" class="hodge-polyvector" hidden></div>
+        <div id="hodge-message" class="hint"></div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="betti-card" hidden>
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Betti Table</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div id="betti-table-chart" class="betti-table-chart" hidden></div>
+        <div id="betti-table-message" class="hint betti-table-message"></div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="export-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="sheaf-inline-row">
+          <span class="input-label">Format</span>
+          <select id="export-format" class="sheaf-select">
+            <option value="latex" selected>LaTeX</option>
+            <option value="tikzcd">TikZ-cd</option>
+            <option value="plain">Plain text</option>
+            <option value="sage">SageMath note</option>
+            <option value="preset-json">Preset JSON</option>
+          </select>
+        </div>
+        <div class="action-row sheaf-export-actions">
+          <button class="btn" id="refresh-export" type="button">refresh</button>
+          <button class="btn btn-ghost" id="copy-export" type="button">copy</button>
+        </div>
+        <textarea id="export-out" readonly></textarea>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<footer>
+  Browser-side sheaf complex calculator styled with the shared Young diagram UI.
+</footer>
+
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]']],
+      processEscapes: true
+    },
+    options: {
+      skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+    }
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+<script src="js/sheaf_complex_calculator.js?v=complex-chart-14"></script>
+</body>
+</html>

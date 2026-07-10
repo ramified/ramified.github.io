@@ -689,6 +689,7 @@
     refs.importTools = document.getElementById('import-preset-tools');
     refs.importInput = document.getElementById('import-preset-input');
     refs.applyImportPreset = document.getElementById('apply-import-preset');
+    refs.placementDisplayRow = document.getElementById('gomoku-display-row');
     refs.gomokuDisplay = document.getElementById('gomoku-display-style');
     refs.gomokuSize = document.getElementById('gomoku-board-size');
     refs.connectFourFall = document.getElementById('connect-four-fall-dir');
@@ -2146,7 +2147,7 @@
     ctx.fillStyle = explosionMode ? '#fff0ee' : '#fffdf8';
     ctx.fillRect(0, 0, logicalWidth, logicalHeight);
 
-    const vertexDisplay = (isGomokuGame(game) && gomokuDisplayStyle() === 'vertex') || isConnectFourGame(game);
+    const vertexDisplay = isPlacementGame(game) && placementDisplayStyle() === 'vertex';
     if (!vertexDisplay) {
       geometry.cells.forEach((cell, index) => {
         if (cell) drawTile(ctx, geometry, cell.row, cell.col, removed.has(index), explosionMode);
@@ -2157,6 +2158,7 @@
     drawGlueEdges(ctx, geometry, preset, hoveredGlue);
     if (isPlacementGame(game)) {
       if (vertexDisplay) drawPlacementVertexBoard(ctx, geometry, game);
+      else if (isConnectFourGame(game)) drawConnectFourHoles(ctx, geometry, game);
       if (!isConnectFourDropAnimation()) drawPlacementWinningLine(ctx, geometry, game);
       drawPlacementPieces(ctx, geometry, placementPieces(game));
       drawPlacementAnimationOverlays(ctx, geometry);
@@ -2340,71 +2342,226 @@
 
   function drawPlacementWinningLine(ctx, geom, state) {
     if (!state || !state.winningLine || !state.winningLine.length) return;
-    const unique = Array.from(new Set(state.winningLine));
+    const highlightCounts = placementWinningLineIndexCounts(state);
     const segments = placementWinningLineSegments(state, geom);
     ctx.save();
     if (segments.length) {
+      const repeatGap = Math.max(3, geom.radius * 0.12);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.strokeStyle = 'rgba(17,17,17,0.22)';
-      ctx.lineWidth = Math.max(5, geom.radius * 0.22);
-      drawLooseSegments(ctx, segments);
+      drawWinningLooseSegments(ctx, segments, Math.max(5, geom.radius * 0.22), repeatGap);
       ctx.strokeStyle = '#b23a48';
-      ctx.lineWidth = Math.max(2.6, geom.radius * 0.1);
-      drawLooseSegments(ctx, segments);
+      drawWinningLooseSegments(ctx, segments, Math.max(2.6, geom.radius * 0.1), repeatGap);
     }
     ctx.fillStyle = 'rgba(196,127,23,0.2)';
     ctx.strokeStyle = 'rgba(196,127,23,0.78)';
     ctx.lineWidth = Math.max(1.4, geom.radius * 0.06);
-    unique.forEach((index) => {
+    highlightCounts.forEach((count, index) => {
       const point = placementPiecePoint(geom, index);
       if (!point) return;
       ctx.beginPath();
-      ctx.arc(point.x, point.y, geom.radius * 0.56, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, geom.radius * 0.46, 0, Math.PI * 2);
       ctx.fill();
-      ctx.stroke();
+      const maxRadius = geom.radius * 0.78;
+      const baseRadius = geom.radius * 0.5;
+      const radiusStep = count > 1
+        ? Math.min(geom.radius * 0.12, (maxRadius - baseRadius) / Math.max(1, count - 1))
+        : 0;
+      for (let occurrence = 0; occurrence < count; occurrence += 1) {
+        const radius = baseRadius + radiusStep * occurrence;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     });
     ctx.restore();
   }
 
-  function drawLooseSegments(ctx, segments) {
-    ctx.beginPath();
-    segments.forEach((segment) => {
-      ctx.moveTo(segment.start.x, segment.start.y);
-      ctx.lineTo(segment.end.x, segment.end.y);
+  function placementWinningLineIndexCounts(state) {
+    const counts = new Map();
+    const line = Array.isArray(state && state.winningLine) ? state.winningLine : [];
+    line.forEach((index) => {
+      if (!Number.isInteger(index)) return;
+      counts.set(index, (counts.get(index) || 0) + 1);
     });
-    ctx.stroke();
+    return counts;
+  }
+
+  function drawWinningLooseSegments(ctx, segments, baseWidth, repeatGap) {
+    segments.forEach((segment) => {
+      const reuseCount = Math.max(1, segment.count || 1);
+      const offsets = winningSegmentRepeatOffsets(segment, reuseCount, repeatGap);
+      ctx.lineWidth = baseWidth;
+      offsets.forEach((offset) => {
+        ctx.beginPath();
+        ctx.moveTo(segment.start.x + offset.x, segment.start.y + offset.y);
+        ctx.lineTo(segment.end.x + offset.x, segment.end.y + offset.y);
+        ctx.stroke();
+      });
+    });
+  }
+
+  function winningSegmentRepeatOffsets(segment, reuseCount, repeatGap) {
+    const count = Math.max(1, Math.floor(reuseCount || 1));
+    if (count === 1) return [{ x: 0, y: 0 }];
+    const dx = segment.end.x - segment.start.x;
+    const dy = segment.end.y - segment.start.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 0.001) return [{ x: 0, y: 0 }];
+    const gap = Math.max(1, repeatGap || 1);
+    const normal = { x: -dy / length, y: dx / length };
+    return Array.from({ length: count }, (_, index) => {
+      const distance = (index - (count - 1) / 2) * gap;
+      return {
+        x: normal.x * distance,
+        y: normal.y * distance
+      };
+    });
   }
 
   function placementWinningLineSegments(state, geom) {
     const line = Array.isArray(state && state.winningLine) ? state.winningLine : [];
-    const segments = [];
+    const routes = placementWinningLineDiagonalRoutes(state, line);
+    const keyed = [];
+    const counts = new Map();
     for (let index = 0; index + 1 < line.length; index += 1) {
-      segments.push(...placementLineRenderSegments(state, geom, line[index], line[index + 1]));
+      const route = routes ? routes[index] : null;
+      placementLineRenderSegments(state, geom, line[index], line[index + 1], route).forEach((segment) => {
+        const key = segment.key || placementSegmentPointKey(segment);
+        if (!key) return;
+        if (!counts.has(key)) {
+          keyed.push({ ...segment, key });
+          counts.set(key, 0);
+        }
+        counts.set(key, counts.get(key) + 1);
+      });
     }
-    return segments;
+    return keyed.map((segment) => ({ ...segment, count: counts.get(segment.key) || 1 }));
   }
 
-  function placementLineRenderSegments(state, geom, fromIndex, toIndex) {
+  function placementLineRenderSegments(state, geom, fromIndex, toIndex, preferredRoute = null) {
     const from = placementPiecePoint(geom, fromIndex);
     const to = placementPiecePoint(geom, toIndex);
     if (!from || !to) return [];
-    const route = placementLineTransitionRoute(state, fromIndex, toIndex);
+    const route = preferredRoute || placementLineTransitionRoute(state, fromIndex, toIndex);
     if (!route || !route.transitions.length || !route.transitions.some((transition) => transition.glued)) {
-      return samePoint(from, to) ? [] : [{ start: from, end: to }];
+      if (route && route.kind === 'diagonal') return placementDiagonalHalfLineSegments(state, geom, route);
+      return samePoint(from, to) ? [] : [keyedPlacementSegment(from, to)];
     }
+    if (route.kind === 'diagonal') return placementDiagonalHalfLineSegments(state, geom, route);
+    return placementGluedAxisLineSegments(state, geom, route, from, to);
+  }
+
+  function placementWinningLineDiagonalRoutes(state, line) {
+    if (!state || !state.preset || !Array.isArray(line) || line.length < 2) return null;
+    const axes = gomokuDiagonalAxes(state.preset);
+    for (const axis of axes) {
+      const forward = placementMatchDiagonalRouteSequence(state, line, axis.forward);
+      if (forward) return forward;
+      const backward = placementMatchDiagonalRouteSequence(state, line, axis.backward);
+      if (backward) return backward;
+    }
+    return null;
+  }
+
+  function placementMatchDiagonalRouteSequence(state, line, orders) {
+    const search = (position, currentOrders) => {
+      if (position + 1 >= line.length) return [];
+      const candidates = gomokuDiagonalStepCandidates(state, line[position], currentOrders);
+      for (const candidate of candidates) {
+        if (candidate.index !== line[position + 1] || !candidate.route) continue;
+        const rest = search(position + 1, candidate.orders);
+        if (rest) return [candidate.route].concat(rest);
+      }
+      return null;
+    };
+    return search(0, normalizeDiagonalOrders(orders));
+  }
+
+  function placementGluedAxisLineSegments(state, geom, route, from, to) {
     const segments = [];
     let anchor = from;
     route.transitions.forEach((transition) => {
       if (!transition.glued || !transition.edge) return;
       const outgoing = placementTransitionBoundaryPoint(state, geom, route, transition, false);
       if (anchor && outgoing && !samePoint(anchor, outgoing)) {
-        segments.push({ start: anchor, end: outgoing });
+        segments.push(keyedPlacementSegment(anchor, outgoing));
       }
       anchor = placementTransitionBoundaryPoint(state, geom, route, transition, true);
     });
-    if (anchor && !samePoint(anchor, to)) segments.push({ start: anchor, end: to });
+    if (anchor && !samePoint(anchor, to)) segments.push(keyedPlacementSegment(anchor, to));
     return segments;
+  }
+
+  function placementDiagonalHalfLineSegments(state, geom, route) {
+    if (!route || !Array.isArray(route.transitions) || route.transitions.length < 2) return [];
+    const from = placementPiecePoint(geom, route.start);
+    const to = placementPiecePoint(geom, route.end);
+    if (!from || !to) return [];
+    const startVertex = placementDiagonalEndpointVertex(state, geom, route, false);
+    const endVertex = placementDiagonalEndpointVertex(state, geom, route, true);
+    const segments = [];
+    if (startVertex && !samePoint(from, startVertex)) {
+      segments.push(keyedPlacementSegment(from, startVertex, placementDiagonalEndpointKey(route.start, startVertex)));
+    }
+    if (endVertex && !samePoint(to, endVertex)) {
+      segments.push(keyedPlacementSegment(endVertex, to, placementDiagonalEndpointKey(route.end, endVertex)));
+    }
+    return segments;
+  }
+
+  function placementDiagonalEndpointVertex(state, geom, route, entry) {
+    const transitions = route && Array.isArray(route.transitions) ? route.transitions : [];
+    if (!transitions.length) return null;
+    if (!entry) {
+      const first = transitions[0];
+      const companion = Number.isInteger(first.companionBefore)
+        ? first.companionBefore
+        : route.directions && route.directions.length > 1
+          ? route.directions[1]
+          : null;
+      if (!Number.isInteger(first.outDir)) return null;
+      if (!Number.isInteger(companion)) {
+        return edgeMidpointFromIndex(geom, route.start, first.outDir);
+      }
+      return edgePointTowardDir(geom, route.start, first.outDir, companion);
+    }
+    const last = transitions[transitions.length - 1];
+    const edgeDir = Number.isInteger(last.dir) ? oppositeDir(state.preset, last.dir) : null;
+    const companion = Number.isInteger(last.companionAfter)
+      ? last.companionAfter
+      : route.directions && route.directions.length > 1
+        ? oppositeDir(state.preset, route.directions[0])
+        : null;
+    if (!Number.isInteger(edgeDir)) return null;
+    if (!Number.isInteger(companion)) {
+      return edgeMidpointFromIndex(geom, route.end, edgeDir);
+    }
+    return edgePointTowardDir(geom, route.end, edgeDir, companion);
+  }
+
+  function keyedPlacementSegment(start, end, key) {
+    return {
+      start,
+      end,
+      key: key || placementSegmentPointKey({ start, end })
+    };
+  }
+
+  function placementDiagonalEndpointKey(index, point) {
+    return `diag:${index}:${pointCoordinateKey(point)}`;
+  }
+
+  function placementSegmentPointKey(segment) {
+    if (!segment || !segment.start || !segment.end) return '';
+    const startKey = pointCoordinateKey(segment.start);
+    const endKey = pointCoordinateKey(segment.end);
+    return startKey <= endKey ? `${startKey}|${endKey}` : `${endKey}|${startKey}`;
+  }
+
+  function pointCoordinateKey(point) {
+    return `${Math.round(point.x * 1000)}:${Math.round(point.y * 1000)}`;
   }
 
   function drawPlacementVertexBoard(ctx, geom, state) {
@@ -3635,16 +3792,34 @@
     let index = startIndex;
     let directions = order.slice(0, 2);
     if (directions.length !== 2 || !directions.every(Number.isInteger)) return null;
+    const transitions = [];
+    const actualDirections = [];
     for (let step = 0; step < 2; step += 1) {
       const outDir = directions[step];
       const next = surfaceSuccessor(state, index, outDir);
       if (!next) return null;
+      actualDirections.push(outDir);
+      const record = placementTransitionRecord(index, outDir, next);
       directions = transportedDirectionsAfterStep(state, directions, step, outDir, next);
+      record.companionBefore = step > 0
+        ? oppositeDir(state.preset, transitions[step - 1].dir)
+        : order[step + 1];
+      record.companionAfter = step + 1 < order.length
+        ? directions[step + 1]
+        : (step > 0 ? oppositeDir(state.preset, directions[step - 1]) : null);
+      transitions.push(record);
       index = next.index;
     }
     return {
       index,
-      orders: normalizeDiagonalOrders([directions, [directions[1], directions[0]]])
+      orders: normalizeDiagonalOrders([directions, [directions[1], directions[0]]]),
+      route: {
+        kind: 'diagonal',
+        start: startIndex,
+        end: index,
+        directions: actualDirections,
+        transitions
+      }
     };
   }
 
@@ -5173,8 +5348,8 @@
     return GAME_MODES.NUMBER_2048;
   }
 
-  function gomokuDisplayStyle() {
-    const value = refs.gomokuDisplay ? refs.gomokuDisplay.value : 'center';
+  function placementDisplayStyle() {
+    const value = refs.gomokuDisplay ? refs.gomokuDisplay.value : 'vertex';
     return value === 'vertex' ? 'vertex' : 'center';
   }
 
@@ -5740,6 +5915,7 @@
         control.hidden = !modeConnectFour;
       });
     }
+    if (refs.placementDisplayRow) refs.placementDisplayRow.hidden = !(modeGomoku || modeConnectFour);
     if (refs.connectFourFall) refs.connectFourFall.disabled = modeConnectFour && game && game.phase !== 'setup';
     if (refs.nextStep) refs.nextStep.disabled = !mode2048 || !(isStepMode() && stepPaused && eventQueue.length && !currentAnimation);
     if (refs.undo) refs.undo.disabled = !undoStack.length;
@@ -6204,6 +6380,7 @@
     isExplosionModeActive,
     latticeForPreset,
     placementLineRenderSegments,
+    placementWinningLineSegments,
     placementLineTransitionRoute,
     placeGomokuStone,
     placeConnectFourToken,

@@ -1378,6 +1378,113 @@ function testDiagonalGluedLineUsesCornerSharedWithPreviousTile() {
   assert.ok(segments[1].start.y > 14.7);
 }
 
+function testDiagonalLineCrossingTwoGluedEdgesUsesOnlyEndpointHalves() {
+  const preset = {
+    id: 'gomoku-diagonal-two-glued-render',
+    label: 'gomoku diagonal two glued render',
+    lattice: 'square',
+    rows: 2,
+    cols: 2,
+    surface: 'test',
+    removedTiles: [],
+    cutEdges: [
+      { left: { row: 2, col: 1 }, right: { row: 2, col: 2 } }
+    ],
+    gluedEdges: [
+      { group: 0, first: { row: 1, col: 1, dir: game.DIRS.N }, second: { row: 2, col: 1, dir: game.DIRS.S } },
+      { group: 1, first: { row: 2, col: 1, dir: game.DIRS.E }, second: { row: 2, col: 2, dir: game.DIRS.W } }
+    ]
+  };
+  const state = game.createGomokuState(preset);
+  const geom = {
+    cols: 2,
+    radius: 5,
+    size: 10,
+    lattice: game.LATTICES.square,
+    cells: [
+      { row: 1, col: 1, x: 0, y: 0 },
+      { row: 1, col: 2, x: 10, y: 0 },
+      { row: 2, col: 1, x: 0, y: 10 },
+      { row: 2, col: 2, x: 10, y: 10 }
+    ]
+  };
+  const from = game.indexOf(1, 1, 2);
+  const to = game.indexOf(2, 2, 2);
+  const route = game.placementLineTransitionRoute(state, from, to);
+  assert.ok(route);
+  assert.strictEqual(route.kind, 'diagonal');
+  assert.deepStrictEqual(route.directions, [game.DIRS.N, game.DIRS.E]);
+  assert.ok(route.transitions.every((transition) => transition.glued));
+  const segments = game.placementLineRenderSegments(state, geom, from, to);
+  assert.strictEqual(segments.length, 2);
+  assert.ok(segments[0].end.x > 4.7);
+  assert.ok(segments[0].end.y < -4.7);
+  assert.ok(segments[1].start.x > 4.7 && segments[1].start.x < 5.7);
+  assert.ok(segments[1].start.y > 14.7);
+}
+
+function testImportedSelfGluedDiagonalWinRendersNoAxisSegments() {
+  const preset = {
+    id: 'imported-preset',
+    label: '6x6 Sigma_0,1^1',
+    lattice: 'square',
+    rows: 6,
+    cols: 6,
+    surface: 'Sigma_0,1^1',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [
+      {
+        group: 0,
+        reversed: false,
+        firstArrowReversed: false,
+        secondArrowReversed: true,
+        first: { row: 1, col: 6, dir: game.DIRS.N },
+        second: { row: 1, col: 6, dir: game.DIRS.E }
+      }
+    ],
+    connectFourHoles: []
+  };
+  const state = game.createGomokuState(preset);
+  state.phase = 'gameover';
+  state.winner = 'black';
+  state.winningLine = [16, 11, 5, 4, 9];
+  state.stones = [
+    { id: 5, index: 4, color: 'black' },
+    { id: 1, index: 5, color: 'black' },
+    { id: 7, index: 9, color: 'black' },
+    { id: 3, index: 11, color: 'black' },
+    { id: 9, index: 16, color: 'black' }
+  ];
+  const win = game.findGomokuWin(state, 16, 'black');
+  assert.ok(win);
+  assert.strictEqual(win.diagonal, true);
+  assert.deepStrictEqual(win.line, state.winningLine);
+  const geom = {
+    cols: 6,
+    radius: 5,
+    size: 10,
+    lattice: game.LATTICES.square,
+    cells: Array.from({ length: 36 }, (_, index) => {
+      const point = game.rowCol(index, 6);
+      return {
+        row: point.row,
+        col: point.col,
+        x: (point.col - 1) * 10,
+        y: (point.row - 1) * 10
+      };
+    })
+  };
+  const pairRoute = game.placementLineTransitionRoute(state, 11, 5);
+  assert.strictEqual(pairRoute.kind, 'axis');
+  const segments = game.placementWinningLineSegments(state, geom);
+  assert.strictEqual(segments.length, 8);
+  segments.forEach((segment) => {
+    assert.ok(Math.abs(segment.end.x - segment.start.x) > 0.1);
+    assert.ok(Math.abs(segment.end.y - segment.start.y) > 0.1);
+  });
+}
+
 function testGomokuCyclicReuseWin() {
   const state = game.createGomokuState('torus');
   state.phase = 'ready';
@@ -1780,7 +1887,8 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameHtml.includes('id="gomoku-board-size"'));
   assert.ok(minigameHtml.includes('id="gomoku-display-row" data-mode-control="gomoku"'));
   assert.ok(minigameHtml.includes('id="gomoku-display-style"'));
-  assert.ok(minigameHtml.includes('<option value="vertex">vertex E/S/W/N</option>'));
+  assert.ok(minigameHtml.includes('<option value="vertex" selected>gridded board</option>'));
+  assert.ok(minigameHtml.includes('<option value="center">tile board</option>'));
   assert.ok(minigameHtml.includes('id="connect-four-fall-row" data-mode-control="connect-four"'));
   assert.ok(minigameHtml.includes('id="connect-four-fall-dir"'));
   assert.ok(minigameHtml.includes('id="game-setup-alert"'));
@@ -2071,7 +2179,7 @@ function testHeadlessDomStepControls() {
     makeElement('import-preset-input'),
     makeElement('apply-import-preset'),
     makeElement('gomoku-board-size', { value: '15' }),
-    makeElement('gomoku-display-style', { value: 'center' }),
+    makeElement('gomoku-display-style', { value: 'vertex' }),
     makeElement('connect-four-fall-dir', {
       value: 'S',
       options: ['S', 'E', 'W', 'N', 'SE', 'SW', 'NW', 'NE'].map((value) => ({ value, textContent: '', hidden: false, disabled: false }))
@@ -2383,7 +2491,7 @@ function testHeadlessDomStepControls() {
   assert.strictEqual(elements.get('surface-preset-select').value, 'connect-four-6x7');
   assert.strictEqual(elements.get('connect-four-fall-row').hidden, false);
   assert.strictEqual(elements.get('gomoku-size-row').hidden, true);
-  assert.strictEqual(elements.get('gomoku-display-row').hidden, true);
+  assert.strictEqual(elements.get('gomoku-display-row').hidden, false);
   assert.strictEqual(elements.get('move-row').hidden, true);
   elements.get('surface-preset-select').value = 'connect-four-6x7';
   elements.get('surface-preset-select').listeners.change();
@@ -2491,6 +2599,8 @@ function run() {
   testGomokuGluedEdgeWin();
   testDiagonalGluedLineUsesBoundaryCorner();
   testDiagonalGluedLineUsesCornerSharedWithPreviousTile();
+  testDiagonalLineCrossingTwoGluedEdgesUsesOnlyEndpointHalves();
+  testImportedSelfGluedDiagonalWinRendersNoAxisSegments();
   testGomokuCyclicReuseWin();
   testConnectFourDropStopsAtBoundaryAndBlocker();
   testConnectFourCycleWarning();

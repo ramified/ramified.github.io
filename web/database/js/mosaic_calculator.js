@@ -22,8 +22,9 @@
       shape: 'square'
     }
   };
-  const MAX_BOARD = 12;
+  const MAX_BOARD = 20;
   const MIN_BOARD = 2;
+  const MAX_DUAL_GRAPH_PRESET_GENUS = 12;
   const MIN_VIEW_SCALE = 0.45;
   const MAX_VIEW_SCALE = 2.8;
   const DEFAULT_RIEMANN_NODE_RADII = [1.1, 0.5, 0.47, 0.43, 0.39, 0.35, 0.35];
@@ -1099,6 +1100,7 @@
 
   function init() {
     collectRefs();
+    syncBoardInputBounds();
     bindControls();
     bindCards();
     bindCanvas();
@@ -1327,6 +1329,14 @@
       genus: document.getElementById('out-genus'),
       cusps: document.getElementById('out-cusps')
     };
+  }
+
+  function syncBoardInputBounds() {
+    [refs.gridRows, refs.gridCols].forEach((input) => {
+      if (!input) return;
+      input.min = String(MIN_BOARD);
+      input.max = String(MAX_BOARD);
+    });
   }
 
   function bindControls() {
@@ -2754,7 +2764,7 @@
         }
         return;
       }
-      const genus = clampInt(refs.dualGraphPresetGenus ? refs.dualGraphPresetGenus.value : 2, 0, 12, 2);
+      const genus = clampInt(refs.dualGraphPresetGenus ? refs.dualGraphPresetGenus.value : 2, 0, MAX_DUAL_GRAPH_PRESET_GENUS, 2);
       const markings = clampInt(refs.dualGraphPresetMarkings ? refs.dualGraphPresetMarkings.value : 5, 0, 6, 5);
       try {
         applyModuliSpaceDualGraphPreset(genus, markings);
@@ -2903,11 +2913,11 @@
   function formatModuliSpaceDualGraphPreset(genus, markings) {
     const n = clampInt(markings, 0, 6, 5);
     const legs = Array.from({ length: n }, (_, index) => index + 1);
-    return `Graph : [${clampInt(genus, 0, 12, 2)}] [[${legs.join(', ')}]] []`;
+    return `Graph : [${clampInt(genus, 0, MAX_DUAL_GRAPH_PRESET_GENUS, 2)}] [[${legs.join(', ')}]] []`;
   }
 
   function applyModuliSpaceDualGraphPreset(genus, markings) {
-    const g = clampInt(genus, 0, 12, 2);
+    const g = clampInt(genus, 0, MAX_DUAL_GRAPH_PRESET_GENUS, 2);
     const n = clampInt(markings, 0, 6, 5);
     const rows = 5;
     const cols = 5;
