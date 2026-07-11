@@ -17,7 +17,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fffdf8",
-      "x": 524.5,
+      "x": 323.9,
       "y": 46
     },
     {
@@ -29,7 +29,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goal",
           "label": "goal",
           "type": "checkbox",
-          "text": "- [x] add complex,\n- [ ] allowing user to truncate to shorter complex\n- [ ] SES is a special complex\n- [ ] SES induces LES\n- [x] filtration and quotient\n- [ ] it induces spectral sequence\n- [ ] triangle can change to a SES if user claim sp\n- [ ] triangle can shift itself"
+          "text": "- [x] add complex,\n- [x] allowing user to truncate to shorter complex\n- [x] SES is a special complex\n- [x] SES induces LES\n- [x] filtration and quotient\n- [ ] it induces spectral sequence\n- [ ] triangle can change to a SES if user claim sp\n- [ ] triangle can shift itself"
         }
       ],
       "setting": "",
@@ -39,8 +39,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 283.5,
-      "y": 46
+      "x": 148.9,
+      "y": 148.8
     },
     {
       "id": "n39",
@@ -61,99 +61,19 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 355.9,
-      "y": 116.3
-    },
-    {
-      "id": "n46",
-      "type": "misc",
-      "label": "wrong glue",
-      "details": [
-        {
-          "id": "preset",
-          "label": "preset",
-          "type": "textbox",
-          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T10:46:51.997Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"half-glued\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"4x4 Sigma_1,1\",\n    \"lattice\": \"square\",\n    \"rows\": 4,\n    \"cols\": 4,\n    \"surface\": \"Sigma_1,1\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 3,\n          \"edge\": \"N\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 3,\n          \"index\": 14,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 2,\n          \"index\": 1,\n          \"dir\": 3,\n          \"edge\": \"N\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 4,\n          \"index\": 15,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 1,\n        \"color\": \"#b23a48\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 8,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 1,\n          \"col\": 4,\n          \"index\": 3,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 1,\n        \"color\": \"#b23a48\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 12,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 4,\n          \"index\": 7,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 16,\n    \"existing\": 16,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 4,\n    \"unmatchedBoundaries\": 8,\n    \"boundaryComponents\": 1,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": 1,\n    \"nonorientableGenus\": null,\n    \"orientable\": true,\n    \"surfaceType\": \"Sigma_1,1\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"T_1 with 1 hole, 0 cusps\\\">&Sigma;<sub>1,1</sub></span>\",\n    \"surfaceTypeTooltip\": \"T_1 with 1 hole, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": -1,\n    \"action\": \"billiard\",\n    \"multiEdges\": true,\n    \"chainLength\": 2,\n    \"chainReversed\": true,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
-        },
-        {
-          "id": "type",
-          "label": "type",
-          "type": "textbox",
-          "text": "half-glued"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 292.8,
-      "y": 402.8
-    },
-    {
-      "id": "n47",
-      "type": "misc",
-      "label": "hyperlink",
-      "details": [
-        {
-          "id": "goal",
-          "label": "goal",
-          "type": "checkbox",
-          "text": "Except the following cases, all calculators only link to the main calculator:\nYoung Diagram Calculator with Young Diagram^2 Calculator are linked to each other\nMosaic Calculator and Ramified Minigames\nSheaf Calculator and Category Calculator"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 667.9,
-      "y": 399.1
+      "x": 268.2,
+      "y": 254
     },
     {
       "id": "n48",
       "type": "misc",
       "label": "minigame",
-      "details": [],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 508.3,
-      "y": 404.5
-    },
-    {
-      "id": "n49",
-      "type": "misc",
-      "label": "Theorem Graph Calculator",
-      "details": [],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 257,
-      "y": 204.3
-    },
-    {
-      "id": "n50",
-      "type": "misc",
-      "label": "label",
       "details": [
         {
-          "id": "goal",
-          "label": "goal",
+          "id": "future",
+          "label": "future?",
           "type": "checkbox",
-          "text": "label of the arrow should have no background rectangle\nLike the https://q.uiver.app/, user can determine the position of the label, and left align/centre align(clear)/centre align(over)/right align"
+          "text": "Go\nBilliard\nReversi"
         }
       ],
       "setting": "",
@@ -161,124 +81,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 140,
-      "y": 375.5
-    },
-    {
-      "id": "n51",
-      "type": "misc",
-      "label": "better display",
-      "details": [
-        {
-          "id": "goal",
-          "label": "goal",
-          "type": "checkbox",
-          "text": "when the five/four in a line, the reused piece will have several yellow highlights indicating how many times the piece is used, and if a line is used more than once it will also be bolded\nThe display row should also work for \"Connect Four\", while both have default choice display \"vertex E/S/W/N\". Maybe the \"vertex E/S/W/N\" can be called \"gridded board\" and the \"tile centers\" can be called \"tile board\"?"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 358.7,
-      "y": 282
-    },
-    {
-      "id": "n53",
-      "type": "misc",
-      "label": "presets",
-      "details": [
-        {
-          "id": "high-hit",
-          "label": "high hit2",
-          "type": "textbox",
-          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T11:33:57.168Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 Sigma_0,3\",\n    \"lattice\": \"square\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"Sigma_0,3\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 1,\n        \"color\": \"#b23a48\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 2,\n    \"unmatchedBoundaries\": 22,\n    \"boundaryComponents\": 3,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": 0,\n    \"nonorientableGenus\": null,\n    \"orientable\": true,\n    \"surfaceType\": \"Sigma_0,3\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"S^2 with 3 holes, 0 cusps\\\">&Sigma;<sub>0,3</sub></span>\",\n    \"surfaceTypeTooltip\": \"S^2 with 3 holes, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": -1,\n    \"action\": \"glue-boundary\",\n    \"multiEdges\": false,\n    \"chainLength\": 1,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
-        },
-        {
-          "id": "high-hit-2",
-          "label": "high hit",
-          "type": "textbox",
-          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T11:38:32.288Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 Sigma_1,1\",\n    \"lattice\": \"square\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"Sigma_1,1\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 1,\n        \"color\": \"#b23a48\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 2,\n    \"unmatchedBoundaries\": 22,\n    \"boundaryComponents\": 1,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": 1,\n    \"nonorientableGenus\": null,\n    \"orientable\": true,\n    \"surfaceType\": \"Sigma_1,1\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"T_1 with 1 hole, 0 cusps\\\">&Sigma;<sub>1,1</sub></span>\",\n    \"surfaceTypeTooltip\": \"T_1 with 1 hole, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": -1,\n    \"action\": \"glue-boundary\",\n    \"multiEdges\": false,\n    \"chainLength\": 1,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
-        },
-        {
-          "id": "all-horizontal",
-          "label": "all horizontal",
-          "type": "textbox",
-          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T11:46:55.845Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 Sigma_1,5\",\n    \"lattice\": \"square\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"Sigma_1,5\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 5,\n          \"index\": 39,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 1,\n        \"color\": \"#b23a48\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 7,\n          \"index\": 34,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 3,\n          \"index\": 37,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 2,\n        \"color\": \"#6a4c93\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 6,\n          \"index\": 40,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 3,\n        \"color\": \"#c47f17\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 2,\n          \"index\": 36,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      },\n      {\n        \"id\": 5,\n        \"group\": 4,\n        \"color\": \"#2f855a\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 1,\n          \"index\": 7,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 6,\n        \"group\": 5,\n        \"color\": \"#8a4f7d\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 7,\n          \"index\": 6,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 6,\n    \"unmatchedBoundaries\": 14,\n    \"boundaryComponents\": 5,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": 1,\n    \"nonorientableGenus\": null,\n    \"orientable\": true,\n    \"surfaceType\": \"Sigma_1,5\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"T_1 with 5 holes, 0 cusps\\\">&Sigma;<sub>1,5</sub></span>\",\n    \"surfaceTypeTooltip\": \"T_1 with 5 holes, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": -5,\n    \"action\": \"glue-boundary\",\n    \"multiEdges\": false,\n    \"chainLength\": 1,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
-        },
-        {
-          "id": "top-fight",
-          "label": "top fight",
-          "type": "textbox",
-          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T11:44:19.664Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 Sigma_1,1\",\n    \"lattice\": \"square\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"Sigma_1,1\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 3,\n          \"index\": 37,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 1,\n        \"color\": \"#b23a48\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 5,\n          \"index\": 39,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 2,\n        \"color\": \"#6a4c93\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 2,\n          \"index\": 36,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 7,\n          \"index\": 34,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 3,\n        \"color\": \"#c47f17\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 6,\n          \"index\": 40,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      },\n      {\n        \"id\": 5,\n        \"group\": 4,\n        \"color\": \"#2f855a\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      },\n      {\n        \"id\": 6,\n        \"group\": 5,\n        \"color\": \"#8a4f7d\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 6,\n    \"unmatchedBoundaries\": 14,\n    \"boundaryComponents\": 1,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": 1,\n    \"nonorientableGenus\": null,\n    \"orientable\": true,\n    \"surfaceType\": \"Sigma_1,1\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"T_1 with 1 hole, 0 cusps\\\">&Sigma;<sub>1,1</sub></span>\",\n    \"surfaceTypeTooltip\": \"T_1 with 1 hole, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": -1,\n    \"action\": \"glue-boundary\",\n    \"multiEdges\": false,\n    \"chainLength\": 1,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
-        },
-        {
-          "id": "exchange",
-          "label": "exchange",
-          "type": "textbox",
-          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T11:50:12.337Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 Sigma_1.5,1^1\",\n    \"lattice\": \"square\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"Sigma_1.5,1^1\",\n    \"removedTiles\": [],\n    \"cutEdges\": [\n      {\n        \"left\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14\n        },\n        \"right\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21\n        }\n      },\n      {\n        \"left\": {\n          \"row\": 3,\n          \"col\": 2,\n          \"index\": 15\n        },\n        \"right\": {\n          \"row\": 4,\n          \"col\": 2,\n          \"index\": 22\n        }\n      },\n      {\n        \"left\": {\n          \"row\": 3,\n          \"col\": 6,\n          \"index\": 19\n        },\n        \"right\": {\n          \"row\": 4,\n          \"col\": 6,\n          \"index\": 26\n        }\n      },\n      {\n        \"left\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20\n        },\n        \"right\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27\n        }\n      }\n    ],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 2,\n          \"index\": 22,\n          \"dir\": 3,\n          \"edge\": \"N\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 6,\n          \"index\": 19,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 3,\n          \"edge\": \"N\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 1,\n        \"color\": \"#b23a48\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 6,\n          \"index\": 26,\n          \"dir\": 3,\n          \"edge\": \"N\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 1,\n        \"color\": \"#b23a48\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 3,\n          \"edge\": \"N\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 2,\n          \"index\": 15,\n          \"dir\": 1,\n          \"edge\": \"S\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 4,\n    \"gluedEdges\": 4,\n    \"unmatchedBoundaries\": 26,\n    \"boundaryComponents\": 1,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": 1.5,\n    \"nonorientableGenus\": null,\n    \"orientable\": true,\n    \"surfaceType\": \"Sigma_1.5,1^1\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"T_1.5 with 1 hole, 1 cusp\\\">&Sigma;<sub>1.5,1</sub><sup>1</sup></span>\",\n    \"surfaceTypeTooltip\": \"T_1.5 with 1 hole, 1 cusp\",\n    \"cusps\": 1,\n    \"eulerCharacteristic\": -2,\n    \"action\": \"billiard\",\n    \"multiEdges\": true,\n    \"chainLength\": 2,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 682,
-      "y": 229.9
-    },
-    {
-      "id": "n54",
-      "type": "misc",
-      "label": "strip presets",
-      "details": [
-        {
-          "id": "usual-strip",
-          "label": "usual strip",
-          "type": "textbox",
-          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T11:59:52.881Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 Sigma_0,2\",\n    \"lattice\": \"square\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"Sigma_0,2\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 7,\n          \"index\": 6,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 1,\n          \"index\": 7,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 5,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 7,\n          \"index\": 34,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 6,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 6,\n    \"unmatchedBoundaries\": 14,\n    \"boundaryComponents\": 2,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": 0,\n    \"nonorientableGenus\": null,\n    \"orientable\": true,\n    \"surfaceType\": \"Sigma_0,2\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"S^2 with 2 holes, 0 cusps\\\">&Sigma;<sub>0,2</sub></span>\",\n    \"surfaceTypeTooltip\": \"S^2 with 2 holes, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": 0,\n    \"action\": \"billiard\",\n    \"multiEdges\": true,\n    \"chainLength\": 6,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
-        },
-        {
-          "id": "m-bius-strip",
-          "label": "Möbius strip",
-          "type": "textbox",
-          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T12:16:09.129Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 N_1,1\",\n    \"lattice\": \"square\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"N_1,1\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 7,\n          \"index\": 34,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 1,\n          \"index\": 7,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 5,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 6,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 7,\n          \"index\": 6,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 2,\n          \"edge\": \"W\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 6,\n    \"unmatchedBoundaries\": 14,\n    \"boundaryComponents\": 1,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": null,\n    \"nonorientableGenus\": 1,\n    \"orientable\": false,\n    \"surfaceType\": \"N_1,1\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"P_1 with 1 hole, 0 cusps\\\">N<sub>1,1</sub></span>\",\n    \"surfaceTypeTooltip\": \"P_1 with 1 hole, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": 0,\n    \"action\": \"reverse-glue\",\n    \"multiEdges\": true,\n    \"chainLength\": 6,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
-        },
-        {
-          "id": "hex-usual-strip",
-          "label": "hex usual strip",
-          "type": "textbox",
-          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T12:06:46.678Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 Sigma_0,2\",\n    \"lattice\": \"hexagonal\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"Sigma_0,2\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 7,\n          \"index\": 6,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        },\n        \"second\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 1,\n          \"index\": 7,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 1,\n          \"edge\": \"SE\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 4,\n          \"edge\": \"NW\"\n        }\n      },\n      {\n        \"id\": 5,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 6,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        }\n      },\n      {\n        \"id\": 7,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 8,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 1,\n          \"edge\": \"SE\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 4,\n          \"edge\": \"NW\"\n        }\n      },\n      {\n        \"id\": 9,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 7,\n          \"index\": 34,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 10,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        }\n      },\n      {\n        \"id\": 11,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"opposite\",\n        \"reversed\": false,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 11,\n    \"unmatchedBoundaries\": 28,\n    \"boundaryComponents\": 2,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": 0,\n    \"nonorientableGenus\": null,\n    \"orientable\": true,\n    \"surfaceType\": \"Sigma_0,2\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"S^2 with 2 holes, 0 cusps\\\">&Sigma;<sub>0,2</sub></span>\",\n    \"surfaceTypeTooltip\": \"S^2 with 2 holes, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": 0,\n    \"action\": \"billiard\",\n    \"multiEdges\": true,\n    \"chainLength\": 11,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
-        },
-        {
-          "id": "hex-bad-m-bius-strip",
-          "label": "hex bad Möbius strip",
-          "type": "textbox",
-          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T12:12:16.541Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"6x7 N_0,2^10\",\n    \"lattice\": \"hexagonal\",\n    \"rows\": 6,\n    \"cols\": 7,\n    \"surface\": \"N_0,2^10\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        },\n        \"second\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 7,\n          \"index\": 34,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 1,\n          \"index\": 7,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 1,\n          \"edge\": \"SE\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 4,\n          \"edge\": \"NW\"\n        }\n      },\n      {\n        \"id\": 5,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 6,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        }\n      },\n      {\n        \"id\": 7,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 8,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 1,\n          \"edge\": \"SE\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 4,\n          \"edge\": \"NW\"\n        }\n      },\n      {\n        \"id\": 9,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      },\n      {\n        \"id\": 10,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        }\n      },\n      {\n        \"id\": 11,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": true,\n        \"secondArrowReversed\": true,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 7,\n          \"index\": 6,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 42,\n    \"existing\": 42,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 11,\n    \"unmatchedBoundaries\": 28,\n    \"boundaryComponents\": 2,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": null,\n    \"nonorientableGenus\": 0,\n    \"orientable\": false,\n    \"surfaceType\": \"N_0,2^10\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"P_0 with 2 holes, 10 cusps\\\">N<sub>0,2</sub><sup>10</sup></span>\",\n    \"surfaceTypeTooltip\": \"P_0 with 2 holes, 10 cusps\",\n    \"cusps\": 10,\n    \"eulerCharacteristic\": 0,\n    \"action\": \"tile\",\n    \"multiEdges\": true,\n    \"chainLength\": 11,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
-        },
-        {
-          "id": "hex-good-m-bius-strip",
-          "label": "hex good Möbius strip",
-          "type": "textbox",
-          "text": "{\n  \"schema\": \"ramified-minigame-background-preset\",\n  \"version\": 1,\n  \"exportedAt\": \"2026-07-09T12:15:11.455Z\",\n  \"source\": \"mosaic-calculator\",\n  \"sourcePresetId\": \"classic-4x4\",\n  \"preset\": {\n    \"id\": \"mosaic-background\",\n    \"label\": \"7x7 N_0,2\",\n    \"lattice\": \"hexagonal\",\n    \"rows\": 7,\n    \"cols\": 7,\n    \"surface\": \"N_0,2\",\n    \"removedTiles\": [],\n    \"cutEdges\": [],\n    \"gluedEdges\": [\n      {\n        \"id\": 1,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 7,\n          \"col\": 1,\n          \"index\": 42,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 1,\n          \"col\": 7,\n          \"index\": 6,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 2,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 7,\n          \"col\": 1,\n          \"index\": 42,\n          \"dir\": 4,\n          \"edge\": \"NW\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        }\n      },\n      {\n        \"id\": 3,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 6,\n          \"col\": 1,\n          \"index\": 35,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 4,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        },\n        \"second\": {\n          \"row\": 2,\n          \"col\": 7,\n          \"index\": 13,\n          \"dir\": 1,\n          \"edge\": \"SE\"\n        }\n      },\n      {\n        \"id\": 5,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 3,\n          \"col\": 7,\n          \"index\": 20,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 6,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 5,\n          \"col\": 1,\n          \"index\": 28,\n          \"dir\": 4,\n          \"edge\": \"NW\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        }\n      },\n      {\n        \"id\": 7,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 4,\n          \"col\": 1,\n          \"index\": 21,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 8,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        },\n        \"second\": {\n          \"row\": 4,\n          \"col\": 7,\n          \"index\": 27,\n          \"dir\": 1,\n          \"edge\": \"SE\"\n        }\n      },\n      {\n        \"id\": 9,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 5,\n          \"col\": 7,\n          \"index\": 34,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 10,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 3,\n          \"col\": 1,\n          \"index\": 14,\n          \"dir\": 4,\n          \"edge\": \"NW\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 5,\n          \"edge\": \"NE\"\n        }\n      },\n      {\n        \"id\": 11,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 2,\n          \"col\": 1,\n          \"index\": 7,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      },\n      {\n        \"id\": 12,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 2,\n          \"edge\": \"SW\"\n        },\n        \"second\": {\n          \"row\": 6,\n          \"col\": 7,\n          \"index\": 41,\n          \"dir\": 1,\n          \"edge\": \"SE\"\n        }\n      },\n      {\n        \"id\": 13,\n        \"group\": 0,\n        \"color\": \"#1f7a8c\",\n        \"orientation\": \"reversed\",\n        \"reversed\": true,\n        \"firstArrowReversed\": false,\n        \"secondArrowReversed\": false,\n        \"first\": {\n          \"row\": 1,\n          \"col\": 1,\n          \"index\": 0,\n          \"dir\": 3,\n          \"edge\": \"W\"\n        },\n        \"second\": {\n          \"row\": 7,\n          \"col\": 7,\n          \"index\": 48,\n          \"dir\": 0,\n          \"edge\": \"E\"\n        }\n      }\n    ]\n  },\n  \"backgroundSpace\": {\n    \"total\": 49,\n    \"existing\": 49,\n    \"removed\": 0,\n    \"cutEdges\": 0,\n    \"gluedEdges\": 13,\n    \"unmatchedBoundaries\": 28,\n    \"boundaryComponents\": 2,\n    \"components\": 1,\n    \"closedSurface\": false,\n    \"genus\": null,\n    \"nonorientableGenus\": 0,\n    \"orientable\": false,\n    \"surfaceType\": \"N_0,2\",\n    \"surfaceTypeHtml\": \"<span class=\\\"tooltip-label\\\" tabindex=\\\"0\\\" data-tooltip=\\\"P_0 with 2 holes, 0 cusps\\\">N<sub>0,2</sub></span>\",\n    \"surfaceTypeTooltip\": \"P_0 with 2 holes, 0 cusps\",\n    \"cusps\": 0,\n    \"eulerCharacteristic\": 0,\n    \"action\": \"reverse-glue\",\n    \"multiEdges\": true,\n    \"chainLength\": 13,\n    \"chainReversed\": false,\n    \"cuspMarkerScale\": 0.7,\n    \"billiardSpeed\": 0.2,\n    \"billiardTrailLength\": 200,\n    \"billiardArrowLength\": 20,\n    \"billiardHitMarkers\": \"boundary\"\n  }\n}"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 467.2,
-      "y": 188.4
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 609.2,
+      "y": 232
     },
     {
       "id": "n55",
@@ -286,54 +92,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "label": "Mosaic Calculator",
       "details": [
         {
-          "id": "improve",
-          "label": "improve",
-          "type": "textbox",
-          "text": "allow more rows and more columns"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 629,
-      "y": 119.1
-    },
-    {
-      "id": "n56",
-      "type": "misc",
-      "label": "misc node",
-      "details": [
-        {
-          "id": "bug",
-          "label": "bug",
-          "type": "textbox",
-          "text": "When user try to change the name of the extra, the name should only appear in the textbox, not appear twice"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 60.5,
-      "y": 225
-    },
-    {
-      "id": "n57",
-      "type": "misc",
-      "label": "main canvas",
-      "details": [
-        {
-          "id": "goal",
-          "label": "goal",
+          "id": "hard-realization",
+          "label": "hard realization",
           "type": "checkbox",
-          "text": "- [x] main canvas should be allowed to drag longer. User can also lock the ratio, so that the length and width ration is fixed, while the relative position and bigness of the buttons are also fixed."
+          "text": "not only realize divisors, but also all degeneralizations\nD(A|B) realization"
         }
       ],
       "setting": "",
@@ -341,10 +103,47 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 122.7,
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 494.2,
+      "y": 137.7
+    },
+    {
+      "id": "n58",
+      "type": "misc",
+      "label": "$M_{g,n}$",
+      "details": [],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 540.3,
       "y": 46
+    },
+    {
+      "id": "n59",
+      "type": "misc",
+      "label": "Others",
+      "details": [
+        {
+          "id": "future",
+          "label": "future",
+          "type": "checkbox",
+          "text": "Newton polygon/tropical curve\nArnold's classification\nSimple singularities\n\\cite{simple sing}"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 428.8,
+      "y": 242.1
     }
   ],
   "arrows": [
@@ -369,7 +168,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "id": "a37",
       "sourceId": "n4",
       "targetId": "n39",
-      "label": "",
+      "label": "same UI",
       "remark": "",
       "body": "solid",
       "head": "arrow",
@@ -377,134 +176,15 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 15,
+      "labelOffset": 0,
       "labelPosition": 0.5,
-      "labelAlign": "left",
+      "labelAlign": "center-clear",
       "color": "#5f574e"
     },
     {
-      "id": "a39",
-      "sourceId": "n46",
-      "targetId": "n48",
-      "label": "test",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 15,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a40",
-      "sourceId": "n50",
-      "targetId": "n49",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 15,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a41",
-      "sourceId": "n51",
-      "targetId": "n48",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 15,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a43",
-      "sourceId": "n53",
-      "targetId": "n48",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 15,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a44",
-      "sourceId": "n54",
-      "targetId": "n53",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "arrow",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 15,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a45",
-      "sourceId": "n54",
-      "targetId": "n48",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 15,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a46",
-      "sourceId": "n56",
-      "targetId": "n49",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 15,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a47",
-      "sourceId": "n57",
-      "targetId": "n49",
+      "id": "a48",
+      "sourceId": "n58",
+      "targetId": "n4",
       "label": "",
       "remark": "",
       "body": "solid",
@@ -519,69 +199,59 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "color": "#5f574e"
     }
   ],
-  "references": [],
+  "references": [
+    {
+      "key": "mo1",
+      "author": "",
+      "title": "Simple singularities algorithm?",
+      "year": "",
+      "citeText": "\\cite{simple sing}",
+      "url": "https://mathoverflow.net/questions/185692/how-can-one-determine-if-a-singularity-is-simple",
+      "source": "mathoverflow",
+      "rawBibtex": "",
+      "links": [
+        {
+          "url": "https://mathoverflow.net/questions/185692/how-can-one-determine-if-a-singularity-is-simple",
+          "source": "mathoverflow",
+          "label": ""
+        }
+      ]
+    }
+  ],
   "view": {
-    "selectedId": "n48",
+    "selectedId": "n59",
     "selectedReferenceKeys": [],
     "layoutRunning": false,
     "canvasRatioLocked": true,
-    "canvasAspectRatio": 1.6124,
+    "canvasAspectRatio": 2.51,
     "relativeNodePositions": {
       "n4": {
-        "x": 0.6965,
-        "y": 0.0985
+        "x": 0.4302,
+        "y": 0.1533
       },
       "n37": {
-        "x": 0.3765,
-        "y": 0.0985
+        "x": 0.1978,
+        "y": 0.4961
       },
       "n39": {
-        "x": 0.4726,
-        "y": 0.249
-      },
-      "n46": {
-        "x": 0.3889,
-        "y": 0.8625
-      },
-      "n47": {
-        "x": 0.887,
-        "y": 0.8545
+        "x": 0.3562,
+        "y": 0.8467
       },
       "n48": {
-        "x": 0.675,
-        "y": 0.8661
-      },
-      "n49": {
-        "x": 0.3413,
-        "y": 0.4374
-      },
-      "n50": {
-        "x": 0.1859,
-        "y": 0.804
-      },
-      "n51": {
-        "x": 0.4763,
-        "y": 0.6039
-      },
-      "n53": {
-        "x": 0.9057,
-        "y": 0.4922
-      },
-      "n54": {
-        "x": 0.6205,
-        "y": 0.4035
+        "x": 0.8091,
+        "y": 0.7732
       },
       "n55": {
-        "x": 0.8353,
-        "y": 0.255
+        "x": 0.6563,
+        "y": 0.4591
       },
-      "n56": {
-        "x": 0.0803,
-        "y": 0.4817
+      "n58": {
+        "x": 0.7175,
+        "y": 0.1533
       },
-      "n57": {
-        "x": 0.1629,
-        "y": 0.0985
+      "n59": {
+        "x": 0.5694,
+        "y": 0.8069
       }
     }
   }

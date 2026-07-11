@@ -1431,12 +1431,27 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      text-align: center;
     }
 
     .sheaf-step-saved-rule-formula mjx-container {
       max-width: 100% !important;
       overflow: hidden;
       vertical-align: middle;
+    }
+
+    .sheaf-step-saved-rule-formula.is-snake-les,
+    .sheaf-complex-operation-preview-formula.is-snake-les {
+      flex: 1 1 100%;
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
+    }
+
+    .sheaf-step-saved-rule-formula.is-snake-les mjx-container,
+    .sheaf-complex-operation-preview-formula.is-snake-les mjx-container {
+      overflow: visible !important;
+      max-width: none !important;
     }
 
     .sheaf-step-saved-rule-kind {
@@ -1453,7 +1468,12 @@
       grid-template-columns: auto minmax(0, 1fr) auto auto;
     }
 
-    .sheaf-complex-object-button {
+    .sheaf-complex-saved-row.is-snake-les {
+      align-items: center;
+    }
+
+    .sheaf-complex-object-button,
+    .sheaf-complex-map-button {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -1470,7 +1490,9 @@
     }
 
     .sheaf-complex-object-button:hover,
-    .sheaf-complex-object-button.is-selected {
+    .sheaf-complex-object-button.is-selected,
+    .sheaf-complex-map-button:hover,
+    .sheaf-complex-map-button.is-selected {
       border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
       background: rgba(61,107,79,0.08);
       color: var(--accent);
@@ -1504,12 +1526,17 @@
     }
 
     .sheaf-complex-operation-controls,
+    .sheaf-complex-operation-actions,
     .sheaf-complex-operation-preview-row {
       display: flex;
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
       min-width: 0;
+    }
+
+    .sheaf-complex-operation-actions {
+      justify-content: flex-end;
     }
 
     .sheaf-complex-operation-target-list {
@@ -1537,11 +1564,162 @@
       min-width: 0;
     }
 
+    .sheaf-complex-operation-fiber-list {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .sheaf-complex-operation-fiber-row {
+      display: grid;
+      grid-template-columns: max-content minmax(120px, 220px);
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
     .sheaf-complex-operation-preview-formula {
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .sheaf-complex-les-display {
+      display: block;
+      width: 100%;
+      min-width: 0;
+      text-align: center;
+    }
+
+    .sheaf-complex-les-switch {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .sheaf-complex-les-switch .hint {
+      margin-left: 4px;
+      font-size: 0.72rem;
+    }
+
+    .sheaf-complex-les-switch .is-selected {
+      border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+      background: rgba(61,107,79,0.08);
+      color: var(--accent);
+    }
+
+    .sheaf-complex-les-pane {
+      display: none;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .sheaf-complex-les-pane.is-active {
+      display: block;
+    }
+
+    .sheaf-complex-snake-fast-display {
+      position: relative;
+      display: block;
+      width: min(100%, var(--les-fast-width));
+      max-width: 100%;
+      margin: 0 auto;
+      aspect-ratio: var(--les-fast-ratio);
+      min-height: 120px;
+      overflow: visible;
+    }
+
+    .sheaf-complex-snake-fast-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      color: var(--text);
+    }
+
+    .sheaf-complex-snake-fast-arrow {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .sheaf-complex-snake-fast-arrow.is-selected {
+      color: var(--accent);
+      stroke-width: 2.25;
+    }
+
+    .sheaf-complex-snake-fast-arrow[data-complex-chart-map-entry] {
+      cursor: pointer;
+      pointer-events: stroke;
+    }
+
+    .sheaf-complex-snake-fast-arrow-hit {
+      fill: none;
+      stroke: transparent;
+      stroke-width: 18;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: stroke;
+      cursor: pointer;
+    }
+
+    .sheaf-complex-snake-fast-marker {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.25;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .sheaf-complex-snake-fast-object,
+    .sheaf-complex-snake-fast-label {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      z-index: 1;
+      padding: 0 3px;
+      background: var(--card);
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .sheaf-complex-snake-fast-button {
+      appearance: none;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .sheaf-complex-snake-fast-button:hover,
+    .sheaf-complex-snake-fast-button.is-selected {
+      border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+      color: var(--accent);
+    }
+
+    .sheaf-complex-snake-fast-label {
+      font-size: 0.92em;
+    }
+
+    .sheaf-complex-tikz-frame {
+      display: block;
+      width: 100%;
+      min-height: 150px;
+      height: 170px;
+      border: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    .sheaf-complex-les-degree-input {
+      width: 72px;
     }
 
     #sheaf-complex-wide-host {
@@ -1653,6 +1831,7 @@
     .sheaf-filtration-display {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 0.35em;
       max-width: 100%;
       min-width: 0;
@@ -4010,6 +4189,6 @@
   };
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
-<script src="js/sheaf_complex_calculator.js?v=complex-chart-20"></script>
+<script src="js/sheaf_complex_calculator.js?v=complex-chart-33"></script>
 </body>
 </html>

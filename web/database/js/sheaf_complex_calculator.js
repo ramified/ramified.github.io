@@ -161,7 +161,8 @@
   ]);
   const VARS = new Map();
   const refs = {};
-  const MAX_COMPLEX_CHART_LENGTH = 20;
+  const MAX_COMPLEX_CHART_LENGTH = 80;
+  const MAX_COMPLEX_CHART_LES_END_DEGREE = 20;
   const COMPLEX_CHART_DERHAM_PRESET_ID = 'de-rham-cohomology';
   const COMPLEX_CHART_DERHAM_LENGTH_MODE = 'de-rham-dimension';
   const MAX_COMPLEX_CHART_DERHAM_DIMENSION = Math.max(0, MAX_COMPLEX_CHART_LENGTH - 4);
@@ -305,8 +306,13 @@
       operations: {
         open: false,
         targetId: null,
-        mode: 'truncate',
+        mode: '',
         cuts: [],
+        mapCut: null,
+        mapCuts: [],
+        fiberNames: {},
+        derivedFunctor: 'cohomology',
+        lesEndDegree: 3,
         candidates: [],
         message: ''
       }
@@ -321,6 +327,8 @@
 
   function init() {
     collectRefs();
+    window.addEventListener('message', handleTikzFrameMessage);
+    document.addEventListener('click', handleComplexChartLesDisplayClick);
     syncMainColumnPlacement();
     bindRuntimeErrorWarnings();
     initCustomTooltips();
@@ -6769,6 +6777,11 @@
     }
     if (refs.complexChartOperationsPanel) {
       refs.complexChartOperationsPanel.addEventListener('click', (event) => {
+        const mapButton = event.target.closest('[data-complex-chart-map-entry]');
+        if (mapButton) {
+          toggleComplexChartOperationMapCut(mapButton.dataset.complexChartMapEntry, mapButton.dataset.complexChartMapIndex);
+          return;
+        }
         const objectButton = event.target.closest('[data-complex-chart-object-entry]');
         if (objectButton) {
           toggleComplexChartOperationCut(objectButton.dataset.complexChartObjectEntry, objectButton.dataset.complexChartObjectIndex);
@@ -6795,8 +6808,34 @@
           setComplexChartOperationCandidateSelected(candidateCheckbox.dataset.complexChartOperationCandidate, candidateCheckbox.checked);
           return;
         }
+        const lesRangeCheckbox = event.target.closest('[data-complex-chart-les-range-truncation]');
+        if (lesRangeCheckbox) {
+          setComplexChartOperationLesRangeTruncation(lesRangeCheckbox.checked);
+          return;
+        }
+        const modeSelect = event.target.closest('[data-complex-chart-operation-mode-select]');
+        if (modeSelect) {
+          setComplexChartOperationMode(modeSelect.value);
+          return;
+        }
         const targetRadio = event.target.closest('[data-complex-chart-operation-target]');
-        if (targetRadio) setComplexChartOperationTarget(targetRadio.dataset.complexChartOperationTarget);
+        if (targetRadio) {
+          setComplexChartOperationTarget(targetRadio.dataset.complexChartOperationTarget);
+          return;
+        }
+        const derivedFunctorSelect = event.target.closest('[data-complex-chart-les-functor]');
+        if (derivedFunctorSelect) {
+          setComplexChartOperationDerivedFunctor(derivedFunctorSelect.value);
+          return;
+        }
+        const lesEndInput = event.target.closest('[data-complex-chart-les-end-degree]');
+        if (lesEndInput) setComplexChartOperationLesEndDegree(lesEndInput.value);
+      });
+      refs.complexChartOperationsPanel.addEventListener('change', (event) => {
+        const fiberInput = event.target.closest('[data-complex-chart-map-fiber-name]');
+        if (fiberInput) {
+          setComplexChartOperationMapFiberName(fiberInput.dataset.complexChartMapFiberName, fiberInput.value);
+        }
       });
     }
     if (refs.complexChartKind) {
@@ -29534,12 +29573,22 @@
       state.complexChart.operations = defaultComplexChartOperationsState();
     } else {
       const previous = state.complexChart.operations;
+      const previousMapCuts = Array.isArray(previous.mapCuts) && previous.mapCuts.length
+        ? previous.mapCuts
+        : previous.mapCut;
       state.complexChart.operations = {
         ...defaultComplexChartOperationsState(),
         ...previous,
         open: previous.open === true || !!previous.openEntryId,
         targetId: previous.targetId || previous.openEntryId || null,
-        mode: normalizeComplexChartOperationMode(previous.mode)
+        mode: normalizeComplexChartOperationMode(previous.mode),
+        mapCut: normalizeComplexChartMapCut(previous.mapCut),
+        mapCuts: normalizeComplexChartMapCuts(previousMapCuts),
+        fiberNames: normalizeComplexChartFiberNames(previous.fiberNames),
+        derivedFunctor: normalizeComplexChartDerivedFunctor(previous.derivedFunctor),
+        lesEndDegree: normalizeComplexChartLesEndDegree(previous.lesEndDegree),
+        lesRangeTruncation: previous.lesRangeTruncation === true,
+        lesRangeEndpoints: normalizeComplexChartLesRangeEndpoints(previous.lesRangeEndpoints)
       };
     }
     return state.complexChart;
@@ -29553,6 +29602,7 @@
       objects: [],
       maps: [],
       quotients: [],
+      display: '',
       editingId: null,
       presetId: null,
       lengthMode: 'objects',
@@ -29564,8 +29614,15 @@
     return {
       open: false,
       targetId: null,
-      mode: 'truncate',
+      mode: '',
       cuts: [],
+      mapCut: null,
+      mapCuts: [],
+      fiberNames: {},
+      derivedFunctor: 'cohomology',
+      lesEndDegree: 3,
+      lesRangeTruncation: false,
+      lesRangeEndpoints: [],
       candidates: [],
       message: ''
     };
@@ -29829,7 +29886,7 @@
   function sanitizeComplexChartLatex(value) {
     const raw = String(value ?? '').trim().replace(/\s+/g, ' ');
     if (!raw) return '';
-    if (raw.length > 120) return '';
+    if (raw.length > 180) return '';
     if (!/^[A-Za-z0-9_{}\\^()\[\]+,\-'\s*!*\/]+$/.test(raw)) return '';
     return raw;
   }
@@ -29855,15 +29912,17 @@
     }
     const id = sanitizePresetId(raw.id)
       || options.fallbackId
-      || (options.requireId === false ? null : `complex-chart-${hashString(stableJson({ kind, length, objects, maps, quotients }))}`);
+      || (options.requireId === false ? null : `complex-chart-${hashString(stableJson({ kind, length, objects, maps, quotients, display: raw.display }))}`);
     const selected = raw.selected !== false;
+    const display = kind === 'chain-complex' && raw.display === 'snake-les' ? 'snake-les' : '';
     const entry = compactSerializable({
       id,
       kind,
       length,
       objects,
       maps,
-      quotients
+      quotients,
+      display
     });
     if (!selected) entry.selected = false;
     return entry;
@@ -29877,6 +29936,7 @@
       objects: editor.objects || [],
       maps: editor.maps || [],
       quotients: editor.quotients || [],
+      display: editor.kind === 'chain-complex' ? editor.display : '',
       selected: true
     }, options);
   }
@@ -29940,6 +30000,7 @@
 
   function complexChartEntryDisplayTikzcd(entry) {
     const normalized = normalizeComplexChartEntry(entry, { requireId: false });
+    if (normalized.display === 'snake-les') return complexChartSnakeDisplayTikzcd(normalized);
     const lines = [
       '\\[',
       '\\begin{tikzcd}[ampersand replacement=\\&]',
@@ -29969,15 +30030,18 @@
   function complexChartEntryDisplayHtml(entry, options = {}) {
     const normalized = normalizeComplexChartEntry(entry, { requireId: false });
     const selectedCuts = new Set(options.selectedCuts || []);
+    const selectedMapCuts = new Set(normalizeComplexChartMapCuts(options.selectedMapCuts ?? options.selectedMapCut, normalized.length));
     if (normalized.kind !== 'filtration') {
-      if (!options.clickableObjects) {
+      if (normalized.display === 'snake-les' && options.clickableLesRange) return complexChartSnakeDisplayFastHtml(normalized, options);
+      if (!options.clickableObjects && !options.clickableMaps) {
+        if (normalized.display === 'snake-les') return complexChartSnakeDisplayHtml(normalized);
         return `<span class="sheaf-complex-whole-expression">\\(${escapeHtml(complexChartEntryDisplayLatex(normalized))}\\)</span>`;
       }
       const pieces = [];
       (normalized.objects || []).forEach((objectLatex, index) => {
         if (index > 0) {
           const mapLatex = normalized.maps?.[index - 1] ?? '';
-          pieces.push(`<span class="sheaf-complex-map">\\(\\xrightarrow{${escapeHtml(mapLatex)}}\\)</span>`);
+          pieces.push(complexChartMapHtml(mapLatex, index - 1, { ...options, selectedMapCuts }));
         }
         pieces.push(complexChartObjectHtml(normalized, objectLatex, index, { ...options, selectedCuts }));
       });
@@ -29993,6 +30057,331 @@
       pieces.push(complexChartObjectHtml(normalized, objectLatex, index, { ...options, selectedCuts }));
     });
     return `<span class="sheaf-filtration-display">${pieces.join('')}</span>`;
+  }
+
+  function complexChartSnakeRows(entry) {
+    const objects = entry.objects || [];
+    const rows = [];
+    let index = 0;
+    const firstRowSize = complexChartObjectIsZero(objects[0]) && objects.length > 4 ? 4 : 3;
+    while (index < objects.length) {
+      const size = rows.length === 0 ? firstRowSize : 3;
+      rows.push({
+        start: index,
+        end: Math.min(objects.length - 1, index + size - 1),
+        hasLeadingZero: index === 0 && firstRowSize === 4,
+        degree: rows.length
+      });
+      index += size;
+    }
+    return rows;
+  }
+
+  function complexChartSnakeDisplayHtml(entry) {
+    const tikzPicture = complexChartSnakeDisplayTikzPicture(entry);
+    const displayId = `les-display-${hashString(tikzPicture)}`;
+    return `
+      <span class="sheaf-complex-les-display" data-sheaf-les-display="${escapeHtml(displayId)}">
+        <span class="sheaf-complex-les-switch" role="group" aria-label="LES display mode">
+          <button class="btn btn-ghost sheaf-chart-export is-selected" type="button" data-sheaf-les-display-mode="fast" aria-pressed="true">no TikZ</button>
+          <button class="btn btn-ghost sheaf-chart-export" type="button" data-sheaf-les-display-mode="tikz" aria-pressed="false">TikZ</button>
+          <span class="hint">TikZ rendering may take a bit to appear.</span>
+        </span>
+        <span class="sheaf-complex-les-pane is-active" data-sheaf-les-pane="fast">
+          ${complexChartSnakeDisplayFastHtml(entry)}
+        </span>
+        <span class="sheaf-complex-les-pane" data-sheaf-les-pane="tikz" data-sheaf-tikz-frame="${escapeHtml(displayId)}" data-sheaf-tikz-srcdoc="${escapeHtml(complexChartSnakeDisplaySrcdoc(tikzPicture, displayId))}"></span>
+      </span>
+    `;
+  }
+
+  function safeTikzScriptText(value) {
+    return String(value || '').replace(/<\/script/gi, '<\\/script');
+  }
+
+  function complexChartSnakeDisplaySrcdoc(tikzPicture, frameId) {
+    const safeFrameId = String(frameId || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    const resizeScript = `
+      (function () {
+        var frameId = ${JSON.stringify(safeFrameId)};
+        function currentHeight() {
+          var body = document.body;
+          var root = document.documentElement;
+          return Math.max(
+            body ? body.scrollHeight : 0,
+            body ? body.offsetHeight : 0,
+            root ? root.scrollHeight : 0,
+            root ? root.offsetHeight : 0,
+            120
+          );
+        }
+        function sendHeight() {
+          parent.postMessage({
+            type: 'sheaf-complex-tikz-height',
+            id: frameId,
+            height: Math.ceil(currentHeight() + 6)
+          }, '*');
+        }
+        window.addEventListener('DOMContentLoaded', sendHeight);
+        window.addEventListener('load', sendHeight);
+        if (window.ResizeObserver) {
+          window.addEventListener('DOMContentLoaded', function () {
+            if (document.body) new ResizeObserver(sendHeight).observe(document.body);
+          });
+        }
+        [80, 300, 900, 1800, 3200, 5200].forEach(function (delay) {
+          window.setTimeout(sendHeight, delay);
+        });
+      })();
+    `;
+    return [
+      '<!doctype html>',
+      '<html>',
+      '<head>',
+      '<meta charset="utf-8">',
+      '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      '<link rel="stylesheet" href="https://tikzjax.com/v1/fonts.css">',
+      '<style>',
+      'html,body{margin:0;padding:0;background:transparent;overflow:hidden;}',
+      'body{display:flex;justify-content:center;align-items:flex-start;min-width:0;}',
+      'svg{max-width:100%;height:auto;}',
+      '</style>',
+      '</head>',
+      '<body>',
+      `<script type="text/tikz">${safeTikzScriptText(tikzPicture)}</script>`,
+      '<script src="https://tikzjax.com/v1/tikzjax.js"></script>',
+      `<script>${safeTikzScriptText(resizeScript)}</script>`,
+      '</body>',
+      '</html>'
+    ].join('');
+  }
+
+  function complexChartSnakeDisplayFastHtml(entry, options = {}) {
+    const rows = complexChartSnakeRows(entry);
+    const maxDegree = Math.max(0, ...rows.map((row) => row.degree));
+    const coordByIndex = new Map();
+    const selectedEndpoints = new Set((options.selectedLesRangeEndpoints || [])
+      .map((endpoint) => complexChartLesRangeEndpointKey(endpoint))
+      .filter(Boolean));
+    const width = 860;
+    const rowGap = 110;
+    const height = Math.max(150, maxDegree * rowGap + 66);
+    const columnStep = 110;
+    const left = 58;
+    const top = 28;
+    rows.forEach((row) => {
+      for (let index = row.start; index <= row.end; index += 1) {
+        const column = complexChartSnakeColumn(row, index);
+        coordByIndex.set(index, {
+          x: left + (column - 1) * columnStep,
+          y: top + (maxDegree - row.degree) * rowGap,
+          row
+        });
+      }
+    });
+    const paths = [];
+    const labels = [];
+    const markerId = `les-fast-arrow-${hashString(stableJson({
+      objects: entry.objects || [],
+      maps: entry.maps || []
+    }))}`;
+    (entry.maps || []).forEach((mapLatex, index) => {
+      const from = coordByIndex.get(index);
+      const to = coordByIndex.get(index + 1);
+      if (!from || !to) return;
+      const selected = selectedEndpoints.has(complexChartLesRangeEndpointKey({ kind: 'map', index }));
+      const mapAttrs = options.clickableMaps
+        ? ` data-complex-chart-map-entry="${escapeHtml(options.entryId || '')}" data-complex-chart-map-index="${index}"`
+        : '';
+      let pathD = '';
+      if (from.row === to.row) {
+        const startX = from.x + 38;
+        const endX = to.x - 38;
+        pathD = complexChartRoundedSvgPath([{ x: startX, y: from.y }, { x: endX, y: from.y }], 0);
+        paths.push(`<path class="sheaf-complex-snake-fast-arrow${selected ? ' is-selected' : ''}" marker-end="url(#${escapeHtml(markerId)})"${mapAttrs} d="${pathD}"></path>`);
+        if (options.clickableMaps) paths.push(`<path class="sheaf-complex-snake-fast-arrow-hit"${mapAttrs} d="${pathD}"></path>`);
+        if (mapLatex) labels.push(complexChartSnakeFastLabelHtml(mapLatex, (startX + endX) / 2, from.y - 18, width, height));
+        return;
+      }
+      const startX = from.x + 42;
+      const endX = to.x - 42;
+      const rightX = Math.min(width - 30, from.x + 100);
+      const leftX = Math.max(30, to.x - 135);
+      const midY = from.y + (to.y - from.y) * 0.52;
+      pathD = complexChartRoundedSvgPath([
+        { x: startX, y: from.y },
+        { x: rightX, y: from.y },
+        { x: rightX, y: midY },
+        { x: leftX, y: midY },
+        { x: leftX, y: to.y },
+        { x: endX, y: to.y }
+      ], 14);
+      paths.push(`<path class="sheaf-complex-snake-fast-arrow${selected ? ' is-selected' : ''}" marker-end="url(#${escapeHtml(markerId)})"${mapAttrs} d="${pathD}"></path>`);
+      if (options.clickableMaps) paths.push(`<path class="sheaf-complex-snake-fast-arrow-hit"${mapAttrs} d="${pathD}"></path>`);
+      if (mapLatex) labels.push(complexChartSnakeFastLabelHtml(mapLatex, (rightX + leftX) / 2, midY - 14, width, height));
+    });
+    const objects = (entry.objects || []).map((objectLatex, index) => {
+      const point = coordByIndex.get(index);
+      if (!point) return '';
+      const selected = selectedEndpoints.has(complexChartLesRangeEndpointKey({ kind: 'object', index }));
+      const tag = options.clickableObjects ? 'button' : 'span';
+      const attrs = options.clickableObjects
+        ? ` type="button" data-complex-chart-object-entry="${escapeHtml(options.entryId || '')}" data-complex-chart-object-kind="${escapeHtml(entry.kind)}" data-complex-chart-object-index="${index}"`
+        : '';
+      return `
+        <${tag} class="sheaf-complex-snake-fast-object${options.clickableObjects ? ' sheaf-complex-snake-fast-button' : ''}${selected ? ' is-selected' : ''}" style="left:${formatSvgNumber((point.x / width) * 100)}%;top:${formatSvgNumber((point.y / height) * 100)}%;"${attrs}>
+          \\(${escapeHtml(objectLatex)}\\)
+        </${tag}>
+      `;
+    }).join('');
+    return `
+      <span class="sheaf-complex-snake-fast-display" style="--les-fast-width:${width}px;--les-fast-ratio:${width} / ${height};">
+        <svg class="sheaf-complex-snake-fast-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+          <defs>
+            <marker id="${escapeHtml(markerId)}" markerWidth="10" markerHeight="10" refX="8.7" refY="5" orient="auto" markerUnits="strokeWidth">
+              <path class="sheaf-complex-snake-fast-marker" d="M 1.1 1.2 C 3.9 2.6 6.4 4.2 8.6 5 C 6.4 5.8 3.9 7.4 1.1 8.8"></path>
+            </marker>
+          </defs>
+          ${paths.join('')}
+        </svg>
+        ${objects}
+        ${labels.join('')}
+      </span>
+    `;
+  }
+
+  function complexChartSnakeFastLabelHtml(mapLatex, x, y, width, height) {
+    return `
+      <span class="sheaf-complex-snake-fast-label" style="left:${formatSvgNumber((x / width) * 100)}%;top:${formatSvgNumber((y / height) * 100)}%;">
+        \\(${escapeHtml(mapLatex)}\\)
+      </span>
+    `;
+  }
+
+  function complexChartRoundedSvgPath(points, radius = 12) {
+    if (!Array.isArray(points) || !points.length) return '';
+    if (points.length === 1) return `M ${formatSvgNumber(points[0].x)} ${formatSvgNumber(points[0].y)}`;
+    const commands = [`M ${formatSvgNumber(points[0].x)} ${formatSvgNumber(points[0].y)}`];
+    for (let index = 1; index < points.length - 1; index += 1) {
+      const previous = points[index - 1];
+      const current = points[index];
+      const next = points[index + 1];
+      const incoming = { x: current.x - previous.x, y: current.y - previous.y };
+      const outgoing = { x: next.x - current.x, y: next.y - current.y };
+      const incomingLength = Math.hypot(incoming.x, incoming.y);
+      const outgoingLength = Math.hypot(outgoing.x, outgoing.y);
+      const cornerRadius = Math.min(radius, incomingLength / 2, outgoingLength / 2);
+      if (!cornerRadius || !incomingLength || !outgoingLength) {
+        commands.push(`L ${formatSvgNumber(current.x)} ${formatSvgNumber(current.y)}`);
+        continue;
+      }
+      const before = {
+        x: current.x - (incoming.x / incomingLength) * cornerRadius,
+        y: current.y - (incoming.y / incomingLength) * cornerRadius
+      };
+      const after = {
+        x: current.x + (outgoing.x / outgoingLength) * cornerRadius,
+        y: current.y + (outgoing.y / outgoingLength) * cornerRadius
+      };
+      commands.push(`L ${formatSvgNumber(before.x)} ${formatSvgNumber(before.y)}`);
+      commands.push(`Q ${formatSvgNumber(current.x)} ${formatSvgNumber(current.y)} ${formatSvgNumber(after.x)} ${formatSvgNumber(after.y)}`);
+    }
+    const last = points[points.length - 1];
+    commands.push(`L ${formatSvgNumber(last.x)} ${formatSvgNumber(last.y)}`);
+    return commands.join(' ');
+  }
+
+  function complexChartSnakeDisplayTikzPicture(entry) {
+    const rows = complexChartSnakeRows(entry);
+    const coordByIndex = new Map();
+    const lines = [
+      '\\begin{tikzpicture}[baseline=(current bounding box.center), >=latex, rounded corners=6pt, line cap=round, line join=round]',
+      '\\tikzset{les object/.style={inner sep=1.5pt}, les arrow/.style={->, line width=0.48pt}, les label/.style={inner sep=1pt}}'
+    ];
+    rows.forEach((row) => {
+      for (let index = row.start; index <= row.end; index += 1) {
+        const column = complexChartSnakeColumn(row, index);
+        const x = (column - 1) * 1.42;
+        const y = row.degree * 1.18;
+        coordByIndex.set(index, { x, y, row });
+        lines.push(`\\node[les object] (les${index}) at (${formatTikzCoord(x)},${formatTikzCoord(y)}) {$${entry.objects?.[index] || ''}$};`);
+      }
+    });
+    (entry.maps || []).forEach((mapLatex, index) => {
+      const from = coordByIndex.get(index);
+      const to = coordByIndex.get(index + 1);
+      if (!from || !to) return;
+      if (from.row === to.row) {
+        const label = mapLatex ? ` node[les label, above] {$${mapLatex}$}` : '';
+        lines.push(`\\draw[les arrow] (les${index}.east) --${label} (les${index + 1}.west);`);
+        return;
+      }
+      const rightX = from.x + 1.35;
+      const leftX = to.x - 1.35;
+      const midY = from.y + (to.y - from.y) * 0.5;
+      lines.push([
+        `\\draw[les arrow] (les${index}.east)`,
+        `-- (${formatTikzCoord(rightX)},${formatTikzCoord(from.y)})`,
+        `-- (${formatTikzCoord(rightX)},${formatTikzCoord(midY)})`,
+        `-- node[les label, above] {$${mapLatex || ''}$} (${formatTikzCoord(leftX)},${formatTikzCoord(midY)})`,
+        `-- (${formatTikzCoord(leftX)},${formatTikzCoord(to.y)})`,
+        `-- (les${index + 1}.west);`
+      ].join(' '));
+    });
+    lines.push('\\end{tikzpicture}');
+    return lines.join('\n');
+  }
+
+  function complexChartSnakeColumn(row, index) {
+    return row.hasLeadingZero ? ((index - row.start) * 2 + 1) : ((index - row.start) * 2 + 3);
+  }
+
+  function formatTikzCoord(value) {
+    return Number(value).toFixed(2).replace(/\.?0+$/, '');
+  }
+
+  function formatSvgNumber(value) {
+    return Number(value).toFixed(3).replace(/\.?0+$/, '');
+  }
+
+  function complexChartSnakeDisplayTikzcd(entry) {
+    const rows = complexChartSnakeRows(entry);
+    const visualRows = [...rows].reverse();
+    const columnCount = 4;
+    const coordByIndex = new Map();
+    const lines = ['\\[', '\\begin{tikzcd}[ampersand replacement=\\&, row sep=2.4em, column sep=2.2em]'];
+    visualRows.forEach((row, visualIndex) => {
+      const cells = Array.from({ length: columnCount }, () => '{}');
+      for (let index = row.start; index <= row.end; index += 1) {
+        const col = row.hasLeadingZero ? index - row.start + 1 : index - row.start + 2;
+        cells[col - 1] = complexChartTikzcdObject(entry.objects?.[index] || '');
+        coordByIndex.set(index, { row: visualIndex + 1, col });
+      }
+      const terminator = visualIndex < visualRows.length - 1 ? ' \\\\' : '';
+      lines.push(`\t${cells.join(' \\& ')}${terminator}`);
+    });
+    (entry.maps || []).forEach((mapLatex, index) => {
+      const from = coordByIndex.get(index);
+      const to = coordByIndex.get(index + 1);
+      if (!from || !to) return;
+      const map = complexChartTikzcdLabel(mapLatex || '');
+      const label = map ? `"{${map}}", ` : '';
+      if (from.row === to.row) {
+        lines.push(`\t\\arrow[${label}from=${from.row}-${from.col}, to=${to.row}-${to.col}]`);
+        return;
+      }
+      const connectorLabel = map ? `"{${map}}"{description}, ` : '';
+      lines.push(`\t\\arrow[rounded corners, ${connectorLabel}to path={ -- ([xshift=2ex]\\tikztostart.east) |- ([xshift=-2ex,yshift=-1.1em]\\tikztotarget.west) \\tikztonodes -| ([xshift=-2ex]\\tikztotarget.west) -- (\\tikztotarget)}, from=${from.row}-${from.col}, to=${to.row}-${to.col}]`);
+    });
+    lines.push('\\end{tikzcd}', '\\]');
+    return lines.join('\n');
+  }
+
+  function complexChartMapHtml(mapLatex, index, options = {}) {
+    const math = `\\(\\xrightarrow{${escapeHtml(mapLatex)}}\\)`;
+    if (!options.clickableMaps) return `<span class="sheaf-complex-map">${math}</span>`;
+    const selected = options.selectedMapCuts?.has?.(index) ? ' is-selected' : '';
+    return `<button class="sheaf-complex-map sheaf-complex-map-button${selected}" type="button" data-complex-chart-map-entry="${escapeHtml(options.entryId || '')}" data-complex-chart-map-index="${index}" title="toggle truncation at map ${index}">${math}</button>`;
   }
 
   function complexChartObjectHtml(entry, objectLatex, index, options = {}) {
@@ -30021,6 +30410,12 @@
 
   function complexChartKindLabel(kind) {
     return normalizeComplexChartKind(kind) === 'filtration' ? 'filtration' : 'complex';
+  }
+
+  function complexChartEntryKindLabel(entry) {
+    const normalized = normalizeComplexChartEntry(entry, { requireId: false });
+    if (normalized.display === 'snake-les') return 'LES';
+    return complexChartKindLabel(normalized.kind);
   }
 
   function complexChartPresetById(id) {
@@ -30119,6 +30514,81 @@
     return ensureComplexChartState().entries.find((entry) => entry.id === id) || null;
   }
 
+  function normalizeComplexChartMapCut(mapCut, length = Number.POSITIVE_INFINITY) {
+    if (mapCut === null || mapCut === undefined || mapCut === '') return null;
+    const index = Number(mapCut);
+    return Number.isInteger(index) && index >= 0 && index < length - 1 ? index : null;
+  }
+
+  function normalizeComplexChartMapCuts(mapCuts, length = Number.POSITIVE_INFINITY) {
+    const source = Array.isArray(mapCuts)
+      ? mapCuts
+      : (mapCuts === null || mapCuts === undefined || mapCuts === '' ? [] : [mapCuts]);
+    return Array.from(new Set(source
+      .map((mapCut) => normalizeComplexChartMapCut(mapCut, length))
+      .filter((mapCut) => mapCut !== null)))
+      .sort((a, b) => a - b);
+  }
+
+  function normalizeComplexChartFiberNames(fiberNames) {
+    const out = {};
+    if (!fiberNames || typeof fiberNames !== 'object' || Array.isArray(fiberNames)) return out;
+    Object.entries(fiberNames).forEach(([key, value]) => {
+      const mapCut = normalizeComplexChartMapCut(key);
+      if (mapCut === null) return;
+      const name = sanitizeComplexChartLatex(value);
+      if (name) out[mapCut] = name;
+    });
+    return out;
+  }
+
+  function normalizeComplexChartDerivedFunctor(value) {
+    return value === 'cohomology' ? 'cohomology' : 'cohomology';
+  }
+
+  function normalizeComplexChartLesEndDegree(value, fallback = 3) {
+    return normalizedInt(value, 0, MAX_COMPLEX_CHART_LES_END_DEGREE, fallback);
+  }
+
+  function normalizeComplexChartLesRangeEndpoint(endpoint, length = Number.POSITIVE_INFINITY) {
+    if (!endpoint || typeof endpoint !== 'object') return null;
+    const kind = endpoint.kind === 'map' ? 'map' : (endpoint.kind === 'object' ? 'object' : '');
+    const index = Number(endpoint.index);
+    if (!kind || !Number.isInteger(index) || index < 0) return null;
+    if (kind === 'object' && index < length) return { kind, index };
+    if (kind === 'map' && index < length - 1) return { kind, index };
+    return null;
+  }
+
+  function normalizeComplexChartLesRangeEndpoints(endpoints, length = Number.POSITIVE_INFINITY) {
+    const source = Array.isArray(endpoints) ? endpoints : [];
+    const byKey = new Map();
+    source.forEach((endpoint) => {
+      const normalized = normalizeComplexChartLesRangeEndpoint(endpoint, length);
+      if (normalized) byKey.set(complexChartLesRangeEndpointKey(normalized), normalized);
+    });
+    return Array.from(byKey.values())
+      .sort((a, b) => complexChartLesRangeEndpointPosition(a) - complexChartLesRangeEndpointPosition(b))
+      .slice(0, 2);
+  }
+
+  function complexChartLesRangeEndpointKey(endpoint) {
+    const normalized = normalizeComplexChartLesRangeEndpoint(endpoint);
+    return normalized ? `${normalized.kind}:${normalized.index}` : '';
+  }
+
+  function complexChartLesRangeEndpointPosition(endpoint) {
+    const normalized = normalizeComplexChartLesRangeEndpoint(endpoint);
+    if (!normalized) return Number.POSITIVE_INFINITY;
+    return normalized.kind === 'map' ? normalized.index * 2 + 1 : normalized.index * 2;
+  }
+
+  function complexChartLesRangeMapCuts(endpoints, length = Number.POSITIVE_INFINITY) {
+    return normalizeComplexChartLesRangeEndpoints(endpoints, length)
+      .filter((endpoint) => endpoint.kind === 'map')
+      .map((endpoint) => endpoint.index);
+  }
+
   function sortedComplexChartCuts(cuts, length) {
     return Array.from(new Set((cuts || [])
       .map((cut) => Number(cut))
@@ -30126,11 +30596,16 @@
       .sort((a, b) => a - b);
   }
 
-  function complexChartTruncationCandidates(entry, cuts) {
+  function complexChartTruncationCandidates(entry, cuts, mapCuts = [], fiberNames = {}) {
     const normalized = normalizeComplexChartEntry(entry, { requireId: false });
     const length = normalized.objects.length;
     const innerCuts = sortedComplexChartCuts(cuts, length);
-    if (length < 2 || !innerCuts.length) return [];
+    if (length < 2) return [];
+    const selectedMapCuts = normalizeComplexChartMapCuts(mapCuts, length);
+    if (selectedMapCuts.length && normalized.kind === 'chain-complex') {
+      return complexChartMapTruncationCandidates(normalized, innerCuts, selectedMapCuts, fiberNames);
+    }
+    if (!innerCuts.length) return [];
     const boundaries = [0, ...innerCuts, length - 1];
     const candidates = [];
     for (let i = 0; i < boundaries.length - 1; i += 1) {
@@ -30152,6 +30627,245 @@
       });
     }
     return candidates;
+  }
+
+  function complexChartMapTruncationCandidates(entry, cuts, mapCuts, fiberNames = {}) {
+    const length = entry.objects.length;
+    const selectedMapCuts = normalizeComplexChartMapCuts(mapCuts, length);
+    if (!selectedMapCuts.length) return [];
+    const eligibleCuts = sortedComplexChartCuts(cuts, length).filter((cut) => cut <= selectedMapCuts[0]);
+    const objectCut = Number.isInteger(eligibleCuts[eligibleCuts.length - 1]) ? eligibleCuts[eligibleCuts.length - 1] : 0;
+    const objects = entry.objects || [];
+    const maps = entry.maps || [];
+    const pieces = [{
+      kind: 'chain-complex',
+      length: objectCut + 1,
+      objects: objects.slice(0, objectCut + 1),
+      maps: maps.slice(0, objectCut)
+    }];
+    selectedMapCuts.forEach((currentMapCut, index) => {
+      const previousMapCut = index > 0 ? selectedMapCuts[index - 1] : null;
+      const pieceObjects = [];
+      const pieceMaps = [];
+      if (previousMapCut === null) {
+        pieceObjects.push(...objects.slice(objectCut, currentMapCut + 1));
+        pieceMaps.push(...maps.slice(objectCut, currentMapCut));
+      } else {
+        const previousMapLatex = maps[previousMapCut] || '';
+        pieceObjects.push('0');
+        if (complexChartMapIsZero(previousMapLatex)) {
+          pieceObjects.push(...objects.slice(previousMapCut + 1, currentMapCut + 1));
+          pieceMaps.push('', ...maps.slice(previousMapCut + 1, currentMapCut));
+        } else {
+          pieceObjects.push(
+            complexChartTruncatedMapFiberObject(previousMapLatex, previousMapCut, fiberNames),
+            ...objects.slice(previousMapCut + 1, currentMapCut + 1)
+          );
+          pieceMaps.push('', complexChartOverlineMapLatex(previousMapLatex), ...maps.slice(previousMapCut + 1, currentMapCut));
+        }
+      }
+      const currentMapLatex = maps[currentMapCut] || '';
+      if (complexChartMapIsZero(currentMapLatex)) {
+        pieceObjects.push('0');
+        pieceMaps.push('');
+      } else {
+        pieceObjects.push(complexChartTruncatedMapFiberObject(currentMapLatex, currentMapCut, fiberNames), '0');
+        pieceMaps.push(currentMapLatex, '');
+      }
+      pieces.push({
+        kind: 'chain-complex',
+        length: pieceObjects.length,
+        objects: pieceObjects,
+        maps: pieceMaps
+      });
+    });
+    const lastMapCut = selectedMapCuts[selectedMapCuts.length - 1];
+    const lastMapLatex = maps[lastMapCut] || '';
+    const rightObjects = ['0'];
+    const rightMaps = [''];
+    if (complexChartMapIsZero(lastMapLatex)) {
+      rightObjects.push(...objects.slice(lastMapCut + 1));
+      rightMaps.push(...maps.slice(lastMapCut + 1));
+    } else {
+      rightObjects.push(
+        complexChartTruncatedMapFiberObject(lastMapLatex, lastMapCut, fiberNames),
+        ...objects.slice(lastMapCut + 1)
+      );
+      rightMaps.push(complexChartOverlineMapLatex(lastMapLatex), ...maps.slice(lastMapCut + 1));
+    }
+    pieces.push({
+      kind: 'chain-complex',
+      length: rightObjects.length,
+      objects: rightObjects,
+      maps: rightMaps
+    });
+    return pieces.map((piece, index) => ({
+      key: `truncate-map-${objectCut}-${selectedMapCuts.join('-')}-${index}`,
+      label: `${objectCut}|${selectedMapCuts.join(',')}:${index + 1}`,
+      entry: normalizeComplexChartEntry(piece, { requireId: false }),
+      selected: true
+    }));
+  }
+
+  function complexChartLesRangeTruncationCandidates(entry, endpoints, fiberNames = {}) {
+    const normalized = normalizeComplexChartEntry(entry, { requireId: false });
+    if (normalized.display !== 'snake-les' || normalized.kind !== 'chain-complex') return [];
+    const normalizedEndpoints = normalizeComplexChartLesRangeEndpoints(endpoints, normalized.length);
+    if (!normalizedEndpoints.length) return [];
+    const start = normalizedEndpoints.length === 1
+      ? { kind: 'object', index: 0 }
+      : normalizedEndpoints[0];
+    const end = normalizedEndpoints.length === 1
+      ? normalizedEndpoints[0]
+      : normalizedEndpoints[1];
+    if (complexChartLesRangeEndpointPosition(end) < complexChartLesRangeEndpointPosition(start)) return [];
+    const piece = complexChartLesRangeTruncationEntry(normalized, start, end, fiberNames);
+    if (!piece) return [];
+    return [{
+      key: `les-range-${complexChartLesRangeEndpointKey(start)}-${complexChartLesRangeEndpointKey(end)}`,
+      label: 'LES part',
+      entry: piece,
+      selected: true
+    }];
+  }
+
+  function complexChartLesRangeTruncationEntry(entry, startEndpoint, endEndpoint, fiberNames = {}) {
+    const objects = entry.objects || [];
+    const maps = entry.maps || [];
+    const start = normalizeComplexChartLesRangeEndpoint(startEndpoint, entry.length);
+    const end = normalizeComplexChartLesRangeEndpoint(endEndpoint, entry.length);
+    if (!start || !end || complexChartLesRangeEndpointPosition(end) < complexChartLesRangeEndpointPosition(start)) return null;
+    const pieceObjects = [];
+    const pieceMaps = [];
+    let firstOriginalIndex = 0;
+    if (start.kind === 'map') {
+      const startMapLatex = maps[start.index] || '';
+      pieceObjects.push('0');
+      if (complexChartMapIsZero(startMapLatex)) {
+        pieceMaps.push('');
+      } else {
+        pieceObjects.push(complexChartTruncatedMapFiberObject(startMapLatex, start.index, fiberNames));
+        pieceMaps.push('', complexChartOverlineMapLatex(startMapLatex));
+      }
+      pieceObjects.push(objects[start.index + 1] || '');
+      firstOriginalIndex = start.index + 1;
+    } else {
+      pieceObjects.push(objects[start.index] || '');
+      firstOriginalIndex = start.index;
+    }
+    const lastOriginalIndex = end.kind === 'map' ? end.index : end.index;
+    for (let index = firstOriginalIndex + 1; index <= lastOriginalIndex; index += 1) {
+      pieceMaps.push(maps[index - 1] || '');
+      pieceObjects.push(objects[index] || '');
+    }
+    if (end.kind === 'map') {
+      const endMapLatex = maps[end.index] || '';
+      if (complexChartMapIsZero(endMapLatex)) {
+        pieceMaps.push('');
+        pieceObjects.push('0');
+      } else {
+        pieceMaps.push(endMapLatex);
+        pieceObjects.push(complexChartTruncatedMapFiberObject(endMapLatex, end.index, fiberNames));
+        pieceMaps.push('');
+        pieceObjects.push('0');
+      }
+    }
+    return normalizeComplexChartEntry({
+      kind: 'chain-complex',
+      length: pieceObjects.length,
+      objects: pieceObjects,
+      maps: pieceMaps,
+      display: 'snake-les'
+    }, { requireId: false });
+  }
+
+  function complexChartFlattenLesEntry(entry) {
+    const normalized = normalizeComplexChartEntry(entry, { requireId: false });
+    if (normalized.kind !== 'chain-complex' || normalized.display !== 'snake-les') return null;
+    return normalizeComplexChartEntry({
+      kind: 'chain-complex',
+      length: normalized.length,
+      objects: normalized.objects || [],
+      maps: normalized.maps || []
+    }, { requireId: false });
+  }
+
+  function complexChartTruncatedMapFiberObject(mapLatex, index = 0, fiberNames = {}) {
+    const customName = sanitizeComplexChartLatex(fiberNames?.[index]);
+    return customName || complexChartDefaultMapFiberName(mapLatex, index);
+  }
+
+  function complexChartDefaultMapFiberName(mapLatex, index = 0) {
+    const label = sanitizeComplexChartLatex(mapLatex);
+    if (label && !complexChartMapIsZero(label) && latexToPlain(label).length <= 18) return `F_{${label}}`;
+    return `F_{${index + 1}}`;
+  }
+
+  function complexChartOverlineMapLatex(mapLatex) {
+    return `\\overline{${sanitizeComplexChartLatex(mapLatex) || 'f'}}`;
+  }
+
+  function complexChartMapIsZero(mapLatex) {
+    const compact = String(mapLatex ?? '').replace(/\s+/g, '');
+    return compact === '0'
+      || compact === '{0}'
+      || compact === '\\mathbf{0}'
+      || compact === '\\mathrm{0}'
+      || compact === '\\operatorname{0}';
+  }
+
+  function complexChartEntryIsSes(entry) {
+    const normalized = normalizeComplexChartEntry(entry, { requireId: false });
+    return normalized.kind === 'chain-complex'
+      && normalized.length === 5
+      && complexChartObjectIsZero(normalized.objects?.[0])
+      && complexChartObjectIsZero(normalized.objects?.[4]);
+  }
+
+  function complexChartLesFromSesEntry(entry, options = {}) {
+    const normalized = normalizeComplexChartEntry(entry, { requireId: false });
+    if (!complexChartEntryIsSes(normalized)) return null;
+    const endDegree = normalizeComplexChartLesEndDegree(options.endDegree);
+    const derivedFunctor = normalizeComplexChartDerivedFunctor(options.derivedFunctor);
+    const sourceObjects = normalized.objects || [];
+    const sourceMaps = normalized.maps || [];
+    const left = sourceObjects[1] || 'A';
+    const middle = sourceObjects[2] || 'B';
+    const right = sourceObjects[3] || 'C';
+    const leftMap = sourceMaps[1] || 'f';
+    const rightMap = sourceMaps[2] || 'g';
+    const objects = ['0'];
+    const maps = [];
+    const addTerm = (incomingMap, objectLatex) => {
+      maps.push(incomingMap || '');
+      objects.push(objectLatex);
+    };
+    for (let degree = 0; degree <= endDegree; degree += 1) {
+      addTerm(degree === 0 ? '' : complexChartConnectingMapLatex(degree - 1), complexChartDerivedFunctorObjectLatex(derivedFunctor, degree, left));
+      addTerm(complexChartDerivedFunctorMapLatex(derivedFunctor, degree, leftMap), complexChartDerivedFunctorObjectLatex(derivedFunctor, degree, middle));
+      addTerm(complexChartDerivedFunctorMapLatex(derivedFunctor, degree, rightMap), complexChartDerivedFunctorObjectLatex(derivedFunctor, degree, right));
+    }
+    return normalizeComplexChartEntry({
+      kind: 'chain-complex',
+      length: objects.length,
+      objects,
+      maps,
+      display: 'snake-les'
+    }, { requireId: false });
+  }
+
+  function complexChartDerivedFunctorObjectLatex(functor, degree, objectLatex) {
+    if (normalizeComplexChartDerivedFunctor(functor) === 'cohomology') return `H^{${degree}}(${objectLatex})`;
+    return `H^{${degree}}(${objectLatex})`;
+  }
+
+  function complexChartDerivedFunctorMapLatex(functor, degree, mapLatex) {
+    if (normalizeComplexChartDerivedFunctor(functor) === 'cohomology') return `H^{${degree}}(${mapLatex || 'f'})`;
+    return `H^{${degree}}(${mapLatex || 'f'})`;
+  }
+
+  function complexChartConnectingMapLatex(degree) {
+    return `\\delta^{${degree}}`;
   }
 
   function complexChartKernelCokernelExtensionEntry(entry) {
@@ -30187,13 +30901,17 @@
   }
 
   function normalizeComplexChartOperationMode(mode) {
-    return mode === 'extend' ? 'extend' : 'truncate';
+    if (mode === 'truncate' || mode === 'extend' || mode === 'les' || mode === 'flatten') return mode;
+    return '';
   }
 
   function complexChartOperationTargets(mode = ensureComplexChartState().operations?.mode) {
     const normalizedMode = normalizeComplexChartOperationMode(mode);
+    if (!normalizedMode) return [];
     return ensureComplexChartState().entries.filter((entry) => (
-      normalizedMode !== 'extend' || normalizeComplexChartEntry(entry, { requireId: false }).kind === 'chain-complex'
+      (normalizedMode !== 'extend' || normalizeComplexChartEntry(entry, { requireId: false }).kind === 'chain-complex')
+      && (normalizedMode !== 'les' || complexChartEntryIsSes(entry))
+      && (normalizedMode !== 'flatten' || normalizeComplexChartEntry(entry, { requireId: false }).display === 'snake-les')
     ));
   }
 
@@ -30201,20 +30919,47 @@
     const chart = ensureComplexChartState();
     const operations = chart.operations || defaultComplexChartOperationsState();
     operations.mode = normalizeComplexChartOperationMode(operations.mode);
+    if (!operations.mode) {
+      operations.targetId = null;
+      operations.cuts = [];
+      operations.mapCut = null;
+      operations.mapCuts = [];
+      operations.fiberNames = {};
+      operations.lesRangeTruncation = false;
+      operations.lesRangeEndpoints = [];
+      operations.candidates = [];
+      operations.message = 'Choose an operation.';
+      chart.operations = operations;
+      return null;
+    }
     const targets = complexChartOperationTargets(operations.mode);
     if (!targets.length) {
       operations.targetId = null;
       operations.cuts = [];
+      operations.mapCut = null;
+      operations.mapCuts = [];
+      operations.fiberNames = {};
+      operations.lesRangeTruncation = false;
+      operations.lesRangeEndpoints = [];
       operations.candidates = [];
       operations.message = operations.mode === 'extend'
         ? 'No chain complexes are available for kernel/cokernel extension.'
-        : 'No complexes or filtrations are available.';
+        : operations.mode === 'les'
+          ? 'No short exact sequence is available.'
+          : operations.mode === 'flatten'
+            ? 'No long exact sequence is available.'
+            : 'No complexes or filtrations are available.';
       chart.operations = operations;
       return null;
     }
     if (!targets.some((entry) => entry.id === operations.targetId)) {
       operations.targetId = targets[0].id;
       operations.cuts = [];
+      operations.mapCut = null;
+      operations.mapCuts = [];
+      operations.fiberNames = {};
+      operations.lesRangeTruncation = false;
+      operations.lesRangeEndpoints = [];
       operations.candidates = [];
     }
     chart.operations = operations;
@@ -30223,17 +30968,31 @@
 
   function refreshComplexChartOperationCandidates(options = {}) {
     const chart = ensureComplexChartState();
-    const operations = chart.operations || defaultComplexChartOperationsState();
+    let operations = chart.operations || defaultComplexChartOperationsState();
+    operations.mode = normalizeComplexChartOperationMode(operations.mode);
     const entry = syncComplexChartOperationTarget();
+    operations = chart.operations || operations;
     if (!entry) {
       chart.operations = operations;
       return null;
     }
     operations.open = true;
     operations.mode = normalizeComplexChartOperationMode(operations.mode);
-    if (options.resetCuts) operations.cuts = [];
+    if (options.resetCuts) {
+      operations.cuts = [];
+      operations.mapCut = null;
+      operations.mapCuts = [];
+      operations.fiberNames = {};
+      operations.lesRangeTruncation = false;
+      operations.lesRangeEndpoints = [];
+    }
     if (operations.mode === 'extend') {
       operations.cuts = [];
+      operations.mapCut = null;
+      operations.mapCuts = [];
+      operations.fiberNames = {};
+      operations.lesRangeTruncation = false;
+      operations.lesRangeEndpoints = [];
       const extended = complexChartKernelCokernelExtensionEntry(entry);
       operations.candidates = extended
         ? [{ key: 'extend-kernel-cokernel', label: 'kernel/cokernel extension', entry: extended, selected: true }]
@@ -30243,26 +31002,81 @@
         : (normalizeComplexChartEntry(entry, { requireId: false }).kind === 'chain-complex'
           ? 'The chosen complex already has zero endpoints.'
           : 'Kernel/cokernel extension is only available for chain complexes.');
+    } else if (operations.mode === 'les') {
+      operations.cuts = [];
+      operations.mapCut = null;
+      operations.mapCuts = [];
+      operations.fiberNames = {};
+      operations.lesRangeTruncation = false;
+      operations.lesRangeEndpoints = [];
+      operations.derivedFunctor = normalizeComplexChartDerivedFunctor(operations.derivedFunctor);
+      operations.lesEndDegree = normalizeComplexChartLesEndDegree(operations.lesEndDegree);
+      const les = complexChartLesFromSesEntry(entry, {
+        derivedFunctor: operations.derivedFunctor,
+        endDegree: operations.lesEndDegree
+      });
+      operations.candidates = les
+        ? [{ key: `les-${entry.id}-${operations.derivedFunctor}-${operations.lesEndDegree}`, label: 'long exact sequence', entry: les, selected: true }]
+        : [];
+      operations.message = les
+        ? 'Long exact sequence ready.'
+        : 'Choose a five-term short exact sequence with zero endpoints.';
+    } else if (operations.mode === 'flatten') {
+      operations.cuts = [];
+      operations.mapCut = null;
+      operations.mapCuts = [];
+      operations.fiberNames = {};
+      operations.lesRangeTruncation = false;
+      operations.lesRangeEndpoints = [];
+      const flattened = complexChartFlattenLesEntry(entry);
+      operations.candidates = flattened
+        ? [{ key: `flatten-${entry.id}`, label: 'flattened complex', entry: flattened, selected: true }]
+        : [];
+      operations.message = flattened
+        ? 'Flattened complex ready.'
+        : 'Choose a long exact sequence to flatten.';
     } else {
-      operations.candidates = complexChartTruncationCandidates(entry, operations.cuts);
-      operations.message = operations.candidates.length
-        ? 'Choose generated pieces to add.'
-        : 'Click object labels to choose truncation cuts.';
+      const normalized = normalizeComplexChartEntry(entry, { requireId: false });
+      operations.fiberNames = normalizeComplexChartFiberNames(operations.fiberNames);
+      if (normalized.display === 'snake-les' && operations.lesRangeTruncation === true) {
+        operations.cuts = [];
+        operations.mapCut = null;
+        operations.mapCuts = [];
+        operations.lesRangeEndpoints = normalizeComplexChartLesRangeEndpoints(operations.lesRangeEndpoints, normalized.length);
+        operations.candidates = complexChartLesRangeTruncationCandidates(normalized, operations.lesRangeEndpoints, operations.fiberNames);
+        operations.message = operations.candidates.length
+          ? 'Choose the LES part to add.'
+          : 'Click one or two LES objects or arrows to pick a part.';
+      } else {
+        operations.lesRangeTruncation = false;
+        operations.lesRangeEndpoints = [];
+        operations.mapCuts = normalized.kind === 'chain-complex'
+          ? normalizeComplexChartMapCuts(operations.mapCuts?.length ? operations.mapCuts : operations.mapCut, normalized.length)
+          : [];
+        operations.mapCut = operations.mapCuts[0] ?? null;
+        operations.candidates = complexChartTruncationCandidates(entry, operations.cuts, operations.mapCuts, operations.fiberNames);
+        operations.message = operations.candidates.length
+          ? 'Choose generated pieces to add.'
+          : (operations.mapCuts.length
+            ? 'Select one or more arrows to preview truncation pieces.'
+            : 'Click object labels or map labels to choose truncation cuts.');
+      }
     }
     chart.operations = operations;
     return entry;
   }
 
-  function openComplexChartOperations(idOrMode = null, mode = 'truncate') {
+  function openComplexChartOperations(idOrMode = null, mode = '') {
     const chart = ensureComplexChartState();
-    const nextMode = idOrMode === 'truncate' || idOrMode === 'extend'
+    const idIsMode = idOrMode === 'truncate' || idOrMode === 'extend' || idOrMode === 'les' || idOrMode === 'flatten';
+    const nextMode = idIsMode
       ? normalizeComplexChartOperationMode(idOrMode)
       : normalizeComplexChartOperationMode(mode);
     chart.operations = {
       ...defaultComplexChartOperationsState(),
       open: true,
       mode: nextMode,
-      targetId: idOrMode && idOrMode !== 'truncate' && idOrMode !== 'extend'
+      targetId: idOrMode && !idIsMode
         ? idOrMode
         : (chart.operations?.targetId || null)
     };
@@ -30274,7 +31088,7 @@
   function toggleComplexChartOperationsPanel() {
     const operations = ensureComplexChartState().operations || defaultComplexChartOperationsState();
     if (operations.open) return closeComplexChartOperations();
-    return openComplexChartOperations(operations.mode || 'truncate');
+    return openComplexChartOperations('');
   }
 
   function closeComplexChartOperations() {
@@ -30290,6 +31104,11 @@
       open: true,
       mode: normalizeComplexChartOperationMode(mode),
       cuts: [],
+      mapCut: null,
+      mapCuts: [],
+      fiberNames: {},
+      lesRangeTruncation: false,
+      lesRangeEndpoints: [],
       candidates: []
     };
     refreshComplexChartOperationCandidates({ resetCuts: true });
@@ -30307,6 +31126,11 @@
       open: true,
       targetId: id,
       cuts: [],
+      mapCut: null,
+      mapCuts: [],
+      fiberNames: {},
+      lesRangeTruncation: false,
+      lesRangeEndpoints: [],
       candidates: []
     };
     refreshComplexChartOperationCandidates({ resetCuts: true });
@@ -30321,6 +31145,9 @@
     if (!entry) return false;
     const normalized = normalizeComplexChartEntry(entry, { requireId: false });
     const cut = Number(index);
+    if (chart.operations?.mode === 'truncate' && chart.operations?.lesRangeTruncation === true && normalized.display === 'snake-les') {
+      return toggleComplexChartLesRangeEndpoint(targetId, 'object', cut);
+    }
     chart.operations = {
       ...(chart.operations || defaultComplexChartOperationsState()),
       open: true,
@@ -30334,10 +31161,192 @@
       renderComplexChartList();
       return false;
     }
+    const mapCuts = normalizeComplexChartMapCuts(chart.operations.mapCuts?.length ? chart.operations.mapCuts : chart.operations.mapCut, normalized.objects.length);
+    const firstMapCut = mapCuts[0] ?? null;
+    if (firstMapCut !== null && cut > firstMapCut) {
+      chart.operations.mapCuts = mapCuts;
+      chart.operations.mapCut = firstMapCut;
+      chart.operations.message = 'That object is after the first selected arrow, so the arrow truncation preview is unchanged.';
+      refreshComplexChartOperationCandidates();
+      renderComplexChartList();
+      return false;
+    }
+    if (firstMapCut !== null) {
+      chart.operations.mapCuts = mapCuts;
+      chart.operations.mapCut = firstMapCut;
+      const currentCuts = sortedComplexChartCuts(chart.operations.cuts, normalized.objects.length);
+      chart.operations.cuts = currentCuts.length === 1 && currentCuts[0] === cut ? [] : [cut];
+      refreshComplexChartOperationCandidates();
+      renderComplexChartList();
+      return true;
+    }
     const cuts = new Set(sortedComplexChartCuts(chart.operations.cuts, normalized.objects.length));
     if (cuts.has(cut)) cuts.delete(cut);
     else cuts.add(cut);
     chart.operations.cuts = Array.from(cuts).sort((a, b) => a - b);
+    refreshComplexChartOperationCandidates();
+    renderComplexChartList();
+    return true;
+  }
+
+  function toggleComplexChartOperationMapCut(id, index) {
+    const chart = ensureComplexChartState();
+    const targetId = id || chart.operations?.targetId;
+    const entry = complexChartEntryById(targetId);
+    if (!entry) return false;
+    const normalized = normalizeComplexChartEntry(entry, { requireId: false });
+    const mapCut = normalizeComplexChartMapCut(index, normalized.objects.length);
+    if (chart.operations?.mode === 'truncate' && chart.operations?.lesRangeTruncation === true && normalized.display === 'snake-les') {
+      return toggleComplexChartLesRangeEndpoint(targetId, 'map', index);
+    }
+    chart.operations = {
+      ...(chart.operations || defaultComplexChartOperationsState()),
+      open: true,
+      mode: 'truncate',
+      targetId
+    };
+    if (normalized.kind !== 'chain-complex' || mapCut === null) {
+      chart.operations.mapCut = null;
+      chart.operations.mapCuts = [];
+      chart.operations.cuts = [];
+      chart.operations.candidates = [];
+      chart.operations.message = 'Only maps inside a chain complex can be used for this truncation.';
+      renderComplexChartList();
+      return false;
+    }
+    const currentMapCuts = normalizeComplexChartMapCuts(chart.operations.mapCuts?.length ? chart.operations.mapCuts : chart.operations.mapCut, normalized.objects.length);
+    const mapCuts = new Set(currentMapCuts);
+    if (mapCuts.has(mapCut)) {
+      mapCuts.delete(mapCut);
+    } else {
+      mapCuts.add(mapCut);
+    }
+    const nextMapCuts = Array.from(mapCuts).sort((a, b) => a - b);
+    const firstMapCut = nextMapCuts[0] ?? null;
+    const eligibleCuts = firstMapCut === null
+      ? sortedComplexChartCuts(chart.operations.cuts, normalized.objects.length)
+      : sortedComplexChartCuts(chart.operations.cuts, normalized.objects.length).filter((cut) => cut <= firstMapCut);
+    chart.operations.mapCuts = nextMapCuts;
+    chart.operations.mapCut = firstMapCut;
+    chart.operations.cuts = nextMapCuts.length && eligibleCuts.length
+      ? [eligibleCuts[eligibleCuts.length - 1]]
+      : eligibleCuts;
+    refreshComplexChartOperationCandidates();
+    renderComplexChartList();
+    return true;
+  }
+
+  function setComplexChartOperationLesRangeTruncation(checked) {
+    const chart = ensureComplexChartState();
+    const operations = chart.operations || defaultComplexChartOperationsState();
+    const entry = complexChartEntryById(operations.targetId);
+    const normalized = entry ? normalizeComplexChartEntry(entry, { requireId: false }) : null;
+    const enabled = checked === true && normalized?.display === 'snake-les';
+    chart.operations = {
+      ...operations,
+      open: true,
+      mode: 'truncate',
+      cuts: [],
+      mapCut: null,
+      mapCuts: [],
+      fiberNames: enabled ? normalizeComplexChartFiberNames(operations.fiberNames) : {},
+      lesRangeTruncation: enabled,
+      lesRangeEndpoints: []
+    };
+    refreshComplexChartOperationCandidates();
+    renderComplexChartList();
+    return enabled;
+  }
+
+  function toggleComplexChartLesRangeEndpoint(id, kind, index) {
+    const chart = ensureComplexChartState();
+    const targetId = id || chart.operations?.targetId;
+    const entry = complexChartEntryById(targetId);
+    if (!entry) return false;
+    const normalized = normalizeComplexChartEntry(entry, { requireId: false });
+    const endpoint = normalizeComplexChartLesRangeEndpoint({ kind, index: Number(index) }, normalized.length);
+    chart.operations = {
+      ...(chart.operations || defaultComplexChartOperationsState()),
+      open: true,
+      mode: 'truncate',
+      targetId,
+      cuts: [],
+      mapCut: null,
+      mapCuts: [],
+      lesRangeTruncation: true
+    };
+    if (normalized.display !== 'snake-les' || !endpoint) {
+      chart.operations.lesRangeEndpoints = [];
+      chart.operations.candidates = [];
+      chart.operations.message = 'LES part picking is only available on long exact sequences.';
+      renderComplexChartList();
+      return false;
+    }
+    const current = normalizeComplexChartLesRangeEndpoints(chart.operations.lesRangeEndpoints, normalized.length);
+    const endpointKey = complexChartLesRangeEndpointKey(endpoint);
+    const existing = current.find((item) => complexChartLesRangeEndpointKey(item) === endpointKey);
+    if (existing) {
+      chart.operations.lesRangeEndpoints = current.filter((item) => complexChartLesRangeEndpointKey(item) !== endpointKey);
+    } else if (current.length >= 2) {
+      chart.operations.lesRangeEndpoints = current;
+      refreshComplexChartOperationCandidates();
+      chart.operations.message = 'Only two LES range endpoints are allowed. Deselect one endpoint before choosing another.';
+      renderComplexChartList();
+      return false;
+    } else {
+      chart.operations.lesRangeEndpoints = normalizeComplexChartLesRangeEndpoints([...current, endpoint], normalized.length);
+    }
+    refreshComplexChartOperationCandidates();
+    renderComplexChartList();
+    return true;
+  }
+
+  function setComplexChartOperationMapFiberName(index, value) {
+    const chart = ensureComplexChartState();
+    const entry = complexChartEntryById(chart.operations?.targetId);
+    if (!entry) return false;
+    const normalized = normalizeComplexChartEntry(entry, { requireId: false });
+    const mapCut = normalizeComplexChartMapCut(index, normalized.objects.length);
+    if (mapCut === null) return false;
+    const operations = chart.operations || defaultComplexChartOperationsState();
+    const fiberNames = normalizeComplexChartFiberNames(operations.fiberNames);
+    const name = sanitizeComplexChartLatex(value);
+    if (name) fiberNames[mapCut] = name;
+    else delete fiberNames[mapCut];
+    chart.operations = {
+      ...operations,
+      open: true,
+      mode: 'truncate',
+      fiberNames
+    };
+    refreshComplexChartOperationCandidates();
+    renderComplexChartList();
+    return true;
+  }
+
+  function setComplexChartOperationDerivedFunctor(value) {
+    const chart = ensureComplexChartState();
+    const operations = chart.operations || defaultComplexChartOperationsState();
+    chart.operations = {
+      ...operations,
+      open: true,
+      mode: 'les',
+      derivedFunctor: normalizeComplexChartDerivedFunctor(value)
+    };
+    refreshComplexChartOperationCandidates();
+    renderComplexChartList();
+    return true;
+  }
+
+  function setComplexChartOperationLesEndDegree(value) {
+    const chart = ensureComplexChartState();
+    const operations = chart.operations || defaultComplexChartOperationsState();
+    chart.operations = {
+      ...operations,
+      open: true,
+      mode: 'les',
+      lesEndDegree: normalizeComplexChartLesEndDegree(value, operations.lesEndDegree ?? 3)
+    };
     refreshComplexChartOperationCandidates();
     renderComplexChartList();
     return true;
@@ -30388,14 +31397,17 @@
     if (!chart.entries.length) {
       return '<div class="hint">No complexes or filtrations yet. Use add to create, load a preset, or import JSON.</div>';
     }
-    const rows = chart.entries.map((entry) => `
-      <div class="sheaf-step-saved-rule-row sheaf-complex-saved-row">
+    const rows = chart.entries.map((entry) => {
+      const displayClass = normalizeComplexChartEntry(entry, { requireId: false }).display === 'snake-les' ? ' is-snake-les' : '';
+      return `
+      <div class="sheaf-step-saved-rule-row sheaf-complex-saved-row${displayClass}">
         <input type="checkbox" data-complex-chart-select="${escapeHtml(entry.id)}" aria-label="choose complex chart entry" ${entry.selected === false ? '' : 'checked'}>
-        <span class="sheaf-step-saved-rule-formula" title="${escapeHtml(complexChartEntryDisplayPlain(entry))}">${complexChartEntryDisplayHtml(entry)}</span>
-        <span class="sheaf-step-saved-rule-kind">${escapeHtml(complexChartKindLabel(entry.kind))}</span>
+        <span class="sheaf-step-saved-rule-formula${displayClass}" title="${escapeHtml(complexChartEntryDisplayPlain(entry))}">${complexChartEntryDisplayHtml(entry)}</span>
+        <span class="sheaf-step-saved-rule-kind">${escapeHtml(complexChartEntryKindLabel(entry))}</span>
         <button class="btn btn-ghost sheaf-chart-export" type="button" data-complex-chart-edit="${escapeHtml(entry.id)}">edit</button>
       </div>
-    `).join('');
+    `;
+    }).join('');
     return `
       <div class="sheaf-step-saved-rule-title">complexes/filtrations</div>
       <div class="sheaf-step-saved-rule-row sheaf-complex-saved-row sheaf-step-select-all-row">
@@ -30420,14 +31432,36 @@
     const chart = ensureComplexChartState();
     const operations = chart.operations || defaultComplexChartOperationsState();
     if (!operations.open) return '';
+    operations.mode = normalizeComplexChartOperationMode(operations.mode);
+    const modeControls = renderComplexChartOperationModeControls(operations);
+    if (!operations.mode) {
+      return `
+        ${modeControls}
+        <div class="hint">Choose an operation.</div>
+        <div class="sheaf-complex-operation-actions">
+          <button class="btn btn-ghost sheaf-chart-export" type="button" data-complex-chart-operation-cancel>cancel</button>
+        </div>
+      `;
+    }
     const entry = syncComplexChartOperationTarget();
     const targets = complexChartOperationTargets(operations.mode);
-    const selectedCuts = entry ? sortedComplexChartCuts(operations.cuts, entry.length) : [];
+    const normalizedEntry = entry ? normalizeComplexChartEntry(entry, { requireId: false }) : null;
+    const selectedCuts = normalizedEntry ? sortedComplexChartCuts(operations.cuts, normalizedEntry.length) : [];
+    const selectedMapCuts = normalizedEntry ? normalizeComplexChartMapCuts(operations.mapCuts?.length ? operations.mapCuts : operations.mapCut, normalizedEntry.length) : [];
+    const isLesRangeTarget = operations.mode === 'truncate' && normalizedEntry?.display === 'snake-les';
+    const lesRangeEnabled = isLesRangeTarget && operations.lesRangeTruncation === true;
+    const selectedLesRangeEndpoints = lesRangeEnabled
+      ? normalizeComplexChartLesRangeEndpoints(operations.lesRangeEndpoints, normalizedEntry.length)
+      : [];
     const candidates = operations.candidates || [];
     const hasSelectedCandidate = candidates.some((candidate) => candidate.selected !== false);
     const message = operations.message || (operations.mode === 'extend'
       ? 'Preview the generated kernel/cokernel extension.'
-      : 'Click object labels to choose truncation cuts.');
+      : operations.mode === 'les'
+        ? 'Choose a short exact sequence and ending degree.'
+        : operations.mode === 'flatten'
+          ? 'Choose a long exact sequence to flatten.'
+          : 'Click object labels or map labels to choose truncation cuts.');
     const targetList = targets.length
       ? `
         <div class="sheaf-complex-operation-target-list">
@@ -30435,7 +31469,7 @@
             <label class="sheaf-step-saved-rule-row sheaf-complex-saved-row sheaf-complex-operation-target-row" title="${escapeHtml(complexChartEntryDisplayPlain(target))}">
               <input type="radio" name="complex-chart-operation-target" data-complex-chart-operation-target="${escapeHtml(target.id)}" ${target.id === operations.targetId ? 'checked' : ''}>
               <span class="sheaf-step-saved-rule-formula">${complexChartEntryDisplayHtml(target)}</span>
-              <span class="sheaf-step-saved-rule-kind">${escapeHtml(complexChartKindLabel(target.kind))}</span>
+              <span class="sheaf-step-saved-rule-kind">${escapeHtml(complexChartEntryKindLabel(target))}</span>
             </label>
           `).join('')}
         </div>
@@ -30444,9 +31478,21 @@
     const expression = entry
       ? `<div class="sheaf-complex-operation-expression">${complexChartEntryDisplayHtml(entry, {
         clickableObjects: operations.mode === 'truncate',
+        clickableMaps: operations.mode === 'truncate' && normalizedEntry?.kind === 'chain-complex',
+        clickableLesRange: lesRangeEnabled,
         entryId: entry.id,
-        selectedCuts
+        selectedCuts,
+        selectedMapCuts,
+        selectedLesRangeEndpoints
       })}</div>`
+      : '';
+    const lesControls = operations.mode === 'les' ? renderComplexChartLesControls(operations) : '';
+    const lesRangeControls = isLesRangeTarget ? renderComplexChartLesRangeControls(operations) : '';
+    const selectedFiberMapCuts = lesRangeEnabled
+      ? complexChartLesRangeMapCuts(selectedLesRangeEndpoints, normalizedEntry.length)
+      : selectedMapCuts;
+    const fiberControls = normalizedEntry && operations.mode === 'truncate'
+      ? renderComplexChartMapFiberControls(normalizedEntry, selectedFiberMapCuts, operations)
       : '';
     const previews = candidates.length
       ? `
@@ -30454,24 +31500,99 @@
           ${candidates.map((candidate) => `
             <label class="sheaf-complex-operation-preview-row">
               <input type="checkbox" data-complex-chart-operation-candidate="${escapeHtml(candidate.key)}" ${candidate.selected === false ? '' : 'checked'}>
-              <span class="sheaf-complex-operation-preview-formula">${complexChartEntryDisplayHtml(candidate.entry)}</span>
-              <span class="sheaf-step-saved-rule-kind">${escapeHtml(complexChartKindLabel(candidate.entry.kind))}</span>
+              <span class="sheaf-complex-operation-preview-formula${normalizeComplexChartEntry(candidate.entry, { requireId: false }).display === 'snake-les' ? ' is-snake-les' : ''}">${complexChartEntryDisplayHtml(candidate.entry)}</span>
+              <span class="sheaf-step-saved-rule-kind">${escapeHtml(complexChartEntryKindLabel(candidate.entry))}</span>
             </label>
           `).join('')}
         </div>
       `
       : '';
-    return `
-      <div class="sheaf-complex-operation-controls">
-        <button class="btn btn-ghost sheaf-chart-export" type="button" data-complex-chart-operation-mode="truncate" aria-pressed="${operations.mode === 'truncate' ? 'true' : 'false'}">truncate</button>
-        <button class="btn btn-ghost sheaf-chart-export" type="button" data-complex-chart-operation-mode="extend" aria-pressed="${operations.mode === 'extend' ? 'true' : 'false'}">extend by kernel/cokernel</button>
+    const actionControls = `
+      <div class="sheaf-complex-operation-actions">
         <button class="btn btn-ghost sheaf-chart-export" type="button" data-complex-chart-operation-add ${hasSelectedCandidate ? '' : 'disabled'}>add selected</button>
         <button class="btn btn-ghost sheaf-chart-export" type="button" data-complex-chart-operation-cancel>cancel</button>
       </div>
+    `;
+    return `
+      ${modeControls}
+      ${lesControls}
+      ${lesRangeControls}
       ${targetList}
       ${expression}
+      ${fiberControls}
       <div class="hint">${escapeHtml(message)}</div>
       ${previews}
+      ${actionControls}
+    `;
+  }
+
+  function renderComplexChartOperationModeControls(operations) {
+    const mode = normalizeComplexChartOperationMode(operations?.mode);
+    return `
+      <div class="sheaf-complex-operation-controls sheaf-complex-operation-mode-row">
+        <label class="opt-row">
+          operation
+          <select class="sheaf-select" data-complex-chart-operation-mode-select>
+            <option value="" ${mode ? '' : 'selected'}>choose...</option>
+            <option value="truncate" ${mode === 'truncate' ? 'selected' : ''}>truncate</option>
+            <option value="extend" ${mode === 'extend' ? 'selected' : ''}>extend by ker/coker</option>
+            <option value="les" ${mode === 'les' ? 'selected' : ''}>LES from SES</option>
+            <option value="flatten" ${mode === 'flatten' ? 'selected' : ''}>flatten</option>
+          </select>
+        </label>
+      </div>
+    `;
+  }
+
+  function renderComplexChartLesControls(operations) {
+    const derivedFunctor = normalizeComplexChartDerivedFunctor(operations?.derivedFunctor);
+    const endDegree = normalizeComplexChartLesEndDegree(operations?.lesEndDegree);
+    return `
+      <div class="sheaf-complex-operation-controls">
+        <label class="opt-row">
+          functor
+          <select class="sheaf-select" data-complex-chart-les-functor>
+            <option value="cohomology" ${derivedFunctor === 'cohomology' ? 'selected' : ''}>H^i(...)</option>
+          </select>
+        </label>
+        <label class="opt-row">
+          end i
+          <input class="sheaf-input sheaf-complex-les-degree-input" type="number" min="0" max="${MAX_COMPLEX_CHART_LES_END_DEGREE}" value="${endDegree}" data-complex-chart-les-end-degree>
+        </label>
+      </div>
+    `;
+  }
+
+  function renderComplexChartLesRangeControls(operations) {
+    return `
+      <div class="sheaf-complex-operation-controls">
+        <label class="opt-row">
+          <input type="checkbox" data-complex-chart-les-range-truncation ${operations?.lesRangeTruncation === true ? 'checked' : ''}>
+          pick part of LES
+        </label>
+      </div>
+    `;
+  }
+
+  function renderComplexChartMapFiberControls(entry, mapCuts, operations) {
+    const selectedMapCuts = normalizeComplexChartMapCuts(mapCuts, entry.length)
+      .filter((mapCut) => !complexChartMapIsZero(entry.maps?.[mapCut]));
+    if (!selectedMapCuts.length) return '';
+    const fiberNames = normalizeComplexChartFiberNames(operations?.fiberNames);
+    return `
+      <div class="sheaf-complex-operation-fiber-list">
+        ${selectedMapCuts.map((mapCut) => {
+          const mapLatex = entry.maps?.[mapCut] || '';
+          const defaultName = complexChartDefaultMapFiberName(mapLatex, mapCut);
+          const value = fiberNames[mapCut] || defaultName;
+          return `
+            <label class="sheaf-complex-operation-fiber-row">
+              <span class="sheaf-step-saved-rule-kind">\\(\\xrightarrow{${escapeHtml(mapLatex)}}\\)</span>
+              <input class="sheaf-input" type="text" value="${escapeHtml(value)}" placeholder="${escapeHtml(defaultName)}" spellcheck="false" autocomplete="off" data-complex-chart-map-fiber-name="${mapCut}" aria-label="name for truncation object at map ${mapCut}">
+            </label>
+          `;
+        }).join('')}
+      </div>
     `;
   }
 
@@ -30594,6 +31715,7 @@
       objects: normalized ? [...(normalized.objects || [])] : complexChartDefaultObjects(editorKind, editorLength),
       maps: [...(normalized?.maps || [])],
       quotients: [...(normalized?.quotients || [])],
+      display: normalized?.display || '',
       editingId: normalized?.id || null,
       presetId: null,
       lengthMode: 'objects',
@@ -30652,6 +31774,7 @@
     if (options.kindChanged && editor.kind !== 'chain-complex') {
       editor.lengthMode = 'objects';
       editor.presetId = null;
+      editor.display = '';
     }
     editor.length = complexChartEditorUsesDeRhamDimension(editor)
       ? normalizeComplexChartDeRhamDimension(refs.complexChartLength?.value, editor.length || 3)
@@ -30737,7 +31860,8 @@
       length: draftEntry.length,
       objects: draftEntry.objects,
       maps: draftEntry.maps,
-      quotients: draftEntry.quotients
+      quotients: draftEntry.quotients,
+      display: draftEntry.display
     })).slice(0, 8)}`;
     const entry = complexChartEntryFromEditor({ fallbackId });
     const result = upsertComplexChartEntries([entry], { replaceId: chart.editor.editingId || null, fallbackId });
@@ -42635,6 +43759,7 @@
       objects: Array.isArray(item.objects) ? item.objects : [],
       maps: Array.isArray(item.maps) ? item.maps : [],
       quotients: Array.isArray(item.quotients) ? item.quotients : [],
+      display: item.display,
       selected: item.unselected === true ? false : item.selected !== false
     }, { fallbackId });
   }
@@ -43436,6 +44561,7 @@
       objects: normalized.objects || [],
       maps: normalized.maps || [],
       quotients: normalized.quotients || [],
+      display: normalized.display,
       unselected: normalized.selected === false
     });
   }
@@ -44248,7 +45374,11 @@
   }
 
   function typeset(element) {
-    if (!element || !window.MathJax) return;
+    if (!element) return;
+    if (!window.MathJax) {
+      renderTikz(element);
+      return;
+    }
     state.mathJaxQueue = state.mathJaxQueue
       .then(() => window.MathJax.startup?.promise || null)
       .then(() => {
@@ -44257,7 +45387,75 @@
         polishDisplayLatexScripts(element);
         return window.MathJax.typesetPromise([element]);
       })
-      .catch(() => {});
+      .then(() => renderTikz(element))
+      .catch(() => renderTikz(element));
+  }
+
+  function handleComplexChartLesDisplayClick(event) {
+    const button = event.target.closest('[data-sheaf-les-display-mode]');
+    if (!button) return;
+    const wrapper = button.closest('[data-sheaf-les-display]');
+    if (!wrapper) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const mode = button.dataset.sheafLesDisplayMode === 'tikz' ? 'tikz' : 'fast';
+    wrapper.querySelectorAll('[data-sheaf-les-display-mode]').forEach((item) => {
+      const active = item.dataset.sheafLesDisplayMode === mode;
+      item.classList.toggle('is-selected', active);
+      item.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    wrapper.querySelectorAll('[data-sheaf-les-pane]').forEach((pane) => {
+      pane.classList.toggle('is-active', pane.dataset.sheafLesPane === mode);
+    });
+    if (mode === 'tikz') ensureComplexChartTikzFrame(wrapper);
+  }
+
+  function ensureComplexChartTikzFrame(wrapper) {
+    const pane = wrapper?.querySelector?.('[data-sheaf-les-pane="tikz"]');
+    if (!pane || pane.querySelector('iframe')) return;
+    const frameId = String(pane.dataset.sheafTikzFrame || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    const srcdoc = pane.dataset.sheafTikzSrcdoc || '';
+    if (!srcdoc) return;
+    const frame = document.createElement('iframe');
+    frame.className = 'sheaf-complex-tikz-frame';
+    frame.title = 'long exact sequence, TikZ display';
+    frame.scrolling = 'no';
+    frame.dataset.sheafTikzFrame = frameId;
+    frame.srcdoc = srcdoc;
+    pane.appendChild(frame);
+  }
+
+  function handleTikzFrameMessage(event) {
+    const data = event?.data;
+    if (!data || data.type !== 'sheaf-complex-tikz-height') return;
+    const frameId = String(data.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    const rawHeight = Number(data.height);
+    const height = Number.isFinite(rawHeight) ? Math.min(Math.max(Math.ceil(rawHeight), 120), 900) : 160;
+    if (!frameId) return;
+    document.querySelectorAll(`iframe[data-sheaf-tikz-frame="${cssEscape(frameId)}"]`).forEach((frame) => {
+      frame.style.height = `${height}px`;
+    });
+  }
+
+  function renderTikz(element) {
+    if (!element || !window.TikZJax) return;
+    const scripts = Array.from(element.querySelectorAll?.('script[type="text/tikz"]') || [])
+      .filter((script) => script.dataset.tikzRendered !== 'true');
+    if (!scripts.length) return;
+    const render = typeof window.TikZJax === 'function'
+      ? () => window.TikZJax(element)
+      : typeof window.TikZJax.process === 'function'
+        ? () => window.TikZJax.process(element)
+        : typeof window.TikZJax.render === 'function'
+          ? () => window.TikZJax.render(element)
+          : null;
+    if (!render) return;
+    scripts.forEach((script) => { script.dataset.tikzRendered = 'true'; });
+    try {
+      render();
+    } catch (error) {
+      scripts.forEach((script) => { delete script.dataset.tikzRendered; });
+    }
   }
 
   function polishDisplayLatexScripts(root) {

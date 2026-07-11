@@ -3,7 +3,7 @@
 // { label: "renting list", key: "renting_list", file: "renting_list.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.renting_list = {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "title": "renting list",
   "nodes": [
     {
@@ -25,8 +25,8 @@ window.THEOREM_GRAPH_PRESET_DATA.renting_list = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 379,
-      "y": 310
+      "x": 413.7,
+      "y": 168.3
     },
     {
       "id": "n47",
@@ -53,8 +53,8 @@ window.THEOREM_GRAPH_PRESET_DATA.renting_list = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 293.7,
-      "y": 385.4
+      "x": 249,
+      "y": 134.3
     }
   ],
   "arrows": [],
@@ -109,10 +109,27 @@ window.THEOREM_GRAPH_PRESET_DATA.renting_list = {
           "label": ""
         }
       ]
+    },
+    {
+      "key": "link4",
+      "author": "",
+      "title": "kalt renting most",
+      "year": "",
+      "citeText": "",
+      "url": "https://wohntraumsuche.de/hamburg/",
+      "source": "web",
+      "rawBibtex": "",
+      "links": [
+        {
+          "url": "https://wohntraumsuche.de/hamburg/",
+          "source": "web",
+          "label": ""
+        }
+      ]
     }
   ],
   "view": {
-    "selectedId": "n46",
+    "selectedId": "n47",
     "selectedReferenceKeys": [],
     "layoutRunning": false
   }
