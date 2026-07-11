@@ -162,6 +162,9 @@
   const VARS = new Map();
   const refs = {};
   const MAX_COMPLEX_CHART_LENGTH = 20;
+  const COMPLEX_CHART_DERHAM_PRESET_ID = 'de-rham-cohomology';
+  const COMPLEX_CHART_DERHAM_LENGTH_MODE = 'de-rham-dimension';
+  const MAX_COMPLEX_CHART_DERHAM_DIMENSION = Math.max(0, MAX_COMPLEX_CHART_LENGTH - 4);
   let resolvingActiveHomologyMapContext = false;
   const ensuringHomologyVarietyIds = new Set();
   const hodgeACoeffCache = new Map();
@@ -295,6 +298,16 @@
         maps: [],
         quotients: [],
         editingId: null,
+        presetId: null,
+        lengthMode: 'objects',
+        message: ''
+      },
+      operations: {
+        open: false,
+        targetId: null,
+        mode: 'truncate',
+        cuts: [],
+        candidates: [],
         message: ''
       }
     },
@@ -320,6 +333,7 @@
     syncHodgeWidePlacement();
     renderClassStepSavedFormulaList();
     renderClassFormulaBuilder();
+    renderComplexChartPresetOptions();
     renderComplexChartList();
     renderComplexChartEditor();
     recompute('initial render');
@@ -772,11 +786,14 @@
     refs.complexChartImportApply = $('complex-chart-import-apply');
     refs.complexChartImportCancel = $('complex-chart-import-cancel');
     refs.complexChartImportMessage = $('complex-chart-import-message');
+    refs.complexChartOperations = $('complex-chart-operations');
     refs.complexChartExport = $('complex-chart-export');
     refs.complexChartDelete = $('complex-chart-delete');
     refs.complexChartSaved = $('complex-chart-saved');
+    refs.complexChartOperationsPanel = $('complex-chart-operations-panel');
     refs.complexChartEditor = $('complex-chart-editor');
     refs.complexChartKind = $('complex-chart-kind');
+    refs.complexChartLengthLabel = $('complex-chart-length-label');
     refs.complexChartLength = $('complex-chart-length');
     refs.complexChartFields = $('complex-chart-fields');
     refs.complexChartPreview = $('complex-chart-preview');
@@ -6685,10 +6702,17 @@
       refs.classStepExport.addEventListener('click', () => openChartExport('step-classes'));
     }
     if (refs.complexChartAdd) {
-      refs.complexChartAdd.addEventListener('click', () => setComplexChartAddPanelVisible(!!refs.complexChartAddPanel?.hidden));
+      refs.complexChartAdd.addEventListener('click', () => {
+        const shouldOpen = !!refs.complexChartAddPanel?.hidden;
+        if (!shouldOpen) closeComplexChartEditor();
+        setComplexChartAddPanelVisible(shouldOpen);
+      });
     }
     if (refs.complexChartAddClose) {
-      refs.complexChartAddClose.addEventListener('click', () => setComplexChartAddPanelVisible(false));
+      refs.complexChartAddClose.addEventListener('click', () => {
+        closeComplexChartEditor();
+        setComplexChartAddPanelVisible(false);
+      });
     }
     if (refs.complexChartAddMode) {
       refs.complexChartAddMode.addEventListener('change', () => syncComplexChartAddMode());
@@ -6696,11 +6720,13 @@
     if (refs.complexChartManualCreate) {
       refs.complexChartManualCreate.addEventListener('click', () => {
         openComplexChartEditor(refs.complexChartManualKind?.value || 'chain-complex');
-        setComplexChartAddPanelVisible(false);
       });
     }
     if (refs.complexChartPresetLoad) {
-      refs.complexChartPresetLoad.addEventListener('click', () => addComplexChartPreset(refs.complexChartPreset?.value));
+      refs.complexChartPresetLoad.addEventListener('click', () => saveComplexChartPresetDraft());
+    }
+    if (refs.complexChartPreset) {
+      refs.complexChartPreset.addEventListener('change', () => loadComplexChartPresetDraft(refs.complexChartPreset.value));
     }
     if (refs.complexChartImportCancel) {
       refs.complexChartImportCancel.addEventListener('click', () => {
@@ -6723,6 +6749,9 @@
     if (refs.complexChartDelete) {
       refs.complexChartDelete.addEventListener('click', () => deleteSelectedComplexChartEntries());
     }
+    if (refs.complexChartOperations) {
+      refs.complexChartOperations.addEventListener('click', () => toggleComplexChartOperationsPanel());
+    }
     if (refs.complexChartSaved) {
       refs.complexChartSaved.addEventListener('click', (event) => {
         const editButton = event.target.closest('[data-complex-chart-edit]');
@@ -6738,6 +6767,38 @@
         if (checkbox) setComplexChartEntrySelected(checkbox.dataset.complexChartSelect, checkbox.checked);
       });
     }
+    if (refs.complexChartOperationsPanel) {
+      refs.complexChartOperationsPanel.addEventListener('click', (event) => {
+        const objectButton = event.target.closest('[data-complex-chart-object-entry]');
+        if (objectButton) {
+          toggleComplexChartOperationCut(objectButton.dataset.complexChartObjectEntry, objectButton.dataset.complexChartObjectIndex);
+          return;
+        }
+        const modeButton = event.target.closest('[data-complex-chart-operation-mode]');
+        if (modeButton) {
+          setComplexChartOperationMode(modeButton.dataset.complexChartOperationMode);
+          return;
+        }
+        const addGeneratedButton = event.target.closest('[data-complex-chart-operation-add]');
+        if (addGeneratedButton) {
+          addSelectedComplexChartOperationCandidates();
+          return;
+        }
+        const cancelOperationsButton = event.target.closest('[data-complex-chart-operation-cancel]');
+        if (cancelOperationsButton) {
+          closeComplexChartOperations();
+        }
+      });
+      refs.complexChartOperationsPanel.addEventListener('change', (event) => {
+        const candidateCheckbox = event.target.closest('[data-complex-chart-operation-candidate]');
+        if (candidateCheckbox) {
+          setComplexChartOperationCandidateSelected(candidateCheckbox.dataset.complexChartOperationCandidate, candidateCheckbox.checked);
+          return;
+        }
+        const targetRadio = event.target.closest('[data-complex-chart-operation-target]');
+        if (targetRadio) setComplexChartOperationTarget(targetRadio.dataset.complexChartOperationTarget);
+      });
+    }
     if (refs.complexChartKind) {
       refs.complexChartKind.addEventListener('change', () => updateComplexChartEditorFromControls({ kindChanged: true }));
     }
@@ -6751,7 +6812,10 @@
       refs.complexChartSave.addEventListener('click', () => saveComplexChartEditor());
     }
     if (refs.complexChartCancel) {
-      refs.complexChartCancel.addEventListener('click', () => closeComplexChartEditor());
+      refs.complexChartCancel.addEventListener('click', () => {
+        closeComplexChartEditor();
+        setComplexChartAddPanelVisible(false);
+      });
     }
     if (refs.furtherSimplify) {
       refs.furtherSimplify.addEventListener('click', () => {
@@ -29466,6 +29530,18 @@
     if (!state.complexChart.editor || typeof state.complexChart.editor !== 'object') {
       state.complexChart.editor = defaultComplexChartEditorState();
     }
+    if (!state.complexChart.operations || typeof state.complexChart.operations !== 'object') {
+      state.complexChart.operations = defaultComplexChartOperationsState();
+    } else {
+      const previous = state.complexChart.operations;
+      state.complexChart.operations = {
+        ...defaultComplexChartOperationsState(),
+        ...previous,
+        open: previous.open === true || !!previous.openEntryId,
+        targetId: previous.targetId || previous.openEntryId || null,
+        mode: normalizeComplexChartOperationMode(previous.mode)
+      };
+    }
     return state.complexChart;
   }
 
@@ -29478,6 +29554,19 @@
       maps: [],
       quotients: [],
       editingId: null,
+      presetId: null,
+      lengthMode: 'objects',
+      message: ''
+    };
+  }
+
+  function defaultComplexChartOperationsState() {
+    return {
+      open: false,
+      targetId: null,
+      mode: 'truncate',
+      cuts: [],
+      candidates: [],
       message: ''
     };
   }
@@ -29512,6 +29601,103 @@
         objects: ['0', '2\\pi i \\underline{\\mathbb{Z}}_X', '\\mathcal{O}_X', '\\mathcal{O}_X^*', '0'],
         maps: ['', '', '\\exp', '']
       }
+    },
+    {
+      id: 'ses-ideal-quotient',
+      label: 'SES: ideal quotient',
+      entry: {
+        kind: 'chain-complex',
+        length: 5,
+        objects: ['0', 'I', 'A', 'A/I', '0'],
+        maps: ['', '\\iota', '\\pi', '']
+      }
+    },
+    {
+      id: 'ses-direct-sum-split',
+      label: 'SES: split direct-sum sequence',
+      entry: {
+        kind: 'chain-complex',
+        length: 5,
+        objects: ['0', 'A', 'A\\oplus B', 'B', '0'],
+        maps: ['', '\\iota_A', '\\operatorname{pr}_B', '']
+      }
+    },
+    {
+      id: 'ses-ideal-intersection-sum',
+      label: 'SES: ideal intersection-sum sequence',
+      entry: {
+        kind: 'chain-complex',
+        length: 5,
+        objects: ['0', 'I\\cap J', 'I\\oplus J', 'I+J', '0'],
+        maps: ['', '\\Delta', '+', '']
+      }
+    },
+    {
+      id: 'ses-mayer-vietoris-quotient',
+      label: 'SES: quotient Mayer-Vietoris sequence',
+      entry: {
+        kind: 'chain-complex',
+        length: 5,
+        objects: ['0', 'R/(I\\cap J)', 'R/I\\oplus R/J', 'R/(I+J)', '0'],
+        maps: ['', '\\bar{\\Delta}', '\\bar{+}', '']
+      }
+    },
+    {
+      id: 'ses-principal-parts-curve',
+      label: 'SES: rational functions and principal parts',
+      entry: {
+        kind: 'chain-complex',
+        length: 5,
+        objects: ['0', '\\mathcal{O}_X', 'K_X', '\\bigoplus_{x\\in X_{\\mathrm{closed}}} K_X/\\mathcal{O}_{X,x}', '0'],
+        maps: ['', '\\iota', '\\operatorname{pp}', '']
+      }
+    },
+    {
+      id: 'ses-diagonal-conormal',
+      label: 'SES: diagonal first thickening',
+      entry: {
+        kind: 'chain-complex',
+        length: 5,
+        objects: ['0', 'I/I^2', '\\mathcal{O}_{X\\times X}/I^2', '\\mathcal{O}_{X\\times X}/I', '0'],
+        maps: ['', '\\iota', '\\pi', '']
+      }
+    },
+    {
+      id: 'ses-inertia-decomposition',
+      label: 'SES: inertia and decomposition groups',
+      entry: {
+        kind: 'chain-complex',
+        length: 5,
+        objects: ['0', 'I_q', 'D_q', '\\operatorname{Gal}(k_q/k_p)', '0'],
+        maps: ['', '\\iota', '\\operatorname{res}', '']
+      }
+    },
+    {
+      id: 'ses-units-divisor-class',
+      label: 'SES: units, divisors, and class group',
+      entry: {
+        kind: 'chain-complex',
+        length: 6,
+        objects: ['0', '\\mathcal{O}_k^*', 'k^*', '\\bigoplus_{\\mathfrak{p}\\in M_k}\\mathbb{Z}', '\\operatorname{Cl}(k)', '0'],
+        maps: ['', '\\iota', '\\operatorname{div}', '[\\cdot]', '']
+      }
+    },
+    {
+      id: 'ses-center-inner-outer',
+      label: 'SES: center, automorphisms, and outer automorphisms',
+      entry: {
+        kind: 'chain-complex',
+        length: 6,
+        objects: ['1', 'Z(G)', 'G', '\\operatorname{Aut}(G)', '\\operatorname{Out}(G)', '1'],
+        maps: ['', '\\iota', '\\operatorname{conj}', '\\pi', '']
+      }
+    },
+    {
+      id: COMPLEX_CHART_DERHAM_PRESET_ID,
+      label: 'de Rham cohomology complex',
+      dimension: 3,
+      lengthMode: COMPLEX_CHART_DERHAM_LENGTH_MODE,
+      entry: complexChartDeRhamEntry(3)
     }
   ]);
 
@@ -29521,6 +29707,46 @@
 
   function normalizeComplexChartLength(value, fallback = 3) {
     return normalizedInt(value, 1, MAX_COMPLEX_CHART_LENGTH, fallback);
+  }
+
+  function normalizeComplexChartDeRhamDimension(value, fallback = 3) {
+    return normalizedInt(value, 0, MAX_COMPLEX_CHART_DERHAM_DIMENSION, fallback);
+  }
+
+  function complexChartDeRhamObject(index, dimension = 3) {
+    const dim = normalizeComplexChartDeRhamDimension(dimension, 3);
+    if (index === 0) return '0';
+    if (index === 1) return '\\underline{\\mathbb{C}}_X';
+    if (index === 2) return '\\mathcal{O}_X';
+    if (index === dim + 3) return '0';
+    return `\\Omega_X^${index - 2}`;
+  }
+
+  function complexChartDeRhamMap(index, dimension = 3) {
+    const dim = normalizeComplexChartDeRhamDimension(dimension, 3);
+    return index < 2 || index === dim + 2 ? '' : 'd';
+  }
+
+  function complexChartDeRhamEntry(dimension = 3) {
+    const dim = normalizeComplexChartDeRhamDimension(dimension, 3);
+    const length = Math.min(MAX_COMPLEX_CHART_LENGTH, dim + 4);
+    return {
+      kind: 'chain-complex',
+      length,
+      objects: Array.from({ length }, (_, index) => complexChartDeRhamObject(index, dim)),
+      maps: Array.from({ length: Math.max(0, length - 1) }, (_, index) => complexChartDeRhamMap(index, dim))
+    };
+  }
+
+  function complexChartEditorUsesDeRhamDimension(editor) {
+    return editor?.kind === 'chain-complex'
+      && (editor.lengthMode === COMPLEX_CHART_DERHAM_LENGTH_MODE || editor.presetId === COMPLEX_CHART_DERHAM_PRESET_ID);
+  }
+
+  function complexChartEditorEntryLength(editor) {
+    return complexChartEditorUsesDeRhamDimension(editor)
+      ? Math.max(1, (editor.objects || []).length)
+      : normalizeComplexChartLength(editor?.length, 3);
   }
 
   function complexChartDefaultObject(kind, index) {
@@ -29533,6 +29759,71 @@
 
   function complexChartDefaultQuotient(index) {
     return `Q_{${index + 1}}`;
+  }
+
+  function complexChartDefaultObjects(kind, length) {
+    return Array.from({ length }, (_, index) => complexChartDefaultObject(kind, index));
+  }
+
+  function syncComplexChartEditorShape(editor, options = {}) {
+    const kind = normalizeComplexChartKind(editor.kind);
+    const deRhamMode = kind === 'chain-complex' && (
+      editor.lengthMode === COMPLEX_CHART_DERHAM_LENGTH_MODE
+      || editor.presetId === COMPLEX_CHART_DERHAM_PRESET_ID
+    );
+    const previousLength = deRhamMode
+      ? normalizeComplexChartDeRhamDimension(options.previousLength ?? editor.length, 3)
+      : normalizeComplexChartLength(options.previousLength ?? editor.length, 3);
+    const length = deRhamMode
+      ? normalizeComplexChartDeRhamDimension(editor.length, 3)
+      : normalizeComplexChartLength(editor.length, 3);
+    const previousKind = options.previousKind ? normalizeComplexChartKind(options.previousKind) : kind;
+    const kindChanged = previousKind !== kind;
+    if (deRhamMode) {
+      const entryLength = length + 4;
+      const objects = [];
+      for (let i = 0; i < entryLength; i += 1) {
+        const current = editor.objects?.[i];
+        const previousDefault = complexChartDeRhamObject(i, previousLength);
+        objects[i] = current === undefined || current === previousDefault
+          ? complexChartDeRhamObject(i, length)
+          : current;
+      }
+      editor.kind = 'chain-complex';
+      editor.length = length;
+      editor.lengthMode = COMPLEX_CHART_DERHAM_LENGTH_MODE;
+      editor.presetId = COMPLEX_CHART_DERHAM_PRESET_ID;
+      editor.objects = objects;
+      editor.maps = Array.from({ length: Math.max(0, entryLength - 1) }, (_, index) => {
+        const current = editor.maps?.[index];
+        const previousDefault = complexChartDeRhamMap(index, previousLength);
+        return current === undefined || current === previousDefault
+          ? complexChartDeRhamMap(index, length)
+          : current;
+      });
+      editor.quotients = [];
+      return editor;
+    }
+    const objects = [];
+    for (let i = 0; i < length; i += 1) {
+      const current = editor.objects?.[i];
+      const previousDefault = complexChartDefaultObject(previousKind, i);
+      objects[i] = current === undefined || (kindChanged && current === previousDefault)
+        ? complexChartDefaultObject(kind, i)
+        : current;
+    }
+    editor.kind = kind;
+    editor.length = length;
+    editor.lengthMode = 'objects';
+    editor.presetId = null;
+    editor.objects = objects;
+    editor.maps = kind === 'chain-complex'
+      ? Array.from({ length: Math.max(0, length - 1) }, (_, index) => editor.maps?.[index] ?? '')
+      : [];
+    editor.quotients = kind === 'filtration'
+      ? Array.from({ length: Math.max(0, length - 1) }, (_, index) => editor.quotients?.[index] ?? '')
+      : [];
+    return editor;
   }
 
   function sanitizeComplexChartLatex(value) {
@@ -29578,17 +29869,20 @@
     return entry;
   }
 
-  function complexChartEntryFromEditor(options = {}) {
-    const editor = ensureComplexChartState().editor;
+  function complexChartEntryFromEditorState(editor, options = {}) {
     return normalizeComplexChartEntry({
       id: editor.editingId || null,
       kind: editor.kind,
-      length: editor.length,
+      length: complexChartEditorEntryLength(editor),
       objects: editor.objects || [],
       maps: editor.maps || [],
       quotients: editor.quotients || [],
       selected: true
     }, options);
+  }
+
+  function complexChartEntryFromEditor(options = {}) {
+    return complexChartEntryFromEditorState(ensureComplexChartState().editor, options);
   }
 
   function complexChartEntryDisplayLatex(entry) {
@@ -29674,9 +29968,20 @@
 
   function complexChartEntryDisplayHtml(entry, options = {}) {
     const normalized = normalizeComplexChartEntry(entry, { requireId: false });
+    const selectedCuts = new Set(options.selectedCuts || []);
     if (normalized.kind !== 'filtration') {
-      const wrapper = options.displayMath ? ['\\[', '\\]'] : ['\\(', '\\)'];
-      return `${wrapper[0]}${complexChartEntryDisplayLatex(normalized)}${wrapper[1]}`;
+      if (!options.clickableObjects) {
+        return `<span class="sheaf-complex-whole-expression">\\(${escapeHtml(complexChartEntryDisplayLatex(normalized))}\\)</span>`;
+      }
+      const pieces = [];
+      (normalized.objects || []).forEach((objectLatex, index) => {
+        if (index > 0) {
+          const mapLatex = normalized.maps?.[index - 1] ?? '';
+          pieces.push(`<span class="sheaf-complex-map">\\(\\xrightarrow{${escapeHtml(mapLatex)}}\\)</span>`);
+        }
+        pieces.push(complexChartObjectHtml(normalized, objectLatex, index, { ...options, selectedCuts }));
+      });
+      return `<span class="sheaf-filtration-display sheaf-complex-chain-display">${pieces.join('')}</span>`;
     }
     const objects = normalized.objects || [];
     const pieces = [];
@@ -29685,9 +29990,17 @@
         const quotient = normalized.quotients?.[index - 1] ?? '';
         pieces.push(complexChartFiltrationRelationHtml(quotient));
       }
-      pieces.push(`<span class="sheaf-filtration-object">\\(${escapeHtml(objectLatex)}\\)</span>`);
+      pieces.push(complexChartObjectHtml(normalized, objectLatex, index, { ...options, selectedCuts }));
     });
     return `<span class="sheaf-filtration-display">${pieces.join('')}</span>`;
+  }
+
+  function complexChartObjectHtml(entry, objectLatex, index, options = {}) {
+    const math = `\\(${escapeHtml(objectLatex)}\\)`;
+    const className = entry.kind === 'filtration' ? 'sheaf-filtration-object' : 'sheaf-complex-object';
+    if (!options.clickableObjects) return `<span class="${className}">${math}</span>`;
+    const selected = options.selectedCuts?.has?.(index) ? ' is-selected' : '';
+    return `<button class="${className} sheaf-complex-object-button${selected}" type="button" data-complex-chart-object-entry="${escapeHtml(options.entryId || '')}" data-complex-chart-object-kind="${escapeHtml(entry.kind)}" data-complex-chart-object-index="${index}" title="toggle truncation cut at object ${index}">${math}</button>`;
   }
 
   function complexChartFiltrationRelationHtml(quotientLatex) {
@@ -29714,11 +30027,18 @@
     return COMPLEX_CHART_PRESETS.find((preset) => preset.id === id) || COMPLEX_CHART_PRESETS[0] || null;
   }
 
-  function setComplexChartAddPanelVisible(visible) {
+  function renderComplexChartPresetOptions() {
+    if (!refs.complexChartPreset) return;
+    refs.complexChartPreset.innerHTML = COMPLEX_CHART_PRESETS
+      .map((preset) => `<option value="${escapeHtml(preset.id)}">${escapeHtml(preset.label)}</option>`)
+      .join('');
+  }
+
+  function setComplexChartAddPanelVisible(visible, options = {}) {
     if (!refs.complexChartAddPanel) return false;
     refs.complexChartAddPanel.hidden = !visible;
     if (refs.complexChartAdd) refs.complexChartAdd.setAttribute('aria-expanded', visible ? 'true' : 'false');
-    if (visible) syncComplexChartAddMode();
+    if (visible && options.sync !== false) syncComplexChartAddMode();
     else {
       if (refs.complexChartImportPanel) refs.complexChartImportPanel.hidden = true;
       showComplexChartImportMessage('', false);
@@ -29732,6 +30052,9 @@
     if (refs.complexChartManualPanel) refs.complexChartManualPanel.hidden = mode !== 'manual';
     if (refs.complexChartPresetPanel) refs.complexChartPresetPanel.hidden = mode !== 'preset';
     if (refs.complexChartImportPanel) refs.complexChartImportPanel.hidden = mode !== 'import';
+    if (mode === 'preset') {
+      loadComplexChartPresetDraft(refs.complexChartPreset?.value, { preservePanel: true });
+    }
     if (mode === 'import') {
       showComplexChartImportMessage('', false);
       refs.complexChartImportInput?.focus?.();
@@ -29740,14 +30063,313 @@
   }
 
   function addComplexChartPreset(id) {
+    return loadComplexChartPresetDraft(id);
+  }
+
+  function loadComplexChartPresetDraft(id, options = {}) {
     const preset = complexChartPresetById(id);
     if (!preset) return false;
-    const fallbackId = `complex-chart-preset-${preset.id}-${Date.now().toString(36)}-${hashString(stableJson(preset.entry)).slice(0, 8)}`;
-    const result = upsertComplexChartEntries([{ ...preset.entry }], { fallbackId });
+    const chart = ensureComplexChartState();
+    const deRhamDraft = preset.id === COMPLEX_CHART_DERHAM_PRESET_ID || preset.lengthMode === COMPLEX_CHART_DERHAM_LENGTH_MODE;
+    const dimension = normalizeComplexChartDeRhamDimension(preset.dimension, 3);
+    const sourceEntry = deRhamDraft ? complexChartDeRhamEntry(dimension) : preset.entry;
+    const normalized = normalizeComplexChartEntry(sourceEntry, { requireId: false });
+    chart.operations = defaultComplexChartOperationsState();
+    chart.editor = {
+      ...defaultComplexChartEditorState(normalized.kind),
+      open: true,
+      kind: normalized.kind,
+      length: deRhamDraft ? dimension : normalized.length,
+      objects: [...(normalized.objects || [])],
+      maps: [...(normalized.maps || [])],
+      quotients: [...(normalized.quotients || [])],
+      editingId: null,
+      presetId: deRhamDraft ? COMPLEX_CHART_DERHAM_PRESET_ID : preset.id,
+      lengthMode: deRhamDraft ? COMPLEX_CHART_DERHAM_LENGTH_MODE : 'objects',
+      message: 'Preset loaded. Edit, then add preset.'
+    };
+    syncComplexChartEditorShape(chart.editor);
+    if (refs.complexChartPreset) refs.complexChartPreset.value = preset.id;
+    if (refs.complexChartCard) {
+      refs.complexChartCard.hidden = false;
+      refs.complexChartCard.classList.remove('collapsed');
+    }
+    renderComplexChartEditor();
+    if (!options.preservePanel && refs.complexChartAddPanel?.hidden) setComplexChartAddPanelVisible(true, { sync: false });
+    if (refs.status) refs.status.textContent = 'complex chart preset loaded for editing';
+    return true;
+  }
+
+  function saveComplexChartPresetDraft() {
+    const chart = ensureComplexChartState();
+    if (!chart.editor.open) {
+      const loaded = loadComplexChartPresetDraft(refs.complexChartPreset?.value, { preservePanel: true });
+      if (!loaded) return false;
+    }
+    const saved = saveComplexChartEditor();
+    if (saved) setComplexChartAddPanelVisible(false);
+    return saved;
+  }
+
+  function complexChartGeneratedEntryId(prefix, entry, index = 0) {
+    return `${prefix}-${Date.now().toString(36)}-${index}-${hashString(stableJson(entry)).slice(0, 8)}`;
+  }
+
+  function complexChartEntryById(id) {
+    return ensureComplexChartState().entries.find((entry) => entry.id === id) || null;
+  }
+
+  function sortedComplexChartCuts(cuts, length) {
+    return Array.from(new Set((cuts || [])
+      .map((cut) => Number(cut))
+      .filter((cut) => Number.isInteger(cut) && cut > 0 && cut < length - 1)))
+      .sort((a, b) => a - b);
+  }
+
+  function complexChartTruncationCandidates(entry, cuts) {
+    const normalized = normalizeComplexChartEntry(entry, { requireId: false });
+    const length = normalized.objects.length;
+    const innerCuts = sortedComplexChartCuts(cuts, length);
+    if (length < 2 || !innerCuts.length) return [];
+    const boundaries = [0, ...innerCuts, length - 1];
+    const candidates = [];
+    for (let i = 0; i < boundaries.length - 1; i += 1) {
+      const start = boundaries[i];
+      const end = boundaries[i + 1];
+      if (end <= start) continue;
+      const piece = {
+        kind: normalized.kind,
+        length: end - start + 1,
+        objects: normalized.objects.slice(start, end + 1)
+      };
+      if (normalized.kind === 'filtration') piece.quotients = (normalized.quotients || []).slice(start, end);
+      else piece.maps = (normalized.maps || []).slice(start, end);
+      candidates.push({
+        key: `truncate-${start}-${end}`,
+        label: `${start}..${end}`,
+        entry: normalizeComplexChartEntry(piece, { requireId: false }),
+        selected: true
+      });
+    }
+    return candidates;
+  }
+
+  function complexChartKernelCokernelExtensionEntry(entry) {
+    const normalized = normalizeComplexChartEntry(entry, { requireId: false });
+    if (normalized.kind !== 'chain-complex') return null;
+    const sourceObjects = normalized.objects || [];
+    const sourceMaps = normalized.maps || [];
+    const startsWithZero = complexChartObjectIsZero(sourceObjects[0]);
+    const endsWithZero = complexChartObjectIsZero(sourceObjects[sourceObjects.length - 1]);
+    if (startsWithZero && endsWithZero) return null;
+    const leftMap = sourceMaps[0] || '';
+    const rightMap = sourceMaps[sourceMaps.length - 1] || '';
+    const objects = [...sourceObjects];
+    const maps = [...sourceMaps];
+    if (!startsWithZero) {
+      objects.unshift('0', leftMap ? `\\ker ${leftMap}` : '\\ker');
+      maps.unshift('', '');
+    }
+    if (!endsWithZero) {
+      objects.push(rightMap ? `\\operatorname{coker} ${rightMap}` : '\\operatorname{coker}', '0');
+      maps.push('', '');
+    }
+    return normalizeComplexChartEntry({
+      kind: 'chain-complex',
+      length: objects.length,
+      objects,
+      maps
+    }, { requireId: false });
+  }
+
+  function complexChartObjectIsZero(value) {
+    return String(value ?? '').trim() === '0';
+  }
+
+  function normalizeComplexChartOperationMode(mode) {
+    return mode === 'extend' ? 'extend' : 'truncate';
+  }
+
+  function complexChartOperationTargets(mode = ensureComplexChartState().operations?.mode) {
+    const normalizedMode = normalizeComplexChartOperationMode(mode);
+    return ensureComplexChartState().entries.filter((entry) => (
+      normalizedMode !== 'extend' || normalizeComplexChartEntry(entry, { requireId: false }).kind === 'chain-complex'
+    ));
+  }
+
+  function syncComplexChartOperationTarget() {
+    const chart = ensureComplexChartState();
+    const operations = chart.operations || defaultComplexChartOperationsState();
+    operations.mode = normalizeComplexChartOperationMode(operations.mode);
+    const targets = complexChartOperationTargets(operations.mode);
+    if (!targets.length) {
+      operations.targetId = null;
+      operations.cuts = [];
+      operations.candidates = [];
+      operations.message = operations.mode === 'extend'
+        ? 'No chain complexes are available for kernel/cokernel extension.'
+        : 'No complexes or filtrations are available.';
+      chart.operations = operations;
+      return null;
+    }
+    if (!targets.some((entry) => entry.id === operations.targetId)) {
+      operations.targetId = targets[0].id;
+      operations.cuts = [];
+      operations.candidates = [];
+    }
+    chart.operations = operations;
+    return targets.find((entry) => entry.id === operations.targetId) || null;
+  }
+
+  function refreshComplexChartOperationCandidates(options = {}) {
+    const chart = ensureComplexChartState();
+    const operations = chart.operations || defaultComplexChartOperationsState();
+    const entry = syncComplexChartOperationTarget();
+    if (!entry) {
+      chart.operations = operations;
+      return null;
+    }
+    operations.open = true;
+    operations.mode = normalizeComplexChartOperationMode(operations.mode);
+    if (options.resetCuts) operations.cuts = [];
+    if (operations.mode === 'extend') {
+      operations.cuts = [];
+      const extended = complexChartKernelCokernelExtensionEntry(entry);
+      operations.candidates = extended
+        ? [{ key: 'extend-kernel-cokernel', label: 'kernel/cokernel extension', entry: extended, selected: true }]
+        : [];
+      operations.message = extended
+        ? 'Kernel/cokernel extension ready.'
+        : (normalizeComplexChartEntry(entry, { requireId: false }).kind === 'chain-complex'
+          ? 'The chosen complex already has zero endpoints.'
+          : 'Kernel/cokernel extension is only available for chain complexes.');
+    } else {
+      operations.candidates = complexChartTruncationCandidates(entry, operations.cuts);
+      operations.message = operations.candidates.length
+        ? 'Choose generated pieces to add.'
+        : 'Click object labels to choose truncation cuts.';
+    }
+    chart.operations = operations;
+    return entry;
+  }
+
+  function openComplexChartOperations(idOrMode = null, mode = 'truncate') {
+    const chart = ensureComplexChartState();
+    const nextMode = idOrMode === 'truncate' || idOrMode === 'extend'
+      ? normalizeComplexChartOperationMode(idOrMode)
+      : normalizeComplexChartOperationMode(mode);
+    chart.operations = {
+      ...defaultComplexChartOperationsState(),
+      open: true,
+      mode: nextMode,
+      targetId: idOrMode && idOrMode !== 'truncate' && idOrMode !== 'extend'
+        ? idOrMode
+        : (chart.operations?.targetId || null)
+    };
+    refreshComplexChartOperationCandidates({ resetCuts: true });
+    renderComplexChartList();
+    return true;
+  }
+
+  function toggleComplexChartOperationsPanel() {
+    const operations = ensureComplexChartState().operations || defaultComplexChartOperationsState();
+    if (operations.open) return closeComplexChartOperations();
+    return openComplexChartOperations(operations.mode || 'truncate');
+  }
+
+  function closeComplexChartOperations() {
+    ensureComplexChartState().operations = defaultComplexChartOperationsState();
+    renderComplexChartList();
+    return true;
+  }
+
+  function setComplexChartOperationMode(mode) {
+    const chart = ensureComplexChartState();
+    chart.operations = {
+      ...(chart.operations || defaultComplexChartOperationsState()),
+      open: true,
+      mode: normalizeComplexChartOperationMode(mode),
+      cuts: [],
+      candidates: []
+    };
+    refreshComplexChartOperationCandidates({ resetCuts: true });
+    renderComplexChartList();
+    return true;
+  }
+
+  function setComplexChartOperationTarget(id) {
+    const chart = ensureComplexChartState();
+    const operations = chart.operations || defaultComplexChartOperationsState();
+    const targets = complexChartOperationTargets(operations.mode);
+    if (!targets.some((entry) => entry.id === id)) return false;
+    chart.operations = {
+      ...operations,
+      open: true,
+      targetId: id,
+      cuts: [],
+      candidates: []
+    };
+    refreshComplexChartOperationCandidates({ resetCuts: true });
+    renderComplexChartList();
+    return true;
+  }
+
+  function toggleComplexChartOperationCut(id, index) {
+    const chart = ensureComplexChartState();
+    const targetId = id || chart.operations?.targetId;
+    const entry = complexChartEntryById(targetId);
+    if (!entry) return false;
+    const normalized = normalizeComplexChartEntry(entry, { requireId: false });
+    const cut = Number(index);
+    chart.operations = {
+      ...(chart.operations || defaultComplexChartOperationsState()),
+      open: true,
+      mode: 'truncate',
+      targetId
+    };
+    if (!Number.isInteger(cut) || cut <= 0 || cut >= normalized.objects.length - 1) {
+      chart.operations.cuts = [];
+      chart.operations.candidates = [];
+      chart.operations.message = 'Endpoints are already truncation boundaries.';
+      renderComplexChartList();
+      return false;
+    }
+    const cuts = new Set(sortedComplexChartCuts(chart.operations.cuts, normalized.objects.length));
+    if (cuts.has(cut)) cuts.delete(cut);
+    else cuts.add(cut);
+    chart.operations.cuts = Array.from(cuts).sort((a, b) => a - b);
+    refreshComplexChartOperationCandidates();
+    renderComplexChartList();
+    return true;
+  }
+
+  function setComplexChartOperationCandidateSelected(key, selected) {
+    const operations = ensureComplexChartState().operations;
+    const candidate = (operations.candidates || []).find((item) => item.key === key);
+    if (!candidate) return false;
+    candidate.selected = selected !== false;
+    renderComplexChartList();
+    return true;
+  }
+
+  function addSelectedComplexChartOperationCandidates() {
+    const chart = ensureComplexChartState();
+    const operations = chart.operations || defaultComplexChartOperationsState();
+    const selected = (operations.candidates || []).filter((candidate) => candidate.selected !== false);
+    if (!selected.length) {
+      operations.message = 'Select at least one generated piece.';
+      chart.operations = operations;
+      renderComplexChartList();
+      return false;
+    }
+    selected.forEach((candidate, index) => {
+      const entry = { ...candidate.entry, id: complexChartGeneratedEntryId('complex-chart-operation', candidate.entry, index) };
+      upsertComplexChartEntries([entry]);
+    });
+    chart.operations = defaultComplexChartOperationsState();
     renderComplexChartList();
     refreshExport(state.exportScope || 'main');
-    setComplexChartAddPanelVisible(false);
-    if (refs.status) refs.status.textContent = result.updated ? 'complex chart preset updated' : 'complex chart preset added';
+    if (refs.status) refs.status.textContent = `added ${selected.length} generated complex chart item${selected.length === 1 ? '' : 's'}`;
     return true;
   }
 
@@ -29755,8 +30377,10 @@
     if (!refs.complexChartSaved) return;
     refs.complexChartSaved.innerHTML = renderComplexChartEntries();
     refs.complexChartSaved.hidden = false;
+    renderComplexChartOperationsPanel();
     updateComplexChartActions();
     typeset(refs.complexChartSaved);
+    typeset(refs.complexChartOperationsPanel);
   }
 
   function renderComplexChartEntries() {
@@ -29765,7 +30389,7 @@
       return '<div class="hint">No complexes or filtrations yet. Use add to create, load a preset, or import JSON.</div>';
     }
     const rows = chart.entries.map((entry) => `
-      <div class="sheaf-step-saved-rule-row">
+      <div class="sheaf-step-saved-rule-row sheaf-complex-saved-row">
         <input type="checkbox" data-complex-chart-select="${escapeHtml(entry.id)}" aria-label="choose complex chart entry" ${entry.selected === false ? '' : 'checked'}>
         <span class="sheaf-step-saved-rule-formula" title="${escapeHtml(complexChartEntryDisplayPlain(entry))}">${complexChartEntryDisplayHtml(entry)}</span>
         <span class="sheaf-step-saved-rule-kind">${escapeHtml(complexChartKindLabel(entry.kind))}</span>
@@ -29774,13 +30398,80 @@
     `).join('');
     return `
       <div class="sheaf-step-saved-rule-title">complexes/filtrations</div>
-      <div class="sheaf-step-saved-rule-row sheaf-step-select-all-row">
+      <div class="sheaf-step-saved-rule-row sheaf-complex-saved-row sheaf-step-select-all-row">
         <input type="checkbox" id="complex-chart-select-all" data-complex-chart-select-all aria-label="select all complexes and filtrations">
         <span></span>
         <span></span>
         <span></span>
       </div>
       ${rows}
+    `;
+  }
+
+  function renderComplexChartOperationsPanel() {
+    if (!refs.complexChartOperationsPanel) return;
+    const html = renderComplexChartOperationsPanelHtml();
+    refs.complexChartOperationsPanel.hidden = !html;
+    refs.complexChartOperationsPanel.innerHTML = html;
+    if (refs.complexChartOperations) refs.complexChartOperations.setAttribute('aria-expanded', html ? 'true' : 'false');
+  }
+
+  function renderComplexChartOperationsPanelHtml() {
+    const chart = ensureComplexChartState();
+    const operations = chart.operations || defaultComplexChartOperationsState();
+    if (!operations.open) return '';
+    const entry = syncComplexChartOperationTarget();
+    const targets = complexChartOperationTargets(operations.mode);
+    const selectedCuts = entry ? sortedComplexChartCuts(operations.cuts, entry.length) : [];
+    const candidates = operations.candidates || [];
+    const hasSelectedCandidate = candidates.some((candidate) => candidate.selected !== false);
+    const message = operations.message || (operations.mode === 'extend'
+      ? 'Preview the generated kernel/cokernel extension.'
+      : 'Click object labels to choose truncation cuts.');
+    const targetList = targets.length
+      ? `
+        <div class="sheaf-complex-operation-target-list">
+          ${targets.map((target) => `
+            <label class="sheaf-step-saved-rule-row sheaf-complex-saved-row sheaf-complex-operation-target-row" title="${escapeHtml(complexChartEntryDisplayPlain(target))}">
+              <input type="radio" name="complex-chart-operation-target" data-complex-chart-operation-target="${escapeHtml(target.id)}" ${target.id === operations.targetId ? 'checked' : ''}>
+              <span class="sheaf-step-saved-rule-formula">${complexChartEntryDisplayHtml(target)}</span>
+              <span class="sheaf-step-saved-rule-kind">${escapeHtml(complexChartKindLabel(target.kind))}</span>
+            </label>
+          `).join('')}
+        </div>
+      `
+      : '<div class="hint">No compatible saved entries.</div>';
+    const expression = entry
+      ? `<div class="sheaf-complex-operation-expression">${complexChartEntryDisplayHtml(entry, {
+        clickableObjects: operations.mode === 'truncate',
+        entryId: entry.id,
+        selectedCuts
+      })}</div>`
+      : '';
+    const previews = candidates.length
+      ? `
+        <div class="sheaf-complex-operation-preview-list">
+          ${candidates.map((candidate) => `
+            <label class="sheaf-complex-operation-preview-row">
+              <input type="checkbox" data-complex-chart-operation-candidate="${escapeHtml(candidate.key)}" ${candidate.selected === false ? '' : 'checked'}>
+              <span class="sheaf-complex-operation-preview-formula">${complexChartEntryDisplayHtml(candidate.entry)}</span>
+              <span class="sheaf-step-saved-rule-kind">${escapeHtml(complexChartKindLabel(candidate.entry.kind))}</span>
+            </label>
+          `).join('')}
+        </div>
+      `
+      : '';
+    return `
+      <div class="sheaf-complex-operation-controls">
+        <button class="btn btn-ghost sheaf-chart-export" type="button" data-complex-chart-operation-mode="truncate" aria-pressed="${operations.mode === 'truncate' ? 'true' : 'false'}">truncate</button>
+        <button class="btn btn-ghost sheaf-chart-export" type="button" data-complex-chart-operation-mode="extend" aria-pressed="${operations.mode === 'extend' ? 'true' : 'false'}">extend by kernel/cokernel</button>
+        <button class="btn btn-ghost sheaf-chart-export" type="button" data-complex-chart-operation-add ${hasSelectedCandidate ? '' : 'disabled'}>add selected</button>
+        <button class="btn btn-ghost sheaf-chart-export" type="button" data-complex-chart-operation-cancel>cancel</button>
+      </div>
+      ${targetList}
+      ${expression}
+      <div class="hint">${escapeHtml(message)}</div>
+      ${previews}
     `;
   }
 
@@ -29811,6 +30502,13 @@
       refs.complexChartDelete.title = selected.length
         ? `Delete ${selected.length} selected item${selected.length === 1 ? '' : 's'}.`
         : 'Select at least one complex or filtration.';
+    }
+    if (refs.complexChartOperations) {
+      refs.complexChartOperations.disabled = !entries.length;
+      refs.complexChartOperations.title = entries.length
+        ? 'Open operations for saved complexes and filtrations.'
+        : 'Save at least one complex or filtration.';
+      refs.complexChartOperations.setAttribute('aria-expanded', ensureComplexChartState().operations?.open ? 'true' : 'false');
     }
   }
 
@@ -29843,6 +30541,7 @@
     }
     chart.entries = chart.entries.filter((entry) => !selectedIds.has(entry.id));
     if (chart.editor.editingId && selectedIds.has(chart.editor.editingId)) chart.editor = defaultComplexChartEditorState(chart.editor.kind);
+    if (chart.operations?.targetId && selectedIds.has(chart.operations.targetId)) chart.operations = defaultComplexChartOperationsState();
     renderComplexChartList();
     renderComplexChartEditor();
     refreshExport(state.exportScope || 'main');
@@ -29884,22 +30583,30 @@
   function openComplexChartEditor(kind = 'chain-complex', entry = null) {
     const chart = ensureComplexChartState();
     const normalized = entry ? normalizeComplexChartEntry(entry) : null;
+    const editorKind = normalized?.kind || normalizeComplexChartKind(kind);
+    const editorLength = normalized?.length || 3;
+    chart.operations = defaultComplexChartOperationsState();
     chart.editor = {
-      ...defaultComplexChartEditorState(normalized?.kind || kind),
+      ...defaultComplexChartEditorState(editorKind),
       open: true,
-      kind: normalized?.kind || normalizeComplexChartKind(kind),
-      length: normalized?.length || 3,
-      objects: [...(normalized?.objects || [])],
+      kind: editorKind,
+      length: editorLength,
+      objects: normalized ? [...(normalized.objects || [])] : complexChartDefaultObjects(editorKind, editorLength),
       maps: [...(normalized?.maps || [])],
       quotients: [...(normalized?.quotients || [])],
       editingId: normalized?.id || null,
+      presetId: null,
+      lengthMode: 'objects',
       message: normalized ? 'Loaded for editing.' : ''
     };
+    syncComplexChartEditorShape(chart.editor);
     if (refs.complexChartCard) {
       refs.complexChartCard.hidden = false;
       refs.complexChartCard.classList.remove('collapsed');
     }
+    if (refs.complexChartAddPanel?.hidden) setComplexChartAddPanelVisible(true, { sync: false });
     renderComplexChartEditor();
+    renderComplexChartOperationsPanel();
     return true;
   }
 
@@ -29942,7 +30649,14 @@
     const previousKind = editor.kind;
     const previousLength = editor.length;
     editor.kind = normalizeComplexChartKind(refs.complexChartKind?.value || editor.kind);
-    editor.length = normalizeComplexChartLength(refs.complexChartLength?.value, editor.length || 3);
+    if (options.kindChanged && editor.kind !== 'chain-complex') {
+      editor.lengthMode = 'objects';
+      editor.presetId = null;
+    }
+    editor.length = complexChartEditorUsesDeRhamDimension(editor)
+      ? normalizeComplexChartDeRhamDimension(refs.complexChartLength?.value, editor.length || 3)
+      : normalizeComplexChartLength(refs.complexChartLength?.value, editor.length || 3);
+    syncComplexChartEditorShape(editor, { previousKind, previousLength });
     if (options.kindChanged) editor.message = '';
     if (editor.kind !== previousKind || editor.length !== previousLength) renderComplexChartEditor({ preserveMessage: true });
     else renderComplexChartPreview();
@@ -29955,21 +30669,34 @@
     refs.complexChartEditor.hidden = !editor.open;
     if (!editor.open) return;
     editor.kind = normalizeComplexChartKind(editor.kind);
-    editor.length = normalizeComplexChartLength(editor.length, 3);
+    editor.length = complexChartEditorUsesDeRhamDimension(editor)
+      ? normalizeComplexChartDeRhamDimension(editor.length, 3)
+      : normalizeComplexChartLength(editor.length, 3);
+    syncComplexChartEditorShape(editor);
+    const deRhamMode = complexChartEditorUsesDeRhamDimension(editor);
     if (refs.complexChartKind) refs.complexChartKind.value = editor.kind;
-    if (refs.complexChartLength) refs.complexChartLength.value = String(editor.length);
+    if (refs.complexChartLengthLabel) refs.complexChartLengthLabel.textContent = deRhamMode ? 'dim X' : 'length';
+    if (refs.complexChartLength) {
+      refs.complexChartLength.min = deRhamMode ? '0' : '1';
+      refs.complexChartLength.max = deRhamMode ? String(MAX_COMPLEX_CHART_DERHAM_DIMENSION) : String(MAX_COMPLEX_CHART_LENGTH);
+      refs.complexChartLength.value = String(editor.length);
+      refs.complexChartLength.title = deRhamMode ? 'Dimension of X.' : 'Number of objects.';
+    }
     if (refs.complexChartFields) {
       const fields = [];
-      for (let i = 0; i < editor.length; i += 1) {
-        fields.push(complexChartInputFieldHtml('object', i, editor.kind === 'filtration' ? `object ${i}` : `object ${i}`, editor.objects?.[i] || '', complexChartDefaultObject(editor.kind, i)));
+      const entryLength = complexChartEditorEntryLength(editor);
+      for (let i = 0; i < entryLength; i += 1) {
+        const placeholder = deRhamMode ? complexChartDeRhamObject(i, editor.length) : complexChartDefaultObject(editor.kind, i);
+        fields.push(complexChartInputFieldHtml('object', i, editor.kind === 'filtration' ? `object ${i}` : `object ${i}`, editor.objects?.[i] ?? '', placeholder));
       }
       if (editor.kind === 'chain-complex') {
-        for (let i = 0; i < Math.max(0, editor.length - 1); i += 1) {
-          fields.push(complexChartInputFieldHtml('map', i, `map ${i}`, editor.maps?.[i] || '', complexChartDefaultMap(i)));
+        for (let i = 0; i < Math.max(0, entryLength - 1); i += 1) {
+          const placeholder = deRhamMode ? complexChartDeRhamMap(i, editor.length) : complexChartDefaultMap(i);
+          fields.push(complexChartInputFieldHtml('map', i, `map ${i}`, editor.maps?.[i] ?? '', placeholder));
         }
       } else {
-        for (let i = 0; i < Math.max(0, editor.length - 1); i += 1) {
-          fields.push(complexChartInputFieldHtml('quotient', i, `quotient ${i + 1}`, editor.quotients?.[i] || '', complexChartDefaultQuotient(i)));
+        for (let i = 0; i < Math.max(0, entryLength - 1); i += 1) {
+          fields.push(complexChartInputFieldHtml('quotient', i, `quotient ${i + 1}`, editor.quotients?.[i] ?? '', complexChartDefaultQuotient(i)));
         }
       }
       refs.complexChartFields.innerHTML = fields.join('');
@@ -30000,13 +30727,17 @@
     if (!chart.editor.open) return false;
     readComplexChartEditorFields();
     chart.editor.kind = normalizeComplexChartKind(refs.complexChartKind?.value || chart.editor.kind);
-    chart.editor.length = normalizeComplexChartLength(refs.complexChartLength?.value, chart.editor.length || 3);
+    chart.editor.length = complexChartEditorUsesDeRhamDimension(chart.editor)
+      ? normalizeComplexChartDeRhamDimension(refs.complexChartLength?.value, chart.editor.length || 3)
+      : normalizeComplexChartLength(refs.complexChartLength?.value, chart.editor.length || 3);
+    syncComplexChartEditorShape(chart.editor);
+    const draftEntry = complexChartEntryFromEditor({ requireId: false });
     const fallbackId = chart.editor.editingId || `complex-chart-${Date.now().toString(36)}-${hashString(stableJson({
-      kind: chart.editor.kind,
-      length: chart.editor.length,
-      objects: chart.editor.objects,
-      maps: chart.editor.maps,
-      quotients: chart.editor.quotients
+      kind: draftEntry.kind,
+      length: draftEntry.length,
+      objects: draftEntry.objects,
+      maps: draftEntry.maps,
+      quotients: draftEntry.quotients
     })).slice(0, 8)}`;
     const entry = complexChartEntryFromEditor({ fallbackId });
     const result = upsertComplexChartEntries([entry], { replaceId: chart.editor.editingId || null, fallbackId });
@@ -30015,6 +30746,7 @@
     if (refs.status) refs.status.textContent = result.updated ? 'complex chart item updated' : 'complex chart item saved';
     renderComplexChartList();
     closeComplexChartEditor();
+    setComplexChartAddPanelVisible(false);
     if (saved) refreshExport(state.exportScope || 'main');
     return true;
   }
@@ -41909,22 +42641,32 @@
 
   function sanitizePresetComplexChartEditor(editor) {
     if (!editor || typeof editor !== 'object' || Array.isArray(editor)) return null;
-    const normalized = normalizeComplexChartEntry({
+    const draft = {
+      ...defaultComplexChartEditorState(editor.kind),
+      open: editor.open === true,
       kind: editor.kind,
       length: editor.length,
       objects: Array.isArray(editor.objects) ? editor.objects : [],
       maps: Array.isArray(editor.maps) ? editor.maps : [],
-      quotients: Array.isArray(editor.quotients) ? editor.quotients : []
-    }, { requireId: false });
+      quotients: Array.isArray(editor.quotients) ? editor.quotients : [],
+      editingId: sanitizePresetId(editor.editingId),
+      presetId: sanitizePresetId(editor.presetId),
+      lengthMode: sanitizePresetEnum(editor.lengthMode, ['objects', COMPLEX_CHART_DERHAM_LENGTH_MODE], 'objects'),
+      message: sanitizePresetString(editor.message, '', 400)
+    };
+    syncComplexChartEditorShape(draft);
+    const normalized = complexChartEntryFromEditorState(draft, { requireId: false });
     return compactSerializable({
-      open: editor.open === true,
+      open: draft.open === true,
       kind: normalized.kind,
-      length: normalized.length,
+      length: draft.length,
       objects: normalized.objects,
       maps: normalized.maps || [],
       quotients: normalized.quotients || [],
-      editingId: sanitizePresetId(editor.editingId),
-      message: sanitizePresetString(editor.message, '', 400)
+      editingId: draft.editingId,
+      presetId: draft.presetId,
+      lengthMode: draft.lengthMode === 'objects' ? null : draft.lengthMode,
+      message: draft.message
     });
   }
 
@@ -42256,6 +42998,7 @@
     nextChart.editor = editor
       ? { ...defaultComplexChartEditorState(editor.kind), ...editor }
       : defaultComplexChartEditorState();
+    nextChart.operations = defaultComplexChartOperationsState();
     renderComplexChartList();
     renderComplexChartEditor();
     typeset(refs.complexChartSaved);
@@ -42699,22 +43442,26 @@
 
   function presetComplexChartEditor(editor = ensureComplexChartState().editor) {
     if (!editor?.open) return null;
-    const normalized = normalizeComplexChartEntry({
-      kind: editor.kind,
-      length: editor.length,
-      objects: editor.objects || [],
-      maps: editor.maps || [],
-      quotients: editor.quotients || []
-    }, { requireId: false });
+    const draft = {
+      ...defaultComplexChartEditorState(editor.kind),
+      ...editor,
+      objects: [...(editor.objects || [])],
+      maps: [...(editor.maps || [])],
+      quotients: [...(editor.quotients || [])]
+    };
+    syncComplexChartEditorShape(draft);
+    const normalized = complexChartEntryFromEditorState(draft, { requireId: false });
     return compactSerializable({
       open: true,
       kind: normalized.kind,
-      length: normalized.length,
+      length: draft.length,
       objects: normalized.objects || [],
       maps: normalized.maps || [],
       quotients: normalized.quotients || [],
-      editingId: editor.editingId || null,
-      message: editor.message || ''
+      editingId: draft.editingId || null,
+      presetId: draft.presetId || null,
+      lengthMode: draft.lengthMode === 'objects' ? null : draft.lengthMode,
+      message: draft.message || ''
     });
   }
 

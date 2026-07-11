@@ -194,7 +194,24 @@ function loadComplexCalculator() {
     complexChartEntryDisplayHtml,
     complexChartEntryDisplayPlain,
     complexChartEntryDisplayTikzcd,
+    complexChartEntryFromEditor,
+    complexChartTruncationCandidates,
+    complexChartKernelCokernelExtensionEntry,
     addComplexChartPreset,
+    loadComplexChartPresetDraft,
+    saveComplexChartPresetDraft,
+    renderComplexChartPresetOptions,
+    renderComplexChartEntries,
+    renderComplexChartOperationsPanelHtml,
+    openComplexChartEditor,
+    openComplexChartOperations,
+    toggleComplexChartOperationsPanel,
+    setComplexChartOperationMode,
+    setComplexChartOperationTarget,
+    toggleComplexChartOperationCut,
+    setComplexChartOperationCandidateSelected,
+    addSelectedComplexChartOperationCandidates,
+    updateComplexChartEditorFromControls,
     upsertComplexChartEntries,
     selectedComplexChartEntries,
     setComplexChartEntrySelected,
@@ -268,16 +285,32 @@ function testSheafComplexCalculatorPageAndPrototypeLink() {
   assert(html.includes('value="preset">presets</option>'));
   assert(html.includes('value="import">import</option>'));
   assert(html.includes('id="complex-chart-preset"'));
+  assert(html.includes('<select id="complex-chart-preset" class="sheaf-select"></select>'));
   assert(!html.includes('id="complex-chart-add-complex"'));
   assert(!html.includes('id="complex-chart-add-filtration"'));
   assert(html.includes('id="complex-chart-saved"'));
-  assert(html.includes('<script src="js/sheaf_complex_calculator.js?v=complex-chart-14"></script>'));
+  assert(html.includes('id="complex-chart-operations"'));
+  assert(html.includes('id="complex-chart-operations-panel"'));
+  assert(html.indexOf('id="complex-chart-add"') < html.indexOf('id="complex-chart-operations"'));
+  assert(html.indexOf('id="complex-chart-operations"') < html.indexOf('id="complex-chart-export"'));
+  assert(html.includes('<script src="js/sheaf_complex_calculator.js?v=complex-chart-20"></script>'));
+  assert(html.includes('id="complex-chart-length-label"'));
+  assert(!html.includes('id="complex-chart-kind"'));
+  assert(html.indexOf('id="complex-chart-saved"') < html.indexOf('id="complex-chart-add-panel"'));
+  assert(html.indexOf('id="complex-chart-add-panel"') < html.indexOf('id="complex-chart-editor"'));
+  assert(html.indexOf('id="complex-chart-editor"') < html.indexOf('id="complex-chart-operations-panel"'));
   assert(html.includes('<option value="tikzcd">TikZ-cd</option>'));
   assert(html.includes('.card.collapsed .card-body'));
   assert(html.includes('pointer-events: none;'));
   assert(html.includes('#sheaf-complex-wide-host'));
   assert(html.includes('.sheaf-complex-card .card-head,'));
   assert(html.includes('cursor: pointer;'));
+  assert(html.includes('.sheaf-complex-card:not(.collapsed) .card-body'));
+  assert(html.includes('.sheaf-complex-map mjx-container'));
+  assert(html.includes('.sheaf-filtration-object mjx-container'));
+  assert(html.includes('overflow: visible !important;'));
+  assert(html.includes('.sheaf-complex-editor {'));
+  assert(html.includes('border: 0;'));
   assert(html.includes('.sheaf-filtration-long-subset'));
   const stepCardIndex = html.indexOf('id="class-step-card"');
   const complexCardIndex = html.indexOf('id="sheaf-complex-card"');
@@ -293,6 +326,15 @@ function testSheafComplexCalculatorPageAndPrototypeLink() {
 
 function testComplexChartLengthDefaultsAndDisplays() {
   const api = loadComplexCalculator();
+  api.openComplexChartEditor('chain-complex');
+  assert.deepStrictEqual(Array.from(api.state.complexChart.editor.objects), ['C_{0}', 'C_{1}', 'C_{2}']);
+  assert.deepStrictEqual(Array.from(api.state.complexChart.editor.maps), ['', '']);
+  assert.strictEqual(api.complexChartEntryDisplayLatex(api.complexChartEntryFromEditor({ requireId: false })), 'C_{0} \\xrightarrow{} C_{1} \\xrightarrow{} C_{2}');
+  api.openComplexChartEditor('filtration');
+  assert.deepStrictEqual(Array.from(api.state.complexChart.editor.objects), ['F_{0}', 'F_{1}', 'F_{2}']);
+  assert.deepStrictEqual(Array.from(api.state.complexChart.editor.quotients), ['', '']);
+  assert.strictEqual(api.complexChartEntryDisplayLatex(api.complexChartEntryFromEditor({ requireId: false })), 'F_{0} \\mathrel{\\overset{}{\\subset}} F_{1} \\mathrel{\\overset{}{\\subset}} F_{2}');
+
   const complex = api.normalizeComplexChartEntry({
     kind: 'chain-complex',
     length: 4,
@@ -370,6 +412,8 @@ function testComplexChartTikzcdExport() {
 
   const presetApi = loadComplexCalculator();
   assert.strictEqual(presetApi.addComplexChartPreset('ses-cyclic'), true);
+  assert.strictEqual(presetApi.state.complexChart.entries.length, 0);
+  assert.strictEqual(presetApi.saveComplexChartPresetDraft(), true);
   const preset = presetApi.state.complexChart.entries[0];
   assert.deepStrictEqual(Array.from(preset.objects), ['0', '\\mathbb{Z}', '\\mathbb{Z}', '\\mathbb{Z}/n\\mathbb{Z}', '0']);
   assert.deepStrictEqual(Array.from(preset.maps), ['', '\\times n', '', '']);
@@ -378,6 +422,154 @@ function testComplexChartTikzcdExport() {
   assert(presetTikz.includes('\\arrow["{\\times n}", from=1-2, to=1-3]'));
   assert(!presetTikz.includes('d_{0}'));
   assert(!presetTikz.includes('d_{3}'));
+}
+
+function testComplexChartScreenshotSesPresets() {
+  const cases = [
+    {
+      id: 'ses-ideal-quotient',
+      label: 'SES: ideal quotient',
+      objects: ['0', 'I', 'A', 'A/I', '0'],
+      maps: ['', '\\iota', '\\pi', '']
+    },
+    {
+      id: 'ses-direct-sum-split',
+      label: 'SES: split direct-sum sequence',
+      objects: ['0', 'A', 'A\\oplus B', 'B', '0'],
+      maps: ['', '\\iota_A', '\\operatorname{pr}_B', '']
+    },
+    {
+      id: 'ses-ideal-intersection-sum',
+      label: 'SES: ideal intersection-sum sequence',
+      objects: ['0', 'I\\cap J', 'I\\oplus J', 'I+J', '0'],
+      maps: ['', '\\Delta', '+', '']
+    },
+    {
+      id: 'ses-mayer-vietoris-quotient',
+      label: 'SES: quotient Mayer-Vietoris sequence',
+      objects: ['0', 'R/(I\\cap J)', 'R/I\\oplus R/J', 'R/(I+J)', '0'],
+      maps: ['', '\\bar{\\Delta}', '\\bar{+}', '']
+    },
+    {
+      id: 'ses-principal-parts-curve',
+      label: 'SES: rational functions and principal parts',
+      objects: ['0', '\\mathcal{O}_X', 'K_X', '\\bigoplus_{x\\in X_{\\mathrm{closed}}} K_X/\\mathcal{O}_{X,x}', '0'],
+      maps: ['', '\\iota', '\\operatorname{pp}', '']
+    },
+    {
+      id: 'ses-diagonal-conormal',
+      label: 'SES: diagonal first thickening',
+      objects: ['0', 'I/I^2', '\\mathcal{O}_{X\\times X}/I^2', '\\mathcal{O}_{X\\times X}/I', '0'],
+      maps: ['', '\\iota', '\\pi', '']
+    },
+    {
+      id: 'ses-inertia-decomposition',
+      label: 'SES: inertia and decomposition groups',
+      objects: ['0', 'I_q', 'D_q', '\\operatorname{Gal}(k_q/k_p)', '0'],
+      maps: ['', '\\iota', '\\operatorname{res}', '']
+    },
+    {
+      id: 'ses-units-divisor-class',
+      label: 'SES: units, divisors, and class group',
+      objects: ['0', '\\mathcal{O}_k^*', 'k^*', '\\bigoplus_{\\mathfrak{p}\\in M_k}\\mathbb{Z}', '\\operatorname{Cl}(k)', '0'],
+      maps: ['', '\\iota', '\\operatorname{div}', '[\\cdot]', '']
+    },
+    {
+      id: 'ses-center-inner-outer',
+      label: 'SES: center, automorphisms, and outer automorphisms',
+      objects: ['1', 'Z(G)', 'G', '\\operatorname{Aut}(G)', '\\operatorname{Out}(G)', '1'],
+      maps: ['', '\\iota', '\\operatorname{conj}', '\\pi', '']
+    }
+  ];
+
+  const optionApi = loadComplexCalculator();
+  const presetSelect = { innerHTML: '' };
+  optionApi.refs.complexChartPreset = presetSelect;
+  optionApi.renderComplexChartPresetOptions();
+  for (const item of cases) {
+    assert(presetSelect.innerHTML.includes(`value="${item.id}"`));
+    assert(presetSelect.innerHTML.includes(item.label));
+  }
+
+  for (const item of cases) {
+    const api = loadComplexCalculator();
+    assert.strictEqual(api.addComplexChartPreset(item.id), true);
+    assert.strictEqual(api.state.complexChart.entries.length, 0);
+    assert.strictEqual(api.saveComplexChartPresetDraft(), true);
+    const entry = api.state.complexChart.entries[0];
+    assert.deepStrictEqual(Array.from(entry.objects), item.objects);
+    assert.deepStrictEqual(Array.from(entry.maps), item.maps);
+    const tikz = api.exportComplexChartEntries('tikzcd');
+    assert(tikz.includes('\\arrow[from=1-1, to=1-2]'));
+    assert(tikz.includes(`\\arrow["{${item.maps[1]}}", from=1-2, to=1-3]`));
+    assert(!tikz.includes('d_{0}'));
+    assert(!tikz.includes('d_{1}'));
+  }
+
+  const groupApi = loadComplexCalculator();
+  groupApi.addComplexChartPreset('ses-center-inner-outer');
+  groupApi.saveComplexChartPresetDraft();
+  const groupTikz = groupApi.exportComplexChartEntries('tikzcd');
+  assert(groupTikz.includes('\\arrow["{\\operatorname{conj}}", from=1-3, to=1-4]'));
+  assert(groupTikz.includes('\\arrow[from=1-1, to=1-2]'));
+  assert(groupTikz.includes('\\arrow[from=1-5, to=1-6]'));
+}
+
+function testComplexChartEditablePresetsAndDeRhamPreset() {
+  const api = loadComplexCalculator();
+  const presetSelect = { innerHTML: '', value: '' };
+  api.refs.complexChartPreset = presetSelect;
+  api.renderComplexChartPresetOptions();
+  assert(presetSelect.innerHTML.includes('value="de-rham-cohomology"'));
+  assert(presetSelect.innerHTML.includes('de Rham cohomology complex'));
+
+  assert.strictEqual(api.loadComplexChartPresetDraft('de-rham-cohomology'), true);
+  assert.strictEqual(api.state.complexChart.entries.length, 0);
+  assert.strictEqual(api.state.complexChart.editor.open, true);
+  assert.strictEqual(api.state.complexChart.editor.length, 3);
+  assert.strictEqual(api.state.complexChart.editor.lengthMode, 'de-rham-dimension');
+  assert.deepStrictEqual(Array.from(api.state.complexChart.editor.objects), [
+    '0',
+    '\\underline{\\mathbb{C}}_X',
+    '\\mathcal{O}_X',
+    '\\Omega_X^1',
+    '\\Omega_X^2',
+    '\\Omega_X^3',
+    '0'
+  ]);
+  assert.deepStrictEqual(Array.from(api.state.complexChart.editor.maps), ['', '', 'd', 'd', 'd', '']);
+
+  const dimApi = loadComplexCalculator();
+  assert.strictEqual(dimApi.loadComplexChartPresetDraft('de-rham-cohomology'), true);
+  dimApi.refs.complexChartLength = { value: '4' };
+  assert.strictEqual(dimApi.updateComplexChartEditorFromControls(), true);
+  assert.strictEqual(dimApi.state.complexChart.editor.length, 4);
+  assert.deepStrictEqual(Array.from(dimApi.state.complexChart.editor.objects), [
+    '0',
+    '\\underline{\\mathbb{C}}_X',
+    '\\mathcal{O}_X',
+    '\\Omega_X^1',
+    '\\Omega_X^2',
+    '\\Omega_X^3',
+    '\\Omega_X^4',
+    '0'
+  ]);
+  assert.deepStrictEqual(Array.from(dimApi.state.complexChart.editor.maps), ['', '', 'd', 'd', 'd', 'd', '']);
+  assert.strictEqual(
+    dimApi.complexChartEntryDisplayLatex(dimApi.complexChartEntryFromEditor({ requireId: false })),
+    '0 \\xrightarrow{} \\underline{\\mathbb{C}}_X \\xrightarrow{} \\mathcal{O}_X \\xrightarrow{d} \\Omega_X^1 \\xrightarrow{d} \\Omega_X^2 \\xrightarrow{d} \\Omega_X^3 \\xrightarrow{d} \\Omega_X^4 \\xrightarrow{} 0'
+  );
+
+  api.state.complexChart.editor.objects[5] = '\\Omega_X^{3,\\mathrm{edit}}';
+  assert.strictEqual(api.saveComplexChartPresetDraft(), true);
+  assert.strictEqual(api.state.complexChart.entries.length, 1);
+  assert.strictEqual(api.state.complexChart.entries[0].length, 7);
+  assert.strictEqual(api.state.complexChart.entries[0].objects[5], '\\Omega_X^{3,\\mathrm{edit}}');
+  assert.strictEqual(api.state.complexChart.entries[0].objects[6], '0');
+
+  assert.strictEqual(api.loadComplexChartPresetDraft('ses-cyclic'), true);
+  assert.strictEqual(api.state.complexChart.entries.length, 1);
+  assert.deepStrictEqual(Array.from(api.state.complexChart.editor.objects), ['0', '\\mathbb{Z}', '\\mathbb{Z}', '\\mathbb{Z}/n\\mathbb{Z}', '0']);
 }
 
 function testComplexChartSelectionEditDeleteModel() {
@@ -398,6 +590,146 @@ function testComplexChartSelectionEditDeleteModel() {
   api.deleteSelectedComplexChartEntries();
   assert.strictEqual(api.state.complexChart.entries.length, 1);
   assert.strictEqual(api.state.complexChart.entries[0].id, 'complex_one');
+}
+
+function testComplexChartOperationTruncationModel() {
+  const api = loadComplexCalculator();
+  const chain = api.normalizeComplexChartEntry({
+    kind: 'chain-complex',
+    length: 9,
+    objects: Array.from({ length: 9 }, (_, index) => `C_${index}`),
+    maps: Array.from({ length: 8 }, (_, index) => `d_${index}`)
+  }, { requireId: false });
+  const chainPieces = api.complexChartTruncationCandidates(chain, [7, 3, 3, 0, 8]);
+  assert.deepStrictEqual(Array.from(chainPieces.map((candidate) => candidate.entry.length)), [4, 5, 2]);
+  assert.deepStrictEqual(Array.from(chainPieces[0].entry.objects), ['C_0', 'C_1', 'C_2', 'C_3']);
+  assert.deepStrictEqual(Array.from(chainPieces[0].entry.maps), ['d_0', 'd_1', 'd_2']);
+  assert.deepStrictEqual(Array.from(chainPieces[1].entry.objects), ['C_3', 'C_4', 'C_5', 'C_6', 'C_7']);
+  assert.deepStrictEqual(Array.from(chainPieces[1].entry.maps), ['d_3', 'd_4', 'd_5', 'd_6']);
+  assert.deepStrictEqual(Array.from(chainPieces[2].entry.objects), ['C_7', 'C_8']);
+  assert.deepStrictEqual(Array.from(chainPieces[2].entry.maps), ['d_7']);
+
+  const filtration = api.normalizeComplexChartEntry({
+    kind: 'filtration',
+    length: 6,
+    objects: Array.from({ length: 6 }, (_, index) => `F_${index}`),
+    quotients: Array.from({ length: 5 }, (_, index) => `Q_${index + 1}`)
+  }, { requireId: false });
+  const filtrationPieces = api.complexChartTruncationCandidates(filtration, [2, 4]);
+  assert.deepStrictEqual(Array.from(filtrationPieces.map((candidate) => candidate.entry.length)), [3, 3, 2]);
+  assert.deepStrictEqual(Array.from(filtrationPieces[0].entry.objects), ['F_0', 'F_1', 'F_2']);
+  assert.deepStrictEqual(Array.from(filtrationPieces[0].entry.quotients), ['Q_1', 'Q_2']);
+  assert.deepStrictEqual(Array.from(filtrationPieces[1].entry.objects), ['F_2', 'F_3', 'F_4']);
+  assert.deepStrictEqual(Array.from(filtrationPieces[1].entry.quotients), ['Q_3', 'Q_4']);
+  assert.deepStrictEqual(Array.from(filtrationPieces[2].entry.objects), ['F_4', 'F_5']);
+  assert.deepStrictEqual(Array.from(filtrationPieces[2].entry.quotients), ['Q_5']);
+}
+
+function testComplexChartKernelCokernelExtensionModel() {
+  const api = loadComplexCalculator();
+  const extended = api.complexChartKernelCokernelExtensionEntry({
+    kind: 'chain-complex',
+    length: 3,
+    objects: ['A', 'B', 'C'],
+    maps: ['d_0', 'd_1']
+  });
+  assert.deepStrictEqual(Array.from(extended.objects), ['0', '\\ker d_0', 'A', 'B', 'C', '\\operatorname{coker} d_1', '0']);
+  assert.deepStrictEqual(Array.from(extended.maps), ['', '', 'd_0', 'd_1', '', '']);
+  const tikz = api.complexChartEntryDisplayTikzcd(extended);
+  assert(tikz.includes('\\arrow[from=1-1, to=1-2]'));
+  assert(tikz.includes('\\arrow[from=1-2, to=1-3]'));
+  assert(tikz.includes('\\arrow["{d_0}", from=1-3, to=1-4]'));
+  assert(tikz.includes('\\arrow["{d_1}", from=1-4, to=1-5]'));
+  assert(tikz.includes('\\arrow[from=1-5, to=1-6]'));
+  assert(tikz.includes('\\arrow[from=1-6, to=1-7]'));
+
+  const fallback = api.complexChartKernelCokernelExtensionEntry({
+    kind: 'chain-complex',
+    length: 3,
+    objects: ['A', 'B', 'C'],
+    maps: ['', '']
+  });
+  assert.strictEqual(fallback.objects[1], '\\ker');
+  assert.strictEqual(fallback.objects[fallback.objects.length - 2], '\\operatorname{coker}');
+  const leftEndpoint = api.complexChartKernelCokernelExtensionEntry({
+    kind: 'chain-complex',
+    length: 3,
+    objects: ['0', 'A', 'B'],
+    maps: ['', 'g']
+  });
+  assert.deepStrictEqual(Array.from(leftEndpoint.objects), ['0', 'A', 'B', '\\operatorname{coker} g', '0']);
+  assert.deepStrictEqual(Array.from(leftEndpoint.maps), ['', 'g', '', '']);
+  const rightEndpoint = api.complexChartKernelCokernelExtensionEntry({
+    kind: 'chain-complex',
+    length: 3,
+    objects: ['A', 'B', '0'],
+    maps: ['f', '']
+  });
+  assert.deepStrictEqual(Array.from(rightEndpoint.objects), ['0', '\\ker f', 'A', 'B', '0']);
+  assert.deepStrictEqual(Array.from(rightEndpoint.maps), ['', '', 'f', '']);
+  assert.strictEqual(api.complexChartKernelCokernelExtensionEntry({
+    kind: 'chain-complex',
+    length: 3,
+    objects: ['0', 'A', '0'],
+    maps: ['', '']
+  }), null);
+  assert.strictEqual(api.complexChartKernelCokernelExtensionEntry({
+    kind: 'filtration',
+    length: 2,
+    objects: ['F_0', 'F_1'],
+    quotients: ['Q_1']
+  }), null);
+}
+
+function testComplexChartOperationUiAndAddSelectedModel() {
+  const api = loadComplexCalculator();
+  const js = fs.readFileSync(path.join(__dirname, 'sheaf_complex_calculator.js'), 'utf8');
+  assert(js.includes('complexChartOperations'));
+  assert(js.includes('data-complex-chart-operation-target'));
+  assert(js.includes('data-complex-chart-object-entry'));
+  assert(js.includes('data-complex-chart-object-kind'));
+  assert(js.includes('data-complex-chart-object-index'));
+  assert(js.includes('data-complex-chart-operation-candidate'));
+
+  api.upsertComplexChartEntries([
+    { id: 'op_source', kind: 'chain-complex', length: 4, objects: ['C_0', 'C_1', 'C_2', 'C_3'], maps: ['d_0', 'd_1', 'd_2'] },
+    { id: 'op_filtration', kind: 'filtration', length: 3, objects: ['F_0', 'F_1', 'F_2'], quotients: ['Q_1', 'Q_2'] }
+  ]);
+  const savedHtml = api.renderComplexChartEntries();
+  assert(!savedHtml.includes('data-complex-chart-operations='));
+  assert(!savedHtml.includes('data-complex-chart-object-entry='));
+  assert(savedHtml.includes('\\(C_0 \\xrightarrow{d_0} C_1 \\xrightarrow{d_1} C_2 \\xrightarrow{d_2} C_3\\)'));
+
+  assert.strictEqual(api.openComplexChartOperations('truncate'), true);
+  let operationHtml = api.renderComplexChartOperationsPanelHtml();
+  assert(operationHtml.includes('data-complex-chart-operation-target="op_source"'));
+  assert(operationHtml.includes('data-complex-chart-operation-target="op_filtration"'));
+  assert(operationHtml.includes('sheaf-step-saved-rule-row sheaf-complex-saved-row sheaf-complex-operation-target-row'));
+  assert(operationHtml.includes('sheaf-step-saved-rule-formula'));
+  assert(operationHtml.includes('\\(C_0 \\xrightarrow{d_0} C_1 \\xrightarrow{d_1} C_2 \\xrightarrow{d_2} C_3\\)'));
+  assert(operationHtml.includes('data-complex-chart-object-entry="op_source"'));
+  assert(operationHtml.includes('data-complex-chart-object-kind="chain-complex"'));
+  assert(operationHtml.includes('data-complex-chart-object-index="1"'));
+
+  assert.strictEqual(api.setComplexChartOperationMode('extend'), true);
+  operationHtml = api.renderComplexChartOperationsPanelHtml();
+  assert(operationHtml.includes('data-complex-chart-operation-target="op_source"'));
+  assert(!operationHtml.includes('data-complex-chart-operation-target="op_filtration"'));
+  assert(operationHtml.includes('data-complex-chart-operation-candidate="extend-kernel-cokernel"'));
+
+  assert.strictEqual(api.setComplexChartOperationMode('truncate'), true);
+  assert.strictEqual(api.setComplexChartOperationTarget('op_source'), true);
+  assert.strictEqual(api.toggleComplexChartOperationCut('op_source', 1), true);
+  operationHtml = api.renderComplexChartOperationsPanelHtml();
+  assert(operationHtml.includes('data-complex-chart-operation-candidate="truncate-0-1"'));
+  assert(operationHtml.includes('data-complex-chart-operation-candidate="truncate-1-3"'));
+  assert.strictEqual(api.setComplexChartOperationCandidateSelected('truncate-1-3', false), true);
+  assert.strictEqual(api.addSelectedComplexChartOperationCandidates(), true);
+  assert.strictEqual(api.state.complexChart.entries.some((entry) => entry.id === 'op_source'), true);
+  assert.strictEqual(api.state.complexChart.entries.length, 3);
+  const generated = api.state.complexChart.entries.find((entry) => entry.id !== 'op_source' && entry.id !== 'op_filtration');
+  assert.deepStrictEqual(Array.from(generated.objects), ['C_0', 'C_1']);
+  assert.deepStrictEqual(Array.from(generated.maps), ['d_0']);
 }
 
 function testComplexChartSeparateJsonImportExport() {
@@ -7273,7 +7605,12 @@ testStepBuilderMarkupIsBelowCanvasAndClassChartHasNoStepButton();
 testSheafComplexCalculatorPageAndPrototypeLink();
 testComplexChartLengthDefaultsAndDisplays();
 testComplexChartTikzcdExport();
+testComplexChartScreenshotSesPresets();
+testComplexChartEditablePresetsAndDeRhamPreset();
 testComplexChartSelectionEditDeleteModel();
+testComplexChartOperationTruncationModel();
+testComplexChartKernelCokernelExtensionModel();
+testComplexChartOperationUiAndAddSelectedModel();
 testComplexChartSeparateJsonImportExport();
 testComplexChartFullPresetRoundTripAndOldSchemaImport();
 testCurveToProjectivePullbackUsesCurvePoint();

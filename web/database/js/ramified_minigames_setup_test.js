@@ -986,6 +986,13 @@ function testRandomGluePresetIsDeterministicWithGlueRng() {
 }
 
 function testGomokuRandomGluePresetSize() {
+  const classic = game.createGomokuState('gomoku-classic', { boardSize: 9 });
+  assert.strictEqual(classic.preset.rows, 9);
+  assert.strictEqual(classic.preset.cols, 9);
+  assert.strictEqual(classic.preset.label, 'classical 9*9');
+  assert.strictEqual(classic.preset.gluedEdges.length, 0);
+  assert.strictEqual(game.emptyExistingIndices(classic).length, 81);
+
   const state = game.createGomokuState('gomoku-random-glue', {
     boardSize: 9,
     glueRng: game.createRng([0.8, 0.1, 0.6, 0.3, 0.95, 0.2])
@@ -998,6 +1005,50 @@ function testGomokuRandomGluePresetSize() {
   const base = game.PRESETS.find((preset) => preset.id === 'gomoku-random-glue');
   assert.strictEqual(base.rows, 15);
   assert.strictEqual(base.gluedEdges.length, 0);
+
+  let ticTacToe = game.beginGomokuGame('gomoku-tic-tac-toe');
+  [
+    [1, 1],
+    [2, 1],
+    [1, 2],
+    [2, 2],
+    [1, 3]
+  ].forEach(([row, col]) => {
+    ticTacToe = game.placeGomokuStone(ticTacToe, game.indexOf(row, col, 3)).state;
+  });
+  assert.strictEqual(ticTacToe.winner, 'black');
+  assert.strictEqual(ticTacToe.winningLine.length, 3);
+  assert.strictEqual(game.countUnmatchedBoundaries(ticTacToe.preset, ticTacToe.removed), 0);
+
+  const strangeCorner = game.createGomokuState('gomoku-strange-corner');
+  assert.strictEqual(strangeCorner.preset.gluedEdges.length, 10);
+  assert.strictEqual(game.countUnmatchedBoundaries(strangeCorner.preset, strangeCorner.removed), 40);
+
+  const smallHoles = game.createGomokuState('gomoku-small-holes');
+  assert.strictEqual(smallHoles.preset.removedTiles.length, 9);
+  assert.strictEqual(smallHoles.preset.gluedEdges.length, 18);
+  assert.strictEqual(game.countUnmatchedBoundaries(smallHoles.preset, smallHoles.removed), 60);
+
+  const bigHole = game.createGomokuState('gomoku-big-hole');
+  assert.strictEqual(bigHole.preset.removedTiles.length, 25);
+  assert.strictEqual(bigHole.preset.gluedEdges.length, 10);
+  assert.strictEqual(game.countUnmatchedBoundaries(bigHole.preset, bigHole.removed), 60);
+
+  const genusFour = game.createGomokuState('gomoku-m4-15x15');
+  assert.strictEqual(genusFour.preset.label, 'genus 4');
+  assert.strictEqual(genusFour.preset.rows, 15);
+  assert.strictEqual(genusFour.preset.cols, 15);
+  assert.strictEqual(genusFour.preset.surface, 'M_4,1');
+  assert.strictEqual(genusFour.preset.removedTiles.length, 25);
+  assert.strictEqual(genusFour.preset.gluedEdges.length, 40);
+  assert.strictEqual(game.countUnmatchedBoundaries(genusFour.preset, genusFour.removed), 0);
+  assert.deepStrictEqual(genusFour.preset.gluedEdges.slice(0, 5).map(gluedEdgeSignature), [
+    '0:5,10,1>1,10,3',
+    '0:5,9,1>1,9,3',
+    '0:5,8,1>1,8,3',
+    '0:5,7,1>1,7,3',
+    '0:5,6,1>1,6,3'
+  ]);
 }
 
 function testHexClassicPreset() {
@@ -1693,7 +1744,13 @@ function testExtraBackgroundPresets() {
   const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
   [
     ['twisted-torus', 'twisted torus'],
+    ['gomoku-classic', 'classical n*n'],
     ['gomoku-random-glue', 'random glue n*n'],
+    ['gomoku-tic-tac-toe', 'Tic-tac-toe'],
+    ['gomoku-strange-corner', 'strange corner'],
+    ['gomoku-small-holes', 'small holes'],
+    ['gomoku-big-hole', 'big hole'],
+    ['gomoku-m4-15x15', 'genus 4'],
     ['rubiks-cube-2x2x2', "Rubik's Cube 2*2*2"],
     ['rubiks-cube-3x3x3', "Rubik's Cube 3*3*3"],
     ['connect-four-6x7', 'Connect Four 6*7'],
@@ -1891,6 +1948,8 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameHtml.includes('<option value="center">tile board</option>'));
   assert.ok(minigameHtml.includes('id="connect-four-fall-row" data-mode-control="connect-four"'));
   assert.ok(minigameHtml.includes('id="connect-four-fall-dir"'));
+  assert.ok(minigameHtml.includes('id="connect-four-align-row" data-mode-control="connect-four"'));
+  assert.ok(minigameHtml.includes('id="connect-four-align-fall" checked'));
   assert.ok(minigameHtml.includes('id="game-setup-alert"'));
   assert.ok(minigameHtml.includes('<option value="import-preset">import</option>'));
   assert.ok(minigameHtml.includes('id="import-preset-input"'));
@@ -2160,7 +2219,8 @@ function testHeadlessDomStepControls() {
     makeElement('gomoku-display-row', { hidden: true, attributes: { 'data-mode-control': 'gomoku' } })
   ];
   const modeConnectFourControls = [
-    makeElement('connect-four-fall-row', { hidden: true, attributes: { 'data-mode-control': 'connect-four' } })
+    makeElement('connect-four-fall-row', { hidden: true, attributes: { 'data-mode-control': 'connect-four' } }),
+    makeElement('connect-four-align-row', { hidden: true, attributes: { 'data-mode-control': 'connect-four' } })
   ];
   const canvas = makeElement('mosaic-canvas', {
     parentElement: wrap,
@@ -2184,6 +2244,7 @@ function testHeadlessDomStepControls() {
       value: 'S',
       options: ['S', 'E', 'W', 'N', 'SE', 'SW', 'NW', 'NE'].map((value) => ({ value, textContent: '', hidden: false, disabled: false }))
     }),
+    makeElement('connect-four-align-fall', { checked: true }),
     makeElement('number-box-style', { value: 'paper' }),
     makeElement('highlight-new-boxes', { checked: true }),
     makeElement('begin-game'),
@@ -2423,6 +2484,12 @@ function testHeadlessDomStepControls() {
   assert.strictEqual(elements.get('step-mode-row').hidden, true);
   assert.strictEqual(elements.get('debug-tile-row').hidden, true);
   assert.strictEqual(elements.get('debug-tile-value').disabled, true);
+  elements.get('surface-preset-select').value = 'gomoku-m4-15x15';
+  elements.get('surface-preset-select').listeners.change();
+  assert.strictEqual(elements.get('gomoku-size-row').hidden, true);
+  elements.get('surface-preset-select').value = 'gomoku-classic';
+  elements.get('surface-preset-select').listeners.change();
+  assert.strictEqual(elements.get('gomoku-size-row').hidden, false);
   elements.get('gomoku-display-style').value = 'vertex';
   elements.get('gomoku-display-style').listeners.change();
   elements.get('begin-game').listeners.click();
@@ -2490,11 +2557,23 @@ function testHeadlessDomStepControls() {
   assert.strictEqual(elements.get('status-badge').textContent, 'setup');
   assert.strictEqual(elements.get('surface-preset-select').value, 'connect-four-6x7');
   assert.strictEqual(elements.get('connect-four-fall-row').hidden, false);
+  assert.strictEqual(elements.get('connect-four-align-row').hidden, false);
+  assert.strictEqual(elements.get('connect-four-align-fall').checked, true);
   assert.strictEqual(elements.get('gomoku-size-row').hidden, true);
   assert.strictEqual(elements.get('gomoku-display-row').hidden, false);
   assert.strictEqual(elements.get('move-row').hidden, true);
   elements.get('surface-preset-select').value = 'connect-four-6x7';
   elements.get('surface-preset-select').listeners.change();
+  calls.length = 0;
+  elements.get('connect-four-fall-dir').value = 'E';
+  elements.get('connect-four-fall-dir').listeners.change();
+  assert.ok(calls.some((call) => call.method === 'rotate' && Math.abs(call.args[0] - (Math.PI / 2)) < 1e-9));
+  calls.length = 0;
+  elements.get('connect-four-align-fall').checked = false;
+  elements.get('connect-four-align-fall').listeners.change();
+  assert.ok(!calls.some((call) => call.method === 'rotate' && Math.abs(call.args[0] - (Math.PI / 2)) < 1e-9));
+  elements.get('connect-four-align-fall').checked = true;
+  elements.get('connect-four-align-fall').listeners.change();
   elements.get('connect-four-fall-dir').value = 'S';
   elements.get('connect-four-fall-dir').listeners.change();
   elements.get('begin-game').listeners.click();
@@ -2537,13 +2616,13 @@ function testHeadlessDomStepControls() {
   assert.strictEqual(elements.get('game-setup-alert').textContent, 'Connect Four drop rejected: drop route cycles before stopping');
   elements.get('export-state').listeners.click();
   exported = JSON.parse(elements.get('debug-export-output').value);
-  assert.deepStrictEqual(exported.cycleHoles.map((hole) => [hole.row, hole.col]), [[1, 1]]);
+  assert.deepStrictEqual(exported.cycleHoles.map((hole) => [hole.row, hole.col]), [[4, 1]]);
   elements.get('begin-game').listeners.click();
   assert.strictEqual(elements.get('status-badge').textContent, 'setup');
   assert.strictEqual(elements.get('game-setup-alert').hidden, true);
   elements.get('export-state').listeners.click();
   exported = JSON.parse(elements.get('debug-export-output').value);
-  assert.deepStrictEqual(exported.cycleHoles.map((hole) => [hole.row, hole.col]), [[1, 1]]);
+  assert.deepStrictEqual(exported.cycleHoles.map((hole) => [hole.row, hole.col]), [[4, 1]]);
   canvas.listeners.click({ clientX: 57, clientY: 57 });
   elements.get('export-state').listeners.click();
   exported = JSON.parse(elements.get('debug-export-output').value);

@@ -89,6 +89,30 @@
     return Array.from({ length: cols }, (_, index) => ({ row: 1, col: index + 1 }));
   }
 
+  function squareGluePair(group, firstRow, firstCol, firstDir, secondRow, secondCol, secondDir, options = {}) {
+    return gluePair(
+      group,
+      { row: firstRow, col: firstCol, dir: DIRS[firstDir] },
+      { row: secondRow, col: secondCol, dir: DIRS[secondDir] },
+      options
+    );
+  }
+
+  function createFixedGomokuPreset(id, label, rows, cols, surface, removedTiles, gluedEdges, options = {}) {
+    return {
+      id,
+      label,
+      lattice: 'square',
+      rows,
+      cols,
+      surface,
+      removedTiles,
+      cutEdges: [],
+      gluedEdges,
+      ...options
+    };
+  }
+
   function createRubiksCubePreset(size, id, label) {
     const rows = size * 3;
     const cols = size * 4;
@@ -206,6 +230,170 @@
       rows,
       cols,
       surface: 'M_0,8',
+      removedTiles,
+      cutEdges: [],
+      gluedEdges
+    };
+  }
+
+  function createTicTacToePreset() {
+    return createFixedGomokuPreset(
+      'gomoku-tic-tac-toe',
+      'Tic-tac-toe',
+      3,
+      3,
+      'M_1',
+      [],
+      [
+        squareGluePair(0, 3, 1, 'S', 1, 1, 'N'),
+        squareGluePair(0, 3, 2, 'S', 1, 2, 'N'),
+        squareGluePair(0, 3, 3, 'S', 1, 3, 'N'),
+        squareGluePair(1, 3, 3, 'E', 3, 1, 'W'),
+        squareGluePair(1, 2, 3, 'E', 2, 1, 'W'),
+        squareGluePair(1, 1, 3, 'E', 1, 1, 'W')
+      ],
+      { gomokuWinLength: 3 }
+    );
+  }
+
+  function createStrangeCornerPreset() {
+    return createFixedGomokuPreset(
+      'gomoku-strange-corner',
+      'strange corner',
+      15,
+      15,
+      'Sigma_0,1^4',
+      [],
+      [
+        squareGluePair(0, 1, 15, 'N', 1, 15, 'E'),
+        squareGluePair(0, 1, 14, 'N', 2, 15, 'E'),
+        squareGluePair(0, 1, 13, 'N', 3, 15, 'E'),
+        squareGluePair(1, 13, 1, 'W', 15, 3, 'S'),
+        squareGluePair(1, 14, 1, 'W', 15, 2, 'S'),
+        squareGluePair(1, 15, 1, 'W', 15, 1, 'S'),
+        squareGluePair(2, 15, 15, 'S', 15, 15, 'E'),
+        squareGluePair(2, 15, 14, 'S', 14, 15, 'E'),
+        squareGluePair(3, 2, 1, 'W', 1, 2, 'N'),
+        squareGluePair(3, 1, 1, 'W', 1, 1, 'N')
+      ]
+    );
+  }
+
+  function createSmallHolesPreset() {
+    return createFixedGomokuPreset(
+      'gomoku-small-holes',
+      'small holes',
+      15,
+      15,
+      'Sigma_9,1^9',
+      [
+        { row: 4, col: 4 },
+        { row: 4, col: 8 },
+        { row: 4, col: 12 },
+        { row: 8, col: 4 },
+        { row: 8, col: 8 },
+        { row: 8, col: 12 },
+        { row: 12, col: 4 },
+        { row: 12, col: 8 },
+        { row: 12, col: 12 }
+      ],
+      [
+        squareGluePair(0, 3, 12, 'S', 5, 12, 'N'),
+        squareGluePair(1, 4, 13, 'W', 4, 11, 'E'),
+        squareGluePair(2, 3, 8, 'S', 5, 8, 'N'),
+        squareGluePair(3, 4, 9, 'W', 4, 7, 'E'),
+        squareGluePair(4, 4, 5, 'W', 4, 3, 'E'),
+        squareGluePair(5, 3, 4, 'S', 5, 4, 'N'),
+        squareGluePair(6, 7, 4, 'S', 9, 4, 'N'),
+        squareGluePair(7, 8, 3, 'E', 8, 5, 'W'),
+        squareGluePair(8, 8, 9, 'W', 8, 7, 'E'),
+        squareGluePair(9, 7, 8, 'S', 9, 8, 'N'),
+        squareGluePair(10, 8, 11, 'E', 8, 13, 'W'),
+        squareGluePair(11, 7, 12, 'S', 9, 12, 'N'),
+        squareGluePair(12, 11, 12, 'S', 13, 12, 'N'),
+        squareGluePair(13, 12, 11, 'E', 12, 13, 'W'),
+        squareGluePair(14, 11, 8, 'S', 13, 8, 'N'),
+        squareGluePair(15, 12, 9, 'W', 12, 7, 'E'),
+        squareGluePair(16, 11, 4, 'S', 13, 4, 'N'),
+        squareGluePair(17, 12, 3, 'E', 12, 5, 'W')
+      ]
+    );
+  }
+
+  function createBigHolePreset() {
+    const removedTiles = [];
+    for (let row = 6; row <= 10; row += 1) {
+      for (let col = 6; col <= 10; col += 1) {
+        removedTiles.push({ row, col });
+      }
+    }
+
+    return createFixedGomokuPreset(
+      'gomoku-big-hole',
+      'big hole',
+      15,
+      15,
+      'Sigma_1,1^1',
+      removedTiles,
+      [
+        squareGluePair(0, 5, 10, 'S', 11, 10, 'N'),
+        squareGluePair(0, 5, 9, 'S', 11, 9, 'N'),
+        squareGluePair(0, 5, 8, 'S', 11, 8, 'N'),
+        squareGluePair(0, 5, 7, 'S', 11, 7, 'N'),
+        squareGluePair(0, 5, 6, 'S', 11, 6, 'N'),
+        squareGluePair(1, 10, 11, 'W', 10, 5, 'E'),
+        squareGluePair(1, 9, 11, 'W', 9, 5, 'E'),
+        squareGluePair(1, 8, 11, 'W', 8, 5, 'E'),
+        squareGluePair(1, 7, 11, 'W', 7, 5, 'E'),
+        squareGluePair(1, 6, 11, 'W', 6, 5, 'E')
+      ]
+    );
+  }
+
+  function createGomokuGenusFourPreset() {
+    const rows = 15;
+    const cols = 15;
+    const removedTiles = [];
+    for (let row = 6; row <= 10; row += 1) {
+      for (let col = 6; col <= 10; col += 1) {
+        removedTiles.push({ row, col });
+      }
+    }
+
+    const gluedEdges = [];
+    const add = (group, first, second) => gluedEdges.push(gluePair(group, first, second));
+    for (let offset = 0; offset < 5; offset += 1) {
+      add(0, { row: 5, col: 10 - offset, dir: DIRS.S }, { row: 1, col: 10 - offset, dir: DIRS.N });
+    }
+    for (let offset = 0; offset < 5; offset += 1) {
+      add(1, { row: 10 - offset, col: 11, dir: DIRS.W }, { row: 10 - offset, col: 15, dir: DIRS.E });
+    }
+    for (let offset = 0; offset < 5; offset += 1) {
+      add(2, { row: 6 + offset, col: 5, dir: DIRS.E }, { row: 6 + offset, col: 1, dir: DIRS.W });
+    }
+    for (let offset = 0; offset < 5; offset += 1) {
+      add(3, { row: 11, col: 6 + offset, dir: DIRS.N }, { row: 15, col: 6 + offset, dir: DIRS.S });
+    }
+    for (let offset = 0; offset < 5; offset += 1) {
+      add(4, { row: 15, col: 15 - offset, dir: DIRS.S }, { row: 1, col: 15 - offset, dir: DIRS.N });
+    }
+    for (let offset = 0; offset < 5; offset += 1) {
+      add(5, { row: 11 + offset, col: 15, dir: DIRS.E }, { row: 11 + offset, col: 1, dir: DIRS.W });
+    }
+    for (let offset = 0; offset < 5; offset += 1) {
+      add(6, { row: 5 - offset, col: 1, dir: DIRS.W }, { row: 5 - offset, col: 15, dir: DIRS.E });
+    }
+    for (let offset = 0; offset < 5; offset += 1) {
+      add(7, { row: 15, col: 5 - offset, dir: DIRS.S }, { row: 1, col: 5 - offset, dir: DIRS.N });
+    }
+
+    return {
+      id: 'gomoku-m4-15x15',
+      label: 'genus 4',
+      lattice: 'square',
+      rows,
+      cols,
+      surface: 'M_4,1',
       removedTiles,
       cutEdges: [],
       gluedEdges
@@ -467,6 +655,19 @@
       ]
     },
     {
+      id: 'gomoku-classic',
+      label: 'classical n*n',
+      lattice: 'square',
+      rows: GOMOKU_DEFAULT_BOARD_SIZE,
+      cols: GOMOKU_DEFAULT_BOARD_SIZE,
+      surface: 'square grid',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [],
+      dynamicGomokuSize: true,
+      dynamicGomokuLabelPrefix: 'classical'
+    },
+    {
       id: 'gomoku-random-glue',
       label: 'random glue n*n',
       lattice: 'square',
@@ -477,8 +678,14 @@
       cutEdges: [],
       gluedEdges: [],
       randomGlue: true,
-      dynamicGomokuSize: true
+      dynamicGomokuSize: true,
+      dynamicGomokuLabelPrefix: 'random glue'
     },
+    createTicTacToePreset(),
+    createStrangeCornerPreset(),
+    createSmallHolesPreset(),
+    createBigHolePreset(),
+    createGomokuGenusFourPreset(),
     {
       id: 'connect-four-6x7',
       label: 'Connect Four 6*7',
@@ -691,8 +898,10 @@
     refs.applyImportPreset = document.getElementById('apply-import-preset');
     refs.placementDisplayRow = document.getElementById('gomoku-display-row');
     refs.gomokuDisplay = document.getElementById('gomoku-display-style');
+    refs.gomokuSizeRow = document.getElementById('gomoku-size-row');
     refs.gomokuSize = document.getElementById('gomoku-board-size');
     refs.connectFourFall = document.getElementById('connect-four-fall-dir');
+    refs.connectFourAlignFall = document.getElementById('connect-four-align-fall');
     refs.boxStyle = document.getElementById('number-box-style');
     refs.highlightNewBoxes = document.getElementById('highlight-new-boxes');
     refs.begin = document.getElementById('begin-game');
@@ -736,6 +945,7 @@
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('change', handleGomokuSizeChange);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('input', handleGomokuSizeChange);
     if (refs.connectFourFall) refs.connectFourFall.addEventListener('change', handleConnectFourFallChange);
+    if (refs.connectFourAlignFall) refs.connectFourAlignFall.addEventListener('change', handleConnectFourAlignFallChange);
     if (refs.boxStyle) refs.boxStyle.addEventListener('change', render);
     if (refs.highlightNewBoxes) refs.highlightNewBoxes.addEventListener('change', render);
     if (refs.begin) refs.begin.addEventListener('click', beginGameFromUi);
@@ -873,7 +1083,7 @@
 
   function handleGomokuSizeChange() {
     if (refs.gomokuSize) refs.gomokuSize.value = String(selectedGomokuBoardSize());
-    if (selectedGameMode() === GAME_MODES.GOMOKU && refs.select && refs.select.value === 'gomoku-random-glue') {
+    if (selectedGameMode() === GAME_MODES.GOMOKU && selectedGomokuPresetIsDynamic()) {
       resetToPreview();
     }
   }
@@ -890,6 +1100,12 @@
     }
     if (selectedGameMode() === GAME_MODES.CONNECT_FOUR) resetToPreview();
     else render();
+  }
+
+  function handleConnectFourAlignFallChange() {
+    hoveredGlue = null;
+    syncGlueHoverCursor();
+    render();
   }
 
   function handlePresetSelectChange() {
@@ -1435,10 +1651,11 @@
     const height = rect && rect.height ? rect.height : geometry.height;
     const left = rect ? rect.left : 0;
     const top = rect ? rect.top : 0;
-    return {
+    const displayPoint = {
       x: ((event.clientX || 0) - left) * (geometry.width / Math.max(1, width)),
       y: ((event.clientY || 0) - top) * (geometry.height / Math.max(1, height))
     };
+    return displayPointToGeometryPoint(displayPoint, geometry);
   }
 
   function normalizedDebugTileValue() {
@@ -1579,6 +1796,7 @@
     if (Array.isArray(preset.connectFourHoles)) {
       presetPayload.connectFourHoles = preset.connectFourHoles.map((tile) => ({ ...tile }));
     }
+    if (Number.isInteger(preset.gomokuWinLength)) presetPayload.gomokuWinLength = preset.gomokuWinLength;
     const base = {
       exportedAt: new Date().toISOString(),
       gameMode: game.gameMode || GAME_MODES.NUMBER_2048,
@@ -1870,7 +2088,8 @@
       removedTiles,
       connectFourHoles,
       cutEdges,
-      gluedEdges
+      gluedEdges,
+      gomokuWinLength: normalizeOptionalGomokuWinLength(source.gomokuWinLength != null ? source.gomokuWinLength : (base && base.gomokuWinLength))
     };
   }
 
@@ -2001,6 +2220,11 @@
     return normalizeGomokuColor(value);
   }
 
+  function normalizeOptionalGomokuWinLength(value) {
+    const number = Number(value);
+    return Number.isInteger(number) && number >= 3 ? number : undefined;
+  }
+
   function normalizeGomokuEnding(value, winner) {
     if (winner) return 'gomoku-win';
     return value === 'draw' ? 'draw' : '';
@@ -2012,7 +2236,7 @@
     return entries
       .map((entry) => Number(entry))
       .filter((index) => Number.isInteger(index) && index >= 0 && index < total)
-      .slice(0, GOMOKU_WIN_LENGTH);
+      .slice(0, gomokuWinLengthForPreset(preset));
   }
 
   function normalizeConnectFourColor(value) {
@@ -2121,6 +2345,97 @@
     return phase || '';
   }
 
+  function connectFourAlignFallEnabled() {
+    return !refs.connectFourAlignFall || !!refs.connectFourAlignFall.checked;
+  }
+
+  function connectFourDisplayRotationAngle() {
+    if (!connectFourAlignFallEnabled()) return 0;
+    const activeConnectFour = isConnectFourGame(game) || selectedGameMode() === GAME_MODES.CONNECT_FOUR;
+    if (!activeConnectFour) return 0;
+    const preset = isConnectFourGame(game) ? game.preset : selectedPreset();
+    const fallDir = isConnectFourGame(game) && Number.isInteger(game.fallDir)
+      ? game.fallDir
+      : selectedConnectFourFallDir(preset);
+    const lattice = latticeForPreset(preset);
+    const fallAngle = lattice.angles[modulo(fallDir, lattice.sides)] || 0;
+    return normalizeAngle((Math.PI / 2) - fallAngle);
+  }
+
+  function normalizeAngle(angle) {
+    let result = angle;
+    while (result > Math.PI) result -= Math.PI * 2;
+    while (result <= -Math.PI) result += Math.PI * 2;
+    return result;
+  }
+
+  function applyDisplayRotationToGeometry(geom, angle) {
+    const baseWidth = geom.width;
+    const baseHeight = geom.height;
+    geom.baseWidth = baseWidth;
+    geom.baseHeight = baseHeight;
+    const normalized = normalizeAngle(angle || 0);
+    if (Math.abs(normalized) < 1e-8) {
+      geom.displayTransform = null;
+      return geom;
+    }
+    const centerX = baseWidth / 2;
+    const centerY = baseHeight / 2;
+    const cos = Math.cos(normalized);
+    const sin = Math.sin(normalized);
+    const corners = [
+      rotatePointAround({ x: 0, y: 0 }, centerX, centerY, cos, sin),
+      rotatePointAround({ x: baseWidth, y: 0 }, centerX, centerY, cos, sin),
+      rotatePointAround({ x: baseWidth, y: baseHeight }, centerX, centerY, cos, sin),
+      rotatePointAround({ x: 0, y: baseHeight }, centerX, centerY, cos, sin)
+    ];
+    const minX = Math.min(...corners.map((point) => point.x));
+    const minY = Math.min(...corners.map((point) => point.y));
+    const maxX = Math.max(...corners.map((point) => point.x));
+    const maxY = Math.max(...corners.map((point) => point.y));
+    geom.width = Math.ceil(maxX - minX);
+    geom.height = Math.ceil(maxY - minY);
+    geom.displayTransform = {
+      angle: normalized,
+      cos,
+      sin,
+      centerX,
+      centerY,
+      minX,
+      minY
+    };
+    return geom;
+  }
+
+  function rotatePointAround(point, centerX, centerY, cos, sin) {
+    const x = point.x - centerX;
+    const y = point.y - centerY;
+    return {
+      x: centerX + (x * cos) - (y * sin),
+      y: centerY + (x * sin) + (y * cos)
+    };
+  }
+
+  function applyGeometryDisplayTransform(ctx, geom) {
+    const transform = geom && geom.displayTransform;
+    if (!transform) return;
+    ctx.translate(-transform.minX, -transform.minY);
+    ctx.translate(transform.centerX, transform.centerY);
+    ctx.rotate(transform.angle);
+    ctx.translate(-transform.centerX, -transform.centerY);
+  }
+
+  function displayPointToGeometryPoint(point, geom) {
+    const transform = geom && geom.displayTransform;
+    if (!point || !transform) return point;
+    const shiftedX = point.x + transform.minX - transform.centerX;
+    const shiftedY = point.y + transform.minY - transform.centerY;
+    return {
+      x: transform.centerX + (shiftedX * transform.cos) + (shiftedY * transform.sin),
+      y: transform.centerY - (shiftedX * transform.sin) + (shiftedY * transform.cos)
+    };
+  }
+
   function render() {
     if (!refs.canvas || !refs.ctx) return;
     const preset = game ? game.preset : selectedPreset();
@@ -2134,6 +2449,7 @@
     const margin = widthAvailable < 430 ? 18 : 28;
     const dpr = Math.min(Math.max((typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1, 1), 2.5);
     geometry = buildGeometry(preset, widthAvailable, margin, dpr);
+    applyDisplayRotationToGeometry(geometry, connectFourDisplayRotationAngle());
     const logicalWidth = geometry.width;
     const logicalHeight = geometry.height;
     refs.canvas.width = Math.max(1, Math.ceil(logicalWidth * dpr));
@@ -2147,6 +2463,8 @@
     ctx.fillStyle = explosionMode ? '#fff0ee' : '#fffdf8';
     ctx.fillRect(0, 0, logicalWidth, logicalHeight);
 
+    ctx.save();
+    applyGeometryDisplayTransform(ctx, geometry);
     const vertexDisplay = isPlacementGame(game) && placementDisplayStyle() === 'vertex';
     if (!vertexDisplay) {
       geometry.cells.forEach((cell, index) => {
@@ -2167,6 +2485,7 @@
       drawAnimationOverlays(ctx, geometry);
       drawDebugDirectionIndicators(ctx, geometry);
     }
+    ctx.restore();
     if (game && game.phase === 'gameover' && !currentAnimation && (!isPlacementGame(game) || !game.resultDismissed)) {
       drawGameOverPopup(ctx, geometry, game);
     }
@@ -3690,33 +4009,34 @@
     if (!isGomokuGame(state)) return null;
     const targetColor = color || (gomokuStoneAt(state, index) || {}).color;
     if (!targetColor) return null;
+    const winLength = gomokuWinLengthForPreset(state.preset);
     const lattice = latticeForPreset(state.preset);
     const axisCount = Math.floor(lattice.sides / 2);
     for (let axis = 0; axis < axisCount; axis += 1) {
-      const backward = gomokuLineSteps(state, index, oppositeDir(state.preset, axis), targetColor);
-      const forward = gomokuLineSteps(state, index, axis, targetColor);
+      const backward = gomokuLineSteps(state, index, oppositeDir(state.preset, axis), targetColor, winLength);
+      const forward = gomokuLineSteps(state, index, axis, targetColor, winLength);
       const line = backward.slice().reverse().concat([index], forward);
-      if (line.length >= GOMOKU_WIN_LENGTH) {
+      if (line.length >= winLength) {
         return {
           color: targetColor,
           axis,
-          line: line.slice(0, GOMOKU_WIN_LENGTH)
+          line: line.slice(0, winLength)
         };
       }
     }
     const diagonalAxes = gomokuDiagonalAxes(state.preset);
     for (const axis of diagonalAxes) {
-      const backwardPaths = gomokuDiagonalLinePaths(state, index, axis.backward, targetColor);
-      const forwardPaths = gomokuDiagonalLinePaths(state, index, axis.forward, targetColor);
+      const backwardPaths = gomokuDiagonalLinePaths(state, index, axis.backward, targetColor, winLength);
+      const forwardPaths = gomokuDiagonalLinePaths(state, index, axis.forward, targetColor, winLength);
       for (const backward of backwardPaths) {
         for (const forward of forwardPaths) {
           const line = backward.slice().reverse().concat([index], forward);
-          if (line.length >= GOMOKU_WIN_LENGTH) {
+          if (line.length >= winLength) {
             return {
               color: targetColor,
               axis: axis.name,
               diagonal: true,
-              line: line.slice(0, GOMOKU_WIN_LENGTH)
+              line: line.slice(0, winLength)
             };
           }
         }
@@ -3725,11 +4045,11 @@
     return null;
   }
 
-  function gomokuLineSteps(state, startIndex, dir, color) {
+  function gomokuLineSteps(state, startIndex, dir, color, winLength = gomokuWinLengthForPreset(state && state.preset)) {
     const indices = [];
     let index = startIndex;
     let direction = dir;
-    for (let step = 1; step < GOMOKU_WIN_LENGTH; step += 1) {
+    for (let step = 1; step < winLength; step += 1) {
       const next = surfaceSuccessor(state, index, direction);
       if (!next) break;
       const stone = gomokuStoneAt(state, next.index);
@@ -3757,10 +4077,10 @@
     ];
   }
 
-  function gomokuDiagonalLinePaths(state, startIndex, orders, color) {
+  function gomokuDiagonalLinePaths(state, startIndex, orders, color, winLength = gomokuWinLengthForPreset(state && state.preset)) {
     const paths = [[]];
     const search = (index, path, currentOrders) => {
-      if (path.length >= GOMOKU_WIN_LENGTH - 1) return;
+      if (path.length >= winLength - 1) return;
       const candidates = gomokuDiagonalStepCandidates(state, index, currentOrders);
       candidates.forEach((candidate) => {
         const stone = gomokuStoneAt(state, candidate.index);
@@ -4122,6 +4442,10 @@
 
   function gomokuColorLabel(color) {
     return color === 'white' ? 'white' : 'black';
+  }
+
+  function gomokuWinLengthForPreset(preset) {
+    return normalizeOptionalGomokuWinLength(preset && preset.gomokuWinLength) || GOMOKU_WIN_LENGTH;
   }
 
   function gomokuTurnInfo(state) {
@@ -5337,8 +5661,16 @@
   function selectedPreset() {
     if (refs.select && refs.select.value === IMPORTED_PRESET_ID && importedPreset) return importedPreset;
     if (refs.select && refs.select.value === IMPORT_PRESET_CHOICE_ID && importedPreset) return importedPreset;
-    if (refs.select && refs.select.value === 'gomoku-random-glue') return gomokuRandomGluePreset(selectedGomokuBoardSize());
-    return resolvePreset(refs.select ? refs.select.value : 'torus');
+    const preset = resolvePreset(refs.select ? refs.select.value : 'torus');
+    if (selectedGameMode() === GAME_MODES.GOMOKU && preset.dynamicGomokuSize) {
+      return gomokuSizedPreset(preset, selectedGomokuBoardSize());
+    }
+    return preset;
+  }
+
+  function selectedGomokuPresetIsDynamic() {
+    if (!refs.select) return false;
+    return !!resolvePreset(refs.select.value).dynamicGomokuSize;
   }
 
   function selectedGameMode() {
@@ -5483,7 +5815,8 @@
       removedTiles,
       connectFourHoles,
       cutEdges,
-      gluedEdges
+      gluedEdges,
+      gomokuWinLength: normalizeOptionalGomokuWinLength(firstPresentValue(source, ['gomokuWinLength']) || firstPresentValue(payload, ['gomokuWinLength']))
     };
   }
 
@@ -5707,10 +6040,7 @@
   function materializePreset(source, options = {}) {
     const preset = clonePreset(source);
     if (preset.dynamicGomokuSize) {
-      const size = clampInteger(options.boardSize || preset.rows, GOMOKU_MIN_BOARD_SIZE, GOMOKU_MAX_BOARD_SIZE, GOMOKU_DEFAULT_BOARD_SIZE);
-      preset.rows = size;
-      preset.cols = size;
-      preset.label = `random glue ${size}*${size}`;
+      applyGomokuBoardSize(preset, options.boardSize || preset.rows);
     }
     if (preset.randomGlue) {
       preset.gluedEdges = generateRandomBoundaryGlue(preset, options.glueRng || Math.random);
@@ -5718,12 +6048,21 @@
     return preset;
   }
 
-  function gomokuRandomGluePreset(size) {
-    const preset = clonePreset(resolvePreset('gomoku-random-glue'));
+  function applyGomokuBoardSize(preset, size) {
     const boardSize = clampInteger(size, GOMOKU_MIN_BOARD_SIZE, GOMOKU_MAX_BOARD_SIZE, GOMOKU_DEFAULT_BOARD_SIZE);
     preset.rows = boardSize;
     preset.cols = boardSize;
-    preset.label = `random glue ${boardSize}*${boardSize}`;
+    const labelPrefix = preset.dynamicGomokuLabelPrefix || (preset.randomGlue ? 'random glue' : 'classic');
+    preset.label = `${labelPrefix} ${boardSize}*${boardSize}`;
+    return preset;
+  }
+
+  function gomokuSizedPreset(presetOrId, size) {
+    return applyGomokuBoardSize(clonePreset(resolvePreset(presetOrId)), size);
+  }
+
+  function gomokuRandomGluePreset(size) {
+    const preset = gomokuSizedPreset('gomoku-random-glue', size);
     preset.gluedEdges = [];
     return preset;
   }
@@ -5915,6 +6254,7 @@
         control.hidden = !modeConnectFour;
       });
     }
+    if (refs.gomokuSizeRow) refs.gomokuSizeRow.hidden = !modeGomoku || !selectedGomokuPresetIsDynamic();
     if (refs.placementDisplayRow) refs.placementDisplayRow.hidden = !(modeGomoku || modeConnectFour);
     if (refs.connectFourFall) refs.connectFourFall.disabled = modeConnectFour && game && game.phase !== 'setup';
     if (refs.nextStep) refs.nextStep.disabled = !mode2048 || !(isStepMode() && stepPaused && eventQueue.length && !currentAnimation);

@@ -1104,7 +1104,13 @@
               <option value="hex-classic-4x4">hex classic 4*4</option>
             </optgroup>
             <optgroup label="Gomoku">
+              <option value="gomoku-classic">classical n*n</option>
               <option value="gomoku-random-glue">random glue n*n</option>
+              <option value="gomoku-tic-tac-toe">Tic-tac-toe</option>
+              <option value="gomoku-strange-corner">strange corner</option>
+              <option value="gomoku-small-holes">small holes</option>
+              <option value="gomoku-big-hole">big hole</option>
+              <option value="gomoku-m4-15x15">genus 4</option>
             </optgroup>
             <optgroup label="Connect Four">
               <option value="connect-four-6x7">Connect Four 6*7</option>
@@ -1138,7 +1144,7 @@
         </div>
         <div class="mosaic-inline-row" id="gomoku-size-row" data-mode-control="gomoku" hidden>
           <span class="input-label">Board n</span>
-          <input id="gomoku-board-size" type="number" min="5" max="25" step="1" value="15" aria-label="Gomoku random glue board size">
+          <input id="gomoku-board-size" type="number" min="5" max="25" step="1" value="15" aria-label="Gomoku board size">
         </div>
         <div class="mosaic-inline-row" id="connect-four-fall-row" data-mode-control="connect-four" hidden>
           <span class="input-label">Fall</span>
@@ -1152,6 +1158,10 @@
             <option value="NW">northwest</option>
             <option value="NE">northeast</option>
           </select>
+        </div>
+        <div class="mosaic-inline-row" id="connect-four-align-row" data-mode-control="connect-four" hidden>
+          <span class="input-label">Board</span>
+          <label class="opt-row"><input type="checkbox" id="connect-four-align-fall" checked> fall down</label>
         </div>
         <div class="mosaic-inline-row" id="box-ui-row" data-mode-control="2048">
           <span class="input-label">Box UI</span>

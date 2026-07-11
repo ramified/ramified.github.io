@@ -1449,6 +1449,101 @@
       padding-inline: 8px;
     }
 
+    .sheaf-complex-saved-row {
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
+    }
+
+    .sheaf-complex-object-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      padding: 0 2px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      line-height: inherit;
+      cursor: pointer;
+      vertical-align: middle;
+    }
+
+    .sheaf-complex-object-button:hover,
+    .sheaf-complex-object-button.is-selected {
+      border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+      background: rgba(61,107,79,0.08);
+      color: var(--accent);
+    }
+
+    .sheaf-complex-map {
+      display: inline-flex;
+      align-items: center;
+      margin: 0 0.2em;
+      overflow: visible;
+      vertical-align: middle;
+    }
+
+    .sheaf-complex-map mjx-container {
+      max-width: none !important;
+      overflow: visible !important;
+    }
+
+    .sheaf-complex-operation-panel {
+      display: grid;
+      gap: 8px;
+      margin: 8px 0;
+      padding: 9px 10px;
+      border: 1px dotted var(--border);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .sheaf-complex-operation-panel[hidden] {
+      display: none !important;
+    }
+
+    .sheaf-complex-operation-controls,
+    .sheaf-complex-operation-preview-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .sheaf-complex-operation-target-list {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .sheaf-complex-operation-target-row {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      cursor: pointer;
+    }
+
+    .sheaf-complex-operation-expression {
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 6px 0;
+      white-space: nowrap;
+    }
+
+    .sheaf-complex-operation-preview-list {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .sheaf-complex-operation-preview-formula {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     #sheaf-complex-wide-host {
       grid-column: 1 / 2;
       min-width: 0;
@@ -1481,6 +1576,12 @@
       gap: 10px;
     }
 
+    .sheaf-complex-card:not(.collapsed) .card-body {
+      max-height: none;
+      opacity: 1;
+      padding: 14px 16px;
+    }
+
     .sheaf-complex-toolbar,
     .sheaf-complex-editor-controls,
     .sheaf-complex-import-actions {
@@ -1490,14 +1591,22 @@
       flex-wrap: wrap;
     }
 
-    .sheaf-complex-add-panel,
-    .sheaf-complex-editor {
+    .sheaf-complex-add-panel {
       display: grid;
       gap: 10px;
       padding: 10px;
       border: 1px solid var(--border);
       border-radius: 8px;
       background: rgba(255,255,255,0.03);
+    }
+
+    .sheaf-complex-editor {
+      display: grid;
+      gap: 10px;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
     }
 
     .sheaf-complex-add-panel[hidden],
@@ -1537,9 +1646,8 @@
     }
 
     .sheaf-complex-display mjx-container {
-      max-width: 100% !important;
-      overflow-x: auto;
-      overflow-y: hidden;
+      max-width: none !important;
+      overflow: visible !important;
     }
 
     .sheaf-filtration-display {
@@ -1554,6 +1662,14 @@
     .sheaf-filtration-object {
       display: inline-flex;
       align-items: center;
+      overflow: visible;
+    }
+
+    .sheaf-filtration-object mjx-container,
+    .sheaf-complex-object mjx-container,
+    .sheaf-complex-whole-expression mjx-container {
+      max-width: none !important;
+      overflow: visible !important;
     }
 
     .sheaf-filtration-relation {
@@ -2844,9 +2960,11 @@
         <div class="card-body">
           <div class="sheaf-complex-toolbar">
             <button class="btn btn-ghost sheaf-chart-export" id="complex-chart-add" type="button" aria-expanded="false">add</button>
+            <button class="btn btn-ghost sheaf-chart-export" id="complex-chart-operations" type="button" aria-expanded="false">operations</button>
             <button class="btn btn-ghost sheaf-chart-export" id="complex-chart-export" type="button">export</button>
             <button class="btn btn-ghost sheaf-chart-export" id="complex-chart-delete" type="button">delete</button>
           </div>
+          <div class="sheaf-step-saved-rules" id="complex-chart-saved"></div>
           <div class="sheaf-complex-add-panel" id="complex-chart-add-panel" hidden>
             <div class="sheaf-complex-editor-controls">
               <label class="input-label" for="complex-chart-add-mode">add by</label>
@@ -2870,11 +2988,7 @@
             <div class="sheaf-complex-add-mode-panel" id="complex-chart-preset-panel" hidden>
               <div class="sheaf-complex-editor-controls">
                 <label class="input-label" for="complex-chart-preset">preset</label>
-                <select id="complex-chart-preset" class="sheaf-select">
-                  <option value="ses-cyclic">SES: 0 -> Z -> Z -> Z/nZ -> 0</option>
-                  <option value="ses-sheaves">SES: 0 -> F -> G -> H -> 0</option>
-                  <option value="ses-exponential">SES: exponential sequence</option>
-                </select>
+                <select id="complex-chart-preset" class="sheaf-select"></select>
                 <button class="btn btn-ghost sheaf-object-button" id="complex-chart-preset-load" type="button">add preset</button>
               </div>
             </div>
@@ -2886,26 +3000,21 @@
                 <button class="btn btn-ghost sheaf-object-button" id="complex-chart-import-apply" type="button">load</button>
               </div>
             </div>
-          </div>
-          <div class="sheaf-step-saved-rules" id="complex-chart-saved"></div>
-          <div class="sheaf-complex-editor" id="complex-chart-editor" hidden>
-            <div class="sheaf-complex-editor-controls">
-              <label class="input-label" for="complex-chart-kind">type</label>
-              <select id="complex-chart-kind" class="sheaf-select">
-                <option value="chain-complex">chain complex</option>
-                <option value="filtration">filtration</option>
-              </select>
-              <label class="input-label" for="complex-chart-length">length</label>
-              <input id="complex-chart-length" class="sheaf-input" type="number" min="1" max="20" value="3">
+            <div class="sheaf-complex-editor" id="complex-chart-editor" hidden>
+              <div class="sheaf-complex-editor-controls">
+                <label class="input-label" id="complex-chart-length-label" for="complex-chart-length">length</label>
+                <input id="complex-chart-length" class="sheaf-input" type="number" min="1" max="20" value="3">
+              </div>
+              <div class="sheaf-complex-editor-grid" id="complex-chart-fields"></div>
+              <div class="sheaf-complex-display" id="complex-chart-preview"></div>
+              <div class="sheaf-complex-editor-controls">
+                <button class="btn btn-ghost sheaf-chart-export" id="complex-chart-save" type="button">save</button>
+                <button class="btn btn-ghost sheaf-chart-export" id="complex-chart-cancel" type="button">cancel</button>
+              </div>
+              <div class="hint" id="complex-chart-message"></div>
             </div>
-            <div class="sheaf-complex-editor-grid" id="complex-chart-fields"></div>
-            <div class="sheaf-complex-display" id="complex-chart-preview"></div>
-            <div class="sheaf-complex-editor-controls">
-              <button class="btn btn-ghost sheaf-chart-export" id="complex-chart-save" type="button">save</button>
-              <button class="btn btn-ghost sheaf-chart-export" id="complex-chart-cancel" type="button">cancel</button>
-            </div>
-            <div class="hint" id="complex-chart-message"></div>
           </div>
+          <div class="sheaf-complex-operation-panel" id="complex-chart-operations-panel" hidden></div>
         </div>
       </section>
     </section>
@@ -3901,6 +4010,6 @@
   };
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
-<script src="js/sheaf_complex_calculator.js?v=complex-chart-14"></script>
+<script src="js/sheaf_complex_calculator.js?v=complex-chart-20"></script>
 </body>
 </html>
