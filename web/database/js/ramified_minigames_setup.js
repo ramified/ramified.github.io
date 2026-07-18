@@ -31,19 +31,15 @@
       ArrowRight: DIRS.E,
       ArrowDown: DIRS.S,
       ArrowLeft: DIRS.W,
-      ArrowUp: DIRS.N
+      ArrowUp: DIRS.N,
+      KeyD: DIRS.E,
+      KeyS: DIRS.S,
+      KeyA: DIRS.W,
+      KeyW: DIRS.N
     },
     hexagonal: {
       ArrowRight: HEX_DIRS.E,
-      ArrowDown: HEX_DIRS.SE,
-      ArrowLeft: HEX_DIRS.W,
-      ArrowUp: HEX_DIRS.NW,
-      KeyW: HEX_DIRS.NW,
-      KeyE: HEX_DIRS.NE,
-      KeyA: HEX_DIRS.W,
-      KeyD: HEX_DIRS.E,
-      KeyZ: HEX_DIRS.SW,
-      KeyX: HEX_DIRS.SE
+      ArrowLeft: HEX_DIRS.W
     }
   };
   const OFFSETS = [[0, 1], [1, 0], [0, -1], [-1, 0]];
@@ -60,6 +56,7 @@
   const PUSH_CHAIN_LIMIT = 50;
   const EVENT_GUARD = 900;
   const UNDO_LIMIT = 100;
+  const SWIPE_MIN_DISTANCE = 10;
   const GAME_MODES = {
     NUMBER_2048: '2048',
     GOMOKU: 'gomoku',
@@ -886,6 +883,11 @@
   let eventQueueChangedBoard = false;
   let pendingBonusGameOver = false;
   let hoveredGlue = null;
+  let swipeGesture = null;
+  let suppressNextCanvasClick = false;
+  let suppressCanvasClickTimer = null;
+  let heldArrowKeys = new Set();
+  let activeHexVerticalKey = null;
 
   function init() {
     refs.canvas = document.getElementById('mosaic-canvas');
@@ -961,11 +963,18 @@
       refs.canvas.addEventListener('mousemove', handleCanvasHover);
       refs.canvas.addEventListener('mouseleave', clearGlueHover);
       refs.canvas.addEventListener('blur', clearGlueHover);
+      refs.canvas.addEventListener('pointerdown', handleCanvasPointerDown);
+      refs.canvas.addEventListener('pointermove', handleCanvasPointerMove);
+      refs.canvas.addEventListener('pointerup', handleCanvasPointerUp);
+      refs.canvas.addEventListener('pointercancel', handleCanvasPointerCancel);
+      refs.canvas.addEventListener('lostpointercapture', handleCanvasLostPointerCapture);
     }
     refs.moveButtons.forEach((button) => {
       button.addEventListener('click', () => handleDirectionalButton(button));
     });
     document.addEventListener('keydown', handleKeydown);
+    document.addEventListener('keyup', handleKeyup);
+    window.addEventListener('blur', clearKeyboardState);
     window.addEventListener('resize', render);
 
     syncSpeedOutput();
@@ -975,6 +984,9 @@
 
   function resetToPreview() {
     stopPlayback();
+    resetSwipeGesture();
+    clearSuppressedCanvasClick();
+    clearKeyboardState();
     game = createSelectedGameState(selectedPreset(), { glueRng: Math.random });
     game.phase = 'setup';
     clearUndoHistory();
@@ -1013,6 +1025,9 @@
       return;
     }
     stopPlayback();
+    resetSwipeGesture();
+    clearSuppressedCanvasClick();
+    clearKeyboardState();
     game = beginSelectedGame(selectedPreset(), {
       rng: Math.random,
       glueRng: Math.random,
@@ -1034,7 +1049,7 @@
     } else if (isConnectFourGame(game)) {
       syncStatus(`${game.preset.label} Connect Four`, connectFourTurnInfo(game), 'ready');
     } else {
-      syncStatus(`${game.preset.label} game seed`, 'use arrow keys to slide', 'ready');
+      syncStatus(`${game.preset.label} game seed`, 'use arrow keys, buttons, or swipe/drag to slide', 'ready');
     }
     syncControls();
     if (refs.canvas) refs.canvas.focus();
@@ -1057,6 +1072,9 @@
       clearDebugExport();
       clearSetupAlert();
       clearNoMoveTrial();
+      resetSwipeGesture();
+      clearSuppressedCanvasClick();
+      clearKeyboardState();
       eventQueueChangedBoard = false;
       render();
       syncStatusForCurrentGame();
@@ -1162,15 +1180,82 @@
 
   function handleKeydown(event) {
     if (!is2048Game(game)) return;
-    const dir = game ? dirFromKey(event.code || event.key, game.preset) : null;
-    if (!Number.isInteger(dir)) return;
+    const key = normalizeKeyboardKey(event.code || event.key);
+    if (!keyboardKeyHandledByPreset(key, game.preset)) return;
+    const reserved = shouldReserve2048KeyboardInput(key);
     if (event.repeat) {
-      event.preventDefault();
+      if (reserved && event.preventDefault) event.preventDefault();
       return;
     }
-    if (!canAcceptMove()) return;
-    event.preventDefault();
+    if (!canAcceptMove()) {
+      if (reserved && event.preventDefault) event.preventDefault();
+      clearKeyboardState();
+      return;
+    }
+    rememberKeyboardKey(key);
+    const dir = dirFromHeldKeyboardKey(key, game.preset);
+    if (reserved && event.preventDefault) event.preventDefault();
+    if (!Number.isInteger(dir)) return;
+    clearKeyboardState();
     playRound(dir);
+  }
+
+  function handleKeyup(event) {
+    forgetKeyboardKey(normalizeKeyboardKey(event.code || event.key));
+  }
+
+  function keyboardKeyHandledByPreset(key, preset) {
+    const lattice = latticeForPreset(preset);
+    if (lattice.shape === 'hex') return isArrowKey(key);
+    return Number.isInteger(dirFromKey(key, preset));
+  }
+
+  function shouldReserve2048KeyboardInput(key) {
+    return !!game
+      && is2048Game(game)
+      && game.phase !== 'setup'
+      && game.phase !== 'gameover'
+      && keyboardKeyHandledByPreset(key, game.preset);
+  }
+
+  function rememberKeyboardKey(key) {
+    if (!isArrowKey(key)) return;
+    heldArrowKeys.add(key);
+    if (key === 'ArrowUp' || key === 'ArrowDown') activeHexVerticalKey = key;
+  }
+
+  function forgetKeyboardKey(key) {
+    if (!isArrowKey(key)) return;
+    heldArrowKeys.delete(key);
+    if (activeHexVerticalKey !== key) return;
+    if (heldArrowKeys.has('ArrowDown')) activeHexVerticalKey = 'ArrowDown';
+    else if (heldArrowKeys.has('ArrowUp')) activeHexVerticalKey = 'ArrowUp';
+    else activeHexVerticalKey = null;
+  }
+
+  function clearKeyboardState() {
+    heldArrowKeys = new Set();
+    activeHexVerticalKey = null;
+  }
+
+  function dirFromHeldKeyboardKey(key, preset) {
+    const lattice = latticeForPreset(preset);
+    if (lattice.shape !== 'hex') return dirFromKey(key, preset);
+    if (key === 'ArrowLeft') {
+      if (activeHexVerticalKey === 'ArrowUp') return HEX_DIRS.NW;
+      if (activeHexVerticalKey === 'ArrowDown') return HEX_DIRS.SW;
+      return HEX_DIRS.W;
+    }
+    if (key === 'ArrowRight') {
+      if (activeHexVerticalKey === 'ArrowUp') return HEX_DIRS.NE;
+      if (activeHexVerticalKey === 'ArrowDown') return HEX_DIRS.SE;
+      return HEX_DIRS.E;
+    }
+    return null;
+  }
+
+  function isArrowKey(key) {
+    return key === 'ArrowUp' || key === 'ArrowDown' || key === 'ArrowLeft' || key === 'ArrowRight';
   }
 
   function handleDirectionalButton(button) {
@@ -1179,6 +1264,127 @@
     if (!Number.isInteger(dir) || !canAcceptMove()) return;
     playRound(dir);
     if (refs.canvas) refs.canvas.focus();
+  }
+
+  function handleCanvasPointerDown(event) {
+    if (event.isPrimary === false) return;
+    if (Number.isInteger(event.button) && event.button !== 0) return;
+    if (!is2048Game(game) || !canAcceptMove()) {
+      resetSwipeGesture();
+      return;
+    }
+    swipeGesture = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY
+    };
+    captureSwipePointer(event.pointerId);
+  }
+
+  function handleCanvasPointerMove(event) {
+    if (!activeSwipeEvent(event)) return;
+    swipeGesture.lastX = event.clientX;
+    swipeGesture.lastY = event.clientY;
+    const dx = swipeGesture.lastX - swipeGesture.startX;
+    const dy = swipeGesture.lastY - swipeGesture.startY;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) >= SWIPE_MIN_DISTANCE && event.preventDefault) {
+      event.preventDefault();
+    }
+  }
+
+  function handleCanvasPointerUp(event) {
+    if (!activeSwipeEvent(event)) return;
+    const endX = Number.isFinite(event.clientX) ? event.clientX : swipeGesture.lastX;
+    const endY = Number.isFinite(event.clientY) ? event.clientY : swipeGesture.lastY;
+    const dx = endX - swipeGesture.startX;
+    const dy = endY - swipeGesture.startY;
+    const pointerId = swipeGesture.pointerId;
+    const dir = dirFromSwipeVector(dx, dy, game && game.preset);
+    releaseSwipePointer(pointerId);
+    resetSwipeGesture();
+    if (!Number.isInteger(dir)) return;
+    suppressUpcomingCanvasClick();
+    if (event.preventDefault) event.preventDefault();
+    if (!is2048Game(game) || !canAcceptMove()) return;
+    playRound(dir);
+    if (refs.canvas) refs.canvas.focus();
+  }
+
+  function handleCanvasPointerCancel(event) {
+    if (!activeSwipeEvent(event)) return;
+    releaseSwipePointer(swipeGesture.pointerId);
+    resetSwipeGesture();
+  }
+
+  function handleCanvasLostPointerCapture(event) {
+    if (!activeSwipeEvent(event)) return;
+    resetSwipeGesture();
+  }
+
+  function activeSwipeEvent(event) {
+    return !!swipeGesture
+      && (swipeGesture.pointerId == null || event.pointerId == null || event.pointerId === swipeGesture.pointerId);
+  }
+
+  function captureSwipePointer(pointerId) {
+    if (pointerId == null || !refs.canvas || typeof refs.canvas.setPointerCapture !== 'function') return;
+    try {
+      refs.canvas.setPointerCapture(pointerId);
+    } catch (error) {
+      // Pointer capture can fail if the pointer is already gone.
+    }
+  }
+
+  function releaseSwipePointer(pointerId) {
+    if (pointerId == null || !refs.canvas || typeof refs.canvas.releasePointerCapture !== 'function') return;
+    try {
+      refs.canvas.releasePointerCapture(pointerId);
+    } catch (error) {
+      // Some browsers release capture automatically on pointerup/cancel.
+    }
+  }
+
+  function resetSwipeGesture() {
+    swipeGesture = null;
+  }
+
+  function suppressUpcomingCanvasClick() {
+    suppressNextCanvasClick = true;
+    if (suppressCanvasClickTimer) clearTimeout(suppressCanvasClickTimer);
+    suppressCanvasClickTimer = setTimeout(() => {
+      suppressNextCanvasClick = false;
+      suppressCanvasClickTimer = null;
+    }, 700);
+  }
+
+  function clearSuppressedCanvasClick() {
+    suppressNextCanvasClick = false;
+    if (suppressCanvasClickTimer) {
+      clearTimeout(suppressCanvasClickTimer);
+      suppressCanvasClickTimer = null;
+    }
+  }
+
+  function dirFromSwipeVector(dx, dy, preset) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_MIN_DISTANCE) return null;
+    const lattice = latticeForPreset(preset);
+    if (lattice.shape !== 'hex') {
+      if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? DIRS.E : DIRS.W;
+      return dy > 0 ? DIRS.S : DIRS.N;
+    }
+    const angle = Math.atan2(dy, dx);
+    let bestDir = 0;
+    let bestDelta = Infinity;
+    lattice.angles.forEach((dirAngle, dir) => {
+      const delta = Math.abs(Math.atan2(Math.sin(angle - dirAngle), Math.cos(angle - dirAngle)));
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        bestDir = dir;
+      }
+    });
+    return bestDir;
   }
 
   function canAcceptMove() {
@@ -1425,6 +1631,11 @@
   }
 
   function handleCanvasClick(event) {
+    if (suppressNextCanvasClick) {
+      clearSuppressedCanvasClick();
+      if (event.preventDefault) event.preventDefault();
+      return;
+    }
     if (isGomokuGame(game)) {
       handleGomokuCanvasClick(event);
       return;
@@ -2333,7 +2544,7 @@
       syncStatus('explosion mode', `cycle move available: ${labels}`, 'ready');
       return;
     }
-    syncStatus(statusText || `round ${game.round}`, 'use arrow keys to slide', phaseBadge(game.phase));
+    syncStatus(statusText || `round ${game.round}`, 'use arrow keys, buttons, or swipe/drag to slide', phaseBadge(game.phase));
   }
 
   function phaseBadge(phase) {
@@ -4700,7 +4911,8 @@
     const willVacate = new Map(proposals.map((proposal) => [proposal.actor.id, true]));
     let stable = false;
     let passes = 0;
-    while (!stable && passes < 12) {
+    const maxVacatePasses = proposals.length + 1;
+    while (!stable && passes < maxVacatePasses) {
       stable = true;
       passes += 1;
       const nextWillVacate = new Map(willVacate);
@@ -6021,10 +6233,13 @@
   function dirFromKey(key, preset) {
     const lattice = latticeForPreset(preset);
     const keyMap = KEY_DIRS[lattice.id] || KEY_DIRS.square;
-    if (Object.prototype.hasOwnProperty.call(keyMap, key)) return keyMap[key];
-    const rawKey = String(key || '');
-    const letterCode = rawKey.length === 1 ? `Key${rawKey.toUpperCase()}` : rawKey;
+    const letterCode = normalizeKeyboardKey(key);
     return Object.prototype.hasOwnProperty.call(keyMap, letterCode) ? keyMap[letterCode] : null;
+  }
+
+  function normalizeKeyboardKey(key) {
+    const rawKey = String(key || '');
+    return rawKey.length === 1 ? `Key${rawKey.toUpperCase()}` : rawKey;
   }
 
   function oppositeDir(preset, dir) {

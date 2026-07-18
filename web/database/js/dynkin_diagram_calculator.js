@@ -896,6 +896,7 @@
     syncStartingFunctionControls(available);
     if (!available) {
       target.innerHTML = `<div class="starting-note">${inlineMath('\\dim\\operatorname{Hom}(P(i),M)')} is shown here for Dynkin types ${inlineMath('A,B,C,D,E,F_4,G_2')}.</div>`;
+      queueArScrollControlSync();
       return;
     }
     const layout = getStartingFunctionLayout(state.type, state.rank, state.cartan);
@@ -905,6 +906,7 @@
         `<div class="ar-summary">${inlineMath('\\Gamma_Q')} simulated from the starting-function charts for the current ${inlineMath('A,D,E')} quiver orientation.</div>`,
         auslanderReitenChartMarkup(data, layout)
       ].join('');
+      queueArScrollControlSync();
       return;
     }
     const chart = startingFunctionChart(state.type, state.rank, state.cartan, selected, layout);
@@ -912,6 +914,7 @@
       `<div class="starting-summary">${inlineMath(`M_\\beta\\mapsto\\dim\\operatorname{Hom}(P(${selected + 1}),M_\\beta)=\\operatorname{coeff}_{\\alpha_{${selected + 1}}}(\\beta)`)}.</div>`,
       startingFunctionChartMarkup(chart, layout)
     ].join('');
+    queueArScrollControlSync();
   }
 
   function canShowStartingFunctionAR() {
@@ -1101,7 +1104,7 @@
   function auslanderReitenDataFromStartingFunctions(type, rank, C, layout) {
     const columnsByVertex = layout.positions.map((position) => position.col);
     const layers = bipartiteColorClasses(C, columnsByVertex);
-    const heights = quiverVertexHeights(rank, C, getQuiverOrientations(type, rank, C));
+    const heights = quiverVertexHeights(rank, C, reversedQuiverOrientations(getQuiverOrientations(type, rank, C)));
     const minHeight = Math.min(...heights);
     const normalizedHeights = heights.map((height) => height - minHeight);
     const charts = Array.from({ length: rank }, (_, vertex) => startingFunctionRowsForVertex(type, rank, C, vertex, layers, columnsByVertex));
@@ -1213,6 +1216,14 @@
     return 0;
   }
 
+  function reversedQuiverOrientations(orientations) {
+    const reversed = {};
+    Object.keys(orientations).forEach((keyName) => {
+      reversed[keyName] = -orientations[keyName];
+    });
+    return reversed;
+  }
+
   function auslanderReitenChartMarkup(data, layout) {
     if (state.startingFunctionTransposed) return transposedAuslanderReitenChartMarkup(data, layout);
     const header = state.startingFunctionHeaderVisible
@@ -1221,10 +1232,13 @@
           `${startingFunctionVertexLabels(layout, false)}` +
         `</div>`
       : '';
-    return `<div class="ar-chart-wrap"><div class="ar-chart-stack" style="--starting-cols:${data.columns};">` +
-      header +
-      `<div class="starting-chart-grid" style="position:relative;">${auslanderReitenArrowSvg(data, 0, false)}${auslanderReitenCells(data, 0, false)}</div>` +
-    `</div></div>`;
+    return `<div class="ar-scroll-shell">` +
+      `<div class="ar-chart-wrap" data-ar-scroll-wrap><div class="ar-chart-stack" style="--starting-cols:${data.columns};">` +
+        header +
+        `<div class="starting-chart-grid" style="position:relative;">${auslanderReitenArrowSvg(data, 0, false)}${auslanderReitenCells(data, 0, false)}</div>` +
+      `</div></div>` +
+      arScrollSliderMarkup() +
+    `</div>`;
   }
 
   function transposedAuslanderReitenChartMarkup(data, layout) {
@@ -1233,14 +1247,21 @@
     const header = state.startingFunctionHeaderVisible
       ? startingFunctionVertexLineSvg(layout, state.cartan, true, totalColumns, data.columns, { quiver: true, interactive: true }) + startingFunctionVertexLabels(layout, true)
       : '';
-    return `<div class="ar-chart-wrap"><div class="ar-chart-stack">` +
-      `<div class="starting-transpose-grid" data-starting-columns="${data.columns}" data-starting-transposed="true" ` +
-        `style="--starting-transpose-cols:${totalColumns};--starting-transpose-rows:${data.columns};">` +
-        header +
-        `${auslanderReitenArrowSvg(data, headerOffset, true)}` +
-        `${auslanderReitenCells(data, headerOffset, true)}` +
-      `</div>` +
-    `</div></div>`;
+    return `<div class="ar-scroll-shell">` +
+      `<div class="ar-chart-wrap" data-ar-scroll-wrap><div class="ar-chart-stack">` +
+        `<div class="starting-transpose-grid" data-starting-columns="${data.columns}" data-starting-transposed="true" ` +
+          `style="--starting-transpose-cols:${totalColumns};--starting-transpose-rows:${data.columns};">` +
+          header +
+          `${auslanderReitenArrowSvg(data, headerOffset, true)}` +
+          `${auslanderReitenCells(data, headerOffset, true)}` +
+        `</div>` +
+      `</div></div>` +
+      arScrollSliderMarkup() +
+    `</div>`;
+  }
+
+  function arScrollSliderMarkup() {
+    return '<input class="ar-scroll-slider" type="range" min="0" max="0" value="0" step="1" aria-label="Scroll AR quiver horizontally" hidden>';
   }
 
   function auslanderReitenCells(data, columnOffset, transposed) {
@@ -1689,6 +1710,78 @@
     const canUseWide = window.matchMedia('(min-width: 960px)').matches;
     state.startingFunctionWide = Boolean(enabled) && canUseWide;
     syncStartingFunctionWidePlacement();
+    queueArScrollControlSync();
+  }
+
+  let arScrollControlSyncQueued = false;
+  function queueArScrollControlSync() {
+    if (arScrollControlSyncQueued) return;
+    arScrollControlSyncQueued = true;
+    const run = () => {
+      arScrollControlSyncQueued = false;
+      syncArScrollControls();
+    };
+    if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(run);
+    else window.setTimeout(run, 0);
+  }
+
+  function bindArScrollControls() {
+    const target = $('dynkin-starting-function');
+    if (!target) return;
+    target.addEventListener('input', handleArScrollSliderInput);
+    target.addEventListener('scroll', handleArChartScroll, true);
+  }
+
+  function handleArScrollSliderInput(event) {
+    const slider = event.target?.closest?.('.ar-scroll-slider');
+    if (!slider) return;
+    const shell = slider.closest('.ar-scroll-shell');
+    const wrap = shell?.querySelector('.ar-chart-wrap');
+    if (!wrap) return;
+    const maxScroll = arScrollMax(wrap);
+    wrap.scrollLeft = clamp(Number(slider.value) || 0, 0, maxScroll);
+    syncArScrollSliderForWrap(wrap);
+  }
+
+  function handleArChartScroll(event) {
+    const wrap = event.target?.closest?.('.ar-chart-wrap');
+    if (!wrap || !$('dynkin-starting-function')?.contains(wrap)) return;
+    syncArScrollSliderForWrap(wrap);
+  }
+
+  function syncArScrollControls() {
+    document.querySelectorAll('.ar-scroll-shell').forEach(syncArScrollShell);
+  }
+
+  function syncArScrollShell(shell) {
+    const wrap = shell.querySelector('.ar-chart-wrap');
+    const slider = shell.querySelector('.ar-scroll-slider');
+    if (!wrap || !slider) return;
+    const maxScroll = arScrollMax(wrap);
+    const shouldShow = state.startingFunctionARMode && canShowStartingFunctionAR() &&
+      maxScroll > 1 && shouldOfferVisibleArScrollSlider();
+    shell.classList.toggle('has-overflow', shouldShow);
+    slider.hidden = !shouldShow;
+    slider.max = String(maxScroll);
+    slider.value = String(clamp(Math.round(wrap.scrollLeft), 0, maxScroll));
+  }
+
+  function syncArScrollSliderForWrap(wrap) {
+    const shell = wrap.closest('.ar-scroll-shell');
+    const slider = shell?.querySelector('.ar-scroll-slider');
+    if (!slider) return;
+    const maxScroll = arScrollMax(wrap);
+    slider.max = String(maxScroll);
+    slider.value = String(clamp(Math.round(wrap.scrollLeft), 0, maxScroll));
+  }
+
+  function arScrollMax(wrap) {
+    return Math.max(0, Math.ceil(wrap.scrollWidth - wrap.clientWidth));
+  }
+
+  function shouldOfferVisibleArScrollSlider() {
+    if (typeof window.matchMedia !== 'function') return false;
+    return window.matchMedia('(pointer: coarse), (hover: none), (max-width: 1180px)').matches;
   }
 
   function bindInputs() {
@@ -1707,6 +1800,7 @@
     $('dynkin-canvas').addEventListener('click', handleCanvasClick);
     window.addEventListener('resize', drawDynkin);
     window.addEventListener('resize', syncStartingFunctionWidePlacement);
+    window.addEventListener('resize', queueArScrollControlSync);
     $('dynkin-starting-toggle-header')?.addEventListener('click', () => {
       setStartingFunctionHeaderVisible(!state.startingFunctionHeaderVisible);
     });
@@ -1796,6 +1890,7 @@
     card.classList.toggle('wide', state.startingFunctionWide);
     wideHost.hidden = !state.startingFunctionWide;
     syncStartingFunctionControls();
+    queueArScrollControlSync();
   }
 
   function bindStartingFunctionDrag() {
@@ -2026,7 +2121,11 @@
         if (Date.now() < suppressCardToggleUntil) return;
         if (event.target.closest('button,input,select,textarea,a,.drag-handle')) return;
         const card = head.closest('.card');
-        if (card) card.classList.toggle('collapsed');
+        if (card) {
+          card.classList.toggle('collapsed');
+          queueArScrollControlSync();
+          window.setTimeout(queueArScrollControlSync, 280);
+        }
       });
     });
 
@@ -2132,6 +2231,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     bindInputs();
+    bindArScrollControls();
     bindStartingFunctionDrag();
     bindCards();
     render();

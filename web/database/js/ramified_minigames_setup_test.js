@@ -180,6 +180,65 @@ function testNewlyMergedTileBlocksLaterPush() {
   assert.ok(!allMergeEvents(result.events).some((event) => event.newValue === 8));
 }
 
+function testLongGluedChainConvergesBeforeBackMerge() {
+  const preset = {
+    id: 'long-glued-chain',
+    label: 'long glued chain',
+    lattice: 'square',
+    rows: 4,
+    cols: 4,
+    surface: 'long glued chain',
+    removedTiles: [{ row: 4, col: 4 }],
+    cutEdges: [],
+    gluedEdges: [
+      { group: 0, first: { row: 1, col: 4, dir: game.DIRS.E }, second: { row: 2, col: 1, dir: game.DIRS.W } },
+      { group: 0, first: { row: 2, col: 4, dir: game.DIRS.E }, second: { row: 3, col: 1, dir: game.DIRS.W } },
+      { group: 0, first: { row: 3, col: 4, dir: game.DIRS.E }, second: { row: 4, col: 1, dir: game.DIRS.W } }
+    ]
+  };
+  const state = stateWithBoxes(preset, [
+    box(1, 1, 1, 2),
+    box(2, 1, 2, 2),
+    box(3, 1, 3, 4),
+    box(4, 1, 4, 8),
+    box(5, 2, 1, 16),
+    box(6, 2, 2, 2),
+    box(7, 2, 3, 8),
+    box(8, 2, 4, 16),
+    box(9, 3, 1, 2),
+    box(10, 3, 2, 4),
+    box(11, 3, 3, 16),
+    box(12, 3, 4, 32),
+    box(13, 4, 1, 64),
+    box(14, 4, 2, 2),
+    box(15, 4, 3, 32)
+  ]);
+  const result = game.simulateRound(state, game.DIRS.E, { spawn: false });
+  const merges = allMergeEvents(result.events);
+  assert.strictEqual(result.changed, true);
+  assert.strictEqual(merges.length, 1);
+  assert.strictEqual(merges[0].targetBoxId, 2);
+  assert.deepStrictEqual(merges[0].removeBoxIds, [1]);
+  assert.strictEqual(merges[0].newValue, 4);
+  assert.deepStrictEqual(valuesAt(result.state), [
+    '1,2:4',
+    '1,3:4',
+    '1,4:8',
+    '2,1:16',
+    '2,2:2',
+    '2,3:8',
+    '2,4:16',
+    '3,1:2',
+    '3,2:4',
+    '3,3:16',
+    '3,4:32',
+    '4,1:64',
+    '4,2:2',
+    '4,3:32'
+  ]);
+  assert.strictEqual(allBounceMoves(result.events).length, 0);
+}
+
 function testFaceToFaceSwapBouncesWithoutMoving() {
   const preset = {
     id: 'face-to-face',
@@ -1902,15 +1961,27 @@ function testExtraBackgroundPresets() {
   ]);
 }
 
-function testHexKeyboardMapping() {
-  const preset = game.createGameState('hex-classic-4x4').preset;
-  assert.strictEqual(game.dirFromKey('KeyW', preset), game.HEX_DIRS.NW);
-  assert.strictEqual(game.dirFromKey('KeyE', preset), game.HEX_DIRS.NE);
-  assert.strictEqual(game.dirFromKey('KeyA', preset), game.HEX_DIRS.W);
-  assert.strictEqual(game.dirFromKey('KeyD', preset), game.HEX_DIRS.E);
-  assert.strictEqual(game.dirFromKey('KeyZ', preset), game.HEX_DIRS.SW);
-  assert.strictEqual(game.dirFromKey('KeyX', preset), game.HEX_DIRS.SE);
-  assert.strictEqual(game.dirFromKey('w', preset), game.HEX_DIRS.NW);
+function testKeyboardMapping() {
+  const squarePreset = game.createGameState('classic-4x4').preset;
+  assert.strictEqual(game.dirFromKey('KeyW', squarePreset), game.DIRS.N);
+  assert.strictEqual(game.dirFromKey('KeyA', squarePreset), game.DIRS.W);
+  assert.strictEqual(game.dirFromKey('KeyS', squarePreset), game.DIRS.S);
+  assert.strictEqual(game.dirFromKey('KeyD', squarePreset), game.DIRS.E);
+  assert.strictEqual(game.dirFromKey('w', squarePreset), game.DIRS.N);
+  assert.strictEqual(game.dirFromKey('ArrowUp', squarePreset), game.DIRS.N);
+  assert.strictEqual(game.dirFromKey('ArrowLeft', squarePreset), game.DIRS.W);
+
+  const hexPreset = game.createGameState('hex-classic-4x4').preset;
+  assert.strictEqual(game.dirFromKey('ArrowLeft', hexPreset), game.HEX_DIRS.W);
+  assert.strictEqual(game.dirFromKey('ArrowRight', hexPreset), game.HEX_DIRS.E);
+  assert.strictEqual(game.dirFromKey('ArrowUp', hexPreset), null);
+  assert.strictEqual(game.dirFromKey('ArrowDown', hexPreset), null);
+  assert.strictEqual(game.dirFromKey('KeyW', hexPreset), null);
+  assert.strictEqual(game.dirFromKey('KeyE', hexPreset), null);
+  assert.strictEqual(game.dirFromKey('KeyA', hexPreset), null);
+  assert.strictEqual(game.dirFromKey('KeyD', hexPreset), null);
+  assert.strictEqual(game.dirFromKey('KeyZ', hexPreset), null);
+  assert.strictEqual(game.dirFromKey('KeyX', hexPreset), null);
 }
 
 function testHexMovePadUsesArrowGlyphs() {
@@ -1921,12 +1992,16 @@ function testHexMovePadUsesArrowGlyphs() {
   assert.ok(html.includes('left: var(--hex-row-offset);'));
   assert.ok(html.includes('position: relative;'));
   assert.ok(html.includes('.hex-move-pad [data-move-dir="E"] { grid-column: 3; grid-row: 2; }'));
-  assert.ok(html.includes('data-move-dir="NW" aria-label="Move northwest" title="Move northwest (W)">&#x2196;</button>'));
-  assert.ok(html.includes('data-move-dir="NE" aria-label="Move northeast" title="Move northeast (E)">&#x2197;</button>'));
-  assert.ok(html.includes('data-move-dir="W" aria-label="Move west" title="Move west (A)">&#x2190;</button>'));
-  assert.ok(html.includes('data-move-dir="E" aria-label="Move east" title="Move east (D)">&#x2192;</button>'));
-  assert.ok(html.includes('data-move-dir="SW" aria-label="Move southwest" title="Move southwest (Z)">&#x2199;</button>'));
-  assert.ok(html.includes('data-move-dir="SE" aria-label="Move southeast" title="Move southeast (X)">&#x2198;</button>'));
+  assert.ok(html.includes('data-move-dir="N" aria-label="Move up" title="Move up (ArrowUp/W)">'));
+  assert.ok(html.includes('data-move-dir="W" aria-label="Move left" title="Move left (ArrowLeft/A)">'));
+  assert.ok(html.includes('data-move-dir="E" aria-label="Move right" title="Move right (ArrowRight/D)">'));
+  assert.ok(html.includes('data-move-dir="S" aria-label="Move down" title="Move down (ArrowDown/S)">'));
+  assert.ok(html.includes('data-move-dir="NW" aria-label="Move northwest" title="Move northwest (ArrowUp+ArrowLeft)">&#x2196;</button>'));
+  assert.ok(html.includes('data-move-dir="NE" aria-label="Move northeast" title="Move northeast (ArrowUp+ArrowRight)">&#x2197;</button>'));
+  assert.ok(html.includes('data-move-dir="W" aria-label="Move west" title="Move west (ArrowLeft)">&#x2190;</button>'));
+  assert.ok(html.includes('data-move-dir="E" aria-label="Move east" title="Move east (ArrowRight)">&#x2192;</button>'));
+  assert.ok(html.includes('data-move-dir="SW" aria-label="Move southwest" title="Move southwest (ArrowDown+ArrowLeft)">&#x2199;</button>'));
+  assert.ok(html.includes('data-move-dir="SE" aria-label="Move southeast" title="Move southeast (ArrowDown+ArrowRight)">&#x2198;</button>'));
 }
 
 function testMosaicBackgroundExportAndMinigameImportControlsExist() {
@@ -2184,6 +2259,504 @@ function makeMoveButton(dir) {
     getAttribute(name) {
       return name === 'data-move-dir' ? dir : null;
     }
+  });
+}
+
+function createHeadlessDomHarness(options = {}) {
+  const source = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
+  const elements = new Map();
+  const calls = [];
+  const ctx = new Proxy({}, {
+    get(target, prop) {
+      if (prop in target) return target[prop];
+      target[prop] = (...args) => {
+        calls.push({ method: prop, args });
+      };
+      return target[prop];
+    },
+    set(target, prop, value) {
+      target[prop] = value;
+      return true;
+    }
+  });
+  const wrap = makeElement('canvas-wrap', { clientWidth: 720 });
+  const moveButtons = ['N', 'W', 'E', 'S', 'NW', 'NE', 'SW', 'SE'].map(makeMoveButton);
+  const mode2048Controls = [
+    makeElement('box-ui-row', { attributes: { 'data-mode-control': '2048' } }),
+    makeElement('new-boxes-row', { attributes: { 'data-mode-control': '2048' } }),
+    makeElement('speed-row', { attributes: { 'data-mode-control': '2048' } }),
+    makeElement('step-mode-row', { attributes: { 'data-mode-control': '2048' } }),
+    makeElement('debug-tile-row', { attributes: { 'data-mode-control': '2048' } }),
+    makeElement('move-row', { attributes: { 'data-mode-control': '2048' } })
+  ];
+  const modeGomokuControls = [
+    makeElement('gomoku-size-row', { hidden: true, attributes: { 'data-mode-control': 'gomoku' } }),
+    makeElement('gomoku-display-row', { hidden: true, attributes: { 'data-mode-control': 'gomoku' } })
+  ];
+  const modeConnectFourControls = [
+    makeElement('connect-four-fall-row', { hidden: true, attributes: { 'data-mode-control': 'connect-four' } }),
+    makeElement('connect-four-align-row', { hidden: true, attributes: { 'data-mode-control': 'connect-four' } })
+  ];
+  const canvas = makeElement('mosaic-canvas', {
+    parentElement: wrap,
+    getContext() {
+      return ctx;
+    },
+    getBoundingClientRect() {
+      return { left: 0, top: 0, width: 288, height: 288 };
+    },
+    setPointerCapture(pointerId) {
+      calls.push({ method: 'setPointerCapture', args: [pointerId] });
+    },
+    releasePointerCapture(pointerId) {
+      calls.push({ method: 'releasePointerCapture', args: [pointerId] });
+    }
+  });
+  [
+    canvas,
+    makeElement('game-mode-select', { value: options.gameMode || '2048' }),
+    makeElement('surface-preset-select', { value: options.preset || 'classic-4x4' }),
+    makeElement('import-preset-toggle'),
+    makeElement('import-preset-tools', { hidden: true }),
+    makeElement('import-preset-input'),
+    makeElement('apply-import-preset'),
+    makeElement('gomoku-board-size', { value: '15' }),
+    makeElement('gomoku-display-style', { value: 'vertex' }),
+    makeElement('connect-four-fall-dir', {
+      value: 'S',
+      options: ['S', 'E', 'W', 'N', 'SE', 'SW', 'NW', 'NE'].map((value) => ({ value, textContent: '', hidden: false, disabled: false }))
+    }),
+    makeElement('connect-four-align-fall', { checked: true }),
+    makeElement('number-box-style', { value: 'paper' }),
+    makeElement('highlight-new-boxes', { checked: true }),
+    makeElement('begin-game'),
+    makeElement('game-setup-alert', { hidden: true }),
+    makeElement('animation-speed', { value: '80' }),
+    makeElement('animation-speed-value'),
+    makeElement('step-mode', { checked: !!options.stepMode }),
+    makeElement('next-step'),
+    makeElement('debug-toggle'),
+    makeElement('debug-tools'),
+    makeElement('debug-tile-value', { value: '128' }),
+    makeElement('undo-step'),
+    makeElement('export-state'),
+    makeElement('import-state'),
+    makeElement('debug-export-output'),
+    makeElement('status-badge'),
+    makeElement('status-line'),
+    makeElement('info-line'),
+    makeElement('score-label'),
+    makeElement('highest-tile-label'),
+    makeElement('existing-tile-label'),
+    makeElement('removed-tile-label'),
+    makeElement('round-label'),
+    makeElement('score-value'),
+    makeElement('highest-tile-value'),
+    makeElement('existing-tile-value'),
+    makeElement('removed-tile-value'),
+    makeElement('round-value')
+  ].forEach((element) => elements.set(element.id, element));
+  moveButtons.forEach((button) => elements.set(button.id, button));
+  mode2048Controls.forEach((control) => elements.set(control.id, control));
+  modeGomokuControls.forEach((control) => elements.set(control.id, control));
+  modeConnectFourControls.forEach((control) => elements.set(control.id, control));
+
+  const documentListeners = {};
+  const windowListeners = {};
+  const context = {
+    module: { exports: {} },
+    exports: {},
+    console,
+    Math: Object.create(Math),
+    performance: { now: () => 0 },
+    setTimeout() {
+      return 1;
+    },
+    clearTimeout() {},
+    document: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      addEventListener(type, handler) {
+        documentListeners[type] = handler;
+        if (type === 'DOMContentLoaded') handler();
+      },
+      querySelectorAll(selector) {
+        if (selector === '[data-move-dir]') return moveButtons;
+        if (selector === '[data-mode-control="2048"]') return mode2048Controls;
+        if (selector === '[data-mode-control="gomoku"]') return modeGomokuControls;
+        if (selector === '[data-mode-control="connect-four"]') return modeConnectFourControls;
+        return [];
+      }
+    },
+    window: {
+      devicePixelRatio: 1,
+      addEventListener(type, handler) {
+        windowListeners[type] = handler;
+      },
+      requestAnimationFrame(handler) {
+        calls.push({ method: 'requestAnimationFrame', args: [] });
+        return 1;
+      },
+      cancelAnimationFrame() {}
+    }
+  };
+  let randoms = (options.randoms || [0, 0.1, 0.2, 0.1, 0.3, 0.1]).slice();
+  context.Math.random = () => (randoms.length ? randoms.shift() : 0.1);
+  vm.runInNewContext(source, context);
+  return { elements, canvas, moveButtons, documentListeners, windowListeners, calls, context };
+}
+
+function pointerEvent(x, y, extra = {}) {
+  return {
+    pointerId: 1,
+    isPrimary: true,
+    button: 0,
+    clientX: x,
+    clientY: y,
+    defaultPrevented: false,
+    preventDefault() {
+      this.defaultPrevented = true;
+    },
+    ...extra
+  };
+}
+
+function swipeCanvas(canvas, startX, startY, endX, endY, extra = {}) {
+  const pointerId = extra.pointerId || 1;
+  canvas.listeners.pointerdown(pointerEvent(startX, startY, { ...extra, pointerId }));
+  canvas.listeners.pointermove(pointerEvent(endX, endY, { ...extra, pointerId }));
+  const up = pointerEvent(endX, endY, { ...extra, pointerId });
+  canvas.listeners.pointerup(up);
+  return up;
+}
+
+function keyboardEvent(code, extra = {}) {
+  return {
+    code,
+    key: code,
+    repeat: false,
+    defaultPrevented: false,
+    preventDefault() {
+      this.defaultPrevented = true;
+    },
+    ...extra
+  };
+}
+
+function pressKey(documentListeners, code, extra = {}) {
+  const event = keyboardEvent(code, extra);
+  documentListeners.keydown(event);
+  return event;
+}
+
+function releaseKey(documentListeners, code, extra = {}) {
+  const event = keyboardEvent(code, extra);
+  documentListeners.keyup(event);
+  return event;
+}
+
+function enableHeadlessDebug(elements) {
+  if (elements.get('debug-toggle').attributes['aria-pressed'] !== 'true') {
+    elements.get('debug-toggle').listeners.click();
+  }
+}
+
+function importHeadlessStatus(elements, payload) {
+  enableHeadlessDebug(elements);
+  elements.get('debug-export-output').value = JSON.stringify(payload);
+  elements.get('import-state').listeners.click();
+}
+
+function singleSquareBoxStatus() {
+  const preset = game.createGameState('classic-4x4').preset;
+  return {
+    preset,
+    phase: 'ready',
+    round: 0,
+    score: 0,
+    nextBoxId: 2,
+    boxes: [{ id: 1, row: 2, col: 2, value: 2 }],
+    removed: [],
+    queue: { eventIndex: 0, stepPaused: false, events: [] }
+  };
+}
+
+function singleHexBoxStatus() {
+  const preset = game.createGameState('hex-classic-4x4').preset;
+  return {
+    preset,
+    phase: 'ready',
+    round: 0,
+    score: 0,
+    nextBoxId: 2,
+    boxes: [{ id: 1, row: 2, col: 2, value: 2 }],
+    removed: [],
+    queue: { eventIndex: 0, stepPaused: false, events: [] }
+  };
+}
+
+function testSquareWasdKeyboardControls() {
+  [
+    ['KeyW', 'up'],
+    ['KeyA', 'left'],
+    ['KeyS', 'down'],
+    ['KeyD', 'right']
+  ].forEach(([key, label]) => {
+    const { elements, documentListeners } = createHeadlessDomHarness();
+    importHeadlessStatus(elements, singleSquareBoxStatus());
+    const event = pressKey(documentListeners, key);
+    assert.strictEqual(event.defaultPrevented, true);
+    assert.strictEqual(elements.get('status-line').textContent, `round 1: ${label}`);
+  });
+}
+
+function testActiveSquareKeyboardPreventsPageScroll() {
+  [
+    ['ArrowUp', 'up'],
+    ['ArrowLeft', 'left'],
+    ['ArrowDown', 'down'],
+    ['ArrowRight', 'right'],
+    ['KeyW', 'up'],
+    ['KeyA', 'left'],
+    ['KeyS', 'down'],
+    ['KeyD', 'right']
+  ].forEach(([key, label]) => {
+    const { elements, documentListeners } = createHeadlessDomHarness();
+    importHeadlessStatus(elements, singleSquareBoxStatus());
+    const event = pressKey(documentListeners, key);
+    assert.strictEqual(event.defaultPrevented, true);
+    assert.strictEqual(elements.get('status-line').textContent, `round 1: ${label}`);
+  });
+}
+
+function testHexArrowKeyboardControls() {
+  [
+    [['ArrowLeft'], 'west'],
+    [['ArrowRight'], 'east'],
+    [['ArrowUp', 'ArrowLeft'], 'northwest'],
+    [['ArrowUp', 'ArrowRight'], 'northeast'],
+    [['ArrowDown', 'ArrowLeft'], 'southwest'],
+    [['ArrowDown', 'ArrowRight'], 'southeast']
+  ].forEach(([keys, label]) => {
+    const { elements, documentListeners } = createHeadlessDomHarness();
+    importHeadlessStatus(elements, singleHexBoxStatus());
+    keys.forEach((key) => {
+      const event = pressKey(documentListeners, key);
+      assert.strictEqual(event.defaultPrevented, true);
+    });
+    assert.strictEqual(elements.get('status-line').textContent, `round 1: ${label}`);
+  });
+}
+
+function testActiveHexKeyboardPreventsPageScroll() {
+  ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].forEach((key) => {
+    const { elements, documentListeners } = createHeadlessDomHarness();
+    importHeadlessStatus(elements, singleHexBoxStatus());
+    const event = pressKey(documentListeners, key);
+    assert.strictEqual(event.defaultPrevented, true);
+  });
+}
+
+function testHexVerticalArrowAloneDoesNotMove() {
+  ['ArrowUp', 'ArrowDown'].forEach((key) => {
+    const { elements, documentListeners } = createHeadlessDomHarness();
+    importHeadlessStatus(elements, singleHexBoxStatus());
+    const event = pressKey(documentListeners, key);
+    assert.strictEqual(event.defaultPrevented, true);
+    assert.strictEqual(elements.get('round-value').textContent, '0');
+    assert.strictEqual(elements.get('status-line').textContent, 'status imported');
+  });
+}
+
+function testHexKeyboardStateClearsOnKeyupAndBlur() {
+  let harness = createHeadlessDomHarness();
+  importHeadlessStatus(harness.elements, singleHexBoxStatus());
+  pressKey(harness.documentListeners, 'ArrowUp');
+  releaseKey(harness.documentListeners, 'ArrowUp');
+  pressKey(harness.documentListeners, 'ArrowRight');
+  assert.strictEqual(harness.elements.get('status-line').textContent, 'round 1: east');
+
+  harness = createHeadlessDomHarness();
+  importHeadlessStatus(harness.elements, singleHexBoxStatus());
+  pressKey(harness.documentListeners, 'ArrowDown');
+  harness.windowListeners.blur();
+  pressKey(harness.documentListeners, 'ArrowRight');
+  assert.strictEqual(harness.elements.get('status-line').textContent, 'round 1: east');
+}
+
+function testKeyboardPreventsScrollWhileBusyWithoutMovingAgain() {
+  let harness = createHeadlessDomHarness();
+  importHeadlessStatus(harness.elements, singleSquareBoxStatus());
+  pressKey(harness.documentListeners, 'ArrowRight');
+  assert.strictEqual(harness.elements.get('round-value').textContent, '1');
+  assert.strictEqual(harness.elements.get('status-badge').textContent, 'moving');
+  const animatingEvent = pressKey(harness.documentListeners, 'ArrowLeft');
+  assert.strictEqual(animatingEvent.defaultPrevented, true);
+  assert.strictEqual(harness.elements.get('round-value').textContent, '1');
+
+  harness = createHeadlessDomHarness({ stepMode: true });
+  importHeadlessStatus(harness.elements, singleSquareBoxStatus());
+  pressKey(harness.documentListeners, 'ArrowRight');
+  assert.strictEqual(harness.elements.get('round-value').textContent, '1');
+  assert.strictEqual(harness.elements.get('status-badge').textContent, 'step');
+  const pausedEvent = pressKey(harness.documentListeners, 'ArrowLeft');
+  assert.strictEqual(pausedEvent.defaultPrevented, true);
+  assert.strictEqual(harness.elements.get('round-value').textContent, '1');
+}
+
+function testKeyboardAllowsPageScrollOutsideActive2048() {
+  let harness = createHeadlessDomHarness();
+  let event = pressKey(harness.documentListeners, 'ArrowDown');
+  assert.strictEqual(event.defaultPrevented, false);
+  assert.strictEqual(harness.elements.get('status-badge').textContent, 'setup');
+
+  harness = createHeadlessDomHarness();
+  importHeadlessStatus(harness.elements, {
+    preset: { label: 'over', lattice: 'square', rows: 4, cols: 4, surface: 'over' },
+    phase: 'gameover',
+    ending: 'bonus',
+    round: 5,
+    score: 0,
+    nextBoxId: 1,
+    boxes: [],
+    removed: [],
+    queue: { eventIndex: 0, stepPaused: false, events: [] }
+  });
+  event = pressKey(harness.documentListeners, 'ArrowDown');
+  assert.strictEqual(event.defaultPrevented, false);
+  assert.strictEqual(harness.elements.get('round-value').textContent, '5');
+
+  harness = createHeadlessDomHarness();
+  harness.elements.get('game-mode-select').value = 'gomoku';
+  harness.elements.get('game-mode-select').listeners.change();
+  harness.elements.get('begin-game').listeners.click();
+  event = pressKey(harness.documentListeners, 'ArrowDown');
+  assert.strictEqual(event.defaultPrevented, false);
+  assert.strictEqual(harness.elements.get('round-value').textContent, '0');
+
+  harness = createHeadlessDomHarness();
+  harness.elements.get('game-mode-select').value = 'connect-four';
+  harness.elements.get('game-mode-select').listeners.change();
+  harness.elements.get('begin-game').listeners.click();
+  event = pressKey(harness.documentListeners, 'ArrowDown');
+  assert.strictEqual(event.defaultPrevented, false);
+  assert.strictEqual(harness.elements.get('round-value').textContent, '0');
+}
+
+function testSwipeRightMovesSquare2048() {
+  const { elements, canvas, moveButtons } = createHeadlessDomHarness();
+  assert.strictEqual(typeof canvas.listeners.pointerdown, 'function');
+  assert.strictEqual(typeof canvas.listeners.pointermove, 'function');
+  assert.strictEqual(typeof canvas.listeners.pointerup, 'function');
+  elements.get('begin-game').listeners.click();
+  assert.strictEqual(elements.get('info-line').textContent, 'use arrow keys, buttons, or swipe/drag to slide');
+  const up = swipeCanvas(canvas, 40, 40, 80, 40);
+  assert.strictEqual(up.defaultPrevented, true);
+  assert.strictEqual(elements.get('status-line').textContent, 'round 1: right');
+  assert.strictEqual(elements.get('status-badge').textContent, 'moving');
+  assert.strictEqual(elements.get('round-value').textContent, '1');
+  assert.ok(moveButtons.every((button) => button.disabled));
+}
+
+function testShortSwipeDoesNotMove() {
+  const { elements, canvas } = createHeadlessDomHarness();
+  elements.get('begin-game').listeners.click();
+  const up = swipeCanvas(canvas, 40, 40, 47, 43);
+  assert.strictEqual(up.defaultPrevented, false);
+  assert.strictEqual(elements.get('round-value').textContent, '0');
+  assert.strictEqual(elements.get('status-badge').textContent, 'ready');
+}
+
+function testSwipeSuppressesFollowupClick() {
+  const { elements, canvas } = createHeadlessDomHarness({ stepMode: true });
+  elements.get('begin-game').listeners.click();
+  enableHeadlessDebug(elements);
+  swipeCanvas(canvas, 40, 40, 80, 40);
+  assert.strictEqual(elements.get('status-line').textContent, 'round 1: right');
+  assert.strictEqual(elements.get('status-badge').textContent, 'step');
+  const click = pointerEvent(57, 57);
+  canvas.listeners.click(click);
+  assert.strictEqual(click.defaultPrevented, true);
+  assert.strictEqual(elements.get('status-line').textContent, 'round 1: right');
+}
+
+function testSwipeIgnoredOutsideAccepting2048() {
+  let harness = createHeadlessDomHarness();
+  swipeCanvas(harness.canvas, 40, 40, 80, 40);
+  assert.strictEqual(harness.elements.get('round-value').textContent, '0');
+  assert.strictEqual(harness.elements.get('status-badge').textContent, 'setup');
+
+  harness = createHeadlessDomHarness();
+  harness.elements.get('begin-game').listeners.click();
+  swipeCanvas(harness.canvas, 40, 40, 80, 40);
+  assert.strictEqual(harness.elements.get('status-line').textContent, 'round 1: right');
+  swipeCanvas(harness.canvas, 80, 40, 40, 40);
+  assert.strictEqual(harness.elements.get('round-value').textContent, '1');
+  assert.strictEqual(harness.elements.get('status-line').textContent, 'round 1: right');
+
+  harness = createHeadlessDomHarness({ stepMode: true });
+  harness.elements.get('begin-game').listeners.click();
+  enableHeadlessDebug(harness.elements);
+  swipeCanvas(harness.canvas, 40, 40, 80, 40);
+  swipeCanvas(harness.canvas, 80, 40, 40, 40);
+  assert.strictEqual(harness.elements.get('round-value').textContent, '1');
+  assert.strictEqual(harness.elements.get('status-badge').textContent, 'step');
+
+  harness = createHeadlessDomHarness();
+  importHeadlessStatus(harness.elements, {
+    preset: { label: 'over', lattice: 'square', rows: 4, cols: 4, surface: 'over' },
+    phase: 'gameover',
+    ending: 'bonus',
+    round: 5,
+    score: 0,
+    nextBoxId: 1,
+    boxes: [],
+    removed: [],
+    queue: { eventIndex: 0, stepPaused: false, events: [] }
+  });
+  swipeCanvas(harness.canvas, 40, 40, 80, 40);
+  harness.elements.get('export-state').listeners.click();
+  let exported = JSON.parse(harness.elements.get('debug-export-output').value);
+  assert.strictEqual(exported.phase, 'gameover');
+  assert.strictEqual(exported.round, 5);
+
+  harness = createHeadlessDomHarness();
+  harness.elements.get('game-mode-select').value = 'gomoku';
+  harness.elements.get('game-mode-select').listeners.change();
+  harness.elements.get('begin-game').listeners.click();
+  swipeCanvas(harness.canvas, 40, 40, 80, 40);
+  harness.elements.get('export-state').listeners.click();
+  exported = JSON.parse(harness.elements.get('debug-export-output').value);
+  assert.strictEqual(exported.gameMode, 'gomoku');
+  assert.strictEqual(exported.stones.length, 0);
+  assert.strictEqual(exported.round, 0);
+
+  harness = createHeadlessDomHarness();
+  harness.elements.get('game-mode-select').value = 'connect-four';
+  harness.elements.get('game-mode-select').listeners.change();
+  harness.elements.get('begin-game').listeners.click();
+  swipeCanvas(harness.canvas, 40, 40, 80, 40);
+  harness.elements.get('export-state').listeners.click();
+  exported = JSON.parse(harness.elements.get('debug-export-output').value);
+  assert.strictEqual(exported.gameMode, 'connect-four');
+  assert.strictEqual(exported.tokens.length, 0);
+  assert.strictEqual(exported.round, 0);
+}
+
+function testHexSwipeDirections() {
+  [
+    ['east', 36, 0],
+    ['southeast', 24, 36],
+    ['southwest', -24, 36],
+    ['west', -36, 0],
+    ['northwest', -24, -36],
+    ['northeast', 24, -36]
+  ].forEach(([label, dx, dy]) => {
+    const { elements, canvas } = createHeadlessDomHarness();
+    importHeadlessStatus(elements, singleHexBoxStatus());
+    swipeCanvas(canvas, 100, 100, 100 + dx, 100 + dy);
+    assert.strictEqual(elements.get('status-line').textContent, `round 1: ${label}`);
   });
 }
 
@@ -2636,6 +3209,7 @@ function run() {
   testGameOverWhenFullAndBlocked();
   testOrdinaryMergeOnce();
   testNewlyMergedTileBlocksLaterPush();
+  testLongGluedChainConvergesBeforeBackMerge();
   testFaceToFaceSwapBouncesWithoutMoving();
   testOccupiedMovingResidentBlocksGroupMerge();
   testVacatingResidentSurvivesIncomingExplosion();
@@ -2689,12 +3263,25 @@ function run() {
   testConnectFourDiagonalWinDetection();
   testConnectFourDiagonalTransportsAfterReflectingGlue();
   testExtraBackgroundPresets();
-  testHexKeyboardMapping();
+  testKeyboardMapping();
   testHexMovePadUsesArrowGlyphs();
   testMosaicBackgroundExportAndMinigameImportControlsExist();
   testPresetFromMosaicBackgroundExport();
   testPresetFromFullMosaicCalculatorExport();
   testSpeedControlDefaults();
+  testSquareWasdKeyboardControls();
+  testActiveSquareKeyboardPreventsPageScroll();
+  testHexArrowKeyboardControls();
+  testActiveHexKeyboardPreventsPageScroll();
+  testHexVerticalArrowAloneDoesNotMove();
+  testHexKeyboardStateClearsOnKeyupAndBlur();
+  testKeyboardPreventsScrollWhileBusyWithoutMovingAgain();
+  testKeyboardAllowsPageScrollOutsideActive2048();
+  testSwipeRightMovesSquare2048();
+  testShortSwipeDoesNotMove();
+  testSwipeSuppressesFollowupClick();
+  testSwipeIgnoredOutsideAccepting2048();
+  testHexSwipeDirections();
   testStepPauseRendersAfterSelectingNextEvent();
   testStationaryDifferentBlocks();
   testSimultaneousDifferentExplosion();
