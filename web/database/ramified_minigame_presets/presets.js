@@ -350,6 +350,50 @@
       "label": "hex strip 9*9",
       "key": "chinese_checkers_hex_strip_9x9",
       "file": "chinese_checkers_hex_strip_9x9.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Gomoku",
+        "Connect Four",
+        "Go"
+        ],
+      "id": "tunnels",
+      "label": "tunnels",
+      "key": "tunnels",
+      "file": "tunnels.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Gomoku",
+        "Go",
+        "Chinese Checkers"
+        ],
+      "id": "octahedron-with-square-holes",
+      "label": "octahedron with square holes",
+      "key": "octahedron_with_square_holes",
+      "file": "octahedron_with_square_holes.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Gomoku",
+        "Go",
+        "Chinese Checkers"
+        ],
+      "id": "octahedron-with-square-glues",
+      "label": "octahedron with square glues",
+      "key": "octahedron_with_square_glues",
+      "file": "octahedron_with_square_glues.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Gomoku",
+        "Go",
+        "Chinese Checkers"
+        ],
+      "id": "dodecahedron-with-pentagon-holes",
+      "label": "dodecahedron with pentagon holes",
+      "key": "dodecahedron_with_pentagon_holes",
+      "file": "dodecahedron_with_pentagon_holes.preset.js"
     }
     ]
   };
