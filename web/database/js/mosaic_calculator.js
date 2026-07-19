@@ -79,7 +79,7 @@
     DSL: 'dsl',
     VERBOSE: 'verbose'
   };
-  const EXPORT_GROUP_FALLBACKS = ['2048', 'Gomoku', 'Connect Four'];
+  const EXPORT_GROUP_FALLBACKS = ['2048', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers'];
   const KNOT_PRESETS = [
     {
       id: 'hopf-link',
@@ -934,6 +934,8 @@
   const MINI_FORCE_EDGE_LENGTH = 12;
   const DEGENERATION_FORCE_LIMIT = 20;
   const DEGENERATION_FORCE_DURATION_MS = 5000;
+  const PRESET_PIECE_COLORS = ['black', 'white', 'red', 'yellow', 'blue', 'green'];
+  const PRESET_PIECE_COLOR_ORDER = new Map(PRESET_PIECE_COLORS.map((color, index) => [color, index]));
 
   const state = {
     rows: 5,
@@ -1000,6 +1002,8 @@
     displayPickInputLocked: false,
     displayPickReturnMode: 'draw',
     editMode: 'rotate',
+    backgroundDecorationKind: 'input-hole',
+    backgroundDecorationColor: 'black',
     vertexDecorations: {},
     halfEdgeDecorations: {},
     standardDualGraphInput: null,
@@ -1156,6 +1160,9 @@
     refs.backgroundReverseGlueOption = refs.backgroundAction
       ? refs.backgroundAction.querySelector('option[value="reverse-glue"]')
       : null;
+    refs.backgroundDecorationRow = document.getElementById('background-decoration-row');
+    refs.backgroundDecorationKind = document.getElementById('background-decoration-kind');
+    refs.backgroundDecorationColor = document.getElementById('background-decoration-color');
     refs.backgroundMultiEdgeRow = document.getElementById('background-multi-edge-row');
     refs.backgroundMultiEdges = document.getElementById('background-multi-edges');
     refs.backgroundBeginSecondChain = document.getElementById('background-begin-second-chain');
@@ -1418,6 +1425,18 @@
         syncBackgroundModeControls();
         syncMainCanvasCursor();
         updateReport(false);
+      });
+    }
+    if (refs.backgroundDecorationKind) {
+      refs.backgroundDecorationKind.addEventListener('change', () => {
+        state.backgroundDecorationKind = normalizeBackgroundDecorationKind(refs.backgroundDecorationKind.value);
+        syncBackgroundModeControls();
+      });
+    }
+    if (refs.backgroundDecorationColor) {
+      refs.backgroundDecorationColor.addEventListener('change', () => {
+        state.backgroundDecorationColor = normalizePresetPieceColor(refs.backgroundDecorationColor.value) || 'black';
+        syncBackgroundModeControls();
       });
     }
     if (refs.loadBackgroundPreset) {
@@ -2932,16 +2951,19 @@
     };
     const holes = minigameHoleRefsForExport();
     const pieces = presetPiecesForExport();
+    const pieceSets = pieceSetsForExport();
     if (holes.length) {
       payload.preset.connectFourHoles = holes;
       payload.preset.inputHoles = holes;
     }
+    if (pieceSets) payload.preset.pieceSets = pieceSets;
     if (pieces.length) payload.preset.pieces = pieces;
     return payload;
   }
 
   function buildMinigamePresetExport() {
     const metadata = currentExportPresetMetadata();
+    const pieceSets = pieceSetsForExport();
     return {
       id: metadata.id,
       label: metadata.label,
@@ -2954,11 +2976,11 @@
       inputHoles: minigameHoleRefsForExport(),
       cutEdges: minigameCutEdgesForExport(),
       gluedEdges: minigameGluedEdgesForExport(),
-      ...(presetPiecesForExport().length ? { pieces: presetPiecesForExport() } : {})
+      ...(pieceSets ? { pieceSets } : {})
     };
   }
 
-  function buildCompactBackgroundExport(includeMetadata) {
+  function buildCompactBackgroundExport(includeMetadata, options = {}) {
     const metadata = currentExportPresetMetadata();
     const compact = includeMetadata
       ? {
@@ -2974,21 +2996,27 @@
     const cuts = compactCutListForExport(minigameCutEdgesForExport());
     const glue = compactGlueListForExport(minigameGluedEdgesForExport(), state.lattice);
     const pieces = presetPiecesForExport();
+    const pieceSets = pieceSetsForExport();
     if (removed) compact.removed = removed;
     if (cuts) compact.cuts = cuts;
     if (glue) compact.glue = glue;
     if (holes) compact.holes = holes;
-    if (pieces.length) compact.pieces = pieces;
+    if (pieceSets) compact.pieceSets = pieceSets;
+    if (options.includePieces !== false && pieces.length) compact.pieces = pieces;
     return compact;
   }
 
   function buildMinigamePresetJsExport() {
     const metadata = currentExportPresetMetadata();
-    const compact = buildCompactBackgroundExport(true);
+    const compact = buildCompactBackgroundExport(true, { includePieces: false });
     const registryEntry = minigamePresetRegistryEntry(metadata);
+    const registryHint = JSON.stringify(registryEntry, null, 2)
+      .split('\n')
+      .map((line) => `// ${line}`);
     return [
       `// Save this file as ramified_minigame_presets/${registryEntry.file}`,
-      `// Add/edit the matching row in ramified_minigame_presets/presets.js for key "${metadata.key}".`,
+      '// Add this entry to ramified_minigame_presets/presets.js:',
+      ...registryHint,
       '// Store gameTypes in presets.js only; do not repeat them in this preset file.',
       '(function(root, factory) {',
       '  const preset = factory();',
@@ -3719,6 +3747,8 @@
     state.wrappedViewMode = payload.wrappedViewMode === 'single' ? 'single' : 'periodic';
     state.inputMode = normalizeInputMode(payload.inputMode);
     state.backgroundAction = normalizeBackgroundAction(payload.backgroundAction || (payload.backgroundSpace && payload.backgroundSpace.action));
+    state.backgroundDecorationKind = normalizeBackgroundDecorationKind(payload.backgroundDecorationKind || (payload.backgroundSpace && payload.backgroundSpace.decorationKind));
+    state.backgroundDecorationColor = normalizePresetPieceColor(payload.backgroundDecorationColor || (payload.backgroundSpace && payload.backgroundSpace.decorationColor)) || 'black';
     state.backgroundMultiEdges = payload.backgroundMultiEdges !== false
       && !(payload.backgroundSpace && payload.backgroundSpace.multiEdges === false);
     state.backgroundChainLength = normalizeBackgroundChainLength(
@@ -3844,6 +3874,8 @@
     refs.knotCodeKind.value = state.knotCodeKind;
     refs.drawStyle.value = state.drawStyle;
     if (refs.backgroundAction) refs.backgroundAction.value = state.backgroundAction;
+    if (refs.backgroundDecorationKind) refs.backgroundDecorationKind.value = normalizeBackgroundDecorationKind(state.backgroundDecorationKind);
+    if (refs.backgroundDecorationColor) refs.backgroundDecorationColor.value = normalizePresetPieceColor(state.backgroundDecorationColor) || 'black';
     if (refs.backgroundMultiEdges) refs.backgroundMultiEdges.checked = !!state.backgroundMultiEdges;
     syncBackgroundBilliardControls();
     if (refs.halfEdgeLabelStyle) refs.halfEdgeLabelStyle.value = state.halfEdgeLabelStyle;
@@ -3904,9 +3936,41 @@
   }
 
   function importPresetPieces(payload, rows, cols) {
+    const pieceSets = importPieceSetsAsPresetPieces(payload, rows, cols);
+    if (pieceSets.length) return pieceSets;
     return collectImportedPresetValues(payload, ['pieces'], 'pieces', rows, cols)
       .map((piece) => normalizePresetPiece(piece, rows, cols))
       .filter(Boolean);
+  }
+
+  function importPieceSetsAsPresetPieces(payload, rows, cols) {
+    const pieces = [];
+    collectImportedPieceSetValues(payload).forEach((pieceSet) => {
+      ['starts', 'targets'].forEach((section) => {
+        const container = pieceSet && pieceSet[section];
+        if (!container || typeof container !== 'object' || Array.isArray(container)) return;
+        Object.entries(container).forEach(([colorKey, entries]) => {
+          const color = normalizePresetPieceColor(colorKey);
+          if (!color) return;
+          const role = section === 'targets' ? 'target' : 'start';
+          (Array.isArray(entries) ? entries : []).forEach((entry) => {
+            const piece = normalizePresetPiece({ ...entry, role, color }, rows, cols);
+            if (piece) pieces.push(piece);
+          });
+        });
+      });
+    });
+    return dedupePresetPieces(pieces, rows, cols);
+  }
+
+  function collectImportedPieceSetValues(payload) {
+    if (!payload || typeof payload !== 'object') return [];
+    const containers = [payload];
+    if (payload.preset && typeof payload.preset === 'object') containers.push(payload.preset);
+    if (payload.backgroundSpace && typeof payload.backgroundSpace === 'object') containers.push(payload.backgroundSpace);
+    return containers
+      .map((container) => container.pieceSets)
+      .filter((pieceSets) => pieceSets && typeof pieceSets === 'object' && !Array.isArray(pieceSets));
   }
 
   function collectImportedPresetValues(payload, keys, kind, rows, cols) {
@@ -3981,10 +4045,37 @@
     const row = Math.floor(index / cols) + 1;
     const col = (index % cols) + 1;
     const normalized = { row, col };
+    const role = normalizePresetPieceRole(piece.role || piece.kind || piece.type);
+    const color = normalizePresetPieceColor(piece.color || piece.player);
+    if (role) normalized.role = role;
+    if (color) normalized.color = color;
     ['kind', 'side', 'value'].forEach((key) => {
       if (piece[key] != null && String(piece[key]).trim()) normalized[key] = String(piece[key]).trim();
     });
     return normalized;
+  }
+
+  function normalizePresetPieceRole(role) {
+    const value = String(role || '').trim().toLowerCase();
+    if (value === 'target' || value === 'goal' || value === 'arrival' || value === 'finish') return 'target';
+    if (value === 'start' || value === 'piece' || value === 'stone' || value === 'disc' || value === 'marble') return 'start';
+    return '';
+  }
+
+  function dedupePresetPieces(pieces, rows = state.rows, cols = state.cols) {
+    const seen = new Set();
+    const result = [];
+    (Array.isArray(pieces) ? pieces : []).forEach((piece) => {
+      const normalized = normalizePresetPiece(piece, rows, cols);
+      if (!normalized) return;
+      const role = normalizePresetPieceRole(normalized.role || normalized.kind) || 'start';
+      const color = normalizePresetPieceColor(normalized.color || normalized.side) || 'black';
+      const key = `${normalized.row},${normalized.col},${role},${color}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      result.push(normalized);
+    });
+    return result;
   }
 
   function importCutEdges(payload, rows, cols) {
@@ -4145,7 +4236,7 @@
   }
 
   function hasImportedPresetPieces(payload) {
-    return hasImportedPresetValue(payload, ['pieces']);
+    return hasImportedPresetValue(payload, ['pieceSets', 'pieces']);
   }
 
   function hasImportedPresetValue(payload, keys) {
@@ -5140,6 +5231,58 @@
     else state.inputHoles.add(index);
     state.edits += 1;
     if (options.update !== false) updateReport(false);
+    return true;
+  }
+
+  function toggleBackgroundDecoration(index, options = {}) {
+    const kind = normalizeBackgroundDecorationKind(state.backgroundDecorationKind);
+    if (kind === 'input-hole') return toggleInputHole(index, options);
+    if (!isGluedBoundaryMode() || index < 0 || index >= state.rows * state.cols) return false;
+    if (state.removedTiles.has(index)) return false;
+    clearBackgroundBilliard(false);
+    clearStandardDualGraphInput();
+    if (kind === 'clear') {
+      const beforePieces = Array.isArray(state.presetPieces) ? state.presetPieces.length : 0;
+      removePresetPiecesAtIndex(index);
+      const hadHole = state.inputHoles instanceof Set && state.inputHoles.has(index);
+      if (hadHole) state.inputHoles.delete(index);
+      if (beforePieces === (state.presetPieces || []).length && !hadHole) return false;
+    } else {
+      const color = normalizePresetPieceColor(state.backgroundDecorationColor) || 'black';
+      if (!togglePresetPieceDecoration(index, kind, color)) return false;
+    }
+    state.edits += 1;
+    if (options.update !== false) updateReport(false);
+    return true;
+  }
+
+  function togglePresetPieceDecoration(index, role, color) {
+    const normalizedRole = normalizePresetPieceRole(role);
+    if (!normalizedRole) return false;
+    const normalizedColor = normalizePresetPieceColor(color) || 'black';
+    const row = Math.floor(index / state.cols) + 1;
+    const col = (index % state.cols) + 1;
+    const pieces = clonePresetPieces()
+      .map((piece) => normalizePresetPiece(piece, state.rows, state.cols))
+      .filter(Boolean);
+    const existing = pieces.find((piece) => {
+      const pieceIndex = importedEndpointIndex(piece, state.rows, state.cols);
+      return pieceIndex === index
+        && normalizePresetPieceRole(piece.role || piece.kind) === normalizedRole
+        && normalizePresetPieceColor(piece.color || piece.side) === normalizedColor;
+    });
+    if (existing) {
+      state.presetPieces = pieces.filter((piece) => piece !== existing);
+      return true;
+    }
+    const next = normalizedRole === 'start'
+      ? pieces.filter((piece) => {
+        const pieceIndex = importedEndpointIndex(piece, state.rows, state.cols);
+        return pieceIndex !== index || normalizePresetPieceRole(piece.role || piece.kind) !== 'start';
+      })
+      : pieces;
+    next.push({ row, col, role: normalizedRole, color: normalizedColor });
+    state.presetPieces = next;
     return true;
   }
 
@@ -7335,7 +7478,13 @@
 
   function isBackgroundInputHoleAction() {
     if (state.wanderSelectingStart) return false;
-    return state.backgroundAction === 'input-hole';
+    return state.backgroundAction === 'decoration'
+      && normalizeBackgroundDecorationKind(state.backgroundDecorationKind) === 'input-hole';
+  }
+
+  function isBackgroundDecorationAction() {
+    if (state.wanderSelectingStart) return false;
+    return state.backgroundAction === 'decoration';
   }
 
   function isClosedBackgroundSurface(report = null) {
@@ -7672,7 +7821,7 @@
       }
       else toggleBackgroundBoundary(edge);
     } else if (!pointerState.moved && hit === pointerState.index && hit >= 0) {
-      if (isBackgroundInputHoleAction()) toggleInputHole(hit);
+      if (isBackgroundDecorationAction()) toggleBackgroundDecoration(hit);
       else toggleBackgroundTile(hit);
     }
   }
@@ -14627,6 +14776,7 @@
     drawSeifertBoundaryComponents(ctx);
     drawBackgroundBoundaries(ctx);
     drawInputHoleMarkers(ctx, palette);
+    drawPresetPieceMarkers(ctx);
     ctx.restore();
   }
 
@@ -14741,6 +14891,62 @@
       ctx.stroke();
     });
     ctx.restore();
+  }
+
+  function drawPresetPieceMarkers(ctx) {
+    const pieces = presetPiecesForExport();
+    if (!pieces.length || !geometry || !Array.isArray(geometry.cells)) return;
+    const targets = pieces.filter((piece) => normalizePresetPieceRole(piece.role || piece.kind) === 'target');
+    const starts = pieces.filter((piece) => normalizePresetPieceRole(piece.role || piece.kind) !== 'target');
+    ctx.save();
+    targets.forEach((piece) => drawPresetPieceMarker(ctx, piece, 'target'));
+    starts.forEach((piece) => drawPresetPieceMarker(ctx, piece, 'start'));
+    ctx.restore();
+  }
+
+  function drawPresetPieceMarker(ctx, piece, role) {
+    const index = importedEndpointIndex(piece, state.rows, state.cols);
+    if (index < 0 || !tileExists(index)) return;
+    const center = tileCenterPoint(index);
+    if (!center) return;
+    const colors = presetPieceMarkerColors(piece.color || piece.side);
+    const radius = geometry.radius * (role === 'target' ? 0.48 : 0.32);
+    ctx.save();
+    ctx.lineWidth = Math.max(1.6, geometry.radius * (role === 'target' ? 0.07 : 0.045));
+    ctx.strokeStyle = colors.stroke;
+    ctx.fillStyle = colors.fill;
+    ctx.shadowColor = 'rgba(17,17,17,0.16)';
+    ctx.shadowBlur = Math.max(1, geometry.radius * 0.08);
+    if (role === 'target') {
+      ctx.globalAlpha = 0.88;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowColor = 'transparent';
+      ctx.globalAlpha = 0.16;
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.stroke();
+      ctx.fillStyle = colors.glint;
+      ctx.beginPath();
+      ctx.arc(center.x - radius * 0.24, center.y - radius * 0.28, Math.max(1.2, radius * 0.22), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function presetPieceMarkerColors(color) {
+    const normalized = normalizePresetPieceColor(color) || 'black';
+    if (normalized === 'white') return { fill: '#f8f3ea', stroke: '#8d7f70', glint: 'rgba(255,255,255,0.9)' };
+    if (normalized === 'red') return { fill: '#d83a3a', stroke: '#841f24', glint: 'rgba(255,180,168,0.78)' };
+    if (normalized === 'yellow') return { fill: '#f0c84b', stroke: '#9a7117', glint: 'rgba(255,246,177,0.82)' };
+    if (normalized === 'blue') return { fill: '#2f6fd6', stroke: '#174187', glint: 'rgba(166,203,255,0.72)' };
+    if (normalized === 'green') return { fill: '#2f855a', stroke: '#1f573b', glint: 'rgba(163,224,193,0.72)' };
+    return { fill: '#171615', stroke: '#050505', glint: 'rgba(255,255,255,0.18)' };
   }
 
   function drawBackgroundBilliardDirectionArrow(ctx, billiard, radius) {
@@ -18632,6 +18838,7 @@
     const seifertSurface = canShowSeifertSurface() ? seifertSurfaceForExport(analyzeSeifertSurface()) : null;
     const inputHoles = inputHolesForExport();
     const presetPieces = presetPiecesForExport();
+    const pieceSets = pieceSetsForExport();
     const payload = {
       name: 'Mosaic Calculator',
       lattice: state.lattice,
@@ -18640,6 +18847,8 @@
       wrappedViewMode: state.wrappedViewMode,
       inputMode: state.inputMode,
       backgroundAction: state.backgroundAction,
+      backgroundDecorationKind: normalizeBackgroundDecorationKind(state.backgroundDecorationKind),
+      backgroundDecorationColor: normalizePresetPieceColor(state.backgroundDecorationColor) || 'black',
       backgroundMultiEdges: !!state.backgroundMultiEdges,
       backgroundCuspMarkerScale: normalizeBackgroundCuspMarkerScale(state.backgroundCuspMarkerScale),
       backgroundBilliardSpeed: normalizeBackgroundBilliardSpeed(state.backgroundBilliardSpeed),
@@ -18687,6 +18896,7 @@
       inputHoles,
       cutEdges: cutEdgesForExport(),
       gluedEdges: gluedEdgesForExport(),
+      pieceSets,
       pieces: presetPieces,
       tiles: state.tiles.map((tile, index) => {
         const mask = tileToMask(tile);
@@ -18705,6 +18915,7 @@
       seifertSurface
     };
     if (!inputHoles.length) delete payload.inputHoles;
+    if (!pieceSets) delete payload.pieceSets;
     if (!presetPieces.length) delete payload.pieces;
     return payload;
   }
@@ -18755,6 +18966,57 @@
   function presetPiecesForExport() {
     prunePresetPieces();
     return clonePresetPieces().map((piece) => ({ ...piece }));
+  }
+
+  function pieceSetsForExport() {
+    prunePresetPieces();
+    const pieceSets = { starts: {}, targets: {} };
+    clonePresetPieces().forEach((piece) => {
+      const index = importedEndpointIndex(piece, state.rows, state.cols);
+      if (index < 0 || state.removedTiles.has(index)) return;
+      const role = normalizePresetPieceRole(piece.role || piece.kind) || 'start';
+      const color = normalizePresetPieceColor(piece.color || piece.side || piece.player) || 'black';
+      const section = role === 'target' ? 'targets' : 'starts';
+      if (!pieceSets[section][color]) pieceSets[section][color] = [];
+      pieceSets[section][color].push({
+        row: Math.floor(index / state.cols) + 1,
+        col: (index % state.cols) + 1
+      });
+    });
+    ['starts', 'targets'].forEach((section) => {
+      const sorted = {};
+      Object.keys(pieceSets[section])
+        .sort(comparePresetPieceColors)
+        .forEach((color) => {
+          const entries = dedupeTileRefs(pieceSets[section][color])
+            .sort((left, right) => indexOf(left.row - 1, left.col - 1, state.cols) - indexOf(right.row - 1, right.col - 1, state.cols));
+          if (entries.length) sorted[color] = entries;
+        });
+      pieceSets[section] = sorted;
+    });
+    return Object.keys(pieceSets.starts).length || Object.keys(pieceSets.targets).length ? pieceSets : null;
+  }
+
+  function dedupeTileRefs(entries) {
+    const seen = new Set();
+    const result = [];
+    (Array.isArray(entries) ? entries : []).forEach((entry) => {
+      const row = Number(entry && entry.row);
+      const col = Number(entry && entry.col);
+      if (!Number.isInteger(row) || !Number.isInteger(col)) return;
+      const key = `${row},${col}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      result.push({ row, col });
+    });
+    return result;
+  }
+
+  function comparePresetPieceColors(left, right) {
+    const leftOrder = PRESET_PIECE_COLOR_ORDER.has(left) ? PRESET_PIECE_COLOR_ORDER.get(left) : PRESET_PIECE_COLORS.length;
+    const rightOrder = PRESET_PIECE_COLOR_ORDER.has(right) ? PRESET_PIECE_COLOR_ORDER.get(right) : PRESET_PIECE_COLORS.length;
+    if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+    return String(left).localeCompare(String(right));
   }
 
   function minigameCutEdgesForExport() {
@@ -19089,6 +19351,7 @@
     const occupiedAction = !!state.wanderSelectingStart;
     const glueAction = !occupiedAction && isBackgroundGlueAction();
     const billiardAction = !occupiedAction && isBackgroundBilliardAction();
+    const decorationAction = !occupiedAction && isBackgroundDecorationAction();
     const hasGlue = hasGluedBoundaryPairs();
     if (refs.backgroundOccupiedOption) {
       refs.backgroundOccupiedOption.hidden = !occupiedAction;
@@ -19102,6 +19365,19 @@
     if (refs.backgroundAction) {
       refs.backgroundAction.value = occupiedAction ? 'occupied' : state.backgroundAction;
       refs.backgroundAction.disabled = occupiedAction;
+    }
+    if (refs.backgroundDecorationRow) refs.backgroundDecorationRow.hidden = !decorationAction;
+    if (refs.backgroundDecorationKind) {
+      const kind = normalizeBackgroundDecorationKind(state.backgroundDecorationKind);
+      state.backgroundDecorationKind = kind;
+      refs.backgroundDecorationKind.value = kind;
+    }
+    if (refs.backgroundDecorationColor) {
+      const color = normalizePresetPieceColor(state.backgroundDecorationColor) || 'black';
+      state.backgroundDecorationColor = color;
+      if (PRESET_PIECE_COLOR_ORDER.has(color)) refs.backgroundDecorationColor.value = color;
+      refs.backgroundDecorationColor.hidden = !['start', 'target'].includes(state.backgroundDecorationKind);
+      refs.backgroundDecorationColor.disabled = !['start', 'target'].includes(state.backgroundDecorationKind);
     }
     const chains = state.pendingGlueChains;
     const firstCount = chains && Array.isArray(chains.first) ? chains.first.length : 0;
@@ -19238,10 +19514,16 @@
       root.RAMIFIED_MINIGAME_PRESETS.forEach((entry) => {
         gameTypesFromPresetLike(entry).forEach((gameType) => groups.add(gameType));
       });
+    } else if (root && root.RAMIFIED_MINIGAME_PRESETS && Array.isArray(root.RAMIFIED_MINIGAME_PRESETS.presets)) {
+      root.RAMIFIED_MINIGAME_PRESETS.presets.forEach((entry) => {
+        gameTypesFromPresetLike(entry).forEach((gameType) => groups.add(gameType));
+      });
     }
     if (typeof require === 'function') {
       try {
-        require('../ramified_minigame_presets/presets.js').forEach((entry) => {
+        const registry = require('../ramified_minigame_presets/presets.js');
+        const entries = Array.isArray(registry) ? registry : (registry && Array.isArray(registry.presets) ? registry.presets : []);
+        entries.forEach((entry) => {
           gameTypesFromPresetLike(entry).forEach((gameType) => groups.add(gameType));
         });
       } catch (_) {}
@@ -19348,7 +19630,7 @@
 
   function buildMinigameTestHref() {
     const metadata = currentExportPresetMetadata();
-    const payload = buildCompactBackgroundExport(true);
+    const payload = buildCompactBackgroundExport(true, { includePieces: false });
     const encoded = base64UrlEncodeUtf8(JSON.stringify(payload));
     const mode = minigameModeForExportGameType(metadata.gameTypes[0]);
     return `ramified_minigames.html?minigamePreset=${encodeURIComponent(encoded)}&mode=${encodeURIComponent(mode)}`;
@@ -19358,6 +19640,9 @@
     const normalized = String(gameType || '').trim().toLowerCase();
     if (normalized.includes('gomoku')) return 'gomoku';
     if (normalized.includes('connect')) return 'connect-four';
+    if (normalized === 'go' || normalized.includes('go')) return 'go';
+    if (normalized.includes('reversi')) return 'reversi';
+    if (normalized.includes('chinese')) return 'chinese-checkers';
     return '2048';
   }
 
@@ -20270,12 +20555,26 @@
   function normalizeBackgroundAction(action) {
     if (action === 'boundary' || action === 'add-boundary' || action === 'addBoundary') return 'boundary';
     if (
-      action === 'input-hole'
+      action === 'decoration'
+      || action === 'decorations'
+      || action === 'add-decoration'
+      || action === 'addDecorations'
+      || action === 'add-remove-decorations'
+      || action === 'addRemoveDecorations'
+      || action === 'preset-piece'
+      || action === 'presetPieces'
+      || action === 'pieceSets'
+      || action === 'piece-sets'
+      || action === 'piece-set'
+      || action === 'pieceSet'
+      || action === 'goal'
+      || action === 'target'
+      || action === 'input-hole'
       || action === 'inputHoles'
       || action === 'holes'
       || action === 'connectFourHoles'
       || action === 'connect-four-holes'
-    ) return 'input-hole';
+    ) return 'decoration';
     if (
       action === 'glue-boundary'
       || action === 'glueBoundary'
@@ -20290,6 +20589,22 @@
     ) return hasGluedBoundaryPairs() ? 'reverse-glue' : 'tile';
     if (action === 'billiard' || action === 'billiards') return 'billiard';
     return 'tile';
+  }
+
+  function normalizeBackgroundDecorationKind(kind) {
+    const value = String(kind || '').trim().toLowerCase();
+    if (value === 'input' || value === 'inputhole' || value === 'input-hole' || value === 'hole' || value === 'holes') return 'input-hole';
+    if (value === 'goal' || value === 'target' || value === 'arrival' || value === 'finish') return 'target';
+    if (value === 'piece' || value === 'start' || value === 'stone' || value === 'disc' || value === 'marble') return 'start';
+    if (value === 'clear' || value === 'erase' || value === 'remove') return 'clear';
+    return 'input-hole';
+  }
+
+  function normalizePresetPieceColor(color) {
+    const text = String(color || '').trim().toLowerCase();
+    if (!text) return '';
+    const normalized = text.replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
+    return normalized || '';
   }
 
   function normalizeSeifertBandWidth(value) {
@@ -20854,12 +21169,14 @@
     state.wrapped = state.boundaryMode === 'wrapped';
     state.inputMode = normalizeInputMode(options.inputMode || 'background');
     state.backgroundAction = normalizeBackgroundAction(options.backgroundAction || 'tile');
+    state.backgroundDecorationKind = normalizeBackgroundDecorationKind(options.backgroundDecorationKind || 'input-hole');
+    state.backgroundDecorationColor = normalizePresetPieceColor(options.backgroundDecorationColor || 'black') || 'black';
     state.tiles = Array(rows * cols).fill(null);
     state.removedTiles = importedIndexSetForTest(options.removedTiles || options.removed || [], rows, cols);
     state.inputHoles = importedIndexSetForTest(options.inputHoles || options.connectFourHoles || options.holes || [], rows, cols);
     state.cutEdges = importCutEdges({ cutEdges: options.cutEdges || options.cuts || [] }, rows, cols);
     state.gluedEdges = importGluedEdges({ gluedEdges: options.gluedEdges || options.glue || [] }, rows, cols);
-    state.presetPieces = importPresetPieces({ pieces: options.pieces || [] }, rows, cols);
+    state.presetPieces = importPresetPieces({ pieceSets: options.pieceSets, pieces: options.pieces || [] }, rows, cols);
     pruneInputHoles();
     prunePresetPieces();
   }
@@ -20915,6 +21232,7 @@
       currentExportPresetMetadata,
       exportPresetGroupChoices,
       inputHolesForExport,
+      pieceSetsForExport,
       minigameModeForExportGameType,
       minigameGluedEdgesForExport,
       minigamePresetRegistryEntry,
@@ -20924,6 +21242,7 @@
       setTestExportControls,
       syncExportPresetDefaults,
       syncExportControls,
+      toggleBackgroundDecoration,
       toggleInputHole
     }
   };

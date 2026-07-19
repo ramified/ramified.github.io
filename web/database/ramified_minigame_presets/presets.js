@@ -3,7 +3,16 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = presets;
   if (root) root.RAMIFIED_MINIGAME_PRESETS = presets;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {
-  return [
+  return {
+    defaultFor: {
+      "2048": "classic-4x4",
+      "gomoku": "gomoku-random-glue",
+      "connect-four": "connect-four-6x7",
+      "go": "gomoku-classic",
+      "reversi": "gomoku-classic",
+      "chinese-checkers": "chinese-checkers-hex-rhombus-9x9"
+    },
+    presets: [
     {
       "gameTypes": [
         "2048"
@@ -11,8 +20,7 @@
       "id": "classic-4x4",
       "label": "4*4 classic",
       "key": "classic_4x4",
-      "file": "classic_4x4.preset.js",
-      "defaultFor": "2048"
+      "file": "classic_4x4.preset.js"
     },
     {
       "gameTypes": [
@@ -88,7 +96,7 @@
     },
     {
       "gameTypes": [
-        "2048"
+        "2048","Gomoku", "Go"
       ],
       "id": "rubiks-cube-3x3x3",
       "label": "Rubik's Cube 3*3*3",
@@ -124,10 +132,12 @@
     },
     {
       "gameTypes": [
-        "Gomoku"
+        "Gomoku",
+        "Go",
+        "Reversi"
       ],
       "id": "gomoku-classic",
-      "label": "classical n*n",
+      "label": "classic n*n",
       "key": "gomoku_classic",
       "file": "gomoku_classic.preset.js"
     },
@@ -138,8 +148,7 @@
       "id": "gomoku-random-glue",
       "label": "random glue n*n",
       "key": "gomoku_random_glue",
-      "file": "gomoku_random_glue.preset.js",
-      "defaultFor": "gomoku"
+      "file": "gomoku_random_glue.preset.js"
     },
     {
       "gameTypes": [
@@ -194,8 +203,7 @@
       "id": "connect-four-6x7",
       "label": "Connect Four 6*7",
       "key": "connect_four_6x7",
-      "file": "connect_four_6x7.preset.js",
-      "defaultFor": "connect-four"
+      "file": "connect_four_6x7.preset.js"
     },
     {
       "gameTypes": [
@@ -315,6 +323,34 @@
       "label": "\u56cd",
       "key": "xi",
       "file": "xi.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Go"
+        ],
+      "id": "three-slits",
+      "label": "three_slits",
+      "key": "three_slits",
+      "file": "three_slits.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Chinese Checkers"
+      ],
+      "id": "chinese-checkers-hex-rhombus-9x9",
+      "label": "hex rhombus 9*9",
+      "key": "chinese_checkers_hex_rhombus_9x9",
+      "file": "chinese_checkers_hex_rhombus_9x9.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Chinese Checkers"
+      ],
+      "id": "chinese-checkers-hex-strip-9x9",
+      "label": "hex strip 9*9",
+      "key": "chinese_checkers_hex_strip_9x9",
+      "file": "chinese_checkers_hex_strip_9x9.preset.js"
     }
-  ];
+    ]
+  };
 });

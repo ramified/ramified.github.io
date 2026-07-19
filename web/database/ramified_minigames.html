@@ -1094,6 +1094,9 @@
             <option value="2048" selected>2048</option>
             <option value="gomoku">Gomoku</option>
             <option value="connect-four">Connect Four</option>
+            <option value="go">Go</option>
+            <option value="reversi">Reversi</option>
+            <option value="chinese-checkers">Chinese Checkers</option>
           </select>
         </div>
         <div class="mosaic-inline-row">
@@ -1111,7 +1114,15 @@
         </div>
         <div class="mosaic-inline-row" id="gomoku-size-row" data-mode-control="gomoku" hidden>
           <span class="input-label">Board n</span>
-          <input id="gomoku-board-size" type="number" min="5" max="25" step="1" value="15" aria-label="Gomoku board size">
+          <input id="gomoku-board-size" type="number" min="4" max="25" step="1" value="15" aria-label="Board size">
+        </div>
+        <div class="mosaic-inline-row" id="go-komi-row" data-mode-control="go" hidden>
+          <span class="input-label">Komi</span>
+          <input id="go-komi" type="number" min="-99" max="99" step="0.5" value="6.5" aria-label="Go white komi">
+        </div>
+        <div class="mosaic-inline-row" id="go-action-row" data-mode-control="go" hidden>
+          <span class="input-label">Action</span>
+          <button class="btn" id="go-pass" type="button">pass</button>
         </div>
         <div class="mosaic-inline-row" id="connect-four-fall-row" data-mode-control="connect-four" hidden>
           <span class="input-label">Fall</span>
@@ -1230,6 +1241,9 @@
               <option value="2048" selected>2048</option>
               <option value="gomoku">Gomoku</option>
               <option value="connect-four">Connect Four</option>
+              <option value="go">Go</option>
+              <option value="reversi">Reversi</option>
+              <option value="chinese-checkers">Chinese Checkers</option>
             </select>
           </div>
           <div class="mosaic-inline-row">

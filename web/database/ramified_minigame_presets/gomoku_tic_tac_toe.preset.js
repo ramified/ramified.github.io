@@ -12,7 +12,6 @@
   "lattice": "square",
   "size": "3x3",
   "surface": "M_1",
-  "gomokuWinLength": 3,
   "glue": "g0:3,1..3,S=1,1..3,N; g1:3..1,3,E=3..1,1,W"
 };
 });

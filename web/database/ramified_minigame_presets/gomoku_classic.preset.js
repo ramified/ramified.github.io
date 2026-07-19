@@ -8,11 +8,11 @@
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {
   return {
   "id": "gomoku-classic",
-  "label": "classical n*n",
+  "label": "classic n*n",
   "lattice": "square",
   "size": "15x15",
   "surface": "square grid",
   "dynamicGomokuSize": true,
-  "dynamicGomokuLabelPrefix": "classical"
+  "dynamicGomokuLabelPrefix": "classic"
 };
 });

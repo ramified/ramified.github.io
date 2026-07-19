@@ -60,13 +60,26 @@
   const GAME_MODES = {
     NUMBER_2048: '2048',
     GOMOKU: 'gomoku',
-    CONNECT_FOUR: 'connect-four'
+    CONNECT_FOUR: 'connect-four',
+    GO: 'go',
+    REVERSI: 'reversi',
+    CHINESE_CHECKERS: 'chinese-checkers'
   };
   const GOMOKU_WIN_LENGTH = 5;
   const GOMOKU_COLORS = ['black', 'white'];
   const GOMOKU_DEFAULT_BOARD_SIZE = 15;
   const GOMOKU_MIN_BOARD_SIZE = 5;
   const GOMOKU_MAX_BOARD_SIZE = 25;
+  const OFFICIAL_GOMOKU_DEFAULT_WIN_LENGTH_PRESETS = new Set(['gomoku-tic-tac-toe']);
+  const GO_COLORS = ['black', 'white'];
+  const GO_DEFAULT_KOMI = 6.5;
+  const REVERSI_COLORS = ['black', 'white'];
+  const REVERSI_DEFAULT_BOARD_SIZE = 8;
+  const REVERSI_MIN_BOARD_SIZE = 4;
+  const REVERSI_MAX_BOARD_SIZE = 24;
+  const CHINESE_CHECKERS_DEFAULT_COLORS = ['red', 'yellow'];
+  const PLACEMENT_KNOWN_COLORS = ['black', 'white', 'red', 'yellow', 'blue', 'green'];
+  const PLACEMENT_COLOR_ORDER = new Map(PLACEMENT_KNOWN_COLORS.map((color, index) => [color, index]));
   const CONNECT_FOUR_WIN_LENGTH = 4;
   const CONNECT_FOUR_COLORS = ['red', 'yellow'];
 
@@ -87,12 +100,7 @@
   }
 
   const PRESET_FOLDER_URL = 'ramified_minigame_presets/';
-  const PRESET_GROUP_ORDER = ['2048', 'Gomoku', 'Connect Four'];
-  const DEFAULT_PRESET_BY_MODE = {
-    [GAME_MODES.NUMBER_2048]: 'classic-4x4',
-    [GAME_MODES.GOMOKU]: 'gomoku-random-glue',
-    [GAME_MODES.CONNECT_FOUR]: 'connect-four-6x7'
-  };
+  const PRESET_GROUP_ORDER = ['2048', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers'];
 
   function createRubiksCubePreset(size, id, label) {
     const rows = size * 3;
@@ -219,6 +227,7 @@
 
   const PRESETS = [];
   let presetRegistry = [];
+  let presetDefaultByMode = {};
   let presetCatalogReady = false;
   let presetCatalogError = '';
 
@@ -265,6 +274,10 @@
     refs.gomokuDisplay = document.getElementById('gomoku-display-style');
     refs.gomokuSizeRow = document.getElementById('gomoku-size-row');
     refs.gomokuSize = document.getElementById('gomoku-board-size');
+    refs.goKomiRow = document.getElementById('go-komi-row');
+    refs.goKomi = document.getElementById('go-komi');
+    refs.goActionRow = document.getElementById('go-action-row');
+    refs.goPass = document.getElementById('go-pass');
     refs.connectFourFall = document.getElementById('connect-four-fall-dir');
     refs.connectFourAlignFall = document.getElementById('connect-four-align-fall');
     refs.boxStyle = document.getElementById('number-box-style');
@@ -290,6 +303,7 @@
     refs.mode2048Controls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="2048"]')) : [];
     refs.modeGomokuControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="gomoku"]')) : [];
     refs.modeConnectFourControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="connect-four"]')) : [];
+    refs.modeGoControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="go"]')) : [];
     refs.statusBadge = document.getElementById('status-badge');
     refs.statusLine = document.getElementById('status-line');
     refs.infoLine = document.getElementById('info-line');
@@ -315,6 +329,9 @@
     if (refs.gomokuDisplay) refs.gomokuDisplay.addEventListener('change', render);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('change', handleGomokuSizeChange);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('input', handleGomokuSizeChange);
+    if (refs.goKomi) refs.goKomi.addEventListener('change', handleGoKomiChange);
+    if (refs.goKomi) refs.goKomi.addEventListener('input', handleGoKomiChange);
+    if (refs.goPass) refs.goPass.addEventListener('click', passGoFromUi);
     if (refs.connectFourFall) refs.connectFourFall.addEventListener('change', handleConnectFourFallChange);
     if (refs.connectFourAlignFall) refs.connectFourAlignFall.addEventListener('change', handleConnectFourAlignFallChange);
     if (refs.boxStyle) refs.boxStyle.addEventListener('change', render);
@@ -385,7 +402,7 @@
     resetSwipeGesture();
     clearSuppressedCanvasClick();
     clearKeyboardState();
-    game = createSelectedGameState(selectedPreset(), { glueRng: Math.random });
+    game = createSelectedGameState(selectedPreset(), selectedGameOptions({ glueRng: Math.random }));
     game.phase = 'setup';
     clearUndoHistory();
     clearDebugExport();
@@ -403,6 +420,7 @@
 
   function finishPresetCatalogInit() {
     if (importPresetFromUrlParams()) return;
+    syncBoardSizeInputForGameMode();
     const preferred = refs.select && presetSelectHasValue(refs.select.value)
       ? refs.select.value
       : defaultPresetIdForMode(selectedGameMode());
@@ -454,8 +472,11 @@
 
   function gameModeFromUrlParam(value) {
     const mode = String(value || '').trim().toLowerCase();
+    if (mode === GAME_MODES.CHINESE_CHECKERS || mode === 'chinesecheckers' || mode === 'chinese checkers') return GAME_MODES.CHINESE_CHECKERS;
     if (mode === GAME_MODES.CONNECT_FOUR || mode === 'connectfour' || mode === 'connect four') return GAME_MODES.CONNECT_FOUR;
+    if (mode === GAME_MODES.REVERSI || mode === 'othello') return GAME_MODES.REVERSI;
     if (mode === GAME_MODES.GOMOKU) return GAME_MODES.GOMOKU;
+    if (mode === GAME_MODES.GO) return GAME_MODES.GO;
     if (mode === GAME_MODES.NUMBER_2048 || mode === 'number-2048' || mode === '2048') return GAME_MODES.NUMBER_2048;
     return '';
   }
@@ -463,8 +484,11 @@
   function gameModeFromPresetGroup(preset) {
     const gameTypes = presetGameTypesForModes(preset);
     const gameType = String(gameTypes[0] || '').trim().toLowerCase();
+    if (gameType.includes('chinese')) return GAME_MODES.CHINESE_CHECKERS;
     if (gameType.includes('connect')) return GAME_MODES.CONNECT_FOUR;
+    if (gameType.includes('reversi') || gameType.includes('othello')) return GAME_MODES.REVERSI;
     if (gameType.includes('gomoku')) return GAME_MODES.GOMOKU;
+    if (gameType === 'go') return GAME_MODES.GO;
     return GAME_MODES.NUMBER_2048;
   }
 
@@ -479,8 +503,11 @@
 
   function gameTypeToGameMode(gameType) {
     const normalized = String(gameType || '').trim().toLowerCase();
+    if (normalized.includes('chinese')) return GAME_MODES.CHINESE_CHECKERS;
     if (normalized.includes('connect')) return GAME_MODES.CONNECT_FOUR;
+    if (normalized.includes('reversi') || normalized.includes('othello')) return GAME_MODES.REVERSI;
     if (normalized.includes('gomoku')) return GAME_MODES.GOMOKU;
+    if (normalized === 'go') return GAME_MODES.GO;
     return GAME_MODES.NUMBER_2048;
   }
 
@@ -499,6 +526,9 @@
   }
 
   function gameTypeForGameMode(mode) {
+    if (mode === GAME_MODES.CHINESE_CHECKERS) return 'Chinese Checkers';
+    if (mode === GAME_MODES.REVERSI) return 'Reversi';
+    if (mode === GAME_MODES.GO) return 'Go';
     if (mode === GAME_MODES.GOMOKU) return 'Gomoku';
     if (mode === GAME_MODES.CONNECT_FOUR) return 'Connect Four';
     return '2048';
@@ -535,7 +565,9 @@
     });
   }
 
-  function installPresetCatalog(items) {
+  function installPresetCatalog(catalogInput) {
+    const catalog = normalizePresetCatalogItems(catalogInput);
+    const items = catalog.items;
     const seen = new Set();
     const nextPresets = [];
     const nextRegistry = [];
@@ -550,13 +582,15 @@
     if (!nextPresets.length) throw new Error('No ramified minigame presets were loaded.');
     PRESETS.splice(0, PRESETS.length, ...nextPresets);
     presetRegistry = nextRegistry;
+    presetDefaultByMode = resolvePresetDefaultMap(catalog.defaultFor, nextPresets);
     presetCatalogReady = true;
     presetCatalogError = '';
   }
 
   function globalPresetCatalogItems() {
     const root = presetRoot();
-    const registry = normalizeMinigamePresetRegistry(root.RAMIFIED_MINIGAME_PRESETS);
+    const catalog = normalizeMinigamePresetCatalog(root.RAMIFIED_MINIGAME_PRESETS);
+    const registry = catalog.entries;
     if (!registry.length) return null;
     const items = [];
     for (const entry of registry) {
@@ -564,7 +598,7 @@
       if (!spec) return null;
       items.push({ entry, spec });
     }
-    return items;
+    return { items, defaultFor: catalog.defaultFor };
   }
 
   function loadBrowserPresetCatalogItems() {
@@ -572,11 +606,13 @@
       return Promise.reject(new Error('Preset loading requires a browser document or Node require.'));
     }
     const root = presetRoot();
-    const registry = normalizeMinigamePresetRegistry(root.RAMIFIED_MINIGAME_PRESETS);
+    const catalog = normalizeMinigamePresetCatalog(root.RAMIFIED_MINIGAME_PRESETS);
+    const registry = catalog.entries;
     if (!registry.length) {
       return Promise.reject(new Error('No presets are registered in ramified_minigame_presets/presets.js.'));
     }
-    return Promise.all(registry.map((entry) => loadBrowserPresetSpec(entry).then((spec) => ({ entry, spec }))));
+    return Promise.all(registry.map((entry) => loadBrowserPresetSpec(entry).then((spec) => ({ entry, spec }))))
+      .then((items) => ({ items, defaultFor: catalog.defaultFor }));
   }
 
   function loadBrowserPresetSpec(entry) {
@@ -613,11 +649,35 @@
     }
     const path = require('path');
     const folder = path.join(__dirname, '..', PRESET_FOLDER_URL);
-    const registry = normalizeMinigamePresetRegistry(require(path.join(folder, 'presets.js')));
-    return registry.map((entry) => ({
-      entry,
-      spec: entry.data || (entry.json ? JSON.parse(entry.json) : require(path.join(folder, entry.file)))
-    }));
+    const catalog = normalizeMinigamePresetCatalog(require(path.join(folder, 'presets.js')));
+    return {
+      defaultFor: catalog.defaultFor,
+      items: catalog.entries.map((entry) => ({
+        entry,
+        spec: entry.data || (entry.json ? JSON.parse(entry.json) : require(path.join(folder, entry.file)))
+      }))
+    };
+  }
+
+  function normalizePresetCatalogItems(catalogInput) {
+    if (Array.isArray(catalogInput)) return { items: catalogInput, defaultFor: {} };
+    if (catalogInput && typeof catalogInput === 'object') {
+      return {
+        items: Array.isArray(catalogInput.items) ? catalogInput.items : [],
+        defaultFor: catalogInput.defaultFor && typeof catalogInput.defaultFor === 'object' ? catalogInput.defaultFor : {}
+      };
+    }
+    return { items: [], defaultFor: {} };
+  }
+
+  function normalizeMinigamePresetCatalog(registry) {
+    const source = registry && typeof registry === 'object' && !Array.isArray(registry)
+      ? registry
+      : { presets: registry };
+    return {
+      entries: normalizeMinigamePresetRegistry(source.presets),
+      defaultFor: normalizePresetDefaultMap(source.defaultFor)
+    };
   }
 
   function normalizeMinigamePresetRegistry(registry) {
@@ -636,7 +696,6 @@
           file,
           label,
           gameTypes: cleanPresetGameTypes(entry.gameTypes, entry.groups, entry.group),
-          defaultFor: normalizePresetDefaultFor(entry.defaultFor),
           data: entry.data && typeof entry.data === 'object' && !Array.isArray(entry.data) ? entry.data : null,
           json: cleanPresetString(entry.json || '')
         };
@@ -678,7 +737,15 @@
 
   function cleanPresetGameType(value) {
     const gameType = cleanPresetString(value);
-    return gameType || '2048';
+    if (!gameType) return '2048';
+    const normalized = gameType.toLowerCase();
+    if (normalized === '2048' || normalized === 'number-2048') return '2048';
+    if (normalized === 'gomoku') return 'Gomoku';
+    if (normalized === 'go') return 'Go';
+    if (normalized === 'reversi' || normalized === 'othello') return 'Reversi';
+    if (normalized === 'connect-four' || normalized === 'connectfour' || normalized === 'connect four') return 'Connect Four';
+    if (normalized === 'chinese-checkers' || normalized === 'chinesecheckers' || normalized === 'chinese checkers') return 'Chinese Checkers';
+    return gameType;
   }
 
   function cleanPresetGameTypes(value, legacyGroups, legacyGroup) {
@@ -692,16 +759,31 @@
     const raw = Array.isArray(value) ? value : (value == null || value === '' ? [] : [value]);
     const gameTypes = [];
     raw.forEach((item) => {
-      const gameType = cleanPresetString(item);
+      if (!cleanPresetString(item)) return;
+      const gameType = cleanPresetGameType(item);
       if (gameType && !gameTypes.includes(gameType)) gameTypes.push(gameType);
     });
     return gameTypes;
   }
 
-  function normalizePresetDefaultFor(value) {
-    if (Array.isArray(value)) return value.map(cleanPresetString).filter(Boolean);
-    const text = cleanPresetString(value);
-    return text ? [text] : [];
+  function normalizePresetDefaultMap(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    const result = {};
+    Object.entries(value).forEach(([rawMode, rawPresetId]) => {
+      const mode = gameModeFromUrlParam(rawMode);
+      const presetId = cleanPresetId(rawPresetId);
+      if (mode && presetId) result[mode] = presetId;
+    });
+    return result;
+  }
+
+  function resolvePresetDefaultMap(defaultFor, presets) {
+    const ids = new Set((Array.isArray(presets) ? presets : []).map((preset) => preset.id));
+    const result = {};
+    Object.entries(defaultFor && typeof defaultFor === 'object' ? defaultFor : {}).forEach(([mode, presetId]) => {
+      if (ids.has(presetId)) result[mode] = presetId;
+    });
+    return result;
   }
 
   function setPresetSelectLoading() {
@@ -795,8 +877,9 @@
 
   function defaultPresetIdForMode(mode) {
     const targetMode = mode || GAME_MODES.NUMBER_2048;
-    const registryDefault = presetRegistry.find((entry) => entry.defaultFor.includes(targetMode));
-    return (registryDefault && registryDefault.id) || DEFAULT_PRESET_BY_MODE[targetMode] || (PRESETS[0] && PRESETS[0].id) || '';
+    if (presetDefaultByMode[targetMode]) return presetDefaultByMode[targetMode];
+    const fallbackPreset = presetListForMode(targetMode)[0] || PRESETS[0];
+    return (fallbackPreset && fallbackPreset.id) || '';
   }
 
   function beginGameFromUi() {
@@ -824,11 +907,11 @@
     resetSwipeGesture();
     clearSuppressedCanvasClick();
     clearKeyboardState();
-    game = beginSelectedGame(selectedPreset(), {
+    game = beginSelectedGame(selectedPreset(), selectedGameOptions({
       rng: Math.random,
       glueRng: Math.random,
       holes: connectFourHoles
-    });
+    }));
     clearUndoHistory();
     clearDebugExport();
     clearSetupAlert();
@@ -844,6 +927,12 @@
       syncStatus(`${game.preset.label} Gomoku`, gomokuTurnInfo(game), 'ready');
     } else if (isConnectFourGame(game)) {
       syncStatus(`${game.preset.label} Connect Four`, connectFourTurnInfo(game), 'ready');
+    } else if (isGoGame(game)) {
+      syncStatus(`${game.preset.label} Go`, goTurnInfo(game), 'ready');
+    } else if (isReversiGame(game)) {
+      syncStatus(`${game.preset.label} Reversi`, reversiTurnInfo(game), 'ready');
+    } else if (isChineseCheckersGame(game)) {
+      syncStatus(`${game.preset.label} Chinese Checkers`, chineseCheckersTurnInfo(game), 'ready');
     } else {
       syncStatus(`${game.preset.label} game seed`, 'use arrow keys, buttons, or swipe/drag to slide', 'ready');
     }
@@ -883,6 +972,7 @@
   }
 
   function handleGameModeChange() {
+    syncBoardSizeInputForGameMode();
     syncDefaultPresetForGameMode();
     if (refs.importGameMode) refs.importGameMode.value = selectedGameMode();
     resetToPreview();
@@ -894,9 +984,19 @@
   }
 
   function handleGomokuSizeChange() {
-    if (refs.gomokuSize) refs.gomokuSize.value = String(selectedGomokuBoardSize());
-    if (selectedGameMode() === GAME_MODES.GOMOKU && selectedGomokuPresetIsDynamic()) {
+    if (refs.gomokuSize) refs.gomokuSize.value = String(selectedBoardSize());
+    if (selectedPresetUsesDynamicBoardSize()) {
       resetToPreview();
+    }
+  }
+
+  function handleGoKomiChange() {
+    if (refs.goKomi) refs.goKomi.value = formatKomi(selectedGoKomi());
+    if (isGoGame(game) && game.phase === 'setup') {
+      game.komi = selectedGoKomi();
+      syncStatusForCurrentGame();
+      render();
+      syncControls();
     }
   }
 
@@ -1403,6 +1503,70 @@
     tickAnimation();
   }
 
+  function startReversiFlipAnimation(result) {
+    if (!result || !result.changed || !result.disc || !Array.isArray(result.flippedDiscs)) return;
+    const flips = reversiFlipAnimationItems(result);
+    currentAnimation = {
+      event: {
+        kind: 'reversiFlip',
+        disc: {
+          id: result.disc.id,
+          index: result.disc.index,
+          color: result.disc.color
+        },
+        flips,
+        lines: (result.lines || []).map(cloneReversiLine)
+      },
+      startedAt: now(),
+      duration: eventDuration({
+        kind: 'reversiFlip',
+        flips
+      })
+    };
+    tickAnimation();
+  }
+
+  function reversiFlipAnimationItems(result) {
+    const distances = new Map();
+    (result.lines || []).forEach((line) => {
+      (line.flips || []).forEach((index, offset) => {
+        const distance = offset + 1;
+        if (!distances.has(index) || distance < distances.get(index)) distances.set(index, distance);
+      });
+    });
+    return (result.flippedDiscs || [])
+      .map((disc) => ({
+        id: disc.id,
+        index: disc.index,
+        fromColor: disc.fromColor,
+        toColor: disc.toColor,
+        distance: distances.get(disc.index) || 1
+      }))
+      .sort((a, b) => a.distance - b.distance || a.index - b.index || a.id - b.id);
+  }
+
+  function startChineseCheckersMoveAnimation(result) {
+    if (!result || !result.changed || !result.marble || !result.move) return;
+    const segments = cloneChineseCheckerMoveSegments(result.move.segments);
+    currentAnimation = {
+      event: {
+        kind: 'chineseCheckersMove',
+        marbleId: result.marble.id,
+        color: result.marble.color,
+        from: result.marble.from,
+        to: result.marble.index,
+        path: (result.move.path || [result.marble.from, result.marble.index]).slice(),
+        segments
+      },
+      startedAt: now(),
+      duration: eventDuration({
+        kind: 'chineseCheckersMove',
+        segments
+      })
+    };
+    tickAnimation();
+  }
+
   function tickAnimation() {
     if (!currentAnimation) return;
     const elapsed = now() - currentAnimation.startedAt;
@@ -1414,7 +1578,7 @@
       return;
     }
     const event = currentAnimation.event;
-    if (event.kind === 'connectFourDrop') {
+    if (event.kind === 'connectFourDrop' || event.kind === 'reversiFlip' || event.kind === 'chineseCheckersMove') {
       currentAnimation = null;
       render();
       syncControls();
@@ -1484,6 +1648,9 @@
   function debugModeInfo() {
     if (isGomokuGame(game)) return 'export or import Gomoku status';
     if (isConnectFourGame(game)) return 'export or import Connect Four status';
+    if (isGoGame(game)) return 'export or import Go status';
+    if (isReversiGame(game)) return 'export or import Reversi status';
+    if (isChineseCheckersGame(game)) return 'export or import Chinese Checkers status';
     return 'click a tile to assign the tile value';
   }
 
@@ -1508,6 +1675,18 @@
     }
     if (isConnectFourGame(game)) {
       handleConnectFourCanvasClick(event);
+      return;
+    }
+    if (isGoGame(game)) {
+      handleGoCanvasClick(event);
+      return;
+    }
+    if (isReversiGame(game)) {
+      handleReversiCanvasClick(event);
+      return;
+    }
+    if (isChineseCheckersGame(game)) {
+      handleChineseCheckersCanvasClick(event);
       return;
     }
     if (!debugMode || !game) return;
@@ -1679,6 +1858,119 @@
     refreshDebugExportIfNeeded();
   }
 
+  function handleGoCanvasClick(event) {
+    if (!game || currentAnimation || game.phase === 'setup') return;
+    if (game.phase === 'gameover') {
+      if (!game.resultDismissed) {
+        game.resultDismissed = true;
+        render();
+        refreshDebugExportIfNeeded();
+      }
+      return;
+    }
+    const target = tileFromCanvasEvent(event);
+    if (!target) return;
+    const result = placeGoStone(game, target.index);
+    if (!result.changed) {
+      syncStatus('Go move rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
+      return;
+    }
+    pushUndoSnapshot(`Go ${result.stone.color} at ${target.label}`);
+    game = result.state;
+    syncStatusForCurrentGame();
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+  }
+
+  function passGoFromUi() {
+    if (!isGoGame(game) || currentAnimation) return;
+    const result = passGoTurn(game);
+    if (!result.changed) {
+      syncStatus('Go pass rejected', result.message || 'pass is unavailable', phaseBadge(game.phase));
+      return;
+    }
+    pushUndoSnapshot(`Go ${game.turn} pass`);
+    game = result.state;
+    syncStatusForCurrentGame();
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+    if (refs.canvas) refs.canvas.focus();
+  }
+
+  function handleReversiCanvasClick(event) {
+    if (!game || currentAnimation || game.phase === 'setup') return;
+    if (game.phase === 'gameover') {
+      if (!game.resultDismissed) {
+        game.resultDismissed = true;
+        render();
+        refreshDebugExportIfNeeded();
+      }
+      return;
+    }
+    const target = tileFromCanvasEvent(event);
+    if (!target) return;
+    const result = placeReversiDisc(game, target.index);
+    if (!result.changed) {
+      syncStatus('Reversi move rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
+      return;
+    }
+    pushUndoSnapshot(`Reversi ${result.disc.color} at ${target.label}`);
+    game = result.state;
+    startReversiFlipAnimation(result);
+    syncStatusForCurrentGame();
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+  }
+
+  function handleChineseCheckersCanvasClick(event) {
+    if (!game || currentAnimation || game.phase === 'setup') return;
+    if (game.phase === 'gameover') {
+      if (!game.resultDismissed) {
+        game.resultDismissed = true;
+        render();
+        refreshDebugExportIfNeeded();
+      }
+      return;
+    }
+    const target = tileFromCanvasEvent(event);
+    if (!target) return;
+    const marble = chineseCheckerMarbleAt(game, target.index);
+    if (!Number.isInteger(game.selectedIndex)) {
+      if (!marble || marble.color !== game.turn) {
+        syncStatus('Chinese Checkers selection', 'select one of your marbles', 'ready');
+        return;
+      }
+      game.selectedIndex = target.index;
+      syncStatus('Chinese Checkers selected', chineseCheckersTurnInfo(game), 'ready');
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    if (marble && marble.color === game.turn) {
+      game.selectedIndex = target.index === game.selectedIndex ? null : target.index;
+      syncStatus('Chinese Checkers selected', chineseCheckersTurnInfo(game), 'ready');
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    const from = game.selectedIndex;
+    const result = moveChineseCheckerMarble(game, from, target.index);
+    if (!result.changed) {
+      syncStatus('Chinese Checkers move rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
+      return;
+    }
+    pushUndoSnapshot(`Chinese Checkers ${game.turn} move`);
+    game = result.state;
+    startChineseCheckersMoveAnimation(result);
+    syncStatusForCurrentGame();
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+  }
+
   function toggleConnectFourHole(target) {
     if (!isConnectFourGame(game) || !target) return;
     if (game.removed.has(target.index)) {
@@ -1778,6 +2070,7 @@
     if (refs.select && game.preset && game.preset.id) refs.select.value = game.preset.id;
     if (refs.gameMode) refs.gameMode.value = gameModeValue(game);
     syncConnectFourFallInputFromGame();
+    syncGoKomiInputFromGame();
     syncStatus('undo complete', `restored before ${snapshot.label || 'previous step'}`, phaseBadge(game.phase));
     render();
     syncControls();
@@ -1853,6 +2146,16 @@
       preset.inputHoles = holes.map((tile) => ({ ...tile }));
     }
     if (Number.isInteger(source.gomokuWinLength)) preset.gomokuWinLength = source.gomokuWinLength;
+    if (Number.isFinite(source.goKomi)) preset.goKomi = normalizeGoKomi(source.goKomi);
+    if (source.pieceSets) preset.pieceSets = clonePlain(source.pieceSets);
+    if (Array.isArray(source.reversiOpening)) preset.reversiOpening = source.reversiOpening.map((entry) => ({ ...entry }));
+    if (source.chineseCheckersCamps) {
+      preset.chineseCheckersCamps = chineseCheckersCampsToTileRefs(
+        normalizeChineseCheckersCamps(source.chineseCheckersCamps, source, initialRemovedSet(source)),
+        source.cols
+      );
+    }
+    if (Array.isArray(source.chineseCheckersPlayers)) preset.chineseCheckersPlayers = source.chineseCheckersPlayers.map(normalizePlacementColor).filter(Boolean);
     return preset;
   }
 
@@ -1882,6 +2185,11 @@
     if (glue) compact.glue = glue;
     if (holes) compact.holes = holes;
     if (Number.isInteger(preset.gomokuWinLength)) compact.gomokuWinLength = preset.gomokuWinLength;
+    if (Number.isFinite(preset.goKomi)) compact.goKomi = normalizeGoKomi(preset.goKomi);
+    if (preset.pieceSets) compact.pieceSets = clonePlain(preset.pieceSets);
+    if (Array.isArray(preset.reversiOpening)) compact.reversiOpening = preset.reversiOpening.map((entry) => ({ ...entry }));
+    if (preset.chineseCheckersCamps) compact.chineseCheckersCamps = clonePlain(preset.chineseCheckersCamps);
+    if (Array.isArray(preset.chineseCheckersPlayers)) compact.chineseCheckersPlayers = preset.chineseCheckersPlayers.slice();
     return compact;
   }
 
@@ -2017,6 +2325,7 @@
       game.phase = stepPaused ? 'paused' : (eventQueue.length ? 'ready' : imported.phase);
       if (game.phase !== 'gameover') game.ending = '';
       syncConnectFourFallInputFromGame();
+      syncGoKomiInputFromGame();
       render();
       const info = debugExportInfo(game);
       syncStatus('status imported', info, debugMode ? 'debug' : phaseBadge(game.phase));
@@ -2058,6 +2367,11 @@
       presetPayload.connectFourHoles = preset.connectFourHoles.map((tile) => ({ ...tile }));
     }
     if (Number.isInteger(preset.gomokuWinLength)) presetPayload.gomokuWinLength = preset.gomokuWinLength;
+    if (Number.isFinite(preset.goKomi)) presetPayload.goKomi = normalizeGoKomi(preset.goKomi);
+    if (preset.pieceSets) presetPayload.pieceSets = clonePlain(preset.pieceSets);
+    if (Array.isArray(preset.reversiOpening)) presetPayload.reversiOpening = preset.reversiOpening.map((entry) => ({ ...entry }));
+    if (preset.chineseCheckersCamps) presetPayload.chineseCheckersCamps = clonePlain(preset.chineseCheckersCamps);
+    if (Array.isArray(preset.chineseCheckersPlayers)) presetPayload.chineseCheckersPlayers = preset.chineseCheckersPlayers.slice();
     const base = {
       exportedAt: new Date().toISOString(),
       gameMode: game.gameMode || GAME_MODES.NUMBER_2048,
@@ -2121,6 +2435,78 @@
         }
       };
     }
+    if (isGoGame(game)) {
+      return {
+        ...base,
+        turn: game.turn || 'black',
+        komi: normalizeGoKomi(game.komi),
+        passes: game.passes || 0,
+        captures: {
+          black: Math.max(0, Number(game.captures && game.captures.black) || 0),
+          white: Math.max(0, Number(game.captures && game.captures.white) || 0)
+        },
+        territory: { ...(game.territory || { black: 0, white: 0, neutral: 0 }) },
+        finalScore: game.finalScore ? clonePlain(game.finalScore) : null,
+        winner: game.winner || '',
+        resultDismissed: !!game.resultDismissed,
+        nextStoneId: game.nextStoneId || 1,
+        previousBoardSignature: game.previousBoardSignature || '',
+        stones: (game.stones || [])
+          .map((stone) => stoneExport(stone, preset.cols))
+          .sort((a, b) => a.index - b.index || a.id - b.id),
+        queue: {
+          eventIndex: 0,
+          eventCount: 0,
+          stepPaused: false,
+          currentAnimation: null,
+          events: []
+        }
+      };
+    }
+    if (isReversiGame(game)) {
+      return {
+        ...base,
+        turn: game.turn || 'black',
+        passCount: game.passCount || 0,
+        winner: game.winner || '',
+        finalScore: game.finalScore ? clonePlain(game.finalScore) : null,
+        resultDismissed: !!game.resultDismissed,
+        nextDiscId: game.nextDiscId || 1,
+        discs: (game.discs || [])
+          .map((disc) => discExport(disc, preset.cols))
+          .sort((a, b) => a.index - b.index || a.id - b.id),
+        queue: {
+          eventIndex: 0,
+          eventCount: 0,
+          stepPaused: false,
+          currentAnimation: null,
+          events: []
+        }
+      };
+    }
+    if (isChineseCheckersGame(game)) {
+      return {
+        ...base,
+        turn: game.turn || 'red',
+        winner: game.winner || '',
+        winningLine: (game.winningLine || []).slice(),
+        resultDismissed: !!game.resultDismissed,
+        nextMarbleId: game.nextMarbleId || 1,
+        selectedIndex: Number.isInteger(game.selectedIndex) ? game.selectedIndex : null,
+        playerColors: chineseCheckersPlayerColors(game),
+        camps: chineseCheckersCampsExport(game.camps, preset.cols),
+        marbles: (game.marbles || [])
+          .map((marble) => marbleExport(marble, preset.cols))
+          .sort((a, b) => a.index - b.index || a.id - b.id),
+        queue: {
+          eventIndex: 0,
+          eventCount: 0,
+          stepPaused: false,
+          currentAnimation: null,
+          events: []
+        }
+      };
+    }
     return {
       ...base,
       score: game.score || 0,
@@ -2171,12 +2557,39 @@
     };
   }
 
+  function discExport(disc, cols) {
+    return {
+      id: disc.id,
+      index: disc.index,
+      ...rowCol(disc.index, cols),
+      color: disc.color
+    };
+  }
+
+  function marbleExport(marble, cols) {
+    return {
+      id: marble.id,
+      index: marble.index,
+      ...rowCol(marble.index, cols),
+      color: marble.color
+    };
+  }
+
   function debugExportInfo(state) {
     if (isGomokuGame(state)) {
       return `${state.stones.length} stone${state.stones.length === 1 ? '' : 's'}, ${state.removed.size} removed`;
     }
     if (isConnectFourGame(state)) {
       return `${state.tokens.length} token${state.tokens.length === 1 ? '' : 's'}, ${state.removed.size} removed`;
+    }
+    if (isGoGame(state)) {
+      return `${state.stones.length} stone${state.stones.length === 1 ? '' : 's'}, komi ${formatKomi(state.komi)}`;
+    }
+    if (isReversiGame(state)) {
+      return `${state.discs.length} disc${state.discs.length === 1 ? '' : 's'}, ${state.removed.size} removed`;
+    }
+    if (isChineseCheckersGame(state)) {
+      return `${state.marbles.length} marble${state.marbles.length === 1 ? '' : 's'}, ${state.removed.size} removed`;
     }
     return `${state.boxes.length} box${state.boxes.length === 1 ? '' : 'es'}, ${state.removed.size} removed`;
   }
@@ -2226,6 +2639,64 @@
         ending: phase === 'gameover' ? normalizeGomokuEnding(payload.ending, winner) : '',
         debugMessage: ''
       };
+      if (state.winningLine.length < gomokuWinLengthForPreset(preset)) {
+        const recomputedWinLine = recomputeGomokuWinningLine(state);
+        if (recomputedWinLine.length) state.winningLine = recomputedWinLine;
+      }
+      return {
+        state,
+        phase: state.phase,
+        eventQueue: [],
+        eventIndex: 0,
+        stepPaused: false
+      };
+    }
+    if (normalizeStatusGameMode(payload) === GAME_MODES.GO) {
+      const stones = normalizeStatusGoStones(payload.stones, preset, removed);
+      const nextStoneId = Math.max(
+        normalizeNonnegativeInteger(payload.nextStoneId, 1),
+        stones.reduce((max, stone) => Math.max(max, stone.id + 1), 1)
+      );
+      const phase = normalizeStatusPhase(payload.phase);
+      const winner = normalizeGoWinner(payload.winner);
+      const captures = payload.captures && typeof payload.captures === 'object' ? payload.captures : {};
+      const state = {
+        gameMode: GAME_MODES.GO,
+        preset,
+        phase,
+        removed,
+        boxes: [],
+        newBoxIds: new Set(),
+        nextBoxId: 1,
+        score: 0,
+        stones,
+        nextStoneId,
+        turn: normalizeGoTurn(payload.turn, stones.length),
+        komi: normalizeGoKomi(payload.komi != null ? payload.komi : preset.goKomi),
+        passes: Math.max(0, normalizeNonnegativeInteger(payload.passes, 0)),
+        captures: {
+          black: Math.max(0, normalizeNonnegativeInteger(captures.black, 0)),
+          white: Math.max(0, normalizeNonnegativeInteger(captures.white, 0))
+        },
+        previousBoardSignature: sanitizeImportedText(payload.previousBoardSignature || '', ''),
+        winner: phase === 'gameover' ? winner : '',
+        territory: payload.territory && typeof payload.territory === 'object'
+          ? {
+            black: Math.max(0, Number(payload.territory.black) || 0),
+            white: Math.max(0, Number(payload.territory.white) || 0),
+            neutral: Math.max(0, Number(payload.territory.neutral) || 0)
+          }
+          : { black: 0, white: 0, neutral: 0 },
+        finalScore: payload.finalScore && typeof payload.finalScore === 'object' ? clonePlain(payload.finalScore) : null,
+        resultDismissed: !!payload.resultDismissed,
+        round: normalizeNonnegativeInteger(payload.round, stones.length),
+        ending: phase === 'gameover' ? 'go-score' : '',
+        debugMessage: ''
+      };
+      if (state.phase === 'gameover' && !state.finalScore) {
+        state.finalScore = scoreGoGame(state);
+        state.territory = state.finalScore.territory;
+      }
       return {
         state,
         phase: state.phase,
@@ -2269,6 +2740,92 @@
         round: normalizeNonnegativeInteger(payload.round, tokens.length),
         ending: phase === 'gameover' ? normalizeConnectFourEnding(payload.ending, winner) : '',
         dropWarning: sanitizeImportedText(payload.dropWarning || '', ''),
+        debugMessage: ''
+      };
+      return {
+        state,
+        phase: state.phase,
+        eventQueue: [],
+        eventIndex: 0,
+        stepPaused: false
+      };
+    }
+    if (normalizeStatusGameMode(payload) === GAME_MODES.REVERSI) {
+      const discs = normalizeStatusReversiDiscs(payload.discs, preset, removed);
+      const nextDiscId = Math.max(
+        normalizeNonnegativeInteger(payload.nextDiscId, 1),
+        discs.reduce((max, disc) => Math.max(max, disc.id + 1), 1)
+      );
+      const phase = normalizeStatusPhase(payload.phase);
+      const winner = normalizeReversiWinner(payload.winner);
+      const state = {
+        gameMode: GAME_MODES.REVERSI,
+        preset,
+        phase,
+        removed,
+        boxes: [],
+        newBoxIds: new Set(),
+        nextBoxId: 1,
+        score: 0,
+        discs,
+        nextDiscId,
+        turn: normalizeReversiTurn(payload.turn, discs.length),
+        passCount: Math.max(0, normalizeNonnegativeInteger(payload.passCount, 0)),
+        winner: phase === 'gameover' ? winner : '',
+        finalScore: payload.finalScore && typeof payload.finalScore === 'object' ? clonePlain(payload.finalScore) : null,
+        resultDismissed: !!payload.resultDismissed,
+        round: normalizeNonnegativeInteger(payload.round, Math.max(0, discs.length - 4)),
+        ending: phase === 'gameover' ? 'reversi-score' : '',
+        debugMessage: ''
+      };
+      if (state.phase === 'gameover' && !state.finalScore) state.finalScore = reversiDiscCounts(state);
+      return {
+        state,
+        phase: state.phase,
+        eventQueue: [],
+        eventIndex: 0,
+        stepPaused: false
+      };
+    }
+    if (normalizeStatusGameMode(payload) === GAME_MODES.CHINESE_CHECKERS) {
+      const marbles = normalizeStatusChineseCheckersMarbles(payload.marbles, preset, removed);
+      const nextMarbleId = Math.max(
+        normalizeNonnegativeInteger(payload.nextMarbleId, 1),
+        marbles.reduce((max, marble) => Math.max(max, marble.id + 1), 1)
+      );
+      const phase = normalizeStatusPhase(payload.phase);
+      const winner = normalizeChineseCheckersWinner(payload.winner);
+      const pieceSets = normalizePieceSets(preset.pieceSets, preset, removed);
+      const camps = normalizeChineseCheckersCamps(
+        payload.camps || preset.chineseCheckersCamps,
+        preset,
+        removed,
+        pieceSets
+      );
+      const playerColors = normalizeChineseCheckersPlayers(
+        payload.playerColors || payload.chineseCheckersPlayers || preset.chineseCheckersPlayers,
+        camps
+      );
+      const state = {
+        gameMode: GAME_MODES.CHINESE_CHECKERS,
+        preset,
+        phase,
+        removed,
+        boxes: [],
+        newBoxIds: new Set(),
+        nextBoxId: 1,
+        score: 0,
+        marbles,
+        nextMarbleId,
+        camps,
+        playerColors,
+        selectedIndex: validBoardIndex({ preset }, Number(payload.selectedIndex)) ? Number(payload.selectedIndex) : null,
+        turn: normalizeChineseCheckersTurn(payload.turn, playerColors),
+        winner: phase === 'gameover' ? normalizeChineseCheckersWinner(winner, playerColors) : '',
+        winningLine: [],
+        resultDismissed: !!payload.resultDismissed,
+        round: normalizeNonnegativeInteger(payload.round, 0),
+        ending: phase === 'gameover' ? 'chinese-checkers-win' : '',
         debugMessage: ''
       };
       return {
@@ -2338,7 +2895,7 @@
       Array.isArray(source.gluedEdges) ? source.gluedEdges : ((base && !base.randomGlue && base.gluedEdges) || []),
       shell
     );
-    return {
+    const statusPreset = {
       id: IMPORTED_PRESET_ID,
       sourceId,
       label: sanitizeImportedText(source.label || (base && base.label) || 'imported status', 'imported status'),
@@ -2350,8 +2907,28 @@
       connectFourHoles,
       cutEdges,
       gluedEdges,
-      gomokuWinLength: normalizeOptionalGomokuWinLength(source.gomokuWinLength != null ? source.gomokuWinLength : (base && base.gomokuWinLength))
+      gomokuWinLength: normalizePresetGomokuWinLength(
+        source.gomokuWinLength != null ? source.gomokuWinLength : (base && base.gomokuWinLength),
+        sourceId || (base && base.id)
+      )
     };
+    const pieceSetSource = source.pieceSets || (base && base.pieceSets);
+    const pieceSets = normalizePieceSets(pieceSetSource, statusPreset, new Set(removedTileSet));
+    if (pieceSetsHaveEntries(pieceSets)) statusPreset.pieceSets = pieceSetsToTileRefs(pieceSets, cols);
+    const goKomi = source.goKomi != null ? source.goKomi : (source.komi != null ? source.komi : (base && base.goKomi));
+    if (goKomi != null) statusPreset.goKomi = normalizeGoKomi(goKomi);
+    const reversiOpening = Array.isArray(source.reversiOpening) ? source.reversiOpening : (base && base.reversiOpening);
+    if (Array.isArray(reversiOpening)) statusPreset.reversiOpening = reversiOpening.map((entry) => ({ ...entry }));
+    const campSource = source.chineseCheckersCamps || source.camps || (base && base.chineseCheckersCamps);
+    if (campSource && typeof campSource === 'object' && !Array.isArray(campSource)) {
+      statusPreset.chineseCheckersCamps = chineseCheckersCampsToTileRefs(
+        normalizeChineseCheckersCamps(campSource, statusPreset, new Set(removedTileSet), pieceSets),
+        cols
+      );
+    }
+    const chinesePlayers = source.chineseCheckersPlayers || source.playerColors || (base && base.chineseCheckersPlayers);
+    if (chinesePlayers != null) statusPreset.chineseCheckersPlayers = normalizeChineseCheckersPlayers(chinesePlayers, pieceSets);
+    return statusPreset;
   }
 
   function normalizeStatusRemovedSet(payload, preset) {
@@ -2419,6 +2996,66 @@
     });
   }
 
+  function normalizeStatusGoStones(entries, preset, removed) {
+    if (!Array.isArray(entries)) throw new Error('status stones must be an array');
+    const usedIds = new Set();
+    const occupied = new Set();
+    return entries.map((entry, index) => {
+      const tile = normalizeImportedTileRef(entry, preset.rows, preset.cols);
+      if (!tile) throw new Error(`status stone ${index + 1} has an invalid tile`);
+      const tileIndex = indexOf(tile.row, tile.col, preset.cols);
+      if (removed.has(tileIndex)) throw new Error(`status stone ${index + 1} is on a removed tile`);
+      if (occupied.has(tileIndex)) throw new Error(`status stone ${index + 1} shares an occupied tile`);
+      occupied.add(tileIndex);
+      const color = normalizeGoColor(entry && entry.color);
+      if (!color) throw new Error(`status stone ${index + 1} color must be black or white`);
+      const id = normalizePositiveInteger(entry && entry.id, index + 1);
+      if (usedIds.has(id)) throw new Error(`status stone id ${id} is duplicated`);
+      usedIds.add(id);
+      return { id, index: tileIndex, color };
+    });
+  }
+
+  function normalizeStatusReversiDiscs(entries, preset, removed) {
+    if (!Array.isArray(entries)) throw new Error('status discs must be an array');
+    const usedIds = new Set();
+    const occupied = new Set();
+    return entries.map((entry, index) => {
+      const tile = normalizeImportedTileRef(entry, preset.rows, preset.cols);
+      if (!tile) throw new Error(`status disc ${index + 1} has an invalid tile`);
+      const tileIndex = indexOf(tile.row, tile.col, preset.cols);
+      if (removed.has(tileIndex)) throw new Error(`status disc ${index + 1} is on a removed tile`);
+      if (occupied.has(tileIndex)) throw new Error(`status disc ${index + 1} shares an occupied tile`);
+      occupied.add(tileIndex);
+      const color = normalizeReversiColor(entry && entry.color);
+      if (!color) throw new Error(`status disc ${index + 1} color must be black or white`);
+      const id = normalizePositiveInteger(entry && entry.id, index + 1);
+      if (usedIds.has(id)) throw new Error(`status disc id ${id} is duplicated`);
+      usedIds.add(id);
+      return { id, index: tileIndex, color };
+    });
+  }
+
+  function normalizeStatusChineseCheckersMarbles(entries, preset, removed) {
+    if (!Array.isArray(entries)) throw new Error('status marbles must be an array');
+    const usedIds = new Set();
+    const occupied = new Set();
+    return entries.map((entry, index) => {
+      const tile = normalizeImportedTileRef(entry, preset.rows, preset.cols);
+      if (!tile) throw new Error(`status marble ${index + 1} has an invalid tile`);
+      const tileIndex = indexOf(tile.row, tile.col, preset.cols);
+      if (removed.has(tileIndex)) throw new Error(`status marble ${index + 1} is on a removed tile`);
+      if (occupied.has(tileIndex)) throw new Error(`status marble ${index + 1} shares an occupied tile`);
+      occupied.add(tileIndex);
+      const color = normalizeChineseCheckersColor(entry && entry.color);
+      if (!color) throw new Error(`status marble ${index + 1} color is invalid`);
+      const id = normalizePositiveInteger(entry && entry.id, index + 1);
+      if (usedIds.has(id)) throw new Error(`status marble id ${id} is duplicated`);
+      usedIds.add(id);
+      return { id, index: tileIndex, color };
+    });
+  }
+
   function normalizeConnectFourHoleSet(entries, preset, removed) {
     const holes = new Set();
     const values = entries instanceof Set ? Array.from(entries) : entries;
@@ -2449,14 +3086,29 @@
 
   function normalizeStatusGameMode(payload) {
     const value = String((payload && (payload.gameMode || payload.game)) || '').trim().toLowerCase();
+    if (value === GAME_MODES.CHINESE_CHECKERS || value === 'chinese checkers' || value === 'chinesecheckers') {
+      return GAME_MODES.CHINESE_CHECKERS;
+    }
     if (value === GAME_MODES.CONNECT_FOUR || value === 'connectfour' || value === 'connect four') {
       return GAME_MODES.CONNECT_FOUR;
+    }
+    if (value === GAME_MODES.REVERSI || value === 'othello') {
+      return GAME_MODES.REVERSI;
+    }
+    if (value === GAME_MODES.GO) {
+      return GAME_MODES.GO;
     }
     if (value === GAME_MODES.GOMOKU || (Array.isArray(payload && payload.stones) && !Array.isArray(payload && payload.boxes))) {
       return GAME_MODES.GOMOKU;
     }
     if (Array.isArray(payload && payload.tokens) && !Array.isArray(payload && payload.boxes)) {
       return GAME_MODES.CONNECT_FOUR;
+    }
+    if (Array.isArray(payload && payload.discs) && !Array.isArray(payload && payload.boxes)) {
+      return GAME_MODES.REVERSI;
+    }
+    if (Array.isArray(payload && payload.marbles) && !Array.isArray(payload && payload.boxes)) {
+      return GAME_MODES.CHINESE_CHECKERS;
     }
     return GAME_MODES.NUMBER_2048;
   }
@@ -2486,6 +3138,18 @@
     return Number.isInteger(number) && number >= 3 ? number : undefined;
   }
 
+  function normalizePresetGomokuWinLength(value, presetId) {
+    const normalized = normalizeOptionalGomokuWinLength(value);
+    if (officialGomokuDefaultWinLengthPreset(presetId) && normalized && normalized < GOMOKU_WIN_LENGTH) {
+      return undefined;
+    }
+    return normalized;
+  }
+
+  function officialGomokuDefaultWinLengthPreset(presetId) {
+    return OFFICIAL_GOMOKU_DEFAULT_WIN_LENGTH_PRESETS.has(cleanPresetId(presetId));
+  }
+
   function normalizeGomokuEnding(value, winner) {
     if (winner) return 'gomoku-win';
     return value === 'draw' ? 'draw' : '';
@@ -2498,6 +3162,21 @@
       .map((entry) => Number(entry))
       .filter((index) => Number.isInteger(index) && index >= 0 && index < total)
       .slice(0, gomokuWinLengthForPreset(preset));
+  }
+
+  function normalizeGoColor(value) {
+    const color = String(value || '').trim().toLowerCase();
+    return GO_COLORS.includes(color) ? color : '';
+  }
+
+  function normalizeGoTurn(value, stoneCount) {
+    const color = normalizeGoColor(value);
+    if (color) return color;
+    return stoneCount % 2 === 0 ? 'black' : 'white';
+  }
+
+  function normalizeGoWinner(value) {
+    return normalizeGoColor(value);
   }
 
   function normalizeConnectFourColor(value) {
@@ -2527,6 +3206,60 @@
       .map((entry) => Number(entry))
       .filter((index) => Number.isInteger(index) && index >= 0 && index < total)
       .slice(0, CONNECT_FOUR_WIN_LENGTH);
+  }
+
+  function normalizeChineseCheckersWinningLine(entries, preset) {
+    if (!Array.isArray(entries)) return [];
+    const total = preset.rows * preset.cols;
+    return entries
+      .map((entry) => Number(entry))
+      .filter((index) => Number.isInteger(index) && index >= 0 && index < total);
+  }
+
+  function normalizeReversiColor(value) {
+    const color = String(value || '').trim().toLowerCase();
+    return REVERSI_COLORS.includes(color) ? color : '';
+  }
+
+  function normalizeReversiTurn(value, discCount) {
+    const color = normalizeReversiColor(value);
+    if (color) return color;
+    return discCount % 2 === 0 ? 'black' : 'white';
+  }
+
+  function normalizeReversiWinner(value) {
+    return normalizeReversiColor(value);
+  }
+
+  function normalizeChineseCheckersColor(value) {
+    return normalizePlacementColor(value);
+  }
+
+  function normalizeChineseCheckersTurn(value, playerColors = CHINESE_CHECKERS_DEFAULT_COLORS) {
+    const color = normalizeChineseCheckersColor(value);
+    const players = normalizeChineseCheckersPlayers(playerColors);
+    if (color && players.includes(color)) return color;
+    return players[0] || 'red';
+  }
+
+  function normalizeChineseCheckersWinner(value, playerColors = null) {
+    const color = normalizeChineseCheckersColor(value);
+    if (!color) return '';
+    const players = playerColors ? normalizeChineseCheckersPlayers(playerColors) : [];
+    return !players.length || players.includes(color) ? color : '';
+  }
+
+  function normalizePlacementColor(value) {
+    const text = String(value || '').trim().toLowerCase();
+    if (!text) return '';
+    return text.replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
+  }
+
+  function comparePlacementColors(left, right) {
+    const leftOrder = PLACEMENT_COLOR_ORDER.has(left) ? PLACEMENT_COLOR_ORDER.get(left) : PLACEMENT_KNOWN_COLORS.length;
+    const rightOrder = PLACEMENT_COLOR_ORDER.has(right) ? PLACEMENT_COLOR_ORDER.get(right) : PLACEMENT_KNOWN_COLORS.length;
+    if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+    return String(left).localeCompare(String(right));
   }
 
   function normalizeConnectFourFallDir(value, preset) {
@@ -2572,6 +3305,44 @@
       syncStatus(`Connect Four drop ${game.round || 0}`, connectFourTurnInfo(game), phaseBadge(game.phase));
       return;
     }
+    if (isGoGame(game)) {
+      if (game.phase === 'setup') {
+        syncStatus(`${game.preset.label} Go preview`, `${previewInfo(game.preset)}; komi ${formatKomi(game.komi)}`, 'setup');
+        return;
+      }
+      if (game.phase === 'gameover') {
+        if (game.winner) syncStatus(`${goColorLabel(game.winner)} wins`, goFinalScoreText(game), 'over');
+        else syncStatus('Go draw', goFinalScoreText(game), 'over');
+        return;
+      }
+      syncStatus(`Go move ${game.round || 0}`, goTurnInfo(game), phaseBadge(game.phase));
+      return;
+    }
+    if (isReversiGame(game)) {
+      if (game.phase === 'setup') {
+        syncStatus(`${game.preset.label} Reversi preview`, previewInfo(game.preset), 'setup');
+        return;
+      }
+      if (game.phase === 'gameover') {
+        if (game.winner) syncStatus(`${reversiColorLabel(game.winner)} wins`, reversiFinalScoreText(game), 'over');
+        else syncStatus('Reversi draw', reversiFinalScoreText(game), 'over');
+        return;
+      }
+      syncStatus(`Reversi move ${game.round || 0}`, reversiTurnInfo(game), phaseBadge(game.phase));
+      return;
+    }
+    if (isChineseCheckersGame(game)) {
+      if (game.phase === 'setup') {
+        syncStatus(`${game.preset.label} Chinese Checkers preview`, previewInfo(game.preset), 'setup');
+        return;
+      }
+      if (game.phase === 'gameover') {
+        syncStatus(`${chineseCheckersColorLabel(game.winner)} wins`, `${game.round || 0} move${game.round === 1 ? '' : 's'}`, 'over');
+        return;
+      }
+      syncStatus(`Chinese Checkers move ${game.round || 0}`, chineseCheckersTurnInfo(game), phaseBadge(game.phase));
+      return;
+    }
     if (game.phase === 'setup') {
       syncStatus(`${game.preset.label} preview`, previewInfo(game.preset), 'setup');
       return;
@@ -2595,6 +3366,16 @@
       return;
     }
     syncStatus(statusText || `round ${game.round}`, 'use arrow keys, buttons, or swipe/drag to slide', phaseBadge(game.phase));
+  }
+
+  function goFinalScoreText(state) {
+    const score = state.finalScore || scoreGoGame(state);
+    return `black ${score.black}, white ${score.white}`;
+  }
+
+  function reversiFinalScoreText(state) {
+    const score = state.finalScore || reversiDiscCounts(state);
+    return `black ${score.black}, white ${score.white}`;
   }
 
   function phaseBadge(phase) {
@@ -2738,7 +3519,8 @@
     if (isPlacementGame(game)) {
       if (vertexDisplay) drawPlacementVertexBoard(ctx, geometry, game);
       else if (isConnectFourGame(game)) drawConnectFourHoles(ctx, geometry, game);
-      if (!isConnectFourDropAnimation()) drawPlacementWinningLine(ctx, geometry, game);
+      if (!isConnectFourDropAnimation() && !isChineseCheckersGame(game)) drawPlacementWinningLine(ctx, geometry, game);
+      drawPlacementSelectionOverlays(ctx, geometry, game);
       drawPlacementPieces(ctx, geometry, placementPieces(game));
       drawPlacementAnimationOverlays(ctx, geometry);
     } else {
@@ -2921,6 +3703,7 @@
   }
 
   function drawPlacementWinningLine(ctx, geom, state) {
+    if (isChineseCheckersGame(state)) return;
     if (!state || !state.winningLine || !state.winningLine.length) return;
     const highlightCounts = placementWinningLineIndexCounts(state);
     const segments = placementWinningLineSegments(state, geom);
@@ -3207,26 +3990,102 @@
     });
   }
 
+  function drawPlacementSelectionOverlays(ctx, geom, state) {
+    if (!isChineseCheckersGame(state)) return;
+    ctx.save();
+    drawChineseCheckersTurnHighlights(ctx, geom, state);
+    if (!Number.isInteger(state.selectedIndex)) {
+      ctx.restore();
+      return;
+    }
+    const selectedPoint = placementPiecePoint(geom, state.selectedIndex);
+    const moveMap = chineseCheckerMoveMap(state, state.selectedIndex);
+    ctx.lineWidth = Math.max(1.5, geom.radius * 0.06);
+    ctx.strokeStyle = 'rgba(31,122,140,0.86)';
+    ctx.fillStyle = 'rgba(31,122,140,0.16)';
+    if (selectedPoint) {
+      ctx.beginPath();
+      ctx.arc(selectedPoint.x, selectedPoint.y, geom.radius * 0.62, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(47,133,90,0.18)';
+    ctx.strokeStyle = 'rgba(47,133,90,0.82)';
+    moveMap.forEach((move, index) => {
+      const point = placementPiecePoint(geom, index);
+      if (!point) return;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, geom.radius * (move.kind === 'jump' ? 0.34 : 0.26), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  function drawChineseCheckersTurnHighlights(ctx, geom, state) {
+    const color = normalizePlacementColor(state.turn);
+    if (!color || state.phase === 'gameover') return;
+    const colors = placementPieceColors(color);
+    const target = chineseCheckersCampSet(state.camps, 'targets', color);
+    ctx.save();
+    ctx.lineWidth = Math.max(1.4, geom.radius * 0.052);
+    ctx.strokeStyle = colors.stroke;
+    ctx.fillStyle = colors.fallback;
+    ctx.globalAlpha = 0.22;
+    Array.from(target).forEach((index) => {
+      const point = placementPiecePoint(geom, index);
+      if (!point) return;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, geom.radius * 0.53, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 0.74;
+    Array.from(target).forEach((index) => {
+      const point = placementPiecePoint(geom, index);
+      if (!point) return;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, geom.radius * 0.53, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = Math.max(1.8, geom.radius * 0.065);
+    (state.marbles || []).forEach((marble) => {
+      if (marble.color !== color || !chineseCheckerMoveMap(state, marble.index).size) return;
+      const point = placementPiecePoint(geom, marble.index);
+      if (!point) return;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, geom.radius * 0.59, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
   function drawPlacementPieceAtIndex(ctx, geom, piece) {
     const point = placementPiecePoint(geom, piece.index);
     if (!point) return;
     drawPlacementPieceAtPoint(ctx, geom, point, piece);
   }
 
-  function drawPlacementPieceAtPoint(ctx, geom, point, piece) {
-    const radius = geom.radius * 0.43;
+  function drawPlacementPieceAtPoint(ctx, geom, point, piece, options = {}) {
+    const scale = Number.isFinite(options.scale) ? Math.max(0.02, options.scale) : 1;
+    const squashX = Number.isFinite(options.squashX) ? Math.max(0.02, options.squashX) : 1;
+    const alpha = Number.isFinite(options.alpha) ? Math.max(0, Math.min(1, options.alpha)) : 1;
+    const radius = geom.radius * 0.43 * scale;
     const colors = placementPieceColors(piece.color);
     ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(point.x, point.y);
+    ctx.scale(squashX, 1);
     ctx.shadowColor = 'rgba(45,34,22,0.2)';
     ctx.shadowBlur = Math.max(1.5, geom.radius * 0.1);
     ctx.shadowOffsetY = Math.max(0.8, geom.radius * 0.035);
     const gradient = ctx.createRadialGradient
       ? ctx.createRadialGradient(
-        point.x - radius * 0.26,
-        point.y - radius * 0.32,
+        -radius * 0.26,
+        -radius * 0.32,
         radius * 0.12,
-        point.x,
-        point.y,
+        0,
+        0,
         radius
       )
       : null;
@@ -3239,7 +4098,7 @@
     ctx.fillStyle = gradient || colors.fallback;
     ctx.lineWidth = Math.max(1.1, geom.radius * 0.04);
     ctx.beginPath();
-    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowColor = 'transparent';
     ctx.stroke();
@@ -3247,8 +4106,17 @@
   }
 
   function drawPlacementAnimationOverlays(ctx, geom) {
-    if (!currentAnimation || !currentAnimation.event || currentAnimation.event.kind !== 'connectFourDrop') return;
+    if (!currentAnimation || !currentAnimation.event) return;
     const event = currentAnimation.event;
+    if (event.kind === 'reversiFlip') {
+      drawReversiFlipAnimation(ctx, geom, event, currentAnimation.progress || 0);
+      return;
+    }
+    if (event.kind === 'chineseCheckersMove') {
+      drawChineseCheckersMoveAnimation(ctx, geom, event, currentAnimation.progress || 0);
+      return;
+    }
+    if (event.kind !== 'connectFourDrop') return;
     const piece = {
       id: event.tokenId,
       index: event.to,
@@ -3261,6 +4129,97 @@
       return;
     }
     if (frame.point) drawPlacementPieceAtPoint(ctx, geom, frame.point, piece);
+  }
+
+  function drawReversiFlipAnimation(ctx, geom, event, rawProgress) {
+    const progress = Math.max(0, Math.min(1, rawProgress || 0));
+    const placedPoint = placementPiecePoint(geom, event.disc && event.disc.index);
+    if (placedPoint && event.disc) {
+      const local = Math.max(0, Math.min(1, progress / 0.28));
+      drawPlacementPieceAtPoint(ctx, geom, placedPoint, event.disc, {
+        alpha: Math.max(0.18, local),
+        scale: 0.38 + easeInOut(local) * 0.62
+      });
+    }
+    const flips = Array.isArray(event.flips) ? event.flips : [];
+    const maxDistance = flips.reduce((max, flip) => Math.max(max, flip.distance || 1), 1);
+    flips.forEach((flip) => {
+      const point = placementPiecePoint(geom, flip.index);
+      if (!point) return;
+      const waveStart = 0.16 + ((flip.distance || 1) - 1) * (0.42 / Math.max(1, maxDistance));
+      const local = Math.max(0, Math.min(1, (progress - waveStart) / 0.46));
+      const color = local < 0.5 ? flip.fromColor : flip.toColor;
+      const squash = Math.max(0.07, Math.abs(Math.cos(local * Math.PI)));
+      drawPlacementPieceAtPoint(ctx, geom, point, {
+        id: flip.id,
+        index: flip.index,
+        color
+      }, {
+        squashX: squash
+      });
+    });
+  }
+
+  function drawChineseCheckersMoveAnimation(ctx, geom, event, rawProgress) {
+    const frame = chineseCheckersMoveAnimationFrame(geom, event, rawProgress);
+    if (!frame) return;
+    const piece = {
+      id: event.marbleId,
+      index: event.to,
+      color: event.color
+    };
+    if (frame.kind === 'glued') {
+      drawGluedPlacementPiece(ctx, geom, frame.transition, frame.progress, piece);
+      return;
+    }
+    if (frame.point) {
+      drawPlacementPieceAtPoint(ctx, geom, frame.point, piece, {
+        scale: 1 + Math.sin(Math.max(0, Math.min(1, rawProgress || 0)) * Math.PI) * 0.08
+      });
+    }
+  }
+
+  function chineseCheckersMoveAnimationFrame(geom, event, rawProgress) {
+    const progress = Math.max(0, Math.min(1, rawProgress || 0));
+    const segments = Array.isArray(event.segments) && event.segments.length
+      ? event.segments
+      : [{ path: Array.isArray(event.path) ? event.path.slice() : [event.from, event.to], transitions: [] }];
+    const weights = segments.map((segment) => Math.max(1, (segment.transitions || []).length));
+    const total = weights.reduce((sum, weight) => sum + weight, 0) || 1;
+    let cursor = progress * total;
+    for (let index = 0; index < segments.length; index += 1) {
+      const weight = weights[index];
+      if (cursor <= weight || index === segments.length - 1) {
+        const local = Math.max(0, Math.min(1, cursor / weight));
+        return placementSegmentAnimationFrame(geom, segments[index], local);
+      }
+      cursor -= weight;
+    }
+    return null;
+  }
+
+  function placementSegmentAnimationFrame(geom, segment, rawProgress) {
+    const progress = Math.max(0, Math.min(1, rawProgress || 0));
+    const transitions = Array.isArray(segment.transitions) ? segment.transitions : [];
+    if (transitions.length) {
+      const scaled = progress * transitions.length;
+      const segmentIndex = Math.min(transitions.length - 1, Math.floor(scaled));
+      const local = Math.max(0, Math.min(1, scaled - segmentIndex));
+      const transition = transitions[segmentIndex];
+      if (transition && transition.glued) return { kind: 'glued', transition, progress: local };
+      const from = placementPiecePoint(geom, transition.from);
+      const to = placementPiecePoint(geom, transition.to);
+      if (!from || !to) return null;
+      return { kind: 'point', point: lerpPoint(from, to, local) };
+    }
+    const path = Array.isArray(segment.path) && segment.path.length ? segment.path : [segment.from, segment.to];
+    const centers = path.map((index) => placementPiecePoint(geom, index)).filter(Boolean);
+    if (!centers.length) return null;
+    if (centers.length === 1) return { kind: 'point', point: centers[0] };
+    const scaled = progress * (centers.length - 1);
+    const segmentIndex = Math.min(centers.length - 2, Math.floor(scaled));
+    const local = Math.max(0, Math.min(1, scaled - segmentIndex));
+    return { kind: 'point', point: lerpPoint(centers[segmentIndex], centers[segmentIndex + 1], local) };
   }
 
   function connectFourDropAnimationFrame(geom, event, rawProgress) {
@@ -3457,8 +4416,43 @@
     };
   }
 
+  function clonePlacementSegment(segment) {
+    return {
+      ...(segment || {}),
+      path: Array.isArray(segment && segment.path) ? segment.path.slice() : [],
+      transitions: Array.isArray(segment && segment.transitions)
+        ? segment.transitions.map(clonePlacementTransition)
+        : []
+    };
+  }
+
+  function cloneChineseCheckerMoveSegments(segments) {
+    return Array.isArray(segments) ? segments.map(clonePlacementSegment) : [];
+  }
+
+  function cloneReversiLine(line) {
+    return {
+      ...(line || {}),
+      flips: Array.isArray(line && line.flips) ? line.flips.slice() : [],
+      transitions: Array.isArray(line && line.transitions)
+        ? line.transitions.map(clonePlacementTransition)
+        : [],
+      routes: Array.isArray(line && line.routes)
+        ? line.routes.map((route) => ({
+          ...(route || {}),
+          directions: Array.isArray(route && route.directions) ? route.directions.slice() : [],
+          transitions: Array.isArray(route && route.transitions)
+            ? route.transitions.map(clonePlacementTransition)
+            : []
+        }))
+        : []
+    };
+  }
+
   function placementPieces(state) {
     if (isConnectFourGame(state)) return state.tokens || [];
+    if (isReversiGame(state)) return state.discs || [];
+    if (isChineseCheckersGame(state)) return state.marbles || [];
     return state && state.stones ? state.stones : [];
   }
 
@@ -3467,6 +4461,13 @@
     if (!currentAnimation || !currentAnimation.event) return hidden;
     const event = currentAnimation.event;
     if (event.kind === 'connectFourDrop' && event.tokenId != null) hidden.add(event.tokenId);
+    if (event.kind === 'reversiFlip') {
+      if (event.disc && event.disc.id != null) hidden.add(event.disc.id);
+      (event.flips || []).forEach((flip) => {
+        if (flip.id != null) hidden.add(flip.id);
+      });
+    }
+    if (event.kind === 'chineseCheckersMove' && event.marbleId != null) hidden.add(event.marbleId);
     return hidden;
   }
 
@@ -3508,6 +4509,30 @@
         ]
       };
     }
+    if (color === 'blue') {
+      return {
+        fallback: '#2f6fd6',
+        stroke: '#174187',
+        stops: [
+          { offset: 0, color: '#9ec8ff' },
+          { offset: 0.66, color: '#2f6fd6' },
+          { offset: 1, color: '#174187' }
+        ]
+      };
+    }
+    if (color === 'green') {
+      return {
+        fallback: '#2f855a',
+        stroke: '#1f573b',
+        stops: [
+          { offset: 0, color: '#9fe3bd' },
+          { offset: 0.66, color: '#2f855a' },
+          { offset: 1, color: '#1f573b' }
+        ]
+      };
+    }
+    const fallback = color && color !== 'black' ? fallbackPlacementColor(color) : null;
+    if (fallback) return fallback;
     return {
       fallback: '#171615',
       stroke: '#050505',
@@ -3515,6 +4540,25 @@
         { offset: 0, color: '#5d5a55' },
         { offset: 0.72, color: '#171615' },
         { offset: 1, color: '#050505' }
+      ]
+    };
+  }
+
+  function fallbackPlacementColor(color) {
+    const normalized = normalizePlacementColor(color);
+    if (!normalized) return null;
+    let hash = 0;
+    for (let index = 0; index < normalized.length; index += 1) {
+      hash = ((hash * 31) + normalized.charCodeAt(index)) >>> 0;
+    }
+    const hue = hash % 360;
+    return {
+      fallback: `hsl(${hue}, 58%, 45%)`,
+      stroke: `hsl(${hue}, 64%, 25%)`,
+      stops: [
+        { offset: 0, color: `hsl(${hue}, 78%, 76%)` },
+        { offset: 0.66, color: `hsl(${hue}, 58%, 45%)` },
+        { offset: 1, color: `hsl(${hue}, 64%, 25%)` }
       ]
     };
   }
@@ -4084,7 +5128,13 @@
       ? (state.winner ? `${gomokuColorLabel(state.winner)} wins` : 'Gomoku draw')
       : (isConnectFourGame(state)
         ? (state.winner ? `${connectFourColorLabel(state.winner)} wins` : 'Connect Four draw')
-        : (state.ending === 'bonus' ? 'bonus ending' : 'game over'));
+        : (isGoGame(state)
+          ? (state.winner ? `${goColorLabel(state.winner)} wins` : 'Go draw')
+          : (isReversiGame(state)
+            ? (state.winner ? `${reversiColorLabel(state.winner)} wins` : 'Reversi draw')
+            : (isChineseCheckersGame(state)
+              ? `${chineseCheckersColorLabel(state.winner)} wins`
+              : (state.ending === 'bonus' ? 'bonus ending' : 'game over')))));
     ctx.fillText(title, geom.width / 2, y + height * 0.36);
     ctx.fillStyle = '#6c6257';
     ctx.font = `${Math.max(12, Math.round(geom.radius * 0.34))}px "JetBrains Mono", monospace`;
@@ -4092,7 +5142,13 @@
       ? `${state.round || 0} move${state.round === 1 ? '' : 's'}`
       : (isConnectFourGame(state)
         ? `${state.round || 0} drop${state.round === 1 ? '' : 's'}`
-        : `score ${state.score || 0}   highest ${highestValue(state)}`);
+        : (isGoGame(state)
+          ? goFinalScoreText(state)
+          : (isReversiGame(state)
+            ? reversiFinalScoreText(state)
+            : (isChineseCheckersGame(state)
+              ? `${state.round || 0} move${state.round === 1 ? '' : 's'}`
+              : `score ${state.score || 0}   highest ${highestValue(state)}`))));
     ctx.fillText(detail, geom.width / 2, y + height * 0.66);
     ctx.restore();
   }
@@ -4212,6 +5268,112 @@
     return state;
   }
 
+  function createGoState(presetOrId, options = {}) {
+    const preset = materializePreset(resolvePreset(presetOrId), options);
+    const state = {
+      gameMode: GAME_MODES.GO,
+      preset,
+      phase: 'setup',
+      removed: initialRemovedSet(preset),
+      boxes: [],
+      newBoxIds: new Set(),
+      nextBoxId: 1,
+      score: 0,
+      stones: [],
+      nextStoneId: 1,
+      turn: 'black',
+      komi: normalizeGoKomi(Object.prototype.hasOwnProperty.call(options, 'komi') ? options.komi : preset.goKomi),
+      passes: 0,
+      captures: { black: 0, white: 0 },
+      previousBoardSignature: '',
+      winner: '',
+      territory: { black: 0, white: 0, neutral: 0 },
+      finalScore: null,
+      resultDismissed: false,
+      round: 0,
+      ending: ''
+    };
+    initializeGoStones(state);
+    return state;
+  }
+
+  function beginGoGame(presetOrId, options = {}) {
+    const state = createGoState(presetOrId, options);
+    state.phase = 'ready';
+    return state;
+  }
+
+  function createReversiState(presetOrId, options = {}) {
+    const preset = materializePreset(resolvePreset(presetOrId), options);
+    const state = {
+      gameMode: GAME_MODES.REVERSI,
+      preset,
+      phase: 'setup',
+      removed: initialRemovedSet(preset),
+      boxes: [],
+      newBoxIds: new Set(),
+      nextBoxId: 1,
+      score: 0,
+      discs: [],
+      nextDiscId: 1,
+      turn: 'black',
+      passCount: 0,
+      winner: '',
+      finalScore: null,
+      resultDismissed: false,
+      round: 0,
+      ending: ''
+    };
+    initializeReversiOpening(state);
+    return state;
+  }
+
+  function beginReversiGame(presetOrId, options = {}) {
+    const state = createReversiState(presetOrId, options);
+    state.phase = 'ready';
+    return state;
+  }
+
+  function createChineseCheckersState(presetOrId, options = {}) {
+    const preset = materializePreset(resolvePreset(presetOrId), options);
+    const removed = initialRemovedSet(preset);
+    const pieceSets = normalizePieceSets(preset.pieceSets, preset, removed);
+    const camps = normalizeChineseCheckersCamps(preset.chineseCheckersCamps, preset, removed, pieceSets);
+    const playerColors = normalizeChineseCheckersPlayers(
+      preset.chineseCheckersPlayers || preset.playerColors || options.chineseCheckersPlayers || options.playerColors,
+      camps
+    );
+    const state = {
+      gameMode: GAME_MODES.CHINESE_CHECKERS,
+      preset,
+      phase: 'setup',
+      removed,
+      boxes: [],
+      newBoxIds: new Set(),
+      nextBoxId: 1,
+      score: 0,
+      marbles: [],
+      nextMarbleId: 1,
+      camps,
+      playerColors,
+      selectedIndex: null,
+      turn: playerColors[0] || 'red',
+      winner: '',
+      winningLine: [],
+      resultDismissed: false,
+      round: 0,
+      ending: ''
+    };
+    initializeChineseCheckersMarbles(state);
+    return state;
+  }
+
+  function beginChineseCheckersGame(presetOrId, options = {}) {
+    const state = createChineseCheckersState(presetOrId, options);
+    state.phase = 'ready';
+    return state;
+  }
+
   function placeGomokuStone(sourceState, index) {
     if (!isGomokuGame(sourceState)) {
       return { changed: false, state: sourceState, message: 'not a Gomoku game' };
@@ -4304,6 +5466,18 @@
       }
     }
     return null;
+  }
+
+  function recomputeGomokuWinningLine(state) {
+    if (!isGomokuGame(state) || state.phase !== 'gameover' || !state.winner) return [];
+    const winner = normalizeGomokuWinner(state.winner);
+    if (!winner) return [];
+    for (const stone of state.stones || []) {
+      if (!stone || stone.color !== winner) continue;
+      const win = findGomokuWin(state, stone.index, winner);
+      if (win && Array.isArray(win.line) && win.line.length) return win.line;
+    }
+    return [];
   }
 
   function gomokuLineSteps(state, startIndex, dir, color, winLength = gomokuWinLengthForPreset(state && state.preset)) {
@@ -4719,6 +5893,973 @@
       else counts.black += 1;
       return counts;
     }, { black: 0, white: 0 });
+  }
+
+  function placeGoStone(sourceState, index) {
+    if (!isGoGame(sourceState)) {
+      return { changed: false, state: sourceState, message: 'not a Go game' };
+    }
+    if (sourceState.phase === 'setup') {
+      return { changed: false, state: sourceState, message: 'begin the game first' };
+    }
+    if (sourceState.phase === 'gameover') {
+      return { changed: false, state: sourceState, message: 'game is already over' };
+    }
+    const target = Number(index);
+    if (!validBoardIndex(sourceState, target)) {
+      return { changed: false, state: sourceState, message: 'tile is outside the board' };
+    }
+    if (sourceState.removed.has(target)) {
+      return { changed: false, state: sourceState, message: 'tile is removed' };
+    }
+    if (goStoneAt(sourceState, target)) {
+      return { changed: false, state: sourceState, message: 'intersection already has a stone' };
+    }
+
+    const beforeSignature = goBoardSignature(sourceState);
+    const state = cloneGameState(sourceState);
+    const color = GO_COLORS.includes(state.turn) ? state.turn : 'black';
+    const stone = { id: state.nextStoneId, index: target, color };
+    state.nextStoneId += 1;
+    state.stones.push(stone);
+
+    const opponent = oppositeGoColor(color);
+    const capturedIds = new Set();
+    adjacentExistingIndices(state, target).forEach((neighborIndex) => {
+      const neighborStone = goStoneAt(state, neighborIndex);
+      if (!neighborStone || neighborStone.color !== opponent || capturedIds.has(neighborStone.id)) return;
+      const group = goGroupAt(state, neighborIndex);
+      if (group.liberties.size > 0) return;
+      group.stones.forEach((item) => capturedIds.add(item.id));
+    });
+    if (capturedIds.size) {
+      state.stones = state.stones.filter((item) => !capturedIds.has(item.id));
+      state.captures[color] = (state.captures[color] || 0) + capturedIds.size;
+    }
+
+    const ownGroup = goGroupAt(state, target);
+    if (ownGroup.liberties.size === 0) {
+      return { changed: false, state: sourceState, message: 'suicide is not legal' };
+    }
+    const afterSignature = goBoardSignature(state);
+    if (sourceState.previousBoardSignature && afterSignature === sourceState.previousBoardSignature) {
+      return { changed: false, state: sourceState, message: 'simple ko forbids this recapture' };
+    }
+
+    state.previousBoardSignature = beforeSignature;
+    state.passes = 0;
+    state.round += 1;
+    state.resultDismissed = false;
+    state.ending = '';
+    if (!emptyGoIndices(state).length) {
+      finishGoByScore(state);
+    } else {
+      state.phase = 'ready';
+      state.turn = opponent;
+    }
+
+    return {
+      changed: true,
+      state,
+      stone: { ...stone },
+      capturedIds: Array.from(capturedIds).sort((a, b) => a - b)
+    };
+  }
+
+  function passGoTurn(sourceState) {
+    if (!isGoGame(sourceState)) {
+      return { changed: false, state: sourceState, message: 'not a Go game' };
+    }
+    if (sourceState.phase === 'setup') {
+      return { changed: false, state: sourceState, message: 'begin the game first' };
+    }
+    if (sourceState.phase === 'gameover') {
+      return { changed: false, state: sourceState, message: 'game is already over' };
+    }
+    const state = cloneGameState(sourceState);
+    state.previousBoardSignature = goBoardSignature(sourceState);
+    state.passes = (state.passes || 0) + 1;
+    state.round += 1;
+    state.resultDismissed = false;
+    if (state.passes >= 2) {
+      finishGoByScore(state);
+    } else {
+      state.phase = 'ready';
+      state.turn = oppositeGoColor(state.turn);
+      state.ending = '';
+    }
+    return { changed: true, state };
+  }
+
+  function finishGoByScore(state) {
+    const finalScore = scoreGoGame(state);
+    state.finalScore = finalScore;
+    state.territory = finalScore.territory;
+    state.winner = finalScore.black === finalScore.white ? '' : (finalScore.black > finalScore.white ? 'black' : 'white');
+    state.phase = 'gameover';
+    state.ending = 'go-score';
+  }
+
+  function scoreGoGame(state) {
+    const counts = goStoneCounts(state);
+    const territory = { black: 0, white: 0, neutral: 0 };
+    const visited = new Set();
+    emptyGoIndices(state).forEach((start) => {
+      if (visited.has(start)) return;
+      const region = goEmptyRegion(state, start, visited);
+      if (region.adjacentColors.size === 1) {
+        const color = Array.from(region.adjacentColors)[0];
+        territory[color] += region.indices.length;
+      } else {
+        territory.neutral += region.indices.length;
+      }
+    });
+    return {
+      black: counts.black + territory.black,
+      white: counts.white + territory.white + (Number(state.komi) || 0),
+      komi: Number(state.komi) || 0,
+      stones: counts,
+      territory
+    };
+  }
+
+  function goEmptyRegion(state, start, visited) {
+    const adjacentColors = new Set();
+    const indices = [];
+    const queue = [start];
+    visited.add(start);
+    while (queue.length) {
+      const index = queue.shift();
+      indices.push(index);
+      adjacentExistingIndices(state, index).forEach((nextIndex) => {
+        const stone = goStoneAt(state, nextIndex);
+        if (stone) {
+          adjacentColors.add(stone.color);
+          return;
+        }
+        if (visited.has(nextIndex)) return;
+        visited.add(nextIndex);
+        queue.push(nextIndex);
+      });
+    }
+    return { indices, adjacentColors };
+  }
+
+  function goGroupAt(state, startIndex) {
+    const startStone = goStoneAt(state, startIndex);
+    if (!startStone) return { stones: [], liberties: new Set() };
+    const stones = [];
+    const liberties = new Set();
+    const visited = new Set([startIndex]);
+    const queue = [startIndex];
+    while (queue.length) {
+      const index = queue.shift();
+      const stone = goStoneAt(state, index);
+      if (!stone || stone.color !== startStone.color) continue;
+      stones.push(stone);
+      adjacentExistingIndices(state, index).forEach((nextIndex) => {
+        const neighbor = goStoneAt(state, nextIndex);
+        if (!neighbor) {
+          liberties.add(nextIndex);
+          return;
+        }
+        if (neighbor.color !== startStone.color || visited.has(nextIndex)) return;
+        visited.add(nextIndex);
+        queue.push(nextIndex);
+      });
+    }
+    return { stones, liberties };
+  }
+
+  function goBoardSignature(state) {
+    return (state.stones || [])
+      .map((stone) => `${stone.index}:${stone.color}`)
+      .sort()
+      .join('|');
+  }
+
+  function emptyGoIndices(state) {
+    const occupied = new Set((state.stones || []).map((stone) => stone.index));
+    return emptyPlayableIndices(state, occupied);
+  }
+
+  function goStoneAt(state, index) {
+    if (!state || !Array.isArray(state.stones)) return null;
+    return state.stones.find((stone) => stone.index === index) || null;
+  }
+
+  function oppositeGoColor(color) {
+    return color === 'white' ? 'black' : 'white';
+  }
+
+  function goColorLabel(color) {
+    return color === 'white' ? 'white' : 'black';
+  }
+
+  function goStoneCounts(state) {
+    return (state.stones || []).reduce((counts, stone) => {
+      if (stone.color === 'white') counts.white += 1;
+      else counts.black += 1;
+      return counts;
+    }, { black: 0, white: 0 });
+  }
+
+  function goTurnInfo(state) {
+    return `${goColorLabel(state.turn)} to play; komi ${formatKomi(state.komi)}`;
+  }
+
+  function placeReversiDisc(sourceState, index) {
+    if (!isReversiGame(sourceState)) {
+      return { changed: false, state: sourceState, message: 'not a Reversi game' };
+    }
+    if (sourceState.phase === 'setup') {
+      return { changed: false, state: sourceState, message: 'begin the game first' };
+    }
+    if (sourceState.phase === 'gameover') {
+      return { changed: false, state: sourceState, message: 'game is already over' };
+    }
+    const target = Number(index);
+    if (!validBoardIndex(sourceState, target)) {
+      return { changed: false, state: sourceState, message: 'tile is outside the board' };
+    }
+    if (sourceState.removed.has(target)) {
+      return { changed: false, state: sourceState, message: 'tile is removed' };
+    }
+    if (reversiDiscAt(sourceState, target)) {
+      return { changed: false, state: sourceState, message: 'tile already has a disc' };
+    }
+    const color = REVERSI_COLORS.includes(sourceState.turn) ? sourceState.turn : 'black';
+    const lines = reversiFlipLinesForMove(sourceState, target, color);
+    const flips = reversiFlipIndicesFromLines(lines);
+    if (!flips.length) {
+      return { changed: false, state: sourceState, message: 'move must bracket at least one disc' };
+    }
+
+    const state = cloneGameState(sourceState);
+    const disc = { id: state.nextDiscId, index: target, color };
+    state.nextDiscId += 1;
+    state.discs.push(disc);
+    const flipSet = new Set(flips);
+    const flippedDiscs = [];
+    state.discs.forEach((item) => {
+      if (flipSet.has(item.index)) {
+        flippedDiscs.push({
+          id: item.id,
+          index: item.index,
+          fromColor: item.color,
+          toColor: color
+        });
+        item.color = color;
+      }
+    });
+    state.round += 1;
+    state.passCount = 0;
+    state.resultDismissed = false;
+    state.ending = '';
+
+    const opponent = oppositeReversiColor(color);
+    if (reversiHasLegalMove(state, opponent)) {
+      state.turn = opponent;
+      state.phase = 'ready';
+    } else if (reversiHasLegalMove(state, color)) {
+      state.turn = color;
+      state.passCount = 1;
+      state.phase = 'ready';
+    } else {
+      finishReversiByScore(state);
+    }
+
+    return {
+      changed: true,
+      state,
+      disc: { ...disc },
+      flips: flips.slice(),
+      lines: lines.map(cloneReversiLine),
+      flippedDiscs
+    };
+  }
+
+  function reversiFlipsForMove(state, index, color) {
+    if (!isReversiGame(state) || state.removed.has(index) || reversiDiscAt(state, index)) return [];
+    return reversiFlipIndicesFromLines(reversiFlipLinesForMove(state, index, color));
+  }
+
+  function reversiFlipLinesForMove(state, index, color) {
+    if (!isReversiGame(state) || state.removed.has(index) || reversiDiscAt(state, index)) return [];
+    const flips = new Set();
+    const lines = [];
+    directionsForPreset(state.preset).forEach((dir) => {
+      const line = reversiFlipLineInDirection(state, index, dir, color);
+      if (line && line.flips.length) lines.push(line);
+    });
+    gomokuDiagonalAxes(state.preset).forEach((axis) => {
+      reversiDiagonalFlipLines(state, index, axis.forward, color, axis.name).forEach((line) => lines.push(line));
+      reversiDiagonalFlipLines(state, index, axis.backward, color, axis.name).forEach((line) => lines.push(line));
+    });
+    const seen = new Set();
+    return lines.filter((line) => {
+      const key = `${line.kind}:${line.terminal}:${line.flips.join(',')}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      line.flips.forEach((flipIndex) => flips.add(flipIndex));
+      return true;
+    });
+  }
+
+  function reversiFlipIndicesFromLines(lines) {
+    const flips = new Set();
+    (lines || []).forEach((line) => {
+      (line.flips || []).forEach((flipIndex) => flips.add(flipIndex));
+    });
+    return Array.from(flips).sort((a, b) => a - b);
+  }
+
+  function reversiFlipsInDirection(state, startIndex, startDir, color) {
+    const line = reversiFlipLineInDirection(state, startIndex, startDir, color);
+    return line ? line.flips.slice() : [];
+  }
+
+  function reversiFlipLineInDirection(state, startIndex, startDir, color) {
+    const opponent = oppositeReversiColor(color);
+    const captured = [];
+    const transitions = [];
+    const seen = new Set();
+    let index = startIndex;
+    let direction = startDir;
+    while (true) {
+      const key = `${index}:${direction}`;
+      if (seen.has(key)) return null;
+      seen.add(key);
+      const next = surfaceSuccessor(state, index, direction);
+      if (!next) return null;
+      transitions.push(placementTransitionRecord(index, direction, next));
+      index = next.index;
+      direction = next.dir;
+      const disc = reversiDiscAt(state, index);
+      if (!disc) return null;
+      if (disc.color === opponent) {
+        captured.push(index);
+        continue;
+      }
+      if (disc.color === color && captured.length) {
+        return {
+          kind: 'axis',
+          dir: startDir,
+          flips: captured,
+          terminal: index,
+          transitions
+        };
+      }
+      return null;
+    }
+  }
+
+  function reversiDiagonalFlipLines(state, startIndex, orders, color, axisName) {
+    const opponent = oppositeReversiColor(color);
+    const lines = [];
+    const seenLines = new Set();
+    const search = (index, captured, currentOrders, routes, seenStates) => {
+      const candidates = gomokuDiagonalStepCandidates(state, index, currentOrders);
+      candidates.forEach((candidate) => {
+        const stateKey = `${candidate.index}:${diagonalOrdersKey(candidate.orders)}`;
+        if (seenStates.has(stateKey)) return;
+        const disc = reversiDiscAt(state, candidate.index);
+        if (!disc) return;
+        if (disc.color === opponent) {
+          const nextSeen = new Set(seenStates);
+          nextSeen.add(stateKey);
+          search(
+            candidate.index,
+            captured.concat(candidate.index),
+            candidate.orders,
+            routes.concat(candidate.route),
+            nextSeen
+          );
+          return;
+        }
+        if (disc.color === color && captured.length) {
+          const key = `${candidate.index}:${captured.join(',')}`;
+          if (seenLines.has(key)) return;
+          seenLines.add(key);
+          lines.push({
+            kind: 'diagonal',
+            axis: axisName,
+            flips: captured.slice(),
+            terminal: candidate.index,
+            routes: routes.concat(candidate.route)
+          });
+        }
+      });
+    };
+    search(
+      startIndex,
+      [],
+      normalizeDiagonalOrders(orders),
+      [],
+      new Set([`${startIndex}:${diagonalOrdersKey(orders)}`])
+    );
+    return lines;
+  }
+
+  function reversiHasLegalMove(state, color) {
+    return emptyReversiIndices(state).some((index) => reversiFlipsForMove(state, index, color).length > 0);
+  }
+
+  function finishReversiByScore(state) {
+    const finalScore = reversiDiscCounts(state);
+    state.finalScore = finalScore;
+    state.winner = finalScore.black === finalScore.white ? '' : (finalScore.black > finalScore.white ? 'black' : 'white');
+    state.phase = 'gameover';
+    state.ending = 'reversi-score';
+  }
+
+  function initializeGoStones(state) {
+    const entries = placementStartsFromPieceSets(state.preset, GO_COLORS);
+    const occupied = new Set();
+    entries.forEach((entry) => {
+      if (state.removed.has(entry.index) || occupied.has(entry.index)) return;
+      occupied.add(entry.index);
+      state.stones.push({ id: state.nextStoneId, index: entry.index, color: entry.color });
+      state.nextStoneId += 1;
+    });
+  }
+
+  function initializeReversiOpening(state) {
+    const rows = state.preset.rows;
+    const cols = state.preset.cols;
+    const pieceSetOpening = placementStartsFromPieceSets(state.preset, REVERSI_COLORS);
+    const opening = pieceSetOpening.length
+      ? pieceSetOpening
+      : normalizeReversiOpeningEntries(state.preset.reversiOpening, state.preset);
+    if (!opening.length) {
+      if (rows % 2 !== 0 || cols % 2 !== 0 || rows < 2 || cols < 2) return;
+      const top = rows / 2;
+      const left = cols / 2;
+      opening.push(
+        { index: indexOf(top, left, cols), color: 'white' },
+        { index: indexOf(top, left + 1, cols), color: 'black' },
+        { index: indexOf(top + 1, left, cols), color: 'black' },
+        { index: indexOf(top + 1, left + 1, cols), color: 'white' }
+      );
+    }
+    const occupied = new Set();
+    opening.forEach((entry) => {
+      const index = entry.index;
+      if (state.removed.has(index)) return;
+      if (occupied.has(index)) return;
+      occupied.add(index);
+      state.discs.push({ id: state.nextDiscId, index, color: entry.color });
+      state.nextDiscId += 1;
+    });
+  }
+
+  function placementStartsFromPieceSets(preset, allowedColors = null) {
+    const removed = initialRemovedSet(preset);
+    const pieceSets = normalizePieceSets(preset && preset.pieceSets, preset, removed);
+    const allowed = Array.isArray(allowedColors) ? new Set(allowedColors) : null;
+    const entries = [];
+    pieceSetColors(pieceSets, ['starts']).forEach((color) => {
+      if (allowed && !allowed.has(color)) return;
+      Array.from(pieceSets.starts[color] || []).forEach((index) => entries.push({ index, color }));
+    });
+    return entries.sort((left, right) => left.index - right.index || comparePlacementColors(left.color, right.color));
+  }
+
+  function normalizeReversiOpeningEntries(entries, preset) {
+    if (!Array.isArray(entries)) return [];
+    const removed = initialRemovedSet(preset);
+    return entries
+      .map((entry) => {
+        const tile = normalizeImportedTileRef(entry, preset.rows, preset.cols);
+        const color = normalizeReversiColor(entry && entry.color);
+        if (!tile || !color) return null;
+        const index = indexOf(tile.row, tile.col, preset.cols);
+        return removed.has(index) ? null : { index, color };
+      })
+      .filter(Boolean)
+      .sort((left, right) => left.index - right.index);
+  }
+
+  function emptyReversiIndices(state) {
+    const occupied = new Set((state.discs || []).map((disc) => disc.index));
+    return emptyPlayableIndices(state, occupied);
+  }
+
+  function reversiDiscAt(state, index) {
+    if (!state || !Array.isArray(state.discs)) return null;
+    return state.discs.find((disc) => disc.index === index) || null;
+  }
+
+  function oppositeReversiColor(color) {
+    return color === 'white' ? 'black' : 'white';
+  }
+
+  function reversiColorLabel(color) {
+    return color === 'white' ? 'white' : 'black';
+  }
+
+  function reversiDiscCounts(state) {
+    return (state.discs || []).reduce((counts, disc) => {
+      if (disc.color === 'white') counts.white += 1;
+      else counts.black += 1;
+      return counts;
+    }, { black: 0, white: 0 });
+  }
+
+  function reversiTurnInfo(state) {
+    return state.passCount
+      ? `${reversiColorLabel(state.turn)} to move; opponent passed`
+      : `${reversiColorLabel(state.turn)} to move`;
+  }
+
+  function moveChineseCheckerMarble(sourceState, fromIndex, toIndex) {
+    if (!isChineseCheckersGame(sourceState)) {
+      return { changed: false, state: sourceState, message: 'not a Chinese Checkers game' };
+    }
+    if (sourceState.phase === 'setup') {
+      return { changed: false, state: sourceState, message: 'begin the game first' };
+    }
+    if (sourceState.phase === 'gameover') {
+      return { changed: false, state: sourceState, message: 'game is already over' };
+    }
+    const from = Number(fromIndex);
+    const to = Number(toIndex);
+    if (!validBoardIndex(sourceState, from) || !validBoardIndex(sourceState, to)) {
+      return { changed: false, state: sourceState, message: 'move is outside the board' };
+    }
+    if (sourceState.removed.has(to)) {
+      return { changed: false, state: sourceState, message: 'target tile is removed' };
+    }
+    if (chineseCheckerMarbleAt(sourceState, to)) {
+      return { changed: false, state: sourceState, message: 'target tile is occupied' };
+    }
+    const marble = chineseCheckerMarbleAt(sourceState, from);
+    if (!marble || marble.color !== sourceState.turn) {
+      return { changed: false, state: sourceState, message: 'select one of your marbles' };
+    }
+    const legal = chineseCheckerMoveMap(sourceState, from);
+    const move = legal.get(to);
+    if (!move) {
+      return { changed: false, state: sourceState, message: 'target is not a legal step or jump' };
+    }
+
+    const state = cloneGameState(sourceState);
+    const moving = chineseCheckerMarbleAt(state, from);
+    const movedMarble = {
+      id: moving.id,
+      from,
+      index: to,
+      color: moving.color
+    };
+    moving.index = to;
+    state.selectedIndex = null;
+    state.round += 1;
+    state.resultDismissed = false;
+    state.winningLine = [];
+    if (chineseCheckersPlayerWins(state, moving.color)) {
+      state.phase = 'gameover';
+      state.winner = moving.color;
+      state.ending = 'chinese-checkers-win';
+    } else {
+      state.phase = 'ready';
+      state.turn = nextChineseCheckersColor(state, moving.color);
+      state.ending = '';
+    }
+    return { changed: true, state, move: cloneChineseCheckerMove(move), marble: movedMarble };
+  }
+
+  function chineseCheckerMoveMap(state, fromIndex) {
+    const moves = new Map();
+    const marble = chineseCheckerMarbleAt(state, fromIndex);
+    if (!marble) return moves;
+    const occupied = new Set((state.marbles || []).map((item) => item.index));
+    occupied.delete(fromIndex);
+    directionsForPreset(state.preset).forEach((dir) => {
+      const step = surfaceSuccessor(state, fromIndex, dir);
+      if (step && step.index !== fromIndex && !occupied.has(step.index) && !state.removed.has(step.index)) {
+        moves.set(step.index, {
+          kind: 'step',
+          path: [fromIndex, step.index],
+          segments: [chineseCheckerMoveSegment(fromIndex, step.index, [fromIndex, step.index], [
+            placementTransitionRecord(fromIndex, dir, step)
+          ], null)]
+        });
+      }
+    });
+    chineseCheckerJumpMap(state, fromIndex, occupied).forEach((move, index) => {
+      moves.set(index, move);
+    });
+    return moves;
+  }
+
+  function chineseCheckerJumpMap(state, fromIndex, occupied) {
+    const moves = new Map();
+    const queue = [{ index: fromIndex, path: [fromIndex], segments: [] }];
+    const seenLandings = new Set([fromIndex]);
+    while (queue.length) {
+      const current = queue.shift();
+      directionsForPreset(state.preset).forEach((dir) => {
+        const segment = chineseCheckerSuperJumpSegment(state, current.index, dir, occupied);
+        if (!segment || seenLandings.has(segment.to)) return;
+        const path = current.path.concat(segment.to);
+        const segments = current.segments.concat(segment);
+        seenLandings.add(segment.to);
+        const move = { kind: 'jump', path, segments };
+        moves.set(segment.to, move);
+        queue.push({ index: segment.to, path, segments });
+      });
+    }
+    return moves;
+  }
+
+  function chineseCheckerSuperJumpSegment(state, fromIndex, startDir, occupied) {
+    const preset = state && state.preset;
+    const guardLimit = Math.max(1, preset.rows * preset.cols * directionsForPreset(preset).length + 1);
+    const path = [fromIndex];
+    const transitions = [];
+    const seen = new Set();
+    let index = fromIndex;
+    let direction = startDir;
+    let midpoint = null;
+    for (let distance = 1; distance <= guardLimit; distance += 1) {
+      const key = `${index}:${direction}`;
+      if (seen.has(key)) return null;
+      seen.add(key);
+      const next = surfaceSuccessor(state, index, direction);
+      if (!next) return null;
+      transitions.push(placementTransitionRecord(index, direction, next));
+      index = next.index;
+      direction = next.dir;
+      path.push(index);
+      const occupiedHere = occupied.has(index);
+      if (!midpoint) {
+        if (occupiedHere) midpoint = { index, distance };
+        continue;
+      }
+      if (occupiedHere) return null;
+      if (distance === midpoint.distance * 2) {
+        if (index === fromIndex || state.removed.has(index) || occupied.has(index)) return null;
+        return chineseCheckerMoveSegment(fromIndex, index, path, transitions, midpoint.index);
+      }
+    }
+    return null;
+  }
+
+  function chineseCheckerMoveSegment(from, to, path, transitions, jumped) {
+    return {
+      from,
+      to,
+      path: Array.isArray(path) ? path.slice() : [from, to],
+      jumped: Number.isInteger(jumped) ? jumped : null,
+      transitions: Array.isArray(transitions) ? transitions.map(clonePlacementTransition) : []
+    };
+  }
+
+  function cloneChineseCheckerMove(move) {
+    return {
+      ...(move || {}),
+      path: Array.isArray(move && move.path) ? move.path.slice() : [],
+      segments: cloneChineseCheckerMoveSegments(move && move.segments)
+    };
+  }
+
+  function chineseCheckersPlayerWins(state, color) {
+    const target = chineseCheckersCampSet(state.camps, 'targets', color);
+    if (!target || !target.size) return false;
+    const occupiedByColor = new Set((state.marbles || [])
+      .filter((marble) => marble.color === color)
+      .map((marble) => marble.index));
+    return Array.from(target).every((index) => occupiedByColor.has(index));
+  }
+
+  function initializeChineseCheckersMarbles(state) {
+    const occupied = new Set();
+    chineseCheckersPlayerColors(state).forEach((color) => {
+      const camp = chineseCheckersCampSet(state.camps, 'starts', color);
+      Array.from(camp).sort((a, b) => a - b).forEach((index) => {
+        if (occupied.has(index) || state.removed.has(index)) return;
+        occupied.add(index);
+        state.marbles.push({ id: state.nextMarbleId, index, color });
+        state.nextMarbleId += 1;
+      });
+    });
+  }
+
+  function normalizePieceSets(value, preset, removed) {
+    const result = { starts: {}, targets: {} };
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    ['starts', 'targets'].forEach((section) => {
+      const container = source[section];
+      if (!container || typeof container !== 'object' || Array.isArray(container)) return;
+      Object.entries(container).forEach(([rawColor, entries]) => {
+        const color = normalizePlacementColor(rawColor);
+        if (!color) return;
+        const set = normalizeTileSet(entries, preset, removed);
+        if (set.size) result[section][color] = set;
+      });
+    });
+    return result;
+  }
+
+  function pieceSetsFromPieces(pieces, preset, removed) {
+    const result = { starts: {}, targets: {} };
+    (Array.isArray(pieces) ? pieces : []).forEach((piece) => {
+      if (!piece || typeof piece !== 'object' || Array.isArray(piece)) return;
+      const tile = normalizeImportedTileRef(piece.tile || piece, preset.rows, preset.cols);
+      if (!tile) return;
+      const index = indexOf(tile.row, tile.col, preset.cols);
+      if (removed.has(index)) return;
+      const role = normalizePieceSetRole(piece.role || piece.kind || piece.type) || 'start';
+      const color = normalizePlacementColor(piece.color || piece.side || piece.player) || 'black';
+      const section = role === 'target' ? 'targets' : 'starts';
+      if (!result[section][color]) result[section][color] = new Set();
+      result[section][color].add(index);
+    });
+    return result;
+  }
+
+  function normalizePieceSetRole(role) {
+    const value = String(role || '').trim().toLowerCase();
+    if (value === 'target' || value === 'goal' || value === 'arrival' || value === 'finish') return 'target';
+    if (value === 'start' || value === 'piece' || value === 'stone' || value === 'disc' || value === 'marble') return 'start';
+    return '';
+  }
+
+  function pieceSetsHaveEntries(pieceSets) {
+    return !!(pieceSets && ['starts', 'targets'].some((section) => (
+      pieceSets[section]
+      && Object.values(pieceSets[section]).some((entries) => pieceSetEntryCount(entries) > 0)
+    )));
+  }
+
+  function pieceSetColors(pieceSets, sections = ['starts', 'targets']) {
+    const colors = new Set();
+    sections.forEach((section) => {
+      const container = pieceSets && pieceSets[section];
+      if (!container || typeof container !== 'object') return;
+      Object.entries(container).forEach(([color, entries]) => {
+        if (pieceSetEntryCount(entries) > 0) colors.add(color);
+      });
+    });
+    return Array.from(colors).sort(comparePlacementColors);
+  }
+
+  function pieceSetEntryCount(entries) {
+    if (entries instanceof Set) return entries.size;
+    if (Array.isArray(entries)) return entries.length;
+    return 0;
+  }
+
+  function pieceSetsToTileRefs(pieceSets, cols) {
+    const result = { starts: {}, targets: {} };
+    ['starts', 'targets'].forEach((section) => {
+      pieceSetColors(pieceSets, [section]).forEach((color) => {
+        const entries = Array.from(pieceSets[section][color] || [])
+          .sort((a, b) => a - b)
+          .map((index) => rowCol(index, cols));
+        if (entries.length) result[section][color] = entries;
+      });
+    });
+    return result;
+  }
+
+  function normalizeChineseCheckersCamps(value, preset, removed, pieceSets = null) {
+    const fallback = defaultChineseCheckersCamps(preset);
+    const pieceSetCamps = pieceSetsHaveEntries(pieceSets) ? pieceSets : null;
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+    if (pieceSetCamps) return clonePieceSetMaps(pieceSetCamps);
+    if (source && (source.starts || source.targets)) {
+      const normalized = normalizePieceSets(source, preset, removed);
+      if (pieceSetsHaveEntries(normalized)) return normalized;
+    }
+    const legacy = { starts: {}, targets: {} };
+    const legacySource = source || fallback;
+    const legacyColors = new Set(CHINESE_CHECKERS_DEFAULT_COLORS);
+    Object.keys(legacySource).forEach((key) => {
+      const match = key.match(/^(.+?)(Start|Target)$/);
+      if (match) {
+        const color = normalizePlacementColor(match[1]);
+        if (color) legacyColors.add(color);
+      }
+    });
+    Array.from(legacyColors).sort(comparePlacementColors).forEach((color) => {
+      const start = normalizeTileSet(legacySource[`${color}Start`] || fallback.starts[color], preset, removed);
+      const target = normalizeTileSet(legacySource[`${color}Target`] || fallback.targets[color], preset, removed);
+      if (start.size) legacy.starts[color] = start;
+      if (target.size) legacy.targets[color] = target;
+    });
+    return legacy;
+  }
+
+  function clonePieceSetMaps(pieceSets) {
+    const result = { starts: {}, targets: {} };
+    ['starts', 'targets'].forEach((section) => {
+      const container = pieceSets && pieceSets[section];
+      if (!container || typeof container !== 'object') return;
+      Object.entries(container).forEach(([rawColor, set]) => {
+        const color = normalizePlacementColor(rawColor);
+        if (!color) return;
+        const values = set instanceof Set ? Array.from(set) : (Array.isArray(set) ? set : []);
+        const normalized = new Set(values.filter((index) => Number.isInteger(index)));
+        if (normalized.size) result[section][color] = normalized;
+      });
+    });
+    return result;
+  }
+
+  function cloneChineseCheckersCamps(camps) {
+    return clonePieceSetMaps(camps);
+  }
+
+  function chineseCheckersCampsToTileRefs(camps, cols) {
+    return pieceSetsToTileRefs(camps, cols);
+  }
+
+  function chineseCheckersCampsExport(camps, cols) {
+    return chineseCheckersCampsToTileRefs(camps, cols);
+  }
+
+  function defaultChineseCheckersCamps(preset) {
+    const rows = preset.rows;
+    const cols = preset.cols;
+    return {
+      starts: {
+        red: [
+          { row: 1, col: 1 },
+          { row: 1, col: Math.min(2, cols) },
+          { row: Math.min(2, rows), col: 1 },
+          { row: Math.min(2, rows), col: Math.min(2, cols) }
+        ],
+        yellow: [
+          { row: Math.max(1, rows - 1), col: Math.max(1, cols - 1) },
+          { row: Math.max(1, rows - 1), col: cols },
+          { row: rows, col: Math.max(1, cols - 1) },
+          { row: rows, col: cols }
+        ]
+      },
+      targets: {
+        red: [
+          { row: Math.max(1, rows - 1), col: Math.max(1, cols - 1) },
+          { row: Math.max(1, rows - 1), col: cols },
+          { row: rows, col: Math.max(1, cols - 1) },
+          { row: rows, col: cols }
+        ],
+        yellow: [
+          { row: 1, col: 1 },
+          { row: 1, col: Math.min(2, cols) },
+          { row: Math.min(2, rows), col: 1 },
+          { row: Math.min(2, rows), col: Math.min(2, cols) }
+        ]
+      }
+    };
+  }
+
+  function normalizeTileSet(entries, preset, removed) {
+    const values = entries instanceof Set ? Array.from(entries) : entries;
+    const tiles = Array.isArray(values) ? values : [];
+    const result = new Set();
+    tiles.forEach((entry) => {
+      const tile = normalizeImportedTileRef(entry, preset.rows, preset.cols);
+      if (!tile) return;
+      const tileIndex = indexOf(tile.row, tile.col, preset.cols);
+      if (!removed.has(tileIndex)) result.add(tileIndex);
+    });
+    return result;
+  }
+
+  function chineseCheckerMarbleAt(state, index) {
+    if (!state || !Array.isArray(state.marbles)) return null;
+    return state.marbles.find((marble) => marble.index === index) || null;
+  }
+
+  function chineseCheckersMarbleCounts(state) {
+    return (state.marbles || []).reduce((counts, marble) => {
+      const color = normalizePlacementColor(marble.color) || 'black';
+      counts[color] = (counts[color] || 0) + 1;
+      return counts;
+    }, {});
+  }
+
+  function normalizeChineseCheckersPlayers(value, camps = null) {
+    const result = [];
+    const add = (colorValue) => {
+      const color = normalizePlacementColor(colorValue);
+      if (color && !result.includes(color)) result.push(color);
+    };
+    if (Array.isArray(value)) value.forEach(add);
+    else if (typeof value === 'string') value.split(/[,\s]+/).forEach(add);
+    if (!result.length && camps && typeof camps === 'object') {
+      pieceSetColors(camps, ['starts']).forEach(add);
+      pieceSetColors(camps, ['targets']).forEach(add);
+    }
+    if (!result.length) CHINESE_CHECKERS_DEFAULT_COLORS.forEach(add);
+    return result;
+  }
+
+  function chineseCheckersPlayerColors(state) {
+    return normalizeChineseCheckersPlayers(state && state.playerColors, state && state.camps);
+  }
+
+  function nextChineseCheckersColor(state, color) {
+    const players = chineseCheckersPlayerColors(state);
+    if (!players.length) return normalizePlacementColor(color) || 'red';
+    const normalized = normalizePlacementColor(color);
+    const currentIndex = Math.max(0, players.indexOf(normalized));
+    return players[(currentIndex + 1) % players.length] || players[0];
+  }
+
+  function chineseCheckersCampSet(camps, section, color) {
+    const normalizedColor = normalizePlacementColor(color);
+    const container = camps && camps[section];
+    const set = normalizedColor && container && container[normalizedColor];
+    return set instanceof Set ? set : new Set();
+  }
+
+  function chineseCheckersColorLabel(color) {
+    return normalizePlacementColor(color) || 'unknown';
+  }
+
+  function chineseCheckersTurnInfo(state) {
+    const selected = Number.isInteger(state.selectedIndex) ? '; marble selected' : '';
+    return `${chineseCheckersColorLabel(state.turn)} to move${selected}`;
+  }
+
+  function emptyChineseCheckersIndices(state) {
+    const occupied = new Set((state.marbles || []).map((marble) => marble.index));
+    return emptyPlayableIndices(state, occupied);
+  }
+
+  function adjacentExistingIndices(state, index) {
+    const indices = new Set();
+    directionsForPreset(state.preset).forEach((dir) => {
+      const next = surfaceSuccessor(state, index, dir);
+      if (next && !state.removed.has(next.index)) indices.add(next.index);
+    });
+    return Array.from(indices);
+  }
+
+  function emptyPlayableIndices(state, occupied) {
+    const total = state.preset.rows * state.preset.cols;
+    const empty = [];
+    for (let index = 0; index < total; index += 1) {
+      if (!state.removed.has(index) && !occupied.has(index)) empty.push(index);
+    }
+    return empty;
+  }
+
+  function validBoardIndex(state, index) {
+    return Number.isInteger(index) && index >= 0 && index < state.preset.rows * state.preset.cols;
+  }
+
+  function normalizeGoKomi(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return GO_DEFAULT_KOMI;
+    return Math.max(-99, Math.min(99, Math.round(number * 2) / 2));
+  }
+
+  function formatKomi(value) {
+    const komi = normalizeGoKomi(value);
+    return Number.isInteger(komi) ? String(komi) : komi.toFixed(1);
   }
 
   function simulateRound(sourceState, dir, options = {}) {
@@ -5782,6 +7923,81 @@
         debugMessage: source.debugMessage || ''
       };
     }
+    if (isGoGame(source)) {
+      return {
+        gameMode: GAME_MODES.GO,
+        preset: source.preset,
+        phase: source.phase,
+        removed: new Set(source.removed),
+        boxes: [],
+        newBoxIds: new Set(),
+        nextBoxId: 1,
+        score: 0,
+        stones: (source.stones || []).map((stone) => ({ id: stone.id, index: stone.index, color: stone.color })),
+        nextStoneId: source.nextStoneId || 1,
+        turn: GO_COLORS.includes(source.turn) ? source.turn : 'black',
+        komi: normalizeGoKomi(source.komi),
+        passes: Math.max(0, Number(source.passes) || 0),
+        captures: {
+          black: Math.max(0, Number(source.captures && source.captures.black) || 0),
+          white: Math.max(0, Number(source.captures && source.captures.white) || 0)
+        },
+        previousBoardSignature: source.previousBoardSignature || '',
+        winner: GO_COLORS.includes(source.winner) ? source.winner : '',
+        territory: source.territory ? { ...source.territory } : { black: 0, white: 0, neutral: 0 },
+        finalScore: source.finalScore ? clonePlain(source.finalScore) : null,
+        resultDismissed: !!source.resultDismissed,
+        round: source.round || 0,
+        ending: source.ending || '',
+        debugMessage: source.debugMessage || ''
+      };
+    }
+    if (isReversiGame(source)) {
+      return {
+        gameMode: GAME_MODES.REVERSI,
+        preset: source.preset,
+        phase: source.phase,
+        removed: new Set(source.removed),
+        boxes: [],
+        newBoxIds: new Set(),
+        nextBoxId: 1,
+        score: 0,
+        discs: (source.discs || []).map((disc) => ({ id: disc.id, index: disc.index, color: disc.color })),
+        nextDiscId: source.nextDiscId || 1,
+        turn: REVERSI_COLORS.includes(source.turn) ? source.turn : 'black',
+        passCount: Math.max(0, Number(source.passCount) || 0),
+        winner: REVERSI_COLORS.includes(source.winner) ? source.winner : '',
+        finalScore: source.finalScore ? clonePlain(source.finalScore) : null,
+        resultDismissed: !!source.resultDismissed,
+        round: source.round || 0,
+        ending: source.ending || '',
+        debugMessage: source.debugMessage || ''
+      };
+    }
+    if (isChineseCheckersGame(source)) {
+      return {
+        gameMode: GAME_MODES.CHINESE_CHECKERS,
+        preset: source.preset,
+        phase: source.phase,
+        removed: new Set(source.removed),
+        boxes: [],
+        newBoxIds: new Set(),
+        nextBoxId: 1,
+        score: 0,
+        marbles: (source.marbles || []).map((marble) => ({ id: marble.id, index: marble.index, color: marble.color })),
+        nextMarbleId: source.nextMarbleId || 1,
+        camps: cloneChineseCheckersCamps(source.camps),
+        playerColors: chineseCheckersPlayerColors(source),
+        selectedIndex: Number.isInteger(source.selectedIndex) ? source.selectedIndex : null,
+        turn: normalizeChineseCheckersTurn(source.turn, chineseCheckersPlayerColors(source)),
+        winner: normalizeChineseCheckersWinner(source.winner, chineseCheckersPlayerColors(source)),
+        winningLine: [],
+        resultDismissed: !!source.resultDismissed,
+        round: source.round || 0,
+        ending: source.ending || '',
+        debugMessage: source.debugMessage || ''
+      };
+    }
     if (isConnectFourGame(source)) {
       return {
         gameMode: GAME_MODES.CONNECT_FOUR,
@@ -5825,6 +8041,9 @@
   function emptyExistingIndices(state) {
     if (isGomokuGame(state)) return emptyGomokuIndices(state);
     if (isConnectFourGame(state)) return emptyConnectFourIndices(state);
+    if (isGoGame(state)) return emptyGoIndices(state);
+    if (isReversiGame(state)) return emptyReversiIndices(state);
+    if (isChineseCheckersGame(state)) return emptyChineseCheckersIndices(state);
     const occupied = new Set((state.boxes || []).map((box) => box.index));
     const total = state.preset.rows * state.preset.cols;
     const empty = [];
@@ -5856,7 +8075,7 @@
   }
 
   function stackedTileDetails(state) {
-    if (!state || isGomokuGame(state) || !state.boxes) return [];
+    if (!state || isPlacementGame(state) || !state.boxes) return [];
     const groups = new Map();
     state.boxes.forEach((box) => {
       const group = groups.get(box.index) || [];
@@ -5883,7 +8102,7 @@
   }
 
   function gameWarnings(state) {
-    if (isGomokuGame(state)) return [];
+    if (isPlacementGame(state)) return [];
     const stackWarning = stackWarningText(state);
     const stacks = stackedTileDetails(state);
     return stackWarning
@@ -5924,19 +8143,27 @@
     if (refs.select && refs.select.value === IMPORTED_PRESET_ID && importedPreset) return importedPreset;
     if (refs.select && refs.select.value === IMPORT_PRESET_CHOICE_ID && importedPreset) return importedPreset;
     const preset = resolvePreset(refs.select ? refs.select.value : 'torus');
-    if (selectedGameMode() === GAME_MODES.GOMOKU && preset.dynamicGomokuSize) {
-      return gomokuSizedPreset(preset, selectedGomokuBoardSize());
+    if (selectedPresetUsesDynamicBoardSize(preset)) {
+      return sizedDynamicPreset(preset, selectedBoardSize());
     }
     return preset;
   }
 
   function selectedGomokuPresetIsDynamic() {
+    return selectedPresetUsesDynamicBoardSize();
+  }
+
+  function selectedPresetUsesDynamicBoardSize(preset = null) {
     if (!refs.select) return false;
-    return !!resolvePreset(refs.select.value).dynamicGomokuSize;
+    const source = preset || resolvePreset(refs.select.value);
+    return dynamicBoardSizeMode(selectedGameMode()) && !!source.dynamicGomokuSize;
   }
 
   function selectedGameMode() {
     const value = refs.gameMode ? refs.gameMode.value : GAME_MODES.NUMBER_2048;
+    if (value === GAME_MODES.CHINESE_CHECKERS) return GAME_MODES.CHINESE_CHECKERS;
+    if (value === GAME_MODES.REVERSI) return GAME_MODES.REVERSI;
+    if (value === GAME_MODES.GO) return GAME_MODES.GO;
     if (value === GAME_MODES.GOMOKU) return GAME_MODES.GOMOKU;
     if (value === GAME_MODES.CONNECT_FOUR) return GAME_MODES.CONNECT_FOUR;
     return GAME_MODES.NUMBER_2048;
@@ -5948,8 +8175,44 @@
   }
 
   function selectedGomokuBoardSize() {
-    const value = refs.gomokuSize ? Number(refs.gomokuSize.value) : GOMOKU_DEFAULT_BOARD_SIZE;
-    return clampInteger(value, GOMOKU_MIN_BOARD_SIZE, GOMOKU_MAX_BOARD_SIZE, GOMOKU_DEFAULT_BOARD_SIZE);
+    return selectedBoardSize();
+  }
+
+  function selectedBoardSize() {
+    const value = refs.gomokuSize ? Number(refs.gomokuSize.value) : defaultBoardSizeForMode(selectedGameMode());
+    if (selectedGameMode() === GAME_MODES.REVERSI) return normalizeEvenBoardSize(value);
+    return clampInteger(value, GOMOKU_MIN_BOARD_SIZE, GOMOKU_MAX_BOARD_SIZE, defaultBoardSizeForMode(selectedGameMode()));
+  }
+
+  function defaultBoardSizeForMode(mode) {
+    if (mode === GAME_MODES.REVERSI) return REVERSI_DEFAULT_BOARD_SIZE;
+    return GOMOKU_DEFAULT_BOARD_SIZE;
+  }
+
+  function normalizeEvenBoardSize(value) {
+    let size = clampInteger(value, REVERSI_MIN_BOARD_SIZE, REVERSI_MAX_BOARD_SIZE, REVERSI_DEFAULT_BOARD_SIZE);
+    if (size % 2 !== 0) size += size < REVERSI_MAX_BOARD_SIZE ? 1 : -1;
+    return size;
+  }
+
+  function syncBoardSizeInputForGameMode() {
+    if (!refs.gomokuSize) return;
+    refs.gomokuSize.value = String(defaultBoardSizeForMode(selectedGameMode()));
+  }
+
+  function dynamicBoardSizeMode(mode) {
+    return mode === GAME_MODES.GOMOKU || mode === GAME_MODES.GO || mode === GAME_MODES.REVERSI;
+  }
+
+  function selectedGoKomi() {
+    return normalizeGoKomi(refs.goKomi ? refs.goKomi.value : GO_DEFAULT_KOMI);
+  }
+
+  function selectedGameOptions(base = {}) {
+    const options = { ...base };
+    if (selectedPresetUsesDynamicBoardSize()) options.boardSize = selectedBoardSize();
+    if (selectedGameMode() === GAME_MODES.GO) options.komi = selectedGoKomi();
+    return options;
   }
 
   function selectedConnectFourFallDir(preset = selectedPreset()) {
@@ -5985,8 +8248,16 @@
     refs.connectFourFall.value = lattice.dirNames[game.fallDir] || lattice.dirNames[defaultConnectFourFallDir(game.preset)];
   }
 
+  function syncGoKomiInputFromGame() {
+    if (!refs.goKomi || !isGoGame(game)) return;
+    refs.goKomi.value = formatKomi(game.komi);
+  }
+
   function createSelectedGameState(presetOrId, options = {}) {
     const mode = selectedGameMode();
+    if (mode === GAME_MODES.CHINESE_CHECKERS) return createChineseCheckersState(presetOrId, options);
+    if (mode === GAME_MODES.REVERSI) return createReversiState(presetOrId, options);
+    if (mode === GAME_MODES.GO) return createGoState(presetOrId, options);
     if (mode === GAME_MODES.GOMOKU) return createGomokuState(presetOrId, options);
     if (mode === GAME_MODES.CONNECT_FOUR) return createConnectFourState(presetOrId, options);
     return createGameState(presetOrId, options);
@@ -5994,6 +8265,9 @@
 
   function beginSelectedGame(presetOrId, options = {}) {
     const mode = selectedGameMode();
+    if (mode === GAME_MODES.CHINESE_CHECKERS) return beginChineseCheckersGame(presetOrId, options);
+    if (mode === GAME_MODES.REVERSI) return beginReversiGame(presetOrId, options);
+    if (mode === GAME_MODES.GO) return beginGoGame(presetOrId, options);
     if (mode === GAME_MODES.GOMOKU) return beginGomokuGame(presetOrId, options);
     if (mode === GAME_MODES.CONNECT_FOUR) return beginConnectFourGame(presetOrId, options);
     return beginGame(presetOrId, options);
@@ -6007,8 +8281,24 @@
     return !!state && state.gameMode === GAME_MODES.CONNECT_FOUR;
   }
 
+  function isGoGame(state) {
+    return !!state && state.gameMode === GAME_MODES.GO;
+  }
+
+  function isReversiGame(state) {
+    return !!state && state.gameMode === GAME_MODES.REVERSI;
+  }
+
+  function isChineseCheckersGame(state) {
+    return !!state && state.gameMode === GAME_MODES.CHINESE_CHECKERS;
+  }
+
   function isPlacementGame(state) {
-    return isGomokuGame(state) || isConnectFourGame(state);
+    return isGomokuGame(state)
+      || isConnectFourGame(state)
+      || isGoGame(state)
+      || isReversiGame(state)
+      || isChineseCheckersGame(state);
   }
 
   function is2048Game(state) {
@@ -6016,6 +8306,9 @@
   }
 
   function gameModeValue(state) {
+    if (isChineseCheckersGame(state)) return GAME_MODES.CHINESE_CHECKERS;
+    if (isReversiGame(state)) return GAME_MODES.REVERSI;
+    if (isGoGame(state)) return GAME_MODES.GO;
     if (isGomokuGame(state)) return GAME_MODES.GOMOKU;
     if (isConnectFourGame(state)) return GAME_MODES.CONNECT_FOUR;
     return GAME_MODES.NUMBER_2048;
@@ -6153,8 +8446,36 @@
       connectFourHoles,
       cutEdges,
       gluedEdges,
-      gomokuWinLength: normalizeOptionalGomokuWinLength(firstPresentValue(source, ['gomokuWinLength']) || firstPresentValue(payload, ['gomokuWinLength']))
+      gomokuWinLength: normalizePresetGomokuWinLength(
+        firstPresentValue(source, ['gomokuWinLength']) || firstPresentValue(payload, ['gomokuWinLength']),
+        sourceId || registryEntry.id
+      )
     };
+    const pieceSetSource = firstPresentValue(source, ['pieceSets']) || firstPresentValue(payload, ['pieceSets']);
+    let pieceSets = normalizePieceSets(pieceSetSource, shell, removedSet);
+    if (!pieceSetsHaveEntries(pieceSets)) {
+      pieceSets = pieceSetsFromPieces(
+        importedPresetValues(payload, source, ['pieces'], 'pieces', shell),
+        shell,
+        removedSet
+      );
+    }
+    if (pieceSetsHaveEntries(pieceSets)) normalized.pieceSets = pieceSetsToTileRefs(pieceSets, cols);
+    const goKomi = firstPresentValue(source, ['goKomi', 'komi']) || firstPresentValue(payload, ['goKomi', 'komi']);
+    if (goKomi != null) normalized.goKomi = normalizeGoKomi(goKomi);
+    const reversiOpening = firstPresentValue(source, ['reversiOpening']) || firstPresentValue(payload, ['reversiOpening']);
+    if (Array.isArray(reversiOpening)) normalized.reversiOpening = reversiOpening.map((entry) => ({ ...entry }));
+    const campSource = firstPresentValue(source, ['chineseCheckersCamps', 'camps'])
+      || firstPresentValue(payload, ['chineseCheckersCamps', 'camps']);
+    if (campSource && typeof campSource === 'object' && !Array.isArray(campSource)) {
+      normalized.chineseCheckersCamps = chineseCheckersCampsToTileRefs(
+        normalizeChineseCheckersCamps(campSource, shell, removedSet),
+        cols
+      );
+    }
+    const chinesePlayers = firstPresentValue(source, ['chineseCheckersPlayers', 'playerColors'])
+      || firstPresentValue(payload, ['chineseCheckersPlayers', 'playerColors']);
+    if (chinesePlayers != null) normalized.chineseCheckersPlayers = normalizeChineseCheckersPlayers(chinesePlayers, normalized.pieceSets);
     if (source.randomGlue === true || payload.randomGlue === true) normalized.randomGlue = true;
     if (source.dynamicGomokuSize === true || payload.dynamicGomokuSize === true) normalized.dynamicGomokuSize = true;
     const dynamicLabel = firstPresentValue(source, ['dynamicGomokuLabelPrefix']) || firstPresentValue(payload, ['dynamicGomokuLabelPrefix']);
@@ -6556,7 +8877,7 @@
   function materializePreset(source, options = {}) {
     const preset = clonePreset(source);
     if (preset.dynamicGomokuSize) {
-      applyGomokuBoardSize(preset, options.boardSize || preset.rows);
+      applyDynamicBoardSize(preset, options.boardSize || preset.rows);
     }
     if (preset.randomGlue) {
       preset.gluedEdges = generateRandomBoundaryGlue(preset, options.glueRng || Math.random);
@@ -6565,7 +8886,11 @@
   }
 
   function applyGomokuBoardSize(preset, size) {
-    const boardSize = clampInteger(size, GOMOKU_MIN_BOARD_SIZE, GOMOKU_MAX_BOARD_SIZE, GOMOKU_DEFAULT_BOARD_SIZE);
+    return applyDynamicBoardSize(preset, size);
+  }
+
+  function applyDynamicBoardSize(preset, size) {
+    const boardSize = clampInteger(size, REVERSI_MIN_BOARD_SIZE, GOMOKU_MAX_BOARD_SIZE, GOMOKU_DEFAULT_BOARD_SIZE);
     preset.rows = boardSize;
     preset.cols = boardSize;
     const labelPrefix = preset.dynamicGomokuLabelPrefix || (preset.randomGlue ? 'random glue' : 'classic');
@@ -6575,6 +8900,10 @@
 
   function gomokuSizedPreset(presetOrId, size) {
     return applyGomokuBoardSize(clonePreset(resolvePreset(presetOrId)), size);
+  }
+
+  function sizedDynamicPreset(presetOrId, size) {
+    return applyDynamicBoardSize(clonePreset(resolvePreset(presetOrId)), size);
   }
 
   function gomokuRandomGluePreset(size) {
@@ -6593,7 +8922,10 @@
         right: { ...edge.right }
       })),
       connectFourHoles: (source.connectFourHoles || []).map((tile) => ({ ...tile })),
-      gluedEdges: (source.gluedEdges || []).map(cloneGluePair)
+      gluedEdges: (source.gluedEdges || []).map(cloneGluePair),
+      pieceSets: source.pieceSets ? clonePlain(source.pieceSets) : undefined,
+      chineseCheckersPlayers: Array.isArray(source.chineseCheckersPlayers) ? source.chineseCheckersPlayers.slice() : undefined,
+      chineseCheckersCamps: source.chineseCheckersCamps ? clonePlain(source.chineseCheckersCamps) : undefined
     };
   }
 
@@ -6737,6 +9069,68 @@
       if (refs.round) refs.round.textContent = String(game.round || 0);
       return;
     }
+    if (isGoGame(game)) {
+      const counts = goStoneCounts(game);
+      if (refs.scoreLabel) refs.scoreLabel.textContent = game.phase === 'gameover' ? 'Result' : 'Turn';
+      if (refs.highestLabel) refs.highestLabel.textContent = 'Black stones';
+      if (refs.existingLabel) refs.existingLabel.textContent = 'White stones';
+      if (refs.removedLabel) refs.removedLabel.textContent = 'Komi';
+      if (refs.roundLabel) refs.roundLabel.textContent = 'Moves';
+      if (refs.score) {
+        refs.score.textContent = game.phase === 'gameover'
+          ? (game.winner ? `${goColorLabel(game.winner)} wins` : 'draw')
+          : goColorLabel(game.turn);
+      }
+      if (refs.highest) refs.highest.textContent = String(counts.black);
+      if (refs.existing) refs.existing.textContent = String(counts.white);
+      if (refs.removed) refs.removed.textContent = formatKomi(game.komi);
+      if (refs.round) refs.round.textContent = String(game.round || 0);
+      return;
+    }
+    if (isReversiGame(game)) {
+      const counts = reversiDiscCounts(game);
+      if (refs.scoreLabel) refs.scoreLabel.textContent = game.phase === 'gameover' ? 'Result' : 'Turn';
+      if (refs.highestLabel) refs.highestLabel.textContent = 'Black discs';
+      if (refs.existingLabel) refs.existingLabel.textContent = 'White discs';
+      if (refs.removedLabel) refs.removedLabel.textContent = 'Removed tiles';
+      if (refs.roundLabel) refs.roundLabel.textContent = 'Moves';
+      if (refs.score) {
+        refs.score.textContent = game.phase === 'gameover'
+          ? (game.winner ? `${reversiColorLabel(game.winner)} wins` : 'draw')
+          : reversiColorLabel(game.turn);
+      }
+      if (refs.highest) refs.highest.textContent = String(counts.black);
+      if (refs.existing) refs.existing.textContent = String(counts.white);
+      if (refs.removed) refs.removed.textContent = String(game.removed.size);
+      if (refs.round) refs.round.textContent = String(game.round || 0);
+      return;
+    }
+    if (isChineseCheckersGame(game)) {
+      const counts = chineseCheckersMarbleCounts(game);
+      const players = chineseCheckersPlayerColors(game);
+      const first = players[0] || 'red';
+      const second = players[1] || '';
+      if (refs.scoreLabel) refs.scoreLabel.textContent = game.phase === 'gameover' ? 'Result' : 'Turn';
+      if (refs.highestLabel) refs.highestLabel.textContent = `${chineseCheckersColorLabel(first)} marbles`;
+      if (refs.existingLabel) refs.existingLabel.textContent = second ? `${chineseCheckersColorLabel(second)} marbles` : 'Other marbles';
+      if (refs.removedLabel) refs.removedLabel.textContent = 'Removed tiles';
+      if (refs.roundLabel) refs.roundLabel.textContent = 'Moves';
+      if (refs.score) {
+        refs.score.textContent = game.phase === 'gameover'
+          ? (game.winner ? `${chineseCheckersColorLabel(game.winner)} wins` : 'draw')
+          : chineseCheckersColorLabel(game.turn);
+      }
+      if (refs.highest) refs.highest.textContent = String(counts[first] || 0);
+      if (refs.existing) {
+        const otherCount = second
+          ? (counts[second] || 0)
+          : Object.entries(counts).reduce((sum, [color, count]) => sum + (color === first ? 0 : count), 0);
+        refs.existing.textContent = String(otherCount);
+      }
+      if (refs.removed) refs.removed.textContent = String(game.removed.size);
+      if (refs.round) refs.round.textContent = String(game.round || 0);
+      return;
+    }
     if (refs.scoreLabel) refs.scoreLabel.textContent = 'Score';
     if (refs.highestLabel) refs.highestLabel.textContent = 'Highest tile';
     if (refs.existingLabel) refs.existingLabel.textContent = 'Existing tiles';
@@ -6754,6 +9148,10 @@
     const mode2048 = catalogAvailable && is2048Game(game) && selectedGameMode() === GAME_MODES.NUMBER_2048;
     const modeGomoku = catalogAvailable && (isGomokuGame(game) || selectedGameMode() === GAME_MODES.GOMOKU);
     const modeConnectFour = catalogAvailable && (isConnectFourGame(game) || selectedGameMode() === GAME_MODES.CONNECT_FOUR);
+    const modeGo = catalogAvailable && (isGoGame(game) || selectedGameMode() === GAME_MODES.GO);
+    const modeReversi = catalogAvailable && (isReversiGame(game) || selectedGameMode() === GAME_MODES.REVERSI);
+    const modeChineseCheckers = catalogAvailable && (isChineseCheckersGame(game) || selectedGameMode() === GAME_MODES.CHINESE_CHECKERS);
+    const modePlacement = modeGomoku || modeConnectFour || modeGo || modeReversi || modeChineseCheckers;
     syncConnectFourFallOptions();
     if (refs.begin) {
       refs.begin.textContent = game && game.phase !== 'setup' ? 'stop the game' : 'begin the game';
@@ -6775,9 +9173,20 @@
         control.hidden = !modeConnectFour;
       });
     }
-    if (refs.gomokuSizeRow) refs.gomokuSizeRow.hidden = !modeGomoku || !selectedGomokuPresetIsDynamic();
-    if (refs.placementDisplayRow) refs.placementDisplayRow.hidden = !(modeGomoku || modeConnectFour);
+    if (refs.modeGoControls) {
+      refs.modeGoControls.forEach((control) => {
+        control.hidden = !modeGo;
+      });
+    }
+    if (refs.gomokuSizeRow) refs.gomokuSizeRow.hidden = !(modeGomoku || modeGo || modeReversi) || !selectedGomokuPresetIsDynamic();
+    if (refs.gomokuSize) {
+      refs.gomokuSize.min = modeReversi ? String(REVERSI_MIN_BOARD_SIZE) : String(GOMOKU_MIN_BOARD_SIZE);
+      refs.gomokuSize.max = modeReversi ? String(REVERSI_MAX_BOARD_SIZE) : String(GOMOKU_MAX_BOARD_SIZE);
+      refs.gomokuSize.step = modeReversi ? '2' : '1';
+    }
+    if (refs.placementDisplayRow) refs.placementDisplayRow.hidden = !modePlacement;
     if (refs.connectFourFall) refs.connectFourFall.disabled = modeConnectFour && game && game.phase !== 'setup';
+    if (refs.goPass) refs.goPass.disabled = !modeGo || !isGoGame(game) || game.phase !== 'ready';
     if (refs.nextStep) refs.nextStep.disabled = !mode2048 || !(isStepMode() && stepPaused && eventQueue.length && !currentAnimation);
     if (refs.undo) refs.undo.disabled = !undoStack.length;
     if (refs.exportState) refs.exportState.disabled = !game;
@@ -6819,6 +9228,14 @@
         ? event.transitions.length
         : (Array.isArray(event.path) ? Math.max(1, event.path.length - 1) : 1);
       return Math.min(900, Math.max(260, 150 + steps * 90));
+    }
+    if (event.kind === 'reversiFlip') {
+      const distance = (event.flips || []).reduce((max, flip) => Math.max(max, flip.distance || 1), 1);
+      return Math.min(1050, Math.max(300, 230 + distance * 90));
+    }
+    if (event.kind === 'chineseCheckersMove') {
+      const steps = (event.segments || []).reduce((sum, segment) => sum + Math.max(1, (segment.transitions || []).length), 0);
+      return Math.min(1300, Math.max(260, 160 + Math.max(1, steps) * 70));
     }
     if (event.kind === 'bounceGroup') return Math.max(100, base * 0.9);
     if (event.kind === 'explode') return Math.max(120, base * 0.85);
@@ -7194,6 +9611,52 @@
         round: state.round || 0
       };
     }
+    if (isGoGame(state)) {
+      return {
+        gameMode: GAME_MODES.GO,
+        stones: (state.stones || [])
+          .map((stone) => ({ id: stone.id, index: stone.index, color: stone.color }))
+          .sort((a, b) => a.index - b.index || a.id - b.id),
+        removed: Array.from(state.removed).sort((a, b) => a - b),
+        turn: state.turn,
+        komi: normalizeGoKomi(state.komi),
+        passes: state.passes || 0,
+        captures: { ...(state.captures || { black: 0, white: 0 }) },
+        winner: state.winner || '',
+        territory: { ...(state.territory || { black: 0, white: 0, neutral: 0 }) },
+        finalScore: state.finalScore ? clonePlain(state.finalScore) : null,
+        round: state.round || 0
+      };
+    }
+    if (isReversiGame(state)) {
+      return {
+        gameMode: GAME_MODES.REVERSI,
+        discs: (state.discs || [])
+          .map((disc) => ({ id: disc.id, index: disc.index, color: disc.color }))
+          .sort((a, b) => a.index - b.index || a.id - b.id),
+        removed: Array.from(state.removed).sort((a, b) => a - b),
+        turn: state.turn,
+        passCount: state.passCount || 0,
+        winner: state.winner || '',
+        finalScore: state.finalScore ? clonePlain(state.finalScore) : null,
+        round: state.round || 0
+      };
+    }
+    if (isChineseCheckersGame(state)) {
+      return {
+        gameMode: GAME_MODES.CHINESE_CHECKERS,
+        marbles: (state.marbles || [])
+          .map((marble) => ({ id: marble.id, index: marble.index, color: marble.color }))
+          .sort((a, b) => a.index - b.index || a.id - b.id),
+        removed: Array.from(state.removed).sort((a, b) => a - b),
+        camps: chineseCheckersCampsExport(state.camps, state.preset.cols),
+        selectedIndex: Number.isInteger(state.selectedIndex) ? state.selectedIndex : null,
+        turn: state.turn,
+        winner: state.winner || '',
+        winningLine: (state.winningLine || []).slice(),
+        round: state.round || 0
+      };
+    }
     return {
       boxes: state.boxes
         .map((box) => ({ id: box.id, index: box.index, value: box.value }))
@@ -7218,8 +9681,11 @@
     LATTICES,
     PRESETS,
     beginGame,
+    beginChineseCheckersGame,
     beginConnectFourGame,
+    beginGoGame,
     beginGomokuGame,
+    beginReversiGame,
     blastNeighborIndices,
     cloneGameState,
     connectFourCyclingHoleIndices,
@@ -7227,8 +9693,11 @@
     connectFourOpenHoleIndices,
     countUnmatchedBoundaries,
     createGameState,
+    createChineseCheckersState,
     createConnectFourState,
+    createGoState,
     createGomokuState,
+    createReversiState,
     createRng,
     directNeighborIndex,
     dirFromKey,
@@ -7251,8 +9720,15 @@
     placementLineRenderSegments,
     placementWinningLineSegments,
     placementLineTransitionRoute,
+    passGoTurn,
+    placeChineseCheckerMarble: moveChineseCheckerMarble,
+    placeGoStone,
     placeGomokuStone,
     placeConnectFourToken,
+    placeReversiDisc,
+    reversiFlipsForMove,
+    chineseCheckerMoveMap,
+    scoreGoGame,
     normalizePresetPayload,
     presetFromImportPayload,
     presetFromImportText,

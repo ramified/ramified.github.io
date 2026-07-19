@@ -68,6 +68,7 @@ function testFullExportIncludesMarkers() {
   assert.strictEqual(payload.name, 'Mosaic Calculator');
   assert.ok(Array.isArray(payload.tiles));
   assert.deepStrictEqual(payload.inputHoles.map((entry) => `${entry.row},${entry.col}`), ['1,1', '1,2', '1,3', '1,4']);
+  assert.deepStrictEqual(payload.pieceSets, { starts: { white: [tile(4, 4)] }, targets: {} });
   assert.deepStrictEqual(payload.pieces, [{ row: 4, col: 4, kind: 'king', side: 'white', value: 'K' }]);
 }
 
@@ -108,6 +109,8 @@ function testMinigameFormats() {
   assert.strictEqual(verbose.backgroundSpace, undefined);
   assert.strictEqual(verbose.display, undefined);
   assert.deepStrictEqual(verbose.connectFourHoles, [tile(1, 1), tile(1, 2), tile(1, 3), tile(1, 4)]);
+  assert.deepStrictEqual(verbose.pieceSets, { starts: { white: [tile(4, 4)] }, targets: {} });
+  assert.strictEqual(verbose.pieces, undefined);
 
   mosaic.setTestExportControls({
     type: 'minigame',
@@ -119,9 +122,11 @@ function testMinigameFormats() {
   const source = mosaic.buildExportText();
   assert.match(source, /RAMIFIED_MINIGAME_PRESET_DATA/);
   assert.match(source, /Save this file as ramified_minigame_presets\/connect_four_export\.preset\.js/);
-  assert.match(source, /Add\/edit the matching row in ramified_minigame_presets\/presets\.js/);
+  assert.match(source, /Add this entry to ramified_minigame_presets\/presets\.js:/);
+  assert.match(source, /\/\/\s+"gameTypes": \[/);
+  assert.match(source, /\/\/\s+"file": "connect_four_export\.preset\.js"/);
   assert.match(source, /Store gameTypes in presets\.js only/);
-  assert.doesNotMatch(source, /"gameTypes"\s*:/);
+  assert.doesNotMatch(source.slice(source.indexOf('  return {')), /"gameTypes"\s*:/);
   assert.match(source, /connect_four_export\.preset\.js/);
   const exportedPreset = loadPresetJs(source);
   assert.strictEqual(exportedPreset.id, 'connect-four-export');
@@ -213,7 +218,8 @@ function testAdvancedMultiGroupExport() {
   const metadata = mosaic.currentExportPresetMetadata();
   assert.deepStrictEqual(metadata.gameTypes, ['2048', 'Gomoku', 'Connect Four']);
   const source = mosaic.buildExportText();
-  assert.doesNotMatch(source, /"gameTypes"\s*:/);
+  assert.match(source, /\/\/\s+"gameTypes": \[/);
+  assert.doesNotMatch(source.slice(source.indexOf('  return {')), /"gameTypes"\s*:/);
   const exportedPreset = loadPresetJs(source);
   assert.strictEqual(exportedPreset.gameTypes, undefined);
   assert.strictEqual(exportedPreset.group, undefined);
@@ -304,7 +310,47 @@ function testImportStyleMarkers() {
   });
   const compact = mosaic.buildCompactBackgroundExport(false);
   assert.strictEqual(compact.holes, 'top');
+  assert.deepStrictEqual(compact.pieceSets, { starts: { black: [tile(2, 2)] }, targets: {} });
   assert.deepStrictEqual(compact.pieces, [{ row: 2, col: 2, kind: 'rook', side: 'black', value: 'r' }]);
+}
+
+function testPieceSetsImportExportAndDecorationToggle() {
+  mosaic.setTestBoard({
+    rows: 4,
+    cols: 4,
+    lattice: 'square',
+    pieceSets: {
+      starts: {
+        black: [tile(1, 1)],
+        blue: [tile(2, 2)]
+      },
+      targets: {
+        black: [tile(4, 4)]
+      }
+    }
+  });
+  assert.deepStrictEqual(mosaic.pieceSetsForExport(), {
+    starts: {
+      black: [tile(1, 1)],
+      blue: [tile(2, 2)]
+    },
+    targets: {
+      black: [tile(4, 4)]
+    }
+  });
+
+  mosaic.setTestBoard({
+    rows: 3,
+    cols: 3,
+    lattice: 'square',
+    backgroundAction: 'decoration',
+    backgroundDecorationKind: 'target',
+    backgroundDecorationColor: 'green'
+  });
+  assert.strictEqual(mosaic.toggleBackgroundDecoration(8, { update: false }), true);
+  assert.deepStrictEqual(mosaic.pieceSetsForExport(), { starts: {}, targets: { green: [tile(3, 3)] } });
+  assert.strictEqual(mosaic.toggleBackgroundDecoration(8, { update: false }), true);
+  assert.strictEqual(mosaic.pieceSetsForExport(), null);
 }
 
 function testHoleMarkerDrawingMatchesConnectFour() {
@@ -336,6 +382,7 @@ const tests = [
   testExportHiddenRowsHaveCssRule,
   testHolePruningAndToggle,
   testImportStyleMarkers,
+  testPieceSetsImportExportAndDecorationToggle,
   testHoleMarkerDrawingMatchesConnectFour
 ];
 

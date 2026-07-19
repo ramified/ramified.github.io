@@ -454,6 +454,18 @@
       font-size: 0.72rem;
     }
 
+    .background-decoration-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(76px, 0.72fr);
+      gap: 6px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .background-decoration-controls select[hidden] {
+      display: none !important;
+    }
+
     .mosaic-color-row {
       display: grid;
       grid-template-columns: 42px minmax(0, 1fr);
@@ -1259,12 +1271,31 @@
             <select id="background-action">
               <option value="occupied" hidden disabled>Occupied</option>
               <option value="tile">Remove / recover tiles</option>
-              <option value="input-hole">Add / remove input holes</option>
+              <option value="decoration">Add / remove decorations</option>
               <option value="boundary">Add / remove boundary</option>
               <option value="glue-boundary">Glue boundary</option>
               <option value="reverse-glue" hidden disabled>Reverse arrows</option>
               <option value="billiard">Billiard / geodesic</option>
             </select>
+          </div>
+          <div class="mosaic-inline-row" id="background-decoration-row" hidden>
+            <span class="input-label">Decoration</span>
+            <span class="background-decoration-controls">
+              <select id="background-decoration-kind" aria-label="Decoration kind">
+                <option value="input-hole">Input hole</option>
+                <option value="start">Start piece</option>
+                <option value="target">Goal</option>
+                <option value="clear">Clear</option>
+              </select>
+              <select id="background-decoration-color" aria-label="Decoration color">
+                <option value="black">black</option>
+                <option value="white">white</option>
+                <option value="red">red</option>
+                <option value="yellow">yellow</option>
+                <option value="blue">blue</option>
+                <option value="green">green</option>
+              </select>
+            </span>
           </div>
           <div class="mosaic-inline-row" id="background-billiard-row">
             <span class="input-label">Geodesic</span>
