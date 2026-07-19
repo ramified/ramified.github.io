@@ -264,6 +264,7 @@
     refs.select = document.getElementById('surface-preset-select');
     refs.importToggle = document.getElementById('import-preset-toggle');
     refs.importTools = document.getElementById('import-preset-tools');
+    refs.importKeepGameMode = document.getElementById('import-keep-game-mode');
     refs.importGameMode = document.getElementById('import-game-mode');
     refs.importSource = document.getElementById('import-preset-source');
     refs.importCatalogRow = document.getElementById('import-preset-catalog-row');
@@ -323,6 +324,7 @@
     if (refs.gameMode) refs.gameMode.addEventListener('change', handleGameModeChange);
     refs.select.addEventListener('change', handlePresetSelectChange);
     if (refs.importToggle) refs.importToggle.addEventListener('click', toggleImportTools);
+    if (refs.importKeepGameMode) refs.importKeepGameMode.addEventListener('change', syncImportExportControls);
     if (refs.importGameMode) refs.importGameMode.addEventListener('change', syncImportExportControls);
     if (refs.importSource) refs.importSource.addEventListener('change', syncImportExportControls);
     if (refs.applyImportPreset) refs.applyImportPreset.addEventListener('click', importPresetFromUi);
@@ -1048,13 +1050,22 @@
   }
 
   function importPresetFromUi() {
-    const mode = selectedImportGameMode();
+    const importMode = selectedImportGameMode();
+    const targetMode = shouldKeepCurrentGameModeOnImport() ? selectedGameMode() : importMode;
     try {
       if (selectedImportSource() === 'catalog') {
-        const preset = resolvePreset(refs.importCatalog ? refs.importCatalog.value : defaultPresetIdForMode(mode));
-        if (refs.gameMode) refs.gameMode.value = mode;
-        syncPresetSelectOptions(preset.id);
-        if (refs.select) refs.select.value = preset.id;
+        const preset = resolvePreset(refs.importCatalog ? refs.importCatalog.value : defaultPresetIdForMode(importMode));
+        if (shouldKeepCurrentGameModeOnImport()) {
+          importedPreset = clonePreset(preset);
+          applyImportedPresetMode(importedPreset, targetMode);
+          ensureImportedPresetOption(importedPreset);
+          if (refs.select) refs.select.value = IMPORTED_PRESET_ID;
+        } else {
+          importedPreset = null;
+          if (refs.gameMode) refs.gameMode.value = importMode;
+          syncPresetSelectOptions(preset.id);
+          if (refs.select) refs.select.value = preset.id;
+        }
         resetToPreview();
         syncImportExportControls();
         syncStatus('preset imported', previewInfo(game.preset), 'setup');
@@ -1062,10 +1073,10 @@
       }
       if (!refs.importInput) return;
       importedPreset = presetFromImportText(refs.importInput.value);
-      applyImportedPresetMode(importedPreset, mode);
-      if (refs.gameMode) refs.gameMode.value = mode;
+      applyImportedPresetMode(importedPreset, targetMode);
+      if (!shouldKeepCurrentGameModeOnImport() && refs.gameMode) refs.gameMode.value = importMode;
       ensureImportedPresetOption(importedPreset);
-      if (refs.select) refs.select.value = importedPreset.id;
+      if (refs.select) refs.select.value = IMPORTED_PRESET_ID;
       resetToPreview();
       syncImportExportControls();
       syncStatus('preset imported', previewInfo(game.preset), 'setup');
@@ -1081,6 +1092,10 @@
 
   function selectedImportSource() {
     return refs.importSource && refs.importSource.value === 'paste' ? 'paste' : 'catalog';
+  }
+
+  function shouldKeepCurrentGameModeOnImport() {
+    return !refs.importKeepGameMode || !!refs.importKeepGameMode.checked;
   }
 
   function applyImportedPresetMode(preset, mode) {

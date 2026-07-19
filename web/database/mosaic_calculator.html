@@ -1623,7 +1623,7 @@
     </section>
 
     <section class="card collapsed" id="export-card">
-      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Import / Export</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="mosaic-inline-row">
           <span class="input-label">Export type</span>
@@ -1673,10 +1673,11 @@
           <a class="export-test-link" id="export-test-link" href="ramified_minigames.html" target="_blank" rel="noopener">Test in Minigames</a>
         </div>
         <div class="action-row">
+          <button class="btn" id="import-export" type="button">import</button>
           <button class="btn" id="refresh-export">refresh</button>
           <button class="btn btn-ghost" id="copy-export">copy</button>
         </div>
-        <textarea id="export-out" readonly></textarea>
+        <textarea id="export-out" spellcheck="false" autocomplete="off" aria-label="Import or export chart"></textarea>
       </div>
     </section>
   </aside>

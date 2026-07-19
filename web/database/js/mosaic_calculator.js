@@ -1100,7 +1100,8 @@
       id: '',
       label: '',
       gameTypes: ['2048']
-    }
+    },
+    exportPresetCustomGroups: []
   };
 
   const refs = {};
@@ -1342,6 +1343,7 @@
     refs.dualGraphPresetMarkings = document.getElementById('dual-graph-preset-markings');
     refs.exportCard = document.getElementById('export-card');
     refs.exportOut = document.getElementById('export-out');
+    refs.importExport = document.getElementById('import-export');
     refs.inputPanels = Array.from(document.querySelectorAll('[data-input-panel]'));
 
     refs.out = {
@@ -1581,6 +1583,7 @@
         refreshExport();
       });
     }
+    if (refs.importExport) refs.importExport.addEventListener('click', importExportText);
     document.getElementById('refresh-export').addEventListener('click', refreshExport);
     document.getElementById('copy-export').addEventListener('click', copyExport);
 
@@ -18831,6 +18834,404 @@
     return JSON.stringify(buildFullExport(), null, 2);
   }
 
+  function importExportText() {
+    if (!refs.exportOut) return;
+    const text = String(refs.exportOut.value || '').trim();
+    if (!text) {
+      setExportImportStatus('no chart data', true);
+      return;
+    }
+
+    try {
+      const parsed = parseExportImportText(text);
+      const payload = normalizeExportImportPayload(parsed.payload);
+      applyImportedMosaic(payload);
+      syncExportImportMetadata(parsed.payload, parsed.metadata, parsed.sourceKind);
+      refreshExport({ fillPresetDefaults: false });
+      setExportImportStatus('chart imported', false);
+    } catch (error) {
+      setExportImportStatus(error && error.message ? error.message : 'could not import chart', true);
+    }
+  }
+
+  function setExportImportStatus(message, isError) {
+    if (!refs.statusLine) return;
+    refs.statusLine.textContent = message;
+    refs.statusLine.classList.toggle('mosaic-status-bad', !!isError);
+    if (!isError) refs.statusLine.classList.remove('mosaic-status-good');
+  }
+
+  function parseExportImportText(text) {
+    const source = String(text || '').trim();
+    const metadata = extractExportImportRegistryMetadata(source);
+    try {
+      return {
+        payload: JSON.parse(source),
+        metadata,
+        sourceKind: 'json'
+      };
+    } catch (_) {
+      const objectText = extractReturnedJsonObjectText(source) || extractFirstJsonObjectText(source);
+      if (!objectText) throw new Error('chart data is not valid JSON or preset JS');
+      return {
+        payload: JSON.parse(objectText),
+        metadata,
+        sourceKind: 'js'
+      };
+    }
+  }
+
+  function extractExportImportRegistryMetadata(text) {
+    const marker = 'Add this entry to ramified_minigame_presets/presets.js:';
+    const markerIndex = String(text || '').indexOf(marker);
+    if (markerIndex < 0) return null;
+    const commentText = String(text)
+      .slice(markerIndex + marker.length)
+      .split(/\r?\n/)
+      .map((line) => {
+        const match = line.match(/^\s*\/\/\s?(.*)$/);
+        return match ? match[1] : '';
+      })
+      .join('\n');
+    const start = commentText.indexOf('{');
+    if (start < 0) return null;
+    const objectText = extractBalancedObjectText(commentText, start);
+    if (!objectText) return null;
+    try {
+      return JSON.parse(objectText);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function extractFirstJsonObjectText(text) {
+    const start = String(text || '').indexOf('{');
+    return start >= 0 ? extractBalancedObjectText(text, start) : '';
+  }
+
+  function extractReturnedJsonObjectText(text) {
+    const source = String(text || '');
+    const pattern = /\breturn\b/g;
+    let match;
+    while ((match = pattern.exec(source))) {
+      const start = source.indexOf('{', match.index + match[0].length);
+      if (start < 0) continue;
+      const objectText = extractBalancedObjectText(source, start);
+      if (objectText) return objectText;
+    }
+    return '';
+  }
+
+  function extractBalancedObjectText(text, start) {
+    const source = String(text || '');
+    if (source[start] !== '{') return '';
+    let depth = 0;
+    let quote = '';
+    let escaped = false;
+    for (let index = start; index < source.length; index += 1) {
+      const char = source[index];
+      if (quote) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === '\\') {
+          escaped = true;
+        } else if (char === quote) {
+          quote = '';
+        }
+        continue;
+      }
+      if (char === '"' || char === "'" || char === '`') {
+        quote = char;
+        continue;
+      }
+      if (char === '{') {
+        depth += 1;
+      } else if (char === '}') {
+        depth -= 1;
+        if (depth === 0) return source.slice(start, index + 1);
+      }
+    }
+    return '';
+  }
+
+  function normalizeExportImportPayload(payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new Error('chart data must be an object');
+    }
+    const source = exportImportPayloadSource(payload);
+    const normalized = { ...source };
+    if (payload.backgroundSpace && !normalized.backgroundSpace) normalized.backgroundSpace = payload.backgroundSpace;
+    const size = parseExportImportSize(normalized.size || payload.size);
+    if (size) {
+      if (!Number.isFinite(Number(normalized.rows))) normalized.rows = size.rows;
+      if (!Number.isFinite(Number(normalized.cols))) normalized.cols = size.cols;
+    }
+    if (!normalized.lattice && payload.lattice) normalized.lattice = payload.lattice;
+    const rows = clampInt(normalized.rows, MIN_BOARD, MAX_BOARD, state.rows);
+    const cols = clampInt(normalized.cols, MIN_BOARD, MAX_BOARD, state.cols);
+
+    if (Array.isArray(normalized.removed) && !Array.isArray(normalized.removedTiles)) {
+      normalized.removedTiles = normalized.removed;
+    } else if (typeof normalized.removed === 'string' && !Array.isArray(normalized.removedTiles)) {
+      normalized.removedTiles = parseCompactTileRefs(normalized.removed, rows, cols);
+    }
+    if (Array.isArray(normalized.holes) && !Array.isArray(normalized.inputHoles)) {
+      normalized.inputHoles = normalized.holes;
+      normalized.connectFourHoles = normalized.holes;
+    } else if (typeof normalized.holes === 'string' && !Array.isArray(normalized.inputHoles)) {
+      const holes = parseCompactTileRefs(normalized.holes, rows, cols, { top: true });
+      normalized.inputHoles = holes;
+      normalized.connectFourHoles = holes;
+    }
+    if (Array.isArray(normalized.cuts) && !Array.isArray(normalized.cutEdges)) {
+      normalized.cutEdges = normalized.cuts;
+    } else if (typeof normalized.cuts === 'string' && !Array.isArray(normalized.cutEdges)) {
+      normalized.cutEdges = parseCompactCutEdges(normalized.cuts, rows, cols);
+    }
+    if (Array.isArray(normalized.glue) && !Array.isArray(normalized.gluedEdges)) {
+      normalized.gluedEdges = normalized.glue;
+    } else if (typeof normalized.glue === 'string' && !Array.isArray(normalized.gluedEdges)) {
+      normalized.gluedEdges = parseCompactGlueEdges(normalized.glue, normalized.lattice || state.lattice, rows, cols);
+    }
+    if (!normalized.boundary && !normalized.boundaryMode && exportImportPayloadLooksLikeBackground(normalized)) {
+      normalized.boundary = 'glued';
+    }
+    if (!normalized.inputMode && !Array.isArray(normalized.tiles)) normalized.inputMode = 'background';
+    return normalized;
+  }
+
+  function exportImportPayloadSource(payload) {
+    if (
+      payload
+      && typeof payload === 'object'
+      && payload.preset
+      && typeof payload.preset === 'object'
+      && !Array.isArray(payload.preset)
+      && (payload.schema === 'ramified-minigame-background-preset' || !Number.isFinite(Number(payload.rows)))
+    ) {
+      return { ...payload.preset };
+    }
+    return payload;
+  }
+
+  function parseExportImportSize(value) {
+    if (Array.isArray(value) && value.length >= 2) {
+      const rows = Number(value[0]);
+      const cols = Number(value[1]);
+      return Number.isFinite(rows) && Number.isFinite(cols) ? { rows, cols } : null;
+    }
+    if (value && typeof value === 'object') {
+      const rows = Number(value.rows);
+      const cols = Number(value.cols);
+      return Number.isFinite(rows) && Number.isFinite(cols) ? { rows, cols } : null;
+    }
+    const text = String(value || '').trim();
+    const pair = text.match(/^(\d+)\s*(?:x|\*|by)\s*(\d+)$/i);
+    if (pair) return { rows: Number(pair[1]), cols: Number(pair[2]) };
+    const square = text.match(/^(\d+)$/);
+    return square ? { rows: Number(square[1]), cols: Number(square[1]) } : null;
+  }
+
+  function parseCompactCutEdges(value, rows, cols) {
+    const entries = [];
+    String(value || '').split(/[;\n]+/).map((entry) => entry.trim()).filter(Boolean).forEach((entry) => {
+      const parts = entry.split('=');
+      if (parts.length !== 2) return;
+      const left = parseCompactTileRefs(parts[0], rows, cols)[0];
+      const right = parseCompactTileRefs(parts[1], rows, cols)[0];
+      if (left && right) entries.push({ left, right });
+    });
+    return entries;
+  }
+
+  function parseCompactGlueEdges(value, latticeName, rows, cols) {
+    const entries = [];
+    String(value || '').split(/[;\n]+/).map((entry) => entry.trim()).filter(Boolean).forEach((entry) => {
+      const settings = parseCompactGlueSettings(entry);
+      const parts = settings.text.split('=');
+      if (parts.length !== 2) return;
+      const firstEdges = parseCompactBoundaryEdgeRefs(parts[0], latticeName, rows, cols);
+      const secondEdges = parseCompactBoundaryEdgeRefs(parts[1], latticeName, rows, cols);
+      const count = Math.max(firstEdges.length, secondEdges.length);
+      if (!count) return;
+      for (let index = 0; index < count; index += 1) {
+        const first = firstEdges[firstEdges.length === 1 ? 0 : index];
+        const second = secondEdges[secondEdges.length === 1 ? 0 : index];
+        if (!first || !second) continue;
+        entries.push({
+          group: settings.group,
+          reversed: settings.reversed,
+          firstArrowReversed: settings.firstArrowReversed,
+          secondArrowReversed: settings.secondArrowReversed,
+          first,
+          second
+        });
+      }
+    });
+    return entries;
+  }
+
+  function parseCompactGlueSettings(entry) {
+    const defaults = {
+      text: String(entry || '').trim(),
+      group: null,
+      reversed: false,
+      firstArrowReversed: false,
+      secondArrowReversed: true
+    };
+    const match = defaults.text.match(/^g(-?\d+)(?:~([01]{0,2})?)?:\s*/i);
+    if (!match) return defaults;
+    const reversed = match[0].includes('~');
+    const flags = match[1] != null && reversed ? (match[2] || '') : '';
+    return {
+      text: defaults.text.slice(match[0].length).trim(),
+      group: normalizeGlueGroup(match[1]),
+      reversed,
+      firstArrowReversed: reversed ? (flags ? flags.charAt(0) === '1' : true) : false,
+      secondArrowReversed: reversed ? (flags.length > 1 ? flags.charAt(1) === '1' : true) : true
+    };
+  }
+
+  function parseCompactBoundaryEdgeRefs(value, latticeName, rows, cols) {
+    const parts = String(value || '').split(',').map((part) => part.trim()).filter(Boolean);
+    if (parts.length < 3) return [];
+    const rowValues = parseCompactNumberRange(parts[0]).filter((row) => row >= 1 && row <= rows);
+    const colValues = parseCompactNumberRange(parts[1]).filter((col) => col >= 1 && col <= cols);
+    const dir = parts.slice(2).join(',').trim();
+    if (!rowValues.length || !colValues.length || !dir) return [];
+    const pairs = [];
+    if (rowValues.length === colValues.length) {
+      rowValues.forEach((row, index) => pairs.push({ row, col: colValues[index], dir }));
+    } else if (rowValues.length === 1) {
+      colValues.forEach((col) => pairs.push({ row: rowValues[0], col, dir }));
+    } else if (colValues.length === 1) {
+      rowValues.forEach((row) => pairs.push({ row, col: colValues[0], dir }));
+    }
+    return pairs.filter((edge) => compactBoundaryDirIsKnown(edge.dir, latticeName));
+  }
+
+  function compactBoundaryDirIsKnown(dir, latticeName) {
+    const lattice = LATTICES[latticeName] || getLattice();
+    const normalized = String(dir || '').trim().toUpperCase();
+    return lattice.dirNames.some((name) => name.toUpperCase() === normalized) || /^-?\d+$/.test(normalized);
+  }
+
+  function exportImportPayloadLooksLikeBackground(payload) {
+    if (!payload || typeof payload !== 'object') return false;
+    return ['removedTiles', 'backgroundRemovedTiles', 'removed', 'cutEdges', 'backgroundCutEdges', 'cuts', 'gluedEdges', 'backgroundGluedEdges', 'glue', 'inputHoles', 'connectFourHoles', 'holes', 'pieceSets', 'pieces']
+      .some((key) => Object.prototype.hasOwnProperty.call(payload, key));
+  }
+
+  function syncExportImportMetadata(payload, registryMetadata, sourceKind) {
+    const source = exportImportPayloadSource(payload);
+    const metadata = exportImportMetadataFromPayload(payload, registryMetadata);
+    const type = exportImportTypeForPayload(payload, source, metadata);
+    const format = exportImportFormatForPayload(payload, source, sourceKind, type);
+    const gameTypes = metadata.gameTypes.length ? metadata.gameTypes : ['2048'];
+    state.exportPresetCustomGroups = type === EXPORT_TYPES.MINIGAME ? gameTypes.slice() : [];
+
+    if (refs.exportType) refs.exportType.value = type;
+    if (refs.exportFormat) refs.exportFormat.value = format;
+    if (refs.exportPresetAdvanced) {
+      refs.exportPresetAdvanced.checked = type === EXPORT_TYPES.MINIGAME && (!!metadata.key || gameTypes.length > 1);
+    }
+    syncExportControls({ fillPresetDefaults: false });
+    if (type !== EXPORT_TYPES.MINIGAME) return;
+
+    if (refs.exportPresetLabel) refs.exportPresetLabel.value = metadata.label;
+    if (refs.exportPresetId) refs.exportPresetId.value = metadata.key || cleanExportPresetKey(metadata.id || metadata.label);
+    syncExportGroupOptions(exportImportGroupChoices(gameTypes));
+    if (refs.exportPresetGroup) refs.exportPresetGroup.value = gameTypes[0];
+    if (Array.isArray(refs.exportPresetGroupChecks)) {
+      refs.exportPresetGroupChecks.forEach((input) => {
+        input.checked = gameTypes.includes(input.value);
+      });
+      if (!refs.exportPresetGroupChecks.some((input) => input.checked)) syncExportPresetGroupChecks({ ensurePrimary: true });
+    }
+    syncExportAdvancedVisibility();
+    updateExportTestLink(type);
+  }
+
+  function exportImportMetadataFromPayload(payload, registryMetadata) {
+    const source = exportImportPayloadSource(payload);
+    const groups = uniqueStrings([
+      ...gameTypesFromPresetLike(registryMetadata),
+      ...gameTypesFromPresetLike(source),
+      ...gameTypesFromPresetLike(payload)
+    ]);
+    const label = firstNonEmptyString(
+      registryMetadata && registryMetadata.label,
+      source && source.label,
+      payload && payload.label,
+      source && source.name
+    ) || 'Mosaic background';
+    const id = firstNonEmptyString(
+      registryMetadata && registryMetadata.id,
+      source && source.id,
+      payload && payload.id
+    ) || cleanExportPresetId(label);
+    const key = firstNonEmptyString(
+      registryMetadata && registryMetadata.key,
+      source && source.key,
+      payload && payload.key
+    );
+    return {
+      id,
+      key,
+      label,
+      gameTypes: groups
+    };
+  }
+
+  function exportImportTypeForPayload(payload, source, metadata) {
+    const schema = String(payload && payload.schema || '').trim();
+    if (schema === 'ramified-minigame-background-preset') return EXPORT_TYPES.BACKGROUND;
+    if (
+      firstNonEmptyString(source && source.id, source && source.label, payload && payload.id, payload && payload.label)
+      || (metadata && metadata.gameTypes && metadata.gameTypes.length)
+    ) {
+      return EXPORT_TYPES.MINIGAME;
+    }
+    if (payload && payload.name === 'Mosaic Calculator' && Array.isArray(payload.tiles)) return EXPORT_TYPES.ALL;
+    if (source.size != null || exportImportPayloadLooksLikeBackground(source)) {
+      return (source.id || source.label || metadata.gameTypes.length) ? EXPORT_TYPES.MINIGAME : EXPORT_TYPES.BACKGROUND;
+    }
+    return EXPORT_TYPES.ALL;
+  }
+
+  function exportImportFormatForPayload(payload, source, sourceKind, type) {
+    if (type === EXPORT_TYPES.ALL) return EXPORT_FORMATS.VERBOSE;
+    if (sourceKind === 'js' || source.size != null) return EXPORT_FORMATS.DSL;
+    if (payload && payload.schema === 'ramified-minigame-background-preset') return EXPORT_FORMATS.VERBOSE;
+    return EXPORT_FORMATS.VERBOSE;
+  }
+
+  function exportImportGroupChoices(gameTypes) {
+    const groups = new Set(exportPresetGroupChoices());
+    (Array.isArray(gameTypes) ? gameTypes : []).forEach((gameType) => {
+      const clean = String(gameType || '').trim();
+      if (clean) groups.add(clean);
+    });
+    return Array.from(groups);
+  }
+
+  function firstNonEmptyString(...values) {
+    for (const value of values) {
+      const text = String(value || '').trim();
+      if (text) return text;
+    }
+    return '';
+  }
+
+  function uniqueStrings(values) {
+    const result = [];
+    (Array.isArray(values) ? values : []).forEach((value) => {
+      const text = String(value || '').trim();
+      if (text && !result.includes(text)) result.push(text);
+    });
+    return result;
+  }
+
   function buildFullExport() {
     const report = analyze();
     const lattice = getLattice();
@@ -19486,9 +19887,8 @@
     if (refs.exportPresetGroupRow) refs.exportPresetGroupRow.hidden = advanced;
   }
 
-  function syncExportGroupOptions() {
+  function syncExportGroupOptions(groups = exportPresetGroupChoices()) {
     if (!refs.exportPresetGroup) return;
-    const groups = exportPresetGroupChoices();
     const previous = String(refs.exportPresetGroup.value || '').trim();
     if (typeof document !== 'undefined' && document.createElement && refs.exportPresetGroup.appendChild) {
       refs.exportPresetGroup.textContent = '';
@@ -19507,6 +19907,10 @@
 
   function exportPresetGroupChoices() {
     const groups = new Set(EXPORT_GROUP_FALLBACKS);
+    (Array.isArray(state.exportPresetCustomGroups) ? state.exportPresetCustomGroups : []).forEach((group) => {
+      const gameType = String(group || '').trim();
+      if (gameType) groups.add(gameType);
+    });
     const root = typeof window !== 'undefined'
       ? window
       : (typeof globalThis !== 'undefined' ? globalThis : null);
@@ -21237,6 +21641,8 @@
       minigameGluedEdgesForExport,
       minigamePresetRegistryEntry,
       normalizeBackgroundAction,
+      normalizeExportImportPayload,
+      parseExportImportText,
       refreshExport,
       setTestBoard,
       setTestExportControls,

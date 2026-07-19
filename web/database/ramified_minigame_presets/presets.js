@@ -5,12 +5,12 @@
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {
   return {
     defaultFor: {
-      "2048": "classic-4x4",
-      "gomoku": "gomoku-random-glue",
-      "connect-four": "connect-four-6x7",
-      "go": "gomoku-classic",
-      "reversi": "gomoku-classic",
-      "chinese-checkers": "chinese-checkers-hex-rhombus-9x9"
+      "2048": "ramified-cover",
+      "gomoku": "gomoku-strange-corner",
+      "connect-four": "connect-four-exchange",
+      "go": "three-slits",
+      "reversi": "focus-frame",
+      "chinese-checkers": "octahedron-with-square-holes"
     },
     presets: [
     {
@@ -161,7 +161,7 @@
     },
     {
       "gameTypes": [
-        "Gomoku"
+        "Gomoku", "Go"
       ],
       "id": "gomoku-strange-corner",
       "label": "strange corner",
@@ -195,7 +195,7 @@
       "key": "gomoku_m4_15x15",
       "file": "gomoku_m4_15x15.preset.js"
     },
-    {"gameTypes":["Gomoku"],"id":"trefoil","label":"trefoil","key":"trefoil","file":"trefoil.preset.js"},
+    {"gameTypes":["Gomoku", "Go"],"id":"trefoil","label":"trefoil","key":"trefoil","file":"trefoil.preset.js"},
     {
       "gameTypes": [
         "Connect Four"
@@ -364,6 +364,15 @@
     },
     {
       "gameTypes": [
+        "Chinese Checkers"
+        ],
+      "id": "classic-chinese-checkers",
+      "label": "classic chinese checkers",
+      "key": "classic_chinese_checkers",
+      "file": "classic_chinese_checkers.preset.js"
+    },
+    {
+      "gameTypes": [
         "Gomoku",
         "Go",
         "Chinese Checkers"
@@ -394,6 +403,15 @@
       "label": "dodecahedron with pentagon holes",
       "key": "dodecahedron_with_pentagon_holes",
       "file": "dodecahedron_with_pentagon_holes.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Reversi"
+        ],
+      "id": "focus-frame",
+      "label": "focus frame",
+      "key": "focus_frame",
+      "file": "focus_frame.preset.js"
     }
     ]
   };
