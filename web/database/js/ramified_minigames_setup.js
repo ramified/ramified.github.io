@@ -86,29 +86,13 @@
     return Array.from({ length: cols }, (_, index) => ({ row: 1, col: index + 1 }));
   }
 
-  function squareGluePair(group, firstRow, firstCol, firstDir, secondRow, secondCol, secondDir, options = {}) {
-    return gluePair(
-      group,
-      { row: firstRow, col: firstCol, dir: DIRS[firstDir] },
-      { row: secondRow, col: secondCol, dir: DIRS[secondDir] },
-      options
-    );
-  }
-
-  function createFixedGomokuPreset(id, label, rows, cols, surface, removedTiles, gluedEdges, options = {}) {
-    return {
-      id,
-      label,
-      lattice: 'square',
-      rows,
-      cols,
-      surface,
-      removedTiles,
-      cutEdges: [],
-      gluedEdges,
-      ...options
-    };
-  }
+  const PRESET_FOLDER_URL = 'ramified_minigame_presets/';
+  const PRESET_GROUP_ORDER = ['2048', 'Gomoku', 'Connect Four'];
+  const DEFAULT_PRESET_BY_MODE = {
+    [GAME_MODES.NUMBER_2048]: 'classic-4x4',
+    [GAME_MODES.GOMOKU]: 'gomoku-random-glue',
+    [GAME_MODES.CONNECT_FOUR]: 'connect-four-6x7'
+  };
 
   function createRubiksCubePreset(size, id, label) {
     const rows = size * 3;
@@ -233,635 +217,10 @@
     };
   }
 
-  function createTicTacToePreset() {
-    return createFixedGomokuPreset(
-      'gomoku-tic-tac-toe',
-      'Tic-tac-toe',
-      3,
-      3,
-      'M_1',
-      [],
-      [
-        squareGluePair(0, 3, 1, 'S', 1, 1, 'N'),
-        squareGluePair(0, 3, 2, 'S', 1, 2, 'N'),
-        squareGluePair(0, 3, 3, 'S', 1, 3, 'N'),
-        squareGluePair(1, 3, 3, 'E', 3, 1, 'W'),
-        squareGluePair(1, 2, 3, 'E', 2, 1, 'W'),
-        squareGluePair(1, 1, 3, 'E', 1, 1, 'W')
-      ],
-      { gomokuWinLength: 3 }
-    );
-  }
-
-  function createStrangeCornerPreset() {
-    return createFixedGomokuPreset(
-      'gomoku-strange-corner',
-      'strange corner',
-      15,
-      15,
-      'Sigma_0,1^4',
-      [],
-      [
-        squareGluePair(0, 1, 15, 'N', 1, 15, 'E'),
-        squareGluePair(0, 1, 14, 'N', 2, 15, 'E'),
-        squareGluePair(0, 1, 13, 'N', 3, 15, 'E'),
-        squareGluePair(1, 13, 1, 'W', 15, 3, 'S'),
-        squareGluePair(1, 14, 1, 'W', 15, 2, 'S'),
-        squareGluePair(1, 15, 1, 'W', 15, 1, 'S'),
-        squareGluePair(2, 15, 15, 'S', 15, 15, 'E'),
-        squareGluePair(2, 15, 14, 'S', 14, 15, 'E'),
-        squareGluePair(3, 2, 1, 'W', 1, 2, 'N'),
-        squareGluePair(3, 1, 1, 'W', 1, 1, 'N')
-      ]
-    );
-  }
-
-  function createSmallHolesPreset() {
-    return createFixedGomokuPreset(
-      'gomoku-small-holes',
-      'small holes',
-      15,
-      15,
-      'Sigma_9,1^9',
-      [
-        { row: 4, col: 4 },
-        { row: 4, col: 8 },
-        { row: 4, col: 12 },
-        { row: 8, col: 4 },
-        { row: 8, col: 8 },
-        { row: 8, col: 12 },
-        { row: 12, col: 4 },
-        { row: 12, col: 8 },
-        { row: 12, col: 12 }
-      ],
-      [
-        squareGluePair(0, 3, 12, 'S', 5, 12, 'N'),
-        squareGluePair(1, 4, 13, 'W', 4, 11, 'E'),
-        squareGluePair(2, 3, 8, 'S', 5, 8, 'N'),
-        squareGluePair(3, 4, 9, 'W', 4, 7, 'E'),
-        squareGluePair(4, 4, 5, 'W', 4, 3, 'E'),
-        squareGluePair(5, 3, 4, 'S', 5, 4, 'N'),
-        squareGluePair(6, 7, 4, 'S', 9, 4, 'N'),
-        squareGluePair(7, 8, 3, 'E', 8, 5, 'W'),
-        squareGluePair(8, 8, 9, 'W', 8, 7, 'E'),
-        squareGluePair(9, 7, 8, 'S', 9, 8, 'N'),
-        squareGluePair(10, 8, 11, 'E', 8, 13, 'W'),
-        squareGluePair(11, 7, 12, 'S', 9, 12, 'N'),
-        squareGluePair(12, 11, 12, 'S', 13, 12, 'N'),
-        squareGluePair(13, 12, 11, 'E', 12, 13, 'W'),
-        squareGluePair(14, 11, 8, 'S', 13, 8, 'N'),
-        squareGluePair(15, 12, 9, 'W', 12, 7, 'E'),
-        squareGluePair(16, 11, 4, 'S', 13, 4, 'N'),
-        squareGluePair(17, 12, 3, 'E', 12, 5, 'W')
-      ]
-    );
-  }
-
-  function createBigHolePreset() {
-    const removedTiles = [];
-    for (let row = 6; row <= 10; row += 1) {
-      for (let col = 6; col <= 10; col += 1) {
-        removedTiles.push({ row, col });
-      }
-    }
-
-    return createFixedGomokuPreset(
-      'gomoku-big-hole',
-      'big hole',
-      15,
-      15,
-      'Sigma_1,1^1',
-      removedTiles,
-      [
-        squareGluePair(0, 5, 10, 'S', 11, 10, 'N'),
-        squareGluePair(0, 5, 9, 'S', 11, 9, 'N'),
-        squareGluePair(0, 5, 8, 'S', 11, 8, 'N'),
-        squareGluePair(0, 5, 7, 'S', 11, 7, 'N'),
-        squareGluePair(0, 5, 6, 'S', 11, 6, 'N'),
-        squareGluePair(1, 10, 11, 'W', 10, 5, 'E'),
-        squareGluePair(1, 9, 11, 'W', 9, 5, 'E'),
-        squareGluePair(1, 8, 11, 'W', 8, 5, 'E'),
-        squareGluePair(1, 7, 11, 'W', 7, 5, 'E'),
-        squareGluePair(1, 6, 11, 'W', 6, 5, 'E')
-      ]
-    );
-  }
-
-  function createGomokuGenusFourPreset() {
-    const rows = 15;
-    const cols = 15;
-    const removedTiles = [];
-    for (let row = 6; row <= 10; row += 1) {
-      for (let col = 6; col <= 10; col += 1) {
-        removedTiles.push({ row, col });
-      }
-    }
-
-    const gluedEdges = [];
-    const add = (group, first, second) => gluedEdges.push(gluePair(group, first, second));
-    for (let offset = 0; offset < 5; offset += 1) {
-      add(0, { row: 5, col: 10 - offset, dir: DIRS.S }, { row: 1, col: 10 - offset, dir: DIRS.N });
-    }
-    for (let offset = 0; offset < 5; offset += 1) {
-      add(1, { row: 10 - offset, col: 11, dir: DIRS.W }, { row: 10 - offset, col: 15, dir: DIRS.E });
-    }
-    for (let offset = 0; offset < 5; offset += 1) {
-      add(2, { row: 6 + offset, col: 5, dir: DIRS.E }, { row: 6 + offset, col: 1, dir: DIRS.W });
-    }
-    for (let offset = 0; offset < 5; offset += 1) {
-      add(3, { row: 11, col: 6 + offset, dir: DIRS.N }, { row: 15, col: 6 + offset, dir: DIRS.S });
-    }
-    for (let offset = 0; offset < 5; offset += 1) {
-      add(4, { row: 15, col: 15 - offset, dir: DIRS.S }, { row: 1, col: 15 - offset, dir: DIRS.N });
-    }
-    for (let offset = 0; offset < 5; offset += 1) {
-      add(5, { row: 11 + offset, col: 15, dir: DIRS.E }, { row: 11 + offset, col: 1, dir: DIRS.W });
-    }
-    for (let offset = 0; offset < 5; offset += 1) {
-      add(6, { row: 5 - offset, col: 1, dir: DIRS.W }, { row: 5 - offset, col: 15, dir: DIRS.E });
-    }
-    for (let offset = 0; offset < 5; offset += 1) {
-      add(7, { row: 15, col: 5 - offset, dir: DIRS.S }, { row: 1, col: 5 - offset, dir: DIRS.N });
-    }
-
-    return {
-      id: 'gomoku-m4-15x15',
-      label: 'genus 4',
-      lattice: 'square',
-      rows,
-      cols,
-      surface: 'M_4,1',
-      removedTiles,
-      cutEdges: [],
-      gluedEdges
-    };
-  }
-
-  const CONNECT_FOUR_SURFACE_PRESETS = [
-    {
-      id: 'connect-four-high-hit',
-      label: 'high hit (6x7 Sigma_1,1)',
-      lattice: 'square',
-      rows: 6,
-      cols: 7,
-      connectFourHoles: connectFourTopRowHoles(7),
-      surface: 'Sigma_1,1',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [
-        gluePair(0, { row: 6, col: 1, dir: DIRS.S }, { row: 3, col: 7, dir: DIRS.E }),
-        gluePair(1, { row: 4, col: 1, dir: DIRS.W }, { row: 6, col: 7, dir: DIRS.S })
-      ]
-    },
-    {
-      id: 'connect-four-high-hit-2',
-      label: 'high hit2 (6x7 Sigma_0,3)',
-      lattice: 'square',
-      rows: 6,
-      cols: 7,
-      connectFourHoles: connectFourTopRowHoles(7),
-      surface: 'Sigma_0,3',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [
-        gluePair(0, { row: 6, col: 7, dir: DIRS.S }, { row: 3, col: 7, dir: DIRS.E }),
-        gluePair(1, { row: 4, col: 1, dir: DIRS.W }, { row: 6, col: 1, dir: DIRS.S })
-      ]
-    },
-    {
-      id: 'connect-four-all-horizontal',
-      label: 'all horizontal (6x7 Sigma_1,5)',
-      lattice: 'square',
-      rows: 6,
-      cols: 7,
-      connectFourHoles: connectFourTopRowHoles(7),
-      surface: 'Sigma_1,5',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [
-        gluePair(0, { row: 6, col: 5, dir: DIRS.S }, { row: 6, col: 1, dir: DIRS.W }),
-        gluePair(1, { row: 5, col: 7, dir: DIRS.E }, { row: 6, col: 3, dir: DIRS.S }),
-        gluePair(2, { row: 6, col: 6, dir: DIRS.S }, { row: 4, col: 1, dir: DIRS.W }),
-        gluePair(3, { row: 3, col: 7, dir: DIRS.E }, { row: 6, col: 2, dir: DIRS.S }),
-        gluePair(4, { row: 6, col: 7, dir: DIRS.S }, { row: 2, col: 1, dir: DIRS.W }),
-        gluePair(5, { row: 1, col: 7, dir: DIRS.E }, { row: 6, col: 1, dir: DIRS.S })
-      ]
-    },
-    {
-      id: 'connect-four-top-fight',
-      label: 'top fight (6x7 Sigma_1,1)',
-      lattice: 'square',
-      rows: 6,
-      cols: 7,
-      connectFourHoles: connectFourTopRowHoles(7),
-      surface: 'Sigma_1,1',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [
-        gluePair(0, { row: 6, col: 3, dir: DIRS.S }, { row: 6, col: 7, dir: DIRS.E }),
-        gluePair(1, { row: 6, col: 1, dir: DIRS.W }, { row: 6, col: 5, dir: DIRS.S }),
-        gluePair(2, { row: 6, col: 2, dir: DIRS.S }, { row: 5, col: 7, dir: DIRS.E }),
-        gluePair(3, { row: 5, col: 1, dir: DIRS.W }, { row: 6, col: 6, dir: DIRS.S }),
-        gluePair(4, { row: 4, col: 1, dir: DIRS.W }, { row: 6, col: 7, dir: DIRS.S }),
-        gluePair(5, { row: 6, col: 1, dir: DIRS.S }, { row: 4, col: 7, dir: DIRS.E })
-      ]
-    },
-    {
-      id: 'connect-four-exchange',
-      label: 'exchange (6x7 Sigma_1.5,1^1)',
-      lattice: 'square',
-      rows: 6,
-      cols: 7,
-      connectFourHoles: connectFourTopRowHoles(7),
-      surface: 'Sigma_1.5,1^1',
-      removedTiles: [],
-      cutEdges: [
-        { left: { row: 3, col: 1 }, right: { row: 4, col: 1 } },
-        { left: { row: 3, col: 2 }, right: { row: 4, col: 2 } },
-        { left: { row: 3, col: 6 }, right: { row: 4, col: 6 } },
-        { left: { row: 3, col: 7 }, right: { row: 4, col: 7 } }
-      ],
-      gluedEdges: [
-        gluePair(0, { row: 3, col: 7, dir: DIRS.S }, { row: 4, col: 2, dir: DIRS.N }),
-        gluePair(0, { row: 3, col: 6, dir: DIRS.S }, { row: 4, col: 1, dir: DIRS.N }),
-        gluePair(1, { row: 4, col: 6, dir: DIRS.N }, { row: 3, col: 1, dir: DIRS.S }),
-        gluePair(1, { row: 4, col: 7, dir: DIRS.N }, { row: 3, col: 2, dir: DIRS.S })
-      ]
-    },
-    {
-      id: 'connect-four-across',
-      label: 'across (6x7 Sigma_1,1^1)',
-      lattice: 'square',
-      rows: 6,
-      cols: 7,
-      connectFourHoles: connectFourTopRowHoles(7),
-      surface: 'Sigma_1,1^1',
-      removedTiles: [
-        { row: 4, col: 4 }
-      ],
-      cutEdges: [],
-      gluedEdges: [
-        gluePair(0, { row: 3, col: 4, dir: DIRS.S }, { row: 5, col: 4, dir: DIRS.N }),
-        gluePair(1, { row: 4, col: 5, dir: DIRS.W }, { row: 4, col: 3, dir: DIRS.E })
-      ]
-    },
-    {
-      id: 'connect-four-usual-strip',
-      label: 'usual strip (6x7 Sigma_0,2)',
-      lattice: 'square',
-      rows: 6,
-      cols: 7,
-      connectFourHoles: connectFourTopRowHoles(7),
-      surface: 'Sigma_0,2',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [
-        gluePair(0, { row: 1, col: 7, dir: DIRS.E }, { row: 1, col: 1, dir: DIRS.W }),
-        gluePair(0, { row: 2, col: 7, dir: DIRS.E }, { row: 2, col: 1, dir: DIRS.W }),
-        gluePair(0, { row: 3, col: 7, dir: DIRS.E }, { row: 3, col: 1, dir: DIRS.W }),
-        gluePair(0, { row: 4, col: 7, dir: DIRS.E }, { row: 4, col: 1, dir: DIRS.W }),
-        gluePair(0, { row: 5, col: 7, dir: DIRS.E }, { row: 5, col: 1, dir: DIRS.W }),
-        gluePair(0, { row: 6, col: 7, dir: DIRS.E }, { row: 6, col: 1, dir: DIRS.W })
-      ]
-    },
-    {
-      id: 'connect-four-mobius-strip',
-      label: 'M\u00f6bius strip (6x7 N_1,1)',
-      lattice: 'square',
-      rows: 6,
-      cols: 7,
-      connectFourHoles: connectFourTopRowHoles(7),
-      surface: 'N_1,1',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [
-        gluePair(0, { row: 6, col: 7, dir: DIRS.E }, { row: 1, col: 1, dir: DIRS.W }, { reversed: true }),
-        gluePair(0, { row: 5, col: 7, dir: DIRS.E }, { row: 2, col: 1, dir: DIRS.W }, { reversed: true }),
-        gluePair(0, { row: 4, col: 7, dir: DIRS.E }, { row: 3, col: 1, dir: DIRS.W }, { reversed: true }),
-        gluePair(0, { row: 3, col: 7, dir: DIRS.E }, { row: 4, col: 1, dir: DIRS.W }, { reversed: true }),
-        gluePair(0, { row: 2, col: 7, dir: DIRS.E }, { row: 5, col: 1, dir: DIRS.W }, { reversed: true }),
-        gluePair(0, { row: 1, col: 7, dir: DIRS.E }, { row: 6, col: 1, dir: DIRS.W }, { reversed: true })
-      ]
-    },
-    {
-      id: 'connect-four-hex-usual-strip',
-      label: 'hex usual strip (6x7 Sigma_0,2)',
-      lattice: 'hexagonal',
-      rows: 6,
-      cols: 7,
-      connectFourHoles: connectFourTopRowHoles(7),
-      surface: 'Sigma_0,2',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [
-        gluePair(0, { row: 1, col: 7, dir: HEX_DIRS.E }, { row: 1, col: 1, dir: HEX_DIRS.W }),
-        gluePair(0, { row: 2, col: 7, dir: HEX_DIRS.NE }, { row: 1, col: 1, dir: HEX_DIRS.SW }),
-        gluePair(0, { row: 2, col: 7, dir: HEX_DIRS.E }, { row: 2, col: 1, dir: HEX_DIRS.W }),
-        gluePair(0, { row: 2, col: 7, dir: HEX_DIRS.SE }, { row: 3, col: 1, dir: HEX_DIRS.NW }),
-        gluePair(0, { row: 3, col: 7, dir: HEX_DIRS.E }, { row: 3, col: 1, dir: HEX_DIRS.W }),
-        gluePair(0, { row: 4, col: 7, dir: HEX_DIRS.NE }, { row: 3, col: 1, dir: HEX_DIRS.SW }),
-        gluePair(0, { row: 4, col: 7, dir: HEX_DIRS.E }, { row: 4, col: 1, dir: HEX_DIRS.W }),
-        gluePair(0, { row: 4, col: 7, dir: HEX_DIRS.SE }, { row: 5, col: 1, dir: HEX_DIRS.NW }),
-        gluePair(0, { row: 5, col: 7, dir: HEX_DIRS.E }, { row: 5, col: 1, dir: HEX_DIRS.W }),
-        gluePair(0, { row: 6, col: 7, dir: HEX_DIRS.NE }, { row: 5, col: 1, dir: HEX_DIRS.SW }),
-        gluePair(0, { row: 6, col: 7, dir: HEX_DIRS.E }, { row: 6, col: 1, dir: HEX_DIRS.W })
-      ]
-    },
-    {
-      id: 'connect-four-hex-bad-mobius-strip',
-      label: 'hex bad M\u00f6bius strip (6x7 N_0,2^10)',
-      lattice: 'hexagonal',
-      rows: 6,
-      cols: 7,
-      connectFourHoles: connectFourTopRowHoles(7),
-      surface: 'N_0,2^10',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [
-        gluePair(0, { row: 6, col: 7, dir: HEX_DIRS.E }, { row: 1, col: 1, dir: HEX_DIRS.W }, { reversed: true }),
-        gluePair(0, { row: 6, col: 7, dir: HEX_DIRS.NE }, { row: 1, col: 1, dir: HEX_DIRS.SW }, { reversed: true }),
-        gluePair(0, { row: 5, col: 7, dir: HEX_DIRS.E }, { row: 2, col: 1, dir: HEX_DIRS.W }, { reversed: true }),
-        gluePair(0, { row: 4, col: 7, dir: HEX_DIRS.SE }, { row: 3, col: 1, dir: HEX_DIRS.NW }, { reversed: true }),
-        gluePair(0, { row: 4, col: 7, dir: HEX_DIRS.E }, { row: 3, col: 1, dir: HEX_DIRS.W }, { reversed: true }),
-        gluePair(0, { row: 4, col: 7, dir: HEX_DIRS.NE }, { row: 3, col: 1, dir: HEX_DIRS.SW }, { reversed: true }),
-        gluePair(0, { row: 3, col: 7, dir: HEX_DIRS.E }, { row: 4, col: 1, dir: HEX_DIRS.W }, { reversed: true }),
-        gluePair(0, { row: 2, col: 7, dir: HEX_DIRS.SE }, { row: 5, col: 1, dir: HEX_DIRS.NW }, { reversed: true }),
-        gluePair(0, { row: 2, col: 7, dir: HEX_DIRS.E }, { row: 5, col: 1, dir: HEX_DIRS.W }, { reversed: true }),
-        gluePair(0, { row: 2, col: 7, dir: HEX_DIRS.NE }, { row: 5, col: 1, dir: HEX_DIRS.SW }, { reversed: true }),
-        gluePair(0, { row: 1, col: 7, dir: HEX_DIRS.E }, { row: 6, col: 1, dir: HEX_DIRS.W }, { reversed: true })
-      ]
-    },
-    {
-      id: 'connect-four-hex-good-mobius-strip',
-      label: 'hex good M\u00f6bius strip (7x7 N_0,2)',
-      lattice: 'hexagonal',
-      rows: 7,
-      cols: 7,
-      connectFourHoles: connectFourTopRowHoles(7),
-      surface: 'N_0,2',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [
-        gluePair(0, { row: 7, col: 1, dir: HEX_DIRS.W }, { row: 1, col: 7, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 7, col: 1, dir: HEX_DIRS.NW }, { row: 2, col: 7, dir: HEX_DIRS.NE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 6, col: 1, dir: HEX_DIRS.W }, { row: 2, col: 7, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 5, col: 1, dir: HEX_DIRS.SW }, { row: 2, col: 7, dir: HEX_DIRS.SE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 5, col: 1, dir: HEX_DIRS.W }, { row: 3, col: 7, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 5, col: 1, dir: HEX_DIRS.NW }, { row: 4, col: 7, dir: HEX_DIRS.NE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 4, col: 1, dir: HEX_DIRS.W }, { row: 4, col: 7, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.SW }, { row: 4, col: 7, dir: HEX_DIRS.SE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.W }, { row: 5, col: 7, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.NW }, { row: 6, col: 7, dir: HEX_DIRS.NE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 2, col: 1, dir: HEX_DIRS.W }, { row: 6, col: 7, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 1, col: 1, dir: HEX_DIRS.SW }, { row: 6, col: 7, dir: HEX_DIRS.SE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 1, col: 1, dir: HEX_DIRS.W }, { row: 7, col: 7, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false })
-      ]
-    }
-  ];
-
-  const PRESETS = [
-    {
-      id: 'classic-4x4',
-      label: '4*4 classic',
-      lattice: 'square',
-      rows: 4,
-      cols: 4,
-      surface: 'square grid',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: []
-    },
-    {
-      id: 'twisted-torus',
-      label: 'twisted torus',
-      lattice: 'square',
-      rows: 4,
-      cols: 4,
-      surface: 'M_2,1',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [
-        { group: 0, first: { row: 1, col: 1, dir: DIRS.N }, second: { row: 4, col: 2, dir: DIRS.S } },
-        { group: 0, first: { row: 1, col: 2, dir: DIRS.N }, second: { row: 4, col: 3, dir: DIRS.S } },
-        { group: 0, first: { row: 1, col: 3, dir: DIRS.N }, second: { row: 4, col: 4, dir: DIRS.S } },
-        { group: 1, first: { row: 1, col: 4, dir: DIRS.E }, second: { row: 2, col: 1, dir: DIRS.W } },
-        { group: 1, first: { row: 2, col: 4, dir: DIRS.E }, second: { row: 3, col: 1, dir: DIRS.W } },
-        { group: 1, first: { row: 3, col: 4, dir: DIRS.E }, second: { row: 4, col: 1, dir: DIRS.W } },
-        { group: 2, first: { row: 1, col: 4, dir: DIRS.N }, second: { row: 4, col: 1, dir: DIRS.S } },
-        { group: 3, first: { row: 4, col: 4, dir: DIRS.E }, second: { row: 1, col: 1, dir: DIRS.W } }
-      ]
-    },
-    {
-      id: 'gomoku-classic',
-      label: 'classical n*n',
-      lattice: 'square',
-      rows: GOMOKU_DEFAULT_BOARD_SIZE,
-      cols: GOMOKU_DEFAULT_BOARD_SIZE,
-      surface: 'square grid',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [],
-      dynamicGomokuSize: true,
-      dynamicGomokuLabelPrefix: 'classical'
-    },
-    {
-      id: 'gomoku-random-glue',
-      label: 'random glue n*n',
-      lattice: 'square',
-      rows: GOMOKU_DEFAULT_BOARD_SIZE,
-      cols: GOMOKU_DEFAULT_BOARD_SIZE,
-      surface: 'random boundary glue',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [],
-      randomGlue: true,
-      dynamicGomokuSize: true,
-      dynamicGomokuLabelPrefix: 'random glue'
-    },
-    createTicTacToePreset(),
-    createStrangeCornerPreset(),
-    createSmallHolesPreset(),
-    createBigHolePreset(),
-    createGomokuGenusFourPreset(),
-    {
-      id: 'connect-four-6x7',
-      label: 'Connect Four 6*7',
-      lattice: 'square',
-      rows: 6,
-      cols: 7,
-      connectFourHoles: connectFourTopRowHoles(7),
-      surface: 'six-row seven-column grid',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: []
-    },
-    ...CONNECT_FOUR_SURFACE_PRESETS,
-    {
-      id: 'genus-2',
-      label: 'genus 2',
-      lattice: 'square',
-      rows: 4,
-      cols: 4,
-      surface: 'M_2',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [
-        { group: 0, first: { row: 4, col: 4, dir: DIRS.E }, second: { row: 1, col: 3, dir: DIRS.N } },
-        { group: 0, first: { row: 3, col: 4, dir: DIRS.E }, second: { row: 1, col: 4, dir: DIRS.N } },
-        { group: 2, first: { row: 1, col: 2, dir: DIRS.N }, second: { row: 4, col: 1, dir: DIRS.W } },
-        { group: 2, first: { row: 1, col: 1, dir: DIRS.N }, second: { row: 3, col: 1, dir: DIRS.W } },
-        { group: 3, first: { row: 4, col: 1, dir: DIRS.S }, second: { row: 2, col: 1, dir: DIRS.W } },
-        { group: 3, first: { row: 4, col: 2, dir: DIRS.S }, second: { row: 1, col: 1, dir: DIRS.W } },
-        { group: 4, first: { row: 2, col: 4, dir: DIRS.E }, second: { row: 4, col: 4, dir: DIRS.S } },
-        { group: 4, first: { row: 1, col: 4, dir: DIRS.E }, second: { row: 4, col: 3, dir: DIRS.S } }
-      ]
-    },
-    {
-      id: 'random-glue-4x4',
-      label: 'random glue 4*4',
-      lattice: 'square',
-      rows: 4,
-      cols: 4,
-      surface: 'random boundary glue',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [],
-      randomGlue: true
-    },
-    {
-      id: 'half-glued',
-      label: 'half-glued',
-      lattice: 'square',
-      rows: 4,
-      cols: 4,
-      surface: 'Sigma_1,1',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [
-        { group: 0, first: { row: 1, col: 1, dir: DIRS.N }, second: { row: 4, col: 3, dir: DIRS.S } },
-        { group: 0, first: { row: 1, col: 2, dir: DIRS.N }, second: { row: 4, col: 4, dir: DIRS.S } },
-        { group: 1, first: { row: 3, col: 1, dir: DIRS.W }, second: { row: 1, col: 4, dir: DIRS.E } },
-        { group: 1, first: { row: 4, col: 1, dir: DIRS.W }, second: { row: 2, col: 4, dir: DIRS.E } }
-      ]
-    },
-    {
-      id: 'torus',
-      label: 'torus',
-      lattice: 'square',
-      rows: 4,
-      cols: 4,
-      surface: 'M_1',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [
-        { group: 3, first: { row: 4, col: 4, dir: DIRS.E }, second: { row: 4, col: 1, dir: DIRS.W } },
-        { group: 3, first: { row: 3, col: 4, dir: DIRS.E }, second: { row: 3, col: 1, dir: DIRS.W } },
-        { group: 3, first: { row: 2, col: 4, dir: DIRS.E }, second: { row: 2, col: 1, dir: DIRS.W } },
-        { group: 3, first: { row: 1, col: 4, dir: DIRS.E }, second: { row: 1, col: 1, dir: DIRS.W } },
-        { group: 4, first: { row: 1, col: 3, dir: DIRS.N }, second: { row: 4, col: 3, dir: DIRS.S } },
-        { group: 4, first: { row: 1, col: 2, dir: DIRS.N }, second: { row: 4, col: 2, dir: DIRS.S } },
-        { group: 4, first: { row: 1, col: 1, dir: DIRS.N }, second: { row: 4, col: 1, dir: DIRS.S } },
-        { group: 4, first: { row: 1, col: 4, dir: DIRS.N }, second: { row: 4, col: 4, dir: DIRS.S } }
-      ]
-    },
-    {
-      id: 'klein-bottle',
-      label: 'Klein bottle',
-      lattice: 'square',
-      rows: 4,
-      cols: 4,
-      surface: 'N_2',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [
-        { group: 3, reversed: true, first: { row: 1, col: 4, dir: DIRS.E }, second: { row: 4, col: 1, dir: DIRS.W } },
-        { group: 3, reversed: true, first: { row: 2, col: 4, dir: DIRS.E }, second: { row: 3, col: 1, dir: DIRS.W } },
-        { group: 3, reversed: true, first: { row: 3, col: 4, dir: DIRS.E }, second: { row: 2, col: 1, dir: DIRS.W } },
-        { group: 3, reversed: true, first: { row: 4, col: 4, dir: DIRS.E }, second: { row: 1, col: 1, dir: DIRS.W } },
-        { group: 4, first: { row: 1, col: 3, dir: DIRS.N }, second: { row: 4, col: 3, dir: DIRS.S } },
-        { group: 4, first: { row: 1, col: 2, dir: DIRS.N }, second: { row: 4, col: 2, dir: DIRS.S } },
-        { group: 4, first: { row: 1, col: 1, dir: DIRS.N }, second: { row: 4, col: 1, dir: DIRS.S } },
-        { group: 4, first: { row: 1, col: 4, dir: DIRS.N }, second: { row: 4, col: 4, dir: DIRS.S } }
-      ]
-    },
-    {
-      id: 'ramified-cover',
-      label: 'ramified cover',
-      lattice: 'square',
-      rows: 4,
-      cols: 9,
-      surface: 'ramified cover',
-      removedTiles: [
-        { row: 1, col: 5 },
-        { row: 2, col: 5 },
-        { row: 3, col: 5 },
-        { row: 4, col: 5 }
-      ],
-      cutEdges: [
-        { left: { row: 2, col: 3 }, right: { row: 3, col: 3 } },
-        { left: { row: 2, col: 4 }, right: { row: 3, col: 4 } },
-        { left: { row: 2, col: 8 }, right: { row: 3, col: 8 } },
-        { left: { row: 2, col: 9 }, right: { row: 3, col: 9 } }
-      ],
-      gluedEdges: [
-        { group: 0, first: { row: 2, col: 8, dir: DIRS.S }, second: { row: 3, col: 3, dir: DIRS.N } },
-        { group: 0, first: { row: 2, col: 9, dir: DIRS.S }, second: { row: 3, col: 4, dir: DIRS.N } },
-        { group: 1, first: { row: 2, col: 3, dir: DIRS.S }, second: { row: 3, col: 8, dir: DIRS.N } },
-        { group: 1, first: { row: 2, col: 4, dir: DIRS.S }, second: { row: 3, col: 9, dir: DIRS.N } }
-      ]
-    },
-    createRubiksCubePreset(2, 'rubiks-cube-2x2x2', "Rubik's Cube 2*2*2"),
-    createRubiksCubePreset(3, 'rubiks-cube-3x3x3', "Rubik's Cube 3*3*3"),
-    {
-      id: 'usual-strip',
-      label: 'usual strip',
-      lattice: 'hexagonal',
-      rows: 4,
-      cols: 5,
-      surface: 'Sigma_0,2',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [
-        gluePair(0, { row: 1, col: 1, dir: HEX_DIRS.W }, { row: 1, col: 5, dir: HEX_DIRS.E }),
-        gluePair(0, { row: 1, col: 1, dir: HEX_DIRS.SW }, { row: 2, col: 5, dir: HEX_DIRS.NE }),
-        gluePair(0, { row: 2, col: 1, dir: HEX_DIRS.W }, { row: 2, col: 5, dir: HEX_DIRS.E }),
-        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.NW }, { row: 2, col: 5, dir: HEX_DIRS.SE }),
-        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.W }, { row: 3, col: 5, dir: HEX_DIRS.E }),
-        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.SW }, { row: 4, col: 5, dir: HEX_DIRS.NE }),
-        gluePair(0, { row: 4, col: 1, dir: HEX_DIRS.W }, { row: 4, col: 5, dir: HEX_DIRS.E })
-      ]
-    },
-    {
-      id: 'mobius-strip',
-      label: 'M\u00f6bius strip',
-      lattice: 'hexagonal',
-      rows: 4,
-      cols: 5,
-      surface: 'N_0,2^6',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: [
-        gluePair(0, { row: 1, col: 1, dir: HEX_DIRS.W }, { row: 4, col: 5, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 1, col: 1, dir: HEX_DIRS.SW }, { row: 4, col: 5, dir: HEX_DIRS.NE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 2, col: 1, dir: HEX_DIRS.W }, { row: 3, col: 5, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.NW }, { row: 2, col: 5, dir: HEX_DIRS.SE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.W }, { row: 2, col: 5, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 3, col: 1, dir: HEX_DIRS.SW }, { row: 2, col: 5, dir: HEX_DIRS.NE }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false }),
-        gluePair(0, { row: 4, col: 1, dir: HEX_DIRS.W }, { row: 1, col: 5, dir: HEX_DIRS.E }, { reversed: true, firstArrowReversed: false, secondArrowReversed: false })
-      ]
-    },
-    {
-      id: 'hex-classic-4x4',
-      label: 'hex classic 4*4',
-      lattice: 'hexagonal',
-      rows: 4,
-      cols: 4,
-      surface: 'hexagonal grid',
-      removedTiles: [],
-      cutEdges: [],
-      gluedEdges: []
-    }
-  ];
+  const PRESETS = [];
+  let presetRegistry = [];
+  let presetCatalogReady = false;
+  let presetCatalogError = '';
 
   const IMPORTED_PRESET_ID = 'imported-preset';
   const IMPORT_PRESET_CHOICE_ID = 'import-preset';
@@ -896,6 +255,10 @@
     refs.select = document.getElementById('surface-preset-select');
     refs.importToggle = document.getElementById('import-preset-toggle');
     refs.importTools = document.getElementById('import-preset-tools');
+    refs.importGameMode = document.getElementById('import-game-mode');
+    refs.importSource = document.getElementById('import-preset-source');
+    refs.importCatalogRow = document.getElementById('import-preset-catalog-row');
+    refs.importCatalog = document.getElementById('import-preset-catalog');
     refs.importInput = document.getElementById('import-preset-input');
     refs.applyImportPreset = document.getElementById('apply-import-preset');
     refs.placementDisplayRow = document.getElementById('gomoku-display-row');
@@ -919,6 +282,9 @@
     refs.exportState = document.getElementById('export-state');
     refs.importState = document.getElementById('import-state');
     refs.debugExport = document.getElementById('debug-export-output');
+    refs.exportStateKind = document.getElementById('export-state-kind');
+    refs.exportBackgroundFormatRow = document.getElementById('export-background-format-row');
+    refs.exportBackgroundFormat = document.getElementById('export-background-format');
     refs.moveButtons = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-move-dir]')) : [];
     refs.moveGroups = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-move-lattice]')) : [];
     refs.mode2048Controls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="2048"]')) : [];
@@ -937,11 +303,14 @@
     refs.existing = document.getElementById('existing-tile-value');
     refs.removed = document.getElementById('removed-tile-value');
     refs.round = document.getElementById('round-value');
+    bindCards();
     if (!refs.canvas || !refs.ctx || !refs.select) return;
 
     if (refs.gameMode) refs.gameMode.addEventListener('change', handleGameModeChange);
     refs.select.addEventListener('change', handlePresetSelectChange);
     if (refs.importToggle) refs.importToggle.addEventListener('click', toggleImportTools);
+    if (refs.importGameMode) refs.importGameMode.addEventListener('change', syncImportExportControls);
+    if (refs.importSource) refs.importSource.addEventListener('change', syncImportExportControls);
     if (refs.applyImportPreset) refs.applyImportPreset.addEventListener('click', importPresetFromUi);
     if (refs.gomokuDisplay) refs.gomokuDisplay.addEventListener('change', render);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('change', handleGomokuSizeChange);
@@ -956,8 +325,10 @@
     if (refs.nextStep) refs.nextStep.addEventListener('click', playNextStep);
     if (refs.debugToggle) refs.debugToggle.addEventListener('click', toggleDebugMode);
     if (refs.undo) refs.undo.addEventListener('click', undoPreviousStep);
-    if (refs.exportState) refs.exportState.addEventListener('click', exportDebugState);
+    if (refs.exportState) refs.exportState.addEventListener('click', exportFromUi);
     if (refs.importState) refs.importState.addEventListener('click', importDebugState);
+    if (refs.exportStateKind) refs.exportStateKind.addEventListener('change', syncImportExportControls);
+    if (refs.exportBackgroundFormat) refs.exportBackgroundFormat.addEventListener('change', syncImportExportControls);
     if (refs.canvas) {
       refs.canvas.addEventListener('click', handleCanvasClick);
       refs.canvas.addEventListener('mousemove', handleCanvasHover);
@@ -979,10 +350,37 @@
 
     syncSpeedOutput();
     syncDebugModeUi();
-    resetToPreview();
+    setPresetSelectLoading();
+    const catalogLoad = ensurePresetCatalogLoaded();
+    if (catalogLoad && typeof catalogLoad.then === 'function') {
+      catalogLoad
+        .then(finishPresetCatalogInit)
+        .catch(handlePresetCatalogError);
+    } else {
+      finishPresetCatalogInit();
+    }
+  }
+
+  function bindCards() {
+    if (typeof document === 'undefined' || !document.querySelectorAll) return;
+    document.querySelectorAll('.card-head').forEach((head) => {
+      head.addEventListener('click', (event) => {
+        if (event.target && event.target.closest && event.target.closest('button,input,select,textarea,a')) return;
+        const card = head.closest ? head.closest('.card') : null;
+        if (card) card.classList.toggle('collapsed');
+      });
+    });
   }
 
   function resetToPreview() {
+    if (!presetCatalogReady || !PRESETS.length) {
+      game = null;
+      geometry = null;
+      clearCanvas();
+      syncStatus('loading presets', presetCatalogError || 'loading ramified minigame presets', presetCatalogError ? 'error' : 'setup');
+      syncControls();
+      return;
+    }
     stopPlayback();
     resetSwipeGesture();
     clearSuppressedCanvasClick();
@@ -1001,6 +399,404 @@
     render();
     syncStatusForCurrentGame();
     syncControls();
+  }
+
+  function finishPresetCatalogInit() {
+    if (importPresetFromUrlParams()) return;
+    const preferred = refs.select && presetSelectHasValue(refs.select.value)
+      ? refs.select.value
+      : defaultPresetIdForMode(selectedGameMode());
+    syncPresetSelectOptions(preferred);
+    resetToPreview();
+  }
+
+  function importPresetFromUrlParams() {
+    if (typeof window === 'undefined' || !window.location || typeof URLSearchParams === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search || '');
+    const encoded = params.get('minigamePreset');
+    if (!encoded) return false;
+    try {
+      const payload = JSON.parse(base64UrlDecodeUtf8(encoded));
+      importedPreset = presetFromImportPayload(payload);
+      const mode = gameModeFromUrlParam(params.get('mode')) || gameModeFromPresetGroup(importedPreset);
+      applyImportedPresetMode(importedPreset, mode);
+      if (refs.gameMode) refs.gameMode.value = mode;
+      ensureImportedPresetOption(importedPreset);
+      if (refs.select) refs.select.value = importedPreset.id;
+      setImportToolsVisible(false);
+      resetToPreview();
+      syncStatus('preset imported from link', previewInfo(game.preset), 'setup');
+    } catch (error) {
+      const fallback = defaultPresetIdForMode(selectedGameMode());
+      syncPresetSelectOptions(fallback);
+      resetToPreview();
+      syncStatus('link import failed', error && error.message ? error.message : 'invalid minigame preset link', 'error');
+    }
+    return true;
+  }
+
+  function base64UrlDecodeUtf8(encoded) {
+    const source = String(encoded || '').replace(/-/g, '+').replace(/_/g, '/');
+    const padded = source + '='.repeat((4 - (source.length % 4)) % 4);
+    if (typeof Buffer !== 'undefined') return Buffer.from(padded, 'base64').toString('utf8');
+    if (typeof atob === 'function') {
+      const binary = atob(padded);
+      if (typeof TextDecoder !== 'undefined') {
+        const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+        return new TextDecoder().decode(bytes);
+      }
+      return decodeURIComponent(Array.from(binary, (char) => (
+        `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`
+      )).join(''));
+    }
+    throw new Error('base64url decoding is unavailable');
+  }
+
+  function gameModeFromUrlParam(value) {
+    const mode = String(value || '').trim().toLowerCase();
+    if (mode === GAME_MODES.CONNECT_FOUR || mode === 'connectfour' || mode === 'connect four') return GAME_MODES.CONNECT_FOUR;
+    if (mode === GAME_MODES.GOMOKU) return GAME_MODES.GOMOKU;
+    if (mode === GAME_MODES.NUMBER_2048 || mode === 'number-2048' || mode === '2048') return GAME_MODES.NUMBER_2048;
+    return '';
+  }
+
+  function gameModeFromPresetGroup(preset) {
+    const gameTypes = presetGameTypesForModes(preset);
+    const gameType = String(gameTypes[0] || '').trim().toLowerCase();
+    if (gameType.includes('connect')) return GAME_MODES.CONNECT_FOUR;
+    if (gameType.includes('gomoku')) return GAME_MODES.GOMOKU;
+    return GAME_MODES.NUMBER_2048;
+  }
+
+  function gameModesForPreset(preset) {
+    const modes = [];
+    presetGameTypesForModes(preset).forEach((gameType) => {
+      const mode = gameTypeToGameMode(gameType);
+      if (!modes.includes(mode)) modes.push(mode);
+    });
+    return modes.length ? modes : [GAME_MODES.NUMBER_2048];
+  }
+
+  function gameTypeToGameMode(gameType) {
+    const normalized = String(gameType || '').trim().toLowerCase();
+    if (normalized.includes('connect')) return GAME_MODES.CONNECT_FOUR;
+    if (normalized.includes('gomoku')) return GAME_MODES.GOMOKU;
+    return GAME_MODES.NUMBER_2048;
+  }
+
+  function presetGameTypesForModes(preset, options = {}) {
+    if (!preset) return ['2048'];
+    if (
+      options.allowEmpty
+      && Array.isArray(preset.gameTypes)
+      && !preset.gameTypes.length
+      && preset.groups == null
+      && preset.group == null
+    ) {
+      return [];
+    }
+    return cleanPresetGameTypes(preset.gameTypes, preset.groups, preset.group);
+  }
+
+  function gameTypeForGameMode(mode) {
+    if (mode === GAME_MODES.GOMOKU) return 'Gomoku';
+    if (mode === GAME_MODES.CONNECT_FOUR) return 'Connect Four';
+    return '2048';
+  }
+
+  function handlePresetCatalogError(error) {
+    presetCatalogReady = false;
+    presetCatalogError = error && error.message ? error.message : 'could not load presets';
+    syncStatus('preset load failed', presetCatalogError, 'error');
+    syncControls();
+  }
+
+  function clearCanvas() {
+    if (!refs.canvas || !refs.ctx) return;
+    refs.canvas.width = Math.max(1, refs.canvas.clientWidth || 720);
+    refs.canvas.height = Math.max(1, refs.canvas.clientHeight || 360);
+    refs.ctx.clearRect(0, 0, refs.canvas.width, refs.canvas.height);
+  }
+
+  function ensurePresetCatalogLoaded() {
+    if (presetCatalogReady) return null;
+    const globalItems = globalPresetCatalogItems();
+    if (globalItems) {
+      installPresetCatalog(globalItems);
+      return null;
+    }
+    const nodeItems = loadNodePresetCatalogItems();
+    if (nodeItems) {
+      installPresetCatalog(nodeItems);
+      return null;
+    }
+    return loadBrowserPresetCatalogItems().then((items) => {
+      installPresetCatalog(items);
+    });
+  }
+
+  function installPresetCatalog(items) {
+    const seen = new Set();
+    const nextPresets = [];
+    const nextRegistry = [];
+    items.forEach((item) => {
+      if (!item || !item.entry || !item.spec) return;
+      const preset = normalizePresetPayload(item.spec, { registryEntry: item.entry });
+      if (!preset.id || seen.has(preset.id)) return;
+      seen.add(preset.id);
+      nextPresets.push(preset);
+      nextRegistry.push(item.entry);
+    });
+    if (!nextPresets.length) throw new Error('No ramified minigame presets were loaded.');
+    PRESETS.splice(0, PRESETS.length, ...nextPresets);
+    presetRegistry = nextRegistry;
+    presetCatalogReady = true;
+    presetCatalogError = '';
+  }
+
+  function globalPresetCatalogItems() {
+    const root = presetRoot();
+    const registry = normalizeMinigamePresetRegistry(root.RAMIFIED_MINIGAME_PRESETS);
+    if (!registry.length) return null;
+    const items = [];
+    for (const entry of registry) {
+      const spec = readPreloadedPresetSpec(entry);
+      if (!spec) return null;
+      items.push({ entry, spec });
+    }
+    return items;
+  }
+
+  function loadBrowserPresetCatalogItems() {
+    if (typeof document === 'undefined' || !document.createElement) {
+      return Promise.reject(new Error('Preset loading requires a browser document or Node require.'));
+    }
+    const root = presetRoot();
+    const registry = normalizeMinigamePresetRegistry(root.RAMIFIED_MINIGAME_PRESETS);
+    if (!registry.length) {
+      return Promise.reject(new Error('No presets are registered in ramified_minigame_presets/presets.js.'));
+    }
+    return Promise.all(registry.map((entry) => loadBrowserPresetSpec(entry).then((spec) => ({ entry, spec }))));
+  }
+
+  function loadBrowserPresetSpec(entry) {
+    const preloaded = readPreloadedPresetSpec(entry);
+    if (preloaded) return Promise.resolve(preloaded);
+    if (!entry.file) return Promise.reject(new Error(`Preset "${entry.label}" has no file.`));
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = `${PRESET_FOLDER_URL}${presetUrlPath(entry.file)}`;
+      script.onload = () => {
+        const spec = readPreloadedPresetSpec(entry);
+        if (spec) resolve(spec);
+        else reject(new Error(`Preset file loaded, but did not register key "${entry.key}".`));
+      };
+      script.onerror = () => reject(new Error(`Could not load ${entry.file}.`));
+      document.head.appendChild(script);
+    });
+  }
+
+  function readPreloadedPresetSpec(entry) {
+    if (!entry) return null;
+    if (entry.data && typeof entry.data === 'object' && !Array.isArray(entry.data)) return entry.data;
+    if (entry.json) return JSON.parse(entry.json);
+    const root = presetRoot();
+    const store = root.RAMIFIED_MINIGAME_PRESET_DATA;
+    return store && store[entry.key] && typeof store[entry.key] === 'object' && !Array.isArray(store[entry.key])
+      ? store[entry.key]
+      : null;
+  }
+
+  function loadNodePresetCatalogItems() {
+    if (typeof module === 'undefined' || !module.exports || typeof require !== 'function' || typeof __dirname !== 'string') {
+      return null;
+    }
+    const path = require('path');
+    const folder = path.join(__dirname, '..', PRESET_FOLDER_URL);
+    const registry = normalizeMinigamePresetRegistry(require(path.join(folder, 'presets.js')));
+    return registry.map((entry) => ({
+      entry,
+      spec: entry.data || (entry.json ? JSON.parse(entry.json) : require(path.join(folder, entry.file)))
+    }));
+  }
+
+  function normalizeMinigamePresetRegistry(registry) {
+    const rawEntries = Array.isArray(registry) ? registry : [];
+    return rawEntries
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+        const id = cleanPresetId(entry.id || entry.key);
+        const label = cleanPresetString(entry.label || entry.name || id || 'Preset');
+        const key = cleanPresetKey(entry.key || id);
+        const file = cleanPresetFile(entry.file || `${key}.preset.js`);
+        if (!id || !key) return null;
+        return {
+          id,
+          key,
+          file,
+          label,
+          gameTypes: cleanPresetGameTypes(entry.gameTypes, entry.groups, entry.group),
+          defaultFor: normalizePresetDefaultFor(entry.defaultFor),
+          data: entry.data && typeof entry.data === 'object' && !Array.isArray(entry.data) ? entry.data : null,
+          json: cleanPresetString(entry.json || '')
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function presetRoot() {
+    if (typeof window !== 'undefined') return window;
+    if (typeof globalThis !== 'undefined') return globalThis;
+    return {};
+  }
+
+  function presetUrlPath(file) {
+    return cleanPresetFile(file).split('/').map(encodeURIComponent).join('/');
+  }
+
+  function cleanPresetFile(file) {
+    const value = cleanPresetString(file).replace(/\\/g, '/');
+    if (!value || /^(?:[a-z]+:)?\/\//i.test(value) || value.startsWith('/') || value.includes('..')) return '';
+    return value.replace(/^\.?\//, '');
+  }
+
+  function cleanPresetKey(value) {
+    const key = cleanPresetString(value).replace(/[^A-Za-z0-9_$]/g, '_');
+    return /^[A-Za-z_$]/.test(key) ? key : '';
+  }
+
+  function cleanPresetId(value) {
+    return cleanPresetString(value)
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  function cleanPresetString(value) {
+    return String(value || '').trim();
+  }
+
+  function cleanPresetGameType(value) {
+    const gameType = cleanPresetString(value);
+    return gameType || '2048';
+  }
+
+  function cleanPresetGameTypes(value, legacyGroups, legacyGroup) {
+    const primary = cleanPresetGameTypeList(value);
+    const legacyList = primary.length ? primary : cleanPresetGameTypeList(legacyGroups);
+    const raw = legacyList.length ? legacyList : cleanPresetGameTypeList(legacyGroup);
+    return raw.length ? raw : ['2048'];
+  }
+
+  function cleanPresetGameTypeList(value) {
+    const raw = Array.isArray(value) ? value : (value == null || value === '' ? [] : [value]);
+    const gameTypes = [];
+    raw.forEach((item) => {
+      const gameType = cleanPresetString(item);
+      if (gameType && !gameTypes.includes(gameType)) gameTypes.push(gameType);
+    });
+    return gameTypes;
+  }
+
+  function normalizePresetDefaultFor(value) {
+    if (Array.isArray(value)) return value.map(cleanPresetString).filter(Boolean);
+    const text = cleanPresetString(value);
+    return text ? [text] : [];
+  }
+
+  function setPresetSelectLoading() {
+    if (!refs.select) return;
+    refs.select.disabled = true;
+    if (!document.createElement || !refs.select.appendChild) {
+      refs.select.value = '';
+      return;
+    }
+    refs.select.innerHTML = '';
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'Loading presets...';
+    refs.select.appendChild(option);
+    refs.select.value = '';
+  }
+
+  function syncPresetSelectOptions(preferredValue) {
+    if (!refs.select) return;
+    const previous = preferredValue != null ? String(preferredValue) : refs.select.value;
+    const mode = selectedGameMode();
+    if (document.createElement && refs.select.appendChild) {
+      refs.select.innerHTML = '';
+      presetOptionGroups(mode).forEach((group) => {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = group.label;
+        group.presets.forEach((preset) => {
+          const option = document.createElement('option');
+          option.value = preset.id;
+          option.textContent = preset.label;
+          optgroup.appendChild(option);
+        });
+        refs.select.appendChild(optgroup);
+      });
+      if (importedPreset && presetMatchesGameMode(importedPreset, mode)) {
+        const customGroup = document.createElement('optgroup');
+        customGroup.label = 'Custom';
+        const importedOption = document.createElement('option');
+        importedOption.value = IMPORTED_PRESET_ID;
+        importedOption.textContent = importedPreset.label || 'imported preset';
+        customGroup.appendChild(importedOption);
+        refs.select.appendChild(customGroup);
+      }
+    }
+    const fallback = defaultPresetIdForMode(mode) || (presetListForMode(mode)[0] && presetListForMode(mode)[0].id) || '';
+    refs.select.value = presetSelectHasValue(previous) ? previous : fallback;
+    refs.select.disabled = !presetCatalogReady || !PRESETS.length;
+  }
+
+  function presetOptionGroups(mode = selectedGameMode()) {
+    const groups = new Map();
+    presetListForMode(mode).forEach((preset) => {
+      const group = presetGameTypeLabelForMode(preset, mode);
+      if (!groups.has(group)) groups.set(group, []);
+      groups.get(group).push(preset);
+    });
+    const ordered = [];
+    PRESET_GROUP_ORDER.forEach((label) => {
+      if (groups.has(label)) {
+        ordered.push({ label, presets: groups.get(label) });
+        groups.delete(label);
+      }
+    });
+    Array.from(groups.keys()).sort().forEach((label) => {
+      ordered.push({ label, presets: groups.get(label) });
+    });
+    return ordered;
+  }
+
+  function presetListForMode(mode = selectedGameMode()) {
+    return PRESETS.filter((preset) => presetMatchesGameMode(preset, mode));
+  }
+
+  function presetMatchesGameMode(preset, mode = selectedGameMode()) {
+    return gameModesForPreset(preset).includes(mode || GAME_MODES.NUMBER_2048);
+  }
+
+  function presetGameTypeLabelForMode(preset, mode) {
+    const matching = presetGameTypesForModes(preset).find((gameType) => gameTypeToGameMode(gameType) === mode);
+    return cleanPresetGameType(matching || gameTypeForGameMode(mode));
+  }
+
+  function presetSelectHasValue(value) {
+    if (!value) return false;
+    if (value === IMPORTED_PRESET_ID && importedPreset) return presetMatchesGameMode(importedPreset, selectedGameMode());
+    if (refs.select && refs.select.options) {
+      return Array.from(refs.select.options).some((option) => option.value === value);
+    }
+    return presetListForMode(selectedGameMode()).some((preset) => preset.id === value);
+  }
+
+  function defaultPresetIdForMode(mode) {
+    const targetMode = mode || GAME_MODES.NUMBER_2048;
+    const registryDefault = presetRegistry.find((entry) => entry.defaultFor.includes(targetMode));
+    return (registryDefault && registryDefault.id) || DEFAULT_PRESET_BY_MODE[targetMode] || (PRESETS[0] && PRESETS[0].id) || '';
   }
 
   function beginGameFromUi() {
@@ -1088,15 +884,13 @@
 
   function handleGameModeChange() {
     syncDefaultPresetForGameMode();
+    if (refs.importGameMode) refs.importGameMode.value = selectedGameMode();
     resetToPreview();
   }
 
   function syncDefaultPresetForGameMode() {
     if (!refs.select) return;
-    const mode = selectedGameMode();
-    if (mode === GAME_MODES.GOMOKU) refs.select.value = 'gomoku-random-glue';
-    else if (mode === GAME_MODES.CONNECT_FOUR) refs.select.value = 'connect-four-6x7';
-    else refs.select.value = 'classic-4x4';
+    syncPresetSelectOptions(defaultPresetIdForMode(selectedGameMode()));
   }
 
   function handleGomokuSizeChange() {
@@ -1142,23 +936,38 @@
 
   function setImportToolsVisible(force) {
     if (!refs.importTools) return;
-    const shouldShow = force === undefined ? refs.importTools.hidden : !!force;
-    refs.importTools.hidden = !shouldShow;
-    if (refs.importToggle) refs.importToggle.setAttribute('aria-expanded', refs.importTools.hidden ? 'false' : 'true');
-    if (!refs.importTools.hidden && refs.importInput) refs.importInput.focus();
+    refs.importTools.hidden = false;
+    if (force && refs.importSource) refs.importSource.value = 'paste';
+    if (refs.importToggle) refs.importToggle.setAttribute('aria-expanded', 'true');
+    syncImportExportControls();
+    if (selectedImportSource() === 'paste' && refs.importInput) refs.importInput.focus();
   }
 
   function toggleImportTools() {
-    setImportToolsVisible();
+    setImportToolsVisible(true);
   }
 
   function importPresetFromUi() {
-    if (!refs.importInput) return;
+    const mode = selectedImportGameMode();
     try {
+      if (selectedImportSource() === 'catalog') {
+        const preset = resolvePreset(refs.importCatalog ? refs.importCatalog.value : defaultPresetIdForMode(mode));
+        if (refs.gameMode) refs.gameMode.value = mode;
+        syncPresetSelectOptions(preset.id);
+        if (refs.select) refs.select.value = preset.id;
+        resetToPreview();
+        syncImportExportControls();
+        syncStatus('preset imported', previewInfo(game.preset), 'setup');
+        return;
+      }
+      if (!refs.importInput) return;
       importedPreset = presetFromImportText(refs.importInput.value);
+      applyImportedPresetMode(importedPreset, mode);
+      if (refs.gameMode) refs.gameMode.value = mode;
       ensureImportedPresetOption(importedPreset);
       if (refs.select) refs.select.value = importedPreset.id;
       resetToPreview();
+      syncImportExportControls();
       syncStatus('preset imported', previewInfo(game.preset), 'setup');
       setImportToolsVisible(false);
     } catch (error) {
@@ -1166,8 +975,65 @@
     }
   }
 
+  function selectedImportGameMode() {
+    return gameModeFromUrlParam(refs.importGameMode && refs.importGameMode.value) || selectedGameMode();
+  }
+
+  function selectedImportSource() {
+    return refs.importSource && refs.importSource.value === 'paste' ? 'paste' : 'catalog';
+  }
+
+  function applyImportedPresetMode(preset, mode) {
+    if (!preset) return;
+    const gameType = gameTypeForGameMode(mode);
+    const gameTypes = presetGameTypesForModes(preset, { allowEmpty: true });
+    preset.gameTypes = gameTypes.includes(gameType)
+      ? [gameType, ...gameTypes.filter((item) => item !== gameType)]
+      : [gameType, ...gameTypes];
+    delete preset.group;
+    delete preset.groups;
+  }
+
+  function syncImportExportControls() {
+    if (refs.importGameMode && !refs.importGameMode.value) refs.importGameMode.value = selectedGameMode();
+    syncImportCatalogOptions();
+    const pasteSource = selectedImportSource() === 'paste';
+    if (refs.importCatalogRow) refs.importCatalogRow.hidden = pasteSource;
+    if (refs.importInput) refs.importInput.hidden = !pasteSource;
+    const backgroundExport = selectedExportKind() === 'background';
+    if (refs.exportBackgroundFormatRow) refs.exportBackgroundFormatRow.hidden = !backgroundExport;
+  }
+
+  function syncImportCatalogOptions() {
+    if (!refs.importCatalog) return;
+    const mode = selectedImportGameMode();
+    const previous = refs.importCatalog.value;
+    const presets = presetListForMode(mode);
+    if (document.createElement && refs.importCatalog.appendChild) {
+      refs.importCatalog.innerHTML = '';
+      presets.forEach((preset) => {
+        const option = document.createElement('option');
+        option.value = preset.id;
+        option.textContent = preset.label;
+        refs.importCatalog.appendChild(option);
+      });
+    }
+    const fallback = defaultPresetIdForMode(mode) || (presets[0] && presets[0].id) || '';
+    refs.importCatalog.value = presets.some((preset) => preset.id === previous) ? previous : fallback;
+    refs.importCatalog.disabled = !presetCatalogReady || !presets.length;
+  }
+
+  function selectedExportKind() {
+    return refs.exportStateKind && refs.exportStateKind.value === 'background' ? 'background' : 'status';
+  }
+
+  function selectedBackgroundExportFormat() {
+    return refs.exportBackgroundFormat && refs.exportBackgroundFormat.value === 'verbose' ? 'verbose' : 'dsl';
+  }
+
   function ensureImportedPresetOption(preset) {
     if (!refs.select || !preset) return;
+    syncPresetSelectOptions(preset.id || IMPORTED_PRESET_ID);
     const options = refs.select.options ? Array.from(refs.select.options) : [];
     let option = options.find((item) => item.value === IMPORTED_PRESET_ID);
     if (!option && typeof document !== 'undefined' && document.createElement && refs.select.appendChild) {
@@ -1179,7 +1045,7 @@
   }
 
   function handleKeydown(event) {
-    if (!is2048Game(game)) return;
+    if (!game || !is2048Game(game)) return;
     const key = normalizeKeyboardKey(event.code || event.key);
     if (!keyboardKeyHandledByPreset(key, game.preset)) return;
     const reserved = shouldReserve2048KeyboardInput(key);
@@ -1936,6 +1802,14 @@
     return JSON.parse(JSON.stringify(value));
   }
 
+  function exportFromUi() {
+    if (selectedExportKind() === 'background') {
+      exportBackgroundPreset();
+      return;
+    }
+    exportDebugState();
+  }
+
   function exportDebugState() {
     if (!game || !refs.debugExport) return;
     refs.debugExport.value = JSON.stringify(debugExportPayload(), null, 2);
@@ -1945,9 +1819,184 @@
     refs.debugExport.select();
   }
 
+  function exportBackgroundPreset() {
+    if (!game || !refs.debugExport) return;
+    const preset = backgroundPresetForExport();
+    const payload = selectedBackgroundExportFormat() === 'verbose'
+      ? preset
+      : compactBackgroundPresetForExport(preset);
+    refs.debugExport.value = JSON.stringify(payload, null, 2);
+    syncStatus('background exported', previewInfo(preset), phaseBadge(game.phase));
+    refs.debugExport.focus();
+    refs.debugExport.select();
+  }
+
+  function backgroundPresetForExport() {
+    const source = game ? game.preset : selectedPreset();
+    const preset = {
+      id: source.id,
+      label: source.label,
+      lattice: source.lattice || 'square',
+      rows: source.rows,
+      cols: source.cols,
+      surface: source.surface,
+      removedTiles: (source.removedTiles || []).map((tile) => ({ row: tile.row, col: tile.col })),
+      cutEdges: (source.cutEdges || []).map((edge) => ({
+        left: { row: edge.left.row, col: edge.left.col },
+        right: { row: edge.right.row, col: edge.right.col }
+      })),
+      gluedEdges: (source.gluedEdges || []).map(cloneGluePair)
+    };
+    const holes = backgroundConnectFourHolesForExport(source);
+    if (holes.length) {
+      preset.connectFourHoles = holes;
+      preset.inputHoles = holes.map((tile) => ({ ...tile }));
+    }
+    if (Number.isInteger(source.gomokuWinLength)) preset.gomokuWinLength = source.gomokuWinLength;
+    return preset;
+  }
+
+  function backgroundConnectFourHolesForExport(preset) {
+    const holes = isConnectFourGame(game)
+      ? Array.from(game.holes || []).map((index) => rowCol(index, preset.cols))
+      : (preset.connectFourHoles || []).map((tile) => ({ row: tile.row, col: tile.col }));
+    return holes
+      .filter((tile) => Number.isInteger(tile.row) && Number.isInteger(tile.col))
+      .sort((left, right) => indexOf(left.row, left.col, preset.cols) - indexOf(right.row, right.col, preset.cols));
+  }
+
+  function compactBackgroundPresetForExport(preset) {
+    const compact = {
+      id: preset.id,
+      label: preset.label,
+      lattice: preset.lattice || 'square',
+      size: `${preset.rows}x${preset.cols}`,
+      surface: preset.surface
+    };
+    const removed = compactTileListForExport(preset.removedTiles, preset.rows, preset.cols, { rect: true });
+    const holes = compactTileListForExport(preset.connectFourHoles, preset.rows, preset.cols, { top: true });
+    const cuts = compactCutListForExport(preset.cutEdges);
+    const glue = compactGlueListForExport(preset.gluedEdges, preset);
+    if (removed) compact.removed = removed;
+    if (cuts) compact.cuts = cuts;
+    if (glue) compact.glue = glue;
+    if (holes) compact.holes = holes;
+    if (Number.isInteger(preset.gomokuWinLength)) compact.gomokuWinLength = preset.gomokuWinLength;
+    return compact;
+  }
+
+  function compactTileListForExport(tiles, rows, cols, options = {}) {
+    if (!Array.isArray(tiles) || !tiles.length) return '';
+    const normalized = tiles
+      .map((tile) => ({ row: Number(tile.row), col: Number(tile.col) }))
+      .filter((tile) => Number.isInteger(tile.row) && Number.isInteger(tile.col))
+      .sort((left, right) => indexOf(left.row, left.col, cols) - indexOf(right.row, right.col, cols));
+    if (!normalized.length) return '';
+    if (options.top && normalized.length === cols && normalized.every((tile, index) => tile.row === 1 && tile.col === index + 1)) {
+      return 'top';
+    }
+    if (options.rect) {
+      const rowsUsed = normalized.map((tile) => tile.row);
+      const colsUsed = normalized.map((tile) => tile.col);
+      const minRow = Math.min(...rowsUsed);
+      const maxRow = Math.max(...rowsUsed);
+      const minCol = Math.min(...colsUsed);
+      const maxCol = Math.max(...colsUsed);
+      const expected = (maxRow - minRow + 1) * (maxCol - minCol + 1);
+      const keys = new Set(normalized.map((tile) => `${tile.row},${tile.col}`));
+      let full = expected === normalized.length && expected > 1;
+      for (let row = minRow; row <= maxRow && full; row += 1) {
+        for (let col = minCol; col <= maxCol; col += 1) {
+          if (!keys.has(`${row},${col}`)) {
+            full = false;
+            break;
+          }
+        }
+      }
+      if (full) return `rect(${formatCompactNumberRange(minRow, maxRow)},${formatCompactNumberRange(minCol, maxCol)})`;
+    }
+    return normalized.map((tile) => `${tile.row},${tile.col}`).join('; ');
+  }
+
+  function compactCutListForExport(cutEdges) {
+    if (!Array.isArray(cutEdges) || !cutEdges.length) return '';
+    return cutEdges
+      .map((edge) => `${edge.left.row},${edge.left.col}=${edge.right.row},${edge.right.col}`)
+      .join('; ');
+  }
+
+  function compactGlueListForExport(gluedEdges, preset) {
+    if (!Array.isArray(gluedEdges) || !gluedEdges.length) return '';
+    const groups = new Map();
+    gluedEdges.forEach((pair, pairIndex) => {
+      const group = Number.isInteger(Number(pair.group)) ? Number(pair.group) : pairIndex;
+      const reversed = !!pair.reversed;
+      const firstArrow = Object.prototype.hasOwnProperty.call(pair, 'firstArrowReversed') ? !!pair.firstArrowReversed : reversed;
+      const secondArrow = Object.prototype.hasOwnProperty.call(pair, 'secondArrowReversed') ? !!pair.secondArrowReversed : true;
+      const key = `${group}|${reversed ? 1 : 0}|${firstArrow ? 1 : 0}|${secondArrow ? 1 : 0}`;
+      if (!groups.has(key)) groups.set(key, { group, reversed, firstArrow, secondArrow, pairs: [] });
+      groups.get(key).pairs.push(pair);
+    });
+    const entries = [];
+    groups.forEach((entry) => {
+      const prefix = compactGluePrefix(entry.group, entry.reversed, entry.firstArrow, entry.secondArrow);
+      const first = compactBoundaryEdgesForExport(entry.pairs.map((pair) => pair.first), preset);
+      const second = compactBoundaryEdgesForExport(entry.pairs.map((pair) => pair.second), preset);
+      if (first && second) {
+        entries.push(`${prefix}${first}=${second}`);
+        return;
+      }
+      entry.pairs.forEach((pair) => {
+        entries.push(`${prefix}${compactBoundaryEdgeForExport(pair.first, preset)}=${compactBoundaryEdgeForExport(pair.second, preset)}`);
+      });
+    });
+    return entries.join('; ');
+  }
+
+  function compactGluePrefix(group, reversed, firstArrow, secondArrow) {
+    if (!reversed) return `g${group}:`;
+    if (firstArrow && secondArrow) return `g${group}~:`;
+    return `g${group}~${firstArrow ? 1 : 0}${secondArrow ? 1 : 0}:`;
+  }
+
+  function compactBoundaryEdgesForExport(edges, preset) {
+    if (!Array.isArray(edges) || !edges.length) return '';
+    if (edges.length === 1) return compactBoundaryEdgeForExport(edges[0], preset);
+    const dir = Number(edges[0].dir);
+    if (!edges.every((edge) => Number(edge.dir) === dir)) return '';
+    const rowCompact = compactCoordinateSequence(edges.map((edge) => Number(edge.row)));
+    const colCompact = compactCoordinateSequence(edges.map((edge) => Number(edge.col)));
+    if (!rowCompact || !colCompact) return '';
+    return `${rowCompact},${colCompact},${boundaryDirNameForExport(dir, preset)}`;
+  }
+
+  function compactBoundaryEdgeForExport(edge, preset) {
+    return `${edge.row},${edge.col},${boundaryDirNameForExport(edge.dir, preset)}`;
+  }
+
+  function compactCoordinateSequence(values) {
+    if (!values.length) return '';
+    if (values.length === 1 || values.every((value) => value === values[0])) return String(values[0]);
+    const step = values[1] - values[0];
+    if (Math.abs(step) !== 1) return '';
+    for (let index = 2; index < values.length; index += 1) {
+      if (values[index] - values[index - 1] !== step) return '';
+    }
+    return `${values[0]}..${values[values.length - 1]}`;
+  }
+
+  function formatCompactNumberRange(start, end) {
+    return start === end ? String(start) : `${start}..${end}`;
+  }
+
+  function boundaryDirNameForExport(dir, preset) {
+    const lattice = latticeForPreset(preset);
+    return lattice.dirNames[modulo(Number(dir), lattice.sides)] || String(dir);
+  }
+
   function importDebugState() {
-    if (!debugMode || !refs.debugExport) {
-      syncStatus('status import unavailable', 'turn on debug mode first', 'debug');
+    if (!refs.debugExport) {
+      syncStatus('status import unavailable', 'status textarea unavailable', 'error');
       return;
     }
     try {
@@ -1955,6 +2004,7 @@
       if (game) pushUndoSnapshot('status import');
       stopPlayback();
       importedPreset = imported.state.preset;
+      if (refs.gameMode) refs.gameMode.value = gameModeValue(imported.state);
       ensureImportedPresetOption(importedPreset);
       if (refs.select) refs.select.value = importedPreset.id;
       game = imported.state;
@@ -1966,11 +2016,10 @@
       eventQueueChangedBoard = false;
       game.phase = stepPaused ? 'paused' : (eventQueue.length ? 'ready' : imported.phase);
       if (game.phase !== 'gameover') game.ending = '';
-      if (refs.gameMode) refs.gameMode.value = gameModeValue(game);
       syncConnectFourFallInputFromGame();
       render();
       const info = debugExportInfo(game);
-      syncStatus('status imported', info, 'debug');
+      syncStatus('status imported', info, debugMode ? 'debug' : phaseBadge(game.phase));
       syncControls();
       refreshDebugExportIfNeeded();
       if (refs.canvas) refs.canvas.focus();
@@ -1981,6 +2030,7 @@
 
   function refreshDebugExportIfNeeded() {
     if (!refs.debugExport || !refs.debugExport.value) return;
+    if (selectedExportKind() !== 'status') return;
     refs.debugExport.value = JSON.stringify(debugExportPayload(), null, 2);
   }
 
@@ -5913,6 +5963,7 @@
 
   function syncConnectFourFallOptions() {
     if (!refs.connectFourFall) return;
+    if (!presetCatalogReady || !PRESETS.length) return;
     const preset = game ? game.preset : selectedPreset();
     const lattice = latticeForPreset(preset);
     const options = refs.connectFourFall.options ? Array.from(refs.connectFourFall.options) : [];
@@ -5977,35 +6028,96 @@
     try {
       payload = JSON.parse(raw);
     } catch (error) {
-      throw new Error('preset JSON could not be parsed');
+      const extracted = extractReturnedPresetObjectText(raw);
+      if (!extracted) throw new Error('preset JSON could not be parsed');
+      try {
+        payload = JSON.parse(extracted);
+      } catch (_) {
+        throw new Error('preset JSON could not be parsed');
+      }
     }
     return presetFromImportPayload(payload);
   }
 
+  function extractReturnedPresetObjectText(source) {
+    const text = String(source || '');
+    const returnIndex = text.search(/\breturn\b/);
+    if (returnIndex < 0) return '';
+    const start = text.indexOf('{', returnIndex);
+    if (start < 0) return '';
+    let depth = 0;
+    let quote = '';
+    let escaped = false;
+    for (let index = start; index < text.length; index += 1) {
+      const char = text[index];
+      if (quote) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === '\\') {
+          escaped = true;
+        } else if (char === quote) {
+          quote = '';
+        }
+        continue;
+      }
+      if (char === '"' || char === "'") {
+        quote = char;
+        continue;
+      }
+      if (char === '{') depth += 1;
+      else if (char === '}') {
+        depth -= 1;
+        if (depth === 0) return text.slice(start, index + 1);
+      }
+    }
+    return '';
+  }
+
   function presetFromImportPayload(payload) {
+    return normalizePresetPayload(payload, { imported: true });
+  }
+
+  function normalizePresetPayload(payload, options = {}) {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new Error('preset must be a JSON object');
     }
-    const source = payload.preset && typeof payload.preset === 'object' ? payload.preset : payload;
-    const lattice = normalizeImportedLattice(firstPresentValue(source, ['lattice']) || firstPresentValue(payload, ['lattice']));
-    const rows = normalizeImportedBoardSize(firstPresentValue(source, ['rows']) || firstPresentValue(payload, ['rows']), 'rows');
-    const cols = normalizeImportedBoardSize(firstPresentValue(source, ['cols']) || firstPresentValue(payload, ['cols']), 'cols');
+    const registryEntry = options.registryEntry && typeof options.registryEntry === 'object' ? options.registryEntry : {};
+    const rawSource = payload.preset && typeof payload.preset === 'object' && !Array.isArray(payload.preset)
+      ? payload.preset
+      : payload;
+    const source = applyPresetGenerator({ ...registryEntry, ...rawSource });
+    const size = parseCompactSize(firstPresentValue(source, ['size']) || firstPresentValue(payload, ['size']));
+    const lattice = normalizeImportedLattice(firstPresentValue(source, ['lattice']) || firstPresentValue(payload, ['lattice']) || 'square');
+    const rows = normalizeImportedBoardSize(firstPresentValue(source, ['rows']) || firstPresentValue(payload, ['rows']) || (size && size.rows), 'rows');
+    const cols = normalizeImportedBoardSize(firstPresentValue(source, ['cols']) || firstPresentValue(payload, ['cols']) || (size && size.cols), 'cols');
     const shell = { lattice, rows, cols, removedTiles: [], cutEdges: [], gluedEdges: [] };
-    const removedTiles = normalizeImportedRemovedTiles(importedArrayValues(payload, source, ['removedTiles', 'backgroundRemovedTiles']), rows, cols);
+    const removedTiles = normalizeImportedRemovedTiles(
+      importedPresetValues(payload, source, ['removed', 'removedTiles', 'backgroundRemovedTiles'], 'tiles', shell),
+      rows,
+      cols
+    );
     shell.removedTiles = removedTiles;
     const removedSet = new Set(removedTiles.map((tile) => indexOf(tile.row, tile.col, cols)));
     const connectFourHoles = normalizeImportedRemovedTiles(
-      importedArrayValues(payload, source, ['connectFourHoles', 'holes', 'inputHoles']),
+      importedPresetValues(payload, source, ['connectFourHoles', 'holes', 'inputHoles'], 'holes', shell),
       rows,
       cols
     ).filter((tile) => !removedSet.has(indexOf(tile.row, tile.col, cols)));
-    const cutEdges = normalizeImportedCutEdges(importedArrayValues(payload, source, ['cutEdges', 'backgroundCutEdges', 'boundaries']), shell);
+    const cutEdges = normalizeImportedCutEdges(
+      importedPresetValues(payload, source, ['cuts', 'cutEdges', 'backgroundCutEdges', 'boundaries'], 'cuts', shell),
+      shell
+    );
     shell.cutEdges = cutEdges;
-    const gluedEdges = normalizeImportedGluedEdges(importedArrayValues(payload, source, ['gluedEdges', 'backgroundGluedEdges', 'gluedBoundaries']), shell);
+    const gluedEdges = normalizeImportedGluedEdges(
+      importedPresetValues(payload, source, ['glue', 'gluedEdges', 'backgroundGluedEdges', 'gluedBoundaries'], 'glue', shell),
+      shell
+    );
     const backgroundSpace = payload.backgroundSpace && typeof payload.backgroundSpace === 'object' ? payload.backgroundSpace : {};
+    const sourceId = sanitizeImportedText(firstPresentValue(source, ['id']) || firstPresentValue(payload, ['id']) || registryEntry.id || '', '');
     const label = sanitizeImportedText(
       firstPresentValue(source, ['label', 'name'])
         || firstPresentValue(payload, ['label', 'name'])
+        || registryEntry.label
         || 'imported preset',
       'imported preset'
     );
@@ -6016,10 +6128,23 @@
         || `${latticeForPreset(shell).label} background`,
       `${latticeForPreset(shell).label} background`
     );
-    return {
-      id: IMPORTED_PRESET_ID,
-      sourceId: sanitizeImportedText(firstPresentValue(source, ['id']) || firstPresentValue(payload, ['id']) || '', ''),
+    const gameTypesValue = firstPresentValue(source, ['gameTypes'])
+      || firstPresentValue(payload, ['gameTypes'])
+      || registryEntry.gameTypes;
+    const legacyGroupsValue = firstPresentValue(source, ['groups'])
+      || firstPresentValue(payload, ['groups'])
+      || registryEntry.groups;
+    const legacyGroupValue = firstPresentValue(source, ['group'])
+      || firstPresentValue(payload, ['group'])
+      || registryEntry.group;
+    const hasGameTypeMetadata = gameTypesValue != null || legacyGroupsValue != null || legacyGroupValue != null;
+    const normalized = {
+      id: options.imported ? IMPORTED_PRESET_ID : cleanPresetId(sourceId || registryEntry.id || label),
+      sourceId: options.imported ? sourceId : '',
       label,
+      gameTypes: options.imported && !hasGameTypeMetadata
+        ? []
+        : cleanPresetGameTypes(gameTypesValue, legacyGroupsValue, legacyGroupValue),
       lattice,
       rows,
       cols,
@@ -6030,6 +6155,195 @@
       gluedEdges,
       gomokuWinLength: normalizeOptionalGomokuWinLength(firstPresentValue(source, ['gomokuWinLength']) || firstPresentValue(payload, ['gomokuWinLength']))
     };
+    if (source.randomGlue === true || payload.randomGlue === true) normalized.randomGlue = true;
+    if (source.dynamicGomokuSize === true || payload.dynamicGomokuSize === true) normalized.dynamicGomokuSize = true;
+    const dynamicLabel = firstPresentValue(source, ['dynamicGomokuLabelPrefix']) || firstPresentValue(payload, ['dynamicGomokuLabelPrefix']);
+    if (dynamicLabel) normalized.dynamicGomokuLabelPrefix = sanitizeImportedText(dynamicLabel, '');
+    return normalized;
+  }
+
+  function applyPresetGenerator(source) {
+    const generator = cleanPresetString(source.generator || source.macro || '').toLowerCase();
+    if (!generator) return source;
+    if (generator === 'rubikscube' || generator === 'rubiks-cube' || generator === 'rubiks') {
+      const cubeSize = normalizePositiveInteger(source.cubeSize || source.n || source.generatorSize, 0);
+      if (!cubeSize) throw new Error('rubiksCube preset generator needs cubeSize');
+      return {
+        ...createRubiksCubePreset(cubeSize, source.id, source.label),
+        ...source
+      };
+    }
+    throw new Error(`Unknown preset generator "${source.generator}".`);
+  }
+
+  function parseCompactSize(value) {
+    if (value == null || value === '') return null;
+    if (Array.isArray(value) && value.length >= 2) {
+      return { rows: Number(value[0]), cols: Number(value[1]) };
+    }
+    if (value && typeof value === 'object') {
+      return { rows: Number(value.rows), cols: Number(value.cols) };
+    }
+    const match = String(value).trim().match(/^(\d+)\s*x\s*(\d+)$/i);
+    if (!match) throw new Error(`Invalid compact size "${value}". Use "rowsxcols".`);
+    return { rows: Number(match[1]), cols: Number(match[2]) };
+  }
+
+  function importedPresetValues(payload, source, keys, kind, preset) {
+    const results = [];
+    const backgroundSpace = payload.backgroundSpace && typeof payload.backgroundSpace === 'object'
+      ? payload.backgroundSpace
+      : null;
+    [source, payload, backgroundSpace].filter(Boolean).forEach((container) => {
+      keys.forEach((key) => {
+        if (!Object.prototype.hasOwnProperty.call(container, key)) return;
+        const value = container[key];
+        if (Array.isArray(value)) {
+          results.push(...value);
+        } else if (typeof value === 'string') {
+          results.push(...parseCompactPresetList(value, kind, preset));
+        }
+      });
+    });
+    return results;
+  }
+
+  function parseCompactPresetList(value, kind, preset) {
+    if (kind === 'tiles') return parseCompactTileList(value, preset.rows, preset.cols);
+    if (kind === 'holes') return parseCompactTileList(value, preset.rows, preset.cols, { top: true });
+    if (kind === 'cuts') return parseCompactCutList(value, preset);
+    if (kind === 'glue') return parseCompactGlueList(value, preset);
+    return [];
+  }
+
+  function parseCompactTileList(value, rows, cols, options = {}) {
+    const text = String(value || '').trim();
+    if (!text) return [];
+    if (options.top && text.toLowerCase() === 'top') return connectFourTopRowHoles(cols);
+    const tiles = [];
+    splitCompactList(text).forEach((entry) => {
+      const rect = entry.match(/^rect\(([^,]+),([^)]+)\)$/i);
+      if (rect) {
+        expandTileCoordinates(parseCompactRange(rect[1]), parseCompactRange(rect[2]), rows, cols).forEach((tile) => tiles.push(tile));
+        return;
+      }
+      const parts = entry.split(',').map((part) => part.trim());
+      if (parts.length !== 2) throw new Error(`Invalid tile ref "${entry}". Use row,col.`);
+      expandTileCoordinates(parseCompactRange(parts[0]), parseCompactRange(parts[1]), rows, cols).forEach((tile) => tiles.push(tile));
+    });
+    return tiles;
+  }
+
+  function parseCompactCutList(value, preset) {
+    const cuts = [];
+    splitCompactList(value).forEach((entry) => {
+      const sides = entry.split('=').map((part) => part.trim());
+      if (sides.length !== 2) throw new Error(`Invalid cut "${entry}". Use row,col=row,col.`);
+      const left = parseCompactTileList(sides[0], preset.rows, preset.cols);
+      const right = parseCompactTileList(sides[1], preset.rows, preset.cols);
+      if (left.length !== right.length) throw new Error(`Cut "${entry}" has mismatched ranges.`);
+      left.forEach((tile, index) => cuts.push({ left: tile, right: right[index] }));
+    });
+    return cuts;
+  }
+
+  function parseCompactGlueList(value, preset) {
+    const glued = [];
+    let autoGroup = 0;
+    splitCompactList(value).forEach((entry) => {
+      const match = entry.match(/^(?:g(\d+)(~[01]{0,2})?:)?(.+)$/i);
+      if (!match) throw new Error(`Invalid glue "${entry}".`);
+      const group = match[1] == null ? autoGroup : Number(match[1]);
+      const flags = match[2] || '';
+      const body = match[3].trim();
+      const sides = body.split('=').map((part) => part.trim());
+      if (sides.length !== 2) throw new Error(`Invalid glue "${entry}". Use edge=edge.`);
+      const first = parseCompactBoundaryList(sides[0], preset);
+      const second = parseCompactBoundaryList(sides[1], preset);
+      if (first.length !== second.length) throw new Error(`Glue "${entry}" has mismatched ranges.`);
+      first.forEach((edge, index) => {
+        const pair = { group, first: edge, second: second[index] };
+        if (flags) {
+          pair.reversed = true;
+          if (flags.length >= 2) pair.firstArrowReversed = flags[1] === '1';
+          if (flags.length >= 3) pair.secondArrowReversed = flags[2] === '1';
+        }
+        glued.push(pair);
+      });
+      autoGroup += 1;
+    });
+    return glued;
+  }
+
+  function parseCompactBoundaryList(value, preset) {
+    const parts = String(value || '').split(',').map((part) => part.trim());
+    if (parts.length !== 3) throw new Error(`Invalid boundary edge "${value}". Use row,col,dir.`);
+    const rows = parseCompactRange(parts[0]);
+    const cols = parseCompactRange(parts[1]);
+    const dir = normalizeImportedDir(parts[2], preset);
+    if (!Number.isInteger(dir)) throw new Error(`Invalid boundary direction "${parts[2]}".`);
+    return expandBoundaryCoordinates(rows, cols, dir, preset.rows, preset.cols);
+  }
+
+  function splitCompactList(value) {
+    return String(value || '')
+      .split(/[;\n]+/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+
+  function parseCompactRange(value) {
+    const text = String(value || '').trim();
+    const range = text.match(/^(-?\d+)\s*\.\.\s*(-?\d+)$/);
+    if (range) {
+      const start = Number(range[1]);
+      const end = Number(range[2]);
+      const step = start <= end ? 1 : -1;
+      const values = [];
+      for (let current = start; step > 0 ? current <= end : current >= end; current += step) values.push(current);
+      return values;
+    }
+    if (/^-?\d+$/.test(text)) return [Number(text)];
+    throw new Error(`Invalid range "${value}".`);
+  }
+
+  function expandTileCoordinates(rowValues, colValues, rows, cols) {
+    const tiles = [];
+    rowValues.forEach((row) => {
+      colValues.forEach((col) => {
+        assertCompactTileInBounds(row, col, rows, cols);
+        tiles.push({ row, col });
+      });
+    });
+    return tiles;
+  }
+
+  function expandBoundaryCoordinates(rowValues, colValues, dir, rows, cols) {
+    const edges = [];
+    if (rowValues.length > 1 && colValues.length > 1) {
+      if (rowValues.length !== colValues.length) {
+        throw new Error('Boundary row and column ranges must have the same length when both vary.');
+      }
+      rowValues.forEach((row, index) => {
+        const col = colValues[index];
+        assertCompactTileInBounds(row, col, rows, cols);
+        edges.push({ row, col, dir });
+      });
+      return edges;
+    }
+    rowValues.forEach((row) => {
+      colValues.forEach((col) => {
+        assertCompactTileInBounds(row, col, rows, cols);
+        edges.push({ row, col, dir });
+      });
+    });
+    return edges;
+  }
+
+  function assertCompactTileInBounds(row, col, rows, cols) {
+    if (!Number.isInteger(row) || !Number.isInteger(col) || row < 1 || row > rows || col < 1 || col > cols) {
+      throw new Error(`Tile ${row},${col} is outside the ${rows}x${cols} board.`);
+    }
   }
 
   function normalizeImportedLattice(value) {
@@ -6046,19 +6360,6 @@
       throw new Error(`imported ${label} must be between ${MIN_IMPORTED_BOARD} and ${MAX_IMPORTED_BOARD}`);
     }
     return number;
-  }
-
-  function importedArrayValues(payload, source, keys) {
-    const results = [];
-    const backgroundSpace = payload.backgroundSpace && typeof payload.backgroundSpace === 'object'
-      ? payload.backgroundSpace
-      : null;
-    [source, payload, backgroundSpace].filter(Boolean).forEach((container) => {
-      keys.forEach((key) => {
-        if (Array.isArray(container[key])) results.push(...container[key]);
-      });
-    });
-    return results;
   }
 
   function normalizeImportedRemovedTiles(entries, rows, cols) {
@@ -6449,11 +6750,16 @@
   }
 
   function syncControls() {
-    const mode2048 = is2048Game(game) && selectedGameMode() === GAME_MODES.NUMBER_2048;
-    const modeGomoku = isGomokuGame(game) || selectedGameMode() === GAME_MODES.GOMOKU;
-    const modeConnectFour = isConnectFourGame(game) || selectedGameMode() === GAME_MODES.CONNECT_FOUR;
+    const catalogAvailable = presetCatalogReady && PRESETS.length > 0;
+    const mode2048 = catalogAvailable && is2048Game(game) && selectedGameMode() === GAME_MODES.NUMBER_2048;
+    const modeGomoku = catalogAvailable && (isGomokuGame(game) || selectedGameMode() === GAME_MODES.GOMOKU);
+    const modeConnectFour = catalogAvailable && (isConnectFourGame(game) || selectedGameMode() === GAME_MODES.CONNECT_FOUR);
     syncConnectFourFallOptions();
-    if (refs.begin) refs.begin.textContent = game && game.phase !== 'setup' ? 'stop the game' : 'begin the game';
+    if (refs.begin) {
+      refs.begin.textContent = game && game.phase !== 'setup' ? 'stop the game' : 'begin the game';
+      refs.begin.disabled = !catalogAvailable;
+    }
+    if (refs.select) refs.select.disabled = !catalogAvailable;
     if (refs.mode2048Controls) {
       refs.mode2048Controls.forEach((control) => {
         control.hidden = !mode2048;
@@ -6475,9 +6781,10 @@
     if (refs.nextStep) refs.nextStep.disabled = !mode2048 || !(isStepMode() && stepPaused && eventQueue.length && !currentAnimation);
     if (refs.undo) refs.undo.disabled = !undoStack.length;
     if (refs.exportState) refs.exportState.disabled = !game;
-    if (refs.importState) refs.importState.disabled = !debugMode;
+    if (refs.importState) refs.importState.disabled = false;
     syncDebugModeUi();
-    const activeLattice = latticeForPreset(game ? game.preset : selectedPreset()).id;
+    syncImportExportControls();
+    const activeLattice = catalogAvailable ? latticeForPreset(game ? game.preset : selectedPreset()).id : '';
     if (refs.moveGroups) {
       refs.moveGroups.forEach((group) => {
         group.hidden = !mode2048 || group.getAttribute('data-move-lattice') !== activeLattice;
@@ -6899,6 +7206,9 @@
     };
   }
 
+  const nodeStartupPresetItems = loadNodePresetCatalogItems();
+  if (nodeStartupPresetItems) installPresetCatalog(nodeStartupPresetItems);
+
   const api = {
     DIRS,
     CONNECT_FOUR_WIN_LENGTH,
@@ -6934,11 +7244,16 @@
     isGameOver,
     isExplosionModeActive,
     latticeForPreset,
+    base64UrlDecodeUtf8,
+    extractReturnedPresetObjectText,
+    gameModeFromPresetGroup,
+    gameModeFromUrlParam,
     placementLineRenderSegments,
     placementWinningLineSegments,
     placementLineTransitionRoute,
     placeGomokuStone,
     placeConnectFourToken,
+    normalizePresetPayload,
     presetFromImportPayload,
     presetFromImportText,
     rowCol,

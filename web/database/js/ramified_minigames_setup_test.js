@@ -3,6 +3,18 @@ const fs = require('fs');
 const vm = require('vm');
 
 const game = require('./ramified_minigames_setup.js');
+const presetRegistry = require('../ramified_minigame_presets/presets.js');
+const presetDataByKey = Object.fromEntries(
+  presetRegistry.map((entry) => [entry.key, require(`../ramified_minigame_presets/${entry.file}`)])
+);
+
+function registryEntryHasGameType(entry, gameType) {
+  const values = [];
+  if (Array.isArray(entry.gameTypes)) values.push(...entry.gameTypes);
+  if (Array.isArray(entry.groups)) values.push(...entry.groups);
+  if (entry.group) values.push(entry.group);
+  return values.includes(gameType);
+}
 
 function box(id, row, col, value, cols = 4) {
   return { id, index: game.indexOf(row, col, cols), value };
@@ -1800,7 +1812,6 @@ function testConnectFourDiagonalTransportsAfterReflectingGlue() {
 }
 
 function testExtraBackgroundPresets() {
-  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
   [
     ['twisted-torus', 'twisted torus'],
     ['gomoku-classic', 'classical n*n'],
@@ -1813,21 +1824,21 @@ function testExtraBackgroundPresets() {
     ['rubiks-cube-2x2x2', "Rubik's Cube 2*2*2"],
     ['rubiks-cube-3x3x3', "Rubik's Cube 3*3*3"],
     ['connect-four-6x7', 'Connect Four 6*7'],
-    ['connect-four-high-hit', 'high hit (6x7 Sigma_1,1)'],
-    ['connect-four-high-hit-2', 'high hit2 (6x7 Sigma_0,3)'],
-    ['connect-four-all-horizontal', 'all horizontal (6x7 Sigma_1,5)'],
-    ['connect-four-top-fight', 'top fight (6x7 Sigma_1,1)'],
-    ['connect-four-exchange', 'exchange (6x7 Sigma_1.5,1^1)'],
-    ['connect-four-across', 'across (6x7 Sigma_1,1^1)'],
-    ['connect-four-usual-strip', 'usual strip (6x7 Sigma_0,2)'],
-    ['connect-four-mobius-strip', 'M&ouml;bius strip (6x7 N_1,1)'],
-    ['connect-four-hex-usual-strip', 'hex usual strip (6x7 Sigma_0,2)'],
-    ['connect-four-hex-bad-mobius-strip', 'hex bad M&ouml;bius strip (6x7 N_0,2^10)'],
-    ['connect-four-hex-good-mobius-strip', 'hex good M&ouml;bius strip (7x7 N_0,2)'],
+    ['connect-four-high-hit', 'high hit'],
+    ['connect-four-high-hit-2', 'high hit2'],
+    ['connect-four-all-horizontal', 'all horizontal'],
+    ['connect-four-top-fight', 'top fight'],
+    ['connect-four-exchange', 'exchange'],
+    ['connect-four-across', 'across'],
+    ['connect-four-usual-strip', 'usual strip'],
+    ['connect-four-mobius-strip', 'M\u00f6bius strip'],
+    ['connect-four-hex-usual-strip', 'hex usual strip'],
+    ['connect-four-hex-bad-mobius-strip', 'hex bad M\u00f6bius strip'],
+    ['connect-four-hex-good-mobius-strip', 'hex good M\u00f6bius strip'],
     ['usual-strip', 'usual strip'],
-    ['mobius-strip', 'M&ouml;bius strip']
+    ['mobius-strip', 'M\u00f6bius strip']
   ].forEach(([id, label]) => {
-    assert.ok(html.includes(`<option value="${id}">${label}</option>`));
+    assert.ok(presetRegistry.find((preset) => preset.id === id && preset.label === label));
     assert.ok(game.PRESETS.find((preset) => preset.id === id));
   });
 
@@ -2007,14 +2018,24 @@ function testHexMovePadUsesArrowGlyphs() {
 function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   const minigameHtml = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
   const mosaicHtml = fs.readFileSync(require.resolve('../mosaic_calculator.html'), 'utf8');
+  const minigameSource = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
   assert.ok(!minigameHtml.includes('id="import-preset-toggle"'));
   assert.ok(minigameHtml.includes('id="game-mode-select"'));
   assert.ok(minigameHtml.includes('<option value="2048" selected>2048</option>'));
   assert.ok(minigameHtml.includes('<option value="gomoku">Gomoku</option>'));
   assert.ok(minigameHtml.includes('<option value="connect-four">Connect Four</option>'));
-  assert.ok(minigameHtml.includes('<optgroup label="2048">'));
-  assert.ok(minigameHtml.includes('<optgroup label="Gomoku">'));
-  assert.ok(minigameHtml.includes('<optgroup label="Connect Four">'));
+  assert.ok(minigameHtml.includes('<option value="">Loading presets...</option>'));
+  assert.ok(minigameHtml.includes('<script src="ramified_minigame_presets/presets.js"></script>'));
+  assert.ok(!minigameHtml.includes('<option value="twisted-torus">'));
+  assert.ok(presetRegistry.some((preset) => registryEntryHasGameType(preset, '2048')));
+  assert.ok(presetRegistry.some((preset) => registryEntryHasGameType(preset, 'Gomoku')));
+  assert.ok(presetRegistry.some((preset) => registryEntryHasGameType(preset, 'Connect Four')));
+  assert.ok(presetRegistry.every((preset) => Array.isArray(preset.gameTypes) && preset.gameTypes.length >= 1));
+  const presetDir = require('path').resolve(__dirname, '..', 'ramified_minigame_presets');
+  const presetFilesWithGameTypes = fs.readdirSync(presetDir)
+    .filter((file) => file.endsWith('.preset.js'))
+    .filter((file) => fs.readFileSync(require('path').join(presetDir, file), 'utf8').includes('"gameTypes"'));
+  assert.deepStrictEqual(presetFilesWithGameTypes, []);
   assert.ok(minigameHtml.includes('id="gomoku-size-row" data-mode-control="gomoku"'));
   assert.ok(minigameHtml.includes('id="gomoku-board-size"'));
   assert.ok(minigameHtml.includes('id="gomoku-display-row" data-mode-control="gomoku"'));
@@ -2026,16 +2047,103 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameHtml.includes('id="connect-four-align-row" data-mode-control="connect-four"'));
   assert.ok(minigameHtml.includes('id="connect-four-align-fall" checked'));
   assert.ok(minigameHtml.includes('id="game-setup-alert"'));
-  assert.ok(minigameHtml.includes('<option value="import-preset">import</option>'));
+  assert.ok(minigameHtml.includes('Import / Export'));
+  assert.ok(minigameHtml.includes('Game Setup</span><em class="toggle-icon"'));
+  assert.ok(minigameHtml.includes('Import / Export</span><em class="toggle-icon"'));
+  assert.ok(minigameHtml.includes('Game Stats</span><em class="toggle-icon"'));
+  assert.ok(minigameHtml.includes('id="import-game-mode"'));
+  assert.ok(minigameHtml.includes('id="import-preset-source"'));
+  assert.ok(minigameHtml.includes('id="import-preset-catalog"'));
   assert.ok(minigameHtml.includes('id="import-preset-input"'));
   assert.ok(minigameHtml.includes('id="apply-import-preset"'));
+  assert.ok(minigameHtml.includes('id="export-state-kind"'));
+  assert.ok(minigameHtml.includes('id="export-background-format"'));
   assert.ok(minigameHtml.includes('id="import-state"'));
   assert.ok(!minigameHtml.includes('id="debug-export-output" readonly'));
+  const importExportSection = minigameHtml.slice(
+    minigameHtml.indexOf('Import / Export'),
+    minigameHtml.indexOf('Game Stats')
+  );
+  assert.ok(importExportSection.includes('class="minigame-subpanel" id="import-preset-tools"'));
+  assert.ok(importExportSection.includes('class="minigame-action-grid"'));
+  assert.ok(importExportSection.includes('class="mosaic-editor-input minigame-status-export"'));
+  assert.ok(!importExportSection.includes('mosaic-debug-panel'));
+  assert.ok(minigameSource.includes("document.querySelectorAll('.card-head')"));
+  assert.ok(minigameSource.includes("card.classList.toggle('collapsed')"));
   assert.ok(minigameHtml.includes('id="step-mode-row" data-mode-control="2048"'));
   assert.ok(minigameHtml.includes('<option value="">empty</option>'));
-  assert.ok(mosaicHtml.includes('id="export-background-preset"'));
-  assert.ok(mosaicHtml.includes('id="export-background-preset" type="button">export</button>'));
-  assert.ok(!mosaicHtml.includes('export background'));
+  assert.ok(!mosaicHtml.includes('id="export-background-preset"'));
+  assert.ok(mosaicHtml.includes('id="export-type"'));
+  assert.ok(mosaicHtml.includes('<option value="minigame">For minigames</option>'));
+  assert.ok(mosaicHtml.includes('id="export-format"'));
+  assert.ok(mosaicHtml.includes('<option value="dsl" selected>DSL-style</option>'));
+  assert.ok(mosaicHtml.includes('id="export-preset-id"'));
+  assert.ok(mosaicHtml.includes('File key'));
+  assert.ok(mosaicHtml.includes('Display name'));
+  assert.ok(mosaicHtml.includes('id="export-preset-advanced"'));
+  assert.ok(mosaicHtml.includes('id="export-preset-advanced-row" hidden'));
+  assert.ok(!mosaicHtml.includes('id="export-preset-custom-key"'));
+  assert.ok(mosaicHtml.includes('id="export-preset-group-row"'));
+  assert.ok(mosaicHtml.includes('.export-meta-field[hidden]'));
+  assert.ok(mosaicHtml.includes('Game type'));
+  assert.ok(mosaicHtml.includes('id="export-preset-groups"'));
+  assert.ok(mosaicHtml.includes('<select id="export-preset-group"'));
+  assert.ok(mosaicHtml.includes('<option value="Connect Four">Connect Four</option>'));
+  assert.ok(mosaicHtml.includes('id="export-test-link"'));
+  assert.ok(mosaicHtml.includes('<script src="ramified_minigame_presets/presets.js"></script>'));
+  assert.ok(mosaicHtml.includes('<option value="input-hole">Add / remove input holes</option>'));
+}
+
+function testCardHeadersCollapse() {
+  const source = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
+  let clickHandler = null;
+  let collapsed = false;
+  const card = {
+    classList: {
+      toggle(name) {
+        assert.strictEqual(name, 'collapsed');
+        collapsed = !collapsed;
+      }
+    }
+  };
+  const head = {
+    addEventListener(type, handler) {
+      if (type === 'click') clickHandler = handler;
+    },
+    closest(selector) {
+      return selector === '.card' ? card : null;
+    }
+  };
+  const context = {
+    module: { exports: {} },
+    exports: {},
+    console,
+    Math,
+    setTimeout() {
+      return 1;
+    },
+    clearTimeout() {},
+    document: {
+      getElementById() {
+        return null;
+      },
+      querySelectorAll(selector) {
+        return selector === '.card-head' ? [head] : [];
+      },
+      addEventListener(type, handler) {
+        if (type === 'DOMContentLoaded') handler();
+      }
+    },
+    window: {
+      addEventListener() {}
+    }
+  };
+  vm.runInNewContext(source, context);
+  assert.strictEqual(typeof clickHandler, 'function');
+  clickHandler({ target: { closest: () => null } });
+  assert.strictEqual(collapsed, true);
+  clickHandler({ target: { closest: () => null } });
+  assert.strictEqual(collapsed, false);
 }
 
 function testPresetFromMosaicBackgroundExport() {
@@ -2096,6 +2204,225 @@ function testPresetFromFullMosaicCalculatorExport() {
   assert.deepStrictEqual(preset.removedTiles, [{ row: 2, col: 2 }]);
   assert.strictEqual(preset.gluedEdges[0].first.dir, game.HEX_DIRS.NW);
   assert.strictEqual(preset.gluedEdges[0].second.dir, game.HEX_DIRS.SE);
+}
+
+function testPresetFromMosaicPresetJsWrapper() {
+  const source = [
+    '// Save this file as ramified_minigame_presets/wrapped_export.preset.js',
+    '// Add/edit the matching row in ramified_minigame_presets/presets.js; gameTypes lives there.',
+    '(function(root, factory) {',
+    '  const preset = factory();',
+    "  if (typeof module !== 'undefined' && module.exports) module.exports = preset;",
+    '  if (root) {',
+    '    root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};',
+    '    root.RAMIFIED_MINIGAME_PRESET_DATA.wrapped_export = preset;',
+    '  }',
+    "})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {",
+    '  return {',
+    '    "id": "wrapped-export",',
+    '    "label": "Wrapped Export",',
+    '    "lattice": "square",',
+    '    "size": "4x4",',
+    '    "surface": "wrapper test",',
+    '    "holes": "top"',
+    '  };',
+    '});'
+  ].join('\n');
+  assert.ok(game.extractReturnedPresetObjectText(source).includes('"id": "wrapped-export"'));
+  const preset = game.presetFromImportText(source);
+  assert.strictEqual(preset.id, 'imported-preset');
+  assert.strictEqual(preset.sourceId, 'wrapped-export');
+  assert.strictEqual(preset.label, 'Wrapped Export');
+  assert.deepStrictEqual(preset.gameTypes, []);
+  assert.strictEqual(preset.group, undefined);
+  assert.strictEqual(preset.groups, undefined);
+  assert.strictEqual(preset.connectFourHoles.length, 4);
+}
+
+function testUrlMinigamePresetImport() {
+  const payload = {
+    id: 'url-connect',
+    label: 'URL Connect',
+    gameTypes: ['Connect Four'],
+    lattice: 'square',
+    size: '4x4',
+    surface: 'url test',
+    holes: 'top'
+  };
+  const encoded = encodeBase64UrlJson(payload);
+  const { elements } = createHeadlessDomHarness({
+    locationSearch: `?minigamePreset=${encoded}&mode=connect-four`
+  });
+  assert.strictEqual(elements.get('game-mode-select').value, 'connect-four');
+  assert.strictEqual(elements.get('surface-preset-select').value, 'imported-preset');
+  assert.strictEqual(elements.get('status-line').textContent, 'preset imported from link');
+  assert.ok(elements.get('surface-preset-select').options.some((option) => (
+    option.value === 'imported-preset' && option.textContent === 'URL Connect'
+  )));
+  elements.get('begin-game').listeners.click();
+  assert.strictEqual(elements.get('status-badge').textContent, 'ready');
+  elements.get('export-state').listeners.click();
+  const exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.gameMode, 'connect-four');
+  assert.strictEqual(exported.preset.id, 'imported-preset');
+  assert.strictEqual(exported.preset.label, 'URL Connect');
+  assert.strictEqual(exported.preset.gameTypes, undefined);
+  assert.strictEqual(exported.preset.group, undefined);
+  assert.strictEqual(exported.preset.groups, undefined);
+  assert.strictEqual(exported.preset.connectFourHoles.length, 4);
+}
+
+function testUrlMinigamePresetImportInfersModeFromGroup() {
+  const payload = {
+    id: 'url-gomoku',
+    label: 'URL Gomoku',
+    group: 'Gomoku',
+    lattice: 'square',
+    size: '5x5',
+    surface: 'url inferred'
+  };
+  const encoded = encodeBase64UrlJson(payload);
+  const { elements } = createHeadlessDomHarness({ locationSearch: `?minigamePreset=${encoded}` });
+  assert.strictEqual(elements.get('game-mode-select').value, 'gomoku');
+  assert.strictEqual(elements.get('surface-preset-select').value, 'imported-preset');
+  assert.strictEqual(elements.get('status-line').textContent, 'preset imported from link');
+  elements.get('begin-game').listeners.click();
+  elements.get('export-state').listeners.click();
+  const exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.gameMode, 'gomoku');
+  assert.strictEqual(exported.preset.id, 'imported-preset');
+  assert.strictEqual(exported.preset.label, 'URL Gomoku');
+  assert.strictEqual(exported.preset.gameTypes, undefined);
+}
+
+function testMultiGroupImportedPresetFiltering() {
+  const payload = {
+    id: 'url-shared',
+    label: 'URL Shared',
+    gameTypes: ['2048', 'Gomoku'],
+    lattice: 'square',
+    size: '5x5',
+    surface: 'shared surface'
+  };
+  const encoded = encodeBase64UrlJson(payload);
+  const { elements } = createHeadlessDomHarness({
+    locationSearch: `?minigamePreset=${encoded}&mode=gomoku`
+  });
+  assert.strictEqual(elements.get('game-mode-select').value, 'gomoku');
+  assert.strictEqual(elements.get('surface-preset-select').value, 'imported-preset');
+
+  elements.get('game-mode-select').value = '2048';
+  elements.get('game-mode-select').listeners.change();
+  assert.ok(elements.get('surface-preset-select').options.some((option) => (
+    option.value === 'imported-preset' && option.textContent === 'URL Shared'
+  )));
+
+  elements.get('game-mode-select').value = 'connect-four';
+  elements.get('game-mode-select').listeners.change();
+  assert.ok(!elements.get('surface-preset-select').options.some((option) => option.value === 'imported-preset'));
+}
+
+function testLegacyGroupsImportedPresetFiltering() {
+  const payload = {
+    id: 'url-shared-legacy',
+    label: 'URL Shared Legacy',
+    group: '2048',
+    groups: ['2048', 'Gomoku'],
+    lattice: 'square',
+    size: '5x5',
+    surface: 'shared legacy surface'
+  };
+  const encoded = encodeBase64UrlJson(payload);
+  const { elements } = createHeadlessDomHarness({
+    locationSearch: `?minigamePreset=${encoded}&mode=gomoku`
+  });
+  assert.strictEqual(elements.get('game-mode-select').value, 'gomoku');
+  elements.get('export-state').listeners.click();
+  const exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.preset.gameTypes, undefined);
+  assert.strictEqual(exported.preset.group, undefined);
+  assert.strictEqual(exported.preset.groups, undefined);
+}
+
+function testGameTypesTakePrecedenceOverLegacyGroups() {
+  const preset = game.normalizePresetPayload({
+    id: 'game-types-first',
+    label: 'Game Types First',
+    gameTypes: ['Connect Four'],
+    group: '2048',
+    groups: ['2048', 'Gomoku'],
+    lattice: 'square',
+    size: '4x4',
+    surface: 'precedence'
+  });
+  assert.deepStrictEqual(preset.gameTypes, ['Connect Four']);
+  assert.strictEqual(preset.group, undefined);
+  assert.strictEqual(preset.groups, undefined);
+  assert.strictEqual(game.gameModeFromPresetGroup(preset), game.GAME_MODES.CONNECT_FOUR);
+}
+
+function testCompactPresetDslParser() {
+  const preset = game.normalizePresetPayload({
+    id: 'compact-test',
+    label: 'compact test',
+    group: '2048',
+    lattice: 'square',
+    size: '4x4',
+    surface: 'compact surface',
+    removed: 'rect(2..3,2..3); 1,1',
+    holes: 'top',
+    cuts: '1,2=1,3',
+    glue: 'g7:1..2,4,E=1..2,1,W; g8~00:1,1,N=4,4,S'
+  });
+  assert.strictEqual(preset.id, 'compact-test');
+  assert.deepStrictEqual(preset.gameTypes, ['2048']);
+  assert.strictEqual(preset.group, undefined);
+  assert.strictEqual(preset.groups, undefined);
+  assert.strictEqual(preset.rows, 4);
+  assert.strictEqual(preset.cols, 4);
+  assert.deepStrictEqual(preset.removedTiles, [
+    { row: 1, col: 1 },
+    { row: 2, col: 2 },
+    { row: 2, col: 3 },
+    { row: 3, col: 2 },
+    { row: 3, col: 3 }
+  ]);
+  assert.deepStrictEqual(preset.connectFourHoles, [
+    { row: 1, col: 2 },
+    { row: 1, col: 3 },
+    { row: 1, col: 4 }
+  ]);
+  assert.deepStrictEqual(preset.cutEdges, [{ left: { row: 1, col: 2 }, right: { row: 1, col: 3 } }]);
+  assert.strictEqual(preset.gluedEdges.length, 3);
+  assert.strictEqual(preset.gluedEdges[0].group, 7);
+  assert.strictEqual(preset.gluedEdges[0].first.dir, game.DIRS.E);
+  assert.strictEqual(preset.gluedEdges[2].reversed, true);
+  assert.strictEqual(preset.gluedEdges[2].firstArrowReversed, false);
+  assert.strictEqual(preset.gluedEdges[2].secondArrowReversed, false);
+
+  const rubiks = game.normalizePresetPayload({
+    id: 'compact-rubiks',
+    label: 'compact Rubik',
+    group: '2048',
+    generator: 'rubiksCube',
+    cubeSize: 2
+  });
+  assert.strictEqual(rubiks.rows, 6);
+  assert.deepStrictEqual(rubiks.gameTypes, ['2048']);
+  assert.strictEqual(rubiks.cols, 8);
+  assert.strictEqual(rubiks.removedTiles.length, 24);
+  assert.strictEqual(rubiks.gluedEdges.length, 14);
+
+  assert.throws(
+    () => game.normalizePresetPayload({
+      id: 'bad-glue',
+      label: 'bad glue',
+      lattice: 'square',
+      size: '2x2',
+      glue: 'g0:1..2,1,E=1,2,W'
+    }),
+    /mismatched ranges/
+  );
 }
 
 function testSpeedControlDefaults() {
@@ -2219,16 +2546,28 @@ function makeElement(id, extra = {}) {
   const classes = new Set();
   return {
     id,
+    tagName: '',
     value: '',
     checked: false,
     disabled: false,
     hidden: false,
     attributes: {},
     textContent: '',
+    label: '',
+    children: [],
+    options: [],
     style: {},
     clientWidth: 720,
     parentElement: null,
     listeners: {},
+    get innerHTML() {
+      return this._innerHTML || '';
+    },
+    set innerHTML(value) {
+      this._innerHTML = String(value || '');
+      this.children = [];
+      this.options = [];
+    },
     classList: {
       toggle(name, force) {
         const enabled = force === undefined ? !classes.has(name) : !!force;
@@ -2247,6 +2586,16 @@ function makeElement(id, extra = {}) {
     },
     addEventListener(type, handler) {
       this.listeners[type] = handler;
+    },
+    appendChild(child) {
+      this.children.push(child);
+      child.parentElement = this;
+      if (child.tagName === 'OPTION') {
+        this.options.push(child);
+      } else if (Array.isArray(child.options)) {
+        this.options.push(...child.options);
+      }
+      return child;
     },
     focus() {},
     select() {},
@@ -2317,7 +2666,11 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('game-mode-select', { value: options.gameMode || '2048' }),
     makeElement('surface-preset-select', { value: options.preset || 'classic-4x4' }),
     makeElement('import-preset-toggle'),
-    makeElement('import-preset-tools', { hidden: true }),
+    makeElement('import-preset-tools'),
+    makeElement('import-game-mode', { value: options.importGameMode || options.gameMode || '2048' }),
+    makeElement('import-preset-source', { value: options.importSource || 'catalog' }),
+    makeElement('import-preset-catalog-row'),
+    makeElement('import-preset-catalog'),
     makeElement('import-preset-input'),
     makeElement('apply-import-preset'),
     makeElement('gomoku-board-size', { value: '15' }),
@@ -2342,6 +2695,9 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('export-state'),
     makeElement('import-state'),
     makeElement('debug-export-output'),
+    makeElement('export-state-kind', { value: options.exportKind || 'status' }),
+    makeElement('export-background-format-row', { hidden: true }),
+    makeElement('export-background-format', { value: options.exportFormat || 'dsl' }),
     makeElement('status-badge'),
     makeElement('status-line'),
     makeElement('info-line'),
@@ -2367,15 +2723,20 @@ function createHeadlessDomHarness(options = {}) {
     module: { exports: {} },
     exports: {},
     console,
+    Buffer,
     Math: Object.create(Math),
     performance: { now: () => 0 },
     setTimeout() {
       return 1;
     },
     clearTimeout() {},
+    URLSearchParams,
     document: {
       getElementById(id) {
         return elements.get(id) || null;
+      },
+      createElement(tagName) {
+        return makeElement('', { tagName: String(tagName || '').toUpperCase() });
       },
       addEventListener(type, handler) {
         documentListeners[type] = handler;
@@ -2391,6 +2752,9 @@ function createHeadlessDomHarness(options = {}) {
     },
     window: {
       devicePixelRatio: 1,
+      location: { search: options.locationSearch || '' },
+      RAMIFIED_MINIGAME_PRESETS: presetRegistry,
+      RAMIFIED_MINIGAME_PRESET_DATA: presetDataByKey,
       addEventListener(type, handler) {
         windowListeners[type] = handler;
       },
@@ -2466,6 +2830,14 @@ function importHeadlessStatus(elements, payload) {
   enableHeadlessDebug(elements);
   elements.get('debug-export-output').value = JSON.stringify(payload);
   elements.get('import-state').listeners.click();
+}
+
+function encodeBase64UrlJson(payload) {
+  return Buffer.from(JSON.stringify(payload), 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
 }
 
 function singleSquareBoxStatus() {
@@ -2760,6 +3132,152 @@ function testHexSwipeDirections() {
   });
 }
 
+function testDynamicPresetCatalogOptions() {
+  const { elements } = createHeadlessDomHarness();
+  const select = elements.get('surface-preset-select');
+  assert.strictEqual(select.disabled, false);
+  assert.strictEqual(select.value, 'classic-4x4');
+  assert.deepStrictEqual(
+    select.children.filter((child) => child.tagName === 'OPTGROUP').map((child) => child.label),
+    ['2048']
+  );
+  assert.ok(select.options.some((option) => option.value === 'torus' && option.textContent === 'torus'));
+  assert.ok(!select.options.some((option) => option.value === 'gomoku-random-glue'));
+  assert.ok(!select.options.some((option) => option.value === 'connect-four-6x7'));
+  assert.ok(!select.options.some((option) => option.value === 'import-preset'));
+
+  elements.get('game-mode-select').value = 'gomoku';
+  elements.get('game-mode-select').listeners.change();
+  assert.strictEqual(select.value, 'gomoku-random-glue');
+  assert.deepStrictEqual(
+    select.children.filter((child) => child.tagName === 'OPTGROUP').map((child) => child.label),
+    ['Gomoku']
+  );
+  assert.ok(select.options.some((option) => option.value === 'gomoku-random-glue'));
+  assert.ok(!select.options.some((option) => option.value === 'torus'));
+
+  elements.get('game-mode-select').value = 'connect-four';
+  elements.get('game-mode-select').listeners.change();
+  assert.strictEqual(select.value, 'connect-four-6x7');
+  assert.deepStrictEqual(
+    select.children.filter((child) => child.tagName === 'OPTGROUP').map((child) => child.label),
+    ['Connect Four']
+  );
+  assert.ok(select.options.some((option) => option.value === 'connect-four-6x7'));
+  assert.ok(!select.options.some((option) => option.value === 'gomoku-random-glue'));
+}
+
+function testImportExportCardDefaultsAndCatalogImport() {
+  const { elements } = createHeadlessDomHarness();
+  assert.strictEqual(elements.get('import-game-mode').value, '2048');
+  assert.strictEqual(elements.get('import-preset-source').value, 'catalog');
+  assert.strictEqual(elements.get('import-preset-catalog-row').hidden, false);
+  assert.strictEqual(elements.get('import-preset-input').hidden, true);
+  assert.ok(elements.get('import-preset-catalog').options.some((option) => option.value === 'classic-4x4'));
+  assert.ok(!elements.get('import-preset-catalog').options.some((option) => option.value === 'connect-four-6x7'));
+
+  elements.get('import-game-mode').value = 'connect-four';
+  elements.get('import-game-mode').listeners.change();
+  assert.ok(elements.get('import-preset-catalog').options.some((option) => option.value === 'connect-four-6x7'));
+  assert.ok(!elements.get('import-preset-catalog').options.some((option) => option.value === 'classic-4x4'));
+  elements.get('import-preset-catalog').value = 'connect-four-6x7';
+  elements.get('apply-import-preset').listeners.click();
+  assert.strictEqual(elements.get('game-mode-select').value, 'connect-four');
+  assert.strictEqual(elements.get('surface-preset-select').value, 'connect-four-6x7');
+  assert.strictEqual(elements.get('status-line').textContent, 'preset imported');
+}
+
+function testImportExportCardPastedPresetMode() {
+  const { elements } = createHeadlessDomHarness();
+  elements.get('import-game-mode').value = 'gomoku';
+  elements.get('import-preset-source').value = 'paste';
+  elements.get('import-preset-source').listeners.change();
+  assert.strictEqual(elements.get('import-preset-catalog-row').hidden, true);
+  assert.strictEqual(elements.get('import-preset-input').hidden, false);
+  elements.get('import-preset-input').value = JSON.stringify({
+    id: 'paste-test',
+    label: 'Pasted Test',
+    lattice: 'square',
+    size: '5x5',
+    surface: 'paste surface'
+  });
+  elements.get('apply-import-preset').listeners.click();
+  assert.strictEqual(elements.get('game-mode-select').value, 'gomoku');
+  assert.strictEqual(elements.get('surface-preset-select').value, 'imported-preset');
+  assert.ok(elements.get('surface-preset-select').options.some((option) => (
+    option.value === 'imported-preset' && option.textContent === 'Pasted Test'
+  )));
+  elements.get('export-state-kind').value = 'status';
+  elements.get('export-state').listeners.click();
+  const exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.gameMode, 'gomoku');
+  assert.strictEqual(exported.preset.gameTypes, undefined);
+  assert.strictEqual(exported.preset.group, undefined);
+  assert.strictEqual(exported.preset.groups, undefined);
+}
+
+function testBackgroundExportFormats() {
+  const { elements } = createHeadlessDomHarness();
+  elements.get('game-mode-select').value = 'connect-four';
+  elements.get('game-mode-select').listeners.change();
+  elements.get('surface-preset-select').value = 'connect-four-6x7';
+  elements.get('surface-preset-select').listeners.change();
+  elements.get('export-state-kind').value = 'background';
+  elements.get('export-state-kind').listeners.change();
+  assert.strictEqual(elements.get('export-background-format-row').hidden, false);
+
+  elements.get('export-background-format').value = 'dsl';
+  elements.get('export-state').listeners.click();
+  const compact = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(compact.size, '6x7');
+  assert.strictEqual(compact.gameTypes, undefined);
+  assert.strictEqual(compact.group, undefined);
+  assert.strictEqual(compact.groups, undefined);
+  assert.strictEqual(compact.holes, 'top');
+  assert.strictEqual(game.normalizePresetPayload(compact).connectFourHoles.length, 7);
+
+  elements.get('export-background-format').value = 'verbose';
+  elements.get('export-state').listeners.click();
+  const verbose = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(verbose.rows, 6);
+  assert.strictEqual(verbose.cols, 7);
+  assert.strictEqual(verbose.gameTypes, undefined);
+  assert.strictEqual(verbose.group, undefined);
+  assert.strictEqual(verbose.groups, undefined);
+  assert.strictEqual(verbose.connectFourHoles.length, 7);
+  assert.strictEqual(verbose.tokens, undefined);
+  assert.strictEqual(verbose.boxes, undefined);
+}
+
+function testFullStatusImportWithoutDebugMode() {
+  const { elements } = createHeadlessDomHarness();
+  assert.notStrictEqual(elements.get('debug-toggle').attributes['aria-pressed'], 'true');
+  assert.strictEqual(elements.get('import-state').disabled, false);
+  elements.get('debug-export-output').value = JSON.stringify({
+    gameMode: '2048',
+    preset: {
+      label: 'status no debug',
+      group: '2048',
+      lattice: 'square',
+      rows: 2,
+      cols: 2,
+      surface: 'status surface'
+    },
+    phase: 'ready',
+    round: 3,
+    score: 8,
+    nextBoxId: 2,
+    boxes: [{ id: 1, row: 1, col: 1, value: 8 }],
+    removed: [],
+    queue: { eventIndex: 0, stepPaused: false, events: [] }
+  });
+  elements.get('import-state').listeners.click();
+  assert.strictEqual(elements.get('status-line').textContent, 'status imported');
+  assert.strictEqual(elements.get('status-badge').textContent, 'ready');
+  assert.strictEqual(elements.get('round-value').textContent, '3');
+  assert.strictEqual(elements.get('score-value').textContent, '8');
+}
+
 function testHeadlessDomStepControls() {
   const source = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
   const elements = new Map();
@@ -2808,7 +3326,11 @@ function testHeadlessDomStepControls() {
     canvas,
     makeElement('game-mode-select', { value: '2048' }),
     makeElement('surface-preset-select', { value: 'torus' }),
-    makeElement('import-preset-tools', { hidden: true }),
+    makeElement('import-preset-tools'),
+    makeElement('import-game-mode', { value: '2048' }),
+    makeElement('import-preset-source', { value: 'catalog' }),
+    makeElement('import-preset-catalog-row'),
+    makeElement('import-preset-catalog'),
     makeElement('import-preset-input'),
     makeElement('apply-import-preset'),
     makeElement('gomoku-board-size', { value: '15' }),
@@ -2833,6 +3355,9 @@ function testHeadlessDomStepControls() {
     makeElement('export-state'),
     makeElement('import-state'),
     makeElement('debug-export-output'),
+    makeElement('export-state-kind', { value: 'status' }),
+    makeElement('export-background-format-row', { hidden: true }),
+    makeElement('export-background-format', { value: 'dsl' }),
     makeElement('status-badge'),
     makeElement('status-line'),
     makeElement('info-line'),
@@ -2866,6 +3391,9 @@ function testHeadlessDomStepControls() {
       getElementById(id) {
         return elements.get(id) || null;
       },
+      createElement(tagName) {
+        return makeElement('', { tagName: String(tagName || '').toUpperCase() });
+      },
       addEventListener(type, handler) {
         documentListeners[type] = handler;
         if (type === 'DOMContentLoaded') handler();
@@ -2880,6 +3408,8 @@ function testHeadlessDomStepControls() {
     },
     window: {
       devicePixelRatio: 1,
+      RAMIFIED_MINIGAME_PRESETS: presetRegistry,
+      RAMIFIED_MINIGAME_PRESET_DATA: presetDataByKey,
       addEventListener(type, handler) {
         windowListeners[type] = handler;
       },
@@ -2896,6 +3426,8 @@ function testHeadlessDomStepControls() {
 
   assert.strictEqual(typeof canvas.listeners.mousemove, 'function');
   assert.strictEqual(typeof canvas.listeners.mouseleave, 'function');
+  elements.get('surface-preset-select').value = 'torus';
+  elements.get('surface-preset-select').listeners.change();
   canvas.listeners.mousemove({ clientX: 57, clientY: 29 });
   assert.strictEqual(canvas.style.cursor, 'help');
   canvas.listeners.mouseleave();
@@ -2957,27 +3489,25 @@ function testHeadlessDomStepControls() {
   assert.strictEqual(moveButtons.every((button) => button.disabled), true);
   assert.strictEqual(elements.get('animation-speed-value').textContent, '80 ms');
 
-  elements.get('surface-preset-select').value = 'import-preset';
-  elements.get('surface-preset-select').listeners.change();
+  elements.get('import-preset-source').value = 'paste';
+  elements.get('import-preset-source').listeners.change();
   assert.strictEqual(elements.get('import-preset-tools').hidden, false);
+  assert.strictEqual(elements.get('import-preset-input').hidden, false);
   elements.get('import-preset-input').value = JSON.stringify({
     schema: 'ramified-minigame-background-preset',
     preset: {
       label: 'tiny import',
       lattice: 'square',
-      rows: 2,
-      cols: 2,
-      removedTiles: [{ row: 1, col: 1 }],
-      gluedEdges: [
-        { first: { row: 1, col: 2, edge: 'E' }, second: { row: 2, col: 1, edge: 'W' } }
-      ]
+      size: '2x2',
+      removed: '1,1',
+      glue: 'g0:1,2,E=2,1,W'
     }
   });
   elements.get('apply-import-preset').listeners.click();
   assert.strictEqual(elements.get('surface-preset-select').value, 'imported-preset');
   assert.strictEqual(elements.get('status-line').textContent, 'preset imported');
   assert.strictEqual(elements.get('existing-tile-value').textContent, '3');
-  assert.strictEqual(elements.get('import-preset-tools').hidden, true);
+  assert.strictEqual(elements.get('import-preset-tools').hidden, false);
 
   elements.get('debug-export-output').value = JSON.stringify({
     preset: {
@@ -3266,8 +3796,16 @@ function run() {
   testKeyboardMapping();
   testHexMovePadUsesArrowGlyphs();
   testMosaicBackgroundExportAndMinigameImportControlsExist();
+  testCardHeadersCollapse();
   testPresetFromMosaicBackgroundExport();
   testPresetFromFullMosaicCalculatorExport();
+  testPresetFromMosaicPresetJsWrapper();
+  testUrlMinigamePresetImport();
+  testUrlMinigamePresetImportInfersModeFromGroup();
+  testMultiGroupImportedPresetFiltering();
+  testLegacyGroupsImportedPresetFiltering();
+  testGameTypesTakePrecedenceOverLegacyGroups();
+  testCompactPresetDslParser();
   testSpeedControlDefaults();
   testSquareWasdKeyboardControls();
   testActiveSquareKeyboardPreventsPageScroll();
@@ -3282,6 +3820,11 @@ function run() {
   testSwipeSuppressesFollowupClick();
   testSwipeIgnoredOutsideAccepting2048();
   testHexSwipeDirections();
+  testDynamicPresetCatalogOptions();
+  testImportExportCardDefaultsAndCatalogImport();
+  testImportExportCardPastedPresetMode();
+  testBackgroundExportFormats();
+  testFullStatusImportWithoutDebugMode();
   testStepPauseRendersAfterSelectingNextEvent();
   testStationaryDifferentBlocks();
   testSimultaneousDifferentExplosion();

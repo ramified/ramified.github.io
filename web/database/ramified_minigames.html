@@ -268,14 +268,16 @@
       white-space: nowrap;
     }
 
-    .mosaic-debug-actions {
+    .mosaic-debug-actions,
+    .minigame-action-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
       margin-top: 10px;
     }
 
-    .mosaic-debug-actions .btn {
+    .mosaic-debug-actions .btn,
+    .minigame-action-grid .btn {
       width: 100%;
     }
 
@@ -291,17 +293,26 @@
       width: 100%;
     }
 
-    .mosaic-debug-panel {
+    .mosaic-debug-panel,
+    .minigame-subpanel {
       margin-top: 10px;
       padding-top: 10px;
       border-top: 1px dotted var(--border);
     }
 
-    .mosaic-debug-panel[hidden] {
+    .minigame-subpanel:first-child {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    .mosaic-debug-panel[hidden],
+    .minigame-subpanel[hidden] {
       display: none !important;
     }
 
-    .mosaic-debug-export {
+    .mosaic-debug-export,
+    .minigame-status-export {
       min-height: 128px;
       line-height: 1.35;
       resize: vertical;
@@ -1075,7 +1086,7 @@
 
   <aside class="side" aria-label="Ramified minigame setup">
     <section class="card">
-      <div class="card-head"><span class="card-head-label">Game Setup</span></div>
+      <div class="card-head"><span class="card-head-label">Game Setup</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="mosaic-inline-row">
           <span class="input-label">Game</span>
@@ -1088,52 +1099,8 @@
         <div class="mosaic-inline-row">
           <span class="input-label">Preset</span>
           <select id="surface-preset-select" aria-label="Surface preset">
-            <optgroup label="2048">
-              <option value="classic-4x4" selected>4*4 classic</option>
-              <option value="twisted-torus">twisted torus</option>
-              <option value="genus-2">genus 2</option>
-              <option value="random-glue-4x4">random glue 4*4</option>
-              <option value="half-glued">half-glued</option>
-              <option value="torus">torus</option>
-              <option value="klein-bottle">Klein bottle</option>
-              <option value="ramified-cover">ramified cover</option>
-              <option value="rubiks-cube-2x2x2">Rubik's Cube 2*2*2</option>
-              <option value="rubiks-cube-3x3x3">Rubik's Cube 3*3*3</option>
-              <option value="usual-strip">usual strip</option>
-              <option value="mobius-strip">M&ouml;bius strip</option>
-              <option value="hex-classic-4x4">hex classic 4*4</option>
-            </optgroup>
-            <optgroup label="Gomoku">
-              <option value="gomoku-classic">classical n*n</option>
-              <option value="gomoku-random-glue">random glue n*n</option>
-              <option value="gomoku-tic-tac-toe">Tic-tac-toe</option>
-              <option value="gomoku-strange-corner">strange corner</option>
-              <option value="gomoku-small-holes">small holes</option>
-              <option value="gomoku-big-hole">big hole</option>
-              <option value="gomoku-m4-15x15">genus 4</option>
-            </optgroup>
-            <optgroup label="Connect Four">
-              <option value="connect-four-6x7">Connect Four 6*7</option>
-              <option value="connect-four-high-hit">high hit (6x7 Sigma_1,1)</option>
-              <option value="connect-four-high-hit-2">high hit2 (6x7 Sigma_0,3)</option>
-              <option value="connect-four-all-horizontal">all horizontal (6x7 Sigma_1,5)</option>
-              <option value="connect-four-top-fight">top fight (6x7 Sigma_1,1)</option>
-              <option value="connect-four-exchange">exchange (6x7 Sigma_1.5,1^1)</option>
-              <option value="connect-four-across">across (6x7 Sigma_1,1^1)</option>
-              <option value="connect-four-usual-strip">usual strip (6x7 Sigma_0,2)</option>
-              <option value="connect-four-mobius-strip">M&ouml;bius strip (6x7 N_1,1)</option>
-              <option value="connect-four-hex-usual-strip">hex usual strip (6x7 Sigma_0,2)</option>
-              <option value="connect-four-hex-bad-mobius-strip">hex bad M&ouml;bius strip (6x7 N_0,2^10)</option>
-              <option value="connect-four-hex-good-mobius-strip">hex good M&ouml;bius strip (7x7 N_0,2)</option>
-            </optgroup>
-            <optgroup label="Custom">
-              <option value="import-preset">import</option>
-            </optgroup>
+            <option value="">Loading presets...</option>
           </select>
-        </div>
-        <div class="mosaic-debug-panel" id="import-preset-tools" hidden>
-          <textarea class="mosaic-editor-input mosaic-import-input" id="import-preset-input" spellcheck="false" autocomplete="off" placeholder="{ ... }" aria-label="Imported background preset"></textarea>
-          <button class="btn mosaic-import-button" id="apply-import-preset" type="button">generate</button>
         </div>
         <div class="mosaic-inline-row" id="gomoku-display-row" data-mode-control="gomoku" hidden>
           <span class="input-label">Display</span>
@@ -1219,11 +1186,6 @@
               <option value="1048576">1048576</option>
             </select>
           </div>
-          <div class="mosaic-debug-actions">
-            <button class="btn mosaic-import-button" id="export-state" type="button">export status</button>
-            <button class="btn mosaic-import-button" id="import-state" type="button">import status</button>
-          </div>
-          <textarea class="mosaic-editor-input mosaic-debug-export" id="debug-export-output" spellcheck="false" autocomplete="off" aria-label="Current game status import or export"></textarea>
         </div>
         <div class="mosaic-inline-row" id="move-row" data-mode-control="2048">
           <span class="input-label">Move</span>
@@ -1259,7 +1221,57 @@
     </section>
 
     <section class="card">
-      <div class="card-head"><span class="card-head-label">Game Stats</span></div>
+      <div class="card-head"><span class="card-head-label">Import / Export</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="minigame-subpanel" id="import-preset-tools">
+          <div class="mosaic-inline-row">
+            <span class="input-label">Import game</span>
+            <select id="import-game-mode" aria-label="Import game">
+              <option value="2048" selected>2048</option>
+              <option value="gomoku">Gomoku</option>
+              <option value="connect-four">Connect Four</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Source</span>
+            <select id="import-preset-source" aria-label="Preset import source">
+              <option value="catalog" selected>Catalog preset</option>
+              <option value="paste">Paste preset</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row" id="import-preset-catalog-row">
+            <span class="input-label">Catalog</span>
+            <select id="import-preset-catalog" aria-label="Import catalog preset"></select>
+          </div>
+          <textarea class="mosaic-editor-input mosaic-import-input" id="import-preset-input" spellcheck="false" autocomplete="off" placeholder="{ ... }" aria-label="Imported background preset" hidden></textarea>
+          <button class="btn mosaic-import-button" id="apply-import-preset" type="button">import preset</button>
+        </div>
+        <div class="minigame-subpanel">
+          <div class="mosaic-inline-row">
+            <span class="input-label">Export</span>
+            <select id="export-state-kind" aria-label="Export kind">
+              <option value="background">Background preset</option>
+              <option value="status" selected>Full current status</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row" id="export-background-format-row" hidden>
+            <span class="input-label">Format</span>
+            <select id="export-background-format" aria-label="Background export format">
+              <option value="dsl" selected>DSL-style</option>
+              <option value="verbose">Verbose JSON</option>
+            </select>
+          </div>
+          <div class="minigame-action-grid">
+            <button class="btn mosaic-import-button" id="export-state" type="button">export</button>
+            <button class="btn mosaic-import-button" id="import-state" type="button">import status</button>
+          </div>
+          <textarea class="mosaic-editor-input minigame-status-export" id="debug-export-output" spellcheck="false" autocomplete="off" aria-label="Current game status import or export"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><span class="card-head-label">Game Stats</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="stat-row"><span class="stat-label" id="score-label">Score</span><span class="stat-value" id="score-value">0</span></div>
         <div class="stat-row"><span class="stat-label" id="highest-tile-label">Highest tile</span><span class="stat-value" id="highest-tile-value">0</span></div>
@@ -1275,6 +1287,7 @@
   Browser-side minigames on glued mosaic background spaces.
 </footer>
 
+<script src="ramified_minigame_presets/presets.js"></script>
 <script src="js/ramified_minigames_setup.js"></script>
 </body>
 </html>

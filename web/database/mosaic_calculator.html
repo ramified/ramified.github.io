@@ -320,12 +320,83 @@
       border-color: var(--accent);
     }
 
+    .mosaic-inline-row input[type="text"] {
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+    }
+
+    .mosaic-inline-row input[type="text"]:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
     .background-preset-controls {
       display: grid;
       grid-template-columns: minmax(0, 1fr) max-content;
       gap: 8px;
       align-items: center;
       min-width: 0;
+    }
+
+    .export-meta-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .export-meta-field {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .export-meta-field[hidden] {
+      display: none !important;
+    }
+
+    .export-meta-field-label {
+      color: var(--muted);
+      font-size: 0.72rem;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .export-advanced-panel {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+      padding-top: 2px;
+    }
+
+    .export-advanced-panel[hidden] {
+      display: none !important;
+    }
+
+    .export-group-checks {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      min-width: 0;
+    }
+
+    .export-test-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.86rem;
+      white-space: nowrap;
+    }
+
+    .export-test-link:hover {
+      text-decoration: underline;
     }
 
     .background-preset-controls .btn {
@@ -1181,8 +1252,6 @@
             <span class="background-preset-controls">
               <select id="background-preset-select" aria-label="Background space preset"></select>
               <button class="btn btn-ghost" id="load-background-preset" type="button">load</button>
-              <span></span>
-              <button class="btn btn-ghost" id="export-background-preset" type="button">export</button>
             </span>
           </div>
           <div class="mosaic-inline-row">
@@ -1190,6 +1259,7 @@
             <select id="background-action">
               <option value="occupied" hidden disabled>Occupied</option>
               <option value="tile">Remove / recover tiles</option>
+              <option value="input-hole">Add / remove input holes</option>
               <option value="boundary">Add / remove boundary</option>
               <option value="glue-boundary">Glue boundary</option>
               <option value="reverse-glue" hidden disabled>Reverse arrows</option>
@@ -1524,6 +1594,53 @@
     <section class="card collapsed" id="export-card">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
+        <div class="mosaic-inline-row">
+          <span class="input-label">Export type</span>
+          <select id="export-type">
+            <option value="all">All info</option>
+            <option value="minigame">For minigames</option>
+            <option value="background">Background only</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="export-format-row">
+          <span class="input-label">Format</span>
+          <select id="export-format">
+            <option value="dsl" selected>DSL-style</option>
+            <option value="verbose">Verbose JSON</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="export-preset-meta-row">
+          <span class="input-label">Preset</span>
+          <span class="export-meta-grid">
+            <label class="export-meta-field">
+              <span class="export-meta-field-label">Display name</span>
+              <input type="text" id="export-preset-label" spellcheck="false" aria-label="Minigame preset display name" placeholder="display name">
+            </label>
+            <label class="export-meta-field" id="export-preset-group-row">
+              <span class="export-meta-field-label">Game type</span>
+              <select id="export-preset-group" aria-label="Minigame preset game type">
+                <option value="2048" selected>2048</option>
+                <option value="Gomoku">Gomoku</option>
+                <option value="Connect Four">Connect Four</option>
+              </select>
+            </label>
+            <label class="opt-row"><input type="checkbox" id="export-preset-advanced"> advanced</label>
+            <span class="export-advanced-panel" id="export-preset-advanced-row" hidden>
+              <label class="export-meta-field" id="export-preset-key-row" hidden>
+                <span class="export-meta-field-label">File key</span>
+                <input type="text" id="export-preset-id" spellcheck="false" aria-label="Minigame preset file key" placeholder="file key">
+              </label>
+              <label class="export-meta-field">
+                <span class="export-meta-field-label">Game types</span>
+                <span class="export-group-checks" id="export-preset-groups" aria-label="Minigame preset game types"></span>
+              </label>
+            </span>
+          </span>
+        </div>
+        <div class="mosaic-inline-row" id="export-test-link-row" hidden>
+          <span class="input-label">Test</span>
+          <a class="export-test-link" id="export-test-link" href="ramified_minigames.html" target="_blank" rel="noopener">Test in Minigames</a>
+        </div>
         <div class="action-row">
           <button class="btn" id="refresh-export">refresh</button>
           <button class="btn btn-ghost" id="copy-export">copy</button>
@@ -1541,6 +1658,7 @@
 <script src="js/mosaic_knot_data.js"></script>
 <script src="js/mosaic_link_data.js"></script>
 <script src="js/mosaic_knot_engine.js"></script>
-<script src="js/mosaic_calculator.js?v=seifert-single-spoke"></script>
+<script src="ramified_minigame_presets/presets.js"></script>
+<script src="js/mosaic_calculator.js?v=export-formats"></script>
 </body>
 </html>
