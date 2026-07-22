@@ -12,10 +12,74 @@
     }
 
     #mosaic-canvas {
+      display: block;
+      width: 100%;
       cursor: pointer;
       touch-action: none;
       user-select: none;
       -webkit-user-select: none;
+    }
+
+    #canvas-wrap {
+      position: relative;
+    }
+
+    .canvas-start-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      pointer-events: none;
+      box-sizing: border-box;
+    }
+
+    .canvas-start-overlay[hidden] {
+      display: none !important;
+    }
+
+    .canvas-start-sheet {
+      width: min(380px, 100%);
+      padding: 15px 16px 16px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: rgba(255, 253, 248, 0.96);
+      box-shadow: 0 12px 34px rgba(0, 0, 0, 0.16);
+      color: var(--text);
+      pointer-events: auto;
+      box-sizing: border-box;
+    }
+
+    .canvas-start-title {
+      margin: 0;
+      font-family: 'EB Garamond', serif;
+      font-size: 1.08rem;
+      line-height: 1.2;
+      font-weight: 700;
+    }
+
+    .canvas-start-context,
+    .canvas-start-rules {
+      margin: 7px 0 0;
+      line-height: 1.35;
+    }
+
+    .canvas-start-context {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      overflow-wrap: anywhere;
+    }
+
+    .canvas-start-rules {
+      font-size: 0.92rem;
+    }
+
+    .canvas-start-begin {
+      width: 100%;
+      margin-top: 12px;
     }
 
     .mosaic-toolbar-group {
@@ -489,6 +553,33 @@
       color: var(--muted);
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.72rem;
+    }
+
+    .chinese-checkers-player-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 12px;
+      min-width: 0;
+    }
+
+    .chinese-checkers-player-options .opt-row {
+      padding: 2px 0;
+      min-width: 88px;
+    }
+
+    .go-score-action-button,
+    .chinese-checkers-action-button {
+      width: 100%;
+    }
+
+    .go-score-compare {
+      display: block;
+      min-width: 0;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
     }
 
     .mosaic-color-row {
@@ -1075,6 +1166,14 @@
     </header>
     <div id="canvas-wrap">
       <canvas id="mosaic-canvas" tabindex="0" aria-label="Ramified minigame mosaic canvas"></canvas>
+      <div class="canvas-start-overlay" id="canvas-start-overlay" role="region" aria-live="polite" aria-label="Canvas start prompt" hidden>
+        <div class="canvas-start-sheet">
+          <p class="canvas-start-title" id="canvas-start-title">Ready to begin?</p>
+          <p class="canvas-start-context" id="canvas-start-context"></p>
+          <p class="canvas-start-rules" id="canvas-start-rules"></p>
+          <button class="btn canvas-start-begin" id="canvas-start-begin" type="button">begin the game</button>
+        </div>
+      </div>
     </div>
     <div class="mosaic-underbar">
       <span class="mosaic-underbar-left">
@@ -1124,6 +1223,33 @@
           <span class="input-label">Action</span>
           <button class="btn" id="go-pass" type="button">pass</button>
         </div>
+        <div class="mosaic-inline-row" id="go-score-view-row" data-mode-control="go" hidden>
+          <span class="input-label">Score</span>
+          <label class="opt-row"><input type="checkbox" id="go-score-view"> score view</label>
+        </div>
+        <div class="mosaic-inline-row" id="go-scoring-method-row" data-mode-control="go" hidden>
+          <span class="input-label">Method</span>
+          <select id="go-scoring-method" aria-label="Go scoring method">
+            <option value="influence" selected>influence field</option>
+            <option value="nearest">nearest stone</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="go-mark-dead-row" data-mode-control="go" hidden>
+          <span class="input-label">Dead</span>
+          <label class="opt-row"><input type="checkbox" id="go-mark-dead"> mark groups</label>
+        </div>
+        <div class="mosaic-inline-row" id="go-edit-territory-row" data-mode-control="go" hidden>
+          <span class="input-label">Edit</span>
+          <label class="opt-row"><input type="checkbox" id="go-edit-territory"> edit territory</label>
+        </div>
+        <div class="mosaic-inline-row" id="go-score-compare-row" data-mode-control="go" hidden>
+          <span class="input-label">Compare</span>
+          <span class="go-score-compare" id="go-score-compare">score view off</span>
+        </div>
+        <div class="mosaic-inline-row" id="go-confirm-score-row" data-mode-control="go" hidden>
+          <span class="input-label">Finish</span>
+          <button class="btn go-score-action-button" id="go-confirm-score" type="button">confirm score</button>
+        </div>
         <div class="mosaic-inline-row" id="connect-four-fall-row" data-mode-control="connect-four" hidden>
           <span class="input-label">Fall</span>
           <select id="connect-four-fall-dir" aria-label="Connect Four fall direction">
@@ -1140,6 +1266,32 @@
         <div class="mosaic-inline-row" id="connect-four-align-row" data-mode-control="connect-four" hidden>
           <span class="input-label">Board</span>
           <label class="opt-row"><input type="checkbox" id="connect-four-align-fall" checked> fall down</label>
+        </div>
+        <div class="mosaic-inline-row" id="chinese-checkers-move-time-row" data-mode-control="chinese-checkers" hidden>
+          <span class="input-label">Move time</span>
+          <span class="background-slider-controls">
+            <input type="range" id="chinese-checkers-move-time" min="40" max="160" step="20" value="100" aria-label="Chinese Checkers move time per edge">
+            <output id="chinese-checkers-move-time-value">100 ms/edge</output>
+          </span>
+        </div>
+        <div class="mosaic-inline-row" id="chinese-checkers-jump-pause-row" data-mode-control="chinese-checkers" hidden>
+          <span class="input-label">Jump pause</span>
+          <span class="background-slider-controls">
+            <input type="range" id="chinese-checkers-jump-pause" min="0" max="240" step="40" value="120" aria-label="Chinese Checkers pause at multi-jump landings">
+            <output id="chinese-checkers-jump-pause-value">120 ms</output>
+          </span>
+        </div>
+        <div class="mosaic-inline-row" id="chinese-checkers-hints-row" data-mode-control="chinese-checkers" hidden>
+          <span class="input-label">Hints</span>
+          <label class="opt-row"><input type="checkbox" id="chinese-checkers-full-hints" checked> full-chain hints</label>
+        </div>
+        <div class="mosaic-inline-row" id="chinese-checkers-players-row" data-mode-control="chinese-checkers" hidden>
+          <span class="input-label">Players</span>
+          <span class="chinese-checkers-player-options" id="chinese-checkers-player-options" aria-label="Chinese Checkers players"></span>
+        </div>
+        <div class="mosaic-inline-row" id="chinese-checkers-end-jump-row" data-mode-control="chinese-checkers" hidden>
+          <span class="input-label">Jump</span>
+          <button class="btn chinese-checkers-action-button" id="chinese-checkers-end-jump" type="button">end jump</button>
         </div>
         <div class="mosaic-inline-row" id="box-ui-row" data-mode-control="2048">
           <span class="input-label">Box UI</span>

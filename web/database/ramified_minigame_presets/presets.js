@@ -6,7 +6,7 @@
   return {
     defaultFor: {
       "2048": "ramified-cover",
-      "gomoku": "gomoku-strange-corner",
+      "gomoku": "small holes",
       "connect-four": "connect-four-exchange",
       "go": "three-slits",
       "reversi": "focus-frame",

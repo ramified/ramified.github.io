@@ -73,11 +73,16 @@
   const OFFICIAL_GOMOKU_DEFAULT_WIN_LENGTH_PRESETS = new Set(['gomoku-tic-tac-toe']);
   const GO_COLORS = ['black', 'white'];
   const GO_DEFAULT_KOMI = 6.5;
+  const GO_SCORING_METHODS = ['influence', 'nearest'];
+  const GO_SCORING_METHOD_DEFAULT = 'influence';
   const REVERSI_COLORS = ['black', 'white'];
   const REVERSI_DEFAULT_BOARD_SIZE = 8;
   const REVERSI_MIN_BOARD_SIZE = 4;
   const REVERSI_MAX_BOARD_SIZE = 24;
   const CHINESE_CHECKERS_DEFAULT_COLORS = ['red', 'yellow'];
+  const CHINESE_CHECKERS_MOVE_TIME_DEFAULT = 100;
+  const CHINESE_CHECKERS_JUMP_PAUSE_DEFAULT = 120;
+  const REVERSI_INVALID_MARK_DURATION = 460;
   const PLACEMENT_KNOWN_COLORS = ['black', 'white', 'red', 'yellow', 'blue', 'green'];
   const PLACEMENT_COLOR_ORDER = new Map(PLACEMENT_KNOWN_COLORS.map((color, index) => [color, index]));
   const CONNECT_FOUR_WIN_LENGTH = 4;
@@ -240,6 +245,8 @@
   let game = null;
   let geometry = null;
   let currentAnimation = null;
+  let placementFeedbacks = [];
+  let placementFeedbackFrameId = null;
   let eventQueue = [];
   let eventIndex = 0;
   let stepPaused = false;
@@ -256,6 +263,8 @@
   let suppressCanvasClickTimer = null;
   let heldArrowKeys = new Set();
   let activeHexVerticalKey = null;
+  let chineseCheckersSelectedPlayers = null;
+  let chineseCheckersSelectedPlayersPresetKey = '';
 
   function init() {
     refs.canvas = document.getElementById('mosaic-canvas');
@@ -279,11 +288,31 @@
     refs.goKomi = document.getElementById('go-komi');
     refs.goActionRow = document.getElementById('go-action-row');
     refs.goPass = document.getElementById('go-pass');
+    refs.goScoreView = document.getElementById('go-score-view');
+    refs.goScoringMethod = document.getElementById('go-scoring-method');
+    refs.goMarkDead = document.getElementById('go-mark-dead');
+    refs.goEditTerritory = document.getElementById('go-edit-territory');
+    refs.goScoreCompareRow = document.getElementById('go-score-compare-row');
+    refs.goScoreCompare = document.getElementById('go-score-compare');
+    refs.goConfirmScore = document.getElementById('go-confirm-score');
     refs.connectFourFall = document.getElementById('connect-four-fall-dir');
     refs.connectFourAlignFall = document.getElementById('connect-four-align-fall');
+    refs.chineseCheckersMoveTime = document.getElementById('chinese-checkers-move-time');
+    refs.chineseCheckersMoveTimeValue = document.getElementById('chinese-checkers-move-time-value');
+    refs.chineseCheckersJumpPause = document.getElementById('chinese-checkers-jump-pause');
+    refs.chineseCheckersJumpPauseValue = document.getElementById('chinese-checkers-jump-pause-value');
+    refs.chineseCheckersFullHints = document.getElementById('chinese-checkers-full-hints');
+    refs.chineseCheckersPlayerOptions = document.getElementById('chinese-checkers-player-options');
+    refs.chineseCheckersEndJumpRow = document.getElementById('chinese-checkers-end-jump-row');
+    refs.chineseCheckersEndJump = document.getElementById('chinese-checkers-end-jump');
     refs.boxStyle = document.getElementById('number-box-style');
     refs.highlightNewBoxes = document.getElementById('highlight-new-boxes');
     refs.begin = document.getElementById('begin-game');
+    refs.canvasStartOverlay = document.getElementById('canvas-start-overlay');
+    refs.canvasStartTitle = document.getElementById('canvas-start-title');
+    refs.canvasStartContext = document.getElementById('canvas-start-context');
+    refs.canvasStartRules = document.getElementById('canvas-start-rules');
+    refs.canvasStartBegin = document.getElementById('canvas-start-begin');
     refs.setupAlert = document.getElementById('game-setup-alert');
     refs.speed = document.getElementById('animation-speed');
     refs.speedValue = document.getElementById('animation-speed-value');
@@ -305,6 +334,7 @@
     refs.modeGomokuControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="gomoku"]')) : [];
     refs.modeConnectFourControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="connect-four"]')) : [];
     refs.modeGoControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="go"]')) : [];
+    refs.modeChineseCheckersControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="chinese-checkers"]')) : [];
     refs.statusBadge = document.getElementById('status-badge');
     refs.statusLine = document.getElementById('status-line');
     refs.infoLine = document.getElementById('info-line');
@@ -334,11 +364,22 @@
     if (refs.goKomi) refs.goKomi.addEventListener('change', handleGoKomiChange);
     if (refs.goKomi) refs.goKomi.addEventListener('input', handleGoKomiChange);
     if (refs.goPass) refs.goPass.addEventListener('click', passGoFromUi);
+    if (refs.goScoreView) refs.goScoreView.addEventListener('change', handleGoScoreViewChange);
+    if (refs.goScoringMethod) refs.goScoringMethod.addEventListener('change', handleGoScoringMethodChange);
+    if (refs.goMarkDead) refs.goMarkDead.addEventListener('change', handleGoMarkDeadChange);
+    if (refs.goEditTerritory) refs.goEditTerritory.addEventListener('change', handleGoEditTerritoryChange);
+    if (refs.goConfirmScore) refs.goConfirmScore.addEventListener('click', confirmGoScoreFromUi);
     if (refs.connectFourFall) refs.connectFourFall.addEventListener('change', handleConnectFourFallChange);
     if (refs.connectFourAlignFall) refs.connectFourAlignFall.addEventListener('change', handleConnectFourAlignFallChange);
+    if (refs.chineseCheckersMoveTime) refs.chineseCheckersMoveTime.addEventListener('input', syncChineseCheckersTimingOutput);
+    if (refs.chineseCheckersJumpPause) refs.chineseCheckersJumpPause.addEventListener('input', syncChineseCheckersTimingOutput);
+    if (refs.chineseCheckersFullHints) refs.chineseCheckersFullHints.addEventListener('change', handleChineseCheckersFullHintsChange);
+    if (refs.chineseCheckersPlayerOptions) refs.chineseCheckersPlayerOptions.addEventListener('change', handleChineseCheckersPlayerOptionsChange);
+    if (refs.chineseCheckersEndJump) refs.chineseCheckersEndJump.addEventListener('click', endChineseCheckersJumpFromUi);
     if (refs.boxStyle) refs.boxStyle.addEventListener('change', render);
     if (refs.highlightNewBoxes) refs.highlightNewBoxes.addEventListener('change', render);
     if (refs.begin) refs.begin.addEventListener('click', beginGameFromUi);
+    if (refs.canvasStartBegin) refs.canvasStartBegin.addEventListener('click', handleCanvasStartBeginClick);
     if (refs.speed) refs.speed.addEventListener('input', syncSpeedOutput);
     if (refs.stepMode) refs.stepMode.addEventListener('change', syncControls);
     if (refs.nextStep) refs.nextStep.addEventListener('click', playNextStep);
@@ -368,6 +409,7 @@
     window.addEventListener('resize', render);
 
     syncSpeedOutput();
+    syncChineseCheckersTimingOutput();
     syncDebugModeUi();
     setPresetSelectLoading();
     const catalogLoad = ensurePresetCatalogLoaded();
@@ -392,6 +434,7 @@
   }
 
   function resetToPreview() {
+    hideCanvasStartPrompt();
     if (!presetCatalogReady || !PRESETS.length) {
       game = null;
       geometry = null;
@@ -885,6 +928,7 @@
   }
 
   function beginGameFromUi() {
+    hideCanvasStartPrompt();
     if (game && game.phase !== 'setup') {
       stopGameFromUi();
       return;
@@ -944,6 +988,7 @@
 
   function stopGameFromUi() {
     const previous = game;
+    hideCanvasStartPrompt();
     stopPlayback();
     if (isConnectFourGame(previous)) {
       const holes = new Set(previous.holes || []);
@@ -1037,6 +1082,7 @@
   }
 
   function setImportToolsVisible(force) {
+    hideCanvasStartPrompt();
     if (!refs.importTools) return;
     refs.importTools.hidden = false;
     if (force && refs.importSource) refs.importSource.value = 'paste';
@@ -1560,24 +1606,68 @@
       .sort((a, b) => a.distance - b.distance || a.index - b.index || a.id - b.id);
   }
 
+  function startReversiInvalidMoveFeedback(target) {
+    if (!target || !Number.isInteger(target.index)) return;
+    startPlacementFeedback({
+      kind: 'reversiInvalid',
+      index: target.index,
+      startedAt: now(),
+      duration: REVERSI_INVALID_MARK_DURATION
+    });
+  }
+
+  function startPlacementFeedback(feedback) {
+    placementFeedbacks = activePlacementFeedbacks();
+    placementFeedbacks.push(feedback);
+    render();
+    schedulePlacementFeedbackTick();
+  }
+
+  function schedulePlacementFeedbackTick() {
+    if (placementFeedbackFrameId != null || !placementFeedbacks.length) return;
+    placementFeedbackFrameId = requestFrame(tickPlacementFeedbacks);
+  }
+
+  function tickPlacementFeedbacks() {
+    placementFeedbackFrameId = null;
+    placementFeedbacks = activePlacementFeedbacks();
+    render();
+    schedulePlacementFeedbackTick();
+  }
+
+  function activePlacementFeedbacks() {
+    const current = now();
+    return placementFeedbacks.filter((feedback) => {
+      const duration = Number.isFinite(feedback.duration) ? Math.max(1, feedback.duration) : REVERSI_INVALID_MARK_DURATION;
+      return current - feedback.startedAt < duration;
+    });
+  }
+
+  function clearPlacementFeedbacks() {
+    placementFeedbacks = [];
+    if (placementFeedbackFrameId != null) cancelFrame(placementFeedbackFrameId);
+    placementFeedbackFrameId = null;
+  }
+
   function startChineseCheckersMoveAnimation(result) {
     if (!result || !result.changed || !result.marble || !result.move) return;
     const segments = cloneChineseCheckerMoveSegments(result.move.segments);
+    const event = {
+      kind: 'chineseCheckersMove',
+      marbleId: result.marble.id,
+      color: result.marble.color,
+      from: result.marble.from,
+      to: result.marble.index,
+      path: (result.move.path || [result.marble.from, result.marble.index]).slice(),
+      segments,
+      moveTime: selectedChineseCheckersMoveTime(),
+      jumpPause: selectedChineseCheckersJumpPause()
+    };
+    event.duration = eventDuration(event);
     currentAnimation = {
-      event: {
-        kind: 'chineseCheckersMove',
-        marbleId: result.marble.id,
-        color: result.marble.color,
-        from: result.marble.from,
-        to: result.marble.index,
-        path: (result.move.path || [result.marble.from, result.marble.index]).slice(),
-        segments
-      },
+      event,
       startedAt: now(),
-      duration: eventDuration({
-        kind: 'chineseCheckersMove',
-        segments
-      })
+      duration: event.duration
     };
     tickAnimation();
   }
@@ -1641,6 +1731,7 @@
     if (animationFrameId != null) cancelFrame(animationFrameId);
     animationFrameId = null;
     currentAnimation = null;
+    clearPlacementFeedbacks();
     eventQueue = [];
     eventIndex = 0;
     stepPaused = false;
@@ -1678,12 +1769,89 @@
     if (refs.debugTileValue) refs.debugTileValue.disabled = !debugMode || !is2048Game(game);
   }
 
+  function handleCanvasStartBeginClick(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    hideCanvasStartPrompt();
+    beginGameFromUi();
+  }
+
+  function hideCanvasStartPrompt() {
+    if (refs.canvasStartOverlay) refs.canvasStartOverlay.hidden = true;
+  }
+
+  function showCanvasStartPrompt() {
+    if (!refs.canvasStartOverlay || !game || game.phase !== 'setup') return;
+    const copy = canvasStartPromptCopy(game);
+    if (refs.canvasStartTitle) refs.canvasStartTitle.textContent = copy.title;
+    if (refs.canvasStartContext) refs.canvasStartContext.textContent = copy.context;
+    if (refs.canvasStartRules) refs.canvasStartRules.textContent = copy.rules;
+    refs.canvasStartOverlay.hidden = false;
+    syncStatus('begin from canvas', copy.status, 'setup');
+  }
+
+  function canvasStartPromptCopy(state) {
+    const mode = gameModeValue(state);
+    const gameName = gameTypeForGameMode(mode);
+    const presetLabel = state && state.preset && state.preset.label ? state.preset.label : 'selected background';
+    let rules = 'Read the quick rule, then begin the selected game on this glued mosaic.';
+    if (mode === GAME_MODES.GOMOKU) {
+      rules = 'Place black and white stones on empty board points. The first player to make a line of five wins.';
+    } else if (mode === GAME_MODES.CONNECT_FOUR) {
+      const holes = isConnectFourGame(state) && state.holes ? state.holes.size : 0;
+      rules = holes
+        ? 'Drop red and yellow tokens through white input holes. Connect four along any board line to win.'
+        : 'Click tiles to mark white input holes, then begin. Drop tokens through those holes and connect four to win.';
+    } else if (mode === GAME_MODES.GO) {
+      rules = 'Place stones on empty points; surrounded opposing groups are captured. Pass when both players are done.';
+    } else if (mode === GAME_MODES.REVERSI) {
+      rules = 'Place a disc to bracket opposing discs along a line and flip them. Most discs at the end wins.';
+    } else if (mode === GAME_MODES.CHINESE_CHECKERS) {
+      rules = 'Select one of your marbles, then move or jump through connected cells. Race into the opposite camp.';
+    } else {
+      rules = 'Slide boxes with arrow keys, move buttons, or a swipe. Matching powers of two merge across the glued board.';
+    }
+    return {
+      title: `${gameName} quick rules`,
+      context: `${gameName} on ${presetLabel}`,
+      rules,
+      status: 'quick rules shown; begin here or use the setup panel'
+    };
+  }
+
+  function handleSetupCanvasStartClick(event) {
+    if (!game || game.phase !== 'setup' || currentAnimation) return false;
+    if (refs.select && refs.select.value === IMPORT_PRESET_CHOICE_ID && !importedPreset) return false;
+    if (debugMode && is2048Game(game)) {
+      hideCanvasStartPrompt();
+      return false;
+    }
+    if (isConnectFourGame(game) && tileFromCanvasEvent(event)) {
+      hideCanvasStartPrompt();
+      return false;
+    }
+    if (canvasClickHitsGlueBoundary(event)) {
+      hideCanvasStartPrompt();
+      syncStatusForCurrentGame();
+      return true;
+    }
+    showCanvasStartPrompt();
+    if (refs.canvas) refs.canvas.focus();
+    return true;
+  }
+
+  function canvasClickHitsGlueBoundary(event) {
+    const preset = game ? game.preset : selectedPreset();
+    return !!hoveredGlueBoundaryAtPoint(preset, geometry, canvasPointFromEvent(event));
+  }
+
   function handleCanvasClick(event) {
     if (suppressNextCanvasClick) {
       clearSuppressedCanvasClick();
       if (event.preventDefault) event.preventDefault();
       return;
     }
+    if (handleSetupCanvasStartClick(event)) return;
+    if (game && game.phase !== 'setup') hideCanvasStartPrompt();
     if (isGomokuGame(game)) {
       handleGomokuCanvasClick(event);
       return;
@@ -1885,6 +2053,23 @@
     }
     const target = tileFromCanvasEvent(event);
     if (!target) return;
+    const stone = goStoneAt(game, target.index);
+    if (isGoDeadMarkModeActive() && stone) {
+      handleGoDeadGroupCanvasClick(target);
+      return;
+    }
+    if (isGoTerritoryEditModeActive()) {
+      handleGoTerritoryOverrideCanvasClick(target);
+      return;
+    }
+    if (isGoDeadMarkModeActive()) {
+      handleGoDeadGroupCanvasClick(target);
+      return;
+    }
+    if (game.scoringReview) {
+      syncStatus('Go score review', 'mark dead groups or confirm score', 'ready');
+      return;
+    }
     const result = placeGoStone(game, target.index);
     if (!result.changed) {
       syncStatus('Go move rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
@@ -1907,7 +2092,113 @@
     }
     pushUndoSnapshot(`Go ${game.turn} pass`);
     game = result.state;
+    if (game.scoringReview) activateGoScoringReviewControls();
     syncStatusForCurrentGame();
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+    if (refs.canvas) refs.canvas.focus();
+  }
+
+  function confirmGoScoreFromUi() {
+    if (!isGoGame(game) || currentAnimation || game.phase === 'setup' || game.phase === 'gameover') return;
+    const result = confirmGoScore(game);
+    if (!result.changed) {
+      syncStatus('Go score unavailable', result.message || 'score cannot be confirmed yet', phaseBadge(game.phase));
+      return;
+    }
+    pushUndoSnapshot('Go confirm score');
+    game = result.state;
+    syncStatusForCurrentGame();
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+    if (refs.canvas) refs.canvas.focus();
+  }
+
+  function handleGoDeadGroupCanvasClick(target) {
+    if (!isGoGame(game) || !target) return;
+    const result = toggleGoDeadGroup(game, target.index);
+    if (!result.changed) {
+      syncStatus('Go dead group', result.message || 'click a stone group to mark it dead or alive', phaseBadge(game.phase));
+      return;
+    }
+    pushUndoSnapshot(`Go ${result.markedDead ? 'mark' : 'unmark'} ${result.color} group`);
+    game = result.state;
+    syncStatus(
+      result.markedDead ? 'dead group marked' : 'dead group restored',
+      `${result.count} ${goColorLabel(result.color)} stone${result.count === 1 ? '' : 's'}; confirm score when ready`,
+      'ready'
+    );
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+    if (refs.canvas) refs.canvas.focus();
+  }
+
+  function handleGoScoreViewChange() {
+    render();
+    syncControls();
+    if (isGoGame(game)) syncStatusForCurrentGame();
+    if (refs.canvas) refs.canvas.focus();
+  }
+
+  function handleGoScoringMethodChange() {
+    const method = selectedGoScoringMethod();
+    if (isGoGame(game)) {
+      const previous = normalizeGoScoringMethod(game.scoringMethod);
+      if (previous !== method) {
+        if (game.phase !== 'setup') pushUndoSnapshot('Go scoring method');
+        game.scoringMethod = method;
+        game.finalScore = null;
+        if (game.phase !== 'gameover') game.territory = scoreGoGame(game).territory;
+      }
+      syncStatus('Go scoring method', method === 'nearest' ? 'nearest-stone Voronoi selected' : 'inverse-square influence selected', phaseBadge(game.phase));
+    }
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+    if (refs.canvas) refs.canvas.focus();
+  }
+
+  function handleGoMarkDeadChange() {
+    if (refs.goMarkDead && refs.goMarkDead.checked && refs.goScoreView) refs.goScoreView.checked = true;
+    render();
+    syncControls();
+    if (isGoGame(game)) {
+      syncStatus(
+        refs.goMarkDead && refs.goMarkDead.checked ? 'Go dead group marking' : `Go move ${game.round || 0}`,
+        refs.goMarkDead && refs.goMarkDead.checked ? 'click a stone to toggle its whole group' : goTurnInfo(game),
+        phaseBadge(game.phase)
+      );
+    }
+    if (refs.canvas) refs.canvas.focus();
+  }
+
+  function handleGoEditTerritoryChange() {
+    if (refs.goEditTerritory && refs.goEditTerritory.checked && refs.goScoreView) refs.goScoreView.checked = true;
+    render();
+    syncControls();
+    if (isGoGame(game)) {
+      syncStatus(
+        refs.goEditTerritory && refs.goEditTerritory.checked ? 'Go territory editing' : `Go move ${game.round || 0}`,
+        refs.goEditTerritory && refs.goEditTerritory.checked ? 'click empty or dead points to cycle ownership' : goTurnInfo(game),
+        phaseBadge(game.phase)
+      );
+    }
+    if (refs.canvas) refs.canvas.focus();
+  }
+
+  function handleGoTerritoryOverrideCanvasClick(target) {
+    if (!isGoGame(game) || !target) return;
+    const result = toggleGoTerritoryOverride(game, target.index);
+    if (!result.changed) {
+      syncStatus('Go territory edit', result.message || 'click an empty or dead scoring point', phaseBadge(game.phase));
+      return;
+    }
+    pushUndoSnapshot('Go territory override');
+    game = result.state;
+    syncStatus('territory override', `${target.label}: ${result.owner === 'auto' ? 'automatic' : result.owner}`, 'ready');
     render();
     syncControls();
     refreshDebugExportIfNeeded();
@@ -1928,6 +2219,7 @@
     if (!target) return;
     const result = placeReversiDisc(game, target.index);
     if (!result.changed) {
+      startReversiInvalidMoveFeedback(target);
       syncStatus('Reversi move rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
       return;
     }
@@ -1953,6 +2245,10 @@
     const target = tileFromCanvasEvent(event);
     if (!target) return;
     const marble = chineseCheckerMarbleAt(game, target.index);
+    if (isChineseCheckersJumping(game)) {
+      handleChineseCheckersJumpContinuationClick(target, marble);
+      return;
+    }
     if (!Number.isInteger(game.selectedIndex)) {
       if (!marble || marble.color !== game.turn) {
         syncStatus('Chinese Checkers selection', 'select one of your marbles', 'ready');
@@ -1972,12 +2268,35 @@
       return;
     }
     const from = game.selectedIndex;
-    const result = moveChineseCheckerMarble(game, from, target.index);
+    const result = moveChineseCheckerMarble(game, from, target.index, {
+      stepwise: !shouldUseChineseCheckersFullChainHints()
+    });
     if (!result.changed) {
       syncStatus('Chinese Checkers move rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
       return;
     }
     pushUndoSnapshot(`Chinese Checkers ${game.turn} move`);
+    game = result.state;
+    startChineseCheckersMoveAnimation(result);
+    syncStatusForCurrentGame();
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+  }
+
+  function handleChineseCheckersJumpContinuationClick(target, marble) {
+    const chain = game && game.jumpChain;
+    if (!chain || !Number.isInteger(chain.currentIndex)) return;
+    if (marble && marble.color === game.turn && target.index !== chain.currentIndex) {
+      syncStatus('Chinese Checkers jumping', 'continue this jump or use end jump', 'ready');
+      return;
+    }
+    const result = moveChineseCheckerMarble(game, chain.currentIndex, target.index, { stepwise: true });
+    if (!result.changed) {
+      syncStatus('Chinese Checkers jump rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
+      return;
+    }
+    pushUndoSnapshot(`Chinese Checkers ${game.turn} jump`);
     game = result.state;
     startChineseCheckersMoveAnimation(result);
     syncStatusForCurrentGame();
@@ -2086,6 +2405,8 @@
     if (refs.gameMode) refs.gameMode.value = gameModeValue(game);
     syncConnectFourFallInputFromGame();
     syncGoKomiInputFromGame();
+    syncGoScoringMethodInputFromGame();
+    if (isGoGame(game) && game.scoringReview) activateGoScoringReviewControls();
     syncStatus('undo complete', `restored before ${snapshot.label || 'previous step'}`, phaseBadge(game.phase));
     render();
     syncControls();
@@ -2331,6 +2652,8 @@
       ensureImportedPresetOption(importedPreset);
       if (refs.select) refs.select.value = importedPreset.id;
       game = imported.state;
+      if (isChineseCheckersGame(game)) setChineseCheckersSelectedPlayers(chineseCheckersPlayerColors(game), game.preset);
+      if (isGoGame(game) && game.scoringReview) activateGoScoringReviewControls();
       eventQueue = imported.eventQueue;
       eventIndex = imported.eventIndex;
       stepPaused = imported.stepPaused;
@@ -2341,6 +2664,7 @@
       if (game.phase !== 'gameover') game.ending = '';
       syncConnectFourFallInputFromGame();
       syncGoKomiInputFromGame();
+      syncGoScoringMethodInputFromGame();
       render();
       const info = debugExportInfo(game);
       syncStatus('status imported', info, debugMode ? 'debug' : phaseBadge(game.phase));
@@ -2451,6 +2775,7 @@
       };
     }
     if (isGoGame(game)) {
+      const goScore = scoreGoGame(game);
       return {
         ...base,
         turn: game.turn || 'black',
@@ -2460,12 +2785,16 @@
           black: Math.max(0, Number(game.captures && game.captures.black) || 0),
           white: Math.max(0, Number(game.captures && game.captures.white) || 0)
         },
-        territory: { ...(game.territory || { black: 0, white: 0, neutral: 0 }) },
+        territory: { ...((game.finalScore && game.finalScore.territory) || goScore.territory || { black: 0, white: 0, neutral: 0 }) },
         finalScore: game.finalScore ? clonePlain(game.finalScore) : null,
         winner: game.winner || '',
         resultDismissed: !!game.resultDismissed,
         nextStoneId: game.nextStoneId || 1,
         previousBoardSignature: game.previousBoardSignature || '',
+        deadStoneIds: Array.from(goDeadStoneIdSet(game)).sort((a, b) => a - b),
+        scoringReview: !!game.scoringReview,
+        scoringMethod: normalizeGoScoringMethod(game.scoringMethod),
+        territoryOverrides: goTerritoryOverridesExport(game),
         stones: (game.stones || [])
           .map((stone) => stoneExport(stone, preset.cols))
           .sort((a, b) => a.index - b.index || a.id - b.id),
@@ -2508,6 +2837,7 @@
         resultDismissed: !!game.resultDismissed,
         nextMarbleId: game.nextMarbleId || 1,
         selectedIndex: Number.isInteger(game.selectedIndex) ? game.selectedIndex : null,
+        jumpChain: cloneChineseCheckersJumpChain(game.jumpChain),
         playerColors: chineseCheckersPlayerColors(game),
         camps: chineseCheckersCampsExport(game.camps, preset.cols),
         marbles: (game.marbles || [])
@@ -2675,6 +3005,9 @@
       const phase = normalizeStatusPhase(payload.phase);
       const winner = normalizeGoWinner(payload.winner);
       const captures = payload.captures && typeof payload.captures === 'object' ? payload.captures : {};
+      const deadStoneIds = normalizeStatusGoDeadStoneIds(payload.deadStoneIds, stones);
+      const scoringMethod = normalizeGoScoringMethod(payload.scoringMethod);
+      const territoryOverrides = normalizeStatusGoTerritoryOverrides(payload.territoryOverrides, preset, removed, stones, deadStoneIds);
       const state = {
         gameMode: GAME_MODES.GO,
         preset,
@@ -2702,12 +3035,17 @@
             neutral: Math.max(0, Number(payload.territory.neutral) || 0)
           }
           : { black: 0, white: 0, neutral: 0 },
+        deadStoneIds,
+        scoringReview: phase !== 'gameover' && !!payload.scoringReview,
+        scoringMethod,
+        territoryOverrides,
         finalScore: payload.finalScore && typeof payload.finalScore === 'object' ? clonePlain(payload.finalScore) : null,
         resultDismissed: !!payload.resultDismissed,
         round: normalizeNonnegativeInteger(payload.round, stones.length),
         ending: phase === 'gameover' ? 'go-score' : '',
         debugMessage: ''
       };
+      if (state.scoringReview) state.territory = scoreGoGame(state).territory;
       if (state.phase === 'gameover' && !state.finalScore) {
         state.finalScore = scoreGoGame(state);
         state.territory = state.finalScore.territory;
@@ -2821,6 +3159,9 @@
         payload.playerColors || payload.chineseCheckersPlayers || preset.chineseCheckersPlayers,
         camps
       );
+      const importedJumpChain = normalizeStatusChineseCheckersJumpChain(payload.jumpChain, marbles, preset, removed);
+      const jumpChain = phase === 'gameover' ? null : importedJumpChain;
+      const jumpingMarble = jumpChain ? marbles.find((marble) => marble.id === jumpChain.marbleId) : null;
       const state = {
         gameMode: GAME_MODES.CHINESE_CHECKERS,
         preset,
@@ -2834,8 +3175,9 @@
         nextMarbleId,
         camps,
         playerColors,
-        selectedIndex: validBoardIndex({ preset }, Number(payload.selectedIndex)) ? Number(payload.selectedIndex) : null,
-        turn: normalizeChineseCheckersTurn(payload.turn, playerColors),
+        selectedIndex: jumpChain ? jumpChain.currentIndex : (validBoardIndex({ preset }, Number(payload.selectedIndex)) ? Number(payload.selectedIndex) : null),
+        jumpChain,
+        turn: jumpChain && jumpingMarble ? jumpingMarble.color : normalizeChineseCheckersTurn(payload.turn, playerColors),
         winner: phase === 'gameover' ? normalizeChineseCheckersWinner(winner, playerColors) : '',
         winningLine: [],
         resultDismissed: !!payload.resultDismissed,
@@ -3031,6 +3373,16 @@
     });
   }
 
+  function normalizeStatusGoDeadStoneIds(entries, stones) {
+    const validIds = new Set((stones || []).map((stone) => stone.id));
+    const ids = new Set();
+    (Array.isArray(entries) ? entries : []).forEach((entry) => {
+      const id = Number(entry);
+      if (Number.isInteger(id) && validIds.has(id)) ids.add(id);
+    });
+    return ids;
+  }
+
   function normalizeStatusReversiDiscs(entries, preset, removed) {
     if (!Array.isArray(entries)) throw new Error('status discs must be an array');
     const usedIds = new Set();
@@ -3069,6 +3421,24 @@
       usedIds.add(id);
       return { id, index: tileIndex, color };
     });
+  }
+
+  function normalizeStatusChineseCheckersJumpChain(value, marbles, preset, removed) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const marbleId = Number(value.marbleId);
+    const moving = Number.isInteger(marbleId) ? marbles.find((marble) => marble.id === marbleId) : null;
+    if (!moving) return null;
+    const startIndex = Number(value.startIndex);
+    const currentIndex = Number(value.currentIndex);
+    const stateLike = { preset };
+    if (!validBoardIndex(stateLike, startIndex) || !validBoardIndex(stateLike, currentIndex)) return null;
+    if (removed.has(startIndex) || removed.has(currentIndex) || moving.index !== currentIndex) return null;
+    return {
+      marbleId,
+      startIndex,
+      currentIndex,
+      segments: cloneChineseCheckerMoveSegments(value.segments)
+    };
   }
 
   function normalizeConnectFourHoleSet(entries, preset, removed) {
@@ -3496,6 +3866,7 @@
   function render() {
     if (!refs.canvas || !refs.ctx) return;
     const preset = game ? game.preset : selectedPreset();
+    if (!preset) return;
     if (hoveredGlue && !activeGlueHoverForPreset(preset, hoveredGlue)) {
       hoveredGlue = null;
       syncGlueHoverCursor();
@@ -3535,9 +3906,12 @@
       if (vertexDisplay) drawPlacementVertexBoard(ctx, geometry, game);
       else if (isConnectFourGame(game)) drawConnectFourHoles(ctx, geometry, game);
       if (!isConnectFourDropAnimation() && !isChineseCheckersGame(game)) drawPlacementWinningLine(ctx, geometry, game);
+      if (isGoGame(game)) drawGoScoreOverlay(ctx, geometry, game);
       drawPlacementSelectionOverlays(ctx, geometry, game);
       drawPlacementPieces(ctx, geometry, placementPieces(game));
+      if (isGoGame(game)) drawGoDeadStoneMarks(ctx, geometry, game);
       drawPlacementAnimationOverlays(ctx, geometry);
+      drawPlacementFeedbackOverlays(ctx, geometry);
     } else {
       drawNumberBoxes(ctx, geometry, game ? game.boxes : []);
       drawAnimationOverlays(ctx, geometry);
@@ -4005,6 +4379,59 @@
     });
   }
 
+  function drawGoScoreOverlay(ctx, geom, state) {
+    if (!shouldShowGoScoreAnnotations(state)) return;
+    const score = scoreGoGame(state);
+    const ownership = score.ownership || { black: [], white: [], neutral: [] };
+    ctx.save();
+    drawGoOwnedRegion(ctx, geom, ownership.black, 'rgba(17,17,17,0.13)', 'rgba(17,17,17,0.34)');
+    drawGoOwnedRegion(ctx, geom, ownership.white, 'rgba(247,241,231,0.58)', 'rgba(141,127,112,0.46)');
+    drawGoOwnedRegion(ctx, geom, ownership.neutral, 'rgba(196,127,23,0.13)', 'rgba(196,127,23,0.32)');
+    ctx.restore();
+  }
+
+  function drawGoOwnedRegion(ctx, geom, indices, fillStyle, strokeStyle) {
+    (Array.isArray(indices) ? indices : []).forEach((index) => {
+      const point = placementPiecePoint(geom, index);
+      if (!point) return;
+      ctx.fillStyle = fillStyle;
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = Math.max(1, geom.radius * 0.035);
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, geom.radius * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+  }
+
+  function drawGoDeadStoneMarks(ctx, geom, state) {
+    if (!shouldShowGoScoreAnnotations(state)) return;
+    const deadIds = goDeadStoneIdSet(state);
+    if (!deadIds.size) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    (state.stones || []).forEach((stone) => {
+      if (!deadIds.has(stone.id)) return;
+      const point = placementPiecePoint(geom, stone.index);
+      if (!point) return;
+      const radius = geom.radius * 0.51;
+      ctx.fillStyle = 'rgba(255,253,248,0.56)';
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      const size = geom.radius * 0.3;
+      ctx.strokeStyle = '#b23a48';
+      ctx.lineWidth = Math.max(2, geom.radius * 0.075);
+      ctx.beginPath();
+      ctx.moveTo(point.x - size, point.y - size);
+      ctx.lineTo(point.x + size, point.y + size);
+      ctx.moveTo(point.x + size, point.y - size);
+      ctx.lineTo(point.x - size, point.y + size);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
   function drawPlacementSelectionOverlays(ctx, geom, state) {
     if (!isChineseCheckersGame(state)) return;
     ctx.save();
@@ -4014,7 +4441,7 @@
       return;
     }
     const selectedPoint = placementPiecePoint(geom, state.selectedIndex);
-    const moveMap = chineseCheckerMoveMap(state, state.selectedIndex);
+    const moveMap = chineseCheckersHintMoveMap(state, state.selectedIndex);
     ctx.lineWidth = Math.max(1.5, geom.radius * 0.06);
     ctx.strokeStyle = 'rgba(31,122,140,0.86)';
     ctx.fillStyle = 'rgba(31,122,140,0.16)';
@@ -4065,7 +4492,7 @@
     ctx.globalAlpha = 1;
     ctx.lineWidth = Math.max(1.8, geom.radius * 0.065);
     (state.marbles || []).forEach((marble) => {
-      if (marble.color !== color || !chineseCheckerMoveMap(state, marble.index).size) return;
+      if (marble.color !== color || !chineseCheckersHintMoveMap(state, marble.index).size) return;
       const point = placementPiecePoint(geom, marble.index);
       if (!point) return;
       ctx.beginPath();
@@ -4175,6 +4602,38 @@
     });
   }
 
+  function drawPlacementFeedbackOverlays(ctx, geom) {
+    const current = now();
+    placementFeedbacks = placementFeedbacks.filter((feedback) => {
+      const duration = Number.isFinite(feedback.duration) ? Math.max(1, feedback.duration) : REVERSI_INVALID_MARK_DURATION;
+      const age = current - feedback.startedAt;
+      if (age >= duration) return false;
+      const progress = Math.max(0, Math.min(1, age / duration));
+      if (feedback.kind === 'reversiInvalid') drawReversiInvalidMoveFeedback(ctx, geom, feedback.index, progress);
+      return true;
+    });
+  }
+
+  function drawReversiInvalidMoveFeedback(ctx, geom, index, progress) {
+    const point = placementPiecePoint(geom, index);
+    if (!point) return;
+    const eased = easeOut(progress);
+    const alpha = Math.max(0, 1 - eased);
+    const size = geom.radius * (0.42 + eased * 0.28);
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.strokeStyle = '#b23a48';
+    ctx.lineWidth = Math.max(2.4, geom.radius * 0.1);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(point.x - size, point.y - size);
+    ctx.lineTo(point.x + size, point.y + size);
+    ctx.moveTo(point.x + size, point.y - size);
+    ctx.lineTo(point.x - size, point.y + size);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function drawChineseCheckersMoveAnimation(ctx, geom, event, rawProgress) {
     const frame = chineseCheckersMoveAnimationFrame(geom, event, rawProgress);
     if (!frame) return;
@@ -4189,8 +4648,9 @@
     }
     if (frame.point) {
       drawPlacementPieceAtPoint(ctx, geom, frame.point, piece, {
-        scale: 1 + Math.sin(Math.max(0, Math.min(1, rawProgress || 0)) * Math.PI) * 0.08
+        scale: frame.paused ? 1 : 1 + Math.sin(Math.max(0, Math.min(1, rawProgress || 0)) * Math.PI) * 0.08
       });
+      if (frame.paused) drawChineseCheckersPauseMarker(ctx, geom, frame.point, frame.pauseProgress);
     }
   }
 
@@ -4199,18 +4659,65 @@
     const segments = Array.isArray(event.segments) && event.segments.length
       ? event.segments
       : [{ path: Array.isArray(event.path) ? event.path.slice() : [event.from, event.to], transitions: [] }];
-    const weights = segments.map((segment) => Math.max(1, (segment.transitions || []).length));
-    const total = weights.reduce((sum, weight) => sum + weight, 0) || 1;
-    let cursor = progress * total;
+    const moveTime = Number.isFinite(event.moveTime) ? Math.max(1, event.moveTime) : selectedChineseCheckersMoveTime();
+    const jumpPause = Number.isFinite(event.jumpPause) ? Math.max(0, event.jumpPause) : selectedChineseCheckersJumpPause();
+    const totalDuration = Number.isFinite(event.duration) && event.duration > 0
+      ? event.duration
+      : eventDuration(event);
+    let cursor = progress * totalDuration;
     for (let index = 0; index < segments.length; index += 1) {
-      const weight = weights[index];
-      if (cursor <= weight || index === segments.length - 1) {
-        const local = Math.max(0, Math.min(1, cursor / weight));
+      const travel = Math.max(1, chineseCheckersSegmentTransitionCount(segments[index]) * moveTime);
+      if (cursor <= travel || index === segments.length - 1) {
+        const local = Math.max(0, Math.min(1, cursor / travel));
         return placementSegmentAnimationFrame(geom, segments[index], local);
       }
-      cursor -= weight;
+      cursor -= travel;
+      if (index < segments.length - 1 && jumpPause > 0) {
+        if (cursor <= jumpPause) {
+          const point = placementPiecePoint(geom, segments[index].to);
+          return {
+            kind: 'point',
+            point,
+            paused: true,
+            pauseProgress: Math.max(0, Math.min(1, cursor / jumpPause))
+          };
+        }
+        cursor -= jumpPause;
+      }
     }
     return null;
+  }
+
+  function drawChineseCheckersPauseMarker(ctx, geom, point, rawProgress) {
+    if (!point) return;
+    const progress = Math.max(0, Math.min(1, rawProgress || 0));
+    const pulse = Math.sin(progress * Math.PI);
+    ctx.save();
+    ctx.fillStyle = `rgba(31,122,140,${0.08 + pulse * 0.1})`;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, geom.radius * (0.46 + pulse * 0.12), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = Math.max(1.2, geom.radius * 0.045);
+    for (let ring = 0; ring < 3; ring += 1) {
+      const local = (progress + ring / 3) % 1;
+      const alpha = (1 - local) * 0.34;
+      const radius = geom.radius * (0.48 + easeOut(local) * 0.76);
+      ctx.strokeStyle = `rgba(31,122,140,${alpha.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function chineseCheckersMoveTransitionCount(segments) {
+    return (segments || []).reduce((sum, segment) => sum + chineseCheckersSegmentTransitionCount(segment), 0);
+  }
+
+  function chineseCheckersSegmentTransitionCount(segment) {
+    return Math.max(1, Array.isArray(segment && segment.transitions) && segment.transitions.length
+      ? segment.transitions.length
+      : (Array.isArray(segment && segment.path) ? Math.max(1, segment.path.length - 1) : 1));
   }
 
   function placementSegmentAnimationFrame(geom, segment, rawProgress) {
@@ -5303,6 +5810,10 @@
       previousBoardSignature: '',
       winner: '',
       territory: { black: 0, white: 0, neutral: 0 },
+      deadStoneIds: new Set(),
+      scoringReview: false,
+      scoringMethod: normalizeGoScoringMethod(options.scoringMethod),
+      territoryOverrides: new Map(),
       finalScore: null,
       resultDismissed: false,
       round: 0,
@@ -5355,7 +5866,7 @@
     const pieceSets = normalizePieceSets(preset.pieceSets, preset, removed);
     const camps = normalizeChineseCheckersCamps(preset.chineseCheckersCamps, preset, removed, pieceSets);
     const playerColors = normalizeChineseCheckersPlayers(
-      preset.chineseCheckersPlayers || preset.playerColors || options.chineseCheckersPlayers || options.playerColors,
+      options.chineseCheckersPlayers || options.playerColors || preset.chineseCheckersPlayers || preset.playerColors,
       camps
     );
     const state = {
@@ -5372,6 +5883,7 @@
       camps,
       playerColors,
       selectedIndex: null,
+      jumpChain: null,
       turn: playerColors[0] || 'red',
       winner: '',
       winningLine: [],
@@ -5920,6 +6432,9 @@
     if (sourceState.phase === 'gameover') {
       return { changed: false, state: sourceState, message: 'game is already over' };
     }
+    if (sourceState.scoringReview) {
+      return { changed: false, state: sourceState, message: 'confirm the score or undo before playing' };
+    }
     const target = Number(index);
     if (!validBoardIndex(sourceState, target)) {
       return { changed: false, state: sourceState, message: 'tile is outside the board' };
@@ -5963,6 +6478,11 @@
 
     state.previousBoardSignature = beforeSignature;
     state.passes = 0;
+    state.deadStoneIds = new Set();
+    state.scoringReview = false;
+    state.territoryOverrides = new Map();
+    state.territory = { black: 0, white: 0, neutral: 0 };
+    state.finalScore = null;
     state.round += 1;
     state.resultDismissed = false;
     state.ending = '';
@@ -5991,18 +6511,42 @@
     if (sourceState.phase === 'gameover') {
       return { changed: false, state: sourceState, message: 'game is already over' };
     }
+    if (sourceState.scoringReview) {
+      return { changed: false, state: sourceState, message: 'confirm the score or undo before passing' };
+    }
     const state = cloneGameState(sourceState);
     state.previousBoardSignature = goBoardSignature(sourceState);
     state.passes = (state.passes || 0) + 1;
     state.round += 1;
     state.resultDismissed = false;
+    state.finalScore = null;
     if (state.passes >= 2) {
-      finishGoByScore(state);
+      state.phase = 'ready';
+      state.turn = oppositeGoColor(state.turn);
+      state.scoringReview = true;
+      state.territory = scoreGoGame(state).territory;
+      state.ending = '';
     } else {
       state.phase = 'ready';
       state.turn = oppositeGoColor(state.turn);
+      state.scoringReview = false;
       state.ending = '';
     }
+    return { changed: true, state };
+  }
+
+  function confirmGoScore(sourceState) {
+    if (!isGoGame(sourceState)) {
+      return { changed: false, state: sourceState, message: 'not a Go game' };
+    }
+    if (sourceState.phase === 'setup') {
+      return { changed: false, state: sourceState, message: 'begin the game first' };
+    }
+    if (sourceState.phase === 'gameover') {
+      return { changed: false, state: sourceState, message: 'game is already over' };
+    }
+    const state = cloneGameState(sourceState);
+    finishGoByScore(state);
     return { changed: true, state };
   }
 
@@ -6012,30 +6556,163 @@
     state.territory = finalScore.territory;
     state.winner = finalScore.black === finalScore.white ? '' : (finalScore.black > finalScore.white ? 'black' : 'white');
     state.phase = 'gameover';
+    state.scoringReview = false;
     state.ending = 'go-score';
   }
 
-  function scoreGoGame(state) {
-    const counts = goStoneCounts(state);
-    const territory = { black: 0, white: 0, neutral: 0 };
+  function scoreGoGame(state, options = {}) {
+    const analysis = goScoringAnalysis(state, options);
+    return {
+      black: analysis.black,
+      white: analysis.white,
+      komi: analysis.komi,
+      method: analysis.method,
+      stones: analysis.stones,
+      territory: analysis.territory,
+      deadStones: analysis.deadStones,
+      ownership: analysis.ownership,
+      ownerByIndex: analysis.ownerByIndex,
+      sourceByIndex: analysis.sourceByIndex
+    };
+  }
+
+  function goScoringAnalysis(state, options = {}) {
+    const method = normalizeGoScoringMethod(options.method || (state && state.scoringMethod));
+    const includeOverrides = options.includeOverrides !== false;
+    const deadIds = goDeadStoneIdSet(state);
+    const counts = goStoneCounts(state, deadIds);
+    const scoringIndices = goScoringEmptyIndices(state, deadIds);
+    const scoringSet = new Set(scoringIndices);
+    const ownerMap = new Map();
+    const sourceMap = new Map();
+    const ambiguous = [];
     const visited = new Set();
-    emptyGoIndices(state).forEach((start) => {
+    scoringIndices.forEach((start) => {
       if (visited.has(start)) return;
-      const region = goEmptyRegion(state, start, visited);
+      const region = goScoringEmptyRegion(state, start, visited, deadIds);
       if (region.adjacentColors.size === 1) {
         const color = Array.from(region.adjacentColors)[0];
-        territory[color] += region.indices.length;
+        region.indices.forEach((index) => {
+          ownerMap.set(index, color);
+          sourceMap.set(index, 'enclosed');
+        });
       } else {
-        territory.neutral += region.indices.length;
+        ambiguous.push(...region.indices);
       }
     });
+    const heuristicOwners = method === 'nearest'
+      ? goNearestStoneTerritoryOwners(state, ambiguous, deadIds)
+      : goInfluenceTerritoryOwners(state, ambiguous, deadIds);
+    ambiguous.forEach((index) => {
+      ownerMap.set(index, normalizeGoTerritoryOwner(heuristicOwners.get(index)) || 'neutral');
+      sourceMap.set(index, method);
+    });
+    if (includeOverrides) {
+      goTerritoryOverrideMap(state, scoringSet).forEach((owner, index) => {
+        ownerMap.set(index, owner);
+        sourceMap.set(index, 'manual');
+      });
+    }
+    const territory = { black: 0, white: 0, neutral: 0 };
+    const ownership = { black: [], white: [], neutral: [], dead: [] };
+    const ownerByIndex = {};
+    const sourceByIndex = {};
+    scoringIndices.forEach((index) => {
+      const owner = normalizeGoTerritoryOwner(ownerMap.get(index)) || 'neutral';
+      territory[owner] += 1;
+      ownership[owner].push(index);
+      ownerByIndex[index] = owner;
+      sourceByIndex[index] = sourceMap.get(index) || 'neutral';
+    });
+    const deadStones = { black: 0, white: 0 };
+    (state.stones || []).forEach((stone) => {
+      if (!deadIds.has(stone.id)) return;
+      ownership.dead.push(stone.index);
+      if (stone.color === 'white') deadStones.white += 1;
+      else deadStones.black += 1;
+    });
+    Object.keys(ownership).forEach((key) => ownership[key].sort((a, b) => a - b));
     return {
       black: counts.black + territory.black,
       white: counts.white + territory.white + (Number(state.komi) || 0),
       komi: Number(state.komi) || 0,
+      method,
       stones: counts,
-      territory
+      territory,
+      deadStones,
+      ownership,
+      ownerByIndex,
+      sourceByIndex
     };
+  }
+
+  function goInfluenceTerritoryOwners(state, indices, deadIds) {
+    const owners = new Map();
+    const candidates = Array.from(new Set(indices || []));
+    if (!candidates.length) return owners;
+    const candidateSet = new Set(candidates);
+    const totals = new Map(candidates.map((index) => [index, { black: 0, white: 0 }]));
+    goLiveStones(state, deadIds).forEach((stone) => {
+      const distances = goScoringDistancesFromSources(state, [stone], deadIds);
+      candidateSet.forEach((index) => {
+        const distance = distances.get(index);
+        if (!Number.isFinite(distance)) return;
+        const total = totals.get(index);
+        total[stone.color] += 1 / ((distance + 1) ** 2);
+      });
+    });
+    candidates.forEach((index) => {
+      const total = totals.get(index) || { black: 0, white: 0 };
+      if (Math.abs(total.black - total.white) < 1e-9) owners.set(index, 'neutral');
+      else owners.set(index, total.black > total.white ? 'black' : 'white');
+    });
+    return owners;
+  }
+
+  function goNearestStoneTerritoryOwners(state, indices, deadIds) {
+    const owners = new Map();
+    const candidates = Array.from(new Set(indices || []));
+    if (!candidates.length) return owners;
+    const blackDistances = goScoringDistancesFromSources(state, goLiveStones(state, deadIds, 'black'), deadIds);
+    const whiteDistances = goScoringDistancesFromSources(state, goLiveStones(state, deadIds, 'white'), deadIds);
+    candidates.forEach((index) => {
+      const blackDistance = blackDistances.has(index) ? blackDistances.get(index) : Infinity;
+      const whiteDistance = whiteDistances.has(index) ? whiteDistances.get(index) : Infinity;
+      if (!Number.isFinite(blackDistance) && !Number.isFinite(whiteDistance)) {
+        owners.set(index, 'neutral');
+      } else if (blackDistance === whiteDistance) {
+        owners.set(index, 'neutral');
+      } else {
+        owners.set(index, blackDistance < whiteDistance ? 'black' : 'white');
+      }
+    });
+    return owners;
+  }
+
+  function goScoringDistancesFromSources(state, sources, deadIds) {
+    const distances = new Map();
+    const queue = [];
+    (Array.isArray(sources) ? sources : []).forEach((stone) => {
+      if (!stone || !Number.isInteger(stone.index) || distances.has(stone.index)) return;
+      distances.set(stone.index, 0);
+      queue.push(stone.index);
+    });
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const index = queue[cursor];
+      const distance = distances.get(index);
+      adjacentExistingIndices(state, index).forEach((nextIndex) => {
+        if (distances.has(nextIndex)) return;
+        if (goScoringStoneAt(state, nextIndex, deadIds)) return;
+        distances.set(nextIndex, distance + 1);
+        queue.push(nextIndex);
+      });
+    }
+    return distances;
+  }
+
+  function goLiveStones(state, deadIds = goDeadStoneIdSet(state), color = '') {
+    return (state && Array.isArray(state.stones) ? state.stones : [])
+      .filter((stone) => !deadIds.has(stone.id) && GO_COLORS.includes(stone.color) && (!color || stone.color === color));
   }
 
   function goEmptyRegion(state, start, visited) {
@@ -6048,6 +6725,28 @@
       indices.push(index);
       adjacentExistingIndices(state, index).forEach((nextIndex) => {
         const stone = goStoneAt(state, nextIndex);
+        if (stone) {
+          adjacentColors.add(stone.color);
+          return;
+        }
+        if (visited.has(nextIndex)) return;
+        visited.add(nextIndex);
+        queue.push(nextIndex);
+      });
+    }
+    return { indices, adjacentColors };
+  }
+
+  function goScoringEmptyRegion(state, start, visited, deadIds) {
+    const adjacentColors = new Set();
+    const indices = [];
+    const queue = [start];
+    visited.add(start);
+    while (queue.length) {
+      const index = queue.shift();
+      indices.push(index);
+      adjacentExistingIndices(state, index).forEach((nextIndex) => {
+        const stone = goScoringStoneAt(state, nextIndex, deadIds);
         if (stone) {
           adjacentColors.add(stone.color);
           return;
@@ -6098,9 +6797,21 @@
     return emptyPlayableIndices(state, occupied);
   }
 
+  function goScoringEmptyIndices(state, deadIds = goDeadStoneIdSet(state)) {
+    const occupied = new Set((state.stones || [])
+      .filter((stone) => !deadIds.has(stone.id))
+      .map((stone) => stone.index));
+    return emptyPlayableIndices(state, occupied);
+  }
+
   function goStoneAt(state, index) {
     if (!state || !Array.isArray(state.stones)) return null;
     return state.stones.find((stone) => stone.index === index) || null;
+  }
+
+  function goScoringStoneAt(state, index, deadIds = goDeadStoneIdSet(state)) {
+    const stone = goStoneAt(state, index);
+    return stone && !deadIds.has(stone.id) ? stone : null;
   }
 
   function oppositeGoColor(color) {
@@ -6111,8 +6822,9 @@
     return color === 'white' ? 'white' : 'black';
   }
 
-  function goStoneCounts(state) {
+  function goStoneCounts(state, deadIds = new Set()) {
     return (state.stones || []).reduce((counts, stone) => {
+      if (deadIds.has(stone.id)) return counts;
       if (stone.color === 'white') counts.white += 1;
       else counts.black += 1;
       return counts;
@@ -6120,7 +6832,215 @@
   }
 
   function goTurnInfo(state) {
+    if (state && state.scoringReview) return 'score review; mark dead groups or confirm score';
     return `${goColorLabel(state.turn)} to play; komi ${formatKomi(state.komi)}`;
+  }
+
+  function goDeadStoneIdSet(state) {
+    const valid = new Set((state && state.stones ? state.stones : []).map((stone) => stone.id));
+    const source = state && state.deadStoneIds instanceof Set
+      ? Array.from(state.deadStoneIds)
+      : (Array.isArray(state && state.deadStoneIds) ? state.deadStoneIds : []);
+    const ids = new Set();
+    source.forEach((entry) => {
+      const id = Number(entry);
+      if (Number.isInteger(id) && valid.has(id)) ids.add(id);
+    });
+    return ids;
+  }
+
+  function normalizeGoScoringMethod(value) {
+    const method = String(value || '').trim().toLowerCase();
+    return GO_SCORING_METHODS.includes(method) ? method : GO_SCORING_METHOD_DEFAULT;
+  }
+
+  function normalizeGoTerritoryOwner(value) {
+    const owner = String(value || '').trim().toLowerCase();
+    return owner === 'black' || owner === 'white' || owner === 'neutral' ? owner : '';
+  }
+
+  function goTerritoryOverrideEntriesFromValue(value) {
+    const entries = [];
+    const add = (index, ownerValue) => {
+      const target = Number(index);
+      const owner = normalizeGoTerritoryOwner(ownerValue);
+      if (Number.isInteger(target) && target >= 0 && owner) entries.push([target, owner]);
+    };
+    if (value instanceof Map) {
+      value.forEach((owner, index) => add(index, owner));
+    } else if (Array.isArray(value)) {
+      value.forEach((entry) => {
+        if (Array.isArray(entry)) add(entry[0], entry[1]);
+        else if (entry && typeof entry === 'object') add(entry.index, entry.owner != null ? entry.owner : entry.color);
+      });
+    } else if (value && typeof value === 'object') {
+      Object.keys(value).forEach((key) => {
+        const entry = value[key];
+        add(key, entry && typeof entry === 'object' ? (entry.owner != null ? entry.owner : entry.color) : entry);
+      });
+    }
+    return entries;
+  }
+
+  function cloneGoTerritoryOverrides(value) {
+    const overrides = new Map();
+    goTerritoryOverrideEntriesFromValue(value).forEach(([index, owner]) => {
+      overrides.set(index, owner);
+    });
+    return overrides;
+  }
+
+  function goTerritoryOverrideMap(state, scoringSet = null) {
+    const overrides = new Map();
+    goTerritoryOverrideEntriesFromValue(state && state.territoryOverrides).forEach(([index, owner]) => {
+      if (scoringSet && !scoringSet.has(index)) return;
+      if (!scoringSet && state && state.preset && !validBoardIndex(state, index)) return;
+      overrides.set(index, owner);
+    });
+    return overrides;
+  }
+
+  function goTerritoryOverridesExport(state) {
+    const deadIds = goDeadStoneIdSet(state);
+    const scoringSet = isGoGame(state) ? new Set(goScoringEmptyIndices(state, deadIds)) : null;
+    const overrides = goTerritoryOverrideMap(state, scoringSet);
+    return Array.from(overrides.entries())
+      .sort((left, right) => left[0] - right[0])
+      .map(([index, owner]) => ({
+        index,
+        ...rowCol(index, state.preset.cols),
+        owner
+      }));
+  }
+
+  function normalizeStatusGoTerritoryOverrides(entries, preset, removed, stones, deadIds) {
+    const stateLike = {
+      gameMode: GAME_MODES.GO,
+      preset,
+      removed,
+      stones
+    };
+    const scoringSet = new Set(goScoringEmptyIndices(stateLike, deadIds));
+    const overrides = new Map();
+    const add = (tileValue, ownerValue) => {
+      const owner = normalizeGoTerritoryOwner(ownerValue);
+      if (!owner) return;
+      const tile = normalizeImportedTileRef(tileValue, preset.rows, preset.cols);
+      if (!tile) return;
+      const index = indexOf(tile.row, tile.col, preset.cols);
+      if (scoringSet.has(index)) overrides.set(index, owner);
+    };
+    if (Array.isArray(entries)) {
+      entries.forEach((entry) => {
+        if (Array.isArray(entry)) {
+          add(entry[0], entry[1]);
+        } else if (entry && typeof entry === 'object') {
+          add(entry, entry.owner != null ? entry.owner : entry.color);
+        }
+      });
+    } else if (entries && typeof entries === 'object') {
+      Object.keys(entries).forEach((key) => {
+        const entry = entries[key];
+        const entryHasTile = entry && typeof entry === 'object' && (
+          entry.index != null || entry.row != null || entry.col != null
+        );
+        add(entryHasTile ? entry : key, entry && typeof entry === 'object' ? (entry.owner != null ? entry.owner : entry.color) : entry);
+      });
+    }
+    return overrides;
+  }
+
+  function toggleGoTerritoryOverride(sourceState, index) {
+    if (!isGoGame(sourceState)) {
+      return { changed: false, state: sourceState, message: 'not a Go game' };
+    }
+    if (sourceState.phase === 'setup') {
+      return { changed: false, state: sourceState, message: 'begin the game first' };
+    }
+    if (sourceState.phase === 'gameover') {
+      return { changed: false, state: sourceState, message: 'game is already over' };
+    }
+    const target = Number(index);
+    if (!validBoardIndex(sourceState, target) || sourceState.removed.has(target)) {
+      return { changed: false, state: sourceState, message: 'click an existing scoring point' };
+    }
+    const deadIds = goDeadStoneIdSet(sourceState);
+    const scoringSet = new Set(goScoringEmptyIndices(sourceState, deadIds));
+    if (!scoringSet.has(target)) {
+      return { changed: false, state: sourceState, message: 'only empty or dead points can be edited' };
+    }
+    const state = cloneGameState(sourceState);
+    const overrides = goTerritoryOverrideMap(state, scoringSet);
+    const current = overrides.get(target) || 'auto';
+    const next = current === 'auto'
+      ? 'black'
+      : (current === 'black' ? 'white' : (current === 'white' ? 'neutral' : 'auto'));
+    if (next === 'auto') overrides.delete(target);
+    else overrides.set(target, next);
+    state.territoryOverrides = overrides;
+    state.finalScore = null;
+    state.territory = scoreGoGame(state).territory;
+    state.resultDismissed = false;
+    return { changed: true, state, owner: next };
+  }
+
+  function compareGoScoringMethods(state) {
+    const influence = timedGoScore(state, 'influence');
+    const nearest = timedGoScore(state, 'nearest');
+    const keys = new Set([
+      ...Object.keys(influence.score.ownerByIndex || {}),
+      ...Object.keys(nearest.score.ownerByIndex || {})
+    ]);
+    let disagreements = 0;
+    keys.forEach((key) => {
+      const influenceOwner = (influence.score.ownerByIndex || {})[key] || 'neutral';
+      const nearestOwner = (nearest.score.ownerByIndex || {})[key] || 'neutral';
+      if (influenceOwner !== nearestOwner) disagreements += 1;
+    });
+    return { influence, nearest, disagreements };
+  }
+
+  function timedGoScore(state, method) {
+    const startedAt = now();
+    const score = scoreGoGame(state, { method, includeOverrides: false });
+    return {
+      method,
+      ms: Math.max(0, now() - startedAt),
+      score
+    };
+  }
+
+  function toggleGoDeadGroup(sourceState, index) {
+    if (!isGoGame(sourceState)) {
+      return { changed: false, state: sourceState, message: 'not a Go game' };
+    }
+    if (sourceState.phase !== 'ready') {
+      return { changed: false, state: sourceState, message: 'dead groups can be marked after the game begins' };
+    }
+    const stone = goStoneAt(sourceState, index);
+    if (!stone) return { changed: false, state: sourceState, message: 'click a Go stone to mark its group' };
+    const group = goGroupAt(sourceState, index);
+    const groupIds = group.stones.map((item) => item.id);
+    if (!groupIds.length) return { changed: false, state: sourceState, message: 'click a Go stone to mark its group' };
+    const state = cloneGameState(sourceState);
+    const deadIds = goDeadStoneIdSet(state);
+    const allDead = groupIds.every((id) => deadIds.has(id));
+    groupIds.forEach((id) => {
+      if (allDead) deadIds.delete(id);
+      else deadIds.add(id);
+    });
+    state.deadStoneIds = deadIds;
+    state.territoryOverrides = goTerritoryOverrideMap(state, new Set(goScoringEmptyIndices(state, deadIds)));
+    state.finalScore = null;
+    state.territory = scoreGoGame(state).territory;
+    state.resultDismissed = false;
+    return {
+      changed: true,
+      state,
+      color: stone.color,
+      count: groupIds.length,
+      markedDead: !allDead
+    };
   }
 
   function placeReversiDisc(sourceState, index) {
@@ -6427,7 +7347,7 @@
       : `${reversiColorLabel(state.turn)} to move`;
   }
 
-  function moveChineseCheckerMarble(sourceState, fromIndex, toIndex) {
+  function moveChineseCheckerMarble(sourceState, fromIndex, toIndex, options = {}) {
     if (!isChineseCheckersGame(sourceState)) {
       return { changed: false, state: sourceState, message: 'not a Chinese Checkers game' };
     }
@@ -6452,10 +7372,20 @@
     if (!marble || marble.color !== sourceState.turn) {
       return { changed: false, state: sourceState, message: 'select one of your marbles' };
     }
-    const legal = chineseCheckerMoveMap(sourceState, from);
+    const activeJump = isChineseCheckersJumping(sourceState);
+    if (activeJump) {
+      const chain = sourceState.jumpChain;
+      if (chain.marbleId !== marble.id || chain.currentIndex !== from) {
+        return { changed: false, state: sourceState, message: 'continue the selected jump' };
+      }
+    }
+    const stepwise = !!options.stepwise || activeJump;
+    const legal = activeJump
+      ? chineseCheckerImmediateJumpMap(sourceState, from)
+      : (stepwise ? chineseCheckerStepwiseMoveMap(sourceState, from) : chineseCheckerMoveMap(sourceState, from));
     const move = legal.get(to);
     if (!move) {
-      return { changed: false, state: sourceState, message: 'target is not a legal step or jump' };
+      return { changed: false, state: sourceState, message: activeJump ? 'target is not a legal next jump' : 'target is not a legal step or jump' };
     }
 
     const state = cloneGameState(sourceState);
@@ -6467,15 +7397,33 @@
       color: moving.color
     };
     moving.index = to;
-    state.selectedIndex = null;
-    state.round += 1;
     state.resultDismissed = false;
     state.winningLine = [];
+    const chainSegments = activeJump
+      ? cloneChineseCheckerMoveSegments(sourceState.jumpChain && sourceState.jumpChain.segments).concat(cloneChineseCheckerMoveSegments(move.segments))
+      : cloneChineseCheckerMoveSegments(move.segments);
     if (chineseCheckersPlayerWins(state, moving.color)) {
+      state.selectedIndex = null;
+      state.jumpChain = null;
+      state.round += 1;
       state.phase = 'gameover';
       state.winner = moving.color;
       state.ending = 'chinese-checkers-win';
+    } else if (stepwise && move.kind === 'jump' && chineseCheckerImmediateJumpMap(state, to).size) {
+      state.selectedIndex = to;
+      state.jumpChain = {
+        marbleId: moving.id,
+        startIndex: activeJump && sourceState.jumpChain ? sourceState.jumpChain.startIndex : from,
+        currentIndex: to,
+        segments: chainSegments
+      };
+      state.phase = 'ready';
+      state.turn = moving.color;
+      state.ending = '';
     } else {
+      state.selectedIndex = null;
+      state.jumpChain = null;
+      state.round += 1;
       state.phase = 'ready';
       state.turn = nextChineseCheckersColor(state, moving.color);
       state.ending = '';
@@ -6485,10 +7433,34 @@
 
   function chineseCheckerMoveMap(state, fromIndex) {
     const moves = new Map();
+    if (!chineseCheckerMarbleAt(state, fromIndex)) return moves;
+    chineseCheckerStepMap(state, fromIndex).forEach((move, index) => {
+      moves.set(index, move);
+    });
+    const occupied = chineseCheckerOccupiedSet(state, fromIndex);
+    chineseCheckerJumpMap(state, fromIndex, occupied).forEach((move, index) => {
+      moves.set(index, move);
+    });
+    return moves;
+  }
+
+  function chineseCheckerStepwiseMoveMap(state, fromIndex) {
+    const moves = new Map();
+    if (!chineseCheckerMarbleAt(state, fromIndex)) return moves;
+    chineseCheckerStepMap(state, fromIndex).forEach((move, index) => {
+      moves.set(index, move);
+    });
+    chineseCheckerImmediateJumpMap(state, fromIndex).forEach((move, index) => {
+      moves.set(index, move);
+    });
+    return moves;
+  }
+
+  function chineseCheckerStepMap(state, fromIndex) {
+    const moves = new Map();
     const marble = chineseCheckerMarbleAt(state, fromIndex);
     if (!marble) return moves;
-    const occupied = new Set((state.marbles || []).map((item) => item.index));
-    occupied.delete(fromIndex);
+    const occupied = chineseCheckerOccupiedSet(state, fromIndex);
     directionsForPreset(state.preset).forEach((dir) => {
       const step = surfaceSuccessor(state, fromIndex, dir);
       if (step && step.index !== fromIndex && !occupied.has(step.index) && !state.removed.has(step.index)) {
@@ -6501,10 +7473,30 @@
         });
       }
     });
-    chineseCheckerJumpMap(state, fromIndex, occupied).forEach((move, index) => {
-      moves.set(index, move);
+    return moves;
+  }
+
+  function chineseCheckerImmediateJumpMap(state, fromIndex) {
+    const moves = new Map();
+    const marble = chineseCheckerMarbleAt(state, fromIndex);
+    if (!marble) return moves;
+    const occupied = chineseCheckerOccupiedSet(state, fromIndex);
+    directionsForPreset(state.preset).forEach((dir) => {
+      const segment = chineseCheckerSuperJumpSegment(state, fromIndex, dir, occupied);
+      if (!segment) return;
+      moves.set(segment.to, {
+        kind: 'jump',
+        path: [fromIndex, segment.to],
+        segments: [segment]
+      });
     });
     return moves;
+  }
+
+  function chineseCheckerOccupiedSet(state, fromIndex) {
+    const occupied = new Set((state.marbles || []).map((item) => item.index));
+    occupied.delete(fromIndex);
+    return occupied;
   }
 
   function chineseCheckerJumpMap(state, fromIndex, occupied) {
@@ -6575,6 +7567,16 @@
       ...(move || {}),
       path: Array.isArray(move && move.path) ? move.path.slice() : [],
       segments: cloneChineseCheckerMoveSegments(move && move.segments)
+    };
+  }
+
+  function cloneChineseCheckersJumpChain(chain) {
+    if (!chain || typeof chain !== 'object') return null;
+    return {
+      marbleId: Number.isInteger(chain.marbleId) ? chain.marbleId : null,
+      startIndex: Number.isInteger(chain.startIndex) ? chain.startIndex : null,
+      currentIndex: Number.isInteger(chain.currentIndex) ? chain.currentIndex : null,
+      segments: cloneChineseCheckerMoveSegments(chain.segments)
     };
   }
 
@@ -6835,8 +7837,67 @@
   }
 
   function chineseCheckersTurnInfo(state) {
+    if (isChineseCheckersJumping(state)) {
+      return `${chineseCheckersColorLabel(state.turn)} jumping; choose next jump or end jump`;
+    }
     const selected = Number.isInteger(state.selectedIndex) ? '; marble selected' : '';
     return `${chineseCheckersColorLabel(state.turn)} to move${selected}`;
+  }
+
+  function isChineseCheckersJumping(state) {
+    if (!isChineseCheckersGame(state) || !state.jumpChain) return false;
+    const chain = state.jumpChain;
+    if (!Number.isInteger(chain.marbleId) || !Number.isInteger(chain.currentIndex)) return false;
+    const marble = (state.marbles || []).find((item) => item.id === chain.marbleId) || null;
+    return !!(marble && marble.index === chain.currentIndex && marble.color === state.turn);
+  }
+
+  function shouldUseChineseCheckersFullChainHints() {
+    return !refs.chineseCheckersFullHints || !!refs.chineseCheckersFullHints.checked;
+  }
+
+  function chineseCheckersHintMoveMap(state, fromIndex) {
+    if (isChineseCheckersJumping(state)) {
+      const chain = state.jumpChain;
+      return chain && chain.currentIndex === fromIndex ? chineseCheckerImmediateJumpMap(state, fromIndex) : new Map();
+    }
+    return shouldUseChineseCheckersFullChainHints()
+      ? chineseCheckerMoveMap(state, fromIndex)
+      : chineseCheckerStepwiseMoveMap(state, fromIndex);
+  }
+
+  function endChineseCheckersJumpFromUi() {
+    if (!isChineseCheckersGame(game) || !isChineseCheckersJumping(game) || currentAnimation) return;
+    pushUndoSnapshot(`Chinese Checkers ${game.turn} end jump`);
+    game = finishChineseCheckersJump(game);
+    syncStatusForCurrentGame();
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+    if (refs.canvas) refs.canvas.focus();
+  }
+
+  function finishChineseCheckersJump(sourceState) {
+    const state = cloneGameState(sourceState);
+    if (!isChineseCheckersJumping(state)) return state;
+    const chain = state.jumpChain;
+    const moving = (state.marbles || []).find((marble) => marble.id === chain.marbleId) || null;
+    const color = moving ? moving.color : state.turn;
+    state.selectedIndex = null;
+    state.jumpChain = null;
+    state.round += 1;
+    state.resultDismissed = false;
+    state.winningLine = [];
+    if (moving && chineseCheckersPlayerWins(state, color)) {
+      state.phase = 'gameover';
+      state.winner = color;
+      state.ending = 'chinese-checkers-win';
+    } else {
+      state.phase = 'ready';
+      state.turn = nextChineseCheckersColor(state, color);
+      state.ending = '';
+    }
+    return state;
   }
 
   function emptyChineseCheckersIndices(state) {
@@ -7960,6 +9021,10 @@
         previousBoardSignature: source.previousBoardSignature || '',
         winner: GO_COLORS.includes(source.winner) ? source.winner : '',
         territory: source.territory ? { ...source.territory } : { black: 0, white: 0, neutral: 0 },
+        deadStoneIds: goDeadStoneIdSet(source),
+        scoringReview: !!source.scoringReview && source.phase !== 'gameover',
+        scoringMethod: normalizeGoScoringMethod(source.scoringMethod),
+        territoryOverrides: cloneGoTerritoryOverrides(source.territoryOverrides),
         finalScore: source.finalScore ? clonePlain(source.finalScore) : null,
         resultDismissed: !!source.resultDismissed,
         round: source.round || 0,
@@ -8004,6 +9069,7 @@
         camps: cloneChineseCheckersCamps(source.camps),
         playerColors: chineseCheckersPlayerColors(source),
         selectedIndex: Number.isInteger(source.selectedIndex) ? source.selectedIndex : null,
+        jumpChain: cloneChineseCheckersJumpChain(source.jumpChain),
         turn: normalizeChineseCheckersTurn(source.turn, chineseCheckersPlayerColors(source)),
         winner: normalizeChineseCheckersWinner(source.winner, chineseCheckersPlayerColors(source)),
         winningLine: [],
@@ -8158,6 +9224,7 @@
     if (refs.select && refs.select.value === IMPORTED_PRESET_ID && importedPreset) return importedPreset;
     if (refs.select && refs.select.value === IMPORT_PRESET_CHOICE_ID && importedPreset) return importedPreset;
     const preset = resolvePreset(refs.select ? refs.select.value : 'torus');
+    if (!preset) return null;
     if (selectedPresetUsesDynamicBoardSize(preset)) {
       return sizedDynamicPreset(preset, selectedBoardSize());
     }
@@ -8171,6 +9238,7 @@
   function selectedPresetUsesDynamicBoardSize(preset = null) {
     if (!refs.select) return false;
     const source = preset || resolvePreset(refs.select.value);
+    if (!source) return false;
     return dynamicBoardSizeMode(selectedGameMode()) && !!source.dynamicGomokuSize;
   }
 
@@ -8223,10 +9291,20 @@
     return normalizeGoKomi(refs.goKomi ? refs.goKomi.value : GO_DEFAULT_KOMI);
   }
 
+  function selectedGoScoringMethod() {
+    return normalizeGoScoringMethod(refs.goScoringMethod ? refs.goScoringMethod.value : GO_SCORING_METHOD_DEFAULT);
+  }
+
   function selectedGameOptions(base = {}) {
     const options = { ...base };
     if (selectedPresetUsesDynamicBoardSize()) options.boardSize = selectedBoardSize();
-    if (selectedGameMode() === GAME_MODES.GO) options.komi = selectedGoKomi();
+    if (selectedGameMode() === GAME_MODES.GO) {
+      options.komi = selectedGoKomi();
+      options.scoringMethod = selectedGoScoringMethod();
+    }
+    if (selectedGameMode() === GAME_MODES.CHINESE_CHECKERS) {
+      options.playerColors = selectedChineseCheckersPlayerColors(selectedPreset());
+    }
     return options;
   }
 
@@ -8266,6 +9344,11 @@
   function syncGoKomiInputFromGame() {
     if (!refs.goKomi || !isGoGame(game)) return;
     refs.goKomi.value = formatKomi(game.komi);
+  }
+
+  function syncGoScoringMethodInputFromGame() {
+    if (!refs.goScoringMethod || !isGoGame(game)) return;
+    refs.goScoringMethod.value = normalizeGoScoringMethod(game.scoringMethod);
   }
 
   function createSelectedGameState(presetOrId, options = {}) {
@@ -9086,19 +10169,21 @@
     }
     if (isGoGame(game)) {
       const counts = goStoneCounts(game);
+      const scoreView = shouldShowGoScoreAnnotations(game);
+      const score = scoreView ? scoreGoGame(game) : null;
       if (refs.scoreLabel) refs.scoreLabel.textContent = game.phase === 'gameover' ? 'Result' : 'Turn';
-      if (refs.highestLabel) refs.highestLabel.textContent = 'Black stones';
-      if (refs.existingLabel) refs.existingLabel.textContent = 'White stones';
-      if (refs.removedLabel) refs.removedLabel.textContent = 'Komi';
+      if (refs.highestLabel) refs.highestLabel.textContent = scoreView ? 'Black score' : 'Black stones';
+      if (refs.existingLabel) refs.existingLabel.textContent = scoreView ? 'White score' : 'White stones';
+      if (refs.removedLabel) refs.removedLabel.textContent = scoreView ? 'Neutral' : 'Komi';
       if (refs.roundLabel) refs.roundLabel.textContent = 'Moves';
       if (refs.score) {
         refs.score.textContent = game.phase === 'gameover'
           ? (game.winner ? `${goColorLabel(game.winner)} wins` : 'draw')
-          : goColorLabel(game.turn);
+          : (game.scoringReview ? 'review' : goColorLabel(game.turn));
       }
-      if (refs.highest) refs.highest.textContent = String(counts.black);
-      if (refs.existing) refs.existing.textContent = String(counts.white);
-      if (refs.removed) refs.removed.textContent = formatKomi(game.komi);
+      if (refs.highest) refs.highest.textContent = scoreView ? String(score.black) : String(counts.black);
+      if (refs.existing) refs.existing.textContent = scoreView ? String(score.white) : String(counts.white);
+      if (refs.removed) refs.removed.textContent = scoreView ? String(score.territory.neutral) : formatKomi(game.komi);
       if (refs.round) refs.round.textContent = String(game.round || 0);
       return;
     }
@@ -9193,6 +10278,11 @@
         control.hidden = !modeGo;
       });
     }
+    if (refs.modeChineseCheckersControls) {
+      refs.modeChineseCheckersControls.forEach((control) => {
+        control.hidden = !modeChineseCheckers;
+      });
+    }
     if (refs.gomokuSizeRow) refs.gomokuSizeRow.hidden = !(modeGomoku || modeGo || modeReversi) || !selectedGomokuPresetIsDynamic();
     if (refs.gomokuSize) {
       refs.gomokuSize.min = modeReversi ? String(REVERSI_MIN_BOARD_SIZE) : String(GOMOKU_MIN_BOARD_SIZE);
@@ -9201,7 +10291,8 @@
     }
     if (refs.placementDisplayRow) refs.placementDisplayRow.hidden = !modePlacement;
     if (refs.connectFourFall) refs.connectFourFall.disabled = modeConnectFour && game && game.phase !== 'setup';
-    if (refs.goPass) refs.goPass.disabled = !modeGo || !isGoGame(game) || game.phase !== 'ready';
+    syncGoScoringControls(modeGo);
+    syncChineseCheckersControls(modeChineseCheckers);
     if (refs.nextStep) refs.nextStep.disabled = !mode2048 || !(isStepMode() && stepPaused && eventQueue.length && !currentAnimation);
     if (refs.undo) refs.undo.disabled = !undoStack.length;
     if (refs.exportState) refs.exportState.disabled = !game;
@@ -9228,6 +10319,218 @@
     refs.speedValue.textContent = `${refs.speed.value} ms`;
   }
 
+  function syncGoScoringControls(modeGo) {
+    const activeGo = !!modeGo && isGoGame(game);
+    const liveGo = activeGo && game.phase !== 'setup' && game.phase !== 'gameover';
+    const readyGo = activeGo && game.phase === 'ready';
+    const annotations = activeGo && shouldShowGoScoreAnnotations(game);
+    if (refs.goScoringMethod) refs.goScoringMethod.disabled = !modeGo || !activeGo || !!currentAnimation || game.phase === 'gameover';
+    if (refs.goPass) refs.goPass.disabled = !readyGo || !!game.scoringReview || !!currentAnimation;
+    if (refs.goScoreView) refs.goScoreView.disabled = !liveGo || !!currentAnimation;
+    if (refs.goMarkDead) refs.goMarkDead.disabled = !liveGo || !!currentAnimation;
+    if (refs.goEditTerritory) refs.goEditTerritory.disabled = !liveGo || !!currentAnimation;
+    if (refs.goConfirmScore) refs.goConfirmScore.disabled = !liveGo || !!currentAnimation;
+    if (refs.goScoreCompareRow) refs.goScoreCompareRow.hidden = !modeGo || !annotations;
+    syncGoScoreCompareOutput(annotations);
+  }
+
+  function activateGoScoringReviewControls() {
+    if (refs.goScoreView) refs.goScoreView.checked = true;
+    if (refs.goMarkDead) refs.goMarkDead.checked = true;
+  }
+
+  function isGoDeadMarkModeActive() {
+    return !!(
+      isGoGame(game)
+      && game.phase === 'ready'
+      && refs.goMarkDead
+      && refs.goMarkDead.checked
+    );
+  }
+
+  function isGoTerritoryEditModeActive() {
+    return !!(
+      isGoGame(game)
+      && game.phase === 'ready'
+      && refs.goEditTerritory
+      && refs.goEditTerritory.checked
+    );
+  }
+
+  function shouldShowGoScoreAnnotations(state) {
+    return !!(
+      isGoGame(state)
+      && (
+        state.scoringReview
+        || (refs.goScoreView && refs.goScoreView.checked)
+        || (refs.goMarkDead && refs.goMarkDead.checked)
+        || (refs.goEditTerritory && refs.goEditTerritory.checked)
+      )
+    );
+  }
+
+  function syncGoScoreCompareOutput(visible) {
+    if (!refs.goScoreCompare) return;
+    if (!visible || !isGoGame(game)) {
+      refs.goScoreCompare.textContent = 'score view off';
+      return;
+    }
+    const compare = compareGoScoringMethods(game);
+    refs.goScoreCompare.textContent = [
+      formatGoCompareScore('influence', compare.influence),
+      formatGoCompareScore('nearest', compare.nearest),
+      `${compare.disagreements} disagreement${compare.disagreements === 1 ? '' : 's'}`
+    ].join('; ');
+  }
+
+  function formatGoCompareScore(label, entry) {
+    const score = entry && entry.score ? entry.score : { black: 0, white: 0 };
+    const ms = entry && Number.isFinite(entry.ms) ? entry.ms : 0;
+    return `${label} ${ms.toFixed(2)} ms B ${formatGoScoreNumber(score.black)} W ${formatGoScoreNumber(score.white)}`;
+  }
+
+  function formatGoScoreNumber(value) {
+    const number = Number(value) || 0;
+    return Number.isInteger(number) ? String(number) : number.toFixed(1);
+  }
+
+  function syncChineseCheckersTimingOutput() {
+    if (refs.chineseCheckersMoveTime && refs.chineseCheckersMoveTimeValue) {
+      refs.chineseCheckersMoveTime.value = String(selectedChineseCheckersMoveTime());
+      refs.chineseCheckersMoveTimeValue.textContent = `${refs.chineseCheckersMoveTime.value} ms/edge`;
+    }
+    if (refs.chineseCheckersJumpPause && refs.chineseCheckersJumpPauseValue) {
+      refs.chineseCheckersJumpPause.value = String(selectedChineseCheckersJumpPause());
+      refs.chineseCheckersJumpPauseValue.textContent = `${refs.chineseCheckersJumpPause.value} ms`;
+    }
+  }
+
+  function selectedChineseCheckersMoveTime() {
+    return clampInteger(
+      refs.chineseCheckersMoveTime ? Number(refs.chineseCheckersMoveTime.value) : CHINESE_CHECKERS_MOVE_TIME_DEFAULT,
+      40,
+      160,
+      CHINESE_CHECKERS_MOVE_TIME_DEFAULT
+    );
+  }
+
+  function selectedChineseCheckersJumpPause() {
+    return clampInteger(
+      refs.chineseCheckersJumpPause ? Number(refs.chineseCheckersJumpPause.value) : CHINESE_CHECKERS_JUMP_PAUSE_DEFAULT,
+      0,
+      240,
+      CHINESE_CHECKERS_JUMP_PAUSE_DEFAULT
+    );
+  }
+
+  function syncChineseCheckersControls(modeChineseCheckers) {
+    syncChineseCheckersTimingOutput();
+    syncChineseCheckersPlayerOptions(modeChineseCheckers);
+    const activeJump = isChineseCheckersJumping(game);
+    if (refs.chineseCheckersEndJumpRow) refs.chineseCheckersEndJumpRow.hidden = !modeChineseCheckers || !activeJump;
+    if (refs.chineseCheckersEndJump) refs.chineseCheckersEndJump.disabled = !modeChineseCheckers || !activeJump || !!currentAnimation;
+    if (refs.chineseCheckersFullHints) refs.chineseCheckersFullHints.disabled = !!activeJump;
+  }
+
+  function syncChineseCheckersPlayerOptions(modeChineseCheckers) {
+    if (!refs.chineseCheckersPlayerOptions) return;
+    refs.chineseCheckersPlayerOptions.textContent = '';
+    if (!modeChineseCheckers || !presetCatalogReady || !PRESETS.length) return;
+    const preset = game && isChineseCheckersGame(game) ? game.preset : selectedPreset();
+    const available = chineseCheckersAvailablePlayerColors(preset);
+    const selected = isChineseCheckersGame(game)
+      ? chineseCheckersPlayerColors(game)
+      : selectedChineseCheckersPlayerColors(preset);
+    const selectedSet = new Set(selected);
+    const setupEditable = !game || (isChineseCheckersGame(game) && game.phase === 'setup');
+    available.forEach((color) => {
+      const label = document.createElement('label');
+      label.className = 'opt-row';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = color;
+      input.checked = selectedSet.has(color);
+      input.disabled = !setupEditable || (input.checked && selectedSet.size <= 1);
+      label.appendChild(input);
+      label.appendChild(document.createTextNode(chineseCheckersColorLabel(color)));
+      refs.chineseCheckersPlayerOptions.appendChild(label);
+    });
+  }
+
+  function handleChineseCheckersFullHintsChange() {
+    if (isChineseCheckersJumping(game)) {
+      if (refs.chineseCheckersFullHints) refs.chineseCheckersFullHints.checked = false;
+      syncStatus('finish jump first', 'end or continue the current jump before changing hint mode', 'ready');
+      syncControls();
+      return;
+    }
+    render();
+    if (isChineseCheckersGame(game)) syncStatusForCurrentGame();
+  }
+
+  function handleChineseCheckersPlayerOptionsChange(event) {
+    if (selectedGameMode() !== GAME_MODES.CHINESE_CHECKERS) return;
+    if (game && isChineseCheckersGame(game) && game.phase !== 'setup') {
+      syncChineseCheckersPlayerOptions(true);
+      return;
+    }
+    const available = chineseCheckersAvailablePlayerColors(selectedPreset());
+    const inputs = refs.chineseCheckersPlayerOptions
+      ? Array.from(refs.chineseCheckersPlayerOptions.querySelectorAll('input[type=checkbox]'))
+      : [];
+    let selected = inputs.filter((input) => input.checked).map((input) => normalizePlacementColor(input.value)).filter(Boolean);
+    selected = selected.filter((color, index) => available.includes(color) && selected.indexOf(color) === index);
+    if (!selected.length) {
+      if (event && event.target && event.target.type === 'checkbox') event.target.checked = true;
+      selected = selectedChineseCheckersPlayerColors(selectedPreset());
+      syncStatus('player required', 'leave at least one Chinese Checkers player active', 'warn');
+      syncChineseCheckersPlayerOptions(true);
+      return;
+    }
+    setChineseCheckersSelectedPlayers(selected, selectedPreset());
+    if (isChineseCheckersGame(game) && game.phase === 'setup') {
+      game = createSelectedGameState(selectedPreset(), selectedGameOptions({ glueRng: Math.random }));
+      game.phase = 'setup';
+      clearUndoHistory();
+      clearDebugExport();
+      render();
+      syncStatusForCurrentGame();
+      syncControls();
+      refreshDebugExportIfNeeded();
+    }
+  }
+
+  function chineseCheckersAvailablePlayerColors(preset) {
+    if (!preset) return CHINESE_CHECKERS_DEFAULT_COLORS.slice();
+    const removed = initialRemovedSet(preset);
+    const pieceSets = normalizePieceSets(preset.pieceSets, preset, removed);
+    const camps = normalizeChineseCheckersCamps(preset.chineseCheckersCamps, preset, removed, pieceSets);
+    return normalizeChineseCheckersPlayers(preset.chineseCheckersPlayers || preset.playerColors, camps);
+  }
+
+  function selectedChineseCheckersPlayerColors(preset) {
+    const available = chineseCheckersAvailablePlayerColors(preset);
+    const key = chineseCheckersPlayerSelectionKey(preset, available);
+    if (chineseCheckersSelectedPlayers && chineseCheckersSelectedPlayersPresetKey === key) {
+      const selected = chineseCheckersSelectedPlayers.filter((color) => available.includes(color));
+      if (selected.length) return selected;
+    }
+    return available.length ? available : CHINESE_CHECKERS_DEFAULT_COLORS.slice();
+  }
+
+  function setChineseCheckersSelectedPlayers(colors, preset) {
+    const available = chineseCheckersAvailablePlayerColors(preset);
+    const selected = colors
+      .map(normalizePlacementColor)
+      .filter((color, index, list) => color && available.includes(color) && list.indexOf(color) === index);
+    chineseCheckersSelectedPlayers = selected.length ? selected : selectedChineseCheckersPlayerColors(preset);
+    chineseCheckersSelectedPlayersPresetKey = chineseCheckersPlayerSelectionKey(preset, available);
+  }
+
+  function chineseCheckersPlayerSelectionKey(preset, available = chineseCheckersAvailablePlayerColors(preset)) {
+    return `${preset && preset.id ? preset.id : ''}|${preset && preset.rows ? preset.rows : 0}|${preset && preset.cols ? preset.cols : 0}|${available.join(',')}`;
+  }
+
   function shouldHighlightNewBoxes() {
     return !refs.highlightNewBoxes || !!refs.highlightNewBoxes.checked;
   }
@@ -9249,8 +10552,12 @@
       return Math.min(1050, Math.max(300, 230 + distance * 90));
     }
     if (event.kind === 'chineseCheckersMove') {
-      const steps = (event.segments || []).reduce((sum, segment) => sum + Math.max(1, (segment.transitions || []).length), 0);
-      return Math.min(1300, Math.max(260, 160 + Math.max(1, steps) * 70));
+      const moveTime = Number.isFinite(event.moveTime) ? event.moveTime : selectedChineseCheckersMoveTime();
+      const jumpPause = Number.isFinite(event.jumpPause) ? event.jumpPause : selectedChineseCheckersJumpPause();
+      const segments = Array.isArray(event.segments) && event.segments.length ? event.segments : [];
+      const steps = chineseCheckersMoveTransitionCount(segments);
+      const pauses = Math.max(0, segments.length - 1);
+      return Math.max(80, (Math.max(1, steps) * moveTime) + (pauses * jumpPause));
     }
     if (event.kind === 'bounceGroup') return Math.max(100, base * 0.9);
     if (event.kind === 'explode') return Math.max(120, base * 0.85);
@@ -9545,6 +10852,11 @@
     return t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
   }
 
+  function easeOut(t) {
+    const clamped = Math.max(0, Math.min(1, t));
+    return 1 - ((1 - clamped) ** 3);
+  }
+
   function pointInPolygon(point, polygon) {
     let inside = false;
     for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
@@ -9627,6 +10939,7 @@
       };
     }
     if (isGoGame(state)) {
+      const score = scoreGoGame(state);
       return {
         gameMode: GAME_MODES.GO,
         stones: (state.stones || [])
@@ -9638,7 +10951,11 @@
         passes: state.passes || 0,
         captures: { ...(state.captures || { black: 0, white: 0 }) },
         winner: state.winner || '',
-        territory: { ...(state.territory || { black: 0, white: 0, neutral: 0 }) },
+        territory: { ...((state.finalScore && state.finalScore.territory) || score.territory || { black: 0, white: 0, neutral: 0 }) },
+        deadStoneIds: Array.from(goDeadStoneIdSet(state)).sort((a, b) => a - b),
+        scoringReview: !!state.scoringReview,
+        scoringMethod: normalizeGoScoringMethod(state.scoringMethod),
+        territoryOverrides: goTerritoryOverridesExport(state),
         finalScore: state.finalScore ? clonePlain(state.finalScore) : null,
         round: state.round || 0
       };
@@ -9665,7 +10982,9 @@
           .sort((a, b) => a.index - b.index || a.id - b.id),
         removed: Array.from(state.removed).sort((a, b) => a - b),
         camps: chineseCheckersCampsExport(state.camps, state.preset.cols),
+        playerColors: chineseCheckersPlayerColors(state),
         selectedIndex: Number.isInteger(state.selectedIndex) ? state.selectedIndex : null,
+        jumpChain: cloneChineseCheckersJumpChain(state.jumpChain),
         turn: state.turn,
         winner: state.winner || '',
         winningLine: (state.winningLine || []).slice(),
