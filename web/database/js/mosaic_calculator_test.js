@@ -353,6 +353,92 @@ function testPieceSetsImportExportAndDecorationToggle() {
   assert.strictEqual(mosaic.pieceSetsForExport(), null);
 }
 
+function testSokobanDecorationPaletteAndExports() {
+  const palette = mosaic.backgroundDecorationPreferences();
+  assert.deepStrictEqual(
+    palette.map((entry) => entry.kind),
+    [
+      'clear',
+      'input-hole',
+      'start',
+      'target',
+      'sokoban-player',
+      'sokoban-box',
+      'sokoban-target',
+      'sokoban-wall',
+      'sokoban-ice',
+      'sokoban-energy-bridge'
+    ]
+  );
+
+  mosaic.setTestBoard({
+    rows: 3,
+    cols: 4,
+    lattice: 'square',
+    sokoban: {
+      players: [tile(2, 1), tile(2, 2)],
+      boxes: [tile(2, 3)],
+      targets: [tile(2, 4)],
+      walls: [tile(1, 1)],
+      ice: [tile(1, 2)],
+      energyBridges: [tile(1, 3)]
+    }
+  });
+  assert.deepStrictEqual(mosaic.sokobanDecorationsForExport(), {
+    targets: [tile(2, 4)],
+    ice: [tile(1, 2)],
+    energyBridges: [tile(1, 3)],
+    walls: [tile(1, 1)],
+    boxes: [tile(2, 3)],
+    players: [tile(2, 1), tile(2, 2)]
+  });
+  assert.deepStrictEqual(mosaic.compactSokobanDecorationsForExport(), {
+    targets: '2,4',
+    ice: '1,2',
+    energyBridges: '1,3',
+    walls: '1,1',
+    boxes: '2,3',
+    players: '2,1; 2,2'
+  });
+
+  mosaic.setTestExportControls({
+    type: 'background',
+    format: 'verbose',
+    id: 'sokoban-export',
+    label: 'Sokoban Export',
+    group: 'Sokoban'
+  });
+  const verbose = JSON.parse(mosaic.buildExportText());
+  assert.deepStrictEqual(verbose.preset.sokoban.boxes, [tile(2, 3)]);
+  assert.deepStrictEqual(verbose.preset.removedTiles, []);
+
+  mosaic.setTestExportControls({
+    type: 'background',
+    format: 'dsl',
+    id: 'sokoban-export',
+    label: 'Sokoban Export',
+    group: 'Sokoban'
+  });
+  const compact = JSON.parse(mosaic.buildExportText());
+  assert.strictEqual(compact.sokoban.players, '2,1; 2,2');
+  const normalized = minigames.normalizePresetPayload(compact);
+  assert.deepStrictEqual(normalized.sokoban.walls, [tile(1, 1)]);
+  assert.deepStrictEqual(normalized.removedTiles, []);
+}
+
+function testSokobanWallToggleDoesNotRemoveTile() {
+  mosaic.setTestBoard({
+    rows: 2,
+    cols: 2,
+    lattice: 'square',
+    backgroundAction: 'decoration',
+    backgroundDecorationKind: 'sokoban-wall'
+  });
+  assert.strictEqual(mosaic.toggleBackgroundDecoration(0, { update: false }), true);
+  assert.strictEqual(mosaic.state.removedTiles.has(0), false);
+  assert.deepStrictEqual(mosaic.sokobanDecorationsForExport(), { walls: [tile(1, 1)] });
+}
+
 function testHoleMarkerDrawingMatchesConnectFour() {
   const mosaicSource = fs.readFileSync(require.resolve('./mosaic_calculator.js'), 'utf8');
   const minigameSource = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
@@ -369,6 +455,52 @@ function testHoleMarkerDrawingMatchesConnectFour() {
   });
 }
 
+function testSokobanDecorationDrawingMatchesMinigame() {
+  const mosaicSource = fs.readFileSync(require.resolve('./mosaic_calculator.js'), 'utf8');
+  const minigameSource = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
+  [
+    'drawSokobanBrickPattern',
+    'drawSokobanCrate',
+    "'#6c6257'",
+    "'#b8793f'",
+    "'#5d351e'",
+    'createRadialGradient',
+    'ctx.clip()',
+    "'rgba(255,253,248,0.92)'",
+    "'#111111'"
+  ].forEach((needle) => {
+    assert.ok(mosaicSource.includes(needle), `mosaic missing ${needle}`);
+    assert.ok(minigameSource.includes(needle), `minigame missing ${needle}`);
+  });
+  assert.ok(mosaicSource.includes('const SOKOBAN_OBJECT_SCALE_DEFAULT = 0.70;'));
+  assert.ok(mosaicSource.includes('const SOKOBAN_ENERGY_GLOW_DEFAULT = { inner: 0.55, outer: 0.82, blur: 0.38 };'));
+  assert.ok(minigameSource.includes('const SOKOBAN_OBJECT_SCALE_DEFAULT = 70;'));
+  assert.ok(minigameSource.includes('const SOKOBAN_ENERGY_GLOW_INNER_DEFAULT = 55;'));
+  assert.ok(minigameSource.includes('const SOKOBAN_ENERGY_GLOW_OUTER_DEFAULT = 82;'));
+  assert.ok(minigameSource.includes('const SOKOBAN_ENERGY_GLOW_BLUR_DEFAULT = 38;'));
+  const minigamePlayerSource = minigameSource.slice(
+    minigameSource.indexOf('function drawSokobanPlayer'),
+    minigameSource.indexOf('function drawPlacementWinningLine')
+  );
+  assert.ok(!minigamePlayerSource.includes("'#2563eb'"));
+}
+
+function testRemovedBoundaryPresetIdsAreNotAdvertised() {
+  const mosaicSource = fs.readFileSync(require.resolve('./mosaic_calculator.js'), 'utf8');
+  const registrySource = fs.readFileSync(require.resolve('../ramified_minigame_presets/presets.js'), 'utf8');
+  const backgroundPresetSource = mosaicSource.slice(
+    mosaicSource.indexOf('const BACKGROUND_SPACE_PRESETS'),
+    mosaicSource.indexOf('const SOKOBAN_ENERGY_GLOW_DEFAULT')
+  );
+  ["id: 'torus'", "id: 'klein-bottle'"].forEach((needle) => {
+    assert.ok(!backgroundPresetSource.includes(needle), `${needle} should not be in Mosaic Calculator background presets`);
+  });
+  ['"id": "torus"', '"id": "klein-bottle"', '"id": "gomoku-classic"', '"id": "gomoku-random-glue"'].forEach((needle) => {
+    assert.ok(!registrySource.includes(needle), `${needle} should not be in the minigame catalog`);
+  });
+  assert.ok(registrySource.includes('"id": "boundary-glue-board"'));
+}
+
 const tests = [
   testFullExportIncludesMarkers,
   testBackgroundFormats,
@@ -383,7 +515,11 @@ const tests = [
   testHolePruningAndToggle,
   testImportStyleMarkers,
   testPieceSetsImportExportAndDecorationToggle,
-  testHoleMarkerDrawingMatchesConnectFour
+  testSokobanDecorationPaletteAndExports,
+  testSokobanWallToggleDoesNotRemoveTile,
+  testHoleMarkerDrawingMatchesConnectFour,
+  testSokobanDecorationDrawingMatchesMinigame,
+  testRemovedBoundaryPresetIdsAreNotAdvertised
 ];
 
 for (const test of tests) {

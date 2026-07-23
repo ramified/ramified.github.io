@@ -10,6 +10,10 @@ const presetDataByKey = Object.fromEntries(
   presetRegistry.map((entry) => [entry.key, require(`../ramified_minigame_presets/${entry.file}`)])
 );
 
+function tile(row, col) {
+  return { row, col };
+}
+
 function registryEntryHasGameType(entry, gameType) {
   const values = [];
   if (Array.isArray(entry.gameTypes)) values.push(...entry.gameTypes);
@@ -42,6 +46,15 @@ function stonesAt(state, cols = state.preset.cols) {
 
 function tokensAt(state, cols = state.preset.cols) {
   return state.tokens
+    .map((item) => {
+      const pos = game.rowCol(item.index, cols);
+      return `${pos.row},${pos.col}:${item.color}`;
+    })
+    .sort();
+}
+
+function discsAt(state, cols = state.preset.cols) {
+  return state.discs
     .map((item) => {
       const pos = game.rowCol(item.index, cols);
       return `${pos.row},${pos.col}:${item.color}`;
@@ -124,11 +137,109 @@ function squareTestGeometry(rows, cols, size = 10) {
   };
 }
 
-function stateWithBoxes(presetId, boxes) {
-  const state = game.createGameState(presetId);
+function boundaryBoardOptions(options = {}) {
+  const rows = options.rows || options.boardRows || 4;
+  const cols = options.cols || options.boardCols || rows;
+  return {
+    boundaryGlueMode: options.mode || options.boundaryGlueMode || game.BOUNDARY_GLUE_MODES.TORUS,
+    boardRows: rows,
+    boardCols: cols,
+    boardSize: rows,
+    glueRng: options.glueRng
+  };
+}
+
+function boundaryBoardState(options = {}) {
+  return game.createGameState(game.BOUNDARY_GLUE_BOARD_PRESET_ID, boundaryBoardOptions(options));
+}
+
+function boundaryGomokuState(options = {}) {
+  return game.createGomokuState(game.BOUNDARY_GLUE_BOARD_PRESET_ID, boundaryBoardOptions(options));
+}
+
+function boundaryGoState(options = {}) {
+  return game.createGoState(game.BOUNDARY_GLUE_BOARD_PRESET_ID, boundaryBoardOptions(options));
+}
+
+function boundaryReversiState(options = {}) {
+  return game.createReversiState(game.BOUNDARY_GLUE_BOARD_PRESET_ID, boundaryBoardOptions(options));
+}
+
+function boundaryConnectFourPreset(options = {}) {
+  return game.generateBoundaryGlueBoardPreset({
+    id: 'boundary-connect-four-test',
+    label: 'boundary connect four test',
+    lattice: 'square',
+    rows: options.rows || 4,
+    cols: options.cols || 4,
+    surface: 'test torus',
+    boundaryGlueBoard: true,
+    boundaryGlueMode: game.BOUNDARY_GLUE_MODES.TORUS,
+    connectFourHoles: []
+  }, {
+    gameMode: game.GAME_MODES.NUMBER_2048,
+    boundaryGlueMode: options.mode || game.BOUNDARY_GLUE_MODES.TORUS,
+    boardRows: options.rows || 4,
+    boardCols: options.cols || 4,
+    glueRng: options.glueRng
+  });
+}
+
+function stateWithBoxes(presetId, boxes, options = {}) {
+  const state = game.createGameState(presetId, options);
   state.boxes = boxes;
   state.nextBoxId = boxes.reduce((max, item) => Math.max(max, item.id + 1), 1);
   return state;
+}
+
+function boundaryStateWithBoxes(boxes, options = {}) {
+  const state = boundaryBoardState(options);
+  state.boxes = boxes;
+  state.nextBoxId = boxes.reduce((max, item) => Math.max(max, item.id + 1), 1);
+  return state;
+}
+
+function sokobanPreset(options = {}) {
+  return game.normalizePresetPayload({
+    id: options.id || 'sokoban-test',
+    label: options.label || 'Sokoban test',
+    gameTypes: ['Sokoban'],
+    lattice: options.lattice || 'square',
+    size: options.size || '3x4',
+    surface: options.surface || 'test room',
+    removed: options.removed || [],
+    cuts: options.cuts || [],
+    glue: options.glue || [],
+    sokoban: options.sokoban || {}
+  });
+}
+
+function readySokobanState(options = {}) {
+  const state = game.beginSokobanGame(sokobanPreset(options));
+  state.phase = 'ready';
+  return state;
+}
+
+function sokobanActorsAt(actors, cols) {
+  return actors
+    .map((actor) => {
+      const pos = game.rowCol(actor.index, cols);
+      return `${pos.row},${pos.col}`;
+    })
+    .sort();
+}
+
+function gluePair(group, first, second, options = {}) {
+  return {
+    group,
+    reversed: !!options.reversed,
+    firstArrowReversed: !!options.firstArrowReversed,
+    secondArrowReversed: Object.prototype.hasOwnProperty.call(options, 'secondArrowReversed')
+      ? !!options.secondArrowReversed
+      : !options.reversed,
+    first,
+    second
+  };
 }
 
 function testInitialSpawnWeights() {
@@ -624,7 +735,7 @@ function testBounceOnlyDirectionsDoNotPreventGameOver() {
 }
 
 function testExplosionModeForFullCycleBoard() {
-  const state = game.createGameState('torus');
+  const state = boundaryBoardState();
   let id = 1;
   for (let row = 1; row <= 4; row += 1) {
     for (let col = 1; col <= 4; col += 1) {
@@ -656,7 +767,7 @@ function testExplosionModeForFullCycleBoard() {
 }
 
 function testDownMoveAfterExplosionDoesNotStack() {
-  const state = game.createGameState('torus');
+  const state = boundaryBoardState();
   state.phase = 'ready';
   state.round = 1;
   state.boxes = [
@@ -829,7 +940,7 @@ function testBouncesAndMovesShareTickAnimation() {
 }
 
 function testGluedBoxRejoinsNextMovementStep() {
-  const state = stateWithBoxes('torus', [
+  const state = boundaryStateWithBoxes([
     box(1, 1, 4, 2),
     box(2, 2, 1, 4)
   ]);
@@ -969,7 +1080,7 @@ function testPushLoopBreaksWhenItReturnsToActorDirection() {
 }
 
 function testTorusGlueLoopExplosion() {
-  const state = stateWithBoxes('torus', [box(1, 1, 1, 2)]);
+  const state = boundaryStateWithBoxes([box(1, 1, 1, 2)]);
   const result = game.simulateRound(state, game.DIRS.E, { spawn: false });
   assert.strictEqual(result.changed, true);
   assert.strictEqual(result.state.boxes.length, 0);
@@ -978,7 +1089,7 @@ function testTorusGlueLoopExplosion() {
 }
 
 function testKleinAndRamifiedSuccessors() {
-  const klein = game.createGameState('klein-bottle');
+  const klein = boundaryBoardState({ mode: game.BOUNDARY_GLUE_MODES.KLEIN_BOTTLE });
   const kleinStep = game.surfaceSuccessor(klein, game.indexOf(1, 4, 4), game.DIRS.E);
   assert.strictEqual(kleinStep.kind, 'glued');
   assert.strictEqual(kleinStep.index, game.indexOf(4, 1, 4));
@@ -1050,6 +1161,24 @@ function gluedBoundaryKeys(preset) {
   return keys;
 }
 
+function glueGroupSummary(gluedEdges) {
+  const groups = new Map();
+  gluedEdges.forEach((pair) => {
+    const group = Number(pair.group);
+    const entry = groups.get(group) || { count: 0, reversedValues: new Set() };
+    entry.count += 1;
+    entry.reversedValues.add(!!pair.reversed);
+    groups.set(group, entry);
+  });
+  return Array.from(groups.entries())
+    .sort((left, right) => left[0] - right[0])
+    .map(([group, entry]) => {
+      const reversed = Array.from(entry.reversedValues);
+      const flag = reversed.length > 1 ? 'mixed' : (reversed[0] ? 'reversed' : 'normal');
+      return `${group}:${entry.count}:${flag}`;
+    });
+}
+
 function testRandomGluePresetCoversBoundary() {
   const rng = game.createRng([0.97, 0.13, 0.53, 0.29, 0.71, 0.41, 0.19]);
   const state = game.createGameState('random-glue-4x4', { glueRng: rng });
@@ -1065,26 +1194,131 @@ function testRandomGluePresetIsDeterministicWithGlueRng() {
   assert.strictEqual(game.PRESETS.find((preset) => preset.id === 'random-glue-4x4').gluedEdges.length, 0);
 }
 
-function testGomokuRandomGluePresetSize() {
-  const classic = game.createGomokuState('gomoku-classic', { boardSize: 9 });
+function testBoundaryGlueBoardPresetSizingAndGlueModes() {
+  const source = game.PRESETS.find((preset) => preset.id === game.BOUNDARY_GLUE_BOARD_PRESET_ID);
+  assert.ok(source && source.boundaryGlueBoard);
+
+  const defaults2048 = game.createGameState(game.BOUNDARY_GLUE_BOARD_PRESET_ID).preset;
+  assert.strictEqual(defaults2048.rows, 4);
+  assert.strictEqual(defaults2048.cols, 4);
+  assert.strictEqual(defaults2048.boundaryGlueMode, game.BOUNDARY_GLUE_MODES.TORUS);
+  assert.strictEqual(defaults2048.gluedEdges.length, 8);
+  assert.deepStrictEqual(glueGroupSummary(defaults2048.gluedEdges), ['0:4:normal', '1:4:normal']);
+
+  const defaultsGomoku = game.createGomokuState(game.BOUNDARY_GLUE_BOARD_PRESET_ID).preset;
+  assert.strictEqual(defaultsGomoku.rows, 15);
+  assert.strictEqual(defaultsGomoku.cols, 15);
+  assert.strictEqual(defaultsGomoku.gluedEdges.length, 30);
+  assert.deepStrictEqual(glueGroupSummary(defaultsGomoku.gluedEdges), ['0:15:normal', '1:15:normal']);
+
+  const defaultsGo = game.createGoState(game.BOUNDARY_GLUE_BOARD_PRESET_ID).preset;
+  assert.strictEqual(defaultsGo.rows, 19);
+  assert.strictEqual(defaultsGo.cols, 19);
+  assert.strictEqual(defaultsGo.gluedEdges.length, 38);
+
+  const defaultsReversi = game.createReversiState(game.BOUNDARY_GLUE_BOARD_PRESET_ID).preset;
+  assert.strictEqual(defaultsReversi.rows, 10);
+  assert.strictEqual(defaultsReversi.cols, 10);
+  assert.strictEqual(defaultsReversi.gluedEdges.length, 20);
+
+  const torusEdges = game.generateTorusBoundaryGlue(3, 5);
+  assert.strictEqual(torusEdges.length, 8);
+  assert.deepStrictEqual(glueGroupSummary(torusEdges), ['0:3:normal', '1:5:normal']);
+  assert.deepStrictEqual(gluedBoundaryKeys({ rows: 3, cols: 5, gluedEdges: torusEdges }), squareBoundaryKeys(3, 5));
+
+  const kleinEdges = game.generateKleinBoundaryGlue(3, 5);
+  assert.strictEqual(kleinEdges.length, 8);
+  assert.deepStrictEqual(glueGroupSummary(kleinEdges), ['0:3:reversed', '1:5:normal']);
+  assert.ok(kleinEdges.slice(0, 3).every((pair) => pair.reversed));
+  assert.strictEqual(kleinEdges[0].first.row, 1);
+  assert.strictEqual(kleinEdges[0].second.row, 3);
+  assert.deepStrictEqual(gluedBoundaryKeys({ rows: 3, cols: 5, gluedEdges: kleinEdges }), squareBoundaryKeys(3, 5));
+
+  const projectiveEdges = game.generateProjectivePlaneBoundaryGlue(3, 5);
+  assert.strictEqual(projectiveEdges.length, 8);
+  assert.deepStrictEqual(glueGroupSummary(projectiveEdges), ['0:3:reversed', '1:5:reversed']);
+  assert.ok(projectiveEdges.every((pair) => pair.reversed));
+  assert.deepStrictEqual(gluedBoundaryKeys({ rows: 3, cols: 5, gluedEdges: projectiveEdges }), squareBoundaryKeys(3, 5));
+
+  const torusState = boundaryBoardState({ rows: 3, cols: 5 });
+  let step = game.surfaceSuccessor(torusState, game.indexOf(2, 5, 5), game.DIRS.E);
+  assert.strictEqual(step.index, game.indexOf(2, 1, 5));
+  assert.strictEqual(step.dir, game.DIRS.E);
+  step = game.surfaceSuccessor(torusState, game.indexOf(1, 4, 5), game.DIRS.N);
+  assert.strictEqual(step.index, game.indexOf(3, 4, 5));
+  assert.strictEqual(step.dir, game.DIRS.N);
+
+  const kleinState = boundaryBoardState({ mode: game.BOUNDARY_GLUE_MODES.KLEIN_BOTTLE, rows: 3, cols: 5 });
+  step = game.surfaceSuccessor(kleinState, game.indexOf(1, 5, 5), game.DIRS.E);
+  assert.strictEqual(step.index, game.indexOf(3, 1, 5));
+  assert.strictEqual(step.dir, game.DIRS.E);
+  step = game.surfaceSuccessor(kleinState, game.indexOf(1, 4, 5), game.DIRS.N);
+  assert.strictEqual(step.index, game.indexOf(3, 4, 5));
+  assert.strictEqual(step.dir, game.DIRS.N);
+
+  const projectiveState = boundaryBoardState({ mode: game.BOUNDARY_GLUE_MODES.RP2, rows: 3, cols: 5 });
+  step = game.surfaceSuccessor(projectiveState, game.indexOf(1, 5, 5), game.DIRS.E);
+  assert.strictEqual(step.index, game.indexOf(3, 1, 5));
+  assert.strictEqual(step.dir, game.DIRS.E);
+  step = game.surfaceSuccessor(projectiveState, game.indexOf(1, 2, 5), game.DIRS.N);
+  assert.strictEqual(step.index, game.indexOf(3, 4, 5));
+  assert.strictEqual(step.dir, game.DIRS.N);
+
+  const open = game.generateBoundaryGlueBoardPreset(source, {
+    gameMode: game.GAME_MODES.GOMOKU,
+    boundaryGlueMode: game.BOUNDARY_GLUE_MODES.OPEN,
+    boardRows: 3,
+    boardCols: 5
+  });
+  assert.strictEqual(open.rows, 3);
+  assert.strictEqual(open.cols, 5);
+  assert.strictEqual(open.gluedEdges.length, 0);
+
+  const randomA = game.generateBoundaryGlueBoardPreset(source, {
+    gameMode: game.GAME_MODES.GOMOKU,
+    boundaryGlueMode: game.BOUNDARY_GLUE_MODES.RANDOM,
+    boardRows: 3,
+    boardCols: 5,
+    glueRng: game.createRng([0.8, 0.1, 0.6, 0.3, 0.95, 0.2])
+  });
+  const randomB = game.generateBoundaryGlueBoardPreset(source, {
+    gameMode: game.GAME_MODES.GOMOKU,
+    boundaryGlueMode: game.BOUNDARY_GLUE_MODES.RANDOM,
+    boardRows: 3,
+    boardCols: 5,
+    glueRng: game.createRng([0.8, 0.1, 0.6, 0.3, 0.95, 0.2])
+  });
+  assert.deepStrictEqual(randomA.gluedEdges, randomB.gluedEdges);
+  assert.strictEqual(glueGroupSummary(randomA.gluedEdges).length, randomA.gluedEdges.length);
+  assert.deepStrictEqual(gluedBoundaryKeys(randomA), squareBoundaryKeys(3, 5));
+
+  const classic = boundaryGomokuState({ mode: game.BOUNDARY_GLUE_MODES.OPEN, rows: 9, cols: 9 });
   assert.strictEqual(classic.preset.rows, 9);
   assert.strictEqual(classic.preset.cols, 9);
-  assert.strictEqual(classic.preset.label, 'classic 9*9');
+  assert.strictEqual(classic.preset.label, 'open/classic 9x9');
   assert.strictEqual(classic.preset.gluedEdges.length, 0);
   assert.strictEqual(game.emptyExistingIndices(classic).length, 81);
 
-  const state = game.createGomokuState('gomoku-random-glue', {
-    boardSize: 9,
+  const state = boundaryGomokuState({
+    mode: game.BOUNDARY_GLUE_MODES.RANDOM,
+    rows: 9,
+    cols: 9,
     glueRng: game.createRng([0.8, 0.1, 0.6, 0.3, 0.95, 0.2])
   });
   assert.strictEqual(state.preset.rows, 9);
   assert.strictEqual(state.preset.cols, 9);
-  assert.strictEqual(state.preset.label, 'random glue 9*9');
+  assert.strictEqual(state.preset.label, 'random boundary glue 9x9');
   assert.strictEqual(state.preset.gluedEdges.length, 18);
   assert.deepStrictEqual(gluedBoundaryKeys(state.preset), squareBoundaryKeys(9, 9));
-  const base = game.PRESETS.find((preset) => preset.id === 'gomoku-random-glue');
-  assert.strictEqual(base.rows, 15);
+  const base = game.PRESETS.find((preset) => preset.id === game.BOUNDARY_GLUE_BOARD_PRESET_ID);
+  assert.ok(base.boundaryGlueBoard);
+  assert.strictEqual(base.rows, 4);
   assert.strictEqual(base.gluedEdges.length, 0);
+
+  const rectangle = boundaryGoState({ rows: 13, cols: 9 });
+  assert.strictEqual(rectangle.preset.rows, 13);
+  assert.strictEqual(rectangle.preset.cols, 9);
+  assert.strictEqual(rectangle.preset.gluedEdges.length, 22);
 
   let ticTacToe = game.beginGomokuGame('gomoku-tic-tac-toe');
   [
@@ -1313,7 +1547,11 @@ function testGoGluedCaptureUsesSurfaceSuccessor() {
 }
 
 function testReversiOpeningFlipsAndScoring() {
-  let state = game.beginReversiGame('gomoku-classic', { boardSize: 8 });
+  let state = game.beginReversiGame(game.BOUNDARY_GLUE_BOARD_PRESET_ID, boundaryBoardOptions({
+    mode: game.BOUNDARY_GLUE_MODES.OPEN,
+    rows: 8,
+    cols: 8
+  }));
   assert.strictEqual(state.preset.rows, 8);
   assert.strictEqual(state.discs.length, 4);
   assert.deepStrictEqual(game.reversiFlipsForMove(state, game.indexOf(3, 4, 8), 'black'), [game.indexOf(4, 4, 8)]);
@@ -1345,6 +1583,44 @@ function testReversiOpeningFlipsAndScoring() {
   assert.strictEqual(result.state.phase, 'gameover');
   assert.strictEqual(result.state.winner, 'black');
   assert.deepStrictEqual(result.state.finalScore, { black: 3, white: 0 });
+}
+
+function testReversiCenteredOpeningDimensions() {
+  const cases = [
+    [8, 8, [
+      '4,4:white', '4,5:black',
+      '5,4:black', '5,5:white'
+    ]],
+    [9, 8, [
+      '4,4:white', '4,5:black',
+      '5,4:black', '5,5:white',
+      '6,4:white', '6,5:black'
+    ]],
+    [8, 9, [
+      '4,4:white', '4,5:black', '4,6:white',
+      '5,4:black', '5,5:white', '5,6:black'
+    ]],
+    [9, 9, [
+      '4,4:white', '4,5:black', '4,6:white',
+      '5,4:black', '5,5:white', '5,6:black',
+      '6,4:white', '6,5:black', '6,6:white'
+    ]]
+  ];
+  cases.forEach(([rows, cols, expected]) => {
+    const sortedExpected = expected.slice().sort();
+    const pure = game.centeredReversiOpening(rows, cols).map((entry) => {
+      const point = game.rowCol(entry.index, cols);
+      return `${point.row},${point.col}:${entry.color}`;
+    }).sort();
+    assert.deepStrictEqual(pure, sortedExpected);
+
+    const state = game.createReversiState(game.BOUNDARY_GLUE_BOARD_PRESET_ID, boundaryBoardOptions({
+      mode: game.BOUNDARY_GLUE_MODES.OPEN,
+      rows,
+      cols
+    }));
+    assert.deepStrictEqual(discsAt(state), sortedExpected);
+  });
 }
 
 function testReversiGluedFlipAndLoopGuard() {
@@ -2165,7 +2441,7 @@ function testImportedSelfGluedDiagonalWinRendersNoAxisSegments() {
 }
 
 function testGomokuCyclicReuseWin() {
-  const state = game.createGomokuState('torus');
+  const state = boundaryGomokuState();
   state.phase = 'ready';
   state.stones = [1, 2, 3, 4].map((col, index) => ({
     id: index + 1,
@@ -2230,7 +2506,7 @@ function testConnectFourDropStopsAtBoundaryAndBlocker() {
 }
 
 function testConnectFourCycleWarning() {
-  const state = game.beginConnectFourGame('torus', {
+  const state = game.beginConnectFourGame(boundaryConnectFourPreset(), {
     fallDir: game.DIRS.E,
     holes: [game.indexOf(1, 1, 4)]
   });
@@ -2243,7 +2519,7 @@ function testConnectFourCycleWarning() {
 }
 
 function testConnectFourDropCarriesGluedRoute() {
-  const state = game.beginConnectFourGame('torus', {
+  const state = game.beginConnectFourGame(boundaryConnectFourPreset(), {
     fallDir: game.DIRS.E,
     holes: [game.indexOf(1, 4, 4)]
   });
@@ -2370,9 +2646,8 @@ function testConnectFourDiagonalTransportsAfterReflectingGlue() {
 
 function testExtraBackgroundPresets() {
   [
+    [game.BOUNDARY_GLUE_BOARD_PRESET_ID, 'boundary glue board'],
     ['twisted-torus', 'twisted torus'],
-    ['gomoku-classic', 'classic n*n'],
-    ['gomoku-random-glue', 'random glue n*n'],
     ['gomoku-tic-tac-toe', 'Tic-tac-toe'],
     ['gomoku-strange-corner', 'strange corner'],
     ['gomoku-small-holes', 'small holes'],
@@ -2399,6 +2674,11 @@ function testExtraBackgroundPresets() {
   ].forEach(([id, label]) => {
     assert.ok(presetRegistry.find((preset) => preset.id === id && preset.label === label));
     assert.ok(game.PRESETS.find((preset) => preset.id === id));
+  });
+
+  ['torus', 'klein-bottle', 'gomoku-classic', 'gomoku-random-glue'].forEach((id) => {
+    assert.ok(!presetRegistry.some((preset) => preset.id === id), `${id} should not be registered`);
+    assert.ok(!game.PRESETS.some((preset) => preset.id === id), `${id} should not be installed`);
   });
 
   assertPresetRegistryDefaults();
@@ -2538,16 +2818,27 @@ function assertPresetRegistryDefaults() {
   assert.ok(presetDefaultFor && typeof presetDefaultFor === 'object' && !Array.isArray(presetDefaultFor));
   assert.ok(Array.isArray(presetRegistry));
   assert.ok(presetRegistry.every((preset) => !Object.prototype.hasOwnProperty.call(preset, 'defaultFor')));
+  assert.deepStrictEqual(presetRegistrySource.gameOrder, ['gomoku', 'go', 'connect-four', '2048', 'reversi', 'chinese-checkers', 'sokoban']);
   const expected = {
-    '2048': 'classic-4x4',
-    gomoku: 'gomoku-random-glue',
-    'connect-four': 'connect-four-6x7',
-    go: 'gomoku-classic',
-    reversi: 'gomoku-classic',
-    'chinese-checkers': 'chinese-checkers-hex-rhombus-9x9'
+    gomoku: game.BOUNDARY_GLUE_BOARD_PRESET_ID,
+    go: 'three-slits',
+    'connect-four': 'connect-four-exchange',
+    '2048': 'ramified-cover',
+    reversi: 'focus-frame',
+    'chinese-checkers': 'octahedron-with-square-holes',
+    sokoban: 'sokoban-square'
   };
   assert.deepStrictEqual(presetDefaultFor, expected);
-  Object.entries(expected).forEach(([mode, id]) => {
+  const expectedResolved = {
+    gomoku: game.BOUNDARY_GLUE_BOARD_PRESET_ID,
+    go: 'three-slits',
+    'connect-four': 'connect-four-exchange',
+    '2048': 'ramified-cover',
+    reversi: 'focus-frame',
+    'chinese-checkers': 'octahedron-with-square-holes',
+    sokoban: 'sokoban-square'
+  };
+  Object.entries(expectedResolved).forEach(([mode, id]) => {
     const entry = presetRegistry.find((preset) => preset.id === id);
     assert.ok(entry, `missing default preset ${id}`);
     assert.ok(registryEntrySupportsMode(entry, mode), `${id} does not support ${mode}`);
@@ -2561,6 +2852,7 @@ function registryEntrySupportsMode(entry, mode) {
   if (mode === 'go') return registryEntryHasGameType(entry, 'Go');
   if (mode === 'reversi') return registryEntryHasGameType(entry, 'Reversi');
   if (mode === 'chinese-checkers') return registryEntryHasGameType(entry, 'Chinese Checkers');
+  if (mode === 'sokoban') return registryEntryHasGameType(entry, 'Sokoban');
   return false;
 }
 
@@ -2619,7 +2911,18 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameHtml.includes('<option value="go">Go</option>'));
   assert.ok(minigameHtml.includes('<option value="reversi">Reversi</option>'));
   assert.ok(minigameHtml.includes('<option value="chinese-checkers">Chinese Checkers</option>'));
+  assert.ok(minigameHtml.includes('<option value="sokoban">Sokoban</option>'));
+  assert.ok(minigameHtml.includes('<option value="__random-game-setup">Random setup</option>'));
+  const gameSelectStart = minigameHtml.indexOf('id="game-mode-select"');
+  const gameSelectEnd = minigameHtml.indexOf('</select>', gameSelectStart);
+  const staticGameOptions = Array.from(minigameHtml.slice(gameSelectStart, gameSelectEnd).matchAll(/<option value="([^"]+)"/g), (match) => match[1]);
+  assert.deepStrictEqual(staticGameOptions, ['gomoku', 'go', 'connect-four', '2048', 'reversi', 'chinese-checkers', 'sokoban', game.RANDOM_GAME_MODE_CHOICE_ID]);
   assert.ok(minigameHtml.includes('<option value="">Loading presets...</option>'));
+  assert.ok(minigameHtml.includes('id="boundary-glue-mode-row"'));
+  assert.ok(minigameHtml.includes('id="boundary-glue-shape-row"'));
+  assert.ok(minigameHtml.includes('id="boundary-glue-rect-row"'));
+  assert.ok(minigameHtml.includes('<option value="rp2">RP^2</option>'));
+  assert.ok(minigameHtml.includes('<option value="random">random boundary glue</option>'));
   assert.ok(minigameHtml.includes('<script src="ramified_minigame_presets/presets.js"></script>'));
   assert.ok(!minigameHtml.includes('<option value="twisted-torus">'));
   assert.ok(presetRegistry.some((preset) => registryEntryHasGameType(preset, '2048')));
@@ -2628,13 +2931,27 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(presetRegistry.some((preset) => registryEntryHasGameType(preset, 'Go')));
   assert.ok(presetRegistry.some((preset) => registryEntryHasGameType(preset, 'Reversi')));
   assert.ok(presetRegistry.some((preset) => registryEntryHasGameType(preset, 'Chinese Checkers')));
+  assert.ok(presetRegistry.some((preset) => registryEntryHasGameType(preset, 'Sokoban')));
   assert.ok(presetRegistry.every((preset) => Array.isArray(preset.gameTypes) && preset.gameTypes.length >= 1));
   const presetDir = require('path').resolve(__dirname, '..', 'ramified_minigame_presets');
   const presetFilesWithGameTypes = fs.readdirSync(presetDir)
     .filter((file) => file.endsWith('.preset.js'))
     .filter((file) => fs.readFileSync(require('path').join(presetDir, file), 'utf8').includes('"gameTypes"'));
-  assert.deepStrictEqual(presetFilesWithGameTypes, []);
+  assert.deepStrictEqual(presetFilesWithGameTypes, [
+    'classic_chinese_checkers.preset.js',
+    'dodecahedron_with_pentagon_holes.preset.js',
+    'focus_frame.preset.js',
+    'octahedron_with_square_glues.preset.js',
+    'octahedron_with_square_holes.preset.js',
+    'three_slits.preset.js',
+    'tunnels.preset.js'
+  ]);
   assert.ok(minigameHtml.includes('id="gomoku-size-row" data-mode-control="gomoku"'));
+  assert.ok(minigameHtml.includes('id="sokoban-object-size" min="54" max="96" step="2" value="70"'));
+  assert.ok(minigameHtml.includes('<output id="sokoban-object-size-value">70%</output>'));
+  assert.ok(minigameHtml.includes('id="sokoban-glow-inner" min="0" max="100" step="5" value="55"'));
+  assert.ok(minigameHtml.includes('id="sokoban-glow-outer" min="0" max="100" step="5" value="82"'));
+  assert.ok(minigameHtml.includes('id="sokoban-glow-blur" min="0" max="100" step="5" value="38"'));
   assert.ok(minigameHtml.includes('id="gomoku-board-size"'));
   assert.ok(minigameHtml.includes('id="gomoku-display-row" data-mode-control="gomoku"'));
   assert.ok(minigameHtml.includes('id="gomoku-display-style"'));
@@ -3254,6 +3571,15 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('go-komi-row', { hidden: true, attributes: { 'data-mode-control': 'go' } }),
     makeElement('go-action-row', { hidden: true, attributes: { 'data-mode-control': 'go' } })
   ];
+  const modeChineseCheckersControls = [
+    makeElement('chinese-checkers-player-row', { hidden: true, attributes: { 'data-mode-control': 'chinese-checkers' } })
+  ];
+  const modeSokobanControls = [
+    makeElement('sokoban-object-size-row', { hidden: true, attributes: { 'data-mode-control': 'sokoban' } }),
+    makeElement('sokoban-glow-inner-row', { hidden: true, attributes: { 'data-mode-control': 'sokoban' } }),
+    makeElement('sokoban-glow-outer-row', { hidden: true, attributes: { 'data-mode-control': 'sokoban' } }),
+    makeElement('sokoban-glow-blur-row', { hidden: true, attributes: { 'data-mode-control': 'sokoban' } })
+  ];
   const canvas = makeElement('mosaic-canvas', {
     parentElement: wrap,
     getContext() {
@@ -3275,12 +3601,20 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('surface-preset-select', { value: options.preset || 'classic-4x4' }),
     makeElement('import-preset-toggle'),
     makeElement('import-preset-tools'),
+    makeElement('import-keep-game-mode', { checked: options.importKeepGameMode !== false }),
     makeElement('import-game-mode', { value: options.importGameMode || options.gameMode || '2048' }),
     makeElement('import-preset-source', { value: options.importSource || 'catalog' }),
     makeElement('import-preset-catalog-row'),
     makeElement('import-preset-catalog'),
     makeElement('import-preset-input'),
     makeElement('apply-import-preset'),
+    makeElement('boundary-glue-mode-row', { hidden: true }),
+    makeElement('boundary-glue-mode', { value: 'torus' }),
+    makeElement('boundary-glue-shape-row', { hidden: true }),
+    makeElement('boundary-glue-shape', { value: 'square' }),
+    makeElement('boundary-glue-rect-row', { hidden: true }),
+    makeElement('boundary-glue-rows', { value: '15' }),
+    makeElement('boundary-glue-cols', { value: '15' }),
     makeElement('gomoku-board-size', { value: '15' }),
     makeElement('gomoku-display-style', { value: 'vertex' }),
     makeElement('go-komi', { value: '6.5' }),
@@ -3290,6 +3624,14 @@ function createHeadlessDomHarness(options = {}) {
       options: ['S', 'E', 'W', 'N', 'SE', 'SW', 'NW', 'NE'].map((value) => ({ value, textContent: '', hidden: false, disabled: false }))
     }),
     makeElement('connect-four-align-fall', { checked: true }),
+    makeElement('sokoban-object-size', { value: '70' }),
+    makeElement('sokoban-object-size-value'),
+    makeElement('sokoban-glow-inner', { value: '55' }),
+    makeElement('sokoban-glow-inner-value'),
+    makeElement('sokoban-glow-outer', { value: '82' }),
+    makeElement('sokoban-glow-outer-value'),
+    makeElement('sokoban-glow-blur', { value: '38' }),
+    makeElement('sokoban-glow-blur-value'),
     makeElement('number-box-style', { value: 'paper' }),
     makeElement('highlight-new-boxes', { checked: true }),
     makeElement('begin-game'),
@@ -3302,6 +3644,7 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('debug-tools'),
     makeElement('debug-tile-value', { value: '128' }),
     makeElement('undo-step'),
+    makeElement('redo-step'),
     makeElement('export-state'),
     makeElement('import-state'),
     makeElement('debug-export-output'),
@@ -3327,6 +3670,8 @@ function createHeadlessDomHarness(options = {}) {
   modeGomokuControls.forEach((control) => elements.set(control.id, control));
   modeConnectFourControls.forEach((control) => elements.set(control.id, control));
   modeGoControls.forEach((control) => elements.set(control.id, control));
+  modeChineseCheckersControls.forEach((control) => elements.set(control.id, control));
+  modeSokobanControls.forEach((control) => elements.set(control.id, control));
 
   const documentListeners = {};
   const windowListeners = {};
@@ -3359,6 +3704,8 @@ function createHeadlessDomHarness(options = {}) {
         if (selector === '[data-mode-control="gomoku"]') return modeGomokuControls;
         if (selector === '[data-mode-control="connect-four"]') return modeConnectFourControls;
         if (selector === '[data-mode-control="go"]') return modeGoControls;
+        if (selector === '[data-mode-control="chinese-checkers"]') return modeChineseCheckersControls;
+        if (selector === '[data-mode-control="sokoban"]') return modeSokobanControls;
         return [];
       }
     },
@@ -3628,6 +3975,62 @@ function testKeyboardAllowsPageScrollOutsideActive2048() {
   assert.strictEqual(harness.elements.get('round-value').textContent, '0');
 }
 
+function testKeyboardShortcutsUndoRedoAndReset() {
+  let harness = createHeadlessDomHarness();
+  let { elements, canvas, documentListeners } = harness;
+  elements.get('game-mode-select').value = 'gomoku';
+  elements.get('game-mode-select').listeners.change();
+  elements.get('begin-game').listeners.click();
+  canvas.listeners.click({ clientX: 57, clientY: 57 });
+  elements.get('export-state').listeners.click();
+  let exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.gameMode, 'gomoku');
+  assert.strictEqual(exported.stones.length, 1);
+  assert.strictEqual(elements.get('redo-step').disabled, true);
+
+  event = pressKey(documentListeners, 'KeyZ');
+  assert.strictEqual(event.defaultPrevented, true);
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.stones.length, 0);
+  assert.strictEqual(elements.get('redo-step').disabled, false);
+
+  event = pressKey(documentListeners, 'KeyY');
+  assert.strictEqual(event.defaultPrevented, true);
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.stones.length, 1);
+  assert.strictEqual(elements.get('undo-step').disabled, false);
+
+  event = pressKey(documentListeners, 'KeyZ', { target: { tagName: 'TEXTAREA' } });
+  assert.strictEqual(event.defaultPrevented, false);
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.stones.length, 1);
+
+  event = pressKey(documentListeners, 'KeyR');
+  assert.strictEqual(event.defaultPrevented, true);
+  assert.strictEqual(elements.get('status-line').textContent, 'reset complete');
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.stones.length, 0);
+  assert.strictEqual(exported.round, 0);
+  assert.strictEqual(elements.get('undo-step').disabled, true);
+  assert.strictEqual(elements.get('redo-step').disabled, true);
+
+  harness = createHeadlessDomHarness();
+  ({ elements, documentListeners } = harness);
+  importHeadlessStatus(elements, singleSquareBoxStatus());
+  pressKey(documentListeners, 'ArrowRight');
+  assert.strictEqual(elements.get('round-value').textContent, '1');
+  event = pressKey(documentListeners, 'KeyR');
+  assert.strictEqual(event.defaultPrevented, true);
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.phase, 'ready');
+  assert.strictEqual(exported.round, 0);
+}
+
 function testSwipeRightMovesSquare2048() {
   const { elements, canvas, moveButtons } = createHeadlessDomHarness();
   assert.strictEqual(typeof canvas.listeners.pointerdown, 'function');
@@ -3746,75 +4149,167 @@ function testHexSwipeDirections() {
 
 function testDynamicPresetCatalogOptions() {
   const { elements } = createHeadlessDomHarness();
+  const gameSelect = elements.get('game-mode-select');
   const select = elements.get('surface-preset-select');
+  assert.deepStrictEqual(
+    gameSelect.options.map((option) => option.value),
+    ['gomoku', 'go', 'connect-four', '2048', 'reversi', 'chinese-checkers', 'sokoban', game.RANDOM_GAME_MODE_CHOICE_ID]
+  );
+  assert.deepStrictEqual(game.orderedCatalogGameModes(), ['gomoku', 'go', 'connect-four', '2048', 'reversi', 'chinese-checkers', 'sokoban']);
   assert.strictEqual(select.disabled, false);
-  assert.strictEqual(select.value, 'classic-4x4');
+  assert.strictEqual(select.value, 'ramified-cover');
+  assert.strictEqual(select.options[0].value, game.RANDOM_PRESET_CHOICE_ID);
+  assert.strictEqual(select.options[0].textContent, 'Random preset');
   assert.deepStrictEqual(
     select.children.filter((child) => child.tagName === 'OPTGROUP').map((child) => child.label),
     ['2048']
   );
-  assert.ok(select.options.some((option) => option.value === 'torus' && option.textContent === 'torus'));
-  assert.ok(!select.options.some((option) => option.value === 'gomoku-random-glue'));
+  assert.ok(select.options.some((option) => option.value === game.BOUNDARY_GLUE_BOARD_PRESET_ID && option.textContent === 'boundary glue board'));
+  assert.ok(select.options.some((option) => option.value === 'ramified-cover'));
+  assert.ok(!select.options.some((option) => ['torus', 'klein-bottle', 'gomoku-classic', 'gomoku-random-glue'].includes(option.value)));
   assert.ok(!select.options.some((option) => option.value === 'connect-four-6x7'));
   assert.ok(!select.options.some((option) => option.value === 'import-preset'));
+  assert.strictEqual(elements.get('boundary-glue-mode-row').hidden, true);
+  assert.strictEqual(elements.get('boundary-glue-shape-row').hidden, true);
+  assert.strictEqual(elements.get('boundary-glue-rect-row').hidden, true);
+  assert.strictEqual(elements.get('boundary-glue-mode').value, 'torus');
+  assert.strictEqual(elements.get('gomoku-board-size').value, '5');
 
-  elements.get('game-mode-select').value = 'gomoku';
-  elements.get('game-mode-select').listeners.change();
-  assert.strictEqual(select.value, 'gomoku-random-glue');
+  gameSelect.value = 'gomoku';
+  gameSelect.listeners.change();
+  assert.strictEqual(select.value, game.BOUNDARY_GLUE_BOARD_PRESET_ID);
   assert.deepStrictEqual(
     select.children.filter((child) => child.tagName === 'OPTGROUP').map((child) => child.label),
     ['Gomoku']
   );
-  assert.ok(select.options.some((option) => option.value === 'gomoku-random-glue'));
-  assert.ok(!select.options.some((option) => option.value === 'torus'));
+  assert.ok(select.options.some((option) => option.value === game.BOUNDARY_GLUE_BOARD_PRESET_ID));
+  assert.ok(select.options.some((option) => option.value === 'gomoku-small-holes'));
+  assert.ok(!select.options.some((option) => ['torus', 'gomoku-classic', 'gomoku-random-glue'].includes(option.value)));
+  assert.strictEqual(elements.get('gomoku-size-row').hidden, false);
+  assert.strictEqual(elements.get('gomoku-board-size').value, '15');
+  assert.strictEqual(elements.get('boundary-glue-mode-row').hidden, false);
+  elements.get('boundary-glue-shape').value = 'rectangle';
+  elements.get('boundary-glue-shape').listeners.change();
+  assert.strictEqual(elements.get('gomoku-size-row').hidden, true);
+  assert.strictEqual(elements.get('boundary-glue-rect-row').hidden, false);
+  elements.get('boundary-glue-rows').value = '8';
+  elements.get('boundary-glue-cols').value = '11';
+  elements.get('boundary-glue-rows').listeners.change();
+  let exported = null;
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.preset.rows, 8);
+  assert.strictEqual(exported.preset.cols, 11);
+  elements.get('boundary-glue-shape').value = 'square';
+  elements.get('boundary-glue-shape').listeners.change();
+  assert.strictEqual(elements.get('boundary-glue-rect-row').hidden, true);
 
-  elements.get('game-mode-select').value = 'connect-four';
-  elements.get('game-mode-select').listeners.change();
-  assert.strictEqual(select.value, 'connect-four-6x7');
+  gameSelect.value = 'connect-four';
+  gameSelect.listeners.change();
+  assert.strictEqual(select.value, 'connect-four-exchange');
   assert.deepStrictEqual(
     select.children.filter((child) => child.tagName === 'OPTGROUP').map((child) => child.label),
     ['Connect Four']
   );
   assert.ok(select.options.some((option) => option.value === 'connect-four-6x7'));
-  assert.ok(!select.options.some((option) => option.value === 'gomoku-random-glue'));
+  assert.ok(!select.options.some((option) => option.value === game.BOUNDARY_GLUE_BOARD_PRESET_ID));
+  assert.strictEqual(elements.get('boundary-glue-mode-row').hidden, true);
 
-  elements.get('game-mode-select').value = 'go';
-  elements.get('game-mode-select').listeners.change();
-  assert.strictEqual(select.value, 'gomoku-classic');
+  gameSelect.value = 'go';
+  gameSelect.listeners.change();
+  assert.strictEqual(select.value, 'three-slits');
   assert.deepStrictEqual(
     select.children.filter((child) => child.tagName === 'OPTGROUP').map((child) => child.label),
     ['Go']
   );
-  assert.ok(select.options.some((option) => option.value === 'gomoku-classic'));
+  assert.ok(select.options.some((option) => option.value === game.BOUNDARY_GLUE_BOARD_PRESET_ID));
+  assert.ok(select.options.some((option) => option.value === 'three-slits'));
   assert.strictEqual(elements.get('go-komi-row').hidden, false);
   assert.strictEqual(elements.get('go-action-row').hidden, false);
-  assert.strictEqual(elements.get('gomoku-size-row').hidden, false);
+  assert.strictEqual(elements.get('gomoku-size-row').hidden, true);
+  assert.strictEqual(elements.get('boundary-glue-mode-row').hidden, true);
+  assert.strictEqual(elements.get('gomoku-board-size').value, '19');
 
-  elements.get('game-mode-select').value = 'reversi';
-  elements.get('game-mode-select').listeners.change();
-  assert.strictEqual(select.value, 'gomoku-classic');
+  gameSelect.value = 'reversi';
+  gameSelect.listeners.change();
+  assert.strictEqual(select.value, 'focus-frame');
   assert.deepStrictEqual(
     select.children.filter((child) => child.tagName === 'OPTGROUP').map((child) => child.label),
     ['Reversi']
   );
-  assert.ok(select.options.some((option) => option.value === 'gomoku-classic'));
-  assert.strictEqual(elements.get('gomoku-board-size').value, '8');
+  assert.ok(select.options.some((option) => option.value === game.BOUNDARY_GLUE_BOARD_PRESET_ID));
+  assert.ok(select.options.some((option) => option.value === 'focus-frame'));
+  assert.strictEqual(elements.get('gomoku-size-row').hidden, true);
+  assert.strictEqual(elements.get('boundary-glue-mode-row').hidden, true);
+  assert.strictEqual(elements.get('gomoku-board-size').value, '10');
   assert.strictEqual(elements.get('go-komi-row').hidden, true);
 
-  elements.get('game-mode-select').value = 'chinese-checkers';
-  elements.get('game-mode-select').listeners.change();
-  assert.strictEqual(select.value, 'chinese-checkers-hex-rhombus-9x9');
+  gameSelect.value = 'chinese-checkers';
+  gameSelect.listeners.change();
+  assert.strictEqual(select.value, 'octahedron-with-square-holes');
   assert.deepStrictEqual(
     select.children.filter((child) => child.tagName === 'OPTGROUP').map((child) => child.label),
     ['Chinese Checkers']
   );
-  assert.ok(select.options.some((option) => option.value === 'chinese-checkers-hex-rhombus-9x9'));
+  assert.ok(select.options.some((option) => option.value === 'octahedron-with-square-holes'));
+  assert.ok(!select.options.some((option) => option.value === game.BOUNDARY_GLUE_BOARD_PRESET_ID));
   assert.ok(!select.options.some((option) => option.value === 'gomoku-classic'));
+
+  gameSelect.value = 'sokoban';
+  gameSelect.listeners.change();
+  assert.strictEqual(select.value, 'sokoban-square');
+  assert.deepStrictEqual(
+    select.children.filter((child) => child.tagName === 'OPTGROUP').map((child) => child.label),
+    ['Sokoban']
+  );
+  assert.strictEqual(elements.get('sokoban-object-size').value, '70');
+  assert.strictEqual(elements.get('sokoban-object-size-value').textContent, '70%');
+  assert.strictEqual(elements.get('sokoban-object-size-row').hidden, false);
+  assert.strictEqual(elements.get('sokoban-glow-inner-value').textContent, '55%');
+  assert.strictEqual(elements.get('sokoban-glow-outer-value').textContent, '82%');
+  assert.strictEqual(elements.get('sokoban-glow-blur-value').textContent, '38%');
+  assert.strictEqual(elements.get('sokoban-glow-inner-row').hidden, false);
+}
+
+function testRandomSetupAndPresetOptions() {
+  let rolls = [0.99, 0];
+  const choice = game.randomSetupChoice(() => rolls.shift());
+  assert.strictEqual(choice.mode, 'sokoban');
+  assert.strictEqual(choice.preset.id, 'sokoban-square');
+  assert.strictEqual(game.randomPresetForMode('sokoban', () => 0.5).id, 'sokoban-square');
+
+  let harness = createHeadlessDomHarness({ randoms: [0.99, 0] });
+  let gameSelect = harness.elements.get('game-mode-select');
+  let presetSelect = harness.elements.get('surface-preset-select');
+  gameSelect.value = game.RANDOM_GAME_MODE_CHOICE_ID;
+  gameSelect.listeners.change();
+  assert.strictEqual(gameSelect.value, 'sokoban');
+  assert.strictEqual(presetSelect.value, 'sokoban-square');
+  assert.ok(![game.RANDOM_GAME_MODE_CHOICE_ID, game.RANDOM_PRESET_CHOICE_ID].includes(gameSelect.value));
+  assert.ok(![game.RANDOM_GAME_MODE_CHOICE_ID, game.RANDOM_PRESET_CHOICE_ID].includes(presetSelect.value));
+
+  harness = createHeadlessDomHarness({ randoms: [0.999] });
+  gameSelect = harness.elements.get('game-mode-select');
+  presetSelect = harness.elements.get('surface-preset-select');
+  gameSelect.value = 'connect-four';
+  gameSelect.listeners.change();
+  presetSelect.value = game.RANDOM_PRESET_CHOICE_ID;
+  presetSelect.listeners.change();
+  assert.strictEqual(gameSelect.value, 'connect-four');
+  assert.ok(registryEntrySupportsMode(presetRegistry.find((preset) => preset.id === presetSelect.value), 'connect-four'));
+  assert.notStrictEqual(presetSelect.value, game.RANDOM_PRESET_CHOICE_ID);
+
+  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  const importGameStart = html.indexOf('id="import-game-mode"');
+  const importGameEnd = html.indexOf('id="import-preset-source"', importGameStart);
+  assert.ok(importGameStart >= 0 && importGameEnd > importGameStart);
+  assert.ok(!html.slice(importGameStart, importGameEnd).includes(game.RANDOM_GAME_MODE_CHOICE_ID));
 }
 
 function testImportExportCardDefaultsAndCatalogImport() {
   const { elements } = createHeadlessDomHarness();
   assert.strictEqual(elements.get('import-game-mode').value, '2048');
+  assert.strictEqual(elements.get('import-keep-game-mode').checked, true);
   assert.strictEqual(elements.get('import-preset-source').value, 'catalog');
   assert.strictEqual(elements.get('import-preset-catalog-row').hidden, false);
   assert.strictEqual(elements.get('import-preset-input').hidden, true);
@@ -3826,6 +4321,7 @@ function testImportExportCardDefaultsAndCatalogImport() {
   assert.ok(elements.get('import-preset-catalog').options.some((option) => option.value === 'connect-four-6x7'));
   assert.ok(!elements.get('import-preset-catalog').options.some((option) => option.value === 'classic-4x4'));
   elements.get('import-preset-catalog').value = 'connect-four-6x7';
+  elements.get('import-keep-game-mode').checked = false;
   elements.get('apply-import-preset').listeners.click();
   assert.strictEqual(elements.get('game-mode-select').value, 'connect-four');
   assert.strictEqual(elements.get('surface-preset-select').value, 'connect-four-6x7');
@@ -3833,11 +4329,13 @@ function testImportExportCardDefaultsAndCatalogImport() {
 
   elements.get('import-game-mode').value = 'go';
   elements.get('import-game-mode').listeners.change();
-  assert.ok(elements.get('import-preset-catalog').options.some((option) => option.value === 'gomoku-classic'));
+  assert.ok(elements.get('import-preset-catalog').options.some((option) => option.value === game.BOUNDARY_GLUE_BOARD_PRESET_ID));
+  assert.ok(!elements.get('import-preset-catalog').options.some((option) => option.value === 'gomoku-classic'));
 
   elements.get('import-game-mode').value = 'reversi';
   elements.get('import-game-mode').listeners.change();
-  assert.ok(elements.get('import-preset-catalog').options.some((option) => option.value === 'gomoku-classic'));
+  assert.ok(elements.get('import-preset-catalog').options.some((option) => option.value === game.BOUNDARY_GLUE_BOARD_PRESET_ID));
+  assert.ok(!elements.get('import-preset-catalog').options.some((option) => option.value === 'gomoku-classic'));
 
   elements.get('import-game-mode').value = 'chinese-checkers';
   elements.get('import-game-mode').listeners.change();
@@ -3846,6 +4344,7 @@ function testImportExportCardDefaultsAndCatalogImport() {
 
 function testImportExportCardPastedPresetMode() {
   const { elements } = createHeadlessDomHarness();
+  elements.get('import-keep-game-mode').checked = false;
   elements.get('import-game-mode').value = 'gomoku';
   elements.get('import-preset-source').value = 'paste';
   elements.get('import-preset-source').listeners.change();
@@ -4129,14 +4628,22 @@ function testHeadlessDomStepControls() {
   [
     canvas,
     makeElement('game-mode-select', { value: '2048' }),
-    makeElement('surface-preset-select', { value: 'torus' }),
+    makeElement('surface-preset-select', { value: game.BOUNDARY_GLUE_BOARD_PRESET_ID }),
     makeElement('import-preset-tools'),
+    makeElement('import-keep-game-mode', { checked: true }),
     makeElement('import-game-mode', { value: '2048' }),
     makeElement('import-preset-source', { value: 'catalog' }),
     makeElement('import-preset-catalog-row'),
     makeElement('import-preset-catalog'),
     makeElement('import-preset-input'),
     makeElement('apply-import-preset'),
+    makeElement('boundary-glue-mode-row', { hidden: true }),
+    makeElement('boundary-glue-mode', { value: 'torus' }),
+    makeElement('boundary-glue-shape-row', { hidden: true }),
+    makeElement('boundary-glue-shape', { value: 'square' }),
+    makeElement('boundary-glue-rect-row', { hidden: true }),
+    makeElement('boundary-glue-rows', { value: '4' }),
+    makeElement('boundary-glue-cols', { value: '4' }),
     makeElement('gomoku-board-size', { value: '15' }),
     makeElement('gomoku-display-style', { value: 'vertex' }),
     makeElement('go-komi', { value: '6.5' }),
@@ -4158,6 +4665,7 @@ function testHeadlessDomStepControls() {
     makeElement('debug-tools'),
     makeElement('debug-tile-value', { value: '128' }),
     makeElement('undo-step'),
+    makeElement('redo-step'),
     makeElement('export-state'),
     makeElement('import-state'),
     makeElement('debug-export-output'),
@@ -4234,7 +4742,7 @@ function testHeadlessDomStepControls() {
 
   assert.strictEqual(typeof canvas.listeners.mousemove, 'function');
   assert.strictEqual(typeof canvas.listeners.mouseleave, 'function');
-  elements.get('surface-preset-select').value = 'torus';
+  elements.get('surface-preset-select').value = game.BOUNDARY_GLUE_BOARD_PRESET_ID;
   elements.get('surface-preset-select').listeners.change();
   canvas.listeners.mousemove({ clientX: 57, clientY: 29 });
   assert.strictEqual(canvas.style.cursor, 'help');
@@ -4386,11 +4894,12 @@ function testHeadlessDomStepControls() {
   elements.get('game-mode-select').value = 'gomoku';
   elements.get('game-mode-select').listeners.change();
   assert.strictEqual(elements.get('status-badge').textContent, 'setup');
-  assert.strictEqual(elements.get('surface-preset-select').value, 'gomoku-random-glue');
+  assert.strictEqual(elements.get('surface-preset-select').value, game.BOUNDARY_GLUE_BOARD_PRESET_ID);
   assert.strictEqual(elements.get('move-row').hidden, true);
   assert.strictEqual(elements.get('box-ui-row').hidden, true);
   assert.strictEqual(elements.get('gomoku-size-row').hidden, false);
   assert.strictEqual(elements.get('gomoku-board-size').value, '15');
+  assert.strictEqual(elements.get('boundary-glue-mode-row').hidden, false);
   assert.strictEqual(elements.get('gomoku-display-row').hidden, false);
   assert.strictEqual(elements.get('step-mode-row').hidden, true);
   assert.strictEqual(elements.get('debug-tile-row').hidden, true);
@@ -4398,7 +4907,7 @@ function testHeadlessDomStepControls() {
   elements.get('surface-preset-select').value = 'gomoku-m4-15x15';
   elements.get('surface-preset-select').listeners.change();
   assert.strictEqual(elements.get('gomoku-size-row').hidden, true);
-  elements.get('surface-preset-select').value = 'gomoku-classic';
+  elements.get('surface-preset-select').value = game.BOUNDARY_GLUE_BOARD_PRESET_ID;
   elements.get('surface-preset-select').listeners.change();
   assert.strictEqual(elements.get('gomoku-size-row').hidden, false);
   elements.get('gomoku-display-style').value = 'vertex';
@@ -4441,8 +4950,10 @@ function testHeadlessDomStepControls() {
       clientY: 57 + ((row - 1) * 58)
     });
   };
-  elements.get('surface-preset-select').value = 'torus';
+  elements.get('surface-preset-select').value = game.BOUNDARY_GLUE_BOARD_PRESET_ID;
   elements.get('surface-preset-select').listeners.change();
+  elements.get('gomoku-board-size').value = '4';
+  elements.get('gomoku-board-size').listeners.change();
   elements.get('begin-game').listeners.click();
   clickCell(1, 1);
   clickCell(2, 1);
@@ -4466,7 +4977,7 @@ function testHeadlessDomStepControls() {
   elements.get('game-mode-select').value = 'connect-four';
   elements.get('game-mode-select').listeners.change();
   assert.strictEqual(elements.get('status-badge').textContent, 'setup');
-  assert.strictEqual(elements.get('surface-preset-select').value, 'connect-four-6x7');
+  assert.strictEqual(elements.get('surface-preset-select').value, 'connect-four-exchange');
   assert.strictEqual(elements.get('connect-four-fall-row').hidden, false);
   assert.strictEqual(elements.get('connect-four-align-row').hidden, false);
   assert.strictEqual(elements.get('connect-four-align-fall').checked, true);
@@ -4514,8 +5025,18 @@ function testHeadlessDomStepControls() {
   assert.strictEqual(elements.get('begin-game').textContent, 'begin the game');
   assert.strictEqual(elements.get('status-badge').textContent, 'setup');
 
-  elements.get('surface-preset-select').value = 'torus';
-  elements.get('surface-preset-select').listeners.change();
+  elements.get('import-preset-source').value = 'paste';
+  elements.get('import-preset-source').listeners.change();
+  elements.get('import-preset-input').value = JSON.stringify({
+    id: 'connect-four-cycle-torus',
+    label: 'Connect Four cycle torus',
+    lattice: 'square',
+    size: '4x4',
+    surface: 'cycle torus',
+    glue: 'g0:1..4,4,E=1..4,1,W; g1:1,1..4,N=4,1..4,S'
+  });
+  elements.get('apply-import-preset').listeners.click();
+  assert.strictEqual(elements.get('surface-preset-select').value, 'imported-preset');
   elements.get('connect-four-fall-dir').value = 'E';
   elements.get('connect-four-fall-dir').listeners.change();
   canvas.listeners.click({ clientX: 57, clientY: 57 });
@@ -4538,6 +5059,177 @@ function testHeadlessDomStepControls() {
   elements.get('export-state').listeners.click();
   exported = JSON.parse(elements.get('debug-export-output').value);
   assert.deepStrictEqual(exported.cycleHoles, []);
+}
+
+function testSokobanPresetRegistryAndSetup() {
+  const state = game.createSokobanState('sokoban-square');
+  assert.strictEqual(state.gameMode, game.GAME_MODES.SOKOBAN);
+  assert.strictEqual(state.players.length, 1);
+  assert.strictEqual(state.boxes.length, 1);
+  assert.strictEqual(state.targets.size, 1);
+  assert.ok(state.walls.size > 0);
+  assert.strictEqual(state.removed.has(game.indexOf(1, 1, state.preset.cols)), false);
+  assert.strictEqual(game.sokobanSetupIssue(state), '');
+  assert.strictEqual(game.gameModeFromPresetGroup(state.preset), game.GAME_MODES.SOKOBAN);
+}
+
+function testSokobanPlayerMovementAndMultiPlayerTransaction() {
+  let state = readySokobanState({
+    sokoban: {
+      players: [tile(2, 2)],
+      boxes: [tile(3, 3)],
+      targets: [tile(3, 4)]
+    }
+  });
+  let result = game.moveSokobanPlayers(state, game.DIRS.N);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['1,2']);
+  assert.strictEqual(result.state.moves, 1);
+  assert.strictEqual(result.state.pushes, 0);
+
+  state = readySokobanState({
+    sokoban: {
+      players: [tile(2, 1), tile(2, 2)],
+      boxes: [tile(3, 3)],
+      targets: [tile(3, 4)]
+    }
+  });
+  result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['2,2', '2,3']);
+
+  state = readySokobanState({
+    sokoban: {
+      players: [tile(1, 1), tile(2, 1)],
+      boxes: [tile(3, 3)],
+      targets: [tile(3, 4)]
+    }
+  });
+  result = game.moveSokobanPlayers(state, game.DIRS.W);
+  assert.strictEqual(result.changed, false);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['1,1', '2,1']);
+}
+
+function testSokobanWallsAndBoxPushes() {
+  let state = readySokobanState({
+    sokoban: {
+      players: [tile(2, 2)],
+      boxes: [tile(3, 3)],
+      targets: [tile(3, 4)],
+      walls: [tile(2, 3)]
+    }
+  });
+  let result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, false);
+  assert.strictEqual(state.removed.has(game.indexOf(2, 3, state.preset.cols)), false);
+
+  state = readySokobanState({
+    sokoban: {
+      players: [tile(2, 1)],
+      boxes: [tile(2, 2)],
+      targets: [tile(2, 3)]
+    }
+  });
+  result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['2,2']);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.boxes, result.state.preset.cols), ['2,3']);
+  assert.strictEqual(result.state.phase, 'gameover');
+  assert.strictEqual(result.state.winner, 'solved');
+
+  state = readySokobanState({
+    sokoban: {
+      players: [tile(2, 1)],
+      boxes: [tile(2, 2)],
+      targets: [tile(3, 3)],
+      walls: [tile(2, 3)]
+    }
+  });
+  result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, false);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.boxes, result.state.preset.cols), ['2,2']);
+}
+
+function testSokobanGluedEdgeMovementAndPush() {
+  let state = readySokobanState({
+    size: '2x2',
+    glue: [
+      gluePair(1, { row: 1, col: 2, dir: game.DIRS.E }, { row: 1, col: 1, dir: game.DIRS.W })
+    ],
+    sokoban: {
+      players: [tile(1, 2)],
+      boxes: [tile(2, 2)],
+      targets: [tile(2, 1)]
+    }
+  });
+  let result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['1,1']);
+
+  state = readySokobanState({
+    size: '1x2',
+    glue: [
+      gluePair(1, { row: 1, col: 2, dir: game.DIRS.E }, { row: 1, col: 1, dir: game.DIRS.W })
+    ],
+    sokoban: {
+      players: [tile(1, 1)],
+      boxes: [tile(1, 2)],
+      targets: [tile(1, 1)]
+    }
+  });
+  result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['1,2']);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.boxes, result.state.preset.cols), ['1,1']);
+  assert.strictEqual(result.state.phase, 'gameover');
+  assert.strictEqual(game.sokobanSolved(result.state), true);
+}
+
+function testSokobanStatusRoundTripAndCompactImport() {
+  const compact = game.normalizePresetPayload({
+    id: 'sokoban-compact',
+    label: 'Sokoban Compact',
+    gameTypes: ['Sokoban'],
+    size: '3x4',
+    sokoban: {
+      players: '2,1; 2,2',
+      boxes: '2,3',
+      targets: '2,4',
+      walls: '1,1',
+      ice: '1,2',
+      energyBridges: '1,3'
+    }
+  });
+  assert.deepStrictEqual(compact.sokoban.players, [tile(2, 1), tile(2, 2)]);
+  assert.deepStrictEqual(compact.sokoban.walls, [tile(1, 1)]);
+
+  const state = game.beginSokobanGame(compact);
+  const result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, true);
+  const summary = game.stateSummary(result.state);
+  assert.strictEqual(summary.gameMode, game.GAME_MODES.SOKOBAN);
+  assert.strictEqual(summary.pushes, 1);
+  assert.deepStrictEqual(summary.walls, [game.indexOf(1, 1, compact.cols)]);
+
+  const imported = game.gameStateFromDebugImportPayload({
+    gameMode: 'sokoban',
+    preset: compact,
+    phase: 'ready',
+    players: [{ id: 10, row: 2, col: 1 }],
+    boxes: [{ id: 20, row: 2, col: 3 }],
+    targets: [tile(2, 4)],
+    walls: [tile(1, 1)],
+    moves: 4,
+    pushes: 2
+  }).state;
+  assert.strictEqual(imported.gameMode, game.GAME_MODES.SOKOBAN);
+  assert.deepStrictEqual(sokobanActorsAt(imported.players, imported.preset.cols), ['2,1']);
+  assert.deepStrictEqual(sokobanActorsAt(imported.boxes, imported.preset.cols), ['2,3']);
+  assert.strictEqual(imported.nextPlayerId, 11);
+  assert.strictEqual(imported.nextBoxId, 21);
+  assert.strictEqual(imported.moves, 4);
+  assert.strictEqual(imported.pushes, 2);
+  assert.strictEqual(imported.walls.has(game.indexOf(1, 1, imported.preset.cols)), true);
 }
 
 function run() {
@@ -4576,10 +5268,11 @@ function run() {
   testGenus2PresetFromExport();
   testRandomGluePresetCoversBoundary();
   testRandomGluePresetIsDeterministicWithGlueRng();
-  testGomokuRandomGluePresetSize();
+  testBoundaryGlueBoardPresetSizingAndGlueModes();
   testGoCaptureSuicideKoAndScoring();
   testGoGluedCaptureUsesSurfaceSuccessor();
   testReversiOpeningFlipsAndScoring();
+  testReversiCenteredOpeningDimensions();
   testReversiGluedFlipAndLoopGuard();
   testReversiDiagonalFlipsAndAnimationMetadata();
   testChineseCheckersSetupMovesJumpsAndWin();
@@ -4611,6 +5304,11 @@ function run() {
   testConnectFourHorizontalWin();
   testConnectFourDiagonalWinDetection();
   testConnectFourDiagonalTransportsAfterReflectingGlue();
+  testSokobanPresetRegistryAndSetup();
+  testSokobanPlayerMovementAndMultiPlayerTransaction();
+  testSokobanWallsAndBoxPushes();
+  testSokobanGluedEdgeMovementAndPush();
+  testSokobanStatusRoundTripAndCompactImport();
   testExtraBackgroundPresets();
   testKeyboardMapping();
   testHexMovePadUsesArrowGlyphs();
@@ -4634,12 +5332,14 @@ function run() {
   testHexKeyboardStateClearsOnKeyupAndBlur();
   testKeyboardPreventsScrollWhileBusyWithoutMovingAgain();
   testKeyboardAllowsPageScrollOutsideActive2048();
+  testKeyboardShortcutsUndoRedoAndReset();
   testSwipeRightMovesSquare2048();
   testShortSwipeDoesNotMove();
   testSwipeSuppressesFollowupClick();
   testSwipeIgnoredOutsideAccepting2048();
   testHexSwipeDirections();
   testDynamicPresetCatalogOptions();
+  testRandomSetupAndPresetOptions();
   testImportExportCardDefaultsAndCatalogImport();
   testImportExportCardPastedPresetMode();
   testNewPlacementGameStatusRoundTrips();

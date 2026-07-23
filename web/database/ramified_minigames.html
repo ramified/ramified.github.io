@@ -1190,18 +1190,37 @@
         <div class="mosaic-inline-row">
           <span class="input-label">Game</span>
           <select id="game-mode-select" aria-label="Game">
-            <option value="2048" selected>2048</option>
             <option value="gomoku">Gomoku</option>
-            <option value="connect-four">Connect Four</option>
             <option value="go">Go</option>
+            <option value="connect-four">Connect Four</option>
+            <option value="2048" selected>2048</option>
             <option value="reversi">Reversi</option>
             <option value="chinese-checkers">Chinese Checkers</option>
+            <option value="sokoban">Sokoban</option>
+            <option value="__random-game-setup">Random setup</option>
           </select>
         </div>
         <div class="mosaic-inline-row">
           <span class="input-label">Preset</span>
           <select id="surface-preset-select" aria-label="Surface preset">
             <option value="">Loading presets...</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="boundary-glue-mode-row" hidden>
+          <span class="input-label">Boundary</span>
+          <select id="boundary-glue-mode" aria-label="Boundary glue mode">
+            <option value="torus" selected>torus</option>
+            <option value="klein-bottle">Klein bottle</option>
+            <option value="rp2">RP^2</option>
+            <option value="open">open/classic</option>
+            <option value="random">random boundary glue</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="boundary-glue-shape-row" hidden>
+          <span class="input-label">Shape</span>
+          <select id="boundary-glue-shape" aria-label="Boundary board shape">
+            <option value="square" selected>square</option>
+            <option value="rectangle">rectangle</option>
           </select>
         </div>
         <div class="mosaic-inline-row" id="gomoku-display-row" data-mode-control="gomoku" hidden>
@@ -1213,7 +1232,14 @@
         </div>
         <div class="mosaic-inline-row" id="gomoku-size-row" data-mode-control="gomoku" hidden>
           <span class="input-label">Board n</span>
-          <input id="gomoku-board-size" type="number" min="4" max="25" step="1" value="15" aria-label="Board size">
+          <input id="gomoku-board-size" type="number" min="2" max="25" step="1" value="15" aria-label="Square board size">
+        </div>
+        <div class="mosaic-inline-row" id="boundary-glue-rect-row" hidden>
+          <span class="input-label">Rows / cols</span>
+          <span class="background-slider-controls">
+            <input id="boundary-glue-rows" type="number" min="2" max="25" step="1" value="15" aria-label="Boundary board rows">
+            <input id="boundary-glue-cols" type="number" min="2" max="25" step="1" value="15" aria-label="Boundary board columns">
+          </span>
         </div>
         <div class="mosaic-inline-row" id="go-komi-row" data-mode-control="go" hidden>
           <span class="input-label">Komi</span>
@@ -1317,6 +1343,7 @@
         <div class="mosaic-debug-actions">
           <button class="btn" id="debug-toggle" type="button" aria-pressed="false">debug</button>
           <button class="btn" id="undo-step" type="button" disabled>undo</button>
+          <button class="btn" id="redo-step" type="button" disabled>redo</button>
         </div>
         <div class="mosaic-debug-panel" id="debug-tools" hidden>
           <div class="mosaic-debug-step-row" id="step-mode-row" data-mode-control="2048">
@@ -1348,6 +1375,34 @@
               <option value="524288">524288</option>
               <option value="1048576">1048576</option>
             </select>
+          </div>
+          <div class="mosaic-debug-step-row" id="sokoban-object-size-row" data-mode-control="sokoban" hidden>
+            <span class="input-label">Object size</span>
+            <span class="background-slider-controls">
+              <input type="range" id="sokoban-object-size" min="54" max="96" step="2" value="70" aria-label="Sokoban object size">
+              <output id="sokoban-object-size-value">70%</output>
+            </span>
+          </div>
+          <div class="mosaic-debug-step-row" id="sokoban-glow-inner-row" data-mode-control="sokoban" hidden>
+            <span class="input-label">Inner glow</span>
+            <span class="background-slider-controls">
+              <input type="range" id="sokoban-glow-inner" min="0" max="100" step="5" value="55" aria-label="Energy Bridge inner glow">
+              <output id="sokoban-glow-inner-value">55%</output>
+            </span>
+          </div>
+          <div class="mosaic-debug-step-row" id="sokoban-glow-outer-row" data-mode-control="sokoban" hidden>
+            <span class="input-label">Outer glow</span>
+            <span class="background-slider-controls">
+              <input type="range" id="sokoban-glow-outer" min="0" max="100" step="5" value="82" aria-label="Energy Bridge outer glow">
+              <output id="sokoban-glow-outer-value">82%</output>
+            </span>
+          </div>
+          <div class="mosaic-debug-step-row" id="sokoban-glow-blur-row" data-mode-control="sokoban" hidden>
+            <span class="input-label">Glow blur</span>
+            <span class="background-slider-controls">
+              <input type="range" id="sokoban-glow-blur" min="0" max="100" step="5" value="38" aria-label="Energy Bridge glow blur">
+              <output id="sokoban-glow-blur-value">38%</output>
+            </span>
           </div>
         </div>
         <div class="mosaic-inline-row" id="move-row" data-mode-control="2048">
@@ -1391,12 +1446,13 @@
           <div class="mosaic-inline-row">
             <span class="input-label">Import game</span>
             <select id="import-game-mode" aria-label="Import game">
-              <option value="2048" selected>2048</option>
               <option value="gomoku">Gomoku</option>
-              <option value="connect-four">Connect Four</option>
               <option value="go">Go</option>
+              <option value="connect-four">Connect Four</option>
+              <option value="2048" selected>2048</option>
               <option value="reversi">Reversi</option>
               <option value="chinese-checkers">Chinese Checkers</option>
+              <option value="sokoban">Sokoban</option>
             </select>
           </div>
           <div class="mosaic-inline-row">

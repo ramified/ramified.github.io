@@ -3,16 +3,31 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = presets;
   if (root) root.RAMIFIED_MINIGAME_PRESETS = presets;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {
+  const defaultForEntries = [
+    ["gomoku", "boundary-glue-board"],
+    ["go", "three-slits"],
+    ["connect-four", "connect-four-exchange"],
+    ["2048", "ramified-cover"],
+    ["reversi", "focus-frame"],
+    ["chinese-checkers", "octahedron-with-square-holes"],
+    ["sokoban", "classic-fans"]
+  ];
   return {
-    defaultFor: {
-      "2048": "ramified-cover",
-      "gomoku": "small holes",
-      "connect-four": "connect-four-exchange",
-      "go": "three-slits",
-      "reversi": "focus-frame",
-      "chinese-checkers": "octahedron-with-square-holes"
-    },
+    gameOrder: defaultForEntries.map(([mode]) => mode),
+    defaultFor: Object.fromEntries(defaultForEntries),
     presets: [
+    {
+      "gameTypes": [
+        "2048",
+        "Gomoku",
+        "Go",
+        "Reversi"
+      ],
+      "id": "boundary-glue-board",
+      "label": "boundary glue board",
+      "key": "boundary_glue_board",
+      "file": "boundary_glue_board.preset.js"
+    },
     {
       "gameTypes": [
         "2048"
@@ -57,24 +72,6 @@
       "label": "half-glued",
       "key": "half_glued",
       "file": "half_glued.preset.js"
-    },
-    {
-      "gameTypes": [
-        "2048"
-      ],
-      "id": "torus",
-      "label": "torus",
-      "key": "torus",
-      "file": "torus.preset.js"
-    },
-    {
-      "gameTypes": [
-        "2048"
-      ],
-      "id": "klein-bottle",
-      "label": "Klein bottle",
-      "key": "klein_bottle",
-      "file": "klein_bottle.preset.js"
     },
     {
       "gameTypes": [
@@ -129,26 +126,6 @@
       "label": "hex classic 4*4",
       "key": "hex_classic_4x4",
       "file": "hex_classic_4x4.preset.js"
-    },
-    {
-      "gameTypes": [
-        "Gomoku",
-        "Go",
-        "Reversi"
-      ],
-      "id": "gomoku-classic",
-      "label": "classic n*n",
-      "key": "gomoku_classic",
-      "file": "gomoku_classic.preset.js"
-    },
-    {
-      "gameTypes": [
-        "Gomoku"
-      ],
-      "id": "gomoku-random-glue",
-      "label": "random glue n*n",
-      "key": "gomoku_random_glue",
-      "file": "gomoku_random_glue.preset.js"
     },
     {
       "gameTypes": [
@@ -412,7 +389,25 @@
       "label": "focus frame",
       "key": "focus_frame",
       "file": "focus_frame.preset.js"
-    }
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "classic-fans",
+      "label": "classic_fans",
+      "key": "classic_fans",
+      "file": "classic_fans.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "classic-fans-glue",
+      "label": "classic_fans_glue",
+      "key": "classic_fans_glue",
+      "file": "classic_fans_glue.preset.js"
+    },
     ]
   };
 });

@@ -9,19 +9,20 @@ Example:
 `presets.js` row:
 
 ```js
-{ id: 'torus', label: 'torus', key: 'torus', file: 'torus.preset.js', gameTypes: ['2048'] }
+{ id: 'boundary-glue-board', label: 'boundary glue board', key: 'boundary_glue_board', file: 'boundary_glue_board.preset.js', gameTypes: ['2048', 'Gomoku', 'Go', 'Reversi'] }
 ```
 
-`torus.preset.js` data:
+`boundary_glue_board.preset.js` data:
 
 ```js
 {
-  id: 'torus',
-  label: 'torus',
+  id: 'boundary-glue-board',
+  label: 'boundary glue board',
   lattice: 'square',
   size: '4x4',
-  surface: 'M_1',
-  glue: 'g3:1..4,4,E=1..4,1,W; g4:1,1..4,N=4,1..4,S'
+  surface: 'torus',
+  boundaryGlueBoard: true,
+  boundaryGlueMode: 'torus'
 }
 ```
 

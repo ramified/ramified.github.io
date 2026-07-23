@@ -982,6 +982,10 @@
       cursor: inherit;
     }
 
+    .decoration-palette-row[hidden] {
+      display: none !important;
+    }
+
     .tile-drag-ghost {
       position: fixed;
       width: 58px;
@@ -1279,12 +1283,18 @@
             </select>
           </div>
           <div class="mosaic-inline-row" id="background-decoration-row" hidden>
-            <span class="input-label">Decoration</span>
+            <span class="input-label">Piece color</span>
             <span class="background-decoration-controls">
-              <select id="background-decoration-kind" aria-label="Decoration kind">
+              <select id="background-decoration-kind" aria-label="Decoration kind" hidden>
                 <option value="input-hole">Input hole</option>
                 <option value="start">Start piece</option>
                 <option value="target">Goal</option>
+                <option value="sokoban-player">Sokoban player</option>
+                <option value="sokoban-box">Sokoban box</option>
+                <option value="sokoban-target">Sokoban target</option>
+                <option value="sokoban-wall">Sokoban wall</option>
+                <option value="sokoban-ice">Icy ground</option>
+                <option value="sokoban-energy-bridge">Energy Bridge</option>
                 <option value="clear">Clear</option>
               </select>
               <select id="background-decoration-color" aria-label="Decoration color">
@@ -1296,6 +1306,10 @@
                 <option value="green">green</option>
               </select>
             </span>
+          </div>
+          <div class="input-method decoration-palette-row" id="background-decoration-palette-row" hidden>
+            <span class="input-label">Decoration palette</span>
+            <div id="background-decoration-palette" class="tile-palette-grid" aria-label="Decoration palette"></div>
           </div>
           <div class="mosaic-inline-row" id="background-billiard-row">
             <span class="input-label">Geodesic</span>
@@ -1653,6 +1667,7 @@
                 <option value="2048" selected>2048</option>
                 <option value="Gomoku">Gomoku</option>
                 <option value="Connect Four">Connect Four</option>
+                <option value="Sokoban">Sokoban</option>
               </select>
             </label>
             <label class="opt-row"><input type="checkbox" id="export-preset-advanced"> advanced</label>

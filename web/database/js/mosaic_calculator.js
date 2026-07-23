@@ -79,7 +79,7 @@
     DSL: 'dsl',
     VERBOSE: 'verbose'
   };
-  const EXPORT_GROUP_FALLBACKS = ['2048', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers'];
+  const EXPORT_GROUP_FALLBACKS = ['2048', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers', 'Sokoban'];
   const KNOT_PRESETS = [
     {
       id: 'hopf-link',
@@ -596,206 +596,6 @@
       }
     },
     {
-      id: 'torus',
-      label: 'torus',
-      payload: {
-        name: 'torus background preset',
-        lattice: 'square',
-        diagramType: 'link',
-        boundary: 'glued',
-        wrappedViewMode: 'periodic',
-        inputMode: 'background',
-        backgroundAction: 'billiard',
-        backgroundMultiEdges: true,
-        backgroundChainLength: 4,
-        backgroundChainReversed: true,
-        backgroundCuspMarkerScale: 0.7,
-        backgroundBilliardSpeed: 0.2,
-        backgroundBilliardTrailLength: 170,
-        backgroundBilliardArrowLength: 20,
-        backgroundBilliardHitMarkers: 'boundary',
-        rows: 4,
-        cols: 4,
-        removedTiles: [],
-        cutEdges: [],
-        gluedEdges: [
-          {
-            group: 3,
-            orientation: 'opposite',
-            reversed: false,
-            firstArrowReversed: false,
-            secondArrowReversed: true,
-            first: { row: 4, col: 4, dir: 0, edge: 'E' },
-            second: { row: 4, col: 1, dir: 2, edge: 'W' }
-          },
-          {
-            group: 3,
-            orientation: 'opposite',
-            reversed: false,
-            firstArrowReversed: false,
-            secondArrowReversed: true,
-            first: { row: 3, col: 4, dir: 0, edge: 'E' },
-            second: { row: 3, col: 1, dir: 2, edge: 'W' }
-          },
-          {
-            group: 3,
-            orientation: 'opposite',
-            reversed: false,
-            firstArrowReversed: false,
-            secondArrowReversed: true,
-            first: { row: 2, col: 4, dir: 0, edge: 'E' },
-            second: { row: 2, col: 1, dir: 2, edge: 'W' }
-          },
-          {
-            group: 3,
-            orientation: 'opposite',
-            reversed: false,
-            firstArrowReversed: false,
-            secondArrowReversed: true,
-            first: { row: 1, col: 4, dir: 0, edge: 'E' },
-            second: { row: 1, col: 1, dir: 2, edge: 'W' }
-          },
-          {
-            group: 4,
-            orientation: 'opposite',
-            reversed: false,
-            firstArrowReversed: false,
-            secondArrowReversed: true,
-            first: { row: 1, col: 3, dir: 3, edge: 'N' },
-            second: { row: 4, col: 3, dir: 1, edge: 'S' }
-          },
-          {
-            group: 4,
-            orientation: 'opposite',
-            reversed: false,
-            firstArrowReversed: false,
-            secondArrowReversed: true,
-            first: { row: 1, col: 2, dir: 3, edge: 'N' },
-            second: { row: 4, col: 2, dir: 1, edge: 'S' }
-          },
-          {
-            group: 4,
-            orientation: 'opposite',
-            reversed: false,
-            firstArrowReversed: false,
-            secondArrowReversed: true,
-            first: { row: 1, col: 1, dir: 3, edge: 'N' },
-            second: { row: 4, col: 1, dir: 1, edge: 'S' }
-          },
-          {
-            group: 4,
-            orientation: 'opposite',
-            reversed: false,
-            firstArrowReversed: false,
-            secondArrowReversed: true,
-            first: { row: 1, col: 4, dir: 3, edge: 'N' },
-            second: { row: 4, col: 4, dir: 1, edge: 'S' }
-          }
-        ],
-        tiles: Array(16).fill(null)
-      }
-    },
-    {
-      id: 'klein-bottle',
-      label: 'Klein bottle',
-      payload: {
-        name: 'Klein bottle background preset',
-        lattice: 'square',
-        diagramType: 'link',
-        boundary: 'glued',
-        wrappedViewMode: 'periodic',
-        inputMode: 'background',
-        backgroundAction: 'billiard',
-        backgroundMultiEdges: true,
-        backgroundChainLength: 4,
-        backgroundChainReversed: true,
-        backgroundCuspMarkerScale: 0.7,
-        backgroundBilliardSpeed: 0.2,
-        backgroundBilliardTrailLength: 170,
-        backgroundBilliardArrowLength: 20,
-        backgroundBilliardHitMarkers: 'boundary',
-        rows: 4,
-        cols: 4,
-        removedTiles: [],
-        cutEdges: [],
-        gluedEdges: [
-          {
-            group: 3,
-            orientation: 'reversed',
-            reversed: true,
-            firstArrowReversed: true,
-            secondArrowReversed: true,
-            first: { row: 1, col: 4, dir: 0, edge: 'E' },
-            second: { row: 4, col: 1, dir: 2, edge: 'W' }
-          },
-          {
-            group: 3,
-            orientation: 'reversed',
-            reversed: true,
-            firstArrowReversed: true,
-            secondArrowReversed: true,
-            first: { row: 2, col: 4, dir: 0, edge: 'E' },
-            second: { row: 3, col: 1, dir: 2, edge: 'W' }
-          },
-          {
-            group: 3,
-            orientation: 'reversed',
-            reversed: true,
-            firstArrowReversed: true,
-            secondArrowReversed: true,
-            first: { row: 3, col: 4, dir: 0, edge: 'E' },
-            second: { row: 2, col: 1, dir: 2, edge: 'W' }
-          },
-          {
-            group: 3,
-            orientation: 'reversed',
-            reversed: true,
-            firstArrowReversed: true,
-            secondArrowReversed: true,
-            first: { row: 4, col: 4, dir: 0, edge: 'E' },
-            second: { row: 1, col: 1, dir: 2, edge: 'W' }
-          },
-          {
-            group: 4,
-            orientation: 'opposite',
-            reversed: false,
-            firstArrowReversed: false,
-            secondArrowReversed: true,
-            first: { row: 1, col: 3, dir: 3, edge: 'N' },
-            second: { row: 4, col: 3, dir: 1, edge: 'S' }
-          },
-          {
-            group: 4,
-            orientation: 'opposite',
-            reversed: false,
-            firstArrowReversed: false,
-            secondArrowReversed: true,
-            first: { row: 1, col: 2, dir: 3, edge: 'N' },
-            second: { row: 4, col: 2, dir: 1, edge: 'S' }
-          },
-          {
-            group: 4,
-            orientation: 'opposite',
-            reversed: false,
-            firstArrowReversed: false,
-            secondArrowReversed: true,
-            first: { row: 1, col: 1, dir: 3, edge: 'N' },
-            second: { row: 4, col: 1, dir: 1, edge: 'S' }
-          },
-          {
-            group: 4,
-            orientation: 'opposite',
-            reversed: false,
-            firstArrowReversed: false,
-            secondArrowReversed: true,
-            first: { row: 1, col: 4, dir: 3, edge: 'N' },
-            second: { row: 4, col: 4, dir: 1, edge: 'S' }
-          }
-        ],
-        tiles: Array(16).fill(null)
-      }
-    },
-    {
       id: 'ramified-cover',
       label: 'ramified cover',
       payload: {
@@ -936,6 +736,17 @@
   const DEGENERATION_FORCE_DURATION_MS = 5000;
   const PRESET_PIECE_COLORS = ['black', 'white', 'red', 'yellow', 'blue', 'green'];
   const PRESET_PIECE_COLOR_ORDER = new Map(PRESET_PIECE_COLORS.map((color, index) => [color, index]));
+  const SOKOBAN_DECORATION_FIELDS = {
+    'sokoban-player': 'players',
+    'sokoban-box': 'boxes',
+    'sokoban-target': 'targets',
+    'sokoban-wall': 'walls',
+    'sokoban-ice': 'ice',
+    'sokoban-energy-bridge': 'energyBridges'
+  };
+  const SOKOBAN_DECORATION_ORDER = ['targets', 'ice', 'energyBridges', 'walls', 'boxes', 'players'];
+  const SOKOBAN_OBJECT_SCALE_DEFAULT = 0.70;
+  const SOKOBAN_ENERGY_GLOW_DEFAULT = { inner: 0.55, outer: 0.82, blur: 0.38 };
 
   const state = {
     rows: 5,
@@ -950,6 +761,7 @@
     gluedEdges: [],
     inputHoles: new Set(),
     presetPieces: [],
+    sokoban: createEmptySokobanDecorations(),
     pendingGlueEdge: null,
     pendingGlueChains: null,
     backgroundMultiEdges: true,
@@ -1004,6 +816,7 @@
     editMode: 'rotate',
     backgroundDecorationKind: 'input-hole',
     backgroundDecorationColor: 'black',
+    selectedDecorationPaletteId: 'input-hole',
     vertexDecorations: {},
     halfEdgeDecorations: {},
     standardDualGraphInput: null,
@@ -1164,6 +977,8 @@
     refs.backgroundDecorationRow = document.getElementById('background-decoration-row');
     refs.backgroundDecorationKind = document.getElementById('background-decoration-kind');
     refs.backgroundDecorationColor = document.getElementById('background-decoration-color');
+    refs.backgroundDecorationPaletteRow = document.getElementById('background-decoration-palette-row');
+    refs.backgroundDecorationPalette = document.getElementById('background-decoration-palette');
     refs.backgroundMultiEdgeRow = document.getElementById('background-multi-edge-row');
     refs.backgroundMultiEdges = document.getElementById('background-multi-edges');
     refs.backgroundBeginSecondChain = document.getElementById('background-begin-second-chain');
@@ -1432,7 +1247,9 @@
     if (refs.backgroundDecorationKind) {
       refs.backgroundDecorationKind.addEventListener('change', () => {
         state.backgroundDecorationKind = normalizeBackgroundDecorationKind(refs.backgroundDecorationKind.value);
+        state.selectedDecorationPaletteId = state.backgroundDecorationKind;
         syncBackgroundModeControls();
+        renderDecorationPalette();
       });
     }
     if (refs.backgroundDecorationColor) {
@@ -2074,6 +1891,7 @@
 
   function bindPalette() {
     renderTilePalette();
+    renderDecorationPalette();
   }
 
   function renderTilePalette() {
@@ -2109,6 +1927,60 @@
       button.addEventListener('click', () => selectPaletteTile(entry));
       button.addEventListener('pointerdown', (event) => beginPaletteDrag(event, entry));
     });
+  }
+
+  function renderDecorationPalette() {
+    if (!refs.backgroundDecorationPalette) return;
+    refs.backgroundDecorationPalette.textContent = '';
+    const selectedKind = normalizeBackgroundDecorationKind(state.backgroundDecorationKind);
+    state.backgroundDecorationKind = selectedKind;
+    state.selectedDecorationPaletteId = selectedKind;
+    backgroundDecorationPreferences().forEach((entry) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'tile-swatch';
+      button.title = entry.label;
+      button.setAttribute('aria-label', entry.label);
+      button.dataset.decorationKind = entry.kind;
+      if (entry.kind === selectedKind) button.classList.add('active');
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      button.appendChild(canvas);
+      refs.backgroundDecorationPalette.appendChild(button);
+      drawDecorationPreview(canvas, entry.kind);
+
+      button.addEventListener('click', () => selectDecorationPaletteEntry(entry));
+    });
+  }
+
+  function backgroundDecorationPreferences() {
+    return [
+      { id: 'clear', kind: 'clear', label: 'clear decoration' },
+      { id: 'input-hole', kind: 'input-hole', label: 'input hole' },
+      { id: 'start', kind: 'start', label: 'start piece' },
+      { id: 'target', kind: 'target', label: 'goal' },
+      { id: 'sokoban-player', kind: 'sokoban-player', label: 'Sokoban player' },
+      { id: 'sokoban-box', kind: 'sokoban-box', label: 'Sokoban box' },
+      { id: 'sokoban-target', kind: 'sokoban-target', label: 'Sokoban target' },
+      { id: 'sokoban-wall', kind: 'sokoban-wall', label: 'Sokoban wall' },
+      { id: 'sokoban-ice', kind: 'sokoban-ice', label: 'icy ground' },
+      { id: 'sokoban-energy-bridge', kind: 'sokoban-energy-bridge', label: 'Energy Bridge' }
+    ];
+  }
+
+  function selectDecorationPaletteEntry(entry) {
+    const kind = normalizeBackgroundDecorationKind(entry && entry.kind);
+    state.backgroundDecorationKind = kind;
+    state.selectedDecorationPaletteId = kind;
+    if (refs.backgroundDecorationKind) refs.backgroundDecorationKind.value = kind;
+    syncBackgroundModeControls();
+    if (refs.backgroundDecorationPalette) {
+      refs.backgroundDecorationPalette.querySelectorAll('.tile-swatch').forEach((button) => {
+        button.classList.toggle('active', button.dataset.decorationKind === kind);
+      });
+    }
   }
 
   function getTilePreferences() {
@@ -2578,6 +2450,7 @@
     state.gluedEdges = [];
     state.inputHoles = new Set();
     state.presetPieces = [];
+    state.sokoban = createEmptySokobanDecorations();
     clearPendingGlueEdge();
     state.backgroundChainLength = 1;
     state.backgroundChainReversed = false;
@@ -2637,6 +2510,7 @@
     const oldGluedEdges = cloneGluedEdges();
     const oldInputHoles = cloneInputHoleSet();
     const oldPresetPieces = clonePresetPieces();
+    const oldSokoban = cloneSokobanDecorations();
     const oldBoundaryMode = state.boundaryMode;
 
     state.rows = rows;
@@ -2681,11 +2555,13 @@
       : reshapeGluedEdges(oldGluedEdges, oldRows, oldCols, rows, cols);
     state.inputHoles = reshapeRemovedTiles(oldInputHoles, oldRows, oldCols, rows, cols);
     state.presetPieces = reshapePresetPieces(oldPresetPieces, oldRows, oldCols, rows, cols);
+    state.sokoban = reshapeSokobanDecorations(oldSokoban, oldRows, oldCols, rows, cols);
     clearPendingGlueEdge();
     pruneCutEdges();
     pruneGluedEdges();
     pruneInputHoles();
     prunePresetPieces();
+    pruneSokobanDecorations();
     state.standardDualGraphInput = null;
     syncAllInputs(rows, cols, state.lattice, state.boundaryMode);
     renderTilePalette();
@@ -2719,6 +2595,15 @@
         if (oldRemovedTiles.has(oldIndex)) next.add(indexOf(row, col, cols));
       }
     }
+    return next;
+  }
+
+  function reshapeSokobanDecorations(oldSokoban, oldRows, oldCols, rows, cols) {
+    const next = createEmptySokobanDecorations();
+    const source = cloneSokobanDecorations(oldSokoban);
+    SOKOBAN_DECORATION_ORDER.forEach((field) => {
+      next[field] = reshapeRemovedTiles(source[field], oldRows, oldCols, rows, cols);
+    });
     return next;
   }
 
@@ -2955,18 +2840,21 @@
     const holes = minigameHoleRefsForExport();
     const pieces = presetPiecesForExport();
     const pieceSets = pieceSetsForExport();
+    const sokoban = sokobanDecorationsForExport();
     if (holes.length) {
       payload.preset.connectFourHoles = holes;
       payload.preset.inputHoles = holes;
     }
     if (pieceSets) payload.preset.pieceSets = pieceSets;
     if (pieces.length) payload.preset.pieces = pieces;
+    if (sokoban) payload.preset.sokoban = sokoban;
     return payload;
   }
 
   function buildMinigamePresetExport() {
     const metadata = currentExportPresetMetadata();
     const pieceSets = pieceSetsForExport();
+    const sokoban = sokobanDecorationsForExport();
     return {
       id: metadata.id,
       label: metadata.label,
@@ -2979,7 +2867,8 @@
       inputHoles: minigameHoleRefsForExport(),
       cutEdges: minigameCutEdgesForExport(),
       gluedEdges: minigameGluedEdgesForExport(),
-      ...(pieceSets ? { pieceSets } : {})
+      ...(pieceSets ? { pieceSets } : {}),
+      ...(sokoban ? { sokoban } : {})
     };
   }
 
@@ -3000,11 +2889,13 @@
     const glue = compactGlueListForExport(minigameGluedEdgesForExport(), state.lattice);
     const pieces = presetPiecesForExport();
     const pieceSets = pieceSetsForExport();
+    const sokoban = compactSokobanDecorationsForExport();
     if (removed) compact.removed = removed;
     if (cuts) compact.cuts = cuts;
     if (glue) compact.glue = glue;
     if (holes) compact.holes = holes;
     if (pieceSets) compact.pieceSets = pieceSets;
+    if (sokoban) compact.sokoban = sokoban;
     if (options.includePieces !== false && pieces.length) compact.pieces = pieces;
     return compact;
   }
@@ -3171,6 +3062,7 @@
       : (oldLattice === latticeName ? reshapeGluedEdges(oldGluedEdges, oldRows, oldCols, rows, cols) : []);
     state.inputHoles = new Set();
     state.presetPieces = [];
+    state.sokoban = createEmptySokobanDecorations();
     state.wrappedViewMode = 'periodic';
     state.inputMode = 'import';
     state.backgroundMultiEdges = true;
@@ -3734,6 +3626,7 @@
     const oldRemovedTiles = cloneRemovedTileSet();
     const oldCutEdges = cloneCutEdgeSet();
     const oldGluedEdges = cloneGluedEdges();
+    const oldSokoban = cloneSokobanDecorations();
     const rows = clampInt(payload.rows, MIN_BOARD, MAX_BOARD, state.rows);
     const cols = clampInt(payload.cols, MIN_BOARD, MAX_BOARD, state.cols);
     const latticeName = LATTICES[payload.lattice] ? payload.lattice : state.lattice;
@@ -3858,6 +3751,9 @@
     state.presetPieces = hasImportedPresetPieces(payload)
       ? importPresetPieces(payload, rows, cols)
       : reshapePresetPieces(clonePresetPieces(), oldRows, oldCols, rows, cols);
+    state.sokoban = hasImportedSokobanDecorations(payload)
+      ? importSokobanDecorations(payload, rows, cols)
+      : reshapeSokobanDecorations(oldSokoban, oldRows, oldCols, rows, cols);
     state.vertexDecorations = importVertexDecorations(payload, rows, cols);
     state.halfEdgeDecorations = importHalfEdgeDecorations(payload);
     clearRemovedTileContents();
@@ -3865,6 +3761,7 @@
     pruneGluedEdges();
     pruneInputHoles();
     prunePresetPieces();
+    pruneSokobanDecorations();
 
     syncAllInputs(rows, cols, state.lattice, state.boundaryMode);
     refs.showErrors.checked = state.showErrors;
@@ -3944,6 +3841,57 @@
     return collectImportedPresetValues(payload, ['pieces'], 'pieces', rows, cols)
       .map((piece) => normalizePresetPiece(piece, rows, cols))
       .filter(Boolean);
+  }
+
+  function importSokobanDecorations(payload, rows, cols) {
+    const result = createEmptySokobanDecorations();
+    Object.entries(SOKOBAN_DECORATION_FIELDS).forEach(([kind, field]) => {
+      result[field] = importSokobanTileSet(payload, sokobanFieldImportKeys(field), rows, cols);
+    });
+    return result;
+  }
+
+  function importSokobanTileSet(payload, keys, rows, cols) {
+    const indices = new Set();
+    collectImportedSokobanValues(payload, keys, rows, cols).forEach((entry) => {
+      const index = importedEndpointIndex(entry, rows, cols);
+      if (index >= 0) indices.add(index);
+    });
+    return indices;
+  }
+
+  function collectImportedSokobanValues(payload, keys, rows, cols) {
+    if (!payload || typeof payload !== 'object') return [];
+    const containers = [payload];
+    if (payload.preset && typeof payload.preset === 'object') containers.push(payload.preset);
+    if (payload.backgroundSpace && typeof payload.backgroundSpace === 'object') containers.push(payload.backgroundSpace);
+    const values = [];
+    containers.forEach((container) => {
+      const sokoban = container.sokoban && typeof container.sokoban === 'object' && !Array.isArray(container.sokoban)
+        ? container.sokoban
+        : null;
+      const sources = sokoban ? [sokoban, container] : [container];
+      sources.forEach((source) => {
+        keys.forEach((key) => {
+          if (!Object.prototype.hasOwnProperty.call(source, key)) return;
+          const value = source[key];
+          if (Array.isArray(value)) values.push(...value);
+          else if (typeof value === 'string') values.push(...parseCompactTileRefs(value, rows, cols));
+          else if (value && typeof value === 'object') values.push(value);
+        });
+      });
+    });
+    return values;
+  }
+
+  function sokobanFieldImportKeys(field) {
+    if (field === 'players') return ['players', 'player', 'sokobanPlayers', 'sokobanPlayer'];
+    if (field === 'boxes') return ['boxes', 'box', 'sokobanBoxes', 'sokobanBox'];
+    if (field === 'targets') return ['targets', 'target', 'goals', 'goal', 'sokobanTargets', 'sokobanGoals'];
+    if (field === 'walls') return ['walls', 'wall', 'sokobanWalls', 'sokobanWall'];
+    if (field === 'ice') return ['ice', 'icyGround', 'icy', 'sokobanIce'];
+    if (field === 'energyBridges') return ['energyBridges', 'energyBridge', 'bridges', 'bridge', 'sokobanEnergyBridges'];
+    return [field];
   }
 
   function importPieceSetsAsPresetPieces(payload, rows, cols) {
@@ -4242,6 +4190,19 @@
     return hasImportedPresetValue(payload, ['pieceSets', 'pieces']);
   }
 
+  function hasImportedSokobanDecorations(payload) {
+    if (!payload || typeof payload !== 'object') return false;
+    const containers = [payload];
+    if (payload.preset && typeof payload.preset === 'object') containers.push(payload.preset);
+    if (payload.backgroundSpace && typeof payload.backgroundSpace === 'object') containers.push(payload.backgroundSpace);
+    return containers.some((container) => {
+      if (container.sokoban && typeof container.sokoban === 'object' && !Array.isArray(container.sokoban)) return true;
+      return SOKOBAN_DECORATION_ORDER.some((field) => (
+        sokobanFieldImportKeys(field).some((key) => Object.prototype.hasOwnProperty.call(container, key))
+      ));
+    });
+  }
+
   function hasImportedPresetValue(payload, keys) {
     if (!payload || typeof payload !== 'object') return false;
     const containers = [payload];
@@ -4488,6 +4449,7 @@
     state.gluedEdges = [];
     state.inputHoles = new Set();
     state.presetPieces = [];
+    state.sokoban = createEmptySokobanDecorations();
     clearPendingGlueEdge();
     state.vertexDecorations = {};
     state.halfEdgeDecorations = {};
@@ -4884,6 +4846,27 @@
     return state.inputHoles instanceof Set ? new Set(state.inputHoles) : new Set();
   }
 
+  function createEmptySokobanDecorations() {
+    return {
+      players: new Set(),
+      boxes: new Set(),
+      targets: new Set(),
+      walls: new Set(),
+      ice: new Set(),
+      energyBridges: new Set()
+    };
+  }
+
+  function cloneSokobanDecorations(source = state.sokoban) {
+    const result = createEmptySokobanDecorations();
+    SOKOBAN_DECORATION_ORDER.forEach((field) => {
+      const values = source && source[field];
+      if (values instanceof Set) result[field] = new Set(values);
+      else if (Array.isArray(values)) result[field] = new Set(values.filter((index) => Number.isInteger(index)));
+    });
+    return result;
+  }
+
   function clonePresetPieces() {
     return Array.isArray(state.presetPieces) ? state.presetPieces.map((piece) => ({ ...piece })) : [];
   }
@@ -5174,6 +5157,7 @@
     state.tiles[index] = null;
     if (state.inputHoles instanceof Set) state.inputHoles.delete(index);
     removePresetPiecesAtIndex(index);
+    removeSokobanDecorationsAtIndex(index);
     delete state.vertexDecorations[index];
     removeCutEdgesForTile(index);
     removeGluedEdgesForTile(index);
@@ -5204,6 +5188,13 @@
     state.presetPieces = state.presetPieces.filter((piece) => importedEndpointIndex(piece, state.rows, state.cols) !== index);
   }
 
+  function removeSokobanDecorationsAtIndex(index) {
+    if (!state.sokoban || typeof state.sokoban !== 'object') return;
+    SOKOBAN_DECORATION_ORDER.forEach((field) => {
+      if (state.sokoban[field] instanceof Set) state.sokoban[field].delete(index);
+    });
+  }
+
   function pruneInputHoles() {
     if (!(state.inputHoles instanceof Set)) {
       state.inputHoles = new Set();
@@ -5222,6 +5213,19 @@
     state.presetPieces = clonePresetPieces()
       .map((piece) => normalizePresetPiece(piece, state.rows, state.cols))
       .filter((piece) => piece && !state.removedTiles.has(indexOf(piece.row - 1, piece.col - 1, state.cols)));
+  }
+
+  function pruneSokobanDecorations() {
+    const next = createEmptySokobanDecorations();
+    const source = cloneSokobanDecorations();
+    SOKOBAN_DECORATION_ORDER.forEach((field) => {
+      source[field].forEach((index) => {
+        if (Number.isInteger(index) && index >= 0 && index < state.rows * state.cols && !state.removedTiles.has(index)) {
+          next[field].add(index);
+        }
+      });
+    });
+    state.sokoban = next;
   }
 
   function toggleInputHole(index, options = {}) {
@@ -5246,10 +5250,14 @@
     clearStandardDualGraphInput();
     if (kind === 'clear') {
       const beforePieces = Array.isArray(state.presetPieces) ? state.presetPieces.length : 0;
+      const beforeSokoban = sokobanDecorationCount();
       removePresetPiecesAtIndex(index);
+      removeSokobanDecorationsAtIndex(index);
       const hadHole = state.inputHoles instanceof Set && state.inputHoles.has(index);
       if (hadHole) state.inputHoles.delete(index);
-      if (beforePieces === (state.presetPieces || []).length && !hadHole) return false;
+      if (beforePieces === (state.presetPieces || []).length && beforeSokoban === sokobanDecorationCount() && !hadHole) return false;
+    } else if (isSokobanDecorationKind(kind)) {
+      if (!toggleSokobanDecoration(index, kind)) return false;
     } else {
       const color = normalizePresetPieceColor(state.backgroundDecorationColor) || 'black';
       if (!togglePresetPieceDecoration(index, kind, color)) return false;
@@ -5257,6 +5265,34 @@
     state.edits += 1;
     if (options.update !== false) updateReport(false);
     return true;
+  }
+
+  function toggleSokobanDecoration(index, kind) {
+    const field = SOKOBAN_DECORATION_FIELDS[kind];
+    if (!field) return false;
+    if (!state.sokoban || typeof state.sokoban !== 'object') state.sokoban = createEmptySokobanDecorations();
+    if (!(state.sokoban[field] instanceof Set)) state.sokoban[field] = new Set();
+    const set = state.sokoban[field];
+    if (set.has(index)) {
+      set.delete(index);
+      return true;
+    }
+    if (field === 'walls') {
+      removeSokobanDecorationsAtIndex(index);
+    } else {
+      if (state.sokoban.walls instanceof Set) state.sokoban.walls.delete(index);
+      if (field === 'players' && state.sokoban.boxes instanceof Set) state.sokoban.boxes.delete(index);
+      if (field === 'boxes' && state.sokoban.players instanceof Set) state.sokoban.players.delete(index);
+    }
+    set.add(index);
+    return true;
+  }
+
+  function sokobanDecorationCount() {
+    if (!state.sokoban || typeof state.sokoban !== 'object') return 0;
+    return SOKOBAN_DECORATION_ORDER.reduce((sum, field) => (
+      sum + (state.sokoban[field] instanceof Set ? state.sokoban[field].size : 0)
+    ), 0);
   }
 
   function togglePresetPieceDecoration(index, role, color) {
@@ -14779,6 +14815,7 @@
     drawSeifertBoundaryComponents(ctx);
     drawBackgroundBoundaries(ctx);
     drawInputHoleMarkers(ctx, palette);
+    drawSokobanDecorationMarkers(ctx);
     drawPresetPieceMarkers(ctx);
     ctx.restore();
   }
@@ -14894,6 +14931,229 @@
       ctx.stroke();
     });
     ctx.restore();
+  }
+
+  function drawSokobanDecorationMarkers(ctx) {
+    const sokoban = cloneSokobanDecorations();
+    if (!sokobanDecorationCount()) return;
+    ctx.save();
+    SOKOBAN_DECORATION_ORDER.forEach((field) => {
+      const kind = sokobanDecorationKindForField(field);
+      sokoban[field].forEach((index) => {
+        if (!tileExists(index)) return;
+        const center = tileCenterPoint(index);
+        if (!center) return;
+        drawSokobanDecorationShape(ctx, center, geometry.radius, kind, getLattice());
+      });
+    });
+    ctx.restore();
+  }
+
+  function sokobanDecorationKindForField(field) {
+    const entry = Object.entries(SOKOBAN_DECORATION_FIELDS).find((item) => item[1] === field);
+    return entry ? entry[0] : '';
+  }
+
+  function drawSokobanDecorationShape(ctx, point, radius, kind, lattice = getLattice()) {
+    const normalized = normalizeBackgroundDecorationKind(kind);
+    if (normalized === 'sokoban-target') {
+      ctx.save();
+      ctx.strokeStyle = '#c47f17';
+      ctx.fillStyle = 'rgba(196,127,23,0.14)';
+      ctx.lineWidth = Math.max(1.5, radius * 0.08);
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius * 0.42, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(point.x - radius * 0.28, point.y);
+      ctx.lineTo(point.x + radius * 0.28, point.y);
+      ctx.moveTo(point.x, point.y - radius * 0.28);
+      ctx.lineTo(point.x, point.y + radius * 0.28);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    if (normalized === 'sokoban-ice') {
+      const half = radius * SOKOBAN_OBJECT_SCALE_DEFAULT;
+      ctx.save();
+      ctx.fillStyle = 'rgba(142,202,230,0.36)';
+      ctx.strokeStyle = 'rgba(33,94,122,0.45)';
+      ctx.lineWidth = Math.max(1, radius * 0.045);
+      drawScaledTilePath(ctx, point, half, lattice);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(33,94,122,0.48)';
+      ctx.lineWidth = Math.max(1, radius * 0.035);
+      for (let offset = -0.34; offset <= 0.36; offset += 0.34) {
+        ctx.beginPath();
+        ctx.moveTo(point.x - half * 0.58, point.y + half * offset);
+        ctx.lineTo(point.x + half * 0.58, point.y + half * (offset - 0.24));
+        ctx.stroke();
+      }
+      ctx.restore();
+      return;
+    }
+    if (normalized === 'sokoban-energy-bridge') {
+      drawSokobanCrate(ctx, point, radius, SOKOBAN_OBJECT_SCALE_DEFAULT, { glow: SOKOBAN_ENERGY_GLOW_DEFAULT });
+      return;
+    }
+    if (normalized === 'sokoban-wall') {
+      ctx.save();
+      drawScaledTilePath(ctx, point, radius * SOKOBAN_OBJECT_SCALE_DEFAULT, lattice);
+      ctx.fillStyle = '#6c6257';
+      ctx.strokeStyle = '#2f2118';
+      ctx.lineWidth = Math.max(1.3, radius * 0.055);
+      ctx.fill();
+      ctx.stroke();
+      drawSokobanBrickPattern(ctx, point, radius, SOKOBAN_OBJECT_SCALE_DEFAULT, lattice);
+      ctx.restore();
+      return;
+    }
+    if (normalized === 'sokoban-box') {
+      drawSokobanCrate(ctx, point, radius, SOKOBAN_OBJECT_SCALE_DEFAULT);
+      return;
+    }
+    if (normalized === 'sokoban-player') {
+      drawSokobanMatchstickPlayer(ctx, point, radius);
+    }
+  }
+
+  function drawSokobanCrate(ctx, point, radius, scale, options = {}) {
+    const side = radius * 2 * scale;
+    const glow = options.glow && typeof options.glow === 'object'
+      ? options.glow
+      : (options.glow ? SOKOBAN_ENERGY_GLOW_DEFAULT : null);
+    const clampUnit = (value) => Math.max(0, Math.min(1, Number(value) || 0));
+    ctx.save();
+    if (glow && glow.outer > 0) {
+      ctx.shadowColor = `rgba(34,197,94,${clampUnit(glow.outer).toFixed(2)})`;
+      ctx.shadowBlur = Math.max(1, radius * clampUnit(glow.blur));
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+    }
+    roundedRectPath(ctx, point.x - side / 2, point.y - side / 2, side, side, Math.min(5, radius * 0.12));
+    ctx.fillStyle = '#b8793f';
+    ctx.strokeStyle = '#5d351e';
+    ctx.lineWidth = Math.max(1.5, radius * 0.055);
+    ctx.fill();
+    ctx.stroke();
+    if (glow && glow.inner > 0) {
+      const innerAlpha = clampUnit(glow.inner);
+      ctx.save();
+      ctx.shadowBlur = 0;
+      roundedRectPath(ctx, point.x - side / 2, point.y - side / 2, side, side, Math.min(5, radius * 0.12));
+      ctx.clip();
+      const gradient = ctx.createRadialGradient
+        ? ctx.createRadialGradient(point.x, point.y, side * 0.08, point.x, point.y, side * 0.55)
+        : null;
+      if (gradient && typeof gradient.addColorStop === 'function') {
+        gradient.addColorStop(0, `rgba(34,197,94,${(innerAlpha * 0.52).toFixed(2)})`);
+        gradient.addColorStop(0.62, `rgba(34,197,94,${(innerAlpha * 0.22).toFixed(2)})`);
+        gradient.addColorStop(1, 'rgba(34,197,94,0)');
+        ctx.fillStyle = gradient;
+      } else {
+        ctx.fillStyle = `rgba(34,197,94,${(innerAlpha * 0.24).toFixed(2)})`;
+      }
+      ctx.fillRect(point.x - side / 2, point.y - side / 2, side, side);
+      ctx.restore();
+    }
+    if (glow && glow.outer > 0) {
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = `rgba(34,197,94,${Math.min(0.95, clampUnit(glow.outer) + 0.06).toFixed(2)})`;
+      ctx.lineWidth = Math.max(1.2, radius * 0.045);
+      roundedRectPath(ctx, point.x - side / 2, point.y - side / 2, side, side, Math.min(5, radius * 0.12));
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(255,253,248,0.36)';
+    ctx.lineWidth = Math.max(1, radius * 0.04);
+    ctx.beginPath();
+    ctx.moveTo(point.x - side * 0.32, point.y - side * 0.32);
+    ctx.lineTo(point.x + side * 0.32, point.y + side * 0.32);
+    ctx.moveTo(point.x + side * 0.32, point.y - side * 0.32);
+    ctx.lineTo(point.x - side * 0.32, point.y + side * 0.32);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawSokobanBrickPattern(ctx, point, radius, scale, lattice) {
+    const half = radius * scale;
+    ctx.save();
+    drawScaledTilePath(ctx, point, half, lattice);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(255,253,248,0.35)';
+    ctx.lineWidth = Math.max(1, radius * 0.035);
+    const rows = 4;
+    const rowHeight = (half * 2) / rows;
+    for (let row = 1; row < rows; row += 1) {
+      const y = point.y - half + rowHeight * row;
+      ctx.beginPath();
+      ctx.moveTo(point.x - half, y);
+      ctx.lineTo(point.x + half, y);
+      ctx.stroke();
+    }
+    for (let row = 0; row < rows; row += 1) {
+      const y0 = point.y - half + rowHeight * row;
+      const y1 = y0 + rowHeight;
+      const offset = row % 2 === 0 ? 0 : rowHeight * 0.55;
+      for (let x = point.x - half + offset; x < point.x + half; x += rowHeight * 1.1) {
+        ctx.beginPath();
+        ctx.moveTo(x, y0);
+        ctx.lineTo(x, y1);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawSokobanMatchstickPlayer(ctx, point, radius) {
+    const headY = point.y - radius * 0.38;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    const drawBodyPath = () => {
+      ctx.beginPath();
+      ctx.moveTo(point.x, point.y - radius * 0.2);
+      ctx.lineTo(point.x, point.y + radius * 0.28);
+      ctx.moveTo(point.x - radius * 0.36, point.y - radius * 0.02);
+      ctx.lineTo(point.x + radius * 0.36, point.y - radius * 0.02);
+      ctx.moveTo(point.x, point.y + radius * 0.28);
+      ctx.lineTo(point.x - radius * 0.34, point.y + radius * 0.56);
+      ctx.moveTo(point.x, point.y + radius * 0.28);
+      ctx.lineTo(point.x + radius * 0.34, point.y + radius * 0.56);
+    };
+
+    ctx.strokeStyle = 'rgba(255,253,248,0.92)';
+    ctx.lineWidth = Math.max(4, radius * 0.16);
+    drawBodyPath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(point.x, headY, radius * 0.22, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#111111';
+    ctx.fillStyle = '#fffdf8';
+    ctx.lineWidth = Math.max(2, radius * 0.075);
+    ctx.beginPath();
+    ctx.arc(point.x, headY, radius * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    drawBodyPath();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawScaledTilePath(ctx, point, radius, lattice) {
+    const points = lattice && lattice.shape === 'hex'
+      ? hexPoints(point.x, point.y, radius, lattice)
+      : squarePoints(point.x, point.y, radius);
+    ctx.beginPath();
+    points.forEach((vertex, index) => {
+      if (index === 0) ctx.moveTo(vertex.x, vertex.y);
+      else ctx.lineTo(vertex.x, vertex.y);
+    });
+    ctx.closePath();
   }
 
   function drawPresetPieceMarkers(ctx) {
@@ -18340,6 +18600,80 @@
     else drawPipe(ctx, { x: cx, y: cy }, tile, palette, radius);
   }
 
+  function drawDecorationPreview(canvas, kind) {
+    const ctx = canvas.getContext('2d');
+    const palette = getPalette();
+    const lattice = getLattice();
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const radius = 24;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawScaledTilePath(ctx, { x: cx, y: cy }, radius * 0.86, lattice);
+    ctx.fillStyle = '#fffdf8';
+    ctx.strokeStyle = palette.border;
+    ctx.lineWidth = 1;
+    ctx.fill();
+    ctx.stroke();
+    const normalized = normalizeBackgroundDecorationKind(kind);
+    if (normalized === 'clear') {
+      ctx.save();
+      ctx.strokeStyle = '#b23a48';
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - radius * 0.42, cy - radius * 0.42);
+      ctx.lineTo(cx + radius * 0.42, cy + radius * 0.42);
+      ctx.moveTo(cx + radius * 0.42, cy - radius * 0.42);
+      ctx.lineTo(cx - radius * 0.42, cy + radius * 0.42);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    if (normalized === 'input-hole') {
+      ctx.save();
+      ctx.fillStyle = '#fffdf8';
+      ctx.strokeStyle = '#111111';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * 0.34, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(31,122,140,0.72)';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * 0.43, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    if (normalized === 'start' || normalized === 'target') {
+      drawPresetPiecePreview(ctx, { x: cx, y: cy }, radius, normalized);
+      return;
+    }
+    drawSokobanDecorationShape(ctx, { x: cx, y: cy }, radius, normalized, lattice);
+  }
+
+  function drawPresetPiecePreview(ctx, point, radius, role) {
+    const colors = presetPieceMarkerColors(state.backgroundDecorationColor);
+    ctx.save();
+    ctx.lineWidth = Math.max(1.8, radius * (role === 'target' ? 0.07 : 0.05));
+    ctx.strokeStyle = colors.stroke;
+    ctx.fillStyle = colors.fill;
+    if (role === 'target') {
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius * 0.48, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 0.18;
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius * 0.33, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function isOverCanvas(clientX, clientY) {
     const rect = refs.canvas.getBoundingClientRect();
     return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
@@ -19118,7 +19452,7 @@
 
   function exportImportPayloadLooksLikeBackground(payload) {
     if (!payload || typeof payload !== 'object') return false;
-    return ['removedTiles', 'backgroundRemovedTiles', 'removed', 'cutEdges', 'backgroundCutEdges', 'cuts', 'gluedEdges', 'backgroundGluedEdges', 'glue', 'inputHoles', 'connectFourHoles', 'holes', 'pieceSets', 'pieces']
+    return ['removedTiles', 'backgroundRemovedTiles', 'removed', 'cutEdges', 'backgroundCutEdges', 'cuts', 'gluedEdges', 'backgroundGluedEdges', 'glue', 'inputHoles', 'connectFourHoles', 'holes', 'pieceSets', 'pieces', 'sokoban']
       .some((key) => Object.prototype.hasOwnProperty.call(payload, key));
   }
 
@@ -19240,6 +19574,7 @@
     const inputHoles = inputHolesForExport();
     const presetPieces = presetPiecesForExport();
     const pieceSets = pieceSetsForExport();
+    const sokoban = sokobanDecorationsForExport();
     const payload = {
       name: 'Mosaic Calculator',
       lattice: state.lattice,
@@ -19299,6 +19634,7 @@
       gluedEdges: gluedEdgesForExport(),
       pieceSets,
       pieces: presetPieces,
+      sokoban,
       tiles: state.tiles.map((tile, index) => {
         const mask = tileToMask(tile);
         return {
@@ -19318,6 +19654,7 @@
     if (!inputHoles.length) delete payload.inputHoles;
     if (!pieceSets) delete payload.pieceSets;
     if (!presetPieces.length) delete payload.pieces;
+    if (!sokoban) delete payload.sokoban;
     return payload;
   }
 
@@ -19367,6 +19704,38 @@
   function presetPiecesForExport() {
     prunePresetPieces();
     return clonePresetPieces().map((piece) => ({ ...piece }));
+  }
+
+  function sokobanDecorationsForExport() {
+    pruneSokobanDecorations();
+    const sokoban = {};
+    SOKOBAN_DECORATION_ORDER.forEach((field) => {
+      const entries = tileRefsFromIndexSet(state.sokoban[field]);
+      if (entries.length) sokoban[field] = entries;
+    });
+    return Object.keys(sokoban).length ? sokoban : null;
+  }
+
+  function compactSokobanDecorationsForExport() {
+    const verbose = sokobanDecorationsForExport();
+    if (!verbose) return null;
+    const compact = {};
+    SOKOBAN_DECORATION_ORDER.forEach((field) => {
+      const value = compactTileListForExport(verbose[field], state.rows, state.cols);
+      if (value) compact[field] = value;
+    });
+    return Object.keys(compact).length ? compact : null;
+  }
+
+  function tileRefsFromIndexSet(indices) {
+    if (!(indices instanceof Set) || !indices.size) return [];
+    return Array.from(indices)
+      .filter((index) => Number.isInteger(index) && index >= 0 && index < state.rows * state.cols && !state.removedTiles.has(index))
+      .sort((left, right) => left - right)
+      .map((index) => ({
+        row: Math.floor(index / state.cols) + 1,
+        col: (index % state.cols) + 1
+      }));
   }
 
   function pieceSetsForExport() {
@@ -19768,9 +20137,11 @@
       refs.backgroundAction.disabled = occupiedAction;
     }
     if (refs.backgroundDecorationRow) refs.backgroundDecorationRow.hidden = !decorationAction;
+    if (refs.backgroundDecorationPaletteRow) refs.backgroundDecorationPaletteRow.hidden = !decorationAction;
     if (refs.backgroundDecorationKind) {
       const kind = normalizeBackgroundDecorationKind(state.backgroundDecorationKind);
       state.backgroundDecorationKind = kind;
+      state.selectedDecorationPaletteId = kind;
       refs.backgroundDecorationKind.value = kind;
     }
     if (refs.backgroundDecorationColor) {
@@ -19780,6 +20151,7 @@
       refs.backgroundDecorationColor.hidden = !['start', 'target'].includes(state.backgroundDecorationKind);
       refs.backgroundDecorationColor.disabled = !['start', 'target'].includes(state.backgroundDecorationKind);
     }
+    renderDecorationPalette();
     const chains = state.pendingGlueChains;
     const firstCount = chains && Array.isArray(chains.first) ? chains.first.length : 0;
     const secondCount = chains && Array.isArray(chains.second) ? chains.second.length : 0;
@@ -20047,6 +20419,7 @@
     if (normalized === 'go' || normalized.includes('go')) return 'go';
     if (normalized.includes('reversi')) return 'reversi';
     if (normalized.includes('chinese')) return 'chinese-checkers';
+    if (normalized.includes('sokoban')) return 'sokoban';
     return '2048';
   }
 
@@ -20978,6 +21351,13 @@
       || action === 'holes'
       || action === 'connectFourHoles'
       || action === 'connect-four-holes'
+      || action === 'sokoban'
+      || action === 'sokoban-player'
+      || action === 'sokoban-box'
+      || action === 'sokoban-target'
+      || action === 'sokoban-wall'
+      || action === 'sokoban-ice'
+      || action === 'sokoban-energy-bridge'
     ) return 'decoration';
     if (
       action === 'glue-boundary'
@@ -21000,8 +21380,18 @@
     if (value === 'input' || value === 'inputhole' || value === 'input-hole' || value === 'hole' || value === 'holes') return 'input-hole';
     if (value === 'goal' || value === 'target' || value === 'arrival' || value === 'finish') return 'target';
     if (value === 'piece' || value === 'start' || value === 'stone' || value === 'disc' || value === 'marble') return 'start';
+    if (value === 'player' || value === 'sokoban-player' || value === 'sokobanplayer' || value === 'pusher') return 'sokoban-player';
+    if (value === 'box' || value === 'crate' || value === 'sokoban-box' || value === 'sokobanbox') return 'sokoban-box';
+    if (value === 'sokoban-target' || value === 'sokobantarget' || value === 'sokoban-goal' || value === 'sokobangoal') return 'sokoban-target';
+    if (value === 'wall' || value === 'sokoban-wall' || value === 'sokobanwall') return 'sokoban-wall';
+    if (value === 'ice' || value === 'icy' || value === 'icy-ground' || value === 'icyground' || value === 'sokoban-ice' || value === 'sokobanice') return 'sokoban-ice';
+    if (value === 'energy-bridge' || value === 'energybridge' || value === 'bridge' || value === 'sokoban-energy-bridge' || value === 'sokobanenergybridge') return 'sokoban-energy-bridge';
     if (value === 'clear' || value === 'erase' || value === 'remove') return 'clear';
     return 'input-hole';
+  }
+
+  function isSokobanDecorationKind(kind) {
+    return Object.prototype.hasOwnProperty.call(SOKOBAN_DECORATION_FIELDS, normalizeBackgroundDecorationKind(kind));
   }
 
   function normalizePresetPieceColor(color) {
@@ -21581,8 +21971,10 @@
     state.cutEdges = importCutEdges({ cutEdges: options.cutEdges || options.cuts || [] }, rows, cols);
     state.gluedEdges = importGluedEdges({ gluedEdges: options.gluedEdges || options.glue || [] }, rows, cols);
     state.presetPieces = importPresetPieces({ pieceSets: options.pieceSets, pieces: options.pieces || [] }, rows, cols);
+    state.sokoban = importSokobanDecorations(options, rows, cols);
     pruneInputHoles();
     prunePresetPieces();
+    pruneSokobanDecorations();
   }
 
   function importedIndexSetForTest(entries, rows, cols) {
@@ -21631,12 +22023,15 @@
       buildMinigamePresetExport,
       buildMinigamePresetJsExport,
       buildMinigameTestHref,
+      backgroundDecorationPreferences,
       compactGlueListForExport,
+      compactSokobanDecorationsForExport,
       compactTileListForExport,
       currentExportPresetMetadata,
       exportPresetGroupChoices,
       inputHolesForExport,
       pieceSetsForExport,
+      sokobanDecorationsForExport,
       minigameModeForExportGameType,
       minigameGluedEdgesForExport,
       minigamePresetRegistryEntry,

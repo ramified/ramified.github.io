@@ -42,6 +42,15 @@
       ArrowLeft: HEX_DIRS.W
     }
   };
+  // Dormant legacy mapping from the old WEADZX hex controls; active hex movement uses arrow chords.
+  const LEGACY_HEX_LETTER_DIRS = {
+    KeyW: HEX_DIRS.NW,
+    KeyE: HEX_DIRS.NE,
+    KeyA: HEX_DIRS.W,
+    KeyD: HEX_DIRS.E,
+    KeyZ: HEX_DIRS.SW,
+    KeyX: HEX_DIRS.SE
+  };
   const OFFSETS = [[0, 1], [1, 0], [0, -1], [-1, 0]];
   const HEX_AXIAL_DELTAS = [
     [1, 0],
@@ -63,8 +72,33 @@
     CONNECT_FOUR: 'connect-four',
     GO: 'go',
     REVERSI: 'reversi',
-    CHINESE_CHECKERS: 'chinese-checkers'
+    CHINESE_CHECKERS: 'chinese-checkers',
+    SOKOBAN: 'sokoban'
   };
+  const BOUNDARY_GLUE_BOARD_PRESET_ID = 'boundary-glue-board';
+  const BOUNDARY_GLUE_MODES = {
+    TORUS: 'torus',
+    KLEIN_BOTTLE: 'klein-bottle',
+    RP2: 'rp2',
+    OPEN: 'open',
+    RANDOM: 'random'
+  };
+  const BOUNDARY_GLUE_MODE_LABELS = {
+    [BOUNDARY_GLUE_MODES.TORUS]: 'torus',
+    [BOUNDARY_GLUE_MODES.KLEIN_BOTTLE]: 'Klein bottle',
+    [BOUNDARY_GLUE_MODES.RP2]: 'RP^2',
+    [BOUNDARY_GLUE_MODES.OPEN]: 'open/classic',
+    [BOUNDARY_GLUE_MODES.RANDOM]: 'random boundary glue'
+  };
+  const BOUNDARY_GLUE_MIN_BOARD_SIZE = 2;
+  const BOUNDARY_GLUE_MAX_BOARD_SIZE = 25;
+  const SOKOBAN_DECORATION_FIELDS = ['players', 'boxes', 'targets', 'walls', 'ice', 'energyBridges'];
+  const SOKOBAN_OBJECT_SCALE_DEFAULT = 70;
+  const SOKOBAN_OBJECT_SCALE_MIN = 54;
+  const SOKOBAN_OBJECT_SCALE_MAX = 96;
+  const SOKOBAN_ENERGY_GLOW_INNER_DEFAULT = 55;
+  const SOKOBAN_ENERGY_GLOW_OUTER_DEFAULT = 82;
+  const SOKOBAN_ENERGY_GLOW_BLUR_DEFAULT = 38;
   const GOMOKU_WIN_LENGTH = 5;
   const GOMOKU_COLORS = ['black', 'white'];
   const GOMOKU_DEFAULT_BOARD_SIZE = 15;
@@ -105,7 +139,7 @@
   }
 
   const PRESET_FOLDER_URL = 'ramified_minigame_presets/';
-  const PRESET_GROUP_ORDER = ['2048', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers'];
+  const PRESET_GROUP_ORDER = ['2048', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers', 'Sokoban'];
 
   function createRubiksCubePreset(size, id, label) {
     const rows = size * 3;
@@ -233,11 +267,14 @@
   const PRESETS = [];
   let presetRegistry = [];
   let presetDefaultByMode = {};
+  let presetGameModeOrder = [];
   let presetCatalogReady = false;
   let presetCatalogError = '';
 
   const IMPORTED_PRESET_ID = 'imported-preset';
   const IMPORT_PRESET_CHOICE_ID = 'import-preset';
+  const RANDOM_GAME_MODE_CHOICE_ID = '__random-game-setup';
+  const RANDOM_PRESET_CHOICE_ID = '__random-preset';
   const MIN_IMPORTED_BOARD = 1;
   const MAX_IMPORTED_BOARD = 25;
 
@@ -253,6 +290,7 @@
   let animationFrameId = null;
   let debugMode = false;
   let undoStack = [];
+  let redoStack = [];
   let importedPreset = null;
   let noMoveDirs = new Set();
   let eventQueueChangedBoard = false;
@@ -284,6 +322,13 @@
     refs.gomokuDisplay = document.getElementById('gomoku-display-style');
     refs.gomokuSizeRow = document.getElementById('gomoku-size-row');
     refs.gomokuSize = document.getElementById('gomoku-board-size');
+    refs.boundaryGlueModeRow = document.getElementById('boundary-glue-mode-row');
+    refs.boundaryGlueMode = document.getElementById('boundary-glue-mode');
+    refs.boundaryGlueShapeRow = document.getElementById('boundary-glue-shape-row');
+    refs.boundaryGlueShape = document.getElementById('boundary-glue-shape');
+    refs.boundaryGlueRectRow = document.getElementById('boundary-glue-rect-row');
+    refs.boundaryGlueRows = document.getElementById('boundary-glue-rows');
+    refs.boundaryGlueCols = document.getElementById('boundary-glue-cols');
     refs.goKomiRow = document.getElementById('go-komi-row');
     refs.goKomi = document.getElementById('go-komi');
     refs.goActionRow = document.getElementById('go-action-row');
@@ -321,7 +366,16 @@
     refs.debugToggle = document.getElementById('debug-toggle');
     refs.debugTools = document.getElementById('debug-tools');
     refs.debugTileValue = document.getElementById('debug-tile-value');
+    refs.sokobanObjectSize = document.getElementById('sokoban-object-size');
+    refs.sokobanObjectSizeValue = document.getElementById('sokoban-object-size-value');
+    refs.sokobanGlowInner = document.getElementById('sokoban-glow-inner');
+    refs.sokobanGlowInnerValue = document.getElementById('sokoban-glow-inner-value');
+    refs.sokobanGlowOuter = document.getElementById('sokoban-glow-outer');
+    refs.sokobanGlowOuterValue = document.getElementById('sokoban-glow-outer-value');
+    refs.sokobanGlowBlur = document.getElementById('sokoban-glow-blur');
+    refs.sokobanGlowBlurValue = document.getElementById('sokoban-glow-blur-value');
     refs.undo = document.getElementById('undo-step');
+    refs.redo = document.getElementById('redo-step');
     refs.exportState = document.getElementById('export-state');
     refs.importState = document.getElementById('import-state');
     refs.debugExport = document.getElementById('debug-export-output');
@@ -330,11 +384,13 @@
     refs.exportBackgroundFormat = document.getElementById('export-background-format');
     refs.moveButtons = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-move-dir]')) : [];
     refs.moveGroups = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-move-lattice]')) : [];
+    refs.moveRow = document.getElementById('move-row');
     refs.mode2048Controls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="2048"]')) : [];
     refs.modeGomokuControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="gomoku"]')) : [];
     refs.modeConnectFourControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="connect-four"]')) : [];
     refs.modeGoControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="go"]')) : [];
     refs.modeChineseCheckersControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="chinese-checkers"]')) : [];
+    refs.modeSokobanControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="sokoban"]')) : [];
     refs.statusBadge = document.getElementById('status-badge');
     refs.statusLine = document.getElementById('status-line');
     refs.infoLine = document.getElementById('info-line');
@@ -361,6 +417,13 @@
     if (refs.gomokuDisplay) refs.gomokuDisplay.addEventListener('change', render);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('change', handleGomokuSizeChange);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('input', handleGomokuSizeChange);
+    if (refs.boundaryGlueMode) refs.boundaryGlueMode.addEventListener('change', handleBoundaryGlueBoardChange);
+    if (refs.boundaryGlueShape) refs.boundaryGlueShape.addEventListener('change', handleBoundaryGlueShapeChange);
+    [refs.boundaryGlueRows, refs.boundaryGlueCols].forEach((input) => {
+      if (!input) return;
+      input.addEventListener('change', handleBoundaryGlueBoardChange);
+      input.addEventListener('input', handleBoundaryGlueBoardChange);
+    });
     if (refs.goKomi) refs.goKomi.addEventListener('change', handleGoKomiChange);
     if (refs.goKomi) refs.goKomi.addEventListener('input', handleGoKomiChange);
     if (refs.goPass) refs.goPass.addEventListener('click', passGoFromUi);
@@ -382,9 +445,21 @@
     if (refs.canvasStartBegin) refs.canvasStartBegin.addEventListener('click', handleCanvasStartBeginClick);
     if (refs.speed) refs.speed.addEventListener('input', syncSpeedOutput);
     if (refs.stepMode) refs.stepMode.addEventListener('change', syncControls);
+    if (refs.sokobanObjectSize) refs.sokobanObjectSize.addEventListener('input', () => {
+      syncSokobanObjectSizeOutput();
+      render();
+    });
+    [refs.sokobanGlowInner, refs.sokobanGlowOuter, refs.sokobanGlowBlur].forEach((input) => {
+      if (!input) return;
+      input.addEventListener('input', () => {
+        syncSokobanEnergyGlowOutput();
+        render();
+      });
+    });
     if (refs.nextStep) refs.nextStep.addEventListener('click', playNextStep);
     if (refs.debugToggle) refs.debugToggle.addEventListener('click', toggleDebugMode);
     if (refs.undo) refs.undo.addEventListener('click', undoPreviousStep);
+    if (refs.redo) refs.redo.addEventListener('click', redoPreviousUndo);
     if (refs.exportState) refs.exportState.addEventListener('click', exportFromUi);
     if (refs.importState) refs.importState.addEventListener('click', importDebugState);
     if (refs.exportStateKind) refs.exportStateKind.addEventListener('change', syncImportExportControls);
@@ -409,6 +484,8 @@
     window.addEventListener('resize', render);
 
     syncSpeedOutput();
+    syncSokobanObjectSizeOutput();
+    syncSokobanEnergyGlowOutput();
     syncChineseCheckersTimingOutput();
     syncDebugModeUi();
     setPresetSelectLoading();
@@ -464,6 +541,8 @@
   }
 
   function finishPresetCatalogInit() {
+    syncGameModeSelectOptions();
+    syncImportGameModeSelectOptions();
     if (importPresetFromUrlParams()) return;
     syncBoardSizeInputForGameMode();
     const preferred = refs.select && presetSelectHasValue(refs.select.value)
@@ -518,6 +597,7 @@
   function gameModeFromUrlParam(value) {
     const mode = String(value || '').trim().toLowerCase();
     if (mode === GAME_MODES.CHINESE_CHECKERS || mode === 'chinesecheckers' || mode === 'chinese checkers') return GAME_MODES.CHINESE_CHECKERS;
+    if (mode === GAME_MODES.SOKOBAN) return GAME_MODES.SOKOBAN;
     if (mode === GAME_MODES.CONNECT_FOUR || mode === 'connectfour' || mode === 'connect four') return GAME_MODES.CONNECT_FOUR;
     if (mode === GAME_MODES.REVERSI || mode === 'othello') return GAME_MODES.REVERSI;
     if (mode === GAME_MODES.GOMOKU) return GAME_MODES.GOMOKU;
@@ -529,6 +609,7 @@
   function gameModeFromPresetGroup(preset) {
     const gameTypes = presetGameTypesForModes(preset);
     const gameType = String(gameTypes[0] || '').trim().toLowerCase();
+    if (gameType.includes('sokoban')) return GAME_MODES.SOKOBAN;
     if (gameType.includes('chinese')) return GAME_MODES.CHINESE_CHECKERS;
     if (gameType.includes('connect')) return GAME_MODES.CONNECT_FOUR;
     if (gameType.includes('reversi') || gameType.includes('othello')) return GAME_MODES.REVERSI;
@@ -548,6 +629,7 @@
 
   function gameTypeToGameMode(gameType) {
     const normalized = String(gameType || '').trim().toLowerCase();
+    if (normalized.includes('sokoban')) return GAME_MODES.SOKOBAN;
     if (normalized.includes('chinese')) return GAME_MODES.CHINESE_CHECKERS;
     if (normalized.includes('connect')) return GAME_MODES.CONNECT_FOUR;
     if (normalized.includes('reversi') || normalized.includes('othello')) return GAME_MODES.REVERSI;
@@ -571,6 +653,7 @@
   }
 
   function gameTypeForGameMode(mode) {
+    if (mode === GAME_MODES.SOKOBAN) return 'Sokoban';
     if (mode === GAME_MODES.CHINESE_CHECKERS) return 'Chinese Checkers';
     if (mode === GAME_MODES.REVERSI) return 'Reversi';
     if (mode === GAME_MODES.GO) return 'Go';
@@ -628,6 +711,7 @@
     PRESETS.splice(0, PRESETS.length, ...nextPresets);
     presetRegistry = nextRegistry;
     presetDefaultByMode = resolvePresetDefaultMap(catalog.defaultFor, nextPresets);
+    presetGameModeOrder = orderedCatalogGameModes(catalog.defaultFor, nextPresets, catalog.gameOrder);
     presetCatalogReady = true;
     presetCatalogError = '';
   }
@@ -643,7 +727,7 @@
       if (!spec) return null;
       items.push({ entry, spec });
     }
-    return { items, defaultFor: catalog.defaultFor };
+    return { items, defaultFor: catalog.defaultFor, gameOrder: catalog.gameOrder };
   }
 
   function loadBrowserPresetCatalogItems() {
@@ -657,7 +741,7 @@
       return Promise.reject(new Error('No presets are registered in ramified_minigame_presets/presets.js.'));
     }
     return Promise.all(registry.map((entry) => loadBrowserPresetSpec(entry).then((spec) => ({ entry, spec }))))
-      .then((items) => ({ items, defaultFor: catalog.defaultFor }));
+      .then((items) => ({ items, defaultFor: catalog.defaultFor, gameOrder: catalog.gameOrder }));
   }
 
   function loadBrowserPresetSpec(entry) {
@@ -697,6 +781,7 @@
     const catalog = normalizeMinigamePresetCatalog(require(path.join(folder, 'presets.js')));
     return {
       defaultFor: catalog.defaultFor,
+      gameOrder: catalog.gameOrder,
       items: catalog.entries.map((entry) => ({
         entry,
         spec: entry.data || (entry.json ? JSON.parse(entry.json) : require(path.join(folder, entry.file)))
@@ -705,14 +790,15 @@
   }
 
   function normalizePresetCatalogItems(catalogInput) {
-    if (Array.isArray(catalogInput)) return { items: catalogInput, defaultFor: {} };
+    if (Array.isArray(catalogInput)) return { items: catalogInput, defaultFor: {}, gameOrder: [] };
     if (catalogInput && typeof catalogInput === 'object') {
       return {
         items: Array.isArray(catalogInput.items) ? catalogInput.items : [],
-        defaultFor: catalogInput.defaultFor && typeof catalogInput.defaultFor === 'object' ? catalogInput.defaultFor : {}
+        defaultFor: catalogInput.defaultFor && typeof catalogInput.defaultFor === 'object' ? catalogInput.defaultFor : {},
+        gameOrder: normalizePresetGameOrder(catalogInput.gameOrder, catalogInput.defaultFor)
       };
     }
-    return { items: [], defaultFor: {} };
+    return { items: [], defaultFor: {}, gameOrder: [] };
   }
 
   function normalizeMinigamePresetCatalog(registry) {
@@ -721,8 +807,22 @@
       : { presets: registry };
     return {
       entries: normalizeMinigamePresetRegistry(source.presets),
-      defaultFor: normalizePresetDefaultMap(source.defaultFor)
+      defaultFor: normalizePresetDefaultMap(source.defaultFor),
+      gameOrder: normalizePresetGameOrder(source.gameOrder, source.defaultFor)
     };
+  }
+
+  function normalizePresetGameOrder(value, defaultFor = null) {
+    const ordered = [];
+    const pushMode = (mode) => {
+      const normalized = gameModeFromUrlParam(mode);
+      if (normalized && !ordered.includes(normalized)) ordered.push(normalized);
+    };
+    if (Array.isArray(value)) value.forEach(pushMode);
+    if (!ordered.length && defaultFor && typeof defaultFor === 'object' && !Array.isArray(defaultFor)) {
+      Object.keys(defaultFor).forEach(pushMode);
+    }
+    return ordered;
   }
 
   function normalizeMinigamePresetRegistry(registry) {
@@ -790,6 +890,7 @@
     if (normalized === 'reversi' || normalized === 'othello') return 'Reversi';
     if (normalized === 'connect-four' || normalized === 'connectfour' || normalized === 'connect four') return 'Connect Four';
     if (normalized === 'chinese-checkers' || normalized === 'chinesecheckers' || normalized === 'chinese checkers') return 'Chinese Checkers';
+    if (normalized === 'sokoban') return 'Sokoban';
     return gameType;
   }
 
@@ -823,10 +924,24 @@
   }
 
   function resolvePresetDefaultMap(defaultFor, presets) {
-    const ids = new Set((Array.isArray(presets) ? presets : []).map((preset) => preset.id));
+    const presetList = Array.isArray(presets) ? presets : [];
+    const ids = new Set(presetList.map((preset) => preset.id));
     const result = {};
     Object.entries(defaultFor && typeof defaultFor === 'object' ? defaultFor : {}).forEach(([mode, presetId]) => {
-      if (ids.has(presetId)) result[mode] = presetId;
+      if (ids.has(presetId)) {
+        result[mode] = presetId;
+        return;
+      }
+      const requestedId = cleanPresetId(presetId);
+      const requestedLabel = cleanPresetString(presetId).toLowerCase();
+      const fallback = presetList.find((preset) => (
+        gameModesForPreset(preset).includes(mode)
+        && (
+          cleanPresetId(preset.label) === requestedId
+          || cleanPresetString(preset.label).toLowerCase() === requestedLabel
+        )
+      ));
+      if (fallback) result[mode] = fallback.id;
     });
     return result;
   }
@@ -846,12 +961,107 @@
     refs.select.value = '';
   }
 
+  function orderedCatalogGameModes(defaultFor = null, presets = PRESETS, gameOrder = null) {
+    if (defaultFor == null && presetGameModeOrder.length) return presetGameModeOrder.slice();
+    const defaultSource = defaultFor || presetDefaultByMode;
+    const ordered = [];
+    const pushMode = (mode) => {
+      const normalized = gameModeFromUrlParam(mode);
+      if (normalized && !ordered.includes(normalized)) ordered.push(normalized);
+    };
+    (Array.isArray(gameOrder) ? gameOrder : []).forEach(pushMode);
+    Object.keys(defaultSource && typeof defaultSource === 'object' ? defaultSource : {}).forEach(pushMode);
+    (Array.isArray(presets) ? presets : []).forEach((preset) => {
+      gameModesForPreset(preset).forEach(pushMode);
+    });
+    return ordered.length ? ordered : [GAME_MODES.NUMBER_2048];
+  }
+
+  function appendSelectOption(select, value, label) {
+    if (!select || !document.createElement || !select.appendChild) return null;
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    select.appendChild(option);
+    return option;
+  }
+
+  function syncGameModeSelectOptions() {
+    if (!refs.gameMode) return;
+    const orderedModes = orderedCatalogGameModes();
+    const previous = gameModeFromUrlParam(refs.gameMode.value);
+    if (document.createElement && refs.gameMode.appendChild) {
+      refs.gameMode.innerHTML = '';
+      orderedModes.forEach((mode) => appendSelectOption(refs.gameMode, mode, gameTypeForGameMode(mode)));
+      appendSelectOption(refs.gameMode, RANDOM_GAME_MODE_CHOICE_ID, 'Random setup');
+    }
+    refs.gameMode.value = orderedModes.includes(previous) ? previous : (orderedModes[0] || GAME_MODES.NUMBER_2048);
+  }
+
+  function syncImportGameModeSelectOptions() {
+    if (!refs.importGameMode) return;
+    const orderedModes = orderedCatalogGameModes();
+    const previous = gameModeFromUrlParam(refs.importGameMode.value);
+    const current = selectedGameMode();
+    if (document.createElement && refs.importGameMode.appendChild) {
+      refs.importGameMode.innerHTML = '';
+      orderedModes.forEach((mode) => appendSelectOption(refs.importGameMode, mode, gameTypeForGameMode(mode)));
+    }
+    refs.importGameMode.value = orderedModes.includes(previous)
+      ? previous
+      : (orderedModes.includes(current) ? current : (orderedModes[0] || GAME_MODES.NUMBER_2048));
+  }
+
+  function randomCatalogItem(items, rng = Math.random) {
+    if (!Array.isArray(items) || !items.length) return null;
+    const roll = Number((typeof rng === 'function' ? rng : Math.random)());
+    const bounded = Number.isFinite(roll) ? Math.max(0, Math.min(roll, 0.999999999999)) : 0;
+    return items[Math.floor(bounded * items.length)];
+  }
+
+  function randomPresetForMode(mode = selectedGameMode(), rng = Math.random) {
+    return randomCatalogItem(presetListForMode(mode), rng);
+  }
+
+  function randomSetupChoice(rng = Math.random) {
+    const modes = orderedCatalogGameModes().filter((mode) => presetListForMode(mode).length);
+    const mode = randomCatalogItem(modes, rng);
+    if (!mode) return null;
+    const preset = randomPresetForMode(mode, rng);
+    return preset ? { mode, preset } : null;
+  }
+
+  function resolveRandomSetupFromUi(rng = Math.random) {
+    const choice = randomSetupChoice(rng);
+    if (!choice || !refs.gameMode || !refs.select) return false;
+    refs.gameMode.value = choice.mode;
+    syncBoardSizeInputForGameMode();
+    syncImportGameModeSelectOptions();
+    if (refs.importGameMode) refs.importGameMode.value = choice.mode;
+    syncPresetSelectOptions(choice.preset.id);
+    setImportToolsVisible(false);
+    resetToPreview();
+    if (refs.canvas) refs.canvas.focus();
+    return true;
+  }
+
+  function resolveRandomPresetFromUi(rng = Math.random) {
+    const preset = randomPresetForMode(selectedGameMode(), rng);
+    if (!preset || !refs.select) return false;
+    refs.select.value = preset.id;
+    setImportToolsVisible(false);
+    resetToPreview();
+    if (refs.canvas) refs.canvas.focus();
+    return true;
+  }
+
   function syncPresetSelectOptions(preferredValue) {
     if (!refs.select) return;
     const previous = preferredValue != null ? String(preferredValue) : refs.select.value;
     const mode = selectedGameMode();
     if (document.createElement && refs.select.appendChild) {
       refs.select.innerHTML = '';
+      appendSelectOption(refs.select, RANDOM_PRESET_CHOICE_ID, 'Random preset');
       presetOptionGroups(mode).forEach((group) => {
         const optgroup = document.createElement('optgroup');
         optgroup.label = group.label;
@@ -913,6 +1123,7 @@
 
   function presetSelectHasValue(value) {
     if (!value) return false;
+    if (value === RANDOM_PRESET_CHOICE_ID) return false;
     if (value === IMPORTED_PRESET_ID && importedPreset) return presetMatchesGameMode(importedPreset, selectedGameMode());
     if (refs.select && refs.select.options) {
       return Array.from(refs.select.options).some((option) => option.value === value);
@@ -949,6 +1160,18 @@
       if (refs.canvas) refs.canvas.focus();
       return;
     }
+    if (selectedGameMode() === GAME_MODES.SOKOBAN) {
+      const preview = isSokobanGame(game) ? game : createSokobanState(selectedPreset(), selectedGameOptions({ glueRng: Math.random }));
+      const issue = sokobanSetupIssue(preview);
+      if (issue) {
+        showSetupAlert(issue);
+        syncStatus('finish Sokoban setup', issue, 'warn');
+        render();
+        syncControls();
+        if (refs.canvas) refs.canvas.focus();
+        return;
+      }
+    }
     stopPlayback();
     resetSwipeGesture();
     clearSuppressedCanvasClick();
@@ -979,6 +1202,8 @@
       syncStatus(`${game.preset.label} Reversi`, reversiTurnInfo(game), 'ready');
     } else if (isChineseCheckersGame(game)) {
       syncStatus(`${game.preset.label} Chinese Checkers`, chineseCheckersTurnInfo(game), 'ready');
+    } else if (isSokobanGame(game)) {
+      syncStatus(`${game.preset.label} Sokoban`, sokobanTurnInfo(game), 'ready');
     } else {
       syncStatus(`${game.preset.label} game seed`, 'use arrow keys, buttons, or swipe/drag to slide', 'ready');
     }
@@ -1018,7 +1243,57 @@
     if (refs.canvas) refs.canvas.focus();
   }
 
+  function resetCurrentGameFromShortcut() {
+    if (!game) return false;
+    const previous = game;
+    if (previous.phase === 'setup') {
+      resetToPreview();
+      if (refs.canvas) refs.canvas.focus();
+      return true;
+    }
+    hideCanvasStartPrompt();
+    stopPlayback();
+    resetSwipeGesture();
+    clearSuppressedCanvasClick();
+    clearKeyboardState();
+    if (refs.gameMode) refs.gameMode.value = gameModeValue(previous);
+    const options = selectedGameOptions({ rng: Math.random, glueRng: Math.random });
+    if (isConnectFourGame(previous)) {
+      options.holes = new Set(previous.holes || []);
+      options.cycleHoles = new Set();
+      options.fallDir = Number.isInteger(previous.fallDir) ? previous.fallDir : selectedConnectFourFallDir(previous.preset);
+    }
+    if (isGoGame(previous)) {
+      options.komi = normalizeGoKomi(previous.komi);
+      options.scoringMethod = normalizeGoScoringMethod(previous.scoringMethod);
+    }
+    if (isChineseCheckersGame(previous)) {
+      options.playerColors = chineseCheckersPlayerColors(previous);
+    }
+    game = beginSelectedGame(previous.preset || selectedPreset(), options);
+    game.phase = 'ready';
+    clearUndoHistory();
+    clearDebugExport();
+    clearSetupAlert();
+    clearNoMoveTrial();
+    eventQueueChangedBoard = false;
+    if (isChineseCheckersGame(game)) setChineseCheckersSelectedPlayers(chineseCheckersPlayerColors(game), game.preset);
+    syncConnectFourFallInputFromGame();
+    syncGoKomiInputFromGame();
+    syncGoScoringMethodInputFromGame();
+    render();
+    syncStatus('reset complete', `${gameTypeForGameMode(gameModeValue(game))} restarted`, 'ready');
+    syncControls();
+    refreshDebugExportIfNeeded();
+    if (refs.canvas) refs.canvas.focus();
+    return true;
+  }
+
   function handleGameModeChange() {
+    if (refs.gameMode && refs.gameMode.value === RANDOM_GAME_MODE_CHOICE_ID) {
+      resolveRandomSetupFromUi();
+      return;
+    }
     syncBoardSizeInputForGameMode();
     syncDefaultPresetForGameMode();
     if (refs.importGameMode) refs.importGameMode.value = selectedGameMode();
@@ -1031,10 +1306,21 @@
   }
 
   function handleGomokuSizeChange() {
-    if (refs.gomokuSize) refs.gomokuSize.value = String(selectedBoardSize());
+    const dimensions = selectedBoardDimensions();
+    if (refs.gomokuSize) refs.gomokuSize.value = String(dimensions.rows);
     if (selectedPresetUsesDynamicBoardSize()) {
       resetToPreview();
     }
+  }
+
+  function handleBoundaryGlueShapeChange() {
+    syncBoundaryGlueBoardControls();
+    if (selectedPresetUsesDynamicBoardSize()) resetToPreview();
+  }
+
+  function handleBoundaryGlueBoardChange() {
+    syncBoundaryGlueBoardControls();
+    if (selectedPresetUsesDynamicBoardSize()) resetToPreview();
   }
 
   function handleGoKomiChange() {
@@ -1068,6 +1354,10 @@
   }
 
   function handlePresetSelectChange() {
+    if (refs.select && refs.select.value === RANDOM_PRESET_CHOICE_ID) {
+      resolveRandomPresetFromUi();
+      return;
+    }
     if (refs.select && refs.select.value === IMPORT_PRESET_CHOICE_ID) {
       stopPlayback();
       setImportToolsVisible(true);
@@ -1206,15 +1496,16 @@
   }
 
   function handleKeydown(event) {
-    if (!game || !is2048Game(game)) return;
     const key = normalizeKeyboardKey(event.code || event.key);
+    if (handleGameShortcutKey(event, key)) return;
+    if (!game || !isDirectionalMoveGame(game)) return;
     if (!keyboardKeyHandledByPreset(key, game.preset)) return;
-    const reserved = shouldReserve2048KeyboardInput(key);
+    const reserved = shouldReserveDirectionalKeyboardInput(key);
     if (event.repeat) {
       if (reserved && event.preventDefault) event.preventDefault();
       return;
     }
-    if (!canAcceptMove()) {
+    if (!canAcceptDirectionalMove()) {
       if (reserved && event.preventDefault) event.preventDefault();
       clearKeyboardState();
       return;
@@ -1224,11 +1515,50 @@
     if (reserved && event.preventDefault) event.preventDefault();
     if (!Number.isInteger(dir)) return;
     clearKeyboardState();
-    playRound(dir);
+    playDirectionalMove(dir);
   }
 
   function handleKeyup(event) {
     forgetKeyboardKey(normalizeKeyboardKey(event.code || event.key));
+  }
+
+  function handleGameShortcutKey(event, key) {
+    if (!game || isEditableKeyboardTarget(event) || event.ctrlKey || event.metaKey || event.altKey) return false;
+    if (key === 'KeyZ') {
+      if (!undoStack.length) return false;
+      if (event.preventDefault) event.preventDefault();
+      if (!event.repeat) undoPreviousStep();
+      return true;
+    }
+    if (key === 'KeyY') {
+      if (!redoStack.length) return false;
+      if (event.preventDefault) event.preventDefault();
+      if (!event.repeat) redoPreviousUndo();
+      return true;
+    }
+    if (key === 'KeyR') {
+      if (event.preventDefault) event.preventDefault();
+      if (!event.repeat) resetCurrentGameFromShortcut();
+      return true;
+    }
+    return false;
+  }
+
+  function isEditableKeyboardTarget(event) {
+    const target = event && event.target;
+    if (!target) return false;
+    if (target.isContentEditable) return true;
+    const tagName = String(target.tagName || '').toUpperCase();
+    if (tagName === 'TEXTAREA' || tagName === 'SELECT') return true;
+    if (tagName === 'INPUT') {
+      const type = String(target.type || '').toLowerCase();
+      return !['button', 'checkbox', 'radio', 'range', 'submit', 'reset'].includes(type);
+    }
+    if (typeof target.getAttribute === 'function') {
+      const editable = target.getAttribute('contenteditable');
+      return editable === '' || String(editable).toLowerCase() === 'true';
+    }
+    return false;
   }
 
   function keyboardKeyHandledByPreset(key, preset) {
@@ -1237,9 +1567,9 @@
     return Number.isInteger(dirFromKey(key, preset));
   }
 
-  function shouldReserve2048KeyboardInput(key) {
+  function shouldReserveDirectionalKeyboardInput(key) {
     return !!game
-      && is2048Game(game)
+      && isDirectionalMoveGame(game)
       && game.phase !== 'setup'
       && game.phase !== 'gameover'
       && keyboardKeyHandledByPreset(key, game.preset);
@@ -1286,17 +1616,17 @@
   }
 
   function handleDirectionalButton(button) {
-    if (!is2048Game(game)) return;
+    if (!isDirectionalMoveGame(game)) return;
     const dir = game ? dirFromName(button.getAttribute('data-move-dir'), game.preset) : null;
-    if (!Number.isInteger(dir) || !canAcceptMove()) return;
-    playRound(dir);
+    if (!Number.isInteger(dir) || !canAcceptDirectionalMove()) return;
+    playDirectionalMove(dir);
     if (refs.canvas) refs.canvas.focus();
   }
 
   function handleCanvasPointerDown(event) {
     if (event.isPrimary === false) return;
     if (Number.isInteger(event.button) && event.button !== 0) return;
-    if (!is2048Game(game) || !canAcceptMove()) {
+    if (!isDirectionalMoveGame(game) || !canAcceptDirectionalMove()) {
       resetSwipeGesture();
       return;
     }
@@ -1334,8 +1664,8 @@
     if (!Number.isInteger(dir)) return;
     suppressUpcomingCanvasClick();
     if (event.preventDefault) event.preventDefault();
-    if (!is2048Game(game) || !canAcceptMove()) return;
-    playRound(dir);
+    if (!isDirectionalMoveGame(game) || !canAcceptDirectionalMove()) return;
+    playDirectionalMove(dir);
     if (refs.canvas) refs.canvas.focus();
   }
 
@@ -1424,6 +1754,22 @@
       && !eventQueue.length;
   }
 
+  function isDirectionalMoveGame(state) {
+    return is2048Game(state) || isSokobanGame(state);
+  }
+
+  function canAcceptDirectionalMove() {
+    if (!game) return false;
+    if (is2048Game(game)) return canAcceptMove();
+    return isSokobanGame(game)
+      && game.phase !== 'setup'
+      && game.phase !== 'animating'
+      && game.phase !== 'gameover'
+      && !stepPaused
+      && !eventQueue.length
+      && !currentAnimation;
+  }
+
   function clearNoMoveTrial() {
     noMoveDirs = new Set();
     pendingBonusGameOver = false;
@@ -1447,6 +1793,14 @@
     } else {
       syncStatus('game over', 'no empty tile and no changing move', 'over');
     }
+  }
+
+  function playDirectionalMove(dir) {
+    if (isSokobanGame(game)) {
+      playSokobanMove(dir);
+      return;
+    }
+    playRound(dir);
   }
 
   function playRound(dir) {
@@ -1807,6 +2161,8 @@
       rules = 'Place a disc to bracket opposing discs along a line and flip them. Most discs at the end wins.';
     } else if (mode === GAME_MODES.CHINESE_CHECKERS) {
       rules = 'Select one of your marbles, then move or jump through connected cells. Race into the opposite camp.';
+    } else if (mode === GAME_MODES.SOKOBAN) {
+      rules = 'Move every player together. Push one box at a time onto the targets across the glued board.';
     } else {
       rules = 'Slide boxes with arrow keys, move buttons, or a swipe. Matching powers of two merge across the glued board.';
     }
@@ -2373,26 +2729,48 @@
     return Number.isSafeInteger(value) && value > 0 && Math.log2(value) % 1 === 0;
   }
 
-  function pushUndoSnapshot(label) {
-    if (!game) return;
-    undoStack.push({
+  function createHistorySnapshot(label) {
+    if (!game) return null;
+    return {
       label: label || 'step',
       game: cloneGameState(game),
       eventQueue: clonePlain(eventQueue),
       eventIndex,
       stepPaused,
       status: statusSnapshot()
-    });
-    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    };
+  }
+
+  function trimHistoryStack(stack) {
+    if (stack.length > UNDO_LIMIT) stack.splice(0, stack.length - UNDO_LIMIT);
+  }
+
+  function pushUndoSnapshot(label) {
+    const snapshot = createHistorySnapshot(label);
+    if (!snapshot) return;
+    undoStack.push(snapshot);
+    trimHistoryStack(undoStack);
+    redoStack = [];
     syncControls();
   }
 
-  function undoPreviousStep() {
-    const snapshot = undoStack.pop();
-    if (!snapshot) {
-      syncControls();
-      return;
-    }
+  function pushRedoSnapshot(label) {
+    const snapshot = createHistorySnapshot(label);
+    if (!snapshot) return;
+    redoStack.push(snapshot);
+    trimHistoryStack(redoStack);
+    syncControls();
+  }
+
+  function pushUndoSnapshotForRedo(label) {
+    const snapshot = createHistorySnapshot(label);
+    if (!snapshot) return;
+    undoStack.push(snapshot);
+    trimHistoryStack(undoStack);
+    syncControls();
+  }
+
+  function restoreHistorySnapshot(snapshot, status, info) {
     stopPlayback();
     game = cloneGameState(snapshot.game);
     eventQueue = clonePlain(snapshot.eventQueue || []);
@@ -2406,16 +2784,46 @@
     syncConnectFourFallInputFromGame();
     syncGoKomiInputFromGame();
     syncGoScoringMethodInputFromGame();
+    if (isChineseCheckersGame(game)) setChineseCheckersSelectedPlayers(chineseCheckersPlayerColors(game), game.preset);
     if (isGoGame(game) && game.scoringReview) activateGoScoringReviewControls();
-    syncStatus('undo complete', `restored before ${snapshot.label || 'previous step'}`, phaseBadge(game.phase));
+    syncStatus(status, info, phaseBadge(game.phase));
     render();
     syncControls();
     refreshDebugExportIfNeeded();
     if (refs.canvas) refs.canvas.focus();
   }
 
+  function undoPreviousStep() {
+    const snapshot = undoStack.pop();
+    if (!snapshot) {
+      syncControls();
+      return;
+    }
+    pushRedoSnapshot(snapshot.label || 'previous step');
+    restoreHistorySnapshot(
+      snapshot,
+      'undo complete',
+      `restored before ${snapshot.label || 'previous step'}`
+    );
+  }
+
+  function redoPreviousUndo() {
+    const snapshot = redoStack.pop();
+    if (!snapshot) {
+      syncControls();
+      return;
+    }
+    pushUndoSnapshotForRedo(snapshot.label || 'previous step');
+    restoreHistorySnapshot(
+      snapshot,
+      'redo complete',
+      `reapplied ${snapshot.label || 'previous step'}`
+    );
+  }
+
   function clearUndoHistory() {
     undoStack = [];
+    redoStack = [];
     syncControls();
   }
 
@@ -2492,6 +2900,8 @@
       );
     }
     if (Array.isArray(source.chineseCheckersPlayers)) preset.chineseCheckersPlayers = source.chineseCheckersPlayers.map(normalizePlacementColor).filter(Boolean);
+    const sokoban = sokobanPresetDecorationsForExport(source);
+    if (sokoban) preset.sokoban = sokoban;
     return preset;
   }
 
@@ -2526,6 +2936,8 @@
     if (Array.isArray(preset.reversiOpening)) compact.reversiOpening = preset.reversiOpening.map((entry) => ({ ...entry }));
     if (preset.chineseCheckersCamps) compact.chineseCheckersCamps = clonePlain(preset.chineseCheckersCamps);
     if (Array.isArray(preset.chineseCheckersPlayers)) compact.chineseCheckersPlayers = preset.chineseCheckersPlayers.slice();
+    const sokoban = sokobanPresetDecorationsForExport(preset, true);
+    if (sokoban) compact.sokoban = sokoban;
     return compact;
   }
 
@@ -2711,6 +3123,8 @@
     if (Array.isArray(preset.reversiOpening)) presetPayload.reversiOpening = preset.reversiOpening.map((entry) => ({ ...entry }));
     if (preset.chineseCheckersCamps) presetPayload.chineseCheckersCamps = clonePlain(preset.chineseCheckersCamps);
     if (Array.isArray(preset.chineseCheckersPlayers)) presetPayload.chineseCheckersPlayers = preset.chineseCheckersPlayers.slice();
+    const presetSokoban = sokobanPresetDecorationsForExport(preset);
+    if (presetSokoban) presetPayload.sokoban = presetSokoban;
     const base = {
       exportedAt: new Date().toISOString(),
       gameMode: game.gameMode || GAME_MODES.NUMBER_2048,
@@ -2852,6 +3266,34 @@
         }
       };
     }
+    if (isSokobanGame(game)) {
+      return {
+        ...base,
+        winner: game.winner || '',
+        resultDismissed: !!game.resultDismissed,
+        nextPlayerId: game.nextPlayerId || 1,
+        nextBoxId: game.nextBoxId || 1,
+        moves: game.moves || game.round || 0,
+        pushes: game.pushes || 0,
+        players: (game.players || [])
+          .map((player) => sokobanActorExport(player, preset.cols))
+          .sort((a, b) => a.index - b.index || a.id - b.id),
+        boxes: (game.boxes || [])
+          .map((box) => sokobanActorExport(box, preset.cols))
+          .sort((a, b) => a.index - b.index || a.id - b.id),
+        targets: sokobanTileSetEntries(game.targets, preset.cols),
+        walls: sokobanTileSetEntries(game.walls, preset.cols),
+        ice: sokobanTileSetEntries(game.ice, preset.cols),
+        energyBridges: sokobanTileSetEntries(game.energyBridges, preset.cols),
+        queue: {
+          eventIndex: 0,
+          eventCount: 0,
+          stepPaused: false,
+          currentAnimation: null,
+          events: []
+        }
+      };
+    }
     return {
       ...base,
       score: game.score || 0,
@@ -2920,6 +3362,14 @@
     };
   }
 
+  function sokobanActorExport(actor, cols) {
+    return {
+      id: actor.id,
+      index: actor.index,
+      ...rowCol(actor.index, cols)
+    };
+  }
+
   function debugExportInfo(state) {
     if (isGomokuGame(state)) {
       return `${state.stones.length} stone${state.stones.length === 1 ? '' : 's'}, ${state.removed.size} removed`;
@@ -2935,6 +3385,9 @@
     }
     if (isChineseCheckersGame(state)) {
       return `${state.marbles.length} marble${state.marbles.length === 1 ? '' : 's'}, ${state.removed.size} removed`;
+    }
+    if (isSokobanGame(state)) {
+      return `${state.players.length} player${state.players.length === 1 ? '' : 's'}, ${state.boxes.length} box${state.boxes.length === 1 ? '' : 'es'}, ${state.targets.size} target${state.targets.size === 1 ? '' : 's'}`;
     }
     return `${state.boxes.length} box${state.boxes.length === 1 ? '' : 'es'}, ${state.removed.size} removed`;
   }
@@ -3193,6 +3646,63 @@
         stepPaused: false
       };
     }
+    if (normalizeStatusGameMode(payload) === GAME_MODES.SOKOBAN) {
+      const walls = normalizeStatusSokobanTileSet(normalizeStatusSokobanEntries(payload, preset, 'walls'), preset, removed);
+      const targets = normalizeStatusSokobanTileSet(normalizeStatusSokobanEntries(payload, preset, 'targets'), preset, removed);
+      const ice = normalizeStatusSokobanTileSet(normalizeStatusSokobanEntries(payload, preset, 'ice'), preset, removed);
+      const energyBridges = normalizeStatusSokobanTileSet(normalizeStatusSokobanEntries(payload, preset, 'energyBridges'), preset, removed);
+      const players = normalizeStatusSokobanActors(normalizeStatusSokobanEntries(payload, preset, 'players'), preset, removed, 'player', walls);
+      const boxes = normalizeStatusSokobanActors(normalizeStatusSokobanEntries(payload, preset, 'boxes'), preset, removed, 'box', walls);
+      const playerTiles = new Set(players.map((player) => player.index));
+      boxes.forEach((box, index) => {
+        if (playerTiles.has(box.index)) throw new Error(`status Sokoban box ${index + 1} overlaps a player`);
+      });
+      const nextPlayerId = Math.max(
+        normalizeNonnegativeInteger(payload.nextPlayerId, 1),
+        players.reduce((max, player) => Math.max(max, player.id + 1), 1)
+      );
+      const nextBoxId = Math.max(
+        normalizeNonnegativeInteger(payload.nextBoxId, 1),
+        boxes.reduce((max, box) => Math.max(max, box.id + 1), 1)
+      );
+      const moves = normalizeNonnegativeInteger(payload.moves != null ? payload.moves : payload.round, 0);
+      const phase = normalizeStatusPhase(payload.phase);
+      const state = {
+        gameMode: GAME_MODES.SOKOBAN,
+        preset,
+        phase,
+        removed,
+        boxes,
+        newBoxIds: new Set(),
+        nextBoxId,
+        score: 0,
+        players,
+        nextPlayerId,
+        targets,
+        walls,
+        ice,
+        energyBridges,
+        moves,
+        pushes: normalizeNonnegativeInteger(payload.pushes, 0),
+        winner: '',
+        winningLine: [],
+        resultDismissed: !!payload.resultDismissed,
+        round: normalizeNonnegativeInteger(payload.round, moves),
+        ending: '',
+        debugMessage: ''
+      };
+      if (phase === 'gameover' && (payload.winner === 'solved' || sokobanSolved(state))) {
+        state.winner = 'solved';
+        state.ending = 'sokoban-win';
+      }
+      return {
+        state,
+        phase: state.phase,
+        eventQueue: [],
+        eventIndex: 0,
+        stepPaused: false
+      };
+    }
     const boxes = normalizeStatusBoxes(payload.boxes, preset, removed);
     const nextBoxId = Math.max(
       normalizeNonnegativeInteger(payload.nextBoxId, 1),
@@ -3285,6 +3795,11 @@
     }
     const chinesePlayers = source.chineseCheckersPlayers || source.playerColors || (base && base.chineseCheckersPlayers);
     if (chinesePlayers != null) statusPreset.chineseCheckersPlayers = normalizeChineseCheckersPlayers(chinesePlayers, pieceSets);
+    const sokobanSource = source.sokoban || (base && base.sokoban);
+    const sokobanDecorations = normalizeSokobanDecorations(sokobanSource, statusPreset, new Set(removedTileSet));
+    if (sokobanDecorationHasEntries(sokobanDecorations)) {
+      statusPreset.sokoban = sokobanDecorationsToTileRefs(sokobanDecorations, cols);
+    }
     return statusPreset;
   }
 
@@ -3310,6 +3825,41 @@
       if (usedIds.has(id)) throw new Error(`status box id ${id} is duplicated`);
       usedIds.add(id);
       return { id, index: tileIndex, value };
+    });
+  }
+
+  function normalizeStatusSokobanEntries(payload, preset, field) {
+    const direct = firstSokobanFieldValue(payload, field);
+    if (direct !== undefined) return direct;
+    const nested = payload && payload.sokoban && typeof payload.sokoban === 'object' && !Array.isArray(payload.sokoban)
+      ? firstSokobanFieldValue(payload.sokoban, field)
+      : undefined;
+    if (nested !== undefined) return nested;
+    return preset && preset.sokoban ? firstSokobanFieldValue(preset.sokoban, field) : [];
+  }
+
+  function normalizeStatusSokobanTileSet(entries, preset, removed) {
+    return normalizeSokobanTileSet(entries, preset, removed);
+  }
+
+  function normalizeStatusSokobanActors(entries, preset, removed, label, blockers = new Set()) {
+    const source = typeof entries === 'string'
+      ? parseCompactTileList(entries, preset.rows, preset.cols)
+      : (Array.isArray(entries) ? entries : []);
+    const usedIds = new Set();
+    const occupied = new Set();
+    return source.map((entry, index) => {
+      const tile = normalizeImportedTileRef(entry, preset.rows, preset.cols);
+      if (!tile) throw new Error(`status Sokoban ${label} ${index + 1} has an invalid tile`);
+      const tileIndex = indexOf(tile.row, tile.col, preset.cols);
+      if (removed.has(tileIndex)) throw new Error(`status Sokoban ${label} ${index + 1} is on a removed tile`);
+      if (blockers.has(tileIndex)) throw new Error(`status Sokoban ${label} ${index + 1} is on a wall`);
+      if (occupied.has(tileIndex)) throw new Error(`status Sokoban ${label} ${index + 1} overlaps another ${label}`);
+      occupied.add(tileIndex);
+      const id = normalizePositiveInteger(entry && entry.id, index + 1);
+      if (usedIds.has(id)) throw new Error(`status Sokoban ${label} id ${id} is duplicated`);
+      usedIds.add(id);
+      return { id, index: tileIndex };
     });
   }
 
@@ -3474,6 +4024,9 @@
     if (value === GAME_MODES.CHINESE_CHECKERS || value === 'chinese checkers' || value === 'chinesecheckers') {
       return GAME_MODES.CHINESE_CHECKERS;
     }
+    if (value === GAME_MODES.SOKOBAN) {
+      return GAME_MODES.SOKOBAN;
+    }
     if (value === GAME_MODES.CONNECT_FOUR || value === 'connectfour' || value === 'connect four') {
       return GAME_MODES.CONNECT_FOUR;
     }
@@ -3494,6 +4047,10 @@
     }
     if (Array.isArray(payload && payload.marbles) && !Array.isArray(payload && payload.boxes)) {
       return GAME_MODES.CHINESE_CHECKERS;
+    }
+    if ((payload && payload.sokoban && typeof payload.sokoban === 'object')
+      || (Array.isArray(payload && payload.players) && Array.isArray(payload && payload.boxes))) {
+      return GAME_MODES.SOKOBAN;
     }
     return GAME_MODES.NUMBER_2048;
   }
@@ -3728,6 +4285,19 @@
       syncStatus(`Chinese Checkers move ${game.round || 0}`, chineseCheckersTurnInfo(game), phaseBadge(game.phase));
       return;
     }
+    if (isSokobanGame(game)) {
+      if (game.phase === 'setup') {
+        const issue = sokobanSetupIssue(game);
+        syncStatus(`${game.preset.label} Sokoban preview`, issue ? `${previewInfo(game.preset)}; ${issue}` : previewInfo(game.preset), issue ? 'warn' : 'setup');
+        return;
+      }
+      if (game.phase === 'gameover') {
+        syncStatus('Sokoban solved', sokobanTurnInfo(game), 'over');
+        return;
+      }
+      syncStatus(`Sokoban move ${game.moves || 0}`, sokobanTurnInfo(game), phaseBadge(game.phase));
+      return;
+    }
     if (game.phase === 'setup') {
       syncStatus(`${game.preset.label} preview`, previewInfo(game.preset), 'setup');
       return;
@@ -3913,9 +4483,13 @@
       drawPlacementAnimationOverlays(ctx, geometry);
       drawPlacementFeedbackOverlays(ctx, geometry);
     } else {
-      drawNumberBoxes(ctx, geometry, game ? game.boxes : []);
-      drawAnimationOverlays(ctx, geometry);
-      drawDebugDirectionIndicators(ctx, geometry);
+      if (isSokobanGame(game)) {
+        drawSokobanGame(ctx, geometry, game);
+      } else {
+        drawNumberBoxes(ctx, geometry, game ? game.boxes : []);
+        drawAnimationOverlays(ctx, geometry);
+        drawDebugDirectionIndicators(ctx, geometry);
+      }
     }
     ctx.restore();
     if (game && game.phase === 'gameover' && !currentAnimation && (!isPlacementGame(game) || !game.resultDismissed)) {
@@ -4089,6 +4663,243 @@
         highlight: shouldHighlightBox(box)
       });
     });
+  }
+
+  function drawSokobanGame(ctx, geom, state) {
+    if (!isSokobanGame(state)) return;
+    const objectScale = selectedSokobanObjectScale();
+    drawSokobanIndexSet(ctx, geom, state.targets, 'target');
+    drawSokobanIndexSet(ctx, geom, state.ice, 'ice', objectScale);
+    drawSokobanIndexSet(ctx, geom, state.energyBridges, 'energyBridge', objectScale);
+    drawSokobanIndexSet(ctx, geom, state.walls, 'wall', objectScale);
+    (state.boxes || []).forEach((box) => drawSokobanBox(ctx, geom, box.index, objectScale));
+    (state.players || []).forEach((player) => drawSokobanPlayer(ctx, geom, player.index));
+  }
+
+  function drawSokobanIndexSet(ctx, geom, indices, kind, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100) {
+    if (!(indices instanceof Set) || !indices.size) return;
+    Array.from(indices).sort((a, b) => a - b).forEach((index) => {
+      if (kind === 'target') drawSokobanTarget(ctx, geom, index);
+      else if (kind === 'ice') drawSokobanIce(ctx, geom, index, objectScale);
+      else if (kind === 'energyBridge') drawSokobanEnergyBridge(ctx, geom, index, objectScale);
+      else if (kind === 'wall') drawSokobanWall(ctx, geom, index, objectScale);
+    });
+  }
+
+  function drawSokobanTileShape(ctx, geom, index, scale = 0.8) {
+    const cell = geom.cells[index];
+    if (!cell) return false;
+    const points = tilePoints(cell.x, cell.y, geom.radius * scale, geom.lattice);
+    ctx.beginPath();
+    points.forEach((point, pointIndex) => {
+      if (pointIndex === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.closePath();
+    return true;
+  }
+
+  function drawSokobanTarget(ctx, geom, index) {
+    const cell = geom.cells[index];
+    if (!cell) return;
+    ctx.save();
+    ctx.strokeStyle = '#c47f17';
+    ctx.fillStyle = 'rgba(196,127,23,0.14)';
+    ctx.lineWidth = Math.max(1.5, geom.radius * 0.08);
+    ctx.beginPath();
+    ctx.arc(cell.x, cell.y, geom.radius * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cell.x - geom.radius * 0.28, cell.y);
+    ctx.lineTo(cell.x + geom.radius * 0.28, cell.y);
+    ctx.moveTo(cell.x, cell.y - geom.radius * 0.28);
+    ctx.lineTo(cell.x, cell.y + geom.radius * 0.28);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawSokobanIce(ctx, geom, index, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100) {
+    const cell = geom.cells[index];
+    if (!cell) return;
+    const half = geom.radius * objectScale;
+    ctx.save();
+    if (drawSokobanTileShape(ctx, geom, index, objectScale)) {
+      ctx.fillStyle = 'rgba(142,202,230,0.36)';
+      ctx.strokeStyle = 'rgba(33,94,122,0.45)';
+      ctx.lineWidth = Math.max(1, geom.radius * 0.045);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(33,94,122,0.48)';
+    ctx.lineWidth = Math.max(1, geom.radius * 0.035);
+    for (let offset = -0.34; offset <= 0.36; offset += 0.34) {
+      ctx.beginPath();
+      ctx.moveTo(cell.x - half * 0.58, cell.y + half * offset);
+      ctx.lineTo(cell.x + half * 0.58, cell.y + half * (offset - 0.24));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawSokobanEnergyBridge(ctx, geom, index, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100) {
+    const cell = geom.cells[index];
+    if (!cell) return;
+    drawSokobanCrate(ctx, cell, geom.radius, objectScale, { glow: selectedSokobanEnergyGlow() });
+  }
+
+  function drawSokobanWall(ctx, geom, index, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100) {
+    const cell = geom.cells[index];
+    if (!cell) return;
+    ctx.save();
+    if (drawSokobanTileShape(ctx, geom, index, objectScale)) {
+      ctx.fillStyle = '#6c6257';
+      ctx.strokeStyle = '#2f2118';
+      ctx.lineWidth = Math.max(1.3, geom.radius * 0.055);
+      ctx.fill();
+      ctx.stroke();
+    }
+    drawSokobanBrickPattern(ctx, geom, index, objectScale);
+    ctx.restore();
+  }
+
+  function drawSokobanBrickPattern(ctx, geom, index, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100) {
+    const cell = geom.cells[index];
+    if (!cell) return;
+    const half = geom.radius * objectScale;
+    ctx.save();
+    drawSokobanTileShape(ctx, geom, index, objectScale);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(255,253,248,0.35)';
+    ctx.lineWidth = Math.max(1, geom.radius * 0.035);
+    const rows = 4;
+    const rowHeight = (half * 2) / rows;
+    for (let row = 1; row < rows; row += 1) {
+      const y = cell.y - half + rowHeight * row;
+      ctx.beginPath();
+      ctx.moveTo(cell.x - half, y);
+      ctx.lineTo(cell.x + half, y);
+      ctx.stroke();
+    }
+    for (let row = 0; row < rows; row += 1) {
+      const y0 = cell.y - half + rowHeight * row;
+      const y1 = y0 + rowHeight;
+      const offset = row % 2 === 0 ? 0 : rowHeight * 0.55;
+      for (let x = cell.x - half + offset; x < cell.x + half; x += rowHeight * 1.1) {
+        ctx.beginPath();
+        ctx.moveTo(x, y0);
+        ctx.lineTo(x, y1);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawSokobanBox(ctx, geom, index, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100) {
+    const cell = geom.cells[index];
+    if (!cell) return;
+    drawSokobanCrate(ctx, cell, geom.radius, objectScale);
+  }
+
+  function drawSokobanCrate(ctx, cell, radius, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100, options = {}) {
+    const side = radius * 2 * objectScale;
+    const glow = options.glow && typeof options.glow === 'object'
+      ? options.glow
+      : (options.glow ? {
+        inner: SOKOBAN_ENERGY_GLOW_INNER_DEFAULT / 100,
+        outer: SOKOBAN_ENERGY_GLOW_OUTER_DEFAULT / 100,
+        blur: SOKOBAN_ENERGY_GLOW_BLUR_DEFAULT / 100
+      } : null);
+    ctx.save();
+    if (glow && glow.outer > 0) {
+      ctx.shadowColor = `rgba(34,197,94,${clampNumber(glow.outer, 0, 1).toFixed(2)})`;
+      ctx.shadowBlur = Math.max(1, radius * clampNumber(glow.blur, 0, 1));
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+    }
+    roundedRectPath(ctx, cell.x - side / 2, cell.y - side / 2, side, side, Math.min(5, radius * 0.12));
+    ctx.fillStyle = '#b8793f';
+    ctx.strokeStyle = '#5d351e';
+    ctx.lineWidth = Math.max(1.5, radius * 0.055);
+    ctx.fill();
+    ctx.stroke();
+    if (glow && glow.inner > 0) {
+      const innerAlpha = clampNumber(glow.inner, 0, 1);
+      ctx.save();
+      ctx.shadowBlur = 0;
+      roundedRectPath(ctx, cell.x - side / 2, cell.y - side / 2, side, side, Math.min(5, radius * 0.12));
+      ctx.clip();
+      const gradient = ctx.createRadialGradient
+        ? ctx.createRadialGradient(cell.x, cell.y, side * 0.08, cell.x, cell.y, side * 0.55)
+        : null;
+      if (gradient && typeof gradient.addColorStop === 'function') {
+        gradient.addColorStop(0, `rgba(34,197,94,${(innerAlpha * 0.52).toFixed(2)})`);
+        gradient.addColorStop(0.62, `rgba(34,197,94,${(innerAlpha * 0.22).toFixed(2)})`);
+        gradient.addColorStop(1, 'rgba(34,197,94,0)');
+        ctx.fillStyle = gradient;
+      } else {
+        ctx.fillStyle = `rgba(34,197,94,${(innerAlpha * 0.24).toFixed(2)})`;
+      }
+      ctx.fillRect(cell.x - side / 2, cell.y - side / 2, side, side);
+      ctx.restore();
+    }
+    if (glow && glow.outer > 0) {
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = `rgba(34,197,94,${Math.min(0.95, clampNumber(glow.outer, 0, 1) + 0.06).toFixed(2)})`;
+      ctx.lineWidth = Math.max(1.2, radius * 0.045);
+      roundedRectPath(ctx, cell.x - side / 2, cell.y - side / 2, side, side, Math.min(5, radius * 0.12));
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(255,253,248,0.36)';
+    ctx.lineWidth = Math.max(1, radius * 0.04);
+    ctx.beginPath();
+    ctx.moveTo(cell.x - side * 0.32, cell.y - side * 0.32);
+    ctx.lineTo(cell.x + side * 0.32, cell.y + side * 0.32);
+    ctx.moveTo(cell.x + side * 0.32, cell.y - side * 0.32);
+    ctx.lineTo(cell.x - side * 0.32, cell.y + side * 0.32);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawSokobanPlayer(ctx, geom, index) {
+    const cell = geom.cells[index];
+    if (!cell) return;
+    const r = geom.radius;
+    const headY = cell.y - r * 0.38;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    const drawBodyPath = () => {
+      ctx.beginPath();
+      ctx.moveTo(cell.x, cell.y - r * 0.2);
+      ctx.lineTo(cell.x, cell.y + r * 0.28);
+      ctx.moveTo(cell.x - r * 0.36, cell.y - r * 0.02);
+      ctx.lineTo(cell.x + r * 0.36, cell.y - r * 0.02);
+      ctx.moveTo(cell.x, cell.y + r * 0.28);
+      ctx.lineTo(cell.x - r * 0.34, cell.y + r * 0.56);
+      ctx.moveTo(cell.x, cell.y + r * 0.28);
+      ctx.lineTo(cell.x + r * 0.34, cell.y + r * 0.56);
+    };
+
+    ctx.strokeStyle = 'rgba(255,253,248,0.92)';
+    ctx.lineWidth = Math.max(4, r * 0.16);
+    drawBodyPath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cell.x, headY, r * 0.22, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#111111';
+    ctx.fillStyle = '#fffdf8';
+    ctx.lineWidth = Math.max(2, r * 0.075);
+    ctx.beginPath();
+    ctx.arc(cell.x, headY, r * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    drawBodyPath();
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawPlacementWinningLine(ctx, geom, state) {
@@ -5656,7 +6467,9 @@
             ? (state.winner ? `${reversiColorLabel(state.winner)} wins` : 'Reversi draw')
             : (isChineseCheckersGame(state)
               ? `${chineseCheckersColorLabel(state.winner)} wins`
-              : (state.ending === 'bonus' ? 'bonus ending' : 'game over')))));
+              : (isSokobanGame(state)
+                ? 'Sokoban solved'
+                : (state.ending === 'bonus' ? 'bonus ending' : 'game over'))))));
     ctx.fillText(title, geom.width / 2, y + height * 0.36);
     ctx.fillStyle = '#6c6257';
     ctx.font = `${Math.max(12, Math.round(geom.radius * 0.34))}px "JetBrains Mono", monospace`;
@@ -5670,7 +6483,9 @@
             ? reversiFinalScoreText(state)
             : (isChineseCheckersGame(state)
               ? `${state.round || 0} move${state.round === 1 ? '' : 's'}`
-              : `score ${state.score || 0}   highest ${highestValue(state)}`))));
+              : (isSokobanGame(state)
+                ? `${state.moves || state.round || 0} move${(state.moves || state.round) === 1 ? '' : 's'}   ${state.pushes || 0} push${state.pushes === 1 ? '' : 'es'}`
+                : `score ${state.score || 0}   highest ${highestValue(state)}`)))));
     ctx.fillText(detail, geom.width / 2, y + height * 0.66);
     ctx.restore();
   }
@@ -5691,7 +6506,7 @@
   }
 
   function createGameState(presetOrId, options = {}) {
-    const preset = materializePreset(resolvePreset(presetOrId), options);
+    const preset = materializePreset(resolvePreset(presetOrId), { ...options, gameMode: GAME_MODES.NUMBER_2048 });
     return {
       gameMode: GAME_MODES.NUMBER_2048,
       preset,
@@ -5707,7 +6522,7 @@
   }
 
   function beginGame(presetOrId, options = {}) {
-    const state = createGameState(presetOrId, { glueRng: options.glueRng });
+    const state = createGameState(presetOrId, options);
     const rng = options.rng || Math.random;
     spawnNumbers(state, 2, rng, spawnInitialValue, []);
     state.phase = 'ready';
@@ -5715,7 +6530,7 @@
   }
 
   function createGomokuState(presetOrId, options = {}) {
-    const preset = materializePreset(resolvePreset(presetOrId), options);
+    const preset = materializePreset(resolvePreset(presetOrId), { ...options, gameMode: GAME_MODES.GOMOKU });
     return {
       gameMode: GAME_MODES.GOMOKU,
       preset,
@@ -5737,13 +6552,13 @@
   }
 
   function beginGomokuGame(presetOrId, options = {}) {
-    const state = createGomokuState(presetOrId, { glueRng: options.glueRng });
+    const state = createGomokuState(presetOrId, options);
     state.phase = 'ready';
     return state;
   }
 
   function createConnectFourState(presetOrId, options = {}) {
-    const preset = materializePreset(resolvePreset(presetOrId), options);
+    const preset = materializePreset(resolvePreset(presetOrId), { ...options, gameMode: GAME_MODES.CONNECT_FOUR });
     const fallDir = Number.isInteger(options.fallDir)
       ? modulo(options.fallDir, latticeForPreset(preset).sides)
       : selectedConnectFourFallDir(preset);
@@ -5791,7 +6606,7 @@
   }
 
   function createGoState(presetOrId, options = {}) {
-    const preset = materializePreset(resolvePreset(presetOrId), options);
+    const preset = materializePreset(resolvePreset(presetOrId), { ...options, gameMode: GAME_MODES.GO });
     const state = {
       gameMode: GAME_MODES.GO,
       preset,
@@ -5830,7 +6645,7 @@
   }
 
   function createReversiState(presetOrId, options = {}) {
-    const preset = materializePreset(resolvePreset(presetOrId), options);
+    const preset = materializePreset(resolvePreset(presetOrId), { ...options, gameMode: GAME_MODES.REVERSI });
     const state = {
       gameMode: GAME_MODES.REVERSI,
       preset,
@@ -5861,7 +6676,7 @@
   }
 
   function createChineseCheckersState(presetOrId, options = {}) {
-    const preset = materializePreset(resolvePreset(presetOrId), options);
+    const preset = materializePreset(resolvePreset(presetOrId), { ...options, gameMode: GAME_MODES.CHINESE_CHECKERS });
     const removed = initialRemovedSet(preset);
     const pieceSets = normalizePieceSets(preset.pieceSets, preset, removed);
     const camps = normalizeChineseCheckersCamps(preset.chineseCheckersCamps, preset, removed, pieceSets);
@@ -5899,6 +6714,179 @@
     const state = createChineseCheckersState(presetOrId, options);
     state.phase = 'ready';
     return state;
+  }
+
+  function createSokobanState(presetOrId, options = {}) {
+    const preset = materializePreset(resolvePreset(presetOrId), { ...options, gameMode: GAME_MODES.SOKOBAN });
+    const removed = initialRemovedSet(preset);
+    const setup = normalizeSokobanSetup(preset, removed);
+    return {
+      gameMode: GAME_MODES.SOKOBAN,
+      preset,
+      phase: 'setup',
+      removed,
+      boxes: setup.boxes,
+      newBoxIds: new Set(),
+      nextBoxId: setup.nextBoxId,
+      score: 0,
+      players: setup.players,
+      nextPlayerId: setup.nextPlayerId,
+      targets: setup.targets,
+      walls: setup.walls,
+      ice: setup.ice,
+      energyBridges: setup.energyBridges,
+      moves: 0,
+      pushes: 0,
+      round: 0,
+      winner: '',
+      winningLine: [],
+      resultDismissed: false,
+      ending: '',
+      debugMessage: ''
+    };
+  }
+
+  function beginSokobanGame(presetOrId, options = {}) {
+    const state = createSokobanState(presetOrId, options);
+    state.phase = 'ready';
+    return state;
+  }
+
+  function moveSokobanPlayers(sourceState, dir) {
+    if (!isSokobanGame(sourceState)) {
+      return { changed: false, state: sourceState, message: 'not a Sokoban game' };
+    }
+    if (sourceState.phase === 'setup') {
+      return { changed: false, state: sourceState, message: 'begin the game first' };
+    }
+    if (sourceState.phase === 'gameover') {
+      return { changed: false, state: sourceState, message: 'game is already over' };
+    }
+    const rawDirection = Number(dir);
+    const direction = Number.isInteger(rawDirection) ? modulo(rawDirection, latticeForPreset(sourceState.preset).sides) : rawDirection;
+    if (!Number.isInteger(direction) || !directionsForPreset(sourceState.preset).includes(direction)) {
+      return { changed: false, state: sourceState, message: 'invalid direction' };
+    }
+    const setupIssue = sokobanSetupIssue(sourceState);
+    if (setupIssue) return { changed: false, state: sourceState, message: setupIssue };
+
+    const boxesByIndex = new Map();
+    const boxesById = new Map();
+    for (const box of sourceState.boxes || []) {
+      if (boxesByIndex.has(box.index)) return { changed: false, state: sourceState, message: 'boxes overlap' };
+      boxesByIndex.set(box.index, box);
+      boxesById.set(box.id, box);
+    }
+    const playerPlans = [];
+    const boxPlans = [];
+    const pushedBoxIds = new Set();
+
+    for (const player of sourceState.players || []) {
+      const next = surfaceSuccessor(sourceState, player.index, direction);
+      if (!next || sokobanTileBlocked(sourceState, next.index)) {
+        return { changed: false, state: sourceState, message: 'player blocked' };
+      }
+      const box = boxesByIndex.get(next.index);
+      if (!box) {
+        playerPlans.push({ id: player.id, from: player.index, to: next.index });
+        continue;
+      }
+      if (pushedBoxIds.has(box.id)) {
+        return { changed: false, state: sourceState, message: 'two players push the same box' };
+      }
+      const boxNext = surfaceSuccessor(sourceState, box.index, next.dir);
+      if (!boxNext || sokobanTileBlocked(sourceState, boxNext.index)) {
+        return { changed: false, state: sourceState, message: 'box blocked' };
+      }
+      if (boxesByIndex.has(boxNext.index)) {
+        return { changed: false, state: sourceState, message: 'box cannot push another box' };
+      }
+      pushedBoxIds.add(box.id);
+      boxPlans.push({ id: box.id, from: box.index, to: boxNext.index, dir: next.dir });
+      playerPlans.push({ id: player.id, from: player.index, to: box.index, boxId: box.id });
+    }
+
+    const finalPlayers = new Map();
+    for (const plan of playerPlans) {
+      if (finalPlayers.has(plan.to)) {
+        return { changed: false, state: sourceState, message: 'players collide' };
+      }
+      finalPlayers.set(plan.to, plan.id);
+    }
+    const pushedDestinations = new Set();
+    for (const plan of boxPlans) {
+      if (pushedDestinations.has(plan.to)) {
+        return { changed: false, state: sourceState, message: 'boxes collide' };
+      }
+      pushedDestinations.add(plan.to);
+    }
+    const finalBoxIndices = new Map();
+    for (const box of sourceState.boxes || []) {
+      const pushed = boxPlans.find((plan) => plan.id === box.id);
+      const finalIndex = pushed ? pushed.to : box.index;
+      if (finalBoxIndices.has(finalIndex)) {
+        return { changed: false, state: sourceState, message: 'boxes collide' };
+      }
+      finalBoxIndices.set(finalIndex, box.id);
+    }
+    for (const finalPlayerIndex of finalPlayers.keys()) {
+      if (finalBoxIndices.has(finalPlayerIndex)) {
+        return { changed: false, state: sourceState, message: 'player and box collide' };
+      }
+    }
+
+    const changed = playerPlans.some((plan) => plan.from !== plan.to)
+      || boxPlans.some((plan) => plan.from !== plan.to);
+    if (!changed) return { changed: false, state: sourceState, message: 'no move' };
+
+    const state = cloneGameState(sourceState);
+    const boxPlanById = new Map(boxPlans.map((plan) => [plan.id, plan]));
+    const playerPlanById = new Map(playerPlans.map((plan) => [plan.id, plan]));
+    state.players.forEach((player) => {
+      const plan = playerPlanById.get(player.id);
+      if (plan) player.index = plan.to;
+    });
+    state.boxes.forEach((box) => {
+      const plan = boxPlanById.get(box.id);
+      if (plan) box.index = plan.to;
+    });
+    state.moves = Math.max(0, Number(sourceState.moves) || Number(sourceState.round) || 0) + 1;
+    state.pushes = Math.max(0, Number(sourceState.pushes) || 0) + boxPlans.length;
+    state.round = state.moves;
+    state.resultDismissed = false;
+    state.debugMessage = '';
+    if (sokobanSolved(state)) {
+      state.phase = 'gameover';
+      state.winner = 'solved';
+      state.ending = 'sokoban-win';
+    } else {
+      state.phase = 'ready';
+      state.winner = '';
+      state.ending = '';
+    }
+    return { changed: true, state, players: playerPlans, boxes: boxPlans, pushes: boxPlans.length };
+  }
+
+  function playSokobanMove(dir) {
+    const result = moveSokobanPlayers(game, dir);
+    if (!result.changed) {
+      game.debugMessage = result.message || 'move rejected';
+      syncStatus('Sokoban blocked', result.message || 'move rejected', phaseBadge(game.phase));
+      render();
+      syncControls();
+      return;
+    }
+    pushUndoSnapshot(`Sokoban move ${game.moves + 1}: ${dirLabel(dir, game.preset)}`);
+    game = result.state;
+    clearNoMoveTrial();
+    if (game.phase === 'gameover') {
+      syncStatus('Sokoban solved', sokobanTurnInfo(game), 'over');
+    } else {
+      syncStatus(`Sokoban move ${game.moves}`, sokobanTurnInfo(game), 'ready');
+    }
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
   }
 
   function placeGomokuStone(sourceState, index) {
@@ -7267,15 +8255,7 @@
       ? pieceSetOpening
       : normalizeReversiOpeningEntries(state.preset.reversiOpening, state.preset);
     if (!opening.length) {
-      if (rows % 2 !== 0 || cols % 2 !== 0 || rows < 2 || cols < 2) return;
-      const top = rows / 2;
-      const left = cols / 2;
-      opening.push(
-        { index: indexOf(top, left, cols), color: 'white' },
-        { index: indexOf(top, left + 1, cols), color: 'black' },
-        { index: indexOf(top + 1, left, cols), color: 'black' },
-        { index: indexOf(top + 1, left + 1, cols), color: 'white' }
-      );
+      opening.push(...centeredReversiOpening(rows, cols));
     }
     const occupied = new Set();
     opening.forEach((entry) => {
@@ -7286,6 +8266,27 @@
       state.discs.push({ id: state.nextDiscId, index, color: entry.color });
       state.nextDiscId += 1;
     });
+  }
+
+  function centeredReversiOpening(rows, cols) {
+    const rowCount = Number(rows);
+    const colCount = Number(cols);
+    if (!Number.isInteger(rowCount) || !Number.isInteger(colCount) || rowCount < 2 || colCount < 2) return [];
+    const rowSpan = rowCount % 2 === 0 ? 2 : 3;
+    const colSpan = colCount % 2 === 0 ? 2 : 3;
+    if (rowCount < rowSpan || colCount < colSpan) return [];
+    const startRow = Math.floor((rowCount - rowSpan) / 2) + 1;
+    const startCol = Math.floor((colCount - colSpan) / 2) + 1;
+    const opening = [];
+    for (let rowOffset = 0; rowOffset < rowSpan; rowOffset += 1) {
+      for (let colOffset = 0; colOffset < colSpan; colOffset += 1) {
+        opening.push({
+          index: indexOf(startRow + rowOffset, startCol + colOffset, colCount),
+          color: (rowOffset + colOffset) % 2 === 0 ? 'white' : 'black'
+        });
+      }
+    }
+    return opening;
   }
 
   function placementStartsFromPieceSets(preset, allowedColors = null) {
@@ -7782,6 +8783,164 @@
       if (!removed.has(tileIndex)) result.add(tileIndex);
     });
     return result;
+  }
+
+  function createEmptySokobanDecorations() {
+    return SOKOBAN_DECORATION_FIELDS.reduce((decorations, field) => {
+      decorations[field] = new Set();
+      return decorations;
+    }, {});
+  }
+
+  function sokobanFieldKeys(field) {
+    if (field === 'players') return ['players', 'player', 'sokobanPlayers', 'sokobanPlayer'];
+    if (field === 'boxes') return ['boxes', 'box', 'sokobanBoxes', 'sokobanBox'];
+    if (field === 'targets') return ['targets', 'target', 'goals', 'goal', 'sokobanTargets', 'sokobanGoals'];
+    if (field === 'walls') return ['walls', 'wall', 'sokobanWalls', 'sokobanWall'];
+    if (field === 'ice') return ['ice', 'icyGround', 'icy', 'sokobanIce'];
+    if (field === 'energyBridges') return ['energyBridges', 'energyBridge', 'bridges', 'bridge', 'sokobanEnergyBridges'];
+    return [field];
+  }
+
+  function firstSokobanFieldValue(source, field) {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return undefined;
+    for (const key of sokobanFieldKeys(field)) {
+      if (Object.prototype.hasOwnProperty.call(source, key)) return source[key];
+    }
+    return undefined;
+  }
+
+  function normalizeSokobanTileSet(entries, preset, removed) {
+    if (typeof entries === 'string') {
+      return normalizeTileSet(parseCompactTileList(entries, preset.rows, preset.cols), preset, removed);
+    }
+    return normalizeTileSet(entries, preset, removed);
+  }
+
+  function normalizeSokobanDecorations(value, preset, removed) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const decorations = createEmptySokobanDecorations();
+    SOKOBAN_DECORATION_FIELDS.forEach((field) => {
+      decorations[field] = normalizeSokobanTileSet(firstSokobanFieldValue(source, field), preset, removed);
+    });
+    decorations.walls.forEach((index) => {
+      decorations.players.delete(index);
+      decorations.boxes.delete(index);
+    });
+    decorations.players.forEach((index) => {
+      decorations.boxes.delete(index);
+    });
+    return decorations;
+  }
+
+  function normalizeSokobanSetup(preset, removed) {
+    const decorations = normalizeSokobanDecorations(preset && preset.sokoban, preset, removed);
+    const players = actorsFromSokobanSet(decorations.players, 'player');
+    const boxes = actorsFromSokobanSet(decorations.boxes, 'box');
+    return {
+      players,
+      boxes,
+      nextPlayerId: players.reduce((max, player) => Math.max(max, player.id + 1), 1),
+      nextBoxId: boxes.reduce((max, box) => Math.max(max, box.id + 1), 1),
+      targets: decorations.targets,
+      walls: decorations.walls,
+      ice: decorations.ice,
+      energyBridges: decorations.energyBridges
+    };
+  }
+
+  function actorsFromSokobanSet(set, kind) {
+    return Array.from(set instanceof Set ? set : [])
+      .sort((a, b) => a - b)
+      .map((index, offset) => ({ id: offset + 1, index, kind }));
+  }
+
+  function sokobanTileSetEntries(set, cols) {
+    return Array.from(set instanceof Set ? set : [])
+      .sort((a, b) => a - b)
+      .map((index) => ({ index, ...rowCol(index, cols) }));
+  }
+
+  function sokobanDecorationsToTileRefs(decorations, cols) {
+    const result = {};
+    SOKOBAN_DECORATION_FIELDS.forEach((field) => {
+      const entries = sokobanTileSetEntries(decorations && decorations[field], cols)
+        .map((tile) => ({ row: tile.row, col: tile.col }));
+      if (entries.length) result[field] = entries;
+    });
+    return result;
+  }
+
+  function sokobanDecorationHasEntries(decorations) {
+    return SOKOBAN_DECORATION_FIELDS.some((field) => decorations && decorations[field] instanceof Set && decorations[field].size);
+  }
+
+  function sokobanPresetDecorationsForExport(preset, compact = false) {
+    if (!preset || !preset.sokoban) return null;
+    const decorations = normalizeSokobanDecorations(preset.sokoban, preset, initialRemovedSet(preset));
+    if (!sokobanDecorationHasEntries(decorations)) return null;
+    const verbose = sokobanDecorationsToTileRefs(decorations, preset.cols);
+    if (!compact) return verbose;
+    const result = {};
+    SOKOBAN_DECORATION_FIELDS.forEach((field) => {
+      const value = compactTileListForExport(verbose[field], preset.rows, preset.cols);
+      if (value) result[field] = value;
+    });
+    return Object.keys(result).length ? result : null;
+  }
+
+  function sokobanActorAt(state, index) {
+    if (!state || !Array.isArray(state.players)) return null;
+    return state.players.find((player) => player.index === index) || null;
+  }
+
+  function sokobanBoxAt(state, index) {
+    if (!state || !Array.isArray(state.boxes)) return null;
+    return state.boxes.find((box) => box.index === index) || null;
+  }
+
+  function sokobanTileBlocked(state, index) {
+    return !validBoardIndex(state, index)
+      || state.removed.has(index)
+      || (state.walls instanceof Set && state.walls.has(index));
+  }
+
+  function sokobanSolved(state) {
+    return isSokobanGame(state)
+      && Array.isArray(state.boxes)
+      && state.boxes.length > 0
+      && state.targets instanceof Set
+      && state.targets.size > 0
+      && state.boxes.every((box) => state.targets.has(box.index));
+  }
+
+  function sokobanSetupIssue(state) {
+    if (!isSokobanGame(state)) return '';
+    if (!Array.isArray(state.players) || !state.players.length) return 'add at least one Sokoban player';
+    if (!Array.isArray(state.boxes) || !state.boxes.length) return 'add at least one Sokoban box';
+    if (!(state.targets instanceof Set) || !state.targets.size) return 'add at least one Sokoban target';
+    const playerTiles = new Set();
+    for (const player of state.players) {
+      if (sokobanTileBlocked(state, player.index)) return 'a Sokoban player is blocked by a wall or removed tile';
+      if (playerTiles.has(player.index)) return 'Sokoban players overlap';
+      playerTiles.add(player.index);
+    }
+    const boxTiles = new Set();
+    for (const box of state.boxes) {
+      if (sokobanTileBlocked(state, box.index)) return 'a Sokoban box is blocked by a wall or removed tile';
+      if (boxTiles.has(box.index)) return 'Sokoban boxes overlap';
+      if (playerTiles.has(box.index)) return 'Sokoban players and boxes overlap';
+      boxTiles.add(box.index);
+    }
+    return '';
+  }
+
+  function sokobanTurnInfo(state) {
+    const moves = Math.max(0, Number(state && state.moves) || Number(state && state.round) || 0);
+    const pushes = Math.max(0, Number(state && state.pushes) || 0);
+    const players = Array.isArray(state && state.players) ? state.players.length : 0;
+    const boxes = Array.isArray(state && state.boxes) ? state.boxes.length : 0;
+    return `${players} player${players === 1 ? '' : 's'}, ${boxes} box${boxes === 1 ? '' : 'es'}, ${moves} move${moves === 1 ? '' : 's'}, ${pushes} push${pushes === 1 ? '' : 'es'}`;
   }
 
   function chineseCheckerMarbleAt(state, index) {
@@ -9079,6 +10238,32 @@
         debugMessage: source.debugMessage || ''
       };
     }
+    if (isSokobanGame(source)) {
+      return {
+        gameMode: GAME_MODES.SOKOBAN,
+        preset: source.preset,
+        phase: source.phase,
+        removed: new Set(source.removed),
+        boxes: (source.boxes || []).map((box) => ({ id: box.id, index: box.index })),
+        newBoxIds: new Set(),
+        nextBoxId: source.nextBoxId || 1,
+        score: 0,
+        players: (source.players || []).map((player) => ({ id: player.id, index: player.index })),
+        nextPlayerId: source.nextPlayerId || 1,
+        targets: new Set(source.targets || []),
+        walls: new Set(source.walls || []),
+        ice: new Set(source.ice || []),
+        energyBridges: new Set(source.energyBridges || []),
+        moves: Math.max(0, Number(source.moves) || Number(source.round) || 0),
+        pushes: Math.max(0, Number(source.pushes) || 0),
+        winner: source.winner === 'solved' ? 'solved' : '',
+        winningLine: [],
+        resultDismissed: !!source.resultDismissed,
+        round: Math.max(0, Number(source.round) || Number(source.moves) || 0),
+        ending: source.ending || '',
+        debugMessage: source.debugMessage || ''
+      };
+    }
     if (isConnectFourGame(source)) {
       return {
         gameMode: GAME_MODES.CONNECT_FOUR,
@@ -9125,11 +10310,22 @@
     if (isGoGame(state)) return emptyGoIndices(state);
     if (isReversiGame(state)) return emptyReversiIndices(state);
     if (isChineseCheckersGame(state)) return emptyChineseCheckersIndices(state);
+    if (isSokobanGame(state)) return emptySokobanIndices(state);
     const occupied = new Set((state.boxes || []).map((box) => box.index));
     const total = state.preset.rows * state.preset.cols;
     const empty = [];
     for (let index = 0; index < total; index += 1) {
       if (!state.removed.has(index) && !occupied.has(index)) empty.push(index);
+    }
+    return empty;
+  }
+
+  function emptySokobanIndices(state) {
+    const occupied = new Set((state.players || []).concat(state.boxes || []).map((actor) => actor.index));
+    const total = state.preset.rows * state.preset.cols;
+    const empty = [];
+    for (let index = 0; index < total; index += 1) {
+      if (!sokobanTileBlocked(state, index) && !occupied.has(index)) empty.push(index);
     }
     return empty;
   }
@@ -9175,6 +10371,7 @@
   }
 
   function stackWarningText(state) {
+    if (isSokobanGame(state)) return '';
     const stacks = stackedTileDetails(state);
     if (!stacks.length) return '';
     const count = stacks.reduce((sum, stack) => sum + stack.boxIds.length, 0);
@@ -9184,6 +10381,10 @@
 
   function gameWarnings(state) {
     if (isPlacementGame(state)) return [];
+    if (isSokobanGame(state)) {
+      const issue = sokobanSetupIssue(state);
+      return issue ? [{ kind: 'sokoban-setup', message: issue }] : [];
+    }
     const stackWarning = stackWarningText(state);
     const stacks = stackedTileDetails(state);
     return stackWarning
@@ -9223,11 +10424,9 @@
   function selectedPreset() {
     if (refs.select && refs.select.value === IMPORTED_PRESET_ID && importedPreset) return importedPreset;
     if (refs.select && refs.select.value === IMPORT_PRESET_CHOICE_ID && importedPreset) return importedPreset;
-    const preset = resolvePreset(refs.select ? refs.select.value : 'torus');
+    if (refs.select && refs.select.value === RANDOM_PRESET_CHOICE_ID) return resolvePreset(defaultPresetIdForMode(selectedGameMode()));
+    const preset = resolvePreset(refs.select ? refs.select.value : BOUNDARY_GLUE_BOARD_PRESET_ID);
     if (!preset) return null;
-    if (selectedPresetUsesDynamicBoardSize(preset)) {
-      return sizedDynamicPreset(preset, selectedBoardSize());
-    }
     return preset;
   }
 
@@ -9239,7 +10438,16 @@
     if (!refs.select) return false;
     const source = preset || resolvePreset(refs.select.value);
     if (!source) return false;
-    return dynamicBoardSizeMode(selectedGameMode()) && !!source.dynamicGomokuSize;
+    return isBoundaryGlueBoardPreset(source) || (dynamicBoardSizeMode(selectedGameMode()) && !!source.dynamicGomokuSize);
+  }
+
+  function selectedPresetIsBoundaryGlueBoard(preset = null) {
+    const source = preset || selectedPreset();
+    return isBoundaryGlueBoardPreset(source);
+  }
+
+  function isBoundaryGlueBoardPreset(preset) {
+    return !!(preset && (preset.boundaryGlueBoard || preset.id === BOUNDARY_GLUE_BOARD_PRESET_ID));
   }
 
   function selectedGameMode() {
@@ -9249,6 +10457,7 @@
     if (value === GAME_MODES.GO) return GAME_MODES.GO;
     if (value === GAME_MODES.GOMOKU) return GAME_MODES.GOMOKU;
     if (value === GAME_MODES.CONNECT_FOUR) return GAME_MODES.CONNECT_FOUR;
+    if (value === GAME_MODES.SOKOBAN) return GAME_MODES.SOKOBAN;
     return GAME_MODES.NUMBER_2048;
   }
 
@@ -9262,14 +10471,19 @@
   }
 
   function selectedBoardSize() {
-    const value = refs.gomokuSize ? Number(refs.gomokuSize.value) : defaultBoardSizeForMode(selectedGameMode());
-    if (selectedGameMode() === GAME_MODES.REVERSI) return normalizeEvenBoardSize(value);
-    return clampInteger(value, GOMOKU_MIN_BOARD_SIZE, GOMOKU_MAX_BOARD_SIZE, defaultBoardSizeForMode(selectedGameMode()));
+    return selectedBoardDimensions().rows;
   }
 
   function defaultBoardSizeForMode(mode) {
-    if (mode === GAME_MODES.REVERSI) return REVERSI_DEFAULT_BOARD_SIZE;
+    if (mode === GAME_MODES.NUMBER_2048) return 4;
+    if (mode === GAME_MODES.GO) return 19;
+    if (mode === GAME_MODES.REVERSI) return 10;
     return GOMOKU_DEFAULT_BOARD_SIZE;
+  }
+
+  function defaultBoardDimensionsForMode(mode) {
+    const size = defaultBoardSizeForMode(mode);
+    return { rows: size, cols: size };
   }
 
   function normalizeEvenBoardSize(value) {
@@ -9279,8 +10493,10 @@
   }
 
   function syncBoardSizeInputForGameMode() {
-    if (!refs.gomokuSize) return;
-    refs.gomokuSize.value = String(defaultBoardSizeForMode(selectedGameMode()));
+    const defaults = defaultBoardDimensionsForMode(selectedGameMode());
+    if (refs.gomokuSize) refs.gomokuSize.value = String(defaults.rows);
+    if (refs.boundaryGlueRows) refs.boundaryGlueRows.value = String(defaults.rows);
+    if (refs.boundaryGlueCols) refs.boundaryGlueCols.value = String(defaults.cols);
   }
 
   function dynamicBoardSizeMode(mode) {
@@ -9297,7 +10513,16 @@
 
   function selectedGameOptions(base = {}) {
     const options = { ...base };
-    if (selectedPresetUsesDynamicBoardSize()) options.boardSize = selectedBoardSize();
+    options.gameMode = selectedGameMode();
+    if (selectedPresetUsesDynamicBoardSize()) {
+      const dimensions = selectedBoardDimensions();
+      options.boardRows = dimensions.rows;
+      options.boardCols = dimensions.cols;
+      options.boardSize = dimensions.rows;
+    }
+    if (selectedPresetIsBoundaryGlueBoard()) {
+      options.boundaryGlueMode = selectedBoundaryGlueMode();
+    }
     if (selectedGameMode() === GAME_MODES.GO) {
       options.komi = selectedGoKomi();
       options.scoringMethod = selectedGoScoringMethod();
@@ -9306,6 +10531,82 @@
       options.playerColors = selectedChineseCheckersPlayerColors(selectedPreset());
     }
     return options;
+  }
+
+  function selectedBoardDimensions() {
+    const mode = selectedGameMode();
+    const defaults = defaultBoardDimensionsForMode(mode);
+    if (selectedPresetIsBoundaryGlueBoard() && selectedBoundaryGlueShape() === 'rectangle') {
+      return {
+        rows: normalizeBoundaryGlueBoardSize(refs.boundaryGlueRows ? refs.boundaryGlueRows.value : defaults.rows, defaults.rows),
+        cols: normalizeBoundaryGlueBoardSize(refs.boundaryGlueCols ? refs.boundaryGlueCols.value : defaults.cols, defaults.cols)
+      };
+    }
+    const value = refs.gomokuSize ? refs.gomokuSize.value : defaults.rows;
+    const size = selectedPresetIsBoundaryGlueBoard()
+      ? normalizeBoundaryGlueBoardSize(value, defaults.rows)
+      : clampInteger(value, GOMOKU_MIN_BOARD_SIZE, GOMOKU_MAX_BOARD_SIZE, defaults.rows);
+    return { rows: size, cols: size };
+  }
+
+  function normalizeBoundaryGlueBoardSize(value, fallback) {
+    return clampInteger(value, BOUNDARY_GLUE_MIN_BOARD_SIZE, BOUNDARY_GLUE_MAX_BOARD_SIZE, fallback);
+  }
+
+  function selectedBoundaryGlueMode() {
+    return normalizeBoundaryGlueMode(refs.boundaryGlueMode ? refs.boundaryGlueMode.value : BOUNDARY_GLUE_MODES.TORUS);
+  }
+
+  function selectedBoundaryGlueShape() {
+    return refs.boundaryGlueShape && refs.boundaryGlueShape.value === 'rectangle' ? 'rectangle' : 'square';
+  }
+
+  function normalizeBoundaryGlueMode(value) {
+    const mode = String(value || '').trim().toLowerCase();
+    if (mode === BOUNDARY_GLUE_MODES.KLEIN_BOTTLE || mode === 'klein' || mode === 'klein bottle') {
+      return BOUNDARY_GLUE_MODES.KLEIN_BOTTLE;
+    }
+    if (mode === BOUNDARY_GLUE_MODES.RP2 || mode === 'rp^2' || mode === 'rp²' || mode === 'projective plane' || mode === 'real projective plane') {
+      return BOUNDARY_GLUE_MODES.RP2;
+    }
+    if (mode === BOUNDARY_GLUE_MODES.OPEN || mode === 'classic' || mode === 'open/classic' || mode === 'none') {
+      return BOUNDARY_GLUE_MODES.OPEN;
+    }
+    if (mode === BOUNDARY_GLUE_MODES.RANDOM || mode === 'random-boundary-glue' || mode === 'random boundary glue') {
+      return BOUNDARY_GLUE_MODES.RANDOM;
+    }
+    return BOUNDARY_GLUE_MODES.TORUS;
+  }
+
+  function syncBoundaryGlueBoardControls() {
+    const active = selectedPresetIsBoundaryGlueBoard();
+    if (refs.boundaryGlueMode) {
+      refs.boundaryGlueMode.value = selectedBoundaryGlueMode();
+      refs.boundaryGlueMode.disabled = !active;
+    }
+    if (refs.boundaryGlueShape) refs.boundaryGlueShape.disabled = !active;
+    const defaults = defaultBoardDimensionsForMode(selectedGameMode());
+    const shape = selectedBoundaryGlueShape();
+    if (refs.gomokuSize) {
+      const value = shape === 'rectangle'
+        ? normalizeBoundaryGlueBoardSize(refs.gomokuSize.value || defaults.rows, defaults.rows)
+        : selectedBoardDimensions().rows;
+      refs.gomokuSize.value = String(value);
+    }
+    if (refs.boundaryGlueRows) {
+      refs.boundaryGlueRows.min = String(BOUNDARY_GLUE_MIN_BOARD_SIZE);
+      refs.boundaryGlueRows.max = String(BOUNDARY_GLUE_MAX_BOARD_SIZE);
+      refs.boundaryGlueRows.step = '1';
+      refs.boundaryGlueRows.disabled = !active || shape !== 'rectangle';
+      refs.boundaryGlueRows.value = String(normalizeBoundaryGlueBoardSize(refs.boundaryGlueRows.value || defaults.rows, defaults.rows));
+    }
+    if (refs.boundaryGlueCols) {
+      refs.boundaryGlueCols.min = String(BOUNDARY_GLUE_MIN_BOARD_SIZE);
+      refs.boundaryGlueCols.max = String(BOUNDARY_GLUE_MAX_BOARD_SIZE);
+      refs.boundaryGlueCols.step = '1';
+      refs.boundaryGlueCols.disabled = !active || shape !== 'rectangle';
+      refs.boundaryGlueCols.value = String(normalizeBoundaryGlueBoardSize(refs.boundaryGlueCols.value || defaults.cols, defaults.cols));
+    }
   }
 
   function selectedConnectFourFallDir(preset = selectedPreset()) {
@@ -9358,6 +10659,7 @@
     if (mode === GAME_MODES.GO) return createGoState(presetOrId, options);
     if (mode === GAME_MODES.GOMOKU) return createGomokuState(presetOrId, options);
     if (mode === GAME_MODES.CONNECT_FOUR) return createConnectFourState(presetOrId, options);
+    if (mode === GAME_MODES.SOKOBAN) return createSokobanState(presetOrId, options);
     return createGameState(presetOrId, options);
   }
 
@@ -9368,6 +10670,7 @@
     if (mode === GAME_MODES.GO) return beginGoGame(presetOrId, options);
     if (mode === GAME_MODES.GOMOKU) return beginGomokuGame(presetOrId, options);
     if (mode === GAME_MODES.CONNECT_FOUR) return beginConnectFourGame(presetOrId, options);
+    if (mode === GAME_MODES.SOKOBAN) return beginSokobanGame(presetOrId, options);
     return beginGame(presetOrId, options);
   }
 
@@ -9391,6 +10694,10 @@
     return !!state && state.gameMode === GAME_MODES.CHINESE_CHECKERS;
   }
 
+  function isSokobanGame(state) {
+    return !!state && state.gameMode === GAME_MODES.SOKOBAN;
+  }
+
   function isPlacementGame(state) {
     return isGomokuGame(state)
       || isConnectFourGame(state)
@@ -9409,6 +10716,7 @@
     if (isGoGame(state)) return GAME_MODES.GO;
     if (isGomokuGame(state)) return GAME_MODES.GOMOKU;
     if (isConnectFourGame(state)) return GAME_MODES.CONNECT_FOUR;
+    if (isSokobanGame(state)) return GAME_MODES.SOKOBAN;
     return GAME_MODES.NUMBER_2048;
   }
 
@@ -9574,10 +10882,21 @@
     const chinesePlayers = firstPresentValue(source, ['chineseCheckersPlayers', 'playerColors'])
       || firstPresentValue(payload, ['chineseCheckersPlayers', 'playerColors']);
     if (chinesePlayers != null) normalized.chineseCheckersPlayers = normalizeChineseCheckersPlayers(chinesePlayers, normalized.pieceSets);
+    const sokobanSource = firstPresentValue(source, ['sokoban']) || firstPresentValue(payload, ['sokoban']);
+    const sokobanDecorations = normalizeSokobanDecorations(sokobanSource, shell, removedSet);
+    if (sokobanDecorationHasEntries(sokobanDecorations)) {
+      normalized.sokoban = sokobanDecorationsToTileRefs(sokobanDecorations, cols);
+    }
     if (source.randomGlue === true || payload.randomGlue === true) normalized.randomGlue = true;
     if (source.dynamicGomokuSize === true || payload.dynamicGomokuSize === true) normalized.dynamicGomokuSize = true;
     const dynamicLabel = firstPresentValue(source, ['dynamicGomokuLabelPrefix']) || firstPresentValue(payload, ['dynamicGomokuLabelPrefix']);
     if (dynamicLabel) normalized.dynamicGomokuLabelPrefix = sanitizeImportedText(dynamicLabel, '');
+    if (source.boundaryGlueBoard === true || payload.boundaryGlueBoard === true) normalized.boundaryGlueBoard = true;
+    if (source.boundaryGlueMaterialized === true || payload.boundaryGlueMaterialized === true) {
+      normalized.boundaryGlueMaterialized = true;
+    }
+    const boundaryGlueMode = firstPresentValue(source, ['boundaryGlueMode']) || firstPresentValue(payload, ['boundaryGlueMode']);
+    if (boundaryGlueMode) normalized.boundaryGlueMode = normalizeBoundaryGlueMode(boundaryGlueMode);
     return normalized;
   }
 
@@ -9974,6 +11293,9 @@
 
   function materializePreset(source, options = {}) {
     const preset = clonePreset(source);
+    if (preset.boundaryGlueBoard && !preset.boundaryGlueMaterialized) {
+      return generateBoundaryGlueBoardPreset(preset, options);
+    }
     if (preset.dynamicGomokuSize) {
       applyDynamicBoardSize(preset, options.boardSize || preset.rows);
     }
@@ -10005,9 +11327,98 @@
   }
 
   function gomokuRandomGluePreset(size) {
-    const preset = gomokuSizedPreset('gomoku-random-glue', size);
+    const preset = gomokuSizedPreset(BOUNDARY_GLUE_BOARD_PRESET_ID, size);
     preset.gluedEdges = [];
     return preset;
+  }
+
+  function generateBoundaryGlueBoardPreset(source, options = {}) {
+    const mode = normalizeBoundaryGlueMode(options.boundaryGlueMode || source.boundaryGlueMode || BOUNDARY_GLUE_MODES.TORUS);
+    const defaults = defaultBoardDimensionsForMode(options.gameMode || gameModeFromPresetGroup(source));
+    const sourceIsCatalogBoundaryBoard = source.id === BOUNDARY_GLUE_BOARD_PRESET_ID;
+    const rawRows = firstDefinedValue(options.boardRows, options.rows, options.boardSize);
+    const rawCols = firstDefinedValue(options.boardCols, options.cols, options.boardSize);
+    const rows = normalizeBoundaryGlueBoardSize(
+      rawRows != null ? rawRows : (sourceIsCatalogBoundaryBoard ? defaults.rows : source.rows),
+      defaults.rows
+    );
+    const cols = normalizeBoundaryGlueBoardSize(
+      rawCols != null ? rawCols : (sourceIsCatalogBoundaryBoard ? defaults.cols : source.cols),
+      defaults.cols
+    );
+    const preset = {
+      ...source,
+      id: BOUNDARY_GLUE_BOARD_PRESET_ID,
+      label: `${BOUNDARY_GLUE_MODE_LABELS[mode]} ${rows}x${cols}`,
+      lattice: 'square',
+      rows,
+      cols,
+      surface: BOUNDARY_GLUE_MODE_LABELS[mode],
+      boundaryGlueBoard: true,
+      boundaryGlueMaterialized: true,
+      boundaryGlueMode: mode,
+      removedTiles: [],
+      cutEdges: [],
+      connectFourHoles: [],
+      gluedEdges: []
+    };
+    if (mode === BOUNDARY_GLUE_MODES.TORUS) preset.gluedEdges = generateTorusBoundaryGlue(rows, cols);
+    else if (mode === BOUNDARY_GLUE_MODES.KLEIN_BOTTLE) preset.gluedEdges = generateKleinBoundaryGlue(rows, cols);
+    else if (mode === BOUNDARY_GLUE_MODES.RP2) preset.gluedEdges = generateProjectivePlaneBoundaryGlue(rows, cols);
+    else if (mode === BOUNDARY_GLUE_MODES.RANDOM) preset.gluedEdges = generateRandomBoundaryGlue(preset, options.glueRng || Math.random);
+    return preset;
+  }
+
+  function firstDefinedValue(...values) {
+    return values.find((value) => value !== undefined && value !== null && value !== '');
+  }
+
+  function generateTorusBoundaryGlue(rows, cols) {
+    const gluedEdges = [];
+    for (let row = 1; row <= rows; row += 1) {
+      gluedEdges.push(gluePair(0, { row, col: cols, dir: DIRS.E }, { row, col: 1, dir: DIRS.W }));
+    }
+    for (let col = 1; col <= cols; col += 1) {
+      gluedEdges.push(gluePair(1, { row: 1, col, dir: DIRS.N }, { row: rows, col, dir: DIRS.S }));
+    }
+    return gluedEdges;
+  }
+
+  function generateKleinBoundaryGlue(rows, cols) {
+    const gluedEdges = [];
+    for (let row = 1; row <= rows; row += 1) {
+      gluedEdges.push(gluePair(
+        0,
+        { row, col: cols, dir: DIRS.E },
+        { row: rows - row + 1, col: 1, dir: DIRS.W },
+        { reversed: true }
+      ));
+    }
+    for (let col = 1; col <= cols; col += 1) {
+      gluedEdges.push(gluePair(1, { row: 1, col, dir: DIRS.N }, { row: rows, col, dir: DIRS.S }));
+    }
+    return gluedEdges;
+  }
+
+  function generateProjectivePlaneBoundaryGlue(rows, cols) {
+    const gluedEdges = [];
+    for (let row = 1; row <= rows; row += 1) {
+      gluedEdges.push(gluePair(
+        0,
+        { row, col: cols, dir: DIRS.E },
+        { row: rows - row + 1, col: 1, dir: DIRS.W },
+        { reversed: true }
+      ));
+    }
+    for (let col = 1; col <= cols; col += 1) {
+      gluedEdges.push(gluePair(
+        1,
+        { row: 1, col, dir: DIRS.N },
+        { row: rows, col: cols - col + 1, dir: DIRS.S },
+        { reversed: true }
+      ));
+    }
+    return gluedEdges;
   }
 
   function clonePreset(source) {
@@ -10023,7 +11434,8 @@
       gluedEdges: (source.gluedEdges || []).map(cloneGluePair),
       pieceSets: source.pieceSets ? clonePlain(source.pieceSets) : undefined,
       chineseCheckersPlayers: Array.isArray(source.chineseCheckersPlayers) ? source.chineseCheckersPlayers.slice() : undefined,
-      chineseCheckersCamps: source.chineseCheckersCamps ? clonePlain(source.chineseCheckersCamps) : undefined
+      chineseCheckersCamps: source.chineseCheckersCamps ? clonePlain(source.chineseCheckersCamps) : undefined,
+      sokoban: source.sokoban ? clonePlain(source.sokoban) : undefined
     };
   }
 
@@ -10231,6 +11643,23 @@
       if (refs.round) refs.round.textContent = String(game.round || 0);
       return;
     }
+    if (isSokobanGame(game)) {
+      const players = Array.isArray(game.players) ? game.players.length : 0;
+      const boxes = Array.isArray(game.boxes) ? game.boxes.length : 0;
+      const targets = game.targets instanceof Set ? game.targets.size : 0;
+      const walls = game.walls instanceof Set ? game.walls.size : 0;
+      if (refs.scoreLabel) refs.scoreLabel.textContent = game.phase === 'gameover' ? 'Result' : 'Players';
+      if (refs.highestLabel) refs.highestLabel.textContent = 'Boxes';
+      if (refs.existingLabel) refs.existingLabel.textContent = 'Targets';
+      if (refs.removedLabel) refs.removedLabel.textContent = 'Walls';
+      if (refs.roundLabel) refs.roundLabel.textContent = 'Moves';
+      if (refs.score) refs.score.textContent = game.phase === 'gameover' ? 'solved' : String(players);
+      if (refs.highest) refs.highest.textContent = String(boxes);
+      if (refs.existing) refs.existing.textContent = String(targets);
+      if (refs.removed) refs.removed.textContent = String(walls);
+      if (refs.round) refs.round.textContent = String(game.moves || game.round || 0);
+      return;
+    }
     if (refs.scoreLabel) refs.scoreLabel.textContent = 'Score';
     if (refs.highestLabel) refs.highestLabel.textContent = 'Highest tile';
     if (refs.existingLabel) refs.existingLabel.textContent = 'Existing tiles';
@@ -10251,7 +11680,11 @@
     const modeGo = catalogAvailable && (isGoGame(game) || selectedGameMode() === GAME_MODES.GO);
     const modeReversi = catalogAvailable && (isReversiGame(game) || selectedGameMode() === GAME_MODES.REVERSI);
     const modeChineseCheckers = catalogAvailable && (isChineseCheckersGame(game) || selectedGameMode() === GAME_MODES.CHINESE_CHECKERS);
+    const modeSokoban = catalogAvailable && (isSokobanGame(game) || selectedGameMode() === GAME_MODES.SOKOBAN);
+    const modeDirectional = mode2048 || modeSokoban;
     const modePlacement = modeGomoku || modeConnectFour || modeGo || modeReversi || modeChineseCheckers;
+    const boundaryGlueBoard = catalogAvailable && selectedPresetIsBoundaryGlueBoard();
+    const boundaryRectangle = boundaryGlueBoard && selectedBoundaryGlueShape() === 'rectangle';
     syncConnectFourFallOptions();
     if (refs.begin) {
       refs.begin.textContent = game && game.phase !== 'setup' ? 'stop the game' : 'begin the game';
@@ -10283,18 +11716,30 @@
         control.hidden = !modeChineseCheckers;
       });
     }
-    if (refs.gomokuSizeRow) refs.gomokuSizeRow.hidden = !(modeGomoku || modeGo || modeReversi) || !selectedGomokuPresetIsDynamic();
+    if (refs.modeSokobanControls) {
+      refs.modeSokobanControls.forEach((control) => {
+        control.hidden = !modeSokoban;
+      });
+    }
+    syncBoundaryGlueBoardControls();
+    if (refs.boundaryGlueModeRow) refs.boundaryGlueModeRow.hidden = !boundaryGlueBoard;
+    if (refs.boundaryGlueShapeRow) refs.boundaryGlueShapeRow.hidden = !boundaryGlueBoard;
+    if (refs.boundaryGlueRectRow) refs.boundaryGlueRectRow.hidden = !boundaryGlueBoard || !boundaryRectangle;
+    if (refs.gomokuSizeRow) refs.gomokuSizeRow.hidden = !selectedPresetUsesDynamicBoardSize() || boundaryRectangle;
     if (refs.gomokuSize) {
-      refs.gomokuSize.min = modeReversi ? String(REVERSI_MIN_BOARD_SIZE) : String(GOMOKU_MIN_BOARD_SIZE);
-      refs.gomokuSize.max = modeReversi ? String(REVERSI_MAX_BOARD_SIZE) : String(GOMOKU_MAX_BOARD_SIZE);
-      refs.gomokuSize.step = modeReversi ? '2' : '1';
+      refs.gomokuSize.min = boundaryGlueBoard ? String(BOUNDARY_GLUE_MIN_BOARD_SIZE) : String(GOMOKU_MIN_BOARD_SIZE);
+      refs.gomokuSize.max = boundaryGlueBoard ? String(BOUNDARY_GLUE_MAX_BOARD_SIZE) : String(GOMOKU_MAX_BOARD_SIZE);
+      refs.gomokuSize.step = '1';
     }
     if (refs.placementDisplayRow) refs.placementDisplayRow.hidden = !modePlacement;
     if (refs.connectFourFall) refs.connectFourFall.disabled = modeConnectFour && game && game.phase !== 'setup';
     syncGoScoringControls(modeGo);
     syncChineseCheckersControls(modeChineseCheckers);
+    syncSokobanObjectSizeOutput();
+    syncSokobanEnergyGlowOutput();
     if (refs.nextStep) refs.nextStep.disabled = !mode2048 || !(isStepMode() && stepPaused && eventQueue.length && !currentAnimation);
     if (refs.undo) refs.undo.disabled = !undoStack.length;
+    if (refs.redo) refs.redo.disabled = !redoStack.length;
     if (refs.exportState) refs.exportState.disabled = !game;
     if (refs.importState) refs.importState.disabled = false;
     syncDebugModeUi();
@@ -10302,11 +11747,12 @@
     const activeLattice = catalogAvailable ? latticeForPreset(game ? game.preset : selectedPreset()).id : '';
     if (refs.moveGroups) {
       refs.moveGroups.forEach((group) => {
-        group.hidden = !mode2048 || group.getAttribute('data-move-lattice') !== activeLattice;
+        group.hidden = !modeDirectional || group.getAttribute('data-move-lattice') !== activeLattice;
       });
     }
+    if (refs.moveRow) refs.moveRow.hidden = !modeDirectional;
     if (refs.moveButtons) {
-      const disabled = !mode2048 || !canAcceptMove();
+      const disabled = !modeDirectional || !canAcceptDirectionalMove();
       refs.moveButtons.forEach((button) => {
         const dir = game ? dirFromName(button.getAttribute('data-move-dir'), game.preset) : null;
         button.disabled = disabled || !Number.isInteger(dir);
@@ -10317,6 +11763,45 @@
   function syncSpeedOutput() {
     if (!refs.speed || !refs.speedValue) return;
     refs.speedValue.textContent = `${refs.speed.value} ms`;
+  }
+
+  function selectedSokobanObjectScale() {
+    const value = refs.sokobanObjectSize ? Number(refs.sokobanObjectSize.value) : SOKOBAN_OBJECT_SCALE_DEFAULT;
+    return clampInteger(value, SOKOBAN_OBJECT_SCALE_MIN, SOKOBAN_OBJECT_SCALE_MAX, SOKOBAN_OBJECT_SCALE_DEFAULT) / 100;
+  }
+
+  function syncSokobanObjectSizeOutput() {
+    if (!refs.sokobanObjectSize || !refs.sokobanObjectSizeValue) return;
+    const percent = Math.round(selectedSokobanObjectScale() * 100);
+    refs.sokobanObjectSize.value = String(percent);
+    refs.sokobanObjectSizeValue.textContent = `${percent}%`;
+  }
+
+  function selectedSokobanEnergyGlow() {
+    const inner = refs.sokobanGlowInner ? Number(refs.sokobanGlowInner.value) : SOKOBAN_ENERGY_GLOW_INNER_DEFAULT;
+    const outer = refs.sokobanGlowOuter ? Number(refs.sokobanGlowOuter.value) : SOKOBAN_ENERGY_GLOW_OUTER_DEFAULT;
+    const blur = refs.sokobanGlowBlur ? Number(refs.sokobanGlowBlur.value) : SOKOBAN_ENERGY_GLOW_BLUR_DEFAULT;
+    return {
+      inner: clampInteger(inner, 0, 100, SOKOBAN_ENERGY_GLOW_INNER_DEFAULT) / 100,
+      outer: clampInteger(outer, 0, 100, SOKOBAN_ENERGY_GLOW_OUTER_DEFAULT) / 100,
+      blur: clampInteger(blur, 0, 100, SOKOBAN_ENERGY_GLOW_BLUR_DEFAULT) / 100
+    };
+  }
+
+  function syncSokobanEnergyGlowOutput() {
+    const glow = selectedSokobanEnergyGlow();
+    if (refs.sokobanGlowInner && refs.sokobanGlowInnerValue) {
+      refs.sokobanGlowInner.value = String(Math.round(glow.inner * 100));
+      refs.sokobanGlowInnerValue.textContent = `${Math.round(glow.inner * 100)}%`;
+    }
+    if (refs.sokobanGlowOuter && refs.sokobanGlowOuterValue) {
+      refs.sokobanGlowOuter.value = String(Math.round(glow.outer * 100));
+      refs.sokobanGlowOuterValue.textContent = `${Math.round(glow.outer * 100)}%`;
+    }
+    if (refs.sokobanGlowBlur && refs.sokobanGlowBlurValue) {
+      refs.sokobanGlowBlur.value = String(Math.round(glow.blur * 100));
+      refs.sokobanGlowBlurValue.textContent = `${Math.round(glow.blur * 100)}%`;
+    }
   }
 
   function syncGoScoringControls(modeGo) {
@@ -10879,6 +12364,12 @@
     return Math.max(min, Math.min(max, number));
   }
 
+  function clampNumber(value, min, max, fallback = min) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return Math.max(min, Math.min(max, number));
+  }
+
   function toRadians(degrees) {
     return degrees * Math.PI / 180;
   }
@@ -10991,6 +12482,26 @@
         round: state.round || 0
       };
     }
+    if (isSokobanGame(state)) {
+      return {
+        gameMode: GAME_MODES.SOKOBAN,
+        players: (state.players || [])
+          .map((player) => ({ id: player.id, index: player.index }))
+          .sort((a, b) => a.index - b.index || a.id - b.id),
+        boxes: (state.boxes || [])
+          .map((box) => ({ id: box.id, index: box.index }))
+          .sort((a, b) => a.index - b.index || a.id - b.id),
+        targets: Array.from(state.targets || []).sort((a, b) => a - b),
+        walls: Array.from(state.walls || []).sort((a, b) => a - b),
+        ice: Array.from(state.ice || []).sort((a, b) => a - b),
+        energyBridges: Array.from(state.energyBridges || []).sort((a, b) => a - b),
+        removed: Array.from(state.removed).sort((a, b) => a - b),
+        moves: state.moves || state.round || 0,
+        pushes: state.pushes || 0,
+        winner: state.winner || '',
+        round: state.round || state.moves || 0
+      };
+    }
     return {
       boxes: state.boxes
         .map((box) => ({ id: box.id, index: box.index, value: box.value }))
@@ -11014,12 +12525,21 @@
     HEX_DIRS,
     LATTICES,
     PRESETS,
+    BOUNDARY_GLUE_BOARD_PRESET_ID,
+    BOUNDARY_GLUE_MODES,
+    RANDOM_GAME_MODE_CHOICE_ID,
+    RANDOM_PRESET_CHOICE_ID,
+    SOKOBAN_ENERGY_GLOW_INNER_DEFAULT,
+    SOKOBAN_ENERGY_GLOW_OUTER_DEFAULT,
+    SOKOBAN_ENERGY_GLOW_BLUR_DEFAULT,
+    SOKOBAN_OBJECT_SCALE_DEFAULT,
     beginGame,
     beginChineseCheckersGame,
     beginConnectFourGame,
     beginGoGame,
     beginGomokuGame,
     beginReversiGame,
+    beginSokobanGame,
     blastNeighborIndices,
     cloneGameState,
     connectFourCyclingHoleIndices,
@@ -11032,7 +12552,9 @@
     createGoState,
     createGomokuState,
     createReversiState,
+    createSokobanState,
     createRng,
+    centeredReversiOpening,
     directNeighborIndex,
     dirFromKey,
     directionsForPreset,
@@ -11041,16 +12563,24 @@
     findGomokuWin,
     findConnectFourWin,
     fullBoardWithoutAdjacentMerge,
+    generateBoundaryGlueBoardPreset,
+    generateTorusBoundaryGlue,
+    generateKleinBoundaryGlue,
+    generateProjectivePlaneBoundaryGlue,
+    generateRandomBoundaryGlue,
     hoveredGlueBoundaryAtPoint,
     hoveredGlueEdgeKeys,
     indexOf,
     isGameOver,
     isExplosionModeActive,
+    isSokobanGame,
     latticeForPreset,
     base64UrlDecodeUtf8,
     extractReturnedPresetObjectText,
     gameModeFromPresetGroup,
     gameModeFromUrlParam,
+    gameStateFromDebugImportPayload,
+    orderedCatalogGameModes,
     placementLineRenderSegments,
     placementWinningLineSegments,
     placementLineTransitionRoute,
@@ -11060,14 +12590,19 @@
     placeGomokuStone,
     placeConnectFourToken,
     placeReversiDisc,
+    moveSokobanPlayers,
     reversiFlipsForMove,
     chineseCheckerMoveMap,
     scoreGoGame,
     normalizePresetPayload,
     presetFromImportPayload,
     presetFromImportText,
+    randomPresetForMode,
+    randomSetupChoice,
     rowCol,
     simulateRound,
+    sokobanSolved,
+    sokobanSetupIssue,
     spawnInitialValue,
     spawnRoundValue,
     stateSummary,

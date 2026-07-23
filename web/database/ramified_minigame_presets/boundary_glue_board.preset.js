@@ -3,17 +3,16 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = preset;
   if (root) {
     root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-    root.RAMIFIED_MINIGAME_PRESET_DATA.gomoku_random_glue = preset;
+    root.RAMIFIED_MINIGAME_PRESET_DATA.boundary_glue_board = preset;
   }
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {
   return {
-  "id": "gomoku-random-glue",
-  "label": "random glue n*n",
-  "lattice": "square",
-  "size": "15x15",
-  "surface": "random boundary glue",
-  "randomGlue": true,
-  "dynamicGomokuSize": true,
-  "dynamicGomokuLabelPrefix": "random glue"
-};
+    id: 'boundary-glue-board',
+    label: 'boundary glue board',
+    lattice: 'square',
+    size: '4x4',
+    surface: 'torus',
+    boundaryGlueBoard: true,
+    boundaryGlueMode: 'torus'
+  };
 });
