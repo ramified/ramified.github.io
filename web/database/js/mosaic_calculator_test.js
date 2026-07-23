@@ -125,6 +125,7 @@ function testMinigameFormats() {
   assert.match(source, /Add this entry to ramified_minigame_presets\/presets\.js:/);
   assert.match(source, /\/\/\s+"gameTypes": \[/);
   assert.match(source, /\/\/\s+"file": "connect_four_export\.preset\.js"/);
+  assert.match(source, /\/\/ \};/);
   assert.match(source, /Store gameTypes in presets\.js only/);
   assert.doesNotMatch(source.slice(source.indexOf('  return {')), /"gameTypes"\s*:/);
   assert.match(source, /connect_four_export\.preset\.js/);
@@ -461,6 +462,9 @@ function testSokobanDecorationDrawingMatchesMinigame() {
   [
     'drawSokobanBrickPattern',
     'drawSokobanCrate',
+    'drawSokobanCratePath',
+    'drawSokobanSnowflakeMark',
+    "lattice && lattice.shape === 'hex'",
     "'#6c6257'",
     "'#b8793f'",
     "'#5d351e'",
@@ -501,6 +505,22 @@ function testRemovedBoundaryPresetIdsAreNotAdvertised() {
   assert.ok(registrySource.includes('"id": "boundary-glue-board"'));
 }
 
+function testPaletteSwatchRatios() {
+  const html = fs.readFileSync(require.resolve('../mosaic_calculator.html'), 'utf8');
+  const source = fs.readFileSync(require.resolve('./mosaic_calculator.js'), 'utf8');
+  const swatchBlock = html.slice(
+    html.indexOf('    .tile-swatch {'),
+    html.indexOf('    .tile-swatch[data-lattice-shape="square"]')
+  );
+  assert.ok(html.includes('.tile-swatch[data-lattice-shape="square"]'));
+  assert.ok(html.includes('aspect-ratio: 1 / 1;'));
+  assert.ok(html.includes('.tile-swatch[data-lattice-shape="hex"]'));
+  assert.ok(html.includes('aspect-ratio: 1.7320508076 / 2;'));
+  assert.ok(!/^\s+height:\s*46px;/m.test(swatchBlock));
+  assert.ok(source.includes('button.dataset.latticeShape'));
+  assert.ok(source.includes('Math.sqrt(3) / 2'));
+}
+
 const tests = [
   testFullExportIncludesMarkers,
   testBackgroundFormats,
@@ -519,7 +539,8 @@ const tests = [
   testSokobanWallToggleDoesNotRemoveTile,
   testHoleMarkerDrawingMatchesConnectFour,
   testSokobanDecorationDrawingMatchesMinigame,
-  testRemovedBoundaryPresetIdsAreNotAdvertised
+  testRemovedBoundaryPresetIdsAreNotAdvertised,
+  testPaletteSwatchRatios
 ];
 
 for (const test of tests) {

@@ -2952,6 +2952,8 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameHtml.includes('id="sokoban-glow-inner" min="0" max="100" step="5" value="55"'));
   assert.ok(minigameHtml.includes('id="sokoban-glow-outer" min="0" max="100" step="5" value="82"'));
   assert.ok(minigameHtml.includes('id="sokoban-glow-blur" min="0" max="100" step="5" value="38"'));
+  assert.ok(minigameHtml.includes('id="sokoban-beam-width" min="20" max="110" step="5" value="70"'));
+  assert.ok(minigameHtml.includes('id="sokoban-beam-opacity" min="5" max="80" step="5" value="34"'));
   assert.ok(minigameHtml.includes('id="gomoku-board-size"'));
   assert.ok(minigameHtml.includes('id="gomoku-display-row" data-mode-control="gomoku"'));
   assert.ok(minigameHtml.includes('id="gomoku-display-style"'));
@@ -3172,7 +3174,8 @@ function testUrlMinigamePresetImport() {
   };
   const encoded = encodeBase64UrlJson(payload);
   const { elements } = createHeadlessDomHarness({
-    locationSearch: `?minigamePreset=${encoded}&mode=connect-four`
+    locationSearch: `?minigamePreset=${encoded}&mode=connect-four`,
+    randoms: [0.99, 0]
   });
   assert.strictEqual(elements.get('game-mode-select').value, 'connect-four');
   assert.strictEqual(elements.get('surface-preset-select').value, 'imported-preset');
@@ -3578,7 +3581,9 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('sokoban-object-size-row', { hidden: true, attributes: { 'data-mode-control': 'sokoban' } }),
     makeElement('sokoban-glow-inner-row', { hidden: true, attributes: { 'data-mode-control': 'sokoban' } }),
     makeElement('sokoban-glow-outer-row', { hidden: true, attributes: { 'data-mode-control': 'sokoban' } }),
-    makeElement('sokoban-glow-blur-row', { hidden: true, attributes: { 'data-mode-control': 'sokoban' } })
+    makeElement('sokoban-glow-blur-row', { hidden: true, attributes: { 'data-mode-control': 'sokoban' } }),
+    makeElement('sokoban-beam-width-row', { hidden: true, attributes: { 'data-mode-control': 'sokoban' } }),
+    makeElement('sokoban-beam-opacity-row', { hidden: true, attributes: { 'data-mode-control': 'sokoban' } })
   ];
   const canvas = makeElement('mosaic-canvas', {
     parentElement: wrap,
@@ -3632,6 +3637,10 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('sokoban-glow-outer-value'),
     makeElement('sokoban-glow-blur', { value: '38' }),
     makeElement('sokoban-glow-blur-value'),
+    makeElement('sokoban-beam-width', { value: '70' }),
+    makeElement('sokoban-beam-width-value'),
+    makeElement('sokoban-beam-opacity', { value: '34' }),
+    makeElement('sokoban-beam-opacity-value'),
     makeElement('number-box-style', { value: 'paper' }),
     makeElement('highlight-new-boxes', { checked: true }),
     makeElement('begin-game'),
@@ -3724,7 +3733,7 @@ function createHeadlessDomHarness(options = {}) {
       cancelAnimationFrame() {}
     }
   };
-  let randoms = (options.randoms || [0, 0.1, 0.2, 0.1, 0.3, 0.1]).slice();
+  let randoms = (options.randoms || [0.5, 0.5, 0, 0.1, 0.2, 0.1, 0.3, 0.1]).slice();
   context.Math.random = () => (randoms.length ? randoms.shift() : 0.1);
   vm.runInNewContext(source, context);
   return { elements, canvas, moveButtons, documentListeners, windowListeners, calls, context };
@@ -4268,27 +4277,44 @@ function testDynamicPresetCatalogOptions() {
   assert.strictEqual(elements.get('sokoban-glow-inner-value').textContent, '55%');
   assert.strictEqual(elements.get('sokoban-glow-outer-value').textContent, '82%');
   assert.strictEqual(elements.get('sokoban-glow-blur-value').textContent, '38%');
+  assert.strictEqual(elements.get('sokoban-beam-width-value').textContent, '70%');
+  assert.strictEqual(elements.get('sokoban-beam-opacity-value').textContent, '34%');
   assert.strictEqual(elements.get('sokoban-glow-inner-row').hidden, false);
+  assert.strictEqual(elements.get('sokoban-beam-width-row').hidden, false);
 }
 
 function testRandomSetupAndPresetOptions() {
+  const firstSokobanPreset = game.randomPresetForMode('sokoban', () => 0);
+  const middleSokobanPreset = game.randomPresetForMode('sokoban', () => 0.5);
+  assert.ok(firstSokobanPreset);
+  assert.ok(middleSokobanPreset);
+  assert.ok(registryEntrySupportsMode(presetRegistry.find((preset) => preset.id === firstSokobanPreset.id), 'sokoban'));
+  assert.ok(registryEntrySupportsMode(presetRegistry.find((preset) => preset.id === middleSokobanPreset.id), 'sokoban'));
+
   let rolls = [0.99, 0];
   const choice = game.randomSetupChoice(() => rolls.shift());
   assert.strictEqual(choice.mode, 'sokoban');
-  assert.strictEqual(choice.preset.id, 'sokoban-square');
-  assert.strictEqual(game.randomPresetForMode('sokoban', () => 0.5).id, 'sokoban-square');
+  assert.strictEqual(choice.preset.id, firstSokobanPreset.id);
 
   let harness = createHeadlessDomHarness({ randoms: [0.99, 0] });
   let gameSelect = harness.elements.get('game-mode-select');
   let presetSelect = harness.elements.get('surface-preset-select');
+  assert.strictEqual(gameSelect.value, 'sokoban');
+  assert.strictEqual(presetSelect.value, firstSokobanPreset.id);
+  assert.strictEqual(harness.elements.get('status-badge').textContent, 'setup');
+  assert.strictEqual(harness.elements.get('begin-game').textContent, 'begin the game');
+
+  harness = createHeadlessDomHarness({ randoms: [0.5, 0.5, 0.99, 0] });
+  gameSelect = harness.elements.get('game-mode-select');
+  presetSelect = harness.elements.get('surface-preset-select');
   gameSelect.value = game.RANDOM_GAME_MODE_CHOICE_ID;
   gameSelect.listeners.change();
   assert.strictEqual(gameSelect.value, 'sokoban');
-  assert.strictEqual(presetSelect.value, 'sokoban-square');
+  assert.strictEqual(presetSelect.value, firstSokobanPreset.id);
   assert.ok(![game.RANDOM_GAME_MODE_CHOICE_ID, game.RANDOM_PRESET_CHOICE_ID].includes(gameSelect.value));
   assert.ok(![game.RANDOM_GAME_MODE_CHOICE_ID, game.RANDOM_PRESET_CHOICE_ID].includes(presetSelect.value));
 
-  harness = createHeadlessDomHarness({ randoms: [0.999] });
+  harness = createHeadlessDomHarness({ randoms: [0.5, 0.5, 0.999] });
   gameSelect = harness.elements.get('game-mode-select');
   presetSelect = harness.elements.get('surface-preset-select');
   gameSelect.value = 'connect-four';
@@ -5232,6 +5258,226 @@ function testSokobanStatusRoundTripAndCompactImport() {
   assert.strictEqual(imported.walls.has(game.indexOf(1, 1, imported.preset.cols)), true);
 }
 
+function testSokobanIcePlayerSlidingAndSkiingBlockers() {
+  let state = readySokobanState({
+    size: '3x5',
+    sokoban: {
+      players: [tile(2, 1)],
+      boxes: [tile(3, 1)],
+      targets: [tile(3, 2)],
+      ice: [tile(2, 2), tile(2, 3)]
+    }
+  });
+  let result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['2,4']);
+
+  state = readySokobanState({
+    size: '3x5',
+    sokoban: {
+      players: [tile(2, 1)],
+      boxes: [tile(2, 4)],
+      targets: [tile(3, 5)],
+      ice: [tile(2, 2), tile(2, 3)]
+    }
+  });
+  result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['2,3']);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.boxes, result.state.preset.cols), ['2,4']);
+  assert.strictEqual(result.state.pushes, 0);
+}
+
+function testSokobanIceBoxFrictionRules() {
+  let state = readySokobanState({
+    size: '3x5',
+    sokoban: {
+      players: [tile(2, 1)],
+      boxes: [tile(2, 2)],
+      targets: [tile(3, 5)],
+      ice: [tile(2, 3), tile(2, 4)]
+    }
+  });
+  let result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['2,2']);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.boxes, result.state.preset.cols), ['2,5']);
+
+  state = readySokobanState({
+    size: '3x5',
+    sokoban: {
+      players: [tile(2, 1)],
+      boxes: [tile(2, 2)],
+      targets: [tile(3, 5)],
+      ice: [tile(2, 2), tile(2, 3)]
+    }
+  });
+  result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['2,1']);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.boxes, result.state.preset.cols), ['2,4']);
+
+  state = readySokobanState({
+    size: '3x5',
+    sokoban: {
+      players: [tile(2, 1)],
+      boxes: [tile(2, 2)],
+      targets: [tile(3, 5)],
+      ice: [tile(2, 1)]
+    }
+  });
+  result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['2,1']);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.boxes, result.state.preset.cols), ['2,3']);
+}
+
+function testSokobanEnergyBeamFormationAndGluedRoutes() {
+  let state = readySokobanState({
+    size: '3x5',
+    sokoban: {
+      players: [tile(1, 1)],
+      boxes: [tile(3, 1)],
+      targets: [tile(3, 2)],
+      energyBridges: [tile(2, 2), tile(2, 5)]
+    }
+  });
+  let beams = game.sokobanEnergyBeamObjects(state);
+  assert.strictEqual(beams.length, 1);
+  assert.deepStrictEqual(beams[0].interior.map((index) => {
+    const pos = game.rowCol(index, state.preset.cols);
+    return `${pos.row},${pos.col}`;
+  }), ['2,3', '2,4']);
+
+  state = readySokobanState({
+    size: '3x5',
+    sokoban: {
+      players: [tile(1, 1)],
+      boxes: [tile(2, 3)],
+      targets: [tile(3, 2)],
+      energyBridges: [tile(2, 2), tile(2, 5)]
+    }
+  });
+  assert.strictEqual(game.sokobanEnergyBeamObjects(state).length, 0);
+
+  const glued = game.createSokobanState(sokobanPreset({
+    size: '1x4',
+    glue: [
+      gluePair(1, { row: 1, col: 4, dir: game.DIRS.E }, { row: 1, col: 1, dir: game.DIRS.W })
+    ],
+    sokoban: {
+      energyBridges: [tile(1, 2), tile(1, 4)]
+    }
+  }));
+  beams = game.sokobanEnergyBeamObjects(glued);
+  assert.ok(beams.some((beam) => beam.interior.includes(game.indexOf(1, 1, glued.preset.cols))));
+}
+
+function testSokobanEnergyBridgesAreBoxLikeCargo() {
+  let state = readySokobanState({
+    size: '3x4',
+    sokoban: {
+      players: [tile(2, 1)],
+      targets: [tile(2, 3)],
+      energyBridges: [tile(2, 2)]
+    }
+  });
+  assert.strictEqual(game.sokobanSetupIssue(state), '');
+  let result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['2,2']);
+  assert.deepStrictEqual(Array.from(result.state.energyBridges).map((index) => {
+    const pos = game.rowCol(index, result.state.preset.cols);
+    return `${pos.row},${pos.col}`;
+  }), ['2,3']);
+  assert.strictEqual(result.bridges.length, 1);
+  assert.strictEqual(result.beams.length, 0);
+  assert.strictEqual(result.state.phase, 'gameover');
+  assert.strictEqual(game.sokobanSolved(result.state), true);
+
+  state = readySokobanState({
+    size: '3x5',
+    sokoban: {
+      players: [tile(2, 1)],
+      targets: [tile(3, 5)],
+      energyBridges: [tile(2, 2), tile(2, 4)]
+    }
+  });
+  assert.strictEqual(game.sokobanEnergyBeamObjects(state).length, 1);
+  result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(Array.from(result.state.energyBridges).map((index) => {
+    const pos = game.rowCol(index, result.state.preset.cols);
+    return `${pos.row},${pos.col}`;
+  }).sort(), ['2,3', '2,4']);
+  assert.strictEqual(result.bridges.length, 1);
+  assert.strictEqual(result.beams.length, 0);
+  assert.strictEqual(game.sokobanEnergyBeamObjects(result.state).length, 0);
+}
+
+function testSokobanEnergyBeamPushesAndIceSliding() {
+  let state = readySokobanState({
+    size: '4x5',
+    sokoban: {
+      players: [tile(1, 3)],
+      boxes: [tile(4, 5)],
+      targets: [tile(4, 4)],
+      energyBridges: [tile(2, 2), tile(2, 4)]
+    }
+  });
+  let result = game.moveSokobanPlayers(state, game.DIRS.S);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['2,3']);
+  assert.deepStrictEqual(Array.from(result.state.energyBridges).map((index) => {
+    const pos = game.rowCol(index, result.state.preset.cols);
+    return `${pos.row},${pos.col}`;
+  }).sort(), ['3,2', '3,4']);
+  assert.strictEqual(result.state.pushes, 1);
+
+  state = readySokobanState({
+    size: '4x5',
+    sokoban: {
+      players: [tile(2, 1)],
+      boxes: [tile(4, 5)],
+      targets: [tile(4, 4)],
+      energyBridges: [tile(2, 2), tile(2, 4)]
+    }
+  });
+  result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, false);
+
+  state = readySokobanState({
+    size: '4x5',
+    sokoban: {
+      players: [tile(1, 3)],
+      boxes: [tile(4, 5)],
+      targets: [tile(4, 4)],
+      walls: [tile(3, 3)],
+      energyBridges: [tile(2, 2), tile(2, 4)]
+    }
+  });
+  result = game.moveSokobanPlayers(state, game.DIRS.S);
+  assert.strictEqual(result.changed, false);
+
+  state = readySokobanState({
+    size: '5x5',
+    sokoban: {
+      players: [tile(1, 3)],
+      boxes: [tile(5, 5)],
+      targets: [tile(5, 4)],
+      ice: [tile(2, 2), tile(2, 4), tile(3, 2), tile(3, 4)],
+      energyBridges: [tile(2, 2), tile(2, 4)]
+    }
+  });
+  result = game.moveSokobanPlayers(state, game.DIRS.S);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['1,3']);
+  assert.deepStrictEqual(Array.from(result.state.energyBridges).map((index) => {
+    const pos = game.rowCol(index, result.state.preset.cols);
+    return `${pos.row},${pos.col}`;
+  }).sort(), ['4,2', '4,4']);
+}
+
 function run() {
   testInitialSpawnWeights();
   testRoundSpawnWeights();
@@ -5309,6 +5555,11 @@ function run() {
   testSokobanWallsAndBoxPushes();
   testSokobanGluedEdgeMovementAndPush();
   testSokobanStatusRoundTripAndCompactImport();
+  testSokobanIcePlayerSlidingAndSkiingBlockers();
+  testSokobanIceBoxFrictionRules();
+  testSokobanEnergyBeamFormationAndGluedRoutes();
+  testSokobanEnergyBridgesAreBoxLikeCargo();
+  testSokobanEnergyBeamPushesAndIceSliding();
   testExtraBackgroundPresets();
   testKeyboardMapping();
   testHexMovePadUsesArrowGlyphs();

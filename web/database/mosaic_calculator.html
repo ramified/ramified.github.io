@@ -941,12 +941,18 @@
     .tile-palette-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(46px, 1fr));
+      align-items: start;
       gap: 8px;
       margin-top: 6px;
     }
 
     .tile-swatch {
-      height: 46px;
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
+      height: auto;
+      min-height: 46px;
+      aspect-ratio: 1 / 1;
       min-width: 0;
       border: 1px solid var(--border);
       border-radius: 3px;
@@ -957,6 +963,14 @@
       -webkit-user-select: none;
       padding: 3px;
       transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+    }
+
+    .tile-swatch[data-lattice-shape="square"] {
+      aspect-ratio: 1 / 1;
+    }
+
+    .tile-swatch[data-lattice-shape="hex"] {
+      aspect-ratio: 1.7320508076 / 2;
     }
 
     .tile-swatch:hover,
@@ -976,6 +990,7 @@
     }
 
     .tile-swatch canvas {
+      display: block;
       width: 100% !important;
       height: 100% !important;
       background: transparent;

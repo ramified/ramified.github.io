@@ -1894,6 +1894,22 @@
     renderDecorationPalette();
   }
 
+  function paletteCanvasSizeForLattice(lattice = getLattice()) {
+    const height = 64;
+    if (lattice.shape === 'hex') {
+      return { width: Math.round(height * Math.sqrt(3) / 2), height };
+    }
+    return { width: height, height };
+  }
+
+  function setupPaletteSwatchPreview(button, canvas) {
+    const lattice = getLattice();
+    button.dataset.latticeShape = lattice.shape === 'hex' ? 'hex' : 'square';
+    const size = paletteCanvasSizeForLattice(lattice);
+    canvas.width = size.width;
+    canvas.height = size.height;
+  }
+
   function renderTilePalette() {
     if (!refs.tilePalette) return;
     if (!isTilingMode()) return;
@@ -1918,8 +1934,7 @@
       if (entry.id === state.selectedPaletteId) button.classList.add('active');
 
       const canvas = document.createElement('canvas');
-      canvas.width = 64;
-      canvas.height = 64;
+      setupPaletteSwatchPreview(button, canvas);
       button.appendChild(canvas);
       refs.tilePalette.appendChild(button);
       drawTilePreview(canvas, entry.tile);
@@ -1945,8 +1960,7 @@
       if (entry.kind === selectedKind) button.classList.add('active');
 
       const canvas = document.createElement('canvas');
-      canvas.width = 64;
-      canvas.height = 64;
+      setupPaletteSwatchPreview(button, canvas);
       button.appendChild(canvas);
       refs.backgroundDecorationPalette.appendChild(button);
       drawDecorationPreview(canvas, entry.kind);
@@ -2906,7 +2920,7 @@
     const registryEntry = minigamePresetRegistryEntry(metadata);
     const registryHint = JSON.stringify(registryEntry, null, 2)
       .split('\n')
-      .map((line) => `// ${line}`);
+      .map((line, index, lines) => `// ${line}${index === lines.length - 1 ? ';' : ''}`);
     return [
       `// Save this file as ramified_minigame_presets/${registryEntry.file}`,
       '// Add this entry to ramified_minigame_presets/presets.js:',
@@ -14995,7 +15009,7 @@
       return;
     }
     if (normalized === 'sokoban-energy-bridge') {
-      drawSokobanCrate(ctx, point, radius, SOKOBAN_OBJECT_SCALE_DEFAULT, { glow: SOKOBAN_ENERGY_GLOW_DEFAULT });
+      drawSokobanCrate(ctx, point, radius, SOKOBAN_OBJECT_SCALE_DEFAULT, { glow: SOKOBAN_ENERGY_GLOW_DEFAULT }, lattice);
       return;
     }
     if (normalized === 'sokoban-wall') {
@@ -15011,7 +15025,7 @@
       return;
     }
     if (normalized === 'sokoban-box') {
-      drawSokobanCrate(ctx, point, radius, SOKOBAN_OBJECT_SCALE_DEFAULT);
+      drawSokobanCrate(ctx, point, radius, SOKOBAN_OBJECT_SCALE_DEFAULT, {}, lattice);
       return;
     }
     if (normalized === 'sokoban-player') {
@@ -15019,7 +15033,7 @@
     }
   }
 
-  function drawSokobanCrate(ctx, point, radius, scale, options = {}) {
+  function drawSokobanCrate(ctx, point, radius, scale, options = {}, lattice = getLattice()) {
     const side = radius * 2 * scale;
     const glow = options.glow && typeof options.glow === 'object'
       ? options.glow
@@ -15032,7 +15046,7 @@
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
     }
-    roundedRectPath(ctx, point.x - side / 2, point.y - side / 2, side, side, Math.min(5, radius * 0.12));
+    drawSokobanCratePath(ctx, point, radius, scale, lattice);
     ctx.fillStyle = '#b8793f';
     ctx.strokeStyle = '#5d351e';
     ctx.lineWidth = Math.max(1.5, radius * 0.055);
@@ -15042,7 +15056,7 @@
       const innerAlpha = clampUnit(glow.inner);
       ctx.save();
       ctx.shadowBlur = 0;
-      roundedRectPath(ctx, point.x - side / 2, point.y - side / 2, side, side, Math.min(5, radius * 0.12));
+      drawSokobanCratePath(ctx, point, radius, scale, lattice);
       ctx.clip();
       const gradient = ctx.createRadialGradient
         ? ctx.createRadialGradient(point.x, point.y, side * 0.08, point.x, point.y, side * 0.55)
@@ -15062,18 +15076,51 @@
       ctx.shadowBlur = 0;
       ctx.strokeStyle = `rgba(34,197,94,${Math.min(0.95, clampUnit(glow.outer) + 0.06).toFixed(2)})`;
       ctx.lineWidth = Math.max(1.2, radius * 0.045);
-      roundedRectPath(ctx, point.x - side / 2, point.y - side / 2, side, side, Math.min(5, radius * 0.12));
+      drawSokobanCratePath(ctx, point, radius, scale, lattice);
       ctx.stroke();
     }
+    drawSokobanCrateMark(ctx, point, radius, scale, lattice);
+    ctx.restore();
+  }
+
+  function drawSokobanCratePath(ctx, point, radius, scale, lattice) {
+    if (lattice && lattice.shape === 'hex') {
+      drawScaledTilePath(ctx, point, radius * scale, lattice);
+      return;
+    }
+    const side = radius * 2 * scale;
+    roundedRectPath(ctx, point.x - side / 2, point.y - side / 2, side, side, Math.min(5, radius * 0.12));
+  }
+
+  function drawSokobanCrateMark(ctx, point, radius, scale, lattice) {
+    if (lattice && lattice.shape === 'hex') {
+      drawSokobanSnowflakeMark(ctx, point, radius * scale * 0.64, radius);
+      return;
+    }
+    const side = radius * 2 * scale;
     ctx.strokeStyle = 'rgba(255,253,248,0.36)';
     ctx.lineWidth = Math.max(1, radius * 0.04);
+    ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(point.x - side * 0.32, point.y - side * 0.32);
     ctx.lineTo(point.x + side * 0.32, point.y + side * 0.32);
     ctx.moveTo(point.x + side * 0.32, point.y - side * 0.32);
     ctx.lineTo(point.x - side * 0.32, point.y + side * 0.32);
     ctx.stroke();
-    ctx.restore();
+  }
+
+  function drawSokobanSnowflakeMark(ctx, point, length, radius) {
+    ctx.strokeStyle = 'rgba(255,253,248,0.46)';
+    ctx.lineWidth = Math.max(1, radius * 0.04);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    [0, Math.PI / 3, (2 * Math.PI) / 3].forEach((angle) => {
+      const dx = Math.cos(angle) * length;
+      const dy = Math.sin(angle) * length;
+      ctx.moveTo(point.x - dx, point.y - dy);
+      ctx.lineTo(point.x + dx, point.y + dy);
+    });
+    ctx.stroke();
   }
 
   function drawSokobanBrickPattern(ctx, point, radius, scale, lattice) {

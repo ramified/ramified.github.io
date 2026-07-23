@@ -99,6 +99,8 @@
   const SOKOBAN_ENERGY_GLOW_INNER_DEFAULT = 55;
   const SOKOBAN_ENERGY_GLOW_OUTER_DEFAULT = 82;
   const SOKOBAN_ENERGY_GLOW_BLUR_DEFAULT = 38;
+  const SOKOBAN_BEAM_WIDTH_DEFAULT = 70;
+  const SOKOBAN_BEAM_OPACITY_DEFAULT = 34;
   const GOMOKU_WIN_LENGTH = 5;
   const GOMOKU_COLORS = ['black', 'white'];
   const GOMOKU_DEFAULT_BOARD_SIZE = 15;
@@ -374,6 +376,10 @@
     refs.sokobanGlowOuterValue = document.getElementById('sokoban-glow-outer-value');
     refs.sokobanGlowBlur = document.getElementById('sokoban-glow-blur');
     refs.sokobanGlowBlurValue = document.getElementById('sokoban-glow-blur-value');
+    refs.sokobanBeamWidth = document.getElementById('sokoban-beam-width');
+    refs.sokobanBeamWidthValue = document.getElementById('sokoban-beam-width-value');
+    refs.sokobanBeamOpacity = document.getElementById('sokoban-beam-opacity');
+    refs.sokobanBeamOpacityValue = document.getElementById('sokoban-beam-opacity-value');
     refs.undo = document.getElementById('undo-step');
     refs.redo = document.getElementById('redo-step');
     refs.exportState = document.getElementById('export-state');
@@ -456,6 +462,13 @@
         render();
       });
     });
+    [refs.sokobanBeamWidth, refs.sokobanBeamOpacity].forEach((input) => {
+      if (!input) return;
+      input.addEventListener('input', () => {
+        syncSokobanBeamOutput();
+        render();
+      });
+    });
     if (refs.nextStep) refs.nextStep.addEventListener('click', playNextStep);
     if (refs.debugToggle) refs.debugToggle.addEventListener('click', toggleDebugMode);
     if (refs.undo) refs.undo.addEventListener('click', undoPreviousStep);
@@ -486,6 +499,7 @@
     syncSpeedOutput();
     syncSokobanObjectSizeOutput();
     syncSokobanEnergyGlowOutput();
+    syncSokobanBeamOutput();
     syncChineseCheckersTimingOutput();
     syncDebugModeUi();
     setPresetSelectLoading();
@@ -544,6 +558,7 @@
     syncGameModeSelectOptions();
     syncImportGameModeSelectOptions();
     if (importPresetFromUrlParams()) return;
+    if (applyRandomSetupChoice(randomSetupChoice(), { focus: false })) return;
     syncBoardSizeInputForGameMode();
     const preferred = refs.select && presetSelectHasValue(refs.select.value)
       ? refs.select.value
@@ -1031,8 +1046,7 @@
     return preset ? { mode, preset } : null;
   }
 
-  function resolveRandomSetupFromUi(rng = Math.random) {
-    const choice = randomSetupChoice(rng);
+  function applyRandomSetupChoice(choice, options = {}) {
     if (!choice || !refs.gameMode || !refs.select) return false;
     refs.gameMode.value = choice.mode;
     syncBoardSizeInputForGameMode();
@@ -1041,8 +1055,12 @@
     syncPresetSelectOptions(choice.preset.id);
     setImportToolsVisible(false);
     resetToPreview();
-    if (refs.canvas) refs.canvas.focus();
+    if (options.focus !== false && refs.canvas) refs.canvas.focus();
     return true;
+  }
+
+  function resolveRandomSetupFromUi(rng = Math.random) {
+    return applyRandomSetupChoice(randomSetupChoice(rng));
   }
 
   function resolveRandomPresetFromUi(rng = Math.random) {
@@ -4670,6 +4688,7 @@
     const objectScale = selectedSokobanObjectScale();
     drawSokobanIndexSet(ctx, geom, state.targets, 'target');
     drawSokobanIndexSet(ctx, geom, state.ice, 'ice', objectScale);
+    drawSokobanEnergyBeams(ctx, geom, state);
     drawSokobanIndexSet(ctx, geom, state.energyBridges, 'energyBridge', objectScale);
     drawSokobanIndexSet(ctx, geom, state.walls, 'wall', objectScale);
     (state.boxes || []).forEach((box) => drawSokobanBox(ctx, geom, box.index, objectScale));
@@ -4745,7 +4764,53 @@
   function drawSokobanEnergyBridge(ctx, geom, index, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100) {
     const cell = geom.cells[index];
     if (!cell) return;
-    drawSokobanCrate(ctx, cell, geom.radius, objectScale, { glow: selectedSokobanEnergyGlow() });
+    drawSokobanCrate(ctx, cell, geom.radius, objectScale, { glow: selectedSokobanEnergyGlow() }, geom.lattice);
+  }
+
+  function drawSokobanEnergyBeams(ctx, geom, state) {
+    const beams = sokobanEnergyBeamObjects(state);
+    if (!beams.length) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    beams.forEach((beam) => drawSokobanEnergyBeam(ctx, geom, state, beam));
+    ctx.restore();
+  }
+
+  function drawSokobanEnergyBeam(ctx, geom, state, beam) {
+    const beamStyle = selectedSokobanBeamStyle();
+    const lineWidth = Math.max(4, geom.radius * 2 * beamStyle.width);
+    const haloWidth = Math.max(lineWidth * 1.18, geom.radius * 0.44);
+    const segments = placementLineRenderSegments(state, geom, beam.start, beam.end, beam.route);
+    ctx.save();
+    ctx.shadowColor = `rgba(34,197,94,${Math.min(0.55, beamStyle.opacity + 0.16).toFixed(2)})`;
+    ctx.shadowBlur = Math.max(5, geom.radius * 0.18);
+    ctx.strokeStyle = `rgba(34,197,94,${Math.max(0.08, beamStyle.opacity * 0.55).toFixed(2)})`;
+    ctx.lineWidth = haloWidth;
+    segments.forEach((segment) => {
+      ctx.beginPath();
+      ctx.moveTo(segment.start.x, segment.start.y);
+      ctx.lineTo(segment.end.x, segment.end.y);
+      ctx.stroke();
+    });
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = `rgba(22,163,74,${beamStyle.opacity.toFixed(2)})`;
+    ctx.lineWidth = lineWidth;
+    segments.forEach((segment) => {
+      ctx.beginPath();
+      ctx.moveTo(segment.start.x, segment.start.y);
+      ctx.lineTo(segment.end.x, segment.end.y);
+      ctx.stroke();
+    });
+    ctx.fillStyle = `rgba(34,197,94,${Math.max(0.06, beamStyle.opacity * 0.42).toFixed(2)})`;
+    ctx.strokeStyle = `rgba(22,163,74,${Math.max(0.12, beamStyle.opacity * 0.7).toFixed(2)})`;
+    ctx.lineWidth = Math.max(1, geom.radius * 0.035);
+    beam.interior.forEach((index) => {
+      if (!drawSokobanTileShape(ctx, geom, index, 0.58)) return;
+      ctx.fill();
+      ctx.stroke();
+    });
+    ctx.restore();
   }
 
   function drawSokobanWall(ctx, geom, index, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100) {
@@ -4798,10 +4863,10 @@
   function drawSokobanBox(ctx, geom, index, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100) {
     const cell = geom.cells[index];
     if (!cell) return;
-    drawSokobanCrate(ctx, cell, geom.radius, objectScale);
+    drawSokobanCrate(ctx, cell, geom.radius, objectScale, {}, geom.lattice);
   }
 
-  function drawSokobanCrate(ctx, cell, radius, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100, options = {}) {
+  function drawSokobanCrate(ctx, cell, radius, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100, options = {}, lattice = LATTICES.square) {
     const side = radius * 2 * objectScale;
     const glow = options.glow && typeof options.glow === 'object'
       ? options.glow
@@ -4817,7 +4882,7 @@
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
     }
-    roundedRectPath(ctx, cell.x - side / 2, cell.y - side / 2, side, side, Math.min(5, radius * 0.12));
+    drawSokobanCratePath(ctx, cell, radius, objectScale, lattice);
     ctx.fillStyle = '#b8793f';
     ctx.strokeStyle = '#5d351e';
     ctx.lineWidth = Math.max(1.5, radius * 0.055);
@@ -4827,7 +4892,7 @@
       const innerAlpha = clampNumber(glow.inner, 0, 1);
       ctx.save();
       ctx.shadowBlur = 0;
-      roundedRectPath(ctx, cell.x - side / 2, cell.y - side / 2, side, side, Math.min(5, radius * 0.12));
+      drawSokobanCratePath(ctx, cell, radius, objectScale, lattice);
       ctx.clip();
       const gradient = ctx.createRadialGradient
         ? ctx.createRadialGradient(cell.x, cell.y, side * 0.08, cell.x, cell.y, side * 0.55)
@@ -4847,18 +4912,57 @@
       ctx.shadowBlur = 0;
       ctx.strokeStyle = `rgba(34,197,94,${Math.min(0.95, clampNumber(glow.outer, 0, 1) + 0.06).toFixed(2)})`;
       ctx.lineWidth = Math.max(1.2, radius * 0.045);
-      roundedRectPath(ctx, cell.x - side / 2, cell.y - side / 2, side, side, Math.min(5, radius * 0.12));
+      drawSokobanCratePath(ctx, cell, radius, objectScale, lattice);
       ctx.stroke();
     }
+    drawSokobanCrateMark(ctx, cell, radius, objectScale, lattice);
+    ctx.restore();
+  }
+
+  function drawSokobanCratePath(ctx, cell, radius, objectScale, lattice) {
+    if (lattice && lattice.shape === 'hex') {
+      const points = tilePoints(cell.x, cell.y, radius * objectScale, lattice);
+      ctx.beginPath();
+      points.forEach((point, pointIndex) => {
+        if (pointIndex === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.closePath();
+      return;
+    }
+    const side = radius * 2 * objectScale;
+    roundedRectPath(ctx, cell.x - side / 2, cell.y - side / 2, side, side, Math.min(5, radius * 0.12));
+  }
+
+  function drawSokobanCrateMark(ctx, cell, radius, objectScale, lattice) {
+    if (lattice && lattice.shape === 'hex') {
+      drawSokobanSnowflakeMark(ctx, cell, radius * objectScale * 0.64, radius);
+      return;
+    }
+    const side = radius * 2 * objectScale;
     ctx.strokeStyle = 'rgba(255,253,248,0.36)';
     ctx.lineWidth = Math.max(1, radius * 0.04);
+    ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(cell.x - side * 0.32, cell.y - side * 0.32);
     ctx.lineTo(cell.x + side * 0.32, cell.y + side * 0.32);
     ctx.moveTo(cell.x + side * 0.32, cell.y - side * 0.32);
     ctx.lineTo(cell.x - side * 0.32, cell.y + side * 0.32);
     ctx.stroke();
-    ctx.restore();
+  }
+
+  function drawSokobanSnowflakeMark(ctx, cell, length, radius) {
+    ctx.strokeStyle = 'rgba(255,253,248,0.46)';
+    ctx.lineWidth = Math.max(1, radius * 0.04);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    [0, Math.PI / 3, (2 * Math.PI) / 3].forEach((angle) => {
+      const dx = Math.cos(angle) * length;
+      const dy = Math.sin(angle) * length;
+      ctx.moveTo(cell.x - dx, cell.y - dy);
+      ctx.lineTo(cell.x + dx, cell.y + dy);
+    });
+    ctx.stroke();
   }
 
   function drawSokobanPlayer(ctx, geom, index) {
@@ -6770,78 +6874,88 @@
     const setupIssue = sokobanSetupIssue(sourceState);
     if (setupIssue) return { changed: false, state: sourceState, message: setupIssue };
 
-    const boxesByIndex = new Map();
-    const boxesById = new Map();
-    for (const box of sourceState.boxes || []) {
-      if (boxesByIndex.has(box.index)) return { changed: false, state: sourceState, message: 'boxes overlap' };
-      boxesByIndex.set(box.index, box);
-      boxesById.set(box.id, box);
-    }
+    const context = sokobanMovementContext(sourceState);
+    if (context.boxesOverlap) return { changed: false, state: sourceState, message: 'boxes overlap' };
+    if (context.playersOverlap) return { changed: false, state: sourceState, message: 'players overlap' };
     const playerPlans = [];
     const boxPlans = [];
+    const bridgePlans = [];
+    const beamPlans = [];
     const pushedBoxIds = new Set();
+    const pushedBridgeIndices = new Set();
+    const pushedBeamIds = new Set();
 
     for (const player of sourceState.players || []) {
-      const next = surfaceSuccessor(sourceState, player.index, direction);
-      if (!next || sokobanTileBlocked(sourceState, next.index)) {
-        return { changed: false, state: sourceState, message: 'player blocked' };
-      }
-      const box = boxesByIndex.get(next.index);
-      if (!box) {
-        playerPlans.push({ id: player.id, from: player.index, to: next.index });
-        continue;
-      }
-      if (pushedBoxIds.has(box.id)) {
-        return { changed: false, state: sourceState, message: 'two players push the same box' };
-      }
-      const boxNext = surfaceSuccessor(sourceState, box.index, next.dir);
-      if (!boxNext || sokobanTileBlocked(sourceState, boxNext.index)) {
-        return { changed: false, state: sourceState, message: 'box blocked' };
-      }
-      if (boxesByIndex.has(boxNext.index)) {
-        return { changed: false, state: sourceState, message: 'box cannot push another box' };
-      }
-      pushedBoxIds.add(box.id);
-      boxPlans.push({ id: box.id, from: box.index, to: boxNext.index, dir: next.dir });
-      playerPlans.push({ id: player.id, from: player.index, to: box.index, boxId: box.id });
+      const plan = sokobanPlanPlayerMove(sourceState, context, player, direction, pushedBoxIds, pushedBridgeIndices, pushedBeamIds);
+      if (!plan.changed && plan.message) return { changed: false, state: sourceState, message: plan.message };
+      playerPlans.push(plan.player);
+      boxPlans.push(...plan.boxes);
+      bridgePlans.push(...plan.bridges);
+      beamPlans.push(...plan.beams);
     }
 
+    const playerPathIssue = sokobanValidatePlayerPathBlockers(sourceState, context, playerPlans, boxPlans, bridgePlans, beamPlans);
+    if (playerPathIssue) return { changed: false, state: sourceState, message: playerPathIssue };
+
+    const finalBridgeResult = sokobanFinalEnergyBridges(sourceState, bridgePlans, beamPlans);
+    if (!finalBridgeResult.ok) return { changed: false, state: sourceState, message: finalBridgeResult.message };
+    const finalEnergyBridges = finalBridgeResult.energyBridges;
+
+    const finalStateLike = cloneGameState(sourceState);
+    const playerPlanById = new Map(playerPlans.map((plan) => [plan.id, plan]));
+    const boxPlanById = new Map(boxPlans.map((plan) => [plan.id, plan]));
+    finalStateLike.players.forEach((player) => {
+      const plan = playerPlanById.get(player.id);
+      if (plan) player.index = plan.to;
+    });
+    finalStateLike.boxes.forEach((box) => {
+      const plan = boxPlanById.get(box.id);
+      if (plan) box.index = plan.to;
+    });
+    finalStateLike.energyBridges = finalEnergyBridges;
+    const finalContext = sokobanMovementContext(finalStateLike);
+
     const finalPlayers = new Map();
-    for (const plan of playerPlans) {
-      if (finalPlayers.has(plan.to)) {
+    for (const player of finalStateLike.players || []) {
+      if (finalPlayers.has(player.index)) {
         return { changed: false, state: sourceState, message: 'players collide' };
       }
-      finalPlayers.set(plan.to, plan.id);
-    }
-    const pushedDestinations = new Set();
-    for (const plan of boxPlans) {
-      if (pushedDestinations.has(plan.to)) {
-        return { changed: false, state: sourceState, message: 'boxes collide' };
-      }
-      pushedDestinations.add(plan.to);
+      finalPlayers.set(player.index, player.id);
     }
     const finalBoxIndices = new Map();
-    for (const box of sourceState.boxes || []) {
-      const pushed = boxPlans.find((plan) => plan.id === box.id);
-      const finalIndex = pushed ? pushed.to : box.index;
-      if (finalBoxIndices.has(finalIndex)) {
+    for (const box of finalStateLike.boxes || []) {
+      if (finalBoxIndices.has(box.index)) {
         return { changed: false, state: sourceState, message: 'boxes collide' };
       }
-      finalBoxIndices.set(finalIndex, box.id);
+      finalBoxIndices.set(box.index, box.id);
     }
     for (const finalPlayerIndex of finalPlayers.keys()) {
       if (finalBoxIndices.has(finalPlayerIndex)) {
         return { changed: false, state: sourceState, message: 'player and box collide' };
       }
+      if (finalEnergyBridges.has(finalPlayerIndex)) {
+        return { changed: false, state: sourceState, message: 'player and energy bridge collide' };
+      }
+      if (sokobanBeamFootprintAt(finalContext, finalPlayerIndex).length) {
+        return { changed: false, state: sourceState, message: 'player and energy beam collide' };
+      }
+    }
+    for (const finalBoxIndex of finalBoxIndices.keys()) {
+      if (finalEnergyBridges.has(finalBoxIndex)) {
+        return { changed: false, state: sourceState, message: 'box and energy bridge collide' };
+      }
+      if (sokobanBeamFootprintAt(finalContext, finalBoxIndex).length) {
+        return { changed: false, state: sourceState, message: 'box and energy beam collide' };
+      }
     }
 
     const changed = playerPlans.some((plan) => plan.from !== plan.to)
-      || boxPlans.some((plan) => plan.from !== plan.to);
+      || boxPlans.some((plan) => plan.from !== plan.to)
+      || bridgePlans.some((plan) => plan.from !== plan.to)
+      || beamPlans.some((plan) => sokobanNumberListKey(plan.fromEndpoints) !== sokobanNumberListKey(plan.toEndpoints));
     if (!changed) return { changed: false, state: sourceState, message: 'no move' };
 
     const state = cloneGameState(sourceState);
-    const boxPlanById = new Map(boxPlans.map((plan) => [plan.id, plan]));
-    const playerPlanById = new Map(playerPlans.map((plan) => [plan.id, plan]));
     state.players.forEach((player) => {
       const plan = playerPlanById.get(player.id);
       if (plan) player.index = plan.to;
@@ -6850,8 +6964,10 @@
       const plan = boxPlanById.get(box.id);
       if (plan) box.index = plan.to;
     });
+    state.energyBridges = finalEnergyBridges;
     state.moves = Math.max(0, Number(sourceState.moves) || Number(sourceState.round) || 0) + 1;
-    state.pushes = Math.max(0, Number(sourceState.pushes) || 0) + boxPlans.length;
+    const pushCount = boxPlans.length + bridgePlans.length + beamPlans.length;
+    state.pushes = Math.max(0, Number(sourceState.pushes) || 0) + pushCount;
     state.round = state.moves;
     state.resultDismissed = false;
     state.debugMessage = '';
@@ -6864,7 +6980,7 @@
       state.winner = '';
       state.ending = '';
     }
-    return { changed: true, state, players: playerPlans, boxes: boxPlans, pushes: boxPlans.length };
+    return { changed: true, state, players: playerPlans, boxes: boxPlans, bridges: bridgePlans, beams: beamPlans, pushes: pushCount };
   }
 
   function playSokobanMove(dir) {
@@ -8905,19 +9021,529 @@
       || (state.walls instanceof Set && state.walls.has(index));
   }
 
+  function sokobanEnergyBeamObjects(state) {
+    if (!isSokobanGame(state)) return [];
+    const bridgeSet = state.energyBridges instanceof Set ? state.energyBridges : new Set();
+    const bridges = Array.from(bridgeSet).sort((a, b) => a - b);
+    const beams = [];
+    const seen = new Set();
+    bridges.forEach((start) => {
+      if (!sokobanEnergyBridgeEndpointOpen(state, start)) return;
+      directionsForPreset(state.preset).forEach((dir) => {
+        const route = sokobanEnergyBridgeRoute(state, start, dir, bridgeSet);
+        if (!route) return;
+        const key = sokobanEnergyBeamKey(route);
+        if (seen.has(key)) return;
+        seen.add(key);
+        beams.push({
+          id: `beam:${key}`,
+          start: route.start,
+          end: route.end,
+          endpoints: [route.start, route.end],
+          interior: route.interior.slice(),
+          footprint: [route.start].concat(route.interior, route.end),
+          dir: route.dir,
+          endDir: route.endDir,
+          route: {
+            kind: 'axis',
+            start: route.start,
+            end: route.end,
+            directions: route.transitions.map((transition) => transition.outDir),
+            transitions: route.transitions
+          }
+        });
+      });
+    });
+    return beams;
+  }
+
+  function sokobanEnergyBridgeRoute(state, startIndex, initialDir, bridgeSet) {
+    let index = startIndex;
+    let dir = initialDir;
+    const interior = [];
+    const transitions = [];
+    const seen = new Set([`${index}:${dir}`]);
+    for (let guard = 0; guard < EVENT_GUARD; guard += 1) {
+      const next = surfaceSuccessor(state, index, dir);
+      if (!next) return null;
+      const transition = placementTransitionRecord(index, dir, next);
+      if (bridgeSet.has(next.index)) {
+        if (next.index === startIndex || !interior.length || !sokobanEnergyBridgeEndpointOpen(state, next.index)) return null;
+        transitions.push(transition);
+        return {
+          start: startIndex,
+          end: next.index,
+          dir: initialDir,
+          endDir: next.dir,
+          interior,
+          transitions
+        };
+      }
+      if (sokobanEnergyBridgeGapBlocked(state, next.index)) return null;
+      transitions.push(transition);
+      interior.push(next.index);
+      index = next.index;
+      dir = next.dir;
+      const stateKey = `${index}:${dir}`;
+      if (seen.has(stateKey)) return null;
+      seen.add(stateKey);
+    }
+    return null;
+  }
+
+  function sokobanEnergyBridgeEndpointOpen(state, index) {
+    return !sokobanTileBlocked(state, index)
+      && !sokobanBoxAt(state, index)
+      && !sokobanActorAt(state, index);
+  }
+
+  function sokobanEnergyBridgeGapBlocked(state, index) {
+    return sokobanTileBlocked(state, index)
+      || sokobanBoxAt(state, index)
+      || sokobanActorAt(state, index)
+      || (state.energyBridges instanceof Set && state.energyBridges.has(index));
+  }
+
+  function sokobanEnergyBeamKey(route) {
+    return [
+      sokobanNumberListKey(route.start < route.end ? [route.start, route.end] : [route.end, route.start]),
+      sokobanNumberListKey(route.interior)
+    ].join('|');
+  }
+
+  function sokobanNumberListKey(values) {
+    return Array.from(values || [])
+      .slice()
+      .sort((a, b) => a - b)
+      .join(',');
+  }
+
+  function sokobanMovementContext(state) {
+    const boxesByIndex = new Map();
+    const boxesById = new Map();
+    let boxesOverlap = false;
+    (state.boxes || []).forEach((box) => {
+      if (boxesByIndex.has(box.index)) boxesOverlap = true;
+      boxesByIndex.set(box.index, box);
+      boxesById.set(box.id, box);
+    });
+    const playersByIndex = new Map();
+    const playersById = new Map();
+    let playersOverlap = false;
+    (state.players || []).forEach((player) => {
+      if (playersByIndex.has(player.index)) playersOverlap = true;
+      playersByIndex.set(player.index, player);
+      playersById.set(player.id, player);
+    });
+    const beams = sokobanEnergyBeamObjects(state);
+    const beamInteriorMap = new Map();
+    const beamFootprintMap = new Map();
+    const activeBridgeIndices = new Set();
+    beams.forEach((beam) => {
+      beam.endpoints.forEach((index) => activeBridgeIndices.add(index));
+      beam.interior.forEach((index) => {
+        const entries = beamInteriorMap.get(index) || [];
+        entries.push(beam);
+        beamInteriorMap.set(index, entries);
+      });
+      beam.footprint.forEach((index) => {
+        const entries = beamFootprintMap.get(index) || [];
+        entries.push(beam);
+        beamFootprintMap.set(index, entries);
+      });
+    });
+    return {
+      boxesByIndex,
+      boxesById,
+      boxesOverlap,
+      playersByIndex,
+      playersById,
+      playersOverlap,
+      beams,
+      beamInteriorMap,
+      beamFootprintMap,
+      activeBridgeIndices,
+      allBridgeIndices: new Set(state.energyBridges || [])
+    };
+  }
+
+  function sokobanBeamFootprintAt(context, index) {
+    return (context && context.beamFootprintMap && context.beamFootprintMap.get(index)) || [];
+  }
+
+  function sokobanInteriorBeamsAt(context, index) {
+    return (context && context.beamInteriorMap && context.beamInteriorMap.get(index)) || [];
+  }
+
+  function sokobanMovementObjectAt(context, index) {
+    const box = context.boxesByIndex.get(index);
+    if (box) return { kind: 'box', box };
+    const beams = sokobanInteriorBeamsAt(context, index);
+    if (beams.length > 1) return { kind: 'beamOverlap', beams };
+    if (beams.length === 1) return { kind: 'beam', beam: beams[0] };
+    if (context.allBridgeIndices.has(index)) return { kind: 'energyBridge', index };
+    return null;
+  }
+
+  function sokobanIndexBlockedForMover(state, context, index, options = {}) {
+    if (sokobanTileBlocked(state, index)) return true;
+    const box = context.boxesByIndex.get(index);
+    if (box && box.id !== options.ignoreBoxId) return true;
+    const footprints = sokobanBeamFootprintAt(context, index);
+    if (footprints.some((beam) => {
+      if (beam.id === options.ignoreBeamId) return false;
+      return !(Number.isInteger(options.ignoreBeamEndpointIndex) && beam.endpoints.includes(options.ignoreBeamEndpointIndex));
+    })) {
+      return true;
+    }
+    const ownEndpoints = options.ownBridgeEndpoints || new Set();
+    if (context.allBridgeIndices.has(index)
+      && index !== options.ignoreBridgeIndex
+      && !ownEndpoints.has(index)) {
+      return true;
+    }
+    if (!options.ignorePlayers) {
+      const player = context.playersByIndex.get(index);
+      if (player && player.id !== options.ignorePlayerId) return true;
+    }
+    return false;
+  }
+
+  function sokobanPlanPlayerMove(state, context, player, direction, pushedBoxIds, pushedBridgeIndices, pushedBeamIds) {
+    const next = surfaceSuccessor(state, player.index, direction);
+    if (!next || sokobanTileBlocked(state, next.index)) {
+      return { changed: false, message: 'player blocked' };
+    }
+    const object = sokobanMovementObjectAt(context, next.index);
+    if (!object) {
+      const trace = sokobanTraceSlidingTile(state, context, player.index, direction, {
+        ignorePlayerId: player.id,
+        ignorePlayers: true
+      });
+      if (!trace || trace.cycle) {
+        return { changed: false, message: trace && trace.cycle ? 'player slide cycles before stopping' : 'player blocked' };
+      }
+      return {
+        changed: true,
+        player: { id: player.id, from: player.index, to: trace.to, path: trace.path, dir: direction },
+        boxes: [],
+        bridges: [],
+        beams: []
+      };
+    }
+    if (object.kind === 'box') {
+      if (pushedBoxIds.has(object.box.id)) {
+        return { changed: false, message: 'two players push the same box' };
+      }
+      const trace = sokobanTraceSlidingTile(state, context, object.box.index, next.dir, {
+        ignoreBoxId: object.box.id,
+        ignorePlayers: true
+      });
+      if (!trace || trace.cycle) {
+        return { changed: false, message: trace && trace.cycle ? 'box slide cycles before stopping' : 'box blocked' };
+      }
+      pushedBoxIds.add(object.box.id);
+      const playerStays = (state.ice instanceof Set && state.ice.has(player.index))
+        || (state.ice instanceof Set && state.ice.has(object.box.index));
+      return {
+        changed: true,
+        player: {
+          id: player.id,
+          from: player.index,
+          to: playerStays ? player.index : object.box.index,
+          path: playerStays ? [] : [object.box.index],
+          boxId: object.box.id,
+          dir: direction
+        },
+        boxes: [{
+          id: object.box.id,
+          from: object.box.index,
+          to: trace.to,
+          dir: next.dir,
+          path: trace.path,
+          steps: trace.steps
+        }],
+        bridges: [],
+        beams: []
+      };
+    }
+    if (object.kind === 'energyBridge') {
+      if (pushedBridgeIndices.has(object.index)) {
+        return { changed: false, message: 'two players push the same energy bridge' };
+      }
+      const trace = sokobanTraceSlidingTile(state, context, object.index, next.dir, {
+        ignoreBridgeIndex: object.index,
+        ignoreBeamEndpointIndex: object.index,
+        ignorePlayers: true
+      });
+      if (!trace || trace.cycle) {
+        return { changed: false, message: trace && trace.cycle ? 'energy bridge slide cycles before stopping' : 'energy bridge blocked' };
+      }
+      pushedBridgeIndices.add(object.index);
+      const playerStays = (state.ice instanceof Set && state.ice.has(player.index))
+        || (state.ice instanceof Set && state.ice.has(object.index));
+      return {
+        changed: true,
+        player: {
+          id: player.id,
+          from: player.index,
+          to: playerStays ? player.index : object.index,
+          path: playerStays ? [] : [object.index],
+          bridgeFrom: object.index,
+          dir: direction
+        },
+        boxes: [],
+        bridges: [{
+          from: object.index,
+          to: trace.to,
+          dir: next.dir,
+          path: trace.path,
+          steps: trace.steps
+        }],
+        beams: []
+      };
+    }
+    if (object.kind === 'beamOverlap') {
+      return { changed: false, message: 'energy beams overlap there' };
+    }
+    if (object.kind === 'beam') {
+      if (pushedBeamIds.has(object.beam.id)) {
+        return { changed: false, message: 'two players push the same energy beam' };
+      }
+      const trace = sokobanTraceSlidingBeam(state, context, object.beam, next.dir);
+      if (!trace || trace.cycle) {
+        return { changed: false, message: trace && trace.cycle ? 'energy beam slide cycles before stopping' : 'energy beam blocked' };
+      }
+      pushedBeamIds.add(object.beam.id);
+      const playerStays = (state.ice instanceof Set && state.ice.has(player.index))
+        || sokobanBeamObjectOnIce(state, object.beam);
+      return {
+        changed: true,
+        player: {
+          id: player.id,
+          from: player.index,
+          to: playerStays ? player.index : next.index,
+          path: playerStays ? [] : [next.index],
+          beamId: object.beam.id,
+          dir: direction
+        },
+        boxes: [],
+        bridges: [],
+        beams: [{
+          id: object.beam.id,
+          fromEndpoints: object.beam.endpoints.slice(),
+          toEndpoints: trace.beam.endpoints.slice(),
+          from: object.beam.footprint.slice(),
+          to: trace.beam.footprint.slice(),
+          dir: next.dir,
+          steps: trace.steps
+        }]
+      };
+    }
+    return { changed: false, message: 'player blocked' };
+  }
+
+  function sokobanTraceSlidingTile(state, context, fromIndex, dir, options = {}) {
+    let index = fromIndex;
+    let direction = dir;
+    const steps = [];
+    const path = [];
+    const seen = new Set([`${index}:${direction}`]);
+    for (let guard = 0; guard < EVENT_GUARD; guard += 1) {
+      const next = surfaceSuccessor(state, index, direction);
+      if (!next || sokobanIndexBlockedForMover(state, context, next.index, options)) {
+        return steps.length ? { to: index, dir: direction, steps, path } : null;
+      }
+      steps.push(placementTransitionRecord(index, direction, next));
+      path.push(next.index);
+      index = next.index;
+      direction = next.dir;
+      if (!(state.ice instanceof Set && state.ice.has(index))) {
+        return { to: index, dir: direction, steps, path };
+      }
+      const stateKey = `${index}:${direction}`;
+      if (seen.has(stateKey)) return { cycle: true, steps, path };
+      seen.add(stateKey);
+    }
+    return { cycle: true, steps, path };
+  }
+
+  function sokobanTraceSlidingBeam(state, context, sourceBeam, dir) {
+    const originalEndpoints = new Set(sourceBeam.endpoints);
+    let beam = { ...sourceBeam, originalEndpoints };
+    let direction = dir;
+    let bridgeSet = new Set(state.energyBridges || []);
+    const steps = [];
+    const seen = new Set([`${sokobanNumberListKey(beam.footprint)}:${direction}`]);
+    for (let guard = 0; guard < EVENT_GUARD; guard += 1) {
+      const step = sokobanTranslateBeamStep(state, context, beam, direction, originalEndpoints, bridgeSet);
+      if (!step) return steps.length ? { beam, steps } : null;
+      steps.push(step);
+      beam = { ...step.beam, id: sourceBeam.id, originalEndpoints };
+      bridgeSet = step.energyBridges;
+      direction = step.dir;
+      if (!sokobanBeamObjectOnIce(state, beam)) return { beam, steps };
+      const stateKey = `${sokobanNumberListKey(beam.footprint)}:${direction}`;
+      if (seen.has(stateKey)) return { cycle: true, beam, steps };
+      seen.add(stateKey);
+    }
+    return { cycle: true, beam, steps };
+  }
+
+  function sokobanTranslateBeamStep(state, context, beam, dir, originalEndpoints, currentBridgeSet) {
+    const destination = new Map();
+    const destinationSet = new Set();
+    const records = new Map();
+    for (const index of beam.footprint) {
+      const next = surfaceSuccessor(state, index, dir);
+      if (!next) return null;
+      if (destinationSet.has(next.index)) return null;
+      if (sokobanIndexBlockedForMover(state, context, next.index, {
+        ignoreBeamId: beam.id,
+        ignorePlayers: true,
+        blockBridgeEndpoints: true,
+        ownBridgeEndpoints: originalEndpoints
+      })) {
+        return null;
+      }
+      destination.set(index, next.index);
+      destinationSet.add(next.index);
+      records.set(index, placementTransitionRecord(index, dir, next));
+    }
+    const newStart = destination.get(beam.start);
+    const newEnd = destination.get(beam.end);
+    const newInterior = beam.interior.map((index) => destination.get(index));
+    const nextBridgeSet = new Set(currentBridgeSet || state.energyBridges || []);
+    beam.endpoints.forEach((index) => nextBridgeSet.delete(index));
+    nextBridgeSet.add(newStart);
+    nextBridgeSet.add(newEnd);
+    const nextState = {
+      ...state,
+      energyBridges: nextBridgeSet
+    };
+    const matched = sokobanMatchingBeam(nextState, newStart, newEnd, newInterior);
+    if (!matched) return null;
+    const reference = records.get(beam.start) || records.values().next().value;
+    return {
+      from: beam.footprint.slice(),
+      to: matched.footprint.slice(),
+      fromEndpoints: beam.endpoints.slice(),
+      toEndpoints: matched.endpoints.slice(),
+      transitions: Array.from(records.values()),
+      dir: reference ? reference.dir : dir,
+      beam: matched,
+      energyBridges: nextBridgeSet
+    };
+  }
+
+  function sokobanMatchingBeam(state, start, end, interior) {
+    const endpointKey = sokobanNumberListKey([start, end]);
+    const interiorKey = sokobanNumberListKey(interior);
+    return sokobanEnergyBeamObjects(state).find((beam) => (
+      sokobanNumberListKey(beam.endpoints) === endpointKey
+      && sokobanNumberListKey(beam.interior) === interiorKey
+    )) || null;
+  }
+
+  function sokobanBeamObjectOnIce(state, beam) {
+    return !!(state.ice instanceof Set
+      && beam
+      && Array.isArray(beam.endpoints)
+      && beam.endpoints.length === 2
+      && beam.endpoints.every((index) => state.ice.has(index)));
+  }
+
+  function sokobanFinalEnergyBridges(state, bridgePlans, beamPlans) {
+    const bridgeMoves = new Map();
+    const addMove = (from, to) => {
+      if (!Number.isInteger(from) || !Number.isInteger(to)) return { ok: false, message: 'energy bridge move is invalid' };
+      if (bridgeMoves.has(from) && bridgeMoves.get(from) !== to) {
+        return { ok: false, message: 'energy bridge moves conflict' };
+      }
+      bridgeMoves.set(from, to);
+      return { ok: true };
+    };
+    for (const plan of bridgePlans || []) {
+      const added = addMove(plan.from, plan.to);
+      if (!added.ok) return added;
+    }
+    for (const plan of beamPlans || []) {
+      for (let index = 0; index < plan.fromEndpoints.length; index += 1) {
+        const added = addMove(plan.fromEndpoints[index], plan.toEndpoints[index]);
+        if (!added.ok) return added;
+      }
+    }
+    const finalEnergyBridges = new Set();
+    for (const index of state.energyBridges || []) {
+      const finalIndex = bridgeMoves.has(index) ? bridgeMoves.get(index) : index;
+      if (finalEnergyBridges.has(finalIndex)) {
+        return { ok: false, message: 'energy bridges collide' };
+      }
+      finalEnergyBridges.add(finalIndex);
+    }
+    return { ok: true, energyBridges: finalEnergyBridges };
+  }
+
+  function sokobanValidatePlayerPathBlockers(state, context, playerPlans, boxPlans, bridgePlans, beamPlans) {
+    const movingPlayerIds = new Set(playerPlans
+      .filter((plan) => plan.from !== plan.to)
+      .map((plan) => plan.id));
+    const nonMovingPlayerAt = (index) => {
+      const player = context.playersByIndex.get(index);
+      return player && !movingPlayerIds.has(player.id) ? player : null;
+    };
+    for (const plan of playerPlans) {
+      for (const index of plan.path || []) {
+        const blocker = nonMovingPlayerAt(index);
+        if (blocker && blocker.id !== plan.id) return 'player blocked';
+      }
+    }
+    for (const plan of boxPlans) {
+      for (const index of plan.path || []) {
+        if (nonMovingPlayerAt(index)) return 'box blocked';
+      }
+    }
+    for (const plan of bridgePlans) {
+      for (const index of plan.path || []) {
+        if (nonMovingPlayerAt(index)) return 'energy bridge blocked';
+      }
+    }
+    for (const plan of beamPlans) {
+      for (const step of plan.steps || []) {
+        for (const index of step.to || []) {
+          if (nonMovingPlayerAt(index)) return 'energy beam blocked';
+        }
+      }
+    }
+    return '';
+  }
+
   function sokobanSolved(state) {
+    const cargo = sokobanCargoIndices(state);
     return isSokobanGame(state)
-      && Array.isArray(state.boxes)
-      && state.boxes.length > 0
+      && cargo.length > 0
       && state.targets instanceof Set
       && state.targets.size > 0
-      && state.boxes.every((box) => state.targets.has(box.index));
+      && cargo.every((index) => state.targets.has(index));
+  }
+
+  function sokobanCargoIndices(state) {
+    const indices = [];
+    (state && state.boxes || []).forEach((box) => {
+      if (Number.isInteger(box.index)) indices.push(box.index);
+    });
+    if (state && state.energyBridges instanceof Set) {
+      state.energyBridges.forEach((index) => {
+        if (Number.isInteger(index)) indices.push(index);
+      });
+    }
+    return indices;
   }
 
   function sokobanSetupIssue(state) {
     if (!isSokobanGame(state)) return '';
     if (!Array.isArray(state.players) || !state.players.length) return 'add at least one Sokoban player';
-    if (!Array.isArray(state.boxes) || !state.boxes.length) return 'add at least one Sokoban box';
+    if (!sokobanCargoIndices(state).length) return 'add at least one Sokoban box or energy bridge';
     if (!(state.targets instanceof Set) || !state.targets.size) return 'add at least one Sokoban target';
     const playerTiles = new Set();
     for (const player of state.players) {
@@ -8932,6 +9558,11 @@
       if (playerTiles.has(box.index)) return 'Sokoban players and boxes overlap';
       boxTiles.add(box.index);
     }
+    for (const index of state.energyBridges || []) {
+      if (sokobanTileBlocked(state, index)) return 'a Sokoban energy bridge is blocked by a wall or removed tile';
+      if (playerTiles.has(index)) return 'Sokoban players and energy bridges overlap';
+      if (boxTiles.has(index)) return 'Sokoban boxes and energy bridges overlap';
+    }
     return '';
   }
 
@@ -8939,7 +9570,7 @@
     const moves = Math.max(0, Number(state && state.moves) || Number(state && state.round) || 0);
     const pushes = Math.max(0, Number(state && state.pushes) || 0);
     const players = Array.isArray(state && state.players) ? state.players.length : 0;
-    const boxes = Array.isArray(state && state.boxes) ? state.boxes.length : 0;
+    const boxes = sokobanCargoIndices(state).length;
     return `${players} player${players === 1 ? '' : 's'}, ${boxes} box${boxes === 1 ? '' : 'es'}, ${moves} move${moves === 1 ? '' : 's'}, ${pushes} push${pushes === 1 ? '' : 'es'}`;
   }
 
@@ -10322,6 +10953,10 @@
 
   function emptySokobanIndices(state) {
     const occupied = new Set((state.players || []).concat(state.boxes || []).map((actor) => actor.index));
+    (state.energyBridges || new Set()).forEach((index) => occupied.add(index));
+    sokobanEnergyBeamObjects(state).forEach((beam) => {
+      beam.footprint.forEach((index) => occupied.add(index));
+    });
     const total = state.preset.rows * state.preset.cols;
     const empty = [];
     for (let index = 0; index < total; index += 1) {
@@ -11737,6 +12372,7 @@
     syncChineseCheckersControls(modeChineseCheckers);
     syncSokobanObjectSizeOutput();
     syncSokobanEnergyGlowOutput();
+    syncSokobanBeamOutput();
     if (refs.nextStep) refs.nextStep.disabled = !mode2048 || !(isStepMode() && stepPaused && eventQueue.length && !currentAnimation);
     if (refs.undo) refs.undo.disabled = !undoStack.length;
     if (refs.redo) refs.redo.disabled = !redoStack.length;
@@ -11801,6 +12437,27 @@
     if (refs.sokobanGlowBlur && refs.sokobanGlowBlurValue) {
       refs.sokobanGlowBlur.value = String(Math.round(glow.blur * 100));
       refs.sokobanGlowBlurValue.textContent = `${Math.round(glow.blur * 100)}%`;
+    }
+  }
+
+  function selectedSokobanBeamStyle() {
+    const width = refs.sokobanBeamWidth ? Number(refs.sokobanBeamWidth.value) : SOKOBAN_BEAM_WIDTH_DEFAULT;
+    const opacity = refs.sokobanBeamOpacity ? Number(refs.sokobanBeamOpacity.value) : SOKOBAN_BEAM_OPACITY_DEFAULT;
+    return {
+      width: clampInteger(width, 20, 110, SOKOBAN_BEAM_WIDTH_DEFAULT) / 100,
+      opacity: clampInteger(opacity, 5, 80, SOKOBAN_BEAM_OPACITY_DEFAULT) / 100
+    };
+  }
+
+  function syncSokobanBeamOutput() {
+    const beam = selectedSokobanBeamStyle();
+    if (refs.sokobanBeamWidth && refs.sokobanBeamWidthValue) {
+      refs.sokobanBeamWidth.value = String(Math.round(beam.width * 100));
+      refs.sokobanBeamWidthValue.textContent = `${Math.round(beam.width * 100)}%`;
+    }
+    if (refs.sokobanBeamOpacity && refs.sokobanBeamOpacityValue) {
+      refs.sokobanBeamOpacity.value = String(Math.round(beam.opacity * 100));
+      refs.sokobanBeamOpacityValue.textContent = `${Math.round(beam.opacity * 100)}%`;
     }
   }
 
@@ -12532,6 +13189,8 @@
     SOKOBAN_ENERGY_GLOW_INNER_DEFAULT,
     SOKOBAN_ENERGY_GLOW_OUTER_DEFAULT,
     SOKOBAN_ENERGY_GLOW_BLUR_DEFAULT,
+    SOKOBAN_BEAM_WIDTH_DEFAULT,
+    SOKOBAN_BEAM_OPACITY_DEFAULT,
     SOKOBAN_OBJECT_SCALE_DEFAULT,
     beginGame,
     beginChineseCheckersGame,
@@ -12601,6 +13260,7 @@
     randomSetupChoice,
     rowCol,
     simulateRound,
+    sokobanEnergyBeamObjects,
     sokobanSolved,
     sokobanSetupIssue,
     spawnInitialValue,

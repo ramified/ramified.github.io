@@ -408,6 +408,24 @@
       "key": "classic_fans_glue",
       "file": "classic_fans_glue.preset.js"
     },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "ice-test",
+      "label": "ice_test",
+      "key": "ice_test",
+      "file": "ice_test.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "energy-test",
+      "label": "energy_test",
+      "key": "energy_test",
+      "file": "energy_test.preset.js"
+    },
     ]
   };
 });
