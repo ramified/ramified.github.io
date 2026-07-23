@@ -426,6 +426,15 @@
       "key": "energy_test",
       "file": "energy_test.preset.js"
     },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "cross",
+      "label": "cross",
+      "key": "cross",
+      "file": "cross.preset.js"
+    },
     ]
   };
 });
