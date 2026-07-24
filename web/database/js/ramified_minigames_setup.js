@@ -2044,6 +2044,177 @@
     tickAnimation();
   }
 
+  function startSokobanMoveAnimation(result, dir) {
+    const event = sokobanMoveAnimationEvent(result, dir);
+    if (!sokobanAnimationHasVisibleItems(event)) return;
+    currentAnimation = {
+      event,
+      startedAt: now(),
+      duration: eventDuration(event)
+    };
+    tickAnimation();
+  }
+
+  function startSokobanBounceAnimation(state, dir, result = {}) {
+    const event = sokobanBounceAnimationEvent(state, dir, result);
+    if (!sokobanAnimationHasVisibleItems(event)) return;
+    currentAnimation = {
+      event,
+      startedAt: now(),
+      duration: eventDuration(event)
+    };
+    tickAnimation();
+  }
+
+  function sokobanMoveAnimationEvent(result, dir) {
+    return {
+      kind: 'sokobanMove',
+      dir,
+      message: result && result.message ? result.message : '',
+      players: (result && result.players || [])
+        .filter((plan) => plan && plan.from !== plan.to)
+        .map((plan) => sokobanAnimatedPlan('player', plan)),
+      boxes: (result && result.boxes || [])
+        .filter((plan) => plan && plan.from !== plan.to)
+        .map((plan) => sokobanAnimatedPlan('box', plan)),
+      bridges: (result && result.bridges || [])
+        .filter((plan) => plan && plan.from !== plan.to)
+        .map((plan) => sokobanAnimatedPlan('energyBridge', plan)),
+      beams: (result && result.beams || [])
+        .filter((plan) => plan && sokobanNumberListKey(plan.fromEndpoints) !== sokobanNumberListKey(plan.toEndpoints))
+        .map((plan) => ({
+          kind: 'beam',
+          id: plan.id,
+          from: Array.isArray(plan.from) ? plan.from.slice() : [],
+          to: Array.isArray(plan.to) ? plan.to.slice() : [],
+          fromEndpoints: Array.isArray(plan.fromEndpoints) ? plan.fromEndpoints.slice() : [],
+          toEndpoints: Array.isArray(plan.toEndpoints) ? plan.toEndpoints.slice() : [],
+          steps: cloneSokobanBeamSteps(plan.steps),
+          fromBeam: cloneSokobanBeam(plan.fromBeam),
+          toBeam: cloneSokobanBeam(plan.toBeam)
+        }))
+    };
+  }
+
+  function sokobanBounceAnimationEvent(state, dir, result = {}) {
+    const event = {
+      kind: 'sokobanBounce',
+      dir,
+      message: result.message || 'move rejected',
+      players: [],
+      boxes: [],
+      bridges: [],
+      beams: []
+    };
+    if (!isSokobanGame(state)) return event;
+    const context = sokobanMovementContext(state);
+    const seenBoxes = new Set();
+    const seenBridges = new Set();
+    const seenBeams = new Set();
+    (state.players || []).forEach((player) => {
+      const next = surfaceSuccessor(state, player.index, dir);
+      const transition = next ? placementTransitionRecord(player.index, dir, next) : null;
+      event.players.push({
+        kind: 'player',
+        id: player.id,
+        from: player.index,
+        to: player.index,
+        dir,
+        transition: transition ? clonePlacementTransition(transition) : null
+      });
+      if (!next || sokobanTileBlocked(state, next.index)) return;
+      const object = sokobanMovementObjectAt(context, next.index);
+      if (!object) return;
+      if (object.kind === 'box' && !seenBoxes.has(object.box.id)) {
+        seenBoxes.add(object.box.id);
+        event.boxes.push(sokobanBounceObjectPlan('box', object.box.id, object.box.index, next.dir, state));
+      } else if (object.kind === 'energyBridge' && !seenBridges.has(object.index)) {
+        seenBridges.add(object.index);
+        event.bridges.push(sokobanBounceObjectPlan('energyBridge', object.index, object.index, next.dir, state));
+      } else if (object.kind === 'beam' && !seenBeams.has(object.beam.id)) {
+        seenBeams.add(object.beam.id);
+        event.beams.push({
+          kind: 'beam',
+          id: object.beam.id,
+          beam: cloneSokobanBeam(object.beam)
+        });
+      }
+    });
+    return event;
+  }
+
+  function sokobanBounceObjectPlan(kind, id, index, dir, state) {
+    const next = surfaceSuccessor(state, index, dir);
+    return {
+      kind,
+      id,
+      from: index,
+      to: index,
+      dir,
+      transition: next ? clonePlacementTransition(placementTransitionRecord(index, dir, next)) : null
+    };
+  }
+
+  function sokobanAnimatedPlan(kind, plan) {
+    return {
+      kind,
+      id: plan.id != null ? plan.id : plan.from,
+      from: plan.from,
+      to: plan.to,
+      dir: plan.dir,
+      path: sokobanAnimationPath(plan),
+      steps: cloneSokobanTransitions(plan.steps)
+    };
+  }
+
+  function sokobanAnimationPath(plan) {
+    const path = [plan.from].concat(Array.isArray(plan.path) ? plan.path : []);
+    if (path[path.length - 1] !== plan.to) path.push(plan.to);
+    return path.filter((index, offset, list) => offset === 0 || index !== list[offset - 1]);
+  }
+
+  function sokobanAnimationHasVisibleItems(event) {
+    return !!(event
+      && ((event.players || []).length
+        || (event.boxes || []).length
+        || (event.bridges || []).length
+        || (event.beams || []).length));
+  }
+
+  function cloneSokobanTransitions(steps) {
+    return Array.isArray(steps) ? steps.map(clonePlacementTransition) : [];
+  }
+
+  function cloneSokobanBeamSteps(steps) {
+    return Array.isArray(steps)
+      ? steps.map((step) => ({
+        from: Array.isArray(step.from) ? step.from.slice() : [],
+        to: Array.isArray(step.to) ? step.to.slice() : [],
+        fromEndpoints: Array.isArray(step.fromEndpoints) ? step.fromEndpoints.slice() : [],
+        toEndpoints: Array.isArray(step.toEndpoints) ? step.toEndpoints.slice() : [],
+        transitions: cloneSokobanTransitions(step.transitions),
+        dir: step.dir,
+        beam: cloneSokobanBeam(step.beam)
+      }))
+      : [];
+  }
+
+  function cloneSokobanBeam(beam) {
+    if (!beam) return null;
+    return {
+      ...beam,
+      endpoints: Array.isArray(beam.endpoints) ? beam.endpoints.slice() : [],
+      interior: Array.isArray(beam.interior) ? beam.interior.slice() : [],
+      path: Array.isArray(beam.path) ? beam.path.slice() : [],
+      footprint: Array.isArray(beam.footprint) ? beam.footprint.slice() : [],
+      route: beam.route ? {
+        ...beam.route,
+        directions: Array.isArray(beam.route.directions) ? beam.route.directions.slice() : [],
+        transitions: cloneSokobanTransitions(beam.route.transitions)
+      } : null
+    };
+  }
+
   function tickAnimation() {
     if (!currentAnimation) return;
     const elapsed = now() - currentAnimation.startedAt;
@@ -2055,7 +2226,13 @@
       return;
     }
     const event = currentAnimation.event;
-    if (event.kind === 'connectFourDrop' || event.kind === 'reversiFlip' || event.kind === 'chineseCheckersMove') {
+    if (
+      event.kind === 'connectFourDrop'
+      || event.kind === 'reversiFlip'
+      || event.kind === 'chineseCheckersMove'
+      || event.kind === 'sokobanMove'
+      || event.kind === 'sokobanBounce'
+    ) {
       currentAnimation = null;
       render();
       syncControls();
@@ -4686,13 +4863,51 @@
   function drawSokobanGame(ctx, geom, state) {
     if (!isSokobanGame(state)) return;
     const objectScale = selectedSokobanObjectScale();
+    const animation = activeSokobanAnimationEvent();
+    const displayState = sokobanAnimationStaticState(state, animation);
     drawSokobanIndexSet(ctx, geom, state.targets, 'target');
     drawSokobanIndexSet(ctx, geom, state.ice, 'ice', objectScale);
-    drawSokobanEnergyBeams(ctx, geom, state);
-    drawSokobanIndexSet(ctx, geom, state.energyBridges, 'energyBridge', objectScale);
+    drawSokobanEnergyBeams(ctx, geom, displayState);
+    drawSokobanIndexSet(ctx, geom, displayState.energyBridges, 'energyBridge', objectScale);
     drawSokobanIndexSet(ctx, geom, state.walls, 'wall', objectScale);
-    (state.boxes || []).forEach((box) => drawSokobanBox(ctx, geom, box.index, objectScale));
-    (state.players || []).forEach((player) => drawSokobanPlayer(ctx, geom, player.index));
+    (displayState.boxes || []).forEach((box) => drawSokobanBox(ctx, geom, box.index, objectScale));
+    (displayState.players || []).forEach((player) => drawSokobanPlayer(ctx, geom, player.index));
+    drawSokobanAnimationOverlays(ctx, geom, state, animation, objectScale);
+  }
+
+  function activeSokobanAnimationEvent() {
+    const event = currentAnimation && currentAnimation.event;
+    return event && (event.kind === 'sokobanMove' || event.kind === 'sokobanBounce') ? event : null;
+  }
+
+  function sokobanAnimationStaticState(state, event) {
+    if (!event) return state;
+    const hidden = hiddenSokobanAnimationPieces(event);
+    if (!hidden.players.size && !hidden.boxes.size && !hidden.bridges.size) return state;
+    return {
+      ...state,
+      players: (state.players || []).filter((player) => !hidden.players.has(player.id)),
+      boxes: (state.boxes || []).filter((box) => !hidden.boxes.has(box.id)),
+      energyBridges: new Set(Array.from(state.energyBridges || []).filter((index) => !hidden.bridges.has(index)))
+    };
+  }
+
+  function hiddenSokobanAnimationPieces(event) {
+    const hidden = {
+      players: new Set(),
+      boxes: new Set(),
+      bridges: new Set()
+    };
+    if (!event) return hidden;
+    (event.players || []).forEach((item) => hidden.players.add(item.id));
+    (event.boxes || []).forEach((item) => hidden.boxes.add(item.id));
+    (event.bridges || []).forEach((item) => hidden.bridges.add(item.to));
+    if (event.kind === 'sokobanMove') {
+      (event.beams || []).forEach((item) => {
+        (item.toEndpoints || []).forEach((index) => hidden.bridges.add(index));
+      });
+    }
+    return hidden;
   }
 
   function drawSokobanIndexSet(ctx, geom, indices, kind, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100) {
@@ -4762,9 +4977,12 @@
   }
 
   function drawSokobanEnergyBridge(ctx, geom, index, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100) {
-    const cell = geom.cells[index];
-    if (!cell) return;
-    drawSokobanCrate(ctx, cell, geom.radius, objectScale, { glow: selectedSokobanEnergyGlow() }, geom.lattice);
+    drawSokobanEnergyBridgeAtPoint(ctx, geom, placementPiecePoint(geom, index), objectScale);
+  }
+
+  function drawSokobanEnergyBridgeAtPoint(ctx, geom, point, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100) {
+    if (!point) return;
+    drawSokobanCrate(ctx, point, geom.radius, objectScale, { glow: selectedSokobanEnergyGlow() }, geom.lattice);
   }
 
   function drawSokobanEnergyBeams(ctx, geom, state) {
@@ -4805,8 +5023,9 @@
     ctx.fillStyle = `rgba(34,197,94,${Math.max(0.06, beamStyle.opacity * 0.42).toFixed(2)})`;
     ctx.strokeStyle = `rgba(22,163,74,${Math.max(0.12, beamStyle.opacity * 0.7).toFixed(2)})`;
     ctx.lineWidth = Math.max(1, geom.radius * 0.035);
+    const interiorScale = Math.max(0.2, Math.min(1.1, beamStyle.width));
     beam.interior.forEach((index) => {
-      if (!drawSokobanTileShape(ctx, geom, index, 0.58)) return;
+      if (!drawSokobanTileShape(ctx, geom, index, interiorScale)) return;
       ctx.fill();
       ctx.stroke();
     });
@@ -4861,9 +5080,12 @@
   }
 
   function drawSokobanBox(ctx, geom, index, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100) {
-    const cell = geom.cells[index];
-    if (!cell) return;
-    drawSokobanCrate(ctx, cell, geom.radius, objectScale, {}, geom.lattice);
+    drawSokobanBoxAtPoint(ctx, geom, placementPiecePoint(geom, index), objectScale);
+  }
+
+  function drawSokobanBoxAtPoint(ctx, geom, point, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100) {
+    if (!point) return;
+    drawSokobanCrate(ctx, point, geom.radius, objectScale, {}, geom.lattice);
   }
 
   function drawSokobanCrate(ctx, cell, radius, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100, options = {}, lattice = LATTICES.square) {
@@ -4966,24 +5188,27 @@
   }
 
   function drawSokobanPlayer(ctx, geom, index) {
-    const cell = geom.cells[index];
-    if (!cell) return;
+    drawSokobanPlayerAtPoint(ctx, geom, placementPiecePoint(geom, index));
+  }
+
+  function drawSokobanPlayerAtPoint(ctx, geom, point) {
+    if (!point) return;
     const r = geom.radius;
-    const headY = cell.y - r * 0.38;
+    const headY = point.y - r * 0.38;
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
     const drawBodyPath = () => {
       ctx.beginPath();
-      ctx.moveTo(cell.x, cell.y - r * 0.2);
-      ctx.lineTo(cell.x, cell.y + r * 0.28);
-      ctx.moveTo(cell.x - r * 0.36, cell.y - r * 0.02);
-      ctx.lineTo(cell.x + r * 0.36, cell.y - r * 0.02);
-      ctx.moveTo(cell.x, cell.y + r * 0.28);
-      ctx.lineTo(cell.x - r * 0.34, cell.y + r * 0.56);
-      ctx.moveTo(cell.x, cell.y + r * 0.28);
-      ctx.lineTo(cell.x + r * 0.34, cell.y + r * 0.56);
+      ctx.moveTo(point.x, point.y - r * 0.2);
+      ctx.lineTo(point.x, point.y + r * 0.28);
+      ctx.moveTo(point.x - r * 0.36, point.y - r * 0.02);
+      ctx.lineTo(point.x + r * 0.36, point.y - r * 0.02);
+      ctx.moveTo(point.x, point.y + r * 0.28);
+      ctx.lineTo(point.x - r * 0.34, point.y + r * 0.56);
+      ctx.moveTo(point.x, point.y + r * 0.28);
+      ctx.lineTo(point.x + r * 0.34, point.y + r * 0.56);
     };
 
     ctx.strokeStyle = 'rgba(255,253,248,0.92)';
@@ -4991,18 +5216,136 @@
     drawBodyPath();
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(cell.x, headY, r * 0.22, 0, Math.PI * 2);
+    ctx.arc(point.x, headY, r * 0.22, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.strokeStyle = '#111111';
     ctx.fillStyle = '#fffdf8';
     ctx.lineWidth = Math.max(2, r * 0.075);
     ctx.beginPath();
-    ctx.arc(cell.x, headY, r * 0.18, 0, Math.PI * 2);
+    ctx.arc(point.x, headY, r * 0.18, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     drawBodyPath();
     ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawSokobanAnimationOverlays(ctx, geom, state, event, objectScale) {
+    if (!event || !currentAnimation) return;
+    if (event.kind === 'sokobanMove') {
+      const progress = easeInOut(currentAnimation.progress || 0);
+      (event.beams || []).forEach((item) => drawSokobanAnimatedBeam(ctx, geom, state, item, progress));
+      (event.bridges || []).forEach((item) => drawSokobanAnimatedPiece(ctx, geom, item, progress, objectScale));
+      (event.boxes || []).forEach((item) => drawSokobanAnimatedPiece(ctx, geom, item, progress, objectScale));
+      (event.players || []).forEach((item) => drawSokobanAnimatedPiece(ctx, geom, item, progress, objectScale));
+      return;
+    }
+    if (event.kind === 'sokobanBounce') {
+      const progress = Math.max(0, Math.min(1, currentAnimation.progress || 0));
+      (event.beams || []).forEach((item) => drawSokobanBounceBeam(ctx, geom, state, item, progress));
+      (event.bridges || []).forEach((item) => drawSokobanBouncePiece(ctx, geom, item, progress, objectScale));
+      (event.boxes || []).forEach((item) => drawSokobanBouncePiece(ctx, geom, item, progress, objectScale));
+      (event.players || []).forEach((item) => drawSokobanBouncePiece(ctx, geom, item, progress, objectScale));
+    }
+  }
+
+  function drawSokobanAnimatedPiece(ctx, geom, item, rawProgress, objectScale) {
+    const frame = placementSegmentAnimationFrame(geom, {
+      from: item.from,
+      to: item.to,
+      path: item.path,
+      transitions: item.steps
+    }, rawProgress);
+    if (!frame) return;
+    if (frame.kind === 'glued') {
+      drawGluedSokobanPiece(ctx, geom, frame.transition, frame.progress, item, objectScale);
+      return;
+    }
+    if (frame.point) drawSokobanPieceAtPoint(ctx, geom, item.kind, frame.point, objectScale);
+  }
+
+  function drawSokobanBouncePiece(ctx, geom, item, rawProgress, objectScale) {
+    const point = placementPiecePoint(geom, item.from);
+    if (!point) return;
+    const impact = Math.sin(Math.max(0, Math.min(1, rawProgress || 0)) * Math.PI) * 0.34;
+    const transition = item.transition;
+    if (transition && transition.glued && transition.edge) {
+      const outgoing = dirVector(transition.edge.dir, (geom.size || geom.radius * 2) * 0.76, geom.lattice);
+      const bouncePoint = {
+        x: point.x + outgoing.x * impact,
+        y: point.y + outgoing.y * impact
+      };
+      drawSokobanPieceClippedToTile(ctx, geom, item.from, bouncePoint, item, objectScale);
+      drawGlueFlash(ctx, geom, { edge: transition.edge }, rawProgress);
+      return;
+    }
+    const vector = dirVector(item.dir, (geom.size || geom.radius * 2) * 0.26, geom.lattice);
+    drawSokobanPieceAtPoint(ctx, geom, item.kind, {
+      x: point.x + vector.x * impact,
+      y: point.y + vector.y * impact
+    }, objectScale);
+  }
+
+  function drawGluedSokobanPiece(ctx, geom, transition, progress, item, objectScale) {
+    const from = placementPiecePoint(geom, transition.from);
+    const to = placementPiecePoint(geom, transition.to);
+    if (!from || !to || !transition.edge) return;
+    const outgoing = dirVector(transition.edge.dir, geom.size, geom.lattice);
+    const incoming = dirVector(transition.dir, geom.size, geom.lattice);
+    const exitPoint = {
+      x: from.x + outgoing.x * progress,
+      y: from.y + outgoing.y * progress
+    };
+    const entryPoint = {
+      x: to.x - incoming.x * (1 - progress),
+      y: to.y - incoming.y * (1 - progress)
+    };
+    drawSokobanPieceClippedToTile(ctx, geom, transition.from, exitPoint, item, objectScale);
+    drawSokobanPieceClippedToTile(ctx, geom, transition.to, entryPoint, item, objectScale);
+    drawGlueFlash(ctx, geom, { edge: transition.edge }, progress);
+  }
+
+  function drawSokobanPieceClippedToTile(ctx, geom, index, point, item, objectScale) {
+    const cell = geom.cells[index];
+    if (!cell) return;
+    ctx.save();
+    clipToTile(ctx, geom, cell, geom.radius * 0.96);
+    drawSokobanPieceAtPoint(ctx, geom, item.kind, point, objectScale);
+    ctx.restore();
+  }
+
+  function drawSokobanPieceAtPoint(ctx, geom, kind, point, objectScale) {
+    if (kind === 'player') drawSokobanPlayerAtPoint(ctx, geom, point);
+    else if (kind === 'energyBridge') drawSokobanEnergyBridgeAtPoint(ctx, geom, point, objectScale);
+    else drawSokobanBoxAtPoint(ctx, geom, point, objectScale);
+  }
+
+  function drawSokobanAnimatedBeam(ctx, geom, state, item, progress) {
+    if (!item) return;
+    const fromBeam = item.fromBeam;
+    const toBeam = item.toBeam;
+    if (fromBeam && progress < 1) {
+      ctx.save();
+      ctx.globalAlpha *= Math.max(0, 1 - progress);
+      drawSokobanEnergyBeam(ctx, geom, state, fromBeam);
+      ctx.restore();
+    }
+    if (toBeam && progress > 0) {
+      ctx.save();
+      ctx.globalAlpha *= Math.max(0, progress);
+      drawSokobanEnergyBeam(ctx, geom, state, toBeam);
+      ctx.restore();
+    }
+  }
+
+  function drawSokobanBounceBeam(ctx, geom, state, item, rawProgress) {
+    const beam = item && item.beam;
+    if (!beam) return;
+    const pulse = Math.sin(Math.max(0, Math.min(1, rawProgress || 0)) * Math.PI);
+    ctx.save();
+    ctx.globalAlpha *= 0.68 + pulse * 0.24;
+    drawSokobanEnergyBeam(ctx, geom, state, beam);
     ctx.restore();
   }
 
@@ -6988,19 +7331,21 @@
     if (!result.changed) {
       game.debugMessage = result.message || 'move rejected';
       syncStatus('Sokoban blocked', result.message || 'move rejected', phaseBadge(game.phase));
-      render();
+      startSokobanBounceAnimation(game, dir, result);
+      if (!currentAnimation) render();
       syncControls();
       return;
     }
     pushUndoSnapshot(`Sokoban move ${game.moves + 1}: ${dirLabel(dir, game.preset)}`);
     game = result.state;
     clearNoMoveTrial();
+    startSokobanMoveAnimation(result, dir);
     if (game.phase === 'gameover') {
       syncStatus('Sokoban solved', sokobanTurnInfo(game), 'over');
     } else {
       syncStatus(`Sokoban move ${game.moves}`, sokobanTurnInfo(game), 'ready');
     }
-    render();
+    if (!currentAnimation) render();
     syncControls();
     refreshDebugExportIfNeeded();
   }
@@ -9027,21 +9372,26 @@
     const bridges = Array.from(bridgeSet).sort((a, b) => a - b);
     const beams = [];
     const seen = new Set();
+    const usedDirections = new Set();
     bridges.forEach((start) => {
       if (!sokobanEnergyBridgeEndpointOpen(state, start)) return;
       directionsForPreset(state.preset).forEach((dir) => {
+        if (usedDirections.has(sokobanEnergyBridgeDirectionKey(start, dir))) return;
         const route = sokobanEnergyBridgeRoute(state, start, dir, bridgeSet);
         if (!route) return;
         const key = sokobanEnergyBeamKey(route);
         if (seen.has(key)) return;
         seen.add(key);
+        sokobanMarkEnergyBeamRouteDirections(state, route, usedDirections);
+        const path = [route.start].concat(route.interior, route.end);
         beams.push({
           id: `beam:${key}`,
           start: route.start,
           end: route.end,
           endpoints: [route.start, route.end],
           interior: route.interior.slice(),
-          footprint: [route.start].concat(route.interior, route.end),
+          path,
+          footprint: uniqueSokobanIndices(path),
           dir: route.dir,
           endDir: route.endDir,
           route: {
@@ -9057,6 +9407,18 @@
     return beams;
   }
 
+  function sokobanEnergyBridgeDirectionKey(index, dir) {
+    return `${index}:${dir}`;
+  }
+
+  function sokobanMarkEnergyBeamRouteDirections(state, route, usedDirections) {
+    if (!route || !(usedDirections instanceof Set)) return;
+    usedDirections.add(sokobanEnergyBridgeDirectionKey(route.start, route.dir));
+    if (Number.isInteger(route.end) && Number.isInteger(route.endDir)) {
+      usedDirections.add(sokobanEnergyBridgeDirectionKey(route.end, oppositeDir(state.preset, route.endDir)));
+    }
+  }
+
   function sokobanEnergyBridgeRoute(state, startIndex, initialDir, bridgeSet) {
     let index = startIndex;
     let dir = initialDir;
@@ -9068,7 +9430,7 @@
       if (!next) return null;
       const transition = placementTransitionRecord(index, dir, next);
       if (bridgeSet.has(next.index)) {
-        if (next.index === startIndex || !interior.length || !sokobanEnergyBridgeEndpointOpen(state, next.index)) return null;
+        if (!sokobanEnergyBridgeEndpointOpen(state, next.index)) return null;
         transitions.push(transition);
         return {
           start: startIndex,
@@ -9105,10 +9467,10 @@
   }
 
   function sokobanEnergyBeamKey(route) {
-    return [
-      sokobanNumberListKey(route.start < route.end ? [route.start, route.end] : [route.end, route.start]),
-      sokobanNumberListKey(route.interior)
-    ].join('|');
+    const path = [route.start].concat(route.interior, route.end);
+    const forward = path.join('>');
+    const reverse = path.slice().reverse().join('>');
+    return forward <= reverse ? forward : reverse;
   }
 
   function sokobanNumberListKey(values) {
@@ -9116,6 +9478,17 @@
       .slice()
       .sort((a, b) => a - b)
       .join(',');
+  }
+
+  function uniqueSokobanIndices(values) {
+    const result = [];
+    const seen = new Set();
+    (values || []).forEach((value) => {
+      if (!Number.isInteger(value) || seen.has(value)) return;
+      seen.add(value);
+      result.push(value);
+    });
+    return result;
   }
 
   function sokobanMovementContext(state) {
@@ -9189,12 +9562,14 @@
     if (sokobanTileBlocked(state, index)) return true;
     const box = context.boxesByIndex.get(index);
     if (box && box.id !== options.ignoreBoxId) return true;
-    const footprints = sokobanBeamFootprintAt(context, index);
-    if (footprints.some((beam) => {
-      if (beam.id === options.ignoreBeamId) return false;
-      return !(Number.isInteger(options.ignoreBeamEndpointIndex) && beam.endpoints.includes(options.ignoreBeamEndpointIndex));
-    })) {
-      return true;
+    if (!options.ignoreAllBeams) {
+      const footprints = sokobanBeamFootprintAt(context, index);
+      if (footprints.some((beam) => {
+        if (beam.id === options.ignoreBeamId) return false;
+        return !(Number.isInteger(options.ignoreBeamEndpointIndex) && beam.endpoints.includes(options.ignoreBeamEndpointIndex));
+      })) {
+        return true;
+      }
     }
     const ownEndpoints = options.ownBridgeEndpoints || new Set();
     if (context.allBridgeIndices.has(index)
@@ -9225,7 +9600,7 @@
       }
       return {
         changed: true,
-        player: { id: player.id, from: player.index, to: trace.to, path: trace.path, dir: direction },
+        player: { id: player.id, from: player.index, to: trace.to, path: trace.path, steps: trace.steps, dir: direction },
         boxes: [],
         bridges: [],
         beams: []
@@ -9252,6 +9627,7 @@
           from: player.index,
           to: playerStays ? player.index : object.box.index,
           path: playerStays ? [] : [object.box.index],
+          steps: playerStays ? [] : [placementTransitionRecord(player.index, direction, next)],
           boxId: object.box.id,
           dir: direction
         },
@@ -9289,6 +9665,7 @@
           from: player.index,
           to: playerStays ? player.index : object.index,
           path: playerStays ? [] : [object.index],
+          steps: playerStays ? [] : [placementTransitionRecord(player.index, direction, next)],
           bridgeFrom: object.index,
           dir: direction
         },
@@ -9324,6 +9701,7 @@
           from: player.index,
           to: playerStays ? player.index : next.index,
           path: playerStays ? [] : [next.index],
+          steps: playerStays ? [] : [placementTransitionRecord(player.index, direction, next)],
           beamId: object.beam.id,
           dir: direction
         },
@@ -9336,7 +9714,9 @@
           from: object.beam.footprint.slice(),
           to: trace.beam.footprint.slice(),
           dir: next.dir,
-          steps: trace.steps
+          steps: trace.steps,
+          fromBeam: cloneSokobanBeam(object.beam),
+          toBeam: cloneSokobanBeam(trace.beam)
         }]
       };
     }
@@ -9400,6 +9780,7 @@
       if (destinationSet.has(next.index)) return null;
       if (sokobanIndexBlockedForMover(state, context, next.index, {
         ignoreBeamId: beam.id,
+        ignoreAllBeams: true,
         ignorePlayers: true,
         blockBridgeEndpoints: true,
         ownBridgeEndpoints: originalEndpoints
@@ -12280,7 +12661,7 @@
     }
     if (isSokobanGame(game)) {
       const players = Array.isArray(game.players) ? game.players.length : 0;
-      const boxes = Array.isArray(game.boxes) ? game.boxes.length : 0;
+      const boxes = sokobanCargoIndices(game).length;
       const targets = game.targets instanceof Set ? game.targets.size : 0;
       const walls = game.walls instanceof Set ? game.walls.size : 0;
       if (refs.scoreLabel) refs.scoreLabel.textContent = game.phase === 'gameover' ? 'Result' : 'Players';
@@ -12683,6 +13064,11 @@
 
   function eventDuration(event) {
     const base = refs.speed ? Number(refs.speed.value) || 260 : 260;
+    if (event.kind === 'sokobanMove') {
+      const steps = sokobanAnimationStepCount(event);
+      return Math.min(1100, Math.max(140, base * 0.52 + Math.max(1, steps) * 86));
+    }
+    if (event.kind === 'sokobanBounce') return Math.max(110, base * 0.58);
     if (event.kind === 'connectFourDrop') {
       const steps = Array.isArray(event.transitions) && event.transitions.length
         ? event.transitions.length
@@ -12706,6 +13092,22 @@
     if (event.kind === 'removeTile' || event.kind === 'clearNumbers') return Math.max(90, base * 0.55);
     if (event.kind === 'spawn') return Math.max(100, base * 0.72);
     return base;
+  }
+
+  function sokobanAnimationStepCount(event) {
+    const pieceSteps = []
+      .concat(event.players || [])
+      .concat(event.boxes || [])
+      .concat(event.bridges || [])
+      .reduce((max, item) => Math.max(max, sokobanAnimatedPieceStepCount(item)), 0);
+    const beamSteps = (event.beams || []).reduce((max, item) => Math.max(max, (item.steps || []).length), 0);
+    return Math.max(pieceSteps, beamSteps, 1);
+  }
+
+  function sokobanAnimatedPieceStepCount(item) {
+    if (Array.isArray(item.steps) && item.steps.length) return item.steps.length;
+    if (Array.isArray(item.path) && item.path.length > 1) return item.path.length - 1;
+    return item.from !== item.to ? 1 : 0;
   }
 
   function isStepMode() {

@@ -435,6 +435,15 @@
       "key": "cross",
       "file": "cross.preset.js"
     },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "bridges-blocking",
+      "label": "bridges_blocking",
+      "key": "bridges_blocking",
+      "file": "bridges_blocking.preset.js"
+    },
     ]
   };
 });

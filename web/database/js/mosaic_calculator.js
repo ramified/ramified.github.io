@@ -2920,7 +2920,7 @@
     const registryEntry = minigamePresetRegistryEntry(metadata);
     const registryHint = JSON.stringify(registryEntry, null, 2)
       .split('\n')
-      .map((line, index, lines) => `// ${line}${index === lines.length - 1 ? ',' : ''}`);
+      .map((line, index, lines) => `// ${line}${index === lines.length - 1 ? ';' : ''}`);
     return [
       `// Save this file as ramified_minigame_presets/${registryEntry.file}`,
       '// Add this entry to ramified_minigame_presets/presets.js:',
