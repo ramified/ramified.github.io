@@ -439,10 +439,55 @@
       "gameTypes": [
         "Sokoban"
         ],
+      "id": "expand",
+      "label": "expand",
+      "key": "expand",
+      "file": "expand.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "expand2",
+      "label": "expand2",
+      "key": "expand2",
+      "file": "expand2.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "expand3",
+      "label": "expand3",
+      "key": "expand3",
+      "file": "expand3.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
       "id": "bridges-blocking",
       "label": "bridges_blocking",
       "key": "bridges_blocking",
       "file": "bridges_blocking.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "orbox-b",
+      "label": "Orbox B",
+      "key": "orbox_b",
+      "file": "orbox_b.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "orbox-b-glued",
+      "label": "Orbox B glued",
+      "key": "orbox_b_glued",
+      "file": "orbox_b_glued.preset.js"
     },
     ]
   };

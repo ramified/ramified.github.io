@@ -10,7 +10,8 @@ window.THEOREM_GRAPH_PRESETS = [
   file: 'maintenance_tracker.preset.js'
 },
 { label: "Quartic double solid", key: "quartic_double_solid", file: "quartic_double_solid.preset.js" },
-{ label: "renting list", key: "renting_list", file: "renting_list.preset.js" },
+{ label: "daily tasks", key: "daily_tasks", file: "daily_tasks.preset.js" },
+{ label: "Fukaya Categories of Surfaces: Learning Roadmap", key: "fukaya_categories_of_surfaces_learning_roadmap", file: "fukaya_categories_of_surfaces_learning_roadmap.preset.js" },
 { label: "perverse sheaf summer school preparation", key: "perverse_sheaf_summer_school_preparation", file: "perverse_sheaf_summer_school_preparation.preset.js" },
 { 
   label: "Francesco Denisi",

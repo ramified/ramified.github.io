@@ -17,8 +17,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fffdf8",
-      "x": 323.9,
-      "y": 46
+      "x": 313.2,
+      "y": 130.8
     },
     {
       "id": "n37",
@@ -39,8 +39,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 148.9,
-      "y": 148.8
+      "x": 153.4,
+      "y": 253.9
     },
     {
       "id": "n39",
@@ -61,8 +61,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 268.2,
-      "y": 254
+      "x": 263.8,
+      "y": 363.2
     },
     {
       "id": "n48",
@@ -73,7 +73,13 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "future",
           "label": "future?",
           "type": "checkbox",
-          "text": "Go\nBilliard\nReversi"
+          "text": "- [x] Go\n- [ ] Billiard\n- [x] Reversi"
+        },
+        {
+          "id": "bugs",
+          "label": "bugs",
+          "type": "checkbox",
+          "text": "actual loop in sokoban, allow reset in the loop\nallow to press Z long time to speed up cancellation"
         }
       ],
       "setting": "",
@@ -83,8 +89,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 609.2,
-      "y": 232
+      "x": 583.5,
+      "y": 377.7
     },
     {
       "id": "n55",
@@ -105,8 +111,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 494.2,
-      "y": 137.7
+      "x": 453.2,
+      "y": 303.8
     },
     {
       "id": "n58",
@@ -120,8 +126,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 540.3,
-      "y": 46
+      "x": 511.8,
+      "y": 69
     },
     {
       "id": "n59",
@@ -142,8 +148,30 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 428.8,
-      "y": 242.1
+      "x": 418.2,
+      "y": 440.3
+    },
+    {
+      "id": "n60",
+      "type": "misc",
+      "label": "Theorem Graph Calculator",
+      "details": [
+        {
+          "id": "goals",
+          "label": "goals",
+          "type": "checkbox",
+          "text": "other type can also type in Extra\nrun layout will not push too the right too much and left side outside of the screen"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 525.6,
+      "y": 217.1
     }
   ],
   "arrows": [
@@ -219,39 +247,43 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     }
   ],
   "view": {
-    "selectedId": "n59",
+    "selectedId": "n48",
     "selectedReferenceKeys": [],
     "layoutRunning": false,
     "canvasRatioLocked": true,
-    "canvasAspectRatio": 2.51,
+    "canvasAspectRatio": 1.4659,
     "relativeNodePositions": {
       "n4": {
-        "x": 0.4302,
-        "y": 0.1533
+        "x": 0.4159,
+        "y": 0.2545
       },
       "n37": {
-        "x": 0.1978,
-        "y": 0.4961
+        "x": 0.2037,
+        "y": 0.494
       },
       "n39": {
-        "x": 0.3562,
-        "y": 0.8467
+        "x": 0.3503,
+        "y": 0.7066
       },
       "n48": {
-        "x": 0.8091,
-        "y": 0.7732
+        "x": 0.7749,
+        "y": 0.7348
       },
       "n55": {
-        "x": 0.6563,
-        "y": 0.4591
+        "x": 0.6018,
+        "y": 0.591
       },
       "n58": {
-        "x": 0.7175,
-        "y": 0.1533
+        "x": 0.6797,
+        "y": 0.1342
       },
       "n59": {
-        "x": 0.5694,
-        "y": 0.8069
+        "x": 0.5554,
+        "y": 0.8567
+      },
+      "n60": {
+        "x": 0.698,
+        "y": 0.4223
       }
     }
   }
