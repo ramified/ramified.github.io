@@ -17,8 +17,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fffdf8",
-      "x": 313.2,
-      "y": 130.8
+      "x": 176.8,
+      "y": 76.4
     },
     {
       "id": "n37",
@@ -39,8 +39,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 153.4,
-      "y": 253.9
+      "x": 86.6,
+      "y": 148.2
     },
     {
       "id": "n39",
@@ -61,8 +61,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 263.8,
-      "y": 363.2
+      "x": 148.9,
+      "y": 212
     },
     {
       "id": "n48",
@@ -89,8 +89,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 583.5,
-      "y": 377.7
+      "x": 329.3,
+      "y": 220.4
     },
     {
       "id": "n55",
@@ -111,8 +111,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 453.2,
-      "y": 303.8
+      "x": 255.8,
+      "y": 177.3
     },
     {
       "id": "n58",
@@ -126,8 +126,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 511.8,
-      "y": 69
+      "x": 288.9,
+      "y": 46
     },
     {
       "id": "n59",
@@ -148,8 +148,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 418.2,
-      "y": 440.3
+      "x": 236,
+      "y": 254
     },
     {
       "id": "n60",
@@ -160,7 +160,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "other type can also type in Extra\nrun layout will not push too the right too much and left side outside of the screen"
+          "text": "other type can also type in Extra\nrun layout will not push too the right too much and left side outside of the screen\ncan choose run layout so that nodes don't coincide"
         }
       ],
       "setting": "",
@@ -170,8 +170,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 525.6,
-      "y": 217.1
+      "x": 296.7,
+      "y": 126.7
     }
   ],
   "arrows": [
@@ -247,7 +247,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     }
   ],
   "view": {
-    "selectedId": "n48",
+    "selectedId": "n60",
     "selectedReferenceKeys": [],
     "layoutRunning": false,
     "canvasRatioLocked": true,
@@ -275,11 +275,11 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       },
       "n58": {
         "x": 0.6797,
-        "y": 0.1342
+        "y": 0.1533
       },
       "n59": {
         "x": 0.5554,
-        "y": 0.8567
+        "y": 0.8467
       },
       "n60": {
         "x": 0.698,

@@ -18,8 +18,8 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 315.5,
-      "y": 65.4
+      "x": 114.3,
+      "y": 73.7
     },
     {
       "id": "n51",
@@ -31,10 +31,10 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#46786e",
+      "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 303.2,
-      "y": 243.2
+      "x": 123.4,
+      "y": 184.2
     },
     {
       "id": "n52",
@@ -48,30 +48,30 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 475.9,
-      "y": 153.8
+      "x": 260.4,
+      "y": 204.3
     }
   ],
   "arrows": [],
   "references": [],
   "view": {
-    "selectedId": "n50",
+    "selectedId": "n52",
     "selectedReferenceKeys": [],
     "layoutRunning": false,
     "canvasRatioLocked": true,
     "canvasAspectRatio": 2.5067,
     "relativeNodePositions": {
       "n50": {
-        "x": 0.4195,
-        "y": 0.2178
+        "x": 0.269,
+        "y": 0.2458
       },
       "n51": {
-        "x": 0.4033,
-        "y": 0.8108
+        "x": 0.2903,
+        "y": 0.6141
       },
       "n52": {
-        "x": 0.6329,
-        "y": 0.5126
+        "x": 0.6126,
+        "y": 0.6811
       }
     }
   }

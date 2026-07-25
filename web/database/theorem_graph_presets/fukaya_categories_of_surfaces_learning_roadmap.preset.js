@@ -15,13 +15,13 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "id": "goal",
           "label": "goal",
           "type": "textbox",
-          "text": "Set the difficulty correctly. You already know symplectic and Lagrangian definitions, but Hamiltonian isotopy, Floer theory, and A-infinity categories are new."
+          "text": "Set the difficulty correctly. You already know symplectic and Lagrangian definitions, but Hamiltonian isotopy, Floer theory, and A-infinity categories are new.\n\\cite{Auroux13}"
         },
         {
           "id": "tasks",
           "label": "practice",
           "type": "checkbox",
-          "text": "- [x] Derive X_H for H(x,y)=x^2+y^2 on (R^2, dx∧dy)\n- [x] Compute homology of a three-term chain complex\n- [x] Write the path algebra of 1→2→3 and one representation\n- [ ] Explain what a triangulation flip does to a surface quiver"
+          "text": "- [x] Derive X_H for H(x,y)=x^2+y^2 on (R^2, dx∧dy)\n- [x] Compute homology of a three-term chain complex\n- [x] Write the path algebra of 1→2→3 and one representation\n- [ ] basic Morse theory\n- [ ] Explain what a triangulation flip does to a surface quiver"
         },
         {
           "id": "checkpoint",
@@ -41,52 +41,10 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 122.4,
-      "y": 291.2
-    },
-    {
-      "id": "n2",
-      "type": "misc",
-      "label": "Forms and Stokes",
-      "details": [
-        {
-          "id": "goal",
-          "label": "goal",
-          "type": "textbox",
-          "text": "Refresh differential forms only to the level needed for symplectic surfaces and action/area calculations."
-        },
-        {
-          "id": "tasks",
-          "label": "practice",
-          "type": "checkbox",
-          "text": "- [ ] Compute d(f dg) in local coordinates\n- [ ] Use Stokes on a disk and an annulus\n- [ ] Recognize exact versus closed one-forms on S^1 and an annulus"
-        },
-        {
-          "id": "checkpoint",
-          "label": "mastery check",
-          "type": "list",
-          "text": "You can explain why ∫∂D λ = ∫D dλ and why this converts boundary data into polygon area."
-        },
-        {
-          "id": "pace",
-          "label": "suggested pace",
-          "type": "textbox",
-          "text": "2–3 sessions"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [
-        "CdS06"
-      ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 74.7,
-      "y": 54.7
+      "color": "#46786e",
+      "fillColor": "#eef7f4",
+      "x": 239.7,
+      "y": 153
     },
     {
       "id": "n3",
@@ -103,7 +61,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "id": "tasks",
           "label": "practice",
           "type": "checkbox",
-          "text": "- [ ] Check that f(x,y) dx∧dy is symplectic exactly when f never vanishes\n- [ ] Describe standard area forms on disk, annulus, torus, and pair of pants\n- [ ] Identify exact and non-exact examples"
+          "text": "- [x] Check that f(x,y) dx∧dy is symplectic exactly when f never vanishes\n- [ ] Describe standard area forms on disk, annulus, torus, and pair of pants\n- [ ] Identify exact and non-exact examples"
         },
         {
           "id": "checkpoint",
@@ -127,8 +85,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 92.6,
-      "y": 227.1
+      "x": 72.3,
+      "y": 210.3
     },
     {
       "id": "n4",
@@ -169,8 +127,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 87.9,
-      "y": 505.2
+      "x": 111.3,
+      "y": 371.1
     },
     {
       "id": "n5",
@@ -187,7 +145,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "id": "tasks",
           "label": "practice",
           "type": "checkbox",
-          "text": "- [ ] Compute Hamiltonian vector fields for H=x, H=y, and H=(x^2+y^2)/2\n- [ ] Sketch their flows in R^2\n- [ ] Move an arc by a compactly supported Hamiltonian and track intersections\n- [ ] Compare Hamiltonian isotopy with arbitrary smooth isotopy"
+          "text": "- [x] Compute Hamiltonian vector fields for H=x, H=y, and H=(x^2+y^2)/2\n- [ ] Sketch their flows in R^2\n- [ ] Move an arc by a compactly supported Hamiltonian and track intersections\n- [ ] Compare Hamiltonian isotopy with arbitrary smooth isotopy"
         },
         {
           "id": "checkpoint",
@@ -212,8 +170,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 106.5,
-      "y": 696.6
+      "x": 235.4,
+      "y": 254.2
     },
     {
       "id": "n6",
@@ -255,95 +213,13 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 130.7,
-      "y": 405.3
-    },
-    {
-      "id": "n7",
-      "type": "misc",
-      "label": "Categories and chain complexes",
-      "details": [
-        {
-          "id": "goal",
-          "label": "goal",
-          "type": "textbox",
-          "text": "Acquire the minimum homological language: categories, graded vector spaces, chain complexes, cohomology, chain maps, and homotopies."
-        },
-        {
-          "id": "tasks",
-          "label": "practice",
-          "type": "checkbox",
-          "text": "- [x] Compute cohomology of two small complexes\n- [x] Verify d^2=0 in an example\n- [x] Write a chain homotopy equation\n- [x] View a dg category as a category with morphism complexes"
-        },
-        {
-          "id": "checkpoint",
-          "label": "mastery check",
-          "type": "list",
-          "text": "You can distinguish a chain complex from its cohomology and explain why quasi-isomorphisms are the correct equivalences."
-        },
-        {
-          "id": "pace",
-          "label": "suggested pace",
-          "type": "textbox",
-          "text": "1 week"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [
-        "KellerAinf"
-      ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 253.4,
-      "y": 46
-    },
-    {
-      "id": "n8",
-      "type": "misc",
-      "label": "Quivers, paths, representations",
-      "details": [
-        {
-          "id": "goal",
-          "label": "goal",
-          "type": "textbox",
-          "text": "Make the representation-theory side computational: path algebras, relations, modules, projectives, and type-A examples."
-        },
-        {
-          "id": "tasks",
-          "label": "practice",
-          "type": "checkbox",
-          "text": "- [x] Compute the path algebra of A3\n- [x] List indecomposable representations of A3\n- [x] Add a quadratic zero relation and see which paths survive\n- [x] Recognize the local gentle conditions on arrows and relations"
-        },
-        {
-          "id": "checkpoint",
-          "label": "mastery check",
-          "type": "list",
-          "text": "You can pass between a quiver with relations and its finite-dimensional modules. Skip most of this node if already routine."
-        },
-        {
-          "id": "pace",
-          "label": "suggested pace",
-          "type": "textbox",
-          "text": "3–5 sessions"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#f7f5f1",
-      "x": 264.4,
-      "y": 141.2
+      "x": 182.6,
+      "y": 420.7
     },
     {
       "id": "n9",
       "type": "misc",
-      "label": "Derived and triangulated language",
+      "label": "perfect complex",
       "details": [
         {
           "id": "goal",
@@ -355,7 +231,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "id": "tasks",
           "label": "practice",
           "type": "checkbox",
-          "text": "- [ ] Construct the cone of a map of complexes\n- [ ] Interpret a short exact sequence as a triangle\n- [ ] Compute a simple perfect complex over kA2"
+          "text": "- [x] Construct the cone of a map of complexes\n- [ ] Interpret a short exact sequence as a triangle\n- [ ] Compute a simple perfect complex over kA2"
         },
         {
           "id": "checkpoint",
@@ -380,8 +256,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 478.1,
-      "y": 150.7
+      "x": 468.1,
+      "y": 243.3
     },
     {
       "id": "n10",
@@ -423,13 +299,13 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 377,
-      "y": 372.4
+      "x": 466.1,
+      "y": 466.2
     },
     {
       "id": "n11",
       "type": "misc",
-      "label": "Morse complex toy model",
+      "label": "Morse homology",
       "details": [
         {
           "id": "goal",
@@ -441,7 +317,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "id": "tasks",
           "label": "practice",
           "type": "checkbox",
-          "text": "- [ ] Choose a Morse function on S^1 or S^2\n- [ ] Generate a complex by critical points\n- [ ] Count gradient trajectories in a simple example\n- [ ] Check why broken trajectories imply d^2=0"
+          "text": "- [x] Choose a Morse function on S^1 or S^2\n- [x] Generate a complex by critical points\n- [x] Count gradient trajectories in a simple example\n- [x] Check why broken trajectories imply d^2=0"
         },
         {
           "id": "checkpoint",
@@ -454,6 +330,12 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "label": "suggested pace",
           "type": "textbox",
           "text": "3 sessions"
+        },
+        {
+          "id": "examples",
+          "label": "examples",
+          "type": "checkbox",
+          "text": "- [x] $\\mathbb{S}^2$\n- [ ] $\\mathbb{T}^2$\n- [ ] $\\mathbb{RP}^n$"
         }
       ],
       "setting": "",
@@ -463,10 +345,10 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       "citationKeys": [
         "Pedroza17"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 487.3,
-      "y": 46
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 551.5,
+      "y": 127.9
     },
     {
       "id": "n12",
@@ -508,8 +390,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 309.8,
-      "y": 210.9
+      "x": 371.7,
+      "y": 274
     },
     {
       "id": "n13",
@@ -551,8 +433,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 571.3,
-      "y": 259.7
+      "x": 625.1,
+      "y": 207.5
     },
     {
       "id": "n14",
@@ -594,8 +476,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 705.9,
-      "y": 383
+      "x": 546.1,
+      "y": 375.9
     },
     {
       "id": "n15",
@@ -636,8 +518,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 516.9,
-      "y": 548.1
+      "x": 699,
+      "y": 364.2
     },
     {
       "id": "n16",
@@ -680,8 +562,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 390.4,
-      "y": 768.6
+      "x": 537.6,
+      "y": 514.1
     },
     {
       "id": "n17",
@@ -723,8 +605,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 387,
-      "y": 256.3
+      "x": 378.9,
+      "y": 394.3
     },
     {
       "id": "n18",
@@ -767,8 +649,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 518.3,
-      "y": 467.6
+      "x": 321,
+      "y": 582.9
     },
     {
       "id": "n19",
@@ -810,8 +692,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 246,
-      "y": 416.1
+      "x": 97.4,
+      "y": 629.1
     },
     {
       "id": "n20",
@@ -853,8 +735,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 382.5,
-      "y": 503.3
+      "x": 98.8,
+      "y": 527.2
     },
     {
       "id": "n21",
@@ -896,8 +778,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 218.8,
-      "y": 570.3
+      "x": 228.5,
+      "y": 654.2
     },
     {
       "id": "n22",
@@ -939,8 +821,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 383.6,
-      "y": 680.7
+      "x": 104.5,
+      "y": 741.5
     },
     {
       "id": "n23",
@@ -982,8 +864,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 471.2,
-      "y": 400.6
+      "x": 163,
+      "y": 860.9
     },
     {
       "id": "n24",
@@ -1024,8 +906,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 642.7,
-      "y": 189.8
+      "x": 437.2,
+      "y": 652.7
     },
     {
       "id": "n25",
@@ -1066,8 +948,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 504.6,
-      "y": 318.7
+      "x": 606.1,
+      "y": 557
     },
     {
       "id": "n26",
@@ -1108,8 +990,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 290.9,
-      "y": 469.7
+      "x": 236.5,
+      "y": 508.5
     },
     {
       "id": "n27",
@@ -1150,8 +1032,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 502.5,
-      "y": 675
+      "x": 286.3,
+      "y": 743.6
     },
     {
       "id": "n28",
@@ -1194,8 +1076,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 368.3,
-      "y": 589.9
+      "x": 454.4,
+      "y": 779.1
     },
     {
       "id": "n29",
@@ -1236,8 +1118,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 617,
-      "y": 745.6
+      "x": 661.3,
+      "y": 771.2
     },
     {
       "id": "n30",
@@ -1280,8 +1162,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 279.1,
-      "y": 327.8
+      "x": 239.6,
+      "y": 965.7
     },
     {
       "id": "n31",
@@ -1324,8 +1206,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 626,
-      "y": 474.4
+      "x": 664.9,
+      "y": 879.8
     },
     {
       "id": "n32",
@@ -1368,8 +1250,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 597.1,
-      "y": 598.6
+      "x": 615.5,
+      "y": 686.6
     },
     {
       "id": "n33",
@@ -1413,8 +1295,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 311,
-      "y": 635.5
+      "x": 472,
+      "y": 859.4
     },
     {
       "id": "n34",
@@ -1456,79 +1338,39 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 502.5,
-      "y": 793
+      "x": 525.9,
+      "y": 971.9
+    },
+    {
+      "id": "n35",
+      "type": "misc",
+      "label": "stable submanifold",
+      "details": [
+        {
+          "id": "link",
+          "label": "link",
+          "type": "textbox",
+          "text": "https://chatgpt.com/c/6a64c762-afc8-83eb-a43c-fa5755ee84a8"
+        },
+        {
+          "id": "examples",
+          "label": "examples",
+          "type": "checkbox",
+          "text": "- [x] $\\mathbb{S}^2$\n- [x] $\\mathbb{T}^2$\n- [ ] $\\mathbb{RP}^n$"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 379.8,
+      "y": 60.9
     }
   ],
   "arrows": [
-    {
-      "id": "a1",
-      "sourceId": "n1",
-      "targetId": "n2",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "center-clear",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a2",
-      "sourceId": "n1",
-      "targetId": "n7",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "center-clear",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a3",
-      "sourceId": "n1",
-      "targetId": "n8",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "center-clear",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a4",
-      "sourceId": "n2",
-      "targetId": "n3",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "center-clear",
-      "color": "#5f574e"
-    },
     {
       "id": "a5",
       "sourceId": "n3",
@@ -1581,60 +1423,9 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       "color": "#5f574e"
     },
     {
-      "id": "a8",
-      "sourceId": "n7",
-      "targetId": "n9",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "center-clear",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a9",
-      "sourceId": "n8",
-      "targetId": "n9",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "center-clear",
-      "color": "#5f574e"
-    },
-    {
       "id": "a10",
       "sourceId": "n9",
       "targetId": "n10",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "center-clear",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a11",
-      "sourceId": "n7",
-      "targetId": "n11",
       "label": "",
       "remark": "",
       "body": "solid",
@@ -1972,23 +1763,6 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       "color": "#5f574e"
     },
     {
-      "id": "a31",
-      "sourceId": "n8",
-      "targetId": "n26",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "center-clear",
-      "color": "#5f574e"
-    },
-    {
       "id": "a32",
       "sourceId": "n17",
       "targetId": "n26",
@@ -2208,6 +1982,74 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       "labelPosition": 0.5,
       "labelAlign": "center-clear",
       "color": "#5f574e"
+    },
+    {
+      "id": "a45",
+      "sourceId": "n1",
+      "targetId": "n3",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
+      "color": "#5f574e"
+    },
+    {
+      "id": "a47",
+      "sourceId": "n1",
+      "targetId": "n9",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
+      "color": "#5f574e"
+    },
+    {
+      "id": "a48",
+      "sourceId": "n1",
+      "targetId": "n35",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
+      "color": "#5f574e"
+    },
+    {
+      "id": "a49",
+      "sourceId": "n35",
+      "targetId": "n11",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
+      "color": "#5f574e"
     }
   ],
   "references": [
@@ -2400,148 +2242,141 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
     }
   ],
   "view": {
-    "selectedId": "n24",
+    "selectedId": "n31",
     "selectedReferenceKeys": [],
     "layoutRunning": false,
     "canvasRatioLocked": true,
-    "canvasAspectRatio": 0.8963,
+    "canvasAspectRatio": 0.7231,
     "relativeNodePositions": {
       "n1": {
-        "x": 0.1628,
-        "y": 0.3471
-      },
-      "n2": {
-        "x": 0.0994,
-        "y": 0.0652
+        "x": 0.3187,
+        "y": 0.1471
       },
       "n3": {
-        "x": 0.1231,
-        "y": 0.2707
+        "x": 0.0962,
+        "y": 0.2022
       },
       "n4": {
-        "x": 0.1169,
-        "y": 0.6021
+        "x": 0.1481,
+        "y": 0.3568
       },
       "n5": {
-        "x": 0.1416,
-        "y": 0.8303
+        "x": 0.313,
+        "y": 0.2444
       },
       "n6": {
-        "x": 0.1738,
-        "y": 0.483
-      },
-      "n7": {
-        "x": 0.3369,
-        "y": 0.0548
-      },
-      "n8": {
-        "x": 0.3516,
-        "y": 0.1683
+        "x": 0.2429,
+        "y": 0.4046
       },
       "n9": {
-        "x": 0.6357,
-        "y": 0.1797
+        "x": 0.6224,
+        "y": 0.2339
       },
       "n10": {
-        "x": 0.5013,
-        "y": 0.4438
+        "x": 0.6199,
+        "y": 0.4483
       },
       "n11": {
-        "x": 0.648,
-        "y": 0.0548
+        "x": 0.7333,
+        "y": 0.1229
       },
       "n12": {
-        "x": 0.412,
-        "y": 0.2514
+        "x": 0.4943,
+        "y": 0.2635
       },
       "n13": {
-        "x": 0.7597,
-        "y": 0.3096
+        "x": 0.8312,
+        "y": 0.1995
       },
       "n14": {
-        "x": 0.9386,
-        "y": 0.4565
+        "x": 0.7261,
+        "y": 0.3615
       },
       "n15": {
-        "x": 0.6873,
-        "y": 0.6533
+        "x": 0.9295,
+        "y": 0.3502
       },
       "n16": {
-        "x": 0.5192,
-        "y": 0.9161
+        "x": 0.7149,
+        "y": 0.4943
       },
       "n17": {
-        "x": 0.5146,
-        "y": 0.3055
+        "x": 0.5038,
+        "y": 0.3791
       },
       "n18": {
-        "x": 0.6892,
-        "y": 0.5574
+        "x": 0.4269,
+        "y": 0.5605
       },
       "n19": {
-        "x": 0.3271,
-        "y": 0.496
+        "x": 0.1295,
+        "y": 0.6049
       },
       "n20": {
-        "x": 0.5086,
-        "y": 0.5998
+        "x": 0.1314,
+        "y": 0.5069
       },
       "n21": {
-        "x": 0.291,
-        "y": 0.6798
+        "x": 0.3039,
+        "y": 0.629
       },
       "n22": {
-        "x": 0.5101,
-        "y": 0.8113
+        "x": 0.1389,
+        "y": 0.7129
       },
       "n23": {
-        "x": 0.6266,
-        "y": 0.4774
+        "x": 0.2168,
+        "y": 0.8278
       },
       "n24": {
-        "x": 0.8547,
-        "y": 0.2263
+        "x": 0.5814,
+        "y": 0.6276
       },
       "n25": {
-        "x": 0.6709,
-        "y": 0.3799
+        "x": 0.806,
+        "y": 0.5356
       },
       "n26": {
-        "x": 0.3869,
-        "y": 0.5598
+        "x": 0.3145,
+        "y": 0.489
       },
       "n27": {
-        "x": 0.6682,
-        "y": 0.8045
+        "x": 0.3808,
+        "y": 0.715
       },
       "n28": {
-        "x": 0.4897,
-        "y": 0.7031
+        "x": 0.6042,
+        "y": 0.7492
       },
       "n29": {
-        "x": 0.8205,
-        "y": 0.8887
+        "x": 0.8794,
+        "y": 0.7416
       },
       "n30": {
-        "x": 0.3711,
-        "y": 0.3907
+        "x": 0.3186,
+        "y": 0.9285
       },
       "n31": {
-        "x": 0.8324,
-        "y": 0.5654
+        "x": 0.8842,
+        "y": 0.846
       },
       "n32": {
-        "x": 0.7941,
-        "y": 0.7135
+        "x": 0.8184,
+        "y": 0.6601
       },
       "n33": {
-        "x": 0.4136,
-        "y": 0.7574
+        "x": 0.6276,
+        "y": 0.8264
       },
       "n34": {
-        "x": 0.6682,
-        "y": 0.9452
+        "x": 0.6993,
+        "y": 0.9345
+      },
+      "n35": {
+        "x": 0.505,
+        "y": 0.0586
       }
     }
   }
 };
+
