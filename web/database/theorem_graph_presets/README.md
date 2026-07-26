@@ -22,12 +22,19 @@ It will look like:
 ```js
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.my_graph = {
-  "schemaVersion": 1,
+  "schemaVersion": 7,
   "title": "My Graph",
   "nodes": [],
   "arrows": [],
-  "references": [],
-  "view": {}
+  "references": [
+    {
+      "key": "diagram",
+      "citeKey": "diagram"
+    }
+  ],
+  "view": {
+    "layoutAvoidOverlap": true
+  }
 };
 ```
 

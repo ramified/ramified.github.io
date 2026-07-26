@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const SCHEMA_VERSION = 6;
+  const SCHEMA_VERSION = 7;
   const DEFAULT_GRAPH_TITLE = 'Dependency Graph';
   const PRESET_FOLDER_URL = 'theorem_graph_presets/';
   const DEFAULT_PRESET_KEY = 'maintenance_tracker';
@@ -42,7 +42,7 @@
     'y'
   ]);
   const KNOWN_ARROW_KEYS = new Set(['id', 'sourceId', 'targetId', 'label', 'remark', 'style', 'body', 'head', 'tail', 'level', 'endpointScale', 'curve', 'labelOffset', 'labelPosition', 'labelAlign', 'color']);
-  const KNOWN_REFERENCE_KEYS = new Set(['key', 'author', 'title', 'year', 'citeText', 'url', 'source', 'rawBibtex', 'links']);
+  const KNOWN_REFERENCE_KEYS = new Set(['key', 'author', 'title', 'year', 'citeKey', 'details', 'url', 'source', 'rawBibtex', 'links']);
   const ARROW_BODIES = [
     { id: 'none', label: 'none' },
     { id: 'solid', label: 'solid' },
@@ -95,9 +95,17 @@
   const NODE_FILL_SATURATION_DEFAULT = 210;
   const NODE_FILL_SATURATION_MIN = 0;
   const NODE_FILL_SATURATION_MAX = 300;
+  const LAYOUT_AVOID_OVERLAP_DEFAULT = true;
+  const LAYOUT_CENTER_STRENGTH = 0.0012;
+  const LAYOUT_WALL_MARGIN = 28;
+  const LAYOUT_WALL_STRENGTH = 0.008;
   const CANVAS_MIN_HEIGHT = 260;
   const CANVAS_MAX_HEIGHT = 1400;
   const CANVAS_DEFAULT_ASPECT_RATIO = 960 / 560;
+  const NODE_LABEL_MAX_WIDTH = 220;
+  const NODE_LABEL_MAX_WIDTH_RATIO = 0.42;
+  const NODE_LABEL_MIN_EDGE_WIDTH = 96;
+  const NODE_LABEL_EDGE_GAP = 8;
   const ARROW_STYLES = [
     { id: 'arrow', label: 'solid arrow', body: 'solid', head: 'arrow', tail: 'none' },
     { id: 'plain', label: 'plain line', body: 'solid', head: 'none', tail: 'none' },
@@ -146,6 +154,8 @@
     connectMode: false,
     connectSourceId: null,
     layoutRunning: false,
+    layoutAvoidOverlap: LAYOUT_AVOID_OVERLAP_DEFAULT,
+    layoutOverlapGroups: [],
     animationFrame: null,
     canvasWidth: 960,
     canvasHeight: 560,
@@ -230,6 +240,7 @@
     refs.nodeMiscDetailType = $('node-misc-detail-type');
     refs.nodeMiscDetailList = $('node-misc-detail-list');
     refs.addNodeMiscDetail = $('add-node-misc-detail');
+    refs.nodeCitationList = $('node-citation-list');
     refs.nodeColor = $('node-color');
     refs.nodeFillColor = $('node-fill-color');
     refs.arrowEditor = $('arrow-editor');
@@ -237,6 +248,7 @@
     refs.arrowTarget = $('arrow-target');
     refs.arrowLabel = $('arrow-label');
     refs.arrowRemark = $('arrow-remark');
+    refs.arrowCitationList = $('arrow-citation-list');
     refs.arrowBodyPicker = $('arrow-body-picker');
     refs.arrowHeadPicker = $('arrow-head-picker');
     refs.arrowTailPicker = $('arrow-tail-picker');
@@ -259,6 +271,7 @@
     refs.deleteSelected = $('delete-selected');
     refs.toggleLayout = $('toggle-layout');
     refs.resetLayout = $('reset-layout');
+    refs.layoutAvoidOverlap = $('layout-avoid-overlap');
     refs.arrowBoundaryGap = $('arrow-boundary-gap');
     refs.arrowBoundaryGapValue = $('arrow-boundary-gap-value');
     refs.nodeFillSaturation = $('node-fill-saturation');
@@ -284,6 +297,10 @@
     refs.referenceEditLinkLabel = $('reference-edit-link-label');
     refs.referenceEditLinkUrl = $('reference-edit-link-url');
     refs.referenceEditAddLink = $('reference-edit-add-link');
+    refs.referenceEditDetailName = $('reference-edit-detail-name');
+    refs.referenceEditDetailType = $('reference-edit-detail-type');
+    refs.referenceEditDetailList = $('reference-edit-detail-list');
+    refs.addReferenceEditDetail = $('add-reference-edit-detail');
     refs.referenceEditRaw = $('reference-edit-raw');
     refs.referenceEditSave = $('reference-edit-save');
     refs.referenceEditCancel = $('reference-edit-cancel');
@@ -347,6 +364,7 @@
     if (refs.deleteSelected) refs.deleteSelected.addEventListener('click', deleteSelected);
     if (refs.toggleLayout) refs.toggleLayout.addEventListener('click', toggleLayout);
     if (refs.resetLayout) refs.resetLayout.addEventListener('click', resetLayout);
+    if (refs.layoutAvoidOverlap) refs.layoutAvoidOverlap.addEventListener('change', updateLayoutAvoidOverlap);
     [refs.arrowBoundaryGap, refs.nodeFillSaturation].forEach((control) => {
       if (!control) return;
       control.addEventListener('input', updateDebugRenderSettings);
@@ -364,6 +382,16 @@
       refs.referenceSelectAll.addEventListener('change', toggleReferenceSelectionFromMaster);
     }
     if (refs.referenceEditAddLink) refs.referenceEditAddLink.addEventListener('click', addReferenceEditLinkFromDraft);
+    if (refs.addReferenceEditDetail) refs.addReferenceEditDetail.addEventListener('click', addReferenceEditDetailFromDraft);
+    [refs.referenceEditDetailName, refs.referenceEditDetailType].forEach((control) => {
+      if (!control) return;
+      control.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          addReferenceEditDetailFromDraft();
+        }
+      });
+    });
     [refs.referenceEditLinkLabel, refs.referenceEditLinkUrl].forEach((control) => {
       if (!control) return;
       control.addEventListener('keydown', (event) => {
@@ -427,7 +455,9 @@
     ].forEach((control) => {
       if (!control) return;
       control.addEventListener('input', autoApplyDetailUpdate);
-      control.addEventListener('change', autoApplyDetailUpdate);
+      if (shouldAutoApplyOnChange(control)) {
+        control.addEventListener('change', autoApplyDetailUpdate);
+      }
     });
     if (refs.arrowLabelAlign) {
       refs.arrowLabelAlign.querySelectorAll('[data-arrow-label-align]').forEach((button) => {
@@ -667,7 +697,9 @@
       refs.nodeResult,
       refs.nodeProofSketch,
       ...(refs.nodeMiscDetailList ? refs.nodeMiscDetailList.querySelectorAll('textarea.theorem-textarea') : []),
-      refs.arrowRemark
+      refs.arrowRemark,
+      refs.referenceEditRaw,
+      ...(refs.referenceEditDetailList ? refs.referenceEditDetailList.querySelectorAll('textarea.theorem-textarea') : [])
     ];
     textareas.forEach(autoResizeTextarea);
   }
@@ -696,6 +728,16 @@
         });
       }
     });
+  }
+
+  function shouldAutoApplyOnChange(control) {
+    if (!control || !control.tagName) return false;
+    if (control.tagName === 'TEXTAREA') return false;
+    if (control.tagName === 'INPUT') {
+      const type = cleanString(control.type).toLowerCase();
+      return !['text', 'search', 'url', 'email', 'password', 'tel'].includes(type);
+    }
+    return true;
   }
 
   function seedExample() {
@@ -747,7 +789,7 @@
         author: 'Hartshorne, Robin',
         title: 'Algebraic Geometry',
         year: '1977',
-        citeText: '\\cite{hartshorne1977}',
+        citeKey: 'hartshorne1977',
         source: 'bibtex',
         rawBibtex: '@book{hartshorne1977, author={Hartshorne, Robin}, title={Algebraic Geometry}, year={1977}}'
       })
@@ -831,7 +873,8 @@
       author: cleanString(source.author),
       title: cleanString(source.title),
       year: cleanString(source.year),
-      citeText: cleanString(source.citeText) || referenceDefaultCiteText({ key, source: sourceType, rawBibtex }),
+      citeKey: cleanCitationKeyInput(source.citeKey || key),
+      details: normalizeReferenceDetails(source),
       url: primaryLink ? primaryLink.url : '',
       source: sourceType,
       rawBibtex,
@@ -901,6 +944,10 @@
       if (details.length) return details;
     }
     return normalizeType(type) === 'misc' ? legacyFieldsToMiscDetails(source) : [];
+  }
+
+  function normalizeReferenceDetails(source = {}) {
+    return normalizeMiscDetails({ details: Array.isArray(source.details) ? source.details : [] }, 'theorem');
   }
 
   function legacyFieldsToMiscDetails(source = {}, used = new Set()) {
@@ -1660,6 +1707,7 @@
       element.classList.toggle('is-source', state.connectSourceId === node.id);
       element.style.left = `${node.x}px`;
       element.style.top = `${node.y}px`;
+      element.style.setProperty('--node-label-max-width', `${nodeLabelMaxWidth(node)}px`);
       const color = currentNodeColor(node);
       const fillColor = currentNodeFillColor(node);
       element.style.borderColor = color;
@@ -1679,6 +1727,17 @@
       if (!rendered.includes(id)) element.remove();
     });
     typesetNodeLabels();
+  }
+
+  function nodeLabelMaxWidth(node) {
+    const normalMaxWidth = Math.max(
+      NODE_LABEL_MIN_EDGE_WIDTH,
+      Math.min(NODE_LABEL_MAX_WIDTH, state.canvasWidth * NODE_LABEL_MAX_WIDTH_RATIO)
+    );
+    const x = finiteNumber(node.x, state.canvasWidth / 2);
+    const nearestHorizontalEdge = Math.min(x, state.canvasWidth - x);
+    const edgeWidth = nearestHorizontalEdge * 2 - NODE_LABEL_EDGE_GAP * 2;
+    return Math.round(clamp(edgeWidth, NODE_LABEL_MIN_EDGE_WIDTH, normalMaxWidth));
   }
 
   function renderArrowLabelLayer() {
@@ -2469,16 +2528,17 @@
       setStatus('No nodes to reset.');
       return;
     }
-    const centerX = state.canvasWidth / 2;
-    const centerY = state.canvasHeight / 2;
-    const radius = Math.max(80, Math.min(state.canvasWidth, state.canvasHeight) * 0.32);
+    const bounds = layoutBounds();
+    const centerX = (bounds.left + bounds.right) / 2;
+    const centerY = (bounds.top + bounds.bottom) / 2;
+    const radius = Math.max(80, Math.min(bounds.width, bounds.height) * 0.32);
     state.nodes.forEach((node, index) => {
       const angle = (2 * Math.PI * index) / state.nodes.length - Math.PI / 2;
       node.x = centerX + Math.cos(angle) * radius;
       node.y = centerY + Math.sin(angle) * radius;
       node.vx = 0;
       node.vy = 0;
-      clampNode(node);
+      clampNodeToBounds(node, bounds);
     });
     setStatus('Layout reset.');
     renderAll();
@@ -2502,13 +2562,23 @@
     setStatus(`Debug view: arrow gap ${state.arrowBoundaryGap}px, fill saturation ${state.nodeFillSaturation}%.`);
   }
 
+  function updateLayoutAvoidOverlap() {
+    state.layoutAvoidOverlap = refs.layoutAvoidOverlap ? !!refs.layoutAvoidOverlap.checked : LAYOUT_AVOID_OVERLAP_DEFAULT;
+    renderCanvas();
+    state.layoutOverlapGroups = state.layoutAvoidOverlap ? [] : detectLayoutOverlapGroups();
+    refreshExport();
+    setStatus(state.layoutAvoidOverlap ? 'Layout will avoid overlapping nodes.' : 'Layout will preserve current overlapping nodes.');
+  }
+
   function syncDebugControlValues() {
     state.arrowBoundaryGap = normalizeArrowBoundaryGap(state.arrowBoundaryGap);
     state.nodeFillSaturation = normalizeNodeFillSaturation(state.nodeFillSaturation);
+    state.layoutAvoidOverlap = !!state.layoutAvoidOverlap;
     if (refs.arrowBoundaryGap) refs.arrowBoundaryGap.value = String(state.arrowBoundaryGap);
     if (refs.arrowBoundaryGapValue) refs.arrowBoundaryGapValue.textContent = `${state.arrowBoundaryGap}px`;
     if (refs.nodeFillSaturation) refs.nodeFillSaturation.value = String(state.nodeFillSaturation);
     if (refs.nodeFillSaturationValue) refs.nodeFillSaturationValue.textContent = `${state.nodeFillSaturation}%`;
+    if (refs.layoutAvoidOverlap) refs.layoutAvoidOverlap.checked = state.layoutAvoidOverlap;
   }
 
   function startLayout() {
@@ -2516,6 +2586,9 @@
       setStatus('Add at least two nodes for layout.');
       return;
     }
+    renderCanvas();
+    state.layoutAvoidOverlap = refs.layoutAvoidOverlap ? !!refs.layoutAvoidOverlap.checked : state.layoutAvoidOverlap;
+    state.layoutOverlapGroups = state.layoutAvoidOverlap ? [] : detectLayoutOverlapGroups();
     state.layoutRunning = true;
     setStatus('Force layout running.');
     syncControls();
@@ -2524,6 +2597,7 @@
 
   function stopLayout() {
     state.layoutRunning = false;
+    state.layoutOverlapGroups = [];
     if (state.animationFrame) {
       window.cancelAnimationFrame(state.animationFrame);
       state.animationFrame = null;
@@ -2541,7 +2615,8 @@
 
   function applyForces() {
     const nodes = state.nodes;
-    const padding = 46;
+    const bounds = layoutBounds();
+    const lockedPairs = layoutLockedPairSet();
     nodes.forEach((node) => {
       if (!node.fixed) {
         node.vx *= 0.82;
@@ -2553,6 +2628,7 @@
       for (let j = i + 1; j < nodes.length; j += 1) {
         const a = nodes[i];
         const b = nodes[j];
+        if (lockedPairs.has(layoutPairKey(a.id, b.id))) continue;
         const dx = b.x - a.x || 0.01;
         const dy = b.y - a.y || 0.01;
         const distSq = Math.max(dx * dx + dy * dy, 400);
@@ -2570,6 +2646,8 @@
         }
       }
     }
+
+    if (state.layoutAvoidOverlap) applyLayoutCollisionForces(nodes);
 
     state.arrows.forEach((arrow) => {
       const source = findNode(arrow.sourceId);
@@ -2592,20 +2670,209 @@
       }
     });
 
-    const centerX = state.canvasWidth / 2;
-    const centerY = state.canvasHeight / 2;
+    const centerX = (bounds.left + bounds.right) / 2;
+    const centerY = (bounds.top + bounds.bottom) / 2;
     nodes.forEach((node) => {
       if (!node.fixed) {
-        node.vx += (centerX - node.x) * 0.002;
-        node.vy += (centerY - node.y) * 0.002;
+        node.vx += (centerX - node.x) * LAYOUT_CENTER_STRENGTH;
+        node.vy += (centerY - node.y) * LAYOUT_CENTER_STRENGTH;
+        applyLayoutWallForce(node, bounds);
         node.x += clamp(node.vx, -8, 8);
         node.y += clamp(node.vy, -8, 8);
       }
-      node.x = clamp(node.x, padding, state.canvasWidth - padding);
-      node.y = clamp(node.y, padding, state.canvasHeight - padding);
-      if (node.x <= padding || node.x >= state.canvasWidth - padding) node.vx *= -0.25;
-      if (node.y <= padding || node.y >= state.canvasHeight - padding) node.vy *= -0.25;
+      clampNodeToBounds(node, bounds);
     });
+    preserveLayoutOverlapGroups(bounds);
+  }
+
+  function layoutBounds() {
+    return {
+      left: 0,
+      top: 0,
+      right: state.canvasWidth,
+      bottom: state.canvasHeight,
+      width: state.canvasWidth,
+      height: state.canvasHeight
+    };
+  }
+
+  function clampNodeToBounds(node, bounds = layoutBounds()) {
+    const box = nodeBox(null, node);
+    const halfWidth = Math.max(18, box.width / 2);
+    const halfHeight = Math.max(14, box.height / 2);
+    const minX = Math.min(bounds.left + halfWidth, (bounds.left + bounds.right) / 2);
+    const maxX = Math.max(bounds.right - halfWidth, (bounds.left + bounds.right) / 2);
+    const minY = Math.min(bounds.top + halfHeight, (bounds.top + bounds.bottom) / 2);
+    const maxY = Math.max(bounds.bottom - halfHeight, (bounds.top + bounds.bottom) / 2);
+    const previousX = node.x;
+    const previousY = node.y;
+    node.x = clamp(node.x, minX, maxX);
+    node.y = clamp(node.y, minY, maxY);
+    if (node.x !== previousX) node.vx *= -0.25;
+    if (node.y !== previousY) node.vy *= -0.25;
+  }
+
+  function applyLayoutWallForce(node, bounds) {
+    const margin = Math.min(LAYOUT_WALL_MARGIN, Math.max(24, Math.min(bounds.width, bounds.height) * 0.22));
+    const strength = LAYOUT_WALL_STRENGTH;
+    const box = nodeBox(null, node);
+    const leftGap = box.x - bounds.left;
+    const rightGap = bounds.right - (box.x + box.width);
+    const topGap = box.y - bounds.top;
+    const bottomGap = bounds.bottom - (box.y + box.height);
+    if (leftGap < margin) node.vx += (margin - leftGap) * strength;
+    if (rightGap < margin) node.vx -= (margin - rightGap) * strength;
+    if (topGap < margin) node.vy += (margin - topGap) * strength;
+    if (bottomGap < margin) node.vy -= (margin - bottomGap) * strength;
+  }
+
+  function applyLayoutCollisionForces(nodes) {
+    const boxes = new Map(nodes.map((node) => [node.id, nodeBox(null, node)]));
+    for (let i = 0; i < nodes.length; i += 1) {
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        const a = nodes[i];
+        const b = nodes[j];
+        const aBox = boxes.get(a.id);
+        const bBox = boxes.get(b.id);
+        if (!boxesOverlap(aBox, bBox, 8)) continue;
+        const overlapX = Math.min(aBox.x + aBox.width, bBox.x + bBox.width) - Math.max(aBox.x, bBox.x);
+        const overlapY = Math.min(aBox.y + aBox.height, bBox.y + bBox.height) - Math.max(aBox.y, bBox.y);
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const xSign = dx >= 0 ? 1 : -1;
+        const ySign = dy >= 0 ? 1 : -1;
+        const force = Math.min(7.5, Math.max(1.8, Math.min(overlapX, overlapY) * 0.12));
+        let fx = 0;
+        let fy = 0;
+        if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) {
+          fx = (i % 2 === 0 ? -1 : 1) * force;
+          fy = (j % 2 === 0 ? -1 : 1) * force;
+        } else if (overlapX < overlapY) {
+          fx = force * xSign;
+        } else {
+          fy = force * ySign;
+        }
+        if (!a.fixed) {
+          a.vx -= fx;
+          a.vy -= fy;
+        }
+        if (!b.fixed) {
+          b.vx += fx;
+          b.vy += fy;
+        }
+      }
+    }
+  }
+
+  function detectLayoutOverlapGroups() {
+    const nodes = state.nodes;
+    const parent = new Map(nodes.map((node) => [node.id, node.id]));
+    const boxes = new Map(nodes.map((node) => [node.id, nodeBox(null, node)]));
+    const find = (id) => {
+      const root = parent.get(id);
+      if (root === id) return id;
+      const next = find(root);
+      parent.set(id, next);
+      return next;
+    };
+    const join = (a, b) => {
+      const rootA = find(a);
+      const rootB = find(b);
+      if (rootA !== rootB) parent.set(rootB, rootA);
+    };
+    for (let i = 0; i < nodes.length; i += 1) {
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        const a = nodes[i];
+        const b = nodes[j];
+        if (boxesOverlap(boxes.get(a.id), boxes.get(b.id), 0)) join(a.id, b.id);
+      }
+    }
+    const grouped = new Map();
+    nodes.forEach((node) => {
+      const root = find(node.id);
+      if (!grouped.has(root)) grouped.set(root, []);
+      grouped.get(root).push(node);
+    });
+    return Array.from(grouped.values())
+      .filter((members) => members.length > 1)
+      .map((members) => {
+        const anchorX = members.reduce((sum, node) => sum + node.x, 0) / members.length;
+        const anchorY = members.reduce((sum, node) => sum + node.y, 0) / members.length;
+        return {
+          members: members.map((node) => ({
+            id: node.id,
+            dx: node.x - anchorX,
+            dy: node.y - anchorY
+          }))
+        };
+      });
+  }
+
+  function layoutLockedPairSet() {
+    const pairs = new Set();
+    (state.layoutOverlapGroups || []).forEach((group) => {
+      const members = Array.isArray(group.members) ? group.members : [];
+      for (let i = 0; i < members.length; i += 1) {
+        for (let j = i + 1; j < members.length; j += 1) {
+          pairs.add(layoutPairKey(members[i].id, members[j].id));
+        }
+      }
+    });
+    return pairs;
+  }
+
+  function layoutPairKey(a, b) {
+    return cleanString(a) < cleanString(b) ? `${a}\u0000${b}` : `${b}\u0000${a}`;
+  }
+
+  function preserveLayoutOverlapGroups(bounds) {
+    if (state.layoutAvoidOverlap || !Array.isArray(state.layoutOverlapGroups) || !state.layoutOverlapGroups.length) return;
+    state.layoutOverlapGroups.forEach((group) => {
+      const members = (Array.isArray(group.members) ? group.members : [])
+        .map((member) => ({ ...member, node: findNode(member.id) }))
+        .filter((member) => member.node);
+      if (members.length < 2) return;
+      let anchorX = members.reduce((sum, member) => sum + member.node.x - member.dx, 0) / members.length;
+      let anchorY = members.reduce((sum, member) => sum + member.node.y - member.dy, 0) / members.length;
+      const minAnchorX = Math.max(...members.map((member) => {
+        const box = nodeBox(null, member.node);
+        return bounds.left + box.width / 2 - member.dx;
+      }));
+      const maxAnchorX = Math.min(...members.map((member) => {
+        const box = nodeBox(null, member.node);
+        return bounds.right - box.width / 2 - member.dx;
+      }));
+      const minAnchorY = Math.max(...members.map((member) => {
+        const box = nodeBox(null, member.node);
+        return bounds.top + box.height / 2 - member.dy;
+      }));
+      const maxAnchorY = Math.min(...members.map((member) => {
+        const box = nodeBox(null, member.node);
+        return bounds.bottom - box.height / 2 - member.dy;
+      }));
+      anchorX = minAnchorX <= maxAnchorX ? clamp(anchorX, minAnchorX, maxAnchorX) : (bounds.left + bounds.right) / 2;
+      anchorY = minAnchorY <= maxAnchorY ? clamp(anchorY, minAnchorY, maxAnchorY) : (bounds.top + bounds.bottom) / 2;
+      const velocity = members.reduce((sum, member) => ({
+        vx: sum.vx + (member.node.fixed ? 0 : member.node.vx),
+        vy: sum.vy + (member.node.fixed ? 0 : member.node.vy)
+      }), { vx: 0, vy: 0 });
+      const movableCount = Math.max(1, members.filter((member) => !member.node.fixed).length);
+      members.forEach((member) => {
+        if (member.node.fixed) return;
+        member.node.x = anchorX + member.dx;
+        member.node.y = anchorY + member.dy;
+        member.node.vx = velocity.vx / movableCount;
+        member.node.vy = velocity.vy / movableCount;
+      });
+    });
+  }
+
+  function boxesOverlap(a, b, padding = 0) {
+    if (!a || !b) return false;
+    return a.x - padding < b.x + b.width + padding
+      && a.x + a.width + padding > b.x - padding
+      && a.y - padding < b.y + b.height + padding
+      && a.y + a.height + padding > b.y - padding;
   }
 
   function syncEditor() {
@@ -2615,6 +2882,10 @@
     const isMisc = !!node && node.type === 'misc';
     refs.nodeEmptyNote.hidden = !!(node || arrow);
     refs.nodeEditor.hidden = !node;
+    if (refs.nodeEditor) {
+      if (node) refs.nodeEditor.dataset.nodeId = node.id;
+      else delete refs.nodeEditor.dataset.nodeId;
+    }
     if (refs.arrowEditor) refs.arrowEditor.hidden = !arrow;
     refs.nodeFixedDetailRows.forEach((row) => {
       row.hidden = isMisc;
@@ -2661,18 +2932,20 @@
     if (refs.detailUpdate) refs.detailUpdate.disabled = !(node || arrow);
     if (refs.detailCancel) refs.detailCancel.disabled = !(node || arrow);
     if (!node) {
-      if (refs.nodeType) refs.nodeType.value = 'theorem';
+      if (refs.nodeType) refs.nodeType.value = DEFAULT_NEW_NODE_TYPE;
       if (refs.nodeLabel) refs.nodeLabel.value = '';
       refs.nodeSetting.value = '';
       refs.nodeCondition.value = '';
       refs.nodeResult.value = '';
       refs.nodeProofSketch.value = '';
       renderMiscDetailFields(null);
+      renderNodeCitationRows(null);
       if (refs.nodeColor) refs.nodeColor.value = DEFAULT_NODE_STROKE;
       if (refs.nodeFillColor) refs.nodeFillColor.value = DEFAULT_NODE_FILL;
       populateArrowParentSelects(arrow);
       if (refs.arrowLabel) refs.arrowLabel.value = arrow ? (arrow.label || '') : '';
       if (refs.arrowRemark) refs.arrowRemark.value = arrow ? (arrow.remark || '') : '';
+      renderArrowCitationRows(arrow);
       syncArrowPartPickers(arrow || null, !arrow);
       setArrowLevelControl(arrow ? arrow.level : ARROW_LEVEL_DEFAULT, !arrow);
       setArrowEndpointScaleControl(arrow ? arrow.endpointScale : ARROW_ENDPOINT_SCALE_DEFAULT, !arrow);
@@ -2692,11 +2965,13 @@
     refs.nodeResult.value = node.result;
     refs.nodeProofSketch.value = node.proofSketch;
     renderMiscDetailFields(node);
+    renderNodeCitationRows(node);
     if (refs.nodeColor) refs.nodeColor.value = normalizeColor(node.color, NODE_TYPES[node.type].stroke);
     if (refs.nodeFillColor) refs.nodeFillColor.value = normalizeNodeFillColor(node.fillColor, NODE_TYPES[node.type].fill);
     populateArrowParentSelects(null);
     if (refs.arrowLabel) refs.arrowLabel.value = '';
     if (refs.arrowRemark) refs.arrowRemark.value = '';
+    renderArrowCitationRows(null);
     syncArrowPartPickers(null, true);
     setArrowLevelControl(ARROW_LEVEL_DEFAULT, true);
     setArrowEndpointScaleControl(ARROW_ENDPOINT_SCALE_DEFAULT, true);
@@ -2707,6 +2982,112 @@
     if (refs.arrowColor) refs.arrowColor.value = '#5f574e';
     autoResizeDetailTextareas();
     syncLatexDetailFields();
+  }
+
+  function renderNodeCitationRows(node) {
+    renderCitationRows(refs.nodeCitationList, node ? collectNodeCitationKeys(node) : []);
+  }
+
+  function renderArrowCitationRows(arrow) {
+    renderCitationRows(refs.arrowCitationList, arrow ? collectArrowCitationKeys(arrow) : []);
+  }
+
+  function renderCitationRows(container, citationKeys) {
+    if (!container) return;
+    container.replaceChildren();
+    const keys = uniqueStrings((citationKeys || []).map(cleanCitationKeyInput).filter(Boolean));
+    container.hidden = !keys.length;
+    if (!keys.length) return;
+
+    const row = document.createElement('div');
+    row.className = 'theorem-citation-row';
+
+    const label = document.createElement('span');
+    label.className = 'input-label';
+    label.textContent = 'citation';
+
+    const buttons = document.createElement('div');
+    buttons.className = 'theorem-citation-buttons';
+    keys.forEach((key) => {
+      const button = document.createElement('button');
+      button.className = 'theorem-citation-button';
+      button.type = 'button';
+      button.textContent = citationCommandForKey(key);
+      button.title = `Show reference for ${key}`;
+      button.addEventListener('click', () => scrollToCitationReference(key));
+      buttons.appendChild(button);
+    });
+
+    row.append(label, buttons);
+    container.appendChild(row);
+  }
+
+  function collectNodeCitationKeys(node) {
+    const texts = [
+      node.label,
+      node.setting,
+      node.condition,
+      node.result,
+      node.proofSketch,
+      ...(Array.isArray(node.details) ? node.details.map((detail) => detail.text) : [])
+    ];
+    return uniqueStrings([
+      ...texts.flatMap(parseCitationKeysFromText),
+      ...(Array.isArray(node.citationKeys) ? node.citationKeys.map(cleanCitationKeyInput) : [])
+    ].filter(Boolean));
+  }
+
+  function collectArrowCitationKeys(arrow) {
+    return uniqueStrings([
+      ...parseCitationKeysFromText(arrow.label),
+      ...parseCitationKeysFromText(arrow.remark)
+    ].filter(Boolean));
+  }
+
+  function parseCitationKeysFromText(value) {
+    const text = cleanString(value);
+    if (!text) return [];
+    const keys = [];
+    const pattern = /\\cite(?:\[[^\]]*\])*\{([^}]*)\}/g;
+    let match;
+    while ((match = pattern.exec(text))) {
+      match[1].split(',').forEach((key) => {
+        const clean = cleanCitationKeyInput(key);
+        if (clean) keys.push(clean);
+      });
+    }
+    return uniqueStrings(keys);
+  }
+
+  function scrollToCitationReference(citeKey) {
+    const key = cleanCitationKeyInput(citeKey);
+    if (!key) return;
+    const reference = findReferenceByCitationKey(key);
+    if (!reference) {
+      setReferenceMessage(`No reference found for ${citationCommandForKey(key)}.`, true);
+      return;
+    }
+    renderReferences();
+    const item = refs.referenceList
+      ? refs.referenceList.querySelector(`[data-reference-key="${cssEscape(reference.key)}"]`)
+      : null;
+    if (!item) return;
+    item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    item.classList.add('is-citation-highlight');
+    window.setTimeout(() => {
+      item.classList.remove('is-citation-highlight');
+    }, 1500);
+    setReferenceMessage(`Showing [${reference.key}] for ${citationCommandForKey(key)}.`);
+  }
+
+  function findReferenceByCitationKey(citeKey) {
+    const key = cleanCitationKeyInput(citeKey);
+    if (!key) return null;
+    return state.references.find((reference) => {
+      const referenceKey = cleanString(reference.key);
+      const referenceCiteKey = referenceExportCiteKey(reference) || referenceKey;
+      return referenceKey === key || referenceCiteKey === key;
+    }) || null;
   }
 
   function renderMiscDetailFields(node) {
@@ -2784,7 +3165,6 @@
     textarea.value = detail.text;
     textarea.dataset.detailRole = 'text';
     textarea.addEventListener('input', autoApplyDetailUpdate);
-    textarea.addEventListener('change', autoApplyDetailUpdate);
     textarea.addEventListener('focus', () => {
       state.activeLatexDetailField = miscDetailFieldKey(detail.id);
       syncLatexDetailFields();
@@ -2839,6 +3219,15 @@
     return !refs.nodeMiscDetailList
       || !refs.nodeMiscDetailList.contains(row)
       || row.dataset.nodeId !== state.selectedNodeId;
+  }
+
+  function isStaleNodeEditorEventTarget(target) {
+    if (isStaleMiscDetailEventTarget(target)) return true;
+    if (!target || typeof target.closest !== 'function') return false;
+    const editor = target.closest('#node-editor');
+    if (!editor || editor.hidden) return false;
+    const editorNodeId = editor.dataset.nodeId || '';
+    return !!editorNodeId && editorNodeId !== state.selectedNodeId;
   }
 
   function showMiscDetailLabelEditor(detailId, sourceElement = null) {
@@ -3167,7 +3556,7 @@
   }
 
   function autoApplyDetailUpdate(event) {
-    if (isStaleMiscDetailEventTarget(event?.target)) return;
+    if (isStaleNodeEditorEventTarget(event?.target)) return;
     autoResizeTextarea(event?.target);
     const updated = applyDetailUpdate({ manual: false });
     if (updated && event?.target === refs.nodeType) {
@@ -3189,6 +3578,7 @@
         renderAll();
       } else {
         syncLatexDetailFields();
+        renderNodeCitationRows(node);
         renderCanvas();
         refreshExport();
       }
@@ -3207,6 +3597,7 @@
         setStatus(arrow.label ? `Updated arrow ${arrow.label}.` : 'Updated arrow.');
         renderAll();
       } else {
+        renderArrowCitationRows(arrow);
         renderCanvas();
         refreshExport();
       }
@@ -3431,6 +3822,7 @@
     state.references.forEach((reference) => {
       const item = document.createElement('div');
       item.className = 'theorem-reference-item';
+      item.dataset.referenceKey = reference.key;
 
       const body = document.createElement('div');
       const key = document.createElement('div');
@@ -3443,11 +3835,11 @@
       meta.className = 'theorem-reference-meta';
       meta.textContent = referenceMeta(reference);
       body.append(key, title, meta);
-      const citeText = referenceDisplayCiteText(reference);
-      if (citeText) {
+      const citeCommand = referenceDisplayCitationCommand(reference);
+      if (citeCommand) {
         const cite = document.createElement('div');
         cite.className = 'theorem-reference-cite';
-        cite.textContent = citeText;
+        cite.textContent = citeCommand;
         body.appendChild(cite);
       }
       const links = referenceLinks(reference);
@@ -3495,11 +3887,12 @@
     state.editingReferenceKey = key;
     refs.referenceEditForm.hidden = false;
     refs.referenceEditKey.value = reference.key;
-    refs.referenceEditCite.value = referenceDisplayCiteText(reference);
+    refs.referenceEditCite.value = referenceExportCiteKey(reference);
     refs.referenceEditTitle.value = reference.title;
     refs.referenceEditAuthor.value = reference.author;
     refs.referenceEditYear.value = reference.year;
     renderReferenceEditLinks(referenceLinks(reference));
+    renderReferenceEditDetails(reference.details);
     refs.referenceEditRaw.value = reference.rawBibtex;
     setReferenceMessage(`Editing [${reference.key}].`);
   }
@@ -3636,6 +4029,129 @@
     return { links, invalid };
   }
 
+  function renderReferenceEditDetails(details = []) {
+    if (!refs.referenceEditDetailList) return;
+    refs.referenceEditDetailList.replaceChildren();
+    cleanMiscDetailsForExport(details).forEach((detail) => {
+      refs.referenceEditDetailList.appendChild(createReferenceEditDetailRow(detail));
+    });
+    clearReferenceEditDetailDraft();
+    autoResizeReferenceEditTextareas();
+  }
+
+  function addReferenceEditDetailFromDraft() {
+    if (!state.editingReferenceKey) {
+      setReferenceMessage('Choose a reference before adding an extra field.', true);
+      return;
+    }
+    const label = cleanDetailLabel(refs.referenceEditDetailName ? refs.referenceEditDetailName.value : '');
+    if (!label) {
+      setReferenceMessage('Name the reference extra field before adding it.', true);
+      if (refs.referenceEditDetailName) refs.referenceEditDetailName.focus();
+      return;
+    }
+    const current = collectReferenceEditDetails();
+    const id = uniqueDetailId(label, new Set(current.map((detail) => detail.id)));
+    const row = createReferenceEditDetailRow({
+      id,
+      label,
+      type: normalizeMiscDetailType(refs.referenceEditDetailType ? refs.referenceEditDetailType.value : 'textbox'),
+      text: ''
+    });
+    refs.referenceEditDetailList.appendChild(row);
+    clearReferenceEditDetailDraft();
+    const textarea = row.querySelector('[data-reference-detail-role="text"]');
+    if (textarea) {
+      textarea.focus();
+      autoResizeTextarea(textarea);
+    }
+    setReferenceMessage(`Added ${label} to the reference edit form.`);
+  }
+
+  function clearReferenceEditDetailDraft() {
+    if (refs.referenceEditDetailName) refs.referenceEditDetailName.value = '';
+    if (refs.referenceEditDetailType) refs.referenceEditDetailType.value = 'textbox';
+  }
+
+  function createReferenceEditDetailRow(detail = {}) {
+    const row = document.createElement('div');
+    row.className = 'theorem-field-row';
+    row.dataset.referenceDetailId = cleanDetailId(detail.id || detail.label) || 'detail';
+
+    const label = document.createElement('input');
+    label.className = 'theorem-input theorem-misc-detail-name-input';
+    label.type = 'text';
+    label.maxLength = 48;
+    label.spellcheck = true;
+    label.autocomplete = 'off';
+    label.value = cleanDetailLabel(detail.label) || 'extra';
+    label.dataset.referenceDetailRole = 'label';
+
+    const body = document.createElement('div');
+    body.className = 'theorem-misc-detail-body';
+
+    const type = document.createElement('select');
+    type.className = 'theorem-select';
+    type.dataset.referenceDetailRole = 'type';
+    ['textbox', 'list', 'enumeration', 'checkbox'].forEach((id) => {
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = id === 'textbox' ? 'Textbox'
+        : id === 'list' ? 'List'
+          : id === 'enumeration' ? 'Enumeration'
+            : 'Checkbox';
+      type.appendChild(option);
+    });
+    type.value = normalizeMiscDetailType(detail.type);
+
+    const textarea = document.createElement('textarea');
+    textarea.className = 'theorem-textarea';
+    textarea.spellcheck = true;
+    textarea.value = cleanString(detail.text);
+    textarea.dataset.referenceDetailRole = 'text';
+    textarea.addEventListener('input', () => autoResizeTextarea(textarea));
+
+    const remove = document.createElement('button');
+    remove.className = 'btn btn-ghost theorem-small-button';
+    remove.type = 'button';
+    remove.textContent = 'delete';
+    remove.addEventListener('click', () => {
+      row.remove();
+      setReferenceMessage('Removed reference extra field from the edit form.');
+    });
+
+    body.append(type, textarea, remove);
+    row.append(label, body);
+    return row;
+  }
+
+  function collectReferenceEditDetails() {
+    if (!refs.referenceEditDetailList) return [];
+    const used = new Set();
+    return Array.from(refs.referenceEditDetailList.querySelectorAll('[data-reference-detail-id]'))
+      .map((row, index) => {
+        const labelInput = row.querySelector('[data-reference-detail-role="label"]');
+        const typeInput = row.querySelector('[data-reference-detail-role="type"]');
+        const textInput = row.querySelector('[data-reference-detail-role="text"]');
+        const rawLabel = cleanDetailLabel(labelInput ? labelInput.value : '');
+        const text = cleanString(textInput ? textInput.value : '');
+        if (!rawLabel && !text) return null;
+        const label = rawLabel || `detail ${index + 1}`;
+        return {
+          id: uniqueDetailId(cleanDetailId(row.dataset.referenceDetailId || label), used),
+          label,
+          type: normalizeMiscDetailType(typeInput ? typeInput.value : 'textbox'),
+          text
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function autoResizeReferenceEditTextareas() {
+    if (!refs.referenceEditDetailList) return;
+    refs.referenceEditDetailList.querySelectorAll('textarea.theorem-textarea').forEach(autoResizeTextarea);
+  }
+
   function closeReferenceEdit() {
     state.editingReferenceKey = null;
     if (refs.referenceEditForm) refs.referenceEditForm.hidden = true;
@@ -3673,7 +4189,8 @@
     original.links = linkResult.links;
     original.url = primaryLink ? primaryLink.url : '';
     original.source = primaryLink ? primaryLink.source : (rawBibtex ? 'bibtex' : normalizeReferenceSource(original.source, 'web'));
-    original.citeText = cleanString(refs.referenceEditCite.value) || referenceDefaultCiteText(original);
+    original.citeKey = cleanCitationKeyInput(refs.referenceEditCite.value) || nextKey;
+    original.details = collectReferenceEditDetails();
     if (state.selectedReferenceKeys.has(state.editingReferenceKey)) {
       state.selectedReferenceKeys.delete(state.editingReferenceKey);
       state.selectedReferenceKeys.add(nextKey);
@@ -3712,25 +4229,17 @@
 
   function referenceIsUsed(reference) {
     const key = cleanString(reference.key);
-    const citeText = cleanString(reference.citeText);
-    if (!key && !citeText) return false;
-    const keyPattern = key ? new RegExp(`\\\\cite(?:\\[[^\\]]*\\])?\\{${escapeRegExp(key)}\\}`) : null;
-    return state.nodes.some((node) => objectUsesReference(node, key, citeText, keyPattern))
-      || state.arrows.some((arrow) => objectUsesReference(arrow, key, citeText, keyPattern));
+    const citeKey = referenceExportCiteKey(reference);
+    if (!key && !citeKey) return false;
+    return state.nodes.some((node) => objectUsesReference(node, key, citeKey))
+      || state.arrows.some((arrow) => objectUsesReference(arrow, key, citeKey));
   }
 
-  function objectUsesReference(source, key, citeText, keyPattern) {
-    if (Array.isArray(source.citationKeys) && key && source.citationKeys.includes(key)) return true;
-    const fields = ['label', 'setting', 'condition', 'result', 'proofSketch', 'remark'];
-    return fields.some((field) => textUsesReference(source[field], key, citeText, keyPattern));
-  }
-
-  function textUsesReference(value, key, citeText, keyPattern) {
-    const text = cleanString(value);
-    if (!text) return false;
-    if (citeText && text.includes(citeText)) return true;
-    if (keyPattern && keyPattern.test(text)) return true;
-    return false;
+  function objectUsesReference(source, key, citeKey) {
+    const keys = new Set([cleanString(key), cleanCitationKeyInput(citeKey)].filter(Boolean));
+    if (Array.isArray(source.citationKeys) && source.citationKeys.some((item) => keys.has(cleanCitationKeyInput(item)))) return true;
+    const cited = source.remark == null ? collectNodeCitationKeys(source) : collectArrowCitationKeys(source);
+    return cited.some((item) => keys.has(cleanCitationKeyInput(item)));
   }
 
   function setReferenceSelected(key, selected) {
@@ -3822,7 +4331,7 @@
     const next = { ...entry };
     if (overrides.key) {
       next.key = overrides.key;
-      next.citeText = defaultCiteText(overrides.key);
+      next.citeKey = overrides.key;
     }
     if (overrides.title) next.title = overrides.title;
     if (overrides.url) {
@@ -3902,7 +4411,7 @@
           year: fields.year || '',
           url: fields.url || '',
           source: fields.url ? inferReferenceSource(fields.url) : 'bibtex',
-          citeText: defaultCiteText(key),
+          citeKey: key,
           rawBibtex: rawEntry,
           links: fields.url ? [{ url: fields.url, source: inferReferenceSource(fields.url), label: '' }] : []
         });
@@ -4074,24 +4583,29 @@
         labelAlign: normalizeArrowLabelAlign(arrow.labelAlign),
         color: arrow.color
       })),
-      references: state.references.map((reference) => ({
-        ...reference.extra,
-        key: reference.key,
-        author: reference.author,
-        title: reference.title,
-        year: reference.year,
-        citeText: referenceExportCiteText(reference),
-        url: reference.url,
-        source: reference.source,
-        rawBibtex: reference.rawBibtex,
-        links: referenceExportLinks(reference)
-      })),
+      references: state.references.map((reference) => {
+        const details = cleanMiscDetailsForExport(reference.details);
+        return {
+          ...reference.extra,
+          key: reference.key,
+          author: reference.author,
+          title: reference.title,
+          year: reference.year,
+          citeKey: referenceExportCiteKey(reference),
+          ...(details.length ? { details } : {}),
+          url: reference.url,
+          source: reference.source,
+          rawBibtex: reference.rawBibtex,
+          links: referenceExportLinks(reference)
+        };
+      }),
       view: {
         ...state.viewExtra,
         selectedId: state.selectedNodeId || '',
         selectedReferenceKeys: state.references
           .filter((reference) => state.selectedReferenceKeys.has(reference.key))
           .map((reference) => reference.key),
+        layoutAvoidOverlap: !!state.layoutAvoidOverlap,
         layoutRunning: false,
         ...(state.canvasRatioLocked ? {
           canvasRatioLocked: true,
@@ -4278,6 +4792,8 @@
     if (refs.referenceEditForm) refs.referenceEditForm.hidden = true;
     state.selectedNodeId = next.selectedNodeId;
     state.selectedArrowId = null;
+    state.layoutAvoidOverlap = next.layoutAvoidOverlap;
+    state.layoutOverlapGroups = [];
     state.activeLatexDetailField = null;
     resetDetailEditBaseline();
     state.connectMode = false;
@@ -4503,6 +5019,7 @@
     const viewExtra = { ...view };
     delete viewExtra.selectedId;
     delete viewExtra.selectedReferenceKeys;
+    delete viewExtra.layoutAvoidOverlap;
     delete viewExtra.layoutRunning;
     delete viewExtra.canvasRatioLocked;
     delete viewExtra.canvasAspectRatio;
@@ -4517,6 +5034,7 @@
       references,
       selectedNodeId: ids.has(selectedId) ? selectedId : (nodes[0] ? nodes[0].id : null),
       selectedReferenceKeys,
+      layoutAvoidOverlap: view.layoutAvoidOverlap !== false,
       viewExtra
     };
   }
@@ -4626,7 +5144,7 @@
   }
 
   function normalizeType(type) {
-    return NODE_TYPE_KEYS.includes(type) ? type : 'theorem';
+    return NODE_TYPE_KEYS.includes(type) ? type : DEFAULT_NEW_NODE_TYPE;
   }
 
   function arrowPartsFromSource(source = {}) {
@@ -4716,9 +5234,15 @@
 
   function normalizeCitationKeys(value) {
     if (Array.isArray(value)) {
-      return uniqueStrings(value.map(cleanString).filter(Boolean));
+      return uniqueStrings(value.flatMap((item) => {
+        const parsed = parseCitationKeysFromText(item);
+        return parsed.length ? parsed : [cleanCitationKeyInput(item)];
+      }).filter(Boolean));
     }
-    return uniqueStrings(cleanString(value).split(/[,\s;]+/).map(cleanString).filter(Boolean));
+    const text = cleanString(value);
+    const parsed = parseCitationKeysFromText(text);
+    if (parsed.length) return parsed;
+    return uniqueStrings(text.split(/[,\s;]+/).map(cleanCitationKeyInput).filter(Boolean));
   }
 
   function referenceMeta(reference) {
@@ -4731,21 +5255,12 @@
     return [source, linkMeta, details].filter(Boolean).join(' - ') || 'metadata not parsed';
   }
 
-  function referenceDisplayCiteText(reference) {
-    const citeText = cleanString(reference.citeText);
-    if (!citeText) return referenceDefaultCiteText(reference);
-    if (!referenceIsBibtexLike(reference) && citeText === defaultCiteText(reference.key)) return '';
-    return citeText;
+  function referenceDisplayCitationCommand(reference) {
+    return citationCommandForKey(referenceExportCiteKey(reference));
   }
 
-  function referenceExportCiteText(reference) {
-    const citeText = cleanString(reference.citeText);
-    if (!referenceIsBibtexLike(reference) && citeText === defaultCiteText(reference.key)) return '';
-    return citeText || referenceDefaultCiteText(reference);
-  }
-
-  function referenceDefaultCiteText(reference) {
-    return referenceIsBibtexLike(reference) ? defaultCiteText(reference.key) : '';
+  function referenceExportCiteKey(reference) {
+    return cleanCitationKeyInput(reference.citeKey || reference.key);
   }
 
   function referenceIsBibtexLike(reference) {
@@ -4843,13 +5358,16 @@
     return key;
   }
 
-  function defaultCiteText(key) {
+  function citationCommandForKey(key) {
     const clean = cleanString(key);
     return clean ? `\\cite{${clean}}` : '';
   }
 
-  function escapeRegExp(value) {
-    return cleanString(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  function cleanCitationKeyInput(value) {
+    const text = cleanString(value);
+    if (!text) return '';
+    const citeMatch = /^\\cite(?:\[[^\]]*\])*\{([^}]*)\}$/.exec(text);
+    return cleanString(citeMatch ? citeMatch[1] : text).replace(/^,+|,+$/g, '').trim();
   }
 
   function uniqueStrings(values) {

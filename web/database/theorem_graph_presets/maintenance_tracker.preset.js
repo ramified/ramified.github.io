@@ -3,7 +3,7 @@
 // { label: "Maintenance Tracker", key: "maintenance_tracker", file: "maintenance_tracker.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
-  "schemaVersion": 5,
+  "schemaVersion": 7,
   "title": "Maintenance Tracker",
   "nodes": [
     {
@@ -17,8 +17,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fffdf8",
-      "x": 313.2,
-      "y": 130.8
+      "x": 221.2,
+      "y": 45.7
     },
     {
       "id": "n37",
@@ -39,8 +39,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 153.4,
-      "y": 253.9
+      "x": 89.4,
+      "y": 208.4
     },
     {
       "id": "n39",
@@ -61,8 +61,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 263.8,
-      "y": 363.2
+      "x": 202.5,
+      "y": 290.8
     },
     {
       "id": "n48",
@@ -89,8 +89,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 583.5,
-      "y": 377.7
+      "x": 587.3,
+      "y": 383
     },
     {
       "id": "n55",
@@ -117,8 +117,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 453.2,
-      "y": 303.8
+      "x": 460.2,
+      "y": 283.6
     },
     {
       "id": "n58",
@@ -132,8 +132,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 511.8,
-      "y": 78.8
+      "x": 443,
+      "y": 32.2
     },
     {
       "id": "n59",
@@ -154,8 +154,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 420.9,
-      "y": 237.2
+      "x": 338.2,
+      "y": 152.3
     },
     {
       "id": "n60",
@@ -166,13 +166,13 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "default type is misc\nother type can also type in Extra\nrun layout will not push too the right too much and left side outside of the screen\ncan choose run layout so that nodes don't coincide\nadd citation cross-reference\n\\cite{diagram} in the edit should be only diagram, code will add \\cite{...} for a preparation\nadd node for the title, allow to add some extras\nallow users to double click the node to expand to another graph. It will be like tab in Google Chrome, where the delete button is replaced by returning button."
+          "text": "- [x] default type is misc\n- [x] other type can also type in Extra\n- [x] run layout will not push too the right too much and left side outside of the screen\n- [x] can choose run layout so that nodes don't coincide\n- [x] add citation cross-reference\n- [x] \\cite{diagram} in the edit should be only diagram, code will add \\cite{...} for a preparation\n- [ ] add node for the title, allow to add some extras\n- [ ] allow users to double click the node to expand to another graph. It will be like tab in Google Chrome, where the delete button is replaced by returning button."
         },
         {
           "id": "bug",
           "label": "bug",
           "type": "checkbox",
-          "text": "if user add some info in the textbox (in node A), and then click the other node B without clicking other area beforehead, then the textbox in node A will cover all the info in node B, which is what we don't want to see"
+          "text": "- [x] if user add some info in the textbox (in node A), and then click the other node B without clicking other area beforehead, then the textbox in node A will cover all the info in node B, which is what we don't want to see"
         }
       ],
       "setting": "",
@@ -182,8 +182,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 544.9,
-      "y": 179.7
+      "x": 611.1,
+      "y": 65
     },
     {
       "id": "n61",
@@ -197,8 +197,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 622.7,
-      "y": 291.4
+      "x": 682.2,
+      "y": 229
     },
     {
       "id": "n62",
@@ -225,8 +225,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 413.6,
-      "y": 441.6
+      "x": 333.8,
+      "y": 384.6
     }
   ],
   "arrows": [
@@ -288,7 +288,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "author": "",
       "title": "Simple singularities algorithm?",
       "year": "",
-      "citeText": "\\cite{simple sing}",
+      "citeKey": "simple sing",
       "url": "https://mathoverflow.net/questions/185692/how-can-one-determine-if-a-singularity-is-simple",
       "source": "mathoverflow",
       "rawBibtex": "",
@@ -305,7 +305,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "author": "",
       "title": "bronken app",
       "year": "",
-      "citeText": "\\cite{diagram}",
+      "citeKey": "diagram",
       "url": "https://dehornoy.lmno.cnrs.fr/Softwares/TressApp/",
       "source": "web",
       "rawBibtex": "",
@@ -321,49 +321,50 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
   "view": {
     "selectedId": "n60",
     "selectedReferenceKeys": [],
+    "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasRatioLocked": true,
-    "canvasAspectRatio": 1.4659,
+    "canvasAspectRatio": 1.8101,
     "relativeNodePositions": {
       "n4": {
-        "x": 0.4159,
-        "y": 0.2545
+        "x": 0.2937,
+        "y": 0.1098
       },
       "n37": {
-        "x": 0.2037,
-        "y": 0.494
+        "x": 0.1187,
+        "y": 0.5009
       },
       "n39": {
-        "x": 0.3503,
-        "y": 0.7066
+        "x": 0.2689,
+        "y": 0.699
       },
       "n48": {
-        "x": 0.7749,
-        "y": 0.7348
+        "x": 0.78,
+        "y": 0.9206
       },
       "n55": {
-        "x": 0.6018,
-        "y": 0.591
+        "x": 0.6112,
+        "y": 0.6818
       },
       "n58": {
-        "x": 0.6797,
-        "y": 0.1533
+        "x": 0.5883,
+        "y": 0.0775
       },
       "n59": {
-        "x": 0.5589,
-        "y": 0.4615
+        "x": 0.4492,
+        "y": 0.3661
       },
       "n60": {
-        "x": 0.7237,
-        "y": 0.3497
+        "x": 0.8116,
+        "y": 0.1562
       },
       "n61": {
-        "x": 0.827,
-        "y": 0.5669
+        "x": 0.906,
+        "y": 0.5506
       },
       "n62": {
-        "x": 0.5493,
-        "y": 0.8592
+        "x": 0.4433,
+        "y": 0.9246
       }
     }
   }

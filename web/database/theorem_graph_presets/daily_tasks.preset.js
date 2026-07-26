@@ -3,7 +3,7 @@
 // { label: "daily tasks", key: "daily_tasks", file: "daily_tasks.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
-  "schemaVersion": 5,
+  "schemaVersion": 7,
   "title": "daily tasks",
   "nodes": [
     {
@@ -73,6 +73,7 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
         "x": 0.6126,
         "y": 0.6811
       }
-    }
+    },
+    "layoutAvoidOverlap": true
   }
 };

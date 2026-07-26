@@ -3,7 +3,7 @@
 // { label: "Quartic double solid", key: "quartic_double_solid", file: "quartic_double_solid.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.quartic_double_solid = {
-  "schemaVersion": 2,
+  "schemaVersion": 7,
   "title": "Quartic double solid",
   "nodes": [
     {
@@ -234,45 +234,46 @@ window.THEOREM_GRAPH_PRESET_DATA.quartic_double_solid = {
       "author": "Welters, G. E.",
       "title": "Abel-Jacobi isogenies for certain types of Fano threefolds",
       "year": "1981",
-      "citeText": "\\cite{Wel81}",
       "url": "https://scispace.com/pdf/abel-jacobi-isogenies-for-certain-types-of-fano-threefolds-32wgtkrz9m.pdf",
       "source": "bibtex",
-      "rawBibtex": "@book{Wel81,\n author = {Welters, G. E.},\n title = {Abel-{Jacobi} isogenies for certain types of {Fano} threefolds},\n fseries = {Mathematical Centre Tracts},\n series = {Math. Cent. Tracts},\n volume = {141},\n year = {1981},\n publisher = {Centrum voor Wiskunde en Informatica (CWI), Amsterdam},\n language = {English},\n keywords = {14J30,14K30,14H40},\n zbMATH = {3743439},\n Zbl = {0474.14028}\n}"
+      "rawBibtex": "@book{Wel81,\n author = {Welters, G. E.},\n title = {Abel-{Jacobi} isogenies for certain types of {Fano} threefolds},\n fseries = {Mathematical Centre Tracts},\n series = {Math. Cent. Tracts},\n volume = {141},\n year = {1981},\n publisher = {Centrum voor Wiskunde en Informatica (CWI), Amsterdam},\n language = {English},\n keywords = {14J30,14K30,14H40},\n zbMATH = {3743439},\n Zbl = {0474.14028}\n}",
+      "citeKey": "Wel81"
     },
     {
       "key": "zbMATH04091651",
       "author": "Picco Botta, Luciana",
       "title": "On the intersection of three quadrics",
       "year": "1989",
-      "citeText": "\\cite{zbMATH04091651}",
       "url": "https://eudml.org/doc/153159",
       "source": "web",
-      "rawBibtex": "@article{zbMATH04091651,\n author = {Picco Botta, Luciana},\n title = {On the intersection of three quadrics},\n fjournal = {Journal f{\\\"u}r die Reine und Angewandte Mathematik},\n journal = {J. Reine Angew. Math.},\n issn = {0075-4102},\n volume = {399},\n pages = {188--207},\n year = {1989},\n language = {English},\n doi = {10.1515/crll.1989.399.188},\n keywords = {14J25,14C17,11E16},\n url = {https://eudml.org/doc/153159},\n zbMATH = {4091651},\n Zbl = {0667.14019}\n}"
+      "rawBibtex": "@article{zbMATH04091651,\n author = {Picco Botta, Luciana},\n title = {On the intersection of three quadrics},\n fjournal = {Journal f{\\\"u}r die Reine und Angewandte Mathematik},\n journal = {J. Reine Angew. Math.},\n issn = {0075-4102},\n volume = {399},\n pages = {188--207},\n year = {1989},\n language = {English},\n doi = {10.1515/crll.1989.399.188},\n keywords = {14J25,14C17,11E16},\n url = {https://eudml.org/doc/153159},\n zbMATH = {4091651},\n Zbl = {0667.14019}\n}",
+      "citeKey": "zbMATH04091651"
     },
     {
       "key": "bauer2020",
       "author": "Thomas Bauer and Slawomir Rams",
       "title": "Counting lines on projective surfaces",
       "year": "2020",
-      "citeText": "\\cite{bauer2020countinglinesprojectivesurfaces}",
       "url": "https://arxiv.org/abs/1902.05133",
       "source": "web",
-      "rawBibtex": "@misc{bauer2020countinglinesprojectivesurfaces,\n      title={Counting lines on projective surfaces}, \n      author={Thomas Bauer and Slawomir Rams},\n      year={2020},\n      eprint={1902.05133},\n      archivePrefix={arXiv},\n      primaryClass={math.AG},\n      url={https://arxiv.org/abs/1902.05133}, \n}"
+      "rawBibtex": "@misc{bauer2020countinglinesprojectivesurfaces,\n      title={Counting lines on projective surfaces}, \n      author={Thomas Bauer and Slawomir Rams},\n      year={2020},\n      eprint={1902.05133},\n      archivePrefix={arXiv},\n      primaryClass={math.AG},\n      url={https://arxiv.org/abs/1902.05133}, \n}",
+      "citeKey": "bauer2020countinglinesprojectivesurfaces"
     },
     {
       "key": "zbMATH03291827",
       "author": "Griffiths, Phillip A.",
       "title": "Periods of integrals on algebraic manifolds. II: Local study of the period mapping",
       "year": "1968",
-      "citeText": "\\cite{zbMATH03291827}",
       "url": "https://www.jstor.org/stable/2373485?seq=1",
       "source": "bibtex",
-      "rawBibtex": "@article{zbMATH03291827,\n author = {Griffiths, Phillip A.},\n title = {Periods of integrals on algebraic manifolds. {II}: {Local} study of the period mapping},\n fjournal = {American Journal of Mathematics},\n journal = {Am. J. Math.},\n issn = {0002-9327},\n volume = {90},\n pages = {805--865},\n year = {1968},\n language = {English},\n doi = {10.2307/2373485},\n keywords = {14-XX},\n zbMATH = {3291827},\n Zbl = {0183.25501}\n}"
+      "rawBibtex": "@article{zbMATH03291827,\n author = {Griffiths, Phillip A.},\n title = {Periods of integrals on algebraic manifolds. {II}: {Local} study of the period mapping},\n fjournal = {American Journal of Mathematics},\n journal = {Am. J. Math.},\n issn = {0002-9327},\n volume = {90},\n pages = {805--865},\n year = {1968},\n language = {English},\n doi = {10.2307/2373485},\n keywords = {14-XX},\n zbMATH = {3291827},\n Zbl = {0183.25501}\n}",
+      "citeKey": "zbMATH03291827"
     }
   ],
   "view": {
     "selectedId": "n10",
     "selectedReferenceKeys": [],
-    "layoutRunning": false
+    "layoutRunning": false,
+    "layoutAvoidOverlap": true
   }
 };

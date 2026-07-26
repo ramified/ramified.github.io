@@ -3,7 +3,7 @@
 // { label: "Starter Dependency Graph", key: "starter_dependency_graph", file: "starter_dependency_graph.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.starter_dependency_graph = {
-  "schemaVersion": 1,
+  "schemaVersion": 7,
   "title": "Starter Dependency Graph",
   "nodes": [
     {
@@ -52,10 +52,10 @@ window.THEOREM_GRAPH_PRESET_DATA.starter_dependency_graph = {
       "author": "Robin Hartshorne",
       "title": "Algebraic Geometry",
       "year": "1977",
-      "citeText": "\\cite{hartshorne1977}",
       "url": "",
       "source": "bibtex",
-      "rawBibtex": "@book{hartshorne1977, title={Algebraic Geometry}, author={Hartshorne, Robin}, year={1977}}"
+      "rawBibtex": "@book{hartshorne1977, title={Algebraic Geometry}, author={Hartshorne, Robin}, year={1977}}",
+      "citeKey": "hartshorne1977"
     }
   ],
   "view": {
@@ -63,6 +63,7 @@ window.THEOREM_GRAPH_PRESET_DATA.starter_dependency_graph = {
     "selectedReferenceKeys": [
       "hartshorne1977"
     ],
-    "layoutRunning": false
+    "layoutRunning": false,
+    "layoutAvoidOverlap": true
   }
 };

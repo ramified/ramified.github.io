@@ -3,7 +3,7 @@
 // { label: "Francesco Denisi", key: "francesco_denisi", file: "francesco_denisi.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.francesco_denisi = {
-  "schemaVersion": 1,
+  "schemaVersion": 7,
   "title": "Francesco Denisi",
   "nodes": [
     {
@@ -82,25 +82,26 @@ window.THEOREM_GRAPH_PRESET_DATA.francesco_denisi = {
       "author": "Hartshorne, Robin",
       "title": "Algebraic Geometry",
       "year": "1977",
-      "citeText": "\\cite{hartshorne1977}",
       "url": "",
       "source": "bibtex",
-      "rawBibtex": "@book{hartshorne1977, author={Hartshorne, Robin}, title={Algebraic Geometry}, year={1977}}"
+      "rawBibtex": "@book{hartshorne1977, author={Hartshorne, Robin}, title={Algebraic Geometry}, year={1977}}",
+      "citeKey": "hartshorne1977"
     },
     {
       "key": "den26",
       "author": "Francesco Antonio Denisi and Claudio Onorati and Francesca Rizzo and Sasha Viktorova",
       "title": "Birational automorphism groups in families of hyper-K\\\"ahler manifolds",
       "year": "2026",
-      "citeText": "\\cite{den26}",
       "url": "https://arxiv.org/abs/2601.16090",
       "source": "web",
-      "rawBibtex": "@misc{den26,\n      title={Birational automorphism groups in families of hyper-K\\\"ahler manifolds}, \n      author={Francesco Antonio Denisi and Claudio Onorati and Francesca Rizzo and Sasha Viktorova},\n      year={2026},\n      eprint={2601.16090},\n      archivePrefix={arXiv},\n      primaryClass={math.AG},\n      url={https://arxiv.org/abs/2601.16090}, \n}"
+      "rawBibtex": "@misc{den26,\n      title={Birational automorphism groups in families of hyper-K\\\"ahler manifolds}, \n      author={Francesco Antonio Denisi and Claudio Onorati and Francesca Rizzo and Sasha Viktorova},\n      year={2026},\n      eprint={2601.16090},\n      archivePrefix={arXiv},\n      primaryClass={math.AG},\n      url={https://arxiv.org/abs/2601.16090}, \n}",
+      "citeKey": "den26"
     }
   ],
   "view": {
     "selectedId": "",
     "selectedReferenceKeys": [],
-    "layoutRunning": false
+    "layoutRunning": false,
+    "layoutAvoidOverlap": true
   }
 };
