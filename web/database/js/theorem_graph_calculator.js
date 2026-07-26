@@ -1,10 +1,11 @@
 (() => {
   'use strict';
 
-  const SCHEMA_VERSION = 5;
+  const SCHEMA_VERSION = 6;
   const DEFAULT_GRAPH_TITLE = 'Dependency Graph';
   const PRESET_FOLDER_URL = 'theorem_graph_presets/';
   const DEFAULT_PRESET_KEY = 'maintenance_tracker';
+  const DEFAULT_NEW_NODE_TYPE = 'misc';
   const DEFAULT_NODE_STROKE = '#7a6f65';
   const DEFAULT_NODE_FILL = '#f7f5f1';
   const NODE_TYPES = {
@@ -878,7 +879,6 @@
   }
 
   function normalizeMiscDetails(source = {}, type = 'theorem') {
-    if (normalizeType(type) !== 'misc') return [];
     const rawDetails = Array.isArray(source.details) ? source.details : [];
     if (rawDetails.length) {
       const used = new Set();
@@ -900,11 +900,10 @@
       }).filter(Boolean);
       if (details.length) return details;
     }
-    return legacyFieldsToMiscDetails(source);
+    return normalizeType(type) === 'misc' ? legacyFieldsToMiscDetails(source) : [];
   }
 
-  function legacyFieldsToMiscDetails(source = {}) {
-    const used = new Set();
+  function legacyFieldsToMiscDetails(source = {}, used = new Set()) {
     return LEGACY_NODE_DETAIL_FIELDS.map(({ key, label }) => {
       const text = cleanString(source[key]);
       if (!text) return null;
@@ -915,6 +914,20 @@
         text
       };
     }).filter(Boolean);
+  }
+
+  function appendUniqueMiscDetails(base = [], additions = []) {
+    const used = new Set();
+    const result = [];
+    cloneMiscDetails(base).forEach((detail) => {
+      const id = uniqueDetailId(detail.id || detail.label, used);
+      result.push({ ...detail, id });
+    });
+    cloneMiscDetails(additions).forEach((detail) => {
+      const id = uniqueDetailId(detail.id || detail.label, used);
+      result.push({ ...detail, id });
+    });
+    return result;
   }
 
   function normalizeMiscDetailType(type) {
@@ -2087,11 +2100,12 @@
   function handleCanvasDoubleClick(event) {
     if (state.connectMode) return;
     const point = eventPoint(event);
+    const type = refs.newNodeType ? refs.newNodeType.value : DEFAULT_NEW_NODE_TYPE;
     const node = addNode({
-      type: refs.newNodeType ? refs.newNodeType.value : 'lemma',
+      type,
       label: refs.newNodeLabel && refs.newNodeLabel.value.trim()
         ? refs.newNodeLabel.value.trim()
-        : nextDefaultNodeLabel(refs.newNodeType ? refs.newNodeType.value : 'lemma'),
+        : nextDefaultNodeLabel(type),
       x: point.x,
       y: point.y
     });
@@ -2256,7 +2270,7 @@
   }
 
   function addNodeFromControls() {
-    const type = refs.newNodeType ? refs.newNodeType.value : 'lemma';
+    const type = refs.newNodeType ? refs.newNodeType.value : DEFAULT_NEW_NODE_TYPE;
     const label = refs.newNodeLabel && refs.newNodeLabel.value.trim()
       ? refs.newNodeLabel.value.trim()
       : nextDefaultNodeLabel(type);
@@ -2276,11 +2290,12 @@
 
   function addMiscDetailFromControls() {
     const node = findNode(state.selectedNodeId);
-    if (!node || node.type !== 'misc') {
-      setStatus('Choose a Misc node before adding an extra field.');
+    if (!node) {
+      setStatus('Choose a node before adding an extra field.');
       return;
     }
     applyNodeDetailFromControls(node);
+    if (!Array.isArray(node.details)) node.details = [];
     const label = cleanDetailLabel(refs.nodeMiscDetailName ? refs.nodeMiscDetailName.value : '');
     if (!label) {
       setStatus('Name the extra field before adding it.');
@@ -2304,8 +2319,8 @@
 
   function removeMiscDetailFromControls(detailId) {
     const node = findNode(state.selectedNodeId);
-    if (!node || node.type !== 'misc') {
-      setStatus('Choose a Misc node before removing an extra field.');
+    if (!node) {
+      setStatus('Choose a node before removing an extra field.');
       return;
     }
     applyNodeDetailFromControls(node);
@@ -2351,7 +2366,24 @@
     renderCanvas();
   }
 
+  function commitCurrentDetailBeforeSelectionChange(nextKind = '', nextId = '') {
+    if (state.selectedNodeId && !(nextKind === 'node' && state.selectedNodeId === nextId)) {
+      const node = findNode(state.selectedNodeId);
+      if (node && refs.nodeEditor && !refs.nodeEditor.hidden) {
+        applyNodeDetailFromControls(node);
+      }
+      return;
+    }
+    if (state.selectedArrowId && !(nextKind === 'arrow' && state.selectedArrowId === nextId)) {
+      const arrow = findArrow(state.selectedArrowId);
+      if (arrow && refs.arrowEditor && !refs.arrowEditor.hidden) {
+        applyArrowDetailFromControls(arrow);
+      }
+    }
+  }
+
   function selectNode(id) {
+    commitCurrentDetailBeforeSelectionChange('node', id);
     state.selectedNodeId = id;
     state.selectedArrowId = null;
     state.detailPreview = null;
@@ -2360,6 +2392,7 @@
   }
 
   function selectArrow(id) {
+    commitCurrentDetailBeforeSelectionChange('arrow', id);
     state.selectedArrowId = id;
     state.selectedNodeId = null;
     state.detailPreview = null;
@@ -2368,6 +2401,7 @@
   }
 
   function clearSelection() {
+    commitCurrentDetailBeforeSelectionChange();
     state.selectedNodeId = null;
     state.selectedArrowId = null;
     state.detailPreview = null;
@@ -2585,7 +2619,7 @@
     refs.nodeFixedDetailRows.forEach((row) => {
       row.hidden = isMisc;
     });
-    if (refs.nodeMiscEditor) refs.nodeMiscEditor.hidden = !isMisc;
+    if (refs.nodeMiscEditor) refs.nodeMiscEditor.hidden = !node;
     [
       refs.nodeType,
       refs.nodeLabel,
@@ -2607,7 +2641,7 @@
       refs.nodeMiscDetailType,
       refs.addNodeMiscDetail
     ].forEach((control) => {
-      if (control) control.disabled = disabled || !isMisc;
+      if (control) control.disabled = disabled;
     });
     [
       refs.arrowSource,
@@ -2657,7 +2691,7 @@
     refs.nodeCondition.value = node.condition;
     refs.nodeResult.value = node.result;
     refs.nodeProofSketch.value = node.proofSketch;
-    renderMiscDetailFields(isMisc ? node : null);
+    renderMiscDetailFields(node);
     if (refs.nodeColor) refs.nodeColor.value = normalizeColor(node.color, NODE_TYPES[node.type].stroke);
     if (refs.nodeFillColor) refs.nodeFillColor.value = normalizeNodeFillColor(node.fillColor, NODE_TYPES[node.type].fill);
     populateArrowParentSelects(null);
@@ -2681,15 +2715,16 @@
     if (!node) return;
     if (!Array.isArray(node.details)) node.details = [];
     node.details.forEach((detail) => {
-      refs.nodeMiscDetailList.appendChild(createMiscDetailRow(detail));
+      refs.nodeMiscDetailList.appendChild(createMiscDetailRow(node, detail));
     });
     autoResizeDetailTextareas();
     syncLatexDetailFields();
   }
 
-  function createMiscDetailRow(detail) {
+  function createMiscDetailRow(node, detail) {
     const row = document.createElement('div');
     row.className = 'theorem-field-row';
+    row.dataset.nodeId = node.id;
     row.dataset.miscDetailId = detail.id;
 
     const labelSlot = document.createElement('div');
@@ -2701,11 +2736,11 @@
     label.setAttribute('role', 'button');
     label.textContent = detail.label;
     label.title = 'Rename extra';
-    label.addEventListener('click', () => showMiscDetailLabelEditor(detail.id));
+    label.addEventListener('click', () => showMiscDetailLabelEditor(detail.id, label));
     label.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter' && event.key !== ' ') return;
       event.preventDefault();
-      showMiscDetailLabelEditor(detail.id);
+      showMiscDetailLabelEditor(detail.id, label);
     });
 
     const labelInput = document.createElement('input');
@@ -2717,26 +2752,26 @@
     labelInput.value = detail.label;
     labelInput.dataset.detailRole = 'label';
     labelInput.hidden = true;
-    labelInput.addEventListener('input', () => updateMiscDetailLabelDraft(detail.id));
-    labelInput.addEventListener('blur', () => commitMiscDetailLabelEdit(detail.id));
-    labelInput.addEventListener('focusout', () => commitMiscDetailLabelEdit(detail.id));
-    labelInput.addEventListener('change', () => commitMiscDetailLabelEdit(detail.id));
+    labelInput.addEventListener('input', () => updateMiscDetailLabelDraft(detail.id, labelInput));
+    labelInput.addEventListener('blur', () => commitMiscDetailLabelEdit(detail.id, labelInput));
+    labelInput.addEventListener('focusout', () => commitMiscDetailLabelEdit(detail.id, labelInput));
+    labelInput.addEventListener('change', () => commitMiscDetailLabelEdit(detail.id, labelInput));
     labelInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
         event.preventDefault();
         labelInput.blur();
       } else if (event.key === 'Escape') {
         event.preventDefault();
-        cancelMiscDetailLabelEdit(detail.id);
+        cancelMiscDetailLabelEdit(detail.id, labelInput);
       }
     });
     labelInput.addEventListener('keyup', (event) => {
       if (event.key === 'Enter') {
         event.preventDefault();
-        commitMiscDetailLabelEdit(detail.id);
+        commitMiscDetailLabelEdit(detail.id, labelInput);
       } else if (event.key === 'Escape') {
         event.preventDefault();
-        cancelMiscDetailLabelEdit(detail.id);
+        cancelMiscDetailLabelEdit(detail.id, labelInput);
       }
     });
 
@@ -2786,9 +2821,28 @@
     return row;
   }
 
-  function showMiscDetailLabelEditor(detailId) {
+  function currentMiscDetailRow(detailId, sourceElement = null) {
     if (!refs.nodeMiscDetailList) return;
-    const row = refs.nodeMiscDetailList.querySelector(`[data-misc-detail-id="${cssEscape(detailId)}"]`);
+    const row = sourceElement && typeof sourceElement.closest === 'function'
+      ? sourceElement.closest('[data-misc-detail-id]')
+      : refs.nodeMiscDetailList.querySelector(`[data-misc-detail-id="${cssEscape(detailId)}"]`);
+    if (!row || !refs.nodeMiscDetailList.contains(row)) return null;
+    if (row.dataset.nodeId !== state.selectedNodeId) return null;
+    if ((row.dataset.miscDetailId || '') !== detailId) return null;
+    return row;
+  }
+
+  function isStaleMiscDetailEventTarget(target) {
+    if (!target || typeof target.closest !== 'function') return false;
+    const row = target.closest('[data-misc-detail-id]');
+    if (!row) return false;
+    return !refs.nodeMiscDetailList
+      || !refs.nodeMiscDetailList.contains(row)
+      || row.dataset.nodeId !== state.selectedNodeId;
+  }
+
+  function showMiscDetailLabelEditor(detailId, sourceElement = null) {
+    const row = currentMiscDetailRow(detailId, sourceElement);
     if (!row) return;
     const label = row.querySelector('.theorem-misc-detail-name');
     const input = row.querySelector('[data-detail-role="label"]');
@@ -2803,9 +2857,8 @@
     if (typeof input.select === 'function') input.select();
   }
 
-  function updateMiscDetailLabelDraft(detailId) {
-    if (!refs.nodeMiscDetailList) return;
-    const row = refs.nodeMiscDetailList.querySelector(`[data-misc-detail-id="${cssEscape(detailId)}"]`);
+  function updateMiscDetailLabelDraft(detailId, sourceElement = null) {
+    const row = currentMiscDetailRow(detailId, sourceElement);
     if (!row) return;
     const label = row.querySelector('.theorem-misc-detail-name');
     const input = row.querySelector('[data-detail-role="label"]');
@@ -2815,9 +2868,8 @@
     autoApplyDetailUpdate({ target: input });
   }
 
-  function commitMiscDetailLabelEdit(detailId) {
-    if (!refs.nodeMiscDetailList) return;
-    const row = refs.nodeMiscDetailList.querySelector(`[data-misc-detail-id="${cssEscape(detailId)}"]`);
+  function commitMiscDetailLabelEdit(detailId, sourceElement = null) {
+    const row = currentMiscDetailRow(detailId, sourceElement);
     if (!row) return;
     const label = row.querySelector('.theorem-misc-detail-name');
     const input = row.querySelector('[data-detail-role="label"]');
@@ -2840,9 +2892,8 @@
     autoApplyDetailUpdate({ target: input });
   }
 
-  function cancelMiscDetailLabelEdit(detailId) {
-    if (!refs.nodeMiscDetailList) return;
-    const row = refs.nodeMiscDetailList.querySelector(`[data-misc-detail-id="${cssEscape(detailId)}"]`);
+  function cancelMiscDetailLabelEdit(detailId, sourceElement = null) {
+    const row = currentMiscDetailRow(detailId, sourceElement);
     if (!row) return;
     const label = row.querySelector('.theorem-misc-detail-name');
     const input = row.querySelector('[data-detail-role="label"]');
@@ -2922,10 +2973,10 @@
       const value = input.value;
       const detail = node && Array.isArray(node.details) ? node.details.find((item) => item.id === detailId) : null;
       const type = normalizeMiscDetailType(detail ? detail.type : 'textbox');
-      const showPreview = !!node && node.type === 'misc' && state.activeLatexDetailField !== key && !!cleanString(value) && (type !== 'textbox' || hasDollarMath(value));
+      const showPreview = !!node && state.activeLatexDetailField !== key && !!cleanString(value) && (type !== 'textbox' || hasDollarMath(value));
       input.hidden = showPreview;
       preview.hidden = !showPreview;
-      preview.setAttribute('aria-disabled', (!node || node.type !== 'misc') ? 'true' : 'false');
+      preview.setAttribute('aria-disabled', node ? 'false' : 'true');
       preview.setAttribute('aria-label', `Preview ${detail ? detail.label : 'detail'}`);
       if (showPreview) {
         if (preview.dataset.sourceText !== value || preview.dataset.detailType !== type) {
@@ -3116,6 +3167,7 @@
   }
 
   function autoApplyDetailUpdate(event) {
+    if (isStaleMiscDetailEventTarget(event?.target)) return;
     autoResizeTextarea(event?.target);
     const updated = applyDetailUpdate({ manual: false });
     if (updated && event?.target === refs.nodeType) {
@@ -3173,6 +3225,7 @@
       result: cleanString(refs.nodeResult ? refs.nodeResult.value : node.result),
       proofSketch: cleanString(refs.nodeProofSketch ? refs.nodeProofSketch.value : node.proofSketch)
     };
+    const currentDetails = collectMiscDetailsFromControls(node.details);
     node.type = type;
     node.label = cleanString(refs.nodeLabel ? refs.nodeLabel.value : node.label) || node.id;
     if (type === 'misc') {
@@ -3181,11 +3234,11 @@
       node.result = '';
       node.proofSketch = '';
       node.details = previousType === 'misc'
-        ? collectMiscDetailsFromControls(node.details)
-        : legacyFieldsToMiscDetails(fixedValues);
+        ? currentDetails
+        : appendUniqueMiscDetails(currentDetails, legacyFieldsToMiscDetails(fixedValues, new Set(currentDetails.map((detail) => detail.id))));
     } else {
       Object.assign(node, fixedValues);
-      node.details = [];
+      node.details = currentDetails;
     }
     node.color = normalizeColor(refs.nodeColor ? refs.nodeColor.value : node.color, NODE_TYPES[type].stroke);
     node.fillColor = normalizeNodeFillColor(refs.nodeFillColor ? refs.nodeFillColor.value : node.fillColor, NODE_TYPES[type].fill);
@@ -3194,7 +3247,8 @@
   function collectMiscDetailsFromControls(fallback = []) {
     if (!refs.nodeMiscDetailList) return cloneMiscDetails(fallback);
     const fallbackById = new Map(cloneMiscDetails(fallback).map((detail) => [detail.id, detail]));
-    const rows = Array.from(refs.nodeMiscDetailList.querySelectorAll('[data-misc-detail-id]'));
+    const rows = Array.from(refs.nodeMiscDetailList.querySelectorAll('[data-misc-detail-id]'))
+      .filter((row) => row.dataset.nodeId === state.selectedNodeId);
     return rows.map((row, index) => {
       const id = cleanDetailId(row.dataset.miscDetailId) || `detail-${index + 1}`;
       const fallbackDetail = fallbackById.get(id) || { id, label: `detail ${index + 1}`, type: 'textbox', text: '' };
@@ -3983,22 +4037,25 @@
     return {
       schemaVersion: SCHEMA_VERSION,
       title: cleanGraphTitle(state.graphTitle),
-      nodes: state.nodes.map((node) => ({
-        ...node.extra,
-        id: node.id,
-        type: node.type,
-        label: node.label,
-        ...(node.type === 'misc' ? { details: cleanMiscDetailsForExport(node.details) } : {}),
-        setting: node.setting,
-        condition: node.condition,
-        result: node.result,
-        proofSketch: node.proofSketch,
-        citationKeys: [...node.citationKeys],
-        color: node.color,
-        fillColor: normalizeNodeFillColor(node.fillColor, (NODE_TYPES[node.type] || NODE_TYPES.theorem).fill),
-        x: roundNumber(node.x),
-        y: roundNumber(node.y)
-      })),
+      nodes: state.nodes.map((node) => {
+        const details = cleanMiscDetailsForExport(node.details);
+        return {
+          ...node.extra,
+          id: node.id,
+          type: node.type,
+          label: node.label,
+          ...(node.type === 'misc' || details.length ? { details } : {}),
+          setting: node.setting,
+          condition: node.condition,
+          result: node.result,
+          proofSketch: node.proofSketch,
+          citationKeys: [...node.citationKeys],
+          color: node.color,
+          fillColor: normalizeNodeFillColor(node.fillColor, (NODE_TYPES[node.type] || NODE_TYPES.theorem).fill),
+          x: roundNumber(node.x),
+          y: roundNumber(node.y)
+        };
+      }),
       arrows: state.arrows.map((arrow) => ({
         ...arrow.extra,
         id: arrow.id,

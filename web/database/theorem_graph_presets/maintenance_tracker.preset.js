@@ -17,8 +17,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fffdf8",
-      "x": 176.8,
-      "y": 76.4
+      "x": 313.2,
+      "y": 130.8
     },
     {
       "id": "n37",
@@ -39,8 +39,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 86.6,
-      "y": 148.2
+      "x": 153.4,
+      "y": 253.9
     },
     {
       "id": "n39",
@@ -61,8 +61,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 148.9,
-      "y": 212
+      "x": 263.8,
+      "y": 363.2
     },
     {
       "id": "n48",
@@ -89,8 +89,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 329.3,
-      "y": 220.4
+      "x": 583.5,
+      "y": 377.7
     },
     {
       "id": "n55",
@@ -102,6 +102,12 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "label": "hard realization",
           "type": "checkbox",
           "text": "not only realize divisors, but also all degeneralizations\nD(A|B) realization"
+        },
+        {
+          "id": "goal",
+          "label": "goal",
+          "type": "checkbox",
+          "text": "pair of pants decomposition\nspanning tree: detect and creation\nhomology class"
         }
       ],
       "setting": "",
@@ -111,8 +117,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 255.8,
-      "y": 177.3
+      "x": 453.2,
+      "y": 303.8
     },
     {
       "id": "n58",
@@ -126,8 +132,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 288.9,
-      "y": 46
+      "x": 511.8,
+      "y": 78.8
     },
     {
       "id": "n59",
@@ -148,8 +154,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 236,
-      "y": 254
+      "x": 420.9,
+      "y": 237.2
     },
     {
       "id": "n60",
@@ -160,7 +166,13 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "other type can also type in Extra\nrun layout will not push too the right too much and left side outside of the screen\ncan choose run layout so that nodes don't coincide"
+          "text": "default type is misc\nother type can also type in Extra\nrun layout will not push too the right too much and left side outside of the screen\ncan choose run layout so that nodes don't coincide\nadd citation cross-reference\n\\cite{diagram} in the edit should be only diagram, code will add \\cite{...} for a preparation\nadd node for the title, allow to add some extras\nallow users to double click the node to expand to another graph. It will be like tab in Google Chrome, where the delete button is replaced by returning button."
+        },
+        {
+          "id": "bug",
+          "label": "bug",
+          "type": "checkbox",
+          "text": "if user add some info in the textbox (in node A), and then click the other node B without clicking other area beforehead, then the textbox in node A will cover all the info in node B, which is what we don't want to see"
         }
       ],
       "setting": "",
@@ -170,8 +182,51 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 296.7,
-      "y": 126.7
+      "x": 544.9,
+      "y": 179.7
+    },
+    {
+      "id": "n61",
+      "type": "misc",
+      "label": "feedback",
+      "details": [],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 622.7,
+      "y": 291.4
+    },
+    {
+      "id": "n62",
+      "type": "misc",
+      "label": "Strand Diagram Calculator",
+      "details": [
+        {
+          "id": "cite",
+          "label": "cite",
+          "type": "textbox",
+          "text": "\\cite{diagram}"
+        },
+        {
+          "id": "goal",
+          "label": "goal",
+          "type": "checkbox",
+          "text": "In the main canvas there is a big strand\nUser can add basic elements step-by-step\nDifferent expressions for symmetric groups, see https://github.com/ramified/master_thesis"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 413.6,
+      "y": 441.6
     }
   ],
   "arrows": [
@@ -244,6 +299,23 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "label": ""
         }
       ]
+    },
+    {
+      "key": "bronken app",
+      "author": "",
+      "title": "bronken app",
+      "year": "",
+      "citeText": "\\cite{diagram}",
+      "url": "https://dehornoy.lmno.cnrs.fr/Softwares/TressApp/",
+      "source": "web",
+      "rawBibtex": "",
+      "links": [
+        {
+          "url": "https://dehornoy.lmno.cnrs.fr/Softwares/TressApp/",
+          "source": "web",
+          "label": ""
+        }
+      ]
     }
   ],
   "view": {
@@ -278,12 +350,20 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
         "y": 0.1533
       },
       "n59": {
-        "x": 0.5554,
-        "y": 0.8467
+        "x": 0.5589,
+        "y": 0.4615
       },
       "n60": {
-        "x": 0.698,
-        "y": 0.4223
+        "x": 0.7237,
+        "y": 0.3497
+      },
+      "n61": {
+        "x": 0.827,
+        "y": 0.5669
+      },
+      "n62": {
+        "x": 0.5493,
+        "y": 0.8592
       }
     }
   }

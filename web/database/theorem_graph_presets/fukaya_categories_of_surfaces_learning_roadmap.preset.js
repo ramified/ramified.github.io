@@ -43,8 +43,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       "citationKeys": [],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 239.7,
-      "y": 153
+      "x": 240,
+      "y": 153.1
     },
     {
       "id": "n3",
@@ -85,8 +85,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 72.3,
-      "y": 210.3
+      "x": 72.4,
+      "y": 210.5
     },
     {
       "id": "n4",
@@ -127,8 +127,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 111.3,
-      "y": 371.1
+      "x": 111.5,
+      "y": 371.4
     },
     {
       "id": "n5",
@@ -170,8 +170,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 235.4,
-      "y": 254.2
+      "x": 235.7,
+      "y": 254.4
     },
     {
       "id": "n6",
@@ -213,8 +213,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 182.6,
-      "y": 420.7
+      "x": 182.9,
+      "y": 421.2
     },
     {
       "id": "n9",
@@ -256,8 +256,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 468.1,
-      "y": 243.3
+      "x": 468.7,
+      "y": 243.5
     },
     {
       "id": "n10",
@@ -299,8 +299,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 466.1,
-      "y": 466.2
+      "x": 466.8,
+      "y": 466.7
     },
     {
       "id": "n11",
@@ -317,7 +317,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "id": "tasks",
           "label": "practice",
           "type": "checkbox",
-          "text": "- [x] Choose a Morse function on S^1 or S^2\n- [x] Generate a complex by critical points\n- [x] Count gradient trajectories in a simple example\n- [x] Check why broken trajectories imply d^2=0"
+          "text": "- [x] Choose a Morse function on S^1 or S^2\n- [x] Generate a complex by critical points\n- [x] Count gradient trajectories in a simple example\n- [x] Check why broken trajectories imply d^2=0\n- [ ] relate Morse homology with cellular homology, e.p. identify the number of broken trajectories with the degree of gluing map"
         },
         {
           "id": "checkpoint",
@@ -335,7 +335,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "id": "examples",
           "label": "examples",
           "type": "checkbox",
-          "text": "- [x] $\\mathbb{S}^2$\n- [ ] $\\mathbb{T}^2$\n- [ ] $\\mathbb{RP}^n$"
+          "text": "- [x] $\\mathbb{S}^2$\n- [x] $\\mathbb{T}^2$\n- [x] $\\mathbb{RP}^n$"
         }
       ],
       "setting": "",
@@ -347,7 +347,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 551.5,
+      "x": 552.2,
       "y": 127.9
     },
     {
@@ -390,8 +390,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 371.7,
-      "y": 274
+      "x": 372.2,
+      "y": 274.3
     },
     {
       "id": "n13",
@@ -433,8 +433,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 625.1,
-      "y": 207.5
+      "x": 625.9,
+      "y": 207.7
     },
     {
       "id": "n14",
@@ -476,8 +476,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 546.1,
-      "y": 375.9
+      "x": 546.8,
+      "y": 376.3
     },
     {
       "id": "n15",
@@ -518,8 +518,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 699,
-      "y": 364.2
+      "x": 699.9,
+      "y": 364.6
     },
     {
       "id": "n16",
@@ -562,8 +562,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 537.6,
-      "y": 514.1
+      "x": 538.3,
+      "y": 514.6
     },
     {
       "id": "n17",
@@ -605,8 +605,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 378.9,
-      "y": 394.3
+      "x": 379.4,
+      "y": 394.6
     },
     {
       "id": "n18",
@@ -649,8 +649,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 321,
-      "y": 582.9
+      "x": 321.5,
+      "y": 583.5
     },
     {
       "id": "n19",
@@ -692,8 +692,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 97.4,
-      "y": 629.1
+      "x": 97.5,
+      "y": 629.7
     },
     {
       "id": "n20",
@@ -735,8 +735,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 98.8,
-      "y": 527.2
+      "x": 98.9,
+      "y": 527.7
     },
     {
       "id": "n21",
@@ -778,8 +778,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 228.5,
-      "y": 654.2
+      "x": 228.8,
+      "y": 654.8
     },
     {
       "id": "n22",
@@ -821,8 +821,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 104.5,
-      "y": 741.5
+      "x": 104.6,
+      "y": 742.1
     },
     {
       "id": "n23",
@@ -864,8 +864,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 163,
-      "y": 860.9
+      "x": 163.3,
+      "y": 861.7
     },
     {
       "id": "n24",
@@ -906,8 +906,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 437.2,
-      "y": 652.7
+      "x": 437.8,
+      "y": 653.3
     },
     {
       "id": "n25",
@@ -948,8 +948,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 606.1,
-      "y": 557
+      "x": 606.9,
+      "y": 557.6
     },
     {
       "id": "n26",
@@ -990,8 +990,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 236.5,
-      "y": 508.5
+      "x": 236.8,
+      "y": 509
     },
     {
       "id": "n27",
@@ -1032,8 +1032,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 286.3,
-      "y": 743.6
+      "x": 286.7,
+      "y": 744.3
     },
     {
       "id": "n28",
@@ -1076,8 +1076,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 454.4,
-      "y": 779.1
+      "x": 455,
+      "y": 779.9
     },
     {
       "id": "n29",
@@ -1118,8 +1118,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 661.3,
-      "y": 771.2
+      "x": 662.2,
+      "y": 772
     },
     {
       "id": "n30",
@@ -1162,8 +1162,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 239.6,
-      "y": 965.7
+      "x": 239.9,
+      "y": 966.6
     },
     {
       "id": "n31",
@@ -1206,8 +1206,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 664.9,
-      "y": 879.8
+      "x": 665.8,
+      "y": 880.7
     },
     {
       "id": "n32",
@@ -1250,8 +1250,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 615.5,
-      "y": 686.6
+      "x": 616.3,
+      "y": 687.2
     },
     {
       "id": "n33",
@@ -1295,8 +1295,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 472,
-      "y": 859.4
+      "x": 472.6,
+      "y": 860.3
     },
     {
       "id": "n34",
@@ -1338,8 +1338,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 525.9,
-      "y": 971.9
+      "x": 526.6,
+      "y": 972.8
     },
     {
       "id": "n35",
@@ -1366,8 +1366,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 379.8,
-      "y": 60.9
+      "x": 380.3,
+      "y": 61
     }
   ],
   "arrows": [
@@ -2242,7 +2242,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
     }
   ],
   "view": {
-    "selectedId": "n31",
+    "selectedId": "n1",
     "selectedReferenceKeys": [],
     "layoutRunning": false,
     "canvasRatioLocked": true,
@@ -2379,4 +2379,3 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
     }
   }
 };
-
