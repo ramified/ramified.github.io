@@ -1,14 +1,17 @@
 (() => {
   'use strict';
 
-  const SCHEMA_VERSION = 7;
+  const SCHEMA_VERSION = 8;
   const DEFAULT_GRAPH_TITLE = 'Dependency Graph';
   const PRESET_FOLDER_URL = 'theorem_graph_presets/';
   const DEFAULT_PRESET_KEY = 'maintenance_tracker';
   const DEFAULT_NEW_NODE_TYPE = 'misc';
   const DEFAULT_NODE_STROKE = '#7a6f65';
   const DEFAULT_NODE_FILL = '#f7f5f1';
+  const TITLE_NODE_ID = '__title__';
+  const TITLE_NODE_TYPE = 'title';
   const NODE_TYPES = {
+    title: { label: 'Title', fill: '#fff7df', stroke: '#8b5f2a', band: '#8b5f2a' },
     theorem: { label: 'Theorem', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
     lemma: { label: 'Lemma', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
     proposition: { label: 'Proposition', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
@@ -18,7 +21,7 @@
     example: { label: 'Example', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
     misc: { label: 'Misc', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE }
   };
-  const NODE_TYPE_KEYS = Object.keys(NODE_TYPES);
+  const NODE_TYPE_KEYS = Object.keys(NODE_TYPES).filter((key) => key !== TITLE_NODE_TYPE);
   const LEGACY_NODE_DETAIL_FIELDS = [
     { key: 'setting', label: 'setting' },
     { key: 'condition', label: 'condition' },
@@ -27,6 +30,7 @@
   ];
   const MISC_DETAIL_TYPES = new Set(['textbox', 'list', 'enumeration', 'checkbox']);
   const KNOWN_NODE_KEYS = new Set([
+    'extra',
     'id',
     'type',
     'label',
@@ -35,14 +39,20 @@
     'result',
     'proofSketch',
     'details',
+    'childGraph',
+    'titleNode',
     'citationKeys',
     'color',
+    'fill',
     'fillColor',
     'x',
-    'y'
+    'y',
+    'vx',
+    'vy',
+    'fixed'
   ]);
-  const KNOWN_ARROW_KEYS = new Set(['id', 'sourceId', 'targetId', 'label', 'remark', 'style', 'body', 'head', 'tail', 'level', 'endpointScale', 'curve', 'labelOffset', 'labelPosition', 'labelAlign', 'color']);
-  const KNOWN_REFERENCE_KEYS = new Set(['key', 'author', 'title', 'year', 'citeKey', 'details', 'url', 'source', 'rawBibtex', 'links']);
+  const KNOWN_ARROW_KEYS = new Set(['extra', 'id', 'sourceId', 'targetId', 'label', 'remark', 'style', 'body', 'head', 'tail', 'level', 'endpointScale', 'curve', 'labelOffset', 'labelPosition', 'labelAlign', 'color']);
+  const KNOWN_REFERENCE_KEYS = new Set(['extra', 'key', 'author', 'title', 'year', 'citeKey', 'details', 'url', 'source', 'rawBibtex', 'links']);
   const ARROW_BODIES = [
     { id: 'none', label: 'none' },
     { id: 'solid', label: 'solid' },
@@ -140,8 +150,12 @@
   const TEXTAREA_AUTO_MAX_HEIGHT = 180;
 
   const state = {
+    rootGraph: createGraph(DEFAULT_GRAPH_TITLE),
+    activePath: [],
     graphTitle: DEFAULT_GRAPH_TITLE,
     importMode: 'preset',
+    importScope: 'current',
+    exportScope: 'whole',
     presets: [],
     presetScriptNonce: '',
     nodes: [],
@@ -171,6 +185,8 @@
     mathTypesetAttempts: 0,
     detailPreview: null,
     detailEditBaseline: null,
+    titleEditorActive: false,
+    exportDirty: true,
     activeLatexDetailField: null,
     arrowBoundaryGap: ARROW_BOUNDARY_GAP_DEFAULT,
     nodeFillSaturation: NODE_FILL_SATURATION_DEFAULT,
@@ -178,6 +194,8 @@
   };
 
   const refs = {};
+
+  defineActiveGraphAccessors();
 
   document.addEventListener('DOMContentLoaded', init);
 
@@ -221,6 +239,7 @@
     refs.graphCountBadge = $('graph-count-badge');
     refs.connectBadge = $('connect-badge');
     refs.graphTitle = $('graph-title');
+    refs.graphBreadcrumb = $('graph-breadcrumb');
     refs.clearGraph = $('clear-graph');
     refs.nodeEmptyNote = $('node-empty-note');
     refs.nodeEditor = $('node-editor');
@@ -311,6 +330,10 @@
     refs.importInput = $('theorem-import-input');
     refs.importModePreset = $('import-mode-preset');
     refs.importModeJson = $('import-mode-json');
+    refs.importScopeCurrent = $('import-scope-current');
+    refs.importScopeWhole = $('import-scope-whole');
+    refs.exportScopeWhole = $('export-scope-whole');
+    refs.exportScopeCurrent = $('export-scope-current');
     refs.presetImportRow = $('preset-import-row');
     refs.jsonImportPanel = $('json-import-panel');
     refs.presetSelect = $('preset-select');
@@ -353,7 +376,9 @@
     document.querySelectorAll('.card-head').forEach((head) => {
       head.addEventListener('click', () => {
         const card = head.closest('.card');
-        if (card) card.classList.toggle('collapsed');
+        if (!card) return;
+        card.classList.toggle('collapsed');
+        if (card.id === 'export-card' && !card.classList.contains('collapsed')) ensureExportFresh();
       });
     });
 
@@ -361,7 +386,7 @@
     if (refs.addNode) refs.addNode.addEventListener('click', addNodeFromControls);
     if (refs.addNodeMiscDetail) refs.addNodeMiscDetail.addEventListener('click', addMiscDetailFromControls);
     if (refs.connectMode) refs.connectMode.addEventListener('click', toggleConnectMode);
-    if (refs.deleteSelected) refs.deleteSelected.addEventListener('click', deleteSelected);
+    if (refs.deleteSelected) refs.deleteSelected.addEventListener('click', deleteSelectedOrReturn);
     if (refs.toggleLayout) refs.toggleLayout.addEventListener('click', toggleLayout);
     if (refs.resetLayout) refs.resetLayout.addEventListener('click', resetLayout);
     if (refs.layoutAvoidOverlap) refs.layoutAvoidOverlap.addEventListener('change', updateLayoutAvoidOverlap);
@@ -409,18 +434,30 @@
     });
     if (refs.copyExport) refs.copyExport.addEventListener('click', copyExport);
     if (refs.graphTitle) {
+      refs.graphTitle.addEventListener('focus', selectTitleNodeFromTitleInput);
+      refs.graphTitle.addEventListener('click', selectTitleNodeFromTitleInput);
       refs.graphTitle.addEventListener('input', () => {
         state.graphTitle = refs.graphTitle.value;
-        refreshExport();
+        markExportDirty();
+        renderBreadcrumb();
+        syncControls();
+        if (state.titleEditorActive) syncEditor();
       });
       refs.graphTitle.addEventListener('blur', () => {
         state.graphTitle = cleanGraphTitle(refs.graphTitle.value);
         refs.graphTitle.value = state.graphTitle;
-        refreshExport();
+        markExportDirty();
+        renderBreadcrumb();
+        syncControls();
+        if (state.titleEditorActive) syncEditor();
       });
     }
     if (refs.importModePreset) refs.importModePreset.addEventListener('change', () => setImportMode('preset'));
     if (refs.importModeJson) refs.importModeJson.addEventListener('change', () => setImportMode('json'));
+    if (refs.importScopeCurrent) refs.importScopeCurrent.addEventListener('change', () => setImportScope('current'));
+    if (refs.importScopeWhole) refs.importScopeWhole.addEventListener('change', () => setImportScope('whole'));
+    if (refs.exportScopeWhole) refs.exportScopeWhole.addEventListener('change', () => setExportScope('whole'));
+    if (refs.exportScopeCurrent) refs.exportScopeCurrent.addEventListener('change', () => setExportScope('current'));
     if (refs.presetSelect) refs.presetSelect.addEventListener('change', syncControls);
     if (refs.loadImport) refs.loadImport.addEventListener('click', loadImport);
     if (refs.clearImport) refs.clearImport.addEventListener('click', () => {
@@ -740,6 +777,281 @@
     return true;
   }
 
+  function defineActiveGraphAccessors() {
+    Object.defineProperties(state, {
+      graphTitle: {
+        get() {
+          return currentGraph().title;
+        },
+        set(value) {
+          const graph = currentGraph();
+          graph.title = cleanGraphTitle(value) || DEFAULT_GRAPH_TITLE;
+          graph.titleNode.label = graph.title;
+          syncActiveOwnerFromTitleNode();
+        }
+      },
+      nodes: {
+        get() {
+          return currentGraph().nodes;
+        },
+        set(value) {
+          currentGraph().nodes = Array.isArray(value) ? value : [];
+        }
+      },
+      arrows: {
+        get() {
+          return currentGraph().arrows;
+        },
+        set(value) {
+          currentGraph().arrows = Array.isArray(value) ? value : [];
+        }
+      },
+      viewExtra: {
+        get() {
+          return currentGraph().viewExtra;
+        },
+        set(value) {
+          currentGraph().viewExtra = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+        }
+      },
+      nodeSerial: {
+        get() {
+          return currentGraph().nodeSerial;
+        },
+        set(value) {
+          currentGraph().nodeSerial = Math.max(1, Math.round(finiteNumber(value, 1)));
+        }
+      },
+      arrowSerial: {
+        get() {
+          return currentGraph().arrowSerial;
+        },
+        set(value) {
+          currentGraph().arrowSerial = Math.max(1, Math.round(finiteNumber(value, 1)));
+        }
+      },
+      layoutAvoidOverlap: {
+        get() {
+          return currentGraph().layoutAvoidOverlap !== false;
+        },
+        set(value) {
+          currentGraph().layoutAvoidOverlap = value !== false;
+        }
+      }
+    });
+  }
+
+  function createGraph(title = DEFAULT_GRAPH_TITLE) {
+    const cleanTitle = cleanGraphTitle(title) || DEFAULT_GRAPH_TITLE;
+    return {
+      title: cleanTitle,
+      titleNode: makeTitleNode({ label: cleanTitle }),
+      nodes: [],
+      arrows: [],
+      viewExtra: {},
+      nodeSerial: 1,
+      arrowSerial: 1,
+      layoutAvoidOverlap: LAYOUT_AVOID_OVERLAP_DEFAULT
+    };
+  }
+
+  function makeTitleNode(source = {}) {
+    const type = Object.prototype.hasOwnProperty.call(source, 'type')
+      ? normalizeTitleNodeType(source.type)
+      : TITLE_NODE_TYPE;
+    const titleType = NODE_TYPES[type] || NODE_TYPES[TITLE_NODE_TYPE];
+    return {
+      extra: {
+        ...cloneExtraObject(source.extra),
+        ...collectExtra(source, KNOWN_NODE_KEYS)
+      },
+      id: TITLE_NODE_ID,
+      type,
+      label: cleanGraphTitle(source.label || source.title) || DEFAULT_GRAPH_TITLE,
+      setting: type === TITLE_NODE_TYPE ? '' : cleanString(source.setting),
+      condition: type === TITLE_NODE_TYPE ? '' : cleanString(source.condition),
+      result: type === TITLE_NODE_TYPE ? '' : cleanString(source.result),
+      proofSketch: type === TITLE_NODE_TYPE ? '' : cleanString(source.proofSketch),
+      details: normalizeMiscDetails(source, type === TITLE_NODE_TYPE ? 'misc' : type),
+      citationKeys: normalizeCitationKeys(source.citationKeys),
+      color: normalizeColor(source.color, titleType.stroke),
+      fillColor: normalizeNodeFillColor(source.fillColor || source.fill, titleType.fill)
+    };
+  }
+
+  function cloneExtraObject(extra) {
+    return extra && typeof extra === 'object' && !Array.isArray(extra) ? { ...extra } : {};
+  }
+
+  function currentGraph() {
+    let graph = state.rootGraph || createGraph(DEFAULT_GRAPH_TITLE);
+    const validPath = [];
+    for (const id of state.activePath || []) {
+      const node = graph.nodes.find((item) => item.id === id);
+      if (!node || !node.childGraph) break;
+      graph = node.childGraph;
+      validPath.push(id);
+    }
+    if (validPath.length !== state.activePath.length) state.activePath = validPath;
+    ensureGraphShape(graph);
+    return graph;
+  }
+
+  function ensureGraphShape(graph) {
+    if (!graph || typeof graph !== 'object' || Array.isArray(graph)) return createGraph(DEFAULT_GRAPH_TITLE);
+    graph.title = cleanGraphTitle(graph.title) || DEFAULT_GRAPH_TITLE;
+    graph.titleNode = graph.titleNode && typeof graph.titleNode === 'object'
+      ? makeTitleNode({ ...graph.titleNode, label: graph.titleNode.label || graph.title })
+      : makeTitleNode({ label: graph.title });
+    graph.titleNode.label = graph.title;
+    graph.nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+    graph.arrows = Array.isArray(graph.arrows) ? graph.arrows : [];
+    graph.viewExtra = graph.viewExtra && typeof graph.viewExtra === 'object' && !Array.isArray(graph.viewExtra) ? graph.viewExtra : {};
+    graph.nodeSerial = Math.max(1, Math.round(finiteNumber(graph.nodeSerial, nextSerial(graph.nodes.map((node) => node.id), 'n'))));
+    graph.arrowSerial = Math.max(1, Math.round(finiteNumber(graph.arrowSerial, nextSerial(graph.arrows.map((arrow) => arrow.id), 'a'))));
+    graph.layoutAvoidOverlap = graph.layoutAvoidOverlap !== false;
+    return graph;
+  }
+
+  function replaceActiveGraph(graph) {
+    const next = ensureGraphShape(graph || createGraph(DEFAULT_GRAPH_TITLE));
+    if (!state.activePath.length) {
+      state.rootGraph = next;
+      return;
+    }
+    const parent = graphAtPath(state.activePath.slice(0, -1));
+    const nodeId = state.activePath[state.activePath.length - 1];
+    const owner = parent ? parent.nodes.find((node) => node.id === nodeId) : null;
+    if (owner) owner.childGraph = next;
+  }
+
+  function graphAtPath(path) {
+    let graph = state.rootGraph;
+    for (const id of path || []) {
+      const node = graph && graph.nodes.find((item) => item.id === id);
+      if (!node || !node.childGraph) return null;
+      graph = node.childGraph;
+    }
+    return graph;
+  }
+
+  function graphOwnerForPath(path = state.activePath) {
+    if (!Array.isArray(path) || !path.length) return null;
+    const parentGraph = graphAtPath(path.slice(0, -1));
+    const nodeId = path[path.length - 1];
+    const node = parentGraph ? parentGraph.nodes.find((item) => item.id === nodeId) : null;
+    return node ? { graph: parentGraph, node } : null;
+  }
+
+  function activeGraphOwner() {
+    return graphOwnerForPath(state.activePath);
+  }
+
+  function syncChildGraphTitleFromSourceNode(node) {
+    if (!node || !node.childGraph) return;
+    ensureGraphShape(node.childGraph);
+    copySourceNodeToTitleNode(node.childGraph.titleNode, node);
+    node.childGraph.title = node.childGraph.titleNode.label;
+  }
+
+  function syncActiveTitleFromOwner() {
+    const owner = activeGraphOwner();
+    if (!owner) return false;
+    const graph = currentGraph();
+    copySourceNodeToTitleNode(graph.titleNode, owner.node);
+    graph.title = graph.titleNode.label;
+    if (refs.graphTitle && refs.graphTitle.value !== graph.title) refs.graphTitle.value = graph.title;
+    return true;
+  }
+
+  function syncActiveOwnerFromTitleNode() {
+    const owner = activeGraphOwner();
+    if (!owner) return false;
+    const graph = currentGraph();
+    copyTitleNodeToSourceNode(owner.node, graph.titleNode);
+    graph.title = graph.titleNode.label;
+    if (refs.graphTitle && refs.graphTitle.value !== graph.title) refs.graphTitle.value = graph.title;
+    return true;
+  }
+
+  function syncLinkedGraphTitlesFromOwners(graph) {
+    ensureGraphShape(graph);
+    graph.nodes.forEach((node) => {
+      if (!node.childGraph) return;
+      syncChildGraphTitleFromSourceNode(node);
+      syncLinkedGraphTitlesFromOwners(node.childGraph);
+    });
+  }
+
+  function copySourceNodeToTitleNode(titleNode, sourceNode) {
+    if (!titleNode || !sourceNode) return;
+    const type = normalizeType(sourceNode.type);
+    const nodeType = NODE_TYPES[type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE];
+    titleNode.extra = cloneExtraObject(sourceNode.extra);
+    titleNode.id = TITLE_NODE_ID;
+    titleNode.type = type;
+    titleNode.label = cleanGraphTitle(sourceNode.label) || DEFAULT_GRAPH_TITLE;
+    titleNode.setting = cleanString(sourceNode.setting);
+    titleNode.condition = cleanString(sourceNode.condition);
+    titleNode.result = cleanString(sourceNode.result);
+    titleNode.proofSketch = cleanString(sourceNode.proofSketch);
+    titleNode.details = cloneMiscDetails(sourceNode.details);
+    titleNode.citationKeys = normalizeCitationKeys(sourceNode.citationKeys);
+    titleNode.color = normalizeColor(sourceNode.color, nodeType.stroke);
+    titleNode.fillColor = normalizeNodeFillColor(sourceNode.fillColor, nodeType.fill);
+  }
+
+  function copyTitleNodeToSourceNode(sourceNode, titleNode) {
+    if (!sourceNode || !titleNode) return;
+    const type = normalizeTitleNodeType(titleNode.type) === TITLE_NODE_TYPE
+      ? normalizeType(sourceNode.type)
+      : normalizeTitleNodeType(titleNode.type);
+    const nodeType = NODE_TYPES[type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE];
+    sourceNode.extra = cloneExtraObject(titleNode.extra);
+    sourceNode.type = type;
+    sourceNode.label = cleanString(titleNode.label) || sourceNode.id;
+    sourceNode.setting = cleanString(titleNode.setting);
+    sourceNode.condition = cleanString(titleNode.condition);
+    sourceNode.result = cleanString(titleNode.result);
+    sourceNode.proofSketch = cleanString(titleNode.proofSketch);
+    sourceNode.details = cloneMiscDetails(titleNode.details);
+    sourceNode.citationKeys = normalizeCitationKeys(titleNode.citationKeys);
+    sourceNode.color = normalizeColor(titleNode.color, nodeType.stroke);
+    sourceNode.fillColor = normalizeNodeFillColor(titleNode.fillColor, nodeType.fill);
+  }
+
+  function activeGraphDepth() {
+    return (state.activePath || []).length;
+  }
+
+  function isTitleNode(node) {
+    return !!node && node.id === TITLE_NODE_ID;
+  }
+
+  function activeTitleNode() {
+    return currentGraph().titleNode;
+  }
+
+  function visibleNodes() {
+    return state.nodes;
+  }
+
+  function selectTitleNodeFromTitleInput() {
+    selectTitleNode();
+    renderAll();
+  }
+
+  function selectTitleNode() {
+    commitCurrentDetailBeforeSelectionChange('node', TITLE_NODE_ID);
+    syncActiveTitleFromOwner();
+    state.titleEditorActive = true;
+    state.selectedNodeId = TITLE_NODE_ID;
+    state.selectedArrowId = null;
+    state.detailPreview = null;
+    state.activeLatexDetailField = null;
+    resetDetailEditBaseline();
+  }
+
   function seedExample() {
     state.nodes = [
       makeNode({
@@ -802,7 +1114,10 @@
   function makeNode(source = {}) {
     const id = cleanId(source.id) || nextNodeId();
     const type = normalizeType(source.type);
-    const extra = collectExtra(source, KNOWN_NODE_KEYS);
+    const extra = {
+      ...cloneExtraObject(source.extra),
+      ...collectExtra(source, KNOWN_NODE_KEYS)
+    };
     return {
       extra,
       id,
@@ -825,7 +1140,10 @@
   }
 
   function makeArrow(source = {}) {
-    const extra = collectExtra(source, KNOWN_ARROW_KEYS);
+    const extra = {
+      ...cloneExtraObject(source.extra),
+      ...collectExtra(source, KNOWN_ARROW_KEYS)
+    };
     const parts = arrowPartsFromSource(source);
     const hasExplicitLevel = Object.prototype.hasOwnProperty.call(source, 'level');
     const hasExplicitLabelAlign = Object.prototype.hasOwnProperty.call(source, 'labelAlign');
@@ -854,7 +1172,10 @@
   }
 
   function makeReference(source = {}) {
-    const extra = collectExtra(source, KNOWN_REFERENCE_KEYS);
+    const extra = {
+      ...cloneExtraObject(source.extra),
+      ...collectExtra(source, KNOWN_REFERENCE_KEYS)
+    };
     const key = cleanString(source.key);
     const rawBibtex = cleanString(source.rawBibtex);
     const fallbackUrl = normalizeUrl(source.url);
@@ -1087,7 +1408,7 @@
       setStatus('Canvas ratio unlocked.');
     }
     syncCanvasRatioLockControl();
-    refreshExport();
+    markExportDirty();
     renderCanvas();
   }
 
@@ -1175,15 +1496,16 @@
     }
     resizeCanvas();
     clampAllNodes();
-    refreshExport();
+    markExportDirty();
     renderCanvas();
   }
 
   function renderAll() {
     syncEditor();
     renderReferences();
+    renderBreadcrumb();
     syncControls();
-    refreshExport();
+    markExportDirty();
     renderCanvas();
   }
 
@@ -1196,6 +1518,59 @@
     drawEmptyState(ctx);
     drawArrows(ctx);
     drawConnectPreview(ctx);
+  }
+
+  function renderBreadcrumb() {
+    if (!refs.graphBreadcrumb) return;
+    refs.graphBreadcrumb.replaceChildren();
+    const items = activeGraphPathItems();
+    items.forEach((item, index) => {
+      if (index > 0) {
+        const separator = document.createElement('span');
+        separator.className = 'theorem-breadcrumb-separator';
+        separator.textContent = '/';
+        refs.graphBreadcrumb.appendChild(separator);
+      }
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'theorem-breadcrumb-button';
+      button.classList.toggle('is-current', index === items.length - 1);
+      button.textContent = item.label;
+      button.disabled = index === items.length - 1;
+      button.addEventListener('click', () => navigateToGraphPath(item.path));
+      refs.graphBreadcrumb.appendChild(button);
+    });
+  }
+
+  function activeGraphPathItems() {
+    const items = [];
+    let graph = state.rootGraph;
+    items.push({ label: cleanGraphTitle(graph.title) || DEFAULT_GRAPH_TITLE, path: [] });
+    const path = [];
+    for (const id of state.activePath || []) {
+      const node = graph.nodes.find((item) => item.id === id);
+      if (!node || !node.childGraph) break;
+      path.push(id);
+      graph = node.childGraph;
+      items.push({ label: cleanString(node.label) || cleanGraphTitle(graph.title) || 'Graph', path: [...path] });
+    }
+    return items;
+  }
+
+  function navigateToGraphPath(path) {
+    commitCurrentDetailBeforeSelectionChange();
+    stopLayout();
+    state.activePath = Array.isArray(path) ? [...path] : [];
+    syncActiveTitleFromOwner();
+    state.titleEditorActive = false;
+    state.selectedNodeId = null;
+    state.selectedArrowId = null;
+    state.detailPreview = null;
+    state.activeLatexDetailField = null;
+    resetDetailEditBaseline();
+    clampAllNodes();
+    setStatus(activeGraphDepth() ? `Opened ${state.graphTitle}.` : 'Returned to root graph.');
+    renderAll();
   }
 
   function drawEmptyState(ctx) {
@@ -1694,7 +2069,7 @@
     if (!refs.nodeLayer) return;
     const existing = new Map(Array.from(refs.nodeLayer.querySelectorAll('[data-node-id]')).map((element) => [element.dataset.nodeId, element]));
     const rendered = [];
-    state.nodes.forEach((node) => {
+    visibleNodes().forEach((node) => {
       let element = existing.get(node.id);
       if (!element) {
         element = document.createElement('button');
@@ -2107,7 +2482,7 @@
           node.y = clamp(point.y + state.drag.offsetY, -margin, state.canvasHeight + margin);
           node.vx = 0;
           node.vy = 0;
-          refreshExport();
+          markExportDirty();
           renderCanvas();
         }
       }
@@ -2154,6 +2529,13 @@
   function handleNodeLayerDoubleClick(event) {
     event.preventDefault();
     event.stopPropagation();
+    if (state.connectMode) return;
+    const target = event.target.closest('[data-node-id]');
+    const node = target ? findNode(target.dataset.nodeId) : null;
+    if (!node) {
+      return;
+    }
+    openChildGraph(node);
   }
 
   function handleCanvasDoubleClick(event) {
@@ -2184,8 +2566,9 @@
   function hitNode(point) {
     if (!refs.canvas) return null;
     const ctx = refs.canvas.getContext('2d');
-    for (let i = state.nodes.length - 1; i >= 0; i -= 1) {
-      const node = state.nodes[i];
+    const nodes = visibleNodes();
+    for (let i = nodes.length - 1; i >= 0; i -= 1) {
+      const node = nodes[i];
       const box = nodeBox(ctx, node);
       if (
         point.x >= box.x
@@ -2268,7 +2651,7 @@
       : clamp(-(dx * normal.x + dy * normal.y), -120, 120);
     setArrowLabelPositionControl(arrow.labelPosition, false);
     if (refs.arrowLabelOffset) refs.arrowLabelOffset.value = String(roundNumber(arrow.labelOffset));
-    refreshExport();
+    markExportDirty();
     renderCanvas();
   }
 
@@ -2306,6 +2689,10 @@
   function handleConnectClick(node) {
     if (!node) {
       setStatus('Click a node to choose the source.');
+      return;
+    }
+    if (isTitleNode(node)) {
+      setStatus('Choose an ordinary node for arrows.');
       return;
     }
     if (!state.connectSourceId) {
@@ -2368,6 +2755,11 @@
       type: normalizeMiscDetailType(refs.nodeMiscDetailType ? refs.nodeMiscDetailType.value : 'textbox'),
       text: ''
     });
+    if (isTitleNode(node)) {
+      syncActiveOwnerFromTitleNode();
+    } else if (node.childGraph) {
+      syncChildGraphTitleFromSourceNode(node);
+    }
     if (refs.nodeMiscDetailName) refs.nodeMiscDetailName.value = '';
     if (refs.nodeMiscDetailType) refs.nodeMiscDetailType.value = 'textbox';
     state.activeLatexDetailField = miscDetailFieldKey(id);
@@ -2386,6 +2778,11 @@
     const before = node.details.length;
     node.details = node.details.filter((detail) => detail.id !== detailId);
     if (node.details.length === before) return;
+    if (isTitleNode(node)) {
+      syncActiveOwnerFromTitleNode();
+    } else if (node.childGraph) {
+      syncChildGraphTitleFromSourceNode(node);
+    }
     if (state.activeLatexDetailField === miscDetailFieldKey(detailId)) state.activeLatexDetailField = null;
     setStatus(`Removed extra field from ${node.label}.`);
     renderAll();
@@ -2411,6 +2808,40 @@
     const arrow = makeArrow({ sourceId, targetId, label });
     state.arrows.push(arrow);
     return arrow;
+  }
+
+  function openChildGraph(node) {
+    if (!node || isTitleNode(node)) return;
+    if (state.selectedNodeId === node.id && refs.nodeEditor && !refs.nodeEditor.hidden) {
+      applyNodeDetailFromControls(node);
+    } else {
+      commitCurrentDetailBeforeSelectionChange('node', node.id);
+    }
+    if (!node.childGraph) {
+      node.childGraph = createGraph(cleanString(node.label) || 'Nested Graph');
+      setStatus(`Created nested graph for ${node.label}.`);
+    } else {
+      setStatus(`Opened nested graph for ${node.label}.`);
+    }
+    syncChildGraphTitleFromSourceNode(node);
+    stopLayout();
+    state.activePath = [...state.activePath, node.id];
+    state.titleEditorActive = false;
+    state.selectedNodeId = null;
+    state.selectedArrowId = null;
+    state.detailPreview = null;
+    state.activeLatexDetailField = null;
+    resetDetailEditBaseline();
+    clampAllNodes();
+    renderAll();
+  }
+
+  function returnToParentGraph() {
+    if (!activeGraphDepth()) {
+      setStatus('Already at the root graph.');
+      return;
+    }
+    navigateToGraphPath(state.activePath.slice(0, -1));
   }
 
   function toggleConnectMode() {
@@ -2443,6 +2874,7 @@
 
   function selectNode(id) {
     commitCurrentDetailBeforeSelectionChange('node', id);
+    state.titleEditorActive = false;
     state.selectedNodeId = id;
     state.selectedArrowId = null;
     state.detailPreview = null;
@@ -2452,6 +2884,7 @@
 
   function selectArrow(id) {
     commitCurrentDetailBeforeSelectionChange('arrow', id);
+    state.titleEditorActive = false;
     state.selectedArrowId = id;
     state.selectedNodeId = null;
     state.detailPreview = null;
@@ -2461,6 +2894,7 @@
 
   function clearSelection() {
     commitCurrentDetailBeforeSelectionChange();
+    state.titleEditorActive = false;
     state.selectedNodeId = null;
     state.selectedArrowId = null;
     state.detailPreview = null;
@@ -2471,6 +2905,10 @@
   function deleteSelected() {
     if (state.selectedNodeId) {
       const node = findNode(state.selectedNodeId);
+      if (isTitleNode(node)) {
+        setStatus('The title node cannot be deleted.');
+        return;
+      }
       removeNodeById(state.selectedNodeId, node ? `Deleted ${node.label}.` : 'Deleted selected node.');
       return;
     }
@@ -2482,6 +2920,14 @@
       return;
     }
     setStatus('Nothing selected.');
+  }
+
+  function deleteSelectedOrReturn() {
+    if (activeGraphDepth()) {
+      returnToParentGraph();
+      return;
+    }
+    deleteSelected();
   }
 
   function removeNodeById(id, message) {
@@ -2498,18 +2944,17 @@
   }
 
   function clearGraphWithConfirm() {
-    if (!state.nodes.length && !state.arrows.length && !state.references.length) {
+    if (!state.nodes.length && !state.arrows.length) {
       setStatus('Graph is already empty.');
       return;
     }
-    if (!window.confirm('Clear all nodes, arrows, and references?')) return;
+    if (!window.confirm('Clear ordinary nodes and arrows in the current graph?')) return;
     stopLayout();
     state.nodes = [];
     state.arrows = [];
-    state.references = [];
-    state.selectedReferenceKeys = new Set();
     state.editingReferenceKey = null;
     if (refs.referenceEditForm) refs.referenceEditForm.hidden = true;
+    state.titleEditorActive = false;
     state.selectedNodeId = null;
     state.selectedArrowId = null;
     state.detailEditBaseline = null;
@@ -2518,7 +2963,6 @@
     state.connectMode = false;
     state.viewExtra = {};
     setStatus('Cleared graph.');
-    setReferenceMessage('No references.');
     renderAll();
   }
 
@@ -2566,7 +3010,7 @@
     state.layoutAvoidOverlap = refs.layoutAvoidOverlap ? !!refs.layoutAvoidOverlap.checked : LAYOUT_AVOID_OVERLAP_DEFAULT;
     renderCanvas();
     state.layoutOverlapGroups = state.layoutAvoidOverlap ? [] : detectLayoutOverlapGroups();
-    refreshExport();
+    markExportDirty();
     setStatus(state.layoutAvoidOverlap ? 'Layout will avoid overlapping nodes.' : 'Layout will preserve current overlapping nodes.');
   }
 
@@ -2609,7 +3053,7 @@
     if (!state.layoutRunning) return;
     applyForces();
     renderCanvas();
-    refreshExport();
+    markExportDirty();
     state.animationFrame = window.requestAnimationFrame(tickLayout);
   }
 
@@ -2879,7 +3323,9 @@
     const node = findNode(state.selectedNodeId);
     const arrow = findArrow(state.selectedArrowId);
     const disabled = !node;
-    const isMisc = !!node && node.type === 'misc';
+    const isTitle = isTitleNode(node);
+    const isRootTitle = isTitle && node.type === TITLE_NODE_TYPE;
+    const isMisc = !!node && (node.type === 'misc' || isRootTitle);
     refs.nodeEmptyNote.hidden = !!(node || arrow);
     refs.nodeEditor.hidden = !node;
     if (refs.nodeEditor) {
@@ -2899,6 +3345,7 @@
     ].forEach((control) => {
       if (control) control.disabled = disabled;
     });
+    if (refs.nodeType && isTitle) refs.nodeType.disabled = true;
     [
       refs.nodeSetting,
       refs.nodeCondition,
@@ -2966,8 +3413,8 @@
     refs.nodeProofSketch.value = node.proofSketch;
     renderMiscDetailFields(node);
     renderNodeCitationRows(node);
-    if (refs.nodeColor) refs.nodeColor.value = normalizeColor(node.color, NODE_TYPES[node.type].stroke);
-    if (refs.nodeFillColor) refs.nodeFillColor.value = normalizeNodeFillColor(node.fillColor, NODE_TYPES[node.type].fill);
+    if (refs.nodeColor) refs.nodeColor.value = normalizeColor(node.color, (NODE_TYPES[node.type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).stroke);
+    if (refs.nodeFillColor) refs.nodeFillColor.value = normalizeNodeFillColor(node.fillColor, (NODE_TYPES[node.type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).fill);
     populateArrowParentSelects(null);
     if (refs.arrowLabel) refs.arrowLabel.value = '';
     if (refs.arrowRemark) refs.arrowRemark.value = '';
@@ -3574,13 +4021,17 @@
       if (manual) {
         state.activeLatexDetailField = null;
         resetDetailEditBaseline();
-        setStatus(`Updated ${node.label}.`);
+        setStatus(isTitleNode(node) ? 'Updated graph title.' : `Updated ${node.label}.`);
         renderAll();
       } else {
         syncLatexDetailFields();
         renderNodeCitationRows(node);
+        if (isTitleNode(node)) {
+          renderBreadcrumb();
+          syncControls();
+        }
         renderCanvas();
-        refreshExport();
+        markExportDirty();
       }
       return true;
     }
@@ -3599,7 +4050,7 @@
       } else {
         renderArrowCitationRows(arrow);
         renderCanvas();
-        refreshExport();
+        markExportDirty();
       }
       return true;
     }
@@ -3609,7 +4060,10 @@
 
   function applyNodeDetailFromControls(node) {
     const previousType = node.type;
-    const type = normalizeType(refs.nodeType ? refs.nodeType.value : node.type);
+    const isTitle = isTitleNode(node);
+    const type = isTitle
+      ? normalizeTitleNodeType(refs.nodeType ? refs.nodeType.value : node.type)
+      : normalizeType(refs.nodeType ? refs.nodeType.value : node.type);
     const fixedValues = {
       setting: cleanString(refs.nodeSetting ? refs.nodeSetting.value : node.setting),
       condition: cleanString(refs.nodeCondition ? refs.nodeCondition.value : node.condition),
@@ -3618,8 +4072,30 @@
     };
     const currentDetails = collectMiscDetailsFromControls(node.details);
     node.type = type;
-    node.label = cleanString(refs.nodeLabel ? refs.nodeLabel.value : node.label) || node.id;
-    if (type === 'misc') {
+    node.label = cleanString(refs.nodeLabel ? refs.nodeLabel.value : node.label) || (isTitle ? DEFAULT_GRAPH_TITLE : node.id);
+    if (isTitle) {
+      node.label = cleanGraphTitle(node.label) || DEFAULT_GRAPH_TITLE;
+      currentGraph().title = node.label;
+      if (refs.graphTitle && refs.graphTitle.value !== node.label) refs.graphTitle.value = node.label;
+      if (type === TITLE_NODE_TYPE) {
+        node.setting = '';
+        node.condition = '';
+        node.result = '';
+        node.proofSketch = '';
+        node.details = currentDetails;
+      } else if (type === 'misc') {
+        node.setting = '';
+        node.condition = '';
+        node.result = '';
+        node.proofSketch = '';
+        node.details = previousType === 'misc'
+          ? currentDetails
+          : appendUniqueMiscDetails(currentDetails, legacyFieldsToMiscDetails(fixedValues, new Set(currentDetails.map((detail) => detail.id))));
+      } else {
+        Object.assign(node, fixedValues);
+        node.details = currentDetails;
+      }
+    } else if (type === 'misc') {
       node.setting = '';
       node.condition = '';
       node.result = '';
@@ -3631,8 +4107,13 @@
       Object.assign(node, fixedValues);
       node.details = currentDetails;
     }
-    node.color = normalizeColor(refs.nodeColor ? refs.nodeColor.value : node.color, NODE_TYPES[type].stroke);
-    node.fillColor = normalizeNodeFillColor(refs.nodeFillColor ? refs.nodeFillColor.value : node.fillColor, NODE_TYPES[type].fill);
+    node.color = normalizeColor(refs.nodeColor ? refs.nodeColor.value : node.color, (NODE_TYPES[type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).stroke);
+    node.fillColor = normalizeNodeFillColor(refs.nodeFillColor ? refs.nodeFillColor.value : node.fillColor, (NODE_TYPES[type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).fill);
+    if (isTitle) {
+      syncActiveOwnerFromTitleNode();
+    } else if (node.childGraph) {
+      syncChildGraphTitleFromSourceNode(node);
+    }
   }
 
   function collectMiscDetailsFromControls(fallback = []) {
@@ -3656,7 +4137,7 @@
   function applyArrowDetailFromControls(arrow) {
     const sourceId = cleanId(refs.arrowSource ? refs.arrowSource.value : arrow.sourceId);
     const targetId = cleanId(refs.arrowTarget ? refs.arrowTarget.value : arrow.targetId);
-    if (!findNode(sourceId) || !findNode(targetId)) return { ok: false, reason: 'missing-node' };
+    if (!state.nodes.some((node) => node.id === sourceId) || !state.nodes.some((node) => node.id === targetId)) return { ok: false, reason: 'missing-node' };
     if (sourceId === targetId) return { ok: false, reason: 'same-node' };
     arrow.sourceId = sourceId;
     arrow.targetId = targetId;
@@ -3751,6 +4232,7 @@
       result: node.result,
       proofSketch: node.proofSketch,
       details: cloneMiscDetails(node.details),
+      citationKeys: normalizeCitationKeys(node.citationKeys),
       color: node.color,
       fillColor: node.fillColor
     };
@@ -3776,17 +4258,26 @@
   }
 
   function restoreNodeDetailSnapshot(node, values) {
+    const type = isTitleNode(node) ? normalizeTitleNodeType(values.type) : normalizeType(values.type);
     Object.assign(node, {
-      type: normalizeType(values.type),
-      label: cleanString(values.label) || node.id,
+      type,
+      label: cleanString(values.label) || (isTitleNode(node) ? DEFAULT_GRAPH_TITLE : node.id),
       setting: cleanString(values.setting),
       condition: cleanString(values.condition),
       result: cleanString(values.result),
       proofSketch: cleanString(values.proofSketch),
-      details: normalizeMiscDetails(values, normalizeType(values.type)),
-      color: normalizeColor(values.color, NODE_TYPES[normalizeType(values.type)].stroke),
-      fillColor: normalizeNodeFillColor(values.fillColor, NODE_TYPES[normalizeType(values.type)].fill)
+      details: normalizeMiscDetails(values, type === TITLE_NODE_TYPE ? 'misc' : type),
+      citationKeys: normalizeCitationKeys(values.citationKeys),
+      color: normalizeColor(values.color, (NODE_TYPES[type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).stroke),
+      fillColor: normalizeNodeFillColor(values.fillColor, (NODE_TYPES[type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).fill)
     });
+    if (isTitleNode(node)) {
+      node.label = cleanGraphTitle(node.label) || DEFAULT_GRAPH_TITLE;
+      currentGraph().title = node.label;
+      syncActiveOwnerFromTitleNode();
+    } else if (node.childGraph) {
+      syncChildGraphTitleFromSourceNode(node);
+    }
   }
 
   function restoreArrowDetailSnapshot(arrow, values) {
@@ -4231,8 +4722,14 @@
     const key = cleanString(reference.key);
     const citeKey = referenceExportCiteKey(reference);
     if (!key && !citeKey) return false;
-    return state.nodes.some((node) => objectUsesReference(node, key, citeKey))
-      || state.arrows.some((arrow) => objectUsesReference(arrow, key, citeKey));
+    return graphUsesReference(state.rootGraph, key, citeKey);
+  }
+
+  function graphUsesReference(graph, key, citeKey) {
+    ensureGraphShape(graph);
+    return objectUsesReference(graph.titleNode, key, citeKey)
+      || graph.nodes.some((node) => objectUsesReference(node, key, citeKey) || (node.childGraph && graphUsesReference(node.childGraph, key, citeKey)))
+      || graph.arrows.some((arrow) => objectUsesReference(arrow, key, citeKey));
   }
 
   function objectUsesReference(source, key, citeKey) {
@@ -4246,14 +4743,14 @@
     if (selected) state.selectedReferenceKeys.add(key);
     else state.selectedReferenceKeys.delete(key);
     syncReferenceMasterCheckbox();
-    refreshExport();
+    markExportDirty();
   }
 
   function toggleReferenceSelectionFromMaster() {
     const checked = !!refs.referenceSelectAll.checked;
     state.selectedReferenceKeys = new Set(checked ? state.references.map((reference) => reference.key) : []);
     renderReferences();
-    refreshExport();
+    markExportDirty();
   }
 
   function syncReferenceMasterCheckbox() {
@@ -4500,7 +4997,17 @@
   function refreshExport() {
     if (!refs.exportOut) return;
     refs.exportOut.value = buildPresetFileExport();
+    state.exportDirty = false;
     syncControls();
+  }
+
+  function markExportDirty() {
+    state.exportDirty = true;
+  }
+
+  function ensureExportFresh() {
+    if (!state.exportDirty && refs.exportOut && refs.exportOut.value) return;
+    refreshExport();
   }
 
   function markCurrentExportClean() {
@@ -4512,14 +5019,22 @@
   }
 
   function graphContentSignature() {
-    const snapshot = buildExport();
-    if (snapshot.view && typeof snapshot.view === 'object') {
-      delete snapshot.view.selectedId;
-      delete snapshot.view.selectedReferenceKeys;
-      delete snapshot.view.layoutRunning;
-      if (!Object.keys(snapshot.view).length) delete snapshot.view;
-    }
+    const snapshot = buildExport('whole');
+    stripVolatileGraphView(snapshot, true);
     return JSON.stringify(snapshot);
+  }
+
+  function stripVolatileGraphView(graph, root = false) {
+    if (!graph || typeof graph !== 'object') return;
+    if (graph.view && typeof graph.view === 'object') {
+      delete graph.view.selectedId;
+      if (root) delete graph.view.selectedReferenceKeys;
+      delete graph.view.layoutRunning;
+      if (!Object.keys(graph.view).length) delete graph.view;
+    }
+    (Array.isArray(graph.nodes) ? graph.nodes : []).forEach((node) => {
+      if (node && node.childGraph) stripVolatileGraphView(node.childGraph, false);
+    });
   }
 
   function handleBeforeUnload(event) {
@@ -4530,7 +5045,7 @@
   }
 
   function buildPresetFileExport() {
-    const preset = buildExport();
+    const preset = buildExport(currentExportScope());
     const key = presetKeyFromTitle(preset.title);
     const file = `${key}.preset.js`;
     return [
@@ -4542,30 +5057,58 @@
     ].join('\n');
   }
 
-  function buildExport() {
-    return {
+  function buildExport(scope = 'whole') {
+    const graph = scope === 'current' ? currentGraph() : state.rootGraph;
+    if (scope === 'current') syncActiveTitleFromOwner();
+    syncLinkedGraphTitlesFromOwners(graph);
+    const preset = {
       schemaVersion: SCHEMA_VERSION,
-      title: cleanGraphTitle(state.graphTitle),
-      nodes: state.nodes.map((node) => {
-        const details = cleanMiscDetailsForExport(node.details);
+      ...buildGraphExport(graph, { includeTitleNode: true }),
+      references: state.references.map((reference) => {
+        const details = cleanMiscDetailsForExport(reference.details);
         return {
-          ...node.extra,
-          id: node.id,
-          type: node.type,
-          label: node.label,
-          ...(node.type === 'misc' || details.length ? { details } : {}),
-          setting: node.setting,
-          condition: node.condition,
-          result: node.result,
-          proofSketch: node.proofSketch,
-          citationKeys: [...node.citationKeys],
-          color: node.color,
-          fillColor: normalizeNodeFillColor(node.fillColor, (NODE_TYPES[node.type] || NODE_TYPES.theorem).fill),
-          x: roundNumber(node.x),
-          y: roundNumber(node.y)
+          ...reference.extra,
+          key: reference.key,
+          author: reference.author,
+          title: reference.title,
+          year: reference.year,
+          citeKey: referenceExportCiteKey(reference),
+          ...(details.length ? { details } : {}),
+          url: reference.url,
+          source: reference.source,
+          rawBibtex: reference.rawBibtex,
+          links: referenceExportLinks(reference)
         };
-      }),
-      arrows: state.arrows.map((arrow) => ({
+      })
+    };
+    if (preset.view && typeof preset.view === 'object') {
+      preset.view.selectedReferenceKeys = state.references
+        .filter((reference) => state.selectedReferenceKeys.has(reference.key))
+        .map((reference) => reference.key);
+    }
+    return preset;
+  }
+
+  function buildGraphExport(graph, options = {}) {
+    ensureGraphShape(graph);
+    const includeTitleNode = options.includeTitleNode !== false;
+    const active = graph === currentGraph();
+    const view = {
+      ...graph.viewExtra,
+      selectedId: active ? (state.selectedNodeId || '') : '',
+      layoutAvoidOverlap: graph.layoutAvoidOverlap !== false,
+      layoutRunning: false,
+      ...(active && state.canvasRatioLocked ? {
+        canvasRatioLocked: true,
+        canvasAspectRatio: roundRatio(normalizeCanvasAspectRatio(state.canvasAspectRatio)),
+        relativeNodePositions: relativeNodePositionsForExport(graph)
+      } : {})
+    };
+    return {
+      title: cleanGraphTitle(graph.title),
+      ...(includeTitleNode ? { titleNode: exportNode(graph.titleNode, false) } : {}),
+      nodes: graph.nodes.map((node) => exportNode(node, true)),
+      arrows: graph.arrows.map((arrow) => ({
         ...arrow.extra,
         id: arrow.id,
         sourceId: arrow.sourceId,
@@ -4583,43 +5126,38 @@
         labelAlign: normalizeArrowLabelAlign(arrow.labelAlign),
         color: arrow.color
       })),
-      references: state.references.map((reference) => {
-        const details = cleanMiscDetailsForExport(reference.details);
-        return {
-          ...reference.extra,
-          key: reference.key,
-          author: reference.author,
-          title: reference.title,
-          year: reference.year,
-          citeKey: referenceExportCiteKey(reference),
-          ...(details.length ? { details } : {}),
-          url: reference.url,
-          source: reference.source,
-          rawBibtex: reference.rawBibtex,
-          links: referenceExportLinks(reference)
-        };
-      }),
-      view: {
-        ...state.viewExtra,
-        selectedId: state.selectedNodeId || '',
-        selectedReferenceKeys: state.references
-          .filter((reference) => state.selectedReferenceKeys.has(reference.key))
-          .map((reference) => reference.key),
-        layoutAvoidOverlap: !!state.layoutAvoidOverlap,
-        layoutRunning: false,
-        ...(state.canvasRatioLocked ? {
-          canvasRatioLocked: true,
-          canvasAspectRatio: roundRatio(normalizeCanvasAspectRatio(state.canvasAspectRatio)),
-          relativeNodePositions: relativeNodePositionsForExport()
-        } : {})
-      }
+      view
     };
   }
 
-  function relativeNodePositionsForExport() {
+  function exportNode(node, includeChildGraph) {
+    const isTitle = isTitleNode(node);
+    const type = isTitle ? normalizeTitleNodeType(node.type) : normalizeType(node.type);
+    const details = cleanMiscDetailsForExport(node.details);
+    if (includeChildGraph && node.childGraph) syncChildGraphTitleFromSourceNode(node);
+    return {
+      ...cloneExtraObject(node.extra),
+      id: node.id,
+      type,
+      label: cleanString(node.label),
+      ...(type === 'misc' || isTitle || details.length ? { details } : {}),
+      setting: type === TITLE_NODE_TYPE ? '' : node.setting,
+      condition: type === TITLE_NODE_TYPE ? '' : node.condition,
+      result: type === TITLE_NODE_TYPE ? '' : node.result,
+      proofSketch: type === TITLE_NODE_TYPE ? '' : node.proofSketch,
+      citationKeys: normalizeCitationKeys(node.citationKeys),
+      color: node.color,
+      fillColor: normalizeNodeFillColor(node.fillColor, (NODE_TYPES[type] || NODE_TYPES.theorem).fill),
+      ...(isTitle ? {} : { x: roundNumber(node.x), y: roundNumber(node.y) }),
+      ...(includeChildGraph && node.childGraph ? { childGraph: buildGraphExport(node.childGraph, { includeTitleNode: false }) } : {})
+    };
+  }
+
+  function relativeNodePositionsForExport(graph = currentGraph()) {
     const width = Math.max(1, finiteNumber(state.canvasWidth, 960));
     const height = Math.max(1, finiteNumber(state.canvasHeight, 560));
-    return Object.fromEntries(state.nodes.map((node) => [
+    ensureGraphShape(graph);
+    return Object.fromEntries(graph.nodes.map((node) => [
       node.id,
       {
         x: roundRatio(node.x / width),
@@ -4629,7 +5167,7 @@
   }
 
   function copyExport() {
-    refreshExport();
+    ensureExportFresh();
     const text = refs.exportOut.value;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text)
@@ -4654,6 +5192,28 @@
   function setImportMode(mode) {
     state.importMode = mode === 'json' ? 'json' : 'preset';
     syncControls();
+  }
+
+  function setImportScope(scope) {
+    state.importScope = scope === 'whole' ? 'whole' : 'current';
+    syncControls();
+  }
+
+  function setExportScope(scope) {
+    state.exportScope = scope === 'current' ? 'current' : 'whole';
+    state.exportDirty = true;
+    ensureExportFresh();
+    syncControls();
+  }
+
+  function currentImportScope() {
+    if (refs.importScopeWhole && refs.importScopeWhole.checked) return 'whole';
+    return state.importScope === 'whole' ? 'whole' : 'current';
+  }
+
+  function currentExportScope() {
+    if (refs.exportScopeCurrent && refs.exportScopeCurrent.checked) return 'current';
+    return state.exportScope === 'current' ? 'current' : 'whole';
   }
 
   function currentImportMode() {
@@ -4775,7 +5335,7 @@
     syncCanvasRatioLockControl();
   }
 
-  function applyImportData(data, sourceLabel = 'graph') {
+  function applyImportData(data, sourceLabel = 'graph', scope = currentImportScope()) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       throw new Error('Import must be a JSON object.');
     }
@@ -4783,14 +5343,24 @@
     const canvasView = normalizeCanvasView(readImportView(data));
     applyImportedCanvasView(canvasView);
     const next = normalizeImport(data, canvasView);
-    state.graphTitle = next.title;
-    state.nodes = next.nodes;
-    state.arrows = next.arrows;
-    state.references = next.references;
-    state.selectedReferenceKeys = next.selectedReferenceKeys;
+    const wholeImport = scope === 'whole';
+    if (wholeImport) {
+      state.rootGraph = next.graph;
+      state.activePath = [];
+      state.references = next.references;
+      state.selectedReferenceKeys = next.selectedReferenceKeys;
+      syncLinkedGraphTitlesFromOwners(state.rootGraph);
+    } else {
+      replaceActiveGraph(next.graph);
+      if (activeGraphDepth()) syncActiveOwnerFromTitleNode();
+      syncLinkedGraphTitlesFromOwners(currentGraph());
+      state.references = mergeReferencesByKey(state.references, next.references);
+      state.selectedReferenceKeys = new Set([...state.selectedReferenceKeys].filter((key) => state.references.some((reference) => reference.key === key)));
+    }
     state.editingReferenceKey = null;
     if (refs.referenceEditForm) refs.referenceEditForm.hidden = true;
-    state.selectedNodeId = next.selectedNodeId;
+    state.titleEditorActive = false;
+    state.selectedNodeId = state.nodes.some((node) => node.id === next.selectedNodeId) ? next.selectedNodeId : null;
     state.selectedArrowId = null;
     state.layoutAvoidOverlap = next.layoutAvoidOverlap;
     state.layoutOverlapGroups = [];
@@ -4798,12 +5368,9 @@
     resetDetailEditBaseline();
     state.connectMode = false;
     state.connectSourceId = null;
-    state.viewExtra = next.viewExtra;
-    state.nodeSerial = nextSerial(state.nodes.map((node) => node.id), 'n');
-    state.arrowSerial = nextSerial(state.arrows.map((arrow) => arrow.id), 'a');
     clampAllNodes();
-    setExportMessage(`Loaded ${state.nodes.length} nodes and ${state.arrows.length} arrows from ${sourceLabel}.`);
-    setStatus('Imported graph.');
+    setExportMessage(`Loaded ${state.nodes.length} nodes and ${state.arrows.length} arrows from ${sourceLabel} into ${wholeImport ? 'the whole graph' : 'the current tab'}.`);
+    setStatus(wholeImport ? 'Imported whole graph.' : 'Imported current tab.');
     renderAll();
     markCurrentExportClean();
   }
@@ -4965,40 +5532,7 @@
     if (data.schemaVersion && Number(data.schemaVersion) > SCHEMA_VERSION) {
       setExportMessage(`Newer schema ${data.schemaVersion}; preserving known fields.`, true);
     }
-    const rawNodes = Array.isArray(data.nodes) ? data.nodes : [];
-    const rawArrows = Array.isArray(data.arrows) ? data.arrows : [];
     const rawReferences = Array.isArray(data.references) ? data.references : [];
-    const ids = new Set();
-    const nodes = [];
-    rawNodes.forEach((entry, index) => {
-      if (!entry || typeof entry !== 'object') return;
-      const id = cleanId(entry.id);
-      if (!id || ids.has(id)) return;
-      const relative = canvasView.locked ? canvasView.relativeNodePositions.get(id) : null;
-      const node = makeNode({
-        ...entry,
-        label: cleanString(entry.label) || `Node ${index + 1}`,
-        x: relative ? relative.x * state.canvasWidth : (Number.isFinite(Number(entry.x)) ? Number(entry.x) : state.canvasWidth / 2),
-        y: relative ? relative.y * state.canvasHeight : (Number.isFinite(Number(entry.y)) ? Number(entry.y) : state.canvasHeight / 2)
-      });
-      nodes.push(node);
-      ids.add(id);
-    });
-
-    const arrows = [];
-    const arrowIds = new Set();
-    rawArrows.forEach((entry) => {
-      if (!entry || typeof entry !== 'object') return;
-      const sourceId = cleanId(entry.sourceId);
-      const targetId = cleanId(entry.targetId);
-      if (!ids.has(sourceId) || !ids.has(targetId) || sourceId === targetId) return;
-      let id = cleanId(entry.id);
-      if (!id || arrowIds.has(id)) id = nextImportedId(arrowIds, 'a');
-      const arrow = makeArrow({ ...entry, id, sourceId, targetId });
-      arrows.push(arrow);
-      arrowIds.add(id);
-    });
-
     const references = [];
     const referenceKeys = new Set();
     rawReferences.forEach((entry) => {
@@ -5016,6 +5550,70 @@
         .map(cleanString)
         .filter((key) => referenceKeys.has(key))
     );
+    const graph = normalizeGraphImport(data, canvasView);
+    return {
+      graph,
+      references,
+      selectedNodeId: normalizeSelectedNodeId(selectedId, graph),
+      selectedReferenceKeys,
+      layoutAvoidOverlap: graph.layoutAvoidOverlap
+    };
+  }
+
+  function normalizeGraphImport(data, canvasView = normalizeCanvasView(readImportView(data))) {
+    const view = data && data.view && typeof data.view === 'object' && !Array.isArray(data.view) ? data.view : {};
+    const graphCanvasView = normalizeCanvasView(view);
+    const activeCanvasView = canvasView && canvasView.locked ? canvasView : graphCanvasView;
+    const titleSource = Object.prototype.hasOwnProperty.call(data, 'title')
+      ? data.title
+      : (Object.prototype.hasOwnProperty.call(view, 'title') ? view.title : DEFAULT_GRAPH_TITLE);
+    const title = cleanGraphTitle(titleSource) || DEFAULT_GRAPH_TITLE;
+    const titleNodeSource = data.titleNode && typeof data.titleNode === 'object' && !Array.isArray(data.titleNode)
+      ? data.titleNode
+      : {};
+    const titleNode = makeTitleNode({
+      ...titleNodeSource,
+      label: titleNodeSource.label || title
+    });
+    titleNode.label = title;
+
+    const rawNodes = Array.isArray(data.nodes) ? data.nodes : [];
+    const ids = new Set();
+    const nodes = [];
+    rawNodes.forEach((entry, index) => {
+      if (!entry || typeof entry !== 'object') return;
+      const id = cleanId(entry.id);
+      if (!id || id === TITLE_NODE_ID || ids.has(id)) return;
+      const relative = activeCanvasView.locked ? activeCanvasView.relativeNodePositions.get(id) : null;
+      const node = makeNode({
+        ...entry,
+        childGraph: undefined,
+        label: cleanString(entry.label) || `Node ${index + 1}`,
+        x: relative ? relative.x * state.canvasWidth : (Number.isFinite(Number(entry.x)) ? Number(entry.x) : state.canvasWidth / 2),
+        y: relative ? relative.y * state.canvasHeight : (Number.isFinite(Number(entry.y)) ? Number(entry.y) : state.canvasHeight / 2)
+      });
+      if (entry.childGraph && typeof entry.childGraph === 'object' && !Array.isArray(entry.childGraph)) {
+        node.childGraph = normalizeGraphImport(entry.childGraph);
+      }
+      nodes.push(node);
+      ids.add(id);
+    });
+
+    const rawArrows = Array.isArray(data.arrows) ? data.arrows : [];
+    const arrows = [];
+    const arrowIds = new Set();
+    rawArrows.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') return;
+      const sourceId = cleanId(entry.sourceId);
+      const targetId = cleanId(entry.targetId);
+      if (!ids.has(sourceId) || !ids.has(targetId) || sourceId === targetId) return;
+      let id = cleanId(entry.id);
+      if (!id || arrowIds.has(id)) id = nextImportedId(arrowIds, 'a');
+      const arrow = makeArrow({ ...entry, id, sourceId, targetId });
+      arrows.push(arrow);
+      arrowIds.add(id);
+    });
+
     const viewExtra = { ...view };
     delete viewExtra.selectedId;
     delete viewExtra.selectedReferenceKeys;
@@ -5024,19 +5622,38 @@
     delete viewExtra.canvasRatioLocked;
     delete viewExtra.canvasAspectRatio;
     delete viewExtra.relativeNodePositions;
-    const titleSource = Object.prototype.hasOwnProperty.call(data, 'title')
-      ? data.title
-      : (Object.prototype.hasOwnProperty.call(view, 'title') ? view.title : DEFAULT_GRAPH_TITLE);
+
     return {
-      title: cleanGraphTitle(titleSource),
+      title,
+      titleNode,
       nodes,
       arrows,
-      references,
-      selectedNodeId: ids.has(selectedId) ? selectedId : (nodes[0] ? nodes[0].id : null),
-      selectedReferenceKeys,
-      layoutAvoidOverlap: view.layoutAvoidOverlap !== false,
-      viewExtra
+      viewExtra,
+      nodeSerial: nextSerial(nodes.map((node) => node.id), 'n'),
+      arrowSerial: nextSerial(arrows.map((arrow) => arrow.id), 'a'),
+      layoutAvoidOverlap: view.layoutAvoidOverlap !== false
     };
+  }
+
+  function normalizeSelectedNodeId(selectedId, graph) {
+    const id = cleanId(selectedId);
+    return graph.nodes.some((node) => node.id === id) ? id : '';
+  }
+
+  function mergeReferencesByKey(existing, incoming) {
+    const merged = [];
+    const seen = new Set();
+    (Array.isArray(existing) ? existing : []).forEach((reference) => {
+      if (!reference || seen.has(reference.key)) return;
+      merged.push(reference);
+      seen.add(reference.key);
+    });
+    (Array.isArray(incoming) ? incoming : []).forEach((reference) => {
+      if (!reference || seen.has(reference.key)) return;
+      merged.push(reference);
+      seen.add(reference.key);
+    });
+    return merged;
   }
 
   function nextImportedId(used, prefix) {
@@ -5074,6 +5691,10 @@
         ? false
         : !(state.presets.length && refs.presetSelect && refs.presetSelect.value);
     }
+    if (refs.importScopeCurrent) refs.importScopeCurrent.checked = state.importScope !== 'whole';
+    if (refs.importScopeWhole) refs.importScopeWhole.checked = state.importScope === 'whole';
+    if (refs.exportScopeWhole) refs.exportScopeWhole.checked = state.exportScope !== 'current';
+    if (refs.exportScopeCurrent) refs.exportScopeCurrent.checked = state.exportScope === 'current';
   }
 
   function syncControls() {
@@ -5097,7 +5718,15 @@
       refs.connectMode.setAttribute('aria-pressed', state.connectMode ? 'true' : 'false');
     }
     if (refs.toggleLayout) refs.toggleLayout.textContent = state.layoutRunning ? 'pause layout' : 'run layout';
-    if (refs.deleteSelected) refs.deleteSelected.disabled = !(selectedNode || selectedArrow);
+    if (refs.deleteSelected) {
+      if (activeGraphDepth()) {
+        refs.deleteSelected.textContent = 'return';
+        refs.deleteSelected.disabled = false;
+      } else {
+        refs.deleteSelected.textContent = 'delete selected';
+        refs.deleteSelected.disabled = !(selectedArrow || (selectedNode && !isTitleNode(selectedNode)));
+      }
+    }
     if (refs.deleteSelectedReferences) refs.deleteSelectedReferences.disabled = state.selectedReferenceKeys.size === 0;
     if (refs.graphHelp) {
       refs.graphHelp.textContent = selectedArrow
@@ -5127,6 +5756,7 @@
   }
 
   function findNode(id) {
+    if (id === TITLE_NODE_ID) return state.titleEditorActive ? activeTitleNode() : null;
     return state.nodes.find((node) => node.id === id) || null;
   }
 
@@ -5135,7 +5765,7 @@
   }
 
   function clampAllNodes() {
-    state.nodes.forEach(clampNode);
+    visibleNodes().forEach(clampNode);
   }
 
   function clampNode(node) {
@@ -5145,6 +5775,11 @@
 
   function normalizeType(type) {
     return NODE_TYPE_KEYS.includes(type) ? type : DEFAULT_NEW_NODE_TYPE;
+  }
+
+  function normalizeTitleNodeType(type) {
+    const value = cleanString(type);
+    return value === TITLE_NODE_TYPE ? TITLE_NODE_TYPE : normalizeType(value);
   }
 
   function arrowPartsFromSource(source = {}) {

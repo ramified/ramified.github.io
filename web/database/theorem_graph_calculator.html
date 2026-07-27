@@ -231,6 +231,45 @@
       min-width: 0;
     }
 
+    .theorem-breadcrumb {
+      display: flex;
+      align-items: center;
+      flex: 1 1 100%;
+      flex-wrap: wrap;
+      gap: 4px;
+      min-height: 24px;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .theorem-breadcrumb-button {
+      border: 1px solid transparent;
+      border-radius: 3px;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      padding: 3px 6px;
+      cursor: pointer;
+    }
+
+    .theorem-breadcrumb-button:hover,
+    .theorem-breadcrumb-button:focus-visible {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+      outline: none;
+    }
+
+    .theorem-breadcrumb-button.is-current {
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+      border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+      cursor: default;
+    }
+
+    .theorem-breadcrumb-separator {
+      color: color-mix(in srgb, var(--muted) 62%, transparent);
+    }
+
     .theorem-main-canvas-label {
       color: var(--muted);
       font-family: 'JetBrains Mono', Consolas, monospace;
@@ -1091,6 +1130,7 @@
     <header class="panel-title">
       <div class="theorem-main-canvas-heading">
         <input id="graph-title" class="theorem-title-input" type="text" maxlength="120" spellcheck="true" autocomplete="off" value="Maintenance Tracker" aria-label="Graph title">
+        <div class="theorem-breadcrumb" id="graph-breadcrumb" aria-label="Graph path"></div>
       </div>
       <div class="canvas-toolbar" aria-label="Theorem graph controls">
         <span class="theorem-badge" id="graph-count-badge">0 nodes, 0 arrows</span>
@@ -1128,6 +1168,7 @@
           <div class="theorem-field-row">
             <label class="input-label" for="node-type">type</label>
             <select id="node-type" class="theorem-select">
+              <option value="title" disabled>Title</option>
               <option value="theorem">Theorem</option>
               <option value="lemma">Lemma</option>
               <option value="proposition">Proposition</option>
@@ -1444,6 +1485,17 @@
           <button class="btn" id="refresh-export" type="button">refresh</button>
           <button class="btn btn-ghost" id="copy-export" type="button">copy</button>
         </div>
+        <label class="input-label" style="margin-top: 12px;">export scope</label>
+        <div class="theorem-import-mode" role="radiogroup" aria-label="Export scope">
+          <label class="theorem-import-option">
+            <input type="radio" name="export-scope" id="export-scope-whole" value="whole" checked>
+            <span>whole graph</span>
+          </label>
+          <label class="theorem-import-option">
+            <input type="radio" name="export-scope" id="export-scope-current" value="current">
+            <span>current tab</span>
+          </label>
+        </div>
         <label class="input-label" style="margin-top: 12px;">import chart</label>
         <div class="theorem-import-mode" role="radiogroup" aria-label="Import source">
           <label class="theorem-import-option">
@@ -1469,6 +1521,17 @@
         </div>
         <div class="theorem-export-actions">
           <button class="btn" id="load-import" type="button">load</button>
+        </div>
+        <label class="input-label" style="margin-top: 12px;">import scope</label>
+        <div class="theorem-import-mode" role="radiogroup" aria-label="Import scope">
+          <label class="theorem-import-option">
+            <input type="radio" name="import-scope" id="import-scope-current" value="current" checked>
+            <span>current tab</span>
+          </label>
+          <label class="theorem-import-option">
+            <input type="radio" name="import-scope" id="import-scope-whole" value="whole">
+            <span>whole graph</span>
+          </label>
         </div>
         <div class="hint" id="export-message">Export includes nodes, arrows, references, and positions.</div>
       </div>
