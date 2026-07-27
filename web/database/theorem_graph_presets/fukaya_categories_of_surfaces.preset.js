@@ -1,10 +1,23 @@
-// Save this file as theorem_graph_presets/fukaya_categories_of_surfaces_learning_roadmap.preset.js
+// Save this file as theorem_graph_presets/fukaya_categories_of_surfaces.preset.js
 // Add this entry to theorem_graph_presets/presets.js:
-// { label: "Fukaya Categories of Surfaces: Learning Roadmap", key: "fukaya_categories_of_surfaces_learning_roadmap", file: "fukaya_categories_of_surfaces_learning_roadmap.preset.js" }
+// { label: "Fukaya Categories of Surfaces", key: "fukaya_categories_of_surfaces", file: "fukaya_categories_of_surfaces.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
-window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap = {
-  "schemaVersion": 7,
-  "title": "Fukaya Categories of Surfaces: Learning Roadmap",
+window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
+  "schemaVersion": 8,
+  "title": "Fukaya Categories of Surfaces",
+  "titleNode": {
+    "id": "__title__",
+    "type": "title",
+    "label": "Fukaya Categories of Surfaces",
+    "details": [],
+    "setting": "",
+    "condition": "",
+    "result": "",
+    "proofSketch": "",
+    "citationKeys": [],
+    "color": "#8b5f2a",
+    "fillColor": "#fff7df"
+  },
   "nodes": [
     {
       "id": "n1",
@@ -33,7 +46,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "id": "pace",
           "label": "suggested pace",
           "type": "textbox",
-          "text": "30–60 minutes"
+          "text": "30–60 minutes\n\\cite{ChatGPT}"
         }
       ],
       "setting": "",
@@ -43,8 +56,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       "citationKeys": [],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 234.6,
-      "y": 172.3
+      "x": 316,
+      "y": 15.5
     },
     {
       "id": "n3",
@@ -85,8 +98,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#8b3a2a",
       "fillColor": "#fbefee",
-      "x": 59.5,
-      "y": 206.7
+      "x": 87.7,
+      "y": 104.9
     },
     {
       "id": "n4",
@@ -103,7 +116,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "id": "tasks",
           "label": "practice",
           "type": "checkbox",
-          "text": "- [ ] Draw transverse intersections of two arcs\n- [ ] Practice perturbing curves into transverse position\n- [ ] Distinguish closed curves, properly embedded arcs, and immersed curves"
+          "text": "- [x] Draw transverse intersections of two arcs\n- [x] Practice perturbing curves into transverse position\n- [ ] Distinguish closed curves, properly embedded arcs, and immersed curves"
         },
         {
           "id": "checkpoint",
@@ -127,8 +140,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 92.9,
-      "y": 383.1
+      "x": 48,
+      "y": 358.8
     },
     {
       "id": "n5",
@@ -176,8 +189,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 245.5,
-      "y": 264.6
+      "x": 126.6,
+      "y": 218.2
     },
     {
       "id": "n6",
@@ -219,8 +232,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 205.7,
-      "y": 414.3
+      "x": 121.8,
+      "y": 430.9
     },
     {
       "id": "n9",
@@ -262,8 +275,18 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 413.6,
-      "y": 201
+      "x": 537.8,
+      "y": 30.3,
+      "childGraph": {
+        "title": "perfect complex",
+        "nodes": [],
+        "arrows": [],
+        "view": {
+          "selectedId": "",
+          "layoutAvoidOverlap": true,
+          "layoutRunning": false
+        }
+      }
     },
     {
       "id": "n10",
@@ -280,7 +303,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "id": "tasks",
           "label": "practice",
           "type": "checkbox",
-          "text": "- [ ] Write the A-infinity relations for n=1,2,3 schematically\n- [ ] Identify the ordinary dg case where μk=0 for k≥3\n- [ ] Relate μk to polygons with k+1 sides"
+          "text": "- [x] Write the A-infinity relations for n=1,2,3 schematically\n- [x] Identify the ordinary dg case where μk=0 for k≥3 (remove in future)\n- [x] Relate μk to polygons with k+1 sides"
         },
         {
           "id": "checkpoint",
@@ -293,6 +316,12 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "label": "suggested pace",
           "type": "textbox",
           "text": "1 week"
+        },
+        {
+          "id": "examples",
+          "label": "examples",
+          "type": "checkbox",
+          "text": "- [x] $\\Omega X$ is an $A_{\\infty}$ space\n- [x] Associative algebra\n- [x] Associative dg algebra$=A_{\\infty}$ with $m_i=0$ for $i>2$\n- [x] Hochschild cocycles $=A_{\\infty}$ on $B \\otimes k[\\epsilon]$ lifting multiplications"
         }
       ],
       "setting": "",
@@ -303,10 +332,10 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
         "KellerAinf",
         "Auroux13"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 463.4,
-      "y": 463.7
+      "color": "#8b3a2a",
+      "fillColor": "#fbefee",
+      "x": 697.7,
+      "y": 149.8
     },
     {
       "id": "n11",
@@ -353,8 +382,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 559.6,
-      "y": 124.7
+      "x": 440.7,
+      "y": 134.9
     },
     {
       "id": "n12",
@@ -371,7 +400,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "id": "tasks",
           "label": "practice",
           "type": "checkbox",
-          "text": "- [ ] Draw two transverse arcs and list generators\n- [ ] Assign relative degrees in a simple graded example\n- [ ] State the hypotheses that keep the complex finite and unobstructed"
+          "text": "- [x] Draw two transverse arcs and list generators\n- [ ] Assign relative degrees in a simple graded example\n- [ ] State the hypotheses that keep the complex finite and unobstructed"
         },
         {
           "id": "checkpoint",
@@ -394,10 +423,10 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
         "Auroux13",
         "Pedroza17"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 432.6,
-      "y": 295
+      "color": "#46786e",
+      "fillColor": "#eef7f4",
+      "x": 287.5,
+      "y": 287.6
     },
     {
       "id": "n13",
@@ -439,8 +468,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 635.9,
-      "y": 215.6
+      "x": 516.4,
+      "y": 238.7
     },
     {
       "id": "n14",
@@ -482,8 +511,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 559.6,
-      "y": 399.8
+      "x": 580.2,
+      "y": 422.5
     },
     {
       "id": "n15",
@@ -524,8 +553,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 703.6,
-      "y": 405.9
+      "x": 704,
+      "y": 337.2
     },
     {
       "id": "n16",
@@ -568,8 +597,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 534.2,
-      "y": 527.9
+      "x": 692.3,
+      "y": 520.4
     },
     {
       "id": "n17",
@@ -611,8 +640,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 397.8,
-      "y": 401
+      "x": 368.9,
+      "y": 350.2
     },
     {
       "id": "n18",
@@ -655,8 +684,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 343.6,
-      "y": 574.1
+      "x": 468.7,
+      "y": 498.9
     },
     {
       "id": "n19",
@@ -698,8 +727,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 135.5,
-      "y": 601.8
+      "x": 566.4,
+      "y": 611.1
     },
     {
       "id": "n20",
@@ -741,8 +770,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 84.7,
-      "y": 521.1
+      "x": 270.8,
+      "y": 559.7
     },
     {
       "id": "n21",
@@ -784,8 +813,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 226.9,
-      "y": 662.3
+      "x": 704,
+      "y": 636.6
     },
     {
       "id": "n22",
@@ -827,8 +856,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 70.4,
-      "y": 747.7
+      "x": 434.7,
+      "y": 662.5
     },
     {
       "id": "n23",
@@ -870,8 +899,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 192.8,
-      "y": 840.6
+      "x": 200.6,
+      "y": 642.7
     },
     {
       "id": "n24",
@@ -912,8 +941,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 432.8,
-      "y": 676
+      "x": 365.2,
+      "y": 732.7
     },
     {
       "id": "n25",
@@ -954,8 +983,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 629.9,
-      "y": 544.7
+      "x": 521.9,
+      "y": 815.7
     },
     {
       "id": "n26",
@@ -996,8 +1025,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 237.8,
-      "y": 512.2
+      "x": 207.6,
+      "y": 477.4
     },
     {
       "id": "n27",
@@ -1038,8 +1067,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 280.9,
-      "y": 746.1
+      "x": 49.1,
+      "y": 637.9
     },
     {
       "id": "n28",
@@ -1082,8 +1111,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 439.8,
-      "y": 773.9
+      "x": 203.6,
+      "y": 804
     },
     {
       "id": "n29",
@@ -1124,8 +1153,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 670,
-      "y": 765
+      "x": 48,
+      "y": 879.7
     },
     {
       "id": "n30",
@@ -1168,8 +1197,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 259.4,
-      "y": 971.7
+      "x": 343.6,
+      "y": 861.6
     },
     {
       "id": "n31",
@@ -1212,8 +1241,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 655.3,
-      "y": 867.1
+      "x": 626.3,
+      "y": 753.7
     },
     {
       "id": "n32",
@@ -1256,8 +1285,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 618.3,
-      "y": 690.1
+      "x": 308.7,
+      "y": 959.3
     },
     {
       "id": "n33",
@@ -1301,8 +1330,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 452.3,
-      "y": 854.4
+      "x": 565.4,
+      "y": 949.4
     },
     {
       "id": "n34",
@@ -1344,8 +1373,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 529.6,
-      "y": 984
+      "x": 394,
+      "y": 1015.2
     },
     {
       "id": "n35",
@@ -1372,8 +1401,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 376.1,
-      "y": 57.7
+      "x": 232.1,
+      "y": 168.4
     }
   ],
   "arrows": [
@@ -2058,12 +2087,185 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
       "color": "#5f574e"
     }
   ],
+  "view": {
+    "selectedId": "n9",
+    "layoutAvoidOverlap": true,
+    "layoutRunning": false,
+    "canvasRatioLocked": true,
+    "canvasAspectRatio": 0.7231,
+    "relativeNodePositions": {
+      "n1": {
+        "x": 0.4202,
+        "y": 0.0149
+      },
+      "n3": {
+        "x": 0.1167,
+        "y": 0.1009
+      },
+      "n4": {
+        "x": 0.0638,
+        "y": 0.345
+      },
+      "n5": {
+        "x": 0.1683,
+        "y": 0.2098
+      },
+      "n6": {
+        "x": 0.162,
+        "y": 0.4143
+      },
+      "n9": {
+        "x": 0.7152,
+        "y": 0.0291
+      },
+      "n10": {
+        "x": 0.9278,
+        "y": 0.144
+      },
+      "n11": {
+        "x": 0.586,
+        "y": 0.1297
+      },
+      "n12": {
+        "x": 0.3823,
+        "y": 0.2765
+      },
+      "n13": {
+        "x": 0.6867,
+        "y": 0.2295
+      },
+      "n14": {
+        "x": 0.7716,
+        "y": 0.4063
+      },
+      "n15": {
+        "x": 0.9362,
+        "y": 0.3243
+      },
+      "n16": {
+        "x": 0.9206,
+        "y": 0.5004
+      },
+      "n17": {
+        "x": 0.4905,
+        "y": 0.3367
+      },
+      "n18": {
+        "x": 0.6233,
+        "y": 0.4797
+      },
+      "n19": {
+        "x": 0.7532,
+        "y": 0.5875
+      },
+      "n20": {
+        "x": 0.3602,
+        "y": 0.5382
+      },
+      "n21": {
+        "x": 0.9362,
+        "y": 0.6121
+      },
+      "n22": {
+        "x": 0.578,
+        "y": 0.637
+      },
+      "n23": {
+        "x": 0.2667,
+        "y": 0.618
+      },
+      "n24": {
+        "x": 0.4856,
+        "y": 0.7045
+      },
+      "n25": {
+        "x": 0.694,
+        "y": 0.7843
+      },
+      "n26": {
+        "x": 0.2761,
+        "y": 0.459
+      },
+      "n27": {
+        "x": 0.0653,
+        "y": 0.6133
+      },
+      "n28": {
+        "x": 0.2708,
+        "y": 0.7731
+      },
+      "n29": {
+        "x": 0.0638,
+        "y": 0.8458
+      },
+      "n30": {
+        "x": 0.4569,
+        "y": 0.8285
+      },
+      "n31": {
+        "x": 0.8328,
+        "y": 0.7247
+      },
+      "n32": {
+        "x": 0.4105,
+        "y": 0.9224
+      },
+      "n33": {
+        "x": 0.7518,
+        "y": 0.9128
+      },
+      "n34": {
+        "x": 0.524,
+        "y": 0.9762
+      },
+      "n35": {
+        "x": 0.3086,
+        "y": 0.1619
+      }
+    },
+    "selectedReferenceKeys": []
+  },
   "references": [
+    {
+      "key": "mo1",
+      "author": "",
+      "title": "Simple singularities algorithm?",
+      "year": "",
+      "citeKey": "simple sing",
+      "url": "https://mathoverflow.net/questions/185692/how-can-one-determine-if-a-singularity-is-simple",
+      "source": "mathoverflow",
+      "rawBibtex": "",
+      "links": [
+        {
+          "url": "https://mathoverflow.net/questions/185692/how-can-one-determine-if-a-singularity-is-simple",
+          "source": "mathoverflow",
+          "label": ""
+        }
+      ]
+    },
+    {
+      "key": "bronken app",
+      "author": "",
+      "title": "bronken app",
+      "year": "",
+      "citeKey": "diagram",
+      "url": "https://dehornoy.lmno.cnrs.fr/Softwares/TressApp/",
+      "source": "web",
+      "rawBibtex": "",
+      "links": [
+        {
+          "url": "https://dehornoy.lmno.cnrs.fr/Softwares/TressApp/",
+          "source": "web",
+          "label": ""
+        }
+      ]
+    },
     {
       "key": "CdS06",
       "author": "Ana Cannas da Silva",
       "title": "Lectures on Symplectic Geometry",
       "year": "2006",
+      "citeKey": "CdS06",
       "url": "https://www.math.ist.utl.pt/~acannas/Books/lsg.pdf",
       "source": "web",
       "rawBibtex": "@book{CdS06, author={Cannas da Silva, Ana}, title={Lectures on Symplectic Geometry}, series={Lecture Notes in Mathematics}, volume={1764}, year={2006}, publisher={Springer}}",
@@ -2073,14 +2275,14 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "source": "web",
           "label": "lecture notes"
         }
-      ],
-      "citeKey": "CdS06"
+      ]
     },
     {
       "key": "Pedroza17",
       "author": "Andrés Pedroza",
       "title": "A Quick View of Lagrangian Floer Homology",
       "year": "2017",
+      "citeKey": "Pedroza17",
       "url": "https://arxiv.org/abs/1701.02293",
       "source": "web",
       "rawBibtex": "@misc{Pedroza17, author={Pedroza, Andrés}, title={A Quick View of Lagrangian Floer Homology}, year={2017}, eprint={1701.02293}, archivePrefix={arXiv}}",
@@ -2090,14 +2292,14 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "source": "web",
           "label": "arXiv"
         }
-      ],
-      "citeKey": "Pedroza17"
+      ]
     },
     {
       "key": "Auroux13",
       "author": "Denis Auroux",
       "title": "A Beginner's Introduction to Fukaya Categories",
       "year": "2013",
+      "citeKey": "Auroux13",
       "url": "https://arxiv.org/abs/1301.7056",
       "source": "web",
       "rawBibtex": "@misc{Auroux13, author={Auroux, Denis}, title={A Beginner's Introduction to Fukaya Categories}, year={2013}, eprint={1301.7056}, archivePrefix={arXiv}}",
@@ -2107,14 +2309,14 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "source": "web",
           "label": "arXiv"
         }
-      ],
-      "citeKey": "Auroux13"
+      ]
     },
     {
       "key": "KellerAinf",
       "author": "Bernhard Keller",
       "title": "Introduction to A-infinity Algebras and Modules",
       "year": "2001",
+      "citeKey": "KellerAinf",
       "url": "https://arxiv.org/abs/math/9910179",
       "source": "web",
       "rawBibtex": "@article{KellerAinf, author={Keller, Bernhard}, title={Introduction to A-infinity Algebras and Modules}, year={2001}, journal={Homology, Homotopy and Applications}}",
@@ -2124,14 +2326,14 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "source": "web",
           "label": "arXiv"
         }
-      ],
-      "citeKey": "KellerAinf"
+      ]
     },
     {
       "key": "Abouzaid07",
       "author": "Mohammed Abouzaid",
       "title": "On the Fukaya Categories of Higher Genus Surfaces",
       "year": "2007",
+      "citeKey": "Abouzaid07",
       "url": "https://arxiv.org/abs/math/0606598",
       "source": "web",
       "rawBibtex": "@misc{Abouzaid07, author={Abouzaid, Mohammed}, title={On the Fukaya Categories of Higher Genus Surfaces}, year={2007}, eprint={math/0606598}, archivePrefix={arXiv}}",
@@ -2141,14 +2343,14 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "source": "web",
           "label": "arXiv"
         }
-      ],
-      "citeKey": "Abouzaid07"
+      ]
     },
     {
       "key": "FST",
       "author": "Sergey Fomin and Michael Shapiro and Dylan Thurston",
       "title": "Cluster Algebras and Triangulated Surfaces. Part I: Cluster Complexes",
       "year": "2006",
+      "citeKey": "FST",
       "url": "https://arxiv.org/abs/math/0608367",
       "source": "web",
       "rawBibtex": "@misc{FST, author={Fomin, Sergey and Shapiro, Michael and Thurston, Dylan}, title={Cluster Algebras and Triangulated Surfaces. Part I: Cluster Complexes}, year={2006}, eprint={math/0608367}, archivePrefix={arXiv}}",
@@ -2158,14 +2360,14 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "source": "web",
           "label": "arXiv"
         }
-      ],
-      "citeKey": "FST"
+      ]
     },
     {
       "key": "HKK17",
       "author": "Fabian Haiden and Ludmil Katzarkov and Maxim Kontsevich",
       "title": "Flat Surfaces and Stability Structures",
       "year": "2017",
+      "citeKey": "HKK17",
       "url": "https://arxiv.org/abs/1409.8611",
       "source": "web",
       "rawBibtex": "@article{HKK17, author={Haiden, Fabian and Katzarkov, Ludmil and Kontsevich, Maxim}, title={Flat Surfaces and Stability Structures}, journal={Publications Mathématiques de l'IHÉS}, volume={126}, pages={247--318}, year={2017}}",
@@ -2175,14 +2377,14 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "source": "web",
           "label": "arXiv"
         }
-      ],
-      "citeKey": "HKK17"
+      ]
     },
     {
       "key": "LP20",
       "author": "Yanki Lekili and Alexander Polishchuk",
       "title": "Derived Equivalences of Gentle Algebras via Fukaya Categories",
       "year": "2020",
+      "citeKey": "LP20",
       "url": "https://arxiv.org/abs/1801.06370",
       "source": "web",
       "rawBibtex": "@article{LP20, author={Lekili, Yanki and Polishchuk, Alexander}, title={Derived Equivalences of Gentle Algebras via Fukaya Categories}, journal={Mathematische Annalen}, year={2020}}",
@@ -2192,14 +2394,14 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "source": "web",
           "label": "arXiv"
         }
-      ],
-      "citeKey": "LP20"
+      ]
     },
     {
       "key": "OPS",
       "author": "Sebastian Opper and Pierre-Guy Plamondon and Sibylle Schroll",
       "title": "A Geometric Model for the Derived Category of Gentle Algebras",
       "year": "2018",
+      "citeKey": "OPS",
       "url": "https://arxiv.org/abs/1801.09659",
       "source": "web",
       "rawBibtex": "@misc{OPS, author={Opper, Sebastian and Plamondon, Pierre-Guy and Schroll, Sibylle}, title={A Geometric Model for the Derived Category of Gentle Algebras}, year={2018}, eprint={1801.09659}, archivePrefix={arXiv}}",
@@ -2209,14 +2411,14 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "source": "web",
           "label": "arXiv (revised 2025)"
         }
-      ],
-      "citeKey": "OPS"
+      ]
     },
     {
       "key": "KellerCluster",
       "author": "Bernhard Keller",
       "title": "Cluster Algebras and Derived Categories",
       "year": "2012",
+      "citeKey": "KellerCluster",
       "url": "https://arxiv.org/abs/1202.4161",
       "source": "web",
       "rawBibtex": "@misc{KellerCluster, author={Keller, Bernhard}, title={Cluster Algebras and Derived Categories}, year={2012}, eprint={1202.4161}, archivePrefix={arXiv}}",
@@ -2226,14 +2428,14 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "source": "web",
           "label": "arXiv"
         }
-      ],
-      "citeKey": "KellerCluster"
+      ]
     },
     {
       "key": "BarmeierWang26",
       "author": "Severin Barmeier and Zhengfang Wang",
       "title": "Fukaya Categories of Orbifold Surfaces in Representation Theory",
       "year": "2026",
+      "citeKey": "BarmeierWang26",
       "url": "https://arxiv.org/abs/2602.17370",
       "source": "web",
       "rawBibtex": "@misc{BarmeierWang26, author={Barmeier, Severin and Wang, Zhengfang}, title={Fukaya Categories of Orbifold Surfaces in Representation Theory}, year={2026}, eprint={2602.17370}, archivePrefix={arXiv}}",
@@ -2243,14 +2445,14 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "source": "web",
           "label": "arXiv"
         }
-      ],
-      "citeKey": "BarmeierWang26"
+      ]
     },
     {
       "key": "volk2025",
       "author": "Luke Volk and Boris Khesin",
       "title": "Morse-Bott Volume Forms",
       "year": "2025",
+      "citeKey": "volk2025",
       "url": "https://arxiv.org/abs/2503.00541",
       "source": "web",
       "rawBibtex": "@misc{volk2025morsebottvolumeforms,\n      title={Morse-Bott Volume Forms}, \n      author={Luke Volk and Boris Khesin},\n      year={2025},\n      eprint={2503.00541},\n      archivePrefix={arXiv},\n      primaryClass={math.DG},\n      url={https://arxiv.org/abs/2503.00541}, \n}",
@@ -2260,146 +2462,24 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces_learning_roadmap 
           "source": "web",
           "label": ""
         }
-      ],
-      "citeKey": "volk2025"
-    }
-  ],
-  "view": {
-    "selectedId": "n4",
-    "selectedReferenceKeys": [],
-    "layoutRunning": false,
-    "canvasRatioLocked": true,
-    "canvasAspectRatio": 0.7231,
-    "relativeNodePositions": {
-      "n1": {
-        "x": 0.312,
-        "y": 0.1657
-      },
-      "n3": {
-        "x": 0.0791,
-        "y": 0.1988
-      },
-      "n4": {
-        "x": 0.1235,
-        "y": 0.3684
-      },
-      "n5": {
-        "x": 0.3264,
-        "y": 0.2545
-      },
-      "n6": {
-        "x": 0.2735,
-        "y": 0.3984
-      },
-      "n9": {
-        "x": 0.55,
-        "y": 0.1932
-      },
-      "n10": {
-        "x": 0.6162,
-        "y": 0.4459
-      },
-      "n11": {
-        "x": 0.7442,
-        "y": 0.1199
-      },
-      "n12": {
-        "x": 0.5753,
-        "y": 0.2837
-      },
-      "n13": {
-        "x": 0.8456,
-        "y": 0.2073
-      },
-      "n14": {
-        "x": 0.7442,
-        "y": 0.3844
-      },
-      "n15": {
-        "x": 0.9356,
-        "y": 0.3903
-      },
-      "n16": {
-        "x": 0.7104,
-        "y": 0.5076
-      },
-      "n17": {
-        "x": 0.5289,
-        "y": 0.3856
-      },
-      "n18": {
-        "x": 0.4569,
-        "y": 0.552
-      },
-      "n19": {
-        "x": 0.1802,
-        "y": 0.5787
-      },
-      "n20": {
-        "x": 0.1126,
-        "y": 0.5011
-      },
-      "n21": {
-        "x": 0.3017,
-        "y": 0.6369
-      },
-      "n22": {
-        "x": 0.0937,
-        "y": 0.7189
-      },
-      "n23": {
-        "x": 0.2564,
-        "y": 0.8083
-      },
-      "n24": {
-        "x": 0.5755,
-        "y": 0.65
-      },
-      "n25": {
-        "x": 0.8377,
-        "y": 0.5238
-      },
-      "n26": {
-        "x": 0.3162,
-        "y": 0.4925
-      },
-      "n27": {
-        "x": 0.3735,
-        "y": 0.7174
-      },
-      "n28": {
-        "x": 0.5848,
-        "y": 0.7441
-      },
-      "n29": {
-        "x": 0.891,
-        "y": 0.7356
-      },
-      "n30": {
-        "x": 0.3449,
-        "y": 0.9343
-      },
-      "n31": {
-        "x": 0.8713,
-        "y": 0.8337
-      },
-      "n32": {
-        "x": 0.8222,
-        "y": 0.6636
-      },
-      "n33": {
-        "x": 0.6015,
-        "y": 0.8216
-      },
-      "n34": {
-        "x": 0.7042,
-        "y": 0.9462
-      },
-      "n35": {
-        "x": 0.5001,
-        "y": 0.0555
-      }
+      ]
     },
-    "layoutAvoidOverlap": true
-  }
+    {
+      "key": "ChatGPT",
+      "author": "",
+      "title": "general advice",
+      "year": "",
+      "citeKey": "ChatGPT",
+      "url": "https://chatgpt.com/share/6a678b48-a868-83eb-8cb2-8e44bd3c30c4",
+      "source": "web",
+      "rawBibtex": "",
+      "links": [
+        {
+          "url": "https://chatgpt.com/share/6a678b48-a868-83eb-8cb2-8e44bd3c30c4",
+          "source": "web",
+          "label": ""
+        }
+      ]
+    }
+  ]
 };

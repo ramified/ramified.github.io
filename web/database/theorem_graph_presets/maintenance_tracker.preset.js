@@ -3,8 +3,21 @@
 // { label: "Maintenance Tracker", key: "maintenance_tracker", file: "maintenance_tracker.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
-  "schemaVersion": 7,
+  "schemaVersion": 8,
   "title": "Maintenance Tracker",
+  "titleNode": {
+    "id": "__title__",
+    "type": "title",
+    "label": "Maintenance Tracker",
+    "details": [],
+    "setting": "",
+    "condition": "",
+    "result": "",
+    "proofSketch": "",
+    "citationKeys": [],
+    "color": "#8b5f2a",
+    "fillColor": "#fff7df"
+  },
   "nodes": [
     {
       "id": "n4",
@@ -17,8 +30,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fffdf8",
-      "x": 221.2,
-      "y": 45.7
+      "x": 192,
+      "y": 28.1
     },
     {
       "id": "n37",
@@ -39,8 +52,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 89.4,
-      "y": 208.4
+      "x": 70,
+      "y": 198.8
     },
     {
       "id": "n39",
@@ -61,8 +74,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 202.5,
-      "y": 290.8
+      "x": 182.5,
+      "y": 267.5
     },
     {
       "id": "n48",
@@ -79,7 +92,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "bugs",
           "label": "bugs",
           "type": "checkbox",
-          "text": "actual loop in sokoban, allow reset in the loop\nallow to press Z long time to speed up cancellation"
+          "text": "- [x] actual loop in sokoban, allow reset in the loop\n- [x] allow to press Z long time to speed up cancellation"
         }
       ],
       "setting": "",
@@ -89,8 +102,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 587.3,
-      "y": 383
+      "x": 484,
+      "y": 394.3
     },
     {
       "id": "n55",
@@ -117,8 +130,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 460.2,
-      "y": 283.6
+      "x": 372.5,
+      "y": 261.8
     },
     {
       "id": "n58",
@@ -132,8 +145,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 443,
-      "y": 32.2
+      "x": 411.2,
+      "y": 15.5
     },
     {
       "id": "n59",
@@ -154,8 +167,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 338.2,
-      "y": 152.3
+      "x": 302,
+      "y": 130.7
     },
     {
       "id": "n60",
@@ -166,7 +179,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "- [x] default type is misc\n- [x] other type can also type in Extra\n- [x] run layout will not push too the right too much and left side outside of the screen\n- [x] can choose run layout so that nodes don't coincide\n- [x] add citation cross-reference\n- [x] \\cite{diagram} in the edit should be only diagram, code will add \\cite{...} for a preparation\n- [ ] add node for the title, allow to add some extras\n- [ ] allow users to double click the node to expand to another graph. It will be like tab in Google Chrome, where the delete button is replaced by returning button."
+          "text": "- [x] default type is misc\n- [x] other type can also type in Extra\n- [x] run layout will not push too the right too much and left side outside of the screen\n- [x] can choose run layout so that nodes don't coincide\n- [x] add citation cross-reference\n- [x] \\cite{diagram} in the edit should be only diagram, code will add \\cite{...} for a preparation\n- [x] add node for the title, allow to add some extras\n- [x] allow users to double click the node to expand to another graph. It will be like tab in Google Chrome, where the delete button is replaced by returning button."
         },
         {
           "id": "bug",
@@ -180,10 +193,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 611.1,
-      "y": 65
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 551.4,
+      "y": 60.4
     },
     {
       "id": "n61",
@@ -195,10 +208,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 682.2,
-      "y": 229
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 695.4,
+      "y": 153.9
     },
     {
       "id": "n62",
@@ -225,8 +238,52 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 333.8,
-      "y": 384.6
+      "x": 282.2,
+      "y": 395.7
+    },
+    {
+      "id": "n64",
+      "type": "misc",
+      "label": "Sokoban",
+      "details": [
+        {
+          "id": "bugs",
+          "label": "display bugs",
+          "type": "checkbox",
+          "text": "The beamers should not get over the glued boundary in a half circle way, that is cut off by the gluing\nWhen user move the beamer the energy bridge and beamer are both flicking, which should be fixed. They should have the animation of movement. If user move the energy bridge instead, the energy bridge won't create the beamer during the movement."
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 692.6,
+      "y": 357
+    },
+    {
+      "id": "n65",
+      "type": "misc",
+      "label": "typo",
+      "details": [
+        {
+          "id": "goals",
+          "label": "goals",
+          "type": "checkbox",
+          "text": "title node can not add extra objects\nref edit should follow the same method as node edit; that is, there is no delete button, and user click the title of the row to modify/delete the term\nAdd a tiny padding in the main canvas on top and bottom, so that the node is not attaching the boundary"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 533.5,
+      "y": 262.9
     }
   ],
   "arrows": [
@@ -280,8 +337,100 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
+    },
+    {
+      "id": "a50",
+      "sourceId": "n64",
+      "targetId": "n48",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "hook",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
+      "color": "#5f574e"
+    },
+    {
+      "id": "a51",
+      "sourceId": "n65",
+      "targetId": "n60",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "hook",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
+      "color": "#5f574e"
     }
   ],
+  "view": {
+    "selectedId": "n65",
+    "layoutAvoidOverlap": true,
+    "layoutRunning": false,
+    "canvasRatioLocked": true,
+    "canvasAspectRatio": 1.8101,
+    "relativeNodePositions": {
+      "n4": {
+        "x": 0.2554,
+        "y": 0.0678
+      },
+      "n37": {
+        "x": 0.0931,
+        "y": 0.4791
+      },
+      "n39": {
+        "x": 0.2426,
+        "y": 0.6446
+      },
+      "n48": {
+        "x": 0.6436,
+        "y": 0.9502
+      },
+      "n55": {
+        "x": 0.4954,
+        "y": 0.6309
+      },
+      "n58": {
+        "x": 0.5469,
+        "y": 0.0373
+      },
+      "n59": {
+        "x": 0.4016,
+        "y": 0.3148
+      },
+      "n60": {
+        "x": 0.7332,
+        "y": 0.1455
+      },
+      "n61": {
+        "x": 0.9248,
+        "y": 0.3709
+      },
+      "n62": {
+        "x": 0.3752,
+        "y": 0.9534
+      },
+      "n64": {
+        "x": 0.921,
+        "y": 0.8603
+      },
+      "n65": {
+        "x": 0.7094,
+        "y": 0.6335
+      }
+    },
+    "selectedReferenceKeys": []
+  },
   "references": [
     {
       "key": "mo1",
@@ -317,55 +466,5 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
         }
       ]
     }
-  ],
-  "view": {
-    "selectedId": "n60",
-    "selectedReferenceKeys": [],
-    "layoutAvoidOverlap": true,
-    "layoutRunning": false,
-    "canvasRatioLocked": true,
-    "canvasAspectRatio": 1.8101,
-    "relativeNodePositions": {
-      "n4": {
-        "x": 0.2937,
-        "y": 0.1098
-      },
-      "n37": {
-        "x": 0.1187,
-        "y": 0.5009
-      },
-      "n39": {
-        "x": 0.2689,
-        "y": 0.699
-      },
-      "n48": {
-        "x": 0.78,
-        "y": 0.9206
-      },
-      "n55": {
-        "x": 0.6112,
-        "y": 0.6818
-      },
-      "n58": {
-        "x": 0.5883,
-        "y": 0.0775
-      },
-      "n59": {
-        "x": 0.4492,
-        "y": 0.3661
-      },
-      "n60": {
-        "x": 0.8116,
-        "y": 0.1562
-      },
-      "n61": {
-        "x": 0.906,
-        "y": 0.5506
-      },
-      "n62": {
-        "x": 0.4433,
-        "y": 0.9246
-      }
-    }
-  }
+  ]
 };

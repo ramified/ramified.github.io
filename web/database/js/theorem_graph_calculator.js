@@ -112,6 +112,7 @@
   const CANVAS_MIN_HEIGHT = 260;
   const CANVAS_MAX_HEIGHT = 1400;
   const CANVAS_DEFAULT_ASPECT_RATIO = 960 / 560;
+  const CANVAS_VERTICAL_NODE_PADDING = 8;
   const NODE_LABEL_MAX_WIDTH = 220;
   const NODE_LABEL_MAX_WIDTH_RATIO = 0.42;
   const NODE_LABEL_MIN_EDGE_WIDTH = 96;
@@ -2506,6 +2507,14 @@
         node.fixed = false;
         if (nodeOutsideCanvas(node)) {
           removeNodeById(node.id, `Removed ${node.label}.`);
+        } else {
+          const previousX = node.x;
+          const previousY = node.y;
+          clampNode(node);
+          if (node.x !== previousX || node.y !== previousY) {
+            markExportDirty();
+            renderCanvas();
+          }
         }
       }
     }
@@ -2735,12 +2744,12 @@
   }
 
   function addMiscDetailFromControls() {
-    const node = findNode(state.selectedNodeId);
+    let node = findEditorNode(state.selectedNodeId);
     if (!node) {
       setStatus('Choose a node before adding an extra field.');
       return;
     }
-    applyNodeDetailFromControls(node);
+    node = applyNodeDetailFromControls(node) || node;
     if (!Array.isArray(node.details)) node.details = [];
     const label = cleanDetailLabel(refs.nodeMiscDetailName ? refs.nodeMiscDetailName.value : '');
     if (!label) {
@@ -2769,12 +2778,12 @@
   }
 
   function removeMiscDetailFromControls(detailId) {
-    const node = findNode(state.selectedNodeId);
+    let node = findEditorNode(state.selectedNodeId);
     if (!node) {
       setStatus('Choose a node before removing an extra field.');
       return;
     }
-    applyNodeDetailFromControls(node);
+    node = applyNodeDetailFromControls(node) || node;
     const before = node.details.length;
     node.details = node.details.filter((detail) => detail.id !== detailId);
     if (node.details.length === before) return;
@@ -2858,7 +2867,7 @@
 
   function commitCurrentDetailBeforeSelectionChange(nextKind = '', nextId = '') {
     if (state.selectedNodeId && !(nextKind === 'node' && state.selectedNodeId === nextId)) {
-      const node = findNode(state.selectedNodeId);
+      const node = findEditorNode(state.selectedNodeId);
       if (node && refs.nodeEditor && !refs.nodeEditor.hidden) {
         applyNodeDetailFromControls(node);
       }
@@ -2904,7 +2913,7 @@
 
   function deleteSelected() {
     if (state.selectedNodeId) {
-      const node = findNode(state.selectedNodeId);
+      const node = findEditorNode(state.selectedNodeId);
       if (isTitleNode(node)) {
         setStatus('The title node cannot be deleted.');
         return;
@@ -3130,13 +3139,15 @@
   }
 
   function layoutBounds() {
+    const top = CANVAS_VERTICAL_NODE_PADDING;
+    const bottom = Math.max(top, state.canvasHeight - CANVAS_VERTICAL_NODE_PADDING);
     return {
       left: 0,
-      top: 0,
+      top,
       right: state.canvasWidth,
-      bottom: state.canvasHeight,
+      bottom,
       width: state.canvasWidth,
-      height: state.canvasHeight
+      height: Math.max(0, bottom - top)
     };
   }
 
@@ -3320,7 +3331,7 @@
   }
 
   function syncEditor() {
-    const node = findNode(state.selectedNodeId);
+    const node = findEditorNode(state.selectedNodeId);
     const arrow = findArrow(state.selectedArrowId);
     const disabled = !node;
     const isTitle = isTitleNode(node);
@@ -3773,7 +3784,7 @@
   }
 
   function syncLatexDetailFields() {
-    const node = findNode(state.selectedNodeId);
+    const node = findEditorNode(state.selectedNodeId);
     NODE_DETAIL_LATEX_FIELDS.forEach(({ key, inputRef, previewRef }) => {
       const input = refs[inputRef];
       const preview = refs[previewRef];
@@ -4013,7 +4024,7 @@
   }
 
   function applyDetailUpdate({ manual = true } = {}) {
-    const node = findNode(state.selectedNodeId);
+    const node = findEditorNode(state.selectedNodeId);
     const arrow = findArrow(state.selectedArrowId);
     if (node) {
       applyNodeDetailFromControls(node);
@@ -4059,6 +4070,8 @@
   }
 
   function applyNodeDetailFromControls(node) {
+    const graph = isTitleNode(node) ? currentGraph() : null;
+    if (graph) node = graph.titleNode;
     const previousType = node.type;
     const isTitle = isTitleNode(node);
     const type = isTitle
@@ -4075,7 +4088,7 @@
     node.label = cleanString(refs.nodeLabel ? refs.nodeLabel.value : node.label) || (isTitle ? DEFAULT_GRAPH_TITLE : node.id);
     if (isTitle) {
       node.label = cleanGraphTitle(node.label) || DEFAULT_GRAPH_TITLE;
-      currentGraph().title = node.label;
+      graph.title = node.label;
       if (refs.graphTitle && refs.graphTitle.value !== node.label) refs.graphTitle.value = node.label;
       if (type === TITLE_NODE_TYPE) {
         node.setting = '';
@@ -4111,9 +4124,11 @@
     node.fillColor = normalizeNodeFillColor(refs.nodeFillColor ? refs.nodeFillColor.value : node.fillColor, (NODE_TYPES[type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).fill);
     if (isTitle) {
       syncActiveOwnerFromTitleNode();
+      return activeTitleNode();
     } else if (node.childGraph) {
       syncChildGraphTitleFromSourceNode(node);
     }
+    return node;
   }
 
   function collectMiscDetailsFromControls(fallback = []) {
@@ -4170,7 +4185,7 @@
       return;
     }
     if (baseline.kind === 'node') {
-      const node = findNode(baseline.id);
+      const node = findEditorNode(baseline.id);
       if (!node) {
         clearSelection();
         setStatus('Selected node is no longer available.');
@@ -4202,7 +4217,7 @@
   }
 
   function resetDetailEditBaseline() {
-    const node = findNode(state.selectedNodeId);
+    const node = findEditorNode(state.selectedNodeId);
     if (node) {
       state.detailEditBaseline = {
         kind: 'node',
@@ -4258,6 +4273,8 @@
   }
 
   function restoreNodeDetailSnapshot(node, values) {
+    const graph = isTitleNode(node) ? currentGraph() : null;
+    if (graph) node = graph.titleNode;
     const type = isTitleNode(node) ? normalizeTitleNodeType(values.type) : normalizeType(values.type);
     Object.assign(node, {
       type,
@@ -4273,11 +4290,13 @@
     });
     if (isTitleNode(node)) {
       node.label = cleanGraphTitle(node.label) || DEFAULT_GRAPH_TITLE;
-      currentGraph().title = node.label;
+      graph.title = node.label;
       syncActiveOwnerFromTitleNode();
+      return activeTitleNode();
     } else if (node.childGraph) {
       syncChildGraphTitleFromSourceNode(node);
     }
+    return node;
   }
 
   function restoreArrowDetailSnapshot(arrow, values) {
@@ -4569,14 +4588,42 @@
     row.className = 'theorem-field-row';
     row.dataset.referenceDetailId = cleanDetailId(detail.id || detail.label) || 'detail';
 
-    const label = document.createElement('input');
-    label.className = 'theorem-input theorem-misc-detail-name-input';
-    label.type = 'text';
-    label.maxLength = 48;
-    label.spellcheck = true;
-    label.autocomplete = 'off';
-    label.value = cleanDetailLabel(detail.label) || 'extra';
-    label.dataset.referenceDetailRole = 'label';
+    const labelSlot = document.createElement('div');
+    labelSlot.className = 'theorem-misc-detail-label-slot';
+
+    const label = document.createElement('span');
+    label.className = 'input-label theorem-misc-detail-name';
+    label.tabIndex = 0;
+    label.setAttribute('role', 'button');
+    label.textContent = cleanDetailLabel(detail.label) || 'extra';
+    label.title = 'Rename extra';
+    label.addEventListener('click', () => showReferenceDetailLabelEditor(row.dataset.referenceDetailId, label));
+    label.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      showReferenceDetailLabelEditor(row.dataset.referenceDetailId, label);
+    });
+
+    const labelInput = document.createElement('input');
+    labelInput.className = 'theorem-input theorem-misc-detail-name-input';
+    labelInput.type = 'text';
+    labelInput.maxLength = 48;
+    labelInput.spellcheck = true;
+    labelInput.autocomplete = 'off';
+    labelInput.value = label.textContent;
+    labelInput.dataset.referenceDetailRole = 'label';
+    labelInput.hidden = true;
+    labelInput.addEventListener('blur', () => commitReferenceDetailLabelEdit(row.dataset.referenceDetailId, labelInput));
+    labelInput.addEventListener('change', () => commitReferenceDetailLabelEdit(row.dataset.referenceDetailId, labelInput));
+    labelInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        labelInput.blur();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelReferenceDetailLabelEdit(row.dataset.referenceDetailId, labelInput);
+      }
+    });
 
     const body = document.createElement('div');
     body.className = 'theorem-misc-detail-body';
@@ -4602,18 +4649,82 @@
     textarea.dataset.referenceDetailRole = 'text';
     textarea.addEventListener('input', () => autoResizeTextarea(textarea));
 
-    const remove = document.createElement('button');
-    remove.className = 'btn btn-ghost theorem-small-button';
-    remove.type = 'button';
-    remove.textContent = 'delete';
-    remove.addEventListener('click', () => {
-      row.remove();
-      setReferenceMessage('Removed reference extra field from the edit form.');
-    });
-
-    body.append(type, textarea, remove);
-    row.append(label, body);
+    labelSlot.append(label, labelInput);
+    body.append(type, textarea);
+    row.append(labelSlot, body);
     return row;
+  }
+
+  function currentReferenceEditDetailRow(detailId, sourceElement = null) {
+    if (!refs.referenceEditDetailList) return null;
+    const row = sourceElement && typeof sourceElement.closest === 'function'
+      ? sourceElement.closest('[data-reference-detail-id]')
+      : refs.referenceEditDetailList.querySelector(`[data-reference-detail-id="${cssEscape(detailId)}"]`);
+    if (!row || !refs.referenceEditDetailList.contains(row)) return null;
+    if ((row.dataset.referenceDetailId || '') !== detailId) return null;
+    return row;
+  }
+
+  function showReferenceDetailLabelEditor(detailId, sourceElement = null) {
+    const row = currentReferenceEditDetailRow(detailId, sourceElement);
+    if (!row) return;
+    const label = row.querySelector('.theorem-misc-detail-name');
+    const input = row.querySelector('[data-reference-detail-role="label"]');
+    if (!label || !input) return;
+    input.dataset.originalLabel = cleanDetailLabel(input.value || label.textContent);
+    row.classList.add('is-editing-label');
+    label.hidden = true;
+    label.style.display = 'none';
+    label.setAttribute('aria-hidden', 'true');
+    input.hidden = false;
+    input.focus();
+    if (typeof input.select === 'function') input.select();
+  }
+
+  function commitReferenceDetailLabelEdit(detailId, sourceElement = null) {
+    const row = currentReferenceEditDetailRow(detailId, sourceElement);
+    if (!row) return;
+    const label = row.querySelector('.theorem-misc-detail-name');
+    const input = row.querySelector('[data-reference-detail-role="label"]');
+    if (!label || !input || input.hidden) return;
+    const previous = cleanDetailLabel(input.dataset.originalLabel || label.textContent) || 'extra';
+    const next = cleanDetailLabel(input.value);
+    if (!next) {
+      const remove = window.confirm(`Remove extra field "${previous}"?`);
+      if (remove) {
+        row.remove();
+        setReferenceMessage('Removed reference extra field from the edit form.');
+        return;
+      }
+      input.value = previous;
+      hideReferenceDetailLabelEditor(label, input, previous);
+      return;
+    }
+    input.value = next;
+    hideReferenceDetailLabelEditor(label, input, next);
+    if (next !== previous) setReferenceMessage(`Renamed reference extra field to ${next}.`);
+  }
+
+  function cancelReferenceDetailLabelEdit(detailId, sourceElement = null) {
+    const row = currentReferenceEditDetailRow(detailId, sourceElement);
+    if (!row) return;
+    const label = row.querySelector('.theorem-misc-detail-name');
+    const input = row.querySelector('[data-reference-detail-role="label"]');
+    if (!label || !input) return;
+    const previous = cleanDetailLabel(input.dataset.originalLabel || label.textContent) || 'extra';
+    input.value = previous;
+    hideReferenceDetailLabelEditor(label, input, previous);
+  }
+
+  function hideReferenceDetailLabelEditor(label, input, value) {
+    const row = input.closest('[data-reference-detail-id]');
+    if (row) row.classList.remove('is-editing-label');
+    label.textContent = value;
+    label.style.display = '';
+    label.removeAttribute('aria-hidden');
+    label.hidden = false;
+    input.hidden = true;
+    delete input.dataset.originalLabel;
   }
 
   function collectReferenceEditDetails() {
@@ -5698,7 +5809,7 @@
   }
 
   function syncControls() {
-    const selectedNode = findNode(state.selectedNodeId);
+    const selectedNode = findEditorNode(state.selectedNodeId);
     const selectedArrow = findArrow(state.selectedArrowId);
     if (refs.graphCountBadge) {
       refs.graphCountBadge.textContent = `${state.nodes.length} node${state.nodes.length === 1 ? '' : 's'}, ${state.arrows.length} arrow${state.arrows.length === 1 ? '' : 's'}`;
@@ -5760,6 +5871,11 @@
     return state.nodes.find((node) => node.id === id) || null;
   }
 
+  function findEditorNode(id) {
+    if (id === TITLE_NODE_ID && state.selectedNodeId === TITLE_NODE_ID) return activeTitleNode();
+    return findNode(id);
+  }
+
   function findArrow(id) {
     return state.arrows.find((arrow) => arrow.id === id) || null;
   }
@@ -5769,8 +5885,9 @@
   }
 
   function clampNode(node) {
+    const bounds = layoutBounds();
     node.x = clamp(node.x, 46, Math.max(46, state.canvasWidth - 46));
-    node.y = clamp(node.y, 46, Math.max(46, state.canvasHeight - 46));
+    node.y = clamp(node.y, bounds.top + 46, Math.max(bounds.top + 46, bounds.bottom - 46));
   }
 
   function normalizeType(type) {
