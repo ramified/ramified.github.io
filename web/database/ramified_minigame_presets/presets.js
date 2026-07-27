@@ -489,6 +489,24 @@
       "key": "orbox_b_glued",
       "file": "orbox_b_glued.preset.js"
     },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "loop",
+      "label": "loop",
+      "key": "loop",
+      "file": "loop.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "curling",
+      "label": "curling",
+      "key": "curling",
+      "file": "curling.preset.js"
+    },
     ]
   };
 });

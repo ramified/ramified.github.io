@@ -64,7 +64,7 @@
   const MAX_COMPLETED_GLUINGS = 3;
   const PUSH_CHAIN_LIMIT = 50;
   const EVENT_GUARD = 900;
-  const UNDO_LIMIT = 100;
+  const UNDO_LIMIT = Number.POSITIVE_INFINITY;
   const SWIPE_MIN_DISTANCE = 10;
   const GAME_MODES = {
     NUMBER_2048: '2048',
@@ -288,6 +288,7 @@
   let placementFeedbackFrameId = null;
   let eventQueue = [];
   let eventIndex = 0;
+  let sokobanMoveSession = null;
   let stepPaused = false;
   let animationFrameId = null;
   let debugMode = false;
@@ -391,6 +392,7 @@
     refs.moveButtons = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-move-dir]')) : [];
     refs.moveGroups = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-move-lattice]')) : [];
     refs.moveRow = document.getElementById('move-row');
+    refs.modeDirectionalControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="directional"]')) : [];
     refs.mode2048Controls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="2048"]')) : [];
     refs.modeGomokuControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="gomoku"]')) : [];
     refs.modeConnectFourControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="connect-four"]')) : [];
@@ -546,6 +548,7 @@
     currentAnimation = null;
     eventQueue = [];
     eventIndex = 0;
+    sokobanMoveSession = null;
     stepPaused = false;
     clearNoMoveTrial();
     eventQueueChangedBoard = false;
@@ -1205,6 +1208,7 @@
     currentAnimation = null;
     eventQueue = [];
     eventIndex = 0;
+    sokobanMoveSession = null;
     stepPaused = false;
     clearNoMoveTrial();
     eventQueueChangedBoard = false;
@@ -1545,7 +1549,7 @@
     if (key === 'KeyZ') {
       if (!undoStack.length) return false;
       if (event.preventDefault) event.preventDefault();
-      if (!event.repeat) undoPreviousStep();
+      undoPreviousStep();
       return true;
     }
     if (key === 'KeyY') {
@@ -1876,6 +1880,10 @@
   }
 
   function playNextStep() {
+    if (sokobanMoveSession && (!eventQueue.length || eventIndex >= eventQueue.length) && !queueNextSokobanSessionEvent()) {
+      finishEventQueue();
+      return;
+    }
     if (!eventQueue.length || currentAnimation) return;
     pushUndoSnapshot(`event ${Math.min(eventIndex + 1, eventQueue.length)}/${eventQueue.length}`);
     stepPaused = false;
@@ -1883,7 +1891,17 @@
   }
 
   function playNextEvent() {
-    if (!eventQueue.length || eventIndex >= eventQueue.length) {
+    if (sokobanMoveSession && (!eventQueue.length || eventIndex >= eventQueue.length)) {
+      if (!queueNextSokobanSessionEvent()) {
+        finishEventQueue();
+        return;
+      }
+    }
+    if (!eventQueue.length) {
+      finishEventQueue();
+      return;
+    }
+    if (eventIndex >= eventQueue.length) {
       finishEventQueue();
       return;
     }
@@ -2240,7 +2258,27 @@
       return;
     }
     if (event.kind !== 'spawn') applyEvent(game, event);
+    if (event.kind === 'sokobanStep') applySokobanSessionStep(sokobanMoveSession, event);
     currentAnimation = null;
+    if (event.kind === 'sokobanStep') {
+      const hasNextSokobanStep = queueNextSokobanSessionEvent();
+      if (!hasNextSokobanStep) {
+        render();
+        finishEventQueue();
+        return;
+      }
+      if (isStepMode()) {
+        stepPaused = true;
+        game.phase = 'paused';
+        syncStatus(`Sokoban move ${game.moves}: paused`, `step ${sokobanMoveSession.stepIndex + 1}`, 'step');
+        syncControls();
+        render();
+        return;
+      }
+      render();
+      playNextEvent();
+      return;
+    }
     if (isStepMode()) {
       stepPaused = eventIndex < eventQueue.length;
       if (stepPaused) {
@@ -2258,6 +2296,7 @@
   function finishEventQueue() {
     eventQueue = [];
     eventIndex = 0;
+    sokobanMoveSession = null;
     stepPaused = false;
     currentAnimation = null;
     const changedBoard = eventQueueChangedBoard;
@@ -2265,6 +2304,18 @@
     if (pendingBonusGameOver) {
       pendingBonusGameOver = false;
       finishGameAs('bonus');
+    } else if (changedBoard && isSokobanGame(game)) {
+      if (sokobanSolved(game)) {
+        game.phase = 'gameover';
+        game.winner = 'solved';
+        game.ending = 'sokoban-win';
+        syncStatus('Sokoban solved', sokobanTurnInfo(game), 'over');
+      } else {
+        game.phase = 'ready';
+        game.winner = '';
+        game.ending = '';
+        syncStatus(`Sokoban move ${game.moves || 0}`, sokobanTurnInfo(game), 'ready');
+      }
     } else if (changedBoard && isGameOver(game)) {
       finishGameAs('standard');
     } else {
@@ -2283,6 +2334,7 @@
     clearPlacementFeedbacks();
     eventQueue = [];
     eventIndex = 0;
+    sokobanMoveSession = null;
     stepPaused = false;
     eventQueueChangedBoard = false;
     pendingBonusGameOver = false;
@@ -2306,6 +2358,7 @@
     if (isGoGame(game)) return 'export or import Go status';
     if (isReversiGame(game)) return 'export or import Reversi status';
     if (isChineseCheckersGame(game)) return 'export or import Chinese Checkers status';
+    if (isSokobanGame(game)) return 'step through Sokoban movement and inspect directions';
     return 'click a tile to assign the tile value';
   }
 
@@ -2428,6 +2481,7 @@
       syncStatus('debug waits', 'finish the active animation or undo first', 'debug');
       return;
     }
+    if (!is2048Game(game)) return;
     const target = tileFromCanvasEvent(event);
     if (!target) return;
     if (game.removed.has(target.index)) {
@@ -2931,13 +2985,14 @@
       game: cloneGameState(game),
       eventQueue: clonePlain(eventQueue),
       eventIndex,
+      sokobanMoveSession: clonePlain(sokobanMoveSession),
       stepPaused,
       status: statusSnapshot()
     };
   }
 
   function trimHistoryStack(stack) {
-    if (stack.length > UNDO_LIMIT) stack.splice(0, stack.length - UNDO_LIMIT);
+    if (Number.isFinite(UNDO_LIMIT) && stack.length > UNDO_LIMIT) stack.splice(0, stack.length - UNDO_LIMIT);
   }
 
   function pushUndoSnapshot(label) {
@@ -2970,10 +3025,11 @@
     game = cloneGameState(snapshot.game);
     eventQueue = clonePlain(snapshot.eventQueue || []);
     eventIndex = Math.max(0, Math.min(Number(snapshot.eventIndex) || 0, eventQueue.length));
+    sokobanMoveSession = snapshot.sokobanMoveSession ? clonePlain(snapshot.sokobanMoveSession) : null;
     stepPaused = !!snapshot.stepPaused && eventQueue.length > 0 && eventIndex < eventQueue.length;
     currentAnimation = null;
     clearNoMoveTrial();
-    eventQueueChangedBoard = !!eventQueue.length;
+    eventQueueChangedBoard = !!(eventQueue.length || sokobanMoveSession);
     if (refs.select && game.preset && game.preset.id) refs.select.value = game.preset.id;
     if (refs.gameMode) refs.gameMode.value = gameModeValue(game);
     syncConnectFourFallInputFromGame();
@@ -3263,6 +3319,7 @@
       if (isGoGame(game) && game.scoringReview) activateGoScoringReviewControls();
       eventQueue = imported.eventQueue;
       eventIndex = imported.eventIndex;
+      sokobanMoveSession = null;
       stepPaused = imported.stepPaused;
       currentAnimation = null;
       clearNoMoveTrial();
@@ -4680,6 +4737,7 @@
     } else {
       if (isSokobanGame(game)) {
         drawSokobanGame(ctx, geometry, game);
+        drawDebugDirectionIndicators(ctx, geometry);
       } else {
         drawNumberBoxes(ctx, geometry, game ? game.boxes : []);
         drawAnimationOverlays(ctx, geometry);
@@ -4877,7 +4935,7 @@
 
   function activeSokobanAnimationEvent() {
     const event = currentAnimation && currentAnimation.event;
-    return event && (event.kind === 'sokobanMove' || event.kind === 'sokobanBounce') ? event : null;
+    return event && (event.kind === 'sokobanMove' || event.kind === 'sokobanStep' || event.kind === 'sokobanBounce') ? event : null;
   }
 
   function sokobanAnimationStaticState(state, event) {
@@ -4901,10 +4959,14 @@
     if (!event) return hidden;
     (event.players || []).forEach((item) => hidden.players.add(item.id));
     (event.boxes || []).forEach((item) => hidden.boxes.add(item.id));
-    (event.bridges || []).forEach((item) => hidden.bridges.add(item.to));
+    (event.bridges || []).forEach((item) => hidden.bridges.add(event.kind === 'sokobanStep' ? item.from : item.to));
     if (event.kind === 'sokobanMove') {
       (event.beams || []).forEach((item) => {
         (item.toEndpoints || []).forEach((index) => hidden.bridges.add(index));
+      });
+    } else if (event.kind === 'sokobanStep') {
+      (event.beams || []).forEach((item) => {
+        (item.fromEndpoints || []).forEach((index) => hidden.bridges.add(index));
       });
     }
     return hidden;
@@ -5233,7 +5295,7 @@
 
   function drawSokobanAnimationOverlays(ctx, geom, state, event, objectScale) {
     if (!event || !currentAnimation) return;
-    if (event.kind === 'sokobanMove') {
+    if (event.kind === 'sokobanMove' || event.kind === 'sokobanStep') {
       const progress = easeInOut(currentAnimation.progress || 0);
       (event.beams || []).forEach((item) => drawSokobanAnimatedBeam(ctx, geom, state, item, progress));
       (event.bridges || []).forEach((item) => drawSokobanAnimatedPiece(ctx, geom, item, progress, objectScale));
@@ -6448,6 +6510,10 @@
       drawDebugTileTarget(ctx, geom, event.index, debugIndicatorColor('explode'));
     } else if (event.kind === 'clearNumbers') {
       (event.indices || []).forEach((index) => drawDebugTileTarget(ctx, geom, index, debugIndicatorColor('clear')));
+    } else if (event.kind === 'sokobanStep') {
+      drawDebugMoveArrows(ctx, geom, event.moves || sokobanDebugMovesForStepEvent(event), 'move');
+    } else if (event.kind === 'sokobanBounce') {
+      drawDebugMoveArrows(ctx, geom, sokobanDebugMovesForBounceEvent(event), 'bounce');
     }
     ctx.restore();
   }
@@ -6465,6 +6531,41 @@
   function drawDebugExplosionArrows(ctx, geom, event) {
     drawDebugMoveArrows(ctx, geom, event.moves || [], 'explode');
     drawDebugTileTarget(ctx, geom, event.center, debugIndicatorColor('explode'));
+  }
+
+  function sokobanDebugMovesForStepEvent(event) {
+    const moves = [];
+    (event.players || []).forEach((item) => addSokobanDebugMove(moves, item.transition || firstSokobanItemTransition(item)));
+    (event.boxes || []).forEach((item) => addSokobanDebugMove(moves, item.transition || firstSokobanItemTransition(item)));
+    (event.bridges || []).forEach((item) => addSokobanDebugMove(moves, item.transition || firstSokobanItemTransition(item)));
+    (event.beams || []).forEach((item) => {
+      (item.transitions || []).forEach((transition) => addSokobanDebugMove(moves, transition, { alpha: 0.7 }));
+    });
+    return moves;
+  }
+
+  function sokobanDebugMovesForBounceEvent(event) {
+    const moves = [];
+    (event.players || []).forEach((item) => addSokobanDebugMove(moves, item.transition || firstSokobanItemTransition(item)));
+    (event.boxes || []).forEach((item) => addSokobanDebugMove(moves, item.transition || firstSokobanItemTransition(item)));
+    (event.bridges || []).forEach((item) => addSokobanDebugMove(moves, item.transition || firstSokobanItemTransition(item)));
+    return moves;
+  }
+
+  function firstSokobanItemTransition(item) {
+    return Array.isArray(item && item.steps) ? item.steps[0] : null;
+  }
+
+  function addSokobanDebugMove(moves, transition, extra = {}) {
+    if (!transition || !Number.isInteger(transition.from) || !Number.isInteger(transition.to)) return;
+    moves.push({
+      ...extra,
+      from: transition.from,
+      to: transition.to,
+      dir: transition.dir,
+      glued: !!transition.glued,
+      edge: transition.edge || null
+    });
   }
 
   function drawDebugMoveArrow(ctx, geom, move, status) {
@@ -7200,154 +7301,678 @@
   }
 
   function moveSokobanPlayers(sourceState, dir) {
-    if (!isSokobanGame(sourceState)) {
-      return { changed: false, state: sourceState, message: 'not a Sokoban game' };
-    }
-    if (sourceState.phase === 'setup') {
-      return { changed: false, state: sourceState, message: 'begin the game first' };
-    }
-    if (sourceState.phase === 'gameover') {
-      return { changed: false, state: sourceState, message: 'game is already over' };
-    }
-    const rawDirection = Number(dir);
-    const direction = Number.isInteger(rawDirection) ? modulo(rawDirection, latticeForPreset(sourceState.preset).sides) : rawDirection;
-    if (!Number.isInteger(direction) || !directionsForPreset(sourceState.preset).includes(direction)) {
-      return { changed: false, state: sourceState, message: 'invalid direction' };
-    }
-    const setupIssue = sokobanSetupIssue(sourceState);
-    if (setupIssue) return { changed: false, state: sourceState, message: setupIssue };
-
-    const context = sokobanMovementContext(sourceState);
-    if (context.boxesOverlap) return { changed: false, state: sourceState, message: 'boxes overlap' };
-    if (context.playersOverlap) return { changed: false, state: sourceState, message: 'players overlap' };
-    const playerPlans = [];
-    const boxPlans = [];
-    const bridgePlans = [];
-    const beamPlans = [];
-    const pushedBoxIds = new Set();
-    const pushedBridgeIndices = new Set();
-    const pushedBeamIds = new Set();
-
-    for (const player of sourceState.players || []) {
-      const plan = sokobanPlanPlayerMove(sourceState, context, player, direction, pushedBoxIds, pushedBridgeIndices, pushedBeamIds);
-      if (!plan.changed && plan.message) return { changed: false, state: sourceState, message: plan.message };
-      playerPlans.push(plan.player);
-      boxPlans.push(...plan.boxes);
-      bridgePlans.push(...plan.bridges);
-      beamPlans.push(...plan.beams);
-    }
-
-    const playerPathIssue = sokobanValidatePlayerPathBlockers(sourceState, context, playerPlans, boxPlans, bridgePlans, beamPlans);
-    if (playerPathIssue) return { changed: false, state: sourceState, message: playerPathIssue };
-
-    const finalBridgeResult = sokobanFinalEnergyBridges(sourceState, bridgePlans, beamPlans);
-    if (!finalBridgeResult.ok) return { changed: false, state: sourceState, message: finalBridgeResult.message };
-    const finalEnergyBridges = finalBridgeResult.energyBridges;
-
-    const finalStateLike = cloneGameState(sourceState);
-    const playerPlanById = new Map(playerPlans.map((plan) => [plan.id, plan]));
-    const boxPlanById = new Map(boxPlans.map((plan) => [plan.id, plan]));
-    finalStateLike.players.forEach((player) => {
-      const plan = playerPlanById.get(player.id);
-      if (plan) player.index = plan.to;
-    });
-    finalStateLike.boxes.forEach((box) => {
-      const plan = boxPlanById.get(box.id);
-      if (plan) box.index = plan.to;
-    });
-    finalStateLike.energyBridges = finalEnergyBridges;
-    const finalContext = sokobanMovementContext(finalStateLike);
-
-    const finalPlayers = new Map();
-    for (const player of finalStateLike.players || []) {
-      if (finalPlayers.has(player.index)) {
-        return { changed: false, state: sourceState, message: 'players collide' };
-      }
-      finalPlayers.set(player.index, player.id);
-    }
-    const finalBoxIndices = new Map();
-    for (const box of finalStateLike.boxes || []) {
-      if (finalBoxIndices.has(box.index)) {
-        return { changed: false, state: sourceState, message: 'boxes collide' };
-      }
-      finalBoxIndices.set(box.index, box.id);
-    }
-    for (const finalPlayerIndex of finalPlayers.keys()) {
-      if (finalBoxIndices.has(finalPlayerIndex)) {
-        return { changed: false, state: sourceState, message: 'player and box collide' };
-      }
-      if (finalEnergyBridges.has(finalPlayerIndex)) {
-        return { changed: false, state: sourceState, message: 'player and energy bridge collide' };
-      }
-      if (sokobanBeamFootprintAt(finalContext, finalPlayerIndex).length) {
-        return { changed: false, state: sourceState, message: 'player and energy beam collide' };
-      }
-    }
-    for (const finalBoxIndex of finalBoxIndices.keys()) {
-      if (finalEnergyBridges.has(finalBoxIndex)) {
-        return { changed: false, state: sourceState, message: 'box and energy bridge collide' };
-      }
-      if (sokobanBeamFootprintAt(finalContext, finalBoxIndex).length) {
-        return { changed: false, state: sourceState, message: 'box and energy beam collide' };
-      }
-    }
-
-    const changed = playerPlans.some((plan) => plan.from !== plan.to)
-      || boxPlans.some((plan) => plan.from !== plan.to)
-      || bridgePlans.some((plan) => plan.from !== plan.to)
-      || beamPlans.some((plan) => sokobanNumberListKey(plan.fromEndpoints) !== sokobanNumberListKey(plan.toEndpoints));
-    if (!changed) return { changed: false, state: sourceState, message: 'no move' };
-
+    const start = createSokobanMoveSession(sourceState, dir);
+    if (!start.ok) return { changed: false, state: sourceState, message: start.message };
     const state = cloneGameState(sourceState);
-    state.players.forEach((player) => {
-      const plan = playerPlanById.get(player.id);
-      if (plan) player.index = plan.to;
-    });
-    state.boxes.forEach((box) => {
-      const plan = boxPlanById.get(box.id);
-      if (plan) box.index = plan.to;
-    });
-    state.energyBridges = finalEnergyBridges;
-    state.moves = Math.max(0, Number(sourceState.moves) || Number(sourceState.round) || 0) + 1;
-    const pushCount = boxPlans.length + bridgePlans.length + beamPlans.length;
-    state.pushes = Math.max(0, Number(sourceState.pushes) || 0) + pushCount;
-    state.round = state.moves;
-    state.resultDismissed = false;
-    state.debugMessage = '';
-    if (sokobanSolved(state)) {
-      state.phase = 'gameover';
-      state.winner = 'solved';
-      state.ending = 'sokoban-win';
-    } else {
-      state.phase = 'ready';
-      state.winner = '';
-      state.ending = '';
+    const session = start.session;
+    const events = [];
+    let changed = false;
+    let message = '';
+    for (let guard = 0; guard < EVENT_GUARD; guard += 1) {
+      const step = nextSokobanSessionStep(state, session);
+      if (!step.event) {
+        message = step.message || message;
+        break;
+      }
+      if (!changed) initializeSokobanMoveCounters(state, sourceState);
+      events.push(step.event);
+      applySokobanStepEvent(state, step.event);
+      applySokobanSessionStep(session, step.event);
+      changed = true;
+      if (!session.active.length) break;
     }
-    return { changed: true, state, players: playerPlans, boxes: boxPlans, bridges: bridgePlans, beams: beamPlans, pushes: pushCount };
+    if (!changed) return { changed: false, state: sourceState, message: message || 'no move' };
+    const unfinished = session.active.length > 0;
+    finishSokobanMovedState(state, unfinished);
+    const result = {
+      changed: true,
+      state,
+      events,
+      pushes: events.reduce((sum, event) => sum + Math.max(0, Number(event.pushes) || 0), 0),
+      ...sokobanPlansFromStepEvents(events)
+    };
+    if (unfinished) result.unfinished = true;
+    return result;
   }
 
   function playSokobanMove(dir) {
-    const result = moveSokobanPlayers(game, dir);
-    if (!result.changed) {
-      game.debugMessage = result.message || 'move rejected';
-      syncStatus('Sokoban blocked', result.message || 'move rejected', phaseBadge(game.phase));
-      startSokobanBounceAnimation(game, dir, result);
+    const start = createSokobanMoveSession(game, dir);
+    if (!start.ok) {
+      game.debugMessage = start.message || 'move rejected';
+      syncStatus('Sokoban blocked', start.message || 'move rejected', phaseBadge(game.phase));
+      startSokobanBounceAnimation(game, dir, { message: start.message });
+      if (!currentAnimation) render();
+      syncControls();
+      return;
+    }
+    sokobanMoveSession = start.session;
+    const firstStep = nextSokobanSessionStep(game, sokobanMoveSession);
+    if (!firstStep.event) {
+      const message = firstStep.message || 'move rejected';
+      sokobanMoveSession = null;
+      game.debugMessage = message;
+      syncStatus('Sokoban blocked', message, phaseBadge(game.phase));
+      startSokobanBounceAnimation(game, dir, { message });
       if (!currentAnimation) render();
       syncControls();
       return;
     }
     pushUndoSnapshot(`Sokoban move ${game.moves + 1}: ${dirLabel(dir, game.preset)}`);
-    game = result.state;
     clearNoMoveTrial();
-    startSokobanMoveAnimation(result, dir);
-    if (game.phase === 'gameover') {
-      syncStatus('Sokoban solved', sokobanTurnInfo(game), 'over');
-    } else {
-      syncStatus(`Sokoban move ${game.moves}`, sokobanTurnInfo(game), 'ready');
-    }
-    if (!currentAnimation) render();
+    initializeSokobanMoveCounters(game, game);
+    eventQueue = [firstStep.event];
+    eventIndex = 0;
+    eventQueueChangedBoard = true;
+    const step = isStepMode();
+    stepPaused = step;
+    game.phase = stepPaused ? 'paused' : 'animating';
+    syncStatus(`Sokoban move ${game.moves}`, `step ${sokobanMoveSession.stepIndex + 1}`, stepPaused ? 'step' : 'moving');
     syncControls();
     refreshDebugExportIfNeeded();
+    if (stepPaused) render();
+    else playNextEvent();
+  }
+
+  function createSokobanMoveSession(sourceState, dir) {
+    if (!isSokobanGame(sourceState)) return { ok: false, message: 'not a Sokoban game' };
+    if (sourceState.phase === 'setup') return { ok: false, message: 'begin the game first' };
+    if (sourceState.phase === 'gameover') return { ok: false, message: 'game is already over' };
+    const direction = normalizeSokobanMoveDirection(sourceState, dir);
+    if (!Number.isInteger(direction)) return { ok: false, message: 'invalid direction' };
+    const setupIssue = sokobanSetupIssue(sourceState);
+    if (setupIssue) return { ok: false, message: setupIssue };
+    const context = sokobanMovementContext(sourceState);
+    if (context.boxesOverlap) return { ok: false, message: 'boxes overlap' };
+    if (context.playersOverlap) return { ok: false, message: 'players overlap' };
+    return {
+      ok: true,
+      session: {
+        dir: direction,
+        stepIndex: 0,
+        lastBlockedMessage: '',
+        active: (sourceState.players || []).map((player) => ({
+          kind: 'player',
+          id: player.id,
+          index: player.index,
+          dir: direction,
+          canPush: true
+        }))
+      }
+    };
+  }
+
+  function normalizeSokobanMoveDirection(state, dir) {
+    const rawDirection = Number(dir);
+    const direction = Number.isInteger(rawDirection) ? modulo(rawDirection, latticeForPreset(state.preset).sides) : rawDirection;
+    return Number.isInteger(direction) && directionsForPreset(state.preset).includes(direction) ? direction : null;
+  }
+
+  function initializeSokobanMoveCounters(targetState, sourceState) {
+    targetState.moves = Math.max(0, Number(sourceState.moves) || Number(sourceState.round) || 0) + 1;
+    targetState.round = targetState.moves;
+    targetState.resultDismissed = false;
+    targetState.debugMessage = '';
+    targetState.winner = '';
+    targetState.ending = '';
+  }
+
+  function finishSokobanMovedState(targetState, unfinished = false) {
+    if (unfinished) {
+      targetState.phase = 'animating';
+      targetState.winner = '';
+      targetState.ending = '';
+      return;
+    }
+    if (sokobanSolved(targetState)) {
+      targetState.phase = 'gameover';
+      targetState.winner = 'solved';
+      targetState.ending = 'sokoban-win';
+    } else {
+      targetState.phase = 'ready';
+      targetState.winner = '';
+      targetState.ending = '';
+    }
+  }
+
+  function nextSokobanSessionStep(state, session) {
+    if (!session || !Array.isArray(session.active) || !session.active.length) {
+      return { event: null, message: session && session.lastBlockedMessage || 'no move' };
+    }
+    const context = sokobanMovementContext(state);
+    if (context.boxesOverlap) return { event: null, message: 'boxes overlap' };
+    if (context.playersOverlap) return { event: null, message: 'players overlap' };
+    const active = session.active
+      .map((actor) => syncSokobanSessionActor(state, context, actor))
+      .filter(Boolean);
+    session.active = active;
+    if (!active.length) return { event: null, message: session.lastBlockedMessage || 'no move' };
+    const activeInfo = sokobanActiveOccupancyInfo(state, context, active);
+    const proposals = [];
+    const messages = [];
+    active.forEach((actor) => {
+      const proposal = sokobanStepProposalForActor(state, context, actor, activeInfo);
+      if (proposal && proposal.blocked) messages.push(proposal.message || sokobanBlockedMessageForActor(actor));
+      else if (proposal) proposals.push(proposal);
+      else messages.push(sokobanBlockedMessageForActor(actor));
+    });
+    if (!proposals.length) {
+      session.active = [];
+      session.lastBlockedMessage = messages[0] || 'no move';
+      return { event: null, message: session.lastBlockedMessage };
+    }
+    const accepted = sokobanAcceptedStepProposals(state, context, proposals, activeInfo);
+    if (!accepted.length) {
+      session.active = [];
+      session.lastBlockedMessage = proposals[0].blockedMessage || messages[0] || 'move blocked';
+      return { event: null, message: session.lastBlockedMessage };
+    }
+    const event = sokobanStepEventFromProposals(session, accepted);
+    if (!sokobanAnimationHasVisibleItems(event)) {
+      session.active = [];
+      return { event: null, message: 'no move' };
+    }
+    return { event };
+  }
+
+  function syncSokobanSessionActor(state, context, actor) {
+    if (!actor || !Number.isInteger(actor.dir)) return null;
+    if (actor.kind === 'player') {
+      const player = (state.players || []).find((entry) => entry.id === actor.id);
+      return player ? { ...actor, index: player.index } : null;
+    }
+    if (actor.kind === 'box') {
+      const box = (state.boxes || []).find((entry) => entry.id === actor.id);
+      return box ? { ...actor, index: box.index } : null;
+    }
+    if (actor.kind === 'energyBridge') {
+      return state.energyBridges instanceof Set && state.energyBridges.has(actor.index) ? { ...actor } : null;
+    }
+    if (actor.kind === 'beam') {
+      const beam = sokobanMatchingSessionBeam(context, actor);
+      return beam ? { ...actor, beam: cloneSokobanBeam(beam) } : null;
+    }
+    return null;
+  }
+
+  function sokobanMatchingSessionBeam(context, actor) {
+    const beam = actor && actor.beam;
+    const actorFootprint = sokobanNumberListKey(beam && beam.footprint);
+    const actorEndpoints = sokobanNumberListKey(beam && beam.endpoints);
+    return (context.beams || []).find((candidate) => (
+      sokobanNumberListKey(candidate.footprint) === actorFootprint
+      || sokobanNumberListKey(candidate.endpoints) === actorEndpoints
+    )) || null;
+  }
+
+  function sokobanActiveOccupancyInfo(state, context, active) {
+    const bridgeByIndex = new Map();
+    const beamByFootprint = new Map();
+    active.forEach((actor) => {
+      if (actor.kind === 'energyBridge') bridgeByIndex.set(actor.index, sokobanActorMoveKey(actor));
+      if (actor.kind === 'beam' && actor.beam) {
+        beamByFootprint.set(sokobanNumberListKey(actor.beam.footprint), sokobanActorMoveKey(actor));
+      }
+    });
+    const occupants = new Map();
+    const add = (index, key) => {
+      if (!Number.isInteger(index) || !key) return;
+      const list = occupants.get(index) || [];
+      if (!list.includes(key)) list.push(key);
+      occupants.set(index, list);
+    };
+    (state.players || []).forEach((player) => add(player.index, `player:${player.id}`));
+    (state.boxes || []).forEach((box) => add(box.index, `box:${box.id}`));
+    (state.energyBridges || new Set()).forEach((index) => add(index, bridgeByIndex.get(index) || `energyBridge:${index}`));
+    (context.beams || []).forEach((beam) => {
+      const key = beamByFootprint.get(sokobanNumberListKey(beam.footprint)) || sokobanBeamOccupantKey(beam);
+      (beam.footprint || []).forEach((index) => add(index, key));
+    });
+    return { occupants };
+  }
+
+  function sokobanActorMoveKey(actor) {
+    if (!actor) return '';
+    if (actor.kind === 'energyBridge') return `energyBridge:${actor.id != null ? actor.id : actor.index}`;
+    return `${actor.kind}:${actor.id}`;
+  }
+
+  function sokobanStepProposalForActor(state, context, actor, activeInfo) {
+    if (actor.kind === 'player') return sokobanPlayerStepProposal(state, context, actor, activeInfo);
+    if (actor.kind === 'box') return sokobanTileActorStepProposal(state, context, actor, 'box');
+    if (actor.kind === 'energyBridge') return sokobanTileActorStepProposal(state, context, actor, 'energyBridge');
+    if (actor.kind === 'beam') return sokobanBeamActorStepProposal(state, context, actor);
+    return null;
+  }
+
+  function sokobanPlayerStepProposal(state, context, actor, activeInfo) {
+    const player = (state.players || []).find((entry) => entry.id === actor.id);
+    if (!player) return null;
+    const next = surfaceSuccessor(state, player.index, actor.dir);
+    if (!next || sokobanTileBlocked(state, next.index)) return null;
+    const object = actor.canPush ? sokobanMovementObjectAt(context, next.index) : null;
+    if (!object) {
+      const transition = placementTransitionRecord(player.index, actor.dir, next);
+      return sokobanStepProposal({
+        actor,
+        blockedMessage: 'player blocked',
+        players: [sokobanStepPiece('player', player.id, transition)],
+        nextActive: sokobanTileNeedsContinuation(state, next.index)
+          ? [{ kind: 'player', id: player.id, index: next.index, dir: transition.dir, canPush: false }]
+          : []
+      });
+    }
+    if (object.kind === 'box') return sokobanPlayerPushBoxProposal(state, actor, player, next, object.box);
+    if (object.kind === 'energyBridge') return sokobanPlayerPushBridgeProposal(state, context, actor, player, next, object.index);
+    if (object.kind === 'beam') return sokobanPlayerPushBeamProposal(state, context, actor, player, next, object.beam);
+    return sokobanBlockedStepProposal(object.kind === 'beamOverlap' ? 'energy beams overlap there' : 'player blocked');
+  }
+
+  function sokobanPlayerPushBoxProposal(state, actor, player, playerNext, box) {
+    const boxNext = surfaceSuccessor(state, box.index, playerNext.dir);
+    if (!boxNext || sokobanTileBlocked(state, boxNext.index)) return sokobanBlockedStepProposal('box blocked');
+    const boxTransition = placementTransitionRecord(box.index, playerNext.dir, boxNext);
+    const playerTransition = placementTransitionRecord(player.index, actor.dir, playerNext);
+    const playerStays = sokobanTileNeedsContinuation(state, player.index) || sokobanTileNeedsContinuation(state, box.index);
+    return sokobanStepProposal({
+      actor,
+      blockedMessage: 'box blocked',
+      pushes: 1,
+      players: playerStays ? [] : [sokobanStepPiece('player', player.id, playerTransition)],
+      boxes: [sokobanStepPiece('box', box.id, boxTransition)],
+      nextActive: sokobanTileNeedsContinuation(state, boxNext.index)
+        ? [{ kind: 'box', id: box.id, index: boxNext.index, dir: boxTransition.dir, canPush: false }]
+        : []
+    });
+  }
+
+  function sokobanPlayerPushBridgeProposal(state, context, actor, player, playerNext, bridgeIndex) {
+    const bridgeNext = surfaceSuccessor(state, bridgeIndex, playerNext.dir);
+    if (!bridgeNext || sokobanTileBlocked(state, bridgeNext.index)) return sokobanBlockedStepProposal('energy bridge blocked');
+    const bridgeTransition = placementTransitionRecord(bridgeIndex, playerNext.dir, bridgeNext);
+    const playerTransition = placementTransitionRecord(player.index, actor.dir, playerNext);
+    const playerStays = sokobanTileNeedsContinuation(state, player.index) || sokobanTileNeedsContinuation(state, bridgeIndex);
+    return sokobanStepProposal({
+      actor,
+      blockedMessage: 'energy bridge blocked',
+      pushes: 1,
+      players: playerStays ? [] : [sokobanStepPiece('player', player.id, playerTransition)],
+      bridges: [sokobanStepPiece('energyBridge', bridgeIndex, bridgeTransition)],
+      ignoredOccupantKeys: sokobanSelfBeamKeysForBridge(context, bridgeIndex),
+      nextActive: sokobanTileNeedsContinuation(state, bridgeNext.index)
+        ? [{ kind: 'energyBridge', id: bridgeIndex, index: bridgeNext.index, dir: bridgeTransition.dir, canPush: false }]
+        : []
+    });
+  }
+
+  function sokobanPlayerPushBeamProposal(state, context, actor, player, playerNext, beam) {
+    const ignoredBeamKeys = sokobanSelfBeamKeysForBridgeSet(context, beam.endpoints);
+    const step = sokobanTranslateBeamStep(state, context, beam, playerNext.dir, new Set(beam.endpoints), new Set(state.energyBridges || []), {
+      ignoredBeamKeys
+    });
+    if (!step) return sokobanBlockedStepProposal('energy beam blocked');
+    const playerTransition = placementTransitionRecord(player.index, actor.dir, playerNext);
+    const playerStays = sokobanTileNeedsContinuation(state, player.index) || sokobanBeamObjectOnIce(state, beam);
+    const beamItem = sokobanStepBeam(beam.id, beam, step);
+    return sokobanStepProposal({
+      actor,
+      blockedMessage: 'energy beam blocked',
+      pushes: 1,
+      players: playerStays ? [] : [sokobanStepPiece('player', player.id, playerTransition)],
+      beams: [beamItem],
+      ignoredOccupantKeys: ignoredBeamKeys,
+      nextActive: sokobanBeamObjectOnIce(state, step.beam)
+        ? [{ kind: 'beam', id: beam.id, beam: cloneSokobanBeam(step.beam), dir: step.dir, canPush: false }]
+        : []
+    });
+  }
+
+  function sokobanTileActorStepProposal(state, context, actor, itemKind) {
+    const next = surfaceSuccessor(state, actor.index, actor.dir);
+    if (!next || sokobanTileBlocked(state, next.index)) return null;
+    const transition = placementTransitionRecord(actor.index, actor.dir, next);
+    const item = sokobanStepPiece(itemKind, actor.id != null ? actor.id : actor.index, transition);
+    return sokobanStepProposal({
+      actor,
+      blockedMessage: itemKind === 'box' ? 'box blocked' : 'energy bridge blocked',
+      boxes: itemKind === 'box' ? [item] : [],
+      bridges: itemKind === 'energyBridge' ? [item] : [],
+      ignoredOccupantKeys: itemKind === 'energyBridge' ? sokobanSelfBeamKeysForBridge(context, actor.index) : [],
+      nextActive: sokobanTileNeedsContinuation(state, next.index)
+        ? [{ kind: actor.kind, id: actor.id, index: next.index, dir: transition.dir, canPush: false }]
+        : []
+    });
+  }
+
+  function sokobanBeamActorStepProposal(state, context, actor) {
+    const beam = actor.beam;
+    if (!beam) return null;
+    const ignoredBeamKeys = sokobanSelfBeamKeysForBridgeSet(context, beam.endpoints);
+    const step = sokobanTranslateBeamStep(state, context, beam, actor.dir, new Set(beam.endpoints), new Set(state.energyBridges || []), {
+      ignoredBeamKeys
+    });
+    if (!step) return null;
+    return sokobanStepProposal({
+      actor,
+      blockedMessage: 'energy beam blocked',
+      beams: [sokobanStepBeam(actor.id, beam, step)],
+      ignoredOccupantKeys: ignoredBeamKeys,
+      nextActive: sokobanBeamObjectOnIce(state, step.beam)
+        ? [{ kind: 'beam', id: actor.id, beam: cloneSokobanBeam(step.beam), dir: step.dir, canPush: false }]
+        : []
+    });
+  }
+
+  function sokobanTileNeedsContinuation(state, index) {
+    return !!(state.ice instanceof Set && state.ice.has(index));
+  }
+
+  function sokobanStepPiece(kind, id, transition) {
+    const clonedTransition = clonePlacementTransition(transition);
+    return {
+      kind,
+      id,
+      from: transition.from,
+      to: transition.to,
+      dir: transition.dir,
+      path: [transition.to],
+      steps: [clonedTransition],
+      transition: clonedTransition
+    };
+  }
+
+  function sokobanStepBeam(id, fromBeam, step) {
+    const toBeam = step.beam ? { ...step.beam, id } : null;
+    const transitions = cloneSokobanTransitions(step.transitions);
+    return {
+      kind: 'beam',
+      id,
+      from: Array.isArray(step.from) ? step.from.slice() : [],
+      to: Array.isArray(step.to) ? step.to.slice() : [],
+      fromEndpoints: Array.isArray(step.fromEndpoints) ? step.fromEndpoints.slice() : [],
+      toEndpoints: Array.isArray(step.toEndpoints) ? step.toEndpoints.slice() : [],
+      transitions,
+      steps: [{
+        from: Array.isArray(step.from) ? step.from.slice() : [],
+        to: Array.isArray(step.to) ? step.to.slice() : [],
+        fromEndpoints: Array.isArray(step.fromEndpoints) ? step.fromEndpoints.slice() : [],
+        toEndpoints: Array.isArray(step.toEndpoints) ? step.toEndpoints.slice() : [],
+        transitions,
+        dir: step.dir,
+        beam: cloneSokobanBeam(toBeam)
+      }],
+      fromBeam: cloneSokobanBeam(fromBeam),
+      toBeam: cloneSokobanBeam(toBeam)
+    };
+  }
+
+  function sokobanStepProposal(options) {
+    const actor = options.actor;
+    const proposal = {
+      actor,
+      actorKey: sokobanActorMoveKey(actor),
+      blockedMessage: options.blockedMessage || sokobanBlockedMessageForActor(actor),
+      pushes: Math.max(0, Number(options.pushes) || 0),
+      players: options.players || [],
+      boxes: options.boxes || [],
+      bridges: options.bridges || [],
+      beams: options.beams || [],
+      ignoredOccupantKeys: uniqueSokobanKeys(options.ignoredOccupantKeys),
+      nextActive: options.nextActive || []
+    };
+    proposal.movingKeys = sokobanProposalMovingKeys(proposal);
+    proposal.fromIndices = sokobanProposalFromIndices(proposal);
+    proposal.toIndices = sokobanProposalToIndices(proposal);
+    return proposal;
+  }
+
+  function sokobanBlockedStepProposal(message) {
+    return { blocked: true, message };
+  }
+
+  function sokobanBeamOccupantKey(beam) {
+    return beam && beam.id ? `beam:${beam.id}` : '';
+  }
+
+  function sokobanSelfBeamKeysForBridge(context, bridgeIndex) {
+    if (!context || !Number.isInteger(bridgeIndex)) return [];
+    return (context.beams || [])
+      .filter((beam) => Array.isArray(beam.endpoints) && beam.endpoints.includes(bridgeIndex))
+      .map(sokobanBeamOccupantKey)
+      .filter(Boolean);
+  }
+
+  function sokobanSelfBeamKeysForBridgeSet(context, bridgeIndices) {
+    const keys = [];
+    (bridgeIndices || []).forEach((index) => {
+      keys.push(...sokobanSelfBeamKeysForBridge(context, index));
+    });
+    return uniqueSokobanKeys(keys);
+  }
+
+  function uniqueSokobanKeys(values) {
+    const result = [];
+    const seen = new Set();
+    (values || []).forEach((value) => {
+      if (!value || seen.has(value)) return;
+      seen.add(value);
+      result.push(value);
+    });
+    return result;
+  }
+
+  function sokobanProposalMovingKeys(proposal) {
+    const keys = [];
+    (proposal.players || []).forEach((item) => keys.push(`player:${item.id}`));
+    (proposal.boxes || []).forEach((item) => keys.push(`box:${item.id}`));
+    (proposal.bridges || []).forEach((item) => keys.push(`energyBridge:${item.id}`));
+    (proposal.beams || []).forEach((item) => {
+      keys.push(`beam:${item.id}`);
+      (item.fromEndpoints || []).forEach((index) => keys.push(`energyBridge:${index}`));
+    });
+    return Array.from(new Set(keys));
+  }
+
+  function sokobanProposalFromIndices(proposal) {
+    const indices = [];
+    (proposal.players || []).forEach((item) => indices.push(item.from));
+    (proposal.boxes || []).forEach((item) => indices.push(item.from));
+    (proposal.bridges || []).forEach((item) => indices.push(item.from));
+    (proposal.beams || []).forEach((item) => indices.push(...(item.from || [])));
+    return uniqueSokobanIndices(indices);
+  }
+
+  function sokobanProposalToIndices(proposal) {
+    const indices = [];
+    (proposal.players || []).forEach((item) => indices.push(item.to));
+    (proposal.boxes || []).forEach((item) => indices.push(item.to));
+    (proposal.bridges || []).forEach((item) => indices.push(item.to));
+    (proposal.beams || []).forEach((item) => indices.push(...(item.to || [])));
+    return uniqueSokobanIndices(indices);
+  }
+
+  function sokobanAcceptedStepProposals(state, context, proposals, activeInfo) {
+    let candidates = proposals.slice();
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const vacatingKeys = sokobanVacatingKeys(candidates);
+      const duplicateKeys = sokobanDuplicateMovingKeys(candidates);
+      const collidedKeys = sokobanCollidingTargetKeys(candidates);
+      const blocked = new Set([...duplicateKeys, ...collidedKeys]);
+      candidates.forEach((proposal) => {
+        if (blocked.has(proposal.actorKey)) return;
+        for (const index of proposal.toIndices || []) {
+          const occupants = (activeInfo.occupants && activeInfo.occupants.get(index)) || [];
+          if (occupants.some((key) => !proposal.movingKeys.includes(key)
+            && !proposal.ignoredOccupantKeys.includes(key)
+            && !vacatingKeys.has(key))) {
+            blocked.add(proposal.actorKey);
+            return;
+          }
+        }
+      });
+      if (blocked.size) {
+        candidates = candidates.filter((proposal) => !blocked.has(proposal.actorKey));
+        changed = true;
+      }
+    }
+    return candidates;
+  }
+
+  function sokobanVacatingKeys(proposals) {
+    const keys = new Set();
+    proposals.forEach((proposal) => {
+      proposal.movingKeys.forEach((key) => keys.add(key));
+    });
+    return keys;
+  }
+
+  function sokobanDuplicateMovingKeys(proposals) {
+    const seen = new Map();
+    const duplicates = new Set();
+    proposals.forEach((proposal) => {
+      proposal.movingKeys.forEach((key) => {
+        if (seen.has(key)) {
+          duplicates.add(seen.get(key));
+          duplicates.add(proposal.actorKey);
+        } else {
+          seen.set(key, proposal.actorKey);
+        }
+      });
+    });
+    return duplicates;
+  }
+
+  function sokobanCollidingTargetKeys(proposals) {
+    const targets = new Map();
+    const collided = new Set();
+    proposals.forEach((proposal) => {
+      proposal.toIndices.forEach((index) => {
+        const list = targets.get(index) || [];
+        list.push(proposal.actorKey);
+        targets.set(index, list);
+      });
+    });
+    targets.forEach((list) => {
+      const unique = Array.from(new Set(list));
+      if (unique.length > 1) unique.forEach((key) => collided.add(key));
+    });
+    return collided;
+  }
+
+  function sokobanStepEventFromProposals(session, proposals) {
+    const event = {
+      kind: 'sokobanStep',
+      dir: session.dir,
+      stepIndex: session.stepIndex,
+      players: [],
+      boxes: [],
+      bridges: [],
+      beams: [],
+      moves: [],
+      pushes: proposals.reduce((sum, proposal) => sum + proposal.pushes, 0),
+      nextActive: []
+    };
+    proposals.forEach((proposal) => {
+      event.players.push(...proposal.players);
+      event.boxes.push(...proposal.boxes);
+      event.bridges.push(...proposal.bridges);
+      event.beams.push(...proposal.beams);
+      event.nextActive.push(...proposal.nextActive);
+    });
+    event.players.forEach((item) => addSokobanDebugMove(event.moves, item.transition || firstSokobanItemTransition(item)));
+    event.boxes.forEach((item) => addSokobanDebugMove(event.moves, item.transition || firstSokobanItemTransition(item)));
+    event.bridges.forEach((item) => addSokobanDebugMove(event.moves, item.transition || firstSokobanItemTransition(item)));
+    event.beams.forEach((item) => {
+      (item.transitions || []).forEach((transition) => addSokobanDebugMove(event.moves, transition, { alpha: 0.7 }));
+    });
+    return event;
+  }
+
+  function applySokobanSessionStep(session, event) {
+    if (!session) return;
+    session.active = Array.isArray(event && event.nextActive) ? clonePlain(event.nextActive) : [];
+    session.stepIndex = Math.max(0, Number(session.stepIndex) || 0) + 1;
+    session.lastBlockedMessage = '';
+  }
+
+  function queueNextSokobanSessionEvent() {
+    if (!sokobanMoveSession || !isSokobanGame(game)) return false;
+    const step = nextSokobanSessionStep(game, sokobanMoveSession);
+    if (!step.event) {
+      sokobanMoveSession.lastBlockedMessage = step.message || sokobanMoveSession.lastBlockedMessage || '';
+      eventQueue = [];
+      eventIndex = 0;
+      return false;
+    }
+    eventQueue = [step.event];
+    eventIndex = 0;
+    return true;
+  }
+
+  function sokobanBlockedMessageForActor(actor) {
+    if (!actor) return 'move blocked';
+    if (actor.kind === 'box') return 'box blocked';
+    if (actor.kind === 'energyBridge') return 'energy bridge blocked';
+    if (actor.kind === 'beam') return 'energy beam blocked';
+    return 'player blocked';
+  }
+
+  function sokobanPlansFromStepEvents(events) {
+    return {
+      players: sokobanPiecePlansFromStepEvents(events, 'players'),
+      boxes: sokobanPiecePlansFromStepEvents(events, 'boxes'),
+      bridges: sokobanPiecePlansFromStepEvents(events, 'bridges'),
+      beams: sokobanBeamPlansFromStepEvents(events)
+    };
+  }
+
+  function sokobanPiecePlansFromStepEvents(events, field) {
+    const plans = new Map();
+    (events || []).forEach((event) => {
+      (event[field] || []).forEach((item) => {
+        const key = item.id != null ? item.id : item.from;
+        const plan = plans.get(key) || {
+          id: item.id,
+          from: item.from,
+          to: item.from,
+          dir: item.dir,
+          path: [],
+          steps: []
+        };
+        plan.to = item.to;
+        plan.path.push(item.to);
+        if (item.transition) plan.steps.push(clonePlacementTransition(item.transition));
+        plans.set(key, plan);
+      });
+    });
+    return Array.from(plans.values());
+  }
+
+  function sokobanBeamPlansFromStepEvents(events) {
+    const plans = new Map();
+    (events || []).forEach((event) => {
+      (event.beams || []).forEach((item) => {
+        const key = item.id;
+        const plan = plans.get(key) || {
+          id: item.id,
+          fromEndpoints: item.fromEndpoints ? item.fromEndpoints.slice() : [],
+          toEndpoints: item.fromEndpoints ? item.fromEndpoints.slice() : [],
+          from: item.from ? item.from.slice() : [],
+          to: item.from ? item.from.slice() : [],
+          dir: item.dir,
+          steps: [],
+          fromBeam: cloneSokobanBeam(item.fromBeam),
+          toBeam: cloneSokobanBeam(item.fromBeam)
+        };
+        plan.toEndpoints = item.toEndpoints ? item.toEndpoints.slice() : [];
+        plan.to = item.to ? item.to.slice() : [];
+        plan.toBeam = cloneSokobanBeam(item.toBeam);
+        if (item.steps && item.steps[0]) plan.steps.push(clonePlain(item.steps[0]));
+        plans.set(key, plan);
+      });
+    });
+    return Array.from(plans.values());
   }
 
   function placeGomokuStone(sourceState, index) {
@@ -9562,14 +10187,14 @@
     if (sokobanTileBlocked(state, index)) return true;
     const box = context.boxesByIndex.get(index);
     if (box && box.id !== options.ignoreBoxId) return true;
-    if (!options.ignoreAllBeams) {
-      const footprints = sokobanBeamFootprintAt(context, index);
-      if (footprints.some((beam) => {
-        if (beam.id === options.ignoreBeamId) return false;
-        return !(Number.isInteger(options.ignoreBeamEndpointIndex) && beam.endpoints.includes(options.ignoreBeamEndpointIndex));
-      })) {
-        return true;
-      }
+    const ignoredBeamKeys = new Set(options.ignoredBeamKeys || []);
+    const footprints = sokobanBeamFootprintAt(context, index);
+    if (footprints.some((beam) => {
+      const beamKey = sokobanBeamOccupantKey(beam);
+      if (beam.id === options.ignoreBeamId || ignoredBeamKeys.has(beamKey)) return false;
+      return !(Number.isInteger(options.ignoreBeamEndpointIndex) && beam.endpoints.includes(options.ignoreBeamEndpointIndex));
+    })) {
+      return true;
     }
     const ownEndpoints = options.ownBridgeEndpoints || new Set();
     if (context.allBridgeIndices.has(index)
@@ -9584,205 +10209,19 @@
     return false;
   }
 
-  function sokobanPlanPlayerMove(state, context, player, direction, pushedBoxIds, pushedBridgeIndices, pushedBeamIds) {
-    const next = surfaceSuccessor(state, player.index, direction);
-    if (!next || sokobanTileBlocked(state, next.index)) {
-      return { changed: false, message: 'player blocked' };
-    }
-    const object = sokobanMovementObjectAt(context, next.index);
-    if (!object) {
-      const trace = sokobanTraceSlidingTile(state, context, player.index, direction, {
-        ignorePlayerId: player.id,
-        ignorePlayers: true
-      });
-      if (!trace || trace.cycle) {
-        return { changed: false, message: trace && trace.cycle ? 'player slide cycles before stopping' : 'player blocked' };
-      }
-      return {
-        changed: true,
-        player: { id: player.id, from: player.index, to: trace.to, path: trace.path, steps: trace.steps, dir: direction },
-        boxes: [],
-        bridges: [],
-        beams: []
-      };
-    }
-    if (object.kind === 'box') {
-      if (pushedBoxIds.has(object.box.id)) {
-        return { changed: false, message: 'two players push the same box' };
-      }
-      const trace = sokobanTraceSlidingTile(state, context, object.box.index, next.dir, {
-        ignoreBoxId: object.box.id,
-        ignorePlayers: true
-      });
-      if (!trace || trace.cycle) {
-        return { changed: false, message: trace && trace.cycle ? 'box slide cycles before stopping' : 'box blocked' };
-      }
-      pushedBoxIds.add(object.box.id);
-      const playerStays = (state.ice instanceof Set && state.ice.has(player.index))
-        || (state.ice instanceof Set && state.ice.has(object.box.index));
-      return {
-        changed: true,
-        player: {
-          id: player.id,
-          from: player.index,
-          to: playerStays ? player.index : object.box.index,
-          path: playerStays ? [] : [object.box.index],
-          steps: playerStays ? [] : [placementTransitionRecord(player.index, direction, next)],
-          boxId: object.box.id,
-          dir: direction
-        },
-        boxes: [{
-          id: object.box.id,
-          from: object.box.index,
-          to: trace.to,
-          dir: next.dir,
-          path: trace.path,
-          steps: trace.steps
-        }],
-        bridges: [],
-        beams: []
-      };
-    }
-    if (object.kind === 'energyBridge') {
-      if (pushedBridgeIndices.has(object.index)) {
-        return { changed: false, message: 'two players push the same energy bridge' };
-      }
-      const trace = sokobanTraceSlidingTile(state, context, object.index, next.dir, {
-        ignoreBridgeIndex: object.index,
-        ignoreBeamEndpointIndex: object.index,
-        ignorePlayers: true
-      });
-      if (!trace || trace.cycle) {
-        return { changed: false, message: trace && trace.cycle ? 'energy bridge slide cycles before stopping' : 'energy bridge blocked' };
-      }
-      pushedBridgeIndices.add(object.index);
-      const playerStays = (state.ice instanceof Set && state.ice.has(player.index))
-        || (state.ice instanceof Set && state.ice.has(object.index));
-      return {
-        changed: true,
-        player: {
-          id: player.id,
-          from: player.index,
-          to: playerStays ? player.index : object.index,
-          path: playerStays ? [] : [object.index],
-          steps: playerStays ? [] : [placementTransitionRecord(player.index, direction, next)],
-          bridgeFrom: object.index,
-          dir: direction
-        },
-        boxes: [],
-        bridges: [{
-          from: object.index,
-          to: trace.to,
-          dir: next.dir,
-          path: trace.path,
-          steps: trace.steps
-        }],
-        beams: []
-      };
-    }
-    if (object.kind === 'beamOverlap') {
-      return { changed: false, message: 'energy beams overlap there' };
-    }
-    if (object.kind === 'beam') {
-      if (pushedBeamIds.has(object.beam.id)) {
-        return { changed: false, message: 'two players push the same energy beam' };
-      }
-      const trace = sokobanTraceSlidingBeam(state, context, object.beam, next.dir);
-      if (!trace || trace.cycle) {
-        return { changed: false, message: trace && trace.cycle ? 'energy beam slide cycles before stopping' : 'energy beam blocked' };
-      }
-      pushedBeamIds.add(object.beam.id);
-      const playerStays = (state.ice instanceof Set && state.ice.has(player.index))
-        || sokobanBeamObjectOnIce(state, object.beam);
-      return {
-        changed: true,
-        player: {
-          id: player.id,
-          from: player.index,
-          to: playerStays ? player.index : next.index,
-          path: playerStays ? [] : [next.index],
-          steps: playerStays ? [] : [placementTransitionRecord(player.index, direction, next)],
-          beamId: object.beam.id,
-          dir: direction
-        },
-        boxes: [],
-        bridges: [],
-        beams: [{
-          id: object.beam.id,
-          fromEndpoints: object.beam.endpoints.slice(),
-          toEndpoints: trace.beam.endpoints.slice(),
-          from: object.beam.footprint.slice(),
-          to: trace.beam.footprint.slice(),
-          dir: next.dir,
-          steps: trace.steps,
-          fromBeam: cloneSokobanBeam(object.beam),
-          toBeam: cloneSokobanBeam(trace.beam)
-        }]
-      };
-    }
-    return { changed: false, message: 'player blocked' };
-  }
-
-  function sokobanTraceSlidingTile(state, context, fromIndex, dir, options = {}) {
-    let index = fromIndex;
-    let direction = dir;
-    const steps = [];
-    const path = [];
-    const seen = new Set([`${index}:${direction}`]);
-    for (let guard = 0; guard < EVENT_GUARD; guard += 1) {
-      const next = surfaceSuccessor(state, index, direction);
-      if (!next || sokobanIndexBlockedForMover(state, context, next.index, options)) {
-        return steps.length ? { to: index, dir: direction, steps, path } : null;
-      }
-      steps.push(placementTransitionRecord(index, direction, next));
-      path.push(next.index);
-      index = next.index;
-      direction = next.dir;
-      if (!(state.ice instanceof Set && state.ice.has(index))) {
-        return { to: index, dir: direction, steps, path };
-      }
-      const stateKey = `${index}:${direction}`;
-      if (seen.has(stateKey)) return { cycle: true, steps, path };
-      seen.add(stateKey);
-    }
-    return { cycle: true, steps, path };
-  }
-
-  function sokobanTraceSlidingBeam(state, context, sourceBeam, dir) {
-    const originalEndpoints = new Set(sourceBeam.endpoints);
-    let beam = { ...sourceBeam, originalEndpoints };
-    let direction = dir;
-    let bridgeSet = new Set(state.energyBridges || []);
-    const steps = [];
-    const seen = new Set([`${sokobanNumberListKey(beam.footprint)}:${direction}`]);
-    for (let guard = 0; guard < EVENT_GUARD; guard += 1) {
-      const step = sokobanTranslateBeamStep(state, context, beam, direction, originalEndpoints, bridgeSet);
-      if (!step) return steps.length ? { beam, steps } : null;
-      steps.push(step);
-      beam = { ...step.beam, id: sourceBeam.id, originalEndpoints };
-      bridgeSet = step.energyBridges;
-      direction = step.dir;
-      if (!sokobanBeamObjectOnIce(state, beam)) return { beam, steps };
-      const stateKey = `${sokobanNumberListKey(beam.footprint)}:${direction}`;
-      if (seen.has(stateKey)) return { cycle: true, beam, steps };
-      seen.add(stateKey);
-    }
-    return { cycle: true, beam, steps };
-  }
-
-  function sokobanTranslateBeamStep(state, context, beam, dir, originalEndpoints, currentBridgeSet) {
+  function sokobanTranslateBeamStep(state, context, beam, dir, originalEndpoints, currentBridgeSet, options = {}) {
     const destination = new Map();
     const destinationSet = new Set();
     const records = new Map();
+    const ignoredBeamKeys = uniqueSokobanKeys([sokobanBeamOccupantKey(beam)].concat(options.ignoredBeamKeys || []));
     for (const index of beam.footprint) {
       const next = surfaceSuccessor(state, index, dir);
       if (!next) return null;
       if (destinationSet.has(next.index)) return null;
       if (sokobanIndexBlockedForMover(state, context, next.index, {
         ignoreBeamId: beam.id,
-        ignoreAllBeams: true,
         ignorePlayers: true,
-        blockBridgeEndpoints: true,
+        ignoredBeamKeys,
         ownBridgeEndpoints: originalEndpoints
       })) {
         return null;
@@ -9832,71 +10271,6 @@
       && Array.isArray(beam.endpoints)
       && beam.endpoints.length === 2
       && beam.endpoints.every((index) => state.ice.has(index)));
-  }
-
-  function sokobanFinalEnergyBridges(state, bridgePlans, beamPlans) {
-    const bridgeMoves = new Map();
-    const addMove = (from, to) => {
-      if (!Number.isInteger(from) || !Number.isInteger(to)) return { ok: false, message: 'energy bridge move is invalid' };
-      if (bridgeMoves.has(from) && bridgeMoves.get(from) !== to) {
-        return { ok: false, message: 'energy bridge moves conflict' };
-      }
-      bridgeMoves.set(from, to);
-      return { ok: true };
-    };
-    for (const plan of bridgePlans || []) {
-      const added = addMove(plan.from, plan.to);
-      if (!added.ok) return added;
-    }
-    for (const plan of beamPlans || []) {
-      for (let index = 0; index < plan.fromEndpoints.length; index += 1) {
-        const added = addMove(plan.fromEndpoints[index], plan.toEndpoints[index]);
-        if (!added.ok) return added;
-      }
-    }
-    const finalEnergyBridges = new Set();
-    for (const index of state.energyBridges || []) {
-      const finalIndex = bridgeMoves.has(index) ? bridgeMoves.get(index) : index;
-      if (finalEnergyBridges.has(finalIndex)) {
-        return { ok: false, message: 'energy bridges collide' };
-      }
-      finalEnergyBridges.add(finalIndex);
-    }
-    return { ok: true, energyBridges: finalEnergyBridges };
-  }
-
-  function sokobanValidatePlayerPathBlockers(state, context, playerPlans, boxPlans, bridgePlans, beamPlans) {
-    const movingPlayerIds = new Set(playerPlans
-      .filter((plan) => plan.from !== plan.to)
-      .map((plan) => plan.id));
-    const nonMovingPlayerAt = (index) => {
-      const player = context.playersByIndex.get(index);
-      return player && !movingPlayerIds.has(player.id) ? player : null;
-    };
-    for (const plan of playerPlans) {
-      for (const index of plan.path || []) {
-        const blocker = nonMovingPlayerAt(index);
-        if (blocker && blocker.id !== plan.id) return 'player blocked';
-      }
-    }
-    for (const plan of boxPlans) {
-      for (const index of plan.path || []) {
-        if (nonMovingPlayerAt(index)) return 'box blocked';
-      }
-    }
-    for (const plan of bridgePlans) {
-      for (const index of plan.path || []) {
-        if (nonMovingPlayerAt(index)) return 'energy bridge blocked';
-      }
-    }
-    for (const plan of beamPlans) {
-      for (const step of plan.steps || []) {
-        for (const index of step.to || []) {
-          if (nonMovingPlayerAt(index)) return 'energy beam blocked';
-        }
-      }
-    }
-    return '';
   }
 
   function sokobanSolved(state) {
@@ -10866,6 +11240,10 @@
     if (event.kind === 'bounceGroup') {
       return;
     }
+    if (event.kind === 'sokobanStep') {
+      applySokobanStepEvent(targetState, event);
+      return;
+    }
     if (event.kind === 'move') {
       if (targetState.removed.has(event.to)) return;
       if (boxesAtIndex(targetState, event.to).some((box) => box.id !== event.boxId)) return;
@@ -10898,6 +11276,38 @@
       if (!targetState.newBoxIds) targetState.newBoxIds = new Set();
       targetState.newBoxIds.add(event.boxId);
     }
+  }
+
+  function applySokobanStepEvent(targetState, event) {
+    if (!isSokobanGame(targetState) || !event) return;
+    (event.players || []).forEach((item) => {
+      const player = (targetState.players || []).find((entry) => entry.id === item.id);
+      if (player && Number.isInteger(item.to)) player.index = item.to;
+    });
+    (event.boxes || []).forEach((item) => {
+      const box = (targetState.boxes || []).find((entry) => entry.id === item.id);
+      if (box && Number.isInteger(item.to)) box.index = item.to;
+    });
+    if (!(targetState.energyBridges instanceof Set)) targetState.energyBridges = new Set(targetState.energyBridges || []);
+    const bridgeMoves = [];
+    (event.bridges || []).forEach((item) => {
+      if (Number.isInteger(item.from) && Number.isInteger(item.to)) bridgeMoves.push({ from: item.from, to: item.to });
+    });
+    (event.beams || []).forEach((item) => {
+      const fromEndpoints = Array.isArray(item.fromEndpoints) ? item.fromEndpoints : [];
+      const toEndpoints = Array.isArray(item.toEndpoints) ? item.toEndpoints : [];
+      for (let index = 0; index < Math.min(fromEndpoints.length, toEndpoints.length); index += 1) {
+        if (Number.isInteger(fromEndpoints[index]) && Number.isInteger(toEndpoints[index])) {
+          bridgeMoves.push({ from: fromEndpoints[index], to: toEndpoints[index] });
+        }
+      }
+    });
+    bridgeMoves.forEach((move) => targetState.energyBridges.delete(move.from));
+    bridgeMoves.forEach((move) => targetState.energyBridges.add(move.to));
+    if (event.pushes) {
+      targetState.pushes = Math.max(0, Number(targetState.pushes) || 0) + Math.max(0, Number(event.pushes) || 0);
+    }
+    if (event.message) targetState.debugMessage = event.message;
   }
 
   function applyMergeEvent(targetState, event) {
@@ -12737,6 +13147,11 @@
         control.hidden = !modeSokoban;
       });
     }
+    if (refs.modeDirectionalControls) {
+      refs.modeDirectionalControls.forEach((control) => {
+        control.hidden = !modeDirectional;
+      });
+    }
     syncBoundaryGlueBoardControls();
     if (refs.boundaryGlueModeRow) refs.boundaryGlueModeRow.hidden = !boundaryGlueBoard;
     if (refs.boundaryGlueShapeRow) refs.boundaryGlueShapeRow.hidden = !boundaryGlueBoard;
@@ -12754,7 +13169,7 @@
     syncSokobanObjectSizeOutput();
     syncSokobanEnergyGlowOutput();
     syncSokobanBeamOutput();
-    if (refs.nextStep) refs.nextStep.disabled = !mode2048 || !(isStepMode() && stepPaused && eventQueue.length && !currentAnimation);
+    if (refs.nextStep) refs.nextStep.disabled = !modeDirectional || !(isStepMode() && stepPaused && eventQueue.length && !currentAnimation);
     if (refs.undo) refs.undo.disabled = !undoStack.length;
     if (refs.redo) refs.redo.disabled = !redoStack.length;
     if (refs.exportState) refs.exportState.disabled = !game;
@@ -13064,6 +13479,7 @@
 
   function eventDuration(event) {
     const base = refs.speed ? Number(refs.speed.value) || 260 : 260;
+    if (event.kind === 'sokobanStep') return Math.max(20, base);
     if (event.kind === 'sokobanMove') {
       const steps = sokobanAnimationStepCount(event);
       return Math.min(1100, Math.max(140, base * 0.52 + Math.max(1, steps) * 86));
