@@ -2476,6 +2476,10 @@
       handleChineseCheckersCanvasClick(event);
       return;
     }
+    if (isSokobanGame(game)) {
+      handleSokobanCanvasClick(event);
+      return;
+    }
     if (!debugMode || !game) return;
     if (currentAnimation) {
       syncStatus('debug waits', 'finish the active animation or undo first', 'debug');
@@ -2887,6 +2891,18 @@
     render();
     syncControls();
     refreshDebugExportIfNeeded();
+  }
+
+  function handleSokobanCanvasClick(event) {
+    if (!game || currentAnimation || game.phase === 'setup') return;
+    if (game.phase === 'gameover') {
+      if (!game.resultDismissed) {
+        game.resultDismissed = true;
+        render();
+        refreshDebugExportIfNeeded();
+      }
+      if (event && event.preventDefault) event.preventDefault();
+    }
   }
 
   function handleChineseCheckersJumpContinuationClick(target, marble) {
@@ -4745,7 +4761,8 @@
       }
     }
     ctx.restore();
-    if (game && game.phase === 'gameover' && !currentAnimation && (!isPlacementGame(game) || !game.resultDismissed)) {
+    const gameOverPopupDismissed = game && game.resultDismissed && (isPlacementGame(game) || isSokobanGame(game));
+    if (game && game.phase === 'gameover' && !currentAnimation && !gameOverPopupDismissed) {
       drawGameOverPopup(ctx, geometry, game);
     }
     syncStats();
@@ -5051,47 +5068,152 @@
     const beams = sokobanEnergyBeamObjects(state);
     if (!beams.length) return;
     ctx.save();
-    ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     beams.forEach((beam) => drawSokobanEnergyBeam(ctx, geom, state, beam));
     ctx.restore();
   }
 
-  function drawSokobanEnergyBeam(ctx, geom, state, beam) {
+  function drawSokobanEnergyBeam(ctx, geom, state, beam, options = {}) {
+    drawSokobanBeamStrips(ctx, geom, sokobanBeamStripRecords(state, geom, beam), options);
+  }
+
+  function sokobanBeamStripRecords(state, geom, beam, options = {}) {
+    if (!state || !geom || !beam) return [];
+    const path = Array.isArray(beam.path) && beam.path.length
+      ? beam.path
+      : [beam.start].concat(Array.isArray(beam.interior) ? beam.interior : [], [beam.end]).filter(Number.isInteger);
+    const route = beam.route || null;
+    const transitions = route && Array.isArray(route.transitions) ? route.transitions : [];
+    if (!path.length || transitions.length !== Math.max(0, path.length - 1)) return [];
+    const records = [];
+    for (let position = 0; position < path.length; position += 1) {
+      const index = path[position];
+      const center = placementPiecePoint(geom, index);
+      if (!center) continue;
+      const start = position > 0
+        ? sokobanBeamRouteBoundaryPoint(state, geom, route, transitions[position - 1], true, options)
+        : center;
+      const end = position < transitions.length
+        ? sokobanBeamRouteBoundaryPoint(state, geom, route, transitions[position], false, options)
+        : center;
+      if (!start || !end || samePoint(start, end)) continue;
+      records.push({
+        index,
+        position,
+        startOffset: { x: start.x - center.x, y: start.y - center.y },
+        endOffset: { x: end.x - center.x, y: end.y - center.y }
+      });
+    }
+    return records;
+  }
+
+  function sokobanBeamRouteBoundaryPoint(state, geom, route, transition, entry, options = {}) {
+    if (!transition) return null;
+    if (transition.glued && transition.edge) {
+      const edgeDir = entry ? oppositeDir(state.preset, transition.dir) : transition.edge.dir;
+      return sokobanBeamEdgeMidpointFromIndex(geom, entry ? transition.to : transition.from, edgeDir, options);
+    }
+    const index = entry ? transition.to : transition.from;
+    const edgeDir = entry ? oppositeDir(state.preset, transition.dir) : transition.outDir;
+    return sokobanBeamEdgeMidpointFromIndex(geom, index, edgeDir, options);
+  }
+
+  function drawSokobanBeamStrips(ctx, geom, strips, options = {}) {
+    if (!Array.isArray(strips) || !strips.length) return;
+    drawSokobanBeamStripStyle(ctx, geom, () => {
+      sokobanUniqueBeamStripRecords(strips).forEach((strip) => drawSokobanBeamStripClippedToTile(ctx, geom, strip));
+    }, options);
+  }
+
+  function sokobanUniqueBeamStripRecords(strips) {
+    const result = [];
+    const seen = new Set();
+    (strips || []).forEach((strip) => {
+      if (!strip || !Number.isInteger(strip.index)) return;
+      const key = [
+        strip.index,
+        Math.round((strip.startOffset && strip.startOffset.x || 0) * 1000),
+        Math.round((strip.startOffset && strip.startOffset.y || 0) * 1000),
+        Math.round((strip.endOffset && strip.endOffset.x || 0) * 1000),
+        Math.round((strip.endOffset && strip.endOffset.y || 0) * 1000)
+      ].join(':');
+      if (seen.has(key)) return;
+      seen.add(key);
+      result.push(strip);
+    });
+    return result;
+  }
+
+  function drawSokobanBeamStripStyle(ctx, geom, draw, options = {}) {
+    if (typeof draw !== 'function') return;
     const beamStyle = selectedSokobanBeamStyle();
     const lineWidth = Math.max(4, geom.radius * 2 * beamStyle.width);
     const haloWidth = Math.max(lineWidth * 1.18, geom.radius * 0.44);
-    const segments = placementLineRenderSegments(state, geom, beam.start, beam.end, beam.route);
     ctx.save();
-    ctx.shadowColor = `rgba(34,197,94,${Math.min(0.55, beamStyle.opacity + 0.16).toFixed(2)})`;
-    ctx.shadowBlur = Math.max(5, geom.radius * 0.18);
-    ctx.strokeStyle = `rgba(34,197,94,${Math.max(0.08, beamStyle.opacity * 0.55).toFixed(2)})`;
-    ctx.lineWidth = haloWidth;
-    segments.forEach((segment) => {
-      ctx.beginPath();
-      ctx.moveTo(segment.start.x, segment.start.y);
-      ctx.lineTo(segment.end.x, segment.end.y);
-      ctx.stroke();
-    });
-    ctx.shadowBlur = 0;
+    ctx.lineJoin = 'miter';
+    ctx.lineCap = 'butt';
+    if (!options.skipHalo) {
+      ctx.shadowColor = `rgba(34,197,94,${Math.min(0.55, beamStyle.opacity + 0.16).toFixed(2)})`;
+      ctx.shadowBlur = Math.max(5, geom.radius * 0.18);
+      ctx.strokeStyle = `rgba(34,197,94,${Math.max(0.08, beamStyle.opacity * 0.5).toFixed(2)})`;
+      ctx.lineWidth = haloWidth;
+      draw();
+      ctx.shadowBlur = 0;
+    }
     ctx.strokeStyle = `rgba(22,163,74,${beamStyle.opacity.toFixed(2)})`;
     ctx.lineWidth = lineWidth;
-    segments.forEach((segment) => {
-      ctx.beginPath();
-      ctx.moveTo(segment.start.x, segment.start.y);
-      ctx.lineTo(segment.end.x, segment.end.y);
-      ctx.stroke();
-    });
-    ctx.fillStyle = `rgba(34,197,94,${Math.max(0.06, beamStyle.opacity * 0.42).toFixed(2)})`;
-    ctx.strokeStyle = `rgba(22,163,74,${Math.max(0.12, beamStyle.opacity * 0.7).toFixed(2)})`;
-    ctx.lineWidth = Math.max(1, geom.radius * 0.035);
-    const interiorScale = Math.max(0.2, Math.min(1.1, beamStyle.width));
-    beam.interior.forEach((index) => {
-      if (!drawSokobanTileShape(ctx, geom, index, interiorScale)) return;
-      ctx.fill();
-      ctx.stroke();
-    });
+    draw();
     ctx.restore();
+  }
+
+  function drawSokobanBeamStripClippedToTile(ctx, geom, strip, centerOverride, clipIndex, options = {}) {
+    const index = Number.isInteger(clipIndex) ? clipIndex : strip && strip.index;
+    const cell = Number.isInteger(index) && geom.cells ? geom.cells[index] : null;
+    if (!cell) return;
+    ctx.save();
+    clipToTile(ctx, geom, cell, sokobanBeamStripClipRadius(geom, options));
+    drawSokobanBeamStripAtCenter(ctx, geom, strip, centerOverride);
+    ctx.restore();
+  }
+
+  function sokobanBeamStripClipRadius(geom, options = {}) {
+    return geom.radius;
+  }
+
+  function sokobanBeamStripReachRadius(geom, options = {}) {
+    return geom.radius;
+  }
+
+  function sokobanBeamEdgeMidpointFromIndex(geom, index, dir, options = {}) {
+    const cell = geom && geom.cells ? geom.cells[index] : null;
+    if (!cell) return null;
+    const lattice = geom.lattice || LATTICES.square;
+    const points = tilePoints(cell.x, cell.y, sokobanBeamStripReachRadius(geom, options), lattice);
+    if (!points.length) return null;
+    const normalizedDir = modulo(Number(dir) || 0, lattice.sides);
+    const segment = lattice.shape === 'hex'
+      ? {
+        start: points[modulo(normalizedDir - 1, lattice.sides)],
+        end: points[modulo(normalizedDir, lattice.sides)]
+      }
+      : {
+        start: points[(normalizedDir + 1) % 4],
+        end: points[(normalizedDir + 2) % 4]
+      };
+    return {
+      x: (segment.start.x + segment.end.x) / 2,
+      y: (segment.start.y + segment.end.y) / 2
+    };
+  }
+
+  function drawSokobanBeamStripAtCenter(ctx, geom, strip, centerOverride) {
+    if (!strip) return;
+    const center = centerOverride || placementPiecePoint(geom, strip.index);
+    if (!center || !strip.startOffset || !strip.endOffset) return;
+    ctx.beginPath();
+    ctx.moveTo(center.x + strip.startOffset.x, center.y + strip.startOffset.y);
+    ctx.lineTo(center.x + strip.endOffset.x, center.y + strip.endOffset.y);
+    ctx.stroke();
   }
 
   function drawSokobanWall(ctx, geom, index, objectScale = SOKOBAN_OBJECT_SCALE_DEFAULT / 100) {
@@ -5297,7 +5419,7 @@
     if (!event || !currentAnimation) return;
     if (event.kind === 'sokobanMove' || event.kind === 'sokobanStep') {
       const progress = easeInOut(currentAnimation.progress || 0);
-      (event.beams || []).forEach((item) => drawSokobanAnimatedBeam(ctx, geom, state, item, progress));
+      (event.beams || []).forEach((item) => drawSokobanAnimatedBeam(ctx, geom, state, item, progress, objectScale));
       (event.bridges || []).forEach((item) => drawSokobanAnimatedPiece(ctx, geom, item, progress, objectScale));
       (event.boxes || []).forEach((item) => drawSokobanAnimatedPiece(ctx, geom, item, progress, objectScale));
       (event.players || []).forEach((item) => drawSokobanAnimatedPiece(ctx, geom, item, progress, objectScale));
@@ -5383,22 +5505,149 @@
     else drawSokobanBoxAtPoint(ctx, geom, point, objectScale);
   }
 
-  function drawSokobanAnimatedBeam(ctx, geom, state, item, progress) {
+  function drawSokobanAnimatedBeam(ctx, geom, state, item, progress, objectScale) {
     if (!item) return;
-    const fromBeam = item.fromBeam;
-    const toBeam = item.toBeam;
-    if (fromBeam && progress < 1) {
-      ctx.save();
-      ctx.globalAlpha *= Math.max(0, 1 - progress);
-      drawSokobanEnergyBeam(ctx, geom, state, fromBeam);
-      ctx.restore();
+    drawSokobanAnimatedBeamFootprints(ctx, geom, state, item, progress);
+    drawSokobanAnimatedBeamEndpoints(ctx, geom, item, progress, objectScale);
+  }
+
+  function drawSokobanAnimatedBeamFootprints(ctx, geom, state, item, progress) {
+    const frame = sokobanBeamAnimationFrame(item, progress);
+    if (!frame || !frame.transitions.length) return;
+    const fromStrips = sokobanBeamStripMap(state, geom, item.fromBeam || item.toBeam, { moving: true });
+    const toStrips = sokobanBeamStripMap(state, geom, item.toBeam || item.fromBeam, { moving: true });
+    drawSokobanBeamStripStyle(ctx, geom, () => {
+      frame.transitions.forEach((transition) => {
+        drawSokobanBeamTransitionStrips(ctx, geom, state, transition, fromStrips, toStrips, frame.progress);
+      });
+    });
+    drawSokobanBeamGlueFlashes(ctx, geom, frame.transitions, frame.progress);
+  }
+
+  function sokobanBeamStripMap(state, geom, beam, options = {}) {
+    const map = new Map();
+    sokobanBeamStripRecords(state, geom, beam, options).forEach((strip) => {
+      const entries = map.get(strip.index) || [];
+      entries.push(strip);
+      map.set(strip.index, entries);
+    });
+    return map;
+  }
+
+  function sokobanBeamAnimationFrame(item, progress) {
+    const directTransitions = sokobanUniqueBeamTransitions(item && item.transitions);
+    if (directTransitions.length) return { transitions: directTransitions, progress };
+    const steps = Array.isArray(item && item.steps)
+      ? item.steps.filter((step) => Array.isArray(step && step.transitions) && step.transitions.length)
+      : [];
+    if (!steps.length) return null;
+    const scaled = Math.max(0, Math.min(1, progress || 0)) * steps.length;
+    const stepIndex = Math.min(steps.length - 1, Math.floor(scaled));
+    return {
+      transitions: sokobanUniqueBeamTransitions(steps[stepIndex].transitions),
+      progress: Math.max(0, Math.min(1, scaled - stepIndex))
+    };
+  }
+
+  function sokobanUniqueBeamTransitions(transitions) {
+    const result = [];
+    const seen = new Set();
+    (transitions || []).forEach((transition) => {
+      if (!transition || !Number.isInteger(transition.from) || seen.has(transition.from)) return;
+      seen.add(transition.from);
+      result.push(transition);
+    });
+    return result;
+  }
+
+  function drawSokobanBeamTransitionStrips(ctx, geom, state, transition, fromStrips, toStrips, progress) {
+    if (!transition || !Number.isInteger(transition.from)) return;
+    const source = sokobanBeamStripsForMovingIndex(fromStrips, state, geom, transition.from, transition.outDir);
+    if (transition.glued && transition.edge) {
+      const target = sokobanBeamStripsForMovingIndex(toStrips, state, geom, transition.to, transition.dir);
+      drawGluedSokobanBeamStrips(ctx, geom, transition, source, target, progress);
+      return;
     }
-    if (toBeam && progress > 0) {
-      ctx.save();
-      ctx.globalAlpha *= Math.max(0, progress);
-      drawSokobanEnergyBeam(ctx, geom, state, toBeam);
-      ctx.restore();
-    }
+    const from = placementPiecePoint(geom, transition.from);
+    const to = placementPiecePoint(geom, transition.to);
+    if (!from || !to) return;
+    const center = lerpPoint(from, to, progress);
+    source.forEach((strip) => drawSokobanBeamStripAtCenter(ctx, geom, strip, center));
+  }
+
+  function sokobanBeamStripsForMovingIndex(map, state, geom, index, dir) {
+    const strips = map && map.get(index);
+    if (strips && strips.length) return strips;
+    const fallback = sokobanFallbackBeamStrip(state, geom, index, dir, { moving: true });
+    return fallback ? [fallback] : [];
+  }
+
+  function sokobanFallbackBeamStrip(state, geom, index, dir, options = {}) {
+    const center = placementPiecePoint(geom, index);
+    const direction = Number.isInteger(dir) ? dir : 0;
+    const start = sokobanBeamEdgeMidpointFromIndex(geom, index, oppositeDir(state.preset, direction), options);
+    const end = sokobanBeamEdgeMidpointFromIndex(geom, index, direction, options);
+    if (!center || !start || !end) return null;
+    return {
+      index,
+      startOffset: { x: start.x - center.x, y: start.y - center.y },
+      endOffset: { x: end.x - center.x, y: end.y - center.y }
+    };
+  }
+
+  function drawGluedSokobanBeamStrips(ctx, geom, transition, sourceStrips, targetStrips, progress) {
+    const from = placementPiecePoint(geom, transition.from);
+    const to = placementPiecePoint(geom, transition.to);
+    if (!from || !to || !transition.edge) return;
+    const outgoing = dirVector(transition.edge.dir, geom.size, geom.lattice);
+    const incoming = dirVector(transition.dir, geom.size, geom.lattice);
+    const exitPoint = {
+      x: from.x + outgoing.x * progress,
+      y: from.y + outgoing.y * progress
+    };
+    const entryPoint = {
+      x: to.x - incoming.x * (1 - progress),
+      y: to.y - incoming.y * (1 - progress)
+    };
+    (sourceStrips || []).forEach((strip) => drawSokobanBeamStripClippedToTile(ctx, geom, strip, exitPoint, transition.from, { moving: true }));
+    (targetStrips || []).forEach((strip) => drawSokobanBeamStripClippedToTile(ctx, geom, strip, entryPoint, transition.to, { moving: true }));
+  }
+
+  function drawSokobanBeamGlueFlashes(ctx, geom, transitions, progress) {
+    const seen = new Set();
+    (transitions || []).forEach((transition) => {
+      if (!transition || !transition.glued || !transition.edge) return;
+      const key = sokobanTransitionEdgeKey(transition.edge);
+      if (seen.has(key)) return;
+      seen.add(key);
+      drawGlueFlash(ctx, geom, { edge: transition.edge }, progress);
+    });
+  }
+
+  function drawSokobanAnimatedBeamEndpoints(ctx, geom, item, progress, objectScale) {
+    const transitionsByFrom = sokobanBeamTransitionMap(item && item.transitions);
+    (item && item.fromEndpoints || []).forEach((index) => {
+      const transition = transitionsByFrom.get(index);
+      if (!transition) return;
+      drawSokobanAnimatedPiece(ctx, geom, {
+        kind: 'energyBridge',
+        id: index,
+        from: transition.from,
+        to: transition.to,
+        dir: transition.dir,
+        path: [transition.to],
+        steps: [transition],
+        transition
+      }, progress, objectScale);
+    });
+  }
+
+  function sokobanBeamTransitionMap(transitions) {
+    const map = new Map();
+    (transitions || []).forEach((transition) => {
+      if (transition && Number.isInteger(transition.from)) map.set(transition.from, transition);
+    });
+    return map;
   }
 
   function drawSokobanBounceBeam(ctx, geom, state, item, rawProgress) {
@@ -7607,7 +7856,8 @@
   function sokobanPlayerPushBeamProposal(state, context, actor, player, playerNext, beam) {
     const ignoredBeamKeys = sokobanSelfBeamKeysForBridgeSet(context, beam.endpoints);
     const step = sokobanTranslateBeamStep(state, context, beam, playerNext.dir, new Set(beam.endpoints), new Set(state.energyBridges || []), {
-      ignoredBeamKeys
+      ignoredBeamKeys,
+      seedIndex: playerNext.index
     });
     if (!step) return sokobanBlockedStepProposal('energy beam blocked');
     const playerTransition = placementTransitionRecord(player.index, actor.dir, playerNext);
@@ -7648,7 +7898,8 @@
     if (!beam) return null;
     const ignoredBeamKeys = sokobanSelfBeamKeysForBridgeSet(context, beam.endpoints);
     const step = sokobanTranslateBeamStep(state, context, beam, actor.dir, new Set(beam.endpoints), new Set(state.energyBridges || []), {
-      ignoredBeamKeys
+      ignoredBeamKeys,
+      seedIndex: beam.start
     });
     if (!step) return null;
     return sokobanStepProposal({
@@ -10209,14 +10460,117 @@
     return false;
   }
 
+  function sokobanBeamRoutePath(beam) {
+    if (Array.isArray(beam && beam.path) && beam.path.length) return beam.path.slice();
+    return [beam && beam.start]
+      .concat(Array.isArray(beam && beam.interior) ? beam.interior : [])
+      .concat([beam && beam.end])
+      .filter(Number.isInteger);
+  }
+
+  function sokobanBeamRouteTransitions(beam, path) {
+    const transitions = beam && beam.route && Array.isArray(beam.route.transitions)
+      ? beam.route.transitions
+      : [];
+    return transitions.length === Math.max(0, path.length - 1) ? transitions : null;
+  }
+
+  function sokobanAssignBeamMoveDir(directions, queue, position, dir, sides) {
+    const normalized = Number.isInteger(dir) ? modulo(dir, sides) : null;
+    if (!Number.isInteger(normalized)) return false;
+    if (!Number.isInteger(directions[position])) {
+      directions[position] = normalized;
+      queue.push(position);
+      return true;
+    }
+    return directions[position] === normalized;
+  }
+
+  function sokobanTransitionRouteDir(transition, field, fallback) {
+    const value = transition && Number.isInteger(transition[field]) ? transition[field] : fallback;
+    return Number.isInteger(value) ? value : null;
+  }
+
+  function sokobanTransportBeamMoveDir(state, transition, moveDir, reverse = false) {
+    const lattice = latticeForPreset(state.preset);
+    const sides = lattice.sides;
+    const outDir = sokobanTransitionRouteDir(transition, 'outDir', transition && transition.dir);
+    const inDir = sokobanTransitionRouteDir(transition, 'dir', outDir);
+    if (!Number.isInteger(moveDir) || !Number.isInteger(outDir) || !Number.isInteger(inDir)) return null;
+    const fromRouteDir = reverse ? inDir : outDir;
+    const toRouteDir = reverse ? outDir : inDir;
+    let relative = modulo(moveDir - fromRouteDir, sides);
+    if (!Number.isInteger(relative)) return null;
+    if (transition && transition.glued && transition.edge && transition.edge.reversed) {
+      relative = modulo(-relative, sides);
+    }
+    return modulo(toRouteDir + relative, sides);
+  }
+
+  function sokobanBeamMovementDirections(state, beam, dir, seedIndex) {
+    const path = sokobanBeamRoutePath(beam);
+    const transitions = sokobanBeamRouteTransitions(beam, path);
+    if (!path.length || !transitions) return null;
+    const sides = latticeForPreset(state.preset).sides;
+    const directions = Array.from({ length: path.length }, () => null);
+    const queue = [];
+    const seed = Number.isInteger(seedIndex) ? seedIndex : beam.start;
+    let seeded = false;
+    for (let position = 0; position < path.length; position += 1) {
+      if (path[position] !== seed) continue;
+      seeded = true;
+      if (!sokobanAssignBeamMoveDir(directions, queue, position, dir, sides)) return null;
+    }
+    if (!seeded && !sokobanAssignBeamMoveDir(directions, queue, 0, dir, sides)) return null;
+    while (queue.length) {
+      const position = queue.shift();
+      const moveDir = directions[position];
+      if (position < transitions.length) {
+        const nextDir = sokobanTransportBeamMoveDir(state, transitions[position], moveDir, false);
+        if (!sokobanAssignBeamMoveDir(directions, queue, position + 1, nextDir, sides)) return null;
+      }
+      if (position > 0) {
+        const previousDir = sokobanTransportBeamMoveDir(state, transitions[position - 1], moveDir, true);
+        if (!sokobanAssignBeamMoveDir(directions, queue, position - 1, previousDir, sides)) return null;
+      }
+    }
+    if (directions.some((value) => !Number.isInteger(value))) return null;
+    return { path, directions };
+  }
+
+  function sokobanTransitionEdgeKey(edge) {
+    if (!edge) return '';
+    return `${edge.index}:${edge.dir}:${edge.reversed ? 1 : 0}`;
+  }
+
+  function sameSokobanPlacementTransition(left, right) {
+    return !!(left && right
+      && left.from === right.from
+      && left.to === right.to
+      && left.outDir === right.outDir
+      && left.dir === right.dir
+      && left.kind === right.kind
+      && !!left.glued === !!right.glued
+      && sokobanTransitionEdgeKey(left.edge) === sokobanTransitionEdgeKey(right.edge));
+  }
+
   function sokobanTranslateBeamStep(state, context, beam, dir, originalEndpoints, currentBridgeSet, options = {}) {
+    const movement = sokobanBeamMovementDirections(state, beam, dir, options.seedIndex);
+    if (!movement) return null;
     const destination = new Map();
     const destinationSet = new Set();
     const records = new Map();
     const ignoredBeamKeys = uniqueSokobanKeys([sokobanBeamOccupantKey(beam)].concat(options.ignoredBeamKeys || []));
-    for (const index of beam.footprint) {
-      const next = surfaceSuccessor(state, index, dir);
+    for (let position = 0; position < movement.path.length; position += 1) {
+      const index = movement.path[position];
+      const moveDir = movement.directions[position];
+      const next = surfaceSuccessor(state, index, moveDir);
       if (!next) return null;
+      const transition = placementTransitionRecord(index, moveDir, next);
+      if (records.has(index)) {
+        if (!sameSokobanPlacementTransition(records.get(index), transition)) return null;
+        continue;
+      }
       if (destinationSet.has(next.index)) return null;
       if (sokobanIndexBlockedForMover(state, context, next.index, {
         ignoreBeamId: beam.id,
@@ -10228,11 +10582,14 @@
       }
       destination.set(index, next.index);
       destinationSet.add(next.index);
-      records.set(index, placementTransitionRecord(index, dir, next));
+      records.set(index, transition);
     }
     const newStart = destination.get(beam.start);
     const newEnd = destination.get(beam.end);
-    const newInterior = beam.interior.map((index) => destination.get(index));
+    const newInterior = (beam.interior || []).map((index) => destination.get(index));
+    if (!Number.isInteger(newStart) || !Number.isInteger(newEnd) || newInterior.some((index) => !Number.isInteger(index))) {
+      return null;
+    }
     const nextBridgeSet = new Set(currentBridgeSet || state.energyBridges || []);
     beam.endpoints.forEach((index) => nextBridgeSet.delete(index));
     nextBridgeSet.add(newStart);
