@@ -2859,18 +2859,27 @@
       return;
     }
     if (!Number.isInteger(game.selectedIndex)) {
-      if (!marble || marble.color !== game.turn) {
-        syncStatus('Chinese Checkers selection', 'select one of your marbles', 'ready');
+      const issue = chineseCheckersSelectionIssue(game, marble);
+      if (issue) {
+        syncStatus('Chinese Checkers selection', issue, 'ready');
         return;
       }
       game.selectedIndex = target.index;
+      if (isChineseCheckersOpeningRound(game)) game.turn = marble.color;
       syncStatus('Chinese Checkers selected', chineseCheckersTurnInfo(game), 'ready');
       render();
       refreshDebugExportIfNeeded();
       return;
     }
-    if (marble && marble.color === game.turn) {
-      game.selectedIndex = target.index === game.selectedIndex ? null : target.index;
+    if (marble) {
+      const selectedAgain = target.index === game.selectedIndex;
+      const issue = selectedAgain ? '' : chineseCheckersSelectionIssue(game, marble);
+      if (issue) {
+        syncStatus('Chinese Checkers selection', issue, 'ready');
+        return;
+      }
+      game.selectedIndex = selectedAgain ? null : target.index;
+      if (isChineseCheckersOpeningRound(game)) game.turn = selectedAgain ? chineseCheckersNextOpeningColor(game) : marble.color;
       syncStatus('Chinese Checkers selected', chineseCheckersTurnInfo(game), 'ready');
       render();
       refreshDebugExportIfNeeded();
@@ -3521,6 +3530,7 @@
         selectedIndex: Number.isInteger(game.selectedIndex) ? game.selectedIndex : null,
         jumpChain: cloneChineseCheckersJumpChain(game.jumpChain),
         playerColors: chineseCheckersPlayerColors(game),
+        openingOrder: chineseCheckersOpeningOrder(game),
         camps: chineseCheckersCampsExport(game.camps, preset.cols),
         marbles: (game.marbles || [])
           .map((marble) => marbleExport(marble, preset.cols))
@@ -3876,10 +3886,13 @@
         removed,
         pieceSets
       );
-      const playerColors = normalizeChineseCheckersPlayers(
+      let playerColors = normalizeChineseCheckersPlayers(
         payload.playerColors || payload.chineseCheckersPlayers || preset.chineseCheckersPlayers,
         camps
       );
+      const round = normalizeNonnegativeInteger(payload.round, 0);
+      const openingOrder = normalizeImportedChineseCheckersOpeningOrder(payload, playerColors, phase, round);
+      playerColors = chineseCheckersOrderedPlayerColors(playerColors, openingOrder);
       const importedJumpChain = normalizeStatusChineseCheckersJumpChain(payload.jumpChain, marbles, preset, removed);
       const jumpChain = phase === 'gameover' ? null : importedJumpChain;
       const jumpingMarble = jumpChain ? marbles.find((marble) => marble.id === jumpChain.marbleId) : null;
@@ -3896,16 +3909,23 @@
         nextMarbleId,
         camps,
         playerColors,
-        selectedIndex: jumpChain ? jumpChain.currentIndex : (validBoardIndex({ preset }, Number(payload.selectedIndex)) ? Number(payload.selectedIndex) : null),
+        openingOrder,
+        selectedIndex: jumpChain ? jumpChain.currentIndex : normalizeStatusOptionalBoardIndex(payload.selectedIndex, preset),
         jumpChain,
         turn: jumpChain && jumpingMarble ? jumpingMarble.color : normalizeChineseCheckersTurn(payload.turn, playerColors),
         winner: phase === 'gameover' ? normalizeChineseCheckersWinner(winner, playerColors) : '',
         winningLine: [],
         resultDismissed: !!payload.resultDismissed,
-        round: normalizeNonnegativeInteger(payload.round, 0),
+        round,
         ending: phase === 'gameover' ? 'chinese-checkers-win' : '',
         debugMessage: ''
       };
+      if (isChineseCheckersOpeningRound(state) && !isChineseCheckersJumping(state)) {
+        const selectedMarble = Number.isInteger(state.selectedIndex) ? chineseCheckerMarbleAt(state, state.selectedIndex) : null;
+        state.turn = selectedMarble && !chineseCheckersOpeningSelectionIssue(state, selectedMarble.color)
+          ? selectedMarble.color
+          : chineseCheckersNextOpeningColor(state);
+      }
       return {
         state,
         phase: state.phase,
@@ -4285,6 +4305,12 @@
 
   function normalizeStatusPhase(value) {
     return ['setup', 'ready', 'paused', 'animating', 'gameover'].includes(value) ? value : 'ready';
+  }
+
+  function normalizeStatusOptionalBoardIndex(value, preset) {
+    if (value === undefined || value === null || value === '') return null;
+    const index = Number(value);
+    return validBoardIndex({ preset }, index) ? index : null;
   }
 
   function normalizeStatusGameMode(payload) {
@@ -6034,7 +6060,12 @@
   }
 
   function drawChineseCheckersTurnHighlights(ctx, geom, state) {
-    const color = normalizePlacementColor(state.turn);
+    const selectedMarble = Number.isInteger(state.selectedIndex) ? chineseCheckerMarbleAt(state, state.selectedIndex) : null;
+    if (isChineseCheckersOpeningRound(state) && !selectedMarble) {
+      drawChineseCheckersOpeningRoundHighlights(ctx, geom, state);
+      return;
+    }
+    const color = normalizePlacementColor(isChineseCheckersOpeningRound(state) && selectedMarble ? selectedMarble.color : state.turn);
     if (!color || state.phase === 'gameover') return;
     const colors = placementPieceColors(color);
     const target = chineseCheckersCampSet(state.camps, 'targets', color);
@@ -6066,6 +6097,30 @@
       if (!point) return;
       ctx.beginPath();
       ctx.arc(point.x, point.y, geom.radius * 0.59, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  function drawChineseCheckersOpeningRoundHighlights(ctx, geom, state) {
+    const pending = new Set(chineseCheckersPendingOpeningColors(state));
+    if (!pending.size) return;
+    ctx.save();
+    ctx.lineWidth = Math.max(1.8, geom.radius * 0.065);
+    (state.marbles || []).forEach((marble) => {
+      if (!pending.has(marble.color) || !chineseCheckersHintMoveMap(state, marble.index).size) return;
+      const point = placementPiecePoint(geom, marble.index);
+      if (!point) return;
+      const colors = placementPieceColors(marble.color);
+      ctx.globalAlpha = 0.2;
+      ctx.fillStyle = colors.fallback;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, geom.radius * 0.62, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.84;
+      ctx.strokeStyle = colors.stroke;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, geom.radius * 0.62, 0, Math.PI * 2);
       ctx.stroke();
     });
     ctx.restore();
@@ -7494,6 +7549,7 @@
       nextMarbleId: 1,
       camps,
       playerColors,
+      openingOrder: [],
       selectedIndex: null,
       jumpChain: null,
       turn: playerColors[0] || 'red',
@@ -9707,15 +9763,18 @@
       return { changed: false, state: sourceState, message: 'target tile is occupied' };
     }
     const marble = chineseCheckerMarbleAt(sourceState, from);
-    if (!marble || marble.color !== sourceState.turn) {
+    if (!marble) {
       return { changed: false, state: sourceState, message: 'select one of your marbles' };
     }
     const activeJump = isChineseCheckersJumping(sourceState);
     if (activeJump) {
       const chain = sourceState.jumpChain;
-      if (chain.marbleId !== marble.id || chain.currentIndex !== from) {
+      if (marble.color !== sourceState.turn || chain.marbleId !== marble.id || chain.currentIndex !== from) {
         return { changed: false, state: sourceState, message: 'continue the selected jump' };
       }
+    } else {
+      const issue = chineseCheckersSelectionIssue(sourceState, marble);
+      if (issue) return { changed: false, state: sourceState, message: issue };
     }
     const stepwise = !!options.stepwise || activeJump;
     const legal = activeJump
@@ -9741,10 +9800,12 @@
       ? cloneChineseCheckerMoveSegments(sourceState.jumpChain && sourceState.jumpChain.segments).concat(cloneChineseCheckerMoveSegments(move.segments))
       : cloneChineseCheckerMoveSegments(move.segments);
     if (chineseCheckersPlayerWins(state, moving.color)) {
+      completeChineseCheckersOpeningTurn(state, moving.color);
       state.selectedIndex = null;
       state.jumpChain = null;
       state.round += 1;
       state.phase = 'gameover';
+      state.turn = moving.color;
       state.winner = moving.color;
       state.ending = 'chinese-checkers-win';
     } else if (stepwise && move.kind === 'jump' && chineseCheckerImmediateJumpMap(state, to).size) {
@@ -9763,7 +9824,7 @@
       state.jumpChain = null;
       state.round += 1;
       state.phase = 'ready';
-      state.turn = nextChineseCheckersColor(state, moving.color);
+      state.turn = nextChineseCheckersTurnAfterCompletedMove(state, moving.color);
       state.ending = '';
     }
     return { changed: true, state, move: cloneChineseCheckerMove(move), marble: movedMarble };
@@ -10719,6 +10780,86 @@
     return normalizeChineseCheckersPlayers(state && state.playerColors, state && state.camps);
   }
 
+  function normalizeChineseCheckersOpeningOrder(value, playerColors = CHINESE_CHECKERS_DEFAULT_COLORS) {
+    const players = normalizeChineseCheckersPlayers(playerColors);
+    const result = [];
+    const add = (colorValue) => {
+      const color = normalizePlacementColor(colorValue);
+      if (color && players.includes(color) && !result.includes(color)) result.push(color);
+    };
+    if (Array.isArray(value)) value.forEach(add);
+    else if (typeof value === 'string') value.split(/[,\s]+/).forEach(add);
+    return result;
+  }
+
+  function normalizeImportedChineseCheckersOpeningOrder(payload, playerColors, phase, round) {
+    if (payload && Object.prototype.hasOwnProperty.call(payload, 'openingOrder')) {
+      return normalizeChineseCheckersOpeningOrder(payload.openingOrder, playerColors);
+    }
+    return phase === 'setup' || normalizeNonnegativeInteger(round, 0) === 0
+      ? []
+      : normalizeChineseCheckersPlayers(playerColors);
+  }
+
+  function chineseCheckersOpeningOrder(state) {
+    return normalizeChineseCheckersOpeningOrder(state && state.openingOrder, chineseCheckersPlayerColors(state));
+  }
+
+  function chineseCheckersOrderedPlayerColors(playerColors, openingOrder) {
+    const players = normalizeChineseCheckersPlayers(playerColors);
+    const order = normalizeChineseCheckersOpeningOrder(openingOrder, players);
+    return order.concat(players.filter((color) => !order.includes(color)));
+  }
+
+  function chineseCheckersPendingOpeningColors(state) {
+    const players = chineseCheckersPlayerColors(state);
+    const order = chineseCheckersOpeningOrder(state);
+    return players.filter((color) => !order.includes(color));
+  }
+
+  function isChineseCheckersOpeningRound(state) {
+    if (!isChineseCheckersGame(state) || state.phase === 'setup' || state.phase === 'gameover') return false;
+    return chineseCheckersPendingOpeningColors(state).length > 0;
+  }
+
+  function chineseCheckersOpeningSelectionIssue(state, color) {
+    const normalized = normalizePlacementColor(color);
+    if (!isChineseCheckersOpeningRound(state)) return '';
+    const players = chineseCheckersPlayerColors(state);
+    if (!normalized || !players.includes(normalized)) return 'select an active player marble';
+    if (chineseCheckersOpeningOrder(state).includes(normalized)) {
+      return `${chineseCheckersColorLabel(normalized)} already moved in the opening round`;
+    }
+    return '';
+  }
+
+  function chineseCheckersSelectionIssue(state, marble) {
+    if (!marble) return 'select one of your marbles';
+    if (isChineseCheckersOpeningRound(state)) return chineseCheckersOpeningSelectionIssue(state, marble.color);
+    return marble.color === state.turn ? '' : 'select one of your marbles';
+  }
+
+  function chineseCheckersNextOpeningColor(state) {
+    const pending = chineseCheckersPendingOpeningColors(state);
+    return pending[0] || chineseCheckersPlayerColors(state)[0] || 'red';
+  }
+
+  function completeChineseCheckersOpeningTurn(state, color) {
+    if (!isChineseCheckersOpeningRound(state)) return;
+    const normalized = normalizePlacementColor(color);
+    const issue = chineseCheckersOpeningSelectionIssue(state, normalized);
+    if (issue) return;
+    const order = chineseCheckersOpeningOrder(state).concat(normalized);
+    state.openingOrder = order;
+    state.playerColors = chineseCheckersOrderedPlayerColors(chineseCheckersPlayerColors(state), order);
+  }
+
+  function nextChineseCheckersTurnAfterCompletedMove(state, color) {
+    completeChineseCheckersOpeningTurn(state, color);
+    if (isChineseCheckersOpeningRound(state)) return chineseCheckersNextOpeningColor(state);
+    return nextChineseCheckersColor(state, color);
+  }
+
   function nextChineseCheckersColor(state, color) {
     const players = chineseCheckersPlayerColors(state);
     if (!players.length) return normalizePlacementColor(color) || 'red';
@@ -10738,9 +10879,31 @@
     return normalizePlacementColor(color) || 'unknown';
   }
 
+  function chineseCheckersTurnLabel(state) {
+    if (isChineseCheckersJumping(state)) return chineseCheckersColorLabel(state.turn);
+    if (isChineseCheckersOpeningRound(state)) {
+      const selectedMarble = Number.isInteger(state.selectedIndex) ? chineseCheckerMarbleAt(state, state.selectedIndex) : null;
+      if (selectedMarble && !chineseCheckersOpeningSelectionIssue(state, selectedMarble.color)) {
+        return chineseCheckersColorLabel(selectedMarble.color);
+      }
+      const pending = chineseCheckersPendingOpeningColors(state);
+      return pending.length === 1 ? chineseCheckersColorLabel(pending[0]) : 'opening';
+    }
+    return chineseCheckersColorLabel(state.turn);
+  }
+
   function chineseCheckersTurnInfo(state) {
     if (isChineseCheckersJumping(state)) {
       return `${chineseCheckersColorLabel(state.turn)} jumping; choose next jump or end jump`;
+    }
+    if (isChineseCheckersOpeningRound(state)) {
+      const selectedMarble = Number.isInteger(state.selectedIndex) ? chineseCheckerMarbleAt(state, state.selectedIndex) : null;
+      if (selectedMarble && !chineseCheckersOpeningSelectionIssue(state, selectedMarble.color)) {
+        return `${chineseCheckersColorLabel(selectedMarble.color)} to move; marble selected`;
+      }
+      const pending = chineseCheckersPendingOpeningColors(state);
+      if (pending.length === 1) return `${chineseCheckersColorLabel(pending[0])} to move`;
+      return 'choose any new color to move';
     }
     const selected = Number.isInteger(state.selectedIndex) ? '; marble selected' : '';
     return `${chineseCheckersColorLabel(state.turn)} to move${selected}`;
@@ -10791,12 +10954,14 @@
     state.resultDismissed = false;
     state.winningLine = [];
     if (moving && chineseCheckersPlayerWins(state, color)) {
+      completeChineseCheckersOpeningTurn(state, color);
       state.phase = 'gameover';
+      state.turn = color;
       state.winner = color;
       state.ending = 'chinese-checkers-win';
     } else {
       state.phase = 'ready';
-      state.turn = nextChineseCheckersColor(state, color);
+      state.turn = nextChineseCheckersTurnAfterCompletedMove(state, color);
       state.ending = '';
     }
     return state;
@@ -12006,6 +12171,7 @@
         nextMarbleId: source.nextMarbleId || 1,
         camps: cloneChineseCheckersCamps(source.camps),
         playerColors: chineseCheckersPlayerColors(source),
+        openingOrder: chineseCheckersOpeningOrder(source),
         selectedIndex: Number.isInteger(source.selectedIndex) ? source.selectedIndex : null,
         jumpChain: cloneChineseCheckersJumpChain(source.jumpChain),
         turn: normalizeChineseCheckersTurn(source.turn, chineseCheckersPlayerColors(source)),
@@ -13310,8 +13476,45 @@
     const infoText = warning ? `${info || ''}${info ? ' | ' : ''}${warning}` : (info || '');
     if (refs.statusBadge) refs.statusBadge.textContent = badge || '';
     if (refs.statusLine) refs.statusLine.textContent = status || '';
-    if (refs.infoLine) refs.infoLine.textContent = infoText;
+    renderStatusInfoLine(infoText);
     syncStats();
+  }
+
+  function renderStatusInfoLine(infoText) {
+    if (!refs.infoLine) return;
+    if (renderChineseCheckersInfoLine(refs.infoLine, infoText || '')) return;
+    refs.infoLine.textContent = infoText || '';
+  }
+
+  function renderChineseCheckersInfoLine(container, infoText) {
+    if (!isChineseCheckersGame(game)) return false;
+    const match = /^([a-z0-9_-]+)\s+((?:to move\b|jumping\b)[\s\S]*)$/i.exec(infoText || '');
+    if (!match) return false;
+    const color = normalizePlacementColor(match[1]);
+    if (!color || !chineseCheckersPlayerColors(game).includes(color)) return false;
+    const doc = container.ownerDocument || (typeof document !== 'undefined' ? document : null);
+    if (!doc || !doc.createElement || !doc.createTextNode) return false;
+    const colors = placementPieceColors(color);
+    const piece = doc.createElement('span');
+    piece.className = 'chinese-checkers-status-piece';
+    piece.textContent = `${chineseCheckersColorLabel(color)} `;
+    piece.title = chineseCheckersColorLabel(color);
+    piece.setAttribute('aria-label', chineseCheckersColorLabel(color));
+    piece.style.background = placementPieceStatusGradient(colors);
+    piece.style.borderColor = colors.stroke;
+    container.textContent = '';
+    container.appendChild(piece);
+    container.appendChild(doc.createTextNode(match[2]));
+    return true;
+  }
+
+  function placementPieceStatusGradient(colors) {
+    const stops = colors && Array.isArray(colors.stops) && colors.stops.length
+      ? colors.stops
+      : [{ offset: 0, color: colors && colors.fallback ? colors.fallback : '#171615' }];
+    return `radial-gradient(circle at 35% 28%, ${stops
+      .map((stop) => `${stop.color} ${Math.round(Math.max(0, Math.min(1, stop.offset)) * 100)}%`)
+      .join(', ')})`;
   }
 
   function showSetupAlert(text) {
@@ -13413,7 +13616,7 @@
       if (refs.score) {
         refs.score.textContent = game.phase === 'gameover'
           ? (game.winner ? `${chineseCheckersColorLabel(game.winner)} wins` : 'draw')
-          : chineseCheckersColorLabel(game.turn);
+          : chineseCheckersTurnLabel(game);
       }
       if (refs.highest) refs.highest.textContent = String(counts[first] || 0);
       if (refs.existing) {
@@ -14306,6 +14509,7 @@
         removed: Array.from(state.removed).sort((a, b) => a - b),
         camps: chineseCheckersCampsExport(state.camps, state.preset.cols),
         playerColors: chineseCheckersPlayerColors(state),
+        openingOrder: chineseCheckersOpeningOrder(state),
         selectedIndex: Number.isInteger(state.selectedIndex) ? state.selectedIndex : null,
         jumpChain: cloneChineseCheckersJumpChain(state.jumpChain),
         turn: state.turn,

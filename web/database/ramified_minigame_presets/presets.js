@@ -507,6 +507,15 @@
       "key": "curling",
       "file": "curling.preset.js"
     },
+    {
+      "gameTypes": [
+        "2048"
+        ],
+      "id": "glue-test",
+      "label": "glue_test",
+      "key": "glue_test",
+      "file": "glue_test.preset.js"
+    },
     ]
   };
 });
