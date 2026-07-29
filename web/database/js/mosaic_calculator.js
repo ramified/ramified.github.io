@@ -740,11 +740,12 @@
     'sokoban-player': 'players',
     'sokoban-box': 'boxes',
     'sokoban-target': 'targets',
+    'sokoban-sea': 'sea',
     'sokoban-wall': 'walls',
     'sokoban-ice': 'ice',
     'sokoban-energy-bridge': 'energyBridges'
   };
-  const SOKOBAN_DECORATION_ORDER = ['targets', 'ice', 'energyBridges', 'walls', 'boxes', 'players'];
+  const SOKOBAN_DECORATION_ORDER = ['sea', 'targets', 'ice', 'energyBridges', 'walls', 'boxes', 'players'];
   const SOKOBAN_OBJECT_SCALE_DEFAULT = 0.70;
   const SOKOBAN_ENERGY_GLOW_DEFAULT = { inner: 0.55, outer: 0.82, blur: 0.38 };
 
@@ -1978,6 +1979,7 @@
       { id: 'sokoban-player', kind: 'sokoban-player', label: 'Sokoban player' },
       { id: 'sokoban-box', kind: 'sokoban-box', label: 'Sokoban box' },
       { id: 'sokoban-target', kind: 'sokoban-target', label: 'Sokoban target' },
+      { id: 'sokoban-sea', kind: 'sokoban-sea', label: 'sea' },
       { id: 'sokoban-wall', kind: 'sokoban-wall', label: 'Sokoban wall' },
       { id: 'sokoban-ice', kind: 'sokoban-ice', label: 'icy ground' },
       { id: 'sokoban-energy-bridge', kind: 'sokoban-energy-bridge', label: 'Energy Bridge' }
@@ -2618,7 +2620,7 @@
     SOKOBAN_DECORATION_ORDER.forEach((field) => {
       next[field] = reshapeRemovedTiles(source[field], oldRows, oldCols, rows, cols);
     });
-    return next;
+    return normalizeSokobanDecorationCoexistence(next);
   }
 
   function reshapeCutEdges(oldCutEdges, oldRows, oldCols, rows, cols) {
@@ -3862,7 +3864,7 @@
     Object.entries(SOKOBAN_DECORATION_FIELDS).forEach(([kind, field]) => {
       result[field] = importSokobanTileSet(payload, sokobanFieldImportKeys(field), rows, cols);
     });
-    return result;
+    return normalizeSokobanDecorationCoexistence(result);
   }
 
   function importSokobanTileSet(payload, keys, rows, cols) {
@@ -3902,6 +3904,7 @@
     if (field === 'players') return ['players', 'player', 'sokobanPlayers', 'sokobanPlayer'];
     if (field === 'boxes') return ['boxes', 'box', 'sokobanBoxes', 'sokobanBox'];
     if (field === 'targets') return ['targets', 'target', 'goals', 'goal', 'sokobanTargets', 'sokobanGoals'];
+    if (field === 'sea') return ['sea', 'water', 'ocean', 'sokobanSea', 'sokobanWater'];
     if (field === 'walls') return ['walls', 'wall', 'sokobanWalls', 'sokobanWall'];
     if (field === 'ice') return ['ice', 'icyGround', 'icy', 'sokobanIce'];
     if (field === 'energyBridges') return ['energyBridges', 'energyBridge', 'bridges', 'bridge', 'sokobanEnergyBridges'];
@@ -4865,6 +4868,7 @@
       players: new Set(),
       boxes: new Set(),
       targets: new Set(),
+      sea: new Set(),
       walls: new Set(),
       ice: new Set(),
       energyBridges: new Set()
@@ -4879,6 +4883,31 @@
       else if (Array.isArray(values)) result[field] = new Set(values.filter((index) => Number.isInteger(index)));
     });
     return result;
+  }
+
+  function normalizeSokobanDecorationCoexistence(decorations) {
+    if (!decorations || typeof decorations !== 'object') return createEmptySokobanDecorations();
+    SOKOBAN_DECORATION_ORDER.forEach((field) => {
+      if (!(decorations[field] instanceof Set)) decorations[field] = new Set(decorations[field] || []);
+    });
+    decorations.walls.forEach((index) => {
+      SOKOBAN_DECORATION_ORDER.forEach((field) => {
+        if (field !== 'walls') decorations[field].delete(index);
+      });
+    });
+    decorations.sea.forEach((index) => {
+      decorations.players.delete(index);
+      decorations.ice.delete(index);
+    });
+    decorations.players.forEach((index) => {
+      decorations.boxes.delete(index);
+      decorations.sea.delete(index);
+      decorations.energyBridges.delete(index);
+    });
+    decorations.ice.forEach((index) => {
+      decorations.sea.delete(index);
+    });
+    return decorations;
   }
 
   function clonePresetPieces() {
@@ -5239,7 +5268,7 @@
         }
       });
     });
-    state.sokoban = next;
+    state.sokoban = normalizeSokobanDecorationCoexistence(next);
   }
 
   function toggleInputHole(index, options = {}) {
@@ -5296,7 +5325,15 @@
     } else {
       if (state.sokoban.walls instanceof Set) state.sokoban.walls.delete(index);
       if (field === 'players' && state.sokoban.boxes instanceof Set) state.sokoban.boxes.delete(index);
+      if (field === 'players' && state.sokoban.energyBridges instanceof Set) state.sokoban.energyBridges.delete(index);
       if (field === 'boxes' && state.sokoban.players instanceof Set) state.sokoban.players.delete(index);
+      if (field === 'sea') {
+        if (state.sokoban.players instanceof Set) state.sokoban.players.delete(index);
+        if (state.sokoban.ice instanceof Set) state.sokoban.ice.delete(index);
+      }
+      if (field === 'players' && state.sokoban.sea instanceof Set) state.sokoban.sea.delete(index);
+      if (field === 'energyBridges' && state.sokoban.players instanceof Set) state.sokoban.players.delete(index);
+      if (field === 'ice' && state.sokoban.sea instanceof Set) state.sokoban.sea.delete(index);
     }
     set.add(index);
     return true;
@@ -14988,8 +15025,12 @@
       ctx.restore();
       return;
     }
+    if (normalized === 'sokoban-sea') {
+      drawSokobanSea(ctx, point, radius, lattice);
+      return;
+    }
     if (normalized === 'sokoban-ice') {
-      const half = radius * SOKOBAN_OBJECT_SCALE_DEFAULT;
+      const half = radius;
       ctx.save();
       ctx.fillStyle = 'rgba(142,202,230,0.36)';
       ctx.strokeStyle = 'rgba(33,94,122,0.45)';
@@ -15114,13 +15155,41 @@
     ctx.lineWidth = Math.max(1, radius * 0.04);
     ctx.lineCap = 'round';
     ctx.beginPath();
-    [0, Math.PI / 3, (2 * Math.PI) / 3].forEach((angle) => {
+    [Math.PI / 6, Math.PI / 2, (5 * Math.PI) / 6].forEach((angle) => {
       const dx = Math.cos(angle) * length;
       const dy = Math.sin(angle) * length;
       ctx.moveTo(point.x - dx, point.y - dy);
       ctx.lineTo(point.x + dx, point.y + dy);
     });
     ctx.stroke();
+  }
+
+  function drawSokobanSea(ctx, point, radius, lattice = getLattice()) {
+    const half = radius;
+    ctx.save();
+    ctx.fillStyle = 'rgba(14,116,144,0.42)';
+    ctx.strokeStyle = 'rgba(8,47,73,0.52)';
+    ctx.lineWidth = Math.max(1, radius * 0.045);
+    drawScaledTilePath(ctx, point, half, lattice);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(186,230,253,0.62)';
+    ctx.lineWidth = Math.max(1, radius * 0.035);
+    ctx.lineCap = 'round';
+    for (let offset = -0.36; offset <= 0.37; offset += 0.24) {
+      ctx.beginPath();
+      ctx.moveTo(point.x - half * 0.62, point.y + half * offset);
+      ctx.bezierCurveTo(
+        point.x - half * 0.25,
+        point.y + half * (offset - 0.18),
+        point.x + half * 0.18,
+        point.y + half * (offset + 0.18),
+        point.x + half * 0.62,
+        point.y + half * offset
+      );
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   function drawSokobanBrickPattern(ctx, point, radius, scale, lattice) {
@@ -21402,6 +21471,10 @@
       || action === 'sokoban-player'
       || action === 'sokoban-box'
       || action === 'sokoban-target'
+      || action === 'sokoban-sea'
+      || action === 'sea'
+      || action === 'water'
+      || action === 'ocean'
       || action === 'sokoban-wall'
       || action === 'sokoban-ice'
       || action === 'sokoban-energy-bridge'
@@ -21430,6 +21503,7 @@
     if (value === 'player' || value === 'sokoban-player' || value === 'sokobanplayer' || value === 'pusher') return 'sokoban-player';
     if (value === 'box' || value === 'crate' || value === 'sokoban-box' || value === 'sokobanbox') return 'sokoban-box';
     if (value === 'sokoban-target' || value === 'sokobantarget' || value === 'sokoban-goal' || value === 'sokobangoal') return 'sokoban-target';
+    if (value === 'sea' || value === 'water' || value === 'ocean' || value === 'sokoban-sea' || value === 'sokobansea' || value === 'sokoban-water' || value === 'sokobanwater') return 'sokoban-sea';
     if (value === 'wall' || value === 'sokoban-wall' || value === 'sokobanwall') return 'sokoban-wall';
     if (value === 'ice' || value === 'icy' || value === 'icy-ground' || value === 'icyground' || value === 'sokoban-ice' || value === 'sokobanice') return 'sokoban-ice';
     if (value === 'energy-bridge' || value === 'energybridge' || value === 'bridge' || value === 'sokoban-energy-bridge' || value === 'sokobanenergybridge') return 'sokoban-energy-bridge';

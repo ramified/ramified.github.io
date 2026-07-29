@@ -366,6 +366,7 @@ function testSokobanDecorationPaletteAndExports() {
       'sokoban-player',
       'sokoban-box',
       'sokoban-target',
+      'sokoban-sea',
       'sokoban-wall',
       'sokoban-ice',
       'sokoban-energy-bridge'
@@ -380,12 +381,14 @@ function testSokobanDecorationPaletteAndExports() {
       players: [tile(2, 1), tile(2, 2)],
       boxes: [tile(2, 3)],
       targets: [tile(2, 4)],
+      sea: [tile(3, 1)],
       walls: [tile(1, 1)],
       ice: [tile(1, 2)],
       energyBridges: [tile(1, 3)]
     }
   });
   assert.deepStrictEqual(mosaic.sokobanDecorationsForExport(), {
+    sea: [tile(3, 1)],
     targets: [tile(2, 4)],
     ice: [tile(1, 2)],
     energyBridges: [tile(1, 3)],
@@ -394,6 +397,7 @@ function testSokobanDecorationPaletteAndExports() {
     players: [tile(2, 1), tile(2, 2)]
   });
   assert.deepStrictEqual(mosaic.compactSokobanDecorationsForExport(), {
+    sea: '3,1',
     targets: '2,4',
     ice: '1,2',
     energyBridges: '1,3',
@@ -411,6 +415,7 @@ function testSokobanDecorationPaletteAndExports() {
   });
   const verbose = JSON.parse(mosaic.buildExportText());
   assert.deepStrictEqual(verbose.preset.sokoban.boxes, [tile(2, 3)]);
+  assert.deepStrictEqual(verbose.preset.sokoban.sea, [tile(3, 1)]);
   assert.deepStrictEqual(verbose.preset.removedTiles, []);
 
   mosaic.setTestExportControls({
@@ -422,9 +427,80 @@ function testSokobanDecorationPaletteAndExports() {
   });
   const compact = JSON.parse(mosaic.buildExportText());
   assert.strictEqual(compact.sokoban.players, '2,1; 2,2');
+  assert.strictEqual(compact.sokoban.sea, '3,1');
   const normalized = minigames.normalizePresetPayload(compact);
   assert.deepStrictEqual(normalized.sokoban.walls, [tile(1, 1)]);
+  assert.deepStrictEqual(normalized.sokoban.sea, [tile(3, 1)]);
   assert.deepStrictEqual(normalized.removedTiles, []);
+}
+
+function testSokobanDecorationCoexistenceRules() {
+  mosaic.setTestBoard({
+    rows: 2,
+    cols: 4,
+    lattice: 'square',
+    backgroundAction: 'decoration',
+    backgroundDecorationKind: 'sokoban-target'
+  });
+  const index = 0;
+  assert.strictEqual(mosaic.toggleBackgroundDecoration(index, { update: false }), true);
+  mosaic.state.backgroundDecorationKind = 'sokoban-box';
+  assert.strictEqual(mosaic.toggleBackgroundDecoration(index, { update: false }), true);
+  mosaic.state.backgroundDecorationKind = 'water';
+  assert.strictEqual(mosaic.toggleBackgroundDecoration(index, { update: false }), true);
+  assert.deepStrictEqual(mosaic.sokobanDecorationsForExport(), {
+    sea: [tile(1, 1)],
+    targets: [tile(1, 1)],
+    boxes: [tile(1, 1)]
+  });
+
+  mosaic.state.backgroundDecorationKind = 'sokoban-ice';
+  assert.strictEqual(mosaic.toggleBackgroundDecoration(index, { update: false }), true);
+  assert.deepStrictEqual(mosaic.sokobanDecorationsForExport(), {
+    targets: [tile(1, 1)],
+    ice: [tile(1, 1)],
+    boxes: [tile(1, 1)]
+  });
+
+  mosaic.state.backgroundDecorationKind = 'sokoban-sea';
+  assert.strictEqual(mosaic.toggleBackgroundDecoration(index, { update: false }), true);
+  mosaic.state.backgroundDecorationKind = 'sokoban-energy-bridge';
+  assert.strictEqual(mosaic.toggleBackgroundDecoration(index, { update: false }), true);
+  assert.deepStrictEqual(mosaic.sokobanDecorationsForExport(), {
+    sea: [tile(1, 1)],
+    targets: [tile(1, 1)],
+    boxes: [tile(1, 1)],
+    energyBridges: [tile(1, 1)]
+  });
+
+  mosaic.state.backgroundDecorationKind = 'sokoban-box';
+  assert.strictEqual(mosaic.toggleBackgroundDecoration(index, { update: false }), true);
+  mosaic.state.backgroundDecorationKind = 'sokoban-player';
+  assert.strictEqual(mosaic.toggleBackgroundDecoration(index, { update: false }), true);
+  assert.deepStrictEqual(mosaic.sokobanDecorationsForExport(), {
+    targets: [tile(1, 1)],
+    players: [tile(1, 1)]
+  });
+
+  mosaic.setTestBoard({
+    rows: 2,
+    cols: 2,
+    lattice: 'square',
+    sokoban: {
+      players: [tile(1, 1)],
+      boxes: [tile(1, 2)],
+      targets: [tile(1, 1), tile(1, 2)],
+      sea: [tile(1, 1), tile(1, 2)],
+      ice: [tile(1, 1)],
+      energyBridges: [tile(1, 2)]
+    }
+  });
+  assert.deepStrictEqual(mosaic.sokobanDecorationsForExport(), {
+    sea: [tile(1, 1), tile(1, 2)],
+    targets: [tile(1, 1), tile(1, 2)],
+    boxes: [tile(1, 2)],
+    energyBridges: [tile(1, 2)]
+  });
 }
 
 function testSokobanWallToggleDoesNotRemoveTile() {
@@ -464,6 +540,7 @@ function testSokobanDecorationDrawingMatchesMinigame() {
     'drawSokobanCrate',
     'drawSokobanCratePath',
     'drawSokobanSnowflakeMark',
+    'drawSokobanSea',
     "lattice && lattice.shape === 'hex'",
     "'#6c6257'",
     "'#b8793f'",
@@ -536,6 +613,7 @@ const tests = [
   testImportStyleMarkers,
   testPieceSetsImportExportAndDecorationToggle,
   testSokobanDecorationPaletteAndExports,
+  testSokobanDecorationCoexistenceRules,
   testSokobanWallToggleDoesNotRemoveTile,
   testHoleMarkerDrawingMatchesConnectFour,
   testSokobanDecorationDrawingMatchesMinigame,

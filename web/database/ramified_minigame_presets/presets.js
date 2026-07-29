@@ -403,6 +403,15 @@
       "gameTypes": [
         "Sokoban"
         ],
+      "id": "pedestrian",
+      "label": "Pedestrian",
+      "key": "pedestrian",
+      "file": "pedestrian.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
       "id": "classic-fans-glue",
       "label": "classic_fans_glue",
       "key": "classic_fans_glue",
@@ -515,6 +524,24 @@
       "label": "glue_test",
       "key": "glue_test",
       "file": "glue_test.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "remote-control",
+      "label": "remote control",
+      "key": "remote_control",
+      "file": "remote_control.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "islands",
+      "label": "islands",
+      "key": "islands",
+      "file": "islands.preset.js"
     },
     ]
   };

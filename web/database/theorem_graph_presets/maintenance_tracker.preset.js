@@ -30,8 +30,18 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fffdf8",
-      "x": 192,
-      "y": 28.1
+      "x": 183.2,
+      "y": 33.8,
+      "childGraph": {
+        "title": "Sheaf Calculator",
+        "nodes": [],
+        "arrows": [],
+        "view": {
+          "selectedId": "",
+          "layoutAvoidOverlap": true,
+          "layoutRunning": false
+        }
+      }
     },
     {
       "id": "n37",
@@ -52,8 +62,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 70,
-      "y": 198.8
+      "x": 63.9,
+      "y": 203.7
     },
     {
       "id": "n39",
@@ -74,8 +84,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 182.5,
-      "y": 267.5
+      "x": 177.7,
+      "y": 274.5
     },
     {
       "id": "n48",
@@ -102,8 +112,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 484,
-      "y": 394.3
+      "x": 476,
+      "y": 388.6
     },
     {
       "id": "n55",
@@ -130,8 +140,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 372.5,
-      "y": 261.8
+      "x": 374.6,
+      "y": 261.3
     },
     {
       "id": "n58",
@@ -145,8 +155,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 411.2,
-      "y": 15.5
+      "x": 398.1,
+      "y": 34
     },
     {
       "id": "n59",
@@ -167,8 +177,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 302,
-      "y": 130.7
+      "x": 298.5,
+      "y": 129.5
     },
     {
       "id": "n60",
@@ -195,8 +205,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 551.4,
-      "y": 60.4
+      "x": 578.5,
+      "y": 41.9
     },
     {
       "id": "n61",
@@ -210,8 +220,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 695.4,
-      "y": 153.9
+      "x": 691.4,
+      "y": 151.7
     },
     {
       "id": "n62",
@@ -228,7 +238,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goal",
           "label": "goal",
           "type": "checkbox",
-          "text": "In the main canvas there is a big strand\nUser can add basic elements step-by-step\nDifferent expressions for symmetric groups, see https://github.com/ramified/master_thesis"
+          "text": "- [x] In the main canvas there is a big strand\n- [x] User can add basic elements step-by-step\n- [x] Different expressions for symmetric groups, see https://github.com/ramified/master_thesis"
         }
       ],
       "setting": "",
@@ -236,10 +246,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 282.2,
-      "y": 395.7
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 278.5,
+      "y": 386.5
     },
     {
       "id": "n64",
@@ -250,7 +260,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "bugs",
           "label": "display bugs",
           "type": "checkbox",
-          "text": "The beamers should not get over the glued boundary in a half circle way, that is cut off by the gluing\nWhen user move the beamer the energy bridge and beamer are both flicking, which should be fixed. They should have the animation of movement. If user move the energy bridge instead, the energy bridge won't create the beamer during the movement."
+          "text": "- [x] The beamers should not get over the glued boundary in a half circle way, that is cut off by the gluing\n- [x] When user move the beamer the energy bridge and beamer are both flicking, which should be fixed. They should have the animation of movement. If user move the energy bridge instead, the energy bridge won't create the beamer during the movement."
         }
       ],
       "setting": "",
@@ -258,10 +268,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 692.6,
-      "y": 357
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 689,
+      "y": 363.6
     },
     {
       "id": "n65",
@@ -272,7 +282,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "title node can not add extra objects\nref edit should follow the same method as node edit; that is, there is no delete button, and user click the title of the row to modify/delete the term\nAdd a tiny padding in the main canvas on top and bottom, so that the node is not attaching the boundary"
+          "text": "- [x] title node can not add extra objects\n- [x] ref edit should follow the same method as node edit; that is, there is no delete button, and user click the title of the row to modify/delete the term\n- [x] Add a tiny padding in the main canvas on top and bottom, so that the node is not attaching the boundary"
         }
       ],
       "setting": "",
@@ -280,10 +290,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 533.5,
-      "y": 262.9
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 540.6,
+      "y": 256.1
     }
   ],
   "arrows": [
@@ -374,59 +384,59 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     }
   ],
   "view": {
-    "selectedId": "n65",
+    "selectedId": "",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasRatioLocked": true,
     "canvasAspectRatio": 1.8101,
     "relativeNodePositions": {
       "n4": {
-        "x": 0.2554,
-        "y": 0.0678
+        "x": 0.2433,
+        "y": 0.0813
       },
       "n37": {
-        "x": 0.0931,
-        "y": 0.4791
+        "x": 0.0848,
+        "y": 0.4896
       },
       "n39": {
-        "x": 0.2426,
-        "y": 0.6446
+        "x": 0.236,
+        "y": 0.6598
       },
       "n48": {
-        "x": 0.6436,
-        "y": 0.9502
+        "x": 0.6321,
+        "y": 0.9342
       },
       "n55": {
-        "x": 0.4954,
-        "y": 0.6309
+        "x": 0.4975,
+        "y": 0.628
       },
       "n58": {
-        "x": 0.5469,
-        "y": 0.0373
+        "x": 0.5287,
+        "y": 0.0816
       },
       "n59": {
-        "x": 0.4016,
-        "y": 0.3148
+        "x": 0.3964,
+        "y": 0.3112
       },
       "n60": {
-        "x": 0.7332,
-        "y": 0.1455
+        "x": 0.7683,
+        "y": 0.1006
       },
       "n61": {
-        "x": 0.9248,
-        "y": 0.3709
+        "x": 0.9182,
+        "y": 0.3645
       },
       "n62": {
-        "x": 0.3752,
-        "y": 0.9534
+        "x": 0.3699,
+        "y": 0.929
       },
       "n64": {
-        "x": 0.921,
-        "y": 0.8603
+        "x": 0.915,
+        "y": 0.874
       },
       "n65": {
-        "x": 0.7094,
-        "y": 0.6335
+        "x": 0.7179,
+        "y": 0.6157
       }
     },
     "selectedReferenceKeys": []

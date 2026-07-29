@@ -53,6 +53,16 @@
   ]);
   const KNOWN_ARROW_KEYS = new Set(['extra', 'id', 'sourceId', 'targetId', 'label', 'remark', 'style', 'body', 'head', 'tail', 'level', 'endpointScale', 'curve', 'labelOffset', 'labelPosition', 'labelAlign', 'color']);
   const KNOWN_REFERENCE_KEYS = new Set(['extra', 'key', 'author', 'title', 'year', 'citeKey', 'details', 'url', 'source', 'rawBibtex', 'links']);
+  const PAPER_DIAGRAM_NODE_KEYS = new Set(['id', 'kind', 'label', 'name', 'weight', 'color', 'statement', 'plain', 'section', 'external', 'ref']);
+  const PAPER_DIAGRAM_EDGE_KEYS = new Set(['from', 'to', 'type']);
+  const PAPER_DIAGRAM_KIND_MAP = {
+    theorem: 'theorem',
+    proposition: 'proposition',
+    lemma: 'lemma',
+    corollary: 'corollary',
+    definition: 'definition',
+    remark: 'misc'
+  };
   const ARROW_BODIES = [
     { id: 'none', label: 'none' },
     { id: 'solid', label: 'solid' },
@@ -5450,6 +5460,9 @@
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       throw new Error('Import must be a JSON object.');
     }
+    const importSource = normalizeImportSource(data, sourceLabel);
+    data = importSource.data;
+    sourceLabel = importSource.sourceLabel;
     stopLayout();
     const canvasView = normalizeCanvasView(readImportView(data));
     applyImportedCanvasView(canvasView);
@@ -5484,6 +5497,275 @@
     setStatus(wholeImport ? 'Imported whole graph.' : 'Imported current tab.');
     renderAll();
     markCurrentExportClean();
+  }
+
+  function normalizeImportSource(data, sourceLabel) {
+    if (!isPaperDiagramImport(data)) return { data, sourceLabel };
+    return {
+      data: paperDiagramToNativeImport(data),
+      sourceLabel: sourceLabel === 'JSON text' ? 'paper-diagram JSON' : sourceLabel
+    };
+  }
+
+  function isPaperDiagramImport(data) {
+    return !!data
+      && typeof data === 'object'
+      && !Array.isArray(data)
+      && cleanString(data.format).toLowerCase() === 'paper-diagram';
+  }
+
+  function paperDiagramToNativeImport(data) {
+    const meta = data.meta && typeof data.meta === 'object' && !Array.isArray(data.meta) ? data.meta : {};
+    const paper = meta.paper && typeof meta.paper === 'object' && !Array.isArray(meta.paper) ? meta.paper : {};
+    const rawNodes = Array.isArray(data.nodes) ? data.nodes : [];
+    const rawEdges = Array.isArray(data.edges) ? data.edges : [];
+    const references = paperDiagramReferences(meta, paper);
+    const paperReferenceKey = references.some((reference) => reference.key === 'paper') ? 'paper' : '';
+    const nodes = [];
+    const ids = new Set();
+
+    rawNodes.forEach((entry, index) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
+      const id = cleanId(entry.id);
+      if (!id || id === TITLE_NODE_ID || ids.has(id)) return;
+      nodes.push(paperDiagramNodeToNative(entry, id, index, paperReferenceKey));
+      ids.add(id);
+    });
+
+    if (!nodes.length) {
+      throw new Error('Paper diagram import found no valid nodes.');
+    }
+
+    const arrows = [];
+    rawEdges.forEach((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
+      const sourceId = cleanId(entry.from);
+      const targetId = cleanId(entry.to);
+      if (!ids.has(sourceId) || !ids.has(targetId) || sourceId === targetId) return;
+      arrows.push(paperDiagramEdgeToNative(entry, sourceId, targetId, arrows.length + 1));
+    });
+
+    applyPaperDiagramLayeredPositions(nodes, arrows, data.layout);
+
+    return {
+      schemaVersion: SCHEMA_VERSION,
+      title: paperDiagramTitle(meta, paper, data),
+      nodes,
+      arrows,
+      references,
+      view: {
+        selectedId: '',
+        selectedReferenceKeys: [],
+        layoutAvoidOverlap: true,
+        sourceFormat: 'paper-diagram',
+        sourceSchemaVersion: cleanString(data.schemaVersion)
+      }
+    };
+  }
+
+  function paperDiagramNodeToNative(entry, id, index, paperReferenceKey = '') {
+    const type = paperDiagramNodeType(entry.kind);
+    const details = paperDiagramNodeDetails(entry, paperReferenceKey);
+    return {
+      extra: collectExtra(entry, PAPER_DIAGRAM_NODE_KEYS),
+      id,
+      type,
+      label: cleanString(entry.name) || cleanString(entry.label) || `Node ${index + 1}`,
+      setting: '',
+      condition: '',
+      result: cleanString(entry.statement),
+      proofSketch: '',
+      details,
+      citationKeys: [],
+      color: (NODE_TYPES[type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).stroke,
+      fillColor: normalizePaperDiagramColor(entry.color),
+      x: state.canvasWidth / 2,
+      y: state.canvasHeight / 2
+    };
+  }
+
+  function paperDiagramNodeType(kind) {
+    const value = cleanString(kind).toLowerCase();
+    return PAPER_DIAGRAM_KIND_MAP[value] || normalizeType(value);
+  }
+
+  function paperDiagramNodeDetails(entry, paperReferenceKey = '') {
+    const details = [];
+    const add = (id, label, text) => {
+      const cleanText = cleanString(text);
+      if (!cleanText) return;
+      details.push({ id, label, type: 'textbox', text: cleanText });
+    };
+    const tag = cleanString(entry.label);
+    if (tag) {
+      add('citation', 'citation', paperReferenceKey ? `${tag} in ${citationCommandForKey(paperReferenceKey)}` : tag);
+    }
+    add('plain', 'plain', entry.plain);
+    add('section', 'section', entry.section);
+    add('ref', 'ref', entry.ref);
+    if (entry.external === true) add('external', 'external', 'true');
+    if (Object.prototype.hasOwnProperty.call(entry, 'weight')) add('weight', 'weight', entry.weight);
+    return details;
+  }
+
+  function paperDiagramEdgeToNative(entry, sourceId, targetId, index) {
+    const type = cleanString(entry.type).toLowerCase();
+    return {
+      extra: collectExtra(entry, PAPER_DIAGRAM_EDGE_KEYS),
+      id: `pd-edge-${index}`,
+      sourceId,
+      targetId,
+      label: '',
+      remark: type && type !== 'uses' ? type : '',
+      body: type === 'generalizes' ? 'dashed' : 'solid',
+      head: 'arrow',
+      tail: 'none',
+      level: 1,
+      endpointScale: 1,
+      curve: 0,
+      labelOffset: 0,
+      labelPosition: 0.5,
+      labelAlign: 'left',
+      color: '#5f574e'
+    };
+  }
+
+  function paperDiagramTitle(meta, paper, data) {
+    return cleanGraphTitle(meta.title || paper.title || data.title) || DEFAULT_GRAPH_TITLE;
+  }
+
+  function paperDiagramReferences(meta, paper) {
+    if (!paper || typeof paper !== 'object' || Array.isArray(paper)) return [];
+    const title = cleanGraphTitle(paper.title || meta.title);
+    const author = Array.isArray(paper.authors)
+      ? paper.authors.map(cleanString).filter(Boolean).join(', ')
+      : cleanString(paper.authors || paper.author);
+    const year = cleanString(paper.year);
+    const arxiv = cleanString(paper.arxiv);
+    const links = paperDiagramReferenceLinks(paper);
+    if (!title && !author && !year && !arxiv && !links.length) return [];
+    return [{
+      key: 'paper',
+      author,
+      title,
+      year,
+      citeKey: 'paper',
+      source: links.length ? 'web' : 'bibtex',
+      rawBibtex: '',
+      links,
+      details: [
+        ...(arxiv ? [{ id: 'arxiv', label: 'arXiv', type: 'textbox', text: arxiv }] : []),
+        ...(cleanString(meta.note) ? [{ id: 'note', label: 'note', type: 'textbox', text: cleanString(meta.note) }] : []),
+        ...(cleanString(meta.date) ? [{ id: 'date', label: 'date', type: 'textbox', text: cleanString(meta.date) }] : [])
+      ]
+    }];
+  }
+
+  function paperDiagramReferenceLinks(paper) {
+    const links = [];
+    const arxiv = cleanString(paper.arxiv);
+    if (arxiv) {
+      links.push({
+        label: 'arXiv',
+        source: 'web',
+        url: /^https?:\/\//i.test(arxiv) ? arxiv : `https://arxiv.org/abs/${encodeURIComponent(arxiv)}`
+      });
+    }
+    const companion = paper.companion;
+    const companionUrl = typeof companion === 'object' && companion
+      ? normalizeUrl(companion.url || companion.href)
+      : normalizeUrl(companion);
+    if (companionUrl) {
+      links.push({
+        label: typeof companion === 'object' && companion ? cleanString(companion.label || companion.title) : 'companion',
+        source: inferReferenceSource(companionUrl),
+        url: companionUrl
+      });
+    }
+    return links;
+  }
+
+  function applyPaperDiagramLayeredPositions(nodes, arrows, layout = {}) {
+    const direction = layout && typeof layout === 'object' && cleanString(layout.direction).toLowerCase() === 'down'
+      ? 'down'
+      : 'up';
+    const order = new Map(nodes.map((node, index) => [node.id, index]));
+    const outgoing = new Map(nodes.map((node) => [node.id, []]));
+    const indegree = new Map(nodes.map((node) => [node.id, 0]));
+    const layers = new Map(nodes.map((node) => [node.id, 0]));
+
+    arrows.forEach((arrow) => {
+      if (!outgoing.has(arrow.sourceId) || !indegree.has(arrow.targetId)) return;
+      outgoing.get(arrow.sourceId).push(arrow.targetId);
+      indegree.set(arrow.targetId, indegree.get(arrow.targetId) + 1);
+    });
+
+    const queue = nodes
+      .filter((node) => indegree.get(node.id) === 0)
+      .sort((a, b) => order.get(a.id) - order.get(b.id))
+      .map((node) => node.id);
+    const processed = new Set();
+    while (queue.length) {
+      const id = queue.shift();
+      processed.add(id);
+      (outgoing.get(id) || []).forEach((targetId) => {
+        layers.set(targetId, Math.max(layers.get(targetId) || 0, (layers.get(id) || 0) + 1));
+        indegree.set(targetId, indegree.get(targetId) - 1);
+        if (indegree.get(targetId) === 0) queue.push(targetId);
+      });
+      queue.sort((a, b) => order.get(a) - order.get(b));
+    }
+
+    nodes.forEach((node) => {
+      if (!processed.has(node.id)) layers.set(node.id, Math.max(0, layers.get(node.id) || 0));
+    });
+
+    const groups = new Map();
+    nodes.forEach((node) => {
+      const layer = layers.get(node.id) || 0;
+      if (!groups.has(layer)) groups.set(layer, []);
+      groups.get(layer).push(node);
+    });
+
+    const width = Math.max(1, finiteNumber(state.canvasWidth, 960));
+    const height = Math.max(1, finiteNumber(state.canvasHeight, 560));
+    const marginX = Math.min(96, Math.max(48, width * 0.08));
+    const marginY = Math.min(72, Math.max(46, height * 0.1));
+    const left = marginX;
+    const right = Math.max(left, width - marginX);
+    const top = marginY;
+    const bottom = Math.max(top, height - marginY);
+    const maxLayer = Math.max(...Array.from(groups.keys()), 0);
+
+    Array.from(groups.entries()).forEach(([layer, group]) => {
+      group.sort((a, b) => order.get(a.id) - order.get(b.id));
+      const yRatio = maxLayer ? layer / maxLayer : 0.5;
+      const y = direction === 'down'
+        ? top + (bottom - top) * yRatio
+        : bottom - (bottom - top) * yRatio;
+      group.forEach((node, index) => {
+        const xRatio = group.length === 1 ? 0.5 : (index + 1) / (group.length + 1);
+        node.x = left + (right - left) * xRatio;
+        node.y = y;
+      });
+    });
+  }
+
+  function normalizePaperDiagramColor(value) {
+    const text = cleanString(value);
+    if (!text) return '';
+    if (/^#[0-9a-f]{6}$/i.test(text)) return text.toLowerCase();
+    const shortHex = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(text);
+    if (shortHex) return `#${shortHex[1]}${shortHex[1]}${shortHex[2]}${shortHex[2]}${shortHex[3]}${shortHex[3]}`.toLowerCase();
+    if (typeof document === 'undefined') return '';
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext && canvas.getContext('2d');
+    if (!ctx) return '';
+    ctx.fillStyle = '#010203';
+    ctx.fillStyle = text;
+    const color = cleanString(ctx.fillStyle).toLowerCase();
+    if (color === '#010203') return '';
+    return /^#[0-9a-f]{6}$/i.test(color) ? color : '';
   }
 
   function loadPresetRegistry() {
