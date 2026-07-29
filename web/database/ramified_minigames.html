@@ -369,6 +369,10 @@
       width: 100%;
     }
 
+    .minigame-action-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
     .mosaic-debug-step-row {
       align-items: center;
       display: grid;
@@ -1504,8 +1508,8 @@
             <span class="input-label">Catalog</span>
             <select id="import-preset-catalog" aria-label="Import catalog preset"></select>
           </div>
-          <textarea class="mosaic-editor-input mosaic-import-input" id="import-preset-input" spellcheck="false" autocomplete="off" placeholder="{ ... }" aria-label="Imported background preset" hidden></textarea>
-          <button class="btn mosaic-import-button" id="apply-import-preset" type="button">import preset</button>
+          <textarea class="mosaic-editor-input mosaic-import-input" id="import-preset-input" spellcheck="false" autocomplete="off" placeholder="{ ... }" aria-label="Imported preset or status" hidden></textarea>
+          <button class="btn mosaic-import-button" id="apply-import-preset" type="button">import</button>
         </div>
         <div class="minigame-subpanel">
           <div class="mosaic-inline-row">
@@ -1524,9 +1528,10 @@
           </div>
           <div class="minigame-action-grid">
             <button class="btn mosaic-import-button" id="export-state" type="button">export</button>
-            <button class="btn mosaic-import-button" id="import-state" type="button">import status</button>
+            <button class="btn mosaic-import-button" id="refresh-state" type="button">refresh</button>
+            <button class="btn mosaic-import-button" id="copy-state" type="button">copy</button>
           </div>
-          <textarea class="mosaic-editor-input minigame-status-export" id="debug-export-output" spellcheck="false" autocomplete="off" aria-label="Current game status import or export"></textarea>
+          <textarea class="mosaic-editor-input minigame-status-export" id="debug-export-output" spellcheck="false" autocomplete="off" aria-label="Current game status or preset export"></textarea>
         </div>
       </div>
     </section>

@@ -384,7 +384,8 @@
     refs.undo = document.getElementById('undo-step');
     refs.redo = document.getElementById('redo-step');
     refs.exportState = document.getElementById('export-state');
-    refs.importState = document.getElementById('import-state');
+    refs.refreshState = document.getElementById('refresh-state');
+    refs.copyState = document.getElementById('copy-state');
     refs.debugExport = document.getElementById('debug-export-output');
     refs.exportStateKind = document.getElementById('export-state-kind');
     refs.exportBackgroundFormatRow = document.getElementById('export-background-format-row');
@@ -476,7 +477,8 @@
     if (refs.undo) refs.undo.addEventListener('click', undoPreviousStep);
     if (refs.redo) refs.redo.addEventListener('click', redoPreviousUndo);
     if (refs.exportState) refs.exportState.addEventListener('click', exportFromUi);
-    if (refs.importState) refs.importState.addEventListener('click', importDebugState);
+    if (refs.refreshState) refs.refreshState.addEventListener('click', refreshExportFromUi);
+    if (refs.copyState) refs.copyState.addEventListener('click', copyExportFromUi);
     if (refs.exportStateKind) refs.exportStateKind.addEventListener('change', syncImportExportControls);
     if (refs.exportBackgroundFormat) refs.exportBackgroundFormat.addEventListener('change', syncImportExportControls);
     if (refs.canvas) {
@@ -1168,7 +1170,7 @@
     if (refs.select && refs.select.value === IMPORT_PRESET_CHOICE_ID && !importedPreset) {
       setImportToolsVisible(true);
       clearSetupAlert();
-      syncStatus('import preset', 'paste a background preset JSON and generate', 'setup');
+      syncStatus('import', 'paste a preset or status JSON and generate', 'setup');
       syncControls();
       return;
     }
@@ -1385,7 +1387,7 @@
       setImportToolsVisible(true);
       clearDebugExport();
       clearSetupAlert();
-      syncStatus('import preset', 'paste a background preset JSON and generate', 'setup');
+      syncStatus('import', 'paste a preset or status JSON and generate', 'setup');
       syncControls();
       return;
     }
@@ -1430,6 +1432,13 @@
         return;
       }
       if (!refs.importInput) return;
+      const statusPayload = statusImportPayloadFromText(refs.importInput.value);
+      if (statusPayload) {
+        const imported = gameStateFromDebugImportPayload(statusPayload);
+        applyImportedDebugState(imported);
+        setImportToolsVisible(false);
+        return;
+      }
       importedPreset = presetFromImportText(refs.importInput.value);
       applyImportedPresetMode(importedPreset, targetMode);
       if (!shouldKeepCurrentGameModeOnImport() && refs.gameMode) refs.gameMode.value = importMode;
@@ -1442,6 +1451,45 @@
     } catch (error) {
       syncStatus('import failed', error && error.message ? error.message : 'invalid preset JSON', 'error');
     }
+  }
+
+  function statusImportPayloadFromText(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return null;
+    let payload;
+    try {
+      payload = JSON.parse(raw);
+    } catch (_) {
+      return null;
+    }
+    return looksLikeStatusImportPayload(payload) ? payload : null;
+  }
+
+  function looksLikeStatusImportPayload(payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+    const has = (key) => Object.prototype.hasOwnProperty.call(payload, key);
+    if (has('exportedAt') || has('status') || has('queue')) return true;
+    if (has('gameMode') || has('game') || has('phase')) return true;
+    const statusKeys = [
+      'score',
+      'highest',
+      'existingTiles',
+      'nextBoxId',
+      'newBoxIds',
+      'stones',
+      'tokens',
+      'discs',
+      'marbles',
+      'players',
+      'turn',
+      'winner',
+      'passes',
+      'captures',
+      'moves',
+      'pushes'
+    ];
+    return (has('preset') || has('round') || has('removed'))
+      && statusKeys.some((key) => has(key));
   }
 
   function selectedImportGameMode() {
@@ -3116,32 +3164,88 @@
   }
 
   function exportFromUi() {
-    if (selectedExportKind() === 'background') {
-      exportBackgroundPreset();
-      return;
-    }
-    exportDebugState();
+    exportSelectedOutput({ focus: true, action: 'exported' });
   }
 
-  function exportDebugState() {
+  function refreshExportFromUi() {
+    exportSelectedOutput({ focus: false, action: 'refreshed' });
+  }
+
+  function exportSelectedOutput(options = {}) {
+    if (selectedExportKind() === 'background') {
+      exportBackgroundPreset(options);
+      return;
+    }
+    exportDebugState(options);
+  }
+
+  function exportDebugState(options = {}) {
     if (!game || !refs.debugExport) return;
     refs.debugExport.value = JSON.stringify(debugExportPayload(), null, 2);
     const info = debugExportInfo(game);
-    syncStatus('status exported', info, debugMode ? 'debug' : phaseBadge(game.phase));
-    refs.debugExport.focus();
-    refs.debugExport.select();
+    syncStatus(`status ${options.action || 'exported'}`, info, debugMode ? 'debug' : phaseBadge(game.phase));
+    if (options.focus !== false) {
+      refs.debugExport.focus();
+      refs.debugExport.select();
+    }
   }
 
-  function exportBackgroundPreset() {
+  function exportBackgroundPreset(options = {}) {
     if (!game || !refs.debugExport) return;
     const preset = backgroundPresetForExport();
     const payload = selectedBackgroundExportFormat() === 'verbose'
       ? preset
       : compactBackgroundPresetForExport(preset);
     refs.debugExport.value = JSON.stringify(payload, null, 2);
-    syncStatus('background exported', previewInfo(preset), phaseBadge(game.phase));
-    refs.debugExport.focus();
-    refs.debugExport.select();
+    syncStatus(`background ${options.action || 'exported'}`, previewInfo(preset), phaseBadge(game.phase));
+    if (options.focus !== false) {
+      refs.debugExport.focus();
+      refs.debugExport.select();
+    }
+  }
+
+  function copyExportFromUi() {
+    if (!refs.debugExport) {
+      syncStatus('copy unavailable', 'export textarea unavailable', 'error');
+      return;
+    }
+    if (!refs.debugExport.value && game) refreshExportFromUi();
+    const text = refs.debugExport.value;
+    if (!text) {
+      syncStatus('copy unavailable', 'nothing to copy', 'error');
+      return;
+    }
+    copyTextToClipboard(text)
+      .then(() => {
+        const count = text.length;
+        syncStatus('export copied', `${count} character${count === 1 ? '' : 's'}`, game ? phaseBadge(game.phase) : 'setup');
+      })
+      .catch((error) => {
+        syncStatus('copy failed', error && error.message ? error.message : 'clipboard unavailable', 'error');
+      });
+  }
+
+  function copyTextToClipboard(text) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise((resolve, reject) => {
+      if (typeof document === 'undefined' || !refs.debugExport) {
+        reject(new Error('clipboard unavailable'));
+        return;
+      }
+      const activeElement = document.activeElement;
+      refs.debugExport.focus();
+      refs.debugExport.select();
+      try {
+        if (document.execCommand && document.execCommand('copy')) resolve();
+        else reject(new Error('clipboard unavailable'));
+      } catch (error) {
+        reject(error);
+      } finally {
+        if (activeElement && activeElement.focus) activeElement.focus();
+      }
+    });
   }
 
   function backgroundPresetForExport() {
@@ -3326,43 +3430,34 @@
     return lattice.dirNames[modulo(Number(dir), lattice.sides)] || String(dir);
   }
 
-  function importDebugState() {
-    if (!refs.debugExport) {
-      syncStatus('status import unavailable', 'status textarea unavailable', 'error');
-      return;
-    }
-    try {
-      const imported = gameStateFromDebugImportText(refs.debugExport.value);
-      if (game) pushUndoSnapshot('status import');
-      stopPlayback();
-      importedPreset = imported.state.preset;
-      if (refs.gameMode) refs.gameMode.value = gameModeValue(imported.state);
-      ensureImportedPresetOption(importedPreset);
-      if (refs.select) refs.select.value = importedPreset.id;
-      game = imported.state;
-      if (isChineseCheckersGame(game)) setChineseCheckersSelectedPlayers(chineseCheckersPlayerColors(game), game.preset);
-      if (isGoGame(game) && game.scoringReview) activateGoScoringReviewControls();
-      eventQueue = imported.eventQueue;
-      eventIndex = imported.eventIndex;
-      sokobanMoveSession = null;
-      stepPaused = imported.stepPaused;
-      currentAnimation = null;
-      clearNoMoveTrial();
-      eventQueueChangedBoard = false;
-      game.phase = stepPaused ? 'paused' : (eventQueue.length ? 'ready' : imported.phase);
-      if (game.phase !== 'gameover') game.ending = '';
-      syncConnectFourFallInputFromGame();
-      syncGoKomiInputFromGame();
-      syncGoScoringMethodInputFromGame();
-      render();
-      const info = debugExportInfo(game);
-      syncStatus('status imported', info, debugMode ? 'debug' : phaseBadge(game.phase));
-      syncControls();
-      refreshDebugExportIfNeeded();
-      if (refs.canvas) refs.canvas.focus();
-    } catch (error) {
-      syncStatus('status import failed', error && error.message ? error.message : 'invalid status JSON', 'error');
-    }
+  function applyImportedDebugState(imported) {
+    if (game) pushUndoSnapshot('status import');
+    stopPlayback();
+    importedPreset = imported.state.preset;
+    if (refs.gameMode) refs.gameMode.value = gameModeValue(imported.state);
+    ensureImportedPresetOption(importedPreset);
+    if (refs.select) refs.select.value = importedPreset.id;
+    game = imported.state;
+    if (isChineseCheckersGame(game)) setChineseCheckersSelectedPlayers(chineseCheckersPlayerColors(game), game.preset);
+    if (isGoGame(game) && game.scoringReview) activateGoScoringReviewControls();
+    eventQueue = imported.eventQueue;
+    eventIndex = imported.eventIndex;
+    sokobanMoveSession = null;
+    stepPaused = imported.stepPaused;
+    currentAnimation = null;
+    clearNoMoveTrial();
+    eventQueueChangedBoard = false;
+    game.phase = stepPaused ? 'paused' : (eventQueue.length ? 'ready' : imported.phase);
+    if (game.phase !== 'gameover') game.ending = '';
+    syncConnectFourFallInputFromGame();
+    syncGoKomiInputFromGame();
+    syncGoScoringMethodInputFromGame();
+    render();
+    const info = debugExportInfo(game);
+    syncStatus('status imported', info, debugMode ? 'debug' : phaseBadge(game.phase));
+    syncControls();
+    refreshDebugExportIfNeeded();
+    if (refs.canvas) refs.canvas.focus();
   }
 
   function refreshDebugExportIfNeeded() {
@@ -3668,18 +3763,6 @@
       return `${state.players.length} player${state.players.length === 1 ? '' : 's'}, ${state.boxes.length} box${state.boxes.length === 1 ? '' : 'es'}, ${state.targets.size} target${state.targets.size === 1 ? '' : 's'}`;
     }
     return `${state.boxes.length} box${state.boxes.length === 1 ? '' : 'es'}, ${state.removed.size} removed`;
-  }
-
-  function gameStateFromDebugImportText(text) {
-    const raw = String(text || '').trim();
-    if (!raw) throw new Error('paste a status JSON object');
-    let payload;
-    try {
-      payload = JSON.parse(raw);
-    } catch (error) {
-      throw new Error('status JSON could not be parsed');
-    }
-    return gameStateFromDebugImportPayload(payload);
   }
 
   function gameStateFromDebugImportPayload(payload) {
@@ -13733,7 +13816,8 @@
     if (refs.undo) refs.undo.disabled = !undoStack.length;
     if (refs.redo) refs.redo.disabled = !redoStack.length;
     if (refs.exportState) refs.exportState.disabled = !game;
-    if (refs.importState) refs.importState.disabled = false;
+    if (refs.refreshState) refs.refreshState.disabled = !game;
+    if (refs.copyState) refs.copyState.disabled = !game && !(refs.debugExport && refs.debugExport.value);
     syncDebugModeUi();
     syncImportExportControls();
     const activeLattice = catalogAvailable ? latticeForPreset(game ? game.preset : selectedPreset()).id : '';
