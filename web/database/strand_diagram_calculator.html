@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Strand Diagram Calculator</title>
+  <link rel="stylesheet" href="css/site.css">
+  <style>
+    .strand-layout {
+      max-width: 1240px;
+      grid-template-columns: minmax(0, 1fr) 390px;
+      align-items: start;
+    }
+
+    .strand-main-column {
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+      align-content: start;
+    }
+
+    .strand-workspace {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+      padding: 16px;
+    }
+
+    .strand-stage {
+      min-height: 420px;
+      max-height: min(64vh, 620px);
+      position: relative;
+      overflow: hidden;
+      scrollbar-gutter: auto;
+    }
+
+    .strand-stage.is-scroll-y {
+      overflow-x: hidden;
+      overflow-y: auto;
+      scrollbar-gutter: stable;
+    }
+
+    .strand-stage.is-scroll-x {
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+
+    .strand-stage.is-scroll-x.is-scroll-y {
+      overflow: auto;
+      scrollbar-gutter: stable;
+    }
+
+    #strand-canvas {
+      width: 100%;
+      height: min(64vh, 620px);
+      min-height: 420px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: #fffdf8;
+      cursor: default;
+      display: block;
+      touch-action: none;
+    }
+
+    .strand-toolbar-group,
+    .strand-action-row,
+    .strand-export-actions,
+    .strand-import-actions,
+    .strand-input-chart {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .strand-toolbar-group {
+      justify-content: flex-end;
+    }
+
+    .strand-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 1px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0;
+      text-transform: none;
+      white-space: nowrap;
+    }
+
+    .strand-field-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.72rem;
+      white-space: nowrap;
+    }
+
+    .strand-field-inline input,
+    .strand-field-inline select,
+    .strand-field-row input,
+    .strand-field-row select,
+    .strand-textarea {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.76rem;
+    }
+
+    .strand-field-row input[type="range"] {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      accent-color: var(--accent);
+      touch-action: none;
+    }
+
+    .strand-field-inline input {
+      width: 70px;
+      padding: 2px 6px;
+      text-align: center;
+    }
+
+    .strand-field-inline select {
+      padding: 3px 7px;
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.92rem;
+    }
+
+    .strand-field-inline input:focus,
+    .strand-field-inline select:focus,
+    .strand-field-row input:focus,
+    .strand-field-row select:focus,
+    .strand-textarea:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .strand-underbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 16px 12px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.72rem;
+      overflow-wrap: anywhere;
+    }
+
+    .strand-generator-panel {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      min-width: 0;
+      padding-top: 2px;
+    }
+
+    .strand-generator-input {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.86rem;
+      white-space: nowrap;
+    }
+
+    .strand-generator-input input {
+      width: 82px;
+      padding: 4px 7px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.78rem;
+      text-align: center;
+    }
+
+    .strand-generator-input input:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .strand-small-button {
+      padding: 4px 10px;
+      font-size: 0.74rem;
+    }
+
+    .strand-small-button:disabled,
+    .strand-generator-input input:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
+    .strand-field-row {
+      display: grid;
+      grid-template-columns: 104px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+      min-width: 0;
+    }
+
+    .strand-field-row .input-label {
+      margin: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .strand-field-row select {
+      width: 100%;
+      padding: 5px 8px;
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.94rem;
+    }
+
+    .strand-textarea {
+      width: 100%;
+      min-height: 150px;
+      padding: 8px;
+      resize: vertical;
+      line-height: 1.35;
+    }
+
+    #strand-import-input {
+      min-height: 92px;
+      margin-top: 8px;
+    }
+
+    .strand-import-mode {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .strand-message {
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .strand-message.is-error {
+      color: var(--accent2);
+    }
+
+    .strand-info-stack {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .strand-basic-controls {
+      display: flex;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      min-width: 0;
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px dotted var(--border);
+    }
+
+    .strand-basic-format-control {
+      display: grid;
+      gap: 4px;
+      flex: 1 1 190px;
+      min-width: 0;
+    }
+
+    .strand-basic-format-control .input-label {
+      margin: 0;
+    }
+
+    .strand-basic-format-control select {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.94rem;
+    }
+
+    .strand-basic-format-control select:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .strand-basic-reduced-toggle {
+      margin: 0 0 1px;
+      padding-bottom: 4px;
+      white-space: nowrap;
+    }
+
+    .strand-basic-reduced-toggle.is-disabled {
+      cursor: not-allowed;
+      opacity: 0.48;
+    }
+
+    .strand-basic-reduced-toggle input:disabled {
+      cursor: not-allowed;
+    }
+
+    .strand-display-controls {
+      display: grid;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .strand-slider-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .strand-slider-row input[type="range"] {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .strand-slider-value {
+      min-width: 42px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.72rem;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .strand-spacing-control {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .strand-display-toggle {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .strand-field-row.is-disabled {
+      opacity: 0.5;
+    }
+
+    .strand-field-row.is-disabled input {
+      cursor: not-allowed;
+    }
+
+    .strand-input-chart {
+      align-items: stretch;
+      gap: 7px;
+    }
+
+    .strand-generator-chip {
+      min-width: 54px;
+      padding: 5px 9px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.78rem;
+      line-height: 1.1;
+      text-align: center;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .strand-generator-chip:hover,
+    .strand-generator-chip:focus {
+      border-color: var(--accent);
+      color: var(--accent);
+      outline: none;
+    }
+
+    .strand-generator-chip:active {
+      cursor: grabbing;
+      transform: translateY(1px);
+    }
+
+    .strand-generator-drag-ghost {
+      position: fixed;
+      z-index: 10000;
+      pointer-events: none;
+      min-width: 54px;
+      padding: 5px 9px;
+      border: 1px solid var(--accent);
+      border-radius: 3px;
+      background: var(--surface);
+      color: var(--accent);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.78rem;
+      line-height: 1.1;
+      text-align: center;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+      opacity: 0.92;
+    }
+
+    body.strand-generator-dragging #strand-canvas {
+      cursor: copy;
+    }
+
+    .strand-stat-grid {
+      display: grid;
+      gap: 0;
+      min-width: 0;
+    }
+
+    .strand-stat-row {
+      display: grid;
+      grid-template-columns: minmax(92px, 0.42fr) minmax(0, 1fr);
+      gap: 10px;
+      align-items: baseline;
+      padding: 6px 0;
+      border-bottom: 1px dotted var(--border);
+      min-width: 0;
+    }
+
+    .strand-stat-row:last-child {
+      border-bottom: 0;
+    }
+
+    .strand-stat-label {
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .strand-stat-value {
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.76rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+      text-align: right;
+    }
+
+    .strand-stat-value mjx-container {
+      margin: 0 !important;
+      overflow: visible;
+    }
+
+    .strand-matrix-wrap {
+      width: 100%;
+      inline-size: 100%;
+      max-width: 100%;
+      max-inline-size: 100%;
+      min-width: 0;
+      min-inline-size: 0;
+      overflow: auto;
+      padding: 2px 0 6px;
+      scrollbar-gutter: stable;
+      box-sizing: border-box;
+      contain: inline-size layout paint;
+      text-align: left;
+    }
+
+    .strand-matrix-wrap mjx-container[jax="CHTML"][display="true"] {
+      margin: 0.35em 0 !important;
+      min-width: max-content;
+    }
+
+    .strand-note {
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-style: italic;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 780px) {
+      .strand-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .strand-workspace {
+        padding: 12px;
+      }
+
+      .strand-stage,
+      #strand-canvas {
+        min-height: 330px;
+      }
+
+      .strand-stage {
+        max-height: 380px;
+      }
+
+      #strand-canvas {
+        height: 380px;
+      }
+
+      .strand-toolbar-group,
+      .strand-generator-panel,
+      .strand-underbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .strand-field-row,
+      .strand-stat-row {
+        grid-template-columns: 1fr;
+        gap: 3px;
+      }
+
+      .strand-spacing-control {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      .strand-basic-controls {
+        align-items: stretch;
+      }
+
+      .strand-basic-format-control {
+        flex-basis: 100%;
+      }
+
+      .strand-stat-value {
+        text-align: left;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Strand Diagram Calculator</h1>
+  <span><a href="index.html">Pure Math Toolkit</a> &middot; symmetric groups &middot; adjacent transpositions</span>
+</header>
+
+<main class="layout strand-layout">
+  <div class="strand-main-column">
+    <section class="canvas-panel" aria-label="Strand diagram canvas panel">
+      <header class="panel-title">
+        <span class="panel-title-text">Strand Diagram</span>
+        <div class="canvas-toolbar strand-toolbar-group" aria-label="Strand diagram controls">
+          <span class="strand-badge" id="strand-status-badge">S_5</span>
+          <label class="strand-field-inline" for="strand-count">
+            <span>strands</span>
+            <input id="strand-count" type="number" min="1" step="1" value="5" inputmode="numeric">
+          </label>
+        </div>
+      </header>
+
+      <div class="strand-workspace">
+        <div class="strand-stage">
+          <canvas id="strand-canvas" width="900" height="560" aria-label="Strand diagram"></canvas>
+        </div>
+        <div class="strand-generator-panel">
+          <button class="btn btn-ghost strand-small-button" id="strand-clear" type="button">clear</button>
+        </div>
+      </div>
+
+      <div class="strand-underbar">
+        <span id="strand-status">ready</span>
+        <span id="strand-summary">identity in S_5</span>
+      </div>
+    </section>
+  </div>
+
+  <aside class="side" id="cards">
+    <section class="card" id="strand-input-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="strand-input-chart" id="strand-input-chart" aria-label="Adjacent generator input chart"></div>
+      </div>
+    </section>
+
+    <section class="card" id="strand-display-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Display</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="strand-display-controls">
+          <div class="strand-field-row">
+            <label class="input-label" for="strand-direction">direction</label>
+            <select id="strand-direction">
+              <option value="up-down" selected>up to down</option>
+              <option value="down-up">down to up</option>
+              <option value="left-right">left to right</option>
+              <option value="right-left">right to left</option>
+            </select>
+          </div>
+          <div class="strand-field-row">
+            <label class="input-label" for="strand-display-style">style</label>
+            <select id="strand-display-style">
+              <option value="straight">Straight</option>
+              <option value="soft" selected>Soft</option>
+            </select>
+          </div>
+          <div class="strand-field-row">
+            <label class="input-label" for="strand-generator-spacing">spacing</label>
+            <div class="strand-spacing-control">
+              <div class="strand-slider-row">
+                <input id="strand-generator-spacing" type="range" min="0" max="2" step="0.1" value="0">
+                <span class="strand-slider-value" id="strand-generator-spacing-value">0.0</span>
+              </div>
+              <label class="opt-row strand-display-toggle" for="strand-generator-gap-enabled">
+                <input id="strand-generator-gap-enabled" type="checkbox">
+                <span>gap</span>
+              </label>
+            </div>
+          </div>
+          <div class="strand-field-row">
+            <label class="input-label" for="strand-size-mode">size mode</label>
+            <select id="strand-size-mode">
+              <option value="fit" selected>Fit canvas</option>
+              <option value="fixed">Fixed generator size</option>
+            </select>
+          </div>
+          <div class="strand-field-row" id="strand-fixed-generator-size-row">
+            <label class="input-label" for="strand-fixed-generator-size">generator size</label>
+            <div class="strand-slider-row">
+              <input id="strand-fixed-generator-size" type="range" min="36" max="180" step="4" value="88">
+              <span class="strand-slider-value" id="strand-fixed-generator-size-value">88px</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="strand-basic-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Basic Info</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="strand-basic-controls" aria-label="Basic expression controls">
+          <label class="strand-basic-format-control" for="strand-basic-expression-format">
+            <span class="input-label">expression</span>
+            <select id="strand-basic-expression-format">
+              <option value="composition" selected>Composition word</option>
+              <option value="transpositions">Transpositions</option>
+              <option value="cycle">Cycle notation</option>
+              <option value="one-line">One-line</option>
+              <option value="two-line">Two-line</option>
+              <option value="matrix">Matrix</option>
+            </select>
+          </label>
+          <label class="strand-basic-reduced-toggle opt-row" for="strand-basic-reduced-only">
+            <input id="strand-basic-reduced-only" type="checkbox">
+            <span>reduced</span>
+          </label>
+        </div>
+        <div class="strand-info-stack" id="strand-basic-info"></div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="strand-export-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Import / Export</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="strand-field-row">
+          <label class="input-label" for="strand-export-format">format</label>
+          <select id="strand-export-format">
+            <option value="latex" selected>LaTeX</option>
+            <option value="plain">Plain text</option>
+            <option value="json">JSON preset</option>
+          </select>
+        </div>
+        <textarea id="strand-export-out" class="strand-textarea" readonly spellcheck="false"></textarea>
+        <div class="strand-export-actions">
+          <button class="btn" id="strand-refresh-export" type="button">refresh</button>
+          <button class="btn btn-ghost" id="strand-copy-export" type="button">copy</button>
+        </div>
+        <div class="strand-import-mode">
+          <label class="input-label" for="strand-import-input">import JSON</label>
+          <textarea id="strand-import-input" class="strand-textarea" spellcheck="false" autocomplete="off" placeholder="Paste exported JSON"></textarea>
+          <div class="strand-import-actions">
+            <button class="btn btn-ghost strand-small-button" id="strand-load-import" type="button">load</button>
+            <button class="btn btn-ghost strand-small-button" id="strand-clear-import" type="button">clear</button>
+          </div>
+          <div class="strand-message" id="strand-export-message"></div>
+        </div>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<footer>
+  Browser-side strand diagram prototype styled with the shared calculator UI.
+  <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
+</footer>
+
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]']],
+      processEscapes: true
+    },
+    options: {
+      skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+    }
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+<script src="js/strand_diagram_calculator.js"></script>
+</body>
+</html>
