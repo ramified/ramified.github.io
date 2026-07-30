@@ -30,8 +30,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fffdf8",
-      "x": 183.2,
-      "y": 33.8,
+      "x": 152,
+      "y": 30.2,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -62,8 +62,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 63.9,
-      "y": 203.7
+      "x": 48.7,
+      "y": 208.4
     },
     {
       "id": "n39",
@@ -84,8 +84,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 177.7,
-      "y": 274.5
+      "x": 157,
+      "y": 270.4
     },
     {
       "id": "n48",
@@ -112,8 +112,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 476,
-      "y": 388.6
+      "x": 469.5,
+      "y": 392.8
     },
     {
       "id": "n55",
@@ -140,8 +140,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 374.6,
-      "y": 261.3
+      "x": 337.4,
+      "y": 301.4
     },
     {
       "id": "n58",
@@ -155,8 +155,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 398.1,
-      "y": 34
+      "x": 382.9,
+      "y": 22.2
     },
     {
       "id": "n59",
@@ -177,8 +177,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 298.5,
-      "y": 129.5
+      "x": 257.2,
+      "y": 100.8
     },
     {
       "id": "n60",
@@ -205,8 +205,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 578.5,
-      "y": 41.9
+      "x": 557.3,
+      "y": 28.5
     },
     {
       "id": "n61",
@@ -220,8 +220,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 691.4,
-      "y": 151.7
+      "x": 694.7,
+      "y": 93.6
     },
     {
       "id": "n62",
@@ -248,8 +248,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 278.5,
-      "y": 386.5
+      "x": 239.4,
+      "y": 392.8
     },
     {
       "id": "n64",
@@ -270,8 +270,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 689,
-      "y": 363.6
+      "x": 682.5,
+      "y": 392.7
     },
     {
       "id": "n65",
@@ -292,8 +292,52 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 540.6,
-      "y": 256.1
+      "x": 523,
+      "y": 246
+    },
+    {
+      "id": "n66",
+      "type": "misc",
+      "label": "bug",
+      "details": [
+        {
+          "id": "preset",
+          "label": "preset",
+          "type": "textbox",
+          "text": "{\n  \"id\": \"bug\",\n  \"label\": \"bug\",\n  \"lattice\": \"square\",\n  \"rows\": 10,\n  \"cols\": 10,\n  \"surface\": \"M_1\",\n  \"removedTiles\": [],\n  \"connectFourHoles\": [],\n  \"inputHoles\": [],\n  \"cutEdges\": [],\n  \"gluedEdges\": [\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 1,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 2,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 2,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 3,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 3,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 4,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 4,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 5,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 5,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 6,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 6,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 7,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 7,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 8,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 8,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 9,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 9,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 10,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 1,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 1,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 2,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 2,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 3,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 3,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 4,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 4,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 5,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 5,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 6,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 6,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 7,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 7,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 8,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 8,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 9,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 9,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 10,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 10,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    }\n  ],\n  \"sokoban\": {\n    \"sea\": [\n      {\n        \"row\": 1,\n        \"col\": 1\n      },\n      {\n        \"row\": 1,\n        \"col\": 2\n      },\n      {\n        \"row\": 1,\n        \"col\": 3\n      },\n      {\n        \"row\": 1,\n        \"col\": 4\n      },\n      {\n        \"row\": 1,\n        \"col\": 5\n      },\n      {\n        \"row\": 1,\n        \"col\": 6\n      },\n      {\n        \"row\": 1,\n        \"col\": 7\n      },\n      {\n        \"row\": 1,\n        \"col\": 8\n      },\n      {\n        \"row\": 1,\n        \"col\": 9\n      },\n      {\n        \"row\": 1,\n        \"col\": 10\n      },\n      {\n        \"row\": 2,\n        \"col\": 1\n      },\n      {\n        \"row\": 2,\n        \"col\": 6\n      },\n      {\n        \"row\": 2,\n        \"col\": 7\n      },\n      {\n        \"row\": 2,\n        \"col\": 8\n      },\n      {\n        \"row\": 2,\n        \"col\": 9\n      },\n      {\n        \"row\": 2,\n        \"col\": 10\n      },\n      {\n        \"row\": 3,\n        \"col\": 1\n      },\n      {\n        \"row\": 3,\n        \"col\": 6\n      },\n      {\n        \"row\": 3,\n        \"col\": 7\n      },\n      {\n        \"row\": 3,\n        \"col\": 8\n      },\n      {\n        \"row\": 3,\n        \"col\": 9\n      },\n      {\n        \"row\": 3,\n        \"col\": 10\n      },\n      {\n        \"row\": 4,\n        \"col\": 1\n      },\n      {\n        \"row\": 4,\n        \"col\": 6\n      },\n      {\n        \"row\": 4,\n        \"col\": 7\n      },\n      {\n        \"row\": 4,\n        \"col\": 8\n      },\n      {\n        \"row\": 4,\n        \"col\": 9\n      },\n      {\n        \"row\": 4,\n        \"col\": 10\n      },\n      {\n        \"row\": 5,\n        \"col\": 1\n      },\n      {\n        \"row\": 5,\n        \"col\": 2\n      },\n      {\n        \"row\": 5,\n        \"col\": 3\n      },\n      {\n        \"row\": 5,\n        \"col\": 4\n      },\n      {\n        \"row\": 5,\n        \"col\": 5\n      },\n      {\n        \"row\": 5,\n        \"col\": 6\n      },\n      {\n        \"row\": 5,\n        \"col\": 7\n      },\n      {\n        \"row\": 5,\n        \"col\": 8\n      },\n      {\n        \"row\": 5,\n        \"col\": 9\n      },\n      {\n        \"row\": 5,\n        \"col\": 10\n      },\n      {\n        \"row\": 6,\n        \"col\": 1\n      },\n      {\n        \"row\": 6,\n        \"col\": 2\n      },\n      {\n        \"row\": 6,\n        \"col\": 3\n      },\n      {\n        \"row\": 6,\n        \"col\": 4\n      },\n      {\n        \"row\": 6,\n        \"col\": 5\n      },\n      {\n        \"row\": 6,\n        \"col\": 6\n      },\n      {\n        \"row\": 6,\n        \"col\": 7\n      },\n      {\n        \"row\": 6,\n        \"col\": 8\n      },\n      {\n        \"row\": 6,\n        \"col\": 9\n      },\n      {\n        \"row\": 6,\n        \"col\": 10\n      },\n      {\n        \"row\": 7,\n        \"col\": 1\n      },\n      {\n        \"row\": 7,\n        \"col\": 2\n      },\n      {\n        \"row\": 7,\n        \"col\": 4\n      },\n      {\n        \"row\": 7,\n        \"col\": 5\n      },\n      {\n        \"row\": 7,\n        \"col\": 6\n      },\n      {\n        \"row\": 7,\n        \"col\": 7\n      },\n      {\n        \"row\": 7,\n        \"col\": 8\n      },\n      {\n        \"row\": 7,\n        \"col\": 9\n      },\n      {\n        \"row\": 7,\n        \"col\": 10\n      },\n      {\n        \"row\": 8,\n        \"col\": 1\n      },\n      {\n        \"row\": 8,\n        \"col\": 2\n      },\n      {\n        \"row\": 8,\n        \"col\": 4\n      },\n      {\n        \"row\": 8,\n        \"col\": 5\n      },\n      {\n        \"row\": 8,\n        \"col\": 6\n      },\n      {\n        \"row\": 8,\n        \"col\": 7\n      },\n      {\n        \"row\": 8,\n        \"col\": 8\n      },\n      {\n        \"row\": 8,\n        \"col\": 9\n      },\n      {\n        \"row\": 8,\n        \"col\": 10\n      },\n      {\n        \"row\": 9,\n        \"col\": 1\n      },\n      {\n        \"row\": 9,\n        \"col\": 2\n      },\n      {\n        \"row\": 9,\n        \"col\": 3\n      },\n      {\n        \"row\": 9,\n        \"col\": 4\n      },\n      {\n        \"row\": 9,\n        \"col\": 5\n      },\n      {\n        \"row\": 9,\n        \"col\": 6\n      },\n      {\n        \"row\": 9,\n        \"col\": 7\n      },\n      {\n        \"row\": 9,\n        \"col\": 8\n      },\n      {\n        \"row\": 9,\n        \"col\": 9\n      },\n      {\n        \"row\": 9,\n        \"col\": 10\n      },\n      {\n        \"row\": 10,\n        \"col\": 1\n      },\n      {\n        \"row\": 10,\n        \"col\": 2\n      },\n      {\n        \"row\": 10,\n        \"col\": 3\n      },\n      {\n        \"row\": 10,\n        \"col\": 4\n      },\n      {\n        \"row\": 10,\n        \"col\": 5\n      },\n      {\n        \"row\": 10,\n        \"col\": 6\n      },\n      {\n        \"row\": 10,\n        \"col\": 7\n      },\n      {\n        \"row\": 10,\n        \"col\": 10\n      }\n    ],\n    \"targets\": [\n      {\n        \"row\": 7,\n        \"col\": 3\n      },\n      {\n        \"row\": 8,\n        \"col\": 3\n      }\n    ],\n    \"energyBridges\": [\n      {\n        \"row\": 3,\n        \"col\": 3\n      },\n      {\n        \"row\": 10,\n        \"col\": 8\n      }\n    ],\n    \"walls\": [\n      {\n        \"row\": 3,\n        \"col\": 4\n      }\n    ],\n    \"boxes\": [\n      {\n        \"row\": 8,\n        \"col\": 3\n      }\n    ],\n    \"players\": [\n      {\n        \"row\": 2,\n        \"col\": 3\n      }\n    ]\n  }\n}"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 666.3,
+      "y": 262
+    },
+    {
+      "id": "n67",
+      "type": "misc",
+      "label": "Strand Diagram Calculator",
+      "details": [
+        {
+          "id": "goals",
+          "label": "goals",
+          "type": "checkbox",
+          "text": "$P_w=$ is unnecessary\nexpression row should be under the \"reduced?\" row\nAdd type BCD case"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 402.6,
+      "y": 161.4
     }
   ],
   "arrows": [
@@ -381,62 +425,87 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
+    },
+    {
+      "id": "a52",
+      "sourceId": "n66",
+      "targetId": "n48",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "hook",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
+      "color": "#5f574e"
     }
   ],
   "view": {
-    "selectedId": "",
+    "selectedId": "n39",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasRatioLocked": true,
     "canvasAspectRatio": 1.8101,
     "relativeNodePositions": {
       "n4": {
-        "x": 0.2433,
-        "y": 0.0813
+        "x": 0.2021,
+        "y": 0.0728
       },
       "n37": {
-        "x": 0.0848,
-        "y": 0.4896
+        "x": 0.0648,
+        "y": 0.5023
       },
       "n39": {
-        "x": 0.236,
-        "y": 0.6598
+        "x": 0.2088,
+        "y": 0.6515
       },
       "n48": {
-        "x": 0.6321,
-        "y": 0.9342
+        "x": 0.6243,
+        "y": 0.9465
       },
       "n55": {
-        "x": 0.4975,
-        "y": 0.628
+        "x": 0.4487,
+        "y": 0.7262
       },
       "n58": {
-        "x": 0.5287,
-        "y": 0.0816
+        "x": 0.5091,
+        "y": 0.0535
       },
       "n59": {
-        "x": 0.3964,
-        "y": 0.3112
+        "x": 0.342,
+        "y": 0.2429
       },
       "n60": {
-        "x": 0.7683,
-        "y": 0.1006
+        "x": 0.7411,
+        "y": 0.0688
       },
       "n61": {
-        "x": 0.9182,
-        "y": 0.3645
+        "x": 0.9238,
+        "y": 0.2256
       },
       "n62": {
-        "x": 0.3699,
-        "y": 0.929
+        "x": 0.3183,
+        "y": 0.9465
       },
       "n64": {
-        "x": 0.915,
-        "y": 0.874
+        "x": 0.9076,
+        "y": 0.9463
       },
       "n65": {
-        "x": 0.7179,
-        "y": 0.6157
+        "x": 0.6955,
+        "y": 0.5927
+      },
+      "n66": {
+        "x": 0.8861,
+        "y": 0.6314
+      },
+      "n67": {
+        "x": 0.5354,
+        "y": 0.3888
       }
     },
     "selectedReferenceKeys": []

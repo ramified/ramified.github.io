@@ -230,12 +230,144 @@ function sokobanActorsAt(actors, cols) {
 }
 
 function sokobanBoxesAtZ(state) {
-  return (state.boxes || [])
+  return (game.stateSummary(state).boxes || [])
     .map((box) => {
       const pos = game.rowCol(box.index, state.preset.cols);
       return `${pos.row},${pos.col},${box.z}`;
     })
     .sort();
+}
+
+function sokobanBridgesAtZ(state) {
+  return (game.stateSummary(state).energyBridges || [])
+    .map((bridge) => {
+      const pos = game.rowCol(bridge.index, state.preset.cols);
+      return `${pos.row},${pos.col},${bridge.z}`;
+    })
+    .sort();
+}
+
+function sokobanBeamRouteSummary(state) {
+  return game.sokobanEnergyBeamObjects(state)
+    .map((beam) => {
+      const path = (beam.path || []).map((index) => {
+        const pos = game.rowCol(index, state.preset.cols);
+        return `${pos.row},${pos.col}`;
+      });
+      return `${beam.z}:${path.join('>')}`;
+    })
+    .sort();
+}
+
+function sokobanCrossBeamOptions(includeColumn4VerticalGlue = false) {
+  const gluedEdges = [];
+  for (let row = 1; row <= 4; row += 1) {
+    gluedEdges.push(gluePair(0, { row, col: 4, dir: game.DIRS.E }, { row, col: 1, dir: game.DIRS.W }));
+  }
+  const verticalGlueCols = includeColumn4VerticalGlue ? 4 : 3;
+  for (let col = 1; col <= verticalGlueCols; col += 1) {
+    gluedEdges.push(gluePair(1, { row: 1, col, dir: game.DIRS.N }, { row: 4, col, dir: game.DIRS.S }));
+  }
+  return {
+    id: includeColumn4VerticalGlue ? 'cross-complete' : 'cross',
+    label: includeColumn4VerticalGlue ? 'cross complete' : 'cross',
+    lattice: 'square',
+    size: '4x4',
+    surface: 'Sigma_1,1',
+    glue: gluedEdges,
+    sokoban: {
+      targets: [tile(3, 2)],
+      energyBridges: [tile(2, 3)],
+      players: [tile(4, 2)]
+    }
+  };
+}
+
+function sokobanHexRemovedNeighborGlueBeamOptions(includeInteriorGlue = true) {
+  const gluedEdges = [
+    gluePair(0, { row: 1, col: 2, dir: game.HEX_DIRS.E }, { row: 3, col: 1, dir: game.HEX_DIRS.W }),
+    gluePair(0, { row: 2, col: 2, dir: game.HEX_DIRS.NE }, { row: 3, col: 1, dir: game.HEX_DIRS.SW }),
+    gluePair(0, { row: 1, col: 4, dir: game.HEX_DIRS.W }, { row: 3, col: 1, dir: game.HEX_DIRS.E })
+  ];
+  if (includeInteriorGlue) {
+    gluedEdges.splice(2, 0, gluePair(0, { row: 2, col: 3, dir: game.HEX_DIRS.NW }, { row: 3, col: 1, dir: game.HEX_DIRS.SE }));
+  }
+  return {
+    id: includeInteriorGlue ? 'hex-removed-neighbor-glue' : 'hex-removed-neighbor-no-glue',
+    label: includeInteriorGlue ? 'hex removed neighbor glue' : 'hex removed neighbor no glue',
+    gameTypes: ['Sokoban'],
+    lattice: 'hexagonal',
+    rows: 3,
+    cols: 4,
+    surface: 'Sigma_0,1',
+    removedTiles: [tile(1, 1), tile(1, 3), tile(2, 1), tile(3, 2), tile(3, 3)],
+    cutEdges: [],
+    gluedEdges,
+    connectFourHoles: [],
+    sokoban: {
+      targets: [tile(1, 2), tile(1, 4)],
+      energyBridges: [tile(2, 2), tile(2, 4)],
+      players: [tile(3, 4)]
+    }
+  };
+}
+
+function sokobanSharedEndpointBeamOptions() {
+  return {
+    id: 'shared-endpoint-beam',
+    label: 'shared endpoint beam',
+    gameTypes: ['Sokoban'],
+    lattice: 'square',
+    rows: 4,
+    cols: 4,
+    surface: 'Sigma_0,1',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [],
+    connectFourHoles: [],
+    inputHoles: [],
+    sokoban: {
+      targets: [tile(1, 4)],
+      energyBridges: [tile(2, 1), tile(2, 3), tile(4, 3)],
+      players: [tile(3, 2)]
+    }
+  };
+}
+
+function sokobanZStackedBridgeSupportOptions() {
+  const gluedEdges = [];
+  for (let row = 1; row <= 10; row += 1) {
+    gluedEdges.push(gluePair(0, { row, col: 10, dir: game.DIRS.E }, { row, col: 1, dir: game.DIRS.W }));
+  }
+  for (let col = 1; col <= 10; col += 1) {
+    gluedEdges.push(gluePair(1, { row: 1, col, dir: game.DIRS.N }, { row: 10, col, dir: game.DIRS.S }));
+  }
+  const sea = [];
+  for (let row = 1; row <= 10; row += 1) {
+    for (let col = 1; col <= 10; col += 1) {
+      if (row === 1 || row >= 5 || col === 1 || col >= 6) sea.push(tile(row, col));
+    }
+  }
+  return {
+    id: 'z-stacked-bridge-support',
+    label: 'z stacked bridge support',
+    gameTypes: ['Sokoban'],
+    lattice: 'square',
+    rows: 10,
+    cols: 10,
+    surface: 'M_1',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges,
+    connectFourHoles: [],
+    inputHoles: [],
+    sokoban: {
+      targets: [tile(3, 5)],
+      sea,
+      energyBridges: [tile(1, 3), tile(2, 3)],
+      players: [tile(3, 3)]
+    }
+  };
 }
 
 function gluePair(group, first, second, options = {}) {
@@ -5480,6 +5612,35 @@ function testSokobanSeaTerrainAndUnderwaterCargo() {
   assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['1,3']);
 
   state = readySokobanState({
+    size: '1x4',
+    sokoban: {
+      players: [tile(1, 1)],
+      boxes: [tile(1, 3)],
+      targets: [tile(1, 4)],
+      sea: [tile(1, 3)],
+      energyBridges: [tile(1, 2)]
+    }
+  });
+  result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['1,2']);
+  assert.deepStrictEqual(sokobanBoxesAtZ(result.state), ['1,3,-1']);
+  assert.deepStrictEqual(sokobanBridgesAtZ(result.state), ['1,3,0']);
+  const bridgeSummary = game.stateSummary(result.state).energyBridges;
+  assert.deepStrictEqual(bridgeSummary, [{ index: game.indexOf(1, 3, result.state.preset.cols), z: 0 }]);
+  const bridgeImport = game.gameStateFromDebugImportPayload({
+    gameMode: 'sokoban',
+    preset: result.state.preset,
+    phase: 'ready',
+    players: [{ id: 1, row: 1, col: 2 }],
+    boxes: [{ id: 1, row: 1, col: 3, z: -1 }],
+    targets: [tile(1, 4)],
+    sea: [tile(1, 3)],
+    energyBridges: [{ row: 1, col: 3, z: 0 }]
+  }).state;
+  assert.deepStrictEqual(sokobanBridgesAtZ(bridgeImport), ['1,3,0']);
+
+  state = readySokobanState({
     size: '4x5',
     sokoban: {
       players: [tile(1, 3)],
@@ -5491,13 +5652,46 @@ function testSokobanSeaTerrainAndUnderwaterCargo() {
   assert.strictEqual(game.sokobanEnergyBeamObjects(state).length, 1);
   result = game.moveSokobanPlayers(state, game.DIRS.S);
   assert.strictEqual(result.changed, true);
-  assert.strictEqual(result.beams.length, 1);
   assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['2,3']);
   assert.deepStrictEqual(Array.from(result.state.energyBridges).map((index) => {
     const pos = game.rowCol(index, result.state.preset.cols);
     return `${pos.row},${pos.col}`;
   }).sort(), ['3,2', '3,4']);
+  assert.strictEqual(result.beams.length, 1);
   assert.strictEqual(game.sokobanEnergyBeamObjects(result.state).length, 0);
+
+  state = game.gameStateFromDebugImportPayload({
+    gameMode: 'sokoban',
+    preset: {
+      id: 'sokoban-beam-different-z-box',
+      label: 'Sokoban Beam Different Z Box',
+      lattice: 'square',
+      rows: 4,
+      cols: 5,
+      surface: 'Sigma_0,1',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [],
+      connectFourHoles: [],
+      sokoban: {
+        players: [tile(1, 3)],
+        boxes: [tile(3, 3)],
+        targets: [tile(4, 5)],
+        sea: [tile(3, 3)],
+        energyBridges: [tile(2, 2), tile(2, 4)]
+      }
+    },
+    phase: 'ready',
+    players: [{ id: 1, row: 1, col: 3 }],
+    boxes: [{ id: 1, row: 3, col: 3, z: -1 }],
+    targets: [tile(4, 5)],
+    sea: [tile(3, 3)],
+    energyBridges: [tile(2, 2), tile(2, 4)]
+  }).state;
+  result = game.moveSokobanPlayers(state, game.DIRS.S);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanBoxesAtZ(result.state), ['3,3,-1']);
+  assert.strictEqual(game.sokobanEnergyBeamObjects(result.state)[0].z, 0);
 
   state = readySokobanState({
     size: '4x5',
@@ -5580,6 +5774,78 @@ function testSokobanSeaTerrainAndUnderwaterCargo() {
   assert.strictEqual(result.changed, true);
   assert.deepStrictEqual(sokobanBoxesAtZ(result.state), ['1,3,-1', '1,3,0']);
   assert.deepStrictEqual(game.stateSummary(result.state).boxes.map((box) => box.z).sort(), [-1, 0]);
+}
+
+function testSokobanZStackedEnergyBridgesOnSea() {
+  let state = game.beginSokobanGame(game.normalizePresetPayload(sokobanZStackedBridgeSupportOptions()));
+  assert.deepStrictEqual(sokobanBridgesAtZ(state), ['1,3,-1', '2,3,0']);
+
+  let result = game.moveSokobanPlayers(state, game.DIRS.N);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['2,3']);
+  assert.deepStrictEqual(sokobanBridgesAtZ(result.state), ['1,3,-1', '1,3,0']);
+
+  result = game.moveSokobanPlayers(result.state, game.DIRS.N);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['1,3']);
+  assert.deepStrictEqual(sokobanBridgesAtZ(result.state), ['1,3,-1', '10,3,-1']);
+
+  const imported = game.gameStateFromDebugImportPayload({
+    gameMode: 'sokoban',
+    preset: {
+      id: 'bridge-stack-import',
+      label: 'Bridge Stack Import',
+      lattice: 'square',
+      rows: 2,
+      cols: 3,
+      surface: 'Sigma_0,1',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [],
+      connectFourHoles: [],
+      sokoban: {
+        players: [tile(2, 1)],
+        targets: [tile(2, 3)],
+        sea: [tile(1, 2)]
+      }
+    },
+    phase: 'ready',
+    players: [{ id: 1, row: 2, col: 1 }],
+    targets: [tile(2, 3)],
+    sea: [tile(1, 2)],
+    energyBridges: [
+      { row: 1, col: 2, z: -1 },
+      { row: 1, col: 2, z: 0 },
+      { row: 1, col: 2, z: 0 }
+    ]
+  }).state;
+  assert.deepStrictEqual(sokobanBridgesAtZ(imported), ['1,2,-1', '1,2,0']);
+  assert.deepStrictEqual(game.stateSummary(imported).energyBridges.map((bridge) => bridge.z).sort(), [-1, 0]);
+
+  const normalizedPreset = game.normalizePresetPayload({
+    id: 'bridge-stack-preset',
+    label: 'Bridge Stack Preset',
+    gameTypes: ['Sokoban'],
+    lattice: 'square',
+    rows: 2,
+    cols: 3,
+    surface: 'Sigma_0,1',
+    sokoban: {
+      players: [tile(2, 1)],
+      targets: [tile(2, 3)],
+      sea: [tile(1, 2)],
+      energyBridges: [
+        { row: 1, col: 2, z: -1 },
+        { row: 1, col: 2, z: 0 }
+      ]
+    }
+  });
+  state = game.beginSokobanGame(normalizedPreset);
+  assert.deepStrictEqual(normalizedPreset.sokoban.energyBridges, [
+    { row: 1, col: 2, z: -1 },
+    { row: 1, col: 2, z: 0 }
+  ]);
+  assert.deepStrictEqual(sokobanBridgesAtZ(state), ['1,2,-1', '1,2,0']);
 }
 
 function testSokobanEnergyBeamFormationAndGluedRoutes() {
@@ -5811,6 +6077,29 @@ function testSokobanEnergyBeamPushesAndIceSliding() {
   });
   result = game.moveSokobanPlayers(state, game.DIRS.S);
   assert.strictEqual(result.changed, false);
+  assert.deepStrictEqual(result.blockers, [{
+    kind: 'tile',
+    reason: 'wall',
+    index: game.indexOf(3, 3, state.preset.cols)
+  }]);
+
+  state = readySokobanState({
+    size: '4x5',
+    sokoban: {
+      players: [tile(1, 3)],
+      boxes: [tile(3, 3)],
+      targets: [tile(4, 4)],
+      energyBridges: [tile(2, 2), tile(2, 4)]
+    }
+  });
+  result = game.moveSokobanPlayers(state, game.DIRS.S);
+  assert.strictEqual(result.changed, false);
+  assert.deepStrictEqual(result.blockers, [{
+    kind: 'tile',
+    reason: 'box',
+    index: game.indexOf(3, 3, state.preset.cols),
+    z: 0
+  }]);
 
   state = readySokobanState({
     size: '5x5',
@@ -5829,6 +6118,91 @@ function testSokobanEnergyBeamPushesAndIceSliding() {
     const pos = game.rowCol(index, result.state.preset.cols);
     return `${pos.row},${pos.col}`;
   }).sort(), ['4,2', '4,4']);
+}
+
+function testSokobanStrictBeamGroupMovementAndBlockerDiagnostics() {
+  let state = readySokobanState(sokobanCrossBeamOptions(false));
+  const initialBeams = sokobanBeamRouteSummary(state);
+  let result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, false);
+  assert.strictEqual(result.message, 'energy beam blocked');
+  assert.deepStrictEqual(result.blockers, [{
+    kind: 'edge',
+    reason: 'boundary',
+    index: game.indexOf(4, 4, state.preset.cols),
+    dir: game.DIRS.S
+  }]);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['4,2']);
+  assert.deepStrictEqual(Array.from(result.state.energyBridges).map((index) => {
+    const pos = game.rowCol(index, result.state.preset.cols);
+    return `${pos.row},${pos.col}`;
+  }), ['2,3']);
+  assert.deepStrictEqual(sokobanBeamRouteSummary(result.state), initialBeams);
+
+  state = readySokobanState(sokobanCrossBeamOptions(true));
+  result = game.moveSokobanPlayers(state, game.DIRS.E);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['4,3']);
+  assert.deepStrictEqual(Array.from(result.state.energyBridges).map((index) => {
+    const pos = game.rowCol(index, result.state.preset.cols);
+    return `${pos.row},${pos.col}`;
+  }), ['2,4']);
+  const beams = game.sokobanEnergyBeamObjects(result.state);
+  assert.strictEqual(beams.length, 2);
+  assert.ok(beams.some((beam) => beam.interior.map((index) => {
+    const pos = game.rowCol(index, result.state.preset.cols);
+    return `${pos.row},${pos.col}`;
+  }).join(';') === '2,1;2,2;2,3'));
+  assert.ok(beams.some((beam) => beam.interior.map((index) => {
+    const pos = game.rowCol(index, result.state.preset.cols);
+    return `${pos.row},${pos.col}`;
+  }).join(';') === '3,4;4,4;1,4'));
+
+  state = game.beginSokobanGame(game.normalizePresetPayload(sokobanSharedEndpointBeamOptions()));
+  state.phase = 'ready';
+  result = game.moveSokobanPlayers(state, game.DIRS.N);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['2,2']);
+  assert.deepStrictEqual(Array.from(result.state.energyBridges).map((index) => {
+    const pos = game.rowCol(index, result.state.preset.cols);
+    return `${pos.row},${pos.col}`;
+  }).sort(), ['1,1', '1,3', '4,3']);
+  assert.strictEqual(result.beams.length, 1);
+  assert.deepStrictEqual(result.beams[0].fromEndpoints.map((index) => {
+    const pos = game.rowCol(index, state.preset.cols);
+    return `${pos.row},${pos.col}`;
+  }), ['2,1', '2,3']);
+  assert.deepStrictEqual(result.beams[0].toEndpoints.map((index) => {
+    const pos = game.rowCol(index, result.state.preset.cols);
+    return `${pos.row},${pos.col}`;
+  }), ['1,1', '1,3']);
+
+  state = game.beginSokobanGame(game.normalizePresetPayload(sokobanHexRemovedNeighborGlueBeamOptions(true)));
+  state.phase = 'ready';
+  result = game.moveSokobanPlayers(state, game.HEX_DIRS.NW);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['2,3']);
+  assert.deepStrictEqual(Array.from(result.state.energyBridges).map((index) => {
+    const pos = game.rowCol(index, result.state.preset.cols);
+    return `${pos.row},${pos.col}`;
+  }).sort(), ['1,2', '1,4']);
+  const hexBeams = game.sokobanEnergyBeamObjects(result.state);
+  assert.strictEqual(hexBeams.length, 1);
+  assert.deepStrictEqual(hexBeams[0].interior.map((index) => {
+    const pos = game.rowCol(index, result.state.preset.cols);
+    return `${pos.row},${pos.col}`;
+  }), ['3,1']);
+
+  state = game.beginSokobanGame(game.normalizePresetPayload(sokobanHexRemovedNeighborGlueBeamOptions(false)));
+  state.phase = 'ready';
+  result = game.moveSokobanPlayers(state, game.HEX_DIRS.NW);
+  assert.strictEqual(result.changed, false);
+  assert.strictEqual(result.message, 'energy beam blocked');
+  assert.deepStrictEqual(result.blockers, [{
+    kind: 'tile',
+    reason: 'removed',
+    index: game.indexOf(1, 3, state.preset.cols)
+  }]);
 }
 
 function testSokobanOverlappingBeamsDoNotBlockBeamMovement() {
@@ -5892,6 +6266,34 @@ function testSokobanBeamInteriorsCanCrossButStillBlockEnergyBridges() {
     const pos = game.rowCol(index, result.state.preset.cols);
     return `${pos.row},${pos.col}`;
   }).sort(), ['2,4', '4,5', '6,2', '6,6', '7,4']);
+
+  state = readySokobanState({
+    id: 'test',
+    label: 'test',
+    size: '4x4',
+    surface: 'Sigma_1,1',
+    glue: 'g0:1,3..4,N=4,3..4,S; g1:1,4,E=1,1,W',
+    sokoban: {
+      sea: '1,1; 1,2; 1,3; 1,4; 2,4; 3,4; 4,4',
+      targets: '4,4',
+      energyBridges: '2,2; 4,3',
+      players: '3,2'
+    }
+  });
+  result = game.moveSokobanPlayers(state, game.DIRS.N);
+  assert.strictEqual(result.changed, true);
+  result = game.moveSokobanPlayers(result.state, game.DIRS.E);
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(sokobanActorsAt(result.state.players, result.state.preset.cols), ['2,3']);
+  assert.deepStrictEqual(Array.from(result.state.energyBridges).map((index) => {
+    const pos = game.rowCol(index, result.state.preset.cols);
+    return `${pos.row},${pos.col}`;
+  }).sort(), ['1,2', '4,4']);
+  const underwaterBeams = game.sokobanEnergyBeamObjects(result.state);
+  assert.strictEqual(underwaterBeams.length, 2);
+  assert.strictEqual(underwaterBeams.every((beam) => beam.z === -1), true);
+  const overlapIndex = game.indexOf(1, 4, result.state.preset.cols);
+  assert.strictEqual(underwaterBeams.filter((beam) => beam.interior.includes(overlapIndex)).length, 2);
 
   state = readySokobanState({
     size: '4x4',
@@ -5992,10 +6394,12 @@ function run() {
   testSokobanIcePlayerSlidingAndSkiingBlockers();
   testSokobanIceBoxFrictionRules();
   testSokobanSeaTerrainAndUnderwaterCargo();
+  testSokobanZStackedEnergyBridgesOnSea();
   testSokobanEnergyBeamFormationAndGluedRoutes();
   testSokobanEnergyBeamsRespectSeaZLevels();
   testSokobanEnergyBridgesAreBoxLikeCargo();
   testSokobanEnergyBeamPushesAndIceSliding();
+  testSokobanStrictBeamGroupMovementAndBlockerDiagnostics();
   testSokobanOverlappingBeamsDoNotBlockBeamMovement();
   testSokobanBeamInteriorsCanCrossButStillBlockEnergyBridges();
   testExtraBackgroundPresets();

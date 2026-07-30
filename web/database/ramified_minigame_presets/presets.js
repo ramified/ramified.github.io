@@ -430,6 +430,15 @@
       "gameTypes": [
         "Sokoban"
         ],
+      "id": "curling-on-cube",
+      "label": "curling on Cube",
+      "key": "curling_on_cube",
+      "file": "curling_on_cube.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
       "id": "energy-test",
       "label": "energy_test",
       "key": "energy_test",
@@ -524,6 +533,15 @@
       "label": "glue_test",
       "key": "glue_test",
       "file": "glue_test.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "remote-rotate",
+      "label": "remote rotate",
+      "key": "remote_rotate",
+      "file": "remote_rotate.preset.js"
     },
     {
       "gameTypes": [

@@ -2,7 +2,8 @@
   'use strict';
 
   const EXPORT_KIND = 'strand-diagram-calculator';
-  const EXPORT_VERSION = 1;
+  const EXPORT_VERSION = 3;
+  const DEFAULT_GROUP_TYPE = 'symmetric';
   const DEFAULT_STRAND_COUNT = 5;
   const DEFAULT_DIRECTION = 'up-down';
   const CANVAS_STRAND_LIMIT = 90;
@@ -20,6 +21,8 @@
   const DEFAULT_STRAND_SIZE_MODE = 'fit';
   const DEFAULT_FIXED_GENERATOR_SIZE = 88;
   const DIRECTIONS = new Set(['up-down', 'down-up', 'left-right', 'right-left']);
+  const GROUP_TYPES = new Set(['symmetric', 'B', 'C', 'D']);
+  const GENERATOR_FAMILIES = new Set(['coxeter', 'braid', 'kl', 'tl']);
   const STRAND_DISPLAY_STYLES = new Set(['straight', 'soft']);
   const STRAND_SIZE_MODES = new Set(['fit', 'fixed']);
   const BASIC_EXPRESSION_FORMATS = new Set(['composition', 'transpositions', 'cycle', 'one-line', 'two-line', 'matrix']);
@@ -30,6 +33,18 @@
     'left-right': 'left to right',
     'right-left': 'right to left'
   };
+  const GROUP_TYPE_NAMES = {
+    symmetric: (n) => `S_${n}`,
+    B: (n) => `B_${n}`,
+    C: (n) => `C_${n}`,
+    D: (n) => `D_${n}`
+  };
+  const GENERATOR_FAMILY_SECTIONS = [
+    { family: 'coxeter', title: 'Coxeter / Weyl' },
+    { family: 'braid', title: 'Braid' },
+    { family: 'kl', title: 'KL basis' },
+    { family: 'tl', title: 'Temperley-Lieb' }
+  ];
   const STRAND_COLORS = [
     '#3d6b4f',
     '#8b3a2a',
@@ -42,6 +57,7 @@
   ];
 
   const state = {
+    groupType: DEFAULT_GROUP_TYPE,
     strandCount: DEFAULT_STRAND_COUNT,
     direction: DEFAULT_DIRECTION,
     appliedSteps: [],
@@ -88,7 +104,9 @@
     const $ = (id) => document.getElementById(id);
     refs.canvas = $('strand-canvas');
     refs.stage = refs.canvas?.parentElement || null;
+    refs.groupType = $('strand-group-type');
     refs.count = $('strand-count');
+    refs.countLabel = $('strand-count-label');
     refs.direction = $('strand-direction');
     refs.displayStyle = $('strand-display-style');
     refs.generatorSpacing = $('strand-generator-spacing');
@@ -119,6 +137,7 @@
   function bindEvents() {
     bindCards();
 
+    refs.groupType.addEventListener('change', commitGroupType);
     refs.count.addEventListener('change', commitStrandCount);
     refs.count.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
@@ -161,14 +180,7 @@
     refs.clear.addEventListener('click', clearSteps);
     bindInputChart();
     bindCanvasGeneratorDrag();
-    refs.basicExpressionFormat.addEventListener('change', () => {
-      state.basicExpressionFormat = basicExpressionFormatValue(refs.basicExpressionFormat.value);
-      renderAll({ preserveMessage: true });
-    });
-    refs.basicReducedOnly.addEventListener('change', () => {
-      state.basicReducedOnly = refs.basicReducedOnly.checked;
-      renderAll({ preserveMessage: true });
-    });
+    refs.basicInfo.addEventListener('change', handleBasicInfoControlChange);
     refs.exportFormat.addEventListener('change', () => refreshExport());
     refs.refreshExport.addEventListener('click', () => {
       refreshExport();
@@ -182,21 +194,33 @@
     });
   }
 
+  function handleBasicInfoControlChange(event) {
+    if (event.target?.id === 'strand-basic-expression-format') {
+      state.basicExpressionFormat = basicExpressionFormatValue(event.target.value);
+      renderAll({ preserveMessage: true });
+      return;
+    }
+    if (event.target?.id === 'strand-basic-reduced-only') {
+      state.basicReducedOnly = event.target.checked;
+      renderAll({ preserveMessage: true });
+    }
+  }
+
   function bindInputChart() {
     if (!refs.inputChart) return;
     refs.inputChart.addEventListener('click', (event) => {
       if (Date.now() < suppressInputChartClickUntil) return;
-      const chip = event.target.closest('[data-generator-step]');
+      const chip = event.target.closest('[data-generator-family]');
       if (!chip) return;
-      const generator = parseInteger(chip.dataset.generatorStep);
+      const generator = generatorRecordFromChip(chip);
       if (!validGenerator(generator)) return;
       addGenerator(generator);
     });
 
     refs.inputChart.addEventListener('pointerdown', (event) => {
-      const chip = event.target.closest('[data-generator-step]');
+      const chip = event.target.closest('[data-generator-family]');
       if (!chip || event.button !== 0) return;
-      const generator = parseInteger(chip.dataset.generatorStep);
+      const generator = generatorRecordFromChip(chip);
       if (!validGenerator(generator)) return;
       state.dragInput = {
         source: 'chart',
@@ -342,7 +366,7 @@
       if (event) event.preventDefault();
       if (Number.isInteger(insertIndex)) insertGeneratorAt(generator, insertIndex);
       else {
-        setStatus(`drop s_${generator} on the strand canvas to insert it`);
+        setStatus(`drop ${generatorLabel(generator)} on the strand canvas to insert it`);
         renderAll({ preserveMessage: true });
       }
       return;
@@ -389,25 +413,25 @@
     suppressInputChartClickUntil = Date.now() + 500;
     if (wasCancelled) {
       restoreDraggedCanvasGenerator(drag);
-      setStatus(`kept s_${generator}`);
+      setStatus(`kept ${generatorLabel(generator)}`);
       renderAll({ preserveMessage: true });
       return;
     }
 
     if (Number.isInteger(insertIndex)) {
-      insertGeneratorAt(generator, insertIndex, `moved s_${generator} to word position ${insertIndex + 1}`);
+      insertGeneratorAt(generator, insertIndex, `moved ${generatorLabel(generator)} to word position ${insertIndex + 1}`);
       return;
     }
 
-    setStatus(`deleted s_${generator} from word position ${sourceIndex + 1}`);
+    setStatus(`deleted ${generatorLabel(generator)} from word position ${sourceIndex + 1}`);
     renderAll({ preserveMessage: true });
   }
 
   function removeDraggedCanvasGenerator(drag) {
     if (drag.removed) return;
     let index = Math.max(0, Math.min(state.appliedSteps.length - 1, drag.sourceIndex));
-    if (state.appliedSteps[index] !== drag.generator) {
-      index = state.appliedSteps.findIndex((step) => step === drag.generator);
+    if (!sameGeneratorRecord(state.appliedSteps[index], drag.generator)) {
+      index = state.appliedSteps.findIndex((step) => sameGeneratorRecord(step, drag.generator));
     }
     if (index < 0) return;
     drag.sourceIndex = index;
@@ -424,7 +448,7 @@
   function createGeneratorGhost(generator) {
     const ghost = document.createElement('div');
     ghost.className = 'strand-generator-drag-ghost';
-    ghost.textContent = `s_${generator}`;
+    ghost.textContent = generatorLabel(generator);
     document.body.appendChild(ghost);
     return ghost;
   }
@@ -550,32 +574,52 @@
     }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
   }
 
+  function commitGroupType() {
+    const previous = state.groupType;
+    state.groupType = groupTypeValue(refs.groupType.value);
+    const nextCount = cleanRankForGroup(refs.count.value, state.groupType);
+    const before = state.appliedSteps.length;
+    state.strandCount = nextCount;
+    refs.count.value = String(nextCount);
+    state.appliedSteps = filterValidSteps(state.appliedSteps, nextCount, state.groupType);
+    const removed = before - state.appliedSteps.length;
+    const changed = previous !== state.groupType;
+    setStatus(`${changed ? 'group' : 'rank'} set to ${groupPlainLabel(state.groupType, state.strandCount)}${removed ? `; dropped ${removed} invalid generator${removed === 1 ? '' : 's'}` : ''}`);
+    renderAll({ preserveMessage: true });
+  }
+
   function commitStrandCount() {
-    const next = cleanPositiveInteger(refs.count.value, DEFAULT_STRAND_COUNT);
+    const next = cleanRankForGroup(refs.count.value, state.groupType);
     state.strandCount = next;
     refs.count.value = String(next);
     const before = state.appliedSteps.length;
-    state.appliedSteps = filterValidSteps(state.appliedSteps, next);
+    state.appliedSteps = filterValidSteps(state.appliedSteps, next, state.groupType);
     const removed = before - state.appliedSteps.length;
-    setStatus(removed ? `strand count set to ${next}; dropped ${removed} invalid step${removed === 1 ? '' : 's'}` : `strand count set to ${next}`);
+    setStatus(removed ? `${rankNoun()} set to ${next}; dropped ${removed} invalid generator${removed === 1 ? '' : 's'}` : `${rankNoun()} set to ${next}`);
     renderAll({ preserveMessage: true });
   }
 
   function syncGeneratorBounds() {
     if (!refs.generator) return;
+    const min = signedGroupActive() ? 0 : 1;
     const max = Math.max(1, state.strandCount - 1);
-    refs.generator.min = '1';
+    refs.generator.min = String(min);
     refs.generator.max = String(max);
-    if (state.strandCount <= 1) {
-      refs.generator.value = '1';
+    if (!generatorValuesForState().length) {
+      refs.generator.value = String(min);
       return;
     }
-    const value = clampInteger(refs.generator.value, 1, max, 1);
+    const value = clampInteger(refs.generator.value, min, max, min);
     refs.generator.value = String(value);
   }
 
   function syncControls() {
+    state.groupType = groupTypeValue(state.groupType);
+    refs.groupType.value = state.groupType;
+    state.strandCount = cleanRankForGroup(state.strandCount, state.groupType);
     refs.count.value = String(state.strandCount);
+    refs.count.min = String(rankBoundsForGroup(state.groupType).min);
+    if (refs.countLabel) refs.countLabel.textContent = signedGroupActive() ? 'rank' : 'strands';
     refs.direction.value = state.direction;
     state.strandDisplayStyle = strandDisplayStyleValue(state.strandDisplayStyle);
     state.generatorSpacing = generatorSpacingValue(state.generatorSpacing);
@@ -592,7 +636,7 @@
     const fixedMode = state.strandSizeMode === 'fixed';
     refs.fixedGeneratorSize.disabled = !fixedMode;
     if (refs.fixedGeneratorSizeRow) refs.fixedGeneratorSizeRow.classList.toggle('is-disabled', !fixedMode);
-    refs.statusBadge.textContent = `S_${state.strandCount}`;
+    refs.statusBadge.textContent = groupPlainLabel(state.groupType, state.strandCount);
     refs.clear.disabled = state.appliedSteps.length === 0;
     syncGeneratorBounds();
     syncBasicInfoControls();
@@ -602,54 +646,59 @@
   function syncBasicInfoControls() {
     const format = basicExpressionFormatValue(state.basicExpressionFormat);
     state.basicExpressionFormat = format;
-    refs.basicExpressionFormat.value = format;
+    if (refs.basicExpressionFormat) refs.basicExpressionFormat.value = format;
 
-    const reducedAvailable = basicReducedApplies(format);
-    refs.basicReducedOnly.checked = state.basicReducedOnly;
-    refs.basicReducedOnly.disabled = !reducedAvailable;
-    refs.basicReducedOnly.title = reducedAvailable
-      ? 'Show a canonical reduced expression for this permutation.'
-      : 'Reduced display is available for composition words and transpositions.';
+    const reducedAvailable = basicReducedApplies(format) && currentWordIsCoxeterOnly();
+    if (refs.basicReducedOnly) {
+      refs.basicReducedOnly.checked = reducedAvailable && state.basicReducedOnly;
+      refs.basicReducedOnly.disabled = !reducedAvailable;
+      refs.basicReducedOnly.title = reducedAvailable
+        ? 'Show a canonical reduced expression for this permutation.'
+        : 'Reduced display is available for composition words and transpositions.';
+    }
 
-    const label = refs.basicReducedOnly.closest('.strand-basic-reduced-toggle');
+    const label = refs.basicReducedOnly?.closest('.strand-basic-reduced-toggle');
     if (label) {
       label.classList.toggle('is-disabled', !reducedAvailable);
-      label.title = refs.basicReducedOnly.title;
+      label.title = refs.basicReducedOnly?.title || '';
     }
   }
 
   function addGeneratorFromInput() {
-    if (state.strandCount <= 1) {
-      setStatus('S_1 has only the identity.');
+    if (!generatorValuesForState().length) {
+      setStatus(`${groupPlainLabel()} has only the identity.`);
       renderAll({ preserveMessage: true });
       return;
     }
+    const min = signedGroupActive() ? 0 : 1;
     const max = state.strandCount - 1;
-    const generator = clampInteger(refs.generator.value, 1, max, 1);
+    const generator = clampInteger(refs.generator.value, min, max, min);
     refs.generator.value = String(generator);
     addGenerator(generator);
   }
 
   function addGenerator(generator) {
-    insertGeneratorAt(generator, state.appliedSteps.length, `added s_${generator}`);
+    const record = normalizeGeneratorRecord(generator);
+    insertGeneratorAt(record, state.appliedSteps.length, `added ${generatorLabel(record)}`);
   }
 
   function insertGeneratorAt(generator, index, message) {
-    if (!validGenerator(generator)) {
+    const record = normalizeGeneratorRecord(generator);
+    if (!validGenerator(record)) {
       setStatus('choose a valid adjacent generator');
       renderAll({ preserveMessage: true });
       return;
     }
     const insertIndex = Math.max(0, Math.min(state.appliedSteps.length, Number.isInteger(index) ? index : state.appliedSteps.length));
-    state.appliedSteps.splice(insertIndex, 0, generator);
-    setStatus(message || `inserted s_${generator} at word position ${insertIndex + 1}`);
+    state.appliedSteps.splice(insertIndex, 0, record);
+    setStatus(message || `inserted ${generatorLabel(record)} at word position ${insertIndex + 1}`);
     renderAll({ preserveMessage: true });
   }
 
   function undoStep() {
     if (!state.appliedSteps.length) return;
     const removed = state.appliedSteps.pop();
-    setStatus(`removed s_${removed}`);
+    setStatus(`removed ${generatorLabel(removed)}`);
     renderAll({ preserveMessage: true });
   }
 
@@ -662,15 +711,23 @@
 
   function renderInputChart() {
     if (!refs.inputChart) return;
-    if (state.strandCount <= 1) {
-      refs.inputChart.innerHTML = '<div class="strand-note">S_1 has no adjacent generators.</div>';
+    const indices = generatorValuesForState();
+    if (!indices.length) {
+      refs.inputChart.innerHTML = `<div class="strand-note">${escapeHtml(groupPlainLabel())} has no available generators.</div>`;
       return;
     }
-    const chips = [];
-    for (let step = 1; step < state.strandCount; step++) {
-      chips.push(`<button class="strand-generator-chip" type="button" data-generator-step="${step}" aria-label="generator s ${step}">s_${step}</button>`);
-    }
-    refs.inputChart.innerHTML = chips.join('');
+    refs.inputChart.innerHTML = GENERATOR_FAMILY_SECTIONS
+      .map((section) => {
+        const records = generatorRecordsForFamily(section.family, indices);
+        const chips = records.map(generatorChipMarkup).join('');
+        return `
+          <div class="strand-generator-family">
+            <div class="strand-generator-family-title">${escapeHtml(section.title)}</div>
+            <div class="strand-generator-family-chips">${chips}</div>
+          </div>
+        `;
+      })
+      .join('');
   }
 
   function renderAll(options = {}) {
@@ -686,10 +743,10 @@
   }
 
   function renderSummary(data) {
-    const length = state.appliedSteps.length;
+    const length = data.wordRecords.length;
     refs.summary.textContent = length
-      ? `${length} generator${length === 1 ? '' : 's'}; w = ${data.oneLinePlain}`
-      : `identity in S_${state.strandCount}`;
+      ? `${length} generator${length === 1 ? '' : 's'}; ${data.coxeterOnly ? `w = ${data.oneLinePlain}` : `word = ${plainGeneratorWord(data.wordRecords)}`}`
+      : `identity in ${groupPlainLabel(data.groupType, data.n)}`;
   }
 
   function resizeCanvas() {
@@ -793,45 +850,118 @@
   }
 
   function buildPermutationData() {
+    const groupType = groupTypeValue(state.groupType);
+    return signedGroupActive(groupType)
+      ? buildSignedPermutationData(groupType)
+      : buildSymmetricPermutationData(groupType);
+  }
+
+  function buildSymmetricPermutationData(groupType) {
     const n = state.strandCount;
-    const steps = filterValidSteps(state.appliedSteps, n);
-    const components = buildComponentStates(steps);
+    const wordRecords = filterValidSteps(state.appliedSteps, n, groupType);
+    const steps = coxeterStepsFromRecords(wordRecords);
+    const coxeterOnly = wordIsCoxeterOnly(wordRecords);
+    const tracks = Array.from({ length: n }, (_, index) => index + 1);
+    const stepRecords = wordRecords.map((record, sourceIndex) => diagramRecordForGenerator(record, sourceIndex, groupType, n));
+    const order = applyDiagramRecordsToOrder(tracks, stepRecords);
     const imageBySource = new Map();
     const terminalOrderByPosition = new Map();
 
-    components.forEach((component) => {
-      component.order.forEach((label, index) => {
-        const position = component.start + index;
-        terminalOrderByPosition.set(position, label);
-        if (label !== position) imageBySource.set(label, position);
-      });
+    tracks.forEach((position, index) => {
+      const label = order[index];
+      terminalOrderByPosition.set(position, label);
+      if (label !== position) imageBySource.set(label, position);
     });
 
-    const inversionCount = components.reduce((sum, component) => sum + countInversions(component.order), 0);
-    const isReduced = steps.length === inversionCount;
+    const components = coxeterOnly ? buildComponentStates(steps) : [];
+    const inversionCount = coxeterOnly ? countInversions(order) : null;
+    const isReduced = coxeterOnly ? steps.length === inversionCount : null;
     const fullPermutation = n <= ONE_LINE_DISPLAY_LIMIT ? fullPermutationArray(n, imageBySource) : null;
     const fullTerminalOrder = n <= CANVAS_STRAND_LIMIT ? fullTerminalOrderArray(n, terminalOrderByPosition) : null;
     const oneLinePlain = fullPermutation
       ? `(${fullPermutation.join(',')})`
       : compactMappingPlain(imageBySource, n);
     const cycles = cyclesFromSparseMap(imageBySource);
-    const canonicalSteps = inversionCount <= REDUCED_WORD_GENERATION_LIMIT
+    const canonicalSteps = coxeterOnly && inversionCount <= REDUCED_WORD_GENERATION_LIMIT
       ? canonicalStepsFromComponents(components)
       : null;
 
     return {
+      groupType,
+      signed: false,
       n,
+      rank: n,
+      tracks,
+      wordRecords,
       steps,
+      stepRecords,
       components,
       imageBySource,
       terminalOrderByPosition,
       inversionCount,
+      length: inversionCount,
       isReduced,
       fullPermutation,
       fullTerminalOrder,
       oneLinePlain,
       cycles,
-      canonicalSteps
+      canonicalSteps,
+      coxeterOnly
+    };
+  }
+
+  function buildSignedPermutationData(groupType) {
+    const n = state.strandCount;
+    const wordRecords = filterValidSteps(state.appliedSteps, n, groupType);
+    const steps = coxeterStepsFromRecords(wordRecords);
+    const coxeterOnly = wordIsCoxeterOnly(wordRecords);
+    const tracks = signedTrackLabels(n);
+    const stepRecords = wordRecords.map((record, sourceIndex) => diagramRecordForGenerator(record, sourceIndex, groupType, n));
+    const order = applyDiagramRecordsToOrder(tracks, stepRecords);
+
+    const imageBySource = new Map();
+    const terminalOrderByPosition = new Map();
+    tracks.forEach((position, index) => {
+      const label = order[index];
+      terminalOrderByPosition.set(position, label);
+      if (label !== position) imageBySource.set(label, position);
+    });
+
+    const signedOneLine = Array.from({ length: n }, (_, index) => imageBySource.get(index + 1) || index + 1);
+    const length = coxeterOnly ? signedLength(signedOneLine, groupType) : null;
+    const isReduced = coxeterOnly ? steps.length === length : null;
+    const fullPermutation = n <= ONE_LINE_DISPLAY_LIMIT ? signedOneLine : null;
+    const fullTerminalOrder = tracks.length <= CANVAS_STRAND_LIMIT ? order.slice() : null;
+    const oneLinePlain = n <= ONE_LINE_DISPLAY_LIMIT
+      ? `(${signedOneLine.map(signedLabelPlain).join(',')})`
+      : compactSignedMappingPlain(signedOneLine, groupType, n);
+    const cycles = cyclesFromSignedMap(imageBySource, n);
+    const canonicalSteps = coxeterOnly && length <= REDUCED_WORD_GENERATION_LIMIT
+      ? canonicalSignedSteps(signedOneLine, groupType)
+      : null;
+
+    return {
+      groupType,
+      signed: true,
+      n,
+      rank: n,
+      tracks,
+      wordRecords,
+      steps,
+      stepRecords,
+      components: [],
+      imageBySource,
+      terminalOrderByPosition,
+      inversionCount: length,
+      length,
+      isReduced,
+      fullPermutation,
+      fullTerminalOrder,
+      signedOneLine,
+      oneLinePlain,
+      cycles,
+      canonicalSteps,
+      coxeterOnly
     };
   }
 
@@ -876,6 +1006,112 @@
 
   function fullTerminalOrderArray(n, terminalOrderByPosition) {
     return Array.from({ length: n }, (_, index) => terminalOrderByPosition.get(index + 1) || index + 1);
+  }
+
+  function signedTrackLabels(n) {
+    const negative = Array.from({ length: n }, (_, index) => -n + index);
+    const positive = Array.from({ length: n }, (_, index) => index + 1);
+    return negative.concat(positive);
+  }
+
+  function trackIndexMap(tracks) {
+    return new Map(tracks.map((label, index) => [label, index]));
+  }
+
+  function diagramRecordForGenerator(generator, sourceIndex, groupType, n) {
+    const record = normalizeGeneratorRecord(generator);
+    const index = record?.index ?? 1;
+    return {
+      generator: record,
+      family: record?.family || 'coxeter',
+      index,
+      sign: record?.family === 'braid' ? record.sign : 1,
+      sourceIndex,
+      pairs: generatorSwapPairs(groupType, n, index),
+      shouldSwap: record?.family === 'coxeter' || record?.family === 'braid'
+    };
+  }
+
+  function applyDiagramRecordsToOrder(tracks, records) {
+    const trackIndex = trackIndexMap(tracks);
+    let order = tracks.slice();
+    records.forEach((record) => {
+      if (record.shouldSwap === false) return;
+      order = applySwapPairsToOrder(order, record.pairs, trackIndex);
+    });
+    return order;
+  }
+
+  function generatorSwapPairs(groupType, n, generator) {
+    if (!signedGroupActive(groupType)) return [[generator, generator + 1]];
+    if (generator === 0) {
+      return groupType === 'D'
+        ? [[-2, 1], [-1, 2]]
+        : [[-1, 1]];
+    }
+    return [[-(generator + 1), -generator], [generator, generator + 1]];
+  }
+
+  function applySwapPairsToOrder(order, pairs, trackIndex) {
+    const next = order.slice();
+    pairs.forEach(([leftTrack, rightTrack]) => {
+      const left = trackIndex.get(leftTrack);
+      const right = trackIndex.get(rightTrack);
+      if (left == null || right == null) return;
+      next[left] = order[right];
+      next[right] = order[left];
+    });
+    return next;
+  }
+
+  function applyGeneratorToSignedOneLine(oneLine, groupType, generator) {
+    const n = oneLine.length;
+    const pairs = generatorSwapPairs(groupType, n, generator);
+    return oneLine.map((value) => {
+      for (const [left, right] of pairs) {
+        if (value === left) return right;
+        if (value === right) return left;
+      }
+      return value;
+    });
+  }
+
+  function signedLength(oneLine, groupType) {
+    let inversions = 0;
+    let negativeSumPairs = 0;
+    let negatives = 0;
+    for (let i = 0; i < oneLine.length; i++) {
+      if (oneLine[i] < 0) negatives++;
+      for (let j = i + 1; j < oneLine.length; j++) {
+        if (oneLine[i] > oneLine[j]) inversions++;
+        if (oneLine[i] + oneLine[j] < 0) negativeSumPairs++;
+      }
+    }
+    return inversions + negativeSumPairs + (groupType === 'D' ? 0 : negatives);
+  }
+
+  function canonicalSignedSteps(oneLine, groupType) {
+    let current = oneLine.slice();
+    let length = signedLength(current, groupType);
+    const reductions = [];
+    const limit = Math.max(REDUCED_WORD_GENERATION_LIMIT, length + 1);
+    while (length > 0) {
+      if (reductions.length > limit) return null;
+      let found = false;
+      for (let generator = 0; generator < current.length; generator++) {
+        const next = applyGeneratorToSignedOneLine(current, groupType, generator);
+        const nextLength = signedLength(next, groupType);
+        if (nextLength < length) {
+          reductions.push(generator);
+          current = next;
+          length = nextLength;
+          found = true;
+          break;
+        }
+      }
+      if (!found) return null;
+    }
+    return reductions.reverse();
   }
 
   function countInversions(values) {
@@ -946,6 +1182,24 @@
     return cycles.filter((cycle) => cycle.length > 1);
   }
 
+  function cyclesFromSignedMap(imageBySource, n) {
+    const labels = signedTrackLabels(n);
+    const seen = new Set();
+    const cycles = [];
+    labels.forEach((start) => {
+      if (seen.has(start)) return;
+      const cycle = [];
+      let value = start;
+      while (!seen.has(value)) {
+        seen.add(value);
+        cycle.push(value);
+        value = imageBySource.get(value) || value;
+      }
+      if (cycle.length > 1) cycles.push(cycle);
+    });
+    return cycles;
+  }
+
   function compactMappingPlain(imageBySource, n) {
     if (!imageBySource.size) return `identity in S_${n}`;
     const pairs = [...imageBySource.entries()]
@@ -953,6 +1207,18 @@
       .slice(0, 12)
       .map(([source, image]) => `${source}->${image}`);
     const suffix = imageBySource.size > 12 ? ', ...' : '';
+    return `w(i)=i except ${pairs.join(', ')}${suffix}`;
+  }
+
+  function compactSignedMappingPlain(oneLine, groupType, n) {
+    const moved = oneLine
+      .map((image, index) => ({ source: index + 1, image }))
+      .filter((record) => record.image !== record.source);
+    if (!moved.length) return `identity in ${groupPlainLabel(groupType, n)}`;
+    const pairs = moved
+      .slice(0, 12)
+      .map((record) => `w(${record.source})=${signedLabelPlain(record.image)}`);
+    const suffix = moved.length > 12 ? ', ...' : '';
     return `w(i)=i except ${pairs.join(', ')}${suffix}`;
   }
 
@@ -968,7 +1234,7 @@
     const view = canvasView(data);
     drawCanvasFrame(ctx, width, height, view);
     if (!view.tracks.length) {
-      drawCanvasMessage(ctx, width, height, 'S_1 identity');
+      drawCanvasMessage(ctx, width, height, `${groupPlainLabel(data.groupType, data.n)} identity`);
       return;
     }
 
@@ -978,23 +1244,27 @@
   }
 
   function canvasView(data) {
+    if (data.signed) return signedCanvasView(data);
+
     if (data.n <= CANVAS_STRAND_LIMIT) {
-      const steps = data.steps.slice(0, MAX_CANVAS_STEPS);
+      const records = data.stepRecords.slice(0, MAX_CANVAS_STEPS);
       return {
-        tracks: Array.from({ length: data.n }, (_, index) => index + 1),
-        steps,
-        sourceIndices: steps.map((_, index) => index),
-        hiddenSteps: Math.max(0, data.steps.length - MAX_CANVAS_STEPS),
+        tracks: data.tracks.slice(),
+        steps: records.map((record) => record.generator),
+        records,
+        sourceIndices: records.map((record) => record.sourceIndex),
+        hiddenSteps: Math.max(0, data.stepRecords.length - MAX_CANVAS_STEPS),
         full: true,
         label: `${data.n} strand${data.n === 1 ? '' : 's'}`
       };
     }
 
-    if (!data.steps.length) {
+    if (!data.stepRecords.length) {
       const limit = Math.min(CANVAS_STRAND_LIMIT, data.n);
       return {
         tracks: Array.from({ length: limit }, (_, index) => index + 1),
         steps: [],
+        records: [],
         sourceIndices: [],
         hiddenSteps: 0,
         full: false,
@@ -1002,31 +1272,101 @@
       };
     }
 
-    const last = data.steps[data.steps.length - 1];
-    const component = data.components.find((item) => last >= item.start && last < item.end) || data.components[0];
-    const span = component.end - component.start + 1;
+    const lastRecord = data.stepRecords[data.stepRecords.length - 1];
+    const last = lastRecord?.index ?? data.steps[data.steps.length - 1] ?? 1;
+    const component = data.coxeterOnly
+      ? data.components.find((item) => last >= item.start && last < item.end) || data.components[0]
+      : null;
+    const span = component ? component.end - component.start + 1 : Math.min(data.n, CANVAS_STRAND_LIMIT);
     const center = last + 0.5;
     const half = Math.floor(CANVAS_STRAND_LIMIT / 2);
-    let start = Math.max(component.start, Math.floor(center) - half);
-    let end = Math.min(component.end, start + CANVAS_STRAND_LIMIT - 1);
-    start = Math.max(component.start, end - CANVAS_STRAND_LIMIT + 1);
+    const minStart = component ? component.start : 1;
+    const maxEnd = component ? component.end : data.n;
+    let start = Math.max(minStart, Math.floor(center) - half);
+    let end = Math.min(maxEnd, start + CANVAS_STRAND_LIMIT - 1);
+    start = Math.max(minStart, end - CANVAS_STRAND_LIMIT + 1);
     const tracks = Array.from({ length: end - start + 1 }, (_, index) => start + index);
-    const localStepRecords = data.steps
-      .map((step, index) => ({ step, index }))
-      .filter((record) => record.step >= start && record.step < end)
+    const localStepRecords = data.stepRecords
+      .filter((record) => record.pairs.every(([left, right]) => left >= start && left <= end && right >= start && right <= end))
       .slice(-MAX_CANVAS_STEPS);
-    const localSteps = localStepRecords.map((record) => record.step);
-    const hiddenOutside = data.steps.length - localSteps.length;
+    const localSteps = localStepRecords.map((record) => record.generator);
+    const hiddenOutside = data.stepRecords.length - localSteps.length;
     return {
       tracks,
       steps: localSteps,
-      sourceIndices: localStepRecords.map((record) => record.index),
+      records: localStepRecords,
+      sourceIndices: localStepRecords.map((record) => record.sourceIndex),
       hiddenSteps: Math.max(0, hiddenOutside),
       full: false,
-      label: span > tracks.length
+      label: component && span > tracks.length
         ? `active window ${start}-${end} in S_${data.n}`
-        : `active component ${component.start}-${component.end} in S_${data.n}`
+        : component
+          ? `active component ${component.start}-${component.end} in S_${data.n}`
+          : `active window ${start}-${end} in S_${data.n}`
     };
+  }
+
+  function signedCanvasView(data) {
+    const trackLimit = CANVAS_STRAND_LIMIT;
+    if (data.tracks.length <= trackLimit) {
+      const records = data.stepRecords.slice(0, MAX_CANVAS_STEPS);
+      return {
+        tracks: data.tracks.slice(),
+        steps: records.map((record) => record.generator),
+        records,
+        sourceIndices: records.map((record) => record.sourceIndex),
+        hiddenSteps: Math.max(0, data.stepRecords.length - MAX_CANVAS_STEPS),
+        full: true,
+        label: `${groupPlainLabel(data.groupType, data.n)} doubled strands`
+      };
+    }
+
+    const window = signedTrackWindow(data, trackLimit);
+    const tracks = data.tracks.slice(window.start, window.end);
+    const visibleRecords = data.stepRecords
+      .filter((record) => recordPairsInWindow(record, data.tracks, window.start, window.end))
+      .slice(-MAX_CANVAS_STEPS);
+    const hiddenSteps = Math.max(0, data.stepRecords.length - visibleRecords.length);
+    return {
+      tracks,
+      steps: visibleRecords.map((record) => record.generator),
+      records: visibleRecords,
+      sourceIndices: visibleRecords.map((record) => record.sourceIndex),
+      hiddenSteps,
+      full: false,
+      label: `active window in ${groupPlainLabel(data.groupType, data.n)}`
+    };
+  }
+
+  function signedTrackWindow(data, limit) {
+    const total = data.tracks.length;
+    if (total <= limit) return { start: 0, end: total };
+    const trackIndex = trackIndexMap(data.tracks);
+    const last = data.stepRecords[data.stepRecords.length - 1];
+    let center = Math.floor(total / 2);
+    if (last) {
+      const positions = last.pairs
+        .flatMap((pair) => pair.map((track) => trackIndex.get(track)))
+        .filter((index) => Number.isInteger(index));
+      if (positions.length) {
+        const min = Math.min(...positions);
+        const max = Math.max(...positions);
+        center = Math.round((min + max) / 2);
+      }
+    }
+    let start = Math.max(0, center - Math.floor(limit / 2));
+    let end = Math.min(total, start + limit);
+    start = Math.max(0, end - limit);
+    return { start, end };
+  }
+
+  function recordPairsInWindow(record, tracks, start, end) {
+    const trackIndex = trackIndexMap(tracks);
+    return record.pairs.every(([left, right]) => {
+      const leftIndex = trackIndex.get(left);
+      const rightIndex = trackIndex.get(right);
+      return leftIndex >= start && leftIndex < end && rightIndex >= start && rightIndex < end;
+    });
   }
 
   function drawCanvasBackground(ctx, width, height) {
@@ -1074,31 +1414,72 @@
   function drawStrands(ctx, width, height, view) {
     const tracks = view.tracks;
     if (!tracks.length) return;
-    const trackStart = tracks[0];
-    const trackEnd = tracks[tracks.length - 1];
-    const steps = view.steps.filter((step) => step >= trackStart && step < trackEnd);
-    const layout = strandLayerLayout(steps.length);
+    const trackIndex = trackIndexMap(tracks);
+    const records = (view.records || []).filter((record) => record.pairs.some(([left, right]) => trackIndex.has(left) && trackIndex.has(right)));
+    const layout = strandLayerLayout(records.length);
     const layerMax = layout.total;
     const order = tracks.slice();
     const strandSegments = new Map();
+    const strandClipMasks = new Map();
     order.forEach((label, index) => {
       strandSegments.set(label, [[pointForLayerPosition(index, 0, tracks.length, layerMax, width, height)]]);
     });
 
-    if (!steps.length) {
+    if (!records.length) {
       order.forEach((label, index) => {
         appendStrandPoint(strandSegments, label, pointForLayerPosition(index, layerMax, tracks.length, layerMax, width, height));
       });
     } else {
-      steps.forEach((step, stepIndex) => {
-        const local = step - trackStart;
-        const leftLabel = order[local];
-        const rightLabel = order[local + 1];
+      const glyphs = [];
+      records.forEach((record, stepIndex) => {
+        const previousLayer = stepIndex === 0
+          ? 0
+          : layout.intervals[stepIndex - 1]?.end ?? layout.crossingEnds[stepIndex - 1];
+        const crossingEnd = layout.crossingEnds[stepIndex];
+        const crossingLayer = (previousLayer + crossingEnd) / 2;
+        const recordGlyphs = [];
+        record.pairs.forEach(([leftTrack, rightTrack]) => {
+          const left = trackIndex.get(leftTrack);
+          const right = trackIndex.get(rightTrack);
+          if (left == null || right == null) return;
+          const glyph = {
+            record,
+            leftIndex: left,
+            rightIndex: right,
+            leftLabel: order[left],
+            rightLabel: order[right],
+            startLayer: previousLayer,
+            crossingLayer,
+            endLayer: crossingEnd
+          };
+          glyphs.push(glyph);
+          recordGlyphs.push(glyph);
+        });
         const nextOrder = order.slice();
-        nextOrder[local] = rightLabel;
-        nextOrder[local + 1] = leftLabel;
+        if (record.shouldSwap !== false) {
+          record.pairs.forEach(([leftTrack, rightTrack]) => {
+            const left = trackIndex.get(leftTrack);
+            const right = trackIndex.get(rightTrack);
+            if (left == null || right == null) return;
+            nextOrder[left] = order[right];
+            nextOrder[right] = order[left];
+          });
+        }
+        addBraidClipMasks(recordGlyphs, record, strandClipMasks, tracks.length, layerMax, width, height, lineWidthForTrackCount(tracks.length));
+        const klBreaks = klVisualBreaks(recordGlyphs, record);
+        const tlBreaks = tlVisualBreaks(recordGlyphs, record);
         nextOrder.forEach((label, index) => {
-          appendStrandPoint(strandSegments, label, pointForLayerPosition(index, layout.crossingEnds[stepIndex], tracks.length, layerMax, width, height));
+          const tlBreak = tlBreaks.get(label);
+          if (tlBreak) {
+            appendTlBreak(strandSegments, label, tlBreak, index, tracks.length, layerMax, width, height);
+            return;
+          }
+          const klBreak = klBreaks.get(label);
+          if (klBreak) {
+            appendKlBreak(strandSegments, label, klBreak, index, tracks.length, layerMax, width, height);
+            return;
+          }
+          appendStrandPoint(strandSegments, label, pointForLayerPosition(index, crossingEnd, tracks.length, layerMax, width, height));
         });
         const interval = layout.intervals[stepIndex];
         if (interval) {
@@ -1114,15 +1495,98 @@
         }
         order.splice(0, order.length, ...nextOrder);
       });
+
+      const lineWidth = lineWidthForTrackCount(tracks.length);
+      strandSegments.forEach((segments, label) => {
+        segments.forEach((points) => drawStrandPath(ctx, points, strandColor(label), lineWidth, state.strandDisplayStyle, strandClipMasks.get(label), width, height));
+      });
+      drawGeneratorGlyphs(ctx, glyphs, tracks.length, layerMax, width, height, lineWidth);
+
+      const endpoints = endpointMapFromSegments(strandSegments);
+      drawEndpointLabels(ctx, endpoints, tracks.length, layerMax, width, height);
+      return;
     }
 
-    const lineWidth = tracks.length > 42 ? 1.05 : tracks.length > 20 ? 1.45 : 2.2;
+    const lineWidth = lineWidthForTrackCount(tracks.length);
     strandSegments.forEach((segments, label) => {
-      segments.forEach((points) => drawStrandPath(ctx, points, strandColor(label), lineWidth, state.strandDisplayStyle));
+      segments.forEach((points) => drawStrandPath(ctx, points, strandColor(label), lineWidth, state.strandDisplayStyle, null, width, height));
     });
 
     const endpoints = endpointMapFromSegments(strandSegments);
     drawEndpointLabels(ctx, endpoints, tracks.length, layerMax, width, height);
+  }
+
+  function lineWidthForTrackCount(trackCount) {
+    return trackCount > 42 ? 1.05 : trackCount > 20 ? 1.45 : 2.2;
+  }
+
+  function addBraidClipMasks(recordGlyphs, record, strandClipMasks, trackCount, layerMax, width, height, lineWidth) {
+    if (record.family !== 'braid') return;
+    const radius = Math.max(5.5, lineWidth * 2.6 + 3);
+    recordGlyphs.forEach((glyph) => {
+      const positive = record.sign !== -1;
+      const label = positive ? glyph.rightLabel : glyph.leftLabel;
+      const center = pointForLayerPosition((glyph.leftIndex + glyph.rightIndex) / 2, glyph.crossingLayer, trackCount, layerMax, width, height);
+      addStrandClipMask(strandClipMasks, label, { x: center.x, y: center.y, radius });
+    });
+  }
+
+  function addStrandClipMask(strandClipMasks, label, mask) {
+    const masks = strandClipMasks.get(label) || [];
+    masks.push(mask);
+    strandClipMasks.set(label, masks);
+  }
+
+  function klVisualBreaks(recordGlyphs, record) {
+    const breaks = new Map();
+    if (record.family !== 'kl') return breaks;
+    recordGlyphs.forEach((glyph) => {
+      breaks.set(glyph.leftLabel, {
+        trackIndex: glyph.leftIndex,
+        beforeLayer: glyph.startLayer,
+        afterLayer: glyph.endLayer,
+        endLayer: glyph.endLayer
+      });
+      breaks.set(glyph.rightLabel, {
+        trackIndex: glyph.rightIndex,
+        beforeLayer: glyph.startLayer,
+        afterLayer: glyph.endLayer,
+        endLayer: glyph.endLayer
+      });
+    });
+    return breaks;
+  }
+
+  function tlVisualBreaks(recordGlyphs, record) {
+    const breaks = new Map();
+    if (record.family !== 'tl') return breaks;
+    recordGlyphs.forEach((glyph) => {
+      breaks.set(glyph.leftLabel, {
+        trackIndex: glyph.leftIndex,
+        beforeLayer: glyph.startLayer,
+        afterLayer: glyph.endLayer,
+        endLayer: glyph.endLayer
+      });
+      breaks.set(glyph.rightLabel, {
+        trackIndex: glyph.rightIndex,
+        beforeLayer: glyph.startLayer,
+        afterLayer: glyph.endLayer,
+        endLayer: glyph.endLayer
+      });
+    });
+    return breaks;
+  }
+
+  function appendKlBreak(strandSegments, label, klBreak, targetIndex, trackCount, layerMax, width, height) {
+    appendStrandPoint(strandSegments, label, pointForLayerPosition(klBreak.trackIndex, klBreak.beforeLayer, trackCount, layerMax, width, height));
+    startStrandSegment(strandSegments, label, pointForLayerPosition(klBreak.trackIndex, klBreak.afterLayer, trackCount, layerMax, width, height));
+    if (klBreak.afterLayer !== klBreak.endLayer) {
+      appendStrandPoint(strandSegments, label, pointForLayerPosition(targetIndex, klBreak.endLayer, trackCount, layerMax, width, height));
+    }
+  }
+
+  function appendTlBreak(strandSegments, label, tlBreak, targetIndex, trackCount, layerMax, width, height) {
+    startStrandSegment(strandSegments, label, pointForLayerPosition(targetIndex, tlBreak.endLayer, trackCount, layerMax, width, height));
   }
 
   function strandLayerLayout(stepCount) {
@@ -1194,9 +1658,10 @@
     return endpoints;
   }
 
-  function drawStrandPath(ctx, points, color, lineWidth, style) {
+  function drawStrandPath(ctx, points, color, lineWidth, style, clipMasks = null, width = 0, height = 0) {
     if (points.length < 2) return;
     ctx.save();
+    if (clipMasks?.length) applyInverseClipMasks(ctx, clipMasks, width, height);
     ctx.strokeStyle = color;
     ctx.lineWidth = lineWidth;
     ctx.lineCap = 'round';
@@ -1208,6 +1673,16 @@
     else drawStraightPathSegments(ctx, points);
     ctx.stroke();
     ctx.restore();
+  }
+
+  function applyInverseClipMasks(ctx, masks, width, height) {
+    ctx.beginPath();
+    ctx.rect(0, 0, Math.max(1, width), Math.max(1, height));
+    masks.forEach((mask) => {
+      ctx.moveTo(mask.x + mask.radius, mask.y);
+      ctx.arc(mask.x, mask.y, mask.radius, 0, Math.PI * 2);
+    });
+    ctx.clip('evenodd');
   }
 
   function drawStraightPathSegments(ctx, points) {
@@ -1231,6 +1706,74 @@
         : { x: point.x - layerDelta * controlScale, y: point.y };
       ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, point.x, point.y);
     }
+  }
+
+  function drawGeneratorGlyphs(ctx, glyphs, trackCount, layerMax, width, height, lineWidth) {
+    glyphs.forEach((glyph) => {
+      const family = glyph.record.family;
+      if (family === 'kl') drawKlGlyph(ctx, glyph, trackCount, layerMax, width, height, lineWidth);
+      else if (family === 'tl') drawTlGlyph(ctx, glyph, trackCount, layerMax, width, height, lineWidth);
+    });
+  }
+
+  function drawKlGlyph(ctx, glyph, trackCount, layerMax, width, height, lineWidth) {
+    const midTrack = (glyph.leftIndex + glyph.rightIndex) / 2;
+    const topLeft = pointForLayerPosition(glyph.leftIndex, glyph.startLayer, trackCount, layerMax, width, height);
+    const topRight = pointForLayerPosition(glyph.rightIndex, glyph.startLayer, trackCount, layerMax, width, height);
+    const bottomLeft = pointForLayerPosition(glyph.leftIndex, glyph.endLayer, trackCount, layerMax, width, height);
+    const bottomRight = pointForLayerPosition(glyph.rightIndex, glyph.endLayer, trackCount, layerMax, width, height);
+    const center = pointForLayerPosition(midTrack, glyph.crossingLayer, trackCount, layerMax, width, height);
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = 0.92;
+    drawTlCurve(ctx, topLeft, center, topRight, '#211c18', lineWidth);
+    drawTlCurve(ctx, bottomLeft, center, bottomRight, '#211c18', lineWidth);
+    ctx.restore();
+  }
+
+  function drawTlGlyph(ctx, glyph, trackCount, layerMax, width, height, lineWidth) {
+    const span = Math.max(0.01, glyph.endLayer - glyph.startLayer);
+    const bow = Math.min(span * 0.28, Math.max(0.01, span / 2 - 0.04));
+    const topLeft = pointForLayerPosition(glyph.leftIndex, glyph.startLayer, trackCount, layerMax, width, height);
+    const topRight = pointForLayerPosition(glyph.rightIndex, glyph.startLayer, trackCount, layerMax, width, height);
+    const bottomLeft = pointForLayerPosition(glyph.leftIndex, glyph.endLayer, trackCount, layerMax, width, height);
+    const bottomRight = pointForLayerPosition(glyph.rightIndex, glyph.endLayer, trackCount, layerMax, width, height);
+    const topControls = [
+      pointForLayerPosition(glyph.leftIndex, glyph.startLayer + bow, trackCount, layerMax, width, height),
+      pointForLayerPosition(glyph.rightIndex, glyph.startLayer + bow, trackCount, layerMax, width, height)
+    ];
+    const bottomControls = [
+      pointForLayerPosition(glyph.leftIndex, glyph.endLayer - bow, trackCount, layerMax, width, height),
+      pointForLayerPosition(glyph.rightIndex, glyph.endLayer - bow, trackCount, layerMax, width, height)
+    ];
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = 0.92;
+    drawTlArc(ctx, topLeft, topControls[0], topControls[1], topRight, '#7b477e', lineWidth);
+    drawTlArc(ctx, bottomLeft, bottomControls[0], bottomControls[1], bottomRight, '#7b477e', lineWidth);
+    ctx.restore();
+  }
+
+  function drawTlArc(ctx, start, controlStart, controlEnd, end, color, width) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.bezierCurveTo(controlStart.x, controlStart.y, controlEnd.x, controlEnd.y, end.x, end.y);
+    ctx.stroke();
+  }
+
+  function drawTlCurve(ctx, start, control, end, color, width) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    drawSoftPathSegments(ctx, [start, control, end]);
+    ctx.stroke();
   }
 
   function drawInsertionGuide(ctx, width, height, view) {
@@ -1397,40 +1940,40 @@
     const y = clientY - rect.top;
     const data = buildPermutationData();
     const view = canvasView(data);
-    if (!view.tracks.length || !view.steps.length) return null;
+    if (!view.tracks.length || !view.records?.length) return null;
 
-    const trackStart = view.tracks[0];
-    const trackEnd = view.tracks[view.tracks.length - 1];
-    const visibleSteps = view.steps
-      .map((step, index) => ({ step, sourceIndex: view.sourceIndices[index] ?? index }))
-      .filter((record) => record.step >= trackStart && record.step < trackEnd);
-    if (!visibleSteps.length) return null;
+    const trackIndex = trackIndexMap(view.tracks);
+    const visibleRecords = view.records.filter((record) => record.pairs.some(([left, right]) => trackIndex.has(left) && trackIndex.has(right)));
+    if (!visibleRecords.length) return null;
 
-    const layout = strandLayerLayout(visibleSteps.length);
+    const layout = strandLayerLayout(visibleRecords.length);
     const layerMax = layout.total;
     const radius = generatorHitRadius(width, height, view.tracks.length, layerMax);
     let best = null;
 
-    visibleSteps.forEach((record, index) => {
-      const local = record.step - trackStart;
-      if (local < 0 || local + 1 >= view.tracks.length) return;
+    visibleRecords.forEach((record, index) => {
       const previousLayer = index === 0
         ? 0
         : layout.intervals[index - 1]?.end ?? layout.crossingEnds[index - 1];
       const crossingLayer = (previousLayer + layout.crossingEnds[index]) / 2;
-      const first = pointForLayerPosition(local, crossingLayer, view.tracks.length, layerMax, width, height);
-      const second = pointForLayerPosition(local + 1, crossingLayer, view.tracks.length, layerMax, width, height);
-      const center = {
-        x: (first.x + second.x) / 2,
-        y: (first.y + second.y) / 2
-      };
-      const distance = Math.hypot(x - center.x, y - center.y);
-      if (distance > radius || (best && distance >= best.distance)) return;
-      best = {
-        generator: record.step,
-        sourceIndex: record.sourceIndex,
-        distance
-      };
+      record.pairs.forEach(([leftTrack, rightTrack]) => {
+        const leftIndex = trackIndex.get(leftTrack);
+        const rightIndex = trackIndex.get(rightTrack);
+        if (leftIndex == null || rightIndex == null) return;
+        const first = pointForLayerPosition(leftIndex, crossingLayer, view.tracks.length, layerMax, width, height);
+        const second = pointForLayerPosition(rightIndex, crossingLayer, view.tracks.length, layerMax, width, height);
+        const center = {
+          x: (first.x + second.x) / 2,
+          y: (first.y + second.y) / 2
+        };
+        const distance = Math.hypot(x - center.x, y - center.y);
+        if (distance > radius || (best && distance >= best.distance)) return;
+        best = {
+          generator: record.generator,
+          sourceIndex: record.sourceIndex,
+          distance
+        };
+      });
     });
 
     return best;
@@ -1508,19 +2051,23 @@
 
   function renderBasicInfo(data) {
     const rows = [
-      ['strands', inlineMath(`S_{${data.n}}`)],
-      ['word length', inlineMath(String(data.steps.length))],
+      ['group', inlineMath(groupLatex(data.groupType, data.n))],
+      [data.signed ? 'rank' : 'strands', inlineMath(String(data.n))],
+      ['word length', inlineMath(String(data.wordRecords.length))],
       ['direction', escapeHtml(DIRECTION_LABELS[state.direction] || state.direction)],
-      ['inversions', inlineMath(String(data.inversionCount))],
+      [data.signed ? 'Coxeter length' : 'inversions', data.coxeterOnly ? inlineMath(String(data.length)) : escapeHtml('not applicable')],
       ['reduced?', escapeHtml(reducedText(data))]
     ];
 
     refs.basicInfo.innerHTML = `
       <div class="strand-stat-grid">
         ${rows.map(([label, value]) => statRow(label, value)).join('')}
+        ${basicExpressionControlMarkup()}
         ${basicExpressionMarkup(data)}
       </div>
     `;
+    recacheBasicInfoControls();
+    syncBasicInfoControls();
   }
 
   function statRow(label, value) {
@@ -1530,6 +2077,32 @@
         <div class="strand-stat-value">${value}</div>
       </div>
     `;
+  }
+
+  function basicExpressionControlMarkup() {
+    return statRow('expression', `
+      <div class="strand-basic-controls" aria-label="Basic expression controls">
+        <label class="strand-basic-format-control" for="strand-basic-expression-format">
+          <select id="strand-basic-expression-format">
+            <option value="composition">Composition word</option>
+            <option value="transpositions">Transpositions</option>
+            <option value="cycle">Cycle notation</option>
+            <option value="one-line">One-line</option>
+            <option value="two-line">Two-line</option>
+            <option value="matrix">Matrix</option>
+          </select>
+        </label>
+        <label class="strand-basic-reduced-toggle opt-row" for="strand-basic-reduced-only">
+          <input id="strand-basic-reduced-only" type="checkbox">
+          <span>reduced</span>
+        </label>
+      </div>
+    `);
+  }
+
+  function recacheBasicInfoControls() {
+    refs.basicExpressionFormat = document.getElementById('strand-basic-expression-format');
+    refs.basicReducedOnly = document.getElementById('strand-basic-reduced-only');
   }
 
   function basicExpressionMarkup(data) {
@@ -1545,8 +2118,10 @@
     }
     if (format === 'transpositions') {
       const steps = basicExpressionSteps(format, data);
-      return steps ? inlineMath(transpositionWordLatex(steps)) : reducedWordLimitMessage(data);
+      if (!data.coxeterOnly) return inlineMath(generatorWordLatex(data.wordRecords, true));
+      return steps ? inlineMath(transpositionWordLatex(steps, data)) : reducedWordLimitMessage(data);
     }
+    if (!data.coxeterOnly) return escapeHtml('not applicable for mixed typed words');
     if (format === 'cycle') return inlineMath(cycleLatex(data.cycles));
     if (format === 'one-line') return inlineMath(oneLineLatex(data));
     if (format === 'two-line') return inlineMath(twoLineLatex(data));
@@ -1554,35 +2129,46 @@
   }
 
   function basicExpressionSteps(format, data) {
+    if (!data.coxeterOnly) return data.wordRecords;
     if (state.basicReducedOnly && basicReducedApplies(format)) return data.canonicalSteps;
     return data.steps;
   }
 
   function reducedWordLimitMessage(data) {
-    return escapeHtml(`${data.inversionCount} generators; too long to display`);
+    return escapeHtml(`${data.length} generators; too long to display`);
   }
 
   function basicExpressionLabel(format) {
-    const reduced = state.basicReducedOnly && basicReducedApplies(format) ? ' (reduced)' : '';
+    const reduced = state.basicReducedOnly && basicReducedApplies(format) && currentWordIsCoxeterOnly() ? ' (reduced)' : '';
+    if (!currentWordIsCoxeterOnly() && (format === 'composition' || format === 'transpositions')) return 'formal word';
     if (format === 'transpositions') return `transpositions${reduced}`;
     if (format === 'cycle') return 'cycle notation';
-    if (format === 'one-line') return 'one-line';
-    if (format === 'two-line') return 'two-line';
+    if (format === 'one-line') return signedGroupActive() ? 'signed one-line' : 'one-line';
+    if (format === 'two-line') return signedGroupActive() ? 'signed two-line' : 'two-line';
     return `composition word${reduced}`;
   }
 
   function matrixMarkup(data) {
+    if (!data.coxeterOnly) {
+      return statRow('matrix', '<div class="strand-note">Permutation matrix is only defined for Coxeter-only words.</div>');
+    }
     if (data.n > MATRIX_DISPLAY_LIMIT || !data.fullPermutation) {
-      const moved = data.imageBySource.size;
+      const moved = data.signed
+        ? data.signedOneLine.filter((image, index) => image !== index + 1).length
+        : data.imageBySource.size;
       return statRow('matrix', `<div class="strand-note">Permutation matrix is shown for at most ${MATRIX_DISPLAY_LIMIT} strands. This permutation moves ${moved} strand${moved === 1 ? '' : 's'}.</div>`);
     }
-    return statRow('matrix', `<div class="strand-matrix-wrap">${displayMath(`P_w=${permutationMatrixLatex(data.fullPermutation)}`)}</div>`);
+    const matrix = data.signed
+      ? signedPermutationMatrixLatex(data.signedOneLine)
+      : permutationMatrixLatex(data.fullPermutation);
+    return statRow('matrix', `<div class="strand-matrix-wrap">${displayMath(matrix)}</div>`);
   }
 
   function reducedText(data) {
+    if (!data.coxeterOnly) return 'not applicable (mixed typed word)';
     return data.isReduced
       ? `yes (length ${data.steps.length})`
-      : `no (minimal length ${data.inversionCount})`;
+      : `no (minimal length ${data.length})`;
   }
 
   function basicExpressionFormatValue(value) {
@@ -1619,8 +2205,168 @@
     return Math.round(clamped / 4) * 4;
   }
 
+  function groupTypeValue(value) {
+    return GROUP_TYPES.has(value) ? value : DEFAULT_GROUP_TYPE;
+  }
+
+  function signedGroupActive(groupType = state.groupType) {
+    return groupType === 'B' || groupType === 'C' || groupType === 'D';
+  }
+
+  function rankBoundsForGroup(groupType = state.groupType) {
+    if (groupType === 'B' || groupType === 'C') return { min: 2 };
+    if (groupType === 'D') return { min: 4 };
+    return { min: 1 };
+  }
+
+  function cleanRankForGroup(value, groupType = state.groupType) {
+    const fallback = Math.max(rankBoundsForGroup(groupType).min, DEFAULT_STRAND_COUNT);
+    const parsed = cleanPositiveInteger(value, fallback);
+    return Math.max(rankBoundsForGroup(groupType).min, parsed);
+  }
+
+  function rankNoun(groupType = state.groupType) {
+    return signedGroupActive(groupType) ? 'rank' : 'strand count';
+  }
+
+  function generatorValuesForState() {
+    if (signedGroupActive()) {
+      return Array.from({ length: state.strandCount }, (_, index) => index);
+    }
+    if (state.strandCount <= 1) return [];
+    return Array.from({ length: state.strandCount - 1 }, (_, index) => index + 1);
+  }
+
+  function generatorRecordsForFamily(family, indices) {
+    if (family === 'braid') {
+      return indices.flatMap((index) => [
+        { family: 'braid', index, sign: 1 },
+        { family: 'braid', index, sign: -1 }
+      ]);
+    }
+    return indices.map((index) => ({ family, index }));
+  }
+
+  function generatorChipMarkup(generator) {
+    const record = normalizeGeneratorRecord(generator);
+    const sign = record.family === 'braid' ? ` data-generator-sign="${record.sign}"` : '';
+    return `<button class="strand-generator-chip is-${record.family}" type="button" data-generator-family="${record.family}" data-generator-index="${record.index}"${sign} aria-label="${escapeHtml(generatorAriaLabel(record))}">${escapeHtml(generatorLabel(record))}</button>`;
+  }
+
+  function generatorRecordFromChip(chip) {
+    if (!chip) return null;
+    return normalizeGeneratorRecord({
+      family: chip.dataset.generatorFamily,
+      index: chip.dataset.generatorIndex,
+      sign: chip.dataset.generatorSign
+    });
+  }
+
   function validGenerator(generator) {
-    return Number.isInteger(generator) && generator >= 1 && generator < state.strandCount;
+    const record = normalizeGeneratorRecord(generator);
+    return validGeneratorRecord(record, state.strandCount, state.groupType);
+  }
+
+  function validGeneratorRecord(record, strandCount, groupType = state.groupType) {
+    if (!record || !Number.isInteger(record.index) || !GENERATOR_FAMILIES.has(record.family)) return false;
+    return validGeneratorIndex(record.index, strandCount, groupType);
+  }
+
+  function validGeneratorIndex(generator, strandCount, groupType = state.groupType) {
+    if (!Number.isInteger(generator)) return false;
+    if (signedGroupActive(groupType)) return generator >= 0 && generator < strandCount;
+    return generator >= 1 && generator < strandCount;
+  }
+
+  function filterValidSteps(steps, strandCount, groupType = state.groupType) {
+    if (!Array.isArray(steps)) return [];
+    return steps
+      .map(normalizeGeneratorRecord)
+      .filter((record) => validGeneratorRecord(record, strandCount, groupType));
+  }
+
+  function normalizeGeneratorRecord(value) {
+    if (Number.isInteger(value) || (typeof value === 'string' && value.trim() !== '')) {
+      const index = parseInteger(value);
+      return Number.isInteger(index) ? { family: 'coxeter', index } : null;
+    }
+    if (!value || typeof value !== 'object') return null;
+    const family = GENERATOR_FAMILIES.has(value.family) ? value.family : 'coxeter';
+    const index = parseInteger(value.index ?? value.generator ?? value.step);
+    if (!Number.isInteger(index)) return null;
+    const record = { family, index };
+    if (family === 'braid') record.sign = braidSignValue(value.sign ?? value.variant ?? value.inverse);
+    return record;
+  }
+
+  function exportGeneratorRecord(generator) {
+    const record = normalizeGeneratorRecord(generator);
+    if (!record) return null;
+    if (record.family === 'braid') return { family: 'braid', index: record.index, sign: record.sign === -1 ? -1 : 1 };
+    return { family: record.family, index: record.index };
+  }
+
+  function braidSignValue(value) {
+    if (value === -1 || value === '-1' || value === 'negative' || value === 'inverse' || value === true) return -1;
+    return 1;
+  }
+
+  function sameGeneratorRecord(left, right) {
+    const a = normalizeGeneratorRecord(left);
+    const b = normalizeGeneratorRecord(right);
+    if (!a || !b) return false;
+    return a.family === b.family && a.index === b.index && (a.family !== 'braid' || a.sign === b.sign);
+  }
+
+  function wordIsCoxeterOnly(records) {
+    return records.every((record) => normalizeGeneratorRecord(record)?.family === 'coxeter');
+  }
+
+  function currentWordIsCoxeterOnly() {
+    return wordIsCoxeterOnly(filterValidSteps(state.appliedSteps, state.strandCount, state.groupType));
+  }
+
+  function coxeterStepsFromRecords(records) {
+    return records
+      .filter((record) => normalizeGeneratorRecord(record)?.family === 'coxeter')
+      .map((record) => normalizeGeneratorRecord(record).index);
+  }
+
+  function groupPlainLabel(groupType = state.groupType, n = state.strandCount) {
+    const cleanGroupType = groupTypeValue(groupType);
+    return (GROUP_TYPE_NAMES[cleanGroupType] || GROUP_TYPE_NAMES[DEFAULT_GROUP_TYPE])(n);
+  }
+
+  function groupLatex(groupType = state.groupType, n = state.strandCount) {
+    const cleanGroupType = groupTypeValue(groupType);
+    if (cleanGroupType === 'symmetric') return `S_{${n}}`;
+    return `${cleanGroupType}_{${n}}`;
+  }
+
+  function generatorLabel(generator) {
+    const record = normalizeGeneratorRecord(generator);
+    if (!record) return 's_?';
+    if (record.family === 'braid') return record.sign === -1 ? `sigma_${record.index}^-1` : `sigma_${record.index}`;
+    if (record.family === 'kl') return `b_${record.index}`;
+    if (record.family === 'tl') return `e_${record.index}`;
+    return `s_${record.index}`;
+  }
+
+  function generatorAriaLabel(generator) {
+    const record = normalizeGeneratorRecord(generator);
+    if (!record) return 'generator';
+    if (record.family === 'braid') return record.sign === -1 ? `inverse braid generator sigma ${record.index}` : `braid generator sigma ${record.index}`;
+    if (record.family === 'kl') return `KL basis generator b ${record.index}`;
+    if (record.family === 'tl') return `Temperley-Lieb generator e ${record.index}`;
+    return `Coxeter generator s ${record.index}`;
+  }
+
+  function signedLabelPlain(label) {
+    return String(label);
+  }
+
+  function signedLabelLatex(label) {
+    return label < 0 ? `\\overline{${Math.abs(label)}}` : String(label);
   }
 
   function generatorWordLatex(steps, compositionOrder) {
@@ -1629,29 +2375,44 @@
     if (ordered.length > WORD_DISPLAY_LIMIT) {
       const head = ordered.slice(0, Math.floor(WORD_DISPLAY_LIMIT / 2));
       const tail = ordered.slice(-Math.floor(WORD_DISPLAY_LIMIT / 2));
-      return `${head.map((step) => `s_{${step}}`).join('\\,')}\\,\\cdots\\,${tail.map((step) => `s_{${step}}`).join('\\,')}`;
+      return `${head.map(generatorLatex).join('\\,')}\\,\\cdots\\,${tail.map(generatorLatex).join('\\,')}`;
     }
-    return ordered.map((step) => `s_{${step}}`).join('\\,');
+    return ordered.map(generatorLatex).join('\\,');
   }
 
   function generatorListLatex(steps) {
     if (!steps.length) return '()';
     const limited = steps.length > WORD_DISPLAY_LIMIT
-      ? steps.slice(0, WORD_DISPLAY_LIMIT).map((step) => `s_{${step}}`).join(', ') + ', \\ldots'
-      : steps.map((step) => `s_{${step}}`).join(', ');
+      ? steps.slice(0, WORD_DISPLAY_LIMIT).map(generatorLatex).join(', ') + ', \\ldots'
+      : steps.map(generatorLatex).join(', ');
     return `(${limited})`;
   }
 
-  function transpositionWordLatex(steps) {
+  function generatorLatex(generator) {
+    const record = normalizeGeneratorRecord(generator);
+    if (!record) return 's_{?}';
+    if (record.family === 'braid') return record.sign === -1 ? `\\sigma_{${record.index}}^{-1}` : `\\sigma_{${record.index}}`;
+    if (record.family === 'kl') return `b_{${record.index}}`;
+    if (record.family === 'tl') return `e_{${record.index}}`;
+    return `s_{${record.index}}`;
+  }
+
+  function transpositionWordLatex(steps, data = null) {
     if (!steps.length) return 'e';
     const ordered = steps.slice().reverse();
     const body = ordered.length > WORD_DISPLAY_LIMIT
-      ? ordered.slice(0, WORD_DISPLAY_LIMIT).map(transpositionLatex).join('') + '\\cdots'
-      : ordered.map(transpositionLatex).join('');
+      ? ordered.slice(0, WORD_DISPLAY_LIMIT).map((step) => transpositionLatex(step, data)).join('') + '\\cdots'
+      : ordered.map((step) => transpositionLatex(step, data)).join('');
     return body;
   }
 
-  function transpositionLatex(step) {
+  function transpositionLatex(step, data = null) {
+    const groupType = data?.groupType || state.groupType;
+    if (signedGroupActive(groupType)) {
+      return generatorSwapPairs(groupType, data?.n || state.strandCount, step)
+        .map((pair) => compactCycleEntriesLatex(pair))
+        .join('');
+    }
     return compactCycleEntriesLatex([step, step + 1]);
   }
 
@@ -1662,10 +2423,20 @@
 
   function compactCycleEntriesLatex(entries) {
     const compact = entries.every((entry) => Number.isInteger(entry) && entry >= 0 && entry < 10);
-    return compact ? `(${entries.join('')})` : `(${entries.join('\\,')})`;
+    if (compact) return `(${entries.join('')})`;
+    return `(${entries.map(signedLabelLatex).join('\\,')})`;
   }
 
   function oneLineLatex(data) {
+    if (data.signed) {
+      if (data.fullPermutation) return `(${data.fullPermutation.map(signedLabelLatex).join(',')})`;
+      const pairs = data.signedOneLine
+        .map((image, index) => [index + 1, image])
+        .filter(([source, image]) => source !== image);
+      if (!pairs.length) return `\\operatorname{id}_{${groupLatex(data.groupType, data.n)}}`;
+      const limited = pairs.slice(0, 14).map(([source, image]) => `w(${source})=${signedLabelLatex(image)}`).join(',\\ ');
+      return `${limited}${pairs.length > 14 ? ',\\ \\ldots' : ''};\\quad w(i)=i\\text{ otherwise}`;
+    }
     if (data.fullPermutation) return `(${data.fullPermutation.join(',')})`;
     if (!data.imageBySource.size) return `\\operatorname{id}_{S_{${data.n}}}`;
     const pairs = [...data.imageBySource.entries()].sort(([a], [b]) => a - b);
@@ -1674,6 +2445,21 @@
   }
 
   function twoLineLatex(data) {
+    if (data.signed) {
+      if (data.fullPermutation && data.n <= TWO_LINE_DISPLAY_LIMIT) {
+        const top = Array.from({ length: data.n }, (_, index) => index + 1).join('&');
+        const bottom = data.fullPermutation.map(signedLabelLatex).join('&');
+        return `\\begin{pmatrix}${top}\\\\${bottom}\\end{pmatrix}`;
+      }
+      const pairs = data.signedOneLine
+        .map((image, index) => [index + 1, image])
+        .filter(([source, image]) => source !== image)
+        .slice(0, TWO_LINE_DISPLAY_LIMIT);
+      if (!pairs.length) return `\\begin{pmatrix}1&\\cdots&${data.n}\\\\1&\\cdots&${data.n}\\end{pmatrix}`;
+      const top = pairs.map(([source]) => source).join('&');
+      const bottom = pairs.map(([, image]) => signedLabelLatex(image)).join('&');
+      return `\\begin{pmatrix}${top}\\\\${bottom}\\end{pmatrix}\\quad\\text{on moved positive strands}`;
+    }
     if (data.fullPermutation && data.n <= TWO_LINE_DISPLAY_LIMIT) {
       const top = Array.from({ length: data.n }, (_, index) => index + 1).join('&');
       const bottom = data.fullPermutation.join('&');
@@ -1695,9 +2481,14 @@
   }
 
   function exportJson() {
-    return JSON.stringify({
+    const appliedGenerators = state.appliedSteps
+      .map(exportGeneratorRecord)
+      .filter(Boolean);
+    const coxeterOnly = wordIsCoxeterOnly(appliedGenerators);
+    const payload = {
       kind: EXPORT_KIND,
       version: EXPORT_VERSION,
+      groupType: state.groupType,
       strandCount: state.strandCount,
       direction: state.direction,
       strandDisplayStyle: state.strandDisplayStyle,
@@ -1705,19 +2496,30 @@
       generatorGapEnabled: state.generatorGapEnabled,
       strandSizeMode: state.strandSizeMode,
       fixedGeneratorSize: state.fixedGeneratorSize,
-      appliedSteps: state.appliedSteps.slice()
-    }, null, 2);
+      appliedGenerators
+    };
+    if (coxeterOnly) payload.appliedSteps = appliedGenerators.map((record) => record.index);
+    return JSON.stringify(payload, null, 2);
   }
 
   function exportLatex(data) {
+    const group = groupLatex(data.groupType, data.n);
+    if (!data.coxeterOnly) {
+      return [
+        '% Strand Diagram Calculator',
+        `\\[x=${generatorWordLatex(data.wordRecords, true)}\\]`,
+        `\\[\\text{mixed typed word over } ${group};\\quad \\text{Coxeter reduction not applicable}\\]`
+      ].join('\n');
+    }
     const lines = [
       '% Strand Diagram Calculator',
-      `\\[w=${generatorWordLatex(data.steps, true)}\\in S_{${data.n}}\\]`,
+      `\\[w=${generatorWordLatex(data.steps, true)}\\in ${group}\\]`,
       `\\[w=${cycleLatex(data.cycles)}=${oneLineLatex(data)}=${twoLineLatex(data)}\\]`,
-      `\\[\\ell(w)=${data.inversionCount},\\quad \\text{input word length}=${data.steps.length}\\]`
+      `\\[\\ell(w)=${data.length},\\quad \\text{input word length}=${data.wordRecords.length}\\]`
     ];
     if (data.n <= MATRIX_DISPLAY_LIMIT && data.fullPermutation) {
-      lines.push(`\\[P_{w(i),i}=\\begin{bmatrix}${matrixLatexRows(data.fullPermutation).join('\\\\')}\\end{bmatrix}\\]`);
+      const rows = data.signed ? signedMatrixLatexRows(data.signedOneLine) : matrixLatexRows(data.fullPermutation);
+      lines.push(`\\[\\begin{bmatrix}${rows.join('\\\\')}\\end{bmatrix}\\]`);
     }
     return lines.join('\n');
   }
@@ -1729,6 +2531,16 @@
     });
   }
 
+  function signedMatrixLatexRows(oneLine) {
+    return oneLine.map((_, rowIndex) => {
+      const row = rowIndex + 1;
+      return oneLine.map((image) => {
+        if (Math.abs(image) !== row) return '';
+        return image > 0 ? '1' : '-1';
+      }).join('&');
+    });
+  }
+
   function permutationMatrixLatex(permutation) {
     const rows = matrixLatexRows(permutation);
     const body = rows.join('\\\\');
@@ -1736,31 +2548,51 @@
     return `\\begin{pmatrix}${body}\\end{pmatrix}`;
   }
 
+  function signedPermutationMatrixLatex(oneLine) {
+    const rows = signedMatrixLatexRows(oneLine);
+    const body = rows.join('\\\\');
+    if (oneLine.length >= 8) return `\\left(\\begin{smallmatrix}${body}\\end{smallmatrix}\\right)`;
+    return `\\begin{pmatrix}${body}\\end{pmatrix}`;
+  }
+
   function exportPlain(data) {
     const lines = [
       'Strand Diagram Calculator',
-      `strandCount: ${data.n}`,
+      `group: ${groupPlainLabel(data.groupType, data.n)}`,
+      `${data.signed ? 'rank' : 'strandCount'}: ${data.n}`,
       `direction: ${DIRECTION_LABELS[state.direction] || state.direction}`,
-      `chronological steps: ${data.steps.length ? data.steps.map((step) => `s_${step}`).join(', ') : 'identity'}`,
-      `composition word: ${plainGeneratorWord(data.steps)}`,
-      `transpositions: ${plainTranspositionWord(data.steps)}`,
-      `cycle notation: ${plainCycleNotation(data.cycles)}`,
-      `one-line: ${data.oneLinePlain}`,
-      `inversions: ${data.inversionCount}`,
-      `reduced: ${data.isReduced ? 'yes' : 'no'}`
+      `chronological generators: ${data.wordRecords.length ? data.wordRecords.map(generatorLabel).join(', ') : 'identity'}`,
+      `composition word: ${plainGeneratorWord(data.wordRecords)}`
     ];
-    if (data.canonicalSteps) lines.push(`canonical reduced word: ${plainGeneratorWord(data.canonicalSteps)}`);
+    if (data.coxeterOnly) {
+      lines.push(
+        `transpositions: ${plainTranspositionWord(data.steps, data)}`,
+        `cycle notation: ${plainCycleNotation(data.cycles)}`,
+        `one-line: ${data.oneLinePlain}`,
+        `${data.signed ? 'Coxeter length' : 'inversions'}: ${data.length}`,
+        `reduced: ${data.isReduced ? 'yes' : 'no'}`
+      );
+      if (data.canonicalSteps) lines.push(`canonical reduced word: ${plainGeneratorWord(data.canonicalSteps)}`);
+    } else {
+      lines.push('Coxeter reduction: not applicable to mixed typed words');
+    }
     return lines.join('\n');
   }
 
   function plainGeneratorWord(steps) {
     if (!steps.length) return 'e';
-    return steps.slice().reverse().map((step) => `s_${step}`).join(' ');
+    return steps.slice().reverse().map(generatorLabel).join(' ');
   }
 
-  function plainTranspositionWord(steps) {
+  function plainTranspositionWord(steps, data = null) {
     if (!steps.length) return 'e';
-    return steps.slice().reverse().map((step) => compactCycleEntriesPlain([step, step + 1])).join('');
+    const groupType = data?.groupType || state.groupType;
+    return steps.slice().reverse().map((step) => {
+      if (!signedGroupActive(groupType)) return compactCycleEntriesPlain([step, step + 1]);
+      return generatorSwapPairs(groupType, data?.n || state.strandCount, step)
+        .map(compactCycleEntriesPlain)
+        .join('');
+    }).join('');
   }
 
   function plainCycleNotation(cycles) {
@@ -1796,7 +2628,7 @@
     try {
       const result = importJson(refs.importInput.value);
       setExportMessage(result.dropped
-        ? `JSON imported; dropped ${result.dropped} invalid step${result.dropped === 1 ? '' : 's'}.`
+        ? `JSON imported; dropped ${result.dropped} invalid generator${result.dropped === 1 ? '' : 's'}.`
         : 'JSON imported.');
       setStatus('imported JSON preset');
       renderAll({ preserveMessage: true });
@@ -1808,18 +2640,24 @@
   function importJson(text) {
     const data = JSON.parse(text || '{}');
     if (data.kind && data.kind !== EXPORT_KIND) throw new Error('This is not a strand diagram preset.');
-    const strandCount = cleanPositiveInteger(data.strandCount, DEFAULT_STRAND_COUNT);
+    const groupType = groupTypeValue(data.groupType || DEFAULT_GROUP_TYPE);
+    const strandCount = cleanRankForGroup(data.strandCount, groupType);
     const direction = DIRECTIONS.has(data.direction) ? data.direction : DEFAULT_DIRECTION;
     const strandDisplayStyle = strandDisplayStyleValue(data.strandDisplayStyle);
     const generatorSpacing = importedGeneratorSpacing(data);
     const generatorGapEnabled = data.generatorGapEnabled === true;
     const strandSizeMode = strandSizeModeValue(data.strandSizeMode);
     const fixedGeneratorSize = fixedGeneratorSizeValue(data.fixedGeneratorSize);
-    const rawSteps = Array.isArray(data.appliedSteps) ? data.appliedSteps : [];
+    const rawSteps = Array.isArray(data.appliedGenerators)
+      ? data.appliedGenerators
+      : Array.isArray(data.appliedSteps)
+        ? data.appliedSteps
+        : [];
     const steps = rawSteps
-      .map(parseInteger)
-      .filter((value) => Number.isFinite(value));
-    const valid = filterValidSteps(steps, strandCount);
+      .map(normalizeGeneratorRecord)
+      .filter(Boolean);
+    const valid = filterValidSteps(steps, strandCount, groupType);
+    state.groupType = groupType;
     state.strandCount = strandCount;
     state.direction = direction;
     state.strandDisplayStyle = strandDisplayStyle;
@@ -1838,13 +2676,6 @@
     return data.generatorGapMode === 'gap'
       ? generatorSpacingValue(0.62)
       : DEFAULT_GENERATOR_SPACING;
-  }
-
-  function filterValidSteps(steps, strandCount) {
-    if (strandCount <= 1) return [];
-    return steps
-      .map(parseInteger)
-      .filter((value) => Number.isInteger(value) && value >= 1 && value < strandCount);
   }
 
   function cleanPositiveInteger(value, fallback) {

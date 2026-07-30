@@ -267,20 +267,16 @@
     }
 
     .strand-basic-controls {
-      display: flex;
-      align-items: flex-end;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
       gap: 8px 12px;
       min-width: 0;
-      margin-bottom: 10px;
-      padding-bottom: 10px;
-      border-bottom: 1px dotted var(--border);
     }
 
     .strand-basic-format-control {
       display: grid;
       gap: 4px;
-      flex: 1 1 190px;
       min-width: 0;
     }
 
@@ -306,8 +302,8 @@
     }
 
     .strand-basic-reduced-toggle {
-      margin: 0 0 1px;
-      padding-bottom: 4px;
+      margin: 0;
+      min-height: 31px;
       white-space: nowrap;
     }
 
@@ -370,7 +366,28 @@
     }
 
     .strand-input-chart {
+      display: grid;
       align-items: stretch;
+      gap: 10px;
+    }
+
+    .strand-generator-family {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .strand-generator-family-title {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0;
+    }
+
+    .strand-generator-family-chips {
+      display: flex;
+      align-items: stretch;
+      flex-wrap: wrap;
       gap: 7px;
     }
 
@@ -400,6 +417,19 @@
     .strand-generator-chip:active {
       cursor: grabbing;
       transform: translateY(1px);
+    }
+
+    .strand-generator-chip.is-braid {
+      border-color: rgba(139, 58, 42, 0.38);
+    }
+
+    .strand-generator-chip.is-kl {
+      border-color: rgba(31, 28, 24, 0.36);
+      font-weight: 700;
+    }
+
+    .strand-generator-chip.is-tl {
+      border-color: rgba(123, 71, 126, 0.4);
     }
 
     .strand-generator-drag-ghost {
@@ -532,11 +562,11 @@
       }
 
       .strand-basic-controls {
-        align-items: stretch;
+        grid-template-columns: minmax(0, 1fr) auto;
       }
 
       .strand-basic-format-control {
-        flex-basis: 100%;
+        min-width: 0;
       }
 
       .strand-stat-value {
@@ -549,7 +579,7 @@
 
 <header>
   <h1>Strand Diagram Calculator</h1>
-  <span><a href="index.html">Pure Math Toolkit</a> &middot; symmetric groups &middot; adjacent transpositions</span>
+  <span><a href="index.html">Pure Math Toolkit</a> &middot; symmetric and signed Weyl groups &middot; strand diagrams</span>
 </header>
 
 <main class="layout strand-layout">
@@ -559,8 +589,17 @@
         <span class="panel-title-text">Strand Diagram</span>
         <div class="canvas-toolbar strand-toolbar-group" aria-label="Strand diagram controls">
           <span class="strand-badge" id="strand-status-badge">S_5</span>
+          <label class="strand-field-inline" for="strand-group-type">
+            <span>group</span>
+            <select id="strand-group-type">
+              <option value="symmetric" selected>S_n</option>
+              <option value="B">B_n</option>
+              <option value="C">C_n</option>
+              <option value="D">D_n</option>
+            </select>
+          </label>
           <label class="strand-field-inline" for="strand-count">
-            <span>strands</span>
+            <span id="strand-count-label">strands</span>
             <input id="strand-count" type="number" min="1" step="1" value="5" inputmode="numeric">
           </label>
         </div>
@@ -644,23 +683,6 @@
     <section class="card" id="strand-basic-card">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Basic Info</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
-        <div class="strand-basic-controls" aria-label="Basic expression controls">
-          <label class="strand-basic-format-control" for="strand-basic-expression-format">
-            <span class="input-label">expression</span>
-            <select id="strand-basic-expression-format">
-              <option value="composition" selected>Composition word</option>
-              <option value="transpositions">Transpositions</option>
-              <option value="cycle">Cycle notation</option>
-              <option value="one-line">One-line</option>
-              <option value="two-line">Two-line</option>
-              <option value="matrix">Matrix</option>
-            </select>
-          </label>
-          <label class="strand-basic-reduced-toggle opt-row" for="strand-basic-reduced-only">
-            <input id="strand-basic-reduced-only" type="checkbox">
-            <span>reduced</span>
-          </label>
-        </div>
         <div class="strand-info-stack" id="strand-basic-info"></div>
       </div>
     </section>

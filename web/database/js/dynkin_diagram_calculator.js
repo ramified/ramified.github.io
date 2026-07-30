@@ -921,6 +921,10 @@
     return state.quiverMode && supportsQuiverOrientation(state.type);
   }
 
+  function canUseStartingFunctionAR(available = supportsStartingFunction(state.type)) {
+    return available && supportsQuiverOrientation(state.type);
+  }
+
   function startingFunctionChart(type, rank, C, selected, layout) {
     const columnsByVertex = layout.positions.map((position) => position.col);
     const layers = startingFunctionLayers(type, rank, C, columnsByVertex);
@@ -1569,6 +1573,23 @@
     return orientations;
   }
 
+  function randomQuiverOrientations(C) {
+    const orientations = {};
+    for (let i = 0; i < C.length; i++) {
+      for (let j = i + 1; j < C.length; j++) {
+        if (!C[i][j] && !C[j][i]) continue;
+        orientations[edgeKey(i, j)] = Math.random() < 0.5 ? 1 : -1;
+      }
+    }
+    return orientations;
+  }
+
+  function randomizeQuiverOrientations(type, rank, C) {
+    const layoutKey = quiverLayoutKey(type, rank);
+    state.quiverOrientations[layoutKey] = randomQuiverOrientations(C);
+    return state.quiverOrientations[layoutKey];
+  }
+
   function getQuiverOrientations(type, rank, C) {
     const layoutKey = quiverLayoutKey(type, rank);
     const defaults = defaultQuiverOrientations(C);
@@ -1592,6 +1613,7 @@
     orientations[keyName] = -(orientations[keyName] || 1);
     drawDynkin();
     renderStartingFunction();
+    renderExport();
     queueMathTypeset();
   }
 
@@ -1679,12 +1701,21 @@
     drawDynkin();
     syncQuiverControls();
     renderStartingFunction();
+    renderExport();
     queueMathTypeset();
   }
 
   function setStartingFunctionARMode(enabled) {
-    state.startingFunctionARMode = Boolean(enabled) && canShowStartingFunctionAR();
+    const shouldEnable = Boolean(enabled) && canUseStartingFunctionAR();
+    if (shouldEnable && !state.quiverMode) {
+      randomizeQuiverOrientations(state.type, state.rank, state.cartan);
+      state.quiverMode = true;
+      syncQuiverControls();
+      drawDynkin();
+    }
+    state.startingFunctionARMode = shouldEnable && canShowStartingFunctionAR();
     renderStartingFunction();
+    renderExport();
     queueMathTypeset();
   }
 
@@ -1834,8 +1865,9 @@
     const arModeCheckbox = $('dynkin-starting-ar-mode');
     const hideUnselectedCheckbox = $('dynkin-ar-hide-unselected');
     const wideButton = $('dynkin-starting-wide');
-    const canUseAR = available && canShowStartingFunctionAR();
-    if (!canUseAR) state.startingFunctionARMode = false;
+    const canUseAR = canUseStartingFunctionAR(available);
+    const canShowAR = canShowStartingFunctionAR();
+    if (!canShowAR) state.startingFunctionARMode = false;
     if (headerButton) {
       headerButton.textContent = state.startingFunctionHeaderVisible ? 'hide header' : 'show header';
       headerButton.setAttribute('aria-pressed', state.startingFunctionHeaderVisible ? 'true' : 'false');
@@ -1851,12 +1883,12 @@
       const label = arModeCheckbox.closest('label');
       if (label) {
         label.title = canUseAR
-          ? 'Show the Auslander-Reiten quiver in this chart'
-          : 'Turn on ADE quiver arrows first';
+          ? 'Show the Auslander-Reiten quiver; enables random quiver arrows if needed'
+          : 'Available for simply-laced ADE types';
       }
     }
     if (hideUnselectedCheckbox) {
-      const canHide = canUseAR && state.startingFunctionARMode;
+      const canHide = canShowAR && state.startingFunctionARMode;
       hideUnselectedCheckbox.checked = canHide && state.arHideUnselected;
       hideUnselectedCheckbox.disabled = !canHide;
       const label = hideUnselectedCheckbox.closest('label');
