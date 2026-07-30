@@ -31,7 +31,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "color": "#8b3a2a",
       "fillColor": "#fffdf8",
       "x": 152,
-      "y": 30.2,
+      "y": 54,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -63,7 +63,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
       "x": 48.7,
-      "y": 208.4
+      "y": 208.5
     },
     {
       "id": "n39",
@@ -112,8 +112,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 469.5,
-      "y": 392.8
+      "x": 468.8,
+      "y": 361
     },
     {
       "id": "n55",
@@ -155,8 +155,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 382.9,
-      "y": 22.2
+      "x": 382.8,
+      "y": 54
     },
     {
       "id": "n59",
@@ -177,8 +177,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 257.2,
-      "y": 100.8
+      "x": 255.7,
+      "y": 101.3
     },
     {
       "id": "n60",
@@ -206,7 +206,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
       "x": 557.3,
-      "y": 28.5
+      "y": 54
     },
     {
       "id": "n61",
@@ -249,7 +249,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
       "x": 239.4,
-      "y": 392.8
+      "y": 361
     },
     {
       "id": "n64",
@@ -271,7 +271,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
       "x": 682.5,
-      "y": 392.7
+      "y": 361
     },
     {
       "id": "n65",
@@ -312,8 +312,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
       "x": 666.3,
       "y": 262
     },
@@ -326,7 +326,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "$P_w=$ is unnecessary\nexpression row should be under the \"reduced?\" row\nAdd type BCD case"
+          "text": "- [x] $P_w=$ is unnecessary\n- [x] expression row should be under the \"reduced?\" row\n- [x] Add type BCD case"
         }
       ],
       "setting": "",
@@ -334,9 +334,9 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 402.6,
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 401.8,
       "y": 161.4
     }
   ],
@@ -445,7 +445,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     }
   ],
   "view": {
-    "selectedId": "n39",
+    "selectedId": "n58",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasRatioLocked": true,
@@ -453,7 +453,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     "relativeNodePositions": {
       "n4": {
         "x": 0.2021,
-        "y": 0.0728
+        "y": 0.1301
       },
       "n37": {
         "x": 0.0648,
@@ -464,8 +464,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
         "y": 0.6515
       },
       "n48": {
-        "x": 0.6243,
-        "y": 0.9465
+        "x": 0.6235,
+        "y": 0.8699
       },
       "n55": {
         "x": 0.4487,
@@ -473,15 +473,15 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       },
       "n58": {
         "x": 0.5091,
-        "y": 0.0535
+        "y": 0.1301
       },
       "n59": {
-        "x": 0.342,
-        "y": 0.2429
+        "x": 0.34,
+        "y": 0.2442
       },
       "n60": {
         "x": 0.7411,
-        "y": 0.0688
+        "y": 0.1301
       },
       "n61": {
         "x": 0.9238,
@@ -489,11 +489,11 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       },
       "n62": {
         "x": 0.3183,
-        "y": 0.9465
+        "y": 0.8699
       },
       "n64": {
         "x": 0.9076,
-        "y": 0.9463
+        "y": 0.8699
       },
       "n65": {
         "x": 0.6955,
@@ -504,7 +504,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
         "y": 0.6314
       },
       "n67": {
-        "x": 0.5354,
+        "x": 0.5343,
         "y": 0.3888
       }
     },

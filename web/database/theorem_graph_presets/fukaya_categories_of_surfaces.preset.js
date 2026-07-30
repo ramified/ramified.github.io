@@ -9,7 +9,14 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
     "id": "__title__",
     "type": "title",
     "label": "Fukaya Categories of Surfaces",
-    "details": [],
+    "details": [
+      {
+        "id": "link",
+        "label": "link",
+        "type": "textbox",
+        "text": "\\cite{ChatGPT}"
+      }
+    ],
     "setting": "",
     "condition": "",
     "result": "",
@@ -46,7 +53,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
           "id": "pace",
           "label": "suggested pace",
           "type": "textbox",
-          "text": "30–60 minutes\n\\cite{ChatGPT}"
+          "text": "30–60 minutes"
         }
       ],
       "setting": "",
@@ -56,8 +63,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "citationKeys": [],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 316,
-      "y": 15.5
+      "x": 330.1,
+      "y": 22
     },
     {
       "id": "n3",
@@ -98,8 +105,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#8b3a2a",
       "fillColor": "#fbefee",
-      "x": 87.7,
-      "y": 104.9
+      "x": 111.2,
+      "y": 24.1
     },
     {
       "id": "n4",
@@ -140,8 +147,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 48,
-      "y": 358.8
+      "x": 124.9,
+      "y": 270.3
     },
     {
       "id": "n5",
@@ -189,8 +196,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 126.6,
-      "y": 218.2
+      "x": 48,
+      "y": 120.1
     },
     {
       "id": "n6",
@@ -232,8 +239,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 121.8,
-      "y": 430.9
+      "x": 48,
+      "y": 348.7
     },
     {
       "id": "n9",
@@ -250,7 +257,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
           "id": "tasks",
           "label": "practice",
           "type": "checkbox",
-          "text": "- [x] Construct the cone of a map of complexes\n- [x] Interpret a short exact sequence as a triangle\n- [ ] Compute a simple perfect complex over kA2"
+          "text": "- [x] Construct the cone of a map of complexes\n- [x] Interpret a short exact sequence as a triangle\n- [x] Compute a simple perfect complex over kA2"
         },
         {
           "id": "checkpoint",
@@ -273,10 +280,10 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
         "KellerAinf",
         "OPS"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 537.8,
-      "y": 30.3,
+      "color": "#8b3a2a",
+      "fillColor": "#fbefee",
+      "x": 529.9,
+      "y": 33,
       "childGraph": {
         "title": "perfect complex",
         "nodes": [],
@@ -321,7 +328,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
           "id": "examples",
           "label": "examples",
           "type": "checkbox",
-          "text": "- [x] $\\Omega X$ is an $A_{\\infty}$ space\n- [x] Associative algebra\n- [x] Associative dg algebra$=A_{\\infty}$ with $m_i=0$ for $i>2$\n- [x] Hochschild cocycles $=A_{\\infty}$ on $B \\otimes k[\\epsilon]$ lifting multiplications"
+          "text": "- [x] $\\Omega X$ is an $A_{\\infty}$ space\n- [x] Associative algebra\n- [x] Associative dg algebra$=A_{\\infty}$ with $m_i=0$ for $i>2$\n- [x] Hochschild cocycles $=A_{\\infty}$ on $B \\otimes k[\\epsilon]$ lifting multiplications\n- [x] Kadeishvili's theorem: the homology algebra of an dg algebra is an $A_{\\infty}$ algebra"
         }
       ],
       "setting": "",
@@ -334,8 +341,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#8b3a2a",
       "fillColor": "#fbefee",
-      "x": 697.7,
-      "y": 149.8
+      "x": 705,
+      "y": 32.1
     },
     {
       "id": "n11",
@@ -382,8 +389,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 440.7,
-      "y": 134.9
+      "x": 427,
+      "y": 94.9
     },
     {
       "id": "n12",
@@ -425,8 +432,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 287.5,
-      "y": 287.6
+      "x": 260.9,
+      "y": 191.9
     },
     {
       "id": "n13",
@@ -468,8 +475,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 516.4,
-      "y": 238.7
+      "x": 477.7,
+      "y": 212.6
     },
     {
       "id": "n14",
@@ -511,8 +518,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 580.2,
-      "y": 422.5
+      "x": 697.3,
+      "y": 298
     },
     {
       "id": "n15",
@@ -553,8 +560,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 704,
-      "y": 337.2
+      "x": 670.1,
+      "y": 198.9
     },
     {
       "id": "n16",
@@ -597,8 +604,18 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 692.3,
-      "y": 520.4
+      "x": 705,
+      "y": 411.5,
+      "childGraph": {
+        "title": "Higher polygon products $\\mu_k$",
+        "nodes": [],
+        "arrows": [],
+        "view": {
+          "selectedId": "",
+          "layoutAvoidOverlap": true,
+          "layoutRunning": false
+        }
+      }
     },
     {
       "id": "n17",
@@ -640,8 +657,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 368.9,
-      "y": 350.2
+      "x": 245,
+      "y": 341.6
     },
     {
       "id": "n18",
@@ -684,8 +701,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 468.7,
-      "y": 498.9
+      "x": 482.4,
+      "y": 323.1
     },
     {
       "id": "n19",
@@ -727,8 +744,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 566.4,
-      "y": 611.1
+      "x": 559.9,
+      "y": 445.8
     },
     {
       "id": "n20",
@@ -770,8 +787,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 270.8,
-      "y": 559.7
+      "x": 299.2,
+      "y": 407.1
     },
     {
       "id": "n21",
@@ -813,8 +830,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 704,
-      "y": 636.6
+      "x": 667.5,
+      "y": 516.2
     },
     {
       "id": "n22",
@@ -856,8 +873,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 434.7,
-      "y": 662.5
+      "x": 431,
+      "y": 523.6
     },
     {
       "id": "n23",
@@ -899,8 +916,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 200.6,
-      "y": 642.7
+      "x": 283.1,
+      "y": 609.6
     },
     {
       "id": "n24",
@@ -941,8 +958,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 365.2,
-      "y": 732.7
+      "x": 527,
+      "y": 581.8
     },
     {
       "id": "n25",
@@ -983,8 +1000,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 521.9,
-      "y": 815.7
+      "x": 512.2,
+      "y": 765.8
     },
     {
       "id": "n26",
@@ -1025,8 +1042,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 207.6,
-      "y": 477.4
+      "x": 193.2,
+      "y": 548.7
     },
     {
       "id": "n27",
@@ -1067,8 +1084,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 49.1,
-      "y": 637.9
+      "x": 48,
+      "y": 637.2
     },
     {
       "id": "n28",
@@ -1111,8 +1128,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 203.6,
-      "y": 804
+      "x": 180.3,
+      "y": 751.3
     },
     {
       "id": "n29",
@@ -1153,8 +1170,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 48,
-      "y": 879.7
+      "x": 49.2,
+      "y": 858.8
     },
     {
       "id": "n30",
@@ -1197,8 +1214,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 343.6,
-      "y": 861.6
+      "x": 437,
+      "y": 695
     },
     {
       "id": "n31",
@@ -1241,8 +1258,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 626.3,
-      "y": 753.7
+      "x": 694.7,
+      "y": 706.3
     },
     {
       "id": "n32",
@@ -1285,8 +1302,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 308.7,
-      "y": 959.3
+      "x": 321.4,
+      "y": 831.4
     },
     {
       "id": "n33",
@@ -1330,8 +1347,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 565.4,
-      "y": 949.4
+      "x": 517.1,
+      "y": 896.6
     },
     {
       "id": "n34",
@@ -1373,8 +1390,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 394,
-      "y": 1015.2
+      "x": 700.3,
+      "y": 833.4
     },
     {
       "id": "n35",
@@ -1401,8 +1418,389 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 232.1,
-      "y": 168.4
+      "x": 193.8,
+      "y": 127
+    },
+    {
+      "id": "n36",
+      "type": "misc",
+      "label": "Triangulation Flips and Surface-Quiver Mutation",
+      "details": [
+        {
+          "id": "link",
+          "label": "link",
+          "type": "textbox",
+          "text": "\\cite{FST08}\nhttps://chatgpt.com/share/6a6b8b81-ff54-83eb-8d0f-9c088e0a90e9"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#8b5f2a",
+      "fillColor": "#fff7df",
+      "x": 87.3,
+      "y": 473.4,
+      "childGraph": {
+        "title": "Triangulation Flips and Surface-Quiver Mutation",
+        "nodes": [
+          {
+            "id": "n1",
+            "type": "definition",
+            "label": "1. Marked surfaces",
+            "details": [
+              {
+                "id": "alias",
+                "label": "alias",
+                "type": "list",
+                "text": "bordered surface\nciliated surface(纤毛虫)"
+              },
+              {
+                "id": "invariants",
+                "label": "invariants",
+                "type": "textbox",
+                "text": "$(g,b,p)$"
+              }
+            ],
+            "setting": "Read Section 2, Definition 2.1.",
+            "condition": "Know what the pair (S,M) records: an oriented bordered surface, boundary marked points, and punctures.",
+            "result": "You can recognize the geometric objects on which ideal triangulations are defined.",
+            "proofSketch": "Draw three examples: a pentagon, an annulus with marked boundary points, and a once-punctured triangle. For a first pass, use the pentagon and postpone punctures.",
+            "citationKeys": [
+              "FST2008"
+            ],
+            "color": "#8b3a2a",
+            "fillColor": "#fbefee",
+            "x": 294.3,
+            "y": 54
+          },
+          {
+            "id": "n2",
+            "type": "definition",
+            "label": "2. Arcs and compatibility",
+            "setting": "Read Definitions 2.2 and 2.4.",
+            "condition": "Distinguish an arc from a boundary segment, and remember that arcs are considered up to isotopy.",
+            "result": "You can decide when two arcs are compatible: they can be represented without interior intersections.",
+            "proofSketch": "In a pentagon, list several diagonals and mark which pairs cross. Compatible pairs are exactly the noncrossing pairs.",
+            "citationKeys": [
+              "FST2008"
+            ],
+            "color": "#8b3a2a",
+            "fillColor": "#fbefee",
+            "x": 526.7,
+            "y": 54
+          },
+          {
+            "id": "n3",
+            "type": "definition",
+            "label": "3. Ideal triangulations",
+            "setting": "Read Definition 2.6 and glance at Figure 1.",
+            "condition": "Understand maximality: an ideal triangulation is a maximal collection of pairwise compatible arcs.",
+            "result": "You can identify the internal arcs of a triangulation and the ideal triangles they bound.",
+            "proofSketch": "Triangulate a pentagon in two different ways. Note that boundary segments are sides of triangles but are not arcs of the triangulation.",
+            "citationKeys": [
+              "FST2008"
+            ],
+            "color": "#46786e",
+            "fillColor": "#eef7f4",
+            "x": 335.9,
+            "y": 152.6
+          },
+          {
+            "id": "n4",
+            "type": "example",
+            "label": "4. Polygon warm-up",
+            "setting": "Use the unpunctured pentagon as a model; compare with the polygon examples in Sections 2 and 3.",
+            "condition": "Avoid self-folded triangles during the first pass.",
+            "result": "You see that a triangulation is local combinatorial data, not a rigid geometric drawing.",
+            "proofSketch": "Label all internal arcs. Redraw the same arcs by isotopy and check that the triangulation has not changed.",
+            "citationKeys": [
+              "FST2008"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 549.5,
+            "y": 207.9
+          },
+          {
+            "id": "n5",
+            "type": "definition",
+            "label": "5. Triangulation flip",
+            "setting": "Read Definition 3.5 and the paragraph immediately following it.",
+            "condition": "For a flippable arc gamma, removing gamma produces a quadrilateral; the replacement gamma' is its other diagonal.",
+            "result": "You can construct T' from T by one local flip and know why a folded side is exceptional.",
+            "proofSketch": "In your pentagon, flip one diagonal. Keep the labels of all unchanged arcs and give the new diagonal the old position label k.",
+            "citationKeys": [
+              "FST2008"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 315.4,
+            "y": 272.7
+          },
+          {
+            "id": "n6",
+            "type": "definition",
+            "label": "6. Signed adjacency matrix",
+            "setting": "Read Definition 4.1; for the unpunctured case, ignore the map pi_T and use the clockwise rule triangle by triangle.",
+            "condition": "Rows and columns are indexed by internal arcs. Each non-self-folded triangle contributes entries 0, +1, or -1.",
+            "result": "You can compute B(T) by summing the local signed contributions of the triangles.",
+            "proofSketch": "Compute B(T) for a triangulated pentagon. Check that it is skew-symmetric. Then recompute after the flip from Node 5.",
+            "citationKeys": [
+              "FST2008"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 520.7,
+            "y": 341.7
+          },
+          {
+            "id": "n7",
+            "type": "misc",
+            "label": "7. Matrix-to-quiver dictionary",
+            "details": [
+              {
+                "id": "read",
+                "label": "read",
+                "type": "textbox",
+                "text": "Translate the skew-symmetric matrix B(T) into a quiver Q(T). Fix one convention: b_ij > 0 means b_ij arrows i -> j. Reversing this convention replaces every quiver by its opposite."
+              },
+              {
+                "id": "target",
+                "label": "target",
+                "type": "textbox",
+                "text": "Vertices are internal arcs. A triangle usually gives an oriented 3-cycle among its internal sides; boundary sides are omitted, and opposite arrows cancel."
+              },
+              {
+                "id": "exercise",
+                "label": "exercise",
+                "type": "textbox",
+                "text": "Draw Q(T) from the matrix computed in Node 6, and reconstruct the matrix from the quiver."
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "FST2008"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 281.4,
+            "y": 397.8
+          },
+          {
+            "id": "n8",
+            "type": "definition",
+            "label": "8. Matrix and quiver mutation",
+            "setting": "Read Definition 4.7. Interpret its formula as quiver mutation at the vertex k.",
+            "condition": "In quiver language: add arrows along every path i -> k -> j, reverse arrows incident with k, then cancel oriented 2-cycles.",
+            "result": "You can compute mu_k(B) and the corresponding mutated quiver without referring to the surface.",
+            "proofSketch": "Mutate the matrix and quiver from Node 6 at the label k of the flipped diagonal. Verify that the two calculations agree.",
+            "citationKeys": [
+              "FST2008"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 488.7,
+            "y": 464.9
+          },
+          {
+            "id": "n9",
+            "type": "proposition",
+            "label": "9. Flip equals mutation",
+            "setting": "Read Proposition 4.8 and its short proof.",
+            "condition": "T' is obtained from T by flipping the arc labeled k; all other arc labels remain fixed.",
+            "result": "The central statement is B(T') = mu_k(B(T)), equivalently Q(T') = mu_k(Q(T)) after fixing the matrix-to-quiver convention.",
+            "proofSketch": "Compare only the two triangles adjacent to k. Everything outside that local region contributes identically before and after the flip.",
+            "citationKeys": [
+              "FST2008"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 273.2,
+            "y": 550
+          },
+          {
+            "id": "n10",
+            "type": "example",
+            "label": "10. Local mastery check",
+            "setting": "Work with a quadrilateral whose sides are labeled a,b,c,d and whose diagonal is k.",
+            "condition": "Compute both routes independently: flip k and rebuild the quiver; mutate Q(T) at k.",
+            "result": "You understand the concept when the two resulting quivers agree and you can explain the cancellation of 2-cycles.",
+            "proofSketch": "Repeat with one or more boundary sides omitted. Then revisit self-folded triangles and the pi_T convention only if your application involves punctures.",
+            "citationKeys": [
+              "FST2008"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 492.1,
+            "y": 589
+          }
+        ],
+        "arrows": [
+          {
+            "id": "a1",
+            "sourceId": "n1",
+            "targetId": "n2",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 15,
+            "labelPosition": 0.5,
+            "labelAlign": "left",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a2",
+            "sourceId": "n2",
+            "targetId": "n3",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 15,
+            "labelPosition": 0.5,
+            "labelAlign": "left",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a3",
+            "sourceId": "n3",
+            "targetId": "n4",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 15,
+            "labelPosition": 0.5,
+            "labelAlign": "left",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a4",
+            "sourceId": "n4",
+            "targetId": "n5",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 15,
+            "labelPosition": 0.5,
+            "labelAlign": "left",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a5",
+            "sourceId": "n5",
+            "targetId": "n6",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 15,
+            "labelPosition": 0.5,
+            "labelAlign": "left",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a6",
+            "sourceId": "n6",
+            "targetId": "n7",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 15,
+            "labelPosition": 0.5,
+            "labelAlign": "left",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a7",
+            "sourceId": "n7",
+            "targetId": "n8",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 15,
+            "labelPosition": 0.5,
+            "labelAlign": "left",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a8",
+            "sourceId": "n8",
+            "targetId": "n9",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 15,
+            "labelPosition": 0.5,
+            "labelAlign": "left",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a9",
+            "sourceId": "n9",
+            "targetId": "n10",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 15,
+            "labelPosition": 0.5,
+            "labelAlign": "left",
+            "color": "#5f574e"
+          }
+        ],
+        "view": {
+          "selectedId": "",
+          "layoutAvoidOverlap": true,
+          "layoutRunning": false
+        }
+      }
     }
   ],
   "arrows": [
@@ -2088,139 +2486,143 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
     }
   ],
   "view": {
-    "selectedId": "n9",
+    "selectedId": "n4",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasRatioLocked": true,
-    "canvasAspectRatio": 0.7231,
+    "canvasAspectRatio": 0.8105,
     "relativeNodePositions": {
       "n1": {
-        "x": 0.4202,
-        "y": 0.0149
+        "x": 0.4384,
+        "y": 0.0237
       },
       "n3": {
-        "x": 0.1167,
-        "y": 0.1009
+        "x": 0.1477,
+        "y": 0.0259
       },
       "n4": {
-        "x": 0.0638,
-        "y": 0.345
+        "x": 0.1658,
+        "y": 0.2909
       },
       "n5": {
-        "x": 0.1683,
-        "y": 0.2098
+        "x": 0.0637,
+        "y": 0.1293
       },
       "n6": {
-        "x": 0.162,
-        "y": 0.4143
+        "x": 0.0637,
+        "y": 0.3753
       },
       "n9": {
-        "x": 0.7152,
-        "y": 0.0291
+        "x": 0.7037,
+        "y": 0.0356
       },
       "n10": {
-        "x": 0.9278,
-        "y": 0.144
+        "x": 0.9363,
+        "y": 0.0345
       },
       "n11": {
-        "x": 0.586,
-        "y": 0.1297
+        "x": 0.5671,
+        "y": 0.1021
       },
       "n12": {
-        "x": 0.3823,
-        "y": 0.2765
+        "x": 0.3465,
+        "y": 0.2065
       },
       "n13": {
-        "x": 0.6867,
-        "y": 0.2295
+        "x": 0.6344,
+        "y": 0.2289
       },
       "n14": {
-        "x": 0.7716,
-        "y": 0.4063
+        "x": 0.926,
+        "y": 0.3207
       },
       "n15": {
-        "x": 0.9362,
-        "y": 0.3243
+        "x": 0.89,
+        "y": 0.2141
       },
       "n16": {
-        "x": 0.9206,
-        "y": 0.5004
+        "x": 0.9363,
+        "y": 0.443
       },
       "n17": {
-        "x": 0.4905,
-        "y": 0.3367
+        "x": 0.3253,
+        "y": 0.3677
       },
       "n18": {
-        "x": 0.6233,
-        "y": 0.4797
+        "x": 0.6406,
+        "y": 0.3478
       },
       "n19": {
-        "x": 0.7532,
-        "y": 0.5875
+        "x": 0.7435,
+        "y": 0.4798
       },
       "n20": {
-        "x": 0.3602,
-        "y": 0.5382
+        "x": 0.3974,
+        "y": 0.4383
       },
       "n21": {
-        "x": 0.9362,
-        "y": 0.6121
+        "x": 0.8865,
+        "y": 0.5556
       },
       "n22": {
-        "x": 0.578,
-        "y": 0.637
+        "x": 0.5724,
+        "y": 0.5636
       },
       "n23": {
-        "x": 0.2667,
-        "y": 0.618
+        "x": 0.3759,
+        "y": 0.6562
       },
       "n24": {
-        "x": 0.4856,
-        "y": 0.7045
+        "x": 0.6998,
+        "y": 0.6263
       },
       "n25": {
-        "x": 0.694,
-        "y": 0.7843
+        "x": 0.6802,
+        "y": 0.8244
       },
       "n26": {
-        "x": 0.2761,
-        "y": 0.459
+        "x": 0.2566,
+        "y": 0.5906
       },
       "n27": {
-        "x": 0.0653,
-        "y": 0.6133
+        "x": 0.0637,
+        "y": 0.6859
       },
       "n28": {
-        "x": 0.2708,
-        "y": 0.7731
+        "x": 0.2394,
+        "y": 0.8087
       },
       "n29": {
-        "x": 0.0638,
-        "y": 0.8458
+        "x": 0.0653,
+        "y": 0.9245
       },
       "n30": {
-        "x": 0.4569,
-        "y": 0.8285
+        "x": 0.5803,
+        "y": 0.7481
       },
       "n31": {
-        "x": 0.8328,
-        "y": 0.7247
+        "x": 0.9226,
+        "y": 0.7602
       },
       "n32": {
-        "x": 0.4105,
-        "y": 0.9224
+        "x": 0.4268,
+        "y": 0.895
       },
       "n33": {
-        "x": 0.7518,
-        "y": 0.9128
+        "x": 0.6868,
+        "y": 0.9651
       },
       "n34": {
-        "x": 0.524,
-        "y": 0.9762
+        "x": 0.93,
+        "y": 0.8971
       },
       "n35": {
-        "x": 0.3086,
-        "y": 0.1619
+        "x": 0.2573,
+        "y": 0.1368
+      },
+      "n36": {
+        "x": 0.1159,
+        "y": 0.5096
       }
     },
     "selectedReferenceKeys": []
@@ -2478,6 +2880,28 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
           "url": "https://chatgpt.com/share/6a678b48-a868-83eb-8cb2-8e44bd3c30c4",
           "source": "web",
           "label": ""
+        }
+      ]
+    },
+    {
+      "key": "FST08",
+      "author": "Fomin, Sergey; Shapiro, Michael; Thurston, Dylan",
+      "title": "Cluster algebras and triangulated surfaces. Part I: Cluster complexes",
+      "year": "2008",
+      "citeKey": "FST08",
+      "url": "https://arxiv.org/abs/math/0608367",
+      "source": "web",
+      "rawBibtex": "@article{FST2008, author={Fomin, Sergey and Shapiro, Michael and Thurston, Dylan}, title={Cluster algebras and triangulated surfaces. Part I: Cluster complexes}, journal={Acta Mathematica}, volume={201}, number={1}, pages={83--146}, year={2008}, doi={10.1007/s11511-008-0030-7}, eprint={math/0608367}, archivePrefix={arXiv}}",
+      "links": [
+        {
+          "url": "https://arxiv.org/abs/math/0608367",
+          "source": "web",
+          "label": "arXiv abstract"
+        },
+        {
+          "url": "https://arxiv.org/pdf/math/0608367",
+          "source": "web",
+          "label": "PDF"
         }
       ]
     }
