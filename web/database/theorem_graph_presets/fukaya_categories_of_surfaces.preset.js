@@ -41,7 +41,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
           "id": "tasks",
           "label": "practice",
           "type": "checkbox",
-          "text": "- [x] Derive X_H for H(x,y)=x^2+y^2 on (R^2, dx∧dy)\n- [x] Compute homology of a three-term chain complex\n- [x] Write the path algebra of 1→2→3 and one representation\n- [x] basic Morse theory\n- [ ] Explain what a triangulation flip does to a surface quiver"
+          "text": "- [x] Derive X_H for H(x,y)=x^2+y^2 on (R^2, dx∧dy)\n- [x] Compute homology of a three-term chain complex\n- [x] Write the path algebra of 1→2→3 and one representation\n- [x] basic Morse theory"
         },
         {
           "id": "checkpoint",
@@ -63,7 +63,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "citationKeys": [],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 330.1,
+      "x": 331.9,
       "y": 22
     },
     {
@@ -105,8 +105,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#8b3a2a",
       "fillColor": "#fbefee",
-      "x": 111.2,
-      "y": 24.1
+      "x": 110,
+      "y": 28.8
     },
     {
       "id": "n4",
@@ -147,8 +147,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 124.9,
-      "y": 270.3
+      "x": 131.1,
+      "y": 278.7
     },
     {
       "id": "n5",
@@ -197,7 +197,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "color": "#46786e",
       "fillColor": "#eef7f4",
       "x": 48,
-      "y": 120.1
+      "y": 127.3
     },
     {
       "id": "n6",
@@ -240,7 +240,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
       "x": 48,
-      "y": 348.7
+      "y": 356.4
     },
     {
       "id": "n9",
@@ -282,8 +282,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#8b3a2a",
       "fillColor": "#fbefee",
-      "x": 529.9,
-      "y": 33,
+      "x": 528.3,
+      "y": 30.8,
       "childGraph": {
         "title": "perfect complex",
         "nodes": [],
@@ -341,8 +341,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#8b3a2a",
       "fillColor": "#fbefee",
-      "x": 705,
-      "y": 32.1
+      "x": 701,
+      "y": 33.1
     },
     {
       "id": "n11",
@@ -389,8 +389,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 427,
-      "y": 94.9
+      "x": 424.6,
+      "y": 103.7
     },
     {
       "id": "n12",
@@ -432,8 +432,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 260.9,
-      "y": 191.9
+      "x": 258.3,
+      "y": 216.1
     },
     {
       "id": "n13",
@@ -475,8 +475,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 477.7,
-      "y": 212.6
+      "x": 474.8,
+      "y": 218.5
     },
     {
       "id": "n14",
@@ -518,8 +518,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 697.3,
-      "y": 298
+      "x": 695.8,
+      "y": 303.8
     },
     {
       "id": "n15",
@@ -560,8 +560,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 670.1,
-      "y": 198.9
+      "x": 665.1,
+      "y": 204.2
     },
     {
       "id": "n16",
@@ -604,8 +604,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 705,
-      "y": 411.5,
+      "x": 700.7,
+      "y": 418.2,
       "childGraph": {
         "title": "Higher polygon products $\\mu_k$",
         "nodes": [],
@@ -657,8 +657,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 245,
-      "y": 341.6
+      "x": 262,
+      "y": 342.1
     },
     {
       "id": "n18",
@@ -701,8 +701,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 482.4,
-      "y": 323.1
+      "x": 483.6,
+      "y": 327.9
     },
     {
       "id": "n19",
@@ -744,8 +744,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 559.9,
-      "y": 445.8
+      "x": 554.9,
+      "y": 453.2
     },
     {
       "id": "n20",
@@ -787,8 +787,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 299.2,
-      "y": 407.1
+      "x": 286.7,
+      "y": 432
     },
     {
       "id": "n21",
@@ -830,8 +830,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 667.5,
-      "y": 516.2
+      "x": 664.7,
+      "y": 528.4
     },
     {
       "id": "n22",
@@ -873,8 +873,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 431,
-      "y": 523.6
+      "x": 426.8,
+      "y": 527.9
     },
     {
       "id": "n23",
@@ -916,8 +916,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 283.1,
-      "y": 609.6
+      "x": 273.9,
+      "y": 611.4
     },
     {
       "id": "n24",
@@ -958,8 +958,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 527,
-      "y": 581.8
+      "x": 522.6,
+      "y": 586.2
     },
     {
       "id": "n25",
@@ -1000,8 +1000,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 512.2,
-      "y": 765.8
+      "x": 521.8,
+      "y": 762.7
     },
     {
       "id": "n26",
@@ -1042,8 +1042,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 193.2,
-      "y": 548.7
+      "x": 189.2,
+      "y": 546.4
     },
     {
       "id": "n27",
@@ -1060,7 +1060,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
           "id": "tasks",
           "label": "practice",
           "type": "checkbox",
-          "text": "- [ ] Do the quadrilateral calculation by hand\n- [ ] Mutate the corresponding quiver\n- [ ] Compare arrows before and after canceling 2-cycles"
+          "text": "- [ ] Do the quadrilateral calculation by hand\n- [ ] Mutate the corresponding quiver\n- [ ] Compare arrows before and after canceling 2-cycles\nExplain what a triangulation flip does to a surface quiver"
         },
         {
           "id": "checkpoint",
@@ -1085,7 +1085,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
       "x": 48,
-      "y": 637.2
+      "y": 656.5
     },
     {
       "id": "n28",
@@ -1128,8 +1128,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 180.3,
-      "y": 751.3
+      "x": 179.3,
+      "y": 766.6
     },
     {
       "id": "n29",
@@ -1170,8 +1170,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 49.2,
-      "y": 858.8
+      "x": 48,
+      "y": 863.2
     },
     {
       "id": "n30",
@@ -1214,8 +1214,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 437,
-      "y": 695
+      "x": 429.2,
+      "y": 697.2
     },
     {
       "id": "n31",
@@ -1258,8 +1258,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 694.7,
-      "y": 706.3
+      "x": 698.7,
+      "y": 706.6
     },
     {
       "id": "n32",
@@ -1302,8 +1302,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 321.4,
-      "y": 831.4
+      "x": 328.3,
+      "y": 828.6
     },
     {
       "id": "n33",
@@ -1347,8 +1347,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 517.1,
-      "y": 896.6
+      "x": 518.4,
+      "y": 891.1
     },
     {
       "id": "n34",
@@ -1390,8 +1390,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 700.3,
-      "y": 833.4
+      "x": 701,
+      "y": 837.7
     },
     {
       "id": "n35",
@@ -1418,8 +1418,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 193.8,
-      "y": 127
+      "x": 194.7,
+      "y": 126.7
     },
     {
       "id": "n36",
@@ -1440,8 +1440,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 87.3,
-      "y": 473.4,
+      "x": 80,
+      "y": 460.7,
       "childGraph": {
         "title": "Triangulation Flips and Surface-Quiver Mutation",
         "nodes": [
@@ -1502,8 +1502,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
             "citationKeys": [
               "FST2008"
             ],
-            "color": "#46786e",
-            "fillColor": "#eef7f4",
+            "color": "#8b3a2a",
+            "fillColor": "#fbefee",
             "x": 335.9,
             "y": 152.6
           },
@@ -1518,8 +1518,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
             "citationKeys": [
               "FST2008"
             ],
-            "color": "#7a6f65",
-            "fillColor": "#f7f5f1",
+            "color": "#8b3a2a",
+            "fillColor": "#fbefee",
             "x": 549.5,
             "y": 207.9
           },
@@ -2483,146 +2483,163 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
+    },
+    {
+      "id": "a50",
+      "sourceId": "n36",
+      "targetId": "n27",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
+      "color": "#5f574e"
     }
   ],
   "view": {
-    "selectedId": "n4",
+    "selectedId": "",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasRatioLocked": true,
     "canvasAspectRatio": 0.8105,
     "relativeNodePositions": {
       "n1": {
-        "x": 0.4384,
-        "y": 0.0237
+        "x": 0.4431,
+        "y": 0.0238
       },
       "n3": {
-        "x": 0.1477,
-        "y": 0.0259
+        "x": 0.1469,
+        "y": 0.0312
       },
       "n4": {
-        "x": 0.1658,
-        "y": 0.2909
+        "x": 0.175,
+        "y": 0.3017
       },
       "n5": {
-        "x": 0.0637,
-        "y": 0.1293
+        "x": 0.0641,
+        "y": 0.1377
       },
       "n6": {
-        "x": 0.0637,
-        "y": 0.3753
+        "x": 0.0641,
+        "y": 0.3857
       },
       "n9": {
-        "x": 0.7037,
-        "y": 0.0356
+        "x": 0.7053,
+        "y": 0.0333
       },
       "n10": {
-        "x": 0.9363,
-        "y": 0.0345
+        "x": 0.9359,
+        "y": 0.0358
       },
       "n11": {
-        "x": 0.5671,
-        "y": 0.1021
+        "x": 0.567,
+        "y": 0.1122
       },
       "n12": {
-        "x": 0.3465,
-        "y": 0.2065
+        "x": 0.3448,
+        "y": 0.2339
       },
       "n13": {
-        "x": 0.6344,
-        "y": 0.2289
+        "x": 0.6339,
+        "y": 0.2365
       },
       "n14": {
-        "x": 0.926,
-        "y": 0.3207
+        "x": 0.929,
+        "y": 0.3288
       },
       "n15": {
-        "x": 0.89,
-        "y": 0.2141
+        "x": 0.8879,
+        "y": 0.221
       },
       "n16": {
-        "x": 0.9363,
-        "y": 0.443
+        "x": 0.9355,
+        "y": 0.4526
       },
       "n17": {
-        "x": 0.3253,
-        "y": 0.3677
+        "x": 0.3498,
+        "y": 0.3702
       },
       "n18": {
-        "x": 0.6406,
-        "y": 0.3478
+        "x": 0.6456,
+        "y": 0.3548
       },
       "n19": {
-        "x": 0.7435,
-        "y": 0.4798
+        "x": 0.7408,
+        "y": 0.4905
       },
       "n20": {
-        "x": 0.3974,
-        "y": 0.4383
+        "x": 0.3828,
+        "y": 0.4675
       },
       "n21": {
-        "x": 0.8865,
-        "y": 0.5556
+        "x": 0.8875,
+        "y": 0.5719
       },
       "n22": {
-        "x": 0.5724,
-        "y": 0.5636
+        "x": 0.5698,
+        "y": 0.5713
       },
       "n23": {
-        "x": 0.3759,
-        "y": 0.6562
+        "x": 0.3657,
+        "y": 0.6617
       },
       "n24": {
-        "x": 0.6998,
-        "y": 0.6263
+        "x": 0.6978,
+        "y": 0.6344
       },
       "n25": {
-        "x": 0.6802,
-        "y": 0.8244
+        "x": 0.6967,
+        "y": 0.8254
       },
       "n26": {
-        "x": 0.2566,
-        "y": 0.5906
+        "x": 0.2526,
+        "y": 0.5913
       },
       "n27": {
-        "x": 0.0637,
-        "y": 0.6859
+        "x": 0.0641,
+        "y": 0.7105
       },
       "n28": {
-        "x": 0.2394,
-        "y": 0.8087
+        "x": 0.2393,
+        "y": 0.8296
       },
       "n29": {
-        "x": 0.0653,
-        "y": 0.9245
+        "x": 0.0641,
+        "y": 0.9342
       },
       "n30": {
-        "x": 0.5803,
-        "y": 0.7481
+        "x": 0.573,
+        "y": 0.7546
       },
       "n31": {
-        "x": 0.9226,
-        "y": 0.7602
+        "x": 0.9328,
+        "y": 0.7647
       },
       "n32": {
-        "x": 0.4268,
-        "y": 0.895
+        "x": 0.4383,
+        "y": 0.8968
       },
       "n33": {
-        "x": 0.6868,
-        "y": 0.9651
+        "x": 0.6921,
+        "y": 0.9644
       },
       "n34": {
-        "x": 0.93,
-        "y": 0.8971
+        "x": 0.9359,
+        "y": 0.9066
       },
       "n35": {
-        "x": 0.2573,
-        "y": 0.1368
+        "x": 0.26,
+        "y": 0.1371
       },
       "n36": {
-        "x": 0.1159,
-        "y": 0.5096
+        "x": 0.1068,
+        "y": 0.4986
       }
     },
     "selectedReferenceKeys": []

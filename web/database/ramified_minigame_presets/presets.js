@@ -4,8 +4,8 @@
   if (root) root.RAMIFIED_MINIGAME_PRESETS = presets;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {
   const defaultForEntries = [
-    ["gomoku", "boundary-glue-board"],
-    ["go", "three-slits"],
+    ["gomoku", "wormhole"],
+    ["go", "gomoku-big-hole"],
     ["connect-four", "connect-four-exchange"],
     ["2048", "ramified-cover"],
     ["reversi", "focus-frame"],
@@ -93,7 +93,7 @@
     },
     {
       "gameTypes": [
-        "2048","Gomoku", "Go"
+        "Gomoku", "Go"
       ],
       "id": "rubiks-cube-3x3x3",
       "label": "Rubik's Cube 3*3*3",
@@ -147,7 +147,7 @@
     },
     {
       "gameTypes": [
-        "Gomoku"
+        "Gomoku", "Go"
       ],
       "id": "gomoku-small-holes",
       "label": "small holes",
@@ -156,12 +156,22 @@
     },
     {
       "gameTypes": [
-        "Gomoku"
+        "Gomoku", "Go"
       ],
       "id": "gomoku-big-hole",
       "label": "big hole",
       "key": "gomoku_big_hole",
       "file": "gomoku_big_hole.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Gomoku",
+        "Go"
+        ],
+      "id": "wormhole",
+      "label": "wormhole",
+      "key": "wormhole",
+      "file": "wormhole.preset.js"
     },
     {
       "gameTypes": [
