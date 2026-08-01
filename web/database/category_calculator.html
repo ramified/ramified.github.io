@@ -183,6 +183,7 @@
     }
 
     .category-input-add,
+    .category-preset-controls,
     .category-actions,
     .category-export-actions,
     .category-import-actions {
@@ -198,6 +199,104 @@
 
     .category-input-add .category-mode-select {
       flex: 0 0 112px;
+    }
+
+    .category-preset-controls .category-select {
+      flex: 1 1 190px;
+    }
+
+    .category-symbol-picker {
+      display: grid;
+      grid-template-columns: minmax(86px, 0.32fr) minmax(0, 1fr);
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .category-symbol-picker .category-input[hidden] {
+      display: none;
+    }
+
+    .category-formula-editor {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+      min-width: 0;
+    }
+
+    .category-inline-formula {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+      flex-wrap: wrap;
+      padding: 7px 9px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.94rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .category-inline-formula mjx-container {
+      margin: 0 !important;
+      overflow: visible;
+    }
+
+    .category-latex-fragment,
+    .category-latex-slot {
+      min-width: 0;
+    }
+
+    .category-latex-slot {
+      appearance: none;
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 1px 4px;
+      border: 1px solid transparent;
+      border-radius: 3px;
+      background: transparent;
+      color: var(--text);
+      cursor: text;
+      font: inherit;
+      line-height: 1.2;
+      text-align: left;
+    }
+
+    .category-latex-slot.is-empty {
+      color: var(--muted);
+    }
+
+    .category-latex-slot:hover,
+    .category-latex-slot:focus-visible {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .category-inline-formula-input {
+      min-width: 104px;
+      max-width: 100%;
+      flex: 1 1 132px;
+      padding: 4px 7px;
+      border: 1px solid var(--accent);
+      border-radius: 3px;
+      background: var(--surface);
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.76rem;
+      line-height: 1.3;
+    }
+
+    .category-inline-formula-input[hidden],
+    .category-latex-slot[hidden] {
+      display: none;
+    }
+
+    .category-inline-formula-input:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
     }
 
     .category-map-formula-picker {
@@ -376,6 +475,10 @@
         grid-template-columns: 1fr;
         gap: 4px;
       }
+
+      .category-symbol-picker {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -436,16 +539,49 @@
 
         <div class="category-editor" id="category-editor">
           <div class="category-field-row">
+            <label class="input-label" for="category-preset-select">preset</label>
+            <div class="category-preset-controls">
+              <select id="category-preset-select" class="category-select" aria-label="Category preset">
+                <option value="">Loading presets...</option>
+              </select>
+              <button class="btn btn-ghost category-small-button" id="category-apply-preset" type="button">apply</button>
+            </div>
+          </div>
+          <div class="category-field-row">
             <label class="input-label" for="category-label">category</label>
             <input id="category-label" class="category-input" type="text" value="\mathcal{C}" maxlength="80" spellcheck="false" autocomplete="off">
           </div>
           <div class="category-field-row">
             <label class="input-label" for="category-object-symbol">object</label>
-            <input id="category-object-symbol" class="category-input" type="text" value="X" maxlength="48" spellcheck="false" autocomplete="off">
+            <div class="category-symbol-picker">
+              <select id="category-object-symbol" class="category-select" aria-label="Object symbol">
+                <option value="X" selected>X</option>
+                <option value="A">A</option>
+                <option value="a">a</option>
+                <option value="G">G</option>
+                <option value="R">R</option>
+                <option value="V">V</option>
+                <option value="custom">custom</option>
+              </select>
+              <input id="category-object-symbol-custom" class="category-input" type="text" value="" maxlength="48" spellcheck="false" autocomplete="off" aria-label="Custom object symbol" hidden>
+            </div>
           </div>
-          <div class="category-field-row">
-            <label class="input-label" for="category-morphism-template">morphisms</label>
-            <textarea id="category-morphism-template" class="category-textarea" spellcheck="false" autocomplete="off">\operatorname{Mor}_{{category}}({source},{target})</textarea>
+          <div class="category-formula-editor" id="category-formula-editor" aria-label="Category set-builder formulas">
+            <div class="category-inline-formula" id="category-object-formula">
+              <span class="category-latex-fragment" id="category-object-builder-prefix">\( \operatorname{Ob}(\mathcal{C})=\{X\mid \)</span>
+              <button class="category-latex-slot is-empty" id="category-object-condition-preview" type="button" data-category-formula-slot="objectCondition" aria-label="Edit object condition">\( \cdots \)</button>
+              <input id="category-object-condition" class="category-inline-formula-input" type="text" value="" maxlength="180" spellcheck="false" autocomplete="off" aria-label="Object condition" hidden>
+              <span class="category-latex-fragment" id="category-object-builder-suffix">\( \} \)</span>
+            </div>
+            <div class="category-inline-formula" id="category-morphism-formula">
+              <span class="category-latex-fragment" id="category-morphism-builder-prefix">\( \operatorname{Mor}_{\mathcal{C}}(X,X')=\{ \)</span>
+              <button class="category-latex-slot" id="category-morphism-element-preview" type="button" data-category-formula-slot="morphismElement" aria-label="Edit morphism element">\( f:X\to X' \)</button>
+              <input id="category-morphism-element" class="category-inline-formula-input" type="text" value="f:{source}\to {target}" maxlength="180" spellcheck="false" autocomplete="off" aria-label="Morphism element" hidden>
+              <span class="category-latex-fragment" id="category-morphism-builder-divider">\( \mid \)</span>
+              <button class="category-latex-slot is-empty" id="category-morphism-condition-preview" type="button" data-category-formula-slot="morphismCondition" aria-label="Edit morphism condition">\( \cdots \)</button>
+              <input id="category-morphism-condition" class="category-inline-formula-input" type="text" value="" maxlength="220" spellcheck="false" autocomplete="off" aria-label="Morphism condition" hidden>
+              <span class="category-latex-fragment" id="category-morphism-builder-suffix">\( \} \)</span>
+            </div>
           </div>
           <div class="category-field-row">
             <span class="input-label">opposite</span>
@@ -521,6 +657,25 @@
   <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
 </footer>
 
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']],
+      processEscapes: true
+    },
+    options: {
+      skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+    }
+  };
+  window.addEventListener('load', () => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js';
+    script.async = true;
+    document.head.appendChild(script);
+  }, { once: true });
+</script>
+<script src="category_presets/presets.js"></script>
 <script src="js/category_calculator.js"></script>
 </body>
 </html>

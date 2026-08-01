@@ -12,9 +12,15 @@
     '\\mathcal{S}'
   ];
   const FUNCTOR_LABELS = ['F', 'G', 'H', 'K', 'L', 'T', 'S'];
+  const CATEGORY_PRESETS = Object.freeze(Array.isArray(window.CATEGORY_CALCULATOR_PRESETS) ? window.CATEGORY_CALCULATOR_PRESETS.slice() : []);
+  const COMMON_OBJECT_SYMBOLS = Object.freeze(['X', 'A', 'a', 'G', 'R', 'V']);
+  const DEFAULT_OBJECT_SYMBOL = 'X';
+  const DEFAULT_OBJECT_CONDITION = '';
+  const DEFAULT_MORPHISM_ELEMENT = 'f:{source}\\to {target}';
+  const DEFAULT_MORPHISM_CONDITION = '';
   const DEFAULT_MORPHISM_TEMPLATE = '\\operatorname{Mor}_{{category}}({source},{target})';
   const EXPORT_KIND = 'category-calculator-prototype';
-  const EXPORT_VERSION = 1;
+  const EXPORT_VERSION = 2;
   const NODE_TRIM = 58;
   const ARROW_HEAD = 10;
   const REPOSITION_MARGIN = 0.06;
@@ -59,6 +65,8 @@
     canvasHeight: 0,
     drag: null,
     functorPickTarget: 'domain',
+    activeCategoryFormulaSlot: null,
+    categoryMathTypesetAttempts: 0,
     suppressLabelClickUntil: 0
   };
 
@@ -68,6 +76,7 @@
 
   function init() {
     cacheRefs();
+    populateCategoryPresetOptions();
     bindEvents();
     setCreateDefaults('category');
     resizeCanvas();
@@ -104,9 +113,23 @@
     refs.deleteObject = $('category-delete-object');
     refs.inputNote = $('category-input-note');
     refs.categoryEditor = $('category-editor');
+    refs.categoryPresetSelect = $('category-preset-select');
+    refs.categoryApplyPreset = $('category-apply-preset');
     refs.categoryLabel = $('category-label');
     refs.categoryObjectSymbol = $('category-object-symbol');
-    refs.categoryMorphismTemplate = $('category-morphism-template');
+    refs.categoryObjectSymbolCustom = $('category-object-symbol-custom');
+    refs.categoryObjectCondition = $('category-object-condition');
+    refs.categoryMorphismElement = $('category-morphism-element');
+    refs.categoryMorphismCondition = $('category-morphism-condition');
+    refs.categoryFormulaEditor = $('category-formula-editor');
+    refs.categoryObjectBuilderPrefix = $('category-object-builder-prefix');
+    refs.categoryObjectBuilderSuffix = $('category-object-builder-suffix');
+    refs.categoryMorphismBuilderPrefix = $('category-morphism-builder-prefix');
+    refs.categoryMorphismBuilderDivider = $('category-morphism-builder-divider');
+    refs.categoryMorphismBuilderSuffix = $('category-morphism-builder-suffix');
+    refs.categoryObjectConditionPreview = $('category-object-condition-preview');
+    refs.categoryMorphismElementPreview = $('category-morphism-element-preview');
+    refs.categoryMorphismConditionPreview = $('category-morphism-condition-preview');
     refs.categoryOpposite = $('category-opposite');
     refs.functorEditor = $('functor-editor');
     refs.functorLabel = $('functor-label');
@@ -125,6 +148,24 @@
     refs.loadImport = $('load-category-import');
     refs.clearImport = $('clear-category-import');
     refs.exportMessage = $('category-export-message');
+  }
+
+  function populateCategoryPresetOptions() {
+    if (!refs.categoryPresetSelect) return;
+    refs.categoryPresetSelect.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = CATEGORY_PRESETS.length ? 'Choose preset' : 'No presets found';
+    refs.categoryPresetSelect.appendChild(placeholder);
+    CATEGORY_PRESETS.forEach((preset) => {
+      if (!preset || !preset.id) return;
+      const option = document.createElement('option');
+      option.value = preset.id;
+      option.textContent = preset.label || preset.id;
+      refs.categoryPresetSelect.appendChild(option);
+    });
+    refs.categoryPresetSelect.disabled = !CATEGORY_PRESETS.length;
+    if (refs.categoryApplyPreset) refs.categoryApplyPreset.disabled = !CATEGORY_PRESETS.length;
   }
 
   function bindEvents() {
@@ -153,15 +194,55 @@
     refs.applyObject.addEventListener('click', applyObjectFromControls);
     refs.deleteObject.addEventListener('click', deleteActiveObject);
     refs.clearCanvas.addEventListener('click', clearCanvas);
+    if (refs.categoryApplyPreset) refs.categoryApplyPreset.addEventListener('click', applySelectedCategoryPreset);
 
     [
       refs.categoryLabel,
-      refs.categoryObjectSymbol,
-      refs.categoryMorphismTemplate,
+      refs.categoryObjectSymbolCustom,
+      refs.categoryObjectCondition,
+      refs.categoryMorphismElement,
+      refs.categoryMorphismCondition,
       refs.categoryOpposite
     ].forEach((control) => {
+      if (!control) return;
       control.addEventListener('input', handleCategoryDraftChange);
       control.addEventListener('change', handleCategoryDraftChange);
+    });
+    if (refs.categoryObjectSymbol) {
+      refs.categoryObjectSymbol.addEventListener('change', () => {
+        syncCategoryObjectSymbolCustom();
+        handleCategoryDraftChange();
+      });
+    }
+    categoryFormulaSlotNames().forEach((slot) => {
+      const config = categoryFormulaSlotConfig(slot);
+      if (!config) return;
+      if (config.preview) {
+        config.preview.addEventListener('click', () => showCategoryFormulaSlotEditor(slot));
+        config.preview.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          showCategoryFormulaSlotEditor(slot);
+        });
+      }
+      if (config.input) {
+        config.input.addEventListener('focus', () => {
+          state.activeCategoryFormulaSlot = slot;
+          syncCategoryFormulaScaffolds();
+        });
+        config.input.addEventListener('blur', () => {
+          commitCategoryFormulaSlotEdit(slot);
+        });
+        config.input.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            config.input.blur();
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            cancelCategoryFormulaSlotEdit(slot);
+          }
+        });
+      }
     });
 
     [
@@ -231,6 +312,7 @@
   }
 
   function setCreateDefaults(kind) {
+    state.activeCategoryFormulaSlot = null;
     if (kind === 'functor') {
       refs.functorLabel.value = defaultFunctorLabel();
       refs.functorDomain.value = '';
@@ -241,9 +323,12 @@
       return;
     }
     refs.categoryLabel.value = defaultCategoryLabel();
-    refs.categoryObjectSymbol.value = 'X';
-    refs.categoryMorphismTemplate.value = DEFAULT_MORPHISM_TEMPLATE;
+    setCategoryObjectSymbol(DEFAULT_OBJECT_SYMBOL);
+    refs.categoryObjectCondition.value = DEFAULT_OBJECT_CONDITION;
+    refs.categoryMorphismElement.value = DEFAULT_MORPHISM_ELEMENT;
+    refs.categoryMorphismCondition.value = DEFAULT_MORPHISM_CONDITION;
     refs.categoryOpposite.checked = false;
+    syncCategoryFormulaScaffolds();
   }
 
   function defaultCategoryLabel() {
@@ -258,14 +343,231 @@
     return cycle ? `${FUNCTOR_LABELS[index]}_{${cycle + 1}}` : FUNCTOR_LABELS[index];
   }
 
+  function selectedCategoryObjectSymbol() {
+    if (!refs.categoryObjectSymbol) return DEFAULT_OBJECT_SYMBOL;
+    if (refs.categoryObjectSymbol.value === 'custom') {
+      return cleanMath(refs.categoryObjectSymbolCustom?.value, DEFAULT_OBJECT_SYMBOL);
+    }
+    return cleanMath(refs.categoryObjectSymbol.value, DEFAULT_OBJECT_SYMBOL);
+  }
+
+  function setCategoryObjectSymbol(symbol) {
+    const value = cleanMath(symbol, DEFAULT_OBJECT_SYMBOL);
+    if (!refs.categoryObjectSymbol) return;
+    if (COMMON_OBJECT_SYMBOLS.includes(value)) {
+      refs.categoryObjectSymbol.value = value;
+      if (refs.categoryObjectSymbolCustom) refs.categoryObjectSymbolCustom.value = '';
+    } else {
+      refs.categoryObjectSymbol.value = 'custom';
+      if (refs.categoryObjectSymbolCustom) refs.categoryObjectSymbolCustom.value = value;
+    }
+    syncCategoryObjectSymbolCustom();
+  }
+
+  function syncCategoryObjectSymbolCustom() {
+    if (!refs.categoryObjectSymbol || !refs.categoryObjectSymbolCustom) return;
+    const custom = refs.categoryObjectSymbol.value === 'custom';
+    refs.categoryObjectSymbolCustom.hidden = !custom;
+    if (custom && !refs.categoryObjectSymbolCustom.value.trim()) {
+      refs.categoryObjectSymbolCustom.value = DEFAULT_OBJECT_SYMBOL;
+    }
+  }
+
+  function categoryFormulaSlotNames() {
+    return ['objectCondition', 'morphismElement', 'morphismCondition'];
+  }
+
+  function categoryFormulaSlotConfig(slot) {
+    const slots = {
+      objectCondition: {
+        input: refs.categoryObjectCondition,
+        preview: refs.categoryObjectConditionPreview,
+        emptyLatex: '\\cdots',
+        label: 'object condition'
+      },
+      morphismElement: {
+        input: refs.categoryMorphismElement,
+        preview: refs.categoryMorphismElementPreview,
+        emptyLatex: '\\cdots',
+        label: 'morphism element'
+      },
+      morphismCondition: {
+        input: refs.categoryMorphismCondition,
+        preview: refs.categoryMorphismConditionPreview,
+        emptyLatex: '\\cdots',
+        label: 'morphism condition'
+      }
+    };
+    return slots[slot] || null;
+  }
+
+  function categoryFormulaContext() {
+    const label = cleanMath(refs.categoryLabel?.value, defaultCategoryLabel());
+    const display = refs.categoryOpposite?.checked ? `${label}^{op}` : label;
+    const source = selectedCategoryObjectSymbol();
+    const target = primeSymbol(source);
+    return { label, display, source, target };
+  }
+
+  function syncCategoryFormulaScaffolds() {
+    if (!refs.categoryLabel) return;
+    const context = categoryFormulaContext();
+    if (refs.categoryObjectBuilderPrefix) {
+      setLatexPreviewText(refs.categoryObjectBuilderPrefix, `\\operatorname{Ob}(${context.display})=\\{${context.source}\\mid`);
+    }
+    if (refs.categoryObjectBuilderSuffix) {
+      setLatexPreviewText(refs.categoryObjectBuilderSuffix, '\\}');
+    }
+    if (refs.categoryMorphismBuilderPrefix) {
+      setLatexPreviewText(refs.categoryMorphismBuilderPrefix, `\\operatorname{Mor}_{${context.display}}(${context.source},${context.target})=\\{`);
+    }
+    if (refs.categoryMorphismBuilderDivider) {
+      setLatexPreviewText(refs.categoryMorphismBuilderDivider, '\\mid');
+    }
+    if (refs.categoryMorphismBuilderSuffix) {
+      setLatexPreviewText(refs.categoryMorphismBuilderSuffix, '\\}');
+    }
+    categoryFormulaSlotNames().forEach((slot) => syncCategoryFormulaSlot(slot, context));
+    typesetCategoryFormulaPreviews();
+  }
+
+  function syncCategoryFormulaSlot(slot, context = categoryFormulaContext()) {
+    const config = categoryFormulaSlotConfig(slot);
+    if (!config || !config.input || !config.preview) return;
+    const active = state.activeCategoryFormulaSlot === slot;
+    config.input.hidden = !active;
+    config.preview.hidden = active;
+    config.preview.setAttribute('aria-label', `Edit ${config.label}`);
+    if (active) return;
+    const raw = cleanOptionalMath(config.input.value);
+    const latex = raw ? categoryFormulaSlotLatex(slot, raw, context) : config.emptyLatex;
+    config.preview.classList.toggle('is-empty', !raw);
+    setLatexPreviewText(config.preview, latex);
+  }
+
+  function categoryFormulaSlotLatex(slot, raw, context = categoryFormulaContext()) {
+    const values = {
+      source: context.source,
+      target: context.target,
+      category: context.display
+    };
+    return applyFormulaTemplate(raw, values) || '\\cdots';
+  }
+
+  function setLatexPreviewText(element, latex) {
+    if (!element) return;
+    const text = `\\(${latex}\\)`;
+    if (element.dataset.sourceLatex === text) return;
+    if (window.MathJax && typeof window.MathJax.typesetClear === 'function') {
+      window.MathJax.typesetClear([element]);
+    }
+    element.textContent = text;
+    element.dataset.sourceLatex = text;
+    element.dataset.needsTypeset = 'true';
+  }
+
+  function showCategoryFormulaSlotEditor(slot) {
+    const config = categoryFormulaSlotConfig(slot);
+    if (!config || !config.input) return;
+    const previous = state.activeCategoryFormulaSlot;
+    if (previous && previous !== slot) commitCategoryFormulaSlotEdit(previous);
+    state.activeCategoryFormulaSlot = slot;
+    config.input.dataset.originalValue = config.input.value;
+    syncCategoryFormulaScaffolds();
+    config.input.focus();
+    if (typeof config.input.setSelectionRange === 'function') {
+      const end = config.input.value.length;
+      config.input.setSelectionRange(end, end);
+    }
+  }
+
+  function commitCategoryFormulaSlotEdit(slot) {
+    const config = categoryFormulaSlotConfig(slot);
+    if (!config || !config.input || config.input.hidden) return;
+    if (state.activeCategoryFormulaSlot === slot) state.activeCategoryFormulaSlot = null;
+    delete config.input.dataset.originalValue;
+    handleCategoryDraftChange();
+  }
+
+  function cancelCategoryFormulaSlotEdit(slot) {
+    const config = categoryFormulaSlotConfig(slot);
+    if (!config || !config.input) return;
+    if (Object.prototype.hasOwnProperty.call(config.input.dataset, 'originalValue')) {
+      config.input.value = config.input.dataset.originalValue;
+    }
+    if (state.activeCategoryFormulaSlot === slot) state.activeCategoryFormulaSlot = null;
+    delete config.input.dataset.originalValue;
+    handleCategoryDraftChange();
+  }
+
+  function typesetCategoryFormulaPreviews() {
+    if (!refs.categoryFormulaEditor) return;
+    const pending = Array.from(refs.categoryFormulaEditor.querySelectorAll('[data-needs-typeset="true"]'));
+    if (!pending.length) return;
+    if (!window.MathJax || typeof window.MathJax.typesetPromise !== 'function') {
+      scheduleCategoryMathTypesetRetry();
+      return;
+    }
+    state.categoryMathTypesetAttempts = 0;
+    pending.forEach((element) => {
+      delete element.dataset.needsTypeset;
+    });
+    window.MathJax.typesetPromise(pending).catch(() => {});
+  }
+
+  function scheduleCategoryMathTypesetRetry() {
+    if (state.categoryMathTypesetAttempts > 40 || typeof window.setTimeout !== 'function') return;
+    state.categoryMathTypesetAttempts += 1;
+    window.setTimeout(typesetCategoryFormulaPreviews, 150);
+  }
+
+  function applySelectedCategoryPreset() {
+    const presetId = refs.categoryPresetSelect?.value || '';
+    const preset = CATEGORY_PRESETS.find((item) => item && item.id === presetId);
+    if (!preset) {
+      setStatus('choose a category preset');
+      return;
+    }
+    fillCategoryControls(categoryFieldsFromPreset(preset));
+    const action = state.inputMode === 'modify' && state.activeKind === 'category' ? 'update' : 'add';
+    setStatus(`${preset.label || preset.id} preset filled; ${action} to commit`);
+  }
+
+  function fillCategoryControls(category) {
+    state.activeCategoryFormulaSlot = null;
+    refs.categoryLabel.value = category.label;
+    setCategoryObjectSymbol(category.objectSymbol);
+    refs.categoryObjectCondition.value = category.objectCondition || DEFAULT_OBJECT_CONDITION;
+    refs.categoryMorphismElement.value = category.morphismElement || DEFAULT_MORPHISM_ELEMENT;
+    refs.categoryMorphismCondition.value = category.morphismCondition || DEFAULT_MORPHISM_CONDITION;
+    refs.categoryOpposite.checked = !!category.opposite;
+    syncCategoryFormulaScaffolds();
+    syncControls();
+  }
+
+  function categoryFieldsFromPreset(preset) {
+    return {
+      label: cleanMath(preset.categoryLabel || preset.label, defaultCategoryLabel()),
+      objectSymbol: cleanMath(preset.objectSymbol, DEFAULT_OBJECT_SYMBOL),
+      objectCondition: cleanOptionalMath(preset.objectCondition),
+      morphismElement: cleanOptionalMath(preset.morphismElement) || DEFAULT_MORPHISM_ELEMENT,
+      morphismCondition: cleanOptionalMath(preset.morphismCondition),
+      opposite: !!preset.opposite
+    };
+  }
+
   function loadActiveIntoControls() {
     const object = activeObject();
     if (!object) return;
+    state.activeCategoryFormulaSlot = null;
     if (state.activeKind === 'category') {
       refs.categoryLabel.value = object.label;
-      refs.categoryObjectSymbol.value = object.objectSymbol;
-      refs.categoryMorphismTemplate.value = object.morphismTemplate || DEFAULT_MORPHISM_TEMPLATE;
+      setCategoryObjectSymbol(object.objectSymbol);
+      refs.categoryObjectCondition.value = object.objectCondition || DEFAULT_OBJECT_CONDITION;
+      refs.categoryMorphismElement.value = object.morphismElement || DEFAULT_MORPHISM_ELEMENT;
+      refs.categoryMorphismCondition.value = object.morphismCondition || DEFAULT_MORPHISM_CONDITION;
       refs.categoryOpposite.checked = !!object.opposite;
+      syncCategoryFormulaScaffolds();
       return;
     }
     refs.functorLabel.value = object.label;
@@ -290,8 +592,11 @@
 
     refs.categoryEditor.hidden = currentKind() !== 'category';
     refs.functorEditor.hidden = currentKind() !== 'functor';
+    if (currentKind() !== 'category') state.activeCategoryFormulaSlot = null;
     refs.inputMode.querySelector('option[value="modify"]').disabled = !active;
     refs.inputMode.value = state.inputMode;
+    syncCategoryObjectSymbolCustom();
+    syncCategoryFormulaScaffolds();
 
     syncFunctorEndpointDefaults(state.inputMode === 'modify' && state.activeKind === 'functor' ? active : null);
     syncFunctorParentButtons();
@@ -303,6 +608,9 @@
 
     const selectedKind = currentKind();
     refs.applyObject.disabled = selectedKind === 'functor' && state.inputMode === 'create' && !canCreateFunctor;
+    if (refs.categoryApplyPreset) {
+      refs.categoryApplyPreset.disabled = selectedKind !== 'category' || !CATEGORY_PRESETS.length;
+    }
     if (refs.inputNote) {
       refs.inputNote.textContent = inputNoteText(selectedKind, isModify, canCreateFunctor);
     }
@@ -316,7 +624,7 @@
     if (isModify && state.activeKind === 'functor') return 'Editing the selected functor updates arrows immediately.';
     if (kind === 'functor' && !canCreateFunctor) return 'Add two categories to enable functors.';
     if (kind === 'functor') return 'Use the parents row, then click categories on the canvas.';
-    return 'Set object notation and the Mor template for this category.';
+    return 'Set object notation and Mor set-builder data for this category.';
   }
 
   function syncFunctorEndpointDefaults(activeFunctor = null) {
@@ -445,8 +753,10 @@
   function readCategoryControls() {
     return {
       label: cleanMath(refs.categoryLabel.value, defaultCategoryLabel()),
-      objectSymbol: cleanMath(refs.categoryObjectSymbol.value, 'X'),
-      morphismTemplate: cleanTemplate(refs.categoryMorphismTemplate.value),
+      objectSymbol: selectedCategoryObjectSymbol(),
+      objectCondition: cleanOptionalMath(refs.categoryObjectCondition?.value),
+      morphismElement: cleanOptionalMath(refs.categoryMorphismElement?.value) || DEFAULT_MORPHISM_ELEMENT,
+      morphismCondition: cleanOptionalMath(refs.categoryMorphismCondition?.value),
       opposite: !!refs.categoryOpposite.checked
     };
   }
@@ -461,8 +771,12 @@
   }
 
   function handleCategoryDraftChange() {
+    syncCategoryObjectSymbolCustom();
+    syncCategoryFormulaScaffolds();
     if (state.inputMode === 'modify' && state.activeKind === 'category') {
       updateActiveObjectFromControls();
+    } else {
+      refreshExport();
     }
   }
 
@@ -877,33 +1191,57 @@
 
   function categoryObjectsLatex(category) {
     const display = categoryDisplayLabel(category);
-    const objects = `\\operatorname{Ob}(${display})`;
-    return category.opposite ? `${objects}=\\operatorname{Ob}(${category.label})` : objects;
+    const symbol = category.objectSymbol || DEFAULT_OBJECT_SYMBOL;
+    const condition = applyFormulaTemplate(category.objectCondition || DEFAULT_OBJECT_CONDITION, {
+      source: symbol,
+      target: primeSymbol(symbol),
+      category: display
+    });
+    const body = setBuilderLatex(symbol, condition);
+    if (!category.opposite) return `\\operatorname{Ob}(${display})=${body}`;
+    return `\\operatorname{Ob}(${display})=\\operatorname{Ob}(${category.label})=${body}`;
   }
 
   function categoryMorphismPreviewLatex(category) {
-    const source = category.objectSymbol || 'X';
+    const source = category.objectSymbol || DEFAULT_OBJECT_SYMBOL;
     const target = primeSymbol(source);
-    const left = applyMorphismTemplate(category, {
-      source,
-      target,
-      category: categoryDisplayLabel(category)
-    });
-    if (!category.opposite) return left;
-    const right = applyMorphismTemplate(category, {
-      source: target,
-      target: source,
-      category: category.label
-    });
-    return `${left}=${right}`;
+    if (!category.opposite) return categoryMorphismSetLatex(category, { source, target });
+    return `${morphismHeadLatex(categoryDisplayLabel(category), source, target)}=${morphismHeadLatex(category.label, target, source)}`;
   }
 
-  function applyMorphismTemplate(category, values) {
-    const template = category?.morphismTemplate || DEFAULT_MORPHISM_TEMPLATE;
-    return template
-      .replaceAll('{source}', values.source || 'X')
-      .replaceAll('{target}', values.target || "X'")
-      .replaceAll('{category}', values.category || categoryDisplayLabel(category));
+  function categoryMorphismSetLatex(category, values = {}) {
+    const source = values.source || category?.objectSymbol || DEFAULT_OBJECT_SYMBOL;
+    const target = values.target || primeSymbol(source);
+    const categoryLabel = values.category || categoryDisplayLabel(category);
+    const element = applyFormulaTemplate(category?.morphismElement || DEFAULT_MORPHISM_ELEMENT, {
+      source,
+      target,
+      category: categoryLabel
+    }) || DEFAULT_MORPHISM_ELEMENT;
+    const condition = applyFormulaTemplate(category?.morphismCondition || DEFAULT_MORPHISM_CONDITION, {
+      source,
+      target,
+      category: categoryLabel
+    });
+    return `${morphismHeadLatex(categoryLabel, source, target)}=${setBuilderLatex(element, condition)}`;
+  }
+
+  function morphismHeadLatex(categoryLabel, source, target) {
+    return `\\operatorname{Mor}_{${categoryLabel}}(${source},${target})`;
+  }
+
+  function setBuilderLatex(element, condition) {
+    const cleanElement = cleanOptionalMath(element) || DEFAULT_MORPHISM_ELEMENT;
+    const cleanCondition = cleanOptionalMath(condition);
+    if (!cleanCondition) return `\\left\\{${cleanElement}\\right\\}`;
+    return `\\left\\{${cleanElement}\\middle| ${cleanCondition}\\right\\}`;
+  }
+
+  function applyFormulaTemplate(template, values) {
+    return cleanOptionalMath(template)
+      .replaceAll('{source}', values.source || DEFAULT_OBJECT_SYMBOL)
+      .replaceAll('{target}', values.target || primeSymbol(values.source || DEFAULT_OBJECT_SYMBOL))
+      .replaceAll('{category}', values.category || '\\mathcal{C}');
   }
 
   function functorSignatureLatex(functor) {
@@ -920,19 +1258,17 @@
     const domain = categoryById(functor.domainId);
     const codomain = categoryById(functor.codomainId);
     if (!domain || !codomain) return '\\text{choose domain and codomain}';
-    const x = domain.objectSymbol || 'X';
+    const x = domain.objectSymbol || DEFAULT_OBJECT_SYMBOL;
     const xp = primeSymbol(x);
-    const sourceMor = applyMorphismTemplate(domain, {
+    const sourceMor = categoryMorphismSetLatex(domain, {
       source: x,
-      target: xp,
-      category: categoryDisplayLabel(domain)
+      target: xp
     });
     const targetSource = functor.variance === 'contravariant' ? `${functor.label}(${xp})` : `${functor.label}(${x})`;
     const targetTarget = functor.variance === 'contravariant' ? `${functor.label}(${x})` : `${functor.label}(${xp})`;
-    const targetMor = applyMorphismTemplate(codomain, {
+    const targetMor = categoryMorphismSetLatex(codomain, {
       source: targetSource,
-      target: targetTarget,
-      category: categoryDisplayLabel(codomain)
+      target: targetTarget
     });
     return `${sourceMor}\\mapsto ${targetMor}`;
   }
@@ -958,7 +1294,9 @@
         id: category.id,
         label: category.label,
         objectSymbol: category.objectSymbol,
-        morphismTemplate: category.morphismTemplate,
+        objectCondition: category.objectCondition || DEFAULT_OBJECT_CONDITION,
+        morphismElement: category.morphismElement || DEFAULT_MORPHISM_ELEMENT,
+        morphismCondition: category.morphismCondition || DEFAULT_MORPHISM_CONDITION,
         opposite: !!category.opposite,
         x: round(category.x),
         y: round(category.y)
@@ -1053,8 +1391,10 @@
       return {
         id,
         label: cleanMath(item.label, fallback),
-        objectSymbol: cleanMath(item.objectSymbol, 'X'),
-        morphismTemplate: cleanTemplate(item.morphismTemplate),
+        objectSymbol: cleanMath(item.objectSymbol, DEFAULT_OBJECT_SYMBOL),
+        objectCondition: cleanOptionalMath(item.objectCondition),
+        morphismElement: cleanOptionalMath(item.morphismElement) || legacyMorphismElement(item.morphismTemplate),
+        morphismCondition: cleanOptionalMath(item.morphismCondition),
         opposite: !!item.opposite,
         x: clampNumber(item.x, positionForNewCategory(index).x, REPOSITION_MARGIN, 1 - REPOSITION_MARGIN),
         y: clampNumber(item.y, positionForNewCategory(index).y, 0.08, 0.92)
@@ -1132,7 +1472,14 @@
 
   function renderMathLabel(latex) {
     return String(latex || '')
+      .replace(/\\mathsf\{([^}]+)\}/g, '$1')
+      .replace(/\\mathrm\{([^}]+)\}/g, '$1')
+      .replace(/\\mathbf\{([^}]+)\}/g, '$1')
+      .replace(/\\operatorname\{([^}]+)\}/g, '$1')
       .replace(/\\mathcal\{([A-Z])\}/g, (_, letter) => SCRIPT_CAPITALS[letter] || letter)
+      .replace(/\\Delta/g, 'Delta')
+      .replace(/\\Gamma/g, 'Gamma')
+      .replace(/\\prime/g, "'")
       .replace(/\^\{([^}]+)\}/g, (_, value) => superscriptText(value))
       .replace(/_/g, '')
       .replace(/[{}]/g, '')
@@ -1169,9 +1516,19 @@
     return text || fallback;
   }
 
+  function cleanOptionalMath(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+  }
+
   function cleanTemplate(value) {
     const text = String(value || '').replace(/\s+/g, ' ').trim();
     return text || DEFAULT_MORPHISM_TEMPLATE;
+  }
+
+  function legacyMorphismElement(template) {
+    const text = cleanOptionalMath(template);
+    if (!text || text === DEFAULT_MORPHISM_TEMPLATE) return DEFAULT_MORPHISM_ELEMENT;
+    return cleanTemplate(text);
   }
 
   function cleanId(value) {
@@ -1193,10 +1550,22 @@
       .replace(/\\operatorname\{([^}]+)\}/g, '$1')
       .replace(/\\mathcal\{([^}]+)\}/g, '$1')
       .replace(/\\mathsf\{([^}]+)\}/g, '$1')
+      .replace(/\\mathrm\{([^}]+)\}/g, '$1')
+      .replace(/\\mathbf\{([^}]+)\}/g, '$1')
       .replace(/\\texttt\{([^}]+)\}/g, '$1')
       .replace(/\\text\{([^}]+)\}/g, '$1')
+      .replace(/\\left/g, '')
+      .replace(/\\right/g, '')
+      .replace(/\\middle\|/g, '|')
+      .replace(/\\Rightarrow/g, '=>')
       .replace(/\\to/g, '->')
       .replace(/\\mapsto/g, '|->')
+      .replace(/\\in/g, 'in')
+      .replace(/\\ge/g, '>=')
+      .replace(/\\Delta/g, 'Delta')
+      .replace(/\\Gamma/g, 'Gamma')
+      .replace(/\\prime/g, "'")
+      .replace(/\\[{}]/g, '')
       .replace(/[{}]/g, '');
   }
 
