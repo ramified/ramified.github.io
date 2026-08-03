@@ -324,20 +324,20 @@
     {
       "gameTypes": [
         "Chinese Checkers"
-      ],
-      "id": "chinese-checkers-hex-rhombus-9x9",
-      "label": "hex rhombus 9*9",
-      "key": "chinese_checkers_hex_rhombus_9x9",
-      "file": "chinese_checkers_hex_rhombus_9x9.preset.js"
+        ],
+      "id": "hex-rhombus",
+      "label": "hex rhombus",
+      "key": "hex_rhombus",
+      "file": "hex_rhombus.preset.js"
     },
     {
       "gameTypes": [
         "Chinese Checkers"
-      ],
-      "id": "chinese-checkers-hex-strip-9x9",
+        ],
+      "id": "hex-strip-9-9",
       "label": "hex strip 9*9",
-      "key": "chinese_checkers_hex_strip_9x9",
-      "file": "chinese_checkers_hex_strip_9x9.preset.js"
+      "key": "hex_strip_9_9",
+      "file": "hex_strip_9_9.preset.js"
     },
     {
       "gameTypes": [
