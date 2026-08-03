@@ -271,6 +271,7 @@
   const PRESETS = [];
   let presetRegistry = [];
   let presetDefaultByMode = {};
+  let presetDefaultDisplayByMode = {};
   let presetGameModeOrder = [];
   let presetCatalogReady = false;
   let presetCatalogError = '';
@@ -308,10 +309,16 @@
   let activeHexVerticalKey = null;
   let chineseCheckersSelectedPlayers = null;
   let chineseCheckersSelectedPlayersPresetKey = '';
+  let canvasDisplayMode = 'normal';
+  let fullscreenTarget = 'canvas';
+  let fullscreenReturnMode = 'normal';
 
   function init() {
     refs.canvas = document.getElementById('mosaic-canvas');
     refs.ctx = refs.canvas ? refs.canvas.getContext('2d') : null;
+    refs.canvasWrap = document.getElementById('canvas-wrap');
+    refs.canvasPanel = refs.canvas && refs.canvas.closest ? refs.canvas.closest('.canvas-panel') : document.querySelector('.canvas-panel');
+    refs.canvasViewButtons = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-canvas-display-mode]')) : [];
     refs.gameMode = document.getElementById('game-mode-select');
     refs.select = document.getElementById('surface-preset-select');
     refs.importToggle = document.getElementById('import-preset-toggle');
@@ -325,6 +332,8 @@
     refs.applyImportPreset = document.getElementById('apply-import-preset');
     refs.placementDisplayRow = document.getElementById('gomoku-display-row');
     refs.gomokuDisplay = document.getElementById('gomoku-display-style');
+    refs.moveNumberLabelRow = document.getElementById('move-number-label-row');
+    refs.moveNumberLabels = document.getElementById('move-number-labels');
     refs.gomokuSizeRow = document.getElementById('gomoku-size-row');
     refs.gomokuSize = document.getElementById('gomoku-board-size');
     refs.boundaryGlueModeRow = document.getElementById('boundary-glue-mode-row');
@@ -371,6 +380,7 @@
     refs.debugToggle = document.getElementById('debug-toggle');
     refs.debugTools = document.getElementById('debug-tools');
     refs.debugTileValue = document.getElementById('debug-tile-value');
+    refs.fullscreenTarget = document.getElementById('fullscreen-target');
     refs.sokobanObjectSize = document.getElementById('sokoban-object-size');
     refs.sokobanObjectSizeValue = document.getElementById('sokoban-object-size-value');
     refs.sokobanGlowInner = document.getElementById('sokoban-glow-inner');
@@ -426,6 +436,7 @@
     if (refs.importSource) refs.importSource.addEventListener('change', syncImportExportControls);
     if (refs.applyImportPreset) refs.applyImportPreset.addEventListener('click', importPresetFromUi);
     if (refs.gomokuDisplay) refs.gomokuDisplay.addEventListener('change', render);
+    if (refs.moveNumberLabels) refs.moveNumberLabels.addEventListener('change', render);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('change', handleGomokuSizeChange);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('input', handleGomokuSizeChange);
     if (refs.boundaryGlueMode) refs.boundaryGlueMode.addEventListener('change', handleBoundaryGlueBoardChange);
@@ -483,6 +494,10 @@
     if (refs.copyState) refs.copyState.addEventListener('click', copyExportFromUi);
     if (refs.exportStateKind) refs.exportStateKind.addEventListener('change', syncImportExportControls);
     if (refs.exportBackgroundFormat) refs.exportBackgroundFormat.addEventListener('change', syncImportExportControls);
+    refs.canvasViewButtons.forEach((button) => {
+      button.addEventListener('click', () => handleCanvasDisplayModeButton(button));
+    });
+    if (refs.fullscreenTarget) refs.fullscreenTarget.addEventListener('change', handleFullscreenTargetChange);
     if (refs.canvas) {
       refs.canvas.addEventListener('click', handleCanvasClick);
       refs.canvas.addEventListener('mousemove', handleCanvasHover);
@@ -499,6 +514,7 @@
     });
     document.addEventListener('keydown', handleKeydown);
     document.addEventListener('keyup', handleKeyup);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
     window.addEventListener('blur', clearKeyboardState);
     window.addEventListener('resize', render);
 
@@ -508,6 +524,7 @@
     syncSokobanBeamOutput();
     syncChineseCheckersTimingOutput();
     syncDebugModeUi();
+    syncCanvasDisplayModeUi();
     setPresetSelectLoading();
     const catalogLoad = ensurePresetCatalogLoaded();
     if (catalogLoad && typeof catalogLoad.then === 'function') {
@@ -544,6 +561,7 @@
     resetSwipeGesture();
     clearSuppressedCanvasClick();
     clearKeyboardState();
+    applyDefaultPlacementDisplayForMode();
     game = createSelectedGameState(selectedPreset(), selectedGameOptions({ glueRng: Math.random }));
     game.phase = 'setup';
     clearUndoHistory();
@@ -567,6 +585,7 @@
     if (importPresetFromUrlParams()) return;
     if (applyRandomSetupChoice(randomSetupChoice(), { focus: false })) return;
     syncBoardSizeInputForGameMode();
+    applyDefaultPlacementDisplayForMode();
     const preferred = refs.select && presetSelectHasValue(refs.select.value)
       ? refs.select.value
       : defaultPresetIdForMode(selectedGameMode());
@@ -733,6 +752,7 @@
     PRESETS.splice(0, PRESETS.length, ...nextPresets);
     presetRegistry = nextRegistry;
     presetDefaultByMode = resolvePresetDefaultMap(catalog.defaultFor, nextPresets);
+    presetDefaultDisplayByMode = catalog.defaultDisplayFor;
     presetGameModeOrder = orderedCatalogGameModes(catalog.defaultFor, nextPresets, catalog.gameOrder);
     presetCatalogReady = true;
     presetCatalogError = '';
@@ -749,7 +769,7 @@
       if (!spec) return null;
       items.push({ entry, spec });
     }
-    return { items, defaultFor: catalog.defaultFor, gameOrder: catalog.gameOrder };
+    return { items, defaultFor: catalog.defaultFor, defaultDisplayFor: catalog.defaultDisplayFor, gameOrder: catalog.gameOrder };
   }
 
   function loadBrowserPresetCatalogItems() {
@@ -763,7 +783,7 @@
       return Promise.reject(new Error('No presets are registered in ramified_minigame_presets/presets.js.'));
     }
     return Promise.all(registry.map((entry) => loadBrowserPresetSpec(entry).then((spec) => ({ entry, spec }))))
-      .then((items) => ({ items, defaultFor: catalog.defaultFor, gameOrder: catalog.gameOrder }));
+      .then((items) => ({ items, defaultFor: catalog.defaultFor, defaultDisplayFor: catalog.defaultDisplayFor, gameOrder: catalog.gameOrder }));
   }
 
   function loadBrowserPresetSpec(entry) {
@@ -803,6 +823,7 @@
     const catalog = normalizeMinigamePresetCatalog(require(path.join(folder, 'presets.js')));
     return {
       defaultFor: catalog.defaultFor,
+      defaultDisplayFor: catalog.defaultDisplayFor,
       gameOrder: catalog.gameOrder,
       items: catalog.entries.map((entry) => ({
         entry,
@@ -812,15 +833,16 @@
   }
 
   function normalizePresetCatalogItems(catalogInput) {
-    if (Array.isArray(catalogInput)) return { items: catalogInput, defaultFor: {}, gameOrder: [] };
+    if (Array.isArray(catalogInput)) return { items: catalogInput, defaultFor: {}, defaultDisplayFor: {}, gameOrder: [] };
     if (catalogInput && typeof catalogInput === 'object') {
       return {
         items: Array.isArray(catalogInput.items) ? catalogInput.items : [],
         defaultFor: catalogInput.defaultFor && typeof catalogInput.defaultFor === 'object' ? catalogInput.defaultFor : {},
+        defaultDisplayFor: normalizeDefaultDisplayMap(catalogInput.defaultDisplayFor),
         gameOrder: normalizePresetGameOrder(catalogInput.gameOrder, catalogInput.defaultFor)
       };
     }
-    return { items: [], defaultFor: {}, gameOrder: [] };
+    return { items: [], defaultFor: {}, defaultDisplayFor: {}, gameOrder: [] };
   }
 
   function normalizeMinigamePresetCatalog(registry) {
@@ -830,8 +852,20 @@
     return {
       entries: normalizeMinigamePresetRegistry(source.presets),
       defaultFor: normalizePresetDefaultMap(source.defaultFor),
+      defaultDisplayFor: normalizeDefaultDisplayMap(source.defaultDisplayFor),
       gameOrder: normalizePresetGameOrder(source.gameOrder, source.defaultFor)
     };
+  }
+
+  function normalizeDefaultDisplayMap(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    const result = {};
+    Object.entries(value).forEach(([rawMode, rawDisplay]) => {
+      const mode = gameModeFromUrlParam(rawMode);
+      const display = normalizePlacementDisplayStyle(rawDisplay, '');
+      if (mode && display) result[mode] = display;
+    });
+    return result;
   }
 
   function normalizePresetGameOrder(value, defaultFor = null) {
@@ -1057,6 +1091,7 @@
     if (!choice || !refs.gameMode || !refs.select) return false;
     refs.gameMode.value = choice.mode;
     syncBoardSizeInputForGameMode();
+    applyDefaultPlacementDisplayForMode(choice.mode);
     syncImportGameModeSelectOptions();
     if (refs.importGameMode) refs.importGameMode.value = choice.mode;
     syncPresetSelectOptions(choice.preset.id);
@@ -1307,6 +1342,7 @@
     syncConnectFourFallInputFromGame();
     syncGoKomiInputFromGame();
     syncGoScoringMethodInputFromGame();
+    syncImportedDisplaySettings(imported);
     render();
     syncStatus('reset complete', `${gameTypeForGameMode(gameModeValue(game))} restarted`, 'ready');
     syncControls();
@@ -1321,6 +1357,7 @@
       return;
     }
     syncBoardSizeInputForGameMode();
+    applyDefaultPlacementDisplayForMode();
     syncDefaultPresetForGameMode();
     if (refs.importGameMode) refs.importGameMode.value = selectedGameMode();
     resetToPreview();
@@ -1470,6 +1507,7 @@
   function looksLikeStatusImportPayload(payload) {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
     const has = (key) => Object.prototype.hasOwnProperty.call(payload, key);
+    if (looksLikeGameRecordImportPayload(payload)) return true;
     if (has('exportedAt') || has('status') || has('queue')) return true;
     if (has('gameMode') || has('game') || has('phase')) return true;
     const statusKeys = [
@@ -1547,7 +1585,9 @@
   }
 
   function selectedExportKind() {
-    return refs.exportStateKind && refs.exportStateKind.value === 'background' ? 'background' : 'status';
+    if (refs.exportStateKind && refs.exportStateKind.value === 'background') return 'background';
+    if (refs.exportStateKind && refs.exportStateKind.value === 'record') return 'record';
+    return 'status';
   }
 
   function selectedBackgroundExportFormat() {
@@ -1693,6 +1733,16 @@
     if (!Number.isInteger(dir) || !canAcceptDirectionalMove()) return;
     playDirectionalMove(dir);
     if (refs.canvas) refs.canvas.focus();
+  }
+
+  function syncImportedDisplaySettings(imported) {
+    if (!imported || typeof imported !== 'object') return;
+    if (refs.gomokuDisplay && imported.displayStyle) {
+      refs.gomokuDisplay.value = normalizePlacementDisplayStyle(imported.displayStyle, placementDisplayStyle());
+    }
+    if (refs.moveNumberLabels && typeof imported.moveNumberLabels === 'boolean') {
+      refs.moveNumberLabels.checked = imported.moveNumberLabels;
+    }
   }
 
   function handleCanvasPointerDown(event) {
@@ -2429,6 +2479,133 @@
     if (refs.debugTileValue) refs.debugTileValue.disabled = !debugMode || !is2048Game(game);
   }
 
+  function handleCanvasDisplayModeButton(button) {
+    const mode = normalizeCanvasDisplayMode(button && button.getAttribute('data-canvas-display-mode'));
+    if (mode === 'fullscreen') {
+      toggleCanvasFullscreen();
+      return;
+    }
+    setCanvasDisplayMode(mode);
+  }
+
+  function handleFullscreenTargetChange() {
+    fullscreenTarget = selectedFullscreenTarget();
+    syncCanvasDisplayModeUi();
+    if (currentFullscreenElement()) {
+      syncStatus('fullscreen target', 'change applies the next time fullscreen opens', phaseBadge(game && game.phase));
+    }
+  }
+
+  function normalizeCanvasDisplayMode(value) {
+    const mode = String(value || '').trim().toLowerCase();
+    return mode === 'fit-viewport' || mode === 'fullscreen' ? mode : 'normal';
+  }
+
+  function selectedFullscreenTarget() {
+    return refs.fullscreenTarget && refs.fullscreenTarget.value === 'panel' ? 'panel' : 'canvas';
+  }
+
+  function setCanvasDisplayMode(mode) {
+    const nextMode = normalizeCanvasDisplayMode(mode);
+    if (nextMode === 'fullscreen') {
+      toggleCanvasFullscreen();
+      return;
+    }
+    fullscreenReturnMode = nextMode;
+    canvasDisplayMode = nextMode;
+    if (currentFullscreenElement() && document.exitFullscreen) {
+      const exit = document.exitFullscreen();
+      if (exit && typeof exit.catch === 'function') exit.catch(() => {});
+    }
+    syncCanvasDisplayModeUi();
+    renderAfterCanvasLayoutChange();
+  }
+
+  function toggleCanvasFullscreen() {
+    if (currentFullscreenElement()) {
+      if (document.exitFullscreen) {
+        const exit = document.exitFullscreen();
+        if (exit && typeof exit.catch === 'function') exit.catch(() => {});
+      }
+      return;
+    }
+    const target = canvasFullscreenTargetElement();
+    if (!target || typeof target.requestFullscreen !== 'function') {
+      syncStatus('fullscreen unavailable', 'this browser does not allow fullscreen for the canvas', 'warn');
+      return;
+    }
+    fullscreenTarget = selectedFullscreenTarget();
+    fullscreenReturnMode = canvasDisplayMode === 'fullscreen' ? 'normal' : canvasDisplayMode;
+    canvasDisplayMode = 'fullscreen';
+    syncCanvasDisplayModeUi();
+    const request = target.requestFullscreen();
+    if (request && typeof request.then === 'function') {
+      request
+        .then(() => {
+          syncCanvasDisplayModeUi();
+          renderAfterCanvasLayoutChange();
+          if (refs.canvas) refs.canvas.focus();
+        })
+        .catch((error) => {
+          canvasDisplayMode = fullscreenReturnMode || 'normal';
+          syncCanvasDisplayModeUi();
+          renderAfterCanvasLayoutChange();
+          syncStatus('fullscreen unavailable', error && error.message ? error.message : 'fullscreen request was blocked', 'warn');
+        });
+    } else {
+      renderAfterCanvasLayoutChange();
+      if (refs.canvas) refs.canvas.focus();
+    }
+  }
+
+  function currentFullscreenElement() {
+    return typeof document !== 'undefined' ? document.fullscreenElement : null;
+  }
+
+  function canvasFullscreenTargetElement() {
+    return selectedFullscreenTarget() === 'panel'
+      ? (refs.canvasPanel || refs.canvasWrap || refs.canvas)
+      : (refs.canvasWrap || refs.canvas);
+  }
+
+  function handleFullscreenChange() {
+    if (currentFullscreenElement()) {
+      canvasDisplayMode = 'fullscreen';
+    } else if (canvasDisplayMode === 'fullscreen') {
+      canvasDisplayMode = fullscreenReturnMode || 'normal';
+    }
+    syncCanvasDisplayModeUi();
+    renderAfterCanvasLayoutChange();
+    if (refs.canvas) refs.canvas.focus();
+  }
+
+  function syncCanvasDisplayModeUi() {
+    fullscreenTarget = selectedFullscreenTarget();
+    const fullscreenActive = !!currentFullscreenElement();
+    const activeMode = fullscreenActive ? 'fullscreen' : canvasDisplayMode;
+    if (typeof document !== 'undefined' && document.body && document.body.classList) {
+      document.body.classList.toggle('canvas-fit-viewport', activeMode === 'fit-viewport');
+    }
+    if (refs.canvasViewButtons) {
+      refs.canvasViewButtons.forEach((button) => {
+        const mode = normalizeCanvasDisplayMode(button.getAttribute('data-canvas-display-mode'));
+        const active = mode === activeMode;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+    }
+    if (refs.fullscreenTarget && refs.fullscreenTarget.value !== fullscreenTarget) {
+      refs.fullscreenTarget.value = fullscreenTarget;
+    }
+  }
+
+  function renderAfterCanvasLayoutChange() {
+    render();
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => render());
+    }
+  }
+
   function handleCanvasStartBeginClick(event) {
     if (event && event.preventDefault) event.preventDefault();
     hideCanvasStartPrompt();
@@ -2819,6 +2996,7 @@
         game.scoringMethod = method;
         game.finalScore = null;
         if (game.phase !== 'gameover') game.territory = scoreGoGame(game).territory;
+        if (game.phase !== 'setup') appendGameRecordMove(game, { action: 'set-scoring-method', method });
       }
       syncStatus('Go scoring method', method === 'nearest' ? 'nearest-stone Voronoi selected' : 'inverse-square influence selected', phaseBadge(game.phase));
     }
@@ -3173,6 +3351,17 @@
     return JSON.parse(JSON.stringify(value));
   }
 
+  function placementPieceClone(piece) {
+    const clone = { id: piece.id, index: piece.index, color: piece.color };
+    const moveNumber = normalizeOptionalMoveNumber(piece.moveNumber);
+    if (moveNumber) clone.moveNumber = moveNumber;
+    return clone;
+  }
+
+  function cloneGameRecordMoves(moves) {
+    return Array.isArray(moves) ? moves.map((move) => clonePlain(move)) : [];
+  }
+
   function exportFromUi() {
     exportSelectedOutput({ focus: true, action: 'exported' });
   }
@@ -3186,7 +3375,57 @@
       exportBackgroundPreset(options);
       return;
     }
+    if (selectedExportKind() === 'record') {
+      exportGameRecord(options);
+      return;
+    }
     exportDebugState(options);
+  }
+
+  function exportGameRecord(options = {}) {
+    if (!game || !refs.debugExport) return;
+    if (!recordableGameMode(gameModeValue(game))) {
+      syncStatus('record unavailable', 'game records are available for Gomoku, Go, Connect Four, and Reversi', 'warn');
+      return;
+    }
+    refs.debugExport.value = JSON.stringify(gameRecordExportPayload(game), null, 2);
+    const count = Array.isArray(game.recordMoves) ? game.recordMoves.length : 0;
+    syncStatus(`record ${options.action || 'exported'}`, `${count} recorded action${count === 1 ? '' : 's'}`, phaseBadge(game.phase));
+    if (options.focus !== false) {
+      refs.debugExport.focus();
+      refs.debugExport.select();
+    }
+  }
+
+  function gameRecordExportPayload(state) {
+    return {
+      kind: 'ramified-minigame-record',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      gameMode: gameModeValue(state),
+      preset: backgroundPresetForExport(),
+      settings: gameRecordSettings(state),
+      moves: cloneGameRecordMoves(state.recordMoves),
+      snapshot: debugExportPayload()
+    };
+  }
+
+  function gameRecordSettings(state) {
+    const settings = {};
+    if (isPlacementGame(state)) settings.displayStyle = placementDisplayStyle();
+    if (supportsMoveNumberLabels(state)) settings.moveNumberLabels = shouldShowMoveNumberLabels(state);
+    if (isGoGame(state)) {
+      settings.komi = normalizeGoKomi(state.komi);
+      settings.scoringMethod = normalizeGoScoringMethod(state.scoringMethod);
+    }
+    if (isConnectFourGame(state)) {
+      settings.fallDir = state.fallDir;
+      settings.fallDirName = latticeForPreset(state.preset).dirNames[state.fallDir] || String(state.fallDir);
+      settings.holes = Array.from(state.holes || [])
+        .sort((a, b) => a - b)
+        .map((index) => ({ index, ...rowCol(index, state.preset.cols) }));
+    }
+    return settings;
   }
 
   function exportDebugState(options = {}) {
@@ -3515,6 +3754,7 @@
       ending: game.ending || '',
       debugMode,
       status: statusSnapshot(),
+      settings: gameRecordSettings(game),
       warnings: gameWarnings(game),
       round: game.round || 0,
       removed: Array.from(game.removed)
@@ -3529,6 +3769,7 @@
         winningLine: (game.winningLine || []).slice(),
         resultDismissed: !!game.resultDismissed,
         nextStoneId: game.nextStoneId || 1,
+        recordMoves: cloneGameRecordMoves(game.recordMoves),
         stones: (game.stones || [])
           .map((stone) => stoneExport(stone, preset.cols))
           .sort((a, b) => a.index - b.index || a.id - b.id),
@@ -3558,6 +3799,7 @@
         resultDismissed: !!game.resultDismissed,
         nextTokenId: game.nextTokenId || 1,
         dropWarning: game.dropWarning || '',
+        recordMoves: cloneGameRecordMoves(game.recordMoves),
         tokens: (game.tokens || [])
           .map((token) => tokenExport(token, preset.cols))
           .sort((a, b) => a.index - b.index || a.id - b.id),
@@ -3591,6 +3833,7 @@
         scoringReview: !!game.scoringReview,
         scoringMethod: normalizeGoScoringMethod(game.scoringMethod),
         territoryOverrides: goTerritoryOverridesExport(game),
+        recordMoves: cloneGameRecordMoves(game.recordMoves),
         stones: (game.stones || [])
           .map((stone) => stoneExport(stone, preset.cols))
           .sort((a, b) => a.index - b.index || a.id - b.id),
@@ -3612,6 +3855,7 @@
         finalScore: game.finalScore ? clonePlain(game.finalScore) : null,
         resultDismissed: !!game.resultDismissed,
         nextDiscId: game.nextDiscId || 1,
+        recordMoves: cloneGameRecordMoves(game.recordMoves),
         discs: (game.discs || [])
           .map((disc) => discExport(disc, preset.cols))
           .sort((a, b) => a.index - b.index || a.id - b.id),
@@ -3712,30 +3956,83 @@
   }
 
   function stoneExport(stone, cols) {
-    return {
+    return placementPieceExport({
       id: stone.id,
       index: stone.index,
       ...rowCol(stone.index, cols),
       color: stone.color
-    };
+    }, stone);
   }
 
   function tokenExport(token, cols) {
-    return {
+    return placementPieceExport({
       id: token.id,
       index: token.index,
       ...rowCol(token.index, cols),
       color: token.color
-    };
+    }, token);
   }
 
   function discExport(disc, cols) {
-    return {
+    return placementPieceExport({
       id: disc.id,
       index: disc.index,
       ...rowCol(disc.index, cols),
       color: disc.color
+    }, disc);
+  }
+
+  function placementPieceExport(payload, piece) {
+    const moveNumber = normalizeOptionalMoveNumber(piece && piece.moveNumber);
+    if (moveNumber) payload.moveNumber = moveNumber;
+    return payload;
+  }
+
+  function appendGameRecordMove(state, move) {
+    if (!recordableGameMode(gameModeValue(state)) || !move || typeof move !== 'object' || Array.isArray(move)) return;
+    const moves = Array.isArray(state.recordMoves) ? state.recordMoves : [];
+    const entry = gameRecordMoveWithTileRefs({
+      sequence: moves.length + 1,
+      ...clonePlain(move)
+    }, state.preset);
+    state.recordMoves = moves.concat(entry);
+  }
+
+  function gameRecordMoveWithTileRefs(move, preset) {
+    const result = { ...move };
+    const addTile = (prefix, index) => {
+      if (!Number.isInteger(index) || !preset) return;
+      const tile = rowCol(index, preset.cols);
+      if (prefix) {
+        result[prefix] = { index, ...tile };
+      } else {
+        result.index = index;
+        result.row = tile.row;
+        result.col = tile.col;
+      }
     };
+    if (Number.isInteger(result.index)) addTile('', result.index);
+    if (Number.isInteger(result.entryIndex)) addTile('entry', result.entryIndex);
+    if (Number.isInteger(result.landingIndex)) addTile('landing', result.landingIndex);
+    return result;
+  }
+
+  function normalizeGameRecordMoves(moves) {
+    if (!Array.isArray(moves)) return [];
+    return moves
+      .filter((move) => move && typeof move === 'object' && !Array.isArray(move))
+      .map((move, index) => {
+        const clone = clonePlain(move);
+        if (!normalizePositiveInteger(clone.sequence, 0)) clone.sequence = index + 1;
+        return clone;
+      });
+  }
+
+  function recordableGameMode(mode) {
+    return mode === GAME_MODES.GOMOKU
+      || mode === GAME_MODES.GO
+      || mode === GAME_MODES.CONNECT_FOUR
+      || mode === GAME_MODES.REVERSI;
   }
 
   function marbleExport(marble, cols) {
@@ -3800,6 +4097,7 @@
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new Error('status must be a JSON object');
     }
+    if (looksLikeGameRecordImportPayload(payload)) return gameStateFromRecordImportPayload(payload);
     const preset = presetFromStatusPayload(payload);
     const removed = normalizeStatusRemovedSet(payload, preset);
     if (normalizeStatusGameMode(payload) === GAME_MODES.GOMOKU) {
@@ -3827,6 +4125,7 @@
         resultDismissed: !!payload.resultDismissed,
         round: normalizeNonnegativeInteger(payload.round, stones.length),
         ending: phase === 'gameover' ? normalizeGomokuEnding(payload.ending, winner) : '',
+        recordMoves: normalizeGameRecordMoves(payload.recordMoves),
         debugMessage: ''
       };
       if (state.winningLine.length < gomokuWinLengthForPreset(preset)) {
@@ -3888,6 +4187,7 @@
         resultDismissed: !!payload.resultDismissed,
         round: normalizeNonnegativeInteger(payload.round, stones.length),
         ending: phase === 'gameover' ? 'go-score' : '',
+        recordMoves: normalizeGameRecordMoves(payload.recordMoves),
         debugMessage: ''
       };
       if (state.scoringReview) state.territory = scoreGoGame(state).territory;
@@ -3938,6 +4238,7 @@
         round: normalizeNonnegativeInteger(payload.round, tokens.length),
         ending: phase === 'gameover' ? normalizeConnectFourEnding(payload.ending, winner) : '',
         dropWarning: sanitizeImportedText(payload.dropWarning || '', ''),
+        recordMoves: normalizeGameRecordMoves(payload.recordMoves),
         debugMessage: ''
       };
       return {
@@ -3974,6 +4275,7 @@
         resultDismissed: !!payload.resultDismissed,
         round: normalizeNonnegativeInteger(payload.round, Math.max(0, discs.length - 4)),
         ending: phase === 'gameover' ? 'reversi-score' : '',
+        recordMoves: normalizeGameRecordMoves(payload.recordMoves),
         debugMessage: ''
       };
       if (state.phase === 'gameover' && !state.finalScore) state.finalScore = reversiDiscCounts(state);
@@ -4166,6 +4468,163 @@
     };
   }
 
+  function looksLikeGameRecordImportPayload(payload) {
+    return !!(
+      payload
+      && typeof payload === 'object'
+      && !Array.isArray(payload)
+      && String(payload.kind || '').trim().toLowerCase() === 'ramified-minigame-record'
+    );
+  }
+
+  function gameStateFromRecordImportPayload(payload) {
+    const mode = gameModeFromUrlParam(payload.gameMode || payload.game);
+    if (!recordableGameMode(mode)) {
+      throw new Error('record gameMode must be Gomoku, Go, Connect Four, or Reversi');
+    }
+    const snapshot = payload.snapshot && typeof payload.snapshot === 'object' && !Array.isArray(payload.snapshot)
+      ? payload.snapshot
+      : null;
+    const settings = gameRecordImportSettings(payload, snapshot);
+    const preset = presetFromStatusPayload({ preset: payload.preset || (snapshot && snapshot.preset) || {} });
+    const moves = normalizeGameRecordMoves(payload.moves);
+    let state = beginRecordGame(mode, preset, settings);
+    state.recordMoves = [];
+    moves.forEach((move, index) => {
+      state = replayGameRecordMove(state, move, index + 1);
+    });
+    validateRecordReplaySnapshot(state, snapshot);
+    return {
+      state,
+      phase: state.phase,
+      eventQueue: [],
+      eventIndex: 0,
+      stepPaused: false,
+      displayStyle: normalizePlacementDisplayStyle(settings.displayStyle, ''),
+      moveNumberLabels: !!settings.moveNumberLabels
+    };
+  }
+
+  function gameRecordImportSettings(payload, snapshot) {
+    const primary = payload && payload.settings && typeof payload.settings === 'object' && !Array.isArray(payload.settings)
+      ? payload.settings
+      : {};
+    const fallback = snapshot && snapshot.settings && typeof snapshot.settings === 'object' && !Array.isArray(snapshot.settings)
+      ? snapshot.settings
+      : {};
+    return { ...fallback, ...primary };
+  }
+
+  function beginRecordGame(mode, preset, settings = {}) {
+    if (mode === GAME_MODES.GOMOKU) return beginGomokuGame(preset, {});
+    if (mode === GAME_MODES.GO) {
+      return beginGoGame(preset, {
+        komi: settings.komi,
+        scoringMethod: settings.scoringMethod
+      });
+    }
+    if (mode === GAME_MODES.CONNECT_FOUR) {
+      return beginConnectFourGame(preset, {
+        fallDir: normalizeConnectFourFallDir(settings.fallDirName != null ? settings.fallDirName : settings.fallDir, preset),
+        holes: settings.holes
+      });
+    }
+    if (mode === GAME_MODES.REVERSI) return beginReversiGame(preset, {});
+    throw new Error('record game is unsupported');
+  }
+
+  function replayGameRecordMove(state, move, ordinal) {
+    const action = String(move.action || move.type || '').trim().toLowerCase();
+    const label = `record move ${ordinal}`;
+    if (isGomokuGame(state)) {
+      if (action !== 'place' && action !== 'play' && action !== 'stone') throw new Error(`${label} has an invalid Gomoku action`);
+      const index = gameRecordMoveIndex(move, state.preset, label);
+      const color = normalizeGomokuColor(move.color);
+      if (color && color !== state.turn) throw new Error(`${label} expected ${gomokuColorLabel(state.turn)} to move`);
+      return changedRecordState(placeGomokuStone(state, index), label);
+    }
+    if (isConnectFourGame(state)) {
+      if (action !== 'drop' && action !== 'place' && action !== 'play') throw new Error(`${label} has an invalid Connect Four action`);
+      const entryIndex = gameRecordMoveIndex(move.entry || move.entryIndex || move, state.preset, label);
+      const color = normalizeConnectFourColor(move.color);
+      if (color && color !== state.turn) throw new Error(`${label} expected ${connectFourColorLabel(state.turn)} to drop`);
+      const result = changedRecordState(placeConnectFourToken(state, entryIndex), label);
+      const landingIndex = optionalGameRecordMoveIndex(move.landing || move.landingIndex, state.preset);
+      if (Number.isInteger(landingIndex) && connectFourLastTokenIndex(result) !== landingIndex) {
+        throw new Error(`${label} landing does not match the record snapshot`);
+      }
+      return result;
+    }
+    if (isGoGame(state)) return replayGoRecordMove(state, move, action, label);
+    if (isReversiGame(state)) {
+      if (action !== 'place' && action !== 'play' && action !== 'disc') throw new Error(`${label} has an invalid Reversi action`);
+      const index = gameRecordMoveIndex(move, state.preset, label);
+      const color = normalizeReversiColor(move.color);
+      if (color && color !== state.turn) throw new Error(`${label} expected ${reversiColorLabel(state.turn)} to move`);
+      return changedRecordState(placeReversiDisc(state, index), label);
+    }
+    throw new Error(`${label} cannot be replayed for this game`);
+  }
+
+  function replayGoRecordMove(state, move, action, label) {
+    if (action === 'place' || action === 'play' || action === 'stone') {
+      const index = gameRecordMoveIndex(move, state.preset, label);
+      const color = normalizeGoColor(move.color);
+      if (color && color !== state.turn) throw new Error(`${label} expected ${goColorLabel(state.turn)} to play`);
+      return changedRecordState(placeGoStone(state, index), label);
+    }
+    if (action === 'pass') {
+      const color = normalizeGoColor(move.color);
+      if (color && color !== state.turn) throw new Error(`${label} expected ${goColorLabel(state.turn)} to pass`);
+      return changedRecordState(passGoTurn(state), label);
+    }
+    if (action === 'mark-dead-group' || action === 'toggle-dead-group') {
+      const index = gameRecordMoveIndex(move, state.preset, label);
+      return changedRecordState(toggleGoDeadGroup(state, index), label);
+    }
+    if (action === 'territory-override' || action === 'set-territory') {
+      const index = gameRecordMoveIndex(move, state.preset, label);
+      return changedRecordState(setGoTerritoryOverride(state, index, move.owner), label);
+    }
+    if (action === 'set-scoring-method') {
+      return changedRecordState(setGoScoringMethodFromRecord(state, move.method), label);
+    }
+    if (action === 'confirm-score') return changedRecordState(confirmGoScore(state), label);
+    throw new Error(`${label} has an invalid Go action`);
+  }
+
+  function changedRecordState(result, label) {
+    if (!result || !result.changed) throw new Error(`${label} rejected: ${result && result.message ? result.message : 'invalid action'}`);
+    return result.state;
+  }
+
+  function connectFourLastTokenIndex(state) {
+    const tokens = state && Array.isArray(state.tokens) ? state.tokens : [];
+    return tokens.reduce((best, token) => (!best || token.id > best.id ? token : best), null)?.index;
+  }
+
+  function gameRecordMoveIndex(value, preset, label) {
+    const index = optionalGameRecordMoveIndex(value, preset);
+    if (!Number.isInteger(index)) throw new Error(`${label} has an invalid tile`);
+    return index;
+  }
+
+  function optionalGameRecordMoveIndex(value, preset) {
+    if (value == null || !preset) return null;
+    const tile = normalizeImportedTileRef(value, preset.rows, preset.cols);
+    return tile ? indexOf(tile.row, tile.col, preset.cols) : null;
+  }
+
+  function validateRecordReplaySnapshot(state, snapshot) {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return;
+    const expected = gameStateFromDebugImportPayload({ ...snapshot, recordMoves: [] }).state;
+    const expectedSummary = JSON.stringify(stateSummary(expected));
+    const actualSummary = JSON.stringify(stateSummary(state));
+    if (expectedSummary !== actualSummary) {
+      throw new Error('record replay did not match its snapshot');
+    }
+  }
+
   function presetFromStatusPayload(payload) {
     const source = payload.preset && typeof payload.preset === 'object' ? payload.preset : {};
     const sourceId = sanitizeImportedText(source.id || '', '');
@@ -4353,8 +4812,16 @@
       const id = normalizePositiveInteger(entry && entry.id, index + 1);
       if (usedIds.has(id)) throw new Error(`status stone id ${id} is duplicated`);
       usedIds.add(id);
-      return { id, index: tileIndex, color };
+      return placementPieceWithOptionalMoveNumber({ id, index: tileIndex, color }, entry);
     });
+  }
+
+  function placementPieceWithOptionalMoveNumber(piece, source) {
+    const moveNumber = normalizeOptionalMoveNumber(
+      source && (source.moveNumber != null ? source.moveNumber : (source.move != null ? source.move : source.number))
+    );
+    if (moveNumber) piece.moveNumber = moveNumber;
+    return piece;
   }
 
   function normalizeStatusConnectFourTokens(entries, preset, removed) {
@@ -4373,7 +4840,7 @@
       const id = normalizePositiveInteger(entry && entry.id, index + 1);
       if (usedIds.has(id)) throw new Error(`status token id ${id} is duplicated`);
       usedIds.add(id);
-      return { id, index: tileIndex, color };
+      return placementPieceWithOptionalMoveNumber({ id, index: tileIndex, color }, entry);
     });
   }
 
@@ -4393,7 +4860,7 @@
       const id = normalizePositiveInteger(entry && entry.id, index + 1);
       if (usedIds.has(id)) throw new Error(`status stone id ${id} is duplicated`);
       usedIds.add(id);
-      return { id, index: tileIndex, color };
+      return placementPieceWithOptionalMoveNumber({ id, index: tileIndex, color }, entry);
     });
   }
 
@@ -4423,7 +4890,7 @@
       const id = normalizePositiveInteger(entry && entry.id, index + 1);
       if (usedIds.has(id)) throw new Error(`status disc id ${id} is duplicated`);
       usedIds.add(id);
-      return { id, index: tileIndex, color };
+      return placementPieceWithOptionalMoveNumber({ id, index: tileIndex, color }, entry);
     });
   }
 
@@ -4699,6 +5166,11 @@
     return Number.isInteger(number) && number >= 0 ? number : fallback;
   }
 
+  function normalizeOptionalMoveNumber(value) {
+    const number = Number(value);
+    return Number.isInteger(number) && number > 0 ? number : 0;
+  }
+
   function syncStatusForCurrentGame() {
     if (!game) return;
     if (isGomokuGame(game)) {
@@ -4922,17 +5394,19 @@
       syncGlueHoverCursor();
     }
     const removed = game ? game.removed : initialRemovedSet(preset);
-    const wrap = refs.canvas.parentElement;
-    const widthAvailable = Math.max(280, Math.floor(wrap ? wrap.clientWidth : refs.canvas.clientWidth || 720));
-    const margin = widthAvailable < 430 ? 18 : 28;
     const dpr = Math.min(Math.max((typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1, 1), 2.5);
-    geometry = buildGeometry(preset, widthAvailable, margin, dpr);
+    const sizing = canvasRenderSizing();
+    geometry = buildGeometry(preset, sizing.widthAvailable, sizing.margin, dpr, {
+      heightAvailable: sizing.heightAvailable,
+      immersive: sizing.immersive
+    });
     applyDisplayRotationToGeometry(geometry, connectFourDisplayRotationAngle());
     const logicalWidth = geometry.width;
     const logicalHeight = geometry.height;
     refs.canvas.width = Math.max(1, Math.ceil(logicalWidth * dpr));
     refs.canvas.height = Math.max(1, Math.ceil(logicalHeight * dpr));
     refs.canvas.style.aspectRatio = `${logicalWidth} / ${logicalHeight}`;
+    applyCanvasDisplaySize(logicalWidth, logicalHeight, sizing);
     refs.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const ctx = refs.ctx;
@@ -4943,7 +5417,9 @@
 
     ctx.save();
     applyGeometryDisplayTransform(ctx, geometry);
-    const vertexDisplay = isPlacementGame(game) && placementDisplayStyle() === 'vertex';
+    const displayStyle = isPlacementGame(game) ? placementDisplayStyle() : 'center';
+    const vertexDisplay = isPlacementGame(game) && isVertexPlacementDisplay(displayStyle);
+    const polishedVertexDisplay = vertexDisplay && displayStyle === 'polished-vertex';
     if (!vertexDisplay) {
       geometry.cells.forEach((cell, index) => {
         if (cell) drawTile(ctx, geometry, cell.row, cell.col, removed.has(index), explosionMode);
@@ -4953,13 +5429,15 @@
     drawBackgroundBoundaries(ctx, geometry, preset, removed);
     drawGlueEdges(ctx, geometry, preset, hoveredGlue);
     if (isPlacementGame(game)) {
-      if (vertexDisplay) drawPlacementVertexBoard(ctx, geometry, game);
+      if (polishedVertexDisplay) drawPolishedPlacementVertexBoard(ctx, geometry, game);
+      else if (vertexDisplay) drawPlacementVertexBoard(ctx, geometry, game);
       else if (isConnectFourGame(game)) drawConnectFourHoles(ctx, geometry, game);
       if (!isConnectFourDropAnimation() && !isChineseCheckersGame(game)) drawPlacementWinningLine(ctx, geometry, game);
       if (isGoGame(game)) drawGoScoreOverlay(ctx, geometry, game);
       drawPlacementSelectionOverlays(ctx, geometry, game);
       drawPlacementPieces(ctx, geometry, placementPieces(game));
       if (isGoGame(game)) drawGoDeadStoneMarks(ctx, geometry, game);
+      drawPlacementMoveNumberLabels(ctx, geometry, game);
       drawPlacementAnimationOverlays(ctx, geometry);
       drawPlacementFeedbackOverlays(ctx, geometry);
     } else {
@@ -4980,12 +5458,87 @@
     syncStats();
   }
 
-  function buildGeometry(preset, widthAvailable, margin, dpr) {
+  function activeCanvasDisplayMode() {
+    return currentFullscreenElement() ? 'fullscreen' : canvasDisplayMode;
+  }
+
+  function canvasRenderSizing() {
+    const wrap = refs.canvasWrap || (refs.canvas && refs.canvas.parentElement);
+    const mode = activeCanvasDisplayMode();
+    if (mode === 'normal') {
+      const widthAvailable = Math.max(280, Math.floor(wrap ? wrap.clientWidth : refs.canvas.clientWidth || 720));
+      return {
+        widthAvailable,
+        heightAvailable: null,
+        displayWidth: widthAvailable,
+        displayHeight: null,
+        margin: widthAvailable < 430 ? 18 : 28,
+        immersive: false
+      };
+    }
+    const box = immersiveCanvasAvailableBox(wrap);
+    const shortSide = Math.min(box.width, box.height);
+    return {
+      widthAvailable: box.width,
+      heightAvailable: box.height,
+      displayWidth: box.width,
+      displayHeight: box.height,
+      margin: shortSide < 430 ? 12 : 18,
+      immersive: true
+    };
+  }
+
+  function immersiveCanvasAvailableBox(wrap) {
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 720;
+    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 540;
+    const rect = wrap && wrap.getBoundingClientRect ? wrap.getBoundingClientRect() : null;
+    const width = Math.floor((rect && rect.width) || (wrap && wrap.clientWidth) || viewportWidth);
+    const height = Math.floor((rect && rect.height) || (wrap && wrap.clientHeight) || viewportHeight);
+    return {
+      width: Math.max(220, width || viewportWidth),
+      height: Math.max(220, height || viewportHeight)
+    };
+  }
+
+  function applyCanvasDisplaySize(logicalWidth, logicalHeight, sizing) {
+    if (!refs.canvas) return;
+    if (!sizing || !sizing.immersive || !sizing.displayHeight) {
+      refs.canvas.style.removeProperty('--canvas-display-width');
+      refs.canvas.style.removeProperty('--canvas-display-height');
+      return;
+    }
+    const display = fitCanvasDisplaySize(logicalWidth, logicalHeight, sizing.displayWidth, sizing.displayHeight);
+    refs.canvas.style.setProperty('--canvas-display-width', `${Math.max(1, Math.floor(display.width))}px`);
+    refs.canvas.style.setProperty('--canvas-display-height', `${Math.max(1, Math.floor(display.height))}px`);
+  }
+
+  function fitCanvasDisplaySize(logicalWidth, logicalHeight, maxWidth, maxHeight) {
+    const ratio = Math.max(0.001, logicalWidth / Math.max(1, logicalHeight));
+    let width = Math.max(1, maxWidth);
+    let height = width / ratio;
+    if (height > maxHeight) {
+      height = Math.max(1, maxHeight);
+      width = height * ratio;
+    }
+    return { width, height };
+  }
+
+  function buildGeometry(preset, widthAvailable, margin, dpr, options = {}) {
     const lattice = latticeForPreset(preset);
     const cells = [];
+    const heightAvailable = Number.isFinite(options.heightAvailable) && options.heightAvailable > 0
+      ? options.heightAvailable
+      : null;
+    const immersive = !!options.immersive;
     if (lattice.shape === 'hex') {
       const hexWidthFactor = Math.sqrt(3) * (preset.cols + 0.5);
-      const radius = Math.min(Math.max((widthAvailable - margin * 2) / hexWidthFactor, 16), 48);
+      const hexHeightFactor = 2 + ((preset.rows - 1) * 1.5);
+      const radiusByWidth = (widthAvailable - margin * 2) / hexWidthFactor;
+      const radiusByHeight = heightAvailable ? (heightAvailable - margin * 2) / hexHeightFactor : Infinity;
+      const rawRadius = Math.min(radiusByWidth, radiusByHeight);
+      const radius = immersive
+        ? Math.max(4, rawRadius)
+        : Math.min(Math.max(rawRadius, 16), 48);
       const hexWidth = Math.sqrt(3) * radius;
       for (let row = 1; row <= preset.rows; row += 1) {
         for (let col = 1; col <= preset.cols; col += 1) {
@@ -5015,7 +5568,12 @@
       };
     }
 
-    const size = Math.min(Math.max((widthAvailable - margin * 2) / preset.cols, 24), 58);
+    const sizeByWidth = (widthAvailable - margin * 2) / preset.cols;
+    const sizeByHeight = heightAvailable ? (heightAvailable - margin * 2) / preset.rows : Infinity;
+    const rawSize = Math.min(sizeByWidth, sizeByHeight);
+    const size = immersive
+      ? Math.max(4, rawSize)
+      : Math.min(Math.max(rawSize, 24), 58);
     const radius = size / 2;
     for (let row = 1; row <= preset.rows; row += 1) {
       for (let col = 1; col <= preset.cols; col += 1) {
@@ -6352,6 +6910,166 @@
     if (isConnectFourGame(state)) drawConnectFourHoles(ctx, geom, state);
   }
 
+  function drawPolishedPlacementVertexBoard(ctx, geom, state) {
+    const removed = state && state.removed ? state.removed : new Set();
+    const preset = state && state.preset;
+    const glued = gluedEdgeKeySet(preset);
+    const cuts = cutEdgeKeySet(preset);
+    const boundaryEdges = [];
+    const drawnConnections = new Set();
+    ctx.save();
+    ctx.strokeStyle = 'rgba(92,76,54,0.28)';
+    ctx.fillStyle = 'rgba(92,76,54,0.34)';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(0.9, geom.radius * 0.03);
+    geometryCells(geom).forEach(({ cell, index }) => {
+      if (removed.has(index)) return;
+      const center = placementPiecePoint(geom, index);
+      if (!center) return;
+      directionsForPreset(preset).forEach((dir) => {
+        const edgeKey = boundaryEdgeKey({ row: cell.row, col: cell.col, dir }, preset.cols);
+        if (glued.has(edgeKey)) {
+          drawPolishedGridStub(ctx, geom, center, dir);
+          return;
+        }
+        const next = neighbor(cell.row, cell.col, dir, preset);
+        if (!next) {
+          boundaryEdges.push({ index, row: cell.row, col: cell.col, dir });
+          return;
+        }
+        const nextIndex = indexOf(next.row, next.col, preset.cols);
+        if (removed.has(nextIndex) || cuts.has(cutKey(index, nextIndex))) {
+          boundaryEdges.push({ index, row: cell.row, col: cell.col, dir });
+          return;
+        }
+        const key = cutKey(index, nextIndex);
+        if (drawnConnections.has(key)) return;
+        drawnConnections.add(key);
+        const nextCenter = placementPiecePoint(geom, nextIndex);
+        if (!nextCenter) return;
+        ctx.beginPath();
+        ctx.moveTo(center.x, center.y);
+        ctx.lineTo(nextCenter.x, nextCenter.y);
+        ctx.stroke();
+      });
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, Math.max(1.8, geom.radius * 0.058), 0, Math.PI * 2);
+      ctx.fill();
+    });
+    drawPolishedBoundaryComponentPaths(ctx, geom, state, boundaryEdges);
+    ctx.restore();
+    if (isConnectFourGame(state)) drawConnectFourHoles(ctx, geom, state);
+  }
+
+  function drawPolishedGridStub(ctx, geom, center, dir) {
+    const vector = dirVector(dir, (geom.size || geom.radius * 2) * 0.42, geom.lattice);
+    ctx.beginPath();
+    ctx.moveTo(center.x, center.y);
+    ctx.lineTo(center.x + vector.x, center.y + vector.y);
+    ctx.stroke();
+  }
+
+  function drawPolishedBoundaryComponentPaths(ctx, geom, state, boundaryEdges) {
+    if (!Array.isArray(boundaryEdges) || !boundaryEdges.length) return;
+    const segments = tracePolishedBoundaryTravelSegments(state, geom, boundaryEdges);
+    if (!segments.length) return;
+    ctx.save();
+    ctx.strokeStyle = '#111111';
+    ctx.lineWidth = Math.max(2.2, geom.radius * 0.085);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    segments.forEach((segment) => drawBackgroundBoundarySegment(ctx, segment));
+    ctx.restore();
+  }
+
+  function tracePolishedBoundaryTravelSegments(state, geom, boundaryEdges) {
+    if (!state || !state.preset || !geom) return [];
+    const boundaryKeys = new Set(boundaryEdges.map(polishedBoundaryHalfEdgeKey));
+    const visited = new Set();
+    const drawn = new Set();
+    const segments = [];
+    boundaryEdges.forEach((edge) => {
+      const start = normalizePolishedBoundaryStart(state, edge.index, edge.dir, boundaryKeys, 1);
+      if (visited.has(polishedBoundaryHalfEdgeKey(start))) return;
+      tracePolishedBoundaryComponent(state, geom, start, boundaryKeys, visited, segments, drawn);
+    });
+    return segments;
+  }
+
+  function normalizePolishedBoundaryStart(state, index, dir, boundaryKeys, turn) {
+    const preset = state.preset;
+    const sides = directionsForPreset(preset).length;
+    let currentDir = dir;
+    for (let guard = 0; guard < sides; guard += 1) {
+      const previousDir = rotatePolishedBoundaryDir(preset, currentDir, -turn);
+      if (!boundaryKeys.has(polishedBoundaryHalfEdgeKey({ index, dir: previousDir }))) break;
+      currentDir = previousDir;
+    }
+    return { index, dir: currentDir, turn };
+  }
+
+  function tracePolishedBoundaryComponent(state, geom, start, boundaryKeys, visited, segments, drawn) {
+    const preset = state.preset;
+    const sides = directionsForPreset(preset).length;
+    const guardLimit = Math.max(1, preset.rows * preset.cols * sides * 4);
+    const firstIndex = start.index;
+    let index = start.index;
+    let dir = start.dir;
+    let turn = start.turn || 1;
+    for (let guard = 0; guard < guardLimit; guard += 1) {
+      const key = polishedBoundaryHalfEdgeKey({ index, dir });
+      if (boundaryKeys.has(key)) {
+        if (visited.has(key)) break;
+        visited.add(key);
+        dir = rotatePolishedBoundaryDir(preset, dir, turn);
+        continue;
+      }
+      const transition = surfaceSuccessor(state, index, dir);
+      if (!transition) break;
+      addPolishedBoundaryCrossingSegments(state, geom, index, dir, transition, segments, drawn);
+      if (transition.index === firstIndex) break;
+      const incomingDir = oppositeDir(preset, transition.dir);
+      if (transition.kind === 'glued' && transition.edge && transition.edge.reversed) turn *= -1;
+      index = transition.index;
+      dir = rotatePolishedBoundaryDir(preset, incomingDir, turn);
+    }
+  }
+
+  function addPolishedBoundaryCrossingSegments(state, geom, fromIndex, outDir, transition, segments, drawn) {
+    const incomingDir = oppositeDir(state.preset, transition.dir);
+    addPolishedBoundaryHalfSegment(
+      segments,
+      drawn,
+      placementPiecePoint(geom, fromIndex),
+      edgeMidpointFromIndex(geom, fromIndex, outDir)
+    );
+    addPolishedBoundaryHalfSegment(
+      segments,
+      drawn,
+      edgeMidpointFromIndex(geom, transition.index, incomingDir),
+      placementPiecePoint(geom, transition.index)
+    );
+  }
+
+  function addPolishedBoundaryHalfSegment(segments, drawn, start, end) {
+    if (!start || !end) return;
+    const segment = { start, end };
+    const key = placementSegmentPointKey(segment);
+    if (!key || drawn.has(key)) return;
+    drawn.add(key);
+    segments.push(segment);
+  }
+
+  function polishedBoundaryHalfEdgeKey(edge) {
+    return `${edge.index}:${edge.dir}`;
+  }
+
+  function rotatePolishedBoundaryDir(preset, dir, turn) {
+    const sides = directionsForPreset(preset).length;
+    return modulo(dir + (turn >= 0 ? 1 : -1), sides);
+  }
+
   function drawConnectFourHoles(ctx, geom, state) {
     const holes = state && state.holes ? Array.from(state.holes) : [];
     if (!holes.length) return;
@@ -6387,6 +7105,42 @@
       if (hidden.has(piece.id)) return;
       drawPlacementPieceAtIndex(ctx, geom, piece);
     });
+  }
+
+  function drawPlacementMoveNumberLabels(ctx, geom, state) {
+    if (!shouldShowMoveNumberLabels(state)) return;
+    const pieces = placementPieces(state);
+    if (!pieces.length) return;
+    const hidden = hiddenPlacementPieceIds();
+    ctx.save();
+    pieces.forEach((piece) => {
+      if (!piece || hidden.has(piece.id)) return;
+      const moveNumber = normalizeOptionalMoveNumber(piece.moveNumber);
+      if (!moveNumber) return;
+      const point = placementPiecePoint(geom, piece.index);
+      if (!point) return;
+      drawPlacementMoveNumberLabel(ctx, geom, point, piece, moveNumber);
+    });
+    ctx.restore();
+  }
+
+  function drawPlacementMoveNumberLabel(ctx, geom, point, piece, moveNumber) {
+    const text = String(moveNumber);
+    const darkText = piece.color === 'white' || piece.color === 'yellow';
+    const maxWidth = geom.radius * 0.9;
+    let fontSize = Math.max(8, Math.min(15, geom.radius * 0.42));
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
+    while (fontSize > 7 && ctx.measureText(text).width > maxWidth) {
+      fontSize -= 1;
+      ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
+    }
+    ctx.lineWidth = Math.max(1.5, fontSize * 0.18);
+    ctx.strokeStyle = darkText ? 'rgba(255,253,248,0.72)' : 'rgba(17,17,17,0.55)';
+    ctx.fillStyle = darkText ? '#171615' : '#fffdf8';
+    ctx.strokeText(text, point.x, point.y + fontSize * 0.04);
+    ctx.fillText(text, point.x, point.y + fontSize * 0.04);
   }
 
   function drawGoScoreOverlay(ctx, geom, state) {
@@ -7814,7 +8568,8 @@
       winningLine: [],
       resultDismissed: false,
       round: 0,
-      ending: ''
+      ending: '',
+      recordMoves: []
     };
   }
 
@@ -7855,7 +8610,8 @@
       resultDismissed: false,
       round: 0,
       ending: '',
-      dropWarning: ''
+      dropWarning: '',
+      recordMoves: []
     };
   }
 
@@ -7899,7 +8655,8 @@
       finalScore: null,
       resultDismissed: false,
       round: 0,
-      ending: ''
+      ending: '',
+      recordMoves: []
     };
     initializeGoStones(state);
     return state;
@@ -7930,7 +8687,8 @@
       finalScore: null,
       resultDismissed: false,
       round: 0,
-      ending: ''
+      ending: '',
+      recordMoves: []
     };
     initializeReversiOpening(state);
     return state;
@@ -8867,7 +9625,8 @@
 
     const state = cloneGameState(sourceState);
     const color = GOMOKU_COLORS.includes(state.turn) ? state.turn : 'black';
-    const stone = { id: state.nextStoneId, index: target, color };
+    const moveNumber = (state.round || 0) + 1;
+    const stone = { id: state.nextStoneId, index: target, color, moveNumber };
     state.nextStoneId += 1;
     state.stones.push(stone);
     state.round += 1;
@@ -8889,6 +9648,7 @@
       state.phase = 'ready';
       state.turn = oppositeGomokuColor(color);
     }
+    appendGameRecordMove(state, { action: 'place', moveNumber, color, index: target });
 
     return {
       changed: true,
@@ -9132,7 +9892,8 @@
 
     const state = cloneGameState(sourceState);
     const color = CONNECT_FOUR_COLORS.includes(state.turn) ? state.turn : 'red';
-    const token = { id: state.nextTokenId, index: drop.index, color };
+    const moveNumber = (state.round || 0) + 1;
+    const token = { id: state.nextTokenId, index: drop.index, color, moveNumber };
     state.nextTokenId += 1;
     state.tokens.push(token);
     state.round += 1;
@@ -9156,6 +9917,15 @@
       state.phase = 'ready';
       state.turn = oppositeConnectFourColor(color);
     }
+    appendGameRecordMove(state, {
+      action: 'drop',
+      moveNumber,
+      color,
+      entryIndex: target,
+      landingIndex: token.index,
+      fallDir: sourceState.fallDir,
+      fallDirName: latticeForPreset(sourceState.preset).dirNames[sourceState.fallDir] || String(sourceState.fallDir)
+    });
 
     return {
       changed: true,
@@ -9392,7 +10162,8 @@
     const beforeSignature = goBoardSignature(sourceState);
     const state = cloneGameState(sourceState);
     const color = GO_COLORS.includes(state.turn) ? state.turn : 'black';
-    const stone = { id: state.nextStoneId, index: target, color };
+    const moveNumber = (state.round || 0) + 1;
+    const stone = { id: state.nextStoneId, index: target, color, moveNumber };
     state.nextStoneId += 1;
     state.stones.push(stone);
 
@@ -9435,6 +10206,13 @@
       state.phase = 'ready';
       state.turn = opponent;
     }
+    appendGameRecordMove(state, {
+      action: 'place',
+      moveNumber,
+      color,
+      index: target,
+      capturedIds: Array.from(capturedIds).sort((a, b) => a - b)
+    });
 
     return {
       changed: true,
@@ -9458,6 +10236,7 @@
       return { changed: false, state: sourceState, message: 'confirm the score or undo before passing' };
     }
     const state = cloneGameState(sourceState);
+    const color = GO_COLORS.includes(sourceState.turn) ? sourceState.turn : 'black';
     state.previousBoardSignature = goBoardSignature(sourceState);
     state.passes = (state.passes || 0) + 1;
     state.round += 1;
@@ -9475,6 +10254,7 @@
       state.scoringReview = false;
       state.ending = '';
     }
+    appendGameRecordMove(state, { action: 'pass', moveNumber: state.round, color });
     return { changed: true, state };
   }
 
@@ -9490,6 +10270,7 @@
     }
     const state = cloneGameState(sourceState);
     finishGoByScore(state);
+    appendGameRecordMove(state, { action: 'confirm-score', finalScore: clonePlain(state.finalScore) });
     return { changed: true, state };
   }
 
@@ -9924,7 +10705,51 @@
     state.finalScore = null;
     state.territory = scoreGoGame(state).territory;
     state.resultDismissed = false;
+    appendGameRecordMove(state, { action: 'territory-override', index: target, owner: next });
     return { changed: true, state, owner: next };
+  }
+
+  function setGoTerritoryOverride(sourceState, index, owner) {
+    if (!isGoGame(sourceState)) {
+      return { changed: false, state: sourceState, message: 'not a Go game' };
+    }
+    if (sourceState.phase === 'setup') {
+      return { changed: false, state: sourceState, message: 'begin the game first' };
+    }
+    if (sourceState.phase === 'gameover') {
+      return { changed: false, state: sourceState, message: 'game is already over' };
+    }
+    const target = Number(index);
+    if (!validBoardIndex(sourceState, target) || sourceState.removed.has(target)) {
+      return { changed: false, state: sourceState, message: 'click an existing scoring point' };
+    }
+    const deadIds = goDeadStoneIdSet(sourceState);
+    const scoringSet = new Set(goScoringEmptyIndices(sourceState, deadIds));
+    if (!scoringSet.has(target)) {
+      return { changed: false, state: sourceState, message: 'only empty or dead points can be edited' };
+    }
+    const next = normalizeGoTerritoryOwner(owner) || 'auto';
+    const state = cloneGameState(sourceState);
+    const overrides = goTerritoryOverrideMap(state, scoringSet);
+    if (next === 'auto') overrides.delete(target);
+    else overrides.set(target, next);
+    state.territoryOverrides = overrides;
+    state.finalScore = null;
+    state.territory = scoreGoGame(state).territory;
+    state.resultDismissed = false;
+    appendGameRecordMove(state, { action: 'territory-override', index: target, owner: next });
+    return { changed: true, state, owner: next };
+  }
+
+  function setGoScoringMethodFromRecord(sourceState, method) {
+    if (!isGoGame(sourceState)) return { changed: false, state: sourceState, message: 'not a Go game' };
+    const next = normalizeGoScoringMethod(method);
+    const state = cloneGameState(sourceState);
+    state.scoringMethod = next;
+    state.finalScore = null;
+    if (state.phase !== 'gameover') state.territory = scoreGoGame(state).territory;
+    appendGameRecordMove(state, { action: 'set-scoring-method', method: next });
+    return { changed: true, state };
   }
 
   function compareGoScoringMethods(state) {
@@ -9977,6 +10802,13 @@
     state.finalScore = null;
     state.territory = scoreGoGame(state).territory;
     state.resultDismissed = false;
+    appendGameRecordMove(state, {
+      action: 'mark-dead-group',
+      index,
+      color: stone.color,
+      markedDead: !allDead,
+      stoneIds: groupIds.slice().sort((a, b) => a - b)
+    });
     return {
       changed: true,
       state,
@@ -10014,7 +10846,8 @@
     }
 
     const state = cloneGameState(sourceState);
-    const disc = { id: state.nextDiscId, index: target, color };
+    const moveNumber = (state.round || 0) + 1;
+    const disc = { id: state.nextDiscId, index: target, color, moveNumber };
     state.nextDiscId += 1;
     state.discs.push(disc);
     const flipSet = new Set(flips);
@@ -10046,6 +10879,13 @@
     } else {
       finishReversiByScore(state);
     }
+    appendGameRecordMove(state, {
+      action: 'place',
+      moveNumber,
+      color,
+      index: target,
+      flips: flips.slice()
+    });
 
     return {
       changed: true,
@@ -13317,7 +14157,7 @@
         newBoxIds: new Set(),
         nextBoxId: 1,
         score: 0,
-        stones: (source.stones || []).map((stone) => ({ id: stone.id, index: stone.index, color: stone.color })),
+        stones: (source.stones || []).map((stone) => placementPieceClone(stone)),
         nextStoneId: source.nextStoneId || 1,
         turn: GOMOKU_COLORS.includes(source.turn) ? source.turn : 'black',
         winner: GOMOKU_COLORS.includes(source.winner) ? source.winner : '',
@@ -13325,6 +14165,7 @@
         resultDismissed: !!source.resultDismissed,
         round: source.round || 0,
         ending: source.ending || '',
+        recordMoves: cloneGameRecordMoves(source.recordMoves),
         debugMessage: source.debugMessage || ''
       };
     }
@@ -13338,7 +14179,7 @@
         newBoxIds: new Set(),
         nextBoxId: 1,
         score: 0,
-        stones: (source.stones || []).map((stone) => ({ id: stone.id, index: stone.index, color: stone.color })),
+        stones: (source.stones || []).map((stone) => placementPieceClone(stone)),
         nextStoneId: source.nextStoneId || 1,
         turn: GO_COLORS.includes(source.turn) ? source.turn : 'black',
         komi: normalizeGoKomi(source.komi),
@@ -13358,6 +14199,7 @@
         resultDismissed: !!source.resultDismissed,
         round: source.round || 0,
         ending: source.ending || '',
+        recordMoves: cloneGameRecordMoves(source.recordMoves),
         debugMessage: source.debugMessage || ''
       };
     }
@@ -13371,7 +14213,7 @@
         newBoxIds: new Set(),
         nextBoxId: 1,
         score: 0,
-        discs: (source.discs || []).map((disc) => ({ id: disc.id, index: disc.index, color: disc.color })),
+        discs: (source.discs || []).map((disc) => placementPieceClone(disc)),
         nextDiscId: source.nextDiscId || 1,
         turn: REVERSI_COLORS.includes(source.turn) ? source.turn : 'black',
         passCount: Math.max(0, Number(source.passCount) || 0),
@@ -13380,6 +14222,7 @@
         resultDismissed: !!source.resultDismissed,
         round: source.round || 0,
         ending: source.ending || '',
+        recordMoves: cloneGameRecordMoves(source.recordMoves),
         debugMessage: source.debugMessage || ''
       };
     }
@@ -13452,7 +14295,7 @@
         newBoxIds: new Set(),
         nextBoxId: 1,
         score: 0,
-        tokens: (source.tokens || []).map((token) => ({ id: token.id, index: token.index, color: token.color })),
+        tokens: (source.tokens || []).map((token) => placementPieceClone(token)),
         nextTokenId: source.nextTokenId || 1,
         holes: new Set(source.holes || []),
         cycleHoles: new Set(source.cycleHoles || []),
@@ -13464,6 +14307,7 @@
         round: source.round || 0,
         ending: source.ending || '',
         dropWarning: source.dropWarning || '',
+        recordMoves: cloneGameRecordMoves(source.recordMoves),
         debugMessage: source.debugMessage || ''
       };
     }
@@ -13651,8 +14495,38 @@
   }
 
   function placementDisplayStyle() {
-    const value = refs.gomokuDisplay ? refs.gomokuDisplay.value : 'vertex';
-    return value === 'vertex' ? 'vertex' : 'center';
+    return normalizePlacementDisplayStyle(refs.gomokuDisplay ? refs.gomokuDisplay.value : '', defaultPlacementDisplayForMode(selectedGameMode()));
+  }
+
+  function isVertexPlacementDisplay(style = placementDisplayStyle()) {
+    return style === 'vertex' || style === 'polished-vertex';
+  }
+
+  function supportsMoveNumberLabels(state = game) {
+    return isGomokuGame(state) || isGoGame(state) || isConnectFourGame(state);
+  }
+
+  function shouldShowMoveNumberLabels(state = game) {
+    return !!(supportsMoveNumberLabels(state) && refs.moveNumberLabels && refs.moveNumberLabels.checked);
+  }
+
+  function normalizePlacementDisplayStyle(value, fallback = 'vertex') {
+    const style = String(value || '').trim().toLowerCase();
+    if (style === 'polished-vertex' || style === 'polished' || style === 'polished gridded board') return 'polished-vertex';
+    if (style === 'center' || style === 'tile' || style === 'tile board') return 'center';
+    if (style === 'vertex' || style === 'gridded board' || style === 'grid') return 'vertex';
+    return fallback || 'vertex';
+  }
+
+  function defaultPlacementDisplayForMode(mode = selectedGameMode()) {
+    const normalized = gameModeFromUrlParam(mode) || GAME_MODES.GOMOKU;
+    const display = normalizePlacementDisplayStyle(presetDefaultDisplayByMode[normalized], '');
+    return display || 'vertex';
+  }
+
+  function applyDefaultPlacementDisplayForMode(mode = selectedGameMode()) {
+    if (!refs.gomokuDisplay) return;
+    refs.gomokuDisplay.value = defaultPlacementDisplayForMode(mode);
   }
 
   function selectedGomokuBoardSize() {
@@ -14963,6 +15837,7 @@
       refs.gomokuSize.step = '1';
     }
     if (refs.placementDisplayRow) refs.placementDisplayRow.hidden = !modePlacement;
+    if (refs.moveNumberLabelRow) refs.moveNumberLabelRow.hidden = !(modeGomoku || modeConnectFour || modeGo);
     if (refs.connectFourFall) refs.connectFourFall.disabled = modeConnectFour && game && game.phase !== 'setup';
     syncGoScoringControls(modeGo);
     syncChineseCheckersControls(modeChineseCheckers);
@@ -14975,6 +15850,7 @@
     if (refs.exportState) refs.exportState.disabled = !game;
     if (refs.refreshState) refs.refreshState.disabled = !game;
     if (refs.copyState) refs.copyState.disabled = !game && !(refs.debugExport && refs.debugExport.value);
+    syncCanvasDisplayModeUi();
     syncDebugModeUi();
     syncImportExportControls();
     const activeLattice = catalogAvailable ? latticeForPreset(game ? game.preset : selectedPreset()).id : '';
@@ -15673,12 +16549,19 @@
     };
   }
 
+  function placementPieceSummary(piece) {
+    const summary = { id: piece.id, index: piece.index, color: piece.color };
+    const moveNumber = normalizeOptionalMoveNumber(piece.moveNumber);
+    if (moveNumber) summary.moveNumber = moveNumber;
+    return summary;
+  }
+
   function stateSummary(state) {
     if (isGomokuGame(state)) {
       return {
         gameMode: GAME_MODES.GOMOKU,
         stones: (state.stones || [])
-          .map((stone) => ({ id: stone.id, index: stone.index, color: stone.color }))
+          .map((stone) => placementPieceSummary(stone))
           .sort((a, b) => a.index - b.index || a.id - b.id),
         removed: Array.from(state.removed).sort((a, b) => a - b),
         turn: state.turn,
@@ -15692,7 +16575,7 @@
       return {
         gameMode: GAME_MODES.CONNECT_FOUR,
         tokens: (state.tokens || [])
-          .map((token) => ({ id: token.id, index: token.index, color: token.color }))
+          .map((token) => placementPieceSummary(token))
           .sort((a, b) => a.index - b.index || a.id - b.id),
         removed: Array.from(state.removed).sort((a, b) => a - b),
         holes: Array.from(state.holes || []).sort((a, b) => a - b),
@@ -15710,7 +16593,7 @@
       return {
         gameMode: GAME_MODES.GO,
         stones: (state.stones || [])
-          .map((stone) => ({ id: stone.id, index: stone.index, color: stone.color }))
+          .map((stone) => placementPieceSummary(stone))
           .sort((a, b) => a.index - b.index || a.id - b.id),
         removed: Array.from(state.removed).sort((a, b) => a - b),
         turn: state.turn,
@@ -15731,7 +16614,7 @@
       return {
         gameMode: GAME_MODES.REVERSI,
         discs: (state.discs || [])
-          .map((disc) => ({ id: disc.id, index: disc.index, color: disc.color }))
+          .map((disc) => placementPieceSummary(disc))
           .sort((a, b) => a.index - b.index || a.id - b.id),
         removed: Array.from(state.removed).sort((a, b) => a - b),
         turn: state.turn,
@@ -15861,6 +16744,7 @@
     gameModeFromPresetGroup,
     gameModeFromUrlParam,
     gameStateFromDebugImportPayload,
+    gameStateFromRecordImportPayload,
     orderedCatalogGameModes,
     placementLineRenderSegments,
     placementWinningLineSegments,

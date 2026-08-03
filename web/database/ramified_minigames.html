@@ -24,6 +24,100 @@
       position: relative;
     }
 
+    body.canvas-fit-viewport {
+      overflow: hidden;
+    }
+
+    body.canvas-fit-viewport > header,
+    body.canvas-fit-viewport > footer {
+      display: none;
+    }
+
+    body.canvas-fit-viewport .mosaic-layout {
+      max-width: none;
+      height: 100vh;
+      margin: 0;
+      padding: 8px;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    body.canvas-fit-viewport .side {
+      min-height: 0;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    body.canvas-fit-viewport .canvas-panel,
+    .canvas-panel:fullscreen {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    body.canvas-fit-viewport .canvas-panel {
+      height: 100%;
+    }
+
+    body.canvas-fit-viewport #canvas-wrap,
+    #canvas-wrap:fullscreen,
+    .canvas-panel:fullscreen #canvas-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    body.canvas-fit-viewport #canvas-wrap {
+      padding: 8px;
+    }
+
+    #canvas-wrap:fullscreen {
+      width: 100vw;
+      height: 100vh;
+      padding: 0;
+      background: #111111;
+    }
+
+    .canvas-panel:fullscreen {
+      width: 100vw;
+      height: 100vh;
+      border: 0;
+      border-radius: 0;
+      background: #111111;
+      color: #f7f4ef;
+      box-shadow: none;
+    }
+
+    .canvas-panel:fullscreen header.panel-title,
+    .canvas-panel:fullscreen .mosaic-underbar {
+      background: #161616;
+      border-color: rgba(255,255,255,0.16);
+      color: #d8d0c4;
+    }
+
+    body.canvas-fit-viewport #mosaic-canvas,
+    #canvas-wrap:fullscreen #mosaic-canvas,
+    .canvas-panel:fullscreen #mosaic-canvas {
+      width: var(--canvas-display-width, 100%) !important;
+      height: var(--canvas-display-height, auto) !important;
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    @media (max-width: 980px), (max-height: 560px) {
+      body.canvas-fit-viewport .mosaic-layout {
+        grid-template-columns: 1fr;
+        gap: 0;
+      }
+
+      body.canvas-fit-viewport .side {
+        display: none;
+      }
+    }
+
     .canvas-start-overlay {
       position: absolute;
       inset: 0;
@@ -1190,6 +1284,11 @@
       <span class="panel-title-text">Mosaic Canvas</span>
       <div class="canvas-toolbar" aria-label="Ramified minigame status">
         <span class="shape-indicator" title="Prototype status"><span id="status-badge" class="mosaic-chip">setup</span></span>
+        <span class="canvas-view-row" id="canvas-view-row" aria-label="Canvas view">
+          <button class="canvas-view-btn active" type="button" data-canvas-display-mode="normal" aria-pressed="true">normal</button>
+          <button class="canvas-view-btn" type="button" data-canvas-display-mode="fit-viewport" aria-pressed="false">fit viewport</button>
+          <button class="canvas-view-btn" type="button" data-canvas-display-mode="fullscreen" aria-pressed="false">fullscreen</button>
+        </span>
       </div>
     </header>
     <div id="canvas-wrap">
@@ -1255,8 +1354,13 @@
           <span class="input-label">Display</span>
           <select id="gomoku-display-style" aria-label="Placement display">
             <option value="vertex" selected>gridded board</option>
+            <option value="polished-vertex">polished gridded board</option>
             <option value="center">tile board</option>
           </select>
+        </div>
+        <div class="mosaic-inline-row" id="move-number-label-row" hidden>
+          <span class="input-label">Labels</span>
+          <label class="opt-row"><input type="checkbox" id="move-number-labels"> move numbers</label>
         </div>
         <div class="mosaic-inline-row" id="gomoku-size-row" data-mode-control="gomoku" hidden>
           <span class="input-label">Board n</span>
@@ -1374,6 +1478,13 @@
           <button class="btn" id="redo-step" type="button" disabled>redo</button>
         </div>
         <div class="mosaic-debug-panel" id="debug-tools" hidden>
+          <div class="mosaic-inline-row" id="fullscreen-target-row">
+            <span class="input-label">Fullscreen</span>
+            <select class="mosaic-editor-input" id="fullscreen-target" aria-label="Fullscreen target">
+              <option value="canvas" selected>canvas only</option>
+              <option value="panel">canvas panel</option>
+            </select>
+          </div>
           <div class="mosaic-debug-step-row" id="step-mode-row" data-mode-control="directional">
             <label class="opt-row"><input type="checkbox" id="step-mode"> step-by-step</label>
             <button class="btn" id="next-step" type="button" disabled>next step</button>
@@ -1517,6 +1628,7 @@
             <select id="export-state-kind" aria-label="Export kind">
               <option value="background">Background preset</option>
               <option value="status" selected>Full current status</option>
+              <option value="record">Game record</option>
             </select>
           </div>
           <div class="mosaic-inline-row" id="export-background-format-row" hidden>

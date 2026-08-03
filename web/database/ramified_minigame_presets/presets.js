@@ -4,17 +4,18 @@
   if (root) root.RAMIFIED_MINIGAME_PRESETS = presets;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {
   const defaultForEntries = [
-    ["gomoku", "wormhole"],
-    ["go", "gomoku-big-hole"],
-    ["connect-four", "connect-four-exchange"],
-    ["2048", "ramified-cover"],
-    ["reversi", "focus-frame"],
-    ["chinese-checkers", "octahedron-with-square-holes"],
-    ["sokoban", "classic-fans"]
+    ["gomoku", "wormhole", "vertex"],
+    ["go", "gomoku-big-hole", "vertex"],
+    ["connect-four", "connect-four-exchange", "vertex"],
+    ["2048", "ramified-cover", "center"],
+    ["reversi", "focus-frame", "center"],
+    ["chinese-checkers", "octahedron-with-square-holes", "center"],
+    ["sokoban", "classic-fans", "center"]
   ];
   return {
     gameOrder: defaultForEntries.map(([mode]) => mode),
-    defaultFor: Object.fromEntries(defaultForEntries),
+    defaultFor: Object.fromEntries(defaultForEntries.map(([mode, presetId]) => [mode, presetId])),
+    defaultDisplayFor: Object.fromEntries(defaultForEntries.map(([mode, _presetId, display]) => [mode, display])),
     presets: [
     {
       "gameTypes": [
