@@ -30,8 +30,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fffdf8",
-      "x": 152,
-      "y": 54,
+      "x": 193.4,
+      "y": 85.3,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -62,8 +62,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 48.7,
-      "y": 208.5
+      "x": 98.1,
+      "y": 277.7
     },
     {
       "id": "n39",
@@ -84,8 +84,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 157,
-      "y": 270.4
+      "x": 263.2,
+      "y": 321.3
     },
     {
       "id": "n48",
@@ -112,8 +112,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 468.8,
-      "y": 361
+      "x": 511.7,
+      "y": 378.9
     },
     {
       "id": "n55",
@@ -140,8 +140,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 337.4,
-      "y": 301.4
+      "x": 520.6,
+      "y": 224.1
     },
     {
       "id": "n58",
@@ -155,8 +155,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 382.8,
-      "y": 54
+      "x": 405.6,
+      "y": 34.5
     },
     {
       "id": "n59",
@@ -177,8 +177,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 255.7,
-      "y": 101.3
+      "x": 335.3,
+      "y": 183.2
     },
     {
       "id": "n60",
@@ -189,13 +189,13 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "- [x] default type is misc\n- [x] other type can also type in Extra\n- [x] run layout will not push too the right too much and left side outside of the screen\n- [x] can choose run layout so that nodes don't coincide\n- [x] add citation cross-reference\n- [x] \\cite{diagram} in the edit should be only diagram, code will add \\cite{...} for a preparation\n- [x] add node for the title, allow to add some extras\n- [x] allow users to double click the node to expand to another graph. It will be like tab in Google Chrome, where the delete button is replaced by returning button."
+          "text": ""
         },
         {
           "id": "bug",
           "label": "bug",
           "type": "checkbox",
-          "text": "- [x] if user add some info in the textbox (in node A), and then click the other node B without clicking other area beforehead, then the textbox in node A will cover all the info in node B, which is what we don't want to see"
+          "text": "citation should be checked, if they are not used they should be removed\nWhen user change the \"cite as\" row all the node refering this reference will change the expression so that the reference link is not broken\nwhen deleted, the warning should also tell user which nodes or arrows cite this reference, so that user can clear them before delete it\nconnect bug: when user is in modification of one node and try to connect the two other nodes, the modified node will cover the first node(where the arrow comes from), this is bad"
         }
       ],
       "setting": "",
@@ -203,141 +203,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 557.3,
-      "y": 54
-    },
-    {
-      "id": "n61",
-      "type": "misc",
-      "label": "feedback",
-      "details": [],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 694.7,
-      "y": 93.6
-    },
-    {
-      "id": "n62",
-      "type": "misc",
-      "label": "Strand Diagram Calculator",
-      "details": [
-        {
-          "id": "cite",
-          "label": "cite",
-          "type": "textbox",
-          "text": "\\cite{diagram}"
-        },
-        {
-          "id": "goal",
-          "label": "goal",
-          "type": "checkbox",
-          "text": "- [x] In the main canvas there is a big strand\n- [x] User can add basic elements step-by-step\n- [x] Different expressions for symmetric groups, see https://github.com/ramified/master_thesis"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 239.4,
-      "y": 361
-    },
-    {
-      "id": "n64",
-      "type": "misc",
-      "label": "Sokoban",
-      "details": [
-        {
-          "id": "bugs",
-          "label": "display bugs",
-          "type": "checkbox",
-          "text": "- [x] The beamers should not get over the glued boundary in a half circle way, that is cut off by the gluing\n- [x] When user move the beamer the energy bridge and beamer are both flicking, which should be fixed. They should have the animation of movement. If user move the energy bridge instead, the energy bridge won't create the beamer during the movement."
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 682.5,
-      "y": 361
-    },
-    {
-      "id": "n65",
-      "type": "misc",
-      "label": "typo",
-      "details": [
-        {
-          "id": "goals",
-          "label": "goals",
-          "type": "checkbox",
-          "text": "- [x] title node can not add extra objects\n- [x] ref edit should follow the same method as node edit; that is, there is no delete button, and user click the title of the row to modify/delete the term\n- [x] Add a tiny padding in the main canvas on top and bottom, so that the node is not attaching the boundary"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 523,
-      "y": 246
-    },
-    {
-      "id": "n66",
-      "type": "misc",
-      "label": "bug",
-      "details": [
-        {
-          "id": "preset",
-          "label": "preset",
-          "type": "textbox",
-          "text": "{\n  \"id\": \"bug\",\n  \"label\": \"bug\",\n  \"lattice\": \"square\",\n  \"rows\": 10,\n  \"cols\": 10,\n  \"surface\": \"M_1\",\n  \"removedTiles\": [],\n  \"connectFourHoles\": [],\n  \"inputHoles\": [],\n  \"cutEdges\": [],\n  \"gluedEdges\": [\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 1,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 2,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 2,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 3,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 3,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 4,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 4,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 5,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 5,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 6,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 6,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 7,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 7,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 8,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 8,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 9,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 9,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 0,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 10,\n        \"col\": 10,\n        \"dir\": 0,\n        \"edge\": \"E\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 1,\n        \"dir\": 2,\n        \"edge\": \"W\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 1,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 1,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 2,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 2,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 3,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 3,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 4,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 4,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 5,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 5,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 6,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 6,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 7,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 7,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 8,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 8,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 9,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 9,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    },\n    {\n      \"group\": 1,\n      \"orientation\": \"opposite\",\n      \"reversed\": false,\n      \"firstArrowReversed\": false,\n      \"secondArrowReversed\": true,\n      \"first\": {\n        \"row\": 1,\n        \"col\": 10,\n        \"dir\": 3,\n        \"edge\": \"N\"\n      },\n      \"second\": {\n        \"row\": 10,\n        \"col\": 10,\n        \"dir\": 1,\n        \"edge\": \"S\"\n      }\n    }\n  ],\n  \"sokoban\": {\n    \"sea\": [\n      {\n        \"row\": 1,\n        \"col\": 1\n      },\n      {\n        \"row\": 1,\n        \"col\": 2\n      },\n      {\n        \"row\": 1,\n        \"col\": 3\n      },\n      {\n        \"row\": 1,\n        \"col\": 4\n      },\n      {\n        \"row\": 1,\n        \"col\": 5\n      },\n      {\n        \"row\": 1,\n        \"col\": 6\n      },\n      {\n        \"row\": 1,\n        \"col\": 7\n      },\n      {\n        \"row\": 1,\n        \"col\": 8\n      },\n      {\n        \"row\": 1,\n        \"col\": 9\n      },\n      {\n        \"row\": 1,\n        \"col\": 10\n      },\n      {\n        \"row\": 2,\n        \"col\": 1\n      },\n      {\n        \"row\": 2,\n        \"col\": 6\n      },\n      {\n        \"row\": 2,\n        \"col\": 7\n      },\n      {\n        \"row\": 2,\n        \"col\": 8\n      },\n      {\n        \"row\": 2,\n        \"col\": 9\n      },\n      {\n        \"row\": 2,\n        \"col\": 10\n      },\n      {\n        \"row\": 3,\n        \"col\": 1\n      },\n      {\n        \"row\": 3,\n        \"col\": 6\n      },\n      {\n        \"row\": 3,\n        \"col\": 7\n      },\n      {\n        \"row\": 3,\n        \"col\": 8\n      },\n      {\n        \"row\": 3,\n        \"col\": 9\n      },\n      {\n        \"row\": 3,\n        \"col\": 10\n      },\n      {\n        \"row\": 4,\n        \"col\": 1\n      },\n      {\n        \"row\": 4,\n        \"col\": 6\n      },\n      {\n        \"row\": 4,\n        \"col\": 7\n      },\n      {\n        \"row\": 4,\n        \"col\": 8\n      },\n      {\n        \"row\": 4,\n        \"col\": 9\n      },\n      {\n        \"row\": 4,\n        \"col\": 10\n      },\n      {\n        \"row\": 5,\n        \"col\": 1\n      },\n      {\n        \"row\": 5,\n        \"col\": 2\n      },\n      {\n        \"row\": 5,\n        \"col\": 3\n      },\n      {\n        \"row\": 5,\n        \"col\": 4\n      },\n      {\n        \"row\": 5,\n        \"col\": 5\n      },\n      {\n        \"row\": 5,\n        \"col\": 6\n      },\n      {\n        \"row\": 5,\n        \"col\": 7\n      },\n      {\n        \"row\": 5,\n        \"col\": 8\n      },\n      {\n        \"row\": 5,\n        \"col\": 9\n      },\n      {\n        \"row\": 5,\n        \"col\": 10\n      },\n      {\n        \"row\": 6,\n        \"col\": 1\n      },\n      {\n        \"row\": 6,\n        \"col\": 2\n      },\n      {\n        \"row\": 6,\n        \"col\": 3\n      },\n      {\n        \"row\": 6,\n        \"col\": 4\n      },\n      {\n        \"row\": 6,\n        \"col\": 5\n      },\n      {\n        \"row\": 6,\n        \"col\": 6\n      },\n      {\n        \"row\": 6,\n        \"col\": 7\n      },\n      {\n        \"row\": 6,\n        \"col\": 8\n      },\n      {\n        \"row\": 6,\n        \"col\": 9\n      },\n      {\n        \"row\": 6,\n        \"col\": 10\n      },\n      {\n        \"row\": 7,\n        \"col\": 1\n      },\n      {\n        \"row\": 7,\n        \"col\": 2\n      },\n      {\n        \"row\": 7,\n        \"col\": 4\n      },\n      {\n        \"row\": 7,\n        \"col\": 5\n      },\n      {\n        \"row\": 7,\n        \"col\": 6\n      },\n      {\n        \"row\": 7,\n        \"col\": 7\n      },\n      {\n        \"row\": 7,\n        \"col\": 8\n      },\n      {\n        \"row\": 7,\n        \"col\": 9\n      },\n      {\n        \"row\": 7,\n        \"col\": 10\n      },\n      {\n        \"row\": 8,\n        \"col\": 1\n      },\n      {\n        \"row\": 8,\n        \"col\": 2\n      },\n      {\n        \"row\": 8,\n        \"col\": 4\n      },\n      {\n        \"row\": 8,\n        \"col\": 5\n      },\n      {\n        \"row\": 8,\n        \"col\": 6\n      },\n      {\n        \"row\": 8,\n        \"col\": 7\n      },\n      {\n        \"row\": 8,\n        \"col\": 8\n      },\n      {\n        \"row\": 8,\n        \"col\": 9\n      },\n      {\n        \"row\": 8,\n        \"col\": 10\n      },\n      {\n        \"row\": 9,\n        \"col\": 1\n      },\n      {\n        \"row\": 9,\n        \"col\": 2\n      },\n      {\n        \"row\": 9,\n        \"col\": 3\n      },\n      {\n        \"row\": 9,\n        \"col\": 4\n      },\n      {\n        \"row\": 9,\n        \"col\": 5\n      },\n      {\n        \"row\": 9,\n        \"col\": 6\n      },\n      {\n        \"row\": 9,\n        \"col\": 7\n      },\n      {\n        \"row\": 9,\n        \"col\": 8\n      },\n      {\n        \"row\": 9,\n        \"col\": 9\n      },\n      {\n        \"row\": 9,\n        \"col\": 10\n      },\n      {\n        \"row\": 10,\n        \"col\": 1\n      },\n      {\n        \"row\": 10,\n        \"col\": 2\n      },\n      {\n        \"row\": 10,\n        \"col\": 3\n      },\n      {\n        \"row\": 10,\n        \"col\": 4\n      },\n      {\n        \"row\": 10,\n        \"col\": 5\n      },\n      {\n        \"row\": 10,\n        \"col\": 6\n      },\n      {\n        \"row\": 10,\n        \"col\": 7\n      },\n      {\n        \"row\": 10,\n        \"col\": 10\n      }\n    ],\n    \"targets\": [\n      {\n        \"row\": 7,\n        \"col\": 3\n      },\n      {\n        \"row\": 8,\n        \"col\": 3\n      }\n    ],\n    \"energyBridges\": [\n      {\n        \"row\": 3,\n        \"col\": 3\n      },\n      {\n        \"row\": 10,\n        \"col\": 8\n      }\n    ],\n    \"walls\": [\n      {\n        \"row\": 3,\n        \"col\": 4\n      }\n    ],\n    \"boxes\": [\n      {\n        \"row\": 8,\n        \"col\": 3\n      }\n    ],\n    \"players\": [\n      {\n        \"row\": 2,\n        \"col\": 3\n      }\n    ]\n  }\n}"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 666.3,
-      "y": 262
-    },
-    {
-      "id": "n67",
-      "type": "misc",
-      "label": "Strand Diagram Calculator",
-      "details": [
-        {
-          "id": "goals",
-          "label": "goals",
-          "type": "checkbox",
-          "text": "- [x] $P_w=$ is unnecessary\n- [x] expression row should be under the \"reduced?\" row\n- [x] Add type BCD case"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 401.8,
-      "y": 161.4
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 596.8,
+      "y": 54.8
     }
   ],
   "arrows": [
@@ -391,121 +260,46 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
-    },
-    {
-      "id": "a50",
-      "sourceId": "n64",
-      "targetId": "n48",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 15,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a51",
-      "sourceId": "n65",
-      "targetId": "n60",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 15,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a52",
-      "sourceId": "n66",
-      "targetId": "n48",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 15,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
     }
   ],
   "view": {
-    "selectedId": "n58",
+    "selectedId": "",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasRatioLocked": true,
     "canvasAspectRatio": 1.8101,
     "relativeNodePositions": {
       "n4": {
-        "x": 0.2021,
-        "y": 0.1301
+        "x": 0.2572,
+        "y": 0.2056
       },
       "n37": {
-        "x": 0.0648,
-        "y": 0.5023
+        "x": 0.1305,
+        "y": 0.6693
       },
       "n39": {
-        "x": 0.2088,
-        "y": 0.6515
+        "x": 0.35,
+        "y": 0.7743
       },
       "n48": {
-        "x": 0.6235,
-        "y": 0.8699
+        "x": 0.6804,
+        "y": 0.9129
       },
       "n55": {
-        "x": 0.4487,
-        "y": 0.7262
+        "x": 0.6923,
+        "y": 0.5401
       },
       "n58": {
-        "x": 0.5091,
-        "y": 0.1301
+        "x": 0.5393,
+        "y": 0.0832
       },
       "n59": {
-        "x": 0.34,
-        "y": 0.2442
+        "x": 0.4459,
+        "y": 0.4415
       },
       "n60": {
-        "x": 0.7411,
-        "y": 0.1301
-      },
-      "n61": {
-        "x": 0.9238,
-        "y": 0.2256
-      },
-      "n62": {
-        "x": 0.3183,
-        "y": 0.8699
-      },
-      "n64": {
-        "x": 0.9076,
-        "y": 0.8699
-      },
-      "n65": {
-        "x": 0.6955,
-        "y": 0.5927
-      },
-      "n66": {
-        "x": 0.8861,
-        "y": 0.6314
-      },
-      "n67": {
-        "x": 0.5343,
-        "y": 0.3888
+        "x": 0.7936,
+        "y": 0.132
       }
     },
     "selectedReferenceKeys": []
@@ -524,23 +318,6 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
         {
           "url": "https://mathoverflow.net/questions/185692/how-can-one-determine-if-a-singularity-is-simple",
           "source": "mathoverflow",
-          "label": ""
-        }
-      ]
-    },
-    {
-      "key": "bronken app",
-      "author": "",
-      "title": "bronken app",
-      "year": "",
-      "citeKey": "diagram",
-      "url": "https://dehornoy.lmno.cnrs.fr/Softwares/TressApp/",
-      "source": "web",
-      "rawBibtex": "",
-      "links": [
-        {
-          "url": "https://dehornoy.lmno.cnrs.fr/Softwares/TressApp/",
-          "source": "web",
           "label": ""
         }
       ]

@@ -2716,7 +2716,6 @@
     }
     if (!state.connectSourceId) {
       state.connectSourceId = node.id;
-      selectNode(node.id);
       setStatus(`Source set to ${node.label}. Click a target node.`);
       syncControls();
       renderCanvas();
@@ -2726,6 +2725,7 @@
       setStatus('Choose a different target node.');
       return;
     }
+    if (!commitActiveEditorDraft()) return;
     const arrow = addArrow(state.connectSourceId, node.id, '');
     state.connectMode = false;
     state.connectSourceId = null;
@@ -2877,18 +2877,35 @@
 
   function commitCurrentDetailBeforeSelectionChange(nextKind = '', nextId = '') {
     if (state.selectedNodeId && !(nextKind === 'node' && state.selectedNodeId === nextId)) {
+      return commitActiveEditorDraft();
+    }
+    if (state.selectedArrowId && !(nextKind === 'arrow' && state.selectedArrowId === nextId)) {
+      return commitActiveEditorDraft();
+    }
+    return true;
+  }
+
+  function commitActiveEditorDraft() {
+    if (state.selectedNodeId) {
       const node = findEditorNode(state.selectedNodeId);
       if (node && refs.nodeEditor && !refs.nodeEditor.hidden) {
         applyNodeDetailFromControls(node);
       }
-      return;
+      return true;
     }
-    if (state.selectedArrowId && !(nextKind === 'arrow' && state.selectedArrowId === nextId)) {
+    if (state.selectedArrowId) {
       const arrow = findArrow(state.selectedArrowId);
       if (arrow && refs.arrowEditor && !refs.arrowEditor.hidden) {
-        applyArrowDetailFromControls(arrow);
+        const result = applyArrowDetailFromControls(arrow);
+        if (!result.ok) {
+          setStatus(result.reason === 'same-node'
+            ? 'Choose two different parent nodes for the arrow.'
+            : 'Choose existing parent nodes for the arrow.');
+          return false;
+        }
       }
     }
+    return true;
   }
 
   function selectNode(id) {
@@ -3353,7 +3370,11 @@
       if (node) refs.nodeEditor.dataset.nodeId = node.id;
       else delete refs.nodeEditor.dataset.nodeId;
     }
-    if (refs.arrowEditor) refs.arrowEditor.hidden = !arrow;
+    if (refs.arrowEditor) {
+      refs.arrowEditor.hidden = !arrow;
+      if (arrow) refs.arrowEditor.dataset.arrowId = arrow.id;
+      else delete refs.arrowEditor.dataset.arrowId;
+    }
     refs.nodeFixedDetailRows.forEach((row) => {
       row.hidden = isMisc;
     });
@@ -3491,7 +3512,17 @@
   }
 
   function collectNodeCitationKeys(node) {
-    const texts = [
+    return collectVisibleNodeCitationKeys(node);
+  }
+
+  function collectVisibleNodeCitationKeys(node) {
+    const texts = nodeCitationTexts(node);
+    return uniqueStrings(texts.flatMap(parseCitationKeysFromText).filter(Boolean));
+  }
+
+  function nodeCitationTexts(node) {
+    if (!node) return [];
+    return [
       node.label,
       node.setting,
       node.condition,
@@ -3499,10 +3530,6 @@
       node.proofSketch,
       ...(Array.isArray(node.details) ? node.details.map((detail) => detail.text) : [])
     ];
-    return uniqueStrings([
-      ...texts.flatMap(parseCitationKeysFromText),
-      ...(Array.isArray(node.citationKeys) ? node.citationKeys.map(cleanCitationKeyInput) : [])
-    ].filter(Boolean));
   }
 
   function collectArrowCitationKeys(arrow) {
@@ -3525,6 +3552,112 @@
       });
     }
     return uniqueStrings(keys);
+  }
+
+  function syncNodeCitationKeys(node) {
+    if (!node) return false;
+    const next = collectVisibleNodeCitationKeys(node);
+    const previous = normalizeCitationKeys(node.citationKeys);
+    if (arraysMatch(previous, next)) {
+      node.citationKeys = previous;
+      return false;
+    }
+    node.citationKeys = next;
+    return true;
+  }
+
+  function syncGraphCitationKeys(graph) {
+    ensureGraphShape(graph);
+    let changed = syncNodeCitationKeys(graph.titleNode);
+    graph.nodes.forEach((node) => {
+      if (syncNodeCitationKeys(node)) changed = true;
+      if (node.childGraph && syncGraphCitationKeys(node.childGraph)) changed = true;
+    });
+    return changed;
+  }
+
+  function rewriteReferenceCitationsInGraph(graph, aliases, nextKey) {
+    ensureGraphShape(graph);
+    let changed = false;
+    if (rewriteReferenceCitationsInNode(graph.titleNode, aliases, nextKey)) changed = true;
+    graph.nodes.forEach((node) => {
+      if (rewriteReferenceCitationsInNode(node, aliases, nextKey)) changed = true;
+      if (node.childGraph && rewriteReferenceCitationsInGraph(node.childGraph, aliases, nextKey)) changed = true;
+    });
+    graph.arrows.forEach((arrow) => {
+      if (rewriteReferenceCitationsInArrow(arrow, aliases, nextKey)) changed = true;
+    });
+    return changed;
+  }
+
+  function rewriteReferenceCitationsInNode(node, aliases, nextKey) {
+    if (!node) return false;
+    let changed = false;
+    ['label', 'setting', 'condition', 'result', 'proofSketch'].forEach((field) => {
+      const next = replaceCitationKeysInText(node[field], aliases, nextKey);
+      if (next !== node[field]) {
+        node[field] = next;
+        changed = true;
+      }
+    });
+    if (Array.isArray(node.details)) {
+      node.details.forEach((detail) => {
+        const next = replaceCitationKeysInText(detail.text, aliases, nextKey);
+        if (next !== detail.text) {
+          detail.text = next;
+          changed = true;
+        }
+      });
+    }
+    if (syncNodeCitationKeys(node)) changed = true;
+    return changed;
+  }
+
+  function rewriteReferenceCitationsInArrow(arrow, aliases, nextKey) {
+    if (!arrow) return false;
+    let changed = false;
+    ['label', 'remark'].forEach((field) => {
+      const next = replaceCitationKeysInText(arrow[field], aliases, nextKey);
+      if (next !== arrow[field]) {
+        arrow[field] = next;
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
+  function replaceCitationKeysInText(value, aliases, nextKey) {
+    const text = value == null ? '' : String(value);
+    if (!text) return text;
+    const aliasSet = normalizedCitationAliasSet(aliases);
+    const cleanNext = cleanCitationKeyInput(nextKey);
+    if (!aliasSet.size || !cleanNext) return text;
+    return text.replace(/(\\cite(?:\[[^\]]*\])*\{)([^}]*)(\})/g, (match, prefix, body, suffix) => {
+      let changed = false;
+      const nextBody = body.split(',').map((part) => {
+        const leading = /^\s*/.exec(part)?.[0] || '';
+        const trailing = /\s*$/.exec(part)?.[0] || '';
+        const core = part.slice(leading.length, part.length - trailing.length);
+        if (!aliasSet.has(cleanCitationKeyInput(core))) return part;
+        changed = true;
+        return `${leading}${cleanNext}${trailing}`;
+      }).join(',');
+      return changed ? `${prefix}${nextBody}${suffix}` : match;
+    });
+  }
+
+  function normalizedCitationAliasSet(aliases) {
+    return new Set((Array.isArray(aliases) ? aliases : [aliases])
+      .flatMap(citationAliasesFromValue)
+      .map(cleanCitationKeyInput)
+      .filter(Boolean));
+  }
+
+  function citationAliasesFromValue(value) {
+    const text = cleanString(value);
+    if (!text) return [];
+    const parsed = parseCitationKeysFromText(text);
+    return parsed.length ? parsed : [cleanCitationKeyInput(text)].filter(Boolean);
   }
 
   function scrollToCitationReference(citeKey) {
@@ -3693,9 +3826,19 @@
     if (isStaleMiscDetailEventTarget(target)) return true;
     if (!target || typeof target.closest !== 'function') return false;
     const editor = target.closest('#node-editor');
-    if (!editor || editor.hidden) return false;
+    if (!editor) return false;
+    if (editor.hidden) return true;
     const editorNodeId = editor.dataset.nodeId || '';
     return !!editorNodeId && editorNodeId !== state.selectedNodeId;
+  }
+
+  function isStaleArrowEditorEventTarget(target) {
+    if (!target || typeof target.closest !== 'function') return false;
+    const editor = target.closest('#arrow-editor');
+    if (!editor) return false;
+    if (editor.hidden) return true;
+    const editorArrowId = editor.dataset.arrowId || '';
+    return !!editorArrowId && editorArrowId !== state.selectedArrowId;
   }
 
   function showMiscDetailLabelEditor(detailId, sourceElement = null) {
@@ -4024,7 +4167,7 @@
   }
 
   function autoApplyDetailUpdate(event) {
-    if (isStaleNodeEditorEventTarget(event?.target)) return;
+    if (isStaleNodeEditorEventTarget(event?.target) || isStaleArrowEditorEventTarget(event?.target)) return;
     autoResizeTextarea(event?.target);
     const updated = applyDetailUpdate({ manual: false });
     if (updated && event?.target === refs.nodeType) {
@@ -4132,6 +4275,7 @@
     }
     node.color = normalizeColor(refs.nodeColor ? refs.nodeColor.value : node.color, (NODE_TYPES[type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).stroke);
     node.fillColor = normalizeNodeFillColor(refs.nodeFillColor ? refs.nodeFillColor.value : node.fillColor, (NODE_TYPES[type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).fill);
+    syncNodeCitationKeys(node);
     if (isTitle) {
       syncActiveOwnerFromTitleNode();
       return activeTitleNode();
@@ -4777,6 +4921,7 @@
       closeReferenceEdit();
       return;
     }
+    const oldAliases = referenceCitationAliases(original);
     const nextKey = cleanString(refs.referenceEditKey.value);
     if (!nextKey) {
       setReferenceMessage('Reference key is required.', true);
@@ -4793,6 +4938,7 @@
     }
     const rawBibtex = cleanString(refs.referenceEditRaw.value);
     const primaryLink = linkResult.links[0] || null;
+    const nextCiteKey = cleanCitationKeyInput(refs.referenceEditCite.value) || nextKey;
     original.key = nextKey;
     original.title = cleanString(refs.referenceEditTitle.value);
     original.author = cleanString(refs.referenceEditAuthor.value);
@@ -4801,28 +4947,38 @@
     original.links = linkResult.links;
     original.url = primaryLink ? primaryLink.url : '';
     original.source = primaryLink ? primaryLink.source : (rawBibtex ? 'bibtex' : normalizeReferenceSource(original.source, 'web'));
-    original.citeKey = cleanCitationKeyInput(refs.referenceEditCite.value) || nextKey;
+    original.citeKey = nextCiteKey;
     original.details = collectReferenceEditDetails();
+    const citationsChanged = rewriteReferenceCitationsInGraph(state.rootGraph, oldAliases, nextCiteKey);
+    const citationKeysChanged = syncGraphCitationKeys(state.rootGraph);
     if (state.selectedReferenceKeys.has(state.editingReferenceKey)) {
       state.selectedReferenceKeys.delete(state.editingReferenceKey);
       state.selectedReferenceKeys.add(nextKey);
     }
     state.editingReferenceKey = null;
     refs.referenceEditForm.hidden = true;
-    setReferenceMessage(`Saved [${nextKey}].`);
+    setReferenceMessage(citationsChanged || citationKeysChanged
+      ? `Saved [${nextKey}] and updated citations to ${citationCommandForKey(nextCiteKey)}.`
+      : `Saved [${nextKey}].`);
     renderAll();
   }
 
   function deleteSelectedReferences() {
+    if (!commitActiveEditorDraft()) {
+      setReferenceMessage('Resolve the active node or arrow edit before deleting references.', true);
+      return;
+    }
+    syncGraphCitationKeys(state.rootGraph);
     const selected = state.references.filter((reference) => state.selectedReferenceKeys.has(reference.key));
     if (!selected.length) {
       setReferenceMessage('No references selected.', true);
       return;
     }
-    const used = selected.filter((reference) => referenceIsUsed(reference));
+    const used = selected
+      .map((reference) => ({ reference, usages: referenceUsages(reference) }))
+      .filter((entry) => entry.usages.length);
     if (used.length) {
-      const names = used.map((reference) => `[${reference.key}]`).join(', ');
-      const message = `${names} ${used.length === 1 ? 'is' : 'are'} used in nodes or arrows. Delete anyway?`;
+      const message = referenceDeleteWarningMessage(used);
       if (!window.confirm(message)) {
         setReferenceMessage('Delete cancelled.');
         return;
@@ -4840,10 +4996,7 @@
   }
 
   function referenceIsUsed(reference) {
-    const key = cleanString(reference.key);
-    const citeKey = referenceExportCiteKey(reference);
-    if (!key && !citeKey) return false;
-    return graphUsesReference(state.rootGraph, key, citeKey);
+    return referenceUsages(reference).length > 0;
   }
 
   function graphUsesReference(graph, key, citeKey) {
@@ -4854,10 +5007,105 @@
   }
 
   function objectUsesReference(source, key, citeKey) {
-    const keys = new Set([cleanString(key), cleanCitationKeyInput(citeKey)].filter(Boolean));
-    if (Array.isArray(source.citationKeys) && source.citationKeys.some((item) => keys.has(cleanCitationKeyInput(item)))) return true;
+    const keys = normalizedCitationAliasSet([key, citeKey]);
     const cited = source.remark == null ? collectNodeCitationKeys(source) : collectArrowCitationKeys(source);
     return cited.some((item) => keys.has(cleanCitationKeyInput(item)));
+  }
+
+  function referenceUsages(reference) {
+    const aliases = referenceCitationAliases(reference);
+    if (!aliases.length) return [];
+    return graphReferenceUsages(state.rootGraph, aliases);
+  }
+
+  function graphReferenceUsages(graph, aliases, path = []) {
+    ensureGraphShape(graph);
+    const usages = [];
+    const graphTitle = cleanGraphTitle(graph.title);
+    const currentPath = path;
+    if (nodeUsesCitationAliases(graph.titleNode, aliases)) {
+      usages.push({
+        kind: 'node',
+        label: usagePathLabel(currentPath, graphTitle ? `${graphTitle} title` : 'title')
+      });
+    }
+    graph.nodes.forEach((node) => {
+      if (nodeUsesCitationAliases(node, aliases)) {
+        usages.push({
+          kind: 'node',
+          label: usagePathLabel(currentPath, node.label || node.id)
+        });
+      }
+      if (node.childGraph) {
+        ensureGraphShape(node.childGraph);
+        usages.push(...graphReferenceUsages(node.childGraph, aliases, [
+          ...currentPath,
+          cleanGraphTitle(node.childGraph.title) || node.label || node.id
+        ]));
+      }
+    });
+    graph.arrows.forEach((arrow) => {
+      if (!arrowUsesCitationAliases(arrow, aliases)) return;
+      usages.push({
+        kind: 'arrow',
+        label: usagePathLabel(currentPath, arrowUsageLabel(graph, arrow))
+      });
+    });
+    return uniqueUsageEntries(usages);
+  }
+
+  function nodeUsesCitationAliases(node, aliases) {
+    const aliasSet = normalizedCitationAliasSet(aliases);
+    return collectVisibleNodeCitationKeys(node).some((key) => aliasSet.has(cleanCitationKeyInput(key)));
+  }
+
+  function arrowUsesCitationAliases(arrow, aliases) {
+    const aliasSet = normalizedCitationAliasSet(aliases);
+    return collectArrowCitationKeys(arrow).some((key) => aliasSet.has(cleanCitationKeyInput(key)));
+  }
+
+  function arrowUsageLabel(graph, arrow) {
+    const source = graph.nodes.find((node) => node.id === arrow.sourceId);
+    const target = graph.nodes.find((node) => node.id === arrow.targetId);
+    const sourceLabel = source ? (source.label || source.id) : arrow.sourceId;
+    const targetLabel = target ? (target.label || target.id) : arrow.targetId;
+    const arrowLabel = cleanString(arrow.label);
+    return `Arrow: ${sourceLabel} -> ${targetLabel}${arrowLabel ? ` (${arrowLabel})` : ''}`;
+  }
+
+  function usagePathLabel(path, label) {
+    return [...(Array.isArray(path) ? path : []), cleanString(label)].filter(Boolean).join(' > ');
+  }
+
+  function uniqueUsageEntries(usages) {
+    const seen = new Set();
+    return usages.filter((usage) => {
+      const key = `${usage.kind}:${usage.label}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function referenceDeleteWarningMessage(used) {
+    const lines = ['The selected reference citations are still used:', ''];
+    used.forEach(({ reference, usages }) => {
+      lines.push(`[${reference.key}] ${citationCommandForKey(referenceExportCiteKey(reference))}`);
+      usages.forEach((usage) => {
+        lines.push(`- ${usage.label}`);
+      });
+      lines.push('');
+    });
+    lines.push('Delete anyway?');
+    return lines.join('\n');
+  }
+
+  function referenceCitationAliases(reference) {
+    return uniqueStrings([
+      reference ? reference.key : '',
+      reference ? reference.citeKey : '',
+      reference ? bibtexEntryKey(reference.rawBibtex) : ''
+    ].flatMap(citationAliasesFromValue).filter(Boolean));
   }
 
   function setReferenceSelected(key, selected) {
@@ -4875,14 +5123,16 @@
   }
 
   function syncReferenceMasterCheckbox() {
-    if (!refs.referenceSelectAll) return;
     const keys = new Set(state.references.map((reference) => reference.key));
     state.selectedReferenceKeys = new Set(Array.from(state.selectedReferenceKeys).filter((key) => keys.has(key)));
     const total = state.references.length;
     const selected = state.references.filter((reference) => state.selectedReferenceKeys.has(reference.key)).length;
-    refs.referenceSelectAll.checked = total > 0 && selected === total;
-    refs.referenceSelectAll.indeterminate = selected > 0 && selected < total;
-    refs.referenceSelectAll.disabled = total === 0;
+    if (refs.referenceSelectAll) {
+      refs.referenceSelectAll.checked = total > 0 && selected === total;
+      refs.referenceSelectAll.indeterminate = selected > 0 && selected < total;
+      refs.referenceSelectAll.disabled = total === 0;
+    }
+    if (refs.deleteSelectedReferences) refs.deleteSelectedReferences.disabled = selected === 0;
   }
 
   function addReferencesFromInput() {
@@ -5039,6 +5289,21 @@
     return entries;
   }
 
+  function bibtexEntryKey(raw) {
+    const text = cleanString(raw);
+    if (!text) return '';
+    const at = text.indexOf('@');
+    if (at < 0) return '';
+    const open = findNextBrace(text, at + 1);
+    if (open < 0) return '';
+    const closeChar = text[open] === '(' ? ')' : '}';
+    const content = text.slice(open + 1);
+    const comma = topLevelComma(content);
+    if (comma < 0) return '';
+    const key = cleanString(content.slice(0, comma));
+    return key.includes(closeChar) ? '' : cleanCitationKeyInput(key);
+  }
+
   function findNextBrace(text, start) {
     for (let i = start; i < text.length; i += 1) {
       if (text[i] === '{' || text[i] === '(') return i;
@@ -5182,6 +5447,7 @@
     const graph = scope === 'current' ? currentGraph() : state.rootGraph;
     if (scope === 'current') syncActiveTitleFromOwner();
     syncLinkedGraphTitlesFromOwners(graph);
+    syncGraphCitationKeys(graph);
     const preset = {
       schemaVersion: SCHEMA_VERSION,
       ...buildGraphExport(graph, { includeTitleNode: true }),
@@ -5944,6 +6210,7 @@
         .filter((key) => referenceKeys.has(key))
     );
     const graph = normalizeGraphImport(data, canvasView);
+    syncGraphCitationKeys(graph);
     return {
       graph,
       references,
@@ -6413,6 +6680,11 @@
       result.push(value);
     });
     return result;
+  }
+
+  function arraysMatch(left, right) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    return left.every((value, index) => value === right[index]);
   }
 
   function nextDefaultNodeLabel(type) {

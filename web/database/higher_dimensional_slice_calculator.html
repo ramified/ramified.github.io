@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Higher-Dimensional Slice Calculator</title>
+  <link rel="stylesheet" href="css/site.css">
+  <style>
+    .slice-calculator-layout {
+      max-width: 1380px;
+      grid-template-columns: minmax(0, 1fr) 410px;
+    }
+
+    .slice-stage-wrap {
+      position: relative;
+      min-height: 440px;
+      background: #fffdf8;
+      overflow: hidden;
+    }
+
+    #slice-viewport {
+      width: 100% !important;
+      height: var(--slice-viewport-height, min(68vh, 720px)) !important;
+      min-height: 440px;
+      display: block;
+      background: #fffdf8;
+      cursor: default;
+    }
+
+    .slice-hud {
+      position: absolute;
+      inset: auto 14px 12px 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      pointer-events: none;
+    }
+
+    .slice-chip {
+      border: 1px solid rgba(216, 208, 196, 0.92);
+      border-radius: 3px;
+      background: rgba(255, 253, 248, 0.9);
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.68rem;
+      line-height: 1.2;
+      padding: 4px 7px;
+      white-space: nowrap;
+    }
+
+    .slice-status-bar {
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      padding: 8px 14px 10px;
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.7rem;
+      line-height: 1.35;
+    }
+
+    .slice-status-bar strong {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .slice-card-body {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .slice-row {
+      display: grid;
+      grid-template-columns: minmax(74px, max-content) minmax(0, 1fr);
+      align-items: center;
+      gap: 7px 10px;
+      min-width: 0;
+    }
+
+    .slice-row.stack {
+      grid-template-columns: 1fr;
+      align-items: stretch;
+    }
+
+    .slice-row[hidden] {
+      display: none !important;
+    }
+
+    .slice-row-label {
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .slice-control-line,
+    .slice-button-line,
+    .slice-check-line {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .slice-control-line > input[type="range"] {
+      flex: 1 1 130px;
+      min-width: 84px;
+    }
+
+    .slice-control-line > input[type="number"] {
+      flex: 0 0 68px;
+      width: 68px;
+    }
+
+    .slice-check-line label,
+    .slice-inline-check {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.7rem;
+      white-space: nowrap;
+    }
+
+    .slice-param-pack,
+    .slice-param-vector {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 5px;
+      min-width: 0;
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.7rem;
+    }
+
+    .slice-param-pack input[type="range"] {
+      flex: 1 1 120px;
+      min-width: 80px;
+    }
+
+    .slice-param-number {
+      width: 64px;
+      min-height: 28px;
+      padding: 3px 5px;
+    }
+
+    .slice-motion-pack {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.68rem;
+      white-space: nowrap;
+    }
+
+    .slice-motion-pack input[type="range"] {
+      width: 112px;
+    }
+
+    .slice-motion-value {
+      min-width: 34px;
+      color: var(--text);
+      text-align: right;
+    }
+
+    .slice-coordinate-input {
+      width: 54px;
+      min-height: 28px;
+      padding: 3px 4px;
+      text-align: center;
+    }
+
+    .slice-segmented {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .slice-btn,
+    .slice-segment,
+    .slice-icon-btn {
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--muted);
+      cursor: pointer;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.68rem;
+      line-height: 1.2;
+      min-height: 28px;
+      padding: 4px 8px;
+    }
+
+    .slice-icon-btn {
+      min-width: 30px;
+      padding-inline: 6px;
+    }
+
+    .slice-btn:hover,
+    .slice-segment:hover,
+    .slice-icon-btn:hover,
+    .slice-btn:focus,
+    .slice-segment:focus,
+    .slice-icon-btn:focus {
+      border-color: var(--accent);
+      color: var(--accent);
+      outline: none;
+    }
+
+    .slice-segment.active,
+    .slice-icon-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+    }
+
+    .slice-btn:disabled,
+    .slice-segment:disabled,
+    .slice-icon-btn:disabled,
+    input:disabled,
+    select:disabled,
+    textarea:disabled {
+      cursor: not-allowed;
+      opacity: 0.52;
+    }
+
+    .slice-input,
+    .slice-select,
+    .slice-textarea {
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.72rem;
+      min-height: 30px;
+      min-width: 0;
+      padding: 5px 7px;
+    }
+
+    .slice-select {
+      max-width: 100%;
+    }
+
+    .slice-input:focus,
+    .slice-select:focus,
+    .slice-textarea:focus {
+      border-color: var(--accent);
+      outline: 2px solid var(--accent);
+    }
+
+    .slice-textarea {
+      width: 100%;
+      resize: vertical;
+    }
+
+    #import-state {
+      min-height: 104px;
+    }
+
+    .slice-color {
+      width: 34px;
+      height: 30px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      padding: 1px;
+    }
+
+    .slice-position-list,
+    .slice-matrix-list {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .slice-position-row {
+      display: grid;
+      grid-template-columns: 32px minmax(80px, 1fr) 68px;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .slice-position-row span {
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.7rem;
+    }
+
+    .slice-readout,
+    .slice-code-block {
+      border: 1px solid rgba(216, 208, 196, 0.72);
+      border-radius: 3px;
+      background: #fffdf8;
+      color: var(--text);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.68rem;
+      line-height: 1.45;
+      overflow: auto;
+      padding: 5px 7px;
+      white-space: pre;
+    }
+
+    .slice-code-block {
+      max-height: 110px;
+    }
+
+    .slice-debug-grid {
+      display: grid;
+      grid-template-columns: minmax(86px, max-content) minmax(0, 1fr);
+      gap: 3px 10px;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.68rem;
+      line-height: 1.4;
+      min-width: 0;
+    }
+
+    .slice-debug-grid dt {
+      color: var(--muted);
+    }
+
+    .slice-debug-grid dd {
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .slice-warning {
+      color: var(--accent2);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.68rem;
+      line-height: 1.4;
+      min-height: 1.4em;
+    }
+
+    @media (max-width: 980px) {
+      .slice-calculator-layout {
+        grid-template-columns: 1fr;
+      }
+
+      #slice-viewport {
+        min-height: 360px;
+        height: min(62vh, 560px) !important;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .slice-row {
+        grid-template-columns: 1fr;
+      }
+
+      .slice-position-row {
+        grid-template-columns: 28px minmax(80px, 1fr) 62px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Higher-Dimensional Slice Calculator</h1>
+    <span><a href="index.html">Pure Math Toolkit</a> &middot; moving slices in R^n</span>
+  </header>
+
+  <main class="layout slice-calculator-layout">
+    <section class="canvas-panel" aria-labelledby="slice-title">
+      <header class="panel-title">
+        <span id="slice-title" class="panel-title-text">Projection / exact 2D slice</span>
+        <div class="canvas-toolbar" aria-label="Current projection summary">
+          <span class="shape-indicator">source <strong id="toolbar-source">frame</strong></span>
+          <span class="shape-indicator">frame <strong id="toolbar-slice">2D</strong></span>
+        </div>
+      </header>
+      <div class="slice-stage-wrap">
+        <canvas id="slice-viewport" width="980" height="680" aria-label="Higher-dimensional projection and exact 2D slice viewport"></canvas>
+        <div class="slice-hud" id="slice-hud" aria-live="polite"></div>
+      </div>
+      <div class="slice-status-bar" id="slice-status-bar"></div>
+    </section>
+
+    <aside id="cards" class="side" aria-label="Higher-dimensional slice controls">
+      <section class="card">
+        <div class="card-head" tabindex="0" role="button" aria-expanded="true">
+          <span class="drag-handle" title="drag card">&#8942;&#8942;</span>
+          <span class="card-head-label">Source Data</span>
+          <i class="toggle-icon">&#9662;</i>
+        </div>
+        <div class="card-body slice-card-body">
+          <div class="slice-row">
+            <span class="slice-row-label">mode</span>
+            <div class="slice-segmented" id="source-mode-controls" aria-label="Source data mode">
+              <button class="slice-segment" type="button" data-source-mode="add">add object</button>
+              <button class="slice-segment active" type="button" data-source-mode="modify">modify object</button>
+            </div>
+          </div>
+
+          <div class="slice-row" data-source-mode-row="add" hidden>
+            <span class="slice-row-label">type</span>
+            <div class="slice-control-line">
+              <select id="source-add-type" class="slice-select" aria-label="New object type"></select>
+              <select id="source-add-family" class="slice-select" aria-label="Regular polytope family" hidden></select>
+              <button id="source-add-object" class="slice-btn" type="button">add</button>
+            </div>
+          </div>
+
+          <div class="slice-row" data-source-mode-row="modify">
+            <span class="slice-row-label">object</span>
+            <div class="slice-control-line">
+              <select id="object-select" class="slice-select" aria-label="Active object"></select>
+              <button id="object-delete" class="slice-icon-btn" type="button" title="delete object">del</button>
+              <button id="object-export" class="slice-btn" type="button">export</button>
+            </div>
+          </div>
+
+          <div class="slice-row" data-source-mode-row="modify">
+            <span class="slice-row-label">name</span>
+            <div class="slice-control-line">
+              <input id="object-name" class="slice-input" type="text" aria-label="Active object name">
+            </div>
+          </div>
+
+          <div class="slice-row" data-source-mode-row="modify">
+            <span class="slice-row-label">params</span>
+            <div id="object-params" class="slice-control-line" aria-live="polite"></div>
+          </div>
+
+          <div class="slice-row" data-source-mode-row="modify">
+            <span class="slice-row-label">style</span>
+            <div class="slice-control-line">
+              <input id="object-color" class="slice-color" type="color" value="#2f7d70" aria-label="Object color">
+              <input id="object-opacity" type="range" min="0.1" max="1" step="0.05" value="0.85" aria-label="Object opacity">
+              <input id="object-point-size" type="range" min="1" max="12" step="1" value="4" aria-label="Point size">
+              <input id="object-line-width" type="range" min="1" max="8" step="1" value="2" aria-label="Line width">
+            </div>
+          </div>
+
+          <div class="slice-row" data-source-mode-row="modify">
+            <span class="slice-row-label">visible</span>
+            <div class="slice-control-line">
+              <div class="slice-segmented" aria-label="Visible object layers">
+                <button id="object-visible-projection" class="slice-segment active" type="button" aria-pressed="true">proj</button>
+                <button id="object-visible-slice" class="slice-segment active" type="button" aria-pressed="true">slice</button>
+              </div>
+              <label class="slice-inline-check"><input id="object-labels" type="checkbox">labels</label>
+            </div>
+          </div>
+
+          <div class="slice-row">
+            <span class="slice-row-label">status</span>
+            <div class="slice-control-line">
+              <span id="source-status" class="slice-warning" role="status">Projection and exact 2D slice layers are active.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head" tabindex="0" role="button" aria-expanded="true">
+          <span class="drag-handle" title="drag card">&#8942;&#8942;</span>
+          <span class="card-head-label">Movement</span>
+          <i class="toggle-icon">&#9662;</i>
+        </div>
+        <div class="card-body slice-card-body">
+          <div class="slice-row">
+            <span class="slice-row-label">dimension</span>
+            <div class="slice-control-line">
+              <input id="ambient-dimension" class="slice-input" type="number" min="2" max="8" step="1" value="4" aria-label="Ambient dimension">
+              <div class="slice-segmented" id="slice-dimension-controls" aria-label="Frame dimension">
+                <button class="slice-segment active" type="button" data-slice-dim="2">2D</button>
+                <button class="slice-segment" type="button" data-slice-dim="3" disabled title="3D frame mode is future work">3D</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="slice-row">
+            <span class="slice-row-label">direction</span>
+            <div class="slice-segmented" id="direction-controls" aria-label="Active movement direction"></div>
+          </div>
+
+          <div class="slice-row">
+            <span class="slice-row-label">quick move</span>
+            <div class="slice-button-line">
+              <button id="move-negative" class="slice-icon-btn" type="button">-</button>
+              <button id="move-positive" class="slice-icon-btn" type="button">+</button>
+              <button id="reset-position" class="slice-btn" type="button">reset p</button>
+            </div>
+          </div>
+
+          <div class="slice-row">
+            <span class="slice-row-label">motion</span>
+            <div class="slice-segmented" id="motion-mode-controls" aria-label="Motion mode">
+              <button class="slice-segment active" type="button" data-motion-mode="continuous">continuous</button>
+              <button class="slice-segment" type="button" data-motion-mode="discrete">discrete</button>
+            </div>
+          </div>
+
+          <div class="slice-row" data-motion-mode-row="continuous">
+            <span class="slice-row-label">speed</span>
+            <div class="slice-control-line">
+              <label class="slice-motion-pack">trans
+                <input id="translation-speed-slider" type="range" min="0.05" max="4" step="0.05" value="1" aria-label="Translation speed">
+                <output id="translation-speed-value" class="slice-motion-value">1</output>
+              </label>
+              <label class="slice-motion-pack">rot
+                <input id="rotation-speed-slider" type="range" min="1" max="180" step="1" value="60" aria-label="Rotation speed">
+                <output id="rotation-speed-value" class="slice-motion-value">60</output>
+              </label>
+            </div>
+          </div>
+
+          <div class="slice-row" data-motion-mode-row="discrete" hidden>
+            <span class="slice-row-label">step</span>
+            <div class="slice-control-line">
+              <label class="slice-motion-pack">trans
+                <input id="translation-step-slider" type="range" min="0.01" max="2" step="0.01" value="0.1" aria-label="Translation distance">
+                <output id="translation-step-value" class="slice-motion-value">0.1</output>
+              </label>
+              <label class="slice-motion-pack">rot
+                <input id="rotation-step-slider" type="range" min="0.5" max="45" step="0.5" value="8" aria-label="Rotation angle">
+                <output id="rotation-step-value" class="slice-motion-value">8</output>
+              </label>
+            </div>
+          </div>
+
+          <div class="slice-row">
+            <span class="slice-row-label">rot pair</span>
+            <div class="slice-control-line">
+              <select id="rotation-i" class="slice-select" aria-label="First frame vector"></select>
+              <select id="rotation-j" class="slice-select" aria-label="Second frame vector"></select>
+            </div>
+          </div>
+
+          <div class="slice-row">
+            <span class="slice-row-label">repair</span>
+            <div class="slice-check-line">
+              <button id="schmidt-frame" class="slice-btn" type="button">Schmidt</button>
+              <label><input id="auto-schmidt" type="checkbox" checked>auto-Schmidt</label>
+            </div>
+          </div>
+
+          <div class="slice-row">
+            <span class="slice-row-label">frame</span>
+            <div class="slice-control-line">
+              <button id="reset-frame" class="slice-btn" type="button">reset frame</button>
+              <code id="frame-preview" class="slice-readout">v1=[1,0,0,0]</code>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card collapsed">
+        <div class="card-head" tabindex="0" role="button" aria-expanded="false">
+          <span class="drag-handle" title="drag card">&#8942;&#8942;</span>
+          <span class="card-head-label">Viewport</span>
+          <i class="toggle-icon">&#9662;</i>
+        </div>
+        <div class="card-body slice-card-body">
+          <div class="slice-row">
+            <span class="slice-row-label">zoom</span>
+            <div class="slice-control-line">
+              <input id="screen-zoom" type="range" min="0.4" max="3" step="0.05" value="1" aria-label="Screen zoom">
+              <button id="reset-screen" class="slice-btn" type="button">reset screen</button>
+            </div>
+          </div>
+
+          <div class="slice-row">
+            <span class="slice-row-label">display</span>
+            <div class="slice-check-line">
+              <label><input id="show-axes" type="checkbox" checked>axes</label>
+              <label><input id="show-grid" type="checkbox" checked>grid</label>
+              <label><input id="show-labels" type="checkbox">labels</label>
+              <label><input id="show-box" type="checkbox" checked>box</label>
+            </div>
+          </div>
+
+          <div class="slice-row">
+            <span class="slice-row-label">3D camera</span>
+            <div class="slice-control-line">
+              <button id="reset-orbit" class="slice-btn" type="button">reset orbit</button>
+              <input id="camera-distance" type="range" min="1" max="8" step="0.1" value="3" aria-label="Camera distance">
+            </div>
+          </div>
+
+          <div class="slice-row">
+            <span class="slice-row-label">box radius</span>
+            <div class="slice-control-line">
+              <input id="box-radius-slider" type="range" min="1" max="12" step="0.25" value="4" aria-label="Box radius">
+              <input id="box-radius-number" class="slice-input" type="number" min="1" max="12" step="0.25" value="4" aria-label="Box radius value">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card collapsed">
+        <div class="card-head" tabindex="0" role="button" aria-expanded="false">
+          <span class="drag-handle" title="drag card">&#8942;&#8942;</span>
+          <span class="card-head-label">Debug Chart</span>
+          <i class="toggle-icon">&#9662;</i>
+        </div>
+        <div class="card-body slice-card-body">
+          <div class="slice-row stack">
+            <span class="slice-row-label">visible counts</span>
+            <dl id="visible-counts" class="slice-debug-grid"></dl>
+          </div>
+          <div class="slice-row stack">
+            <span class="slice-row-label">preview diagnostics</span>
+            <dl id="slice-diagnostics" class="slice-debug-grid"></dl>
+          </div>
+          <div class="slice-row">
+            <span class="slice-row-label">sphere</span>
+            <div class="slice-check-line">
+              <label><input id="exact-sphere-guide" type="checkbox">exact S^n guide</label>
+            </div>
+          </div>
+          <div class="slice-row">
+            <span class="slice-row-label">tolerance</span>
+            <div class="slice-control-line">
+              <input id="tolerance-slider" type="range" min="0.000001" max="0.01" step="0.000001" value="0.0001" aria-label="Tolerance">
+              <input id="tolerance-number" class="slice-input" type="number" min="0.000001" max="0.01" step="0.000001" value="0.0001" aria-label="Tolerance value">
+            </div>
+          </div>
+          <div class="slice-row stack">
+            <span class="slice-row-label">warnings</span>
+            <div id="debug-warnings" class="slice-warning">Projection and exact 2D slice layers are active.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card collapsed">
+        <div class="card-head" tabindex="0" role="button" aria-expanded="false">
+          <span class="drag-handle" title="drag card">&#8942;&#8942;</span>
+          <span class="card-head-label">Background Space Details</span>
+          <i class="toggle-icon">&#9662;</i>
+        </div>
+        <div class="card-body slice-card-body">
+          <div class="slice-row stack">
+            <span class="slice-row-label">position vector</span>
+            <code id="position-vector" class="slice-readout"></code>
+          </div>
+          <div class="slice-row stack">
+            <span class="slice-row-label">frame matrix</span>
+            <pre id="frame-matrix" class="slice-code-block"></pre>
+          </div>
+          <div class="slice-row stack">
+            <span class="slice-row-label">active frame matrix</span>
+            <pre id="active-slice-matrix" class="slice-code-block"></pre>
+          </div>
+          <div class="slice-row stack">
+            <span class="slice-row-label">Gram matrix</span>
+            <pre id="gram-matrix" class="slice-code-block"></pre>
+          </div>
+          <div class="slice-row stack">
+            <span class="slice-row-label">affine formula</span>
+            <code id="affine-formula" class="slice-readout"></code>
+          </div>
+          <div class="slice-row">
+            <span class="slice-row-label">copy</span>
+            <div class="slice-button-line">
+              <button id="copy-position" class="slice-btn" type="button">copy p</button>
+              <button id="copy-frame" class="slice-btn" type="button">copy frame</button>
+              <button id="copy-slice" class="slice-btn" type="button">copy frame JSON</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card collapsed">
+        <div class="card-head" tabindex="0" role="button" aria-expanded="false">
+          <span class="drag-handle" title="drag card">&#8942;&#8942;</span>
+          <span class="card-head-label">Import / Export</span>
+          <i class="toggle-icon">&#9662;</i>
+        </div>
+        <div class="card-body slice-card-body">
+          <div class="slice-row">
+            <span class="slice-row-label">export</span>
+            <div class="slice-button-line">
+              <button id="copy-state" class="slice-btn" type="button">copy state JSON</button>
+              <button id="download-state" class="slice-btn" type="button">download state JSON</button>
+            </div>
+          </div>
+          <div class="slice-row stack">
+            <span class="slice-row-label">import</span>
+            <textarea id="import-state" class="slice-textarea" spellcheck="false" placeholder="Paste full calculator state JSON or exported object JSON here"></textarea>
+          </div>
+          <div class="slice-row">
+            <span class="slice-row-label">apply</span>
+            <div class="slice-button-line">
+              <button id="import-apply" class="slice-btn" type="button">import full state</button>
+              <button id="import-object-new" class="slice-btn" type="button">import as new object</button>
+              <button id="import-object-replace" class="slice-btn" type="button">replace active object</button>
+              <button id="reset-preset" class="slice-btn" type="button">reset demo</button>
+            </div>
+          </div>
+          <div class="slice-row">
+            <span class="slice-row-label">sharing</span>
+            <button class="slice-btn" type="button" disabled>permalink later</button>
+          </div>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <script src="js/higher_dimensional_slice_explorer.js"></script>
+</body>
+</html>

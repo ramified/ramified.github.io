@@ -148,6 +148,64 @@
   line-height: 1.2;
 }
 
+.applet-title-toggle {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  display: flex;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  gap: 0;
+  letter-spacing: inherit;
+  justify-content: flex-start;
+  line-height: inherit;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.applet-title-toggle:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.collapsible-grid.is-single-column .applet-title-toggle {
+  cursor: pointer;
+}
+
+.collapsible-grid.is-single-column .applet-title-toggle::after {
+  color: var(--accent);
+  content: "+";
+  flex: 0 0 auto;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 0.9em;
+  line-height: 1;
+  margin-left: auto;
+  padding-left: 12px;
+}
+
+.collapsible-grid.is-single-column .is-expanded .applet-title-toggle::after {
+  content: "-";
+}
+
+.collapsible-grid.is-single-column .applet-title-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.collapsible-grid.is-single-column .is-collapsed .demo-strip,
+.collapsible-grid.is-single-column .is-collapsed .applet-kind,
+.collapsible-grid.is-single-column .is-collapsed .applet-body p:not(.applet-kind),
+.collapsible-grid.is-single-column .is-collapsed .applet-link,
+.collapsible-grid.is-single-column .reference-card.is-collapsed > p:not(.applet-kind),
+.collapsible-grid.is-single-column .reference-card.is-collapsed > a,
+.collapsible-grid.is-single-column .reference-card.is-collapsed > .reference-links {
+  display: none;
+}
+
 .applet-body p:not(.applet-kind) {
   color: var(--muted);
   font-size: 0.95rem;
