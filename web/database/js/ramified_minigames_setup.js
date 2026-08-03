@@ -75,6 +75,14 @@
     CHINESE_CHECKERS: 'chinese-checkers',
     SOKOBAN: 'sokoban'
   };
+  const PLACEMENT_PIECE_RADIUS_DEFAULT = 43;
+  const PLACEMENT_PIECE_RADIUS_MIN = 24;
+  const PLACEMENT_PIECE_RADIUS_MAX = 100;
+  const PLACEMENT_PIECE_RADIUS_DEFAULTS = {
+    [GAME_MODES.GOMOKU]: 70,
+    [GAME_MODES.GO]: 70,
+    [GAME_MODES.REVERSI]: 70
+  };
   const BOUNDARY_GLUE_BOARD_PRESET_ID = 'boundary-glue-board';
   const BOUNDARY_GLUE_MODES = {
     TORUS: 'torus',
@@ -334,6 +342,9 @@
     refs.gomokuDisplay = document.getElementById('gomoku-display-style');
     refs.moveNumberLabelRow = document.getElementById('move-number-label-row');
     refs.moveNumberLabels = document.getElementById('move-number-labels');
+    refs.placementPieceSizeRow = document.getElementById('placement-piece-size-row');
+    refs.placementPieceSize = document.getElementById('placement-piece-size');
+    refs.placementPieceSizeValue = document.getElementById('placement-piece-size-value');
     refs.gomokuSizeRow = document.getElementById('gomoku-size-row');
     refs.gomokuSize = document.getElementById('gomoku-board-size');
     refs.boundaryGlueModeRow = document.getElementById('boundary-glue-mode-row');
@@ -437,6 +448,10 @@
     if (refs.applyImportPreset) refs.applyImportPreset.addEventListener('click', importPresetFromUi);
     if (refs.gomokuDisplay) refs.gomokuDisplay.addEventListener('change', render);
     if (refs.moveNumberLabels) refs.moveNumberLabels.addEventListener('change', render);
+    if (refs.placementPieceSize) {
+      refs.placementPieceSize.addEventListener('input', handlePlacementPieceSizeChange);
+      refs.placementPieceSize.addEventListener('change', handlePlacementPieceSizeChange);
+    }
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('change', handleGomokuSizeChange);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('input', handleGomokuSizeChange);
     if (refs.boundaryGlueMode) refs.boundaryGlueMode.addEventListener('change', handleBoundaryGlueBoardChange);
@@ -523,6 +538,7 @@
     syncSokobanEnergyGlowOutput();
     syncSokobanBeamOutput();
     syncChineseCheckersTimingOutput();
+    syncPlacementPieceSizeOutput();
     syncDebugModeUi();
     syncCanvasDisplayModeUi();
     setPresetSelectLoading();
@@ -586,6 +602,7 @@
     if (applyRandomSetupChoice(randomSetupChoice(), { focus: false })) return;
     syncBoardSizeInputForGameMode();
     applyDefaultPlacementDisplayForMode();
+    applyDefaultPlacementPieceSizeForMode();
     const preferred = refs.select && presetSelectHasValue(refs.select.value)
       ? refs.select.value
       : defaultPresetIdForMode(selectedGameMode());
@@ -604,6 +621,7 @@
       const mode = gameModeFromUrlParam(params.get('mode')) || gameModeFromPresetGroup(importedPreset);
       applyImportedPresetMode(importedPreset, mode);
       if (refs.gameMode) refs.gameMode.value = mode;
+      applyDefaultPlacementPieceSizeForMode(mode);
       ensureImportedPresetOption(importedPreset);
       if (refs.select) refs.select.value = importedPreset.id;
       setImportToolsVisible(false);
@@ -1092,6 +1110,7 @@
     refs.gameMode.value = choice.mode;
     syncBoardSizeInputForGameMode();
     applyDefaultPlacementDisplayForMode(choice.mode);
+    applyDefaultPlacementPieceSizeForMode(choice.mode);
     syncImportGameModeSelectOptions();
     if (refs.importGameMode) refs.importGameMode.value = choice.mode;
     syncPresetSelectOptions(choice.preset.id);
@@ -1358,6 +1377,7 @@
     }
     syncBoardSizeInputForGameMode();
     applyDefaultPlacementDisplayForMode();
+    applyDefaultPlacementPieceSizeForMode();
     syncDefaultPresetForGameMode();
     if (refs.importGameMode) refs.importGameMode.value = selectedGameMode();
     resetToPreview();
@@ -1374,6 +1394,13 @@
     if (selectedPresetUsesDynamicBoardSize()) {
       resetToPreview();
     }
+  }
+
+  function handlePlacementPieceSizeChange() {
+    if (!refs.placementPieceSize) return;
+    refs.placementPieceSize.value = String(selectedPlacementPieceRadiusPercent());
+    syncPlacementPieceSizeOutput();
+    render();
   }
 
   function handleBoundaryGlueShapeChange() {
@@ -1465,6 +1492,7 @@
           syncPresetSelectOptions(preset.id);
           if (refs.select) refs.select.value = preset.id;
         }
+        applyDefaultPlacementPieceSizeForMode(targetMode);
         resetToPreview();
         syncImportExportControls();
         syncStatus('preset imported', previewInfo(game.preset), 'setup');
@@ -1474,6 +1502,9 @@
       const statusPayload = statusImportPayloadFromText(refs.importInput.value);
       if (statusPayload) {
         const imported = gameStateFromDebugImportPayload(statusPayload);
+        if (statusPayload.settings && typeof statusPayload.settings === 'object' && !Array.isArray(statusPayload.settings)) {
+          imported.settings = statusPayload.settings;
+        }
         applyImportedDebugState(imported);
         setImportToolsVisible(false);
         return;
@@ -1481,6 +1512,7 @@
       importedPreset = presetFromImportText(refs.importInput.value);
       applyImportedPresetMode(importedPreset, targetMode);
       if (!shouldKeepCurrentGameModeOnImport() && refs.gameMode) refs.gameMode.value = importMode;
+      applyDefaultPlacementPieceSizeForMode(targetMode);
       ensureImportedPresetOption(importedPreset);
       if (refs.select) refs.select.value = IMPORTED_PRESET_ID;
       resetToPreview();
@@ -1737,11 +1769,20 @@
 
   function syncImportedDisplaySettings(imported) {
     if (!imported || typeof imported !== 'object') return;
+    const settings = imported.settings && typeof imported.settings === 'object' && !Array.isArray(imported.settings)
+      ? imported.settings
+      : {};
     if (refs.gomokuDisplay && imported.displayStyle) {
       refs.gomokuDisplay.value = normalizePlacementDisplayStyle(imported.displayStyle, placementDisplayStyle());
     }
     if (refs.moveNumberLabels && typeof imported.moveNumberLabels === 'boolean') {
       refs.moveNumberLabels.checked = imported.moveNumberLabels;
+    }
+    const pieceRadius = firstPresentValue(imported, ['pieceRadiusPercent', 'pieceSizePercent', 'pieceSize'])
+      ?? firstPresentValue(settings, ['pieceRadiusPercent', 'pieceSizePercent', 'pieceSize']);
+    if (refs.placementPieceSize && pieceRadius != null) {
+      refs.placementPieceSize.value = String(normalizePlacementPieceRadiusPercent(pieceRadius));
+      syncPlacementPieceSizeOutput();
     }
   }
 
@@ -3405,14 +3446,44 @@
       gameMode: gameModeValue(state),
       preset: backgroundPresetForExport(),
       settings: gameRecordSettings(state),
-      moves: cloneGameRecordMoves(state.recordMoves),
+      moves: compactGameRecordMovesForExport(state),
       snapshot: debugExportPayload()
     };
   }
 
+  function compactGameRecordMovesForExport(state) {
+    const moves = Array.isArray(state && state.recordMoves) ? state.recordMoves : [];
+    const compact = moves.map((move) => compactGameRecordMoveForExport(move, state));
+    if (!compact.length) return [];
+    return compact.every((move) => typeof move === 'string')
+      ? compact.join(',')
+      : compact;
+  }
+
+  function compactGameRecordMoveForExport(move, state) {
+    if (!move || typeof move !== 'object' || Array.isArray(move)) return clonePlain(move);
+    const action = String(move.action || move.type || '').trim().toLowerCase();
+    if (isConnectFourGame(state) && (action === 'drop' || action === 'place' || action === 'play')) {
+      const tile = normalizeCompactTileRefText(move.entry || move.tile);
+      if (tile) return tile;
+    }
+    if ((isGomokuGame(state) || isGoGame(state)) && (action === 'place' || action === 'play' || action === 'stone')) {
+      const tile = normalizeCompactTileRefText(move.tile);
+      if (tile) return tile;
+    }
+    if (isReversiGame(state) && (action === 'place' || action === 'play' || action === 'disc')) {
+      const tile = normalizeCompactTileRefText(move.tile);
+      if (tile) return tile;
+    }
+    return clonePlain(move);
+  }
+
   function gameRecordSettings(state) {
     const settings = {};
-    if (isPlacementGame(state)) settings.displayStyle = placementDisplayStyle();
+    if (isPlacementGame(state)) {
+      settings.displayStyle = placementDisplayStyle();
+      settings.pieceRadiusPercent = selectedPlacementPieceRadiusPercent(gameModeValue(state));
+    }
     if (supportsMoveNumberLabels(state)) settings.moveNumberLabels = shouldShowMoveNumberLabels(state);
     if (isGoGame(state)) {
       settings.komi = normalizeGoKomi(state.komi);
@@ -3423,7 +3494,7 @@
       settings.fallDirName = latticeForPreset(state.preset).dirNames[state.fallDir] || String(state.fallDir);
       settings.holes = Array.from(state.holes || [])
         .sort((a, b) => a - b)
-        .map((index) => ({ index, ...rowCol(index, state.preset.cols) }));
+        .map((index) => compactTileRef(index, state.preset));
     }
     return settings;
   }
@@ -3701,6 +3772,8 @@
     syncConnectFourFallInputFromGame();
     syncGoKomiInputFromGame();
     syncGoScoringMethodInputFromGame();
+    applyDefaultPlacementPieceSizeForMode(gameModeValue(game));
+    syncImportedDisplaySettings(imported);
     render();
     const info = debugExportInfo(game);
     syncStatus('status imported', info, debugMode ? 'debug' : phaseBadge(game.phase));
@@ -4002,30 +4075,82 @@
     const result = { ...move };
     const addTile = (prefix, index) => {
       if (!Number.isInteger(index) || !preset) return;
-      const tile = rowCol(index, preset.cols);
+      const tile = compactTileRef(index, preset);
+      if (!tile) return;
       if (prefix) {
-        result[prefix] = { index, ...tile };
+        result[prefix] = tile;
       } else {
-        result.index = index;
-        result.row = tile.row;
-        result.col = tile.col;
+        result.tile = tile;
       }
     };
-    if (Number.isInteger(result.index)) addTile('', result.index);
-    if (Number.isInteger(result.entryIndex)) addTile('entry', result.entryIndex);
-    if (Number.isInteger(result.landingIndex)) addTile('landing', result.landingIndex);
+    if (Number.isInteger(result.index)) {
+      addTile('', result.index);
+      delete result.index;
+      delete result.row;
+      delete result.col;
+    }
+    if (Number.isInteger(result.entryIndex)) {
+      addTile('entry', result.entryIndex);
+      delete result.entryIndex;
+    }
+    if (Number.isInteger(result.landingIndex)) {
+      addTile('landing', result.landingIndex);
+      delete result.landingIndex;
+    }
     return result;
   }
 
   function normalizeGameRecordMoves(moves) {
-    if (!Array.isArray(moves)) return [];
-    return moves
-      .filter((move) => move && typeof move === 'object' && !Array.isArray(move))
+    const entries = typeof moves === 'string'
+      ? compactTileRefsFromText(moves).map((tile) => ({ action: 'place', tile }))
+      : (Array.isArray(moves) ? moves.map(normalizeGameRecordMoveEntry).filter(Boolean) : []);
+    return entries
       .map((move, index) => {
         const clone = clonePlain(move);
         if (!normalizePositiveInteger(clone.sequence, 0)) clone.sequence = index + 1;
         return clone;
       });
+  }
+
+  function normalizeGameRecordMoveEntry(move) {
+    if (typeof move === 'string') {
+      const tile = normalizeCompactTileRefText(move);
+      return tile ? { action: 'place', tile } : null;
+    }
+    if (Array.isArray(move)) {
+      const tile = normalizeCompactTileRefText(move);
+      return tile ? { action: 'place', tile } : null;
+    }
+    if (move && typeof move === 'object') return move;
+    return null;
+  }
+
+  function compactTileRef(index, preset) {
+    if (!preset || !Number.isInteger(index)) return '';
+    const tile = rowCol(index, preset.cols);
+    return `(${tile.row},${tile.col})`;
+  }
+
+  function compactTileRefsFromText(value) {
+    const refs = [];
+    const pattern = /\(?\s*(-?\d+)\s*,\s*(-?\d+)\s*\)?/g;
+    let match = pattern.exec(String(value || ''));
+    while (match) {
+      refs.push(`(${Number(match[1])},${Number(match[2])})`);
+      match = pattern.exec(String(value || ''));
+    }
+    return refs;
+  }
+
+  function normalizeCompactTileRefText(value) {
+    if (Array.isArray(value) && value.length >= 2) {
+      const row = Number(value[0]);
+      const col = Number(value[1]);
+      return Number.isInteger(row) && Number.isInteger(col) ? `(${row},${col})` : '';
+    }
+    if (typeof value !== 'string') return '';
+    const refs = compactTileRefsFromText(value);
+    return refs.length === 1 ? refs[0] : '';
   }
 
   function recordableGameMode(mode) {
@@ -4501,7 +4626,11 @@
       eventIndex: 0,
       stepPaused: false,
       displayStyle: normalizePlacementDisplayStyle(settings.displayStyle, ''),
-      moveNumberLabels: !!settings.moveNumberLabels
+      moveNumberLabels: !!settings.moveNumberLabels,
+      pieceRadiusPercent: normalizePlacementPieceRadiusPercent(
+        firstPresentValue(settings, ['pieceRadiusPercent', 'pieceSizePercent', 'pieceSize']),
+        defaultPlacementPieceRadiusPercentForMode(mode)
+      )
     };
   }
 
@@ -7127,8 +7256,9 @@
   function drawPlacementMoveNumberLabel(ctx, geom, point, piece, moveNumber) {
     const text = String(moveNumber);
     const darkText = piece.color === 'white' || piece.color === 'yellow';
-    const maxWidth = geom.radius * 0.9;
-    let fontSize = Math.max(8, Math.min(15, geom.radius * 0.42));
+    const pieceRadius = placementPieceBaseRadius(geom);
+    const maxWidth = pieceRadius * 2.05;
+    let fontSize = Math.max(8, Math.min(22, pieceRadius * 0.98));
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
@@ -7178,7 +7308,7 @@
       if (!deadIds.has(stone.id)) return;
       const point = placementPiecePoint(geom, stone.index);
       if (!point) return;
-      const radius = geom.radius * 0.51;
+      const radius = placementPieceBaseRadius(geom) * 1.18;
       ctx.fillStyle = 'rgba(255,253,248,0.56)';
       ctx.beginPath();
       ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
@@ -7305,7 +7435,7 @@
     const scale = Number.isFinite(options.scale) ? Math.max(0.02, options.scale) : 1;
     const squashX = Number.isFinite(options.squashX) ? Math.max(0.02, options.squashX) : 1;
     const alpha = Number.isFinite(options.alpha) ? Math.max(0, Math.min(1, options.alpha)) : 1;
-    const radius = geom.radius * 0.43 * scale;
+    const radius = placementPieceBaseRadius(geom) * scale;
     const colors = placementPieceColors(piece.color);
     ctx.save();
     ctx.globalAlpha *= alpha;
@@ -7338,6 +7468,10 @@
     ctx.shadowColor = 'transparent';
     ctx.stroke();
     ctx.restore();
+  }
+
+  function placementPieceBaseRadius(geom) {
+    return geom.radius * selectedPlacementPieceRadiusFraction();
   }
 
   function drawPlacementAnimationOverlays(ctx, geom) {
@@ -14529,6 +14663,34 @@
     refs.gomokuDisplay.value = defaultPlacementDisplayForMode(mode);
   }
 
+  function defaultPlacementPieceRadiusPercentForMode(mode = selectedGameMode()) {
+    const normalized = gameModeFromUrlParam(mode) || mode || GAME_MODES.NUMBER_2048;
+    return PLACEMENT_PIECE_RADIUS_DEFAULTS[normalized] || PLACEMENT_PIECE_RADIUS_DEFAULT;
+  }
+
+  function normalizePlacementPieceRadiusPercent(value, fallback = defaultPlacementPieceRadiusPercentForMode()) {
+    const number = Math.round(Number.parseFloat(value));
+    if (!Number.isFinite(number)) return fallback;
+    return clampNumber(number, PLACEMENT_PIECE_RADIUS_MIN, PLACEMENT_PIECE_RADIUS_MAX, fallback);
+  }
+
+  function selectedPlacementPieceRadiusPercent(mode = selectedGameMode()) {
+    return normalizePlacementPieceRadiusPercent(
+      refs.placementPieceSize ? refs.placementPieceSize.value : null,
+      defaultPlacementPieceRadiusPercentForMode(mode)
+    );
+  }
+
+  function selectedPlacementPieceRadiusFraction(mode = selectedGameMode()) {
+    return selectedPlacementPieceRadiusPercent(mode) / 100;
+  }
+
+  function applyDefaultPlacementPieceSizeForMode(mode = selectedGameMode()) {
+    if (!refs.placementPieceSize) return;
+    refs.placementPieceSize.value = String(defaultPlacementPieceRadiusPercentForMode(mode));
+    syncPlacementPieceSizeOutput();
+  }
+
   function selectedGomokuBoardSize() {
     return selectedBoardSize();
   }
@@ -15263,7 +15425,31 @@
 
   function normalizeImportedTileRef(value, rows, cols) {
     if (Number.isInteger(Number(value))) return tileRefFromIndex(Number(value), rows, cols);
+    if (typeof value === 'string') {
+      const match = value.trim().match(/^\(?\s*(-?\d+)\s*,\s*(-?\d+)\s*\)?$/);
+      if (match) {
+        const row = Number(match[1]);
+        const col = Number(match[2]);
+        if (Number.isInteger(row) && Number.isInteger(col) && row >= 1 && row <= rows && col >= 1 && col <= cols) {
+          return { row, col };
+        }
+      }
+      return null;
+    }
+    if (Array.isArray(value) && value.length >= 2) {
+      const row = Number(value[0]);
+      const col = Number(value[1]);
+      if (Number.isInteger(row) && Number.isInteger(col) && row >= 1 && row <= rows && col >= 1 && col <= cols) {
+        return { row, col };
+      }
+      return null;
+    }
     if (!value || typeof value !== 'object') return null;
+    const nested = firstPresentValue(value, ['tile', 'point', 'coord', 'coordinate', 'at', 'position']);
+    if (nested != null) {
+      const tile = normalizeImportedTileRef(nested, rows, cols);
+      if (tile) return tile;
+    }
     const row = Number(value.row);
     const col = Number(value.col);
     if (Number.isInteger(row) && Number.isInteger(col) && row >= 1 && row <= rows && col >= 1 && col <= cols) {
@@ -15838,6 +16024,8 @@
     }
     if (refs.placementDisplayRow) refs.placementDisplayRow.hidden = !modePlacement;
     if (refs.moveNumberLabelRow) refs.moveNumberLabelRow.hidden = !(modeGomoku || modeConnectFour || modeGo);
+    if (refs.placementPieceSizeRow) refs.placementPieceSizeRow.hidden = !(modeGomoku || modeConnectFour || modeGo || modeReversi);
+    syncPlacementPieceSizeOutput();
     if (refs.connectFourFall) refs.connectFourFall.disabled = modeConnectFour && game && game.phase !== 'setup';
     syncGoScoringControls(modeGo);
     syncChineseCheckersControls(modeChineseCheckers);
@@ -15872,6 +16060,11 @@
   function syncSpeedOutput() {
     if (!refs.speed || !refs.speedValue) return;
     refs.speedValue.textContent = `${refs.speed.value} ms`;
+  }
+
+  function syncPlacementPieceSizeOutput() {
+    if (!refs.placementPieceSizeValue) return;
+    refs.placementPieceSizeValue.textContent = `${selectedPlacementPieceRadiusPercent()}%`;
   }
 
   function selectedSokobanObjectScale() {

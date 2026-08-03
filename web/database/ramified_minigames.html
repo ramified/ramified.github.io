@@ -1362,6 +1362,13 @@
           <span class="input-label">Labels</span>
           <label class="opt-row"><input type="checkbox" id="move-number-labels"> move numbers</label>
         </div>
+        <div class="mosaic-inline-row" id="placement-piece-size-row" hidden>
+          <span class="input-label">Piece</span>
+          <span class="background-slider-controls">
+            <input type="range" id="placement-piece-size" min="24" max="100" step="1" value="43" aria-label="Placement piece radius">
+            <output id="placement-piece-size-value">43%</output>
+          </span>
+        </div>
         <div class="mosaic-inline-row" id="gomoku-size-row" data-mode-control="gomoku" hidden>
           <span class="input-label">Board n</span>
           <input id="gomoku-board-size" type="number" min="2" max="25" step="1" value="15" aria-label="Square board size">

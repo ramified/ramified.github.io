@@ -166,6 +166,15 @@
     },
     {
       "gameTypes": [
+        "Go"
+        ],
+      "id": "reflex-angle",
+      "label": "reflex angle",
+      "key": "reflex_angle",
+      "file": "reflex_angle.preset.js"
+    },
+    {
+      "gameTypes": [
         "Gomoku",
         "Go"
         ],
