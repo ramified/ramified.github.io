@@ -27,11 +27,7 @@
       cursor: default;
     }
 
-    .slice-dimension-overlay {
-      position: absolute;
-      top: 12px;
-      right: 14px;
-      z-index: 3;
+    .slice-toolbar-dimension {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -45,7 +41,7 @@
       padding: 5px 7px;
     }
 
-    .slice-dimension-overlay input {
+    .slice-toolbar-dimension input {
       width: 54px;
       min-height: 26px;
       padding: 2px 5px;
@@ -58,6 +54,7 @@
       flex-wrap: wrap;
       gap: 7px;
       pointer-events: none;
+      z-index: 4;
     }
 
     .slice-chip {
@@ -87,6 +84,45 @@
     .slice-status-bar strong {
       color: var(--text);
       font-weight: 500;
+    }
+
+    .slice-label-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+      overflow: hidden;
+    }
+
+    .slice-canvas-label {
+      position: absolute;
+      color: #243b45;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: var(--slice-canvas-label-size, 1.05rem);
+      line-height: 1;
+      text-shadow:
+        0 1px 0 rgba(255, 253, 248, 0.9),
+        1px 0 0 rgba(255, 253, 248, 0.9),
+        0 -1px 0 rgba(255, 253, 248, 0.9),
+        -1px 0 0 rgba(255, 253, 248, 0.9);
+      transform: translate(0, -50%);
+      white-space: nowrap;
+    }
+
+    .slice-canvas-label.centered {
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+
+    .slice-math .mjx-container {
+      margin: 0 !important;
+    }
+
+    .slice-code-block.slice-math,
+    .slice-readout.slice-math,
+    .slice-tropical-summary.slice-math {
+      font-family: "JetBrains Mono", Consolas, monospace;
+      white-space: normal;
     }
 
     .slice-card-body {
@@ -515,16 +551,17 @@
       <header class="panel-title">
         <span id="slice-title" class="panel-title-text">Projection / exact+numeric 2D slice</span>
         <div class="canvas-toolbar" aria-label="Current projection summary">
+          <label class="slice-toolbar-dimension" title="Ambient dimension">
+            <span>n</span>
+            <input id="ambient-dimension" class="slice-input" type="number" min="2" max="8" step="1" value="4" aria-label="Ambient dimension">
+          </label>
           <span class="shape-indicator">source <strong id="toolbar-source">frame</strong></span>
           <span class="shape-indicator">frame <strong id="toolbar-slice">2D</strong></span>
         </div>
       </header>
       <div class="slice-stage-wrap">
-        <label class="slice-dimension-overlay" title="Ambient dimension">
-          <span>n</span>
-          <input id="ambient-dimension" class="slice-input" type="number" min="2" max="8" step="1" value="4" aria-label="Ambient dimension">
-        </label>
         <canvas id="slice-viewport" width="980" height="680" aria-label="Higher-dimensional projection and exact or numeric 2D slice viewport"></canvas>
+        <div class="slice-label-overlay" id="slice-label-overlay" aria-hidden="true"></div>
         <div class="slice-hud" id="slice-hud" aria-live="polite"></div>
       </div>
       <div class="slice-status-bar" id="slice-status-bar"></div>
@@ -754,6 +791,14 @@
           </div>
 
           <div class="slice-row">
+            <span class="slice-row-label">label size</span>
+            <div class="slice-control-line">
+              <input id="label-size-slider" type="range" min="0.75" max="2" step="0.05" value="1.05" aria-label="Canvas label size">
+              <output id="label-size-value" class="slice-motion-value">1.05rem</output>
+            </div>
+          </div>
+
+          <div class="slice-row">
             <span class="slice-row-label">3D camera</span>
             <div class="slice-control-line">
               <button id="reset-orbit" class="slice-btn" type="button">reset orbit</button>
@@ -880,6 +925,19 @@
     </aside>
   </main>
 
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea']
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
   <script src="js/higher_dimensional_slice_explorer.js"></script>
 </body>
 </html>

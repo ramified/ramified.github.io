@@ -27,6 +27,18 @@
     { key: "formula-set", label: "formula set", color: "#4f7fbd", pointSize: 4, lineWidth: 2 },
     { key: "tropical-polynomial", label: "tropical polynomial", color: "#2f6fb0", pointSize: 4, lineWidth: 2 },
   ];
+  const TROPICAL_DISTRICT_COLORS = [
+    "#d95f5f",
+    "#2f8f7f",
+    "#4f73c6",
+    "#d2a33a",
+    "#8a66b5",
+    "#cf6f3d",
+    "#3f8ab8",
+    "#7aa54a",
+    "#c95f93",
+    "#6f7f3d",
+  ];
   const EXACT_SLICE_TYPES = new Set(["regular-polytope", "cube", "simplex", "sphere", "formula-set", "tropical-polynomial"]);
   const REGULAR_POLYTOPE_FAMILIES = [
     { key: "regular-simplex", label: "regular simplex" },
@@ -51,6 +63,7 @@
     rotationStep: [0.5, 45],
   };
   const MOTION_RAMP_MS = 180;
+  const DEFAULT_CANVAS_LABEL_SIZE_REM = 1.05;
   const regularGeometryCache = new Map();
   const regularHalfspaceCache = new Map();
   const runtimeStats = {
@@ -86,6 +99,7 @@
       showBox: true,
       cameraDistance: 3,
       boxRadius: 4,
+      labelSize: DEFAULT_CANVAS_LABEL_SIZE_REM,
       exactSphereGuide: false,
       tolerance: 0.0001,
     },
@@ -109,6 +123,9 @@
     lastTimestamp: 0,
     rafId: 0,
   };
+
+  let mathTypesetQueued = false;
+  let mathTypesetDirty = false;
 
   function identityFrame(n) {
     return Array.from({ length: n }, (_, col) =>
@@ -171,6 +188,10 @@
 
   function normalizeDirectInputMode(mode) {
     return mode === "import" ? "import" : "manual";
+  }
+
+  function normalizeCanvasLabelSize(value) {
+    return clamp(finiteNumber(value, DEFAULT_CANVAS_LABEL_SIZE_REM), 0.75, 2);
   }
 
   function normalizeFormulaInputMode(mode) {
@@ -804,6 +825,11 @@
     return String(value || "").toLowerCase() === "min" ? "min" : "max";
   }
 
+  function normalizeTropicalNotationMode(value) {
+    const mode = String(value || "").toLowerCase();
+    return mode === "affine" || mode === "tropical" ? mode : "u";
+  }
+
   function defaultTropicalInput(n = state.ambientDim) {
     return n >= 2 ? "p^0 + u1 + u2" : "p^0 + u1";
   }
@@ -818,16 +844,26 @@
     return fmt(value, 6);
   }
 
+  function formatTropicalCoefficientTex(value) {
+    return formatTropicalCoefficient(value).replace(/-/g, "-");
+  }
+
   function tropicalCoefficientToken(value) {
     const text = formatTropicalCoefficient(value);
     return value < 0 ? `p^{${text}}` : `p^${text}`;
   }
 
-  function tropicalMonomialLabel(exponent) {
+  function tropicalCoefficientTokenTex(value) {
+    return `p^{${formatTropicalCoefficientTex(value)}}`;
+  }
+
+  function tropicalMonomialLabel(exponent, symbol = "u", options = {}) {
+    const useUnderscore = options.underscore === true;
     const parts = [];
     exponent.forEach((power, index) => {
       if (!power) return;
-      parts.push(power === 1 ? `u${index + 1}` : `u${index + 1}^${power}`);
+      const variable = useUnderscore ? `${symbol}_${index + 1}` : `${symbol}${index + 1}`;
+      parts.push(power === 1 ? variable : `${variable}^${power}`);
     });
     return parts.join("") || "1";
   }
@@ -841,6 +877,154 @@
 
   function tropicalTermsToText(terms) {
     return terms.map(tropicalTermToText).join(" + ");
+  }
+
+  function tropicalMonomialTex(exponent, symbol = "u") {
+    const parts = [];
+    (Array.isArray(exponent) ? exponent : []).forEach((power, index) => {
+      if (!power) return;
+      const variable = `${symbol}_{${index + 1}}`;
+      parts.push(power === 1 ? variable : `${variable}^{${power}}`);
+    });
+    return parts.join("") || "1";
+  }
+
+  function tropicalTermToTex(term) {
+    const monomial = tropicalMonomialTex(term?.exponent || [], "u");
+    if (monomial === "1") return tropicalCoefficientTokenTex(term?.coefficient || 0);
+    if (Math.abs(term?.coefficient || 0) <= 1e-12) return monomial;
+    return `${tropicalCoefficientTokenTex(term.coefficient)}${monomial}`;
+  }
+
+  function tropicalTermsToTex(terms) {
+    return terms.map(tropicalTermToTex).join(" + ");
+  }
+
+  function tropicalAffineTermToText(term) {
+    const parts = [];
+    const coefficient = finiteNumber(term?.coefficient, 0);
+    const exponent = Array.isArray(term?.exponent) ? term.exponent : [];
+    if (Math.abs(coefficient) > 1e-12 || !exponent.some(Boolean)) parts.push(formatTropicalCoefficient(coefficient));
+    exponent.forEach((power, index) => {
+      if (!power) return;
+      parts.push(power === 1 ? `x_${index + 1}` : `${power}x_${index + 1}`);
+    });
+    return parts.join(" + ") || "0";
+  }
+
+  function tropicalAffineTermToTex(term) {
+    const parts = [];
+    const coefficient = finiteNumber(term?.coefficient, 0);
+    const exponent = Array.isArray(term?.exponent) ? term.exponent : [];
+    if (Math.abs(coefficient) > 1e-12 || !exponent.some(Boolean)) parts.push(formatTropicalCoefficientTex(coefficient));
+    exponent.forEach((power, index) => {
+      if (!power) return;
+      parts.push(power === 1 ? `x_{${index + 1}}` : `${power}x_{${index + 1}}`);
+    });
+    return parts.join(" + ") || "0";
+  }
+
+  function tropicalTermsToAffineText(terms, convention = "max") {
+    const mode = normalizeTropicalConvention(convention);
+    return `${mode}{${terms.map(tropicalAffineTermToText).join(", ")}}`;
+  }
+
+  function tropicalTermsToAffineTex(terms, convention = "max") {
+    const mode = normalizeTropicalConvention(convention);
+    return `\\${mode}\\{${terms.map(tropicalAffineTermToTex).join(", ")}\\}`;
+  }
+
+  function tropicalAlgebraTermToText(term) {
+    const coefficient = formatTropicalCoefficient(finiteNumber(term?.coefficient, 0));
+    const monomial = tropicalMonomialLabel(term?.exponent || [], "x", { underscore: true });
+    if (monomial === "1") return coefficient;
+    if (Math.abs(finiteNumber(term?.coefficient, 0)) <= 1e-12) return monomial;
+    return `${coefficient}\u2297${monomial}`;
+  }
+
+  function tropicalAlgebraTermToTex(term) {
+    const coefficient = formatTropicalCoefficientTex(finiteNumber(term?.coefficient, 0));
+    const monomial = tropicalMonomialTex(term?.exponent || [], "x");
+    if (monomial === "1") return coefficient;
+    if (Math.abs(finiteNumber(term?.coefficient, 0)) <= 1e-12) return monomial;
+    return `${coefficient}\\otimes ${monomial}`;
+  }
+
+  function tropicalTermsToAlgebraText(terms) {
+    return terms.map(tropicalAlgebraTermToText).join(" \u2295 ");
+  }
+
+  function tropicalTermsToAlgebraTex(terms) {
+    return terms.map(tropicalAlgebraTermToTex).join(" \\oplus ");
+  }
+
+  function tropicalNotationText(data, mode = data?.tropicalNotationMode) {
+    const terms = Array.isArray(data?.terms) ? data.terms : [];
+    const notation = normalizeTropicalNotationMode(mode);
+    const convention = normalizeTropicalConvention(data?.tropicalConvention);
+    if (notation === "affine") return data?.normalizedTropicalAffine || tropicalTermsToAffineText(terms, convention);
+    if (notation === "tropical") return data?.normalizedTropicalAlgebra || tropicalTermsToAlgebraText(terms);
+    return data?.normalizedTropical || tropicalTermsToText(terms);
+  }
+
+  function tropicalNotationTex(data, mode = data?.tropicalNotationMode) {
+    const terms = Array.isArray(data?.terms) ? data.terms : [];
+    const notation = normalizeTropicalNotationMode(mode);
+    const convention = normalizeTropicalConvention(data?.tropicalConvention);
+    if (notation === "affine") return tropicalTermsToAffineTex(terms, convention);
+    if (notation === "tropical") return tropicalTermsToAlgebraTex(terms);
+    return tropicalTermsToTex(terms);
+  }
+
+  function tropicalTermDisplay(term, mode = "u", convention = "max") {
+    const notation = normalizeTropicalNotationMode(mode);
+    if (notation === "affine") return {
+      plain: tropicalAffineTermToText(term),
+      tex: tropicalAffineTermToTex(term),
+    };
+    if (notation === "tropical") return {
+      plain: tropicalAlgebraTermToText(term),
+      tex: tropicalAlgebraTermToTex(term),
+    };
+    return {
+      plain: tropicalTermToText(term),
+      tex: tropicalTermToTex(term),
+    };
+  }
+
+  function tropicalSummaryText(data) {
+    return tropicalNotationText(data, data?.tropicalNotationMode);
+  }
+
+  function normalizeTropicalInputSyntax(rawInput) {
+    let text = String(rawInput || "").trim();
+    while (/^\$[\s\S]*\$$/.test(text)) text = text.slice(1, -1).trim();
+    return text
+      .replace(/\\left\b|\\right\b/g, "")
+      .replace(/\\\{/g, "{")
+      .replace(/\\\}/g, "}")
+      .replace(/\\(?:oplus|vee)\b|⊕|\boplus\b/gi, "+")
+      .replace(/\\(?:otimes|odot)\b|⊗|\botimes\b/gi, "*")
+      .replace(/\\cdot\b|·/g, "*");
+  }
+
+  function splitTopLevelList(text, delimiter = ",") {
+    const parts = [];
+    let start = 0;
+    let depth = 0;
+    for (let index = 0; index < text.length; index += 1) {
+      const char = text[index];
+      if ("({[".includes(char)) depth += 1;
+      else if (")}]".includes(char)) depth = Math.max(0, depth - 1);
+      if (char === delimiter && depth === 0) {
+        const part = text.slice(start, index).trim();
+        if (part) parts.push(part);
+        start = index + 1;
+      }
+    }
+    const last = text.slice(start).trim();
+    if (last) parts.push(last);
+    return parts;
   }
 
   function splitTropicalTerms(rawInput) {
@@ -930,8 +1114,6 @@
         index += 1;
         continue;
       }
-      const xMatch = text.slice(index).match(/^x_?\d+/i);
-      if (xMatch) throw new Error(`Use u_i symbols for tropical monomials; "${xMatch[0]}" is not accepted here.`);
       const pMatch = text.slice(index).match(/^p\b/i);
       if (pMatch) {
         index += pMatch[0].length;
@@ -950,7 +1132,7 @@
         sawCoefficient = true;
         continue;
       }
-      const variableMatch = text.slice(index).match(/^u_?(\d+)/i);
+      const variableMatch = text.slice(index).match(/^[ux]_?(\d+)/i);
       if (variableMatch) {
         const coordinate = Number(variableMatch[1]) - 1;
         if (coordinate < 0 || coordinate >= n) throw new Error(`Unknown tropical symbol ${variableMatch[0]}; current ambient dimension is ${n}.`);
@@ -964,6 +1146,7 @@
       throw new Error(`Unexpected tropical term text near "${text.slice(index)}".`);
     }
     if (!sawFactor) throw new Error("Empty tropical term.");
+    if (sign < 0 && !sawCoefficient) coefficient = 1;
     return {
       coefficient: sign * coefficient,
       exponent,
@@ -1026,18 +1209,91 @@
     return normalizeTropicalTerms(terms, convention, n);
   }
 
+  function parseTropicalAffineExpression(rawTerm, n = state.ambientDim) {
+    const text = String(rawTerm || "").trim();
+    if (!text) throw new Error("Empty affine tropical term.");
+    const exponent = Array(n).fill(0);
+    let coefficient = 0;
+    let index = 0;
+    let sawPiece = false;
+    const numberPattern = /^(?:\d+(?:\.\d*)?|\.\d+)(?:\/[+-]?(?:\d+(?:\.\d*)?|\.\d+))?/;
+    while (index < text.length) {
+      while (/\s/.test(text[index])) index += 1;
+      let sign = 1;
+      if (text[index] === "+" || text[index] === "-") {
+        sign = text[index] === "-" ? -1 : 1;
+        index += 1;
+      } else if (sawPiece) {
+        throw new Error(`Expected + or - in affine term near "${text.slice(index)}".`);
+      }
+      while (/\s/.test(text[index])) index += 1;
+      const numberMatch = text.slice(index).match(numberPattern);
+      let scalar = 1;
+      let hasNumber = false;
+      if (numberMatch) {
+        scalar = parseTropicalRational(numberMatch[0], "affine coefficient");
+        index += numberMatch[0].length;
+        hasNumber = true;
+      }
+      while (/\s/.test(text[index])) index += 1;
+      if (text[index] === "*") {
+        index += 1;
+        while (/\s/.test(text[index])) index += 1;
+      }
+      const variableMatch = text.slice(index).match(/^x_?(\d+)/i);
+      if (variableMatch) {
+        const coordinate = Number(variableMatch[1]) - 1;
+        if (coordinate < 0 || coordinate >= n) throw new Error(`Unknown affine tropical symbol ${variableMatch[0]}; current ambient dimension is ${n}.`);
+        const amount = sign * scalar;
+        if (!Number.isInteger(amount) || amount < 0) throw new Error("Affine tropical slopes must be nonnegative integers.");
+        exponent[coordinate] += amount;
+        index += variableMatch[0].length;
+      } else if (hasNumber) {
+        coefficient += sign * scalar;
+      } else {
+        throw new Error(`Expected a number or x_i term near "${text.slice(index)}".`);
+      }
+      sawPiece = true;
+    }
+    if (!sawPiece) throw new Error("Empty affine tropical term.");
+    return { coefficient, exponent, label: tropicalMonomialLabel(exponent) };
+  }
+
+  function parseTropicalAffineSet(rawInput, n = state.ambientDim) {
+    const text = String(rawInput || "").trim();
+    const match = text.match(/^\\?(max|min)\s*([({])/i);
+    if (!match) return null;
+    const convention = normalizeTropicalConvention(match[1]);
+    const open = match[2];
+    const close = open === "{" ? "}" : ")";
+    if (!text.endsWith(close)) throw new Error(`Tropical ${convention} notation needs a closing ${close}.`);
+    const body = text.slice(match[0].length, -1).trim();
+    const pieces = splitTopLevelList(body, ",");
+    if (!pieces.length) throw new Error(`Tropical ${convention} notation needs at least one affine term.`);
+    return {
+      convention,
+      terms: normalizeTropicalTerms(pieces.map((piece) => parseTropicalAffineExpression(piece, n)), convention, n),
+    };
+  }
+
   function compileTropicalPolynomial(rawInput, convention = "max", n = state.ambientDim) {
     const tropicalInput = String(rawInput || "").trim();
     if (!tropicalInput) throw new Error("Tropical polynomial is empty.");
-    const tropicalConvention = normalizeTropicalConvention(convention);
-    const terms = /^[\[{]/.test(tropicalInput)
-      ? parseTropicalJsonTerms(tropicalInput, tropicalConvention, n)
-      : normalizeTropicalTerms(splitTropicalTerms(tropicalInput).map((term) => parseTropicalTextTerm(term, n)), tropicalConvention, n);
+    const normalizedInput = normalizeTropicalInputSyntax(tropicalInput);
+    const affineSet = parseTropicalAffineSet(normalizedInput, n);
+    const tropicalConvention = affineSet?.convention || normalizeTropicalConvention(convention);
+    const terms = affineSet
+      ? affineSet.terms
+      : /^[\[{]/.test(normalizedInput)
+        ? parseTropicalJsonTerms(normalizedInput, tropicalConvention, n)
+        : normalizeTropicalTerms(splitTropicalTerms(normalizedInput).map((term) => parseTropicalTextTerm(term, n)), tropicalConvention, n);
     return {
       tropicalInput,
       tropicalConvention,
       terms,
       normalizedTropical: tropicalTermsToText(terms),
+      normalizedTropicalAffine: tropicalTermsToAffineText(terms, tropicalConvention),
+      normalizedTropicalAlgebra: tropicalTermsToAlgebraText(terms),
     };
   }
 
@@ -1250,13 +1506,13 @@
     for (let col = 0; col < state.ambientDim; col += 1) {
       const label = document.createElement("span");
       label.className = "slice-direct-matrix-label";
-      label.textContent = `v${col + 1}`;
+      setMathText(label, `v${col + 1}`, `v_{${col + 1}}`);
       grid.append(label);
     }
     for (let row = 0; row < state.ambientDim; row += 1) {
       const rowLabel = document.createElement("span");
       rowLabel.className = "slice-direct-matrix-label";
-      rowLabel.textContent = `e${row + 1}`;
+      setMathText(rowLabel, `e${row + 1}`, `e_{${row + 1}}`);
       grid.append(rowLabel);
       for (let col = 0; col < state.ambientDim; col += 1) {
         const input = document.createElement("input");
@@ -2005,6 +2261,8 @@
       objectType: "tropical-polynomial",
       ambientDimension: n,
       description: `Tropical polynomial in R^${n}, using u_i as the monomial symbol for p^{X_i}.`,
+      showDistricts: true,
+      tropicalNotationMode: "u",
       ...compileTropicalPolynomial(tropicalInput, "max", n),
     };
   }
@@ -2736,6 +2994,8 @@
   function buildTropicalParams(container, object) {
     const data = object.data || {};
     data.tropicalConvention = normalizeTropicalConvention(data.tropicalConvention);
+    data.showDistricts = data.showDistricts !== false;
+    data.tropicalNotationMode = normalizeTropicalNotationMode(data.tropicalNotationMode);
     const panel = document.createElement("div");
     panel.className = "slice-tropical-panel";
 
@@ -2750,16 +3010,32 @@
       button.textContent = mode;
       button.classList.toggle("active", data.tropicalConvention === mode);
       button.addEventListener("click", () => {
-        applyTropicalInput(object, data.tropicalInput || textarea.value, mode);
+        setTropicalConvention(object, mode, data.tropicalNotationMode);
       });
       modes.append(button);
+    });
+
+    const notationModes = document.createElement("div");
+    notationModes.className = "slice-segmented";
+    notationModes.setAttribute("aria-label", "Tropical notation");
+    ["u", "affine", "tropical"].forEach((mode) => {
+      const button = document.createElement("button");
+      button.className = "slice-segment";
+      button.type = "button";
+      button.dataset.tropicalNotation = mode;
+      button.textContent = mode;
+      button.classList.toggle("active", data.tropicalNotationMode === mode);
+      button.addEventListener("click", () => {
+        switchTropicalNotation(object, mode);
+      });
+      notationModes.append(button);
     });
 
     const textarea = document.createElement("textarea");
     textarea.className = "slice-textarea slice-tropical-textarea";
     textarea.dataset.tropicalInput = "true";
     textarea.spellcheck = false;
-    textarea.value = data.tropicalInput || tropicalTermsToText(data.terms || []);
+    textarea.value = tropicalNotationText(data, data.tropicalNotationMode);
     textarea.setAttribute("aria-label", "Tropical polynomial");
     textarea.placeholder = "p^0 + u1 + u2";
     const apply = document.createElement("button");
@@ -2767,7 +3043,7 @@
     apply.type = "button";
     apply.dataset.tropicalApply = "true";
     apply.textContent = "apply tropical";
-    const applyCurrent = () => applyTropicalInput(object, textarea.value, data.tropicalConvention);
+    const applyCurrent = () => applyTropicalInput(object, textarea.value, data.tropicalConvention, data.tropicalNotationMode);
     apply.addEventListener("click", applyCurrent);
     textarea.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
@@ -2775,22 +3051,77 @@
         applyCurrent();
       } else if (event.key === "Escape") {
         event.preventDefault();
-        textarea.value = data.tropicalInput || tropicalTermsToText(data.terms || []);
+        textarea.value = tropicalNotationText(data, data.tropicalNotationMode);
         textarea.blur();
       }
     });
 
+    const districtToggle = document.createElement("label");
+    districtToggle.className = "slice-inline-check";
+    const districtCheckbox = document.createElement("input");
+    districtCheckbox.type = "checkbox";
+    districtCheckbox.checked = data.showDistricts;
+    districtCheckbox.addEventListener("change", () => {
+      object.data = {
+        ...object.data,
+        showDistricts: districtCheckbox.checked,
+      };
+      state.lastWarning = districtCheckbox.checked ? "Tropical districts shown." : "Tropical districts hidden.";
+      renderAll();
+    });
+    districtToggle.append(districtCheckbox, document.createTextNode("districts"));
+
     const summary = document.createElement("code");
     summary.className = "slice-tropical-summary";
     summary.dataset.tropicalSummary = "true";
-    summary.textContent = data.normalizedTropical || tropicalTermsToText(data.terms || []);
-    panel.append(modes, textarea, apply, summary);
+    setMathText(summary, tropicalSummaryText(data), tropicalNotationTex(data, data.tropicalNotationMode));
+    panel.append(modes, notationModes, textarea, apply, districtToggle, summary);
     container.appendChild(panel);
   }
 
-  function applyTropicalInput(object, rawInput, convention) {
+  function setTropicalConvention(object, convention, notationMode) {
+    try {
+      const mode = normalizeTropicalConvention(convention);
+      const selectedNotation = normalizeTropicalNotationMode(notationMode || object.data?.tropicalNotationMode);
+      const terms = normalizeTropicalTerms(resizeTropicalTerms(object.data?.terms || [], state.ambientDim), mode, state.ambientDim);
+      const candidate = {
+        tropicalConvention: mode,
+        terms,
+        normalizedTropical: tropicalTermsToText(terms),
+        normalizedTropicalAffine: tropicalTermsToAffineText(terms, mode),
+        normalizedTropicalAlgebra: tropicalTermsToAlgebraText(terms),
+      };
+      object.data = {
+        ...object.data,
+        ...candidate,
+        tropicalInput: tropicalNotationText(candidate, selectedNotation),
+        tropicalNotationMode: selectedNotation,
+      };
+      state.lastWarning = `Tropical convention switched to ${mode}.`;
+      syncObjectPanel();
+      renderAll();
+    } catch (error) {
+      state.lastWarning = `Tropical convention rejected: ${error.message}`;
+      updateDebug();
+    }
+  }
+
+  function switchTropicalNotation(object, notationMode) {
+    const mode = normalizeTropicalNotationMode(notationMode);
+    object.data = {
+      ...object.data,
+      tropicalNotationMode: mode,
+      tropicalInput: tropicalNotationText(object.data || {}, mode),
+    };
+    state.lastWarning = `Tropical notation switched to ${mode}.`;
+    syncObjectPanel();
+    renderAll();
+  }
+
+  function applyTropicalInput(object, rawInput, convention, notationMode) {
     try {
       const candidate = compileTropicalPolynomial(rawInput, convention, state.ambientDim);
+      const selectedNotation = normalizeTropicalNotationMode(notationMode || object.data?.tropicalNotationMode);
       object.kind = "tropical";
       object.visibleProjection = false;
       object.visibleSlice = true;
@@ -2800,6 +3131,9 @@
         kind: "tropical",
         objectType: "tropical-polynomial",
         ambientDimension: state.ambientDim,
+        showDistricts: object.data?.showDistricts !== false,
+        tropicalNotationMode: selectedNotation,
+        tropicalInput: tropicalNotationText(candidate, selectedNotation),
         name: object.name,
       };
       state.lastWarning = `Tropical polynomial applied in ${candidate.tropicalConvention} convention.`;
@@ -2820,7 +3154,7 @@
       const button = document.createElement("button");
       button.className = "slice-segment";
       button.type = "button";
-      button.textContent = label;
+      setMathText(button, label, `${basis === "ambient" ? "e" : "v"}_{${index + 1}}`);
       button.title = basis === "ambient" ? `move along ambient ${label}` : `move along frame ${label}`;
       button.dataset.directionKey = `${basis}:${index}`;
       button.addEventListener("click", () => {
@@ -3117,14 +3451,21 @@
       objectType: "tropical-polynomial",
       ambientDimension: n,
       tropicalConvention,
+      showDistricts: data.showDistricts !== false,
+      tropicalNotationMode: normalizeTropicalNotationMode(data.tropicalNotationMode),
     };
     if (Array.isArray(data.terms) && data.terms.length) {
       const terms = normalizeTropicalTerms(resizeTropicalTerms(data.terms, n), tropicalConvention, n);
-      return {
+      const normalizedData = {
         ...base,
-        tropicalInput: String(data.tropicalInput || tropicalTermsToText(terms)),
         terms,
         normalizedTropical: tropicalTermsToText(terms),
+        normalizedTropicalAffine: tropicalTermsToAffineText(terms, tropicalConvention),
+        normalizedTropicalAlgebra: tropicalTermsToAlgebraText(terms),
+      };
+      return {
+        ...normalizedData,
+        tropicalInput: String(data.tropicalInput || tropicalNotationText(normalizedData, normalizedData.tropicalNotationMode)),
       };
     }
     return {
@@ -3541,6 +3882,12 @@
       draw();
       updateDebug();
     });
+    $("label-size-slider").addEventListener("input", () => {
+      state.viewport.labelSize = normalizeCanvasLabelSize($("label-size-slider").value);
+      syncCanvasLabelSize();
+      $("label-size-value").textContent = `${fmt(state.viewport.labelSize, 2)}rem`;
+      queueMathTypeset();
+    });
     $("reset-screen").addEventListener("click", () => {
       state.viewport.zoom = 1;
       $("screen-zoom").value = "1";
@@ -3587,6 +3934,7 @@
     window.addEventListener("keyup", handleKeyboardUp);
     window.addEventListener("blur", clearAllMotion);
     window.addEventListener("resize", resizeCanvas);
+    window.addEventListener("load", () => queueMathTypeset());
   }
 
   function handleKeyboardDown(event) {
@@ -3619,10 +3967,13 @@
 
   function renderAll() {
     state.sliceDim = 2;
+    state.viewport.labelSize = normalizeCanvasLabelSize(state.viewport.labelSize);
     state.activeDirection = normalizeDirection(state.activeDirection);
     clampMotionState();
     $("ambient-dimension").value = String(state.ambientDim);
     $("screen-zoom").value = String(state.viewport.zoom);
+    $("label-size-slider").value = String(state.viewport.labelSize);
+    $("label-size-value").textContent = `${fmt(state.viewport.labelSize, 2)}rem`;
     $("camera-distance").value = String(state.viewport.cameraDistance);
     $("box-radius-slider").value = String(state.viewport.boxRadius);
     $("box-radius-number").value = String(state.viewport.boxRadius);
@@ -3645,18 +3996,37 @@
     if (object) syncLayerButtons(object);
     $("toolbar-source").textContent = object ? sourceLabel(object) : "none";
     $("toolbar-slice").textContent = `${state.sliceDim}D`;
+    syncCanvasLabelSize();
     updateReadouts();
     draw();
     updateDebug();
+    queueMathTypeset();
   }
 
   function updateReadouts() {
-    $("position-vector").textContent = `p = [${state.p.map((value) => fmt(value, 4)).join(", ")}]`;
-    $("frame-matrix").textContent = frameMatrixToString(state.frame);
-    $("active-slice-matrix").textContent = frameMatrixToString(state.frame.slice(0, state.sliceDim));
-    $("gram-matrix").textContent = matrixToString(gramMatrix(state.frame));
+    setMathText(
+      $("position-vector"),
+      `p = [${state.p.map((value) => fmt(value, 4)).join(", ")}]`,
+      `p=${vectorToTex(state.p, 4)}`
+    );
+    const fullRows = frameRows(state.frame);
+    const frameColLabels = state.frame.map((_, index) => `v_${index + 1}`);
+    const frameRowLabels = Array.from({ length: state.ambientDim }, (_, index) => `e_${index + 1}`);
+    setMathText($("frame-matrix"), frameMatrixToString(state.frame), matrixToTex(fullRows, {
+      rowLabels: frameRowLabels,
+      colLabels: frameColLabels,
+    }), { display: true });
+    setMathText($("active-slice-matrix"), frameMatrixToString(state.frame.slice(0, state.sliceDim)), matrixToTex(frameRows(state.frame.slice(0, state.sliceDim)), {
+      rowLabels: frameRowLabels,
+      colLabels: frameColLabels.slice(0, state.sliceDim),
+    }), { display: true });
+    setMathText($("gram-matrix"), matrixToString(gramMatrix(state.frame)), matrixToTex(gramMatrix(state.frame), {
+      rowLabels: frameColLabels,
+      colLabels: frameColLabels,
+    }), { display: true });
     const vectors = Array.from({ length: state.sliceDim }, (_, index) => `y_${index + 1}v_${index + 1}`).join(" + ");
-    $("affine-formula").textContent = `x = p + ${vectors}`;
+    const texVectors = Array.from({ length: state.sliceDim }, (_, index) => `y_{${index + 1}}v_{${index + 1}}`).join(" + ");
+    setMathText($("affine-formula"), `x = p + ${vectors}`, `x=p+${texVectors}`);
   }
 
   function frameRows(columns) {
@@ -3695,7 +4065,7 @@
       ["proj edges", String(counts.edges)],
       ["proj rays", String(counts.rays)],
       ["slice objects", state.sliceDim === 2 ? String(counts.sliceObjects) : "disabled in 3D"],
-      ["slice cells", `${counts.slicePolygons} poly / ${counts.sliceCircles} circ / ${counts.sliceConics} conic / ${counts.sliceImplicit} implicit / ${counts.sliceTropicalSegments} tropical seg / ${counts.slicePoints} pts`],
+      ["slice cells", `${counts.slicePolygons} poly / ${counts.sliceCircles} circ / ${counts.sliceConics} conic / ${counts.sliceImplicit} implicit / ${counts.sliceTropicalSegments} tropical seg / ${counts.sliceTropicalDistricts} tropical dist / ${counts.slicePoints} pts`],
     ]);
     writeDefinitionList("slice-diagnostics", [
       ["renderer", "projection + exact/numeric 2D slice"],
@@ -3703,6 +4073,7 @@
       ["formula/tropical renderer", state.sliceDim === 2 ? "formula exact/numeric; tropical exact" : "2D only"],
       ["draw runtime", `${fmt(runtimeStats.drawMs, 2)} ms`],
       ["slice runtime", `${fmt(runtimeStats.exactSliceMs, 2)} ms`],
+      ["tropical skips", counts.sliceTropicalSkippedPairs || counts.sliceTropicalSkippedDistricts ? `${counts.sliceTropicalSkippedPairs} pairs / ${counts.sliceTropicalSkippedDistricts} districts` : "none"],
       ["halfspaces", runtimeStats.halfspaceCount ? `${runtimeStats.halfspaceCount} (${runtimeStats.heavyFamily})` : "none"],
       ["halfspace build", `${fmt(runtimeStats.halfspaceMs, 2)} ms`],
       ["empty warning", counts.visibleObjects ? "none" : "no visible objects"],
@@ -3715,21 +4086,22 @@
       ? `${picked.objectName} / ${picked.label}  x=${vectorToInline(picked.ambient)}  y=${vectorToInline(picked.frameCoords)}`
       : "";
     const previewText = state.sourceMode === "add" ? `preview ${currentTypeLabel(state.addType, state.ambientDim)}` : "";
-    $("slice-hud").innerHTML = `
-      <span class="slice-chip">n=${state.ambientDim}</span>
-      <span class="slice-chip">k=${state.sliceDim}</span>
-      <span class="slice-chip">active ${directionLabel()}</span>
-      <span class="slice-chip">projection / exact+numeric 2D slice</span>
-      ${previewText ? `<span class="slice-chip">${escapeHtml(previewText)}</span>` : ""}
-      ${pickedText ? `<span class="slice-chip">picked: ${escapeHtml(pickedText)}</span>` : ""}
-    `;
-    $("slice-status-bar").innerHTML = `
-      <span><strong>p</strong> [${state.p.map((value) => fmt(value, 2)).join(", ")}]</span>
-      <span><strong>objects</strong> ${counts.visibleObjects} visible</span>
-      <span><strong>zoom</strong> ${fmt(state.viewport.zoom, 2)}</span>
-      <span><strong>box</strong> ${fmt(state.viewport.boxRadius, 2)}</span>
-      ${pickedText ? `<span><strong>picked</strong> ${escapeHtml(pickedText)}</span>` : ""}
-    `;
+    renderHudChips([
+      { plain: `n=${state.ambientDim}`, tex: `n=${state.ambientDim}` },
+      { plain: `k=${state.sliceDim}`, tex: `k=${state.sliceDim}` },
+      { plain: `active ${directionLabel()}`, tex: `\\mathrm{active}\\ ${labelToTex(directionLabel())}` },
+      { plain: "projection / exact+numeric 2D slice", tex: "\\mathrm{projection\\ /\\ exact{+}numeric\\ 2D\\ slice}" },
+      ...(previewText ? [{ plain: previewText, tex: `\\text{${texText(previewText)}}` }] : []),
+      ...(pickedText ? [{ plain: `picked: ${pickedText}`, tex: `\\text{picked: ${texText(pickedText)}}` }] : []),
+    ]);
+    renderStatusBar([
+      { plain: `p [${state.p.map((value) => fmt(value, 2)).join(", ")}]`, tex: `p\\ ${vectorToTex(state.p, 2)}` },
+      { plain: `objects ${counts.visibleObjects} visible`, tex: `\\mathrm{objects}\\ ${counts.visibleObjects}\\ \\mathrm{visible}` },
+      { plain: `zoom ${fmt(state.viewport.zoom, 2)}`, tex: `\\mathrm{zoom}\\ ${fmt(state.viewport.zoom, 2)}` },
+      { plain: `box ${fmt(state.viewport.boxRadius, 2)}`, tex: `\\mathrm{box}\\ ${fmt(state.viewport.boxRadius, 2)}` },
+      ...(pickedText ? [{ plain: `picked ${pickedText}`, tex: `\\text{picked ${texText(pickedText)}}` }] : []),
+    ]);
+    queueMathTypeset();
   }
 
   function writeDefinitionList(id, rows) {
@@ -3742,6 +4114,41 @@
       dd.textContent = description;
       list.append(dt, dd);
     }
+  }
+
+  function syncStaticMathLabels() {
+    const dimensionLabel = document.querySelector(".slice-toolbar-dimension span");
+    if (dimensionLabel) setMathText(dimensionLabel, "n", "n");
+    const directVectorParts = document.querySelectorAll(".slice-direct-vector > span:not(#direct-position-inputs)");
+    if (directVectorParts[0]) setMathText(directVectorParts[0], "p = (", "p=(");
+    if (directVectorParts[1]) setMathText(directVectorParts[1], ")", ")");
+  }
+
+  function syncCanvasLabelSize() {
+    const overlay = $("slice-label-overlay");
+    if (!overlay) return;
+    overlay.style.setProperty("--slice-canvas-label-size", `${normalizeCanvasLabelSize(state.viewport.labelSize)}rem`);
+  }
+
+  function renderHudChips(chips) {
+    const hud = $("slice-hud");
+    hud.innerHTML = "";
+    chips.forEach((chip) => {
+      const span = document.createElement("span");
+      span.className = "slice-chip";
+      setMathText(span, chip.plain, chip.tex);
+      hud.append(span);
+    });
+  }
+
+  function renderStatusBar(items) {
+    const bar = $("slice-status-bar");
+    bar.innerHTML = "";
+    items.forEach((item) => {
+      const span = document.createElement("span");
+      setMathText(span, item.plain, item.tex);
+      bar.append(span);
+    });
   }
 
   function collectCounts() {
@@ -3757,6 +4164,9 @@
       sliceConics: 0,
       sliceImplicit: 0,
       sliceTropicalSegments: 0,
+      sliceTropicalDistricts: 0,
+      sliceTropicalSkippedPairs: 0,
+      sliceTropicalSkippedDistricts: 0,
       slicePoints: 0,
     };
     for (const object of state.objects) {
@@ -3778,7 +4188,12 @@
           if (slice.kind === "circle") counts.sliceCircles += 1;
           if (slice.kind === "conic") counts.sliceConics += 1;
           if (slice.kind === "implicit-formula") counts.sliceImplicit += 1;
-          if (slice.kind === "tropical-curve") counts.sliceTropicalSegments += (slice.segments || []).length;
+          if (slice.kind === "tropical-curve") {
+            counts.sliceTropicalSegments += (slice.segments || []).length;
+            if (slice.showDistricts !== false) counts.sliceTropicalDistricts += (slice.districts || []).length;
+            counts.sliceTropicalSkippedPairs += slice.skippedPairs || 0;
+            counts.sliceTropicalSkippedDistricts += slice.skippedDistricts || 0;
+          }
           if (slice.kind === "point") counts.slicePoints += 1;
           if (slice.kind === "segment") counts.slicePoints += 2;
         }
@@ -3823,6 +4238,7 @@
     const canvas = $("slice-viewport");
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    clearCanvasMathLabels();
     const ratio = window.devicePixelRatio || 1;
     const width = canvas.width;
     const height = canvas.height;
@@ -3855,6 +4271,7 @@
 
     if (state.viewport.exactSphereGuide) drawSphereGuide(ctx, view);
     runtimeStats.drawMs = nowMs() - drawStart;
+    queueMathTypeset();
   }
 
   function drawGrid(ctx, view, width, height) {
@@ -3890,10 +4307,8 @@
     line(ctx, x0.x, x0.y, x1.x, x1.y);
     line(ctx, y0.x, y0.y, y1.x, y1.y);
     if (state.viewport.showLabels) {
-      ctx.fillStyle = "#2c4a55";
-      ctx.font = `${11 * view.ratio}px JetBrains Mono, Consolas, monospace`;
-      ctx.fillText("y1", x1.x + 6 * view.ratio, x1.y - 4 * view.ratio);
-      ctx.fillText("y2", y1.x + 6 * view.ratio, y1.y - 4 * view.ratio);
+      addCanvasMathLabel(view, x1, "y1", "y_{1}", { offsetX: 6, offsetY: -4, color: "#2c4a55" });
+      addCanvasMathLabel(view, y1, "y2", "y_{2}", { offsetX: 6, offsetY: -4, color: "#2c4a55" });
     }
     ctx.restore();
   }
@@ -3945,8 +4360,8 @@
         recordPickCandidate(object, tip, ray.label || `rho_${rayIndex + 1}`, `ray-tip:${rayIndex}`, Math.max(pointSize, 4 * view.ratio));
       }
       if ((object.labels || state.viewport.showLabels) && rayIndex < 48) {
-        ctx.font = `${10 * view.ratio}px JetBrains Mono, Consolas, monospace`;
-        ctx.fillText(ray.label || `rho_${rayIndex + 1}`, tip.x + 5 * view.ratio, tip.y - 5 * view.ratio);
+        const label = ray.label || `rho_${rayIndex + 1}`;
+        addCanvasMathLabel(view, tip, label, labelToTex(label), { offsetX: 5, offsetY: -5, color });
       }
     }
 
@@ -3954,8 +4369,7 @@
       drawPoint(ctx, point.x, point.y, pointSize);
       if (registerPick) recordPickCandidate(object, point, `v_${index + 1}`, `point:${index}`, pointSize);
       if ((object.labels || state.viewport.showLabels) && index < 48) {
-        ctx.font = `${10 * view.ratio}px JetBrains Mono, Consolas, monospace`;
-        ctx.fillText(String(index), point.x + 5 * view.ratio, point.y - 5 * view.ratio);
+        addCanvasMathLabel(view, point, String(index), String(index), { offsetX: 5, offsetY: -5, color });
       }
     });
 
@@ -3979,8 +4393,7 @@
     drawPoint(ctx, center.x, center.y, Math.max(pointSize, 3 * view.ratio));
     if (options.registerPick !== false) recordPickCandidate(object, center, "center", "sphere-center", Math.max(pointSize, 3 * view.ratio));
     if (object.labels || state.viewport.showLabels) {
-      ctx.font = `${10 * view.ratio}px JetBrains Mono, Consolas, monospace`;
-      ctx.fillText("center", center.x + 5 * view.ratio, center.y - 5 * view.ratio);
+      addCanvasMathLabel(view, center, "center", labelToTex("center"), { offsetX: 5, offsetY: -5, color: options.color || "#8a4f9f" });
     }
     ctx.restore();
   }
@@ -4018,8 +4431,7 @@
         drawPoint(ctx, point.x, point.y, pointSize);
         if (registerPick) recordPickCandidate(object, point, `slice v_${index + 1}`, `slice-point:${index}`, pointSize);
         if ((object.labels || state.viewport.showLabels) && index < 48) {
-          ctx.font = `${10 * view.ratio}px JetBrains Mono, Consolas, monospace`;
-          ctx.fillText(`s${index}`, point.x + 5 * view.ratio, point.y - 5 * view.ratio);
+          addCanvasMathLabel(view, point, `s${index}`, `s_{${index}}`, { offsetX: 5, offsetY: -5, color });
         }
       });
     } else if (slice.kind === "segment") {
@@ -4029,12 +4441,19 @@
       projected.forEach((point, index) => {
         drawPoint(ctx, point.x, point.y, pointSize);
         if (registerPick) recordPickCandidate(object, point, `slice v_${index + 1}`, `slice-point:${index}`, pointSize);
+        if ((object.labels || state.viewport.showLabels) && index < 48) {
+          addCanvasMathLabel(view, point, `s${index}`, `s_{${index}}`, { offsetX: 5, offsetY: -5, color });
+        }
       });
     } else if (slice.kind === "point") {
       const point = projectFramePoint(slice.point.y, view);
       ctx.globalAlpha = alpha;
       drawPoint(ctx, point.x, point.y, pointSize + 1 * view.ratio);
       if (registerPick) recordPickCandidate(object, point, slice.label || "slice point", "slice-point:0", pointSize + 1 * view.ratio);
+      if (object.labels || state.viewport.showLabels) {
+        const label = slice.label || "slice point";
+        addCanvasMathLabel(view, point, label, labelToTex(label), { offsetX: 5, offsetY: -5, color });
+      }
     } else if (slice.kind === "circle") {
       const center = projectFramePoint(slice.center.y, view);
       ctx.globalAlpha = alpha * 0.2;
@@ -4046,8 +4465,7 @@
       drawPoint(ctx, center.x, center.y, pointSize);
       if (registerPick) recordPickCandidate(object, center, "slice center", "slice-center", pointSize);
       if (object.labels || state.viewport.showLabels) {
-        ctx.font = `${10 * view.ratio}px JetBrains Mono, Consolas, monospace`;
-        ctx.fillText("slice center", center.x + 5 * view.ratio, center.y - 5 * view.ratio);
+        addCanvasMathLabel(view, center, "slice center", labelToTex("slice center"), { offsetX: 5, offsetY: -5, color });
       }
     } else if (slice.kind === "conic") {
       drawFormulaConicSlice(ctx, view, slice, { alpha, lineWidth });
@@ -4626,14 +5044,25 @@
     const data = object.data || {};
     const terms = normalizeTropicalTerms(resizeTropicalTerms(data.terms || [], state.ambientDim), data.tropicalConvention, state.ambientDim);
     const radius = formulaClipRadius(object);
-    if (terms.length < 2) {
-      return { kind: "tropical-curve", segments: [], clipRadius: radius, skippedPairs: 0 };
-    }
     const convention = normalizeTropicalConvention(data.tropicalConvention);
     const functions = restrictTropicalTermsToSlice(terms, convention);
+    const tolerance = sliceTolerance();
+    const districtResult = computeTropicalDistricts(functions, radius, tolerance);
+    if (terms.length < 2) {
+      return {
+        kind: "tropical-curve",
+        segments: [],
+        districts: districtResult.districts,
+        clipRadius: radius,
+        convention,
+        notationMode: normalizeTropicalNotationMode(data.tropicalNotationMode),
+        showDistricts: data.showDistricts !== false,
+        skippedPairs: 0,
+        skippedDistricts: districtResult.skippedDistricts,
+      };
+    }
     const segments = [];
     let skippedPairs = 0;
-    const tolerance = sliceTolerance();
     for (let left = 0; left < functions.length; left += 1) {
       for (let right = left + 1; right < functions.length; right += 1) {
         const diffA = functions[left].a - functions[right].a;
@@ -4659,9 +5088,13 @@
     return {
       kind: "tropical-curve",
       segments: uniqueTropicalSegments(segments),
+      districts: districtResult.districts,
       clipRadius: radius,
       convention,
+      notationMode: normalizeTropicalNotationMode(data.tropicalNotationMode),
+      showDistricts: data.showDistricts !== false,
       skippedPairs,
+      skippedDistricts: districtResult.skippedDistricts,
     };
   }
 
@@ -4715,6 +5148,50 @@
     ];
   }
 
+  function computeTropicalDistricts(functions, radius, tolerance) {
+    const districts = [];
+    let skippedDistricts = 0;
+    for (let activeIndex = 0; activeIndex < functions.length; activeIndex += 1) {
+      const activeFunction = functions[activeIndex];
+      let polygon = initialClipPolygon(radius);
+      let duplicateRestrictedTerm = false;
+      for (let candidateIndex = 0; candidateIndex < functions.length; candidateIndex += 1) {
+        if (candidateIndex === activeIndex) continue;
+        const candidate = functions[candidateIndex];
+        const diffA = activeFunction.a - candidate.a;
+        const diffB = activeFunction.b - candidate.b;
+        const diffC = activeFunction.c - candidate.c;
+        const scaleValue = Math.max(1, Math.abs(diffA), Math.abs(diffB), Math.abs(diffC));
+        if (Math.hypot(diffA, diffB) <= tolerance * scaleValue) {
+          if (Math.abs(diffC) <= tolerance * scaleValue) {
+            if (candidateIndex < activeIndex) duplicateRestrictedTerm = true;
+            continue;
+          }
+          if (diffC < -tolerance * scaleValue) polygon = [];
+          if (!polygon.length) break;
+          continue;
+        }
+        polygon = clipPolygonByHalfPlane(polygon, -diffA, -diffB, diffC);
+        if (!polygon.length) break;
+      }
+      if (duplicateRestrictedTerm) {
+        skippedDistricts += 1;
+        continue;
+      }
+      polygon = cleanPolygon(polygon);
+      if (polygon.length < 3 || Math.abs(polygonArea(polygon)) <= tolerance ** 2) continue;
+      districts.push({
+        termIndex: activeIndex,
+        label: activeFunction.term.label,
+        term: activeFunction.term,
+        vertices: polygon,
+        color: TROPICAL_DISTRICT_COLORS[activeIndex % TROPICAL_DISTRICT_COLORS.length],
+        anchor: polygonCentroid(polygon),
+      });
+    }
+    return { districts, skippedDistricts };
+  }
+
   function uniqueTropicalSegments(segments) {
     const seen = new Set();
     const unique = [];
@@ -4732,7 +5209,34 @@
 
   function drawTropicalCurveSlice(ctx, view, slice, options = {}) {
     ctx.save();
-    ctx.globalAlpha = options.alpha ?? 0.85;
+    const alpha = options.alpha ?? 0.85;
+    const curveColor = ctx.strokeStyle;
+    if (slice.showDistricts !== false) {
+      for (const district of slice.districts || []) {
+        const projected = (district.vertices || []).map((vertex) => projectFramePoint(vertex, view));
+        if (projected.length < 3) continue;
+        ctx.globalAlpha = alpha * 0.22;
+        ctx.fillStyle = district.color || "#d95f5f";
+        ctx.beginPath();
+        ctx.moveTo(projected[0].x, projected[0].y);
+        for (let index = 1; index < projected.length; index += 1) ctx.lineTo(projected[index].x, projected[index].y);
+        ctx.closePath();
+        ctx.fill();
+      }
+      for (const district of slice.districts || []) {
+        if (!district.anchor) continue;
+        const area = Math.abs(polygonArea(district.vertices || []));
+        if (area <= Math.max(0.02, sliceTolerance() * 10)) continue;
+        const point = projectFramePoint(district.anchor, view);
+        const display = tropicalTermDisplay(district.term || { coefficient: 0, exponent: [] }, slice.notationMode, slice.convention);
+        addCanvasMathLabel(view, point, display.plain, display.tex, {
+          centered: true,
+          color: "rgba(34, 46, 62, 0.88)",
+        });
+      }
+    }
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = curveColor;
     ctx.lineWidth = options.lineWidth || 2 * view.ratio;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -4838,6 +5342,24 @@
       area += current[0] * next[1] - next[0] * current[1];
     }
     return area / 2;
+  }
+
+  function polygonCentroid(points) {
+    const area = polygonArea(points);
+    if (Math.abs(area) <= sliceTolerance()) {
+      const total = points.reduce((sum, point) => [sum[0] + point[0], sum[1] + point[1]], [0, 0]);
+      return points.length ? [total[0] / points.length, total[1] / points.length] : [0, 0];
+    }
+    let x = 0;
+    let y = 0;
+    for (let index = 0; index < points.length; index += 1) {
+      const current = points[index];
+      const next = points[(index + 1) % points.length];
+      const cross = current[0] * next[1] - next[0] * current[1];
+      x += (current[0] + next[0]) * cross;
+      y += (current[1] + next[1]) * cross;
+    }
+    return [x / (6 * area), y / (6 * area)];
   }
 
   function distanceSq2(a, b) {
@@ -5146,13 +5668,122 @@
     })[char]);
   }
 
+  function texText(value) {
+    return String(value)
+      .replace(/\\/g, "\\textbackslash{}")
+      .replace(/[{}_$%&#]/g, (char) => `\\${char}`)
+      .replace(/\^/g, "\\textasciicircum{}");
+  }
+
+  function vectorToTex(vector, digits = 3) {
+    return `\\left[${vector.map((value) => fmt(value, digits)).join(", ")}\\right]`;
+  }
+
+  function labelToTex(label) {
+    const text = String(label || "").trim();
+    const indexed = text.match(/^(rho|[euvxys])_?(\d+)$/i);
+    if (indexed) {
+      const symbol = indexed[1].toLowerCase() === "rho" ? "\\rho" : indexed[1];
+      return `${symbol}_{${indexed[2]}}`;
+    }
+    const powered = text.match(/^([ux])_?(\d+)\^(\d+)$/i);
+    if (powered) return `${powered[1].toLowerCase()}_{${powered[2]}}^{${powered[3]}}`;
+    if (/^\d+$/.test(text)) return text;
+    if (text === "origin" || text === "center" || text === "slice center" || text === "slice tangent") {
+      return `\\mathrm{${text.replace(/\s+/g, "\\ ")}}`;
+    }
+    return `\\text{${texText(text)}}`;
+  }
+
+  function setMathText(element, plain, tex, options = {}) {
+    if (!element) return;
+    const display = options.display === true;
+    element.classList.add("slice-math");
+    element.dataset.mathPlain = String(plain ?? "");
+    element.dataset.mathTex = display ? `\\[${tex}\\]` : `\\(${tex}\\)`;
+    element.textContent = String(plain ?? "");
+  }
+
+  function queueMathTypeset() {
+    const nodes = Array.from(document.querySelectorAll(".slice-math"));
+    if (!nodes.length) return;
+    if (!window.MathJax?.typesetPromise) {
+      nodes.forEach((node) => {
+        if (node.dataset.mathPlain != null) node.textContent = node.dataset.mathPlain;
+      });
+      return;
+    }
+    mathTypesetDirty = true;
+    if (mathTypesetQueued) return;
+    mathTypesetQueued = true;
+    const run = () => {
+      mathTypesetDirty = false;
+      const targets = Array.from(document.querySelectorAll(".slice-math"));
+      if (window.MathJax?.typesetClear) window.MathJax.typesetClear(targets);
+      targets.forEach((node) => {
+        if (node.dataset.mathTex) node.innerHTML = node.dataset.mathTex;
+      });
+      window.MathJax.typesetPromise(targets)
+        .catch(() => {})
+        .finally(() => {
+          mathTypesetQueued = false;
+          if (mathTypesetDirty) queueMathTypeset();
+        });
+    };
+    if (window.MathJax.startup?.promise) {
+      window.MathJax.startup.promise.then(run).catch(() => { mathTypesetQueued = false; });
+    } else {
+      Promise.resolve().then(run);
+    }
+  }
+
+  function addCanvasMathLabel(view, projected, plain, tex, options = {}) {
+    const overlay = $("slice-label-overlay");
+    if (!overlay || !projected || !Number.isFinite(projected.x) || !Number.isFinite(projected.y)) return;
+    const label = document.createElement("span");
+    label.className = "slice-canvas-label";
+    if (options.centered) label.classList.add("centered");
+    if (options.color) label.style.color = options.color;
+    const offsetX = finiteNumber(options.offsetX, 0);
+    const offsetY = finiteNumber(options.offsetY, 0);
+    label.style.left = `${projected.x / view.ratio + offsetX}px`;
+    label.style.top = `${projected.y / view.ratio + offsetY}px`;
+    setMathText(label, plain, tex);
+    overlay.append(label);
+  }
+
+  function clearCanvasMathLabels() {
+    const overlay = $("slice-label-overlay");
+    if (!overlay) return;
+    if (window.MathJax?.typesetClear) window.MathJax.typesetClear([overlay]);
+    overlay.innerHTML = "";
+  }
+
+  function matrixToTex(rows, options = {}) {
+    const rowLabels = options.rowLabels || [];
+    const colLabels = options.colLabels || [];
+    const hasLabels = rowLabels.length || colLabels.length;
+    const columnCount = rows[0]?.length || colLabels.length || 1;
+    const spec = hasLabels ? `c|${"r".repeat(columnCount)}` : "r".repeat(columnCount);
+    const lines = [];
+    if (colLabels.length) {
+      lines.push(["", ...colLabels.map(labelToTex)].join(" & "));
+      lines.push("\\hline");
+    }
+    rows.forEach((row, rowIndex) => {
+      const entries = row.map((value) => fmt(value, 4));
+      lines.push(rowLabels[rowIndex] ? [labelToTex(rowLabels[rowIndex]), ...entries].join(" & ") : entries.join(" & "));
+    });
+    return `\\begin{array}{${spec}}${lines.join(" \\\\ ")}\\end{array}`;
+  }
+
   function frameState() {
     return {
       ambientDimension: state.ambientDim,
       frameDimension: state.sliceDim,
       position: state.p,
       activeFrame: state.frame.slice(0, state.sliceDim),
-      formula: $("affine-formula").textContent,
+      formula: $("affine-formula").dataset.mathPlain || $("affine-formula").textContent,
     };
   }
 
@@ -5361,6 +5992,7 @@
       showBox: true,
       cameraDistance: 3,
       boxRadius: 4,
+      labelSize: DEFAULT_CANVAS_LABEL_SIZE_REM,
       exactSphereGuide: false,
       tolerance: 0.0001,
     };
@@ -5391,6 +6023,7 @@
     syncObjectSelect();
     syncObjectPanel();
     syncSourceMode();
+    syncStaticMathLabels();
     setupEventListeners();
     if (typeof ResizeObserver !== "undefined") {
       const observer = new ResizeObserver(resizeCanvas);

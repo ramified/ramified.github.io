@@ -130,7 +130,7 @@ Later object types:
 
 ### Slide Position Card
 
-Purpose: control the affine slice map `y -> p + y_1 v_1 + y_2 v_2`. The current build is intentionally 2D-only; no 2D/3D selector is shown. Ambient dimension `n` is controlled from a compact overlay at the top-right of the main canvas.
+Purpose: control the affine slice map `y -> p + y_1 v_1 + y_2 v_2`. The current build is intentionally 2D-only; no 2D/3D selector is shown. Ambient dimension `n` is controlled from a compact input in the main canvas toolbar before the source/frame status.
 
 Rows:
 
@@ -170,6 +170,7 @@ Rows:
 | --------------- | ------------------------------------ | ---------------------------------------- |
 | Screen zoom     | Zoom the canvas/screen view          | zoom slider plus reset screen view button |
 | Display toggles | Show or hide common visual aids      | checkboxes: `axes`, `grid`, `labels`, `bounding box` |
+| Label size      | Resize main-canvas MathJax labels    | label-size slider with compact rem readout |
 | 3D camera       | Control only the screen orbit camera | reset orbit camera button, camera distance slider |
 | Canvas box      | Set visible coordinate box           | box-radius slider plus exact number input |
 
@@ -580,15 +581,21 @@ p^0 + u1 + u2
 p^0 + u1 + u2 + u3
 p^0 + u1 + u2 + p^2 u1^2 + u1u2 + p^2 u2^2
 p^0 + u1 + u2 + u3 + u4 + p^{-1} u1u2
+max{1+3x_3, 5+2x_1}
+1 \otimes x_3^3 \oplus 5 \otimes x_1^2
+x_1 + x_2
 ```
 
 Acceptance:
 
-- Parser handles constants, negative coefficients, repeated monomials, whitespace, JSON terms, malformed input, and rejects tropical `x_i` notation with a `u_i` warning.
+- Parser handles constants, negative coefficients, repeated monomials, whitespace, JSON terms, malformed input, `u_i` monomials, affine `max{...}` / `min{...}` notation, and tropical-algebra `x_i` notation.
+- `u_i` remains the preferred normalized monomial notation; three notation buttons `u`, `affine`, and `tropical` switch the normalized readout and rewrite the textarea into that notation. Tropical-algebra display omits `0 \otimes` on nonconstant monomials.
 - Tropical objects use the same Source Data object manager.
 - Last valid state is preserved after parse errors.
 - `max` and `min` conventions are selectable and affect repeated-term merging and curve dominance.
 - Exact 2D tropical curve segments render inside the current slice box and update as `p` and the frame move.
+- Tropical dominance districts render by default with per-object show/hide control, colored cells, monomial labels, district counts, and degenerate restricted-term diagnostics.
+- Main-canvas mathematical labels are rendered through a positioned MathJax overlay with adjustable label size; Source Data tropical readouts, Background Space Details, HUD/status math, and direct frame labels use MathJax with plain-text fallback.
 
 ### 11. Generic 3D Renderer
 
@@ -610,7 +617,7 @@ Acceptance:
 
 ### 12. Exact 2D Tropical Slice
 
-Status: planned.
+Status: implemented in Step 10.
 
 Goal: construct the tropical curve in a moving 2D affine slice.
 
@@ -626,6 +633,7 @@ Algorithm:
 - clip by display rectangle;
 - clip by dominance half-planes;
 - draw remaining segments as the tropical curve.
+- draw dominance districts for the active maximal/minimal monomials when enabled.
 
 Acceptance:
 
