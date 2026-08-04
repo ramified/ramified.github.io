@@ -4,11 +4,11 @@ This is the implementation schedule for a broad higher-dimensional slice calcula
 
 ## Current V1 Summary
 
-The current implemented V1 is a standalone page at `higher_dimensional_slice_calculator.html`, backed by `js/higher_dimensional_slice_explorer.js`. It has the six-card right-side layout, compact Source Data add/modify modes, Cartesian-frame default object, regular-polytopes including 120-cell and 600-cell, the separate non-regular simplex source, sphere, Cartesian frame, and point sources.
+The current implemented V1 is a standalone page at `higher_dimensional_slice_calculator.html`, backed by `js/higher_dimensional_slice_explorer.js`. It has the six-card right-side layout, compact Source Data add/modify modes, Cartesian-frame default object, regular-polytopes including 120-cell and 600-cell, the separate non-regular simplex source, sphere, Cartesian frame, point, formula-set, and tropical-polynomial sources.
 
-The current renderer supports moving-frame projection and exact 2D slice layers for regular polytopes, the separate simplex source, and spheres. It also includes rational parameter input, continuous/discrete directional movement, frame-plane rotation, Gram-Schmidt repair, canvas picking, import/export, runtime diagnostics, and an `index.html` card with a GIF preview.
+The current renderer supports moving-frame projection, exact 2D slice layers for regular polytopes/simplex/spheres, exact/numeric 2D formula slices, and exact 2D tropical curve slices. It also includes rational parameter input, direct rational position/frame input, continuous/discrete directional movement, frame-plane rotation, Gram-Schmidt repair, canvas picking, import/export, runtime diagnostics, and an `index.html` card with a GIF preview.
 
-The current build does not yet implement direct matrix/frame input, lattice or Voronoi sources, formula/quadratic sources, tropical polynomial parsing, generic 3D rendering, or tropical exact 2D/3D rendering.
+The current build does not yet implement lattice or Voronoi sources, generic 3D rendering, or tropical exact 3D rendering.
 
 ## Guiding Model
 
@@ -74,16 +74,16 @@ Purpose: separate object creation from object modification. This card manages so
 
 Rows:
 
-| Row | Planned Function | UI Tools |
-| --- | --- | --- |
-| Mode | Choose creation or editing workflow; always visible | segmented control: `add object`, `modify object` |
-| Add type | Add-mode only; choose concrete source object and create it with an automatic unique name | select menu: `regular polytope in R^n`, `simplex in R^n`, `sphere S^{n-1}`, `Cartesian frame`, `point in R^n`; when regular polytope is selected, show a family select before the `add` button; planned later: `lattice`, `formula set`, `tropical polynomial`, `Lie slice data` |
-| Object | Modify-mode only; choose, delete, or export the active object/layer | select menu, small `del` button, `export` button |
-| Object name | Rename active object | compact text input |
-| Params | Modify the active object's mathematical parameters | regular polytope/simplex/sphere: size slider plus number; Cartesian frame: basis selector plus length slider/number; point: compact coordinate controls |
-| Style | Set visual style of active object | color swatch, opacity slider, point-size slider, line-width slider |
-| Visibility | Hide/show active object layers and labels | independent toggle buttons `proj`, `slice`; checkbox `labels` |
-| Status | Report current source-data action; always visible | compact inline warning/status text |
+| Row         | Planned Function                         | UI Tools                                 |
+| ----------- | ---------------------------------------- | ---------------------------------------- |
+| Mode        | Choose creation or editing workflow; always visible | segmented control: `add object`, `modify object` |
+| Add type    | Add-mode only; choose concrete source object and create it with an automatic unique name | select menu: `regular polytope in R^n`, `simplex in R^n`, `sphere S^{n-1}`, `Cartesian frame`, `point in R^n`, `formula set`, `tropical polynomial`; when regular polytope is selected, show a family select before the `add` button; planned later: `lattice`, `Lie slice data` |
+| Object      | Modify-mode only; choose, delete, or export the active object/layer | select menu, small `del` button, `export` button |
+| Object name | Rename active object                     | compact text input                       |
+| Params      | Modify the active object's mathematical parameters | regular polytope/simplex/sphere: size slider plus number; Cartesian frame: basis selector plus length slider/number; point: compact coordinate controls |
+| Style       | Set visual style of active object        | color swatch, opacity slider, point-size slider, line-width slider |
+| Visibility  | Hide/show active object layers and labels | independent toggle buttons `proj`, `slice`; checkbox `labels` |
+| Status      | Report current source-data action; always visible | compact inline warning/status text       |
 
 Initial object types:
 
@@ -130,23 +130,22 @@ Later object types:
 
 ### Slide Position Card
 
-Purpose: control the affine slice map `y -> p + y_1 v_1 + y_2 v_2`. The current build is intentionally 2D-only; 3D frame mode remains visible as disabled future work. The current implementation only has move-mode input; a planned direct-input mode will allow users to edit `p` and a frame matrix directly.
+Purpose: control the affine slice map `y -> p + y_1 v_1 + y_2 v_2`. The current build is intentionally 2D-only; no 2D/3D selector is shown. Ambient dimension `n` is controlled from a compact overlay at the top-right of the main canvas.
 
 Rows:
 
-| Row | Planned Function | UI Tools |
-| --- | --- | --- |
-| Dimension | Set ambient dimension and show frame dimension availability | number stepper for `n`; segmented control with `2D` active and `3D` disabled |
-| Input mode | Choose how `p` and frame data are changed | segmented control: `move`, `direct input`; default `move` |
+| Row              | Planned Function                         | UI Tools                                 |
+| ---------------- | ---------------------------------------- | ---------------------------------------- |
+| Input mode       | Choose how `p` and frame data are changed | segmented control: `move`, `direct input`; default `move` |
 | Active direction | Move-mode only; select ambient or moving-frame direction for keyboard/button movement | wrapped buttons `e1 ... en` and `v1 ... vn`; default `v3` when available |
-| Quick move | Move-mode only; move `p` along selected direction or reset it to the origin | hold/click buttons `-`, `+`, `reset p` |
-| Motion | Move-mode only; choose continuous or discrete movement behavior | segmented control `continuous`, `discrete`; default `continuous` |
-| Speed | Move-mode continuous only; set held-key/button speeds | two sliders: translation speed `0.05..4` units/sec, rotation speed `1..180` deg/sec |
-| Step | Move-mode discrete only; set one-press increments | two sliders: translation distance `0.01..2`, rotation angle `0.5..45` degrees |
-| Rotation pair | Move-mode only; choose frame-plane rotation pair | two select menus choosing `(v_i, v_j)` |
-| Direct input | Direct-input mode only; edit both the slice position and candidate frame matrix | rational tuple input for `p`, compact `n x n` matrix textarea/table, `apply` button |
-| Frame repair | Keep frame orthonormal | `Schmidt` button and `auto-Schmidt` checkbox; direct-input apply always runs Schmidt |
-| Reset/readout | Reset frame and preview active directions | `reset frame` button plus compact read-only `v1`, `v2`, `v3` preview |
+| Quick move       | Move-mode only; move `p` along selected direction or reset it to the origin | hold/click buttons `-`, `+`, `reset p`   |
+| Motion           | Move-mode only; choose continuous or discrete movement behavior | segmented control `continuous`, `discrete`; default `continuous` |
+| Speed            | Move-mode continuous only; set held-key/button speeds | two sliders: translation speed `0.05..4` units/sec, rotation speed `1..180` deg/sec |
+| Step             | Move-mode discrete only; set one-press increments | two sliders: translation distance `0.01..2`, rotation angle `0.5..45` degrees |
+| Rotation pair    | Move-mode only; choose frame-plane rotation pair | two select menus choosing `(v_i, v_j)`   |
+| Direct input     | Direct-input mode only; edit or import affine-frame data | nested segmented control: `manual input`, `import`; manual mode has rational `p` tuple plus editable `n x n` grid whose columns are `v_i`; import mode has a matrix rows textarea compatible with `matrix_calculator.html` `Rows` export |
+| Frame repair     | Keep frame orthonormal                   | `Schmidt` button and `auto-Schmidt` checkbox; direct-input apply always runs Schmidt |
+| Reset            | Reset frame                              | `reset frame` button                     |
 
 Keyboard controls:
 
@@ -158,7 +157,7 @@ Keyboard controls:
 - In discrete mode, each key press or click applies exactly one selected distance or angle.
 - Number keys set the rotation pair: `1` and `2` fill the first selectbox, while `3...n` fill the second selectbox. If the pair would become equal, the other selectbox moves to the lowest available distinct frame vector.
 - Keyboard movement, rotation, and number-key shortcuts are ignored while a text input, textarea, or select menu has focus.
-- Direct position sliders are intentionally omitted; the Background Space Details card displays the resulting `p` vector.
+- Direct position sliders are intentionally omitted; manual direct-input position cells accept rational text and wheel-step editing like point-source params.
 - Direct-input mode validates finite rational entries for `p` and the frame matrix. Rank-deficient, malformed, or non-finite matrices are rejected with a Debug Chart warning and must not overwrite the last valid frame.
 
 ### Viewport Card
@@ -167,12 +166,12 @@ Purpose: control the screen view only. Nothing in this card changes `p`, `v_i`, 
 
 Rows:
 
-| Row | Planned Function | UI Tools |
-| --- | --- | --- |
-| Screen zoom | Zoom the canvas/screen view | zoom slider plus reset screen view button |
-| Display toggles | Show or hide common visual aids | checkboxes: `axes`, `grid`, `labels`, `bounding box` |
-| 3D camera | Control only the screen orbit camera | reset orbit camera button, camera distance slider |
-| Canvas box | Set visible coordinate box | box-radius slider plus exact number input |
+| Row             | Planned Function                     | UI Tools                                 |
+| --------------- | ------------------------------------ | ---------------------------------------- |
+| Screen zoom     | Zoom the canvas/screen view          | zoom slider plus reset screen view button |
+| Display toggles | Show or hide common visual aids      | checkboxes: `axes`, `grid`, `labels`, `bounding box` |
+| 3D camera       | Control only the screen orbit camera | reset orbit camera button, camera distance slider |
+| Canvas box      | Set visible coordinate box           | box-radius slider plus exact number input |
 
 Important distinction:
 
@@ -185,14 +184,14 @@ Purpose: show correctness checks, visible counts, warnings, and optional exact g
 
 Rows:
 
-| Row | Planned Function | UI Tools |
-| --- | --- | --- |
-| Visible counts | Count visible objects and projection/slice primitives | compact read-only key/value grid with projection points/edges/rays and slice polygons/circles/points |
-| Preview diagnostics | Show active projection and exact 2D slice state | compact read-only key/value grid |
+| Row                 | Planned Function                         | UI Tools                                 |
+| ------------------- | ---------------------------------------- | ---------------------------------------- |
+| Visible counts      | Count visible objects and projection/slice primitives | compact read-only key/value grid with projection points/edges/rays and slice polygons/circles/points |
+| Preview diagnostics | Show active projection and exact 2D slice state | compact read-only key/value grid         |
 | Runtime diagnostics | Show current render and exact-slice cost | read-only draw runtime, exact-slice runtime, halfspace count, and halfspace build time |
-| Sphere debug | Show an optional exact sphere-intersection guide for checking affine-frame intuition | checkbox: `exact S^n guide` |
-| Tolerance | Tune numerical predicates | tolerance slider plus exact number input |
-| Warnings | Report empty slices, degeneracy, parse issues | compact warning/status text area |
+| Sphere debug        | Show an optional exact sphere-intersection guide for checking affine-frame intuition | checkbox: `exact S^n guide`              |
+| Tolerance           | Tune numerical predicates                | tolerance slider plus exact number input |
+| Warnings            | Report empty slices, degeneracy, parse issues | compact warning/status text area         |
 
 The exact `S^n` guide is a debug feature. For `S^{n-1}` in `R^n`, its intersection with a 2D affine frame plane should display as a circle, point, or empty set when the frame is in the right relative position. This is a diagnostic guide, not a general exact slice renderer.
 
@@ -202,14 +201,14 @@ Purpose: explicitly display the current ambient-space data, not just diagnostics
 
 Rows:
 
-| Row | Planned Function | UI Tools |
-| --- | --- | --- |
-| Position vector | Show current center | read-only monospace `p = [...]` |
-| Frame matrix | Show full frame with columns `v_1, ..., v_n` | read-only compact matrix |
-| Active frame matrix | Show columns used by current projection frame | read-only compact matrix with `v_1,v_2` or `v_1,v_2,v_3` |
-| Gram matrix | Show `V^T V` or max orthogonality error | read-only matrix or compact key/value row |
-| Affine formula | Show the current slice map | read-only monospace formula `x = p + y_1v_1 + ...` |
-| Copy row | Copy reusable background-space data | buttons: `copy p`, `copy frame`, `copy frame JSON` |
+| Row                 | Planned Function                         | UI Tools                                 |
+| ------------------- | ---------------------------------------- | ---------------------------------------- |
+| Position vector     | Show current center                      | read-only monospace `p = [...]`          |
+| Frame matrix        | Show full frame with columns `v_1, ..., v_n` | read-only compact matrix with `v_i` column labels and `e_i` row labels |
+| Active frame matrix | Show columns used by current projection frame | read-only compact matrix with `v_1,v_2` column labels |
+| Gram matrix         | Show `V^T V` or max orthogonality error  | read-only matrix or compact key/value row |
+| Affine formula      | Show the current slice map               | read-only monospace formula `x = p + y_1v_1 + ...` |
+| Copy row            | Copy reusable background-space data      | buttons: `copy p`, `copy frame`, `copy frame JSON` |
 
 This card is the place to inspect the current frame coordinates as a matrix and the current position as a vector.
 
@@ -219,12 +218,12 @@ Purpose: save and restore complete experiments, not only source object data.
 
 Rows:
 
-| Row | Planned Function | UI Tools |
-| --- | --- | --- |
-| Export | Save current app state | buttons: `copy state JSON`, `download state JSON` |
-| Import | Paste complete state or exported object JSON | compact monospace textarea |
-| Apply import | Load pasted state, add object JSON, replace active object, or reset | `import full state`, `import as new object`, `replace active object`, `reset demo` buttons |
-| Future sharing | Later permalink/share support | disabled row or planned placeholder |
+| Row            | Planned Function                         | UI Tools                                 |
+| -------------- | ---------------------------------------- | ---------------------------------------- |
+| Export         | Save current app state                   | buttons: `copy state JSON`, `download state JSON` |
+| Import         | Paste complete state or exported object JSON | compact monospace textarea               |
+| Apply import   | Load pasted state, add object JSON, replace active object, or reset | `import full state`, `import as new object`, `replace active object`, `reset demo` buttons |
+| Future sharing | Later permalink/share support            | disabled row or planned placeholder      |
 
 Full state should include:
 
@@ -358,7 +357,7 @@ Acceptance:
 - The first viewport appears on the left.
 - The six right-side cards exist in the order specified above.
 - All card rows fit compactly on desktop and stack cleanly on mobile.
-- No tropical parser is implemented yet.
+- Tropical polynomial sources parse `u_i` monomial notation and render exact 2D tropical curve slices.
 
 ### 3. Slide Position Move Engine
 
@@ -479,7 +478,7 @@ Acceptance:
 
 ### 7. Slide Position Input Modes
 
-Status: planned.
+Status: implemented in current V1.
 
 Goal: make `Slide Position` more than motion controls by adding direct affine-frame input.
 
@@ -487,16 +486,21 @@ Implement:
 
 - add an `input mode` row with exactly two modes: `move` and `direct input`;
 - keep all current translation/rotation controls inside move mode;
-- direct-input mode combines a rational position-vector editor for `p` and a compact rational `n x n` frame-matrix editor;
-- applying direct input validates dimensions and finite rational values, then Gram-Schmidt orthogonalizes the frame-matrix columns;
-- reject malformed, non-finite, or rank-deficient frame matrices with a Debug Chart warning and keep the last valid `p` and frame;
+- direct-input mode has exactly two submodes: `manual input` and `import`;
+- manual direct input combines a rational position-vector editor for `p` and a compact rational `n x n` frame-matrix grid whose columns are `v_i`;
+- import direct input accepts row format compatible with the `matrix_calculator.html` `Rows` export and preserves current `p`;
+- applying manual or import input validates dimensions and finite rational values, then Gram-Schmidt orthogonalizes the frame-matrix columns;
+- reject malformed, non-finite, or rank-deficient frame matrices with a Debug Chart warning, keep the last valid frame, and never partially commit malformed `p` text;
 - refresh Background Space Details immediately after successful apply.
 
 Acceptance:
 
 - Mode labels are exactly `move` and `direct input`.
+- Direct-input submode labels are exactly `manual input` and `import`.
 - Move mode preserves existing keyboard and button behavior.
 - Direct input accepts rational entries such as `1/3`, `-5/2`, `8`, and decimals.
+- Manual `p` inputs and frame-matrix cells support wheel-step editing by `0.1`, clamped to `[-6, 6]` for wheel edits, while rational text entry remains unbounded.
+- Frame matrices display columns as `v_i` in both manual input and Background Space Details.
 - A full-rank matrix applies and becomes an orthonormal frame.
 - A rank-deficient matrix is rejected without mutating the current frame.
 
@@ -527,19 +531,20 @@ Acceptance:
 
 ### 9. Formula, Inequality, And Quadratic Sources
 
-Status: planned.
+Status: implemented.
 
 Goal: add mathematical source objects described by equations, inequalities, and especially quadratic forms in coordinates `x_1, ..., x_n`.
 
 Implement:
 
-- add Source Data type `formula set`;
-- support linear equalities and inequalities as exact halfspace or affine-line data;
-- support quadratic forms from a symmetric matrix `Q`, with relation `=`, `<=`, or `>=`;
-- allow a quadratic source to use an imported matrix from its object data;
+- add Source Data type `formula set`, slice-visible and projection-inert in this build;
+- each formula-set object stores one relation and has params modes `formula` and `import Q`;
+- formula text accepts calculator-like syntax, variables `x1`/`x_1`, relation symbols `=`, `<=`, `>=`, `<`, and `>`, and exact-renders polynomial formulas of degree at most 2;
+- parse broader functions and powers, including `sqrt`, `abs`, trigonometric functions, `exp`, `ln`, `log`, and `log_a`; non-polynomial formulas render through a numerical implicit-region fallback instead of replacing the exact polynomial path;
+- `import Q` accepts matrix-calculator `Rows` for a symmetric displayed matrix `Q`, relation `=`, `<=`, or `>=`, and rational RHS, interpreted as `x^T Q x relation rhs`;
 - substitute `x = p + y_1v_1 + y_2v_2` for exact 2D rendering;
-- draw quadratic equalities as conics and quadratic inequalities as filled conic regions when the resulting 2D form is classified successfully;
-- report malformed formulas, nonsymmetric matrices, and unsupported nonlinear formulas in Debug Chart.
+- draw linear inequalities through the existing half-plane clipping path, linear equalities as clipped segments or empty sets, and quadratic relations as conic boundaries with filled inequality regions inside the slice box;
+- report malformed formulas, nonsymmetric matrices, wrong Q dimensions, non-finite entries, and numerical fallback status in Debug Chart / Source status.
 
 Acceptance:
 
@@ -547,45 +552,47 @@ Acceptance:
 - Linear equalities render exact 2D lines or empty results.
 - Quadratic-form objects accept rational matrix entries.
 - Quadratic equality/inequality slices update as `p` and the frame move.
-- Unsupported formulas preserve the last valid object state and show a warning.
+- Strict `<` and `>` are accepted and rendered as closed `<=` and `>=` boundaries with a status warning.
+- Malformed formulas preserve the last valid object state and show a warning.
 
-### 10. Tropical Polynomial Parser And Model
+### 10. Tropical Polynomial Parser, Model, And 2D Slice Rendering
 
-Status: planned.
+Status: implemented.
 
-Goal: add tropical input after generic 2D slice mechanics and before generic 3D rendering.
+Goal: add tropical input after generic 2D slice mechanics and before generic 3D rendering, including exact 2D tropical curve slices.
 
 Default convention:
 
 ```text
-F(x) = max_i(c_i + <a_i, x>)
+F(X) = max_i(c_i + <a_i, X>)
 ```
 
 Term model:
 
 ```json
-{ "coefficient": 0, "exponent": [1, 0, 0], "label": "x1" }
+{ "coefficient": 0, "exponent": [1, 0, 0], "label": "u1" }
 ```
 
 Readable examples:
 
 ```text
-0 + x1 + x2
-0 + x1 + x2 + x3
-0 + x1 + x2 + 2x1^2 + x1x2 + 2x2^2
-0 + x1 + x2 + x3 + x4 + -1x1x2
+p^0 + u1 + u2
+p^0 + u1 + u2 + u3
+p^0 + u1 + u2 + p^2 u1^2 + u1u2 + p^2 u2^2
+p^0 + u1 + u2 + u3 + u4 + p^{-1} u1u2
 ```
 
 Acceptance:
 
-- Parser handles constants, negative coefficients, repeated monomials, whitespace, JSON terms, and malformed input.
+- Parser handles constants, negative coefficients, repeated monomials, whitespace, JSON terms, malformed input, and rejects tropical `x_i` notation with a `u_i` warning.
 - Tropical objects use the same Source Data object manager.
 - Last valid state is preserved after parse errors.
-- Parser/model work does not imply exact tropical rendering exists yet.
+- `max` and `min` conventions are selectable and affect repeated-term merging and curve dominance.
+- Exact 2D tropical curve segments render inside the current slice box and update as `p` and the frame move.
 
 ### 11. Generic 3D Renderer
 
-Status: planned.
+Status: implemented in Step 10 for 2D.
 
 Goal: test 3D frame projection before exact 3D intersection and tropical surfaces.
 
@@ -622,7 +629,7 @@ Algorithm:
 
 Acceptance:
 
-- `0 + x1 + x2` gives the standard tropical line with three rays.
+- `p^0 + u1 + u2` gives the standard tropical line with three rays.
 - Moving `p` changes restricted constants continuously.
 - Rotating the frame changes the curve smoothly.
 - Degenerate terms produce diagnostics instead of crashes.
@@ -643,7 +650,7 @@ Algorithm:
 
 Acceptance:
 
-- `0 + x1 + x2 + x3` gives the expected tropical plane.
+- `p^0 + u1 + u2 + u3` gives the expected tropical plane.
 - 4D tropical examples can be viewed through moving 3D slices.
 - Empty slices and degenerate coincidences are reported gracefully.
 

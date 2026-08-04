@@ -27,6 +27,30 @@
       cursor: default;
     }
 
+    .slice-dimension-overlay {
+      position: absolute;
+      top: 12px;
+      right: 14px;
+      z-index: 3;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid rgba(216, 208, 196, 0.92);
+      border-radius: 3px;
+      background: rgba(255, 253, 248, 0.94);
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.68rem;
+      line-height: 1.2;
+      padding: 5px 7px;
+    }
+
+    .slice-dimension-overlay input {
+      width: 54px;
+      min-height: 26px;
+      padding: 2px 5px;
+    }
+
     .slice-hud {
       position: absolute;
       inset: auto 14px 12px 14px;
@@ -284,6 +308,116 @@
       min-width: 0;
     }
 
+    .slice-direct-panel {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .slice-formula-panel,
+    .slice-tropical-panel {
+      display: grid;
+      gap: 7px;
+      min-width: min(100%, 420px);
+      width: 100%;
+    }
+
+    .slice-formula-mode-panel {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .slice-formula-mode-panel[hidden] {
+      display: none !important;
+    }
+
+    .slice-formula-textarea,
+    .slice-formula-matrix-textarea,
+    .slice-tropical-textarea {
+      min-height: 74px;
+      font-family: "JetBrains Mono", Consolas, monospace;
+    }
+
+    .slice-tropical-summary {
+      display: block;
+      max-height: 96px;
+      overflow: auto;
+      padding: 7px 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.64);
+      color: var(--muted);
+      font-size: 0.7rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .slice-formula-import-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .slice-direct-vector,
+    .slice-direct-position-list {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px;
+      min-width: 0;
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.7rem;
+    }
+
+    .slice-direct-frame-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) max-content;
+      align-items: start;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .slice-direct-mode-panel[hidden] {
+      display: none !important;
+    }
+
+    .slice-direct-matrix-wrap {
+      overflow: auto;
+      padding-bottom: 2px;
+    }
+
+    .slice-direct-matrix-grid {
+      display: grid;
+      gap: 4px;
+      align-items: center;
+      min-width: max-content;
+    }
+
+    .slice-direct-matrix-label {
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.68rem;
+      line-height: 1.2;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .slice-direct-matrix-cell {
+      width: 58px;
+      min-height: 28px;
+      padding: 3px 4px;
+      text-align: center;
+    }
+
+    #direct-frame-import {
+      min-height: 92px;
+      font-family: "JetBrains Mono", Consolas, monospace;
+    }
+
     .slice-position-row {
       display: grid;
       grid-template-columns: 32px minmax(80px, 1fr) 68px;
@@ -363,6 +497,10 @@
       .slice-position-row {
         grid-template-columns: 28px minmax(80px, 1fr) 62px;
       }
+
+      .slice-direct-frame-row {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -375,14 +513,18 @@
   <main class="layout slice-calculator-layout">
     <section class="canvas-panel" aria-labelledby="slice-title">
       <header class="panel-title">
-        <span id="slice-title" class="panel-title-text">Projection / exact 2D slice</span>
+        <span id="slice-title" class="panel-title-text">Projection / exact+numeric 2D slice</span>
         <div class="canvas-toolbar" aria-label="Current projection summary">
           <span class="shape-indicator">source <strong id="toolbar-source">frame</strong></span>
           <span class="shape-indicator">frame <strong id="toolbar-slice">2D</strong></span>
         </div>
       </header>
       <div class="slice-stage-wrap">
-        <canvas id="slice-viewport" width="980" height="680" aria-label="Higher-dimensional projection and exact 2D slice viewport"></canvas>
+        <label class="slice-dimension-overlay" title="Ambient dimension">
+          <span>n</span>
+          <input id="ambient-dimension" class="slice-input" type="number" min="2" max="8" step="1" value="4" aria-label="Ambient dimension">
+        </label>
+        <canvas id="slice-viewport" width="980" height="680" aria-label="Higher-dimensional projection and exact or numeric 2D slice viewport"></canvas>
         <div class="slice-hud" id="slice-hud" aria-live="polite"></div>
       </div>
       <div class="slice-status-bar" id="slice-status-bar"></div>
@@ -458,7 +600,7 @@
           <div class="slice-row">
             <span class="slice-row-label">status</span>
             <div class="slice-control-line">
-              <span id="source-status" class="slice-warning" role="status">Projection and exact 2D slice layers are active.</span>
+              <span id="source-status" class="slice-warning" role="status">Projection and exact/numeric 2D slice layers are active.</span>
             </div>
           </div>
         </div>
@@ -467,27 +609,24 @@
       <section class="card">
         <div class="card-head" tabindex="0" role="button" aria-expanded="true">
           <span class="drag-handle" title="drag card">&#8942;&#8942;</span>
-          <span class="card-head-label">Movement</span>
+          <span class="card-head-label">Slide Position</span>
           <i class="toggle-icon">&#9662;</i>
         </div>
         <div class="card-body slice-card-body">
           <div class="slice-row">
-            <span class="slice-row-label">dimension</span>
-            <div class="slice-control-line">
-              <input id="ambient-dimension" class="slice-input" type="number" min="2" max="8" step="1" value="4" aria-label="Ambient dimension">
-              <div class="slice-segmented" id="slice-dimension-controls" aria-label="Frame dimension">
-                <button class="slice-segment active" type="button" data-slice-dim="2">2D</button>
-                <button class="slice-segment" type="button" data-slice-dim="3" disabled title="3D frame mode is future work">3D</button>
-              </div>
+            <span class="slice-row-label">input mode</span>
+            <div class="slice-segmented" id="slide-input-mode-controls" aria-label="Slide position input mode">
+              <button class="slice-segment active" type="button" data-slide-input-mode="move">move</button>
+              <button class="slice-segment" type="button" data-slide-input-mode="direct">direct input</button>
             </div>
           </div>
 
-          <div class="slice-row">
+          <div class="slice-row" data-slide-input-mode-row="move">
             <span class="slice-row-label">direction</span>
             <div class="slice-segmented" id="direction-controls" aria-label="Active movement direction"></div>
           </div>
 
-          <div class="slice-row">
+          <div class="slice-row" data-slide-input-mode-row="move">
             <span class="slice-row-label">quick move</span>
             <div class="slice-button-line">
               <button id="move-negative" class="slice-icon-btn" type="button">-</button>
@@ -496,7 +635,7 @@
             </div>
           </div>
 
-          <div class="slice-row">
+          <div class="slice-row" data-slide-input-mode-row="move">
             <span class="slice-row-label">motion</span>
             <div class="slice-segmented" id="motion-mode-controls" aria-label="Motion mode">
               <button class="slice-segment active" type="button" data-motion-mode="continuous">continuous</button>
@@ -504,7 +643,7 @@
             </div>
           </div>
 
-          <div class="slice-row" data-motion-mode-row="continuous">
+          <div class="slice-row" data-slide-input-mode-row="move" data-motion-mode-row="continuous">
             <span class="slice-row-label">speed</span>
             <div class="slice-control-line">
               <label class="slice-motion-pack">trans
@@ -518,7 +657,7 @@
             </div>
           </div>
 
-          <div class="slice-row" data-motion-mode-row="discrete" hidden>
+          <div class="slice-row" data-slide-input-mode-row="move" data-motion-mode-row="discrete" hidden>
             <span class="slice-row-label">step</span>
             <div class="slice-control-line">
               <label class="slice-motion-pack">trans
@@ -532,11 +671,43 @@
             </div>
           </div>
 
-          <div class="slice-row">
+          <div class="slice-row" data-slide-input-mode-row="move">
             <span class="slice-row-label">rot pair</span>
             <div class="slice-control-line">
               <select id="rotation-i" class="slice-select" aria-label="First frame vector"></select>
               <select id="rotation-j" class="slice-select" aria-label="Second frame vector"></select>
+            </div>
+          </div>
+
+          <div class="slice-row stack" data-slide-input-mode-row="direct" hidden>
+            <span class="slice-row-label">direct input</span>
+            <div class="slice-direct-panel">
+              <div class="slice-segmented" id="direct-input-mode-controls" aria-label="Direct input mode">
+                <button class="slice-segment active" type="button" data-direct-input-mode="manual">manual input</button>
+                <button class="slice-segment" type="button" data-direct-input-mode="import">import</button>
+              </div>
+
+              <div class="slice-direct-vector" aria-label="Direct position vector">
+                <span>p = (</span>
+                <span id="direct-position-inputs" class="slice-direct-position-list"></span>
+                <span>)</span>
+              </div>
+
+              <div class="slice-direct-mode-panel" data-direct-input-mode-panel="manual">
+                <div class="slice-direct-matrix-wrap">
+                  <div id="direct-frame-grid" class="slice-direct-matrix-grid" aria-label="Manual frame matrix with columns v_i"></div>
+                </div>
+                <div class="slice-button-line">
+                  <button id="direct-manual-apply" class="slice-btn" type="button">apply manual</button>
+                </div>
+              </div>
+
+              <div class="slice-direct-mode-panel" data-direct-input-mode-panel="import" hidden>
+                <div class="slice-direct-frame-row">
+                  <textarea id="direct-frame-import" class="slice-textarea" spellcheck="false" aria-label="Import frame matrix rows" placeholder="Paste matrix_calculator rows here; columns are v_i"></textarea>
+                  <button id="direct-import-apply" class="slice-btn" type="button">apply import</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -552,7 +723,6 @@
             <span class="slice-row-label">frame</span>
             <div class="slice-control-line">
               <button id="reset-frame" class="slice-btn" type="button">reset frame</button>
-              <code id="frame-preview" class="slice-readout">v1=[1,0,0,0]</code>
             </div>
           </div>
         </div>
@@ -631,7 +801,7 @@
           </div>
           <div class="slice-row stack">
             <span class="slice-row-label">warnings</span>
-            <div id="debug-warnings" class="slice-warning">Projection and exact 2D slice layers are active.</div>
+            <div id="debug-warnings" class="slice-warning">Projection and exact/numeric 2D slice layers are active.</div>
           </div>
         </div>
       </section>
@@ -648,11 +818,11 @@
             <code id="position-vector" class="slice-readout"></code>
           </div>
           <div class="slice-row stack">
-            <span class="slice-row-label">frame matrix</span>
+            <span class="slice-row-label">frame matrix (columns v_i)</span>
             <pre id="frame-matrix" class="slice-code-block"></pre>
           </div>
           <div class="slice-row stack">
-            <span class="slice-row-label">active frame matrix</span>
+            <span class="slice-row-label">active frame columns</span>
             <pre id="active-slice-matrix" class="slice-code-block"></pre>
           </div>
           <div class="slice-row stack">

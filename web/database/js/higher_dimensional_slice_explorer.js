@@ -24,8 +24,10 @@
     { key: "sphere", label: "sphere S^{n-1}", color: "#8a4f9f", pointSize: 3, lineWidth: 2 },
     { key: "cartesian-frame", label: "Cartesian frame", color: "#b05835", pointSize: 4, lineWidth: 3 },
     { key: "point", label: "point in R^n", color: "#c58a20", pointSize: 7, lineWidth: 2 },
+    { key: "formula-set", label: "formula set", color: "#4f7fbd", pointSize: 4, lineWidth: 2 },
+    { key: "tropical-polynomial", label: "tropical polynomial", color: "#2f6fb0", pointSize: 4, lineWidth: 2 },
   ];
-  const EXACT_SLICE_TYPES = new Set(["regular-polytope", "cube", "simplex", "sphere"]);
+  const EXACT_SLICE_TYPES = new Set(["regular-polytope", "cube", "simplex", "sphere", "formula-set", "tropical-polynomial"]);
   const REGULAR_POLYTOPE_FAMILIES = [
     { key: "regular-simplex", label: "regular simplex" },
     { key: "hypercube", label: "hypercube" },
@@ -64,6 +66,8 @@
   const state = {
     ambientDim: 4,
     sliceDim: 2,
+    slideInputMode: "move",
+    directInputMode: "manual",
     activeDirection: defaultDirection(4),
     motionMode: "continuous",
     translationSpeed: MOTION_DEFAULTS.translationSpeed,
@@ -92,7 +96,7 @@
     activeObjectId: null,
     selectedVertex: null,
     pickCandidates: [],
-    lastWarning: "Projection and exact 2D slice layers are active.",
+    lastWarning: "Projection and exact/numeric 2D slice layers are active.",
   };
 
   const motionHold = {
@@ -161,6 +165,890 @@
     return { ok: true, value: numerator / denominator };
   }
 
+  function normalizeSlideInputMode(mode) {
+    return mode === "direct" || mode === "direct input" ? "direct" : "move";
+  }
+
+  function normalizeDirectInputMode(mode) {
+    return mode === "import" ? "import" : "manual";
+  }
+
+  function normalizeFormulaInputMode(mode) {
+    return mode === "import-q" || mode === "import Q" ? "import-q" : "formula";
+  }
+
+  function zeroFormulaPolynomial(n = state.ambientDim) {
+    return {
+      constant: 0,
+      linear: Array(n).fill(0),
+      quadratic: Array.from({ length: n }, () => Array(n).fill(0)),
+    };
+  }
+
+  function constantFormulaPolynomial(value, n = state.ambientDim) {
+    const polynomial = zeroFormulaPolynomial(n);
+    polynomial.constant = value;
+    return polynomial;
+  }
+
+  function variableFormulaPolynomial(index, n = state.ambientDim) {
+    const polynomial = zeroFormulaPolynomial(n);
+    polynomial.linear[index] = 1;
+    return polynomial;
+  }
+
+  function cleanFormulaPolynomial(polynomial, n = state.ambientDim) {
+    const cleaned = {
+      constant: finiteNumber(polynomial?.constant, 0),
+      linear: resizeVector(Array.isArray(polynomial?.linear) ? polynomial.linear : [], n),
+      quadratic: Array.from({ length: n }, (_, row) =>
+        resizeVector(Array.isArray(polynomial?.quadratic?.[row]) ? polynomial.quadratic[row] : [], n)
+      ),
+    };
+    if (Math.abs(cleaned.constant) < 1e-12) cleaned.constant = 0;
+    cleaned.linear = cleaned.linear.map((value) => (Math.abs(finiteNumber(value, 0)) < 1e-12 ? 0 : finiteNumber(value, 0)));
+    for (let row = 0; row < n; row += 1) {
+      for (let col = row; col < n; col += 1) {
+        const value = row === col
+          ? finiteNumber(cleaned.quadratic[row][col], 0)
+          : (finiteNumber(cleaned.quadratic[row][col], 0) + finiteNumber(cleaned.quadratic[col][row], 0)) / 2;
+        const compact = Math.abs(value) < 1e-12 ? 0 : value;
+        cleaned.quadratic[row][col] = compact;
+        cleaned.quadratic[col][row] = compact;
+      }
+    }
+    return cleaned;
+  }
+
+  function formulaPolynomialDegree(polynomial) {
+    const tolerance = 1e-10;
+    if (polynomial.quadratic.some((row) => row.some((value) => Math.abs(value) > tolerance))) return 2;
+    if (polynomial.linear.some((value) => Math.abs(value) > tolerance)) return 1;
+    if (Math.abs(polynomial.constant) > tolerance) return 0;
+    return 0;
+  }
+
+  function formulaPolynomialHasVariables(polynomial) {
+    return formulaPolynomialDegree({ ...polynomial, constant: 0 }) > 0;
+  }
+
+  function addFormulaPolynomials(left, right, sign = 1) {
+    const n = left.linear.length;
+    const result = zeroFormulaPolynomial(n);
+    result.constant = left.constant + sign * right.constant;
+    for (let row = 0; row < n; row += 1) {
+      result.linear[row] = left.linear[row] + sign * right.linear[row];
+      for (let col = 0; col < n; col += 1) {
+        result.quadratic[row][col] = left.quadratic[row][col] + sign * right.quadratic[row][col];
+      }
+    }
+    return cleanFormulaPolynomial(result, n);
+  }
+
+  function scaleFormulaPolynomial(polynomial, factor) {
+    const n = polynomial.linear.length;
+    const result = zeroFormulaPolynomial(n);
+    result.constant = polynomial.constant * factor;
+    for (let row = 0; row < n; row += 1) {
+      result.linear[row] = polynomial.linear[row] * factor;
+      for (let col = 0; col < n; col += 1) result.quadratic[row][col] = polynomial.quadratic[row][col] * factor;
+    }
+    return cleanFormulaPolynomial(result, n);
+  }
+
+  function multiplyFormulaPolynomials(left, right) {
+    const n = left.linear.length;
+    const leftDegree = formulaPolynomialDegree(left);
+    const rightDegree = formulaPolynomialDegree(right);
+    if (leftDegree + rightDegree > 2) {
+      throw new Error("Unsupported nonlinear formula: exact rendering is limited to degree 2.");
+    }
+    const result = zeroFormulaPolynomial(n);
+    result.constant = left.constant * right.constant;
+    for (let row = 0; row < n; row += 1) {
+      result.linear[row] = left.constant * right.linear[row] + right.constant * left.linear[row];
+      for (let col = 0; col < n; col += 1) {
+        result.quadratic[row][col] =
+          left.constant * right.quadratic[row][col] +
+          right.constant * left.quadratic[row][col] +
+          left.linear[row] * right.linear[col];
+      }
+    }
+    return cleanFormulaPolynomial(result, n);
+  }
+
+  function formulaConstantValue(polynomial) {
+    const cleaned = cleanFormulaPolynomial(polynomial, polynomial.linear.length);
+    return formulaPolynomialHasVariables(cleaned) ? null : cleaned.constant;
+  }
+
+  function powerFormulaPolynomial(base, exponent) {
+    const exponentValue = formulaConstantValue(exponent);
+    const baseValue = formulaConstantValue(base);
+    if (exponentValue == null) {
+      throw new Error("Unsupported nonlinear formula: variable exponents are not exact-rendered.");
+    }
+    if (baseValue != null) {
+      const value = Math.pow(baseValue, exponentValue);
+      if (!Number.isFinite(value)) throw new Error("Formula power produced a non-finite value.");
+      return constantFormulaPolynomial(value, base.linear.length);
+    }
+    if (!Number.isInteger(exponentValue) || exponentValue < 0) {
+      throw new Error("Unsupported nonlinear formula: polynomial powers must be nonnegative integers.");
+    }
+    if (formulaPolynomialDegree(base) * exponentValue > 2) {
+      throw new Error("Unsupported nonlinear formula: exact rendering is limited to degree 2.");
+    }
+    let result = constantFormulaPolynomial(1, base.linear.length);
+    for (let count = 0; count < exponentValue; count += 1) result = multiplyFormulaPolynomials(result, base);
+    return result;
+  }
+
+  function formulaVariableIndex(identifier, n = state.ambientDim) {
+    const text = String(identifier || "").toLowerCase();
+    const match = text.match(/^x_?(\d+)$/);
+    if (match) {
+      const index = Number(match[1]) - 1;
+      if (index < 0 || index >= n) throw new Error(`Unknown variable ${identifier}; current ambient dimension is ${n}.`);
+      return index;
+    }
+    if (text === "x" && n >= 1) return 0;
+    if (text === "y" && n >= 2) return 1;
+    return null;
+  }
+
+  function tokenizeFormulaExpression(text) {
+    const tokens = [];
+    let index = 0;
+    while (index < text.length) {
+      const char = text[index];
+      if (/\s/.test(char)) {
+        index += 1;
+        continue;
+      }
+      const numberMatch = text.slice(index).match(/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/);
+      if (numberMatch) {
+        tokens.push({ type: "number", value: Number(numberMatch[0]) });
+        index += numberMatch[0].length;
+        continue;
+      }
+      const identifierMatch = text.slice(index).match(/^[A-Za-z_][A-Za-z0-9_]*/);
+      if (identifierMatch) {
+        tokens.push({ type: "id", value: identifierMatch[0] });
+        index += identifierMatch[0].length;
+        continue;
+      }
+      if ("+-*/^(),".includes(char)) {
+        tokens.push({ type: char });
+        index += 1;
+        continue;
+      }
+      throw new Error(`Unexpected character "${char}" in formula.`);
+    }
+    tokens.push({ type: "end" });
+    return tokens;
+  }
+
+  function formulaFunctionInfo(identifier) {
+    const text = String(identifier || "").toLowerCase();
+    if (["sqrt", "abs", "sin", "cos", "tan", "exp", "ln", "log"].includes(text)) return { name: text };
+    const logBase = text.match(/^log_([A-Za-z0-9.]+)$/);
+    if (logBase) return { name: "log_base", base: logBase[1] };
+    return null;
+  }
+
+  function parseFormulaFunctionBase(rawBase) {
+    const text = String(rawBase || "").toLowerCase();
+    if (text === "e") return Math.E;
+    if (text === "pi") return Math.PI;
+    const parsed = parseRationalNumber(text);
+    if (parsed.ok && Number.isFinite(parsed.value)) return parsed.value;
+    return null;
+  }
+
+  function evaluateFormulaFunction(info, args, n) {
+    const values = args.map(formulaConstantValue);
+    if (values.some((value) => value == null)) {
+      throw new Error(`Unsupported nonlinear formula: ${info.name.replace("_base", "_a")} with variables is not exact-rendered.`);
+    }
+    let value;
+    if (info.name === "sqrt") value = Math.sqrt(values[0]);
+    else if (info.name === "abs") value = Math.abs(values[0]);
+    else if (info.name === "sin") value = Math.sin(values[0]);
+    else if (info.name === "cos") value = Math.cos(values[0]);
+    else if (info.name === "tan") value = Math.tan(values[0]);
+    else if (info.name === "exp") value = Math.exp(values[0]);
+    else if (info.name === "ln") value = Math.log(values[0]);
+    else if (info.name === "log") {
+      value = values.length >= 2 ? Math.log(values[1]) / Math.log(values[0]) : Math.log10(values[0]);
+    } else if (info.name === "log_base") {
+      const base = parseFormulaFunctionBase(info.base);
+      if (base == null) throw new Error("Unsupported nonlinear formula: symbolic logarithm bases are not exact-rendered.");
+      value = Math.log(values[0]) / Math.log(base);
+    }
+    if (!Number.isFinite(value)) throw new Error(`${info.name} produced a non-finite value.`);
+    return constantFormulaPolynomial(value, n);
+  }
+
+  class FormulaExpressionParser {
+    constructor(text, n) {
+      this.tokens = tokenizeFormulaExpression(text);
+      this.index = 0;
+      this.n = n;
+    }
+
+    peek() {
+      return this.tokens[this.index] || { type: "end" };
+    }
+
+    consume(type) {
+      const token = this.peek();
+      if (token.type !== type) throw new Error(`Expected "${type}" in formula.`);
+      this.index += 1;
+      return token;
+    }
+
+    parse() {
+      const polynomial = this.parseAdditive();
+      if (this.peek().type !== "end") throw new Error("Unexpected extra formula text.");
+      return cleanFormulaPolynomial(polynomial, this.n);
+    }
+
+    parseAdditive() {
+      let left = this.parseMultiplicative();
+      while (this.peek().type === "+" || this.peek().type === "-") {
+        const operator = this.peek().type;
+        this.index += 1;
+        const right = this.parseMultiplicative();
+        left = addFormulaPolynomials(left, right, operator === "-" ? -1 : 1);
+      }
+      return left;
+    }
+
+    startsImplicitFactor(token) {
+      return token.type === "number" || token.type === "id" || token.type === "(";
+    }
+
+    parseMultiplicative() {
+      let left = this.parsePower();
+      while (this.peek().type === "*" || this.peek().type === "/" || this.startsImplicitFactor(this.peek())) {
+        if (this.peek().type === "*") {
+          this.index += 1;
+          left = multiplyFormulaPolynomials(left, this.parsePower());
+        } else if (this.peek().type === "/") {
+          this.index += 1;
+          const divisor = this.parsePower();
+          const value = formulaConstantValue(divisor);
+          if (value == null) throw new Error("Unsupported nonlinear formula: division by a variable expression is not exact-rendered.");
+          if (Math.abs(value) <= 1e-12) throw new Error("Formula division by zero.");
+          left = scaleFormulaPolynomial(left, 1 / value);
+        } else {
+          left = multiplyFormulaPolynomials(left, this.parsePower());
+        }
+      }
+      return left;
+    }
+
+    parsePower() {
+      const base = this.parseUnary();
+      if (this.peek().type !== "^") return base;
+      this.index += 1;
+      return powerFormulaPolynomial(base, this.parsePower());
+    }
+
+    parseUnary() {
+      if (this.peek().type === "+") {
+        this.index += 1;
+        return this.parseUnary();
+      }
+      if (this.peek().type === "-") {
+        this.index += 1;
+        return scaleFormulaPolynomial(this.parseUnary(), -1);
+      }
+      return this.parsePrimary();
+    }
+
+    parsePrimary() {
+      const token = this.peek();
+      if (token.type === "number") {
+        this.index += 1;
+        if (!Number.isFinite(token.value)) throw new Error("Formula number is not finite.");
+        return constantFormulaPolynomial(token.value, this.n);
+      }
+      if (token.type === "id") {
+        this.index += 1;
+        const identifier = token.value;
+        const variableIndex = formulaVariableIndex(identifier, this.n);
+        if (variableIndex != null) return variableFormulaPolynomial(variableIndex, this.n);
+        const lower = identifier.toLowerCase();
+        if (lower === "pi") return constantFormulaPolynomial(Math.PI, this.n);
+        if (lower === "e") return constantFormulaPolynomial(Math.E, this.n);
+        const functionInfo = formulaFunctionInfo(identifier);
+        if (functionInfo) return this.parseFunctionCall(functionInfo);
+        throw new Error(`Unknown variable or function "${identifier}". Use x1 through x${this.n}.`);
+      }
+      if (token.type === "(") {
+        this.index += 1;
+        const expression = this.parseAdditive();
+        this.consume(")");
+        return expression;
+      }
+      throw new Error("Expected a number, variable, function, or parenthesized expression.");
+    }
+
+    parseFunctionCall(functionInfo) {
+      const args = [];
+      if (this.peek().type === "(") {
+        this.index += 1;
+        if (this.peek().type !== ")") {
+          do {
+            args.push(this.parseAdditive());
+            if (this.peek().type !== ",") break;
+            this.index += 1;
+          } while (true);
+        }
+        this.consume(")");
+      } else {
+        args.push(this.parseUnary());
+      }
+      if (functionInfo.name === "log" && args.length !== 1 && args.length !== 2) throw new Error("log expects one argument, or log(base, value).");
+      if (functionInfo.name !== "log" && args.length !== 1) throw new Error(`${functionInfo.name} expects one argument.`);
+      return evaluateFormulaFunction(functionInfo, args, this.n);
+    }
+  }
+
+  function formulaFunctionFromInfo(info) {
+    if (info.name !== "log_base") return { name: info.name };
+    const base = parseFormulaFunctionBase(info.base);
+    if (base == null || !Number.isFinite(base) || base <= 0 || Math.abs(base - 1) <= 1e-12) {
+      throw new Error("Unsupported formula: logarithm bases must be positive finite constants other than 1.");
+    }
+    return { name: "log_base", base };
+  }
+
+  class NumericFormulaExpressionParser {
+    constructor(text, n) {
+      this.tokens = tokenizeFormulaExpression(text);
+      this.index = 0;
+      this.n = n;
+    }
+
+    peek() {
+      return this.tokens[this.index] || { type: "end" };
+    }
+
+    consume(type) {
+      const token = this.peek();
+      if (token.type !== type) throw new Error(`Expected "${type}" in formula.`);
+      this.index += 1;
+      return token;
+    }
+
+    parse() {
+      const ast = this.parseAdditive();
+      if (this.peek().type !== "end") throw new Error("Unexpected extra formula text.");
+      validateFormulaConstants(ast);
+      return ast;
+    }
+
+    parseAdditive() {
+      let left = this.parseMultiplicative();
+      while (this.peek().type === "+" || this.peek().type === "-") {
+        const operator = this.peek().type;
+        this.index += 1;
+        left = { type: "binary", op: operator, left, right: this.parseMultiplicative() };
+      }
+      return left;
+    }
+
+    startsImplicitFactor(token) {
+      return token.type === "number" || token.type === "id" || token.type === "(";
+    }
+
+    parseMultiplicative() {
+      let left = this.parsePower();
+      while (this.peek().type === "*" || this.peek().type === "/" || this.startsImplicitFactor(this.peek())) {
+        if (this.peek().type === "*") {
+          this.index += 1;
+          left = { type: "binary", op: "*", left, right: this.parsePower() };
+        } else if (this.peek().type === "/") {
+          this.index += 1;
+          left = { type: "binary", op: "/", left, right: this.parsePower() };
+        } else {
+          left = { type: "binary", op: "*", left, right: this.parsePower() };
+        }
+      }
+      return left;
+    }
+
+    parsePower() {
+      const base = this.parseUnary();
+      if (this.peek().type !== "^") return base;
+      this.index += 1;
+      return { type: "binary", op: "^", left: base, right: this.parsePower() };
+    }
+
+    parseUnary() {
+      if (this.peek().type === "+") {
+        this.index += 1;
+        return this.parseUnary();
+      }
+      if (this.peek().type === "-") {
+        this.index += 1;
+        return { type: "unary", op: "-", value: this.parseUnary() };
+      }
+      return this.parsePrimary();
+    }
+
+    parsePrimary() {
+      const token = this.peek();
+      if (token.type === "number") {
+        this.index += 1;
+        if (!Number.isFinite(token.value)) throw new Error("Formula number is not finite.");
+        return { type: "constant", value: token.value };
+      }
+      if (token.type === "id") {
+        this.index += 1;
+        const identifier = token.value;
+        const variableIndex = formulaVariableIndex(identifier, this.n);
+        if (variableIndex != null) return { type: "variable", index: variableIndex };
+        const lower = identifier.toLowerCase();
+        if (lower === "pi") return { type: "constant", value: Math.PI };
+        if (lower === "e") return { type: "constant", value: Math.E };
+        const functionInfo = formulaFunctionInfo(identifier);
+        if (functionInfo) return this.parseFunctionCall(formulaFunctionFromInfo(functionInfo));
+        throw new Error(`Unknown variable or function "${identifier}". Use x1 through x${this.n}.`);
+      }
+      if (token.type === "(") {
+        this.index += 1;
+        const expression = this.parseAdditive();
+        this.consume(")");
+        return expression;
+      }
+      throw new Error("Expected a number, variable, function, or parenthesized expression.");
+    }
+
+    parseFunctionCall(functionInfo) {
+      const args = [];
+      if (this.peek().type === "(") {
+        this.index += 1;
+        if (this.peek().type !== ")") {
+          do {
+            args.push(this.parseAdditive());
+            if (this.peek().type !== ",") break;
+            this.index += 1;
+          } while (true);
+        }
+        this.consume(")");
+      } else {
+        args.push(this.parseUnary());
+      }
+      if (functionInfo.name === "log" && args.length !== 1 && args.length !== 2) throw new Error("log expects one argument, or log(base, value).");
+      if (functionInfo.name !== "log" && args.length !== 1) throw new Error(`${functionInfo.name} expects one argument.`);
+      return { type: "function", name: functionInfo.name, base: functionInfo.base, args };
+    }
+  }
+
+  function formulaAstHasVariables(ast) {
+    if (!ast) return false;
+    if (ast.type === "variable") return true;
+    if (ast.type === "unary") return formulaAstHasVariables(ast.value);
+    if (ast.type === "binary") return formulaAstHasVariables(ast.left) || formulaAstHasVariables(ast.right);
+    if (ast.type === "function") return ast.args.some(formulaAstHasVariables);
+    return false;
+  }
+
+  function evaluateFormulaAst(ast, variables = []) {
+    let value = NaN;
+    if (!ast) return NaN;
+    if (ast.type === "constant") value = ast.value;
+    else if (ast.type === "variable") value = variables[ast.index];
+    else if (ast.type === "unary") {
+      const inner = evaluateFormulaAst(ast.value, variables);
+      value = ast.op === "-" ? -inner : inner;
+    } else if (ast.type === "binary") {
+      const left = evaluateFormulaAst(ast.left, variables);
+      const right = evaluateFormulaAst(ast.right, variables);
+      if (ast.op === "+") value = left + right;
+      else if (ast.op === "-") value = left - right;
+      else if (ast.op === "*") value = left * right;
+      else if (ast.op === "/") value = left / right;
+      else if (ast.op === "^") value = Math.pow(left, right);
+    } else if (ast.type === "function") {
+      const args = ast.args.map((arg) => evaluateFormulaAst(arg, variables));
+      if (ast.name === "sqrt") value = Math.sqrt(args[0]);
+      else if (ast.name === "abs") value = Math.abs(args[0]);
+      else if (ast.name === "sin") value = Math.sin(args[0]);
+      else if (ast.name === "cos") value = Math.cos(args[0]);
+      else if (ast.name === "tan") value = Math.tan(args[0]);
+      else if (ast.name === "exp") value = Math.exp(args[0]);
+      else if (ast.name === "ln") value = Math.log(args[0]);
+      else if (ast.name === "log") value = args.length >= 2 ? Math.log(args[1]) / Math.log(args[0]) : Math.log10(args[0]);
+      else if (ast.name === "log_base") value = Math.log(args[0]) / Math.log(ast.base);
+    }
+    return Number.isFinite(value) ? value : NaN;
+  }
+
+  function validateFormulaConstants(ast) {
+    if (!ast || formulaAstHasVariables(ast)) return;
+    const value = evaluateFormulaAst(ast, []);
+    if (!Number.isFinite(value)) throw new Error("Formula contains a non-finite constant expression.");
+  }
+
+  function validateFormulaAstConstants(ast) {
+    if (!ast) return;
+    if (ast.type === "unary") validateFormulaAstConstants(ast.value);
+    else if (ast.type === "binary") {
+      validateFormulaAstConstants(ast.left);
+      validateFormulaAstConstants(ast.right);
+    } else if (ast.type === "function") {
+      ast.args.forEach(validateFormulaAstConstants);
+    }
+    validateFormulaConstants(ast);
+  }
+
+  function compileNumericFormulaRelation(relation, n) {
+    const leftAst = new NumericFormulaExpressionParser(relation.left, n).parse();
+    const rightAst = new NumericFormulaExpressionParser(relation.right, n).parse();
+    const formulaAst = { type: "binary", op: "-", left: leftAst, right: rightAst };
+    validateFormulaAstConstants(formulaAst);
+    if (!formulaAstHasVariables(formulaAst)) {
+      throw new Error("Formula must contain at least one x_i term.");
+    }
+    return formulaAst;
+  }
+
+  function isExactFormulaUnsupportedError(error) {
+    return /^Unsupported nonlinear formula:/.test(String(error?.message || ""));
+  }
+
+  function splitFormulaRelation(rawFormula) {
+    const text = String(rawFormula || "").trim();
+    if (!text) throw new Error("Formula is empty.");
+    let depth = 0;
+    for (let index = 0; index < text.length; index += 1) {
+      const char = text[index];
+      if (char === "(") depth += 1;
+      else if (char === ")") depth = Math.max(0, depth - 1);
+      if (depth !== 0) continue;
+      const two = text.slice(index, index + 2);
+      if (two === "<=" || two === ">=") {
+        return {
+          left: text.slice(0, index).trim(),
+          right: text.slice(index + 2).trim(),
+          relation: two,
+          strict: false,
+        };
+      }
+      if (char === "=" || char === "<" || char === ">") {
+        return {
+          left: text.slice(0, index).trim(),
+          right: text.slice(index + 1).trim(),
+          relation: char === "<" ? "<=" : char === ">" ? ">=" : "=",
+          strict: char === "<" || char === ">",
+        };
+      }
+    }
+    throw new Error("Formula needs a relation: =, <=, >=, <, or >.");
+  }
+
+  function compileFormulaRelation(rawFormula, n = state.ambientDim) {
+    const relation = splitFormulaRelation(rawFormula);
+    if (!relation.left || !relation.right) throw new Error("Both sides of the formula relation are required.");
+    const formulaAst = compileNumericFormulaRelation(relation, n);
+    let polynomial = null;
+    let exactError = null;
+    try {
+      const left = new FormulaExpressionParser(relation.left, n).parse();
+      const right = new FormulaExpressionParser(relation.right, n).parse();
+      polynomial = addFormulaPolynomials(left, right, -1);
+      if (!formulaPolynomialHasVariables(polynomial)) {
+        throw new Error("Formula must contain at least one x_i term.");
+      }
+    } catch (error) {
+      exactError = error;
+    }
+    const result = {
+      formulaRelation: relation.relation,
+      formulaStrict: relation.strict,
+      formulaAst,
+      formulaRenderMode: polynomial ? "exact" : "numeric",
+      formulaPolynomial: polynomial ? cleanFormulaPolynomial(polynomial, n) : null,
+    };
+    if (exactError && isExactFormulaUnsupportedError(exactError)) {
+      result.formulaRenderWarning = `${exactError.message} Rendering with numerical marching squares.`;
+    } else if (exactError && !polynomial) {
+      result.formulaRenderWarning = `Rendering with numerical marching squares.`;
+    }
+    return result;
+  }
+
+  function compileExactFormulaRelation(rawFormula, n = state.ambientDim) {
+    const relation = splitFormulaRelation(rawFormula);
+    if (!relation.left || !relation.right) throw new Error("Both sides of the formula relation are required.");
+    const left = new FormulaExpressionParser(relation.left, n).parse();
+    const right = new FormulaExpressionParser(relation.right, n).parse();
+    const polynomial = addFormulaPolynomials(left, right, -1);
+    if (!formulaPolynomialHasVariables(polynomial)) {
+      throw new Error("Formula must contain at least one x_i term.");
+    }
+    return {
+      formulaRelation: relation.relation,
+      formulaStrict: relation.strict,
+      formulaRenderMode: "exact",
+      formulaPolynomial: cleanFormulaPolynomial(polynomial, n),
+    };
+  }
+
+  function normalizeTropicalConvention(value) {
+    return String(value || "").toLowerCase() === "min" ? "min" : "max";
+  }
+
+  function defaultTropicalInput(n = state.ambientDim) {
+    return n >= 2 ? "p^0 + u1 + u2" : "p^0 + u1";
+  }
+
+  function parseTropicalRational(rawValue, label = "coefficient") {
+    const parsed = parseRationalNumber(rawValue);
+    if (!parsed.ok || !Number.isFinite(parsed.value)) throw new Error(`Tropical ${label} must be a finite rational value.`);
+    return parsed.value;
+  }
+
+  function formatTropicalCoefficient(value) {
+    return fmt(value, 6);
+  }
+
+  function tropicalCoefficientToken(value) {
+    const text = formatTropicalCoefficient(value);
+    return value < 0 ? `p^{${text}}` : `p^${text}`;
+  }
+
+  function tropicalMonomialLabel(exponent) {
+    const parts = [];
+    exponent.forEach((power, index) => {
+      if (!power) return;
+      parts.push(power === 1 ? `u${index + 1}` : `u${index + 1}^${power}`);
+    });
+    return parts.join("") || "1";
+  }
+
+  function tropicalTermToText(term) {
+    const monomial = tropicalMonomialLabel(term.exponent);
+    if (monomial === "1") return tropicalCoefficientToken(term.coefficient);
+    if (Math.abs(term.coefficient) <= 1e-12) return monomial;
+    return `${tropicalCoefficientToken(term.coefficient)} ${monomial}`;
+  }
+
+  function tropicalTermsToText(terms) {
+    return terms.map(tropicalTermToText).join(" + ");
+  }
+
+  function splitTropicalTerms(rawInput) {
+    const text = String(rawInput || "").trim();
+    if (!text) throw new Error("Tropical polynomial is empty.");
+    const terms = [];
+    let start = 0;
+    let depth = 0;
+    const previousNonspace = (index) => {
+      for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+        if (!/\s/.test(text[cursor])) return text[cursor];
+      }
+      return "";
+    };
+    for (let index = 0; index < text.length; index += 1) {
+      const char = text[index];
+      if ("({[".includes(char)) depth += 1;
+      else if (")}]".includes(char)) depth = Math.max(0, depth - 1);
+      if ((char === "+" || char === "-") && depth === 0 && index > start) {
+        const previous = previousNonspace(index);
+        if (!previous || "^*/+-(".includes(previous)) continue;
+        const term = text.slice(start, index).trim();
+        if (term) terms.push(term);
+        start = index;
+      }
+    }
+    const last = text.slice(start).trim();
+    if (last) terms.push(last);
+    if (!terms.length) throw new Error("Tropical polynomial needs at least one term.");
+    return terms;
+  }
+
+  function readTropicalPowerValue(text, start, label, { integer = false } = {}) {
+    let index = start;
+    while (/\s/.test(text[index])) index += 1;
+    if (text[index] !== "^") {
+      return { value: integer ? 1 : 1, nextIndex: start };
+    }
+    index += 1;
+    while (/\s/.test(text[index])) index += 1;
+    let raw = "";
+    if (text[index] === "{" || text[index] === "(") {
+      const open = text[index];
+      const close = open === "{" ? "}" : ")";
+      index += 1;
+      const valueStart = index;
+      let depth = 1;
+      while (index < text.length && depth > 0) {
+        if (text[index] === open) depth += 1;
+        else if (text[index] === close) depth -= 1;
+        if (depth > 0) index += 1;
+      }
+      if (depth !== 0) throw new Error(`Unclosed ${label} power.`);
+      raw = text.slice(valueStart, index).trim();
+      index += 1;
+    } else {
+      const match = text.slice(index).match(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:\/[+-]?(?:\d+(?:\.\d*)?|\.\d+))?/);
+      if (!match) throw new Error(`${label} power must be a number.`);
+      raw = match[0];
+      index += raw.length;
+    }
+    const value = integer ? Number(raw) : parseTropicalRational(raw, `${label} power`);
+    if (integer) {
+      if (!Number.isInteger(value) || value < 0) throw new Error(`${label} powers must be nonnegative integers.`);
+      return { value, nextIndex: index };
+    }
+    return { value, nextIndex: index };
+  }
+
+  function parseTropicalTextTerm(rawTerm, n = state.ambientDim) {
+    let text = String(rawTerm || "").trim();
+    if (!text) throw new Error("Empty tropical term.");
+    let sign = 1;
+    if (text[0] === "+" || text[0] === "-") {
+      sign = text[0] === "-" ? -1 : 1;
+      text = text.slice(1).trim();
+    }
+    if (!text) throw new Error("Empty tropical term after sign.");
+    const exponent = Array(n).fill(0);
+    let coefficient = 0;
+    let sawFactor = false;
+    let sawCoefficient = false;
+    let index = 0;
+    while (index < text.length) {
+      const char = text[index];
+      if (/\s/.test(char) || char === "*") {
+        index += 1;
+        continue;
+      }
+      const xMatch = text.slice(index).match(/^x_?\d+/i);
+      if (xMatch) throw new Error(`Use u_i symbols for tropical monomials; "${xMatch[0]}" is not accepted here.`);
+      const pMatch = text.slice(index).match(/^p\b/i);
+      if (pMatch) {
+        index += pMatch[0].length;
+        const power = readTropicalPowerValue(text, index, "p");
+        coefficient += power.value;
+        index = power.nextIndex;
+        sawFactor = true;
+        sawCoefficient = true;
+        continue;
+      }
+      const numberMatch = text.slice(index).match(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:\/[+-]?(?:\d+(?:\.\d*)?|\.\d+))?/);
+      if (numberMatch) {
+        coefficient += parseTropicalRational(numberMatch[0], "coefficient");
+        index += numberMatch[0].length;
+        sawFactor = true;
+        sawCoefficient = true;
+        continue;
+      }
+      const variableMatch = text.slice(index).match(/^u_?(\d+)/i);
+      if (variableMatch) {
+        const coordinate = Number(variableMatch[1]) - 1;
+        if (coordinate < 0 || coordinate >= n) throw new Error(`Unknown tropical symbol ${variableMatch[0]}; current ambient dimension is ${n}.`);
+        index += variableMatch[0].length;
+        const power = readTropicalPowerValue(text, index, variableMatch[0], { integer: true });
+        exponent[coordinate] += power.value;
+        index = power.nextIndex;
+        sawFactor = true;
+        continue;
+      }
+      throw new Error(`Unexpected tropical term text near "${text.slice(index)}".`);
+    }
+    if (!sawFactor) throw new Error("Empty tropical term.");
+    return {
+      coefficient: sign * coefficient,
+      exponent,
+      label: tropicalMonomialLabel(exponent),
+      implicitCoefficient: !sawCoefficient,
+    };
+  }
+
+  function normalizeTropicalTerms(terms, convention = "max", n = state.ambientDim) {
+    const mode = normalizeTropicalConvention(convention);
+    const merged = new Map();
+    for (const term of terms) {
+      const coefficient = finiteNumber(term?.coefficient, NaN);
+      if (!Number.isFinite(coefficient)) throw new Error("Tropical term coefficient is not finite.");
+      if (!Array.isArray(term?.exponent)) throw new Error("Tropical term needs an exponent vector.");
+      if (term.exponent.length !== n) throw new Error(`Tropical exponent vectors need ${n} entries.`);
+      const exponent = term.exponent.map((value, index) => {
+        const parsed = Number(value);
+        if (!Number.isInteger(parsed) || parsed < 0) throw new Error(`Tropical exponent ${index + 1} must be a nonnegative integer.`);
+        return parsed;
+      });
+      const key = exponent.join(",");
+      const existing = merged.get(key);
+      if (!existing || (mode === "max" ? coefficient > existing.coefficient : coefficient < existing.coefficient)) {
+        merged.set(key, { coefficient, exponent, label: tropicalMonomialLabel(exponent) });
+      }
+    }
+    const normalized = Array.from(merged.values());
+    if (!normalized.length) throw new Error("Tropical polynomial needs at least one term.");
+    normalized.sort((left, right) => {
+      const degreeLeft = left.exponent.reduce((total, value) => total + value, 0);
+      const degreeRight = right.exponent.reduce((total, value) => total + value, 0);
+      if (degreeLeft !== degreeRight) return degreeLeft - degreeRight;
+      for (let index = 0; index < n; index += 1) {
+        if (left.exponent[index] !== right.exponent[index]) return right.exponent[index] - left.exponent[index];
+      }
+      return left.coefficient - right.coefficient;
+    });
+    return normalized;
+  }
+
+  function parseTropicalJsonTerms(rawInput, convention, n = state.ambientDim) {
+    const parsed = JSON.parse(rawInput);
+    const source = Array.isArray(parsed) ? parsed : parsed?.terms;
+    if (!Array.isArray(source)) throw new Error("Tropical JSON must be an array of terms or an object with terms.");
+    const terms = source.map((entry, index) => {
+      const term = Array.isArray(entry)
+        ? { coefficient: entry[0], exponent: entry[1] }
+        : entry;
+      if (!term || typeof term !== "object") throw new Error(`Tropical JSON term ${index + 1} must be an object.`);
+      const coefficient = typeof term.coefficient === "string"
+        ? parseTropicalRational(term.coefficient, "coefficient")
+        : finiteNumber(term.coefficient, NaN);
+      return {
+        coefficient,
+        exponent: Array.isArray(term.exponent) ? term.exponent : [],
+        label: term.label,
+      };
+    });
+    return normalizeTropicalTerms(terms, convention, n);
+  }
+
+  function compileTropicalPolynomial(rawInput, convention = "max", n = state.ambientDim) {
+    const tropicalInput = String(rawInput || "").trim();
+    if (!tropicalInput) throw new Error("Tropical polynomial is empty.");
+    const tropicalConvention = normalizeTropicalConvention(convention);
+    const terms = /^[\[{]/.test(tropicalInput)
+      ? parseTropicalJsonTerms(tropicalInput, tropicalConvention, n)
+      : normalizeTropicalTerms(splitTropicalTerms(tropicalInput).map((term) => parseTropicalTextTerm(term, n)), tropicalConvention, n);
+    return {
+      tropicalInput,
+      tropicalConvention,
+      terms,
+      normalizedTropical: tropicalTermsToText(terms),
+    };
+  }
+
+  function resizeTropicalTerms(terms, n = state.ambientDim) {
+    if (!Array.isArray(terms)) return [];
+    return terms.map((term) => ({
+      coefficient: finiteNumber(term?.coefficient, NaN),
+      exponent: resizeVector(Array.isArray(term?.exponent) ? term.exponent : [], n).map((value) => Math.round(finiteNumber(value, 0))),
+    }));
+  }
+
   function defaultDirection(n = state.ambientDim) {
     return { basis: "frame", index: Math.max(0, Math.min(2, n - 1)) };
   }
@@ -225,6 +1113,25 @@
     gramSchmidtFrame();
   }
 
+  function orthonormalizeFrameColumns(columns, n = state.ambientDim) {
+    const repaired = [];
+    for (let col = 0; col < n; col += 1) {
+      let vector = resizeVector(Array.isArray(columns[col]) ? columns[col] : [], n);
+      for (const previous of repaired) {
+        vector = add(vector, scale(previous, -dot(vector, previous)));
+      }
+      const length = norm(vector);
+      if (!(length > 1e-10)) {
+        return {
+          ok: false,
+          error: `Frame matrix is rank deficient at column v_${col + 1}.`,
+        };
+      }
+      repaired.push(vector.map((value) => value / length));
+    }
+    return { ok: true, frame: repaired };
+  }
+
   function gramSchmidtFrame() {
     const repaired = [];
     for (let col = 0; col < state.ambientDim; col += 1) {
@@ -252,11 +1159,211 @@
     state.rotationPair = normalizeRotationPair(state.rotationPair);
   }
 
+  function directInputHasFocus() {
+    const active = document.activeElement;
+    return !!active?.closest?.("[data-slide-input-mode-row='direct']");
+  }
+
+  function directFrameRowsText(columns = state.frame) {
+    return frameRows(columns)
+      .map((row) => row.map((value) => fmt(value, 6)).join(", "))
+      .join("\n");
+  }
+
+  function formatDirectInputValue(value) {
+    return fmt(finiteNumber(value, 0), 6);
+  }
+
+  function directWheelInputValue(rawValue, fallback = 0) {
+    const parsed = parseRationalNumber(rawValue);
+    if (parsed.ok && Number.isFinite(parsed.value)) return parsed.value;
+    return finiteNumber(rawValue, fallback);
+  }
+
+  function rebuildDirectPositionInputs() {
+    const container = $("direct-position-inputs");
+    if (!container) return;
+    container.innerHTML = "";
+    for (let index = 0; index < state.ambientDim; index += 1) {
+      if (index > 0) container.append(document.createTextNode(", "));
+      const input = document.createElement("input");
+      input.className = "slice-input slice-coordinate-input";
+      input.type = "text";
+      input.inputMode = "decimal";
+      input.value = formatDirectInputValue(state.p[index] || 0);
+      input.dataset.directPositionIndex = String(index);
+      input.setAttribute("aria-label", `Direct position coordinate p_${index + 1}`);
+      input.addEventListener("focus", () => {
+        input.dataset.originalValue = input.value;
+      });
+      input.addEventListener("change", () => commitDirectPositionInput(input, index));
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          commitDirectPositionInput(input, index);
+          input.blur();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          input.value = input.dataset.originalValue || formatDirectInputValue(state.p[index] || 0);
+          input.blur();
+        }
+      });
+      input.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        const direction = event.deltaY < 0 ? 1 : -1;
+        const next = clamp(directWheelInputValue(input.value, state.p[index] || 0) + direction * 0.1, -6, 6);
+        state.p = resizeVector(state.p, state.ambientDim);
+        state.p[index] = next;
+        input.value = formatDirectInputValue(next);
+        input.dataset.originalValue = input.value;
+        renderAll();
+      }, { passive: false });
+      container.append(input);
+    }
+  }
+
+  function commitDirectPositionInput(input, index) {
+    const parsed = parseRationalNumber(input.value);
+    if (!parsed.ok || !Number.isFinite(parsed.value)) {
+      state.lastWarning = `Direct position p_${index + 1} must be a finite rational value.`;
+      input.value = input.dataset.originalValue || formatDirectInputValue(state.p[index] || 0);
+      renderAll();
+      return false;
+    }
+    state.p = resizeVector(state.p, state.ambientDim);
+    state.p[index] = parsed.value;
+    input.value = formatDirectInputValue(state.p[index]);
+    input.dataset.originalValue = input.value;
+    renderAll();
+    return true;
+  }
+
+  function rebuildDirectFrameGrid() {
+    const grid = $("direct-frame-grid");
+    if (!grid) return;
+    grid.innerHTML = "";
+    grid.style.gridTemplateColumns = `32px repeat(${state.ambientDim}, 58px)`;
+    const corner = document.createElement("span");
+    corner.className = "slice-direct-matrix-label";
+    corner.textContent = "";
+    grid.append(corner);
+    for (let col = 0; col < state.ambientDim; col += 1) {
+      const label = document.createElement("span");
+      label.className = "slice-direct-matrix-label";
+      label.textContent = `v${col + 1}`;
+      grid.append(label);
+    }
+    for (let row = 0; row < state.ambientDim; row += 1) {
+      const rowLabel = document.createElement("span");
+      rowLabel.className = "slice-direct-matrix-label";
+      rowLabel.textContent = `e${row + 1}`;
+      grid.append(rowLabel);
+      for (let col = 0; col < state.ambientDim; col += 1) {
+        const input = document.createElement("input");
+        input.className = "slice-input slice-direct-matrix-cell";
+        input.type = "text";
+        input.inputMode = "decimal";
+        input.value = formatDirectInputValue(state.frame[col]?.[row] || 0);
+        input.dataset.directFrameRow = String(row);
+        input.dataset.directFrameColumn = String(col);
+        input.setAttribute("aria-label", `Frame entry e_${row + 1}, v_${col + 1}`);
+        input.addEventListener("focus", () => {
+          input.dataset.originalValue = input.value;
+        });
+        input.addEventListener("change", () => commitDirectFrameCell(input));
+        input.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commitDirectFrameCell(input);
+            input.blur();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            input.value = input.dataset.originalValue || formatDirectInputValue(state.frame[col]?.[row] || 0);
+            input.blur();
+          }
+        });
+        input.addEventListener("wheel", (event) => {
+          event.preventDefault();
+          const direction = event.deltaY < 0 ? 1 : -1;
+          const fallback = state.frame[col]?.[row] || 0;
+          const next = clamp(directWheelInputValue(input.value, fallback) + direction * 0.1, -6, 6);
+          input.value = formatDirectInputValue(next);
+          input.dataset.originalValue = input.value;
+        }, { passive: false });
+        grid.append(input);
+      }
+    }
+  }
+
+  function commitDirectFrameCell(input) {
+    const parsed = parseRationalNumber(input.value);
+    if (!parsed.ok || !Number.isFinite(parsed.value)) {
+      state.lastWarning = "Manual frame entries must be finite rational values.";
+      input.value = input.dataset.originalValue || "0";
+      renderAll();
+      return false;
+    }
+    input.value = formatDirectInputValue(parsed.value);
+    input.dataset.originalValue = input.value;
+    return true;
+  }
+
+  function syncDirectFrameGrid() {
+    const grid = $("direct-frame-grid");
+    if (!grid) return;
+    const inputs = Array.from(grid.querySelectorAll("[data-direct-frame-row]"));
+    if (inputs.length !== state.ambientDim * state.ambientDim) {
+      rebuildDirectFrameGrid();
+      return;
+    }
+    inputs.forEach((input) => {
+      const row = Number(input.dataset.directFrameRow);
+      const col = Number(input.dataset.directFrameColumn);
+      input.value = formatDirectInputValue(state.frame[col]?.[row] || 0);
+    });
+  }
+
+  function syncDirectInputFields(options = {}) {
+    if (!options.force && directInputHasFocus()) return;
+    const container = $("direct-position-inputs");
+    if (container) {
+      const inputs = Array.from(container.querySelectorAll("[data-direct-position-index]"));
+      if (inputs.length !== state.ambientDim) {
+        rebuildDirectPositionInputs();
+      } else {
+        inputs.forEach((input, index) => {
+          input.value = formatDirectInputValue(state.p[index] || 0);
+        });
+      }
+    }
+    syncDirectFrameGrid();
+    const matrix = $("direct-frame-import");
+    if (matrix) matrix.value = directFrameRowsText();
+  }
+
+  function syncDirectInputModeControls() {
+    state.directInputMode = normalizeDirectInputMode(state.directInputMode);
+    setSegmentActive("direct-input-mode-controls", "data-direct-input-mode", state.directInputMode);
+    document.querySelectorAll("[data-direct-input-mode-panel]").forEach((panel) => {
+      panel.hidden = panel.dataset.directInputModePanel !== state.directInputMode;
+    });
+  }
+
+  function syncSlideInputControls() {
+    state.slideInputMode = normalizeSlideInputMode(state.slideInputMode);
+    setSegmentActive("slide-input-mode-controls", "data-slide-input-mode", state.slideInputMode);
+    document.querySelectorAll("[data-slide-input-mode-row]").forEach((row) => {
+      row.hidden = row.dataset.slideInputModeRow !== state.slideInputMode;
+    });
+    syncDirectInputModeControls();
+    if (state.slideInputMode === "direct") syncDirectInputFields();
+  }
+
   function syncMotionControls() {
     clampMotionState();
     setSegmentActive("motion-mode-controls", "data-motion-mode", state.motionMode);
     document.querySelectorAll("[data-motion-mode-row]").forEach((row) => {
-      row.hidden = row.dataset.motionModeRow !== state.motionMode;
+      row.hidden = state.slideInputMode !== "move" || row.dataset.motionModeRow !== state.motionMode;
     });
     const entries = [
       ["translation-speed-slider", "translation-speed-value", "translationSpeed", 2],
@@ -365,7 +1472,7 @@
   }
 
   function ensureMotionLoop() {
-    if (state.motionMode !== "continuous" || motionHold.rafId) return;
+    if (state.slideInputMode !== "move" || state.motionMode !== "continuous" || motionHold.rafId) return;
     motionHold.lastTimestamp = 0;
     motionHold.rafId = window.requestAnimationFrame(stepMotionFrame);
   }
@@ -380,7 +1487,7 @@
 
   function stepMotionFrame(timestamp) {
     motionHold.rafId = 0;
-    if (state.motionMode !== "continuous") {
+    if (state.slideInputMode !== "move" || state.motionMode !== "continuous") {
       motionHold.translationVelocity = 0;
       motionHold.rotationVelocity = 0;
       motionHold.lastTimestamp = 0;
@@ -415,6 +1522,26 @@
     state.lastWarning = state.motionMode === "continuous"
       ? "Continuous movement is active. Hold W/S or A/D to move."
       : "Discrete movement is active. Each key press applies one step.";
+    renderAll();
+  }
+
+  function setSlideInputMode(mode) {
+    const next = normalizeSlideInputMode(mode);
+    if (next !== "move") clearAllMotion();
+    state.slideInputMode = next;
+    if (next === "direct") syncDirectInputFields({ force: true });
+    state.lastWarning = next === "move"
+      ? "Move input mode is active."
+      : "Direct input mode is active.";
+    renderAll();
+  }
+
+  function setDirectInputMode(mode) {
+    state.directInputMode = normalizeDirectInputMode(mode);
+    if (state.slideInputMode === "direct") syncDirectInputFields({ force: true });
+    state.lastWarning = state.directInputMode === "manual"
+      ? "Manual direct input is active."
+      : "Frame matrix import is active.";
     renderAll();
   }
 
@@ -757,6 +1884,8 @@
     if (typeKey === "sphere") return `S^${n - 1} in R^${n}`;
     if (typeKey === "cartesian-frame" || typeKey === "fan") return `Cartesian frame in R^${n}`;
     if (typeKey === "point") return `point in R^${n}`;
+    if (typeKey === "formula-set") return `formula set in R^${n}`;
+    if (typeKey === "tropical-polynomial") return `tropical polynomial in R^${n}`;
     if (typeKey === "cube") return `cube in R^${n}`;
     return `regular polytope in R^${n}`;
   }
@@ -767,6 +1896,8 @@
     if (typeKey === "sphere") return makeSphereData(n);
     if (typeKey === "cartesian-frame" || typeKey === "fan") return makeCartesianFrameData(n);
     if (typeKey === "point") return makePointData(n);
+    if (typeKey === "formula-set") return makeFormulaSetData(n);
+    if (typeKey === "tropical-polynomial") return makeTropicalPolynomialData(n);
     return makeRegularPolytopeData(n, "hypercube");
   }
 
@@ -853,6 +1984,35 @@
     };
   }
 
+  function makeFormulaSetData(n) {
+    return {
+      name: currentTypeLabel("formula-set", n),
+      kind: "formula",
+      objectType: "formula-set",
+      ambientDimension: n,
+      description: `Single 2D slice formula in R^${n}, exact for degree 2 and numerical for broader relations.`,
+      formulaInputMode: "formula",
+      formula: "x1^2 + x2^2 <= 1",
+      ...compileFormulaRelation("x1^2 + x2^2 <= 1", n),
+    };
+  }
+
+  function makeTropicalPolynomialData(n) {
+    const tropicalInput = defaultTropicalInput(n);
+    return {
+      name: currentTypeLabel("tropical-polynomial", n),
+      kind: "tropical",
+      objectType: "tropical-polynomial",
+      ambientDimension: n,
+      description: `Tropical polynomial in R^${n}, using u_i as the monomial symbol for p^{X_i}.`,
+      ...compileTropicalPolynomial(tropicalInput, "max", n),
+    };
+  }
+
+  function isProjectionlessSourceType(typeKey) {
+    return typeKey === "formula-set" || typeKey === "tropical-polynomial";
+  }
+
   function makeObjectForType(typeKey, name = "", options = {}) {
     const type = OBJECT_TYPES.find((item) => item.key === typeKey) || OBJECT_TYPES[0];
     const data = makeObjectData(type.key, state.ambientDim, options);
@@ -860,7 +2020,7 @@
       id: `object-${objectCounter++}`,
       name: name.trim() || data.name || currentTypeLabel(type.key, state.ambientDim),
       kind: data.kind || "geometry",
-      visibleProjection: true,
+      visibleProjection: !isProjectionlessSourceType(type.key),
       visibleSlice: supportsExact2DSliceType(type.key),
       labels: false,
       style: {
@@ -881,7 +2041,7 @@
       id: "__add-preview__",
       name: `preview ${data.name || currentTypeLabel(type.key, state.ambientDim)}`,
       kind: data.kind || "geometry",
-      visibleProjection: true,
+      visibleProjection: !isProjectionlessSourceType(type.key),
       visibleSlice: false,
       labels: false,
       style: {
@@ -906,6 +2066,8 @@
       sphere: "sphere",
       "cartesian-frame": "frame",
       point: "point",
+      "formula-set": "formula",
+      "tropical-polynomial": "tropical",
     };
     const type = object?.data?.objectType || object?.kind || "object";
     return labels[type] || type;
@@ -998,7 +2160,7 @@
     $("object-labels").checked = object.labels;
     syncLayerButtons(object);
     rebuildObjectParams();
-    $("source-status").textContent = "Projection and exact 2D slice layers are active.";
+    $("source-status").textContent = "Projection and exact/numeric 2D slice layers are active.";
   }
 
   function objectTypeKey(object) {
@@ -1020,11 +2182,16 @@
   function syncLayerButtons(object) {
     const projectionButton = $("object-visible-projection");
     const sliceButton = $("object-visible-slice");
+    const type = objectTypeKey(object);
+    const projectionEnabled = !isProjectionlessSourceType(type);
+    if (!projectionEnabled) object.visibleProjection = false;
+    projectionButton.disabled = !projectionEnabled;
+    projectionButton.title = projectionEnabled ? "show projection layer" : `${sourceLabel(object)} projection is unavailable in this build`;
     projectionButton.classList.toggle("active", !!object.visibleProjection);
     projectionButton.setAttribute("aria-pressed", object.visibleProjection ? "true" : "false");
     const sliceEnabled = canDrawExact2DSlice(object);
     sliceButton.disabled = !sliceEnabled;
-    sliceButton.title = sliceEnabled ? "show exact 2D slice layer" : "exact slice is available only for regular polytopes, simplex, and sphere in 2D frame mode";
+    sliceButton.title = sliceEnabled ? "show exact/numeric 2D slice layer" : "2D slice is available only for regular polytopes, simplex, sphere, formula sets, and tropical polynomials in 2D frame mode";
     sliceButton.classList.toggle("active", !!object.visibleSlice);
     sliceButton.setAttribute("aria-pressed", object.visibleSlice ? "true" : "false");
   }
@@ -1057,6 +2224,14 @@
     }
     if (type === "point") {
       buildPointParams(container, object);
+      return;
+    }
+    if (type === "formula-set") {
+      buildFormulaParams(container, object);
+      return;
+    }
+    if (type === "tropical-polynomial") {
+      buildTropicalParams(container, object);
       return;
     }
     container.textContent = "no parameters";
@@ -1289,6 +2464,354 @@
     renderAll();
   }
 
+  function formulaMatrixRowsText(matrix) {
+    return matrix
+      .map((row) => row.map((value) => fmt(value, 6)).join(", "))
+      .join("\n");
+  }
+
+  function fallbackFormulaQMatrix(data) {
+    const n = state.ambientDim;
+    if (Array.isArray(data.quadraticMatrix)) {
+      return Array.from({ length: n }, (_, row) =>
+        resizeVector(Array.isArray(data.quadraticMatrix[row]) ? data.quadraticMatrix[row] : [], n)
+      );
+    }
+    if (Array.isArray(data.formulaPolynomial?.quadratic)) {
+      return Array.from({ length: n }, (_, row) =>
+        resizeVector(Array.isArray(data.formulaPolynomial.quadratic[row]) ? data.formulaPolynomial.quadratic[row] : [], n)
+      );
+    }
+    const identity = identityFrame(n);
+    return frameRows(identity);
+  }
+
+  function formatFormulaCoefficient(value) {
+    return fmt(value, 6);
+  }
+
+  function quadraticFormulaText(matrix, relation, rhs) {
+    const terms = [];
+    const n = matrix.length;
+    for (let row = 0; row < n; row += 1) {
+      for (let col = row; col < n; col += 1) {
+        const coefficient = row === col ? matrix[row][col] : 2 * matrix[row][col];
+        if (Math.abs(coefficient) <= 1e-12) continue;
+        const variable = row === col ? `x${row + 1}^2` : `x${row + 1}*x${col + 1}`;
+        const absCoefficient = Math.abs(coefficient);
+        const body = Math.abs(absCoefficient - 1) <= 1e-12 ? variable : `${formatFormulaCoefficient(absCoefficient)}*${variable}`;
+        terms.push({ sign: coefficient < 0 ? "-" : "+", body });
+      }
+    }
+    if (!terms.length) return `0 ${relation} ${formatFormulaCoefficient(rhs)}`;
+    const first = terms[0].sign === "-" ? `-${terms[0].body}` : terms[0].body;
+    const rest = terms.slice(1).map((term) => ` ${term.sign} ${term.body}`).join("");
+    return `${first}${rest} ${relation} ${formatFormulaCoefficient(rhs)}`;
+  }
+
+  function validateSymmetricMatrix(rows, n = state.ambientDim) {
+    if (!Array.isArray(rows) || rows.length !== n || rows.some((row) => !Array.isArray(row) || row.length !== n)) {
+      throw new Error(`Q matrix needs ${n} x ${n} entries.`);
+    }
+    const matrix = rows.map((row) => row.map((value) => finiteNumber(value, NaN)));
+    const maxAbs = Math.max(1, ...matrix.flat().map((value) => Math.abs(value)));
+    const tolerance = Math.max(1e-9, maxAbs * 1e-9);
+    for (let row = 0; row < n; row += 1) {
+      for (let col = 0; col < n; col += 1) {
+        if (!Number.isFinite(matrix[row][col])) throw new Error(`Q entry row ${row + 1}, column ${col + 1} is not finite.`);
+        if (Math.abs(matrix[row][col] - matrix[col][row]) > tolerance) {
+          throw new Error(`Q matrix must be symmetric; entries (${row + 1}, ${col + 1}) and (${col + 1}, ${row + 1}) differ.`);
+        }
+      }
+    }
+    if (!matrix.some((row) => row.some((value) => Math.abs(value) > tolerance))) {
+      throw new Error("Q matrix needs at least one nonzero entry.");
+    }
+    return matrix.map((row, rowIndex) => row.map((value, colIndex) => (value + matrix[colIndex][rowIndex]) / 2));
+  }
+
+  function compileQuadraticMatrixFormula(rows, relation, rhsRaw, n = state.ambientDim) {
+    const normalizedRelation = relation === ">=" || relation === "=" ? relation : "<=";
+    const rhs = parseRationalNumber(rhsRaw);
+    if (!rhs.ok || !Number.isFinite(rhs.value)) throw new Error("Q right-hand side must be a finite rational value.");
+    const matrix = validateSymmetricMatrix(rows, n);
+    const polynomial = zeroFormulaPolynomial(n);
+    polynomial.constant = -rhs.value;
+    polynomial.quadratic = matrix.map((row) => row.slice());
+    const formula = quadraticFormulaText(matrix, normalizedRelation, rhs.value);
+    const formulaAst = compileNumericFormulaRelation(splitFormulaRelation(formula), n);
+    return {
+      formulaInputMode: "import-q",
+      formula,
+      quadraticMatrix: matrix,
+      quadraticRelation: normalizedRelation,
+      quadraticRhs: rhs.value,
+      formulaRelation: normalizedRelation,
+      formulaStrict: false,
+      formulaAst,
+      formulaRenderMode: "exact",
+      formulaPolynomial: cleanFormulaPolynomial(polynomial, n),
+    };
+  }
+
+  function buildFormulaParams(container, object) {
+    const data = object.data || {};
+    data.formulaInputMode = normalizeFormulaInputMode(data.formulaInputMode);
+    const panel = document.createElement("div");
+    panel.className = "slice-formula-panel";
+
+    const modes = document.createElement("div");
+    modes.className = "slice-segmented";
+    modes.setAttribute("aria-label", "Formula input mode");
+    [
+      ["formula", "formula"],
+      ["import-q", "import Q"],
+    ].forEach(([mode, label]) => {
+      const button = document.createElement("button");
+      button.className = "slice-segment";
+      button.type = "button";
+      button.dataset.formulaInputMode = mode;
+      button.textContent = label;
+      button.classList.toggle("active", data.formulaInputMode === mode);
+      button.addEventListener("click", () => {
+        data.formulaInputMode = mode;
+        state.lastWarning = mode === "formula" ? "Formula input mode is active." : "Q matrix import is active.";
+        modes.querySelectorAll("[data-formula-input-mode]").forEach((entry) => {
+          entry.classList.toggle("active", entry.dataset.formulaInputMode === mode);
+        });
+        formulaPane.hidden = mode !== "formula";
+        importPane.hidden = mode !== "import-q";
+        updateDebug();
+      });
+      modes.append(button);
+    });
+
+    const formulaPane = document.createElement("div");
+    formulaPane.className = "slice-formula-mode-panel";
+    formulaPane.hidden = data.formulaInputMode !== "formula";
+    const textarea = document.createElement("textarea");
+    textarea.className = "slice-textarea slice-formula-textarea";
+    textarea.dataset.formulaText = "true";
+    textarea.spellcheck = false;
+    textarea.value = data.formula || "x1^2 + x2^2 <= 1";
+    textarea.setAttribute("aria-label", "Formula relation");
+    textarea.placeholder = "x1^2 + x2^2 <= 1";
+    const formulaApply = document.createElement("button");
+    formulaApply.className = "slice-btn";
+    formulaApply.type = "button";
+    formulaApply.dataset.formulaApply = "true";
+    formulaApply.textContent = "apply formula";
+    const applyFormula = () => applyFormulaTextInput(object, textarea.value);
+    formulaApply.addEventListener("click", applyFormula);
+    textarea.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        applyFormula();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        textarea.value = data.formula || "x1^2 + x2^2 <= 1";
+        textarea.blur();
+      }
+    });
+    formulaPane.append(textarea, formulaApply);
+
+    const importPane = document.createElement("div");
+    importPane.className = "slice-formula-mode-panel";
+    importPane.hidden = data.formulaInputMode !== "import-q";
+    const matrixInput = document.createElement("textarea");
+    matrixInput.className = "slice-textarea slice-formula-matrix-textarea";
+    matrixInput.dataset.formulaQImport = "true";
+    matrixInput.spellcheck = false;
+    matrixInput.value = formulaMatrixRowsText(fallbackFormulaQMatrix(data));
+    matrixInput.setAttribute("aria-label", "Q matrix Rows import");
+    matrixInput.placeholder = "Paste matrix_calculator Rows for symmetric Q";
+    const importControls = document.createElement("div");
+    importControls.className = "slice-formula-import-controls";
+    const relation = document.createElement("select");
+    relation.className = "slice-select";
+    relation.dataset.formulaQRelation = "true";
+    relation.setAttribute("aria-label", "Q relation");
+    ["=", "<=", ">="].forEach((value) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      relation.append(option);
+    });
+    relation.value = ["=", "<=", ">="].includes(data.quadraticRelation) ? data.quadraticRelation : data.formulaRelation || "<=";
+    const rhs = document.createElement("input");
+    rhs.className = "slice-input slice-param-number";
+    rhs.type = "text";
+    rhs.inputMode = "decimal";
+    rhs.dataset.formulaQRhs = "true";
+    rhs.value = formatDirectInputValue(data.quadraticRhs ?? 1);
+    rhs.setAttribute("aria-label", "Q right-hand side");
+    const importApply = document.createElement("button");
+    importApply.className = "slice-btn";
+    importApply.type = "button";
+    importApply.dataset.formulaQApply = "true";
+    importApply.textContent = "apply import";
+    const applyImport = () => applyFormulaMatrixImport(object, matrixInput.value, relation.value, rhs.value);
+    importApply.addEventListener("click", applyImport);
+    matrixInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        applyImport();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        matrixInput.value = formulaMatrixRowsText(fallbackFormulaQMatrix(data));
+        matrixInput.blur();
+      }
+    });
+    importControls.append(relation, rhs, importApply);
+    importPane.append(matrixInput, importControls);
+
+    panel.append(modes, formulaPane, importPane);
+    container.appendChild(panel);
+  }
+
+  function applyFormulaTextInput(object, rawFormula) {
+    try {
+      const candidate = {
+        formulaInputMode: "formula",
+        formula: String(rawFormula || "").trim(),
+        ...compileFormulaRelation(rawFormula, state.ambientDim),
+      };
+      delete candidate.quadraticMatrix;
+      delete candidate.quadraticRelation;
+      delete candidate.quadraticRhs;
+      object.kind = "formula";
+      object.visibleProjection = false;
+      object.visibleSlice = true;
+      object.data = {
+        ...object.data,
+        ...candidate,
+        kind: "formula",
+        objectType: "formula-set",
+        ambientDimension: state.ambientDim,
+        name: object.name,
+      };
+      delete object.data.quadraticMatrix;
+      delete object.data.quadraticRelation;
+      delete object.data.quadraticRhs;
+      if (candidate.formulaRenderMode === "numeric") {
+        const strictNote = candidate.formulaStrict ? " Strict inequality is rendered as a closed boundary." : "";
+        state.lastWarning = `Formula applied with numerical implicit renderer.${strictNote}`;
+      } else {
+        state.lastWarning = candidate.formulaStrict
+          ? "Formula applied. Strict inequality is rendered as a closed boundary."
+          : "Formula applied.";
+      }
+      state.selectedVertex = null;
+      renderAll();
+    } catch (error) {
+      state.lastWarning = `Formula rejected: ${error.message}`;
+      updateDebug();
+    }
+  }
+
+  function applyFormulaMatrixImport(object, rawRows, relation, rhsRaw) {
+    try {
+      const rows = parseMatrixRows(rawRows, state.ambientDim, "Q matrix");
+      const candidate = compileQuadraticMatrixFormula(rows, relation, rhsRaw, state.ambientDim);
+      object.kind = "formula";
+      object.visibleProjection = false;
+      object.visibleSlice = true;
+      object.data = {
+        ...object.data,
+        ...candidate,
+        kind: "formula",
+        objectType: "formula-set",
+        ambientDimension: state.ambientDim,
+        name: object.name,
+      };
+      state.lastWarning = "Q matrix formula imported.";
+      state.selectedVertex = null;
+      renderAll();
+    } catch (error) {
+      state.lastWarning = `Q import rejected: ${error.message}`;
+      updateDebug();
+    }
+  }
+
+  function buildTropicalParams(container, object) {
+    const data = object.data || {};
+    data.tropicalConvention = normalizeTropicalConvention(data.tropicalConvention);
+    const panel = document.createElement("div");
+    panel.className = "slice-tropical-panel";
+
+    const modes = document.createElement("div");
+    modes.className = "slice-segmented";
+    modes.setAttribute("aria-label", "Tropical convention");
+    ["max", "min"].forEach((mode) => {
+      const button = document.createElement("button");
+      button.className = "slice-segment";
+      button.type = "button";
+      button.dataset.tropicalConvention = mode;
+      button.textContent = mode;
+      button.classList.toggle("active", data.tropicalConvention === mode);
+      button.addEventListener("click", () => {
+        applyTropicalInput(object, data.tropicalInput || textarea.value, mode);
+      });
+      modes.append(button);
+    });
+
+    const textarea = document.createElement("textarea");
+    textarea.className = "slice-textarea slice-tropical-textarea";
+    textarea.dataset.tropicalInput = "true";
+    textarea.spellcheck = false;
+    textarea.value = data.tropicalInput || tropicalTermsToText(data.terms || []);
+    textarea.setAttribute("aria-label", "Tropical polynomial");
+    textarea.placeholder = "p^0 + u1 + u2";
+    const apply = document.createElement("button");
+    apply.className = "slice-btn";
+    apply.type = "button";
+    apply.dataset.tropicalApply = "true";
+    apply.textContent = "apply tropical";
+    const applyCurrent = () => applyTropicalInput(object, textarea.value, data.tropicalConvention);
+    apply.addEventListener("click", applyCurrent);
+    textarea.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        applyCurrent();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        textarea.value = data.tropicalInput || tropicalTermsToText(data.terms || []);
+        textarea.blur();
+      }
+    });
+
+    const summary = document.createElement("code");
+    summary.className = "slice-tropical-summary";
+    summary.dataset.tropicalSummary = "true";
+    summary.textContent = data.normalizedTropical || tropicalTermsToText(data.terms || []);
+    panel.append(modes, textarea, apply, summary);
+    container.appendChild(panel);
+  }
+
+  function applyTropicalInput(object, rawInput, convention) {
+    try {
+      const candidate = compileTropicalPolynomial(rawInput, convention, state.ambientDim);
+      object.kind = "tropical";
+      object.visibleProjection = false;
+      object.visibleSlice = true;
+      object.data = {
+        ...object.data,
+        ...candidate,
+        kind: "tropical",
+        objectType: "tropical-polynomial",
+        ambientDimension: state.ambientDim,
+        name: object.name,
+      };
+      state.lastWarning = `Tropical polynomial applied in ${candidate.tropicalConvention} convention.`;
+      state.selectedVertex = null;
+      syncObjectPanel();
+      renderAll();
+    } catch (error) {
+      state.lastWarning = `Tropical input rejected: ${error.message}`;
+      updateDebug();
+    }
+  }
+
   function rebuildDirectionButtons() {
     const container = $("direction-controls");
     container.innerHTML = "";
@@ -1354,6 +2877,117 @@
   function rebuildDynamicControls() {
     rebuildDirectionButtons();
     rebuildRotationSelects();
+    rebuildDirectPositionInputs();
+    syncDirectInputFields({ force: true });
+  }
+
+  function directPositionValues() {
+    const inputs = Array.from($("direct-position-inputs").querySelectorAll("[data-direct-position-index]"));
+    if (inputs.length !== state.ambientDim) {
+      throw new Error(`Position vector needs ${state.ambientDim} entries.`);
+    }
+    return inputs.map((input, index) => {
+      const parsed = parseRationalNumber(input.value);
+      if (!parsed.ok || !Number.isFinite(parsed.value)) {
+        throw new Error(`Position entry p_${index + 1} is not a finite rational value.`);
+      }
+      return parsed.value;
+    });
+  }
+
+  function directManualFrameRows() {
+    const rows = Array.from({ length: state.ambientDim }, () => Array(state.ambientDim).fill(0));
+    const inputs = Array.from($("direct-frame-grid").querySelectorAll("[data-direct-frame-row]"));
+    if (inputs.length !== state.ambientDim * state.ambientDim) {
+      throw new Error(`Frame matrix needs ${state.ambientDim} x ${state.ambientDim} entries.`);
+    }
+    inputs.forEach((input) => {
+      const row = Number(input.dataset.directFrameRow);
+      const col = Number(input.dataset.directFrameColumn);
+      const parsed = parseRationalNumber(input.value);
+      if (!parsed.ok || !Number.isFinite(parsed.value)) {
+        throw new Error(`Frame entry e_${row + 1}, v_${col + 1} is not a finite rational value.`);
+      }
+      rows[row][col] = parsed.value;
+    });
+    return rows;
+  }
+
+  function cleanMatrixRowText(rowText) {
+    return String(rowText || "")
+      .trim()
+      .replace(/^\s*[\[\(\{]\s*/, "")
+      .replace(/\s*[\]\)\}]\s*,?\s*$/, "")
+      .replace(/\s*,\s*$/, "")
+      .trim();
+  }
+
+  function parseMatrixRows(rawValue, n = state.ambientDim, label = "Matrix") {
+    const text = String(rawValue || "").trim();
+    if (!text) throw new Error(`${label} rows are empty.`);
+    const rowTexts = text
+      .split(/\n|;/)
+      .map(cleanMatrixRowText)
+      .filter(Boolean);
+    if (rowTexts.length !== n) {
+      throw new Error(`${label} needs ${n} rows.`);
+    }
+    return rowTexts.map((rowText, rowIndex) => {
+      const parts = (rowText.includes(",") ? rowText.split(",") : rowText.split(/\s+/))
+        .map((part) => part.trim())
+        .filter(Boolean);
+      if (parts.length !== n) {
+        throw new Error(`${label} row ${rowIndex + 1} needs ${n} entries.`);
+      }
+      return parts.map((part, columnIndex) => {
+        const parsed = parseRationalNumber(part);
+        if (!parsed.ok || !Number.isFinite(parsed.value)) {
+          throw new Error(`${label} entry row ${rowIndex + 1}, column ${columnIndex + 1} is not a finite rational value.`);
+        }
+        return parsed.value;
+      });
+    });
+  }
+
+  function parseDirectMatrixRows(rawValue) {
+    return parseMatrixRows(rawValue, state.ambientDim, "Frame matrix");
+  }
+
+  function columnsFromRows(rows) {
+    return Array.from({ length: state.ambientDim }, (_, columnIndex) =>
+      rows.map((row) => row[columnIndex])
+    );
+  }
+
+  function applyDirectFrameRows(rows, nextP, successMessage) {
+    const candidate = orthonormalizeFrameColumns(columnsFromRows(rows), state.ambientDim);
+    if (!candidate.ok) throw new Error(candidate.error);
+    if (nextP) state.p = nextP;
+    state.frame = candidate.frame;
+    state.lastWarning = successMessage;
+    syncDirectInputFields({ force: true });
+    renderAll();
+  }
+
+  function applyDirectManualInput() {
+    try {
+      const nextP = directPositionValues();
+      const rows = directManualFrameRows();
+      applyDirectFrameRows(rows, nextP, "Manual slide position applied.");
+    } catch (error) {
+      state.lastWarning = `Direct input rejected: ${error.message}`;
+      updateDebug();
+    }
+  }
+
+  function applyDirectImportInput() {
+    try {
+      const rows = parseDirectMatrixRows($("direct-frame-import").value);
+      applyDirectFrameRows(rows, null, "Imported frame matrix applied.");
+    } catch (error) {
+      state.lastWarning = `Frame import rejected: ${error.message}`;
+      updateDebug();
+    }
   }
 
   function updateObjectFromControls() {
@@ -1405,8 +3039,98 @@
       data.origin = resizeVector(Array.isArray(data.origin) ? data.origin : [], state.ambientDim);
       data.length = positiveNumber(data.length, 4);
       data.basis = data.basis === "moving" ? "moving" : "ambient";
+    } else if (type === "formula-set") {
+      const previousDimension = data.ambientDimension || state.ambientDim;
+      try {
+        object.kind = "formula";
+        object.visibleProjection = false;
+        object.visibleSlice = true;
+        object.data = normalizeFormulaSetData(data, state.ambientDim);
+        object.data.name = object.name;
+        if (previousDimension !== state.ambientDim && Array.isArray(data.quadraticMatrix)) {
+          return `Formula Q matrix resized to R^${state.ambientDim}.`;
+        }
+      } catch (error) {
+        object.kind = "formula";
+        object.visibleProjection = false;
+        object.visibleSlice = true;
+        object.data = { ...makeFormulaSetData(state.ambientDim), name: object.name };
+        return `Formula reset while resizing: ${error.message}`;
+      }
+    } else if (type === "tropical-polynomial") {
+      const previousDimension = data.ambientDimension || state.ambientDim;
+      try {
+        object.kind = "tropical";
+        object.visibleProjection = false;
+        object.visibleSlice = true;
+        object.data = normalizeTropicalPolynomialData(data, state.ambientDim);
+        object.data.name = object.name;
+        if (previousDimension !== state.ambientDim) {
+          return `Tropical polynomial resized to R^${state.ambientDim}.`;
+        }
+      } catch (error) {
+        object.kind = "tropical";
+        object.visibleProjection = false;
+        object.visibleSlice = true;
+        object.data = { ...makeTropicalPolynomialData(state.ambientDim), name: object.name };
+        return `Tropical polynomial reset while resizing: ${error.message}`;
+      }
     }
     return "";
+  }
+
+  function normalizeFormulaSetData(data, n = state.ambientDim) {
+    const normalized = {
+      ...data,
+      kind: "formula",
+      objectType: "formula-set",
+      ambientDimension: n,
+      formulaInputMode: normalizeFormulaInputMode(data.formulaInputMode),
+    };
+    if (Array.isArray(normalized.quadraticMatrix) && normalized.formulaInputMode === "import-q") {
+      const rows = Array.from({ length: n }, (_, row) =>
+        resizeVector(Array.isArray(normalized.quadraticMatrix[row]) ? normalized.quadraticMatrix[row] : [], n)
+      );
+      return {
+        ...normalized,
+        ...compileQuadraticMatrixFormula(
+          rows,
+          normalized.quadraticRelation || normalized.formulaRelation || "<=",
+          normalized.quadraticRhs ?? 1,
+          n
+        ),
+      };
+    }
+    const formula = String(normalized.formula || "x1^2 + x2^2 <= 1").trim();
+    return {
+      ...normalized,
+      formula,
+      ...compileFormulaRelation(formula, n),
+    };
+  }
+
+  function normalizeTropicalPolynomialData(data, n = state.ambientDim) {
+    const tropicalConvention = normalizeTropicalConvention(data.tropicalConvention);
+    const base = {
+      ...data,
+      kind: "tropical",
+      objectType: "tropical-polynomial",
+      ambientDimension: n,
+      tropicalConvention,
+    };
+    if (Array.isArray(data.terms) && data.terms.length) {
+      const terms = normalizeTropicalTerms(resizeTropicalTerms(data.terms, n), tropicalConvention, n);
+      return {
+        ...base,
+        tropicalInput: String(data.tropicalInput || tropicalTermsToText(terms)),
+        terms,
+        normalizedTropical: tropicalTermsToText(terms),
+      };
+    }
+    return {
+      ...base,
+      ...compileTropicalPolynomial(data.tropicalInput || defaultTropicalInput(n), tropicalConvention, n),
+    };
   }
 
   function normalizeObjectData(data, fallbackKind) {
@@ -1467,6 +3191,12 @@
         normalized.ambientDimension
       );
     }
+    if (normalized.objectType === "formula-set" || normalized.kind === "formula") {
+      return normalizeFormulaSetData(normalized, normalized.ambientDimension);
+    }
+    if (normalized.objectType === "tropical-polynomial" || normalized.kind === "tropical") {
+      return normalizeTropicalPolynomialData(normalized, normalized.ambientDimension);
+    }
     if (Array.isArray(normalized.points)) {
       normalized.points = normalized.points
         .map((point) => (Array.isArray(point) ? point : point.coords))
@@ -1496,12 +3226,15 @@
 
   function normalizeSourceObject(object) {
     const data = normalizeObjectData(object.data || {}, object.kind);
-    const visibleProjection = object.visibleProjection ?? object.projectionVisible ?? object.visible ?? true;
-    const visibleSlice = object.visibleSlice ?? object.sliceVisible ?? false;
+    const isFormulaSet = data.objectType === "formula-set";
+    const isTropical = data.objectType === "tropical-polynomial";
+    const isProjectionless = isProjectionlessSourceType(data.objectType);
+    const visibleProjection = isProjectionless ? false : object.visibleProjection ?? object.projectionVisible ?? object.visible ?? true;
+    const visibleSlice = isProjectionless ? object.visibleSlice ?? object.sliceVisible ?? true : object.visibleSlice ?? object.sliceVisible ?? false;
     const normalized = {
       id: object.id || `object-${objectCounter++}`,
       name: String(object.name || data.name || "object").trim(),
-      kind: data.kind || object.kind || "geometry",
+      kind: isFormulaSet ? "formula" : isTropical ? "tropical" : data.kind || object.kind || "geometry",
       visibleProjection: visibleProjection !== false,
       visibleSlice: !!visibleSlice,
       labels: !!(object.labels ?? object.showLabels),
@@ -1662,7 +3395,9 @@
       state.activeObjectId = object.id;
       state.sourceMode = "modify";
       state.selectedVertex = null;
-      state.lastWarning = `${object.name} added to the projection and slice view.`;
+      state.lastWarning = isProjectionlessSourceType(objectTypeKey(object))
+        ? `${object.name} added to the exact slice layer.`
+        : `${object.name} added to the projection and slice view.`;
       syncObjectSelect();
       syncObjectPanel();
       syncSourceMode();
@@ -1700,6 +3435,13 @@
     $("object-visible-projection").addEventListener("click", () => {
       const object = activeObject();
       if (!object) return;
+      if (isProjectionlessSourceType(objectTypeKey(object))) {
+        object.visibleProjection = false;
+        state.lastWarning = `${sourceLabel(object)} projection is unavailable; use the exact slice layer.`;
+        syncLayerButtons(object);
+        renderAll();
+        return;
+      }
       object.visibleProjection = !object.visibleProjection;
       if (!objectHasVisibleLayer(object) && state.selectedVertex?.objectId === object.id) state.selectedVertex = null;
       syncLayerButtons(object);
@@ -1726,18 +3468,30 @@
       });
     });
 
+    $("ambient-dimension").addEventListener("input", () => changeAmbientDimension($("ambient-dimension").value));
     $("ambient-dimension").addEventListener("change", () => changeAmbientDimension($("ambient-dimension").value));
 
-    $("slice-dimension-controls").addEventListener("click", (event) => {
-      const button = event.target.closest("[data-slice-dim]");
+    $("slide-input-mode-controls").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-slide-input-mode]");
       if (!button) return;
-      if (button.disabled || button.dataset.sliceDim !== "2") {
-        state.lastWarning = "3D frame mode is future work; the current build is fixed to 2D.";
-        renderAll();
-        return;
+      setSlideInputMode(button.dataset.slideInputMode);
+    });
+    $("direct-input-mode-controls").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-direct-input-mode]");
+      if (!button) return;
+      setDirectInputMode(button.dataset.directInputMode);
+    });
+    $("direct-manual-apply").addEventListener("click", applyDirectManualInput);
+    $("direct-import-apply").addEventListener("click", applyDirectImportInput);
+    $("direct-frame-import").addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        applyDirectImportInput();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        syncDirectInputFields({ force: true });
+        $("direct-frame-import").blur();
       }
-      state.sliceDim = 2;
-      renderAll();
     });
 
     syncScalarPair("box-radius-slider", "box-radius-number", state.viewport, "boxRadius");
@@ -1837,6 +3591,7 @@
 
   function handleKeyboardDown(event) {
     if (isTypingTarget(event.target) || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (state.slideInputMode !== "move") return;
     if (/^[1-9]$/.test(event.key)) {
       const index = Number(event.key) - 1;
       if (index < state.ambientDim) {
@@ -1856,6 +3611,7 @@
   }
 
   function handleKeyboardUp(event) {
+    if (state.slideInputMode !== "move") return;
     const action = motionActionFromKey(event);
     if (!action) return;
     clearMotionToken(motionTokenForKey(event, action));
@@ -1879,8 +3635,8 @@
     $("exact-sphere-guide").checked = state.viewport.exactSphereGuide;
     $("auto-schmidt").checked = state.autoSchmidt;
 
-    setSegmentActive("slice-dimension-controls", "data-slice-dim", state.sliceDim);
     setSegmentActive("direction-controls", "data-direction-key", directionKey());
+    syncSlideInputControls();
     syncMotionControls();
     syncRotationControls();
     syncSourceMode();
@@ -1896,15 +3652,11 @@
 
   function updateReadouts() {
     $("position-vector").textContent = `p = [${state.p.map((value) => fmt(value, 4)).join(", ")}]`;
-    $("frame-matrix").textContent = matrixToString(frameRows(state.frame));
-    $("active-slice-matrix").textContent = matrixToString(frameRows(state.frame.slice(0, state.sliceDim)));
+    $("frame-matrix").textContent = frameMatrixToString(state.frame);
+    $("active-slice-matrix").textContent = frameMatrixToString(state.frame.slice(0, state.sliceDim));
     $("gram-matrix").textContent = matrixToString(gramMatrix(state.frame));
     const vectors = Array.from({ length: state.sliceDim }, (_, index) => `y_${index + 1}v_${index + 1}`).join(" + ");
     $("affine-formula").textContent = `x = p + ${vectors}`;
-    $("frame-preview").textContent = state.frame
-      .slice(0, Math.min(3, state.frame.length))
-      .map((vector, index) => `v${index + 1}=[${vector.map((value) => fmt(value, 2)).join(",")}]`)
-      .join("  ");
   }
 
   function frameRows(columns) {
@@ -1925,6 +3677,15 @@
       .join("\n");
   }
 
+  function frameMatrixToString(columns) {
+    const rows = frameRows(columns);
+    const header = `      ${columns.map((_, index) => `v${index + 1}`.padStart(7, " ")).join(" ")}`;
+    const body = rows
+      .map((row, rowIndex) => `e${rowIndex + 1}`.padEnd(4, " ") + `[${row.map((value) => fmt(value, 4).padStart(7, " ")).join(" ")}]`)
+      .join("\n");
+    return `${header}\n${body}`;
+  }
+
   function updateDebug() {
     const counts = collectCounts();
     writeDefinitionList("visible-counts", [
@@ -1934,12 +3695,12 @@
       ["proj edges", String(counts.edges)],
       ["proj rays", String(counts.rays)],
       ["slice objects", state.sliceDim === 2 ? String(counts.sliceObjects) : "disabled in 3D"],
-      ["slice cells", `${counts.slicePolygons} poly / ${counts.sliceCircles} circ / ${counts.slicePoints} pts`],
+      ["slice cells", `${counts.slicePolygons} poly / ${counts.sliceCircles} circ / ${counts.sliceConics} conic / ${counts.sliceImplicit} implicit / ${counts.sliceTropicalSegments} tropical seg / ${counts.slicePoints} pts`],
     ]);
     writeDefinitionList("slice-diagnostics", [
-      ["renderer", "projection + exact 2D slice"],
+      ["renderer", "projection + exact/numeric 2D slice"],
       ["frame dimension", `${state.sliceDim}D`],
-      ["exact intersection", state.sliceDim === 2 ? "regular polytope/simplex/sphere" : "2D only"],
+      ["formula/tropical renderer", state.sliceDim === 2 ? "formula exact/numeric; tropical exact" : "2D only"],
       ["draw runtime", `${fmt(runtimeStats.drawMs, 2)} ms`],
       ["slice runtime", `${fmt(runtimeStats.exactSliceMs, 2)} ms`],
       ["halfspaces", runtimeStats.halfspaceCount ? `${runtimeStats.halfspaceCount} (${runtimeStats.heavyFamily})` : "none"],
@@ -1958,7 +3719,7 @@
       <span class="slice-chip">n=${state.ambientDim}</span>
       <span class="slice-chip">k=${state.sliceDim}</span>
       <span class="slice-chip">active ${directionLabel()}</span>
-      <span class="slice-chip">projection / exact 2D slice</span>
+      <span class="slice-chip">projection / exact+numeric 2D slice</span>
       ${previewText ? `<span class="slice-chip">${escapeHtml(previewText)}</span>` : ""}
       ${pickedText ? `<span class="slice-chip">picked: ${escapeHtml(pickedText)}</span>` : ""}
     `;
@@ -1993,6 +3754,9 @@
       rays: 0,
       slicePolygons: 0,
       sliceCircles: 0,
+      sliceConics: 0,
+      sliceImplicit: 0,
+      sliceTropicalSegments: 0,
       slicePoints: 0,
     };
     for (const object of state.objects) {
@@ -2012,6 +3776,9 @@
           counts.sliceObjects += 1;
           if (slice.kind === "polygon") counts.slicePolygons += 1;
           if (slice.kind === "circle") counts.sliceCircles += 1;
+          if (slice.kind === "conic") counts.sliceConics += 1;
+          if (slice.kind === "implicit-formula") counts.sliceImplicit += 1;
+          if (slice.kind === "tropical-curve") counts.sliceTropicalSegments += (slice.segments || []).length;
           if (slice.kind === "point") counts.slicePoints += 1;
           if (slice.kind === "segment") counts.slicePoints += 2;
         }
@@ -2282,6 +4049,12 @@
         ctx.font = `${10 * view.ratio}px JetBrains Mono, Consolas, monospace`;
         ctx.fillText("slice center", center.x + 5 * view.ratio, center.y - 5 * view.ratio);
       }
+    } else if (slice.kind === "conic") {
+      drawFormulaConicSlice(ctx, view, slice, { alpha, lineWidth });
+    } else if (slice.kind === "implicit-formula") {
+      drawNumericFormulaSlice(ctx, view, slice, { alpha, lineWidth });
+    } else if (slice.kind === "tropical-curve") {
+      drawTropicalCurveSlice(ctx, view, slice, { alpha, lineWidth });
     }
 
     ctx.restore();
@@ -2296,6 +4069,8 @@
     else if (type === "cube") result = exactPolytopeSlice(object, cubeSliceHalfPlanes(object));
     else if (type === "simplex") result = exactPolytopeSlice(object, simplexSliceHalfPlanes(object));
     else if (type === "sphere") result = exactSphereSlice(object);
+    else if (type === "formula-set") result = exactFormulaSlice(object);
+    else if (type === "tropical-polynomial") result = exactTropicalSlice(object);
     if (options.profile) runtimeStats.exactSliceMs += nowMs() - start;
     return result;
   }
@@ -2521,6 +4296,454 @@
     };
   }
 
+  function formulaQuadraticForm(matrix, left, right) {
+    let total = 0;
+    for (let row = 0; row < state.ambientDim; row += 1) {
+      for (let col = 0; col < state.ambientDim; col += 1) {
+        total += (left[row] || 0) * (matrix[row]?.[col] || 0) * (right[col] || 0);
+      }
+    }
+    return total;
+  }
+
+  function restrictFormulaPolynomialToSlice(polynomial) {
+    const clean = cleanFormulaPolynomial(polynomial, state.ambientDim);
+    const v1 = state.frame[0] || [];
+    const v2 = state.frame[1] || [];
+    const p = resizeVector(state.p, state.ambientDim);
+    const q = clean.quadratic;
+    const linear = clean.linear;
+    return {
+      A: formulaQuadraticForm(q, v1, v1),
+      B: 2 * formulaQuadraticForm(q, v1, v2),
+      C: formulaQuadraticForm(q, v2, v2),
+      D: 2 * formulaQuadraticForm(q, v1, p) + dot(linear, v1),
+      E: 2 * formulaQuadraticForm(q, v2, p) + dot(linear, v2),
+      F: formulaQuadraticForm(q, p, p) + dot(linear, p) + clean.constant,
+    };
+  }
+
+  function exactFormulaSlice(object) {
+    const data = object.data || {};
+    const relation = data.formulaRelation === ">=" || data.formulaRelation === "=" ? data.formulaRelation : "<=";
+    if (data.formulaRenderMode === "numeric" || !data.formulaPolynomial) {
+      return numericFormulaSlice(object, relation);
+    }
+    const coeffs = restrictFormulaPolynomialToSlice(data.formulaPolynomial || zeroFormulaPolynomial());
+    const tolerance = sliceTolerance();
+    const hasQuadratic = Math.abs(coeffs.A) > tolerance || Math.abs(coeffs.B) > tolerance || Math.abs(coeffs.C) > tolerance;
+    if (!hasQuadratic) {
+      return exactFormulaLinearSlice(coeffs.D, coeffs.E, coeffs.F, relation, object);
+    }
+    return {
+      kind: "conic",
+      coeffs,
+      relation,
+      classification: classifyConic(coeffs),
+      clipRadius: formulaClipRadius(object),
+    };
+  }
+
+  function numericFormulaSlice(object, relation) {
+    const data = object.data || {};
+    if (!data.formulaAst) return { kind: "empty" };
+    return {
+      kind: "implicit-formula",
+      ast: data.formulaAst,
+      relation,
+      strict: !!data.formulaStrict,
+      clipRadius: formulaClipRadius(object),
+    };
+  }
+
+  function exactFormulaLinearSlice(a, b, constant, relation, object) {
+    const tolerance = sliceTolerance();
+    const radius = formulaClipRadius(object);
+    if (Math.hypot(a, b) <= tolerance) {
+      const satisfied = relation === "="
+        ? Math.abs(constant) <= tolerance
+        : relation === ">="
+          ? constant >= -tolerance
+          : constant <= tolerance;
+      if (!satisfied) return { kind: "empty" };
+      return { kind: "polygon", vertices: initialClipPolygon(radius).map(sliceVertex) };
+    }
+    if (relation === "=") {
+      const endpoints = lineBoxIntersections(a, b, -constant, radius);
+      if (endpoints.length >= 2) return { kind: "segment", vertices: endpoints.slice(0, 2).map(sliceVertex) };
+      if (endpoints.length === 1) return { kind: "point", point: sliceVertex(endpoints[0]) };
+      return { kind: "empty" };
+    }
+    const plane = relation === ">="
+      ? { a: -a, b: -b, c: constant }
+      : { a, b, c: -constant };
+    let polygon = initialClipPolygon(radius);
+    polygon = clipPolygonByHalfPlane(polygon, plane.a, plane.b, plane.c);
+    polygon = cleanPolygon(polygon);
+    if (!polygon.length) return { kind: "empty" };
+    if (polygon.length >= 3 && Math.abs(polygonArea(polygon)) > tolerance) {
+      return { kind: "polygon", vertices: polygon.map(sliceVertex) };
+    }
+    const endpoints = farthestPair(uniquePoints(polygon));
+    if (endpoints.length === 2 && distanceSq2(endpoints[0], endpoints[1]) > tolerance ** 2) {
+      return { kind: "segment", vertices: endpoints.map(sliceVertex) };
+    }
+    return endpoints.length ? { kind: "point", point: sliceVertex(endpoints[0]) } : { kind: "empty" };
+  }
+
+  function lineBoxIntersections(a, b, c, radius) {
+    const candidates = [];
+    const tolerance = sliceTolerance();
+    const push = (x, y) => {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      if (x < -radius - tolerance || x > radius + tolerance || y < -radius - tolerance || y > radius + tolerance) return;
+      const point = [clamp(x, -radius, radius), clamp(y, -radius, radius)];
+      if (!candidates.some((candidate) => distanceSq2(candidate, point) <= tolerance ** 2)) candidates.push(point);
+    };
+    if (Math.abs(b) > tolerance) {
+      push(-radius, (c + a * radius) / b);
+      push(radius, (c - a * radius) / b);
+    }
+    if (Math.abs(a) > tolerance) {
+      push((c + b * radius) / a, -radius);
+      push((c - b * radius) / a, radius);
+    }
+    return farthestPair(candidates);
+  }
+
+  function formulaClipRadius() {
+    return Math.max(state.viewport.boxRadius, 1);
+  }
+
+  function classifyConic(coeffs) {
+    const discriminant = coeffs.B ** 2 - 4 * coeffs.A * coeffs.C;
+    const tolerance = Math.max(sliceTolerance(), 1e-9) * Math.max(1, Math.abs(coeffs.A), Math.abs(coeffs.B), Math.abs(coeffs.C));
+    if (Math.abs(discriminant) <= tolerance) return "parabola/degenerate";
+    return discriminant < 0 ? "ellipse" : "hyperbola";
+  }
+
+  function formulaConicValue(coeffs, x, y) {
+    return coeffs.A * x * x + coeffs.B * x * y + coeffs.C * y * y + coeffs.D * x + coeffs.E * y + coeffs.F;
+  }
+
+  function drawFormulaConicSlice(ctx, view, slice, options = {}) {
+    const radius = slice.clipRadius || formulaClipRadius();
+    if (slice.relation !== "=") drawConicInequalityFill(ctx, view, slice, radius, options.alpha ?? 0.85);
+    const segments = conicBoundarySegments(slice.coeffs, radius);
+    ctx.globalAlpha = options.alpha ?? 0.85;
+    ctx.lineWidth = options.lineWidth || 2 * view.ratio;
+    for (const segment of segments) {
+      const start = projectFramePoint(segment[0], view);
+      const end = projectFramePoint(segment[1], view);
+      line(ctx, start.x, start.y, end.x, end.y);
+    }
+  }
+
+  function drawConicInequalityFill(ctx, view, slice, radius, alpha) {
+    const steps = 112;
+    const cell = (2 * radius) / steps;
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.13;
+    for (let row = 0; row < steps; row += 1) {
+      const y = -radius + (row + 0.5) * cell;
+      for (let col = 0; col < steps; col += 1) {
+        const x = -radius + (col + 0.5) * cell;
+        const value = formulaConicValue(slice.coeffs, x, y);
+        const inside = slice.relation === ">=" ? value >= -sliceTolerance() : value <= sliceTolerance();
+        if (!inside) continue;
+        const left = view.centerX + (-radius + col * cell) * view.scale;
+        const top = view.centerY - (-radius + (row + 1) * cell) * view.scale;
+        ctx.fillRect(left, top, Math.ceil(cell * view.scale) + 0.5, Math.ceil(cell * view.scale) + 0.5);
+      }
+    }
+    ctx.restore();
+  }
+
+  function conicBoundarySegments(coeffs, radius) {
+    const steps = 150;
+    const cell = (2 * radius) / steps;
+    const segments = [];
+    const interpolate = (pointA, pointB, valueA, valueB) => {
+      const denominator = valueA - valueB;
+      const t = Math.abs(denominator) <= 1e-14 ? 0.5 : valueA / denominator;
+      return [
+        pointA[0] + clamp(t, 0, 1) * (pointB[0] - pointA[0]),
+        pointA[1] + clamp(t, 0, 1) * (pointB[1] - pointA[1]),
+      ];
+    };
+    for (let row = 0; row < steps; row += 1) {
+      const y0 = -radius + row * cell;
+      const y1 = y0 + cell;
+      for (let col = 0; col < steps; col += 1) {
+        const x0 = -radius + col * cell;
+        const x1 = x0 + cell;
+        const corners = [
+          { p: [x0, y0], v: formulaConicValue(coeffs, x0, y0) },
+          { p: [x1, y0], v: formulaConicValue(coeffs, x1, y0) },
+          { p: [x1, y1], v: formulaConicValue(coeffs, x1, y1) },
+          { p: [x0, y1], v: formulaConicValue(coeffs, x0, y1) },
+        ];
+        const intersections = [];
+        for (let edge = 0; edge < 4; edge += 1) {
+          const current = corners[edge];
+          const next = corners[(edge + 1) % 4];
+          if (Math.abs(current.v) <= 1e-12) intersections.push(current.p);
+          if ((current.v < 0 && next.v > 0) || (current.v > 0 && next.v < 0)) {
+            intersections.push(interpolate(current.p, next.p, current.v, next.v));
+          }
+        }
+        const unique = uniquePoints(intersections);
+        if (unique.length === 2) segments.push(unique);
+        else if (unique.length > 2) {
+          for (let index = 0; index + 1 < unique.length; index += 2) segments.push([unique[index], unique[index + 1]]);
+        }
+      }
+    }
+    return segments;
+  }
+
+  function numericFormulaSteps(view, radius) {
+    const pixelWidth = 2 * radius * view.scale;
+    return clamp(Math.round(pixelWidth / Math.max(5 * view.ratio, 3)), 72, 180);
+  }
+
+  function sliceAmbientPoint(x, y) {
+    const point = resizeVector(state.p, state.ambientDim);
+    const v1 = state.frame[0] || [];
+    const v2 = state.frame[1] || [];
+    for (let index = 0; index < state.ambientDim; index += 1) {
+      point[index] += x * (v1[index] || 0) + y * (v2[index] || 0);
+    }
+    return point;
+  }
+
+  function numericFormulaValue(ast, x, y) {
+    return evaluateFormulaAst(ast, sliceAmbientPoint(x, y));
+  }
+
+  function numericFormulaInside(value, relation) {
+    if (!Number.isFinite(value)) return false;
+    const tolerance = sliceTolerance();
+    if (relation === "=") return Math.abs(value) <= tolerance;
+    return relation === ">=" ? value >= -tolerance : value <= tolerance;
+  }
+
+  function sampleNumericFormulaGrid(ast, radius, steps) {
+    const cell = (2 * radius) / steps;
+    const values = Array.from({ length: steps + 1 }, () => Array(steps + 1).fill(NaN));
+    for (let row = 0; row <= steps; row += 1) {
+      const y = -radius + row * cell;
+      for (let col = 0; col <= steps; col += 1) {
+        values[row][col] = numericFormulaValue(ast, -radius + col * cell, y);
+      }
+    }
+    return { values, cell };
+  }
+
+  function drawNumericFormulaSlice(ctx, view, slice, options = {}) {
+    const radius = slice.clipRadius || formulaClipRadius();
+    const steps = numericFormulaSteps(view, radius);
+    const grid = sampleNumericFormulaGrid(slice.ast, radius, steps);
+    const alpha = options.alpha ?? 0.85;
+    if (slice.relation !== "=") drawNumericFormulaInequalityFill(ctx, view, slice, radius, steps, grid.cell, alpha);
+    const segments = numericFormulaBoundarySegments(grid.values, radius, steps, grid.cell);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = options.lineWidth || 2 * view.ratio;
+    for (const segment of segments) {
+      const start = projectFramePoint(segment[0], view);
+      const end = projectFramePoint(segment[1], view);
+      line(ctx, start.x, start.y, end.x, end.y);
+    }
+    ctx.restore();
+  }
+
+  function drawNumericFormulaInequalityFill(ctx, view, slice, radius, steps, cell, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.12;
+    for (let row = 0; row < steps; row += 1) {
+      const y = -radius + (row + 0.5) * cell;
+      for (let col = 0; col < steps; col += 1) {
+        const x = -radius + (col + 0.5) * cell;
+        if (!numericFormulaInside(numericFormulaValue(slice.ast, x, y), slice.relation)) continue;
+        const left = view.centerX + (-radius + col * cell) * view.scale;
+        const top = view.centerY - (-radius + (row + 1) * cell) * view.scale;
+        ctx.fillRect(left, top, Math.ceil(cell * view.scale) + 0.5, Math.ceil(cell * view.scale) + 0.5);
+      }
+    }
+    ctx.restore();
+  }
+
+  function numericFormulaBoundarySegments(values, radius, steps, cell) {
+    const segments = [];
+    const zeroTolerance = Math.max(sliceTolerance(), 1e-9);
+    const interpolate = (pointA, pointB, valueA, valueB) => {
+      const denominator = valueA - valueB;
+      const t = Math.abs(denominator) <= 1e-14 ? 0.5 : valueA / denominator;
+      return [
+        pointA[0] + clamp(t, 0, 1) * (pointB[0] - pointA[0]),
+        pointA[1] + clamp(t, 0, 1) * (pointB[1] - pointA[1]),
+      ];
+    };
+    const signedValue = (value) => {
+      if (!Number.isFinite(value)) return null;
+      if (Math.abs(value) <= zeroTolerance) return 0;
+      return value < 0 ? -1 : 1;
+    };
+    for (let row = 0; row < steps; row += 1) {
+      const y0 = -radius + row * cell;
+      const y1 = y0 + cell;
+      for (let col = 0; col < steps; col += 1) {
+        const x0 = -radius + col * cell;
+        const x1 = x0 + cell;
+        const corners = [
+          { p: [x0, y0], v: values[row][col] },
+          { p: [x1, y0], v: values[row][col + 1] },
+          { p: [x1, y1], v: values[row + 1][col + 1] },
+          { p: [x0, y1], v: values[row + 1][col] },
+        ];
+        const intersections = [];
+        for (let edge = 0; edge < 4; edge += 1) {
+          const current = corners[edge];
+          const next = corners[(edge + 1) % 4];
+          const currentSign = signedValue(current.v);
+          const nextSign = signedValue(next.v);
+          if (currentSign == null || nextSign == null) continue;
+          if (currentSign === 0) intersections.push(current.p);
+          if (currentSign * nextSign < 0) intersections.push(interpolate(current.p, next.p, current.v, next.v));
+        }
+        const unique = uniquePoints(intersections);
+        if (unique.length === 2) segments.push(unique);
+        else if (unique.length > 2) {
+          for (let index = 0; index + 1 < unique.length; index += 2) segments.push([unique[index], unique[index + 1]]);
+        }
+      }
+    }
+    return segments;
+  }
+
+  function exactTropicalSlice(object) {
+    const data = object.data || {};
+    const terms = normalizeTropicalTerms(resizeTropicalTerms(data.terms || [], state.ambientDim), data.tropicalConvention, state.ambientDim);
+    const radius = formulaClipRadius(object);
+    if (terms.length < 2) {
+      return { kind: "tropical-curve", segments: [], clipRadius: radius, skippedPairs: 0 };
+    }
+    const convention = normalizeTropicalConvention(data.tropicalConvention);
+    const functions = restrictTropicalTermsToSlice(terms, convention);
+    const segments = [];
+    let skippedPairs = 0;
+    const tolerance = sliceTolerance();
+    for (let left = 0; left < functions.length; left += 1) {
+      for (let right = left + 1; right < functions.length; right += 1) {
+        const diffA = functions[left].a - functions[right].a;
+        const diffB = functions[left].b - functions[right].b;
+        const diffC = functions[left].c - functions[right].c;
+        const scaleValue = Math.max(1, Math.abs(diffA), Math.abs(diffB), Math.abs(diffC));
+        if (Math.hypot(diffA, diffB) <= tolerance * scaleValue) {
+          skippedPairs += Math.abs(diffC) <= tolerance * scaleValue ? 1 : 0;
+          continue;
+        }
+        const endpoints = lineBoxIntersections(diffA, diffB, -diffC, radius);
+        if (endpoints.length < 2) continue;
+        const clipped = clipTropicalSegmentByDominance(endpoints, functions[left], functions, tolerance);
+        if (!clipped) continue;
+        if (distanceSq2(clipped[0], clipped[1]) <= tolerance ** 2) continue;
+        segments.push({
+          y0: clipped[0],
+          y1: clipped[1],
+          pair: [functions[left].term.label, functions[right].term.label],
+        });
+      }
+    }
+    return {
+      kind: "tropical-curve",
+      segments: uniqueTropicalSegments(segments),
+      clipRadius: radius,
+      convention,
+      skippedPairs,
+    };
+  }
+
+  function restrictTropicalTermsToSlice(terms, convention) {
+    const sign = normalizeTropicalConvention(convention) === "min" ? -1 : 1;
+    return terms.map((term) => {
+      const exponent = resizeVector(term.exponent || [], state.ambientDim);
+      const restricted = {
+        a: dot(exponent, state.frame[0]),
+        b: dot(exponent, state.frame[1]),
+        c: finiteNumber(term.coefficient, 0) + dot(exponent, state.p),
+        term,
+      };
+      return {
+        a: sign * restricted.a,
+        b: sign * restricted.b,
+        c: sign * restricted.c,
+        term,
+      };
+    });
+  }
+
+  function clipTropicalSegmentByDominance(segment, activeFunction, functions, tolerance) {
+    const start = segment[0];
+    const end = segment[1];
+    const dx = end[0] - start[0];
+    const dy = end[1] - start[1];
+    let lo = 0;
+    let hi = 1;
+    for (const candidate of functions) {
+      const diffA = activeFunction.a - candidate.a;
+      const diffB = activeFunction.b - candidate.b;
+      const diffC = activeFunction.c - candidate.c;
+      const base = diffA * start[0] + diffB * start[1] + diffC;
+      const slope = diffA * dx + diffB * dy;
+      if (Math.abs(slope) <= tolerance) {
+        if (base < -tolerance) return null;
+        continue;
+      }
+      const threshold = (-tolerance - base) / slope;
+      if (slope > 0) lo = Math.max(lo, threshold);
+      else hi = Math.min(hi, threshold);
+      if (lo - hi > tolerance) return null;
+    }
+    lo = clamp(lo, 0, 1);
+    hi = clamp(hi, 0, 1);
+    if (lo > hi) return null;
+    return [
+      [start[0] + lo * dx, start[1] + lo * dy],
+      [start[0] + hi * dx, start[1] + hi * dy],
+    ];
+  }
+
+  function uniqueTropicalSegments(segments) {
+    const seen = new Set();
+    const unique = [];
+    const keyPoint = (point) => point.map((value) => fmt(value, 7)).join(",");
+    for (const segment of segments) {
+      const a = keyPoint(segment.y0);
+      const b = keyPoint(segment.y1);
+      const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(segment);
+    }
+    return unique;
+  }
+
+  function drawTropicalCurveSlice(ctx, view, slice, options = {}) {
+    ctx.save();
+    ctx.globalAlpha = options.alpha ?? 0.85;
+    ctx.lineWidth = options.lineWidth || 2 * view.ratio;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const segment of slice.segments || []) {
+      const start = projectFramePoint(segment.y0, view);
+      const end = projectFramePoint(segment.y1, view);
+      line(ctx, start.x, start.y, end.x, end.y);
+    }
+    ctx.restore();
+  }
+
   function initialClipPolygon(radius) {
     const r = Math.max(1, radius);
     return [[-r, -r], [r, -r], [r, r], [-r, r]];
@@ -2529,6 +4752,7 @@
   function sliceClipRadiusForObject(object) {
     const data = object.data || {};
     const type = objectTypeKey(object);
+    if (type === "formula-set" || type === "tropical-polynomial") return formulaClipRadius(object);
     const size = type === "sphere"
       ? positiveNumber(data.radius, 1)
       : positiveNumber(data.scale, 1);
@@ -2687,6 +4911,9 @@
           label: basis === "moving" ? `v_${index + 1}` : `e_${index + 1}`,
         })),
       };
+    }
+    if (type === "formula-set" || type === "tropical-polynomial") {
+      return { points: [], edges: [], rays: [] };
     }
     if (type === "regular-polytope") {
       const geometry = regularPolytopeGeometry(data, state.ambientDim);
@@ -2933,9 +5160,11 @@
     return {
       version: 1,
       module: "higher-dimensional-slice-explorer",
-      activeModeTitle: "Projection / exact 2D slice",
+      activeModeTitle: "Projection / exact+numeric 2D slice",
       ambientDimension: state.ambientDim,
       frameDimension: state.sliceDim,
+      slideInputMode: state.slideInputMode,
+      directInputMode: state.directInputMode,
       activeDirection: state.activeDirection,
       motionMode: state.motionMode,
       translationSpeed: state.translationSpeed,
@@ -3023,6 +5252,8 @@
       }
       state.ambientDim = clamp(Math.round(finiteNumber(imported.ambientDimension, 4)), 2, 8);
       state.sliceDim = 2;
+      state.slideInputMode = normalizeSlideInputMode(imported.slideInputMode);
+      state.directInputMode = normalizeDirectInputMode(imported.directInputMode);
       state.activeDirection = normalizeDirection(imported.activeDirection, state.ambientDim);
       state.motionMode = imported.motionMode === "discrete" ? "discrete" : "continuous";
       state.translationSpeed = finiteNumber(imported.translationSpeed, MOTION_DEFAULTS.translationSpeed);
@@ -3110,6 +5341,8 @@
   function resetToPreset() {
     state.ambientDim = 4;
     state.sliceDim = 2;
+    state.slideInputMode = "move";
+    state.directInputMode = "manual";
     state.activeDirection = defaultDirection(4);
     state.motionMode = "continuous";
     state.translationSpeed = MOTION_DEFAULTS.translationSpeed;
@@ -3139,7 +5372,7 @@
     clearAllMotion();
     state.objects = [makeObjectForType("cartesian-frame")];
     state.activeObjectId = state.objects[0].id;
-    state.lastWarning = "Reset to the projection and exact 2D slice demo.";
+    state.lastWarning = "Reset to the projection and exact/numeric 2D slice demo.";
     rebuildDynamicControls();
     refreshTypeLabels();
     syncObjectSelect();
