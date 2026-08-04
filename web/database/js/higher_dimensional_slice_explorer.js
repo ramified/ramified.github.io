@@ -19,13 +19,14 @@
   const nowMs = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
 
   const OBJECT_TYPES = [
-    { key: "regular-polytope", label: "regular polytope in R^n", color: "#2f7d70", pointSize: 4, lineWidth: 2 },
-    { key: "simplex", label: "simplex in R^n", color: "#5577aa", pointSize: 4, lineWidth: 2 },
+    { key: "regular-polytope", label: "regular polytope", color: "#2f7d70", pointSize: 4, lineWidth: 2 },
+    { key: "simplex", label: "simplex", color: "#5577aa", pointSize: 4, lineWidth: 2 },
     { key: "sphere", label: "sphere S^{n-1}", color: "#8a4f9f", pointSize: 3, lineWidth: 2 },
     { key: "cartesian-frame", label: "Cartesian frame", color: "#b05835", pointSize: 4, lineWidth: 3 },
-    { key: "point", label: "point in R^n", color: "#c58a20", pointSize: 7, lineWidth: 2 },
+    { key: "point", label: "point", color: "#c58a20", pointSize: 7, lineWidth: 2 },
     { key: "formula-set", label: "formula set", color: "#4f7fbd", pointSize: 4, lineWidth: 2 },
     { key: "tropical-polynomial", label: "tropical polynomial", color: "#2f6fb0", pointSize: 4, lineWidth: 2 },
+    { key: "weyl-chambers", label: "Weyl chambers", color: "#7b5cb8", pointSize: 4, lineWidth: 2 },
   ];
   const TROPICAL_DISTRICT_COLORS = [
     "#d95f5f",
@@ -39,7 +40,23 @@
     "#c95f93",
     "#6f7f3d",
   ];
-  const EXACT_SLICE_TYPES = new Set(["regular-polytope", "cube", "simplex", "sphere", "formula-set", "tropical-polynomial"]);
+  const WEYL_CHAMBER_COLORS = [
+    "#7b5cb8",
+    "#2f8f7f",
+    "#d2a33a",
+    "#4f73c6",
+    "#cf6f3d",
+    "#7aa54a",
+    "#c95f93",
+    "#3f8ab8",
+    "#d95f5f",
+    "#6f7f3d",
+    "#8a66b5",
+    "#b05835",
+  ];
+  const EXACT_SLICE_TYPES = new Set(["regular-polytope", "cube", "simplex", "sphere", "formula-set", "tropical-polynomial", "weyl-chambers"]);
+  const WEYL_LABEL_MODES = new Set(["permutation", "word"]);
+  const WEYL_LABEL_DENSITIES = new Set(["all", "active"]);
   const REGULAR_POLYTOPE_FAMILIES = [
     { key: "regular-simplex", label: "regular simplex" },
     { key: "hypercube", label: "hypercube" },
@@ -66,6 +83,7 @@
   const DEFAULT_CANVAS_LABEL_SIZE_REM = 1.05;
   const regularGeometryCache = new Map();
   const regularHalfspaceCache = new Map();
+  const weylRootSystemCache = new Map();
   const runtimeStats = {
     drawMs: 0,
     exactSliceMs: 0,
@@ -106,10 +124,13 @@
     sourceMode: "modify",
     addType: "cartesian-frame",
     addRegularFamily: "hypercube",
+    addWeylDynkinType: "A",
     objects: [],
     activeObjectId: null,
     selectedVertex: null,
     pickCandidates: [],
+    weylChamberPickCandidates: [],
+    activeWeylChamber: null,
     lastWarning: "Projection and exact/numeric 2D slice layers are active.",
   };
 
@@ -192,6 +213,16 @@
 
   function normalizeCanvasLabelSize(value) {
     return clamp(finiteNumber(value, DEFAULT_CANVAS_LABEL_SIZE_REM), 0.75, 2);
+  }
+
+  function normalizeWeylLabelMode(mode) {
+    return WEYL_LABEL_MODES.has(mode) ? mode : "word";
+  }
+
+  function normalizeWeylLabelDensity(density) {
+    if (density === "label all") return "all";
+    if (density === "active labels") return "active";
+    return WEYL_LABEL_DENSITIES.has(density) ? density : "active";
   }
 
   function normalizeFormulaInputMode(mode) {
@@ -1873,12 +1904,40 @@
   }
 
   function regularPolytopeInstanceLabel(family, n = state.ambientDim) {
-    return `${regularFamilyLabel(normalizeRegularFamily(family, n), n)} in R^${n}`;
+    return regularFamilyLabel(normalizeRegularFamily(family, n), n);
+  }
+
+  function weylDynkinOptions(n = state.ambientDim) {
+    const options = [
+      { key: "A", type: "A", rank: n, label: `A_${n}` },
+      { key: "B", type: "B", rank: n, label: `B_${n}` },
+      { key: "C", type: "C", rank: n, label: `C_${n}` },
+    ];
+    if (n >= 4) options.push({ key: "D", type: "D", rank: n, label: `D_${n}` });
+    if (n === 2) options.push({ key: "G", type: "G", rank: 2, label: "G_2" });
+    if (n === 4) options.push({ key: "F", type: "F", rank: 4, label: "F_4" });
+    if (n >= 6 && n <= 8) options.push({ key: "E", type: "E", rank: n, label: `E_${n}` });
+    return options;
+  }
+
+  function normalizeWeylDynkinType(type, n = state.ambientDim) {
+    const raw = String(type || "A").trim().toUpperCase().replace(/^([ABCDEFG]).*$/, "$1");
+    const options = weylDynkinOptions(n);
+    return options.some((option) => option.type === raw) ? raw : options[0].type;
+  }
+
+  function weylDynkinLabel(type, rank = state.ambientDim) {
+    return `${normalizeWeylDynkinType(type, rank)}_${rank}`;
   }
 
   function currentAddRegularFamily(n = state.ambientDim) {
     state.addRegularFamily = normalizeRegularFamily(state.addRegularFamily, n);
     return state.addRegularFamily;
+  }
+
+  function currentAddWeylDynkinType(n = state.ambientDim) {
+    state.addWeylDynkinType = normalizeWeylDynkinType(state.addWeylDynkinType, n);
+    return state.addWeylDynkinType;
   }
 
   function makeRegularPolytopeData(n, family = "hypercube") {
@@ -2135,15 +2194,16 @@
   }
 
   function currentTypeLabel(typeKey = state.addType, n = state.ambientDim) {
-    if (typeKey === "regular-polytope") return `regular polytope in R^${n}`;
-    if (typeKey === "simplex") return `simplex in R^${n}`;
-    if (typeKey === "sphere") return `S^${n - 1} in R^${n}`;
-    if (typeKey === "cartesian-frame" || typeKey === "fan") return `Cartesian frame in R^${n}`;
-    if (typeKey === "point") return `point in R^${n}`;
-    if (typeKey === "formula-set") return `formula set in R^${n}`;
-    if (typeKey === "tropical-polynomial") return `tropical polynomial in R^${n}`;
-    if (typeKey === "cube") return `cube in R^${n}`;
-    return `regular polytope in R^${n}`;
+    if (typeKey === "regular-polytope") return "regular polytope";
+    if (typeKey === "simplex") return "simplex";
+    if (typeKey === "sphere") return `sphere S^${n - 1}`;
+    if (typeKey === "cartesian-frame" || typeKey === "fan") return "Cartesian frame";
+    if (typeKey === "point") return "point";
+    if (typeKey === "formula-set") return "formula set";
+    if (typeKey === "tropical-polynomial") return "tropical polynomial";
+    if (typeKey === "weyl-chambers") return "Weyl chambers";
+    if (typeKey === "cube") return "cube";
+    return "regular polytope";
   }
 
   function makeObjectData(typeKey, n = state.ambientDim, options = {}) {
@@ -2154,6 +2214,7 @@
     if (typeKey === "point") return makePointData(n);
     if (typeKey === "formula-set") return makeFormulaSetData(n);
     if (typeKey === "tropical-polynomial") return makeTropicalPolynomialData(n);
+    if (typeKey === "weyl-chambers") return makeWeylChambersData(n, options.dynkinType || currentAddWeylDynkinType(n));
     return makeRegularPolytopeData(n, "hypercube");
   }
 
@@ -2267,8 +2328,24 @@
     };
   }
 
+  function makeWeylChambersData(n, dynkinType = "A") {
+    const normalizedDynkinType = normalizeWeylDynkinType(dynkinType, n);
+    return {
+      name: currentTypeLabel("weyl-chambers", n),
+      kind: "weyl",
+      objectType: "weyl-chambers",
+      ambientDimension: n,
+      description: `Finite Weyl chamber arrangement ${weylDynkinLabel(normalizedDynkinType, n)} in R^${n}, rendered by exact 2D slice.`,
+      dynkinType: normalizedDynkinType,
+      dynkinRank: n,
+      showChambers: true,
+      weylLabelMode: "word",
+      weylLabelDensity: "active",
+    };
+  }
+
   function isProjectionlessSourceType(typeKey) {
-    return typeKey === "formula-set" || typeKey === "tropical-polynomial";
+    return typeKey === "formula-set" || typeKey === "tropical-polynomial" || typeKey === "weyl-chambers";
   }
 
   function makeObjectForType(typeKey, name = "", options = {}) {
@@ -2293,7 +2370,11 @@
 
   function makePreviewObject() {
     const type = OBJECT_TYPES.find((item) => item.key === state.addType) || OBJECT_TYPES[0];
-    const options = type.key === "regular-polytope" ? { family: currentAddRegularFamily() } : {};
+    const options = type.key === "regular-polytope"
+      ? { family: currentAddRegularFamily() }
+      : type.key === "weyl-chambers"
+        ? { dynkinType: currentAddWeylDynkinType() }
+        : {};
     const data = makeObjectData(type.key, state.ambientDim, options);
     return {
       id: "__add-preview__",
@@ -2326,6 +2407,7 @@
       point: "point",
       "formula-set": "formula",
       "tropical-polynomial": "tropical",
+      "weyl-chambers": "Weyl chambers",
     };
     const type = object?.data?.objectType || object?.kind || "object";
     return labels[type] || type;
@@ -2346,21 +2428,39 @@
       select.appendChild(option);
     }
     select.value = state.addType;
-    fillAddFamilySelect();
+    fillAddVariantSelect();
   }
 
-  function fillAddFamilySelect() {
-    const select = $("source-add-family");
+  function fillAddVariantSelect() {
+    const select = $("source-add-variant");
     if (!select) return;
     select.innerHTML = "";
-    state.addRegularFamily = normalizeRegularFamily(state.addRegularFamily, state.ambientDim);
-    for (const family of regularFamilyOptions(state.ambientDim)) {
-      const option = document.createElement("option");
-      option.value = family.key;
-      option.textContent = family.label;
-      select.appendChild(option);
+    if (state.addType === "regular-polytope") {
+      state.addRegularFamily = normalizeRegularFamily(state.addRegularFamily, state.ambientDim);
+      for (const family of regularFamilyOptions(state.ambientDim)) {
+        const option = document.createElement("option");
+        option.value = family.key;
+        option.textContent = family.label;
+        select.appendChild(option);
+      }
+      select.value = state.addRegularFamily;
+      select.setAttribute("aria-label", "Regular polytope family");
+      select.title = "Regular polytope family";
+    } else if (state.addType === "weyl-chambers") {
+      state.addWeylDynkinType = normalizeWeylDynkinType(state.addWeylDynkinType, state.ambientDim);
+      for (const dynkin of weylDynkinOptions(state.ambientDim)) {
+        const option = document.createElement("option");
+        option.value = dynkin.type;
+        option.textContent = dynkin.label;
+        select.appendChild(option);
+      }
+      select.value = state.addWeylDynkinType;
+      select.setAttribute("aria-label", "Dynkin type");
+      select.title = "Dynkin type";
+    } else {
+      select.setAttribute("aria-label", "Source variant");
+      select.title = "";
     }
-    select.value = state.addRegularFamily;
   }
 
   function refreshTypeLabels() {
@@ -2369,7 +2469,7 @@
     Array.from(select.options).forEach((option) => {
       option.textContent = currentTypeLabel(option.value, state.ambientDim);
     });
-    fillAddFamilySelect();
+    fillAddVariantSelect();
   }
 
   function syncObjectSelect() {
@@ -2387,12 +2487,13 @@
 
   function syncSourceMode() {
     $("source-add-type").value = state.addType;
-    const familySelect = $("source-add-family");
-    if (familySelect) {
+    const variantSelect = $("source-add-variant");
+    if (variantSelect) {
       state.addRegularFamily = normalizeRegularFamily(state.addRegularFamily, state.ambientDim);
-      familySelect.value = state.addRegularFamily;
-      familySelect.hidden = state.addType !== "regular-polytope";
-      familySelect.disabled = state.addType !== "regular-polytope";
+      state.addWeylDynkinType = normalizeWeylDynkinType(state.addWeylDynkinType, state.ambientDim);
+      fillAddVariantSelect();
+      variantSelect.hidden = state.addType !== "regular-polytope" && state.addType !== "weyl-chambers";
+      variantSelect.disabled = variantSelect.hidden;
     }
     setSegmentActive("source-mode-controls", "data-source-mode", state.sourceMode);
     document.querySelectorAll("[data-source-mode-row]").forEach((row) => {
@@ -2449,7 +2550,7 @@
     projectionButton.setAttribute("aria-pressed", object.visibleProjection ? "true" : "false");
     const sliceEnabled = canDrawExact2DSlice(object);
     sliceButton.disabled = !sliceEnabled;
-    sliceButton.title = sliceEnabled ? "show exact/numeric 2D slice layer" : "2D slice is available only for regular polytopes, simplex, sphere, formula sets, and tropical polynomials in 2D frame mode";
+    sliceButton.title = sliceEnabled ? "show exact/numeric 2D slice layer" : "2D slice is available only for regular polytopes, simplex, sphere, formula sets, tropical polynomials, and Weyl chambers in 2D frame mode";
     sliceButton.classList.toggle("active", !!object.visibleSlice);
     sliceButton.setAttribute("aria-pressed", object.visibleSlice ? "true" : "false");
   }
@@ -2490,6 +2591,10 @@
     }
     if (type === "tropical-polynomial") {
       buildTropicalParams(container, object);
+      return;
+    }
+    if (type === "weyl-chambers") {
+      buildWeylParams(container, object);
       return;
     }
     container.textContent = "no parameters";
@@ -3079,6 +3184,118 @@
     container.appendChild(panel);
   }
 
+  function buildWeylParams(container, object) {
+    object.kind = "weyl";
+    object.visibleProjection = false;
+    object.visibleSlice = true;
+    object.data = normalizeWeylChambersData(object.data || {}, state.ambientDim);
+    const data = object.data;
+    const panel = document.createElement("div");
+    panel.className = "slice-tropical-panel";
+
+    const dynkinLine = document.createElement("div");
+    dynkinLine.className = "slice-control-line";
+    const dynkinSelect = document.createElement("select");
+    dynkinSelect.className = "slice-select";
+    dynkinSelect.setAttribute("aria-label", "Dynkin type");
+    for (const optionData of weylDynkinOptions(state.ambientDim)) {
+      const option = document.createElement("option");
+      option.value = optionData.type;
+      option.textContent = optionData.label;
+      dynkinSelect.append(option);
+    }
+    dynkinSelect.value = data.dynkinType;
+    dynkinSelect.addEventListener("change", () => {
+      object.data = {
+        ...object.data,
+        dynkinType: normalizeWeylDynkinType(dynkinSelect.value, state.ambientDim),
+        dynkinRank: state.ambientDim,
+      };
+      object.data = normalizeWeylChambersData(object.data, state.ambientDim);
+      state.activeWeylChamber = null;
+      state.lastWarning = `${weylDynkinLabel(object.data.dynkinType, state.ambientDim)} Weyl chambers selected.`;
+      syncObjectPanel();
+      renderAll();
+    });
+    dynkinLine.append(dynkinSelect);
+
+    const chamberToggle = document.createElement("label");
+    chamberToggle.className = "slice-inline-check";
+    const chamberCheckbox = document.createElement("input");
+    chamberCheckbox.type = "checkbox";
+    chamberCheckbox.checked = data.showChambers;
+    chamberCheckbox.addEventListener("change", () => {
+      object.data = {
+        ...object.data,
+        showChambers: chamberCheckbox.checked,
+      };
+      state.lastWarning = chamberCheckbox.checked ? "Weyl chambers shown." : "Weyl chamber fills and labels hidden.";
+      renderAll();
+    });
+    chamberToggle.append(chamberCheckbox, document.createTextNode("chambers"));
+
+    const labelModes = document.createElement("div");
+    labelModes.className = "slice-segmented";
+    labelModes.setAttribute("aria-label", "Weyl label mode");
+    [
+      ["permutation", "permutation"],
+      ["word", "word"],
+    ].forEach(([mode, label]) => {
+      const button = document.createElement("button");
+      button.className = "slice-segment";
+      button.type = "button";
+      button.dataset.weylLabelMode = mode;
+      button.textContent = label;
+      button.classList.toggle("active", data.weylLabelMode === mode);
+      button.addEventListener("click", () => {
+        object.data = {
+          ...object.data,
+          weylLabelMode: normalizeWeylLabelMode(mode),
+        };
+        state.lastWarning = `Weyl labels switched to ${label}.`;
+        syncObjectPanel();
+        renderAll();
+      });
+      labelModes.append(button);
+    });
+
+    const densityModes = document.createElement("div");
+    densityModes.className = "slice-segmented";
+    densityModes.setAttribute("aria-label", "Weyl label density");
+    [
+      ["all", "label all"],
+      ["active", "active labels"],
+    ].forEach(([mode, label]) => {
+      const button = document.createElement("button");
+      button.className = "slice-segment";
+      button.type = "button";
+      button.dataset.weylLabelDensity = mode;
+      button.textContent = label;
+      button.classList.toggle("active", data.weylLabelDensity === mode);
+      button.addEventListener("click", () => {
+        object.data = {
+          ...object.data,
+          weylLabelDensity: normalizeWeylLabelDensity(mode),
+        };
+        if (mode !== "active") state.activeWeylChamber = null;
+        state.lastWarning = `Weyl label density switched to ${label}.`;
+        syncObjectPanel();
+        renderAll();
+      });
+      densityModes.append(button);
+    });
+
+    const summary = document.createElement("code");
+    summary.className = "slice-tropical-summary";
+    const system = weylRootSystem(data.dynkinType, state.ambientDim);
+    const plain = `${weylDynkinLabel(data.dynkinType, state.ambientDim)}: ${system.hyperplaneRoots.length} walls`;
+    const tex = `${data.dynkinType}_{${state.ambientDim}}:\\ ${system.hyperplaneRoots.length}\\ \\mathrm{walls}`;
+    setMathText(summary, plain, tex);
+
+    panel.append(dynkinLine, chamberToggle, labelModes, densityModes, summary);
+    container.appendChild(panel);
+  }
+
   function setTropicalConvention(object, convention, notationMode) {
     try {
       const mode = normalizeTropicalConvention(convention);
@@ -3194,12 +3411,14 @@
     state.activeDirection = normalizeDirection(state.activeDirection, next);
     state.sliceDim = 2;
     state.rotationPair = normalizeRotationPair(state.rotationPair, next);
+    state.addWeylDynkinType = normalizeWeylDynkinType(state.addWeylDynkinType, next);
     const resizeWarnings = [];
     state.objects.forEach((object) => {
       const warning = resizeManagedObjectToAmbient(object);
       if (warning) resizeWarnings.push(warning);
     });
     state.selectedVertex = null;
+    state.activeWeylChamber = null;
     $("ambient-dimension").value = String(next);
     rebuildDynamicControls();
     refreshTypeLabels();
@@ -3409,6 +3628,16 @@
         object.data = { ...makeTropicalPolynomialData(state.ambientDim), name: object.name };
         return `Tropical polynomial reset while resizing: ${error.message}`;
       }
+    } else if (type === "weyl-chambers") {
+      const previousType = data.dynkinType || "A";
+      object.kind = "weyl";
+      object.visibleProjection = false;
+      object.visibleSlice = true;
+      object.data = normalizeWeylChambersData(data, state.ambientDim);
+      object.data.name = object.name;
+      if (previousType !== object.data.dynkinType) {
+        return `${previousType} is unavailable in R^${state.ambientDim}; switched to ${weylDynkinLabel(object.data.dynkinType, state.ambientDim)}.`;
+      }
     }
     return "";
   }
@@ -3471,6 +3700,22 @@
     return {
       ...base,
       ...compileTropicalPolynomial(data.tropicalInput || defaultTropicalInput(n), tropicalConvention, n),
+    };
+  }
+
+  function normalizeWeylChambersData(data, n = state.ambientDim) {
+    const dynkinType = normalizeWeylDynkinType(data.dynkinType || data.type, n);
+    return {
+      name: data.name || "Weyl chambers",
+      kind: "weyl",
+      objectType: "weyl-chambers",
+      ambientDimension: n,
+      dynkinType,
+      dynkinRank: n,
+      showChambers: data.showChambers !== false,
+      weylLabelMode: normalizeWeylLabelMode(data.weylLabelMode),
+      weylLabelDensity: normalizeWeylLabelDensity(data.weylLabelDensity),
+      description: `Finite Weyl chamber arrangement ${weylDynkinLabel(dynkinType, n)} in R^${n}, rendered by exact 2D slice.`,
     };
   }
 
@@ -3538,6 +3783,9 @@
     if (normalized.objectType === "tropical-polynomial" || normalized.kind === "tropical") {
       return normalizeTropicalPolynomialData(normalized, normalized.ambientDimension);
     }
+    if (normalized.objectType === "weyl-chambers" || normalized.kind === "weyl") {
+      return normalizeWeylChambersData(normalized, normalized.ambientDimension);
+    }
     if (Array.isArray(normalized.points)) {
       normalized.points = normalized.points
         .map((point) => (Array.isArray(point) ? point : point.coords))
@@ -3569,13 +3817,14 @@
     const data = normalizeObjectData(object.data || {}, object.kind);
     const isFormulaSet = data.objectType === "formula-set";
     const isTropical = data.objectType === "tropical-polynomial";
+    const isWeyl = data.objectType === "weyl-chambers";
     const isProjectionless = isProjectionlessSourceType(data.objectType);
     const visibleProjection = isProjectionless ? false : object.visibleProjection ?? object.projectionVisible ?? object.visible ?? true;
     const visibleSlice = isProjectionless ? object.visibleSlice ?? object.sliceVisible ?? true : object.visibleSlice ?? object.sliceVisible ?? false;
     const normalized = {
       id: object.id || `object-${objectCounter++}`,
       name: String(object.name || data.name || "object").trim(),
-      kind: isFormulaSet ? "formula" : isTropical ? "tropical" : data.kind || object.kind || "geometry",
+      kind: isFormulaSet ? "formula" : isTropical ? "tropical" : isWeyl ? "weyl" : data.kind || object.kind || "geometry",
       visibleProjection: visibleProjection !== false,
       visibleSlice: !!visibleSlice,
       labels: !!(object.labels ?? object.showLabels),
@@ -3723,19 +3972,29 @@
       renderAll();
     });
 
-    $("source-add-family").addEventListener("change", () => {
-      state.addRegularFamily = normalizeRegularFamily($("source-add-family").value, state.ambientDim);
+    $("source-add-variant").addEventListener("change", () => {
+      const value = $("source-add-variant").value;
+      if (state.addType === "regular-polytope") {
+        state.addRegularFamily = normalizeRegularFamily(value, state.ambientDim);
+      } else if (state.addType === "weyl-chambers") {
+        state.addWeylDynkinType = normalizeWeylDynkinType(value, state.ambientDim);
+      }
       renderAll();
     });
 
     $("source-add-object").addEventListener("click", () => {
-      const options = state.addType === "regular-polytope" ? { family: currentAddRegularFamily() } : {};
+      const options = state.addType === "regular-polytope"
+        ? { family: currentAddRegularFamily() }
+        : state.addType === "weyl-chambers"
+          ? { dynkinType: currentAddWeylDynkinType() }
+          : {};
       const data = makeObjectData(state.addType, state.ambientDim, options);
       const object = makeObjectForType(state.addType, uniqueObjectName(data.name || currentTypeLabel(state.addType, state.ambientDim)), options);
       state.objects.push(object);
       state.activeObjectId = object.id;
       state.sourceMode = "modify";
       state.selectedVertex = null;
+      state.activeWeylChamber = null;
       state.lastWarning = isProjectionlessSourceType(objectTypeKey(object))
         ? `${object.name} added to the exact slice layer.`
         : `${object.name} added to the projection and slice view.`;
@@ -3763,6 +4022,7 @@
       state.objects = state.objects.filter((object) => object.id !== state.activeObjectId);
       state.activeObjectId = state.objects[0].id;
       state.selectedVertex = null;
+      state.activeWeylChamber = null;
       state.lastWarning = "Active object deleted.";
       syncObjectSelect();
       syncObjectPanel();
@@ -4065,15 +4325,16 @@
       ["proj edges", String(counts.edges)],
       ["proj rays", String(counts.rays)],
       ["slice objects", state.sliceDim === 2 ? String(counts.sliceObjects) : "disabled in 3D"],
-      ["slice cells", `${counts.slicePolygons} poly / ${counts.sliceCircles} circ / ${counts.sliceConics} conic / ${counts.sliceImplicit} implicit / ${counts.sliceTropicalSegments} tropical seg / ${counts.sliceTropicalDistricts} tropical dist / ${counts.slicePoints} pts`],
+      ["slice cells", `${counts.slicePolygons} poly / ${counts.sliceCircles} circ / ${counts.sliceConics} conic / ${counts.sliceImplicit} implicit / ${counts.sliceTropicalSegments} tropical seg / ${counts.sliceTropicalDistricts} tropical dist / ${counts.sliceWeylWalls} Weyl walls / ${counts.sliceWeylChambers} Weyl chambers / ${counts.slicePoints} pts`],
     ]);
     writeDefinitionList("slice-diagnostics", [
       ["renderer", "projection + exact/numeric 2D slice"],
       ["frame dimension", `${state.sliceDim}D`],
-      ["formula/tropical renderer", state.sliceDim === 2 ? "formula exact/numeric; tropical exact" : "2D only"],
+      ["formula/tropical/Weyl renderer", state.sliceDim === 2 ? "formula exact/numeric; tropical/Weyl exact" : "2D only"],
       ["draw runtime", `${fmt(runtimeStats.drawMs, 2)} ms`],
       ["slice runtime", `${fmt(runtimeStats.exactSliceMs, 2)} ms`],
       ["tropical skips", counts.sliceTropicalSkippedPairs || counts.sliceTropicalSkippedDistricts ? `${counts.sliceTropicalSkippedPairs} pairs / ${counts.sliceTropicalSkippedDistricts} districts` : "none"],
+      ["Weyl skips", counts.sliceWeylSkippedWalls || counts.sliceWeylDuplicateWalls ? `${counts.sliceWeylSkippedWalls} skipped / ${counts.sliceWeylDuplicateWalls} duplicate` : "none"],
       ["halfspaces", runtimeStats.halfspaceCount ? `${runtimeStats.halfspaceCount} (${runtimeStats.heavyFamily})` : "none"],
       ["halfspace build", `${fmt(runtimeStats.halfspaceMs, 2)} ms`],
       ["empty warning", counts.visibleObjects ? "none" : "no visible objects"],
@@ -4118,7 +4379,7 @@
 
   function syncStaticMathLabels() {
     const dimensionLabel = document.querySelector(".slice-toolbar-dimension span");
-    if (dimensionLabel) setMathText(dimensionLabel, "n", "n");
+    if (dimensionLabel) setMathText(dimensionLabel, "n=", "n=");
     const directVectorParts = document.querySelectorAll(".slice-direct-vector > span:not(#direct-position-inputs)");
     if (directVectorParts[0]) setMathText(directVectorParts[0], "p = (", "p=(");
     if (directVectorParts[1]) setMathText(directVectorParts[1], ")", ")");
@@ -4167,6 +4428,10 @@
       sliceTropicalDistricts: 0,
       sliceTropicalSkippedPairs: 0,
       sliceTropicalSkippedDistricts: 0,
+      sliceWeylWalls: 0,
+      sliceWeylChambers: 0,
+      sliceWeylSkippedWalls: 0,
+      sliceWeylDuplicateWalls: 0,
       slicePoints: 0,
     };
     for (const object of state.objects) {
@@ -4193,6 +4458,12 @@
             if (slice.showDistricts !== false) counts.sliceTropicalDistricts += (slice.districts || []).length;
             counts.sliceTropicalSkippedPairs += slice.skippedPairs || 0;
             counts.sliceTropicalSkippedDistricts += slice.skippedDistricts || 0;
+          }
+          if (slice.kind === "weyl-chambers") {
+            counts.sliceWeylWalls += (slice.walls || []).length;
+            if (slice.showChambers !== false) counts.sliceWeylChambers += (slice.chambers || []).length;
+            counts.sliceWeylSkippedWalls += slice.skippedWalls || 0;
+            counts.sliceWeylDuplicateWalls += slice.duplicateWalls || 0;
           }
           if (slice.kind === "point") counts.slicePoints += 1;
           if (slice.kind === "segment") counts.slicePoints += 2;
@@ -4253,6 +4524,7 @@
       ratio,
     };
     state.pickCandidates = [];
+    state.weylChamberPickCandidates = [];
 
     if (state.viewport.showGrid) drawGrid(ctx, view, width, height);
     if (state.viewport.showBox) drawBox(ctx, view);
@@ -4473,6 +4745,8 @@
       drawNumericFormulaSlice(ctx, view, slice, { alpha, lineWidth });
     } else if (slice.kind === "tropical-curve") {
       drawTropicalCurveSlice(ctx, view, slice, { alpha, lineWidth });
+    } else if (slice.kind === "weyl-chambers") {
+      drawWeylChambersSlice(ctx, view, object, slice, { alpha, lineWidth, color, registerPick });
     }
 
     ctx.restore();
@@ -4489,6 +4763,7 @@
     else if (type === "sphere") result = exactSphereSlice(object);
     else if (type === "formula-set") result = exactFormulaSlice(object);
     else if (type === "tropical-polynomial") result = exactTropicalSlice(object);
+    else if (type === "weyl-chambers") result = exactWeylSlice(object);
     if (options.profile) runtimeStats.exactSliceMs += nowMs() - start;
     return result;
   }
@@ -5248,6 +5523,507 @@
     ctx.restore();
   }
 
+  function exactWeylSlice(object) {
+    const data = normalizeWeylChambersData(object.data || {}, state.ambientDim);
+    const system = weylRootSystem(data.dynkinType, state.ambientDim);
+    const radius = formulaClipRadius(object);
+    const tolerance = sliceTolerance();
+    const restricted = restrictWeylRootsToSlice(system.hyperplaneRoots, radius, tolerance);
+    const chambers = computeWeylChambers(system, restricted.walls, radius, data, tolerance);
+    const labelKeys = selectWeylLabelKeys(chambers, data.weylLabelDensity, object.id);
+    const labelKeySet = new Set(labelKeys);
+    return {
+      kind: "weyl-chambers",
+      dynkinType: data.dynkinType,
+      dynkinRank: state.ambientDim,
+      system,
+      walls: restricted.walls,
+      chambers,
+      showChambers: data.showChambers !== false,
+      labelMode: data.weylLabelMode,
+      labelDensity: data.weylLabelDensity,
+      labelKeySet,
+      skippedWalls: restricted.skippedWalls,
+      duplicateWalls: restricted.duplicateWalls,
+      clipRadius: radius,
+    };
+  }
+
+  function restrictWeylRootsToSlice(roots, radius, tolerance) {
+    const walls = [];
+    const seen = new Set();
+    let skippedWalls = 0;
+    let duplicateWalls = 0;
+    for (const root of roots) {
+      const a = dot(root, state.frame[0]);
+      const b = dot(root, state.frame[1]);
+      const c = dot(root, state.p);
+      const scaleValue = Math.max(1, Math.abs(a), Math.abs(b), Math.abs(c));
+      if (Math.hypot(a, b) <= tolerance * scaleValue) {
+        skippedWalls += 1;
+        continue;
+      }
+      const key = canonicalRestrictedLineKey(a, b, c);
+      if (seen.has(key)) {
+        duplicateWalls += 1;
+        continue;
+      }
+      seen.add(key);
+      const endpoints = lineBoxIntersections(a, b, -c, radius);
+      if (endpoints.length < 2) {
+        skippedWalls += 1;
+        continue;
+      }
+      walls.push({ a, b, c, root, endpoints });
+    }
+    return { walls, skippedWalls, duplicateWalls };
+  }
+
+  function canonicalRestrictedLineKey(a, b, c) {
+    const length = Math.max(Math.hypot(a, b), 1e-12);
+    let values = [a / length, b / length, c / length];
+    const first = values.find((value) => Math.abs(value) > 1e-10) || 1;
+    if (first < 0) values = values.map((value) => -value);
+    return values.map((value) => fmt(value, 7)).join(",");
+  }
+
+  function computeWeylChambers(system, walls, radius, data, tolerance) {
+    let cells = [{ vertices: initialClipPolygon(radius) }];
+    for (const wall of walls) {
+      const nextCells = [];
+      for (const cell of cells) {
+        const split = splitPolygonByLine(cell.vertices, wall.a, wall.b, wall.c, tolerance);
+        if (split.positive.length >= 3 && Math.abs(polygonArea(split.positive)) > tolerance ** 2) {
+          nextCells.push({ vertices: split.positive });
+        }
+        if (split.negative.length >= 3 && Math.abs(polygonArea(split.negative)) > tolerance ** 2) {
+          nextCells.push({ vertices: split.negative });
+        }
+      }
+      cells = nextCells;
+      if (!cells.length) break;
+    }
+    return cells.map((cell, index) => {
+      const vertices = cleanPolygon(cell.vertices);
+      const area = Math.abs(polygonArea(vertices));
+      const anchor = polygonCentroid(vertices);
+      const ambient = ambientFromFrameCoords(anchor);
+      const signPattern = weylSignPattern(system.hyperplaneRoots, ambient);
+      const display = weylChamberDisplay(system, ambient, data.weylLabelMode);
+      const key = signPattern.join("");
+      return {
+        key,
+        index,
+        vertices,
+        area,
+        anchor,
+        ambient,
+        signPattern,
+        color: WEYL_CHAMBER_COLORS[Math.abs(hashString(key || String(index))) % WEYL_CHAMBER_COLORS.length],
+        labelEligible: area > Math.max(0.018, tolerance * 10),
+        display,
+      };
+    });
+  }
+
+  function splitPolygonByLine(polygon, a, b, c, tolerance) {
+    const values = polygon.map((point) => a * point[0] + b * point[1] + c);
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+    if (minValue >= -tolerance) return { positive: polygon.slice(), negative: [] };
+    if (maxValue <= tolerance) return { positive: [], negative: polygon.slice() };
+    const positive = [];
+    const negative = [];
+    for (let index = 0; index < polygon.length; index += 1) {
+      const current = polygon[index];
+      const next = polygon[(index + 1) % polygon.length];
+      const currentValue = values[index];
+      const nextValue = values[(index + 1) % polygon.length];
+      const currentPositive = currentValue >= -tolerance;
+      const currentNegative = currentValue <= tolerance;
+      if (currentPositive) positive.push(current);
+      if (currentNegative) negative.push(current);
+      if ((currentValue < -tolerance && nextValue > tolerance) || (currentValue > tolerance && nextValue < -tolerance)) {
+        const point = intersectionPoint(current, next, currentValue, nextValue);
+        positive.push(point);
+        negative.push(point);
+      }
+    }
+    return {
+      positive: cleanPolygon(positive),
+      negative: cleanPolygon(negative),
+    };
+  }
+
+  function selectWeylLabelKeys(chambers, density, objectId) {
+    const eligible = chambers.filter((chamber) => chamber.labelEligible);
+    if (density === "all") return eligible.map((chamber) => chamber.key);
+    const active = state.activeWeylChamber;
+    return active && active.objectId === objectId && eligible.some((chamber) => chamber.key === active.chamberKey)
+      ? [active.chamberKey]
+      : [];
+  }
+
+  function drawWeylChambersSlice(ctx, view, object, slice, options = {}) {
+    const alpha = options.alpha ?? 0.85;
+    if (slice.showChambers !== false) {
+      for (const chamber of slice.chambers || []) {
+        const projected = chamber.vertices.map((vertex) => projectFramePoint(vertex, view));
+        if (projected.length < 3) continue;
+        ctx.globalAlpha = alpha * 0.19;
+        ctx.fillStyle = chamber.color || "#7b5cb8";
+        ctx.beginPath();
+        ctx.moveTo(projected[0].x, projected[0].y);
+        for (let index = 1; index < projected.length; index += 1) ctx.lineTo(projected[index].x, projected[index].y);
+        ctx.closePath();
+        ctx.fill();
+        if (options.registerPick !== false) recordWeylChamberCandidate(object, chamber, projected);
+      }
+      for (const chamber of slice.chambers || []) {
+        if (!slice.labelKeySet?.has(chamber.key)) continue;
+        const point = projectFramePoint(chamber.anchor, view);
+        addCanvasMathLabel(view, point, chamber.display.plain, chamber.display.tex, {
+          centered: true,
+          color: "rgba(44, 35, 62, 0.9)",
+        });
+      }
+    }
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = options.color || ctx.strokeStyle;
+    ctx.lineWidth = options.lineWidth || 2 * view.ratio;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const wall of slice.walls || []) {
+      const start = projectFramePoint(wall.endpoints[0], view);
+      const end = projectFramePoint(wall.endpoints[1], view);
+      line(ctx, start.x, start.y, end.x, end.y);
+    }
+  }
+
+  function weylRootSystem(type, rank = state.ambientDim) {
+    const dynkinType = normalizeWeylDynkinType(type, rank);
+    const key = `${dynkinType}:${rank}`;
+    if (weylRootSystemCache.has(key)) return weylRootSystemCache.get(key);
+    let system;
+    if (dynkinType === "A") system = aWeylRootSystem(rank);
+    else if (dynkinType === "B" || dynkinType === "C") system = bcWeylRootSystem(dynkinType, rank);
+    else if (dynkinType === "D") system = dWeylRootSystem(rank);
+    else if (dynkinType === "G") system = g2WeylRootSystem();
+    else if (dynkinType === "F") system = f4WeylRootSystem();
+    else system = exceptionalEWeylRootSystem(rank);
+    weylRootSystemCache.set(key, system);
+    return system;
+  }
+
+  function aWeylRootSystem(rank) {
+    const basis = sumZeroOrthonormalBasis(rank);
+    const rootCoord = (i, j) => basis.map((vector) => vector[i] - vector[j]);
+    const hyperplaneRoots = [];
+    for (let i = 0; i <= rank; i += 1) {
+      for (let j = i + 1; j <= rank; j += 1) hyperplaneRoots.push(normalizeVector(rootCoord(i, j)));
+    }
+    const simpleRoots = Array.from({ length: rank }, (_, index) => normalizeVector(rootCoord(index, index + 1)));
+    return {
+      type: "A",
+      rank,
+      simpleRoots,
+      hyperplaneRoots,
+      permutationCoordinates: (point) => {
+        const coords = Array(rank + 1).fill(0);
+        for (let basisIndex = 0; basisIndex < rank; basisIndex += 1) {
+          for (let coordinate = 0; coordinate <= rank; coordinate += 1) {
+            coords[coordinate] += (point[basisIndex] || 0) * basis[basisIndex][coordinate];
+          }
+        }
+        return coords;
+      },
+    };
+  }
+
+  function bcWeylRootSystem(type, rank) {
+    const roots = [];
+    for (let i = 0; i < rank; i += 1) roots.push(unitVector(rank, i));
+    for (let i = 0; i < rank; i += 1) {
+      for (let j = i + 1; j < rank; j += 1) {
+        roots.push(unitVector(rank, i).map((value, index) => value + (index === j ? 1 : 0)));
+        roots.push(unitVector(rank, i).map((value, index) => value - (index === j ? 1 : 0)));
+      }
+    }
+    const simpleRoots = [];
+    for (let i = 0; i < rank - 1; i += 1) simpleRoots.push(unitVector(rank, i).map((value, index) => value - (index === i + 1 ? 1 : 0)));
+    simpleRoots.push(unitVector(rank, rank - 1));
+    return {
+      type,
+      rank,
+      simpleRoots: simpleRoots.map(normalizeVector),
+      hyperplaneRoots: uniqueHyperplaneRoots(roots),
+    };
+  }
+
+  function dWeylRootSystem(rank) {
+    const roots = [];
+    for (let i = 0; i < rank; i += 1) {
+      for (let j = i + 1; j < rank; j += 1) {
+        roots.push(unitVector(rank, i).map((value, index) => value + (index === j ? 1 : 0)));
+        roots.push(unitVector(rank, i).map((value, index) => value - (index === j ? 1 : 0)));
+      }
+    }
+    const simpleRoots = [];
+    for (let i = 0; i < rank - 1; i += 1) simpleRoots.push(unitVector(rank, i).map((value, index) => value - (index === i + 1 ? 1 : 0)));
+    simpleRoots.push(unitVector(rank, rank - 2).map((value, index) => value + (index === rank - 1 ? 1 : 0)));
+    return {
+      type: "D",
+      rank,
+      simpleRoots: simpleRoots.map(normalizeVector),
+      hyperplaneRoots: uniqueHyperplaneRoots(roots),
+    };
+  }
+
+  function g2WeylRootSystem() {
+    const wallAngleOffset = Math.PI / 12;
+    const hyperplaneRoots = Array.from({ length: 6 }, (_, index) => [
+      Math.cos(wallAngleOffset + (Math.PI * index) / 6),
+      Math.sin(wallAngleOffset + (Math.PI * index) / 6),
+    ]);
+    const simpleAngle = (5 * Math.PI) / 12;
+    return {
+      type: "G",
+      rank: 2,
+      simpleRoots: [
+        [Math.cos(simpleAngle), Math.sin(simpleAngle)],
+        [Math.cos(simpleAngle), -Math.sin(simpleAngle)],
+      ],
+      hyperplaneRoots: uniqueHyperplaneRoots(hyperplaneRoots),
+    };
+  }
+
+  function f4WeylRootSystem() {
+    const rank = 4;
+    const roots = [];
+    for (let i = 0; i < rank; i += 1) {
+      roots.push(unitVector(rank, i));
+      roots.push(unitVector(rank, i).map((value) => -value));
+    }
+    for (let i = 0; i < rank; i += 1) {
+      for (let j = i + 1; j < rank; j += 1) {
+        for (const si of [-1, 1]) {
+          for (const sj of [-1, 1]) {
+            roots.push(Array.from({ length: rank }, (_, index) => (index === i ? si : index === j ? sj : 0)));
+          }
+        }
+      }
+    }
+    for (let mask = 0; mask < 16; mask += 1) {
+      roots.push(Array.from({ length: rank }, (_, index) => ((mask >> index) & 1 ? -0.5 : 0.5)));
+    }
+    const simpleRoots = [
+      [0, 1, -1, 0],
+      [0, 0, 1, -1],
+      [0, 0, 0, 1],
+      [0.5, -0.5, -0.5, -0.5],
+    ];
+    return {
+      type: "F",
+      rank,
+      simpleRoots: simpleRoots.map(normalizeVector),
+      hyperplaneRoots: uniqueHyperplaneRoots(roots),
+    };
+  }
+
+  function exceptionalEWeylRootSystem(rank) {
+    const simpleRoots = choleskyVectorsFromGram(eCartanMatrix(rank));
+    const roots = rootsFromSimpleReflections(simpleRoots);
+    return {
+      type: "E",
+      rank,
+      simpleRoots: simpleRoots.map(normalizeVector),
+      hyperplaneRoots: uniqueHyperplaneRoots(roots),
+    };
+  }
+
+  function eCartanMatrix(rank) {
+    const matrix = Array.from({ length: rank }, (_, row) =>
+      Array.from({ length: rank }, (_, col) => (row === col ? 2 : 0))
+    );
+    const edges = rank === 6
+      ? [[0, 1], [1, 2], [2, 3], [3, 4], [2, 5]]
+      : rank === 7
+        ? [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [2, 6]]
+        : [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [2, 7]];
+    for (const [left, right] of edges) {
+      matrix[left][right] = -1;
+      matrix[right][left] = -1;
+    }
+    return matrix;
+  }
+
+  function choleskyVectorsFromGram(gram) {
+    const n = gram.length;
+    const lower = Array.from({ length: n }, () => Array(n).fill(0));
+    for (let row = 0; row < n; row += 1) {
+      for (let col = 0; col <= row; col += 1) {
+        let sum = gram[row][col];
+        for (let k = 0; k < col; k += 1) sum -= lower[row][k] * lower[col][k];
+        if (row === col) lower[row][col] = Math.sqrt(Math.max(sum, 0));
+        else lower[row][col] = Math.abs(lower[col][col]) <= 1e-12 ? 0 : sum / lower[col][col];
+      }
+    }
+    return lower;
+  }
+
+  function rootsFromSimpleReflections(simpleRoots) {
+    const roots = [];
+    const queue = [];
+    const seen = new Set();
+    const enqueue = (root) => {
+      const cleaned = root.map((value) => (Math.abs(value) < 1e-10 ? 0 : value));
+      const key = vectorKey(cleaned, 8);
+      if (seen.has(key)) return;
+      seen.add(key);
+      roots.push(cleaned);
+      queue.push(cleaned);
+    };
+    simpleRoots.forEach((root) => {
+      enqueue(root);
+      enqueue(root.map((value) => -value));
+    });
+    for (let cursor = 0; cursor < queue.length && roots.length < 1000; cursor += 1) {
+      const root = queue[cursor];
+      for (const simpleRoot of simpleRoots) enqueue(reflectVector(root, simpleRoot));
+    }
+    return roots;
+  }
+
+  function reflectVector(vector, root) {
+    const rootNormSq = Math.max(dot(root, root), 1e-12);
+    const factor = (2 * dot(vector, root)) / rootNormSq;
+    return vector.map((value, index) => value - factor * (root[index] || 0));
+  }
+
+  function sumZeroOrthonormalBasis(rank) {
+    const raw = [];
+    for (let index = 0; index < rank; index += 1) {
+      raw.push(Array.from({ length: rank + 1 }, (_, coordinate) => (coordinate === index ? 1 : coordinate === rank ? -1 : 0)));
+    }
+    const basis = [];
+    for (const vector of raw) {
+      let candidate = vector.slice();
+      for (const existing of basis) {
+        const projection = dot(candidate, existing);
+        candidate = candidate.map((value, index) => value - projection * existing[index]);
+      }
+      basis.push(normalizeVector(candidate));
+    }
+    return basis;
+  }
+
+  function unitVector(n, index) {
+    return Array.from({ length: n }, (_, coordinate) => (coordinate === index ? 1 : 0));
+  }
+
+  function normalizeVector(vector) {
+    const length = Math.sqrt(vector.reduce((total, value) => total + value * value, 0));
+    return length > 1e-12 ? vector.map((value) => value / length) : vector.slice();
+  }
+
+  function uniqueHyperplaneRoots(roots) {
+    const seen = new Set();
+    const unique = [];
+    for (const root of roots) {
+      const canonical = canonicalHyperplaneRoot(root);
+      const key = vectorKey(canonical, 8);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(canonical);
+    }
+    return unique;
+  }
+
+  function canonicalHyperplaneRoot(root) {
+    const normalized = normalizeVector(root);
+    const first = normalized.find((value) => Math.abs(value) > 1e-10) || 1;
+    return first < 0 ? normalized.map((value) => -value) : normalized;
+  }
+
+  function vectorKey(vector, digits = 8) {
+    return vector.map((value) => fmt(value, digits)).join(",");
+  }
+
+  function weylSignPattern(roots, ambient) {
+    const tolerance = sliceTolerance();
+    return roots.map((root) => {
+      const value = dot(root, ambient);
+      if (value > tolerance) return "+";
+      if (value < -tolerance) return "-";
+      return "0";
+    });
+  }
+
+  function weylChamberDisplay(system, ambient, mode) {
+    const normalizedMode = normalizeWeylLabelMode(mode);
+    if (normalizedMode === "word" || !["A", "B", "C", "D"].includes(system.type)) return weylWordDisplay(system, ambient);
+    return weylPermutationDisplay(system, ambient);
+  }
+
+  function weylPermutationDisplay(system, ambient) {
+    if (system.type === "A") {
+      const coords = system.permutationCoordinates(ambient);
+      const order = coords.map((value, index) => ({ value, index: index + 1 }))
+        .sort((left, right) => right.value - left.value)
+        .map((entry) => entry.index);
+      return {
+        plain: `(${order.join(" ")})`,
+        tex: `\\left(${order.join("\\,")}\\right)`,
+      };
+    }
+    const order = ambient.map((value, index) => ({ value, index: index + 1, abs: Math.abs(value) }))
+      .sort((left, right) => right.abs - left.abs);
+    const plainEntries = order.map((entry) => `${entry.value < 0 ? "-" : "+"}${entry.index}`);
+    const texEntries = order.map((entry) => entry.value < 0 ? `\\bar{${entry.index}}` : String(entry.index));
+    return {
+      plain: `[${plainEntries.join(" ")}]`,
+      tex: `\\left[${texEntries.join("\\,")}\\right]`,
+    };
+  }
+
+  function weylWordDisplay(system, ambient) {
+    const word = weylReducedWord(system, ambient);
+    if (!word.length) return { plain: "e", tex: "e" };
+    return {
+      plain: word.map((index) => `s${index}`).join(""),
+      tex: word.map((index) => `s_{${index}}`).join(""),
+    };
+  }
+
+  function weylReducedWord(system, ambient) {
+    let point = ambient.slice();
+    const word = [];
+    const tolerance = sliceTolerance();
+    const maxSteps = Math.max(32, system.hyperplaneRoots.length * 4);
+    for (let step = 0; step < maxSteps; step += 1) {
+      let reflected = false;
+      for (let index = 0; index < system.simpleRoots.length; index += 1) {
+        const simpleRoot = system.simpleRoots[index];
+        if (dot(point, simpleRoot) < -tolerance) {
+          point = reflectVector(point, simpleRoot);
+          word.push(index + 1);
+          reflected = true;
+          break;
+        }
+      }
+      if (!reflected) break;
+    }
+    return word.reverse();
+  }
+
+  function hashString(value) {
+    let hash = 0;
+    for (let index = 0; index < String(value).length; index += 1) {
+      hash = ((hash << 5) - hash + String(value).charCodeAt(index)) | 0;
+    }
+    return hash;
+  }
+
   function initialClipPolygon(radius) {
     const r = Math.max(1, radius);
     return [[-r, -r], [r, -r], [r, r], [-r, r]];
@@ -5256,7 +6032,7 @@
   function sliceClipRadiusForObject(object) {
     const data = object.data || {};
     const type = objectTypeKey(object);
-    if (type === "formula-set" || type === "tropical-polynomial") return formulaClipRadius(object);
+    if (type === "formula-set" || type === "tropical-polynomial" || type === "weyl-chambers") return formulaClipRadius(object);
     const size = type === "sphere"
       ? positiveNumber(data.radius, 1)
       : positiveNumber(data.scale, 1);
@@ -5434,7 +6210,7 @@
         })),
       };
     }
-    if (type === "formula-set" || type === "tropical-polynomial") {
+    if (type === "formula-set" || type === "tropical-polynomial" || type === "weyl-chambers") {
       return { points: [], edges: [], rays: [] };
     }
     if (type === "regular-polytope") {
@@ -5575,6 +6351,19 @@
     });
   }
 
+  function recordWeylChamberCandidate(object, chamber, projectedPolygon) {
+    state.weylChamberPickCandidates.push({
+      objectId: object.id,
+      objectName: object.name,
+      chamberKey: chamber.key,
+      label: chamber.display?.plain || chamber.key,
+      ambient: chamber.ambient.slice(),
+      frameCoords: chamber.anchor.slice(0, 2),
+      area: chamber.area,
+      polygon: projectedPolygon.map((point) => [point.x, point.y]),
+    });
+  }
+
   function currentSelectedCandidate() {
     if (!state.selectedVertex) return null;
     return state.pickCandidates.find((candidate) =>
@@ -5627,31 +6416,91 @@
     return best;
   }
 
+  function nearestWeylChamberCandidate(x, y) {
+    let best = null;
+    let bestArea = Infinity;
+    for (const candidate of state.weylChamberPickCandidates) {
+      if (!pointInPolygon([x, y], candidate.polygon)) continue;
+      if (candidate.area < bestArea) {
+        best = candidate;
+        bestArea = candidate.area;
+      }
+    }
+    return best;
+  }
+
+  function pointInPolygon(point, polygon) {
+    let inside = false;
+    for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
+      const current = polygon[index];
+      const last = polygon[previous];
+      const intersects = ((current[1] > point[1]) !== (last[1] > point[1]))
+        && point[0] < ((last[0] - current[0]) * (point[1] - current[1])) / ((last[1] - current[1]) || 1e-12) + current[0];
+      if (intersects) inside = !inside;
+    }
+    return inside;
+  }
+
   function handleCanvasClick(event) {
     const point = canvasPointFromEvent(event);
     const candidate = nearestPickCandidate(point.x, point.y);
+    if (candidate) {
+      state.selectedVertex = {
+        objectId: candidate.objectId,
+        vertexKey: candidate.vertexKey,
+      };
+      state.activeObjectId = candidate.objectId;
+      state.sourceMode = "modify";
+      state.lastWarning = `Picked ${candidate.objectName} / ${candidate.label}.`;
+      syncObjectSelect();
+      syncObjectPanel();
+      syncSourceMode();
+      renderAll();
+      return;
+    }
+    const chamber = nearestWeylChamberCandidate(point.x, point.y);
+    if (chamber) {
+      state.selectedVertex = null;
+      state.activeWeylChamber = {
+        objectId: chamber.objectId,
+        chamberKey: chamber.chamberKey,
+      };
+      state.activeObjectId = chamber.objectId;
+      state.sourceMode = "modify";
+      state.lastWarning = `Picked ${chamber.objectName} / ${chamber.label}  x=${vectorToInline(chamber.ambient)}  y=${vectorToInline(chamber.frameCoords)}.`;
+      syncObjectSelect();
+      syncObjectPanel();
+      syncSourceMode();
+      renderAll();
+      return;
+    }
     if (!candidate) {
       state.selectedVertex = null;
+      state.activeWeylChamber = null;
       state.lastWarning = "No projected vertex selected.";
       renderAll();
       return;
     }
-    state.selectedVertex = {
-      objectId: candidate.objectId,
-      vertexKey: candidate.vertexKey,
-    };
-    state.activeObjectId = candidate.objectId;
-    state.sourceMode = "modify";
-    state.lastWarning = `Picked ${candidate.objectName} / ${candidate.label}.`;
-    syncObjectSelect();
-    syncObjectPanel();
-    syncSourceMode();
-    renderAll();
   }
 
   function handleCanvasPointerMove(event) {
     const point = canvasPointFromEvent(event);
-    $("slice-viewport").style.cursor = nearestPickCandidate(point.x, point.y) ? "pointer" : "default";
+    const vertex = nearestPickCandidate(point.x, point.y);
+    const chamber = vertex ? null : nearestWeylChamberCandidate(point.x, point.y);
+    $("slice-viewport").style.cursor = vertex || chamber ? "pointer" : "default";
+    const nextActive = chamber
+      ? { objectId: chamber.objectId, chamberKey: chamber.chamberKey }
+      : null;
+    const previous = state.activeWeylChamber;
+    const changed = (previous?.objectId || "") !== (nextActive?.objectId || "")
+      || (previous?.chamberKey || "") !== (nextActive?.chamberKey || "");
+    if (changed) {
+      state.activeWeylChamber = nextActive;
+      const touchedObjectId = nextActive?.objectId || previous?.objectId;
+      if (state.objects.some((object) => object.id === touchedObjectId && object.data?.weylLabelDensity === "active")) {
+        renderAll();
+      }
+    }
   }
 
   function vectorToInline(vector, digits = 3) {
@@ -5809,6 +6658,7 @@
       viewport: state.viewport,
       addType: state.addType,
       addRegularFamily: state.addRegularFamily,
+      addWeylDynkinType: state.addWeylDynkinType,
       activeObjectId: state.activeObjectId,
       objects: state.objects.map(serializableObject),
     };
@@ -5899,6 +6749,7 @@
       state.viewport = { ...state.viewport, ...(imported.viewport || {}) };
       state.addType = OBJECT_TYPES.some((type) => type.key === imported.addType) ? imported.addType : "cartesian-frame";
       state.addRegularFamily = normalizeRegularFamily(imported.addRegularFamily || state.addRegularFamily || "hypercube", state.ambientDim);
+      state.addWeylDynkinType = normalizeWeylDynkinType(imported.addWeylDynkinType || state.addWeylDynkinType || "A", state.ambientDim);
       clampMotionState();
       state.objects = Array.isArray(imported.objects) && imported.objects.length ? imported.objects.map(normalizeSourceObject) : [makeObjectForType("cartesian-frame")];
       state.activeObjectId = imported.activeObjectId && state.objects.some((object) => object.id === imported.activeObjectId)
@@ -5906,6 +6757,7 @@
         : state.objects[0].id;
       state.sourceMode = "modify";
       state.selectedVertex = null;
+      state.activeWeylChamber = null;
       state.lastWarning = "State JSON imported.";
       rebuildDynamicControls();
       refreshTypeLabels();
@@ -5929,6 +6781,7 @@
       state.activeObjectId = object.id;
       state.sourceMode = "modify";
       state.selectedVertex = null;
+      state.activeWeylChamber = null;
       state.lastWarning = "Object JSON imported as a new object.";
       syncObjectSelect();
       syncObjectPanel();
@@ -5950,6 +6803,7 @@
       state.activeObjectId = imported.id;
       state.sourceMode = "modify";
       state.selectedVertex = null;
+      state.activeWeylChamber = null;
       state.lastWarning = "Active object replaced from object JSON.";
       syncObjectSelect();
       syncObjectPanel();
@@ -5999,8 +6853,11 @@
     state.sourceMode = "modify";
     state.addType = "cartesian-frame";
     state.addRegularFamily = "hypercube";
+    state.addWeylDynkinType = "A";
     state.selectedVertex = null;
+    state.activeWeylChamber = null;
     state.pickCandidates = [];
+    state.weylChamberPickCandidates = [];
     clearAllMotion();
     state.objects = [makeObjectForType("cartesian-frame")];
     state.activeObjectId = state.objects[0].id;
@@ -6015,6 +6872,7 @@
 
   function init() {
     state.addRegularFamily = normalizeRegularFamily(state.addRegularFamily, state.ambientDim);
+    state.addWeylDynkinType = normalizeWeylDynkinType(state.addWeylDynkinType, state.ambientDim);
     state.objects = [makeObjectForType("cartesian-frame")];
     state.activeObjectId = state.objects[0].id;
     fillTypeSelect();

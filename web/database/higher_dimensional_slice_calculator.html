@@ -30,19 +30,15 @@
     .slice-toolbar-dimension {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      border: 1px solid rgba(216, 208, 196, 0.92);
-      border-radius: 3px;
-      background: rgba(255, 253, 248, 0.94);
+      gap: 4px;
       color: var(--muted);
       font-family: "JetBrains Mono", Consolas, monospace;
       font-size: 0.68rem;
       line-height: 1.2;
-      padding: 5px 7px;
     }
 
     .slice-toolbar-dimension input {
-      width: 54px;
+      width: 50px;
       min-height: 26px;
       padding: 2px 5px;
     }
@@ -552,7 +548,7 @@
         <span id="slice-title" class="panel-title-text">Projection / exact+numeric 2D slice</span>
         <div class="canvas-toolbar" aria-label="Current projection summary">
           <label class="slice-toolbar-dimension" title="Ambient dimension">
-            <span>n</span>
+            <span>n=</span>
             <input id="ambient-dimension" class="slice-input" type="number" min="2" max="8" step="1" value="4" aria-label="Ambient dimension">
           </label>
           <span class="shape-indicator">source <strong id="toolbar-source">frame</strong></span>
@@ -587,7 +583,7 @@
             <span class="slice-row-label">type</span>
             <div class="slice-control-line">
               <select id="source-add-type" class="slice-select" aria-label="New object type"></select>
-              <select id="source-add-family" class="slice-select" aria-label="Regular polytope family" hidden></select>
+              <select id="source-add-variant" class="slice-select" aria-label="Source variant" hidden></select>
               <button id="source-add-object" class="slice-btn" type="button">add</button>
             </div>
           </div>

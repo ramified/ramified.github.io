@@ -77,7 +77,7 @@ Rows:
 | Row         | Planned Function                         | UI Tools                                 |
 | ----------- | ---------------------------------------- | ---------------------------------------- |
 | Mode        | Choose creation or editing workflow; always visible | segmented control: `add object`, `modify object` |
-| Add type    | Add-mode only; choose concrete source object and create it with an automatic unique name | select menu: `regular polytope in R^n`, `simplex in R^n`, `sphere S^{n-1}`, `Cartesian frame`, `point in R^n`, `formula set`, `tropical polynomial`; when regular polytope is selected, show a family select before the `add` button; planned later: `lattice`, `Lie slice data` |
+| Add type    | Add-mode only; choose concrete source object and create it with an automatic unique name | select menu: `regular polytope`, `simplex`, `sphere S^{n-1}`, `Cartesian frame`, `point`, `formula set`, `tropical polynomial`, `Weyl chambers`; a generic variant select appears before `add` for regular-polytope family or Weyl Dynkin type; planned later: `lattice`, `Lie slice data` |
 | Object      | Modify-mode only; choose, delete, or export the active object/layer | select menu, small `del` button, `export` button |
 | Object name | Rename active object                     | compact text input                       |
 | Params      | Modify the active object's mathematical parameters | regular polytope/simplex/sphere: size slider plus number; Cartesian frame: basis selector plus length slider/number; point: compact coordinate controls |
@@ -87,11 +87,14 @@ Rows:
 
 Initial object types:
 
-- `regular polytope in R^n`: a family source whose first families are regular simplex, hypercube, cross-polytope, plus named 3D and 4D regular polytopes. The projection layer shows generated vertices and edges, and the exact 2D slice layer shows filled polygon cross-sections.
-- `simplex in R^n`: standard basis vertices plus one balanced negative vertex.
+- `regular polytope`: a family source whose first families are regular simplex, hypercube, cross-polytope, plus named 3D and 4D regular polytopes. The projection layer shows generated vertices and edges, and the exact 2D slice layer shows filled polygon cross-sections.
+- `simplex`: standard basis vertices plus one balanced negative vertex.
 - `sphere S^{n-1}`: radius-parameter sphere in `R^n`, drawn as a projection circle and as an exact 2D slice circle/point/empty result. Nonempty circle slices are visually filled with a translucent disk.
 - `Cartesian frame`: rays from the origin along either fixed ambient `e_i` directions or the moving frame `v_i` directions.
-- `point in R^n`: one editable ambient coordinate tuple `(a_1, ..., a_n)`.
+- `point`: one editable ambient coordinate tuple `(a_1, ..., a_n)`.
+- `formula set`: one equation/inequality source in coordinates `x_i`, exact through degree two and numerical for broader supported syntax.
+- `tropical polynomial`: max/min tropical polynomial source with optional colored dominance districts.
+- `Weyl chambers`: finite root-hyperplane chamber source with colored exact 2D slice chambers.
 
 Modify-mode parameter behavior:
 
@@ -110,7 +113,8 @@ Modify-mode visibility behavior:
 Add-mode behavior:
 
 - The selected add type is drawn as a temporary light-yellow projection preview in the main canvas.
-- If the selected add type is regular polytope, the add-row family selector controls both the preview family and the newly created object. The family selector uses special names such as `cube`, `tesseract`, `dodecahedron`, `24-cell`, `120-cell`, or `600-cell` when available in the current dimension.
+- If the selected add type is regular polytope, the add-row variant selector controls both the preview family and the newly created object. The selector uses special names such as `cube`, `tesseract`, `dodecahedron`, `24-cell`, `120-cell`, or `600-cell` when available in the current dimension.
+- If the selected add type is `Weyl chambers`, the add-row variant selector chooses the Dynkin type before creation. New objects are named generically as `Weyl chambers`, with duplicate suffixes added as needed.
 - This preview is not part of the object list, visible counts, active object, import/export state, or saved state.
 - Pressing `add` creates the selected type using the current ambient dimension `n`, assigns an automatic unique name, selects it, and switches to modify mode.
 
@@ -124,8 +128,6 @@ Canvas picking behavior:
 Later object types:
 
 - `lattice`: basis/Gram/Dynkin/number-field lattice inputs and Voronoi diagrams.
-- `formula set`: linear equalities/inequalities and quadratic-form sources in variables `x_1, ..., x_n`.
-- `tropical`: tropical polynomial/hypersurface.
 - `Lie`: weight/root/lattice slices, reusing ideas from `double_young_diagram.html`.
 
 ### Slide Position Card
@@ -597,7 +599,31 @@ Acceptance:
 - Tropical dominance districts render by default with per-object show/hide control, colored cells, monomial labels, district counts, and degenerate restricted-term diagnostics.
 - Main-canvas mathematical labels are rendered through a positioned MathJax overlay with adjustable label size; Source Data tropical readouts, Background Space Details, HUD/status math, and direct frame labels use MathJax with plain-text fallback.
 
-### 11. Generic 3D Renderer
+### 11. Weyl Chamber Sources
+
+Status: implemented.
+
+Goal: add finite Weyl chamber arrangements as exact 2D slice sources, similar to tropical districts but driven by root hyperplanes.
+
+Implement:
+
+- add Source Data type `Weyl chambers`, projection-inert and exact-slice-visible by default;
+- support finite Dynkin choices filtered by rank and selectable while adding the object: `A_n`, `B_n`, `C_n`, `D_n` for `n >= 4`, plus `G_2`, `F_4`, `E_6`, `E_7`, and `E_8` only in matching dimensions;
+- use rank-`n` finite root systems in ambient `R^n`; type `A` means `A_n`;
+- restrict root hyperplanes to `x = p + y_1v_1 + y_2v_2`, split the slice clip box into chamber polygons, draw walls, and fill chambers with deterministic colors;
+- provide per-object `chambers` visibility plus label mode buttons `permutation`, `word` and density buttons `label all`, `active labels`;
+- default new Weyl objects to `word` labels and `active labels`;
+- orient `G_2` so the identity chamber is centered near positive `e_1`, matching the other rank-2 displays;
+- render chamber labels through the main MathJax label overlay and report Weyl wall/chamber/skipped/duplicate-wall counts in Debug Chart.
+
+Acceptance:
+
+- In `n=2`, `A_2` shows 6 sectors, `B_2`/`C_2` show 8, and `G_2` shows 12.
+- Exceptional systems are available only in their matching ranks and remain responsive with active labels by default.
+- Moving `p`, rotating the frame, changing label size, and changing dimension update chamber polygons and labels safely.
+- Object and full-state JSON preserve Dynkin type, chamber visibility, label mode, and label density.
+
+### 12. Generic 3D Renderer
 
 Status: implemented in Step 10 for 2D.
 
@@ -615,7 +641,7 @@ Acceptance:
 - Screen orbit camera does not mutate `p` or `V`.
 - Frame rotations still alter the mathematical projection smoothly.
 
-### 12. Exact 2D Tropical Slice
+### 13. Exact 2D Tropical Slice
 
 Status: implemented in Step 10.
 
@@ -642,7 +668,7 @@ Acceptance:
 - Rotating the frame changes the curve smoothly.
 - Degenerate terms produce diagnostics instead of crashes.
 
-### 13. Exact 3D Tropical Slice
+### 14. Exact 3D Tropical Slice
 
 Status: planned.
 
@@ -662,7 +688,7 @@ Acceptance:
 - 4D tropical examples can be viewed through moving 3D slices.
 - Empty slices and degenerate coincidences are reported gracefully.
 
-### 14. Polish And Integration
+### 15. Polish And Integration
 
 Status: partially implemented.
 
