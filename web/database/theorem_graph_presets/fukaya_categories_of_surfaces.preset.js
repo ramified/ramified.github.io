@@ -3,7 +3,7 @@
 // { label: "Fukaya Categories of Surfaces", key: "fukaya_categories_of_surfaces", file: "fukaya_categories_of_surfaces.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
-  "schemaVersion": 8,
+  "schemaVersion": 9,
   "title": "Fukaya Categories of Surfaces",
   "titleNode": {
     "id": "__title__",
@@ -21,7 +21,9 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
     "condition": "",
     "result": "",
     "proofSketch": "",
-    "citationKeys": [],
+    "citationKeys": [
+      "ChatGPT"
+    ],
     "color": "#8b5f2a",
     "fillColor": "#fff7df"
   },
@@ -47,7 +49,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
           "id": "checkpoint",
           "label": "mastery check",
           "type": "list",
-          "text": "Skip only the items you can do without notes. In your case, do the Hamiltonian and Floer branches fully; the quiver branch may be shortened if the last two tasks are easy."
+          "text": "Skip only the items you can do without notes."
         },
         {
           "id": "pace",
@@ -60,11 +62,13 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [],
-      "color": "#46786e",
-      "fillColor": "#eef7f4",
-      "x": 258.4,
-      "y": 37.3
+      "citationKeys": [
+        "Auroux13"
+      ],
+      "color": "#8b3a2a",
+      "fillColor": "#fbefee",
+      "x": 159.7,
+      "y": 54
     },
     {
       "id": "n3",
@@ -100,13 +104,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "CdS06"
-      ],
+      "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fbefee",
-      "x": 89.4,
-      "y": 154
+      "x": 102.5,
+      "y": 236.1
     },
     {
       "id": "n4",
@@ -123,13 +125,13 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
           "id": "tasks",
           "label": "practice",
           "type": "checkbox",
-          "text": "- [x] Draw transverse intersections of two arcs\n- [x] Practice perturbing curves into transverse position\n- [ ] Distinguish closed curves, properly embedded arcs, and immersed curves"
+          "text": "- [x] Draw transverse intersections of two arcs\n- [x] Practice perturbing curves into transverse position"
         },
         {
           "id": "checkpoint",
           "label": "mastery check",
           "type": "list",
-          "text": "You can explain why every smooth curve in a symplectic surface is automatically Lagrangian, and why extra brane data still matters."
+          "text": "A curve is automatically Lagrangian in dimension two, but a Fukaya object may additionally require a grading, sign data, a local system, and exactness or unobstructedness conditions. These determine degrees, signs, coefficients and whether Floer operations are well-defined."
         },
         {
           "id": "pace",
@@ -142,13 +144,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "Auroux13"
-      ],
+      "citationKeys": [],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 142.1,
-      "y": 409
+      "x": 184.6,
+      "y": 455.2
     },
     {
       "id": "n5",
@@ -191,13 +191,12 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [
-        "CdS06",
-        "Pedroza17"
+        "volk2025"
       ],
       "color": "#46786e",
       "fillColor": "#eef7f4",
       "x": 48,
-      "y": 259.1
+      "y": 324.3
     },
     {
       "id": "n6",
@@ -233,14 +232,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "Auroux13",
-        "HKK17"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 48,
-      "y": 475.8
+      "x": 75.2,
+      "y": 516.7
     },
     {
       "id": "n9",
@@ -276,14 +272,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "KellerAinf",
-        "OPS"
-      ],
+      "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fbefee",
-      "x": 464.9,
-      "y": 47.1,
+      "x": 365.1,
+      "y": 54,
       "childGraph": {
         "title": "perfect complex",
         "nodes": [],
@@ -291,7 +284,10 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
         "view": {
           "selectedId": "",
           "layoutAvoidOverlap": true,
-          "layoutRunning": false
+          "layoutRunning": false,
+          "canvasHeight": 1317,
+          "canvasRatioLocked": false,
+          "canvasAspectRatio": 0.5718
         }
       }
     },
@@ -335,14 +331,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "KellerAinf",
-        "Auroux13"
-      ],
+      "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fbefee",
-      "x": 662.8,
-      "y": 38.5
+      "x": 564.8,
+      "y": 64.8
     },
     {
       "id": "n11",
@@ -384,13 +377,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "Pedroza17"
-      ],
+      "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 391.1,
-      "y": 169.4
+      "x": 476.3,
+      "y": 246
     },
     {
       "id": "n12",
@@ -426,14 +417,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "Auroux13",
-        "Pedroza17"
-      ],
+      "citationKeys": [],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 267.1,
-      "y": 359
+      "x": 301.1,
+      "y": 387.1
     },
     {
       "id": "n13",
@@ -469,14 +457,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "Abouzaid07",
-        "Auroux13"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 453.5,
-      "y": 285.4
+      "x": 537.5,
+      "y": 358.1
     },
     {
       "id": "n14",
@@ -512,14 +497,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "Auroux13",
-        "Pedroza17"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 641.2,
-      "y": 336.2
+      "x": 380.9,
+      "y": 495.1
     },
     {
       "id": "n15",
@@ -555,13 +537,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "Auroux13"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 662.1,
-      "y": 221.5
+      "x": 700.9,
+      "y": 204.3
     },
     {
       "id": "n16",
@@ -597,15 +577,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "Auroux13",
-        "KellerAinf",
-        "Abouzaid07"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 704,
-      "y": 427,
+      "x": 679.8,
+      "y": 391.1,
       "childGraph": {
         "title": "Higher polygon products $\\mu_k$",
         "nodes": [],
@@ -613,7 +589,10 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
         "view": {
           "selectedId": "",
           "layoutAvoidOverlap": true,
-          "layoutRunning": false
+          "layoutRunning": false,
+          "canvasHeight": 1317,
+          "canvasRatioLocked": false,
+          "canvasAspectRatio": 0.5718
         }
       }
     },
@@ -651,15 +630,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "Auroux13",
-        "HKK17",
-        "LP20"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 475.7,
-      "y": 457.4
+      "x": 510.2,
+      "y": 529.9
     },
     {
       "id": "n19",
@@ -695,14 +670,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "HKK17",
-        "LP20"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 667.7,
-      "y": 527.6
+      "x": 705,
+      "y": 505.1
     },
     {
       "id": "n20",
@@ -738,14 +710,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "HKK17",
-        "OPS"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 263.8,
-      "y": 617.4
+      "x": 705,
+      "y": 623
     },
     {
       "id": "n21",
@@ -781,14 +750,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "HKK17",
-        "LP20"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 686.7,
-      "y": 631.4
+      "x": 680.1,
+      "y": 737.4
     },
     {
       "id": "n22",
@@ -824,14 +790,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "HKK17",
-        "LP20"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 452.5,
-      "y": 566
+      "x": 507,
+      "y": 632.2
     },
     {
       "id": "n23",
@@ -867,14 +830,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "LP20",
-        "OPS"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 324.1,
-      "y": 752.2
+      "x": 323.7,
+      "y": 690.1
     },
     {
       "id": "n24",
@@ -910,13 +870,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "OPS"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 507.8,
-      "y": 648.3
+      "x": 524.9,
+      "y": 751.8
     },
     {
       "id": "n25",
@@ -952,13 +910,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "OPS"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 411.8,
-      "y": 844.3
+      "x": 347.5,
+      "y": 838.8
     },
     {
       "id": "n26",
@@ -994,13 +950,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "FST"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 50.2,
-      "y": 624.1
+      "x": 48.2,
+      "y": 659.3
     },
     {
       "id": "n28",
@@ -1036,15 +990,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "FST",
-        "LP20",
-        "KellerCluster"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 138.5,
-      "y": 703.6
+      "x": 134.7,
+      "y": 743.8
     },
     {
       "id": "n29",
@@ -1080,13 +1030,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "KellerCluster"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 48.4,
-      "y": 864.7
+      "x": 48,
+      "y": 900.5
     },
     {
       "id": "n30",
@@ -1122,15 +1070,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "Auroux13",
-        "HKK17",
-        "LP20"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 543,
-      "y": 760.2
+      "x": 211.8,
+      "y": 864.6
     },
     {
       "id": "n31",
@@ -1166,15 +1110,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "HKK17",
-        "OPS",
-        "LP20"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 649.2,
-      "y": 816.9
+      "x": 632.4,
+      "y": 901.3
     },
     {
       "id": "n32",
@@ -1210,15 +1150,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "FST",
-        "OPS",
-        "KellerCluster"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 224.3,
-      "y": 924
+      "x": 191.2,
+      "y": 991.1
     },
     {
       "id": "n33",
@@ -1254,16 +1190,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "Auroux13",
-        "HKK17",
-        "LP20",
-        "OPS"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 460.5,
-      "y": 960.5
+      "x": 412.3,
+      "y": 972.5
     },
     {
       "id": "n34",
@@ -1299,14 +1230,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "Abouzaid07",
-        "BarmeierWang26"
-      ],
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 671.3,
-      "y": 946.1
+      "x": 615.3,
+      "y": 1018
     },
     {
       "id": "n35",
@@ -1333,8 +1261,8 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 202.4,
-      "y": 241.2
+      "x": 248.7,
+      "y": 252.9
     },
     {
       "id": "n36",
@@ -1352,11 +1280,13 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [],
+      "citationKeys": [
+        "FST08"
+      ],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 255.9,
-      "y": 500.2,
+      "x": 271.1,
+      "y": 579.7,
       "childGraph": {
         "title": "Triangulation Flips and Surface-Quiver Mutation",
         "nodes": [
@@ -1382,9 +1312,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
             "condition": "Know what the pair (S,M) records: an oriented bordered surface, boundary marked points, and punctures.",
             "result": "You can recognize the geometric objects on which ideal triangulations are defined.",
             "proofSketch": "Draw three examples: a pentagon, an annulus with marked boundary points, and a once-punctured triangle. For a first pass, use the pentagon and postpone punctures.",
-            "citationKeys": [
-              "FST2008"
-            ],
+            "citationKeys": [],
             "color": "#8b3a2a",
             "fillColor": "#fbefee",
             "x": 294.3,
@@ -1398,9 +1326,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
             "condition": "Distinguish an arc from a boundary segment, and remember that arcs are considered up to isotopy.",
             "result": "You can decide when two arcs are compatible: they can be represented without interior intersections.",
             "proofSketch": "In a pentagon, list several diagonals and mark which pairs cross. Compatible pairs are exactly the noncrossing pairs.",
-            "citationKeys": [
-              "FST2008"
-            ],
+            "citationKeys": [],
             "color": "#8b3a2a",
             "fillColor": "#fbefee",
             "x": 526.7,
@@ -1414,9 +1340,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
             "condition": "Understand maximality: an ideal triangulation is a maximal collection of pairwise compatible arcs.",
             "result": "You can identify the internal arcs of a triangulation and the ideal triangles they bound.",
             "proofSketch": "Triangulate a pentagon in two different ways. Note that boundary segments are sides of triangles but are not arcs of the triangulation.",
-            "citationKeys": [
-              "FST2008"
-            ],
+            "citationKeys": [],
             "color": "#8b3a2a",
             "fillColor": "#fbefee",
             "x": 335.9,
@@ -1430,9 +1354,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
             "condition": "Avoid self-folded triangles during the first pass.",
             "result": "You see that a triangulation is local combinatorial data, not a rigid geometric drawing.",
             "proofSketch": "Label all internal arcs. Redraw the same arcs by isotopy and check that the triangulation has not changed.",
-            "citationKeys": [
-              "FST2008"
-            ],
+            "citationKeys": [],
             "color": "#8b3a2a",
             "fillColor": "#fbefee",
             "x": 549.5,
@@ -1446,9 +1368,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
             "condition": "For a flippable arc $\\gamma$, removing $\\gamma$ produces a quadrilateral; the replacement gamma' is its other diagonal.",
             "result": "You can construct $T'$ from $T$ by one local flip and know why a folded side is exceptional.",
             "proofSketch": "In your pentagon, flip one diagonal. Keep the labels of all unchanged arcs and give the new diagonal the old position label $k$.",
-            "citationKeys": [
-              "FST2008"
-            ],
+            "citationKeys": [],
             "color": "#8b3a2a",
             "fillColor": "#fbefee",
             "x": 315.4,
@@ -1462,9 +1382,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
             "condition": "Rows and columns are indexed by internal arcs. Each non-self-folded triangle contributes entries 0, +1, or -1.",
             "result": "You can compute B(T) by summing the local signed contributions of the triangles.",
             "proofSketch": "Compute B(T) for a triangulated pentagon. Check that it is skew-symmetric. Then recompute after the flip from Node 5.",
-            "citationKeys": [
-              "FST2008"
-            ],
+            "citationKeys": [],
             "color": "#8b3a2a",
             "fillColor": "#fbefee",
             "x": 520.7,
@@ -1478,9 +1396,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
             "condition": "In quiver language: add arrows along every path i -> k -> j, reverse arrows incident with k, then cancel oriented 2-cycles.",
             "result": "You can compute mu_k(B) and the corresponding mutated quiver without referring to the surface.",
             "proofSketch": "Mutate the matrix and quiver from Node 6 at the label k of the flipped diagonal. Verify that the two calculations agree.",
-            "citationKeys": [
-              "FST2008"
-            ],
+            "citationKeys": [],
             "color": "#8b3a2a",
             "fillColor": "#fbefee",
             "x": 488.7,
@@ -1494,9 +1410,7 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
             "condition": "$T'$ is obtained from $T$ by flipping the arc labeled $k$; all other arc labels remain fixed.",
             "result": "The central statement is $B(T') = \\mu_k(B(T))$, equivalently $Q(T') = \\mu_k(Q(T))$ after fixing the matrix-to-quiver convention.",
             "proofSketch": "Compare only the two triangles adjacent to $k$. Everything outside that local region contributes identically before and after the flip.",
-            "citationKeys": [
-              "FST2008"
-            ],
+            "citationKeys": [],
             "color": "#8b3a2a",
             "fillColor": "#fbefee",
             "x": 273.2,
@@ -1510,13 +1424,11 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
             "condition": "Compute both routes independently: flip k and rebuild the quiver; mutate Q(T) at k.",
             "result": "You understand the concept when the two resulting quivers agree and you can explain the cancellation of 2-cycles.",
             "proofSketch": "Repeat with one or more boundary sides omitted. Then revisit self-folded triangles and the pi_T convention only if your application involves punctures.",
-            "citationKeys": [
-              "FST2008"
-            ],
+            "citationKeys": [],
             "color": "#2f5f9f",
             "fillColor": "#eef4fb",
-            "x": 492.1,
-            "y": 589
+            "x": 491.4,
+            "y": 606.3
           },
           {
             "id": "n11",
@@ -1762,7 +1674,636 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
         "view": {
           "selectedId": "",
           "layoutAvoidOverlap": true,
-          "layoutRunning": false
+          "layoutRunning": false,
+          "canvasHeight": 661,
+          "canvasRatioLocked": false,
+          "canvasAspectRatio": 0.5718
+        }
+      }
+    },
+    {
+      "id": "n37",
+      "type": "misc",
+      "label": "Surface Fukaya Computations",
+      "details": [
+        {
+          "id": "purpose",
+          "label": "purpose",
+          "type": "textbox",
+          "text": "A ten-node reading route through Grossack's paper, emphasizing computations rather than analytic foundations. Complete each node's checklist before following its outgoing arrows.\n\\cite{Grossack26}"
+        },
+        {
+          "id": "convention",
+          "label": "convention",
+          "type": "list",
+          "text": "Grossack’s convention: stops are forbidden points\n\nHKK-style convention: marked regions are allowed endpoints\n\ncircle always connected via points/edge/points/edge...\n\nbut be careful to distinguish Fukaya category with cluster category\n\nSo there is generally no mathematical contradiction. Grossack uses the forbidden-point convention, while many topological Fukaya and cluster-style papers use an allowed-endpoint convention, often after collapsing allowed boundary intervals to marked points."
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [
+        "Grossack26"
+      ],
+      "color": "#8b5f2a",
+      "fillColor": "#fff7df",
+      "x": 359.6,
+      "y": 167.1,
+      "childGraph": {
+        "title": "Surface Fukaya Computations",
+        "nodes": [
+          {
+            "id": "n1",
+            "type": "misc",
+            "label": "Computational promise",
+            "details": [
+              {
+                "id": "read",
+                "label": "read",
+                "type": "textbox",
+                "text": "§1.1, pp. 1–2. Read for scope and the basic geometric–algebraic dictionary.\n\\cite{Grossack26}"
+              },
+              {
+                "id": "focus",
+                "label": "focus checklist",
+                "type": "checkbox",
+                "text": "- [x] State which partially wrapped/topological surface Fukaya category the paper is computing.\n- [x] Explain why surfaces with nonempty boundary admit a combinatorial model.\n- [x] Write the dictionary: curves = objects, intersections = morphisms, polygons = compositions and higher products."
+              },
+              {
+                "id": "checkpoint",
+                "label": "stop when",
+                "type": "textbox",
+                "text": "You can summarize the paper’s aim in three sentences without using analytic details."
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "Grossack26"
+            ],
+            "color": "#46786e",
+            "fillColor": "#eef7f4",
+            "x": 140.2,
+            "y": 122
+          },
+          {
+            "id": "n2",
+            "type": "misc",
+            "label": "Marked surfaces and stops",
+            "details": [
+              {
+                "id": "read",
+                "label": "read",
+                "type": "textbox",
+                "text": "§1.2, pp. 2–3; Figures 1.1–1.2.\n\\cite{Grossack26}"
+              },
+              {
+                "id": "focus",
+                "label": "focus checklist",
+                "type": "checkbox",
+                "text": "- [x] Draw a marked surface and identify its stops.\n- [x] Explain positive wrapping and why the moving source curve stops at marked points.\n- [x] Distinguish an interior Hamiltonian perturbation from boundary wrapping.\n- [x] Predict when missing stops may create infinitely many wrapped intersections."
+              },
+              {
+                "id": "checkpoint",
+                "label": "stop when",
+                "type": "textbox",
+                "text": "Given two arcs near a boundary component, you can draw the perturbation used to compute a Hom space."
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "Grossack26"
+            ],
+            "color": "#46786e",
+            "fillColor": "#eef7f4",
+            "x": 567,
+            "y": 164.2
+          },
+          {
+            "id": "n3",
+            "type": "misc",
+            "label": "Generators and dissections",
+            "details": [
+              {
+                "id": "read",
+                "label": "read",
+                "type": "textbox",
+                "text": "§1.2, pp. 3–5; Figures 1.3–1.4.\n\\cite{Grossack26}"
+              },
+              {
+                "id": "focus",
+                "label": "focus checklist",
+                "type": "checkbox",
+                "text": "- [x] Restate the definitions of generating family and dissection in your own words.\n- [x] Dissect a stopped disk and a stopped annulus by hand.\n- [x] Check that each complementary polygon satisfies the one-boundary-edge(in fact, one stop) rule.\n- [ ] Explain why a dissection removes the ambiguity responsible for higher A-infinity products."
+              },
+              {
+                "id": "checkpoint",
+                "label": "stop when",
+                "type": "textbox",
+                "text": "Starting from a small marked surface, you can choose arcs that cut it into the required polygons."
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "Grossack26"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 110.5,
+            "y": 248.3
+          },
+          {
+            "id": "n4",
+            "type": "misc",
+            "label": "Angles and quivers",
+            "details": [
+              {
+                "id": "read",
+                "label": "read",
+                "type": "textbox",
+                "text": "§1.3, pp. 5–6; Figures 1.5–1.6.\n\\cite{Grossack26}"
+              },
+              {
+                "id": "focus",
+                "label": "focus checklist",
+                "type": "checkbox",
+                "text": "- [ ] Turn each generating arc into a quiver vertex.\n- [ ] Turn each allowed boundary angle after wrapping into an arrow.\n- [ ] Assign its Z/2-degree from the relative orientations.\n- [ ] Decide when two angles compose and when the composition is zero.\n- [ ] Locate a closed polygon that would contribute a higher product."
+              },
+              {
+                "id": "checkpoint",
+                "label": "stop when",
+                "type": "textbox",
+                "text": "From a small dissection, you can write the graded quiver and its obvious zero relations."
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "Grossack26"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 614.3,
+            "y": 298.6
+          },
+          {
+            "id": "n5",
+            "type": "misc",
+            "label": "Disk example and cones",
+            "details": [
+              {
+                "id": "read",
+                "label": "read",
+                "type": "textbox",
+                "text": "§1.3, pp. 6–7; Figure 1.7.\n\\cite{Grossack26}"
+              },
+              {
+                "id": "focus",
+                "label": "focus checklist",
+                "type": "checkbox",
+                "text": "- [ ] Recover the A3 quiver from the disk with four stops.\n- [ ] Explain why the quiver arrows are opposite to the displayed curve maps.\n- [ ] Identify the generating arcs with projective modules.\n- [ ] Write the orange arc as a cone and simplify its two-term complex.\n- [ ] Match resolution of an intersection with the corresponding cone."
+              },
+              {
+                "id": "checkpoint",
+                "label": "stop when",
+                "type": "textbox",
+                "text": "You can reproduce Figure 1.7 as both a surface computation and a module computation."
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "Grossack26"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 156.5,
+            "y": 383.2
+          },
+          {
+            "id": "n6",
+            "type": "misc",
+            "label": "Closed curves and monodromy",
+            "details": [
+              {
+                "id": "read",
+                "label": "read",
+                "type": "textbox",
+                "text": "§1.3, pp. 7–8; Figures 1.8–1.9.\n\\cite{Grossack26}"
+              },
+              {
+                "id": "focus",
+                "label": "focus checklist",
+                "type": "checkbox",
+                "text": "- [ ] Explain why local systems on arcs can be suppressed but not on closed curves.\n- [ ] Represent a rank-r local system by monodromy M in GL_r(k).\n- [ ] Build the differential using identity matrices along ordinary angles and M on the closing angle.\n- [ ] Work out the rank-one annulus/Kronecker example before reading the larger matrix example."
+              },
+              {
+                "id": "checkpoint",
+                "label": "stop when",
+                "type": "textbox",
+                "text": "Given a closed curve following generating arcs, you can write the shape of its associated dg-module."
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "Grossack26"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 595.4,
+            "y": 453.4
+          },
+          {
+            "id": "n7",
+            "type": "misc",
+            "label": "Intersections, Ext, resolutions",
+            "details": [
+              {
+                "id": "read",
+                "label": "read",
+                "type": "textbox",
+                "text": "End of §1.3, pp. 8–9. Revisit Figures 1.7, 1.12, and 1.13 as needed.\n\\cite{Grossack26}"
+              },
+              {
+                "id": "focus",
+                "label": "focus checklist",
+                "type": "checkbox",
+                "text": "- [ ] Explain why an interior crossing supplies maps in both Hom directions.\n- [ ] Write the differential δf = δ_B f − (−1)^|f| f δ_A for a two-term example.\n- [ ] Identify a degree-one crossing whose cone is represented by resolving the crossing.\n- [ ] Explain how wrapping around a stopless boundary can produce countably many maps."
+              },
+              {
+                "id": "checkpoint",
+                "label": "stop when",
+                "type": "textbox",
+                "text": "You can pass between a drawn crossing, a cohomology class in Ext, and a cone/resolution picture."
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "Grossack26"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 125.2,
+            "y": 497
+          },
+          {
+            "id": "n8",
+            "type": "misc",
+            "label": "Line fields and Z-gradings",
+            "details": [
+              {
+                "id": "read",
+                "label": "read",
+                "type": "textbox",
+                "text": "§1.4, pp. 9–10; Figures 1.10–1.11.\n\\cite{Grossack26}"
+              },
+              {
+                "id": "focus",
+                "label": "focus checklist",
+                "type": "checkbox",
+                "text": "- [ ] Interpret a line field both as a section of PTS and as a foliation.\n- [ ] Describe a grading on a curve as a homotopy from the line field to its tangent line.\n- [ ] Use Figure 1.10 to decide whether a closed curve admits a grading.\n- [ ] Compute one intersection degree by counting signed half-turns.\n- [ ] Verify that the two complementary intersection degrees sum to one."
+              },
+              {
+                "id": "checkpoint",
+                "label": "stop when",
+                "type": "textbox",
+                "text": "You can explain precisely what extra data upgrades the Z/2-graded model to a Z-graded one."
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "Grossack26"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 606.7,
+            "y": 563.4
+          },
+          {
+            "id": "n9",
+            "type": "misc",
+            "label": "Punctured torus laboratory",
+            "details": [
+              {
+                "id": "read",
+                "label": "read",
+                "type": "textbox",
+                "text": "§1.5.1, pp. 11–12; Figure 1.12.\n\\cite{Grossack26}"
+              },
+              {
+                "id": "focus",
+                "label": "focus checklist",
+                "type": "checkbox",
+                "text": "- [ ] Reconstruct the two-vertex, three-arrow quiver from the generating curves.\n- [ ] Attach rank-one local systems with parameters λ and μ to the two closed curves.\n- [ ] Compute the Hom differential and identify the surviving Ext^1 generator.\n- [ ] Form its cone and match it with the geometrically resolved curve.\n- [ ] Repeat once in Z/2 grading and note what changes in the Z-graded version."
+              },
+              {
+                "id": "checkpoint",
+                "label": "stop when",
+                "type": "textbox",
+                "text": "You can reproduce the punctured-torus computation without copying the final Ext generator."
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "Grossack26"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 127,
+            "y": 646.1
+          },
+          {
+            "id": "n10",
+            "type": "misc",
+            "label": "Pairs of pants and polygons",
+            "details": [
+              {
+                "id": "read",
+                "label": "read",
+                "type": "textbox",
+                "text": "§1.5.2, pp. 12–14; Figures 1.13–1.14.\n\\cite{Grossack26}"
+              },
+              {
+                "id": "focus",
+                "label": "focus checklist",
+                "type": "checkbox",
+                "text": "- [ ] Compare the quivers for stopped and stopless boundary components.\n- [ ] Explain finite versus countably infinite morphism spaces in the examples.\n- [ ] Identify the triangle that invalidates naive simultaneous resolution of p and q.\n- [ ] Use the bigon to explain why one crossing becomes null-homologous after resolving the other.\n- [ ] Run the full workflow on one new genus-zero marked surface: dissect, extract the quiver, choose curves, compute a Hom, and interpret a cone."
+              },
+              {
+                "id": "checkpoint",
+                "label": "stop when",
+                "type": "textbox",
+                "text": "You can diagnose when polygon contributions make a naive curve-resolution rule fail."
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "Grossack26"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 599.1,
+            "y": 672.5
+          }
+        ],
+        "arrows": [
+          {
+            "id": "a1",
+            "sourceId": "n1",
+            "targetId": "n2",
+            "label": "set vocabulary",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a2",
+            "sourceId": "n2",
+            "targetId": "n3",
+            "label": "choose arcs",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a3",
+            "sourceId": "n3",
+            "targetId": "n4",
+            "label": "extract algebra",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a4",
+            "sourceId": "n4",
+            "targetId": "n5",
+            "label": "first full computation",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0.1,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a5",
+            "sourceId": "n5",
+            "targetId": "n6",
+            "label": "add monodromy",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a6",
+            "sourceId": "n6",
+            "targetId": "n7",
+            "label": "compute Homs",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a7",
+            "sourceId": "n7",
+            "targetId": "n8",
+            "label": "refine degrees",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a8",
+            "sourceId": "n8",
+            "targetId": "n9",
+            "label": "graded test case",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": -0.1,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a9",
+            "sourceId": "n9",
+            "targetId": "n10",
+            "label": "scale up",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a10",
+            "sourceId": "n5",
+            "targetId": "n7",
+            "label": "crossings as maps",
+            "remark": "",
+            "body": "dashed",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": -0.2,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a11",
+            "sourceId": "n4",
+            "targetId": "n8",
+            "label": "grading branch",
+            "remark": "",
+            "body": "dashed",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0.2,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a12",
+            "sourceId": "n7",
+            "targetId": "n9",
+            "label": "Ext laboratory",
+            "remark": "",
+            "body": "dashed",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": -0.1,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a13",
+            "sourceId": "n3",
+            "targetId": "n10",
+            "label": "reuse dissections",
+            "remark": "",
+            "body": "dotted",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0.3,
+            "labelOffset": 0,
+            "labelPosition": 0.1,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          }
+        ],
+        "view": {
+          "selectedId": "n2",
+          "layoutAvoidOverlap": true,
+          "layoutRunning": false,
+          "canvasHeight": 761,
+          "canvasRatioLocked": false,
+          "canvasAspectRatio": 0.5718
         }
       }
     }
@@ -2447,140 +2988,49 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
+    },
+    {
+      "id": "a56",
+      "sourceId": "n1",
+      "targetId": "n37",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
+      "color": "#5f574e"
+    },
+    {
+      "id": "a57",
+      "sourceId": "n10",
+      "targetId": "n37",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
+      "color": "#5f574e"
     }
   ],
   "view": {
-    "selectedId": "n34",
-    "layoutAvoidOverlap": true,
+    "selectedId": "",
+    "layoutAvoidOverlap": false,
     "layoutRunning": false,
+    "canvasHeight": 1072,
     "canvasRatioLocked": true,
-    "canvasAspectRatio": 0.7483,
-    "relativeNodePositions": {
-      "n1": {
-        "x": 0.3436,
-        "y": 0.0371
-      },
-      "n3": {
-        "x": 0.1188,
-        "y": 0.1532
-      },
-      "n4": {
-        "x": 0.1889,
-        "y": 0.407
-      },
-      "n5": {
-        "x": 0.0638,
-        "y": 0.2578
-      },
-      "n6": {
-        "x": 0.0638,
-        "y": 0.4734
-      },
-      "n9": {
-        "x": 0.6182,
-        "y": 0.0469
-      },
-      "n10": {
-        "x": 0.8813,
-        "y": 0.0383
-      },
-      "n11": {
-        "x": 0.5201,
-        "y": 0.1685
-      },
-      "n12": {
-        "x": 0.3551,
-        "y": 0.3573
-      },
-      "n13": {
-        "x": 0.6031,
-        "y": 0.284
-      },
-      "n14": {
-        "x": 0.8527,
-        "y": 0.3345
-      },
-      "n15": {
-        "x": 0.8805,
-        "y": 0.2204
-      },
-      "n16": {
-        "x": 0.9362,
-        "y": 0.4249
-      },
-      "n18": {
-        "x": 0.6326,
-        "y": 0.4551
-      },
-      "n19": {
-        "x": 0.8879,
-        "y": 0.525
-      },
-      "n20": {
-        "x": 0.3508,
-        "y": 0.6143
-      },
-      "n21": {
-        "x": 0.9132,
-        "y": 0.6282
-      },
-      "n22": {
-        "x": 0.6018,
-        "y": 0.5632
-      },
-      "n23": {
-        "x": 0.431,
-        "y": 0.7484
-      },
-      "n24": {
-        "x": 0.6752,
-        "y": 0.6451
-      },
-      "n25": {
-        "x": 0.5476,
-        "y": 0.8401
-      },
-      "n26": {
-        "x": 0.0668,
-        "y": 0.621
-      },
-      "n28": {
-        "x": 0.1842,
-        "y": 0.7001
-      },
-      "n29": {
-        "x": 0.0643,
-        "y": 0.8604
-      },
-      "n30": {
-        "x": 0.7221,
-        "y": 0.7564
-      },
-      "n31": {
-        "x": 0.8633,
-        "y": 0.8128
-      },
-      "n32": {
-        "x": 0.2983,
-        "y": 0.9194
-      },
-      "n33": {
-        "x": 0.6124,
-        "y": 0.9558
-      },
-      "n34": {
-        "x": 0.8927,
-        "y": 0.9414
-      },
-      "n35": {
-        "x": 0.2691,
-        "y": 0.24
-      },
-      "n36": {
-        "x": 0.3403,
-        "y": 0.4977
-      }
-    },
+    "canvasAspectRatio": 0.7024,
     "selectedReferenceKeys": []
   },
   "references": [
@@ -2860,8 +3310,170 @@ window.THEOREM_GRAPH_PRESET_DATA.fukaya_categories_of_surfaces = {
           "label": "PDF"
         }
       ]
+    },
+    {
+      "key": "Grossack26",
+      "author": "Chris (Christina) Grossack",
+      "title": "Explicitly Computing with Fukaya Categories of Surfaces with Boundary",
+      "year": "2026",
+      "citeKey": "Grossack26",
+      "url": "https://arxiv.org/abs/2510.10867",
+      "source": "web",
+      "rawBibtex": "@misc{Grossack26, author={Grossack, Chris}, title={Explicitly Computing with Fukaya Categories of Surfaces with Boundary}, year={2026}, eprint={2510.10867}, archivePrefix={arXiv}}",
+      "links": [
+        {
+          "url": "https://arxiv.org/abs/2510.10867",
+          "source": "web",
+          "label": "main paper"
+        }
+      ]
+    },
+    {
+      "key": "Auroux14",
+      "author": "Denis Auroux",
+      "title": "A Beginner's Introduction to Fukaya Categories",
+      "year": "2014",
+      "citeKey": "Auroux14",
+      "url": "https://arxiv.org/abs/1301.7056",
+      "source": "web",
+      "rawBibtex": "@incollection{Auroux14, author={Auroux, Denis}, title={A Beginner's Introduction to Fukaya Categories}, booktitle={Contact and Symplectic Topology}, year={2014}, pages={85--136}}",
+      "links": [
+        {
+          "url": "https://arxiv.org/abs/1301.7056",
+          "source": "web",
+          "label": "background"
+        }
+      ]
+    },
+    {
+      "key": "Bocklandt21",
+      "author": "Raf Bocklandt",
+      "title": "A Gentle Introduction to Homological Mirror Symmetry",
+      "year": "2021",
+      "citeKey": "Bocklandt21",
+      "url": "https://doi.org/10.1017/9781108692458",
+      "source": "web",
+      "rawBibtex": "@book{Bocklandt21, author={Bocklandt, Raf}, title={A Gentle Introduction to Homological Mirror Symmetry}, publisher={Cambridge University Press}, year={2021}}",
+      "links": [
+        {
+          "url": "https://doi.org/10.1017/9781108692458",
+          "source": "web",
+          "label": "textbook"
+        }
+      ]
+    },
+    {
+      "key": "OPS18",
+      "author": "Sebastian Opper and Pierre-Guy Plamondon and Sibylle Schroll",
+      "title": "A Geometric Model for the Derived Category of Gentle Algebras",
+      "year": "2018",
+      "citeKey": "OPS18",
+      "url": "https://arxiv.org/abs/1801.09659",
+      "source": "web",
+      "rawBibtex": "@misc{OPS18, author={Opper, Sebastian and Plamondon, Pierre-Guy and Schroll, Sibylle}, title={A Geometric Model for the Derived Category of Gentle Algebras}, year={2018}, eprint={1801.09659}, archivePrefix={arXiv}}",
+      "links": [
+        {
+          "url": "https://arxiv.org/abs/1801.09659",
+          "source": "web",
+          "label": "curves and cones"
+        }
+      ]
+    },
+    {
+      "key": "Keller01",
+      "author": "Bernhard Keller",
+      "title": "Introduction to A-infinity Algebras and Modules",
+      "year": "2001",
+      "citeKey": "Keller01",
+      "url": "https://arxiv.org/abs/math/9910179",
+      "source": "web",
+      "rawBibtex": "@article{Keller01, author={Keller, Bernhard}, title={Introduction to A-infinity Algebras and Modules}, journal={Homology, Homotopy and Applications}, volume={3}, number={1}, year={2001}, pages={1--35}}",
+      "links": [
+        {
+          "url": "https://arxiv.org/abs/math/9910179",
+          "source": "web",
+          "label": "A-infinity reference"
+        }
+      ]
+    },
+    {
+      "key": "hartshorne1977",
+      "author": "Robin Hartshorne",
+      "title": "Algebraic Geometry",
+      "year": "1977",
+      "citeKey": "hartshorne1977",
+      "url": "",
+      "source": "bibtex",
+      "rawBibtex": "@book{hartshorne1977, title={Algebraic Geometry}, author={Hartshorne, Robin}, year={1977}}",
+      "links": []
+    },
+    {
+      "key": "Wel81",
+      "author": "Welters, G. E.",
+      "title": "Abel-Jacobi isogenies for certain types of Fano threefolds",
+      "year": "1981",
+      "citeKey": "Wel81",
+      "url": "https://scispace.com/pdf/abel-jacobi-isogenies-for-certain-types-of-fano-threefolds-32wgtkrz9m.pdf",
+      "source": "bibtex",
+      "rawBibtex": "@book{Wel81,\n author = {Welters, G. E.},\n title = {Abel-{Jacobi} isogenies for certain types of {Fano} threefolds},\n fseries = {Mathematical Centre Tracts},\n series = {Math. Cent. Tracts},\n volume = {141},\n year = {1981},\n publisher = {Centrum voor Wiskunde en Informatica (CWI), Amsterdam},\n language = {English},\n keywords = {14J30,14K30,14H40},\n zbMATH = {3743439},\n Zbl = {0474.14028}\n}",
+      "links": [
+        {
+          "url": "https://scispace.com/pdf/abel-jacobi-isogenies-for-certain-types-of-fano-threefolds-32wgtkrz9m.pdf",
+          "source": "bibtex",
+          "label": ""
+        }
+      ]
+    },
+    {
+      "key": "zbMATH04091651",
+      "author": "Picco Botta, Luciana",
+      "title": "On the intersection of three quadrics",
+      "year": "1989",
+      "citeKey": "zbMATH04091651",
+      "url": "https://eudml.org/doc/153159",
+      "source": "web",
+      "rawBibtex": "@article{zbMATH04091651,\n author = {Picco Botta, Luciana},\n title = {On the intersection of three quadrics},\n fjournal = {Journal f{\\\"u}r die Reine und Angewandte Mathematik},\n journal = {J. Reine Angew. Math.},\n issn = {0075-4102},\n volume = {399},\n pages = {188--207},\n year = {1989},\n language = {English},\n doi = {10.1515/crll.1989.399.188},\n keywords = {14J25,14C17,11E16},\n url = {https://eudml.org/doc/153159},\n zbMATH = {4091651},\n Zbl = {0667.14019}\n}",
+      "links": [
+        {
+          "url": "https://eudml.org/doc/153159",
+          "source": "web",
+          "label": ""
+        }
+      ]
+    },
+    {
+      "key": "bauer2020",
+      "author": "Thomas Bauer and Slawomir Rams",
+      "title": "Counting lines on projective surfaces",
+      "year": "2020",
+      "citeKey": "bauer2020countinglinesprojectivesurfaces",
+      "url": "https://arxiv.org/abs/1902.05133",
+      "source": "web",
+      "rawBibtex": "@misc{bauer2020countinglinesprojectivesurfaces,\n      title={Counting lines on projective surfaces}, \n      author={Thomas Bauer and Slawomir Rams},\n      year={2020},\n      eprint={1902.05133},\n      archivePrefix={arXiv},\n      primaryClass={math.AG},\n      url={https://arxiv.org/abs/1902.05133}, \n}",
+      "links": [
+        {
+          "url": "https://arxiv.org/abs/1902.05133",
+          "source": "web",
+          "label": ""
+        }
+      ]
+    },
+    {
+      "key": "zbMATH03291827",
+      "author": "Griffiths, Phillip A.",
+      "title": "Periods of integrals on algebraic manifolds. II: Local study of the period mapping",
+      "year": "1968",
+      "citeKey": "zbMATH03291827",
+      "url": "https://www.jstor.org/stable/2373485?seq=1",
+      "source": "bibtex",
+      "rawBibtex": "@article{zbMATH03291827,\n author = {Griffiths, Phillip A.},\n title = {Periods of integrals on algebraic manifolds. {II}: {Local} study of the period mapping},\n fjournal = {American Journal of Mathematics},\n journal = {Am. J. Math.},\n issn = {0002-9327},\n volume = {90},\n pages = {805--865},\n year = {1968},\n language = {English},\n doi = {10.2307/2373485},\n keywords = {14-XX},\n zbMATH = {3291827},\n Zbl = {0183.25501}\n}",
+      "links": [
+        {
+          "url": "https://www.jstor.org/stable/2373485?seq=1",
+          "source": "bibtex",
+          "label": ""
+        }
+      ]
     }
   ]
 };
-
-

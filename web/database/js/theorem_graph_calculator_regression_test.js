@@ -12,6 +12,12 @@ function loadCalculator() {
     makeArrow,
     makeNode,
     makeReference,
+    buildGraphExport,
+    normalizeGraphImport,
+    detailCheckboxItems,
+    checkboxItemsToText,
+    layoutArrowSpringStrength,
+    layoutArrowIdealDistance,
     collectArrowCitationKeys,
     collectNodeCitationKeys,
     parseCitationKeysFromText,
@@ -199,6 +205,99 @@ function testReferenceSelectionEnablesDeleteButton() {
   assert.strictEqual(api.refs.referenceSelectAll.checked, false);
 }
 
+function testCheckboxQuestionStateRoundTrips() {
+  const api = loadCalculator();
+  const items = hostArray(api.detailCheckboxItems('- [ ] open\n- [x] done\n- [?] unclear\nloose item'))
+    .map((item) => ({ state: item.state, checked: item.checked, text: item.text }));
+
+  assert.deepStrictEqual(items, [
+    { state: 'unchecked', checked: false, text: 'open' },
+    { state: 'checked', checked: true, text: 'done' },
+    { state: 'question', checked: false, text: 'unclear' },
+    { state: 'unchecked', checked: false, text: 'loose item' }
+  ]);
+  assert.strictEqual(
+    api.checkboxItemsToText(items),
+    '- [ ] open\n- [x] done\n- [?] unclear\n- [ ] loose item'
+  );
+  assert.strictEqual(api.checkboxItemsToText([{ checked: true, text: 'legacy checked' }]), '- [x] legacy checked');
+}
+
+function testLayoutArrowSpringWeightsRespectBodyStyle() {
+  const api = loadCalculator();
+  const solid = api.layoutArrowSpringStrength({ body: 'solid' });
+  const wavy = api.layoutArrowSpringStrength({ body: 'wavy' });
+  const dashed = api.layoutArrowSpringStrength({ body: 'dashed' });
+  const dotted = api.layoutArrowSpringStrength({ body: 'dotted' });
+  const labeled = api.layoutArrowSpringStrength({ body: 'solid', label: 'uses' });
+  const none = api.layoutArrowSpringStrength({ body: 'none' });
+
+  assert.strictEqual(wavy, solid);
+  assert.ok(dashed > 0 && dashed < solid);
+  assert.ok(dotted > 0 && dotted < dashed);
+  assert.strictEqual(labeled, solid * 0.45);
+  assert.strictEqual(none, 0);
+}
+
+function testLayoutArrowIdealDistanceRespectsBodyAndLabel() {
+  const api = loadCalculator();
+  const solid = api.layoutArrowIdealDistance({ body: 'solid' });
+  const dashed = api.layoutArrowIdealDistance({ body: 'dashed' });
+  const dotted = api.layoutArrowIdealDistance({ body: 'dotted' });
+  const labeled = api.layoutArrowIdealDistance({ body: 'solid', label: 'uses' });
+  const labeledDotted = api.layoutArrowIdealDistance({ body: 'dotted', label: 'maybe' });
+
+  assert.strictEqual(solid, 220);
+  assert.strictEqual(dashed, 290);
+  assert.strictEqual(dotted, 360);
+  assert.strictEqual(labeled, 420);
+  assert.strictEqual(labeledDotted, 560);
+
+  api.state.layoutIdealDistance = 260;
+  api.state.layoutDashedIdealBonus = 80;
+  api.state.layoutDottedIdealBonus = 150;
+  api.state.layoutLabelIdealBonus = 40;
+  api.state.layoutSpringStrength = 8;
+  api.state.layoutDashedSpringScale = 50;
+  api.state.layoutDottedSpringScale = 10;
+  api.state.layoutLabelSpringScale = 25;
+
+  assert.strictEqual(api.layoutArrowIdealDistance({ body: 'dashed', label: 'uses' }), 380);
+  assert.strictEqual(api.layoutArrowSpringStrength({ body: 'solid' }), 0.008);
+  assert.strictEqual(api.layoutArrowSpringStrength({ body: 'dashed' }), 0.004);
+  assert.strictEqual(api.layoutArrowSpringStrength({ body: 'dotted' }), 0.0008);
+  assert.strictEqual(api.layoutArrowSpringStrength({ body: 'solid', label: 'uses' }), 0.002);
+}
+
+function testCanvasHeightIsExportedPerGraph() {
+  const api = loadCalculator();
+  const root = api.createGraph('Root');
+  const owner = api.makeNode({ id: 'owner', label: 'Owner' });
+  const child = api.createGraph('Child graph');
+
+  root.canvasHeight = 720;
+  root.canvasRatioLocked = false;
+  root.canvasAspectRatio = 1.4;
+  child.canvasHeight = 420;
+  child.canvasRatioLocked = true;
+  child.canvasAspectRatio = 1.25;
+  owner.childGraph = child;
+  root.nodes = [owner];
+  api.state.rootGraph = root;
+  api.state.activePath = [];
+
+  const exported = api.buildGraphExport(root, { includeTitleNode: true });
+  const exportedChild = exported.nodes[0].childGraph;
+  const imported = api.normalizeGraphImport(exported);
+
+  assert.strictEqual(exported.view.canvasHeight, 720);
+  assert.strictEqual(exportedChild.view.canvasHeight, 420);
+  assert.strictEqual(exportedChild.view.canvasRatioLocked, true);
+  assert.strictEqual(imported.canvasHeight, 720);
+  assert.strictEqual(imported.nodes[0].childGraph.canvasHeight, 420);
+  assert.strictEqual(imported.nodes[0].childGraph.canvasRatioLocked, true);
+}
+
 testHiddenCitationKeysArePruned();
 testVisibleCitationKeysSurvive();
 testReferenceRenameRewritesNestedNodesTitleAndArrows();
@@ -206,5 +305,9 @@ testMultiKeyReplacementPreservesUnrelatedKeys();
 testDeleteUsageReportIncludesNestedNodesAndArrows();
 testRawBibtexKeyIsRenameAlias();
 testReferenceSelectionEnablesDeleteButton();
+testCheckboxQuestionStateRoundTrips();
+testLayoutArrowSpringWeightsRespectBodyStyle();
+testLayoutArrowIdealDistanceRespectsBodyAndLabel();
+testCanvasHeightIsExportedPerGraph();
 
 console.log('theorem graph regression tests passed');

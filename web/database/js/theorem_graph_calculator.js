@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const SCHEMA_VERSION = 8;
+  const SCHEMA_VERSION = 9;
   const DEFAULT_GRAPH_TITLE = 'Dependency Graph';
   const PRESET_FOLDER_URL = 'theorem_graph_presets/';
   const DEFAULT_PRESET_KEY = 'maintenance_tracker';
@@ -119,8 +119,25 @@
   const LAYOUT_CENTER_STRENGTH = 0.0012;
   const LAYOUT_WALL_MARGIN = 28;
   const LAYOUT_WALL_STRENGTH = 0.008;
+  const LAYOUT_ARROW_IDEAL_DEFAULT = 220;
+  const LAYOUT_ARROW_IDEAL_MIN = 80;
+  const LAYOUT_ARROW_IDEAL_MAX = 520;
+  const LAYOUT_DASHED_IDEAL_BONUS_DEFAULT = 70;
+  const LAYOUT_DOTTED_IDEAL_BONUS_DEFAULT = 140;
+  const LAYOUT_LABEL_IDEAL_BONUS_DEFAULT = 200;
+  const LAYOUT_IDEAL_BONUS_MIN = 0;
+  const LAYOUT_IDEAL_BONUS_MAX = 240;
+  const LAYOUT_ARROW_SPRING_DEFAULT = 6;
+  const LAYOUT_ARROW_SPRING_MIN = 0;
+  const LAYOUT_ARROW_SPRING_MAX = 20;
+  const LAYOUT_DASHED_SPRING_SCALE_DEFAULT = 10;
+  const LAYOUT_DOTTED_SPRING_SCALE_DEFAULT = 5;
+  const LAYOUT_LABEL_SPRING_SCALE_DEFAULT = 45;
+  const LAYOUT_SPRING_SCALE_MIN = 0;
+  const LAYOUT_SPRING_SCALE_MAX = 150;
   const CANVAS_MIN_HEIGHT = 260;
   const CANVAS_MAX_HEIGHT = 1400;
+  const CANVAS_DEFAULT_HEIGHT = 560;
   const CANVAS_DEFAULT_ASPECT_RATIO = 960 / 560;
   const CANVAS_VERTICAL_NODE_PADDING = 8;
   const NODE_LABEL_MAX_WIDTH = 220;
@@ -201,6 +218,14 @@
     activeLatexDetailField: null,
     arrowBoundaryGap: ARROW_BOUNDARY_GAP_DEFAULT,
     nodeFillSaturation: NODE_FILL_SATURATION_DEFAULT,
+    layoutIdealDistance: LAYOUT_ARROW_IDEAL_DEFAULT,
+    layoutDashedIdealBonus: LAYOUT_DASHED_IDEAL_BONUS_DEFAULT,
+    layoutDottedIdealBonus: LAYOUT_DOTTED_IDEAL_BONUS_DEFAULT,
+    layoutLabelIdealBonus: LAYOUT_LABEL_IDEAL_BONUS_DEFAULT,
+    layoutSpringStrength: LAYOUT_ARROW_SPRING_DEFAULT,
+    layoutDashedSpringScale: LAYOUT_DASHED_SPRING_SCALE_DEFAULT,
+    layoutDottedSpringScale: LAYOUT_DOTTED_SPRING_SCALE_DEFAULT,
+    layoutLabelSpringScale: LAYOUT_LABEL_SPRING_SCALE_DEFAULT,
     cleanExportSignature: ''
   };
 
@@ -306,6 +331,22 @@
     refs.arrowBoundaryGapValue = $('arrow-boundary-gap-value');
     refs.nodeFillSaturation = $('node-fill-saturation');
     refs.nodeFillSaturationValue = $('node-fill-saturation-value');
+    refs.layoutIdealDistance = $('layout-ideal-distance');
+    refs.layoutIdealDistanceValue = $('layout-ideal-distance-value');
+    refs.layoutDashedIdealBonus = $('layout-dashed-ideal-bonus');
+    refs.layoutDashedIdealBonusValue = $('layout-dashed-ideal-bonus-value');
+    refs.layoutDottedIdealBonus = $('layout-dotted-ideal-bonus');
+    refs.layoutDottedIdealBonusValue = $('layout-dotted-ideal-bonus-value');
+    refs.layoutLabelIdealBonus = $('layout-label-ideal-bonus');
+    refs.layoutLabelIdealBonusValue = $('layout-label-ideal-bonus-value');
+    refs.layoutSpringStrength = $('layout-spring-strength');
+    refs.layoutSpringStrengthValue = $('layout-spring-strength-value');
+    refs.layoutDashedSpringScale = $('layout-dashed-spring-scale');
+    refs.layoutDashedSpringScaleValue = $('layout-dashed-spring-scale-value');
+    refs.layoutDottedSpringScale = $('layout-dotted-spring-scale');
+    refs.layoutDottedSpringScaleValue = $('layout-dotted-spring-scale-value');
+    refs.layoutLabelSpringScale = $('layout-label-spring-scale');
+    refs.layoutLabelSpringScaleValue = $('layout-label-spring-scale-value');
     refs.graphHelp = $('graph-help');
     refs.bibtexInput = $('bibtex-input');
     refs.addReference = $('add-reference');
@@ -397,11 +438,22 @@
     if (refs.addNode) refs.addNode.addEventListener('click', addNodeFromControls);
     if (refs.addNodeMiscDetail) refs.addNodeMiscDetail.addEventListener('click', addMiscDetailFromControls);
     if (refs.connectMode) refs.connectMode.addEventListener('click', toggleConnectMode);
-    if (refs.deleteSelected) refs.deleteSelected.addEventListener('click', deleteSelectedOrReturn);
+    if (refs.deleteSelected) refs.deleteSelected.addEventListener('click', deleteSelected);
     if (refs.toggleLayout) refs.toggleLayout.addEventListener('click', toggleLayout);
     if (refs.resetLayout) refs.resetLayout.addEventListener('click', resetLayout);
     if (refs.layoutAvoidOverlap) refs.layoutAvoidOverlap.addEventListener('change', updateLayoutAvoidOverlap);
-    [refs.arrowBoundaryGap, refs.nodeFillSaturation].forEach((control) => {
+    [
+      refs.arrowBoundaryGap,
+      refs.nodeFillSaturation,
+      refs.layoutIdealDistance,
+      refs.layoutDashedIdealBonus,
+      refs.layoutDottedIdealBonus,
+      refs.layoutLabelIdealBonus,
+      refs.layoutSpringStrength,
+      refs.layoutDashedSpringScale,
+      refs.layoutDottedSpringScale,
+      refs.layoutLabelSpringScale
+    ].forEach((control) => {
       if (!control) return;
       control.addEventListener('input', updateDebugRenderSettings);
       control.addEventListener('change', updateDebugRenderSettings);
@@ -848,6 +900,32 @@
         set(value) {
           currentGraph().layoutAvoidOverlap = value !== false;
         }
+      },
+      canvasHeight: {
+        get() {
+          return normalizeCanvasHeight(currentGraph().canvasHeight);
+        },
+        set(value) {
+          const graph = currentGraph();
+          graph.canvasHeight = normalizeCanvasHeight(value, graph.canvasHeight);
+        }
+      },
+      canvasRatioLocked: {
+        get() {
+          return currentGraph().canvasRatioLocked === true;
+        },
+        set(value) {
+          currentGraph().canvasRatioLocked = value === true;
+        }
+      },
+      canvasAspectRatio: {
+        get() {
+          return normalizeCanvasAspectRatio(currentGraph().canvasAspectRatio);
+        },
+        set(value) {
+          const graph = currentGraph();
+          graph.canvasAspectRatio = normalizeCanvasAspectRatio(value, graph.canvasAspectRatio);
+        }
       }
     });
   }
@@ -862,7 +940,10 @@
       viewExtra: {},
       nodeSerial: 1,
       arrowSerial: 1,
-      layoutAvoidOverlap: LAYOUT_AVOID_OVERLAP_DEFAULT
+      layoutAvoidOverlap: LAYOUT_AVOID_OVERLAP_DEFAULT,
+      canvasHeight: CANVAS_DEFAULT_HEIGHT,
+      canvasRatioLocked: false,
+      canvasAspectRatio: CANVAS_DEFAULT_ASPECT_RATIO
     };
   }
 
@@ -921,6 +1002,9 @@
     graph.nodeSerial = Math.max(1, Math.round(finiteNumber(graph.nodeSerial, nextSerial(graph.nodes.map((node) => node.id), 'n'))));
     graph.arrowSerial = Math.max(1, Math.round(finiteNumber(graph.arrowSerial, nextSerial(graph.arrows.map((arrow) => arrow.id), 'a'))));
     graph.layoutAvoidOverlap = graph.layoutAvoidOverlap !== false;
+    graph.canvasHeight = normalizeCanvasHeight(graph.canvasHeight);
+    graph.canvasRatioLocked = graph.canvasRatioLocked === true;
+    graph.canvasAspectRatio = normalizeCanvasAspectRatio(graph.canvasAspectRatio);
     return graph;
   }
 
@@ -1432,6 +1516,21 @@
     refs.canvasRatioLock.title = locked ? 'Unlock canvas ratio' : 'Lock canvas ratio';
   }
 
+  function persistActiveGraphCanvasView() {
+    const graph = currentGraph();
+    graph.canvasHeight = normalizeCanvasHeight(state.canvasHeight, graph.canvasHeight);
+    graph.canvasRatioLocked = state.canvasRatioLocked === true;
+    graph.canvasAspectRatio = normalizeCanvasAspectRatio(state.canvasAspectRatio, graph.canvasAspectRatio);
+  }
+
+  function applyActiveGraphCanvasView() {
+    const graph = currentGraph();
+    applyCanvasHeight(graph.canvasHeight);
+    if (graph.canvasRatioLocked) syncLockedCanvasHeight();
+    resizeCanvas();
+    syncCanvasRatioLockControl();
+  }
+
   function currentCanvasAspectRatio() {
     const width = Math.max(1, finiteNumber(state.canvasWidth, refs.canvas?.getBoundingClientRect().width || 960));
     const height = Math.max(1, finiteNumber(state.canvasHeight, refs.canvas?.getBoundingClientRect().height || 560));
@@ -1570,8 +1669,10 @@
 
   function navigateToGraphPath(path) {
     commitCurrentDetailBeforeSelectionChange();
+    persistActiveGraphCanvasView();
     stopLayout();
     state.activePath = Array.isArray(path) ? [...path] : [];
+    applyActiveGraphCanvasView();
     syncActiveTitleFromOwner();
     state.titleEditorActive = false;
     state.selectedNodeId = null;
@@ -2843,8 +2944,10 @@
       setStatus(`Opened nested graph for ${node.label}.`);
     }
     syncChildGraphTitleFromSourceNode(node);
+    persistActiveGraphCanvasView();
     stopLayout();
     state.activePath = [...state.activePath, node.id];
+    applyActiveGraphCanvasView();
     state.titleEditorActive = false;
     state.selectedNodeId = null;
     state.selectedArrowId = null;
@@ -2958,14 +3061,6 @@
     setStatus('Nothing selected.');
   }
 
-  function deleteSelectedOrReturn() {
-    if (activeGraphDepth()) {
-      returnToParentGraph();
-      return;
-    }
-    deleteSelected();
-  }
-
   function removeNodeById(id, message) {
     state.nodes = state.nodes.filter((item) => item.id !== id);
     state.arrows = state.arrows.filter((arrow) => arrow.sourceId !== id && arrow.targetId !== id);
@@ -3037,9 +3132,17 @@
   function updateDebugRenderSettings() {
     state.arrowBoundaryGap = normalizeArrowBoundaryGap(refs.arrowBoundaryGap ? refs.arrowBoundaryGap.value : state.arrowBoundaryGap);
     state.nodeFillSaturation = normalizeNodeFillSaturation(refs.nodeFillSaturation ? refs.nodeFillSaturation.value : state.nodeFillSaturation);
+    state.layoutIdealDistance = normalizeLayoutIdealDistance(refs.layoutIdealDistance ? refs.layoutIdealDistance.value : state.layoutIdealDistance);
+    state.layoutDashedIdealBonus = normalizeLayoutIdealBonus(refs.layoutDashedIdealBonus ? refs.layoutDashedIdealBonus.value : state.layoutDashedIdealBonus);
+    state.layoutDottedIdealBonus = normalizeLayoutIdealBonus(refs.layoutDottedIdealBonus ? refs.layoutDottedIdealBonus.value : state.layoutDottedIdealBonus);
+    state.layoutLabelIdealBonus = normalizeLayoutIdealBonus(refs.layoutLabelIdealBonus ? refs.layoutLabelIdealBonus.value : state.layoutLabelIdealBonus);
+    state.layoutSpringStrength = normalizeLayoutSpringStrength(refs.layoutSpringStrength ? refs.layoutSpringStrength.value : state.layoutSpringStrength);
+    state.layoutDashedSpringScale = normalizeLayoutSpringScale(refs.layoutDashedSpringScale ? refs.layoutDashedSpringScale.value : state.layoutDashedSpringScale);
+    state.layoutDottedSpringScale = normalizeLayoutSpringScale(refs.layoutDottedSpringScale ? refs.layoutDottedSpringScale.value : state.layoutDottedSpringScale);
+    state.layoutLabelSpringScale = normalizeLayoutSpringScale(refs.layoutLabelSpringScale ? refs.layoutLabelSpringScale.value : state.layoutLabelSpringScale);
     syncDebugControlValues();
     renderCanvas();
-    setStatus(`Debug view: arrow gap ${state.arrowBoundaryGap}px, fill saturation ${state.nodeFillSaturation}%.`);
+    setStatus(`Layout debug: ideal ${state.layoutIdealDistance}px, spring ${layoutSpringStrengthLabel(state.layoutSpringStrength)}.`);
   }
 
   function updateLayoutAvoidOverlap() {
@@ -3053,11 +3156,35 @@
   function syncDebugControlValues() {
     state.arrowBoundaryGap = normalizeArrowBoundaryGap(state.arrowBoundaryGap);
     state.nodeFillSaturation = normalizeNodeFillSaturation(state.nodeFillSaturation);
+    state.layoutIdealDistance = normalizeLayoutIdealDistance(state.layoutIdealDistance);
+    state.layoutDashedIdealBonus = normalizeLayoutIdealBonus(state.layoutDashedIdealBonus);
+    state.layoutDottedIdealBonus = normalizeLayoutIdealBonus(state.layoutDottedIdealBonus);
+    state.layoutLabelIdealBonus = normalizeLayoutIdealBonus(state.layoutLabelIdealBonus);
+    state.layoutSpringStrength = normalizeLayoutSpringStrength(state.layoutSpringStrength);
+    state.layoutDashedSpringScale = normalizeLayoutSpringScale(state.layoutDashedSpringScale);
+    state.layoutDottedSpringScale = normalizeLayoutSpringScale(state.layoutDottedSpringScale);
+    state.layoutLabelSpringScale = normalizeLayoutSpringScale(state.layoutLabelSpringScale);
     state.layoutAvoidOverlap = !!state.layoutAvoidOverlap;
     if (refs.arrowBoundaryGap) refs.arrowBoundaryGap.value = String(state.arrowBoundaryGap);
     if (refs.arrowBoundaryGapValue) refs.arrowBoundaryGapValue.textContent = `${state.arrowBoundaryGap}px`;
     if (refs.nodeFillSaturation) refs.nodeFillSaturation.value = String(state.nodeFillSaturation);
     if (refs.nodeFillSaturationValue) refs.nodeFillSaturationValue.textContent = `${state.nodeFillSaturation}%`;
+    if (refs.layoutIdealDistance) refs.layoutIdealDistance.value = String(state.layoutIdealDistance);
+    if (refs.layoutIdealDistanceValue) refs.layoutIdealDistanceValue.textContent = `${state.layoutIdealDistance}px`;
+    if (refs.layoutDashedIdealBonus) refs.layoutDashedIdealBonus.value = String(state.layoutDashedIdealBonus);
+    if (refs.layoutDashedIdealBonusValue) refs.layoutDashedIdealBonusValue.textContent = `+${state.layoutDashedIdealBonus}px`;
+    if (refs.layoutDottedIdealBonus) refs.layoutDottedIdealBonus.value = String(state.layoutDottedIdealBonus);
+    if (refs.layoutDottedIdealBonusValue) refs.layoutDottedIdealBonusValue.textContent = `+${state.layoutDottedIdealBonus}px`;
+    if (refs.layoutLabelIdealBonus) refs.layoutLabelIdealBonus.value = String(state.layoutLabelIdealBonus);
+    if (refs.layoutLabelIdealBonusValue) refs.layoutLabelIdealBonusValue.textContent = `+${state.layoutLabelIdealBonus}px`;
+    if (refs.layoutSpringStrength) refs.layoutSpringStrength.value = String(state.layoutSpringStrength);
+    if (refs.layoutSpringStrengthValue) refs.layoutSpringStrengthValue.textContent = layoutSpringStrengthLabel(state.layoutSpringStrength);
+    if (refs.layoutDashedSpringScale) refs.layoutDashedSpringScale.value = String(state.layoutDashedSpringScale);
+    if (refs.layoutDashedSpringScaleValue) refs.layoutDashedSpringScaleValue.textContent = `${state.layoutDashedSpringScale}%`;
+    if (refs.layoutDottedSpringScale) refs.layoutDottedSpringScale.value = String(state.layoutDottedSpringScale);
+    if (refs.layoutDottedSpringScaleValue) refs.layoutDottedSpringScaleValue.textContent = `${state.layoutDottedSpringScale}%`;
+    if (refs.layoutLabelSpringScale) refs.layoutLabelSpringScale.value = String(state.layoutLabelSpringScale);
+    if (refs.layoutLabelSpringScaleValue) refs.layoutLabelSpringScaleValue.textContent = `${state.layoutLabelSpringScale}%`;
     if (refs.layoutAvoidOverlap) refs.layoutAvoidOverlap.checked = state.layoutAvoidOverlap;
   }
 
@@ -3136,8 +3263,9 @@
       const dx = target.x - source.x;
       const dy = target.y - source.y;
       const dist = Math.hypot(dx, dy) || 1;
-      const ideal = 220;
-      const force = (dist - ideal) * 0.006;
+      const ideal = layoutArrowIdealDistance(arrow);
+      const force = (dist - ideal) * layoutArrowSpringStrength(arrow);
+      if (!force) return;
       const fx = (dx / dist) * force;
       const fy = (dy / dist) * force;
       if (!source.fixed) {
@@ -3163,6 +3291,29 @@
       clampNodeToBounds(node, bounds);
     });
     preserveLayoutOverlapGroups(bounds);
+  }
+
+  function layoutArrowSpringStrength(arrow = {}) {
+    const body = normalizeArrowPart('body', arrow.body);
+    if (body === 'none') return 0;
+    const bodyScale = body === 'dashed'
+      ? state.layoutDashedSpringScale
+      : body === 'dotted'
+        ? state.layoutDottedSpringScale
+        : 100;
+    const labelScale = cleanString(arrow.label) ? state.layoutLabelSpringScale : 100;
+    return (normalizeLayoutSpringStrength(state.layoutSpringStrength) / 1000)
+      * (normalizeLayoutSpringScale(bodyScale) / 100)
+      * (normalizeLayoutSpringScale(labelScale) / 100);
+  }
+
+  function layoutArrowIdealDistance(arrow = {}) {
+    const body = normalizeArrowPart('body', arrow.body);
+    let ideal = normalizeLayoutIdealDistance(state.layoutIdealDistance);
+    if (body === 'dashed') ideal += normalizeLayoutIdealBonus(state.layoutDashedIdealBonus);
+    if (body === 'dotted') ideal += normalizeLayoutIdealBonus(state.layoutDottedIdealBonus);
+    if (cleanString(arrow.label)) ideal += normalizeLayoutIdealBonus(state.layoutLabelIdealBonus);
+    return normalizeLayoutIdealDistance(ideal);
   }
 
   function layoutBounds() {
@@ -3786,12 +3937,12 @@
     preview.dataset.detailPreview = 'true';
     preview.hidden = true;
     preview.addEventListener('click', (event) => {
-      if (event.target && typeof event.target.closest === 'function' && event.target.closest('input[type="checkbox"]')) return;
+      if (isCheckboxDetailToggleTarget(event.target)) return;
       showLatexDetailEditor(miscDetailFieldKey(detail.id));
     });
     preview.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter' && event.key !== ' ') return;
-      if (event.target && typeof event.target.closest === 'function' && event.target.closest('input[type="checkbox"]')) return;
+      if (isCheckboxDetailToggleTarget(event.target)) return;
       event.preventDefault();
       showLatexDetailEditor(miscDetailFieldKey(detail.id));
     });
@@ -3800,6 +3951,14 @@
     body.append(textarea, preview);
     row.append(labelSlot, body);
     return row;
+  }
+
+  function isCheckboxDetailToggleTarget(target) {
+    return !!(
+      target
+      && typeof target.closest === 'function'
+      && target.closest('input[type="checkbox"], .theorem-misc-task-checkbox')
+    );
   }
 
   function currentMiscDetailRow(detailId, sourceElement = null) {
@@ -4031,10 +4190,20 @@
       task.className = 'theorem-misc-task';
 
       const checkbox = document.createElement('input');
+      checkbox.className = 'theorem-misc-task-checkbox';
       checkbox.type = 'checkbox';
-      checkbox.checked = item.checked;
+      checkbox.checked = item.state === 'checked';
+      checkbox.indeterminate = item.state === 'question';
+      checkbox.dataset.state = item.state;
+      checkbox.setAttribute('aria-checked', item.state === 'question' ? 'mixed' : (checkbox.checked ? 'true' : 'false'));
+      checkbox.setAttribute('aria-label', `${item.text}: ${checkboxStateLabel(item.state)}`);
+      checkbox.title = 'Left-click to check; right-click to mark as question';
       checkbox.addEventListener('change', () => {
-        updateCheckboxDetailItem(preview, index, checkbox.checked);
+        updateCheckboxDetailItem(preview, index, checkbox.checked ? 'checked' : 'unchecked');
+      });
+      checkbox.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        updateCheckboxDetailItem(preview, index, item.state === 'question' ? 'unchecked' : 'question');
       });
 
       const text = document.createElement('span');
@@ -4047,15 +4216,23 @@
     preview.appendChild(list);
   }
 
-  function updateCheckboxDetailItem(preview, index, checked) {
-    const row = preview.closest('[data-misc-detail-id]');
-    const textarea = row ? row.querySelector('[data-detail-role="text"]') : null;
+  function updateCheckboxDetailItem(preview, index, stateValue) {
+    const row = preview.closest('[data-misc-detail-id], [data-reference-detail-id]');
+    const textarea = row ? row.querySelector('[data-detail-role="text"], [data-reference-detail-role="text"]') : null;
     if (!textarea) return;
     const items = detailCheckboxItems(textarea.value);
     if (!items[index]) return;
-    items[index] = { ...items[index], checked };
+    items[index] = {
+      ...items[index],
+      state: normalizeCheckboxDetailState(stateValue, items[index].state)
+    };
     textarea.value = checkboxItemsToText(items);
-    autoApplyDetailUpdate({ target: textarea });
+    if (row.dataset.miscDetailId) {
+      autoApplyDetailUpdate({ target: textarea });
+    } else {
+      autoResizeTextarea(textarea);
+      syncReferenceEditDetailPreview(row);
+    }
   }
 
   function detailCheckboxItems(value) {
@@ -4068,21 +4245,26 @@
   function parseCheckboxDetailLine(line) {
     const trimmed = cleanString(line);
     if (!trimmed) return null;
-    const marked = trimmed.match(/^[-*]\s+\[([ xX])\]\s*(.*)$/);
+    const marked = trimmed.match(/^[-*]\s+\[([ xX?])\]\s*(.*)$/);
     if (marked) {
+      const state = checkboxDetailStateFromMark(marked[1]);
       return {
-        checked: marked[1].toLowerCase() === 'x',
+        state,
+        checked: state === 'checked',
         text: cleanString(marked[2])
       };
     }
-    const bareMarked = trimmed.match(/^\[([ xX])\]\s*(.*)$/);
+    const bareMarked = trimmed.match(/^\[([ xX?])\]\s*(.*)$/);
     if (bareMarked) {
+      const state = checkboxDetailStateFromMark(bareMarked[1]);
       return {
-        checked: bareMarked[1].toLowerCase() === 'x',
+        state,
+        checked: state === 'checked',
         text: cleanString(bareMarked[2])
       };
     }
     return {
+      state: 'unchecked',
       checked: false,
       text: trimmed.replace(/^[-*]\s+/, '').trim()
     };
@@ -4091,8 +4273,37 @@
   function checkboxItemsToText(items) {
     return items
       .filter((item) => item && cleanString(item.text))
-      .map((item) => `- [${item.checked ? 'x' : ' '}] ${cleanString(item.text)}`)
+      .map((item) => `- [${checkboxDetailStateMark(item.state || (item.checked ? 'checked' : 'unchecked'))}] ${cleanString(item.text)}`)
       .join('\n');
+  }
+
+  function checkboxDetailStateFromMark(mark) {
+    const value = cleanString(mark).toLowerCase();
+    if (value === 'x') return 'checked';
+    if (value === '?') return 'question';
+    return 'unchecked';
+  }
+
+  function checkboxDetailStateMark(state) {
+    const value = normalizeCheckboxDetailState(state);
+    if (value === 'checked') return 'x';
+    if (value === 'question') return '?';
+    return ' ';
+  }
+
+  function normalizeCheckboxDetailState(value, fallback = 'unchecked') {
+    const state = cleanString(value).toLowerCase();
+    if (state === 'checked' || state === 'question' || state === 'unchecked') return state;
+    if (state === 'true' || value === true) return 'checked';
+    if (state === 'false' || value === false) return 'unchecked';
+    return normalizeCheckboxDetailState(fallback, 'unchecked');
+  }
+
+  function checkboxStateLabel(state) {
+    const value = normalizeCheckboxDetailState(state);
+    if (value === 'checked') return 'checked';
+    if (value === 'question') return 'question';
+    return 'unchecked';
   }
 
   function typesetLatexDetailPreviews() {
@@ -4795,18 +5006,51 @@
       type.appendChild(option);
     });
     type.value = normalizeMiscDetailType(detail.type);
+    type.addEventListener('change', () => syncReferenceEditDetailPreview(row));
 
     const textarea = document.createElement('textarea');
     textarea.className = 'theorem-textarea';
     textarea.spellcheck = true;
     textarea.value = cleanString(detail.text);
     textarea.dataset.referenceDetailRole = 'text';
-    textarea.addEventListener('input', () => autoResizeTextarea(textarea));
+    textarea.addEventListener('input', () => {
+      autoResizeTextarea(textarea);
+      syncReferenceEditDetailPreview(row);
+    });
+
+    const preview = document.createElement('div');
+    preview.className = 'theorem-misc-preview';
+    preview.setAttribute('role', 'group');
+    preview.dataset.referenceDetailPreview = 'true';
+    preview.hidden = true;
 
     labelSlot.append(label, labelInput);
-    body.append(type, textarea);
+    body.append(type, textarea, preview);
     row.append(labelSlot, body);
+    syncReferenceEditDetailPreview(row);
     return row;
+  }
+
+  function syncReferenceEditDetailPreview(row) {
+    if (!row) return;
+    const type = row.querySelector('[data-reference-detail-role="type"]');
+    const textarea = row.querySelector('[data-reference-detail-role="text"]');
+    const preview = row.querySelector('[data-reference-detail-preview]');
+    if (!type || !textarea || !preview) return;
+    const detailType = normalizeMiscDetailType(type.value);
+    const value = textarea.value;
+    const showPreview = detailType === 'checkbox' && !!cleanString(value);
+    preview.hidden = !showPreview;
+    if (!showPreview) {
+      delete preview.dataset.sourceText;
+      delete preview.dataset.detailType;
+      preview.replaceChildren();
+      return;
+    }
+    if (preview.dataset.sourceText === value && preview.dataset.detailType === detailType) return;
+    renderDetailPreviewContent(preview, value, detailType);
+    preview.dataset.sourceText = value;
+    preview.dataset.detailType = detailType;
   }
 
   function currentReferenceEditDetailRow(detailId, sourceElement = null) {
@@ -5444,6 +5688,7 @@
   }
 
   function buildExport(scope = 'whole') {
+    persistActiveGraphCanvasView();
     const graph = scope === 'current' ? currentGraph() : state.rootGraph;
     if (scope === 'current') syncActiveTitleFromOwner();
     syncLinkedGraphTitlesFromOwners(graph);
@@ -5485,6 +5730,9 @@
       selectedId: active ? (state.selectedNodeId || '') : '',
       layoutAvoidOverlap: graph.layoutAvoidOverlap !== false,
       layoutRunning: false,
+      canvasHeight: normalizeCanvasHeight(graph.canvasHeight),
+      canvasRatioLocked: graph.canvasRatioLocked === true,
+      canvasAspectRatio: roundRatio(normalizeCanvasAspectRatio(graph.canvasAspectRatio)),
       ...(active && state.canvasRatioLocked ? {
         canvasRatioLocked: true,
         canvasAspectRatio: roundRatio(normalizeCanvasAspectRatio(state.canvasAspectRatio)),
@@ -5701,9 +5949,11 @@
   function normalizeCanvasView(view) {
     const locked = view && view.canvasRatioLocked === true;
     const aspect = normalizeCanvasAspectRatio(view ? view.canvasAspectRatio : null, currentCanvasAspectRatio());
+    const height = normalizeCanvasHeight(view ? view.canvasHeight : null, state.canvasHeight);
     return {
       locked,
       aspect,
+      height,
       relativeNodePositions: normalizeRelativeNodePositions(view ? view.relativeNodePositions : null)
     };
   }
@@ -5711,11 +5961,12 @@
   function applyImportedCanvasView(canvasView) {
     state.canvasRatioLocked = !!canvasView.locked;
     state.canvasAspectRatio = normalizeCanvasAspectRatio(canvasView.aspect);
+    state.canvasHeight = normalizeCanvasHeight(canvasView.height, state.canvasHeight);
+    applyCanvasHeight(state.canvasHeight);
     if (state.canvasRatioLocked) {
       syncLockedCanvasHeight();
       resizeCanvas();
     } else {
-      clearCanvasHeight();
       resizeCanvas();
       state.canvasAspectRatio = currentCanvasAspectRatio();
     }
@@ -5747,6 +5998,7 @@
       state.references = mergeReferencesByKey(state.references, next.references);
       state.selectedReferenceKeys = new Set([...state.selectedReferenceKeys].filter((key) => state.references.some((reference) => reference.key === key)));
     }
+    applyActiveGraphCanvasView();
     state.editingReferenceKey = null;
     if (refs.referenceEditForm) refs.referenceEditForm.hidden = true;
     state.titleEditorActive = false;
@@ -6224,6 +6476,7 @@
     const view = data && data.view && typeof data.view === 'object' && !Array.isArray(data.view) ? data.view : {};
     const graphCanvasView = normalizeCanvasView(view);
     const activeCanvasView = canvasView && canvasView.locked ? canvasView : graphCanvasView;
+    const activeCanvasHeight = normalizeCanvasHeight(activeCanvasView.height, graphCanvasView.height);
     const titleSource = Object.prototype.hasOwnProperty.call(data, 'title')
       ? data.title
       : (Object.prototype.hasOwnProperty.call(view, 'title') ? view.title : DEFAULT_GRAPH_TITLE);
@@ -6250,7 +6503,7 @@
         childGraph: undefined,
         label: cleanString(entry.label) || `Node ${index + 1}`,
         x: relative ? relative.x * state.canvasWidth : (Number.isFinite(Number(entry.x)) ? Number(entry.x) : state.canvasWidth / 2),
-        y: relative ? relative.y * state.canvasHeight : (Number.isFinite(Number(entry.y)) ? Number(entry.y) : state.canvasHeight / 2)
+        y: relative ? relative.y * activeCanvasHeight : (Number.isFinite(Number(entry.y)) ? Number(entry.y) : activeCanvasHeight / 2)
       });
       if (entry.childGraph && typeof entry.childGraph === 'object' && !Array.isArray(entry.childGraph)) {
         node.childGraph = normalizeGraphImport(entry.childGraph);
@@ -6281,6 +6534,7 @@
     delete viewExtra.layoutRunning;
     delete viewExtra.canvasRatioLocked;
     delete viewExtra.canvasAspectRatio;
+    delete viewExtra.canvasHeight;
     delete viewExtra.relativeNodePositions;
 
     return {
@@ -6291,7 +6545,10 @@
       viewExtra,
       nodeSerial: nextSerial(nodes.map((node) => node.id), 'n'),
       arrowSerial: nextSerial(arrows.map((arrow) => arrow.id), 'a'),
-      layoutAvoidOverlap: view.layoutAvoidOverlap !== false
+      layoutAvoidOverlap: view.layoutAvoidOverlap !== false,
+      canvasHeight: graphCanvasView.height,
+      canvasRatioLocked: graphCanvasView.locked,
+      canvasAspectRatio: graphCanvasView.aspect
     };
   }
 
@@ -6379,13 +6636,8 @@
     }
     if (refs.toggleLayout) refs.toggleLayout.textContent = state.layoutRunning ? 'pause layout' : 'run layout';
     if (refs.deleteSelected) {
-      if (activeGraphDepth()) {
-        refs.deleteSelected.textContent = 'return';
-        refs.deleteSelected.disabled = false;
-      } else {
-        refs.deleteSelected.textContent = 'delete selected';
-        refs.deleteSelected.disabled = !(selectedArrow || (selectedNode && !isTitleNode(selectedNode)));
-      }
+      refs.deleteSelected.textContent = 'delete selected';
+      refs.deleteSelected.disabled = !(selectedArrow || (selectedNode && !isTitleNode(selectedNode)));
     }
     if (refs.deleteSelectedReferences) refs.deleteSelectedReferences.disabled = state.selectedReferenceKeys.size === 0;
     if (refs.graphHelp) {
@@ -6508,6 +6760,10 @@
 
   function normalizeCanvasAspectRatio(value, fallback = CANVAS_DEFAULT_ASPECT_RATIO) {
     return clamp(finiteNumber(value, fallback), 0.25, 4);
+  }
+
+  function normalizeCanvasHeight(value, fallback = CANVAS_DEFAULT_HEIGHT) {
+    return clamp(Math.round(finiteNumber(value, fallback)), CANVAS_MIN_HEIGHT, CANVAS_MAX_HEIGHT);
   }
 
   function normalizeRelativeNodePositions(value) {
@@ -6781,6 +7037,26 @@
 
   function normalizeNodeFillSaturation(value) {
     return clamp(Math.round(finiteNumber(value, NODE_FILL_SATURATION_DEFAULT) / 10) * 10, NODE_FILL_SATURATION_MIN, NODE_FILL_SATURATION_MAX);
+  }
+
+  function normalizeLayoutIdealDistance(value) {
+    return clamp(Math.round(finiteNumber(value, LAYOUT_ARROW_IDEAL_DEFAULT) / 10) * 10, LAYOUT_ARROW_IDEAL_MIN, 900);
+  }
+
+  function normalizeLayoutIdealBonus(value) {
+    return clamp(Math.round(finiteNumber(value, 0) / 10) * 10, LAYOUT_IDEAL_BONUS_MIN, LAYOUT_IDEAL_BONUS_MAX);
+  }
+
+  function normalizeLayoutSpringStrength(value) {
+    return clamp(Math.round(finiteNumber(value, LAYOUT_ARROW_SPRING_DEFAULT) * 10) / 10, LAYOUT_ARROW_SPRING_MIN, LAYOUT_ARROW_SPRING_MAX);
+  }
+
+  function normalizeLayoutSpringScale(value) {
+    return clamp(Math.round(finiteNumber(value, 100) / 5) * 5, LAYOUT_SPRING_SCALE_MIN, LAYOUT_SPRING_SCALE_MAX);
+  }
+
+  function layoutSpringStrengthLabel(value) {
+    return (normalizeLayoutSpringStrength(value) / 1000).toFixed(4);
   }
 
   function hexToRgb(color) {

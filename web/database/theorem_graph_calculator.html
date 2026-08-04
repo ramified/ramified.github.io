@@ -470,9 +470,28 @@
     .theorem-misc-task input {
       width: 15px;
       height: 15px;
-      margin: 2px 0 0;
+      margin: 3px 0 0;
       accent-color: var(--accent);
       cursor: pointer;
+    }
+
+    .theorem-misc-task input[data-state="question"] {
+      appearance: none;
+      -webkit-appearance: none;
+      background: #ffe28a;
+      border: 1px solid #b78700;
+      border-radius: 2px;
+      color: #7a5200;
+      display: grid;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 12px;
+      line-height: 13px;
+      place-items: center;
+    }
+
+    .theorem-misc-task input[data-state="question"]::after {
+      content: "?";
+      font-weight: 700;
     }
 
     .theorem-misc-task-text {
@@ -1371,6 +1390,69 @@
           <input id="layout-avoid-overlap" type="checkbox" checked>
           <span>avoid overlap</span>
         </label>
+        <div class="hint" id="graph-help">Connect mode: click the source node, then the target node.</div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="debug-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Debug</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="theorem-field-row">
+          <label class="input-label" for="layout-ideal-distance">ideal</label>
+          <div class="theorem-range-row">
+            <input id="layout-ideal-distance" class="theorem-range-input" type="range" min="80" max="520" step="10" value="220" aria-label="Layout ideal arrow distance">
+            <output id="layout-ideal-distance-value" class="theorem-range-value" for="layout-ideal-distance">220px</output>
+          </div>
+        </div>
+        <div class="theorem-field-row">
+          <label class="input-label" for="layout-dashed-ideal-bonus">dash +</label>
+          <div class="theorem-range-row">
+            <input id="layout-dashed-ideal-bonus" class="theorem-range-input" type="range" min="0" max="240" step="10" value="70" aria-label="Dashed arrow ideal distance bonus">
+            <output id="layout-dashed-ideal-bonus-value" class="theorem-range-value" for="layout-dashed-ideal-bonus">+70px</output>
+          </div>
+        </div>
+        <div class="theorem-field-row">
+          <label class="input-label" for="layout-dotted-ideal-bonus">dot +</label>
+          <div class="theorem-range-row">
+            <input id="layout-dotted-ideal-bonus" class="theorem-range-input" type="range" min="0" max="240" step="10" value="140" aria-label="Dotted arrow ideal distance bonus">
+            <output id="layout-dotted-ideal-bonus-value" class="theorem-range-value" for="layout-dotted-ideal-bonus">+140px</output>
+          </div>
+        </div>
+        <div class="theorem-field-row">
+          <label class="input-label" for="layout-label-ideal-bonus">label +</label>
+          <div class="theorem-range-row">
+            <input id="layout-label-ideal-bonus" class="theorem-range-input" type="range" min="0" max="240" step="10" value="200" aria-label="Labeled arrow ideal distance bonus">
+            <output id="layout-label-ideal-bonus-value" class="theorem-range-value" for="layout-label-ideal-bonus">+200px</output>
+          </div>
+        </div>
+        <div class="theorem-field-row">
+          <label class="input-label" for="layout-spring-strength">spring</label>
+          <div class="theorem-range-row">
+            <input id="layout-spring-strength" class="theorem-range-input" type="range" min="0" max="20" step="0.5" value="6" aria-label="Layout spring strength">
+            <output id="layout-spring-strength-value" class="theorem-range-value" for="layout-spring-strength">0.0060</output>
+          </div>
+        </div>
+        <div class="theorem-field-row">
+          <label class="input-label" for="layout-dashed-spring-scale">dash %</label>
+          <div class="theorem-range-row">
+            <input id="layout-dashed-spring-scale" class="theorem-range-input" type="range" min="0" max="150" step="5" value="10" aria-label="Dashed arrow spring strength percent">
+            <output id="layout-dashed-spring-scale-value" class="theorem-range-value" for="layout-dashed-spring-scale">10%</output>
+          </div>
+        </div>
+        <div class="theorem-field-row">
+          <label class="input-label" for="layout-dotted-spring-scale">dot %</label>
+          <div class="theorem-range-row">
+            <input id="layout-dotted-spring-scale" class="theorem-range-input" type="range" min="0" max="150" step="5" value="5" aria-label="Dotted arrow spring strength percent">
+            <output id="layout-dotted-spring-scale-value" class="theorem-range-value" for="layout-dotted-spring-scale">5%</output>
+          </div>
+        </div>
+        <div class="theorem-field-row">
+          <label class="input-label" for="layout-label-spring-scale">label %</label>
+          <div class="theorem-range-row">
+            <input id="layout-label-spring-scale" class="theorem-range-input" type="range" min="0" max="150" step="5" value="45" aria-label="Labeled arrow spring strength percent">
+            <output id="layout-label-spring-scale-value" class="theorem-range-value" for="layout-label-spring-scale">45%</output>
+          </div>
+        </div>
         <div class="theorem-field-row">
           <label class="input-label" for="arrow-boundary-gap">arrow gap</label>
           <div class="theorem-range-row">
@@ -1385,7 +1467,6 @@
             <output id="node-fill-saturation-value" class="theorem-range-value" for="node-fill-saturation">210%</output>
           </div>
         </div>
-        <div class="hint" id="graph-help">Connect mode: click the source node, then the target node.</div>
       </div>
     </section>
 

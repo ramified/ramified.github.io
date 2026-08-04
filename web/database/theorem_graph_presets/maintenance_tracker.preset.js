@@ -3,7 +3,7 @@
 // { label: "Maintenance Tracker", key: "maintenance_tracker", file: "maintenance_tracker.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
-  "schemaVersion": 8,
+  "schemaVersion": 9,
   "title": "Maintenance Tracker",
   "titleNode": {
     "id": "__title__",
@@ -30,8 +30,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fffdf8",
-      "x": 193.4,
-      "y": 85.3,
+      "x": 193.7,
+      "y": 71.3,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -39,7 +39,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
         "view": {
           "selectedId": "",
           "layoutAvoidOverlap": true,
-          "layoutRunning": false
+          "layoutRunning": false,
+          "canvasHeight": 416,
+          "canvasRatioLocked": false,
+          "canvasAspectRatio": 1.8101
         }
       }
     },
@@ -62,8 +65,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 98.1,
-      "y": 277.7
+      "x": 98.3,
+      "y": 232.3
     },
     {
       "id": "n39",
@@ -84,8 +87,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 263.2,
-      "y": 321.3
+      "x": 263.6,
+      "y": 268.7
     },
     {
       "id": "n48",
@@ -112,8 +115,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 511.7,
-      "y": 378.9
+      "x": 512.3,
+      "y": 301.8
     },
     {
       "id": "n55",
@@ -140,8 +143,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 520.6,
-      "y": 224.1
+      "x": 521.3,
+      "y": 187.4
     },
     {
       "id": "n58",
@@ -155,8 +158,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 405.6,
-      "y": 34.5
+      "x": 406.1,
+      "y": 54
     },
     {
       "id": "n59",
@@ -174,11 +177,13 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [],
+      "citationKeys": [
+        "simple sing"
+      ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 335.3,
-      "y": 183.2
+      "x": 335.8,
+      "y": 153.2
     },
     {
       "id": "n60",
@@ -189,13 +194,13 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": ""
+          "text": "- [x] checkbox can use right click to turn it into a yellow question symbol(The current \"[x]\" are quite different compared with previous one, looks like the symbol get smaller and the border is missing, could you fix it?)\n- [x] delete selected button is replaced by the return button in the subgraph, but we still need this delete selected button"
         },
         {
           "id": "bug",
           "label": "bug",
           "type": "checkbox",
-          "text": "citation should be checked, if they are not used they should be removed\nWhen user change the \"cite as\" row all the node refering this reference will change the expression so that the reference link is not broken\nwhen deleted, the warning should also tell user which nodes or arrows cite this reference, so that user can clear them before delete it\nconnect bug: when user is in modification of one node and try to connect the two other nodes, the modified node will cover the first node(where the arrow comes from), this is bad"
+          "text": "- [x] citation should be checked, if they are not used they should be removed\n- [x] When user change the \"cite as\" row all the node refering this reference will change the expression so that the reference link is not broken\n- [x] when deleted, the warning should also tell user which nodes or arrows cite this reference, so that user can clear them before delete it\n- [x] connect bug: when user is in modification of one node and try to connect the two other nodes, the modified node will cover the first node(where the arrow comes from), this is bad\n- [x] the graph and the subgraph can have different main canvas height, and don't affact each other\n- [x] dashed lines should have weaker force in the run layout process, and dotted lines even weaker"
         }
       ],
       "setting": "",
@@ -203,10 +208,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 596.8,
-      "y": 54.8
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 597.6,
+      "y": 54
     }
   ],
   "arrows": [
@@ -263,43 +268,44 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     }
   ],
   "view": {
-    "selectedId": "",
+    "selectedId": "n60",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
+    "canvasHeight": 416,
     "canvasRatioLocked": true,
     "canvasAspectRatio": 1.8101,
     "relativeNodePositions": {
       "n4": {
         "x": 0.2572,
-        "y": 0.2056
+        "y": 0.1715
       },
       "n37": {
         "x": 0.1305,
-        "y": 0.6693
+        "y": 0.5583
       },
       "n39": {
         "x": 0.35,
-        "y": 0.7743
+        "y": 0.6459
       },
       "n48": {
         "x": 0.6804,
-        "y": 0.9129
+        "y": 0.7256
       },
       "n55": {
         "x": 0.6923,
-        "y": 0.5401
+        "y": 0.4505
       },
       "n58": {
         "x": 0.5393,
-        "y": 0.0832
+        "y": 0.1298
       },
       "n59": {
         "x": 0.4459,
-        "y": 0.4415
+        "y": 0.3683
       },
       "n60": {
         "x": 0.7936,
-        "y": 0.132
+        "y": 0.1298
       }
     },
     "selectedReferenceKeys": []
