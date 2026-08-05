@@ -4,11 +4,11 @@ This is the implementation schedule for a broad higher-dimensional slice calcula
 
 ## Current V1 Summary
 
-The current implemented V1 is a standalone page at `higher_dimensional_slice_calculator.html`, backed by `js/higher_dimensional_slice_explorer.js`. It has the six-card right-side layout, compact Source Data add/modify modes, Cartesian-frame default object, regular-polytopes including 120-cell and 600-cell, the separate non-regular simplex source, sphere, Cartesian frame, point, formula-set, and tropical-polynomial sources.
+The current implemented V1 is a standalone page at `higher_dimensional_slice_calculator.html`, backed by `js/higher_dimensional_slice_explorer.js`. It has the six-card right-side layout, compact Source Data add/modify modes, Cartesian-frame default object, regular-polytopes including 120-cell and 600-cell, the separate non-regular simplex source, sphere, Cartesian frame, point, vector, matrix, Dynkin-type, lattice, Voronoi-diagram, formula-set, tropical-polynomial, and Weyl-chamber sources.
 
-The current renderer supports moving-frame projection, exact 2D slice layers for regular polytopes/simplex/spheres, exact/numeric 2D formula slices, and exact 2D tropical curve slices. It also includes rational parameter input, direct rational position/frame input, continuous/discrete directional movement, frame-plane rotation, Gram-Schmidt repair, canvas picking, import/export, runtime diagnostics, and an `index.html` card with a GIF preview.
+The current renderer supports moving-frame projection, exact 2D slice layers for regular polytopes/simplex/spheres/Voronoi cells, exact/numeric 2D formula slices, exact 2D tropical curve slices, and exact 2D Weyl chamber slices. It also includes rational parameter input, direct rational position/frame input, continuous/discrete directional movement, frame-plane rotation, Gram-Schmidt repair, canvas picking, import/export, runtime diagnostics, and an `index.html` card with a GIF preview.
 
-The current build does not yet implement lattice or Voronoi sources, generic 3D rendering, or tropical exact 3D rendering.
+The current build does not yet implement generic 3D rendering, tropical exact 3D rendering, or number-field lattice inputs.
 
 ## Guiding Model
 
@@ -77,10 +77,10 @@ Rows:
 | Row         | Planned Function                         | UI Tools                                 |
 | ----------- | ---------------------------------------- | ---------------------------------------- |
 | Mode        | Choose creation or editing workflow; always visible | segmented control: `add object`, `modify object` |
-| Add type    | Add-mode only; choose concrete source object and create it with an automatic unique name | select menu: `regular polytope`, `simplex`, `sphere S^{n-1}`, `Cartesian frame`, `point`, `formula set`, `tropical polynomial`, `Weyl chambers`; a generic variant select appears before `add` for regular-polytope family or Weyl Dynkin type; planned later: `lattice`, `Lie slice data` |
+| Add type    | Add-mode only; choose concrete source object and create it with an automatic unique name | select menu: `regular polytope`, `simplex`, `sphere S^{n-1}`, `Cartesian frame`, `point`, `vector`, `matrix`, `Dynkin type`, `lattice`, `Voronoi diagram`, `formula set`, `tropical polynomial`, `Weyl chambers`; a generic variant select appears before `add` for regular-polytope family, Dynkin type, Weyl Dynkin reference, matrix preset, lattice preset, or Voronoi lattice source; planned later: `Lie slice data` |
 | Object      | Modify-mode only; choose, delete, or export the active object/layer | select menu, small `del` button, `export` button |
 | Object name | Rename active object                     | compact text input                       |
-| Params      | Modify the active object's mathematical parameters | regular polytope/simplex/sphere: size slider plus number; Cartesian frame: basis selector plus length slider/number; point: compact coordinate controls |
+| Params      | Modify the active object's mathematical parameters | regular polytope/simplex/sphere: size slider plus number; Cartesian frame: basis selector plus length slider/number; point/vector/sphere center/matrix/lattice basis: shared rational vector or matrix editors; Dynkin-aware objects use the shared Dynkin picker |
 | Style       | Set visual style of active object        | color swatch, opacity slider, point-size slider, line-width slider |
 | Visibility  | Hide/show active object layers and labels | independent toggle buttons `proj`, `slice`; checkbox `labels` |
 | Status      | Report current source-data action; always visible | compact inline warning/status text       |
@@ -92,6 +92,11 @@ Initial object types:
 - `sphere S^{n-1}`: radius-parameter sphere in `R^n`, drawn as a projection circle and as an exact 2D slice circle/point/empty result. Nonempty circle slices are visually filled with a translucent disk.
 - `Cartesian frame`: rays from the origin along either fixed ambient `e_i` directions or the moving frame `v_i` directions.
 - `point`: one editable ambient coordinate tuple `(a_1, ..., a_n)`.
+- `vector`: one ambient vector with a separate displayed mathematical label, rendered as a directed origin-to-vector segment. The object `name` remains the list/export identity, while the vector `label` defaults to `v`.
+- `matrix`: one square displayed matrix whose columns are ambient vectors `v_i`, rendered as directed column-vector segments from the origin.
+- `Dynkin type`: one projection/slice-inert finite Dynkin datum that can live-link Weyl chambers, simple-root matrices, fundamental-weight matrices, root lattices, and weight lattices.
+- `lattice`: one full-rank basis matrix whose columns generate a lattice; it renders bounded projection points.
+- `Voronoi diagram`: one exact 2D Voronoi-cell slice linked to a lattice object and a chosen lattice point `q`, defaulting to `0`; `Vor(q)` is rendered as the translation of `Vor(0)`.
 - `formula set`: one equation/inequality source in coordinates `x_i`, exact through degree two and numerical for broader supported syntax.
 - `tropical polynomial`: max/min tropical polynomial source with optional colored dominance districts.
 - `Weyl chambers`: finite root-hyperplane chamber source with colored exact 2D slice chambers.
@@ -100,21 +105,37 @@ Modify-mode parameter behavior:
 
 - Regular polytope and simplex store `scale`; sphere stores `radius`. The regular-polytope params row adds a family selector plus the compact `size` slider/text input. The slider uses default `1`, range `0.05..6`, and step `0.05`; the text input accepts positive rational values outside that slider range.
 - Cartesian frame stores `basis: "ambient" | "moving"` and `length`; the UI provides a basis select labelled `ambient e_i` / `moving v_i` plus length slider and rational text input. The text input accepts any positive finite rational value, even above the slider maximum.
-- Point stores `position: [...]`; the UI shows only a compact tuple of text controls, visually `( input, ..., input )` with no visible `a =` or `a_i =` labels. Text entry accepts integers, decimals, and simple rational values such as `1/3`, `-5/2`, or `8`, with no text-entry coordinate bounds. Scrolling over a coordinate changes it by `0.1`, clamps to `[-6, 6]`, and prevents page scrolling for that wheel event. `Enter` or blur commits; `Escape` cancels.
+- Point stores `position: [...]`; vector stores `label: "v"` and `vector: [...]`; sphere stores `center: [...]`; matrix stores `matrixRows: [[...], ...]` in displayed-row convention with columns interpreted as `v_i`; lattice stores `basisRows: [[...], ...]` in the same displayed-row convention with columns interpreted as basis vectors `b_i`; Voronoi diagrams store a `latticeSourceId` and default cell point `latticePoint: [0, ..., 0]`.
+- Vector-valued params use the shared vector editor modes `manual input`, `import`, and `targets`. Text entry accepts integers, decimals, and simple rational values such as `1/3`, `-5/2`, or `8`, with no text-entry coordinate bounds. Scrolling over a coordinate changes it by `0.1`, clamps to `[-6, 6]`, and prevents page scrolling for that wheel event. `Enter` or blur commits; `Escape` cancels.
+- Matrix-valued params use the shared matrix editor modes `manual input`, `import`, and `targets`. Manual/import changes apply atomically: malformed, wrong-size, or non-finite entries warn without mutating the last valid matrix.
+- Matrix objects can be ordinary manual matrices or live Dynkin presets `simple roots` / `fundamental weights`; preset columns are labelled `alpha_i` / `omega_i` and update from the selected Dynkin source/type.
+- Lattice params choose `matrix input`, `matrix object`, or `Dynkin`. Matrix input uses the shared matrix editor with full-rank validation; matrix-object mode live-links to an existing matrix object; Dynkin mode creates root or weight lattices from the shared Dynkin picker. Voronoi diagrams expose no modify-mode PARAMS in the current build; their lattice source is chosen at creation and the cell point remains the default `0`.
 - Older imported `fan` objects should normalize to an ambient Cartesian frame so saved experiments from the temporary preview stage remain usable.
+
+Shared rational input methods:
+
+- Scalar, vector, and matrix editors use one rational text-input helper for parsing, finite-value validation, `Enter`/blur commit, `Escape` cancel, and optional wheel stepping by `0.1` clamped to `[-6, 6]`.
+- Vector editors are built from a tuple helper that supplies compact coordinate inputs and caller-defined commit behavior, currently used by point coordinates, vector objects, sphere centers, and direct `p`.
+- Matrix editors use displayed rows as the canonical UI/import convention. Manual grids may supply row/column MathJax labels, while textarea imports and exports use the `matrix_calculator.html` `Rows` format.
+- Matrix consumers decide interpretation after parsing: frame matrices treat displayed columns as `v_i`; lattice bases treat displayed columns as `b_i`; Dynkin matrix presets label columns as `alpha_i` or `omega_i`; formula `Q` imports treat displayed rows as the symmetric quadratic matrix.
+- Vector and matrix editors may expose a `targets` mode. A target slot is a small button, inspired by `sheaf_calculator.html` map-parent slots, that can be filled by clicking an existing visible canvas pick target or by choosing an existing vector object. Vector target slots display just the tuple value, such as `(2, 3.2, 0, 1)`. Matrix target slots display as a compact parenthesized list of column labels, such as `(v_1, v_2, v_3, v_4)`, using the source vector label when filled from a vector object. Filled slots copy vector values by value rather than keeping live references.
 
 Modify-mode visibility behavior:
 
 - `proj` and `slice` are independent per-object buttons, so an object can show projection only, exact slice only, both, or neither.
 - `visibleProjection` and `visibleSlice` are stored in object JSON. Older `visible` imports migrate to `visibleProjection`; `visibleSlice` defaults to `false` unless explicitly saved.
-- New regular-polytope/simplex/sphere objects default to both `proj` and `slice` on. New point and Cartesian frame objects default to projection on and slice off.
+- New regular-polytope/simplex/sphere objects default to both `proj` and `slice` on. New lattice objects default to projection on and slice off. New Voronoi diagrams default to exact slice on and projection off. New point, vector, matrix, and Cartesian frame objects default to projection on and slice off. New `Dynkin type` objects are projection/slice-inert data sources.
 - The `slice` button is disabled or muted for point/Cartesian frame and in 3D frame mode, while preserving the stored `visibleSlice` value for future 2D use.
 
 Add-mode behavior:
 
 - The selected add type is drawn as a temporary light-yellow projection preview in the main canvas.
 - If the selected add type is regular polytope, the add-row variant selector controls both the preview family and the newly created object. The selector uses special names such as `cube`, `tesseract`, `dodecahedron`, `24-cell`, `120-cell`, or `600-cell` when available in the current dimension.
-- If the selected add type is `Weyl chambers`, the add-row variant selector chooses the Dynkin type before creation. New objects are named generically as `Weyl chambers`, with duplicate suffixes added as needed.
+- If the selected add type is `Dynkin type`, the add-row variant selector chooses the raw Dynkin type before creation.
+- If the selected add type is `Weyl chambers`, the add-row variant selector chooses among compatible `Dynkin type` objects when any exist; raw Dynkin type choices are shown only when no compatible Dynkin source exists. New objects are named generically as `Weyl chambers`, with duplicate suffixes added as needed.
+- If the selected add type is `matrix`, the add-row variant selector can create either a manual matrix or a Dynkin live preset for `simple roots` or `fundamental weights`.
+- If the selected add type is `lattice`, the add-row variant selector can create a manual matrix-input lattice or a Dynkin root/weight lattice.
+- If the selected add type is `Voronoi diagram`, the add-row variant selector chooses the lattice object source; if no lattice exists yet, the selector says to create a lattice first and the add button is disabled.
 - This preview is not part of the object list, visible counts, active object, import/export state, or saved state.
 - Pressing `add` creates the selected type using the current ambient dimension `n`, assigns an automatic unique name, selects it, and switches to modify mode.
 
@@ -122,12 +143,12 @@ Canvas picking behavior:
 
 - Clicking a visible persisted object's projected point or exact-slice pick target selects that object and switches Source Data to modify mode.
 - Ray-only sources such as Cartesian frame expose the ray origin and displayed ray tips as pickable targets.
+- While a vector/matrix target slot is active, clicking a visible pick target fills the active slot instead of selecting the clicked object. Empty canvas clicks warn and keep the previous target value.
 - The lower-left canvas HUD reports the picked target as `picked: object name / v_i  x=[ambient coords]  y=[frame coords]`.
-- Empty canvas clicks clear the picked-target readout without changing the active object.
+- Empty canvas clicks clear the picked-target readout without changing the active object. The bottom-left canvas overlay `clear` button clears source objects back to the default Cartesian frame.
 
 Later object types:
 
-- `lattice`: basis/Gram/Dynkin/number-field lattice inputs and Voronoi diagrams.
 - `Lie`: weight/root/lattice slices, reusing ideas from `double_young_diagram.html`.
 
 ### Slide Position Card
@@ -147,7 +168,7 @@ Rows:
 | Rotation pair    | Move-mode only; choose frame-plane rotation pair | two select menus choosing `(v_i, v_j)`   |
 | Direct input     | Direct-input mode only; edit or import affine-frame data | nested segmented control: `manual input`, `import`; manual mode has rational `p` tuple plus editable `n x n` grid whose columns are `v_i`; import mode has a matrix rows textarea compatible with `matrix_calculator.html` `Rows` export |
 | Frame repair     | Keep frame orthonormal                   | `Schmidt` button and `auto-Schmidt` checkbox; direct-input apply always runs Schmidt |
-| Reset            | Reset frame                              | `reset frame` button                     |
+| Reset            | Reset slide-position data                | `position` and `direction` checkboxes, checked by default, plus `reset frame`; checked `position` resets `p` to `0`, checked `direction` resets the frame columns to the identity matrix |
 
 Keyboard controls:
 
@@ -378,7 +399,7 @@ Implement:
 - Keyboard translation with `W/S`, `ArrowUp/ArrowDown`, and `+/-`.
 - Keyboard rotation with `A/D` and `ArrowLeft/ArrowRight`.
 - Number-key shortcuts for the rotation pair: `1`/`2` update the first selectbox and `3...n` update the second.
-- Gram-Schmidt repair and reset frame.
+- Gram-Schmidt repair and reset controls for position and frame direction.
 
 Acceptance:
 
@@ -476,7 +497,7 @@ Acceptance:
 - Projection-only, slice-only, both, and hidden states work per object.
 - Add preview is visible in add mode and absent from state/export JSON.
 - Vertex picking switches to modify mode and shows ambient plus frame coordinates.
-- Clicking empty canvas clears the picked-vertex readout.
+- Clicking empty canvas clears the picked-vertex readout, and the overlay `clear` button clears source objects back to the default Cartesian frame.
 - Exact sphere guide gives circle, point, or empty results as expected.
 
 ### 7. Slide Position Input Modes
@@ -509,26 +530,38 @@ Acceptance:
 
 ### 8. Lattice Sources And Voronoi Diagrams
 
-Status: planned.
+Status: implemented.
 
-Goal: add lattice objects as a major source type before 3D rendering.
+Goal: add lattice objects as a major source type before 3D rendering, add Voronoi diagrams as their own exact-slice source, and use Dynkin type data as the shared source for Weyl chambers, root/weight matrices, and root/weight lattices.
 
 Implement:
 
-- add Source Data type `lattice`;
-- support matrix-basis input first, where columns are lattice basis vectors in ambient `R^n`;
-- support Dynkin lattice presets such as `A_n`, `D_n`, `E_6`, `E_7`, and `E_8` after matrix input is stable;
+- add Source Data types `Dynkin type`, `lattice`, and `Voronoi diagram`;
+- `Dynkin type` stores one filtered finite type/rank datum and is projection/slice-inert;
+- Weyl chambers, simple-root matrices, fundamental-weight matrices, root lattices, and weight lattices use the shared Dynkin picker;
+- if a compatible `Dynkin type` object exists, Dynkin-aware add/params UI chooses among those live sources only; otherwise the UI exposes raw filtered Dynkin type choices as the fallback;
+- matrix objects can be created as `simple roots` or `fundamental weights` presets, still using ordinary matrix JSON/rendering with semantic column labels `alpha_i` or `omega_i`;
+- preset matrices live-update from their Dynkin source; if the source is deleted, they keep the last generated matrix and show a warning;
+- lattice objects support `matrix input`, `matrix object`, and `Dynkin` basis modes;
+- matrix-input lattices reuse the shared matrix editor with displayed rows and columns as basis vectors `b_i`;
+- matrix-object lattices live-link to an existing matrix object and keep the last valid basis if the source is missing or rank-deficient;
+- Dynkin lattices generate the root lattice from unnormalized simple roots or the weight lattice from fundamental weights computed by `2 <omega_i, alpha_j> / <alpha_j, alpha_j> = delta_ij`;
 - plan number-field integer-ring lattice input as a later lattice subgoal;
-- render bounded projected lattice points and selected short vectors in frame coordinates;
-- render the exact 2D slice of the Voronoi cell using inequalities `<x, lambda> <= ||lambda||^2 / 2` from relevant short lattice vectors;
-- cache enumeration and halfspace data per lattice object and ambient dimension;
-- report lattice point enumeration count, Voronoi halfspace count, halfspace build time, and draw time in Debug Chart.
+- render bounded projected lattice points in frame coordinates; projected lattice points are drawn only when their current frame coordinates are inside the visible box;
+- keep lattice exact-slice inert; Voronoi diagrams are the exact-slice source determined by a linked lattice and a cell point `q`, defaulting to `0`;
+- render the exact 2D slice of `Vor(q)` as the translated origin cell using inequalities `<x, lambda> <= <q, lambda> + ||lambda||^2 / 2` from enumerated lattice vectors restricted to the current moving 2D slice;
+- enumerate lattice vectors by bounded coefficient shells using an inverse-basis radius estimate and a safety cap;
+- if enumeration hits the cap, draw the partial result and report the cap in Debug Chart;
+- report lattice projection point count, Voronoi halfspace count, Voronoi build time, cap status, and warnings in Debug Chart.
 
 Acceptance:
 
-- Matrix-basis lattice objects import/export and render nonblank projections.
-- Dynkin presets create the expected ambient dimensions and basis metadata.
-- The origin Voronoi cell renders as a filled exact 2D slice when nonempty.
+- Matrix-basis lattice objects import/export, validate full rank, and render nonblank projections.
+- Dynkin type objects can drive linked Weyl chambers, simple-root matrices, fundamental-weight matrices, root lattices, and weight lattices.
+- Linked objects update when the Dynkin type changes and freeze with a warning when the source is deleted.
+- Dynkin presets create the expected ambient dimensions and basis metadata, including `A_n`, `B_n`, `C_n`, `D_n`, `G_2`, `F_4`, `E_6`, `E_7`, and `E_8` where allowed by rank.
+- Lattice sources have no exact slice layer; linked Voronoi diagram objects render filled exact 2D slices when nonempty.
+- `Vor(0)` is the default cell, and `Vor(q)` renders as a translation by the chosen lattice point `q`.
 - Runtime diagnostics make expensive enumeration visible.
 - Large or degenerate lattice inputs warn without crashing.
 
@@ -596,7 +629,8 @@ Acceptance:
 - Last valid state is preserved after parse errors.
 - `max` and `min` conventions are selectable and affect repeated-term merging and curve dominance.
 - Exact 2D tropical curve segments render inside the current slice box and update as `p` and the frame move.
-- Tropical dominance districts render by default with per-object show/hide control, colored cells, monomial labels, district counts, and degenerate restricted-term diagnostics.
+- Tropical dominance districts render by default with per-object show/hide control, colored cells, monomial labels, `label all` / `active labels` density controls, district counts, and degenerate restricted-term diagnostics.
+- Tropical district labels follow the active notation button (`u`, `affine`, or `tropical`); missing saved density defaults to `label all`.
 - Main-canvas mathematical labels are rendered through a positioned MathJax overlay with adjustable label size; Source Data tropical readouts, Background Space Details, HUD/status math, and direct frame labels use MathJax with plain-text fallback.
 
 ### 11. Weyl Chamber Sources
@@ -609,6 +643,7 @@ Implement:
 
 - add Source Data type `Weyl chambers`, projection-inert and exact-slice-visible by default;
 - support finite Dynkin choices filtered by rank and selectable while adding the object: `A_n`, `B_n`, `C_n`, `D_n` for `n >= 4`, plus `G_2`, `F_4`, `E_6`, `E_7`, and `E_8` only in matching dimensions;
+- when a compatible `Dynkin type` source exists, Weyl chambers live-link through the shared Dynkin picker and raw type choices are hidden; raw choices remain available only when no compatible source exists;
 - use rank-`n` finite root systems in ambient `R^n`; type `A` means `A_n`;
 - restrict root hyperplanes to `x = p + y_1v_1 + y_2v_2`, split the slice clip box into chamber polygons, draw walls, and fill chambers with deterministic colors;
 - provide per-object `chambers` visibility plus label mode buttons `permutation`, `word` and density buttons `label all`, `active labels`;
@@ -621,7 +656,7 @@ Acceptance:
 - In `n=2`, `A_2` shows 6 sectors, `B_2`/`C_2` show 8, and `G_2` shows 12.
 - Exceptional systems are available only in their matching ranks and remain responsive with active labels by default.
 - Moving `p`, rotating the frame, changing label size, and changing dimension update chamber polygons and labels safely.
-- Object and full-state JSON preserve Dynkin type, chamber visibility, label mode, and label density.
+- Object and full-state JSON preserve Dynkin source/type, chamber visibility, label mode, and label density.
 
 ### 12. Generic 3D Renderer
 

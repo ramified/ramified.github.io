@@ -45,12 +45,28 @@
 
     .slice-hud {
       position: absolute;
-      inset: auto 14px 12px 14px;
+      inset: auto 14px 12px 74px;
       display: flex;
       flex-wrap: wrap;
       gap: 7px;
       pointer-events: none;
       z-index: 4;
+    }
+
+    .slice-canvas-corner-actions {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .slice-canvas-clear-button {
+      background: rgba(255, 253, 248, 0.9);
+      padding: 4px 10px;
+      font-size: 0.74rem;
     }
 
     .slice-chip {
@@ -347,26 +363,32 @@
     }
 
     .slice-formula-panel,
-    .slice-tropical-panel {
+    .slice-tropical-panel,
+    .slice-vector-panel,
+    .slice-matrix-panel {
       display: grid;
-      gap: 7px;
+      gap: 9px;
       min-width: min(100%, 420px);
       width: 100%;
     }
 
-    .slice-formula-mode-panel {
+    .slice-formula-mode-panel,
+    .slice-vector-mode-panel {
       display: grid;
-      gap: 6px;
+      gap: 8px;
       min-width: 0;
+      padding-block: 2px 4px;
     }
 
-    .slice-formula-mode-panel[hidden] {
+    .slice-formula-mode-panel[hidden],
+    .slice-vector-mode-panel[hidden] {
       display: none !important;
     }
 
     .slice-formula-textarea,
     .slice-formula-matrix-textarea,
-    .slice-tropical-textarea {
+    .slice-tropical-textarea,
+    .slice-vector-textarea {
       min-height: 74px;
       font-family: "JetBrains Mono", Consolas, monospace;
     }
@@ -383,6 +405,70 @@
       font-size: 0.7rem;
       white-space: pre-wrap;
       word-break: break-word;
+    }
+
+    .slice-target-slots,
+    .slice-target-source-line {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .slice-target-slots {
+      padding-block: 2px;
+    }
+
+    .slice-target-source-line {
+      padding-block: 2px;
+    }
+
+    .slice-target-slot-button {
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--muted);
+      cursor: pointer;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.66rem;
+      line-height: 1.2;
+      min-height: 28px;
+      max-width: 100%;
+      padding: 4px 7px;
+      text-align: left;
+    }
+
+    .slice-target-separator {
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.72rem;
+      line-height: 1.2;
+    }
+
+    .slice-target-slot-button:hover,
+    .slice-target-slot-button:focus {
+      border-color: var(--accent);
+      color: var(--accent);
+      outline: none;
+    }
+
+    .slice-target-slot-button.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+    }
+
+    .slice-target-source-select {
+      flex: 1 1 150px;
+      min-width: 120px;
+    }
+
+    .slice-target-note {
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.68rem;
+      line-height: 1.35;
     }
 
     .slice-formula-import-controls {
@@ -558,6 +644,9 @@
       <div class="slice-stage-wrap">
         <canvas id="slice-viewport" width="980" height="680" aria-label="Higher-dimensional projection and exact or numeric 2D slice viewport"></canvas>
         <div class="slice-label-overlay" id="slice-label-overlay" aria-hidden="true"></div>
+        <div class="slice-canvas-corner-actions">
+          <button id="clear-canvas" class="slice-btn slice-canvas-clear-button" type="button">clear</button>
+        </div>
         <div class="slice-hud" id="slice-hud" aria-live="polite"></div>
       </div>
       <div class="slice-status-bar" id="slice-status-bar"></div>
@@ -753,8 +842,10 @@
           </div>
 
           <div class="slice-row">
-            <span class="slice-row-label">frame</span>
+            <span class="slice-row-label">reset</span>
             <div class="slice-control-line">
+              <label class="slice-inline-check"><input id="reset-position-enabled" type="checkbox" checked>position</label>
+              <label class="slice-inline-check"><input id="reset-direction-enabled" type="checkbox" checked>direction</label>
               <button id="reset-frame" class="slice-btn" type="button">reset frame</button>
             </div>
           </div>
