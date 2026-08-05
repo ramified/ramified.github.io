@@ -30,8 +30,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b3a2a",
       "fillColor": "#fffdf8",
-      "x": 193.7,
-      "y": 71.3,
+      "x": 170.6,
+      "y": 58,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -65,8 +65,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 98.3,
-      "y": 232.3
+      "x": 107.4,
+      "y": 259.7
     },
     {
       "id": "n39",
@@ -87,8 +87,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 263.6,
-      "y": 268.7
+      "x": 287.5,
+      "y": 389
     },
     {
       "id": "n48",
@@ -115,8 +115,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 512.3,
-      "y": 301.8
+      "x": 501.5,
+      "y": 389
     },
     {
       "id": "n55",
@@ -143,8 +143,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 521.3,
-      "y": 187.4
+      "x": 513.1,
+      "y": 216.3
     },
     {
       "id": "n58",
@@ -158,8 +158,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 406.1,
-      "y": 54
+      "x": 388.4,
+      "y": 58
     },
     {
       "id": "n59",
@@ -170,7 +170,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "future",
           "label": "future",
           "type": "checkbox",
-          "text": "Newton polygon/tropical curve\nArnold's classification\nSimple singularities\n\\cite{simple sing}"
+          "text": "- [ ] Newton polygon\n- [x] tropical curve\n- [ ] Arnold's classification\n- [ ] Simple singularities\n- [ ] \\cite{simple sing}"
         }
       ],
       "setting": "",
@@ -182,8 +182,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 335.8,
-      "y": 153.2
+      "x": 314.9,
+      "y": 191.8
     },
     {
       "id": "n60",
@@ -210,8 +210,30 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 597.6,
-      "y": 54
+      "x": 552.8,
+      "y": 58
+    },
+    {
+      "id": "n61",
+      "type": "misc",
+      "label": "extra",
+      "details": [
+        {
+          "id": "goal",
+          "label": "goal",
+          "type": "checkbox",
+          "text": "allow user to move one node inside or outside"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 701.6,
+      "y": 190.6
     }
   ],
   "arrows": [
@@ -265,47 +287,68 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
+    },
+    {
+      "id": "a50",
+      "sourceId": "n61",
+      "targetId": "n60",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
+      "color": "#5f574e"
     }
   ],
   "view": {
-    "selectedId": "n60",
+    "selectedId": "n61",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 416,
+    "canvasHeight": 447,
     "canvasRatioLocked": true,
-    "canvasAspectRatio": 1.8101,
+    "canvasAspectRatio": 1.6823,
     "relativeNodePositions": {
       "n4": {
-        "x": 0.2572,
-        "y": 0.1715
+        "x": 0.2269,
+        "y": 0.1298
       },
       "n37": {
-        "x": 0.1305,
-        "y": 0.5583
+        "x": 0.1428,
+        "y": 0.581
       },
       "n39": {
-        "x": 0.35,
-        "y": 0.6459
+        "x": 0.3823,
+        "y": 0.8702
       },
       "n48": {
-        "x": 0.6804,
-        "y": 0.7256
+        "x": 0.6669,
+        "y": 0.8702
       },
       "n55": {
-        "x": 0.6923,
-        "y": 0.4505
+        "x": 0.6823,
+        "y": 0.4838
       },
       "n58": {
-        "x": 0.5393,
+        "x": 0.5165,
         "y": 0.1298
       },
       "n59": {
-        "x": 0.4459,
-        "y": 0.3683
+        "x": 0.4187,
+        "y": 0.4292
       },
       "n60": {
-        "x": 0.7936,
+        "x": 0.7352,
         "y": 0.1298
+      },
+      "n61": {
+        "x": 0.933,
+        "y": 0.4265
       }
     },
     "selectedReferenceKeys": []
