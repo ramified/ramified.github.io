@@ -425,14 +425,14 @@
       refs.canvasResizeHandle.addEventListener('keydown', handleCanvasResizeKeyDown);
     }
 
-    document.querySelectorAll('.card-head').forEach((head) => {
-      head.addEventListener('click', () => {
-        const card = head.closest('.card');
-        if (!card) return;
-        card.classList.toggle('collapsed');
-        if (card.id === 'export-card' && !card.classList.contains('collapsed')) ensureExportFresh();
+    if (window.CalculatorCards) {
+      window.CalculatorCards.init({
+        side: '#cards',
+        onOpen: (card) => {
+          if (card.id === 'export-card') ensureExportFresh();
+        }
       });
-    });
+    }
 
     if (refs.clearGraph) refs.clearGraph.addEventListener('click', clearGraphWithConfirm);
     if (refs.addNode) refs.addNode.addEventListener('click', addNodeFromControls);

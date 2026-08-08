@@ -3021,7 +3021,7 @@
       <section id="hodge-wide-host" hidden></section>
     </section>
 
-    <section id="class-step-wide-host">
+    <section id="class-step-wide-host" data-card-drag-item="true">
       <section class="card collapsed sheaf-step-card wide" id="class-step-card">
         <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Step-by-Step Formula</span><em class="toggle-icon">&#9662;</em></div>
         <div class="card-body">
@@ -3133,7 +3133,7 @@
       </section>
     </section>
 
-    <section id="sheaf-complex-wide-host">
+    <section id="sheaf-complex-wide-host" data-card-drag-item="true">
       <section class="card collapsed sheaf-complex-card wide" id="sheaf-complex-card">
         <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Complexes and Filtrations</span><em class="toggle-icon">&#9662;</em></div>
         <div class="card-body">
@@ -4106,7 +4106,7 @@
     </section>
 
     <span id="hodge-side-anchor" hidden></span>
-    <section class="card collapsed" id="hodge-card" hidden>
+    <section class="card collapsed" id="hodge-card" hidden data-card-wide="true" data-card-wide-host="#hodge-wide-host" data-card-side-anchor="#hodge-side-anchor" data-card-wide-button="#toggle-hodge-wide">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Hodge Numbers</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="hodge-card-actions" id="hodge-actions">
@@ -4190,6 +4190,7 @@
   };
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+<script src="js/calculator_cards.js"></script>
 <script src="js/sheaf_complex_calculator.js?v=complex-chart-33"></script>
 </body>
 </html>

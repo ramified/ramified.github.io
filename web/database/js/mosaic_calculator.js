@@ -2060,6 +2060,17 @@
   }
 
   function bindCards() {
+    if (window.CalculatorCards) {
+      window.CalculatorCards.init({
+        side: '.side',
+        wideAvailable: (card) => {
+          if (card.id === 'dual-graph-degenerations-card') return isDualGraph();
+          if (card.id === 'wander-card') return isGluedBoundaryMode() && state.wanderOpen;
+          return true;
+        }
+      });
+      return;
+    }
     document.querySelectorAll('.card-head').forEach((head) => {
       head.addEventListener('click', (event) => {
         if (Date.now() < suppressCardToggleUntil) return;
@@ -10040,7 +10051,10 @@
     const report = analyze();
     const payload = buildDualGraphDegenerationsExport(report);
     refs.exportOut.value = formatConciseDualGraphPayload(payload);
-    if (refs.exportCard) refs.exportCard.classList.remove('collapsed');
+    if (refs.exportCard) {
+      if (window.CalculatorCards) window.CalculatorCards.openCard(refs.exportCard);
+      else refs.exportCard.classList.remove('collapsed');
+    }
     if (refs.exportOut) {
       refs.exportOut.focus();
       refs.exportOut.select();
@@ -10113,10 +10127,14 @@
     if (!card || !sideHost || !wideHost) return;
     const canUseWide = isDualGraph() && window.matchMedia('(min-width: 960px)').matches;
     if (!canUseWide) state.dualGraphDegenerationsWide = false;
-    const target = state.dualGraphDegenerationsWide ? wideHost : sideHost;
-    if (card.parentElement !== target) target.appendChild(card);
-    card.classList.toggle('wide', state.dualGraphDegenerationsWide);
-    wideHost.hidden = !state.dualGraphDegenerationsWide;
+    if (window.CalculatorCards) {
+      state.dualGraphDegenerationsWide = window.CalculatorCards.setWide(card, state.dualGraphDegenerationsWide, { notify: false });
+    } else {
+      const target = state.dualGraphDegenerationsWide ? wideHost : sideHost;
+      if (card.parentElement !== target) target.appendChild(card);
+      card.classList.toggle('wide', state.dualGraphDegenerationsWide);
+      wideHost.hidden = !state.dualGraphDegenerationsWide;
+    }
     if (refs.toggleDegenerationsWide) {
       refs.toggleDegenerationsWide.textContent = state.dualGraphDegenerationsWide ? 'side' : 'wide';
       refs.toggleDegenerationsWide.setAttribute('aria-pressed', state.dualGraphDegenerationsWide ? 'true' : 'false');
@@ -20156,7 +20174,10 @@
     const report = analyze();
     const graphData = collectDualGraphData(report);
     refs.exportOut.value = formatConciseDualGraphPayload(buildDualGraphOnlyExport(report));
-    if (refs.exportCard) refs.exportCard.classList.remove('collapsed');
+    if (refs.exportCard) {
+      if (window.CalculatorCards) window.CalculatorCards.openCard(refs.exportCard);
+      else refs.exportCard.classList.remove('collapsed');
+    }
     if (refs.exportOut) {
       refs.exportOut.focus();
       refs.exportOut.select();
@@ -20588,7 +20609,10 @@
   function openWanderChart() {
     if (!isGluedBoundaryMode()) return;
     state.wanderOpen = true;
-    if (refs.wanderCard) refs.wanderCard.classList.remove('collapsed');
+    if (refs.wanderCard) {
+      if (window.CalculatorCards) window.CalculatorCards.openCard(refs.wanderCard);
+      else refs.wanderCard.classList.remove('collapsed');
+    }
     syncWanderControls();
     resizeWanderCanvas();
     renderWanderChart();
@@ -20905,15 +20929,21 @@
     const wideHost = refs.wanderWideHost;
     if (!card || !sideHost || !wideHost) return;
     const available = isGluedBoundaryMode() && state.wanderOpen;
-    const target = state.wanderWide ? wideHost : sideHost;
-    if (card.parentElement !== target) target.appendChild(card);
-    card.classList.toggle('wide', state.wanderWide);
-    wideHost.hidden = !(available && state.wanderWide);
+    if (!available) state.wanderWide = false;
+    if (window.CalculatorCards) {
+      state.wanderWide = window.CalculatorCards.setWide(card, state.wanderWide, { notify: false });
+    } else {
+      const target = state.wanderWide ? wideHost : sideHost;
+      if (card.parentElement !== target) target.appendChild(card);
+      card.classList.toggle('wide', state.wanderWide);
+      wideHost.hidden = !(available && state.wanderWide);
+    }
     sideHost.hidden = !(available && !state.wanderWide);
     if (refs.wanderToggleWide) {
+      const canUseWide = available && window.matchMedia('(min-width: 960px)').matches;
       refs.wanderToggleWide.textContent = state.wanderWide ? 'side' : 'wide';
       refs.wanderToggleWide.setAttribute('aria-pressed', state.wanderWide ? 'true' : 'false');
-      refs.wanderToggleWide.disabled = !isGluedBoundaryMode();
+      refs.wanderToggleWide.disabled = !canUseWide;
     }
   }
 
@@ -21067,7 +21097,10 @@
     const chartVisible = surfaceAvailable && !!state.showSeifertSurface;
     if (refs.seifertSurfaceCard) {
       refs.seifertSurfaceCard.hidden = !chartVisible;
-      if (chartVisible) refs.seifertSurfaceCard.classList.remove('collapsed');
+      if (chartVisible) {
+        if (window.CalculatorCards) window.CalculatorCards.openCard(refs.seifertSurfaceCard);
+        else refs.seifertSurfaceCard.classList.remove('collapsed');
+      }
     }
     if (refs.showSeifertBackgroundRow) refs.showSeifertBackgroundRow.hidden = !chartVisible;
     if (refs.showSeifertBackground) {

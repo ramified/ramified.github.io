@@ -2811,7 +2811,13 @@
     if (!card) return;
     if (scope === 'hodge' && !visible && state.hodgeWide) setHodgeWide(false);
     card.hidden = !visible;
-    if (visible) card.classList.remove('collapsed');
+    if (visible) openUiCard(card);
+  }
+
+  function openUiCard(card, options = {}) {
+    if (!card) return;
+    if (window.CalculatorCards) window.CalculatorCards.openCard(card, options);
+    else card.classList.remove('collapsed');
   }
 
   function syncRevealButton(button, scope, available) {
@@ -24443,7 +24449,7 @@
     state.classFormulaEditorOpen = true;
     if (refs.classStepCard) {
       refs.classStepCard.hidden = false;
-      refs.classStepCard.classList.remove('collapsed');
+      openUiCard(refs.classStepCard);
     }
     renderClassFormulaBuilder({ focusPreview: true });
     typeset(refs.classFormulaBuilder);
@@ -25735,7 +25741,7 @@
     builder.editingSavedFormulaId = null;
     if (refs.classStepCard) {
       refs.classStepCard.hidden = false;
-      refs.classStepCard.classList.remove('collapsed');
+      openUiCard(refs.classStepCard);
     }
     if (refs.classStepPanel) refs.classStepPanel.hidden = false;
     syncClassStepControlsForSession(session);
@@ -25799,7 +25805,7 @@
     state.lastResult = result;
     if (refs.classStepCard) {
       refs.classStepCard.hidden = false;
-      refs.classStepCard.classList.remove('collapsed');
+      openUiCard(refs.classStepCard);
     }
     if (refs.classStepPanel) refs.classStepPanel.hidden = false;
     if (!options.preserveControls) {
@@ -26300,7 +26306,7 @@
     if (!refs.classStepPanel || !session) return;
     if (refs.classStepCard) {
       refs.classStepCard.hidden = false;
-      refs.classStepCard.classList.remove('collapsed');
+      openUiCard(refs.classStepCard);
     }
     refs.classStepPanel.hidden = false;
     syncClassStepControlsForSession(session);
@@ -29431,7 +29437,7 @@
     state.classFormulaEditorOpen = true;
     if (refs.classStepCard) {
       refs.classStepCard.hidden = false;
-      refs.classStepCard.classList.remove('collapsed');
+      openUiCard(refs.classStepCard);
     }
     renderClassFormulaBuilder({ focusPreview: true });
     typeset(refs.classFormulaBuilder);
@@ -30487,7 +30493,7 @@
     if (refs.complexChartPreset) refs.complexChartPreset.value = preset.id;
     if (refs.complexChartCard) {
       refs.complexChartCard.hidden = false;
-      refs.complexChartCard.classList.remove('collapsed');
+      openUiCard(refs.complexChartCard);
     }
     renderComplexChartEditor();
     if (!options.preservePanel && refs.complexChartAddPanel?.hidden) setComplexChartAddPanelVisible(true, { sync: false });
@@ -31724,7 +31730,7 @@
     syncComplexChartEditorShape(chart.editor);
     if (refs.complexChartCard) {
       refs.complexChartCard.hidden = false;
-      refs.complexChartCard.classList.remove('collapsed');
+      openUiCard(refs.complexChartCard);
     }
     if (refs.complexChartAddPanel?.hidden) setComplexChartAddPanelVisible(true, { sync: false });
     renderComplexChartEditor();
@@ -40172,13 +40178,17 @@
     if (!card || !sideAnchor || !wideHost) return;
     const canUseWide = window.matchMedia('(min-width: 960px)').matches;
     if (!canUseWide) state.hodgeWide = false;
-    if (state.hodgeWide) {
-      if (card.parentElement !== wideHost) wideHost.appendChild(card);
-    } else if (sideAnchor.parentElement && card.parentElement !== sideAnchor.parentElement) {
-      sideAnchor.insertAdjacentElement('afterend', card);
+    if (window.CalculatorCards) {
+      state.hodgeWide = window.CalculatorCards.setWide(card, state.hodgeWide, { notify: false });
+    } else {
+      if (state.hodgeWide) {
+        if (card.parentElement !== wideHost) wideHost.appendChild(card);
+      } else if (sideAnchor.parentElement && card.parentElement !== sideAnchor.parentElement) {
+        sideAnchor.insertAdjacentElement('afterend', card);
+      }
+      card.classList.toggle('wide', state.hodgeWide);
+      wideHost.hidden = !state.hodgeWide;
     }
-    card.classList.toggle('wide', state.hodgeWide);
-    wideHost.hidden = !state.hodgeWide;
     if (refs.toggleHodgeWide) {
       refs.toggleHodgeWide.textContent = state.hodgeWide ? 'side' : 'wide';
       refs.toggleHodgeWide.setAttribute('aria-pressed', state.hodgeWide ? 'true' : 'false');
@@ -42904,7 +42914,7 @@
 
   function openChartExport(scope) {
     refreshExport(scope);
-    if (refs.exportCard) refs.exportCard.classList.remove('collapsed');
+    if (refs.exportCard) openUiCard(refs.exportCard);
     refs.status.textContent = scope === 'hodge'
       ? 'hodge numbers export ready'
       : (scope === 'step-classes'
@@ -44100,7 +44110,7 @@
     if (state.classStepSession) {
       if (refs.classStepCard) {
         refs.classStepCard.hidden = false;
-        refs.classStepCard.classList.remove('collapsed');
+        openUiCard(refs.classStepCard);
       }
       if (refs.classStepPanel) refs.classStepPanel.hidden = false;
       syncClassStepControlsForSession(state.classStepSession);
@@ -45265,6 +45275,13 @@
   }
 
   function bindCards() {
+    if (window.CalculatorCards) {
+      window.CalculatorCards.init({
+        side: '#cards',
+        dragContainers: '.sheaf-main-column'
+      });
+      return;
+    }
     document.querySelectorAll('.card-head').forEach((head) => {
       head.addEventListener('click', (event) => {
         if (Date.now() < state.suppressCardToggleUntil) return;

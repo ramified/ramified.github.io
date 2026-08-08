@@ -553,6 +553,10 @@
   }
 
   function bindCards() {
+    if (window.CalculatorCards) {
+      window.CalculatorCards.init({ side: '.side' });
+      return;
+    }
     if (typeof document === 'undefined' || !document.querySelectorAll) return;
     document.querySelectorAll('.card-head').forEach((head) => {
       head.addEventListener('click', (event) => {

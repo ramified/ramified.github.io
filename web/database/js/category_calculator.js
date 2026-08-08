@@ -169,13 +169,7 @@
   }
 
   function bindEvents() {
-    document.querySelectorAll('.card-head').forEach((head) => {
-      head.addEventListener('click', (event) => {
-        if (event.target.closest('button,input,select,textarea,a,.drag-handle')) return;
-        const card = head.closest('.card');
-        if (card) card.classList.toggle('collapsed');
-      });
-    });
+    if (window.CalculatorCards) window.CalculatorCards.init({ side: '#cards' });
 
     refs.inputMode.addEventListener('change', () => {
       state.inputMode = refs.inputMode.value === 'modify' && activeObject() ? 'modify' : 'create';

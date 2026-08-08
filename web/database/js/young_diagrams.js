@@ -4743,6 +4743,7 @@ function exportBranching(event) {
     return node;
   }
   function initDnd() {
+    if (window.CalculatorCards) return;
     const side = getSide();
     if (!side || side.dataset.dndReady === '1') return;
     side.dataset.dndReady = '1';
@@ -6820,6 +6821,10 @@ function enforceOpenChartCardLimit(activeCard) {
 
 function openCard(card, refreshOnOpen = true, protectedCard = null) {
   if (!card) return;
+  if (window.CalculatorCards) {
+    window.CalculatorCards.openCard(card, { refreshOnOpen, protectedCard });
+    return;
+  }
   card.classList.remove('collapsed');
   setCardAriaExpanded(card, true);
   const previousProtectedCard = temporaryOpenLimitProtectedCard;
@@ -6833,6 +6838,7 @@ function openCard(card, refreshOnOpen = true, protectedCard = null) {
 }
 
 function toggleCard(eventOrHead, maybeHead) {
+  if (window.CalculatorCards) return window.CalculatorCards.toggleCard(eventOrHead, maybeHead);
   const event = maybeHead ? eventOrHead : window.event;
   const headEl = maybeHead || eventOrHead;
   if (event && event.target && event.target.closest && event.target.closest('.card-pin-btn')) return;
@@ -6923,8 +6929,15 @@ function initYoungDiagramPage() {
     const head = card.querySelector('.card-head');
     if (head) head.setAttribute('aria-expanded', 'false');
   });
-  initCardChrome();
-  initCardPinBreakpoint();
+  if (window.CalculatorCards) {
+    window.CalculatorCards.init({
+      side: '.side',
+      onOpen: (card) => refreshCardCalculation(card)
+    });
+  } else {
+    initCardChrome();
+    initCardPinBreakpoint();
+  }
   initGridSizeControls();
   applyYoungUrlState();
   initCustomTooltips();

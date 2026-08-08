@@ -5812,24 +5812,7 @@
   }
 
   function bindCardCollapse() {
-    document.querySelectorAll(".card-head").forEach((head) => {
-      const card = head.closest(".card");
-      if (!card) return;
-      head.setAttribute("aria-expanded", card.classList.contains("collapsed") ? "false" : "true");
-      const toggle = () => {
-        card.classList.toggle("collapsed");
-        head.setAttribute("aria-expanded", card.classList.contains("collapsed") ? "false" : "true");
-      };
-      head.addEventListener("click", (event) => {
-        if (event.target.closest("button,input,select,textarea,a,.drag-handle")) return;
-        toggle();
-      });
-      head.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        toggle();
-      });
-    });
+    if (window.CalculatorCards) window.CalculatorCards.init({ side: "#cards" });
   }
 
   function bindMotionSlider(sliderId, key) {
@@ -9205,9 +9188,12 @@
     const cards = Array.from(document.querySelectorAll(".card"));
     const card = cards.find((item) => item.querySelector(".card-head-label")?.textContent.trim() === label);
     if (!card) return;
-    card.classList.remove("collapsed");
-    const head = card.querySelector(".card-head");
-    if (head) head.setAttribute("aria-expanded", "true");
+    if (window.CalculatorCards) window.CalculatorCards.openCard(card);
+    else {
+      card.classList.remove("collapsed");
+      const head = card.querySelector(".card-head");
+      if (head) head.setAttribute("aria-expanded", "true");
+    }
   }
 
   function importState() {

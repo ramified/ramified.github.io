@@ -738,6 +738,10 @@
   }
 
   function bindCards() {
+    if (window.CalculatorCards) {
+      window.CalculatorCards.init({ side: '#cards' });
+      return;
+    }
     let suppressCardToggleUntil = 0;
     document.querySelectorAll('.card-head').forEach((head) => {
       head.addEventListener('click', (event) => {
@@ -5286,7 +5290,10 @@
     refs.operationMessage.textContent = '';
     refs.exportOut.value = exportOperationPayload(state.lastOperationResult, refs.exportFormat.value);
     const exportCard = refs.exportOut.closest('.card');
-    if (exportCard) exportCard.classList.remove('collapsed');
+    if (exportCard) {
+      if (window.CalculatorCards) window.CalculatorCards.openCard(exportCard);
+      else exportCard.classList.remove('collapsed');
+    }
     refs.matrixStatus.textContent = 'operation export ready';
   }
 

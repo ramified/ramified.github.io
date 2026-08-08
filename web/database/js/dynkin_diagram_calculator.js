@@ -1914,13 +1914,17 @@
     if (!card || !sideAnchor || !wideHost) return;
     const canUseWide = window.matchMedia('(min-width: 960px)').matches;
     if (!canUseWide) state.startingFunctionWide = false;
-    if (state.startingFunctionWide) {
-      if (card.parentElement !== wideHost) wideHost.appendChild(card);
-    } else if (sideAnchor.parentElement && card.parentElement !== sideAnchor.parentElement) {
-      sideAnchor.insertAdjacentElement('afterend', card);
+    if (window.CalculatorCards) {
+      state.startingFunctionWide = window.CalculatorCards.setWide(card, state.startingFunctionWide, { notify: false });
+    } else {
+      if (state.startingFunctionWide) {
+        if (card.parentElement !== wideHost) wideHost.appendChild(card);
+      } else if (sideAnchor.parentElement && card.parentElement !== sideAnchor.parentElement) {
+        sideAnchor.insertAdjacentElement('afterend', card);
+      }
+      card.classList.toggle('wide', state.startingFunctionWide);
+      wideHost.hidden = !state.startingFunctionWide;
     }
-    card.classList.toggle('wide', state.startingFunctionWide);
-    wideHost.hidden = !state.startingFunctionWide;
     syncStartingFunctionControls();
     queueArScrollControlSync();
   }
@@ -2147,6 +2151,13 @@
   }
 
   function bindCards() {
+    if (window.CalculatorCards) {
+      window.CalculatorCards.init({
+        side: '#cards',
+        wideAvailable: (card) => card.id !== 'dynkin-starting-card' || supportsStartingFunction(state.type)
+      });
+      return;
+    }
     let suppressCardToggleUntil = 0;
     document.querySelectorAll('.card-head').forEach((head) => {
       head.addEventListener('click', (event) => {

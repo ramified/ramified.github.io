@@ -4375,6 +4375,10 @@
 
     function setCardCollapsed(card, collapsed, refreshOnOpen = true, protectedCard = null) {
       if (!card) return;
+      if (window.CalculatorCards) {
+        window.CalculatorCards.setCardCollapsed(card, collapsed, { refreshOnOpen, protectedCard });
+        return;
+      }
       card.classList.toggle('collapsed', collapsed);
       setCardAriaExpanded(card, !collapsed);
       if (!collapsed) {
@@ -4389,6 +4393,18 @@
       }
     }
     function setupCards() {
+      if (window.CalculatorCards) {
+        window.CalculatorCards.init({
+          side: '#cards',
+          onOpen: (card) => runCardOpenRefresh(card),
+          groupKey: (card) => openChartCardGroupKey(card),
+          limitPredicate: (card, helpers) => helpers.defaultPredicate() && card.style.display !== 'none'
+        });
+        document.querySelectorAll('.card').forEach(card => {
+          window.CalculatorCards.setCardCollapsed(card, true, { refreshOnOpen: false });
+        });
+        return;
+      }
       document.addEventListener('click', (event) => {
         const head = event.target.closest('.card-head');
         if (!head || event.target.closest('.drag-handle') || event.target.closest('.card-pin-btn')) return;
@@ -4400,6 +4416,7 @@
       document.querySelectorAll('.card').forEach(card => setCardCollapsed(card, true, false));
     }
     function setupPointerDnd() {
+      if (window.CalculatorCards) return;
       const side = $('cards');
       let drag = null, ghost = null, placeholder = null, offsetY = 0;
       function cards() { return Array.from(side.querySelectorAll(':scope > .card')); }

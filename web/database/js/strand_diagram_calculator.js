@@ -460,6 +460,10 @@
   }
 
   function bindCards() {
+    if (window.CalculatorCards) {
+      window.CalculatorCards.init({ side: '#cards' });
+      return;
+    }
     let suppressCardToggleUntil = 0;
     document.querySelectorAll('.card').forEach((card) => {
       card.addEventListener('dragstart', (event) => event.preventDefault());
