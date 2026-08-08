@@ -65,11 +65,22 @@
   const MATRIX_PRESET_KINDS = new Set(["manual", "simple-roots", "fundamental-weights"]);
   const LATTICE_BASIS_MODES = new Set(["matrix-input", "matrix-object", "dynkin"]);
   const LATTICE_DYNKIN_KINDS = new Set(["root", "weight"]);
+  const VIEWPORT_BOUND_SHAPES = new Set(["box", "disk"]);
+  const LATTICE_BOUND_SHAPES = new Set(["box", "ball"]);
   const TROPICAL_DISTRICT_LABEL_DENSITIES = new Set(["all", "active"]);
   const WEYL_LABEL_MODES = new Set(["permutation", "word"]);
   const WEYL_LABEL_DENSITIES = new Set(["all", "active"]);
   const LATTICE_ENUMERATION_CAP = 8000;
+  const LATTICE_PROJECTION_ENUMERATION_CAP = 250000;
   const LATTICE_PROJECTION_POINT_CAP = 1800;
+  const VORONOI_PROJECTION_HALFSPACE_CAP = 180;
+  const VORONOI_PROJECTION_COMBINATION_CAP = 120000;
+  const VORONOI_PROJECTION_VERTEX_CAP = 2400;
+  const VORONOI_PROJECTION_EDGE_CAP = 8000;
+  const VORONOI_LLL_ITERATION_CAP = 900;
+  const VORONOI_COSET_ENUMERATION_CAP = 120000;
+  const VORONOI_RELEVANT_VECTOR_CAP = 2048;
+  const VIEWPORT_DISK_POLYGON_SEGMENTS = 96;
   const RATIONAL_WHEEL_STEP = 0.1;
   const RATIONAL_WHEEL_MIN = -6;
   const RATIONAL_WHEEL_MAX = 6;
@@ -100,6 +111,10 @@
   const regularGeometryCache = new Map();
   const regularHalfspaceCache = new Map();
   const weylRootSystemCache = new Map();
+  const latticeProjectionStatsCache = new Map();
+  const voronoiProjectionCache = new Map();
+  const voronoiRelevantVectorCache = new Map();
+  const matrixTargetDrafts = new Map();
   const runtimeStats = {
     drawMs: 0,
     exactSliceMs: 0,
@@ -131,6 +146,7 @@
       showGrid: true,
       showLabels: false,
       showBox: true,
+      boundShape: "box",
       cameraDistance: 3,
       boxRadius: 4,
       labelSize: DEFAULT_CANVAS_LABEL_SIZE_REM,
@@ -189,6 +205,10 @@
 
   function add(a, b) {
     return a.map((value, index) => value + (b[index] || 0));
+  }
+
+  function subtract(a, b) {
+    return a.map((value, index) => value - (b[index] || 0));
   }
 
   function scale(v, scalar) {
@@ -260,6 +280,43 @@
     if (kind === "root lattice") return "root";
     if (kind === "weight lattice") return "weight";
     return LATTICE_DYNKIN_KINDS.has(kind) ? kind : "root";
+  }
+
+  function normalizeViewportBoundShape(shape) {
+    if (shape === "D^2" || shape === "S^1" || shape === "sphere" || shape === "ball" || shape === "disk") return "disk";
+    return VIEWPORT_BOUND_SHAPES.has(shape) ? shape : "box";
+  }
+
+  function viewportBoundLabel(shape = state.viewport.boundShape) {
+    return normalizeViewportBoundShape(shape) === "disk" ? "D^2" : "box";
+  }
+
+  function viewportBoundDescription(shape = state.viewport.boundShape, radius = state.viewport.boxRadius) {
+    const normalized = normalizeViewportBoundShape(shape);
+    return normalized === "disk"
+      ? `D^2 radius ${fmt(radius, 2)}`
+      : `box [-${fmt(radius, 2)}, ${fmt(radius, 2)}]^2`;
+  }
+
+  function normalizeLatticeBoundShape(shape) {
+    if (shape === "D^n" || shape === "S^n" || shape === "sphere" || shape === "ball") return "ball";
+    return LATTICE_BOUND_SHAPES.has(shape) ? shape : "ball";
+  }
+
+  function latticeBoundLabel(shape = "ball") {
+    return normalizeLatticeBoundShape(shape) === "ball" ? "D^n" : "box";
+  }
+
+  function normalizeLatticeBoundRadius(value) {
+    return clamp(positiveNumber(value, 2), 0.1, 12);
+  }
+
+  function latticeBoundDescription(data = {}) {
+    const shape = normalizeLatticeBoundShape(data.latticeBoundShape);
+    const radius = normalizeLatticeBoundRadius(data.latticeBoundRadius);
+    return shape === "ball"
+      ? `D^${state.ambientDim} radius ${fmt(radius, 2)}`
+      : `box [-${fmt(radius, 2)}, ${fmt(radius, 2)}]^${state.ambientDim}`;
   }
 
   function normalizeCanvasLabelSize(value) {
@@ -1055,15 +1112,6 @@
     return data?.normalizedTropical || tropicalTermsToText(terms);
   }
 
-  function tropicalNotationTex(data, mode = data?.tropicalNotationMode) {
-    const terms = Array.isArray(data?.terms) ? data.terms : [];
-    const notation = normalizeTropicalNotationMode(mode);
-    const convention = normalizeTropicalConvention(data?.tropicalConvention);
-    if (notation === "affine") return tropicalTermsToAffineTex(terms, convention);
-    if (notation === "tropical") return tropicalTermsToAlgebraTex(terms);
-    return tropicalTermsToTex(terms);
-  }
-
   function tropicalTermDisplay(term, mode = "u", convention = "max") {
     const notation = normalizeTropicalNotationMode(mode);
     if (notation === "affine") return {
@@ -1078,10 +1126,6 @@
       plain: tropicalTermToText(term),
       tex: tropicalTermToTex(term),
     };
-  }
-
-  function tropicalSummaryText(data) {
-    return tropicalNotationText(data, data?.tropicalNotationMode);
   }
 
   function normalizeTropicalInputSyntax(rawInput) {
@@ -1577,10 +1621,13 @@
       input.addEventListener("wheel", (event) => {
         event.preventDefault();
         const direction = event.deltaY < 0 ? 1 : -1;
+        const wheelStep = options.wheelStep ?? RATIONAL_WHEEL_STEP;
+        const wheelMin = options.wheelMin ?? RATIONAL_WHEEL_MIN;
+        const wheelMax = options.wheelMax ?? RATIONAL_WHEEL_MAX;
         const next = clamp(
-          rationalWheelInputValue(input.value, currentValue()) + direction * RATIONAL_WHEEL_STEP,
-          RATIONAL_WHEEL_MIN,
-          RATIONAL_WHEEL_MAX
+          rationalWheelInputValue(input.value, currentValue()) + direction * wheelStep,
+          wheelMin,
+          wheelMax
         );
         input.value = formatValue(next);
         input.dataset.originalValue = input.value;
@@ -1802,6 +1849,264 @@
     return minEigenvalue > 1e-12 ? Math.sqrt(minEigenvalue) : 0;
   }
 
+  function lllReduceBasisRows(basisRows, options = {}) {
+    const n = state.ambientDim;
+    const delta = clamp(finiteNumber(options.delta, 0.75), 0.51, 0.99);
+    const columns = transposeMatrix(cloneMatrixRows(basisRows, n)).map((column) => column.slice());
+    const tolerance = 1e-12;
+    const gramSchmidt = () => {
+      const star = [];
+      const mu = Array.from({ length: n }, () => Array(n).fill(0));
+      const normSq = Array(n).fill(0);
+      for (let i = 0; i < n; i += 1) {
+        let vector = columns[i].slice();
+        for (let j = 0; j < i; j += 1) {
+          mu[i][j] = normSq[j] > tolerance ? dot(columns[i], star[j]) / normSq[j] : 0;
+          vector = subtract(vector, scale(star[j], mu[i][j]));
+        }
+        star[i] = vector;
+        normSq[i] = dot(vector, vector);
+      }
+      return { mu, normSq };
+    };
+
+    let k = 1;
+    let iterations = 0;
+    let capped = false;
+    while (k < n) {
+      iterations += 1;
+      if (iterations > VORONOI_LLL_ITERATION_CAP) {
+        capped = true;
+        break;
+      }
+      let gs = gramSchmidt();
+      for (let j = k - 1; j >= 0; j -= 1) {
+        const q = Math.round(gs.mu[k][j] || 0);
+        if (!q) continue;
+        columns[k] = subtract(columns[k], scale(columns[j], q));
+        gs = gramSchmidt();
+      }
+      const lhs = gs.normSq[k] || 0;
+      const rhs = (delta - (gs.mu[k][k - 1] || 0) ** 2) * (gs.normSq[k - 1] || 0);
+      if (lhs + tolerance >= rhs) {
+        k += 1;
+      } else {
+        [columns[k], columns[k - 1]] = [columns[k - 1], columns[k]];
+        k = Math.max(1, k - 1);
+      }
+    }
+
+    return {
+      basisRows: matrixRowsFromColumns(columns, n),
+      capped,
+      iterations,
+    };
+  }
+
+  function choleskyUpperFromGram(gram) {
+    const n = gram.length;
+    const upper = Array.from({ length: n }, () => Array(n).fill(0));
+    for (let row = 0; row < n; row += 1) {
+      for (let col = row; col < n; col += 1) {
+        let sum = gram[row][col];
+        for (let k = 0; k < row; k += 1) sum -= upper[k][row] * upper[k][col];
+        if (row === col) {
+          if (sum <= 1e-12) return null;
+          upper[row][row] = Math.sqrt(sum);
+        } else {
+          upper[row][col] = sum / upper[row][row];
+        }
+      }
+    }
+    return upper;
+  }
+
+  function quadraticFormValue(gram, coeffs) {
+    let total = 0;
+    for (let row = 0; row < coeffs.length; row += 1) {
+      for (let col = 0; col < coeffs.length; col += 1) {
+        total += coeffs[row] * gram[row][col] * coeffs[col];
+      }
+    }
+    return total;
+  }
+
+  function normalizedParity(value) {
+    return ((Math.round(finiteNumber(value, 0)) % 2) + 2) % 2;
+  }
+
+  function initialParityCosetCoeffs(parity) {
+    const active = [];
+    parity.forEach((value, index) => {
+      if (normalizedParity(value)) active.push(index);
+    });
+    const coeffs = [];
+    const signCount = 1 << active.length;
+    for (let mask = 0; mask < signCount; mask += 1) {
+      const coeff = Array(parity.length).fill(0);
+      active.forEach((index, signIndex) => {
+        coeff[index] = (mask & (1 << signIndex)) ? -1 : 1;
+      });
+      coeffs.push(coeff);
+    }
+    return coeffs;
+  }
+
+  function parityIntegersInRange(low, high, parity, center, cap = Infinity) {
+    const normalized = normalizedParity(parity);
+    let start = Math.ceil(low);
+    const end = Math.floor(high);
+    while (start <= end && normalizedParity(start) !== normalized) start += 1;
+    const count = start <= end ? Math.floor((end - start) / 2) + 1 : 0;
+    if (count > cap) return null;
+    const values = [];
+    for (let value = start; value <= end; value += 2) values.push(value);
+    values.sort((left, right) => Math.abs(left - center) - Math.abs(right - center));
+    return values;
+  }
+
+  function shortestVectorsInParityCoset(basisRows, parity, options = {}) {
+    const n = state.ambientDim;
+    const gram = gramMatrix(transposeMatrix(basisRows));
+    const upper = choleskyUpperFromGram(gram);
+    const coeffs = Array(n).fill(0);
+    const solutions = [];
+    const seen = new Set();
+    let bestSq = Infinity;
+    let capped = false;
+    let nodeCount = 0;
+    const cap = options.cap || VORONOI_COSET_ENUMERATION_CAP;
+
+    const record = (candidate, sq) => {
+      if (!Number.isFinite(sq)) return;
+      const tolerance = Number.isFinite(bestSq) ? Math.max(1e-8, bestSq * 1e-8) : 1e-8;
+      if (!Number.isFinite(bestSq) || sq < bestSq - tolerance) {
+        bestSq = sq;
+        solutions.length = 0;
+        seen.clear();
+      }
+      const nextTolerance = Number.isFinite(bestSq) ? Math.max(1e-8, bestSq * 1e-8) : 1e-8;
+      if (sq <= bestSq + nextTolerance) {
+        const key = candidate.join(",");
+        if (!seen.has(key)) {
+          seen.add(key);
+          solutions.push(candidate.slice());
+        }
+      }
+    };
+
+    for (const candidate of initialParityCosetCoeffs(parity)) {
+      record(candidate, quadraticFormValue(gram, candidate));
+    }
+    if (!upper || !Number.isFinite(bestSq)) {
+      return {
+        vectors: solutions.map((candidate) => {
+          const ambient = multiplyMatrixVector(basisRows, candidate);
+          return { coeffs: candidate, ambient, length: norm(ambient) };
+        }),
+        bestSq,
+        capped: true,
+        nodeCount,
+      };
+    }
+
+    const visit = (index, partialSq) => {
+      if (capped) return;
+      if (index < 0) {
+        record(coeffs, quadraticFormValue(gram, coeffs));
+        return;
+      }
+      let offset = 0;
+      for (let col = index + 1; col < n; col += 1) offset += upper[index][col] * coeffs[col];
+      const diagonal = upper[index][index];
+      if (!(diagonal > 1e-12)) {
+        capped = true;
+        return;
+      }
+      const tolerance = Number.isFinite(bestSq) ? Math.max(1e-8, bestSq * 1e-8) : 1e-8;
+      const remaining = bestSq + tolerance - partialSq;
+      if (remaining < -tolerance) return;
+      const radius = Math.sqrt(Math.max(0, remaining));
+      const low = (-radius - offset) / diagonal;
+      const high = (radius - offset) / diagonal;
+      const center = -offset / diagonal;
+      const values = parityIntegersInRange(low - 1e-12, high + 1e-12, parity[index], center, cap);
+      if (!values) {
+        capped = true;
+        return;
+      }
+      for (const value of values) {
+        nodeCount += 1;
+        if (nodeCount > cap) {
+          capped = true;
+          return;
+        }
+        coeffs[index] = value;
+        const term = diagonal * value + offset;
+        const nextSq = partialSq + term * term;
+        if (nextSq <= bestSq + tolerance) visit(index - 1, nextSq);
+        if (capped) return;
+      }
+    };
+
+    visit(n - 1, 0);
+    const vectors = solutions.map((candidate) => {
+      const ambient = multiplyMatrixVector(basisRows, candidate);
+      return { coeffs: candidate.slice(), ambient, length: norm(ambient) };
+    }).sort((left, right) => left.length - right.length);
+    return { vectors, bestSq, capped, nodeCount };
+  }
+
+  function voronoiRelevantVectorCacheKey(basisRows) {
+    return `${state.ambientDim}|${matrixRowsText(basisRows, 8)}`;
+  }
+
+  function voronoiRelevantVectorsForBasis(basisRows) {
+    const cacheKey = voronoiRelevantVectorCacheKey(basisRows);
+    const cached = voronoiRelevantVectorCache.get(cacheKey);
+    if (cached) return cached;
+    const reduction = lllReduceBasisRows(basisRows);
+    const reducedRows = reduction.basisRows;
+    const n = state.ambientDim;
+    const vectors = [];
+    const seen = new Set();
+    let capped = reduction.capped;
+    let nodeCount = 0;
+    let cosetCount = 0;
+    const cosetLimit = 2 ** n;
+    for (let mask = 1; mask < cosetLimit; mask += 1) {
+      const parity = Array.from({ length: n }, (_, index) => (mask >> index) & 1);
+      const coset = shortestVectorsInParityCoset(reducedRows, parity);
+      cosetCount += 1;
+      nodeCount += coset.nodeCount;
+      capped = capped || coset.capped;
+      for (const vector of coset.vectors) {
+        const key = vectorKey(vector.ambient, 8);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        vectors.push({ ...vector, parity });
+        if (vectors.length >= VORONOI_RELEVANT_VECTOR_CAP) {
+          capped = true;
+          break;
+        }
+      }
+      if (vectors.length >= VORONOI_RELEVANT_VECTOR_CAP) break;
+    }
+    vectors.sort((left, right) => left.length - right.length);
+    const result = {
+      vectors,
+      reducedBasisRows: reducedRows,
+      capped,
+      reductionCapped: reduction.capped,
+      cosetCount,
+      nodeCount,
+      status: capped ? "Voronoi relevant-vector search capped/partial" : "",
+    };
+    if (voronoiRelevantVectorCache.size > 32) voronoiRelevantVectorCache.clear();
+    voronoiRelevantVectorCache.set(cacheKey, result);
+    return result;
+  }
+
   function inverseMatrix(rows, label = "Matrix") {
     const n = rows.length;
     const matrix = rows.map((row, rowIndex) => {
@@ -1912,7 +2217,7 @@
     return source ? `source:${source.id}` : `type:${defaultDynkinRawType(n)}`;
   }
 
-  function dynkinReferenceOptions(n = state.ambientDim) {
+  function dynkinReferenceOptions(n = state.ambientDim, options = {}) {
     const sourceOptions = dynkinTypeObjects(n).map((object) => {
       const type = normalizeWeylDynkinType(object.data?.dynkinType, n);
       return {
@@ -1920,18 +2225,20 @@
         label: `${object.name} (${weylDynkinLabel(type, n)})`,
       };
     });
-    if (sourceOptions.length) return sourceOptions;
-    return weylDynkinOptions(n).map((option) => ({
+    const rawOptions = weylDynkinOptions(n).map((option) => ({
       value: `type:${option.type}`,
       label: option.label,
     }));
+    if (sourceOptions.length) return options.includeRawTypes ? [...sourceOptions, ...rawOptions] : sourceOptions;
+    return rawOptions;
   }
 
-  function dynkinReferenceValueFromData(data = {}, n = state.ambientDim) {
+  function dynkinReferenceValueFromData(data = {}, n = state.ambientDim, options = {}) {
     const sources = dynkinTypeObjects(n);
     if (data.dynkinSourceId && sources.some((object) => object.id === data.dynkinSourceId)) {
       return `source:${data.dynkinSourceId}`;
     }
+    if (options.preferRawType || !sources.length) return `type:${normalizeWeylDynkinType(data.dynkinType, n)}`;
     if (sources.length) return `source:${sources[0].id}`;
     return `type:${normalizeWeylDynkinType(data.dynkinType, n)}`;
   }
@@ -2949,6 +3256,8 @@
       dynkinRank: n,
       dynkinLatticeKind,
       showLatticePoints: true,
+      latticeBoundShape: "ball",
+      latticeBoundRadius: 2,
     };
     if (basisMode === "dynkin") {
       base.name = dynkinLatticeKind === "weight" ? "weight lattice" : "root lattice";
@@ -3022,7 +3331,7 @@
   }
 
   function isProjectionlessSourceType(typeKey) {
-    return typeKey === "formula-set" || typeKey === "tropical-polynomial" || typeKey === "weyl-chambers" || typeKey === "dynkin-type" || typeKey === "voronoi-diagram";
+    return typeKey === "formula-set" || typeKey === "tropical-polynomial" || typeKey === "weyl-chambers" || typeKey === "dynkin-type";
   }
 
   function makeObjectForType(typeKey, name = "", options = {}) {
@@ -3217,10 +3526,10 @@
   function syncObjectSelect() {
     const select = $("object-select");
     select.innerHTML = "";
-    state.objects.forEach((object, index) => {
+    state.objects.forEach((object) => {
       const option = document.createElement("option");
       option.value = object.id;
-      option.textContent = `${index + 1}. ${object.name}`;
+      option.textContent = object.name;
       select.appendChild(option);
     });
     if (activeObject()) select.value = activeObject().id;
@@ -3255,12 +3564,18 @@
   function syncObjectPanel() {
     const object = activeObject();
     if (!object) return;
+    const labelsInput = $("object-labels");
+    const labelsWrap = labelsInput.closest("label");
+    const labelsEnabled = objectLabelsEnabled(object);
+    if (!labelsEnabled) object.labels = false;
     $("object-name").value = object.name;
     $("object-color").value = object.style.color;
     $("object-opacity").value = object.style.opacity;
     $("object-point-size").value = object.style.pointSize;
     $("object-line-width").value = object.style.lineWidth;
-    $("object-labels").checked = object.labels;
+    labelsInput.checked = labelsEnabled && object.labels;
+    labelsInput.disabled = !labelsEnabled;
+    if (labelsWrap) labelsWrap.hidden = !labelsEnabled;
     syncLayerButtons(object);
     rebuildObjectParams();
     $("source-status").textContent = "Projection and exact/numeric 2D slice layers are active.";
@@ -3280,6 +3595,14 @@
 
   function canDrawExact2DSlice(object) {
     return state.sliceDim === 2 && supportsExact2DSlice(object);
+  }
+
+  function objectLabelsEnabled(object) {
+    return objectTypeKey(object) !== "lattice";
+  }
+
+  function shouldDrawObjectLabels(object) {
+    return objectLabelsEnabled(object) && (object.labels || state.viewport.showLabels);
   }
 
   function syncLayerButtons(object) {
@@ -3456,8 +3779,7 @@
     state.activeVectorTarget = null;
   }
 
-  function activateVectorTargetSlot(object, fieldKey, slotIndex, slotLabel) {
-    const targetLabelsKey = arguments.length > 4 ? arguments[4] : "";
+  function activateVectorTargetSlot(object, fieldKey, slotIndex, slotLabel, targetLabelsKey = "", options = {}) {
     state.activeVectorTarget = {
       objectId: object.id,
       objectName: object.name,
@@ -3465,6 +3787,7 @@
       slotIndex,
       slotLabel,
       targetLabelsKey,
+      targetDraftKey: options.targetDraftKey || "",
     };
     state.lastWarning = `Target ${object.name} / ${slotLabel} is active. Click an existing visible canvas point or choose a vector object.`;
   }
@@ -3504,8 +3827,59 @@
     return { select, vectors };
   }
 
+  function matrixTargetDraftKey(object, fieldKey) {
+    return `${object?.id || "missing"}:${fieldKey || "matrixRows"}:${state.ambientDim}`;
+  }
+
+  function matrixTargetDraftFor(object, fieldKey, targetLabelsKey = matrixFieldTargetLabelsKey(fieldKey)) {
+    const key = matrixTargetDraftKey(object, fieldKey);
+    const existing = matrixTargetDrafts.get(key);
+    if (existing && existing.dimension === state.ambientDim) return existing;
+    const data = object?.data || {};
+    const draft = {
+      key,
+      dimension: state.ambientDim,
+      rows: cloneMatrixRows(data[fieldKey], state.ambientDim),
+      labels: resizeVector(Array.isArray(data[targetLabelsKey]) ? data[targetLabelsKey] : [], state.ambientDim)
+        .map((value) => String(value || "")),
+      dirty: false,
+    };
+    matrixTargetDrafts.set(key, draft);
+    return draft;
+  }
+
+  function clearMatrixTargetDraft(object, fieldKey) {
+    matrixTargetDrafts.delete(matrixTargetDraftKey(object, fieldKey));
+  }
+
+  function commitMatrixTargetDraftValue(target, rawVector, sourceLabel = "vector", targetDisplayLabel = "") {
+    const object = state.objects.find((candidate) => candidate.id === target.objectId);
+    if (!object) {
+      clearVectorTargetSession();
+      state.lastWarning = "Target object is no longer available.";
+      renderAll();
+      return false;
+    }
+    const labelsKey = target.targetLabelsKey || matrixFieldTargetLabelsKey(target.fieldKey);
+    const draft = matrixTargetDrafts.get(target.targetDraftKey) || matrixTargetDraftFor(object, target.fieldKey, labelsKey);
+    const vector = finiteVector(rawVector, state.ambientDim);
+    draft.rows = setMatrixColumnRows(draft.rows, target.slotIndex, vector, state.ambientDim);
+    draft.labels = resizeVector(Array.isArray(draft.labels) ? draft.labels : [], state.ambientDim)
+      .map((value) => String(value || ""));
+    draft.labels[target.slotIndex] = String(targetDisplayLabel || target.slotLabel || `v_${target.slotIndex + 1}`);
+    draft.dirty = true;
+    state.activeObjectId = object.id;
+    state.sourceMode = "modify";
+    state.lastWarning = `Drafted ${object.name} / ${target.slotLabel} from ${sourceLabel}; click apply targets to update the matrix.`;
+    syncObjectPanel();
+    syncSourceMode();
+    renderAll();
+    return true;
+  }
+
   function commitVectorTargetValue(target, rawVector, sourceLabel = "vector", targetDisplayLabel = "") {
     if (!target) return false;
+    if (target.targetDraftKey) return commitMatrixTargetDraftValue(target, rawVector, sourceLabel, targetDisplayLabel);
     const object = state.objects.find((candidate) => candidate.id === target.objectId);
     if (!object) {
       clearVectorTargetSession();
@@ -3526,6 +3900,8 @@
           renderAll();
           return false;
         }
+        data.basisMode = "matrix-input";
+        data.basisInputMode = "targets";
       }
       data[target.fieldKey] = nextRows;
       const labelsKey = target.targetLabelsKey || matrixFieldTargetLabelsKey(target.fieldKey);
@@ -3544,6 +3920,12 @@
     state.activeTropicalDistrict = null;
     state.activeWeylChamber = null;
     state.lastWarning = `Filled ${object.name} / ${target.slotLabel} from ${sourceLabel}.`;
+    if (objectTypeKey(object) === "lattice") {
+      commitLatticeParamChange(object, null, {
+        message: state.lastWarning,
+      });
+      return true;
+    }
     syncObjectSelect();
     syncObjectPanel();
     syncSourceMode();
@@ -3572,6 +3954,16 @@
       plain: `${label} ${vectorToInline(vector, 2)}`,
       tex: `${labelToTex(label)}\\ ${vectorToTex(vector, 2)}`,
     }));
+    const targetOptions = options.targetOptions || {};
+    const syncAfterTargetAction = (message = "") => {
+      const handled = typeof options.afterTargetAction === "function" && options.afterTargetAction(object, {
+        fieldKey,
+        message: message || state.lastWarning,
+      }) === true;
+      if (handled) return;
+      syncObjectPanel();
+      renderAll();
+    };
     const slots = document.createElement("div");
     slots.className = "slice-target-slots";
     if (options.wrapSlotsInParens) {
@@ -3603,10 +3995,9 @@
           clearVectorTargetSession();
           state.lastWarning = `${object.name} target slot cleared.`;
         } else {
-          activateVectorTargetSlot(object, fieldKey, index, label, targetLabelsKey);
+          activateVectorTargetSlot(object, fieldKey, index, label, targetLabelsKey, targetOptions);
         }
-        syncObjectPanel();
-        renderAll();
+        syncAfterTargetAction();
       });
       slots.append(button);
     }
@@ -3671,17 +4062,33 @@
     resetAll.dataset.targetResetAll = "true";
     resetAll.textContent = "reset targets";
     resetAll.addEventListener("click", () => {
+      if (typeof options.onResetAllTargets === "function" && options.onResetAllTargets(object, {
+        fieldKey,
+        targetLabelsKey,
+      }) === true) {
+        return;
+      }
       if (isMatrixRowsField(object.data, fieldKey, slotCount)) {
         object.data[fieldKey] = typeof options.resetRows === "function"
           ? options.resetRows()
           : Array.from({ length: state.ambientDim }, () => Array(state.ambientDim).fill(0));
         object.data[targetLabelsKey] = [];
+        if (objectTypeKey(object) === "lattice" && fieldKey === "basisRows") {
+          object.data.basisMode = "matrix-input";
+          object.data.basisInputMode = "targets";
+        }
       } else {
         object.data[fieldKey] = Array(state.ambientDim).fill(0);
         object.data[`${fieldKey}TargetLabel`] = "";
       }
       clearVectorTargetSession();
       state.lastWarning = `${object.name} target values reset.`;
+      if (objectTypeKey(object) === "lattice") {
+        commitLatticeParamChange(object, null, {
+          message: state.lastWarning,
+        });
+        return;
+      }
       syncObjectPanel();
       renderAll();
     });
@@ -3840,6 +4247,7 @@
     data[fieldKey] = normalizedMatrixRows(data[fieldKey], state.ambientDim);
     data[modeKey] = normalizeMatrixInputMode(data[modeKey]);
     data.ambientDimension = state.ambientDim;
+    const targetDraft = matrixTargetDraftFor(object, fieldKey, targetLabelsKey);
 
     const panel = document.createElement("div");
     panel.className = "slice-matrix-panel";
@@ -3860,10 +4268,19 @@
       button.addEventListener("click", () => {
         data[modeKey] = normalizeMatrixInputMode(mode);
         clearVectorTargetSession();
-        state.lastWarning = mode === "targets"
-          ? "Matrix targets are active. Choose a column slot, then click a visible point or choose a vector object."
-          : `Matrix ${text} is active.`;
-        syncObjectPanel();
+        let message = `Matrix ${text} is active.`;
+        if (mode === "targets") {
+          const firstLabelValue = columnLabel(0);
+          const firstSlotLabel = firstLabelValue.plain || firstLabelValue || "v_1";
+          activateVectorTargetSlot(object, fieldKey, 0, firstSlotLabel, targetLabelsKey, {
+            targetDraftKey: targetDraft.key,
+          });
+          message = state.lastWarning;
+        }
+        syncModeUi();
+        state.lastWarning = message;
+        const handled = typeof options.afterModeChange === "function" && options.afterModeChange(object, { mode, text, message }) === true;
+        if (handled) return;
         renderAll();
       });
       modes.append(button);
@@ -3909,8 +4326,14 @@
           : rows;
         data[targetLabelsKey] = [];
         data.ambientDimension = state.ambientDim;
-        if (typeof options.afterMatrixChange === "function") options.afterMatrixChange(object);
+        clearMatrixTargetDraft(object, fieldKey);
         state.lastWarning = `Manual ${editorLabel.toLowerCase()} applied.`;
+        const handled = typeof options.afterMatrixChange === "function" && options.afterMatrixChange(object, {
+          fieldKey,
+          mode: "manual",
+          message: state.lastWarning,
+        }) === true;
+        if (handled) return;
         syncObjectPanel();
         renderAll();
       } catch (error) {
@@ -3942,8 +4365,14 @@
           : rows;
         data[targetLabelsKey] = [];
         data.ambientDimension = state.ambientDim;
-        if (typeof options.afterMatrixChange === "function") options.afterMatrixChange(object);
+        clearMatrixTargetDraft(object, fieldKey);
         state.lastWarning = `${editorLabel} rows imported.`;
+        const handled = typeof options.afterMatrixChange === "function" && options.afterMatrixChange(object, {
+          fieldKey,
+          mode: "import",
+          message: state.lastWarning,
+        }) === true;
+        if (handled) return;
         syncObjectPanel();
         renderAll();
       } catch (error) {
@@ -3975,35 +4404,95 @@
         const labelValue = columnLabel(index);
         return labelValue.plain || labelValue;
       },
-      slotVector: (index) => matrixColumnFromRows(data[fieldKey], index, state.ambientDim),
+      slotVector: (index) => matrixColumnFromRows(targetDraft.rows, index, state.ambientDim),
       resetVector: options.resetVector,
       resetRows: options.resetRows,
       wrapSlotsInParens: true,
       slotDisplay: (index, vector, label) => {
-        const displayLabel = String(data[targetLabelsKey]?.[index] || label);
+        const displayLabel = String(targetDraft.labels?.[index] || label);
         return {
           plain: displayLabel,
           tex: labelToTex(displayLabel),
         };
       },
+      targetOptions: {
+        targetDraftKey: targetDraft.key,
+      },
+      onResetAllTargets: () => {
+        targetDraft.rows = typeof options.resetRows === "function"
+          ? options.resetRows()
+          : Array.from({ length: state.ambientDim }, () => Array(state.ambientDim).fill(0));
+        targetDraft.labels = [];
+        targetDraft.dirty = true;
+        clearVectorTargetSession();
+        state.lastWarning = `${object.name} target draft reset; click apply targets to update the matrix.`;
+        syncObjectPanel();
+        renderAll();
+        return true;
+      },
     });
 
-    const summary = document.createElement("code");
-    summary.className = "slice-tropical-summary";
-    setMathText(
-      summary,
-      matrixRowsText(data[fieldKey], 4),
-      matrixToTex(data[fieldKey], {
-        rowLabels: Array.from({ length: state.ambientDim }, (_, index) => `e_${index + 1}`),
-        colLabels: Array.from({ length: state.ambientDim }, (_, index) => {
-          const labelValue = columnLabel(index);
-          return labelValue.plain || labelValue;
-        }),
-      }),
-      { display: true }
-    );
+    const targetActions = document.createElement("div");
+    targetActions.className = "slice-target-source-line";
+    const applyTargets = document.createElement("button");
+    applyTargets.className = "slice-btn";
+    applyTargets.type = "button";
+    applyTargets.textContent = "apply targets";
+    applyTargets.addEventListener("click", () => {
+      try {
+        const rows = typeof options.validateRows === "function"
+          ? options.validateRows(targetDraft.rows)
+          : cloneMatrixRows(targetDraft.rows, state.ambientDim);
+        data[fieldKey] = rows;
+        data[targetLabelsKey] = resizeVector(Array.isArray(targetDraft.labels) ? targetDraft.labels : [], state.ambientDim)
+          .map((value) => String(value || ""));
+        data.ambientDimension = state.ambientDim;
+        clearMatrixTargetDraft(object, fieldKey);
+        state.lastWarning = `Target ${editorLabel.toLowerCase()} applied.`;
+        const handled = typeof options.afterMatrixChange === "function" && options.afterMatrixChange(object, {
+          fieldKey,
+          mode: "targets",
+          message: state.lastWarning,
+        }) === true;
+        if (handled) return;
+        syncObjectPanel();
+        renderAll();
+      } catch (error) {
+        state.lastWarning = `${editorLabel} targets rejected: ${error.message}`;
+        updateDebug();
+      }
+    });
+    const draftNote = document.createElement("span");
+    draftNote.className = "slice-target-note";
+    draftNote.textContent = targetDraft.dirty ? "draft changes pending" : "targets edit a draft until applied";
+    targetActions.append(applyTargets, draftNote);
+    targetsPane.append(targetActions);
 
-    panel.append(modes, manualPane, importPane, targetsPane, summary);
+    function syncModeUi() {
+      const activeMode = normalizeMatrixInputMode(data[modeKey]);
+      data[modeKey] = activeMode;
+      modes.querySelectorAll("[data-matrix-input-mode]").forEach((button) => {
+        const active = button.dataset.matrixInputMode === activeMode;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+      manualPane.hidden = activeMode !== "manual";
+      importPane.hidden = activeMode !== "import";
+      targetsPane.hidden = activeMode !== "targets";
+      syncTargetSlotButtons();
+    }
+
+    function syncTargetSlotButtons() {
+      targetsPane.querySelectorAll("[data-target-slot]").forEach((button) => {
+        const slotIndex = Number(button.dataset.targetSlot);
+        const active = targetSessionMatches(object, fieldKey, slotIndex);
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+    }
+
+    panel.append(modes, manualPane, importPane, targetsPane);
+    syncModeUi();
     container.append(panel);
   }
 
@@ -4160,12 +4649,15 @@
     const select = document.createElement("select");
     select.className = "slice-select";
     select.setAttribute("aria-label", options.ariaLabel || "Dynkin reference");
-    const choices = dynkinReferenceOptions(state.ambientDim);
-    const currentValue = dynkinReferenceValueFromData(data, state.ambientDim);
+    const choices = dynkinReferenceOptions(state.ambientDim, {
+      includeRawTypes: !!options.includeRawTypes,
+    });
+    const currentValue = dynkinReferenceValueFromData(data, state.ambientDim, {
+      preferRawType: !!options.includeRawTypes,
+    });
     const value = choices.some((choice) => choice.value === currentValue) ? currentValue : defaultDynkinReferenceValue(state.ambientDim);
     if (value !== currentValue) {
       applyDynkinReferenceToData(data, value, state.ambientDim);
-      if (typeof options.afterChange === "function") options.afterChange(object);
     }
     for (const choice of choices) {
       const option = document.createElement("option");
@@ -4175,11 +4667,14 @@
     }
     select.value = value;
     select.addEventListener("change", () => {
+      object.data = data;
       applyDynkinReferenceToData(data, select.value, state.ambientDim);
-      if (typeof options.afterChange === "function") options.afterChange(object);
+      object.data = data;
+      const handled = typeof options.afterChange === "function" && options.afterChange(object) === true;
+      if (handled) return;
       state.activeTropicalDistrict = null;
       state.activeWeylChamber = null;
-      const reference = resolveDynkinReference(data, state.ambientDim);
+      const reference = resolveDynkinReference(object.data, state.ambientDim);
       state.lastWarning = `${options.messageLabel || object.name} linked to ${reference.label}.`;
       syncObjectPanel();
       renderAll();
@@ -4220,16 +4715,8 @@
       syncObjectPanel();
       renderAll();
     });
-    const summary = document.createElement("code");
-    summary.className = "slice-tropical-summary";
-    const system = weylRootSystem(data.dynkinType, state.ambientDim);
-    setMathText(
-      summary,
-      `${weylDynkinLabel(data.dynkinType, state.ambientDim)}: ${system.hyperplaneRoots.length} walls, ${system.simpleRootBasis.length} simple roots`,
-      `${data.dynkinType}_{${state.ambientDim}}:\\ ${system.hyperplaneRoots.length}\\ \\mathrm{walls},\\ ${system.simpleRootBasis.length}\\ \\mathrm{simple\\ roots}`
-    );
     line.append(label, select);
-    panel.append(line, summary);
+    panel.append(line);
     container.append(panel);
   }
 
@@ -4292,14 +4779,6 @@
       messageLabel: matrixPresetDisplayName(data.matrixPresetKind),
       afterChange: () => refreshMatrixPresetFromDynkin(object, { warn: true }),
     });
-    const summary = document.createElement("code");
-    summary.className = "slice-tropical-summary";
-    const labels = matrixColumnLabels(data, data.matrixPresetKind === "fundamental-weights" ? "omega" : "alpha", state.ambientDim);
-    setMathText(summary, matrixRowsText(data.matrixRows, 4), matrixToTex(data.matrixRows, {
-      rowLabels: Array.from({ length: state.ambientDim }, (_, index) => `e_${index + 1}`),
-      colLabels: labels,
-    }), { display: true });
-    panel.append(summary);
     container.append(panel);
   }
 
@@ -4307,11 +4786,236 @@
     return state.objects.filter((candidate) => objectTypeKey(candidate) === "matrix");
   }
 
-  function buildLatticeParams(container, object) {
+  function normalizeLatticeDataInPlace(object, n = state.ambientDim) {
+    const data = object?.data && typeof object.data === "object" ? object.data : {};
+    const normalized = normalizeLatticeData(data, n);
+    for (const key of Object.keys(data)) delete data[key];
+    Object.assign(data, normalized);
+    if (object) object.data = data;
+    return data;
+  }
+
+  function normalizeActiveLatticeObject(object, options = {}) {
+    if (!object || objectTypeKey(object) !== "lattice") return "";
     object.kind = "lattice";
-    object.data = normalizeLatticeData(object.data || {}, state.ambientDim);
-    refreshLatticeBasis(object);
+    object.labels = false;
+    const data = normalizeLatticeDataInPlace(object, state.ambientDim);
+    data.name = object.name;
+    if (data.basisMode === "dynkin") data.showLatticePoints = true;
+    return options.refreshBasis === false ? "" : refreshLatticeBasis(object, { warn: options.warn !== false });
+  }
+
+  function latticeMutationMessage(message, object) {
+    return typeof message === "function" ? message(object) : String(message || "");
+  }
+
+  function latticeBoundChangeStatus(object, before, after) {
+    if (!before || !after || after.displayCapped || after.enumerationCapped) return "";
+    if (before.visible !== after.visible || before.drawn !== after.drawn) return "";
+    const ambientChanged = before.enumerated !== after.enumerated;
+    const ambientText = ambientChanged
+      ? `ambient lattice points changed ${before.enumerated} -> ${after.enumerated}, `
+      : "";
+    return `${object.name}: ${ambientText}visible projected points unchanged inside current ${viewportBoundDescription()}.`;
+  }
+
+  function commitLatticeParamChange(object, mutate, options = {}) {
+    if (!object || objectTypeKey(object) !== "lattice") {
+      if (typeof mutate === "function") mutate(object?.data || {});
+      if (options.syncPanel !== false) syncObjectPanel();
+      renderAll();
+      return "";
+    }
+    const beforeStats = latticeProjectionStatsCache.get(object.id);
+    if (typeof mutate === "function") mutate(object.data || {});
+    const warning = normalizeActiveLatticeObject(object, {
+      refreshBasis: options.refreshBasis !== false,
+      warn: true,
+    });
+    state.selectedVertex = null;
+    state.activeTropicalDistrict = null;
+    state.activeWeylChamber = null;
+    const message = warning || latticeMutationMessage(options.message, object);
+    if (message) state.lastWarning = message;
+    if (options.syncPanel !== false) syncObjectPanel();
+    renderAll();
+    updateLatticeBoundSummaryElements();
+    if (options.boundChange) {
+      const nextStats = latticeProjectionStatsCache.get(object.id);
+      const unchangedStatus = latticeBoundChangeStatus(object, beforeStats, nextStats);
+      if (unchangedStatus) {
+        state.lastWarning = unchangedStatus;
+        updateDebug();
+        updateLatticeBoundSummaryElements();
+      }
+    }
+    return warning;
+  }
+
+  function latticeProjectionSummaryText(object) {
+    const stats = latticeProjectionStatsCache.get(object?.id);
+    if (!stats) return `drawn - / visible - / ambient -`;
+    if (stats.showPoints === false) return `points hidden / ambient ${stats.enumerated}`;
+    return `${stats.drawn} drawn / ${stats.visible} visible / ${stats.enumerated} ambient`;
+  }
+
+  function updateLatticeBoundSummaryElements() {
+    document.querySelectorAll("[data-lattice-bound-summary]").forEach((element) => {
+      const object = state.objects.find((candidate) => candidate.id === element.dataset.latticeBoundSummary);
+      if (object) element.textContent = latticeProjectionSummaryText(object);
+    });
+  }
+
+  function syncDynkinLatticeDisplayName(object) {
+    if (!object || objectTypeKey(object) !== "lattice") return;
+    const kind = normalizeDynkinLatticeKind(object.data?.dynkinLatticeKind);
+    const current = String(object.name || "").trim().toLowerCase();
+    if (!current || current === "lattice" || current === "root lattice" || current === "weight lattice") {
+      object.name = kind === "weight" ? "weight lattice" : "root lattice";
+      if (object.data) object.data.name = object.name;
+    }
+  }
+
+  function buildDynkinLatticeKindControls(panel, object) {
     const data = object.data;
+    const row = document.createElement("div");
+    row.className = "slice-row";
+    const label = document.createElement("span");
+    label.className = "slice-row-label";
+    label.textContent = "lattice kind";
+    const controls = document.createElement("div");
+    controls.className = "slice-segmented";
+    controls.setAttribute("aria-label", "Dynkin lattice kind");
+    [
+      ["root", "root lattice"],
+      ["weight", "weight lattice"],
+    ].forEach(([kind, text]) => {
+      const button = document.createElement("button");
+      button.className = "slice-segment";
+      button.type = "button";
+      button.dataset.dynkinLatticeKind = kind;
+      button.textContent = text;
+      button.classList.toggle("active", data.dynkinLatticeKind === kind);
+      button.addEventListener("click", () => {
+        commitLatticeParamChange(object, (latticeData) => {
+          clearMatrixTargetDraft(object, "basisRows");
+          latticeData.basisMode = "dynkin";
+          latticeData.dynkinLatticeKind = normalizeDynkinLatticeKind(kind);
+          latticeData.showLatticePoints = true;
+          syncDynkinLatticeDisplayName(object);
+        }, {
+          message: (latticeObject) => `${latticeObject.name} regenerated as a ${text}.`,
+        });
+      });
+      controls.append(button);
+    });
+    row.append(label, controls);
+    panel.append(row);
+  }
+
+  function buildLatticeBoundControls(panel, object) {
+    const data = object.data;
+    data.latticeBoundShape = normalizeLatticeBoundShape(data.latticeBoundShape);
+    data.latticeBoundRadius = normalizeLatticeBoundRadius(data.latticeBoundRadius);
+    const row = document.createElement("div");
+    row.className = "slice-row";
+    const label = document.createElement("span");
+    label.className = "slice-row-label";
+    label.textContent = "point bound";
+
+    const controls = document.createElement("div");
+    controls.className = "slice-control-line";
+    const modes = document.createElement("div");
+    modes.className = "slice-segmented";
+    modes.setAttribute("aria-label", "Lattice point bound shape");
+    [
+      ["ball", "D^n"],
+      ["box", "box"],
+    ].forEach(([shape, text]) => {
+      const button = document.createElement("button");
+      button.className = "slice-segment";
+      button.type = "button";
+      button.dataset.latticeBoundShape = shape;
+      button.textContent = text;
+      button.classList.toggle("active", data.latticeBoundShape === shape);
+      button.addEventListener("click", () => {
+        commitLatticeParamChange(object, (latticeData) => {
+          latticeData.latticeBoundShape = normalizeLatticeBoundShape(shape);
+        }, {
+          message: (latticeObject) => `${latticeObject.name} point bound set to ${latticeBoundLabel(latticeObject.data?.latticeBoundShape)}.`,
+          refreshBasis: false,
+          boundChange: true,
+        });
+      });
+      modes.append(button);
+    });
+
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = "0.1";
+    slider.max = "12";
+    slider.step = "0.25";
+    slider.value = String(data.latticeBoundRadius);
+    slider.setAttribute("aria-label", "Lattice point bound radius slider");
+
+    const radius = document.createElement("input");
+    radius.className = "slice-input slice-param-number";
+    radius.type = "text";
+    radius.inputMode = "decimal";
+    radius.value = fmt(data.latticeBoundRadius, 4);
+    radius.setAttribute("aria-label", "Lattice point bound radius value");
+
+    const summary = document.createElement("span");
+    summary.className = "slice-target-note";
+    summary.dataset.latticeBoundSummary = object.id;
+    summary.textContent = latticeProjectionSummaryText(object);
+
+    const syncRadiusControls = () => {
+      const value = normalizeLatticeBoundRadius(object.data?.latticeBoundRadius);
+      slider.value = String(value);
+      radius.value = fmt(value, 4);
+      summary.textContent = latticeProjectionSummaryText(object);
+    };
+    const commitRadius = (raw, meta = {}) => {
+      const next = normalizeLatticeBoundRadius(raw);
+      commitLatticeParamChange(object, (latticeData) => {
+        latticeData.latticeBoundRadius = next;
+      }, {
+        message: `${object.name} point bound radius ${fmt(next, 2)}.`,
+        refreshBasis: false,
+        syncPanel: meta.syncPanel === true,
+        boundChange: true,
+      });
+      syncRadiusControls();
+    };
+
+    slider.addEventListener("input", () => commitRadius(slider.value));
+    attachRationalInputBehavior(radius, {
+      digits: 4,
+      wheelStep: 0.25,
+      wheelMin: 0.1,
+      wheelMax: 12,
+      currentValue: () => object.data?.latticeBoundRadius ?? data.latticeBoundRadius,
+      validateValue: (value) => value > 0,
+      invalidMessage: "Lattice point-bound radius must be a positive number or fraction.",
+      onCommit: (value) => commitRadius(value),
+      afterCommit: syncRadiusControls,
+      onInvalid: () => {
+        syncRadiusControls();
+        updateDebug();
+      },
+    });
+
+    controls.append(modes, slider, radius, summary);
+    row.append(label, controls);
+    panel.append(row);
+  }
+
+  function buildLatticeParams(container, object) {
+    normalizeActiveLatticeObject(object, { warn: false });
+    const data = object.data;
+    const dynkinBacked = data.basisMode === "dynkin";
+    if (dynkinBacked) data.showLatticePoints = true;
     const panel = document.createElement("div");
     panel.className = "slice-matrix-panel";
 
@@ -4330,17 +5034,22 @@
       button.textContent = label;
       button.classList.toggle("active", data.basisMode === mode);
       button.addEventListener("click", () => {
-        data.basisMode = normalizeLatticeBasisMode(mode);
-        if (data.basisMode === "matrix-object" && !data.matrixSourceId) {
-          data.matrixSourceId = matrixObjectOptions()[0]?.id || null;
-        }
-        if (data.basisMode === "dynkin" && !data.dynkinSourceId) {
-          applyDynkinReferenceToData(data, defaultDynkinReferenceValue(state.ambientDim), state.ambientDim);
-        }
-        const warning = refreshLatticeBasis(object, { warn: true });
-        state.lastWarning = warning || `Lattice basis mode switched to ${label}.`;
-        syncObjectPanel();
-        renderAll();
+        commitLatticeParamChange(object, (latticeData) => {
+          clearMatrixTargetDraft(object, "basisRows");
+          latticeData.basisMode = normalizeLatticeBasisMode(mode);
+          if (latticeData.basisMode === "matrix-object" && !latticeData.matrixSourceId) {
+            latticeData.matrixSourceId = matrixObjectOptions()[0]?.id || null;
+          }
+          if (latticeData.basisMode === "dynkin" && !latticeData.dynkinSourceId) {
+            applyDynkinReferenceToData(latticeData, defaultDynkinReferenceValue(state.ambientDim), state.ambientDim);
+          }
+          if (latticeData.basisMode === "dynkin") {
+            latticeData.showLatticePoints = true;
+            syncDynkinLatticeDisplayName(object);
+          }
+        }, {
+          message: `Lattice basis mode switched to ${label}.`,
+        });
       });
       basisModes.append(button);
     });
@@ -4356,15 +5065,21 @@
       checkbox.type = "checkbox";
       checkbox.checked = data[key] !== false;
       checkbox.addEventListener("change", () => {
-        data[key] = checkbox.checked;
-        state.lastWarning = `${label} ${checkbox.checked ? "shown" : "hidden"}.`;
-        renderAll();
+        const checked = checkbox.checked;
+        commitLatticeParamChange(object, (latticeData) => {
+          latticeData[key] = checked;
+        }, {
+          message: `${label} ${checked ? "shown" : "hidden"}.`,
+          refreshBasis: false,
+          syncPanel: false,
+        });
       });
       wrap.append(checkbox, document.createTextNode(label));
       toggles.append(wrap);
     });
 
-    panel.append(basisModes, toggles);
+    panel.append(basisModes);
+    if (!dynkinBacked) panel.append(toggles);
 
     if (data.basisMode === "matrix-input") {
       const editorHost = document.createElement("div");
@@ -4378,6 +5093,22 @@
         validateRows: (rows) => validateFullRankMatrixRows(rows, state.ambientDim, "Lattice basis"),
         resetVector: (index) => Array.from({ length: state.ambientDim }, (_, coordinate) => (coordinate === index ? 1 : 0)),
         resetRows: () => frameRows(identityFrame(state.ambientDim)),
+        afterModeChange: (latticeObject, meta) => {
+          commitLatticeParamChange(latticeObject, null, {
+            message: meta.message || `Lattice basis ${meta.text} is active.`,
+            refreshBasis: false,
+            syncPanel: false,
+          });
+          return true;
+        },
+        afterMatrixChange: (latticeObject, meta) => {
+          commitLatticeParamChange(latticeObject, (latticeData) => {
+            latticeData.basisMode = "matrix-input";
+          }, {
+            message: meta.message,
+          });
+          return true;
+        },
       });
     } else if (data.basisMode === "matrix-object") {
       const line = document.createElement("div");
@@ -4408,53 +5139,35 @@
         select.value = data.matrixSourceId;
       }
       select.addEventListener("change", () => {
-        data.matrixSourceId = select.value || null;
-        const warning = refreshLatticeBasis(object, { warn: true });
-        state.lastWarning = warning || `Lattice linked to matrix ${select.options[select.selectedIndex]?.textContent || ""}.`;
-        syncObjectPanel();
-        renderAll();
+        const sourceName = select.options[select.selectedIndex]?.textContent || "";
+        commitLatticeParamChange(object, (latticeData) => {
+          clearMatrixTargetDraft(object, "basisRows");
+          latticeData.matrixSourceId = select.value || null;
+        }, {
+          message: `Lattice linked to matrix ${sourceName}.`,
+        });
       });
       line.append(label, select);
       panel.append(line);
     } else {
-      const kindModes = document.createElement("div");
-      kindModes.className = "slice-segmented";
-      kindModes.setAttribute("aria-label", "Dynkin lattice kind");
-      [
-        ["root", "root lattice"],
-        ["weight", "weight lattice"],
-      ].forEach(([kind, label]) => {
-        const button = document.createElement("button");
-        button.className = "slice-segment";
-        button.type = "button";
-        button.dataset.dynkinLatticeKind = kind;
-        button.textContent = label;
-        button.classList.toggle("active", data.dynkinLatticeKind === kind);
-        button.addEventListener("click", () => {
-          data.dynkinLatticeKind = normalizeDynkinLatticeKind(kind);
-          const warning = refreshLatticeBasis(object, { warn: true });
-          state.lastWarning = warning || `${label} selected.`;
-          syncObjectPanel();
-          renderAll();
-        });
-        kindModes.append(button);
-      });
-      panel.append(kindModes);
+      buildDynkinLatticeKindControls(panel, object);
       buildDynkinReferencePicker(panel, object, {
         label: "Dynkin",
         messageLabel: "lattice",
-        afterChange: () => refreshLatticeBasis(object, { warn: true }),
+        includeRawTypes: true,
+        afterChange: (latticeObject) => {
+          const reference = resolveDynkinReference(latticeObject.data, state.ambientDim);
+          clearMatrixTargetDraft(latticeObject, "basisRows");
+          commitLatticeParamChange(latticeObject, null, {
+            message: `lattice linked to ${reference.label}.`,
+          });
+          return true;
+        },
       });
     }
 
-    const summary = document.createElement("code");
-    summary.className = "slice-tropical-summary";
-    const basisRows = cloneMatrixRows(data.basisRows, state.ambientDim);
-    setMathText(summary, matrixRowsText(basisRows, 4), matrixToTex(basisRows, {
-      rowLabels: Array.from({ length: state.ambientDim }, (_, index) => `e_${index + 1}`),
-      colLabels: Array.from({ length: state.ambientDim }, (_, index) => `b_${index + 1}`),
-    }), { display: true });
-    panel.append(summary);
+    buildLatticeBoundControls(panel, object);
+
     container.append(panel);
   }
 
@@ -4843,11 +5556,7 @@
       densityModes.append(button);
     });
 
-    const summary = document.createElement("code");
-    summary.className = "slice-tropical-summary";
-    summary.dataset.tropicalSummary = "true";
-    setMathText(summary, tropicalSummaryText(data), tropicalNotationTex(data, data.tropicalNotationMode));
-    panel.append(modes, notationModes, textarea, apply, districtToggle, densityModes, summary);
+    panel.append(modes, notationModes, textarea, apply, districtToggle, densityModes);
     container.appendChild(panel);
   }
 
@@ -4939,14 +5648,7 @@
       densityModes.append(button);
     });
 
-    const summary = document.createElement("code");
-    summary.className = "slice-tropical-summary";
-    const system = weylRootSystem(data.dynkinType, state.ambientDim);
-    const plain = `${weylDynkinLabel(data.dynkinType, state.ambientDim)}: ${system.hyperplaneRoots.length} walls`;
-    const tex = `${data.dynkinType}_{${state.ambientDim}}:\\ ${system.hyperplaneRoots.length}\\ \\mathrm{walls}`;
-    setMathText(summary, plain, tex);
-
-    panel.append(chamberToggle, labelModes, densityModes, summary);
+    panel.append(chamberToggle, labelModes, densityModes);
     container.appendChild(panel);
   }
 
@@ -5236,7 +5938,7 @@
     object.style.opacity = finiteNumber($("object-opacity").value, object.style.opacity);
     object.style.pointSize = finiteNumber($("object-point-size").value, object.style.pointSize);
     object.style.lineWidth = finiteNumber($("object-line-width").value, object.style.lineWidth);
-    object.labels = $("object-labels").checked;
+    object.labels = objectLabelsEnabled(object) && $("object-labels").checked;
     if (object.data) object.data.name = object.name;
     if (!objectHasVisibleLayer(object) && state.selectedVertex?.objectId === object.id) state.selectedVertex = null;
   }
@@ -5416,13 +6118,12 @@
       object.kind = "lattice";
       object.visibleProjection = true;
       object.visibleSlice = false;
-      object.data = normalizeLatticeData(data, state.ambientDim);
+      normalizeLatticeDataInPlace(object, state.ambientDim);
       object.data.name = object.name;
       const warning = refreshLatticeBasis(object, { warn: true });
       if (warning) return warning;
     } else if (type === "voronoi-diagram") {
       object.kind = "voronoi";
-      object.visibleProjection = false;
       object.visibleSlice = true;
       object.data = normalizeVoronoiDiagramData(data, state.ambientDim);
       object.data.name = object.name;
@@ -5596,7 +6297,9 @@
       dynkinType: normalizeWeylDynkinType(reference.dynkinType, n),
       dynkinRank: n,
       dynkinLatticeKind,
-      showLatticePoints: data.showLatticePoints !== false,
+      showLatticePoints: basisMode === "dynkin" ? true : data.showLatticePoints !== false,
+      latticeBoundShape: normalizeLatticeBoundShape(data.latticeBoundShape),
+      latticeBoundRadius: normalizeLatticeBoundRadius(data.latticeBoundRadius),
       basisTargetLabels: resizeVector(Array.isArray(data.basisTargetLabels) ? data.basisTargetLabels : [], n)
         .map((value) => String(value || "")),
       latticeStatus: String(data.latticeStatus || ""),
@@ -5760,7 +6463,7 @@
       kind: isFormulaSet ? "formula" : isTropical ? "tropical" : isWeyl ? "weyl" : isDynkin ? "dynkin" : isLattice ? "lattice" : isVoronoi ? "voronoi" : data.kind || object.kind || "geometry",
       visibleProjection: visibleProjection !== false,
       visibleSlice: !!visibleSlice,
-      labels: !!(object.labels ?? object.showLabels),
+      labels: isLattice ? false : !!(object.labels ?? object.showLabels),
       style: {
         color: "#2f7d70",
         opacity: 0.85,
@@ -6150,6 +6853,13 @@
       state.viewport.cameraDistance = finiteNumber($("camera-distance").value, 3);
       renderAll();
     });
+    $("viewport-bound-controls").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-viewport-bound]");
+      if (!button) return;
+      state.viewport.boundShape = normalizeViewportBoundShape(button.dataset.viewportBound);
+      state.lastWarning = `Viewport bound set to ${viewportBoundLabel()}.`;
+      renderAll();
+    });
     ["show-axes", "show-grid", "show-labels", "show-box", "exact-sphere-guide"].forEach((id) => {
       $(id).addEventListener("change", () => {
         state.viewport.showAxes = $("show-axes").checked;
@@ -6214,6 +6924,7 @@
 
   function renderAll() {
     state.sliceDim = 2;
+    state.viewport.boundShape = normalizeViewportBoundShape(state.viewport.boundShape);
     state.viewport.labelSize = normalizeCanvasLabelSize(state.viewport.labelSize);
     state.activeDirection = normalizeDirection(state.activeDirection);
     clampMotionState();
@@ -6232,6 +6943,7 @@
     $("show-labels").checked = state.viewport.showLabels;
     $("show-box").checked = state.viewport.showBox;
     $("exact-sphere-guide").checked = state.viewport.exactSphereGuide;
+    setSegmentActive("viewport-bound-controls", "data-viewport-bound", state.viewport.boundShape);
     $("auto-schmidt").checked = state.autoSchmidt;
 
     setSegmentActive("direction-controls", "data-direction-key", directionKey());
@@ -6248,6 +6960,7 @@
     updateReadouts();
     draw();
     updateDebug();
+    updateLatticeBoundSummaryElements();
     queueMathTypeset();
   }
 
@@ -6306,6 +7019,18 @@
 
   function updateDebug() {
     const counts = collectCounts();
+    const latticeWarningText = counts.latticeWarnings.length
+      ? counts.latticeWarnings[0]
+      : `${counts.latticeProjectionDrawn}/${counts.latticeProjectionVisible} visible lattice pts from ${counts.latticeProjectionGenerated} ambient / ${counts.sliceVoronoiHalfspaces} Voronoi halfspaces`;
+    const latticeCapText = counts.latticeProjectionDisplayCapped
+      ? `drawing capped at ${counts.latticeProjectionDrawn}/${counts.latticeProjectionVisible} visible; reduce that lattice point-bound radius`
+      : counts.latticeEnumerationCapped
+        ? "lattice point search capped; reduce that lattice point-bound radius"
+        : "none";
+    const voronoiProjectionText = counts.voronoiProjectionVertices || counts.voronoiProjectionEdges || counts.voronoiProjectionBuildMs
+      ? `${counts.voronoiProjectionVertices} vertices / ${counts.voronoiProjectionEdges} edges${counts.voronoiProjectionCapped ? " (partial)" : ""}`
+      : "none";
+    const highlightWarning = !!counts.latticeWarnings.length || !!counts.projectionWarnings.length || counts.latticeProjectionDisplayCapped || counts.latticeEnumerationCapped || counts.voronoiProjectionCapped;
     writeDefinitionList("visible-counts", [
       ["objects", `${counts.visibleObjects}/${state.objects.length}`],
       ["proj objects", String(counts.projectionObjects)],
@@ -6323,16 +7048,23 @@
       ["slice runtime", `${fmt(runtimeStats.exactSliceMs, 2)} ms`],
       ["tropical skips", counts.sliceTropicalSkippedPairs || counts.sliceTropicalSkippedDistricts ? `${counts.sliceTropicalSkippedPairs} pairs / ${counts.sliceTropicalSkippedDistricts} districts` : "none"],
       ["Weyl skips", counts.sliceWeylSkippedWalls || counts.sliceWeylDuplicateWalls ? `${counts.sliceWeylSkippedWalls} skipped / ${counts.sliceWeylDuplicateWalls} duplicate` : "none"],
-      ["lattice", counts.latticeWarnings.length ? counts.latticeWarnings[0] : `${counts.latticeProjectionPoints} pts / ${counts.sliceVoronoiHalfspaces} Voronoi halfspaces`],
+      ["lattice", latticeWarningText],
       ["lattice build", `${fmt(counts.latticeBuildMs, 2)} ms`],
-      ["lattice caps", counts.latticeEnumerationCapped ? "enumeration capped" : "none"],
+      ["lattice caps", latticeCapText],
+      ["Voronoi proj", voronoiProjectionText],
+      ["Vor proj build", counts.voronoiProjectionBuildMs ? `${fmt(counts.voronoiProjectionBuildMs, 2)} ms` : "none"],
       ["halfspaces", runtimeStats.halfspaceCount ? `${runtimeStats.halfspaceCount} (${runtimeStats.heavyFamily})` : "none"],
       ["halfspace build", `${fmt(runtimeStats.halfspaceMs, 2)} ms`],
       ["empty warning", counts.visibleObjects ? "none" : "no visible objects"],
       ["orth error", fmt(maxOrthogonalityError(), 6)],
     ]);
-    $("debug-warnings").textContent = state.lastWarning;
-    $("source-status").textContent = state.lastWarning;
+    const warningMessage = highlightWarning
+      ? (counts.latticeWarnings[0] || counts.projectionWarnings[0] || state.lastWarning)
+      : state.lastWarning;
+    $("debug-warnings").textContent = warningMessage;
+    $("source-status").textContent = warningMessage;
+    $("debug-warnings").classList.toggle("highlight", highlightWarning);
+    $("source-status").classList.toggle("highlight", highlightWarning);
     const picked = currentSelectedCandidate();
     const pickedText = picked
       ? `${picked.objectName} / ${picked.label}  x=${vectorToInline(picked.ambient)}  y=${vectorToInline(picked.frameCoords)}`
@@ -6354,7 +7086,7 @@
       { plain: `p [${state.p.map((value) => fmt(value, 2)).join(", ")}]`, tex: `p\\ ${vectorToTex(state.p, 2)}` },
       { plain: `objects ${counts.visibleObjects} visible`, tex: `\\mathrm{objects}\\ ${counts.visibleObjects}\\ \\mathrm{visible}` },
       { plain: `zoom ${fmt(state.viewport.zoom, 2)}`, tex: `\\mathrm{zoom}\\ ${fmt(state.viewport.zoom, 2)}` },
-      { plain: `box ${fmt(state.viewport.boxRadius, 2)}`, tex: `\\mathrm{box}\\ ${fmt(state.viewport.boxRadius, 2)}` },
+      { plain: `${viewportBoundLabel()} ${fmt(state.viewport.boxRadius, 2)}`, tex: `\\mathrm{${texText(viewportBoundLabel())}}\\ ${fmt(state.viewport.boxRadius, 2)}` },
       ...(pickedText ? [{ plain: `picked ${pickedText}`, tex: `\\text{picked ${texText(pickedText)}}` }] : []),
     ]);
     queueMathTypeset();
@@ -6430,9 +7162,18 @@
       sliceVoronoiCells: 0,
       sliceVoronoiHalfspaces: 0,
       latticeProjectionPoints: 0,
+      latticeProjectionGenerated: 0,
+      latticeProjectionVisible: 0,
+      latticeProjectionDrawn: 0,
+      latticeProjectionDisplayCapped: false,
       latticeEnumerationCapped: false,
       latticeWarnings: [],
       latticeBuildMs: 0,
+      voronoiProjectionVertices: 0,
+      voronoiProjectionEdges: 0,
+      voronoiProjectionCapped: false,
+      voronoiProjectionBuildMs: 0,
+      projectionWarnings: [],
       slicePoints: 0,
     };
     for (const object of state.objects) {
@@ -6445,9 +7186,25 @@
         counts.edges += drawable.edges.length;
         counts.rays += drawable.rays.length;
         if (objectTypeKey(object) === "lattice") {
+          const lattice = drawable.lattice || {};
           counts.latticeProjectionPoints += drawable.points.length;
+          counts.latticeProjectionGenerated += finiteNumber(lattice.enumerated, drawable.points.length);
+          counts.latticeProjectionVisible += finiteNumber(lattice.visible, drawable.points.length);
+          counts.latticeProjectionDrawn += finiteNumber(lattice.drawn, drawable.points.length);
+          counts.latticeProjectionDisplayCapped = counts.latticeProjectionDisplayCapped || !!lattice.displayCapped;
+          counts.latticeEnumerationCapped = counts.latticeEnumerationCapped || !!lattice.enumerationCapped;
+          if (lattice.status) counts.latticeWarnings.push(lattice.status);
           if (object.data?.latticeStatus && /warning|missing|capped|rank/i.test(object.data.latticeStatus)) {
             counts.latticeWarnings.push(object.data.latticeStatus);
+          }
+        } else if (objectTypeKey(object) === "voronoi-diagram") {
+          const projection = drawable.voronoiProjection || {};
+          counts.voronoiProjectionVertices += finiteNumber(projection.vertexCount, drawable.points.length);
+          counts.voronoiProjectionEdges += finiteNumber(projection.edgeCount, drawable.edges.length);
+          counts.voronoiProjectionCapped = counts.voronoiProjectionCapped || !!projection.capped;
+          counts.voronoiProjectionBuildMs += finiteNumber(projection.buildMs, 0);
+          if (projection.status && /warning|missing|capped|partial|rank|invalid/i.test(projection.status)) {
+            counts.projectionWarnings.push(projection.status);
           }
         }
       }
@@ -6544,7 +7301,7 @@
     state.weylChamberPickCandidates = [];
 
     if (state.viewport.showGrid) drawGrid(ctx, view, width, height);
-    if (state.viewport.showBox) drawBox(ctx, view);
+    if (state.viewport.showBox) drawViewportBound(ctx, view);
     if (state.viewport.showAxes) drawAxes(ctx, view);
 
     for (const object of state.objects) {
@@ -6573,6 +7330,30 @@
     ctx.restore();
   }
 
+  function drawViewportBound(ctx, view) {
+    if (normalizeViewportBoundShape(state.viewport.boundShape) === "disk") {
+      drawDiskBound(ctx, view);
+    } else {
+      drawBox(ctx, view);
+    }
+  }
+
+  function applyViewportCanvasClip(ctx, view) {
+    const r = state.viewport.boxRadius;
+    if (normalizeViewportBoundShape(state.viewport.boundShape) === "disk") {
+      const center = projectY([0, 0, 0], view);
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, r * view.scale, 0, Math.PI * 2);
+      ctx.clip();
+      return;
+    }
+    const a = projectY([-r, -r, 0], view);
+    const b = projectY([r, r, 0], view);
+    ctx.beginPath();
+    ctx.rect(a.x, b.y, b.x - a.x, a.y - b.y);
+    ctx.clip();
+  }
+
   function drawBox(ctx, view) {
     const r = state.viewport.boxRadius;
     const a = projectY([-r, -r, 0], view);
@@ -6581,6 +7362,18 @@
     ctx.strokeStyle = "rgba(47, 125, 112, 0.32)";
     ctx.lineWidth = 1.5 * view.ratio;
     ctx.strokeRect(a.x, b.y, b.x - a.x, a.y - b.y);
+    ctx.restore();
+  }
+
+  function drawDiskBound(ctx, view) {
+    const r = state.viewport.boxRadius;
+    const center = projectY([0, 0, 0], view);
+    ctx.save();
+    ctx.strokeStyle = "rgba(47, 125, 112, 0.32)";
+    ctx.lineWidth = 1.5 * view.ratio;
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, r * view.scale, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -6626,6 +7419,7 @@
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     if (options.preview) ctx.setLineDash([6 * view.ratio, 5 * view.ratio]);
+    applyViewportCanvasClip(ctx, view);
 
     for (const [a, b] of data.edges) {
       if (!projected[a] || !projected[b]) continue;
@@ -6649,7 +7443,7 @@
       if (registerPick) {
         recordPickCandidate(object, tip, ray.label || `rho_${rayIndex + 1}`, `ray-tip:${rayIndex}`, Math.max(pointSize, 4 * view.ratio));
       }
-      if ((object.labels || state.viewport.showLabels) && rayIndex < 48) {
+      if (shouldDrawObjectLabels(object) && rayIndex < 48) {
         const label = ray.label || `rho_${rayIndex + 1}`;
         addCanvasMathLabel(view, tip, label, labelToTex(label), { offsetX: 5, offsetY: -5, color });
       }
@@ -6658,7 +7452,7 @@
     projected.forEach((point, index) => {
       drawPoint(ctx, point.x, point.y, pointSize);
       if (registerPick) recordPickCandidate(object, point, `v_${index + 1}`, `point:${index}`, pointSize);
-      if ((object.labels || state.viewport.showLabels) && index < 48) {
+      if (shouldDrawObjectLabels(object) && index < 48) {
         addCanvasMathLabel(view, point, String(index), String(index), { offsetX: 5, offsetY: -5, color });
       }
     });
@@ -6677,12 +7471,13 @@
     ctx.fillStyle = options.color || "#8a4f9f";
     ctx.lineWidth = options.lineWidth || 2 * view.ratio;
     if (options.preview) ctx.setLineDash([6 * view.ratio, 5 * view.ratio]);
+    applyViewportCanvasClip(ctx, view);
     ctx.beginPath();
     ctx.arc(center.x, center.y, radius * view.scale, 0, Math.PI * 2);
     ctx.stroke();
     drawPoint(ctx, center.x, center.y, Math.max(pointSize, 3 * view.ratio));
     if (options.registerPick !== false) recordPickCandidate(object, center, "center", "sphere-center", Math.max(pointSize, 3 * view.ratio));
-    if (object.labels || state.viewport.showLabels) {
+    if (shouldDrawObjectLabels(object)) {
       addCanvasMathLabel(view, center, "center", labelToTex("center"), { offsetX: 5, offsetY: -5, color: options.color || "#8a4f9f" });
     }
     ctx.restore();
@@ -6704,6 +7499,7 @@
     ctx.lineWidth = lineWidth;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
+    applyViewportCanvasClip(ctx, view);
 
     if (slice.kind === "polygon") {
       const projected = slice.vertices.map((vertex) => projectFramePoint(vertex.y, view));
@@ -6720,7 +7516,7 @@
       projected.forEach((point, index) => {
         drawPoint(ctx, point.x, point.y, pointSize);
         if (registerPick) recordPickCandidate(object, point, `slice v_${index + 1}`, `slice-point:${index}`, pointSize);
-        if ((object.labels || state.viewport.showLabels) && index < 48) {
+        if (shouldDrawObjectLabels(object) && index < 48) {
           addCanvasMathLabel(view, point, `s${index}`, `s_{${index}}`, { offsetX: 5, offsetY: -5, color });
         }
       });
@@ -6731,7 +7527,7 @@
       projected.forEach((point, index) => {
         drawPoint(ctx, point.x, point.y, pointSize);
         if (registerPick) recordPickCandidate(object, point, `slice v_${index + 1}`, `slice-point:${index}`, pointSize);
-        if ((object.labels || state.viewport.showLabels) && index < 48) {
+        if (shouldDrawObjectLabels(object) && index < 48) {
           addCanvasMathLabel(view, point, `s${index}`, `s_{${index}}`, { offsetX: 5, offsetY: -5, color });
         }
       });
@@ -6740,7 +7536,7 @@
       ctx.globalAlpha = alpha;
       drawPoint(ctx, point.x, point.y, pointSize + 1 * view.ratio);
       if (registerPick) recordPickCandidate(object, point, slice.label || "slice point", "slice-point:0", pointSize + 1 * view.ratio);
-      if (object.labels || state.viewport.showLabels) {
+      if (shouldDrawObjectLabels(object)) {
         const label = slice.label || "slice point";
         addCanvasMathLabel(view, point, label, labelToTex(label), { offsetX: 5, offsetY: -5, color });
       }
@@ -6754,7 +7550,7 @@
       ctx.stroke();
       drawPoint(ctx, center.x, center.y, pointSize);
       if (registerPick) recordPickCandidate(object, center, "slice center", "slice-center", pointSize);
-      if (object.labels || state.viewport.showLabels) {
+      if (shouldDrawObjectLabels(object)) {
         addCanvasMathLabel(view, center, "slice center", labelToTex("slice center"), { offsetX: 5, offsetY: -5, color });
       }
     } else if (slice.kind === "conic") {
@@ -7106,6 +7902,9 @@
   }
 
   function lineBoxIntersections(a, b, c, radius) {
+    if (normalizeViewportBoundShape(state.viewport.boundShape) === "disk") {
+      return lineDiskIntersections(a, b, c, radius);
+    }
     const candidates = [];
     const tolerance = sliceTolerance();
     const push = (x, y) => {
@@ -7123,6 +7922,24 @@
       push((c - b * radius) / a, radius);
     }
     return farthestPair(candidates);
+  }
+
+  function lineDiskIntersections(a, b, c, radius) {
+    const r = Math.max(1, radius);
+    const tolerance = sliceTolerance();
+    const lengthSq = a * a + b * b;
+    if (lengthSq <= tolerance ** 2) return [];
+    const distance = Math.abs(c) / Math.sqrt(lengthSq);
+    if (distance > r + tolerance) return [];
+    const base = [a * c / lengthSq, b * c / lengthSq];
+    const halfLengthSq = Math.max(0, r * r - distance * distance);
+    if (halfLengthSq <= tolerance ** 2) return [base];
+    const halfLength = Math.sqrt(halfLengthSq);
+    const scaleValue = halfLength / Math.sqrt(lengthSq);
+    return [
+      [base[0] - b * scaleValue, base[1] + a * scaleValue],
+      [base[0] + b * scaleValue, base[1] - a * scaleValue],
+    ];
   }
 
   function formulaClipRadius() {
@@ -7162,6 +7979,7 @@
       const y = -radius + (row + 0.5) * cell;
       for (let col = 0; col < steps; col += 1) {
         const x = -radius + (col + 0.5) * cell;
+        if (!viewportPointInside([x, y], radius)) continue;
         const value = formulaConicValue(slice.coeffs, x, y);
         const inside = slice.relation === ">=" ? value >= -sliceTolerance() : value <= sliceTolerance();
         if (!inside) continue;
@@ -7279,6 +8097,7 @@
       const y = -radius + (row + 0.5) * cell;
       for (let col = 0; col < steps; col += 1) {
         const x = -radius + (col + 0.5) * cell;
+        if (!viewportPointInside([x, y], radius)) continue;
         if (!numericFormulaInside(numericFormulaValue(slice.ast, x, y), slice.relation)) continue;
         const left = view.centerX + (-radius + col * cell) * view.scale;
         const top = view.centerY - (-radius + (row + 1) * cell) * view.scale;
@@ -7755,8 +8574,7 @@
   }
 
   function resolveLatticeBasis(object, options = {}) {
-    const data = object?.data || {};
-    object.data = normalizeLatticeData(data, state.ambientDim);
+    normalizeLatticeDataInPlace(object, state.ambientDim);
     const warning = refreshLatticeBasis(object, options);
     const rows = cloneMatrixRows(object.data.basisRows, state.ambientDim);
     try {
@@ -7768,21 +8586,34 @@
     }
   }
 
-  function latticeCoefficientBounds(basisRows, ambientRadius) {
+  function latticeCoefficientBounds(basisRows, ambientRadius, boundShape = "ball") {
     try {
       const inverse = inverseMatrix(basisRows, "Lattice basis");
-      return inverse.map((row) => Math.max(1, Math.ceil(norm(row) * ambientRadius + 1)));
+      const shape = normalizeLatticeBoundShape(boundShape);
+      return inverse.map((row) => {
+        const stretch = shape === "box"
+          ? row.reduce((total, value) => total + Math.abs(value), 0)
+          : norm(row);
+        return Math.max(1, Math.ceil(stretch * ambientRadius + 1));
+      });
     } catch {
       return Array(state.ambientDim).fill(1);
     }
+  }
+
+  function ambientInLatticeProjectionBound(point, radius, boundShape = "ball") {
+    const tolerance = sliceTolerance();
+    if (normalizeLatticeBoundShape(boundShape) === "ball") return norm(point) <= radius + tolerance;
+    return point.every((coordinate) => Math.abs(coordinate) <= radius + tolerance);
   }
 
   function enumerateLatticeVectors(basisRows, ambientRadius, options = {}) {
     const n = state.ambientDim;
     const cap = options.cap || LATTICE_ENUMERATION_CAP;
     const includeZero = options.includeZero === true;
-    const bounds = latticeCoefficientBounds(basisRows, ambientRadius);
-    const maxShell = Math.min(options.maxShell || 9, Math.max(...bounds));
+    const boundShape = normalizeLatticeBoundShape(options.boundShape || "ball");
+    const bounds = latticeCoefficientBounds(basisRows, ambientRadius, boundShape);
+    const maxShell = Math.min(options.maxShell || Math.max(...bounds), Math.max(...bounds));
     const vectors = [];
     let candidateCount = 0;
     let capped = false;
@@ -7802,7 +8633,7 @@
         seen.add(key);
         const ambient = multiplyMatrixVector(basisRows, coeffs);
         const length = norm(ambient);
-        if (length <= ambientRadius + sliceTolerance()) {
+        if (ambientInLatticeProjectionBound(ambient, ambientRadius, boundShape)) {
           vectors.push({ coeffs: coeffs.slice(), ambient, length });
         }
         return;
@@ -7819,76 +8650,85 @@
       if (capped) break;
     }
     vectors.sort((left, right) => left.length - right.length);
-    return { vectors, candidateCount, capped, bounds, maxShell };
-  }
-
-  function enumerateLatticeShellVectors(basisRows, shell, bounds, ambientRadius, counter) {
-    const n = state.ambientDim;
-    const vectors = [];
-    const coeffs = Array(n).fill(0);
-    const visit = (index, shellUsed) => {
-      if (counter.capped) return;
-      if (index === n) {
-        if (!shellUsed) return;
-        counter.candidateCount += 1;
-        if (counter.candidateCount > counter.cap) {
-          counter.capped = true;
-          return;
-        }
-        const ambient = multiplyMatrixVector(basisRows, coeffs);
-        const length = norm(ambient);
-        if (length > sliceTolerance() && length <= ambientRadius + sliceTolerance()) {
-          vectors.push({ coeffs: coeffs.slice(), ambient, length });
-        }
-        return;
-      }
-      const bound = Math.min(bounds[index], shell);
-      for (let value = -bound; value <= bound; value += 1) {
-        coeffs[index] = value;
-        visit(index + 1, shellUsed || Math.abs(value) === shell);
-        if (counter.capped) return;
-      }
-    };
-    visit(0, false);
-    vectors.sort((left, right) => left.length - right.length);
-    return vectors;
-  }
-
-  function maxAmbientDistanceOnSlicePolygon(polygon, center) {
-    const q = finiteVector(center, state.ambientDim);
-    return Math.max(0, ...polygon.map((point) => norm(ambientFromFrameCoords(point).map((value, index) => value - q[index]))));
+    return { vectors, candidateCount, capped, bounds, maxShell, boundShape, boundRadius: ambientRadius };
   }
 
   function latticeProjectionData(object) {
     const resolved = resolveLatticeBasis(object);
-    if (!resolved.ok) return { points: [], rays: [], status: resolved.warning || "invalid lattice basis", capped: false };
-    const data = object.data || {};
-    const radius = Math.max(2, norm(state.p) + state.viewport.boxRadius * Math.sqrt(2) + 2);
-    const enumeration = enumerateLatticeVectors(resolved.basisRows, radius, {
-      cap: LATTICE_PROJECTION_POINT_CAP * 8,
-      includeZero: true,
-      maxShell: 8,
-    });
-    const frameRadius = state.viewport.boxRadius;
-    const points = [];
-    if (data.showLatticePoints !== false) {
-      for (const vector of enumeration.vectors) {
-        const centered = vector.ambient.map((value, index) => value - (state.p[index] || 0));
-        const y1 = dot(centered, state.frame[0]);
-        const y2 = dot(centered, state.frame[1]);
-        if (Math.abs(y1) <= frameRadius + sliceTolerance() && Math.abs(y2) <= frameRadius + sliceTolerance()) {
-          points.push(vector.ambient);
-          if (points.length >= LATTICE_PROJECTION_POINT_CAP) break;
-        }
-      }
+    if (!resolved.ok) {
+      const empty = {
+        points: [],
+        rays: [],
+        status: resolved.warning || "invalid lattice basis",
+        capped: false,
+        enumerationCapped: false,
+        displayCapped: false,
+        enumerated: 0,
+        visible: 0,
+        drawn: 0,
+        showPoints: true,
+      };
+      latticeProjectionStatsCache.set(object.id, {
+        enumerated: 0,
+        visible: 0,
+        drawn: 0,
+        displayCapped: false,
+        enumerationCapped: false,
+        showPoints: true,
+      });
+      return empty;
     }
-    return {
+    const data = object.data || {};
+    data.latticeBoundShape = normalizeLatticeBoundShape(data.latticeBoundShape);
+    data.latticeBoundRadius = normalizeLatticeBoundRadius(data.latticeBoundRadius);
+    const boundShape = data.latticeBoundShape;
+    const radius = data.latticeBoundRadius;
+    const enumeration = enumerateLatticeVectors(resolved.basisRows, radius, {
+      boundShape,
+      cap: LATTICE_PROJECTION_ENUMERATION_CAP,
+      includeZero: true,
+    });
+    const visibleVectors = data.showLatticePoints === false
+      ? []
+      : enumeration.vectors.filter((vector) => viewportPointInside(frameCoordsForAmbient(vector.ambient), state.viewport.boxRadius));
+    const drawnVectors = visibleVectors.slice(0, LATTICE_PROJECTION_POINT_CAP);
+    const points = drawnVectors.map((vector) => vector.ambient);
+    const displayCapped = data.showLatticePoints !== false && visibleVectors.length > LATTICE_PROJECTION_POINT_CAP;
+    const capped = enumeration.capped || displayCapped;
+    const boundText = latticeBoundDescription(data);
+    const shrinkHint = "reduce this lattice point-bound radius for complete drawing";
+    const status = enumeration.capped
+      ? `${object.name} lattice point search capped in ${boundText} after ${enumeration.candidateCount} candidates; ${shrinkHint}`
+      : displayCapped
+        ? `${object.name} showing ${points.length}/${visibleVectors.length} visible projected lattice points from ${enumeration.vectors.length} in ${boundText}; ${shrinkHint}`
+        : "";
+    const result = {
       points,
       rays: [],
-      status: enumeration.capped ? "lattice projection enumeration capped" : "",
-      capped: enumeration.capped,
+      status,
+      capped,
+      enumerationCapped: enumeration.capped,
+      displayCapped,
       enumerated: enumeration.vectors.length,
+      visible: visibleVectors.length,
+      drawn: points.length,
+      candidateCount: enumeration.candidateCount,
+      boundShape,
+      boundRadius: radius,
+      bounds: enumeration.bounds,
+      maxShell: enumeration.maxShell,
+      complete: !capped,
+      showPoints: data.showLatticePoints !== false,
     };
+    latticeProjectionStatsCache.set(object.id, {
+      enumerated: result.enumerated,
+      visible: result.visible,
+      drawn: result.drawn,
+      displayCapped: result.displayCapped,
+      enumerationCapped: result.enumerationCapped,
+      showPoints: result.showPoints,
+    });
+    return result;
   }
 
   function resolveVoronoiBasis(object, options = {}) {
@@ -7919,66 +8759,53 @@
     }
     const start = nowMs();
     const center = finiteVector(data.latticePoint, state.ambientDim);
-    const pMinusCenter = state.p.map((value, index) => value - (center[index] || 0));
-    const searchRadius = Math.max(2, 2 * (norm(pMinusCenter) + Math.SQRT2 * radius) + 2);
-    const bounds = latticeCoefficientBounds(resolved.basisRows, searchRadius);
-    const maxShell = Math.min(9, Math.max(...bounds));
-    const minStretch = latticeMinStretch(resolved.basisRows);
-    const counter = { candidateCount: 0, cap: LATTICE_ENUMERATION_CAP, capped: false };
+    const relevant = voronoiRelevantVectorsForBasis(resolved.basisRows);
+    const vectors = relevant.vectors.filter((vector) => vector.length > sliceTolerance());
     let polygon = initialClipPolygon(radius);
     const halfspaces = [];
-    let vectorCount = 0;
     let skipped = 0;
-    let complete = false;
     const tolerance = sliceTolerance();
-    for (let shell = 1; shell <= maxShell; shell += 1) {
-      const vectors = enumerateLatticeShellVectors(resolved.basisRows, shell, bounds, searchRadius, counter);
-      vectorCount += vectors.length;
-      for (const vector of vectors) {
-        const lambda = vector.ambient;
-        const a = dot(lambda, state.frame[0]);
-        const b = dot(lambda, state.frame[1]);
-        const c = dot(center, lambda) + (dot(lambda, lambda) / 2) - dot(lambda, state.p);
-        const scaleValue = Math.max(1, Math.abs(a), Math.abs(b), Math.abs(c));
-        if (Math.hypot(a, b) <= tolerance * scaleValue) {
-          if (c < -tolerance) {
-            polygon = [];
-            break;
-          }
-          skipped += 1;
-          continue;
-        }
-        const maxBoxValue = Math.abs(a) * radius + Math.abs(b) * radius - c;
-        if (maxBoxValue < -tolerance) {
-          skipped += 1;
-          continue;
-        }
-        polygon = clipPolygonByHalfPlane(polygon, a, b, c);
-        halfspaces.push({ a, b, c, lambda, length: vector.length });
-        if (!polygon.length) break;
-      }
-      if (!polygon.length || counter.capped) break;
-      if (minStretch > 0) {
-        const futureLowerBound = minStretch * (shell + 1);
-        if (maxAmbientDistanceOnSlicePolygon(polygon, center) <= futureLowerBound / 2 + tolerance) {
-          complete = true;
+
+    for (const vector of vectors) {
+      const lambda = vector.ambient;
+      const a = dot(lambda, state.frame[0]);
+      const b = dot(lambda, state.frame[1]);
+      const c = dot(center, lambda) + (dot(lambda, lambda) / 2) - dot(lambda, state.p);
+      const scaleValue = Math.max(1, Math.abs(a), Math.abs(b), Math.abs(c));
+      if (Math.hypot(a, b) <= tolerance * scaleValue) {
+        if (c < -tolerance) {
+          polygon = [];
           break;
         }
+        skipped += 1;
+        continue;
       }
+      const maxBoundValue = maxLinearValueOnViewportBound(a, b, c, radius);
+      if (maxBoundValue < -tolerance) {
+        skipped += 1;
+        continue;
+      }
+      if (maxLinearValueOnPolygon(polygon, a, b, c) <= tolerance * scaleValue) {
+        skipped += 1;
+        continue;
+      }
+      polygon = clipPolygonByHalfPlane(polygon, a, b, c);
+      halfspaces.push({ a, b, c, lambda, length: vector.length });
+      if (!polygon.length) break;
     }
-    if (!complete && !counter.capped && maxShell >= Math.max(...bounds)) complete = true;
+
     const buildMs = nowMs() - start;
     const cleaned = cleanPolygon(polygon);
     const status = [
-      counter.capped || !complete ? "Voronoi vector enumeration capped/partial" : "",
+      relevant.capped ? (relevant.status || "Voronoi relevant-vector search capped/partial") : "",
       skipped ? `${skipped} inactive/degenerate lattice inequalities skipped` : "",
     ].filter(Boolean).join("; ");
-    object.data.voronoiStatus = status || `${halfspaces.length} Voronoi halfspaces`;
+    object.data.voronoiStatus = status || `${halfspaces.length} Voronoi halfspaces from ${vectors.length} relevant vectors`;
     if (!cleaned.length) {
       return {
         kind: "empty",
         latticeStatus: object.data.voronoiStatus,
-        latticeEnumerationCapped: counter.capped || !complete,
+        latticeEnumerationCapped: relevant.capped,
         latticeHalfspaces: halfspaces.length,
         latticeBuildMs: buildMs,
       };
@@ -7989,12 +8816,295 @@
       halfspaces,
       center,
       latticeStatus: object.data.voronoiStatus,
-      latticeEnumerationCapped: counter.capped || !complete,
+      latticeEnumerationCapped: relevant.capped,
       latticeHalfspaces: halfspaces.length,
-      latticeVectorCount: vectorCount,
+      latticeVectorCount: vectors.length,
+      latticeCosetCount: relevant.cosetCount,
+      latticeNodeCount: relevant.nodeCount,
       latticeBuildMs: buildMs,
       clipRadius: radius,
     };
+  }
+
+  function voronoiProjectionCacheKey(object, basisRows, center) {
+    return [
+      object.id,
+      state.ambientDim,
+      vectorKey(center, 8),
+      matrixRowsText(basisRows, 8),
+    ].join("|");
+  }
+
+  function voronoiHalfspaceFromLatticeVector(vector, center) {
+    const normal = vector.ambient.slice();
+    return {
+      normal,
+      offset: dot(center, normal) + dot(normal, normal) / 2,
+      lambda: normal,
+      length: vector.length,
+    };
+  }
+
+  function voronoiProjectionHalfspaces(basisRows, center) {
+    const relevant = voronoiRelevantVectorsForBasis(basisRows);
+    let halfspaceCapped = false;
+    const halfspaces = [];
+    let vertexResult = { vertices: [], checked: 0, capped: false };
+    const vectors = relevant.vectors
+      .filter((vector) => vector.length > sliceTolerance())
+      .map((vector) => voronoiHalfspaceFromLatticeVector(vector, center))
+      .sort((left, right) => left.length - right.length);
+
+    let index = 0;
+    while (index < vectors.length && !halfspaceCapped && !vertexResult.capped) {
+      const groupLength = vectors[index].length;
+      const group = [];
+      while (index < vectors.length && Math.abs(vectors[index].length - groupLength) <= 1e-8) {
+        group.push(vectors[index]);
+        index += 1;
+      }
+      let added = 0;
+      for (const halfspace of group) {
+        const cutsCurrentCell = !vertexResult.vertices.length || vertexResult.vertices.some((vertex) =>
+          voronoiHalfspaceValue(halfspace, vertex.point) > Math.max(1e-7, sliceTolerance() * 10) * voronoiHalfspaceScale(halfspace, vertex.point)
+        );
+        if (!cutsCurrentCell) continue;
+        halfspaces.push(halfspace);
+        added += 1;
+        if (halfspaces.length >= VORONOI_PROJECTION_HALFSPACE_CAP) {
+          halfspaceCapped = true;
+          break;
+        }
+      }
+      if (added) vertexResult = enumerateVoronoiProjectionVertices(halfspaces, state.ambientDim);
+    }
+
+    const complete = !relevant.capped && !halfspaceCapped && !vertexResult.capped && !!vertexResult.vertices.length;
+
+    return {
+      halfspaces,
+      vertexResult,
+      candidateCount: vectors.length,
+      capped: !complete,
+      vectorCapped: relevant.capped,
+      halfspaceCapped,
+      complete,
+      relevantStatus: relevant.status,
+      relevantCosetCount: relevant.cosetCount,
+      relevantNodeCount: relevant.nodeCount,
+    };
+  }
+
+  function solveVoronoiVertex(halfspaces, indices) {
+    const normals = indices.map((index) => halfspaces[index].normal);
+    const offsets = indices.map((index) => halfspaces[index].offset);
+    try {
+      return multiplyMatrixVector(inverseMatrix(normals, "Voronoi vertex system"), offsets);
+    } catch {
+      return null;
+    }
+  }
+
+  function voronoiHalfspaceValue(halfspace, point) {
+    return dot(halfspace.normal, point) - halfspace.offset;
+  }
+
+  function voronoiHalfspaceScale(halfspace, point) {
+    return Math.max(1, norm(halfspace.normal), Math.abs(halfspace.offset), norm(point));
+  }
+
+  function activeVoronoiFacets(halfspaces, point, fallbackIndices = []) {
+    const active = new Set(fallbackIndices);
+    const tolerance = Math.max(1e-7, sliceTolerance() * 10);
+    halfspaces.forEach((halfspace, index) => {
+      const value = voronoiHalfspaceValue(halfspace, point);
+      if (Math.abs(value) <= tolerance * voronoiHalfspaceScale(halfspace, point)) active.add(index);
+    });
+    return Array.from(active).sort((left, right) => left - right);
+  }
+
+  function pointSatisfiesVoronoiHalfspaces(halfspaces, point) {
+    if (!point || point.some((value) => !Number.isFinite(value))) return false;
+    const tolerance = Math.max(1e-7, sliceTolerance() * 10);
+    return halfspaces.every((halfspace) =>
+      voronoiHalfspaceValue(halfspace, point) <= tolerance * voronoiHalfspaceScale(halfspace, point)
+    );
+  }
+
+  function enumerateVoronoiProjectionVertices(halfspaces, n) {
+    const vertices = [];
+    const seen = new Set();
+    const combo = [];
+    let checked = 0;
+    let capped = false;
+
+    const visit = (start, depth) => {
+      if (capped) return;
+      if (depth === n) {
+        checked += 1;
+        if (checked > VORONOI_PROJECTION_COMBINATION_CAP) {
+          capped = true;
+          return;
+        }
+        const point = solveVoronoiVertex(halfspaces, combo);
+        if (!pointSatisfiesVoronoiHalfspaces(halfspaces, point)) return;
+        const key = vectorKey(point, 7);
+        if (seen.has(key)) return;
+        seen.add(key);
+        vertices.push({
+          point,
+          active: activeVoronoiFacets(halfspaces, point, combo),
+        });
+        if (vertices.length >= VORONOI_PROJECTION_VERTEX_CAP) capped = true;
+        return;
+      }
+      const remaining = n - depth;
+      for (let index = start; index <= halfspaces.length - remaining; index += 1) {
+        combo[depth] = index;
+        visit(index + 1, depth + 1);
+        if (capped) return;
+      }
+    };
+
+    if (halfspaces.length >= n) visit(0, 0);
+    return { vertices, checked, capped };
+  }
+
+  function forEachIndexSubset(indices, size, callback, capState) {
+    const subset = [];
+    const visit = (start, depth) => {
+      if (capState.capped) return;
+      if (depth === size) {
+        capState.count += 1;
+        if (capState.count > capState.cap) {
+          capState.capped = true;
+          return;
+        }
+        callback(subset.slice());
+        return;
+      }
+      const remaining = size - depth;
+      for (let index = start; index <= indices.length - remaining; index += 1) {
+        subset[depth] = indices[index];
+        visit(index + 1, depth + 1);
+        if (capState.capped) return;
+      }
+    };
+    if (size <= 0) return;
+    visit(0, 0);
+  }
+
+  function enumerateVoronoiProjectionEdges(vertices, halfspaces, n) {
+    const edgeSet = new Set();
+    const groups = new Map();
+    const subsetCap = { count: 0, cap: VORONOI_PROJECTION_EDGE_CAP * Math.max(4, n), capped: false };
+    const edgeCap = { capped: false };
+
+    vertices.forEach((vertex, vertexIndex) => {
+      if (vertex.active.length < n - 1 || subsetCap.capped) return;
+      forEachIndexSubset(vertex.active, n - 1, (subset) => {
+        const normals = subset.map((index) => halfspaces[index].normal);
+        if (matrixRank(normals, n) < n - 1) return;
+        const key = subset.join(",");
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(vertexIndex);
+      }, subsetCap);
+    });
+
+    const addEdge = (left, right) => {
+      if (left === right || edgeCap.capped) return;
+      const a = Math.min(left, right);
+      const b = Math.max(left, right);
+      edgeSet.add(`${a},${b}`);
+      if (edgeSet.size >= VORONOI_PROJECTION_EDGE_CAP) edgeCap.capped = true;
+    };
+
+    for (const group of groups.values()) {
+      if (edgeCap.capped) break;
+      const unique = Array.from(new Set(group));
+      if (unique.length === 2) {
+        addEdge(unique[0], unique[1]);
+      } else if (unique.length > 2) {
+        let best = [unique[0], unique[1]];
+        let bestDistance = -Infinity;
+        for (let i = 0; i < unique.length; i += 1) {
+          for (let j = i + 1; j < unique.length; j += 1) {
+            const distance = norm(subtract(vertices[unique[i]].point, vertices[unique[j]].point));
+            if (distance > bestDistance) {
+              bestDistance = distance;
+              best = [unique[i], unique[j]];
+            }
+          }
+        }
+        addEdge(best[0], best[1]);
+      }
+    }
+
+    return {
+      edges: Array.from(edgeSet, (key) => key.split(",").map((value) => Number(value))),
+      capped: subsetCap.capped || edgeCap.capped,
+      groupCount: groups.size,
+      subsetCount: subsetCap.count,
+    };
+  }
+
+  function voronoiProjectionData(object) {
+    const resolved = resolveVoronoiBasis(object);
+    if (!resolved.ok) {
+      return {
+        points: [],
+        edges: [],
+        rays: [],
+        status: resolved.warning || "invalid Voronoi lattice basis",
+        capped: false,
+        halfspaceCount: 0,
+        vertexCount: 0,
+        edgeCount: 0,
+        buildMs: 0,
+      };
+    }
+
+    const start = nowMs();
+    const data = object.data || {};
+    const center = finiteVector(data.latticePoint, state.ambientDim);
+    const cacheKey = voronoiProjectionCacheKey(object, resolved.basisRows, center);
+    const cached = voronoiProjectionCache.get(cacheKey);
+    if (cached) return cached;
+
+    const halfspaceResult = voronoiProjectionHalfspaces(resolved.basisRows, center);
+    const vertexResult = halfspaceResult.vertexResult || enumerateVoronoiProjectionVertices(halfspaceResult.halfspaces, state.ambientDim);
+    const edgeResult = enumerateVoronoiProjectionEdges(vertexResult.vertices, halfspaceResult.halfspaces, state.ambientDim);
+    const capped = halfspaceResult.capped || vertexResult.capped || edgeResult.capped;
+    const statusParts = [
+      halfspaceResult.vectorCapped ? (halfspaceResult.relevantStatus || "relevant-vector search capped") : "",
+      halfspaceResult.halfspaceCapped ? "halfspace cap reached" : "",
+      !halfspaceResult.complete ? "cell completion not certified" : "",
+      vertexResult.capped ? "vertex enumeration capped" : "",
+      edgeResult.capped ? "edge enumeration capped" : "",
+      !vertexResult.vertices.length ? "no projection vertices found" : "",
+    ].filter(Boolean);
+    const status = statusParts.length
+      ? `${object.name} Voronoi projection partial/capped: ${statusParts.join("; ")}`
+      : "";
+    const result = {
+      points: vertexResult.vertices.map((vertex) => vertex.point),
+      edges: edgeResult.edges,
+      rays: [],
+      status,
+      capped,
+      halfspaceCount: halfspaceResult.halfspaces.length,
+      vertexCount: vertexResult.vertices.length,
+      edgeCount: edgeResult.edges.length,
+      candidateCount: halfspaceResult.candidateCount,
+      cosetCount: halfspaceResult.relevantCosetCount,
+      nodeCount: halfspaceResult.relevantNodeCount,
+      combinationCount: vertexResult.checked,
+      edgeGroupCount: edgeResult.groupCount,
+      buildMs: nowMs() - start,
+    };
+    if (voronoiProjectionCache.size > 32) voronoiProjectionCache.clear();
+    voronoiProjectionCache.set(cacheKey, result);
+    return result;
   }
 
   function drawLatticeVoronoiSlice(ctx, view, object, slice, options = {}) {
@@ -8013,7 +9123,7 @@
     ctx.strokeStyle = options.color || ctx.strokeStyle;
     ctx.lineWidth = options.lineWidth || 2 * view.ratio;
     ctx.stroke();
-    if (object.labels || state.viewport.showLabels) {
+    if (shouldDrawObjectLabels(object)) {
       const center = polygonCentroid(slice.vertices);
       const point = projectFramePoint(center, view);
       const latticePoint = finiteVector(slice.center || object.data?.latticePoint || [], state.ambientDim);
@@ -8361,7 +9471,35 @@
 
   function initialClipPolygon(radius) {
     const r = Math.max(1, radius);
+    if (normalizeViewportBoundShape(state.viewport.boundShape) === "disk") {
+      return Array.from({ length: VIEWPORT_DISK_POLYGON_SEGMENTS }, (_, index) => {
+        const theta = (Math.PI * 2 * index) / VIEWPORT_DISK_POLYGON_SEGMENTS;
+        return [r * Math.cos(theta), r * Math.sin(theta)];
+      });
+    }
     return [[-r, -r], [r, -r], [r, r], [-r, r]];
+  }
+
+  function viewportPointInside(point, radius = state.viewport.boxRadius, shape = state.viewport.boundShape) {
+    const tolerance = sliceTolerance();
+    const x = point?.[0] || 0;
+    const y = point?.[1] || 0;
+    if (normalizeViewportBoundShape(shape) === "disk") {
+      return x * x + y * y <= radius * radius + tolerance;
+    }
+    return Math.abs(x) <= radius + tolerance && Math.abs(y) <= radius + tolerance;
+  }
+
+  function maxLinearValueOnViewportBound(a, b, c, radius = state.viewport.boxRadius) {
+    if (normalizeViewportBoundShape(state.viewport.boundShape) === "disk") {
+      return Math.hypot(a, b) * radius - c;
+    }
+    return Math.abs(a) * radius + Math.abs(b) * radius - c;
+  }
+
+  function maxLinearValueOnPolygon(polygon, a, b, c) {
+    if (!polygon.length) return -Infinity;
+    return Math.max(...polygon.map((point) => a * (point[0] || 0) + b * (point[1] || 0) - c));
   }
 
   function sliceClipRadiusForObject(object) {
@@ -8498,6 +9636,15 @@
     return result;
   }
 
+  function frameCoordsForAmbient(point) {
+    const ambient = resizeVector(point, state.ambientDim);
+    const centered = ambient.map((value, index) => value - state.p[index]);
+    return [
+      dot(centered, state.frame[0] || []),
+      dot(centered, state.frame[1] || []),
+    ];
+  }
+
   function projectFramePoint(y, view) {
     return {
       ...projectY([y[0] || 0, y[1] || 0, 0], view),
@@ -8564,6 +9711,16 @@
         points: lattice.points,
         edges: [],
         rays: lattice.rays,
+        lattice,
+      };
+    }
+    if (type === "voronoi-diagram") {
+      const voronoiProjection = voronoiProjectionData(object);
+      return {
+        points: voronoiProjection.points,
+        edges: voronoiProjection.edges,
+        rays: [],
+        voronoiProjection,
       };
     }
     if (type === "cartesian-frame") {
@@ -8583,7 +9740,7 @@
         })),
       };
     }
-    if (type === "formula-set" || type === "tropical-polynomial" || type === "weyl-chambers" || type === "dynkin-type" || type === "voronoi-diagram") {
+    if (type === "formula-set" || type === "tropical-polynomial" || type === "weyl-chambers" || type === "dynkin-type") {
       return { points: [], edges: [], rays: [] };
     }
     if (type === "regular-polytope") {
@@ -8724,6 +9881,7 @@
   }
 
   function recordPickCandidate(object, projected, label, vertexKey, radius) {
+    if (projected.frameCoords && !viewportPointInside(projected.frameCoords, state.viewport.boxRadius)) return;
     state.pickCandidates.push({
       objectId: object.id,
       objectName: object.name,
@@ -9053,6 +10211,7 @@
   function addCanvasMathLabel(view, projected, plain, tex, options = {}) {
     const overlay = $("slice-label-overlay");
     if (!overlay || !projected || !Number.isFinite(projected.x) || !Number.isFinite(projected.y)) return;
+    if (projected.frameCoords && !viewportPointInside(projected.frameCoords, state.viewport.boxRadius)) return;
     const label = document.createElement("span");
     label.className = "slice-canvas-label";
     if (options.centered) label.classList.add("centered");
@@ -9218,6 +10377,7 @@
       state.frame = Array.isArray(imported.frame) ? imported.frame.map((vector) => resizeVector(vector.map((value) => finiteNumber(value, 0)), state.ambientDim)) : identityFrame(state.ambientDim);
       resizeFrame(state.frame, state.ambientDim);
       state.viewport = { ...state.viewport, ...(imported.viewport || {}) };
+      state.viewport.boundShape = normalizeViewportBoundShape(state.viewport.boundShape);
       state.addType = OBJECT_TYPES.some((type) => type.key === imported.addType) ? imported.addType : "cartesian-frame";
       state.addRegularFamily = normalizeRegularFamily(imported.addRegularFamily || state.addRegularFamily || "hypercube", state.ambientDim);
       state.addWeylDynkinType = normalizeWeylDynkinType(imported.addWeylDynkinType || state.addWeylDynkinType || "A", state.ambientDim);
@@ -9328,6 +10488,7 @@
       showGrid: true,
       showLabels: false,
       showBox: true,
+      boundShape: "box",
       cameraDistance: 3,
       boxRadius: 4,
       labelSize: DEFAULT_CANVAS_LABEL_SIZE_REM,
