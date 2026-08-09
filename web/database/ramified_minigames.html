@@ -1324,6 +1324,7 @@
             <option value="reversi">Reversi</option>
             <option value="chinese-checkers">Chinese Checkers</option>
             <option value="sokoban">Sokoban</option>
+            <option value="fide-chess">FIDE Chess</option>
             <option value="__random-game-setup">Random setup</option>
           </select>
         </div>
@@ -1356,6 +1357,7 @@
             <option value="vertex" selected>gridded board</option>
             <option value="polished-vertex">polished gridded board</option>
             <option value="center">tile board</option>
+            <option value="chessboard">classical board</option>
           </select>
         </div>
         <div class="mosaic-inline-row" id="move-number-label-row" hidden>
@@ -1368,6 +1370,17 @@
             <input type="range" id="placement-piece-size" min="24" max="100" step="1" value="43" aria-label="Placement piece radius">
             <output id="placement-piece-size-value">43%</output>
           </span>
+        </div>
+        <div class="mosaic-inline-row" id="fide-chess-piece-display-row" data-mode-control="fide-chess" hidden>
+          <span class="input-label">Pieces</span>
+          <select id="fide-chess-piece-display" aria-label="Chess piece display">
+            <option value="minigame" selected>minigame symbols</option>
+            <option value="mosaic">mosaic calculator</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="fide-chess-puzzle-threat-row" data-mode-control="fide-chess" hidden>
+          <span class="input-label">Threats</span>
+          <label class="opt-row"><input type="checkbox" id="fide-chess-puzzle-attack-borders" checked> attacked background</label>
         </div>
         <div class="mosaic-inline-row" id="gomoku-size-row" data-mode-control="gomoku" hidden>
           <span class="input-label">Board n</span>
@@ -1613,6 +1626,7 @@
               <option value="reversi">Reversi</option>
               <option value="chinese-checkers">Chinese Checkers</option>
               <option value="sokoban">Sokoban</option>
+              <option value="fide-chess">FIDE Chess</option>
             </select>
           </div>
           <div class="mosaic-inline-row">

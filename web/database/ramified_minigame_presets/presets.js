@@ -10,7 +10,8 @@
     ["2048", "ramified-cover", "center"],
     ["reversi", "focus-frame", "center"],
     ["chinese-checkers", "octahedron-with-square-holes", "center"],
-    ["sokoban", "classic-fans", "center"]
+    ["sokoban", "classic-fans", "center"],
+    ["fide-chess", "fide-chess-8x8", "chessboard"]
   ];
   return {
     gameOrder: defaultForEntries.map(([mode]) => mode),
@@ -22,12 +23,49 @@
         "2048",
         "Gomoku",
         "Go",
-        "Reversi"
+        "Reversi",
+        "FIDE Chess"
       ],
       "id": "boundary-glue-board",
       "label": "boundary glue board",
       "key": "boundary_glue_board",
       "file": "boundary_glue_board.preset.js"
+    },
+    {
+      "gameTypes": [
+        "FIDE Chess"
+      ],
+      "id": "fide-chess-8x8",
+      "label": "FIDE chess 8x8",
+      "key": "fide_chess_8x8",
+      "file": "fide_chess_8x8.preset.js"
+    },
+    {
+      "gameTypes": [
+        "FIDE Chess"
+        ],
+      "id": "between-two-fires",
+      "label": "between two fires",
+      "key": "between_two_fires",
+      "file": "between_two_fires.preset.js"
+    },
+    {
+      "gameTypes": [
+        "FIDE Chess"
+      ],
+      "id": "n-queens-puzzle",
+      "label": "N queens puzzle",
+      "key": "n_queens_puzzle",
+      "file": "n_queens_puzzle.preset.js"
+    },
+    {
+      "gameTypes": [
+        "FIDE Chess"
+      ],
+      "id": "n-queens-torus-puzzle",
+      "label": "N queens puzzle on torus",
+      "key": "n_queens_torus_puzzle",
+      "file": "n_queens_torus_puzzle.preset.js"
     },
     {
       "gameTypes": [
@@ -580,6 +618,24 @@
       "label": "islands",
       "key": "islands",
       "file": "islands.preset.js"
+    },
+    {
+      "gameTypes": [
+        "FIDE Chess"
+        ],
+      "id": "knights-on-rubik-s-cube",
+      "label": "knights on Rubik's Cube",
+      "key": "knights_on_rubik_s_cube",
+      "file": "knights_on_rubik_s_cube.preset.js"
+    },
+    {
+      "gameTypes": [
+        "FIDE Chess"
+        ],
+      "id": "queens-on-double-cover",
+      "label": "queens on double cover",
+      "key": "queens_on_double_cover",
+      "file": "queens_on_double_cover.preset.js"
     },
     ]
   };

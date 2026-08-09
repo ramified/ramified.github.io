@@ -66,6 +66,7 @@
   const EVENT_GUARD = 900;
   const UNDO_LIMIT = Number.POSITIVE_INFINITY;
   const SWIPE_MIN_DISTANCE = 10;
+  const FIDE_CHESS_DRAG_MIN_DISTANCE = 4;
   const GAME_MODES = {
     NUMBER_2048: '2048',
     GOMOKU: 'gomoku',
@@ -73,7 +74,8 @@
     GO: 'go',
     REVERSI: 'reversi',
     CHINESE_CHECKERS: 'chinese-checkers',
-    SOKOBAN: 'sokoban'
+    SOKOBAN: 'sokoban',
+    FIDE_CHESS: 'fide-chess'
   };
   const PLACEMENT_PIECE_RADIUS_DEFAULT = 43;
   const PLACEMENT_PIECE_RADIUS_MIN = 24;
@@ -81,8 +83,11 @@
   const PLACEMENT_PIECE_RADIUS_DEFAULTS = {
     [GAME_MODES.GOMOKU]: 70,
     [GAME_MODES.GO]: 70,
-    [GAME_MODES.REVERSI]: 70
+    [GAME_MODES.REVERSI]: 70,
+    [GAME_MODES.FIDE_CHESS]: 66
   };
+  const CHESSBOARD_SQUARE_COLORS = ['#f0d9b5', '#b58863'];
+  const CHESSBOARD_HEX_COLORS = ['#f0d9b5', '#d7b06f', '#b58863'];
   const BOUNDARY_GLUE_BOARD_PRESET_ID = 'boundary-glue-board';
   const BOUNDARY_GLUE_MODES = {
     TORUS: 'torus',
@@ -100,6 +105,7 @@
   };
   const BOUNDARY_GLUE_MIN_BOARD_SIZE = 2;
   const BOUNDARY_GLUE_MAX_BOARD_SIZE = 25;
+  const FIDE_CHESS_PUZZLE_MIN_BOARD_SIZE = 2;
   const SOKOBAN_DECORATION_FIELDS = ['players', 'boxes', 'targets', 'sea', 'walls', 'ice', 'energyBridges'];
   const SOKOBAN_OBJECT_SCALE_DEFAULT = 70;
   const SOKOBAN_OBJECT_SCALE_MIN = 54;
@@ -111,6 +117,43 @@
   const SOKOBAN_BEAM_OPACITY_DEFAULT = 34;
   const SOKOBAN_SURFACE_Z = 0;
   const SOKOBAN_UNDERWATER_Z = -1;
+  const FIDE_CHESS_DEFAULT_BOARD_SIZE = 8;
+  const FIDE_CHESS_COLORS = ['white', 'black'];
+  const FIDE_CHESS_VARIANTS = {
+    GAME: 'game',
+    KINGLESS_PUZZLE: 'kingless-puzzle'
+  };
+  const FIDE_CHESS_PIECE_KINDS = ['king', 'queen', 'rook', 'bishop', 'knight', 'pawn'];
+  const FIDE_CHESS_PROMOTION_KINDS = ['queen', 'rook', 'bishop', 'knight'];
+  const FIDE_CHESS_PIECE_DISPLAY_STYLES = ['minigame', 'mosaic'];
+  const FIDE_CHESS_PUZZLE_N_QUEENS = 'n-queens';
+  const FIDE_CHESS_PIECE_VALUES = {
+    king: 'K',
+    queen: 'Q',
+    rook: 'R',
+    bishop: 'B',
+    knight: 'N',
+    pawn: 'P'
+  };
+  const FIDE_CHESS_FORWARD_DIR_NAMES = ['E', 'S', 'W', 'N'];
+  const FIDE_CHESS_PIECE_SYMBOLS = {
+    white: {
+      king: '\u2654',
+      queen: '\u2655',
+      rook: '\u2656',
+      bishop: '\u2657',
+      knight: '\u2658',
+      pawn: '\u2659'
+    },
+    black: {
+      king: '\u265A',
+      queen: '\u265B',
+      rook: '\u265C',
+      bishop: '\u265D',
+      knight: '\u265E',
+      pawn: '\u265F'
+    }
+  };
   const GOMOKU_WIN_LENGTH = 5;
   const GOMOKU_COLORS = ['black', 'white'];
   const GOMOKU_DEFAULT_BOARD_SIZE = 15;
@@ -311,6 +354,8 @@
   let pendingBonusGameOver = false;
   let hoveredGlue = null;
   let swipeGesture = null;
+  let fideChessDrag = null;
+  let fideChessPendingPromotion = null;
   let suppressNextCanvasClick = false;
   let suppressCanvasClickTimer = null;
   let heldArrowKeys = new Set();
@@ -375,6 +420,9 @@
     refs.chineseCheckersPlayerOptions = document.getElementById('chinese-checkers-player-options');
     refs.chineseCheckersEndJumpRow = document.getElementById('chinese-checkers-end-jump-row');
     refs.chineseCheckersEndJump = document.getElementById('chinese-checkers-end-jump');
+    refs.fideChessPieceDisplay = document.getElementById('fide-chess-piece-display');
+    refs.fideChessPuzzleThreatRow = document.getElementById('fide-chess-puzzle-threat-row');
+    refs.fideChessPuzzleAttackBorders = document.getElementById('fide-chess-puzzle-attack-borders');
     refs.boxStyle = document.getElementById('number-box-style');
     refs.highlightNewBoxes = document.getElementById('highlight-new-boxes');
     refs.begin = document.getElementById('begin-game');
@@ -423,6 +471,7 @@
     refs.modeGoControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="go"]')) : [];
     refs.modeChineseCheckersControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="chinese-checkers"]')) : [];
     refs.modeSokobanControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="sokoban"]')) : [];
+    refs.modeFideChessControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="fide-chess"]')) : [];
     refs.statusBadge = document.getElementById('status-badge');
     refs.statusLine = document.getElementById('status-line');
     refs.infoLine = document.getElementById('info-line');
@@ -452,6 +501,8 @@
       refs.placementPieceSize.addEventListener('input', handlePlacementPieceSizeChange);
       refs.placementPieceSize.addEventListener('change', handlePlacementPieceSizeChange);
     }
+    if (refs.fideChessPieceDisplay) refs.fideChessPieceDisplay.addEventListener('change', handleFideChessPieceDisplayChange);
+    if (refs.fideChessPuzzleAttackBorders) refs.fideChessPuzzleAttackBorders.addEventListener('change', handleFideChessPuzzleAttackBordersChange);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('change', handleGomokuSizeChange);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('input', handleGomokuSizeChange);
     if (refs.boundaryGlueMode) refs.boundaryGlueMode.addEventListener('change', handleBoundaryGlueBoardChange);
@@ -579,6 +630,8 @@
     }
     stopPlayback();
     resetSwipeGesture();
+    resetFideChessDrag();
+    clearFideChessPendingPromotion({ render: false });
     clearSuppressedCanvasClick();
     clearKeyboardState();
     applyDefaultPlacementDisplayForMode();
@@ -661,6 +714,7 @@
     const mode = String(value || '').trim().toLowerCase();
     if (mode === GAME_MODES.CHINESE_CHECKERS || mode === 'chinesecheckers' || mode === 'chinese checkers') return GAME_MODES.CHINESE_CHECKERS;
     if (mode === GAME_MODES.SOKOBAN) return GAME_MODES.SOKOBAN;
+    if (mode === GAME_MODES.FIDE_CHESS || mode === 'fidechess' || mode === 'fide chess' || mode === 'chess') return GAME_MODES.FIDE_CHESS;
     if (mode === GAME_MODES.CONNECT_FOUR || mode === 'connectfour' || mode === 'connect four') return GAME_MODES.CONNECT_FOUR;
     if (mode === GAME_MODES.REVERSI || mode === 'othello') return GAME_MODES.REVERSI;
     if (mode === GAME_MODES.GOMOKU) return GAME_MODES.GOMOKU;
@@ -672,6 +726,7 @@
   function gameModeFromPresetGroup(preset) {
     const gameTypes = presetGameTypesForModes(preset);
     const gameType = String(gameTypes[0] || '').trim().toLowerCase();
+    if (gameType.includes('fide') || gameType.includes('chess')) return GAME_MODES.FIDE_CHESS;
     if (gameType.includes('sokoban')) return GAME_MODES.SOKOBAN;
     if (gameType.includes('chinese')) return GAME_MODES.CHINESE_CHECKERS;
     if (gameType.includes('connect')) return GAME_MODES.CONNECT_FOUR;
@@ -692,6 +747,7 @@
 
   function gameTypeToGameMode(gameType) {
     const normalized = String(gameType || '').trim().toLowerCase();
+    if (normalized.includes('fide') || normalized.includes('chess')) return GAME_MODES.FIDE_CHESS;
     if (normalized.includes('sokoban')) return GAME_MODES.SOKOBAN;
     if (normalized.includes('chinese')) return GAME_MODES.CHINESE_CHECKERS;
     if (normalized.includes('connect')) return GAME_MODES.CONNECT_FOUR;
@@ -716,6 +772,7 @@
   }
 
   function gameTypeForGameMode(mode) {
+    if (mode === GAME_MODES.FIDE_CHESS) return 'FIDE Chess';
     if (mode === GAME_MODES.SOKOBAN) return 'Sokoban';
     if (mode === GAME_MODES.CHINESE_CHECKERS) return 'Chinese Checkers';
     if (mode === GAME_MODES.REVERSI) return 'Reversi';
@@ -969,6 +1026,7 @@
     if (normalized === 'connect-four' || normalized === 'connectfour' || normalized === 'connect four') return 'Connect Four';
     if (normalized === 'chinese-checkers' || normalized === 'chinesecheckers' || normalized === 'chinese checkers') return 'Chinese Checkers';
     if (normalized === 'sokoban') return 'Sokoban';
+    if (normalized === 'fide-chess' || normalized === 'fidechess' || normalized === 'fide chess' || normalized === 'chess') return 'FIDE Chess';
     return gameType;
   }
 
@@ -1255,8 +1313,22 @@
         return;
       }
     }
+    if (selectedGameMode() === GAME_MODES.FIDE_CHESS) {
+      const preview = isFideChessGame(game) ? game : createFideChessState(selectedPreset(), selectedGameOptions({ glueRng: Math.random }));
+      const issue = fideChessSetupIssue(preview);
+      if (issue) {
+        showSetupAlert(issue);
+        syncStatus('finish FIDE Chess setup', issue, 'warn');
+        render();
+        syncControls();
+        if (refs.canvas) refs.canvas.focus();
+        return;
+      }
+    }
     stopPlayback();
     resetSwipeGesture();
+    resetFideChessDrag();
+    clearFideChessPendingPromotion({ render: false });
     clearSuppressedCanvasClick();
     clearKeyboardState();
     game = beginSelectedGame(selectedPreset(), selectedGameOptions({
@@ -1274,7 +1346,7 @@
     stepPaused = false;
     clearNoMoveTrial();
     eventQueueChangedBoard = false;
-    game.phase = 'ready';
+    if (game.phase !== 'gameover') game.phase = 'ready';
     render();
     if (isGomokuGame(game)) {
       syncStatus(`${game.preset.label} Gomoku`, gomokuTurnInfo(game), 'ready');
@@ -1288,6 +1360,9 @@
       syncStatus(`${game.preset.label} Chinese Checkers`, chineseCheckersTurnInfo(game), 'ready');
     } else if (isSokobanGame(game)) {
       syncStatus(`${game.preset.label} Sokoban`, sokobanTurnInfo(game), 'ready');
+    } else if (isFideChessGame(game)) {
+      if (game.phase === 'gameover') syncStatus(fideChessResultText(game), `${game.round || 0} move${game.round === 1 ? '' : 's'}`, 'over');
+      else syncStatus(`${game.preset.label} FIDE Chess`, fideChessTurnInfo(game), 'ready');
     } else {
       syncStatus(`${game.preset.label} game seed`, 'use arrow keys, buttons, or swipe/drag to slide', 'ready');
     }
@@ -1314,6 +1389,8 @@
       clearSetupAlert();
       clearNoMoveTrial();
       resetSwipeGesture();
+      resetFideChessDrag();
+      clearFideChessPendingPromotion({ render: false });
       clearSuppressedCanvasClick();
       clearKeyboardState();
       eventQueueChangedBoard = false;
@@ -1338,6 +1415,8 @@
     hideCanvasStartPrompt();
     stopPlayback();
     resetSwipeGesture();
+    resetFideChessDrag();
+    clearFideChessPendingPromotion({ render: false });
     clearSuppressedCanvasClick();
     clearKeyboardState();
     if (refs.gameMode) refs.gameMode.value = gameModeValue(previous);
@@ -1355,7 +1434,7 @@
       options.playerColors = chineseCheckersPlayerColors(previous);
     }
     game = beginSelectedGame(previous.preset || selectedPreset(), options);
-    game.phase = 'ready';
+    if (game.phase !== 'gameover') game.phase = 'ready';
     clearUndoHistory();
     clearDebugExport();
     clearSetupAlert();
@@ -1365,7 +1444,6 @@
     syncConnectFourFallInputFromGame();
     syncGoKomiInputFromGame();
     syncGoScoringMethodInputFromGame();
-    syncImportedDisplaySettings(imported);
     render();
     syncStatus('reset complete', `${gameTypeForGameMode(gameModeValue(game))} restarted`, 'ready');
     syncControls();
@@ -1405,6 +1483,18 @@
     refs.placementPieceSize.value = String(selectedPlacementPieceRadiusPercent());
     syncPlacementPieceSizeOutput();
     render();
+  }
+
+  function handleFideChessPieceDisplayChange() {
+    if (!refs.fideChessPieceDisplay) return;
+    refs.fideChessPieceDisplay.value = selectedFideChessPieceDisplay();
+    render();
+    refreshDebugExportIfNeeded();
+  }
+
+  function handleFideChessPuzzleAttackBordersChange() {
+    render();
+    refreshDebugExportIfNeeded();
   }
 
   function handleBoundaryGlueShapeChange() {
@@ -1462,7 +1552,17 @@
       return;
     }
     setImportToolsVisible(false);
+    syncBoardSizeInputForSelectedPreset();
     resetToPreview();
+  }
+
+  function syncBoardSizeInputForSelectedPreset() {
+    if (!refs.gomokuSize || !selectedPresetUsesDynamicBoardSize()) return;
+    const preset = selectedPreset();
+    const fallback = defaultBoardSizeForPreset(selectedGameMode(), preset);
+    refs.gomokuSize.value = String(fallback);
+    if (refs.boundaryGlueRows) refs.boundaryGlueRows.value = String(fallback);
+    if (refs.boundaryGlueCols) refs.boundaryGlueCols.value = String(fallback);
   }
 
   function setImportToolsVisible(force) {
@@ -1776,8 +1876,12 @@
     const settings = imported.settings && typeof imported.settings === 'object' && !Array.isArray(imported.settings)
       ? imported.settings
       : {};
-    if (refs.gomokuDisplay && imported.displayStyle) {
-      refs.gomokuDisplay.value = normalizePlacementDisplayStyle(imported.displayStyle, placementDisplayStyle());
+    const displayStyle = firstPresentValue(imported, ['displayStyle', 'placementDisplayStyle', 'boardDisplay'])
+      ?? firstPresentValue(settings, ['displayStyle', 'placementDisplayStyle', 'boardDisplay']);
+    if (refs.gomokuDisplay && displayStyle != null) {
+      refs.gomokuDisplay.value = normalizePlacementDisplayStyle(displayStyle, placementDisplayStyle());
+    } else if (refs.gomokuDisplay && isFideChessPuzzle(imported.state)) {
+      refs.gomokuDisplay.value = 'center';
     }
     if (refs.moveNumberLabels && typeof imported.moveNumberLabels === 'boolean') {
       refs.moveNumberLabels.checked = imported.moveNumberLabels;
@@ -1788,11 +1892,23 @@
       refs.placementPieceSize.value = String(normalizePlacementPieceRadiusPercent(pieceRadius));
       syncPlacementPieceSizeOutput();
     }
+    const fidePieceDisplay = firstPresentValue(imported, ['fideChessPieceDisplay', 'chessPieceDisplay', 'pieceDisplay'])
+      ?? firstPresentValue(settings, ['fideChessPieceDisplay', 'chessPieceDisplay', 'pieceDisplay']);
+    if (refs.fideChessPieceDisplay && fidePieceDisplay != null) {
+      refs.fideChessPieceDisplay.value = normalizeFideChessPieceDisplay(fidePieceDisplay);
+    }
+    const attackBorders = firstPresentValue(imported, ['fideChessPuzzleAttackBorders', 'puzzleAttackBorders', 'attackBorders'])
+      ?? firstPresentValue(settings, ['fideChessPuzzleAttackBorders', 'puzzleAttackBorders', 'attackBorders']);
+    if (refs.fideChessPuzzleAttackBorders) {
+      refs.fideChessPuzzleAttackBorders.checked = normalizeBooleanSetting(attackBorders, true);
+    }
   }
 
   function handleCanvasPointerDown(event) {
     if (event.isPrimary === false) return;
     if (Number.isInteger(event.button) && event.button !== 0) return;
+    if (isFideChessGame(game) && fideChessPendingPromotion) return;
+    if (beginFideChessPieceDrag(event)) return;
     if (!isDirectionalMoveGame(game) || !canAcceptDirectionalMove()) {
       resetSwipeGesture();
       return;
@@ -1808,6 +1924,10 @@
   }
 
   function handleCanvasPointerMove(event) {
+    if (activeFideChessDragEvent(event)) {
+      updateFideChessPieceDrag(event);
+      return;
+    }
     if (!activeSwipeEvent(event)) return;
     swipeGesture.lastX = event.clientX;
     swipeGesture.lastY = event.clientY;
@@ -1819,6 +1939,10 @@
   }
 
   function handleCanvasPointerUp(event) {
+    if (activeFideChessDragEvent(event)) {
+      finishFideChessPieceDrag(event);
+      return;
+    }
     if (!activeSwipeEvent(event)) return;
     const endX = Number.isFinite(event.clientX) ? event.clientX : swipeGesture.lastX;
     const endY = Number.isFinite(event.clientY) ? event.clientY : swipeGesture.lastY;
@@ -1837,14 +1961,260 @@
   }
 
   function handleCanvasPointerCancel(event) {
+    if (activeFideChessDragEvent(event)) {
+      cancelFideChessPieceDrag(event);
+      return;
+    }
     if (!activeSwipeEvent(event)) return;
     releaseSwipePointer(swipeGesture.pointerId);
     resetSwipeGesture();
   }
 
   function handleCanvasLostPointerCapture(event) {
+    if (activeFideChessDragEvent(event)) {
+      cancelFideChessPieceDrag(event);
+      return;
+    }
     if (!activeSwipeEvent(event)) return;
     resetSwipeGesture();
+  }
+
+  function beginFideChessPieceDrag(event) {
+    if (!isFideChessGame(game) || currentAnimation || game.phase !== 'ready') return false;
+    if (fideChessPendingPromotion) return false;
+    const point = canvasPointFromEvent(event);
+    if (!point) return false;
+    let target = tileFromCanvasEvent(event);
+    let piece = target ? fideChessPieceAt(game, target.index) : null;
+    let fromWaiting = false;
+    if (isFideChessPuzzle(game)) {
+      const trayHit = fideChessPuzzleTrayHitAtPoint(point, geometry, game);
+      if (trayHit && trayHit.kind === 'piece') {
+        piece = trayHit.piece;
+        target = null;
+        fromWaiting = true;
+      } else if (trayHit) {
+        return false;
+      }
+    }
+    if (!piece) return false;
+    if (!isFideChessPuzzle(game) && piece.side !== game.turn) return false;
+    fideChessDrag = {
+      pointerId: event.pointerId,
+      pieceId: piece.id,
+      fromIndex: Number.isInteger(piece.index) ? piece.index : null,
+      fromWaiting,
+      startX: event.clientX,
+      startY: event.clientY,
+      x: point.x,
+      y: point.y,
+      moved: false
+    };
+    captureSwipePointer(event.pointerId);
+    if (refs.canvas && refs.canvas.style) refs.canvas.style.cursor = 'grabbing';
+    return true;
+  }
+
+  function updateFideChessPieceDrag(event) {
+    const point = canvasPointFromEvent(event);
+    if (point) {
+      fideChessDrag.x = point.x;
+      fideChessDrag.y = point.y;
+    }
+    const dx = (Number.isFinite(event.clientX) ? event.clientX : fideChessDrag.startX) - fideChessDrag.startX;
+    const dy = (Number.isFinite(event.clientY) ? event.clientY : fideChessDrag.startY) - fideChessDrag.startY;
+    if (!fideChessDrag.moved && Math.max(Math.abs(dx), Math.abs(dy)) >= FIDE_CHESS_DRAG_MIN_DISTANCE) {
+      fideChessDrag.moved = true;
+      const piece = fideChessPieceById(game, fideChessDrag.pieceId);
+      if (piece) syncStatus('FIDE Chess dragging', `${fideChessPieceLabel(piece)} from ${fideChessPuzzlePieceOriginLabel(piece, game)}`, 'ready');
+    }
+    if (fideChessDrag.moved) {
+      if (event.preventDefault) event.preventDefault();
+      render();
+    }
+  }
+
+  function finishFideChessPieceDrag(event) {
+    const drag = fideChessDrag;
+    releaseSwipePointer(drag.pointerId);
+    resetFideChessDrag({ render: false });
+    syncGlueHoverCursor();
+    if (!drag.moved) return;
+    suppressUpcomingCanvasClick();
+    if (event.preventDefault) event.preventDefault();
+    if (isFideChessPuzzle(game)) {
+      finishFideChessPuzzlePieceDrag(drag, event);
+      return;
+    }
+    const target = tileFromCanvasEvent(event);
+    if (!target) {
+      syncStatus('FIDE Chess drop rejected', 'drop on a playable square', phaseBadge(game && game.phase));
+      restoreRejectedFideChessMoveSelection(drag.fromIndex);
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    if (target.index === drag.fromIndex) {
+      render();
+      return;
+    }
+    playFideChessMove(drag.fromIndex, target.index, target);
+  }
+
+  function finishFideChessPuzzlePieceDrag(drag, event) {
+    const point = canvasPointFromEvent(event);
+    const trayHit = fideChessPuzzleTrayHitAtPoint(point, geometry, game);
+    const target = tileFromCanvasEvent(event);
+    if (drag.fromWaiting) {
+      if (target) {
+        playFideChessPuzzleFromWaiting(drag.pieceId, target.index, target);
+        return;
+      }
+      restoreRejectedFideChessPuzzleSelection(drag.pieceId);
+      syncStatus('Puzzle drop rejected', 'drop waiting pieces on an empty board square', phaseBadge(game && game.phase));
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    if (trayHit) {
+      if (trayHit.kind === 'piece' || trayHit.kind === 'collect') {
+        restoreRejectedFideChessPuzzleSelection(drag.pieceId);
+        syncStatus('Puzzle drop rejected', 'drop on an empty waiting slot', phaseBadge(game && game.phase));
+        render();
+        refreshDebugExportIfNeeded();
+        return;
+      }
+      playFideChessPuzzleToWaiting(drag.pieceId);
+      return;
+    }
+    if (!target) {
+      restoreRejectedFideChessPuzzleSelection(drag.pieceId);
+      syncStatus('Puzzle drop rejected', 'drop on a board square or the waiting container', phaseBadge(game && game.phase));
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    if (target.index === drag.fromIndex) {
+      render();
+      return;
+    }
+    playFideChessPuzzleMove(drag.fromIndex, target.index, target);
+  }
+
+  function cancelFideChessPieceDrag(event) {
+    const pointerId = fideChessDrag && fideChessDrag.pointerId;
+    releaseSwipePointer(pointerId);
+    resetFideChessDrag();
+    syncGlueHoverCursor();
+    if (event && event.preventDefault) event.preventDefault();
+  }
+
+  function resetFideChessDrag(options = {}) {
+    const hadDrag = !!fideChessDrag;
+    fideChessDrag = null;
+    if (refs.canvas && refs.canvas.style && refs.canvas.style.cursor === 'grabbing') refs.canvas.style.cursor = '';
+    if (hadDrag && options.render !== false) render();
+  }
+
+  function clearFideChessPendingPromotion(options = {}) {
+    const hadPending = !!fideChessPendingPromotion;
+    fideChessPendingPromotion = null;
+    if (hadPending && options.render !== false) render();
+  }
+
+  function activeFideChessPendingPromotion(state = game) {
+    if (!fideChessPendingPromotion || !isFideChessGame(state) || state.phase !== 'ready') return null;
+    const pending = fideChessPendingPromotion;
+    if (!Number.isInteger(pending.pieceId) || !Number.isInteger(pending.from) || !Number.isInteger(pending.to)) return null;
+    const piece = fideChessPieceById(state, pending.pieceId);
+    if (!piece || piece.kind !== 'pawn' || piece.index !== pending.from || piece.side !== state.turn) return null;
+    return pending;
+  }
+
+  function beginFideChessPendingPromotion(move, target = null) {
+    if (!isFideChessGame(game) || !move || !move.promotion) return false;
+    const piece = fideChessPieceById(game, move.pieceId);
+    if (!piece || piece.kind !== 'pawn') return false;
+    const label = target && target.label ? target.label : compactTileRef(move.to, game.preset);
+    fideChessPendingPromotion = {
+      move: clonePlain(move),
+      pieceId: move.pieceId,
+      from: move.from,
+      to: move.to,
+      side: piece.side,
+      label
+    };
+    game.selectedIndex = move.from;
+    syncStatus('Choose promotion', `${fideChessSideLabel(piece.side)} pawn at ${label}`, 'ready');
+    render();
+    refreshDebugExportIfNeeded();
+    return true;
+  }
+
+  function handleFideChessPromotionPickerClick(event) {
+    const pending = activeFideChessPendingPromotion(game);
+    if (!pending) return false;
+    const point = canvasPointFromEvent(event);
+    const kind = fideChessPromotionPickerKindAtPoint(point, geometry, game);
+    if (kind) commitFideChessPendingPromotion(kind);
+    else cancelFideChessPendingPromotion();
+    if (event && event.preventDefault) event.preventDefault();
+    return true;
+  }
+
+  function commitFideChessPendingPromotion(kind) {
+    const pending = activeFideChessPendingPromotion(game);
+    const promotionKind = normalizeFideChessPromotionKind(kind);
+    if (!pending) {
+      clearFideChessPendingPromotion({ render: false });
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    const piece = fideChessPieceById(game, pending.pieceId);
+    const movingPiece = piece ? { ...piece } : null;
+    const label = pending.label || compactTileRef(pending.to, game.preset);
+    const next = cloneFideChessState(game);
+    const applied = applyFideChessMoveToState(next, clonePlain(pending.move), {
+      promotionKind,
+      record: true,
+      switchTurn: true,
+      finalize: true
+    });
+    if (!applied) {
+      clearFideChessPendingPromotion({ render: false });
+      syncStatus('FIDE Chess move rejected', 'promotion is no longer available', phaseBadge(game.phase));
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    pushUndoSnapshot(`FIDE Chess ${piece ? piece.kind : 'pawn'} to ${label}`);
+    fideChessPendingPromotion = null;
+    game = next;
+    startFideChessMoveAnimation({
+      changed: true,
+      state: next,
+      move: pending.move
+    }, movingPiece);
+    syncStatusForCurrentGame();
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+  }
+
+  function cancelFideChessPendingPromotion() {
+    const pending = activeFideChessPendingPromotion(game) || fideChessPendingPromotion;
+    const from = pending && Number.isInteger(pending.from) ? pending.from : null;
+    fideChessPendingPromotion = null;
+    restoreRejectedFideChessMoveSelection(from);
+    syncStatus('Promotion canceled', 'choose another move or promotion square', phaseBadge(game && game.phase));
+    render();
+    refreshDebugExportIfNeeded();
+  }
+
+  function activeFideChessDragEvent(event) {
+    return !!fideChessDrag
+      && (fideChessDrag.pointerId == null || event.pointerId == null || event.pointerId === fideChessDrag.pointerId);
   }
 
   function activeSwipeEvent(event) {
@@ -2207,6 +2577,85 @@
     tickAnimation();
   }
 
+  function startFideChessMoveAnimation(result, movingPiece, rookPiece = null) {
+    if (!result || !result.changed || !result.move || !movingPiece) return;
+    const move = result.move;
+    const event = {
+      kind: 'fideChessMove',
+      pieceId: move.pieceId,
+      piece: {
+        ...movingPiece,
+        index: move.from,
+        side: movingPiece.side || movingPiece.color || move.side,
+        color: movingPiece.color || movingPiece.side || move.side,
+        kind: movingPiece.kind || move.kind
+      },
+      from: move.from,
+      to: move.to,
+      route: cloneFideChessRoute(move.route) || {
+        kind: 'direct',
+        start: move.from,
+        end: move.to,
+        path: [move.from, move.to],
+        transitions: []
+      },
+      castle: move.castle || '',
+      promotion: !!move.promotion
+    };
+    if (move.castle && Number.isInteger(move.rookId) && rookPiece) {
+      event.rookId = move.rookId;
+      event.rookPiece = {
+        ...rookPiece,
+        index: move.rookFrom,
+        side: rookPiece.side || rookPiece.color || move.side,
+        color: rookPiece.color || rookPiece.side || move.side,
+        kind: 'rook'
+      };
+      event.rookFrom = move.rookFrom;
+      event.rookTo = move.rookTo;
+      event.rookRoute = cloneFideChessRoute(move.rookRoute) || {
+        kind: 'direct',
+        start: move.rookFrom,
+        end: move.rookTo,
+        path: [move.rookFrom, move.rookTo],
+        transitions: []
+      };
+    }
+    event.duration = eventDuration(event);
+    currentAnimation = {
+      event,
+      startedAt: now(),
+      duration: event.duration
+    };
+    tickAnimation();
+  }
+
+  function startFideChessPuzzleMoveAnimation(result, movingPiece, from, to) {
+    if (!result || !result.changed || !movingPiece || !Number.isInteger(from) || !Number.isInteger(to)) return;
+    startFideChessMoveAnimation({
+      changed: true,
+      state: result.state,
+      move: {
+        pieceId: movingPiece.id,
+        from,
+        to,
+        side: 'black',
+        kind: movingPiece.kind,
+        route: {
+          kind: 'direct',
+          start: from,
+          end: to,
+          path: [from, to],
+          transitions: []
+        }
+      }
+    }, {
+      ...movingPiece,
+      side: 'black',
+      color: 'black'
+    });
+  }
+
   function startSokobanMoveAnimation(result, dir) {
     const event = sokobanMoveAnimationEvent(result, dir);
     if (!sokobanAnimationHasVisibleItems(event)) return;
@@ -2401,6 +2850,7 @@
       event.kind === 'connectFourDrop'
       || event.kind === 'reversiFlip'
       || event.kind === 'chineseCheckersMove'
+      || event.kind === 'fideChessMove'
       || event.kind === 'sokobanMove'
       || event.kind === 'sokobanBounce'
     ) {
@@ -2511,6 +2961,7 @@
     if (isGoGame(game)) return 'export or import Go status';
     if (isReversiGame(game)) return 'export or import Reversi status';
     if (isChineseCheckersGame(game)) return 'export or import Chinese Checkers status';
+    if (isFideChessGame(game)) return 'export or import FIDE Chess status';
     if (isSokobanGame(game)) return 'step through Sokoban movement and inspect directions';
     return 'click a tile to assign the tile value';
   }
@@ -2691,6 +3142,10 @@
       rules = 'Select one of your marbles, then move or jump through connected cells. Race into the opposite camp.';
     } else if (mode === GAME_MODES.SOKOBAN) {
       rules = 'Move every player together. Push one box at a time onto the targets across the glued board.';
+    } else if (mode === GAME_MODES.FIDE_CHESS) {
+      rules = fideChessPresetHasNQueensGenerator(state && state.preset)
+        ? 'Rearrange all queens so no queen threatens another across the transported square-board routes.'
+        : 'Move FIDE chess pieces across transported square-board routes. Checkmate wins; stalemate and dead positions draw.';
     } else {
       rules = 'Slide boxes with arrow keys, move buttons, or a swipe. Matching powers of two merge across the glued board.';
     }
@@ -2735,6 +3190,7 @@
       return;
     }
     if (handleSetupCanvasStartClick(event)) return;
+    if (handleFideChessPromotionPickerClick(event)) return;
     if (game && game.phase !== 'setup') hideCanvasStartPrompt();
     if (isGomokuGame(game)) {
       handleGomokuCanvasClick(event);
@@ -2754,6 +3210,10 @@
     }
     if (isChineseCheckersGame(game)) {
       handleChineseCheckersCanvasClick(event);
+      return;
+    }
+    if (isFideChessGame(game)) {
+      handleFideChessCanvasClick(event);
       return;
     }
     if (isSokobanGame(game)) {
@@ -3183,6 +3643,240 @@
     refreshDebugExportIfNeeded();
   }
 
+  function handleFideChessCanvasClick(event) {
+    if (!game || currentAnimation || game.phase === 'setup') return;
+    if (fideChessPendingPromotion) return;
+    if (game.phase === 'gameover') {
+      if (!game.resultDismissed) {
+        game.resultDismissed = true;
+        render();
+        refreshDebugExportIfNeeded();
+      }
+      return;
+    }
+    if (isFideChessPuzzle(game)) {
+      handleFideChessPuzzleCanvasClick(event);
+      return;
+    }
+    const target = tileFromCanvasEvent(event);
+    if (!target) return;
+    const piece = fideChessPieceAt(game, target.index);
+    if (!Number.isInteger(game.selectedIndex)) {
+      if (!piece) {
+        syncStatus('FIDE Chess selection', `${target.label} is empty`, 'ready');
+        return;
+      }
+      if (piece.side !== game.turn) {
+        syncStatus('FIDE Chess selection', `${fideChessSideLabel(game.turn)} to move`, 'ready');
+        return;
+      }
+      const moves = fideChessLegalMovesForPiece(game, piece);
+      if (!moves.length) {
+        syncStatus('FIDE Chess selection', `${fideChessPieceLabel(piece)} has no legal move`, 'ready');
+        return;
+      }
+      game.selectedIndex = target.index;
+      syncStatus('FIDE Chess selected', `${fideChessPieceLabel(piece)}; ${moves.length} legal move${moves.length === 1 ? '' : 's'}`, 'ready');
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    if (piece && piece.side === game.turn) {
+      const selectedAgain = target.index === game.selectedIndex;
+      game.selectedIndex = selectedAgain ? null : target.index;
+      const selectedPiece = selectedAgain ? null : piece;
+      const count = selectedPiece ? fideChessLegalMovesForPiece(game, selectedPiece).length : 0;
+      syncStatus('FIDE Chess selected', selectedPiece ? `${fideChessPieceLabel(selectedPiece)}; ${count} legal move${count === 1 ? '' : 's'}` : fideChessTurnInfo(game), 'ready');
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    const from = game.selectedIndex;
+    playFideChessMove(from, target.index, target);
+  }
+
+  function playFideChessMove(from, to, target = null) {
+    const result = moveFideChessPiece(game, from, to, {
+      deferPromotion: true
+    });
+    if (result.pendingPromotion) {
+      if (beginFideChessPendingPromotion(result.move, target)) return;
+      syncStatus('FIDE Chess move rejected', result.message || 'promotion picker unavailable', phaseBadge(game.phase));
+      restoreRejectedFideChessMoveSelection(from);
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    if (!result.changed) {
+      const label = target && target.label ? target.label : compactTileRef(to, game && game.preset);
+      syncStatus('FIDE Chess move rejected', result.message || `${label} is unavailable`, phaseBadge(game.phase));
+      restoreRejectedFideChessMoveSelection(from);
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    const movedPiece = fideChessPieceAt(game, from);
+    const rookPiece = result.move && Number.isInteger(result.move.rookId)
+      ? fideChessPieceById(game, result.move.rookId)
+      : null;
+    const label = target && target.label ? target.label : compactTileRef(to, game && game.preset);
+    pushUndoSnapshot(`FIDE Chess ${movedPiece ? movedPiece.kind : 'move'} to ${label}`);
+    game = result.state;
+    startFideChessMoveAnimation(result, movedPiece, rookPiece);
+    syncStatusForCurrentGame();
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+  }
+
+  function handleFideChessPuzzleCanvasClick(event) {
+    const point = canvasPointFromEvent(event);
+    const trayHit = fideChessPuzzleTrayHitAtPoint(point, geometry, game);
+    if (trayHit) {
+      handleFideChessPuzzleTrayClick(trayHit);
+      return;
+    }
+    const target = tileFromCanvasEvent(event);
+    if (!target) return;
+    const piece = fideChessPieceAt(game, target.index);
+    const selectedPiece = selectedFideChessPuzzlePiece(game);
+    if (!selectedPiece) {
+      if (!piece) {
+        syncStatus('Puzzle selection', `${target.label} is empty`, 'ready');
+        return;
+      }
+      setFideChessPuzzleSelection(game, piece);
+      syncStatus('Puzzle piece selected', fideChessPuzzleTurnInfo(game), 'ready');
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    if (piece) {
+      const selectedAgain = piece.id === selectedPiece.id;
+      if (selectedAgain) clearFideChessPuzzleSelection(game);
+      else setFideChessPuzzleSelection(game, piece);
+      syncStatus('Puzzle piece selected', fideChessPuzzleTurnInfo(game), 'ready');
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    if (fideChessPieceWaiting(selectedPiece)) playFideChessPuzzleFromWaiting(selectedPiece.id, target.index, target);
+    else playFideChessPuzzleMove(selectedPiece.index, target.index, target);
+  }
+
+  function handleFideChessPuzzleTrayClick(hit) {
+    if (!hit) return;
+    if (hit.kind === 'collect') {
+      collectFideChessPuzzlePiecesFromUi();
+      return;
+    }
+    const selectedPiece = selectedFideChessPuzzlePiece(game);
+    if (hit.kind === 'piece' && hit.piece) {
+      const selectedAgain = selectedPiece && selectedPiece.id === hit.piece.id;
+      if (selectedAgain) clearFideChessPuzzleSelection(game);
+      else setFideChessPuzzleSelection(game, hit.piece);
+      syncStatus('Puzzle piece selected', fideChessPuzzleTurnInfo(game), 'ready');
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    if (selectedPiece && fideChessPieceOnBoard(selectedPiece, game)) {
+      playFideChessPuzzleToWaiting(selectedPiece.id);
+      return;
+    }
+    syncStatus('Puzzle waiting area', `${fideChessPuzzleWaitingCount(game)} waiting`, 'ready');
+  }
+
+  function playFideChessPuzzleMove(from, to, target = null) {
+    const movedPiece = fideChessPieceAt(game, from);
+    const result = moveFideChessPuzzlePiece(game, from, to);
+    if (!result.changed) {
+      const label = target && target.label ? target.label : compactTileRef(to, game && game.preset);
+      syncStatus('Puzzle move rejected', result.message || `${label} is unavailable`, phaseBadge(game.phase));
+      restoreRejectedFideChessPuzzleSelection(movedPiece ? movedPiece.id : null);
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    const label = target && target.label ? target.label : compactTileRef(to, game && game.preset);
+    pushUndoSnapshot(`Puzzle ${movedPiece ? movedPiece.kind : 'piece'} to ${label}`);
+    game = result.state;
+    startFideChessPuzzleMoveAnimation(result, movedPiece, from, to);
+    syncStatusForCurrentGame();
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+  }
+
+  function playFideChessPuzzleToWaiting(pieceId) {
+    const piece = fideChessPieceById(game, pieceId);
+    const label = piece ? fideChessPuzzlePieceOriginLabel(piece, game) : 'board';
+    const result = moveFideChessPuzzlePieceToWaiting(game, pieceId);
+    if (!result.changed) {
+      syncStatus('Puzzle move rejected', result.message || 'waiting area is unavailable', phaseBadge(game.phase));
+      restoreRejectedFideChessPuzzleSelection(pieceId);
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    pushUndoSnapshot(`Puzzle ${piece ? piece.kind : 'piece'} to waiting`);
+    game = result.state;
+    syncStatus('Puzzle piece waiting', appendTextPart(label, fideChessPuzzleTurnInfo(game)), phaseBadge(game.phase));
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+  }
+
+  function playFideChessPuzzleFromWaiting(pieceId, to, target = null) {
+    const piece = fideChessPieceById(game, pieceId);
+    const result = moveFideChessPuzzleWaitingPieceToBoard(game, pieceId, to);
+    if (!result.changed) {
+      const label = target && target.label ? target.label : compactTileRef(to, game && game.preset);
+      syncStatus('Puzzle move rejected', result.message || `${label} is unavailable`, phaseBadge(game.phase));
+      restoreRejectedFideChessPuzzleSelection(pieceId);
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    const label = target && target.label ? target.label : compactTileRef(to, game && game.preset);
+    pushUndoSnapshot(`Puzzle ${piece ? piece.kind : 'piece'} to ${label}`);
+    game = result.state;
+    syncStatusForCurrentGame();
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+  }
+
+  function collectFideChessPuzzlePiecesFromUi() {
+    const result = collectFideChessPuzzlePieces(game);
+    if (!result.changed) {
+      syncStatus('Puzzle collect', result.message || 'nothing to collect', phaseBadge(game && game.phase));
+      render();
+      refreshDebugExportIfNeeded();
+      return;
+    }
+    pushUndoSnapshot('Puzzle collect pieces');
+    game = result.state;
+    syncStatus('Puzzle pieces collected', fideChessPuzzleTurnInfo(game), phaseBadge(game.phase));
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+  }
+
+  function restoreRejectedFideChessMoveSelection(from) {
+    if (!isFideChessGame(game) || !Number.isInteger(from)) return;
+    const piece = fideChessPieceAt(game, from);
+    if (!piece || piece.side !== game.turn) return;
+    game.selectedIndex = from;
+  }
+
+  function restoreRejectedFideChessPuzzleSelection(from) {
+    if (!isFideChessPuzzle(game) || !Number.isInteger(from)) return;
+    const piece = fideChessPieceById(game, from) || fideChessPieceAt(game, from);
+    if (!piece) return;
+    setFideChessPuzzleSelection(game, piece);
+  }
+
   function handleSokobanCanvasClick(event) {
     if (!game || currentAnimation || game.phase === 'setup') return;
     if (game.phase === 'gameover') {
@@ -3241,7 +3935,11 @@
 
   function tileFromCanvasEvent(event) {
     const point = canvasPointFromEvent(event);
-    if (!point) return null;
+    return tileFromCanvasPoint(point);
+  }
+
+  function tileFromCanvasPoint(point) {
+    if (!point || !geometry || !geometry.cells || !geometry.cells.length) return null;
     const radius = geometry.radius * 0.96;
     for (let index = 0; index < geometry.cells.length; index += 1) {
       const cell = geometry.cells[index];
@@ -3328,6 +4026,7 @@
 
   function restoreHistorySnapshot(snapshot, status, info) {
     stopPlayback();
+    clearFideChessPendingPromotion({ render: false });
     game = cloneGameState(snapshot.game);
     eventQueue = clonePlain(snapshot.eventQueue || []);
     eventIndex = Math.max(0, Math.min(Number(snapshot.eventIndex) || 0, eventQueue.length));
@@ -3430,7 +4129,7 @@
   function exportGameRecord(options = {}) {
     if (!game || !refs.debugExport) return;
     if (!recordableGameMode(gameModeValue(game))) {
-      syncStatus('record unavailable', 'game records are available for Gomoku, Go, Connect Four, and Reversi', 'warn');
+      syncStatus('record unavailable', 'game records are available for Gomoku, Go, Connect Four, Reversi, and FIDE Chess', 'warn');
       return;
     }
     refs.debugExport.value = JSON.stringify(gameRecordExportPayload(game), null, 2);
@@ -3487,6 +4186,11 @@
     if (isPlacementGame(state)) {
       settings.displayStyle = placementDisplayStyle();
       settings.pieceRadiusPercent = selectedPlacementPieceRadiusPercent(gameModeValue(state));
+    }
+    if (isFideChessGame(state)) {
+      settings.fideChessPieceDisplay = selectedFideChessPieceDisplay();
+      settings.fideChessVariant = fideChessVariant(state);
+      if (isFideChessPuzzle(state)) settings.fideChessPuzzleAttackBorders = selectedFideChessPuzzleAttackBorders();
     }
     if (supportsMoveNumberLabels(state)) settings.moveNumberLabels = shouldShowMoveNumberLabels(state);
     if (isGoGame(state)) {
@@ -3596,6 +4300,8 @@
     if (Number.isInteger(source.gomokuWinLength)) preset.gomokuWinLength = source.gomokuWinLength;
     if (Number.isFinite(source.goKomi)) preset.goKomi = normalizeGoKomi(source.goKomi);
     if (source.pieceSets) preset.pieceSets = clonePlain(source.pieceSets);
+    if (Array.isArray(source.pieces)) preset.pieces = source.pieces.map((piece) => ({ ...piece }));
+    addFideChessPuzzlePresetMetadata(preset, source);
     if (Array.isArray(source.reversiOpening)) preset.reversiOpening = source.reversiOpening.map((entry) => ({ ...entry }));
     if (source.chineseCheckersCamps) {
       preset.chineseCheckersCamps = chineseCheckersCampsToTileRefs(
@@ -3637,12 +4343,27 @@
     if (Number.isInteger(preset.gomokuWinLength)) compact.gomokuWinLength = preset.gomokuWinLength;
     if (Number.isFinite(preset.goKomi)) compact.goKomi = normalizeGoKomi(preset.goKomi);
     if (preset.pieceSets) compact.pieceSets = clonePlain(preset.pieceSets);
+    if (Array.isArray(preset.pieces)) compact.pieces = preset.pieces.map((piece) => ({ ...piece }));
+    addFideChessPuzzlePresetMetadata(compact, preset);
     if (Array.isArray(preset.reversiOpening)) compact.reversiOpening = preset.reversiOpening.map((entry) => ({ ...entry }));
     if (preset.chineseCheckersCamps) compact.chineseCheckersCamps = clonePlain(preset.chineseCheckersCamps);
     if (Array.isArray(preset.chineseCheckersPlayers)) compact.chineseCheckersPlayers = preset.chineseCheckersPlayers.slice();
     const sokoban = sokobanPresetDecorationsForExport(preset, true);
     if (sokoban) compact.sokoban = sokoban;
     return compact;
+  }
+
+  function addFideChessPuzzlePresetMetadata(target, source) {
+    const variant = normalizeFideChessVariant(source && source.fideChessVariant);
+    const puzzle = normalizeFideChessPuzzleKind(source && (source.fideChessPuzzle || source.chessPuzzle || source.puzzle));
+    const generator = normalizeFideChessPuzzleGenerator(source && (source.fideChessPuzzleGenerator || source.chessPuzzleGenerator));
+    if (variant) target.fideChessVariant = variant;
+    if (puzzle) target.fideChessPuzzle = puzzle;
+    if (generator) target.fideChessPuzzleGenerator = generator;
+    if (source && source.fideChessPuzzleTorus) target.fideChessPuzzleTorus = true;
+    if (source && Number.isInteger(source.defaultBoardSize)) target.defaultBoardSize = source.defaultBoardSize;
+    if (source && source.dynamicGomokuSize) target.dynamicGomokuSize = true;
+    if (source && source.dynamicGomokuLabelPrefix) target.dynamicGomokuLabelPrefix = source.dynamicGomokuLabelPrefix;
   }
 
   function compactTileListForExport(tiles, rows, cols, options = {}) {
@@ -3757,6 +4478,7 @@
   function applyImportedDebugState(imported) {
     if (game) pushUndoSnapshot('status import');
     stopPlayback();
+    clearFideChessPendingPromotion({ render: false });
     importedPreset = imported.state.preset;
     if (refs.gameMode) refs.gameMode.value = gameModeValue(imported.state);
     ensureImportedPresetOption(importedPreset);
@@ -3818,6 +4540,7 @@
     if (Number.isInteger(preset.gomokuWinLength)) presetPayload.gomokuWinLength = preset.gomokuWinLength;
     if (Number.isFinite(preset.goKomi)) presetPayload.goKomi = normalizeGoKomi(preset.goKomi);
     if (preset.pieceSets) presetPayload.pieceSets = clonePlain(preset.pieceSets);
+    if (Array.isArray(preset.pieces)) presetPayload.pieces = preset.pieces.map((piece) => ({ ...piece }));
     if (Array.isArray(preset.reversiOpening)) presetPayload.reversiOpening = preset.reversiOpening.map((entry) => ({ ...entry }));
     if (preset.chineseCheckersCamps) presetPayload.chineseCheckersCamps = clonePlain(preset.chineseCheckersCamps);
     if (Array.isArray(preset.chineseCheckersPlayers)) presetPayload.chineseCheckersPlayers = preset.chineseCheckersPlayers.slice();
@@ -3970,6 +4693,33 @@
         }
       };
     }
+    if (isFideChessGame(game)) {
+      return {
+        ...base,
+        fideChessVariant: fideChessVariant(game),
+        turn: game.turn || 'white',
+        winner: game.winner || '',
+        result: game.result || '',
+        resultDismissed: !!game.resultDismissed,
+        selectedIndex: Number.isInteger(game.selectedIndex) ? game.selectedIndex : null,
+        selectedPieceId: normalizePositiveInteger(game.selectedPieceId, 0) || null,
+        nextPieceId: game.nextPieceId || 1,
+        enPassant: game.enPassant ? { ...game.enPassant } : null,
+        halfmoveClock: Math.max(0, Number(game.halfmoveClock) || 0),
+        fullmoveNumber: Math.max(1, Number(game.fullmoveNumber) || 1),
+        recordMoves: cloneGameRecordMoves(game.recordMoves),
+        pieces: (game.pieces || [])
+          .map((piece) => fideChessPieceExport(piece, preset.cols))
+          .sort(compareFideChessPieceSummaries),
+        queue: {
+          eventIndex: 0,
+          eventCount: 0,
+          stepPaused: false,
+          currentAnimation: null,
+          events: []
+        }
+      };
+    }
     if (isSokobanGame(game)) {
       return {
         ...base,
@@ -4059,6 +4809,31 @@
     }, disc);
   }
 
+  function fideChessPieceExport(piece, cols) {
+    const payload = {
+      id: piece.id,
+      color: piece.side || piece.color,
+      side: piece.side || piece.color,
+      kind: piece.kind,
+      value: FIDE_CHESS_PIECE_VALUES[piece.kind] || piece.value || '',
+      hasMoved: !!piece.hasMoved
+    };
+    const forwardDir = piece.kind === 'pawn' ? normalizeFideChessForwardDir(piece.forwardDir) : null;
+    if (Number.isInteger(forwardDir)) {
+      payload.forwardDir = forwardDir;
+      payload.forward = FIDE_CHESS_FORWARD_DIR_NAMES[forwardDir];
+    }
+    if (fideChessPieceWaiting(piece)) {
+      payload.waiting = true;
+      const waitingOrder = normalizeOptionalMoveNumber(piece.waitingOrder);
+      if (waitingOrder) payload.waitingOrder = waitingOrder;
+    } else if (Number.isInteger(piece.index)) {
+      payload.index = piece.index;
+      Object.assign(payload, rowCol(piece.index, cols));
+    }
+    return placementPieceExport(payload, piece);
+  }
+
   function placementPieceExport(payload, piece) {
     const moveNumber = normalizeOptionalMoveNumber(piece && piece.moveNumber);
     if (moveNumber) payload.moveNumber = moveNumber;
@@ -4100,6 +4875,14 @@
     if (Number.isInteger(result.landingIndex)) {
       addTile('landing', result.landingIndex);
       delete result.landingIndex;
+    }
+    if (Number.isInteger(result.fromIndex)) {
+      addTile('from', result.fromIndex);
+      delete result.fromIndex;
+    }
+    if (Number.isInteger(result.toIndex)) {
+      addTile('to', result.toIndex);
+      delete result.toIndex;
     }
     return result;
   }
@@ -4161,7 +4944,8 @@
     return mode === GAME_MODES.GOMOKU
       || mode === GAME_MODES.GO
       || mode === GAME_MODES.CONNECT_FOUR
-      || mode === GAME_MODES.REVERSI;
+      || mode === GAME_MODES.REVERSI
+      || mode === GAME_MODES.FIDE_CHESS;
   }
 
   function marbleExport(marble, cols) {
@@ -4215,6 +4999,15 @@
     }
     if (isChineseCheckersGame(state)) {
       return `${state.marbles.length} marble${state.marbles.length === 1 ? '' : 's'}, ${state.removed.size} removed`;
+    }
+    if (isFideChessGame(state)) {
+      if (isFideChessPuzzle(state)) {
+        const threatCount = fideChessPuzzleThreatCount(state);
+        const waitingCount = fideChessPuzzleWaitingCount(state);
+        return `${(state.pieces || []).length} puzzle piece${(state.pieces || []).length === 1 ? '' : 's'}, ${threatCount} threat${threatCount === 1 ? '' : 's'}, ${waitingCount} waiting`;
+      }
+      const counts = fideChessPieceCounts(state);
+      return `${counts.white} white, ${counts.black} black, ${state.removed.size} removed`;
     }
     if (isSokobanGame(state)) {
       return `${state.players.length} player${state.players.length === 1 ? '' : 's'}, ${state.boxes.length} box${state.boxes.length === 1 ? '' : 'es'}, ${state.targets.size} target${state.targets.size === 1 ? '' : 's'}`;
@@ -4479,6 +5272,51 @@
         stepPaused: false
       };
     }
+    if (normalizeStatusGameMode(payload) === GAME_MODES.FIDE_CHESS) {
+      const pieces = normalizeFideChessPieces(payload.pieces || preset.pieces || [], preset, removed);
+      const nextPieceId = Math.max(
+        normalizeNonnegativeInteger(payload.nextPieceId, 1),
+        pieces.reduce((max, piece) => Math.max(max, piece.id + 1), 1)
+      );
+      const phase = normalizeStatusPhase(payload.phase);
+      const winner = normalizeFideChessSide(payload.winner);
+      const explicitVariant = normalizeFideChessVariant(payload.fideChessVariant || payload.chessVariant || payload.variant);
+      const fideChessVariant = explicitVariant || inferFideChessVariantFromPieces(pieces);
+      const state = {
+        gameMode: GAME_MODES.FIDE_CHESS,
+        fideChessVariant,
+        preset,
+        phase,
+        removed,
+        boxes: [],
+        newBoxIds: new Set(),
+        nextBoxId: 1,
+        score: 0,
+        pieces,
+        nextPieceId,
+        selectedIndex: normalizeStatusOptionalBoardIndex(payload.selectedIndex, preset),
+        selectedPieceId: normalizePositiveInteger(payload.selectedPieceId, 0) || null,
+        turn: normalizeFideChessSide(payload.turn) || 'white',
+        winner: phase === 'gameover' ? winner : '',
+        result: phase === 'gameover' ? sanitizeImportedText(payload.result || '', '') : '',
+        enPassant: normalizeStatusFideChessEnPassant(payload.enPassant, pieces),
+        halfmoveClock: Math.max(0, normalizeNonnegativeInteger(payload.halfmoveClock, 0)),
+        fullmoveNumber: Math.max(1, normalizeNonnegativeInteger(payload.fullmoveNumber, 1)),
+        resultDismissed: !!payload.resultDismissed,
+        round: normalizeNonnegativeInteger(payload.round, 0),
+        ending: phase === 'gameover' ? sanitizeImportedText(payload.ending || '', '') : '',
+        recordMoves: normalizeGameRecordMoves(payload.recordMoves),
+        debugMessage: ''
+      };
+      if (isFideChessPuzzle(state)) prepareFideChessPuzzleState(state, { preserveSelection: true, preserveStatus: phase === 'gameover' });
+      return {
+        state,
+        phase: state.phase,
+        eventQueue: [],
+        eventIndex: 0,
+        stepPaused: false
+      };
+    }
     if (normalizeStatusGameMode(payload) === GAME_MODES.SOKOBAN) {
       const walls = normalizeStatusSokobanTileSet(normalizeStatusSokobanEntries(payload, preset, 'walls'), preset, removed);
       const targets = normalizeStatusSokobanTileSet(normalizeStatusSokobanEntries(payload, preset, 'targets'), preset, removed);
@@ -4609,7 +5447,7 @@
   function gameStateFromRecordImportPayload(payload) {
     const mode = gameModeFromUrlParam(payload.gameMode || payload.game);
     if (!recordableGameMode(mode)) {
-      throw new Error('record gameMode must be Gomoku, Go, Connect Four, or Reversi');
+      throw new Error('record gameMode must be Gomoku, Go, Connect Four, Reversi, or FIDE Chess');
     }
     const snapshot = payload.snapshot && typeof payload.snapshot === 'object' && !Array.isArray(payload.snapshot)
       ? payload.snapshot
@@ -4631,6 +5469,10 @@
       stepPaused: false,
       displayStyle: normalizePlacementDisplayStyle(settings.displayStyle, ''),
       moveNumberLabels: !!settings.moveNumberLabels,
+      fideChessPuzzleAttackBorders: normalizeBooleanSetting(
+        firstPresentValue(settings, ['fideChessPuzzleAttackBorders', 'puzzleAttackBorders', 'attackBorders']),
+        true
+      ),
       pieceRadiusPercent: normalizePlacementPieceRadiusPercent(
         firstPresentValue(settings, ['pieceRadiusPercent', 'pieceSizePercent', 'pieceSize']),
         defaultPlacementPieceRadiusPercentForMode(mode)
@@ -4663,6 +5505,11 @@
       });
     }
     if (mode === GAME_MODES.REVERSI) return beginReversiGame(preset, {});
+    if (mode === GAME_MODES.FIDE_CHESS) {
+      return beginFideChessGame(preset, {
+        fideChessVariant: settings.fideChessVariant || settings.chessVariant || settings.variant
+      });
+    }
     throw new Error('record game is unsupported');
   }
 
@@ -4695,6 +5542,44 @@
       const color = normalizeReversiColor(move.color);
       if (color && color !== state.turn) throw new Error(`${label} expected ${reversiColorLabel(state.turn)} to move`);
       return changedRecordState(placeReversiDisc(state, index), label);
+    }
+    if (isFideChessGame(state)) {
+      if (isFideChessPuzzle(state)) {
+        if (action === 'collect') return changedRecordState(collectFideChessPuzzlePieces(state), label);
+        if (action === 'to-waiting' || action === 'towaiting' || action === 'wait' || action === 'tray') {
+          const pieceId = normalizePositiveInteger(move.pieceId || move.id, 0);
+          const from = optionalGameRecordMoveIndex(move.from || move.fromIndex, state.preset);
+          const piece = pieceId ? fideChessPieceById(state, pieceId) : fideChessPieceAt(state, from);
+          if (!piece) throw new Error(`${label} expected a puzzle piece`);
+          return changedRecordState(moveFideChessPuzzlePieceToWaiting(state, piece.id), label);
+        }
+        if (action === 'from-waiting' || action === 'fromwaiting' || action === 'place-waiting' || action === 'untray') {
+          const pieceId = normalizePositiveInteger(move.pieceId || move.id, 0);
+          if (!pieceId) throw new Error(`${label} expected a piece id`);
+          const to = gameRecordMoveIndex(move.to || move.toIndex || move.tile, state.preset, label);
+          return changedRecordState(moveFideChessPuzzleWaitingPieceToBoard(state, pieceId, to), label);
+        }
+        if (action !== 'rearrange' && action !== 'move' && action !== 'play') throw new Error(`${label} has an invalid FIDE Chess puzzle action`);
+        const from = gameRecordMoveIndex(move.from || move.fromIndex, state.preset, label);
+        const to = gameRecordMoveIndex(move.to || move.toIndex || move.tile, state.preset, label);
+        const piece = fideChessPieceAt(state, from);
+        const pieceId = normalizePositiveInteger(move.pieceId || move.id, 0);
+        if (pieceId && piece && piece.id !== pieceId) throw new Error(`${label} expected piece id ${pieceId}`);
+        const kind = normalizeFideChessKind(move.piece || move.kind);
+        if (kind && piece && piece.kind !== kind) throw new Error(`${label} expected a ${kind}`);
+        return changedRecordState(moveFideChessPuzzlePiece(state, from, to), label);
+      }
+      if (action !== 'move' && action !== 'play') throw new Error(`${label} has an invalid FIDE Chess action`);
+      const from = gameRecordMoveIndex(move.from || move.fromIndex, state.preset, label);
+      const to = gameRecordMoveIndex(move.to || move.toIndex || move.tile, state.preset, label);
+      const side = normalizeFideChessSide(move.side || move.color);
+      if (side && side !== state.turn) throw new Error(`${label} expected ${fideChessSideLabel(state.turn)} to move`);
+      const piece = fideChessPieceAt(state, from);
+      const kind = normalizeFideChessKind(move.piece || move.kind);
+      if (kind && piece && piece.kind !== kind) throw new Error(`${label} expected a ${kind}`);
+      return changedRecordState(moveFideChessPiece(state, from, to, {
+        promotionKind: move.promotion || move.promote
+      }), label);
     }
     throw new Error(`${label} cannot be replayed for this game`);
   }
@@ -4799,6 +5684,10 @@
       connectFourHoles,
       cutEdges,
       gluedEdges,
+      fideChessVariant: normalizeFideChessVariant(source.fideChessVariant || (base && base.fideChessVariant)) || undefined,
+      fideChessPuzzle: normalizeFideChessPuzzleKind(source.fideChessPuzzle || source.chessPuzzle || (base && (base.fideChessPuzzle || base.chessPuzzle))) || undefined,
+      fideChessPuzzleGenerator: normalizeFideChessPuzzleGenerator(source.fideChessPuzzleGenerator || source.chessPuzzleGenerator || (base && (base.fideChessPuzzleGenerator || base.chessPuzzleGenerator))) || undefined,
+      fideChessPuzzleTorus: !!(source.fideChessPuzzleTorus || source.torusQueens || (base && (base.fideChessPuzzleTorus || base.torusQueens))),
       gomokuWinLength: normalizePresetGomokuWinLength(
         source.gomokuWinLength != null ? source.gomokuWinLength : (base && base.gomokuWinLength),
         sourceId || (base && base.id)
@@ -4807,6 +5696,12 @@
     const pieceSetSource = source.pieceSets || (base && base.pieceSets);
     const pieceSets = normalizePieceSets(pieceSetSource, statusPreset, new Set(removedTileSet));
     if (pieceSetsHaveEntries(pieceSets)) statusPreset.pieceSets = pieceSetsToTileRefs(pieceSets, cols);
+    const chessPiecesSource = Array.isArray(source.pieces) ? source.pieces : (base && base.pieces);
+    if (Array.isArray(chessPiecesSource)) {
+      const pieces = normalizeFideChessPieces(chessPiecesSource, statusPreset, new Set(removedTileSet))
+        .map((piece) => fideChessPieceExport(piece, cols));
+      if (pieces.length) statusPreset.pieces = pieces;
+    }
     const goKomi = source.goKomi != null ? source.goKomi : (source.komi != null ? source.komi : (base && base.goKomi));
     if (goKomi != null) statusPreset.goKomi = normalizeGoKomi(goKomi);
     const reversiOpening = Array.isArray(source.reversiOpening) ? source.reversiOpening : (base && base.reversiOpening);
@@ -5099,6 +5994,26 @@
     return validBoardIndex({ preset }, index) ? index : null;
   }
 
+  function normalizeStatusFideChessEnPassant(value, pieces) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const pawnId = normalizePositiveInteger(value.pawnId, 0);
+    const pawn = (pieces || []).find((piece) => piece.id === pawnId && piece.kind === 'pawn');
+    if (!pawn) return null;
+    const side = normalizeFideChessSide(value.side) || pawn.side;
+    if (side !== pawn.side) return null;
+    const targetIndex = Number(value.targetIndex);
+    const pawnIndex = Number(value.pawnIndex);
+    if (!Number.isInteger(targetIndex) || !Number.isInteger(pawnIndex) || pawn.index !== pawnIndex) return null;
+    return {
+      pawnId,
+      side,
+      pawnIndex,
+      targetIndex,
+      fromIndex: Number.isInteger(Number(value.fromIndex)) ? Number(value.fromIndex) : null,
+      moveNumber: normalizeOptionalMoveNumber(value.moveNumber)
+    };
+  }
+
   function normalizeStatusGameMode(payload) {
     const value = String((payload && (payload.gameMode || payload.game)) || '').trim().toLowerCase();
     if (value === GAME_MODES.CHINESE_CHECKERS || value === 'chinese checkers' || value === 'chinesecheckers') {
@@ -5106,6 +6021,9 @@
     }
     if (value === GAME_MODES.SOKOBAN) {
       return GAME_MODES.SOKOBAN;
+    }
+    if (value === GAME_MODES.FIDE_CHESS || value === 'fide chess' || value === 'fidechess' || value === 'chess') {
+      return GAME_MODES.FIDE_CHESS;
     }
     if (value === GAME_MODES.CONNECT_FOUR || value === 'connectfour' || value === 'connect four') {
       return GAME_MODES.CONNECT_FOUR;
@@ -5383,6 +6301,24 @@
       syncStatus(`Sokoban move ${game.moves || 0}`, sokobanTurnInfo(game), phaseBadge(game.phase));
       return;
     }
+    if (isFideChessGame(game)) {
+      if (game.phase === 'setup') {
+        const issue = fideChessSetupIssue(game);
+        const hint = issue ? '' : fideChessSetupHint(game);
+        syncStatus(
+          `${game.preset.label} FIDE Chess preview`,
+          appendTextPart(issue ? `${previewInfo(game.preset)}; ${issue}` : previewInfo(game.preset), hint),
+          issue || hint ? 'warn' : 'setup'
+        );
+        return;
+      }
+      if (game.phase === 'gameover') {
+        syncStatus(fideChessResultText(game), `${game.round || 0} move${game.round === 1 ? '' : 's'}`, 'over');
+        return;
+      }
+      syncStatus(isFideChessPuzzle(game) ? `FIDE Chess puzzle ${game.round || 0}` : `FIDE Chess move ${game.round || 0}`, fideChessTurnInfo(game), phaseBadge(game.phase));
+      return;
+    }
     if (game.phase === 'setup') {
       syncStatus(`${game.preset.label} preview`, previewInfo(game.preset), 'setup');
       return;
@@ -5533,6 +6469,7 @@
       heightAvailable: sizing.heightAvailable,
       immersive: sizing.immersive
     });
+    applyFideChessPuzzleTrayGeometry(geometry, game);
     applyDisplayRotationToGeometry(geometry, connectFourDisplayRotationAngle());
     const logicalWidth = geometry.width;
     const logicalHeight = geometry.height;
@@ -5555,7 +6492,7 @@
     const polishedVertexDisplay = vertexDisplay && displayStyle === 'polished-vertex';
     if (!vertexDisplay) {
       geometry.cells.forEach((cell, index) => {
-        if (cell) drawTile(ctx, geometry, cell.row, cell.col, removed.has(index), explosionMode);
+        if (cell) drawTile(ctx, geometry, cell.row, cell.col, removed.has(index), explosionMode, displayStyle);
       });
     }
 
@@ -5568,7 +6505,10 @@
       if (!isConnectFourDropAnimation() && !isChineseCheckersGame(game)) drawPlacementWinningLine(ctx, geometry, game);
       if (isGoGame(game)) drawGoScoreOverlay(ctx, geometry, game);
       drawPlacementSelectionOverlays(ctx, geometry, game);
+      drawFideChessPuzzleWaitingTray(ctx, geometry, game);
       drawPlacementPieces(ctx, geometry, placementPieces(game));
+      drawFideChessPendingPromotion(ctx, geometry, game);
+      drawFideChessDraggedPiece(ctx, geometry, game);
       if (isGoGame(game)) drawGoDeadStoneMarks(ctx, geometry, game);
       drawPlacementMoveNumberLabels(ctx, geometry, game);
       drawPlacementAnimationOverlays(ctx, geometry);
@@ -5731,7 +6671,80 @@
     };
   }
 
-  function drawTile(ctx, geom, row, col, removed, explosionMode = false) {
+  function applyFideChessPuzzleTrayGeometry(geom, state) {
+    if (!shouldShowFideChessPuzzleTray(state) || !geom) return geom;
+    geom.boardWidth = geom.width;
+    geom.boardHeight = geom.height;
+    const layout = computeFideChessPuzzleTrayLayout(geom, state);
+    geom.fideChessPuzzleTray = layout;
+    if (layout) {
+      const pad = Math.max(geom.margin * 0.55, geom.radius * 0.28);
+      geom.width = Math.ceil(Math.max(geom.width, layout.x + layout.width + pad));
+      geom.height = Math.ceil(layout.y + layout.height + pad);
+    }
+    return geom;
+  }
+
+  function shouldShowFideChessPuzzleTray(state) {
+    return isFideChessPuzzle(state) && state.phase !== 'setup';
+  }
+
+  function fideChessPuzzleTrayLayout(geom, state) {
+    if (!shouldShowFideChessPuzzleTray(state) || !geom) return null;
+    return geom.fideChessPuzzleTray || computeFideChessPuzzleTrayLayout(geom, state);
+  }
+
+  function computeFideChessPuzzleTrayLayout(geom, state) {
+    const boardWidth = Math.max(1, geom.boardWidth || geom.baseWidth || geom.width || 1);
+    const boardHeight = Math.max(1, geom.boardHeight || geom.baseHeight || geom.height || 1);
+    const outerPad = Math.max(8, geom.radius * 0.2);
+    const gap = Math.max(6, geom.radius * 0.14);
+    const x = Math.max(outerPad, geom.margin || outerPad);
+    const width = Math.max(160, boardWidth - x * 2);
+    const slotSize = Math.max(26, Math.min(56, placementPieceBaseRadius(geom) * 1.46));
+    const buttonWidth = Math.max(72, Math.min(116, width * 0.24));
+    const buttonHeight = Math.max(28, Math.min(42, slotSize * 0.72));
+    const slotAreaWidth = Math.max(slotSize, width - (outerPad * 3) - buttonWidth);
+    const totalSlots = Math.max(1, (state.pieces || []).length);
+    const cols = Math.max(1, Math.floor((slotAreaWidth + gap) / (slotSize + gap)));
+    const rows = Math.max(1, Math.ceil(totalSlots / cols));
+    const slotsHeight = rows * slotSize + (rows - 1) * gap;
+    const height = (outerPad * 2) + Math.max(slotsHeight, buttonHeight);
+    const y = boardHeight + Math.max(6, geom.radius * 0.18);
+    const slotY = y + outerPad + Math.max(0, (height - outerPad * 2 - slotsHeight) / 2);
+    const slots = Array.from({ length: totalSlots }, (_, index) => {
+      const row = Math.floor(index / cols);
+      const col = index % cols;
+      const slotX = x + outerPad + col * (slotSize + gap);
+      const top = slotY + row * (slotSize + gap);
+      return {
+        index,
+        x: slotX,
+        y: top,
+        cx: slotX + slotSize / 2,
+        cy: top + slotSize / 2,
+        size: slotSize,
+        radius: Math.min(8, slotSize * 0.18)
+      };
+    });
+    return {
+      x,
+      y,
+      width,
+      height,
+      radius: Math.min(10, height * 0.16),
+      slots,
+      button: {
+        x: x + width - outerPad - buttonWidth,
+        y: y + (height - buttonHeight) / 2,
+        width: buttonWidth,
+        height: buttonHeight,
+        radius: Math.min(8, buttonHeight * 0.22)
+      }
+    };
+  }
+
+  function drawTile(ctx, geom, row, col, removed, explosionMode = false, displayStyle = 'center') {
     const cell = geom.cells[indexOf(row, col, geom.cols)];
     const points = tilePoints(cell.x, cell.y, geom.radius * 0.96, geom.lattice);
     ctx.beginPath();
@@ -5740,8 +6753,9 @@
       else ctx.lineTo(point.x, point.y);
     });
     ctx.closePath();
-    ctx.fillStyle = removed ? '#e9e0d0' : (explosionMode ? '#ffe4de' : '#fbf5e8');
-    ctx.strokeStyle = explosionMode && !removed ? '#e5b2a8' : '#d8c9ac';
+    const chessboard = !removed && !explosionMode && displayStyle === 'chessboard';
+    ctx.fillStyle = removed ? '#e9e0d0' : (explosionMode ? '#ffe4de' : (chessboard ? chessboardTileColor(geom, cell) : '#fbf5e8'));
+    ctx.strokeStyle = chessboard ? 'rgba(92,76,54,0.18)' : (explosionMode && !removed ? '#e5b2a8' : '#d8c9ac');
     ctx.lineWidth = 1;
     ctx.fill();
     ctx.stroke();
@@ -5755,6 +6769,15 @@
     ctx.moveTo(cell.x + mark, cell.y - mark);
     ctx.lineTo(cell.x - mark, cell.y + mark);
     ctx.stroke();
+  }
+
+  function chessboardTileColor(geom, cell) {
+    if (geom && geom.lattice && geom.lattice.shape === 'hex') {
+      const q = Number.isFinite(cell.q) ? cell.q : offsetToAxial((cell.row || 1) - 1, (cell.col || 1) - 1).q;
+      const r = Number.isFinite(cell.r) ? cell.r : offsetToAxial((cell.row || 1) - 1, (cell.col || 1) - 1).r;
+      return CHESSBOARD_HEX_COLORS[modulo(q - r, CHESSBOARD_HEX_COLORS.length)] || CHESSBOARD_HEX_COLORS[0];
+    }
+    return ((cell.row + cell.col) % 2 === 0) ? CHESSBOARD_SQUARE_COLORS[0] : CHESSBOARD_SQUARE_COLORS[1];
   }
 
   function drawBackgroundBoundaries(ctx, geom, preset, removed) {
@@ -7240,6 +8263,202 @@
     });
   }
 
+  function drawFideChessDraggedPiece(ctx, geom, state) {
+    if (!isFideChessGame(state) || !fideChessDrag || !fideChessDrag.moved) return;
+    const piece = fideChessPieceById(state, fideChessDrag.pieceId);
+    if (!piece) return;
+    drawPlacementPieceAtPoint(ctx, geom, { x: fideChessDrag.x, y: fideChessDrag.y }, piece, {
+      alpha: 0.9,
+      scale: 1.06
+    });
+  }
+
+  function drawFideChessPuzzleWaitingTray(ctx, geom, state) {
+    const layout = fideChessPuzzleTrayLayout(geom, state);
+    if (!layout) return;
+    const waitingPieces = fideChessWaitingPieces(state);
+    const hidden = hiddenPlacementPieceIds();
+    const selectedPiece = selectedFideChessPuzzlePiece(state);
+    ctx.save();
+    roundedRectPath(ctx, layout.x, layout.y, layout.width, layout.height, layout.radius);
+    ctx.fillStyle = 'rgba(255,253,248,0.92)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(92,76,54,0.28)';
+    ctx.lineWidth = Math.max(1, geom.radius * 0.024);
+    ctx.stroke();
+    layout.slots.forEach((slot, slotIndex) => {
+      const piece = waitingPieces[slotIndex] || null;
+      const selected = piece && selectedPiece && piece.id === selectedPiece.id;
+      roundedRectPath(ctx, slot.x, slot.y, slot.size, slot.size, slot.radius);
+      ctx.fillStyle = selected ? 'rgba(31,122,140,0.14)' : 'rgba(240,217,181,0.34)';
+      ctx.fill();
+      ctx.strokeStyle = selected ? 'rgba(31,122,140,0.86)' : 'rgba(92,76,54,0.22)';
+      ctx.lineWidth = selected ? Math.max(1.6, geom.radius * 0.045) : Math.max(1, geom.radius * 0.02);
+      ctx.stroke();
+      if (!piece || hidden.has(piece.id)) return;
+      drawPlacementPieceAtPoint(ctx, geom, { x: slot.cx, y: slot.cy }, {
+        ...piece,
+        side: 'black',
+        color: 'black'
+      }, {
+        scale: Math.max(0.28, (slot.size * 0.43) / Math.max(1, placementPieceBaseRadius(geom))),
+        display: selectedFideChessPieceDisplay()
+      });
+    });
+    drawFideChessPuzzleCollectButton(ctx, geom, layout.button);
+    ctx.restore();
+  }
+
+  function drawFideChessPuzzleCollectButton(ctx, geom, button) {
+    if (!button) return;
+    roundedRectPath(ctx, button.x, button.y, button.width, button.height, button.radius);
+    ctx.fillStyle = 'rgba(31,122,140,0.12)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(31,122,140,0.55)';
+    ctx.lineWidth = Math.max(1, geom.radius * 0.024);
+    ctx.stroke();
+    const text = 'Collect';
+    let fontSize = Math.max(10, Math.min(15, button.height * 0.42));
+    ctx.fillStyle = '#1f4f5a';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
+    const maxWidth = button.width * 0.78;
+    while (fontSize > 8 && ctx.measureText && ctx.measureText(text).width > maxWidth) {
+      fontSize -= 1;
+      ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
+    }
+    ctx.fillText(text, button.x + button.width / 2, button.y + button.height / 2);
+  }
+
+  function fideChessPuzzleTrayHitAtPoint(point, geom, state) {
+    const layout = point ? fideChessPuzzleTrayLayout(geom, state) : null;
+    if (!layout) return null;
+    if (rectContainsPoint(layout.button, point)) return { kind: 'collect', button: layout.button };
+    const waitingPieces = fideChessWaitingPieces(state);
+    for (let index = 0; index < layout.slots.length; index += 1) {
+      const slot = layout.slots[index];
+      if (!rectContainsPoint(slot, point)) continue;
+      const piece = waitingPieces[index] || null;
+      return piece
+        ? { kind: 'piece', piece, pieceId: piece.id, slot }
+        : { kind: 'slot', slot };
+    }
+    if (rectContainsPoint(layout, point)) return { kind: 'tray', layout };
+    return null;
+  }
+
+  function rectContainsPoint(rect, point) {
+    const width = rect && Number.isFinite(rect.width) ? rect.width : (rect && Number.isFinite(rect.size) ? rect.size : 0);
+    const height = rect && Number.isFinite(rect.height) ? rect.height : (rect && Number.isFinite(rect.size) ? rect.size : 0);
+    return !!rect
+      && !!point
+      && point.x >= rect.x
+      && point.x <= rect.x + width
+      && point.y >= rect.y
+      && point.y <= rect.y + height;
+  }
+
+  function drawFideChessPendingPromotion(ctx, geom, state) {
+    const pending = activeFideChessPendingPromotion(state);
+    if (!pending) return;
+    const piece = fideChessPieceById(state, pending.pieceId);
+    const targetPoint = placementPiecePoint(geom, pending.to);
+    if (!piece || !targetPoint) return;
+    drawPlacementPieceAtPoint(ctx, geom, targetPoint, { ...piece, index: pending.to }, {
+      alpha: 0.98,
+      scale: 1.02
+    });
+    const layout = fideChessPromotionPickerLayout(geom, state);
+    if (!layout) return;
+    ctx.save();
+    ctx.shadowColor = 'rgba(45,34,22,0.18)';
+    ctx.shadowBlur = Math.max(4, geom.radius * 0.12);
+    ctx.shadowOffsetY = Math.max(1.5, geom.radius * 0.045);
+    roundedRectPath(ctx, layout.x, layout.y, layout.width, layout.height, layout.radius);
+    ctx.fillStyle = 'rgba(255,253,248,0.96)';
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = 'rgba(45,34,22,0.34)';
+    ctx.lineWidth = Math.max(1, geom.radius * 0.025);
+    ctx.stroke();
+    layout.buttons.forEach((button) => {
+      roundedRectPath(ctx, button.x, button.y, button.size, button.size, button.radius);
+      ctx.fillStyle = button.kind === 'queen' ? 'rgba(240,217,181,0.72)' : 'rgba(255,253,248,0.72)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(31,122,140,0.55)';
+      ctx.lineWidth = Math.max(1, geom.radius * 0.022);
+      ctx.stroke();
+      drawPlacementPieceAtPoint(ctx, geom, { x: button.cx, y: button.cy }, {
+        id: -1,
+        index: pending.to,
+        color: piece.color,
+        side: piece.side,
+        kind: button.kind
+      }, {
+        scale: button.pieceScale,
+        display: selectedFideChessPieceDisplay()
+      });
+    });
+    ctx.restore();
+  }
+
+  function fideChessPromotionPickerLayout(geom, state) {
+    const pending = activeFideChessPendingPromotion(state);
+    const anchor = pending ? placementPiecePoint(geom, pending.to) : null;
+    if (!pending || !anchor || !geom) return null;
+    const boardWidth = Math.max(1, geom.baseWidth || geom.width || 1);
+    const boardHeight = Math.max(1, geom.baseHeight || geom.height || 1);
+    const outerPad = Math.max(4, geom.radius * 0.12);
+    const gap = Math.max(3, geom.radius * 0.08);
+    const panelPad = Math.max(5, geom.radius * 0.12);
+    const desiredButton = Math.max(28, Math.min(72, placementPieceBaseRadius(geom) * 1.52));
+    const maxButton = Math.max(22, (boardWidth - (outerPad * 2) - (panelPad * 2) - (gap * 3)) / FIDE_CHESS_PROMOTION_KINDS.length);
+    const size = Math.max(22, Math.min(desiredButton, maxButton));
+    const width = (panelPad * 2) + (size * FIDE_CHESS_PROMOTION_KINDS.length) + (gap * (FIDE_CHESS_PROMOTION_KINDS.length - 1));
+    const height = (panelPad * 2) + size;
+    let x = anchor.x - (width / 2);
+    let y = anchor.y - geom.radius * 1.08 - height;
+    if (y < outerPad) y = anchor.y + geom.radius * 1.08;
+    x = Math.max(outerPad, Math.min(boardWidth - width - outerPad, x));
+    y = Math.max(outerPad, Math.min(boardHeight - height - outerPad, y));
+    const pieceScale = (size * 0.43) / Math.max(1, placementPieceBaseRadius(geom));
+    const buttons = FIDE_CHESS_PROMOTION_KINDS.map((kind, index) => {
+      const buttonX = x + panelPad + index * (size + gap);
+      const buttonY = y + panelPad;
+      return {
+        kind,
+        x: buttonX,
+        y: buttonY,
+        cx: buttonX + size / 2,
+        cy: buttonY + size / 2,
+        size,
+        radius: Math.min(8, size * 0.16),
+        pieceScale
+      };
+    });
+    return {
+      x,
+      y,
+      width,
+      height,
+      radius: Math.min(10, height * 0.16),
+      buttons
+    };
+  }
+
+  function fideChessPromotionPickerKindAtPoint(point, geom, state) {
+    const layout = point ? fideChessPromotionPickerLayout(geom, state) : null;
+    if (!layout) return '';
+    const button = layout.buttons.find((entry) => (
+      point.x >= entry.x
+      && point.x <= entry.x + entry.size
+      && point.y >= entry.y
+      && point.y <= entry.y + entry.size
+    ));
+    return button ? button.kind : '';
+  }
+
   function drawPlacementMoveNumberLabels(ctx, geom, state) {
     if (!shouldShowMoveNumberLabels(state)) return;
     const pieces = placementPieces(state);
@@ -7331,6 +8550,10 @@
   }
 
   function drawPlacementSelectionOverlays(ctx, geom, state) {
+    if (isFideChessGame(state)) {
+      drawFideChessSelectionOverlays(ctx, geom, state);
+      return;
+    }
     if (!isChineseCheckersGame(state)) return;
     ctx.save();
     drawChineseCheckersTurnHighlights(ctx, geom, state);
@@ -7360,6 +8583,209 @@
       ctx.stroke();
     });
     ctx.restore();
+  }
+
+  function drawFideChessSelectionOverlays(ctx, geom, state) {
+    ctx.save();
+    if (isFideChessPuzzle(state)) {
+      drawFideChessPuzzleThreatOverlays(ctx, geom, state);
+      const hintSource = state.phase === 'ready' ? fideChessPuzzleAttackHintSource(state) : null;
+      if (hintSource) {
+        const selectedPoint = placementPiecePoint(geom, hintSource.index);
+        if (selectedPoint) {
+          ctx.fillStyle = 'rgba(31,122,140,0.14)';
+          ctx.strokeStyle = 'rgba(31,122,140,0.9)';
+          ctx.lineWidth = Math.max(1.6, geom.radius * 0.065);
+          ctx.beginPath();
+          ctx.arc(selectedPoint.x, selectedPoint.y, geom.radius * 0.64, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+        drawFideChessPuzzleAttackHintCircles(ctx, geom, fideChessPuzzleAttackPreviewIndices(state, hintSource.piece, hintSource.index));
+      }
+      ctx.restore();
+      return;
+    }
+    FIDE_CHESS_COLORS.forEach((checkSide) => {
+      if (!fideChessIsSideInCheck(state, checkSide)) return;
+      const king = fideChessKing(state, checkSide);
+      const point = king ? placementPiecePoint(geom, king.index) : null;
+      if (point) {
+        ctx.fillStyle = 'rgba(178,58,72,0.16)';
+        ctx.strokeStyle = 'rgba(178,58,72,0.88)';
+        ctx.lineWidth = Math.max(2, geom.radius * 0.075);
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, geom.radius * 0.62, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    });
+    const hintSource = fideChessMoveHintSource(state);
+    if (!hintSource) {
+      ctx.restore();
+      return;
+    }
+    const selectedPiece = hintSource.piece;
+    const selectedPoint = placementPiecePoint(geom, hintSource.index);
+    if (selectedPoint) {
+      ctx.fillStyle = 'rgba(31,122,140,0.14)';
+      ctx.strokeStyle = 'rgba(31,122,140,0.9)';
+      ctx.lineWidth = Math.max(1.6, geom.radius * 0.065);
+      ctx.beginPath();
+      ctx.arc(selectedPoint.x, selectedPoint.y, geom.radius * 0.64, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    if (selectedPiece) {
+      fideChessLegalMovesForPiece(state, selectedPiece).forEach((move) => {
+        const point = placementPiecePoint(geom, move.to);
+        if (!point) return;
+        const capture = move.captureId || move.enPassantCaptureId;
+        ctx.fillStyle = capture ? 'rgba(178,58,72,0.18)' : 'rgba(47,133,90,0.16)';
+        ctx.strokeStyle = capture ? 'rgba(178,58,72,0.82)' : 'rgba(47,133,90,0.82)';
+        ctx.lineWidth = Math.max(1.4, geom.radius * 0.052);
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, geom.radius * (capture ? 0.34 : 0.24), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
+    ctx.restore();
+  }
+
+  function drawFideChessPuzzleThreatOverlays(ctx, geom, state) {
+    const overlays = fideChessPuzzleAttackOverlaySets(state);
+    if (!overlays.attackedIndices.size && !overlays.threatenedPieceIndices.size) return;
+    if (selectedFideChessPuzzleAttackBorders()) {
+      drawFideChessPuzzleTileOverlaySet(
+        ctx,
+        geom,
+        overlays.attackedIndices,
+        'rgba(246,201,74,0.34)',
+        '',
+        0,
+        0.94
+      );
+    }
+    drawFideChessPuzzleTileOverlaySet(
+      ctx,
+      geom,
+      overlays.threatenedPieceIndices,
+      'rgba(178,58,72,0.32)',
+      'rgba(178,58,72,0.78)',
+      Math.max(1.4, geom.radius * 0.05),
+      0.94
+    );
+  }
+
+  function drawFideChessPuzzleTileOverlaySet(ctx, geom, indices, fillStyle, strokeStyle, lineWidth, radiusScale = 0.94) {
+    if (!indices || !indices.size) return;
+    ctx.save();
+    if (strokeStyle) {
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = lineWidth;
+    }
+    indices.forEach((index) => {
+      const cell = geom && geom.cells ? geom.cells[index] : null;
+      if (!cell) return;
+      const points = tilePoints(cell.x, cell.y, geom.radius * radiusScale, geom.lattice);
+      ctx.beginPath();
+      points.forEach((point, pointIndex) => {
+        if (pointIndex === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.closePath();
+      if (fillStyle) {
+        ctx.fillStyle = fillStyle;
+        ctx.fill();
+      }
+      if (strokeStyle) ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  function drawFideChessPuzzleAttackHintCircles(ctx, geom, indices) {
+    if (!indices || !indices.size) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(178,58,72,0.18)';
+    ctx.strokeStyle = 'rgba(178,58,72,0.82)';
+    ctx.lineWidth = Math.max(1.4, geom.radius * 0.052);
+    indices.forEach((index) => {
+      const point = placementPiecePoint(geom, index);
+      if (!point) return;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, geom.radius * 0.34, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  function fideChessPuzzleAttackHintSource(state) {
+    if (!isFideChessPuzzle(state)) return null;
+    if (fideChessDrag && Number.isInteger(fideChessDrag.pieceId)) {
+      const piece = fideChessPieceById(state, fideChessDrag.pieceId);
+      const target = tileFromCanvasPoint({ x: fideChessDrag.x, y: fideChessDrag.y });
+      if (!piece || !target || !fideChessPuzzlePreviewTargetAvailable(state, piece, target.index)) return null;
+      return { index: target.index, piece };
+    }
+    const selectedPiece = selectedFideChessPuzzlePiece(state);
+    if (!selectedPiece || !fideChessPieceOnBoard(selectedPiece, state)) return null;
+    return {
+      index: selectedPiece.index,
+      piece: selectedPiece
+    };
+  }
+
+  function fideChessPuzzlePreviewTargetAvailable(state, piece, index) {
+    if (!piece || !Number.isInteger(index) || !validBoardIndex(state, index) || state.removed.has(index)) return false;
+    const occupyingPiece = fideChessPieceAt(state, index);
+    return !occupyingPiece || occupyingPiece.id === piece.id;
+  }
+
+  function fideChessPuzzleAttackPreviewIndices(state, piece, index) {
+    const attacked = new Set();
+    if (!isFideChessPuzzle(state) || !piece || !Number.isInteger(index)) return attacked;
+    const preview = cloneFideChessState(state);
+    const previewPiece = fideChessPieceById(preview, piece.id);
+    if (!previewPiece) return attacked;
+    previewPiece.index = index;
+    previewPiece.waiting = false;
+    delete previewPiece.waitingOrder;
+    previewPiece.side = 'black';
+    previewPiece.color = 'black';
+    return fideChessPuzzleAttackedIndicesForPiece(preview, previewPiece);
+  }
+
+  function fideChessMoveHintSource(state) {
+    if (!isFideChessGame(state)) return null;
+    if (isFideChessPuzzle(state)) {
+      if (fideChessDrag && Number.isInteger(fideChessDrag.pieceId)) {
+        const piece = fideChessPieceById(state, fideChessDrag.pieceId);
+        if (piece) {
+          return {
+            index: fideChessPieceOnBoard(piece, state) ? piece.index : null,
+            piece
+          };
+        }
+      }
+      const selectedPiece = selectedFideChessPuzzlePiece(state);
+      return selectedPiece
+        ? {
+          index: fideChessPieceOnBoard(selectedPiece, state) ? selectedPiece.index : null,
+          piece: selectedPiece
+        }
+        : null;
+    }
+    if (fideChessDrag && Number.isInteger(fideChessDrag.fromIndex)) {
+      const piece = fideChessPieceById(state, fideChessDrag.pieceId) || fideChessPieceAt(state, fideChessDrag.fromIndex);
+      if (piece) return { index: fideChessDrag.fromIndex, piece };
+    }
+    if (!Number.isInteger(state.selectedIndex)) return null;
+    return {
+      index: state.selectedIndex,
+      piece: fideChessPieceAt(state, state.selectedIndex)
+    };
   }
 
   function drawChineseCheckersTurnHighlights(ctx, geom, state) {
@@ -7436,6 +8862,10 @@
   }
 
   function drawPlacementPieceAtPoint(ctx, geom, point, piece, options = {}) {
+    if (piece && piece.kind && normalizeFideChessKind(piece.kind)) {
+      drawFideChessPieceAtPoint(ctx, geom, point, piece, options);
+      return;
+    }
     const scale = Number.isFinite(options.scale) ? Math.max(0.02, options.scale) : 1;
     const squashX = Number.isFinite(options.squashX) ? Math.max(0.02, options.squashX) : 1;
     const alpha = Number.isFinite(options.alpha) ? Math.max(0, Math.min(1, options.alpha)) : 1;
@@ -7474,6 +8904,354 @@
     ctx.restore();
   }
 
+  function drawFideChessPieceAtPoint(ctx, geom, point, piece, options = {}) {
+    const scale = Number.isFinite(options.scale) ? Math.max(0.02, options.scale) : 1;
+    const squashX = Number.isFinite(options.squashX) ? Math.max(0.02, options.squashX) : 1;
+    const alpha = Number.isFinite(options.alpha) ? Math.max(0, Math.min(1, options.alpha)) : 1;
+    const radius = placementPieceBaseRadius(geom) * scale;
+    const side = normalizeFideChessSide(piece.side || piece.color) || 'white';
+    const kind = normalizeFideChessKind(piece.kind || piece.value) || 'pawn';
+    const display = normalizeFideChessPieceDisplay(options.display || selectedFideChessPieceDisplay());
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(point.x, point.y);
+    ctx.scale(squashX, 1);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    if (display === 'mosaic') {
+      ctx.translate(0, radius * 0.14);
+      drawFideChessMosaicPiece(ctx, radius * 1.03, kind, side);
+    } else {
+      drawFideChessSymbolPiece(ctx, geom, radius, kind, side);
+    }
+    ctx.restore();
+  }
+
+  function drawFideChessSymbolPiece(ctx, geom, radius, kind, side) {
+    const symbol = FIDE_CHESS_PIECE_SYMBOLS[side] && FIDE_CHESS_PIECE_SYMBOLS[side][kind];
+    if (!symbol) return;
+    if (side === 'black' && (kind === 'knight' || kind === 'bishop')) {
+      if (drawFideChessSymbolPieceWithCutouts(ctx, geom, radius, kind, symbol, side)) return;
+    }
+    ctx.save();
+    drawFideChessSymbolGlyph(ctx, geom, radius, symbol, side);
+    ctx.restore();
+  }
+
+  function drawFideChessSymbolPieceWithCutouts(ctx, geom, radius, kind, symbol, side) {
+    const size = Math.max(48, Math.ceil(radius * 3.7 + geom.radius * 0.5));
+    const buffer = createFideChessSymbolBuffer(size);
+    const bufferCtx = buffer && typeof buffer.getContext === 'function' ? buffer.getContext('2d') : null;
+    if (!bufferCtx) return false;
+    bufferCtx.clearRect(0, 0, size, size);
+    bufferCtx.save();
+    bufferCtx.translate(size / 2, size / 2);
+    drawFideChessSymbolGlyph(bufferCtx, geom, radius, symbol, side);
+    cutFideChessSymbolInterior(bufferCtx, radius, kind);
+    bufferCtx.restore();
+    ctx.drawImage(buffer, -size / 2, -size / 2, size, size);
+    return true;
+  }
+
+  function createFideChessSymbolBuffer(size) {
+    if (typeof OffscreenCanvas === 'function') return new OffscreenCanvas(size, size);
+    if (typeof document !== 'undefined' && document.createElement) {
+      const buffer = document.createElement('canvas');
+      buffer.width = size;
+      buffer.height = size;
+      return buffer;
+    }
+    return null;
+  }
+
+  function drawFideChessSymbolGlyph(ctx, geom, radius, symbol, side) {
+    ctx.font = `700 ${Math.max(14, radius * 2.28)}px "Segoe UI Symbol", "Noto Sans Symbols 2", "Apple Symbols", "Arial Unicode MS", serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.shadowColor = 'rgba(45,34,22,0.22)';
+    ctx.shadowBlur = Math.max(1.2, geom.radius * 0.09);
+    ctx.shadowOffsetY = Math.max(0.6, geom.radius * 0.032);
+    ctx.lineWidth = Math.max(0.75, geom.radius * 0.028);
+    ctx.strokeStyle = side === 'white' ? '#111111' : 'rgba(255,253,248,0.42)';
+    ctx.fillStyle = side === 'white' ? '#fffdf8' : '#050505';
+    ctx.strokeText(symbol, 0, radius * 0.03);
+    ctx.shadowColor = 'transparent';
+    ctx.fillText(symbol, 0, radius * 0.03);
+  }
+
+  function cutFideChessSymbolInterior(ctx, radius, kind) {
+    const r = radius;
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#000';
+    ctx.strokeStyle = '#000';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (kind === 'knight') {
+      ctx.beginPath();
+      ctx.arc(-r * 0.27, -r * 0.60, Math.max(1.6, r * 0.062), 0, Math.PI * 2);
+      ctx.fill();
+    } else if (kind === 'bishop') {
+      ctx.lineWidth = Math.max(1.6, r * 0.108);
+      ctx.beginPath();
+      ctx.moveTo(0, -r * 0.68);
+      ctx.lineTo(0, -r * 0.08);
+      ctx.moveTo(-r * 0.18, -r * 0.44);
+      ctx.lineTo(r * 0.18, -r * 0.44);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawFideChessMosaicPiece(ctx, radius, kind, side) {
+    const r = Math.max(1, radius);
+    const colors = fideChessMosaicPieceColors(side);
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.lineWidth = Math.max(1.25, r * 0.066);
+    ctx.fillStyle = colors.fill;
+    ctx.strokeStyle = colors.stroke;
+    if (kind === 'pawn') drawFideChessMosaicPawn(ctx, r, colors);
+    else if (kind === 'rook') drawFideChessMosaicRook(ctx, r, colors);
+    else if (kind === 'bishop') drawFideChessMosaicBishop(ctx, r, colors);
+    else if (kind === 'knight') drawFideChessMosaicKnight(ctx, r, colors);
+    else if (kind === 'queen') drawFideChessMosaicQueen(ctx, r, colors);
+    else drawFideChessMosaicKing(ctx, r, colors);
+    ctx.restore();
+  }
+
+  function fideChessMosaicPieceColors(side) {
+    return side === 'white'
+      ? { fill: '#fffdf8', stroke: '#050505', detail: '#050505' }
+      : { fill: '#050505', stroke: '#050505', detail: '#fffdf8' };
+  }
+
+  function drawFideChessMosaicShape(ctx, colors) {
+    ctx.fillStyle = colors.fill;
+    ctx.strokeStyle = colors.stroke;
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  function drawFideChessMosaicPath(ctx, r, coords, colors) {
+    if (!Array.isArray(coords) || !coords.length) return;
+    ctx.beginPath();
+    coords.forEach((entry) => {
+      if (entry.length === 2) ctx.lineTo(entry[0] * r, entry[1] * r);
+      else if (entry.length === 3 && entry[0] === 'M') ctx.moveTo(entry[1] * r, entry[2] * r);
+      else if (entry.length === 5 && entry[0] === 'Q') ctx.quadraticCurveTo(entry[1] * r, entry[2] * r, entry[3] * r, entry[4] * r);
+      else if (entry.length === 7 && entry[0] === 'C') ctx.bezierCurveTo(entry[1] * r, entry[2] * r, entry[3] * r, entry[4] * r, entry[5] * r, entry[6] * r);
+    });
+    ctx.closePath();
+    drawFideChessMosaicShape(ctx, colors);
+  }
+
+  function drawFideChessMosaicRoundRect(ctx, r, x, y, width, height, radius, colors) {
+    const left = x * r;
+    const top = y * r;
+    const w = width * r;
+    const h = height * r;
+    const corner = Math.min(Math.abs(radius * r), Math.abs(w) / 2, Math.abs(h) / 2);
+    ctx.beginPath();
+    ctx.moveTo(left + corner, top);
+    ctx.lineTo(left + w - corner, top);
+    ctx.quadraticCurveTo(left + w, top, left + w, top + corner);
+    ctx.lineTo(left + w, top + h - corner);
+    ctx.quadraticCurveTo(left + w, top + h, left + w - corner, top + h);
+    ctx.lineTo(left + corner, top + h);
+    ctx.quadraticCurveTo(left, top + h, left, top + h - corner);
+    ctx.lineTo(left, top + corner);
+    ctx.quadraticCurveTo(left, top, left + corner, top);
+    ctx.closePath();
+    drawFideChessMosaicShape(ctx, colors);
+  }
+
+  function drawFideChessMosaicOval(ctx, r, x, y, radiusX, radiusY, colors) {
+    ctx.beginPath();
+    ctx.ellipse(x * r, y * r, radiusX * r, radiusY * r, 0, 0, Math.PI * 2);
+    drawFideChessMosaicShape(ctx, colors);
+  }
+
+  function drawFideChessMosaicCircle(ctx, r, x, y, radius, colors) {
+    drawFideChessMosaicOval(ctx, r, x, y, radius, radius, colors);
+  }
+
+  function drawFideChessMosaicDetail(ctx, r, colors, points, width = 0.035) {
+    if (!Array.isArray(points) || points.length < 2) return;
+    ctx.save();
+    ctx.strokeStyle = colors.detail;
+    ctx.lineWidth = Math.max(1.1, r * width);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point[0] * r, point[1] * r);
+      else ctx.lineTo(point[0] * r, point[1] * r);
+    });
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawFideChessMosaicStrokePath(ctx, r, colors, coords, width = 0.032) {
+    if (!Array.isArray(coords) || !coords.length) return;
+    ctx.save();
+    ctx.strokeStyle = colors.detail;
+    ctx.lineWidth = Math.max(1.05, r * width);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    coords.forEach((entry) => {
+      if (entry.length === 2) ctx.lineTo(entry[0] * r, entry[1] * r);
+      else if (entry.length === 3 && entry[0] === 'M') ctx.moveTo(entry[1] * r, entry[2] * r);
+      else if (entry.length === 5 && entry[0] === 'Q') ctx.quadraticCurveTo(entry[1] * r, entry[2] * r, entry[3] * r, entry[4] * r);
+      else if (entry.length === 7 && entry[0] === 'C') ctx.bezierCurveTo(entry[1] * r, entry[2] * r, entry[3] * r, entry[4] * r, entry[5] * r, entry[6] * r);
+    });
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawFideChessMosaicDot(ctx, r, colors, x, y, radius) {
+    ctx.save();
+    ctx.fillStyle = colors.detail;
+    ctx.beginPath();
+    ctx.arc(x * r, y * r, Math.max(1, radius * r), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawFideChessMosaicBase(ctx, r, colors, width = 0.72) {
+    drawFideChessMosaicRoundRect(ctx, r, -width * 0.5, 0.48, width, 0.12, 0.018, colors);
+    drawFideChessMosaicRoundRect(ctx, r, -width * 0.43, 0.37, width * 0.86, 0.10, 0.018, colors);
+    drawFideChessMosaicRoundRect(ctx, r, -width * 0.34, 0.28, width * 0.68, 0.07, 0.014, colors);
+    drawFideChessMosaicDetail(ctx, r, colors, [[-width * 0.43, 0.545], [width * 0.43, 0.545]], 0.020);
+  }
+
+  function drawFideChessMosaicCollar(ctx, r, colors, y, width = 0.48) {
+    drawFideChessMosaicRoundRect(ctx, r, -width * 0.5, y, width, 0.075, 0.016, colors);
+  }
+
+  function drawFideChessMosaicStem(ctx, r, colors, topY, bottomY, topWidth, bottomWidth) {
+    drawFideChessMosaicPath(ctx, r, [
+      ['M', -bottomWidth * 0.5, bottomY],
+      ['C', -bottomWidth * 0.42, bottomY - 0.22, -topWidth * 0.56, topY + 0.18, -topWidth * 0.5, topY],
+      [topWidth * 0.5, topY],
+      ['C', topWidth * 0.56, topY + 0.18, bottomWidth * 0.42, bottomY - 0.22, bottomWidth * 0.5, bottomY]
+    ], colors);
+  }
+
+  function drawFideChessMosaicPawn(ctx, r, colors) {
+    drawFideChessMosaicCircle(ctx, r, 0, -0.36, 0.17, colors);
+    drawFideChessMosaicCollar(ctx, r, colors, -0.13, 0.34);
+    drawFideChessMosaicStem(ctx, r, colors, -0.06, 0.30, 0.18, 0.34);
+    drawFideChessMosaicBase(ctx, r, colors, 0.58);
+  }
+
+  function drawFideChessMosaicRook(ctx, r, colors) {
+    drawFideChessMosaicPath(ctx, r, [
+      ['M', -0.29, -0.56],
+      [-0.18, -0.56],
+      [-0.18, -0.40],
+      [-0.06, -0.40],
+      [-0.06, -0.56],
+      [0.06, -0.56],
+      [0.06, -0.40],
+      [0.18, -0.40],
+      [0.18, -0.56],
+      [0.29, -0.56],
+      [0.29, -0.25],
+      [-0.29, -0.25]
+    ], colors);
+    drawFideChessMosaicCollar(ctx, r, colors, -0.22, 0.52);
+    drawFideChessMosaicStem(ctx, r, colors, -0.14, 0.30, 0.28, 0.42);
+    drawFideChessMosaicBase(ctx, r, colors, 0.66);
+  }
+
+  function drawFideChessMosaicBishop(ctx, r, colors) {
+    drawFideChessMosaicCircle(ctx, r, 0, -0.86, 0.055, colors);
+    drawFideChessMosaicOval(ctx, r, 0, -0.62, 0.18, 0.30, colors);
+    drawFideChessMosaicStrokePath(ctx, r, colors, [
+      ['M', -0.07, -0.76],
+      ['C', -0.02, -0.68, 0.06, -0.60, 0.12, -0.49]
+    ], 0.034);
+    drawFideChessMosaicCollar(ctx, r, colors, -0.28, 0.45);
+    drawFideChessMosaicStem(ctx, r, colors, -0.20, 0.30, 0.20, 0.38);
+    drawFideChessMosaicBase(ctx, r, colors, 0.66);
+  }
+
+  function drawFideChessMosaicKnight(ctx, r, colors) {
+    drawFideChessMosaicPath(ctx, r, [
+      ['M', -0.36, 0.29],
+      ['C', -0.37, 0.05, -0.32, -0.22, -0.20, -0.48],
+      ['C', -0.12, -0.65, -0.01, -0.79, 0.15, -0.84],
+      ['Q', 0.19, -0.70, 0.27, -0.63],
+      ['C', 0.39, -0.55, 0.44, -0.42, 0.36, -0.31],
+      ['C', 0.30, -0.23, 0.18, -0.23, 0.08, -0.27],
+      ['C', 0.18, -0.16, 0.32, -0.08, 0.30, 0.02],
+      ['C', 0.28, 0.12, 0.15, 0.13, 0.03, 0.06],
+      ['C', 0.04, 0.15, 0.10, 0.23, 0.20, 0.29]
+    ], colors);
+    drawFideChessMosaicDot(ctx, r, colors, 0.15, -0.53, 0.022);
+    drawFideChessMosaicStrokePath(ctx, r, colors, [
+      ['M', -0.02, -0.77],
+      ['C', -0.13, -0.66, -0.23, -0.48, -0.28, -0.25],
+      ['C', -0.31, -0.10, -0.28, 0.07, -0.20, 0.21]
+    ], 0.034);
+    drawFideChessMosaicStrokePath(ctx, r, colors, [
+      ['M', 0.23, -0.35],
+      ['C', 0.30, -0.37, 0.36, -0.40, 0.40, -0.45]
+    ], 0.026);
+    drawFideChessMosaicCollar(ctx, r, colors, 0.23, 0.52);
+    drawFideChessMosaicBase(ctx, r, colors, 0.72);
+  }
+
+  function drawFideChessMosaicQueen(ctx, r, colors) {
+    const top = -1.05;
+    const crownBottom = -0.48;
+    drawFideChessMosaicStem(ctx, r, colors, -0.42, 0.30, 0.24, 0.44);
+    drawFideChessMosaicPath(ctx, r, [
+      ['M', -0.23, top + 0.18],
+      [0.23, top + 0.18],
+      [0.13, crownBottom],
+      [-0.13, crownBottom]
+    ], colors);
+    drawFideChessMosaicCircle(ctx, r, 0, top + 0.08, 0.042, colors);
+    drawFideChessMosaicCollar(ctx, r, colors, -0.30, 0.52);
+    drawFideChessMosaicCollar(ctx, r, colors, 0.18, 0.56);
+    drawFideChessMosaicBase(ctx, r, colors, 0.74);
+  }
+
+  function drawFideChessMosaicKingCross(ctx, r, colors, y, height, width) {
+    const stem = width * 0.30;
+    const armH = height * 0.13;
+    drawFideChessMosaicPath(ctx, r, [
+      ['M', -stem * 0.5, y + height * 0.5],
+      [-stem * 0.5, y + armH],
+      [-width * 0.5, y + armH],
+      [-width * 0.5, y - armH],
+      [-stem * 0.5, y - armH],
+      [-stem * 0.5, y - height * 0.5],
+      [stem * 0.5, y - height * 0.5],
+      [stem * 0.5, y - armH],
+      [width * 0.5, y - armH],
+      [width * 0.5, y + armH],
+      [stem * 0.5, y + armH],
+      [stem * 0.5, y + height * 0.5]
+    ], colors);
+  }
+
+  function drawFideChessMosaicKing(ctx, r, colors) {
+    drawFideChessMosaicStem(ctx, r, colors, -0.42, 0.30, 0.24, 0.44);
+    drawFideChessMosaicOval(ctx, r, 0, -0.66, 0.24, 0.20, colors);
+    drawFideChessMosaicKingCross(ctx, r, colors, -0.96, 0.34, 0.34);
+    drawFideChessMosaicCollar(ctx, r, colors, -0.30, 0.52);
+    drawFideChessMosaicCollar(ctx, r, colors, 0.18, 0.56);
+    drawFideChessMosaicBase(ctx, r, colors, 0.74);
+  }
+
   function placementPieceBaseRadius(geom) {
     return geom.radius * selectedPlacementPieceRadiusFraction();
   }
@@ -7487,6 +9265,10 @@
     }
     if (event.kind === 'chineseCheckersMove') {
       drawChineseCheckersMoveAnimation(ctx, geom, event, currentAnimation.progress || 0);
+      return;
+    }
+    if (event.kind === 'fideChessMove') {
+      drawFideChessMoveAnimation(ctx, geom, event, currentAnimation.progress || 0);
       return;
     }
     if (event.kind !== 'connectFourDrop') return;
@@ -7585,6 +9367,76 @@
     }
   }
 
+  function drawFideChessMoveAnimation(ctx, geom, event, rawProgress) {
+    if (!event || !event.piece) return;
+    const progress = easeInOut(Math.max(0, Math.min(1, rawProgress || 0)));
+    if (event.rookPiece && event.rookRoute) {
+      drawFideChessAnimatedPiece(ctx, geom, event.rookPiece, event.rookRoute, progress, rawProgress);
+    }
+    drawFideChessAnimatedPiece(ctx, geom, event.piece, event.route, progress, rawProgress);
+  }
+
+  function drawFideChessAnimatedPiece(ctx, geom, piece, route, progress, rawProgress) {
+    const frame = fideChessRouteAnimationFrame(game, geom, route, progress);
+    if (!frame) return;
+    if (frame.kind === 'glued') {
+      drawGluedPlacementPiece(ctx, geom, frame.transition, frame.progress, piece);
+      return;
+    }
+    if (frame.point) {
+      drawPlacementPieceAtPoint(ctx, geom, frame.point, piece, {
+        scale: 1 + Math.sin(Math.max(0, Math.min(1, rawProgress || 0)) * Math.PI) * 0.055,
+        display: selectedFideChessPieceDisplay()
+      });
+    }
+  }
+
+  function fideChessRouteAnimationFrame(state, geom, route, rawProgress) {
+    if (!route) return null;
+    if (route.kind === 'diagonal') return fideChessDiagonalRouteAnimationFrame(state, geom, route, rawProgress);
+    return placementSegmentAnimationFrame(geom, route, rawProgress);
+  }
+
+  function fideChessDiagonalRouteAnimationFrame(state, geom, route, rawProgress) {
+    const progress = Math.max(0, Math.min(1, rawProgress || 0));
+    const steps = Array.isArray(route.steps) && route.steps.length ? route.steps : [route];
+    const scaled = progress * steps.length;
+    const stepIndex = Math.min(steps.length - 1, Math.floor(scaled));
+    const local = Math.max(0, Math.min(1, scaled - stepIndex));
+    const step = steps[stepIndex];
+    if (!step) return null;
+    const from = placementPiecePoint(geom, step.start);
+    const to = placementPiecePoint(geom, step.end);
+    if (!from || !to) return null;
+    const glued = Array.isArray(step.transitions) && step.transitions.some((transition) => transition && transition.glued);
+    if (!glued) return { kind: 'point', point: lerpPoint(from, to, local) };
+    const segments = placementLineRenderSegments(state, geom, step.start, step.end, step);
+    const point = fideChessPointOnSegments(segments, local) || lerpPoint(from, to, local);
+    return { kind: 'point', point };
+  }
+
+  function fideChessPointOnSegments(segments, rawProgress) {
+    const usable = (Array.isArray(segments) ? segments : [])
+      .filter((segment) => segment && segment.start && segment.end)
+      .map((segment) => ({
+        start: segment.start,
+        end: segment.end,
+        length: Math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y)
+      }))
+      .filter((segment) => segment.length > 0.001);
+    if (!usable.length) return null;
+    const total = usable.reduce((sum, segment) => sum + segment.length, 0);
+    let remaining = Math.max(0, Math.min(1, rawProgress || 0)) * total;
+    for (let index = 0; index < usable.length; index += 1) {
+      const segment = usable[index];
+      if (remaining <= segment.length || index === usable.length - 1) {
+        return lerpPoint(segment.start, segment.end, Math.max(0, Math.min(1, remaining / segment.length)));
+      }
+      remaining -= segment.length;
+    }
+    return usable[usable.length - 1].end;
+  }
+
   function chineseCheckersMoveAnimationFrame(geom, event, rawProgress) {
     const progress = Math.max(0, Math.min(1, rawProgress || 0));
     const segments = Array.isArray(event.segments) && event.segments.length
@@ -7643,6 +9495,17 @@
 
   function chineseCheckersMoveTransitionCount(segments) {
     return (segments || []).reduce((sum, segment) => sum + chineseCheckersSegmentTransitionCount(segment), 0);
+  }
+
+  function fideChessAnimationStepCount(event) {
+    const routeSteps = (route) => {
+      if (!route) return 1;
+      if (route.kind === 'diagonal' && Array.isArray(route.steps) && route.steps.length) return route.steps.length;
+      if (Array.isArray(route.transitions) && route.transitions.length) return route.transitions.length;
+      if (Array.isArray(route.path) && route.path.length > 1) return route.path.length - 1;
+      return 1;
+    };
+    return Math.max(routeSteps(event && event.route), routeSteps(event && event.rookRoute));
   }
 
   function chineseCheckersSegmentTransitionCount(segment) {
@@ -7906,11 +9769,19 @@
     if (isConnectFourGame(state)) return state.tokens || [];
     if (isReversiGame(state)) return state.discs || [];
     if (isChineseCheckersGame(state)) return state.marbles || [];
+    if (isFideChessGame(state)) {
+      return isFideChessPuzzle(state)
+        ? fideChessPlacedPieces(state).map((piece) => ({ ...piece, side: 'black', color: 'black' }))
+        : (state.pieces || []);
+    }
     return state && state.stones ? state.stones : [];
   }
 
   function hiddenPlacementPieceIds() {
     const hidden = new Set();
+    if (fideChessDrag && fideChessDrag.moved && fideChessDrag.pieceId != null) hidden.add(fideChessDrag.pieceId);
+    const pendingPromotion = activeFideChessPendingPromotion(game);
+    if (pendingPromotion && pendingPromotion.pieceId != null) hidden.add(pendingPromotion.pieceId);
     if (!currentAnimation || !currentAnimation.event) return hidden;
     const event = currentAnimation.event;
     if (event.kind === 'connectFourDrop' && event.tokenId != null) hidden.add(event.tokenId);
@@ -7921,6 +9792,10 @@
       });
     }
     if (event.kind === 'chineseCheckersMove' && event.marbleId != null) hidden.add(event.marbleId);
+    if (event.kind === 'fideChessMove') {
+      if (event.pieceId != null) hidden.add(event.pieceId);
+      if (event.rookId != null) hidden.add(event.rookId);
+    }
     return hidden;
   }
 
@@ -8626,9 +10501,11 @@
             ? (state.winner ? `${reversiColorLabel(state.winner)} wins` : 'Reversi draw')
             : (isChineseCheckersGame(state)
               ? `${chineseCheckersColorLabel(state.winner)} wins`
-              : (isSokobanGame(state)
-                ? 'Sokoban solved'
-                : (state.ending === 'bonus' ? 'bonus ending' : 'game over'))))));
+              : (isFideChessGame(state)
+                ? (state.winner ? `${fideChessSideLabel(state.winner)} wins` : 'FIDE Chess draw')
+                : (isSokobanGame(state)
+                  ? 'Sokoban solved'
+                  : (state.ending === 'bonus' ? 'bonus ending' : 'game over')))))));
     ctx.fillText(title, geom.width / 2, y + height * 0.36);
     ctx.fillStyle = '#6c6257';
     ctx.font = `${Math.max(12, Math.round(geom.radius * 0.34))}px "JetBrains Mono", monospace`;
@@ -8642,9 +10519,11 @@
             ? reversiFinalScoreText(state)
             : (isChineseCheckersGame(state)
               ? `${state.round || 0} move${state.round === 1 ? '' : 's'}`
-              : (isSokobanGame(state)
-                ? `${state.moves || state.round || 0} move${(state.moves || state.round) === 1 ? '' : 's'}   ${state.pushes || 0} push${state.pushes === 1 ? '' : 'es'}`
-                : `score ${state.score || 0}   highest ${highestValue(state)}`)))));
+              : (isFideChessGame(state)
+                ? `${state.ending || state.result || 'result'}   ${state.round || 0} move${state.round === 1 ? '' : 's'}`
+                : (isSokobanGame(state)
+                  ? `${state.moves || state.round || 0} move${(state.moves || state.round) === 1 ? '' : 's'}   ${state.pushes || 0} push${state.pushes === 1 ? '' : 'es'}`
+                  : `score ${state.score || 0}   highest ${highestValue(state)}`))))));
     ctx.fillText(detail, geom.width / 2, y + height * 0.66);
     ctx.restore();
   }
@@ -8836,6 +10715,1373 @@
     const state = createReversiState(presetOrId, options);
     state.phase = 'ready';
     return state;
+  }
+
+  function createFideChessState(presetOrId, options = {}) {
+    const preset = materializePreset(resolvePreset(presetOrId), { ...options, gameMode: GAME_MODES.FIDE_CHESS });
+    const removed = initialRemovedSet(preset);
+    const pieces = normalizeFideChessPieces(preset.pieces || preset.chessPieces || [], preset, removed);
+    const explicitVariant = normalizeFideChessVariant(options.fideChessVariant || preset.fideChessVariant || preset.chessVariant || preset.variant);
+    const state = {
+      gameMode: GAME_MODES.FIDE_CHESS,
+      fideChessVariant: explicitVariant || FIDE_CHESS_VARIANTS.GAME,
+      preset,
+      phase: 'setup',
+      removed,
+      boxes: [],
+      newBoxIds: new Set(),
+      nextBoxId: 1,
+      score: 0,
+      pieces,
+      nextPieceId: nextFideChessPieceId(pieces),
+      selectedIndex: null,
+      selectedPieceId: null,
+      turn: 'white',
+      winner: '',
+      result: '',
+      ending: '',
+      enPassant: null,
+      halfmoveClock: 0,
+      fullmoveNumber: 1,
+      resultDismissed: false,
+      round: 0,
+      recordMoves: [],
+      debugMessage: ''
+    };
+    if (!state.pieces.length) initializeFideChessOpening(state);
+    state.nextPieceId = nextFideChessPieceId(state.pieces);
+    if (!explicitVariant) state.fideChessVariant = inferFideChessVariantFromPieces(state.pieces);
+    return state;
+  }
+
+  function beginFideChessGame(presetOrId, options = {}) {
+    const state = createFideChessState(presetOrId, options);
+    state.fideChessVariant = inferFideChessVariantFromPieces(state.pieces, state.fideChessVariant);
+    if (isFideChessPuzzle(state)) prepareFideChessPuzzleState(state);
+    state.phase = 'ready';
+    if (isFideChessPuzzle(state)) finalizeFideChessPuzzlePosition(state);
+    return state;
+  }
+
+  function normalizeFideChessSide(value) {
+    const text = String(value || '').trim().toLowerCase();
+    if (text === 'white' || text === 'w' || text === 'light') return 'white';
+    if (text === 'black' || text === 'b' || text === 'dark') return 'black';
+    return '';
+  }
+
+  function normalizeFideChessKind(value) {
+    const text = String(value || '').trim().toLowerCase();
+    if (FIDE_CHESS_PIECE_KINDS.includes(text)) return text;
+    if (text === 'k') return 'king';
+    if (text === 'q') return 'queen';
+    if (text === 'r') return 'rook';
+    if (text === 'b') return 'bishop';
+    if (text === 'n') return 'knight';
+    if (text === 'p') return 'pawn';
+    return '';
+  }
+
+  function normalizeFideChessPromotionKind(value) {
+    const kind = normalizeFideChessKind(value);
+    return FIDE_CHESS_PROMOTION_KINDS.includes(kind) ? kind : 'queen';
+  }
+
+  function normalizeFideChessVariant(value) {
+    const text = String(value || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+    if (text === FIDE_CHESS_VARIANTS.KINGLESS_PUZZLE || text === 'kingless' || text === 'puzzle' || text === 'n-queens' || text === 'n-queens-puzzle') {
+      return FIDE_CHESS_VARIANTS.KINGLESS_PUZZLE;
+    }
+    if (text === FIDE_CHESS_VARIANTS.GAME || text === 'standard' || text === 'chess' || text === 'fide') return FIDE_CHESS_VARIANTS.GAME;
+    return '';
+  }
+
+  function oppositeFideChessSide(side) {
+    return side === 'white' ? 'black' : 'white';
+  }
+
+  function normalizeFideChessPieces(entries, preset, removed = new Set()) {
+    const pieces = [];
+    const occupied = new Set();
+    (Array.isArray(entries) ? entries : []).forEach((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
+      const kind = normalizeFideChessKind(firstPresentValue(entry, ['kind', 'type', 'piece', 'value']));
+      const side = normalizeFideChessSide(firstPresentValue(entry, ['side', 'color', 'player']));
+      if (!kind || !side) return;
+      const waiting = !!(entry.waiting || entry.inWaiting || entry.inTray || entry.location === 'waiting' || entry.location === 'tray');
+      const piece = {
+        id: normalizePositiveInteger(entry.id, pieces.length + 1),
+        color: side,
+        side,
+        kind,
+        value: FIDE_CHESS_PIECE_VALUES[kind],
+        hasMoved: !!(entry.hasMoved || entry.moved),
+        moveNumber: normalizeOptionalMoveNumber(entry.moveNumber)
+      };
+      const forwardDir = kind === 'pawn'
+        ? normalizeFideChessForwardDir(firstPresentValue(entry, [
+          'forwardDir',
+          'forwardDirection',
+          'pawnDirection',
+          'direction',
+          'forward',
+          'dir'
+        ]))
+        : null;
+      if (Number.isInteger(forwardDir)) piece.forwardDir = forwardDir;
+      if (waiting) {
+        piece.waiting = true;
+        piece.waitingOrder = normalizeOptionalMoveNumber(entry.waitingOrder || entry.trayOrder || entry.order);
+      } else {
+        const tile = normalizeImportedTileRef(entry.tile || entry, preset.rows, preset.cols);
+        if (!tile) return;
+        const index = indexOf(tile.row, tile.col, preset.cols);
+        if (!Number.isInteger(index) || removed.has(index) || occupied.has(index)) return;
+        occupied.add(index);
+        piece.index = index;
+      }
+      pieces.push(piece);
+    });
+    return pieces;
+  }
+
+  function nextFideChessPieceId(pieces) {
+    return (Array.isArray(pieces) ? pieces : []).reduce((max, piece) => (
+      Math.max(max, normalizePositiveInteger(piece && piece.id, 0))
+    ), 0) + 1;
+  }
+
+  function initializeFideChessOpening(state) {
+    const preset = state.preset;
+    if (!preset || preset.rows !== 8 || preset.cols !== 8 || latticeForPreset(preset).shape !== 'square') return;
+    const back = ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook'];
+    const startSquares = [];
+    for (let col = 1; col <= 8; col += 1) {
+      startSquares.push({ row: 1, col }, { row: 2, col }, { row: 7, col }, { row: 8, col });
+    }
+    if (startSquares.some((tile) => state.removed.has(indexOf(tile.row, tile.col, preset.cols)))) return;
+    const pieces = [];
+    const add = (side, kind, row, col) => {
+      const id = pieces.length + 1;
+      pieces.push({
+        id,
+        index: indexOf(row, col, preset.cols),
+        color: side,
+        side,
+        kind,
+        value: FIDE_CHESS_PIECE_VALUES[kind],
+        hasMoved: false,
+        moveNumber: 0
+      });
+    };
+    back.forEach((kind, colIndex) => add('black', kind, 1, colIndex + 1));
+    for (let col = 1; col <= 8; col += 1) add('black', 'pawn', 2, col);
+    for (let col = 1; col <= 8; col += 1) add('white', 'pawn', 7, col);
+    back.forEach((kind, colIndex) => add('white', kind, 8, colIndex + 1));
+    state.pieces = pieces;
+  }
+
+  function fideChessSetupIssue(state) {
+    if (!isFideChessGame(state)) return '';
+    if (latticeForPreset(state.preset).shape !== 'square') return 'FIDE Chess needs a square-lattice board';
+    const occupied = new Set();
+    const kings = { white: 0, black: 0 };
+    for (const piece of state.pieces || []) {
+      if (!piece || typeof piece !== 'object' || Array.isArray(piece)) return 'every chess piece needs a side and kind';
+      const side = normalizeFideChessSide(piece.side || piece.color);
+      const kind = normalizeFideChessKind(piece.kind || piece.value);
+      if (!side || !kind) return 'every chess piece needs a side and kind';
+      if (kind === 'king') kings[side] += 1;
+      if (fideChessPieceWaiting(piece)) continue;
+      if (!piece || !Number.isInteger(piece.index) || piece.index < 0 || piece.index >= state.preset.rows * state.preset.cols) {
+        return 'every chess piece needs a playable square';
+      }
+      if (state.removed.has(piece.index)) return 'chess pieces cannot occupy removed tiles';
+      if (occupied.has(piece.index)) return 'only one chess piece may occupy a square';
+      occupied.add(piece.index);
+    }
+    if (kings.white === 1 && kings.black === 1) return '';
+    if (kings.white === 0 || kings.black === 0) return '';
+    return 'FIDE Chess needs exactly one white king and one black king, or a kingless puzzle setup';
+    return '';
+  }
+
+  function fideChessSetupHint(state) {
+    return fideChessPuzzleSolvabilityHint(state);
+  }
+
+  function fideChessPuzzleSolvabilityHint(state) {
+    if (!isFideChessGame(state) || !fideChessIsNQueensPuzzle(state)) return '';
+    const rows = state.preset && state.preset.rows;
+    const cols = state.preset && state.preset.cols;
+    if (!Number.isInteger(rows) || rows !== cols) return '';
+    if (fideChessIsToroidalNQueensPuzzle(state)) {
+      return greatestCommonDivisor(rows, 6) === 1
+        ? ''
+        : `toroidal ${rows}-queens has no solution because gcd(${rows}, 6) is not 1`;
+    }
+    return rows === 2 || rows === 3 ? `${rows}-queens has no solution` : '';
+  }
+
+  function fideChessIsNQueensPuzzle(state) {
+    const preset = state && state.preset;
+    return !!(preset && normalizeFideChessPuzzleKind(preset.fideChessPuzzle || preset.chessPuzzle || preset.puzzle) === FIDE_CHESS_PUZZLE_N_QUEENS);
+  }
+
+  function fideChessIsToroidalNQueensPuzzle(state) {
+    const preset = state && state.preset;
+    return !!(preset && (preset.fideChessPuzzleTorus || preset.torusQueens || preset.boundaryGlueMode === BOUNDARY_GLUE_MODES.TORUS));
+  }
+
+  function normalizeFideChessPuzzleKind(value) {
+    const text = String(value || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+    return text === FIDE_CHESS_PUZZLE_N_QUEENS || text === 'queens' || text === 'nqueen' || text === 'n-queen'
+      ? FIDE_CHESS_PUZZLE_N_QUEENS
+      : '';
+  }
+
+  function greatestCommonDivisor(a, b) {
+    let left = Math.abs(Math.trunc(Number(a) || 0));
+    let right = Math.abs(Math.trunc(Number(b) || 0));
+    while (right) {
+      const next = left % right;
+      left = right;
+      right = next;
+    }
+    return left;
+  }
+
+  function appendTextPart(base, part) {
+    if (!part) return base || '';
+    return base ? `${base}; ${part}` : part;
+  }
+
+  function fideChessPieceClone(piece) {
+    const clone = {
+      id: piece.id,
+      color: piece.side || piece.color,
+      side: piece.side || piece.color,
+      kind: piece.kind,
+      value: FIDE_CHESS_PIECE_VALUES[piece.kind] || piece.value || '',
+      hasMoved: !!piece.hasMoved,
+      moveNumber: normalizeOptionalMoveNumber(piece.moveNumber)
+    };
+    const forwardDir = piece.kind === 'pawn' ? normalizeFideChessForwardDir(piece.forwardDir) : null;
+    if (Number.isInteger(forwardDir)) clone.forwardDir = forwardDir;
+    if (fideChessPieceWaiting(piece)) {
+      clone.waiting = true;
+      clone.waitingOrder = normalizeOptionalMoveNumber(piece.waitingOrder);
+    } else if (Number.isInteger(piece.index)) {
+      clone.index = piece.index;
+    }
+    return clone;
+  }
+
+  function fideChessPieceAt(state, index) {
+    return (state.pieces || []).find((piece) => fideChessPieceOnBoard(piece, state) && piece.index === index) || null;
+  }
+
+  function fideChessPieceById(state, id) {
+    return (state.pieces || []).find((piece) => piece.id === id) || null;
+  }
+
+  function fideChessPiecesBySide(state, side) {
+    return (state.pieces || []).filter((piece) => piece.side === side && (!fideChessPieceWaiting(piece) || !isFideChessPuzzle(state)));
+  }
+
+  function fideChessPieceWaiting(piece) {
+    return !!(piece && piece.waiting);
+  }
+
+  function fideChessPieceOnBoard(piece, state = null) {
+    return !!piece
+      && !fideChessPieceWaiting(piece)
+      && Number.isInteger(piece.index)
+      && (!state || validBoardIndex(state, piece.index));
+  }
+
+  function fideChessPlacedPieces(state) {
+    return (state && Array.isArray(state.pieces) ? state.pieces : []).filter((piece) => fideChessPieceOnBoard(piece, state));
+  }
+
+  function fideChessWaitingPieces(state) {
+    return (state && Array.isArray(state.pieces) ? state.pieces : [])
+      .filter(fideChessPieceWaiting)
+      .slice()
+      .sort((left, right) => {
+        const leftOrder = normalizeOptionalMoveNumber(left.waitingOrder) || Number.MAX_SAFE_INTEGER;
+        const rightOrder = normalizeOptionalMoveNumber(right.waitingOrder) || Number.MAX_SAFE_INTEGER;
+        return leftOrder - rightOrder || left.id - right.id;
+      });
+  }
+
+  function fideChessPuzzleWaitingCount(state) {
+    return fideChessWaitingPieces(state).length;
+  }
+
+  function selectedFideChessPuzzlePiece(state) {
+    if (!isFideChessPuzzle(state)) return null;
+    const selectedId = normalizePositiveInteger(state.selectedPieceId, 0);
+    if (selectedId) {
+      const byId = fideChessPieceById(state, selectedId);
+      if (byId) return byId;
+    }
+    if (Number.isInteger(state.selectedIndex)) return fideChessPieceAt(state, state.selectedIndex);
+    return null;
+  }
+
+  function setFideChessPuzzleSelection(state, piece) {
+    if (!isFideChessPuzzle(state) || !piece) return;
+    state.selectedPieceId = piece.id;
+    state.selectedIndex = fideChessPieceOnBoard(piece, state) ? piece.index : null;
+  }
+
+  function clearFideChessPuzzleSelection(state) {
+    if (!isFideChessPuzzle(state)) return;
+    state.selectedPieceId = null;
+    state.selectedIndex = null;
+  }
+
+  function fideChessPuzzlePieceOriginLabel(piece, state) {
+    if (!piece) return 'piece';
+    if (fideChessPieceWaiting(piece)) return 'waiting area';
+    return Number.isInteger(piece.index) ? compactTileRef(piece.index, state && state.preset) : 'board';
+  }
+
+  function fideChessKingCounts(source) {
+    const pieces = Array.isArray(source) ? source : ((source && source.pieces) || []);
+    const counts = { white: 0, black: 0 };
+    pieces.forEach((piece) => {
+      const side = normalizeFideChessSide(piece && (piece.side || piece.color));
+      const kind = normalizeFideChessKind(piece && (piece.kind || piece.value));
+      if (side && kind === 'king') counts[side] += 1;
+    });
+    return counts;
+  }
+
+  function inferFideChessVariantFromPieces(pieces, fallback = FIDE_CHESS_VARIANTS.GAME) {
+    const explicit = normalizeFideChessVariant(fallback);
+    const counts = fideChessKingCounts(pieces);
+    if (counts.white === 0 || counts.black === 0) return FIDE_CHESS_VARIANTS.KINGLESS_PUZZLE;
+    return explicit || FIDE_CHESS_VARIANTS.GAME;
+  }
+
+  function fideChessVariant(state) {
+    return normalizeFideChessVariant(state && state.fideChessVariant) || FIDE_CHESS_VARIANTS.GAME;
+  }
+
+  function isFideChessPuzzle(state) {
+    return isFideChessGame(state) && fideChessVariant(state) === FIDE_CHESS_VARIANTS.KINGLESS_PUZZLE;
+  }
+
+  function prepareFideChessPuzzleState(state, options = {}) {
+    if (!isFideChessGame(state)) return state;
+    state.fideChessVariant = FIDE_CHESS_VARIANTS.KINGLESS_PUZZLE;
+    (state.pieces || []).forEach((piece) => {
+      if (piece.kind === 'pawn' && !Number.isInteger(normalizeFideChessForwardDir(piece.forwardDir))) {
+        piece.forwardDir = fideChessForwardDir(piece.side);
+      }
+      piece.side = 'black';
+      piece.color = 'black';
+    });
+    state.turn = 'black';
+    if (!options.preserveStatus && state.phase !== 'gameover') {
+      state.winner = '';
+      state.result = '';
+      state.ending = '';
+      state.resultDismissed = false;
+    }
+    state.enPassant = null;
+    if (!options.preserveSelection) {
+      state.selectedIndex = null;
+      state.selectedPieceId = null;
+    }
+    return state;
+  }
+
+  function fideChessPieceCounts(state) {
+    const counts = { white: 0, black: 0 };
+    (state.pieces || []).forEach((piece) => {
+      if (piece.side === 'white' || piece.color === 'white') counts.white += 1;
+      if (piece.side === 'black' || piece.color === 'black') counts.black += 1;
+    });
+    return counts;
+  }
+
+  function fideChessKing(state, side) {
+    return (state.pieces || []).find((piece) => piece.side === side && piece.kind === 'king') || null;
+  }
+
+  function fideChessForwardDir(side) {
+    return side === 'white' ? DIRS.N : DIRS.S;
+  }
+
+  function normalizeFideChessForwardDir(value) {
+    if (value == null || value === '') return null;
+    if (typeof value === 'string') {
+      const text = value.trim().toLowerCase().replace(/[\s_-]+/g, '');
+      if (!text || text === 'auto') return null;
+      if (text === 'e' || text === 'east' || text === 'right') return DIRS.E;
+      if (text === 's' || text === 'south' || text === 'down') return DIRS.S;
+      if (text === 'w' || text === 'west' || text === 'left') return DIRS.W;
+      if (text === 'n' || text === 'north' || text === 'up') return DIRS.N;
+      if (!/^-?\d+$/.test(text)) return null;
+    }
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    return modulo(Math.trunc(parsed), 4);
+  }
+
+  function fideChessPawnForwardDir(piece) {
+    const explicit = normalizeFideChessForwardDir(piece && piece.forwardDir);
+    return Number.isInteger(explicit) ? explicit : fideChessForwardDir(piece && piece.side);
+  }
+
+  function fideChessBackRank(state, side) {
+    return side === 'white' ? state.preset.rows : 1;
+  }
+
+  function fideChessTileRef(state, index) {
+    return rowCol(index, state.preset.cols);
+  }
+
+  function fideChessIsPromotionIndex(state, piece, index, forwardDir = null) {
+    const tile = fideChessTileRef(state, index);
+    const forward = Number.isInteger(normalizeFideChessForwardDir(forwardDir))
+      ? normalizeFideChessForwardDir(forwardDir)
+      : fideChessPawnForwardDir(piece);
+    if (neighbor(tile.row, tile.col, forward, state.preset)) return false;
+    return !gluedPartner(state.preset, index, forward);
+  }
+
+  function fideChessLegalMovesFromIndex(state, index) {
+    const piece = fideChessPieceAt(state, index);
+    if (!piece || piece.side !== state.turn || state.phase === 'gameover') return [];
+    return fideChessLegalMovesForPiece(state, piece);
+  }
+
+  function fideChessLegalMovesForPiece(state, piece, options = {}) {
+    const moves = fideChessPseudoMovesForPiece(state, piece, { attacksOnly: false });
+    if (options.respectCheck) return moves.filter((move) => !fideChessMoveLeavesKingInCheck(state, move));
+    return moves;
+  }
+
+  function fideChessMoveLeavesKingInCheck(state, move) {
+    const next = cloneFideChessState(state);
+    applyFideChessMoveToState(next, move, { record: false, switchTurn: false, finalize: false });
+    return fideChessIsSideInCheck(next, move.side);
+  }
+
+  function fideChessPseudoMovesForPiece(state, piece, options = {}) {
+    if (!piece || !Number.isInteger(piece.index)) return [];
+    if (piece.kind === 'rook') return fideChessRayMoves(state, piece, directionsForPreset(state.preset), options);
+    if (piece.kind === 'bishop') return fideChessDiagonalMoves(state, piece, options);
+    if (piece.kind === 'queen') {
+      return fideChessRayMoves(state, piece, directionsForPreset(state.preset), options)
+        .concat(fideChessDiagonalMoves(state, piece, options));
+    }
+    if (piece.kind === 'king') return fideChessKingMoves(state, piece, options);
+    if (piece.kind === 'knight') return fideChessKnightMoves(state, piece, options);
+    if (piece.kind === 'pawn') return fideChessPawnMoves(state, piece, options);
+    return [];
+  }
+
+  function fideChessMove(state, piece, to, options = {}) {
+    const target = fideChessPieceAt(state, to);
+    const capture = target && target.side !== piece.side ? target.id : null;
+    return {
+      pieceId: piece.id,
+      from: piece.index,
+      to,
+      side: piece.side,
+      kind: piece.kind,
+      captureId: capture,
+      route: options.route || null,
+      forwardDir: Number.isInteger(normalizeFideChessForwardDir(options.forwardDir))
+        ? normalizeFideChessForwardDir(options.forwardDir)
+        : null,
+      promotion: !!options.promotion,
+      doubleStep: !!options.doubleStep,
+      passedIndex: Number.isInteger(options.passedIndex) ? options.passedIndex : null,
+      enPassant: !!options.enPassant,
+      enPassantCaptureId: Number.isInteger(options.enPassantCaptureId) ? options.enPassantCaptureId : null,
+      castle: options.castle || '',
+      rookId: Number.isInteger(options.rookId) ? options.rookId : null,
+      rookFrom: Number.isInteger(options.rookFrom) ? options.rookFrom : null,
+      rookTo: Number.isInteger(options.rookTo) ? options.rookTo : null,
+      rookRoute: options.rookRoute || null,
+      through: Array.isArray(options.through) ? options.through.slice() : []
+    };
+  }
+
+  function dedupeFideChessMoves(moves) {
+    const seen = new Set();
+    return (Array.isArray(moves) ? moves : []).filter((move) => {
+      const key = [
+        move.pieceId,
+        move.from,
+        move.to,
+        move.captureId || '',
+        move.enPassantCaptureId || '',
+        move.castle || '',
+        Number.isInteger(move.forwardDir) ? move.forwardDir : '',
+        move.promotion ? 'promotion' : ''
+      ].join(':');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function fideChessRayMoves(state, piece, dirs, options = {}) {
+    const moves = [];
+    const limit = Math.max(8, state.preset.rows * state.preset.cols * directionsForPreset(state.preset).length + 8);
+    (Array.isArray(dirs) ? dirs : []).forEach((initialDir) => {
+      let index = piece.index;
+      let direction = initialDir;
+      const path = [piece.index];
+      const transitions = [];
+      const seen = new Set();
+      let guard = 0;
+      while (guard < limit) {
+        const key = `${index}:${direction}`;
+        if (seen.has(key)) break;
+        seen.add(key);
+        const next = surfaceSuccessor(state, index, direction);
+        if (!next) break;
+        const transition = placementTransitionRecord(index, direction, next);
+        transitions.push(transition);
+        path.push(next.index);
+        const route = fideChessRouteFromTransitions('axis', piece.index, transitions, path);
+        if (next.index === piece.index) break;
+        const occupant = fideChessPieceAt(state, next.index);
+        if (occupant) {
+          if (options.attacksOnly || occupant.side !== piece.side) moves.push(fideChessMove(state, piece, next.index, { route }));
+          break;
+        }
+        moves.push(fideChessMove(state, piece, next.index, { route }));
+        index = next.index;
+        direction = next.dir;
+        guard += 1;
+      }
+    });
+    return dedupeFideChessMoves(moves);
+  }
+
+  function fideChessDiagonalMoves(state, piece, options = {}) {
+    if (latticeForPreset(state.preset).shape !== 'square') return [];
+    const moves = [];
+    const directionGroups = gomokuDiagonalAxes(state.preset).flatMap((axis) => [axis.forward, axis.backward]);
+    const limit = Math.max(8, state.preset.rows * state.preset.cols * 16);
+    directionGroups.forEach((initialOrders) => {
+      const orders = normalizeDiagonalOrders(initialOrders);
+      const stack = [{
+        index: piece.index,
+        orders,
+        path: [piece.index],
+        steps: [],
+        seen: new Set([`${piece.index}:${diagonalOrdersKey(orders)}`])
+      }];
+      let expanded = 0;
+      while (stack.length && expanded < limit) {
+        const branch = stack.pop();
+        expanded += 1;
+        gomokuDiagonalStepCandidates(state, branch.index, branch.orders).forEach((candidate) => {
+          if (!candidate || !candidate.route) return;
+          if (candidate.index === piece.index) return;
+          const key = `${candidate.index}:${diagonalOrdersKey(candidate.orders)}`;
+          if (branch.seen.has(key)) return;
+          const nextPath = branch.path.concat(candidate.index);
+          const nextSteps = branch.steps.concat(candidate.route);
+          const route = fideChessDiagonalRoute(piece.index, nextPath, nextSteps);
+          const occupant = fideChessPieceAt(state, candidate.index);
+          if (occupant) {
+            if (options.attacksOnly || occupant.side !== piece.side) moves.push(fideChessMove(state, piece, candidate.index, { route }));
+            return;
+          }
+          moves.push(fideChessMove(state, piece, candidate.index, { route }));
+          const nextSeen = new Set(branch.seen);
+          nextSeen.add(key);
+          stack.push({
+            index: candidate.index,
+            orders: candidate.orders,
+            path: nextPath,
+            steps: nextSteps,
+            seen: nextSeen
+          });
+        });
+      }
+    });
+    return dedupeFideChessMoves(moves);
+  }
+
+  function fideChessRouteFromTransitions(kind, startIndex, transitions, path, extras = {}) {
+    const normalizedPath = Array.isArray(path) && path.length ? path.slice() : [startIndex];
+    const clonedTransitions = (Array.isArray(transitions) ? transitions : []).map(clonePlacementTransition);
+    return {
+      kind: kind || 'axis',
+      start: startIndex,
+      end: normalizedPath[normalizedPath.length - 1],
+      path: normalizedPath,
+      directions: clonedTransitions.map((transition) => transition.outDir),
+      transitions: clonedTransitions,
+      ...extras
+    };
+  }
+
+  function fideChessDiagonalRoute(startIndex, path, steps) {
+    const normalizedSteps = (Array.isArray(steps) ? steps : [])
+      .map(cloneFideChessRoute)
+      .filter(Boolean);
+    const transitions = normalizedSteps.flatMap((step) => step.transitions || []);
+    return fideChessRouteFromTransitions('diagonal', startIndex, transitions, path, {
+      steps: normalizedSteps
+    });
+  }
+
+  function cloneFideChessRoute(route) {
+    if (!route || typeof route !== 'object') return null;
+    const cloned = {
+      ...route,
+      path: Array.isArray(route.path) ? route.path.slice() : [],
+      directions: Array.isArray(route.directions) ? route.directions.slice() : [],
+      sourceOrder: Array.isArray(route.sourceOrder) ? route.sourceOrder.slice() : undefined,
+      outputDirections: Array.isArray(route.outputDirections) ? route.outputDirections.slice() : undefined,
+      transitions: Array.isArray(route.transitions)
+        ? route.transitions.map(clonePlacementTransition)
+        : []
+    };
+    if (Array.isArray(route.steps)) {
+      cloned.steps = route.steps.map(cloneFideChessRoute).filter(Boolean);
+    }
+    return cloned;
+  }
+
+  function fideChessMoveFromSurfaceTransition(state, piece, outDir, next, kind = 'axis') {
+    const route = fideChessRouteFromTransitions(kind, piece.index, [placementTransitionRecord(piece.index, outDir, next)], [piece.index, next.index]);
+    return { index: next.index, route };
+  }
+
+  function fideChessPushStepMove(state, piece, moves, toIndex, route, options = {}, moveOptions = {}) {
+    if (toIndex === piece.index) return false;
+    const occupant = fideChessPieceAt(state, toIndex);
+    if (occupant) {
+      if (occupant.id === piece.id) return false;
+      if (options.attacksOnly || occupant.side !== piece.side) {
+        moves.push(fideChessMove(state, piece, toIndex, { ...moveOptions, route }));
+      }
+      return false;
+    }
+    moves.push(fideChessMove(state, piece, toIndex, { ...moveOptions, route }));
+    return true;
+  }
+
+  function fideChessPawnDiagonalCandidates(state, piece) {
+    const forward = fideChessPawnForwardDir(piece);
+    const candidates = [];
+    const seen = new Set();
+    [modulo(forward - 1, 4), modulo(forward + 1, 4)].forEach((lateral) => {
+      gomokuDiagonalStepCandidates(state, piece.index, [[forward, lateral], [lateral, forward]]).forEach((candidate) => {
+        if (!candidate || candidate.index === piece.index) return;
+        const sourceOrder = Array.isArray(candidate.sourceOrder)
+          ? candidate.sourceOrder
+          : (candidate.route && Array.isArray(candidate.route.sourceOrder) ? candidate.route.sourceOrder : []);
+        const outputDirections = Array.isArray(candidate.outputDirections)
+          ? candidate.outputDirections
+          : (candidate.route && Array.isArray(candidate.route.outputDirections) ? candidate.route.outputDirections : []);
+        const forwardSlot = sourceOrder.findIndex((dir) => dir === forward);
+        const nextForward = normalizeFideChessForwardDir(outputDirections[forwardSlot]);
+        const forwardDir = Number.isInteger(nextForward) ? nextForward : forward;
+        const key = `${candidate.index}:${forwardDir}:${diagonalOrdersKey(candidate.orders)}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        candidates.push({
+          ...candidate,
+          forwardDir,
+          route: candidate.route ? {
+            ...candidate.route,
+            forwardDir,
+            sourceOrder: sourceOrder.slice(),
+            outputDirections: outputDirections.slice()
+          } : candidate.route
+        });
+      });
+    });
+    return candidates;
+  }
+
+  function fideChessCastleLabelForDirection(state, dir) {
+    if (latticeForPreset(state.preset).shape !== 'square') return 'castling';
+    if (dir === DIRS.E) return 'kingside';
+    if (dir === DIRS.W) return 'queenside';
+    return 'castling';
+  }
+
+  function fideChessReverseRouteSegment(state, route, firstTransitionIndex, endIndex) {
+    const sourceTransitions = Array.isArray(route && route.transitions) ? route.transitions : [];
+    const transitions = [];
+    let path = [route.end];
+    for (let index = sourceTransitions.length - 1; index >= firstTransitionIndex; index -= 1) {
+      const source = sourceTransitions[index];
+      const outDir = oppositeDir(state.preset, source.dir);
+      const next = surfaceSuccessor(state, path[path.length - 1], outDir);
+      if (!next || next.index !== source.from) return null;
+      transitions.push(placementTransitionRecord(path[path.length - 1], outDir, next));
+      path.push(next.index);
+    }
+    if (path[path.length - 1] !== endIndex) return null;
+    return fideChessRouteFromTransitions('axis', route.end, transitions, path);
+  }
+
+  function fideChessCastleSquareAttacked(state, king, index, opponent) {
+    const next = cloneFideChessState(state);
+    const nextKing = fideChessPieceById(next, king.id);
+    if (!nextKing) return true;
+    nextKing.index = index;
+    return fideChessSquareAttackedBy(next, index, opponent);
+  }
+
+  function fideChessCastleCandidateInDirection(state, king, initialDir) {
+    let index = king.index;
+    let direction = initialDir;
+    const transitions = [];
+    const path = [king.index];
+    const seen = new Set();
+    const limit = Math.max(8, state.preset.rows * state.preset.cols * directionsForPreset(state.preset).length + 8);
+    let guard = 0;
+    while (guard < limit) {
+      const key = `${index}:${direction}`;
+      if (seen.has(key)) return null;
+      seen.add(key);
+      const next = surfaceSuccessor(state, index, direction);
+      if (!next) return null;
+      const transition = placementTransitionRecord(index, direction, next);
+      transitions.push(transition);
+      path.push(next.index);
+      if (next.index === king.index) return null;
+      const occupant = fideChessPieceAt(state, next.index);
+      if (occupant) {
+        if (occupant.side !== king.side || occupant.kind !== 'rook' || occupant.hasMoved) return null;
+        if (path.length < 4) return null;
+        const kingThrough = path[1];
+        const kingTo = path[2];
+        const rookTo = path[1];
+        if (kingTo === rookTo || kingTo === occupant.index || rookTo === occupant.index) return null;
+        if (fideChessPieceAt(state, kingThrough) || fideChessPieceAt(state, kingTo)) return null;
+        const routeToRook = fideChessRouteFromTransitions('axis', king.index, transitions, path);
+        const kingRoute = fideChessRouteFromTransitions('axis', king.index, transitions.slice(0, 2), path.slice(0, 3));
+        const rookRoute = fideChessReverseRouteSegment(state, routeToRook, 1, rookTo);
+        if (!rookRoute) return null;
+        const opponent = oppositeFideChessSide(king.side);
+        if (
+          fideChessCastleSquareAttacked(state, king, king.index, opponent)
+          || fideChessCastleSquareAttacked(state, king, kingThrough, opponent)
+          || fideChessCastleSquareAttacked(state, king, kingTo, opponent)
+        ) return null;
+        return fideChessMove(state, king, kingTo, {
+          castle: fideChessCastleLabelForDirection(state, initialDir),
+          rookId: occupant.id,
+          rookFrom: occupant.index,
+          rookTo,
+          rookRoute,
+          through: [kingThrough, kingTo],
+          route: kingRoute
+        });
+      }
+      index = next.index;
+      direction = next.dir;
+      guard += 1;
+    }
+    return null;
+  }
+
+  function filterAmbiguousFideChessCastleMoves(moves) {
+    const counts = new Map();
+    moves.forEach((move) => {
+      const key = `${move.to}`;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return moves.filter((move) => counts.get(`${move.to}`) === 1);
+  }
+
+  function fideChessDiagonalStepMoves(state, piece, moves, options = {}) {
+    gomokuDiagonalAxes(state.preset).flatMap((axis) => [axis.forward, axis.backward]).forEach((orders) => {
+      gomokuDiagonalStepCandidates(state, piece.index, normalizeDiagonalOrders(orders)).forEach((candidate) => {
+        if (!candidate || !candidate.route || candidate.index === piece.index) return;
+        fideChessPushStepMove(state, piece, moves, candidate.index, candidate.route, options);
+      });
+    });
+  }
+
+  function fideChessKingMoves(state, piece, options = {}) {
+    const moves = [];
+    directionsForPreset(state.preset).forEach((dir) => {
+      const next = surfaceSuccessor(state, piece.index, dir);
+      if (!next) return;
+      const step = fideChessMoveFromSurfaceTransition(state, piece, dir, next);
+      fideChessPushStepMove(state, piece, moves, step.index, step.route, options);
+    });
+    fideChessDiagonalStepMoves(state, piece, moves, options);
+    if (!options.attacksOnly) moves.push(...fideChessCastleMoves(state, piece));
+    return dedupeFideChessMoves(moves);
+  }
+
+  function fideChessKnightMoves(state, piece, options = {}) {
+    if (latticeForPreset(state.preset).shape !== 'square') return [];
+    const moves = [];
+    const candidateDirs = [];
+    directionsForPreset(state.preset).forEach((dir) => {
+      [modulo(dir + 1, 4), modulo(dir - 1, 4)].forEach((minor) => {
+        candidateDirs.push([dir, dir, minor], [dir, minor, dir], [minor, dir, dir]);
+      });
+    });
+    const seenRoutes = new Set();
+    candidateDirs.forEach((dirs) => {
+      const route = placementRouteByDirections(state, piece.index, dirs, { kind: 'knight', transport: true });
+      if (!route || route.end === piece.index) return;
+      route.path = [piece.index].concat((route.transitions || []).map((transition) => transition.to));
+      const routeKey = `${route.end}:${route.directions.join(',')}:${(route.transitions || []).map((step) => `${step.from}-${step.to}-${step.outDir}`).join('|')}`;
+      if (seenRoutes.has(routeKey)) return;
+      seenRoutes.add(routeKey);
+      const occupant = fideChessPieceAt(state, route.end);
+      if (!occupant || options.attacksOnly || occupant.side !== piece.side) moves.push(fideChessMove(state, piece, route.end, { route: cloneFideChessRoute(route) }));
+    });
+    return dedupeFideChessMoves(moves);
+  }
+
+  function fideChessPawnMoves(state, piece, options = {}) {
+    const moves = [];
+    const forward = fideChessPawnForwardDir(piece);
+    const one = surfaceSuccessor(state, piece.index, forward);
+    if (!options.attacksOnly && one && one.index !== piece.index && !fideChessPieceAt(state, one.index)) {
+      const onePromotion = fideChessIsPromotionIndex(state, piece, one.index, one.dir);
+      moves.push(fideChessMove(state, piece, one.index, {
+        promotion: onePromotion,
+        forwardDir: one.dir,
+        route: fideChessRouteFromTransitions('axis', piece.index, [placementTransitionRecord(piece.index, forward, one)], [piece.index, one.index])
+      }));
+      if (!piece.hasMoved && !onePromotion) {
+        const two = surfaceSuccessor(state, one.index, one.dir);
+        if (two && two.index !== piece.index && two.index !== one.index && !fideChessPieceAt(state, two.index)) {
+          moves.push(fideChessMove(state, piece, two.index, {
+            doubleStep: true,
+            passedIndex: one.index,
+            forwardDir: two.dir,
+            route: fideChessRouteFromTransitions('axis', piece.index, [
+              placementTransitionRecord(piece.index, forward, one),
+              placementTransitionRecord(one.index, one.dir, two)
+            ], [piece.index, one.index, two.index])
+          }));
+        }
+      }
+    }
+    fideChessPawnDiagonalCandidates(state, piece).forEach((candidate) => {
+      if (options.attacksOnly) {
+        moves.push(fideChessMove(state, piece, candidate.index, {
+          route: candidate.route,
+          forwardDir: candidate.forwardDir
+        }));
+        return;
+      }
+      const occupant = fideChessPieceAt(state, candidate.index);
+      if (occupant && occupant.side !== piece.side) {
+        moves.push(fideChessMove(state, piece, candidate.index, {
+          promotion: fideChessIsPromotionIndex(state, piece, candidate.index, candidate.forwardDir),
+          forwardDir: candidate.forwardDir,
+          route: candidate.route
+        }));
+        return;
+      }
+      if (
+        state.enPassant
+        && state.enPassant.side !== piece.side
+        && state.enPassant.targetIndex === candidate.index
+        && !occupant
+      ) {
+        const captured = fideChessPieceById(state, state.enPassant.pawnId);
+        if (captured && captured.kind === 'pawn' && captured.side !== piece.side && captured.index === state.enPassant.pawnIndex) {
+          moves.push(fideChessMove(state, piece, candidate.index, {
+            route: candidate.route,
+            forwardDir: candidate.forwardDir,
+            enPassant: true,
+            enPassantCaptureId: captured.id
+          }));
+        }
+      }
+    });
+    return dedupeFideChessMoves(moves);
+  }
+
+  function fideChessCastleMoves(state, piece) {
+    if (!piece || piece.kind !== 'king' || piece.hasMoved) return [];
+    if (latticeForPreset(state.preset).shape !== 'square') return [];
+    return filterAmbiguousFideChessCastleMoves(
+      directionsForPreset(state.preset)
+        .map((dir) => fideChessCastleCandidateInDirection(state, piece, dir))
+        .filter(Boolean)
+    );
+  }
+
+  function fideChessTransportedRouteThrough(state, startIndex, dir, expectedIndices) {
+    let index = startIndex;
+    let direction = dir;
+    const transitions = [];
+    const path = [startIndex];
+    for (const expected of expectedIndices) {
+      const next = surfaceSuccessor(state, index, direction);
+      if (!next || next.index !== expected) return null;
+      transitions.push(placementTransitionRecord(index, direction, next));
+      path.push(next.index);
+      index = next.index;
+      direction = next.dir;
+    }
+    return fideChessRouteFromTransitions('axis', startIndex, transitions, path);
+  }
+
+  function fideChessSquareAttackedBy(state, index, attackingSide) {
+    return fideChessPiecesBySide(state, attackingSide).some((piece) => (
+      fideChessPseudoMovesForPiece(state, piece, { attacksOnly: true }).some((move) => move.to === index)
+    ));
+  }
+
+  function fideChessPuzzleThreats(state) {
+    if (!isFideChessGame(state)) return [];
+    const pieces = fideChessPlacedPieces(state);
+    const pieceByIndex = new Map(pieces.map((piece) => [piece.index, piece]));
+    const threats = [];
+    const seen = new Set();
+    pieces.forEach((piece) => {
+      if (!piece || !Number.isInteger(piece.index)) return;
+      const threatPiece = { ...piece, side: 'black', color: 'black' };
+      fideChessPseudoMovesForPiece(state, threatPiece, { attacksOnly: true }).forEach((move) => {
+        const target = pieceByIndex.get(move.to);
+        if (!target || target.id === piece.id) return;
+        const key = `${piece.id}:${target.id}:${move.to}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        threats.push({
+          from: piece.index,
+          to: target.index,
+          attackerId: piece.id,
+          targetId: target.id,
+          kind: piece.kind
+        });
+      });
+    });
+    return threats;
+  }
+
+  function fideChessPuzzleAttackOverlaySets(state) {
+    const attackedIndices = new Set();
+    const threatenedPieceIndices = new Set();
+    if (!isFideChessGame(state)) return { attackedIndices, threatenedPieceIndices };
+    const pieces = fideChessPlacedPieces(state);
+    const pieceByIndex = new Map(pieces.map((piece) => [piece.index, piece]));
+    pieces.forEach((piece) => {
+      if (!piece || !Number.isInteger(piece.index)) return;
+      fideChessPuzzleAttackedIndicesForPiece(state, piece).forEach((index) => {
+        attackedIndices.add(index);
+        const target = pieceByIndex.get(index);
+        if (target && target.id !== piece.id) threatenedPieceIndices.add(target.index);
+      });
+    });
+    return { attackedIndices, threatenedPieceIndices };
+  }
+
+  function fideChessPuzzleAttackedIndicesForPiece(state, piece) {
+    const attacked = new Set();
+    if (!isFideChessGame(state) || !piece || !Number.isInteger(piece.index)) return attacked;
+    const threatPiece = { ...piece, side: 'black', color: 'black' };
+    fideChessPseudoMovesForPiece(state, threatPiece, { attacksOnly: true }).forEach((move) => {
+      if (!Number.isInteger(move.to) || move.to === piece.index || !validBoardIndex(state, move.to) || state.removed.has(move.to)) return;
+      attacked.add(move.to);
+    });
+    return attacked;
+  }
+
+  function fideChessPuzzleThreatCount(state) {
+    return fideChessPuzzleThreats(state).length;
+  }
+
+  function fideChessIsSideInCheck(state, side) {
+    const king = fideChessKing(state, side);
+    if (!king) return false;
+    return fideChessSquareAttackedBy(state, king.index, oppositeFideChessSide(side));
+  }
+
+  function fideChessAnyLegalMove(state, side = state.turn) {
+    return fideChessPiecesBySide(state, side).some((piece) => fideChessLegalMovesForPiece(state, piece).length);
+  }
+
+  function fideChessDeadPosition(state) {
+    const material = (state.pieces || []).filter((piece) => piece.kind !== 'king');
+    if (!material.length) return true;
+    if (material.length === 1 && (material[0].kind === 'bishop' || material[0].kind === 'knight')) return true;
+    return false;
+  }
+
+  function moveFideChessPuzzlePiece(source, fromIndex, toIndex) {
+    if (!isFideChessPuzzle(source) || source.phase !== 'ready') return { changed: false, message: 'puzzle not ready' };
+    const piece = fideChessPieceAt(source, fromIndex);
+    if (!piece) return { changed: false, message: 'no chess piece there' };
+    if (fromIndex === toIndex) return { changed: false, message: 'choose a different square' };
+    if (!validBoardIndex(source, toIndex) || source.removed.has(toIndex)) return { changed: false, message: 'target is not playable' };
+    if (fideChessPieceAt(source, toIndex)) return { changed: false, message: 'target square is occupied' };
+    const next = cloneFideChessState(source);
+    prepareFideChessPuzzleState(next, { preserveSelection: true });
+    const mutablePiece = fideChessPieceById(next, piece.id);
+    if (!mutablePiece) return { changed: false, message: 'piece disappeared' };
+    mutablePiece.index = toIndex;
+    mutablePiece.waiting = false;
+    delete mutablePiece.waitingOrder;
+    mutablePiece.hasMoved = true;
+    mutablePiece.moveNumber = (next.round || 0) + 1;
+    next.round = Math.max(0, Number(next.round) || 0) + 1;
+    next.selectedIndex = null;
+    next.selectedPieceId = null;
+    appendFideChessPuzzleRecordMove(next, mutablePiece, fromIndex, toIndex);
+    finalizeFideChessPuzzlePosition(next);
+    return { changed: true, state: next, piece: mutablePiece };
+  }
+
+  function moveFideChessPuzzlePieceToWaiting(source, pieceId) {
+    if (!isFideChessPuzzle(source) || source.phase !== 'ready') return { changed: false, message: 'puzzle not ready' };
+    const piece = fideChessPieceById(source, pieceId);
+    if (!piece) return { changed: false, message: 'piece disappeared' };
+    if (fideChessPieceWaiting(piece)) return { changed: false, message: 'piece is already waiting' };
+    if (!fideChessPieceOnBoard(piece, source)) return { changed: false, message: 'piece is not on the board' };
+    const next = cloneFideChessState(source);
+    prepareFideChessPuzzleState(next, { preserveSelection: true });
+    const mutablePiece = fideChessPieceById(next, piece.id);
+    if (!mutablePiece) return { changed: false, message: 'piece disappeared' };
+    const fromIndex = mutablePiece.index;
+    delete mutablePiece.index;
+    mutablePiece.waiting = true;
+    mutablePiece.waitingOrder = nextFideChessWaitingOrder(next);
+    mutablePiece.hasMoved = true;
+    mutablePiece.moveNumber = (next.round || 0) + 1;
+    next.round = Math.max(0, Number(next.round) || 0) + 1;
+    next.selectedIndex = null;
+    next.selectedPieceId = null;
+    appendGameRecordMove(next, {
+      action: 'to-waiting',
+      pieceId: mutablePiece.id,
+      piece: mutablePiece.kind,
+      fromIndex
+    });
+    finalizeFideChessPuzzlePosition(next);
+    return { changed: true, state: next, piece: mutablePiece };
+  }
+
+  function moveFideChessPuzzleWaitingPieceToBoard(source, pieceId, toIndex) {
+    if (!isFideChessPuzzle(source) || source.phase !== 'ready') return { changed: false, message: 'puzzle not ready' };
+    const piece = fideChessPieceById(source, pieceId);
+    if (!piece) return { changed: false, message: 'piece disappeared' };
+    if (!fideChessPieceWaiting(piece)) return { changed: false, message: 'piece is already on the board' };
+    if (!validBoardIndex(source, toIndex) || source.removed.has(toIndex)) return { changed: false, message: 'target is not playable' };
+    if (fideChessPieceAt(source, toIndex)) return { changed: false, message: 'target square is occupied' };
+    const next = cloneFideChessState(source);
+    prepareFideChessPuzzleState(next, { preserveSelection: true });
+    const mutablePiece = fideChessPieceById(next, piece.id);
+    if (!mutablePiece) return { changed: false, message: 'piece disappeared' };
+    mutablePiece.index = toIndex;
+    mutablePiece.waiting = false;
+    delete mutablePiece.waitingOrder;
+    mutablePiece.hasMoved = true;
+    mutablePiece.moveNumber = (next.round || 0) + 1;
+    next.round = Math.max(0, Number(next.round) || 0) + 1;
+    next.selectedIndex = null;
+    next.selectedPieceId = null;
+    appendGameRecordMove(next, {
+      action: 'from-waiting',
+      pieceId: mutablePiece.id,
+      piece: mutablePiece.kind,
+      toIndex
+    });
+    finalizeFideChessPuzzlePosition(next);
+    return { changed: true, state: next, piece: mutablePiece };
+  }
+
+  function collectFideChessPuzzlePieces(source) {
+    if (!isFideChessPuzzle(source) || source.phase !== 'ready') return { changed: false, message: 'puzzle not ready' };
+    if (!fideChessPlacedPieces(source).length) return { changed: false, message: 'all pieces are already waiting' };
+    const next = cloneFideChessState(source);
+    prepareFideChessPuzzleState(next, { preserveSelection: true });
+    next.pieces
+      .slice()
+      .sort(compareFideChessPiecesForTrayCollection)
+      .forEach((piece, orderIndex) => {
+        delete piece.index;
+        piece.waiting = true;
+        piece.waitingOrder = orderIndex + 1;
+        piece.hasMoved = true;
+        piece.moveNumber = (next.round || 0) + 1;
+      });
+    next.round = Math.max(0, Number(next.round) || 0) + 1;
+    next.selectedIndex = null;
+    next.selectedPieceId = null;
+    appendGameRecordMove(next, { action: 'collect' });
+    finalizeFideChessPuzzlePosition(next);
+    return { changed: true, state: next };
+  }
+
+  function compareFideChessPiecesForTrayCollection(left, right) {
+    const leftIndex = Number.isInteger(left.index) ? left.index : Number.MAX_SAFE_INTEGER;
+    const rightIndex = Number.isInteger(right.index) ? right.index : Number.MAX_SAFE_INTEGER;
+    return leftIndex - rightIndex || left.id - right.id;
+  }
+
+  function nextFideChessWaitingOrder(state) {
+    return fideChessWaitingPieces(state).reduce((max, piece) => (
+      Math.max(max, normalizeOptionalMoveNumber(piece.waitingOrder) || 0)
+    ), 0) + 1;
+  }
+
+  function appendFideChessPuzzleRecordMove(state, piece, fromIndex, toIndex) {
+    appendGameRecordMove(state, {
+      action: 'rearrange',
+      pieceId: piece.id,
+      piece: piece.kind,
+      fromIndex,
+      toIndex
+    });
+  }
+
+  function fideChessKingCaptureResult(state) {
+    const counts = fideChessKingCounts(state);
+    if (counts.white === 0 && counts.black === 0) {
+      return { winner: '', result: 'draw', ending: 'missing-kings' };
+    }
+    if (counts.white === 0) return { winner: 'black', result: 'king-captured', ending: 'king-captured' };
+    if (counts.black === 0) return { winner: 'white', result: 'king-captured', ending: 'king-captured' };
+    return null;
+  }
+
+  function moveFideChessPiece(source, fromIndex, toIndex, options = {}) {
+    if (isFideChessPuzzle(source)) return { changed: false, message: 'rearrange puzzle pieces freely' };
+    if (!isFideChessGame(source) || source.phase !== 'ready') return { changed: false, message: 'game not ready' };
+    const piece = fideChessPieceAt(source, fromIndex);
+    if (!piece) return { changed: false, message: 'no chess piece there' };
+    if (piece.side !== source.turn) return { changed: false, message: `${fideChessSideLabel(source.turn)} to move` };
+    const legal = fideChessLegalMovesForPiece(source, piece);
+    const move = legal.find((candidate) => candidate.to === toIndex);
+    if (!move) return { changed: false, message: 'illegal chess move' };
+    const promotionKind = FIDE_CHESS_PROMOTION_KINDS.includes(normalizeFideChessKind(options.promotionKind))
+      ? normalizeFideChessKind(options.promotionKind)
+      : '';
+    if (move.promotion && options.deferPromotion && !promotionKind) {
+      return {
+        changed: false,
+        pendingPromotion: true,
+        message: 'choose promotion piece',
+        move
+      };
+    }
+    const next = cloneFideChessState(source);
+    applyFideChessMoveToState(next, move, {
+      promotionKind: promotionKind || normalizeFideChessPromotionKind(options.promotionKind),
+      record: true,
+      switchTurn: true,
+      finalize: true
+    });
+    return { changed: true, state: next, move };
+  }
+
+  function fideChessMoveArrivalForwardDir(piece, move) {
+    const moveForward = normalizeFideChessForwardDir(move && move.forwardDir);
+    if (Number.isInteger(moveForward)) return moveForward;
+    const routeForward = normalizeFideChessForwardDir(move && move.route && move.route.forwardDir);
+    if (Number.isInteger(routeForward)) return routeForward;
+    const transitions = move && move.route && Array.isArray(move.route.transitions)
+      ? move.route.transitions
+      : [];
+    const lastTransition = transitions[transitions.length - 1];
+    const transitionForward = normalizeFideChessForwardDir(lastTransition && lastTransition.dir);
+    return Number.isInteger(transitionForward) ? transitionForward : fideChessPawnForwardDir(piece);
+  }
+
+  function applyFideChessMoveToState(state, move, options = {}) {
+    const piece = fideChessPieceById(state, move.pieceId);
+    if (!piece) return false;
+    const movingSide = piece.side;
+    const capturedId = move.enPassant ? move.enPassantCaptureId : move.captureId;
+    if (Number.isInteger(capturedId)) {
+      state.pieces = state.pieces.filter((entry) => entry.id !== capturedId);
+    }
+    const mutablePiece = fideChessPieceById(state, move.pieceId);
+    if (!mutablePiece) return false;
+    const wasPawn = mutablePiece.kind === 'pawn';
+    const arrivalForwardDir = wasPawn ? fideChessMoveArrivalForwardDir(mutablePiece, move) : null;
+    mutablePiece.index = move.to;
+    mutablePiece.hasMoved = true;
+    mutablePiece.moveNumber = options.switchTurn === false ? mutablePiece.moveNumber : (state.round || 0) + 1;
+    if (move.promotion) {
+      mutablePiece.kind = normalizeFideChessPromotionKind(options.promotionKind);
+      mutablePiece.value = FIDE_CHESS_PIECE_VALUES[mutablePiece.kind];
+      delete mutablePiece.forwardDir;
+    } else if (wasPawn && Number.isInteger(arrivalForwardDir)) {
+      mutablePiece.forwardDir = arrivalForwardDir;
+    }
+    if (move.castle && Number.isInteger(move.rookId)) {
+      const rook = fideChessPieceById(state, move.rookId);
+      if (rook) {
+        rook.index = move.rookTo;
+        rook.hasMoved = true;
+        rook.moveNumber = mutablePiece.moveNumber;
+      }
+    }
+    state.enPassant = move.doubleStep && Number.isInteger(move.passedIndex)
+      ? {
+        pawnId: mutablePiece.id,
+        side: movingSide,
+        pawnIndex: mutablePiece.index,
+        targetIndex: move.passedIndex,
+        fromIndex: move.from,
+        moveNumber: (state.round || 0) + 1
+      }
+      : null;
+    state.halfmoveClock = mutablePiece.kind === 'pawn' || Number.isInteger(capturedId)
+      ? 0
+      : Math.max(0, Number(state.halfmoveClock) || 0) + 1;
+    if (options.switchTurn !== false) {
+      state.round = Math.max(0, Number(state.round) || 0) + 1;
+      if (movingSide === 'black') state.fullmoveNumber = Math.max(1, Number(state.fullmoveNumber) || 1) + 1;
+      state.turn = oppositeFideChessSide(movingSide);
+      state.selectedIndex = null;
+      state.resultDismissed = false;
+      if (options.record !== false) appendFideChessRecordMove(state, move, mutablePiece, capturedId);
+      if (options.finalize !== false) finalizeFideChessPosition(state);
+    }
+    return true;
+  }
+
+  function appendFideChessRecordMove(state, move, piece, capturedId) {
+    appendGameRecordMove(state, {
+      action: 'move',
+      side: piece.side,
+      piece: move.kind,
+      fromIndex: move.from,
+      toIndex: move.to,
+      capture: Number.isInteger(capturedId),
+      promotion: move.promotion ? piece.kind : undefined,
+      castle: move.castle || undefined,
+      enPassant: move.enPassant || undefined
+    });
+  }
+
+  function finalizeFideChessPosition(state) {
+    if (isFideChessPuzzle(state)) {
+      finalizeFideChessPuzzlePosition(state);
+      return;
+    }
+    const kingCapture = fideChessKingCaptureResult(state);
+    if (kingCapture) {
+      state.phase = 'gameover';
+      state.winner = kingCapture.winner;
+      state.result = kingCapture.result;
+      state.ending = kingCapture.ending;
+      return;
+    }
+    const active = state.turn;
+    if (fideChessDeadPosition(state)) {
+      state.phase = 'gameover';
+      state.winner = '';
+      state.result = 'draw';
+      state.ending = 'dead-position';
+      return;
+    }
+    const inCheck = fideChessIsSideInCheck(state, active);
+    if (!fideChessAnyLegalMove(state, active)) {
+      state.phase = 'gameover';
+      if (inCheck) {
+        state.winner = oppositeFideChessSide(active);
+        state.result = 'checkmate';
+        state.ending = 'checkmate';
+      } else {
+        state.winner = '';
+        state.result = 'draw';
+        state.ending = 'stalemate';
+      }
+    }
+  }
+
+  function finalizeFideChessPuzzlePosition(state) {
+    if (!isFideChessPuzzle(state)) return;
+    const threats = fideChessPuzzleThreats(state);
+    const waitingCount = fideChessPuzzleWaitingCount(state);
+    state.winner = '';
+    if (!threats.length && waitingCount === 0) {
+      state.phase = 'gameover';
+      state.result = 'solved';
+      state.ending = 'puzzle-solved';
+      return;
+    }
+    if (state.phase !== 'setup') state.phase = 'ready';
+    state.result = '';
+    state.ending = '';
+  }
+
+  function cloneFideChessState(source) {
+    return {
+      gameMode: GAME_MODES.FIDE_CHESS,
+      fideChessVariant: fideChessVariant(source),
+      preset: source.preset,
+      phase: source.phase,
+      removed: new Set(source.removed || []),
+      boxes: [],
+      newBoxIds: new Set(),
+      nextBoxId: 1,
+      score: 0,
+      pieces: (source.pieces || []).map(fideChessPieceClone),
+      nextPieceId: source.nextPieceId || nextFideChessPieceId(source.pieces),
+      selectedIndex: Number.isInteger(source.selectedIndex) ? source.selectedIndex : null,
+      selectedPieceId: normalizePositiveInteger(source.selectedPieceId, 0) || null,
+      turn: FIDE_CHESS_COLORS.includes(source.turn) ? source.turn : 'white',
+      winner: FIDE_CHESS_COLORS.includes(source.winner) ? source.winner : '',
+      result: source.result || '',
+      enPassant: source.enPassant ? { ...source.enPassant } : null,
+      halfmoveClock: Math.max(0, Number(source.halfmoveClock) || 0),
+      fullmoveNumber: Math.max(1, Number(source.fullmoveNumber) || 1),
+      resultDismissed: !!source.resultDismissed,
+      round: source.round || 0,
+      ending: source.ending || '',
+      recordMoves: cloneGameRecordMoves(source.recordMoves),
+      debugMessage: source.debugMessage || ''
+    };
+  }
+
+  function fideChessSideLabel(side) {
+    return side === 'black' ? 'Black' : 'White';
+  }
+
+  function fideChessPieceLabel(piece) {
+    if (!piece) return 'piece';
+    return `${fideChessSideLabel(piece.side).toLowerCase()} ${piece.kind || 'piece'}`;
+  }
+
+  function fideChessTurnInfo(state) {
+    if (isFideChessPuzzle(state)) return fideChessPuzzleTurnInfo(state);
+    const check = fideChessIsSideInCheck(state, state.turn) ? ', in check' : '';
+    return `${fideChessSideLabel(state.turn)} to move${check}`;
+  }
+
+  function fideChessPuzzleTurnInfo(state) {
+    const threatCount = fideChessPuzzleThreatCount(state);
+    const waitingCount = fideChessPuzzleWaitingCount(state);
+    const threatText = `${threatCount} threat${threatCount === 1 ? '' : 's'} remaining`;
+    const waitingText = waitingCount ? `${waitingCount} waiting` : '';
+    return appendTextPart(appendTextPart(threatText, waitingText), fideChessPuzzleSolvabilityHint(state));
+  }
+
+  function fideChessResultText(state) {
+    if (state.ending === 'puzzle-solved') return 'Puzzle solved';
+    if (state.ending === 'king-captured' && state.winner) return `${fideChessSideLabel(state.winner)} wins by capturing the king`;
+    if (state.ending === 'missing-kings') return 'draw by missing kings';
+    if (state.ending === 'checkmate' && state.winner) return `${fideChessSideLabel(state.winner)} wins by checkmate`;
+    if (state.ending === 'stalemate') return 'draw by stalemate';
+    if (state.ending === 'dead-position') return 'draw by dead position';
+    if (state.winner) return `${fideChessSideLabel(state.winner)} wins`;
+    return 'draw';
   }
 
   function createChineseCheckersState(presetOrId, options = {}) {
@@ -9915,6 +13161,7 @@
     let index = startIndex;
     let directions = order.slice(0, 2);
     if (directions.length !== 2 || !directions.every(Number.isInteger)) return null;
+    const sourceOrder = directions.slice();
     const transitions = [];
     const actualDirections = [];
     for (let step = 0; step < 2; step += 1) {
@@ -9936,11 +13183,16 @@
     return {
       index,
       orders: normalizeDiagonalOrders([directions, [directions[1], directions[0]]]),
+      sourceOrder,
+      outputDirections: directions.slice(0, 2),
       route: {
         kind: 'diagonal',
         start: startIndex,
         end: index,
+        path: [startIndex, index],
         directions: actualDirections,
+        sourceOrder: sourceOrder.slice(),
+        outputDirections: directions.slice(0, 2),
         transitions
       }
     };
@@ -14390,6 +17642,9 @@
         debugMessage: source.debugMessage || ''
       };
     }
+    if (isFideChessGame(source)) {
+      return cloneFideChessState(source);
+    }
     if (isSokobanGame(source)) {
       return {
         gameMode: GAME_MODES.SOKOBAN,
@@ -14470,6 +17725,7 @@
     if (isGoGame(state)) return emptyGoIndices(state);
     if (isReversiGame(state)) return emptyReversiIndices(state);
     if (isChineseCheckersGame(state)) return emptyChineseCheckersIndices(state);
+    if (isFideChessGame(state)) return emptyFideChessIndices(state);
     if (isSokobanGame(state)) return emptySokobanIndices(state);
     const occupied = new Set((state.boxes || []).map((box) => box.index));
     const total = state.preset.rows * state.preset.cols;
@@ -14497,6 +17753,16 @@
     const empty = [];
     for (let index = 0; index < total; index += 1) {
       if (!sokobanPlayerTileBlocked(state, index) && !occupied.has(index)) empty.push(index);
+    }
+    return empty;
+  }
+
+  function emptyFideChessIndices(state) {
+    const occupied = new Set(fideChessPlacedPieces(state).map((piece) => piece.index));
+    const total = state.preset.rows * state.preset.cols;
+    const empty = [];
+    for (let index = 0; index < total; index += 1) {
+      if (!state.removed.has(index) && !occupied.has(index)) empty.push(index);
     }
     return empty;
   }
@@ -14617,6 +17883,23 @@
     return isBoundaryGlueBoardPreset(source);
   }
 
+  function selectedFideChessPresetIsPuzzle(preset = null) {
+    if (selectedGameMode() !== GAME_MODES.FIDE_CHESS) return false;
+    return isFideChessPuzzlePreset(preset || selectedPreset());
+  }
+
+  function isFideChessPuzzlePreset(preset) {
+    if (!preset) return false;
+    if (normalizeFideChessVariant(preset.fideChessVariant || preset.chessVariant || preset.variant) === FIDE_CHESS_VARIANTS.KINGLESS_PUZZLE) return true;
+    if (normalizeFideChessPuzzleKind(preset.fideChessPuzzle || preset.chessPuzzle || preset.puzzle)) return true;
+    if (fideChessPresetHasNQueensGenerator(preset)) return true;
+    const pieces = Array.isArray(preset.pieces)
+      ? preset.pieces
+      : (Array.isArray(preset.chessPieces) ? preset.chessPieces : null);
+    if (!pieces || !pieces.length) return false;
+    return inferFideChessVariantFromPieces(pieces) === FIDE_CHESS_VARIANTS.KINGLESS_PUZZLE;
+  }
+
   function isBoundaryGlueBoardPreset(preset) {
     return !!(preset && (preset.boundaryGlueBoard || preset.id === BOUNDARY_GLUE_BOARD_PRESET_ID));
   }
@@ -14629,6 +17912,7 @@
     if (value === GAME_MODES.GOMOKU) return GAME_MODES.GOMOKU;
     if (value === GAME_MODES.CONNECT_FOUR) return GAME_MODES.CONNECT_FOUR;
     if (value === GAME_MODES.SOKOBAN) return GAME_MODES.SOKOBAN;
+    if (value === GAME_MODES.FIDE_CHESS) return GAME_MODES.FIDE_CHESS;
     return GAME_MODES.NUMBER_2048;
   }
 
@@ -14641,7 +17925,7 @@
   }
 
   function supportsMoveNumberLabels(state = game) {
-    return isGomokuGame(state) || isGoGame(state) || isConnectFourGame(state);
+    return isGomokuGame(state) || isGoGame(state) || isConnectFourGame(state) || isFideChessGame(state);
   }
 
   function shouldShowMoveNumberLabels(state = game) {
@@ -14649,17 +17933,22 @@
   }
 
   function normalizePlacementDisplayStyle(value, fallback = 'vertex') {
-    const style = String(value || '').trim().toLowerCase();
-    if (style === 'polished-vertex' || style === 'polished' || style === 'polished gridded board') return 'polished-vertex';
-    if (style === 'center' || style === 'tile' || style === 'tile board') return 'center';
-    if (style === 'vertex' || style === 'gridded board' || style === 'grid') return 'vertex';
-    return fallback || 'vertex';
+    const style = String(value || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+    const fallbackStyle = fallback === '' ? '' : (fallback || 'vertex');
+    if (style === 'polished-vertex' || style === 'polished' || style === 'polished-gridded-board') return 'polished-vertex';
+    if (style === 'center' || style === 'tile' || style === 'tile-board') return 'center';
+    if (style === 'chessboard' || style === 'chess-board' || style === 'classical-board' || style === 'classical-chessboard' || style === 'classical-chess-board') return 'chessboard';
+    if (style === 'vertex' || style === 'gridded-board' || style === 'grid') return 'vertex';
+    return fallbackStyle;
   }
 
   function defaultPlacementDisplayForMode(mode = selectedGameMode()) {
     const normalized = gameModeFromUrlParam(mode) || GAME_MODES.GOMOKU;
+    if (normalized === GAME_MODES.FIDE_CHESS && selectedFideChessPresetIsPuzzle()) return 'center';
     const display = normalizePlacementDisplayStyle(presetDefaultDisplayByMode[normalized], '');
-    return display || 'vertex';
+    if (display) return display;
+    if (normalized === GAME_MODES.FIDE_CHESS) return 'chessboard';
+    return 'vertex';
   }
 
   function applyDefaultPlacementDisplayForMode(mode = selectedGameMode()) {
@@ -14707,7 +17996,18 @@
     if (mode === GAME_MODES.NUMBER_2048) return 4;
     if (mode === GAME_MODES.GO) return 19;
     if (mode === GAME_MODES.REVERSI) return 10;
+    if (mode === GAME_MODES.FIDE_CHESS) return FIDE_CHESS_DEFAULT_BOARD_SIZE;
     return GOMOKU_DEFAULT_BOARD_SIZE;
+  }
+
+  function defaultBoardSizeForPreset(mode, preset) {
+    const fallback = defaultBoardSizeForMode(mode);
+    const source = preset || selectedPreset();
+    if (!source) return fallback;
+    const raw = firstDefinedValue(source.defaultBoardSize, source.boardSize, source.n, source.rows);
+    if (raw == null) return fallback;
+    const min = fideChessPresetHasNQueensGenerator(source) ? FIDE_CHESS_PUZZLE_MIN_BOARD_SIZE : BOUNDARY_GLUE_MIN_BOARD_SIZE;
+    return clampInteger(raw, min, BOUNDARY_GLUE_MAX_BOARD_SIZE, fallback);
   }
 
   function defaultBoardDimensionsForMode(mode) {
@@ -14729,7 +18029,7 @@
   }
 
   function dynamicBoardSizeMode(mode) {
-    return mode === GAME_MODES.GOMOKU || mode === GAME_MODES.GO || mode === GAME_MODES.REVERSI;
+    return mode === GAME_MODES.GOMOKU || mode === GAME_MODES.GO || mode === GAME_MODES.REVERSI || mode === GAME_MODES.FIDE_CHESS;
   }
 
   function selectedGoKomi() {
@@ -14738,6 +18038,32 @@
 
   function selectedGoScoringMethod() {
     return normalizeGoScoringMethod(refs.goScoringMethod ? refs.goScoringMethod.value : GO_SCORING_METHOD_DEFAULT);
+  }
+
+  function normalizeFideChessPieceDisplay(value) {
+    const text = String(value || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+    if (text === 'mosaic' || text === 'mosaic-calculator' || text === 'calculator' || text === 'staunton' || text === 'vector') return 'mosaic';
+    if (text === 'minigame' || text === 'minigame-silhouette' || text === 'silhouette' || text === 'classic') return 'minigame';
+    return 'minigame';
+  }
+
+  function selectedFideChessPieceDisplay() {
+    const display = normalizeFideChessPieceDisplay(refs.fideChessPieceDisplay ? refs.fideChessPieceDisplay.value : 'minigame');
+    if (!FIDE_CHESS_PIECE_DISPLAY_STYLES.includes(display)) return 'minigame';
+    return display;
+  }
+
+  function normalizeBooleanSetting(value, fallback = true) {
+    if (value == null) return fallback;
+    if (typeof value === 'boolean') return value;
+    const text = String(value).trim().toLowerCase();
+    if (text === 'true' || text === '1' || text === 'yes' || text === 'on' || text === 'show' || text === 'visible') return true;
+    if (text === 'false' || text === '0' || text === 'no' || text === 'off' || text === 'hide' || text === 'hidden') return false;
+    return fallback;
+  }
+
+  function selectedFideChessPuzzleAttackBorders() {
+    return !refs.fideChessPuzzleAttackBorders || !!refs.fideChessPuzzleAttackBorders.checked;
   }
 
   function selectedGameOptions(base = {}) {
@@ -14772,7 +18098,10 @@
       };
     }
     const value = refs.gomokuSize ? refs.gomokuSize.value : defaults.rows;
-    const size = selectedPresetIsBoundaryGlueBoard()
+    const source = selectedPreset();
+    const size = fideChessPresetHasNQueensGenerator(source)
+      ? clampInteger(value, FIDE_CHESS_PUZZLE_MIN_BOARD_SIZE, BOUNDARY_GLUE_MAX_BOARD_SIZE, defaultBoardSizeForPreset(mode, source))
+      : selectedPresetIsBoundaryGlueBoard()
       ? normalizeBoundaryGlueBoardSize(value, defaults.rows)
       : clampInteger(value, GOMOKU_MIN_BOARD_SIZE, GOMOKU_MAX_BOARD_SIZE, defaults.rows);
     return { rows: size, cols: size };
@@ -14883,6 +18212,7 @@
 
   function createSelectedGameState(presetOrId, options = {}) {
     const mode = selectedGameMode();
+    if (mode === GAME_MODES.FIDE_CHESS) return createFideChessState(presetOrId, options);
     if (mode === GAME_MODES.CHINESE_CHECKERS) return createChineseCheckersState(presetOrId, options);
     if (mode === GAME_MODES.REVERSI) return createReversiState(presetOrId, options);
     if (mode === GAME_MODES.GO) return createGoState(presetOrId, options);
@@ -14894,6 +18224,7 @@
 
   function beginSelectedGame(presetOrId, options = {}) {
     const mode = selectedGameMode();
+    if (mode === GAME_MODES.FIDE_CHESS) return beginFideChessGame(presetOrId, options);
     if (mode === GAME_MODES.CHINESE_CHECKERS) return beginChineseCheckersGame(presetOrId, options);
     if (mode === GAME_MODES.REVERSI) return beginReversiGame(presetOrId, options);
     if (mode === GAME_MODES.GO) return beginGoGame(presetOrId, options);
@@ -14927,12 +18258,17 @@
     return !!state && state.gameMode === GAME_MODES.SOKOBAN;
   }
 
+  function isFideChessGame(state) {
+    return !!state && state.gameMode === GAME_MODES.FIDE_CHESS;
+  }
+
   function isPlacementGame(state) {
     return isGomokuGame(state)
       || isConnectFourGame(state)
       || isGoGame(state)
       || isReversiGame(state)
-      || isChineseCheckersGame(state);
+      || isChineseCheckersGame(state)
+      || isFideChessGame(state);
   }
 
   function is2048Game(state) {
@@ -14946,6 +18282,7 @@
     if (isGomokuGame(state)) return GAME_MODES.GOMOKU;
     if (isConnectFourGame(state)) return GAME_MODES.CONNECT_FOUR;
     if (isSokobanGame(state)) return GAME_MODES.SOKOBAN;
+    if (isFideChessGame(state)) return GAME_MODES.FIDE_CHESS;
     return GAME_MODES.NUMBER_2048;
   }
 
@@ -15096,6 +18433,12 @@
       );
     }
     if (pieceSetsHaveEntries(pieceSets)) normalized.pieceSets = pieceSetsToTileRefs(pieceSets, cols);
+    const chessPieces = normalizeFideChessPieces(
+      importedPresetValues(payload, source, ['pieces'], 'pieces', shell),
+      shell,
+      removedSet
+    ).map((piece) => fideChessPieceExport(piece, cols));
+    if (chessPieces.length) normalized.pieces = chessPieces;
     const goKomi = firstPresentValue(source, ['goKomi', 'komi']) || firstPresentValue(payload, ['goKomi', 'komi']);
     if (goKomi != null) normalized.goKomi = normalizeGoKomi(goKomi);
     const reversiOpening = firstPresentValue(source, ['reversiOpening']) || firstPresentValue(payload, ['reversiOpening']);
@@ -15120,6 +18463,17 @@
     if (source.dynamicGomokuSize === true || payload.dynamicGomokuSize === true) normalized.dynamicGomokuSize = true;
     const dynamicLabel = firstPresentValue(source, ['dynamicGomokuLabelPrefix']) || firstPresentValue(payload, ['dynamicGomokuLabelPrefix']);
     if (dynamicLabel) normalized.dynamicGomokuLabelPrefix = sanitizeImportedText(dynamicLabel, '');
+    const fideVariant = normalizeFideChessVariant(firstPresentValue(source, ['fideChessVariant', 'chessVariant', 'variant']) || firstPresentValue(payload, ['fideChessVariant', 'chessVariant', 'variant']));
+    if (fideVariant) normalized.fideChessVariant = fideVariant;
+    const fidePuzzle = normalizeFideChessPuzzleKind(firstPresentValue(source, ['fideChessPuzzle', 'chessPuzzle', 'puzzle']) || firstPresentValue(payload, ['fideChessPuzzle', 'chessPuzzle', 'puzzle']));
+    if (fidePuzzle) normalized.fideChessPuzzle = fidePuzzle;
+    const fidePuzzleGenerator = normalizeFideChessPuzzleGenerator(firstPresentValue(source, ['fideChessPuzzleGenerator', 'chessPuzzleGenerator']) || firstPresentValue(payload, ['fideChessPuzzleGenerator', 'chessPuzzleGenerator']));
+    if (fidePuzzleGenerator) normalized.fideChessPuzzleGenerator = fidePuzzleGenerator;
+    if (source.fideChessPuzzleTorus === true || payload.fideChessPuzzleTorus === true || source.torusQueens === true || payload.torusQueens === true) normalized.fideChessPuzzleTorus = true;
+    const defaultBoardSize = firstPresentValue(source, ['defaultBoardSize', 'boardSize', 'n']) || firstPresentValue(payload, ['defaultBoardSize', 'boardSize', 'n']);
+    if ((fideVariant === FIDE_CHESS_VARIANTS.KINGLESS_PUZZLE || fidePuzzle || fidePuzzleGenerator) && defaultBoardSize != null) {
+      normalized.defaultBoardSize = clampInteger(defaultBoardSize, FIDE_CHESS_PUZZLE_MIN_BOARD_SIZE, BOUNDARY_GLUE_MAX_BOARD_SIZE, FIDE_CHESS_DEFAULT_BOARD_SIZE);
+    }
     if (source.boundaryGlueBoard === true || payload.boundaryGlueBoard === true) normalized.boundaryGlueBoard = true;
     if (source.boundaryGlueMaterialized === true || payload.boundaryGlueMaterialized === true) {
       normalized.boundaryGlueMaterialized = true;
@@ -15552,6 +18906,9 @@
     if (preset.dynamicGomokuSize) {
       applyDynamicBoardSize(preset, options.boardSize || preset.rows);
     }
+    if (fideChessPresetHasNQueensGenerator(preset)) {
+      applyFideChessNQueensPuzzlePreset(preset);
+    }
     if (preset.randomGlue) {
       preset.gluedEdges = generateRandomBoundaryGlue(preset, options.glueRng || Math.random);
     }
@@ -15563,11 +18920,51 @@
   }
 
   function applyDynamicBoardSize(preset, size) {
-    const boardSize = clampInteger(size, REVERSI_MIN_BOARD_SIZE, GOMOKU_MAX_BOARD_SIZE, GOMOKU_DEFAULT_BOARD_SIZE);
+    const min = fideChessPresetHasNQueensGenerator(preset) ? FIDE_CHESS_PUZZLE_MIN_BOARD_SIZE : REVERSI_MIN_BOARD_SIZE;
+    const fallback = defaultBoardSizeForPreset(gameModeFromPresetGroup(preset), preset);
+    const boardSize = clampInteger(size, min, GOMOKU_MAX_BOARD_SIZE, fallback);
     preset.rows = boardSize;
     preset.cols = boardSize;
     const labelPrefix = preset.dynamicGomokuLabelPrefix || (preset.randomGlue ? 'random glue' : 'classic');
     preset.label = `${labelPrefix} ${boardSize}*${boardSize}`;
+    return preset;
+  }
+
+  function fideChessPresetHasNQueensGenerator(preset) {
+    return normalizeFideChessPuzzleGenerator(preset && (preset.fideChessPuzzleGenerator || preset.chessPuzzleGenerator)) === FIDE_CHESS_PUZZLE_N_QUEENS;
+  }
+
+  function normalizeFideChessPuzzleGenerator(value) {
+    const text = String(value || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+    return text === FIDE_CHESS_PUZZLE_N_QUEENS || text === 'n-queen' || text === 'nqueen' || text === 'queens'
+      ? FIDE_CHESS_PUZZLE_N_QUEENS
+      : '';
+  }
+
+  function applyFideChessNQueensPuzzlePreset(preset) {
+    const rows = clampInteger(preset.rows, FIDE_CHESS_PUZZLE_MIN_BOARD_SIZE, BOUNDARY_GLUE_MAX_BOARD_SIZE, FIDE_CHESS_DEFAULT_BOARD_SIZE);
+    const cols = rows;
+    const torus = !!(preset.fideChessPuzzleTorus || preset.torusQueens || preset.boundaryGlueMode === BOUNDARY_GLUE_MODES.TORUS);
+    preset.lattice = 'square';
+    preset.rows = rows;
+    preset.cols = cols;
+    preset.surface = torus ? 'toroidal n-queens puzzle' : 'n-queens puzzle';
+    preset.fideChessVariant = FIDE_CHESS_VARIANTS.KINGLESS_PUZZLE;
+    preset.fideChessPuzzle = FIDE_CHESS_PUZZLE_N_QUEENS;
+    preset.fideChessPuzzleTorus = torus;
+    preset.gluedEdges = torus ? generateTorusBoundaryGlue(rows, cols) : [];
+    preset.cutEdges = [];
+    preset.removedTiles = [];
+    preset.pieces = Array.from({ length: rows }, (_, index) => ({
+      id: index + 1,
+      row: index + 1,
+      col: index + 1,
+      side: 'black',
+      color: 'black',
+      kind: 'queen'
+    }));
+    const labelPrefix = torus ? 'toroidal N queens puzzle' : 'N queens puzzle';
+    preset.label = `${labelPrefix} ${rows}x${cols}`;
     return preset;
   }
 
@@ -15686,6 +19083,7 @@
       connectFourHoles: (source.connectFourHoles || []).map((tile) => ({ ...tile })),
       gluedEdges: (source.gluedEdges || []).map(cloneGluePair),
       pieceSets: source.pieceSets ? clonePlain(source.pieceSets) : undefined,
+      pieces: Array.isArray(source.pieces) ? source.pieces.map((piece) => ({ ...piece })) : undefined,
       chineseCheckersPlayers: Array.isArray(source.chineseCheckersPlayers) ? source.chineseCheckersPlayers.slice() : undefined,
       chineseCheckersCamps: source.chineseCheckersCamps ? clonePlain(source.chineseCheckersCamps) : undefined,
       sokoban: source.sokoban ? clonePlain(source.sokoban) : undefined
@@ -15950,6 +19348,38 @@
       if (refs.round) refs.round.textContent = String(game.moves || game.round || 0);
       return;
     }
+    if (isFideChessGame(game)) {
+      if (isFideChessPuzzle(game)) {
+        const threatCount = fideChessPuzzleThreatCount(game);
+        const waitingCount = fideChessPuzzleWaitingCount(game);
+        if (refs.scoreLabel) refs.scoreLabel.textContent = game.phase === 'gameover' ? 'Result' : 'Puzzle';
+        if (refs.highestLabel) refs.highestLabel.textContent = 'Placed';
+        if (refs.existingLabel) refs.existingLabel.textContent = 'Threats';
+        if (refs.removedLabel) refs.removedLabel.textContent = 'Waiting';
+        if (refs.roundLabel) refs.roundLabel.textContent = 'Moves';
+        if (refs.score) refs.score.textContent = game.phase === 'gameover' ? fideChessResultText(game) : 'Arrange';
+        if (refs.highest) refs.highest.textContent = String(fideChessPlacedPieces(game).length);
+        if (refs.existing) refs.existing.textContent = String(threatCount);
+        if (refs.removed) refs.removed.textContent = String(waitingCount);
+        if (refs.round) refs.round.textContent = String(game.round || 0);
+        return;
+      }
+      const counts = fideChessPieceCounts(game);
+      const checkedSides = FIDE_CHESS_COLORS.filter((side) => fideChessIsSideInCheck(game, side));
+      if (refs.scoreLabel) refs.scoreLabel.textContent = game.phase === 'gameover' ? 'Result' : 'Turn';
+      if (refs.highestLabel) refs.highestLabel.textContent = 'White pieces';
+      if (refs.existingLabel) refs.existingLabel.textContent = 'Black pieces';
+      if (refs.removedLabel) refs.removedLabel.textContent = 'Check';
+      if (refs.roundLabel) refs.roundLabel.textContent = 'Moves';
+      if (refs.score) refs.score.textContent = game.phase === 'gameover' ? fideChessResultText(game) : fideChessSideLabel(game.turn);
+      if (refs.highest) refs.highest.textContent = String(counts.white);
+      if (refs.existing) refs.existing.textContent = String(counts.black);
+      if (refs.removed) refs.removed.textContent = checkedSides.length
+        ? `${checkedSides.map(fideChessSideLabel).join(' and ')} in check`
+        : 'none';
+      if (refs.round) refs.round.textContent = String(game.round || 0);
+      return;
+    }
     if (refs.scoreLabel) refs.scoreLabel.textContent = 'Score';
     if (refs.highestLabel) refs.highestLabel.textContent = 'Highest tile';
     if (refs.existingLabel) refs.existingLabel.textContent = 'Existing tiles';
@@ -15971,8 +19401,10 @@
     const modeReversi = catalogAvailable && (isReversiGame(game) || selectedGameMode() === GAME_MODES.REVERSI);
     const modeChineseCheckers = catalogAvailable && (isChineseCheckersGame(game) || selectedGameMode() === GAME_MODES.CHINESE_CHECKERS);
     const modeSokoban = catalogAvailable && (isSokobanGame(game) || selectedGameMode() === GAME_MODES.SOKOBAN);
+    const modeFideChess = catalogAvailable && (isFideChessGame(game) || selectedGameMode() === GAME_MODES.FIDE_CHESS);
+    const modeFideChessPuzzle = modeFideChess && (isFideChessPuzzle(game) || selectedFideChessPresetIsPuzzle());
     const modeDirectional = mode2048 || modeSokoban;
-    const modePlacement = modeGomoku || modeConnectFour || modeGo || modeReversi || modeChineseCheckers;
+    const modePlacement = modeGomoku || modeConnectFour || modeGo || modeReversi || modeChineseCheckers || modeFideChess;
     const boundaryGlueBoard = catalogAvailable && selectedPresetIsBoundaryGlueBoard();
     const boundaryRectangle = boundaryGlueBoard && selectedBoundaryGlueShape() === 'rectangle';
     syncConnectFourFallOptions();
@@ -16011,6 +19443,12 @@
         control.hidden = !modeSokoban;
       });
     }
+    if (refs.modeFideChessControls) {
+      refs.modeFideChessControls.forEach((control) => {
+        control.hidden = !modeFideChess;
+      });
+    }
+    if (refs.fideChessPuzzleThreatRow) refs.fideChessPuzzleThreatRow.hidden = !modeFideChessPuzzle;
     if (refs.modeDirectionalControls) {
       refs.modeDirectionalControls.forEach((control) => {
         control.hidden = !modeDirectional;
@@ -16022,13 +19460,14 @@
     if (refs.boundaryGlueRectRow) refs.boundaryGlueRectRow.hidden = !boundaryGlueBoard || !boundaryRectangle;
     if (refs.gomokuSizeRow) refs.gomokuSizeRow.hidden = !selectedPresetUsesDynamicBoardSize() || boundaryRectangle;
     if (refs.gomokuSize) {
-      refs.gomokuSize.min = boundaryGlueBoard ? String(BOUNDARY_GLUE_MIN_BOARD_SIZE) : String(GOMOKU_MIN_BOARD_SIZE);
-      refs.gomokuSize.max = boundaryGlueBoard ? String(BOUNDARY_GLUE_MAX_BOARD_SIZE) : String(GOMOKU_MAX_BOARD_SIZE);
+      const fideNQueensPreset = fideChessPresetHasNQueensGenerator(selectedPreset());
+      refs.gomokuSize.min = boundaryGlueBoard || fideNQueensPreset ? String(BOUNDARY_GLUE_MIN_BOARD_SIZE) : String(GOMOKU_MIN_BOARD_SIZE);
+      refs.gomokuSize.max = boundaryGlueBoard || fideNQueensPreset ? String(BOUNDARY_GLUE_MAX_BOARD_SIZE) : String(GOMOKU_MAX_BOARD_SIZE);
       refs.gomokuSize.step = '1';
     }
     if (refs.placementDisplayRow) refs.placementDisplayRow.hidden = !modePlacement;
     if (refs.moveNumberLabelRow) refs.moveNumberLabelRow.hidden = !(modeGomoku || modeConnectFour || modeGo);
-    if (refs.placementPieceSizeRow) refs.placementPieceSizeRow.hidden = !(modeGomoku || modeConnectFour || modeGo || modeReversi);
+    if (refs.placementPieceSizeRow) refs.placementPieceSizeRow.hidden = !(modeGomoku || modeConnectFour || modeGo || modeReversi || modeFideChess);
     syncPlacementPieceSizeOutput();
     if (refs.connectFourFall) refs.connectFourFall.disabled = modeConnectFour && game && game.phase !== 'setup';
     syncGoScoringControls(modeGo);
@@ -16376,6 +19815,10 @@
       const steps = chineseCheckersMoveTransitionCount(segments);
       const pauses = Math.max(0, segments.length - 1);
       return Math.max(80, (Math.max(1, steps) * moveTime) + (pauses * jumpPause));
+    }
+    if (event.kind === 'fideChessMove') {
+      const steps = fideChessAnimationStepCount(event);
+      return Math.min(920, Math.max(150, base * 0.58 + Math.max(1, steps) * 72));
     }
     if (event.kind === 'bounceGroup') return Math.max(100, base * 0.9);
     if (event.kind === 'explode') return Math.max(120, base * 0.85);
@@ -16753,6 +20196,17 @@
     return summary;
   }
 
+  function compareFideChessPieceSummaries(left, right) {
+    const leftWaiting = !!(left && left.waiting);
+    const rightWaiting = !!(right && right.waiting);
+    if (leftWaiting !== rightWaiting) return leftWaiting ? 1 : -1;
+    const leftIndex = Number.isInteger(left && left.index) ? left.index : Number.MAX_SAFE_INTEGER;
+    const rightIndex = Number.isInteger(right && right.index) ? right.index : Number.MAX_SAFE_INTEGER;
+    const leftOrder = normalizeOptionalMoveNumber(left && left.waitingOrder) || Number.MAX_SAFE_INTEGER;
+    const rightOrder = normalizeOptionalMoveNumber(right && right.waitingOrder) || Number.MAX_SAFE_INTEGER;
+    return leftIndex - rightIndex || leftOrder - rightOrder || ((left && left.id) || 0) - ((right && right.id) || 0);
+  }
+
   function stateSummary(state) {
     if (isGomokuGame(state)) {
       return {
@@ -16839,6 +20293,37 @@
         round: state.round || 0
       };
     }
+    if (isFideChessGame(state)) {
+      return {
+        gameMode: GAME_MODES.FIDE_CHESS,
+        fideChessVariant: fideChessVariant(state),
+        pieces: (state.pieces || [])
+          .map((piece) => ({
+            id: piece.id,
+            index: Number.isInteger(piece.index) ? piece.index : null,
+            waiting: !!piece.waiting,
+            waitingOrder: normalizeOptionalMoveNumber(piece.waitingOrder),
+            side: piece.side,
+            kind: piece.kind,
+            forwardDir: piece.kind === 'pawn' && Number.isInteger(normalizeFideChessForwardDir(piece.forwardDir))
+              ? normalizeFideChessForwardDir(piece.forwardDir)
+              : undefined,
+            hasMoved: !!piece.hasMoved,
+            moveNumber: normalizeOptionalMoveNumber(piece.moveNumber)
+          }))
+          .sort(compareFideChessPieceSummaries),
+        removed: Array.from(state.removed).sort((a, b) => a - b),
+        selectedIndex: Number.isInteger(state.selectedIndex) ? state.selectedIndex : null,
+        selectedPieceId: normalizePositiveInteger(state.selectedPieceId, 0) || null,
+        turn: state.turn,
+        winner: state.winner || '',
+        result: state.result || '',
+        enPassant: state.enPassant ? { ...state.enPassant } : null,
+        halfmoveClock: Math.max(0, Number(state.halfmoveClock) || 0),
+        fullmoveNumber: Math.max(1, Number(state.fullmoveNumber) || 1),
+        round: state.round || 0
+      };
+    }
     if (isSokobanGame(state)) {
       return {
         gameMode: GAME_MODES.SOKOBAN,
@@ -16901,6 +20386,7 @@
     beginGomokuGame,
     beginReversiGame,
     beginSokobanGame,
+    beginFideChessGame,
     blastNeighborIndices,
     cloneGameState,
     connectFourCyclingHoleIndices,
@@ -16914,6 +20400,7 @@
     createGomokuState,
     createReversiState,
     createSokobanState,
+    createFideChessState,
     createRng,
     centeredReversiOpening,
     directNeighborIndex,
@@ -16935,6 +20422,7 @@
     isGameOver,
     isExplosionModeActive,
     isSokobanGame,
+    isFideChessGame,
     latticeForPreset,
     base64UrlDecodeUtf8,
     extractReturnedPresetObjectText,
@@ -16953,6 +20441,9 @@
     placeConnectFourToken,
     placeReversiDisc,
     moveSokobanPlayers,
+    moveFideChessPiece,
+    fideChessLegalMovesFromIndex,
+    fideChessSetupIssue,
     reversiFlipsForMove,
     chineseCheckerMoveMap,
     scoreGoGame,

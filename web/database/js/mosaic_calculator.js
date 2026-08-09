@@ -79,7 +79,7 @@
     DSL: 'dsl',
     VERBOSE: 'verbose'
   };
-  const EXPORT_GROUP_FALLBACKS = ['2048', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers', 'Sokoban'];
+  const EXPORT_GROUP_FALLBACKS = ['2048', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers', 'Sokoban', 'FIDE Chess'];
   const KNOT_PRESETS = [
     {
       id: 'hopf-link',
@@ -736,6 +736,34 @@
   const DEGENERATION_FORCE_DURATION_MS = 5000;
   const PRESET_PIECE_COLORS = ['black', 'white', 'red', 'yellow', 'blue', 'green'];
   const PRESET_PIECE_COLOR_ORDER = new Map(PRESET_PIECE_COLORS.map((color, index) => [color, index]));
+  const CHESS_PIECE_KINDS = ['king', 'queen', 'rook', 'bishop', 'knight', 'pawn'];
+  const CHESS_PIECE_SIDES = ['white', 'black'];
+  const CHESS_PIECE_LABELS = {
+    king: 'king',
+    queen: 'queen',
+    rook: 'rook',
+    bishop: 'bishop',
+    knight: 'knight',
+    pawn: 'pawn'
+  };
+  const CHESS_PIECE_VALUES = {
+    king: 'K',
+    queen: 'Q',
+    rook: 'R',
+    bishop: 'B',
+    knight: 'N',
+    pawn: 'P'
+  };
+  const CHESS_PAWN_FORWARD_DIR_NAMES = ['E', 'S', 'W', 'N'];
+  const CHESS_ROYAL_STYLE_VARIANTS = [
+    { id: 'vector-c', suffix: '', label: 'Staunton' }
+  ];
+  const CHESS_ROYAL_VARIANT_KINDS = ['king', 'queen'];
+  const TESSELLATED_PALETTE_HEX_WIDTH = 44;
+  const TESSELLATED_PALETTE_HEX_HEIGHT = 50;
+  const TESSELLATED_PALETTE_HEX_GAP = 0;
+  const TESSELLATED_PALETTE_SQUARE_SIZE = 44;
+  const TESSELLATED_PALETTE_SQUARE_GAP = 0;
   const SOKOBAN_DECORATION_FIELDS = {
     'sokoban-player': 'players',
     'sokoban-box': 'boxes',
@@ -817,6 +845,7 @@
     editMode: 'rotate',
     backgroundDecorationKind: 'input-hole',
     backgroundDecorationColor: 'black',
+    backgroundChessPawnDirection: 'auto',
     selectedDecorationPaletteId: 'input-hole',
     vertexDecorations: {},
     halfEdgeDecorations: {},
@@ -980,6 +1009,8 @@
     refs.backgroundDecorationColor = document.getElementById('background-decoration-color');
     refs.backgroundDecorationPaletteRow = document.getElementById('background-decoration-palette-row');
     refs.backgroundDecorationPalette = document.getElementById('background-decoration-palette');
+    refs.backgroundChessPawnDirectionRow = document.getElementById('background-chess-pawn-direction-row');
+    refs.backgroundChessPawnDirection = document.getElementById('background-chess-pawn-direction');
     refs.backgroundMultiEdgeRow = document.getElementById('background-multi-edge-row');
     refs.backgroundMultiEdges = document.getElementById('background-multi-edges');
     refs.backgroundBeginSecondChain = document.getElementById('background-begin-second-chain');
@@ -1257,6 +1288,13 @@
       refs.backgroundDecorationColor.addEventListener('change', () => {
         state.backgroundDecorationColor = normalizePresetPieceColor(refs.backgroundDecorationColor.value) || 'black';
         syncBackgroundModeControls();
+      });
+    }
+    if (refs.backgroundChessPawnDirection) {
+      refs.backgroundChessPawnDirection.addEventListener('change', () => {
+        state.backgroundChessPawnDirection = normalizeChessPawnDirectionChoice(refs.backgroundChessPawnDirection.value);
+        syncBackgroundModeControls();
+        renderDecorationPalette();
       });
     }
     if (refs.loadBackgroundPreset) {
@@ -1807,6 +1845,8 @@
       normalizeViewOffset();
       syncDualGraphDegenerationWidePlacement();
       syncWanderPlacement();
+      layoutTilePalette();
+      layoutDecorationPalette();
       draw(analyze());
     }, 80));
 
@@ -1835,6 +1875,7 @@
     cancelDrawGesture();
     if (isTilingMode()) renderTilePalette();
     updateInputModePanels();
+    if (isTilingMode()) layoutTilePalette();
     syncImportPresetControls();
     updateDrawModeControls();
     syncBackgroundModeControls();
@@ -1943,6 +1984,7 @@
       button.addEventListener('click', () => selectPaletteTile(entry));
       button.addEventListener('pointerdown', (event) => beginPaletteDrag(event, entry));
     });
+    layoutTilePalette();
   }
 
   function renderDecorationPalette() {
@@ -1967,7 +2009,62 @@
       drawDecorationPreview(canvas, entry.kind);
 
       button.addEventListener('click', () => selectDecorationPaletteEntry(entry));
+      button.addEventListener('pointerdown', (event) => beginDecorationPaletteDrag(event, entry));
     });
+    layoutDecorationPalette();
+  }
+
+  function layoutTilePalette() {
+    layoutTessellatedPalette(refs.tilePalette);
+  }
+
+  function layoutDecorationPalette() {
+    layoutTessellatedPalette(refs.backgroundDecorationPalette);
+  }
+
+  function layoutTessellatedPalette(palette) {
+    if (!palette) return;
+    const buttons = Array.from(palette.querySelectorAll('.tile-swatch'));
+    if (!buttons.length) {
+      palette.style.height = '0px';
+      return;
+    }
+    const availableWidth = palette.clientWidth || palette.getBoundingClientRect().width || 0;
+    if (availableWidth <= 0) return;
+    const lattice = getLattice();
+    const shape = lattice.shape === 'hex' ? 'hex' : 'square';
+    palette.dataset.latticeShape = shape;
+    if (shape === 'square') {
+      const size = TESSELLATED_PALETTE_SQUARE_SIZE;
+      const gap = TESSELLATED_PALETTE_SQUARE_GAP;
+      const step = size + gap;
+      const columns = Math.max(1, Math.floor((availableWidth + gap) / step));
+      buttons.forEach((button, index) => {
+        const row = Math.floor(index / columns);
+        const col = index % columns;
+        button.style.left = `${col * step}px`;
+        button.style.top = `${row * step}px`;
+      });
+      const rows = Math.ceil(buttons.length / columns);
+      palette.style.height = `${Math.ceil(rows * size + Math.max(0, rows - 1) * gap)}px`;
+      return;
+    }
+    const hexWidth = TESSELLATED_PALETTE_HEX_WIDTH;
+    const hexHeight = TESSELLATED_PALETTE_HEX_HEIGHT;
+    const gap = TESSELLATED_PALETTE_HEX_GAP;
+    const colStep = hexWidth + gap;
+    const rowStep = hexHeight * 0.75 + gap;
+    const columns = Math.max(1, Math.floor((availableWidth - hexWidth * 1.5) / colStep) + 1);
+    buttons.forEach((button, index) => {
+      const row = Math.floor(index / columns);
+      const col = index % columns;
+      const left = col * colStep + (row % 2 ? hexWidth * 0.5 : 0);
+      const top = row * rowStep;
+      button.style.left = `${left}px`;
+      button.style.top = `${top}px`;
+    });
+    const rows = Math.ceil(buttons.length / columns);
+    palette.style.height = `${Math.ceil((rows - 1) * rowStep + hexHeight)}px`;
   }
 
   function backgroundDecorationPreferences() {
@@ -1982,8 +2079,31 @@
       { id: 'sokoban-sea', kind: 'sokoban-sea', label: 'sea' },
       { id: 'sokoban-wall', kind: 'sokoban-wall', label: 'Sokoban wall' },
       { id: 'sokoban-ice', kind: 'sokoban-ice', label: 'icy ground' },
-      { id: 'sokoban-energy-bridge', kind: 'sokoban-energy-bridge', label: 'Energy Bridge' }
+      { id: 'sokoban-energy-bridge', kind: 'sokoban-energy-bridge', label: 'Energy Bridge' },
+      ...chessDecorationPreferences()
     ];
+  }
+
+  function chessDecorationPreferences() {
+    return CHESS_PIECE_SIDES.flatMap((side) => {
+      const royalOptions = CHESS_ROYAL_VARIANT_KINDS.flatMap((pieceKind) => (
+        CHESS_ROYAL_STYLE_VARIANTS.map((variant) => ({
+          id: `chess-${side}-${pieceKind}-${variant.id}`,
+          kind: `chess-${side}-${pieceKind}-${variant.id}`,
+          label: variant.suffix
+            ? `${side} ${CHESS_PIECE_LABELS[pieceKind]} ${variant.suffix}: ${variant.label}`
+            : `${side} ${CHESS_PIECE_LABELS[pieceKind]}`
+        }))
+      ));
+      const regularPieces = CHESS_PIECE_KINDS
+        .filter((pieceKind) => !CHESS_ROYAL_VARIANT_KINDS.includes(pieceKind))
+        .map((pieceKind) => ({
+          id: `chess-${side}-${pieceKind}`,
+          kind: `chess-${side}-${pieceKind}`,
+          label: `${side} ${CHESS_PIECE_LABELS[pieceKind]}`
+        }));
+      return [...royalOptions, ...regularPieces];
+    });
   }
 
   function selectDecorationPaletteEntry(entry) {
@@ -2049,6 +2169,47 @@
       if (state.drag && state.drag.active && isOverCanvas(upEvent.clientX, upEvent.clientY)) {
         const hit = hitTest(upEvent.clientX, upEvent.clientY);
         if (hit >= 0) placeTile(hit, state.drag ? state.drag.tile : entry.tile);
+      }
+      clearEditorDrag();
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    event.preventDefault();
+  }
+
+  function beginDecorationPaletteDrag(event, entry) {
+    if (!isBackgroundDecorationAction()) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch (_) {}
+    selectDecorationPaletteEntry(entry);
+    const kind = normalizeBackgroundDecorationKind(entry && entry.kind);
+    state.drag = {
+      type: 'decoration-palette',
+      decorationKind: kind,
+      active: false
+    };
+    const startX = event.clientX;
+    const startY = event.clientY;
+
+    const onMove = (moveEvent) => {
+      if (state.drag && !state.drag.active) {
+        if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 4) return;
+        state.drag.active = true;
+        startDecorationDragGhost(moveEvent.clientX, moveEvent.clientY, kind, event.currentTarget);
+      }
+      moveTileDragGhost(moveEvent.clientX, moveEvent.clientY);
+      updateDragPreview(moveEvent.clientX, moveEvent.clientY);
+    };
+    const onUp = (upEvent) => {
+      try { event.currentTarget.releasePointerCapture(event.pointerId); } catch (_) {}
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      if (state.drag && state.drag.active && isOverCanvas(upEvent.clientX, upEvent.clientY)) {
+        const hit = hitTest(upEvent.clientX, upEvent.clientY, { includeRemoved: true });
+        if (hit >= 0) toggleBackgroundDecoration(hit);
       }
       clearEditorDrag();
     };
@@ -2881,6 +3042,7 @@
   function buildMinigamePresetExport() {
     const metadata = currentExportPresetMetadata();
     const pieceSets = pieceSetsForExport();
+    const pieces = presetPiecesForExport();
     const sokoban = sokobanDecorationsForExport();
     return {
       id: metadata.id,
@@ -2895,6 +3057,7 @@
       cutEdges: minigameCutEdgesForExport(),
       gluedEdges: minigameGluedEdgesForExport(),
       ...(pieceSets ? { pieceSets } : {}),
+      ...(pieces.length ? { pieces } : {}),
       ...(sokoban ? { sokoban } : {})
     };
   }
@@ -2929,7 +3092,7 @@
 
   function buildMinigamePresetJsExport() {
     const metadata = currentExportPresetMetadata();
-    const compact = buildCompactBackgroundExport(true, { includePieces: false });
+    const compact = buildCompactBackgroundExport(true);
     const registryEntry = minigamePresetRegistryEntry(metadata);
     const registryHint = JSON.stringify(registryEntry, null, 2)
       .split('\n')
@@ -3646,6 +3809,7 @@
 
   function applyImportedMosaic(payload) {
     if (!payload || typeof payload !== 'object') throw new Error('mosaic data must be an object');
+    payload = normalizeMosaicImportPayload(payload);
     state.standardDualGraphInput = null;
     const oldRows = state.rows;
     const oldCols = state.cols;
@@ -3672,6 +3836,9 @@
     state.backgroundAction = normalizeBackgroundAction(payload.backgroundAction || (payload.backgroundSpace && payload.backgroundSpace.action));
     state.backgroundDecorationKind = normalizeBackgroundDecorationKind(payload.backgroundDecorationKind || (payload.backgroundSpace && payload.backgroundSpace.decorationKind));
     state.backgroundDecorationColor = normalizePresetPieceColor(payload.backgroundDecorationColor || (payload.backgroundSpace && payload.backgroundSpace.decorationColor)) || 'black';
+    state.backgroundChessPawnDirection = normalizeChessPawnDirectionChoice(
+      payload.backgroundChessPawnDirection || (payload.backgroundSpace && payload.backgroundSpace.chessPawnDirection)
+    );
     state.backgroundMultiEdges = payload.backgroundMultiEdges !== false
       && !(payload.backgroundSpace && payload.backgroundSpace.multiEdges === false);
     state.backgroundChainLength = normalizeBackgroundChainLength(
@@ -3863,11 +4030,13 @@
   }
 
   function importPresetPieces(payload, rows, cols) {
-    const pieceSets = importPieceSetsAsPresetPieces(payload, rows, cols);
-    if (pieceSets.length) return pieceSets;
-    return collectImportedPresetValues(payload, ['pieces'], 'pieces', rows, cols)
+    const explicitPieces = collectImportedPresetValues(payload, ['pieces'], 'pieces', rows, cols)
       .map((piece) => normalizePresetPiece(piece, rows, cols))
       .filter(Boolean);
+    if (explicitPieces.length) return dedupePresetPieces(explicitPieces, rows, cols);
+    const pieceSets = importPieceSetsAsPresetPieces(payload, rows, cols);
+    if (pieceSets.length) return pieceSets;
+    return [];
   }
 
   function importSokobanDecorations(payload, rows, cols) {
@@ -4025,12 +4194,32 @@
     const col = (index % cols) + 1;
     const normalized = { row, col };
     const role = normalizePresetPieceRole(piece.role || piece.kind || piece.type);
-    const color = normalizePresetPieceColor(piece.color || piece.player);
+    const color = normalizePresetPieceColor(piece.color || piece.player || piece.side);
+    const chessKind = normalizeChessPieceKind(piece.kind || piece.type || piece.value);
+    const chessSide = normalizeChessPieceSide(piece.side || piece.color || piece.player);
+    const chessStyle = normalizeChessPieceStyle(piece.style || piece.iconStyle || piece.variant);
+    const pawnForwardDir = normalizeChessPawnForwardDir(firstPresentValue(piece, [
+      'forwardDir',
+      'forwardDirection',
+      'pawnDirection',
+      'direction',
+      'forward',
+      'dir'
+    ]));
     if (role) normalized.role = role;
     if (color) normalized.color = color;
-    ['kind', 'side', 'value'].forEach((key) => {
-      if (piece[key] != null && String(piece[key]).trim()) normalized[key] = String(piece[key]).trim();
-    });
+    if (chessKind) {
+      normalized.role = normalized.role || 'start';
+      normalized.kind = chessKind;
+      normalized.value = CHESS_PIECE_VALUES[chessKind] || String(piece.value || '').trim();
+      if (CHESS_ROYAL_VARIANT_KINDS.includes(chessKind) && chessStyle) normalized.style = chessStyle;
+      if (chessKind === 'pawn' && Number.isInteger(pawnForwardDir)) normalized.forwardDir = pawnForwardDir;
+    } else if (piece.kind != null && String(piece.kind).trim()) {
+      normalized.kind = String(piece.kind).trim();
+    }
+    if (chessSide) normalized.side = chessSide;
+    else if (piece.side != null && String(piece.side).trim()) normalized.side = String(piece.side).trim();
+    if (!chessKind && piece.value != null && String(piece.value).trim()) normalized.value = String(piece.value).trim();
     return normalized;
   }
 
@@ -5312,6 +5501,8 @@
       if (beforePieces === (state.presetPieces || []).length && beforeSokoban === sokobanDecorationCount() && !hadHole) return false;
     } else if (isSokobanDecorationKind(kind)) {
       if (!toggleSokobanDecoration(index, kind)) return false;
+    } else if (isChessDecorationKind(kind)) {
+      if (!toggleChessPieceDecoration(index, kind)) return false;
     } else {
       const color = normalizePresetPieceColor(state.backgroundDecorationColor) || 'black';
       if (!togglePresetPieceDecoration(index, kind, color)) return false;
@@ -5319,6 +5510,153 @@
     state.edits += 1;
     if (options.update !== false) updateReport(false);
     return true;
+  }
+
+  function backgroundDecorationDragDescriptorAtIndex(index) {
+    if (!tileExists(index)) return null;
+    const layers = [];
+    if (state.inputHoles instanceof Set && state.inputHoles.has(index)) {
+      layers.push({ type: 'input-hole', kind: 'input-hole' });
+    }
+    const sokoban = cloneSokobanDecorations();
+    SOKOBAN_DECORATION_ORDER.forEach((field) => {
+      if (sokoban[field] instanceof Set && sokoban[field].has(index)) {
+        layers.push({
+          type: 'sokoban',
+          field,
+          kind: sokobanDecorationKindForField(field)
+        });
+      }
+    });
+    presetPiecesAtIndex(index).forEach((piece) => {
+      layers.push({ type: 'preset-piece', piece });
+    });
+    if (!layers.length) return null;
+    return { type: 'stack', layers };
+  }
+
+  function presetPiecesAtIndex(index) {
+    return clonePresetPieces()
+      .map((piece) => normalizePresetPiece(piece, state.rows, state.cols))
+      .filter((piece) => piece && importedEndpointIndex(piece, state.rows, state.cols) === index);
+  }
+
+  function moveBackgroundDecoration(sourceIndex, targetIndex, descriptor) {
+    if (!descriptor || !Number.isInteger(sourceIndex) || !Number.isInteger(targetIndex)) return false;
+    if (!tileExists(sourceIndex) || !tileExists(targetIndex)) return false;
+    if (sourceIndex === targetIndex) return false;
+    clearBackgroundBilliard(false);
+    clearStandardDualGraphInput();
+    if (!removeBackgroundDecorationDescriptor(sourceIndex, descriptor)) return false;
+    clearBackgroundDecorationsAtIndex(targetIndex);
+    placeBackgroundDecorationDescriptor(targetIndex, descriptor);
+    state.edits += 1;
+    updateReport(false);
+    return true;
+  }
+
+  function removeBackgroundDecorationDescriptor(index, descriptor) {
+    if (!descriptor || !tileExists(index)) return false;
+    if (descriptor.type === 'stack') {
+      if (!backgroundDecorationDescriptorLayers(descriptor).length) return false;
+      clearBackgroundDecorationsAtIndex(index);
+      return true;
+    }
+    if (descriptor.type === 'input-hole') {
+      if (!(state.inputHoles instanceof Set) || !state.inputHoles.has(index)) return false;
+      state.inputHoles.delete(index);
+      return true;
+    }
+    if (descriptor.type === 'sokoban') {
+      const field = descriptor.field;
+      if (!state.sokoban || !(state.sokoban[field] instanceof Set) || !state.sokoban[field].has(index)) return false;
+      state.sokoban[field].delete(index);
+      return true;
+    }
+    if (descriptor.type !== 'preset-piece') return false;
+    const targetKey = presetPieceDecorationKey({ ...descriptor.piece, row: Math.floor(index / state.cols) + 1, col: (index % state.cols) + 1 });
+    let removed = false;
+    state.presetPieces = clonePresetPieces()
+      .map((piece) => normalizePresetPiece(piece, state.rows, state.cols))
+      .filter((piece) => {
+        if (!piece) return false;
+        if (!removed && importedEndpointIndex(piece, state.rows, state.cols) === index && presetPieceDecorationKey(piece) === targetKey) {
+          removed = true;
+          return false;
+        }
+        return true;
+      });
+    return removed;
+  }
+
+  function clearBackgroundDecorationsAtIndex(index) {
+    if (state.inputHoles instanceof Set) state.inputHoles.delete(index);
+    removePresetPiecesAtIndex(index);
+    removeSokobanDecorationsAtIndex(index);
+  }
+
+  function placeBackgroundDecorationDescriptor(index, descriptor) {
+    if (!descriptor || !tileExists(index)) return false;
+    const row = Math.floor(index / state.cols) + 1;
+    const col = (index % state.cols) + 1;
+    const layers = backgroundDecorationDescriptorLayers(descriptor);
+    if (!layers.length) return false;
+    let placed = false;
+    let touchedSokoban = false;
+    const nextPieces = clonePresetPieces()
+      .map((entry) => normalizePresetPiece(entry, state.rows, state.cols))
+      .filter(Boolean);
+    layers.forEach((layer) => {
+      if (layer.type === 'input-hole') {
+        if (!(state.inputHoles instanceof Set)) state.inputHoles = new Set();
+        state.inputHoles.add(index);
+        placed = true;
+        return;
+      }
+      if (layer.type === 'sokoban') {
+        if (!state.sokoban || typeof state.sokoban !== 'object') state.sokoban = createEmptySokobanDecorations();
+        if (!(state.sokoban[layer.field] instanceof Set)) state.sokoban[layer.field] = new Set();
+        state.sokoban[layer.field].add(index);
+        touchedSokoban = true;
+        placed = true;
+        return;
+      }
+      if (layer.type !== 'preset-piece') return;
+      const piece = normalizePresetPiece({ ...layer.piece, row, col }, state.rows, state.cols);
+      if (!piece) return;
+      nextPieces.push({ ...piece });
+      placed = true;
+    });
+    state.presetPieces = nextPieces;
+    if (touchedSokoban) state.sokoban = normalizeSokobanDecorationCoexistence(state.sokoban);
+    return placed;
+  }
+
+  function backgroundDecorationDescriptorLayers(descriptor) {
+    if (!descriptor) return [];
+    return descriptor.type === 'stack'
+      ? (Array.isArray(descriptor.layers) ? descriptor.layers.filter(Boolean) : [])
+      : [descriptor];
+  }
+
+  function presetPieceDecorationKey(piece) {
+    const normalized = normalizePresetPiece(piece, state.rows, state.cols);
+    if (!normalized) return '';
+    const role = normalizePresetPieceRole(normalized.role || normalized.kind) || 'start';
+    const color = normalizePresetPieceColor(normalized.color || normalized.side || normalized.player) || '';
+    const chessKind = normalizeChessPieceKind(normalized.kind || normalized.type || normalized.value);
+    const chessSide = normalizeChessPieceSide(normalized.side || normalized.color || normalized.player);
+    const style = chessPieceStyleForKind(chessKind, normalized.style || normalized.iconStyle || normalized.variant);
+    const forwardDir = chessKind === 'pawn' ? normalizedChessPieceForwardDir(normalized) : null;
+    return [
+      role,
+      color,
+      chessKind || String(normalized.kind || '').trim(),
+      chessSide,
+      style,
+      Number.isInteger(forwardDir) ? forwardDir : '',
+      String(normalized.value || '').trim()
+    ].join(':');
   }
 
   function toggleSokobanDecoration(index, kind) {
@@ -5355,6 +5693,49 @@
     return SOKOBAN_DECORATION_ORDER.reduce((sum, field) => (
       sum + (state.sokoban[field] instanceof Set ? state.sokoban[field].size : 0)
     ), 0);
+  }
+
+  function toggleChessPieceDecoration(index, kind) {
+    const chess = parseChessDecorationKind(kind);
+    if (!chess) return false;
+    const selectedPawnForwardDir = chess.kind === 'pawn'
+      ? selectedBackgroundChessPawnForwardDir(chess)
+      : null;
+    const row = Math.floor(index / state.cols) + 1;
+    const col = (index % state.cols) + 1;
+    const pieces = clonePresetPieces()
+      .map((piece) => normalizePresetPiece(piece, state.rows, state.cols))
+      .filter(Boolean);
+    const existing = pieces.find((piece) => {
+      const pieceIndex = importedEndpointIndex(piece, state.rows, state.cols);
+      const pieceKind = normalizeChessPieceKind(piece.kind || piece.type || piece.value);
+      const pieceStyle = chessPieceStyleForKind(pieceKind, piece.style || piece.iconStyle || piece.variant);
+      return pieceIndex === index
+        && pieceKind === chess.kind
+        && normalizeChessPieceSide(piece.side || piece.color || piece.player) === chess.side
+        && pieceStyle === chessPieceStyleForKind(chess.kind, chess.style)
+        && (pieceKind !== 'pawn' || normalizedChessPieceForwardDir(piece) === selectedPawnForwardDir);
+    });
+    if (existing) {
+      state.presetPieces = pieces.filter((piece) => piece !== existing);
+      return true;
+    }
+    removeSokobanDecorationsAtIndex(index);
+    if (state.inputHoles instanceof Set) state.inputHoles.delete(index);
+    const next = pieces.filter((piece) => importedEndpointIndex(piece, state.rows, state.cols) !== index);
+    const nextPiece = {
+      row,
+      col,
+      role: 'start',
+      kind: chess.kind,
+      side: chess.side,
+      value: CHESS_PIECE_VALUES[chess.kind] || ''
+    };
+    if (chess.style) nextPiece.style = chess.style;
+    if (chess.kind === 'pawn' && Number.isInteger(selectedPawnForwardDir)) nextPiece.forwardDir = selectedPawnForwardDir;
+    next.push(nextPiece);
+    state.presetPieces = next;
+    return true;
   }
 
   function togglePresetPieceDecoration(index, role, color) {
@@ -7842,6 +8223,9 @@
       : (isBackgroundBoundaryAction()
       ? -1
       : hitTest(event.clientX, event.clientY, { includeRemoved: true }));
+    const decoration = isBackgroundDecorationAction() && hit >= 0
+      ? backgroundDecorationDragDescriptorAtIndex(hit)
+      : null;
     pointerState = {
       id: event.pointerId,
       index: hit,
@@ -7853,6 +8237,12 @@
       lastY: event.clientY,
       moved: false
     };
+    state.drag = decoration ? {
+      type: 'background-decoration',
+      sourceIndex: hit,
+      decoration,
+      active: false
+    } : null;
     clearDrawDebugHit(false);
     if (isBilliard) updateBackgroundBilliardAim(event.clientX, event.clientY, false);
     const edgeChanged = !sameBackgroundEdgeHit(edge, state.backgroundHoverEdge);
@@ -7872,6 +8262,15 @@
     const dx = event.clientX - pointerState.x;
     const dy = event.clientY - pointerState.y;
     if (Math.hypot(dx, dy) > 10) pointerState.moved = true;
+    if (state.drag && state.drag.type === 'background-decoration' && pointerState.moved) {
+      const wasActive = state.drag.active;
+      state.drag.active = true;
+      if (!wasActive) startBackgroundDecorationDragGhost(event.clientX, event.clientY, state.drag.decoration);
+      moveTileDragGhost(event.clientX, event.clientY);
+      updateDragPreview(event.clientX, event.clientY);
+      draw(analyze());
+      return;
+    }
     const isBilliard = isBackgroundBilliardAction();
     const cusp = isBilliard ? null : backgroundCuspHitTest(event.clientX, event.clientY);
     const edge = !isBilliard && isBackgroundBoundaryAction()
@@ -7896,6 +8295,14 @@
 
   function finishBackgroundGesture(event) {
     if (!pointerState || event.pointerId !== pointerState.id) return;
+    if (state.drag && state.drag.type === 'background-decoration' && state.drag.active) {
+      const hit = isOverCanvas(event.clientX, event.clientY)
+        ? hitTest(event.clientX, event.clientY)
+        : -1;
+      moveBackgroundDecoration(state.drag.sourceIndex, hit, state.drag.decoration);
+      clearEditorDrag();
+      return;
+    }
     if (isBackgroundBilliardAction()) {
       if (!pointerState.moved && isOverCanvas(event.clientX, event.clientY)) {
         handleBackgroundBilliardClick(event.clientX, event.clientY);
@@ -7936,7 +8343,7 @@
     }
     pointerState = null;
     syncMainCanvasCursor();
-    if (!state.drag || state.drag.type === 'canvas') clearEditorDrag();
+    if (!state.drag || state.drag.type === 'canvas' || state.drag.type === 'background-decoration') clearEditorDrag();
     longPressFired = false;
   }
 
@@ -15306,6 +15713,15 @@
     if (index < 0 || !tileExists(index)) return;
     const center = tileCenterPoint(index);
     if (!center) return;
+    const chess = chessPieceDescriptorFromPresetPiece(piece);
+    if (chess) {
+      const squareLattice = getLattice().shape !== 'hex';
+      const chessCenter = squareLattice
+        ? { x: center.x, y: center.y + geometry.radius * 0.09 }
+        : center;
+      drawChessPieceShape(ctx, chessCenter, geometry.radius * (squareLattice ? 0.68 : 0.58), chess.kind, chess.side, { style: chess.style });
+      return;
+    }
     const colors = presetPieceMarkerColors(piece.color || piece.side);
     const radius = geometry.radius * (role === 'target' ? 0.48 : 0.32);
     ctx.save();
@@ -15334,6 +15750,297 @@
       ctx.fill();
     }
     ctx.restore();
+  }
+
+  function chessPieceDescriptorFromPresetPiece(piece) {
+    if (!piece || typeof piece !== 'object') return null;
+    const kind = normalizeChessPieceKind(piece.kind || piece.type || piece.value);
+    const side = normalizeChessPieceSide(piece.side || piece.color || piece.player);
+    if (!kind || !side) return null;
+    return { kind, side, style: chessPieceStyleForKind(kind, piece.style || piece.iconStyle || piece.variant) };
+  }
+
+  function normalizeChessPieceKind(value) {
+    const text = String(value || '').trim().toLowerCase();
+    if (!text) return '';
+    if (CHESS_PIECE_KINDS.includes(text)) return text;
+    if (text === 'k') return 'king';
+    if (text === 'q') return 'queen';
+    if (text === 'r') return 'rook';
+    if (text === 'b') return 'bishop';
+    if (text === 'n') return 'knight';
+    if (text === 'p') return 'pawn';
+    return '';
+  }
+
+  function normalizeChessPieceSide(value) {
+    const text = String(value || '').trim().toLowerCase();
+    if (text === 'white' || text === 'w' || text === 'light') return 'white';
+    if (text === 'black' || text === 'b' || text === 'dark') return 'black';
+    return '';
+  }
+
+  function drawChessPieceShape(ctx, point, radius, kind, side, options = {}) {
+    const normalizedKind = normalizeChessPieceKind(kind);
+    const normalizedSide = normalizeChessPieceSide(side);
+    if (!normalizedKind || !normalizedSide) return;
+    const scale = Number.isFinite(options.scale) ? Math.max(0.2, options.scale) : 1;
+    ctx.save();
+    ctx.translate(point.x, point.y);
+    drawVectorChessPiece(
+      ctx,
+      radius * scale,
+      normalizedKind,
+      normalizedSide,
+      chessPieceStyleForKind(normalizedKind, options.style || options.variant)
+    );
+    ctx.restore();
+  }
+
+  function drawVectorChessPiece(ctx, radius, kind, side, style) {
+    const r = Math.max(1, radius);
+    const colors = chessVectorPieceColors(side);
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.lineWidth = Math.max(1.25, r * 0.066);
+    ctx.fillStyle = colors.fill;
+    ctx.strokeStyle = colors.stroke;
+    if (kind === 'pawn') drawStauntonPawn(ctx, r, colors);
+    else if (kind === 'rook') drawStauntonRook(ctx, r, colors);
+    else if (kind === 'bishop') drawStauntonBishop(ctx, r, colors);
+    else if (kind === 'knight') drawStauntonKnight(ctx, r, colors);
+    else if (kind === 'queen') drawStauntonQueen(ctx, r, colors, style);
+    else drawStauntonKing(ctx, r, colors, style);
+    ctx.restore();
+  }
+
+  function chessVectorPieceColors(side) {
+    return side === 'white'
+      ? { fill: '#fffdf8', stroke: '#050505', detail: '#050505' }
+      : { fill: '#050505', stroke: '#050505', detail: '#fffdf8' };
+  }
+
+  function drawChessVectorShape(ctx, colors) {
+    ctx.fillStyle = colors.fill;
+    ctx.strokeStyle = colors.stroke;
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  function drawChessVectorPath(ctx, r, coords, colors) {
+    if (!Array.isArray(coords) || !coords.length) return;
+    ctx.beginPath();
+    coords.forEach((entry) => {
+      if (entry.length === 2) ctx.lineTo(entry[0] * r, entry[1] * r);
+      else if (entry.length === 3 && entry[0] === 'M') ctx.moveTo(entry[1] * r, entry[2] * r);
+      else if (entry.length === 5 && entry[0] === 'Q') ctx.quadraticCurveTo(entry[1] * r, entry[2] * r, entry[3] * r, entry[4] * r);
+      else if (entry.length === 7 && entry[0] === 'C') ctx.bezierCurveTo(entry[1] * r, entry[2] * r, entry[3] * r, entry[4] * r, entry[5] * r, entry[6] * r);
+    });
+    ctx.closePath();
+    drawChessVectorShape(ctx, colors);
+  }
+
+  function drawChessVectorRoundRect(ctx, r, x, y, width, height, radius, colors) {
+    const left = x * r;
+    const top = y * r;
+    const w = width * r;
+    const h = height * r;
+    const corner = Math.min(Math.abs(radius * r), Math.abs(w) / 2, Math.abs(h) / 2);
+    ctx.beginPath();
+    ctx.moveTo(left + corner, top);
+    ctx.lineTo(left + w - corner, top);
+    ctx.quadraticCurveTo(left + w, top, left + w, top + corner);
+    ctx.lineTo(left + w, top + h - corner);
+    ctx.quadraticCurveTo(left + w, top + h, left + w - corner, top + h);
+    ctx.lineTo(left + corner, top + h);
+    ctx.quadraticCurveTo(left, top + h, left, top + h - corner);
+    ctx.lineTo(left, top + corner);
+    ctx.quadraticCurveTo(left, top, left + corner, top);
+    ctx.closePath();
+    drawChessVectorShape(ctx, colors);
+  }
+
+  function drawChessVectorOval(ctx, r, x, y, radiusX, radiusY, colors) {
+    ctx.beginPath();
+    ctx.ellipse(x * r, y * r, radiusX * r, radiusY * r, 0, 0, Math.PI * 2);
+    drawChessVectorShape(ctx, colors);
+  }
+
+  function drawChessVectorCircle(ctx, r, x, y, radius, colors) {
+    drawChessVectorOval(ctx, r, x, y, radius, radius, colors);
+  }
+
+  function drawChessVectorDetail(ctx, r, colors, points, width = 0.035) {
+    if (!Array.isArray(points) || points.length < 2) return;
+    ctx.save();
+    ctx.strokeStyle = colors.detail;
+    ctx.lineWidth = Math.max(1.1, r * width);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point[0] * r, point[1] * r);
+      else ctx.lineTo(point[0] * r, point[1] * r);
+    });
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawChessVectorStrokePath(ctx, r, colors, coords, width = 0.032) {
+    if (!Array.isArray(coords) || !coords.length) return;
+    ctx.save();
+    ctx.strokeStyle = colors.detail;
+    ctx.lineWidth = Math.max(1.05, r * width);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    coords.forEach((entry) => {
+      if (entry.length === 2) ctx.lineTo(entry[0] * r, entry[1] * r);
+      else if (entry.length === 3 && entry[0] === 'M') ctx.moveTo(entry[1] * r, entry[2] * r);
+      else if (entry.length === 5 && entry[0] === 'Q') ctx.quadraticCurveTo(entry[1] * r, entry[2] * r, entry[3] * r, entry[4] * r);
+      else if (entry.length === 7 && entry[0] === 'C') ctx.bezierCurveTo(entry[1] * r, entry[2] * r, entry[3] * r, entry[4] * r, entry[5] * r, entry[6] * r);
+    });
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawChessVectorDot(ctx, r, colors, x, y, radius) {
+    ctx.save();
+    ctx.fillStyle = colors.detail;
+    ctx.beginPath();
+    ctx.arc(x * r, y * r, Math.max(1, radius * r), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawStauntonBase(ctx, r, colors, width = 0.72) {
+    drawChessVectorRoundRect(ctx, r, -width * 0.5, 0.48, width, 0.12, 0.018, colors);
+    drawChessVectorRoundRect(ctx, r, -width * 0.43, 0.37, width * 0.86, 0.10, 0.018, colors);
+    drawChessVectorRoundRect(ctx, r, -width * 0.34, 0.28, width * 0.68, 0.07, 0.014, colors);
+    drawChessVectorDetail(ctx, r, colors, [[-width * 0.43, 0.545], [width * 0.43, 0.545]], 0.020);
+  }
+
+  function drawStauntonCollar(ctx, r, colors, y, width = 0.48) {
+    drawChessVectorRoundRect(ctx, r, -width * 0.5, y, width, 0.075, 0.016, colors);
+  }
+
+  function drawStauntonStem(ctx, r, colors, topY, bottomY, topWidth, bottomWidth) {
+    drawChessVectorPath(ctx, r, [
+      ['M', -bottomWidth * 0.5, bottomY],
+      ['C', -bottomWidth * 0.42, bottomY - 0.22, -topWidth * 0.56, topY + 0.18, -topWidth * 0.5, topY],
+      [topWidth * 0.5, topY],
+      ['C', topWidth * 0.56, topY + 0.18, bottomWidth * 0.42, bottomY - 0.22, bottomWidth * 0.5, bottomY]
+    ], colors);
+  }
+
+  function drawStauntonPawn(ctx, r, colors) {
+    drawChessVectorCircle(ctx, r, 0, -0.36, 0.17, colors);
+    drawStauntonCollar(ctx, r, colors, -0.13, 0.34);
+    drawStauntonStem(ctx, r, colors, -0.06, 0.30, 0.18, 0.34);
+    drawStauntonBase(ctx, r, colors, 0.58);
+  }
+
+  function drawStauntonRook(ctx, r, colors) {
+    drawChessVectorPath(ctx, r, [
+      ['M', -0.29, -0.56],
+      [-0.18, -0.56],
+      [-0.18, -0.40],
+      [-0.06, -0.40],
+      [-0.06, -0.56],
+      [0.06, -0.56],
+      [0.06, -0.40],
+      [0.18, -0.40],
+      [0.18, -0.56],
+      [0.29, -0.56],
+      [0.29, -0.25],
+      [-0.29, -0.25]
+    ], colors);
+    drawStauntonCollar(ctx, r, colors, -0.22, 0.52);
+    drawStauntonStem(ctx, r, colors, -0.14, 0.30, 0.28, 0.42);
+    drawStauntonBase(ctx, r, colors, 0.66);
+  }
+
+  function drawStauntonBishop(ctx, r, colors) {
+    drawChessVectorCircle(ctx, r, 0, -0.86, 0.055, colors);
+    drawChessVectorOval(ctx, r, 0, -0.62, 0.18, 0.30, colors);
+    drawChessVectorStrokePath(ctx, r, colors, [
+      ['M', -0.07, -0.76],
+      ['C', -0.02, -0.68, 0.06, -0.60, 0.12, -0.49]
+    ], 0.034);
+    drawStauntonCollar(ctx, r, colors, -0.28, 0.45);
+    drawStauntonStem(ctx, r, colors, -0.20, 0.30, 0.20, 0.38);
+    drawStauntonBase(ctx, r, colors, 0.66);
+  }
+
+  function drawStauntonKnight(ctx, r, colors) {
+    drawChessVectorPath(ctx, r, [
+      ['M', -0.36, 0.29],
+      ['C', -0.37, 0.05, -0.32, -0.22, -0.20, -0.48],
+      ['C', -0.12, -0.65, -0.01, -0.79, 0.15, -0.84],
+      ['Q', 0.19, -0.70, 0.27, -0.63],
+      ['C', 0.39, -0.55, 0.44, -0.42, 0.36, -0.31],
+      ['C', 0.30, -0.23, 0.18, -0.23, 0.08, -0.27],
+      ['C', 0.18, -0.16, 0.32, -0.08, 0.30, 0.02],
+      ['C', 0.28, 0.12, 0.15, 0.13, 0.03, 0.06],
+      ['C', 0.04, 0.15, 0.10, 0.23, 0.20, 0.29]
+    ], colors);
+    drawChessVectorDot(ctx, r, colors, 0.15, -0.53, 0.022);
+    drawChessVectorStrokePath(ctx, r, colors, [
+      ['M', -0.02, -0.77],
+      ['C', -0.13, -0.66, -0.23, -0.48, -0.28, -0.25],
+      ['C', -0.31, -0.10, -0.28, 0.07, -0.20, 0.21]
+    ], 0.034);
+    drawChessVectorStrokePath(ctx, r, colors, [
+      ['M', 0.23, -0.35],
+      ['C', 0.30, -0.37, 0.36, -0.40, 0.40, -0.45]
+    ], 0.026);
+    drawStauntonCollar(ctx, r, colors, 0.23, 0.52);
+    drawStauntonBase(ctx, r, colors, 0.72);
+  }
+
+  function drawStauntonQueen(ctx, r, colors) {
+    const top = -1.05;
+    const crownBottom = -0.48;
+    drawStauntonStem(ctx, r, colors, -0.42, 0.30, 0.24, 0.44);
+    drawChessVectorPath(ctx, r, [
+      ['M', -0.23, top + 0.18],
+      [0.23, top + 0.18],
+      [0.13, crownBottom],
+      [-0.13, crownBottom]
+    ], colors);
+    drawChessVectorCircle(ctx, r, 0, top + 0.08, 0.042, colors);
+    drawStauntonCollar(ctx, r, colors, -0.30, 0.52);
+    drawStauntonCollar(ctx, r, colors, 0.18, 0.56);
+    drawStauntonBase(ctx, r, colors, 0.74);
+  }
+
+  function drawStauntonKingCross(ctx, r, colors, y, height, width) {
+    const stem = width * 0.30;
+    const armH = height * 0.13;
+    drawChessVectorPath(ctx, r, [
+      ['M', -stem * 0.5, y + height * 0.5],
+      [-stem * 0.5, y + armH],
+      [-width * 0.5, y + armH],
+      [-width * 0.5, y - armH],
+      [-stem * 0.5, y - armH],
+      [-stem * 0.5, y - height * 0.5],
+      [stem * 0.5, y - height * 0.5],
+      [stem * 0.5, y - armH],
+      [width * 0.5, y - armH],
+      [width * 0.5, y + armH],
+      [stem * 0.5, y + armH],
+      [stem * 0.5, y + height * 0.5]
+    ], colors);
+  }
+
+  function drawStauntonKing(ctx, r, colors) {
+    drawStauntonStem(ctx, r, colors, -0.42, 0.30, 0.24, 0.44);
+    drawChessVectorOval(ctx, r, 0, -0.66, 0.24, 0.20, colors);
+    drawStauntonKingCross(ctx, r, colors, -0.96, 0.34, 0.34);
+    drawStauntonCollar(ctx, r, colors, -0.30, 0.52);
+    drawStauntonCollar(ctx, r, colors, 0.18, 0.56);
+    drawStauntonBase(ctx, r, colors, 0.74);
   }
 
   function presetPieceMarkerColors(color) {
@@ -16892,7 +17599,9 @@
   }
 
   function drawDragGhost(ctx, palette) {
-    if (!state.drag || !state.drag.active || !state.dragPoint || isTileEmpty(state.drag.tile)) return;
+    if (!state.drag || !state.drag.active || !state.dragPoint) return;
+    const isDecorationDrag = state.drag.type === 'decoration-palette' || state.drag.type === 'background-decoration';
+    if (!isDecorationDrag && isTileEmpty(state.drag.tile)) return;
     const radius = geometry.radius * 0.88;
     const points = tilePoints(state.dragPoint.x, state.dragPoint.y, radius);
 
@@ -16909,8 +17618,15 @@
     ctx.lineWidth = 2;
     ctx.fill();
     ctx.stroke();
-    if (isDualGraph() && isVertexTileValue(state.drag.tile)) drawGraphTile(ctx, state.dragPoint, state.drag.tile, palette);
-    else drawPipe(ctx, state.dragPoint, state.drag.tile, palette);
+    if (state.drag.type === 'background-decoration') {
+      drawBackgroundDecorationDescriptorPreview(ctx, state.dragPoint, geometry.radius * 0.72, state.drag.decoration, getLattice());
+    } else if (isDecorationDrag) {
+      drawDecorationPreviewContent(ctx, state.dragPoint, geometry.radius * 0.72, state.drag.decorationKind, getLattice());
+    } else if (isDualGraph() && isVertexTileValue(state.drag.tile)) {
+      drawGraphTile(ctx, state.dragPoint, state.drag.tile, palette);
+    } else {
+      drawPipe(ctx, state.dragPoint, state.drag.tile, palette);
+    }
     ctx.restore();
   }
 
@@ -18748,6 +19464,10 @@
     ctx.lineWidth = 1;
     ctx.fill();
     ctx.stroke();
+    drawDecorationPreviewContent(ctx, { x: cx, y: cy }, radius, kind, lattice);
+  }
+
+  function drawDecorationPreviewContent(ctx, point, radius, kind, lattice = getLattice()) {
     const normalized = normalizeBackgroundDecorationKind(kind);
     if (normalized === 'clear') {
       ctx.save();
@@ -18755,10 +19475,10 @@
       ctx.lineWidth = 4;
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(cx - radius * 0.42, cy - radius * 0.42);
-      ctx.lineTo(cx + radius * 0.42, cy + radius * 0.42);
-      ctx.moveTo(cx + radius * 0.42, cy - radius * 0.42);
-      ctx.lineTo(cx - radius * 0.42, cy + radius * 0.42);
+      ctx.moveTo(point.x - radius * 0.42, point.y - radius * 0.42);
+      ctx.lineTo(point.x + radius * 0.42, point.y + radius * 0.42);
+      ctx.moveTo(point.x + radius * 0.42, point.y - radius * 0.42);
+      ctx.lineTo(point.x - radius * 0.42, point.y + radius * 0.42);
       ctx.stroke();
       ctx.restore();
       return;
@@ -18769,26 +19489,61 @@
       ctx.strokeStyle = '#111111';
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(cx, cy, radius * 0.34, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, radius * 0.34, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
       ctx.strokeStyle = 'rgba(31,122,140,0.72)';
       ctx.lineWidth = 1.8;
       ctx.beginPath();
-      ctx.arc(cx, cy, radius * 0.43, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, radius * 0.43, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
       return;
     }
     if (normalized === 'start' || normalized === 'target') {
-      drawPresetPiecePreview(ctx, { x: cx, y: cy }, radius, normalized);
+      drawPresetPiecePreview(ctx, point, radius, normalized);
       return;
     }
-    drawSokobanDecorationShape(ctx, { x: cx, y: cy }, radius, normalized, lattice);
+    const chess = parseChessDecorationKind(normalized);
+    if (chess) {
+      drawChessPiecePreview(ctx, point, radius, chess);
+      const forwardDir = chess.kind === 'pawn' ? selectedBackgroundChessPawnForwardDir(chess) : null;
+      if (Number.isInteger(forwardDir)) drawChessPawnDirectionPreview(ctx, point, radius, forwardDir);
+      return;
+    }
+    drawSokobanDecorationShape(ctx, point, radius, normalized, lattice);
   }
 
-  function drawPresetPiecePreview(ctx, point, radius, role) {
-    const colors = presetPieceMarkerColors(state.backgroundDecorationColor);
+  function drawBackgroundDecorationDescriptorPreview(ctx, point, radius, descriptor, lattice = getLattice()) {
+    if (!descriptor) return;
+    if (descriptor.type === 'stack') {
+      backgroundDecorationDescriptorLayers(descriptor).forEach((layer) => {
+        drawBackgroundDecorationDescriptorPreview(ctx, point, radius, layer, lattice);
+      });
+      return;
+    }
+    if (descriptor.type === 'input-hole') {
+      drawDecorationPreviewContent(ctx, point, radius, 'input-hole', lattice);
+      return;
+    }
+    if (descriptor.type === 'sokoban') {
+      drawSokobanDecorationShape(ctx, point, radius, descriptor.kind, lattice);
+      return;
+    }
+    if (descriptor.type !== 'preset-piece') return;
+    const piece = descriptor.piece || {};
+    const chess = chessPieceDescriptorFromPresetPiece(piece);
+    if (chess) {
+      drawChessPiecePreview(ctx, point, radius, chess);
+      const forwardDir = chess.kind === 'pawn' ? normalizedChessPieceForwardDir(piece) : null;
+      if (Number.isInteger(forwardDir)) drawChessPawnDirectionPreview(ctx, point, radius, forwardDir);
+      return;
+    }
+    drawPresetPiecePreview(ctx, point, radius, normalizePresetPieceRole(piece.role || piece.kind) || 'start', piece.color || piece.side);
+  }
+
+  function drawPresetPiecePreview(ctx, point, radius, role, color = state.backgroundDecorationColor) {
+    const colors = presetPieceMarkerColors(color);
     ctx.save();
     ctx.lineWidth = Math.max(1.8, radius * (role === 'target' ? 0.07 : 0.05));
     ctx.strokeStyle = colors.stroke;
@@ -18805,6 +19560,38 @@
       ctx.fill();
       ctx.stroke();
     }
+    ctx.restore();
+  }
+
+  function drawChessPiecePreview(ctx, point, radius, chess) {
+    drawChessPieceShape(ctx, point, radius * 0.70, chess.kind, chess.side, {
+      lineWidth: Math.max(1.5, radius * 0.055),
+      style: chess.style
+    });
+  }
+
+  function drawChessPawnDirectionPreview(ctx, point, radius, forwardDir) {
+    const angle = [0, Math.PI / 2, Math.PI, -Math.PI / 2][modulo(forwardDir, 4)];
+    const length = radius * 0.36;
+    const cx = point.x + radius * 0.42;
+    const cy = point.y - radius * 0.42;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    ctx.strokeStyle = '#b23a48';
+    ctx.fillStyle = '#b23a48';
+    ctx.lineWidth = Math.max(1.5, radius * 0.05);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-length * 0.45, 0);
+    ctx.lineTo(length * 0.30, 0);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(length * 0.45, 0);
+    ctx.lineTo(length * 0.16, -length * 0.18);
+    ctx.lineTo(length * 0.16, length * 0.18);
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
   }
 
@@ -18841,6 +19628,57 @@
     document.body.classList.add('tile-dragging');
     drawTilePreview(canvas, tile);
     moveTileDragGhost(clientX, clientY);
+  }
+
+  function startDecorationDragGhost(clientX, clientY, kind, sourceElement = null) {
+    clearTileDragGhost();
+    const normalized = normalizeBackgroundDecorationKind(kind);
+    tileDragSource = sourceElement;
+    if (tileDragSource) tileDragSource.classList.add('dragging');
+
+    const ghost = document.createElement('div');
+    ghost.className = 'tile-drag-ghost';
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    ghost.appendChild(canvas);
+    document.body.appendChild(ghost);
+    tileDragGhost = ghost;
+    document.body.classList.add('tile-dragging');
+    drawDecorationPreview(canvas, normalized);
+    moveTileDragGhost(clientX, clientY);
+  }
+
+  function startBackgroundDecorationDragGhost(clientX, clientY, descriptor) {
+    clearTileDragGhost();
+    const ghost = document.createElement('div');
+    ghost.className = 'tile-drag-ghost';
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    ghost.appendChild(canvas);
+    document.body.appendChild(ghost);
+    tileDragGhost = ghost;
+    document.body.classList.add('tile-dragging');
+    drawBackgroundDecorationGhostPreview(canvas, descriptor);
+    moveTileDragGhost(clientX, clientY);
+  }
+
+  function drawBackgroundDecorationGhostPreview(canvas, descriptor) {
+    const ctx = canvas.getContext('2d');
+    const palette = getPalette();
+    const lattice = getLattice();
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const radius = 24;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawScaledTilePath(ctx, { x: cx, y: cy }, radius * 0.86, lattice);
+    ctx.fillStyle = '#fffdf8';
+    ctx.strokeStyle = palette.border;
+    ctx.lineWidth = 1;
+    ctx.fill();
+    ctx.stroke();
+    drawBackgroundDecorationDescriptorPreview(ctx, { x: cx, y: cy }, radius, descriptor, lattice);
   }
 
   function moveTileDragGhost(clientX, clientY) {
@@ -19426,6 +20264,7 @@
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new Error('chart data must be an object');
     }
+    payload = normalizeMosaicImportPayload(payload);
     const source = exportImportPayloadSource(payload);
     const normalized = { ...source };
     if (payload.backgroundSpace && !normalized.backgroundSpace) normalized.backgroundSpace = payload.backgroundSpace;
@@ -19469,6 +20308,8 @@
   }
 
   function exportImportPayloadSource(payload) {
+    const statusPayload = fideChessStatusPayloadForMosaicImport(payload);
+    if (statusPayload) return statusPayload;
     if (
       payload
       && typeof payload === 'object'
@@ -19480,6 +20321,37 @@
       return { ...payload.preset };
     }
     return payload;
+  }
+
+  function normalizeMosaicImportPayload(payload) {
+    return fideChessStatusPayloadForMosaicImport(payload) || payload;
+  }
+
+  function fideChessStatusPayloadForMosaicImport(payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+    const preset = payload.preset && typeof payload.preset === 'object' && !Array.isArray(payload.preset)
+      ? payload.preset
+      : null;
+    if (!preset) return null;
+    const mode = String(payload.gameMode || payload.mode || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+    const isFideStatus = mode === 'fide-chess'
+      || mode === 'fidechess'
+      || mode === 'chess'
+      || mode.includes('fide')
+      || mode.includes('chess');
+    if (!isFideStatus || !Array.isArray(payload.pieces)) return null;
+    const adapted = {
+      ...preset,
+      lattice: preset.lattice || payload.lattice || state.lattice,
+      rows: preset.rows || payload.rows,
+      cols: preset.cols || payload.cols,
+      inputMode: 'background',
+      backgroundAction: 'decoration',
+      pieces: payload.pieces
+    };
+    delete adapted.pieceSets;
+    if (!adapted.boundary && !adapted.boundaryMode) adapted.boundary = 'glued';
+    return adapted;
   }
 
   function parseExportImportSize(value) {
@@ -19719,6 +20591,7 @@
       backgroundAction: state.backgroundAction,
       backgroundDecorationKind: normalizeBackgroundDecorationKind(state.backgroundDecorationKind),
       backgroundDecorationColor: normalizePresetPieceColor(state.backgroundDecorationColor) || 'black',
+      backgroundChessPawnDirection: normalizeChessPawnDirectionChoice(state.backgroundChessPawnDirection),
       backgroundMultiEdges: !!state.backgroundMultiEdges,
       backgroundCuspMarkerScale: normalizeBackgroundCuspMarkerScale(state.backgroundCuspMarkerScale),
       backgroundBilliardSpeed: normalizeBackgroundBilliardSpeed(state.backgroundBilliardSpeed),
@@ -20072,6 +20945,7 @@
       ...(report.background || analyzeBackgroundSpace()),
       action: state.backgroundAction,
       multiEdges: !!state.backgroundMultiEdges,
+      chessPawnDirection: normalizeChessPawnDirectionChoice(state.backgroundChessPawnDirection),
       chainLength: normalizeBackgroundChainLength(state.backgroundChainLength),
       chainReversed: !!state.backgroundChainReversed,
       cuspMarkerScale: normalizeBackgroundCuspMarkerScale(state.backgroundCuspMarkerScale),
@@ -20287,6 +21161,15 @@
       if (PRESET_PIECE_COLOR_ORDER.has(color)) refs.backgroundDecorationColor.value = color;
       refs.backgroundDecorationColor.hidden = !['start', 'target'].includes(state.backgroundDecorationKind);
       refs.backgroundDecorationColor.disabled = !['start', 'target'].includes(state.backgroundDecorationKind);
+    }
+    if (refs.backgroundChessPawnDirection) {
+      const directionChoice = normalizeChessPawnDirectionChoice(state.backgroundChessPawnDirection);
+      const chess = parseChessDecorationKind(state.backgroundDecorationKind);
+      const pawnDirectionVisible = !!(decorationAction && chess && chess.kind === 'pawn');
+      state.backgroundChessPawnDirection = directionChoice;
+      refs.backgroundChessPawnDirection.value = directionChoice;
+      refs.backgroundChessPawnDirection.disabled = !pawnDirectionVisible;
+      if (refs.backgroundChessPawnDirectionRow) refs.backgroundChessPawnDirectionRow.hidden = !pawnDirectionVisible;
     }
     renderDecorationPalette();
     const chains = state.pendingGlueChains;
@@ -20543,7 +21426,7 @@
 
   function buildMinigameTestHref() {
     const metadata = currentExportPresetMetadata();
-    const payload = buildCompactBackgroundExport(true, { includePieces: false });
+    const payload = buildCompactBackgroundExport(true);
     const encoded = base64UrlEncodeUtf8(JSON.stringify(payload));
     const mode = minigameModeForExportGameType(metadata.gameTypes[0]);
     return `ramified_minigames.html?minigamePreset=${encodeURIComponent(encoded)}&mode=${encodeURIComponent(mode)}`;
@@ -20551,6 +21434,7 @@
 
   function minigameModeForExportGameType(gameType) {
     const normalized = String(gameType || '').trim().toLowerCase();
+    if (normalized.includes('fide') || normalized.includes('chess')) return 'fide-chess';
     if (normalized.includes('gomoku')) return 'gomoku';
     if (normalized.includes('connect')) return 'connect-four';
     if (normalized === 'go' || normalized.includes('go')) return 'go';
@@ -21511,6 +22395,10 @@
       || action === 'sokoban-wall'
       || action === 'sokoban-ice'
       || action === 'sokoban-energy-bridge'
+      || action === 'chess'
+      || action === 'fide-chess'
+      || action === 'chess-piece'
+      || action === 'chessPieces'
     ) return 'decoration';
     if (
       action === 'glue-boundary'
@@ -21540,12 +22428,109 @@
     if (value === 'wall' || value === 'sokoban-wall' || value === 'sokobanwall') return 'sokoban-wall';
     if (value === 'ice' || value === 'icy' || value === 'icy-ground' || value === 'icyground' || value === 'sokoban-ice' || value === 'sokobanice') return 'sokoban-ice';
     if (value === 'energy-bridge' || value === 'energybridge' || value === 'bridge' || value === 'sokoban-energy-bridge' || value === 'sokobanenergybridge') return 'sokoban-energy-bridge';
+    const chess = parseChessDecorationKind(value);
+    if (chess) return `chess-${chess.side}-${chess.kind}${chess.style ? `-${chess.style}` : ''}`;
     if (value === 'clear' || value === 'erase' || value === 'remove') return 'clear';
     return 'input-hole';
   }
 
   function isSokobanDecorationKind(kind) {
     return Object.prototype.hasOwnProperty.call(SOKOBAN_DECORATION_FIELDS, normalizeBackgroundDecorationKind(kind));
+  }
+
+  function isChessDecorationKind(kind) {
+    return !!parseChessDecorationKind(kind);
+  }
+
+  function normalizeChessPawnDirectionChoice(value) {
+    const text = String(value || '').trim().toUpperCase();
+    return text === 'AUTO' || !Number.isInteger(normalizeChessPawnForwardDir(text))
+      ? 'auto'
+      : CHESS_PAWN_FORWARD_DIR_NAMES[normalizeChessPawnForwardDir(text)];
+  }
+
+  function selectedBackgroundChessPawnForwardDir(chess = null) {
+    if (chess && Number.isInteger(chess.forwardDir)) return chess.forwardDir;
+    const choice = normalizeChessPawnDirectionChoice(state.backgroundChessPawnDirection);
+    return choice === 'auto' ? null : normalizeChessPawnForwardDir(choice);
+  }
+
+  function normalizedChessPieceForwardDir(piece) {
+    return normalizeChessPawnForwardDir(firstPresentValue(piece, [
+      'forwardDir',
+      'forwardDirection',
+      'pawnDirection',
+      'direction',
+      'forward',
+      'dir'
+    ]));
+  }
+
+  function normalizeChessPawnForwardDir(value) {
+    if (value == null || value === '') return null;
+    if (typeof value === 'string') {
+      const text = value.trim().toLowerCase().replace(/[\s_-]+/g, '');
+      if (!text || text === 'auto') return null;
+      if (text === 'e' || text === 'east' || text === 'right') return 0;
+      if (text === 's' || text === 'south' || text === 'down') return 1;
+      if (text === 'w' || text === 'west' || text === 'left') return 2;
+      if (text === 'n' || text === 'north' || text === 'up') return 3;
+      if (!/^-?\d+$/.test(text)) return null;
+    }
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    return modulo(Math.trunc(parsed), 4);
+  }
+
+  function parseChessDecorationKind(kind) {
+    const value = String(kind || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
+    const aliases = {
+      k: 'king',
+      q: 'queen',
+      r: 'rook',
+      b: 'bishop',
+      n: 'knight',
+      knight: 'knight',
+      p: 'pawn'
+    };
+    const parts = value.split('-').filter(Boolean);
+    const side = parts.find((part) => CHESS_PIECE_SIDES.includes(part));
+    let pieceKind = parts.find((part) => CHESS_PIECE_KINDS.includes(part));
+    if (!pieceKind) {
+      const aliasKey = parts.find((part) => Object.prototype.hasOwnProperty.call(aliases, part));
+      pieceKind = aliasKey ? aliases[aliasKey] : '';
+    }
+    if (!side || !pieceKind) return null;
+    if (!parts.includes('chess') && !parts.includes('fide') && !value.includes('white') && !value.includes('black')) return null;
+    const directionPart = parts.find((part) => Number.isInteger(normalizeChessPawnForwardDir(part)));
+    const result = { side, kind: pieceKind, style: chessPieceStyleForKind(pieceKind, value) };
+    if (pieceKind === 'pawn' && directionPart) result.forwardDir = normalizeChessPawnForwardDir(directionPart);
+    return result;
+  }
+
+  function normalizeChessPieceStyle(value) {
+    const text = String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
+    if (!text) return '';
+    if (CHESS_ROYAL_STYLE_VARIANTS.some((variant) => variant.id === text)) return text;
+    if (
+      text.includes('staunton')
+      || text.includes('classic')
+      || text.includes('compact')
+      || text.includes('sharp')
+      || text.includes('silhouette')
+      || text.includes('vector')
+      || text.includes('cartoon')
+      || text.includes('sketch')
+      || text.includes('option')
+      || /(?:^|-)[abc](?:$|-)/.test(text)
+    ) return CHESS_ROYAL_STYLE_VARIANTS[0].id;
+    return '';
+  }
+
+  function chessPieceStyleForKind(kind, value) {
+    const normalizedKind = normalizeChessPieceKind(kind);
+    if (!CHESS_ROYAL_VARIANT_KINDS.includes(normalizedKind)) return '';
+    return normalizeChessPieceStyle(value) || CHESS_ROYAL_STYLE_VARIANTS[0].id;
   }
 
   function normalizePresetPieceColor(color) {
@@ -22119,6 +23104,7 @@
     state.backgroundAction = normalizeBackgroundAction(options.backgroundAction || 'tile');
     state.backgroundDecorationKind = normalizeBackgroundDecorationKind(options.backgroundDecorationKind || 'input-hole');
     state.backgroundDecorationColor = normalizePresetPieceColor(options.backgroundDecorationColor || 'black') || 'black';
+    state.backgroundChessPawnDirection = normalizeChessPawnDirectionChoice(options.backgroundChessPawnDirection || options.chessPawnDirection);
     state.tiles = Array(rows * cols).fill(null);
     state.removedTiles = importedIndexSetForTest(options.removedTiles || options.removed || [], rows, cols);
     state.inputHoles = importedIndexSetForTest(options.inputHoles || options.connectFourHoles || options.holes || [], rows, cols);
