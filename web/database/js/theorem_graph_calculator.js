@@ -10,6 +10,33 @@
   const DEFAULT_NODE_FILL = '#f7f5f1';
   const TITLE_NODE_ID = '__title__';
   const TITLE_NODE_TYPE = 'title';
+  const CURRENT_NODE_EXPORT_KIND = 'current-node';
+  const NODE_NEST_HOVER_DELAY = 1000;
+  const NODE_DROP_ANIMATION_MS = 180;
+  const BREADCRUMB_DROP_TOLERANCE_X = 28;
+  const BREADCRUMB_DROP_TOLERANCE_Y = 18;
+  const UNDO_STACK_LIMIT = 40;
+  const NODE_SWATCH_VISIBLE_SLOTS = 7;
+  const NODE_COLOR_PRESETS = [
+    { label: 'default', value: '#7a6f65' },
+    { label: 'title brown', value: '#8b5f2a' },
+    { label: 'black', value: '#1a1612' },
+    { label: 'olive', value: '#6b7f3d' },
+    { label: 'teal', value: '#46786e' },
+    { label: 'blue', value: '#2f5f9f' },
+    { label: 'red', value: '#8b3a2a' },
+    { label: 'purple', value: '#7a4d9b' }
+  ];
+  const NODE_FILL_PRESETS = [
+    { label: 'default fill', value: '#f7f5f1' },
+    { label: 'title fill', value: '#fff7df' },
+    { label: 'warm white', value: '#fffdf8' },
+    { label: 'pale green', value: '#f4f7ed' },
+    { label: 'pale teal', value: '#eef7f4' },
+    { label: 'pale blue', value: '#eef4fb' },
+    { label: 'pale red', value: '#fbefee' },
+    { label: 'pale purple', value: '#f4f1f8' }
+  ];
   const NODE_TYPES = {
     title: { label: 'Title', fill: '#fff7df', stroke: '#8b5f2a', band: '#8b5f2a' },
     theorem: { label: 'Theorem', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
@@ -184,6 +211,7 @@
     importMode: 'preset',
     importScope: 'current',
     exportScope: 'whole',
+    undoStack: [],
     presets: [],
     presetScriptNonce: '',
     nodes: [],
@@ -202,6 +230,7 @@
     canvasWidth: 960,
     canvasHeight: 560,
     drag: null,
+    nodeDropAnimation: null,
     canvasResize: null,
     canvasRatioLocked: false,
     canvasAspectRatio: CANVAS_DEFAULT_ASPECT_RATIO,
@@ -213,6 +242,8 @@
     mathTypesetAttempts: 0,
     detailPreview: null,
     detailEditBaseline: null,
+    detailUndoCapturedKey: '',
+    titleUndoCaptured: false,
     titleEditorActive: false,
     exportDirty: true,
     activeLatexDetailField: null,
@@ -238,6 +269,7 @@
   function init() {
     cacheRefs();
     populateArrowPartPickers();
+    populateColorPalettes();
     bindEvents();
     syncCanvasRatioLockControl();
     resizeCanvas();
@@ -298,6 +330,9 @@
     refs.nodeCitationList = $('node-citation-list');
     refs.nodeColor = $('node-color');
     refs.nodeFillColor = $('node-fill-color');
+    refs.nodeColorSwatches = $('node-color-swatches');
+    refs.nodeFillColorSwatches = $('node-fill-color-swatches');
+    refs.nodeExport = $('node-export');
     refs.arrowEditor = $('arrow-editor');
     refs.arrowSource = $('arrow-source');
     refs.arrowTarget = $('arrow-target');
@@ -384,6 +419,7 @@
     refs.importModeJson = $('import-mode-json');
     refs.importScopeCurrent = $('import-scope-current');
     refs.importScopeWhole = $('import-scope-whole');
+    refs.importScopeNode = $('import-scope-node');
     refs.exportScopeWhole = $('export-scope-whole');
     refs.exportScopeCurrent = $('export-scope-current');
     refs.presetImportRow = $('preset-import-row');
@@ -434,9 +470,11 @@
       });
     }
 
+    window.addEventListener('keydown', handleGlobalKeyDown);
     if (refs.clearGraph) refs.clearGraph.addEventListener('click', clearGraphWithConfirm);
     if (refs.addNode) refs.addNode.addEventListener('click', addNodeFromControls);
     if (refs.addNodeMiscDetail) refs.addNodeMiscDetail.addEventListener('click', addMiscDetailFromControls);
+    if (refs.nodeExport) refs.nodeExport.addEventListener('click', exportSelectedNodeToExportCard);
     if (refs.connectMode) refs.connectMode.addEventListener('click', toggleConnectMode);
     if (refs.deleteSelected) refs.deleteSelected.addEventListener('click', deleteSelected);
     if (refs.toggleLayout) refs.toggleLayout.addEventListener('click', toggleLayout);
@@ -492,14 +530,20 @@
     if (refs.referenceEditSave) refs.referenceEditSave.addEventListener('click', saveReferenceEdit);
     if (refs.referenceEditCancel) refs.referenceEditCancel.addEventListener('click', closeReferenceEdit);
     if (refs.refreshExport) refs.refreshExport.addEventListener('click', () => {
-      refreshExport();
-      setExportMessage('Export refreshed.');
+      if (refreshExport()) setExportMessage('Export refreshed.');
     });
     if (refs.copyExport) refs.copyExport.addEventListener('click', copyExport);
     if (refs.graphTitle) {
-      refs.graphTitle.addEventListener('focus', selectTitleNodeFromTitleInput);
+      refs.graphTitle.addEventListener('focus', () => {
+        state.titleUndoCaptured = false;
+        selectTitleNodeFromTitleInput();
+      });
       refs.graphTitle.addEventListener('click', selectTitleNodeFromTitleInput);
       refs.graphTitle.addEventListener('input', () => {
+        if (!state.titleUndoCaptured) {
+          pushUndoSnapshot('graph title edit');
+          state.titleUndoCaptured = true;
+        }
         state.graphTitle = refs.graphTitle.value;
         markExportDirty();
         renderBreadcrumb();
@@ -509,6 +553,7 @@
       refs.graphTitle.addEventListener('blur', () => {
         state.graphTitle = cleanGraphTitle(refs.graphTitle.value);
         refs.graphTitle.value = state.graphTitle;
+        state.titleUndoCaptured = false;
         markExportDirty();
         renderBreadcrumb();
         syncControls();
@@ -519,6 +564,7 @@
     if (refs.importModeJson) refs.importModeJson.addEventListener('change', () => setImportMode('json'));
     if (refs.importScopeCurrent) refs.importScopeCurrent.addEventListener('change', () => setImportScope('current'));
     if (refs.importScopeWhole) refs.importScopeWhole.addEventListener('change', () => setImportScope('whole'));
+    if (refs.importScopeNode) refs.importScopeNode.addEventListener('change', () => setImportScope('node'));
     if (refs.exportScopeWhole) refs.exportScopeWhole.addEventListener('change', () => setExportScope('whole'));
     if (refs.exportScopeCurrent) refs.exportScopeCurrent.addEventListener('change', () => setExportScope('current'));
     if (refs.presetSelect) refs.presetSelect.addEventListener('change', syncControls);
@@ -575,7 +621,78 @@
         if (!input) return;
         input.value = normalizeColor(button.dataset.colorValue, input.value);
         input.dispatchEvent(new Event('input', { bubbles: true }));
+        closeColorPopovers();
       });
+    });
+    window.addEventListener('click', closeColorPopovers);
+  }
+
+  function populateColorPalettes() {
+    renderColorPalette(refs.nodeColorSwatches, 'node-color', NODE_COLOR_PRESETS, NODE_SWATCH_VISIBLE_SLOTS);
+    renderColorPalette(refs.nodeFillColorSwatches, 'node-fill-color', NODE_FILL_PRESETS, NODE_SWATCH_VISIBLE_SLOTS);
+  }
+
+  function colorPaletteRenderPlan(entries, visibleSlots = NODE_SWATCH_VISIBLE_SLOTS) {
+    const cleanEntries = (Array.isArray(entries) ? entries : [])
+      .map((entry) => ({
+        label: cleanString(entry && entry.label) || 'color',
+        value: normalizeColor(entry && entry.value, '')
+      }))
+      .filter((entry) => entry.value);
+    const slots = Math.max(1, Math.round(finiteNumber(visibleSlots, NODE_SWATCH_VISIBLE_SLOTS)));
+    if (cleanEntries.length <= slots) {
+      return { visible: cleanEntries, overflow: [], hasOverflow: false };
+    }
+    return {
+      visible: cleanEntries.slice(0, Math.max(0, slots - 1)),
+      overflow: cleanEntries.slice(Math.max(0, slots - 1)),
+      hasOverflow: true
+    };
+  }
+
+  function renderColorPalette(container, targetId, entries, visibleSlots) {
+    if (!container) return;
+    container.replaceChildren();
+    const plan = colorPaletteRenderPlan(entries, visibleSlots);
+    plan.visible.forEach((entry) => {
+      container.appendChild(makeColorSwatchButton(targetId, entry));
+    });
+    if (!plan.hasOverflow) return;
+    const popover = document.createElement('div');
+    popover.className = 'theorem-color-popover';
+    popover.hidden = true;
+    plan.overflow.forEach((entry) => {
+      popover.appendChild(makeColorSwatchButton(targetId, entry));
+    });
+    const overflow = document.createElement('button');
+    overflow.className = 'theorem-color-swatch is-overflow';
+    overflow.type = 'button';
+    overflow.textContent = '⋯';
+    overflow.setAttribute('aria-label', 'More colors');
+    overflow.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const shouldOpen = popover.hidden;
+      closeColorPopovers();
+      popover.hidden = !shouldOpen;
+    });
+    container.append(overflow, popover);
+  }
+
+  function makeColorSwatchButton(targetId, entry) {
+    const button = document.createElement('button');
+    button.className = 'theorem-color-swatch';
+    button.type = 'button';
+    button.dataset.colorTarget = targetId;
+    button.dataset.colorValue = entry.value;
+    button.style.setProperty('--swatch-color', entry.value);
+    button.setAttribute('aria-label', entry.label);
+    return button;
+  }
+
+  function closeColorPopovers() {
+    document.querySelectorAll('.theorem-color-popover').forEach((popover) => {
+      popover.hidden = true;
     });
   }
 
@@ -1630,6 +1747,121 @@
     drawConnectPreview(ctx);
   }
 
+  function pushUndoSnapshot(label = 'change') {
+    const snapshot = makeUndoSnapshot(label);
+    if (!snapshot) return false;
+    const previous = state.undoStack[state.undoStack.length - 1];
+    if (previous && previous.signature === snapshot.signature) return false;
+    state.undoStack.push(snapshot);
+    if (state.undoStack.length > UNDO_STACK_LIMIT) state.undoStack.shift();
+    return true;
+  }
+
+  function makeUndoSnapshot(label = 'change') {
+    try {
+      persistActiveGraphCanvasView();
+      const snapshot = {
+        label: cleanString(label) || 'change',
+        rootGraph: clonePlainObject(state.rootGraph),
+        activePath: [...state.activePath],
+        references: clonePlainObject(state.references),
+        selectedReferenceKeys: [...state.selectedReferenceKeys],
+        selectedNodeId: state.selectedNodeId || '',
+        selectedArrowId: state.selectedArrowId || '',
+        titleEditorActive: state.titleEditorActive === true,
+        layoutAvoidOverlap: state.layoutAvoidOverlap !== false,
+        canvasHeight: state.canvasHeight,
+        canvasRatioLocked: state.canvasRatioLocked === true,
+        canvasAspectRatio: state.canvasAspectRatio
+      };
+      snapshot.signature = JSON.stringify({
+        rootGraph: snapshot.rootGraph,
+        activePath: snapshot.activePath,
+        references: snapshot.references,
+        selectedReferenceKeys: snapshot.selectedReferenceKeys,
+        selectedNodeId: snapshot.selectedNodeId,
+        selectedArrowId: snapshot.selectedArrowId,
+        titleEditorActive: snapshot.titleEditorActive,
+        canvasHeight: snapshot.canvasHeight,
+        canvasRatioLocked: snapshot.canvasRatioLocked,
+        canvasAspectRatio: snapshot.canvasAspectRatio
+      });
+      return snapshot;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function restoreUndoSnapshot(snapshot, options = {}) {
+    if (!snapshot) return false;
+    stopLayout();
+    state.rootGraph = ensureGraphTreeShape(clonePlainObject(snapshot.rootGraph || createGraph(DEFAULT_GRAPH_TITLE)));
+    state.activePath = Array.isArray(snapshot.activePath) ? [...snapshot.activePath] : [];
+    currentGraph();
+    state.references = (Array.isArray(snapshot.references) ? snapshot.references : []).map((reference) => makeReference(reference));
+    state.selectedReferenceKeys = new Set(Array.isArray(snapshot.selectedReferenceKeys) ? snapshot.selectedReferenceKeys : []);
+    state.selectedNodeId = cleanId(snapshot.selectedNodeId);
+    state.selectedArrowId = cleanId(snapshot.selectedArrowId);
+    state.titleEditorActive = snapshot.titleEditorActive === true;
+    state.layoutAvoidOverlap = snapshot.layoutAvoidOverlap !== false;
+    state.canvasHeight = normalizeCanvasHeight(snapshot.canvasHeight, state.canvasHeight);
+    state.canvasRatioLocked = snapshot.canvasRatioLocked === true;
+    state.canvasAspectRatio = normalizeCanvasAspectRatio(snapshot.canvasAspectRatio, state.canvasAspectRatio);
+    state.detailPreview = null;
+    state.detailUndoCapturedKey = '';
+    state.titleUndoCaptured = false;
+    state.activeLatexDetailField = null;
+    state.connectMode = false;
+    state.connectSourceId = null;
+    state.nodeDropAnimation = null;
+    if (refs.referenceEditForm) refs.referenceEditForm.hidden = true;
+    state.editingReferenceKey = null;
+    if (options.render !== false) {
+      applyActiveGraphCanvasView();
+      resetDetailEditBaseline();
+      markExportDirty();
+      setStatus(`Undid ${snapshot.label || 'change'}.`);
+      renderAll();
+    }
+    return true;
+  }
+
+  function performUndo(options = {}) {
+    const snapshot = state.undoStack.pop();
+    if (!snapshot) {
+      if (options.render !== false) setStatus('Nothing to undo.');
+      return false;
+    }
+    return restoreUndoSnapshot(snapshot, options);
+  }
+
+  function ensureGraphTreeShape(graph) {
+    const shaped = ensureGraphShape(graph);
+    shaped.nodes.forEach((node) => {
+      if (node.childGraph) node.childGraph = ensureGraphTreeShape(node.childGraph);
+    });
+    return shaped;
+  }
+
+  function clonePlainObject(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function handleGlobalKeyDown(event) {
+    if (!event || !isUndoKeyboardEvent(event) || isTextEditingTarget(event.target)) return;
+    event.preventDefault();
+    performUndo();
+  }
+
+  function isUndoKeyboardEvent(event) {
+    return (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && cleanString(event.key).toLowerCase() === 'z';
+  }
+
+  function isTextEditingTarget(target) {
+    if (!target || typeof target.closest !== 'function') return false;
+    return !!target.closest('input, textarea, select, [contenteditable="true"]');
+  }
+
   function renderBreadcrumb() {
     if (!refs.graphBreadcrumb) return;
     refs.graphBreadcrumb.replaceChildren();
@@ -1644,7 +1876,10 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'theorem-breadcrumb-button';
+      button.dataset.graphBreadcrumb = 'true';
+      button.__theoremGraphPath = [...item.path];
       button.classList.toggle('is-current', index === items.length - 1);
+      button.classList.toggle('is-drop-target', !!state.drag && state.drag.kind === 'node' && Array.isArray(state.drag.breadcrumbDropPath) && graphPathsMatch(state.drag.breadcrumbDropPath, item.path));
       button.textContent = item.label;
       button.disabled = index === items.length - 1;
       button.addEventListener('click', () => navigateToGraphPath(item.path));
@@ -2192,6 +2427,8 @@
       }
       element.classList.toggle('is-selected', state.selectedNodeId === node.id);
       element.classList.toggle('is-source', state.connectSourceId === node.id);
+      element.classList.toggle('is-nest-target', !!state.drag && state.drag.kind === 'node' && state.drag.armedDrop && state.drag.armedDrop.targetNodeId === node.id);
+      element.classList.toggle('is-dropping', !!state.nodeDropAnimation && state.nodeDropAnimation.nodeId === node.id);
       element.style.left = `${node.x}px`;
       element.style.top = `${node.y}px`;
       element.style.setProperty('--node-label-max-width', `${nodeLabelMaxWidth(node)}px`);
@@ -2491,6 +2728,22 @@
     return `${arrow.sourceId}->${arrow.targetId}`;
   }
 
+  function beginNodeDrag(node, point) {
+    state.drag = {
+      kind: 'node',
+      nodeId: node.id,
+      sourcePath: [...state.activePath],
+      sourceGraph: currentGraph(),
+      offsetX: node.x - point.x,
+      offsetY: node.y - point.y,
+      hoverNodeId: '',
+      hoverTimer: null,
+      armedDrop: null,
+      breadcrumbDropPath: null
+    };
+    node.fixed = true;
+  }
+
   function handleCanvasPointerDown(event) {
     const point = eventPoint(event);
     const node = hitNode(point);
@@ -2501,13 +2754,7 @@
 
     if (node) {
       selectNode(node.id);
-      state.drag = {
-        kind: 'node',
-        nodeId: node.id,
-        offsetX: node.x - point.x,
-        offsetY: node.y - point.y
-      };
-      node.fixed = true;
+      beginNodeDrag(node, point);
       try {
         refs.canvas.setPointerCapture(event.pointerId);
       } catch (_) {}
@@ -2550,13 +2797,7 @@
     }
     const point = eventPoint(event);
     selectNode(node.id);
-    state.drag = {
-      kind: 'node',
-      nodeId: node.id,
-      offsetX: node.x - point.x,
-      offsetY: node.y - point.y
-    };
-    node.fixed = true;
+    beginNodeDrag(node, point);
     try {
       target.setPointerCapture(event.pointerId);
     } catch (_) {}
@@ -2581,22 +2822,164 @@
     renderAll();
   }
 
+  function updateDraggedNode(point, event) {
+    const drag = state.drag;
+    const node = drag ? findNode(drag.nodeId) : null;
+    if (!drag || !node) return;
+    if (!drag.undoCaptured) {
+      pushUndoSnapshot('node move');
+      drag.undoCaptured = true;
+    }
+    const margin = 90;
+    node.x = clamp(point.x + drag.offsetX, -margin, state.canvasWidth + margin);
+    node.y = clamp(point.y + drag.offsetY, -margin, state.canvasHeight + margin);
+    node.vx = 0;
+    node.vy = 0;
+    markExportDirty();
+
+    const breadcrumbTarget = breadcrumbDropTargetFromEvent(event);
+    if (setDragBreadcrumbDropPath(breadcrumbTarget ? breadcrumbTarget.path : null)) {
+      renderBreadcrumb();
+    }
+    if (breadcrumbTarget) {
+      clearNodeNestTarget(drag);
+    } else {
+      updateNodeNestHoverTarget(point, drag);
+    }
+    renderCanvas();
+  }
+
+  function updateNodeNestHoverTarget(point, drag = state.drag) {
+    if (!drag || drag.kind !== 'node') return;
+    const target = hitNode(point, { ignoreId: drag.nodeId });
+    if (!target) {
+      clearNodeNestTarget(drag);
+      return;
+    }
+    if (drag.hoverNodeId === target.id) return;
+    clearNodeNestTarget(drag);
+    drag.hoverNodeId = target.id;
+    drag.hoverTimer = window.setTimeout(() => {
+      if (state.drag !== drag || drag.kind !== 'node' || drag.hoverNodeId !== target.id) return;
+      if (!findNode(drag.nodeId) || !findNode(target.id)) return;
+      drag.armedDrop = { kind: 'nest', targetNodeId: target.id };
+      setStatus(`Release to move inside ${target.label}.`);
+      renderCanvas();
+    }, NODE_NEST_HOVER_DELAY);
+  }
+
+  function clearNodeNestTarget(drag = state.drag) {
+    if (!drag || drag.kind !== 'node') return;
+    const hadArmedDrop = !!drag.armedDrop;
+    clearNodeNestHoverTimer(drag);
+    drag.hoverNodeId = '';
+    drag.armedDrop = null;
+    if (hadArmedDrop) renderCanvas();
+  }
+
+  function clearNodeNestHoverTimer(drag = state.drag) {
+    if (!drag || !drag.hoverTimer) return;
+    if (typeof window.clearTimeout === 'function') window.clearTimeout(drag.hoverTimer);
+    drag.hoverTimer = null;
+  }
+
+  function setDragBreadcrumbDropPath(path, drag = state.drag) {
+    if (!drag || drag.kind !== 'node') return false;
+    const nextPath = Array.isArray(path) ? [...path] : null;
+    const hadPath = Array.isArray(drag.breadcrumbDropPath);
+    const hasNextPath = Array.isArray(nextPath);
+    if (hadPath === hasNextPath && graphPathsMatch(drag.breadcrumbDropPath, nextPath)) return false;
+    drag.breadcrumbDropPath = nextPath;
+    return true;
+  }
+
+  function breadcrumbDropTargetFromEvent(event) {
+    if (!event || !refs.graphBreadcrumb) return null;
+    const button = breadcrumbDropButtonFromPoint(event.clientX, event.clientY);
+    if (!button) return null;
+    const path = Array.isArray(button.__theoremGraphPath) ? button.__theoremGraphPath : [];
+    if (!isAncestorGraphPath(path, state.activePath) || graphPathsMatch(path, state.activePath)) return null;
+    return { kind: 'breadcrumb', path: [...path] };
+  }
+
+  function breadcrumbDropButtonFromPoint(clientX, clientY) {
+    const x = Number(clientX);
+    const y = Number(clientY);
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !refs.graphBreadcrumb) return null;
+    const exact = exactBreadcrumbButtonFromPoint(x, y);
+    if (exact) return breadcrumbButtonCanReceiveDrop(exact) ? exact : null;
+    return tolerantBreadcrumbButtonFromPoint(x, y);
+  }
+
+  function exactBreadcrumbButtonFromPoint(clientX, clientY) {
+    if (typeof document.elementFromPoint !== 'function') return null;
+    const element = document.elementFromPoint(clientX, clientY);
+    const button = element ? element.closest('[data-graph-breadcrumb="true"]') : null;
+    return button && refs.graphBreadcrumb.contains(button) ? button : null;
+  }
+
+  function tolerantBreadcrumbButtonFromPoint(clientX, clientY) {
+    let best = null;
+    let bestDistance = Infinity;
+    refs.graphBreadcrumb.querySelectorAll('[data-graph-breadcrumb="true"]').forEach((button) => {
+      if (!breadcrumbButtonCanReceiveDrop(button)) return;
+      const rect = button.getBoundingClientRect();
+      const insideX = clientX >= rect.left - BREADCRUMB_DROP_TOLERANCE_X && clientX <= rect.right + BREADCRUMB_DROP_TOLERANCE_X;
+      const insideY = clientY >= rect.top - BREADCRUMB_DROP_TOLERANCE_Y && clientY <= rect.bottom + BREADCRUMB_DROP_TOLERANCE_Y;
+      if (!insideX || !insideY) return;
+      const distance = distanceToRect(clientX, clientY, rect);
+      if (distance < bestDistance) {
+        best = button;
+        bestDistance = distance;
+      }
+    });
+    return best;
+  }
+
+  function breadcrumbButtonCanReceiveDrop(button) {
+    if (!button || !refs.graphBreadcrumb || !refs.graphBreadcrumb.contains(button)) return false;
+    const path = Array.isArray(button.__theoremGraphPath) ? button.__theoremGraphPath : [];
+    return isAncestorGraphPath(path, state.activePath) && !graphPathsMatch(path, state.activePath);
+  }
+
+  function distanceToRect(clientX, clientY, rect) {
+    const dx = clientX < rect.left ? rect.left - clientX : (clientX > rect.right ? clientX - rect.right : 0);
+    const dy = clientY < rect.top ? rect.top - clientY : (clientY > rect.bottom ? clientY - rect.bottom : 0);
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  function resolveNodeDropTarget(drag, event) {
+    if (!drag || drag.kind !== 'node') return null;
+    const breadcrumbTarget = breadcrumbDropTargetFromEvent(event);
+    if (breadcrumbTarget) return breadcrumbTarget;
+    if (drag.breadcrumbDropPath && !graphPathsMatch(drag.breadcrumbDropPath, state.activePath)) {
+      return { kind: 'breadcrumb', path: [...drag.breadcrumbDropPath] };
+    }
+    if (drag.armedDrop && drag.armedDrop.kind === 'nest' && findNode(drag.armedDrop.targetNodeId)) {
+      return { kind: 'nest', targetNodeId: drag.armedDrop.targetNodeId };
+    }
+    return null;
+  }
+
+  function graphPathsMatch(left, right) {
+    const a = Array.isArray(left) ? left : [];
+    const b = Array.isArray(right) ? right : [];
+    return a.length === b.length && a.every((id, index) => id === b[index]);
+  }
+
+  function isAncestorGraphPath(path, possibleDescendant) {
+    const ancestor = Array.isArray(path) ? path : [];
+    const descendant = Array.isArray(possibleDescendant) ? possibleDescendant : [];
+    return ancestor.length <= descendant.length && ancestor.every((id, index) => id === descendant[index]);
+  }
+
   function handleCanvasPointerMove(event) {
     const point = eventPoint(event);
     if (state.drag) {
       if (state.drag.kind === 'arrow-label') {
         updateDraggedArrowLabel(point);
       } else {
-        const node = findNode(state.drag.nodeId);
-        if (node) {
-          const margin = 90;
-          node.x = clamp(point.x + state.drag.offsetX, -margin, state.canvasWidth + margin);
-          node.y = clamp(point.y + state.drag.offsetY, -margin, state.canvasHeight + margin);
-          node.vx = 0;
-          node.vy = 0;
-          markExportDirty();
-          renderCanvas();
-        }
+        updateDraggedNode(point, event);
       }
       return;
     }
@@ -2612,12 +2995,17 @@
   }
 
   function handleCanvasPointerUp(event) {
-    if (state.drag && state.drag.kind !== 'arrow-label') {
-      const node = findNode(state.drag.nodeId);
+    const drag = state.drag;
+    let handledNodeDrop = false;
+    if (drag && drag.kind !== 'arrow-label') {
+      const node = findNode(drag.nodeId);
       if (node) {
         node.fixed = false;
-        if (nodeOutsideCanvas(node)) {
-          removeNodeById(node.id, `Removed ${node.label}.`);
+        const dropTarget = resolveNodeDropTarget(drag, event);
+        if (dropTarget) {
+          handledNodeDrop = finishDraggedNodeDrop(drag, dropTarget);
+        } else if (nodeOutsideCanvas(node)) {
+          removeNodeById(node.id, `Removed ${node.label}.`, { recordUndo: !drag.undoCaptured });
         } else {
           const previousX = node.x;
           const previousY = node.y;
@@ -2628,6 +3016,11 @@
           }
         }
       }
+    }
+    if (drag && drag.kind === 'node') {
+      clearNodeNestHoverTimer(drag);
+      setDragBreadcrumbDropPath(null, drag);
+      renderBreadcrumb();
     }
     state.drag = null;
     if (refs.canvas) {
@@ -2644,6 +3037,160 @@
         captureTarget.releasePointerCapture(event.pointerId);
       } catch (_) {}
     }
+    if (handledNodeDrop) renderCanvas();
+  }
+
+  function finishDraggedNodeDrop(drag, dropTarget) {
+    const sourceGraph = drag.sourceGraph || graphAtPath(drag.sourcePath) || currentGraph();
+    const node = sourceGraph.nodes.find((item) => item.id === drag.nodeId);
+    if (!node) return false;
+
+    let targetGraph = null;
+    let targetPath = null;
+    let position = null;
+    let selectIdAfterMove = '';
+    let statusMessage = '';
+    let navigateAfterMove = false;
+
+    if (dropTarget.kind === 'nest') {
+      const targetNode = sourceGraph.nodes.find((item) => item.id === dropTarget.targetNodeId);
+      if (!targetNode || targetNode.id === node.id) return false;
+      targetGraph = ensureNodeChildGraph(targetNode);
+      targetPath = [...(drag.sourcePath || []), targetNode.id];
+      position = defaultNodePositionForGraph(targetGraph);
+      selectIdAfterMove = targetNode.id;
+      statusMessage = `Moved ${node.label} inside ${targetNode.label}.`;
+    } else if (dropTarget.kind === 'breadcrumb') {
+      targetPath = [...dropTarget.path];
+      targetGraph = graphAtPath(targetPath);
+      if (!targetGraph || targetGraph === sourceGraph) return false;
+      position = ancestorDropPosition(targetGraph, targetPath, drag.sourcePath || []);
+      navigateAfterMove = true;
+      statusMessage = `Moved ${node.label} to ${cleanGraphTitle(targetGraph.title) || 'graph'}.`;
+    }
+
+    if (!targetGraph) return false;
+    if (!drag.undoCaptured) {
+      pushUndoSnapshot(dropTarget.kind === 'nest' ? 'move node inside' : 'move node to breadcrumb');
+      drag.undoCaptured = true;
+    }
+    clearNodeNestHoverTimer(drag);
+    drag.armedDrop = null;
+    drag.hoverNodeId = '';
+    setDragBreadcrumbDropPath(null, drag);
+    state.nodeDropAnimation = { nodeId: node.id };
+    renderCanvas();
+    window.setTimeout(() => {
+      state.nodeDropAnimation = null;
+      const moved = moveNodeBetweenGraphs(sourceGraph, node.id, targetGraph, { position });
+      if (!moved) {
+        renderAll();
+        return;
+      }
+      if (navigateAfterMove) {
+        navigateToGraphPath(targetPath);
+        selectNode(moved.node.id);
+      } else {
+        if (!graphPathsMatch(state.activePath, drag.sourcePath)) navigateToGraphPath(drag.sourcePath || []);
+        if (selectIdAfterMove) selectNode(selectIdAfterMove);
+      }
+      markExportDirty();
+      setStatus(statusMessage);
+      renderAll();
+    }, NODE_DROP_ANIMATION_MS);
+    return true;
+  }
+
+  function ensureNodeChildGraph(node) {
+    if (!node) return null;
+    if (!node.childGraph) node.childGraph = createGraph(cleanString(node.label) || 'Nested Graph');
+    ensureGraphShape(node.childGraph);
+    syncChildGraphTitleFromSourceNode(node);
+    return node.childGraph;
+  }
+
+  function moveNodeBetweenGraphs(sourceGraph, nodeId, targetGraph, options = {}) {
+    if (!sourceGraph || !targetGraph || sourceGraph === targetGraph) return null;
+    ensureGraphShape(sourceGraph);
+    ensureGraphShape(targetGraph);
+    const index = sourceGraph.nodes.findIndex((item) => item.id === nodeId);
+    if (index < 0) return null;
+    const [node] = sourceGraph.nodes.splice(index, 1);
+    const previousId = node.id;
+    const removedArrowCount = sourceGraph.arrows.length;
+    sourceGraph.arrows = sourceGraph.arrows.filter((arrow) => arrow.sourceId !== previousId && arrow.targetId !== previousId);
+    appendNodeToGraph(targetGraph, node, options);
+    sourceGraph.nodeSerial = Math.max(1, Math.round(finiteNumber(sourceGraph.nodeSerial, nextSerial(sourceGraph.nodes.map((item) => item.id), 'n'))));
+    return {
+      node,
+      previousId,
+      removedArrowCount: removedArrowCount - sourceGraph.arrows.length
+    };
+  }
+
+  function appendNodeToGraph(graph, node, options = {}) {
+    ensureGraphShape(graph);
+    node.id = uniqueNodeIdForGraph(graph, node.id);
+    if (options.position && typeof options.position === 'object') {
+      node.x = finiteNumber(options.position.x, node.x);
+      node.y = finiteNumber(options.position.y, node.y);
+    }
+    node.vx = 0;
+    node.vy = 0;
+    node.fixed = false;
+    if (node.childGraph) syncChildGraphTitleFromSourceNode(node);
+    graph.nodes.push(node);
+    graph.nodeSerial = Math.max(graph.nodeSerial, nextSerial(graph.nodes.map((item) => item.id), 'n'));
+    clampNodeToGraphBounds(node, graph);
+    return node;
+  }
+
+  function uniqueNodeIdForGraph(graph, preferredId = '') {
+    ensureGraphShape(graph);
+    const used = new Set(graph.nodes.map((node) => node.id));
+    const cleanPreferredId = cleanId(preferredId);
+    if (cleanPreferredId && cleanPreferredId !== TITLE_NODE_ID && !used.has(cleanPreferredId)) return cleanPreferredId;
+    let serial = Math.max(graph.nodeSerial, nextSerial(graph.nodes.map((node) => node.id), 'n'));
+    let id = '';
+    do {
+      id = `n${serial}`;
+      serial += 1;
+    } while (used.has(id));
+    graph.nodeSerial = Math.max(graph.nodeSerial, serial);
+    return id;
+  }
+
+  function defaultNodePositionForGraph(graph) {
+    const width = Math.max(320, finiteNumber(state.canvasWidth, 960));
+    const height = normalizeCanvasHeight(graph ? graph.canvasHeight : null, state.canvasHeight);
+    const count = graph && Array.isArray(graph.nodes) ? graph.nodes.length : 0;
+    const angle = count * Math.PI * (3 - Math.sqrt(5));
+    const radius = Math.min(width, height) * 0.14;
+    return {
+      x: width / 2 + Math.cos(angle) * radius,
+      y: height / 2 + Math.sin(angle) * radius
+    };
+  }
+
+  function ancestorDropPosition(targetGraph, targetPath, sourcePath) {
+    const childOwnerId = Array.isArray(sourcePath) ? sourcePath[(targetPath || []).length] : '';
+    const anchor = childOwnerId && targetGraph && Array.isArray(targetGraph.nodes)
+      ? targetGraph.nodes.find((node) => node.id === childOwnerId)
+      : null;
+    if (!anchor) return defaultNodePositionForGraph(targetGraph);
+    return {
+      x: anchor.x + 72,
+      y: anchor.y + 52
+    };
+  }
+
+  function clampNodeToGraphBounds(node, graph) {
+    const width = Math.max(320, finiteNumber(state.canvasWidth, 960));
+    const height = normalizeCanvasHeight(graph ? graph.canvasHeight : null, state.canvasHeight);
+    const top = CANVAS_VERTICAL_NODE_PADDING;
+    const bottom = Math.max(top, height - CANVAS_VERTICAL_NODE_PADDING);
+    node.x = clamp(node.x, 46, Math.max(46, width - 46));
+    node.y = clamp(node.y, top + 46, Math.max(top + 46, bottom - 46));
   }
 
   function handleNodeLayerDoubleClick(event) {
@@ -2662,6 +3209,7 @@
     if (state.connectMode) return;
     const point = eventPoint(event);
     const type = refs.newNodeType ? refs.newNodeType.value : DEFAULT_NEW_NODE_TYPE;
+    pushUndoSnapshot('add node');
     const node = addNode({
       type,
       label: refs.newNodeLabel && refs.newNodeLabel.value.trim()
@@ -2683,12 +3231,14 @@
     };
   }
 
-  function hitNode(point) {
+  function hitNode(point, options = {}) {
     if (!refs.canvas) return null;
+    const ignoreId = cleanString(options.ignoreId);
     const ctx = refs.canvas.getContext('2d');
     const nodes = visibleNodes();
     for (let i = nodes.length - 1; i >= 0; i -= 1) {
       const node = nodes[i];
+      if (ignoreId && node.id === ignoreId) continue;
       const box = nodeBox(ctx, node);
       if (
         point.x >= box.x
@@ -2760,6 +3310,10 @@
     if (!arrow || !refs.canvas) return;
     const model = arrowModelForPointer(arrow);
     if (!model) return;
+    if (!state.drag.undoCaptured) {
+      pushUndoSnapshot('arrow label move');
+      state.drag.undoCaptured = true;
+    }
     const closest = closestPointOnQuadratic(point, model);
     const normal = quadraticNormal(model.start, model.control, model.end, closest.t);
     const align = normalizeArrowLabelAlign(arrow.labelAlign);
@@ -2827,6 +3381,7 @@
       return;
     }
     if (!commitActiveEditorDraft()) return;
+    pushUndoSnapshot('add arrow');
     const arrow = addArrow(state.connectSourceId, node.id, '');
     state.connectMode = false;
     state.connectSourceId = null;
@@ -2842,6 +3397,7 @@
       : nextDefaultNodeLabel(type);
     const angle = state.nodes.length * Math.PI * (3 - Math.sqrt(5));
     const radius = Math.min(state.canvasWidth, state.canvasHeight) * 0.18;
+    pushUndoSnapshot('add node');
     const node = addNode({
       type,
       label,
@@ -2860,6 +3416,7 @@
       setStatus('Choose a node before adding an extra field.');
       return;
     }
+    captureDetailUndoBeforeChange('node', node.id);
     node = applyNodeDetailFromControls(node) || node;
     if (!Array.isArray(node.details)) node.details = [];
     const label = cleanDetailLabel(refs.nodeMiscDetailName ? refs.nodeMiscDetailName.value : '');
@@ -2894,6 +3451,7 @@
       setStatus('Choose a node before removing an extra field.');
       return;
     }
+    captureDetailUndoBeforeChange('node', node.id);
     node = applyNodeDetailFromControls(node) || node;
     const before = node.details.length;
     node.details = node.details.filter((detail) => detail.id !== detailId);
@@ -2938,6 +3496,7 @@
       commitCurrentDetailBeforeSelectionChange('node', node.id);
     }
     if (!node.childGraph) {
+      pushUndoSnapshot('create nested graph');
       node.childGraph = createGraph(cleanString(node.label) || 'Nested Graph');
       setStatus(`Created nested graph for ${node.label}.`);
     } else {
@@ -3052,6 +3611,7 @@
       return;
     }
     if (state.selectedArrowId) {
+      pushUndoSnapshot('delete arrow');
       state.arrows = state.arrows.filter((arrow) => arrow.id !== state.selectedArrowId);
       clearSelection();
       setStatus('Deleted selected arrow.');
@@ -3061,7 +3621,8 @@
     setStatus('Nothing selected.');
   }
 
-  function removeNodeById(id, message) {
+  function removeNodeById(id, message, options = {}) {
+    if (options.recordUndo !== false) pushUndoSnapshot('delete node');
     state.nodes = state.nodes.filter((item) => item.id !== id);
     state.arrows = state.arrows.filter((arrow) => arrow.sourceId !== id && arrow.targetId !== id);
     state.connectSourceId = state.connectSourceId === id ? null : state.connectSourceId;
@@ -3081,6 +3642,7 @@
     }
     if (!window.confirm('Clear ordinary nodes and arrows in the current graph?')) return;
     stopLayout();
+    pushUndoSnapshot('clear graph');
     state.nodes = [];
     state.arrows = [];
     state.editingReferenceKey = null;
@@ -3103,6 +3665,7 @@
       setStatus('No nodes to reset.');
       return;
     }
+    pushUndoSnapshot('reset layout');
     const bounds = layoutBounds();
     const centerX = (bounds.left + bounds.right) / 2;
     const centerY = (bounds.top + bounds.bottom) / 2;
@@ -3130,6 +3693,7 @@
   }
 
   function updateDebugRenderSettings() {
+    pushUndoSnapshot('layout settings');
     state.arrowBoundaryGap = normalizeArrowBoundaryGap(refs.arrowBoundaryGap ? refs.arrowBoundaryGap.value : state.arrowBoundaryGap);
     state.nodeFillSaturation = normalizeNodeFillSaturation(refs.nodeFillSaturation ? refs.nodeFillSaturation.value : state.nodeFillSaturation);
     state.layoutIdealDistance = normalizeLayoutIdealDistance(refs.layoutIdealDistance ? refs.layoutIdealDistance.value : state.layoutIdealDistance);
@@ -3146,6 +3710,7 @@
   }
 
   function updateLayoutAvoidOverlap() {
+    pushUndoSnapshot('layout overlap setting');
     state.layoutAvoidOverlap = refs.layoutAvoidOverlap ? !!refs.layoutAvoidOverlap.checked : LAYOUT_AVOID_OVERLAP_DEFAULT;
     renderCanvas();
     state.layoutOverlapGroups = state.layoutAvoidOverlap ? [] : detectLayoutOverlapGroups();
@@ -3193,6 +3758,7 @@
       setStatus('Add at least two nodes for layout.');
       return;
     }
+    pushUndoSnapshot('run layout');
     renderCanvas();
     state.layoutAvoidOverlap = refs.layoutAvoidOverlap ? !!refs.layoutAvoidOverlap.checked : state.layoutAvoidOverlap;
     state.layoutOverlapGroups = state.layoutAvoidOverlap ? [] : detectLayoutOverlapGroups();
@@ -3571,6 +4137,10 @@
     setArrowLabelAlignControl(arrow ? arrow.labelAlign : ARROW_LABEL_ALIGN_DEFAULT, !arrow);
     if (refs.detailUpdate) refs.detailUpdate.disabled = !(node || arrow);
     if (refs.detailCancel) refs.detailCancel.disabled = !(node || arrow);
+    if (refs.nodeExport) {
+      refs.nodeExport.hidden = !node || isTitle;
+      refs.nodeExport.disabled = !node || isTitle;
+    }
     if (!node) {
       if (refs.nodeType) refs.nodeType.value = DEFAULT_NEW_NODE_TYPE;
       if (refs.nodeLabel) refs.nodeLabel.value = '';
@@ -4391,6 +4961,7 @@
     const node = findEditorNode(state.selectedNodeId);
     const arrow = findArrow(state.selectedArrowId);
     if (node) {
+      captureDetailUndoBeforeChange('node', node.id);
       applyNodeDetailFromControls(node);
       state.detailPreview = null;
       if (manual) {
@@ -4411,6 +4982,7 @@
       return true;
     }
     if (arrow) {
+      captureDetailUndoBeforeChange('arrow', arrow.id);
       const result = applyArrowDetailFromControls(arrow);
       if (!result.ok) {
         setStatus('Choose existing parent nodes for the arrow.');
@@ -4431,6 +5003,13 @@
     }
     setStatus('Click a node or arrow before updating.');
     return false;
+  }
+
+  function captureDetailUndoBeforeChange(kind, id) {
+    const key = `${kind}:${id}`;
+    if (state.detailUndoCapturedKey === key) return;
+    pushUndoSnapshot(`${kind} edit`);
+    state.detailUndoCapturedKey = key;
   }
 
   function applyNodeDetailFromControls(node) {
@@ -4582,6 +5161,7 @@
   }
 
   function resetDetailEditBaseline() {
+    state.detailUndoCapturedKey = '';
     const node = findEditorNode(state.selectedNodeId);
     if (node) {
       state.detailEditBaseline = {
@@ -5183,6 +5763,7 @@
     const rawBibtex = cleanString(refs.referenceEditRaw.value);
     const primaryLink = linkResult.links[0] || null;
     const nextCiteKey = cleanCitationKeyInput(refs.referenceEditCite.value) || nextKey;
+    pushUndoSnapshot('reference edit');
     original.key = nextKey;
     original.title = cleanString(refs.referenceEditTitle.value);
     original.author = cleanString(refs.referenceEditAuthor.value);
@@ -5229,6 +5810,7 @@
       }
     }
     const selectedKeys = new Set(selected.map((reference) => reference.key));
+    pushUndoSnapshot('delete references');
     state.references = state.references.filter((reference) => !selectedKeys.has(reference.key));
     state.selectedReferenceKeys = new Set();
     if (selectedKeys.has(state.editingReferenceKey)) {
@@ -5399,12 +5981,21 @@
       setReferenceMessage('Use link/key/title overrides with exactly one BibTeX entry.', true);
       return;
     }
-    let added = 0;
-    let replaced = 0;
+    const pending = [];
     parsed.forEach((entry) => {
       const merged = overrides.hasValues ? applyReferenceInputOverrides(entry, overrides) : entry;
       if (!merged.key) return;
       const next = makeReference(merged);
+      pending.push(next);
+    });
+    if (!pending.length) {
+      setReferenceMessage('No entries had usable keys.', true);
+      return;
+    }
+    pushUndoSnapshot('add references');
+    let added = 0;
+    let replaced = 0;
+    pending.forEach((next) => {
       const index = state.references.findIndex((reference) => reference.key === next.key);
       if (index >= 0) {
         state.references[index] = next;
@@ -5414,10 +6005,6 @@
         added += 1;
       }
     });
-    if (!added && !replaced) {
-      setReferenceMessage('No entries had usable keys.', true);
-      return;
-    }
     refs.bibtexInput.value = '';
     if (overrides.hasValues) clearLinkReferenceControls();
     setReferenceMessage(`${added} added, ${replaced} replaced.`);
@@ -5480,6 +6067,7 @@
       setReferenceMessage(`Reference [${key}] already exists.`, true);
       return;
     }
+    pushUndoSnapshot('add reference');
     state.references.push(makeReference({
       key,
       title,
@@ -5625,10 +6213,19 @@
   }
 
   function refreshExport() {
-    if (!refs.exportOut) return;
-    refs.exportOut.value = buildPresetFileExport();
-    state.exportDirty = false;
-    syncControls();
+    if (!refs.exportOut) return false;
+    try {
+      refs.exportOut.value = buildPresetFileExport();
+      state.exportDirty = false;
+      syncControls();
+      return true;
+    } catch (error) {
+      refs.exportOut.value = '';
+      state.exportDirty = true;
+      setExportMessage(error.message, true);
+      syncControls();
+      return false;
+    }
   }
 
   function markExportDirty() {
@@ -5688,6 +6285,7 @@
   }
 
   function buildExport(scope = 'whole') {
+    if (scope === 'node') return buildCurrentNodeExport();
     persistActiveGraphCanvasView();
     const graph = scope === 'current' ? currentGraph() : state.rootGraph;
     if (scope === 'current') syncActiveTitleFromOwner();
@@ -5696,22 +6294,7 @@
     const preset = {
       schemaVersion: SCHEMA_VERSION,
       ...buildGraphExport(graph, { includeTitleNode: true }),
-      references: state.references.map((reference) => {
-        const details = cleanMiscDetailsForExport(reference.details);
-        return {
-          ...reference.extra,
-          key: reference.key,
-          author: reference.author,
-          title: reference.title,
-          year: reference.year,
-          citeKey: referenceExportCiteKey(reference),
-          ...(details.length ? { details } : {}),
-          url: reference.url,
-          source: reference.source,
-          rawBibtex: reference.rawBibtex,
-          links: referenceExportLinks(reference)
-        };
-      })
+      references: exportReferences()
     };
     if (preset.view && typeof preset.view === 'object') {
       preset.view.selectedReferenceKeys = state.references
@@ -5719,6 +6302,64 @@
         .map((reference) => reference.key);
     }
     return preset;
+  }
+
+  function buildCurrentNodeExport() {
+    const node = findEditorNode(state.selectedNodeId);
+    if (!node || isTitleNode(node)) {
+      throw new Error('Select an ordinary node before exporting the current node.');
+    }
+    if (!commitActiveEditorDraft()) {
+      throw new Error('Finish the active edit before exporting the current node.');
+    }
+    syncNodeCitationKeys(node);
+    if (node.childGraph) syncGraphCitationKeys(node.childGraph);
+    return {
+      schemaVersion: SCHEMA_VERSION,
+      exportKind: CURRENT_NODE_EXPORT_KIND,
+      title: cleanString(node.label) || node.id,
+      node: exportNode(node, true),
+      references: exportReferences()
+    };
+  }
+
+  function currentNodeExportJson() {
+    return JSON.stringify(buildCurrentNodeExport(), null, 2);
+  }
+
+  function exportSelectedNodeToExportCard() {
+    if (!refs.exportOut) return;
+    try {
+      refs.exportOut.value = currentNodeExportJson();
+      state.exportDirty = false;
+      setExportMessage('Current node JSON exported.');
+      if (window.CalculatorCards) {
+        window.CalculatorCards.openCard('#export-card', { reason: 'node-export' });
+      }
+      if (refs.exportOut && typeof refs.exportOut.focus === 'function') refs.exportOut.focus();
+      syncControls();
+    } catch (error) {
+      setExportMessage(error.message, true);
+    }
+  }
+
+  function exportReferences() {
+    return state.references.map((reference) => {
+      const details = cleanMiscDetailsForExport(reference.details);
+      return {
+        ...reference.extra,
+        key: reference.key,
+        author: reference.author,
+        title: reference.title,
+        year: reference.year,
+        citeKey: referenceExportCiteKey(reference),
+        ...(details.length ? { details } : {}),
+        url: reference.url,
+        source: reference.source,
+        rawBibtex: reference.rawBibtex,
+        links: referenceExportLinks(reference)
+      };
+    });
   }
 
   function buildGraphExport(graph, options = {}) {
@@ -5830,7 +6471,7 @@
   }
 
   function setImportScope(scope) {
-    state.importScope = scope === 'whole' ? 'whole' : 'current';
+    state.importScope = scope === 'whole' ? 'whole' : (scope === 'node' ? 'node' : 'current');
     syncControls();
   }
 
@@ -5842,8 +6483,9 @@
   }
 
   function currentImportScope() {
+    if (refs.importScopeNode && refs.importScopeNode.checked) return 'node';
     if (refs.importScopeWhole && refs.importScopeWhole.checked) return 'whole';
-    return state.importScope === 'whole' ? 'whole' : 'current';
+    return state.importScope === 'whole' ? 'whole' : (state.importScope === 'node' ? 'node' : 'current');
   }
 
   function currentExportScope() {
@@ -5973,14 +6615,22 @@
     syncCanvasRatioLockControl();
   }
 
-  function applyImportData(data, sourceLabel = 'graph', scope = currentImportScope()) {
+  function applyImportData(data, sourceLabel = 'graph', scope = currentImportScope(), options = {}) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       throw new Error('Import must be a JSON object.');
     }
     const importSource = normalizeImportSource(data, sourceLabel);
     data = importSource.data;
     sourceLabel = importSource.sourceLabel;
+    if (scope === 'node') {
+      applyCurrentNodeImportData(data, sourceLabel);
+      return;
+    }
+    if (isCurrentNodeExport(data)) {
+      throw new Error('Current-node exports must be loaded with import scope "current node".');
+    }
     stopLayout();
+    if (options.recordUndo !== false) pushUndoSnapshot(scope === 'whole' ? 'whole graph import' : 'current tab import');
     const canvasView = normalizeCanvasView(readImportView(data));
     applyImportedCanvasView(canvasView);
     const next = normalizeImport(data, canvasView);
@@ -6015,6 +6665,78 @@
     setStatus(wholeImport ? 'Imported whole graph.' : 'Imported current tab.');
     renderAll();
     markCurrentExportClean();
+  }
+
+  function applyCurrentNodeImportData(data, sourceLabel = 'current-node export') {
+    stopLayout();
+    pushUndoSnapshot('current node import');
+    const next = importCurrentNodeIntoGraph(currentGraph(), data);
+    state.references = mergeReferencesByKey(state.references, next.references);
+    state.selectedReferenceKeys = new Set([...state.selectedReferenceKeys].filter((key) => state.references.some((reference) => reference.key === key)));
+    state.editingReferenceKey = null;
+    if (refs.referenceEditForm) refs.referenceEditForm.hidden = true;
+    state.titleEditorActive = false;
+    state.selectedNodeId = next.node.id;
+    state.selectedArrowId = null;
+    state.layoutOverlapGroups = [];
+    state.activeLatexDetailField = null;
+    resetDetailEditBaseline();
+    state.connectMode = false;
+    state.connectSourceId = null;
+    setExportMessage(`Loaded ${next.node.label} from ${sourceLabel} into the current tab.`);
+    setStatus(`Imported ${next.node.label}.`);
+    renderAll();
+    markCurrentExportClean();
+  }
+
+  function importCurrentNodeIntoGraph(graph, data) {
+    const next = normalizeCurrentNodeImport(data);
+    appendNodeToGraph(graph, next.node);
+    return next;
+  }
+
+  function normalizeCurrentNodeImport(data) {
+    if (!isCurrentNodeExport(data)) {
+      throw new Error('Current node import expects a current-node export. Choose current tab or whole graph for graph imports.');
+    }
+    if (data.schemaVersion && Number(data.schemaVersion) > SCHEMA_VERSION) {
+      setExportMessage(`Newer schema ${data.schemaVersion}; preserving known fields.`, true);
+    }
+    const node = normalizeNodeImport(data.node);
+    if (!node) throw new Error('Current node import found no valid node.');
+    syncNodeCitationKeys(node);
+    if (node.childGraph) syncGraphCitationKeys(node.childGraph);
+    return {
+      node,
+      references: normalizeReferencesImport(data).references
+    };
+  }
+
+  function isCurrentNodeExport(data) {
+    return !!data
+      && typeof data === 'object'
+      && !Array.isArray(data)
+      && cleanString(data.exportKind) === CURRENT_NODE_EXPORT_KIND;
+  }
+
+  function normalizeNodeImport(entry) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+    const id = cleanId(entry.id) || 'n1';
+    if (id === TITLE_NODE_ID) return null;
+    const x = Number.isFinite(Number(entry.x)) ? Number(entry.x) : state.canvasWidth / 2;
+    const y = Number.isFinite(Number(entry.y)) ? Number(entry.y) : state.canvasHeight / 2;
+    const node = makeNode({
+      ...entry,
+      childGraph: undefined,
+      id,
+      label: cleanString(entry.label) || 'Imported node',
+      x,
+      y
+    });
+    if (entry.childGraph && typeof entry.childGraph === 'object' && !Array.isArray(entry.childGraph)) {
+      node.childGraph = normalizeGraphImport(entry.childGraph);
+    }
+    return node;
   }
 
   function normalizeImportSource(data, sourceLabel) {
@@ -6390,7 +7112,7 @@
     const preset = state.presets[index];
     try {
       const data = await readPresetData(preset);
-      applyImportData(data, preset.label);
+      applyImportData(data, preset.label, undefined, { recordUndo: false });
       setExportMessage(`Default preset "${preset.label}" loaded.`);
     } catch (error) {
       loadSeedExampleFallback(`Default preset failed: ${error.message}. Loaded the starter example.`, true);
@@ -6443,17 +7165,9 @@
     if (data.schemaVersion && Number(data.schemaVersion) > SCHEMA_VERSION) {
       setExportMessage(`Newer schema ${data.schemaVersion}; preserving known fields.`, true);
     }
-    const rawReferences = Array.isArray(data.references) ? data.references : [];
-    const references = [];
-    const referenceKeys = new Set();
-    rawReferences.forEach((entry) => {
-      if (!entry || typeof entry !== 'object') return;
-      const key = cleanString(entry.key);
-      if (!key || referenceKeys.has(key)) return;
-      references.push(makeReference({ ...entry, key }));
-      referenceKeys.add(key);
-    });
-
+    const normalizedReferences = normalizeReferencesImport(data);
+    const references = normalizedReferences.references;
+    const referenceKeys = normalizedReferences.referenceKeys;
     const view = data.view && typeof data.view === 'object' && !Array.isArray(data.view) ? data.view : {};
     const selectedId = cleanId(view.selectedId);
     const selectedReferenceKeys = new Set(
@@ -6469,6 +7183,23 @@
       selectedNodeId: normalizeSelectedNodeId(selectedId, graph),
       selectedReferenceKeys,
       layoutAvoidOverlap: graph.layoutAvoidOverlap
+    };
+  }
+
+  function normalizeReferencesImport(data) {
+    const rawReferences = Array.isArray(data && data.references) ? data.references : [];
+    const references = [];
+    const referenceKeys = new Set();
+    rawReferences.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') return;
+      const key = cleanString(entry.key);
+      if (!key || referenceKeys.has(key)) return;
+      references.push(makeReference({ ...entry, key }));
+      referenceKeys.add(key);
+    });
+    return {
+      references,
+      referenceKeys
     };
   }
 
@@ -6608,8 +7339,9 @@
         ? false
         : !(state.presets.length && refs.presetSelect && refs.presetSelect.value);
     }
-    if (refs.importScopeCurrent) refs.importScopeCurrent.checked = state.importScope !== 'whole';
+    if (refs.importScopeCurrent) refs.importScopeCurrent.checked = state.importScope !== 'whole' && state.importScope !== 'node';
     if (refs.importScopeWhole) refs.importScopeWhole.checked = state.importScope === 'whole';
+    if (refs.importScopeNode) refs.importScopeNode.checked = state.importScope === 'node';
     if (refs.exportScopeWhole) refs.exportScopeWhole.checked = state.exportScope !== 'current';
     if (refs.exportScopeCurrent) refs.exportScopeCurrent.checked = state.exportScope === 'current';
   }

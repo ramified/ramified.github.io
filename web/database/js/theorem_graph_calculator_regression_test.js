@@ -9,10 +9,20 @@ function loadCalculator() {
     state,
     refs,
     createGraph,
+    ensureNodeChildGraph,
+    moveNodeBetweenGraphs,
+    appendNodeToGraph,
     makeArrow,
     makeNode,
     makeReference,
     buildGraphExport,
+    buildCurrentNodeExport,
+    currentNodeExportJson,
+    normalizeCurrentNodeImport,
+    importCurrentNodeIntoGraph,
+    pushUndoSnapshot,
+    performUndo,
+    colorPaletteRenderPlan,
     normalizeGraphImport,
     detailCheckboxItems,
     checkboxItemsToText,
@@ -298,6 +308,211 @@ function testCanvasHeightIsExportedPerGraph() {
   assert.strictEqual(imported.nodes[0].childGraph.canvasRatioLocked, true);
 }
 
+function testMoveNodeIntoNodePreservesChildGraphAndRemovesSourceArrows() {
+  const api = loadCalculator();
+  const root = api.createGraph('Root');
+  const moved = api.makeNode({ id: 'move', label: 'Move me' });
+  const target = api.makeNode({ id: 'target', label: 'Target' });
+  const other = api.makeNode({ id: 'other', label: 'Other' });
+  moved.childGraph = api.createGraph('Moved child');
+  root.nodes = [moved, target, other];
+  root.arrows = [
+    api.makeArrow({ id: 'touching', sourceId: 'move', targetId: 'other' }),
+    api.makeArrow({ id: 'kept', sourceId: 'target', targetId: 'other' })
+  ];
+
+  const child = api.ensureNodeChildGraph(target);
+  const result = api.moveNodeBetweenGraphs(root, 'move', child, { position: { x: 120, y: 140 } });
+
+  assert.strictEqual(result.node, moved);
+  assert.strictEqual(result.removedArrowCount, 1);
+  assert.deepStrictEqual(root.nodes.map((node) => node.id), ['target', 'other']);
+  assert.deepStrictEqual(root.arrows.map((arrow) => arrow.id), ['kept']);
+  assert.strictEqual(child.nodes[0], moved);
+  assert.ok(moved.childGraph);
+  assert.strictEqual(moved.childGraph.title, 'Move me');
+}
+
+function testMoveNodeToAncestorGraphUniquifiesId() {
+  const api = loadCalculator();
+  const root = api.createGraph('Root');
+  const owner = api.makeNode({ id: 'owner', label: 'Owner' });
+  const conflict = api.makeNode({ id: 'move', label: 'Existing Move' });
+  const child = api.createGraph('Owner child');
+  const moved = api.makeNode({ id: 'move', label: 'Moved from child' });
+  child.nodes = [moved];
+  owner.childGraph = child;
+  root.nodes = [owner, conflict];
+
+  const result = api.moveNodeBetweenGraphs(child, 'move', root, { position: { x: 240, y: 180 } });
+
+  assert.strictEqual(child.nodes.length, 0);
+  assert.notStrictEqual(result.node.id, 'move');
+  assert.ok(root.nodes.some((node) => node.id === 'move'));
+  assert.ok(root.nodes.some((node) => node.id === result.node.id));
+  assert.strictEqual(result.node.label, 'Moved from child');
+}
+
+function testCurrentNodeExportIncludesNodeChildGraphAndReferences() {
+  const api = loadCalculator();
+  const root = api.createGraph('Root');
+  const node = api.makeNode({ id: 'n1', label: 'Portable node', setting: 'See \\cite{ref1}.' });
+  node.childGraph = api.createGraph('Portable child');
+  node.childGraph.nodes = [api.makeNode({ id: 'nested', label: 'Nested' })];
+  root.nodes = [node];
+  api.state.rootGraph = root;
+  api.state.activePath = [];
+  api.state.selectedNodeId = 'n1';
+  api.state.references = [api.makeReference({ key: 'ref1', citeKey: 'ref1', title: 'Reference' })];
+
+  const exported = api.buildCurrentNodeExport();
+
+  assert.strictEqual(exported.exportKind, 'current-node');
+  assert.strictEqual(exported.title, 'Portable node');
+  assert.strictEqual(exported.node.id, 'n1');
+  assert.ok(exported.node.childGraph);
+  assert.strictEqual(exported.node.childGraph.nodes[0].id, 'nested');
+  assert.deepStrictEqual(hostArray(exported.node.citationKeys), ['ref1']);
+  assert.strictEqual(exported.references[0].key, 'ref1');
+}
+
+function testCurrentNodeExportJsonIsParseable() {
+  const api = loadCalculator();
+  const root = api.createGraph('Root');
+  root.nodes = [api.makeNode({ id: 'n1', label: 'Portable node' })];
+  api.state.rootGraph = root;
+  api.state.activePath = [];
+  api.state.selectedNodeId = 'n1';
+
+  const parsed = JSON.parse(api.currentNodeExportJson());
+
+  assert.strictEqual(parsed.exportKind, 'current-node');
+  assert.strictEqual(parsed.node.label, 'Portable node');
+}
+
+function testCurrentNodeImportAppendsAndUniquifiesId() {
+  const api = loadCalculator();
+  const graph = api.createGraph('Destination');
+  graph.nodes = [api.makeNode({ id: 'n1', label: 'Existing' })];
+  const data = {
+    schemaVersion: 9,
+    exportKind: 'current-node',
+    title: 'Imported',
+    node: {
+      id: 'n1',
+      type: 'misc',
+      label: 'Imported',
+      x: 160,
+      y: 170,
+      childGraph: {
+        title: 'Imported',
+        nodes: [{ id: 'nested', type: 'misc', label: 'Nested', x: 100, y: 100 }],
+        arrows: [],
+        view: { layoutAvoidOverlap: true }
+      }
+    },
+    references: [{ key: 'ref1', citeKey: 'ref1', title: 'Reference' }]
+  };
+
+  const result = api.importCurrentNodeIntoGraph(graph, data);
+
+  assert.strictEqual(graph.nodes.length, 2);
+  assert.notStrictEqual(result.node.id, 'n1');
+  assert.strictEqual(result.node.label, 'Imported');
+  assert.ok(result.node.childGraph);
+  assert.strictEqual(result.node.childGraph.nodes[0].id, 'nested');
+  assert.strictEqual(result.references[0].key, 'ref1');
+}
+
+function testUndoRestoresDeletedNode() {
+  const api = loadCalculator();
+  const root = api.createGraph('Root');
+  root.nodes = [api.makeNode({ id: 'n1', label: 'Keep me' })];
+  api.state.rootGraph = root;
+  api.state.activePath = [];
+
+  api.pushUndoSnapshot('delete node');
+  root.nodes = [];
+  api.performUndo({ render: false });
+
+  assert.strictEqual(api.state.rootGraph.nodes.length, 1);
+  assert.strictEqual(api.state.rootGraph.nodes[0].label, 'Keep me');
+}
+
+function testUndoRestoresNodeMoveIntoChildGraph() {
+  const api = loadCalculator();
+  const root = api.createGraph('Root');
+  const moved = api.makeNode({ id: 'move', label: 'Move me' });
+  const target = api.makeNode({ id: 'target', label: 'Target' });
+  root.nodes = [moved, target];
+  api.state.rootGraph = root;
+  api.state.activePath = [];
+
+  api.pushUndoSnapshot('move node inside');
+  api.moveNodeBetweenGraphs(root, 'move', api.ensureNodeChildGraph(target));
+  api.performUndo({ render: false });
+
+  assert.deepStrictEqual(hostArray(api.state.rootGraph.nodes.map((node) => node.id)), ['move', 'target']);
+  assert.ok(!api.state.rootGraph.nodes.find((node) => node.id === 'target').childGraph);
+}
+
+function testUndoRestoresCurrentNodeImport() {
+  const api = loadCalculator();
+  const graph = api.createGraph('Destination');
+  graph.nodes = [api.makeNode({ id: 'n1', label: 'Existing' })];
+  api.state.rootGraph = graph;
+  api.state.activePath = [];
+  const data = {
+    schemaVersion: 9,
+    exportKind: 'current-node',
+    node: { id: 'n2', type: 'misc', label: 'Imported', x: 160, y: 170 },
+    references: []
+  };
+
+  api.pushUndoSnapshot('current node import');
+  api.importCurrentNodeIntoGraph(graph, data);
+  api.performUndo({ render: false });
+
+  assert.deepStrictEqual(hostArray(api.state.rootGraph.nodes.map((node) => node.label)), ['Existing']);
+}
+
+function testUndoRestoresNodeColorEditSnapshot() {
+  const api = loadCalculator();
+  const root = api.createGraph('Root');
+  root.nodes = [api.makeNode({ id: 'n1', label: 'Colored', color: '#7a6f65' })];
+  api.state.rootGraph = root;
+  api.state.activePath = [];
+
+  api.pushUndoSnapshot('node edit');
+  root.nodes[0].color = '#8b5f2a';
+  api.performUndo({ render: false });
+
+  assert.strictEqual(api.state.rootGraph.nodes[0].color, '#7a6f65');
+}
+
+function testCurrentNodeImportRejectsGraphPayload() {
+  const api = loadCalculator();
+
+  assert.throws(
+    () => api.normalizeCurrentNodeImport({ schemaVersion: 9, title: 'Graph', nodes: [], arrows: [] }),
+    /current-node export/
+  );
+}
+
+function testColorPaletteOverflowContainsOnlyHiddenPresets() {
+  const api = loadCalculator();
+  const plan = api.colorPaletteRenderPlan([
+    { label: 'one', value: '#111111' },
+    { label: 'two', value: '#222222' },
+    { label: 'three', value: '#333333' },
+    { label: 'four', value: '#444444' }
+  ], 3);
+
+  assert.strictEqual(plan.hasOverflow, true);
+  assert.deepStrictEqual(hostArray(plan.visible.map((entry) => entry.value)), ['#111111', '#222222']);
+  assert.deepStrictEqual(hostArray(plan.overflow.map((entry) => entry.value)), ['#333333', '#444444']);
+}
+
 testHiddenCitationKeysArePruned();
 testVisibleCitationKeysSurvive();
 testReferenceRenameRewritesNestedNodesTitleAndArrows();
@@ -309,5 +524,16 @@ testCheckboxQuestionStateRoundTrips();
 testLayoutArrowSpringWeightsRespectBodyStyle();
 testLayoutArrowIdealDistanceRespectsBodyAndLabel();
 testCanvasHeightIsExportedPerGraph();
+testMoveNodeIntoNodePreservesChildGraphAndRemovesSourceArrows();
+testMoveNodeToAncestorGraphUniquifiesId();
+testCurrentNodeExportIncludesNodeChildGraphAndReferences();
+testCurrentNodeExportJsonIsParseable();
+testCurrentNodeImportAppendsAndUniquifiesId();
+testUndoRestoresDeletedNode();
+testUndoRestoresNodeMoveIntoChildGraph();
+testUndoRestoresCurrentNodeImport();
+testUndoRestoresNodeColorEditSnapshot();
+testCurrentNodeImportRejectsGraphPayload();
+testColorPaletteOverflowContainsOnlyHiddenPresets();
 
 console.log('theorem graph regression tests passed');
