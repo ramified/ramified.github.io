@@ -28,10 +28,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#8b3a2a",
-      "fillColor": "#fffdf8",
-      "x": 170.6,
-      "y": 58,
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 110.9,
+      "y": 54,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -65,8 +65,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 107.4,
-      "y": 259.7
+      "x": 141.5,
+      "y": 246
     },
     {
       "id": "n39",
@@ -87,64 +87,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 287.5,
-      "y": 389
-    },
-    {
-      "id": "n48",
-      "type": "misc",
-      "label": "minigame",
-      "details": [
-        {
-          "id": "future",
-          "label": "future?",
-          "type": "checkbox",
-          "text": "- [x] Go\n- [ ] Billiard\n- [x] Reversi"
-        },
-        {
-          "id": "bugs",
-          "label": "bugs",
-          "type": "checkbox",
-          "text": "- [x] actual loop in sokoban, allow reset in the loop\n- [x] allow to press Z long time to speed up cancellation"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 501.5,
-      "y": 389
-    },
-    {
-      "id": "n55",
-      "type": "misc",
-      "label": "Mosaic Calculator",
-      "details": [
-        {
-          "id": "hard-realization",
-          "label": "hard realization",
-          "type": "checkbox",
-          "text": "not only realize divisors, but also all degeneralizations\nD(A|B) realization"
-        },
-        {
-          "id": "goal",
-          "label": "goal",
-          "type": "checkbox",
-          "text": "pair of pants decomposition\nspanning tree: detect and creation\nhomology class"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 513.1,
-      "y": 216.3
+      "x": 345.8,
+      "y": 246
     },
     {
       "id": "n58",
@@ -158,32 +102,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 388.4,
-      "y": 58
-    },
-    {
-      "id": "n59",
-      "type": "misc",
-      "label": "Others",
-      "details": [
-        {
-          "id": "future",
-          "label": "future",
-          "type": "checkbox",
-          "text": "- [ ] Newton polygon\n- [x] tropical curve\n- [ ] Arnold's classification\n- [ ] Simple singularities\n- [ ] \\cite{simple sing}"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [
-        "simple sing"
-      ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 314.9,
-      "y": 191.8
+      "x": 329.8,
+      "y": 54
     },
     {
       "id": "n60",
@@ -210,8 +130,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 552.8,
-      "y": 58
+      "x": 536.9,
+      "y": 54
     },
     {
       "id": "n61",
@@ -230,10 +150,148 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 381.8,
+      "y": 160
+    },
+    {
+      "id": "n62",
+      "type": "misc",
+      "label": "others",
+      "details": [
+        {
+          "id": "goals",
+          "label": "goals",
+          "type": "checkbox",
+          "text": "export button being on the left of the update button\nwhen click a node or arrow, if node/arrow card is collapsed then it auto expands itself;\nwhen click a citation in node/arrow card, if reference card is collapsed then it auto expands itself(and node/arrow card preserve itself);"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 701.6,
-      "y": 190.6
+      "x": 686.6,
+      "y": 171.4
+    },
+    {
+      "id": "n63",
+      "type": "misc",
+      "label": "double click",
+      "details": [
+        {
+          "id": "new-functions-intro",
+          "label": "new functions intro",
+          "type": "checkbox",
+          "text": "you can double click this node to open a new graph\ntry drag a node into this node"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#8b5f2a",
+      "fillColor": "#fff7df",
+      "x": 534,
+      "y": 246,
+      "childGraph": {
+        "title": "double click",
+        "nodes": [
+          {
+            "id": "n48",
+            "type": "misc",
+            "label": "minigame",
+            "details": [
+              {
+                "id": "future",
+                "label": "future?",
+                "type": "checkbox",
+                "text": "- [x] Go\n- [ ] Billiard\n- [x] Reversi"
+              },
+              {
+                "id": "bugs",
+                "label": "bugs",
+                "type": "checkbox",
+                "text": "- [x] actual loop in sokoban, allow reset in the loop\n- [x] allow to press Z long time to speed up cancellation"
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 454.9,
+            "y": 280
+          },
+          {
+            "id": "n59",
+            "type": "misc",
+            "label": "Others",
+            "details": [
+              {
+                "id": "future",
+                "label": "future",
+                "type": "checkbox",
+                "text": "- [ ] Newton polygon\n- [x] tropical curve\n- [ ] Arnold's classification\n- [ ] Simple singularities\n- [ ] \\cite{simple sing}"
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "simple sing"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 318.7,
+            "y": 333
+          },
+          {
+            "id": "n55",
+            "type": "misc",
+            "label": "Mosaic Calculator",
+            "details": [
+              {
+                "id": "hard-realization",
+                "label": "hard realization",
+                "type": "checkbox",
+                "text": "not only realize divisors, but also all degeneralizations\nD(A|B) realization"
+              },
+              {
+                "id": "goal",
+                "label": "goal",
+                "type": "checkbox",
+                "text": "pair of pants decomposition\nspanning tree: detect and creation\nhomology class"
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 383.4,
+            "y": 201.9
+          }
+        ],
+        "arrows": [],
+        "view": {
+          "selectedId": "",
+          "layoutAvoidOverlap": true,
+          "layoutRunning": false,
+          "canvasHeight": 560,
+          "canvasRatioLocked": false,
+          "canvasAspectRatio": 1.7143
+        }
+      }
     }
   ],
   "arrows": [
@@ -304,51 +362,64 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
+    },
+    {
+      "id": "a51",
+      "sourceId": "n62",
+      "targetId": "n60",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
+      "color": "#5f574e"
     }
   ],
   "view": {
-    "selectedId": "n61",
+    "selectedId": "",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 447,
+    "canvasHeight": 300,
     "canvasRatioLocked": true,
-    "canvasAspectRatio": 1.6823,
+    "canvasAspectRatio": 2.51,
     "relativeNodePositions": {
       "n4": {
-        "x": 0.2269,
-        "y": 0.1298
+        "x": 0.1472,
+        "y": 0.18
       },
       "n37": {
-        "x": 0.1428,
-        "y": 0.581
+        "x": 0.1879,
+        "y": 0.82
       },
       "n39": {
-        "x": 0.3823,
-        "y": 0.8702
-      },
-      "n48": {
-        "x": 0.6669,
-        "y": 0.8702
-      },
-      "n55": {
-        "x": 0.6823,
-        "y": 0.4838
+        "x": 0.4593,
+        "y": 0.82
       },
       "n58": {
-        "x": 0.5165,
-        "y": 0.1298
-      },
-      "n59": {
-        "x": 0.4187,
-        "y": 0.4292
+        "x": 0.438,
+        "y": 0.18
       },
       "n60": {
-        "x": 0.7352,
-        "y": 0.1298
+        "x": 0.713,
+        "y": 0.18
       },
       "n61": {
-        "x": 0.933,
-        "y": 0.4265
+        "x": 0.5071,
+        "y": 0.5333
+      },
+      "n62": {
+        "x": 0.9118,
+        "y": 0.5713
+      },
+      "n63": {
+        "x": 0.7092,
+        "y": 0.82
       }
     },
     "selectedReferenceKeys": []
