@@ -28,7 +28,7 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "- [ ] Be fluent with $K_X(-p)$ and vanishing orders. \\cite{ACGH1985}\n- [ ] Recall Riemann--Roch for degree $g-1$ line bundles. \\cite{ACGH1985}\n- [ ] Review base-point-free pencils and degrees of associated maps. \\cite{ACGH1985}\n- [ ] Explain why a base point of the degree-$3$ pencil in the blueprint would force hyperellipticity. \\cite{blueprint}"
+          "text": "- [x] Be fluent with $K_X(-p)$ and vanishing orders. \\cite{ACGH1985}\n- [x] Recall Riemann--Roch for degree $g-1$ line bundles. \\cite{ACGH1985}\n- [x] Review base-point-free pencils and degrees of associated maps. \\cite{ACGH1985}"
         }
       ],
       "setting": "",
@@ -36,13 +36,70 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [
-        "ACGH1985",
-        "blueprint"
+        "ACGH1985"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 120,
-      "y": 110
+      "color": "#8b3a2a",
+      "fillColor": "#fbefee",
+      "x": 327.6,
+      "y": 29.1,
+      "childGraph": {
+        "title": "1. Canonical systems refresh",
+        "nodes": [
+          {
+            "id": "n1",
+            "type": "misc",
+            "label": "test",
+            "details": [
+              {
+                "id": "render",
+                "label": "render",
+                "type": "textbox",
+                "text": "$P_{\\mathbf Q}=H^1(A_0,\\mathbf Q)\\hookrightarrow H^1(\\Gamma _0,\\mathbf Q)$\n$F^1(P_{\\mathbf C})=H^0\\bigl(\\Gamma_0,K_{\\Gamma _0}(-p_0)\\bigr)$"
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 476.8,
+            "y": 280
+          },
+          {
+            "id": "n2",
+            "type": "misc",
+            "label": "counter example",
+            "details": [
+              {
+                "id": "text",
+                "label": "text",
+                "type": "checkbox",
+                "text": "For the pair ((X,L)) and quotient $q:JX \\twoheadrightarrow A$ supplied by Lemma lem:fixed-plane-deformation, let$f\\to A$ be an Abel--Jacobi map followed by (q), and put\n\n[\nC=f(X).\n]"
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 301.7,
+            "y": 348.1
+          }
+        ],
+        "arrows": [],
+        "view": {
+          "selectedId": "",
+          "layoutAvoidOverlap": true,
+          "layoutRunning": false,
+          "canvasHeight": 560,
+          "canvasRatioLocked": false,
+          "canvasAspectRatio": 1.7143
+        }
+      }
     },
     {
       "id": "n2",
@@ -53,7 +110,7 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "- [ ] Review the Abel--Jacobi map $X\\to JX$ and why the Abel curve generates $JX$. \\cite{ACGH1985}\n- [ ] Understand quotients $q:JX\\twoheadrightarrow A$ on tangent and cotangent spaces. \\cite{BirkenhakeLange2004}\n- [ ] Review complementary abelian factors up to isogeny. \\cite{BirkenhakeLange2004}\n- [ ] Distinguish simple from absolutely simple abelian varieties. \\cite{BirkenhakeLange2004}"
+          "text": "- [x] Review the Abel--Jacobi map $X\\to JX$ and why the Abel curve generates $JX$. \\cite{ACGH1985}\n- [x] Understand quotients $q:JX\\twoheadrightarrow A$ on tangent and cotangent spaces. \\cite{BirkenhakeLange2004}\n- [x] Review complementary abelian factors up to isogeny. \\cite{BirkenhakeLange2004}"
         }
       ],
       "setting": "",
@@ -64,10 +121,10 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
         "ACGH1985",
         "BirkenhakeLange2004"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 360,
-      "y": 110
+      "color": "#8b3a2a",
+      "fillColor": "#fbefee",
+      "x": 641.9,
+      "y": 65.7
     },
     {
       "id": "n3",
@@ -78,7 +135,7 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "- [ ] Review $H^1_{\\mathbf C}=F^1\\oplus\\overline{F^1}$. \\cite{BirkenhakeLange2004}\n- [ ] Understand rational Hodge substructures $P_{\\mathbf Q}\\subset H^1(X,\\mathbf Q)$. \\cite{BirkenhakeLange2004}\n- [ ] Explain why a polarizable rational weight-one Hodge structure gives a complex abelian variety up to isogeny. \\cite{BirkenhakeLange2004}\n- [ ] Relate simplicity of the Hodge structure to simplicity of the abelian factor in this blueprint. \\cite{blueprint}"
+          "text": "- [x] Review $H^1_{\\mathbf C}=F^1\\oplus\\overline{F^1}$. \\cite{BirkenhakeLange2004}\n- [x] Understand why a six-dimensional rational weight-one Hodge substructure corresponds to an abelian threefold up to isogeny, and why proper Hodge substructures correspond to unwanted abelian factors.\n- [x] Explain why a polarizable rational weight-one Hodge structure gives a complex abelian variety up to isogeny. \\cite{BirkenhakeLange2004}\n- [x] Relate simplicity of the Hodge structure to simplicity of the abelian factor in this blueprint. \\cite{blueprint}"
         }
       ],
       "setting": "",
@@ -89,10 +146,10 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
         "BirkenhakeLange2004",
         "blueprint"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 600,
-      "y": 110
+      "color": "#8b3a2a",
+      "fillColor": "#fbefee",
+      "x": 449,
+      "y": 121.5
     },
     {
       "id": "n4",
@@ -103,7 +160,13 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "- [ ] Learn theta characteristics $L^{\\otimes 2}\\simeq K_X$ and parity. \\cite{Mumford1971}\n- [ ] Understand why parity is deformation invariant. \\cite{Mumford1971}\n- [ ] Study even theta characteristics with $h^0(L)=2$ and the spin-moduli viewpoint. \\cite{Farkas2012,Cornalba1989}\n- [ ] Understand the theta-null locus $\\{h^0(L)\\ge2\\}$. \\cite{Farkas2012}\n- [ ] Understand $\\operatorname{Sym}^2H^0(L)\\to H^0(K_X)$ and the basis $s^2,st,t^2$. \\cite{blueprint}"
+          "text": "- [x] Learn theta characteristics $L^{\\otimes 2}\\simeq K_X$ and parity. \\cite{Mumford1971}\n- [x] Understand why parity is deformation invariant. \\cite{Mumford1971}\n\n- [?] Understand the theta-null locus $\\{h^0(L)\\ge2\\}$. \\cite{Farkas2012}\n- [x] Understand $\\operatorname{Sym}^2H^0(L)\\to H^0(K_X)$ and the basis $s^2,st,t^2$. \\cite{blueprint}"
+        },
+        {
+          "id": "revised",
+          "label": "revised",
+          "type": "checkbox",
+          "text": "- [x] Understand that the proof deforms the pair $(X,L)$, not just $X$, and follows the rank-$3$ space $\\mathcal W=\\operatorname{Sym}^2 H^0(L)$ in this family.\\cite{Farkas2012,Cornalba1989}\n- [x] Understand that the proof deforms the pair $(X,L)$, not just $X$, and follows the rank-$3$ space $\\mathcal W=\\operatorname{Sym}^2 H^0(L)$ in this family."
         }
       ],
       "setting": "",
@@ -113,13 +176,13 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       "citationKeys": [
         "Mumford1971",
         "Farkas2012",
-        "Cornalba1989",
-        "blueprint"
+        "blueprint",
+        "Cornalba1989"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 96.7,
-      "y": 226
+      "color": "#46786e",
+      "fillColor": "#eef7f4",
+      "x": 114.8,
+      "y": 96.7
     },
     {
       "id": "n5",
@@ -143,8 +206,8 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 333.3,
-      "y": 220
+      "x": 87.2,
+      "y": 327.5
     },
     {
       "id": "n6",
@@ -169,8 +232,8 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 542,
-      "y": 242.7
+      "x": 243,
+      "y": 175.6
     },
     {
       "id": "n7",
@@ -194,8 +257,8 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 691,
-      "y": 220
+      "x": 661.2,
+      "y": 289.7
     },
     {
       "id": "n8",
@@ -222,8 +285,8 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 513.3,
-      "y": 335.3
+      "x": 453.6,
+      "y": 262.8
     },
     {
       "id": "n9",
@@ -235,6 +298,12 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
           "label": "goals",
           "type": "checkbox",
           "text": "- [ ] Learn enough deformation theory to interpret a local marked deformation space and upper semicontinuity. \\cite{Sernesi2006}\n- [ ] Understand spin curves locally and why parity persists in families. \\cite{Cornalba1989,Mumford1971}\n- [ ] Reproduce the blueprint's dimension count: spin space $9$, theta-null at least $8$, hence $\\dim Z\\ge8-6=2$. \\cite{blueprint}\n- [ ] Understand why $P_{\\mathbf C}=\\mathcal W\\oplus\\overline{\\mathcal W}$ along the aligned locus. \\cite{blueprint}\n- [ ] Understand the finiteness input that gives $\\dim(Z\\cap\\mathcal H_4)\\le1$. \\cite{Treibich2025}\n- [ ] Understand the Baire-category step excluding proper rational Hodge substructures. \\cite{blueprint}"
+        },
+        {
+          "id": "revised",
+          "label": "revised",
+          "type": "checkbox",
+          "text": "- [ ] Understand why the local genus-$4$ spin-deformation space has dimension $9$, why $h^0(L)\\ge 2$ defines the theta-null locus of dimension at least $8$, and why $\\mathcal W$ varies as a rank-$3$ bundle."
         }
       ],
       "setting": "",
@@ -250,8 +319,8 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 308.7,
-      "y": 343.3
+      "x": 277.6,
+      "y": 329.3
     },
     {
       "id": "n10",
@@ -275,8 +344,8 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 168,
-      "y": 386
+      "x": 508.8,
+      "y": 414.7
     },
     {
       "id": "n11",
@@ -300,8 +369,8 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 574.7,
-      "y": 396
+      "x": 292,
+      "y": 443.8
     }
   ],
   "arrows": [
@@ -309,23 +378,6 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       "id": "a1",
       "sourceId": "n1",
       "targetId": "n4",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a2",
-      "sourceId": "n1",
-      "targetId": "n5",
       "label": "",
       "remark": "",
       "body": "solid",
@@ -357,43 +409,9 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       "color": "#5f574e"
     },
     {
-      "id": "a4",
-      "sourceId": "n2",
-      "targetId": "n6",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
       "id": "a5",
       "sourceId": "n2",
       "targetId": "n7",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a6",
-      "sourceId": "n2",
-      "targetId": "n10",
       "label": "",
       "remark": "",
       "body": "solid",
@@ -425,40 +443,6 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       "color": "#5f574e"
     },
     {
-      "id": "a8",
-      "sourceId": "n3",
-      "targetId": "n8",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a9",
-      "sourceId": "n3",
-      "targetId": "n9",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
       "id": "a10",
       "sourceId": "n4",
       "targetId": "n5",
@@ -476,60 +460,9 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       "color": "#5f574e"
     },
     {
-      "id": "a11",
-      "sourceId": "n4",
-      "targetId": "n9",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a12",
-      "sourceId": "n4",
-      "targetId": "n10",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
       "id": "a13",
       "sourceId": "n5",
       "targetId": "n6",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a14",
-      "sourceId": "n5",
-      "targetId": "n8",
       "label": "",
       "remark": "",
       "body": "solid",
@@ -612,40 +545,6 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       "color": "#5f574e"
     },
     {
-      "id": "a19",
-      "sourceId": "n2",
-      "targetId": "n11",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a20",
-      "sourceId": "n3",
-      "targetId": "n11",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
       "id": "a21",
       "sourceId": "n10",
       "targetId": "n11",
@@ -664,12 +563,58 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
     }
   ],
   "view": {
-    "selectedId": "n4",
+    "selectedId": "n7",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 450,
-    "canvasRatioLocked": false,
-    "canvasAspectRatio": 1.6644,
+    "canvasHeight": 466,
+    "canvasRatioLocked": true,
+    "canvasAspectRatio": 1.6137,
+    "relativeNodePositions": {
+      "n1": {
+        "x": 0.4356,
+        "y": 0.0624
+      },
+      "n2": {
+        "x": 0.8536,
+        "y": 0.141
+      },
+      "n3": {
+        "x": 0.5971,
+        "y": 0.2607
+      },
+      "n4": {
+        "x": 0.1527,
+        "y": 0.2074
+      },
+      "n5": {
+        "x": 0.116,
+        "y": 0.7027
+      },
+      "n6": {
+        "x": 0.3232,
+        "y": 0.3768
+      },
+      "n7": {
+        "x": 0.8793,
+        "y": 0.6217
+      },
+      "n8": {
+        "x": 0.6032,
+        "y": 0.564
+      },
+      "n9": {
+        "x": 0.3692,
+        "y": 0.7067
+      },
+      "n10": {
+        "x": 0.6767,
+        "y": 0.8898
+      },
+      "n11": {
+        "x": 0.3882,
+        "y": 0.9524
+      }
+    },
     "selectedReferenceKeys": []
   },
   "references": [
@@ -1003,3 +948,4 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
     }
   ]
 };
+

@@ -30,7 +30,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 110.9,
+      "x": 80.1,
       "y": 54,
       "childGraph": {
         "title": "Sheaf Calculator",
@@ -65,8 +65,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 141.5,
-      "y": 246
+      "x": 124.9,
+      "y": 282.7
     },
     {
       "id": "n39",
@@ -87,8 +87,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 345.8,
-      "y": 246
+      "x": 283.9,
+      "y": 334
     },
     {
       "id": "n58",
@@ -102,7 +102,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 329.8,
+      "x": 284.9,
       "y": 54
     },
     {
@@ -130,7 +130,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 536.9,
+      "x": 534.4,
       "y": 54
     },
     {
@@ -152,8 +152,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 381.8,
-      "y": 160
+      "x": 342,
+      "y": 128.9
     },
     {
       "id": "n62",
@@ -174,8 +174,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 686.6,
-      "y": 171.4
+      "x": 706,
+      "y": 166.8
     },
     {
       "id": "n63",
@@ -196,8 +196,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 534,
-      "y": 246,
+      "x": 398.2,
+      "y": 302.7,
       "childGraph": {
         "title": "double click",
         "nodes": [
@@ -292,6 +292,84 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "canvasAspectRatio": 1.7143
         }
       }
+    },
+    {
+      "id": "n64",
+      "type": "misc",
+      "label": "Higher-Dimensional Slice Calculator",
+      "details": [
+        {
+          "id": "goals",
+          "label": "goals",
+          "type": "checkbox",
+          "text": "Add fundamental weights, simple roots and roots(as a point set, use can also choose \"positive\").\nIf both weight lattice and cover root lattice (for the same Dynkin type) appear, then only the extra vertices of the weight lattice will appear, those coincided vertices will only appear for the UI of root lattice\nAdd KL polynomials and length expression, from https://www.jgibson.id.au/lievis/affine_weyl"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 607.9,
+      "y": 265.1
+    },
+    {
+      "id": "n65",
+      "type": "misc",
+      "label": "Acknowledgements",
+      "details": [
+        {
+          "id": "4d",
+          "label": "4d",
+          "type": "checkbox",
+          "text": "https://www.dimensions-math.org/Dim_E.htm\n4d toys"
+        },
+        {
+          "id": "3-2d",
+          "label": "3/2d",
+          "type": "checkbox",
+          "text": "The Geometer's Sketchpad\nIsoball 4"
+        },
+        {
+          "id": "updates",
+          "label": "updates",
+          "type": "checkbox",
+          "text": "Lievis is also used in Higher-Dimensional Slice Calculator"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 614.7,
+      "y": 334
+    },
+    {
+      "id": "n66",
+      "type": "misc",
+      "label": "Place Ramification Calculator",
+      "details": [
+        {
+          "id": "goal",
+          "label": "goal",
+          "type": "checkbox",
+          "text": "change the field extension to two different field, with a single primitive generator\nTry to identify number field with labels in LMFDB\nfor a number field gives the lattice"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 369.5,
+      "y": 217.6
     }
   ],
   "arrows": [
@@ -379,47 +457,76 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
+    },
+    {
+      "id": "a52",
+      "sourceId": "n66",
+      "targetId": "n64",
+      "label": "",
+      "remark": "realize two important lattices in number theory",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "none",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
+      "color": "#5f574e"
     }
   ],
   "view": {
-    "selectedId": "",
+    "selectedId": "n63",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 300,
+    "canvasHeight": 388,
     "canvasRatioLocked": true,
-    "canvasAspectRatio": 2.51,
+    "canvasAspectRatio": 1.9381,
     "relativeNodePositions": {
       "n4": {
-        "x": 0.1472,
-        "y": 0.18
+        "x": 0.1066,
+        "y": 0.1392
       },
       "n37": {
-        "x": 0.1879,
-        "y": 0.82
+        "x": 0.1661,
+        "y": 0.7286
       },
       "n39": {
-        "x": 0.4593,
-        "y": 0.82
+        "x": 0.3776,
+        "y": 0.8608
       },
       "n58": {
-        "x": 0.438,
-        "y": 0.18
+        "x": 0.3788,
+        "y": 0.1392
       },
       "n60": {
-        "x": 0.713,
-        "y": 0.18
+        "x": 0.7107,
+        "y": 0.1392
       },
       "n61": {
-        "x": 0.5071,
-        "y": 0.5333
+        "x": 0.4548,
+        "y": 0.3323
       },
       "n62": {
-        "x": 0.9118,
-        "y": 0.5713
+        "x": 0.9388,
+        "y": 0.43
       },
       "n63": {
-        "x": 0.7092,
-        "y": 0.82
+        "x": 0.5295,
+        "y": 0.7802
+      },
+      "n64": {
+        "x": 0.8084,
+        "y": 0.6833
+      },
+      "n65": {
+        "x": 0.8174,
+        "y": 0.8608
+      },
+      "n66": {
+        "x": 0.4914,
+        "y": 0.5608
       }
     },
     "selectedReferenceKeys": []
