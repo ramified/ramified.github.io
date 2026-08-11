@@ -27,6 +27,7 @@
     { key: "vector", label: "vector", color: "#1f8f91", pointSize: 5, lineWidth: 2 },
     { key: "matrix", label: "matrix", color: "#6e7f2f", pointSize: 4, lineWidth: 2 },
     { key: "dynkin-type", label: "Dynkin type", color: "#8a6242", pointSize: 4, lineWidth: 2 },
+    { key: "root-set", label: "roots", color: "#a64f6f", pointSize: 5, lineWidth: 2 },
     { key: "lattice", label: "lattice", color: "#4f7a55", pointSize: 4, lineWidth: 2 },
     { key: "voronoi-diagram", label: "Voronoi diagram", color: "#b36b4a", pointSize: 4, lineWidth: 2 },
     { key: "formula-set", label: "formula set", color: "#4f7fbd", pointSize: 4, lineWidth: 2 },
@@ -65,10 +66,11 @@
   const MATRIX_PRESET_KINDS = new Set(["manual", "simple-roots", "fundamental-weights"]);
   const LATTICE_BASIS_MODES = new Set(["matrix-input", "matrix-object", "dynkin"]);
   const LATTICE_DYNKIN_KINDS = new Set(["root", "weight"]);
+  const ROOT_SET_SIGN_MODES = new Set(["all", "positive"]);
   const VIEWPORT_BOUND_SHAPES = new Set(["box", "disk"]);
   const LATTICE_BOUND_SHAPES = new Set(["box", "ball"]);
   const TROPICAL_DISTRICT_LABEL_DENSITIES = new Set(["all", "active"]);
-  const WEYL_LABEL_MODES = new Set(["permutation", "word"]);
+  const WEYL_LABEL_MODES = new Set(["permutation", "word", "length", "kl", "kl-v1"]);
   const WEYL_LABEL_DENSITIES = new Set(["all", "active"]);
   const LATTICE_ENUMERATION_CAP = 8000;
   const LATTICE_PROJECTION_ENUMERATION_CAP = 250000;
@@ -81,6 +83,11 @@
   const VORONOI_COSET_ENUMERATION_CAP = 120000;
   const VORONOI_RELEVANT_VECTOR_CAP = 2048;
   const VIEWPORT_DISK_POLYGON_SEGMENTS = 96;
+  const WEYL_KL_SUBWORD_CAP = 100000;
+  const WEYL_KL_INTERVAL_CAP = 1500;
+  const WEYL_KL_CACHE_LIMIT = 64;
+  const WEYL_KL_PENDING_STATUS = "Computing KL polynomial, please wait...";
+  const WEYL_KL_STATUS_ROW_CHAR_LIMIT = 52;
   const RATIONAL_WHEEL_STEP = 0.1;
   const RATIONAL_WHEEL_MIN = -6;
   const RATIONAL_WHEEL_MAX = 6;
@@ -114,7 +121,12 @@
   const latticeProjectionStatsCache = new Map();
   const voronoiProjectionCache = new Map();
   const voronoiRelevantVectorCache = new Map();
+  const finiteRootSetCache = new Map();
+  const finiteWeylKlCalculatorCache = new Map();
   const matrixTargetDrafts = new Map();
+  let finiteWeylKlScheduledFrame = 0;
+  let finiteWeylKlScheduledKey = "";
+  let finiteWeylKlImmediateKey = "";
   const runtimeStats = {
     drawMs: 0,
     exactSliceMs: 0,
@@ -170,6 +182,7 @@
     activeTropicalDistrict: null,
     weylChamberPickCandidates: [],
     activeWeylChamber: null,
+    weylKlTargetChamber: null,
     lastWarning: "Projection and exact/numeric 2D slice layers are active.",
   };
 
@@ -282,6 +295,12 @@
     return LATTICE_DYNKIN_KINDS.has(kind) ? kind : "root";
   }
 
+  function normalizeRootSetSignMode(mode) {
+    if (mode === "positive roots") return "positive";
+    if (mode === "all roots") return "all";
+    return ROOT_SET_SIGN_MODES.has(mode) ? mode : "all";
+  }
+
   function normalizeViewportBoundShape(shape) {
     if (shape === "D^2" || shape === "S^1" || shape === "sphere" || shape === "ball" || shape === "disk") return "disk";
     return VIEWPORT_BOUND_SHAPES.has(shape) ? shape : "box";
@@ -330,7 +349,15 @@
   }
 
   function normalizeWeylLabelMode(mode) {
+    if (mode === "KL" || mode === "KL polynomials") return "kl";
+    if (mode === "KL(v=1)" || mode === "KL polynomial at v=1") return "kl-v1";
     return WEYL_LABEL_MODES.has(mode) ? mode : "word";
+  }
+
+  function normalizeWeylElementDisplayMode(mode, fallback = "word") {
+    if (mode === "permutation") return "permutation";
+    if (mode === "word") return "word";
+    return fallback === "permutation" ? "permutation" : "word";
   }
 
   function normalizeWeylLabelDensity(density) {
@@ -3072,6 +3099,7 @@
     if (typeKey === "vector") return "vector";
     if (typeKey === "matrix") return "matrix";
     if (typeKey === "dynkin-type") return "Dynkin type";
+    if (typeKey === "root-set") return "roots";
     if (typeKey === "lattice") return "lattice";
     if (typeKey === "voronoi-diagram") return "Voronoi diagram";
     if (typeKey === "formula-set") return "formula set";
@@ -3090,6 +3118,7 @@
     if (typeKey === "vector") return makeVectorData(n);
     if (typeKey === "matrix") return makeMatrixData(n, options);
     if (typeKey === "dynkin-type") return makeDynkinTypeData(n, options.dynkinType || defaultDynkinRawType(n));
+    if (typeKey === "root-set") return makeRootSetData(n, options);
     if (typeKey === "lattice") return makeLatticeData(n, options);
     if (typeKey === "voronoi-diagram") return makeVoronoiDiagramData(n, options);
     if (typeKey === "formula-set") return makeFormulaSetData(n);
@@ -3237,6 +3266,22 @@
     };
   }
 
+  function makeRootSetData(n, options = {}) {
+    const reference = parseDynkinReferenceValue(options.dynkinRef || options.dynkinType || defaultDynkinReferenceValue(n), n);
+    const normalizedDynkinType = normalizeWeylDynkinType(reference.dynkinType, n);
+    return {
+      name: currentTypeLabel("root-set", n),
+      kind: "geometry",
+      objectType: "root-set",
+      ambientDimension: n,
+      description: `Finite ${weylDynkinLabel(normalizedDynkinType, n)} roots as a projected point set.`,
+      dynkinSourceId: reference.dynkinSourceId,
+      dynkinType: normalizedDynkinType,
+      dynkinRank: n,
+      rootSignMode: normalizeRootSetSignMode(options.rootSignMode),
+    };
+  }
+
   function makeLatticeData(n, options = {}) {
     const basisMode = normalizeLatticeBasisMode(options.basisMode || (options.dynkinLatticeKind ? "dynkin" : "matrix-input"));
     const reference = parseDynkinReferenceValue(options.dynkinRef || defaultDynkinReferenceValue(n), n);
@@ -3326,6 +3371,7 @@
       dynkinRank: n,
       showChambers: true,
       weylLabelMode: "word",
+      weylElementDisplayMode: "word",
       weylLabelDensity: "active",
     };
   }
@@ -3357,6 +3403,7 @@
   function addOptionsForCurrentType() {
     if (state.addType === "regular-polytope") return { family: currentAddRegularFamily() };
     if (state.addType === "dynkin-type") return { dynkinType: currentAddWeylDynkinType() };
+    if (state.addType === "root-set") return { dynkinRef: currentAddDynkinReferenceValue() };
     if (state.addType === "weyl-chambers") return { dynkinRef: currentAddDynkinReferenceValue() };
     if (state.addType === "matrix") return parseMatrixAddVariant(state.addMatrixVariant, state.ambientDim);
     if (state.addType === "lattice") return parseLatticeAddVariant(state.addLatticeVariant, state.ambientDim);
@@ -3400,6 +3447,7 @@
       vector: "vector",
       matrix: "matrix",
       "dynkin-type": "Dynkin type",
+      "root-set": "roots",
       lattice: "lattice",
       "voronoi-diagram": "Voronoi diagram",
       "formula-set": "formula",
@@ -3413,6 +3461,11 @@
   function setActiveObject(objectId) {
     const found = state.objects.find((object) => object.id === objectId);
     if (found) state.activeObjectId = found.id;
+  }
+
+  function clearWeylInteraction(objectId = "") {
+    if (!objectId || state.activeWeylChamber?.objectId === objectId) state.activeWeylChamber = null;
+    if (!objectId || state.weylKlTargetChamber?.objectId === objectId) state.weylKlTargetChamber = null;
   }
 
   function fillTypeSelect() {
@@ -3452,6 +3505,18 @@
         select.appendChild(option);
       }
       select.value = state.addWeylDynkinType;
+      select.setAttribute("aria-label", "Dynkin type");
+      select.title = "Dynkin type";
+    } else if (state.addType === "root-set") {
+      const options = dynkinReferenceOptions(state.ambientDim);
+      const currentValue = currentAddDynkinReferenceValue(state.ambientDim);
+      for (const dynkin of options) {
+        const option = document.createElement("option");
+        option.value = dynkin.value;
+        option.textContent = dynkin.label;
+        select.appendChild(option);
+      }
+      select.value = options.some((option) => option.value === currentValue) ? currentValue : defaultDynkinReferenceValue(state.ambientDim);
       select.setAttribute("aria-label", "Dynkin type");
       select.title = "Dynkin type";
     } else if (state.addType === "weyl-chambers") {
@@ -3543,7 +3608,7 @@
       state.addRegularFamily = normalizeRegularFamily(state.addRegularFamily, state.ambientDim);
       state.addWeylDynkinType = normalizeWeylDynkinType(state.addWeylDynkinType, state.ambientDim);
       fillAddVariantSelect();
-      variantSelect.hidden = !["regular-polytope", "dynkin-type", "weyl-chambers", "matrix", "lattice", "voronoi-diagram"].includes(state.addType);
+      variantSelect.hidden = !["regular-polytope", "dynkin-type", "root-set", "weyl-chambers", "matrix", "lattice", "voronoi-diagram"].includes(state.addType);
       variantSelect.disabled = variantSelect.hidden || (state.addType === "voronoi-diagram" && !defaultLatticeSourceId(state.ambientDim));
     }
     const addButton = $("source-add-object");
@@ -3578,7 +3643,7 @@
     if (labelsWrap) labelsWrap.hidden = !labelsEnabled;
     syncLayerButtons(object);
     rebuildObjectParams();
-    $("source-status").textContent = "Projection and exact/numeric 2D slice layers are active.";
+    renderSourceStatusText($("source-status"), "Projection and exact/numeric 2D slice layers are active.");
   }
 
   function objectTypeKey(object) {
@@ -3665,6 +3730,10 @@
       buildDynkinTypeParams(container, object);
       return;
     }
+    if (type === "root-set") {
+      buildRootSetParams(container, object);
+      return;
+    }
     if (type === "lattice") {
       buildLatticeParams(container, object);
       return;
@@ -3704,7 +3773,7 @@
       state.selectedVertex = null;
       clearVectorTargetSession();
       state.activeTropicalDistrict = null;
-      state.activeWeylChamber = null;
+      clearWeylInteraction();
       state.lastWarning = `${regularFamilyLabel(data.family, state.ambientDim)} family selected.`;
       renderAll();
     });
@@ -3918,7 +3987,7 @@
     state.sourceMode = "modify";
     state.selectedVertex = null;
     state.activeTropicalDistrict = null;
-    state.activeWeylChamber = null;
+    clearWeylInteraction();
     state.lastWarning = `Filled ${object.name} / ${target.slotLabel} from ${sourceLabel}.`;
     if (objectTypeKey(object) === "lattice") {
       commitLatticeParamChange(object, null, {
@@ -4673,7 +4742,7 @@
       const handled = typeof options.afterChange === "function" && options.afterChange(object) === true;
       if (handled) return;
       state.activeTropicalDistrict = null;
-      state.activeWeylChamber = null;
+      clearWeylInteraction(object.id);
       const reference = resolveDynkinReference(object.data, state.ambientDim);
       state.lastWarning = `${options.messageLabel || object.name} linked to ${reference.label}.`;
       syncObjectPanel();
@@ -4711,12 +4780,65 @@
       data.dynkinRank = state.ambientDim;
       data.description = `Shared finite Dynkin type ${weylDynkinLabel(data.dynkinType, state.ambientDim)} for Weyl chambers, root/weight matrices, and Dynkin lattices.`;
       const warnings = refreshLinkedObjects({ warn: true });
+      clearWeylInteraction();
       state.lastWarning = warnings[0] || `${object.name} set to ${weylDynkinLabel(data.dynkinType, state.ambientDim)}.`;
       syncObjectPanel();
       renderAll();
     });
     line.append(label, select);
     panel.append(line);
+    container.append(panel);
+  }
+
+  function buildRootSetParams(container, object) {
+    object.kind = "geometry";
+    object.visibleSlice = false;
+    object.data = normalizeRootSetData(object.data || {}, state.ambientDim);
+    const data = object.data;
+    const panel = document.createElement("div");
+    panel.className = "slice-tropical-panel";
+
+    buildDynkinReferencePicker(panel, object, {
+      label: "Dynkin",
+      messageLabel: "roots",
+      afterChange: () => {
+        object.data = normalizeRootSetData(object.data, state.ambientDim);
+        const reference = resolveDynkinReference(object.data, state.ambientDim);
+        state.selectedVertex = null;
+        state.lastWarning = `roots linked to ${reference.label}.`;
+        syncObjectPanel();
+        renderAll();
+        return true;
+      },
+    });
+
+    const signModes = document.createElement("div");
+    signModes.className = "slice-segmented";
+    signModes.setAttribute("aria-label", "Root set sign mode");
+    [
+      ["all", "all roots"],
+      ["positive", "positive roots"],
+    ].forEach(([mode, label]) => {
+      const button = document.createElement("button");
+      button.className = "slice-segment";
+      button.type = "button";
+      button.dataset.rootSignMode = mode;
+      button.textContent = label;
+      button.classList.toggle("active", data.rootSignMode === mode);
+      button.addEventListener("click", () => {
+        object.data = {
+          ...object.data,
+          rootSignMode: normalizeRootSetSignMode(mode),
+        };
+        state.selectedVertex = null;
+        state.lastWarning = `Root set switched to ${label}.`;
+        syncObjectPanel();
+        renderAll();
+      });
+      signModes.append(button);
+    });
+
+    panel.append(signModes);
     container.append(panel);
   }
 
@@ -4834,7 +4956,7 @@
     });
     state.selectedVertex = null;
     state.activeTropicalDistrict = null;
-    state.activeWeylChamber = null;
+    clearWeylInteraction();
     const message = warning || latticeMutationMessage(options.message, object);
     if (message) state.lastWarning = message;
     if (options.syncPanel !== false) syncObjectPanel();
@@ -4856,7 +4978,8 @@
     const stats = latticeProjectionStatsCache.get(object?.id);
     if (!stats) return `drawn - / visible - / ambient -`;
     if (stats.showPoints === false) return `points hidden / ambient ${stats.enumerated}`;
-    return `${stats.drawn} drawn / ${stats.visible} visible / ${stats.enumerated} ambient`;
+    const suppressed = finiteNumber(stats.suppressedByRootLattice, 0);
+    return `${stats.drawn} drawn / ${stats.visible} visible / ${stats.enumerated} ambient${suppressed ? ` / ${suppressed} root-owned` : ""}`;
   }
 
   function updateLatticeBoundSummaryElements() {
@@ -5413,7 +5536,7 @@
       state.selectedVertex = null;
       clearVectorTargetSession();
       state.activeTropicalDistrict = null;
-      state.activeWeylChamber = null;
+      clearWeylInteraction();
       renderAll();
     } catch (error) {
       state.lastWarning = `Formula rejected: ${error.message}`;
@@ -5440,7 +5563,7 @@
       state.selectedVertex = null;
       clearVectorTargetSession();
       state.activeTropicalDistrict = null;
-      state.activeWeylChamber = null;
+      clearWeylInteraction();
       renderAll();
     } catch (error) {
       state.lastWarning = `Q import rejected: ${error.message}`;
@@ -5575,6 +5698,7 @@
       afterChange: () => {
         object.data = normalizeWeylChambersData(object.data, state.ambientDim);
         refreshWeylFromDynkin(object, { warn: true });
+        clearWeylInteraction(object.id);
       },
     });
 
@@ -5589,7 +5713,7 @@
         showChambers: chamberCheckbox.checked,
       };
       state.activeTropicalDistrict = null;
-      if (!chamberCheckbox.checked) state.activeWeylChamber = null;
+      if (!chamberCheckbox.checked) clearWeylInteraction(object.id);
       state.lastWarning = chamberCheckbox.checked ? "Weyl chambers shown." : "Weyl chamber fills and labels hidden.";
       renderAll();
     });
@@ -5601,6 +5725,9 @@
     [
       ["permutation", "permutation"],
       ["word", "word"],
+      ["length", "length"],
+      ["kl", "KL"],
+      ["kl-v1", "KL(v=1)"],
     ].forEach(([mode, label]) => {
       const button = document.createElement("button");
       button.className = "slice-segment";
@@ -5609,10 +5736,15 @@
       button.textContent = label;
       button.classList.toggle("active", data.weylLabelMode === mode);
       button.addEventListener("click", () => {
-        object.data = {
+        const normalizedMode = normalizeWeylLabelMode(mode);
+        const nextData = {
           ...object.data,
-          weylLabelMode: normalizeWeylLabelMode(mode),
+          weylLabelMode: normalizedMode,
         };
+        if (normalizedMode === "word" || normalizedMode === "permutation") {
+          nextData.weylElementDisplayMode = normalizedMode;
+        }
+        object.data = nextData;
         state.activeTropicalDistrict = null;
         state.lastWarning = `Weyl labels switched to ${label}.`;
         syncObjectPanel();
@@ -5714,7 +5846,7 @@
       state.lastWarning = `Tropical polynomial applied in ${candidate.tropicalConvention} convention.`;
       state.selectedVertex = null;
       state.activeTropicalDistrict = null;
-      state.activeWeylChamber = null;
+      clearWeylInteraction();
       syncObjectPanel();
       renderAll();
     } catch (error) {
@@ -5780,7 +5912,7 @@
     state.selectedVertex = null;
     clearVectorTargetSession();
     state.activeTropicalDistrict = null;
-    state.activeWeylChamber = null;
+    clearWeylInteraction();
     $("ambient-dimension").value = String(next);
     rebuildDynamicControls();
     refreshTypeLabels();
@@ -5983,6 +6115,22 @@
     return "";
   }
 
+  function refreshRootSetFromDynkin(object, options = {}) {
+    const data = object?.data || {};
+    if (objectTypeKey(object) !== "root-set") return "";
+    const reference = resolveDynkinReference(data, state.ambientDim);
+    data.ambientDimension = state.ambientDim;
+    data.dynkinType = reference.dynkinType;
+    data.dynkinRank = state.ambientDim;
+    data.rootSignMode = normalizeRootSetSignMode(data.rootSignMode);
+    data.rootStatus = reference.label;
+    data.description = `Finite ${weylDynkinLabel(reference.dynkinType, state.ambientDim)} roots as a projected point set.`;
+    if (reference.sourceMissing && options.warn) {
+      return `${object.name} kept ${weylDynkinLabel(reference.dynkinType, state.ambientDim)} because its Dynkin source is missing.`;
+    }
+    return "";
+  }
+
   function refreshLatticeBasis(object, options = {}) {
     const data = object?.data || {};
     if (objectTypeKey(object) !== "lattice") return "";
@@ -6054,6 +6202,7 @@
       let warning = "";
       if (type === "matrix") warning = refreshMatrixPresetFromDynkin(object, options);
       else if (type === "weyl-chambers") warning = refreshWeylFromDynkin(object, options);
+      else if (type === "root-set") warning = refreshRootSetFromDynkin(object, options);
       else if (type === "lattice") warning = refreshLatticeBasis(object, options);
       else if (type === "voronoi-diagram") warning = refreshVoronoiFromLattice(object, options);
       if (warning) warnings.push(warning);
@@ -6112,6 +6261,17 @@
       object.data = normalizeDynkinTypeData(data, state.ambientDim);
       object.data.name = object.name;
       if (previousType !== object.data.dynkinType) {
+        return `${previousType} is unavailable in R^${state.ambientDim}; switched to ${weylDynkinLabel(object.data.dynkinType, state.ambientDim)}.`;
+      }
+    } else if (type === "root-set") {
+      const previousType = data.dynkinType || "A";
+      object.kind = "geometry";
+      object.visibleSlice = false;
+      object.data = normalizeRootSetData(data, state.ambientDim);
+      object.data.name = object.name;
+      const warning = refreshRootSetFromDynkin(object, { warn: true });
+      if (warning) return warning;
+      if (!object.data.dynkinSourceId && previousType !== object.data.dynkinType) {
         return `${previousType} is unavailable in R^${state.ambientDim}; switched to ${weylDynkinLabel(object.data.dynkinType, state.ambientDim)}.`;
       }
     } else if (type === "lattice") {
@@ -6251,6 +6411,8 @@
   function normalizeWeylChambersData(data, n = state.ambientDim) {
     const reference = resolveDynkinReference(data, n);
     const dynkinType = normalizeWeylDynkinType(reference.dynkinType, n);
+    const weylLabelMode = normalizeWeylLabelMode(data.weylLabelMode);
+    const elementDisplayFallback = weylLabelMode === "permutation" ? "permutation" : "word";
     return {
       name: data.name || "Weyl chambers",
       kind: "weyl",
@@ -6260,7 +6422,8 @@
       dynkinType,
       dynkinRank: n,
       showChambers: data.showChambers !== false,
-      weylLabelMode: normalizeWeylLabelMode(data.weylLabelMode),
+      weylLabelMode,
+      weylElementDisplayMode: normalizeWeylElementDisplayMode(data.weylElementDisplayMode, elementDisplayFallback),
       weylLabelDensity: normalizeWeylLabelDensity(data.weylLabelDensity),
       description: `Finite Weyl chamber arrangement ${weylDynkinLabel(dynkinType, n)} in R^${n}, rendered by exact 2D slice.`,
     };
@@ -6276,6 +6439,23 @@
       dynkinType,
       dynkinRank: n,
       description: `Shared finite Dynkin type ${weylDynkinLabel(dynkinType, n)} for Weyl chambers, root/weight matrices, and Dynkin lattices.`,
+    };
+  }
+
+  function normalizeRootSetData(data, n = state.ambientDim) {
+    const reference = resolveDynkinReference(data, n);
+    const dynkinType = normalizeWeylDynkinType(reference.dynkinType, n);
+    return {
+      name: data.name || "roots",
+      kind: "geometry",
+      objectType: "root-set",
+      ambientDimension: n,
+      dynkinSourceId: reference.sourceMissing ? data.dynkinSourceId : reference.dynkinSourceId,
+      dynkinType,
+      dynkinRank: n,
+      rootSignMode: normalizeRootSetSignMode(data.rootSignMode),
+      rootStatus: String(data.rootStatus || ""),
+      description: data.description || `Finite ${weylDynkinLabel(dynkinType, n)} roots as a projected point set.`,
     };
   }
 
@@ -6390,6 +6570,9 @@
     if (normalized.objectType === "dynkin-type" || normalized.kind === "dynkin") {
       return normalizeDynkinTypeData(normalized, normalized.ambientDimension);
     }
+    if (normalized.objectType === "root-set") {
+      return normalizeRootSetData(normalized, normalized.ambientDimension);
+    }
     if (normalized.objectType === "lattice" || normalized.kind === "lattice") {
       return normalizeLatticeData(normalized, normalized.ambientDimension);
     }
@@ -6449,6 +6632,7 @@
     const isTropical = data.objectType === "tropical-polynomial";
     const isWeyl = data.objectType === "weyl-chambers";
     const isDynkin = data.objectType === "dynkin-type";
+    const isRootSet = data.objectType === "root-set";
     const isLattice = data.objectType === "lattice";
     const isVoronoi = data.objectType === "voronoi-diagram";
     const isProjectionless = isProjectionlessSourceType(data.objectType);
@@ -6460,7 +6644,7 @@
     const normalized = {
       id: object.id || `object-${objectCounter++}`,
       name: String(object.name || data.name || "object").trim(),
-      kind: isFormulaSet ? "formula" : isTropical ? "tropical" : isWeyl ? "weyl" : isDynkin ? "dynkin" : isLattice ? "lattice" : isVoronoi ? "voronoi" : data.kind || object.kind || "geometry",
+      kind: isFormulaSet ? "formula" : isTropical ? "tropical" : isWeyl ? "weyl" : isDynkin ? "dynkin" : isRootSet ? "geometry" : isLattice ? "lattice" : isVoronoi ? "voronoi" : data.kind || object.kind || "geometry",
       visibleProjection: visibleProjection !== false,
       visibleSlice: !!visibleSlice,
       labels: isLattice ? false : !!(object.labels ?? object.showLabels),
@@ -6562,7 +6746,7 @@
     state.selectedVertex = null;
     clearVectorTargetSession();
     state.activeTropicalDistrict = null;
-    state.activeWeylChamber = null;
+    clearWeylInteraction();
     state.addVoronoiLatticeSourceId = "";
     state.lastWarning = "Canvas cleared to the Cartesian frame.";
     syncObjectSelect();
@@ -6602,7 +6786,7 @@
         state.selectedVertex = null;
         clearVectorTargetSession();
         state.activeTropicalDistrict = null;
-        state.activeWeylChamber = null;
+        clearWeylInteraction();
       }
       syncSourceMode();
       renderAll();
@@ -6620,6 +6804,10 @@
         state.addRegularFamily = normalizeRegularFamily(value, state.ambientDim);
       } else if (state.addType === "dynkin-type") {
         state.addWeylDynkinType = normalizeWeylDynkinType(value, state.ambientDim);
+      } else if (state.addType === "root-set") {
+        const reference = parseDynkinReferenceValue(value, state.ambientDim);
+        state.addWeylDynkinSourceId = reference.dynkinSourceId || "__raw__";
+        state.addWeylDynkinType = reference.dynkinType;
       } else if (state.addType === "weyl-chambers") {
         const reference = parseDynkinReferenceValue(value, state.ambientDim);
         state.addWeylDynkinSourceId = reference.dynkinSourceId || "__raw__";
@@ -6649,7 +6837,7 @@
       state.selectedVertex = null;
       clearVectorTargetSession();
       state.activeTropicalDistrict = null;
-      state.activeWeylChamber = null;
+      clearWeylInteraction();
       const addedType = objectTypeKey(object);
       state.lastWarning = isProjectionlessSourceType(addedType) && supportsExact2DSliceType(addedType)
         ? `${object.name} added to the exact slice layer.`
@@ -6669,7 +6857,7 @@
       state.selectedVertex = null;
       clearVectorTargetSession();
       state.activeTropicalDistrict = null;
-      state.activeWeylChamber = null;
+      clearWeylInteraction();
       syncObjectPanel();
       renderAll();
     });
@@ -6687,7 +6875,7 @@
       state.selectedVertex = null;
       clearVectorTargetSession();
       state.activeTropicalDistrict = null;
-      state.activeWeylChamber = null;
+      clearWeylInteraction();
       const linkWarnings = refreshLinkedObjects({ warn: true });
       state.lastWarning = linkWarnings[0] ? `Active object deleted. ${linkWarnings[0]}` : "Active object deleted.";
       syncObjectSelect();
@@ -6716,7 +6904,7 @@
         if (state.selectedVertex?.objectId === object.id) state.selectedVertex = null;
         if (state.activeVectorTarget?.objectId === object.id) clearVectorTargetSession();
         if (state.activeTropicalDistrict?.objectId === object.id) state.activeTropicalDistrict = null;
-        if (state.activeWeylChamber?.objectId === object.id) state.activeWeylChamber = null;
+        clearWeylInteraction(object.id);
       }
       syncLayerButtons(object);
       renderAll();
@@ -6730,7 +6918,7 @@
         if (state.selectedVertex?.objectId === object.id) state.selectedVertex = null;
         if (state.activeVectorTarget?.objectId === object.id) clearVectorTargetSession();
         if (state.activeTropicalDistrict?.objectId === object.id) state.activeTropicalDistrict = null;
-        if (state.activeWeylChamber?.objectId === object.id) state.activeWeylChamber = null;
+        clearWeylInteraction(object.id);
       }
       syncLayerButtons(object);
       renderAll();
@@ -7021,7 +7209,7 @@
     const counts = collectCounts();
     const latticeWarningText = counts.latticeWarnings.length
       ? counts.latticeWarnings[0]
-      : `${counts.latticeProjectionDrawn}/${counts.latticeProjectionVisible} visible lattice pts from ${counts.latticeProjectionGenerated} ambient / ${counts.sliceVoronoiHalfspaces} Voronoi halfspaces`;
+      : `${counts.latticeProjectionDrawn}/${counts.latticeProjectionVisible} visible lattice pts from ${counts.latticeProjectionGenerated} ambient${counts.latticeProjectionSuppressed ? ` / ${counts.latticeProjectionSuppressed} root-owned hidden` : ""} / ${counts.sliceVoronoiHalfspaces} Voronoi halfspaces`;
     const latticeCapText = counts.latticeProjectionDisplayCapped
       ? `drawing capped at ${counts.latticeProjectionDrawn}/${counts.latticeProjectionVisible} visible; reduce that lattice point-bound radius`
       : counts.latticeEnumerationCapped
@@ -7030,7 +7218,9 @@
     const voronoiProjectionText = counts.voronoiProjectionVertices || counts.voronoiProjectionEdges || counts.voronoiProjectionBuildMs
       ? `${counts.voronoiProjectionVertices} vertices / ${counts.voronoiProjectionEdges} edges${counts.voronoiProjectionCapped ? " (partial)" : ""}`
       : "none";
-    const highlightWarning = !!counts.latticeWarnings.length || !!counts.projectionWarnings.length || counts.latticeProjectionDisplayCapped || counts.latticeEnumerationCapped || counts.voronoiProjectionCapped;
+    const klStatus = counts.sliceWeylKlStatus || "";
+    const klNeedsAttention = /select|skipped|exceeded|outside/i.test(klStatus);
+    const highlightWarning = !!counts.latticeWarnings.length || !!counts.projectionWarnings.length || counts.latticeProjectionDisplayCapped || counts.latticeEnumerationCapped || counts.voronoiProjectionCapped || klNeedsAttention;
     writeDefinitionList("visible-counts", [
       ["objects", `${counts.visibleObjects}/${state.objects.length}`],
       ["proj objects", String(counts.projectionObjects)],
@@ -7048,6 +7238,7 @@
       ["slice runtime", `${fmt(runtimeStats.exactSliceMs, 2)} ms`],
       ["tropical skips", counts.sliceTropicalSkippedPairs || counts.sliceTropicalSkippedDistricts ? `${counts.sliceTropicalSkippedPairs} pairs / ${counts.sliceTropicalSkippedDistricts} districts` : "none"],
       ["Weyl skips", counts.sliceWeylSkippedWalls || counts.sliceWeylDuplicateWalls ? `${counts.sliceWeylSkippedWalls} skipped / ${counts.sliceWeylDuplicateWalls} duplicate` : "none"],
+      ["Weyl KL", klStatus || "none"],
       ["lattice", latticeWarningText],
       ["lattice build", `${fmt(counts.latticeBuildMs, 2)} ms`],
       ["lattice caps", latticeCapText],
@@ -7058,11 +7249,19 @@
       ["empty warning", counts.visibleObjects ? "none" : "no visible objects"],
       ["orth error", fmt(maxOrthogonalityError(), 6)],
     ]);
+    const statusMessage = klStatus || state.lastWarning;
     const warningMessage = highlightWarning
-      ? (counts.latticeWarnings[0] || counts.projectionWarnings[0] || state.lastWarning)
-      : state.lastWarning;
+      ? (counts.latticeWarnings[0] || counts.projectionWarnings[0] || (klNeedsAttention ? klStatus : "") || statusMessage)
+      : statusMessage;
     $("debug-warnings").textContent = warningMessage;
-    $("source-status").textContent = warningMessage;
+    const sourceStatus = $("source-status");
+    if (!highlightWarning && counts.sliceWeylKlStatusFormula && warningMessage === klStatus) {
+      renderSourceStatusFormula(sourceStatus, counts.sliceWeylKlStatusFormula);
+    } else if (!highlightWarning && counts.sliceWeylKlStatusParts && warningMessage === klStatus) {
+      renderSourceStatusParts(sourceStatus, counts.sliceWeylKlStatusParts);
+    } else {
+      renderSourceStatusText(sourceStatus, warningMessage);
+    }
     $("debug-warnings").classList.toggle("highlight", highlightWarning);
     $("source-status").classList.toggle("highlight", highlightWarning);
     const picked = currentSelectedCandidate();
@@ -7139,6 +7338,60 @@
     });
   }
 
+  function renderSourceStatusText(element, text) {
+    if (!element) return;
+    if (window.MathJax?.typesetClear) window.MathJax.typesetClear([element]);
+    element.classList.remove("slice-kl-status-rendered");
+    element.textContent = String(text || "");
+  }
+
+  function renderSourceStatusParts(element, parts) {
+    if (!element) return;
+    if (window.MathJax?.typesetClear) window.MathJax.typesetClear([element]);
+    element.classList.remove("slice-kl-status-rendered");
+    element.innerHTML = "";
+    (parts || []).forEach((part) => {
+      if (typeof part === "string") {
+        element.append(document.createTextNode(part));
+        return;
+      }
+      const span = document.createElement("span");
+      span.className = `slice-kl-status-term${part.active ? " active" : ""}`;
+      span.textContent = String(part.text || "");
+      element.append(span);
+    });
+  }
+
+  function renderSourceStatusFormula(element, formula) {
+    if (!element) return;
+    if (window.MathJax?.typesetClear) window.MathJax.typesetClear([element]);
+    element.classList.add("slice-kl-status-rendered");
+    element.innerHTML = "";
+    const label = document.createElement("span");
+    label.className = "slice-kl-status-label";
+    label.textContent = formula?.label ? `${formula.label}:` : "";
+    const math = document.createElement("div");
+    math.className = "slice-kl-status-formula";
+    math.dataset.mathPlain = formula?.plain || "0";
+    const rows = Array.isArray(formula?.rows) && formula.rows.length
+      ? formula.rows
+      : [{ parts: [{ text: formula?.plain || "0", tex: formula?.tex || "0", active: false }] }];
+    rows.forEach((row) => {
+      const rowElement = document.createElement("div");
+      rowElement.className = "slice-kl-status-row";
+      (row.parts || []).forEach((part) => {
+        const partElement = document.createElement("span");
+        partElement.className = part.separator
+          ? "slice-kl-status-separator"
+          : `slice-kl-status-term${part.active ? " active" : ""}`;
+        setMathText(partElement, part.text || "", part.tex || labelToTex(part.text || ""));
+        rowElement.append(partElement);
+      });
+      math.append(rowElement);
+    });
+    element.append(label, math);
+  }
+
   function collectCounts() {
     const counts = {
       visibleObjects: 0,
@@ -7159,12 +7412,16 @@
       sliceWeylChambers: 0,
       sliceWeylSkippedWalls: 0,
       sliceWeylDuplicateWalls: 0,
+      sliceWeylKlStatus: "",
+      sliceWeylKlStatusParts: null,
+      sliceWeylKlStatusFormula: null,
       sliceVoronoiCells: 0,
       sliceVoronoiHalfspaces: 0,
       latticeProjectionPoints: 0,
       latticeProjectionGenerated: 0,
       latticeProjectionVisible: 0,
       latticeProjectionDrawn: 0,
+      latticeProjectionSuppressed: 0,
       latticeProjectionDisplayCapped: false,
       latticeEnumerationCapped: false,
       latticeWarnings: [],
@@ -7191,6 +7448,7 @@
           counts.latticeProjectionGenerated += finiteNumber(lattice.enumerated, drawable.points.length);
           counts.latticeProjectionVisible += finiteNumber(lattice.visible, drawable.points.length);
           counts.latticeProjectionDrawn += finiteNumber(lattice.drawn, drawable.points.length);
+          counts.latticeProjectionSuppressed += finiteNumber(lattice.suppressedByRootLattice, 0);
           counts.latticeProjectionDisplayCapped = counts.latticeProjectionDisplayCapped || !!lattice.displayCapped;
           counts.latticeEnumerationCapped = counts.latticeEnumerationCapped || !!lattice.enumerationCapped;
           if (lattice.status) counts.latticeWarnings.push(lattice.status);
@@ -7228,6 +7486,17 @@
             if (slice.showChambers !== false) counts.sliceWeylChambers += (slice.chambers || []).length;
             counts.sliceWeylSkippedWalls += slice.skippedWalls || 0;
             counts.sliceWeylDuplicateWalls += slice.duplicateWalls || 0;
+            if (slice.klStatus) {
+              if (typeof slice.klStatus === "string") {
+                counts.sliceWeylKlStatus = slice.klStatus;
+                counts.sliceWeylKlStatusParts = null;
+                counts.sliceWeylKlStatusFormula = null;
+              } else {
+                counts.sliceWeylKlStatus = slice.klStatus.plain || "";
+                counts.sliceWeylKlStatusParts = slice.klStatus.parts || null;
+                counts.sliceWeylKlStatusFormula = slice.klStatus.formula || null;
+              }
+            }
           }
           if (slice.kind === "lattice-voronoi") {
             counts.sliceVoronoiCells += 1;
@@ -7449,11 +7718,16 @@
       }
     }
 
+    const pointLabels = Array.isArray(data.pointLabels) ? data.pointLabels : [];
+    const pointTexLabels = Array.isArray(data.pointTexLabels) ? data.pointTexLabels : [];
     projected.forEach((point, index) => {
+      const pickLabel = pointLabels[index] || `v_${index + 1}`;
+      const displayLabel = pointLabels[index] || String(index);
+      const displayTex = pointTexLabels[index] || labelToTex(displayLabel);
       drawPoint(ctx, point.x, point.y, pointSize);
-      if (registerPick) recordPickCandidate(object, point, `v_${index + 1}`, `point:${index}`, pointSize);
+      if (registerPick) recordPickCandidate(object, point, pickLabel, `point:${index}`, pointSize);
       if (shouldDrawObjectLabels(object) && index < 48) {
-        addCanvasMathLabel(view, point, String(index), String(index), { offsetX: 5, offsetY: -5, color });
+        addCanvasMathLabel(view, point, displayLabel, displayTex, { offsetX: 5, offsetY: -5, color });
       }
     });
 
@@ -8403,7 +8677,9 @@
     const tolerance = sliceTolerance();
     const restricted = restrictWeylRootsToSlice(system.hyperplaneRoots, radius, tolerance);
     const chambers = computeWeylChambers(system, restricted.walls, radius, data, tolerance);
-    const labelKeys = selectWeylLabelKeys(chambers, data.weylLabelDensity, object.id);
+    const klStatus = applyWeylKlDisplays(system, object, chambers, data);
+    const labelDensity = normalizeWeylLabelDensity(data.weylLabelDensity);
+    const labelKeys = selectWeylLabelKeys(chambers, labelDensity, object.id);
     const labelKeySet = new Set(labelKeys);
     return {
       kind: "weyl-chambers",
@@ -8414,11 +8690,264 @@
       chambers,
       showChambers: data.showChambers !== false,
       labelMode: data.weylLabelMode,
-      labelDensity: data.weylLabelDensity,
+      labelDensity,
       labelKeySet,
+      klStatus,
       skippedWalls: restricted.skippedWalls,
       duplicateWalls: restricted.duplicateWalls,
       clipRadius: radius,
+    };
+  }
+
+  function clearWeylKlChamberDisplays(chambers) {
+    chambers.forEach((chamber) => {
+      chamber.display = { plain: "", tex: "" };
+      chamber.labelEligible = false;
+    });
+  }
+
+  function finiteWeylKlCalculatorCacheKey(system, selectedElement) {
+    const type = system?.type || "";
+    const rank = Math.round(finiteNumber(system?.rank, state.ambientDim));
+    const elementKey = selectedElement?.key || "";
+    const wordKey = Array.isArray(selectedElement?.word) ? selectedElement.word.join(",") : "";
+    return `${type}:${rank}:${elementKey}:${wordKey}`;
+  }
+
+  function rememberFiniteWeylKlCalculatorCacheEntry(cacheKey, entry) {
+    if (!cacheKey) return;
+    if (finiteWeylKlCalculatorCache.has(cacheKey)) finiteWeylKlCalculatorCache.delete(cacheKey);
+    finiteWeylKlCalculatorCache.set(cacheKey, entry);
+    while (finiteWeylKlCalculatorCache.size > WEYL_KL_CACHE_LIMIT) {
+      const oldestKey = finiteWeylKlCalculatorCache.keys().next().value;
+      if (oldestKey == null) break;
+      finiteWeylKlCalculatorCache.delete(oldestKey);
+    }
+  }
+
+  function scheduleFiniteWeylKlCalculation(cacheKey) {
+    if (!cacheKey || finiteWeylKlCalculatorCache.has(cacheKey)) return;
+    if (finiteWeylKlScheduledFrame && finiteWeylKlScheduledKey === cacheKey) return;
+    if (finiteWeylKlScheduledFrame && typeof window !== "undefined" && window.cancelAnimationFrame) {
+      window.cancelAnimationFrame(finiteWeylKlScheduledFrame);
+    }
+    finiteWeylKlScheduledKey = cacheKey;
+    const run = () => {
+      finiteWeylKlScheduledFrame = 0;
+      const immediateKey = finiteWeylKlScheduledKey;
+      finiteWeylKlScheduledKey = "";
+      finiteWeylKlImmediateKey = immediateKey;
+      try {
+        renderAll();
+      } finally {
+        if (finiteWeylKlImmediateKey === immediateKey) finiteWeylKlImmediateKey = "";
+      }
+    };
+    finiteWeylKlScheduledFrame = typeof window !== "undefined" && window.requestAnimationFrame
+      ? window.requestAnimationFrame(run)
+      : setTimeout(run, 0);
+  }
+
+  function finiteWeylKlCalculatorResult(system, selectedElement) {
+    const cacheKey = finiteWeylKlCalculatorCacheKey(system, selectedElement);
+    const cached = finiteWeylKlCalculatorCache.get(cacheKey);
+    if (cached?.errorMessage) throw new Error(cached.errorMessage);
+    if (cached?.calculator) return { calculator: cached.calculator, pending: false };
+    if (finiteWeylKlImmediateKey !== cacheKey) {
+      scheduleFiniteWeylKlCalculation(cacheKey);
+      return { calculator: null, pending: true };
+    }
+    try {
+      const calculator = makeFiniteWeylKlCalculator(system, selectedElement);
+      rememberFiniteWeylKlCalculatorCacheEntry(cacheKey, { calculator });
+      return { calculator, pending: false };
+    } catch (error) {
+      const errorMessage = error?.message || String(error);
+      rememberFiniteWeylKlCalculatorCacheEntry(cacheKey, { errorMessage });
+      throw new Error(errorMessage);
+    }
+  }
+
+  function applyWeylKlDisplays(system, object, chambers, data) {
+    if (!isWeylKlLabelMode(data.weylLabelMode)) return "";
+    const target = state.weylKlTargetChamber;
+    if (!target || target.objectId !== object.id) {
+      clearWeylKlChamberDisplays(chambers);
+      return "Click a Weyl chamber x to show KL polynomial labels h_{w,x}.";
+    }
+    const selectedElement = weylKlTargetElement(system, target, chambers);
+    if (!selectedElement) {
+      clearWeylKlChamberDisplays(chambers);
+      return "Click a Weyl chamber x again to save its Weyl group element for KL labels.";
+    }
+    try {
+      const klResult = finiteWeylKlCalculatorResult(system, selectedElement);
+      if (klResult.pending) {
+        clearWeylKlChamberDisplays(chambers);
+        return WEYL_KL_PENDING_STATUS;
+      }
+      const calculator = klResult.calculator;
+      const displayMode = normalizeWeylElementDisplayMode(data.weylElementDisplayMode, "word");
+      const currentRef = state.activeWeylChamber?.objectId === object.id ? state.activeWeylChamber : null;
+      const currentChamber = currentRef ? chambers.find((chamber) => chamber.key === currentRef.chamberKey) || null : null;
+      let currentElement = null;
+      chambers.forEach((chamber) => {
+        const element = calculator.elementFromAmbient(chamber.ambient);
+        if (!calculator.contains(element)) {
+          chamber.display = { plain: "0", tex: "0" };
+        } else {
+          const polynomial = calculator.polynomialFor(element);
+          if (data.weylLabelMode === "kl-v1") {
+            const value = polynomialValueAtOne(polynomial);
+            chamber.display = { plain: String(value), tex: String(value) };
+          } else {
+            chamber.display = formatSoergelKlPolynomial(polynomial, element.length, selectedElement.length);
+          }
+        }
+        chamber.word = element.word;
+        chamber.length = element.length;
+        chamber.labelEligible = chamber.display.plain !== "" && chamber.area > Math.max(0.018, sliceTolerance() * 10);
+        if (currentChamber && chamber.key === currentChamber.key) {
+          currentElement = element;
+        }
+      });
+      if (!currentElement && currentChamber) {
+        currentElement = calculator.elementFromAmbient(currentChamber.ambient);
+      }
+      return formatWeylKlExpansionStatus(system, data, calculator, selectedElement, currentElement, displayMode);
+    } catch (error) {
+      clearWeylKlChamberDisplays(chambers);
+      return `KL polynomial labels skipped: ${error.message}`;
+    }
+  }
+
+  function formatWeylKlExpansionStatus(system, data, calculator, selectedElement, currentElement, displayMode) {
+    const modeLabel = data.weylLabelMode === "kl-v1" ? "KL(v=1)" : "KL polynomial";
+    const terms = (calculator.intervalElements || [])
+      .map((element) => {
+        const polynomial = calculator.polynomialFor(element);
+        const coefficient = data.weylLabelMode === "kl-v1"
+          ? { plain: String(polynomialValueAtOne(polynomial)), tex: String(polynomialValueAtOne(polynomial)) }
+          : formatSoergelKlPolynomial(polynomial, element.length, selectedElement.length);
+        const term = heckeStatusTermDisplay(system, element, coefficient, displayMode);
+        return term
+          ? {
+              text: term.plain,
+              tex: term.tex,
+              key: element.key,
+              length: element.length,
+              sortText: heckeBasisSubscript(system, element, displayMode),
+              active: !!currentElement && currentElement.key === element.key,
+            }
+          : null;
+      })
+      .filter(Boolean)
+      .sort((left, right) => (right.length - left.length) || left.sortText.localeCompare(right.sortText));
+    const parts = [`${modeLabel}: `];
+    if (!terms.length) {
+      parts.push("0");
+    } else {
+      terms.forEach((term, index) => {
+        if (index) parts.push(" + ");
+        parts.push({ text: term.text, active: term.active });
+      });
+    }
+    const plain = parts.map((part) => typeof part === "string" ? part : part.text).join("");
+    return {
+      plain,
+      parts,
+      formula: formatWeylKlStatusFormula(modeLabel, terms),
+    };
+  }
+
+  function heckeStatusTermText(system, element, coefficient, displayMode) {
+    const display = heckeStatusTermDisplay(system, element, coefficient, displayMode);
+    return display ? display.plain : "";
+  }
+
+  function heckeStatusTermDisplay(system, element, coefficient, displayMode) {
+    const coefficientDisplay = formatHeckeStatusCoefficientDisplay(coefficient);
+    if (!coefficientDisplay) return null;
+    const basisPlain = `T_${heckeBasisSubscript(system, element, displayMode)}`;
+    const basisTex = `T_{${heckeBasisSubscriptTex(system, element, displayMode)}}`;
+    if (!coefficientDisplay.plain) {
+      return { plain: basisPlain, tex: basisTex };
+    }
+    return {
+      plain: `${coefficientDisplay.plain} ${basisPlain}`,
+      tex: `${coefficientDisplay.tex}${basisTex}`,
+    };
+  }
+
+  function formatHeckeStatusCoefficient(coefficient) {
+    const display = formatHeckeStatusCoefficientDisplay(coefficient);
+    return display ? display.plain : null;
+  }
+
+  function formatHeckeStatusCoefficientDisplay(coefficient) {
+    const rawPlain = typeof coefficient === "object" && coefficient
+      ? coefficient.plain
+      : coefficient;
+    const rawTex = typeof coefficient === "object" && coefficient
+      ? coefficient.tex
+      : coefficient;
+    const text = String(rawPlain == null ? "" : rawPlain).trim();
+    if (!text || text === "0") return null;
+    const tex = String(rawTex == null ? rawPlain : rawTex).trim();
+    if (text === "1" && tex === "1") return { plain: "", tex: "" };
+    if (/\s/.test(text)) {
+      return {
+        plain: `(${text})`,
+        tex: `\\left(${tex}\\right)`,
+      };
+    }
+    return { plain: text, tex };
+  }
+
+  function heckeBasisSubscript(system, element, displayMode) {
+    if (!element?.length) return "e";
+    return weylElementDisplay(system, element, displayMode).plain;
+  }
+
+  function heckeBasisSubscriptTex(system, element, displayMode) {
+    if (!element?.length) return "e";
+    return weylElementDisplay(system, element, displayMode).tex;
+  }
+
+  function formatWeylKlStatusFormula(label, terms) {
+    if (!terms.length) {
+      return {
+        label,
+        plain: "0",
+        rows: [{ plain: "0", parts: [{ text: "0", tex: "0", active: false }] }],
+      };
+    }
+    const rows = [];
+    let current = { plain: "", parts: [] };
+    const appendTerm = (term, leadingPlus) => {
+      if (leadingPlus) current.parts.push({ text: "+", tex: "+", separator: true });
+      current.parts.push({ text: term.text, tex: term.tex, active: term.active });
+      current.plain = current.plain
+        ? `${current.plain} + ${term.text}`
+        : leadingPlus
+          ? `+ ${term.text}`
+          : term.text;
+    };
+    terms.forEach((term, index) => {
+      const nextPlain = current.plain ? `${current.plain} + ${term.text}` : term.text;
+      if (current.parts.length && nextPlain.length > WEYL_KL_STATUS_ROW_CHAR_LIMIT) {
+        rows.push(current);
+        current = { plain: "", parts: [] };
+        appendTerm(term, true);
+      } else {
+        appendTerm(term, index > 0);
+      }
+    });
+    if (current.parts.length || !rows.length) rows.push(current.parts.length ? current : { plain: "0", parts: [{ text: "0", tex: "0", active: false }] });
+    return {
+      label,
+      plain: rows.map((row) => row.plain).join("\n"),
+      rows,
     };
   }
 
@@ -8482,6 +9011,7 @@
       const anchor = polygonCentroid(vertices);
       const ambient = ambientFromFrameCoords(anchor);
       const signPattern = weylSignPattern(system.hyperplaneRoots, ambient);
+      const word = weylReducedWord(system, ambient);
       const display = weylChamberDisplay(system, ambient, data.weylLabelMode);
       const key = signPattern.join("");
       return {
@@ -8492,8 +9022,10 @@
         anchor,
         ambient,
         signPattern,
+        word,
+        length: word.length,
         color: WEYL_CHAMBER_COLORS[Math.abs(hashString(key || String(index))) % WEYL_CHAMBER_COLORS.length],
-        labelEligible: area > Math.max(0.018, tolerance * 10),
+        labelEligible: display.plain !== "" && area > Math.max(0.018, tolerance * 10),
         display,
       };
     });
@@ -8529,8 +9061,9 @@
   }
 
   function selectWeylLabelKeys(chambers, density, objectId) {
+    const normalizedDensity = normalizeWeylLabelDensity(density);
     const eligible = chambers.filter((chamber) => chamber.labelEligible);
-    if (density === "all") return eligible.map((chamber) => chamber.key);
+    if (normalizedDensity === "all") return eligible.map((chamber) => chamber.key);
     const active = state.activeWeylChamber;
     return active && active.objectId === objectId && eligible.some((chamber) => chamber.key === active.chamberKey)
       ? [active.chamberKey]
@@ -8653,6 +9186,45 @@
     return { vectors, candidateCount, capped, bounds, maxShell, boundShape, boundRadius: ambientRadius };
   }
 
+  function matchingVisibleRootLatticeForWeightLattice(object) {
+    const data = object?.data || {};
+    if (
+      objectTypeKey(object) !== "lattice" ||
+      data.basisMode !== "dynkin" ||
+      normalizeDynkinLatticeKind(data.dynkinLatticeKind) !== "weight"
+    ) {
+      return null;
+    }
+    const dynkinType = normalizeWeylDynkinType(data.dynkinType, state.ambientDim);
+    return state.objects.find((candidate) => {
+      if (!candidate.visibleProjection || candidate.id === object.id || objectTypeKey(candidate) !== "lattice") return false;
+      const candidateData = candidate.data || {};
+      return candidateData.basisMode === "dynkin" &&
+        normalizeDynkinLatticeKind(candidateData.dynkinLatticeKind) === "root" &&
+        normalizeWeylDynkinType(candidateData.dynkinType, state.ambientDim) === dynkinType &&
+        (candidateData.ambientDimension || state.ambientDim) === state.ambientDim;
+    }) || null;
+  }
+
+  function rootLatticeMembershipTesterForWeightLattice(object) {
+    const rootLattice = matchingVisibleRootLatticeForWeightLattice(object);
+    if (!rootLattice) return null;
+    const dynkinType = normalizeWeylDynkinType(object.data?.dynkinType, state.ambientDim);
+    try {
+      const rootRows = simpleRootMatrixRows(dynkinType, state.ambientDim);
+      const inverseRootRows = inverseMatrix(rootRows, `${weylDynkinLabel(dynkinType, state.ambientDim)} root lattice`);
+      return {
+        rootLattice,
+        contains: (point) => {
+          const coefficients = multiplyMatrixVector(inverseRootRows, resizeVector(point, state.ambientDim));
+          return coefficients.every((value) => Math.abs(value - Math.round(value)) <= Math.max(1e-7, sliceTolerance() * 10));
+        },
+      };
+    } catch {
+      return null;
+    }
+  }
+
   function latticeProjectionData(object) {
     const resolved = resolveLatticeBasis(object);
     if (!resolved.ok) {
@@ -8666,12 +9238,14 @@
         enumerated: 0,
         visible: 0,
         drawn: 0,
+        suppressedByRootLattice: 0,
         showPoints: true,
       };
       latticeProjectionStatsCache.set(object.id, {
         enumerated: 0,
         visible: 0,
         drawn: 0,
+        suppressedByRootLattice: 0,
         displayCapped: false,
         enumerationCapped: false,
         showPoints: true,
@@ -8683,25 +9257,33 @@
     data.latticeBoundRadius = normalizeLatticeBoundRadius(data.latticeBoundRadius);
     const boundShape = data.latticeBoundShape;
     const radius = data.latticeBoundRadius;
+    const rootMembership = rootLatticeMembershipTesterForWeightLattice(object);
     const enumeration = enumerateLatticeVectors(resolved.basisRows, radius, {
       boundShape,
       cap: LATTICE_PROJECTION_ENUMERATION_CAP,
       includeZero: true,
     });
+    const projectedVectors = enumeration.vectors.filter((vector) => viewportPointInside(frameCoordsForAmbient(vector.ambient), state.viewport.boxRadius));
+    const suppressedByRootLattice = rootMembership
+      ? projectedVectors.filter((vector) => rootMembership.contains(vector.ambient)).length
+      : 0;
     const visibleVectors = data.showLatticePoints === false
       ? []
-      : enumeration.vectors.filter((vector) => viewportPointInside(frameCoordsForAmbient(vector.ambient), state.viewport.boxRadius));
+      : projectedVectors.filter((vector) => !rootMembership || !rootMembership.contains(vector.ambient));
     const drawnVectors = visibleVectors.slice(0, LATTICE_PROJECTION_POINT_CAP);
     const points = drawnVectors.map((vector) => vector.ambient);
     const displayCapped = data.showLatticePoints !== false && visibleVectors.length > LATTICE_PROJECTION_POINT_CAP;
     const capped = enumeration.capped || displayCapped;
     const boundText = latticeBoundDescription(data);
     const shrinkHint = "reduce this lattice point-bound radius for complete drawing";
+    const suppressionText = suppressedByRootLattice
+      ? `${suppressedByRootLattice} shared ${rootMembership.rootLattice.name} point${suppressedByRootLattice === 1 ? "" : "s"} hidden from ${object.name}`
+      : "";
     const status = enumeration.capped
       ? `${object.name} lattice point search capped in ${boundText} after ${enumeration.candidateCount} candidates; ${shrinkHint}`
       : displayCapped
         ? `${object.name} showing ${points.length}/${visibleVectors.length} visible projected lattice points from ${enumeration.vectors.length} in ${boundText}; ${shrinkHint}`
-        : "";
+        : suppressionText;
     const result = {
       points,
       rays: [],
@@ -8712,6 +9294,7 @@
       enumerated: enumeration.vectors.length,
       visible: visibleVectors.length,
       drawn: points.length,
+      suppressedByRootLattice,
       candidateCount: enumeration.candidateCount,
       boundShape,
       boundRadius: radius,
@@ -8724,6 +9307,7 @@
       enumerated: result.enumerated,
       visible: result.visible,
       drawn: result.drawn,
+      suppressedByRootLattice: result.suppressedByRootLattice,
       displayCapped: result.displayCapped,
       enumerationCapped: result.enumerationCapped,
       showPoints: result.showPoints,
@@ -9339,6 +9923,119 @@
     return roots;
   }
 
+  function finiteRootSet(dynkinType, rank = state.ambientDim) {
+    const type = normalizeWeylDynkinType(dynkinType, rank);
+    const key = `${type}:${rank}`;
+    if (finiteRootSetCache.has(key)) return finiteRootSetCache.get(key);
+    const system = weylRootSystem(type, rank);
+    const simpleRootBasis = system.simpleRootBasis || system.simpleRoots;
+    const roots = rootsFromSimpleReflections(simpleRootBasis)
+      .map((root) => resizeVector(root, rank))
+      .filter((root) => norm(root) > 1e-10);
+    const simpleRows = matrixRowsFromColumns(simpleRootBasis, rank);
+    const simpleInverse = inverseMatrix(simpleRows, `${weylDynkinLabel(type, rank)} simple roots`);
+    const rootEntries = roots.map((root) => {
+      const coefficients = multiplyMatrixVector(simpleInverse, root).map(cleanRootCoefficient);
+      const positive = coefficients.every((value) => value >= -1e-7);
+      const negative = coefficients.every((value) => value <= 1e-7);
+      const canonicalCoefficients = negative ? coefficients.map((value) => -value) : coefficients;
+      return {
+        root,
+        coefficients,
+        positive,
+        display: rootCoefficientDisplay(coefficients),
+        sortKey: [
+          positive ? 0 : 1,
+          canonicalCoefficients.reduce((total, value) => total + Math.abs(value), 0),
+          ...canonicalCoefficients.map((value) => Math.abs(value)),
+          ...coefficients,
+        ],
+      };
+    });
+    rootEntries.sort(compareRootEntries);
+    const result = {
+      type,
+      rank,
+      roots: rootEntries,
+      positiveRoots: rootEntries.filter((entry) => entry.positive),
+    };
+    finiteRootSetCache.set(key, result);
+    return result;
+  }
+
+  function cleanRootCoefficient(value) {
+    const rounded = Math.round(value);
+    if (Math.abs(value - rounded) <= 1e-7) return rounded;
+    return Math.abs(value) <= 1e-9 ? 0 : value;
+  }
+
+  function compareRootEntries(left, right) {
+    const a = left.sortKey || [];
+    const b = right.sortKey || [];
+    for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+      const diff = finiteNumber(a[index], 0) - finiteNumber(b[index], 0);
+      if (Math.abs(diff) > 1e-10) return diff;
+    }
+    return 0;
+  }
+
+  function rootCoefficientDisplay(coefficients) {
+    const terms = [];
+    const texTerms = [];
+    coefficients.forEach((coefficient, index) => {
+      if (Math.abs(coefficient) <= 1e-9) return;
+      const sign = coefficient < 0 ? "-" : "+";
+      const absValue = Math.abs(coefficient);
+      const coeffText = Math.abs(absValue - 1) <= 1e-9 ? "" : fmt(absValue, 3);
+      const plainTerm = `${coeffText}alpha_${index + 1}`;
+      const texCoeff = Math.abs(absValue - 1) <= 1e-9 ? "" : fmt(absValue, 3);
+      const texTerm = `${texCoeff}\\alpha_{${index + 1}}`;
+      terms.push({ sign, text: plainTerm });
+      texTerms.push({ sign, text: texTerm });
+    });
+    if (!terms.length) return { plain: "0", tex: "0" };
+    const plain = terms.map((term, index) =>
+      index === 0
+        ? `${term.sign === "-" ? "-" : ""}${term.text}`
+        : ` ${term.sign} ${term.text}`
+    ).join("");
+    const tex = texTerms.map((term, index) =>
+      index === 0
+        ? `${term.sign === "-" ? "-" : ""}${term.text}`
+        : ` ${term.sign} ${term.text}`
+    ).join("");
+    return { plain, tex };
+  }
+
+  function rootSetProjectionData(object) {
+    object.data = normalizeRootSetData(object.data || {}, state.ambientDim);
+    refreshRootSetFromDynkin(object);
+    const data = object.data || {};
+    try {
+      const roots = finiteRootSet(data.dynkinType, state.ambientDim);
+      const entries = normalizeRootSetSignMode(data.rootSignMode) === "positive"
+        ? roots.positiveRoots
+        : roots.roots;
+      data.rootStatus = `${entries.length}/${roots.roots.length} ${data.rootSignMode === "positive" ? "positive " : ""}roots for ${weylDynkinLabel(data.dynkinType, state.ambientDim)}`;
+      return {
+        points: entries.map((entry) => entry.root),
+        edges: [],
+        rays: [],
+        pointLabels: entries.map((entry) => entry.display.plain),
+        pointTexLabels: entries.map((entry) => entry.display.tex),
+        rootSet: {
+          shown: entries.length,
+          total: roots.roots.length,
+          positive: roots.positiveRoots.length,
+          status: data.rootStatus,
+        },
+      };
+    } catch (error) {
+      data.rootStatus = `root-set warning: ${error.message}`;
+      return { points: [], edges: [], rays: [], rootSet: { shown: 0, total: 0, positive: 0, status: data.rootStatus } };
+    }
+  }
+
   function reflectVector(vector, root) {
     const rootNormSq = Math.max(dot(root, root), 1e-12);
     const factor = (2 * dot(vector, root)) / rootNormSq;
@@ -9404,8 +10101,21 @@
     });
   }
 
+  function isWeylKlLabelMode(mode) {
+    const normalizedMode = normalizeWeylLabelMode(mode);
+    return normalizedMode === "kl" || normalizedMode === "kl-v1";
+  }
+
   function weylChamberDisplay(system, ambient, mode) {
     const normalizedMode = normalizeWeylLabelMode(mode);
+    if (normalizedMode === "length") {
+      const length = weylReducedWord(system, ambient).length;
+      return {
+        plain: String(length),
+        tex: String(length),
+      };
+    }
+    if (isWeylKlLabelMode(normalizedMode)) return { plain: "", tex: "" };
     if (normalizedMode === "word" || !["A", "B", "C", "D"].includes(system.type)) return weylWordDisplay(system, ambient);
     return weylPermutationDisplay(system, ambient);
   }
@@ -9440,6 +10150,17 @@
     };
   }
 
+  function weylElementDisplay(system, element, mode = "word") {
+    const displayMode = normalizeWeylElementDisplayMode(mode, "word");
+    if (displayMode === "permutation") return weylChamberDisplay(system, element.ambient, "permutation");
+    const word = Array.isArray(element?.word) ? element.word : weylReducedWord(system, element?.ambient || []);
+    if (!word.length) return { plain: "e", tex: "e" };
+    return {
+      plain: word.map((index) => `s${index}`).join(""),
+      tex: word.map((index) => `s_{${index}}`).join(""),
+    };
+  }
+
   function weylReducedWord(system, ambient) {
     let point = ambient.slice();
     const word = [];
@@ -9458,7 +10179,252 @@
       }
       if (!reflected) break;
     }
-    return word.reverse();
+    return word;
+  }
+
+  function dominantWeylBasePoint(system) {
+    const simpleRows = (system.simpleRootBasis || system.simpleRoots).map((root) => resizeVector(root, system.rank));
+    try {
+      return multiplyMatrixVector(inverseMatrix(simpleRows, `${weylDynkinLabel(system.type, system.rank)} simple root pairings`), Array(system.rank).fill(1));
+    } catch {
+      return normalize(Array(system.rank).fill(1), 0);
+    }
+  }
+
+  function weylPointFromWord(system, word) {
+    let point = dominantWeylBasePoint(system);
+    for (let index = word.length - 1; index >= 0; index -= 1) {
+      const simpleRoot = system.simpleRoots[(word[index] || 1) - 1];
+      point = reflectVector(point, simpleRoot);
+    }
+    return point;
+  }
+
+  function normalizeWeylWord(word, generatorCount) {
+    if (!Array.isArray(word)) return null;
+    const limit = Math.max(1, Math.round(finiteNumber(generatorCount, 1)));
+    return word
+      .map((entry) => Math.round(finiteNumber(entry, NaN)))
+      .filter((entry) => Number.isInteger(entry) && entry >= 1 && entry <= limit);
+  }
+
+  function weylElementFromWord(system, word) {
+    const normalizedWord = normalizeWeylWord(word, system.simpleRoots.length);
+    if (!normalizedWord) return null;
+    return weylElementFromReducedWord(system, normalizedWord);
+  }
+
+  function weylElementFromAmbient(system, ambient) {
+    const word = weylReducedWord(system, ambient);
+    return weylElementFromReducedWord(system, word);
+  }
+
+  function weylElementFromReducedWord(system, word) {
+    const normalizedWord = normalizeWeylWord(word, system.simpleRoots.length) || [];
+    const ambient = weylPointFromWord(system, normalizedWord);
+    const reducedWord = weylReducedWord(system, ambient);
+    const regularAmbient = weylPointFromWord(system, reducedWord);
+    return {
+      key: weylSignPattern(system.hyperplaneRoots, regularAmbient).join(""),
+      word: reducedWord,
+      length: reducedWord.length,
+      ambient: regularAmbient,
+    };
+  }
+
+  function weylKlTargetElement(system, target, chambers) {
+    const fromWord = weylElementFromWord(system, target?.word);
+    if (fromWord) return fromWord;
+    const selected = chambers.find((chamber) => chamber.key === target?.chamberKey);
+    return selected ? weylElementFromAmbient(system, selected.ambient) : null;
+  }
+
+  function makeFiniteWeylKlCalculator(system, selectedElement) {
+    const generators = Array.from({ length: system.simpleRoots.length }, (_, index) => index + 1);
+    const elementByKey = new Map();
+    const elementByWord = new Map();
+    const lowerSetMemo = new Map();
+    const polynomialMemo = new Map();
+
+    const rememberElement = (element) => {
+      const existing = elementByKey.get(element.key);
+      if (!existing || element.length < existing.length) elementByKey.set(element.key, element);
+      elementByWord.set(element.word.join(","), element);
+      return elementByKey.get(element.key) || element;
+    };
+
+    const elementFromWord = (word) => {
+      const normalizedWord = word.map((entry) => clamp(Math.round(finiteNumber(entry, 1)), 1, generators.length));
+      const wordKey = normalizedWord.join(",");
+      const cached = elementByWord.get(wordKey);
+      if (cached) return cached;
+      const ambient = weylPointFromWord(system, normalizedWord);
+      const reducedWord = weylReducedWord(system, ambient);
+      const element = rememberElement(weylElementFromReducedWord(system, reducedWord));
+      elementByWord.set(wordKey, element);
+      return element;
+    };
+
+    rememberElement(elementFromWord([]));
+    rememberElement(selectedElement);
+
+    const leftMultiply = (element, generator) => elementFromWord([generator, ...element.word]);
+
+    const lowerSet = (element) => {
+      const cached = lowerSetMemo.get(element.key);
+      if (cached) return cached;
+      const values = new Map();
+      values.set(elementFromWord([]).key, elementFromWord([]));
+      let checked = 0;
+      for (const generator of element.word) {
+        const current = Array.from(values.values());
+        for (const candidate of current) {
+          checked += 1;
+          if (checked > WEYL_KL_SUBWORD_CAP) {
+            const capped = { values, capped: true, reason: `subword search exceeded ${WEYL_KL_SUBWORD_CAP}` };
+            lowerSetMemo.set(element.key, capped);
+            return capped;
+          }
+          const next = elementFromWord([...candidate.word, generator]);
+          values.set(next.key, next);
+          if (values.size > WEYL_KL_INTERVAL_CAP) {
+            const capped = { values, capped: true, reason: `interval exceeded ${WEYL_KL_INTERVAL_CAP} elements` };
+            lowerSetMemo.set(element.key, capped);
+            return capped;
+          }
+        }
+      }
+      values.set(element.key, element);
+      const result = { values, capped: false, reason: "" };
+      lowerSetMemo.set(element.key, result);
+      return result;
+    };
+
+    const bruhatLeq = (left, right) => {
+      if (left.key === right.key) return true;
+      if (left.length > right.length) return false;
+      const lower = lowerSet(right);
+      if (lower.capped) throw new Error(lower.reason);
+      return lower.values.has(left.key);
+    };
+
+    const leftDescents = (element) => generators.filter((generator) => leftMultiply(element, generator).length < element.length);
+
+    const klPolynomial = (left, right) => {
+      const memoKey = `${left.key}|${right.key}`;
+      if (polynomialMemo.has(memoKey)) return polynomialMemo.get(memoKey);
+      let result;
+      if (left.key === right.key) {
+        result = [1];
+      } else if (left.length > right.length || !bruhatLeq(left, right)) {
+        result = [];
+      } else {
+        const descent = leftDescents(right)[0];
+        if (!descent) {
+          result = [];
+        } else {
+          const leftStep = leftMultiply(left, descent);
+          const rightStep = leftMultiply(right, descent);
+          if (leftStep.length < left.length) {
+            result = klPolynomial(leftStep, rightStep);
+          } else {
+            // Standard KL recurrence for P_{left,right}(q) with a left descent of right.
+            result = polynomialAdd(
+              polynomialShift(klPolynomial(leftStep, rightStep), 1),
+              klPolynomial(left, rightStep)
+            );
+            const lower = lowerSet(rightStep);
+            if (lower.capped) throw new Error(lower.reason);
+            for (const middle of lower.values.values()) {
+              if (middle.key === rightStep.key || !bruhatLeq(left, middle)) continue;
+              if (leftMultiply(middle, descent).length >= middle.length) continue;
+              const mu = klMuCoefficient(middle, rightStep);
+              if (!mu) continue;
+              const exponent = (right.length - middle.length) / 2;
+              if (Math.abs(exponent - Math.round(exponent)) > 1e-9) continue;
+              const correction = polynomialScale(polynomialShift(klPolynomial(left, middle), Math.round(exponent)), -mu);
+              result = polynomialAdd(result, correction);
+            }
+          }
+        }
+      }
+      result = polynomialTrim(result);
+      polynomialMemo.set(memoKey, result);
+      return result;
+    };
+
+    const klMuCoefficient = (left, right) => {
+      const degree = (right.length - left.length - 1) / 2;
+      if (degree < 0 || Math.abs(degree - Math.round(degree)) > 1e-9) return 0;
+      return klPolynomial(left, right)[Math.round(degree)] || 0;
+    };
+
+    const selectedLower = lowerSet(selectedElement);
+    if (selectedLower.capped) throw new Error(selectedLower.reason);
+    return {
+      selected: selectedElement,
+      lowerSize: selectedLower.values.size,
+      intervalElements: Array.from(selectedLower.values.values()),
+      elementFromAmbient: (ambient) => rememberElement(weylElementFromAmbient(system, ambient)),
+      polynomialFor: (element) => klPolynomial(element, selectedElement),
+      contains: (element) => bruhatLeq(element, selectedElement),
+    };
+  }
+
+  function polynomialTrim(poly) {
+    const result = (poly || []).map((value) => Math.round(finiteNumber(value, 0)));
+    while (result.length && result[result.length - 1] === 0) result.pop();
+    return result;
+  }
+
+  function polynomialAdd(left, right) {
+    const n = Math.max(left?.length || 0, right?.length || 0);
+    return polynomialTrim(Array.from({ length: n }, (_, index) => finiteNumber(left?.[index], 0) + finiteNumber(right?.[index], 0)));
+  }
+
+  function polynomialScale(poly, scalar) {
+    return polynomialTrim((poly || []).map((value) => finiteNumber(value, 0) * scalar));
+  }
+
+  function polynomialShift(poly, degree) {
+    const shift = Math.max(0, Math.round(finiteNumber(degree, 0)));
+    if (!poly?.length) return [];
+    return polynomialTrim([...Array(shift).fill(0), ...poly]);
+  }
+
+  function polynomialValueAtOne(poly) {
+    return (poly || []).reduce((total, value) => total + finiteNumber(value, 0), 0);
+  }
+
+  function formatSoergelKlPolynomial(poly, leftLength, rightLength) {
+    if (!poly?.length) return { plain: "0", tex: "0" };
+    const plainTerms = [];
+    const texTerms = [];
+    const baseDegree = rightLength - leftLength;
+    poly.forEach((coefficient, qDegree) => {
+      const coeff = Math.round(finiteNumber(coefficient, 0));
+      if (!coeff) return;
+      const vDegree = baseDegree - 2 * qDegree;
+      const sign = coeff < 0 ? "-" : "+";
+      const absCoeff = Math.abs(coeff);
+      const coeffText = absCoeff === 1 && vDegree !== 0 ? "" : String(absCoeff);
+      const vPlain = vDegree === 0 ? "" : vDegree === 1 ? "v" : `v^${vDegree}`;
+      const vTex = vDegree === 0 ? "" : vDegree === 1 ? "v" : `v^{${vDegree}}`;
+      plainTerms.push({ sign, text: `${coeffText}${vPlain || (coeffText ? "" : "1")}` });
+      texTerms.push({ sign, text: `${coeffText}${vTex || (coeffText ? "" : "1")}` });
+    });
+    if (!plainTerms.length) return { plain: "0", tex: "0" };
+    const plain = plainTerms.map((term, index) =>
+      index === 0
+        ? `${term.sign === "-" ? "-" : ""}${term.text}`
+        : ` ${term.sign} ${term.text}`
+    ).join("");
+    const tex = texTerms.map((term, index) =>
+      index === 0
+        ? `${term.sign === "-" ? "-" : ""}${term.text}`
+        : ` ${term.sign} ${term.text}`
+    ).join("");
+    return { plain, tex };
   }
 
   function hashString(value) {
@@ -9705,6 +10671,9 @@
         }),
       };
     }
+    if (type === "root-set") {
+      return rootSetProjectionData(object);
+    }
     if (type === "lattice") {
       const lattice = latticeProjectionData(object);
       return {
@@ -9909,13 +10878,16 @@
   }
 
   function recordWeylChamberCandidate(object, chamber, projectedPolygon) {
+    const fallbackWord = chamber.word?.length ? chamber.word.map((index) => `s${index}`).join("") : "e";
     state.weylChamberPickCandidates.push({
       objectId: object.id,
       objectName: object.name,
       chamberKey: chamber.key,
-      label: chamber.display?.plain || chamber.key,
+      label: chamber.display?.plain || fallbackWord || chamber.key,
       ambient: chamber.ambient.slice(),
+      word: Array.isArray(chamber.word) ? chamber.word.slice() : [],
       frameCoords: chamber.anchor.slice(0, 2),
+      length: chamber.length,
       area: chamber.area,
       polygon: projectedPolygon.map((point) => [point.x, point.y]),
     });
@@ -10026,7 +10998,7 @@
       state.activeObjectId = candidate.objectId;
       state.sourceMode = "modify";
       state.activeTropicalDistrict = null;
-      state.activeWeylChamber = null;
+      clearWeylInteraction();
       state.lastWarning = `Picked ${candidate.objectName} / ${candidate.label}.`;
       syncObjectSelect();
       syncObjectPanel();
@@ -10041,7 +11013,7 @@
         objectId: district.objectId,
         districtKey: district.districtKey,
       };
-      state.activeWeylChamber = null;
+      clearWeylInteraction();
       state.activeObjectId = district.objectId;
       state.sourceMode = "modify";
       state.lastWarning = `Picked ${district.objectName} / ${district.label}  x=${vectorToInline(district.ambient)}  y=${vectorToInline(district.frameCoords)}.`;
@@ -10059,9 +11031,22 @@
         objectId: chamber.objectId,
         chamberKey: chamber.chamberKey,
       };
+      state.weylKlTargetChamber = {
+        objectId: chamber.objectId,
+        chamberKey: chamber.chamberKey,
+        word: Array.isArray(chamber.word) ? chamber.word.slice() : [],
+        length: chamber.length,
+      };
       state.activeObjectId = chamber.objectId;
       state.sourceMode = "modify";
-      state.lastWarning = `Picked ${chamber.objectName} / ${chamber.label}  x=${vectorToInline(chamber.ambient)}  y=${vectorToInline(chamber.frameCoords)}.`;
+      const chamberObject = state.objects.find((object) => object.id === chamber.objectId);
+      let targetDisplay = chamber.label;
+      if (chamberObject && objectTypeKey(chamberObject) === "weyl-chambers") {
+        const data = normalizeWeylChambersData(chamberObject.data || {}, state.ambientDim);
+        const system = weylRootSystem(data.dynkinType, state.ambientDim);
+        targetDisplay = weylElementDisplay(system, weylElementFromAmbient(system, chamber.ambient), data.weylElementDisplayMode).plain;
+      }
+      state.lastWarning = `Picked ${chamber.objectName} / KL target x=${targetDisplay}${Number.isFinite(chamber.length) ? `, length ${chamber.length}` : ""}  ambient=${vectorToInline(chamber.ambient)}  y=${vectorToInline(chamber.frameCoords)}.`;
       syncObjectSelect();
       syncObjectPanel();
       syncSourceMode();
@@ -10071,7 +11056,7 @@
     if (!candidate) {
       state.selectedVertex = null;
       state.activeTropicalDistrict = null;
-      state.activeWeylChamber = null;
+      clearWeylInteraction();
       state.lastWarning = "No projected vertex selected.";
       renderAll();
       return;
@@ -10111,7 +11096,7 @@
     if (weylChanged) {
       state.activeWeylChamber = nextWeylActive;
       const touchedObjectId = nextWeylActive?.objectId || previous?.objectId;
-      if (state.objects.some((object) => object.id === touchedObjectId && object.data?.weylLabelDensity === "active")) {
+      if (state.objects.some((object) => object.id === touchedObjectId && (object.data?.weylLabelDensity === "active" || isWeylKlLabelMode(object.data?.weylLabelMode)))) {
         shouldRender = true;
       }
     }
@@ -10395,7 +11380,7 @@
       state.selectedVertex = null;
       clearVectorTargetSession();
       state.activeTropicalDistrict = null;
-      state.activeWeylChamber = null;
+      clearWeylInteraction();
       state.lastWarning = "State JSON imported.";
       rebuildDynamicControls();
       refreshTypeLabels();
@@ -10422,7 +11407,7 @@
       state.selectedVertex = null;
       clearVectorTargetSession();
       state.activeTropicalDistrict = null;
-      state.activeWeylChamber = null;
+      clearWeylInteraction();
       state.lastWarning = "Object JSON imported as a new object.";
       syncObjectSelect();
       syncObjectPanel();
@@ -10447,7 +11432,7 @@
       state.selectedVertex = null;
       clearVectorTargetSession();
       state.activeTropicalDistrict = null;
-      state.activeWeylChamber = null;
+      clearWeylInteraction();
       state.lastWarning = "Active object replaced from object JSON.";
       syncObjectSelect();
       syncObjectPanel();
@@ -10506,7 +11491,7 @@
     state.selectedVertex = null;
     clearVectorTargetSession();
     state.activeTropicalDistrict = null;
-    state.activeWeylChamber = null;
+    clearWeylInteraction();
     state.pickCandidates = [];
     state.tropicalDistrictPickCandidates = [];
     state.weylChamberPickCandidates = [];

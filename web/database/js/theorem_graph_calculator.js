@@ -627,6 +627,44 @@
     window.addEventListener('click', closeColorPopovers);
   }
 
+  function resolveCalculatorCard(cardRef) {
+    if (!cardRef) return null;
+    if (cardRef.classList) {
+      return cardRef.classList.contains('card') ? cardRef : (cardRef.closest ? cardRef.closest('.card') : null);
+    }
+    if (typeof cardRef === 'string' && document.querySelector) return document.querySelector(cardRef);
+    return null;
+  }
+
+  function openCalculatorCard(cardRef, options = {}) {
+    const card = resolveCalculatorCard(cardRef);
+    if (!card) return false;
+    const openOptions = { ...options };
+    if (openOptions.protectedCard) {
+      const protectedCard = resolveCalculatorCard(openOptions.protectedCard);
+      if (protectedCard) openOptions.protectedCard = protectedCard;
+      else delete openOptions.protectedCard;
+    }
+    if (window.CalculatorCards && typeof window.CalculatorCards.openCard === 'function') {
+      return window.CalculatorCards.openCard(card, openOptions);
+    }
+    card.classList.remove('collapsed');
+    const head = card.querySelector ? card.querySelector('.card-head') : null;
+    if (head) head.setAttribute('aria-expanded', 'true');
+    return true;
+  }
+
+  function openNodeArrowCard() {
+    openCalculatorCard('#node-card', { reason: 'selection' });
+  }
+
+  function openReferenceCardFromCitation() {
+    openCalculatorCard('#reference-card', {
+      reason: 'citation-reference',
+      protectedCard: '#node-card'
+    });
+  }
+
   function populateColorPalettes() {
     renderColorPalette(refs.nodeColorSwatches, 'node-color', NODE_COLOR_PRESETS, NODE_SWATCH_VISIBLE_SLOTS);
     renderColorPalette(refs.nodeFillColorSwatches, 'node-fill-color', NODE_FILL_PRESETS, NODE_SWATCH_VISIBLE_SLOTS);
@@ -3578,6 +3616,7 @@
     state.detailPreview = null;
     state.activeLatexDetailField = null;
     resetDetailEditBaseline();
+    openNodeArrowCard();
   }
 
   function selectArrow(id) {
@@ -3588,6 +3627,7 @@
     state.detailPreview = null;
     state.activeLatexDetailField = null;
     resetDetailEditBaseline();
+    openNodeArrowCard();
   }
 
   function clearSelection() {
@@ -4384,6 +4424,7 @@
   function scrollToCitationReference(citeKey) {
     const key = cleanCitationKeyInput(citeKey);
     if (!key) return;
+    openReferenceCardFromCitation();
     const reference = findReferenceByCitationKey(key);
     if (!reference) {
       setReferenceMessage(`No reference found for ${citationCommandForKey(key)}.`, true);

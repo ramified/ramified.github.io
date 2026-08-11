@@ -30,8 +30,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 80.1,
-      "y": 54,
+      "x": 66.9,
+      "y": 55.2,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -65,8 +65,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 124.9,
-      "y": 282.7
+      "x": 106.4,
+      "y": 279
     },
     {
       "id": "n39",
@@ -87,8 +87,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 283.9,
-      "y": 334
+      "x": 263.2,
+      "y": 326.8
     },
     {
       "id": "n58",
@@ -102,8 +102,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 284.9,
-      "y": 54
+      "x": 255.2,
+      "y": 55.2
     },
     {
       "id": "n60",
@@ -130,8 +130,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 534.4,
-      "y": 54
+      "x": 519.5,
+      "y": 55.2
     },
     {
       "id": "n61",
@@ -152,8 +152,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 342,
-      "y": 128.9
+      "x": 330.1,
+      "y": 90.4
     },
     {
       "id": "n62",
@@ -174,8 +174,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 706,
-      "y": 166.8
+      "x": 676,
+      "y": 150.9
     },
     {
       "id": "n63",
@@ -196,8 +196,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 398.2,
-      "y": 302.7,
+      "x": 435.4,
+      "y": 325.2,
       "childGraph": {
         "title": "double click",
         "nodes": [
@@ -312,8 +312,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 607.9,
-      "y": 265.1
+      "x": 576.9,
+      "y": 251.6
     },
     {
       "id": "n65",
@@ -330,7 +330,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "3-2d",
           "label": "3/2d",
           "type": "checkbox",
-          "text": "The Geometer's Sketchpad\nIsoball 4"
+          "text": "Isoball 4\nStephen's Sausage Roll\nThe Geometer's Sketchpad"
         },
         {
           "id": "updates",
@@ -346,8 +346,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 614.7,
-      "y": 334
+      "x": 595.1,
+      "y": 326.8
     },
     {
       "id": "n66",
@@ -368,8 +368,30 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 369.5,
-      "y": 217.6
+      "x": 324,
+      "y": 217.3
+    },
+    {
+      "id": "n67",
+      "type": "misc",
+      "label": "prompt",
+      "details": [
+        {
+          "id": "ex",
+          "label": "ex",
+          "type": "checkbox",
+          "text": "Continue. I think this counterexample may also work for arbitrary big genus curve? If so could you also so the counterexample for arbitrary genus?"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 503,
+      "y": 153.3
     }
   ],
   "arrows": [
@@ -480,53 +502,57 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     "selectedId": "n63",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 388,
+    "canvasHeight": 382,
     "canvasRatioLocked": true,
-    "canvasAspectRatio": 1.9381,
+    "canvasAspectRatio": 1.8901,
     "relativeNodePositions": {
       "n4": {
-        "x": 0.1066,
-        "y": 0.1392
+        "x": 0.0927,
+        "y": 0.1444
       },
       "n37": {
-        "x": 0.1661,
-        "y": 0.7286
+        "x": 0.1474,
+        "y": 0.7304
       },
       "n39": {
-        "x": 0.3776,
-        "y": 0.8608
+        "x": 0.3646,
+        "y": 0.8556
       },
       "n58": {
-        "x": 0.3788,
-        "y": 0.1392
+        "x": 0.3534,
+        "y": 0.1444
       },
       "n60": {
-        "x": 0.7107,
-        "y": 0.1392
+        "x": 0.7196,
+        "y": 0.1444
       },
       "n61": {
-        "x": 0.4548,
-        "y": 0.3323
+        "x": 0.4573,
+        "y": 0.2368
       },
       "n62": {
-        "x": 0.9388,
-        "y": 0.43
+        "x": 0.9363,
+        "y": 0.3949
       },
       "n63": {
-        "x": 0.5295,
-        "y": 0.7802
+        "x": 0.6031,
+        "y": 0.8514
       },
       "n64": {
-        "x": 0.8084,
-        "y": 0.6833
+        "x": 0.7991,
+        "y": 0.6587
       },
       "n65": {
-        "x": 0.8174,
-        "y": 0.8608
+        "x": 0.8242,
+        "y": 0.8556
       },
       "n66": {
-        "x": 0.4914,
-        "y": 0.5608
+        "x": 0.4488,
+        "y": 0.5688
+      },
+      "n67": {
+        "x": 0.6966,
+        "y": 0.4012
       }
     },
     "selectedReferenceKeys": []
