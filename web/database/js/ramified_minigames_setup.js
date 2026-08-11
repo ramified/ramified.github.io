@@ -67,6 +67,9 @@
   const UNDO_LIMIT = Number.POSITIVE_INFINITY;
   const SWIPE_MIN_DISTANCE = 10;
   const FIDE_CHESS_DRAG_MIN_DISTANCE = 4;
+  const FULLSCREEN_ACTION_PAD = 10;
+  const FULLSCREEN_ACTION_AUTO_COLLAPSE_MS = 5000;
+  const FULLSCREEN_RESTART_CONFIRM_MS = 4200;
   const GAME_MODES = {
     NUMBER_2048: '2048',
     GOMOKU: 'gomoku',
@@ -365,6 +368,11 @@
   let canvasDisplayMode = 'normal';
   let fullscreenTarget = 'canvas';
   let fullscreenReturnMode = 'normal';
+  let fullscreenActionExpanded = false;
+  let fullscreenActionAutoCollapseTimer = null;
+  let fullscreenActionPlacementFrame = null;
+  let fullscreenRestartPending = false;
+  let fullscreenRestartConfirmTimer = null;
 
   function init() {
     refs.canvas = document.getElementById('mosaic-canvas');
@@ -372,6 +380,14 @@
     refs.canvasWrap = document.getElementById('canvas-wrap');
     refs.canvasPanel = refs.canvas && refs.canvas.closest ? refs.canvas.closest('.canvas-panel') : document.querySelector('.canvas-panel');
     refs.canvasViewButtons = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-canvas-display-mode]')) : [];
+    refs.fullscreenActionShell = document.getElementById('fullscreen-action-shell');
+    refs.fullscreenActionToggle = document.getElementById('fullscreen-action-toggle');
+    refs.fullscreenActionBar = document.getElementById('fullscreen-action-bar');
+    refs.fullscreenUndo = document.getElementById('fullscreen-undo-step');
+    refs.fullscreenRedo = document.getElementById('fullscreen-redo-step');
+    refs.fullscreenExit = document.getElementById('fullscreen-exit');
+    refs.fullscreenActionStatus = document.getElementById('fullscreen-action-status');
+    refs.fullscreenRestart = document.getElementById('fullscreen-restart');
     refs.gameMode = document.getElementById('game-mode-select');
     refs.select = document.getElementById('surface-preset-select');
     refs.importToggle = document.getElementById('import-preset-toggle');
@@ -564,6 +580,15 @@
       button.addEventListener('click', () => handleCanvasDisplayModeButton(button));
     });
     if (refs.fullscreenTarget) refs.fullscreenTarget.addEventListener('change', handleFullscreenTargetChange);
+    if (refs.fullscreenActionToggle) refs.fullscreenActionToggle.addEventListener('click', toggleFullscreenActionBar);
+    if (refs.fullscreenUndo) refs.fullscreenUndo.addEventListener('click', undoFromFullscreenAction);
+    if (refs.fullscreenRedo) refs.fullscreenRedo.addEventListener('click', redoFromFullscreenAction);
+    if (refs.fullscreenExit) refs.fullscreenExit.addEventListener('click', exitFromFullscreenAction);
+    if (refs.fullscreenRestart) refs.fullscreenRestart.addEventListener('click', restartFromFullscreenAction);
+    if (refs.fullscreenActionShell) {
+      refs.fullscreenActionShell.addEventListener('pointerdown', scheduleFullscreenActionAutoCollapse);
+      refs.fullscreenActionShell.addEventListener('focusin', scheduleFullscreenActionAutoCollapse);
+    }
     if (refs.canvas) {
       refs.canvas.addEventListener('click', handleCanvasClick);
       refs.canvas.addEventListener('mousemove', handleCanvasHover);
@@ -582,7 +607,7 @@
     document.addEventListener('keyup', handleKeyup);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     window.addEventListener('blur', clearKeyboardState);
-    window.addEventListener('resize', render);
+    window.addEventListener('resize', handleWindowResize);
 
     syncSpeedOutput();
     syncSokobanObjectSizeOutput();
@@ -1745,6 +1770,7 @@
 
   function handleKeydown(event) {
     const key = normalizeKeyboardKey(event.code || event.key);
+    if (key === 'Escape' && fullscreenActionExpanded) collapseFullscreenActionBar({ focusCanvas: false });
     if (handleGameShortcutKey(event, key)) return;
     if (!game || !isDirectionalMoveGame(game)) return;
     if (!keyboardKeyHandledByPreset(key, game.preset)) return;
@@ -1768,6 +1794,11 @@
 
   function handleKeyup(event) {
     forgetKeyboardKey(normalizeKeyboardKey(event.code || event.key));
+  }
+
+  function handleWindowResize() {
+    render();
+    requestFullscreenActionPlacement();
   }
 
   function handleGameShortcutKey(event, key) {
@@ -3081,6 +3112,7 @@
     const activeMode = fullscreenActive ? 'fullscreen' : canvasDisplayMode;
     if (typeof document !== 'undefined' && document.body && document.body.classList) {
       document.body.classList.toggle('canvas-fit-viewport', activeMode === 'fit-viewport');
+      document.body.classList.toggle('canvas-fullscreen-active', fullscreenActive);
     }
     if (refs.canvasViewButtons) {
       refs.canvasViewButtons.forEach((button) => {
@@ -3093,13 +3125,303 @@
     if (refs.fullscreenTarget && refs.fullscreenTarget.value !== fullscreenTarget) {
       refs.fullscreenTarget.value = fullscreenTarget;
     }
+    if (!fullscreenActive) collapseFullscreenActionBar({ focusCanvas: false, skipPlacement: true });
+    requestFullscreenActionPlacement();
+  }
+
+  function toggleFullscreenActionBar() {
+    setFullscreenActionExpanded(!fullscreenActionExpanded);
+    if (fullscreenActionExpanded) focusFirstFullscreenActionButton();
+  }
+
+  function collapseFullscreenActionBar(options = {}) {
+    setFullscreenActionExpanded(false, options);
+  }
+
+  function setFullscreenActionExpanded(expanded, options = {}) {
+    const nextExpanded = !!expanded && !!currentFullscreenElement();
+    fullscreenActionExpanded = nextExpanded;
+    if (refs.fullscreenActionShell) refs.fullscreenActionShell.classList.toggle('is-expanded', nextExpanded);
+    if (refs.fullscreenActionBar) refs.fullscreenActionBar.hidden = !nextExpanded;
+    if (refs.fullscreenActionToggle) {
+      refs.fullscreenActionToggle.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+      refs.fullscreenActionToggle.setAttribute(
+        'aria-label',
+        nextExpanded ? 'Close fullscreen action bar' : 'Open fullscreen action bar'
+      );
+    }
+    if (nextExpanded) scheduleFullscreenActionAutoCollapse();
+    else {
+      clearFullscreenActionAutoCollapse();
+      clearFullscreenRestartConfirmation();
+      clearFullscreenActionGutter();
+    }
+    if (!options.skipPlacement) requestFullscreenActionPlacement();
+    if (options.focusCanvas && refs.canvas) refs.canvas.focus();
+  }
+
+  function focusFirstFullscreenActionButton() {
+    const buttons = [
+      refs.fullscreenUndo,
+      refs.fullscreenRedo,
+      refs.fullscreenExit,
+      refs.fullscreenRestart
+    ];
+    const target = buttons.find((button) => button && !button.disabled && typeof button.focus === 'function');
+    if (target) target.focus();
+  }
+
+  function scheduleFullscreenActionAutoCollapse() {
+    clearFullscreenActionAutoCollapse();
+    if (!fullscreenActionExpanded || typeof window === 'undefined' || typeof window.setTimeout !== 'function') return;
+    fullscreenActionAutoCollapseTimer = window.setTimeout(() => {
+      collapseFullscreenActionBar({ focusCanvas: false });
+    }, FULLSCREEN_ACTION_AUTO_COLLAPSE_MS);
+  }
+
+  function clearFullscreenActionAutoCollapse() {
+    if (!fullscreenActionAutoCollapseTimer || typeof window === 'undefined' || typeof window.clearTimeout !== 'function') {
+      fullscreenActionAutoCollapseTimer = null;
+      return;
+    }
+    window.clearTimeout(fullscreenActionAutoCollapseTimer);
+    fullscreenActionAutoCollapseTimer = null;
+  }
+
+  function setFullscreenRestartConfirmation(active) {
+    fullscreenRestartPending = !!active;
+    if (refs.fullscreenRestart) {
+      refs.fullscreenRestart.classList.toggle('is-confirming', fullscreenRestartPending);
+      refs.fullscreenRestart.setAttribute(
+        'aria-label',
+        fullscreenRestartPending ? 'Confirm restart game' : 'Restart game'
+      );
+      refs.fullscreenRestart.setAttribute(
+        'title',
+        fullscreenRestartPending ? 'Confirm restart' : 'Restart'
+      );
+    }
+    if (refs.fullscreenActionStatus) {
+      refs.fullscreenActionStatus.textContent = fullscreenRestartPending ? 'Restart this game?' : '';
+      refs.fullscreenActionStatus.hidden = !fullscreenRestartPending;
+    }
+    requestFullscreenActionPlacement();
+    if (!fullscreenRestartPending) {
+      clearFullscreenRestartConfirmTimer();
+      return;
+    }
+    clearFullscreenRestartConfirmTimer();
+    if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+      fullscreenRestartConfirmTimer = window.setTimeout(clearFullscreenRestartConfirmation, FULLSCREEN_RESTART_CONFIRM_MS);
+    }
+  }
+
+  function clearFullscreenRestartConfirmation() {
+    setFullscreenRestartConfirmation(false);
+  }
+
+  function clearFullscreenRestartConfirmTimer() {
+    if (!fullscreenRestartConfirmTimer || typeof window === 'undefined' || typeof window.clearTimeout !== 'function') {
+      fullscreenRestartConfirmTimer = null;
+      return;
+    }
+    window.clearTimeout(fullscreenRestartConfirmTimer);
+    fullscreenRestartConfirmTimer = null;
+  }
+
+  function undoFromFullscreenAction() {
+    if (!undoStack.length) {
+      syncControls();
+      return;
+    }
+    undoPreviousStep();
+    collapseFullscreenActionBar({ focusCanvas: true });
+  }
+
+  function redoFromFullscreenAction() {
+    if (!redoStack.length) {
+      syncControls();
+      return;
+    }
+    redoPreviousUndo();
+    collapseFullscreenActionBar({ focusCanvas: true });
+  }
+
+  function exitFromFullscreenAction() {
+    collapseFullscreenActionBar({ focusCanvas: false });
+    if (currentFullscreenElement()) toggleCanvasFullscreen();
+  }
+
+  function restartFromFullscreenAction() {
+    if (!game) {
+      syncControls();
+      return;
+    }
+    scheduleFullscreenActionAutoCollapse();
+    if (!fullscreenRestartPending) {
+      setFullscreenRestartConfirmation(true);
+      return;
+    }
+    clearFullscreenRestartConfirmation();
+    const restarted = restartCurrentGameFromFullscreenAction();
+    if (restarted) collapseFullscreenActionBar({ focusCanvas: true });
+  }
+
+  function restartCurrentGameFromFullscreenAction() {
+    if (!game) return false;
+    if (game.phase === 'setup') {
+      beginGameFromUi();
+      return !!game && game.phase !== 'setup';
+    }
+    return resetCurrentGameFromShortcut();
+  }
+
+  function requestFullscreenActionPlacement() {
+    if (!refs.fullscreenActionShell) return;
+    if (!currentFullscreenElement()) {
+      if (!refs.fullscreenActionShell.hidden || fullscreenActionExpanded) positionFullscreenActionBar();
+      return;
+    }
+    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      positionFullscreenActionBar();
+      return;
+    }
+    if (fullscreenActionPlacementFrame) return;
+    fullscreenActionPlacementFrame = window.requestAnimationFrame(() => {
+      fullscreenActionPlacementFrame = null;
+      positionFullscreenActionBar();
+    });
+  }
+
+  function positionFullscreenActionBar() {
+    const shell = refs.fullscreenActionShell;
+    if (!shell) return;
+    const fullscreenActive = !!currentFullscreenElement();
+    if (!fullscreenActive || !refs.canvasWrap || !refs.canvas) {
+      shell.hidden = true;
+      clearFullscreenActionGutter();
+      if (fullscreenActionExpanded) collapseFullscreenActionBar({ focusCanvas: false, skipPlacement: true });
+      return;
+    }
+    shell.hidden = false;
+    shell.classList.toggle('is-expanded', fullscreenActionExpanded);
+    if (refs.fullscreenActionBar) refs.fullscreenActionBar.hidden = !fullscreenActionExpanded;
+    clearFullscreenActionGutter();
+
+    const wrapRect = refs.canvasWrap.getBoundingClientRect ? refs.canvasWrap.getBoundingClientRect() : null;
+    const canvasRect = refs.canvas.getBoundingClientRect ? refs.canvas.getBoundingClientRect() : null;
+    const placement = chooseFullscreenActionPlacement(wrapRect, canvasRect, fullscreenActionExpanded);
+    shell.dataset.placement = placement.edge;
+    shell.classList.toggle('is-fallback', !!placement.fallback);
+    shell.style.setProperty('--fullscreen-action-left', `${Math.round(placement.left)}px`);
+    shell.style.setProperty('--fullscreen-action-top', `${Math.round(placement.top)}px`);
+    if (placement.fallback && fullscreenActionExpanded) applyFullscreenActionGutter();
+  }
+
+  function chooseFullscreenActionPlacement(wrapRect, canvasRect, expanded) {
+    const fallback = { edge: 'top', left: FULLSCREEN_ACTION_PAD, top: FULLSCREEN_ACTION_PAD, fallback: true };
+    if (!wrapRect || !canvasRect || !wrapRect.width || !wrapRect.height) return fallback;
+    const wrapWidth = Math.max(1, wrapRect.width);
+    const wrapHeight = Math.max(1, wrapRect.height);
+    const canvasLeft = Math.max(0, canvasRect.left - wrapRect.left);
+    const canvasTop = Math.max(0, canvasRect.top - wrapRect.top);
+    const canvasRight = Math.min(wrapWidth, canvasRect.right - wrapRect.left);
+    const canvasBottom = Math.min(wrapHeight, canvasRect.bottom - wrapRect.top);
+    const candidates = [
+      {
+        edge: 'top',
+        spaceWidth: wrapWidth,
+        spaceHeight: canvasTop,
+        left: FULLSCREEN_ACTION_PAD,
+        top: FULLSCREEN_ACTION_PAD
+      },
+      {
+        edge: 'left',
+        spaceWidth: canvasLeft,
+        spaceHeight: wrapHeight,
+        left: FULLSCREEN_ACTION_PAD,
+        top: clampFullscreenActionPosition(canvasTop, wrapHeight, fullscreenActionSize('left', expanded).height)
+      },
+      {
+        edge: 'right',
+        spaceWidth: Math.max(0, wrapWidth - canvasRight),
+        spaceHeight: wrapHeight,
+        left: wrapWidth - fullscreenActionSize('right', expanded).width - FULLSCREEN_ACTION_PAD,
+        top: clampFullscreenActionPosition(canvasTop, wrapHeight, fullscreenActionSize('right', expanded).height)
+      },
+      {
+        edge: 'bottom',
+        spaceWidth: wrapWidth,
+        spaceHeight: Math.max(0, wrapHeight - canvasBottom),
+        left: FULLSCREEN_ACTION_PAD,
+        top: wrapHeight - fullscreenActionSize('bottom', expanded).height - FULLSCREEN_ACTION_PAD
+      }
+    ];
+    for (const candidate of candidates) {
+      const size = fullscreenActionSize(candidate.edge, expanded);
+      if (candidate.spaceWidth >= size.width + (FULLSCREEN_ACTION_PAD * 2)
+        && candidate.spaceHeight >= size.height + (FULLSCREEN_ACTION_PAD * 2)) {
+        return {
+          edge: candidate.edge,
+          left: Math.max(FULLSCREEN_ACTION_PAD, Math.min(candidate.left, wrapWidth - size.width - FULLSCREEN_ACTION_PAD)),
+          top: Math.max(FULLSCREEN_ACTION_PAD, Math.min(candidate.top, wrapHeight - size.height - FULLSCREEN_ACTION_PAD)),
+          fallback: false
+        };
+      }
+    }
+    return fallback;
+  }
+
+  function fullscreenActionSize(edge, expanded) {
+    if (!expanded) return { width: 42, height: 42 };
+    const currentEdge = refs.fullscreenActionShell && refs.fullscreenActionShell.dataset
+      ? refs.fullscreenActionShell.dataset.placement
+      : '';
+    if (currentEdge === edge
+      && refs.fullscreenActionBar
+      && !refs.fullscreenActionBar.hidden
+      && refs.fullscreenActionBar.getBoundingClientRect) {
+      const rect = refs.fullscreenActionBar.getBoundingClientRect();
+      if (rect.width && rect.height) {
+        return {
+          width: Math.ceil(rect.width),
+          height: Math.ceil(rect.height)
+        };
+      }
+    }
+    return edge === 'left' || edge === 'right'
+      ? { width: fullscreenRestartPending ? 96 : 54, height: fullscreenRestartPending ? 306 : 226 }
+      : { width: fullscreenRestartPending ? 360 : 226, height: 54 };
+  }
+
+  function clampFullscreenActionPosition(value, total, size) {
+    return Math.max(
+      FULLSCREEN_ACTION_PAD,
+      Math.min(value || FULLSCREEN_ACTION_PAD, total - size - FULLSCREEN_ACTION_PAD)
+    );
+  }
+
+  function applyFullscreenActionGutter() {
+    if (!refs.canvasWrap || !refs.canvasWrap.classList) return;
+    refs.canvasWrap.classList.add('fullscreen-action-gutter');
+    refs.canvasWrap.setAttribute('data-fullscreen-action-gutter', 'top');
+  }
+
+  function clearFullscreenActionGutter() {
+    if (!refs.canvasWrap || !refs.canvasWrap.classList) return;
+    refs.canvasWrap.classList.remove('fullscreen-action-gutter');
+    refs.canvasWrap.removeAttribute('data-fullscreen-action-gutter');
   }
 
   function renderAfterCanvasLayoutChange() {
     render();
     if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-      window.requestAnimationFrame(() => render());
+      window.requestAnimationFrame(() => {
+        render();
+        requestFullscreenActionPlacement();
+      });
     }
+    requestFullscreenActionPlacement();
   }
 
   function handleCanvasStartBeginClick(event) {
@@ -6529,6 +6851,7 @@
       drawGameOverPopup(ctx, geometry, game);
     }
     syncStats();
+    requestFullscreenActionPlacement();
   }
 
   function activeCanvasDisplayMode() {
@@ -19478,6 +19801,9 @@
     if (refs.nextStep) refs.nextStep.disabled = !modeDirectional || !(isStepMode() && stepPaused && eventQueue.length && !currentAnimation);
     if (refs.undo) refs.undo.disabled = !undoStack.length;
     if (refs.redo) refs.redo.disabled = !redoStack.length;
+    if (refs.fullscreenUndo) refs.fullscreenUndo.disabled = !undoStack.length;
+    if (refs.fullscreenRedo) refs.fullscreenRedo.disabled = !redoStack.length;
+    if (refs.fullscreenRestart) refs.fullscreenRestart.disabled = !game;
     if (refs.exportState) refs.exportState.disabled = !game;
     if (refs.refreshState) refs.refreshState.disabled = !game;
     if (refs.copyState) refs.copyState.disabled = !game && !(refs.debugExport && refs.debugExport.value);
