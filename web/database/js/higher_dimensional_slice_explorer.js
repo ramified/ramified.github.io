@@ -186,6 +186,7 @@
     activeWeylChamber: null,
     weylKlTargetChamber: null,
     lastWarning: "Projection and exact/numeric 2D slice layers are active.",
+    lastWarningMath: null,
   };
 
   const motionHold = {
@@ -7819,6 +7820,216 @@
       .join("\n");
   }
 
+  function cleanLatticeCoefficient(value) {
+    const number = finiteNumber(value, 0);
+    if (Math.abs(number) <= 1e-9) return 0;
+    const rounded = Math.round(number);
+    return Math.abs(number - rounded) <= Math.max(1e-7, sliceTolerance() * 10) ? rounded : number;
+  }
+
+  function latticeCoefficientText(value) {
+    const cleaned = cleanLatticeCoefficient(value);
+    if (Number.isInteger(cleaned)) return String(cleaned);
+    return fmt(cleaned, 6);
+  }
+
+  function latticeBasisLabelEntriesForObject(object) {
+    const data = object?.data || {};
+    const basisMode = normalizeLatticeBasisMode(data.basisMode);
+    if (basisMode === "lmfdb-field") {
+      return Array.from({ length: state.ambientDim }, (_, index) => ({
+        plain: `zk_${index + 1}`,
+        tex: `\\mathrm{zk}_{${index + 1}}`,
+      }));
+    }
+    if (basisMode === "dynkin") {
+      const kind = normalizeDynkinLatticeKind(data.dynkinLatticeKind);
+      const prefix = kind === "weight" ? "omega" : "alpha";
+      return Array.from({ length: state.ambientDim }, (_, index) => ({
+        plain: `${prefix}_${index + 1}`,
+        tex: `${kind === "weight" ? "\\omega" : "\\alpha"}_{${index + 1}}`,
+      }));
+    }
+    return Array.from({ length: state.ambientDim }, (_, index) => ({
+      plain: `b_${index + 1}`,
+      tex: `b_{${index + 1}}`,
+    }));
+  }
+
+  function normalizeLatticeBasisLabelEntries(labels) {
+    return resizeVector(Array.isArray(labels) ? labels : [], state.ambientDim)
+      .map((label, index) => {
+        if (label && typeof label === "object") {
+          const plain = String(label.plain || label.text || `b_${index + 1}`);
+          return { plain, tex: label.tex || labelToTex(plain) };
+        }
+        const plain = String(label || `b_${index + 1}`);
+        return { plain, tex: labelToTex(plain) };
+      });
+  }
+
+  function latticeCoefficientExpressionDisplay(coefficients, labels) {
+    const sizedCoefficients = resizeVector(Array.isArray(coefficients) ? coefficients : [], state.ambientDim)
+      .map(cleanLatticeCoefficient);
+    const sizedLabels = normalizeLatticeBasisLabelEntries(labels);
+    const terms = [];
+    sizedCoefficients.forEach((coefficient, index) => {
+      if (Math.abs(coefficient) <= 1e-9) return;
+      const sign = coefficient < 0 ? "-" : "+";
+      const magnitude = Math.abs(coefficient);
+      const plainCoefficientPrefix = Math.abs(magnitude - 1) <= 1e-9 ? "" : `${latticeCoefficientText(magnitude)} `;
+      const texCoefficientPrefix = Math.abs(magnitude - 1) <= 1e-9 ? "" : `${latticeCoefficientText(magnitude)}\\,`;
+      terms.push({
+        sign,
+        plain: `${plainCoefficientPrefix}${sizedLabels[index].plain}`,
+        tex: `${texCoefficientPrefix}${sizedLabels[index].tex}`,
+      });
+    });
+    if (!terms.length) return { plain: "0", tex: "0" };
+    return {
+      plain: terms.map((term, index) => {
+        if (index === 0) return term.sign === "-" ? `-${term.plain}` : term.plain;
+        return ` ${term.sign} ${term.plain}`;
+      }).join(""),
+      tex: terms.map((term, index) => {
+        if (index === 0) return term.sign === "-" ? `-${term.tex}` : term.tex;
+        return ` ${term.sign} ${term.tex}`;
+      }).join(""),
+    };
+  }
+
+  function latticeCoefficientExpression(coefficients, labels) {
+    return latticeCoefficientExpressionDisplay(coefficients, labels).plain;
+  }
+
+  function dynkinLatticeBasisRows(kind, dynkinType, n = state.ambientDim) {
+    return normalizeDynkinLatticeKind(kind) === "weight"
+      ? fundamentalWeightMatrixRows(dynkinType, n)
+      : simpleRootMatrixRows(dynkinType, n);
+  }
+
+  function dynkinLatticeCoordinates(kind, dynkinType, point, preferredCoefficients = null) {
+    if (Array.isArray(preferredCoefficients) && preferredCoefficients.length) {
+      return resizeVector(preferredCoefficients, state.ambientDim).map(cleanLatticeCoefficient);
+    }
+    const basisRows = dynkinLatticeBasisRows(kind, dynkinType, state.ambientDim);
+    const inverseRows = inverseMatrix(basisRows, `${weylDynkinLabel(dynkinType, state.ambientDim)} ${kind} lattice`);
+    return multiplyMatrixVector(inverseRows, resizeVector(point, state.ambientDim)).map(cleanLatticeCoefficient);
+  }
+
+  function matchingVisibleDynkinCompanionLattice(object) {
+    const data = object?.data || {};
+    if (objectTypeKey(object) !== "lattice" || normalizeLatticeBasisMode(data.basisMode) !== "dynkin") return null;
+    const currentKind = normalizeDynkinLatticeKind(data.dynkinLatticeKind);
+    const companionKind = currentKind === "weight" ? "root" : "weight";
+    const dynkinType = normalizeWeylDynkinType(data.dynkinType, state.ambientDim);
+    return state.objects.find((candidate) => {
+      if (!candidate.visibleProjection || candidate.id === object.id || objectTypeKey(candidate) !== "lattice") return false;
+      const candidateData = candidate.data || {};
+      return normalizeLatticeBasisMode(candidateData.basisMode) === "dynkin" &&
+        normalizeDynkinLatticeKind(candidateData.dynkinLatticeKind) === companionKind &&
+        normalizeWeylDynkinType(candidateData.dynkinType, state.ambientDim) === dynkinType &&
+        (candidateData.ambientDimension || state.ambientDim) === state.ambientDim;
+    }) || null;
+  }
+
+  function dynkinLatticePickReadout(object, candidate) {
+    const data = object?.data || {};
+    const currentKind = normalizeDynkinLatticeKind(data.dynkinLatticeKind);
+    const dynkinType = normalizeWeylDynkinType(data.dynkinType, state.ambientDim);
+    const companion = matchingVisibleDynkinCompanionLattice(object);
+    const kinds = companion ? ["root", "weight"] : [currentKind];
+    const entries = kinds.map((kind) => {
+      const labelPrefix = kind === "weight" ? "omega" : "alpha";
+      const labelTex = kind === "weight" ? "\\omega" : "\\alpha";
+      const labels = Array.from({ length: state.ambientDim }, (_, index) => ({
+        plain: `${labelPrefix}_${index + 1}`,
+        tex: `${labelTex}_{${index + 1}}`,
+      }));
+      const preferred = kind === currentKind ? candidate.latticeCoefficients : null;
+      const coordinates = dynkinLatticeCoordinates(kind, dynkinType, candidate.ambient, preferred);
+      const expression = latticeCoefficientExpressionDisplay(coordinates, labels);
+      return {
+        plain: `${labelPrefix}: ${expression.plain}`,
+        tex: `${labelTex}\\colon ${expression.tex}`,
+      };
+    });
+    return {
+      plain: entries.map((entry) => entry.plain).join("; "),
+      tex: entries.map((entry) => entry.tex).join(";\\quad "),
+    };
+  }
+
+  function latticePickReadout(candidate) {
+    if (!candidate?.latticePoint) return null;
+    const object = state.objects.find((item) => item.id === candidate.objectId);
+    if (!object || objectTypeKey(object) !== "lattice") return null;
+    const data = object.data || {};
+    if (normalizeLatticeBasisMode(data.basisMode) === "dynkin") {
+      try {
+        return dynkinLatticePickReadout(object, candidate);
+      } catch (error) {
+        return null;
+      }
+    }
+    let coefficients = candidate.latticeCoefficients;
+    if (!Array.isArray(coefficients) || !coefficients.length) {
+      try {
+        const resolved = resolveLatticeBasis(object);
+        if (!resolved.ok) return null;
+        coefficients = multiplyMatrixVector(
+          inverseMatrix(resolved.basisRows, `${object.name} lattice basis`),
+          resizeVector(candidate.ambient, state.ambientDim)
+        );
+      } catch (error) {
+        return null;
+      }
+    }
+    const expression = latticeCoefficientExpressionDisplay(coefficients, latticeBasisLabelEntriesForObject(object));
+    return {
+      plain: `= ${expression.plain}`,
+      tex: `= ${expression.tex}`,
+    };
+  }
+
+  function pickedCandidateBaseTex(candidate) {
+    return `\\text{${texText(candidate.objectName)} / }${labelToTex(candidate.label)}`;
+  }
+
+  function pickedCandidateDisplay(candidate, options = {}) {
+    if (!candidate) return null;
+    const includeCoordinates = options.includeCoordinates !== false;
+    const basisReadout = latticePickReadout(candidate);
+    const basePlain = `${candidate.objectName} / ${candidate.label}`;
+    const baseTex = pickedCandidateBaseTex(candidate);
+    const coordinatePlain = includeCoordinates
+      ? `  x=${vectorToInline(candidate.ambient)}  y=${vectorToInline(candidate.frameCoords)}`
+      : "";
+    const coordinateTex = includeCoordinates
+      ? `\\quad x=${vectorToTex(candidate.ambient, 3)}\\quad y=${vectorToTex(candidate.frameCoords, 3)}`
+      : "";
+    return {
+      plain: `${basePlain}${coordinatePlain}${basisReadout ? `  ${basisReadout.plain}` : ""}`,
+      tex: `${baseTex}${coordinateTex}${basisReadout ? `\\quad ${basisReadout.tex}` : ""}`,
+      basisReadout,
+    };
+  }
+
+  function pickedCandidateStatusDisplay(candidate) {
+    if (!candidate) return null;
+    const basisReadout = latticePickReadout(candidate);
+    const basePlain = `${candidate.objectName} / ${candidate.label}`;
+    const baseTex = pickedCandidateBaseTex(candidate);
+    const equationReadout = basisReadout?.plain?.startsWith("=");
+    const plain = basisReadout
+      ? `Picked ${basePlain}${equationReadout ? " " : ": "}${basisReadout.plain}`
+      : `Picked ${basePlain}.`;
+    const tex = basisReadout
+      ? `\\text{Picked }${baseTex}${equationReadout ? "\\quad " : "\\colon "}${basisReadout.tex}`
+      : `\\text{${texText(plain)}}`;
+    return { plain, tex };
+  }
+
   function frameMatrixToString(columns) {
     const rows = frameRows(columns);
     const header = `      ${columns.map((_, index) => `v${index + 1}`.padStart(7, " ")).join(" ")}`;
@@ -7882,15 +8093,15 @@
       renderSourceStatusFormula(sourceStatus, counts.sliceWeylKlStatusFormula);
     } else if (!highlightWarning && counts.sliceWeylKlStatusParts && warningMessage === klStatus) {
       renderSourceStatusParts(sourceStatus, counts.sliceWeylKlStatusParts);
+    } else if (!highlightWarning && state.lastWarningMath?.plain === warningMessage) {
+      renderSourceStatusMath(sourceStatus, state.lastWarningMath.plain, state.lastWarningMath.tex);
     } else {
       renderSourceStatusText(sourceStatus, warningMessage);
     }
     $("debug-warnings").classList.toggle("highlight", highlightWarning);
     $("source-status").classList.toggle("highlight", highlightWarning);
     const picked = currentSelectedCandidate();
-    const pickedText = picked
-      ? `${picked.objectName} / ${picked.label}  x=${vectorToInline(picked.ambient)}  y=${vectorToInline(picked.frameCoords)}`
-      : "";
+    const pickedDisplay = pickedCandidateDisplay(picked);
     const targetText = state.activeVectorTarget
       ? `${state.activeVectorTarget.objectName} / ${state.activeVectorTarget.slotLabel}`
       : "";
@@ -7901,7 +8112,7 @@
       { plain: `active ${directionLabel()}`, tex: `\\mathrm{active}\\ ${labelToTex(directionLabel())}` },
       { plain: "projection / exact+numeric 2D slice", tex: "\\mathrm{projection\\ /\\ exact{+}numeric\\ 2D\\ slice}" },
       ...(previewText ? [{ plain: previewText, tex: `\\text{${texText(previewText)}}` }] : []),
-      ...(pickedText ? [{ plain: `picked: ${pickedText}`, tex: `\\text{picked: ${texText(pickedText)}}` }] : []),
+      ...(pickedDisplay ? [{ plain: `picked: ${pickedDisplay.plain}`, tex: `\\text{picked: }${pickedDisplay.tex}` }] : []),
       ...(targetText ? [{ plain: `target: ${targetText}`, tex: `\\text{target: ${texText(targetText)}}` }] : []),
     ]);
     renderStatusBar([
@@ -7909,7 +8120,7 @@
       { plain: `objects ${counts.visibleObjects} visible`, tex: `\\mathrm{objects}\\ ${counts.visibleObjects}\\ \\mathrm{visible}` },
       { plain: `zoom ${fmt(state.viewport.zoom, 2)}`, tex: `\\mathrm{zoom}\\ ${fmt(state.viewport.zoom, 2)}` },
       { plain: `${viewportBoundLabel()} ${fmt(state.viewport.boxRadius, 2)}`, tex: `\\mathrm{${texText(viewportBoundLabel())}}\\ ${fmt(state.viewport.boxRadius, 2)}` },
-      ...(pickedText ? [{ plain: `picked ${pickedText}`, tex: `\\text{picked ${texText(pickedText)}}` }] : []),
+      ...(pickedDisplay ? [{ plain: `picked ${pickedDisplay.plain}`, tex: `\\text{picked }${pickedDisplay.tex}` }] : []),
     ]);
     queueMathTypeset();
   }
@@ -7961,9 +8172,16 @@
     });
   }
 
+  function clearMathTextElement(element) {
+    element.classList.remove("slice-math");
+    delete element.dataset.mathPlain;
+    delete element.dataset.mathTex;
+  }
+
   function renderSourceStatusText(element, text) {
     if (!element) return;
     if (window.MathJax?.typesetClear) window.MathJax.typesetClear([element]);
+    clearMathTextElement(element);
     element.classList.remove("slice-kl-status-rendered");
     element.textContent = String(text || "");
   }
@@ -7971,6 +8189,7 @@
   function renderSourceStatusParts(element, parts) {
     if (!element) return;
     if (window.MathJax?.typesetClear) window.MathJax.typesetClear([element]);
+    clearMathTextElement(element);
     element.classList.remove("slice-kl-status-rendered");
     element.innerHTML = "";
     (parts || []).forEach((part) => {
@@ -7985,9 +8204,17 @@
     });
   }
 
+  function renderSourceStatusMath(element, plain, tex) {
+    if (!element) return;
+    if (window.MathJax?.typesetClear) window.MathJax.typesetClear([element]);
+    element.classList.remove("slice-kl-status-rendered");
+    setMathText(element, plain, tex);
+  }
+
   function renderSourceStatusFormula(element, formula) {
     if (!element) return;
     if (window.MathJax?.typesetClear) window.MathJax.typesetClear([element]);
+    clearMathTextElement(element);
     element.classList.add("slice-kl-status-rendered");
     element.innerHTML = "";
     const label = document.createElement("span");
@@ -8300,6 +8527,7 @@
     }
     const data = drawableData(object);
     const projected = data.points.map((point) => projectAmbient(point, view));
+    const pointMetadata = Array.isArray(data.pointMetadata) ? data.pointMetadata : [];
     const registerPick = options.registerPick !== false;
     const rayOriginKeys = new Set();
 
@@ -8348,7 +8576,7 @@
       const displayLabel = pointLabels[index] || String(index);
       const displayTex = pointTexLabels[index] || labelToTex(displayLabel);
       drawPoint(ctx, point.x, point.y, pointSize);
-      if (registerPick) recordPickCandidate(object, point, pickLabel, `point:${index}`, pointSize);
+      if (registerPick) recordPickCandidate(object, point, pickLabel, `point:${index}`, pointSize, pointMetadata[index]);
       if (shouldDrawObjectLabels(object) && index < 48) {
         addCanvasMathLabel(view, point, displayLabel, displayTex, { offsetX: 5, offsetY: -5, color });
       }
@@ -9853,6 +10081,7 @@
     if (!resolved.ok) {
       const empty = {
         points: [],
+        pointMetadata: [],
         rays: [],
         status: resolved.warning || "invalid lattice basis",
         capped: false,
@@ -9895,6 +10124,11 @@
       : projectedVectors.filter((vector) => !rootMembership || !rootMembership.contains(vector.ambient));
     const drawnVectors = visibleVectors.slice(0, LATTICE_PROJECTION_POINT_CAP);
     const points = drawnVectors.map((vector) => vector.ambient);
+    const pointMetadata = drawnVectors.map((vector) => ({
+      lattice: true,
+      coeffs: vector.coeffs.slice(),
+      length: vector.length,
+    }));
     const displayCapped = data.showLatticePoints !== false && visibleVectors.length > LATTICE_PROJECTION_POINT_CAP;
     const capped = enumeration.capped || displayCapped;
     const boundText = latticeBoundDescription(data);
@@ -9909,6 +10143,7 @@
         : suppressionText;
     const result = {
       points,
+      pointMetadata,
       rays: [],
       status,
       capped,
@@ -11301,6 +11536,7 @@
       const lattice = latticeProjectionData(object);
       return {
         points: lattice.points,
+        pointMetadata: lattice.pointMetadata,
         edges: [],
         rays: lattice.rays,
         lattice,
@@ -11472,8 +11708,9 @@
     ctx.restore();
   }
 
-  function recordPickCandidate(object, projected, label, vertexKey, radius) {
+  function recordPickCandidate(object, projected, label, vertexKey, radius, metadata = null) {
     if (projected.frameCoords && !viewportPointInside(projected.frameCoords, state.viewport.boxRadius)) return;
+    const pointMetadata = metadata && typeof metadata === "object" ? metadata : null;
     state.pickCandidates.push({
       objectId: object.id,
       objectName: object.name,
@@ -11484,6 +11721,8 @@
       x: projected.x,
       y: projected.y,
       radius,
+      latticePoint: pointMetadata?.lattice === true,
+      latticeCoefficients: Array.isArray(pointMetadata?.coeffs) ? pointMetadata.coeffs.slice() : null,
     });
   }
 
@@ -11622,7 +11861,9 @@
       state.sourceMode = "modify";
       state.activeTropicalDistrict = null;
       clearWeylInteraction();
-      state.lastWarning = `Picked ${candidate.objectName} / ${candidate.label}.`;
+      const pickStatus = pickedCandidateStatusDisplay(candidate);
+      state.lastWarning = pickStatus?.plain || `Picked ${candidate.objectName} / ${candidate.label}.`;
+      state.lastWarningMath = pickStatus || null;
       syncObjectSelect();
       syncObjectPanel();
       syncSourceMode();

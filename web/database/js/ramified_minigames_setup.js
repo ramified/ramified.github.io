@@ -467,6 +467,7 @@
     refs.canvasStartRules = document.getElementById('canvas-start-rules');
     refs.canvasStartBegin = document.getElementById('canvas-start-begin');
     refs.setupAlert = document.getElementById('game-setup-alert');
+    refs.onlineCard = document.getElementById('online-play-card');
     refs.onlineRoomCode = document.getElementById('online-room-code');
     refs.onlineRoleOptions = document.getElementById('online-role-options');
     refs.onlineCreateRoom = document.getElementById('online-create-room');
@@ -929,12 +930,14 @@
     if (!onlineState) return;
     const configured = !!onlineState.baseUrl;
     const active = onlineIsInRoom() || !!onlineState.connecting;
+    const visible = onlinePlayCardVisible();
+    if (refs.onlineCard) refs.onlineCard.hidden = !visible;
     const roomInput = onlineRoomCodeFromInput();
     if (refs.onlineRoomCode && refs.onlineRoomCode.value !== roomInput) refs.onlineRoomCode.value = roomInput;
     if (refs.onlineCreateRoom) {
-      refs.onlineCreateRoom.disabled = !configured || active || !onlineSelectedModeSupported();
+      refs.onlineCreateRoom.disabled = !visible || !configured || active || !onlineSelectedModeSupported();
     }
-    if (refs.onlineJoinRoom) refs.onlineJoinRoom.disabled = !configured || active || roomInput.length < 4;
+    if (refs.onlineJoinRoom) refs.onlineJoinRoom.disabled = !visible || !configured || active || roomInput.length < 4;
     if (refs.onlineLeaveRoom) refs.onlineLeaveRoom.disabled = !active;
     if (refs.onlineRoomCode) refs.onlineRoomCode.disabled = active;
     if (refs.onlineRoleOptions && refs.onlineRoleOptions.querySelectorAll) {
@@ -952,6 +955,12 @@
       refs.onlineStatus.textContent = onlineStatusText();
       refs.onlineStatus.dataset.state = onlineStatusDataState();
     }
+  }
+
+  function onlinePlayCardVisible() {
+    if (!onlineState) return false;
+    if (onlineIsInRoom() || onlineState.connecting) return true;
+    return onlineSelectedModeSupported();
   }
 
   function onlineHttpUrl(path) {
